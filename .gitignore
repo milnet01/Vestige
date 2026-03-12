@@ -37,7 +37,8 @@ Thumbs.db
 # Dependency directories (fetched by CMake)
 external/glfw/
 external/glm/
-external/glad/
 external/stb/
 external/googletest/
 external/assimp/
+
+# Note: external/glad/ is NOT ignored — it contains pre-generated OpenGL loader files
