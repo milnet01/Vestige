@@ -13,8 +13,13 @@ set(ENGINE_SOURCES
     renderer/mesh.cpp
     renderer/camera.cpp
     renderer/renderer.cpp
+    renderer/texture.cpp
+    renderer/material.cpp
+    utils/obj_loader.cpp
     # glad OpenGL loader
     ${CMAKE_SOURCE_DIR}/external/glad/src/gl.c
+    # stb_image implementation
+    ${CMAKE_SOURCE_DIR}/external/stb/stb_image_impl.cpp
 )
 
 # Create static library
@@ -25,6 +30,7 @@ target_include_directories(vestige_engine
     PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}
         ${CMAKE_SOURCE_DIR}/external/glad/include
+        ${CMAKE_SOURCE_DIR}/external/stb
 )
 
 # Link dependencies
@@ -32,6 +38,13 @@ target_link_libraries(vestige_engine
     PUBLIC
         glfw
         glm::glm
+)
+
+# Suppress warnings from third-party source files compiled as part of the engine
+set_source_files_properties(
+    ${CMAKE_SOURCE_DIR}/external/stb/stb_image_impl.cpp
+    ${CMAKE_SOURCE_DIR}/external/glad/src/gl.c
+    PROPERTIES COMPILE_FLAGS "-w"
 )
 
 # Compiler warnings

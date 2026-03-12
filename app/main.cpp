@@ -6,7 +6,7 @@
 int main()
 {
     Vestige::EngineConfig config;
-    config.window.title = "Vestige Engine v0.1.0";
+    config.window.title = "Vestige Engine v0.2.0";
     config.window.width = 1280;
     config.window.height = 720;
     config.window.isVsyncEnabled = true;

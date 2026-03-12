@@ -10,12 +10,13 @@
 namespace Vestige
 {
 
-/// @brief A single vertex with position, normal, and color data.
+/// @brief A single vertex with position, normal, color, and texture coordinate data.
 struct Vertex
 {
     glm::vec3 position;
     glm::vec3 normal;
     glm::vec3 color;
+    glm::vec2 texCoord;
 };
 
 /// @brief Manages vertex/index data and OpenGL buffer objects for a piece of geometry.
@@ -50,6 +51,11 @@ public:
     /// @brief Creates a unit cube mesh (1x1x1, centered at origin).
     /// @return A mesh containing a colored cube.
     static Mesh createCube();
+
+    /// @brief Creates a ground plane mesh.
+    /// @param size Half-size of the plane.
+    /// @return A mesh containing a flat ground plane.
+    static Mesh createPlane(float size = 10.0f);
 
 private:
     void cleanup();

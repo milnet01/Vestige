@@ -9,8 +9,10 @@
 #include "renderer/renderer.h"
 #include "renderer/camera.h"
 #include "renderer/mesh.h"
+#include "renderer/material.h"
 
 #include <memory>
+#include <vector>
 
 namespace Vestige
 {
@@ -20,6 +22,14 @@ struct EngineConfig
 {
     WindowConfig window;
     std::string assetPath = "assets";
+};
+
+/// @brief A renderable object in the scene — mesh + material + transform.
+struct RenderObject
+{
+    Mesh* mesh;
+    Material* material;
+    glm::mat4 transform;
 };
 
 /// @brief The central engine — owns all subsystems and runs the main loop.
@@ -46,6 +56,7 @@ public:
 
 private:
     void processInput(float deltaTime);
+    void setupDemoScene();
 
     EventBus m_eventBus;
     std::unique_ptr<Window> m_window;
@@ -53,7 +64,11 @@ private:
     std::unique_ptr<InputManager> m_inputManager;
     std::unique_ptr<Renderer> m_renderer;
     std::unique_ptr<Camera> m_camera;
-    std::unique_ptr<Mesh> m_cubeMesh;
+
+    // Scene objects
+    std::vector<std::unique_ptr<Mesh>> m_meshes;
+    std::vector<std::unique_ptr<Material>> m_materials;
+    std::vector<RenderObject> m_renderObjects;
 
     bool m_isRunning;
     bool m_isCursorCaptured;

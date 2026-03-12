@@ -6,7 +6,9 @@
       "Bash(glxinfo 2>/dev/null | grep -E \"OpenGL \\(version|renderer|vendor\\)\" | head -5)",
       "Bash(pipx install:*)",
       "Bash(mkdir -p /mnt/Storage/Scripts/Linux/3D_Engine/external/glad && glad --api gl:core=4.5 --out-path /mnt/Storage/Scripts/Linux/3D_Engine/external/glad c 2>&1)",
-      "Bash(cd /mnt/Storage/Scripts/Linux/3D_Engine/build/bin && timeout 5 ./vestige 2>&1; echo \"Exit code: $?\")"
+      "Bash(cd /mnt/Storage/Scripts/Linux/3D_Engine/build/bin && timeout 5 ./vestige 2>&1; echo \"Exit code: $?\")",
+      "Bash(mkdir -p /mnt/Storage/Scripts/Linux/3D_Engine/external/stb && curl -sL https://raw.githubusercontent.com/nothings/stb/master/stb_image.h -o /mnt/Storage/Scripts/Linux/3D_Engine/external/stb/stb_image.h && wc -l /mnt/Storage/Scripts/Linux/3D_Engine/external/stb/stb_image.h)",
+      "Bash(cd /mnt/Storage/Scripts/Linux/3D_Engine/build/bin && LSAN_OPTIONS=suppressions=/mnt/Storage/Scripts/Linux/3D_Engine/asan_suppressions.txt timeout 5 ./vestige 2>&1)"
     ]
   }
 }
