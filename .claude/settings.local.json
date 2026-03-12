@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh auth:*)",
+      "Bash(glxinfo 2>/dev/null | grep \"OpenGL version\" || echo \"glxinfo not available — try: sudo apt install mesa-utils\")",
+      "Bash(glxinfo 2>/dev/null | grep -E \"OpenGL \\(version|renderer|vendor\\)\" | head -5)"
+    ]
+  }
+}

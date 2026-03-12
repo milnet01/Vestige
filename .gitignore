@@ -1,0 +1,43 @@
+# Build output
+build/
+cmake-build-*/
+out/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.vs/
+*.user
+*.suo
+
+# Compiled objects
+*.o
+*.obj
+*.a
+*.lib
+*.so
+*.dll
+*.dylib
+*.exe
+
+# CMake generated
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+compile_commands.json
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Dependency directories (fetched by CMake)
+external/glfw/
+external/glm/
+external/glad/
+external/stb/
+external/googletest/
+external/assimp/
