@@ -1,0 +1,7 @@
+# AddressSanitizer leak suppressions
+# These are known leaks in third-party libraries, not in Vestige code.
+
+# Mesa/AMD GLX driver allocates memory during OpenGL context creation
+# that is never freed. This is a known driver behavior, not a bug.
+leak:extensionSupportedGLX
+leak:_glfwInitGLX

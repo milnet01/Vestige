@@ -62,4 +62,9 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
             -fsanitize=undefined
         >
     )
+    # Suppress known third-party leaks (Mesa/GLFW driver allocations)
+    set(ASAN_SUPPRESSIONS "${CMAKE_SOURCE_DIR}/asan_suppressions.txt")
+    target_compile_definitions(vestige_engine PUBLIC
+        VESTIGE_ASAN_SUPPRESSIONS="${ASAN_SUPPRESSIONS}"
+    )
 endif()
