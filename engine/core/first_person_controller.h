@@ -19,7 +19,7 @@ struct ControllerConfig
     float moveSpeed = 3.0f;
     float sprintMultiplier = 2.0f;
     float mouseSensitivity = 0.1f;
-    float gamepadLookSensitivity = 120.0f;  // Degrees per second
+    float gamepadLookSensitivity = 350.0f;  // Degrees per second
     float gamepadDeadzone = 0.15f;
     float playerHeight = 1.7f;     // Eye height above ground
     float playerRadius = 0.3f;     // Collision radius
