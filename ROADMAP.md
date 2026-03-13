@@ -139,11 +139,55 @@ Application published on Steam.
 - [ ] Ray tracing — global illumination
 - [ ] Deferred rendering pipeline
 - [ ] Volumetric lighting (god rays, fog)
-- [ ] LOD (Level of Detail) system
 - [ ] Frustum culling and occlusion culling
 
 ### Milestone
 Hybrid rendering with ray-traced effects on supported hardware.
+
+---
+
+## Phase 8: Adaptive Geometry System
+**Goal:** Handle massive geometric complexity automatically — original approach, not a copy of any existing engine.
+
+### Problem Statement
+High-fidelity 3D scenes (like a fully detailed Solomon's Temple) can contain hundreds of millions of triangles. Without automatic geometry management, artists must manually create LOD variants and the engine wastes GPU time rendering detail the player can't see.
+
+### Research Direction (Original Approach)
+Rather than replicating existing commercial solutions, Vestige will explore its own approach to automatic geometry management. Possible research areas:
+- [ ] Automatic mesh simplification (quadric error metrics, academic literature)
+- [ ] Cluster-based mesh decomposition (splitting meshes into independently cullable/LOD-able chunks)
+- [ ] Screen-space error-driven selection (choose cluster detail based on projected pixel coverage)
+- [ ] Compute shader-driven culling and selection pipeline
+- [ ] Virtual geometry streaming (load/unload clusters on demand from disk)
+- [ ] Mesh shader integration (via Vulkan mesh shader extensions on RDNA2+)
+- [ ] Hybrid rasterization (hardware for large triangles, compute for sub-pixel)
+- [ ] Novel approaches: SDF-based geometry, surfel-based rendering, or other non-traditional representations
+
+### Design Principles
+- Solve the problem from first principles — don't reverse-engineer other engines
+- Build on published academic research (SIGGRAPH papers, GPU Pro/Gems, etc.)
+- Innovate where possible — this is an opportunity to do something new
+- Incremental: start with traditional LOD, evolve toward fully automatic
+
+### Milestone
+A system that lets artists import film-quality assets and the engine automatically manages complexity in real time.
+
+---
+
+## Phase 9: Atmospheric Rendering
+**Goal:** Procedural sky, weather, and time of day.
+
+### Features
+- [ ] Procedural sky model (Rayleigh/Mie scattering)
+- [ ] Full day/night cycle with sun/moon positioning
+- [ ] Volumetric clouds (ray-marched or noise-based)
+- [ ] Dynamic time-of-day lighting (sun color/intensity changes)
+- [ ] Stars and night sky
+- [ ] Weather effects (rain, dust, fog density changes)
+- [ ] God rays / crepuscular rays through clouds
+
+### Milestone
+A living sky with dynamic clouds, day/night transitions, and atmospheric lighting.
 
 ---
 

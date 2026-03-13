@@ -1,5 +1,5 @@
 /// @file renderer.cpp
-/// @brief Renderer implementation with Blinn-Phong lighting.
+/// @brief Renderer implementation with Blinn-Phong lighting, shadows, and FBO pipeline.
 #include "renderer/renderer.h"
 #include "scene/scene.h"
 #include "core/logger.h"
@@ -25,6 +25,12 @@ Renderer::Renderer(EventBus& eventBus)
     // Default clear color (dark grey)
     glClearColor(0.1f, 0.1f, 0.12f, 1.0f);
 
+    // Subscribe to window resize events
+    m_eventBus.subscribe<WindowResizeEvent>([this](const WindowResizeEvent& event)
+    {
+        onWindowResize(event.width, event.height);
+    });
+
     Logger::info("Renderer initialized (OpenGL 4.5)");
 }
 
@@ -45,13 +51,100 @@ bool Renderer::loadShaders(const std::string& assetPath)
         return false;
     }
 
+    // Load screen quad shader (for the FBO → screen pass)
+    std::string screenVertPath = assetPath + "/shaders/screen_quad.vert.glsl";
+    std::string screenFragPath = assetPath + "/shaders/screen_quad.frag.glsl";
+
+    if (!m_screenShader.loadFromFiles(screenVertPath, screenFragPath))
+    {
+        Logger::error("Failed to load screen quad shaders");
+        return false;
+    }
+
+    // Load shadow depth shader (for the shadow pass)
+    std::string shadowVertPath = assetPath + "/shaders/shadow_depth.vert.glsl";
+    std::string shadowFragPath = assetPath + "/shaders/shadow_depth.frag.glsl";
+
+    if (!m_shadowDepthShader.loadFromFiles(shadowVertPath, shadowFragPath))
+    {
+        Logger::error("Failed to load shadow depth shaders");
+        return false;
+    }
+
     Logger::info("Shaders loaded successfully");
     return true;
 }
 
+void Renderer::initFramebuffers(int width, int height, int msaaSamples)
+{
+    m_windowWidth = width;
+    m_windowHeight = height;
+    m_msaaSamples = msaaSamples;
+
+    // MSAA framebuffer — scene is rendered here
+    FramebufferConfig msaaConfig;
+    msaaConfig.width = width;
+    msaaConfig.height = height;
+    msaaConfig.samples = msaaSamples;
+    msaaConfig.hasColorAttachment = true;
+    msaaConfig.hasDepthAttachment = true;
+    m_msaaFbo = std::make_unique<Framebuffer>(msaaConfig);
+
+    // Resolve framebuffer — MSAA is resolved to this non-multisampled FBO
+    FramebufferConfig resolveConfig;
+    resolveConfig.width = width;
+    resolveConfig.height = height;
+    resolveConfig.samples = 1;
+    resolveConfig.hasColorAttachment = true;
+    resolveConfig.hasDepthAttachment = false;
+    m_resolveFbo = std::make_unique<Framebuffer>(resolveConfig);
+
+    // Fullscreen quad for the screen pass
+    m_screenQuad = std::make_unique<FullscreenQuad>();
+
+    // Shadow map for the directional light
+    m_shadowMap = std::make_unique<ShadowMap>();
+
+    Logger::info("Framebuffer pipeline initialized: "
+        + std::to_string(width) + "x" + std::to_string(height)
+        + " with " + std::to_string(msaaSamples) + "x MSAA + shadow mapping");
+}
+
 void Renderer::beginFrame()
 {
+    if (m_msaaFbo)
+    {
+        // Render to the MSAA framebuffer
+        m_msaaFbo->bind();
+    }
+
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+}
+
+void Renderer::endFrame()
+{
+    if (!m_msaaFbo || !m_resolveFbo || !m_screenQuad)
+    {
+        // FBOs not initialized — nothing to resolve
+        return;
+    }
+
+    // Resolve MSAA → non-multisampled FBO
+    m_msaaFbo->resolve(*m_resolveFbo);
+
+    // Draw to the default framebuffer (screen)
+    Framebuffer::unbind();
+    glViewport(0, 0, m_windowWidth, m_windowHeight);
+    glClear(GL_COLOR_BUFFER_BIT);
+    glDisable(GL_DEPTH_TEST);
+
+    // Draw the resolved texture to the screen via fullscreen quad
+    m_screenShader.use();
+    m_resolveFbo->bindColorTexture(0);
+    m_screenShader.setInt("u_screenTexture", 0);
+    m_screenQuad->draw();
+
+    glEnable(GL_DEPTH_TEST);
 }
 
 void Renderer::drawMesh(const Mesh& mesh, const glm::mat4& modelMatrix,
@@ -196,11 +289,62 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
         }
     }
 
-    // Draw all render items
+    // --- Shadow pass ---
+    if (m_shadowMap && m_hasDirectionalLight)
+    {
+        renderShadowPass(renderData);
+    }
+
+    // Re-bind the MSAA FBO (shadow pass changed the bound framebuffer)
+    if (m_msaaFbo)
+    {
+        m_msaaFbo->bind();
+    }
+
+    // --- Set shadow uniforms for the lighting pass ---
+    m_blinnPhongShader.use();
+    if (m_shadowMap && m_hasDirectionalLight)
+    {
+        m_shadowMap->bindShadowTexture(3);  // Texture unit 3 for shadow map
+        m_blinnPhongShader.setInt("u_shadowMap", 3);
+        m_blinnPhongShader.setMat4("u_lightSpaceMatrix", m_shadowMap->getLightSpaceMatrix());
+        m_blinnPhongShader.setBool("u_hasShadows", true);
+    }
+    else
+    {
+        m_blinnPhongShader.setBool("u_hasShadows", false);
+    }
+
+    // --- Scene pass: draw all render items with full lighting + shadows ---
     for (const auto& item : renderData.renderItems)
     {
         drawMesh(*item.mesh, item.worldMatrix, *item.material, camera, aspectRatio);
     }
+}
+
+void Renderer::renderShadowPass(const SceneRenderData& renderData)
+{
+    // Update shadow map light-space matrix from the directional light
+    m_shadowMap->update(m_directionalLight, glm::vec3(0.0f, 0.0f, 0.0f));
+
+    // Begin shadow pass (binds depth FBO, sets front-face culling)
+    m_shadowMap->beginShadowPass();
+
+    // Render all scene geometry using the shadow depth shader
+    m_shadowDepthShader.use();
+    m_shadowDepthShader.setMat4("u_lightSpaceMatrix", m_shadowMap->getLightSpaceMatrix());
+
+    for (const auto& item : renderData.renderItems)
+    {
+        m_shadowDepthShader.setMat4("u_model", item.worldMatrix);
+        item.mesh->bind();
+        glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(item.mesh->getIndexCount()),
+                       GL_UNSIGNED_INT, nullptr);
+        item.mesh->unbind();
+    }
+
+    // End shadow pass (restores culling, unbinds FBO)
+    m_shadowMap->endShadowPass();
 }
 
 void Renderer::uploadLightUniforms(const Camera& camera)
@@ -252,6 +396,27 @@ void Renderer::uploadLightUniforms(const Camera& camera)
         m_blinnPhongShader.setFloat(prefix + "linear" + idx, m_spotLights[static_cast<size_t>(i)].linear);
         m_blinnPhongShader.setFloat(prefix + "quadratic" + idx, m_spotLights[static_cast<size_t>(i)].quadratic);
     }
+}
+
+void Renderer::onWindowResize(int width, int height)
+{
+    if (width <= 0 || height <= 0)
+    {
+        return;
+    }
+
+    m_windowWidth = width;
+    m_windowHeight = height;
+
+    if (m_msaaFbo)
+    {
+        m_msaaFbo->resize(width, height);
+    }
+    if (m_resolveFbo)
+    {
+        m_resolveFbo->resize(width, height);
+    }
+    // Shadow map does not resize with the window — it has a fixed resolution
 }
 
 } // namespace Vestige

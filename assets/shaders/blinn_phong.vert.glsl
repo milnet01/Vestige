@@ -8,11 +8,13 @@ layout(location = 3) in vec2 texCoord;
 uniform mat4 u_model;
 uniform mat4 u_view;
 uniform mat4 u_projection;
+uniform mat4 u_lightSpaceMatrix;
 
 out vec3 v_fragPosition;
 out vec3 v_normal;
 out vec3 v_color;
 out vec2 v_texCoord;
+out vec4 v_fragPosLightSpace;
 
 void main()
 {
@@ -23,4 +25,5 @@ void main()
     v_normal = mat3(transpose(inverse(u_model))) * normal;
     v_color = color;
     v_texCoord = texCoord;
+    v_fragPosLightSpace = u_lightSpaceMatrix * worldPosition;
 }

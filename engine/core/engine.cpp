@@ -46,6 +46,9 @@ bool Engine::initialize(const EngineConfig& config)
         return false;
     }
 
+    // Initialize framebuffer pipeline (4x MSAA)
+    m_renderer->initFramebuffers(m_window->getWidth(), m_window->getHeight(), 4);
+
     // Create resource manager
     m_resourceManager = std::make_unique<ResourceManager>();
 
@@ -152,7 +155,10 @@ void Engine::run()
             m_renderer->renderScene(renderData, *m_camera, aspectRatio);
         }
 
-        // 7. Window — swap buffers
+        // 7. Resolve MSAA and draw to screen
+        m_renderer->endFrame();
+
+        // 8. Window — swap buffers
         m_window->swapBuffers();
     }
 
@@ -196,26 +202,31 @@ void Engine::setupDemoScene()
     groundMat->setDiffuseColor(glm::vec3(0.3f, 0.3f, 0.3f));
     groundMat->setSpecularColor(glm::vec3(0.1f));
     groundMat->setShininess(8.0f);
+    groundMat->setDiffuseTexture(m_resourceManager->loadTexture("assets/textures/Texturelabs_Stone_138M.jpg"));
 
     auto goldMat = m_resourceManager->createMaterial("gold");
     goldMat->setDiffuseColor(glm::vec3(0.83f, 0.69f, 0.22f));
     goldMat->setSpecularColor(glm::vec3(1.0f, 0.95f, 0.7f));
     goldMat->setShininess(128.0f);
+    goldMat->setDiffuseTexture(m_resourceManager->loadTexture("assets/textures/Texturelabs_Metal_124M.jpg"));
 
     auto redMat = m_resourceManager->createMaterial("red_clay");
     redMat->setDiffuseColor(glm::vec3(0.7f, 0.2f, 0.15f));
     redMat->setSpecularColor(glm::vec3(0.3f));
     redMat->setShininess(16.0f);
+    redMat->setDiffuseTexture(m_resourceManager->loadTexture("assets/textures/Texturelabs_Brick_124M.jpg"));
 
     auto blueMat = m_resourceManager->createMaterial("blue_matte");
     blueMat->setDiffuseColor(glm::vec3(0.15f, 0.25f, 0.7f));
     blueMat->setSpecularColor(glm::vec3(0.2f));
     blueMat->setShininess(8.0f);
+    blueMat->setDiffuseTexture(m_resourceManager->loadTexture("assets/textures/Texturelabs_Glass_120M.jpg"));
 
     auto whiteMat = m_resourceManager->createMaterial("white_stone");
     whiteMat->setDiffuseColor(glm::vec3(0.85f, 0.85f, 0.8f));
     whiteMat->setSpecularColor(glm::vec3(0.4f));
     whiteMat->setShininess(32.0f);
+    whiteMat->setDiffuseTexture(m_resourceManager->loadTexture("assets/textures/Texturelabs_Grunge_207M.jpg"));
 
     // --- Ground ---
     Entity* ground = scene->createEntity("Ground");

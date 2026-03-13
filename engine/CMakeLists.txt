@@ -22,6 +22,9 @@ set(ENGINE_SOURCES
     renderer/renderer.cpp
     renderer/texture.cpp
     renderer/material.cpp
+    renderer/framebuffer.cpp
+    renderer/fullscreen_quad.cpp
+    renderer/shadow_map.cpp
     utils/obj_loader.cpp
     # glad OpenGL loader
     ${CMAKE_SOURCE_DIR}/external/glad/src/gl.c

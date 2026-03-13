@@ -9,6 +9,7 @@ in vec3 v_fragPosition;
 in vec3 v_normal;
 in vec3 v_color;
 in vec2 v_texCoord;
+in vec4 v_fragPosLightSpace;
 
 out vec4 fragColor;
 
@@ -28,6 +29,10 @@ uniform vec3 u_dirLight_direction;
 uniform vec3 u_dirLight_ambient;
 uniform vec3 u_dirLight_diffuse;
 uniform vec3 u_dirLight_specular;
+
+// Shadow mapping
+uniform bool u_hasShadows;
+uniform sampler2D u_shadowMap;
 
 // Point lights
 uniform int u_pointLightCount;
@@ -55,6 +60,39 @@ uniform float u_spotLights_quadratic[MAX_SPOT_LIGHTS];
 // Wireframe mode
 uniform bool u_wireframe;
 
+/// Calculates the shadow factor using PCF (Percentage Closer Filtering).
+/// Returns 0.0 (fully lit) to 1.0 (fully in shadow).
+float calcShadow(vec3 normal, vec3 lightDir)
+{
+    // Perspective divide (identity for ortho, but correct for both)
+    vec3 projCoords = v_fragPosLightSpace.xyz / v_fragPosLightSpace.w;
+    projCoords = projCoords * 0.5 + 0.5;  // Transform from [-1,1] to [0,1]
+
+    // Fragments outside the shadow map are not in shadow
+    if (projCoords.z > 1.0)
+    {
+        return 0.0;
+    }
+
+    // Angle-dependent bias: surfaces facing the light need less bias
+    float bias = max(0.005 * (1.0 - dot(normal, lightDir)), 0.001);
+
+    // PCF 3x3: sample a grid around the fragment and average the results
+    float shadow = 0.0;
+    vec2 texelSize = 1.0 / textureSize(u_shadowMap, 0);
+    for (int x = -1; x <= 1; x++)
+    {
+        for (int y = -1; y <= 1; y++)
+        {
+            float closestDepth = texture(u_shadowMap, projCoords.xy + vec2(x, y) * texelSize).r;
+            shadow += (projCoords.z - bias > closestDepth) ? 1.0 : 0.0;
+        }
+    }
+    shadow /= 9.0;
+
+    return shadow;
+}
+
 /// Calculates the contribution from a directional light.
 vec3 calcDirectionalLight(vec3 norm, vec3 viewDir, vec3 baseColor)
 {
@@ -67,11 +105,19 @@ vec3 calcDirectionalLight(vec3 norm, vec3 viewDir, vec3 baseColor)
     vec3 halfwayDir = normalize(lightDir + viewDir);
     float spec = pow(max(dot(norm, halfwayDir), 0.0), u_materialShininess);
 
+    // Shadow factor
+    float shadow = 0.0;
+    if (u_hasShadows)
+    {
+        shadow = calcShadow(norm, lightDir);
+    }
+
     vec3 ambient  = u_dirLight_ambient * baseColor;
     vec3 diffuse  = u_dirLight_diffuse * diff * baseColor;
     vec3 specular = u_dirLight_specular * spec * u_materialSpecular;
 
-    return ambient + diffuse + specular;
+    // Ambient is never shadowed; diffuse and specular are
+    return ambient + (1.0 - shadow) * (diffuse + specular);
 }
 
 /// Calculates the contribution from a point light.

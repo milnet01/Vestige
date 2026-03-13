@@ -172,7 +172,7 @@ Mesh Mesh::createPlane(float size)
 {
     glm::vec3 color = {0.4f, 0.4f, 0.4f};
     glm::vec3 normal = {0.0f, 1.0f, 0.0f};
-    float uvScale = size;
+    float uvScale = size / 5.0f;
 
     std::vector<Vertex> vertices = {
         {{-size, 0.0f, -size}, normal, color, {0.0f,    0.0f}},
@@ -181,7 +181,7 @@ Mesh Mesh::createPlane(float size)
         {{-size, 0.0f,  size}, normal, color, {0.0f,    uvScale}},
     };
 
-    std::vector<uint32_t> indices = {0, 1, 2, 2, 3, 0};
+    std::vector<uint32_t> indices = {0, 2, 1, 0, 3, 2};
 
     Mesh plane;
     plane.upload(vertices, indices);
