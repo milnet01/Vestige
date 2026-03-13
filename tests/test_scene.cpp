@@ -1,0 +1,96 @@
+/// @file test_scene.cpp
+/// @brief Unit tests for the Scene and SceneManager systems.
+#include "scene/scene.h"
+#include "scene/scene_manager.h"
+
+#include <gtest/gtest.h>
+
+using namespace Vestige;
+
+TEST(SceneTest, CreateEntity)
+{
+    Scene scene("TestScene");
+    Entity* entity = scene.createEntity("Box");
+
+    EXPECT_NE(entity, nullptr);
+    EXPECT_EQ(entity->getName(), "Box");
+}
+
+TEST(SceneTest, FindEntity)
+{
+    Scene scene("TestScene");
+    scene.createEntity("Alpha");
+    scene.createEntity("Beta");
+
+    EXPECT_NE(scene.findEntity("Alpha"), nullptr);
+    EXPECT_NE(scene.findEntity("Beta"), nullptr);
+    EXPECT_EQ(scene.findEntity("Gamma"), nullptr);
+}
+
+TEST(SceneTest, GetNameAndRoot)
+{
+    Scene scene("MyScene");
+    EXPECT_EQ(scene.getName(), "MyScene");
+    EXPECT_NE(scene.getRoot(), nullptr);
+}
+
+TEST(SceneTest, UpdateDoesNotCrash)
+{
+    Scene scene("TestScene");
+    scene.createEntity("A");
+    scene.createEntity("B");
+    EXPECT_NO_THROW(scene.update(0.016f));
+}
+
+// --- SceneManager tests ---
+
+TEST(SceneManagerTest, CreateScene)
+{
+    SceneManager manager;
+    Scene* scene = manager.createScene("Level1");
+
+    EXPECT_NE(scene, nullptr);
+    EXPECT_EQ(scene->getName(), "Level1");
+    EXPECT_EQ(manager.getSceneCount(), 1u);
+}
+
+TEST(SceneManagerTest, SetActiveScene)
+{
+    SceneManager manager;
+    manager.createScene("Level1");
+    manager.createScene("Level2");
+
+    EXPECT_TRUE(manager.setActiveScene("Level2"));
+    EXPECT_EQ(manager.getActiveScene()->getName(), "Level2");
+}
+
+TEST(SceneManagerTest, FirstSceneBecomesActive)
+{
+    SceneManager manager;
+    manager.createScene("First");
+
+    EXPECT_NE(manager.getActiveScene(), nullptr);
+    EXPECT_EQ(manager.getActiveScene()->getName(), "First");
+}
+
+TEST(SceneManagerTest, SetActiveSceneInvalidName)
+{
+    SceneManager manager;
+    manager.createScene("Level1");
+    EXPECT_FALSE(manager.setActiveScene("NonExistent"));
+}
+
+TEST(SceneManagerTest, RemoveScene)
+{
+    SceneManager manager;
+    manager.createScene("Level1");
+    EXPECT_EQ(manager.getSceneCount(), 1u);
+    manager.removeScene("Level1");
+    EXPECT_EQ(manager.getSceneCount(), 0u);
+}
+
+TEST(SceneManagerTest, UpdateDoesNotCrashWithNoActiveScene)
+{
+    SceneManager manager;
+    EXPECT_NO_THROW(manager.update(0.016f));
+}

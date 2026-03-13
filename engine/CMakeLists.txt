@@ -9,6 +9,13 @@ set(ENGINE_SOURCES
     core/window.cpp
     core/input_manager.cpp
     core/engine.cpp
+    core/first_person_controller.cpp
+    scene/component.cpp
+    scene/entity.cpp
+    scene/mesh_renderer.cpp
+    scene/scene.cpp
+    scene/scene_manager.cpp
+    resource/resource_manager.cpp
     renderer/shader.cpp
     renderer/mesh.cpp
     renderer/camera.cpp

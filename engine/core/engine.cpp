@@ -2,6 +2,8 @@
 /// @brief Engine implementation — main loop and subsystem orchestration.
 #include "core/engine.h"
 #include "core/logger.h"
+#include "scene/mesh_renderer.h"
+#include "scene/light_component.h"
 
 #include <GLFW/glfw3.h>
 #include <glm/gtc/matrix_transform.hpp>
@@ -22,7 +24,7 @@ Engine::~Engine()
 
 bool Engine::initialize(const EngineConfig& config)
 {
-    Logger::info("=== Vestige Engine v0.2.0 ===");
+    Logger::info("=== Vestige Engine v0.3.0 ===");
     Logger::info("Initializing engine...");
 
     // Create window (also initializes GLFW and OpenGL context)
@@ -44,8 +46,20 @@ bool Engine::initialize(const EngineConfig& config)
         return false;
     }
 
-    // Create camera — start slightly above the ground looking forward
-    m_camera = std::make_unique<Camera>(glm::vec3(0.0f, 1.5f, 5.0f));
+    // Create resource manager
+    m_resourceManager = std::make_unique<ResourceManager>();
+
+    // Create scene manager
+    m_sceneManager = std::make_unique<SceneManager>();
+
+    // Create camera — start slightly above the ground
+    m_camera = std::make_unique<Camera>(glm::vec3(0.0f, 1.7f, 5.0f));
+
+    // Create first-person controller
+    ControllerConfig ctrlConfig;
+    ctrlConfig.playerHeight = 1.7f;
+    ctrlConfig.moveSpeed = 3.0f;
+    m_controller = std::make_unique<FirstPersonController>(*m_camera, *m_inputManager, ctrlConfig);
 
     // Set up the demo scene
     setupDemoScene();
@@ -73,6 +87,7 @@ bool Engine::initialize(const EngineConfig& config)
             case GLFW_KEY_ESCAPE:
                 m_isCursorCaptured = !m_isCursorCaptured;
                 m_window->setCursorEnabled(!m_isCursorCaptured);
+                m_controller->setEnabled(m_isCursorCaptured);
                 break;
 
             case GLFW_KEY_F1:
@@ -93,7 +108,8 @@ bool Engine::initialize(const EngineConfig& config)
 
     m_isRunning = true;
     Logger::info("Engine initialized successfully");
-    Logger::info("Controls: WASD=move, Mouse=look, Space/Shift=up/down, F1=wireframe, Q=quit");
+    Logger::info("Controls: WASD=move, Mouse=look, Space/Shift=up/down, LCtrl=sprint, F1=wireframe, Q=quit");
+    Logger::info("Gamepad: Left stick=move, Right stick=look, LB=sprint, Triggers=up/down");
     return true;
 }
 
@@ -109,24 +125,34 @@ void Engine::run()
         // 2. Window — poll OS events
         m_window->pollEvents();
 
-        // 3. Input — process and update state
-        processInput(deltaTime);
+        // 3. Update input state (reset per-frame deltas)
         m_inputManager->update();
 
-        // 4. Renderer — draw the frame
+        // 4. Scene — update entities and components
+        m_sceneManager->update(deltaTime);
+
+        // 5. Controller — process input and update camera
+        Scene* activeScene = m_sceneManager->getActiveScene();
+        std::vector<AABB> colliders;
+        if (activeScene)
+        {
+            colliders = activeScene->collectColliders();
+        }
+        m_controller->update(deltaTime, colliders);
+
+        // 6. Renderer — draw the frame
         m_renderer->beginFrame();
 
         float aspectRatio = static_cast<float>(m_window->getWidth())
                           / static_cast<float>(m_window->getHeight());
 
-        // Draw all scene objects
-        for (const auto& obj : m_renderObjects)
+        if (activeScene)
         {
-            m_renderer->drawMesh(*obj.mesh, obj.transform, *obj.material,
-                                 *m_camera, aspectRatio);
+            SceneRenderData renderData = activeScene->collectRenderData();
+            m_renderer->renderScene(renderData, *m_camera, aspectRatio);
         }
 
-        // 5. Window — swap buffers
+        // 7. Window — swap buffers
         m_window->swapBuffers();
     }
 
@@ -142,11 +168,10 @@ void Engine::shutdown()
 
     Logger::info("Shutting down engine...");
 
-    // Release resources in reverse order of creation
-    m_renderObjects.clear();
-    m_materials.clear();
-    m_meshes.clear();
+    m_controller.reset();
     m_camera.reset();
+    m_sceneManager.reset();
+    m_resourceManager.reset();
     m_renderer.reset();
     m_inputManager.reset();
     m_timer.reset();
@@ -157,166 +182,101 @@ void Engine::shutdown()
     Logger::info("Engine shutdown complete");
 }
 
-void Engine::processInput(float deltaTime)
-{
-    // WASD movement
-    float forward = 0.0f;
-    float right = 0.0f;
-    float up = 0.0f;
-
-    if (m_inputManager->isKeyDown(GLFW_KEY_W))
-    {
-        forward += 1.0f;
-    }
-    if (m_inputManager->isKeyDown(GLFW_KEY_S))
-    {
-        forward -= 1.0f;
-    }
-    if (m_inputManager->isKeyDown(GLFW_KEY_D))
-    {
-        right += 1.0f;
-    }
-    if (m_inputManager->isKeyDown(GLFW_KEY_A))
-    {
-        right -= 1.0f;
-    }
-    if (m_inputManager->isKeyDown(GLFW_KEY_SPACE))
-    {
-        up += 1.0f;
-    }
-    if (m_inputManager->isKeyDown(GLFW_KEY_LEFT_SHIFT))
-    {
-        up -= 1.0f;
-    }
-
-    m_camera->move(forward, right, up, deltaTime);
-
-    // Mouse look (only when cursor is captured)
-    if (m_isCursorCaptured)
-    {
-        glm::vec2 mouseDelta = m_inputManager->getMouseDelta();
-        if (mouseDelta.x != 0.0f || mouseDelta.y != 0.0f)
-        {
-            m_camera->rotate(mouseDelta.x, -mouseDelta.y);
-        }
-    }
-}
-
 void Engine::setupDemoScene()
 {
     Logger::info("Setting up demo scene...");
 
-    // --- Create materials ---
+    Scene* scene = m_sceneManager->createScene("Demo");
 
-    // Ground material (dark grey)
-    auto groundMat = std::make_unique<Material>();
-    groundMat->name = "ground";
+    // --- Create shared resources via ResourceManager ---
+    auto cubeMesh = m_resourceManager->getCubeMesh();
+    auto planeMesh = m_resourceManager->getPlaneMesh(20.0f);
+
+    auto groundMat = m_resourceManager->createMaterial("ground");
     groundMat->setDiffuseColor(glm::vec3(0.3f, 0.3f, 0.3f));
-    groundMat->setSpecularColor(glm::vec3(0.1f, 0.1f, 0.1f));
+    groundMat->setSpecularColor(glm::vec3(0.1f));
     groundMat->setShininess(8.0f);
 
-    // Red material (like a clay brick)
-    auto redMat = std::make_unique<Material>();
-    redMat->name = "red_clay";
-    redMat->setDiffuseColor(glm::vec3(0.7f, 0.2f, 0.15f));
-    redMat->setSpecularColor(glm::vec3(0.3f, 0.3f, 0.3f));
-    redMat->setShininess(16.0f);
-
-    // Gold material (shiny metal)
-    auto goldMat = std::make_unique<Material>();
-    goldMat->name = "gold";
+    auto goldMat = m_resourceManager->createMaterial("gold");
     goldMat->setDiffuseColor(glm::vec3(0.83f, 0.69f, 0.22f));
     goldMat->setSpecularColor(glm::vec3(1.0f, 0.95f, 0.7f));
     goldMat->setShininess(128.0f);
 
-    // Blue material (matte)
-    auto blueMat = std::make_unique<Material>();
-    blueMat->name = "blue_matte";
+    auto redMat = m_resourceManager->createMaterial("red_clay");
+    redMat->setDiffuseColor(glm::vec3(0.7f, 0.2f, 0.15f));
+    redMat->setSpecularColor(glm::vec3(0.3f));
+    redMat->setShininess(16.0f);
+
+    auto blueMat = m_resourceManager->createMaterial("blue_matte");
     blueMat->setDiffuseColor(glm::vec3(0.15f, 0.25f, 0.7f));
-    blueMat->setSpecularColor(glm::vec3(0.2f, 0.2f, 0.2f));
+    blueMat->setSpecularColor(glm::vec3(0.2f));
     blueMat->setShininess(8.0f);
 
-    // White material (stone-like)
-    auto whiteMat = std::make_unique<Material>();
-    whiteMat->name = "white_stone";
+    auto whiteMat = m_resourceManager->createMaterial("white_stone");
     whiteMat->setDiffuseColor(glm::vec3(0.85f, 0.85f, 0.8f));
-    whiteMat->setSpecularColor(glm::vec3(0.4f, 0.4f, 0.4f));
+    whiteMat->setSpecularColor(glm::vec3(0.4f));
     whiteMat->setShininess(32.0f);
 
-    // --- Create meshes ---
+    // --- Ground ---
+    Entity* ground = scene->createEntity("Ground");
+    ground->addComponent<MeshRenderer>(planeMesh, groundMat);
+    // No collision bounds for the ground (we handle ground via height clamping)
 
-    auto groundMesh = std::make_unique<Mesh>(Mesh::createPlane(20.0f));
-    auto cubeMesh = std::make_unique<Mesh>(Mesh::createCube());
+    // --- Cubes ---
+    Entity* goldCube = scene->createEntity("Gold Cube");
+    goldCube->transform.position = glm::vec3(0.0f, 0.5f, 0.0f);
+    auto* goldRenderer = goldCube->addComponent<MeshRenderer>(cubeMesh, goldMat);
+    goldRenderer->setBounds(AABB::unitCube());
 
-    // --- Assemble render objects ---
+    Entity* redCube = scene->createEntity("Red Cube");
+    redCube->transform.position = glm::vec3(-3.0f, 0.5f, -1.0f);
+    redCube->transform.rotation = glm::vec3(0.0f, 30.0f, 0.0f);
+    auto* redRenderer = redCube->addComponent<MeshRenderer>(cubeMesh, redMat);
+    redRenderer->setBounds(AABB::unitCube());
 
-    // Ground plane
-    glm::mat4 groundTransform = glm::mat4(1.0f);
-    m_renderObjects.push_back({groundMesh.get(), groundMat.get(), groundTransform});
+    Entity* blueCube = scene->createEntity("Blue Cube");
+    blueCube->transform.position = glm::vec3(3.0f, 0.75f, -1.0f);
+    blueCube->transform.scale = glm::vec3(1.0f, 1.5f, 1.0f);
+    auto* blueRenderer = blueCube->addComponent<MeshRenderer>(cubeMesh, blueMat);
+    blueRenderer->setBounds(AABB::unitCube());
 
-    // Center cube (gold)
-    glm::mat4 cube1Transform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.5f, 0.0f));
-    m_renderObjects.push_back({cubeMesh.get(), goldMat.get(), cube1Transform});
+    Entity* whiteCube = scene->createEntity("White Cube");
+    whiteCube->transform.position = glm::vec3(0.0f, 1.0f, -5.0f);
+    whiteCube->transform.scale = glm::vec3(2.0f, 2.0f, 2.0f);
+    whiteCube->transform.rotation = glm::vec3(0.0f, 45.0f, 0.0f);
+    auto* whiteRenderer = whiteCube->addComponent<MeshRenderer>(cubeMesh, whiteMat);
+    whiteRenderer->setBounds(AABB::unitCube());
 
-    // Left cube (red, rotated)
-    glm::mat4 cube2Transform = glm::translate(glm::mat4(1.0f), glm::vec3(-3.0f, 0.5f, -1.0f));
-    cube2Transform = glm::rotate(cube2Transform, glm::radians(30.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-    m_renderObjects.push_back({cubeMesh.get(), redMat.get(), cube2Transform});
+    // --- Lights ---
+    Entity* sun = scene->createEntity("Sun");
+    auto* dirLight = sun->addComponent<DirectionalLightComponent>();
+    dirLight->light.direction = glm::vec3(-0.3f, -0.8f, -0.5f);
+    dirLight->light.ambient = glm::vec3(0.15f, 0.15f, 0.18f);
+    dirLight->light.diffuse = glm::vec3(0.9f, 0.85f, 0.75f);
+    dirLight->light.specular = glm::vec3(1.0f);
 
-    // Right cube (blue, scaled taller)
-    glm::mat4 cube3Transform = glm::translate(glm::mat4(1.0f), glm::vec3(3.0f, 0.75f, -1.0f));
-    cube3Transform = glm::scale(cube3Transform, glm::vec3(1.0f, 1.5f, 1.0f));
-    m_renderObjects.push_back({cubeMesh.get(), blueMat.get(), cube3Transform});
+    Entity* warmLight = scene->createEntity("Warm Light");
+    warmLight->transform.position = glm::vec3(1.5f, 2.0f, 1.5f);
+    auto* warmPL = warmLight->addComponent<PointLightComponent>();
+    warmPL->light.ambient = glm::vec3(0.02f, 0.02f, 0.01f);
+    warmPL->light.diffuse = glm::vec3(0.9f, 0.7f, 0.3f);
+    warmPL->light.specular = glm::vec3(1.0f, 0.9f, 0.6f);
+    warmPL->light.linear = 0.14f;
+    warmPL->light.quadratic = 0.07f;
 
-    // Back cube (white, large)
-    glm::mat4 cube4Transform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 1.0f, -5.0f));
-    cube4Transform = glm::scale(cube4Transform, glm::vec3(2.0f, 2.0f, 2.0f));
-    cube4Transform = glm::rotate(cube4Transform, glm::radians(45.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-    m_renderObjects.push_back({cubeMesh.get(), whiteMat.get(), cube4Transform});
+    Entity* coolLight = scene->createEntity("Cool Light");
+    coolLight->transform.position = glm::vec3(-2.0f, 2.5f, 2.0f);
+    auto* coolPL = coolLight->addComponent<PointLightComponent>();
+    coolPL->light.ambient = glm::vec3(0.01f, 0.01f, 0.02f);
+    coolPL->light.diffuse = glm::vec3(0.3f, 0.5f, 0.9f);
+    coolPL->light.specular = glm::vec3(0.5f, 0.7f, 1.0f);
+    coolPL->light.linear = 0.14f;
+    coolPL->light.quadratic = 0.07f;
 
-    // --- Store ownership ---
-    m_meshes.push_back(std::move(groundMesh));
-    m_meshes.push_back(std::move(cubeMesh));
-    m_materials.push_back(std::move(groundMat));
-    m_materials.push_back(std::move(redMat));
-    m_materials.push_back(std::move(goldMat));
-    m_materials.push_back(std::move(blueMat));
-    m_materials.push_back(std::move(whiteMat));
+    // Initial scene update to compute world matrices
+    scene->update(0.0f);
 
-    // --- Set up lights ---
-
-    // Directional light (sun)
-    DirectionalLight sun;
-    sun.direction = glm::vec3(-0.3f, -0.8f, -0.5f);
-    sun.ambient = glm::vec3(0.15f, 0.15f, 0.18f);
-    sun.diffuse = glm::vec3(0.9f, 0.85f, 0.75f);
-    sun.specular = glm::vec3(1.0f, 1.0f, 1.0f);
-    m_renderer->setDirectionalLight(sun);
-
-    // Warm point light near the gold cube
-    PointLight warmLight;
-    warmLight.position = glm::vec3(1.5f, 2.0f, 1.5f);
-    warmLight.ambient = glm::vec3(0.02f, 0.02f, 0.01f);
-    warmLight.diffuse = glm::vec3(0.9f, 0.7f, 0.3f);
-    warmLight.specular = glm::vec3(1.0f, 0.9f, 0.6f);
-    warmLight.constant = 1.0f;
-    warmLight.linear = 0.14f;
-    warmLight.quadratic = 0.07f;
-    m_renderer->addPointLight(warmLight);
-
-    // Cool point light on the other side
-    PointLight coolLight;
-    coolLight.position = glm::vec3(-2.0f, 2.5f, 2.0f);
-    coolLight.ambient = glm::vec3(0.01f, 0.01f, 0.02f);
-    coolLight.diffuse = glm::vec3(0.3f, 0.5f, 0.9f);
-    coolLight.specular = glm::vec3(0.5f, 0.7f, 1.0f);
-    coolLight.constant = 1.0f;
-    coolLight.linear = 0.14f;
-    coolLight.quadratic = 0.07f;
-    m_renderer->addPointLight(coolLight);
-
-    Logger::info("Demo scene ready: " + std::to_string(m_renderObjects.size())
-        + " objects, 1 directional + 2 point lights");
+    Logger::info("Demo scene ready: entities with components, 1 directional + 2 point lights");
 }
 
 } // namespace Vestige

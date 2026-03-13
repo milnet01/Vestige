@@ -16,6 +16,8 @@
 namespace Vestige
 {
 
+struct SceneRenderData;
+
 /// @brief Manages OpenGL rendering state and draw operations.
 class Renderer
 {
@@ -76,6 +78,12 @@ public:
 
     /// @brief Enables or disables the directional light.
     void setDirectionalLightEnabled(bool isEnabled);
+
+    /// @brief Renders an entire scene from collected render data.
+    /// @param renderData The scene's collected render data.
+    /// @param camera The camera providing view/projection matrices.
+    /// @param aspectRatio Window width / height.
+    void renderScene(const SceneRenderData& renderData, const Camera& camera, float aspectRatio);
 
 private:
     void uploadLightUniforms(const Camera& camera);

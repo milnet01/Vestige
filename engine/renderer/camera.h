@@ -68,6 +68,9 @@ public:
     /// @brief Sets the mouse sensitivity.
     void setSensitivity(float sensitivity);
 
+    /// @brief Sets the camera position directly.
+    void setPosition(const glm::vec3& position);
+
 private:
     void updateVectors();
 

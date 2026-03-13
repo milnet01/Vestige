@@ -1,6 +1,7 @@
 /// @file renderer.cpp
 /// @brief Renderer implementation with Blinn-Phong lighting.
 #include "renderer/renderer.h"
+#include "scene/scene.h"
 #include "core/logger.h"
 
 #include <glad/gl.h>
@@ -166,6 +167,40 @@ bool Renderer::isWireframeMode() const
 void Renderer::setDirectionalLightEnabled(bool isEnabled)
 {
     m_hasDirectionalLight = isEnabled;
+}
+
+void Renderer::renderScene(const SceneRenderData& renderData, const Camera& camera, float aspectRatio)
+{
+    // Apply lights from scene data
+    m_hasDirectionalLight = renderData.hasDirectionalLight;
+    if (renderData.hasDirectionalLight)
+    {
+        m_directionalLight = renderData.directionalLight;
+    }
+
+    m_pointLights.clear();
+    for (const auto& pl : renderData.pointLights)
+    {
+        if (static_cast<int>(m_pointLights.size()) < MAX_POINT_LIGHTS)
+        {
+            m_pointLights.push_back(pl);
+        }
+    }
+
+    m_spotLights.clear();
+    for (const auto& sl : renderData.spotLights)
+    {
+        if (static_cast<int>(m_spotLights.size()) < MAX_SPOT_LIGHTS)
+        {
+            m_spotLights.push_back(sl);
+        }
+    }
+
+    // Draw all render items
+    for (const auto& item : renderData.renderItems)
+    {
+        drawMesh(*item.mesh, item.worldMatrix, *item.material, camera, aspectRatio);
+    }
 }
 
 void Renderer::uploadLightUniforms(const Camera& camera)

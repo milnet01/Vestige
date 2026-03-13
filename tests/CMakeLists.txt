@@ -5,6 +5,9 @@ add_executable(vestige_tests
     test_event_bus.cpp
     test_timer.cpp
     test_logger.cpp
+    test_aabb.cpp
+    test_entity.cpp
+    test_scene.cpp
 )
 
 target_link_libraries(vestige_tests

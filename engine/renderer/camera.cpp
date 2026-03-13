@@ -84,6 +84,11 @@ void Camera::setSensitivity(float sensitivity)
     m_sensitivity = sensitivity;
 }
 
+void Camera::setPosition(const glm::vec3& position)
+{
+    m_position = position;
+}
+
 void Camera::updateVectors()
 {
     // Calculate new front vector from yaw and pitch angles

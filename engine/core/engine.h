@@ -6,13 +6,13 @@
 #include "core/window.h"
 #include "core/timer.h"
 #include "core/input_manager.h"
+#include "core/first_person_controller.h"
 #include "renderer/renderer.h"
 #include "renderer/camera.h"
-#include "renderer/mesh.h"
-#include "renderer/material.h"
+#include "scene/scene_manager.h"
+#include "resource/resource_manager.h"
 
 #include <memory>
-#include <vector>
 
 namespace Vestige
 {
@@ -22,14 +22,6 @@ struct EngineConfig
 {
     WindowConfig window;
     std::string assetPath = "assets";
-};
-
-/// @brief A renderable object in the scene — mesh + material + transform.
-struct RenderObject
-{
-    Mesh* mesh;
-    Material* material;
-    glm::mat4 transform;
 };
 
 /// @brief The central engine — owns all subsystems and runs the main loop.
@@ -55,7 +47,6 @@ public:
     void shutdown();
 
 private:
-    void processInput(float deltaTime);
     void setupDemoScene();
 
     EventBus m_eventBus;
@@ -64,11 +55,9 @@ private:
     std::unique_ptr<InputManager> m_inputManager;
     std::unique_ptr<Renderer> m_renderer;
     std::unique_ptr<Camera> m_camera;
-
-    // Scene objects
-    std::vector<std::unique_ptr<Mesh>> m_meshes;
-    std::vector<std::unique_ptr<Material>> m_materials;
-    std::vector<RenderObject> m_renderObjects;
+    std::unique_ptr<FirstPersonController> m_controller;
+    std::unique_ptr<SceneManager> m_sceneManager;
+    std::unique_ptr<ResourceManager> m_resourceManager;
 
     bool m_isRunning;
     bool m_isCursorCaptured;

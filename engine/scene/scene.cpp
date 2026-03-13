@@ -1,0 +1,135 @@
+/// @file scene.cpp
+/// @brief Scene implementation.
+#include "scene/scene.h"
+#include "core/logger.h"
+
+namespace Vestige
+{
+
+Scene::Scene(const std::string& name)
+    : m_name(name)
+    , m_root(std::make_unique<Entity>("Root"))
+{
+}
+
+Scene::~Scene() = default;
+
+Entity* Scene::createEntity(const std::string& name)
+{
+    auto entity = std::make_unique<Entity>(name);
+    return m_root->addChild(std::move(entity));
+}
+
+void Scene::update(float deltaTime)
+{
+    m_root->update(deltaTime);
+}
+
+SceneRenderData Scene::collectRenderData() const
+{
+    SceneRenderData data;
+    collectRenderDataRecursive(*m_root, data);
+    return data;
+}
+
+std::vector<AABB> Scene::collectColliders() const
+{
+    std::vector<AABB> colliders;
+    collectCollidersRecursive(*m_root, colliders);
+    return colliders;
+}
+
+Entity* Scene::findEntity(const std::string& name)
+{
+    if (m_root->getName() == name)
+    {
+        return m_root.get();
+    }
+    return m_root->findDescendant(name);
+}
+
+Entity* Scene::getRoot()
+{
+    return m_root.get();
+}
+
+const std::string& Scene::getName() const
+{
+    return m_name;
+}
+
+void Scene::collectRenderDataRecursive(const Entity& entity, SceneRenderData& data) const
+{
+    if (!entity.isActive())
+    {
+        return;
+    }
+
+    // Check for MeshRenderer
+    auto* meshRenderer = entity.getComponent<MeshRenderer>();
+    if (meshRenderer && meshRenderer->isEnabled() && meshRenderer->getMesh() && meshRenderer->getMaterial())
+    {
+        SceneRenderData::RenderItem item;
+        item.mesh = meshRenderer->getMesh().get();
+        item.material = meshRenderer->getMaterial().get();
+        item.worldMatrix = entity.getWorldMatrix();
+        item.worldBounds = meshRenderer->getBounds().transformed(item.worldMatrix);
+        data.renderItems.push_back(item);
+    }
+
+    // Check for light components
+    auto* dirLight = entity.getComponent<DirectionalLightComponent>();
+    if (dirLight && dirLight->isEnabled())
+    {
+        data.directionalLight = dirLight->light;
+        data.hasDirectionalLight = true;
+    }
+
+    auto* pointLight = entity.getComponent<PointLightComponent>();
+    if (pointLight && pointLight->isEnabled())
+    {
+        PointLight pl = pointLight->light;
+        pl.position = entity.getWorldPosition();
+        data.pointLights.push_back(pl);
+    }
+
+    auto* spotLight = entity.getComponent<SpotLightComponent>();
+    if (spotLight && spotLight->isEnabled())
+    {
+        SpotLight sl = spotLight->light;
+        sl.position = entity.getWorldPosition();
+        data.spotLights.push_back(sl);
+    }
+
+    // Recurse into children
+    for (const auto& child : entity.getChildren())
+    {
+        collectRenderDataRecursive(*child, data);
+    }
+}
+
+void Scene::collectCollidersRecursive(const Entity& entity, std::vector<AABB>& colliders) const
+{
+    if (!entity.isActive())
+    {
+        return;
+    }
+
+    auto* meshRenderer = entity.getComponent<MeshRenderer>();
+    if (meshRenderer && meshRenderer->isEnabled())
+    {
+        AABB bounds = meshRenderer->getBounds();
+        // Only add if bounds are non-zero (has collision)
+        if (bounds.getSize() != glm::vec3(0.0f))
+        {
+            colliders.push_back(bounds.transformed(entity.getWorldMatrix()));
+        }
+    }
+
+    for (const auto& child : entity.getChildren())
+    {
+        collectCollidersRecursive(*child, colliders);
+    }
+}
+
+} // namespace Vestige
