@@ -41,4 +41,15 @@ void MeshRenderer::setBounds(const AABB& bounds)
     m_bounds = bounds;
 }
 
+const AABB& MeshRenderer::getCullingBounds() const
+{
+    return m_hasCullingBounds ? m_cullingBounds : m_bounds;
+}
+
+void MeshRenderer::setCullingBounds(const AABB& bounds)
+{
+    m_cullingBounds = bounds;
+    m_hasCullingBounds = true;
+}
+
 } // namespace Vestige

@@ -5,6 +5,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 #include <algorithm>
+#include <cmath>
 
 namespace Vestige
 {
@@ -31,6 +32,33 @@ glm::mat4 Camera::getViewMatrix() const
 
 glm::mat4 Camera::getProjectionMatrix(float aspectRatio) const
 {
+    // Reverse-Z infinite projection: near maps to 1.0, far maps to 0.0.
+    // Combined with glClipControl(GL_LOWER_LEFT, GL_ZERO_TO_ONE), this gives
+    // near-uniform depth precision across the entire view range and eliminates
+    // Z-fighting at distance. The far plane is at infinity — no clipping.
+    float fovRad = glm::radians(m_fov);
+    float f = 1.0f / std::tan(fovRad * 0.5f);
+    float nearPlane = 0.1f;
+
+    // Reverse-Z infinite far plane projection matrix for [0, 1] depth range.
+    // Row-major layout (GLM uses column-major, so we build column by column):
+    //   f/aspect  0     0      0
+    //   0         f     0      0
+    //   0         0     0     near
+    //   0         0    -1      0
+    glm::mat4 proj(0.0f);
+    proj[0][0] = f / aspectRatio;
+    proj[1][1] = f;
+    proj[2][3] = -1.0f;         // w = -z (perspective divide)
+    proj[3][2] = nearPlane;     // maps near plane to depth 1.0
+
+    return proj;
+}
+
+glm::mat4 Camera::getCullingProjectionMatrix(float aspectRatio) const
+{
+    // Standard GLM perspective for frustum plane extraction.
+    // Uses a large but finite far plane so all 6 frustum planes are well-defined.
     return glm::perspective(glm::radians(m_fov), aspectRatio, 0.1f, 1000.0f);
 }
 

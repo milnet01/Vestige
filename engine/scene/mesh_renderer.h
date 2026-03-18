@@ -34,13 +34,23 @@ public:
     /// @brief Gets the local-space bounding box for collision.
     const AABB& getBounds() const;
 
-    /// @brief Sets the local-space bounding box.
+    /// @brief Sets the local-space bounding box (used for both collision and frustum culling).
     void setBounds(const AABB& bounds);
+
+    /// @brief Gets the frustum-culling bounds (falls back to collision bounds if not set).
+    const AABB& getCullingBounds() const;
+
+    /// @brief Sets separate frustum-culling bounds (independent of collision bounds).
+    /// Use this for objects that need different bounds for rendering vs. physics,
+    /// e.g. a ground plane that should never be a collider but needs culling bounds.
+    void setCullingBounds(const AABB& bounds);
 
 private:
     std::shared_ptr<Mesh> m_mesh;
     std::shared_ptr<Material> m_material;
     AABB m_bounds;
+    AABB m_cullingBounds;
+    bool m_hasCullingBounds = false;
 };
 
 } // namespace Vestige

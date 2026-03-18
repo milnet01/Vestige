@@ -14,8 +14,63 @@
 namespace Vestige
 {
 
+/// @brief OpenGL debug message callback — routes driver messages to the engine logger.
+static void GLAPIENTRY glDebugCallback(
+    GLenum source, GLenum type, GLuint id, GLenum severity,
+    GLsizei /*length*/, const GLchar* message, const void* /*userParam*/)
+{
+    // Skip insignificant notifications (buffer info, shader recompile hints)
+    if (severity == GL_DEBUG_SEVERITY_NOTIFICATION)
+    {
+        return;
+    }
+
+    const char* sourceStr = "Unknown";
+    switch (source)
+    {
+        case GL_DEBUG_SOURCE_API:             sourceStr = "API"; break;
+        case GL_DEBUG_SOURCE_WINDOW_SYSTEM:   sourceStr = "Window"; break;
+        case GL_DEBUG_SOURCE_SHADER_COMPILER: sourceStr = "Shader"; break;
+        case GL_DEBUG_SOURCE_THIRD_PARTY:     sourceStr = "3rdParty"; break;
+        case GL_DEBUG_SOURCE_APPLICATION:     sourceStr = "App"; break;
+        case GL_DEBUG_SOURCE_OTHER:           sourceStr = "Other"; break;
+    }
+
+    const char* typeStr = "Unknown";
+    switch (type)
+    {
+        case GL_DEBUG_TYPE_ERROR:               typeStr = "Error"; break;
+        case GL_DEBUG_TYPE_DEPRECATED_BEHAVIOR: typeStr = "Deprecated"; break;
+        case GL_DEBUG_TYPE_UNDEFINED_BEHAVIOR:  typeStr = "UB"; break;
+        case GL_DEBUG_TYPE_PORTABILITY:         typeStr = "Portability"; break;
+        case GL_DEBUG_TYPE_PERFORMANCE:         typeStr = "Performance"; break;
+        case GL_DEBUG_TYPE_MARKER:              typeStr = "Marker"; break;
+        case GL_DEBUG_TYPE_OTHER:               typeStr = "Other"; break;
+    }
+
+    std::string msg = "[GL " + std::string(sourceStr) + "/" + typeStr
+                    + " #" + std::to_string(id) + "] " + message;
+
+    switch (severity)
+    {
+        case GL_DEBUG_SEVERITY_HIGH:
+            Logger::error(msg);
+            break;
+        case GL_DEBUG_SEVERITY_MEDIUM:
+            Logger::warning(msg);
+            break;
+        case GL_DEBUG_SEVERITY_LOW:
+            Logger::debug(msg);
+            break;
+        default:
+            Logger::debug(msg);
+            break;
+    }
+}
+
 /// @brief Extracts the 6 frustum planes from a view-projection matrix.
 /// Each plane is (a, b, c, d) where ax + by + cz + d >= 0 is inside.
+/// Uses standard [-1, 1] NDC formulas (the culling VP uses glm::perspective).
 static std::array<glm::vec4, 6> extractFrustumPlanes(const glm::mat4& vp)
 {
     std::array<glm::vec4, 6> planes;
@@ -72,8 +127,26 @@ Renderer::Renderer(EventBus& eventBus)
     , m_hasDirectionalLight(true)
     , m_isWireframe(false)
 {
+    // Enable OpenGL debug output (debug builds only — zero cost in release)
+#ifndef NDEBUG
+    glEnable(GL_DEBUG_OUTPUT);
+    glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
+    glDebugMessageCallback(glDebugCallback, nullptr);
+    // Suppress notifications — they are too noisy (buffer allocation hints etc.)
+    glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DEBUG_SEVERITY_NOTIFICATION,
+                          0, nullptr, GL_FALSE);
+    Logger::debug("OpenGL debug output enabled");
+#endif
+
     // Enable depth testing — closer objects obscure farther ones
     glEnable(GL_DEPTH_TEST);
+
+    // Reverse-Z: map clip-space Z to [0, 1] instead of [-1, 1], and use
+    // GEQUAL depth test so near=1.0, far=0.0. This distributes floating-point
+    // precision evenly across the entire depth range, eliminating Z-fighting.
+    glClipControl(GL_LOWER_LEFT, GL_ZERO_TO_ONE);
+    glDepthFunc(GL_GEQUAL);
+    glClearDepth(0.0);
 
     // Enable back-face culling — skip drawing the back side of triangles
     glEnable(GL_CULL_FACE);
@@ -89,7 +162,7 @@ Renderer::Renderer(EventBus& eventBus)
         onWindowResize(event.width, event.height);
     });
 
-    Logger::info("Renderer initialized (OpenGL 4.5)");
+    Logger::info("Renderer initialized (OpenGL 4.5, reverse-Z)");
 }
 
 Renderer::~Renderer()
@@ -375,6 +448,16 @@ void Renderer::endFrame()
     {
         // MSAA mode: resolve multisampled → non-multisampled
         m_msaaFbo->resolve(*m_resolveFbo);
+    }
+
+    // Invalidate the source FBO after resolve — tells the driver the multisampled
+    // data is no longer needed, avoiding unnecessary writeback to VRAM.
+    if (!isTAA && m_msaaFbo && m_msaaFbo->isMultisampled())
+    {
+        glBindFramebuffer(GL_FRAMEBUFFER, m_msaaFbo->getId());
+        GLenum attachments[] = { GL_COLOR_ATTACHMENT0, GL_DEPTH_ATTACHMENT };
+        glInvalidateFramebuffer(GL_FRAMEBUFFER, 2, attachments);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
     }
 
     // 2. Resolve depth → sampleable depth texture for SSAO and TAA motion vectors
@@ -1074,14 +1157,20 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
     renderPointShadowPass(allBatches, shadowCasters);
 
     // --- Frustum cull for scene pass ---
-    glm::mat4 viewProjection = camera.getProjectionMatrix(aspectRatio) * camera.getViewMatrix();
-    auto frustumPlanes = extractFrustumPlanes(viewProjection);
+    // Use the standard (non-reverse-Z) projection for frustum extraction so all
+    // 6 planes are well-defined. The reverse-Z infinite projection produces a
+    // degenerate near plane that breaks the Gribb-Hartmann extraction.
+    glm::mat4 cullingVP = camera.getCullingProjectionMatrix(aspectRatio) * camera.getViewMatrix();
+    auto frustumPlanes = extractFrustumPlanes(cullingVP);
 
-    // Filter render items to only those inside the view frustum
+    // Filter render items to only those inside the view frustum.
+    // Items with zero-size bounds (no explicit AABB set) are always included —
+    // it is safer to overdraw than to incorrectly cull visible geometry.
     m_culledItems.clear();
     for (const auto& item : renderData.renderItems)
     {
-        if (isAabbInFrustum(item.worldBounds, frustumPlanes))
+        if (item.worldBounds.getSize() == glm::vec3(0.0f)
+            || isAabbInFrustum(item.worldBounds, frustumPlanes))
         {
             m_culledItems.push_back(item);
         }
@@ -1254,7 +1343,10 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
     // --- Skybox pass: draw after opaque geometry, before transparent ---
     if (m_skybox)
     {
-        glDepthFunc(GL_LEQUAL);  // Pass where depth == 1.0 (far plane)
+        // Reverse-Z: skybox at depth 0.0 (far plane). GL_GEQUAL ensures:
+        //   empty pixels (depth=0.0): 0.0 >= 0.0 → PASS (skybox fills background)
+        //   geometry pixels (depth>0): 0.0 >= 0.02 → FAIL (skybox hidden by geometry)
+        // No depth func change needed — GL_GEQUAL is already set.
         glDepthMask(GL_FALSE);   // Don't write to depth buffer
         glDisable(GL_CULL_FACE); // We're inside the cube — must see inner faces
 
@@ -1272,7 +1364,6 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
 
         glEnable(GL_CULL_FACE);  // Restore face culling
         glDepthMask(GL_TRUE);    // Restore depth writes
-        glDepthFunc(GL_LESS);    // Restore default depth func
     }
 
     // --- Transparent pass: frustum cull + draw BLEND items back-to-front ---
@@ -1313,6 +1404,11 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
 void Renderer::renderShadowPass(const std::vector<InstanceBatch>& batches,
                                  const Camera& camera, float aspectRatio)
 {
+    // Shadow maps use standard forward-Z (GL_LESS) while the main scene uses
+    // reverse-Z (GL_GEQUAL). Temporarily switch depth state for shadow rendering.
+    glDepthFunc(GL_LESS);
+    glClearDepth(1.0);
+
     // Update all cascade light-space matrices from the camera frustum
     m_cascadedShadowMap->update(m_directionalLight, camera, aspectRatio);
 
@@ -1360,6 +1456,10 @@ void Renderer::renderShadowPass(const std::vector<InstanceBatch>& batches,
 
         m_cascadedShadowMap->endCascade();
     }
+
+    // Restore reverse-Z depth state
+    glDepthFunc(GL_GEQUAL);
+    glClearDepth(0.0);
 }
 
 std::vector<int> Renderer::selectShadowCastingPointLights() const
@@ -1383,6 +1483,10 @@ void Renderer::renderPointShadowPass(const std::vector<InstanceBatch>& batches,
     {
         return;
     }
+
+    // Point shadow maps use forward-Z — temporarily override reverse-Z state
+    glDepthFunc(GL_LESS);
+    glClearDepth(1.0);
 
     m_pointShadowDepthShader.use();
 
@@ -1439,6 +1543,10 @@ void Renderer::renderPointShadowPass(const std::vector<InstanceBatch>& batches,
             shadowMap->endFace();
         }
     }
+
+    // Restore reverse-Z depth state
+    glDepthFunc(GL_GEQUAL);
+    glClearDepth(0.0);
 }
 
 /// Pre-built uniform name strings for point lights (avoids per-frame string allocations).

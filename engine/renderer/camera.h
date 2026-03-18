@@ -32,10 +32,16 @@ public:
     /// @return The 4x4 view matrix.
     glm::mat4 getViewMatrix() const;
 
-    /// @brief Gets the projection matrix for rendering.
+    /// @brief Gets the reverse-Z infinite far projection matrix for rendering.
     /// @param aspectRatio Window width / height.
     /// @return The 4x4 perspective projection matrix.
     glm::mat4 getProjectionMatrix(float aspectRatio) const;
+
+    /// @brief Gets a standard projection matrix for frustum culling.
+    /// Uses a finite far plane so frustum plane extraction works correctly.
+    /// @param aspectRatio Window width / height.
+    /// @return The 4x4 perspective projection matrix (standard depth).
+    glm::mat4 getCullingProjectionMatrix(float aspectRatio) const;
 
     /// @brief Moves the camera forward/backward and left/right.
     /// @param forward Forward movement amount (negative = backward).

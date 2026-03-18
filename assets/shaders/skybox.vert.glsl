@@ -15,6 +15,7 @@ void main()
     mat4 viewNoTranslation = mat4(mat3(u_view));
     vec4 pos = u_projection * viewNoTranslation * vec4(position, 1.0);
 
-    // Set z = w so after perspective divide, depth = 1.0 (far plane)
+    // Reverse-Z: far plane is depth 0.0. Set z = 0 so skybox renders behind everything.
     gl_Position = pos.xyww;
+    gl_Position.z = 0.0;
 }
