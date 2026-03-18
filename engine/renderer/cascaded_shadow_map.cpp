@@ -17,6 +17,7 @@ CascadedShadowMap::CascadedShadowMap(const CascadedShadowConfig& config)
     : m_config(config)
     , m_lightSpaceMatrices(static_cast<size_t>(config.cascadeCount), glm::mat4(1.0f))
     , m_cascadeSplits(static_cast<size_t>(config.cascadeCount), 0.0f)
+    , m_texelWorldSizes(static_cast<size_t>(config.cascadeCount), 0.0f)
 {
     int res = config.resolution;
     int layers = config.cascadeCount;
@@ -207,6 +208,13 @@ void CascadedShadowMap::update(const DirectionalLight& light, const Camera& came
         // Compute a tight orthographic light-space matrix
         m_lightSpaceMatrices[static_cast<size_t>(i)] =
             computeCascadeMatrix(light, corners, m_config.resolution);
+
+        // Compute world-space texel size for this cascade (for normal offset bias).
+        // The ortho projection maps a world-space extent to the shadow map resolution.
+        // We can extract this from the light-space matrix: element [0][0] = 2/width.
+        float orthoWidth = 2.0f / std::abs(m_lightSpaceMatrices[static_cast<size_t>(i)][0][0]);
+        m_texelWorldSizes[static_cast<size_t>(i)] =
+            orthoWidth / static_cast<float>(m_config.resolution);
     }
 }
 
@@ -243,6 +251,11 @@ float CascadedShadowMap::getCascadeSplit(int cascade) const
 int CascadedShadowMap::getCascadeCount() const
 {
     return m_config.cascadeCount;
+}
+
+float CascadedShadowMap::getTexelWorldSize(int cascade) const
+{
+    return m_texelWorldSizes[static_cast<size_t>(cascade)];
 }
 
 const CascadedShadowConfig& CascadedShadowMap::getConfig() const

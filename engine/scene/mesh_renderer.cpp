@@ -52,4 +52,14 @@ void MeshRenderer::setCullingBounds(const AABB& bounds)
     m_hasCullingBounds = true;
 }
 
+void MeshRenderer::setCastsShadow(bool casts)
+{
+    m_castsShadow = casts;
+}
+
+bool MeshRenderer::castsShadow() const
+{
+    return m_castsShadow;
+}
+
 } // namespace Vestige

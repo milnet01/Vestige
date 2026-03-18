@@ -1272,8 +1272,16 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
         }
     }
 
-    // Build unculled batches for shadow passes (shadows need off-screen objects)
-    auto allBatches = buildInstanceBatches(renderData.renderItems);
+    // Build shadow caster list (filter out non-casting items like ground planes)
+    std::vector<SceneRenderData::RenderItem> shadowCasterItems;
+    for (const auto& item : renderData.renderItems)
+    {
+        if (item.castsShadow)
+        {
+            shadowCasterItems.push_back(item);
+        }
+    }
+    auto shadowBatches = buildInstanceBatches(shadowCasterItems);
 
     // Compute shadow-casting point lights once (used by both shadow pass and uniform upload)
     std::vector<int> shadowCasters = selectShadowCastingPointLights();
@@ -1281,11 +1289,11 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
     // --- Directional shadow pass (cascaded) ---
     if (m_cascadedShadowMap && m_hasDirectionalLight)
     {
-        renderShadowPass(allBatches, camera, aspectRatio);
+        renderShadowPass(shadowBatches, camera, aspectRatio);
     }
 
     // --- Point light shadow pass ---
-    renderPointShadowPass(allBatches, shadowCasters);
+    renderPointShadowPass(shadowBatches, shadowCasters);
 
     // --- Frustum cull for scene pass ---
     // Use the standard (non-reverse-Z) projection for frustum extraction so all
@@ -1353,6 +1361,8 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
                 m_cascadedShadowMap->getCascadeSplit(i));
             m_sceneShader.setMat4("u_cascadeLightSpaceMatrices[" + std::to_string(i) + "]",
                 m_cascadedShadowMap->getLightSpaceMatrix(i));
+            m_sceneShader.setFloat("u_cascadeTexelSize[" + std::to_string(i) + "]",
+                m_cascadedShadowMap->getTexelWorldSize(i));
         }
         m_sceneShader.setBool("u_hasShadows", true);
         m_sceneShader.setBool("u_cascadeDebug", m_cascadeDebug);
@@ -1618,7 +1628,6 @@ void Renderer::renderPointShadowPass(const std::vector<InstanceBatch>& batches,
     // Point shadow maps use forward-Z — temporarily override reverse-Z state
     glDepthFunc(GL_LESS);
     glClearDepth(1.0);
-
     m_pointShadowDepthShader.use();
 
     for (size_t s = 0; s < shadowCasters.size(); s++)

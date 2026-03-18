@@ -41,9 +41,14 @@ public:
     const AABB& getCullingBounds() const;
 
     /// @brief Sets separate frustum-culling bounds (independent of collision bounds).
-    /// Use this for objects that need different bounds for rendering vs. physics,
-    /// e.g. a ground plane that should never be a collider but needs culling bounds.
     void setCullingBounds(const AABB& bounds);
+
+    /// @brief Sets whether this mesh casts shadows into shadow maps.
+    /// Disable for surfaces that only receive shadows (e.g. ground planes).
+    void setCastsShadow(bool casts);
+
+    /// @brief Checks if this mesh casts shadows.
+    bool castsShadow() const;
 
 private:
     std::shared_ptr<Mesh> m_mesh;
@@ -51,6 +56,7 @@ private:
     AABB m_bounds;
     AABB m_cullingBounds;
     bool m_hasCullingBounds = false;
+    bool m_castsShadow = true;
 };
 
 } // namespace Vestige
