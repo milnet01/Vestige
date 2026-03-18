@@ -10,6 +10,24 @@ add_executable(vestige_tests
     test_scene.cpp
     test_framebuffer.cpp
     test_shadow_map.cpp
+    test_tangent_calc.cpp
+    test_skybox.cpp
+    test_point_shadow_map.cpp
+    test_hdr_pipeline.cpp
+    test_pom.cpp
+    test_gltf_loader.cpp
+    test_pbr_material.cpp
+    test_bloom.cpp
+    test_ssao.cpp
+    test_transparency.cpp
+    test_emissive_lighting.cpp
+    test_async_texture_loader.cpp
+    test_taa.cpp
+    test_text_rendering.cpp
+    test_color_grading.cpp
+    test_instanced_rendering.cpp
+    test_cascaded_shadow_map.cpp
+    test_ibl.cpp
 )
 
 target_link_libraries(vestige_tests
@@ -19,4 +37,6 @@ target_link_libraries(vestige_tests
 )
 
 include(GoogleTest)
-gtest_discover_tests(vestige_tests)
+gtest_discover_tests(vestige_tests
+    PROPERTIES ENVIRONMENT "LSAN_OPTIONS=suppressions=${CMAKE_SOURCE_DIR}/asan_suppressions.txt"
+)

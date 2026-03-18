@@ -26,6 +26,7 @@ Shader::~Shader()
 
 Shader::Shader(Shader&& other) noexcept
     : m_programId(other.m_programId)
+    , m_uniformCache(std::move(other.m_uniformCache))
 {
     other.m_programId = 0;
 }
@@ -39,6 +40,7 @@ Shader& Shader::operator=(Shader&& other) noexcept
             glDeleteProgram(m_programId);
         }
         m_programId = other.m_programId;
+        m_uniformCache = std::move(other.m_uniformCache);
         other.m_programId = 0;
     }
     return *this;
@@ -46,6 +48,14 @@ Shader& Shader::operator=(Shader&& other) noexcept
 
 bool Shader::loadFromFiles(const std::string& vertexPath, const std::string& fragmentPath)
 {
+    // Clean up previous program if reloading
+    if (m_programId != 0)
+    {
+        glDeleteProgram(m_programId);
+        m_programId = 0;
+    }
+    m_uniformCache.clear();
+
     // Read vertex shader source
     std::ifstream vertexFile(vertexPath);
     if (!vertexFile.is_open())
@@ -122,6 +132,11 @@ void Shader::setFloat(const std::string& name, float value) const
     glUniform1f(getUniformLocation(name), value);
 }
 
+void Shader::setVec2(const std::string& name, const glm::vec2& value) const
+{
+    glUniform2fv(getUniformLocation(name), 1, glm::value_ptr(value));
+}
+
 void Shader::setVec3(const std::string& name, const glm::vec3& value) const
 {
     glUniform3fv(getUniformLocation(name), 1, glm::value_ptr(value));
@@ -130,6 +145,11 @@ void Shader::setVec3(const std::string& name, const glm::vec3& value) const
 void Shader::setVec4(const std::string& name, const glm::vec4& value) const
 {
     glUniform4fv(getUniformLocation(name), 1, glm::value_ptr(value));
+}
+
+void Shader::setMat3(const std::string& name, const glm::mat3& value) const
+{
+    glUniformMatrix3fv(getUniformLocation(name), 1, GL_FALSE, glm::value_ptr(value));
 }
 
 void Shader::setMat4(const std::string& name, const glm::mat4& value) const
@@ -183,10 +203,18 @@ bool Shader::linkProgram(GLuint vertexShader, GLuint fragmentShader)
 
 GLint Shader::getUniformLocation(const std::string& name) const
 {
+    auto it = m_uniformCache.find(name);
+    if (it != m_uniformCache.end())
+    {
+        return it->second;
+    }
+
     GLint location = glGetUniformLocation(m_programId, name.c_str());
+    m_uniformCache[name] = location;
+
     if (location == -1)
     {
-        Logger::warning("Uniform not found: " + name);
+        Logger::debug("Uniform not found (may be optimized out): " + name);
     }
     return location;
 }

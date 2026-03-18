@@ -3,8 +3,85 @@
 #include "renderer/mesh.h"
 #include "core/logger.h"
 
+#include <cmath>
+
 namespace Vestige
 {
+
+void calculateTangents(std::vector<Vertex>& vertices, const std::vector<uint32_t>& indices)
+{
+    // Zero out tangents/bitangents for accumulation
+    for (auto& v : vertices)
+    {
+        v.tangent = glm::vec3(0.0f);
+        v.bitangent = glm::vec3(0.0f);
+    }
+
+    // Accumulate per-triangle tangent/bitangent
+    for (size_t i = 0; i + 2 < indices.size(); i += 3)
+    {
+        Vertex& v0 = vertices[indices[i]];
+        Vertex& v1 = vertices[indices[i + 1]];
+        Vertex& v2 = vertices[indices[i + 2]];
+
+        glm::vec3 edge1 = v1.position - v0.position;
+        glm::vec3 edge2 = v2.position - v0.position;
+        glm::vec2 deltaUV1 = v1.texCoord - v0.texCoord;
+        glm::vec2 deltaUV2 = v2.texCoord - v0.texCoord;
+
+        float denom = deltaUV1.x * deltaUV2.y - deltaUV2.x * deltaUV1.y;
+
+        // Handle degenerate UVs — fall back to a default tangent
+        if (std::abs(denom) < 1e-6f)
+        {
+            // Choose a tangent perpendicular to the normal
+            glm::vec3 n = glm::normalize(v0.normal);
+            glm::vec3 fallback = (std::abs(n.x) < 0.9f) ? glm::vec3(1, 0, 0) : glm::vec3(0, 1, 0);
+            glm::vec3 t = glm::normalize(glm::cross(n, fallback));
+            glm::vec3 b = glm::cross(n, t);
+            v0.tangent += t; v0.bitangent += b;
+            v1.tangent += t; v1.bitangent += b;
+            v2.tangent += t; v2.bitangent += b;
+            continue;
+        }
+
+        float f = 1.0f / denom;
+
+        glm::vec3 tangent;
+        tangent.x = f * (deltaUV2.y * edge1.x - deltaUV1.y * edge2.x);
+        tangent.y = f * (deltaUV2.y * edge1.y - deltaUV1.y * edge2.y);
+        tangent.z = f * (deltaUV2.y * edge1.z - deltaUV1.y * edge2.z);
+
+        glm::vec3 bitangent;
+        bitangent.x = f * (-deltaUV2.x * edge1.x + deltaUV1.x * edge2.x);
+        bitangent.y = f * (-deltaUV2.x * edge1.y + deltaUV1.x * edge2.y);
+        bitangent.z = f * (-deltaUV2.x * edge1.z + deltaUV1.x * edge2.z);
+
+        v0.tangent += tangent; v0.bitangent += bitangent;
+        v1.tangent += tangent; v1.bitangent += bitangent;
+        v2.tangent += tangent; v2.bitangent += bitangent;
+    }
+
+    // Gram-Schmidt orthogonalize and normalize
+    for (auto& v : vertices)
+    {
+        glm::vec3 n = glm::normalize(v.normal);
+        glm::vec3 t = v.tangent;
+
+        // Orthogonalize: remove the component of tangent along normal
+        t = glm::normalize(t - n * glm::dot(n, t));
+
+        // Compute bitangent with correct handedness
+        glm::vec3 b = glm::cross(n, t);
+        if (glm::dot(b, v.bitangent) < 0.0f)
+        {
+            b = -b;
+        }
+
+        v.tangent = t;
+        v.bitangent = b;
+    }
+}
 
 Mesh::Mesh()
     : m_vao(0)
@@ -92,6 +169,16 @@ void Mesh::upload(const std::vector<Vertex>& vertices, const std::vector<uint32_
     glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex),
         reinterpret_cast<void*>(offsetof(Vertex, texCoord)));
 
+    // Tangent attribute (location 4)
+    glEnableVertexAttribArray(4);
+    glVertexAttribPointer(4, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex),
+        reinterpret_cast<void*>(offsetof(Vertex, tangent)));
+
+    // Bitangent attribute (location 5)
+    glEnableVertexAttribArray(5);
+    glVertexAttribPointer(5, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex),
+        reinterpret_cast<void*>(offsetof(Vertex, bitangent)));
+
     glBindVertexArray(0);
 
     Logger::debug("Mesh uploaded: " + std::to_string(vertices.size()) + " vertices, "
@@ -113,45 +200,75 @@ uint32_t Mesh::getIndexCount() const
     return m_indexCount;
 }
 
+void Mesh::setupInstanceAttributes(GLuint instanceVbo) const
+{
+    if (m_vao == 0)
+    {
+        return;
+    }
+
+    glBindVertexArray(m_vao);
+    glBindBuffer(GL_ARRAY_BUFFER, instanceVbo);
+
+    // mat4 = 4 x vec4, using locations 6-9
+    for (int i = 0; i < 4; i++)
+    {
+        GLuint loc = static_cast<GLuint>(6 + i);
+        glEnableVertexAttribArray(loc);
+        glVertexAttribPointer(loc, 4, GL_FLOAT, GL_FALSE,
+            sizeof(glm::mat4),
+            reinterpret_cast<void*>(static_cast<size_t>(i) * sizeof(glm::vec4)));
+        glVertexAttribDivisor(loc, 1);
+    }
+
+    glBindVertexArray(0);
+}
+
+GLuint Mesh::getVao() const
+{
+    return m_vao;
+}
+
 Mesh Mesh::createCube()
 {
     // Each face has its own vertices for correct normals and UVs
+    glm::vec3 white(1.0f, 1.0f, 1.0f);
     std::vector<Vertex> vertices = {
-        // Front face (red) — normal: +Z
-        {{-0.5f, -0.5f,  0.5f}, { 0.0f,  0.0f,  1.0f}, {0.8f, 0.2f, 0.2f}, {0.0f, 0.0f}},
-        {{ 0.5f, -0.5f,  0.5f}, { 0.0f,  0.0f,  1.0f}, {0.8f, 0.2f, 0.2f}, {1.0f, 0.0f}},
-        {{ 0.5f,  0.5f,  0.5f}, { 0.0f,  0.0f,  1.0f}, {0.8f, 0.2f, 0.2f}, {1.0f, 1.0f}},
-        {{-0.5f,  0.5f,  0.5f}, { 0.0f,  0.0f,  1.0f}, {0.8f, 0.2f, 0.2f}, {0.0f, 1.0f}},
+        // Front face — normal: +Z
+        {{-0.5f, -0.5f,  0.5f}, { 0.0f,  0.0f,  1.0f}, white, {0.0f, 0.0f}, {}, {}},
+        {{ 0.5f, -0.5f,  0.5f}, { 0.0f,  0.0f,  1.0f}, white, {1.0f, 0.0f}, {}, {}},
+        {{ 0.5f,  0.5f,  0.5f}, { 0.0f,  0.0f,  1.0f}, white, {1.0f, 1.0f}, {}, {}},
+        {{-0.5f,  0.5f,  0.5f}, { 0.0f,  0.0f,  1.0f}, white, {0.0f, 1.0f}, {}, {}},
 
-        // Back face (green) — normal: -Z
-        {{ 0.5f, -0.5f, -0.5f}, { 0.0f,  0.0f, -1.0f}, {0.2f, 0.8f, 0.2f}, {0.0f, 0.0f}},
-        {{-0.5f, -0.5f, -0.5f}, { 0.0f,  0.0f, -1.0f}, {0.2f, 0.8f, 0.2f}, {1.0f, 0.0f}},
-        {{-0.5f,  0.5f, -0.5f}, { 0.0f,  0.0f, -1.0f}, {0.2f, 0.8f, 0.2f}, {1.0f, 1.0f}},
-        {{ 0.5f,  0.5f, -0.5f}, { 0.0f,  0.0f, -1.0f}, {0.2f, 0.8f, 0.2f}, {0.0f, 1.0f}},
+        // Back face — normal: -Z
+        {{ 0.5f, -0.5f, -0.5f}, { 0.0f,  0.0f, -1.0f}, white, {0.0f, 0.0f}, {}, {}},
+        {{-0.5f, -0.5f, -0.5f}, { 0.0f,  0.0f, -1.0f}, white, {1.0f, 0.0f}, {}, {}},
+        {{-0.5f,  0.5f, -0.5f}, { 0.0f,  0.0f, -1.0f}, white, {1.0f, 1.0f}, {}, {}},
+        {{ 0.5f,  0.5f, -0.5f}, { 0.0f,  0.0f, -1.0f}, white, {0.0f, 1.0f}, {}, {}},
 
-        // Top face (blue) — normal: +Y
-        {{-0.5f,  0.5f,  0.5f}, { 0.0f,  1.0f,  0.0f}, {0.2f, 0.2f, 0.8f}, {0.0f, 0.0f}},
-        {{ 0.5f,  0.5f,  0.5f}, { 0.0f,  1.0f,  0.0f}, {0.2f, 0.2f, 0.8f}, {1.0f, 0.0f}},
-        {{ 0.5f,  0.5f, -0.5f}, { 0.0f,  1.0f,  0.0f}, {0.2f, 0.2f, 0.8f}, {1.0f, 1.0f}},
-        {{-0.5f,  0.5f, -0.5f}, { 0.0f,  1.0f,  0.0f}, {0.2f, 0.2f, 0.8f}, {0.0f, 1.0f}},
+        // Top face — normal: +Y
+        {{-0.5f,  0.5f,  0.5f}, { 0.0f,  1.0f,  0.0f}, white, {0.0f, 0.0f}, {}, {}},
+        {{ 0.5f,  0.5f,  0.5f}, { 0.0f,  1.0f,  0.0f}, white, {1.0f, 0.0f}, {}, {}},
+        {{ 0.5f,  0.5f, -0.5f}, { 0.0f,  1.0f,  0.0f}, white, {1.0f, 1.0f}, {}, {}},
+        {{-0.5f,  0.5f, -0.5f}, { 0.0f,  1.0f,  0.0f}, white, {0.0f, 1.0f}, {}, {}},
 
-        // Bottom face (yellow) — normal: -Y
-        {{-0.5f, -0.5f, -0.5f}, { 0.0f, -1.0f,  0.0f}, {0.8f, 0.8f, 0.2f}, {0.0f, 0.0f}},
-        {{ 0.5f, -0.5f, -0.5f}, { 0.0f, -1.0f,  0.0f}, {0.8f, 0.8f, 0.2f}, {1.0f, 0.0f}},
-        {{ 0.5f, -0.5f,  0.5f}, { 0.0f, -1.0f,  0.0f}, {0.8f, 0.8f, 0.2f}, {1.0f, 1.0f}},
-        {{-0.5f, -0.5f,  0.5f}, { 0.0f, -1.0f,  0.0f}, {0.8f, 0.8f, 0.2f}, {0.0f, 1.0f}},
+        // Bottom face — normal: -Y
+        {{-0.5f, -0.5f, -0.5f}, { 0.0f, -1.0f,  0.0f}, white, {0.0f, 0.0f}, {}, {}},
+        {{ 0.5f, -0.5f, -0.5f}, { 0.0f, -1.0f,  0.0f}, white, {1.0f, 0.0f}, {}, {}},
+        {{ 0.5f, -0.5f,  0.5f}, { 0.0f, -1.0f,  0.0f}, white, {1.0f, 1.0f}, {}, {}},
+        {{-0.5f, -0.5f,  0.5f}, { 0.0f, -1.0f,  0.0f}, white, {0.0f, 1.0f}, {}, {}},
 
-        // Right face (magenta) — normal: +X
-        {{ 0.5f, -0.5f,  0.5f}, { 1.0f,  0.0f,  0.0f}, {0.8f, 0.2f, 0.8f}, {0.0f, 0.0f}},
-        {{ 0.5f, -0.5f, -0.5f}, { 1.0f,  0.0f,  0.0f}, {0.8f, 0.2f, 0.8f}, {1.0f, 0.0f}},
-        {{ 0.5f,  0.5f, -0.5f}, { 1.0f,  0.0f,  0.0f}, {0.8f, 0.2f, 0.8f}, {1.0f, 1.0f}},
-        {{ 0.5f,  0.5f,  0.5f}, { 1.0f,  0.0f,  0.0f}, {0.8f, 0.2f, 0.8f}, {0.0f, 1.0f}},
+        // Right face — normal: +X
+        {{ 0.5f, -0.5f,  0.5f}, { 1.0f,  0.0f,  0.0f}, white, {0.0f, 0.0f}, {}, {}},
+        {{ 0.5f, -0.5f, -0.5f}, { 1.0f,  0.0f,  0.0f}, white, {1.0f, 0.0f}, {}, {}},
+        {{ 0.5f,  0.5f, -0.5f}, { 1.0f,  0.0f,  0.0f}, white, {1.0f, 1.0f}, {}, {}},
+        {{ 0.5f,  0.5f,  0.5f}, { 1.0f,  0.0f,  0.0f}, white, {0.0f, 1.0f}, {}, {}},
 
-        // Left face (cyan) — normal: -X
-        {{-0.5f, -0.5f, -0.5f}, {-1.0f,  0.0f,  0.0f}, {0.2f, 0.8f, 0.8f}, {0.0f, 0.0f}},
-        {{-0.5f, -0.5f,  0.5f}, {-1.0f,  0.0f,  0.0f}, {0.2f, 0.8f, 0.8f}, {1.0f, 0.0f}},
-        {{-0.5f,  0.5f,  0.5f}, {-1.0f,  0.0f,  0.0f}, {0.2f, 0.8f, 0.8f}, {1.0f, 1.0f}},
-        {{-0.5f,  0.5f, -0.5f}, {-1.0f,  0.0f,  0.0f}, {0.2f, 0.8f, 0.8f}, {0.0f, 1.0f}},
+        // Left face — normal: -X
+        {{-0.5f, -0.5f, -0.5f}, {-1.0f,  0.0f,  0.0f}, white, {0.0f, 0.0f}, {}, {}},
+        {{-0.5f, -0.5f,  0.5f}, {-1.0f,  0.0f,  0.0f}, white, {1.0f, 0.0f}, {}, {}},
+        {{-0.5f,  0.5f,  0.5f}, {-1.0f,  0.0f,  0.0f}, white, {1.0f, 1.0f}, {}, {}},
+        {{-0.5f,  0.5f, -0.5f}, {-1.0f,  0.0f,  0.0f}, white, {0.0f, 1.0f}, {}, {}},
     };
 
     std::vector<uint32_t> indices = {
@@ -163,6 +280,8 @@ Mesh Mesh::createCube()
         20, 21, 22,  22, 23, 20,  // Left
     };
 
+    calculateTangents(vertices, indices);
+
     Mesh cube;
     cube.upload(vertices, indices);
     return cube;
@@ -170,18 +289,20 @@ Mesh Mesh::createCube()
 
 Mesh Mesh::createPlane(float size)
 {
-    glm::vec3 color = {0.4f, 0.4f, 0.4f};
+    glm::vec3 color = {1.0f, 1.0f, 1.0f};
     glm::vec3 normal = {0.0f, 1.0f, 0.0f};
     float uvScale = size / 5.0f;
 
     std::vector<Vertex> vertices = {
-        {{-size, 0.0f, -size}, normal, color, {0.0f,    0.0f}},
-        {{ size, 0.0f, -size}, normal, color, {uvScale, 0.0f}},
-        {{ size, 0.0f,  size}, normal, color, {uvScale, uvScale}},
-        {{-size, 0.0f,  size}, normal, color, {0.0f,    uvScale}},
+        {{-size, 0.0f, -size}, normal, color, {0.0f,    0.0f},    {}, {}},
+        {{ size, 0.0f, -size}, normal, color, {uvScale, 0.0f},    {}, {}},
+        {{ size, 0.0f,  size}, normal, color, {uvScale, uvScale}, {}, {}},
+        {{-size, 0.0f,  size}, normal, color, {0.0f,    uvScale}, {}, {}},
     };
 
     std::vector<uint32_t> indices = {0, 2, 1, 0, 3, 2};
+
+    calculateTangents(vertices, indices);
 
     Mesh plane;
     plane.upload(vertices, indices);

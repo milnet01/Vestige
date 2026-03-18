@@ -4,149 +4,583 @@ This document outlines the phased development plan for the Vestige 3D Engine.
 
 ---
 
-## Phase 1: Foundation
+## Phase 1: Foundation (COMPLETE)
 **Goal:** Open a window, render a 3D shape, move a camera around it.
 
 This phase establishes the project skeleton, build system, and core engine loop.
 
 ### Features
-- [ ] Project setup (CMake, dependency fetching, .gitignore)
-- [ ] GLFW window creation and OpenGL 4.5 context
-- [ ] glad OpenGL function loader
-- [ ] Basic engine loop (init → loop → shutdown)
-- [ ] Timer (delta time, FPS tracking)
-- [ ] Logger (console output with severity levels)
-- [ ] Shader loading and compilation (vertex + fragment)
-- [ ] Render a colored triangle (hello world of 3D graphics)
-- [ ] Render a 3D cube with perspective projection
-- [ ] Basic camera (position, look direction, perspective)
-- [ ] Keyboard input (WASD movement, mouse look)
-- [ ] Event Bus (basic publish/subscribe)
-- [ ] Window resize handling
-- [ ] Basic unit test infrastructure (Google Test)
+- [x] Project setup (CMake, dependency fetching, .gitignore)
+- [x] GLFW window creation and OpenGL 4.5 context
+- [x] glad OpenGL function loader
+- [x] Basic engine loop (init → loop → shutdown)
+- [x] Timer (delta time, FPS tracking)
+- [x] Logger (console output with severity levels)
+- [x] Shader loading and compilation (vertex + fragment)
+- [x] Render a colored triangle (hello world of 3D graphics)
+- [x] Render a 3D cube with perspective projection
+- [x] Basic camera (position, look direction, perspective)
+- [x] Keyboard input (WASD movement, mouse look)
+- [x] Event Bus (basic publish/subscribe)
+- [x] Window resize handling
+- [x] Basic unit test infrastructure (Google Test)
 
 ### Milestone
-A window showing a colored 3D cube that the user can fly around using keyboard and mouse.
+~~A window showing a colored 3D cube that the user can fly around using keyboard and mouse.~~ DONE
 
 ---
 
-## Phase 2: 3D World
+## Phase 2: 3D World (COMPLETE)
 **Goal:** Load 3D models, apply textures, and light the scene.
 
 ### Features
-- [ ] Mesh class (vertex buffer, index buffer, vertex array)
+- [x] Mesh class (vertex buffer, index buffer, vertex array)
 - [ ] OBJ model loading (simple format, good for starting)
-- [ ] Texture loading (PNG/JPG via stb_image)
-- [ ] UV mapping and texture coordinates
-- [ ] Basic materials (diffuse color, specular, shininess)
-- [ ] Blinn-Phong lighting model
-- [ ] Directional light (sun)
-- [ ] Point lights (lamps, candles)
-- [ ] Spot lights (focused beams)
-- [ ] Multiple objects in a scene
-- [ ] Depth testing and face culling
-- [ ] Wireframe debug rendering mode
+- [x] Texture loading (PNG/JPG via stb_image)
+- [x] UV mapping and texture coordinates
+- [x] Basic materials (diffuse color, specular, shininess)
+- [x] Blinn-Phong lighting model
+- [x] Directional light (sun)
+- [x] Point lights (lamps, candles)
+- [x] Spot lights (focused beams)
+- [x] Multiple objects in a scene
+- [x] Depth testing and face culling
+- [x] Wireframe debug rendering mode
 
 ### Milestone
-A lit scene with multiple textured 3D models (e.g., a simple room with objects).
+~~A lit scene with multiple textured 3D models (e.g., a simple room with objects).~~ DONE
 
 ---
 
-## Phase 3: Scene Management
+## Phase 3: Scene Management (COMPLETE)
 **Goal:** Organize the world into a scene graph with entities and components.
 
 ### Features
-- [ ] Entity class with component system
-- [ ] Transform component (position, rotation, scale, parent-child hierarchy)
-- [ ] MeshRenderer component
-- [ ] Camera component
-- [ ] Light components (Directional, Point, Spot)
-- [ ] Scene class (holds entity hierarchy)
-- [ ] SceneManager (load, unload, switch scenes)
-- [ ] Resource manager (caching loaded assets)
-- [ ] Gamepad/controller input (Xbox, PlayStation via GLFW)
-- [ ] First-person character controller (walking, looking, collision with ground)
-- [ ] Basic bounding-box collision detection (prevent walking through walls)
+- [x] Entity class with component system
+- [x] Transform component (position, rotation, scale, parent-child hierarchy)
+- [x] MeshRenderer component
+- [ ] Camera component (currently camera is standalone — works for now)
+- [x] Light components (Directional, Point, Spot)
+- [x] Scene class (holds entity hierarchy)
+- [x] SceneManager (load, unload, switch scenes)
+- [x] Resource manager (caching loaded assets)
+- [x] Gamepad/controller input (Xbox, PlayStation via GLFW)
+- [x] First-person character controller (walking, looking, collision with ground)
+- [x] Basic bounding-box collision detection (prevent walking through walls)
 
 ### Milestone
-Walk through a multi-room environment in first person with controller support.
+~~Walk through a multi-room environment in first person with controller support.~~ DONE
 
 ---
 
-## Phase 4: Visual Quality
+## Phase 4: Visual Quality (IN PROGRESS)
 **Goal:** Make it look good — shadows, better materials, post-processing.
 
 ### Features
-- [ ] Shadow mapping (directional light shadows)
-- [ ] Point light shadows (omnidirectional shadow maps)
-- [ ] Normal mapping (surface detail without extra geometry)
-- [ ] PBR materials (Physically Based Rendering — metallic/roughness workflow)
-- [ ] Environment mapping / skybox
-- [ ] HDR rendering and tone mapping
-- [ ] Bloom post-processing effect
-- [ ] MSAA anti-aliasing
-- [ ] glTF model loading (modern, full-featured format)
-- [ ] Ambient occlusion (SSAO)
+- [x] Shadow mapping (directional light shadows)
+- [x] Point light shadows (omnidirectional shadow maps)
+- [x] Normal mapping (surface detail without extra geometry)
+- [x] Parallax occlusion mapping (depth illusion via height map ray-marching)
+- [x] PBR materials (Physically Based Rendering — metallic/roughness workflow)
+- [x] Environment mapping / skybox (procedural gradient)
+- [x] Image-Based Lighting / IBL (HDRI environment maps for realistic ambient lighting — diffuse irradiance convolution, prefiltered specular mip chain, BRDF integration LUT; completes PBR pipeline with environment-driven reflections and ambient light)
+- [x] HDR rendering and tone mapping (Reinhard + ACES Filmic)
+- [x] 3D text rendering (FreeType glyph atlas, text-on-surface decals, embossed/engraved inscriptions)
+- [x] Emissive lighting (materials that emit light into the scene — fire glow, neon signs, lava, glowing runes; emissive surfaces contribute to scene illumination via bloom and indirect light propagation; scalable from simple bloom-coupled emissives to many-light systems for scenes with hundreds of emissive sources)
+- [x] Bloom post-processing effect
+- [x] MSAA anti-aliasing (4x)
+- [x] TAA (Temporal Anti-Aliasing — motion vectors, history buffer, jittered projection)
+- [x] glTF model loading (modern, full-featured format)
+- [x] Ambient occlusion (SSAO)
+- [x] Transparency / alpha blending (glass, coloured glass, frosted glass, linen curtains)
+- [x] Transparent object sorting (back-to-front draw order)
+- [x] Asynchronous texture loading (background thread loading with GPU upload on main thread)
+- [x] Instanced rendering (draw thousands of identical objects — pillars, columns, courtyard stones — in a single draw call)
+- [x] Cascaded shadow maps (multi-split directional shadows for large outdoor scenes like Temple courtyards)
+- [x] Color grading / LUT (look-up table color transformation for artistic control — warm golden interiors, cool blue night exteriors)
 
 ### Milestone
-A visually polished scene with realistic lighting, shadows, and materials.
+A visually polished scene with realistic lighting, shadows, materials, and transparency.
 
 ---
 
-## Phase 5: Polish and Features
-**Goal:** Complete the experience — UI, audio, and usability.
+## Phase 5: Scene Editor — The Creator's Toolkit
+**Goal:** Build a full graphical editor so scenes, materials, effects, and gameplay can be created entirely without writing code. This is the primary tool the user will use day-to-day.
+
+The editor is not just a debug tool — it IS the way scenes get built. Every engine feature must ultimately be accessible through the editor. This phase is broken into sub-phases that can be developed incrementally.
+
+---
+
+### Phase 5A: Editor Foundation
+**Goal:** Get the basic editor shell running — panels, viewport, and the ability to interact with the scene visually.
+
+#### GUI Framework
+- [ ] Dear ImGui integration (immediate-mode GUI, renders on top of the 3D viewport)
+- [ ] ImGui GLFW + OpenGL backend setup
+- [ ] Docking system (drag panels to arrange your workspace — imgui docking branch)
+- [ ] Editor theme (dark theme, readable fonts, consistent styling)
+- [ ] Editor/Play mode toggle (Escape or a toolbar button switches between editing and first-person walkthrough)
+
+#### Metric Scale System
+- [ ] Define 1 engine unit = 1 meter (enforce everywhere)
+- [ ] 3D grid overlay on the ground plane (1m lines, 10m bold lines)
+- [ ] Grid snapping — objects snap to 0.25m / 0.5m / 1m increments (configurable)
+- [ ] Ruler/measurement tool — click two points to see distance in meters
+- [ ] Dimension display — selected objects show their width/height/depth in meters
+- [ ] Room dimension input — type "10m x 20m x 2.5m" to create a room of that size
+
+#### Editor Camera
+- [ ] Orbit camera (Alt+drag to orbit around a point, scroll to zoom)
+- [ ] Pan camera (middle-mouse drag to pan)
+- [ ] Focus on selection (F key snaps camera to look at the selected entity)
+- [ ] Top/Front/Side orthographic views (numpad shortcuts)
+- [ ] Smooth camera transitions between views
+
+#### Selection System
+- [ ] Mouse picking — click on an object in the viewport to select it
+- [ ] Selection highlighting (outline or tint on selected object)
+- [ ] Multi-selection (Shift+click to add, Ctrl+click to toggle)
+- [ ] Selection rectangle (drag to box-select multiple objects)
+
+#### Transform Gizmos
+- [ ] Translate gizmo (RGB arrows for X/Y/Z, click-drag to move)
+- [ ] Rotate gizmo (rings around the object, drag to rotate)
+- [ ] Scale gizmo (cubes on axes, drag to scale)
+- [ ] W/E/R hotkeys to switch between translate/rotate/scale
+- [ ] Local vs World space toggle for gizmos
+- [ ] Snap-to-grid for gizmos (hold Ctrl to snap while dragging)
+
+---
+
+### Phase 5B: Scene Construction
+**Goal:** Place and arrange objects to build rooms, walls, floors, and architectural structures.
+
+#### Primitive Placement
+- [ ] Toolbar palette for placing basic shapes: cube, plane, cylinder, sphere, wedge/ramp
+- [ ] Click-to-place — click in the viewport or grid to drop a shape at that position
+- [ ] Shapes spawn at metric sizes (e.g., cube = 1m x 1m x 1m by default)
+- [ ] Dimension handles — drag edges/faces of a placed shape to resize it
+
+#### Room/Wall Builder
+- [ ] Wall tool — click two points on the grid to draw a wall segment (specify height + thickness)
+- [ ] Room tool — click four corners (or specify dimensions) to generate a room with walls, floor, and ceiling
+- [ ] Wall thickness setting (default 0.2m for interior, 0.3m for exterior)
+- [ ] Door cutout tool — click on a wall to cut a door-sized opening
+- [ ] Window cutout tool — click on a wall to cut a window opening
+- [ ] Roof tool — select walls and choose roof type (flat, gabled, hipped)
+- [ ] Stair/ramp tool — specify start height, end height, and width
+
+#### Model Import
+- [ ] glTF / OBJ import dialog — browse and import 3D models into the asset library
+- [ ] Import preview — see the model before committing to import
+- [ ] Automatic material/texture extraction from imported models
+- [ ] Place imported models into the scene from the asset browser
+- [ ] Scale-on-import — ensure imported models match metric scale (1 unit = 1 meter)
+
+#### Object Management
+- [ ] Duplicate objects (Ctrl+D)
+- [ ] Delete objects (Delete key)
+- [ ] Group objects (select multiple, group into a named parent entity)
+- [ ] Lock objects (prevent accidental selection/modification)
+- [ ] Hide/show objects (eye icon in hierarchy — hidden objects don't render)
+- [ ] Copy/Paste transforms between objects
+- [ ] Align tools (align selected objects by edge, center, or distribute evenly)
+
+#### Prefab System
+- [ ] Save any entity (or group) as a reusable prefab asset (e.g., "Golden Lampstand")
+- [ ] Place prefab instances in any scene — drag from the asset browser
+- [ ] Edit the master prefab and have all instances update automatically
+- [ ] Override individual instance properties (e.g., different scale on one copy)
+- [ ] Prefab library browser in the asset panel
+
+#### Scene Hierarchy Panel
+- [ ] Tree view of all entities in the scene
+- [ ] Drag to reparent entities (make one a child of another)
+- [ ] Right-click context menu (rename, duplicate, delete, add child)
+- [ ] Search/filter entities by name
+- [ ] Icons to distinguish entity types (mesh, light, camera, empty)
+
+---
+
+### Phase 5C: Materials, Textures, and Lighting
+**Goal:** Assign and tweak the look of every surface, and place lights, all through the editor.
+
+#### Material Editor Panel
+- [ ] Visual material editor — sliders for diffuse color, specular color, shininess
+- [ ] Texture slot assignment — drag a texture from the asset browser onto a material slot
+- [ ] Live preview — changes update in the viewport immediately
+- [ ] Material library — save/load reusable materials (e.g., "Gold", "Acacia Wood", "Linen")
+- [ ] UV tiling controls — adjust how many times a texture repeats per meter
+- [ ] POM height scale slider (when height maps are assigned)
+- [ ] PBR material slots (when PBR is implemented): albedo, normal, roughness, metallic, AO, emissive
+
+#### Texture Management
+- [ ] Asset browser panel — shows all textures in `assets/textures/` with thumbnail previews
+- [ ] Drag-and-drop textures onto objects in the viewport to assign them
+- [ ] Texture import — drag external image files into the asset browser to import
+- [ ] Texture preview — click a texture to see it full-size with metadata (resolution, format, size)
+- [ ] Texture filtering options (nearest, linear, anisotropic) per texture
+
+#### Entity Inspector Panel
+- [ ] Shows all components on the selected entity
+- [ ] Edit any property — transform, material, light settings, etc.
+- [ ] "Add Component" button — attach new components to an entity
+- [ ] "Remove Component" button
+- [ ] Component-specific sub-panels (material expands to show all material properties, etc.)
+
+#### Light Placement and Editing
+- [ ] Place lights from the toolbar (directional, point, spot)
+- [ ] Visual light indicators in the viewport (icons, range spheres, cone wireframes)
+- [ ] Light property editing in the inspector (color picker, intensity, range, shadow toggle)
+- [ ] Directional light visualized as an arrow showing direction
+- [ ] Point light visualized as a sphere showing range
+- [ ] Spot light visualized as a cone showing angle and range
+
+---
+
+### Phase 5D: Scene Persistence
+**Goal:** Save and load scenes so work persists between sessions. This is essential — without it, every scene is lost when the editor closes.
+
+#### Scene Serialization
+- [ ] Save scene to JSON file (human-readable, version-controlled)
+- [ ] Load scene from JSON file
+- [ ] Auto-save (periodic backup while editing)
+- [ ] Scene metadata (name, author, description, creation date)
+- [ ] All entity data serialized: transforms, components, material references, light settings
+- [ ] Asset references by path (textures, meshes — not embedded in scene file)
+
+#### Undo/Redo System
+- [ ] Command pattern — every editor action is a reversible command
+- [ ] Ctrl+Z to undo, Ctrl+Shift+Z (or Ctrl+Y) to redo
+- [ ] Undo history panel showing recent actions
+- [ ] Essential for a non-destructive workflow — mistakes can be reverted
+
+#### Project Management
+- [ ] Project file that tracks all scenes, assets, and settings
+- [ ] "New Scene" / "Open Scene" / "Save Scene" / "Save As" from the File menu
+- [ ] Recent files list
+- [ ] Asset directory monitoring — detect when new textures/models are added to `assets/`
+
+---
+
+### Phase 5E: Effects Editors
+**Goal:** Configure particle effects (fire, smoke, water) through the editor, not code.
+
+#### Particle System Editor
+- [ ] Place particle emitter entities in the scene
+- [ ] Visual particle editor — adjust emission rate, lifetime, velocity, size, color over time
+- [ ] Presets for common effects: torch fire, candle flame, smoke, dust, sparks, embers
+- [ ] Real-time preview in the viewport while editing parameters
+- [ ] Save/load particle presets as reusable assets
+
+#### Water Body Editor
+- [ ] Place water surface entities (rectangular water plane)
+- [ ] Set water dimensions and elevation in meters
+- [ ] Water property editor: color tint, opacity, reflection strength, wave speed/amplitude
+- [ ] Presets: still bath, gentle pool, flowing stream
+
+---
+
+### Phase 5F: Editor Utilities
+**Goal:** Quality-of-life tools that make the editor efficient and informative.
+
+#### Performance Overlay
+- [ ] FPS counter (always visible in corner)
+- [ ] Frame time graph (rolling chart of frame times)
+- [ ] Draw call count, triangle count, texture memory usage
+- [ ] Per-object stats (vertex count on selected object)
+
+#### Console / Log Panel
+- [ ] In-editor log viewer (scrollable, filterable by severity)
+- [ ] Color-coded messages (info=white, warning=yellow, error=red)
+- [ ] Search/filter log messages
+
+#### Additional Tools
+- [ ] Screenshot capture (F12 or menu — saves to a screenshots folder)
+- [ ] Fullscreen viewport toggle (hide all panels for a clean view)
+- [ ] Keyboard shortcut reference panel (searchable list of all hotkeys)
+- [ ] Welcome screen / getting started tutorial on first launch
+- [ ] Scene statistics panel (total entities, meshes, textures, lights, memory usage)
+- [ ] Validation warnings (e.g., "Light has no shadow map", "Texture missing", "Object outside scene bounds")
+
+---
+
+### Phase 5G: Environment Painting
+**Goal:** Paint natural environments directly onto surfaces — grass, gravel, trees, paths, streams — using an intuitive brush-based system. This is the primary tool for building outdoor scenes around the Temple complex.
+
+#### Foliage Brush
+- [ ] Grass rendering system (instanced billboards or geometry shader, leveraging existing instanced rendering)
+- [ ] Foliage brush tool — paint grass/flowers/low plants onto any surface with adjustable radius and density
+- [ ] Density falloff (full density at brush center, tapering at edges for natural blending)
+- [ ] Random rotation, scale, and tint variation per instance (configurable ranges)
+- [ ] Wind animation (vertex shader sway — amplitude, frequency, direction as brush parameters)
+- [ ] Foliage presets: short grass, tall grass, wildflowers, reeds, desert scrub
+- [ ] Density map layer — a per-surface texture controlling where foliage can grow (paintable in-editor)
+
+#### Scatter Brush
+- [ ] Scatter brush tool — paint rocks, gravel, debris, fallen leaves onto surfaces
+- [ ] Object palette — select which meshes to scatter (small rocks, pebbles, pottery shards)
+- [ ] Random placement within brush radius with configurable spacing and overlap rules
+- [ ] Surface alignment — scattered objects orient to the surface normal (rocks sit flat on slopes)
+- [ ] Scale/rotation randomization ranges per object type
+- [ ] Eraser mode — remove scattered objects within brush radius
+
+#### Tree and Large Object Placement
+- [ ] Tree brush — paint clusters of trees with species selection and spacing rules
+- [ ] Single-place mode — click to place one tree precisely, then adjust with transform gizmos
+- [ ] Minimum spacing enforcement (trees don't overlap trunks)
+- [ ] Tree species presets: olive, cedar, palm, acacia (with placeholder meshes until real models are imported)
+- [ ] LOD system for trees (full mesh up close, billboard at distance — leverages instanced rendering)
+
+#### Path and Road Tool
+- [ ] Spline-based path drawing — click waypoints, engine generates a smooth path between them
+- [ ] Path width and material selection (gravel, dirt, stone pavers, sand)
+- [ ] Terrain texture blending along path edges (smooth transition from path to surrounding ground)
+- [ ] Automatic foliage clearing — foliage within the path footprint is removed
+- [ ] Path presets: narrow footpath, wide road, stone walkway
+
+#### Water Painting
+- [ ] Stream/river spline tool — draw a path, engine generates a flowing water surface mesh
+- [ ] Stream width and depth controls per waypoint (narrow creek to wide river)
+- [ ] Flow direction and speed (derived from spline direction)
+- [ ] Pool/pond tool — draw a closed shape to create a still water body
+- [ ] Water material integration (reflective/refractive shader from Phase 6, or basic placeholder)
+- [ ] Automatic bank blending — terrain textures transition to wet sand/mud near water edges
+
+#### Biome Presets
+- [ ] Biome system — named combinations of ground texture + foliage + scatter + trees
+- [ ] Built-in presets: "Garden" (green grass, flowers, olive trees), "Desert" (sand, scrub, rocks), "Temple Courtyard" (stone pavers, sparse grass at edges), "Cedar Forest" (forest floor, ferns, cedar trees)
+- [ ] Paint entire areas with a biome brush — applies all layers at once
+- [ ] Per-layer override — paint a biome then selectively adjust individual layers
+- [ ] Save/load custom biome presets
+
+#### Performance
+- [ ] Frustum culling for foliage instances (don't submit off-screen grass to the GPU)
+- [ ] Distance-based density fade (reduce foliage density at distance, fade out beyond a threshold)
+- [ ] Chunk-based spatial partitioning (group nearby foliage into spatial cells for efficient culling)
+- [ ] Target: 60 FPS with dense grass fields covering the Temple courtyard (~100k instances visible)
+
+---
+
+### Phase 5 Milestone
+**A complete scene editor where architectural environments can be designed, textured, lit, and saved entirely through the GUI.** The Tabernacle and Solomon's Temple can be built in-editor by a non-programmer. Outdoor areas around the Temple can be painted with grass, trees, paths, and water using the environment painting tools.
+
+---
+
+## Phase 6: Particle and Effects System
+**Goal:** Fire, smoke, water, and other real-time visual effects.
+
+These engine features are prerequisites for the editor's effects tools (Phase 5E) but can be developed alongside the early editor phases.
+
+### Fire and Flame
+- [ ] GPU particle system (compute shader driven for thousands of particles at 60 FPS)
+- [ ] Billboard particle rendering (camera-facing quads with alpha blending)
+- [ ] Fire shader (animated color gradient: white core → yellow → orange → red → smoke)
+- [ ] Torch fire preset (upward emission with flickering, ember sparks)
+- [ ] Candle flame preset (small, gentle, mostly yellow)
+- [ ] Campfire preset (larger, with smoke and floating embers)
+- [ ] Light coupling — fire emitters automatically create a flickering point light
+
+### Smoke and Atmosphere
+- [ ] Smoke particles (grey, slow-rising, expanding, fading)
+- [ ] Dust motes (tiny, slow, ambient particles in indoor spaces)
+- [ ] Incense smoke (thin, wispy, rising column — perfect for the Tabernacle)
+
+### Water
+- [ ] Water surface shader (reflective/refractive with Fresnel effect)
+- [ ] Animated water normals (scrolling normal maps for wave appearance)
+- [ ] Water bath/pool (contained rectangular body — no terrain needed)
+- [ ] Depth-based color (water darkens with depth)
+- [ ] Water caustics (animated light patterns projected onto surfaces below water — scrolling noise texture modulates light intensity, simulating refraction through waves)
+- [ ] Optional: simple wave vertex displacement
+
+### Milestone
+Torches with flickering fire illuminate a room, smoke rises from an altar of incense, and a bronze laver contains reflective water.
+
+---
+
+## Phase 7: Animation
+**Goal:** Bring the world to life with skeletal animation and motion.
+
+Animated objects and characters are essential for doors, swinging censers, priestly processions, and any living scene. glTF already carries skeletal animation data — this phase makes the engine able to play it.
+
+### Skeletal Animation System
+- [ ] Bone/joint hierarchy (skeleton loaded from glTF)
+- [ ] Skinned mesh rendering (vertex skinning with bone weights in the vertex shader)
+- [ ] Animation clip playback (keyframe interpolation — position, rotation, scale)
+- [ ] Animation blending (cross-fade between clips, layered blending)
+- [ ] Animation state machine (idle → walk → run transitions with conditions)
+- [ ] Root motion support (animation drives entity movement, not just visual)
+
+### Object Animation
+- [ ] Property animation system (animate any numeric property over time — position, rotation, color, intensity)
+- [ ] Animation curves (linear, ease-in/out, cubic bezier)
+- [ ] Looping, ping-pong, and one-shot playback modes
+- [ ] Animation events (trigger callbacks at specific keyframes — play sound, spawn particles)
+
+### Inverse Kinematics (IK)
+- [ ] Two-bone IK solver (arms, legs — reach for a target position)
+- [ ] Foot IK (plant feet correctly on slopes, stairs, and uneven terrain)
+- [ ] Hand IK (reach for door handles, grab objects, brace against walls)
+- [ ] Look-at / head IK (characters turn head toward points of interest)
+- [ ] IK blending with animation clips (IK layer on top of baked animations)
+
+### glTF Animation Import
+- [ ] Import skeletal animations from glTF files
+- [ ] Import morph target / blend shape animations
+- [ ] Multiple animation clips per model (walk, idle, gesture)
+
+### Milestone
+Animated characters walk through the Temple courts, doors swing open on approach, and a golden censer swings rhythmically over the altar of incense.
+
+---
+
+## Phase 8: Physics
+**Goal:** Physical simulation for realistic object interaction, cloth, and world dynamics.
+
+Physics enables curtains blowing in the wind, objects responding to gravity, doors with realistic hinges, and the linen fabrics of the Tabernacle draping naturally.
+
+### Rigid Body Dynamics
+- [ ] Physics engine integration (Bullet Physics or Jolt — evaluate both)
+- [ ] Rigid body component (mass, friction, restitution)
+- [ ] Collision shapes (box, sphere, capsule, convex hull, triangle mesh)
+- [ ] Gravity and force application
+- [ ] Collision detection and response (bouncing, sliding, resting)
+- [ ] Kinematic bodies (scripted movement that still collides — doors, platforms)
+- [ ] Physics-based character controller (replace current AABB controller)
+
+### Constraints and Joints
+- [ ] Hinge joints (doors, gates, lids)
+- [ ] Spring/damper constraints (swinging objects, suspension)
+- [ ] Fixed joints (weld objects together)
+- [ ] Rope/chain constraints (hanging lamps, chains)
+
+### Cloth Simulation
+- [ ] Cloth component (mass-spring or position-based dynamics)
+- [ ] Wind interaction (cloth responds to wind direction and strength)
+- [ ] Collision with rigid bodies (cloth drapes over objects)
+- [ ] Pin constraints (attach cloth corners to fixed points — hanging curtains)
+- [ ] Presets: linen curtain, tent fabric, priestly garment, banner/flag
+
+### Milestone
+The Tabernacle's linen curtains sway gently, the entrance veil drapes realistically from its poles, and doors throughout Solomon's Temple swing on hinged joints.
+
+---
+
+## Phase 9: Polish and Features
+**Goal:** Complete the experience — UI, audio, usability, and accessibility.
 
 ### Features
-- [ ] UI system (menus, HUD, information panels/plaques)
+- [ ] In-game UI system (menus, HUD, information panels/plaques)
 - [ ] Text rendering (TrueType fonts)
 - [ ] Audio system (background music, ambient sounds)
-- [ ] Spatial audio (3D positioned sound sources)
-- [ ] Particle effects (dust motes, torch flames, smoke)
+- [ ] Spatial audio (3D positioned sound sources — crackling torch, splashing water)
 - [ ] Scene/level configuration files (define scenes in data, not code)
-- [ ] Screenshot capture
-- [ ] Performance profiler (frame time breakdown)
-- [ ] Settings system (resolution, quality, keybindings)
+- [ ] Settings system (resolution, quality presets, keybindings)
+- [ ] Loading screens (for scene transitions)
+- [ ] Information plaques — approach an object to see a text description
+
+### Localization
+- [ ] Multi-language text support (UTF-8, language selection)
+- [ ] Translatable string table system (all UI/plaque text referenced by key, not hardcoded)
+- [ ] Hebrew, Greek, and Latin text rendering (right-to-left support for Hebrew)
+- [ ] Language selection in settings menu
+
+### Accessibility
+- [ ] Colorblind modes (protanopia, deuteranopia, tritanopia filters)
+- [ ] Subtitle / closed caption system for spatial audio cues
+- [ ] Fully remappable controls (keyboard, mouse, gamepad)
+- [ ] UI scaling options (for readability at different resolutions/distances)
+- [ ] High-contrast mode for UI elements
 
 ### Milestone
-A complete walkthrough experience with UI, audio, and visual effects.
+A complete walkthrough experience with UI, audio, information displays, multi-language support, and accessibility options.
 
 ---
 
-## Phase 6: Distribution
-**Goal:** Package and distribute the application.
+## Phase 10: Distribution
+**Goal:** Package and distribute the application — both finished experiences and the engine itself.
 
-### Features
+### Asset Pipeline
+- [ ] Texture compression (BC7 for desktop, ASTC for mobile — compress on import, decompress on GPU)
+- [ ] Automatic mipmap generation with quality filtering options
+- [ ] Asset cooking / baking (preprocess models, textures, shaders into optimized binary format)
+- [ ] Asset manifest and dependency tracking (know exactly what each scene needs)
+- [ ] Hot-reload during development (detect changed assets, reload without restarting)
+
+### Application Distribution
 - [ ] Steam SDK integration
 - [ ] Steam achievements (if applicable)
 - [ ] Installer/packaging for Windows
 - [ ] Linux AppImage or Flatpak packaging
-- [ ] Loading screens
 - [ ] Save/load system (player position, settings)
 - [ ] Controller button prompts (show correct icons for connected controller)
+- [ ] Loading screens (with progress indicators for large scenes)
+
+### Scene Packaging and Sharing
+- [ ] Export scene as standalone package (scene + all referenced assets in one archive)
+- [ ] Import packaged scenes from other creators
+- [ ] Scene versioning — track which engine version a scene was built with
 
 ### Milestone
-Application published on Steam.
+Application published on Steam. Scenes can be packaged and shared between users.
 
 ---
 
-## Phase 7: Advanced Rendering
+## Phase 11: Advanced Rendering
 **Goal:** Push visual fidelity with modern techniques.
 
-### Features
+### Screen-Space Effects
+- [ ] Screen-space reflections / SSR (real-time reflections on wet floors, polished bronze/gold — complements IBL)
+- [ ] Depth of field (cinematic focus effect for guided tours and screenshots)
+- [ ] Motion blur (per-object and camera-based)
+
+### Advanced Materials
+- [ ] Subsurface scattering / SSS (light bleeding through thin materials — linen curtains, wax candles, marble, skin)
+- [ ] Anisotropic reflections (brushed metal, hair, silk fabrics)
+
+### Global Illumination
+- [ ] Baked lightmaps (pre-computed GI for static architectural scenes — ideal for walkthroughs)
+- [ ] Light probes (capture local lighting conditions at probe positions — varying lighting between rooms)
+- [ ] Reflection probes (local cubemap captures for accurate indoor reflections — Holy Place vs Holy of Holies)
+- [ ] Light probe blending (smooth transitions between probe volumes)
+
+### Vulkan and Ray Tracing
 - [ ] Vulkan rendering backend (alternative to OpenGL)
 - [ ] Ray tracing — reflections (hardware-accelerated on supported GPUs)
 - [ ] Ray tracing — ambient occlusion
 - [ ] Ray tracing — global illumination
 - [ ] Deferred rendering pipeline
+
+### Tessellation and Geometry
+- [ ] Tessellation (adaptive subdivision for nearby geometry)
+- [ ] Displacement mapping (height maps that actually move geometry, unlike normal maps)
+- [ ] Tessellated water surfaces (wave simulation via height maps)
+- [ ] Tessellated terrain (adaptive detail for landscapes)
+
+### Shadow Techniques
+- [ ] Virtual shadow maps (massive virtual texture shadow map — only allocate tiles visible to camera, consistent detail at all distances, eliminates cascade seams)
+- [ ] Percentage-closer soft shadows / PCSS (contact-hardening shadows — sharp near caster, soft further away)
+
+### Performance
+- [ ] Frustum culling (skip objects outside camera view)
+- [ ] Occlusion culling (skip objects hidden behind other objects)
 - [ ] Volumetric lighting (god rays, fog)
-- [ ] Frustum culling and occlusion culling
+
+### VR / Immersive Rendering
+- [ ] OpenXR integration (cross-platform VR/AR runtime)
+- [ ] Stereoscopic rendering (dual-eye viewpoints with correct IPD)
+- [ ] VR locomotion system (teleport, smooth movement, comfort options)
+- [ ] VR interaction (grab, point, inspect objects)
+- [ ] VR performance target (90 FPS stereo — requires aggressive optimization)
+- [ ] Foveated rendering (reduce detail in peripheral vision on supported headsets)
 
 ### Milestone
-Hybrid rendering with ray-traced effects on supported hardware.
+Hybrid rendering with ray-traced effects, VR walkthroughs, baked GI for architectural scenes, and tessellation on supported hardware.
 
 ---
 
-## Phase 8: Adaptive Geometry System
+## Phase 12: Adaptive Geometry System
 **Goal:** Handle massive geometric complexity automatically — original approach, not a copy of any existing engine.
 
 ### Problem Statement
@@ -174,7 +608,7 @@ A system that lets artists import film-quality assets and the engine automatical
 
 ---
 
-## Phase 9: Atmospheric Rendering
+## Phase 13: Atmospheric Rendering
 **Goal:** Procedural sky, weather, and time of day.
 
 ### Features
@@ -188,6 +622,86 @@ A system that lets artists import film-quality assets and the engine automatical
 
 ### Milestone
 A living sky with dynamic clouds, day/night transitions, and atmospheric lighting.
+
+---
+
+## Phase 14: Scripting and Interactivity
+**Goal:** Allow scene creators to add behavior and interactivity without writing C++.
+
+### Visual Scripting
+- [ ] Node-based visual scripting system (connect trigger → action blocks in the editor)
+- [ ] Event triggers: player enters area, player looks at object, player presses interact key, timer
+- [ ] Actions: open/close door, play sound, show text, move object, toggle light, teleport player
+- [ ] Waypoint system — define guided tour paths the player can follow
+- [ ] Trigger zones — invisible volumes that fire events when the player enters
+
+### Simple Behaviors
+- [ ] Animated objects (rotating, bobbing, swinging — set in the inspector)
+- [ ] Door component (opens on interact, with animation)
+- [ ] Torch component (auto-generates fire particles + flickering light)
+- [ ] Water component (auto-generates water surface shader + sound)
+
+### AI and Navigation
+- [ ] Navigation mesh generation (automatic walkable surface detection from scene geometry)
+- [ ] NavMesh pathfinding (A* or similar on the navigation mesh)
+- [ ] NPC component (entity that follows paths, plays animations, responds to triggers)
+- [ ] NPC patrol routes (editor-defined waypoint sequences)
+- [ ] Crowd simulation (multiple NPCs navigating without colliding — Temple visitors, priests)
+- [ ] Line-of-sight checks (NPCs react to player visibility)
+
+### Milestone
+A scene where doors open, torches flicker, guided tours run, NPCs walk patrol routes, and information appears — all configured in the editor without code.
+
+---
+
+## Phase 15: Terrain and Landscape
+**Goal:** Large-scale terrain with heightmap-based elevation for hills, valleys, and natural landscapes.
+
+Environment painting tools (grass, trees, paths, water) are in Phase 5G. This phase focuses on the terrain geometry system that those tools paint onto.
+
+### Terrain System
+- [ ] Heightmap-based terrain (import or paint elevation in-editor)
+- [ ] Terrain painting tools — raise, lower, smooth, flatten brushes
+- [ ] Multi-layer terrain texturing (paint grass, dirt, rock, sand onto terrain)
+- [ ] Automatic texture blending based on slope and altitude
+- [ ] Terrain LOD — distant terrain uses fewer triangles automatically
+- [ ] Terrain collision (character controller walks on terrain surface)
+- [ ] Terrain chunking (split large terrains into tiles for streaming and culling)
+
+### Milestone
+Outdoor landscapes surrounding the Temple complex — hills, valleys, and the Kidron Valley with terrain elevation, ready for environment painting from Phase 5G.
+
+---
+
+## Commercial Vision
+
+### Engine Licensing
+Vestige has the long-term potential to be licensed to other developers as a standalone engine and editor. The goal is to provide a complete, accessible creation tool — particularly suited to architectural visualization, historical reconstruction, and exploration experiences.
+
+#### Licensing Model
+- **Free tier:** Free to use for learning, non-commercial projects, and small teams
+- **Revenue royalty:** 5% royalty on gross revenue above a threshold (e.g., first $100,000 revenue-free) for commercial products built with Vestige
+- **Alternative:** One-time or subscription license options for studios that prefer predictable costs
+- **Open development:** Transparent roadmap, community feedback shapes priorities
+
+#### What Makes Vestige Licensable
+- Complete editor — non-programmers can build full scenes without writing code
+- Metric-scale architectural tools — purpose-built for room/building construction
+- Biblical/historical focus — a niche no other engine specifically serves
+- Modern rendering — PBR, shadows, particles, water, atmospheric effects
+- Cross-platform — Linux and Windows from day one
+
+#### Prerequisites (before licensing is viable)
+- [ ] Stable, well-documented editor (Phase 5 complete)
+- [ ] Scene save/load working reliably
+- [ ] Comprehensive documentation and tutorials
+- [ ] Bug tracker and version release process
+- [ ] Engine API documentation for advanced users who do want to code
+- [ ] License agreement and terms drafted
+- [ ] Website and community channels
+
+### Milestone
+Vestige available for download with a clear license, documentation, and at least one showcase project (Tabernacle walkthrough) demonstrating its capabilities.
 
 ---
 

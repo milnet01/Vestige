@@ -26,10 +26,10 @@ public:
     void setMaterial(std::shared_ptr<Material> material);
 
     /// @brief Gets the mesh.
-    std::shared_ptr<Mesh> getMesh() const;
+    const std::shared_ptr<Mesh>& getMesh() const;
 
     /// @brief Gets the material.
-    std::shared_ptr<Material> getMaterial() const;
+    const std::shared_ptr<Material>& getMaterial() const;
 
     /// @brief Gets the local-space bounding box for collision.
     const AABB& getBounds() const;

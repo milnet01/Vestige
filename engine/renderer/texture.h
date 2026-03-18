@@ -26,8 +26,28 @@ public:
 
     /// @brief Loads a texture from an image file (PNG, JPG, BMP, TGA).
     /// @param filePath Path to the image file.
+    /// @param linear If true, load as linear data (normal/height/metallic-roughness maps).
+    ///               If false (default), load as sRGB color data (albedo/emissive/diffuse).
     /// @return True if loading succeeded.
-    bool loadFromFile(const std::string& filePath);
+    bool loadFromFile(const std::string& filePath, bool linear = false);
+
+    /// @brief Loads a texture from compressed image data in memory (PNG, JPEG, etc.).
+    /// @param compressedData Pointer to the compressed image bytes.
+    /// @param dataSize Size of the compressed data in bytes.
+    /// @param linear If true, load as linear data; if false, load as sRGB.
+    /// @return True if loading succeeded.
+    bool loadFromMemory(const unsigned char* compressedData, size_t dataSize,
+                        bool linear = false);
+
+    /// @brief Loads a texture from raw, pre-decoded pixel data.
+    /// @param rawData Pointer to the raw pixel data.
+    /// @param width Image width in pixels.
+    /// @param height Image height in pixels.
+    /// @param channels Number of color channels (1, 3, or 4).
+    /// @param linear If true, load as linear data; if false, load as sRGB.
+    /// @return True if loading succeeded.
+    bool loadFromMemory(const unsigned char* rawData, int width, int height,
+                        int channels, bool linear = false);
 
     /// @brief Creates a solid 1x1 color texture.
     /// @param r Red component (0-255).
@@ -56,6 +76,14 @@ public:
     bool isLoaded() const;
 
 private:
+    bool loadFromExr(const std::string& filePath);
+
+    /// @brief Deletes any existing GPU texture before re-creation.
+    void releaseGpuTexture();
+
+    /// @brief Selects the appropriate internal format based on channels and sRGB flag.
+    static GLenum selectInternalFormat(int channels, bool linear);
+
     GLuint m_textureId;
     int m_width;
     int m_height;

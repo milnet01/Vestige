@@ -27,6 +27,7 @@ struct SceneRenderData
     };
 
     std::vector<RenderItem> renderItems;
+    std::vector<RenderItem> transparentItems;
     DirectionalLight directionalLight;
     bool hasDirectionalLight = false;
     std::vector<PointLight> pointLights;
@@ -54,9 +55,17 @@ public:
     /// @return Render data containing meshes, materials, transforms, and lights.
     SceneRenderData collectRenderData() const;
 
+    /// @brief Fills existing render data (clears and reuses allocated memory).
+    /// @param data Output render data — vectors are cleared but capacity is preserved.
+    void collectRenderData(SceneRenderData& data) const;
+
     /// @brief Collects all world-space AABBs for collision detection.
     /// @return List of world-space bounding boxes.
     std::vector<AABB> collectColliders() const;
+
+    /// @brief Fills existing collider list (clears and reuses allocated memory).
+    /// @param colliders Output vector — cleared but capacity is preserved.
+    void collectColliders(std::vector<AABB>& colliders) const;
 
     /// @brief Finds an entity by name (searches entire hierarchy).
     Entity* findEntity(const std::string& name);

@@ -4,6 +4,7 @@
 #include "core/logger.h"
 #include "scene/mesh_renderer.h"
 #include "scene/light_component.h"
+#include "resource/model.h"
 
 #include <GLFW/glfw3.h>
 #include <glm/gtc/matrix_transform.hpp>
@@ -48,6 +49,12 @@ bool Engine::initialize(const EngineConfig& config)
 
     // Initialize framebuffer pipeline (4x MSAA)
     m_renderer->initFramebuffers(m_window->getWidth(), m_window->getHeight(), 4);
+
+    // Initialize text rendering (optional — continues without it)
+    if (!m_renderer->initTextRenderer(config.assetPath + "/fonts/default.ttf", config.assetPath))
+    {
+        Logger::warning("Text rendering unavailable (font not found)");
+    }
 
     // Create resource manager
     m_resourceManager = std::make_unique<ResourceManager>();
@@ -97,6 +104,128 @@ bool Engine::initialize(const EngineConfig& config)
                 m_renderer->setWireframeMode(!m_renderer->isWireframeMode());
                 break;
 
+            case GLFW_KEY_F2:
+            {
+                int nextMode = (m_renderer->getTonemapMode() + 1) % 3;
+                m_renderer->setTonemapMode(nextMode);
+                const char* names[] = {"Reinhard", "ACES Filmic", "None (linear clamp)"};
+                Logger::info("Tonemapper: " + std::string(names[nextMode]));
+                break;
+            }
+
+            case GLFW_KEY_F3:
+            {
+                int nextDebug = (m_renderer->getDebugMode() == 0) ? 1 : 0;
+                m_renderer->setDebugMode(nextDebug);
+                Logger::info(std::string("HDR debug: ") + (nextDebug ? "false-color luminance" : "off"));
+                break;
+            }
+
+            case GLFW_KEY_LEFT_BRACKET:
+            {
+                float newExposure = m_renderer->getExposure() - 0.1f;
+                if (newExposure < 0.1f)
+                {
+                    newExposure = 0.1f;
+                }
+                m_renderer->setExposure(newExposure);
+                Logger::info("Exposure: " + std::to_string(newExposure));
+                break;
+            }
+
+            case GLFW_KEY_RIGHT_BRACKET:
+            {
+                float newExposure = m_renderer->getExposure() + 0.1f;
+                if (newExposure > 10.0f)
+                {
+                    newExposure = 10.0f;
+                }
+                m_renderer->setExposure(newExposure);
+                Logger::info("Exposure: " + std::to_string(newExposure));
+                break;
+            }
+
+            case GLFW_KEY_F4:
+                m_renderer->setPomEnabled(!m_renderer->isPomEnabled());
+                Logger::info(std::string("POM: ") + (m_renderer->isPomEnabled() ? "ON" : "OFF"));
+                break;
+
+            case GLFW_KEY_MINUS:
+            {
+                float newMult = m_renderer->getPomHeightMultiplier() - 0.1f;
+                if (newMult < 0.0f)
+                {
+                    newMult = 0.0f;
+                }
+                m_renderer->setPomHeightMultiplier(newMult);
+                Logger::info("POM height multiplier: " + std::to_string(newMult));
+                break;
+            }
+
+            case GLFW_KEY_EQUAL:
+            {
+                float newMult = m_renderer->getPomHeightMultiplier() + 0.1f;
+                if (newMult > 3.0f)
+                {
+                    newMult = 3.0f;
+                }
+                m_renderer->setPomHeightMultiplier(newMult);
+                Logger::info("POM height multiplier: " + std::to_string(newMult));
+                break;
+            }
+
+            case GLFW_KEY_F5:
+                m_renderer->setBloomEnabled(!m_renderer->isBloomEnabled());
+                Logger::info(std::string("Bloom: ") + (m_renderer->isBloomEnabled() ? "ON" : "OFF"));
+                break;
+
+            case GLFW_KEY_F6:
+                m_renderer->setSsaoEnabled(!m_renderer->isSsaoEnabled());
+                Logger::info(std::string("SSAO: ") + (m_renderer->isSsaoEnabled() ? "ON" : "OFF"));
+                break;
+
+            case GLFW_KEY_F7:
+            {
+                int current = static_cast<int>(m_renderer->getAntiAliasMode());
+                int next = (current + 1) % 3;
+                m_renderer->setAntiAliasMode(static_cast<AntiAliasMode>(next));
+                break;
+            }
+
+            case GLFW_KEY_F8:
+            {
+                if (!m_renderer->isColorGradingEnabled())
+                {
+                    m_renderer->setColorGradingEnabled(true);
+                    // Skip neutral (index 0) — start at first visual preset
+                    m_renderer->nextColorGradingPreset();
+                    Logger::info("Color grading: " + m_renderer->getColorGradingPresetName());
+                }
+                else
+                {
+                    m_renderer->nextColorGradingPreset();
+                    // If we cycled back to Neutral (index 0), turn off
+                    if (m_renderer->getColorGradingPresetName() == "Neutral")
+                    {
+                        m_renderer->setColorGradingEnabled(false);
+                        Logger::info("Color grading: OFF");
+                    }
+                    else
+                    {
+                        Logger::info("Color grading: " + m_renderer->getColorGradingPresetName());
+                    }
+                }
+                break;
+            }
+
+            case GLFW_KEY_F9:
+            {
+                bool debug = !m_renderer->isCascadeDebug();
+                m_renderer->setCascadeDebug(debug);
+                Logger::info(std::string("CSM debug: ") + (debug ? "ON" : "OFF"));
+                break;
+            }
+
             case GLFW_KEY_Q:
                 m_isRunning = false;
                 break;
@@ -111,7 +240,7 @@ bool Engine::initialize(const EngineConfig& config)
 
     m_isRunning = true;
     Logger::info("Engine initialized successfully");
-    Logger::info("Controls: WASD=move, Mouse=look, Space/Shift=up/down, LCtrl=sprint, F1=wireframe, Q=quit");
+    Logger::info("Controls: WASD=move, Mouse=look, Space/Shift=up/down, LCtrl=sprint, F1=wireframe, F2=tonemapper, F3=HDR debug, F4=POM, F5=bloom, F6=SSAO, F7=AA mode, F8=color grading, F9=CSM debug, [/]=exposure, -/+=POM depth, Q=quit");
     Logger::info("Gamepad: Left stick=move, Right stick=look, LB=sprint, Triggers=up/down");
     return true;
 }
@@ -131,28 +260,41 @@ void Engine::run()
         // 3. Update input state (reset per-frame deltas)
         m_inputManager->update();
 
+        // 3b. Process async texture uploads (GPU upload on main thread)
+        m_resourceManager->processAsyncUploads();
+
         // 4. Scene — update entities and components
         m_sceneManager->update(deltaTime);
 
         // 5. Controller — process input and update camera
         Scene* activeScene = m_sceneManager->getActiveScene();
-        std::vector<AABB> colliders;
         if (activeScene)
         {
-            colliders = activeScene->collectColliders();
+            activeScene->collectColliders(m_colliders);
         }
-        m_controller->update(deltaTime, colliders);
+        else
+        {
+            m_colliders.clear();
+        }
+        m_controller->update(deltaTime, m_colliders);
 
         // 6. Renderer — draw the frame
+        int winHeight = m_window->getHeight();
+        if (winHeight <= 0)
+        {
+            m_window->pollEvents();
+            continue;  // Skip rendering when minimized
+        }
+
         m_renderer->beginFrame();
 
         float aspectRatio = static_cast<float>(m_window->getWidth())
-                          / static_cast<float>(m_window->getHeight());
+                          / static_cast<float>(winHeight);
 
         if (activeScene)
         {
-            SceneRenderData renderData = activeScene->collectRenderData();
-            m_renderer->renderScene(renderData, *m_camera, aspectRatio);
+            activeScene->collectRenderData(m_renderData);
+            m_renderer->renderScene(m_renderData, *m_camera, aspectRatio);
         }
 
         // 7. Resolve MSAA and draw to screen
@@ -198,35 +340,101 @@ void Engine::setupDemoScene()
     auto cubeMesh = m_resourceManager->getCubeMesh();
     auto planeMesh = m_resourceManager->getPlaneMesh(20.0f);
 
-    auto groundMat = m_resourceManager->createMaterial("ground");
-    groundMat->setDiffuseColor(glm::vec3(0.3f, 0.3f, 0.3f));
-    groundMat->setSpecularColor(glm::vec3(0.1f));
-    groundMat->setShininess(8.0f);
-    groundMat->setDiffuseTexture(m_resourceManager->loadTexture("assets/textures/Texturelabs_Stone_138M.jpg"));
+    // --- PBR materials ---
 
+    auto groundMat = m_resourceManager->createMaterial("ground");
+    groundMat->setType(MaterialType::PBR);
+    groundMat->setAlbedo(glm::vec3(1.0f));
+    groundMat->setMetallic(0.0f);
+    groundMat->setRoughness(0.9f);
+    groundMat->setDiffuseTexture(m_resourceManager->loadTexture(
+        "assets/textures/everytexture-com-stock-rocks-texture-00038-2048/everytexture.com-stock-rocks-texture-00038-diffuse-2048.jpg"));
+    groundMat->setNormalMap(m_resourceManager->loadTexture(
+        "assets/textures/everytexture-com-stock-rocks-texture-00038-2048/everytexture.com-stock-rocks-texture-00038-normal-2048.jpg", true));
+    groundMat->setStochasticTiling(true);
+    groundMat->setUvScale(4.0f);
+
+    // Block 1 — Red Brick (left)
+    auto redBrickMat = m_resourceManager->createMaterial("red_brick");
+    redBrickMat->setType(MaterialType::PBR);
+    redBrickMat->setAlbedo(glm::vec3(1.0f));
+    redBrickMat->setMetallic(0.0f);
+    redBrickMat->setRoughness(1.0f);
+    redBrickMat->setDiffuseTexture(m_resourceManager->loadTexture("assets/textures/red_brick_diff_2k.jpg"));
+    redBrickMat->setNormalMap(m_resourceManager->loadTexture("assets/textures/red_brick_nor_gl_2k.jpg", true));
+    redBrickMat->setMetallicRoughnessTexture(
+        m_resourceManager->loadTexture("assets/textures/red_brick_rough_2k.jpg", true));
+    redBrickMat->setUvScale(0.5f);
+
+    // Block 2 — Gold (center)
     auto goldMat = m_resourceManager->createMaterial("gold");
-    goldMat->setDiffuseColor(glm::vec3(0.83f, 0.69f, 0.22f));
-    goldMat->setSpecularColor(glm::vec3(1.0f, 0.95f, 0.7f));
-    goldMat->setShininess(128.0f);
+    goldMat->setType(MaterialType::PBR);
+    goldMat->setAlbedo(glm::vec3(1.4f, 1.1f, 0.5f));
+    goldMat->setMetallic(1.0f);
+    goldMat->setRoughness(0.25f);
     goldMat->setDiffuseTexture(m_resourceManager->loadTexture("assets/textures/Texturelabs_Metal_124M.jpg"));
 
-    auto redMat = m_resourceManager->createMaterial("red_clay");
-    redMat->setDiffuseColor(glm::vec3(0.7f, 0.2f, 0.15f));
-    redMat->setSpecularColor(glm::vec3(0.3f));
-    redMat->setShininess(16.0f);
-    redMat->setDiffuseTexture(m_resourceManager->loadTexture("assets/textures/Texturelabs_Brick_124M.jpg"));
+    // Block 3 — Wood (right)
+    auto woodMat = m_resourceManager->createMaterial("wood");
+    woodMat->setType(MaterialType::PBR);
+    woodMat->setAlbedo(glm::vec3(1.0f));
+    woodMat->setMetallic(0.0f);
+    woodMat->setRoughness(0.9f);
+    woodMat->setDiffuseTexture(m_resourceManager->loadTexture("assets/textures/Texturelabs_Glass_120M.jpg"));
 
-    auto blueMat = m_resourceManager->createMaterial("blue_matte");
-    blueMat->setDiffuseColor(glm::vec3(0.15f, 0.25f, 0.7f));
-    blueMat->setSpecularColor(glm::vec3(0.2f));
-    blueMat->setShininess(8.0f);
-    blueMat->setDiffuseTexture(m_resourceManager->loadTexture("assets/textures/Texturelabs_Glass_120M.jpg"));
+    // Block 4 — Rough Brick (back)
+    auto roughBrickMat = m_resourceManager->createMaterial("rough_brick");
+    roughBrickMat->setType(MaterialType::PBR);
+    roughBrickMat->setAlbedo(glm::vec3(1.0f));
+    roughBrickMat->setMetallic(0.0f);
+    roughBrickMat->setRoughness(0.9f);
+    roughBrickMat->setDiffuseTexture(m_resourceManager->loadTexture("assets/textures/brick_wall_005_diff_2k.jpg"));
+    roughBrickMat->setNormalMap(m_resourceManager->loadTexture("assets/textures/brick_wall_005_nor_gl_2k.jpg", true));
 
-    auto whiteMat = m_resourceManager->createMaterial("white_stone");
-    whiteMat->setDiffuseColor(glm::vec3(0.85f, 0.85f, 0.8f));
-    whiteMat->setSpecularColor(glm::vec3(0.4f));
-    whiteMat->setShininess(32.0f);
-    whiteMat->setDiffuseTexture(m_resourceManager->loadTexture("assets/textures/Texturelabs_Grunge_207M.jpg"));
+    // --- Height maps for POM ---
+
+    // Ground — rock bump/height map
+    auto groundHeightTex = std::make_shared<Texture>();
+    if (groundHeightTex->loadFromFile(
+        "assets/textures/everytexture-com-stock-rocks-texture-00038-2048/everytexture.com-stock-rocks-texture-00038-bump-2048.jpg", true))
+    {
+        groundMat->setHeightMap(groundHeightTex);
+        groundMat->setHeightScale(0.06f);
+    }
+
+    // Block 1 — embossed label "1" over red brick displacement
+    auto redBrickHeightTex = std::make_shared<Texture>();
+    if (redBrickHeightTex->loadFromFile("assets/textures/red_brick_disp_2k.jpg", true))
+    {
+        redBrickMat->setHeightMap(redBrickHeightTex);
+        redBrickMat->setHeightScale(0.05f);
+    }
+
+    // Block 2 — embossed label "2"
+    auto goldLabelTex = std::make_shared<Texture>();
+    if (goldLabelTex->loadFromFile("assets/textures/label_2.png", true))
+    {
+        goldMat->setHeightMap(goldLabelTex);
+        goldMat->setHeightScale(0.03f);
+        goldMat->setPomEnabled(true);
+    }
+
+    // Block 3 — embossed label "3"
+    auto woodLabelTex = std::make_shared<Texture>();
+    if (woodLabelTex->loadFromFile("assets/textures/label_3.png", true))
+    {
+        woodMat->setHeightMap(woodLabelTex);
+        woodMat->setHeightScale(0.03f);
+        woodMat->setPomEnabled(true);
+    }
+
+    // Block 4 — embossed label "4" over brick wall displacement
+    auto roughBrickHeightTex = std::make_shared<Texture>();
+    if (roughBrickHeightTex->loadFromFile("assets/textures/brick_wall_005_disp_2k.jpg", true))
+    {
+        roughBrickMat->setHeightMap(roughBrickHeightTex);
+        roughBrickMat->setHeightScale(0.05f);
+    }
 
     // --- Ground ---
     Entity* ground = scene->createEntity("Ground");
@@ -234,36 +442,72 @@ void Engine::setupDemoScene()
     // No collision bounds for the ground (we handle ground via height clamping)
 
     // --- Cubes ---
-    Entity* goldCube = scene->createEntity("Gold Cube");
+    Entity* redBrickCube = scene->createEntity("1 Red Brick");
+    redBrickCube->transform.position = glm::vec3(-3.0f, 0.5f, -1.0f);
+    redBrickCube->transform.rotation = glm::vec3(0.0f, 30.0f, 0.0f);
+    auto* redBrickRenderer = redBrickCube->addComponent<MeshRenderer>(cubeMesh, redBrickMat);
+    redBrickRenderer->setBounds(AABB::unitCube());
+
+    Entity* goldCube = scene->createEntity("2 Gold");
     goldCube->transform.position = glm::vec3(0.0f, 0.5f, 0.0f);
     auto* goldRenderer = goldCube->addComponent<MeshRenderer>(cubeMesh, goldMat);
     goldRenderer->setBounds(AABB::unitCube());
 
-    Entity* redCube = scene->createEntity("Red Cube");
-    redCube->transform.position = glm::vec3(-3.0f, 0.5f, -1.0f);
-    redCube->transform.rotation = glm::vec3(0.0f, 30.0f, 0.0f);
-    auto* redRenderer = redCube->addComponent<MeshRenderer>(cubeMesh, redMat);
-    redRenderer->setBounds(AABB::unitCube());
+    Entity* woodCube = scene->createEntity("3 Wood");
+    woodCube->transform.position = glm::vec3(3.0f, 0.75f, -1.0f);
+    woodCube->transform.scale = glm::vec3(1.0f, 1.5f, 1.0f);
+    auto* woodRenderer = woodCube->addComponent<MeshRenderer>(cubeMesh, woodMat);
+    woodRenderer->setBounds(AABB::unitCube());
 
-    Entity* blueCube = scene->createEntity("Blue Cube");
-    blueCube->transform.position = glm::vec3(3.0f, 0.75f, -1.0f);
-    blueCube->transform.scale = glm::vec3(1.0f, 1.5f, 1.0f);
-    auto* blueRenderer = blueCube->addComponent<MeshRenderer>(cubeMesh, blueMat);
-    blueRenderer->setBounds(AABB::unitCube());
+    Entity* roughBrickCube = scene->createEntity("4 Rough Brick");
+    roughBrickCube->transform.position = glm::vec3(0.0f, 1.0f, -5.0f);
+    roughBrickCube->transform.scale = glm::vec3(2.0f, 2.0f, 2.0f);
+    roughBrickCube->transform.rotation = glm::vec3(0.0f, 45.0f, 0.0f);
+    auto* roughBrickRenderer = roughBrickCube->addComponent<MeshRenderer>(cubeMesh, roughBrickMat);
+    roughBrickRenderer->setBounds(AABB::unitCube());
 
-    Entity* whiteCube = scene->createEntity("White Cube");
-    whiteCube->transform.position = glm::vec3(0.0f, 1.0f, -5.0f);
-    whiteCube->transform.scale = glm::vec3(2.0f, 2.0f, 2.0f);
-    whiteCube->transform.rotation = glm::vec3(0.0f, 45.0f, 0.0f);
-    auto* whiteRenderer = whiteCube->addComponent<MeshRenderer>(cubeMesh, whiteMat);
-    whiteRenderer->setBounds(AABB::unitCube());
+    // --- Glass cube (transparent) ---
+    auto glassMat = m_resourceManager->createMaterial("glass");
+    glassMat->setType(MaterialType::PBR);
+    glassMat->setAlbedo(glm::vec3(0.4f, 0.6f, 0.9f));
+    glassMat->setMetallic(0.0f);
+    glassMat->setRoughness(0.1f);
+    glassMat->setAlphaMode(AlphaMode::BLEND);
+    glassMat->setBaseColorAlpha(0.3f);
+
+    Entity* glassCube = scene->createEntity("5 Glass");
+    glassCube->transform.position = glm::vec3(1.5f, 0.5f, 2.0f);
+    glassCube->transform.rotation = glm::vec3(0.0f, 15.0f, 0.0f);
+    auto* glassRenderer = glassCube->addComponent<MeshRenderer>(cubeMesh, glassMat);
+    glassRenderer->setBounds(AABB::unitCube());
+
+    // --- Emissive cube (lava glow) ---
+    auto lavaMat = m_resourceManager->createMaterial("lava");
+    lavaMat->setType(MaterialType::PBR);
+    lavaMat->setAlbedo(glm::vec3(0.1f, 0.02f, 0.0f));
+    lavaMat->setMetallic(0.0f);
+    lavaMat->setRoughness(0.8f);
+    lavaMat->setEmissive(glm::vec3(1.0f, 0.3f, 0.05f));
+    lavaMat->setEmissiveStrength(5.0f);
+
+    Entity* lavaCube = scene->createEntity("6 Lava");
+    lavaCube->transform.position = glm::vec3(-1.5f, 0.35f, 2.5f);
+    lavaCube->transform.scale = glm::vec3(0.7f);
+    lavaCube->transform.rotation = glm::vec3(0.0f, 30.0f, 0.0f);
+    auto* lavaRenderer = lavaCube->addComponent<MeshRenderer>(cubeMesh, lavaMat);
+    lavaRenderer->setBounds(AABB::unitCube());
+
+    // Emissive light component — auto-generates a point light from the emissive material
+    auto* emissiveLC = lavaCube->addComponent<EmissiveLightComponent>();
+    emissiveLC->lightRadius = 4.0f;
+    emissiveLC->lightIntensity = 0.8f;
 
     // --- Lights ---
     Entity* sun = scene->createEntity("Sun");
     auto* dirLight = sun->addComponent<DirectionalLightComponent>();
     dirLight->light.direction = glm::vec3(-0.3f, -0.8f, -0.5f);
     dirLight->light.ambient = glm::vec3(0.15f, 0.15f, 0.18f);
-    dirLight->light.diffuse = glm::vec3(0.9f, 0.85f, 0.75f);
+    dirLight->light.diffuse = glm::vec3(1.8f, 1.7f, 1.5f);
     dirLight->light.specular = glm::vec3(1.0f);
 
     Entity* warmLight = scene->createEntity("Warm Light");
@@ -274,6 +518,7 @@ void Engine::setupDemoScene()
     warmPL->light.specular = glm::vec3(1.0f, 0.9f, 0.6f);
     warmPL->light.linear = 0.14f;
     warmPL->light.quadratic = 0.07f;
+    warmPL->light.castsShadow = true;
 
     Entity* coolLight = scene->createEntity("Cool Light");
     coolLight->transform.position = glm::vec3(-2.0f, 2.5f, 2.0f);
@@ -283,11 +528,21 @@ void Engine::setupDemoScene()
     coolPL->light.specular = glm::vec3(0.5f, 0.7f, 1.0f);
     coolPL->light.linear = 0.14f;
     coolPL->light.quadratic = 0.07f;
+    coolPL->light.castsShadow = true;
+
+    // --- Optional glTF model loading ---
+    auto testModel = m_resourceManager->loadModel("assets/models/test_model.glb");
+    if (testModel)
+    {
+        Entity* modelRoot = testModel->instantiate(*scene, nullptr, "TestModel");
+        modelRoot->transform.position = glm::vec3(5.0f, 0.0f, -3.0f);
+        Logger::info("Loaded glTF model: " + std::to_string(testModel->getMeshCount()) + " meshes");
+    }
 
     // Initial scene update to compute world matrices
     scene->update(0.0f);
 
-    Logger::info("Demo scene ready: entities with components, 1 directional + 2 point lights");
+    Logger::info("Demo scene ready: entities with components, 1 directional + 2 point lights + emissive lava + glass cube");
 }
 
 } // namespace Vestige

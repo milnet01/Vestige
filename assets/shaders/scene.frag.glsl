@@ -1,0 +1,817 @@
+#version 450 core
+
+// Maximum light counts — must match C++ constants
+const int MAX_POINT_LIGHTS = 8;
+const int MAX_SPOT_LIGHTS = 4;
+const int MAX_POINT_SHADOW_LIGHTS = 2;
+
+const float PI = 3.14159265359;
+
+// Inputs from vertex shader
+in vec3 v_fragPosition;
+in vec3 v_normal;
+in vec3 v_color;
+in vec2 v_texCoord;
+in float v_viewDepth;
+in mat3 v_TBN;
+
+out vec4 fragColor;
+
+// Material (Blinn-Phong)
+uniform vec3 u_materialDiffuse;
+uniform vec3 u_materialSpecular;
+uniform float u_materialShininess;
+uniform vec3 u_materialEmissive;
+uniform float u_materialEmissiveStrength;
+uniform bool u_hasTexture;
+uniform sampler2D u_diffuseTexture;   // Unit 0
+
+// Normal mapping
+uniform bool u_hasNormalMap;
+uniform sampler2D u_normalMap;        // Unit 1
+
+// Parallax occlusion mapping
+uniform bool u_hasHeightMap;
+uniform sampler2D u_heightMap;        // Unit 2
+uniform float u_heightScale;
+
+// Camera
+uniform vec3 u_viewPosition;
+
+// Directional light
+uniform bool u_hasDirLight;
+uniform vec3 u_dirLight_direction;
+uniform vec3 u_dirLight_ambient;
+uniform vec3 u_dirLight_diffuse;
+uniform vec3 u_dirLight_specular;
+
+// Cascaded shadow mapping
+uniform bool u_hasShadows;
+uniform sampler2DArray u_cascadeShadowMap;  // Unit 3
+uniform int u_cascadeCount;
+uniform float u_cascadeSplits[4];
+uniform mat4 u_cascadeLightSpaceMatrices[4];
+uniform bool u_cascadeDebug;
+
+// Point lights
+uniform int u_pointLightCount;
+uniform vec3 u_pointLights_position[MAX_POINT_LIGHTS];
+uniform vec3 u_pointLights_ambient[MAX_POINT_LIGHTS];
+uniform vec3 u_pointLights_diffuse[MAX_POINT_LIGHTS];
+uniform vec3 u_pointLights_specular[MAX_POINT_LIGHTS];
+uniform float u_pointLights_constant[MAX_POINT_LIGHTS];
+uniform float u_pointLights_linear[MAX_POINT_LIGHTS];
+uniform float u_pointLights_quadratic[MAX_POINT_LIGHTS];
+
+// Point light shadows
+uniform int u_pointShadowCount;
+uniform samplerCube u_pointShadowMaps[MAX_POINT_SHADOW_LIGHTS];  // Units 4-5
+uniform int u_pointShadowIndices[MAX_POINT_SHADOW_LIGHTS];
+uniform float u_pointShadowFarPlane[MAX_POINT_SHADOW_LIGHTS];
+
+// Spot lights
+uniform int u_spotLightCount;
+uniform vec3 u_spotLights_position[MAX_SPOT_LIGHTS];
+uniform vec3 u_spotLights_direction[MAX_SPOT_LIGHTS];
+uniform vec3 u_spotLights_ambient[MAX_SPOT_LIGHTS];
+uniform vec3 u_spotLights_diffuse[MAX_SPOT_LIGHTS];
+uniform vec3 u_spotLights_specular[MAX_SPOT_LIGHTS];
+uniform float u_spotLights_innerCutoff[MAX_SPOT_LIGHTS];
+uniform float u_spotLights_outerCutoff[MAX_SPOT_LIGHTS];
+uniform float u_spotLights_constant[MAX_SPOT_LIGHTS];
+uniform float u_spotLights_linear[MAX_SPOT_LIGHTS];
+uniform float u_spotLights_quadratic[MAX_SPOT_LIGHTS];
+
+// PBR mode toggle
+uniform bool u_usePBR;
+
+// PBR material uniforms
+uniform vec3 u_pbrAlbedo;
+uniform float u_pbrMetallic;
+uniform float u_pbrRoughness;
+uniform float u_pbrAo;
+uniform vec3 u_pbrEmissive;
+uniform float u_pbrEmissiveStrength;
+
+// PBR textures
+uniform bool u_hasMetallicRoughnessMap;
+uniform sampler2D u_metallicRoughnessMap;  // Unit 6
+
+uniform bool u_hasEmissiveMap;
+uniform sampler2D u_emissiveMap;           // Unit 7
+
+uniform bool u_hasAoMap;
+uniform sampler2D u_aoMap;                 // Unit 8
+
+// UV tiling scale
+uniform float u_uvScale;
+
+// Wireframe mode
+uniform bool u_wireframe;
+
+// Transparency
+uniform int u_alphaMode;          // 0=OPAQUE, 1=MASK, 2=BLEND
+uniform float u_alphaCutoff;
+uniform float u_baseColorAlpha;
+
+// IBL (Image-Based Lighting)
+uniform bool u_hasIBL;
+uniform samplerCube u_irradianceMap;    // Unit 14
+uniform samplerCube u_prefilterMap;     // Unit 15
+uniform sampler2D u_brdfLUT;            // Unit 16
+uniform float u_maxPrefilterLod;
+
+// Stochastic tiling
+uniform bool u_stochasticTiling;
+
+// =============================================================================
+// Stochastic tiling (hex-grid tri-cell blending with random UV offsets)
+// =============================================================================
+
+/// Integer-based pseudo-random hash: vec2 → vec2.
+/// Uses ALU integer ops instead of sin() for bit-identical results across all GPUs.
+vec2 stochasticHash(vec2 p)
+{
+    uvec2 q = uvec2(floatBitsToUint(p.x), floatBitsToUint(p.y));
+    q = 1103515245u * ((q >> 1u) ^ q.yx);
+    uint n = 1103515245u * (q.x ^ (q.y >> 3u));
+    return vec2(n, n * 48271u) * (1.0 / float(0xFFFFFFFFu));
+}
+
+/// Sample a texture with stochastic tiling to break visible repetition.
+/// Uses a hex grid with three overlapping cells, each with a random UV offset.
+/// Weight sharpening (pow 7) keeps blending tight to avoid blur.
+vec4 textureStochastic(sampler2D samp, vec2 uv)
+{
+    // Skew to hex grid
+    vec2 skewedUV = vec2(uv.x + uv.y * 0.5, uv.y);
+    vec2 cell = floor(skewedUV);
+    vec2 f = fract(skewedUV);
+
+    // Three closest hex cell vertices
+    float w1 = f.x + f.y < 1.0 ? 1.0 : 0.0;
+    vec2 v0 = cell;
+    vec2 v1 = cell + vec2(1.0, 0.0);
+    vec2 v2 = cell + vec2(0.0, 1.0);
+    vec2 v3 = cell + vec2(1.0, 1.0);
+
+    // Pick the correct triangle
+    vec2 A, B, C;
+    vec3 bary;
+    if (w1 > 0.5)
+    {
+        A = v0; B = v1; C = v2;
+        bary = vec3(1.0 - f.x - f.y, f.x, f.y);
+    }
+    else
+    {
+        A = v3; B = v2; C = v1;
+        bary = vec3(f.x + f.y - 1.0, 1.0 - f.x, 1.0 - f.y);
+    }
+
+    // Random UV offsets per cell vertex
+    vec2 offsetA = stochasticHash(A);
+    vec2 offsetB = stochasticHash(B);
+    vec2 offsetC = stochasticHash(C);
+
+    // Sample texture at each offset
+    vec4 sA = texture(samp, uv + offsetA);
+    vec4 sB = texture(samp, uv + offsetB);
+    vec4 sC = texture(samp, uv + offsetC);
+
+    // Sharpen barycentric weights to reduce blur
+    vec3 w = pow(bary, vec3(7.0));
+    w /= (w.x + w.y + w.z);
+
+    return sA * w.x + sB * w.y + sC * w.z;
+}
+
+/// Dispatches to stochastic or regular texture sampling based on uniform flag.
+vec4 sampleMaterial(sampler2D samp, vec2 uv)
+{
+    if (u_stochasticTiling)
+    {
+        return textureStochastic(samp, uv);
+    }
+    return texture(samp, uv);
+}
+
+// =============================================================================
+// Shadow functions (shared by both lighting models)
+// =============================================================================
+
+/// Determines which cascade to use based on fragment's view-space depth.
+int getCascadeIndex()
+{
+    float depth = abs(v_viewDepth);
+    for (int i = 0; i < u_cascadeCount; i++)
+    {
+        if (depth < u_cascadeSplits[i])
+        {
+            return i;
+        }
+    }
+    return u_cascadeCount - 1;
+}
+
+/// Calculates shadow factor from cascaded shadow maps.
+/// Returns 0.0 (fully lit) to 1.0 (fully in shadow).
+float calcShadow(vec3 normal, vec3 lightDir)
+{
+    int cascade = getCascadeIndex();
+
+    // Transform fragment position to light space for this cascade
+    vec4 lightSpacePos = u_cascadeLightSpaceMatrices[cascade] * vec4(v_fragPosition, 1.0);
+    vec3 projCoords = lightSpacePos.xyz / lightSpacePos.w;
+    projCoords = projCoords * 0.5 + 0.5;
+
+    // Outside shadow map range — not in shadow
+    if (projCoords.z > 1.0)
+    {
+        return 0.0;
+    }
+
+    float currentDepth = projCoords.z;
+
+    // Slope-scaled bias to reduce shadow acne
+    float bias = max(0.005 * (1.0 - dot(normal, lightDir)), 0.001);
+
+    // PCF (percentage-closer filtering) — 3x3 kernel for softer edges
+    float shadow = 0.0;
+    vec2 texelSize = 1.0 / vec2(textureSize(u_cascadeShadowMap, 0).xy);
+    for (int x = -1; x <= 1; x++)
+    {
+        for (int y = -1; y <= 1; y++)
+        {
+            float pcfDepth = texture(u_cascadeShadowMap,
+                vec3(projCoords.xy + vec2(x, y) * texelSize, float(cascade))).r;
+            shadow += (currentDepth - bias > pcfDepth) ? 1.0 : 0.0;
+        }
+    }
+    shadow /= 9.0;
+
+    return shadow;
+}
+
+/// Samples point shadow cubemap 0 and returns shadow factor.
+float samplePointShadow0(vec3 fragToLight, float currentDepth, float farPlane, float bias)
+{
+    float closestDepth = texture(u_pointShadowMaps[0], fragToLight).r * farPlane;
+    return (currentDepth - bias > closestDepth) ? 1.0 : 0.0;
+}
+
+/// Samples point shadow cubemap 1 and returns shadow factor.
+float samplePointShadow1(vec3 fragToLight, float currentDepth, float farPlane, float bias)
+{
+    float closestDepth = texture(u_pointShadowMaps[1], fragToLight).r * farPlane;
+    return (currentDepth - bias > closestDepth) ? 1.0 : 0.0;
+}
+
+/// Calculates the point light shadow factor using a hard-coded cubemap index.
+/// Returns 0.0 (fully lit) to 1.0 (fully in shadow).
+float calcPointShadow(int shadowIdx, vec3 fragPos, vec3 lightPos, vec3 normal)
+{
+    vec3 fragToLight = fragPos - lightPos;
+    float currentDepth = length(fragToLight);
+    float farPlane = u_pointShadowFarPlane[shadowIdx];
+
+    // Slope-scaled bias (matches CSM approach)
+    vec3 lightDir = normalize(-fragToLight);
+    float bias = max(0.05 * (1.0 - dot(normal, lightDir)), 0.005);
+
+    // Use compile-time constant index for sampler access
+    if (shadowIdx == 0)
+    {
+        return samplePointShadow0(fragToLight, currentDepth, farPlane, bias);
+    }
+    else
+    {
+        return samplePointShadow1(fragToLight, currentDepth, farPlane, bias);
+    }
+}
+
+/// Finds the shadow map index for a given point light index, or returns -1.
+int findPointShadowIndex(int lightIdx)
+{
+    for (int s = 0; s < u_pointShadowCount && s < MAX_POINT_SHADOW_LIGHTS; s++)
+    {
+        if (u_pointShadowIndices[s] == lightIdx)
+        {
+            return s;
+        }
+    }
+    return -1;
+}
+
+// =============================================================================
+// PBR BRDF functions (Cook-Torrance)
+// =============================================================================
+
+/// GGX/Trowbridge-Reitz normal distribution function.
+/// Describes the statistical distribution of microfacet normals.
+float distributionGGX(float NdotH, float roughness)
+{
+    float a = roughness * roughness;
+    float a2 = a * a;
+    float NdotH2 = NdotH * NdotH;
+
+    float denom = NdotH2 * (a2 - 1.0) + 1.0;
+    denom = PI * denom * denom;
+
+    return a2 / denom;
+}
+
+/// Schlick-GGX geometry function for a single direction.
+/// Approximates microfacet self-shadowing.
+float geometrySchlickGGX(float NdotV, float roughness)
+{
+    float r = roughness + 1.0;
+    float k = (r * r) / 8.0;
+
+    return NdotV / (NdotV * (1.0 - k) + k);
+}
+
+/// Smith's geometry function — combines view and light direction masking.
+float geometrySmith(float NdotV, float NdotL, float roughness)
+{
+    return geometrySchlickGGX(NdotV, roughness) * geometrySchlickGGX(NdotL, roughness);
+}
+
+/// Fresnel-Schlick approximation.
+/// Describes how reflectance changes at grazing angles.
+vec3 fresnelSchlick(float cosTheta, vec3 F0)
+{
+    return F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
+}
+
+/// Fresnel-Schlick with roughness — prevents harsh edges on rough metals under IBL.
+vec3 fresnelSchlickRoughness(float cosTheta, vec3 F0, float roughness)
+{
+    return F0 + (max(vec3(1.0 - roughness), F0) - F0)
+             * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
+}
+
+// =============================================================================
+// Blinn-Phong lighting functions
+// =============================================================================
+
+/// Calculates the contribution from a directional light (Blinn-Phong).
+vec3 calcDirectionalLight(vec3 norm, vec3 viewDir, vec3 baseColor)
+{
+    vec3 lightDir = normalize(-u_dirLight_direction);
+
+    // Diffuse — how directly the surface faces the light
+    float diff = max(dot(norm, lightDir), 0.0);
+
+    // Specular (Blinn-Phong) — halfway vector between light and view
+    vec3 halfwayDir = normalize(lightDir + viewDir);
+    float spec = pow(max(dot(norm, halfwayDir), 0.0), u_materialShininess);
+
+    // Shadow factor
+    float shadow = 0.0;
+    if (u_hasShadows)
+    {
+        shadow = calcShadow(norm, lightDir);
+    }
+
+    vec3 ambient  = u_dirLight_ambient * baseColor;
+    vec3 diffuse  = u_dirLight_diffuse * diff * baseColor;
+    vec3 specular = u_dirLight_specular * spec * u_materialSpecular;
+
+    // Ambient is never shadowed; diffuse and specular are
+    return ambient + (1.0 - shadow) * (diffuse + specular);
+}
+
+/// Calculates the contribution from a point light (Blinn-Phong).
+vec3 calcPointLight(int i, vec3 norm, vec3 viewDir, vec3 baseColor)
+{
+    vec3 toLight = u_pointLights_position[i] - v_fragPosition;
+    float dist = length(toLight);
+    vec3 lightDir = toLight / dist;  // normalize reusing dist
+
+    // Diffuse
+    float diff = max(dot(norm, lightDir), 0.0);
+
+    // Specular (Blinn-Phong)
+    vec3 halfwayDir = normalize(lightDir + viewDir);
+    float spec = pow(max(dot(norm, halfwayDir), 0.0), u_materialShininess);
+
+    // Attenuation — light fades with distance
+    float attenuation = 1.0 / (u_pointLights_constant[i]
+        + u_pointLights_linear[i] * dist
+        + u_pointLights_quadratic[i] * dist * dist);
+
+    // Point light shadow
+    float shadow = 0.0;
+    int shadowIdx = findPointShadowIndex(i);
+    if (shadowIdx >= 0)
+    {
+        shadow = calcPointShadow(shadowIdx, v_fragPosition, u_pointLights_position[i], norm);
+    }
+
+    vec3 ambient  = u_pointLights_ambient[i] * baseColor;
+    vec3 diffuse  = u_pointLights_diffuse[i] * diff * baseColor;
+    vec3 specular = u_pointLights_specular[i] * spec * u_materialSpecular;
+
+    return (ambient + (1.0 - shadow) * (diffuse + specular)) * attenuation;
+}
+
+/// Calculates the contribution from a spot light (Blinn-Phong).
+vec3 calcSpotLight(int i, vec3 norm, vec3 viewDir, vec3 baseColor)
+{
+    vec3 toLight = u_spotLights_position[i] - v_fragPosition;
+    float dist = length(toLight);
+    vec3 lightDir = toLight / dist;  // normalize reusing dist
+
+    // Diffuse
+    float diff = max(dot(norm, lightDir), 0.0);
+
+    // Specular (Blinn-Phong)
+    vec3 halfwayDir = normalize(lightDir + viewDir);
+    float spec = pow(max(dot(norm, halfwayDir), 0.0), u_materialShininess);
+
+    // Attenuation
+    float attenuation = 1.0 / (u_spotLights_constant[i]
+        + u_spotLights_linear[i] * dist
+        + u_spotLights_quadratic[i] * dist * dist);
+
+    // Spotlight cone — smooth edge falloff
+    float theta = dot(lightDir, normalize(-u_spotLights_direction[i]));
+    float epsilon = u_spotLights_innerCutoff[i] - u_spotLights_outerCutoff[i];
+    float intensity = clamp((theta - u_spotLights_outerCutoff[i]) / epsilon, 0.0, 1.0);
+
+    vec3 ambient  = u_spotLights_ambient[i] * baseColor;
+    vec3 diffuse  = u_spotLights_diffuse[i] * diff * baseColor;
+    vec3 specular = u_spotLights_specular[i] * spec * u_materialSpecular;
+
+    return (ambient + (diffuse + specular) * intensity) * attenuation;
+}
+
+// =============================================================================
+// PBR lighting functions (Cook-Torrance)
+// =============================================================================
+
+/// Calculates Cook-Torrance specular + Lambertian diffuse for a directional light.
+vec3 calcDirectionalLightPBR(vec3 N, vec3 V, vec3 albedo, float metallic,
+                              float roughness, vec3 F0)
+{
+    vec3 L = normalize(-u_dirLight_direction);
+    vec3 H = normalize(V + L);
+
+    float NdotL = max(dot(N, L), 0.0);
+    float NdotV = max(dot(N, V), 0.001);
+    float NdotH = max(dot(N, H), 0.0);
+    float HdotV = max(dot(H, V), 0.0);
+
+    // Cook-Torrance BRDF
+    float D = distributionGGX(NdotH, roughness);
+    float G = geometrySmith(NdotV, NdotL, roughness);
+    vec3  F = fresnelSchlick(HdotV, F0);
+
+    vec3 specular = (D * G * F) / (4.0 * NdotV * NdotL + 0.0001);
+
+    vec3 kD = (vec3(1.0) - F) * (1.0 - metallic);
+    vec3 radiance = u_dirLight_diffuse;
+
+    // Shadow
+    float shadow = 0.0;
+    if (u_hasShadows)
+    {
+        shadow = calcShadow(N, L);
+    }
+
+    return (kD * albedo / PI + specular) * radiance * NdotL * (1.0 - shadow);
+}
+
+/// Calculates Cook-Torrance specular + Lambertian diffuse for a point light.
+vec3 calcPointLightPBR(int i, vec3 N, vec3 V, vec3 fragPos, vec3 albedo,
+                        float metallic, float roughness, vec3 F0)
+{
+    vec3 toLight = u_pointLights_position[i] - fragPos;
+    float dist = length(toLight);
+    vec3 L = toLight / dist;  // normalize reusing dist
+    vec3 H = normalize(V + L);
+
+    float attenuation = 1.0 / (u_pointLights_constant[i]
+        + u_pointLights_linear[i] * dist
+        + u_pointLights_quadratic[i] * dist * dist);
+    vec3 radiance = u_pointLights_diffuse[i] * attenuation;
+
+    float NdotL = max(dot(N, L), 0.0);
+    float NdotV = max(dot(N, V), 0.001);
+    float NdotH = max(dot(N, H), 0.0);
+    float HdotV = max(dot(H, V), 0.0);
+
+    float D = distributionGGX(NdotH, roughness);
+    float G = geometrySmith(NdotV, NdotL, roughness);
+    vec3  F = fresnelSchlick(HdotV, F0);
+
+    vec3 specular = (D * G * F) / (4.0 * NdotV * NdotL + 0.0001);
+
+    vec3 kD = (vec3(1.0) - F) * (1.0 - metallic);
+
+    // Shadow
+    float shadow = 0.0;
+    int shadowIdx = findPointShadowIndex(i);
+    if (shadowIdx >= 0)
+    {
+        shadow = calcPointShadow(shadowIdx, fragPos, u_pointLights_position[i], N);
+    }
+
+    return (kD * albedo / PI + specular) * radiance * NdotL * (1.0 - shadow);
+}
+
+/// Calculates Cook-Torrance specular + Lambertian diffuse for a spot light.
+vec3 calcSpotLightPBR(int i, vec3 N, vec3 V, vec3 fragPos, vec3 albedo,
+                       float metallic, float roughness, vec3 F0)
+{
+    vec3 toLight = u_spotLights_position[i] - fragPos;
+    float dist = length(toLight);
+    vec3 L = toLight / dist;  // normalize reusing dist
+    vec3 H = normalize(V + L);
+
+    float attenuation = 1.0 / (u_spotLights_constant[i]
+        + u_spotLights_linear[i] * dist
+        + u_spotLights_quadratic[i] * dist * dist);
+
+    // Spotlight cone
+    float theta = dot(L, normalize(-u_spotLights_direction[i]));
+    float epsilon = u_spotLights_innerCutoff[i] - u_spotLights_outerCutoff[i];
+    float intensity = clamp((theta - u_spotLights_outerCutoff[i]) / epsilon, 0.0, 1.0);
+
+    vec3 radiance = u_spotLights_diffuse[i] * attenuation * intensity;
+
+    float NdotL = max(dot(N, L), 0.0);
+    float NdotV = max(dot(N, V), 0.001);
+    float NdotH = max(dot(N, H), 0.0);
+    float HdotV = max(dot(H, V), 0.0);
+
+    float D = distributionGGX(NdotH, roughness);
+    float G = geometrySmith(NdotV, NdotL, roughness);
+    vec3  F = fresnelSchlick(HdotV, F0);
+
+    vec3 specular = (D * G * F) / (4.0 * NdotV * NdotL + 0.0001);
+
+    vec3 kD = (vec3(1.0) - F) * (1.0 - metallic);
+
+    return (kD * albedo / PI + specular) * radiance * NdotL;
+}
+
+// =============================================================================
+// Parallax occlusion mapping
+// =============================================================================
+
+/// Computes offset UV coordinates via parallax occlusion mapping.
+/// Ray-marches through a height field in tangent space for sub-pixel depth.
+vec2 parallaxOcclusionMap(vec2 texCoords, vec3 viewDirTS)
+{
+    // Adaptive layer count: more layers at grazing angles for accuracy
+    float numLayers = mix(32.0, 8.0, abs(viewDirTS.z));
+
+    float layerDepth = 1.0 / numLayers;
+    float currentLayerDepth = 0.0;
+
+    // Direction to shift UVs per layer (scaled by height)
+    vec2 p = viewDirTS.xy * u_heightScale;
+    vec2 deltaTexCoords = p / numLayers;
+
+    vec2 currentTexCoords = texCoords;
+    float currentDepthMapValue = texture(u_heightMap, currentTexCoords).r;
+    float previousDepthMapValue = currentDepthMapValue;
+
+    // March through layers until ray depth exceeds sampled height
+    for (int i = 0; i < 32; i++)
+    {
+        if (currentLayerDepth >= currentDepthMapValue)
+        {
+            break;
+        }
+        previousDepthMapValue = currentDepthMapValue;
+        currentTexCoords -= deltaTexCoords;
+        currentDepthMapValue = texture(u_heightMap, currentTexCoords).r;
+        currentLayerDepth += layerDepth;
+    }
+
+    // Linear interpolation between last two samples for sub-step precision
+    vec2 prevTexCoords = currentTexCoords + deltaTexCoords;
+    float afterDepth = currentDepthMapValue - currentLayerDepth;
+    float beforeDepth = previousDepthMapValue - (currentLayerDepth - layerDepth);
+    float denom = afterDepth - beforeDepth;
+    float weight = (abs(denom) < 0.0001) ? 0.5 : afterDepth / denom;
+    vec2 finalTexCoords = prevTexCoords * weight + currentTexCoords * (1.0 - weight);
+
+    return finalTexCoords;
+}
+
+// =============================================================================
+// Main
+// =============================================================================
+
+void main()
+{
+
+    // Wireframe mode — solid color, no lighting
+    if (u_wireframe)
+    {
+        fragColor = vec4(0.0, 1.0, 0.0, 1.0);
+        return;
+    }
+
+    // Compute texture coordinates — apply UV scale, then POM offset if height map is present
+    vec2 texCoords = v_texCoord * u_uvScale;
+    if (u_hasHeightMap)
+    {
+        // View direction in tangent space for parallax calculation
+        vec3 viewDirTS = normalize(transpose(v_TBN) * (u_viewPosition - v_fragPosition));
+        texCoords = parallaxOcclusionMap(texCoords, viewDirTS);
+    }
+
+    // Get surface normal — from normal map or vertex data
+    vec3 norm;
+    if (u_hasNormalMap)
+    {
+        // Sample normal map and transform from [0,1] to [-1,1]
+        norm = sampleMaterial(u_normalMap, texCoords).rgb * 2.0 - 1.0;
+        norm = normalize(v_TBN * norm);
+    }
+    else
+    {
+        norm = normalize(v_normal);
+    }
+
+    vec3 viewDir = normalize(u_viewPosition - v_fragPosition);
+
+    if (u_usePBR)
+    {
+        // =====================================================================
+        // PBR path (Cook-Torrance BRDF)
+        // =====================================================================
+
+        // Albedo — base color modulated by texture and vertex color
+        vec3 albedo = u_pbrAlbedo;
+        float alpha = u_baseColorAlpha;
+        if (u_hasTexture)
+        {
+            vec4 texSample = sampleMaterial(u_diffuseTexture, texCoords);
+            albedo *= texSample.rgb;
+            alpha *= texSample.a;
+        }
+        albedo *= v_color;
+
+        // Metallic and roughness — sample from packed texture if available
+        float metallic = u_pbrMetallic;
+        float roughness = u_pbrRoughness;
+        if (u_hasMetallicRoughnessMap)
+        {
+            vec3 mrSample = sampleMaterial(u_metallicRoughnessMap, texCoords).rgb;
+            // glTF packing: G = roughness, B = metallic
+            roughness *= mrSample.g;
+            metallic *= mrSample.b;
+        }
+
+        // Ambient occlusion
+        float ao = u_pbrAo;
+        if (u_hasAoMap)
+        {
+            ao *= sampleMaterial(u_aoMap, texCoords).r;
+        }
+
+        // Emissive
+        vec3 emissive = u_pbrEmissive;
+        if (u_hasEmissiveMap)
+        {
+            emissive *= sampleMaterial(u_emissiveMap, texCoords).rgb;
+        }
+        emissive *= u_pbrEmissiveStrength;
+
+        // F0 — base reflectivity: 0.04 for dielectrics, albedo for metals
+        vec3 F0 = mix(vec3(0.04), albedo, metallic);
+
+        // Accumulate direct lighting
+        vec3 Lo = vec3(0.0);
+
+        if (u_hasDirLight)
+        {
+            Lo += calcDirectionalLightPBR(norm, viewDir, albedo, metallic, roughness, F0);
+        }
+
+        for (int i = 0; i < u_pointLightCount && i < MAX_POINT_LIGHTS; i++)
+        {
+            Lo += calcPointLightPBR(i, norm, viewDir, v_fragPosition,
+                                     albedo, metallic, roughness, F0);
+        }
+
+        for (int i = 0; i < u_spotLightCount && i < MAX_SPOT_LIGHTS; i++)
+        {
+            Lo += calcSpotLightPBR(i, norm, viewDir, v_fragPosition,
+                                    albedo, metallic, roughness, F0);
+        }
+
+        // Ambient lighting — IBL or fallback constant
+        vec3 ambient;
+        if (u_hasIBL)
+        {
+            // IBL diffuse: irradiance map lookup
+            vec3 F = fresnelSchlickRoughness(max(dot(norm, viewDir), 0.0), F0, roughness);
+            vec3 kD = (vec3(1.0) - F) * (1.0 - metallic);
+            vec3 irradiance = texture(u_irradianceMap, norm).rgb;
+            vec3 diffuseIBL = kD * irradiance * albedo;
+
+            // IBL specular: prefiltered environment + BRDF LUT
+            vec3 R = reflect(-viewDir, norm);
+            float lod = roughness * u_maxPrefilterLod;
+            vec3 prefilteredColor = textureLod(u_prefilterMap, R, lod).rgb;
+            vec2 brdf = texture(u_brdfLUT, vec2(max(dot(norm, viewDir), 0.0), roughness)).rg;
+            vec3 specularIBL = prefilteredColor * (F * brdf.x + brdf.y);
+
+            ambient = (diffuseIBL + specularIBL) * ao;
+        }
+        else
+        {
+            vec3 ambientColor = vec3(0.03);
+            if (u_hasDirLight)
+            {
+                ambientColor = u_dirLight_ambient;
+            }
+            ambient = ambientColor * albedo * ao;
+        }
+
+        vec3 color = ambient + Lo + emissive;
+
+        // Alpha masking: discard below cutoff
+        if (u_alphaMode == 1 && alpha < u_alphaCutoff)
+        {
+            discard;
+        }
+
+        // Output alpha: only BLEND mode outputs actual alpha
+        fragColor = vec4(color, u_alphaMode == 2 ? alpha : 1.0);
+    }
+    else
+    {
+        // =====================================================================
+        // Blinn-Phong path (unchanged from original)
+        // =====================================================================
+
+        // Determine base color — texture or material color, modulated by vertex color
+        vec3 baseColor;
+        float alpha = u_baseColorAlpha;
+        if (u_hasTexture)
+        {
+            vec4 texSample = sampleMaterial(u_diffuseTexture, texCoords);
+            baseColor = texSample.rgb * v_color;
+            alpha *= texSample.a;
+        }
+        else
+        {
+            baseColor = u_materialDiffuse * v_color;
+        }
+
+        // Accumulate light contributions
+        vec3 result = vec3(0.0);
+
+        // Directional light
+        if (u_hasDirLight)
+        {
+            result += calcDirectionalLight(norm, viewDir, baseColor);
+        }
+
+        // Point lights
+        for (int i = 0; i < u_pointLightCount && i < MAX_POINT_LIGHTS; i++)
+        {
+            result += calcPointLight(i, norm, viewDir, baseColor);
+        }
+
+        // Spot lights
+        for (int i = 0; i < u_spotLightCount && i < MAX_SPOT_LIGHTS; i++)
+        {
+            result += calcSpotLight(i, norm, viewDir, baseColor);
+        }
+
+        // Emissive contribution (HDR — feeds into bloom)
+        result += u_materialEmissive * u_materialEmissiveStrength;
+
+        // Alpha masking: discard below cutoff
+        if (u_alphaMode == 1 && alpha < u_alphaCutoff)
+        {
+            discard;
+        }
+
+        // Output alpha: only BLEND mode outputs actual alpha
+        fragColor = vec4(result, u_alphaMode == 2 ? alpha : 1.0);
+    }
+
+    // Cascade debug visualization — tints fragments by cascade index
+    if (u_cascadeDebug && u_hasShadows)
+    {
+        int cascade = getCascadeIndex();
+        vec3 debugColors[4] = vec3[4](
+            vec3(1.0, 0.2, 0.2),  // Red — nearest
+            vec3(0.2, 1.0, 0.2),  // Green
+            vec3(0.2, 0.2, 1.0),  // Blue
+            vec3(1.0, 1.0, 0.2)   // Yellow — farthest
+        );
+        vec3 tint = debugColors[clamp(cascade, 0, 3)];
+        fragColor.rgb = mix(fragColor.rgb, tint, 0.3);
+    }
+}
