@@ -61,6 +61,9 @@ public:
     /// @brief Gets the number of cascades.
     int getCascadeCount() const;
 
+    /// @brief Gets the world-space texel size for a cascade (for normal offset bias).
+    float getTexelWorldSize(int cascade) const;
+
     /// @brief Gets the configuration (read-only).
     const CascadedShadowConfig& getConfig() const;
 
@@ -97,6 +100,7 @@ private:
     GLuint m_depthTextureArray = 0;
     std::vector<glm::mat4> m_lightSpaceMatrices;
     std::vector<float> m_cascadeSplits;
+    std::vector<float> m_texelWorldSizes;
 };
 
 } // namespace Vestige

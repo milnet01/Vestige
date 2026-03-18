@@ -445,10 +445,10 @@ void Engine::setupDemoScene()
 
     // --- Ground ---
     Entity* ground = scene->createEntity("Ground");
-    ground->addComponent<MeshRenderer>(planeMesh, groundMat);
-    // No bounds set → zero-size AABB → skipped by collision AND always rendered
-    // (the frustum culler bypasses zero-size items). A 2-triangle ground plane
-    // has no performance benefit from culling.
+    auto* groundMR = ground->addComponent<MeshRenderer>(planeMesh, groundMat);
+    // Ground only receives shadows, doesn't cast them (nothing is below it).
+    // This prevents self-shadowing acne that causes visible cascade boundaries.
+    groundMR->setCastsShadow(false);
 
     // --- Cubes ---
     Entity* redBrickCube = scene->createEntity("1 Red Brick");

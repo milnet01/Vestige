@@ -50,6 +50,7 @@ uniform bool u_hasShadows;
 uniform sampler2DArray u_cascadeShadowMap;  // Unit 3
 uniform int u_cascadeCount;
 uniform float u_cascadeSplits[4];
+uniform float u_cascadeTexelSize[4];
 uniform mat4 u_cascadeLightSpaceMatrices[4];
 uniform bool u_cascadeDebug;
 
@@ -214,30 +215,14 @@ int getCascadeIndex()
     return u_cascadeCount - 1;
 }
 
-/// Calculates shadow factor from cascaded shadow maps.
-/// Returns 0.0 (fully lit) to 1.0 (fully in shadow).
-float calcShadow(vec3 normal, vec3 lightDir)
+/// Computes shadow factor for a single cascade.
+float calcShadowForCascade(int cascade, vec3 normal, vec3 lightDir)
 {
-    float depth = abs(v_viewDepth);
-
-    // Beyond shadow distance — smoothly fade to no shadow over the last 20%
-    // of the final cascade range to avoid a hard cutoff line.
-    float maxShadowDist = u_cascadeSplits[u_cascadeCount - 1];
-    float fadeStart = maxShadowDist * 0.8;
-    if (depth > maxShadowDist)
-    {
-        return 0.0;
-    }
-    float shadowFade = 1.0 - smoothstep(fadeStart, maxShadowDist, depth);
-
-    int cascade = getCascadeIndex();
-
     // Transform fragment position to light space for this cascade
     vec4 lightSpacePos = u_cascadeLightSpaceMatrices[cascade] * vec4(v_fragPosition, 1.0);
     vec3 projCoords = lightSpacePos.xyz / lightSpacePos.w;
     projCoords = projCoords * 0.5 + 0.5;
 
-    // Outside shadow map range — not in shadow
     if (projCoords.z > 1.0)
     {
         return 0.0;
@@ -245,10 +230,11 @@ float calcShadow(vec3 normal, vec3 lightDir)
 
     float currentDepth = projCoords.z;
 
-    // Slope-scaled bias to reduce shadow acne
-    float bias = max(0.005 * (1.0 - dot(normal, lightDir)), 0.001);
+    // Slope-scaled bias — kept small since ground planes are excluded from the
+    // shadow map (castsShadow=false), eliminating the main source of acne.
+    float bias = max(0.002 * (1.0 - dot(normal, lightDir)), 0.0003);
 
-    // PCF (percentage-closer filtering) — 3x3 kernel for softer edges
+    // PCF 3x3
     float shadow = 0.0;
     vec2 texelSize = 1.0 / vec2(textureSize(u_cascadeShadowMap, 0).xy);
     for (int x = -1; x <= 1; x++)
@@ -262,7 +248,43 @@ float calcShadow(vec3 normal, vec3 lightDir)
     }
     shadow /= 9.0;
 
-    // Apply distance fade so shadow doesn't end with a hard line
+    return shadow;
+}
+
+/// Calculates shadow factor from cascaded shadow maps with cascade blending.
+/// Returns 0.0 (fully lit) to 1.0 (fully in shadow).
+float calcShadow(vec3 normal, vec3 lightDir)
+{
+    float depth = abs(v_viewDepth);
+
+    // Beyond shadow distance — smoothly fade to no shadow
+    float maxShadowDist = u_cascadeSplits[u_cascadeCount - 1];
+    float fadeStart = maxShadowDist * 0.8;
+    if (depth > maxShadowDist)
+    {
+        return 0.0;
+    }
+    float shadowFade = 1.0 - smoothstep(fadeStart, maxShadowDist, depth);
+
+    int cascade = getCascadeIndex();
+    float shadow = calcShadowForCascade(cascade, normal, lightDir);
+
+    // Blend with the next cascade near the boundary to eliminate visible seams
+    if (cascade < u_cascadeCount - 1)
+    {
+        float splitDist = u_cascadeSplits[cascade];
+        float prevSplit = (cascade == 0) ? 0.0 : u_cascadeSplits[cascade - 1];
+        float cascadeRange = splitDist - prevSplit;
+        float blendStart = splitDist - cascadeRange * 0.2;
+
+        if (depth > blendStart)
+        {
+            float blendFactor = (depth - blendStart) / (splitDist - blendStart);
+            float nextShadow = calcShadowForCascade(cascade + 1, normal, lightDir);
+            shadow = mix(shadow, nextShadow, blendFactor);
+        }
+    }
+
     return shadow * shadowFade;
 }
 

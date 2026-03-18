@@ -24,6 +24,7 @@ struct SceneRenderData
         const Material* material;
         glm::mat4 worldMatrix;
         AABB worldBounds;
+        bool castsShadow = true;
     };
 
     std::vector<RenderItem> renderItems;
