@@ -5,6 +5,7 @@ in vec2 v_texCoord;
 uniform sampler2D u_sourceTexture;
 uniform vec2 u_srcTexelSize;    // 1.0 / source resolution
 uniform bool u_useKarisAverage; // true only on first downsample (prevents fireflies)
+uniform float u_threshold;      // Brightness threshold (only on first downsample)
 
 out vec4 fragColor;
 
@@ -44,6 +45,26 @@ void main()
     vec3 k = texture(u_sourceTexture, v_texCoord + vec2( x,  y)).rgb;
     vec3 l = texture(u_sourceTexture, v_texCoord + vec2(-x, -y)).rgb;
     vec3 m = texture(u_sourceTexture, v_texCoord + vec2( x, -y)).rgb;
+
+    // On the first downsample, apply soft brightness threshold to extract only
+    // bright areas. Without this, the entire scene gets bloom (washed-out haze).
+    if (u_useKarisAverage && u_threshold > 0.0)
+    {
+        // Soft knee threshold (same approach as the original bloom_bright shader)
+        a = max(a - vec3(u_threshold), vec3(0.0));
+        b = max(b - vec3(u_threshold), vec3(0.0));
+        c = max(c - vec3(u_threshold), vec3(0.0));
+        d = max(d - vec3(u_threshold), vec3(0.0));
+        e = max(e - vec3(u_threshold), vec3(0.0));
+        f = max(f - vec3(u_threshold), vec3(0.0));
+        g = max(g - vec3(u_threshold), vec3(0.0));
+        h = max(h - vec3(u_threshold), vec3(0.0));
+        i = max(i - vec3(u_threshold), vec3(0.0));
+        j = max(j - vec3(u_threshold), vec3(0.0));
+        k = max(k - vec3(u_threshold), vec3(0.0));
+        l = max(l - vec3(u_threshold), vec3(0.0));
+        m = max(m - vec3(u_threshold), vec3(0.0));
+    }
 
     vec3 result;
 

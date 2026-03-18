@@ -123,25 +123,27 @@ bool Engine::initialize(const EngineConfig& config)
 
             case GLFW_KEY_LEFT_BRACKET:
             {
+                m_renderer->setAutoExposure(false);  // Manual override disables auto
                 float newExposure = m_renderer->getExposure() - 0.1f;
                 if (newExposure < 0.1f)
                 {
                     newExposure = 0.1f;
                 }
                 m_renderer->setExposure(newExposure);
-                Logger::info("Exposure: " + std::to_string(newExposure));
+                Logger::info("Exposure: " + std::to_string(newExposure) + " (manual)");
                 break;
             }
 
             case GLFW_KEY_RIGHT_BRACKET:
             {
+                m_renderer->setAutoExposure(false);  // Manual override disables auto
                 float newExposure = m_renderer->getExposure() + 0.1f;
                 if (newExposure > 10.0f)
                 {
                     newExposure = 10.0f;
                 }
                 m_renderer->setExposure(newExposure);
-                Logger::info("Exposure: " + std::to_string(newExposure));
+                Logger::info("Exposure: " + std::to_string(newExposure) + " (manual)");
                 break;
             }
 
@@ -226,6 +228,11 @@ bool Engine::initialize(const EngineConfig& config)
                 break;
             }
 
+            case GLFW_KEY_F10:
+                m_renderer->setAutoExposure(!m_renderer->isAutoExposure());
+                Logger::info(std::string("Auto-exposure: ") + (m_renderer->isAutoExposure() ? "ON" : "OFF"));
+                break;
+
             case GLFW_KEY_Q:
                 m_isRunning = false;
                 break;
@@ -240,7 +247,7 @@ bool Engine::initialize(const EngineConfig& config)
 
     m_isRunning = true;
     Logger::info("Engine initialized successfully");
-    Logger::info("Controls: WASD=move, Mouse=look, Space/Shift=up/down, LCtrl=sprint, F1=wireframe, F2=tonemapper, F3=HDR debug, F4=POM, F5=bloom, F6=SSAO, F7=AA mode, F8=color grading, F9=CSM debug, [/]=exposure, -/+=POM depth, Q=quit");
+    Logger::info("Controls: WASD=move, Mouse=look, Space/Shift=up/down, LCtrl=sprint, F1=wireframe, F2=tonemapper, F3=HDR debug, F4=POM, F5=bloom, F6=SSAO, F7=AA mode, F8=color grading, F9=CSM debug, F10=auto-exposure, [/]=exposure, -/+=POM depth, Q=quit");
     Logger::info("Gamepad: Left stick=move, Right stick=look, LB=sprint, Triggers=up/down");
     return true;
 }
@@ -338,7 +345,7 @@ void Engine::setupDemoScene()
 
     // --- Create shared resources via ResourceManager ---
     auto cubeMesh = m_resourceManager->getCubeMesh();
-    auto planeMesh = m_resourceManager->getPlaneMesh(20.0f);
+    auto planeMesh = m_resourceManager->getPlaneMesh(30.0f);
 
     // --- PBR materials ---
 
@@ -352,7 +359,7 @@ void Engine::setupDemoScene()
     groundMat->setNormalMap(m_resourceManager->loadTexture(
         "assets/textures/everytexture-com-stock-rocks-texture-00038-2048/everytexture.com-stock-rocks-texture-00038-normal-2048.jpg", true));
     groundMat->setStochasticTiling(true);
-    groundMat->setUvScale(4.0f);
+    groundMat->setUvScale(6.0f);
 
     // Block 1 — Red Brick (left)
     auto redBrickMat = m_resourceManager->createMaterial("red_brick");

@@ -179,6 +179,10 @@ Renderer::~Renderer()
     {
         glDeleteFramebuffers(1, &m_bloomFbo);
     }
+    if (m_luminanceTexture != 0)
+    {
+        glDeleteTextures(1, &m_luminanceTexture);
+    }
     Logger::debug("Renderer destroyed");
 }
 
@@ -359,6 +363,20 @@ void Renderer::initFramebuffers(int width, int height, int msaaSamples)
         Logger::debug("Bloom mip-chain created: " + std::to_string(BLOOM_MIP_COUNT)
             + " levels from " + std::to_string(m_bloomMipWidths[0]) + "x"
             + std::to_string(m_bloomMipHeights[0]));
+    }
+
+    // Auto-exposure luminance texture (separate from bloom — unthresholded)
+    {
+        glGenTextures(1, &m_luminanceTexture);
+        glBindTexture(GL_TEXTURE_2D, m_luminanceTexture);
+        // Start at 256x256 — glGenerateMipmap creates all levels down to 1x1
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, 256, 256,
+                     0, GL_RGB, GL_FLOAT, nullptr);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glGenerateMipmap(GL_TEXTURE_2D);
     }
 
     // Resolved depth FBO (for SSAO — depth-only, sampleable texture)
@@ -607,6 +625,7 @@ void Renderer::endFrame()
                     glm::vec2(1.0f / static_cast<float>(m_windowWidth),
                               1.0f / static_cast<float>(m_windowHeight)));
                 m_bloomDownsampleShader.setBool("u_useKarisAverage", true);
+                m_bloomDownsampleShader.setFloat("u_threshold", m_bloomThreshold);
             }
             else
             {
@@ -619,6 +638,7 @@ void Renderer::endFrame()
                     glm::vec2(1.0f / static_cast<float>(m_bloomMipWidths[mip - 1]),
                               1.0f / static_cast<float>(m_bloomMipHeights[mip - 1])));
                 m_bloomDownsampleShader.setBool("u_useKarisAverage", false);
+                m_bloomDownsampleShader.setFloat("u_threshold", 0.0f);
             }
 
             m_bloomDownsampleShader.setInt("u_sourceTexture", 0);
@@ -668,6 +688,48 @@ void Renderer::endFrame()
         glBindTexture(GL_TEXTURE_2D, m_bloomTexture);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, BLOOM_MIP_COUNT - 1);
+    }
+
+    // 5b. Auto-exposure: compute average scene luminance from dedicated texture
+    //     (NOT from the bloom mip chain, which is brightness-thresholded).
+    if (m_autoExposure && m_luminanceTexture != 0)
+    {
+        // Blit the HDR scene to the 256x256 luminance texture (hardware downscale)
+        glBindFramebuffer(GL_FRAMEBUFFER, m_bloomFbo);  // reuse bloom FBO
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                               GL_TEXTURE_2D, m_luminanceTexture, 0);
+
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, hdrSourceFbo->getId());
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_bloomFbo);
+        glBlitFramebuffer(0, 0, m_windowWidth, m_windowHeight,
+                          0, 0, 256, 256, GL_COLOR_BUFFER_BIT, GL_LINEAR);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+        // Generate mipmaps — hardware averages down to 1x1
+        glBindTexture(GL_TEXTURE_2D, m_luminanceTexture);
+        glGenerateMipmap(GL_TEXTURE_2D);
+
+        // Read the 1x1 mip (level 8: 256 >> 8 = 1)
+        float avgColor[3] = {0.0f, 0.0f, 0.0f};
+        glGetTexImage(GL_TEXTURE_2D, 8, GL_RGB, GL_FLOAT, avgColor);
+
+        // Compute BT.709 luminance
+        float avgLuminance = 0.2126f * avgColor[0] + 0.7152f * avgColor[1] + 0.0722f * avgColor[2];
+        avgLuminance = std::max(avgLuminance, 0.001f);
+
+        // Target exposure: bring average luminance to the target mid-grey level
+        m_targetExposure = m_autoExposureTarget / avgLuminance;
+        m_targetExposure = std::clamp(m_targetExposure, m_autoExposureMin, m_autoExposureMax);
+
+        // Smooth adaptation (exponential interpolation, ~60fps assumed)
+        float adaptSpeed = 1.0f - std::exp(-m_autoExposureSpeed * (1.0f / 60.0f));
+        m_exposure += (m_targetExposure - m_exposure) * adaptSpeed;
+
+        // Restore bloom FBO attachment to bloom texture mip 0
+        glBindFramebuffer(GL_FRAMEBUFFER, m_bloomFbo);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                               GL_TEXTURE_2D, m_bloomTexture, 0);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
     }
 
     // 6. Final screen quad composite (tone mapping + bloom + SSAO)
@@ -941,6 +1003,17 @@ void Renderer::setExposure(float exposure)
 float Renderer::getExposure() const
 {
     return m_exposure;
+}
+
+void Renderer::setAutoExposure(bool enabled)
+{
+    m_autoExposure = enabled;
+    Logger::debug(std::string("Auto-exposure: ") + (enabled ? "ON" : "OFF"));
+}
+
+bool Renderer::isAutoExposure() const
+{
+    return m_autoExposure;
 }
 
 void Renderer::setTonemapMode(int mode)

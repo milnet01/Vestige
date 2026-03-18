@@ -92,10 +92,17 @@ public:
     bool isWireframeMode() const;
 
     /// @brief Sets the exposure multiplier for HDR tone mapping.
+    /// When auto-exposure is on, this is overridden each frame.
     void setExposure(float exposure);
 
     /// @brief Gets the current exposure multiplier.
     float getExposure() const;
+
+    /// @brief Enables or disables automatic exposure adaptation.
+    void setAutoExposure(bool enabled);
+
+    /// @brief Checks if auto-exposure is enabled.
+    bool isAutoExposure() const;
 
     /// @brief Sets the tonemapper: 0=Reinhard, 1=ACES Filmic, 2=None.
     void setTonemapMode(int mode);
@@ -259,6 +266,12 @@ private:
 
     // HDR / Tone mapping
     float m_exposure = 1.0f;
+    float m_targetExposure = 1.0f;
+    bool m_autoExposure = true;
+    float m_autoExposureSpeed = 2.0f;       // Adaptation speed (higher = faster)
+    float m_autoExposureMin = 0.2f;         // Minimum auto-exposure value
+    float m_autoExposureMax = 8.0f;         // Maximum auto-exposure value
+    float m_autoExposureTarget = 0.25f;     // Target average luminance (mid-grey)
     int m_tonemapMode = 1;    // Default to ACES Filmic
     int m_debugMode = 0;      // 0 = off
 
@@ -279,6 +292,8 @@ private:
     static constexpr int BLOOM_MIP_COUNT = 6;
     GLuint m_bloomTexture = 0;         // Single texture with mip levels
     GLuint m_bloomFbo = 0;             // FBO reused for each mip level
+    // Auto-exposure luminance (separate from bloom — reads unthresholded scene)
+    GLuint m_luminanceTexture = 0;     // Small texture with mipmaps for averaging
     int m_bloomMipWidths[BLOOM_MIP_COUNT] = {};
     int m_bloomMipHeights[BLOOM_MIP_COUNT] = {};
     bool m_bloomEnabled = true;

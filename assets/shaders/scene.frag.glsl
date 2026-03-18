@@ -218,6 +218,18 @@ int getCascadeIndex()
 /// Returns 0.0 (fully lit) to 1.0 (fully in shadow).
 float calcShadow(vec3 normal, vec3 lightDir)
 {
+    float depth = abs(v_viewDepth);
+
+    // Beyond shadow distance — smoothly fade to no shadow over the last 20%
+    // of the final cascade range to avoid a hard cutoff line.
+    float maxShadowDist = u_cascadeSplits[u_cascadeCount - 1];
+    float fadeStart = maxShadowDist * 0.8;
+    if (depth > maxShadowDist)
+    {
+        return 0.0;
+    }
+    float shadowFade = 1.0 - smoothstep(fadeStart, maxShadowDist, depth);
+
     int cascade = getCascadeIndex();
 
     // Transform fragment position to light space for this cascade
@@ -250,7 +262,8 @@ float calcShadow(vec3 normal, vec3 lightDir)
     }
     shadow /= 9.0;
 
-    return shadow;
+    // Apply distance fade so shadow doesn't end with a hard line
+    return shadow * shadowFade;
 }
 
 /// Samples point shadow cubemap 0 and returns shadow factor.
@@ -603,6 +616,45 @@ vec2 parallaxOcclusionMap(vec2 texCoords, vec3 viewDirTS)
     return finalTexCoords;
 }
 
+/// Computes a soft self-shadow factor for POM surfaces by ray-marching toward the
+/// light through the height field. Returns 1.0 (lit) or 0.0..1.0 (shadowed).
+float pomSelfShadow(vec2 texCoords, vec3 lightDirTS, float currentHeight)
+{
+    // March from the POM intersection point toward the light in tangent space.
+    // If the ray hits the height field, this point is in the surface's own shadow.
+    float numLayers = 16.0;
+    float layerStep = 1.0 / numLayers;
+
+    vec2 deltaUV = lightDirTS.xy * u_heightScale / numLayers;
+    float deltaHeight = lightDirTS.z / numLayers;
+
+    vec2 sampleUV = texCoords + deltaUV;
+    float sampleLayerH = currentHeight + deltaHeight;
+    float shadow = 0.0;
+
+    for (int i = 0; i < 16; i++)
+    {
+        if (sampleLayerH > 1.0)
+        {
+            break;  // Exited the surface — reached the light
+        }
+
+        float mapHeight = texture(u_heightMap, sampleUV).r;
+
+        // If the height field is above our ray, we're in shadow
+        if (mapHeight > sampleLayerH)
+        {
+            // Soft shadow: weight by how much the height field exceeds the ray
+            shadow = max(shadow, (mapHeight - sampleLayerH) * 8.0);
+        }
+
+        sampleUV += deltaUV;
+        sampleLayerH += deltaHeight;
+    }
+
+    return 1.0 - clamp(shadow, 0.0, 1.0);
+}
+
 // =============================================================================
 // Main
 // =============================================================================
@@ -619,11 +671,21 @@ void main()
 
     // Compute texture coordinates — apply UV scale, then POM offset if height map is present
     vec2 texCoords = v_texCoord * u_uvScale;
+    float pomShadowFactor = 1.0;
     if (u_hasHeightMap)
     {
         // View direction in tangent space for parallax calculation
         vec3 viewDirTS = normalize(transpose(v_TBN) * (u_viewPosition - v_fragPosition));
         texCoords = parallaxOcclusionMap(texCoords, viewDirTS);
+
+        // POM self-shadowing: march toward the directional light to check if
+        // the height field occludes this point. Only for the primary light.
+        if (u_hasDirLight)
+        {
+            vec3 lightDirTS = normalize(transpose(v_TBN) * (-u_dirLight_direction));
+            float currentHeight = texture(u_heightMap, texCoords).r;
+            pomShadowFactor = pomSelfShadow(texCoords, lightDirTS, currentHeight);
+        }
     }
 
     // Get surface normal — from normal map or vertex data
@@ -692,7 +754,7 @@ void main()
 
         if (u_hasDirLight)
         {
-            Lo += calcDirectionalLightPBR(norm, viewDir, albedo, metallic, roughness, F0);
+            Lo += calcDirectionalLightPBR(norm, viewDir, albedo, metallic, roughness, F0) * pomShadowFactor;
         }
 
         for (int i = 0; i < u_pointLightCount && i < MAX_POINT_LIGHTS; i++)
@@ -770,10 +832,10 @@ void main()
         // Accumulate light contributions
         vec3 result = vec3(0.0);
 
-        // Directional light
+        // Directional light (with POM self-shadow if applicable)
         if (u_hasDirLight)
         {
-            result += calcDirectionalLight(norm, viewDir, baseColor);
+            result += calcDirectionalLight(norm, viewDir, baseColor) * pomShadowFactor;
         }
 
         // Point lights
