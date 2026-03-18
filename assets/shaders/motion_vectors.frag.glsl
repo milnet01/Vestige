@@ -14,16 +14,16 @@ void main()
     // Read depth and reconstruct world position
     float depth = texture(u_depthTexture, v_texCoord).r;
 
-    // Skip sky fragments (depth == 1.0): no meaningful motion
-    if (depth >= 1.0)
+    // Reverse-Z: sky is at depth 0.0 (far plane)
+    if (depth <= 0.0001)
     {
         fragColor = vec4(0.0, 0.0, 0.0, 1.0);
         return;
     }
 
-    // NDC position (current frame)
+    // NDC position (current frame). With glClipControl [0,1], depth IS the NDC z.
     vec2 ndc = v_texCoord * 2.0 - 1.0;
-    vec4 clipPos = vec4(ndc, depth * 2.0 - 1.0, 1.0);
+    vec4 clipPos = vec4(ndc, depth, 1.0);
 
     // Reconstruct world position
     vec4 worldPos = u_currentInvViewProjection * clipPos;

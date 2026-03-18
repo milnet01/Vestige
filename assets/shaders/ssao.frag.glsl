@@ -15,10 +15,12 @@ uniform mat4 u_invProjection;
 
 out vec4 fragColor;
 
-/// Reconstruct view-space position from depth (full vec3).
+/// Reconstruct view-space position from depth.
+/// Reverse-Z with [0,1] depth range: depth is already in [0,1] NDC.
 vec3 viewPosFromDepth(vec2 uv, float depth)
 {
-    vec4 ndc = vec4(uv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
+    // With glClipControl(GL_LOWER_LEFT, GL_ZERO_TO_ONE), NDC z = depth directly
+    vec4 ndc = vec4(uv * 2.0 - 1.0, depth, 1.0);
     vec4 viewPos = u_invProjection * ndc;
     return viewPos.xyz / viewPos.w;
 }
@@ -26,8 +28,8 @@ vec3 viewPosFromDepth(vec2 uv, float depth)
 /// Reconstruct only view-space Z from depth (cheaper — 2 MADs instead of mat4*vec4).
 float viewZFromDepth(float depth)
 {
-    float ndcZ = depth * 2.0 - 1.0;
-    float viewZ = u_invProjection[3][2] / (ndcZ + u_invProjection[2][2]);
+    // For reverse-Z [0,1]: NDC z = depth directly
+    float viewZ = u_invProjection[3][2] / (depth + u_invProjection[2][2]);
     return viewZ;
 }
 
@@ -35,8 +37,8 @@ void main()
 {
     float depth = texture(u_depthTexture, v_texCoord).r;
 
-    // Skip sky fragments (depth at or beyond far plane)
-    if (depth >= 1.0)
+    // Reverse-Z: sky is at depth 0.0 (far plane), geometry is near 1.0 (near plane)
+    if (depth <= 0.0001)
     {
         fragColor = vec4(1.0);
         return;
@@ -67,7 +69,8 @@ void main()
         // Project sample to screen space
         vec4 offset = u_projection * vec4(samplePos, 1.0);
         offset.xyz /= offset.w;
-        offset.xyz = offset.xyz * 0.5 + 0.5;
+        // XY: NDC [-1,1] → UV [0,1]. Z is already in [0,1] for reverse-Z.
+        offset.xy = offset.xy * 0.5 + 0.5;
 
         // Only reconstruct Z (not full vec3) — saves a mat4*vec4 per sample
         float sampleDepth = texture(u_depthTexture, offset.xy).r;

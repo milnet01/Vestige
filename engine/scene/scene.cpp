@@ -89,7 +89,7 @@ void Scene::collectRenderDataRecursive(const Entity& entity, SceneRenderData& da
         item.mesh = meshRenderer->getMesh().get();
         item.material = meshRenderer->getMaterial().get();
         item.worldMatrix = entity.getWorldMatrix();
-        item.worldBounds = meshRenderer->getBounds().transformed(item.worldMatrix);
+        item.worldBounds = meshRenderer->getCullingBounds().transformed(item.worldMatrix);
 
         // BLEND materials go to the transparent list; OPAQUE and MASK go to opaque
         if (item.material->getAlphaMode() == AlphaMode::BLEND)

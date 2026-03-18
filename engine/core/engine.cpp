@@ -439,7 +439,9 @@ void Engine::setupDemoScene()
     // --- Ground ---
     Entity* ground = scene->createEntity("Ground");
     ground->addComponent<MeshRenderer>(planeMesh, groundMat);
-    // No collision bounds for the ground (we handle ground via height clamping)
+    // No bounds set → zero-size AABB → skipped by collision AND always rendered
+    // (the frustum culler bypasses zero-size items). A 2-triangle ground plane
+    // has no performance benefit from culling.
 
     // --- Cubes ---
     Entity* redBrickCube = scene->createEntity("1 Red Brick");
