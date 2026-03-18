@@ -25,12 +25,13 @@ vec3 viewPosFromDepth(vec2 uv, float depth)
     return viewPos.xyz / viewPos.w;
 }
 
-/// Reconstruct only view-space Z from depth (cheaper — 2 MADs instead of mat4*vec4).
+/// Reconstruct only view-space Z from depth (cheaper than full mat4*vec4).
+/// For reverse-Z infinite projection: depth = near / (-viewZ), so viewZ = -near / depth.
+/// We extract the near plane from the projection matrix: proj[3][2] = near.
 float viewZFromDepth(float depth)
 {
-    // For reverse-Z [0,1]: NDC z = depth directly
-    float viewZ = u_invProjection[3][2] / (depth + u_invProjection[2][2]);
-    return viewZ;
+    float nearPlane = u_projection[3][2];  // Our projection stores near in [3][2]
+    return -nearPlane / max(depth, 0.0001);
 }
 
 void main()
