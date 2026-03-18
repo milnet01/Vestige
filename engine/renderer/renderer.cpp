@@ -1,13 +1,71 @@
 /// @file renderer.cpp
-/// @brief Renderer implementation with Blinn-Phong lighting, shadows, and FBO pipeline.
+/// @brief Renderer implementation with Blinn-Phong/PBR lighting, shadows, and FBO pipeline.
 #include "renderer/renderer.h"
 #include "scene/scene.h"
 #include "core/logger.h"
 
 #include <glad/gl.h>
+#include <glm/gtc/matrix_transform.hpp>
+
+#include <algorithm>
+#include <array>
+#include <random>
 
 namespace Vestige
 {
+
+/// @brief Extracts the 6 frustum planes from a view-projection matrix.
+/// Each plane is (a, b, c, d) where ax + by + cz + d >= 0 is inside.
+static std::array<glm::vec4, 6> extractFrustumPlanes(const glm::mat4& vp)
+{
+    std::array<glm::vec4, 6> planes;
+    // Left
+    planes[0] = glm::vec4(vp[0][3] + vp[0][0], vp[1][3] + vp[1][0],
+                           vp[2][3] + vp[2][0], vp[3][3] + vp[3][0]);
+    // Right
+    planes[1] = glm::vec4(vp[0][3] - vp[0][0], vp[1][3] - vp[1][0],
+                           vp[2][3] - vp[2][0], vp[3][3] - vp[3][0]);
+    // Bottom
+    planes[2] = glm::vec4(vp[0][3] + vp[0][1], vp[1][3] + vp[1][1],
+                           vp[2][3] + vp[2][1], vp[3][3] + vp[3][1]);
+    // Top
+    planes[3] = glm::vec4(vp[0][3] - vp[0][1], vp[1][3] - vp[1][1],
+                           vp[2][3] - vp[2][1], vp[3][3] - vp[3][1]);
+    // Near
+    planes[4] = glm::vec4(vp[0][3] + vp[0][2], vp[1][3] + vp[1][2],
+                           vp[2][3] + vp[2][2], vp[3][3] + vp[3][2]);
+    // Far
+    planes[5] = glm::vec4(vp[0][3] - vp[0][2], vp[1][3] - vp[1][2],
+                           vp[2][3] - vp[2][2], vp[3][3] - vp[3][2]);
+
+    // Normalize each plane
+    for (auto& p : planes)
+    {
+        float len = glm::length(glm::vec3(p));
+        if (len > 0.0f) p /= len;
+    }
+    return planes;
+}
+
+/// @brief Tests if an AABB is at least partially inside the frustum.
+static bool isAabbInFrustum(const AABB& box, const std::array<glm::vec4, 6>& planes)
+{
+    for (const auto& plane : planes)
+    {
+        // Find the AABB corner most aligned with the plane normal (p-vertex)
+        glm::vec3 pVertex(
+            (plane.x >= 0.0f) ? box.max.x : box.min.x,
+            (plane.y >= 0.0f) ? box.max.y : box.min.y,
+            (plane.z >= 0.0f) ? box.max.z : box.min.z
+        );
+
+        if (glm::dot(glm::vec3(plane), pVertex) + plane.w < 0.0f)
+        {
+            return false;  // Entirely outside this plane
+        }
+    }
+    return true;
+}
 
 Renderer::Renderer(EventBus& eventBus)
     : m_eventBus(eventBus)
@@ -36,18 +94,24 @@ Renderer::Renderer(EventBus& eventBus)
 
 Renderer::~Renderer()
 {
+    if (m_ssaoNoiseTexture != 0)
+    {
+        glDeleteTextures(1, &m_ssaoNoiseTexture);
+    }
     Logger::debug("Renderer destroyed");
 }
 
 bool Renderer::loadShaders(const std::string& assetPath)
 {
-    // Load Blinn-Phong shader
-    std::string vertPath = assetPath + "/shaders/blinn_phong.vert.glsl";
-    std::string fragPath = assetPath + "/shaders/blinn_phong.frag.glsl";
+    m_assetPath = assetPath;
 
-    if (!m_blinnPhongShader.loadFromFiles(vertPath, fragPath))
+    // Load scene shader (handles both Blinn-Phong and PBR)
+    std::string vertPath = assetPath + "/shaders/scene.vert.glsl";
+    std::string fragPath = assetPath + "/shaders/scene.frag.glsl";
+
+    if (!m_sceneShader.loadFromFiles(vertPath, fragPath))
     {
-        Logger::error("Failed to load Blinn-Phong shaders");
+        Logger::error("Failed to load scene shaders");
         return false;
     }
 
@@ -71,6 +135,71 @@ bool Renderer::loadShaders(const std::string& assetPath)
         return false;
     }
 
+    // Load skybox shader
+    std::string skyboxVertPath = assetPath + "/shaders/skybox.vert.glsl";
+    std::string skyboxFragPath = assetPath + "/shaders/skybox.frag.glsl";
+
+    if (!m_skyboxShader.loadFromFiles(skyboxVertPath, skyboxFragPath))
+    {
+        Logger::error("Failed to load skybox shaders");
+        return false;
+    }
+
+    // Load point shadow depth shader
+    std::string pointShadowVertPath = assetPath + "/shaders/point_shadow_depth.vert.glsl";
+    std::string pointShadowFragPath = assetPath + "/shaders/point_shadow_depth.frag.glsl";
+
+    if (!m_pointShadowDepthShader.loadFromFiles(pointShadowVertPath, pointShadowFragPath))
+    {
+        Logger::error("Failed to load point shadow depth shaders");
+        return false;
+    }
+
+    // Load bloom shaders (reuse screen_quad.vert.glsl)
+    std::string bloomBrightFragPath = assetPath + "/shaders/bloom_bright.frag.glsl";
+    if (!m_bloomBrightShader.loadFromFiles(screenVertPath, bloomBrightFragPath))
+    {
+        Logger::error("Failed to load bloom bright shader");
+        return false;
+    }
+
+    std::string bloomBlurFragPath = assetPath + "/shaders/bloom_blur.frag.glsl";
+    if (!m_bloomBlurShader.loadFromFiles(screenVertPath, bloomBlurFragPath))
+    {
+        Logger::error("Failed to load bloom blur shader");
+        return false;
+    }
+
+    // Load SSAO shaders (reuse screen_quad.vert.glsl)
+    std::string ssaoFragPath = assetPath + "/shaders/ssao.frag.glsl";
+    if (!m_ssaoShader.loadFromFiles(screenVertPath, ssaoFragPath))
+    {
+        Logger::error("Failed to load SSAO shader");
+        return false;
+    }
+
+    std::string ssaoBlurFragPath = assetPath + "/shaders/ssao_blur.frag.glsl";
+    if (!m_ssaoBlurShader.loadFromFiles(screenVertPath, ssaoBlurFragPath))
+    {
+        Logger::error("Failed to load SSAO blur shader");
+        return false;
+    }
+
+    // Load TAA shaders (reuse screen_quad.vert.glsl)
+    std::string taaResolveFragPath = assetPath + "/shaders/taa_resolve.frag.glsl";
+    if (!m_taaResolveShader.loadFromFiles(screenVertPath, taaResolveFragPath))
+    {
+        Logger::error("Failed to load TAA resolve shader");
+        return false;
+    }
+
+    std::string motionVectorFragPath = assetPath + "/shaders/motion_vectors.frag.glsl";
+    if (!m_motionVectorShader.loadFromFiles(screenVertPath, motionVectorFragPath))
+    {
+        Logger::error("Failed to load motion vector shader");
+        return false;
+    }
+
     Logger::info("Shaders loaded successfully");
     return true;
 }
@@ -81,102 +210,505 @@ void Renderer::initFramebuffers(int width, int height, int msaaSamples)
     m_windowHeight = height;
     m_msaaSamples = msaaSamples;
 
-    // MSAA framebuffer — scene is rendered here
+    // MSAA framebuffer — scene is rendered here (HDR floating-point)
     FramebufferConfig msaaConfig;
     msaaConfig.width = width;
     msaaConfig.height = height;
     msaaConfig.samples = msaaSamples;
     msaaConfig.hasColorAttachment = true;
     msaaConfig.hasDepthAttachment = true;
+    msaaConfig.isFloatingPoint = true;
     m_msaaFbo = std::make_unique<Framebuffer>(msaaConfig);
 
-    // Resolve framebuffer — MSAA is resolved to this non-multisampled FBO
+    // Resolve framebuffer — MSAA is resolved to this non-multisampled FBO (HDR floating-point)
     FramebufferConfig resolveConfig;
     resolveConfig.width = width;
     resolveConfig.height = height;
     resolveConfig.samples = 1;
     resolveConfig.hasColorAttachment = true;
     resolveConfig.hasDepthAttachment = false;
+    resolveConfig.isFloatingPoint = true;
     m_resolveFbo = std::make_unique<Framebuffer>(resolveConfig);
 
     // Fullscreen quad for the screen pass
     m_screenQuad = std::make_unique<FullscreenQuad>();
 
-    // Shadow map for the directional light
-    m_shadowMap = std::make_unique<ShadowMap>();
+    // Cascaded shadow maps for the directional light
+    m_cascadedShadowMap = std::make_unique<CascadedShadowMap>();
+
+    // Point light shadow maps (pool of MAX_POINT_SHADOW_LIGHTS)
+    for (int i = 0; i < MAX_POINT_SHADOW_LIGHTS; i++)
+    {
+        m_pointShadowMaps.push_back(std::make_unique<PointShadowMap>());
+    }
+
+    // Skybox (procedural gradient — no cubemap texture)
+    m_skybox = std::make_unique<Skybox>();
+
+    // Bloom FBOs (half-resolution, RGBA16F, no depth)
+    int halfW = width / 2;
+    int halfH = height / 2;
+    if (halfW < 1) halfW = 1;
+    if (halfH < 1) halfH = 1;
+
+    FramebufferConfig bloomConfig;
+    bloomConfig.width = halfW;
+    bloomConfig.height = halfH;
+    bloomConfig.samples = 1;
+    bloomConfig.hasColorAttachment = true;
+    bloomConfig.hasDepthAttachment = false;
+    bloomConfig.isFloatingPoint = true;
+
+    m_bloomBrightFbo = std::make_unique<Framebuffer>(bloomConfig);
+    m_bloomPingFbo = std::make_unique<Framebuffer>(bloomConfig);
+    m_bloomPongFbo = std::make_unique<Framebuffer>(bloomConfig);
+
+    // Resolved depth FBO (for SSAO — depth-only, sampleable texture)
+    FramebufferConfig depthResolveConfig;
+    depthResolveConfig.width = width;
+    depthResolveConfig.height = height;
+    depthResolveConfig.samples = 1;
+    depthResolveConfig.hasColorAttachment = false;
+    depthResolveConfig.hasDepthAttachment = true;
+    depthResolveConfig.isFloatingPoint = false;
+    depthResolveConfig.isDepthTexture = true;
+    m_resolveDepthFbo = std::make_unique<Framebuffer>(depthResolveConfig);
+
+    // SSAO FBOs (full-resolution, RGBA16F, no depth)
+    FramebufferConfig ssaoConfig;
+    ssaoConfig.width = width;
+    ssaoConfig.height = height;
+    ssaoConfig.samples = 1;
+    ssaoConfig.hasColorAttachment = true;
+    ssaoConfig.hasDepthAttachment = false;
+    ssaoConfig.isFloatingPoint = true;
+
+    m_ssaoFbo = std::make_unique<Framebuffer>(ssaoConfig);
+    m_ssaoBlurFbo = std::make_unique<Framebuffer>(ssaoConfig);
+
+    // TAA FBOs (created regardless, used when mode is TAA)
+    // Non-MSAA scene FBO for TAA (scene rendered here instead of MSAA FBO)
+    FramebufferConfig taaSceneConfig;
+    taaSceneConfig.width = width;
+    taaSceneConfig.height = height;
+    taaSceneConfig.samples = 1;
+    taaSceneConfig.hasColorAttachment = true;
+    taaSceneConfig.hasDepthAttachment = true;
+    taaSceneConfig.isFloatingPoint = true;
+    m_taaSceneFbo = std::make_unique<Framebuffer>(taaSceneConfig);
+
+    m_taa = std::make_unique<Taa>(width, height);
+
+    // Generate SSAO kernel and noise texture
+    generateSsaoKernel();
+    generateSsaoNoiseTexture();
+
+    // Upload SSAO kernel to shader once (it never changes)
+    m_ssaoShader.use();
+    m_ssaoShader.setInt("u_kernelSize", static_cast<int>(m_ssaoKernel.size()));
+    for (size_t i = 0; i < m_ssaoKernel.size(); i++)
+    {
+        m_ssaoShader.setVec3("u_samples[" + std::to_string(i) + "]", m_ssaoKernel[i]);
+    }
+
+    // Initialize color grading LUT (neutral + built-in presets)
+    m_colorGradingLut = std::make_unique<ColorGradingLut>();
+    m_colorGradingLut->initialize();
+
+    // Initialize instance buffer for instanced rendering
+    m_instanceBuffer = std::make_unique<InstanceBuffer>();
+
+    // IBL environment map (irradiance, prefilter, BRDF LUT)
+    m_environmentMap = std::make_unique<EnvironmentMap>();
+    if (m_environmentMap->initialize(m_assetPath))
+    {
+        GLuint skyboxCubemap = m_skybox ? m_skybox->getTextureId() : 0;
+        bool hasCubemap = m_skybox && m_skybox->hasTexture();
+        m_environmentMap->generate(skyboxCubemap, hasCubemap,
+                                   *m_screenQuad, m_skyboxShader);
+    }
+    while (glGetError() != GL_NO_ERROR) {}
 
     Logger::info("Framebuffer pipeline initialized: "
         + std::to_string(width) + "x" + std::to_string(height)
-        + " with " + std::to_string(msaaSamples) + "x MSAA + shadow mapping");
+        + " with " + std::to_string(msaaSamples) + "x MSAA + shadow mapping + skybox + bloom + SSAO");
 }
 
 void Renderer::beginFrame()
 {
-    if (m_msaaFbo)
+    bool isTAA = (m_antiAliasMode == AntiAliasMode::TAA && m_taa && m_taaSceneFbo);
+
+    if (isTAA)
     {
-        // Render to the MSAA framebuffer
+        m_taaSceneFbo->bind();
+    }
+    else if (m_msaaFbo)
+    {
         m_msaaFbo->bind();
     }
 
+    glViewport(0, 0, m_windowWidth, m_windowHeight);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 }
 
 void Renderer::endFrame()
 {
-    if (!m_msaaFbo || !m_resolveFbo || !m_screenQuad)
+    if (!m_resolveFbo || !m_screenQuad)
     {
-        // FBOs not initialized — nothing to resolve
         return;
     }
 
-    // Resolve MSAA → non-multisampled FBO
-    m_msaaFbo->resolve(*m_resolveFbo);
+    bool isTAA = (m_antiAliasMode == AntiAliasMode::TAA && m_taa && m_taaSceneFbo);
 
-    // Draw to the default framebuffer (screen)
+    // 1. Resolve scene color → non-multisampled resolve FBO
+    if (isTAA)
+    {
+        // TAA mode: blit from non-MSAA scene FBO to resolve FBO
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, m_taaSceneFbo->getId());
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_resolveFbo->getId());
+        glBlitFramebuffer(0, 0, m_windowWidth, m_windowHeight,
+                          0, 0, m_windowWidth, m_windowHeight,
+                          GL_COLOR_BUFFER_BIT, GL_NEAREST);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    }
+    else if (m_msaaFbo)
+    {
+        // MSAA mode: resolve multisampled → non-multisampled
+        m_msaaFbo->resolve(*m_resolveFbo);
+    }
+
+    // 2. Resolve depth → sampleable depth texture for SSAO and TAA motion vectors
+    GLuint depthSourceFbo = isTAA ? m_taaSceneFbo->getId()
+                                   : (m_msaaFbo ? m_msaaFbo->getId() : 0);
+    if (m_resolveDepthFbo && depthSourceFbo != 0)
+    {
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, depthSourceFbo);
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_resolveDepthFbo->getId());
+        glBlitFramebuffer(0, 0, m_windowWidth, m_windowHeight,
+                          0, 0, m_windowWidth, m_windowHeight,
+                          GL_DEPTH_BUFFER_BIT, GL_NEAREST);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    }
+
+    glDisable(GL_DEPTH_TEST);
+
+    // 3. SSAO pass
+    if (m_ssaoEnabled && m_ssaoFbo && m_ssaoBlurFbo && m_resolveDepthFbo)
+    {
+        m_ssaoFbo->bind();
+        glViewport(0, 0, m_windowWidth, m_windowHeight);
+        glClear(GL_COLOR_BUFFER_BIT);
+
+        m_ssaoShader.use();
+
+        m_resolveDepthFbo->bindDepthTexture(12);
+        m_ssaoShader.setInt("u_depthTexture", 12);
+
+        glActiveTexture(GL_TEXTURE11);
+        glBindTexture(GL_TEXTURE_2D, m_ssaoNoiseTexture);
+        m_ssaoShader.setInt("u_noiseTexture", 11);
+
+        // Kernel was uploaded once at init — only set per-frame uniforms
+        m_ssaoShader.setFloat("u_radius", m_ssaoRadius);
+        m_ssaoShader.setFloat("u_bias", m_ssaoBias);
+        m_ssaoShader.setVec2("u_noiseScale",
+            glm::vec2(static_cast<float>(m_windowWidth) / 4.0f,
+                      static_cast<float>(m_windowHeight) / 4.0f));
+        m_ssaoShader.setMat4("u_projection", m_lastProjection);
+        m_ssaoShader.setMat4("u_invProjection", glm::inverse(m_lastProjection));
+
+        m_screenQuad->draw();
+
+        // SSAO blur pass
+        m_ssaoBlurFbo->bind();
+        glClear(GL_COLOR_BUFFER_BIT);
+
+        m_ssaoBlurShader.use();
+        m_ssaoFbo->bindColorTexture(0);
+        m_ssaoBlurShader.setInt("u_ssaoInput", 0);
+        m_screenQuad->draw();
+    }
+
+    // 4. TAA motion vectors and resolve
+    // The FBO used as the HDR input for bloom and final composite
+    Framebuffer* hdrSourceFbo = m_resolveFbo.get();
+
+    if (isTAA)
+    {
+        // 4a. Motion vector pass
+        m_taa->getMotionVectorFbo().bind();
+        glViewport(0, 0, m_windowWidth, m_windowHeight);
+        glClear(GL_COLOR_BUFFER_BIT);
+
+        m_motionVectorShader.use();
+        m_resolveDepthFbo->bindDepthTexture(0);
+        m_motionVectorShader.setInt("u_depthTexture", 0);
+        m_motionVectorShader.setMat4("u_currentInvViewProjection",
+            glm::inverse(m_lastViewProjection));
+        m_motionVectorShader.setMat4("u_prevViewProjection", m_prevViewProjection);
+        m_motionVectorShader.setVec2("u_texelSize",
+            glm::vec2(1.0f / static_cast<float>(m_windowWidth),
+                      1.0f / static_cast<float>(m_windowHeight)));
+        m_screenQuad->draw();
+
+        // 4b. TAA resolve pass
+        m_taa->getCurrentFbo().bind();
+        glViewport(0, 0, m_windowWidth, m_windowHeight);
+        glClear(GL_COLOR_BUFFER_BIT);
+
+        m_taaResolveShader.use();
+        m_resolveFbo->bindColorTexture(0);
+        m_taaResolveShader.setInt("u_currentTexture", 0);
+        m_taa->getHistoryFbo().bindColorTexture(1);
+        m_taaResolveShader.setInt("u_historyTexture", 1);
+        m_taa->getMotionVectorFbo().bindColorTexture(2);
+        m_taaResolveShader.setInt("u_motionVectorTexture", 2);
+        m_taaResolveShader.setFloat("u_feedbackFactor", m_taa->getFeedbackFactor());
+        m_taaResolveShader.setVec2("u_texelSize",
+            glm::vec2(1.0f / static_cast<float>(m_windowWidth),
+                      1.0f / static_cast<float>(m_windowHeight)));
+        m_screenQuad->draw();
+
+        // Use TAA output as bloom/composite input
+        hdrSourceFbo = &m_taa->getCurrentFbo();
+    }
+
+    // 5. Bloom passes
+    if (m_bloomEnabled && m_bloomBrightFbo && m_bloomPingFbo && m_bloomPongFbo)
+    {
+        int halfW = m_bloomBrightFbo->getWidth();
+        int halfH = m_bloomBrightFbo->getHeight();
+
+        // Bright extraction (from TAA output or resolve FBO)
+        m_bloomBrightFbo->bind();
+        glViewport(0, 0, halfW, halfH);
+        glClear(GL_COLOR_BUFFER_BIT);
+
+        m_bloomBrightShader.use();
+        hdrSourceFbo->bindColorTexture(0);
+        m_bloomBrightShader.setInt("u_hdrTexture", 0);
+        m_bloomBrightShader.setFloat("u_threshold", m_bloomThreshold);
+        m_screenQuad->draw();
+
+        // Ping-pong Gaussian blur
+        m_bloomBlurShader.use();
+        bool horizontal = true;
+        bool firstIteration = true;
+        for (int i = 0; i < m_bloomIterations * 2; i++)
+        {
+            if (horizontal)
+            {
+                m_bloomPongFbo->bind();
+            }
+            else
+            {
+                m_bloomPingFbo->bind();
+            }
+
+            glViewport(0, 0, halfW, halfH);
+            glClear(GL_COLOR_BUFFER_BIT);
+
+            if (firstIteration)
+            {
+                m_bloomBrightFbo->bindColorTexture(0);
+                firstIteration = false;
+            }
+            else
+            {
+                if (horizontal)
+                {
+                    m_bloomPingFbo->bindColorTexture(0);
+                }
+                else
+                {
+                    m_bloomPongFbo->bindColorTexture(0);
+                }
+            }
+
+            m_bloomBlurShader.setInt("u_image", 0);
+            m_bloomBlurShader.setBool("u_horizontal", horizontal);
+            m_screenQuad->draw();
+
+            horizontal = !horizontal;
+        }
+    }
+
+    // 6. Final screen quad composite (tone mapping + bloom + SSAO)
     Framebuffer::unbind();
     glViewport(0, 0, m_windowWidth, m_windowHeight);
     glClear(GL_COLOR_BUFFER_BIT);
-    glDisable(GL_DEPTH_TEST);
 
-    // Draw the resolved texture to the screen via fullscreen quad
     m_screenShader.use();
-    m_resolveFbo->bindColorTexture(0);
+    hdrSourceFbo->bindColorTexture(0);
     m_screenShader.setInt("u_screenTexture", 0);
+    m_screenShader.setFloat("u_exposure", m_exposure);
+    m_screenShader.setInt("u_tonemapMode", m_tonemapMode);
+    m_screenShader.setInt("u_debugMode", m_debugMode);
+
+    // Bloom uniforms — ALWAYS bind texture (Mesa requires valid textures for declared samplers)
+    m_screenShader.setBool("u_bloomEnabled", m_bloomEnabled);
+    m_screenShader.setFloat("u_bloomIntensity", m_bloomIntensity);
+    if (m_bloomPongFbo)
+    {
+        m_bloomPongFbo->bindColorTexture(9);
+        m_screenShader.setInt("u_bloomTexture", 9);
+    }
+
+    // SSAO uniforms — ALWAYS bind texture
+    m_screenShader.setBool("u_ssaoEnabled", m_ssaoEnabled);
+    if (m_ssaoBlurFbo)
+    {
+        m_ssaoBlurFbo->bindColorTexture(10);
+        m_screenShader.setInt("u_ssaoTexture", 10);
+    }
+
+    // Color grading LUT uniforms — ALWAYS bind texture
+    bool lutActive = (m_colorGradingLut && m_colorGradingLut->isEnabled());
+    m_screenShader.setBool("u_lutEnabled", lutActive);
+    if (m_colorGradingLut)
+    {
+        m_colorGradingLut->bind(13);
+        m_screenShader.setInt("u_lutTexture", 13);
+        m_screenShader.setFloat("u_lutIntensity",
+            lutActive ? m_colorGradingLut->getIntensity() : 0.0f);
+    }
+
     m_screenQuad->draw();
+
+    // 7. Swap TAA history buffers
+    if (isTAA)
+    {
+        m_taa->swapBuffers();
+        m_taa->nextFrame();
+        m_prevViewProjection = m_lastViewProjection;
+    }
 
     glEnable(GL_DEPTH_TEST);
 }
 
-void Renderer::drawMesh(const Mesh& mesh, const glm::mat4& modelMatrix,
-                         const Material& material, const Camera& camera,
-                         float aspectRatio)
+void Renderer::uploadMaterialUniforms(const Material& material)
 {
-    m_blinnPhongShader.use();
+    // UV tiling scale
+    m_sceneShader.setFloat("u_uvScale", material.getUvScale());
 
-    // Transform matrices
-    m_blinnPhongShader.setMat4("u_model", modelMatrix);
-    m_blinnPhongShader.setMat4("u_view", camera.getViewMatrix());
-    m_blinnPhongShader.setMat4("u_projection", camera.getProjectionMatrix(aspectRatio));
+    // PBR mode toggle
+    bool usePBR = (material.getType() == MaterialType::PBR);
+    m_sceneShader.setBool("u_usePBR", usePBR);
 
-    // Material
-    m_blinnPhongShader.setVec3("u_materialDiffuse", material.getDiffuseColor());
-    m_blinnPhongShader.setVec3("u_materialSpecular", material.getSpecularColor());
-    m_blinnPhongShader.setFloat("u_materialShininess", material.getShininess());
+    // Material (Blinn-Phong uniforms — always set for the non-PBR path)
+    m_sceneShader.setVec3("u_materialDiffuse", material.getDiffuseColor());
+    m_sceneShader.setVec3("u_materialSpecular", material.getSpecularColor());
+    m_sceneShader.setFloat("u_materialShininess", material.getShininess());
+    m_sceneShader.setVec3("u_materialEmissive", material.getEmissive());
+    m_sceneShader.setFloat("u_materialEmissiveStrength", material.getEmissiveStrength());
 
-    // Texture
+    // Diffuse/albedo texture (shared by both paths — unit 0)
     bool hasTexture = material.hasDiffuseTexture();
-    m_blinnPhongShader.setBool("u_hasTexture", hasTexture);
+    m_sceneShader.setBool("u_hasTexture", hasTexture);
     if (hasTexture)
     {
         material.getDiffuseTexture()->bind(0);
-        m_blinnPhongShader.setInt("u_diffuseTexture", 0);
+        m_sceneShader.setInt("u_diffuseTexture", 0);
     }
 
-    // Wireframe
-    m_blinnPhongShader.setBool("u_wireframe", m_isWireframe);
+    // Normal map (shared — unit 1)
+    bool hasNormalMap = material.hasNormalMap();
+    m_sceneShader.setBool("u_hasNormalMap", hasNormalMap);
+    if (hasNormalMap)
+    {
+        material.getNormalMap()->bind(1);
+        m_sceneShader.setInt("u_normalMap", 1);
+    }
 
-    // Lights
-    uploadLightUniforms(camera);
+    // Height map (shared — unit 2)
+    bool hasHeightMap = m_pomEnabled && material.isPomEnabled() && material.hasHeightMap();
+    m_sceneShader.setBool("u_hasHeightMap", hasHeightMap);
+    if (hasHeightMap)
+    {
+        material.getHeightMap()->bind(2);
+        m_sceneShader.setInt("u_heightMap", 2);
+        m_sceneShader.setFloat("u_heightScale", material.getHeightScale() * m_pomHeightMultiplier);
+    }
+
+    // PBR uniforms
+    if (usePBR)
+    {
+        m_sceneShader.setVec3("u_pbrAlbedo", material.getAlbedo());
+        m_sceneShader.setFloat("u_pbrMetallic", material.getMetallic());
+        m_sceneShader.setFloat("u_pbrRoughness", material.getRoughness());
+        m_sceneShader.setFloat("u_pbrAo", material.getAo());
+        m_sceneShader.setVec3("u_pbrEmissive", material.getEmissive());
+        m_sceneShader.setFloat("u_pbrEmissiveStrength", material.getEmissiveStrength());
+
+        // Metallic-roughness map (unit 6)
+        bool hasMR = material.hasMetallicRoughnessTexture();
+        m_sceneShader.setBool("u_hasMetallicRoughnessMap", hasMR);
+        if (hasMR)
+        {
+            material.getMetallicRoughnessTexture()->bind(6);
+            m_sceneShader.setInt("u_metallicRoughnessMap", 6);
+        }
+
+        // Emissive map (unit 7)
+        bool hasEmissive = material.hasEmissiveTexture();
+        m_sceneShader.setBool("u_hasEmissiveMap", hasEmissive);
+        if (hasEmissive)
+        {
+            material.getEmissiveTexture()->bind(7);
+            m_sceneShader.setInt("u_emissiveMap", 7);
+        }
+
+        // AO map (unit 8)
+        bool hasAo = material.hasAoTexture();
+        m_sceneShader.setBool("u_hasAoMap", hasAo);
+        if (hasAo)
+        {
+            material.getAoTexture()->bind(8);
+            m_sceneShader.setInt("u_aoMap", 8);
+        }
+    }
+    else
+    {
+        // Ensure PBR texture booleans are false when not in PBR mode
+        m_sceneShader.setBool("u_hasMetallicRoughnessMap", false);
+        m_sceneShader.setBool("u_hasEmissiveMap", false);
+        m_sceneShader.setBool("u_hasAoMap", false);
+    }
+
+    // Stochastic tiling
+    m_sceneShader.setBool("u_stochasticTiling", material.isStochasticTiling());
+
+    // Transparency uniforms
+    m_sceneShader.setInt("u_alphaMode", static_cast<int>(material.getAlphaMode()));
+    m_sceneShader.setFloat("u_alphaCutoff", material.getAlphaCutoff());
+    m_sceneShader.setFloat("u_baseColorAlpha", material.getBaseColorAlpha());
+
+    // Wireframe
+    m_sceneShader.setBool("u_wireframe", m_isWireframe);
+}
+
+void Renderer::drawMesh(const Mesh& mesh, const glm::mat4& modelMatrix,
+                         const Material& material, const Camera& camera,
+                         float /*aspectRatio*/)
+{
+    m_sceneShader.use();
+
+    // Non-instanced draw — use uniform model matrix
+    m_sceneShader.setBool("u_useInstancing", false);
+    m_sceneShader.setMat4("u_model", modelMatrix);
+    m_sceneShader.setMat3("u_normalMatrix",
+        glm::mat3(glm::transpose(glm::inverse(modelMatrix))));
+    m_sceneShader.setMat4("u_view", camera.getViewMatrix());
+    m_sceneShader.setMat4("u_projection", m_lastProjection);
+
+    uploadMaterialUniforms(material);
+
+    // Double-sided: disable face culling for this draw call
+    bool doubleSided = material.isDoubleSided();
+    if (doubleSided)
+    {
+        glDisable(GL_CULL_FACE);
+    }
 
     // Set polygon mode
     if (m_isWireframe)
@@ -196,11 +728,14 @@ void Renderer::drawMesh(const Mesh& mesh, const glm::mat4& modelMatrix,
         glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     }
 
-    // Unbind texture
-    if (hasTexture)
+    // Restore face culling
+    if (doubleSided)
     {
-        Texture::unbind(0);
+        glEnable(GL_CULL_FACE);
     }
+
+    // Textures are left bound — the next draw call rebinds what it needs.
+    // Unbinding is unnecessary overhead (6-12 extra GL calls per draw).
 }
 
 void Renderer::setClearColor(const glm::vec3& color)
@@ -257,9 +792,243 @@ bool Renderer::isWireframeMode() const
     return m_isWireframe;
 }
 
+void Renderer::setExposure(float exposure)
+{
+    m_exposure = exposure;
+}
+
+float Renderer::getExposure() const
+{
+    return m_exposure;
+}
+
+void Renderer::setTonemapMode(int mode)
+{
+    m_tonemapMode = mode;
+}
+
+int Renderer::getTonemapMode() const
+{
+    return m_tonemapMode;
+}
+
+void Renderer::setDebugMode(int mode)
+{
+    m_debugMode = mode;
+}
+
+int Renderer::getDebugMode() const
+{
+    return m_debugMode;
+}
+
+void Renderer::setPomEnabled(bool isEnabled)
+{
+    m_pomEnabled = isEnabled;
+    Logger::debug(std::string("POM: ") + (isEnabled ? "ON" : "OFF"));
+}
+
+bool Renderer::isPomEnabled() const
+{
+    return m_pomEnabled;
+}
+
+void Renderer::setPomHeightMultiplier(float multiplier)
+{
+    if (multiplier < 0.0f)
+    {
+        multiplier = 0.0f;
+    }
+    if (multiplier > 3.0f)
+    {
+        multiplier = 3.0f;
+    }
+    m_pomHeightMultiplier = multiplier;
+}
+
+float Renderer::getPomHeightMultiplier() const
+{
+    return m_pomHeightMultiplier;
+}
+
+void Renderer::setBloomEnabled(bool isEnabled)
+{
+    m_bloomEnabled = isEnabled;
+    Logger::debug(std::string("Bloom: ") + (isEnabled ? "ON" : "OFF"));
+}
+
+bool Renderer::isBloomEnabled() const
+{
+    return m_bloomEnabled;
+}
+
+void Renderer::setBloomThreshold(float threshold)
+{
+    m_bloomThreshold = threshold;
+}
+
+float Renderer::getBloomThreshold() const
+{
+    return m_bloomThreshold;
+}
+
+void Renderer::setBloomIntensity(float intensity)
+{
+    m_bloomIntensity = intensity;
+}
+
+float Renderer::getBloomIntensity() const
+{
+    return m_bloomIntensity;
+}
+
+void Renderer::setSsaoEnabled(bool isEnabled)
+{
+    m_ssaoEnabled = isEnabled;
+    Logger::debug(std::string("SSAO: ") + (isEnabled ? "ON" : "OFF"));
+}
+
+bool Renderer::isSsaoEnabled() const
+{
+    return m_ssaoEnabled;
+}
+
+void Renderer::setAntiAliasMode(AntiAliasMode mode)
+{
+    m_antiAliasMode = mode;
+    const char* names[] = {"None", "MSAA 4x", "TAA"};
+    Logger::info("Anti-aliasing: " + std::string(names[static_cast<int>(mode)]));
+}
+
+AntiAliasMode Renderer::getAntiAliasMode() const
+{
+    return m_antiAliasMode;
+}
+
+TextRenderer* Renderer::getTextRenderer()
+{
+    return m_textRenderer.get();
+}
+
+bool Renderer::initTextRenderer(const std::string& fontPath, const std::string& assetPath)
+{
+    m_textRenderer = std::make_unique<TextRenderer>();
+    if (!m_textRenderer->initialize(fontPath, assetPath))
+    {
+        m_textRenderer.reset();
+        return false;
+    }
+    return true;
+}
+
+void Renderer::setColorGradingEnabled(bool enabled)
+{
+    if (m_colorGradingLut)
+    {
+        m_colorGradingLut->setEnabled(enabled);
+    }
+}
+
+bool Renderer::isColorGradingEnabled() const
+{
+    return m_colorGradingLut && m_colorGradingLut->isEnabled();
+}
+
+void Renderer::nextColorGradingPreset()
+{
+    if (m_colorGradingLut)
+    {
+        m_colorGradingLut->nextPreset();
+    }
+}
+
+std::string Renderer::getColorGradingPresetName() const
+{
+    if (m_colorGradingLut)
+    {
+        return m_colorGradingLut->getCurrentPresetName();
+    }
+    return "None";
+}
+
+void Renderer::setColorGradingIntensity(float intensity)
+{
+    if (m_colorGradingLut)
+    {
+        m_colorGradingLut->setIntensity(intensity);
+    }
+}
+
+float Renderer::getColorGradingIntensity() const
+{
+    if (m_colorGradingLut)
+    {
+        return m_colorGradingLut->getIntensity();
+    }
+    return 1.0f;
+}
+
+bool Renderer::loadColorGradingLut(const std::string& filePath, const std::string& name)
+{
+    if (m_colorGradingLut)
+    {
+        return m_colorGradingLut->loadCubeFile(filePath, name);
+    }
+    return false;
+}
+
 void Renderer::setDirectionalLightEnabled(bool isEnabled)
 {
     m_hasDirectionalLight = isEnabled;
+}
+
+void Renderer::setCascadeDebug(bool enabled)
+{
+    m_cascadeDebug = enabled;
+}
+
+bool Renderer::isCascadeDebug() const
+{
+    return m_cascadeDebug;
+}
+
+std::vector<Renderer::InstanceBatch> Renderer::buildInstanceBatches(
+    const std::vector<SceneRenderData::RenderItem>& items)
+{
+    // Hash functor for (mesh*, material*) pair
+    struct PairHash
+    {
+        size_t operator()(const std::pair<const Mesh*, const Material*>& p) const
+        {
+            size_t h1 = std::hash<const void*>{}(p.first);
+            size_t h2 = std::hash<const void*>{}(p.second);
+            return h1 ^ (h2 * 2654435761u);
+        }
+    };
+
+    std::unordered_map<std::pair<const Mesh*, const Material*>, size_t, PairHash> indexMap;
+    std::vector<InstanceBatch> batches;
+
+    for (const auto& item : items)
+    {
+        auto key = std::make_pair(item.mesh, item.material);
+        auto it = indexMap.find(key);
+        if (it != indexMap.end())
+        {
+            batches[it->second].modelMatrices.push_back(item.worldMatrix);
+        }
+        else
+        {
+            indexMap[key] = batches.size();
+            InstanceBatch batch;
+            batch.mesh = item.mesh;
+            batch.material = item.material;
+            batch.modelMatrices.push_back(item.worldMatrix);
+            batches.push_back(std::move(batch));
+        }
+    }
+
+    return batches;
 }
 
 void Renderer::renderScene(const SceneRenderData& renderData, const Camera& camera, float aspectRatio)
@@ -289,113 +1058,545 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
         }
     }
 
-    // --- Shadow pass ---
-    if (m_shadowMap && m_hasDirectionalLight)
+    // Build unculled batches for shadow passes (shadows need off-screen objects)
+    auto allBatches = buildInstanceBatches(renderData.renderItems);
+
+    // Compute shadow-casting point lights once (used by both shadow pass and uniform upload)
+    std::vector<int> shadowCasters = selectShadowCastingPointLights();
+
+    // --- Directional shadow pass (cascaded) ---
+    if (m_cascadedShadowMap && m_hasDirectionalLight)
     {
-        renderShadowPass(renderData);
+        renderShadowPass(allBatches, camera, aspectRatio);
     }
 
-    // Re-bind the MSAA FBO (shadow pass changed the bound framebuffer)
-    if (m_msaaFbo)
+    // --- Point light shadow pass ---
+    renderPointShadowPass(allBatches, shadowCasters);
+
+    // --- Frustum cull for scene pass ---
+    glm::mat4 viewProjection = camera.getProjectionMatrix(aspectRatio) * camera.getViewMatrix();
+    auto frustumPlanes = extractFrustumPlanes(viewProjection);
+
+    // Filter render items to only those inside the view frustum
+    m_culledItems.clear();
+    for (const auto& item : renderData.renderItems)
+    {
+        if (isAabbInFrustum(item.worldBounds, frustumPlanes))
+        {
+            m_culledItems.push_back(item);
+        }
+    }
+
+    // Sort culled items front-to-back for early-Z efficiency
+    glm::vec3 camPos = camera.getPosition();
+    std::sort(m_culledItems.begin(), m_culledItems.end(),
+        [&camPos](const SceneRenderData::RenderItem& a, const SceneRenderData::RenderItem& b)
+        {
+            glm::vec3 da = glm::vec3(a.worldMatrix[3]) - camPos;
+            glm::vec3 db = glm::vec3(b.worldMatrix[3]) - camPos;
+            return glm::dot(da, da) < glm::dot(db, db);  // Nearest first
+        });
+
+    // Build batches from culled+sorted items
+    auto batches = buildInstanceBatches(m_culledItems);
+
+    // Re-bind the scene FBO after shadow passes
+    bool isTAA = (m_antiAliasMode == AntiAliasMode::TAA && m_taa && m_taaSceneFbo);
+    if (isTAA)
+    {
+        m_taaSceneFbo->bind();
+    }
+    else if (m_msaaFbo)
     {
         m_msaaFbo->bind();
     }
+    glViewport(0, 0, m_windowWidth, m_windowHeight);
 
-    // --- Set shadow uniforms for the lighting pass ---
-    m_blinnPhongShader.use();
-    if (m_shadowMap && m_hasDirectionalLight)
+    // --- Set cascaded shadow uniforms for the lighting pass ---
+    m_sceneShader.use();
+
+    // ALWAYS bind CSM texture to unit 3 (Mesa requires valid textures for declared samplers)
+    if (m_cascadedShadowMap)
     {
-        m_shadowMap->bindShadowTexture(3);  // Texture unit 3 for shadow map
-        m_blinnPhongShader.setInt("u_shadowMap", 3);
-        m_blinnPhongShader.setMat4("u_lightSpaceMatrix", m_shadowMap->getLightSpaceMatrix());
-        m_blinnPhongShader.setBool("u_hasShadows", true);
+        m_cascadedShadowMap->bindShadowTexture(3);
+        m_sceneShader.setInt("u_cascadeShadowMap", 3);
+    }
+
+    // Set shadow state and cascade uniforms
+    if (m_cascadedShadowMap && m_hasDirectionalLight)
+    {
+        int cascadeCount = m_cascadedShadowMap->getCascadeCount();
+        m_sceneShader.setInt("u_cascadeCount", cascadeCount);
+        for (int i = 0; i < cascadeCount; i++)
+        {
+            m_sceneShader.setFloat("u_cascadeSplits[" + std::to_string(i) + "]",
+                m_cascadedShadowMap->getCascadeSplit(i));
+            m_sceneShader.setMat4("u_cascadeLightSpaceMatrices[" + std::to_string(i) + "]",
+                m_cascadedShadowMap->getLightSpaceMatrix(i));
+        }
+        m_sceneShader.setBool("u_hasShadows", true);
+        m_sceneShader.setBool("u_cascadeDebug", m_cascadeDebug);
     }
     else
     {
-        m_blinnPhongShader.setBool("u_hasShadows", false);
+        m_sceneShader.setBool("u_hasShadows", false);
+        m_sceneShader.setBool("u_cascadeDebug", false);
     }
 
-    // --- Scene pass: draw all render items with full lighting + shadows ---
-    for (const auto& item : renderData.renderItems)
+    // --- Set point shadow uniforms (reusing precomputed shadowCasters) ---
+    int pointShadowCount = static_cast<int>(shadowCasters.size());
+    m_sceneShader.setInt("u_pointShadowCount", pointShadowCount);
+
+    for (int i = 0; i < pointShadowCount; i++)
     {
-        drawMesh(*item.mesh, item.worldMatrix, *item.material, camera, aspectRatio);
+        int textureUnit = 4 + i;  // Units 4-5 for point shadow cubemaps
+        m_pointShadowMaps[static_cast<size_t>(i)]->bindShadowTexture(textureUnit);
+        m_sceneShader.setInt("u_pointShadowMaps[" + std::to_string(i) + "]", textureUnit);
+        m_sceneShader.setInt("u_pointShadowIndices[" + std::to_string(i) + "]", shadowCasters[static_cast<size_t>(i)]);
+        m_sceneShader.setFloat("u_pointShadowFarPlane[" + std::to_string(i) + "]",
+            m_pointShadowMaps[static_cast<size_t>(i)]->getConfig().farPlane);
+    }
+
+    // --- Set IBL uniforms ---
+    // ALWAYS bind IBL textures (Mesa requires valid textures for declared samplers)
+    if (m_environmentMap)
+    {
+        m_environmentMap->bindIrradiance(14);
+        m_sceneShader.setInt("u_irradianceMap", 14);
+        m_environmentMap->bindPrefilter(15);
+        m_sceneShader.setInt("u_prefilterMap", 15);
+        m_environmentMap->bindBrdfLut(16);
+        m_sceneShader.setInt("u_brdfLUT", 16);
+        m_sceneShader.setFloat("u_maxPrefilterLod",
+            static_cast<float>(EnvironmentMap::MAX_MIP_LEVELS - 1));
+
+        // Only enable IBL shading when textures are fully generated
+        m_sceneShader.setBool("u_hasIBL", m_environmentMap->isReady());
+    }
+    else
+    {
+        // No environment map at all — bind dummy textures to satisfy Mesa
+        // Cubemap samplers on units 14, 15
+        glActiveTexture(GL_TEXTURE0 + 14);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
+        m_sceneShader.setInt("u_irradianceMap", 14);
+        glActiveTexture(GL_TEXTURE0 + 15);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
+        m_sceneShader.setInt("u_prefilterMap", 15);
+        // 2D sampler on unit 16
+        glActiveTexture(GL_TEXTURE0 + 16);
+        glBindTexture(GL_TEXTURE_2D, 0);
+        m_sceneShader.setInt("u_brdfLUT", 16);
+        m_sceneShader.setFloat("u_maxPrefilterLod", 0.0f);
+        m_sceneShader.setBool("u_hasIBL", false);
+    }
+
+    // Store projection matrix for SSAO
+    glm::mat4 projection = camera.getProjectionMatrix(aspectRatio);
+
+    // Apply TAA jitter to projection
+    if (m_antiAliasMode == AntiAliasMode::TAA && m_taa)
+    {
+        projection = m_taa->jitterProjection(projection, m_windowWidth, m_windowHeight);
+    }
+    m_lastProjection = projection;
+    m_lastViewProjection = projection * camera.getViewMatrix();
+
+    // Upload light uniforms once per frame (not per batch)
+    uploadLightUniforms(camera);
+
+    // --- Scene pass: draw all opaque render items (instanced where possible) ---
+    for (const auto& batch : batches)
+    {
+        int count = static_cast<int>(batch.modelMatrices.size());
+        if (count >= MIN_INSTANCE_BATCH_SIZE && m_instanceBuffer)
+        {
+            // Instanced path: set up material once, draw all instances
+            m_sceneShader.use();
+            m_sceneShader.setBool("u_useInstancing", true);
+
+            // Upload instance matrices and bind to mesh VAO
+            m_instanceBuffer->upload(batch.modelMatrices);
+            batch.mesh->setupInstanceAttributes(m_instanceBuffer->getHandle());
+
+            // Set a dummy u_model (unused but prevents warnings)
+            m_sceneShader.setMat4("u_model", batch.modelMatrices[0]);
+            m_sceneShader.setMat4("u_view", camera.getViewMatrix());
+            m_sceneShader.setMat4("u_projection", m_lastProjection);
+
+            uploadMaterialUniforms(*batch.material);
+
+            bool doubleSided = batch.material->isDoubleSided();
+            if (doubleSided) glDisable(GL_CULL_FACE);
+            if (m_isWireframe) glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+
+            batch.mesh->bind();
+            glDrawElementsInstanced(GL_TRIANGLES,
+                static_cast<GLsizei>(batch.mesh->getIndexCount()),
+                GL_UNSIGNED_INT, nullptr, count);
+            batch.mesh->unbind();
+
+            if (m_isWireframe) glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+            if (doubleSided) glEnable(GL_CULL_FACE);
+
+            m_sceneShader.setBool("u_useInstancing", false);
+        }
+        else
+        {
+            // Non-instanced path for single-instance batches
+            for (const auto& matrix : batch.modelMatrices)
+            {
+                drawMesh(*batch.mesh, matrix, *batch.material, camera, aspectRatio);
+            }
+        }
+    }
+
+    // --- Skybox pass: draw after opaque geometry, before transparent ---
+    if (m_skybox)
+    {
+        glDepthFunc(GL_LEQUAL);  // Pass where depth == 1.0 (far plane)
+        glDepthMask(GL_FALSE);   // Don't write to depth buffer
+        glDisable(GL_CULL_FACE); // We're inside the cube — must see inner faces
+
+        m_skyboxShader.use();
+        m_skyboxShader.setMat4("u_view", camera.getViewMatrix());
+        m_skyboxShader.setMat4("u_projection", camera.getProjectionMatrix(aspectRatio));
+        m_skyboxShader.setBool("u_hasCubemap", m_skybox->hasTexture());
+
+        if (m_skybox->hasTexture())
+        {
+            m_skyboxShader.setInt("u_skyboxTexture", 0);
+        }
+
+        m_skybox->draw();
+
+        glEnable(GL_CULL_FACE);  // Restore face culling
+        glDepthMask(GL_TRUE);    // Restore depth writes
+        glDepthFunc(GL_LESS);    // Restore default depth func
+    }
+
+    // --- Transparent pass: frustum cull + draw BLEND items back-to-front ---
+    if (!renderData.transparentItems.empty())
+    {
+        // Frustum cull transparent items (reuse frustum planes from opaque pass)
+        m_sortedTransparentItems.clear();
+        for (const auto& item : renderData.transparentItems)
+        {
+            if (isAabbInFrustum(item.worldBounds, frustumPlanes))
+            {
+                m_sortedTransparentItems.push_back(item);
+            }
+        }
+
+        std::sort(m_sortedTransparentItems.begin(), m_sortedTransparentItems.end(),
+            [&camPos](const SceneRenderData::RenderItem& a, const SceneRenderData::RenderItem& b)
+            {
+                glm::vec3 da = glm::vec3(a.worldMatrix[3]) - camPos;
+                glm::vec3 db = glm::vec3(b.worldMatrix[3]) - camPos;
+                return glm::dot(da, da) > glm::dot(db, db);  // Farthest first
+            });
+
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        glDepthMask(GL_FALSE);
+
+        for (const auto& item : m_sortedTransparentItems)
+        {
+            drawMesh(*item.mesh, item.worldMatrix, *item.material, camera, aspectRatio);
+        }
+
+        glDepthMask(GL_TRUE);
+        glDisable(GL_BLEND);
     }
 }
 
-void Renderer::renderShadowPass(const SceneRenderData& renderData)
+void Renderer::renderShadowPass(const std::vector<InstanceBatch>& batches,
+                                 const Camera& camera, float aspectRatio)
 {
-    // Update shadow map light-space matrix from the directional light
-    m_shadowMap->update(m_directionalLight, glm::vec3(0.0f, 0.0f, 0.0f));
+    // Update all cascade light-space matrices from the camera frustum
+    m_cascadedShadowMap->update(m_directionalLight, camera, aspectRatio);
 
-    // Begin shadow pass (binds depth FBO, sets front-face culling)
-    m_shadowMap->beginShadowPass();
-
-    // Render all scene geometry using the shadow depth shader
     m_shadowDepthShader.use();
-    m_shadowDepthShader.setMat4("u_lightSpaceMatrix", m_shadowMap->getLightSpaceMatrix());
 
-    for (const auto& item : renderData.renderItems)
+    // Render geometry into each cascade layer
+    int cascadeCount = m_cascadedShadowMap->getCascadeCount();
+    for (int c = 0; c < cascadeCount; c++)
     {
-        m_shadowDepthShader.setMat4("u_model", item.worldMatrix);
-        item.mesh->bind();
-        glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(item.mesh->getIndexCount()),
-                       GL_UNSIGNED_INT, nullptr);
-        item.mesh->unbind();
+        m_cascadedShadowMap->beginCascade(c);
+        m_shadowDepthShader.setMat4("u_lightSpaceMatrix",
+            m_cascadedShadowMap->getLightSpaceMatrix(c));
+
+        for (const auto& batch : batches)
+        {
+            int count = static_cast<int>(batch.modelMatrices.size());
+            if (count >= MIN_INSTANCE_BATCH_SIZE && m_instanceBuffer)
+            {
+                m_shadowDepthShader.setBool("u_useInstancing", true);
+                m_instanceBuffer->upload(batch.modelMatrices);
+                batch.mesh->setupInstanceAttributes(m_instanceBuffer->getHandle());
+
+                batch.mesh->bind();
+                glDrawElementsInstanced(GL_TRIANGLES,
+                    static_cast<GLsizei>(batch.mesh->getIndexCount()),
+                    GL_UNSIGNED_INT, nullptr, count);
+                batch.mesh->unbind();
+
+                m_shadowDepthShader.setBool("u_useInstancing", false);
+            }
+            else
+            {
+                m_shadowDepthShader.setBool("u_useInstancing", false);
+                for (const auto& matrix : batch.modelMatrices)
+                {
+                    m_shadowDepthShader.setMat4("u_model", matrix);
+                    batch.mesh->bind();
+                    glDrawElements(GL_TRIANGLES,
+                        static_cast<GLsizei>(batch.mesh->getIndexCount()),
+                        GL_UNSIGNED_INT, nullptr);
+                    batch.mesh->unbind();
+                }
+            }
+        }
+
+        m_cascadedShadowMap->endCascade();
+    }
+}
+
+std::vector<int> Renderer::selectShadowCastingPointLights() const
+{
+    std::vector<int> result;
+    for (int i = 0; i < static_cast<int>(m_pointLights.size()); i++)
+    {
+        if (m_pointLights[static_cast<size_t>(i)].castsShadow
+            && static_cast<int>(result.size()) < MAX_POINT_SHADOW_LIGHTS)
+        {
+            result.push_back(i);
+        }
+    }
+    return result;
+}
+
+void Renderer::renderPointShadowPass(const std::vector<InstanceBatch>& batches,
+                                      const std::vector<int>& shadowCasters)
+{
+    if (shadowCasters.empty())
+    {
+        return;
     }
 
-    // End shadow pass (restores culling, unbinds FBO)
-    m_shadowMap->endShadowPass();
+    m_pointShadowDepthShader.use();
+
+    for (size_t s = 0; s < shadowCasters.size(); s++)
+    {
+        const PointLight& light = m_pointLights[static_cast<size_t>(shadowCasters[s])];
+        auto& shadowMap = m_pointShadowMaps[s];
+
+        shadowMap->update(light.position);
+
+        float farPlane = shadowMap->getConfig().farPlane;
+        m_pointShadowDepthShader.setVec3("u_lightPos", light.position);
+        m_pointShadowDepthShader.setFloat("u_farPlane", farPlane);
+
+        // Render all 6 cubemap faces
+        for (int face = 0; face < 6; face++)
+        {
+            shadowMap->beginFace(face);
+            m_pointShadowDepthShader.setMat4("u_lightSpaceMatrix",
+                shadowMap->getLightSpaceMatrix(face));
+
+            for (const auto& batch : batches)
+            {
+                int count = static_cast<int>(batch.modelMatrices.size());
+                if (count >= MIN_INSTANCE_BATCH_SIZE && m_instanceBuffer)
+                {
+                    m_pointShadowDepthShader.setBool("u_useInstancing", true);
+                    m_instanceBuffer->upload(batch.modelMatrices);
+                    batch.mesh->setupInstanceAttributes(m_instanceBuffer->getHandle());
+
+                    batch.mesh->bind();
+                    glDrawElementsInstanced(GL_TRIANGLES,
+                        static_cast<GLsizei>(batch.mesh->getIndexCount()),
+                        GL_UNSIGNED_INT, nullptr, count);
+                    batch.mesh->unbind();
+
+                    m_pointShadowDepthShader.setBool("u_useInstancing", false);
+                }
+                else
+                {
+                    m_pointShadowDepthShader.setBool("u_useInstancing", false);
+                    for (const auto& matrix : batch.modelMatrices)
+                    {
+                        m_pointShadowDepthShader.setMat4("u_model", matrix);
+                        batch.mesh->bind();
+                        glDrawElements(GL_TRIANGLES,
+                            static_cast<GLsizei>(batch.mesh->getIndexCount()),
+                            GL_UNSIGNED_INT, nullptr);
+                        batch.mesh->unbind();
+                    }
+                }
+            }
+
+            shadowMap->endFace();
+        }
+    }
+}
+
+/// Pre-built uniform name strings for point lights (avoids per-frame string allocations).
+struct PointLightNames
+{
+    std::string position, ambient, diffuse, specular, constant, linear, quadratic;
+};
+
+/// Pre-built uniform name strings for spot lights.
+struct SpotLightNames
+{
+    std::string position, direction, ambient, diffuse, specular;
+    std::string innerCutoff, outerCutoff, constant, linear, quadratic;
+};
+
+static const std::array<PointLightNames, MAX_POINT_LIGHTS>& getPointLightNames()
+{
+    static const auto names = []()
+    {
+        std::array<PointLightNames, MAX_POINT_LIGHTS> arr;
+        for (int i = 0; i < MAX_POINT_LIGHTS; i++)
+        {
+            std::string p = "u_pointLights_";
+            std::string idx = "[" + std::to_string(i) + "]";
+            arr[static_cast<size_t>(i)] = {
+                p + "position" + idx, p + "ambient" + idx, p + "diffuse" + idx,
+                p + "specular" + idx, p + "constant" + idx, p + "linear" + idx,
+                p + "quadratic" + idx
+            };
+        }
+        return arr;
+    }();
+    return names;
+}
+
+static const std::array<SpotLightNames, MAX_SPOT_LIGHTS>& getSpotLightNames()
+{
+    static const auto names = []()
+    {
+        std::array<SpotLightNames, MAX_SPOT_LIGHTS> arr;
+        for (int i = 0; i < MAX_SPOT_LIGHTS; i++)
+        {
+            std::string p = "u_spotLights_";
+            std::string idx = "[" + std::to_string(i) + "]";
+            arr[static_cast<size_t>(i)] = {
+                p + "position" + idx, p + "direction" + idx, p + "ambient" + idx,
+                p + "diffuse" + idx, p + "specular" + idx, p + "innerCutoff" + idx,
+                p + "outerCutoff" + idx, p + "constant" + idx, p + "linear" + idx,
+                p + "quadratic" + idx
+            };
+        }
+        return arr;
+    }();
+    return names;
 }
 
 void Renderer::uploadLightUniforms(const Camera& camera)
 {
     // Camera position for specular calculation
-    m_blinnPhongShader.setVec3("u_viewPosition", camera.getPosition());
+    m_sceneShader.setVec3("u_viewPosition", camera.getPosition());
 
     // Directional light
-    m_blinnPhongShader.setBool("u_hasDirLight", m_hasDirectionalLight);
+    m_sceneShader.setBool("u_hasDirLight", m_hasDirectionalLight);
     if (m_hasDirectionalLight)
     {
-        m_blinnPhongShader.setVec3("u_dirLight_direction", m_directionalLight.direction);
-        m_blinnPhongShader.setVec3("u_dirLight_ambient", m_directionalLight.ambient);
-        m_blinnPhongShader.setVec3("u_dirLight_diffuse", m_directionalLight.diffuse);
-        m_blinnPhongShader.setVec3("u_dirLight_specular", m_directionalLight.specular);
+        m_sceneShader.setVec3("u_dirLight_direction", m_directionalLight.direction);
+        m_sceneShader.setVec3("u_dirLight_ambient", m_directionalLight.ambient);
+        m_sceneShader.setVec3("u_dirLight_diffuse", m_directionalLight.diffuse);
+        m_sceneShader.setVec3("u_dirLight_specular", m_directionalLight.specular);
     }
 
-    // Point lights
+    // Point lights (using pre-built uniform names to avoid per-frame allocations)
+    const auto& plNames = getPointLightNames();
     int pointCount = static_cast<int>(m_pointLights.size());
-    m_blinnPhongShader.setInt("u_pointLightCount", pointCount);
+    m_sceneShader.setInt("u_pointLightCount", pointCount);
     for (int i = 0; i < pointCount; i++)
     {
-        std::string prefix = "u_pointLights_";
-        std::string idx = "[" + std::to_string(i) + "]";
-        m_blinnPhongShader.setVec3(prefix + "position" + idx, m_pointLights[static_cast<size_t>(i)].position);
-        m_blinnPhongShader.setVec3(prefix + "ambient" + idx, m_pointLights[static_cast<size_t>(i)].ambient);
-        m_blinnPhongShader.setVec3(prefix + "diffuse" + idx, m_pointLights[static_cast<size_t>(i)].diffuse);
-        m_blinnPhongShader.setVec3(prefix + "specular" + idx, m_pointLights[static_cast<size_t>(i)].specular);
-        m_blinnPhongShader.setFloat(prefix + "constant" + idx, m_pointLights[static_cast<size_t>(i)].constant);
-        m_blinnPhongShader.setFloat(prefix + "linear" + idx, m_pointLights[static_cast<size_t>(i)].linear);
-        m_blinnPhongShader.setFloat(prefix + "quadratic" + idx, m_pointLights[static_cast<size_t>(i)].quadratic);
+        const auto& n = plNames[static_cast<size_t>(i)];
+        const auto& pl = m_pointLights[static_cast<size_t>(i)];
+        m_sceneShader.setVec3(n.position, pl.position);
+        m_sceneShader.setVec3(n.ambient, pl.ambient);
+        m_sceneShader.setVec3(n.diffuse, pl.diffuse);
+        m_sceneShader.setVec3(n.specular, pl.specular);
+        m_sceneShader.setFloat(n.constant, pl.constant);
+        m_sceneShader.setFloat(n.linear, pl.linear);
+        m_sceneShader.setFloat(n.quadratic, pl.quadratic);
     }
 
-    // Spot lights
+    // Spot lights (using pre-built uniform names)
+    const auto& slNames = getSpotLightNames();
     int spotCount = static_cast<int>(m_spotLights.size());
-    m_blinnPhongShader.setInt("u_spotLightCount", spotCount);
+    m_sceneShader.setInt("u_spotLightCount", spotCount);
     for (int i = 0; i < spotCount; i++)
     {
-        std::string prefix = "u_spotLights_";
-        std::string idx = "[" + std::to_string(i) + "]";
-        m_blinnPhongShader.setVec3(prefix + "position" + idx, m_spotLights[static_cast<size_t>(i)].position);
-        m_blinnPhongShader.setVec3(prefix + "direction" + idx, m_spotLights[static_cast<size_t>(i)].direction);
-        m_blinnPhongShader.setVec3(prefix + "ambient" + idx, m_spotLights[static_cast<size_t>(i)].ambient);
-        m_blinnPhongShader.setVec3(prefix + "diffuse" + idx, m_spotLights[static_cast<size_t>(i)].diffuse);
-        m_blinnPhongShader.setVec3(prefix + "specular" + idx, m_spotLights[static_cast<size_t>(i)].specular);
-        m_blinnPhongShader.setFloat(prefix + "innerCutoff" + idx, m_spotLights[static_cast<size_t>(i)].innerCutoff);
-        m_blinnPhongShader.setFloat(prefix + "outerCutoff" + idx, m_spotLights[static_cast<size_t>(i)].outerCutoff);
-        m_blinnPhongShader.setFloat(prefix + "constant" + idx, m_spotLights[static_cast<size_t>(i)].constant);
-        m_blinnPhongShader.setFloat(prefix + "linear" + idx, m_spotLights[static_cast<size_t>(i)].linear);
-        m_blinnPhongShader.setFloat(prefix + "quadratic" + idx, m_spotLights[static_cast<size_t>(i)].quadratic);
+        const auto& n = slNames[static_cast<size_t>(i)];
+        const auto& sl = m_spotLights[static_cast<size_t>(i)];
+        m_sceneShader.setVec3(n.position, sl.position);
+        m_sceneShader.setVec3(n.direction, sl.direction);
+        m_sceneShader.setVec3(n.ambient, sl.ambient);
+        m_sceneShader.setVec3(n.diffuse, sl.diffuse);
+        m_sceneShader.setVec3(n.specular, sl.specular);
+        m_sceneShader.setFloat(n.innerCutoff, sl.innerCutoff);
+        m_sceneShader.setFloat(n.outerCutoff, sl.outerCutoff);
+        m_sceneShader.setFloat(n.constant, sl.constant);
+        m_sceneShader.setFloat(n.linear, sl.linear);
+        m_sceneShader.setFloat(n.quadratic, sl.quadratic);
     }
+}
+
+void Renderer::generateSsaoKernel()
+{
+    m_ssaoKernel.clear();
+    std::mt19937 gen(42);
+    std::uniform_real_distribution<float> dist(0.0f, 1.0f);
+
+    for (int i = 0; i < 64; i++)
+    {
+        glm::vec3 sample(
+            dist(gen) * 2.0f - 1.0f,
+            dist(gen) * 2.0f - 1.0f,
+            dist(gen));
+
+        sample = glm::normalize(sample);
+        sample *= dist(gen);
+
+        // Bias toward surface: lerp(0.1, 1.0, (i/64)^2)
+        float scale = static_cast<float>(i) / 64.0f;
+        scale = 0.1f + scale * scale * (1.0f - 0.1f);
+        sample *= scale;
+
+        m_ssaoKernel.push_back(sample);
+    }
+}
+
+void Renderer::generateSsaoNoiseTexture()
+{
+    std::mt19937 gen(7);
+    std::uniform_real_distribution<float> dist(0.0f, 1.0f);
+
+    // 4x4 random rotation vectors (rotate around z-axis in tangent space)
+    std::vector<glm::vec3> noise;
+    for (int i = 0; i < 16; i++)
+    {
+        glm::vec3 n(
+            dist(gen) * 2.0f - 1.0f,
+            dist(gen) * 2.0f - 1.0f,
+            0.0f);
+        noise.push_back(n);
+    }
+
+    glGenTextures(1, &m_ssaoNoiseTexture);
+    glBindTexture(GL_TEXTURE_2D, m_ssaoNoiseTexture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, 4, 4, 0, GL_RGB, GL_FLOAT, noise.data());
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glBindTexture(GL_TEXTURE_2D, 0);
 }
 
 void Renderer::onWindowResize(int width, int height)
@@ -417,6 +1618,24 @@ void Renderer::onWindowResize(int width, int height)
         m_resolveFbo->resize(width, height);
     }
     // Shadow map does not resize with the window — it has a fixed resolution
+
+    // Resize bloom FBOs (half-resolution)
+    int halfW = width / 2;
+    int halfH = height / 2;
+    if (halfW < 1) halfW = 1;
+    if (halfH < 1) halfH = 1;
+    if (m_bloomBrightFbo) m_bloomBrightFbo->resize(halfW, halfH);
+    if (m_bloomPingFbo) m_bloomPingFbo->resize(halfW, halfH);
+    if (m_bloomPongFbo) m_bloomPongFbo->resize(halfW, halfH);
+
+    // Resize SSAO FBOs (full-resolution)
+    if (m_resolveDepthFbo) m_resolveDepthFbo->resize(width, height);
+    if (m_ssaoFbo) m_ssaoFbo->resize(width, height);
+    if (m_ssaoBlurFbo) m_ssaoBlurFbo->resize(width, height);
+
+    // Resize TAA FBOs
+    if (m_taaSceneFbo) m_taaSceneFbo->resize(width, height);
+    if (m_taa) m_taa->resize(width, height);
 }
 
 } // namespace Vestige

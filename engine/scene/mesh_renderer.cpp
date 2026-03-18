@@ -21,12 +21,12 @@ void MeshRenderer::setMaterial(std::shared_ptr<Material> material)
     m_material = std::move(material);
 }
 
-std::shared_ptr<Mesh> MeshRenderer::getMesh() const
+const std::shared_ptr<Mesh>& MeshRenderer::getMesh() const
 {
     return m_mesh;
 }
 
-std::shared_ptr<Material> MeshRenderer::getMaterial() const
+const std::shared_ptr<Material>& MeshRenderer::getMaterial() const
 {
     return m_material;
 }

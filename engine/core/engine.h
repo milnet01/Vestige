@@ -61,6 +61,10 @@ private:
 
     bool m_isRunning;
     bool m_isCursorCaptured;
+
+    // Reusable per-frame data (avoids heap allocation every frame)
+    SceneRenderData m_renderData;
+    std::vector<AABB> m_colliders;
 };
 
 } // namespace Vestige

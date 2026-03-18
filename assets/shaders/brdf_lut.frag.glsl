@@ -1,0 +1,107 @@
+#version 450 core
+
+in vec2 v_texCoord;
+out vec4 fragColor;
+
+const float PI = 3.14159265359;
+const uint SAMPLE_COUNT = 1024u;
+
+/// Bit-reversal radical inverse for the Van der Corput sequence.
+float radicalInverse_VdC(uint bits)
+{
+    bits = (bits << 16u) | (bits >> 16u);
+    bits = ((bits & 0x55555555u) << 1u) | ((bits & 0xAAAAAAAAu) >> 1u);
+    bits = ((bits & 0x33333333u) << 2u) | ((bits & 0xCCCCCCCCu) >> 2u);
+    bits = ((bits & 0x0F0F0F0Fu) << 4u) | ((bits & 0xF0F0F0F0u) >> 4u);
+    bits = ((bits & 0x00FF00FFu) << 8u) | ((bits & 0xFF00FF00u) >> 8u);
+    return float(bits) * 2.3283064365386963e-10;
+}
+
+/// Low-discrepancy Hammersley sequence point.
+vec2 hammersley(uint i, uint N)
+{
+    return vec2(float(i) / float(N), radicalInverse_VdC(i));
+}
+
+/// GGX importance sampling: generates a half vector biased toward the specular lobe.
+vec3 importanceSampleGGX(vec2 Xi, vec3 N, float roughness)
+{
+    float a = roughness * roughness;
+
+    float phi = 2.0 * PI * Xi.x;
+    float cosTheta = sqrt((1.0 - Xi.y) / (1.0 + (a * a - 1.0) * Xi.y));
+    float sinTheta = sqrt(1.0 - cosTheta * cosTheta);
+
+    vec3 H;
+    H.x = cos(phi) * sinTheta;
+    H.y = sin(phi) * sinTheta;
+    H.z = cosTheta;
+
+    vec3 up = abs(N.z) < 0.999 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0);
+    vec3 tangent = normalize(cross(up, N));
+    vec3 bitangent = cross(N, tangent);
+
+    return tangent * H.x + bitangent * H.y + N * H.z;
+}
+
+/// Schlick-GGX geometry function for IBL (uses k = roughness^2 / 2).
+float geometrySchlickGGX(float NdotV, float roughness)
+{
+    float a = roughness;
+    float k = (a * a) / 2.0;
+    return NdotV / (NdotV * (1.0 - k) + k);
+}
+
+/// Smith's geometry function for IBL.
+float geometrySmith(float NdotV, float NdotL, float roughness)
+{
+    return geometrySchlickGGX(NdotV, roughness) * geometrySchlickGGX(NdotL, roughness);
+}
+
+/// Integrates the BRDF for a given NdotV and roughness.
+/// Returns (scale, bias) for the split-sum approximation: specular = F0 * scale + bias.
+vec2 integrateBRDF(float NdotV, float roughness)
+{
+    vec3 V;
+    V.x = sqrt(1.0 - NdotV * NdotV);  // sin
+    V.y = 0.0;
+    V.z = NdotV;                        // cos
+
+    float A = 0.0;  // Scale factor
+    float B = 0.0;  // Bias factor
+
+    vec3 N = vec3(0.0, 0.0, 1.0);
+
+    for (uint i = 0u; i < SAMPLE_COUNT; i++)
+    {
+        vec2 Xi = hammersley(i, SAMPLE_COUNT);
+        vec3 H = importanceSampleGGX(Xi, N, roughness);
+        vec3 L = normalize(2.0 * dot(V, H) * H - V);
+
+        float NdotL = max(L.z, 0.0);
+        float NdotH = max(H.z, 0.0);
+        float VdotH = max(dot(V, H), 0.0);
+
+        if (NdotL > 0.0)
+        {
+            float G = geometrySmith(max(V.z, 0.0), NdotL, roughness);
+            float G_Vis = (G * VdotH) / (NdotH * max(V.z, 0.001));
+            float Fc = pow(1.0 - VdotH, 5.0);
+
+            A += (1.0 - Fc) * G_Vis;
+            B += Fc * G_Vis;
+        }
+    }
+
+    A /= float(SAMPLE_COUNT);
+    B /= float(SAMPLE_COUNT);
+
+    return vec2(A, B);
+}
+
+void main()
+{
+    // NdotV = u, roughness = v (both in [0, 1])
+    vec2 result = integrateBRDF(v_texCoord.x, v_texCoord.y);
+    fragColor = vec4(result, 0.0, 1.0);
+}

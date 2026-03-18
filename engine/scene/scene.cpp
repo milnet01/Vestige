@@ -32,11 +32,27 @@ SceneRenderData Scene::collectRenderData() const
     return data;
 }
 
+void Scene::collectRenderData(SceneRenderData& data) const
+{
+    data.renderItems.clear();
+    data.transparentItems.clear();
+    data.pointLights.clear();
+    data.spotLights.clear();
+    data.hasDirectionalLight = false;
+    collectRenderDataRecursive(*m_root, data);
+}
+
 std::vector<AABB> Scene::collectColliders() const
 {
     std::vector<AABB> colliders;
     collectCollidersRecursive(*m_root, colliders);
     return colliders;
+}
+
+void Scene::collectColliders(std::vector<AABB>& colliders) const
+{
+    colliders.clear();
+    collectCollidersRecursive(*m_root, colliders);
 }
 
 Entity* Scene::findEntity(const std::string& name)
@@ -74,7 +90,16 @@ void Scene::collectRenderDataRecursive(const Entity& entity, SceneRenderData& da
         item.material = meshRenderer->getMaterial().get();
         item.worldMatrix = entity.getWorldMatrix();
         item.worldBounds = meshRenderer->getBounds().transformed(item.worldMatrix);
-        data.renderItems.push_back(item);
+
+        // BLEND materials go to the transparent list; OPAQUE and MASK go to opaque
+        if (item.material->getAlphaMode() == AlphaMode::BLEND)
+        {
+            data.transparentItems.push_back(item);
+        }
+        else
+        {
+            data.renderItems.push_back(item);
+        }
     }
 
     // Check for light components
@@ -99,6 +124,39 @@ void Scene::collectRenderDataRecursive(const Entity& entity, SceneRenderData& da
         SpotLight sl = spotLight->light;
         sl.position = entity.getWorldPosition();
         data.spotLights.push_back(sl);
+    }
+
+    // Emissive light auto-generation: create a synthetic point light from emissive material
+    auto* emissiveLight = entity.getComponent<EmissiveLightComponent>();
+    if (emissiveLight && emissiveLight->isEnabled() && meshRenderer)
+    {
+        auto mat = meshRenderer->getMaterial();
+        if (mat)
+        {
+            glm::vec3 emColor = emissiveLight->overrideColor;
+            if (emColor == glm::vec3(0.0f))
+            {
+                emColor = mat->getEmissive() * mat->getEmissiveStrength();
+            }
+
+            if (emColor != glm::vec3(0.0f) && static_cast<int>(data.pointLights.size()) < MAX_POINT_LIGHTS)
+            {
+                PointLight pl;
+                pl.position = entity.getWorldPosition();
+                pl.ambient = emColor * 0.05f * emissiveLight->lightIntensity;
+                pl.diffuse = emColor * emissiveLight->lightIntensity;
+                pl.specular = emColor * emissiveLight->lightIntensity;
+
+                // Attenuation based on radius
+                float r = emissiveLight->lightRadius;
+                pl.constant = 1.0f;
+                pl.linear = 2.0f / r;
+                pl.quadratic = 1.0f / (r * r);
+                pl.castsShadow = false;
+
+                data.pointLights.push_back(pl);
+            }
+        }
     }
 
     // Recurse into children

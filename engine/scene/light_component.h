@@ -29,4 +29,19 @@ public:
     SpotLight light;
 };
 
+/// @brief Auto-generates a point light from an entity's emissive material properties.
+/// Attach to an entity with a MeshRenderer whose material has emissive values > 0.
+class EmissiveLightComponent : public Component
+{
+public:
+    /// @brief Radius of the generated point light.
+    float lightRadius = 5.0f;
+
+    /// @brief Intensity multiplier for the generated light.
+    float lightIntensity = 1.0f;
+
+    /// @brief Override color. If zero (default), derives from material emissive color.
+    glm::vec3 overrideColor = glm::vec3(0.0f);
+};
+
 } // namespace Vestige

@@ -26,6 +26,11 @@ struct Transform
     /// @brief Computes the local model matrix from position, rotation, and scale.
     glm::mat4 getLocalMatrix() const
     {
+        if (m_hasMatrixOverride)
+        {
+            return m_matrixOverride;
+        }
+
         glm::mat4 mat = glm::translate(glm::mat4(1.0f), position);
         mat = glm::rotate(mat, glm::radians(rotation.x), glm::vec3(1.0f, 0.0f, 0.0f));
         mat = glm::rotate(mat, glm::radians(rotation.y), glm::vec3(0.0f, 1.0f, 0.0f));
@@ -33,6 +38,31 @@ struct Transform
         mat = glm::scale(mat, scale);
         return mat;
     }
+
+    /// @brief Sets a direct matrix override (bypasses TRS computation).
+    /// @param matrix The local transform matrix to use directly.
+    void setLocalMatrix(const glm::mat4& matrix)
+    {
+        m_matrixOverride = matrix;
+        m_hasMatrixOverride = true;
+    }
+
+    /// @brief Checks if a matrix override is active.
+    bool hasMatrixOverride() const
+    {
+        return m_hasMatrixOverride;
+    }
+
+    /// @brief Clears the matrix override, reverting to TRS computation.
+    void clearMatrixOverride()
+    {
+        m_matrixOverride = glm::mat4(1.0f);
+        m_hasMatrixOverride = false;
+    }
+
+private:
+    glm::mat4 m_matrixOverride = glm::mat4(1.0f);
+    bool m_hasMatrixOverride = false;
 };
 
 /// @brief An object in the scene graph. Has a Transform, optional Components, and children.

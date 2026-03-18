@@ -16,6 +16,7 @@ set(ENGINE_SOURCES
     scene/scene.cpp
     scene/scene_manager.cpp
     resource/resource_manager.cpp
+    resource/async_texture_loader.cpp
     renderer/shader.cpp
     renderer/mesh.cpp
     renderer/camera.cpp
@@ -25,7 +26,20 @@ set(ENGINE_SOURCES
     renderer/framebuffer.cpp
     renderer/fullscreen_quad.cpp
     renderer/shadow_map.cpp
+    renderer/cascaded_shadow_map.cpp
+    renderer/skybox.cpp
+    renderer/point_shadow_map.cpp
+    renderer/taa.cpp
+    renderer/font.cpp
+    renderer/text_renderer.cpp
+    renderer/color_grading_lut.cpp
+    renderer/instance_buffer.cpp
+    renderer/environment_map.cpp
+    resource/model.cpp
     utils/obj_loader.cpp
+    utils/gltf_loader.cpp
+    utils/gltf_loader_impl.cpp
+    utils/cube_loader.cpp
     # glad OpenGL loader
     ${CMAKE_SOURCE_DIR}/external/glad/src/gl.c
     # stb_image implementation
@@ -41,6 +55,10 @@ target_include_directories(vestige_engine
         ${CMAKE_CURRENT_SOURCE_DIR}
         ${CMAKE_SOURCE_DIR}/external/glad/include
         ${CMAKE_SOURCE_DIR}/external/stb
+        ${tinyexr_SOURCE_DIR}
+        ${tinygltf_SOURCE_DIR}
+    PRIVATE
+        ${freetype_SOURCE_DIR}/include
 )
 
 # Link dependencies
@@ -48,12 +66,15 @@ target_link_libraries(vestige_engine
     PUBLIC
         glfw
         glm::glm
+        tinyexr
+        freetype
 )
 
 # Suppress warnings from third-party source files compiled as part of the engine
 set_source_files_properties(
     ${CMAKE_SOURCE_DIR}/external/stb/stb_image_impl.cpp
     ${CMAKE_SOURCE_DIR}/external/glad/src/gl.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/utils/gltf_loader_impl.cpp
     PROPERTIES COMPILE_FLAGS "-w"
 )
 

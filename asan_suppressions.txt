@@ -5,3 +5,7 @@
 # that is never freed. This is a known driver behavior, not a bug.
 leak:extensionSupportedGLX
 leak:_glfwInitGLX
+
+# Fontconfig allocates caches during GLFW/X11 initialization
+# that are never freed. This is a known system library behavior.
+leak:libfontconfig

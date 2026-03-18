@@ -6,6 +6,7 @@
 #include <glm/glm.hpp>
 
 #include <string>
+#include <unordered_map>
 
 namespace Vestige
 {
@@ -46,11 +47,17 @@ public:
     /// @brief Sets a float uniform.
     void setFloat(const std::string& name, float value) const;
 
+    /// @brief Sets a vec2 uniform.
+    void setVec2(const std::string& name, const glm::vec2& value) const;
+
     /// @brief Sets a vec3 uniform.
     void setVec3(const std::string& name, const glm::vec3& value) const;
 
     /// @brief Sets a vec4 uniform.
     void setVec4(const std::string& name, const glm::vec4& value) const;
+
+    /// @brief Sets a mat3 uniform.
+    void setMat3(const std::string& name, const glm::mat3& value) const;
 
     /// @brief Sets a mat4 uniform.
     void setMat4(const std::string& name, const glm::mat4& value) const;
@@ -61,6 +68,7 @@ private:
     GLint getUniformLocation(const std::string& name) const;
 
     GLuint m_programId;
+    mutable std::unordered_map<std::string, GLint> m_uniformCache;
 };
 
 } // namespace Vestige

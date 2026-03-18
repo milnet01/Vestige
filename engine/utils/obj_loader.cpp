@@ -205,6 +205,9 @@ bool ObjLoader::load(const std::string& filePath,
         return false;
     }
 
+    // Compute tangent/bitangent vectors for normal mapping
+    calculateTangents(outVertices, outIndices);
+
     Logger::info("OBJ loaded: " + filePath + " ("
         + std::to_string(outVertices.size()) + " vertices, "
         + std::to_string(outIndices.size() / 3) + " triangles)");
