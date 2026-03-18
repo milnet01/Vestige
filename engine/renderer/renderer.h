@@ -220,8 +220,8 @@ private:
     Shader m_shadowDepthShader;
     Shader m_skyboxShader;
     Shader m_pointShadowDepthShader;
-    Shader m_bloomBrightShader;
-    Shader m_bloomBlurShader;
+    Shader m_bloomDownsampleShader;
+    Shader m_bloomUpsampleShader;
     Shader m_ssaoShader;
     Shader m_ssaoBlurShader;
     Shader m_taaResolveShader;
@@ -275,14 +275,16 @@ private:
     bool m_pomEnabled = true;
     float m_pomHeightMultiplier = 1.0f;
 
-    // Bloom post-processing
-    std::unique_ptr<Framebuffer> m_bloomBrightFbo;
-    std::unique_ptr<Framebuffer> m_bloomPingFbo;
-    std::unique_ptr<Framebuffer> m_bloomPongFbo;
+    // Bloom post-processing (mip-chain approach)
+    static constexpr int BLOOM_MIP_COUNT = 6;
+    GLuint m_bloomTexture = 0;         // Single texture with mip levels
+    GLuint m_bloomFbo = 0;             // FBO reused for each mip level
+    int m_bloomMipWidths[BLOOM_MIP_COUNT] = {};
+    int m_bloomMipHeights[BLOOM_MIP_COUNT] = {};
     bool m_bloomEnabled = true;
     float m_bloomThreshold = 1.0f;
-    float m_bloomIntensity = 1.0f;
-    int m_bloomIterations = 5;
+    float m_bloomIntensity = 0.04f;
+    float m_bloomFilterRadius = 1.0f;
 
     // Instanced rendering
     std::unique_ptr<InstanceBuffer> m_instanceBuffer;

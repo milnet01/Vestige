@@ -171,6 +171,14 @@ Renderer::~Renderer()
     {
         glDeleteTextures(1, &m_ssaoNoiseTexture);
     }
+    if (m_bloomTexture != 0)
+    {
+        glDeleteTextures(1, &m_bloomTexture);
+    }
+    if (m_bloomFbo != 0)
+    {
+        glDeleteFramebuffers(1, &m_bloomFbo);
+    }
     Logger::debug("Renderer destroyed");
 }
 
@@ -228,18 +236,18 @@ bool Renderer::loadShaders(const std::string& assetPath)
         return false;
     }
 
-    // Load bloom shaders (reuse screen_quad.vert.glsl)
-    std::string bloomBrightFragPath = assetPath + "/shaders/bloom_bright.frag.glsl";
-    if (!m_bloomBrightShader.loadFromFiles(screenVertPath, bloomBrightFragPath))
+    // Load mip-chain bloom shaders (reuse screen_quad.vert.glsl)
+    std::string bloomDownFragPath = assetPath + "/shaders/bloom_downsample.frag.glsl";
+    if (!m_bloomDownsampleShader.loadFromFiles(screenVertPath, bloomDownFragPath))
     {
-        Logger::error("Failed to load bloom bright shader");
+        Logger::error("Failed to load bloom downsample shader");
         return false;
     }
 
-    std::string bloomBlurFragPath = assetPath + "/shaders/bloom_blur.frag.glsl";
-    if (!m_bloomBlurShader.loadFromFiles(screenVertPath, bloomBlurFragPath))
+    std::string bloomUpFragPath = assetPath + "/shaders/bloom_upsample.frag.glsl";
+    if (!m_bloomUpsampleShader.loadFromFiles(screenVertPath, bloomUpFragPath))
     {
-        Logger::error("Failed to load bloom blur shader");
+        Logger::error("Failed to load bloom upsample shader");
         return false;
     }
 
@@ -318,23 +326,40 @@ void Renderer::initFramebuffers(int width, int height, int msaaSamples)
     // Skybox (procedural gradient — no cubemap texture)
     m_skybox = std::make_unique<Skybox>();
 
-    // Bloom FBOs (half-resolution, RGBA16F, no depth)
-    int halfW = width / 2;
-    int halfH = height / 2;
-    if (halfW < 1) halfW = 1;
-    if (halfH < 1) halfH = 1;
+    // Bloom mip-chain texture (single texture with progressively smaller mip levels)
+    {
+        glGenTextures(1, &m_bloomTexture);
+        glBindTexture(GL_TEXTURE_2D, m_bloomTexture);
 
-    FramebufferConfig bloomConfig;
-    bloomConfig.width = halfW;
-    bloomConfig.height = halfH;
-    bloomConfig.samples = 1;
-    bloomConfig.hasColorAttachment = true;
-    bloomConfig.hasDepthAttachment = false;
-    bloomConfig.isFloatingPoint = true;
+        // Compute mip dimensions
+        int mipW = width / 2;
+        int mipH = height / 2;
+        for (int i = 0; i < BLOOM_MIP_COUNT; i++)
+        {
+            if (mipW < 1) mipW = 1;
+            if (mipH < 1) mipH = 1;
+            m_bloomMipWidths[i] = mipW;
+            m_bloomMipHeights[i] = mipH;
+            glTexImage2D(GL_TEXTURE_2D, i, GL_R11F_G11F_B10F, mipW, mipH,
+                         0, GL_RGB, GL_FLOAT, nullptr);
+            mipW /= 2;
+            mipH /= 2;
+        }
 
-    m_bloomBrightFbo = std::make_unique<Framebuffer>(bloomConfig);
-    m_bloomPingFbo = std::make_unique<Framebuffer>(bloomConfig);
-    m_bloomPongFbo = std::make_unique<Framebuffer>(bloomConfig);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, BLOOM_MIP_COUNT - 1);
+
+        // Single FBO, we'll attach different mip levels as needed
+        glGenFramebuffers(1, &m_bloomFbo);
+
+        Logger::debug("Bloom mip-chain created: " + std::to_string(BLOOM_MIP_COUNT)
+            + " levels from " + std::to_string(m_bloomMipWidths[0]) + "x"
+            + std::to_string(m_bloomMipHeights[0]));
+    }
 
     // Resolved depth FBO (for SSAO — depth-only, sampleable texture)
     FramebufferConfig depthResolveConfig;
@@ -556,64 +581,93 @@ void Renderer::endFrame()
         hdrSourceFbo = &m_taa->getCurrentFbo();
     }
 
-    // 5. Bloom passes
-    if (m_bloomEnabled && m_bloomBrightFbo && m_bloomPingFbo && m_bloomPongFbo)
+    // 5. Mip-chain bloom (CoD: Advanced Warfare style)
+    if (m_bloomEnabled && m_bloomTexture != 0 && m_bloomFbo != 0)
     {
-        int halfW = m_bloomBrightFbo->getWidth();
-        int halfH = m_bloomBrightFbo->getHeight();
+        glBindFramebuffer(GL_FRAMEBUFFER, m_bloomFbo);
 
-        // Bright extraction (from TAA output or resolve FBO)
-        m_bloomBrightFbo->bind();
-        glViewport(0, 0, halfW, halfH);
-        glClear(GL_COLOR_BUFFER_BIT);
+        // --- Downsample pass: progressively halve the resolution ---
+        m_bloomDownsampleShader.use();
 
-        m_bloomBrightShader.use();
-        hdrSourceFbo->bindColorTexture(0);
-        m_bloomBrightShader.setInt("u_hdrTexture", 0);
-        m_bloomBrightShader.setFloat("u_threshold", m_bloomThreshold);
-        m_screenQuad->draw();
-
-        // Ping-pong Gaussian blur
-        m_bloomBlurShader.use();
-        bool horizontal = true;
-        bool firstIteration = true;
-        for (int i = 0; i < m_bloomIterations * 2; i++)
+        for (int mip = 0; mip < BLOOM_MIP_COUNT; mip++)
         {
-            if (horizontal)
+            int mipW = m_bloomMipWidths[mip];
+            int mipH = m_bloomMipHeights[mip];
+
+            // Attach this mip level as the render target
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                                   GL_TEXTURE_2D, m_bloomTexture, mip);
+            glViewport(0, 0, mipW, mipH);
+
+            // Source: for mip 0, use the HDR scene; for mip N>0, use mip N-1
+            if (mip == 0)
             {
-                m_bloomPongFbo->bind();
+                hdrSourceFbo->bindColorTexture(0);
+                m_bloomDownsampleShader.setVec2("u_srcTexelSize",
+                    glm::vec2(1.0f / static_cast<float>(m_windowWidth),
+                              1.0f / static_cast<float>(m_windowHeight)));
+                m_bloomDownsampleShader.setBool("u_useKarisAverage", true);
             }
             else
             {
-                m_bloomPingFbo->bind();
+                // Bind the bloom texture and limit sampling to the previous mip
+                glActiveTexture(GL_TEXTURE0);
+                glBindTexture(GL_TEXTURE_2D, m_bloomTexture);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, mip - 1);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, mip - 1);
+                m_bloomDownsampleShader.setVec2("u_srcTexelSize",
+                    glm::vec2(1.0f / static_cast<float>(m_bloomMipWidths[mip - 1]),
+                              1.0f / static_cast<float>(m_bloomMipHeights[mip - 1])));
+                m_bloomDownsampleShader.setBool("u_useKarisAverage", false);
             }
 
-            glViewport(0, 0, halfW, halfH);
-            glClear(GL_COLOR_BUFFER_BIT);
-
-            if (firstIteration)
-            {
-                m_bloomBrightFbo->bindColorTexture(0);
-                firstIteration = false;
-            }
-            else
-            {
-                if (horizontal)
-                {
-                    m_bloomPingFbo->bindColorTexture(0);
-                }
-                else
-                {
-                    m_bloomPongFbo->bindColorTexture(0);
-                }
-            }
-
-            m_bloomBlurShader.setInt("u_image", 0);
-            m_bloomBlurShader.setBool("u_horizontal", horizontal);
+            m_bloomDownsampleShader.setInt("u_sourceTexture", 0);
             m_screenQuad->draw();
-
-            horizontal = !horizontal;
         }
+
+        // Restore texture mip range for sampling during upsample
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, m_bloomTexture);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, BLOOM_MIP_COUNT - 1);
+
+        // --- Upsample pass: progressively double resolution, additive blending ---
+        m_bloomUpsampleShader.use();
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_ONE, GL_ONE);  // Additive: each mip adds its contribution
+
+        for (int mip = BLOOM_MIP_COUNT - 1; mip > 0; mip--)
+        {
+            int dstMip = mip - 1;
+            int dstW = m_bloomMipWidths[dstMip];
+            int dstH = m_bloomMipHeights[dstMip];
+
+            // Render target: the next larger mip level
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                                   GL_TEXTURE_2D, m_bloomTexture, dstMip);
+            glViewport(0, 0, dstW, dstH);
+
+            // Source: current (smaller) mip level
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, m_bloomTexture);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, mip);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, mip);
+
+            m_bloomUpsampleShader.setInt("u_sourceTexture", 0);
+            m_bloomUpsampleShader.setVec2("u_srcTexelSize",
+                glm::vec2(1.0f / static_cast<float>(m_bloomMipWidths[mip]),
+                          1.0f / static_cast<float>(m_bloomMipHeights[mip])));
+            m_bloomUpsampleShader.setFloat("u_filterRadius", m_bloomFilterRadius);
+            m_screenQuad->draw();
+        }
+
+        glDisable(GL_BLEND);
+
+        // Restore mip range
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, m_bloomTexture);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, BLOOM_MIP_COUNT - 1);
     }
 
     // 6. Final screen quad composite (tone mapping + bloom + SSAO)
@@ -631,9 +685,13 @@ void Renderer::endFrame()
     // Bloom uniforms — ALWAYS bind texture (Mesa requires valid textures for declared samplers)
     m_screenShader.setBool("u_bloomEnabled", m_bloomEnabled);
     m_screenShader.setFloat("u_bloomIntensity", m_bloomIntensity);
-    if (m_bloomPongFbo)
+    if (m_bloomTexture != 0)
     {
-        m_bloomPongFbo->bindColorTexture(9);
+        glActiveTexture(GL_TEXTURE9);
+        glBindTexture(GL_TEXTURE_2D, m_bloomTexture);
+        // Sample from mip 0 (the fully composited bloom result)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
         m_screenShader.setInt("u_bloomTexture", 9);
     }
 
@@ -1727,14 +1785,24 @@ void Renderer::onWindowResize(int width, int height)
     }
     // Shadow map does not resize with the window — it has a fixed resolution
 
-    // Resize bloom FBOs (half-resolution)
-    int halfW = width / 2;
-    int halfH = height / 2;
-    if (halfW < 1) halfW = 1;
-    if (halfH < 1) halfH = 1;
-    if (m_bloomBrightFbo) m_bloomBrightFbo->resize(halfW, halfH);
-    if (m_bloomPingFbo) m_bloomPingFbo->resize(halfW, halfH);
-    if (m_bloomPongFbo) m_bloomPongFbo->resize(halfW, halfH);
+    // Resize bloom mip-chain texture
+    if (m_bloomTexture != 0)
+    {
+        glBindTexture(GL_TEXTURE_2D, m_bloomTexture);
+        int mipW = width / 2;
+        int mipH = height / 2;
+        for (int i = 0; i < BLOOM_MIP_COUNT; i++)
+        {
+            if (mipW < 1) mipW = 1;
+            if (mipH < 1) mipH = 1;
+            m_bloomMipWidths[i] = mipW;
+            m_bloomMipHeights[i] = mipH;
+            glTexImage2D(GL_TEXTURE_2D, i, GL_R11F_G11F_B10F, mipW, mipH,
+                         0, GL_RGB, GL_FLOAT, nullptr);
+            mipW /= 2;
+            mipH /= 2;
+        }
+    }
 
     // Resize SSAO FBOs (full-resolution)
     if (m_resolveDepthFbo) m_resolveDepthFbo->resize(width, height);
