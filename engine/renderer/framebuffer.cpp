@@ -129,6 +129,11 @@ GLuint Framebuffer::getId() const
     return m_fboId;
 }
 
+GLuint Framebuffer::getColorAttachmentId() const
+{
+    return m_colorAttachment;
+}
+
 int Framebuffer::getWidth() const
 {
     return m_config.width;

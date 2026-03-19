@@ -214,6 +214,14 @@ public:
     /// @brief Gets the number of active spot lights.
     int getSpotLightCount() const;
 
+    /// @brief Gets the OpenGL texture ID of the final composited (post-tonemapped) frame.
+    /// Used by the editor viewport panel to display the scene in ImGui.
+    GLuint getOutputTextureId() const;
+
+    /// @brief Blits the final output to the default framebuffer (screen).
+    /// Call this in play mode when ImGui is not displaying the viewport.
+    void blitToScreen();
+
     /// @brief Gets the text renderer (nullptr if not initialized).
     TextRenderer* getTextRenderer();
 
@@ -262,6 +270,7 @@ private:
     // Framebuffer pipeline
     std::unique_ptr<Framebuffer> m_msaaFbo;
     std::unique_ptr<Framebuffer> m_resolveFbo;
+    std::unique_ptr<Framebuffer> m_outputFbo;  // Post-tonemapped LDR output for editor viewport
     std::unique_ptr<FullscreenQuad> m_screenQuad;
     int m_windowWidth = 0;
     int m_windowHeight = 0;

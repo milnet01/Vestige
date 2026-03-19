@@ -2,6 +2,7 @@
 /// @brief Editor implementation — ImGui lifecycle, docking workspace, theme.
 #include "editor/editor.h"
 #include "core/logger.h"
+#include "renderer/renderer.h"
 
 #include <imgui.h>
 #include <imgui_internal.h>
@@ -83,7 +84,7 @@ void Editor::shutdown()
     Logger::info("Editor shut down");
 }
 
-void Editor::beginFrame()
+void Editor::beginFrame(Renderer* renderer)
 {
     if (!m_isInitialized)
     {
@@ -123,8 +124,7 @@ void Editor::beginFrame()
             ImGui::DockBuilderFinish(dockspaceId);
         }
 
-        ImGui::DockSpaceOverViewport(dockspaceId, viewport,
-            ImGuiDockNodeFlags_PassthruCentralNode);
+        ImGui::DockSpaceOverViewport(dockspaceId, viewport);
 
         // Menu bar
         if (ImGui::BeginMainMenuBar())
@@ -212,7 +212,29 @@ void Editor::beginFrame()
             ImGui::EndMainMenuBar();
         }
 
-        // Placeholder panels (replaced in later sub-phases)
+        // --- Viewport panel: display the rendered scene as a texture ---
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
+        ImGui::Begin("Viewport");
+        {
+            ImVec2 viewportSize = ImGui::GetContentRegionAvail();
+            if (viewportSize.x > 0 && viewportSize.y > 0 && renderer)
+            {
+                GLuint texId = renderer->getOutputTextureId();
+                if (texId != 0)
+                {
+                    // UV flipped vertically: OpenGL textures are bottom-up, ImGui expects top-down
+                    ImGui::Image(static_cast<ImTextureID>(static_cast<uintptr_t>(texId)),
+                        viewportSize, ImVec2(0, 1), ImVec2(1, 0));
+                }
+            }
+
+            m_viewportFocused = ImGui::IsWindowFocused();
+            m_viewportHovered = ImGui::IsWindowHovered();
+        }
+        ImGui::End();
+        ImGui::PopStyleVar();
+
+        // --- Placeholder panels (replaced in later sub-phases) ---
         ImGui::Begin("Hierarchy");
         ImGui::TextWrapped("Scene hierarchy will appear here.");
         ImGui::TextWrapped("(Phase 5A-5)");
