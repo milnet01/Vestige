@@ -24,6 +24,7 @@ struct SceneRenderData
         const Material* material;
         glm::mat4 worldMatrix;
         AABB worldBounds;
+        uint32_t entityId = 0;
         bool castsShadow = true;
     };
 
@@ -71,15 +72,30 @@ public:
     /// @brief Finds an entity by name (searches entire hierarchy).
     Entity* findEntity(const std::string& name);
 
+    /// @brief Finds an entity by unique ID (searches entire hierarchy).
+    /// @return Pointer to the entity, or nullptr if not found.
+    Entity* findEntityById(uint32_t id);
+
     /// @brief Gets the root entity.
     Entity* getRoot();
 
     /// @brief Gets the scene name.
     const std::string& getName() const;
 
+    /// @brief Removes an entity by ID (and all its descendants).
+    /// @return True if the entity was found and removed.
+    bool removeEntity(uint32_t id);
+
+    /// @brief Moves an entity to a new parent.
+    /// @param entityId Entity to move.
+    /// @param newParentId New parent (0 = scene root).
+    /// @return True if reparenting succeeded.
+    bool reparentEntity(uint32_t entityId, uint32_t newParentId);
+
 private:
     void collectRenderDataRecursive(const Entity& entity, SceneRenderData& data) const;
     void collectCollidersRecursive(const Entity& entity, std::vector<AABB>& colliders) const;
+    Entity* findEntityByIdRecursive(Entity& entity, uint32_t id);
 
     std::string m_name;
     std::unique_ptr<Entity> m_root;

@@ -42,6 +42,10 @@ set(ENGINE_SOURCES
     utils/gltf_loader_impl.cpp
     utils/cube_loader.cpp
     editor/editor.cpp
+    editor/editor_camera.cpp
+    editor/selection.cpp
+    editor/panels/hierarchy_panel.cpp
+    editor/panels/inspector_panel.cpp
     # glad OpenGL loader
     ${CMAKE_SOURCE_DIR}/external/glad/src/gl.c
     # stb_image implementation

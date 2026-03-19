@@ -136,6 +136,10 @@ Renderer::~Renderer()
     {
         glDeleteBuffers(2, m_luminancePbo);
     }
+    if (m_outlineStencilRbo != 0)
+    {
+        glDeleteRenderbuffers(1, &m_outlineStencilRbo);
+    }
     Logger::debug("Renderer destroyed");
 }
 
@@ -254,6 +258,24 @@ bool Renderer::loadShaders(const std::string& assetPath)
         return false;
     }
 
+    // Load ID buffer shader (for mouse picking)
+    std::string idBufferVertPath = assetPath + "/shaders/id_buffer.vert.glsl";
+    std::string idBufferFragPath = assetPath + "/shaders/id_buffer.frag.glsl";
+    if (!m_idBufferShader.loadFromFiles(idBufferVertPath, idBufferFragPath))
+    {
+        Logger::error("Failed to load ID buffer shaders");
+        return false;
+    }
+
+    // Load outline shader (for selection highlight)
+    std::string outlineVertPath = assetPath + "/shaders/outline.vert.glsl";
+    std::string outlineFragPath = assetPath + "/shaders/outline.frag.glsl";
+    if (!m_outlineShader.loadFromFiles(outlineVertPath, outlineFragPath))
+    {
+        Logger::error("Failed to load outline shaders");
+        return false;
+    }
+
     Logger::info("Shaders loaded successfully");
     return true;
 }
@@ -293,6 +315,28 @@ void Renderer::initFramebuffers(int width, int height, int msaaSamples)
     outputConfig.hasDepthAttachment = false;
     outputConfig.isFloatingPoint = false;  // LDR RGBA8 — post-tonemapped
     m_outputFbo = std::make_unique<Framebuffer>(outputConfig);
+
+    // Attach a depth-stencil renderbuffer to the output FBO for selection outlines.
+    // The existing screen quad pass disables depth test so this doesn't interfere.
+    glGenRenderbuffers(1, &m_outlineStencilRbo);
+    glBindRenderbuffer(GL_RENDERBUFFER, m_outlineStencilRbo);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, width, height);
+    glBindRenderbuffer(GL_RENDERBUFFER, 0);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, m_outputFbo->getId());
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT,
+                              GL_RENDERBUFFER, m_outlineStencilRbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    // ID buffer FBO for mouse picking (RGBA8 + depth, rendered on demand)
+    FramebufferConfig idBufferConfig;
+    idBufferConfig.width = width;
+    idBufferConfig.height = height;
+    idBufferConfig.samples = 1;
+    idBufferConfig.hasColorAttachment = true;
+    idBufferConfig.hasDepthAttachment = true;
+    idBufferConfig.isFloatingPoint = false;  // RGBA8 for ID encoding
+    m_idBufferFbo = std::make_unique<Framebuffer>(idBufferConfig);
 
     // Fullscreen quad for the screen pass
     m_screenQuad = std::make_unique<FullscreenQuad>();
@@ -2010,6 +2054,199 @@ void Renderer::generateSsaoNoiseTexture()
     glBindTexture(GL_TEXTURE_2D, 0);
 }
 
+// ---------------------------------------------------------------------------
+// Selection system: ID buffer picking + outline rendering
+// ---------------------------------------------------------------------------
+
+void Renderer::renderIdBuffer(const SceneRenderData& renderData,
+                              const Camera& camera, float aspectRatio)
+{
+    if (!m_idBufferFbo)
+    {
+        return;
+    }
+
+    m_idBufferFbo->bind();
+    glViewport(0, 0, m_windowWidth, m_windowHeight);
+
+    // Clear to black (entity ID 0 = background/no entity)
+    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+    glClearDepth(0.0);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+    // Use reverse-Z depth (already global state: glDepthFunc(GL_GEQUAL), glClipControl ZERO_TO_ONE)
+    glEnable(GL_DEPTH_TEST);
+    glDisable(GL_BLEND);
+
+    m_idBufferShader.use();
+    glm::mat4 vp = camera.getProjectionMatrix(aspectRatio) * camera.getViewMatrix();
+    m_idBufferShader.setMat4("u_viewProjection", vp);
+
+    // Draw all opaque items
+    auto drawItems = [&](const std::vector<SceneRenderData::RenderItem>& items)
+    {
+        for (const auto& item : items)
+        {
+            if (item.entityId == 0)
+            {
+                continue;
+            }
+
+            // Encode entity ID as RGB color
+            float r = static_cast<float>((item.entityId >> 0) & 0xFF) / 255.0f;
+            float g = static_cast<float>((item.entityId >> 8) & 0xFF) / 255.0f;
+            float b = static_cast<float>((item.entityId >> 16) & 0xFF) / 255.0f;
+
+            m_idBufferShader.setVec3("u_entityColor", glm::vec3(r, g, b));
+            m_idBufferShader.setMat4("u_model", item.worldMatrix);
+
+            item.mesh->bind();
+            glDrawElements(GL_TRIANGLES,
+                static_cast<GLsizei>(item.mesh->getIndexCount()),
+                GL_UNSIGNED_INT, nullptr);
+            item.mesh->unbind();
+        }
+    };
+
+    drawItems(renderData.renderItems);
+    drawItems(renderData.transparentItems);
+
+    // Restore clear color
+    glClearColor(0.1f, 0.1f, 0.12f, 1.0f);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+uint32_t Renderer::pickEntityAt(int x, int y)
+{
+    if (!m_idBufferFbo)
+    {
+        return 0;
+    }
+
+    // Clamp to FBO bounds
+    x = std::clamp(x, 0, m_windowWidth - 1);
+    y = std::clamp(y, 0, m_windowHeight - 1);
+
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, m_idBufferFbo->getId());
+
+    unsigned char pixel[4] = {0, 0, 0, 0};
+    glReadPixels(x, y, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixel);
+
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+
+    // Decode entity ID from RGB
+    uint32_t id = static_cast<uint32_t>(pixel[0])
+                | (static_cast<uint32_t>(pixel[1]) << 8)
+                | (static_cast<uint32_t>(pixel[2]) << 16);
+    return id;
+}
+
+void Renderer::renderSelectionOutline(const SceneRenderData& renderData,
+                                      const std::vector<uint32_t>& selectedIds,
+                                      const Camera& camera, float aspectRatio)
+{
+    if (selectedIds.empty() || !m_outputFbo)
+    {
+        return;
+    }
+
+    // Build fast lookup set
+    std::unordered_map<uint32_t, bool> selectedSet;
+    for (uint32_t id : selectedIds)
+    {
+        selectedSet[id] = true;
+    }
+
+    // Collect render items that belong to selected entities
+    struct OutlineItem
+    {
+        const Mesh* mesh;
+        glm::mat4 worldMatrix;
+    };
+    std::vector<OutlineItem> outlineItems;
+
+    auto collectFrom = [&](const std::vector<SceneRenderData::RenderItem>& items)
+    {
+        for (const auto& item : items)
+        {
+            if (selectedSet.count(item.entityId))
+            {
+                outlineItems.push_back({item.mesh, item.worldMatrix});
+            }
+        }
+    };
+    collectFrom(renderData.renderItems);
+    collectFrom(renderData.transparentItems);
+
+    if (outlineItems.empty())
+    {
+        return;
+    }
+
+    // Bind the output FBO (has depth-stencil RBO attached)
+    m_outputFbo->bind();
+    glViewport(0, 0, m_windowWidth, m_windowHeight);
+
+    // Clear stencil only (preserve the tonemapped color)
+    glClear(GL_STENCIL_BUFFER_BIT);
+
+    // Disable depth testing — outline shows through all geometry (standard editor behavior)
+    glDisable(GL_DEPTH_TEST);
+    glEnable(GL_STENCIL_TEST);
+
+    glm::mat4 vp = camera.getProjectionMatrix(aspectRatio) * camera.getViewMatrix();
+    m_outlineShader.use();
+    m_outlineShader.setMat4("u_viewProjection", vp);
+
+    // Pass 1: Write stencil = 1 where selected entities draw (normal scale, no color)
+    glStencilFunc(GL_ALWAYS, 1, 0xFF);
+    glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
+    glStencilMask(0xFF);
+    glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
+
+    for (const auto& oi : outlineItems)
+    {
+        m_outlineShader.setMat4("u_model", oi.worldMatrix);
+        oi.mesh->bind();
+        glDrawElements(GL_TRIANGLES,
+            static_cast<GLsizei>(oi.mesh->getIndexCount()),
+            GL_UNSIGNED_INT, nullptr);
+        oi.mesh->unbind();
+    }
+
+    // Pass 2: Draw scaled-up version where stencil != 1 → orange outline ring
+    glStencilFunc(GL_NOTEQUAL, 1, 0xFF);
+    glStencilMask(0x00);
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+
+    // Bright orange — high contrast for accessibility
+    m_outlineShader.setVec3("u_outlineColor", glm::vec3(0.95f, 0.55f, 0.10f));
+
+    float outlineScale = 1.05f;
+    for (const auto& oi : outlineItems)
+    {
+        // Scale around the object's world-space center
+        glm::vec3 center = glm::vec3(oi.worldMatrix[3]);
+        glm::mat4 scaledModel = glm::translate(glm::mat4(1.0f), center)
+            * glm::scale(glm::mat4(1.0f), glm::vec3(outlineScale))
+            * glm::translate(glm::mat4(1.0f), -center)
+            * oi.worldMatrix;
+
+        m_outlineShader.setMat4("u_model", scaledModel);
+        oi.mesh->bind();
+        glDrawElements(GL_TRIANGLES,
+            static_cast<GLsizei>(oi.mesh->getIndexCount()),
+            GL_UNSIGNED_INT, nullptr);
+        oi.mesh->unbind();
+    }
+
+    // Restore OpenGL state
+    glStencilMask(0xFF);
+    glDisable(GL_STENCIL_TEST);
+    glEnable(GL_DEPTH_TEST);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
 void Renderer::onWindowResize(int width, int height)
 {
     if (width <= 0 || height <= 0)
@@ -2031,6 +2268,18 @@ void Renderer::onWindowResize(int width, int height)
     if (m_outputFbo)
     {
         m_outputFbo->resize(width, height);
+
+        // Resize the stencil renderbuffer attached to the output FBO
+        if (m_outlineStencilRbo != 0)
+        {
+            glBindRenderbuffer(GL_RENDERBUFFER, m_outlineStencilRbo);
+            glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, width, height);
+            glBindRenderbuffer(GL_RENDERBUFFER, 0);
+        }
+    }
+    if (m_idBufferFbo)
+    {
+        m_idBufferFbo->resize(width, height);
     }
     // Shadow map does not resize with the window — it has a fixed resolution
 

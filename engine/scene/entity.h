@@ -69,10 +69,13 @@ private:
 class Entity
 {
 public:
-    /// @brief Creates an entity with the given name.
+    /// @brief Creates an entity with the given name (auto-assigns a unique ID).
     /// @param name Human-readable name for identification.
     explicit Entity(const std::string& name = "Entity");
     ~Entity();
+
+    /// @brief Gets the unique entity ID (assigned at creation, never 0).
+    uint32_t getId() const;
 
     // Non-copyable
     Entity(const Entity&) = delete;
@@ -178,6 +181,14 @@ public:
     /// @brief Gets the entity name.
     const std::string& getName() const;
 
+    /// @brief Sets the entity name.
+    void setName(const std::string& name);
+
+    /// @brief Detaches a child and returns ownership.
+    /// @param child Pointer to the child to remove.
+    /// @return Unique pointer to the detached child, or nullptr if not found.
+    std::unique_ptr<Entity> removeChild(Entity* child);
+
     /// @brief Sets whether this entity is active.
     void setActive(bool isActive);
 
@@ -185,12 +196,15 @@ public:
     bool isActive() const;
 
 private:
+    uint32_t m_id;
     std::string m_name;
     Entity* m_parent;
     std::vector<std::unique_ptr<Entity>> m_children;
     std::unordered_map<uint32_t, std::unique_ptr<Component>> m_components;
     glm::mat4 m_worldMatrix;
     bool m_isActive;
+
+    static uint32_t s_nextId;
 };
 
 } // namespace Vestige

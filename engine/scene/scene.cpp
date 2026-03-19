@@ -64,6 +64,11 @@ Entity* Scene::findEntity(const std::string& name)
     return m_root->findDescendant(name);
 }
 
+Entity* Scene::findEntityById(uint32_t id)
+{
+    return findEntityByIdRecursive(*m_root, id);
+}
+
 Entity* Scene::getRoot()
 {
     return m_root.get();
@@ -72,6 +77,71 @@ Entity* Scene::getRoot()
 const std::string& Scene::getName() const
 {
     return m_name;
+}
+
+bool Scene::removeEntity(uint32_t id)
+{
+    Entity* entity = findEntityById(id);
+    if (!entity || entity == m_root.get())
+    {
+        return false;
+    }
+
+    Entity* parent = entity->getParent();
+    if (!parent)
+    {
+        return false;
+    }
+
+    parent->removeChild(entity);
+    return true;
+}
+
+bool Scene::reparentEntity(uint32_t entityId, uint32_t newParentId)
+{
+    Entity* entity = findEntityById(entityId);
+    if (!entity || entity == m_root.get())
+    {
+        return false;
+    }
+
+    // newParentId 0 means reparent to root
+    Entity* newParent = (newParentId == 0) ? m_root.get() : findEntityById(newParentId);
+    if (!newParent)
+    {
+        return false;
+    }
+
+    if (entity == newParent)
+    {
+        return false;
+    }
+
+    Entity* oldParent = entity->getParent();
+    if (oldParent == newParent)
+    {
+        return false;
+    }
+
+    // Check for cycle: newParent must not be a descendant of entity
+    Entity* check = newParent;
+    while (check)
+    {
+        if (check == entity)
+        {
+            return false;
+        }
+        check = check->getParent();
+    }
+
+    auto detached = oldParent->removeChild(entity);
+    if (!detached)
+    {
+        return false;
+    }
+
+    newParent->addChild(std::move(detached));
+    return true;
 }
 
 void Scene::collectRenderDataRecursive(const Entity& entity, SceneRenderData& data) const
@@ -90,6 +160,7 @@ void Scene::collectRenderDataRecursive(const Entity& entity, SceneRenderData& da
         item.material = meshRenderer->getMaterial().get();
         item.worldMatrix = entity.getWorldMatrix();
         item.worldBounds = meshRenderer->getCullingBounds().transformed(item.worldMatrix);
+        item.entityId = entity.getId();
         item.castsShadow = meshRenderer->castsShadow();
 
         // BLEND materials go to the transparent list; OPAQUE and MASK go to opaque
@@ -165,6 +236,23 @@ void Scene::collectRenderDataRecursive(const Entity& entity, SceneRenderData& da
     {
         collectRenderDataRecursive(*child, data);
     }
+}
+
+Entity* Scene::findEntityByIdRecursive(Entity& entity, uint32_t id)
+{
+    if (entity.getId() == id)
+    {
+        return &entity;
+    }
+    for (auto& child : entity.getChildren())
+    {
+        Entity* found = findEntityByIdRecursive(*child, id);
+        if (found)
+        {
+            return found;
+        }
+    }
+    return nullptr;
 }
 
 void Scene::collectCollidersRecursive(const Entity& entity, std::vector<AABB>& colliders) const

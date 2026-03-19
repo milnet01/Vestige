@@ -1,8 +1,9 @@
 /// @file editor.cpp
-/// @brief Editor implementation — ImGui lifecycle, docking workspace, theme.
+/// @brief Editor implementation — ImGui lifecycle, docking workspace, editor camera, theme.
 #include "editor/editor.h"
 #include "core/logger.h"
 #include "renderer/renderer.h"
+#include "scene/scene.h"
 
 #include <imgui.h>
 #include <imgui_internal.h>
@@ -10,6 +11,8 @@
 #include <imgui_impl_opengl3.h>
 
 #include <GLFW/glfw3.h>
+
+#include <algorithm>
 
 namespace Vestige
 {
@@ -63,8 +66,11 @@ bool Editor::initialize(GLFWwindow* window, const std::string& assetPath)
     // Initialize OpenGL backend (GLSL 4.50 matches our OpenGL 4.5 context)
     ImGui_ImplOpenGL3_Init("#version 450");
 
+    // Create editor camera (orbit/pan/zoom for scene editing)
+    m_editorCamera = std::make_unique<EditorCamera>();
+
     m_isInitialized = true;
-    Logger::info("Editor initialized (ImGui + docking)");
+    Logger::info("Editor initialized (ImGui + docking + editor camera)");
     return true;
 }
 
@@ -75,6 +81,8 @@ void Editor::shutdown()
         return;
     }
 
+    m_editorCamera.reset();
+
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
@@ -84,7 +92,7 @@ void Editor::shutdown()
     Logger::info("Editor shut down");
 }
 
-void Editor::beginFrame(Renderer* renderer)
+void Editor::prepareFrame()
 {
     if (!m_isInitialized)
     {
@@ -94,10 +102,18 @@ void Editor::beginFrame(Renderer* renderer)
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
+}
+
+void Editor::drawPanels(Renderer* renderer, Scene* scene)
+{
+    if (!m_isInitialized)
+    {
+        return;
+    }
 
     if (m_mode == EditorMode::EDIT)
     {
-        // Full-window dockspace with passthrough so the 3D scene shows through
+        // Full-window dockspace
         ImGuiViewport* viewport = ImGui::GetMainViewport();
         ImGuiID dockspaceId = ImGui::GetID("VestigeDockSpace");
 
@@ -216,7 +232,9 @@ void Editor::beginFrame(Renderer* renderer)
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
         ImGui::Begin("Viewport");
         {
+            ImVec2 contentMin = ImGui::GetCursorScreenPos();
             ImVec2 viewportSize = ImGui::GetContentRegionAvail();
+
             if (viewportSize.x > 0 && viewportSize.y > 0 && renderer)
             {
                 GLuint texId = renderer->getOutputTextureId();
@@ -228,21 +246,24 @@ void Editor::beginFrame(Renderer* renderer)
                 }
             }
 
+            // Store viewport bounds for click detection (used next frame in processViewportClick)
+            m_viewportMin = glm::vec2(contentMin.x, contentMin.y);
+            m_viewportMax = glm::vec2(contentMin.x + viewportSize.x, contentMin.y + viewportSize.y);
+
             m_viewportFocused = ImGui::IsWindowFocused();
             m_viewportHovered = ImGui::IsWindowHovered();
         }
         ImGui::End();
         ImGui::PopStyleVar();
 
-        // --- Placeholder panels (replaced in later sub-phases) ---
+        // --- Hierarchy panel ---
         ImGui::Begin("Hierarchy");
-        ImGui::TextWrapped("Scene hierarchy will appear here.");
-        ImGui::TextWrapped("(Phase 5A-5)");
+        m_hierarchyPanel.draw(scene, m_selection);
         ImGui::End();
 
+        // --- Inspector panel ---
         ImGui::Begin("Inspector");
-        ImGui::TextWrapped("Entity properties will appear here.");
-        ImGui::TextWrapped("(Phase 5A-6)");
+        m_inspectorPanel.draw(scene, m_selection);
         ImGui::End();
 
         ImGui::Begin("Console");
@@ -267,6 +288,32 @@ void Editor::endFrame()
 
     ImGui::Render();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+}
+
+void Editor::updateEditorCamera(float deltaTime)
+{
+    if (!m_editorCamera)
+    {
+        return;
+    }
+
+    m_editorCamera->processInput(m_viewportHovered);
+    m_editorCamera->update(deltaTime);
+}
+
+void Editor::applyEditorCamera(Camera& camera)
+{
+    if (!m_editorCamera)
+    {
+        return;
+    }
+
+    m_editorCamera->applyToCamera(camera);
+}
+
+EditorCamera* Editor::getEditorCamera()
+{
+    return m_editorCamera.get();
 }
 
 void Editor::setMode(EditorMode mode)
@@ -305,6 +352,102 @@ bool Editor::wantCaptureKeyboard() const
 bool Editor::isInitialized() const
 {
     return m_isInitialized;
+}
+
+void Editor::processViewportClick(int fboWidth, int fboHeight)
+{
+    m_pickRequested = false;
+
+    if (!m_isInitialized || m_mode != EditorMode::EDIT)
+    {
+        return;
+    }
+
+    ImGuiIO& io = ImGui::GetIO();
+
+    // Check for left mouse click while the viewport is hovered (previous frame's state)
+    if (!io.MouseClicked[0] || !m_viewportHovered)
+    {
+        return;
+    }
+
+    // Ignore clicks while Alt is held (orbit camera uses Alt+LMB)
+    if (io.KeyAlt)
+    {
+        return;
+    }
+
+    float mx = io.MousePos.x;
+    float my = io.MousePos.y;
+
+    // Check if click is within stored viewport bounds
+    float vpWidth = m_viewportMax.x - m_viewportMin.x;
+    float vpHeight = m_viewportMax.y - m_viewportMin.y;
+    if (vpWidth <= 0.0f || vpHeight <= 0.0f)
+    {
+        return;
+    }
+    if (mx < m_viewportMin.x || mx > m_viewportMax.x
+        || my < m_viewportMin.y || my > m_viewportMax.y)
+    {
+        return;
+    }
+
+    // Map to viewport UV [0,1]
+    float u = (mx - m_viewportMin.x) / vpWidth;
+    float v = (my - m_viewportMin.y) / vpHeight;
+
+    // Map to FBO pixel coordinates (flip Y for OpenGL)
+    m_pickX = static_cast<int>(u * static_cast<float>(fboWidth));
+    m_pickY = static_cast<int>((1.0f - v) * static_cast<float>(fboHeight));
+    m_pickX = std::clamp(m_pickX, 0, fboWidth - 1);
+    m_pickY = std::clamp(m_pickY, 0, fboHeight - 1);
+
+    m_pickShift = io.KeyShift;
+    m_pickCtrl = io.KeyCtrl;
+    m_pickRequested = true;
+}
+
+bool Editor::isPickRequested() const
+{
+    return m_pickRequested;
+}
+
+void Editor::getPickCoords(int& outX, int& outY) const
+{
+    outX = m_pickX;
+    outY = m_pickY;
+}
+
+void Editor::handlePickResult(uint32_t entityId)
+{
+    m_pickRequested = false;
+
+    if (m_pickShift)
+    {
+        // Shift+click: add to selection
+        m_selection.addToSelection(entityId);
+    }
+    else if (m_pickCtrl)
+    {
+        // Ctrl+click: toggle in selection
+        m_selection.toggleSelection(entityId);
+    }
+    else
+    {
+        // Plain click: replace selection (or clear if background)
+        m_selection.select(entityId);
+    }
+}
+
+Selection& Editor::getSelection()
+{
+    return m_selection;
+}
+
+const Selection& Editor::getSelection() const
+{
+    return m_selection;
 }
 
 void Editor::setupTheme()
