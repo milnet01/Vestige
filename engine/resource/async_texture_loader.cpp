@@ -3,6 +3,7 @@
 #include "resource/async_texture_loader.h"
 #include "core/logger.h"
 
+#include <chrono>
 #include <stb_image.h>
 
 namespace Vestige
@@ -83,10 +84,11 @@ size_t AsyncTextureLoader::getPendingCount() const
 
 void AsyncTextureLoader::waitForAll()
 {
-    // Spin until all jobs are completed (decoded but not yet uploaded)
+    // Block until all jobs finish decoding (does not upload — caller does that).
+    // Uses a short sleep instead of busy-spin to avoid wasting CPU.
+    using namespace std::chrono_literals;
     while (m_inFlightCount.load(std::memory_order_relaxed) > 0)
     {
-        // Check if worker has finished processing
         {
             std::lock_guard<std::mutex> lock(m_completedMutex);
             std::lock_guard<std::mutex> lock2(m_pendingMutex);
@@ -95,7 +97,7 @@ void AsyncTextureLoader::waitForAll()
                 break;  // All decoded, waiting for upload
             }
         }
-        std::this_thread::yield();
+        std::this_thread::sleep_for(1ms);
     }
 }
 

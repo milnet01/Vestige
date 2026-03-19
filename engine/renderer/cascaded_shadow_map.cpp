@@ -162,12 +162,12 @@ glm::mat4 CascadedShadowMap::computeCascadeMatrix(
     if (worldUnitsPerTexelX > 0.0f)
     {
         minX = std::floor(minX / worldUnitsPerTexelX) * worldUnitsPerTexelX;
-        maxX = std::floor(maxX / worldUnitsPerTexelX) * worldUnitsPerTexelX;
+        maxX = std::ceil(maxX / worldUnitsPerTexelX) * worldUnitsPerTexelX;
     }
     if (worldUnitsPerTexelY > 0.0f)
     {
         minY = std::floor(minY / worldUnitsPerTexelY) * worldUnitsPerTexelY;
-        maxY = std::floor(maxY / worldUnitsPerTexelY) * worldUnitsPerTexelY;
+        maxY = std::ceil(maxY / worldUnitsPerTexelY) * worldUnitsPerTexelY;
     }
 
     glm::mat4 lightProjection = glm::ortho(minX, maxX, minY, maxY, minZ, maxZ);
@@ -237,6 +237,13 @@ void CascadedShadowMap::update(const DirectionalLight& light, const Camera& came
 
 void CascadedShadowMap::beginCascade(int cascade)
 {
+    if (cascade < 0 || cascade >= m_config.cascadeCount)
+    {
+        Logger::error("CascadedShadowMap::beginCascade — cascade index out of range: "
+            + std::to_string(cascade) + " (max: " + std::to_string(m_config.cascadeCount - 1) + ")");
+        return;
+    }
+
     glBindFramebuffer(GL_FRAMEBUFFER, m_fbo);
     glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
                               m_depthTextureArray, 0, cascade);
@@ -257,11 +264,24 @@ void CascadedShadowMap::bindShadowTexture(int textureUnit)
 
 const glm::mat4& CascadedShadowMap::getLightSpaceMatrix(int cascade) const
 {
+    if (cascade < 0 || cascade >= m_config.cascadeCount)
+    {
+        Logger::error("CascadedShadowMap::getLightSpaceMatrix — cascade index out of range: "
+            + std::to_string(cascade));
+        static const glm::mat4 identity(1.0f);
+        return identity;
+    }
     return m_lightSpaceMatrices[static_cast<size_t>(cascade)];
 }
 
 float CascadedShadowMap::getCascadeSplit(int cascade) const
 {
+    if (cascade < 0 || cascade >= m_config.cascadeCount)
+    {
+        Logger::error("CascadedShadowMap::getCascadeSplit — cascade index out of range: "
+            + std::to_string(cascade));
+        return 0.0f;
+    }
     return m_cascadeSplits[static_cast<size_t>(cascade)];
 }
 
@@ -272,6 +292,12 @@ int CascadedShadowMap::getCascadeCount() const
 
 float CascadedShadowMap::getTexelWorldSize(int cascade) const
 {
+    if (cascade < 0 || cascade >= m_config.cascadeCount)
+    {
+        Logger::error("CascadedShadowMap::getTexelWorldSize — cascade index out of range: "
+            + std::to_string(cascade));
+        return 0.0f;
+    }
     return m_texelWorldSizes[static_cast<size_t>(cascade)];
 }
 

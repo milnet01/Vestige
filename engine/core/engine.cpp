@@ -5,6 +5,7 @@
 #include "scene/mesh_renderer.h"
 #include "scene/light_component.h"
 #include "resource/model.h"
+#include "renderer/frame_diagnostics.h"
 
 #include <GLFW/glfw3.h>
 #include <glm/gtc/matrix_transform.hpp>
@@ -233,6 +234,12 @@ bool Engine::initialize(const EngineConfig& config)
                 Logger::info(std::string("Auto-exposure: ") + (m_renderer->isAutoExposure() ? "ON" : "OFF"));
                 break;
 
+            case GLFW_KEY_F11:
+                FrameDiagnostics::capture(*m_renderer, *m_camera,
+                    m_window->getWidth(), m_window->getHeight(),
+                    m_timer->getFps(), m_timer->getDeltaTime());
+                break;
+
             case GLFW_KEY_Q:
                 m_isRunning = false;
                 break;
@@ -247,7 +254,7 @@ bool Engine::initialize(const EngineConfig& config)
 
     m_isRunning = true;
     Logger::info("Engine initialized successfully");
-    Logger::info("Controls: WASD=move, Mouse=look, Space/Shift=up/down, LCtrl=sprint, F1=wireframe, F2=tonemapper, F3=HDR debug, F4=POM, F5=bloom, F6=SSAO, F7=AA mode, F8=color grading, F9=CSM debug, F10=auto-exposure, [/]=exposure, -/+=POM depth, Q=quit");
+    Logger::info("Controls: WASD=move, Mouse=look, Space/Shift=up/down, LCtrl=sprint, F1=wireframe, F2=tonemapper, F3=HDR debug, F4=POM, F5=bloom, F6=SSAO, F7=AA mode, F8=color grading, F9=CSM debug, F10=auto-exposure, F11=diagnostic capture, [/]=exposure, -/+=POM depth, Q=quit");
     Logger::info("Gamepad: Left stick=move, Right stick=look, LB=sprint, Triggers=up/down");
     return true;
 }

@@ -35,6 +35,7 @@ set(ENGINE_SOURCES
     renderer/color_grading_lut.cpp
     renderer/instance_buffer.cpp
     renderer/environment_map.cpp
+    renderer/frame_diagnostics.cpp
     resource/model.cpp
     utils/obj_loader.cpp
     utils/gltf_loader.cpp
@@ -44,6 +45,7 @@ set(ENGINE_SOURCES
     ${CMAKE_SOURCE_DIR}/external/glad/src/gl.c
     # stb_image implementation
     ${CMAKE_SOURCE_DIR}/external/stb/stb_image_impl.cpp
+    ${CMAKE_SOURCE_DIR}/external/stb/stb_image_write_impl.cpp
 )
 
 # Create static library
@@ -73,6 +75,7 @@ target_link_libraries(vestige_engine
 # Suppress warnings from third-party source files compiled as part of the engine
 set_source_files_properties(
     ${CMAKE_SOURCE_DIR}/external/stb/stb_image_impl.cpp
+    ${CMAKE_SOURCE_DIR}/external/stb/stb_image_write_impl.cpp
     ${CMAKE_SOURCE_DIR}/external/glad/src/gl.c
     ${CMAKE_CURRENT_SOURCE_DIR}/utils/gltf_loader_impl.cpp
     PROPERTIES COMPILE_FLAGS "-w"
