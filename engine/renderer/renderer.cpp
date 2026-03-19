@@ -643,6 +643,9 @@ void Renderer::endFrame()
 
             m_bloomDownsampleShader.setInt("u_sourceTexture", 0);
             m_screenQuad->draw();
+
+            // Barrier required: next iteration reads from the mip we just wrote
+            glTextureBarrier();
         }
 
         // Restore texture mip range for sampling during upsample
@@ -679,6 +682,9 @@ void Renderer::endFrame()
                           1.0f / static_cast<float>(m_bloomMipHeights[mip])));
             m_bloomUpsampleShader.setFloat("u_filterRadius", m_bloomFilterRadius);
             m_screenQuad->draw();
+
+            // Barrier required: next iteration reads from the mip we just wrote
+            glTextureBarrier();
         }
 
         glDisable(GL_BLEND);
@@ -1493,7 +1499,8 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
 
         m_skyboxShader.use();
         m_skyboxShader.setMat4("u_view", camera.getViewMatrix());
-        m_skyboxShader.setMat4("u_projection", camera.getProjectionMatrix(aspectRatio));
+        // Use the (potentially jittered) projection so TAA accumulates the skybox correctly
+        m_skyboxShader.setMat4("u_projection", m_lastProjection);
         m_skyboxShader.setBool("u_hasCubemap", m_skybox->hasTexture());
 
         if (m_skybox->hasTexture())
@@ -1545,8 +1552,11 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
 void Renderer::renderShadowPass(const std::vector<InstanceBatch>& batches,
                                  const Camera& camera, float aspectRatio)
 {
-    // Shadow maps use standard forward-Z (GL_LESS) while the main scene uses
-    // reverse-Z (GL_GEQUAL). Temporarily switch depth state for shadow rendering.
+    // Shadow maps use standard forward-Z with [-1,1] NDC depth range.
+    // Must restore GL_NEGATIVE_ONE_TO_ONE because glClipControl(GL_ZERO_TO_ONE)
+    // clips z < 0 which discards half the shadow casters from glm::ortho's
+    // [-1,1] range. This was the root cause of disappearing shadows at distance.
+    glClipControl(GL_LOWER_LEFT, GL_NEGATIVE_ONE_TO_ONE);
     glDepthFunc(GL_LESS);
     glClearDepth(1.0);
 
@@ -1599,6 +1609,7 @@ void Renderer::renderShadowPass(const std::vector<InstanceBatch>& batches,
     }
 
     // Restore reverse-Z depth state
+    glClipControl(GL_LOWER_LEFT, GL_ZERO_TO_ONE);
     glDepthFunc(GL_GEQUAL);
     glClearDepth(0.0);
 }
@@ -1625,7 +1636,8 @@ void Renderer::renderPointShadowPass(const std::vector<InstanceBatch>& batches,
         return;
     }
 
-    // Point shadow maps use forward-Z — temporarily override reverse-Z state
+    // Point shadow maps use forward-Z with [-1,1] NDC depth range
+    glClipControl(GL_LOWER_LEFT, GL_NEGATIVE_ONE_TO_ONE);
     glDepthFunc(GL_LESS);
     glClearDepth(1.0);
     m_pointShadowDepthShader.use();
@@ -1685,6 +1697,7 @@ void Renderer::renderPointShadowPass(const std::vector<InstanceBatch>& batches,
     }
 
     // Restore reverse-Z depth state
+    glClipControl(GL_LOWER_LEFT, GL_ZERO_TO_ONE);
     glDepthFunc(GL_GEQUAL);
     glClearDepth(0.0);
 }

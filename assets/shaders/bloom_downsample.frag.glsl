@@ -46,24 +46,22 @@ void main()
     vec3 l = texture(u_sourceTexture, v_texCoord + vec2(-x, -y)).rgb;
     vec3 m = texture(u_sourceTexture, v_texCoord + vec2( x, -y)).rgb;
 
-    // On the first downsample, apply soft brightness threshold to extract only
-    // bright areas. Without this, the entire scene gets bloom (washed-out haze).
+    // On the first downsample, apply luminance-based soft threshold to extract
+    // only bright areas. Uses BT.709 luminance to preserve color ratios
+    // (per-component threshold would shift colors, e.g. orange → red).
     if (u_useKarisAverage && u_threshold > 0.0)
     {
-        // Soft knee threshold (same approach as the original bloom_bright shader)
-        a = max(a - vec3(u_threshold), vec3(0.0));
-        b = max(b - vec3(u_threshold), vec3(0.0));
-        c = max(c - vec3(u_threshold), vec3(0.0));
-        d = max(d - vec3(u_threshold), vec3(0.0));
-        e = max(e - vec3(u_threshold), vec3(0.0));
-        f = max(f - vec3(u_threshold), vec3(0.0));
-        g = max(g - vec3(u_threshold), vec3(0.0));
-        h = max(h - vec3(u_threshold), vec3(0.0));
-        i = max(i - vec3(u_threshold), vec3(0.0));
-        j = max(j - vec3(u_threshold), vec3(0.0));
-        k = max(k - vec3(u_threshold), vec3(0.0));
-        l = max(l - vec3(u_threshold), vec3(0.0));
-        m = max(m - vec3(u_threshold), vec3(0.0));
+        #define SOFT_THRESHOLD(s) { \
+            float luma = dot(s, vec3(0.2126, 0.7152, 0.0722)); \
+            float contrib = max(0.0, luma - u_threshold); \
+            contrib = contrib / (contrib + 1.0); \
+            s *= contrib / (luma + 0.0001); \
+        }
+        SOFT_THRESHOLD(a) SOFT_THRESHOLD(b) SOFT_THRESHOLD(c)
+        SOFT_THRESHOLD(d) SOFT_THRESHOLD(e) SOFT_THRESHOLD(f)
+        SOFT_THRESHOLD(g) SOFT_THRESHOLD(h) SOFT_THRESHOLD(i)
+        SOFT_THRESHOLD(j) SOFT_THRESHOLD(k) SOFT_THRESHOLD(l) SOFT_THRESHOLD(m)
+        #undef SOFT_THRESHOLD
     }
 
     vec3 result;
