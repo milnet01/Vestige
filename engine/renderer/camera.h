@@ -77,6 +77,12 @@ public:
     /// @brief Sets the camera position directly.
     void setPosition(const glm::vec3& position);
 
+    /// @brief Sets the yaw angle directly (in degrees) and recalculates vectors.
+    void setYaw(float yaw);
+
+    /// @brief Sets the pitch angle directly (in degrees) and recalculates vectors.
+    void setPitch(float pitch);
+
 private:
     void updateVectors();
 

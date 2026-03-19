@@ -222,6 +222,22 @@ public:
     /// Call this in play mode when ImGui is not displaying the viewport.
     void blitToScreen();
 
+    /// @brief Renders the scene to the ID buffer for mouse picking.
+    /// Call on-demand (when the user clicks in the viewport).
+    void renderIdBuffer(const SceneRenderData& renderData,
+                        const Camera& camera, float aspectRatio);
+
+    /// @brief Reads the ID buffer pixel at (x, y) and decodes the entity ID.
+    /// @param x Pixel X in FBO coordinates (0 = left).
+    /// @param y Pixel Y in FBO coordinates (0 = bottom).
+    /// @return Entity ID, or 0 if background/empty.
+    uint32_t pickEntityAt(int x, int y);
+
+    /// @brief Renders selection outlines into the output FBO for the given entities.
+    void renderSelectionOutline(const SceneRenderData& renderData,
+                                const std::vector<uint32_t>& selectedIds,
+                                const Camera& camera, float aspectRatio);
+
     /// @brief Gets the text renderer (nullptr if not initialized).
     TextRenderer* getTextRenderer();
 
@@ -264,6 +280,8 @@ private:
     Shader m_ssaoBlurShader;
     Shader m_taaResolveShader;
     Shader m_motionVectorShader;
+    Shader m_idBufferShader;
+    Shader m_outlineShader;
     EventBus& m_eventBus;
     std::string m_assetPath;
 
@@ -271,6 +289,10 @@ private:
     std::unique_ptr<Framebuffer> m_msaaFbo;
     std::unique_ptr<Framebuffer> m_resolveFbo;
     std::unique_ptr<Framebuffer> m_outputFbo;  // Post-tonemapped LDR output for editor viewport
+    GLuint m_outlineStencilRbo = 0;            // Depth-stencil RBO attached to output FBO for outline rendering
+
+    // ID buffer (for mouse picking — rendered on demand)
+    std::unique_ptr<Framebuffer> m_idBufferFbo;
     std::unique_ptr<FullscreenQuad> m_screenQuad;
     int m_windowWidth = 0;
     int m_windowHeight = 0;

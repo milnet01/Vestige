@@ -111,10 +111,15 @@ bool Engine::initialize(const EngineConfig& config)
             return;
         }
 
-        // When ImGui wants keyboard input, only let Escape and F-keys through
+        // When ImGui wants keyboard input, only let Escape, F-keys, and
+        // editor camera keys (numpad presets, F for focus) through
         if (m_editor && m_editor->wantCaptureKeyboard()
             && event.keyCode != GLFW_KEY_ESCAPE
-            && !(event.keyCode >= GLFW_KEY_F1 && event.keyCode <= GLFW_KEY_F12))
+            && !(event.keyCode >= GLFW_KEY_F1 && event.keyCode <= GLFW_KEY_F12)
+            && event.keyCode != GLFW_KEY_KP_1
+            && event.keyCode != GLFW_KEY_KP_3
+            && event.keyCode != GLFW_KEY_KP_7
+            && event.keyCode != GLFW_KEY_F)
         {
             return;
         }
@@ -283,6 +288,53 @@ bool Engine::initialize(const EngineConfig& config)
             case GLFW_KEY_Q:
                 m_isRunning = false;
                 break;
+
+            // --- Editor camera view presets (only active in EDIT mode) ---
+            case GLFW_KEY_KP_1:
+                if (m_editor && m_editor->getMode() == EditorMode::EDIT)
+                {
+                    m_editor->getEditorCamera()->setFrontView();
+                    Logger::info("Editor camera: Front view");
+                }
+                break;
+
+            case GLFW_KEY_KP_3:
+                if (m_editor && m_editor->getMode() == EditorMode::EDIT)
+                {
+                    m_editor->getEditorCamera()->setRightView();
+                    Logger::info("Editor camera: Right view");
+                }
+                break;
+
+            case GLFW_KEY_KP_7:
+                if (m_editor && m_editor->getMode() == EditorMode::EDIT)
+                {
+                    m_editor->getEditorCamera()->setTopView();
+                    Logger::info("Editor camera: Top view");
+                }
+                break;
+
+            case GLFW_KEY_F:
+                if (m_editor && m_editor->getMode() == EditorMode::EDIT)
+                {
+                    Scene* focusScene = m_sceneManager->getActiveScene();
+                    Entity* selected = nullptr;
+                    if (focusScene)
+                    {
+                        selected = m_editor->getSelection().getPrimaryEntity(*focusScene);
+                    }
+                    if (selected)
+                    {
+                        m_editor->getEditorCamera()->focusOn(selected->getWorldPosition());
+                        Logger::info("Editor camera: Focus on '" + selected->getName() + "'");
+                    }
+                    else
+                    {
+                        m_editor->getEditorCamera()->focusOn(glm::vec3(0.0f, 0.5f, 0.0f));
+                        Logger::info("Editor camera: Focus on scene center");
+                    }
+                }
+                break;
         }
     });
 
@@ -299,6 +351,7 @@ bool Engine::initialize(const EngineConfig& config)
     m_isRunning = true;
     Logger::info("Engine initialized successfully");
     Logger::info("Controls: Escape=toggle editor/play, WASD=move (play mode), Mouse=look (play mode), F1=wireframe, F2=tonemapper, F3=HDR debug, F4=POM, F5=bloom, F6=SSAO, F7=AA mode, F8=color grading, F9=CSM debug, F10=auto-exposure, F11=diagnostic capture, Q=quit");
+    Logger::info("Editor camera: Alt+LMB=orbit, MMB=pan, Scroll=zoom, F=focus, Numpad 1/3/7=front/right/top");
     Logger::info("Gamepad: Left stick=move, Right stick=look, LB=sprint, Triggers=up/down");
     return true;
 }
@@ -320,6 +373,26 @@ void Engine::run()
 
         // 3b. Process async texture uploads (GPU upload on main thread)
         m_resourceManager->processAsyncUploads();
+
+        // 3c. Start ImGui frame early (so editor camera can read ImGui IO state)
+        if (m_editor)
+        {
+            m_editor->prepareFrame();
+        }
+
+        // 3d. Check for viewport clicks (uses previous frame's viewport bounds)
+        bool editorActive = m_editor && m_editor->getMode() == EditorMode::EDIT;
+        if (editorActive)
+        {
+            m_editor->processViewportClick(m_window->getWidth(), m_window->getHeight());
+        }
+
+        // 3e. Update editor camera before rendering (uses previous frame's hover state)
+        if (editorActive)
+        {
+            m_editor->updateEditorCamera(deltaTime);
+            m_editor->applyEditorCamera(*m_camera);
+        }
 
         // 4. Scene — update entities and components
         m_sceneManager->update(deltaTime);
@@ -358,8 +431,44 @@ void Engine::run()
         // 7. Resolve MSAA, post-process, composite to output FBO
         m_renderer->endFrame(deltaTime);
 
+        // 7b. Selection system: ID buffer picking and outline rendering
+        if (editorActive)
+        {
+            // Process pending pick request (renders ID buffer on demand)
+            if (m_editor->isPickRequested())
+            {
+                m_renderer->renderIdBuffer(m_renderData, *m_camera, aspectRatio);
+                int pickX = 0;
+                int pickY = 0;
+                m_editor->getPickCoords(pickX, pickY);
+                uint32_t entityId = m_renderer->pickEntityAt(pickX, pickY);
+                m_editor->handlePickResult(entityId);
+
+                // Log the selection result
+                if (entityId != 0 && activeScene)
+                {
+                    Entity* picked = activeScene->findEntityById(entityId);
+                    if (picked)
+                    {
+                        Logger::info("Selected: '" + picked->getName() + "' (ID " + std::to_string(entityId) + ")");
+                    }
+                }
+                else if (entityId == 0)
+                {
+                    Logger::info("Selection cleared (clicked background)");
+                }
+            }
+
+            // Render selection outlines into the output FBO
+            if (m_editor->getSelection().hasSelection())
+            {
+                m_renderer->renderSelectionOutline(
+                    m_renderData, m_editor->getSelection().getSelectedIds(),
+                    *m_camera, aspectRatio);
+            }
+        }
+
         // 8. Display the rendered frame
-        bool editorActive = m_editor && m_editor->getMode() == EditorMode::EDIT;
         if (editorActive)
         {
             // Editor mode: clear screen to dark grey, then ImGui draws the scene
@@ -368,7 +477,7 @@ void Engine::run()
             glViewport(0, 0, m_window->getWidth(), m_window->getHeight());
             glClearColor(0.08f, 0.08f, 0.10f, 1.0f);
             glClear(GL_COLOR_BUFFER_BIT);
-            m_editor->beginFrame(m_renderer.get());
+            m_editor->drawPanels(m_renderer.get(), activeScene);
             m_editor->endFrame();
         }
         else
@@ -377,7 +486,7 @@ void Engine::run()
             m_renderer->blitToScreen();
             if (m_editor)
             {
-                m_editor->beginFrame(nullptr);
+                m_editor->drawPanels(nullptr, nullptr);
                 m_editor->endFrame();
             }
         }

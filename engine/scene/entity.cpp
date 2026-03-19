@@ -5,12 +5,20 @@
 namespace Vestige
 {
 
+uint32_t Entity::s_nextId = 1;
+
 Entity::Entity(const std::string& name)
-    : m_name(name)
+    : m_id(s_nextId++)
+    , m_name(name)
     , m_parent(nullptr)
     , m_worldMatrix(1.0f)
     , m_isActive(true)
 {
+}
+
+uint32_t Entity::getId() const
+{
+    return m_id;
 }
 
 Entity::~Entity() = default;
@@ -101,6 +109,26 @@ glm::vec3 Entity::getWorldPosition() const
 const std::string& Entity::getName() const
 {
     return m_name;
+}
+
+void Entity::setName(const std::string& name)
+{
+    m_name = name;
+}
+
+std::unique_ptr<Entity> Entity::removeChild(Entity* child)
+{
+    for (auto it = m_children.begin(); it != m_children.end(); ++it)
+    {
+        if (it->get() == child)
+        {
+            std::unique_ptr<Entity> removed = std::move(*it);
+            m_children.erase(it);
+            removed->m_parent = nullptr;
+            return removed;
+        }
+    }
+    return nullptr;
 }
 
 void Entity::setActive(bool isActive)

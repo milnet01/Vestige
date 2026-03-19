@@ -117,6 +117,18 @@ void Camera::setPosition(const glm::vec3& position)
     m_position = position;
 }
 
+void Camera::setYaw(float yaw)
+{
+    m_yaw = yaw;
+    updateVectors();
+}
+
+void Camera::setPitch(float pitch)
+{
+    m_pitch = std::clamp(pitch, -89.0f, 89.0f);
+    updateVectors();
+}
+
 void Camera::updateVectors()
 {
     // Calculate new front vector from yaw and pitch angles
