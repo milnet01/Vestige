@@ -26,7 +26,7 @@ Engine::~Engine()
 
 bool Engine::initialize(const EngineConfig& config)
 {
-    Logger::info("=== Vestige Engine v0.3.0 ===");
+    Logger::info("=== Vestige Engine v0.5.0 ===");
     Logger::info("Initializing engine...");
 
     // Create window (also initializes GLFW and OpenGL context)
@@ -75,9 +75,27 @@ bool Engine::initialize(const EngineConfig& config)
     // Set up the demo scene
     setupDemoScene();
 
-    // Capture cursor for FPS-style controls
-    m_window->setCursorEnabled(false);
-    m_isCursorCaptured = true;
+    // Initialize editor (ImGui + docking) — must come after InputManager for callback chaining
+    m_editor = std::make_unique<Editor>();
+    if (!m_editor->initialize(m_window->getHandle(), config.assetPath))
+    {
+        Logger::warning("Editor initialization failed — continuing without editor");
+        m_editor.reset();
+    }
+
+    // Start in editor mode — cursor visible, FPS controller disabled
+    if (m_editor)
+    {
+        m_window->setCursorEnabled(true);
+        m_isCursorCaptured = false;
+        m_controller->setEnabled(false);
+    }
+    else
+    {
+        // Fallback: no editor, start in play mode
+        m_window->setCursorEnabled(false);
+        m_isCursorCaptured = true;
+    }
 
     // Subscribe to window close event
     m_eventBus.subscribe<WindowCloseEvent>([this](const WindowCloseEvent&)
@@ -93,12 +111,33 @@ bool Engine::initialize(const EngineConfig& config)
             return;
         }
 
+        // When ImGui wants keyboard input, only let Escape through
+        if (m_editor && m_editor->wantCaptureKeyboard()
+            && event.keyCode != GLFW_KEY_ESCAPE)
+        {
+            return;
+        }
+
         switch (event.keyCode)
         {
             case GLFW_KEY_ESCAPE:
-                m_isCursorCaptured = !m_isCursorCaptured;
-                m_window->setCursorEnabled(!m_isCursorCaptured);
-                m_controller->setEnabled(m_isCursorCaptured);
+                if (m_editor)
+                {
+                    // Toggle between editor and play mode
+                    m_editor->toggleMode();
+                    bool isPlayMode = (m_editor->getMode() == EditorMode::PLAY);
+                    m_isCursorCaptured = isPlayMode;
+                    m_window->setCursorEnabled(!isPlayMode);
+                    m_controller->setEnabled(isPlayMode);
+                    Logger::info(isPlayMode ? "Switched to PLAY mode" : "Switched to EDIT mode");
+                }
+                else
+                {
+                    // No editor: toggle cursor capture as before
+                    m_isCursorCaptured = !m_isCursorCaptured;
+                    m_window->setCursorEnabled(!m_isCursorCaptured);
+                    m_controller->setEnabled(m_isCursorCaptured);
+                }
                 break;
 
             case GLFW_KEY_F1:
@@ -246,15 +285,19 @@ bool Engine::initialize(const EngineConfig& config)
         }
     });
 
-    // Subscribe to scroll for FOV zoom
+    // Subscribe to scroll for FOV zoom (gated by ImGui in edit mode)
     m_eventBus.subscribe<MouseScrollEvent>([this](const MouseScrollEvent& event)
     {
+        if (m_editor && m_editor->wantCaptureMouse())
+        {
+            return;
+        }
         m_camera->adjustFov(static_cast<float>(event.yOffset));
     });
 
     m_isRunning = true;
     Logger::info("Engine initialized successfully");
-    Logger::info("Controls: WASD=move, Mouse=look, Space/Shift=up/down, LCtrl=sprint, F1=wireframe, F2=tonemapper, F3=HDR debug, F4=POM, F5=bloom, F6=SSAO, F7=AA mode, F8=color grading, F9=CSM debug, F10=auto-exposure, F11=diagnostic capture, [/]=exposure, -/+=POM depth, Q=quit");
+    Logger::info("Controls: Escape=toggle editor/play, WASD=move (play mode), Mouse=look (play mode), F1=wireframe, F2=tonemapper, F3=HDR debug, F4=POM, F5=bloom, F6=SSAO, F7=AA mode, F8=color grading, F9=CSM debug, F10=auto-exposure, F11=diagnostic capture, Q=quit");
     Logger::info("Gamepad: Left stick=move, Right stick=look, LB=sprint, Triggers=up/down");
     return true;
 }
@@ -314,7 +357,14 @@ void Engine::run()
         // 7. Resolve MSAA and draw to screen
         m_renderer->endFrame(deltaTime);
 
-        // 8. Window — swap buffers
+        // 8. Editor overlay (ImGui renders on top of the final framebuffer)
+        if (m_editor)
+        {
+            m_editor->beginFrame();
+            m_editor->endFrame();
+        }
+
+        // 9. Window — swap buffers
         m_window->swapBuffers();
     }
 
@@ -330,6 +380,7 @@ void Engine::shutdown()
 
     Logger::info("Shutting down engine...");
 
+    m_editor.reset();
     m_controller.reset();
     m_camera.reset();
     m_sceneManager.reset();

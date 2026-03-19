@@ -11,6 +11,7 @@
 #include "renderer/camera.h"
 #include "scene/scene_manager.h"
 #include "resource/resource_manager.h"
+#include "editor/editor.h"
 
 #include <memory>
 
@@ -58,6 +59,7 @@ private:
     std::unique_ptr<FirstPersonController> m_controller;
     std::unique_ptr<SceneManager> m_sceneManager;
     std::unique_ptr<ResourceManager> m_resourceManager;
+    std::unique_ptr<Editor> m_editor;
 
     bool m_isRunning;
     bool m_isCursorCaptured;
