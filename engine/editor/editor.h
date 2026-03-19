@@ -2,6 +2,8 @@
 /// @brief Editor subsystem — ImGui integration, docking, and editor mode management.
 #pragma once
 
+#include <glad/gl.h>
+
 #include <string>
 
 struct GLFWwindow;
@@ -10,6 +12,7 @@ namespace Vestige
 {
 
 class EventBus;
+class Renderer;
 
 /// @brief Editor/Play mode toggle.
 enum class EditorMode
@@ -40,7 +43,8 @@ public:
 
     /// @brief Starts a new ImGui frame. Call after Renderer::endFrame().
     /// In EDIT mode, draws the dockspace and editor panels.
-    void beginFrame();
+    /// @param renderer Renderer reference (for viewport texture). May be nullptr.
+    void beginFrame(Renderer* renderer = nullptr);
 
     /// @brief Finalizes and renders the ImGui frame. Call before Window::swapBuffers().
     void endFrame();
@@ -68,7 +72,9 @@ private:
 
     EditorMode m_mode = EditorMode::EDIT;
     bool m_isInitialized = false;
-    bool m_showDemoWindow = true;
+    bool m_showDemoWindow = false;
+    bool m_viewportFocused = false;
+    bool m_viewportHovered = false;
     GLFWwindow* m_window = nullptr;
 };
 

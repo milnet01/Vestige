@@ -62,6 +62,9 @@ public:
     /// @brief Gets the OpenGL framebuffer ID.
     GLuint getId() const;
 
+    /// @brief Gets the color attachment texture/renderbuffer ID.
+    GLuint getColorAttachmentId() const;
+
     /// @brief Gets the framebuffer width.
     int getWidth() const;
 

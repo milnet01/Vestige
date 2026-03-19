@@ -111,9 +111,10 @@ bool Engine::initialize(const EngineConfig& config)
             return;
         }
 
-        // When ImGui wants keyboard input, only let Escape through
+        // When ImGui wants keyboard input, only let Escape and F-keys through
         if (m_editor && m_editor->wantCaptureKeyboard()
-            && event.keyCode != GLFW_KEY_ESCAPE)
+            && event.keyCode != GLFW_KEY_ESCAPE
+            && !(event.keyCode >= GLFW_KEY_F1 && event.keyCode <= GLFW_KEY_F12))
         {
             return;
         }
@@ -354,14 +355,31 @@ void Engine::run()
             m_renderer->renderScene(m_renderData, *m_camera, aspectRatio);
         }
 
-        // 7. Resolve MSAA and draw to screen
+        // 7. Resolve MSAA, post-process, composite to output FBO
         m_renderer->endFrame(deltaTime);
 
-        // 8. Editor overlay (ImGui renders on top of the final framebuffer)
-        if (m_editor)
+        // 8. Display the rendered frame
+        bool editorActive = m_editor && m_editor->getMode() == EditorMode::EDIT;
+        if (editorActive)
         {
-            m_editor->beginFrame();
+            // Editor mode: clear screen to dark grey, then ImGui draws the scene
+            // inside the Viewport panel as a texture. No blit to screen.
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            glViewport(0, 0, m_window->getWidth(), m_window->getHeight());
+            glClearColor(0.08f, 0.08f, 0.10f, 1.0f);
+            glClear(GL_COLOR_BUFFER_BIT);
+            m_editor->beginFrame(m_renderer.get());
             m_editor->endFrame();
+        }
+        else
+        {
+            // Play mode: blit output directly to screen, run ImGui frame (hidden)
+            m_renderer->blitToScreen();
+            if (m_editor)
+            {
+                m_editor->beginFrame(nullptr);
+                m_editor->endFrame();
+            }
         }
 
         // 9. Window — swap buffers

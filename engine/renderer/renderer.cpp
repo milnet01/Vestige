@@ -284,6 +284,16 @@ void Renderer::initFramebuffers(int width, int height, int msaaSamples)
     resolveConfig.isFloatingPoint = true;
     m_resolveFbo = std::make_unique<Framebuffer>(resolveConfig);
 
+    // Post-tonemapped LDR output (for editor viewport — ImGui displays this texture)
+    FramebufferConfig outputConfig;
+    outputConfig.width = width;
+    outputConfig.height = height;
+    outputConfig.samples = 1;
+    outputConfig.hasColorAttachment = true;
+    outputConfig.hasDepthAttachment = false;
+    outputConfig.isFloatingPoint = false;  // LDR RGBA8 — post-tonemapped
+    m_outputFbo = std::make_unique<Framebuffer>(outputConfig);
+
     // Fullscreen quad for the screen pass
     m_screenQuad = std::make_unique<FullscreenQuad>();
 
@@ -774,7 +784,15 @@ void Renderer::endFrame(float deltaTime)
     }
 
     // 6. Final screen quad composite (tone mapping + bloom + SSAO + contact shadows)
-    Framebuffer::unbind();
+    //    Render to the output FBO (not the screen) so the editor can display it as a texture.
+    if (m_outputFbo)
+    {
+        m_outputFbo->bind();
+    }
+    else
+    {
+        Framebuffer::unbind();
+    }
     glViewport(0, 0, m_windowWidth, m_windowHeight);
     glClear(GL_COLOR_BUFFER_BIT);
 
@@ -1187,6 +1205,30 @@ int Renderer::getPointLightCount() const
 int Renderer::getSpotLightCount() const
 {
     return static_cast<int>(m_spotLights.size());
+}
+
+GLuint Renderer::getOutputTextureId() const
+{
+    if (m_outputFbo)
+    {
+        return m_outputFbo->getColorAttachmentId();
+    }
+    return 0;
+}
+
+void Renderer::blitToScreen()
+{
+    if (!m_outputFbo)
+    {
+        return;
+    }
+
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, m_outputFbo->getId());
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+    glBlitFramebuffer(0, 0, m_windowWidth, m_windowHeight,
+                      0, 0, m_windowWidth, m_windowHeight,
+                      GL_COLOR_BUFFER_BIT, GL_NEAREST);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
 TextRenderer* Renderer::getTextRenderer()
@@ -1985,6 +2027,10 @@ void Renderer::onWindowResize(int width, int height)
     if (m_resolveFbo)
     {
         m_resolveFbo->resize(width, height);
+    }
+    if (m_outputFbo)
+    {
+        m_outputFbo->resize(width, height);
     }
     // Shadow map does not resize with the window — it has a fixed resolution
 
