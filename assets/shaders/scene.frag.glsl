@@ -230,8 +230,9 @@ float calcShadowForCascade(int cascade, vec3 normal, vec3 lightDir)
 
     float currentDepth = projCoords.z;
 
-    // Slope-scaled bias — kept small since ground planes are excluded from the
-    // shadow map (castsShadow=false), eliminating the main source of acne.
+    // Slope-scaled bias. Ground planes are excluded from the shadow map
+    // (castsShadow=false), so this only needs to handle cube self-shadowing.
+    // Reduced from 0.005 to minimize shadow detachment (peter panning).
     float bias = max(0.002 * (1.0 - dot(normal, lightDir)), 0.0003);
 
     // PCF 3x3
