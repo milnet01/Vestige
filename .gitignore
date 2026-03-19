@@ -34,6 +34,9 @@ compile_commands.json
 .DS_Store
 Thumbs.db
 
+# Claude Code local settings
+.claude/settings.local.json
+
 # Dependency directories (fetched by CMake)
 external/glfw/
 external/glm/

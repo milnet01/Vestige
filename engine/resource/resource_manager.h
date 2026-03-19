@@ -59,6 +59,18 @@ public:
     /// @brief Gets or creates a shared plane mesh.
     std::shared_ptr<Mesh> getPlaneMesh(float size = 10.0f);
 
+    /// @brief Gets or creates a shared sphere mesh.
+    std::shared_ptr<Mesh> getSphereMesh(uint32_t sectors = 32, uint32_t stacks = 16);
+
+    /// @brief Gets or creates a shared cylinder mesh.
+    std::shared_ptr<Mesh> getCylinderMesh(uint32_t sectors = 32);
+
+    /// @brief Gets or creates a shared cone mesh.
+    std::shared_ptr<Mesh> getConeMesh(uint32_t sectors = 32, uint32_t stacks = 4);
+
+    /// @brief Gets or creates a shared wedge mesh.
+    std::shared_ptr<Mesh> getWedgeMesh();
+
     // --- Materials ---
 
     /// @brief Creates and registers a named material.
