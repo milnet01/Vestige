@@ -722,6 +722,38 @@ void Engine::setupDemoScene()
     coolPL->light.quadratic = 0.07f;
     coolPL->light.castsShadow = true;
 
+    // --- New primitive shapes (5B-1 test) ---
+    auto sphereMesh = m_resourceManager->getSphereMesh();
+    auto cylinderMesh = m_resourceManager->getCylinderMesh();
+    auto coneMesh = m_resourceManager->getConeMesh();
+    auto wedgeMesh = m_resourceManager->getWedgeMesh();
+
+    auto primitiveMat = m_resourceManager->createMaterial("primitive_default");
+    primitiveMat->setType(MaterialType::PBR);
+    primitiveMat->setAlbedo(glm::vec3(0.7f));
+    primitiveMat->setMetallic(0.0f);
+    primitiveMat->setRoughness(0.5f);
+
+    Entity* sphereEntity = scene->createEntity("7 Sphere");
+    sphereEntity->transform.position = glm::vec3(-4.5f, 0.5f, 2.0f);
+    auto* sphereMR = sphereEntity->addComponent<MeshRenderer>(sphereMesh, primitiveMat);
+    sphereMR->setBounds(sphereMesh->getLocalBounds());
+
+    Entity* cylinderEntity = scene->createEntity("8 Cylinder");
+    cylinderEntity->transform.position = glm::vec3(-6.0f, 0.5f, 0.0f);
+    auto* cylinderMR = cylinderEntity->addComponent<MeshRenderer>(cylinderMesh, primitiveMat);
+    cylinderMR->setBounds(cylinderMesh->getLocalBounds());
+
+    Entity* coneEntity = scene->createEntity("9 Cone");
+    coneEntity->transform.position = glm::vec3(-6.0f, 0.5f, 2.0f);
+    auto* coneMR = coneEntity->addComponent<MeshRenderer>(coneMesh, primitiveMat);
+    coneMR->setBounds(coneMesh->getLocalBounds());
+
+    Entity* wedgeEntity = scene->createEntity("10 Wedge");
+    wedgeEntity->transform.position = glm::vec3(-4.5f, 0.5f, 4.0f);
+    auto* wedgeMR = wedgeEntity->addComponent<MeshRenderer>(wedgeMesh, primitiveMat);
+    wedgeMR->setBounds(wedgeMesh->getLocalBounds());
+
     // --- Optional glTF model loading ---
     auto testModel = m_resourceManager->loadModel("assets/models/test_model.glb");
     if (testModel)

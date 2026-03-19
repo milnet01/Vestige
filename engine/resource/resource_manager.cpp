@@ -138,6 +138,62 @@ std::shared_ptr<Mesh> ResourceManager::getPlaneMesh(float size)
     return mesh;
 }
 
+std::shared_ptr<Mesh> ResourceManager::getSphereMesh(uint32_t sectors, uint32_t stacks)
+{
+    std::string key = "__builtin_sphere_" + std::to_string(sectors) + "x" + std::to_string(stacks);
+    auto it = m_meshes.find(key);
+    if (it != m_meshes.end())
+    {
+        return it->second;
+    }
+
+    auto mesh = std::make_shared<Mesh>(Mesh::createSphere(sectors, stacks));
+    m_meshes[key] = mesh;
+    return mesh;
+}
+
+std::shared_ptr<Mesh> ResourceManager::getCylinderMesh(uint32_t sectors)
+{
+    std::string key = "__builtin_cylinder_" + std::to_string(sectors);
+    auto it = m_meshes.find(key);
+    if (it != m_meshes.end())
+    {
+        return it->second;
+    }
+
+    auto mesh = std::make_shared<Mesh>(Mesh::createCylinder(sectors));
+    m_meshes[key] = mesh;
+    return mesh;
+}
+
+std::shared_ptr<Mesh> ResourceManager::getConeMesh(uint32_t sectors, uint32_t stacks)
+{
+    std::string key = "__builtin_cone_" + std::to_string(sectors) + "x" + std::to_string(stacks);
+    auto it = m_meshes.find(key);
+    if (it != m_meshes.end())
+    {
+        return it->second;
+    }
+
+    auto mesh = std::make_shared<Mesh>(Mesh::createCone(sectors, stacks));
+    m_meshes[key] = mesh;
+    return mesh;
+}
+
+std::shared_ptr<Mesh> ResourceManager::getWedgeMesh()
+{
+    const std::string key = "__builtin_wedge";
+    auto it = m_meshes.find(key);
+    if (it != m_meshes.end())
+    {
+        return it->second;
+    }
+
+    auto mesh = std::make_shared<Mesh>(Mesh::createWedge());
+    m_meshes[key] = mesh;
+    return mesh;
+}
+
 std::shared_ptr<Material> ResourceManager::createMaterial(const std::string& name)
 {
     auto it = m_materials.find(name);

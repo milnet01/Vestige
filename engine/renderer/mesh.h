@@ -78,6 +78,27 @@ public:
     /// @return A mesh containing a flat ground plane.
     static Mesh createPlane(float size = 10.0f);
 
+    /// @brief Creates a UV sphere mesh (diameter 1m, centered at origin).
+    /// @param sectors Number of longitude slices (default 32).
+    /// @param stacks Number of latitude rings (default 16).
+    /// @return A mesh containing a UV sphere.
+    static Mesh createSphere(uint32_t sectors = 32, uint32_t stacks = 16);
+
+    /// @brief Creates a capped cylinder mesh (diameter 1m, height 1m, centered at origin).
+    /// @param sectors Number of circumference segments (default 32).
+    /// @return A mesh containing a capped cylinder.
+    static Mesh createCylinder(uint32_t sectors = 32);
+
+    /// @brief Creates a capped cone mesh (base diameter 1m, height 1m, centered at origin).
+    /// @param sectors Number of circumference segments (default 32).
+    /// @param stacks Number of height segments on the side surface (default 4).
+    /// @return A mesh containing a capped cone.
+    static Mesh createCone(uint32_t sectors = 32, uint32_t stacks = 4);
+
+    /// @brief Creates a wedge (triangular prism / ramp) mesh (1x1x1 bounding box).
+    /// @return A mesh containing a wedge shape.
+    static Mesh createWedge();
+
 private:
     void cleanup();
 
