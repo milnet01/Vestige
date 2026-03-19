@@ -41,6 +41,7 @@ set(ENGINE_SOURCES
     utils/gltf_loader.cpp
     utils/gltf_loader_impl.cpp
     utils/cube_loader.cpp
+    editor/editor.cpp
     # glad OpenGL loader
     ${CMAKE_SOURCE_DIR}/external/glad/src/gl.c
     # stb_image implementation
@@ -70,6 +71,8 @@ target_link_libraries(vestige_engine
         glm::glm
         tinyexr
         freetype
+        imgui_lib
+        imguizmo_lib
 )
 
 # Suppress warnings from third-party source files compiled as part of the engine

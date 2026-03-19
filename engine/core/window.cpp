@@ -11,6 +11,8 @@
 namespace Vestige
 {
 
+Window* Window::s_instance = nullptr;
+
 Window::Window(const WindowConfig& config, EventBus& eventBus)
     : m_handle(nullptr)
     , m_width(config.width)
@@ -60,8 +62,9 @@ Window::Window(const WindowConfig& config, EventBus& eventBus)
     // VSync
     glfwSwapInterval(config.isVsyncEnabled ? 1 : 0);
 
-    // Store pointer to this Window instance for callbacks
-    glfwSetWindowUserPointer(m_handle, this);
+    // Store static instance for framebuffer resize callback.
+    // The user pointer is reserved for InputManager (set later).
+    s_instance = this;
 
     // Register callbacks
     glfwSetFramebufferSizeCallback(m_handle, framebufferSizeCallback);
@@ -75,6 +78,7 @@ Window::Window(const WindowConfig& config, EventBus& eventBus)
 
 Window::~Window()
 {
+    s_instance = nullptr;
     if (m_handle)
     {
         glfwDestroyWindow(m_handle);
@@ -120,15 +124,14 @@ void Window::setCursorEnabled(bool isEnabled)
         isEnabled ? GLFW_CURSOR_NORMAL : GLFW_CURSOR_DISABLED);
 }
 
-void Window::framebufferSizeCallback(GLFWwindow* window, int width, int height)
+void Window::framebufferSizeCallback(GLFWwindow* /*window*/, int width, int height)
 {
-    auto* self = static_cast<Window*>(glfwGetWindowUserPointer(window));
-    if (self)
+    if (s_instance)
     {
-        self->m_width = width;
-        self->m_height = height;
+        s_instance->m_width = width;
+        s_instance->m_height = height;
         glViewport(0, 0, width, height);
-        self->m_eventBus.publish(WindowResizeEvent(width, height));
+        s_instance->m_eventBus.publish(WindowResizeEvent(width, height));
         Logger::debug("Window resized to " + std::to_string(width) + "x" + std::to_string(height));
     }
 }

@@ -62,6 +62,11 @@ public:
 private:
     static void framebufferSizeCallback(GLFWwindow* window, int width, int height);
 
+    /// @brief Static instance pointer for GLFW callbacks.
+    /// Safe because only one Window exists (Engine owns a single Window).
+    /// This avoids the glfwSetWindowUserPointer conflict with InputManager.
+    static Window* s_instance;
+
     GLFWwindow* m_handle;
     int m_width;
     int m_height;
