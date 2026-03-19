@@ -7,6 +7,7 @@
 #include <tinyexr.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <vector>
 
@@ -421,6 +422,81 @@ int Texture::getHeight() const
 bool Texture::isLoaded() const
 {
     return m_textureId != 0;
+}
+
+std::shared_ptr<Texture> Texture::generateNormalFromHeight(
+    const std::string& heightMapPath, float strength)
+{
+    // Load the height map as a greyscale image (flip to match OpenGL Y-up convention)
+    stbi_set_flip_vertically_on_load_thread(true);
+    int w = 0;
+    int h = 0;
+    int channels = 0;
+    unsigned char* heightData = stbi_load(heightMapPath.c_str(), &w, &h, &channels, 1);
+    if (!heightData)
+    {
+        Logger::error("Failed to load height map for normal generation: " + heightMapPath);
+        return nullptr;
+    }
+
+    // Generate normal map using Sobel filter on height gradients
+    std::vector<unsigned char> normalData(static_cast<size_t>(w * h * 3));
+
+    for (int y = 0; y < h; y++)
+    {
+        for (int x = 0; x < w; x++)
+        {
+            // Sample heights with wrapping (for tileable textures)
+            auto sample = [&](int sx, int sy) -> float
+            {
+                sx = ((sx % w) + w) % w;
+                sy = ((sy % h) + h) % h;
+                return static_cast<float>(heightData[sy * w + sx]) / 255.0f;
+            };
+
+            // Sobel filter for X and Y gradients
+            float tl = sample(x - 1, y - 1);
+            float t  = sample(x,     y - 1);
+            float tr = sample(x + 1, y - 1);
+            float l  = sample(x - 1, y    );
+            float r  = sample(x + 1, y    );
+            float bl = sample(x - 1, y + 1);
+            float b  = sample(x,     y + 1);
+            float br = sample(x + 1, y + 1);
+
+            float dx = (tr + 2.0f * r + br) - (tl + 2.0f * l + bl);
+            float dy = (bl + 2.0f * b + br) - (tl + 2.0f * t + tr);
+
+            // Construct normal vector: (-dx * strength, -dy * strength, 1.0), normalized
+            float nx = -dx * strength;
+            float ny = -dy * strength;
+            float nz = 1.0f;
+            float len = std::sqrt(nx * nx + ny * ny + nz * nz);
+            nx /= len;
+            ny /= len;
+            nz /= len;
+
+            // Encode from [-1,1] to [0,255]
+            size_t idx = static_cast<size_t>((y * w + x) * 3);
+            normalData[idx + 0] = static_cast<unsigned char>((nx * 0.5f + 0.5f) * 255.0f);
+            normalData[idx + 1] = static_cast<unsigned char>((ny * 0.5f + 0.5f) * 255.0f);
+            normalData[idx + 2] = static_cast<unsigned char>((nz * 0.5f + 0.5f) * 255.0f);
+        }
+    }
+
+    stbi_image_free(heightData);
+
+    // Create the texture from the generated normal data
+    auto normalTex = std::make_shared<Texture>();
+    if (!normalTex->loadFromMemory(normalData.data(), w, h, 3, true))
+    {
+        Logger::error("Failed to create normal map texture from height: " + heightMapPath);
+        return nullptr;
+    }
+
+    Logger::info("Generated normal map from height: " + heightMapPath
+        + " (" + std::to_string(w) + "x" + std::to_string(h) + ", strength=" + std::to_string(strength) + ")");
+    return normalTex;
 }
 
 } // namespace Vestige

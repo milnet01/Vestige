@@ -16,6 +16,10 @@ uniform float u_bloomIntensity;
 uniform bool u_ssaoEnabled;
 uniform sampler2D u_ssaoTexture;       // Unit 10
 
+// Screen-space contact shadows
+uniform bool u_contactShadowEnabled;
+uniform sampler2D u_contactShadowTexture;  // Unit 11
+
 // Color grading LUT
 uniform bool u_lutEnabled;
 uniform sampler3D u_lutTexture;        // Unit 13
@@ -65,6 +69,13 @@ void main()
     {
         float ao = texture(u_ssaoTexture, v_texCoord).r;
         color *= ao;
+    }
+
+    // 2b. Apply screen-space contact shadows (directional light)
+    if (u_contactShadowEnabled)
+    {
+        float contactShadow = texture(u_contactShadowTexture, v_texCoord).r;
+        color *= contactShadow;
     }
 
     // 3. Add bloom (before exposure)

@@ -361,12 +361,14 @@ void Engine::setupDemoScene()
     groundMat->setStochasticTiling(true);
     groundMat->setUvScale(6.0f);
 
-    // Block 1 — Red Brick (left)
+    // Block 1 — Red Brick (left) — sealed/glazed brick with clearcoat
     auto redBrickMat = m_resourceManager->createMaterial("red_brick");
     redBrickMat->setType(MaterialType::PBR);
     redBrickMat->setAlbedo(glm::vec3(1.0f));
     redBrickMat->setMetallic(0.0f);
     redBrickMat->setRoughness(1.0f);
+    redBrickMat->setClearcoat(0.5f);
+    redBrickMat->setClearcoatRoughness(0.1f);
     redBrickMat->setDiffuseTexture(m_resourceManager->loadTexture("assets/textures/red_brick_diff_2k.jpg"));
     redBrickMat->setNormalMap(m_resourceManager->loadTexture("assets/textures/red_brick_nor_gl_2k.jpg", true));
     redBrickMat->setMetallicRoughnessTexture(
@@ -417,30 +419,26 @@ void Engine::setupDemoScene()
         redBrickMat->setHeightScale(0.05f);
     }
 
-    // Block 2 — embossed label "2"
-    auto goldLabelTex = std::make_shared<Texture>();
-    if (goldLabelTex->loadFromFile("assets/textures/label_2.png", true))
+    // Block 2 — normal map label "2" (generated from height map, visible from all angles)
+    auto goldLabelNormal = Texture::generateNormalFromHeight("assets/textures/label_2.png", 12.0f);
+    if (goldLabelNormal)
     {
-        goldMat->setHeightMap(goldLabelTex);
-        goldMat->setHeightScale(0.03f);
-        goldMat->setPomEnabled(true);
+        goldMat->setNormalMap(goldLabelNormal);
     }
 
-    // Block 3 — embossed label "3"
-    auto woodLabelTex = std::make_shared<Texture>();
-    if (woodLabelTex->loadFromFile("assets/textures/label_3.png", true))
+    // Block 3 — normal map label "3" (generated from height map, visible from all angles)
+    auto woodLabelNormal = Texture::generateNormalFromHeight("assets/textures/label_3.png", 12.0f);
+    if (woodLabelNormal)
     {
-        woodMat->setHeightMap(woodLabelTex);
-        woodMat->setHeightScale(0.03f);
-        woodMat->setPomEnabled(true);
+        woodMat->setNormalMap(woodLabelNormal);
     }
 
-    // Block 4 — embossed label "4" over brick wall displacement
+    // Block 4 — brick wall displacement (deeper to show off self-shadowing)
     auto roughBrickHeightTex = std::make_shared<Texture>();
     if (roughBrickHeightTex->loadFromFile("assets/textures/brick_wall_005_disp_2k.jpg", true))
     {
         roughBrickMat->setHeightMap(roughBrickHeightTex);
-        roughBrickMat->setHeightScale(0.05f);
+        roughBrickMat->setHeightScale(0.08f);
     }
 
     // --- Ground ---

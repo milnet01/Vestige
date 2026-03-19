@@ -22,6 +22,8 @@ Material::Material()
     , m_metallic(0.0f)
     , m_roughness(0.5f)
     , m_ao(1.0f)
+    , m_clearcoat(0.0f)
+    , m_clearcoatRoughness(0.04f)
     , m_emissive(0.0f, 0.0f, 0.0f)
     , m_emissiveStrength(1.0f)
     , m_metallicRoughnessTexture(nullptr)
@@ -239,6 +241,30 @@ void Material::setAo(float ao)
 float Material::getAo() const
 {
     return m_ao;
+}
+
+void Material::setClearcoat(float clearcoat)
+{
+    if (clearcoat < 0.0f) clearcoat = 0.0f;
+    if (clearcoat > 1.0f) clearcoat = 1.0f;
+    m_clearcoat = clearcoat;
+}
+
+float Material::getClearcoat() const
+{
+    return m_clearcoat;
+}
+
+void Material::setClearcoatRoughness(float roughness)
+{
+    if (roughness < 0.0f) roughness = 0.0f;
+    if (roughness > 1.0f) roughness = 1.0f;
+    m_clearcoatRoughness = roughness;
+}
+
+float Material::getClearcoatRoughness() const
+{
+    return m_clearcoatRoughness;
 }
 
 void Material::setEmissive(const glm::vec3& emissive)

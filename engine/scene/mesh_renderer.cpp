@@ -14,6 +14,12 @@ MeshRenderer::MeshRenderer(std::shared_ptr<Mesh> mesh, std::shared_ptr<Material>
 void MeshRenderer::setMesh(std::shared_ptr<Mesh> mesh)
 {
     m_mesh = std::move(mesh);
+
+    // Auto-populate bounds from the mesh's local AABB if no explicit bounds were set
+    if (m_mesh && m_bounds.getSize() == glm::vec3(0.0f))
+    {
+        m_bounds = m_mesh->getLocalBounds();
+    }
 }
 
 void MeshRenderer::setMaterial(std::shared_ptr<Material> material)

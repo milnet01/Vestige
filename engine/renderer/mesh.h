@@ -2,6 +2,8 @@
 /// @brief Vertex data and GPU buffer management for 3D geometry.
 #pragma once
 
+#include "utils/aabb.h"
+
 #include <glad/gl.h>
 #include <glm/glm.hpp>
 
@@ -63,6 +65,10 @@ public:
     /// @brief Gets the VAO handle.
     GLuint getVao() const;
 
+    /// @brief Gets the local-space bounding box computed during upload().
+    /// Returns a zero-sized AABB if no geometry has been uploaded.
+    const AABB& getLocalBounds() const;
+
     /// @brief Creates a unit cube mesh (1x1x1, centered at origin).
     /// @return A mesh containing a colored cube.
     static Mesh createCube();
@@ -79,6 +85,7 @@ private:
     GLuint m_vbo;  // Vertex Buffer Object
     GLuint m_ebo;  // Element Buffer Object (indices)
     uint32_t m_indexCount;
+    AABB m_localBounds;  // Computed from vertex positions during upload()
 };
 
 } // namespace Vestige

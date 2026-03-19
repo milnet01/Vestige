@@ -4,6 +4,7 @@
 #include "core/logger.h"
 
 #include <cmath>
+#include <limits>
 
 namespace Vestige
 {
@@ -101,11 +102,13 @@ Mesh::Mesh(Mesh&& other) noexcept
     , m_vbo(other.m_vbo)
     , m_ebo(other.m_ebo)
     , m_indexCount(other.m_indexCount)
+    , m_localBounds(other.m_localBounds)
 {
     other.m_vao = 0;
     other.m_vbo = 0;
     other.m_ebo = 0;
     other.m_indexCount = 0;
+    other.m_localBounds = {};
 }
 
 Mesh& Mesh::operator=(Mesh&& other) noexcept
@@ -117,10 +120,12 @@ Mesh& Mesh::operator=(Mesh&& other) noexcept
         m_vbo = other.m_vbo;
         m_ebo = other.m_ebo;
         m_indexCount = other.m_indexCount;
+        m_localBounds = other.m_localBounds;
         other.m_vao = 0;
         other.m_vbo = 0;
         other.m_ebo = 0;
         other.m_indexCount = 0;
+        other.m_localBounds = {};
     }
     return *this;
 }
@@ -181,6 +186,19 @@ void Mesh::upload(const std::vector<Vertex>& vertices, const std::vector<uint32_
 
     glBindVertexArray(0);
 
+    // Compute local-space AABB from vertex positions
+    if (!vertices.empty())
+    {
+        glm::vec3 bmin(std::numeric_limits<float>::max());
+        glm::vec3 bmax(std::numeric_limits<float>::lowest());
+        for (const auto& v : vertices)
+        {
+            bmin = glm::min(bmin, v.position);
+            bmax = glm::max(bmax, v.position);
+        }
+        m_localBounds = {bmin, bmax};
+    }
+
     Logger::debug("Mesh uploaded: " + std::to_string(vertices.size()) + " vertices, "
         + std::to_string(indices.size()) + " indices");
 }
@@ -227,6 +245,11 @@ void Mesh::setupInstanceAttributes(GLuint instanceVbo) const
 GLuint Mesh::getVao() const
 {
     return m_vao;
+}
+
+const AABB& Mesh::getLocalBounds() const
+{
+    return m_localBounds;
 }
 
 Mesh Mesh::createCube()

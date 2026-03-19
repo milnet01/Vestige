@@ -28,6 +28,7 @@ add_executable(vestige_tests
     test_instanced_rendering.cpp
     test_cascaded_shadow_map.cpp
     test_ibl.cpp
+    test_frustum_culling.cpp
 )
 
 target_link_libraries(vestige_tests

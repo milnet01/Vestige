@@ -4,6 +4,7 @@
 
 #include <glad/gl.h>
 
+#include <memory>
 #include <string>
 
 namespace Vestige
@@ -74,6 +75,14 @@ public:
 
     /// @brief Checks if a texture is loaded.
     bool isLoaded() const;
+
+    /// @brief Generates a normal map from a height map texture on the CPU.
+    /// Computes per-pixel normals using Sobel-filtered height gradients.
+    /// @param heightMapPath Path to the height map image file.
+    /// @param strength Normal map strength (higher = more pronounced bumps).
+    /// @return A new Texture containing the generated normal map, or nullptr on failure.
+    static std::shared_ptr<Texture> generateNormalFromHeight(
+        const std::string& heightMapPath, float strength = 8.0f);
 
 private:
     bool loadFromExr(const std::string& filePath);
