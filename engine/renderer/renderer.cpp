@@ -370,7 +370,7 @@ void Renderer::initFramebuffers(int width, int height, int msaaSamples)
     depthResolveConfig.isDepthTexture = true;
     m_resolveDepthFbo = std::make_unique<Framebuffer>(depthResolveConfig);
 
-    // SSAO FBOs (full-resolution, RGBA16F, no depth)
+    // SSAO FBOs (full-resolution to avoid upsample seam artifacts)
     FramebufferConfig ssaoConfig;
     ssaoConfig.width = width;
     ssaoConfig.height = height;
@@ -533,12 +533,19 @@ void Renderer::endFrame(float deltaTime)
 
         // SSAO blur pass
         m_ssaoBlurFbo->bind();
+        glViewport(0, 0, m_windowWidth, m_windowHeight);
         glClear(GL_COLOR_BUFFER_BIT);
 
         m_ssaoBlurShader.use();
         m_ssaoFbo->bindColorTexture(0);
         m_ssaoBlurShader.setInt("u_ssaoInput", 0);
         m_screenQuad->draw();
+
+        // Raw SSAO is consumed — invalidate to free tile memory
+        glBindFramebuffer(GL_FRAMEBUFFER, m_ssaoFbo->getId());
+        GLenum ssaoAttach[] = { GL_COLOR_ATTACHMENT0 };
+        glInvalidateFramebuffer(GL_FRAMEBUFFER, 1, ssaoAttach);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
     }
 
     // 4. TAA motion vectors and resolve
@@ -970,6 +977,7 @@ void Renderer::drawMesh(const Mesh& mesh, const glm::mat4& modelMatrix,
     mesh.bind();
     glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(mesh.getIndexCount()),
                    GL_UNSIGNED_INT, nullptr);
+    m_cullingStats.drawCalls++;
     mesh.unbind();
 
     // Restore polygon mode
@@ -1171,6 +1179,16 @@ const Renderer::CullingStats& Renderer::getCullingStats() const
     return m_cullingStats;
 }
 
+int Renderer::getPointLightCount() const
+{
+    return static_cast<int>(m_pointLights.size());
+}
+
+int Renderer::getSpotLightCount() const
+{
+    return static_cast<int>(m_spotLights.size());
+}
+
 TextRenderer* Renderer::getTextRenderer()
 {
     return m_textRenderer.get();
@@ -1299,6 +1317,10 @@ std::vector<Renderer::InstanceBatch> Renderer::buildInstanceBatches(
 
 void Renderer::renderScene(const SceneRenderData& renderData, const Camera& camera, float aspectRatio)
 {
+    // Reset per-frame stats
+    m_cullingStats.drawCalls = 0;
+    m_cullingStats.instanceBatches = 0;
+
     // Apply lights from scene data
     m_hasDirectionalLight = renderData.hasDirectionalLight;
     if (renderData.hasDirectionalLight)
@@ -1524,6 +1546,8 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
             glDrawElementsInstanced(GL_TRIANGLES,
                 static_cast<GLsizei>(batch.mesh->getIndexCount()),
                 GL_UNSIGNED_INT, nullptr, count);
+            m_cullingStats.drawCalls++;
+            m_cullingStats.instanceBatches++;
             batch.mesh->unbind();
 
             if (m_isWireframe) glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
@@ -1662,6 +1686,7 @@ void Renderer::renderShadowPass(const std::vector<SceneRenderData::RenderItem>& 
                 glDrawElementsInstanced(GL_TRIANGLES,
                     static_cast<GLsizei>(batch.mesh->getIndexCount()),
                     GL_UNSIGNED_INT, nullptr, count);
+                m_cullingStats.drawCalls++;
                 batch.mesh->unbind();
 
                 m_shadowDepthShader.setBool("u_useInstancing", false);
@@ -1676,6 +1701,7 @@ void Renderer::renderShadowPass(const std::vector<SceneRenderData::RenderItem>& 
                     glDrawElements(GL_TRIANGLES,
                         static_cast<GLsizei>(batch.mesh->getIndexCount()),
                         GL_UNSIGNED_INT, nullptr);
+                    m_cullingStats.drawCalls++;
                     batch.mesh->unbind();
                 }
             }
@@ -1753,6 +1779,7 @@ void Renderer::renderPointShadowPass(const std::vector<InstanceBatch>& batches,
                     glDrawElementsInstanced(GL_TRIANGLES,
                         static_cast<GLsizei>(batch.mesh->getIndexCount()),
                         GL_UNSIGNED_INT, nullptr, count);
+                    m_cullingStats.drawCalls++;
                     batch.mesh->unbind();
 
                     m_pointShadowDepthShader.setBool("u_useInstancing", false);
@@ -1767,6 +1794,7 @@ void Renderer::renderPointShadowPass(const std::vector<InstanceBatch>& batches,
                         glDrawElements(GL_TRIANGLES,
                             static_cast<GLsizei>(batch.mesh->getIndexCount()),
                             GL_UNSIGNED_INT, nullptr);
+                        m_cullingStats.drawCalls++;
                         batch.mesh->unbind();
                     }
                 }

@@ -156,7 +156,11 @@ bool Font::loadFromFile(const std::string& filePath, int pixelSize)
             {
                 int atlasIdx = (curY + y) * atlasWidth + (curX + x);
                 int bmpIdx = y * bmp.width + x;
-                atlasData[static_cast<size_t>(atlasIdx)] = bmp.buffer[static_cast<size_t>(bmpIdx)];
+                if (atlasIdx >= 0 && static_cast<size_t>(atlasIdx) < atlasData.size()
+                    && bmpIdx >= 0 && static_cast<size_t>(bmpIdx) < bmp.buffer.size())
+                {
+                    atlasData[static_cast<size_t>(atlasIdx)] = bmp.buffer[static_cast<size_t>(bmpIdx)];
+                }
             }
         }
 

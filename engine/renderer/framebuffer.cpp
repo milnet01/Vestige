@@ -50,6 +50,11 @@ Framebuffer& Framebuffer::operator=(Framebuffer&& other) noexcept
 
 void Framebuffer::bind()
 {
+    if (!m_isComplete)
+    {
+        Logger::error("Framebuffer::bind — binding incomplete FBO (id="
+            + std::to_string(m_fboId) + ")");
+    }
     glBindFramebuffer(GL_FRAMEBUFFER, m_fboId);
     glViewport(0, 0, m_config.width, m_config.height);
 }
@@ -85,6 +90,12 @@ void Framebuffer::resize(int width, int height)
 
 void Framebuffer::bindColorTexture(int textureUnit)
 {
+    if (textureUnit < 0 || textureUnit > 31)
+    {
+        Logger::error("Framebuffer::bindColorTexture — invalid texture unit: "
+            + std::to_string(textureUnit));
+        return;
+    }
     glActiveTexture(GL_TEXTURE0 + static_cast<GLenum>(textureUnit));
     if (m_config.samples > 1)
     {
@@ -98,6 +109,12 @@ void Framebuffer::bindColorTexture(int textureUnit)
 
 void Framebuffer::bindDepthTexture(int textureUnit)
 {
+    if (textureUnit < 0 || textureUnit > 31)
+    {
+        Logger::error("Framebuffer::bindDepthTexture — invalid texture unit: "
+            + std::to_string(textureUnit));
+        return;
+    }
     if (m_isDepthRenderbuffer)
     {
         Logger::warning("Cannot bind depth renderbuffer as texture — use isDepthTexture=true");
@@ -247,9 +264,11 @@ void Framebuffer::create()
     {
         Logger::error("Framebuffer incomplete — status: 0x"
             + std::to_string(static_cast<unsigned int>(status)));
+        m_isComplete = false;
     }
     else
     {
+        m_isComplete = true;
         Logger::debug("Framebuffer created: "
             + std::to_string(m_config.width) + "x" + std::to_string(m_config.height)
             + (isMultisample ? " (" + std::to_string(m_config.samples) + "x MSAA)" : "")
@@ -285,6 +304,11 @@ void Framebuffer::cleanup()
         glDeleteFramebuffers(1, &m_fboId);
         m_fboId = 0;
     }
+}
+
+bool Framebuffer::isComplete() const
+{
+    return m_isComplete;
 }
 
 } // namespace Vestige

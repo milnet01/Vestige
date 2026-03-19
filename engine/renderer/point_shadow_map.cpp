@@ -88,6 +88,13 @@ void PointShadowMap::update(const glm::vec3& lightPos)
 
 void PointShadowMap::beginFace(int face)
 {
+    if (face < 0 || face >= 6)
+    {
+        Logger::error("PointShadowMap::beginFace — face index out of range: "
+            + std::to_string(face));
+        return;
+    }
+
     glBindFramebuffer(GL_FRAMEBUFFER, m_fbo);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
         GL_TEXTURE_CUBE_MAP_POSITIVE_X + face, m_depthCubemap, 0);
@@ -108,6 +115,13 @@ void PointShadowMap::bindShadowTexture(int textureUnit) const
 
 const glm::mat4& PointShadowMap::getLightSpaceMatrix(int face) const
 {
+    if (face < 0 || face >= 6)
+    {
+        Logger::error("PointShadowMap::getLightSpaceMatrix — face index out of range: "
+            + std::to_string(face));
+        static const glm::mat4 identity(1.0f);
+        return identity;
+    }
     return m_lightSpaceMatrices[face];
 }
 

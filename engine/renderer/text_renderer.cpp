@@ -89,6 +89,13 @@ void TextRenderer::renderText2D(const std::string& text, float x, float y, float
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, m_font.getAtlasTextureId());
 
+    // Save GL state that text rendering modifies
+    GLboolean prevBlend = glIsEnabled(GL_BLEND);
+    GLboolean prevDepth = glIsEnabled(GL_DEPTH_TEST);
+    GLint prevBlendSrc, prevBlendDst;
+    glGetIntegerv(GL_BLEND_SRC_ALPHA, &prevBlendSrc);
+    glGetIntegerv(GL_BLEND_DST_ALPHA, &prevBlendDst);
+
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glDisable(GL_DEPTH_TEST);
@@ -135,8 +142,11 @@ void TextRenderer::renderText2D(const std::string& text, float x, float y, float
 
     glBindVertexArray(0);
     glBindTexture(GL_TEXTURE_2D, 0);
-    glEnable(GL_DEPTH_TEST);
-    glDisable(GL_BLEND);
+
+    // Restore GL state
+    if (prevDepth) glEnable(GL_DEPTH_TEST); else glDisable(GL_DEPTH_TEST);
+    if (prevBlend) glEnable(GL_BLEND); else glDisable(GL_BLEND);
+    glBlendFunc(static_cast<GLenum>(prevBlendSrc), static_cast<GLenum>(prevBlendDst));
 }
 
 void TextRenderer::renderText3D(const std::string& text, const glm::mat4& modelMatrix,
@@ -147,6 +157,11 @@ void TextRenderer::renderText3D(const std::string& text, const glm::mat4& modelM
     {
         return;
     }
+
+    // Save GL state
+    GLboolean prevBlend = glIsEnabled(GL_BLEND);
+    GLboolean prevDepthWrite;
+    glGetBooleanv(GL_DEPTH_WRITEMASK, &prevDepthWrite);
 
     m_textShader.use();
     m_textShader.setMat4("u_projection", projection * view);
@@ -159,6 +174,7 @@ void TextRenderer::renderText3D(const std::string& text, const glm::mat4& modelM
 
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glDepthMask(GL_FALSE);  // Don't write depth — text shouldn't occlude geometry
 
     glBindVertexArray(m_vao);
 
@@ -201,7 +217,10 @@ void TextRenderer::renderText3D(const std::string& text, const glm::mat4& modelM
 
     glBindVertexArray(0);
     glBindTexture(GL_TEXTURE_2D, 0);
-    glDisable(GL_BLEND);
+
+    // Restore GL state
+    glDepthMask(prevDepthWrite ? GL_TRUE : GL_FALSE);
+    if (prevBlend) glEnable(GL_BLEND); else glDisable(GL_BLEND);
 }
 
 std::shared_ptr<Texture> TextRenderer::generateTextHeightMap(const std::string& text,

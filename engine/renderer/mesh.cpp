@@ -19,8 +19,15 @@ void calculateTangents(std::vector<Vertex>& vertices, const std::vector<uint32_t
     }
 
     // Accumulate per-triangle tangent/bitangent
+    size_t vertCount = vertices.size();
     for (size_t i = 0; i + 2 < indices.size(); i += 3)
     {
+        // Validate index buffer — malformed meshes could have out-of-range indices
+        if (indices[i] >= vertCount || indices[i + 1] >= vertCount || indices[i + 2] >= vertCount)
+        {
+            continue;
+        }
+
         Vertex& v0 = vertices[indices[i]];
         Vertex& v1 = vertices[indices[i + 1]];
         Vertex& v2 = vertices[indices[i + 2]];

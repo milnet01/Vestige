@@ -74,6 +74,9 @@ public:
     /// @brief Gets the current configuration.
     const FramebufferConfig& getConfig() const;
 
+    /// @brief Returns true if the framebuffer was created successfully.
+    bool isComplete() const;
+
 private:
     void create();
     void cleanup();
@@ -83,6 +86,7 @@ private:
     GLuint m_colorAttachment = 0;
     GLuint m_depthAttachment = 0;
     bool m_isDepthRenderbuffer = false;  // Tracks depth attachment type for cleanup
+    bool m_isComplete = false;           // True if FBO passed completeness check
 };
 
 } // namespace Vestige

@@ -192,7 +192,7 @@ public:
     /// @brief Renders an entire scene from collected render data.
     void renderScene(const SceneRenderData& renderData, const Camera& camera, float aspectRatio);
 
-    /// @brief Per-frame frustum culling statistics.
+    /// @brief Per-frame rendering statistics.
     struct CullingStats
     {
         int totalItems = 0;           // Total opaque items before culling
@@ -201,10 +201,18 @@ public:
         int transparentCulled = 0;    // Transparent items remaining after cull
         int shadowCastersTotal = 0;   // Total shadow casters before culling
         int shadowCastersCulled = 0;  // Shadow casters per cascade (avg)
+        int drawCalls = 0;            // Total draw calls this frame
+        int instanceBatches = 0;      // Draw calls that used instancing
     };
 
     /// @brief Gets the most recent frame's culling statistics.
     const CullingStats& getCullingStats() const;
+
+    /// @brief Gets the number of active point lights.
+    int getPointLightCount() const;
+
+    /// @brief Gets the number of active spot lights.
+    int getSpotLightCount() const;
 
     /// @brief Gets the text renderer (nullptr if not initialized).
     TextRenderer* getTextRenderer();
