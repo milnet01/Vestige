@@ -2,6 +2,7 @@
 /// @brief Editor implementation — ImGui lifecycle, docking workspace, editor camera, theme.
 #include "editor/editor.h"
 #include "core/logger.h"
+#include "renderer/camera.h"
 #include "renderer/renderer.h"
 #include "scene/scene.h"
 
@@ -9,10 +10,13 @@
 #include <imgui_internal.h>
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
+#include <ImGuizmo.h>
 
 #include <GLFW/glfw3.h>
+#include <glm/gtc/type_ptr.hpp>
 
 #include <algorithm>
+#include <cstdio>
 
 namespace Vestige
 {
@@ -102,9 +106,10 @@ void Editor::prepareFrame()
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
+    ImGuizmo::BeginFrame();
 }
 
-void Editor::drawPanels(Renderer* renderer, Scene* scene)
+void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera)
 {
     if (!m_isInitialized)
     {
@@ -235,6 +240,10 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene)
             ImVec2 contentMin = ImGui::GetCursorScreenPos();
             ImVec2 viewportSize = ImGui::GetContentRegionAvail();
 
+            // Store viewport bounds for click detection (used next frame in processViewportClick)
+            m_viewportMin = glm::vec2(contentMin.x, contentMin.y);
+            m_viewportMax = glm::vec2(contentMin.x + viewportSize.x, contentMin.y + viewportSize.y);
+
             if (viewportSize.x > 0 && viewportSize.y > 0 && renderer)
             {
                 GLuint texId = renderer->getOutputTextureId();
@@ -246,9 +255,14 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene)
                 }
             }
 
-            // Store viewport bounds for click detection (used next frame in processViewportClick)
-            m_viewportMin = glm::vec2(contentMin.x, contentMin.y);
-            m_viewportMax = glm::vec2(contentMin.x + viewportSize.x, contentMin.y + viewportSize.y);
+            // Draw transform gizmo overlay on the viewport
+            drawGizmo(camera, scene);
+
+            // Draw gizmo mode/operation indicator
+            drawGizmoOverlay();
+
+            // Process W/E/R/L gizmo keyboard shortcuts
+            processGizmoShortcuts();
 
             m_viewportFocused = ImGui::IsWindowFocused();
             m_viewportHovered = ImGui::IsWindowHovered();
@@ -377,6 +391,12 @@ void Editor::processViewportClick(int fboWidth, int fboHeight)
         return;
     }
 
+    // Don't pick when gizmo was hovered/used (previous frame state)
+    if (m_gizmoActive)
+    {
+        return;
+    }
+
     float mx = io.MousePos.x;
     float my = io.MousePos.y;
 
@@ -448,6 +468,172 @@ Selection& Editor::getSelection()
 const Selection& Editor::getSelection() const
 {
     return m_selection;
+}
+
+bool Editor::isGizmoActive() const
+{
+    return m_gizmoActive;
+}
+
+void Editor::drawGizmo(Camera* camera, Scene* scene)
+{
+    // Reset gizmo active state (updated below if gizmo is drawn)
+    m_gizmoActive = false;
+
+    if (!camera || !scene || !m_selection.hasSelection())
+    {
+        return;
+    }
+
+    float vpWidth = m_viewportMax.x - m_viewportMin.x;
+    float vpHeight = m_viewportMax.y - m_viewportMin.y;
+    if (vpWidth <= 0.0f || vpHeight <= 0.0f)
+    {
+        return;
+    }
+
+    Entity* entity = m_selection.getPrimaryEntity(*scene);
+    if (!entity)
+    {
+        return;
+    }
+
+    // Configure ImGuizmo for perspective rendering in this viewport
+    ImGuizmo::SetOrthographic(false);
+    ImGuizmo::SetDrawlist();
+    ImGuizmo::SetRect(m_viewportMin.x, m_viewportMin.y, vpWidth, vpHeight);
+
+    // Get camera matrices — use standard projection (not reverse-Z) for ImGuizmo
+    glm::mat4 view = camera->getViewMatrix();
+    float vpAspect = vpWidth / vpHeight;
+    glm::mat4 proj = camera->getCullingProjectionMatrix(vpAspect);
+
+    // Get the entity's world transform as the manipulated matrix
+    glm::mat4 model = entity->getWorldMatrix();
+
+    // Set up snap values (active when Ctrl is held)
+    float snap[3] = {0.0f, 0.0f, 0.0f};
+    bool useSnap = ImGui::GetIO().KeyCtrl;
+    if (useSnap)
+    {
+        float snapVal = m_snapTranslation;
+        if (m_gizmoOperation == ImGuizmo::ROTATE)
+        {
+            snapVal = m_snapRotation;
+        }
+        else if (m_gizmoOperation == ImGuizmo::SCALE)
+        {
+            snapVal = m_snapScale;
+        }
+        snap[0] = snap[1] = snap[2] = snapVal;
+    }
+
+    // Draw and manipulate the gizmo
+    ImGuizmo::Manipulate(
+        glm::value_ptr(view),
+        glm::value_ptr(proj),
+        m_gizmoOperation,
+        m_gizmoMode,
+        glm::value_ptr(model),
+        nullptr,
+        useSnap ? snap : nullptr
+    );
+
+    // Apply the manipulated transform back to the entity
+    if (ImGuizmo::IsUsing())
+    {
+        // Convert world-space result to local space (account for parent transform)
+        glm::mat4 localMatrix = model;
+        Entity* parent = entity->getParent();
+        if (parent)
+        {
+            localMatrix = glm::inverse(parent->getWorldMatrix()) * model;
+        }
+
+        // Decompose into translation, rotation (degrees), scale
+        float translation[3];
+        float rotation[3];
+        float scale[3];
+        ImGuizmo::DecomposeMatrixToComponents(
+            glm::value_ptr(localMatrix),
+            translation, rotation, scale
+        );
+
+        entity->transform.position = glm::vec3(translation[0], translation[1], translation[2]);
+        entity->transform.rotation = glm::vec3(rotation[0], rotation[1], rotation[2]);
+        entity->transform.scale = glm::vec3(scale[0], scale[1], scale[2]);
+
+        // Clear matrix override if present (user is now editing via TRS gizmo)
+        if (entity->transform.hasMatrixOverride())
+        {
+            entity->transform.clearMatrixOverride();
+        }
+    }
+
+    // Track gizmo hover/use for next frame's pick suppression
+    m_gizmoActive = ImGuizmo::IsOver() || ImGuizmo::IsUsing();
+}
+
+void Editor::drawGizmoOverlay()
+{
+    // Show gizmo mode indicator in the top-left corner of the viewport
+    const char* opName = "Translate (W)";
+    if (m_gizmoOperation == ImGuizmo::ROTATE)
+    {
+        opName = "Rotate (E)";
+    }
+    else if (m_gizmoOperation == ImGuizmo::SCALE)
+    {
+        opName = "Scale (R)";
+    }
+
+    const char* modeName = (m_gizmoMode == ImGuizmo::WORLD) ? "World" : "Local";
+
+    char overlayText[128];
+    std::snprintf(overlayText, sizeof(overlayText),
+        "%s | %s (L) | Ctrl=Snap", opName, modeName);
+
+    ImDrawList* drawList = ImGui::GetWindowDrawList();
+    ImVec2 textPos(m_viewportMin.x + 10.0f, m_viewportMin.y + 8.0f);
+    ImVec2 textSize = ImGui::CalcTextSize(overlayText);
+
+    // Semi-transparent background pill
+    drawList->AddRectFilled(
+        ImVec2(textPos.x - 6.0f, textPos.y - 4.0f),
+        ImVec2(textPos.x + textSize.x + 6.0f, textPos.y + textSize.y + 4.0f),
+        IM_COL32(25, 25, 30, 192),
+        4.0f
+    );
+
+    // Warm yellow text for visibility
+    drawList->AddText(textPos, IM_COL32(255, 230, 150, 216), overlayText);
+}
+
+void Editor::processGizmoShortcuts()
+{
+    // Only process when viewport is focused and no text input is active
+    if (!m_viewportFocused || ImGui::GetIO().WantTextInput)
+    {
+        return;
+    }
+
+    if (ImGui::IsKeyPressed(ImGuiKey_W))
+    {
+        m_gizmoOperation = ImGuizmo::TRANSLATE;
+    }
+    if (ImGui::IsKeyPressed(ImGuiKey_E))
+    {
+        m_gizmoOperation = ImGuizmo::ROTATE;
+    }
+    if (ImGui::IsKeyPressed(ImGuiKey_R))
+    {
+        m_gizmoOperation = ImGuizmo::SCALE;
+    }
+    if (ImGui::IsKeyPressed(ImGuiKey_L))
+    {
+        m_gizmoMode = (m_gizmoMode == ImGuizmo::WORLD)
+            ? ImGuizmo::LOCAL : ImGuizmo::WORLD;
+    }
 }
 
 void Editor::setupTheme()
