@@ -96,10 +96,13 @@ void main()
     }
     // Mode 2 = None (linear clamp) — no tonemapping applied
 
+    // Clamp after tonemapping — ACES can produce values slightly > 1.0
+    color = clamp(color, vec3(0.0), vec3(1.0));
+
     // 7. Color grading LUT
     if (u_lutEnabled)
     {
-        float lutSize = 32.0;
+        float lutSize = float(textureSize(u_lutTexture, 0).x);
         vec3 lutCoord = clamp(color, 0.0, 1.0) * ((lutSize - 1.0) / lutSize) + vec3(0.5 / lutSize);
         vec3 graded = texture(u_lutTexture, lutCoord).rgb;
         color = mix(color, graded, u_lutIntensity);

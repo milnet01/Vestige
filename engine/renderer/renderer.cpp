@@ -467,7 +467,7 @@ void Renderer::beginFrame()
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 }
 
-void Renderer::endFrame()
+void Renderer::endFrame(float deltaTime)
 {
     if (!m_resolveFbo || !m_screenQuad)
     {
@@ -727,8 +727,8 @@ void Renderer::endFrame()
         m_targetExposure = m_autoExposureTarget / avgLuminance;
         m_targetExposure = std::clamp(m_targetExposure, m_autoExposureMin, m_autoExposureMax);
 
-        // Smooth adaptation (exponential interpolation, ~60fps assumed)
-        float adaptSpeed = 1.0f - std::exp(-m_autoExposureSpeed * (1.0f / 60.0f));
+        // Smooth adaptation (frame-rate independent exponential interpolation)
+        float adaptSpeed = 1.0f - std::exp(-m_autoExposureSpeed * deltaTime);
         m_exposure += (m_targetExposure - m_exposure) * adaptSpeed;
 
         // Restore bloom FBO attachment to bloom texture mip 0

@@ -171,8 +171,25 @@ glm::mat4 CascadedShadowMap::computeCascadeMatrix(
     }
 
     glm::mat4 lightProjection = glm::ortho(minX, maxX, minY, maxY, minZ, maxZ);
+    glm::mat4 shadowMatrix = lightProjection * lightView;
 
-    return lightProjection * lightView;
+    // Snap the shadow matrix origin to the texel grid. Without this, sub-texel
+    // camera movement causes the entire shadow map to shift by fractional texels,
+    // producing visible edge swimming/shimmering.
+    glm::vec4 shadowOrigin = shadowMatrix * glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
+    float halfRes = static_cast<float>(resolution) * 0.5f;
+    shadowOrigin.x *= halfRes;
+    shadowOrigin.y *= halfRes;
+    glm::vec4 rounded(std::round(shadowOrigin.x), std::round(shadowOrigin.y),
+                      shadowOrigin.z, shadowOrigin.w);
+    glm::vec4 offset = rounded - shadowOrigin;
+    offset.x /= halfRes;
+    offset.y /= halfRes;
+
+    shadowMatrix[3][0] += offset.x;
+    shadowMatrix[3][1] += offset.y;
+
+    return shadowMatrix;
 }
 
 void CascadedShadowMap::update(const DirectionalLight& light, const Camera& camera, float aspectRatio)
