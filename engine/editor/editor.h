@@ -7,6 +7,9 @@
 #include "editor/panels/inspector_panel.h"
 #include "editor/selection.h"
 
+#include <imgui.h>
+#include <ImGuizmo.h>
+
 #include <glad/gl.h>
 #include <glm/glm.hpp>
 
@@ -58,7 +61,8 @@ public:
     /// Must call prepareFrame() first.
     /// @param renderer Renderer reference (for viewport texture). May be nullptr.
     /// @param scene Active scene for hierarchy panel. May be nullptr.
-    void drawPanels(Renderer* renderer, Scene* scene);
+    /// @param camera Camera for gizmo projection. May be nullptr.
+    void drawPanels(Renderer* renderer, Scene* scene, Camera* camera = nullptr);
 
     /// @brief Finalizes and renders the ImGui frame. Call before Window::swapBuffers().
     void endFrame();
@@ -82,6 +86,10 @@ public:
 
     /// @brief Toggles between EDIT and PLAY mode.
     void toggleMode();
+
+    /// @brief Returns true if the gizmo was hovered or used last frame.
+    /// Used to suppress viewport picks when interacting with the gizmo.
+    bool isGizmoActive() const;
 
     /// @brief Returns true if ImGui wants to capture mouse input.
     bool wantCaptureMouse() const;
@@ -115,6 +123,9 @@ public:
 
 private:
     void setupTheme();
+    void drawGizmo(Camera* camera, Scene* scene);
+    void drawGizmoOverlay();
+    void processGizmoShortcuts();
 
     EditorMode m_mode = EditorMode::EDIT;
     bool m_isInitialized = false;
@@ -138,6 +149,14 @@ private:
     int m_pickY = 0;
     bool m_pickShift = false;
     bool m_pickCtrl = false;
+
+    // Gizmo state
+    ImGuizmo::OPERATION m_gizmoOperation = ImGuizmo::TRANSLATE;
+    ImGuizmo::MODE m_gizmoMode = ImGuizmo::WORLD;
+    bool m_gizmoActive = false;  ///< Was gizmo hovered/used last frame (for pick suppression).
+    float m_snapTranslation = 0.5f;  ///< Snap grid in world units.
+    float m_snapRotation = 15.0f;    ///< Snap in degrees.
+    float m_snapScale = 0.1f;        ///< Snap in scale units.
 };
 
 } // namespace Vestige

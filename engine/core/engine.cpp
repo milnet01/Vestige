@@ -477,7 +477,7 @@ void Engine::run()
             glViewport(0, 0, m_window->getWidth(), m_window->getHeight());
             glClearColor(0.08f, 0.08f, 0.10f, 1.0f);
             glClear(GL_COLOR_BUFFER_BIT);
-            m_editor->drawPanels(m_renderer.get(), activeScene);
+            m_editor->drawPanels(m_renderer.get(), activeScene, m_camera.get());
             m_editor->endFrame();
         }
         else
