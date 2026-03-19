@@ -134,6 +134,18 @@ public:
     /// @brief Gets the ambient occlusion factor.
     float getAo() const;
 
+    /// @brief Sets the clearcoat intensity (0.0 = no clearcoat, 1.0 = full clearcoat).
+    void setClearcoat(float clearcoat);
+
+    /// @brief Gets the clearcoat intensity.
+    float getClearcoat() const;
+
+    /// @brief Sets the clearcoat roughness (clamped to [0.0, 1.0]).
+    void setClearcoatRoughness(float roughness);
+
+    /// @brief Gets the clearcoat roughness.
+    float getClearcoatRoughness() const;
+
     /// @brief Sets the emissive color.
     void setEmissive(const glm::vec3& emissive);
 
@@ -231,6 +243,8 @@ private:
     float m_metallic;
     float m_roughness;
     float m_ao;
+    float m_clearcoat;
+    float m_clearcoatRoughness;
     glm::vec3 m_emissive;
     float m_emissiveStrength;
     float m_uvScale;

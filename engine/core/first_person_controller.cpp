@@ -187,8 +187,11 @@ void FirstPersonController::processGamepad(float deltaTime, glm::vec3& moveDir)
 
 void FirstPersonController::applyCollision(glm::vec3& newPosition, const std::vector<AABB>& colliders)
 {
+    // Player AABB extends from feet to head. The camera is at eye height,
+    // so the body center is half the player height below the camera.
+    glm::vec3 bodyCenter(newPosition.x, newPosition.y - m_config.playerHeight * 0.5f, newPosition.z);
     AABB playerBounds = AABB::fromCenterSize(
-        newPosition,
+        bodyCenter,
         glm::vec3(m_config.playerRadius * 2.0f, m_config.playerHeight, m_config.playerRadius * 2.0f)
     );
 
@@ -200,8 +203,9 @@ void FirstPersonController::applyCollision(glm::vec3& newPosition, const std::ve
             newPosition += pushOut;
 
             // Recompute player bounds after push
+            bodyCenter = glm::vec3(newPosition.x, newPosition.y - m_config.playerHeight * 0.5f, newPosition.z);
             playerBounds = AABB::fromCenterSize(
-                newPosition,
+                bodyCenter,
                 glm::vec3(m_config.playerRadius * 2.0f, m_config.playerHeight, m_config.playerRadius * 2.0f)
             );
         }
@@ -236,8 +240,10 @@ ControllerConfig& FirstPersonController::getConfig()
 
 AABB FirstPersonController::getPlayerBounds() const
 {
+    glm::vec3 camPos = m_camera.getPosition();
+    glm::vec3 bodyCenter(camPos.x, camPos.y - m_config.playerHeight * 0.5f, camPos.z);
     return AABB::fromCenterSize(
-        m_camera.getPosition(),
+        bodyCenter,
         glm::vec3(m_config.playerRadius * 2.0f, m_config.playerHeight, m_config.playerRadius * 2.0f)
     );
 }

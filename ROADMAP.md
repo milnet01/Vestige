@@ -563,7 +563,7 @@ Application published on Steam. Scenes can be packaged and shared between users.
 - [ ] Percentage-closer soft shadows / PCSS (contact-hardening shadows — sharp near caster, soft further away)
 
 ### Performance
-- [ ] Frustum culling (skip objects outside camera view)
+- [x] Frustum culling (skip objects outside camera view)
 - [ ] Occlusion culling (skip objects hidden behind other objects)
 - [ ] Volumetric lighting (god rays, fog)
 

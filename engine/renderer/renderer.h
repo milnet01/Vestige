@@ -192,6 +192,20 @@ public:
     /// @brief Renders an entire scene from collected render data.
     void renderScene(const SceneRenderData& renderData, const Camera& camera, float aspectRatio);
 
+    /// @brief Per-frame frustum culling statistics.
+    struct CullingStats
+    {
+        int totalItems = 0;           // Total opaque items before culling
+        int culledItems = 0;          // Items remaining after frustum cull
+        int transparentTotal = 0;     // Total transparent items before culling
+        int transparentCulled = 0;    // Transparent items remaining after cull
+        int shadowCastersTotal = 0;   // Total shadow casters before culling
+        int shadowCastersCulled = 0;  // Shadow casters per cascade (avg)
+    };
+
+    /// @brief Gets the most recent frame's culling statistics.
+    const CullingStats& getCullingStats() const;
+
     /// @brief Gets the text renderer (nullptr if not initialized).
     TextRenderer* getTextRenderer();
 
@@ -216,7 +230,7 @@ public:
 private:
     void uploadLightUniforms(const Camera& camera);
     void uploadMaterialUniforms(const Material& material);
-    void renderShadowPass(const std::vector<InstanceBatch>& batches,
+    void renderShadowPass(const std::vector<SceneRenderData::RenderItem>& shadowCasterItems,
                           const Camera& camera, float aspectRatio);
     void renderPointShadowPass(const std::vector<InstanceBatch>& batches,
                                const std::vector<int>& shadowCasters);
@@ -295,6 +309,9 @@ private:
     GLuint m_bloomFbo = 0;             // FBO reused for each mip level
     // Auto-exposure luminance (separate from bloom — reads unthresholded scene)
     GLuint m_luminanceTexture = 0;     // Small texture with mipmaps for averaging
+    GLuint m_luminancePbo[2] = {0, 0}; // Double-buffered PBO for async GPU→CPU readback
+    int m_pboWriteIndex = 0;           // Which PBO to write into this frame
+    bool m_pboReady = false;           // True after first frame's PBO has been filled
     int m_bloomMipWidths[BLOOM_MIP_COUNT] = {};
     int m_bloomMipHeights[BLOOM_MIP_COUNT] = {};
     bool m_bloomEnabled = true;
@@ -326,9 +343,28 @@ private:
     float m_ssaoRadius = 0.5f;
     float m_ssaoBias = 0.025f;
     glm::mat4 m_lastProjection = glm::mat4(1.0f);
+    glm::mat4 m_lastView = glm::mat4(1.0f);
+
+    // Screen-space reflections (disabled until G-buffer in Phase 5)
+    Shader m_ssrShader;
+    std::unique_ptr<Framebuffer> m_ssrFbo;
+    bool m_ssrEnabled = false;  // Disabled: needs G-buffer for per-pixel roughness
+    float m_ssrMaxDistance = 5.0f;
+    float m_ssrThickness = 0.3f;
+    int m_ssrMaxSteps = 32;
+
+    // Screen-space contact shadows
+    Shader m_contactShadowShader;
+    std::unique_ptr<Framebuffer> m_contactShadowFbo;
+    bool m_contactShadowsEnabled = false;  // Disabled: needs G-buffer normals for correct results
+    float m_contactShadowLength = 0.5f;   // Max ray length in view space
+    int m_contactShadowSteps = 16;
 
     void generateSsaoKernel();
     void generateSsaoNoiseTexture();
+
+    // Frustum culling statistics (updated each frame in renderScene)
+    CullingStats m_cullingStats;
 };
 
 } // namespace Vestige

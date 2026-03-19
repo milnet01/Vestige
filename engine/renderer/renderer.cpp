@@ -3,6 +3,7 @@
 #include "renderer/renderer.h"
 #include "scene/scene.h"
 #include "core/logger.h"
+#include "utils/frustum.h"
 
 #include <glad/gl.h>
 #include <glm/gtc/matrix_transform.hpp>
@@ -68,59 +69,7 @@ static void GLAPIENTRY glDebugCallback(
     }
 }
 
-/// @brief Extracts the 6 frustum planes from a view-projection matrix.
-/// Each plane is (a, b, c, d) where ax + by + cz + d >= 0 is inside.
-/// Uses standard [-1, 1] NDC formulas (the culling VP uses glm::perspective).
-static std::array<glm::vec4, 6> extractFrustumPlanes(const glm::mat4& vp)
-{
-    std::array<glm::vec4, 6> planes;
-    // Left
-    planes[0] = glm::vec4(vp[0][3] + vp[0][0], vp[1][3] + vp[1][0],
-                           vp[2][3] + vp[2][0], vp[3][3] + vp[3][0]);
-    // Right
-    planes[1] = glm::vec4(vp[0][3] - vp[0][0], vp[1][3] - vp[1][0],
-                           vp[2][3] - vp[2][0], vp[3][3] - vp[3][0]);
-    // Bottom
-    planes[2] = glm::vec4(vp[0][3] + vp[0][1], vp[1][3] + vp[1][1],
-                           vp[2][3] + vp[2][1], vp[3][3] + vp[3][1]);
-    // Top
-    planes[3] = glm::vec4(vp[0][3] - vp[0][1], vp[1][3] - vp[1][1],
-                           vp[2][3] - vp[2][1], vp[3][3] - vp[3][1]);
-    // Near
-    planes[4] = glm::vec4(vp[0][3] + vp[0][2], vp[1][3] + vp[1][2],
-                           vp[2][3] + vp[2][2], vp[3][3] + vp[3][2]);
-    // Far
-    planes[5] = glm::vec4(vp[0][3] - vp[0][2], vp[1][3] - vp[1][2],
-                           vp[2][3] - vp[2][2], vp[3][3] - vp[3][2]);
-
-    // Normalize each plane
-    for (auto& p : planes)
-    {
-        float len = glm::length(glm::vec3(p));
-        if (len > 0.0f) p /= len;
-    }
-    return planes;
-}
-
-/// @brief Tests if an AABB is at least partially inside the frustum.
-static bool isAabbInFrustum(const AABB& box, const std::array<glm::vec4, 6>& planes)
-{
-    for (const auto& plane : planes)
-    {
-        // Find the AABB corner most aligned with the plane normal (p-vertex)
-        glm::vec3 pVertex(
-            (plane.x >= 0.0f) ? box.max.x : box.min.x,
-            (plane.y >= 0.0f) ? box.max.y : box.min.y,
-            (plane.z >= 0.0f) ? box.max.z : box.min.z
-        );
-
-        if (glm::dot(glm::vec3(plane), pVertex) + plane.w < 0.0f)
-        {
-            return false;  // Entirely outside this plane
-        }
-    }
-    return true;
-}
+// Frustum plane extraction and AABB-vs-frustum testing moved to utils/frustum.h
 
 Renderer::Renderer(EventBus& eventBus)
     : m_eventBus(eventBus)
@@ -182,6 +131,10 @@ Renderer::~Renderer()
     if (m_luminanceTexture != 0)
     {
         glDeleteTextures(1, &m_luminanceTexture);
+    }
+    if (m_luminancePbo[0] != 0)
+    {
+        glDeleteBuffers(2, m_luminancePbo);
     }
     Logger::debug("Renderer destroyed");
 }
@@ -285,6 +238,22 @@ bool Renderer::loadShaders(const std::string& assetPath)
         return false;
     }
 
+    // Load screen-space reflections shader (disabled until G-buffer in Phase 5)
+    std::string ssrFragPath = assetPath + "/shaders/ssr.frag.glsl";
+    if (!m_ssrShader.loadFromFiles(screenVertPath, ssrFragPath))
+    {
+        Logger::error("Failed to load SSR shader");
+        return false;
+    }
+
+    // Load screen-space contact shadow shader
+    std::string contactShadowFragPath = assetPath + "/shaders/contact_shadows.frag.glsl";
+    if (!m_contactShadowShader.loadFromFiles(screenVertPath, contactShadowFragPath))
+    {
+        Logger::error("Failed to load contact shadow shader");
+        return false;
+    }
+
     Logger::info("Shaders loaded successfully");
     return true;
 }
@@ -379,6 +348,17 @@ void Renderer::initFramebuffers(int width, int height, int msaaSamples)
         glGenerateMipmap(GL_TEXTURE_2D);
     }
 
+    // Async PBO readback for auto-exposure (avoids GPU→CPU sync stall)
+    glGenBuffers(2, m_luminancePbo);
+    for (int i = 0; i < 2; i++)
+    {
+        glBindBuffer(GL_PIXEL_PACK_BUFFER, m_luminancePbo[i]);
+        glBufferData(GL_PIXEL_PACK_BUFFER, 3 * sizeof(float), nullptr, GL_STREAM_READ);
+    }
+    glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+    m_pboWriteIndex = 0;
+    m_pboReady = false;
+
     // Resolved depth FBO (for SSAO — depth-only, sampleable texture)
     FramebufferConfig depthResolveConfig;
     depthResolveConfig.width = width;
@@ -401,6 +381,12 @@ void Renderer::initFramebuffers(int width, int height, int msaaSamples)
 
     m_ssaoFbo = std::make_unique<Framebuffer>(ssaoConfig);
     m_ssaoBlurFbo = std::make_unique<Framebuffer>(ssaoConfig);
+
+    // Contact shadow FBO (same config as SSAO — RGBA16F)
+    m_contactShadowFbo = std::make_unique<Framebuffer>(ssaoConfig);
+
+    // SSR FBO (RGBA16F — stores reflected color + confidence in alpha)
+    m_ssrFbo = std::make_unique<Framebuffer>(ssaoConfig);
 
     // TAA FBOs (created regardless, used when mode is TAA)
     // Non-MSAA scene FBO for TAA (scene rendered here instead of MSAA FBO)
@@ -696,9 +682,9 @@ void Renderer::endFrame(float deltaTime)
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, BLOOM_MIP_COUNT - 1);
     }
 
-    // 5b. Auto-exposure: compute average scene luminance from dedicated texture
-    //     (NOT from the bloom mip chain, which is brightness-thresholded).
-    if (m_autoExposure && m_luminanceTexture != 0)
+    // 5b. Auto-exposure: compute average scene luminance from dedicated texture.
+    //     Uses async PBO readback to avoid GPU→CPU sync stall.
+    if (m_autoExposure && m_luminanceTexture != 0 && m_luminancePbo[0] != 0)
     {
         // Blit the HDR scene to the 256x256 luminance texture (hardware downscale)
         glBindFramebuffer(GL_FRAMEBUFFER, m_bloomFbo);  // reuse bloom FBO
@@ -715,21 +701,37 @@ void Renderer::endFrame(float deltaTime)
         glBindTexture(GL_TEXTURE_2D, m_luminanceTexture);
         glGenerateMipmap(GL_TEXTURE_2D);
 
-        // Read the 1x1 mip (level 8: 256 >> 8 = 1)
-        float avgColor[3] = {0.0f, 0.0f, 0.0f};
-        glGetTexImage(GL_TEXTURE_2D, 8, GL_RGB, GL_FLOAT, avgColor);
+        // Async readback: issue glGetTexImage into a PBO (non-blocking DMA transfer)
+        glBindBuffer(GL_PIXEL_PACK_BUFFER, m_luminancePbo[m_pboWriteIndex]);
+        glGetTexImage(GL_TEXTURE_2D, 8, GL_RGB, GL_FLOAT, nullptr);
+        glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
 
-        // Compute BT.709 luminance
-        float avgLuminance = 0.2126f * avgColor[0] + 0.7152f * avgColor[1] + 0.0722f * avgColor[2];
-        avgLuminance = std::max(avgLuminance, 0.001f);
+        // Read from the OTHER PBO (filled 1-2 frames ago — data is ready)
+        if (m_pboReady)
+        {
+            int readIndex = 1 - m_pboWriteIndex;
+            glBindBuffer(GL_PIXEL_PACK_BUFFER, m_luminancePbo[readIndex]);
+            auto* data = static_cast<const float*>(
+                glMapBuffer(GL_PIXEL_PACK_BUFFER, GL_READ_ONLY));
+            if (data)
+            {
+                float avgLuminance = 0.2126f * data[0] + 0.7152f * data[1] + 0.0722f * data[2];
+                avgLuminance = std::max(avgLuminance, 0.001f);
 
-        // Target exposure: bring average luminance to the target mid-grey level
-        m_targetExposure = m_autoExposureTarget / avgLuminance;
-        m_targetExposure = std::clamp(m_targetExposure, m_autoExposureMin, m_autoExposureMax);
+                m_targetExposure = m_autoExposureTarget / avgLuminance;
+                m_targetExposure = std::clamp(m_targetExposure, m_autoExposureMin, m_autoExposureMax);
 
-        // Smooth adaptation (frame-rate independent exponential interpolation)
-        float adaptSpeed = 1.0f - std::exp(-m_autoExposureSpeed * deltaTime);
-        m_exposure += (m_targetExposure - m_exposure) * adaptSpeed;
+                float adaptSpeed = 1.0f - std::exp(-m_autoExposureSpeed * deltaTime);
+                m_exposure += (m_targetExposure - m_exposure) * adaptSpeed;
+
+                glUnmapBuffer(GL_PIXEL_PACK_BUFFER);
+            }
+            glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+        }
+
+        // Swap PBO index for next frame
+        m_pboWriteIndex = 1 - m_pboWriteIndex;
+        m_pboReady = true;
 
         // Restore bloom FBO attachment to bloom texture mip 0
         glBindFramebuffer(GL_FRAMEBUFFER, m_bloomFbo);
@@ -738,7 +740,33 @@ void Renderer::endFrame(float deltaTime)
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
     }
 
-    // 6. Final screen quad composite (tone mapping + bloom + SSAO)
+    // 5c. Screen-space contact shadows
+    if (m_contactShadowsEnabled && m_contactShadowFbo && m_resolveDepthFbo
+        && m_hasDirectionalLight)
+    {
+        m_contactShadowFbo->bind();
+        glViewport(0, 0, m_windowWidth, m_windowHeight);
+        glClear(GL_COLOR_BUFFER_BIT);
+
+        m_contactShadowShader.use();
+
+        m_resolveDepthFbo->bindDepthTexture(12);
+        m_contactShadowShader.setInt("u_depthTexture", 12);
+
+        m_contactShadowShader.setMat4("u_projection", m_lastProjection);
+        m_contactShadowShader.setMat4("u_invProjection", glm::inverse(m_lastProjection));
+        m_contactShadowShader.setMat4("u_view", m_lastView);
+        m_contactShadowShader.setVec3("u_lightDirection", m_directionalLight.direction);
+        m_contactShadowShader.setVec2("u_texelSize",
+            glm::vec2(1.0f / static_cast<float>(m_windowWidth),
+                      1.0f / static_cast<float>(m_windowHeight)));
+        m_contactShadowShader.setFloat("u_rayLength", m_contactShadowLength);
+        m_contactShadowShader.setInt("u_numSteps", m_contactShadowSteps);
+
+        m_screenQuad->draw();
+    }
+
+    // 6. Final screen quad composite (tone mapping + bloom + SSAO + contact shadows)
     Framebuffer::unbind();
     glViewport(0, 0, m_windowWidth, m_windowHeight);
     glClear(GL_COLOR_BUFFER_BIT);
@@ -769,6 +797,15 @@ void Renderer::endFrame(float deltaTime)
     {
         m_ssaoBlurFbo->bindColorTexture(10);
         m_screenShader.setInt("u_ssaoTexture", 10);
+    }
+
+    // Contact shadow uniforms — ALWAYS bind texture
+    bool contactShadowActive = m_contactShadowsEnabled && m_hasDirectionalLight;
+    m_screenShader.setBool("u_contactShadowEnabled", contactShadowActive);
+    if (m_contactShadowFbo)
+    {
+        m_contactShadowFbo->bindColorTexture(11);
+        m_screenShader.setInt("u_contactShadowTexture", 11);
     }
 
     // Color grading LUT uniforms — ALWAYS bind texture
@@ -846,6 +883,8 @@ void Renderer::uploadMaterialUniforms(const Material& material)
         m_sceneShader.setFloat("u_pbrMetallic", material.getMetallic());
         m_sceneShader.setFloat("u_pbrRoughness", material.getRoughness());
         m_sceneShader.setFloat("u_pbrAo", material.getAo());
+        m_sceneShader.setFloat("u_clearcoat", material.getClearcoat());
+        m_sceneShader.setFloat("u_clearcoatRoughness", material.getClearcoatRoughness());
         m_sceneShader.setVec3("u_pbrEmissive", material.getEmissive());
         m_sceneShader.setFloat("u_pbrEmissiveStrength", material.getEmissiveStrength());
 
@@ -878,10 +917,12 @@ void Renderer::uploadMaterialUniforms(const Material& material)
     }
     else
     {
-        // Ensure PBR texture booleans are false when not in PBR mode
+        // Ensure PBR-only uniforms are zeroed when not in PBR mode
         m_sceneShader.setBool("u_hasMetallicRoughnessMap", false);
         m_sceneShader.setBool("u_hasEmissiveMap", false);
         m_sceneShader.setBool("u_hasAoMap", false);
+        m_sceneShader.setFloat("u_clearcoat", 0.0f);
+        m_sceneShader.setFloat("u_clearcoatRoughness", 0.0f);
     }
 
     // Stochastic tiling
@@ -1125,6 +1166,11 @@ AntiAliasMode Renderer::getAntiAliasMode() const
     return m_antiAliasMode;
 }
 
+const Renderer::CullingStats& Renderer::getCullingStats() const
+{
+    return m_cullingStats;
+}
+
 TextRenderer* Renderer::getTextRenderer()
 {
     return m_textRenderer.get();
@@ -1287,18 +1333,19 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
             shadowCasterItems.push_back(item);
         }
     }
-    auto shadowBatches = buildInstanceBatches(shadowCasterItems);
+    m_cullingStats.shadowCastersTotal = static_cast<int>(shadowCasterItems.size());
 
     // Compute shadow-casting point lights once (used by both shadow pass and uniform upload)
     std::vector<int> shadowCasters = selectShadowCastingPointLights();
 
-    // --- Directional shadow pass (cascaded) ---
+    // --- Directional shadow pass (cascaded, per-cascade frustum culled) ---
     if (m_cascadedShadowMap && m_hasDirectionalLight)
     {
-        renderShadowPass(shadowBatches, camera, aspectRatio);
+        renderShadowPass(shadowCasterItems, camera, aspectRatio);
     }
 
-    // --- Point light shadow pass ---
+    // --- Point light shadow pass (uses all shadow casters — omnidirectional) ---
+    auto shadowBatches = buildInstanceBatches(shadowCasterItems);
     renderPointShadowPass(shadowBatches, shadowCasters);
 
     // --- Frustum cull for scene pass ---
@@ -1320,6 +1367,11 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
             m_culledItems.push_back(item);
         }
     }
+
+    // Update culling statistics
+    m_cullingStats.totalItems = static_cast<int>(renderData.renderItems.size());
+    m_cullingStats.culledItems = static_cast<int>(m_culledItems.size());
+    m_cullingStats.transparentTotal = static_cast<int>(renderData.transparentItems.size());
 
     // Sort culled items front-to-back for early-Z efficiency
     glm::vec3 camPos = camera.getPosition();
@@ -1372,6 +1424,7 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
         }
         m_sceneShader.setBool("u_hasShadows", true);
         m_sceneShader.setBool("u_cascadeDebug", m_cascadeDebug);
+        m_sceneShader.setFloat("u_shadowLightSize", 4.0f);  // PCSS light size (texels)
     }
     else
     {
@@ -1436,7 +1489,8 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
         projection = m_taa->jitterProjection(projection, m_windowWidth, m_windowHeight);
     }
     m_lastProjection = projection;
-    m_lastViewProjection = projection * camera.getViewMatrix();
+    m_lastView = camera.getViewMatrix();
+    m_lastViewProjection = projection * m_lastView;
 
     // Upload light uniforms once per frame (not per batch)
     uploadLightUniforms(camera);
@@ -1515,6 +1569,7 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
     }
 
     // --- Transparent pass: frustum cull + draw BLEND items back-to-front ---
+    m_cullingStats.transparentCulled = 0;
     if (!renderData.transparentItems.empty())
     {
         // Frustum cull transparent items (reuse frustum planes from opaque pass)
@@ -1526,6 +1581,7 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
                 m_sortedTransparentItems.push_back(item);
             }
         }
+        m_cullingStats.transparentCulled = static_cast<int>(m_sortedTransparentItems.size());
 
         std::sort(m_sortedTransparentItems.begin(), m_sortedTransparentItems.end(),
             [&camPos](const SceneRenderData::RenderItem& a, const SceneRenderData::RenderItem& b)
@@ -1549,7 +1605,7 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
     }
 }
 
-void Renderer::renderShadowPass(const std::vector<InstanceBatch>& batches,
+void Renderer::renderShadowPass(const std::vector<SceneRenderData::RenderItem>& shadowCasterItems,
                                  const Camera& camera, float aspectRatio)
 {
     // Shadow maps use standard forward-Z with [-1,1] NDC depth range.
@@ -1565,13 +1621,33 @@ void Renderer::renderShadowPass(const std::vector<InstanceBatch>& batches,
 
     m_shadowDepthShader.use();
 
-    // Render geometry into each cascade layer
+    // Render geometry into each cascade layer with per-cascade frustum culling
     int cascadeCount = m_cascadedShadowMap->getCascadeCount();
+    int totalCascadeCulled = 0;
+
     for (int c = 0; c < cascadeCount; c++)
     {
+        const glm::mat4& lightSpaceMatrix = m_cascadedShadowMap->getLightSpaceMatrix(c);
+
+        // Extract frustum planes from the cascade's orthographic light-space matrix
+        auto cascadePlanes = extractFrustumPlanes(lightSpaceMatrix);
+
+        // Cull shadow casters against this cascade's frustum
+        std::vector<SceneRenderData::RenderItem> culledCasters;
+        for (const auto& item : shadowCasterItems)
+        {
+            if (item.worldBounds.getSize() == glm::vec3(0.0f)
+                || isAabbInFrustum(item.worldBounds, cascadePlanes))
+            {
+                culledCasters.push_back(item);
+            }
+        }
+        totalCascadeCulled += static_cast<int>(culledCasters.size());
+
+        auto batches = buildInstanceBatches(culledCasters);
+
         m_cascadedShadowMap->beginCascade(c);
-        m_shadowDepthShader.setMat4("u_lightSpaceMatrix",
-            m_cascadedShadowMap->getLightSpaceMatrix(c));
+        m_shadowDepthShader.setMat4("u_lightSpaceMatrix", lightSpaceMatrix);
 
         for (const auto& batch : batches)
         {
@@ -1607,6 +1683,10 @@ void Renderer::renderShadowPass(const std::vector<InstanceBatch>& batches,
 
         m_cascadedShadowMap->endCascade();
     }
+
+    // Average shadow casters across cascades for stats
+    m_cullingStats.shadowCastersCulled = (cascadeCount > 0)
+        ? totalCascadeCulled / cascadeCount : 0;
 
     // Restore reverse-Z depth state
     glClipControl(GL_LOWER_LEFT, GL_ZERO_TO_ONE);

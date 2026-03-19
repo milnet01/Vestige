@@ -94,6 +94,10 @@ uniform float u_pbrAo;
 uniform vec3 u_pbrEmissive;
 uniform float u_pbrEmissiveStrength;
 
+// Clearcoat PBR layer
+uniform float u_clearcoat;           // 0.0 = none, 1.0 = full clearcoat
+uniform float u_clearcoatRoughness;  // Roughness of the clearcoat layer
+
 // PBR textures
 uniform bool u_hasMetallicRoughnessMap;
 uniform sampler2D u_metallicRoughnessMap;  // Unit 6
@@ -201,6 +205,29 @@ vec4 sampleMaterial(sampler2D samp, vec2 uv)
 // Shadow functions (shared by both lighting models)
 // =============================================================================
 
+// PCSS light size (in shadow map texels) — controls penumbra width.
+// Larger values = softer shadows further from the caster.
+uniform float u_shadowLightSize;
+
+// Poisson disk samples (16 points) for shadow map filtering.
+// Pre-computed for even distribution with randomized look.
+const vec2 POISSON_DISK[16] = vec2[16](
+    vec2(-0.94201624, -0.39906216), vec2( 0.94558609, -0.76890725),
+    vec2(-0.09418410, -0.92938870), vec2( 0.34495938,  0.29387760),
+    vec2(-0.91588581,  0.45771432), vec2(-0.81544232, -0.87912464),
+    vec2(-0.38277543,  0.27676845), vec2( 0.97484398,  0.75648379),
+    vec2( 0.44323325, -0.97511554), vec2( 0.53742981, -0.47373420),
+    vec2(-0.26496911, -0.41893023), vec2( 0.79197514,  0.19090188),
+    vec2(-0.24188840,  0.99706507), vec2(-0.81409955,  0.91437590),
+    vec2( 0.19984126,  0.78641367), vec2( 0.14383161, -0.14100790)
+);
+
+/// Simple noise for rotating Poisson disk per-fragment (reduces banding).
+float interleavedGradientNoise(vec2 screenPos)
+{
+    return fract(52.9829189 * fract(dot(screenPos, vec2(0.06711056, 0.00583715))));
+}
+
 /// Determines which cascade to use based on fragment's view-space depth.
 int getCascadeIndex()
 {
@@ -215,7 +242,40 @@ int getCascadeIndex()
     return u_cascadeCount - 1;
 }
 
-/// Computes shadow factor for a single cascade.
+/// PCSS blocker search: find average depth of occluders in a search region.
+/// Returns average blocker depth, or -1.0 if no blockers found.
+float blockerSearch(vec3 projCoords, int cascade, float bias, vec2 texelSize, float searchRadius)
+{
+    float blockerSum = 0.0;
+    int blockerCount = 0;
+
+    // Rotate Poisson disk per-fragment to break up banding artifacts
+    float angle = interleavedGradientNoise(gl_FragCoord.xy) * 6.28318;
+    float cosA = cos(angle);
+    float sinA = sin(angle);
+    mat2 rotation = mat2(cosA, sinA, -sinA, cosA);
+
+    for (int i = 0; i < 16; i++)
+    {
+        vec2 offset = rotation * POISSON_DISK[i] * searchRadius * texelSize;
+        float sampleDepth = texture(u_cascadeShadowMap,
+            vec3(projCoords.xy + offset, float(cascade))).r;
+
+        if (projCoords.z - bias > sampleDepth)
+        {
+            blockerSum += sampleDepth;
+            blockerCount++;
+        }
+    }
+
+    if (blockerCount == 0)
+    {
+        return -1.0;
+    }
+    return blockerSum / float(blockerCount);
+}
+
+/// PCSS shadow: variable penumbra width based on blocker distance.
 float calcShadowForCascade(int cascade, vec3 normal, vec3 lightDir)
 {
     // Transform fragment position to light space for this cascade
@@ -230,24 +290,42 @@ float calcShadowForCascade(int cascade, vec3 normal, vec3 lightDir)
 
     float currentDepth = projCoords.z;
 
-    // Slope-scaled bias. Ground planes are excluded from the shadow map
-    // (castsShadow=false), so this only needs to handle cube self-shadowing.
-    // Reduced from 0.005 to minimize shadow detachment (peter panning).
+    // Slope-scaled bias
     float bias = max(0.002 * (1.0 - dot(normal, lightDir)), 0.0003);
 
-    // PCF 3x3
-    float shadow = 0.0;
     vec2 texelSize = 1.0 / vec2(textureSize(u_cascadeShadowMap, 0).xy);
-    for (int x = -1; x <= 1; x++)
+
+    // Step 1: Blocker search — find average occluder depth
+    float searchRadius = u_shadowLightSize;
+    float avgBlockerDepth = blockerSearch(projCoords, cascade, bias, texelSize, searchRadius);
+
+    // No blockers found → fully lit
+    if (avgBlockerDepth < 0.0)
     {
-        for (int y = -1; y <= 1; y++)
-        {
-            float pcfDepth = texture(u_cascadeShadowMap,
-                vec3(projCoords.xy + vec2(x, y) * texelSize, float(cascade))).r;
-            shadow += (currentDepth - bias > pcfDepth) ? 1.0 : 0.0;
-        }
+        return 0.0;
     }
-    shadow /= 9.0;
+
+    // Step 2: Penumbra estimation
+    // penumbraWidth = lightSize * (receiverDepth - blockerDepth) / blockerDepth
+    float penumbraWidth = u_shadowLightSize * (currentDepth - avgBlockerDepth)
+                          / max(avgBlockerDepth, 0.001);
+    penumbraWidth = clamp(penumbraWidth, 1.0, u_shadowLightSize * 4.0);
+
+    // Step 3: PCF with variable-size kernel
+    float shadow = 0.0;
+    float angle = interleavedGradientNoise(gl_FragCoord.xy) * 6.28318;
+    float cosA = cos(angle);
+    float sinA = sin(angle);
+    mat2 rotation = mat2(cosA, sinA, -sinA, cosA);
+
+    for (int i = 0; i < 16; i++)
+    {
+        vec2 offset = rotation * POISSON_DISK[i] * penumbraWidth * texelSize;
+        float pcfDepth = texture(u_cascadeShadowMap,
+            vec3(projCoords.xy + offset, float(cascade))).r;
+        shadow += (currentDepth - bias > pcfDepth) ? 1.0 : 0.0;
+    }
+    shadow /= 16.0;
 
     return shadow;
 }
@@ -387,6 +465,19 @@ vec3 fresnelSchlickRoughness(float cosTheta, vec3 F0, float roughness)
              * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
 }
 
+/// Computes the clearcoat specular contribution for a single light.
+/// Uses a separate GGX lobe with fixed F0=0.04 (IOR ~1.5, like lacquer/varnish).
+/// Returns the clearcoat specular term and the Fresnel factor (for base attenuation).
+vec3 calcClearcoatLobe(float NdotH, float NdotV, float NdotL, float HdotV,
+                        float clearcoatRoughness, out float Fc)
+{
+    float Dc = distributionGGX(NdotH, max(clearcoatRoughness, 0.04));
+    float Gc = geometrySmith(NdotV, NdotL, clearcoatRoughness);
+    Fc = pow(1.0 - HdotV, 5.0) * 0.96 + 0.04;  // Schlick with F0=0.04
+
+    return vec3(Dc * Gc * Fc) / (4.0 * NdotV * NdotL + 0.0001);
+}
+
 // =============================================================================
 // Blinn-Phong lighting functions
 // =============================================================================
@@ -516,7 +607,20 @@ vec3 calcDirectionalLightPBR(vec3 N, vec3 V, vec3 albedo, float metallic,
         shadow = calcShadow(N, L);
     }
 
-    return (kD * albedo / PI + specular) * radiance * NdotL * (1.0 - shadow);
+    vec3 baseLighting = (kD * albedo / PI + specular) * radiance * NdotL;
+
+    // Clearcoat: second specular lobe (smooth lacquer layer)
+    if (u_clearcoat > 0.0)
+    {
+        float Fc;
+        vec3 ccSpec = calcClearcoatLobe(NdotH, NdotV, NdotL, HdotV,
+                                         u_clearcoatRoughness, Fc);
+        // Attenuate base by clearcoat Fresnel (energy conservation)
+        baseLighting *= (1.0 - u_clearcoat * Fc);
+        baseLighting += ccSpec * radiance * NdotL * u_clearcoat;
+    }
+
+    return baseLighting * (1.0 - shadow);
 }
 
 /// Calculates Cook-Torrance specular + Lambertian diffuse for a point light.
@@ -554,7 +658,19 @@ vec3 calcPointLightPBR(int i, vec3 N, vec3 V, vec3 fragPos, vec3 albedo,
         shadow = calcPointShadow(shadowIdx, fragPos, u_pointLights_position[i], N);
     }
 
-    return (kD * albedo / PI + specular) * radiance * NdotL * (1.0 - shadow);
+    vec3 baseLighting = (kD * albedo / PI + specular) * radiance * NdotL;
+
+    // Clearcoat
+    if (u_clearcoat > 0.0)
+    {
+        float Fc;
+        vec3 ccSpec = calcClearcoatLobe(NdotH, NdotV, NdotL, HdotV,
+                                         u_clearcoatRoughness, Fc);
+        baseLighting *= (1.0 - u_clearcoat * Fc);
+        baseLighting += ccSpec * radiance * NdotL * u_clearcoat;
+    }
+
+    return baseLighting * (1.0 - shadow);
 }
 
 /// Calculates Cook-Torrance specular + Lambertian diffuse for a spot light.
@@ -590,7 +706,19 @@ vec3 calcSpotLightPBR(int i, vec3 N, vec3 V, vec3 fragPos, vec3 albedo,
 
     vec3 kD = (vec3(1.0) - F) * (1.0 - metallic);
 
-    return (kD * albedo / PI + specular) * radiance * NdotL;
+    vec3 baseLighting = (kD * albedo / PI + specular) * radiance * NdotL;
+
+    // Clearcoat
+    if (u_clearcoat > 0.0)
+    {
+        float Fc;
+        vec3 ccSpec = calcClearcoatLobe(NdotH, NdotV, NdotL, HdotV,
+                                         u_clearcoatRoughness, Fc);
+        baseLighting *= (1.0 - u_clearcoat * Fc);
+        baseLighting += ccSpec * radiance * NdotL * u_clearcoat;
+    }
+
+    return baseLighting;
 }
 
 // =============================================================================
@@ -810,6 +938,16 @@ void main()
             vec3 specularIBL = prefilteredColor * (F * brdf.x + brdf.y);
 
             ambient = (diffuseIBL + specularIBL) * ao;
+
+            // Clearcoat IBL reflection: sharp specular from the clearcoat layer
+            if (u_clearcoat > 0.0)
+            {
+                float ccLod = u_clearcoatRoughness * u_maxPrefilterLod;
+                vec3 ccPrefilt = textureLod(u_prefilterMap, R, ccLod).rgb;
+                float ccFresnel = pow(1.0 - max(dot(norm, viewDir), 0.0), 5.0) * 0.96 + 0.04;
+                vec3 ccIBL = ccPrefilt * ccFresnel;
+                ambient = ambient * (1.0 - u_clearcoat * ccFresnel) + ccIBL * u_clearcoat * ao;
+            }
         }
         else
         {
