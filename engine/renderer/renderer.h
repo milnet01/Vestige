@@ -60,7 +60,8 @@ public:
     void beginFrame();
 
     /// @brief Resolves MSAA and draws the final image to the screen.
-    void endFrame();
+    /// @param deltaTime Time elapsed since last frame (for auto-exposure smoothing).
+    void endFrame(float deltaTime = 1.0f / 60.0f);
 
     /// @brief Renders a mesh with material and lighting.
     void drawMesh(const Mesh& mesh, const glm::mat4& modelMatrix,

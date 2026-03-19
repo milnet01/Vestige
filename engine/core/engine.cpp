@@ -305,7 +305,7 @@ void Engine::run()
         }
 
         // 7. Resolve MSAA and draw to screen
-        m_renderer->endFrame();
+        m_renderer->endFrame(deltaTime);
 
         // 8. Window — swap buffers
         m_window->swapBuffers();
