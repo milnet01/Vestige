@@ -45,7 +45,7 @@ static bool drawVec3Control(const char* label, glm::vec3& values,
 
     // Label on left — use narrow column so XYZ fields have room
     ImGui::Columns(2, nullptr, false);
-    ImGui::SetColumnWidth(0, 75.0f);
+    ImGui::SetColumnWidth(0, 60.0f);
     ImGui::Text("%s", label);
     ImGui::NextColumn();
 
