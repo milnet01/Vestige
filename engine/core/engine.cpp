@@ -114,7 +114,14 @@ bool Engine::initialize(const EngineConfig& config)
     // Subscribe to window close event
     m_eventBus.subscribe<WindowCloseEvent>([this](const WindowCloseEvent&)
     {
-        m_isRunning = false;
+        if (m_editor)
+        {
+            m_editor->getFileMenu().requestQuit();
+        }
+        else
+        {
+            m_isRunning = false;
+        }
     });
 
     // Subscribe to key events for engine controls
@@ -299,9 +306,8 @@ bool Engine::initialize(const EngineConfig& config)
                     m_timer->getFps(), m_timer->getDeltaTime());
                 break;
 
-            case GLFW_KEY_Q:
-                m_isRunning = false;
-                break;
+            // Q key: quit is now Ctrl+Q, handled by FileMenu via ImGui shortcuts.
+            // Plain Q is no longer a quit shortcut.
 
             // --- Editor camera view presets (only active in EDIT mode) ---
             case GLFW_KEY_KP_1:
@@ -364,7 +370,7 @@ bool Engine::initialize(const EngineConfig& config)
 
     m_isRunning = true;
     Logger::info("Engine initialized successfully");
-    Logger::info("Controls: Escape=toggle editor/play, WASD=move (play mode), Mouse=look (play mode), F1=wireframe, F2=tonemapper, F3=HDR debug, F4=POM, F5=bloom, F6=SSAO, F7=AA mode, F8=color grading, F9=CSM debug, F10=auto-exposure, F11=diagnostic capture, Q=quit");
+    Logger::info("Controls: Escape=toggle editor/play, WASD=move (play mode), Mouse=look (play mode), F1=wireframe, F2=tonemapper, F3=HDR debug, F4=POM, F5=bloom, F6=SSAO, F7=AA mode, F8=color grading, F9=CSM debug, F10=auto-exposure, F11=diagnostic capture, Ctrl+Q=quit");
     Logger::info("Editor camera: Alt+LMB=orbit, MMB=pan, Scroll=zoom, F=focus, Numpad 1/3/7=front/right/top");
     Logger::info("Gamepad: Left stick=move, Right stick=look, LB=sprint, Triggers=up/down");
     return true;
@@ -374,8 +380,31 @@ void Engine::run()
 {
     Logger::info("Entering main loop...");
 
-    while (m_isRunning && !m_window->shouldClose())
+    while (m_isRunning)
     {
+        // Handle window close (X button) — route through FileMenu for unsaved
+        // changes check instead of quitting immediately.
+        if (m_window->shouldClose())
+        {
+            glfwSetWindowShouldClose(m_window->getHandle(), GLFW_FALSE);
+            if (m_editor)
+            {
+                m_editor->getFileMenu().requestQuit();
+            }
+            else
+            {
+                m_isRunning = false;
+                break;
+            }
+        }
+
+        // Check if FileMenu confirmed quit (after modal or if scene was clean)
+        if (m_editor && m_editor->getFileMenu().shouldQuit())
+        {
+            m_isRunning = false;
+            break;
+        }
+
         // 1. Timer — calculate delta time
         float deltaTime = m_timer->update();
 

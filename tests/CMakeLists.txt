@@ -30,6 +30,8 @@ add_executable(vestige_tests
     test_ibl.cpp
     test_frustum_culling.cpp
     test_scene_serializer.cpp
+    test_file_menu.cpp
+    test_command_history.cpp
 )
 
 target_link_libraries(vestige_tests

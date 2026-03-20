@@ -1,6 +1,10 @@
 /// @file editor.cpp
 /// @brief Editor implementation — ImGui lifecycle, docking workspace, editor camera, theme.
 #include "editor/editor.h"
+#include "editor/commands/transform_command.h"
+#include "editor/commands/create_entity_command.h"
+#include "editor/commands/delete_entity_command.h"
+#include "editor/commands/composite_command.h"
 #include "core/logger.h"
 #include "renderer/camera.h"
 #include "renderer/renderer.h"
@@ -83,6 +87,10 @@ bool Editor::initialize(GLFWwindow* window, const std::string& assetPath)
     // Note: asset browser is initialized when setResourceManager() is called
     // because it needs a ResourceManager for texture loading.
 
+    // Initialize file menu with the GLFW window for title bar updates
+    m_fileMenu.setWindow(window);
+    m_fileMenu.setCommandHistory(&m_commandHistory);
+
     m_isInitialized = true;
     Logger::info("Editor initialized (ImGui + docking + editor camera)");
     return true;
@@ -158,50 +166,60 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera)
 
         ImGui::DockSpaceOverViewport(dockspaceId, viewport);
 
+        // Process global file shortcuts (Ctrl+N/O/S/Shift+S/Q)
+        m_fileMenu.processShortcuts(scene, m_selection);
+
+        // Process undo/redo shortcuts (Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z)
+        {
+            ImGuiIO& undoIo = ImGui::GetIO();
+            if (!ImGui::IsPopupOpen("Unsaved Changes"))
+            {
+                if (undoIo.KeyCtrl && !undoIo.KeyShift
+                    && ImGui::IsKeyPressed(ImGuiKey_Z))
+                {
+                    m_commandHistory.undo();
+                }
+                if (undoIo.KeyCtrl && !undoIo.KeyShift
+                    && ImGui::IsKeyPressed(ImGuiKey_Y))
+                {
+                    m_commandHistory.redo();
+                }
+                if (undoIo.KeyCtrl && undoIo.KeyShift
+                    && ImGui::IsKeyPressed(ImGuiKey_Z))
+                {
+                    m_commandHistory.redo();
+                }
+            }
+        }
+
         // Menu bar
         if (ImGui::BeginMainMenuBar())
         {
             if (ImGui::BeginMenu("File"))
             {
-                if (ImGui::MenuItem("New Scene", "Ctrl+N"))
-                {
-                    // TODO: Phase 5D
-                }
-                if (ImGui::MenuItem("Open Scene...", "Ctrl+O"))
-                {
-                    // TODO: Phase 5D
-                }
-                ImGui::Separator();
-                if (ImGui::MenuItem("Save Scene", "Ctrl+S"))
-                {
-                    // TODO: Phase 5D
-                }
-                if (ImGui::MenuItem("Save Scene As...", "Ctrl+Shift+S"))
-                {
-                    // TODO: Phase 5D
-                }
+                m_fileMenu.drawMenuItems(scene, m_selection);
                 ImGui::Separator();
                 if (ImGui::MenuItem("Import Model...", "Ctrl+I"))
                 {
                     m_importDialog.open();
                 }
                 ImGui::Separator();
-                if (ImGui::MenuItem("Quit", "Q"))
+                if (ImGui::MenuItem("Quit", "Ctrl+Q"))
                 {
-                    glfwSetWindowShouldClose(m_window, GLFW_TRUE);
+                    m_fileMenu.requestQuit();
                 }
                 ImGui::EndMenu();
             }
 
             if (ImGui::BeginMenu("Edit"))
             {
-                if (ImGui::MenuItem("Undo", "Ctrl+Z", false, false))
+                if (ImGui::MenuItem("Undo", "Ctrl+Z", false, m_commandHistory.canUndo()))
                 {
-                    // TODO: Phase 5D
+                    m_commandHistory.undo();
                 }
-                if (ImGui::MenuItem("Redo", "Ctrl+Y", false, false))
+                if (ImGui::MenuItem("Redo", "Ctrl+Y", false, m_commandHistory.canRedo()))
                 {
-                    // TODO: Phase 5D
+                    m_commandHistory.redo();
                 }
                 ImGui::EndMenu();
             }
@@ -224,6 +242,8 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera)
                     {
                         Entity* entity = EntityFactory::createEmptyEntity(*scene, spawnPos);
                         m_selection.select(entity->getId());
+                        m_commandHistory.execute(
+                            std::make_unique<CreateEntityCommand>(*scene, entity->getId()));
                     }
                 }
                 ImGui::Separator();
@@ -235,31 +255,43 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera)
                     {
                         Entity* e = EntityFactory::createCube(*scene, *m_resourceManager, spawnPos);
                         m_selection.select(e->getId());
+                        m_commandHistory.execute(
+                            std::make_unique<CreateEntityCommand>(*scene, e->getId()));
                     }
                     if (ImGui::MenuItem("Sphere", nullptr, false, canSpawnPrimitive))
                     {
                         Entity* e = EntityFactory::createSphere(*scene, *m_resourceManager, spawnPos);
                         m_selection.select(e->getId());
+                        m_commandHistory.execute(
+                            std::make_unique<CreateEntityCommand>(*scene, e->getId()));
                     }
                     if (ImGui::MenuItem("Plane", nullptr, false, canSpawnPrimitive))
                     {
                         Entity* e = EntityFactory::createPlane(*scene, *m_resourceManager, spawnPos);
                         m_selection.select(e->getId());
+                        m_commandHistory.execute(
+                            std::make_unique<CreateEntityCommand>(*scene, e->getId()));
                     }
                     if (ImGui::MenuItem("Cylinder", nullptr, false, canSpawnPrimitive))
                     {
                         Entity* e = EntityFactory::createCylinder(*scene, *m_resourceManager, spawnPos);
                         m_selection.select(e->getId());
+                        m_commandHistory.execute(
+                            std::make_unique<CreateEntityCommand>(*scene, e->getId()));
                     }
                     if (ImGui::MenuItem("Cone", nullptr, false, canSpawnPrimitive))
                     {
                         Entity* e = EntityFactory::createCone(*scene, *m_resourceManager, spawnPos);
                         m_selection.select(e->getId());
+                        m_commandHistory.execute(
+                            std::make_unique<CreateEntityCommand>(*scene, e->getId()));
                     }
                     if (ImGui::MenuItem("Wedge", nullptr, false, canSpawnPrimitive))
                     {
                         Entity* e = EntityFactory::createWedge(*scene, *m_resourceManager, spawnPos);
                         m_selection.select(e->getId());
+                        m_commandHistory.execute(
+                            std::make_unique<CreateEntityCommand>(*scene, e->getId()));
                     }
                     ImGui::EndMenu();
                 }
@@ -289,6 +321,8 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera)
                                 {
                                     e->transform.position = spawnPos;
                                     m_selection.select(e->getId());
+                                    m_commandHistory.execute(
+                                        std::make_unique<CreateEntityCommand>(*scene, e->getId()));
                                 }
                             }
                         }
@@ -303,16 +337,22 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera)
                     {
                         Entity* e = EntityFactory::createDirectionalLight(*scene, spawnPos);
                         m_selection.select(e->getId());
+                        m_commandHistory.execute(
+                            std::make_unique<CreateEntityCommand>(*scene, e->getId()));
                     }
                     if (ImGui::MenuItem("Point Light", nullptr, false, canSpawnLight))
                     {
                         Entity* e = EntityFactory::createPointLight(*scene, spawnPos);
                         m_selection.select(e->getId());
+                        m_commandHistory.execute(
+                            std::make_unique<CreateEntityCommand>(*scene, e->getId()));
                     }
                     if (ImGui::MenuItem("Spot Light", nullptr, false, canSpawnLight))
                     {
                         Entity* e = EntityFactory::createSpotLight(*scene, spawnPos);
                         m_selection.select(e->getId());
+                        m_commandHistory.execute(
+                            std::make_unique<CreateEntityCommand>(*scene, e->getId()));
                     }
                     ImGui::EndMenu();
                 }
@@ -410,6 +450,9 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera)
         m_importDialog.draw(scene, m_resourceManager, m_selection,
                             m_editorCamera.get());
 
+        // File browser dialogs and unsaved changes modal
+        m_fileMenu.drawDialogs(scene, m_selection);
+
         // Demo window for testing ImGui features
         if (m_showDemoWindow)
         {
@@ -502,6 +545,29 @@ void Editor::setResourceManager(ResourceManager* resourceManager)
     {
         m_assetBrowserPanel.initialize(m_assetPath, *resourceManager);
     }
+
+    // Give the file menu access to the resource manager for scene loading
+    m_fileMenu.setResourceManager(resourceManager);
+}
+
+FileMenu& Editor::getFileMenu()
+{
+    return m_fileMenu;
+}
+
+const FileMenu& Editor::getFileMenu() const
+{
+    return m_fileMenu;
+}
+
+CommandHistory& Editor::getCommandHistory()
+{
+    return m_commandHistory;
+}
+
+const CommandHistory& Editor::getCommandHistory() const
+{
+    return m_commandHistory;
 }
 
 void Editor::processViewportClick(int fboWidth, int fboHeight)
@@ -707,7 +773,43 @@ void Editor::drawGizmo(Camera* camera, Scene* scene)
     }
 
     // Track gizmo hover/use for next frame's pick suppression
-    m_gizmoActive = ImGuizmo::IsOver() || ImGuizmo::IsUsing();
+    bool isUsing = ImGuizmo::IsUsing();
+    m_gizmoActive = ImGuizmo::IsOver() || isUsing;
+
+    // Gizmo begin/end bracketing for undo — capture old transform on drag start,
+    // record TransformCommand on drag end. One drag = one undo step.
+    if (!m_wasGizmoUsing && isUsing)
+    {
+        // Drag begins — snapshot the current transform
+        m_gizmoStartEntityId = entity->getId();
+        m_gizmoStartPosition = entity->transform.position;
+        m_gizmoStartRotation = entity->transform.rotation;
+        m_gizmoStartScale = entity->transform.scale;
+    }
+    else if (m_wasGizmoUsing && !isUsing)
+    {
+        // Drag ends — record a TransformCommand if the transform actually changed
+        if (scene && m_gizmoStartEntityId != 0)
+        {
+            Entity* target = scene->findEntityById(m_gizmoStartEntityId);
+            if (target)
+            {
+                bool changed = (target->transform.position != m_gizmoStartPosition)
+                             || (target->transform.rotation != m_gizmoStartRotation)
+                             || (target->transform.scale != m_gizmoStartScale);
+                if (changed)
+                {
+                    auto cmd = std::make_unique<TransformCommand>(
+                        *scene, m_gizmoStartEntityId,
+                        m_gizmoStartPosition, m_gizmoStartRotation, m_gizmoStartScale,
+                        target->transform.position, target->transform.rotation, target->transform.scale);
+                    m_commandHistory.execute(std::move(cmd));
+                }
+            }
+        }
+        m_gizmoStartEntityId = 0;
+    }
+    m_wasGizmoUsing = isUsing;
 }
 
 void Editor::drawGizmoOverlay()
@@ -782,17 +884,42 @@ void Editor::processEntityShortcuts(Scene* scene)
 
     ImGuiIO& io = ImGui::GetIO();
 
-    // Delete key — delete all selected entities
+    // Delete key — delete all selected entities (via commands for undo)
     if (ImGui::IsKeyPressed(ImGuiKey_Delete) && m_selection.hasSelection())
     {
-        EntityActions::deleteSelectedEntities(*scene, m_selection);
+        std::vector<uint32_t> ids = m_selection.getSelectedIds();
+        m_selection.clearSelection();
+
+        if (ids.size() == 1)
+        {
+            auto cmd = std::make_unique<DeleteEntityCommand>(*scene, ids[0]);
+            m_commandHistory.execute(std::move(cmd));
+        }
+        else if (ids.size() > 1)
+        {
+            // Multi-delete: wrap in CompositeCommand
+            std::vector<std::unique_ptr<EditorCommand>> cmds;
+            for (uint32_t id : ids)
+            {
+                cmds.push_back(std::make_unique<DeleteEntityCommand>(*scene, id));
+            }
+            m_commandHistory.execute(
+                std::make_unique<CompositeCommand>(
+                    "Delete " + std::to_string(ids.size()) + " entities",
+                    std::move(cmds)));
+        }
     }
 
-    // Ctrl+D — duplicate primary selected entity
+    // Ctrl+D — duplicate primary selected entity (via command for undo)
     if (io.KeyCtrl && !io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_D)
         && m_selection.hasSelection())
     {
-        EntityActions::duplicateEntity(*scene, m_selection, m_selection.getPrimaryId());
+        Entity* clone = EntityActions::duplicateEntity(*scene, m_selection, m_selection.getPrimaryId());
+        if (clone)
+        {
+            m_commandHistory.execute(
+                std::make_unique<CreateEntityCommand>(*scene, clone->getId()));
+        }
     }
 
     // Ctrl+G — group selected entities
@@ -800,6 +927,10 @@ void Editor::processEntityShortcuts(Scene* scene)
         && m_selection.hasSelection())
     {
         EntityActions::groupEntities(*scene, m_selection);
+        // Group is complex (creates entity + reparents) — mark dirty directly
+        // until we have a dedicated GroupCommand (Phase 5D-4)
+        m_fileMenu.markDirty();
+        m_fileMenu.updateWindowTitle(scene->getName());
     }
 
     // H — toggle visibility of primary selected entity
@@ -810,6 +941,9 @@ void Editor::processEntityShortcuts(Scene* scene)
         if (entity)
         {
             entity->setVisible(!entity->isVisible());
+            // Visibility toggle will be undoable via EntityPropertyCommand (Phase 5D-4)
+            m_fileMenu.markDirty();
+            m_fileMenu.updateWindowTitle(scene->getName());
         }
     }
 

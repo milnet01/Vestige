@@ -59,6 +59,24 @@ Entity* Entity::addChild(std::unique_ptr<Entity> child)
     return ptr;
 }
 
+Entity* Entity::insertChild(std::unique_ptr<Entity> child, size_t index)
+{
+    child->m_parent = this;
+    Entity* ptr = child.get();
+
+    if (index >= m_children.size())
+    {
+        m_children.push_back(std::move(child));
+    }
+    else
+    {
+        m_children.insert(m_children.begin() + static_cast<ptrdiff_t>(index),
+                          std::move(child));
+    }
+
+    return ptr;
+}
+
 const std::vector<std::unique_ptr<Entity>>& Entity::getChildren() const
 {
     return m_children;
