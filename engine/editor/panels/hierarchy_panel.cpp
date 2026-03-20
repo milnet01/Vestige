@@ -196,6 +196,42 @@ void HierarchyPanel::draw(Scene* scene, Selection& selection)
         ImGui::EndPopup();
     }
 
+    // --- Save-as-Prefab popup ---
+    if (m_wantOpenPrefabSave)
+    {
+        ImGui::OpenPopup("SavePrefab");
+        m_wantOpenPrefabSave = false;
+    }
+
+    if (ImGui::BeginPopup("SavePrefab"))
+    {
+        ImGui::Text("Prefab Name:");
+        ImGui::SetNextItemWidth(200.0f);
+        bool confirmed = ImGui::InputText("##PrefabNameInput",
+            m_prefabNameBuffer, sizeof(m_prefabNameBuffer),
+            ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll);
+
+        if (!m_prefabNameFocusSet)
+        {
+            ImGui::SetKeyboardFocusHere(-1);
+            m_prefabNameFocusSet = true;
+        }
+
+        if (confirmed && m_prefabNameBuffer[0] != '\0')
+        {
+            m_prefabSaveConfirmed = true;
+            ImGui::CloseCurrentPopup();
+        }
+
+        if (ImGui::IsKeyPressed(ImGuiKey_Escape))
+        {
+            m_pendingSavePrefabId = 0;
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::EndPopup();
+    }
+
     // --- Process deferred actions (after tree iteration is complete) ---
 
     // Multi-select delete (Delete key)
@@ -461,6 +497,16 @@ void HierarchyPanel::drawEntityNode(Entity& entity, Scene& scene, Selection& sel
         if (ImGui::MenuItem("Duplicate", "Ctrl+D"))
         {
             m_pendingDuplicateId = id;
+        }
+
+        if (ImGui::MenuItem("Save as Prefab..."))
+        {
+            m_pendingSavePrefabId = id;
+            std::strncpy(m_prefabNameBuffer, entity.getName().c_str(),
+                sizeof(m_prefabNameBuffer) - 1);
+            m_prefabNameBuffer[sizeof(m_prefabNameBuffer) - 1] = '\0';
+            m_prefabNameFocusSet = false;
+            m_wantOpenPrefabSave = true;
         }
 
         ImGui::Separator();

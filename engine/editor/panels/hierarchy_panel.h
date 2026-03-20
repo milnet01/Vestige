@@ -21,6 +21,22 @@ public:
     /// @param selection Editor selection state.
     void draw(Scene* scene, Selection& selection);
 
+    /// @brief Returns true if the user confirmed a "Save as Prefab" action.
+    bool hasPendingSavePrefab() const { return m_prefabSaveConfirmed; }
+
+    /// @brief Gets the entity ID to save as prefab.
+    uint32_t getPendingSavePrefabEntityId() const { return m_pendingSavePrefabId; }
+
+    /// @brief Gets the user-entered prefab name.
+    const char* getPendingSavePrefabName() const { return m_prefabNameBuffer; }
+
+    /// @brief Clears the pending save-as-prefab state (called after processing).
+    void clearPendingSavePrefab()
+    {
+        m_prefabSaveConfirmed = false;
+        m_pendingSavePrefabId = 0;
+    }
+
 private:
     void drawEntityNode(Entity& entity, Scene& scene, Selection& selection);
     bool matchesFilter(const Entity& entity) const;
@@ -44,6 +60,13 @@ private:
     bool m_wantCreateEntity = false;
     uint32_t m_createParentId = 0;
     bool m_wantGroupSelected = false;
+
+    // Save-as-prefab state (persists across frames while popup is open)
+    uint32_t m_pendingSavePrefabId = 0;
+    bool m_prefabSaveConfirmed = false;
+    char m_prefabNameBuffer[256] = {};
+    bool m_wantOpenPrefabSave = false;
+    bool m_prefabNameFocusSet = false;
 };
 
 } // namespace Vestige

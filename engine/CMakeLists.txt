@@ -49,6 +49,8 @@ set(ENGINE_SOURCES
     editor/panels/hierarchy_panel.cpp
     editor/panels/import_dialog.cpp
     editor/panels/inspector_panel.cpp
+    editor/prefab_system.cpp
+    utils/entity_serializer.cpp
     # glad OpenGL loader
     ${CMAKE_SOURCE_DIR}/external/glad/src/gl.c
     # stb_image implementation
@@ -81,6 +83,7 @@ target_link_libraries(vestige_engine
         imgui_lib
         imguizmo_lib
         imgui_filebrowser
+        nlohmann_json::nlohmann_json
 )
 
 # Suppress warnings from third-party source files compiled as part of the engine

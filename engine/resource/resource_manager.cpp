@@ -245,6 +245,117 @@ size_t ResourceManager::getModelCount() const
     return m_models.size();
 }
 
+std::string ResourceManager::findMeshKey(const std::shared_ptr<Mesh>& mesh) const
+{
+    for (const auto& [key, cached] : m_meshes)
+    {
+        if (cached == mesh)
+        {
+            return key;
+        }
+    }
+    return "";
+}
+
+std::shared_ptr<Mesh> ResourceManager::getMeshByKey(const std::string& key)
+{
+    // Check cache first (handles exact matches for any previously created mesh)
+    auto it = m_meshes.find(key);
+    if (it != m_meshes.end())
+    {
+        return it->second;
+    }
+
+    // Create built-in meshes on demand
+    if (key == "__builtin_cube")
+    {
+        return getCubeMesh();
+    }
+    if (key == "__builtin_wedge")
+    {
+        return getWedgeMesh();
+    }
+    if (key.rfind("__builtin_plane_", 0) == 0)
+    {
+        try
+        {
+            float size = std::stof(key.substr(16));
+            return getPlaneMesh(size);
+        }
+        catch (...)
+        {
+            return getPlaneMesh();
+        }
+    }
+    if (key.rfind("__builtin_sphere_", 0) == 0)
+    {
+        try
+        {
+            auto xPos = key.find('x', 17);
+            if (xPos != std::string::npos)
+            {
+                uint32_t sectors = static_cast<uint32_t>(std::stoi(key.substr(17, xPos - 17)));
+                uint32_t stacks = static_cast<uint32_t>(std::stoi(key.substr(xPos + 1)));
+                return getSphereMesh(sectors, stacks);
+            }
+        }
+        catch (...)
+        {
+        }
+        return getSphereMesh();
+    }
+    if (key.rfind("__builtin_cylinder_", 0) == 0)
+    {
+        try
+        {
+            uint32_t sectors = static_cast<uint32_t>(std::stoi(key.substr(19)));
+            return getCylinderMesh(sectors);
+        }
+        catch (...)
+        {
+            return getCylinderMesh();
+        }
+    }
+    if (key.rfind("__builtin_cone_", 0) == 0)
+    {
+        try
+        {
+            auto xPos = key.find('x', 15);
+            if (xPos != std::string::npos)
+            {
+                uint32_t sectors = static_cast<uint32_t>(std::stoi(key.substr(15, xPos - 15)));
+                uint32_t stacks = static_cast<uint32_t>(std::stoi(key.substr(xPos + 1)));
+                return getConeMesh(sectors, stacks);
+            }
+        }
+        catch (...)
+        {
+        }
+        return getConeMesh();
+    }
+
+    // Try loading as file path (OBJ)
+    return loadMesh(key);
+}
+
+std::string ResourceManager::findTexturePath(const std::shared_ptr<Texture>& texture) const
+{
+    for (const auto& [key, cached] : m_textures)
+    {
+        if (cached == texture)
+        {
+            // Strip ":linear" or ":srgb" cache key suffix
+            auto colonPos = key.rfind(':');
+            if (colonPos != std::string::npos)
+            {
+                return key.substr(0, colonPos);
+            }
+            return key;
+        }
+    }
+    return "";
+}
+
 void ResourceManager::clearAll()
 {
     m_textures.clear();

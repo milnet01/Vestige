@@ -91,6 +91,20 @@ public:
     /// @brief Gets the number of cached models.
     size_t getModelCount() const;
 
+    // --- Reverse lookup (for serialization) ---
+
+    /// @brief Finds the cache key for a mesh (e.g. "__builtin_cube" or file path).
+    /// @return The key string, or empty if the mesh is not in the cache.
+    std::string findMeshKey(const std::shared_ptr<Mesh>& mesh) const;
+
+    /// @brief Gets or creates a mesh by its cache key (builtin name or file path).
+    /// @return The mesh, or nullptr if the key is invalid.
+    std::shared_ptr<Mesh> getMeshByKey(const std::string& key);
+
+    /// @brief Finds the file path for a cached texture (strips cache key suffix).
+    /// @return The original file path, or empty if not found.
+    std::string findTexturePath(const std::shared_ptr<Texture>& texture) const;
+
     // --- Management ---
 
     /// @brief Releases all cached resources.

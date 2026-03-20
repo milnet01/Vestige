@@ -4,6 +4,7 @@
 #include "core/logger.h"
 #include "renderer/camera.h"
 #include "renderer/renderer.h"
+#include "resource/resource_manager.h"
 #include "scene/entity.h"
 #include "scene/scene.h"
 
@@ -18,6 +19,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <filesystem>
 
 namespace Vestige
 {
@@ -43,6 +45,7 @@ bool Editor::initialize(GLFWwindow* window, const std::string& assetPath)
     }
 
     m_window = window;
+    m_assetPath = assetPath;
 
     // Create ImGui context
     IMGUI_CHECKVERSION();
@@ -254,6 +257,38 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera)
                     ImGui::EndMenu();
                 }
 
+                if (ImGui::BeginMenu("Prefabs"))
+                {
+                    bool canSpawnPrefab = scene && m_resourceManager;
+                    auto prefabFiles = m_prefabSystem.listPrefabs(m_assetPath);
+
+                    if (prefabFiles.empty())
+                    {
+                        ImGui::TextDisabled("No prefabs saved yet");
+                    }
+                    else
+                    {
+                        for (const auto& prefabFile : prefabFiles)
+                        {
+                            std::filesystem::path p(prefabFile);
+                            std::string displayName = p.stem().string();
+
+                            if (ImGui::MenuItem(displayName.c_str(), nullptr,
+                                                false, canSpawnPrefab))
+                            {
+                                Entity* e = m_prefabSystem.loadPrefab(
+                                    prefabFile, *scene, *m_resourceManager);
+                                if (e)
+                                {
+                                    e->transform.position = spawnPos;
+                                    m_selection.select(e->getId());
+                                }
+                            }
+                        }
+                    }
+                    ImGui::EndMenu();
+                }
+
                 if (ImGui::BeginMenu("Lights"))
                 {
                     bool canSpawnLight = scene != nullptr;
@@ -333,6 +368,20 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera)
         ImGui::Begin("Hierarchy");
         m_hierarchyPanel.draw(scene, m_selection);
         ImGui::End();
+
+        // Process pending "Save as Prefab" from hierarchy context menu
+        if (m_hierarchyPanel.hasPendingSavePrefab() && scene && m_resourceManager)
+        {
+            Entity* entity = scene->findEntityById(
+                m_hierarchyPanel.getPendingSavePrefabEntityId());
+            if (entity)
+            {
+                m_prefabSystem.savePrefab(
+                    *entity, m_hierarchyPanel.getPendingSavePrefabName(),
+                    *m_resourceManager, m_assetPath);
+            }
+            m_hierarchyPanel.clearPendingSavePrefab();
+        }
 
         // --- Inspector panel ---
         ImGui::Begin("Inspector");

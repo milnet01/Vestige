@@ -123,6 +123,13 @@ add_library(imgui_filebrowser INTERFACE)
 target_include_directories(imgui_filebrowser INTERFACE ${imgui_filebrowser_SOURCE_DIR})
 target_link_libraries(imgui_filebrowser INTERFACE imgui_lib)
 
+# nlohmann/json — JSON serialization (header-only, MIT)
+# Use URL tarball to avoid cloning the ~150 MB repo
+FetchContent_Declare(json
+    URL https://github.com/nlohmann/json/releases/download/v3.12.0/json.tar.xz
+)
+FetchContent_MakeAvailable(json)
+
 # Google Test — unit testing
 FetchContent_Declare(
     googletest
