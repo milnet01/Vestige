@@ -79,6 +79,16 @@ const std::string& Scene::getName() const
     return m_name;
 }
 
+void Scene::setName(const std::string& name)
+{
+    m_name = name;
+}
+
+void Scene::clearEntities()
+{
+    m_root = std::make_unique<Entity>("Root");
+}
+
 bool Scene::removeEntity(uint32_t id)
 {
     Entity* entity = findEntityById(id);

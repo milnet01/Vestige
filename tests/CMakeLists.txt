@@ -29,6 +29,7 @@ add_executable(vestige_tests
     test_cascaded_shadow_map.cpp
     test_ibl.cpp
     test_frustum_culling.cpp
+    test_scene_serializer.cpp
 )
 
 target_link_libraries(vestige_tests

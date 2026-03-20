@@ -52,6 +52,7 @@ set(ENGINE_SOURCES
     editor/panels/inspector_panel.cpp
     editor/panels/asset_browser_panel.cpp
     editor/prefab_system.cpp
+    editor/scene_serializer.cpp
     editor/material_preview.cpp
     utils/entity_serializer.cpp
     # glad OpenGL loader
