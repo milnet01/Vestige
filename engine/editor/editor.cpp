@@ -77,6 +77,9 @@ bool Editor::initialize(GLFWwindow* window, const std::string& assetPath)
     // Create editor camera (orbit/pan/zoom for scene editing)
     m_editorCamera = std::make_unique<EditorCamera>();
 
+    // Initialize the inspector panel (material preview, etc.)
+    m_inspectorPanel.initialize(assetPath);
+
     m_isInitialized = true;
     Logger::info("Editor initialized (ImGui + docking + editor camera)");
     return true;
