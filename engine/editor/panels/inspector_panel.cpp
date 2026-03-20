@@ -7,10 +7,12 @@
 #include "scene/mesh_renderer.h"
 #include "scene/light_component.h"
 #include "renderer/material.h"
+#include "renderer/texture.h"
 #include "renderer/light_utils.h"
 
 #include <imgui.h>
 #include <imgui_internal.h>
+#include <glad/gl.h>
 
 #include <algorithm>
 #include <cmath>
@@ -286,6 +288,56 @@ void InspectorPanel::drawMeshRenderer(Entity& entity)
 // Material
 // ---------------------------------------------------------------------------
 
+/// @brief Draws a texture slot with thumbnail preview.
+/// Shows a 48x48 thumbnail of the texture if loaded, or a placeholder if not.
+static void drawTextureSlot(const char* label,
+                            const std::shared_ptr<Texture>& texture)
+{
+    ImGui::PushID(label);
+
+    constexpr float THUMB_SIZE = 48.0f;
+
+    if (texture && texture->isLoaded())
+    {
+        ImTextureID texId = static_cast<ImTextureID>(
+            static_cast<uintptr_t>(texture->getId()));
+        // UV flipped: OpenGL textures are bottom-up
+        ImGui::Image(texId, ImVec2(THUMB_SIZE, THUMB_SIZE),
+                     ImVec2(0, 1), ImVec2(1, 0));
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("%s\n%dx%d", label,
+                              texture->getWidth(), texture->getHeight());
+        }
+    }
+    else
+    {
+        // Draw placeholder rectangle
+        ImVec2 pos = ImGui::GetCursorScreenPos();
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
+        drawList->AddRectFilled(pos,
+            ImVec2(pos.x + THUMB_SIZE, pos.y + THUMB_SIZE),
+            IM_COL32(40, 40, 40, 255));
+        drawList->AddRect(pos,
+            ImVec2(pos.x + THUMB_SIZE, pos.y + THUMB_SIZE),
+            IM_COL32(80, 80, 80, 255));
+
+        const char* noneText = "None";
+        ImVec2 textSize = ImGui::CalcTextSize(noneText);
+        drawList->AddText(
+            ImVec2(pos.x + (THUMB_SIZE - textSize.x) * 0.5f,
+                   pos.y + (THUMB_SIZE - textSize.y) * 0.5f),
+            IM_COL32(128, 128, 128, 255), noneText);
+
+        ImGui::Dummy(ImVec2(THUMB_SIZE, THUMB_SIZE));
+    }
+
+    ImGui::SameLine();
+    ImGui::Text("%s", label);
+
+    ImGui::PopID();
+}
+
 void InspectorPanel::drawMaterial(Material& material)
 {
     ImGui::PushID("Material");
@@ -329,22 +381,28 @@ void InspectorPanel::drawMaterial(Material& material)
 
 void InspectorPanel::drawMaterialBlinnPhong(Material& material)
 {
-    glm::vec3 diffuse = material.getDiffuseColor();
-    if (ImGui::ColorEdit3("Diffuse", &diffuse.x))
+    // --- Base Color section ---
+    if (ImGui::CollapsingHeader("Base Color", ImGuiTreeNodeFlags_DefaultOpen))
     {
-        material.setDiffuseColor(diffuse);
-    }
+        drawTextureSlot("Diffuse", material.getDiffuseTexture());
 
-    glm::vec3 specular = material.getSpecularColor();
-    if (ImGui::ColorEdit3("Specular", &specular.x))
-    {
-        material.setSpecularColor(specular);
-    }
+        glm::vec3 diffuse = material.getDiffuseColor();
+        if (ImGui::ColorEdit3("Diffuse Color", &diffuse.x))
+        {
+            material.setDiffuseColor(diffuse);
+        }
 
-    float shininess = material.getShininess();
-    if (ImGui::DragFloat("Shininess", &shininess, 1.0f, 1.0f, 512.0f))
-    {
-        material.setShininess(shininess);
+        glm::vec3 specular = material.getSpecularColor();
+        if (ImGui::ColorEdit3("Specular Color", &specular.x))
+        {
+            material.setSpecularColor(specular);
+        }
+
+        float shininess = material.getShininess();
+        if (ImGui::DragFloat("Shininess", &shininess, 1.0f, 1.0f, 512.0f))
+        {
+            material.setShininess(shininess);
+        }
     }
 
     ImGui::Spacing();
@@ -352,63 +410,100 @@ void InspectorPanel::drawMaterialBlinnPhong(Material& material)
 
 void InspectorPanel::drawMaterialPbr(Material& material)
 {
-    glm::vec3 albedo = material.getAlbedo();
-    if (ImGui::ColorEdit3("Albedo", &albedo.x))
+    // --- Base Color section ---
+    if (ImGui::CollapsingHeader("Base Color", ImGuiTreeNodeFlags_DefaultOpen))
     {
-        material.setAlbedo(albedo);
-    }
+        drawTextureSlot("Albedo", material.getDiffuseTexture());
 
-    float metallic = material.getMetallic();
-    if (ImGui::SliderFloat("Metallic", &metallic, 0.0f, 1.0f))
-    {
-        material.setMetallic(metallic);
-    }
-
-    float roughness = material.getRoughness();
-    if (ImGui::SliderFloat("Roughness", &roughness, 0.04f, 1.0f))
-    {
-        material.setRoughness(roughness);
-    }
-
-    float ao = material.getAo();
-    if (ImGui::SliderFloat("AO", &ao, 0.0f, 1.0f))
-    {
-        material.setAo(ao);
-    }
-
-    // Clearcoat
-    float clearcoat = material.getClearcoat();
-    if (ImGui::SliderFloat("Clearcoat", &clearcoat, 0.0f, 1.0f))
-    {
-        material.setClearcoat(clearcoat);
-    }
-
-    if (clearcoat > 0.0f)
-    {
-        float ccRoughness = material.getClearcoatRoughness();
-        if (ImGui::SliderFloat("CC Roughness", &ccRoughness, 0.0f, 1.0f))
+        glm::vec3 albedo = material.getAlbedo();
+        if (ImGui::ColorEdit3("Albedo Color", &albedo.x))
         {
-            material.setClearcoatRoughness(ccRoughness);
+            material.setAlbedo(albedo);
         }
     }
 
-    // Emissive
-    glm::vec3 emissive = material.getEmissive();
-    if (ImGui::ColorEdit3("Emissive", &emissive.x))
+    // --- Surface Properties section ---
+    if (ImGui::CollapsingHeader("Surface", ImGuiTreeNodeFlags_DefaultOpen))
     {
-        material.setEmissive(emissive);
+        float metallic = material.getMetallic();
+        if (ImGui::SliderFloat("Metallic", &metallic, 0.0f, 1.0f))
+        {
+            material.setMetallic(metallic);
+        }
+
+        float roughness = material.getRoughness();
+        if (ImGui::SliderFloat("Roughness", &roughness, 0.04f, 1.0f))
+        {
+            material.setRoughness(roughness);
+        }
+
+        drawTextureSlot("Metallic-Roughness", material.getMetallicRoughnessTexture());
+
+        float ao = material.getAo();
+        if (ImGui::SliderFloat("AO", &ao, 0.0f, 1.0f))
+        {
+            material.setAo(ao);
+        }
+
+        drawTextureSlot("AO Map", material.getAoTexture());
     }
 
-    float emissiveStrength = material.getEmissiveStrength();
-    if (ImGui::DragFloat("Emissive Strength", &emissiveStrength, 0.1f, 0.0f, 100.0f))
+    // --- Clearcoat section ---
+    float clearcoat = material.getClearcoat();
+    if (clearcoat > 0.0f || ImGui::CollapsingHeader("Clearcoat"))
     {
-        material.setEmissiveStrength(emissiveStrength);
+        if (clearcoat > 0.0f)
+        {
+            // Auto-open if clearcoat is active — section drawn inline
+        }
+        if (ImGui::SliderFloat("Clearcoat", &clearcoat, 0.0f, 1.0f))
+        {
+            material.setClearcoat(clearcoat);
+        }
+
+        if (clearcoat > 0.0f)
+        {
+            float ccRoughness = material.getClearcoatRoughness();
+            if (ImGui::SliderFloat("CC Roughness", &ccRoughness, 0.0f, 1.0f))
+            {
+                material.setClearcoatRoughness(ccRoughness);
+            }
+        }
     }
 
-    float uvScale = material.getUvScale();
-    if (ImGui::DragFloat("UV Scale", &uvScale, 0.05f, 0.01f, 50.0f))
+    // --- Emission section ---
+    if (ImGui::CollapsingHeader("Emission"))
     {
-        material.setUvScale(uvScale);
+        glm::vec3 emissive = material.getEmissive();
+        if (ImGui::ColorEdit3("Emissive Color", &emissive.x,
+                              ImGuiColorEditFlags_HDR | ImGuiColorEditFlags_Float))
+        {
+            material.setEmissive(emissive);
+        }
+
+        float emissiveStrength = material.getEmissiveStrength();
+        if (ImGui::DragFloat("Strength", &emissiveStrength, 0.1f, 0.0f, 100.0f))
+        {
+            material.setEmissiveStrength(emissiveStrength);
+        }
+
+        drawTextureSlot("Emissive Map", material.getEmissiveTexture());
+    }
+
+    // --- UV & Tiling ---
+    if (ImGui::CollapsingHeader("UV & Tiling"))
+    {
+        float uvScale = material.getUvScale();
+        if (ImGui::DragFloat("UV Scale", &uvScale, 0.05f, 0.01f, 50.0f))
+        {
+            material.setUvScale(uvScale);
+        }
+
+        bool stochastic = material.isStochasticTiling();
+        if (ImGui::Checkbox("Stochastic Tiling", &stochastic))
+        {
+            material.setStochasticTiling(stochastic);
+        }
     }
 
     ImGui::Spacing();
@@ -416,30 +511,10 @@ void InspectorPanel::drawMaterialPbr(Material& material)
 
 void InspectorPanel::drawMaterialTextures(Material& material)
 {
-    if (ImGui::TreeNode("Textures"))
+    if (ImGui::CollapsingHeader("Normal & Height", ImGuiTreeNodeFlags_DefaultOpen))
     {
-        auto showTexSlot = [](const char* label, bool hasTexture)
-        {
-            if (hasTexture)
-            {
-                ImGui::BulletText("%s: loaded", label);
-            }
-            else
-            {
-                ImGui::BulletText("%s: (none)", label);
-            }
-        };
-
-        showTexSlot("Diffuse/Albedo", material.hasDiffuseTexture());
-        showTexSlot("Normal Map",     material.hasNormalMap());
-        showTexSlot("Height Map",     material.hasHeightMap());
-
-        if (material.getType() == MaterialType::PBR)
-        {
-            showTexSlot("Metallic-Roughness", material.hasMetallicRoughnessTexture());
-            showTexSlot("Emissive",           material.hasEmissiveTexture());
-            showTexSlot("AO",                 material.hasAoTexture());
-        }
+        drawTextureSlot("Normal Map", material.getNormalMap());
+        drawTextureSlot("Height Map", material.getHeightMap());
 
         // POM settings (only relevant if height map present)
         if (material.hasHeightMap())
@@ -461,20 +536,21 @@ void InspectorPanel::drawMaterialTextures(Material& material)
             }
         }
 
-        // Stochastic tiling
-        bool stochastic = material.isStochasticTiling();
-        if (ImGui::Checkbox("Stochastic Tiling", &stochastic))
+        // Stochastic tiling (for Blinn-Phong — PBR has it in UV section)
+        if (material.getType() == MaterialType::BLINN_PHONG)
         {
-            material.setStochasticTiling(stochastic);
+            bool stochastic = material.isStochasticTiling();
+            if (ImGui::Checkbox("Stochastic Tiling", &stochastic))
+            {
+                material.setStochasticTiling(stochastic);
+            }
         }
-
-        ImGui::TreePop();
     }
 }
 
 void InspectorPanel::drawMaterialTransparency(Material& material)
 {
-    if (ImGui::TreeNode("Transparency"))
+    if (ImGui::CollapsingHeader("Transparency"))
     {
         const char* modeLabels[] = { "Opaque", "Mask", "Blend" };
         int modeIndex = static_cast<int>(material.getAlphaMode());
@@ -506,8 +582,6 @@ void InspectorPanel::drawMaterialTransparency(Material& material)
         {
             material.setDoubleSided(doubleSided);
         }
-
-        ImGui::TreePop();
     }
 }
 
