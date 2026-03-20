@@ -143,13 +143,14 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera)
             ImGuiID right = 0;
             ImGuiID bottom = 0;
 
-            ImGui::DockBuilderSplitNode(main, ImGuiDir_Left, 0.20f, &left, &main);
-            ImGui::DockBuilderSplitNode(main, ImGuiDir_Right, 0.25f, &right, &main);
+            ImGui::DockBuilderSplitNode(main, ImGuiDir_Left, 0.18f, &left, &main);
+            ImGui::DockBuilderSplitNode(main, ImGuiDir_Right, 0.28f, &right, &main);
             ImGui::DockBuilderSplitNode(main, ImGuiDir_Down, 0.25f, &bottom, &main);
 
             ImGui::DockBuilderDockWindow("Hierarchy", left);
             ImGui::DockBuilderDockWindow("Inspector", right);
             ImGui::DockBuilderDockWindow("Console", bottom);
+            ImGui::DockBuilderDockWindow("Assets", bottom);
             ImGui::DockBuilderDockWindow("Viewport", main);
 
             ImGui::DockBuilderFinish(dockspaceId);
@@ -390,6 +391,7 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera)
         }
 
         // --- Inspector panel ---
+        ImGui::SetNextWindowSizeConstraints(ImVec2(280, 200), ImVec2(FLT_MAX, FLT_MAX));
         ImGui::Begin("Inspector");
         m_inspectorPanel.draw(scene, m_selection);
         ImGui::End();
