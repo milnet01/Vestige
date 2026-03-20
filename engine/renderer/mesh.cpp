@@ -449,12 +449,12 @@ Mesh Mesh::createCylinder(uint32_t sectors)
         uint32_t tr = bl + 3;
 
         indices.push_back(bl);
-        indices.push_back(br);
         indices.push_back(tl);
+        indices.push_back(br);
 
         indices.push_back(tl);
-        indices.push_back(br);
         indices.push_back(tr);
+        indices.push_back(br);
     }
 
     // --- Top cap (normal +Y) ---
@@ -478,8 +478,8 @@ Mesh Mesh::createCylinder(uint32_t sectors)
     {
         uint32_t next = (j + 1) % sectors;
         indices.push_back(topCenterIdx);
-        indices.push_back(topRingIdx + j);
         indices.push_back(topRingIdx + next);
+        indices.push_back(topRingIdx + j);
     }
 
     // --- Bottom cap (normal -Y) ---
@@ -503,8 +503,8 @@ Mesh Mesh::createCylinder(uint32_t sectors)
     {
         uint32_t next = (j + 1) % sectors;
         indices.push_back(botCenterIdx);
-        indices.push_back(botRingIdx + next);
         indices.push_back(botRingIdx + j);
+        indices.push_back(botRingIdx + next);
     }
 
     calculateTangents(vertices, indices);
@@ -601,8 +601,8 @@ Mesh Mesh::createCone(uint32_t sectors, uint32_t stacks)
     {
         uint32_t next = (j + 1) % sectors;
         indices.push_back(baseCenterIdx);
-        indices.push_back(baseRingIdx + next);
         indices.push_back(baseRingIdx + j);
+        indices.push_back(baseRingIdx + next);
     }
 
     calculateTangents(vertices, indices);

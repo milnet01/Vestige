@@ -2,8 +2,9 @@
 /// @brief Base component class for the entity-component system.
 #pragma once
 
-#include <cstdint>
 #include <atomic>
+#include <cstdint>
+#include <memory>
 
 namespace Vestige
 {
@@ -46,6 +47,11 @@ public:
 
     /// @brief Checks if this component is enabled.
     bool isEnabled() const;
+
+    /// @brief Creates a deep copy of this component (new instance, same data).
+    /// Override in derived classes to support entity duplication.
+    /// @return Cloned component, or nullptr if cloning is not supported.
+    virtual std::unique_ptr<Component> clone() const;
 
 protected:
     Entity* m_owner = nullptr;

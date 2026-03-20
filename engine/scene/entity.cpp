@@ -141,4 +141,30 @@ bool Entity::isActive() const
     return m_isActive;
 }
 
+std::unique_ptr<Entity> Entity::clone() const
+{
+    auto copy = std::make_unique<Entity>(m_name);
+    copy->transform = transform;
+    copy->m_isActive = m_isActive;
+
+    // Clone all components
+    for (const auto& [typeId, comp] : m_components)
+    {
+        auto cloned = comp->clone();
+        if (cloned)
+        {
+            cloned->setOwner(copy.get());
+            copy->m_components[typeId] = std::move(cloned);
+        }
+    }
+
+    // Recursively clone children
+    for (const auto& child : m_children)
+    {
+        copy->addChild(child->clone());
+    }
+
+    return copy;
+}
+
 } // namespace Vestige

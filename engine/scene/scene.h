@@ -86,6 +86,12 @@ public:
     /// @return True if the entity was found and removed.
     bool removeEntity(uint32_t id);
 
+    /// @brief Duplicates an entity and all its descendants.
+    /// The clone is placed as a sibling (same parent) with new IDs.
+    /// @param entityId ID of the entity to duplicate.
+    /// @return Pointer to the clone, or nullptr if the entity was not found.
+    Entity* duplicateEntity(uint32_t entityId);
+
     /// @brief Moves an entity to a new parent.
     /// @param entityId Entity to move.
     /// @param newParentId New parent (0 = scene root).

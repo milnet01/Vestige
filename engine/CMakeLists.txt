@@ -43,6 +43,7 @@ set(ENGINE_SOURCES
     utils/cube_loader.cpp
     editor/editor.cpp
     editor/editor_camera.cpp
+    editor/entity_actions.cpp
     editor/entity_factory.cpp
     editor/selection.cpp
     editor/panels/hierarchy_panel.cpp
