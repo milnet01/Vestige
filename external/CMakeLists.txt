@@ -108,6 +108,21 @@ target_link_libraries(imguizmo_lib PUBLIC imgui_lib)
 target_compile_options(imguizmo_lib PRIVATE -w)
 set(imguizmo_SOURCE_DIR ${imguizmo_SOURCE_DIR} PARENT_SCOPE)
 
+# imgui-filebrowser — file browser dialog for ImGui (header-only, C++17 std::filesystem)
+FetchContent_Declare(
+    imgui_filebrowser
+    GIT_REPOSITORY https://github.com/AirGuanZ/imgui-filebrowser.git
+    GIT_TAG        master
+    GIT_SHALLOW    TRUE
+)
+FetchContent_GetProperties(imgui_filebrowser)
+if(NOT imgui_filebrowser_POPULATED)
+    FetchContent_Populate(imgui_filebrowser)
+endif()
+add_library(imgui_filebrowser INTERFACE)
+target_include_directories(imgui_filebrowser INTERFACE ${imgui_filebrowser_SOURCE_DIR})
+target_link_libraries(imgui_filebrowser INTERFACE imgui_lib)
+
 # Google Test — unit testing
 FetchContent_Declare(
     googletest
