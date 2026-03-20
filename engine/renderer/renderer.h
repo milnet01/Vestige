@@ -233,6 +233,9 @@ public:
     /// @return Entity ID, or 0 if background/empty.
     uint32_t pickEntityAt(int x, int y);
 
+    /// @brief Binds the output FBO and sets viewport for overlay rendering (debug draw, etc.).
+    void bindOutputFbo();
+
     /// @brief Renders selection outlines into the output FBO for the given entities.
     void renderSelectionOutline(const SceneRenderData& renderData,
                                 const std::vector<uint32_t>& selectedIds,
