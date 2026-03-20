@@ -150,10 +150,16 @@ public:
 
     // --- Hierarchy ---
 
-    /// @brief Adds a child entity. This entity takes ownership.
+    /// @brief Adds a child entity at the end. This entity takes ownership.
     /// @param child The child entity to add.
     /// @return Pointer to the added child.
     Entity* addChild(std::unique_ptr<Entity> child);
+
+    /// @brief Inserts a child entity at a specific sibling index.
+    /// @param child The child entity to insert.
+    /// @param index Position in the children list (clamped to size).
+    /// @return Pointer to the inserted child.
+    Entity* insertChild(std::unique_ptr<Entity> child, size_t index);
 
     /// @brief Gets all children.
     const std::vector<std::unique_ptr<Entity>>& getChildren() const;

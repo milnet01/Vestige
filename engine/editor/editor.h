@@ -2,9 +2,11 @@
 /// @brief Editor subsystem — ImGui integration, docking, editor camera, and mode management.
 #pragma once
 
+#include "editor/command_history.h"
 #include "editor/editor_camera.h"
 #include "editor/entity_actions.h"
 #include "editor/entity_factory.h"
+#include "editor/file_menu.h"
 #include "editor/panels/asset_browser_panel.h"
 #include "editor/panels/hierarchy_panel.h"
 #include "editor/panels/import_dialog.h"
@@ -131,6 +133,14 @@ public:
     Selection& getSelection();
     const Selection& getSelection() const;
 
+    /// @brief Gets the file menu (for save/load, dirty tracking, quit).
+    FileMenu& getFileMenu();
+    const FileMenu& getFileMenu() const;
+
+    /// @brief Gets the command history (for undo/redo).
+    CommandHistory& getCommandHistory();
+    const CommandHistory& getCommandHistory() const;
+
 private:
     void setupTheme();
     void drawGizmo(Camera* camera, Scene* scene);
@@ -147,6 +157,8 @@ private:
 
     std::unique_ptr<EditorCamera> m_editorCamera;
     Selection m_selection;
+    FileMenu m_fileMenu;
+    CommandHistory m_commandHistory;
     HierarchyPanel m_hierarchyPanel;
     InspectorPanel m_inspectorPanel;
     ImportDialog m_importDialog;
@@ -170,6 +182,11 @@ private:
     ImGuizmo::OPERATION m_gizmoOperation = ImGuizmo::TRANSLATE;
     ImGuizmo::MODE m_gizmoMode = ImGuizmo::WORLD;
     bool m_gizmoActive = false;  ///< Was gizmo hovered/used last frame (for pick suppression).
+    bool m_wasGizmoUsing = false; ///< Was gizmo being manipulated last frame (for dirty tracking).
+    glm::vec3 m_gizmoStartPosition = glm::vec3(0.0f);  ///< Transform at gizmo drag start.
+    glm::vec3 m_gizmoStartRotation = glm::vec3(0.0f);
+    glm::vec3 m_gizmoStartScale = glm::vec3(1.0f);
+    uint32_t m_gizmoStartEntityId = 0; ///< Entity being transformed at drag start.
     float m_snapTranslation = 0.5f;  ///< Snap grid in world units.
     float m_snapRotation = 15.0f;    ///< Snap in degrees.
     float m_snapScale = 0.1f;        ///< Snap in scale units.
