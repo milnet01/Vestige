@@ -50,6 +50,7 @@ set(ENGINE_SOURCES
     editor/panels/hierarchy_panel.cpp
     editor/panels/import_dialog.cpp
     editor/panels/inspector_panel.cpp
+    editor/panels/asset_browser_panel.cpp
     editor/prefab_system.cpp
     editor/material_preview.cpp
     utils/entity_serializer.cpp

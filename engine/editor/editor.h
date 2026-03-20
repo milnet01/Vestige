@@ -5,6 +5,7 @@
 #include "editor/editor_camera.h"
 #include "editor/entity_actions.h"
 #include "editor/entity_factory.h"
+#include "editor/panels/asset_browser_panel.h"
 #include "editor/panels/hierarchy_panel.h"
 #include "editor/panels/import_dialog.h"
 #include "editor/panels/inspector_panel.h"
@@ -149,6 +150,7 @@ private:
     HierarchyPanel m_hierarchyPanel;
     InspectorPanel m_inspectorPanel;
     ImportDialog m_importDialog;
+    AssetBrowserPanel m_assetBrowserPanel;
     PrefabSystem m_prefabSystem;
     ResourceManager* m_resourceManager = nullptr;
     std::string m_assetPath;
