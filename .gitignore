@@ -37,6 +37,9 @@ Thumbs.db
 # Claude Code local settings
 .claude/settings.local.json
 
+# ImGui layout state
+imgui.ini
+
 # Dependency directories (fetched by CMake)
 external/glfw/
 external/glm/

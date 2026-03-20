@@ -171,6 +171,12 @@ void Scene::collectRenderDataRecursive(const Entity& entity, SceneRenderData& da
         return;
     }
 
+    // Invisible entities (and their children) are skipped for rendering
+    if (!entity.isVisible())
+    {
+        return;
+    }
+
     // Check for MeshRenderer
     auto* meshRenderer = entity.getComponent<MeshRenderer>();
     if (meshRenderer && meshRenderer->isEnabled() && meshRenderer->getMesh() && meshRenderer->getMaterial())
@@ -182,6 +188,7 @@ void Scene::collectRenderDataRecursive(const Entity& entity, SceneRenderData& da
         item.worldBounds = meshRenderer->getCullingBounds().transformed(item.worldMatrix);
         item.entityId = entity.getId();
         item.castsShadow = meshRenderer->castsShadow();
+        item.isLocked = entity.isLocked();
 
         // BLEND materials go to the transparent list; OPAQUE and MASK go to opaque
         if (item.material->getAlphaMode() == AlphaMode::BLEND)
