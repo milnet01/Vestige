@@ -80,6 +80,9 @@ bool Editor::initialize(GLFWwindow* window, const std::string& assetPath)
     // Initialize the inspector panel (material preview, etc.)
     m_inspectorPanel.initialize(assetPath);
 
+    // Note: asset browser is initialized when setResourceManager() is called
+    // because it needs a ResourceManager for texture loading.
+
     m_isInitialized = true;
     Logger::info("Editor initialized (ImGui + docking + editor camera)");
     return true;
@@ -396,6 +399,11 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera)
         ImGui::TextWrapped("(Phase 5F)");
         ImGui::End();
 
+        // --- Asset browser panel ---
+        ImGui::Begin("Assets");
+        m_assetBrowserPanel.draw();
+        ImGui::End();
+
         // --- Import dialog (file browser + settings modal) ---
         m_importDialog.draw(scene, m_resourceManager, m_selection,
                             m_editorCamera.get());
@@ -486,6 +494,12 @@ bool Editor::isInitialized() const
 void Editor::setResourceManager(ResourceManager* resourceManager)
 {
     m_resourceManager = resourceManager;
+
+    // Initialize asset browser now that we have a resource manager
+    if (resourceManager && !m_assetPath.empty())
+    {
+        m_assetBrowserPanel.initialize(m_assetPath, *resourceManager);
+    }
 }
 
 void Editor::processViewportClick(int fboWidth, int fboHeight)
