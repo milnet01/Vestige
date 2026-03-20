@@ -6,6 +6,8 @@
 #include "scene/light_component.h"
 #include "resource/model.h"
 #include "renderer/frame_diagnostics.h"
+#include "renderer/debug_draw.h"
+#include "renderer/light_utils.h"
 
 #include <GLFW/glfw3.h>
 #include <glm/gtc/matrix_transform.hpp>
@@ -81,6 +83,12 @@ bool Engine::initialize(const EngineConfig& config)
     {
         Logger::warning("Editor initialization failed — continuing without editor");
         m_editor.reset();
+    }
+
+    // Initialize debug draw system for editor overlays (light gizmos, etc.)
+    if (!m_debugDraw.initialize(config.assetPath))
+    {
+        Logger::warning("DebugDraw initialization failed — gizmos will be unavailable");
     }
 
     // Give the editor access to the resource manager for entity spawning
@@ -472,6 +480,16 @@ void Engine::run()
                     m_renderData, m_editor->getSelection().getSelectedIds(),
                     *m_camera, aspectRatio);
             }
+
+            // 7c. Queue light gizmos for selected entities, then flush debug draw
+            if (activeScene)
+            {
+                drawLightGizmos(*activeScene, m_editor->getSelection());
+            }
+            m_renderer->bindOutputFbo();
+            glm::mat4 vp = m_camera->getProjectionMatrix(aspectRatio)
+                         * m_camera->getViewMatrix();
+            m_debugDraw.flush(vp);
         }
 
         // 8. Display the rendered frame
@@ -513,6 +531,7 @@ void Engine::shutdown()
 
     Logger::info("Shutting down engine...");
 
+    m_debugDraw.cleanup();
     m_editor.reset();
     m_controller.reset();
     m_camera.reset();
@@ -526,6 +545,87 @@ void Engine::shutdown()
 
     m_isRunning = false;
     Logger::info("Engine shutdown complete");
+}
+
+void Engine::drawLightGizmos(Scene& scene, const Selection& selection)
+{
+    if (!selection.hasSelection())
+    {
+        return;
+    }
+
+    const auto& selectedIds = selection.getSelectedIds();
+    for (uint32_t id : selectedIds)
+    {
+        Entity* entity = scene.findEntityById(id);
+        if (!entity)
+        {
+            continue;
+        }
+
+        glm::vec3 worldPos = entity->getWorldPosition();
+
+        // Directional light: 3 parallel arrows showing direction
+        if (auto* dirComp = entity->getComponent<DirectionalLightComponent>())
+        {
+            glm::vec3 color = dirComp->light.diffuse;
+            glm::vec3 dir = glm::normalize(dirComp->light.direction);
+            float arrowLen = 2.0f;
+            float spacing = 0.3f;
+
+            // Build perpendicular vectors for offset arrows
+            glm::vec3 up = (std::abs(glm::dot(dir, glm::vec3(0.0f, 1.0f, 0.0f))) > 0.99f)
+                           ? glm::vec3(1.0f, 0.0f, 0.0f)
+                           : glm::vec3(0.0f, 1.0f, 0.0f);
+            glm::vec3 right = glm::normalize(glm::cross(dir, up));
+            glm::vec3 fwd = glm::cross(right, dir);
+
+            // Center arrow
+            DebugDraw::arrow(worldPos, worldPos + dir * arrowLen, color);
+            // Offset arrows
+            DebugDraw::arrow(worldPos + right * spacing,
+                             worldPos + right * spacing + dir * arrowLen, color);
+            DebugDraw::arrow(worldPos - right * spacing,
+                             worldPos - right * spacing + dir * arrowLen, color);
+            DebugDraw::arrow(worldPos + fwd * spacing,
+                             worldPos + fwd * spacing + dir * arrowLen, color);
+            DebugDraw::arrow(worldPos - fwd * spacing,
+                             worldPos - fwd * spacing + dir * arrowLen, color);
+        }
+
+        // Point light: wireframe sphere at effective range
+        if (auto* ptComp = entity->getComponent<PointLightComponent>())
+        {
+            glm::vec3 color = ptComp->light.diffuse;
+            float range = calculateLightRange(ptComp->light.constant,
+                                              ptComp->light.linear,
+                                              ptComp->light.quadratic);
+            range = std::min(range, 200.0f); // clamp to avoid absurd gizmos
+            DebugDraw::wireSphere(worldPos, range, color);
+        }
+
+        // Spot light: cone wireframe
+        if (auto* spotComp = entity->getComponent<SpotLightComponent>())
+        {
+            glm::vec3 color = spotComp->light.diffuse;
+            float range = calculateLightRange(spotComp->light.constant,
+                                              spotComp->light.linear,
+                                              spotComp->light.quadratic);
+            range = std::min(range, 200.0f);
+
+            float outerAngleDeg = glm::degrees(
+                std::acos(std::clamp(spotComp->light.outerCutoff, -1.0f, 1.0f)));
+            DebugDraw::cone(worldPos, spotComp->light.direction,
+                            range, outerAngleDeg, color);
+
+            // Inner cone (dimmer, to show soft edge)
+            float innerAngleDeg = glm::degrees(
+                std::acos(std::clamp(spotComp->light.innerCutoff, -1.0f, 1.0f)));
+            glm::vec3 dimColor = color * 0.4f;
+            DebugDraw::cone(worldPos, spotComp->light.direction,
+                            range, innerAngleDeg, dimColor, 4);
+        }
+    }
 }
 
 void Engine::setupDemoScene()

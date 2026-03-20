@@ -36,6 +36,7 @@ set(ENGINE_SOURCES
     renderer/instance_buffer.cpp
     renderer/environment_map.cpp
     renderer/frame_diagnostics.cpp
+    renderer/debug_draw.cpp
     resource/model.cpp
     utils/obj_loader.cpp
     utils/gltf_loader.cpp

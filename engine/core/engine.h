@@ -12,6 +12,7 @@
 #include "scene/scene_manager.h"
 #include "resource/resource_manager.h"
 #include "editor/editor.h"
+#include "renderer/debug_draw.h"
 
 #include <memory>
 
@@ -49,6 +50,7 @@ public:
 
 private:
     void setupDemoScene();
+    void drawLightGizmos(Scene& scene, const Selection& selection);
 
     EventBus m_eventBus;
     std::unique_ptr<Window> m_window;
@@ -60,6 +62,7 @@ private:
     std::unique_ptr<SceneManager> m_sceneManager;
     std::unique_ptr<ResourceManager> m_resourceManager;
     std::unique_ptr<Editor> m_editor;
+    DebugDraw m_debugDraw;
 
     bool m_isRunning;
     bool m_isCursorCaptured;

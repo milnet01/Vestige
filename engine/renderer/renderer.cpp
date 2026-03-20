@@ -2141,6 +2141,15 @@ uint32_t Renderer::pickEntityAt(int x, int y)
     return id;
 }
 
+void Renderer::bindOutputFbo()
+{
+    if (m_outputFbo)
+    {
+        m_outputFbo->bind();
+        glViewport(0, 0, m_windowWidth, m_windowHeight);
+    }
+}
+
 void Renderer::renderSelectionOutline(const SceneRenderData& renderData,
                                       const std::vector<uint32_t>& selectedIds,
                                       const Camera& camera, float aspectRatio)
