@@ -8,6 +8,8 @@
 
 #include <cctype>
 #include <string>
+#include <utility>
+#include <vector>
 
 namespace Vestige
 {
@@ -170,6 +172,66 @@ void pasteTransform(Scene& scene, uint32_t entityId, const TransformClipboard& c
     }
 
     Logger::info("Pasted transform to '" + entity->getName() + "'");
+}
+
+Entity* groupEntities(Scene& scene, Selection& selection)
+{
+    if (!selection.hasSelection())
+    {
+        return nullptr;
+    }
+
+    auto ids = selection.getSelectedIds();
+    if (ids.size() < 2)
+    {
+        return nullptr;
+    }
+
+    // Compute centroid of selected entities' world positions
+    glm::vec3 centroid(0.0f);
+    int count = 0;
+    std::vector<std::pair<uint32_t, glm::vec3>> entityPositions;
+
+    for (uint32_t id : ids)
+    {
+        Entity* e = scene.findEntityById(id);
+        if (e && e != scene.getRoot())
+        {
+            glm::vec3 wp = e->getWorldPosition();
+            centroid += wp;
+            entityPositions.emplace_back(id, wp);
+            ++count;
+        }
+    }
+
+    if (count < 2)
+    {
+        return nullptr;
+    }
+
+    centroid /= static_cast<float>(count);
+
+    // Create group entity at root with position = centroid
+    Entity* group = scene.createEntity("Group");
+    group->transform.position = centroid;
+
+    // Reparent all selected entities under the group
+    for (const auto& [id, worldPos] : entityPositions)
+    {
+        scene.reparentEntity(id, group->getId());
+
+        // Adjust local position to preserve world position
+        // Group has no rotation/scale, so: new_local_pos = old_world_pos - centroid
+        Entity* e = scene.findEntityById(id);
+        if (e)
+        {
+            e->transform.position = worldPos - centroid;
+        }
+    }
+
+    selection.select(group->getId());
+    Logger::info("Grouped " + std::to_string(count) + " entities");
+    return group;
 }
 
 } // namespace EntityActions

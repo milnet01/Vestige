@@ -718,6 +718,24 @@ void Editor::processEntityShortcuts(Scene* scene)
         EntityActions::duplicateEntity(*scene, m_selection, m_selection.getPrimaryId());
     }
 
+    // Ctrl+G — group selected entities
+    if (io.KeyCtrl && !io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_G)
+        && m_selection.hasSelection())
+    {
+        EntityActions::groupEntities(*scene, m_selection);
+    }
+
+    // H — toggle visibility of primary selected entity
+    if (!io.KeyCtrl && !io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_H)
+        && m_selection.hasSelection())
+    {
+        Entity* entity = scene->findEntityById(m_selection.getPrimaryId());
+        if (entity)
+        {
+            entity->setVisible(!entity->isVisible());
+        }
+    }
+
     // Ctrl+Shift+C — copy transform
     if (io.KeyCtrl && io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_C)
         && m_selection.hasSelection())

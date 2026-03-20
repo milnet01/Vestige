@@ -200,6 +200,20 @@ public:
     /// @brief Checks if this entity is active.
     bool isActive() const;
 
+    /// @brief Sets whether this entity is visible (affects rendering only, not update).
+    void setVisible(bool visible);
+
+    /// @brief Checks if this entity is visible. Invisible entities and their children
+    /// are skipped during render data collection but still appear in the hierarchy.
+    bool isVisible() const;
+
+    /// @brief Sets whether this entity is locked (cannot be selected via viewport click).
+    void setLocked(bool locked);
+
+    /// @brief Checks if this entity is locked. Locked entities are rendered normally
+    /// but skipped in the ID buffer, preventing viewport selection.
+    bool isLocked() const;
+
 private:
     uint32_t m_id;
     std::string m_name;
@@ -208,6 +222,8 @@ private:
     std::unordered_map<uint32_t, std::unique_ptr<Component>> m_components;
     glm::mat4 m_worldMatrix;
     bool m_isActive;
+    bool m_isVisible;
+    bool m_isLocked;
 
     static uint32_t s_nextId;
 };

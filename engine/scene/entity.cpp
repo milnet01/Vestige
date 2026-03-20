@@ -13,6 +13,8 @@ Entity::Entity(const std::string& name)
     , m_parent(nullptr)
     , m_worldMatrix(1.0f)
     , m_isActive(true)
+    , m_isVisible(true)
+    , m_isLocked(false)
 {
 }
 
@@ -141,11 +143,33 @@ bool Entity::isActive() const
     return m_isActive;
 }
 
+void Entity::setVisible(bool visible)
+{
+    m_isVisible = visible;
+}
+
+bool Entity::isVisible() const
+{
+    return m_isVisible;
+}
+
+void Entity::setLocked(bool locked)
+{
+    m_isLocked = locked;
+}
+
+bool Entity::isLocked() const
+{
+    return m_isLocked;
+}
+
 std::unique_ptr<Entity> Entity::clone() const
 {
     auto copy = std::make_unique<Entity>(m_name);
     copy->transform = transform;
     copy->m_isActive = m_isActive;
+    copy->m_isVisible = m_isVisible;
+    copy->m_isLocked = m_isLocked;
 
     // Clone all components
     for (const auto& [typeId, comp] : m_components)

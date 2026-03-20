@@ -39,17 +39,23 @@ static bool drawVec3Control(const char* label, glm::vec3& values,
 
     ImGui::PushID(label);
 
-    // Label on left
+    // Label on left — use narrow column so XYZ fields have room
     ImGui::Columns(2, nullptr, false);
-    ImGui::SetColumnWidth(0, 100.0f);
+    ImGui::SetColumnWidth(0, 75.0f);
     ImGui::Text("%s", label);
     ImGui::NextColumn();
 
-    ImGui::PushMultiItemsWidths(3, ImGui::CalcItemWidth());
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4.0f, 4.0f));
-
     float lineHeight = ImGui::GetFrameHeight();
     ImVec2 buttonSize = { lineHeight, lineHeight };
+    float spacing = 4.0f;
+
+    // Compute drag field widths dynamically: subtract button and gap space from available width
+    float totalWidth = ImGui::GetContentRegionAvail().x;
+    float buttonsSpace = 3.0f * lineHeight;
+    float gapsSpace = 5.0f * spacing;  // 3 button-drag gaps + 2 between-group gaps
+    float perDragWidth = std::max(20.0f, (totalWidth - buttonsSpace - gapsSpace) / 3.0f);
+
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(spacing, spacing));
 
     // --- X (red) ---
     ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.7f, 0.15f, 0.15f, 1.0f));
@@ -62,11 +68,11 @@ static bool drawVec3Control(const char* label, glm::vec3& values,
     }
     ImGui::PopStyleColor(3);
     ImGui::SameLine();
+    ImGui::SetNextItemWidth(perDragWidth);
     if (ImGui::DragFloat("##X", &values.x, speed))
     {
         changed = true;
     }
-    ImGui::PopItemWidth();
     ImGui::SameLine();
 
     // --- Y (green) ---
@@ -80,11 +86,11 @@ static bool drawVec3Control(const char* label, glm::vec3& values,
     }
     ImGui::PopStyleColor(3);
     ImGui::SameLine();
+    ImGui::SetNextItemWidth(perDragWidth);
     if (ImGui::DragFloat("##Y", &values.y, speed))
     {
         changed = true;
     }
-    ImGui::PopItemWidth();
     ImGui::SameLine();
 
     // --- Z (blue) ---
@@ -98,11 +104,11 @@ static bool drawVec3Control(const char* label, glm::vec3& values,
     }
     ImGui::PopStyleColor(3);
     ImGui::SameLine();
+    ImGui::SetNextItemWidth(perDragWidth);
     if (ImGui::DragFloat("##Z", &values.z, speed))
     {
         changed = true;
     }
-    ImGui::PopItemWidth();
 
     ImGui::PopStyleVar();
     ImGui::Columns(1);

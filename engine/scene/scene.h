@@ -26,6 +26,7 @@ struct SceneRenderData
         AABB worldBounds;
         uint32_t entityId = 0;
         bool castsShadow = true;
+        bool isLocked = false;
     };
 
     std::vector<RenderItem> renderItems;

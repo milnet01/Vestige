@@ -43,6 +43,7 @@ private:
     uint32_t m_pendingReparentTargetId = 0;
     bool m_wantCreateEntity = false;
     uint32_t m_createParentId = 0;
+    bool m_wantGroupSelected = false;
 };
 
 } // namespace Vestige

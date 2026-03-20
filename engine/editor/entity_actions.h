@@ -60,6 +60,14 @@ void copyTransform(Scene& scene, uint32_t entityId, TransformClipboard& clipboar
 /// @param clipboard The stored transform data.
 void pasteTransform(Scene& scene, uint32_t entityId, const TransformClipboard& clipboard);
 
+/// @brief Groups all selected entities under a new empty parent "Group".
+/// The group's position is set to the centroid of the selected entities.
+/// Each entity's local position is adjusted to preserve its world position.
+/// @param scene The active scene.
+/// @param selection Editor selection (group entity is auto-selected).
+/// @return Pointer to the group entity, or nullptr if fewer than 2 entities selected.
+Entity* groupEntities(Scene& scene, Selection& selection);
+
 } // namespace EntityActions
 
 } // namespace Vestige

@@ -2087,7 +2087,7 @@ void Renderer::renderIdBuffer(const SceneRenderData& renderData,
     {
         for (const auto& item : items)
         {
-            if (item.entityId == 0)
+            if (item.entityId == 0 || item.isLocked)
             {
                 continue;
             }

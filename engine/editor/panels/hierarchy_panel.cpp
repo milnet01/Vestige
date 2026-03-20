@@ -46,6 +46,7 @@ void HierarchyPanel::draw(Scene* scene, Selection& selection)
     m_pendingReparentTargetId = 0;
     m_wantCreateEntity = false;
     m_createParentId = 0;
+    m_wantGroupSelected = false;
 
     // --- Draw entity tree (root is hidden, show its children) ---
     Entity* root = scene->getRoot();
@@ -120,9 +121,35 @@ void HierarchyPanel::draw(Scene* scene, Selection& selection)
         && ImGui::IsWindowFocused()
         && !ImGui::GetIO().WantTextInput
         && ImGui::GetIO().KeyCtrl
+        && !ImGui::GetIO().KeyShift
         && ImGui::IsKeyPressed(ImGuiKey_D))
     {
         m_pendingDuplicateId = selection.getPrimaryId();
+    }
+
+    // --- Ctrl+G: group selected entities ---
+    if (selection.hasSelection()
+        && ImGui::IsWindowFocused()
+        && !ImGui::GetIO().WantTextInput
+        && ImGui::GetIO().KeyCtrl
+        && !ImGui::GetIO().KeyShift
+        && ImGui::IsKeyPressed(ImGuiKey_G))
+    {
+        m_wantGroupSelected = true;
+    }
+
+    // --- H: toggle visibility of primary selected ---
+    if (selection.hasSelection()
+        && ImGui::IsWindowFocused()
+        && !ImGui::GetIO().WantTextInput
+        && !ImGui::GetIO().KeyCtrl
+        && ImGui::IsKeyPressed(ImGuiKey_H))
+    {
+        Entity* entity = scene->findEntityById(selection.getPrimaryId());
+        if (entity)
+        {
+            entity->setVisible(!entity->isVisible());
+        }
     }
 
     // --- Rename popup (opened from context menu or F2) ---
@@ -230,6 +257,12 @@ void HierarchyPanel::draw(Scene* scene, Selection& selection)
         selection.select(newId);
         Logger::info("Created new entity under '" + parent->getName() + "'");
     }
+
+    // Group selected entities (Ctrl+G)
+    if (m_wantGroupSelected)
+    {
+        EntityActions::groupEntities(*scene, selection);
+    }
 }
 
 void HierarchyPanel::drawEntityNode(Entity& entity, Scene& scene, Selection& selection)
@@ -267,10 +300,16 @@ void HierarchyPanel::drawEntityNode(Entity& entity, Scene& scene, Selection& sel
     bool hasMesh = entity.hasComponent<MeshRenderer>();
     bool isEmissive = entity.hasComponent<EmissiveLightComponent>();
 
+    bool isEntityVisible = entity.isVisible();
+
     ImVec4 textColor;
     if (!isActive)
     {
         textColor = ImVec4(0.45f, 0.45f, 0.45f, 1.0f);
+    }
+    else if (!isEntityVisible)
+    {
+        textColor = ImVec4(0.50f, 0.50f, 0.50f, 1.0f);
     }
     else if (isLight)
     {
@@ -290,6 +329,7 @@ void HierarchyPanel::drawEntityNode(Entity& entity, Scene& scene, Selection& sel
     }
 
     ImGui::PushStyleColor(ImGuiCol_Text, textColor);
+    ImGui::SetNextItemAllowOverlap();
     bool isOpen = ImGui::TreeNodeEx(
         reinterpret_cast<void*>(static_cast<uintptr_t>(id)),
         flags,
@@ -297,8 +337,72 @@ void HierarchyPanel::drawEntityNode(Entity& entity, Scene& scene, Selection& sel
         entity.getName().c_str());
     ImGui::PopStyleColor();
 
-    // --- Click to select ---
-    if (ImGui::IsItemClicked(0) && !ImGui::IsItemToggledOpen())
+    // Save tree node interaction state before drawing overlapping buttons
+    bool treeNodeClicked = ImGui::IsItemClicked(0) && !ImGui::IsItemToggledOpen();
+
+    // --- Visibility / Lock icon buttons (right-aligned on the row) ---
+    bool visClicked = false;
+    bool lockClicked = false;
+    {
+        ImGuiStyle& style = ImGui::GetStyle();
+        float buttonHeight = ImGui::GetFrameHeight();
+        float buttonWidth = buttonHeight;  // Square buttons
+        float spacing = style.ItemInnerSpacing.x;
+        float rightEdge = ImGui::GetWindowContentRegionMax().x;
+        float buttonsX = rightEdge - (buttonWidth * 2 + spacing);
+
+        ImGui::SameLine(buttonsX);
+        ImGui::PushID(static_cast<int>(id));
+
+        // Transparent button background
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
+
+        // Visibility toggle
+        if (isEntityVisible)
+        {
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.75f, 0.75f, 0.75f, 1.0f));
+        }
+        else
+        {
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.35f, 0.35f, 0.35f, 1.0f));
+        }
+        visClicked = ImGui::Button(isEntityVisible ? "V##vis" : "-##vis",
+            ImVec2(buttonWidth, buttonHeight));
+        ImGui::PopStyleColor();
+
+        ImGui::SameLine(0.0f, spacing);
+
+        // Lock toggle
+        if (entity.isLocked())
+        {
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.7f, 0.2f, 1.0f));
+        }
+        else
+        {
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.35f, 0.35f, 0.35f, 1.0f));
+        }
+        lockClicked = ImGui::Button(entity.isLocked() ? "L##lock" : "U##lock",
+            ImVec2(buttonWidth, buttonHeight));
+        ImGui::PopStyleColor();
+
+        ImGui::PopStyleVar();
+        ImGui::PopStyleColor();
+        ImGui::PopID();
+    }
+
+    // Handle visibility/lock toggles
+    if (visClicked)
+    {
+        entity.setVisible(!entity.isVisible());
+    }
+    if (lockClicked)
+    {
+        entity.setLocked(!entity.isLocked());
+    }
+
+    // --- Click to select (suppress if button was clicked) ---
+    if (treeNodeClicked && !visClicked && !lockClicked)
     {
         ImGuiIO& io = ImGui::GetIO();
         if (io.KeyShift)
@@ -364,6 +468,18 @@ void HierarchyPanel::drawEntityNode(Entity& entity, Scene& scene, Selection& sel
         if (ImGui::MenuItem("Delete", "Del"))
         {
             m_pendingDeleteId = id;
+        }
+
+        ImGui::Separator();
+
+        if (ImGui::MenuItem(entity.isVisible() ? "Hide" : "Show", "H"))
+        {
+            entity.setVisible(!entity.isVisible());
+        }
+
+        if (ImGui::MenuItem(entity.isLocked() ? "Unlock" : "Lock"))
+        {
+            entity.setLocked(!entity.isLocked());
         }
 
         ImGui::EndPopup();
