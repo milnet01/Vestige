@@ -29,6 +29,9 @@ struct PointLight
     float linear    = 0.09f;
     float quadratic = 0.032f;
 
+    /// @brief Cached range for the inspector (not used by the shader).
+    float range = 0.0f;
+
     // Shadow casting
     bool castsShadow = false;
 };
@@ -50,6 +53,9 @@ struct SpotLight
     float constant  = 1.0f;
     float linear    = 0.09f;
     float quadratic = 0.032f;
+
+    /// @brief Cached range for the inspector (not used by the shader).
+    float range = 0.0f;
 };
 
 /// @brief Maximum number of each light type supported by the shader.

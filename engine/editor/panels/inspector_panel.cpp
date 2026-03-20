@@ -7,11 +7,13 @@
 #include "scene/mesh_renderer.h"
 #include "scene/light_component.h"
 #include "renderer/material.h"
+#include "renderer/light_utils.h"
 
 #include <imgui.h>
 #include <imgui_internal.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 
 namespace Vestige
@@ -513,6 +515,77 @@ void InspectorPanel::drawMaterialTransparency(Material& material)
 // Light components
 // ---------------------------------------------------------------------------
 
+/// @brief Draws a small attenuation curve plot.
+static void drawAttenuationCurve(float constant, float linear, float quadratic,
+                                 float range)
+{
+    constexpr int SAMPLES = 64;
+    float values[SAMPLES];
+    for (int i = 0; i < SAMPLES; ++i)
+    {
+        float d = (static_cast<float>(i) / (SAMPLES - 1)) * range;
+        float atten = 1.0f / (constant + linear * d + quadratic * d * d);
+        values[i] = std::clamp(atten, 0.0f, 1.0f);
+    }
+
+    char overlay[64];
+    std::snprintf(overlay, sizeof(overlay), "Range: %.1f m", static_cast<double>(range));
+    ImGui::PlotLines("##Falloff", values, SAMPLES, 0, overlay,
+                     0.0f, 1.0f, ImVec2(0, 50));
+}
+
+/// @brief Draws the shared attenuation/range controls for point and spot lights.
+/// Returns true if anything changed.
+static bool drawAttenuationControls(float& constant, float& linear, float& quadratic,
+                                    float& range)
+{
+    bool changed = false;
+
+    // Compute range from current attenuation if it hasn't been set yet
+    if (range <= 0.0f)
+    {
+        range = calculateLightRange(constant, linear, quadratic);
+    }
+
+    // Range slider (auto-calculates attenuation)
+    if (ImGui::DragFloat("Range", &range, 0.1f, 0.1f, 200.0f, "%.1f m"))
+    {
+        setAttenuationFromRange(range, constant, linear, quadratic);
+        changed = true;
+    }
+    if (ImGui::IsItemHovered())
+    {
+        ImGui::SetTooltip("Distance where light intensity reaches ~0%%.\n"
+                          "Auto-calculates attenuation coefficients.");
+    }
+
+    // Attenuation curve visualization
+    drawAttenuationCurve(constant, linear, quadratic, range);
+
+    // Advanced section: raw attenuation coefficients
+    if (ImGui::TreeNode("Advanced Attenuation"))
+    {
+        if (ImGui::DragFloat("Constant",  &constant,  0.01f, 0.0f, 10.0f))
+        {
+            range = calculateLightRange(constant, linear, quadratic);
+            changed = true;
+        }
+        if (ImGui::DragFloat("Linear",    &linear,    0.001f, 0.0f, 2.0f))
+        {
+            range = calculateLightRange(constant, linear, quadratic);
+            changed = true;
+        }
+        if (ImGui::DragFloat("Quadratic", &quadratic, 0.001f, 0.0f, 2.0f))
+        {
+            range = calculateLightRange(constant, linear, quadratic);
+            changed = true;
+        }
+        ImGui::TreePop();
+    }
+
+    return changed;
+}
+
 void InspectorPanel::drawDirectionalLight(Entity& entity)
 {
     auto* comp = entity.getComponent<DirectionalLightComponent>();
@@ -530,9 +603,17 @@ void InspectorPanel::drawDirectionalLight(Entity& entity)
 
     drawVec3Control("Direction", light.direction, 0.0f, 0.01f);
 
-    ImGui::ColorEdit3("Ambient",  &light.ambient.x);
-    ImGui::ColorEdit3("Diffuse",  &light.diffuse.x);
-    ImGui::ColorEdit3("Specular", &light.specular.x);
+    // Simplified color model: single color, ambient/specular derived
+    ImGui::ColorEdit3("Color", &light.diffuse.x);
+    light.specular = light.diffuse;
+    light.ambient = light.diffuse * 0.1f;
+
+    if (ImGui::TreeNode("Advanced Colors"))
+    {
+        ImGui::ColorEdit3("Ambient",  &light.ambient.x);
+        ImGui::ColorEdit3("Specular", &light.specular.x);
+        ImGui::TreePop();
+    }
 
     ImGui::Spacing();
 }
@@ -552,16 +633,24 @@ void InspectorPanel::drawPointLight(Entity& entity)
 
     auto& light = comp->light;
 
-    ImGui::ColorEdit3("Ambient",  &light.ambient.x);
-    ImGui::ColorEdit3("Diffuse",  &light.diffuse.x);
-    ImGui::ColorEdit3("Specular", &light.specular.x);
+    // Simplified color model: single color, ambient/specular derived
+    ImGui::ColorEdit3("Color", &light.diffuse.x);
+    light.specular = light.diffuse;
+    light.ambient = light.diffuse * 0.05f;
+
+    if (ImGui::TreeNode("Advanced Colors"))
+    {
+        ImGui::ColorEdit3("Ambient",  &light.ambient.x);
+        ImGui::ColorEdit3("Specular", &light.specular.x);
+        ImGui::TreePop();
+    }
 
     ImGui::Spacing();
-    ImGui::Text("Attenuation");
-    ImGui::DragFloat("Constant",  &light.constant,  0.01f, 0.0f, 10.0f);
-    ImGui::DragFloat("Linear",    &light.linear,    0.001f, 0.0f, 2.0f);
-    ImGui::DragFloat("Quadratic", &light.quadratic, 0.001f, 0.0f, 2.0f);
 
+    // Range and attenuation controls
+    drawAttenuationControls(light.constant, light.linear, light.quadratic, light.range);
+
+    ImGui::Spacing();
     ImGui::Checkbox("Casts Shadow", &light.castsShadow);
 
     ImGui::Spacing();
@@ -584,27 +673,36 @@ void InspectorPanel::drawSpotLight(Entity& entity)
 
     drawVec3Control("Direction", light.direction, 0.0f, 0.01f);
 
-    ImGui::ColorEdit3("Ambient",  &light.ambient.x);
-    ImGui::ColorEdit3("Diffuse",  &light.diffuse.x);
-    ImGui::ColorEdit3("Specular", &light.specular.x);
+    // Simplified color model
+    ImGui::ColorEdit3("Color", &light.diffuse.x);
+    light.specular = light.diffuse;
+    light.ambient = light.diffuse * 0.0f; // Spot lights typically have no ambient
 
-    // Convert cos cutoffs to degrees for editing, then back
+    if (ImGui::TreeNode("Advanced Colors"))
+    {
+        ImGui::ColorEdit3("Ambient",  &light.ambient.x);
+        ImGui::ColorEdit3("Specular", &light.specular.x);
+        ImGui::TreePop();
+    }
+
+    ImGui::Spacing();
+
+    // Cone angles
     float innerDeg = glm::degrees(std::acos(std::clamp(light.innerCutoff, -1.0f, 1.0f)));
     float outerDeg = glm::degrees(std::acos(std::clamp(light.outerCutoff, -1.0f, 1.0f)));
-    if (ImGui::DragFloat("Inner Angle", &innerDeg, 0.5f, 0.0f, 90.0f, "%.1f deg"))
+    if (ImGui::DragFloat("Inner Angle", &innerDeg, 0.5f, 0.0f, 89.0f, "%.1f deg"))
     {
         light.innerCutoff = std::cos(glm::radians(innerDeg));
     }
-    if (ImGui::DragFloat("Outer Angle", &outerDeg, 0.5f, 0.0f, 90.0f, "%.1f deg"))
+    if (ImGui::DragFloat("Outer Angle", &outerDeg, 0.5f, 0.0f, 89.0f, "%.1f deg"))
     {
         light.outerCutoff = std::cos(glm::radians(outerDeg));
     }
 
     ImGui::Spacing();
-    ImGui::Text("Attenuation");
-    ImGui::DragFloat("Constant",  &light.constant,  0.01f, 0.0f, 10.0f);
-    ImGui::DragFloat("Linear",    &light.linear,    0.001f, 0.0f, 2.0f);
-    ImGui::DragFloat("Quadratic", &light.quadratic, 0.001f, 0.0f, 2.0f);
+
+    // Range and attenuation controls
+    drawAttenuationControls(light.constant, light.linear, light.quadratic, light.range);
 
     ImGui::Spacing();
 }
@@ -623,7 +721,8 @@ void InspectorPanel::drawEmissiveLight(Entity& entity)
     }
 
     ImGui::DragFloat("Radius",    &comp->lightRadius,    0.1f, 0.1f, 100.0f);
-    ImGui::DragFloat("Intensity", &comp->lightIntensity, 0.05f, 0.0f, 50.0f);
+    ImGui::DragFloat("Intensity", &comp->lightIntensity, 0.05f, 0.0f, 50.0f,
+                     "%.3f", ImGuiSliderFlags_Logarithmic);
 
     ImGui::ColorEdit3("Override Color", &comp->overrideColor.x);
     ImGui::SameLine();
