@@ -3,6 +3,7 @@
 #pragma once
 
 #include "editor/editor_camera.h"
+#include "editor/entity_factory.h"
 #include "editor/panels/hierarchy_panel.h"
 #include "editor/panels/inspector_panel.h"
 #include "editor/selection.h"
@@ -24,6 +25,7 @@ namespace Vestige
 class Camera;
 class EventBus;
 class Renderer;
+class ResourceManager;
 class Scene;
 
 /// @brief Editor/Play mode toggle.
@@ -117,6 +119,10 @@ public:
     /// @param entityId The entity ID under the cursor (0 = background).
     void handlePickResult(uint32_t entityId);
 
+    /// @brief Stores a pointer to the ResourceManager for entity spawning.
+    /// @param resourceManager ResourceManager owned by Engine. Must outlive Editor.
+    void setResourceManager(ResourceManager* resourceManager);
+
     /// @brief Gets the selection state.
     Selection& getSelection();
     const Selection& getSelection() const;
@@ -138,6 +144,7 @@ private:
     Selection m_selection;
     HierarchyPanel m_hierarchyPanel;
     InspectorPanel m_inspectorPanel;
+    ResourceManager* m_resourceManager = nullptr;
 
     // Viewport bounds (stored from drawPanels, used next frame for click detection)
     glm::vec2 m_viewportMin = glm::vec2(0.0f);

@@ -83,6 +83,12 @@ bool Engine::initialize(const EngineConfig& config)
         m_editor.reset();
     }
 
+    // Give the editor access to the resource manager for entity spawning
+    if (m_editor)
+    {
+        m_editor->setResourceManager(m_resourceManager.get());
+    }
+
     // Start in editor mode — cursor visible, FPS controller disabled
     if (m_editor)
     {
