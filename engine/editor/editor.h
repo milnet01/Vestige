@@ -8,6 +8,7 @@
 #include "editor/panels/hierarchy_panel.h"
 #include "editor/panels/import_dialog.h"
 #include "editor/panels/inspector_panel.h"
+#include "editor/prefab_system.h"
 #include "editor/selection.h"
 
 #include <imgui.h>
@@ -148,7 +149,9 @@ private:
     HierarchyPanel m_hierarchyPanel;
     InspectorPanel m_inspectorPanel;
     ImportDialog m_importDialog;
+    PrefabSystem m_prefabSystem;
     ResourceManager* m_resourceManager = nullptr;
+    std::string m_assetPath;
 
     // Viewport bounds (stored from drawPanels, used next frame for click detection)
     glm::vec2 m_viewportMin = glm::vec2(0.0f);
