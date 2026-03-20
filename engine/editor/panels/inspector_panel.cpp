@@ -125,6 +125,11 @@ static bool drawVec3Control(const char* label, glm::vec3& values,
 // Main draw
 // ---------------------------------------------------------------------------
 
+void InspectorPanel::initialize(const std::string& assetPath)
+{
+    m_materialPreview.initialize(assetPath);
+}
+
 void InspectorPanel::draw(Scene* scene, Selection& selection)
 {
     if (!scene || !selection.hasSelection())
@@ -375,6 +380,32 @@ void InspectorPanel::drawMaterial(Material& material)
 
     drawMaterialTextures(material);
     drawMaterialTransparency(material);
+
+    // --- Material Preview ---
+    if (ImGui::CollapsingHeader("Preview", ImGuiTreeNodeFlags_DefaultOpen))
+    {
+        // Mark dirty whenever the material is viewed (simple approach — re-renders once
+        // per selection change and when properties change via inspector interaction)
+        m_materialPreview.markDirty();
+        m_materialPreview.render(material);
+
+        GLuint previewTex = m_materialPreview.getTextureId();
+        if (previewTex != 0)
+        {
+            float previewSize = std::min(128.0f, ImGui::GetContentRegionAvail().x);
+            // Center the preview
+            float avail = ImGui::GetContentRegionAvail().x;
+            if (avail > previewSize)
+            {
+                ImGui::SetCursorPosX(ImGui::GetCursorPosX()
+                    + (avail - previewSize) * 0.5f);
+            }
+            ImGui::Image(
+                static_cast<ImTextureID>(static_cast<uintptr_t>(previewTex)),
+                ImVec2(previewSize, previewSize),
+                ImVec2(0, 1), ImVec2(1, 0));
+        }
+    }
 
     ImGui::PopID();
 }

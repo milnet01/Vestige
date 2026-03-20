@@ -51,6 +51,7 @@ set(ENGINE_SOURCES
     editor/panels/import_dialog.cpp
     editor/panels/inspector_panel.cpp
     editor/prefab_system.cpp
+    editor/material_preview.cpp
     utils/entity_serializer.cpp
     # glad OpenGL loader
     ${CMAKE_SOURCE_DIR}/external/glad/src/gl.c
