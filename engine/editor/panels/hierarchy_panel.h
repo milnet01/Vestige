@@ -37,6 +37,8 @@ private:
 
     // Deferred actions (processed after tree iteration to avoid modifying during traversal)
     uint32_t m_pendingDeleteId = 0;
+    bool m_pendingDeleteSelected = false;
+    uint32_t m_pendingDuplicateId = 0;
     uint32_t m_pendingReparentEntityId = 0;
     uint32_t m_pendingReparentTargetId = 0;
     bool m_wantCreateEntity = false;

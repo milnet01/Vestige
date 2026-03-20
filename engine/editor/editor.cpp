@@ -315,6 +315,9 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera)
             // Process W/E/R/L gizmo keyboard shortcuts
             processGizmoShortcuts();
 
+            // Process Delete, Ctrl+D, Ctrl+Shift+C/V entity shortcuts
+            processEntityShortcuts(scene);
+
             m_viewportFocused = ImGui::IsWindowFocused();
             m_viewportHovered = ImGui::IsWindowHovered();
         }
@@ -689,6 +692,44 @@ void Editor::processGizmoShortcuts()
     {
         m_gizmoMode = (m_gizmoMode == ImGuizmo::WORLD)
             ? ImGuizmo::LOCAL : ImGuizmo::WORLD;
+    }
+}
+
+void Editor::processEntityShortcuts(Scene* scene)
+{
+    // Only process when viewport is focused, no text input active, and in edit mode
+    if (!m_viewportFocused || !scene || ImGui::GetIO().WantTextInput)
+    {
+        return;
+    }
+
+    ImGuiIO& io = ImGui::GetIO();
+
+    // Delete key — delete all selected entities
+    if (ImGui::IsKeyPressed(ImGuiKey_Delete) && m_selection.hasSelection())
+    {
+        EntityActions::deleteSelectedEntities(*scene, m_selection);
+    }
+
+    // Ctrl+D — duplicate primary selected entity
+    if (io.KeyCtrl && !io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_D)
+        && m_selection.hasSelection())
+    {
+        EntityActions::duplicateEntity(*scene, m_selection, m_selection.getPrimaryId());
+    }
+
+    // Ctrl+Shift+C — copy transform
+    if (io.KeyCtrl && io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_C)
+        && m_selection.hasSelection())
+    {
+        EntityActions::copyTransform(*scene, m_selection.getPrimaryId(), m_transformClipboard);
+    }
+
+    // Ctrl+Shift+V — paste transform
+    if (io.KeyCtrl && io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_V)
+        && m_selection.hasSelection())
+    {
+        EntityActions::pasteTransform(*scene, m_selection.getPrimaryId(), m_transformClipboard);
     }
 }
 

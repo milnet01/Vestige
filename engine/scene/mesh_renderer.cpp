@@ -68,4 +68,15 @@ bool MeshRenderer::castsShadow() const
     return m_castsShadow;
 }
 
+std::unique_ptr<Component> MeshRenderer::clone() const
+{
+    auto copy = std::make_unique<MeshRenderer>(m_mesh, m_material);
+    copy->m_bounds = m_bounds;
+    copy->m_cullingBounds = m_cullingBounds;
+    copy->m_hasCullingBounds = m_hasCullingBounds;
+    copy->m_castsShadow = m_castsShadow;
+    copy->setEnabled(isEnabled());
+    return copy;
+}
+
 } // namespace Vestige

@@ -97,6 +97,26 @@ bool Scene::removeEntity(uint32_t id)
     return true;
 }
 
+Entity* Scene::duplicateEntity(uint32_t entityId)
+{
+    Entity* original = findEntityById(entityId);
+    if (!original || original == m_root.get())
+    {
+        return nullptr;
+    }
+
+    auto clone = original->clone();
+
+    // Place as sibling (same parent as original)
+    Entity* parent = original->getParent();
+    if (!parent)
+    {
+        parent = m_root.get();
+    }
+
+    return parent->addChild(std::move(clone));
+}
+
 bool Scene::reparentEntity(uint32_t entityId, uint32_t newParentId)
 {
     Entity* entity = findEntityById(entityId);

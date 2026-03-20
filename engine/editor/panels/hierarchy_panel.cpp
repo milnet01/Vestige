@@ -1,6 +1,7 @@
 /// @file hierarchy_panel.cpp
 /// @brief Scene hierarchy panel implementation.
 #include "editor/panels/hierarchy_panel.h"
+#include "editor/entity_actions.h"
 #include "editor/selection.h"
 #include "scene/scene.h"
 #include "scene/entity.h"
@@ -39,6 +40,8 @@ void HierarchyPanel::draw(Scene* scene, Selection& selection)
 
     // Reset deferred actions each frame
     m_pendingDeleteId = 0;
+    m_pendingDeleteSelected = false;
+    m_pendingDuplicateId = 0;
     m_pendingReparentEntityId = 0;
     m_pendingReparentTargetId = 0;
     m_wantCreateEntity = false;
@@ -104,12 +107,22 @@ void HierarchyPanel::draw(Scene* scene, Selection& selection)
         }
     }
 
-    // --- Delete hotkey ---
+    // --- Delete hotkey (multi-select aware) ---
     if (selection.hasSelection()
         && ImGui::IsWindowFocused()
         && ImGui::IsKeyPressed(ImGuiKey_Delete))
     {
-        m_pendingDeleteId = selection.getPrimaryId();
+        m_pendingDeleteSelected = true;
+    }
+
+    // --- Ctrl+D: duplicate primary selected ---
+    if (selection.hasSelection()
+        && ImGui::IsWindowFocused()
+        && !ImGui::GetIO().WantTextInput
+        && ImGui::GetIO().KeyCtrl
+        && ImGui::IsKeyPressed(ImGuiKey_D))
+    {
+        m_pendingDuplicateId = selection.getPrimaryId();
     }
 
     // --- Rename popup (opened from context menu or F2) ---
@@ -158,7 +171,13 @@ void HierarchyPanel::draw(Scene* scene, Selection& selection)
 
     // --- Process deferred actions (after tree iteration is complete) ---
 
-    if (m_pendingDeleteId != 0)
+    // Multi-select delete (Delete key)
+    if (m_pendingDeleteSelected)
+    {
+        EntityActions::deleteSelectedEntities(*scene, selection);
+    }
+    // Single-entity delete (context menu)
+    else if (m_pendingDeleteId != 0)
     {
         Entity* toDelete = scene->findEntityById(m_pendingDeleteId);
         if (toDelete)
@@ -177,6 +196,12 @@ void HierarchyPanel::draw(Scene* scene, Selection& selection)
             scene->removeEntity(m_pendingDeleteId);
             Logger::info("Deleted entity ID " + std::to_string(m_pendingDeleteId));
         }
+    }
+
+    // Duplicate (Ctrl+D or context menu)
+    if (m_pendingDuplicateId != 0)
+    {
+        EntityActions::duplicateEntity(*scene, selection, m_pendingDuplicateId);
     }
 
     if (m_pendingReparentEntityId != 0)
@@ -329,9 +354,9 @@ void HierarchyPanel::drawEntityNode(Entity& entity, Scene& scene, Selection& sel
             m_wantOpenRename = true;
         }
 
-        if (ImGui::MenuItem("Duplicate", nullptr, false, false))
+        if (ImGui::MenuItem("Duplicate", "Ctrl+D"))
         {
-            // TODO: Phase 5B — requires deep entity cloning
+            m_pendingDuplicateId = id;
         }
 
         ImGui::Separator();

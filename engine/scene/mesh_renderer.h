@@ -50,6 +50,9 @@ public:
     /// @brief Checks if this mesh casts shadows.
     bool castsShadow() const;
 
+    /// @brief Clones this MeshRenderer (shares Mesh/Material pointers).
+    std::unique_ptr<Component> clone() const override;
+
 private:
     std::shared_ptr<Mesh> m_mesh;
     std::shared_ptr<Material> m_material;

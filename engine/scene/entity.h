@@ -184,6 +184,11 @@ public:
     /// @brief Sets the entity name.
     void setName(const std::string& name);
 
+    /// @brief Creates a deep copy of this entity and all descendants.
+    /// Each clone gets a new unique ID. Components are cloned via Component::clone().
+    /// The returned entity has no parent.
+    std::unique_ptr<Entity> clone() const;
+
     /// @brief Detaches a child and returns ownership.
     /// @param child Pointer to the child to remove.
     /// @return Unique pointer to the detached child, or nullptr if not found.

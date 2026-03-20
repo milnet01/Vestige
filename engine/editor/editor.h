@@ -3,6 +3,7 @@
 #pragma once
 
 #include "editor/editor_camera.h"
+#include "editor/entity_actions.h"
 #include "editor/entity_factory.h"
 #include "editor/panels/hierarchy_panel.h"
 #include "editor/panels/inspector_panel.h"
@@ -132,6 +133,7 @@ private:
     void drawGizmo(Camera* camera, Scene* scene);
     void drawGizmoOverlay();
     void processGizmoShortcuts();
+    void processEntityShortcuts(Scene* scene);
 
     EditorMode m_mode = EditorMode::EDIT;
     bool m_isInitialized = false;
@@ -164,6 +166,9 @@ private:
     float m_snapTranslation = 0.5f;  ///< Snap grid in world units.
     float m_snapRotation = 15.0f;    ///< Snap in degrees.
     float m_snapScale = 0.1f;        ///< Snap in scale units.
+
+    // Transform clipboard (Ctrl+Shift+C / Ctrl+Shift+V)
+    EntityActions::TransformClipboard m_transformClipboard;
 };
 
 } // namespace Vestige
