@@ -47,6 +47,7 @@ set(ENGINE_SOURCES
     editor/entity_factory.cpp
     editor/selection.cpp
     editor/panels/hierarchy_panel.cpp
+    editor/panels/import_dialog.cpp
     editor/panels/inspector_panel.cpp
     # glad OpenGL loader
     ${CMAKE_SOURCE_DIR}/external/glad/src/gl.c
@@ -79,6 +80,7 @@ target_link_libraries(vestige_engine
         freetype
         imgui_lib
         imguizmo_lib
+        imgui_filebrowser
 )
 
 # Suppress warnings from third-party source files compiled as part of the engine

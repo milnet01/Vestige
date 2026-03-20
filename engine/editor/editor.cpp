@@ -171,6 +171,11 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera)
                     // TODO: Phase 5D
                 }
                 ImGui::Separator();
+                if (ImGui::MenuItem("Import Model...", "Ctrl+I"))
+                {
+                    m_importDialog.open();
+                }
+                ImGui::Separator();
                 if (ImGui::MenuItem("Quit", "Q"))
                 {
                     glfwSetWindowShouldClose(m_window, GLFW_TRUE);
@@ -338,6 +343,10 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera)
         ImGui::TextWrapped("Log output will appear here.");
         ImGui::TextWrapped("(Phase 5F)");
         ImGui::End();
+
+        // --- Import dialog (file browser + settings modal) ---
+        m_importDialog.draw(scene, m_resourceManager, m_selection,
+                            m_editorCamera.get());
 
         // Demo window for testing ImGui features
         if (m_showDemoWindow)
@@ -734,6 +743,12 @@ void Editor::processEntityShortcuts(Scene* scene)
         {
             entity->setVisible(!entity->isVisible());
         }
+    }
+
+    // Ctrl+I — open import model dialog
+    if (io.KeyCtrl && !io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_I))
+    {
+        m_importDialog.open();
     }
 
     // Ctrl+Shift+C — copy transform

@@ -104,7 +104,7 @@ static bool drawVec3Control(const char* label, glm::vec3& values,
     }
     ImGui::PopStyleColor(3);
     ImGui::SameLine();
-    ImGui::SetNextItemWidth(perDragWidth);
+    ImGui::SetNextItemWidth(std::max(20.0f, ImGui::GetContentRegionAvail().x));
     if (ImGui::DragFloat("##Z", &values.z, speed))
     {
         changed = true;

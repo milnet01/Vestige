@@ -6,6 +6,7 @@
 #include "editor/entity_actions.h"
 #include "editor/entity_factory.h"
 #include "editor/panels/hierarchy_panel.h"
+#include "editor/panels/import_dialog.h"
 #include "editor/panels/inspector_panel.h"
 #include "editor/selection.h"
 
@@ -146,6 +147,7 @@ private:
     Selection m_selection;
     HierarchyPanel m_hierarchyPanel;
     InspectorPanel m_inspectorPanel;
+    ImportDialog m_importDialog;
     ResourceManager* m_resourceManager = nullptr;
 
     // Viewport bounds (stored from drawPanels, used next frame for click detection)
