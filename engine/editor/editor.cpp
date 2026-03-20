@@ -4,6 +4,7 @@
 #include "core/logger.h"
 #include "renderer/camera.h"
 #include "renderer/renderer.h"
+#include "scene/entity.h"
 #include "scene/scene.h"
 
 #include <imgui.h>
@@ -198,24 +199,74 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera)
 
             if (ImGui::BeginMenu("Create"))
             {
+                // Spawn position = editor camera's focus point (where camera is looking at)
+                glm::vec3 spawnPos = m_editorCamera
+                    ? m_editorCamera->getFocusPoint() : glm::vec3(0.0f);
+
                 if (ImGui::MenuItem("Empty Entity"))
                 {
-                    // TODO: Phase 5B
+                    if (scene)
+                    {
+                        Entity* entity = EntityFactory::createEmptyEntity(*scene, spawnPos);
+                        m_selection.select(entity->getId());
+                    }
                 }
                 ImGui::Separator();
+
+                bool canSpawnPrimitive = scene && m_resourceManager;
                 if (ImGui::BeginMenu("Primitives"))
                 {
-                    ImGui::MenuItem("Cube", nullptr, false, false);
-                    ImGui::MenuItem("Plane", nullptr, false, false);
-                    ImGui::MenuItem("Sphere", nullptr, false, false);
-                    ImGui::MenuItem("Cylinder", nullptr, false, false);
+                    if (ImGui::MenuItem("Cube", nullptr, false, canSpawnPrimitive))
+                    {
+                        Entity* e = EntityFactory::createCube(*scene, *m_resourceManager, spawnPos);
+                        m_selection.select(e->getId());
+                    }
+                    if (ImGui::MenuItem("Sphere", nullptr, false, canSpawnPrimitive))
+                    {
+                        Entity* e = EntityFactory::createSphere(*scene, *m_resourceManager, spawnPos);
+                        m_selection.select(e->getId());
+                    }
+                    if (ImGui::MenuItem("Plane", nullptr, false, canSpawnPrimitive))
+                    {
+                        Entity* e = EntityFactory::createPlane(*scene, *m_resourceManager, spawnPos);
+                        m_selection.select(e->getId());
+                    }
+                    if (ImGui::MenuItem("Cylinder", nullptr, false, canSpawnPrimitive))
+                    {
+                        Entity* e = EntityFactory::createCylinder(*scene, *m_resourceManager, spawnPos);
+                        m_selection.select(e->getId());
+                    }
+                    if (ImGui::MenuItem("Cone", nullptr, false, canSpawnPrimitive))
+                    {
+                        Entity* e = EntityFactory::createCone(*scene, *m_resourceManager, spawnPos);
+                        m_selection.select(e->getId());
+                    }
+                    if (ImGui::MenuItem("Wedge", nullptr, false, canSpawnPrimitive))
+                    {
+                        Entity* e = EntityFactory::createWedge(*scene, *m_resourceManager, spawnPos);
+                        m_selection.select(e->getId());
+                    }
                     ImGui::EndMenu();
                 }
+
                 if (ImGui::BeginMenu("Lights"))
                 {
-                    ImGui::MenuItem("Directional Light", nullptr, false, false);
-                    ImGui::MenuItem("Point Light", nullptr, false, false);
-                    ImGui::MenuItem("Spot Light", nullptr, false, false);
+                    bool canSpawnLight = scene != nullptr;
+                    if (ImGui::MenuItem("Directional Light", nullptr, false, canSpawnLight))
+                    {
+                        Entity* e = EntityFactory::createDirectionalLight(*scene, spawnPos);
+                        m_selection.select(e->getId());
+                    }
+                    if (ImGui::MenuItem("Point Light", nullptr, false, canSpawnLight))
+                    {
+                        Entity* e = EntityFactory::createPointLight(*scene, spawnPos);
+                        m_selection.select(e->getId());
+                    }
+                    if (ImGui::MenuItem("Spot Light", nullptr, false, canSpawnLight))
+                    {
+                        Entity* e = EntityFactory::createSpotLight(*scene, spawnPos);
+                        m_selection.select(e->getId());
+                    }
                     ImGui::EndMenu();
                 }
                 ImGui::EndMenu();
@@ -366,6 +417,11 @@ bool Editor::wantCaptureKeyboard() const
 bool Editor::isInitialized() const
 {
     return m_isInitialized;
+}
+
+void Editor::setResourceManager(ResourceManager* resourceManager)
+{
+    m_resourceManager = resourceManager;
 }
 
 void Editor::processViewportClick(int fboWidth, int fboHeight)
