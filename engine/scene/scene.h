@@ -83,6 +83,12 @@ public:
     /// @brief Gets the scene name.
     const std::string& getName() const;
 
+    /// @brief Sets the scene name.
+    void setName(const std::string& name);
+
+    /// @brief Removes all entities from the scene (keeps the root node).
+    void clearEntities();
+
     /// @brief Removes an entity by ID (and all its descendants).
     /// @return True if the entity was found and removed.
     bool removeEntity(uint32_t id);
