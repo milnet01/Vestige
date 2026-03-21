@@ -55,6 +55,7 @@ set(ENGINE_SOURCES
     editor/prefab_system.cpp
     editor/command_history.cpp
     editor/file_menu.cpp
+    editor/recent_files.cpp
     editor/scene_serializer.cpp
     editor/material_preview.cpp
     utils/entity_serializer.cpp

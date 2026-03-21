@@ -1,5 +1,5 @@
 /// @file file_menu.cpp
-/// @brief File menu implementation — save/load, unsaved changes dialog.
+/// @brief File menu implementation — save/load, unsaved changes dialog, auto-save, recent files.
 #include "editor/file_menu.h"
 #include "editor/command_history.h"
 #include "editor/scene_serializer.h"
@@ -11,19 +11,33 @@
 #include <imgui.h>
 #include <GLFW/glfw3.h>
 
+#include <fstream>
+
 namespace Vestige
 {
+
+namespace fs = std::filesystem;
 
 FileMenu::FileMenu()
     : m_openBrowser(0)
     , m_saveBrowser(ImGuiFileBrowserFlags_EnterNewFilename
                     | ImGuiFileBrowserFlags_CreateNewDir)
+    , m_lastAutoSaveTime(std::chrono::steady_clock::now())
 {
     m_openBrowser.SetTitle("Open Scene");
     m_openBrowser.SetTypeFilters({".scene"});
 
     m_saveBrowser.SetTitle("Save Scene As");
     m_saveBrowser.SetTypeFilters({".scene"});
+
+    // Load recent files from disk
+    m_recentFiles.load();
+
+    // Check if a crash recovery file exists
+    if (fs::exists(getAutoSavePath()))
+    {
+        m_recoveryPending = true;
+    }
 }
 
 void FileMenu::setWindow(GLFWwindow* window)
@@ -55,6 +69,7 @@ void FileMenu::drawMenuItems(Scene* scene, Selection& selection)
     {
         handleUnsavedChanges(PendingAction::OPEN_SCENE, scene, selection);
     }
+    drawRecentFilesMenu(scene, selection);
     ImGui::Separator();
     if (ImGui::MenuItem("Save Scene", "Ctrl+S"))
     {
@@ -110,6 +125,14 @@ void FileMenu::processShortcuts(Scene* scene, Selection& selection)
 
 void FileMenu::drawDialogs(Scene* scene, Selection& selection)
 {
+    // --- Crash recovery dialog (shown once on startup if autosave exists) ---
+    if (m_recoveryPending && scene && m_resources)
+    {
+        m_showRecoveryModal = true;
+        m_recoveryPending = false;
+    }
+    drawRecoveryModal(scene, selection);
+
     // --- File browser: Open ---
     m_openBrowser.Display();
     if (m_openBrowser.HasSelected())
@@ -121,7 +144,7 @@ void FileMenu::drawDialogs(Scene* scene, Selection& selection)
     m_saveBrowser.Display();
     if (m_saveBrowser.HasSelected())
     {
-        handleSaveResult(scene);
+        handleSaveResult(scene, selection);
     }
 
     // --- Unsaved changes modal ---
@@ -133,6 +156,9 @@ void FileMenu::drawDialogs(Scene* scene, Selection& selection)
 
     ImVec2 center = ImGui::GetMainViewport()->GetCenter();
     ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+
+    // Ensure the modal is wide enough for three buttons with spacing
+    ImGui::SetNextWindowSizeConstraints(ImVec2(420, 0), ImVec2(FLT_MAX, FLT_MAX));
 
     if (ImGui::BeginPopupModal("Unsaved Changes", nullptr,
                                 ImGuiWindowFlags_AlwaysAutoResize
@@ -149,21 +175,25 @@ void FileMenu::drawDialogs(Scene* scene, Selection& selection)
         ImGui::Spacing();
 
         // Three buttons: Don't Save | Cancel | Save
-        if (ImGui::Button("Don't Save", ImVec2(120, 0)))
+        // "Don't Save" left-aligned, "Cancel" and "Save" right-aligned
+        float buttonW = 120.0f;
+        float spacing = ImGui::GetStyle().ItemSpacing.x;
+
+        if (ImGui::Button("Don't Save", ImVec2(buttonW, 0)))
         {
             ImGui::CloseCurrentPopup();
             // Discard and proceed with the pending action
-            m_isDirty = false;
+            markClean();
             proceedWithPendingAction(scene, selection);
         }
 
         ImGui::SameLine();
 
-        // Push Cancel and Save to the right
-        float rightEdge = ImGui::GetWindowWidth() - ImGui::GetStyle().WindowPadding.x;
-        ImGui::SetCursorPosX(rightEdge - 252);
+        // Right-align Cancel + Save: push cursor to the right
+        float rightEdge = ImGui::GetWindowContentRegionMax().x;
+        ImGui::SetCursorPosX(rightEdge - 2.0f * buttonW - spacing);
 
-        if (ImGui::Button("Cancel", ImVec2(120, 0)))
+        if (ImGui::Button("Cancel", ImVec2(buttonW, 0)))
         {
             ImGui::CloseCurrentPopup();
             m_pendingAction = PendingAction::NONE;
@@ -171,12 +201,14 @@ void FileMenu::drawDialogs(Scene* scene, Selection& selection)
 
         ImGui::SameLine();
 
-        if (ImGui::Button("Save", ImVec2(120, 0)))
+        if (ImGui::Button("Save", ImVec2(buttonW, 0)))
         {
             ImGui::CloseCurrentPopup();
             saveScene(scene);
-            // Only proceed if save succeeded (not redirected to Save As)
-            if (!m_isDirty)
+            // If save completed immediately (had a path), proceed with pending action.
+            // If redirected to Save As (file browser), the pending action is preserved
+            // and will be processed in handleSaveResult after the file browser completes.
+            if (!isDirty())
             {
                 proceedWithPendingAction(scene, selection);
             }
@@ -198,7 +230,7 @@ void FileMenu::requestQuit()
         return;
     }
 
-    if (m_isDirty)
+    if (isDirty())
     {
         m_pendingAction = PendingAction::QUIT;
         m_showUnsavedModal = true;
@@ -236,6 +268,8 @@ void FileMenu::markClean()
     {
         m_commandHistory->markSaved();
     }
+    // Reset auto-save timer so the next autosave is a full interval after save
+    m_lastAutoSaveTime = std::chrono::steady_clock::now();
 }
 
 bool FileMenu::isDirty() const
@@ -291,7 +325,7 @@ void FileMenu::updateWindowTitle(const std::string& sceneName)
 void FileMenu::handleUnsavedChanges(PendingAction action,
                                      Scene* scene, Selection& selection)
 {
-    if (m_isDirty)
+    if (isDirty())
     {
         m_pendingAction = action;
         m_showUnsavedModal = true;
@@ -315,6 +349,9 @@ void FileMenu::proceedWithPendingAction(Scene* scene, Selection& selection)
             break;
         case PendingAction::OPEN_SCENE:
             openScene();
+            break;
+        case PendingAction::OPEN_RECENT:
+            openRecentScene(scene, selection);
             break;
         case PendingAction::QUIT:
             m_shouldQuit = true;
@@ -344,6 +381,7 @@ void FileMenu::newScene(Scene* scene, Selection& selection)
         m_commandHistory->clear();
     }
     markClean();
+    deleteAutoSave();
     updateWindowTitle("Untitled Scene");
     Logger::info("New scene created");
 }
@@ -373,6 +411,8 @@ void FileMenu::saveScene(Scene* scene)
     if (result.success)
     {
         markClean();
+        deleteAutoSave();
+        m_recentFiles.addPath(m_currentScenePath);
         updateWindowTitle(scene->getName());
     }
     else
@@ -419,6 +459,8 @@ void FileMenu::handleOpenResult(Scene* scene, Selection& selection)
             m_commandHistory->clear();
         }
         markClean();
+        deleteAutoSave();
+        m_recentFiles.addPath(selectedPath);
         updateWindowTitle(scene->getName());
         Logger::info("Scene loaded: " + selectedPath.string()
                      + " (" + std::to_string(result.entityCount) + " entities)");
@@ -429,9 +471,9 @@ void FileMenu::handleOpenResult(Scene* scene, Selection& selection)
     }
 }
 
-void FileMenu::handleSaveResult(Scene* scene)
+void FileMenu::handleSaveResult(Scene* scene, Selection& selection)
 {
-    std::filesystem::path selectedPath = m_saveBrowser.GetSelected();
+    fs::path selectedPath = m_saveBrowser.GetSelected();
     m_saveBrowser.ClearSelected();
 
     if (!scene || !m_resources || selectedPath.empty())
@@ -454,11 +496,272 @@ void FileMenu::handleSaveResult(Scene* scene)
     if (result.success)
     {
         markClean();
+        deleteAutoSave();
+        m_recentFiles.addPath(selectedPath);
         updateWindowTitle(scene->getName());
+
+        // If there was a pending action (e.g. QUIT) that triggered the save,
+        // proceed with it now that the save completed.
+        if (m_pendingAction != PendingAction::NONE)
+        {
+            proceedWithPendingAction(scene, selection);
+        }
     }
     else
     {
         Logger::error("Failed to save scene: " + result.errorMessage);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Recent files submenu
+// ---------------------------------------------------------------------------
+
+void FileMenu::drawRecentFilesMenu(Scene* scene, Selection& selection)
+{
+    const auto& paths = m_recentFiles.getPaths();
+
+    if (ImGui::BeginMenu("Recent Scenes", !paths.empty()))
+    {
+        for (const auto& path : paths)
+        {
+            std::string displayName = path.filename().string();
+            if (ImGui::MenuItem(displayName.c_str()))
+            {
+                m_pendingRecentPath = path;
+                handleUnsavedChanges(PendingAction::OPEN_RECENT, scene, selection);
+            }
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("%s", path.string().c_str());
+            }
+        }
+        ImGui::Separator();
+        if (ImGui::MenuItem("Clear Recent Files"))
+        {
+            m_recentFiles.clear();
+        }
+        ImGui::EndMenu();
+    }
+}
+
+void FileMenu::openRecentScene(Scene* scene, Selection& selection)
+{
+    if (!scene || !m_resources || m_pendingRecentPath.empty())
+    {
+        return;
+    }
+
+    if (!fs::exists(m_pendingRecentPath))
+    {
+        Logger::warning("Recent file no longer exists: " + m_pendingRecentPath.string());
+        m_recentFiles.removePath(m_pendingRecentPath);
+        m_pendingRecentPath.clear();
+        return;
+    }
+
+    SceneSerializerResult result = SceneSerializer::loadScene(
+        *scene, m_pendingRecentPath, *m_resources);
+
+    if (result.success)
+    {
+        m_currentScenePath = m_pendingRecentPath;
+        selection.clearSelection();
+        if (m_commandHistory)
+        {
+            m_commandHistory->clear();
+        }
+        markClean();
+        deleteAutoSave();
+        m_recentFiles.addPath(m_pendingRecentPath);
+        updateWindowTitle(scene->getName());
+        Logger::info("Loaded recent scene: " + m_pendingRecentPath.string()
+                     + " (" + std::to_string(result.entityCount) + " entities)");
+    }
+    else
+    {
+        Logger::error("Failed to load recent scene: " + result.errorMessage);
+    }
+
+    m_pendingRecentPath.clear();
+}
+
+// ---------------------------------------------------------------------------
+// Auto-save
+// ---------------------------------------------------------------------------
+
+void FileMenu::tickAutoSave(const Scene* scene)
+{
+    auto now = std::chrono::steady_clock::now();
+
+    if (!scene || !m_resources || !isDirty())
+    {
+        return;
+    }
+
+    float elapsed = std::chrono::duration<float>(now - m_lastAutoSaveTime).count();
+
+    if (elapsed >= AUTO_SAVE_INTERVAL)
+    {
+        performAutoSave(*scene);
+        m_lastAutoSaveTime = now;
+    }
+}
+
+void FileMenu::performAutoSave(const Scene& scene)
+{
+    std::string content = SceneSerializer::serializeToString(scene, *m_resources);
+    if (content.empty())
+    {
+        Logger::warning("Auto-save: serialization failed");
+        return;
+    }
+
+    fs::path autoSavePath = getAutoSavePath();
+
+    // Ensure parent directory exists
+    std::error_code ec;
+    fs::create_directories(autoSavePath.parent_path(), ec);
+    if (ec)
+    {
+        Logger::warning("Auto-save: could not create directory "
+                        + autoSavePath.parent_path().string());
+        return;
+    }
+
+    // Write to temp file, then rename (atomic)
+    fs::path tmpPath = autoSavePath;
+    tmpPath += ".tmp";
+
+    {
+        std::ofstream out(tmpPath, std::ios::out | std::ios::trunc);
+        if (!out.is_open())
+        {
+            Logger::warning("Auto-save: could not open temp file " + tmpPath.string());
+            return;
+        }
+
+        out << content;
+        out.flush();
+
+        if (!out.good())
+        {
+            Logger::warning("Auto-save: write error");
+            out.close();
+            fs::remove(tmpPath, ec);
+            return;
+        }
+
+        out.close();
+    }
+
+    fs::rename(tmpPath, autoSavePath, ec);
+    if (ec)
+    {
+        Logger::warning("Auto-save: rename failed — " + ec.message());
+        fs::remove(tmpPath);
+        return;
+    }
+
+    Logger::info("Auto-saved to " + autoSavePath.string());
+}
+
+void FileMenu::deleteAutoSave()
+{
+    fs::path autoSavePath = getAutoSavePath();
+    if (fs::exists(autoSavePath))
+    {
+        std::error_code ec;
+        fs::remove(autoSavePath, ec);
+        if (!ec)
+        {
+            Logger::info("Deleted autosave file");
+        }
+    }
+}
+
+fs::path FileMenu::getAutoSavePath()
+{
+    return RecentFiles::getConfigDir() / "autosave.scene";
+}
+
+// ---------------------------------------------------------------------------
+// Crash recovery dialog
+// ---------------------------------------------------------------------------
+
+void FileMenu::drawRecoveryModal(Scene* scene, Selection& selection)
+{
+    if (m_showRecoveryModal)
+    {
+        ImGui::OpenPopup("Recover Auto-Save");
+        m_showRecoveryModal = false;
+    }
+
+    ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+
+    if (ImGui::BeginPopupModal("Recover Auto-Save", nullptr,
+                                ImGuiWindowFlags_AlwaysAutoResize
+                                | ImGuiWindowFlags_NoMove))
+    {
+        fs::path autoSavePath = getAutoSavePath();
+
+        // Read metadata for the timestamp
+        SceneMetadata meta = SceneSerializer::readMetadata(autoSavePath);
+        std::string timeStr = meta.modified.empty() ? "unknown time" : meta.modified;
+
+        ImGui::Text("An auto-save recovery file was found.");
+        ImGui::Text("Last modified: %s", timeStr.c_str());
+        ImGui::Spacing();
+        ImGui::TextWrapped("This may indicate that the application crashed or was "
+                           "terminated unexpectedly. Would you like to recover?");
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        if (ImGui::Button("Recover", ImVec2(120, 0)))
+        {
+            ImGui::CloseCurrentPopup();
+
+            if (scene && m_resources)
+            {
+                SceneSerializerResult result = SceneSerializer::loadScene(
+                    *scene, autoSavePath, *m_resources);
+
+                if (result.success)
+                {
+                    // Recovered scene is untitled — user must Save As to assign a path
+                    m_currentScenePath.clear();
+                    selection.clearSelection();
+                    if (m_commandHistory)
+                    {
+                        m_commandHistory->clear();
+                    }
+                    // Mark dirty so user is prompted to save
+                    m_isDirty = true;
+                    deleteAutoSave();
+                    updateWindowTitle(scene->getName());
+                    Logger::info("Recovered auto-save ("
+                                 + std::to_string(result.entityCount) + " entities)");
+                }
+                else
+                {
+                    Logger::error("Failed to recover auto-save: " + result.errorMessage);
+                    deleteAutoSave();
+                }
+            }
+        }
+
+        ImGui::SameLine();
+
+        if (ImGui::Button("Discard", ImVec2(120, 0)))
+        {
+            ImGui::CloseCurrentPopup();
+            deleteAutoSave();
+            Logger::info("Discarded auto-save recovery file");
+        }
+
+        ImGui::EndPopup();
     }
 }
 

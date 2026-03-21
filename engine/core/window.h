@@ -59,7 +59,14 @@ public:
     /// @param isEnabled True to show the cursor, false to capture it.
     void setCursorEnabled(bool isEnabled);
 
+    /// @brief Saves the current window position and size to a config file.
+    /// Call on shutdown so the window restores its state next launch.
+    void saveWindowState() const;
+
 private:
+    /// @brief Restores window position and size from the config file.
+    /// Called during construction after the window is created.
+    void restoreWindowState();
     static void framebufferSizeCallback(GLFWwindow* window, int width, int height);
 
     /// @brief Static instance pointer for GLFW callbacks.
