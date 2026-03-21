@@ -15,6 +15,9 @@
 #include "renderer/debug_draw.h"
 #include "renderer/particle_renderer.h"
 #include "renderer/water_renderer.h"
+#include "renderer/foliage_renderer.h"
+#include "renderer/tree_renderer.h"
+#include "environment/foliage_manager.h"
 
 #include <memory>
 
@@ -67,6 +70,9 @@ private:
     DebugDraw m_debugDraw;
     ParticleRenderer m_particleRenderer;
     WaterRenderer m_waterRenderer;
+    FoliageRenderer m_foliageRenderer;
+    TreeRenderer m_treeRenderer;
+    FoliageManager m_foliageManager;
 
     bool m_isRunning;
     bool m_isCursorCaptured;

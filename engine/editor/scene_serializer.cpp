@@ -2,6 +2,7 @@
 /// @brief Scene save/load implementation.
 #include "editor/scene_serializer.h"
 #include "utils/entity_serializer.h"
+#include "environment/foliage_manager.h"
 #include "scene/entity.h"
 #include "scene/scene.h"
 #include "resource/resource_manager.h"
@@ -378,6 +379,88 @@ SceneMetadata SceneSerializer::readMetadata(const fs::path& path)
     metadata.engineVersion = meta.value("engine_version", std::string(""));
 
     return metadata;
+}
+
+// --- Environment-aware overloads ---
+
+SceneSerializerResult SceneSerializer::saveScene(
+    const Scene& scene,
+    const fs::path& path,
+    const ResourceManager& resources,
+    const FoliageManager* environment)
+{
+    // First do the standard save
+    SceneSerializerResult result = saveScene(scene, path, resources);
+    if (!result.success || !environment)
+    {
+        return result;
+    }
+
+    // Re-read the saved file, inject environment data, re-write
+    std::ifstream file(path);
+    if (!file.is_open()) return result;
+
+    json sceneJson;
+    try
+    {
+        sceneJson = json::parse(file);
+    }
+    catch (const json::parse_error&)
+    {
+        return result;
+    }
+    file.close();
+
+    sceneJson["environment"] = environment->serialize();
+
+    std::string content = sceneJson.dump(4);
+    std::string writeError;
+    if (!atomicWriteFile(path, content, writeError))
+    {
+        Logger::warning("Failed to write environment data: " + writeError);
+    }
+    else
+    {
+        Logger::info("Saved environment data: " + std::to_string(environment->getTotalFoliageCount()) + " instances");
+    }
+
+    return result;
+}
+
+SceneSerializerResult SceneSerializer::loadScene(
+    Scene& scene,
+    const fs::path& path,
+    ResourceManager& resources,
+    FoliageManager* environment)
+{
+    // Standard entity load
+    SceneSerializerResult result = loadScene(scene, path, resources);
+    if (!result.success || !environment)
+    {
+        return result;
+    }
+
+    // Load environment data from the same file
+    std::ifstream file(path);
+    if (!file.is_open()) return result;
+
+    json sceneJson;
+    try
+    {
+        sceneJson = json::parse(file);
+    }
+    catch (const json::parse_error&)
+    {
+        return result;
+    }
+    file.close();
+
+    if (sceneJson.contains("environment") && sceneJson["environment"].is_object())
+    {
+        environment->deserialize(sceneJson["environment"]);
+    }
+
+    return result;
 }
 
 } // namespace Vestige

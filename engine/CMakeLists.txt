@@ -60,12 +60,21 @@ set(ENGINE_SOURCES
     editor/recent_files.cpp
     editor/scene_serializer.cpp
     editor/material_preview.cpp
+    editor/tools/brush_tool.cpp
+    editor/tools/brush_preview.cpp
+    editor/panels/environment_panel.cpp
     editor/widgets/animation_curve.cpp
     editor/widgets/color_gradient.cpp
     editor/widgets/curve_editor_widget.cpp
     editor/widgets/gradient_editor_widget.cpp
     scene/water_surface.cpp
     renderer/water_renderer.cpp
+    renderer/foliage_renderer.cpp
+    renderer/tree_renderer.cpp
+    environment/foliage_chunk.cpp
+    environment/foliage_manager.cpp
+    environment/spline_path.cpp
+    environment/biome_preset.cpp
     utils/entity_serializer.cpp
     # glad OpenGL loader
     ${CMAKE_SOURCE_DIR}/external/glad/src/gl.c
