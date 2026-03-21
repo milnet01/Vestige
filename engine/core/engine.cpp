@@ -1055,16 +1055,36 @@ void Engine::setupDemoScene()
         grassConfig.maxScale = 1.3f;
         grassConfig.tintVariation = glm::vec3(0.12f, 0.15f, 0.05f);
 
-        // Paint several stamps across the ground plane
+        // Paint overlapping stamps across the ground plane for dense coverage
         const float groundHalf = 15.0f;  // Ground plane is 30m
-        for (float x = -groundHalf + 2.0f; x < groundHalf - 2.0f; x += 5.0f)
+        for (float x = -groundHalf + 1.0f; x < groundHalf - 1.0f; x += 3.0f)
         {
-            for (float z = -groundHalf + 2.0f; z < groundHalf - 2.0f; z += 5.0f)
+            for (float z = -groundHalf + 1.0f; z < groundHalf - 1.0f; z += 3.0f)
             {
                 m_foliageManager.paintFoliage(
-                    0, glm::vec3(x, 0.0f, z), 3.5f, 3.0f, 0.4f, grassConfig);
+                    0, glm::vec3(x, 0.0f, z), 3.0f, 6.0f, 0.3f, grassConfig);
             }
         }
+        // Clear grass around scene objects so it doesn't poke through
+        struct Exclusion { glm::vec3 pos; float radius; };
+        Exclusion exclusions[] = {
+            {{-3.0f, 0.0f, -1.0f}, 1.2f},   // Red Brick cube
+            {{ 0.0f, 0.0f,  0.0f}, 1.2f},   // Gold cube
+            {{ 3.0f, 0.0f, -1.0f}, 1.2f},   // Wood cube
+            {{ 0.0f, 0.0f, -5.0f}, 2.2f},   // Rough Brick cube (2x scale)
+            {{ 1.5f, 0.0f,  2.0f}, 1.2f},   // Glass cube
+            {{-1.5f, 0.0f,  2.5f}, 1.0f},   // Lava cube
+            {{-4.5f, 0.0f,  2.0f}, 0.8f},   // Sphere
+            {{-6.0f, 0.0f,  0.0f}, 0.8f},   // Cylinder
+            {{-6.0f, 0.0f,  2.0f}, 0.8f},   // Cone
+            {{-4.5f, 0.0f,  4.0f}, 0.8f},   // Wedge
+            {{ 5.0f, 0.0f, -3.0f}, 2.0f},   // glTF model
+        };
+        for (const auto& ex : exclusions)
+        {
+            m_foliageManager.eraseAllFoliage(ex.pos, ex.radius);
+        }
+
         Logger::info("Demo foliage: " + std::to_string(m_foliageManager.getTotalFoliageCount())
                      + " grass instances across " + std::to_string(m_foliageManager.getChunkCount()) + " chunks");
     }
