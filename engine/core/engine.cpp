@@ -431,11 +431,31 @@ void Engine::run()
             m_editor->prepareFrame();
         }
 
-        // 3d. Check for viewport clicks (uses previous frame's viewport bounds)
+        // 3d. Resize render FBOs to match the target dimensions:
+        // - Editor mode: match the viewport panel size (correct aspect ratio)
+        // - Play mode: match the full window size
         bool editorActive = m_editor && m_editor->getMode() == EditorMode::EDIT;
         if (editorActive)
         {
-            m_editor->processViewportClick(m_window->getWidth(), m_window->getHeight());
+            int vpW = 0;
+            int vpH = 0;
+            m_editor->getViewportSize(vpW, vpH);
+            if (vpW > 0 && vpH > 0)
+            {
+                m_renderer->resizeRenderTarget(vpW, vpH);
+            }
+        }
+        else
+        {
+            // Play mode or no editor — render at full window size
+            m_renderer->resizeRenderTarget(m_window->getWidth(), m_window->getHeight());
+        }
+
+        // Check for viewport clicks (uses previous frame's viewport bounds)
+        if (editorActive)
+        {
+            m_editor->processViewportClick(
+                m_renderer->getRenderWidth(), m_renderer->getRenderHeight());
         }
 
         // 3e. Update editor camera before rendering (uses previous frame's hover state)
@@ -470,8 +490,12 @@ void Engine::run()
 
         m_renderer->beginFrame();
 
-        float aspectRatio = static_cast<float>(m_window->getWidth())
-                          / static_cast<float>(winHeight);
+        // Use render target dimensions for aspect ratio (matches viewport panel in editor mode,
+        // or window dimensions in play mode)
+        int renderW = m_renderer->getRenderWidth();
+        int renderH = m_renderer->getRenderHeight();
+        if (renderH <= 0) renderH = 1;
+        float aspectRatio = static_cast<float>(renderW) / static_cast<float>(renderH);
 
         if (activeScene)
         {
@@ -567,6 +591,12 @@ void Engine::shutdown()
     }
 
     Logger::info("Shutting down engine...");
+
+    // Save window position/size before destroying anything
+    if (m_window)
+    {
+        m_window->saveWindowState();
+    }
 
     m_debugDraw.cleanup();
     m_editor.reset();

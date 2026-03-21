@@ -475,6 +475,9 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera)
         {
             m_fileMenu.updateWindowTitle(scene->getName());
         }
+
+        // Tick auto-save timer (writes autosave file every 120s when dirty)
+        m_fileMenu.tickAutoSave(scene);
     }
 }
 
@@ -687,6 +690,12 @@ Selection& Editor::getSelection()
 const Selection& Editor::getSelection() const
 {
     return m_selection;
+}
+
+void Editor::getViewportSize(int& outWidth, int& outHeight) const
+{
+    outWidth = static_cast<int>(m_viewportMax.x - m_viewportMin.x);
+    outHeight = static_cast<int>(m_viewportMax.y - m_viewportMin.y);
 }
 
 bool Editor::isGizmoActive() const

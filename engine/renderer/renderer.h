@@ -214,6 +214,19 @@ public:
     /// @brief Gets the number of active spot lights.
     int getSpotLightCount() const;
 
+    /// @brief Resizes the render target FBOs to match a new viewport size.
+    /// Call this when the editor viewport panel changes dimensions.
+    /// Does nothing if the size matches the current render target.
+    /// @param width New render width in pixels.
+    /// @param height New render height in pixels.
+    void resizeRenderTarget(int width, int height);
+
+    /// @brief Gets the current render target width.
+    int getRenderWidth() const;
+
+    /// @brief Gets the current render target height.
+    int getRenderHeight() const;
+
     /// @brief Gets the OpenGL texture ID of the final composited (post-tonemapped) frame.
     /// Used by the editor viewport panel to display the scene in ImGui.
     GLuint getOutputTextureId() const;

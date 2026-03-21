@@ -2256,9 +2256,15 @@ void Renderer::renderSelectionOutline(const SceneRenderData& renderData,
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
-void Renderer::onWindowResize(int width, int height)
+void Renderer::resizeRenderTarget(int width, int height)
 {
     if (width <= 0 || height <= 0)
+    {
+        return;
+    }
+
+    // Skip if unchanged — avoids expensive FBO reallocations every frame
+    if (width == m_windowWidth && height == m_windowHeight)
     {
         return;
     }
@@ -2325,6 +2331,26 @@ void Renderer::onWindowResize(int width, int height)
     // Resize TAA FBOs
     if (m_taaSceneFbo) m_taaSceneFbo->resize(width, height);
     if (m_taa) m_taa->resize(width, height);
+}
+
+int Renderer::getRenderWidth() const
+{
+    return m_windowWidth;
+}
+
+int Renderer::getRenderHeight() const
+{
+    return m_windowHeight;
+}
+
+void Renderer::onWindowResize(int width, int height)
+{
+    // In editor mode, FBO size is driven by the viewport panel, not the window.
+    // This callback still fires on window resize — only resize FBOs if we're
+    // not in editor mode (no viewport panel). The engine drives
+    // resizeRenderTarget() each frame based on viewport panel size.
+    // For now, always resize — the engine will override next frame if in editor mode.
+    resizeRenderTarget(width, height);
 }
 
 } // namespace Vestige

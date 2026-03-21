@@ -2,9 +2,12 @@
 /// @brief File menu for scene save/load, unsaved changes dialog, and dirty tracking.
 #pragma once
 
+#include "editor/recent_files.h"
+
 #include <imgui.h>
 #include <imfilebrowser.h>
 
+#include <chrono>
 #include <filesystem>
 #include <string>
 
@@ -37,6 +40,11 @@ public:
 
     /// @brief Sets the CommandHistory for dirty tracking and clear-on-load.
     void setCommandHistory(CommandHistory* history);
+
+    /// @brief Ticks the auto-save timer. Call once per frame.
+    /// Writes an autosave file when the scene is dirty and the interval has elapsed.
+    /// @param scene Active scene to serialize.
+    void tickAutoSave(const Scene* scene);
 
     /// @brief Draws File menu items. Call inside ImGui::BeginMenu("File").
     /// @param scene Active scene (for save/load operations).
@@ -85,23 +93,33 @@ private:
         NONE,
         NEW_SCENE,
         OPEN_SCENE,
+        OPEN_RECENT,
         QUIT
     };
 
     void newScene(Scene* scene, Selection& selection);
     void openScene();
+    void openRecentScene(Scene* scene, Selection& selection);
     void saveScene(Scene* scene);
     void saveSceneAs(Scene* scene);
     void handleUnsavedChanges(PendingAction action, Scene* scene, Selection& selection);
     void proceedWithPendingAction(Scene* scene, Selection& selection);
     void handleOpenResult(Scene* scene, Selection& selection);
-    void handleSaveResult(Scene* scene);
+    void handleSaveResult(Scene* scene, Selection& selection);
+    void drawRecentFilesMenu(Scene* scene, Selection& selection);
+    void performAutoSave(const Scene& scene);
+    void deleteAutoSave();
+    void drawRecoveryModal(Scene* scene, Selection& selection);
+
+    /// @brief Returns the autosave file path (~/.config/vestige/autosave.scene).
+    static std::filesystem::path getAutoSavePath();
 
     GLFWwindow* m_window = nullptr;
     ResourceManager* m_resources = nullptr;
     CommandHistory* m_commandHistory = nullptr;
 
     std::filesystem::path m_currentScenePath;
+    std::filesystem::path m_pendingRecentPath;
     bool m_isDirty = false;
     bool m_shouldQuit = false;
 
@@ -112,6 +130,17 @@ private:
     // Unsaved changes modal
     bool m_showUnsavedModal = false;
     PendingAction m_pendingAction = PendingAction::NONE;
+
+    // Recent files
+    RecentFiles m_recentFiles;
+
+    // Auto-save
+    static constexpr float AUTO_SAVE_INTERVAL = 120.0f;
+    std::chrono::steady_clock::time_point m_lastAutoSaveTime;
+
+    // Crash recovery
+    bool m_recoveryPending = false;
+    bool m_showRecoveryModal = false;
 };
 
 } // namespace Vestige

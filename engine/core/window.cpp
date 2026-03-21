@@ -3,9 +3,14 @@
 #include "core/window.h"
 #include "core/logger.h"
 
+#include <nlohmann/json.hpp>
+
 #include <glad/gl.h>
 #include <GLFW/glfw3.h>
 
+#include <cstdlib>
+#include <filesystem>
+#include <fstream>
 #include <stdexcept>
 
 namespace Vestige
@@ -69,10 +74,15 @@ Window::Window(const WindowConfig& config, EventBus& eventBus)
     // Register callbacks
     glfwSetFramebufferSizeCallback(m_handle, framebufferSizeCallback);
 
-    // Set initial viewport
+    // Restore saved window position and size from previous session
+    restoreWindowState();
+
+    // Set initial viewport (after restore, so framebuffer size matches)
     int framebufferWidth = 0;
     int framebufferHeight = 0;
     glfwGetFramebufferSize(m_handle, &framebufferWidth, &framebufferHeight);
+    m_width = framebufferWidth;
+    m_height = framebufferHeight;
     glViewport(0, 0, framebufferWidth, framebufferHeight);
 }
 
@@ -134,6 +144,133 @@ void Window::framebufferSizeCallback(GLFWwindow* /*window*/, int width, int heig
         s_instance->m_eventBus.publish(WindowResizeEvent(width, height));
         Logger::debug("Window resized to " + std::to_string(width) + "x" + std::to_string(height));
     }
+}
+
+// ---------------------------------------------------------------------------
+// Window state persistence
+// ---------------------------------------------------------------------------
+
+/// @brief Returns the config file path for window state.
+static std::filesystem::path getWindowStatePath()
+{
+    namespace fs = std::filesystem;
+    const char* xdgConfig = std::getenv("XDG_CONFIG_HOME");
+    fs::path configDir;
+
+    if (xdgConfig && xdgConfig[0] != '\0')
+    {
+        configDir = fs::path(xdgConfig);
+    }
+    else
+    {
+        const char* home = std::getenv("HOME");
+        configDir = home ? fs::path(home) / ".config" : fs::path("/tmp");
+    }
+
+    return configDir / "vestige" / "window.json";
+}
+
+void Window::saveWindowState() const
+{
+    namespace fs = std::filesystem;
+
+    if (!m_handle)
+    {
+        return;
+    }
+
+    // Don't save if the window is minimized (iconified) — the size would be 0x0
+    if (glfwGetWindowAttrib(m_handle, GLFW_ICONIFIED))
+    {
+        return;
+    }
+
+    int posX = 0;
+    int posY = 0;
+    glfwGetWindowPos(m_handle, &posX, &posY);
+
+    int sizeW = 0;
+    int sizeH = 0;
+    glfwGetWindowSize(m_handle, &sizeW, &sizeH);
+
+    bool maximized = glfwGetWindowAttrib(m_handle, GLFW_MAXIMIZED) != 0;
+
+    nlohmann::json state;
+    state["x"] = posX;
+    state["y"] = posY;
+    state["width"] = sizeW;
+    state["height"] = sizeH;
+    state["maximized"] = maximized;
+
+    fs::path statePath = getWindowStatePath();
+
+    std::error_code ec;
+    fs::create_directories(statePath.parent_path(), ec);
+
+    std::ofstream file(statePath, std::ios::out | std::ios::trunc);
+    if (file.is_open())
+    {
+        file << state.dump(2);
+    }
+}
+
+void Window::restoreWindowState()
+{
+    namespace fs = std::filesystem;
+
+    fs::path statePath = getWindowStatePath();
+    if (!fs::exists(statePath))
+    {
+        return;
+    }
+
+    std::ifstream file(statePath);
+    if (!file.is_open())
+    {
+        return;
+    }
+
+    nlohmann::json state;
+    try
+    {
+        state = nlohmann::json::parse(file);
+    }
+    catch (const nlohmann::json::parse_error&)
+    {
+        return;
+    }
+
+    int w = state.value("width", 0);
+    int h = state.value("height", 0);
+    int x = state.value("x", -1);
+    int y = state.value("y", -1);
+    bool maximized = state.value("maximized", false);
+
+    // Validate dimensions (must be reasonable)
+    if (w < 200 || h < 200 || w > 8192 || h > 8192)
+    {
+        return;
+    }
+
+    // Apply size first
+    glfwSetWindowSize(m_handle, w, h);
+
+    // Apply position if valid (avoid off-screen placement)
+    if (x >= 0 && y >= 0)
+    {
+        glfwSetWindowPos(m_handle, x, y);
+    }
+
+    // Maximize if it was maximized
+    if (maximized)
+    {
+        glfwMaximizeWindow(m_handle);
+    }
+
+    Logger::debug("Restored window state: " + std::to_string(w) + "x"
+                  + std::to_string(h) + " at (" + std::to_string(x) + ", "
+                  + std::to_string(y) + ")"
+                  + (maximized ? " [maximized]" : ""));
 }
 
 } // namespace Vestige

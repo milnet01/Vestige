@@ -96,6 +96,11 @@ public:
     /// @brief Toggles between EDIT and PLAY mode.
     void toggleMode();
 
+    /// @brief Gets the viewport panel size in pixels (from previous frame).
+    /// @param outWidth Set to viewport width.
+    /// @param outHeight Set to viewport height.
+    void getViewportSize(int& outWidth, int& outHeight) const;
+
     /// @brief Returns true if the gizmo was hovered or used last frame.
     /// Used to suppress viewport picks when interacting with the gizmo.
     bool isGizmoActive() const;
