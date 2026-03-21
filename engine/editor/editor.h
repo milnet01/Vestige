@@ -8,12 +8,15 @@
 #include "editor/entity_factory.h"
 #include "editor/file_menu.h"
 #include "editor/panels/asset_browser_panel.h"
+#include "editor/panels/environment_panel.h"
 #include "editor/panels/hierarchy_panel.h"
 #include "editor/panels/history_panel.h"
 #include "editor/panels/import_dialog.h"
 #include "editor/panels/inspector_panel.h"
 #include "editor/prefab_system.h"
 #include "editor/selection.h"
+#include "editor/tools/brush_tool.h"
+#include "editor/tools/brush_preview.h"
 
 #include <imgui.h>
 #include <ImGuizmo.h>
@@ -31,6 +34,7 @@ namespace Vestige
 
 class Camera;
 class EventBus;
+class FoliageManager;
 class Renderer;
 class ResourceManager;
 class Scene;
@@ -101,6 +105,9 @@ public:
     /// @param outHeight Set to viewport height.
     void getViewportSize(int& outWidth, int& outHeight) const;
 
+    /// @brief Gets the viewport minimum screen position (top-left corner).
+    glm::vec2 getViewportMin() const { return m_viewportMin; }
+
     /// @brief Returns true if the gizmo was hovered or used last frame.
     /// Used to suppress viewport picks when interacting with the gizmo.
     bool isGizmoActive() const;
@@ -147,6 +154,18 @@ public:
     CommandHistory& getCommandHistory();
     const CommandHistory& getCommandHistory() const;
 
+    /// @brief Gets the brush tool (for environment painting).
+    BrushTool& getBrushTool();
+
+    /// @brief Gets the brush preview renderer.
+    BrushPreviewRenderer& getBrushPreview();
+
+    /// @brief Gets the environment panel.
+    EnvironmentPanel& getEnvironmentPanel();
+
+    /// @brief Stores a pointer to the FoliageManager for brush painting.
+    void setFoliageManager(FoliageManager* manager);
+
 private:
     void setupTheme();
     void drawGizmo(Camera* camera, Scene* scene);
@@ -170,8 +189,12 @@ private:
     InspectorPanel m_inspectorPanel;
     ImportDialog m_importDialog;
     AssetBrowserPanel m_assetBrowserPanel;
+    EnvironmentPanel m_environmentPanel;
+    BrushTool m_brushTool;
+    BrushPreviewRenderer m_brushPreview;
     PrefabSystem m_prefabSystem;
     ResourceManager* m_resourceManager = nullptr;
+    FoliageManager* m_foliageManager = nullptr;
     std::string m_assetPath;
 
     // Viewport bounds (stored from drawPanels, used next frame for click detection)

@@ -8,6 +8,7 @@
 namespace Vestige
 {
 
+class FoliageManager;
 class ResourceManager;
 class Scene;
 
@@ -72,6 +73,20 @@ public:
     static std::string serializeToString(
         const Scene& scene,
         const ResourceManager& resources);
+
+    /// @brief Saves scene with environment data.
+    static SceneSerializerResult saveScene(
+        const Scene& scene,
+        const std::filesystem::path& path,
+        const ResourceManager& resources,
+        const FoliageManager* environment);
+
+    /// @brief Loads scene with environment data.
+    static SceneSerializerResult loadScene(
+        Scene& scene,
+        const std::filesystem::path& path,
+        ResourceManager& resources,
+        FoliageManager* environment);
 
     /// @brief Reads scene metadata from a file without loading entities.
     /// @param path Input file path.

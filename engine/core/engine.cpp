@@ -8,7 +8,9 @@
 #include "renderer/frame_diagnostics.h"
 #include "renderer/debug_draw.h"
 #include "renderer/light_utils.h"
+#include "editor/tools/brush_tool.h"
 
+#include <imgui.h>
 #include <GLFW/glfw3.h>
 #include <glm/gtc/matrix_transform.hpp>
 
@@ -103,10 +105,24 @@ bool Engine::initialize(const EngineConfig& config)
         Logger::warning("Water renderer initialization failed — water surfaces will be unavailable");
     }
 
-    // Give the editor access to the resource manager for entity spawning
+    // Initialize foliage renderer
+    if (!m_foliageRenderer.init(config.assetPath))
+    {
+        Logger::warning("Foliage renderer initialization failed — foliage will be unavailable");
+    }
+
+    // Initialize tree renderer
+    if (!m_treeRenderer.init(config.assetPath))
+    {
+        Logger::warning("Tree renderer initialization failed — trees will be unavailable");
+    }
+
+    // Give the editor access to the resource manager and foliage manager
     if (m_editor)
     {
         m_editor->setResourceManager(m_resourceManager.get());
+        m_editor->setFoliageManager(&m_foliageManager);
+        m_editor->getBrushPreview().init(config.assetPath);
     }
 
     // Start in editor mode — cursor visible, FPS controller disabled
@@ -475,6 +491,28 @@ void Engine::run()
         {
             m_editor->updateEditorCamera(deltaTime);
             m_editor->applyEditorCamera(*m_camera);
+
+            // 3f. Process brush tool input for environment painting
+            BrushTool& brush = m_editor->getBrushTool();
+            if (brush.isActive() && !m_editor->isGizmoActive())
+            {
+                int vpW = 0, vpH = 0;
+                m_editor->getViewportSize(vpW, vpH);
+                if (vpW > 0 && vpH > 0)
+                {
+                    ImGuiIO& brushIo = ImGui::GetIO();
+                    float mouseX = (brushIo.MousePos.x - m_editor->getViewportMin().x)
+                                 / static_cast<float>(vpW);
+                    float mouseY = (brushIo.MousePos.y - m_editor->getViewportMin().y)
+                                 / static_cast<float>(vpH);
+                    float aspect = static_cast<float>(vpW) / static_cast<float>(vpH);
+
+                    Ray mouseRay = BrushTool::createRay(*m_camera, mouseX, mouseY, aspect);
+                    bool mouseDown = brushIo.MouseDown[0] && !brushIo.KeyAlt;
+                    brush.processInput(mouseRay, mouseDown, deltaTime,
+                                       m_foliageManager, m_editor->getCommandHistory());
+                }
+            }
         }
 
         // 4. Scene — update entities and components
@@ -513,6 +551,19 @@ void Engine::run()
         {
             activeScene->collectRenderData(m_renderData);
             m_renderer->renderScene(m_renderData, *m_camera, aspectRatio);
+
+            // Render foliage (after opaques, before water/particles)
+            {
+                glm::mat4 viewProj = m_camera->getProjectionMatrix(aspectRatio)
+                                   * m_camera->getViewMatrix();
+                auto visibleChunks = m_foliageManager.getVisibleChunks(viewProj);
+                float elapsed = static_cast<float>(m_timer->getElapsedTime());
+                if (!visibleChunks.empty())
+                {
+                    m_foliageRenderer.render(visibleChunks, *m_camera, viewProj, elapsed);
+                    m_treeRenderer.render(visibleChunks, *m_camera, viewProj, elapsed);
+                }
+            }
 
             // Render water surfaces (after opaques, before particles)
             if (!m_renderData.waterSurfaces.empty())
@@ -597,6 +648,18 @@ void Engine::run()
             glm::mat4 vp = m_camera->getProjectionMatrix(aspectRatio)
                          * m_camera->getViewMatrix();
             m_debugDraw.flush(vp);
+
+            // 7d. Render brush preview circle
+            {
+                BrushTool& brush = m_editor->getBrushTool();
+                glm::vec3 hitPoint, hitNormal;
+                if (brush.getHitPoint(hitPoint, hitNormal))
+                {
+                    bool isEraser = (brush.mode == BrushTool::Mode::ERASER);
+                    m_editor->getBrushPreview().render(
+                        hitPoint, hitNormal, brush.radius, vp, isEraser);
+                }
+            }
         }
 
         // 8. Display the rendered frame
@@ -984,10 +1047,32 @@ void Engine::setupDemoScene()
         Logger::info("Loaded glTF model: " + std::to_string(testModel->getMeshCount()) + " meshes");
     }
 
+    // --- Demo foliage (10K grass instances around the ground plane) ---
+    {
+        FoliageTypeConfig grassConfig;
+        grassConfig.name = "Short Grass";
+        grassConfig.minScale = 0.6f;
+        grassConfig.maxScale = 1.3f;
+        grassConfig.tintVariation = glm::vec3(0.12f, 0.15f, 0.05f);
+
+        // Paint several stamps across the ground plane
+        const float groundHalf = 15.0f;  // Ground plane is 30m
+        for (float x = -groundHalf + 2.0f; x < groundHalf - 2.0f; x += 5.0f)
+        {
+            for (float z = -groundHalf + 2.0f; z < groundHalf - 2.0f; z += 5.0f)
+            {
+                m_foliageManager.paintFoliage(
+                    0, glm::vec3(x, 0.0f, z), 3.5f, 3.0f, 0.4f, grassConfig);
+            }
+        }
+        Logger::info("Demo foliage: " + std::to_string(m_foliageManager.getTotalFoliageCount())
+                     + " grass instances across " + std::to_string(m_foliageManager.getChunkCount()) + " chunks");
+    }
+
     // Initial scene update to compute world matrices
     scene->update(0.0f);
 
-    Logger::info("Demo scene ready: entities with components, 1 directional + 2 point lights + emissive lava + glass cube");
+    Logger::info("Demo scene ready: entities with components, 1 directional + 2 point lights + emissive lava + glass cube + foliage");
 }
 
 } // namespace Vestige

@@ -162,6 +162,7 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera)
 
             ImGui::DockBuilderDockWindow("Hierarchy", left);
             ImGui::DockBuilderDockWindow("Inspector", right);
+            ImGui::DockBuilderDockWindow("Environment", right);
             ImGui::DockBuilderDockWindow("Console", bottom);
             ImGui::DockBuilderDockWindow("Assets", bottom);
             ImGui::DockBuilderDockWindow("History", bottom);
@@ -232,6 +233,11 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera)
 
             if (ImGui::BeginMenu("View"))
             {
+                bool envOpen = m_environmentPanel.isOpen();
+                if (ImGui::MenuItem("Environment", nullptr, &envOpen))
+                {
+                    m_environmentPanel.setOpen(envOpen);
+                }
                 ImGui::MenuItem("Demo Window", nullptr, &m_showDemoWindow);
                 ImGui::EndMenu();
             }
@@ -477,6 +483,12 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera)
         m_historyPanel.draw(m_commandHistory);
         ImGui::End();
 
+        // --- Environment painting panel ---
+        if (m_foliageManager)
+        {
+            m_environmentPanel.draw(m_brushTool, *m_foliageManager, m_commandHistory);
+        }
+
         // --- Import dialog (file browser + settings modal) ---
         m_importDialog.draw(scene, m_resourceManager, m_selection,
                             m_editorCamera.get());
@@ -608,6 +620,26 @@ CommandHistory& Editor::getCommandHistory()
 const CommandHistory& Editor::getCommandHistory() const
 {
     return m_commandHistory;
+}
+
+BrushTool& Editor::getBrushTool()
+{
+    return m_brushTool;
+}
+
+BrushPreviewRenderer& Editor::getBrushPreview()
+{
+    return m_brushPreview;
+}
+
+EnvironmentPanel& Editor::getEnvironmentPanel()
+{
+    return m_environmentPanel;
+}
+
+void Editor::setFoliageManager(FoliageManager* manager)
+{
+    m_foliageManager = manager;
 }
 
 void Editor::processViewportClick(int fboWidth, int fboHeight)
