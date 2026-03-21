@@ -75,6 +75,11 @@ set(ENGINE_SOURCES
     environment/foliage_manager.cpp
     environment/spline_path.cpp
     environment/biome_preset.cpp
+    profiler/gpu_timer.cpp
+    profiler/cpu_profiler.cpp
+    profiler/memory_tracker.cpp
+    profiler/performance_profiler.cpp
+    editor/panels/performance_panel.cpp
     utils/entity_serializer.cpp
     # glad OpenGL loader
     ${CMAKE_SOURCE_DIR}/external/glad/src/gl.c

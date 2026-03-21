@@ -18,6 +18,7 @@
 #include "renderer/foliage_renderer.h"
 #include "renderer/tree_renderer.h"
 #include "environment/foliage_manager.h"
+#include "profiler/performance_profiler.h"
 
 #include <memory>
 
@@ -73,6 +74,7 @@ private:
     FoliageRenderer m_foliageRenderer;
     TreeRenderer m_treeRenderer;
     FoliageManager m_foliageManager;
+    PerformanceProfiler m_profiler;
 
     bool m_isRunning;
     bool m_isCursorCaptured;

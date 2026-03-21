@@ -238,6 +238,11 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera)
                 {
                     m_environmentPanel.setOpen(envOpen);
                 }
+                bool perfOpen = m_performancePanel.isOpen();
+                if (ImGui::MenuItem("Performance", "F12", &perfOpen))
+                {
+                    m_performancePanel.setOpen(perfOpen);
+                }
                 ImGui::MenuItem("Demo Window", nullptr, &m_showDemoWindow);
                 ImGui::EndMenu();
             }
@@ -489,6 +494,12 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera)
             m_environmentPanel.draw(m_brushTool, *m_foliageManager, m_commandHistory);
         }
 
+        // --- Performance panel ---
+        if (m_profiler)
+        {
+            m_performancePanel.draw(*m_profiler, renderer);
+        }
+
         // --- Import dialog (file browser + settings modal) ---
         m_importDialog.draw(scene, m_resourceManager, m_selection,
                             m_editorCamera.get());
@@ -640,6 +651,16 @@ EnvironmentPanel& Editor::getEnvironmentPanel()
 void Editor::setFoliageManager(FoliageManager* manager)
 {
     m_foliageManager = manager;
+}
+
+void Editor::setProfiler(PerformanceProfiler* profiler)
+{
+    m_profiler = profiler;
+}
+
+PerformancePanel& Editor::getPerformancePanel()
+{
+    return m_performancePanel;
 }
 
 void Editor::processViewportClick(int fboWidth, int fboHeight)

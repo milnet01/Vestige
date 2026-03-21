@@ -10,6 +10,7 @@
 #include "editor/panels/asset_browser_panel.h"
 #include "editor/panels/environment_panel.h"
 #include "editor/panels/hierarchy_panel.h"
+#include "editor/panels/performance_panel.h"
 #include "editor/panels/history_panel.h"
 #include "editor/panels/import_dialog.h"
 #include "editor/panels/inspector_panel.h"
@@ -35,6 +36,7 @@ namespace Vestige
 class Camera;
 class EventBus;
 class FoliageManager;
+class PerformanceProfiler;
 class Renderer;
 class ResourceManager;
 class Scene;
@@ -166,6 +168,12 @@ public:
     /// @brief Stores a pointer to the FoliageManager for brush painting.
     void setFoliageManager(FoliageManager* manager);
 
+    /// @brief Stores a pointer to the PerformanceProfiler.
+    void setProfiler(PerformanceProfiler* profiler);
+
+    /// @brief Gets the performance panel.
+    PerformancePanel& getPerformancePanel();
+
 private:
     void setupTheme();
     void drawGizmo(Camera* camera, Scene* scene);
@@ -190,11 +198,13 @@ private:
     ImportDialog m_importDialog;
     AssetBrowserPanel m_assetBrowserPanel;
     EnvironmentPanel m_environmentPanel;
+    PerformancePanel m_performancePanel;
     BrushTool m_brushTool;
     BrushPreviewRenderer m_brushPreview;
     PrefabSystem m_prefabSystem;
     ResourceManager* m_resourceManager = nullptr;
     FoliageManager* m_foliageManager = nullptr;
+    PerformanceProfiler* m_profiler = nullptr;
     std::string m_assetPath;
 
     // Viewport bounds (stored from drawPanels, used next frame for click detection)

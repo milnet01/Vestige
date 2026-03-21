@@ -9,6 +9,7 @@
 #include "renderer/debug_draw.h"
 #include "renderer/light_utils.h"
 #include "editor/tools/brush_tool.h"
+#include "profiler/cpu_profiler.h"
 
 #include <imgui.h>
 #include <GLFW/glfw3.h>
@@ -105,6 +106,9 @@ bool Engine::initialize(const EngineConfig& config)
         Logger::warning("Water renderer initialization failed — water surfaces will be unavailable");
     }
 
+    // Initialize performance profiler
+    m_profiler.init();
+
     // Initialize foliage renderer
     if (!m_foliageRenderer.init(config.assetPath))
     {
@@ -122,6 +126,7 @@ bool Engine::initialize(const EngineConfig& config)
     {
         m_editor->setResourceManager(m_resourceManager.get());
         m_editor->setFoliageManager(&m_foliageManager);
+        m_editor->setProfiler(&m_profiler);
         m_editor->getBrushPreview().init(config.assetPath);
     }
 
@@ -391,6 +396,15 @@ bool Engine::initialize(const EngineConfig& config)
                     }
                 }
                 break;
+
+            case GLFW_KEY_F12:
+                if (m_editor)
+                {
+                    m_editor->getPerformancePanel().toggleOpen();
+                    Logger::info(std::string("Performance panel: ")
+                                 + (m_editor->getPerformancePanel().isOpen() ? "ON" : "OFF"));
+                }
+                break;
         }
     });
 
@@ -538,6 +552,7 @@ void Engine::run()
             continue;  // Skip rendering when minimized
         }
 
+        m_profiler.beginFrame();
         m_renderer->beginFrame();
 
         // Use render target dimensions for aspect ratio (matches viewport panel in editor mode,
@@ -550,7 +565,10 @@ void Engine::run()
         if (activeScene)
         {
             activeScene->collectRenderData(m_renderData);
+
+            m_profiler.getGpuTimer().beginPass("Scene");
             m_renderer->renderScene(m_renderData, *m_camera, aspectRatio);
+            m_profiler.getGpuTimer().endPass();
 
             // Render foliage (after opaques, before water/particles)
             {
@@ -560,8 +578,10 @@ void Engine::run()
                 float elapsed = static_cast<float>(m_timer->getElapsedTime());
                 if (!visibleChunks.empty())
                 {
+                    m_profiler.getGpuTimer().beginPass("Foliage");
                     m_foliageRenderer.render(visibleChunks, *m_camera, viewProj, elapsed);
                     m_treeRenderer.render(visibleChunks, *m_camera, viewProj, elapsed);
+                    m_profiler.getGpuTimer().endPass();
                 }
             }
 
@@ -587,8 +607,10 @@ void Engine::run()
                 float elapsed = static_cast<float>(m_timer->getElapsedTime());
                 GLuint skyboxTex = m_renderer->getSkyboxTextureId();
 
+                m_profiler.getGpuTimer().beginPass("Water");
                 m_waterRenderer.render(waterItems, *m_camera, aspectRatio,
                                        elapsed, lightDir, lightColor, skyboxTex);
+                m_profiler.getGpuTimer().endPass();
             }
 
             // Render particles (after scene transparent pass, before post-processing)
@@ -596,12 +618,16 @@ void Engine::run()
             {
                 glm::mat4 viewProj = m_camera->getProjectionMatrix(aspectRatio)
                                    * m_camera->getViewMatrix();
+                m_profiler.getGpuTimer().beginPass("Particles");
                 m_particleRenderer.render(m_renderData.particleEmitters, *m_camera, viewProj);
+                m_profiler.getGpuTimer().endPass();
             }
         }
 
         // 7. Resolve MSAA, post-process, composite to output FBO
+        m_profiler.getGpuTimer().beginPass("PostProcess");
         m_renderer->endFrame(deltaTime);
+        m_profiler.getGpuTimer().endPass();
 
         // 7b. Selection system: ID buffer picking and outline rendering
         if (editorActive)
@@ -685,7 +711,10 @@ void Engine::run()
             }
         }
 
-        // 9. Window — swap buffers
+        // 9. End profiler frame (collect GPU results, update history)
+        m_profiler.endFrame(deltaTime);
+
+        // 10. Window — swap buffers
         m_window->swapBuffers();
     }
 
