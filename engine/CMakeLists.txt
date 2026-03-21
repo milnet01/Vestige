@@ -15,6 +15,7 @@ set(ENGINE_SOURCES
     scene/mesh_renderer.cpp
     scene/scene.cpp
     scene/scene_manager.cpp
+    scene/particle_emitter.cpp
     resource/resource_manager.cpp
     resource/async_texture_loader.cpp
     renderer/shader.cpp
@@ -37,6 +38,7 @@ set(ENGINE_SOURCES
     renderer/environment_map.cpp
     renderer/frame_diagnostics.cpp
     renderer/debug_draw.cpp
+    renderer/particle_renderer.cpp
     resource/model.cpp
     utils/obj_loader.cpp
     utils/gltf_loader.cpp
@@ -58,6 +60,12 @@ set(ENGINE_SOURCES
     editor/recent_files.cpp
     editor/scene_serializer.cpp
     editor/material_preview.cpp
+    editor/widgets/animation_curve.cpp
+    editor/widgets/color_gradient.cpp
+    editor/widgets/curve_editor_widget.cpp
+    editor/widgets/gradient_editor_widget.cpp
+    scene/water_surface.cpp
+    renderer/water_renderer.cpp
     utils/entity_serializer.cpp
     # glad OpenGL loader
     ${CMAKE_SOURCE_DIR}/external/glad/src/gl.c

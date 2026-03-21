@@ -254,6 +254,9 @@ public:
                                 const std::vector<uint32_t>& selectedIds,
                                 const Camera& camera, float aspectRatio);
 
+    /// @brief Gets the skybox cubemap texture ID (0 if no skybox loaded).
+    GLuint getSkyboxTextureId() const;
+
     /// @brief Gets the text renderer (nullptr if not initialized).
     TextRenderer* getTextRenderer();
 

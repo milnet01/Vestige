@@ -1275,6 +1275,11 @@ void Renderer::blitToScreen()
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
+GLuint Renderer::getSkyboxTextureId() const
+{
+    return m_skybox ? m_skybox->getTextureId() : 0;
+}
+
 TextRenderer* Renderer::getTextRenderer()
 {
     return m_textRenderer.get();

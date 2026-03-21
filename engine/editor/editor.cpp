@@ -362,6 +362,26 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera)
                     }
                     ImGui::EndMenu();
                 }
+
+                if (ImGui::BeginMenu("Effects"))
+                {
+                    bool canSpawnEffect = scene != nullptr;
+                    if (ImGui::MenuItem("Particle Emitter", nullptr, false, canSpawnEffect))
+                    {
+                        Entity* e = EntityFactory::createParticleEmitter(*scene, spawnPos);
+                        m_selection.select(e->getId());
+                        m_commandHistory.execute(
+                            std::make_unique<CreateEntityCommand>(*scene, e->getId()));
+                    }
+                    if (ImGui::MenuItem("Water Surface", nullptr, false, canSpawnEffect))
+                    {
+                        Entity* e = EntityFactory::createWaterSurface(*scene, spawnPos);
+                        m_selection.select(e->getId());
+                        m_commandHistory.execute(
+                            std::make_unique<CreateEntityCommand>(*scene, e->getId()));
+                    }
+                    ImGui::EndMenu();
+                }
                 ImGui::EndMenu();
             }
 

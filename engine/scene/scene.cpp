@@ -38,6 +38,8 @@ void Scene::collectRenderData(SceneRenderData& data) const
     data.transparentItems.clear();
     data.pointLights.clear();
     data.spotLights.clear();
+    data.particleEmitters.clear();
+    data.waterSurfaces.clear();
     data.hasDirectionalLight = false;
     collectRenderDataRecursive(*m_root, data);
 }
@@ -266,6 +268,20 @@ void Scene::collectRenderDataRecursive(const Entity& entity, SceneRenderData& da
                 data.pointLights.push_back(pl);
             }
         }
+    }
+
+    // Check for particle emitter
+    auto* particleEmitter = entity.getComponent<ParticleEmitterComponent>();
+    if (particleEmitter && particleEmitter->isEnabled())
+    {
+        data.particleEmitters.emplace_back(particleEmitter, entity.getWorldMatrix());
+    }
+
+    // Check for water surface
+    auto* waterSurface = entity.getComponent<WaterSurfaceComponent>();
+    if (waterSurface && waterSurface->isEnabled())
+    {
+        data.waterSurfaces.emplace_back(waterSurface, entity.getWorldMatrix());
     }
 
     // Recurse into children

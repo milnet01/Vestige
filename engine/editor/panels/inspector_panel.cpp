@@ -9,6 +9,10 @@
 #include "scene/scene.h"
 #include "scene/mesh_renderer.h"
 #include "scene/light_component.h"
+#include "scene/particle_emitter.h"
+#include "editor/commands/particle_property_command.h"
+#include "editor/widgets/curve_editor_widget.h"
+#include "editor/widgets/gradient_editor_widget.h"
 #include "renderer/material.h"
 #include "renderer/texture.h"
 #include "renderer/light_utils.h"
@@ -240,6 +244,12 @@ void InspectorPanel::draw(Scene* scene, Selection& selection)
     if (entity->hasComponent<EmissiveLightComponent>())
     {
         drawEmissiveLight(*entity);
+    }
+
+    // --- Particle Emitter ---
+    if (entity->hasComponent<ParticleEmitterComponent>())
+    {
+        drawParticleEmitter(*entity);
     }
 
     // --- Multi-selection info ---
@@ -937,6 +947,244 @@ void InspectorPanel::drawEmissiveLight(Entity& entity)
     ImGui::ColorEdit3("Override Color", &comp->overrideColor.x);
     ImGui::SameLine();
     ImGui::TextDisabled("(0,0,0 = derive from material)");
+
+    ImGui::Spacing();
+}
+
+// ---------------------------------------------------------------------------
+// Particle Emitter
+// ---------------------------------------------------------------------------
+
+/// @brief Helper that captures config before edit, then pushes an undo command if changed.
+/// Usage: call before ImGui widget, then after, check if configBefore != configAfter.
+static void pushParticleUndo(CommandHistory* history, Scene* scene, uint32_t entityId,
+                             const ParticleEmitterConfig& oldConfig,
+                             const ParticleEmitterConfig& newConfig,
+                             const char* propertyName)
+{
+    if (!history || !scene)
+    {
+        return;
+    }
+    // Only push if something actually changed (compare key fields for the given property)
+    history->execute(
+        std::make_unique<ParticlePropertyCommand>(
+            *scene, entityId, oldConfig, newConfig, propertyName));
+}
+
+void InspectorPanel::drawParticleEmitter(Entity& entity)
+{
+    auto* comp = entity.getComponent<ParticleEmitterComponent>();
+    if (!comp)
+    {
+        return;
+    }
+
+    if (!drawComponentHeader("Particle Emitter"))
+    {
+        return;
+    }
+
+    auto& cfg = comp->getConfig();
+    ParticleEmitterConfig before = cfg;  // Snapshot for undo
+
+    // --- Playback controls ---
+    {
+        bool paused = comp->isPaused();
+        if (paused)
+        {
+            if (ImGui::Button("Play"))
+            {
+                comp->setPaused(false);
+            }
+        }
+        else
+        {
+            if (ImGui::Button("Pause"))
+            {
+                comp->setPaused(true);
+            }
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Restart"))
+        {
+            comp->restart();
+        }
+        ImGui::SameLine();
+        ImGui::TextDisabled("(%d alive)", comp->getData().count);
+    }
+
+    ImGui::Spacing();
+
+    // --- Emission ---
+    if (ImGui::TreeNodeEx("Emission", ImGuiTreeNodeFlags_DefaultOpen))
+    {
+        bool changed = false;
+        changed |= ImGui::DragFloat("Rate", &cfg.emissionRate, 1.0f, 0.0f, 10000.0f, "%.0f/s");
+        changed |= ImGui::DragInt("Max Particles", &cfg.maxParticles, 10.0f, 1, 100000);
+        changed |= ImGui::Checkbox("Looping", &cfg.looping);
+        if (!cfg.looping)
+        {
+            changed |= ImGui::DragFloat("Duration", &cfg.duration, 0.1f, 0.1f, 60.0f, "%.1f s");
+        }
+
+        if (changed && ImGui::IsItemDeactivatedAfterEdit())
+        {
+            pushParticleUndo(m_commandHistory, m_currentScene, entity.getId(),
+                             before, cfg, "emission");
+            before = cfg;
+        }
+        ImGui::TreePop();
+    }
+
+    // --- Start Properties ---
+    if (ImGui::TreeNodeEx("Start Properties", ImGuiTreeNodeFlags_DefaultOpen))
+    {
+        bool changed = false;
+        changed |= ImGui::DragFloatRange2("Lifetime", &cfg.startLifetimeMin, &cfg.startLifetimeMax,
+                                           0.05f, 0.01f, 30.0f, "%.2f s", "%.2f s");
+        changed |= ImGui::DragFloatRange2("Speed", &cfg.startSpeedMin, &cfg.startSpeedMax,
+                                           0.1f, 0.0f, 100.0f, "%.1f", "%.1f");
+        changed |= ImGui::DragFloatRange2("Size", &cfg.startSizeMin, &cfg.startSizeMax,
+                                           0.01f, 0.001f, 10.0f, "%.3f", "%.3f");
+        changed |= ImGui::ColorEdit4("Start Color", &cfg.startColor.x);
+
+        if (changed && ImGui::IsItemDeactivatedAfterEdit())
+        {
+            pushParticleUndo(m_commandHistory, m_currentScene, entity.getId(),
+                             before, cfg, "start properties");
+            before = cfg;
+        }
+        ImGui::TreePop();
+    }
+
+    // --- Shape ---
+    if (ImGui::TreeNodeEx("Shape", ImGuiTreeNodeFlags_DefaultOpen))
+    {
+        bool changed = false;
+        const char* shapeNames[] = {"Point", "Sphere", "Cone", "Box"};
+        int shapeIdx = static_cast<int>(cfg.shape);
+        if (ImGui::Combo("Type", &shapeIdx, shapeNames, 4))
+        {
+            cfg.shape = static_cast<ParticleEmitterConfig::Shape>(shapeIdx);
+            changed = true;
+        }
+
+        switch (cfg.shape)
+        {
+            case ParticleEmitterConfig::Shape::SPHERE:
+                changed |= ImGui::DragFloat("Radius", &cfg.shapeRadius, 0.1f, 0.0f, 50.0f);
+                break;
+            case ParticleEmitterConfig::Shape::CONE:
+                changed |= ImGui::DragFloat("Radius", &cfg.shapeRadius, 0.1f, 0.0f, 50.0f);
+                changed |= ImGui::DragFloat("Cone Angle", &cfg.shapeConeAngle, 1.0f, 1.0f, 89.0f, "%.0f deg");
+                break;
+            case ParticleEmitterConfig::Shape::BOX:
+                changed |= ImGui::DragFloat3("Box Size", &cfg.shapeBoxSize.x, 0.1f, 0.0f, 50.0f);
+                break;
+            case ParticleEmitterConfig::Shape::POINT:
+            default:
+                break;
+        }
+
+        if (changed && ImGui::IsItemDeactivatedAfterEdit())
+        {
+            pushParticleUndo(m_commandHistory, m_currentScene, entity.getId(),
+                             before, cfg, "shape");
+            before = cfg;
+        }
+        ImGui::TreePop();
+    }
+
+    // --- Over Lifetime ---
+    if (ImGui::TreeNodeEx("Over Lifetime", ImGuiTreeNodeFlags_DefaultOpen))
+    {
+        bool changed = false;
+
+        // Color over lifetime
+        changed |= ImGui::Checkbox("Color Over Lifetime", &cfg.useColorOverLifetime);
+        if (cfg.useColorOverLifetime)
+        {
+            ImGui::Indent();
+            changed |= drawGradientEditor("Color Gradient", cfg.colorOverLifetime);
+            ImGui::Unindent();
+        }
+
+        ImGui::Spacing();
+
+        // Size over lifetime
+        changed |= ImGui::Checkbox("Size Over Lifetime", &cfg.useSizeOverLifetime);
+        if (cfg.useSizeOverLifetime)
+        {
+            ImGui::Indent();
+            changed |= drawCurveEditor("Size Curve", cfg.sizeOverLifetime);
+            ImGui::Unindent();
+        }
+
+        ImGui::Spacing();
+
+        // Speed over lifetime
+        changed |= ImGui::Checkbox("Speed Over Lifetime", &cfg.useSpeedOverLifetime);
+        if (cfg.useSpeedOverLifetime)
+        {
+            ImGui::Indent();
+            changed |= drawCurveEditor("Speed Curve", cfg.speedOverLifetime);
+            ImGui::Unindent();
+        }
+
+        if (changed)
+        {
+            pushParticleUndo(m_commandHistory, m_currentScene, entity.getId(),
+                             before, cfg, "over lifetime");
+            before = cfg;
+        }
+        ImGui::TreePop();
+    }
+
+    // --- Forces ---
+    if (ImGui::TreeNodeEx("Forces"))
+    {
+        bool changed = ImGui::DragFloat3("Gravity", &cfg.gravity.x, 0.1f, -50.0f, 50.0f);
+
+        if (changed && ImGui::IsItemDeactivatedAfterEdit())
+        {
+            pushParticleUndo(m_commandHistory, m_currentScene, entity.getId(),
+                             before, cfg, "gravity");
+            before = cfg;
+        }
+        ImGui::TreePop();
+    }
+
+    // --- Renderer ---
+    if (ImGui::TreeNodeEx("Renderer"))
+    {
+        bool changed = false;
+        const char* blendNames[] = {"Additive", "Alpha Blend"};
+        int blendIdx = static_cast<int>(cfg.blendMode);
+        if (ImGui::Combo("Blend Mode", &blendIdx, blendNames, 2))
+        {
+            cfg.blendMode = static_cast<ParticleEmitterConfig::BlendMode>(blendIdx);
+            changed = true;
+        }
+
+        // Texture path (read-only display for now, browse in 5E-3)
+        if (!cfg.texturePath.empty())
+        {
+            ImGui::Text("Texture: %s", cfg.texturePath.c_str());
+        }
+        else
+        {
+            ImGui::TextDisabled("No texture (using default circle)");
+        }
+
+        if (changed)
+        {
+            pushParticleUndo(m_commandHistory, m_currentScene, entity.getId(),
+                             before, cfg, "renderer");
+            before = cfg;
+        }
+        ImGui::TreePop();
+    }
 
     ImGui::Spacing();
 }

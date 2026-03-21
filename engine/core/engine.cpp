@@ -91,6 +91,18 @@ bool Engine::initialize(const EngineConfig& config)
         Logger::warning("DebugDraw initialization failed — gizmos will be unavailable");
     }
 
+    // Initialize particle renderer
+    if (!m_particleRenderer.init(config.assetPath))
+    {
+        Logger::warning("Particle renderer initialization failed — particles will be unavailable");
+    }
+
+    // Initialize water renderer
+    if (!m_waterRenderer.init(config.assetPath))
+    {
+        Logger::warning("Water renderer initialization failed — water surfaces will be unavailable");
+    }
+
     // Give the editor access to the resource manager for entity spawning
     if (m_editor)
     {
@@ -501,6 +513,40 @@ void Engine::run()
         {
             activeScene->collectRenderData(m_renderData);
             m_renderer->renderScene(m_renderData, *m_camera, aspectRatio);
+
+            // Render water surfaces (after opaques, before particles)
+            if (!m_renderData.waterSurfaces.empty())
+            {
+                std::vector<WaterRenderItem> waterItems;
+                waterItems.reserve(m_renderData.waterSurfaces.size());
+                for (const auto& [comp, matrix] : m_renderData.waterSurfaces)
+                {
+                    waterItems.push_back({comp, matrix});
+                }
+
+                // Get directional light info for specular highlights
+                glm::vec3 lightDir(0.0f, -1.0f, 0.0f);
+                glm::vec3 lightColor(1.0f);
+                if (m_renderData.hasDirectionalLight)
+                {
+                    lightDir = m_renderData.directionalLight.direction;
+                    lightColor = m_renderData.directionalLight.diffuse;
+                }
+
+                float elapsed = static_cast<float>(m_timer->getElapsedTime());
+                GLuint skyboxTex = m_renderer->getSkyboxTextureId();
+
+                m_waterRenderer.render(waterItems, *m_camera, aspectRatio,
+                                       elapsed, lightDir, lightColor, skyboxTex);
+            }
+
+            // Render particles (after scene transparent pass, before post-processing)
+            if (!m_renderData.particleEmitters.empty())
+            {
+                glm::mat4 viewProj = m_camera->getProjectionMatrix(aspectRatio)
+                                   * m_camera->getViewMatrix();
+                m_particleRenderer.render(m_renderData.particleEmitters, *m_camera, viewProj);
+            }
         }
 
         // 7. Resolve MSAA, post-process, composite to output FBO
@@ -598,6 +644,8 @@ void Engine::shutdown()
         m_window->saveWindowState();
     }
 
+    m_waterRenderer.shutdown();
+    m_particleRenderer.shutdown();
     m_debugDraw.cleanup();
     m_editor.reset();
     m_controller.reset();

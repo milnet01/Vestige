@@ -13,6 +13,8 @@
 #include "resource/resource_manager.h"
 #include "editor/editor.h"
 #include "renderer/debug_draw.h"
+#include "renderer/particle_renderer.h"
+#include "renderer/water_renderer.h"
 
 #include <memory>
 
@@ -63,6 +65,8 @@ private:
     std::unique_ptr<ResourceManager> m_resourceManager;
     std::unique_ptr<Editor> m_editor;
     DebugDraw m_debugDraw;
+    ParticleRenderer m_particleRenderer;
+    WaterRenderer m_waterRenderer;
 
     bool m_isRunning;
     bool m_isCursorCaptured;
