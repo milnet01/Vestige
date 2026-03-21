@@ -157,6 +157,43 @@ float EditorCamera::getDistance() const
     return m_distance;
 }
 
+void EditorCamera::syncFromCamera(const Camera& camera)
+{
+    glm::vec3 camPos = camera.getPosition();
+    float fpsYaw = camera.getYaw();
+    float fpsPitch = camera.getPitch();
+
+    // Reverse the applyToCamera mapping:
+    //   fpsYaw = orbit_yaw + 180     → orbit_yaw = fpsYaw - 180
+    //   fpsPitch = -orbit_pitch      → orbit_pitch = -fpsPitch
+    float orbitYaw = fpsYaw - 180.0f;
+    float orbitPitch = -fpsPitch;
+    orbitPitch = std::clamp(orbitPitch, m_minPitch, m_maxPitch);
+
+    // Compute focus point: camera is at distance along the orbit direction
+    float yawRad = glm::radians(orbitYaw);
+    float pitchRad = glm::radians(orbitPitch);
+
+    glm::vec3 offset(
+        m_distance * std::cos(pitchRad) * std::cos(yawRad),
+        m_distance * std::sin(pitchRad),
+        m_distance * std::cos(pitchRad) * std::sin(yawRad)
+    );
+
+    glm::vec3 focusPoint = camPos - offset;
+
+    // Set both current and target to avoid smoothing snap
+    m_focusPoint = focusPoint;
+    m_targetFocusPoint = focusPoint;
+    m_yaw = orbitYaw;
+    m_targetYaw = orbitYaw;
+    m_pitch = orbitPitch;
+    m_targetPitch = orbitPitch;
+    // Keep current distance (don't change zoom level)
+
+    computePosition();
+}
+
 void EditorCamera::computePosition()
 {
     float yawRad = glm::radians(m_yaw);

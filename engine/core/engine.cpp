@@ -156,6 +156,14 @@ bool Engine::initialize(const EngineConfig& config)
                     m_isCursorCaptured = isPlayMode;
                     m_window->setCursorEnabled(!isPlayMode);
                     m_controller->setEnabled(isPlayMode);
+
+                    // When returning to edit mode, sync the editor camera to
+                    // where the FPS camera is so it doesn't snap back
+                    if (!isPlayMode && m_editor->getEditorCamera() && m_camera)
+                    {
+                        m_editor->getEditorCamera()->syncFromCamera(*m_camera);
+                    }
+
                     Logger::info(isPlayMode ? "Switched to PLAY mode" : "Switched to EDIT mode");
                 }
                 else

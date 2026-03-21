@@ -1,6 +1,12 @@
 /// @file hierarchy_panel.cpp
 /// @brief Scene hierarchy panel implementation.
 #include "editor/panels/hierarchy_panel.h"
+#include "editor/command_history.h"
+#include "editor/commands/create_entity_command.h"
+#include "editor/commands/delete_entity_command.h"
+#include "editor/commands/composite_command.h"
+#include "editor/commands/entity_property_command.h"
+#include "editor/commands/reparent_command.h"
 #include "editor/entity_actions.h"
 #include "editor/selection.h"
 #include "scene/scene.h"
@@ -17,6 +23,11 @@
 
 namespace Vestige
 {
+
+void HierarchyPanel::setCommandHistory(CommandHistory* history)
+{
+    m_commandHistory = history;
+}
 
 void HierarchyPanel::draw(Scene* scene, Selection& selection)
 {
@@ -148,7 +159,18 @@ void HierarchyPanel::draw(Scene* scene, Selection& selection)
         Entity* entity = scene->findEntityById(selection.getPrimaryId());
         if (entity)
         {
-            entity->setVisible(!entity->isVisible());
+            if (m_commandHistory)
+            {
+                bool oldVis = entity->isVisible();
+                m_commandHistory->execute(
+                    std::make_unique<EntityPropertyCommand>(
+                        *scene, entity->getId(),
+                        EntityProperty::VISIBLE, oldVis, !oldVis));
+            }
+            else
+            {
+                entity->setVisible(!entity->isVisible());
+            }
         }
     }
 
@@ -179,8 +201,23 @@ void HierarchyPanel::draw(Scene* scene, Selection& selection)
                 Entity* entity = scene->findEntityById(m_renamingEntityId);
                 if (entity)
                 {
-                    entity->setName(m_renameBuffer);
-                    Logger::info("Renamed entity to '" + std::string(m_renameBuffer) + "'");
+                    std::string oldName = entity->getName();
+                    std::string newName(m_renameBuffer);
+                    if (newName != oldName)
+                    {
+                        if (m_commandHistory)
+                        {
+                            m_commandHistory->execute(
+                                std::make_unique<EntityPropertyCommand>(
+                                    *scene, m_renamingEntityId,
+                                    EntityProperty::NAME, oldName, newName));
+                        }
+                        else
+                        {
+                            entity->setName(newName);
+                        }
+                        Logger::info("Renamed entity to '" + newName + "'");
+                    }
                 }
             }
             m_renamingEntityId = 0;
@@ -237,7 +274,34 @@ void HierarchyPanel::draw(Scene* scene, Selection& selection)
     // Multi-select delete (Delete key)
     if (m_pendingDeleteSelected)
     {
-        EntityActions::deleteSelectedEntities(*scene, selection);
+        if (m_commandHistory)
+        {
+            auto ids = selection.getSelectedIds();
+            selection.clearSelection();
+
+            if (ids.size() == 1)
+            {
+                m_commandHistory->execute(
+                    std::make_unique<DeleteEntityCommand>(*scene, ids[0]));
+            }
+            else if (ids.size() > 1)
+            {
+                std::vector<std::unique_ptr<EditorCommand>> cmds;
+                for (uint32_t id : ids)
+                {
+                    cmds.push_back(
+                        std::make_unique<DeleteEntityCommand>(*scene, id));
+                }
+                m_commandHistory->execute(
+                    std::make_unique<CompositeCommand>(
+                        "Delete " + std::to_string(ids.size()) + " entities",
+                        std::move(cmds)));
+            }
+        }
+        else
+        {
+            EntityActions::deleteSelectedEntities(*scene, selection);
+        }
     }
     // Single-entity delete (context menu)
     else if (m_pendingDeleteId != 0)
@@ -256,7 +320,15 @@ void HierarchyPanel::draw(Scene* scene, Selection& selection)
                 }
             }
 
-            scene->removeEntity(m_pendingDeleteId);
+            if (m_commandHistory)
+            {
+                m_commandHistory->execute(
+                    std::make_unique<DeleteEntityCommand>(*scene, m_pendingDeleteId));
+            }
+            else
+            {
+                scene->removeEntity(m_pendingDeleteId);
+            }
             Logger::info("Deleted entity ID " + std::to_string(m_pendingDeleteId));
         }
     }
@@ -264,15 +336,27 @@ void HierarchyPanel::draw(Scene* scene, Selection& selection)
     // Duplicate (Ctrl+D or context menu)
     if (m_pendingDuplicateId != 0)
     {
-        EntityActions::duplicateEntity(*scene, selection, m_pendingDuplicateId);
+        Entity* clone = EntityActions::duplicateEntity(*scene, selection, m_pendingDuplicateId);
+        if (clone && m_commandHistory)
+        {
+            m_commandHistory->execute(
+                std::make_unique<CreateEntityCommand>(*scene, clone->getId()));
+        }
     }
 
     if (m_pendingReparentEntityId != 0)
     {
-        if (scene->reparentEntity(m_pendingReparentEntityId, m_pendingReparentTargetId))
+        if (m_commandHistory)
         {
-            Logger::info("Reparented entity ID " + std::to_string(m_pendingReparentEntityId));
+            m_commandHistory->execute(
+                std::make_unique<ReparentCommand>(
+                    *scene, m_pendingReparentEntityId, m_pendingReparentTargetId));
         }
+        else
+        {
+            scene->reparentEntity(m_pendingReparentEntityId, m_pendingReparentTargetId);
+        }
+        Logger::info("Reparented entity ID " + std::to_string(m_pendingReparentEntityId));
     }
 
     if (m_wantCreateEntity)
@@ -291,6 +375,12 @@ void HierarchyPanel::draw(Scene* scene, Selection& selection)
         uint32_t newId = newEntity->getId();
         parent->addChild(std::move(newEntity));
         selection.select(newId);
+
+        if (m_commandHistory)
+        {
+            m_commandHistory->execute(
+                std::make_unique<CreateEntityCommand>(*scene, newId));
+        }
         Logger::info("Created new entity under '" + parent->getName() + "'");
     }
 
@@ -430,11 +520,33 @@ void HierarchyPanel::drawEntityNode(Entity& entity, Scene& scene, Selection& sel
     // Handle visibility/lock toggles
     if (visClicked)
     {
-        entity.setVisible(!entity.isVisible());
+        if (m_commandHistory)
+        {
+            bool oldVis = entity.isVisible();
+            m_commandHistory->execute(
+                std::make_unique<EntityPropertyCommand>(
+                    scene, entity.getId(),
+                    EntityProperty::VISIBLE, oldVis, !oldVis));
+        }
+        else
+        {
+            entity.setVisible(!entity.isVisible());
+        }
     }
     if (lockClicked)
     {
-        entity.setLocked(!entity.isLocked());
+        if (m_commandHistory)
+        {
+            bool oldLocked = entity.isLocked();
+            m_commandHistory->execute(
+                std::make_unique<EntityPropertyCommand>(
+                    scene, entity.getId(),
+                    EntityProperty::LOCKED, oldLocked, !oldLocked));
+        }
+        else
+        {
+            entity.setLocked(!entity.isLocked());
+        }
     }
 
     // --- Click to select (suppress if button was clicked) ---
@@ -520,12 +632,34 @@ void HierarchyPanel::drawEntityNode(Entity& entity, Scene& scene, Selection& sel
 
         if (ImGui::MenuItem(entity.isVisible() ? "Hide" : "Show", "H"))
         {
-            entity.setVisible(!entity.isVisible());
+            if (m_commandHistory)
+            {
+                bool oldVis = entity.isVisible();
+                m_commandHistory->execute(
+                    std::make_unique<EntityPropertyCommand>(
+                        scene, entity.getId(),
+                        EntityProperty::VISIBLE, oldVis, !oldVis));
+            }
+            else
+            {
+                entity.setVisible(!entity.isVisible());
+            }
         }
 
         if (ImGui::MenuItem(entity.isLocked() ? "Unlock" : "Lock"))
         {
-            entity.setLocked(!entity.isLocked());
+            if (m_commandHistory)
+            {
+                bool oldLocked = entity.isLocked();
+                m_commandHistory->execute(
+                    std::make_unique<EntityPropertyCommand>(
+                        scene, entity.getId(),
+                        EntityProperty::LOCKED, oldLocked, !oldLocked));
+            }
+            else
+            {
+                entity.setLocked(!entity.isLocked());
+            }
         }
 
         ImGui::EndPopup();

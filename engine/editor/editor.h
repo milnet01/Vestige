@@ -9,6 +9,7 @@
 #include "editor/file_menu.h"
 #include "editor/panels/asset_browser_panel.h"
 #include "editor/panels/hierarchy_panel.h"
+#include "editor/panels/history_panel.h"
 #include "editor/panels/import_dialog.h"
 #include "editor/panels/inspector_panel.h"
 #include "editor/prefab_system.h"
@@ -160,6 +161,7 @@ private:
     FileMenu m_fileMenu;
     CommandHistory m_commandHistory;
     HierarchyPanel m_hierarchyPanel;
+    HistoryPanel m_historyPanel;
     InspectorPanel m_inspectorPanel;
     ImportDialog m_importDialog;
     AssetBrowserPanel m_assetBrowserPanel;

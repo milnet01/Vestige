@@ -2278,12 +2278,18 @@ void Renderer::onWindowResize(int width, int height)
     {
         m_outputFbo->resize(width, height);
 
-        // Resize the stencil renderbuffer attached to the output FBO
+        // Resize and re-attach the stencil renderbuffer (resize recreates the FBO
+        // with a new ID, so the old attachment is lost)
         if (m_outlineStencilRbo != 0)
         {
             glBindRenderbuffer(GL_RENDERBUFFER, m_outlineStencilRbo);
             glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, width, height);
             glBindRenderbuffer(GL_RENDERBUFFER, 0);
+
+            glBindFramebuffer(GL_FRAMEBUFFER, m_outputFbo->getId());
+            glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT,
+                                      GL_RENDERBUFFER, m_outlineStencilRbo);
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
         }
     }
     if (m_idBufferFbo)

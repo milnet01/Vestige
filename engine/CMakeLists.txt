@@ -48,6 +48,7 @@ set(ENGINE_SOURCES
     editor/entity_factory.cpp
     editor/selection.cpp
     editor/panels/hierarchy_panel.cpp
+    editor/panels/history_panel.cpp
     editor/panels/import_dialog.cpp
     editor/panels/inspector_panel.cpp
     editor/panels/asset_browser_panel.cpp
