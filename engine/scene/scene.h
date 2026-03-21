@@ -5,6 +5,8 @@
 #include "scene/entity.h"
 #include "scene/mesh_renderer.h"
 #include "scene/light_component.h"
+#include "scene/particle_emitter.h"
+#include "scene/water_surface.h"
 #include "renderer/camera.h"
 #include "renderer/light.h"
 
@@ -35,6 +37,12 @@ struct SceneRenderData
     bool hasDirectionalLight = false;
     std::vector<PointLight> pointLights;
     std::vector<SpotLight> spotLights;
+
+    /// @brief Particle emitters with their world matrices.
+    std::vector<std::pair<const ParticleEmitterComponent*, glm::mat4>> particleEmitters;
+
+    /// @brief Water surfaces with their world matrices.
+    std::vector<std::pair<const WaterSurfaceComponent*, glm::mat4>> waterSurfaces;
 };
 
 /// @brief A complete scene — owns a hierarchy of entities.

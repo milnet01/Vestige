@@ -4,6 +4,8 @@
 #include "scene/entity.h"
 #include "scene/mesh_renderer.h"
 #include "scene/light_component.h"
+#include "scene/particle_emitter.h"
+#include "scene/water_surface.h"
 #include "renderer/material.h"
 #include "resource/resource_manager.h"
 #include "scene/scene.h"
@@ -25,6 +27,25 @@ namespace EntitySerializer
 static json vec3ToJson(const glm::vec3& v)
 {
     return {v.x, v.y, v.z};
+}
+
+static json vec4ToJson(const glm::vec4& v)
+{
+    return {v.x, v.y, v.z, v.w};
+}
+
+static glm::vec4 readVec4(const json& j, const std::string& key, const glm::vec4& defaultVal)
+{
+    if (j.contains(key) && j[key].is_array() && j[key].size() >= 4)
+    {
+        return glm::vec4(
+            j[key][0].get<float>(),
+            j[key][1].get<float>(),
+            j[key][2].get<float>(),
+            j[key][3].get<float>()
+        );
+    }
+    return defaultVal;
 }
 
 static glm::vec3 readVec3(const json& j, const std::string& key, const glm::vec3& defaultVal)
@@ -324,6 +345,213 @@ static json serializeEmissiveLight(const EmissiveLightComponent& comp)
 }
 
 // ---------------------------------------------------------------------------
+// Particle emitter serialization
+// ---------------------------------------------------------------------------
+
+static std::string shapeToString(ParticleEmitterConfig::Shape shape)
+{
+    switch (shape)
+    {
+        case ParticleEmitterConfig::Shape::POINT: return "point";
+        case ParticleEmitterConfig::Shape::SPHERE: return "sphere";
+        case ParticleEmitterConfig::Shape::CONE: return "cone";
+        case ParticleEmitterConfig::Shape::BOX: return "box";
+    }
+    return "point";
+}
+
+static ParticleEmitterConfig::Shape stringToShape(const std::string& s)
+{
+    if (s == "sphere") return ParticleEmitterConfig::Shape::SPHERE;
+    if (s == "cone") return ParticleEmitterConfig::Shape::CONE;
+    if (s == "box") return ParticleEmitterConfig::Shape::BOX;
+    return ParticleEmitterConfig::Shape::POINT;
+}
+
+static json serializeParticleEmitter(const ParticleEmitterComponent& comp)
+{
+    json j;
+    const auto& cfg = comp.getConfig();
+
+    j["emissionRate"] = cfg.emissionRate;
+    j["maxParticles"] = cfg.maxParticles;
+    j["looping"] = cfg.looping;
+    j["duration"] = cfg.duration;
+
+    j["startLifetimeMin"] = cfg.startLifetimeMin;
+    j["startLifetimeMax"] = cfg.startLifetimeMax;
+    j["startSpeedMin"] = cfg.startSpeedMin;
+    j["startSpeedMax"] = cfg.startSpeedMax;
+    j["startSizeMin"] = cfg.startSizeMin;
+    j["startSizeMax"] = cfg.startSizeMax;
+    j["startColor"] = vec4ToJson(cfg.startColor);
+
+    j["gravity"] = vec3ToJson(cfg.gravity);
+
+    j["shape"] = shapeToString(cfg.shape);
+    j["shapeRadius"] = cfg.shapeRadius;
+    j["shapeConeAngle"] = cfg.shapeConeAngle;
+    j["shapeBoxSize"] = vec3ToJson(cfg.shapeBoxSize);
+
+    // Over-lifetime
+    j["useColorOverLifetime"] = cfg.useColorOverLifetime;
+    if (cfg.useColorOverLifetime)
+    {
+        j["colorOverLifetime"] = cfg.colorOverLifetime.toJson();
+    }
+
+    j["useSizeOverLifetime"] = cfg.useSizeOverLifetime;
+    if (cfg.useSizeOverLifetime)
+    {
+        j["sizeOverLifetime"] = cfg.sizeOverLifetime.toJson();
+    }
+
+    j["useSpeedOverLifetime"] = cfg.useSpeedOverLifetime;
+    if (cfg.useSpeedOverLifetime)
+    {
+        j["speedOverLifetime"] = cfg.speedOverLifetime.toJson();
+    }
+
+    j["blendMode"] = (cfg.blendMode == ParticleEmitterConfig::BlendMode::ADDITIVE)
+                         ? "additive" : "alphaBlend";
+
+    if (!cfg.texturePath.empty())
+    {
+        j["texturePath"] = cfg.texturePath;
+    }
+
+    return j;
+}
+
+static void deserializeParticleEmitter(const json& j, ParticleEmitterComponent& comp)
+{
+    auto& cfg = comp.getConfig();
+
+    cfg.emissionRate = j.value("emissionRate", cfg.emissionRate);
+    cfg.maxParticles = j.value("maxParticles", cfg.maxParticles);
+    cfg.looping = j.value("looping", cfg.looping);
+    cfg.duration = j.value("duration", cfg.duration);
+
+    cfg.startLifetimeMin = j.value("startLifetimeMin", cfg.startLifetimeMin);
+    cfg.startLifetimeMax = j.value("startLifetimeMax", cfg.startLifetimeMax);
+    cfg.startSpeedMin = j.value("startSpeedMin", cfg.startSpeedMin);
+    cfg.startSpeedMax = j.value("startSpeedMax", cfg.startSpeedMax);
+    cfg.startSizeMin = j.value("startSizeMin", cfg.startSizeMin);
+    cfg.startSizeMax = j.value("startSizeMax", cfg.startSizeMax);
+    cfg.startColor = readVec4(j, "startColor", cfg.startColor);
+
+    cfg.gravity = readVec3(j, "gravity", cfg.gravity);
+
+    if (j.contains("shape"))
+    {
+        cfg.shape = stringToShape(j["shape"].get<std::string>());
+    }
+    cfg.shapeRadius = j.value("shapeRadius", cfg.shapeRadius);
+    cfg.shapeConeAngle = j.value("shapeConeAngle", cfg.shapeConeAngle);
+    cfg.shapeBoxSize = readVec3(j, "shapeBoxSize", cfg.shapeBoxSize);
+
+    // Over-lifetime
+    cfg.useColorOverLifetime = j.value("useColorOverLifetime", false);
+    if (j.contains("colorOverLifetime"))
+    {
+        cfg.colorOverLifetime = ColorGradient::fromJson(j["colorOverLifetime"]);
+    }
+
+    cfg.useSizeOverLifetime = j.value("useSizeOverLifetime", false);
+    if (j.contains("sizeOverLifetime"))
+    {
+        cfg.sizeOverLifetime = AnimationCurve::fromJson(j["sizeOverLifetime"]);
+    }
+
+    cfg.useSpeedOverLifetime = j.value("useSpeedOverLifetime", false);
+    if (j.contains("speedOverLifetime"))
+    {
+        cfg.speedOverLifetime = AnimationCurve::fromJson(j["speedOverLifetime"]);
+    }
+
+    std::string blend = j.value("blendMode", std::string("additive"));
+    cfg.blendMode = (blend == "alphaBlend")
+                        ? ParticleEmitterConfig::BlendMode::ALPHA_BLEND
+                        : ParticleEmitterConfig::BlendMode::ADDITIVE;
+
+    cfg.texturePath = j.value("texturePath", std::string(""));
+}
+
+// ---------------------------------------------------------------------------
+// Water surface serialization
+// ---------------------------------------------------------------------------
+
+static json serializeWaterSurface(const WaterSurfaceComponent& comp)
+{
+    json j;
+    const auto& cfg = comp.getConfig();
+
+    j["width"] = cfg.width;
+    j["depth"] = cfg.depth;
+    j["gridResolution"] = cfg.gridResolution;
+    j["numWaves"] = cfg.numWaves;
+
+    json waves = json::array();
+    for (int i = 0; i < cfg.numWaves && i < WaterSurfaceConfig::MAX_WAVES; ++i)
+    {
+        json w;
+        w["amplitude"] = cfg.waves[i].amplitude;
+        w["wavelength"] = cfg.waves[i].wavelength;
+        w["speed"] = cfg.waves[i].speed;
+        w["direction"] = cfg.waves[i].direction;
+        waves.push_back(w);
+    }
+    j["waves"] = waves;
+
+    j["shallowColor"] = vec4ToJson(cfg.shallowColor);
+    j["deepColor"] = vec4ToJson(cfg.deepColor);
+    j["depthDistance"] = cfg.depthDistance;
+    j["refractionStrength"] = cfg.refractionStrength;
+    j["normalStrength"] = cfg.normalStrength;
+    j["dudvStrength"] = cfg.dudvStrength;
+    j["flowSpeed"] = cfg.flowSpeed;
+    j["specularPower"] = cfg.specularPower;
+    j["reflectionResolutionScale"] = cfg.reflectionResolutionScale;
+
+    return j;
+}
+
+static void deserializeWaterSurface(const json& j, WaterSurfaceComponent& comp)
+{
+    auto& cfg = comp.getConfig();
+
+    cfg.width = j.value("width", cfg.width);
+    cfg.depth = j.value("depth", cfg.depth);
+    cfg.gridResolution = j.value("gridResolution", cfg.gridResolution);
+    cfg.numWaves = j.value("numWaves", cfg.numWaves);
+
+    if (j.contains("waves") && j["waves"].is_array())
+    {
+        int count = std::min(static_cast<int>(j["waves"].size()),
+                             WaterSurfaceConfig::MAX_WAVES);
+        for (int i = 0; i < count; ++i)
+        {
+            const auto& w = j["waves"][i];
+            cfg.waves[i].amplitude = w.value("amplitude", cfg.waves[i].amplitude);
+            cfg.waves[i].wavelength = w.value("wavelength", cfg.waves[i].wavelength);
+            cfg.waves[i].speed = w.value("speed", cfg.waves[i].speed);
+            cfg.waves[i].direction = w.value("direction", cfg.waves[i].direction);
+        }
+    }
+
+    cfg.shallowColor = readVec4(j, "shallowColor", cfg.shallowColor);
+    cfg.deepColor = readVec4(j, "deepColor", cfg.deepColor);
+    cfg.depthDistance = j.value("depthDistance", cfg.depthDistance);
+    cfg.refractionStrength = j.value("refractionStrength", cfg.refractionStrength);
+    cfg.normalStrength = j.value("normalStrength", cfg.normalStrength);
+    cfg.dudvStrength = j.value("dudvStrength", cfg.dudvStrength);
+    cfg.flowSpeed = j.value("flowSpeed", cfg.flowSpeed);
+    cfg.specularPower = j.value("specularPower", cfg.specularPower);
+    cfg.reflectionResolutionScale = j.value("reflectionResolutionScale",
+                                             cfg.reflectionResolutionScale);
+}
+
+// ---------------------------------------------------------------------------
 // Main serialize
 // ---------------------------------------------------------------------------
 
@@ -375,6 +603,18 @@ json serializeEntity(const Entity& entity, const ResourceManager& resources)
     if (emissive)
     {
         components["EmissiveLight"] = serializeEmissiveLight(*emissive);
+    }
+
+    auto* particleEmitter = entity.getComponent<ParticleEmitterComponent>();
+    if (particleEmitter)
+    {
+        components["ParticleEmitter"] = serializeParticleEmitter(*particleEmitter);
+    }
+
+    auto* waterSurface = entity.getComponent<WaterSurfaceComponent>();
+    if (waterSurface)
+    {
+        components["WaterSurface"] = serializeWaterSurface(*waterSurface);
     }
 
     if (!components.empty())
@@ -516,6 +756,20 @@ static Entity* deserializeEntityRecursive(
             comp->lightRadius = el.value("lightRadius", 5.0f);
             comp->lightIntensity = el.value("lightIntensity", 1.0f);
             comp->overrideColor = readVec3(el, "overrideColor", glm::vec3(0.0f));
+        }
+
+        // Particle Emitter
+        if (comps.contains("ParticleEmitter") && comps["ParticleEmitter"].is_object())
+        {
+            auto* comp = entity->addComponent<ParticleEmitterComponent>();
+            deserializeParticleEmitter(comps["ParticleEmitter"], *comp);
+        }
+
+        // Water Surface
+        if (comps.contains("WaterSurface") && comps["WaterSurface"].is_object())
+        {
+            auto* comp = entity->addComponent<WaterSurfaceComponent>();
+            deserializeWaterSurface(comps["WaterSurface"], *comp);
         }
     }
 

@@ -53,6 +53,14 @@ public:
 
     /// @brief Creates an entity with a SpotLightComponent (pointing down).
     static Entity* createSpotLight(Scene& scene, const glm::vec3& position);
+
+    // --- Effects ---
+
+    /// @brief Creates an entity with a ParticleEmitterComponent (default upward fountain).
+    static Entity* createParticleEmitter(Scene& scene, const glm::vec3& position);
+
+    /// @brief Creates an entity with a WaterSurfaceComponent (default pool preset).
+    static Entity* createWaterSurface(Scene& scene, const glm::vec3& position);
 };
 
 } // namespace Vestige

@@ -134,17 +134,30 @@ void FileMenu::drawDialogs(Scene* scene, Selection& selection)
     drawRecoveryModal(scene, selection);
 
     // --- File browser: Open ---
+    bool openBrowserWasOpen = m_openBrowser.IsOpened();
     m_openBrowser.Display();
     if (m_openBrowser.HasSelected())
     {
         handleOpenResult(scene, selection);
     }
+    else if (openBrowserWasOpen && !m_openBrowser.IsOpened())
+    {
+        // User cancelled the Open dialog — clear pending action
+        m_pendingAction = PendingAction::NONE;
+    }
 
     // --- File browser: Save As ---
+    bool saveBrowserWasOpen = m_saveBrowser.IsOpened();
     m_saveBrowser.Display();
     if (m_saveBrowser.HasSelected())
     {
         handleSaveResult(scene, selection);
+    }
+    else if (saveBrowserWasOpen && !m_saveBrowser.IsOpened())
+    {
+        // User cancelled the Save As dialog — clear pending action so the
+        // app can respond to subsequent close/quit requests.
+        m_pendingAction = PendingAction::NONE;
     }
 
     // --- Unsaved changes modal ---
@@ -174,24 +187,26 @@ void FileMenu::drawDialogs(Scene* scene, Selection& selection)
         ImGui::Separator();
         ImGui::Spacing();
 
-        // Three buttons: Don't Save | Cancel | Save
-        // "Don't Save" left-aligned, "Cancel" and "Save" right-aligned
+        // Buttons: Don't Save | Cancel | [Save] | Save As
+        // "Don't Save" left-aligned, rest right-aligned
         float buttonW = 120.0f;
         float spacing = ImGui::GetStyle().ItemSpacing.x;
+        bool hasExistingPath = !m_currentScenePath.empty();
 
         if (ImGui::Button("Don't Save", ImVec2(buttonW, 0)))
         {
             ImGui::CloseCurrentPopup();
-            // Discard and proceed with the pending action
             markClean();
             proceedWithPendingAction(scene, selection);
         }
 
         ImGui::SameLine();
 
-        // Right-align Cancel + Save: push cursor to the right
+        // Right-align the remaining buttons
         float rightEdge = ImGui::GetWindowContentRegionMax().x;
-        ImGui::SetCursorPosX(rightEdge - 2.0f * buttonW - spacing);
+        int rightButtonCount = hasExistingPath ? 3 : 2;  // Cancel + [Save] + Save As
+        ImGui::SetCursorPosX(rightEdge - static_cast<float>(rightButtonCount) * buttonW
+                             - static_cast<float>(rightButtonCount - 1) * spacing);
 
         if (ImGui::Button("Cancel", ImVec2(buttonW, 0)))
         {
@@ -201,17 +216,27 @@ void FileMenu::drawDialogs(Scene* scene, Selection& selection)
 
         ImGui::SameLine();
 
-        if (ImGui::Button("Save", ImVec2(buttonW, 0)))
+        // "Save" only shown when a file path exists (overwrites without prompting)
+        if (hasExistingPath)
+        {
+            if (ImGui::Button("Save", ImVec2(buttonW, 0)))
+            {
+                ImGui::CloseCurrentPopup();
+                saveScene(scene);
+                if (!isDirty())
+                {
+                    proceedWithPendingAction(scene, selection);
+                }
+            }
+            ImGui::SameLine();
+        }
+
+        if (ImGui::Button("Save As...", ImVec2(buttonW, 0)))
         {
             ImGui::CloseCurrentPopup();
-            saveScene(scene);
-            // If save completed immediately (had a path), proceed with pending action.
-            // If redirected to Save As (file browser), the pending action is preserved
-            // and will be processed in handleSaveResult after the file browser completes.
-            if (!isDirty())
-            {
-                proceedWithPendingAction(scene, selection);
-            }
+            saveSceneAs(scene);
+            // Pending action is preserved — will be processed in
+            // handleSaveResult after the file browser completes.
         }
 
         ImGui::EndPopup();
@@ -664,19 +689,38 @@ void FileMenu::performAutoSave(const Scene& scene)
     }
 
     Logger::info("Auto-saved to " + autoSavePath.string());
+
+    // Save the original scene path alongside the autosave so recovery can restore it
+    fs::path pathFile = autoSavePath;
+    pathFile.replace_extension(".path");
+    {
+        std::ofstream out(pathFile, std::ios::out | std::ios::trunc);
+        if (out.is_open())
+        {
+            out << m_currentScenePath.string();
+        }
+    }
 }
 
 void FileMenu::deleteAutoSave()
 {
+    std::error_code ec;
     fs::path autoSavePath = getAutoSavePath();
     if (fs::exists(autoSavePath))
     {
-        std::error_code ec;
         fs::remove(autoSavePath, ec);
         if (!ec)
         {
             Logger::info("Deleted autosave file");
         }
+    }
+
+    // Also remove the sidecar path file
+    fs::path pathFile = autoSavePath;
+    pathFile.replace_extension(".path");
+    if (fs::exists(pathFile))
+    {
+        fs::remove(pathFile, ec);
     }
 }
 
@@ -730,8 +774,34 @@ void FileMenu::drawRecoveryModal(Scene* scene, Selection& selection)
 
                 if (result.success)
                 {
-                    // Recovered scene is untitled — user must Save As to assign a path
+                    // Restore the original scene path from sidecar file
                     m_currentScenePath.clear();
+                    fs::path pathFile = autoSavePath;
+                    pathFile.replace_extension(".path");
+                    if (fs::exists(pathFile))
+                    {
+                        std::ifstream pathIn(pathFile);
+                        std::string originalPath;
+                        if (std::getline(pathIn, originalPath) && !originalPath.empty())
+                        {
+                            m_currentScenePath = originalPath;
+                        }
+                    }
+
+                    // Fallback: match scene name against recent files
+                    if (m_currentScenePath.empty())
+                    {
+                        std::string sceneName = scene->getName();
+                        for (const auto& recentPath : m_recentFiles.getPaths())
+                        {
+                            if (recentPath.stem().string() == sceneName && fs::exists(recentPath))
+                            {
+                                m_currentScenePath = recentPath;
+                                break;
+                            }
+                        }
+                    }
+
                     selection.clearSelection();
                     if (m_commandHistory)
                     {

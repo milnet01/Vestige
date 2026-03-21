@@ -1,0 +1,250 @@
+/// @file water_renderer.cpp
+/// @brief Water surface rendering implementation.
+#include "renderer/water_renderer.h"
+#include "core/logger.h"
+
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/constants.hpp>
+
+#include <cmath>
+#include <vector>
+
+namespace Vestige
+{
+
+WaterRenderer::~WaterRenderer()
+{
+    shutdown();
+}
+
+bool WaterRenderer::init(const std::string& assetPath)
+{
+    // Load water shaders
+    std::string vertPath = assetPath + "/shaders/water.vert.glsl";
+    std::string fragPath = assetPath + "/shaders/water.frag.glsl";
+
+    if (!m_waterShader.loadFromFiles(vertPath, fragPath))
+    {
+        Logger::error("Failed to load water shaders");
+        return false;
+    }
+
+    generateDefaultNormalMap();
+    generateDefaultDudvMap();
+
+    m_initialized = true;
+    Logger::info("Water renderer initialized");
+    return true;
+}
+
+void WaterRenderer::shutdown()
+{
+    if (m_defaultNormalMap != 0)
+    {
+        glDeleteTextures(1, &m_defaultNormalMap);
+        m_defaultNormalMap = 0;
+    }
+    if (m_defaultDudvMap != 0)
+    {
+        glDeleteTextures(1, &m_defaultDudvMap);
+        m_defaultDudvMap = 0;
+    }
+    m_initialized = false;
+}
+
+void WaterRenderer::render(const std::vector<WaterRenderItem>& waterItems,
+                           const Camera& camera,
+                           float aspectRatio,
+                           float time,
+                           const glm::vec3& lightDir,
+                           const glm::vec3& lightColor,
+                           GLuint environmentCubemap)
+{
+    if (!m_initialized || waterItems.empty())
+    {
+        return;
+    }
+
+    // Enable alpha blending for water transparency
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glDepthMask(GL_FALSE);  // Don't write depth (water is transparent)
+
+    m_waterShader.use();
+
+    // Camera and matrices
+    glm::mat4 view = camera.getViewMatrix();
+    glm::mat4 projection = camera.getProjectionMatrix(aspectRatio);
+
+    m_waterShader.setMat4("u_view", view);
+    m_waterShader.setMat4("u_projection", projection);
+    m_waterShader.setVec3("u_cameraPos", camera.getPosition());
+    m_waterShader.setFloat("u_time", time);
+
+    // Directional light
+    m_waterShader.setVec3("u_lightDirection", lightDir);
+    m_waterShader.setVec3("u_lightColor", lightColor);
+
+    // Bind default normal map (texture unit 0)
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, m_defaultNormalMap);
+    m_waterShader.setInt("u_normalMap", 0);
+    m_waterShader.setBool("u_hasNormalMap", m_defaultNormalMap != 0);
+
+    // Bind default DuDv map (texture unit 1)
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, m_defaultDudvMap);
+    m_waterShader.setInt("u_dudvMap", 1);
+    m_waterShader.setBool("u_hasDudvMap", m_defaultDudvMap != 0);
+
+    // Bind environment cubemap (texture unit 2)
+    glActiveTexture(GL_TEXTURE2);
+    if (environmentCubemap != 0)
+    {
+        glBindTexture(GL_TEXTURE_CUBE_MAP, environmentCubemap);
+        m_waterShader.setBool("u_hasEnvironmentMap", true);
+    }
+    else
+    {
+        glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
+        m_waterShader.setBool("u_hasEnvironmentMap", false);
+    }
+    m_waterShader.setInt("u_environmentMap", 2);
+
+    // Draw each water surface
+    for (const auto& item : waterItems)
+    {
+        const auto* water = item.component;
+        const auto& config = water->getConfig();
+
+        // Ensure mesh is built/up-to-date (mutable GPU cache)
+        water->rebuildMeshIfNeeded();
+
+        if (water->getVao() == 0 || water->getIndexCount() == 0)
+        {
+            continue;
+        }
+
+        // Model matrix
+        m_waterShader.setMat4("u_model", item.worldMatrix);
+
+        // Wave parameters
+        m_waterShader.setInt("u_numWaves", config.numWaves);
+        for (int i = 0; i < config.numWaves && i < WaterSurfaceConfig::MAX_WAVES; ++i)
+        {
+            float dirRad = config.waves[i].direction * glm::pi<float>() / 180.0f;
+            std::string prefix = "u_waveParams[" + std::to_string(i) + "]";
+            m_waterShader.setVec4(prefix, glm::vec4(
+                config.waves[i].amplitude,
+                config.waves[i].wavelength,
+                config.waves[i].speed,
+                dirRad
+            ));
+        }
+
+        // Water color and surface parameters
+        m_waterShader.setVec4("u_shallowColor", config.shallowColor);
+        m_waterShader.setVec4("u_deepColor", config.deepColor);
+        m_waterShader.setFloat("u_dudvStrength", config.dudvStrength);
+        m_waterShader.setFloat("u_normalStrength", config.normalStrength);
+        m_waterShader.setFloat("u_flowSpeed", config.flowSpeed);
+        m_waterShader.setFloat("u_specularPower", config.specularPower);
+
+        // Draw the water mesh
+        glBindVertexArray(water->getVao());
+        glDrawElements(GL_TRIANGLES, water->getIndexCount(), GL_UNSIGNED_INT, nullptr);
+        glBindVertexArray(0);
+    }
+
+    // Restore state
+    glDepthMask(GL_TRUE);
+    glDisable(GL_BLEND);
+}
+
+void WaterRenderer::generateDefaultNormalMap()
+{
+    // Generate a simple tileable normal map (flat with slight noise for detail)
+    constexpr int size = 256;
+    std::vector<unsigned char> pixels(size * size * 3);
+
+    for (int y = 0; y < size; ++y)
+    {
+        for (int x = 0; x < size; ++x)
+        {
+            int idx = (y * size + x) * 3;
+
+            // Base normal pointing up (0, 0, 1) encoded as (128, 128, 255)
+            // Add subtle sine-based ripple pattern for visual interest
+            float u = static_cast<float>(x) / static_cast<float>(size);
+            float v = static_cast<float>(y) / static_cast<float>(size);
+
+            float nx = 0.03f * std::sin(u * 12.0f * glm::pi<float>())
+                      + 0.02f * std::sin(v * 8.0f * glm::pi<float>() + 1.5f);
+            float nz = 0.03f * std::sin(v * 10.0f * glm::pi<float>())
+                      + 0.02f * std::sin(u * 6.0f * glm::pi<float>() + 0.7f);
+            float ny = 1.0f;
+
+            // Normalize
+            float len = std::sqrt(nx * nx + ny * ny + nz * nz);
+            nx /= len;
+            ny /= len;
+            nz /= len;
+
+            // Encode to [0, 255]
+            pixels[idx + 0] = static_cast<unsigned char>((nx * 0.5f + 0.5f) * 255.0f);
+            pixels[idx + 1] = static_cast<unsigned char>((ny * 0.5f + 0.5f) * 255.0f);
+            pixels[idx + 2] = static_cast<unsigned char>((nz * 0.5f + 0.5f) * 255.0f);
+        }
+    }
+
+    glGenTextures(1, &m_defaultNormalMap);
+    glBindTexture(GL_TEXTURE_2D, m_defaultNormalMap);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, size, size, 0, GL_RGB,
+                 GL_UNSIGNED_BYTE, pixels.data());
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glGenerateMipmap(GL_TEXTURE_2D);
+    glBindTexture(GL_TEXTURE_2D, 0);
+}
+
+void WaterRenderer::generateDefaultDudvMap()
+{
+    // Generate a simple tileable DuDv distortion map
+    constexpr int size = 256;
+    std::vector<unsigned char> pixels(size * size * 2);  // RG only
+
+    for (int y = 0; y < size; ++y)
+    {
+        for (int x = 0; x < size; ++x)
+        {
+            int idx = (y * size + x) * 2;
+
+            float u = static_cast<float>(x) / static_cast<float>(size);
+            float v = static_cast<float>(y) / static_cast<float>(size);
+
+            // Swirling distortion pattern
+            float du = 0.5f + 0.5f * std::sin(u * 8.0f * glm::pi<float>()
+                                              + v * 4.0f * glm::pi<float>());
+            float dv = 0.5f + 0.5f * std::sin(v * 6.0f * glm::pi<float>()
+                                              + u * 10.0f * glm::pi<float>() + 1.0f);
+
+            pixels[idx + 0] = static_cast<unsigned char>(du * 255.0f);
+            pixels[idx + 1] = static_cast<unsigned char>(dv * 255.0f);
+        }
+    }
+
+    glGenTextures(1, &m_defaultDudvMap);
+    glBindTexture(GL_TEXTURE_2D, m_defaultDudvMap);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RG8, size, size, 0, GL_RG,
+                 GL_UNSIGNED_BYTE, pixels.data());
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glGenerateMipmap(GL_TEXTURE_2D);
+    glBindTexture(GL_TEXTURE_2D, 0);
+}
+
+} // namespace Vestige

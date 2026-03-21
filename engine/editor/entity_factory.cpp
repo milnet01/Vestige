@@ -5,6 +5,8 @@
 #include "scene/scene.h"
 #include "scene/mesh_renderer.h"
 #include "scene/light_component.h"
+#include "scene/particle_emitter.h"
+#include "scene/water_surface.h"
 #include "resource/resource_manager.h"
 #include "renderer/material.h"
 #include "core/logger.h"
@@ -153,6 +155,54 @@ Entity* EntityFactory::createSpotLight(Scene& scene, const glm::vec3& position)
     entity->transform.position = position;
 
     entity->addComponent<SpotLightComponent>();
+
+    Logger::info("Created: " + entity->getName());
+    return entity;
+}
+
+Entity* EntityFactory::createParticleEmitter(Scene& scene, const glm::vec3& position)
+{
+    Entity* entity = scene.createEntity("Particle Emitter");
+    entity->transform.position = position;
+
+    auto* emitter = entity->addComponent<ParticleEmitterComponent>();
+    // Default: upward fountain effect
+    auto& cfg = emitter->getConfig();
+    cfg.emissionRate = 50.0f;
+    cfg.maxParticles = 500;
+    cfg.shape = ParticleEmitterConfig::Shape::CONE;
+    cfg.shapeConeAngle = 15.0f;
+    cfg.startSpeedMin = 2.0f;
+    cfg.startSpeedMax = 4.0f;
+    cfg.startSizeMin = 0.05f;
+    cfg.startSizeMax = 0.15f;
+    cfg.startLifetimeMin = 1.0f;
+    cfg.startLifetimeMax = 2.5f;
+    cfg.startColor = glm::vec4(1.0f, 0.8f, 0.3f, 1.0f);  // Warm orange
+    cfg.gravity = glm::vec3(0.0f, -3.0f, 0.0f);
+
+    Logger::info("Created: " + entity->getName());
+    return entity;
+}
+
+Entity* EntityFactory::createWaterSurface(Scene& scene, const glm::vec3& position)
+{
+    Entity* entity = scene.createEntity("Water Surface");
+    entity->transform.position = position;
+
+    auto* water = entity->addComponent<WaterSurfaceComponent>();
+    // Default: calm pool preset
+    auto& cfg = water->getConfig();
+    cfg.width = 10.0f;
+    cfg.depth = 10.0f;
+    cfg.gridResolution = 32;
+    cfg.numWaves = 2;
+    cfg.waves[0] = {0.005f, 3.0f, 0.2f, 0.0f};
+    cfg.waves[1] = {0.003f, 2.0f, 0.15f, 90.0f};
+    cfg.shallowColor = {0.15f, 0.5f, 0.6f, 0.7f};
+    cfg.deepColor = {0.02f, 0.15f, 0.3f, 1.0f};
+    cfg.flowSpeed = 0.2f;
+    cfg.specularPower = 256.0f;
 
     Logger::info("Created: " + entity->getName());
     return entity;
