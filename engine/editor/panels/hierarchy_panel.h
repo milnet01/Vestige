@@ -8,6 +8,7 @@
 namespace Vestige
 {
 
+class CommandHistory;
 class Scene;
 class Entity;
 class Selection;
@@ -16,6 +17,9 @@ class Selection;
 class HierarchyPanel
 {
 public:
+    /// @brief Sets the command history for undo support.
+    void setCommandHistory(CommandHistory* history);
+
     /// @brief Draws the hierarchy panel contents (inside an existing ImGui window).
     /// @param scene Active scene (may be nullptr).
     /// @param selection Editor selection state.
@@ -60,6 +64,7 @@ private:
     bool m_wantCreateEntity = false;
     uint32_t m_createParentId = 0;
     bool m_wantGroupSelected = false;
+    CommandHistory* m_commandHistory = nullptr;
 
     // Save-as-prefab state (persists across frames while popup is open)
     uint32_t m_pendingSavePrefabId = 0;

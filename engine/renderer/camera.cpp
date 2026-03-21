@@ -117,6 +117,16 @@ void Camera::setPosition(const glm::vec3& position)
     m_position = position;
 }
 
+float Camera::getYaw() const
+{
+    return m_yaw;
+}
+
+float Camera::getPitch() const
+{
+    return m_pitch;
+}
+
 void Camera::setYaw(float yaw)
 {
     m_yaw = yaw;
@@ -133,9 +143,9 @@ void Camera::updateVectors()
 {
     // Calculate new front vector from yaw and pitch angles
     glm::vec3 front;
-    front.x = cos(glm::radians(m_yaw)) * cos(glm::radians(m_pitch));
-    front.y = sin(glm::radians(m_pitch));
-    front.z = sin(glm::radians(m_yaw)) * cos(glm::radians(m_pitch));
+    front.x = std::cos(glm::radians(m_yaw)) * std::cos(glm::radians(m_pitch));
+    front.y = std::sin(glm::radians(m_pitch));
+    front.z = std::sin(glm::radians(m_yaw)) * std::cos(glm::radians(m_pitch));
     m_front = glm::normalize(front);
 
     // Recalculate right and up vectors

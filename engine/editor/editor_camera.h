@@ -53,6 +53,12 @@ public:
     glm::vec3 getFocusPoint() const;
     float getDistance() const;
 
+    /// @brief Syncs the editor camera from an existing camera's position/orientation.
+    /// Used when switching back from play mode so the orbit camera picks up
+    /// where the FPS camera left off instead of snapping to its old state.
+    /// @param camera The camera to sync from.
+    void syncFromCamera(const Camera& camera);
+
 private:
     /// @brief Recomputes eye position from orbit parameters.
     void computePosition();

@@ -6,6 +6,8 @@
 #include "editor/commands/composite_command.h"
 #include "editor/commands/create_entity_command.h"
 #include "editor/commands/delete_entity_command.h"
+#include "editor/commands/entity_property_command.h"
+#include "editor/commands/reparent_command.h"
 #include "scene/scene.h"
 #include "scene/entity.h"
 
@@ -400,4 +402,162 @@ TEST(EntityTest, InsertChildAtEnd)
     ASSERT_EQ(children.size(), 2u);
     EXPECT_EQ(children[0]->getName(), "A");
     EXPECT_EQ(children[1]->getName(), "Z");
+}
+
+// ---------------------------------------------------------------------------
+// EntityPropertyCommand — name
+// ---------------------------------------------------------------------------
+
+TEST(CommandHistoryTest, EntityPropertyCommandNameUndoRedo)
+{
+    Scene scene("Test");
+    Entity* entity = scene.createEntity("OriginalName");
+    uint32_t id = entity->getId();
+
+    CommandHistory history;
+    history.execute(std::make_unique<EntityPropertyCommand>(
+        scene, id, EntityProperty::NAME,
+        std::string("OriginalName"), std::string("NewName")));
+
+    EXPECT_EQ(entity->getName(), "NewName");
+
+    history.undo();
+    EXPECT_EQ(entity->getName(), "OriginalName");
+
+    history.redo();
+    EXPECT_EQ(entity->getName(), "NewName");
+}
+
+// ---------------------------------------------------------------------------
+// EntityPropertyCommand — visible
+// ---------------------------------------------------------------------------
+
+TEST(CommandHistoryTest, EntityPropertyCommandVisibleUndoRedo)
+{
+    Scene scene("Test");
+    Entity* entity = scene.createEntity("Box");
+    uint32_t id = entity->getId();
+
+    EXPECT_TRUE(entity->isVisible());
+
+    CommandHistory history;
+    history.execute(std::make_unique<EntityPropertyCommand>(
+        scene, id, EntityProperty::VISIBLE, true, false));
+
+    EXPECT_FALSE(entity->isVisible());
+
+    history.undo();
+    EXPECT_TRUE(entity->isVisible());
+
+    history.redo();
+    EXPECT_FALSE(entity->isVisible());
+}
+
+// ---------------------------------------------------------------------------
+// EntityPropertyCommand — locked
+// ---------------------------------------------------------------------------
+
+TEST(CommandHistoryTest, EntityPropertyCommandLockedUndoRedo)
+{
+    Scene scene("Test");
+    Entity* entity = scene.createEntity("Box");
+    uint32_t id = entity->getId();
+
+    EXPECT_FALSE(entity->isLocked());
+
+    CommandHistory history;
+    history.execute(std::make_unique<EntityPropertyCommand>(
+        scene, id, EntityProperty::LOCKED, false, true));
+
+    EXPECT_TRUE(entity->isLocked());
+
+    history.undo();
+    EXPECT_FALSE(entity->isLocked());
+}
+
+// ---------------------------------------------------------------------------
+// EntityPropertyCommand — active
+// ---------------------------------------------------------------------------
+
+TEST(CommandHistoryTest, EntityPropertyCommandActiveUndoRedo)
+{
+    Scene scene("Test");
+    Entity* entity = scene.createEntity("Box");
+    uint32_t id = entity->getId();
+
+    EXPECT_TRUE(entity->isActive());
+
+    CommandHistory history;
+    history.execute(std::make_unique<EntityPropertyCommand>(
+        scene, id, EntityProperty::ACTIVE, true, false));
+
+    EXPECT_FALSE(entity->isActive());
+
+    history.undo();
+    EXPECT_TRUE(entity->isActive());
+}
+
+// ---------------------------------------------------------------------------
+// ReparentCommand
+// ---------------------------------------------------------------------------
+
+TEST(CommandHistoryTest, ReparentCommandUndoRedo)
+{
+    Scene scene("Test");
+    Entity* a = scene.createEntity("A");
+    Entity* b = scene.createEntity("B");
+    uint32_t aId = a->getId();
+    uint32_t bId = b->getId();
+
+    EXPECT_EQ(scene.getRoot()->getChildren().size(), 2u);
+    EXPECT_EQ(a->getParent(), scene.getRoot());
+    EXPECT_EQ(b->getParent(), scene.getRoot());
+
+    // Reparent B under A
+    CommandHistory history;
+    history.execute(std::make_unique<ReparentCommand>(scene, bId, aId));
+
+    EXPECT_EQ(scene.getRoot()->getChildren().size(), 1u);
+    EXPECT_EQ(b->getParent(), a);
+    EXPECT_EQ(a->getChildren().size(), 1u);
+
+    // Undo: B should be back at root
+    history.undo();
+    EXPECT_EQ(scene.getRoot()->getChildren().size(), 2u);
+    EXPECT_EQ(b->getParent(), scene.getRoot());
+    EXPECT_EQ(a->getChildren().size(), 0u);
+
+    // Redo: B under A again
+    history.redo();
+    EXPECT_EQ(scene.getRoot()->getChildren().size(), 1u);
+    EXPECT_EQ(b->getParent(), a);
+}
+
+TEST(CommandHistoryTest, ReparentCommandPreservesSiblingOrder)
+{
+    Scene scene("Test");
+    scene.createEntity("A");
+    Entity* b = scene.createEntity("B");
+    scene.createEntity("C");
+    Entity* d = scene.createEntity("D");
+
+    uint32_t bId = b->getId();
+    uint32_t dId = d->getId();
+
+    // Reparent B under D
+    CommandHistory history;
+    history.execute(std::make_unique<ReparentCommand>(scene, bId, dId));
+
+    EXPECT_EQ(scene.getRoot()->getChildren().size(), 3u);
+    EXPECT_EQ(scene.getRoot()->getChildren()[0]->getName(), "A");
+    EXPECT_EQ(scene.getRoot()->getChildren()[1]->getName(), "C");
+    EXPECT_EQ(scene.getRoot()->getChildren()[2]->getName(), "D");
+
+    // Undo: B should be back at index 1 (between A and C)
+    history.undo();
+    EXPECT_EQ(scene.getRoot()->getChildren().size(), 4u);
+    EXPECT_EQ(scene.getRoot()->getChildren()[0]->getName(), "A");
+    EXPECT_EQ(scene.getRoot()->getChildren()[1]->getName(), "B");
+    EXPECT_EQ(scene.getRoot()->getChildren()[2]->getName(), "C");
+    EXPECT_EQ(scene.getRoot()->getChildren()[3]->getName(), "D");
 }

@@ -265,7 +265,7 @@ void FileMenu::updateWindowTitle(const std::string& sceneName)
     }
 
     std::string title;
-    if (m_isDirty)
+    if (isDirty())
     {
         title = "*";
     }

@@ -5,6 +5,7 @@
 #include "editor/commands/create_entity_command.h"
 #include "editor/commands/delete_entity_command.h"
 #include "editor/commands/composite_command.h"
+#include "editor/commands/entity_property_command.h"
 #include "core/logger.h"
 #include "renderer/camera.h"
 #include "renderer/renderer.h"
@@ -91,6 +92,10 @@ bool Editor::initialize(GLFWwindow* window, const std::string& assetPath)
     m_fileMenu.setWindow(window);
     m_fileMenu.setCommandHistory(&m_commandHistory);
 
+    // Wire command history to panels for undo support
+    m_inspectorPanel.setCommandHistory(&m_commandHistory);
+    m_hierarchyPanel.setCommandHistory(&m_commandHistory);
+
     m_isInitialized = true;
     Logger::info("Editor initialized (ImGui + docking + editor camera)");
     return true;
@@ -159,6 +164,7 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera)
             ImGui::DockBuilderDockWindow("Inspector", right);
             ImGui::DockBuilderDockWindow("Console", bottom);
             ImGui::DockBuilderDockWindow("Assets", bottom);
+            ImGui::DockBuilderDockWindow("History", bottom);
             ImGui::DockBuilderDockWindow("Viewport", main);
 
             ImGui::DockBuilderFinish(dockspaceId);
@@ -446,6 +452,11 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera)
         m_assetBrowserPanel.draw();
         ImGui::End();
 
+        // --- History panel ---
+        ImGui::Begin("History");
+        m_historyPanel.draw(m_commandHistory);
+        ImGui::End();
+
         // --- Import dialog (file browser + settings modal) ---
         m_importDialog.draw(scene, m_resourceManager, m_selection,
                             m_editorCamera.get());
@@ -457,6 +468,12 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera)
         if (m_showDemoWindow)
         {
             ImGui::ShowDemoWindow(&m_showDemoWindow);
+        }
+
+        // Update window title to reflect current dirty state
+        if (scene)
+        {
+            m_fileMenu.updateWindowTitle(scene->getName());
         }
     }
 }
@@ -928,9 +945,8 @@ void Editor::processEntityShortcuts(Scene* scene)
     {
         EntityActions::groupEntities(*scene, m_selection);
         // Group is complex (creates entity + reparents) — mark dirty directly
-        // until we have a dedicated GroupCommand (Phase 5D-4)
+        // until we have a dedicated GroupCommand
         m_fileMenu.markDirty();
-        m_fileMenu.updateWindowTitle(scene->getName());
     }
 
     // H — toggle visibility of primary selected entity
@@ -940,10 +956,11 @@ void Editor::processEntityShortcuts(Scene* scene)
         Entity* entity = scene->findEntityById(m_selection.getPrimaryId());
         if (entity)
         {
-            entity->setVisible(!entity->isVisible());
-            // Visibility toggle will be undoable via EntityPropertyCommand (Phase 5D-4)
-            m_fileMenu.markDirty();
-            m_fileMenu.updateWindowTitle(scene->getName());
+            bool oldVis = entity->isVisible();
+            m_commandHistory.execute(
+                std::make_unique<EntityPropertyCommand>(
+                    *scene, entity->getId(),
+                    EntityProperty::VISIBLE, oldVis, !oldVis));
         }
     }
 

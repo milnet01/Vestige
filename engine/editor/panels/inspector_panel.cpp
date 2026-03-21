@@ -1,6 +1,9 @@
 /// @file inspector_panel.cpp
 /// @brief Inspector panel implementation — property editing for selected entities.
 #include "editor/panels/inspector_panel.h"
+#include "editor/command_history.h"
+#include "editor/commands/transform_command.h"
+#include "editor/commands/entity_property_command.h"
 #include "editor/selection.h"
 #include "scene/entity.h"
 #include "scene/scene.h"
@@ -35,11 +38,19 @@ static bool drawComponentHeader(const char* label, bool canRemove = false)
     return open;
 }
 
-/// @brief Draws a vec3 with 3 coloured drag fields (red/green/blue labels).
-static bool drawVec3Control(const char* label, glm::vec3& values,
-                            float resetValue = 0.0f, float speed = 0.1f)
+/// @brief Return state from drawVec3Control for undo bracketing.
+struct Vec3EditState
 {
-    bool changed = false;
+    bool changed = false;              ///< Any value was modified this frame.
+    bool dragActivated = false;        ///< A DragFloat started being edited.
+    bool dragDeactivatedAfterEdit = false; ///< A DragFloat finished editing with changes.
+};
+
+/// @brief Draws a vec3 with 3 coloured drag fields (red/green/blue labels).
+static Vec3EditState drawVec3Control(const char* label, glm::vec3& values,
+                                     float resetValue = 0.0f, float speed = 0.1f)
+{
+    Vec3EditState state;
 
     ImGui::PushID(label);
 
@@ -68,15 +79,17 @@ static bool drawVec3Control(const char* label, glm::vec3& values,
     if (ImGui::Button("X", buttonSize))
     {
         values.x = resetValue;
-        changed = true;
+        state.changed = true;
     }
     ImGui::PopStyleColor(3);
     ImGui::SameLine();
     ImGui::SetNextItemWidth(perDragWidth);
     if (ImGui::DragFloat("##X", &values.x, speed))
     {
-        changed = true;
+        state.changed = true;
     }
+    if (ImGui::IsItemActivated()) state.dragActivated = true;
+    if (ImGui::IsItemDeactivatedAfterEdit()) state.dragDeactivatedAfterEdit = true;
     ImGui::SameLine();
 
     // --- Y (green) ---
@@ -86,15 +99,17 @@ static bool drawVec3Control(const char* label, glm::vec3& values,
     if (ImGui::Button("Y", buttonSize))
     {
         values.y = resetValue;
-        changed = true;
+        state.changed = true;
     }
     ImGui::PopStyleColor(3);
     ImGui::SameLine();
     ImGui::SetNextItemWidth(perDragWidth);
     if (ImGui::DragFloat("##Y", &values.y, speed))
     {
-        changed = true;
+        state.changed = true;
     }
+    if (ImGui::IsItemActivated()) state.dragActivated = true;
+    if (ImGui::IsItemDeactivatedAfterEdit()) state.dragDeactivatedAfterEdit = true;
     ImGui::SameLine();
 
     // --- Z (blue) ---
@@ -104,21 +119,23 @@ static bool drawVec3Control(const char* label, glm::vec3& values,
     if (ImGui::Button("Z", buttonSize))
     {
         values.z = resetValue;
-        changed = true;
+        state.changed = true;
     }
     ImGui::PopStyleColor(3);
     ImGui::SameLine();
     ImGui::SetNextItemWidth(std::max(20.0f, ImGui::GetContentRegionAvail().x));
     if (ImGui::DragFloat("##Z", &values.z, speed))
     {
-        changed = true;
+        state.changed = true;
     }
+    if (ImGui::IsItemActivated()) state.dragActivated = true;
+    if (ImGui::IsItemDeactivatedAfterEdit()) state.dragDeactivatedAfterEdit = true;
 
     ImGui::PopStyleVar();
     ImGui::Columns(1);
     ImGui::PopID();
 
-    return changed;
+    return state;
 }
 
 // ---------------------------------------------------------------------------
@@ -132,6 +149,8 @@ void InspectorPanel::initialize(const std::string& assetPath)
 
 void InspectorPanel::draw(Scene* scene, Selection& selection)
 {
+    m_currentScene = scene;
+
     if (!scene || !selection.hasSelection())
     {
         ImGui::TextWrapped("Select an entity to inspect its properties.");
@@ -147,10 +166,21 @@ void InspectorPanel::draw(Scene* scene, Selection& selection)
 
     // --- Entity header: name + active toggle ---
     {
-        bool isActive = entity->isActive();
+        bool oldActive = entity->isActive();
+        bool isActive = oldActive;
         if (ImGui::Checkbox("##Active", &isActive))
         {
-            entity->setActive(isActive);
+            if (m_commandHistory)
+            {
+                m_commandHistory->execute(
+                    std::make_unique<EntityPropertyCommand>(
+                        *scene, entity->getId(),
+                        EntityProperty::ACTIVE, oldActive, isActive));
+            }
+            else
+            {
+                entity->setActive(isActive);
+            }
         }
         ImGui::SameLine();
 
@@ -161,9 +191,21 @@ void InspectorPanel::draw(Scene* scene, Selection& selection)
         if (ImGui::InputText("##EntityName", nameBuf, sizeof(nameBuf),
                              ImGuiInputTextFlags_EnterReturnsTrue))
         {
-            if (std::strlen(nameBuf) > 0)
+            std::string oldName = entity->getName();
+            std::string newName(nameBuf);
+            if (!newName.empty() && newName != oldName)
             {
-                entity->setName(nameBuf);
+                if (m_commandHistory)
+                {
+                    m_commandHistory->execute(
+                        std::make_unique<EntityPropertyCommand>(
+                            *scene, entity->getId(),
+                            EntityProperty::NAME, oldName, newName));
+                }
+                else
+                {
+                    entity->setName(newName);
+                }
             }
         }
     }
@@ -234,9 +276,72 @@ void InspectorPanel::drawTransform(Entity& entity)
         return;
     }
 
-    drawVec3Control("Position", entity.transform.position, 0.0f, 0.05f);
-    drawVec3Control("Rotation", entity.transform.rotation, 0.0f, 1.0f);
-    drawVec3Control("Scale",    entity.transform.scale,    1.0f, 0.02f);
+    // Reset bracket if entity changed
+    if (entity.getId() != m_editEntityId)
+    {
+        m_transformEditActive = false;
+        m_editEntityId = entity.getId();
+    }
+
+    // Capture transform before any controls modify it
+    glm::vec3 prePos = entity.transform.position;
+    glm::vec3 preRot = entity.transform.rotation;
+    glm::vec3 preScale = entity.transform.scale;
+
+    auto posState = drawVec3Control("Position", entity.transform.position, 0.0f, 0.05f);
+    auto rotState = drawVec3Control("Rotation", entity.transform.rotation, 0.0f, 1.0f);
+    auto scaleState = drawVec3Control("Scale",  entity.transform.scale,    1.0f, 0.02f);
+
+    // Aggregate activation/deactivation across all 3 vec3 controls
+    bool anyActivated = posState.dragActivated
+                     || rotState.dragActivated
+                     || scaleState.dragActivated;
+    bool anyDeactivated = posState.dragDeactivatedAfterEdit
+                       || rotState.dragDeactivatedAfterEdit
+                       || scaleState.dragDeactivatedAfterEdit;
+
+    // --- End bracket first (handles rapid switch between fields) ---
+    if (anyDeactivated && m_transformEditActive)
+    {
+        m_transformEditActive = false;
+        bool changed = (entity.transform.position != m_editOldPos)
+                    || (entity.transform.rotation != m_editOldRot)
+                    || (entity.transform.scale != m_editOldScale);
+        if (changed && m_commandHistory && m_currentScene)
+        {
+            m_commandHistory->execute(std::make_unique<TransformCommand>(
+                *m_currentScene, m_editEntityId,
+                m_editOldPos, m_editOldRot, m_editOldScale,
+                entity.transform.position, entity.transform.rotation,
+                entity.transform.scale));
+        }
+    }
+
+    // --- Start new bracket ---
+    if (anyActivated && !m_transformEditActive)
+    {
+        m_transformEditActive = true;
+        m_editOldPos = prePos;
+        m_editOldRot = preRot;
+        m_editOldScale = preScale;
+        m_editEntityId = entity.getId();
+    }
+
+    // --- Handle instant changes (reset buttons) when no drag is active ---
+    if (!m_transformEditActive)
+    {
+        bool changed = (entity.transform.position != prePos)
+                    || (entity.transform.rotation != preRot)
+                    || (entity.transform.scale != preScale);
+        if (changed && m_commandHistory && m_currentScene)
+        {
+            m_commandHistory->execute(std::make_unique<TransformCommand>(
+                *m_currentScene, entity.getId(),
+                prePos, preRot, preScale,
+                entity.transform.position, entity.transform.rotation,
+                entity.transform.scale));
+        }
+    }
 
     ImGui::Spacing();
 }
