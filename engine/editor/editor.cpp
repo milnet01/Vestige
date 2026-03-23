@@ -228,11 +228,104 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera)
                 {
                     m_commandHistory.redo();
                 }
+                ImGui::Separator();
+
+                bool hasSel = m_selection.hasSelection();
+                if (ImGui::MenuItem("Duplicate", "Ctrl+D", false, hasSel && scene))
+                {
+                    Entity* clone = EntityActions::duplicateEntity(
+                        *scene, m_selection, m_selection.getPrimaryId());
+                    if (clone)
+                    {
+                        m_commandHistory.execute(
+                            std::make_unique<CreateEntityCommand>(*scene, clone->getId()));
+                    }
+                }
+                if (ImGui::MenuItem("Delete", "Del", false, hasSel && scene))
+                {
+                    std::vector<uint32_t> ids = m_selection.getSelectedIds();
+                    m_selection.clearSelection();
+                    if (ids.size() == 1)
+                    {
+                        m_commandHistory.execute(
+                            std::make_unique<DeleteEntityCommand>(*scene, ids[0]));
+                    }
+                    else if (ids.size() > 1)
+                    {
+                        std::vector<std::unique_ptr<EditorCommand>> cmds;
+                        for (uint32_t id : ids)
+                        {
+                            cmds.push_back(std::make_unique<DeleteEntityCommand>(*scene, id));
+                        }
+                        m_commandHistory.execute(
+                            std::make_unique<CompositeCommand>(
+                                "Delete " + std::to_string(ids.size()) + " entities",
+                                std::move(cmds)));
+                    }
+                }
+                if (ImGui::MenuItem("Group", "Ctrl+G", false, hasSel && scene))
+                {
+                    EntityActions::groupEntities(*scene, m_selection);
+                    m_fileMenu.markDirty();
+                }
+                if (ImGui::MenuItem("Toggle Visibility", "H", false, hasSel && scene))
+                {
+                    Entity* entity = scene->findEntityById(m_selection.getPrimaryId());
+                    if (entity)
+                    {
+                        bool oldVis = entity->isVisible();
+                        m_commandHistory.execute(
+                            std::make_unique<EntityPropertyCommand>(
+                                *scene, entity->getId(),
+                                EntityProperty::VISIBLE, oldVis, !oldVis));
+                    }
+                }
+                ImGui::Separator();
+                if (ImGui::MenuItem("Copy Transform", "Ctrl+Shift+C", false, hasSel && scene))
+                {
+                    EntityActions::copyTransform(
+                        *scene, m_selection.getPrimaryId(), m_transformClipboard);
+                }
+                if (ImGui::MenuItem("Paste Transform", "Ctrl+Shift+V", false, hasSel && scene))
+                {
+                    EntityActions::pasteTransform(
+                        *scene, m_selection.getPrimaryId(), m_transformClipboard);
+                }
                 ImGui::EndMenu();
             }
 
             if (ImGui::BeginMenu("View"))
             {
+                // Camera presets
+                bool hasEditorCam = m_editorCamera != nullptr;
+                if (ImGui::MenuItem("Front View", "Numpad 1", false, hasEditorCam))
+                {
+                    m_editorCamera->setFrontView();
+                }
+                if (ImGui::MenuItem("Right View", "Numpad 3", false, hasEditorCam))
+                {
+                    m_editorCamera->setRightView();
+                }
+                if (ImGui::MenuItem("Top View", "Numpad 7", false, hasEditorCam))
+                {
+                    m_editorCamera->setTopView();
+                }
+                if (ImGui::MenuItem("Focus Selection", "F", false, hasEditorCam && scene))
+                {
+                    Entity* selected = m_selection.hasSelection()
+                        ? m_selection.getPrimaryEntity(*scene) : nullptr;
+                    if (selected)
+                    {
+                        m_editorCamera->focusOn(selected->getWorldPosition());
+                    }
+                    else
+                    {
+                        m_editorCamera->focusOn(glm::vec3(0.0f, 0.5f, 0.0f));
+                    }
+                }
+                ImGui::Separator();
+
+                // Panel toggles
                 bool envOpen = m_environmentPanel.isOpen();
                 if (ImGui::MenuItem("Environment", nullptr, &envOpen))
                 {
@@ -244,6 +337,145 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera)
                     m_performancePanel.setOpen(perfOpen);
                 }
                 ImGui::MenuItem("Demo Window", nullptr, &m_showDemoWindow);
+                ImGui::EndMenu();
+            }
+
+            if (ImGui::BeginMenu("Tools"))
+            {
+                bool isTranslate = (m_gizmoOperation == ImGuizmo::TRANSLATE);
+                bool isRotate = (m_gizmoOperation == ImGuizmo::ROTATE);
+                bool isScale = (m_gizmoOperation == ImGuizmo::SCALE);
+                if (ImGui::MenuItem("Translate", "W", isTranslate))
+                {
+                    m_gizmoOperation = ImGuizmo::TRANSLATE;
+                }
+                if (ImGui::MenuItem("Rotate", "E", isRotate))
+                {
+                    m_gizmoOperation = ImGuizmo::ROTATE;
+                }
+                if (ImGui::MenuItem("Scale", "R", isScale))
+                {
+                    m_gizmoOperation = ImGuizmo::SCALE;
+                }
+                ImGui::Separator();
+                bool isWorld = (m_gizmoMode == ImGuizmo::WORLD);
+                if (ImGui::MenuItem("World Space", "L", isWorld))
+                {
+                    m_gizmoMode = ImGuizmo::WORLD;
+                }
+                if (ImGui::MenuItem("Local Space", "L", !isWorld))
+                {
+                    m_gizmoMode = ImGuizmo::LOCAL;
+                }
+                ImGui::Separator();
+                ImGui::Text("Snap Settings");
+                ImGui::SetNextItemWidth(100.0f);
+                ImGui::DragFloat("Translation", &m_snapTranslation, 0.05f, 0.1f, 10.0f, "%.2f");
+                ImGui::SetNextItemWidth(100.0f);
+                ImGui::DragFloat("Rotation", &m_snapRotation, 1.0f, 1.0f, 90.0f, "%.0f deg");
+                ImGui::SetNextItemWidth(100.0f);
+                ImGui::DragFloat("Scale##snap", &m_snapScale, 0.01f, 0.01f, 1.0f, "%.2f");
+                ImGui::EndMenu();
+            }
+
+            if (ImGui::BeginMenu("Render"))
+            {
+                if (renderer)
+                {
+                    bool wireframe = renderer->isWireframeMode();
+                    if (ImGui::MenuItem("Wireframe", "F1", wireframe))
+                    {
+                        renderer->setWireframeMode(!wireframe);
+                    }
+                    ImGui::Separator();
+
+                    // Tonemapping
+                    int tonemapMode = renderer->getTonemapMode();
+                    const char* tonemapNames[] = {"Reinhard", "ACES Filmic", "None (linear)"};
+                    if (ImGui::BeginMenu("Tonemapping (F2)"))
+                    {
+                        for (int i = 0; i < 3; ++i)
+                        {
+                            if (ImGui::MenuItem(tonemapNames[i], nullptr, tonemapMode == i))
+                            {
+                                renderer->setTonemapMode(i);
+                            }
+                        }
+                        ImGui::EndMenu();
+                    }
+
+                    bool autoExp = renderer->isAutoExposure();
+                    if (ImGui::MenuItem("Auto-Exposure", "F10", autoExp))
+                    {
+                        renderer->setAutoExposure(!autoExp);
+                    }
+
+                    bool hdrDebug = renderer->getDebugMode() != 0;
+                    if (ImGui::MenuItem("HDR Debug", "F3", hdrDebug))
+                    {
+                        renderer->setDebugMode(hdrDebug ? 0 : 1);
+                    }
+                    ImGui::Separator();
+
+                    bool pom = renderer->isPomEnabled();
+                    if (ImGui::MenuItem("Parallax Mapping", "F4", pom))
+                    {
+                        renderer->setPomEnabled(!pom);
+                    }
+
+                    bool bloom = renderer->isBloomEnabled();
+                    if (ImGui::MenuItem("Bloom", "F5", bloom))
+                    {
+                        renderer->setBloomEnabled(!bloom);
+                    }
+
+                    bool ssao = renderer->isSsaoEnabled();
+                    if (ImGui::MenuItem("SSAO", "F6", ssao))
+                    {
+                        renderer->setSsaoEnabled(!ssao);
+                    }
+
+                    // Anti-aliasing
+                    AntiAliasMode aaMode = renderer->getAntiAliasMode();
+                    const char* aaNames[] = {"None", "MSAA 4x", "TAA"};
+                    if (ImGui::BeginMenu("Anti-Aliasing (F7)"))
+                    {
+                        for (int i = 0; i < 3; ++i)
+                        {
+                            if (ImGui::MenuItem(aaNames[i], nullptr,
+                                                static_cast<int>(aaMode) == i))
+                            {
+                                renderer->setAntiAliasMode(static_cast<AntiAliasMode>(i));
+                            }
+                        }
+                        ImGui::EndMenu();
+                    }
+
+                    bool colorGrading = renderer->isColorGradingEnabled();
+                    if (ImGui::MenuItem("Color Grading", "F8", colorGrading))
+                    {
+                        if (colorGrading)
+                        {
+                            renderer->setColorGradingEnabled(false);
+                        }
+                        else
+                        {
+                            renderer->setColorGradingEnabled(true);
+                            renderer->nextColorGradingPreset();
+                        }
+                    }
+
+                    ImGui::Separator();
+                    bool csmDebug = renderer->isCascadeDebug();
+                    if (ImGui::MenuItem("CSM Debug", "F9", csmDebug))
+                    {
+                        renderer->setCascadeDebug(!csmDebug);
+                    }
+                }
+                else
+                {
+                    ImGui::TextDisabled("Renderer not available");
+                }
                 ImGui::EndMenu();
             }
 
@@ -398,9 +630,9 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera)
 
             if (ImGui::BeginMenu("Help"))
             {
-                if (ImGui::MenuItem("Controls"))
+                if (ImGui::MenuItem("Controls Reference"))
                 {
-                    // TODO: show controls overlay
+                    m_showControlsWindow = true;
                 }
                 ImGui::EndMenu();
             }
@@ -511,6 +743,142 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera)
         if (m_showDemoWindow)
         {
             ImGui::ShowDemoWindow(&m_showDemoWindow);
+        }
+
+        // --- Controls reference window ---
+        if (m_showControlsWindow)
+        {
+            ImGui::SetNextWindowSize(ImVec2(520, 600), ImGuiCond_FirstUseEver);
+            if (ImGui::Begin("Controls Reference", &m_showControlsWindow))
+            {
+                auto shortcutRow = [](const char* key, const char* desc)
+                {
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn();
+                    ImGui::TextUnformatted(key);
+                    ImGui::TableNextColumn();
+                    ImGui::TextUnformatted(desc);
+                };
+
+                // File
+                if (ImGui::CollapsingHeader("File", ImGuiTreeNodeFlags_DefaultOpen))
+                {
+                    if (ImGui::BeginTable("##file", 2, ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp))
+                    {
+                        ImGui::TableSetupColumn("Shortcut", ImGuiTableColumnFlags_WidthFixed, 160.0f);
+                        ImGui::TableSetupColumn("Action");
+                        ImGui::TableHeadersRow();
+                        shortcutRow("Ctrl+N", "New scene");
+                        shortcutRow("Ctrl+O", "Open scene");
+                        shortcutRow("Ctrl+S", "Save scene");
+                        shortcutRow("Ctrl+Shift+S", "Save scene as...");
+                        shortcutRow("Ctrl+I", "Import model");
+                        shortcutRow("Ctrl+Q", "Quit");
+                        ImGui::EndTable();
+                    }
+                }
+
+                // Edit
+                if (ImGui::CollapsingHeader("Edit", ImGuiTreeNodeFlags_DefaultOpen))
+                {
+                    if (ImGui::BeginTable("##edit", 2, ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp))
+                    {
+                        ImGui::TableSetupColumn("Shortcut", ImGuiTableColumnFlags_WidthFixed, 160.0f);
+                        ImGui::TableSetupColumn("Action");
+                        ImGui::TableHeadersRow();
+                        shortcutRow("Ctrl+Z", "Undo");
+                        shortcutRow("Ctrl+Y / Ctrl+Shift+Z", "Redo");
+                        shortcutRow("Delete", "Delete selected entity");
+                        shortcutRow("Ctrl+D", "Duplicate selected entity");
+                        shortcutRow("Ctrl+G", "Group selected entities");
+                        shortcutRow("H", "Toggle visibility");
+                        shortcutRow("F2", "Rename entity (in Hierarchy)");
+                        shortcutRow("Ctrl+Shift+C", "Copy transform");
+                        shortcutRow("Ctrl+Shift+V", "Paste transform");
+                        ImGui::EndTable();
+                    }
+                }
+
+                // Tools / Gizmo
+                if (ImGui::CollapsingHeader("Tools / Gizmo", ImGuiTreeNodeFlags_DefaultOpen))
+                {
+                    if (ImGui::BeginTable("##tools", 2, ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp))
+                    {
+                        ImGui::TableSetupColumn("Shortcut", ImGuiTableColumnFlags_WidthFixed, 160.0f);
+                        ImGui::TableSetupColumn("Action");
+                        ImGui::TableHeadersRow();
+                        shortcutRow("W", "Translate gizmo");
+                        shortcutRow("E", "Rotate gizmo");
+                        shortcutRow("R", "Scale gizmo");
+                        shortcutRow("L", "Toggle World / Local space");
+                        shortcutRow("Ctrl (hold)", "Enable snap while dragging gizmo");
+                        ImGui::EndTable();
+                    }
+                }
+
+                // Camera
+                if (ImGui::CollapsingHeader("Camera (Edit Mode)", ImGuiTreeNodeFlags_DefaultOpen))
+                {
+                    if (ImGui::BeginTable("##camera", 2, ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp))
+                    {
+                        ImGui::TableSetupColumn("Shortcut", ImGuiTableColumnFlags_WidthFixed, 160.0f);
+                        ImGui::TableSetupColumn("Action");
+                        ImGui::TableHeadersRow();
+                        shortcutRow("Alt + LMB drag", "Orbit around focus point");
+                        shortcutRow("MMB drag", "Pan the view");
+                        shortcutRow("Scroll wheel", "Zoom in / out");
+                        shortcutRow("Numpad 1", "Front view");
+                        shortcutRow("Numpad 3", "Right view");
+                        shortcutRow("Numpad 7", "Top view");
+                        shortcutRow("F", "Focus on selection (or scene center)");
+                        ImGui::EndTable();
+                    }
+                }
+
+                // Render
+                if (ImGui::CollapsingHeader("Render Toggles"))
+                {
+                    if (ImGui::BeginTable("##render", 2, ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp))
+                    {
+                        ImGui::TableSetupColumn("Shortcut", ImGuiTableColumnFlags_WidthFixed, 160.0f);
+                        ImGui::TableSetupColumn("Action");
+                        ImGui::TableHeadersRow();
+                        shortcutRow("F1", "Toggle wireframe");
+                        shortcutRow("F2", "Cycle tonemapper (Reinhard / ACES / None)");
+                        shortcutRow("F3", "Toggle HDR debug visualization");
+                        shortcutRow("F4", "Toggle parallax occlusion mapping");
+                        shortcutRow("F5", "Toggle bloom");
+                        shortcutRow("F6", "Toggle SSAO");
+                        shortcutRow("F7", "Cycle anti-aliasing (None / MSAA / TAA)");
+                        shortcutRow("F8", "Cycle color grading presets");
+                        shortcutRow("F9", "Toggle cascade shadow map debug");
+                        shortcutRow("F10", "Toggle auto-exposure");
+                        shortcutRow("F11", "Capture frame diagnostics + screenshot");
+                        shortcutRow("F12", "Toggle performance panel");
+                        shortcutRow("[ / ]", "Decrease / increase exposure (manual)");
+                        shortcutRow("- / =", "Decrease / increase POM height");
+                        ImGui::EndTable();
+                    }
+                }
+
+                // Play Mode
+                if (ImGui::CollapsingHeader("Play Mode (Escape to toggle)"))
+                {
+                    if (ImGui::BeginTable("##play", 2, ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp))
+                    {
+                        ImGui::TableSetupColumn("Shortcut", ImGuiTableColumnFlags_WidthFixed, 160.0f);
+                        ImGui::TableSetupColumn("Action");
+                        ImGui::TableHeadersRow();
+                        shortcutRow("Escape", "Return to Edit mode");
+                        shortcutRow("W / A / S / D", "Move forward / left / back / right");
+                        shortcutRow("Space", "Jump");
+                        shortcutRow("Left Ctrl", "Sprint");
+                        shortcutRow("Mouse", "Look around");
+                        ImGui::EndTable();
+                    }
+                }
+            }
+            ImGui::End();
         }
 
         // Update window title to reflect current dirty state
