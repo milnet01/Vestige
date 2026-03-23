@@ -184,6 +184,7 @@ private:
     EditorMode m_mode = EditorMode::EDIT;
     bool m_isInitialized = false;
     bool m_showDemoWindow = false;
+    bool m_showControlsWindow = false;
     bool m_viewportFocused = false;
     bool m_viewportHovered = false;
     GLFWwindow* m_window = nullptr;
