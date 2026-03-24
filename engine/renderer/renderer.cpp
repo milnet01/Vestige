@@ -416,14 +416,13 @@ void Renderer::initFramebuffers(int width, int height, int msaaSamples)
         glTextureParameteri(m_luminanceTexture, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     }
 
-    // Async PBO readback for auto-exposure (avoids GPU→CPU sync stall)
+    // Async PBO readback for auto-exposure (DSA, avoids GPU→CPU sync stall)
     glCreateBuffers(2, m_luminancePbo);
     for (int i = 0; i < 2; i++)
     {
-        glBindBuffer(GL_PIXEL_PACK_BUFFER, m_luminancePbo[i]);
-        glBufferData(GL_PIXEL_PACK_BUFFER, 3 * sizeof(float), nullptr, GL_STREAM_READ);
+        glNamedBufferStorage(m_luminancePbo[i], 3 * sizeof(float), nullptr,
+                             GL_MAP_READ_BIT);
     }
-    glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
     m_pboWriteIndex = 0;
     m_pboReady = false;
 
@@ -672,9 +671,8 @@ void Renderer::endFrame(float deltaTime)
             int mipW = m_bloomMipWidths[mip];
             int mipH = m_bloomMipHeights[mip];
 
-            // Attach this mip level as the render target
-            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-                                   GL_TEXTURE_2D, m_bloomTexture, mip);
+            // Attach this mip level as the render target (DSA)
+            glNamedFramebufferTexture(m_bloomFbo, GL_COLOR_ATTACHMENT0, m_bloomTexture, mip);
             glViewport(0, 0, mipW, mipH);
 
             // Source: for mip 0, use the HDR scene; for mip N>0, use mip N-1
@@ -722,9 +720,8 @@ void Renderer::endFrame(float deltaTime)
             int dstW = m_bloomMipWidths[dstMip];
             int dstH = m_bloomMipHeights[dstMip];
 
-            // Render target: the next larger mip level
-            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-                                   GL_TEXTURE_2D, m_bloomTexture, dstMip);
+            // Render target: the next larger mip level (DSA)
+            glNamedFramebufferTexture(m_bloomFbo, GL_COLOR_ATTACHMENT0, m_bloomTexture, dstMip);
             glViewport(0, 0, dstW, dstH);
 
             // Source: current (smaller) mip level
@@ -755,31 +752,28 @@ void Renderer::endFrame(float deltaTime)
     if (m_autoExposure && m_luminanceTexture != 0 && m_luminancePbo[0] != 0)
     {
         // Blit the HDR scene to the 256x256 luminance texture (hardware downscale)
-        glBindFramebuffer(GL_FRAMEBUFFER, m_bloomFbo);  // reuse bloom FBO
-        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-                               GL_TEXTURE_2D, m_luminanceTexture, 0);
+        glNamedFramebufferTexture(m_bloomFbo, GL_COLOR_ATTACHMENT0, m_luminanceTexture, 0);
 
-        glBindFramebuffer(GL_READ_FRAMEBUFFER, hdrSourceFbo->getId());
-        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_bloomFbo);
-        glBlitFramebuffer(0, 0, m_windowWidth, m_windowHeight,
-                          0, 0, 256, 256, GL_COLOR_BUFFER_BIT, GL_LINEAR);
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glBlitNamedFramebuffer(hdrSourceFbo->getId(), m_bloomFbo,
+                               0, 0, m_windowWidth, m_windowHeight,
+                               0, 0, 256, 256, GL_COLOR_BUFFER_BIT, GL_LINEAR);
 
         // Generate mipmaps — hardware averages down to 1x1
         glGenerateTextureMipmap(m_luminanceTexture);
 
-        // Async readback: issue glGetTexImage into a PBO (non-blocking DMA transfer)
+        // Async readback: issue glGetTextureImage into a PBO (non-blocking DMA transfer)
         glBindBuffer(GL_PIXEL_PACK_BUFFER, m_luminancePbo[m_pboWriteIndex]);
-        glGetTexImage(GL_TEXTURE_2D, 8, GL_RGB, GL_FLOAT, nullptr);
+        glGetTextureImage(m_luminanceTexture, 8, GL_RGB, GL_FLOAT,
+                          3 * static_cast<GLsizei>(sizeof(float)), nullptr);
         glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
 
         // Read from the OTHER PBO (filled 1-2 frames ago — data is ready)
         if (m_pboReady)
         {
             int readIndex = 1 - m_pboWriteIndex;
-            glBindBuffer(GL_PIXEL_PACK_BUFFER, m_luminancePbo[readIndex]);
             auto* data = static_cast<const float*>(
-                glMapBuffer(GL_PIXEL_PACK_BUFFER, GL_READ_ONLY));
+                glMapNamedBufferRange(m_luminancePbo[readIndex], 0,
+                                      3 * sizeof(float), GL_MAP_READ_BIT));
             if (data)
             {
                 float avgLuminance = 0.2126f * data[0] + 0.7152f * data[1] + 0.0722f * data[2];
@@ -791,9 +785,8 @@ void Renderer::endFrame(float deltaTime)
                 float adaptSpeed = 1.0f - std::exp(-m_autoExposureSpeed * deltaTime);
                 m_exposure += (m_targetExposure - m_exposure) * adaptSpeed;
 
-                glUnmapBuffer(GL_PIXEL_PACK_BUFFER);
+                glUnmapNamedBuffer(m_luminancePbo[readIndex]);
             }
-            glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
         }
 
         // Swap PBO index for next frame
@@ -801,10 +794,7 @@ void Renderer::endFrame(float deltaTime)
         m_pboReady = true;
 
         // Restore bloom FBO attachment to bloom texture mip 0
-        glBindFramebuffer(GL_FRAMEBUFFER, m_bloomFbo);
-        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-                               GL_TEXTURE_2D, m_bloomTexture, 0);
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glNamedFramebufferTexture(m_bloomFbo, GL_COLOR_ATTACHMENT0, m_bloomTexture, 0);
     }
 
     // 5c. Screen-space contact shadows
