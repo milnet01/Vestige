@@ -16,7 +16,8 @@ void main()
     {
         for (int y = -2; y < 2; y++)
         {
-            vec2 offset = vec2(float(x), float(y)) * texelSize;
+            // Offset by +0.5 to center the 4x4 kernel at the texel
+            vec2 offset = (vec2(float(x), float(y)) + 0.5) * texelSize;
             result += texture(u_ssaoInput, v_texCoord + offset).r;
         }
     }

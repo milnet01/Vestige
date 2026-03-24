@@ -10,6 +10,7 @@ Scene::Scene(const std::string& name)
     : m_name(name)
     , m_root(std::make_unique<Entity>("Root"))
 {
+    m_entityIndex[m_root->getId()] = m_root.get();
 }
 
 Scene::~Scene() = default;
@@ -17,7 +18,9 @@ Scene::~Scene() = default;
 Entity* Scene::createEntity(const std::string& name)
 {
     auto entity = std::make_unique<Entity>(name);
-    return m_root->addChild(std::move(entity));
+    Entity* ptr = m_root->addChild(std::move(entity));
+    m_entityIndex[ptr->getId()] = ptr;
+    return ptr;
 }
 
 void Scene::update(float deltaTime)
@@ -68,7 +71,8 @@ Entity* Scene::findEntity(const std::string& name)
 
 Entity* Scene::findEntityById(uint32_t id)
 {
-    return findEntityByIdRecursive(*m_root, id);
+    auto it = m_entityIndex.find(id);
+    return (it != m_entityIndex.end()) ? it->second : nullptr;
 }
 
 Entity* Scene::getRoot()
@@ -89,6 +93,8 @@ void Scene::setName(const std::string& name)
 void Scene::clearEntities()
 {
     m_root = std::make_unique<Entity>("Root");
+    m_entityIndex.clear();
+    m_entityIndex[m_root->getId()] = m_root.get();
 }
 
 bool Scene::removeEntity(uint32_t id)
@@ -105,6 +111,7 @@ bool Scene::removeEntity(uint32_t id)
         return false;
     }
 
+    unregisterEntityRecursive(entity);
     parent->removeChild(entity);
     return true;
 }
@@ -126,7 +133,9 @@ Entity* Scene::duplicateEntity(uint32_t entityId)
         parent = m_root.get();
     }
 
-    return parent->addChild(std::move(clone));
+    Entity* result = parent->addChild(std::move(clone));
+    registerEntityRecursive(result);
+    return result;
 }
 
 bool Scene::reparentEntity(uint32_t entityId, uint32_t newParentId)
@@ -291,21 +300,30 @@ void Scene::collectRenderDataRecursive(const Entity& entity, SceneRenderData& da
     }
 }
 
-Entity* Scene::findEntityByIdRecursive(Entity& entity, uint32_t id)
+void Scene::rebuildEntityIndex()
 {
-    if (entity.getId() == id)
+    m_entityIndex.clear();
+    registerEntityRecursive(m_root.get());
+}
+
+void Scene::registerEntityRecursive(Entity* entity)
+{
+    if (!entity) return;
+    m_entityIndex[entity->getId()] = entity;
+    for (const auto& child : entity->getChildren())
     {
-        return &entity;
+        registerEntityRecursive(child.get());
     }
-    for (auto& child : entity.getChildren())
+}
+
+void Scene::unregisterEntityRecursive(Entity* entity)
+{
+    if (!entity) return;
+    m_entityIndex.erase(entity->getId());
+    for (const auto& child : entity->getChildren())
     {
-        Entity* found = findEntityByIdRecursive(*child, id);
-        if (found)
-        {
-            return found;
-        }
+        unregisterEntityRecursive(child.get());
     }
-    return nullptr;
 }
 
 void Scene::collectCollidersRecursive(const Entity& entity, std::vector<AABB>& colliders) const

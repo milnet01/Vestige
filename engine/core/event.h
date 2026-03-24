@@ -2,8 +2,6 @@
 /// @brief Event base class and common engine events.
 #pragma once
 
-#include <string>
-
 namespace Vestige
 {
 

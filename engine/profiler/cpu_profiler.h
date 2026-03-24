@@ -69,5 +69,7 @@ CpuProfiler& getCpuProfiler();
 } // namespace Vestige
 
 /// @brief Place at function/scope start to measure CPU time.
+#define VESTIGE_CONCAT_IMPL_(a, b) a##b
+#define VESTIGE_CONCAT_(a, b) VESTIGE_CONCAT_IMPL_(a, b)
 #define VESTIGE_PROFILE_SCOPE(name) \
-    ::Vestige::CpuProfileScope _vestigeProfileScope##__LINE__(name)
+    ::Vestige::CpuProfileScope VESTIGE_CONCAT_(_vestigeProfileScope, __LINE__)(name)

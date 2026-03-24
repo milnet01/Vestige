@@ -55,7 +55,8 @@ public:
 
             if (parent)
             {
-                parent->addChild(std::move(m_ownedEntity));
+                Entity* ptr = parent->addChild(std::move(m_ownedEntity));
+                m_scene.registerEntityRecursive(ptr);
             }
         }
     }
@@ -76,6 +77,7 @@ public:
 
         // Record sibling index for potential future use
         m_parentId = parent->getId();
+        m_scene.unregisterEntityRecursive(entity);
         m_ownedEntity = parent->removeChild(entity);
     }
 

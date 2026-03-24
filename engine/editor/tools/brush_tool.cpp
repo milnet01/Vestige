@@ -10,9 +10,22 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 #include <cmath>
+#include <random>
 
 namespace Vestige
 {
+
+static std::mt19937& getRng()
+{
+    static std::mt19937 rng(std::random_device{}());
+    return rng;
+}
+
+static float randomFloat(float minVal, float maxVal)
+{
+    std::uniform_real_distribution<float> dist(minVal, maxVal);
+    return dist(getRng());
+}
 
 bool BrushTool::processInput(const Ray& mouseRay, bool mouseDown, float deltaTime,
                               FoliageManager& manager, CommandHistory& history)
@@ -213,9 +226,8 @@ void BrushTool::stampAt(const glm::vec3& position, FoliageManager& manager)
         // Tree placement: single tree per click, with minimum spacing
         TreeInstance tree;
         tree.position = position;
-        tree.rotation = static_cast<float>(std::rand()) / RAND_MAX * glm::two_pi<float>();
-        tree.scale = treeConfig.minScale + static_cast<float>(std::rand()) / RAND_MAX
-                     * (treeConfig.maxScale - treeConfig.minScale);
+        tree.rotation = randomFloat(0.0f, glm::two_pi<float>());
+        tree.scale = randomFloat(treeConfig.minScale, treeConfig.maxScale);
         tree.speciesIndex = selectedSpeciesId;
 
         auto placed = manager.placeTree(tree, treeConfig.minSpacing);

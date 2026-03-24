@@ -38,6 +38,19 @@ struct VertexKeyHash
     }
 };
 
+/// @brief Safely converts a string to int, returning -1 on failure.
+static int safeStoi(const std::string& s)
+{
+    try
+    {
+        return std::stoi(s);
+    }
+    catch (const std::exception&)
+    {
+        return 0;
+    }
+}
+
 /// @brief Parses a face vertex token like "1/2/3", "1//3", or "1".
 static VertexKey parseFaceVertex(const std::string& token)
 {
@@ -51,7 +64,7 @@ static VertexKey parseFaceVertex(const std::string& token)
     {
         if (!part.empty())
         {
-            key.posIndex = std::stoi(part) - 1;  // OBJ is 1-indexed
+            key.posIndex = safeStoi(part) - 1;  // OBJ is 1-indexed
         }
     }
 
@@ -60,7 +73,7 @@ static VertexKey parseFaceVertex(const std::string& token)
     {
         if (!part.empty())
         {
-            key.texIndex = std::stoi(part) - 1;
+            key.texIndex = safeStoi(part) - 1;
         }
     }
 
@@ -69,7 +82,7 @@ static VertexKey parseFaceVertex(const std::string& token)
     {
         if (!part.empty())
         {
-            key.normIndex = std::stoi(part) - 1;
+            key.normIndex = safeStoi(part) - 1;
         }
     }
 

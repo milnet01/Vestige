@@ -135,13 +135,17 @@ target_compile_options(vestige_engine PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:
         -Wall -Wextra -Wpedantic
         -Wformat=2
+        -Wconversion
         -Wshadow
         -Wnull-dereference
         -Wdouble-promotion
-    >
-    $<$<AND:$<CXX_COMPILER_ID:GNU,Clang>,$<CONFIG:Release>>:
         -fstack-protector-strong
     >
+)
+
+# Runtime buffer overflow detection (requires -O1 or higher)
+target_compile_definitions(vestige_engine PRIVATE
+    $<$<AND:$<CXX_COMPILER_ID:GNU,Clang>,$<NOT:$<CONFIG:Debug>>>:_FORTIFY_SOURCE=2>
 )
 
 # Debug sanitizers

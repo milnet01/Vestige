@@ -12,6 +12,7 @@
 
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace Vestige
@@ -113,13 +114,23 @@ public:
     /// @return True if reparenting succeeded.
     bool reparentEntity(uint32_t entityId, uint32_t newParentId);
 
+    /// @brief Rebuilds the entity ID lookup index from the current hierarchy.
+    /// Call after bulk operations (e.g., deserialization) that bypass Scene methods.
+    void rebuildEntityIndex();
+
+    /// @brief Registers an entity (and all descendants) in the lookup index.
+    void registerEntityRecursive(Entity* entity);
+
+    /// @brief Unregisters an entity (and all descendants) from the lookup index.
+    void unregisterEntityRecursive(Entity* entity);
+
 private:
     void collectRenderDataRecursive(const Entity& entity, SceneRenderData& data) const;
     void collectCollidersRecursive(const Entity& entity, std::vector<AABB>& colliders) const;
-    Entity* findEntityByIdRecursive(Entity& entity, uint32_t id);
 
     std::string m_name;
     std::unique_ptr<Entity> m_root;
+    std::unordered_map<uint32_t, Entity*> m_entityIndex;
 };
 
 } // namespace Vestige

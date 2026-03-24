@@ -54,7 +54,9 @@ public:
         auto it = m_listeners.find(std::type_index(typeid(T)));
         if (it != m_listeners.end())
         {
-            for (const auto& entry : it->second)
+            // Copy to avoid iterator invalidation if a callback subscribes/unsubscribes
+            auto listeners = it->second;
+            for (const auto& entry : listeners)
             {
                 entry.callback(event);
             }

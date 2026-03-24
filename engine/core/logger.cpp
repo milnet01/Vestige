@@ -2,6 +2,8 @@
 /// @brief Logger implementation.
 #include "core/logger.h"
 
+#include <iostream>
+
 namespace Vestige
 {
 

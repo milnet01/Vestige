@@ -67,8 +67,11 @@ void MemoryTracker::readGpuVram()
     FILE* usedFile = fopen("/sys/class/drm/card1/device/mem_info_vram_used", "r");
     FILE* totalFile = fopen("/sys/class/drm/card1/device/mem_info_vram_total", "r");
 
-    if (!usedFile)
+    if (!usedFile || !totalFile)
     {
+        // Close any partially opened card1 handles before falling back to card0
+        if (usedFile) { fclose(usedFile); usedFile = nullptr; }
+        if (totalFile) { fclose(totalFile); totalFile = nullptr; }
         usedFile = fopen("/sys/class/drm/card0/device/mem_info_vram_used", "r");
         totalFile = fopen("/sys/class/drm/card0/device/mem_info_vram_total", "r");
     }
