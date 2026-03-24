@@ -442,10 +442,10 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera)
 
                     // Anti-aliasing
                     AntiAliasMode aaMode = renderer->getAntiAliasMode();
-                    const char* aaNames[] = {"None", "MSAA 4x", "TAA"};
+                    const char* aaNames[] = {"None", "MSAA 4x", "TAA", "SMAA"};
                     if (ImGui::BeginMenu("Anti-Aliasing (F7)"))
                     {
-                        for (int i = 0; i < 3; ++i)
+                        for (int i = 0; i < 4; ++i)
                         {
                             if (ImGui::MenuItem(aaNames[i], nullptr,
                                                 static_cast<int>(aaMode) == i))
@@ -860,7 +860,7 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera)
                         shortcutRow("F4", "Toggle parallax occlusion mapping");
                         shortcutRow("F5", "Toggle bloom");
                         shortcutRow("F6", "Toggle SSAO");
-                        shortcutRow("F7", "Cycle anti-aliasing (None / MSAA / TAA)");
+                        shortcutRow("F7", "Cycle anti-aliasing (None / MSAA / TAA / SMAA)");
                         shortcutRow("F8", "Cycle color grading presets");
                         shortcutRow("F9", "Toggle cascade shadow map debug");
                         shortcutRow("F10", "Toggle auto-exposure");

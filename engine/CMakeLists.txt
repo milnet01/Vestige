@@ -38,6 +38,8 @@ set(ENGINE_SOURCES
     renderer/environment_map.cpp
     renderer/frame_diagnostics.cpp
     renderer/debug_draw.cpp
+    renderer/depth_reducer.cpp
+    renderer/smaa.cpp
     renderer/particle_renderer.cpp
     resource/model.cpp
     utils/obj_loader.cpp

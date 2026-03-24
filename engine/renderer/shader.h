@@ -11,7 +11,7 @@
 namespace Vestige
 {
 
-/// @brief Compiles and manages an OpenGL shader program (vertex + fragment).
+/// @brief Compiles and manages an OpenGL shader program (vertex + fragment, or compute).
 class Shader
 {
 public:
@@ -31,6 +31,11 @@ public:
     /// @param fragmentPath Path to the fragment shader file.
     /// @return True if compilation and linking succeeded.
     bool loadFromFiles(const std::string& vertexPath, const std::string& fragmentPath);
+
+    /// @brief Loads and compiles a compute shader from a file path.
+    /// @param computePath Path to the compute shader file.
+    /// @return True if compilation and linking succeeded.
+    bool loadComputeShader(const std::string& computePath);
 
     /// @brief Activates this shader program for rendering.
     void use() const;

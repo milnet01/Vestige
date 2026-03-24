@@ -105,6 +105,7 @@ static const char* antiAliasModeStr(AntiAliasMode mode)
         case AntiAliasMode::NONE:    return "None";
         case AntiAliasMode::MSAA_4X: return "MSAA 4x";
         case AntiAliasMode::TAA:     return "TAA";
+        case AntiAliasMode::SMAA:    return "SMAA";
     }
     return "Unknown";
 }
