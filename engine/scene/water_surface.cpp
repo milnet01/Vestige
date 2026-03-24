@@ -120,34 +120,35 @@ void WaterSurfaceComponent::buildMesh() const
         }
     }
 
-    // Upload to GPU
-    glGenVertexArrays(1, &m_vao);
-    glGenBuffers(1, &m_vbo);
-    glGenBuffers(1, &m_ebo);
+    // Upload to GPU (DSA)
+    glCreateVertexArrays(1, &m_vao);
+    glCreateBuffers(1, &m_vbo);
+    glCreateBuffers(1, &m_ebo);
 
-    glBindVertexArray(m_vao);
+    // Upload data (immutable, static)
+    glNamedBufferStorage(m_vbo,
+                         static_cast<GLsizeiptr>(vertices.size() * sizeof(float)),
+                         vertices.data(), 0);
 
-    glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
-    glBufferData(GL_ARRAY_BUFFER,
-                 static_cast<GLsizeiptr>(vertices.size() * sizeof(float)),
-                 vertices.data(), GL_STATIC_DRAW);
+    glNamedBufferStorage(m_ebo,
+                         static_cast<GLsizeiptr>(indices.size() * sizeof(unsigned int)),
+                         indices.data(), 0);
 
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_ebo);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER,
-                 static_cast<GLsizeiptr>(indices.size() * sizeof(unsigned int)),
-                 indices.data(), GL_STATIC_DRAW);
+    // Bind VBO to VAO binding point 0
+    glVertexArrayVertexBuffer(m_vao, 0, m_vbo, 0, 5 * sizeof(float));
 
-    // Position: location 0
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float),
-                          reinterpret_cast<void*>(0));
+    // Bind EBO to VAO
+    glVertexArrayElementBuffer(m_vao, m_ebo);
 
-    // TexCoord: location 1
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float),
-                          reinterpret_cast<void*>(3 * sizeof(float)));
+    // Position: location 0, binding 0
+    glEnableVertexArrayAttrib(m_vao, 0);
+    glVertexArrayAttribFormat(m_vao, 0, 3, GL_FLOAT, GL_FALSE, 0);
+    glVertexArrayAttribBinding(m_vao, 0, 0);
 
-    glBindVertexArray(0);
+    // TexCoord: location 1, binding 0
+    glEnableVertexArrayAttrib(m_vao, 1);
+    glVertexArrayAttribFormat(m_vao, 1, 2, GL_FLOAT, GL_FALSE, 3 * sizeof(float));
+    glVertexArrayAttribBinding(m_vao, 1, 0);
 
     m_builtWidth = m_config.width;
     m_builtDepth = m_config.depth;

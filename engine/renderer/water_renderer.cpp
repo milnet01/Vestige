@@ -87,27 +87,24 @@ void WaterRenderer::render(const std::vector<WaterRenderItem>& waterItems,
     m_waterShader.setVec3("u_lightColor", lightColor);
 
     // Bind default normal map (texture unit 0)
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, m_defaultNormalMap);
+    glBindTextureUnit(0, m_defaultNormalMap);
     m_waterShader.setInt("u_normalMap", 0);
     m_waterShader.setBool("u_hasNormalMap", m_defaultNormalMap != 0);
 
     // Bind default DuDv map (texture unit 1)
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, m_defaultDudvMap);
+    glBindTextureUnit(1, m_defaultDudvMap);
     m_waterShader.setInt("u_dudvMap", 1);
     m_waterShader.setBool("u_hasDudvMap", m_defaultDudvMap != 0);
 
     // Bind environment cubemap (texture unit 2)
-    glActiveTexture(GL_TEXTURE2);
     if (environmentCubemap != 0)
     {
-        glBindTexture(GL_TEXTURE_CUBE_MAP, environmentCubemap);
+        glBindTextureUnit(2, environmentCubemap);
         m_waterShader.setBool("u_hasEnvironmentMap", true);
     }
     else
     {
-        glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
+        glBindTextureUnit(2, 0);
         m_waterShader.setBool("u_hasEnvironmentMap", false);
     }
     m_waterShader.setInt("u_environmentMap", 2);
@@ -154,7 +151,6 @@ void WaterRenderer::render(const std::vector<WaterRenderItem>& waterItems,
         // Draw the water mesh
         glBindVertexArray(water->getVao());
         glDrawElements(GL_TRIANGLES, water->getIndexCount(), GL_UNSIGNED_INT, nullptr);
-        glBindVertexArray(0);
     }
 
     // Restore state
@@ -198,16 +194,16 @@ void WaterRenderer::generateDefaultNormalMap()
         }
     }
 
-    glGenTextures(1, &m_defaultNormalMap);
-    glBindTexture(GL_TEXTURE_2D, m_defaultNormalMap);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, size, size, 0, GL_RGB,
-                 GL_UNSIGNED_BYTE, pixels.data());
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glGenerateMipmap(GL_TEXTURE_2D);
-    glBindTexture(GL_TEXTURE_2D, 0);
+    glCreateTextures(GL_TEXTURE_2D, 1, &m_defaultNormalMap);
+    GLsizei mipLevels = 1 + static_cast<GLsizei>(std::floor(std::log2(size)));
+    glTextureStorage2D(m_defaultNormalMap, mipLevels, GL_RGB8, size, size);
+    glTextureSubImage2D(m_defaultNormalMap, 0, 0, 0, size, size,
+                        GL_RGB, GL_UNSIGNED_BYTE, pixels.data());
+    glTextureParameteri(m_defaultNormalMap, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTextureParameteri(m_defaultNormalMap, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTextureParameteri(m_defaultNormalMap, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTextureParameteri(m_defaultNormalMap, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glGenerateTextureMipmap(m_defaultNormalMap);
 }
 
 void WaterRenderer::generateDefaultDudvMap()
@@ -236,16 +232,16 @@ void WaterRenderer::generateDefaultDudvMap()
         }
     }
 
-    glGenTextures(1, &m_defaultDudvMap);
-    glBindTexture(GL_TEXTURE_2D, m_defaultDudvMap);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RG8, size, size, 0, GL_RG,
-                 GL_UNSIGNED_BYTE, pixels.data());
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glGenerateMipmap(GL_TEXTURE_2D);
-    glBindTexture(GL_TEXTURE_2D, 0);
+    glCreateTextures(GL_TEXTURE_2D, 1, &m_defaultDudvMap);
+    GLsizei mipLevels = 1 + static_cast<GLsizei>(std::floor(std::log2(size)));
+    glTextureStorage2D(m_defaultDudvMap, mipLevels, GL_RG8, size, size);
+    glTextureSubImage2D(m_defaultDudvMap, 0, 0, 0, size, size,
+                        GL_RG, GL_UNSIGNED_BYTE, pixels.data());
+    glTextureParameteri(m_defaultDudvMap, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTextureParameteri(m_defaultDudvMap, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTextureParameteri(m_defaultDudvMap, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTextureParameteri(m_defaultDudvMap, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glGenerateTextureMipmap(m_defaultDudvMap);
 }
 
 } // namespace Vestige

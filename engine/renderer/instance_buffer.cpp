@@ -7,7 +7,7 @@ namespace Vestige
 
 InstanceBuffer::InstanceBuffer()
 {
-    glGenBuffers(1, &m_vbo);
+    glCreateBuffers(1, &m_vbo);
 }
 
 InstanceBuffer::~InstanceBuffer()
@@ -26,23 +26,21 @@ void InstanceBuffer::upload(const std::vector<glm::mat4>& matrices)
         return;
     }
 
-    glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
-
     auto dataSize = static_cast<GLsizeiptr>(m_instanceCount * sizeof(glm::mat4));
 
     if (m_instanceCount > m_capacity)
     {
-        // Reallocate — grow to fit
+        // Reallocate — delete old immutable buffer and create larger one
+        glDeleteBuffers(1, &m_vbo);
         m_capacity = m_instanceCount;
-        glBufferData(GL_ARRAY_BUFFER, dataSize, matrices.data(), GL_DYNAMIC_DRAW);
+        glCreateBuffers(1, &m_vbo);
+        glNamedBufferStorage(m_vbo, dataSize, matrices.data(), GL_DYNAMIC_STORAGE_BIT);
     }
     else
     {
-        // Reuse existing allocation
-        glBufferSubData(GL_ARRAY_BUFFER, 0, dataSize, matrices.data());
+        // Reuse existing allocation (DSA sub-data update)
+        glNamedBufferSubData(m_vbo, 0, dataSize, matrices.data());
     }
-
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
 }
 
 GLuint InstanceBuffer::getHandle() const

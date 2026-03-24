@@ -79,41 +79,42 @@ void ParticleRenderer::createQuadVao()
     };
     // NOLINTEND(cppcoreguidelines-avoid-magic-numbers)
 
-    glGenVertexArrays(1, &m_quadVao);
-    glGenBuffers(1, &m_quadVbo);
+    glCreateVertexArrays(1, &m_quadVao);
+    glCreateBuffers(1, &m_quadVbo);
 
-    glBindVertexArray(m_quadVao);
+    // Upload quad vertex data (immutable, static)
+    glNamedBufferStorage(m_quadVbo, sizeof(quadVertices), quadVertices, 0);
 
-    // Quad vertex positions (location 0)
-    glBindBuffer(GL_ARRAY_BUFFER, m_quadVbo);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(quadVertices), quadVertices, GL_STATIC_DRAW);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), nullptr);
+    // Bind VBO to VAO binding point 0
+    glVertexArrayVertexBuffer(m_quadVao, 0, m_quadVbo, 0, 2 * sizeof(float));
 
-    // Create instance data buffers (initially empty)
-    glGenBuffers(1, &m_instancePositionVbo);
-    glGenBuffers(1, &m_instanceColorVbo);
-    glGenBuffers(1, &m_instanceSizeVbo);
+    // Quad vertex positions (location 0, binding 0)
+    glEnableVertexArrayAttrib(m_quadVao, 0);
+    glVertexArrayAttribFormat(m_quadVao, 0, 2, GL_FLOAT, GL_FALSE, 0);
+    glVertexArrayAttribBinding(m_quadVao, 0, 0);
 
-    // Instance position (location 1) — vec3
-    glBindBuffer(GL_ARRAY_BUFFER, m_instancePositionVbo);
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(glm::vec3), nullptr);
-    glVertexAttribDivisor(1, 1);
+    // Create instance data buffers (initially empty, will be created on first use)
+    glCreateBuffers(1, &m_instancePositionVbo);
+    glCreateBuffers(1, &m_instanceColorVbo);
+    glCreateBuffers(1, &m_instanceSizeVbo);
 
-    // Instance color (location 2) — vec4
-    glBindBuffer(GL_ARRAY_BUFFER, m_instanceColorVbo);
-    glEnableVertexAttribArray(2);
-    glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, sizeof(glm::vec4), nullptr);
-    glVertexAttribDivisor(2, 1);
+    // Instance position (location 1, binding 1) — vec3
+    glEnableVertexArrayAttrib(m_quadVao, 1);
+    glVertexArrayAttribFormat(m_quadVao, 1, 3, GL_FLOAT, GL_FALSE, 0);
+    glVertexArrayAttribBinding(m_quadVao, 1, 1);
+    glVertexArrayBindingDivisor(m_quadVao, 1, 1);
 
-    // Instance size (location 3) — float
-    glBindBuffer(GL_ARRAY_BUFFER, m_instanceSizeVbo);
-    glEnableVertexAttribArray(3);
-    glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, sizeof(float), nullptr);
-    glVertexAttribDivisor(3, 1);
+    // Instance color (location 2, binding 2) — vec4
+    glEnableVertexArrayAttrib(m_quadVao, 2);
+    glVertexArrayAttribFormat(m_quadVao, 2, 4, GL_FLOAT, GL_FALSE, 0);
+    glVertexArrayAttribBinding(m_quadVao, 2, 2);
+    glVertexArrayBindingDivisor(m_quadVao, 2, 1);
 
-    glBindVertexArray(0);
+    // Instance size (location 3, binding 3) — float
+    glEnableVertexArrayAttrib(m_quadVao, 3);
+    glVertexArrayAttribFormat(m_quadVao, 3, 1, GL_FLOAT, GL_FALSE, 0);
+    glVertexArrayAttribBinding(m_quadVao, 3, 3);
+    glVertexArrayBindingDivisor(m_quadVao, 3, 1);
 }
 
 void ParticleRenderer::ensureInstanceBufferCapacity(int count)
@@ -133,20 +134,27 @@ void ParticleRenderer::ensureInstanceBufferCapacity(int count)
     m_instanceBufferCapacity = capacity;
     auto byteCount = static_cast<GLsizeiptr>(capacity);
 
-    // Orphan and reallocate all instance buffers
-    glBindBuffer(GL_ARRAY_BUFFER, m_instancePositionVbo);
-    glBufferData(GL_ARRAY_BUFFER, byteCount * static_cast<GLsizeiptr>(sizeof(glm::vec3)),
-                 nullptr, GL_STREAM_DRAW);
+    // Delete old buffers and create new immutable ones with GL_DYNAMIC_STORAGE_BIT
+    glDeleteBuffers(1, &m_instancePositionVbo);
+    glCreateBuffers(1, &m_instancePositionVbo);
+    glNamedBufferStorage(m_instancePositionVbo,
+                         byteCount * static_cast<GLsizeiptr>(sizeof(glm::vec3)),
+                         nullptr, GL_DYNAMIC_STORAGE_BIT);
+    glVertexArrayVertexBuffer(m_quadVao, 1, m_instancePositionVbo, 0, sizeof(glm::vec3));
 
-    glBindBuffer(GL_ARRAY_BUFFER, m_instanceColorVbo);
-    glBufferData(GL_ARRAY_BUFFER, byteCount * static_cast<GLsizeiptr>(sizeof(glm::vec4)),
-                 nullptr, GL_STREAM_DRAW);
+    glDeleteBuffers(1, &m_instanceColorVbo);
+    glCreateBuffers(1, &m_instanceColorVbo);
+    glNamedBufferStorage(m_instanceColorVbo,
+                         byteCount * static_cast<GLsizeiptr>(sizeof(glm::vec4)),
+                         nullptr, GL_DYNAMIC_STORAGE_BIT);
+    glVertexArrayVertexBuffer(m_quadVao, 2, m_instanceColorVbo, 0, sizeof(glm::vec4));
 
-    glBindBuffer(GL_ARRAY_BUFFER, m_instanceSizeVbo);
-    glBufferData(GL_ARRAY_BUFFER, byteCount * static_cast<GLsizeiptr>(sizeof(float)),
-                 nullptr, GL_STREAM_DRAW);
-
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glDeleteBuffers(1, &m_instanceSizeVbo);
+    glCreateBuffers(1, &m_instanceSizeVbo);
+    glNamedBufferStorage(m_instanceSizeVbo,
+                         byteCount * static_cast<GLsizeiptr>(sizeof(float)),
+                         nullptr, GL_DYNAMIC_STORAGE_BIT);
+    glVertexArrayVertexBuffer(m_quadVao, 3, m_instanceSizeVbo, 0, sizeof(float));
 }
 
 void ParticleRenderer::render(
@@ -212,29 +220,20 @@ void ParticleRenderer::render(
 
         auto countBytes = static_cast<GLsizeiptr>(count);
 
-        // Upload position data (buffer orphaning pattern)
-        glBindBuffer(GL_ARRAY_BUFFER, m_instancePositionVbo);
-        glBufferData(GL_ARRAY_BUFFER, countBytes * static_cast<GLsizeiptr>(sizeof(glm::vec3)),
-                     nullptr, GL_STREAM_DRAW);
-        glBufferSubData(GL_ARRAY_BUFFER, 0,
-                        countBytes * static_cast<GLsizeiptr>(sizeof(glm::vec3)),
-                        data.positions.data());
+        // Upload position data via DSA
+        glNamedBufferSubData(m_instancePositionVbo, 0,
+                             countBytes * static_cast<GLsizeiptr>(sizeof(glm::vec3)),
+                             data.positions.data());
 
         // Upload color data
-        glBindBuffer(GL_ARRAY_BUFFER, m_instanceColorVbo);
-        glBufferData(GL_ARRAY_BUFFER, countBytes * static_cast<GLsizeiptr>(sizeof(glm::vec4)),
-                     nullptr, GL_STREAM_DRAW);
-        glBufferSubData(GL_ARRAY_BUFFER, 0,
-                        countBytes * static_cast<GLsizeiptr>(sizeof(glm::vec4)),
-                        data.colors.data());
+        glNamedBufferSubData(m_instanceColorVbo, 0,
+                             countBytes * static_cast<GLsizeiptr>(sizeof(glm::vec4)),
+                             data.colors.data());
 
         // Upload size data
-        glBindBuffer(GL_ARRAY_BUFFER, m_instanceSizeVbo);
-        glBufferData(GL_ARRAY_BUFFER, countBytes * static_cast<GLsizeiptr>(sizeof(float)),
-                     nullptr, GL_STREAM_DRAW);
-        glBufferSubData(GL_ARRAY_BUFFER, 0,
-                        countBytes * static_cast<GLsizeiptr>(sizeof(float)),
-                        data.sizes.data());
+        glNamedBufferSubData(m_instanceSizeVbo, 0,
+                             countBytes * static_cast<GLsizeiptr>(sizeof(float)),
+                             data.sizes.data());
 
         // Draw all particles in one instanced call
         glDrawArraysInstanced(GL_TRIANGLES, 0, 6, count);
@@ -243,7 +242,6 @@ void ParticleRenderer::render(
     // Restore state
     glDepthMask(GL_TRUE);
     glDisable(GL_BLEND);
-    glBindVertexArray(0);
 }
 
 } // namespace Vestige
