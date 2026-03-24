@@ -1192,7 +1192,7 @@ void Engine::setupDemoScene()
     primitiveMat->setRoughness(0.5f);
 
     Entity* sphereEntity = scene->createEntity("7 Sphere");
-    sphereEntity->transform.position = glm::vec3(-4.5f, 0.5f, 2.0f);
+    sphereEntity->transform.position = glm::vec3(-4.5f, 0.52f, 2.0f);
     auto* sphereMR = sphereEntity->addComponent<MeshRenderer>(sphereMesh, primitiveMat);
     sphereMR->setBounds(sphereMesh->getLocalBounds());
 
