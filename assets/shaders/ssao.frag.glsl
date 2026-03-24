@@ -1,3 +1,5 @@
+/// @file ssao.frag.glsl
+/// @brief Screen-space ambient occlusion — kernel-based depth sampling to estimate local occlusion.
 #version 450 core
 
 in vec2 v_texCoord;

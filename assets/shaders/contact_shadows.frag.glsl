@@ -1,3 +1,5 @@
+/// @file contact_shadows.frag.glsl
+/// @brief Screen-space contact shadows — ray-marches toward the light to catch fine shadow detail at object contacts.
 #version 450 core
 
 /// Screen-space contact shadows — ray-march toward the light in screen space

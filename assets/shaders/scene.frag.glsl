@@ -1,3 +1,5 @@
+/// @file scene.frag.glsl
+/// @brief Main scene PBR fragment shader — multi-light Blinn-Phong/PBR with CSM shadows, normal mapping, and IBL.
 #version 450 core
 
 // Maximum light counts — must match C++ constants

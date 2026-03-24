@@ -1,3 +1,5 @@
+/// @file water.vert.glsl
+/// @brief Water surface vertex shader — displaces vertices with Gerstner wave summation.
 #version 450 core
 
 layout(location = 0) in vec3 a_position;

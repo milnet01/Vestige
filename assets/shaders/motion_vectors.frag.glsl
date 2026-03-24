@@ -1,3 +1,5 @@
+/// @file motion_vectors.frag.glsl
+/// @brief Computes per-pixel motion vectors from current and previous frame view-projection matrices.
 #version 450 core
 
 in vec2 v_texCoord;

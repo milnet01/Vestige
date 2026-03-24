@@ -1,3 +1,5 @@
+/// @file brdf_lut.frag.glsl
+/// @brief Precomputes the split-sum BRDF lookup table for IBL specular lighting.
 #version 450 core
 
 in vec2 v_texCoord;

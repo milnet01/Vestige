@@ -1,3 +1,5 @@
+/// @file basic.vert.glsl
+/// @brief Basic vertex shader with model-view-projection transform and normal matrix via cofactor.
 #version 450 core
 
 layout(location = 0) in vec3 position;

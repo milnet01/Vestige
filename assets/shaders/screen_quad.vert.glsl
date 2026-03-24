@@ -1,3 +1,5 @@
+/// @file screen_quad.vert.glsl
+/// @brief Full-screen quad vertex shader for post-processing passes.
 #version 450 core
 
 layout(location = 0) in vec2 position;

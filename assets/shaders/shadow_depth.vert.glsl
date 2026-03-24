@@ -1,3 +1,5 @@
+/// @file shadow_depth.vert.glsl
+/// @brief Directional shadow map vertex shader — transforms geometry into light space with instancing support.
 #version 450 core
 
 layout(location = 0) in vec3 position;

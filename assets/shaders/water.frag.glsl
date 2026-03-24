@@ -1,3 +1,5 @@
+/// @file water.frag.glsl
+/// @brief Water surface fragment shader — Fresnel blending, normal-mapped distortion, and environment reflections.
 #version 450 core
 
 in vec3 v_worldPos;

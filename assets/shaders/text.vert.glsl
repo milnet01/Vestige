@@ -1,3 +1,5 @@
+/// @file text.vert.glsl
+/// @brief Text rendering vertex shader — transforms glyph quads with packed position and UV data.
 #version 450 core
 
 layout(location = 0) in vec4 vertex;  // xy = position, zw = texcoord

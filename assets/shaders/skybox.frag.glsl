@@ -1,3 +1,5 @@
+/// @file skybox.frag.glsl
+/// @brief Skybox fragment shader — samples cubemap or renders a procedural gradient sky.
 #version 450 core
 
 in vec3 v_texCoord;

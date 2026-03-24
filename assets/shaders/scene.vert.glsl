@@ -1,3 +1,5 @@
+/// @file scene.vert.glsl
+/// @brief Main scene vertex shader — transforms geometry with instancing, TBN matrix, and TAA jitter support.
 #version 450 core
 
 layout(location = 0) in vec3 position;

@@ -1,3 +1,5 @@
+/// @file taa_resolve.frag.glsl
+/// @brief Temporal anti-aliasing resolve — blends current frame with clamped history using YCoCg variance clipping.
 #version 450 core
 
 in vec2 v_texCoord;

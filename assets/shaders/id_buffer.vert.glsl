@@ -1,3 +1,5 @@
+/// @file id_buffer.vert.glsl
+/// @brief Entity ID buffer vertex shader — transforms geometry for the color-encoded picking pass.
 #version 450 core
 
 layout(location = 0) in vec3 position;

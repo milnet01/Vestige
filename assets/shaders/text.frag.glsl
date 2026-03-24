@@ -1,3 +1,5 @@
+/// @file text.frag.glsl
+/// @brief Text rendering fragment shader — samples glyph atlas alpha and applies text color.
 #version 450 core
 
 in vec2 v_texCoord;

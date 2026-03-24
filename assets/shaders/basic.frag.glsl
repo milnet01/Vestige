@@ -1,3 +1,5 @@
+/// @file basic.frag.glsl
+/// @brief Basic fragment shader with simple directional lighting and vertex colors.
 #version 450 core
 
 in vec3 v_color;

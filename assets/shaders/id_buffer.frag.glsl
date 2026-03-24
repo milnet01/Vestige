@@ -1,3 +1,5 @@
+/// @file id_buffer.frag.glsl
+/// @brief Entity ID buffer fragment shader — outputs the entity ID as an RGB color for mouse picking.
 #version 450 core
 
 /// Entity ID encoded as an RGB color (passed from CPU).
