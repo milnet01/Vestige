@@ -4,7 +4,6 @@
 #include "environment/terrain.h"
 #include "core/logger.h"
 
-#include <glm/gtc/type_ptr.hpp>
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
@@ -608,9 +607,12 @@ void Terrain::computeNormalAt(int x, int z)
     // Scale by height scale and spacing for correct world-space normal
     float dX = (hL - hR) * m_config.heightScale;
     float dZ = (hD - hU) * m_config.heightScale;
-    float dY = 2.0f * m_config.spacingX;  // Two texels apart
 
-    glm::vec3 normal = glm::normalize(glm::vec3(dX, dY, dZ));
+    // Use respective axis spacing (two texels apart in each direction)
+    glm::vec3 normal = glm::normalize(glm::vec3(
+        dX / (2.0f * m_config.spacingX),
+        1.0f,
+        dZ / (2.0f * m_config.spacingZ)));
     m_normalData[static_cast<size_t>(z * m_config.width + x)] = normal;
 }
 

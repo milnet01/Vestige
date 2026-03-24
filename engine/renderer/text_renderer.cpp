@@ -93,8 +93,8 @@ void TextRenderer::renderText2D(const std::string& text, float x, float y, float
     GLboolean prevBlend = glIsEnabled(GL_BLEND);
     GLboolean prevDepth = glIsEnabled(GL_DEPTH_TEST);
     GLint prevBlendSrc, prevBlendDst;
-    glGetIntegerv(GL_BLEND_SRC_ALPHA, &prevBlendSrc);
-    glGetIntegerv(GL_BLEND_DST_ALPHA, &prevBlendDst);
+    glGetIntegerv(GL_BLEND_SRC_RGB, &prevBlendSrc);
+    glGetIntegerv(GL_BLEND_DST_RGB, &prevBlendDst);
 
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);

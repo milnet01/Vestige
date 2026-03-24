@@ -25,10 +25,12 @@ Framebuffer::Framebuffer(Framebuffer&& other) noexcept
     , m_colorAttachment(other.m_colorAttachment)
     , m_depthAttachment(other.m_depthAttachment)
     , m_isDepthRenderbuffer(other.m_isDepthRenderbuffer)
+    , m_isComplete(other.m_isComplete)
 {
     other.m_fboId = 0;
     other.m_colorAttachment = 0;
     other.m_depthAttachment = 0;
+    other.m_isComplete = false;
 }
 
 Framebuffer& Framebuffer::operator=(Framebuffer&& other) noexcept
@@ -41,9 +43,11 @@ Framebuffer& Framebuffer::operator=(Framebuffer&& other) noexcept
         m_colorAttachment = other.m_colorAttachment;
         m_depthAttachment = other.m_depthAttachment;
         m_isDepthRenderbuffer = other.m_isDepthRenderbuffer;
+        m_isComplete = other.m_isComplete;
         other.m_fboId = 0;
         other.m_colorAttachment = 0;
         other.m_depthAttachment = 0;
+        other.m_isComplete = false;
     }
     return *this;
 }

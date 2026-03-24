@@ -214,20 +214,23 @@ void FoliageManager::removeFoliage(const std::vector<FoliageInstanceRef>& instan
         }
 
         // Remove the specific instance by matching position (effectively unique)
-        auto& foliage = const_cast<std::vector<FoliageInstance>&>(
-            it->second->getFoliage(ref.typeId));
+        auto* foliage = it->second->getFoliageMutable(ref.typeId);
+        if (!foliage)
+        {
+            continue;
+        }
 
-        auto found = std::find_if(foliage.begin(), foliage.end(),
+        auto found = std::find_if(foliage->begin(), foliage->end(),
             [&](const FoliageInstance& inst)
             {
                 return glm::distance(inst.position, ref.instance.position) < 0.001f;
             });
 
-        if (found != foliage.end())
+        if (found != foliage->end())
         {
             // Swap-and-pop for O(1) removal
-            *found = foliage.back();
-            foliage.pop_back();
+            *found = foliage->back();
+            foliage->pop_back();
         }
     }
 }

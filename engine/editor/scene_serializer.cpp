@@ -33,7 +33,11 @@ static std::string currentTimestamp()
     auto now = std::chrono::system_clock::now();
     auto time = std::chrono::system_clock::to_time_t(now);
     std::tm utc{};
+#ifdef _WIN32
+    gmtime_s(&utc, &time);
+#else
     gmtime_r(&time, &utc);
+#endif
 
     std::ostringstream ss;
     ss << std::put_time(&utc, "%Y-%m-%dT%H:%M:%SZ");
@@ -320,6 +324,9 @@ SceneSerializerResult SceneSerializer::loadScene(
             Logger::warning("Scene load: failed to deserialize an entity");
         }
     }
+
+    // Rebuild entity ID lookup index after bulk deserialization
+    scene.rebuildEntityIndex();
 
     result.success = true;
     Logger::info("Loaded scene '" + sceneName + "' from " + path.string()

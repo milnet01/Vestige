@@ -52,6 +52,7 @@ public:
         m_parentId = parent->getId();
         m_siblingIndex = findSiblingIndex(parent, entity);
 
+        m_scene.unregisterEntityRecursive(entity);
         m_ownedEntity = parent->removeChild(entity);
     }
 
@@ -78,7 +79,8 @@ public:
             parent = m_scene.getRoot();
         }
 
-        parent->insertChild(std::move(m_ownedEntity), m_siblingIndex);
+        Entity* ptr = parent->insertChild(std::move(m_ownedEntity), m_siblingIndex);
+        m_scene.registerEntityRecursive(ptr);
     }
 
     std::string getDescription() const override

@@ -35,8 +35,12 @@ public:
     /// @return Number of instances removed.
     int removeFoliageInRadius(uint32_t typeId, const glm::vec3& center, float radius);
 
-    /// @brief Gets all foliage instances for a given type.
+    /// @brief Gets all foliage instances for a given type (const).
     const std::vector<FoliageInstance>& getFoliage(uint32_t typeId) const;
+
+    /// @brief Gets mutable foliage instances for a given type.
+    /// @return Pointer to the instance vector, or nullptr if typeId not found.
+    std::vector<FoliageInstance>* getFoliageMutable(uint32_t typeId);
 
     /// @brief Gets all foliage type IDs that have instances in this chunk.
     std::vector<uint32_t> getFoliageTypeIds() const;

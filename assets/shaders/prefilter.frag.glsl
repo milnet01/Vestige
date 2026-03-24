@@ -99,6 +99,6 @@ void main()
         }
     }
 
-    prefilteredColor = prefilteredColor / totalWeight;
+    prefilteredColor = prefilteredColor / max(totalWeight, 0.001);
     fragColor = vec4(prefilteredColor, 1.0);
 }

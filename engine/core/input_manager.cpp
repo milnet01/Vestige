@@ -114,7 +114,7 @@ void InputManager::cursorPositionCallback(GLFWwindow* window, double xPos, doubl
         self->m_isFirstMouse = false;
     }
 
-    self->m_mouseDelta = newPos - self->m_lastMousePosition;
+    self->m_mouseDelta += newPos - self->m_lastMousePosition;
     self->m_lastMousePosition = newPos;
     self->m_mousePosition = newPos;
 
@@ -129,7 +129,7 @@ void InputManager::scrollCallback(GLFWwindow* window, double xOffset, double yOf
         return;
     }
 
-    self->m_scrollDelta = glm::vec2(static_cast<float>(xOffset), static_cast<float>(yOffset));
+    self->m_scrollDelta += glm::vec2(static_cast<float>(xOffset), static_cast<float>(yOffset));
     self->m_eventBus.publish(MouseScrollEvent(xOffset, yOffset));
 }
 

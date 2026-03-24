@@ -68,6 +68,16 @@ const std::vector<FoliageInstance>& FoliageChunk::getFoliage(uint32_t typeId) co
     return EMPTY_FOLIAGE;
 }
 
+std::vector<FoliageInstance>* FoliageChunk::getFoliageMutable(uint32_t typeId)
+{
+    auto it = m_foliage.find(typeId);
+    if (it != m_foliage.end())
+    {
+        return &it->second;
+    }
+    return nullptr;
+}
+
 std::vector<uint32_t> FoliageChunk::getFoliageTypeIds() const
 {
     std::vector<uint32_t> ids;

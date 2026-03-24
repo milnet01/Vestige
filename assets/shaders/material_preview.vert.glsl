@@ -12,11 +12,19 @@ out vec3 vWorldPos;
 out vec3 vNormal;
 out vec2 vTexCoord;
 
+/// Computes the cofactor matrix for correct non-uniform scale normal transform.
+mat3 cofactorMatrix(mat3 m)
+{
+    return mat3(cross(m[1], m[2]),
+                cross(m[2], m[0]),
+                cross(m[0], m[1]));
+}
+
 void main()
 {
     vec4 worldPos = u_model * vec4(aPos, 1.0);
     vWorldPos = worldPos.xyz;
-    vNormal = mat3(transpose(inverse(u_model))) * aNormal;
+    vNormal = normalize(cofactorMatrix(mat3(u_model)) * aNormal);
     vTexCoord = aTexCoord;
     gl_Position = u_projection * u_view * worldPos;
 }

@@ -497,11 +497,14 @@ void InspectorPanel::drawMaterial(Material& material)
     drawMaterialTransparency(material);
 
     // --- Material Preview ---
+    // Mark preview dirty if any inspector widget was modified this frame
+    if (ImGui::IsAnyItemActive() || ImGui::IsItemDeactivated())
+    {
+        m_materialPreview.markDirty();
+    }
+
     if (ImGui::CollapsingHeader("Preview", ImGuiTreeNodeFlags_DefaultOpen))
     {
-        // Mark dirty whenever the material is viewed (simple approach — re-renders once
-        // per selection change and when properties change via inspector interaction)
-        m_materialPreview.markDirty();
         m_materialPreview.render(material);
 
         GLuint previewTex = m_materialPreview.getTextureId();
