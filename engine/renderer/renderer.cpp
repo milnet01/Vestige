@@ -370,57 +370,54 @@ void Renderer::initFramebuffers(int width, int height, int msaaSamples)
     // Skybox (procedural gradient — no cubemap texture)
     m_skybox = std::make_unique<Skybox>();
 
-    // Bloom mip-chain texture (single texture with progressively smaller mip levels)
+    // Bloom mip-chain texture (DSA, immutable storage)
     {
-        glGenTextures(1, &m_bloomTexture);
-        glBindTexture(GL_TEXTURE_2D, m_bloomTexture);
-
-        // Compute mip dimensions
+        // Compute mip dimensions (base = half resolution)
         int mipW = width / 2;
         int mipH = height / 2;
+        if (mipW < 1) mipW = 1;
+        if (mipH < 1) mipH = 1;
+
+        glCreateTextures(GL_TEXTURE_2D, 1, &m_bloomTexture);
+        glTextureStorage2D(m_bloomTexture, BLOOM_MIP_COUNT, GL_R11F_G11F_B10F, mipW, mipH);
+
+        // Record mip dimensions for later use
         for (int i = 0; i < BLOOM_MIP_COUNT; i++)
         {
-            if (mipW < 1) mipW = 1;
-            if (mipH < 1) mipH = 1;
             m_bloomMipWidths[i] = mipW;
             m_bloomMipHeights[i] = mipH;
-            glTexImage2D(GL_TEXTURE_2D, i, GL_R11F_G11F_B10F, mipW, mipH,
-                         0, GL_RGB, GL_FLOAT, nullptr);
-            mipW /= 2;
-            mipH /= 2;
+            mipW = std::max(1, mipW / 2);
+            mipH = std::max(1, mipH / 2);
         }
 
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, BLOOM_MIP_COUNT - 1);
+        glTextureParameteri(m_bloomTexture, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+        glTextureParameteri(m_bloomTexture, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTextureParameteri(m_bloomTexture, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTextureParameteri(m_bloomTexture, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTextureParameteri(m_bloomTexture, GL_TEXTURE_BASE_LEVEL, 0);
+        glTextureParameteri(m_bloomTexture, GL_TEXTURE_MAX_LEVEL, BLOOM_MIP_COUNT - 1);
 
         // Single FBO, we'll attach different mip levels as needed
-        glGenFramebuffers(1, &m_bloomFbo);
+        glCreateFramebuffers(1, &m_bloomFbo);
 
         Logger::debug("Bloom mip-chain created: " + std::to_string(BLOOM_MIP_COUNT)
             + " levels from " + std::to_string(m_bloomMipWidths[0]) + "x"
             + std::to_string(m_bloomMipHeights[0]));
     }
 
-    // Auto-exposure luminance texture (separate from bloom — unthresholded)
+    // Auto-exposure luminance texture (DSA, immutable storage with full mip chain)
     {
-        glGenTextures(1, &m_luminanceTexture);
-        glBindTexture(GL_TEXTURE_2D, m_luminanceTexture);
-        // Start at 256x256 — glGenerateMipmap creates all levels down to 1x1
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, 256, 256,
-                     0, GL_RGB, GL_FLOAT, nullptr);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        glGenerateMipmap(GL_TEXTURE_2D);
+        glCreateTextures(GL_TEXTURE_2D, 1, &m_luminanceTexture);
+        // 256x256 with 9 mip levels (256 → 1)
+        glTextureStorage2D(m_luminanceTexture, 9, GL_RGB16F, 256, 256);
+        glTextureParameteri(m_luminanceTexture, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+        glTextureParameteri(m_luminanceTexture, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTextureParameteri(m_luminanceTexture, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTextureParameteri(m_luminanceTexture, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     }
 
     // Async PBO readback for auto-exposure (avoids GPU→CPU sync stall)
-    glGenBuffers(2, m_luminancePbo);
+    glCreateBuffers(2, m_luminancePbo);
     for (int i = 0; i < 2; i++)
     {
         glBindBuffer(GL_PIXEL_PACK_BUFFER, m_luminancePbo[i]);
@@ -587,8 +584,7 @@ void Renderer::endFrame(float deltaTime)
         m_resolveDepthFbo->bindDepthTexture(12);
         m_ssaoShader.setInt("u_depthTexture", 12);
 
-        glActiveTexture(GL_TEXTURE11);
-        glBindTexture(GL_TEXTURE_2D, m_ssaoNoiseTexture);
+        glBindTextureUnit(11, m_ssaoNoiseTexture);
         m_ssaoShader.setInt("u_noiseTexture", 11);
 
         // Kernel was uploaded once at init — only set per-frame uniforms
@@ -695,9 +691,8 @@ void Renderer::endFrame(float deltaTime)
             {
                 // Bind the bloom texture and limit sampling to the previous mip
                 glActiveTexture(GL_TEXTURE0);
-                glBindTexture(GL_TEXTURE_2D, m_bloomTexture);
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, mip - 1);
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, mip - 1);
+                glTextureParameteri(m_bloomTexture, GL_TEXTURE_BASE_LEVEL, mip - 1);
+                glTextureParameteri(m_bloomTexture, GL_TEXTURE_MAX_LEVEL, mip - 1);
                 m_bloomDownsampleShader.setVec2("u_srcTexelSize",
                     glm::vec2(1.0f / static_cast<float>(m_bloomMipWidths[mip - 1]),
                               1.0f / static_cast<float>(m_bloomMipHeights[mip - 1])));
@@ -713,10 +708,8 @@ void Renderer::endFrame(float deltaTime)
         }
 
         // Restore texture mip range for sampling during upsample
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, m_bloomTexture);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, BLOOM_MIP_COUNT - 1);
+        glTextureParameteri(m_bloomTexture, GL_TEXTURE_BASE_LEVEL, 0);
+        glTextureParameteri(m_bloomTexture, GL_TEXTURE_MAX_LEVEL, BLOOM_MIP_COUNT - 1);
 
         // --- Upsample pass: progressively double resolution, additive blending ---
         m_bloomUpsampleShader.use();
@@ -735,10 +728,9 @@ void Renderer::endFrame(float deltaTime)
             glViewport(0, 0, dstW, dstH);
 
             // Source: current (smaller) mip level
-            glActiveTexture(GL_TEXTURE0);
-            glBindTexture(GL_TEXTURE_2D, m_bloomTexture);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, mip);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, mip);
+            glTextureParameteri(m_bloomTexture, GL_TEXTURE_BASE_LEVEL, mip);
+            glTextureParameteri(m_bloomTexture, GL_TEXTURE_MAX_LEVEL, mip);
+            glBindTextureUnit(0, m_bloomTexture);
 
             m_bloomUpsampleShader.setInt("u_sourceTexture", 0);
             m_bloomUpsampleShader.setVec2("u_srcTexelSize",
@@ -754,10 +746,8 @@ void Renderer::endFrame(float deltaTime)
         glDisable(GL_BLEND);
 
         // Restore mip range
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, m_bloomTexture);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, BLOOM_MIP_COUNT - 1);
+        glTextureParameteri(m_bloomTexture, GL_TEXTURE_BASE_LEVEL, 0);
+        glTextureParameteri(m_bloomTexture, GL_TEXTURE_MAX_LEVEL, BLOOM_MIP_COUNT - 1);
     }
 
     // 5b. Auto-exposure: compute average scene luminance from dedicated texture.
@@ -776,8 +766,7 @@ void Renderer::endFrame(float deltaTime)
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
         // Generate mipmaps — hardware averages down to 1x1
-        glBindTexture(GL_TEXTURE_2D, m_luminanceTexture);
-        glGenerateMipmap(GL_TEXTURE_2D);
+        glGenerateTextureMipmap(m_luminanceTexture);
 
         // Async readback: issue glGetTexImage into a PBO (non-blocking DMA transfer)
         glBindBuffer(GL_PIXEL_PACK_BUFFER, m_luminancePbo[m_pboWriteIndex]);
@@ -869,11 +858,10 @@ void Renderer::endFrame(float deltaTime)
     m_screenShader.setFloat("u_bloomIntensity", m_bloomIntensity);
     if (m_bloomTexture != 0)
     {
-        glActiveTexture(GL_TEXTURE9);
-        glBindTexture(GL_TEXTURE_2D, m_bloomTexture);
         // Sample from mip 0 (the fully composited bloom result)
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
+        glTextureParameteri(m_bloomTexture, GL_TEXTURE_BASE_LEVEL, 0);
+        glTextureParameteri(m_bloomTexture, GL_TEXTURE_MAX_LEVEL, 0);
+        glBindTextureUnit(9, m_bloomTexture);
         m_screenShader.setInt("u_bloomTexture", 9);
     }
 
@@ -1610,16 +1598,13 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
     else
     {
         // No environment map at all — bind dummy textures to satisfy Mesa
-        // Cubemap samplers on units 14, 15
-        glActiveTexture(GL_TEXTURE0 + 14);
-        glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
+        // Cubemap samplers on units 14, 15 — bind zero textures
+        glBindTextureUnit(14, 0);
         m_sceneShader.setInt("u_irradianceMap", 14);
-        glActiveTexture(GL_TEXTURE0 + 15);
-        glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
+        glBindTextureUnit(15, 0);
         m_sceneShader.setInt("u_prefilterMap", 15);
-        // 2D sampler on unit 16
-        glActiveTexture(GL_TEXTURE0 + 16);
-        glBindTexture(GL_TEXTURE_2D, 0);
+        // 2D sampler on unit 16 — bind zero texture
+        glBindTextureUnit(16, 0);
         m_sceneShader.setInt("u_brdfLUT", 16);
         m_sceneShader.setFloat("u_maxPrefilterLod", 0.0f);
         m_sceneShader.setBool("u_hasIBL", false);
@@ -2098,14 +2083,13 @@ void Renderer::generateSsaoNoiseTexture()
         noise.push_back(n);
     }
 
-    glGenTextures(1, &m_ssaoNoiseTexture);
-    glBindTexture(GL_TEXTURE_2D, m_ssaoNoiseTexture);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, 4, 4, 0, GL_RGB, GL_FLOAT, noise.data());
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-    glBindTexture(GL_TEXTURE_2D, 0);
+    glCreateTextures(GL_TEXTURE_2D, 1, &m_ssaoNoiseTexture);
+    glTextureStorage2D(m_ssaoNoiseTexture, 1, GL_RGB16F, 4, 4);
+    glTextureSubImage2D(m_ssaoNoiseTexture, 0, 0, 0, 4, 4, GL_RGB, GL_FLOAT, noise.data());
+    glTextureParameteri(m_ssaoNoiseTexture, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTextureParameteri(m_ssaoNoiseTexture, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTextureParameteri(m_ssaoNoiseTexture, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTextureParameteri(m_ssaoNoiseTexture, GL_TEXTURE_WRAP_T, GL_REPEAT);
 }
 
 // ---------------------------------------------------------------------------
@@ -2358,23 +2342,33 @@ void Renderer::resizeRenderTarget(int width, int height)
     }
     // Shadow map does not resize with the window — it has a fixed resolution
 
-    // Resize bloom mip-chain texture
+    // Recreate bloom mip-chain texture (immutable storage requires delete+recreate on resize)
     if (m_bloomTexture != 0)
     {
-        glBindTexture(GL_TEXTURE_2D, m_bloomTexture);
+        glDeleteTextures(1, &m_bloomTexture);
+
         int mipW = width / 2;
         int mipH = height / 2;
+        if (mipW < 1) mipW = 1;
+        if (mipH < 1) mipH = 1;
+
+        glCreateTextures(GL_TEXTURE_2D, 1, &m_bloomTexture);
+        glTextureStorage2D(m_bloomTexture, BLOOM_MIP_COUNT, GL_R11F_G11F_B10F, mipW, mipH);
+
         for (int i = 0; i < BLOOM_MIP_COUNT; i++)
         {
-            if (mipW < 1) mipW = 1;
-            if (mipH < 1) mipH = 1;
             m_bloomMipWidths[i] = mipW;
             m_bloomMipHeights[i] = mipH;
-            glTexImage2D(GL_TEXTURE_2D, i, GL_R11F_G11F_B10F, mipW, mipH,
-                         0, GL_RGB, GL_FLOAT, nullptr);
-            mipW /= 2;
-            mipH /= 2;
+            mipW = std::max(1, mipW / 2);
+            mipH = std::max(1, mipH / 2);
         }
+
+        glTextureParameteri(m_bloomTexture, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+        glTextureParameteri(m_bloomTexture, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTextureParameteri(m_bloomTexture, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTextureParameteri(m_bloomTexture, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTextureParameteri(m_bloomTexture, GL_TEXTURE_BASE_LEVEL, 0);
+        glTextureParameteri(m_bloomTexture, GL_TEXTURE_MAX_LEVEL, BLOOM_MIP_COUNT - 1);
     }
 
     // Resize SSAO FBOs (full-resolution)

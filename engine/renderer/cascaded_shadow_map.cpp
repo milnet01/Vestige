@@ -22,33 +22,28 @@ CascadedShadowMap::CascadedShadowMap(const CascadedShadowConfig& config)
     int res = config.resolution;
     int layers = config.cascadeCount;
 
-    // Create depth texture array (one layer per cascade)
-    glGenTextures(1, &m_depthTextureArray);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, m_depthTextureArray);
-    glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_DEPTH_COMPONENT24,
-                 res, res, layers, 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
-    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
-    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+    // Create depth texture array (one layer per cascade) — DSA
+    glCreateTextures(GL_TEXTURE_2D_ARRAY, 1, &m_depthTextureArray);
+    glTextureStorage3D(m_depthTextureArray, 1, GL_DEPTH_COMPONENT24, res, res, layers);
+    glTextureParameteri(m_depthTextureArray, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTextureParameteri(m_depthTextureArray, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTextureParameteri(m_depthTextureArray, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+    glTextureParameteri(m_depthTextureArray, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
     float borderColor[] = {1.0f, 1.0f, 1.0f, 1.0f};
-    glTexParameterfv(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_BORDER_COLOR, borderColor);
+    glTextureParameterfv(m_depthTextureArray, GL_TEXTURE_BORDER_COLOR, borderColor);
 
-    // Create FBO (layers are attached one at a time during rendering)
-    glGenFramebuffers(1, &m_fbo);
-    glBindFramebuffer(GL_FRAMEBUFFER, m_fbo);
-    glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
-                              m_depthTextureArray, 0, 0);
-    glDrawBuffer(GL_NONE);
-    glReadBuffer(GL_NONE);
+    // Create FBO (layers are attached one at a time during rendering) — DSA
+    glCreateFramebuffers(1, &m_fbo);
+    glNamedFramebufferTextureLayer(m_fbo, GL_DEPTH_ATTACHMENT,
+                                   m_depthTextureArray, 0, 0);
+    glNamedFramebufferDrawBuffer(m_fbo, GL_NONE);
+    glNamedFramebufferReadBuffer(m_fbo, GL_NONE);
 
-    GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+    GLenum status = glCheckNamedFramebufferStatus(m_fbo, GL_FRAMEBUFFER);
     if (status != GL_FRAMEBUFFER_COMPLETE)
     {
         Logger::error("Cascaded shadow map FBO incomplete: " + std::to_string(status));
     }
-
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
     Logger::info("Cascaded shadow map initialized: " + std::to_string(layers)
         + " cascades at " + std::to_string(res) + "x" + std::to_string(res));
@@ -245,8 +240,8 @@ void CascadedShadowMap::beginCascade(int cascade)
     }
 
     glBindFramebuffer(GL_FRAMEBUFFER, m_fbo);
-    glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
-                              m_depthTextureArray, 0, cascade);
+    glNamedFramebufferTextureLayer(m_fbo, GL_DEPTH_ATTACHMENT,
+                                   m_depthTextureArray, 0, cascade);
     glViewport(0, 0, m_config.resolution, m_config.resolution);
     glClear(GL_DEPTH_BUFFER_BIT);
 }
@@ -258,8 +253,7 @@ void CascadedShadowMap::endCascade()
 
 void CascadedShadowMap::bindShadowTexture(int textureUnit)
 {
-    glActiveTexture(GL_TEXTURE0 + textureUnit);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, m_depthTextureArray);
+    glBindTextureUnit(static_cast<GLuint>(textureUnit), m_depthTextureArray);
 }
 
 const glm::mat4& CascadedShadowMap::getLightSpaceMatrix(int cascade) const
