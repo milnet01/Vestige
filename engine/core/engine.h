@@ -17,7 +17,9 @@
 #include "renderer/water_renderer.h"
 #include "renderer/foliage_renderer.h"
 #include "renderer/tree_renderer.h"
+#include "renderer/terrain_renderer.h"
 #include "environment/foliage_manager.h"
+#include "environment/terrain.h"
 #include "profiler/performance_profiler.h"
 
 #include <memory>
@@ -74,6 +76,8 @@ private:
     FoliageRenderer m_foliageRenderer;
     TreeRenderer m_treeRenderer;
     FoliageManager m_foliageManager;
+    Terrain m_terrain;
+    TerrainRenderer m_terrainRenderer;
     PerformanceProfiler m_profiler;
 
     bool m_isRunning;

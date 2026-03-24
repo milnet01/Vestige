@@ -19,9 +19,13 @@ void PerformanceProfiler::shutdown()
 
 void PerformanceProfiler::beginFrame()
 {
+    // Always run GPU timer begin/end so the triple-buffered queries stay
+    // in sync with the passes recorded every frame (beginPass/endPass are
+    // called unconditionally in the render loop).
+    m_gpuTimer.beginFrame();
+
     if (m_enabled)
     {
-        m_gpuTimer.beginFrame();
         getCpuProfiler_().beginFrame();
     }
 }
@@ -30,10 +34,11 @@ void PerformanceProfiler::endFrame(float deltaTime)
 {
     m_currentFrameTimeMs = deltaTime * 1000.0f;
 
+    m_gpuTimer.endFrame();
+
     if (m_enabled)
     {
         getCpuProfiler_().endFrame();
-        m_gpuTimer.endFrame();
         m_memoryTracker.update();
     }
 

@@ -49,6 +49,7 @@ void WaterRenderer::shutdown()
         glDeleteTextures(1, &m_defaultDudvMap);
         m_defaultDudvMap = 0;
     }
+    m_waterShader.destroy();
     m_initialized = false;
 }
 

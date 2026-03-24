@@ -24,6 +24,16 @@ Shader::~Shader()
     }
 }
 
+void Shader::destroy()
+{
+    if (m_programId != 0)
+    {
+        glDeleteProgram(m_programId);
+        m_programId = 0;
+    }
+    m_uniformCache.clear();
+}
+
 Shader::Shader(Shader&& other) noexcept
     : m_programId(other.m_programId)
     , m_uniformCache(std::move(other.m_uniformCache))

@@ -15,6 +15,8 @@
 #include <GLFW/glfw3.h>
 #include <glm/gtc/matrix_transform.hpp>
 
+#include <cmath>
+
 namespace Vestige
 {
 
@@ -121,11 +123,86 @@ bool Engine::initialize(const EngineConfig& config)
         Logger::warning("Tree renderer initialization failed — trees will be unavailable");
     }
 
+    // Initialize terrain renderer
+    if (!m_terrainRenderer.init(config.assetPath))
+    {
+        Logger::warning("Terrain renderer initialization failed — terrain will be unavailable");
+    }
+
+    // Initialize terrain with default config
+    {
+        TerrainConfig terrainConfig;
+        terrainConfig.width = 257;
+        terrainConfig.depth = 257;
+        terrainConfig.spacingX = 1.0f;
+        terrainConfig.spacingZ = 1.0f;
+        terrainConfig.heightScale = 50.0f;
+        terrainConfig.origin = glm::vec3(-128.0f, 0.0f, -128.0f);  // Center at origin
+        terrainConfig.gridResolution = 33;
+        terrainConfig.maxLodLevels = 6;
+        terrainConfig.baseLodDistance = 20.0f;
+
+        if (m_terrain.initialize(terrainConfig))
+        {
+            // Generate test hills with a flat area around the demo objects
+            int w = terrainConfig.width;
+            int d = terrainConfig.depth;
+            float originX = terrainConfig.origin.x;
+            float originZ = terrainConfig.origin.z;
+            for (int z = 0; z < d; ++z)
+            {
+                for (int x = 0; x < w; ++x)
+                {
+                    float nx = static_cast<float>(x) / static_cast<float>(w - 1);
+                    float nz = static_cast<float>(z) / static_cast<float>(d - 1);
+
+                    // World position of this texel
+                    float wx = originX + static_cast<float>(x) * terrainConfig.spacingX;
+                    float wz = originZ + static_cast<float>(z) * terrainConfig.spacingZ;
+
+                    // Gentle rolling hills using sine waves
+                    float h = 0.0f;
+                    h += 0.15f * std::sin(nx * 6.28f * 2.0f) * std::cos(nz * 6.28f * 1.5f);
+                    h += 0.08f * std::sin(nx * 6.28f * 5.0f + 1.0f) * std::sin(nz * 6.28f * 4.0f);
+                    h += 0.04f * std::sin(nx * 6.28f * 11.0f) * std::cos(nz * 6.28f * 9.0f + 2.0f);
+                    h = std::max(h, 0.0f);
+
+                    // Flatten near origin where demo objects and grass sit.
+                    // Ground plane sits at y=0.02, so flat terrain at y=0 is just below it.
+                    float distFromOrigin = std::sqrt(wx * wx + wz * wz);
+                    float flatRadius = 18.0f;   // Fully flat within 18m (ground plane is 30m)
+                    float blendRadius = 35.0f;  // Blend from flat to hills
+                    if (distFromOrigin < blendRadius)
+                    {
+                        float t = std::max(0.0f, (distFromOrigin - flatRadius)
+                                                / (blendRadius - flatRadius));
+                        h *= t * t;  // Quadratic ease-in for smooth transition
+                    }
+
+                    m_terrain.setRawHeight(x, z, h);
+                }
+            }
+
+            // Upload modified heightmap and recompute normals
+            m_terrain.updateHeightmapRegion(0, 0, w, d);
+            m_terrain.updateNormalMapRegion(0, 0, w, d);
+            m_terrain.buildQuadtree();  // Rebuild with correct min/max heights
+        }
+        else
+        {
+            Logger::warning("Terrain initialization failed");
+        }
+    }
+
+    // Wire up foliage shadow casting into the renderer's shadow pass
+    m_renderer->setFoliageShadowCaster(&m_foliageRenderer, &m_foliageManager);
+
     // Give the editor access to the resource manager and foliage manager
     if (m_editor)
     {
         m_editor->setResourceManager(m_resourceManager.get());
         m_editor->setFoliageManager(&m_foliageManager);
+        m_editor->setTerrain(&m_terrain);
         m_editor->setProfiler(&m_profiler);
         m_editor->getBrushPreview().init(config.assetPath);
     }
@@ -527,6 +604,29 @@ void Engine::run()
                                        m_foliageManager, m_editor->getCommandHistory());
                 }
             }
+
+            // 3g. Process terrain brush input for sculpting/painting
+            TerrainBrush& terrainBrush = m_editor->getTerrainBrush();
+            if (terrainBrush.isActive() && !m_editor->isGizmoActive()
+                && m_terrain.isInitialized())
+            {
+                int vpW = 0, vpH = 0;
+                m_editor->getViewportSize(vpW, vpH);
+                if (vpW > 0 && vpH > 0)
+                {
+                    ImGuiIO& brushIo = ImGui::GetIO();
+                    float mouseX = (brushIo.MousePos.x - m_editor->getViewportMin().x)
+                                 / static_cast<float>(vpW);
+                    float mouseY = (brushIo.MousePos.y - m_editor->getViewportMin().y)
+                                 / static_cast<float>(vpH);
+                    float aspect = static_cast<float>(vpW) / static_cast<float>(vpH);
+
+                    Ray mouseRay = BrushTool::createRay(*m_camera, mouseX, mouseY, aspect);
+                    bool mouseDown = brushIo.MouseDown[0] && !brushIo.KeyAlt;
+                    terrainBrush.processInput(mouseRay, mouseDown, deltaTime,
+                                              m_terrain, m_editor->getCommandHistory());
+                }
+            }
         }
 
         // 4. Scene — update entities and components
@@ -566,9 +666,21 @@ void Engine::run()
         {
             activeScene->collectRenderData(m_renderData);
 
+            // Sync foliage wind time for shadow pass (must match main foliage pass)
+            m_renderer->setFoliageShadowTime(static_cast<float>(m_timer->getElapsedTime()));
+
             m_profiler.getGpuTimer().beginPass("Scene");
             m_renderer->renderScene(m_renderData, *m_camera, aspectRatio);
             m_profiler.getGpuTimer().endPass();
+
+            // Render terrain (after opaques, before foliage/water)
+            if (m_terrain.isInitialized())
+            {
+                m_profiler.getGpuTimer().beginPass("Terrain");
+                m_terrainRenderer.render(m_terrain, *m_camera, aspectRatio, m_renderData,
+                                         m_renderer->getCascadedShadowMap());
+                m_profiler.getGpuTimer().endPass();
+            }
 
             // Render foliage (after opaques, before water/particles)
             {
@@ -579,7 +691,13 @@ void Engine::run()
                 if (!visibleChunks.empty())
                 {
                     m_profiler.getGpuTimer().beginPass("Foliage");
-                    m_foliageRenderer.render(visibleChunks, *m_camera, viewProj, elapsed);
+
+                    // Pass shadow map and directional light to foliage for shadow receiving
+                    CascadedShadowMap* csm = m_renderer->getCascadedShadowMap();
+                    const DirectionalLight* dirLight =
+                        m_renderData.hasDirectionalLight ? &m_renderData.directionalLight : nullptr;
+                    m_foliageRenderer.render(visibleChunks, *m_camera, viewProj, elapsed,
+                                             100.0f, csm, dirLight);
                     m_treeRenderer.render(visibleChunks, *m_camera, viewProj, elapsed);
                     m_profiler.getGpuTimer().endPass();
                 }
@@ -675,7 +793,7 @@ void Engine::run()
                          * m_camera->getViewMatrix();
             m_debugDraw.flush(vp);
 
-            // 7d. Render brush preview circle
+            // 7d. Render brush preview circle (foliage brush)
             {
                 BrushTool& brush = m_editor->getBrushTool();
                 glm::vec3 hitPoint, hitNormal;
@@ -684,6 +802,18 @@ void Engine::run()
                     bool isEraser = (brush.mode == BrushTool::Mode::ERASER);
                     m_editor->getBrushPreview().render(
                         hitPoint, hitNormal, brush.radius, vp, isEraser);
+                }
+            }
+
+            // 7e. Render terrain brush preview circle
+            {
+                TerrainBrush& tBrush = m_editor->getTerrainBrush();
+                glm::vec3 hitPoint, hitNormal;
+                if (tBrush.getHitPoint(hitPoint, hitNormal))
+                {
+                    bool isEraser = (tBrush.mode == TerrainBrushMode::LOWER);
+                    m_editor->getBrushPreview().render(
+                        hitPoint, hitNormal, tBrush.radius, vp, isEraser);
                 }
             }
         }
@@ -711,11 +841,11 @@ void Engine::run()
             }
         }
 
-        // 9. End profiler frame (collect GPU results, update history)
-        m_profiler.endFrame(deltaTime);
-
-        // 10. Window — swap buffers
+        // 9. Window — swap buffers (flushes GPU work, making query results available)
         m_window->swapBuffers();
+
+        // 10. End profiler frame (collect GPU results after swap ensures queries are complete)
+        m_profiler.endFrame(deltaTime);
     }
 
     Logger::info("Main loop ended");
@@ -736,8 +866,21 @@ void Engine::shutdown()
         m_window->saveWindowState();
     }
 
+    // Clear foliage shadow pointers before destroying the foliage renderer
+    if (m_renderer)
+    {
+        m_renderer->setFoliageShadowCaster(nullptr, nullptr);
+    }
+
+    // Shut down all subsystems that hold GL resources BEFORE destroying the window
+    // (the window owns the GL context — GL calls after window destruction crash).
+    m_terrain.shutdown();
+    m_terrainRenderer.shutdown();
+    m_foliageRenderer.shutdown();
+    m_treeRenderer.shutdown();
     m_waterRenderer.shutdown();
     m_particleRenderer.shutdown();
+    m_profiler.shutdown();
     m_debugDraw.cleanup();
     m_editor.reset();
     m_controller.reset();
@@ -941,6 +1084,7 @@ void Engine::setupDemoScene()
 
     // --- Ground ---
     Entity* ground = scene->createEntity("Ground");
+    ground->transform.position = glm::vec3(0.0f, 0.02f, 0.0f);  // Slightly above terrain in flat zone
     auto* groundMR = ground->addComponent<MeshRenderer>(planeMesh, groundMat);
     // Ground only receives shadows, doesn't cast them (nothing is below it).
     // This prevents self-shadowing acne that causes visible cascade boundaries.

@@ -66,14 +66,15 @@ void PerformancePanel::drawOverviewTab(PerformanceProfiler& profiler)
                     : (fps >= 30.0f) ? ImVec4(1.0f, 1.0f, 0.2f, 1.0f)
                                      : ImVec4(1.0f, 0.3f, 0.2f, 1.0f);
 
-    ImGui::TextColored(fpsColor, "%.0f FPS", fps);
+    ImGui::TextColored(fpsColor, "%.0f FPS", static_cast<double>(fps));
     ImGui::SameLine(120);
-    ImGui::Text("%.2f ms", frameMs);
+    ImGui::Text("%.2f ms", static_cast<double>(frameMs));
     ImGui::SameLine(240);
-    ImGui::Text("Avg: %.2f ms", profiler.getAvgFrameTimeMs());
+    ImGui::Text("Avg: %.2f ms", static_cast<double>(profiler.getAvgFrameTimeMs()));
 
     ImGui::Text("Min: %.2f ms  Max: %.2f ms",
-                profiler.getMinFrameTimeMs(), profiler.getMaxFrameTimeMs());
+                static_cast<double>(profiler.getMinFrameTimeMs()),
+                static_cast<double>(profiler.getMaxFrameTimeMs()));
 
     ImGui::Separator();
 
@@ -82,7 +83,8 @@ void PerformancePanel::drawOverviewTab(PerformanceProfiler& profiler)
     float gpuMs = profiler.getGpuTimer().getTotalGpuTimeMs();
     bool gpuBound = gpuMs > cpuMs;
 
-    ImGui::Text("CPU: %.2f ms  GPU: %.2f ms", cpuMs, gpuMs);
+    ImGui::Text("CPU: %.2f ms  GPU: %.2f ms",
+                static_cast<double>(cpuMs), static_cast<double>(gpuMs));
     ImGui::SameLine();
     ImGui::TextColored(gpuBound ? ImVec4(1, 0.6f, 0.2f, 1) : ImVec4(0.2f, 0.8f, 1, 1),
                        gpuBound ? "[GPU bound]" : "[CPU bound]");
@@ -94,7 +96,8 @@ void PerformancePanel::drawOverviewTab(PerformanceProfiler& profiler)
 
     // Custom overlay callback text
     char overlay[64];
-    snprintf(overlay, sizeof(overlay), "%.1f ms (%.0f FPS)", frameMs, fps);
+    snprintf(overlay, sizeof(overlay), "%.1f ms (%.0f FPS)",
+             static_cast<double>(frameMs), static_cast<double>(fps));
 
     // Plot with budget line
     const float* history = profiler.getFrameTimeHistory();
@@ -119,7 +122,7 @@ void PerformancePanel::drawGpuTab(PerformanceProfiler& profiler)
     const auto& results = profiler.getGpuTimer().getResults();
     float totalGpu = profiler.getGpuTimer().getTotalGpuTimeMs();
 
-    ImGui::Text("Total GPU: %.2f ms", totalGpu);
+    ImGui::Text("Total GPU: %.2f ms", static_cast<double>(totalGpu));
     ImGui::Separator();
 
     // Stacked bar visualization
@@ -186,11 +189,11 @@ void PerformancePanel::drawGpuTab(PerformanceProfiler& profiler)
             ImGui::Text("%s", results[i].name.c_str());
 
             ImGui::TableSetColumnIndex(1);
-            ImGui::Text("%.3f", results[i].timeMs);
+            ImGui::Text("%.3f", static_cast<double>(results[i].timeMs));
 
             ImGui::TableSetColumnIndex(2);
             float pct = (totalGpu > 0.0f) ? (results[i].timeMs / totalGpu * 100.0f) : 0.0f;
-            ImGui::Text("%.0f%%", pct);
+            ImGui::Text("%.0f%%", static_cast<double>(pct));
         }
 
         ImGui::EndTable();
@@ -200,7 +203,7 @@ void PerformancePanel::drawGpuTab(PerformanceProfiler& profiler)
 void PerformancePanel::drawCpuTab(PerformanceProfiler& profiler)
 {
     float totalCpu = profiler.getCpuProfiler().getTotalCpuTimeMs();
-    ImGui::Text("Total CPU: %.2f ms", totalCpu);
+    ImGui::Text("Total CPU: %.2f ms", static_cast<double>(totalCpu));
     ImGui::Separator();
 
     const auto& entries = profiler.getCpuProfiler().getLastFrame();
@@ -235,11 +238,11 @@ void PerformancePanel::drawCpuTab(PerformanceProfiler& profiler)
 
             ImGui::TableSetColumnIndex(1);
             float scopeMs = entry.endMs - entry.startMs;
-            ImGui::Text("%.3f", scopeMs);
+            ImGui::Text("%.3f", static_cast<double>(scopeMs));
 
             ImGui::TableSetColumnIndex(2);
             float pct = (totalCpu > 0.0f) ? (scopeMs / totalCpu * 100.0f) : 0.0f;
-            ImGui::Text("%.0f%%", pct);
+            ImGui::Text("%.0f%%", static_cast<double>(pct));
         }
 
         ImGui::EndTable();
@@ -256,9 +259,9 @@ void PerformancePanel::drawMemoryTab(PerformanceProfiler& profiler)
     size_t cpuPeak = MemoryTracker::getCpuPeakBytes();
 
     ImGui::Text("  Allocated: %.1f MB (%zu allocs)",
-                static_cast<float>(cpuBytes) / (1024.0f * 1024.0f), cpuCount);
+                static_cast<double>(cpuBytes) / (1024.0 * 1024.0), cpuCount);
     ImGui::Text("  Peak:      %.1f MB",
-                static_cast<float>(cpuPeak) / (1024.0f * 1024.0f));
+                static_cast<double>(cpuPeak) / (1024.0 * 1024.0));
 
     ImGui::Separator();
 
@@ -271,7 +274,7 @@ void PerformancePanel::drawMemoryTab(PerformanceProfiler& profiler)
         float fraction = static_cast<float>(gpuUsed) / static_cast<float>(gpuTotal);
         char label[64];
         snprintf(label, sizeof(label), "%zu / %zu MB (%.0f%%)",
-                 gpuUsed, gpuTotal, fraction * 100.0f);
+                 gpuUsed, gpuTotal, static_cast<double>(fraction) * 100.0);
         ImGui::ProgressBar(fraction, ImVec2(-1, 0), label);
     }
     else
@@ -321,7 +324,7 @@ void PerformancePanel::drawDrawCallsTab(const Renderer* renderer)
         {
             float efficiency = static_cast<float>(stats.instanceBatches)
                              / static_cast<float>(stats.drawCalls) * 100.0f;
-            ImGui::Text("%.0f%%", efficiency);
+            ImGui::Text("%.0f%%", static_cast<double>(efficiency));
         }
         else
         {

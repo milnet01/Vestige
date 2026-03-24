@@ -38,6 +38,9 @@ public:
     /// @brief Gets the OpenGL program ID.
     GLuint getId() const;
 
+    /// @brief Releases the GL program now (safe to call before context teardown).
+    void destroy();
+
     /// @brief Sets a boolean uniform.
     void setBool(const std::string& name, bool value) const;
 

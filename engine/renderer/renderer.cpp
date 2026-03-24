@@ -1,6 +1,8 @@
 /// @file renderer.cpp
 /// @brief Renderer implementation with Blinn-Phong/PBR lighting, shadows, and FBO pipeline.
 #include "renderer/renderer.h"
+#include "renderer/foliage_renderer.h"
+#include "environment/foliage_manager.h"
 #include "scene/scene.h"
 #include "core/logger.h"
 #include "utils/frustum.h"
@@ -1280,6 +1282,18 @@ GLuint Renderer::getSkyboxTextureId() const
     return m_skybox ? m_skybox->getTextureId() : 0;
 }
 
+CascadedShadowMap* Renderer::getCascadedShadowMap() const
+{
+    return m_cascadedShadowMap.get();
+}
+
+void Renderer::setFoliageShadowCaster(FoliageRenderer* foliageRenderer,
+                                       FoliageManager* foliageManager)
+{
+    m_foliageShadowCaster = foliageRenderer;
+    m_foliageShadowManager = foliageManager;
+}
+
 TextRenderer* Renderer::getTextRenderer()
 {
     return m_textRenderer.get();
@@ -1795,6 +1809,23 @@ void Renderer::renderShadowPass(const std::vector<SceneRenderData::RenderItem>& 
                     m_cullingStats.drawCalls++;
                     batch.mesh->unbind();
                 }
+            }
+        }
+
+        // Render foliage into nearby cascades for grass shadow casting
+        if (m_foliageShadowCaster && m_foliageShadowManager && c == 0)
+        {
+            // Use camera's VP for chunk visibility (same as main pass)
+            glm::mat4 viewProj = camera.getCullingProjectionMatrix(aspectRatio)
+                               * camera.getViewMatrix();
+            auto visibleChunks = m_foliageShadowManager->getVisibleChunks(viewProj);
+            if (!visibleChunks.empty())
+            {
+                m_foliageShadowCaster->renderShadow(
+                    visibleChunks, camera, lightSpaceMatrix,
+                    m_foliageShadowTime);
+                // Restore shadow depth shader — foliage shadow binds its own shader
+                m_shadowDepthShader.use();
             }
         }
 

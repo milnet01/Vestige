@@ -60,6 +60,8 @@ void TreeRenderer::shutdown()
     if (m_billboardTexture != 0) { glDeleteTextures(1, &m_billboardTexture); m_billboardTexture = 0; }
     m_treeInstanceCapacity = 0;
     m_billboardInstanceCapacity = 0;
+    m_meshShader.destroy();
+    m_billboardShader.destroy();
     m_initialized = false;
 }
 

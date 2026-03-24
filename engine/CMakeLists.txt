@@ -62,7 +62,10 @@ set(ENGINE_SOURCES
     editor/material_preview.cpp
     editor/tools/brush_tool.cpp
     editor/tools/brush_preview.cpp
+    editor/tools/terrain_brush.cpp
     editor/panels/environment_panel.cpp
+    editor/panels/terrain_panel.cpp
+    editor/commands/terrain_sculpt_command.cpp
     editor/widgets/animation_curve.cpp
     editor/widgets/color_gradient.cpp
     editor/widgets/curve_editor_widget.cpp
@@ -75,6 +78,8 @@ set(ENGINE_SOURCES
     environment/foliage_manager.cpp
     environment/spline_path.cpp
     environment/biome_preset.cpp
+    environment/terrain.cpp
+    renderer/terrain_renderer.cpp
     profiler/gpu_timer.cpp
     profiler/cpu_profiler.cpp
     profiler/memory_tracker.cpp

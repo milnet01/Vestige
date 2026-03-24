@@ -17,9 +17,11 @@ namespace Vestige
 {
 
 class CommandHistory;
+class FoliageManager;
 class ResourceManager;
 class Scene;
 class Selection;
+class Terrain;
 
 /// @brief Manages the File menu, save/load dialogs, and unsaved changes tracking.
 ///
@@ -40,6 +42,12 @@ public:
 
     /// @brief Sets the CommandHistory for dirty tracking and clear-on-load.
     void setCommandHistory(CommandHistory* history);
+
+    /// @brief Sets the FoliageManager for environment save/load.
+    void setFoliageManager(FoliageManager* manager);
+
+    /// @brief Sets the Terrain for terrain save/load.
+    void setTerrain(Terrain* terrain);
 
     /// @brief Ticks the auto-save timer. Call once per frame.
     /// Writes an autosave file when the scene is dirty and the interval has elapsed.
@@ -117,6 +125,8 @@ private:
     GLFWwindow* m_window = nullptr;
     ResourceManager* m_resources = nullptr;
     CommandHistory* m_commandHistory = nullptr;
+    FoliageManager* m_foliageManager = nullptr;
+    Terrain* m_terrain = nullptr;
 
     std::filesystem::path m_currentScenePath;
     std::filesystem::path m_pendingRecentPath;

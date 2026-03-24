@@ -1,6 +1,7 @@
 /// @file foliage_renderer.cpp
 /// @brief FoliageRenderer implementation — instanced star-mesh grass with wind.
 #include "renderer/foliage_renderer.h"
+#include "renderer/cascaded_shadow_map.h"
 #include "core/logger.h"
 
 #include <glm/gtc/type_ptr.hpp>
@@ -28,6 +29,13 @@ bool FoliageRenderer::init(const std::string& assetPath)
     {
         Logger::error("Failed to load foliage shaders");
         return false;
+    }
+
+    // Load foliage shadow shaders
+    if (!m_shadowShader.loadFromFiles(assetPath + "/shaders/foliage_shadow.vert.glsl",
+                                      assetPath + "/shaders/foliage_shadow.frag.glsl"))
+    {
+        Logger::warning("Failed to load foliage shadow shaders — grass won't cast shadows");
     }
 
     createStarMesh();
@@ -61,6 +69,8 @@ void FoliageRenderer::shutdown()
         m_defaultTexture = 0;
     }
     m_instanceCapacity = 0;
+    m_shader.destroy();
+    m_shadowShader.destroy();
     m_initialized = false;
 }
 
@@ -69,7 +79,9 @@ void FoliageRenderer::render(
     const Camera& camera,
     const glm::mat4& viewProjection,
     float time,
-    float maxDistance)
+    float maxDistance,
+    CascadedShadowMap* csm,
+    const DirectionalLight* dirLight)
 {
     if (!m_initialized || chunks.empty())
     {
@@ -122,6 +134,7 @@ void FoliageRenderer::render(
     // Render
     m_shader.use();
     m_shader.setMat4("u_viewProjection", viewProjection);
+    m_shader.setMat4("u_view", camera.getViewMatrix());
     m_shader.setFloat("u_time", time);
     m_shader.setVec3("u_windDirection", glm::normalize(windDirection));
     m_shader.setFloat("u_windAmplitude", windAmplitude);
@@ -129,7 +142,41 @@ void FoliageRenderer::render(
     m_shader.setFloat("u_maxDistance", maxDistance);
     m_shader.setVec3("u_cameraPos", camPos);
 
-    // Bind texture
+    // Lighting uniforms
+    bool hasShadows = (csm != nullptr && dirLight != nullptr);
+    m_shader.setBool("u_hasShadows", hasShadows);
+
+    if (dirLight)
+    {
+        m_shader.setVec3("u_lightDirection", dirLight->direction);
+        m_shader.setVec3("u_lightColor", dirLight->diffuse);
+        m_shader.setVec3("u_ambientColor", dirLight->ambient);
+        m_shader.setBool("u_hasDirectionalLight", true);
+    }
+    else
+    {
+        m_shader.setBool("u_hasDirectionalLight", false);
+    }
+
+    // Shadow map uniforms
+    if (hasShadows)
+    {
+        csm->bindShadowTexture(3);
+        m_shader.setInt("u_cascadeShadowMap", 3);
+
+        int cascadeCount = csm->getCascadeCount();
+        m_shader.setInt("u_cascadeCount", cascadeCount);
+        for (int i = 0; i < cascadeCount; ++i)
+        {
+            std::string idx = std::to_string(i);
+            m_shader.setFloat("u_cascadeSplits[" + idx + "]",
+                              csm->getCascadeSplit(i));
+            m_shader.setMat4("u_cascadeLightSpaceMatrices[" + idx + "]",
+                             csm->getLightSpaceMatrix(i));
+        }
+    }
+
+    // Bind grass texture
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, m_defaultTexture);
     m_shader.setInt("u_texture", 0);
@@ -146,6 +193,80 @@ void FoliageRenderer::render(
 
     glEnable(GL_CULL_FACE);
     glDisable(GL_BLEND);
+}
+
+void FoliageRenderer::renderShadow(
+    const std::vector<const FoliageChunk*>& chunks,
+    const Camera& camera,
+    const glm::mat4& lightSpaceMatrix,
+    float time)
+{
+    if (!m_initialized || !m_shadowShader.getId() || chunks.empty())
+    {
+        return;
+    }
+
+    // Collect nearby grass instances only (shadow casting is expensive)
+    m_visibleInstances.clear();
+
+    glm::vec3 camPos = camera.getPosition();
+    float maxDistSq = shadowMaxDistance * shadowMaxDistance;
+
+    for (const FoliageChunk* chunk : chunks)
+    {
+        AABB bounds = chunk->getBounds();
+        glm::vec3 chunkCenter = bounds.getCenter();
+        glm::vec3 diff = chunkCenter - camPos;
+        float chunkDistSq = diff.x * diff.x + diff.z * diff.z;
+        float chunkRadius = FoliageChunk::CHUNK_SIZE * 0.707f;
+        if (chunkDistSq > (shadowMaxDistance + chunkRadius) * (shadowMaxDistance + chunkRadius))
+        {
+            continue;
+        }
+
+        for (uint32_t typeId : chunk->getFoliageTypeIds())
+        {
+            const auto& instances = chunk->getFoliage(typeId);
+            for (const auto& inst : instances)
+            {
+                glm::vec3 d = inst.position - camPos;
+                float distSq = d.x * d.x + d.z * d.z;
+                if (distSq <= maxDistSq)
+                {
+                    m_visibleInstances.push_back(inst);
+                }
+            }
+        }
+    }
+
+    if (m_visibleInstances.empty())
+    {
+        return;
+    }
+
+    uploadInstances(m_visibleInstances);
+
+    m_shadowShader.use();
+    m_shadowShader.setMat4("u_lightSpaceMatrix", lightSpaceMatrix);
+    m_shadowShader.setFloat("u_time", time);
+    m_shadowShader.setVec3("u_windDirection", glm::normalize(windDirection));
+    m_shadowShader.setFloat("u_windAmplitude", windAmplitude);
+    m_shadowShader.setFloat("u_windFrequency", windFrequency);
+
+    // Bind grass texture for alpha testing
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, m_defaultTexture);
+    m_shadowShader.setInt("u_texture", 0);
+
+    // Two-sided rendering for grass shadow casting
+    glDisable(GL_CULL_FACE);
+
+    glBindVertexArray(m_starVao);
+    glDrawArraysInstanced(GL_TRIANGLES, 0, 18,
+                          static_cast<GLsizei>(m_visibleInstances.size()));
+    glBindVertexArray(0);
+
+    glEnable(GL_CULL_FACE);
 }
 
 void FoliageRenderer::createStarMesh()
