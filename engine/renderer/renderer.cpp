@@ -525,6 +525,19 @@ void Renderer::initFramebuffers(int width, int height, int msaaSamples)
     // Initialize instance buffer for instanced rendering
     m_instanceBuffer = std::make_unique<InstanceBuffer>();
 
+    // Initialize MDI (Multi-Draw Indirect) infrastructure
+    m_meshPool = std::make_unique<MeshPool>();
+    m_indirectBuffer = std::make_unique<IndirectBuffer>();
+
+    // Initialize GPU frustum culler
+    m_gpuCuller = std::make_unique<GpuCuller>();
+    std::string frustumCullPath = m_assetPath + "/shaders/frustum_cull.comp.glsl";
+    if (!m_gpuCuller->init(frustumCullPath))
+    {
+        Logger::warning("GPU frustum culler failed to initialize");
+        m_gpuCuller.reset();
+    }
+
     // IBL environment map (irradiance, prefilter, BRDF LUT)
     m_environmentMap = std::make_unique<EnvironmentMap>();
     if (m_environmentMap->initialize(m_assetPath))
@@ -1105,6 +1118,7 @@ void Renderer::drawMesh(const Mesh& mesh, const glm::mat4& modelMatrix,
 
     // Non-instanced draw — use uniform model matrix
     m_sceneShader.setBool("u_useInstancing", false);
+    m_sceneShader.setBool("u_useMDI", false);
     m_sceneShader.setMat4("u_model", modelMatrix);
     m_sceneShader.setMat3("u_normalMatrix",
         glm::mat3(glm::transpose(glm::inverse(modelMatrix))));
@@ -1749,50 +1763,111 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
     // Upload light uniforms once per frame (not per batch)
     uploadLightUniforms(camera);
 
-    // --- Scene pass: draw all opaque render items (instanced where possible) ---
-    for (const auto& batch : batches)
+    // --- Scene pass: draw all opaque render items ---
+    // MDI path: group batches by material, issue one glMultiDrawElementsIndirect per group.
+    // Falls back to legacy instanced/single-draw when MDI is unavailable.
+    if (m_mdiEnabled && m_meshPool && m_meshPool->hasData() && m_indirectBuffer)
     {
-        int count = static_cast<int>(batch.modelMatrices.size());
-        if (count >= MIN_INSTANCE_BATCH_SIZE && m_instanceBuffer)
+        // Group batches by material pointer
+        std::unordered_map<const Material*, std::vector<const InstanceBatch*>> materialGroups;
+        for (const auto& batch : batches)
         {
-            // Instanced path: set up material once, draw all instances
-            m_sceneShader.use();
-            m_sceneShader.setBool("u_useInstancing", true);
-
-            // Upload instance matrices and bind to mesh VAO
-            m_instanceBuffer->upload(batch.modelMatrices);
-            batch.mesh->setupInstanceAttributes(m_instanceBuffer->getHandle());
-
-            // Set a dummy u_model (unused but prevents warnings)
-            m_sceneShader.setMat4("u_model", batch.modelMatrices[0]);
-            m_sceneShader.setMat4("u_view", camera.getViewMatrix());
-            m_sceneShader.setMat4("u_projection", m_lastProjection);
-
-            uploadMaterialUniforms(*batch.material);
-
-            bool doubleSided = batch.material->isDoubleSided();
-            if (doubleSided) glDisable(GL_CULL_FACE);
-            if (m_isWireframe) glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-
-            batch.mesh->bind();
-            glDrawElementsInstanced(GL_TRIANGLES,
-                static_cast<GLsizei>(batch.mesh->getIndexCount()),
-                GL_UNSIGNED_INT, nullptr, count);
-            m_cullingStats.drawCalls++;
-            m_cullingStats.instanceBatches++;
-            batch.mesh->unbind();
-
-            if (m_isWireframe) glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-            if (doubleSided) glEnable(GL_CULL_FACE);
-
-            m_sceneShader.setBool("u_useInstancing", false);
+            materialGroups[batch.material].push_back(&batch);
         }
-        else
+
+        m_sceneShader.use();
+        m_sceneShader.setBool("u_useInstancing", false);
+        m_sceneShader.setBool("u_useMDI", true);
+        m_sceneShader.setMat4("u_view", camera.getViewMatrix());
+        m_sceneShader.setMat4("u_projection", m_lastProjection);
+
+        m_meshPool->bind();
+
+        for (const auto& [material, batchPtrs] : materialGroups)
         {
-            // Non-instanced path for single-instance batches
-            for (const auto& matrix : batch.modelMatrices)
+            // Build indirect commands for this material group
+            m_indirectBuffer->clear();
+            for (const auto* batchPtr : batchPtrs)
             {
-                drawMesh(*batch.mesh, matrix, *batch.material, camera, aspectRatio);
+                if (m_meshPool->hasMesh(batchPtr->mesh))
+                {
+                    MeshPoolEntry entry = m_meshPool->getEntry(batchPtr->mesh);
+                    m_indirectBuffer->addCommand(entry, batchPtr->modelMatrices);
+                }
+            }
+            m_indirectBuffer->upload();
+
+            if (m_indirectBuffer->getCommandCount() > 0)
+            {
+                uploadMaterialUniforms(*material);
+
+                bool doubleSided = material->isDoubleSided();
+                if (doubleSided) glDisable(GL_CULL_FACE);
+                if (m_isWireframe) glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+
+                m_indirectBuffer->draw();
+                m_cullingStats.drawCalls += m_indirectBuffer->getCommandCount();
+                m_cullingStats.instanceBatches += m_indirectBuffer->getCommandCount();
+
+                if (m_isWireframe) glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+                if (doubleSided) glEnable(GL_CULL_FACE);
+            }
+        }
+
+        m_meshPool->unbind();
+        m_sceneShader.setBool("u_useMDI", false);
+
+        // Unbind SSBO
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, 0);
+    }
+    else
+    {
+        // Legacy path: instanced or single-draw per batch
+        for (const auto& batch : batches)
+        {
+            int count = static_cast<int>(batch.modelMatrices.size());
+            if (count >= MIN_INSTANCE_BATCH_SIZE && m_instanceBuffer)
+            {
+                // Instanced path: set up material once, draw all instances
+                m_sceneShader.use();
+                m_sceneShader.setBool("u_useInstancing", true);
+                m_sceneShader.setBool("u_useMDI", false);
+
+                // Upload instance matrices and bind to mesh VAO
+                m_instanceBuffer->upload(batch.modelMatrices);
+                batch.mesh->setupInstanceAttributes(m_instanceBuffer->getHandle());
+
+                // Set a dummy u_model (unused but prevents warnings)
+                m_sceneShader.setMat4("u_model", batch.modelMatrices[0]);
+                m_sceneShader.setMat4("u_view", camera.getViewMatrix());
+                m_sceneShader.setMat4("u_projection", m_lastProjection);
+
+                uploadMaterialUniforms(*batch.material);
+
+                bool doubleSided = batch.material->isDoubleSided();
+                if (doubleSided) glDisable(GL_CULL_FACE);
+                if (m_isWireframe) glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+
+                batch.mesh->bind();
+                glDrawElementsInstanced(GL_TRIANGLES,
+                    static_cast<GLsizei>(batch.mesh->getIndexCount()),
+                    GL_UNSIGNED_INT, nullptr, count);
+                m_cullingStats.drawCalls++;
+                m_cullingStats.instanceBatches++;
+                batch.mesh->unbind();
+
+                if (m_isWireframe) glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+                if (doubleSided) glEnable(GL_CULL_FACE);
+
+                m_sceneShader.setBool("u_useInstancing", false);
+            }
+            else
+            {
+                // Non-instanced path for single-instance batches
+                for (const auto& matrix : batch.modelMatrices)
+                {
+                    drawMesh(*batch.mesh, matrix, *batch.material, camera, aspectRatio);
+                }
             }
         }
     }

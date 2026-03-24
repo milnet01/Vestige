@@ -1,6 +1,7 @@
 /// @file scene.vert.glsl
-/// @brief Main scene vertex shader — transforms geometry with instancing, TBN matrix, and TAA jitter support.
-#version 450 core
+/// @brief Main scene vertex shader — transforms geometry with instancing, MDI, TBN matrix, and TAA jitter support.
+#version 460 core
+#extension GL_ARB_shader_draw_parameters : enable
 
 layout(location = 0) in vec3 position;
 layout(location = 1) in vec3 normal;
@@ -9,16 +10,23 @@ layout(location = 3) in vec2 texCoord;
 layout(location = 4) in vec3 tangent;
 layout(location = 5) in vec3 bitangent;
 
-// Per-instance model matrix (locations 6-9, one vec4 column each)
+// Per-instance model matrix (locations 6-9, one vec4 column each) — legacy instancing
 layout(location = 6) in vec4 instanceModelCol0;
 layout(location = 7) in vec4 instanceModelCol1;
 layout(location = 8) in vec4 instanceModelCol2;
 layout(location = 9) in vec4 instanceModelCol3;
 
+// MDI per-instance model matrices (accessed via gl_BaseInstance + gl_InstanceID)
+layout(std430, binding = 0) buffer ModelMatrices
+{
+    mat4 u_modelMatrices[];
+};
+
 uniform mat4 u_model;
 uniform mat4 u_view;
 uniform mat4 u_projection;
 uniform bool u_useInstancing;
+uniform bool u_useMDI;
 uniform mat3 u_normalMatrix;  // Precomputed on CPU for non-instanced path
 
 out vec3 v_fragPosition;
@@ -43,7 +51,13 @@ void main()
     mat4 model;
     mat3 normalMatrix;
 
-    if (u_useInstancing)
+    if (u_useMDI)
+    {
+        // MDI path: model matrix from SSBO indexed by gl_BaseInstance + gl_InstanceID
+        model = u_modelMatrices[gl_BaseInstance + gl_InstanceID];
+        normalMatrix = cofactorMatrix(mat3(model));
+    }
+    else if (u_useInstancing)
     {
         model = mat4(instanceModelCol0, instanceModelCol1,
                      instanceModelCol2, instanceModelCol3);
