@@ -177,8 +177,7 @@ void FoliageRenderer::render(
     }
 
     // Bind grass texture
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, m_defaultTexture);
+    glBindTextureUnit(0, m_defaultTexture);
     m_shader.setInt("u_texture", 0);
 
     // Draw instanced
@@ -189,7 +188,6 @@ void FoliageRenderer::render(
     glBindVertexArray(m_starVao);
     glDrawArraysInstanced(GL_TRIANGLES, 0, 18,
                           static_cast<GLsizei>(m_visibleInstances.size()));
-    glBindVertexArray(0);
 
     glEnable(GL_CULL_FACE);
     glDisable(GL_BLEND);
@@ -254,8 +252,7 @@ void FoliageRenderer::renderShadow(
     m_shadowShader.setFloat("u_windFrequency", windFrequency);
 
     // Bind grass texture for alpha testing
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, m_defaultTexture);
+    glBindTextureUnit(0, m_defaultTexture);
     m_shadowShader.setInt("u_texture", 0);
 
     // Two-sided rendering for grass shadow casting
@@ -264,7 +261,6 @@ void FoliageRenderer::renderShadow(
     glBindVertexArray(m_starVao);
     glDrawArraysInstanced(GL_TRIANGLES, 0, 18,
                           static_cast<GLsizei>(m_visibleInstances.size()));
-    glBindVertexArray(0);
 
     glEnable(GL_CULL_FACE);
 }
@@ -312,63 +308,59 @@ void FoliageRenderer::createStarMesh()
         vertices.push_back({tl, {0.0f, 1.0f}});
     }
 
-    // Create VAO and VBO for the star mesh
-    glGenVertexArrays(1, &m_starVao);
-    glGenBuffers(1, &m_starVbo);
+    // Create VAO and VBO for the star mesh (DSA)
+    glCreateVertexArrays(1, &m_starVao);
+    glCreateBuffers(1, &m_starVbo);
 
-    glBindVertexArray(m_starVao);
+    // Upload star mesh geometry (immutable, static)
+    glNamedBufferStorage(m_starVbo, vertices.size() * sizeof(Vertex),
+                         vertices.data(), 0);
 
-    // Upload star mesh geometry
-    glBindBuffer(GL_ARRAY_BUFFER, m_starVbo);
-    glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(Vertex),
-                 vertices.data(), GL_STATIC_DRAW);
+    // Bind VBO to VAO binding point 0
+    glVertexArrayVertexBuffer(m_starVao, 0, m_starVbo, 0, sizeof(Vertex));
 
-    // Position attribute (location 0)
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex),
-                          reinterpret_cast<void*>(offsetof(Vertex, position)));
+    // Position attribute (location 0, binding 0)
+    glEnableVertexArrayAttrib(m_starVao, 0);
+    glVertexArrayAttribFormat(m_starVao, 0, 3, GL_FLOAT, GL_FALSE,
+                              offsetof(Vertex, position));
+    glVertexArrayAttribBinding(m_starVao, 0, 0);
 
-    // TexCoord attribute (location 1)
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex),
-                          reinterpret_cast<void*>(offsetof(Vertex, texCoord)));
+    // TexCoord attribute (location 1, binding 0)
+    glEnableVertexArrayAttrib(m_starVao, 1);
+    glVertexArrayAttribFormat(m_starVao, 1, 2, GL_FLOAT, GL_FALSE,
+                              offsetof(Vertex, texCoord));
+    glVertexArrayAttribBinding(m_starVao, 1, 0);
 
-    // Create instance VBO (initially empty)
-    glGenBuffers(1, &m_instanceVbo);
-    glBindBuffer(GL_ARRAY_BUFFER, m_instanceVbo);
+    // Create instance VBO (initially empty, will be created on first upload)
+    glCreateBuffers(1, &m_instanceVbo);
 
-    // Per-instance attributes layout:
+    // Per-instance attributes layout (binding 1):
     // location 3: vec3 i_position  (offset 0)
     // location 4: float i_rotation (offset 12)
     // location 5: float i_scale    (offset 16)
     // location 6: vec3 i_colorTint (offset 20)
     // Total stride: 32 bytes (matches FoliageInstance layout)
 
-    // i_position (location 3)
-    glEnableVertexAttribArray(3);
-    glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, sizeof(FoliageInstance),
-                          reinterpret_cast<void*>(0));
-    glVertexAttribDivisor(3, 1);
+    // i_position (location 3, binding 1)
+    glEnableVertexArrayAttrib(m_starVao, 3);
+    glVertexArrayAttribFormat(m_starVao, 3, 3, GL_FLOAT, GL_FALSE, 0);
+    glVertexArrayAttribBinding(m_starVao, 3, 1);
+    glVertexArrayBindingDivisor(m_starVao, 1, 1);
 
-    // i_rotation (location 4)
-    glEnableVertexAttribArray(4);
-    glVertexAttribPointer(4, 1, GL_FLOAT, GL_FALSE, sizeof(FoliageInstance),
-                          reinterpret_cast<void*>(12));
-    glVertexAttribDivisor(4, 1);
+    // i_rotation (location 4, binding 1)
+    glEnableVertexArrayAttrib(m_starVao, 4);
+    glVertexArrayAttribFormat(m_starVao, 4, 1, GL_FLOAT, GL_FALSE, 12);
+    glVertexArrayAttribBinding(m_starVao, 4, 1);
 
-    // i_scale (location 5)
-    glEnableVertexAttribArray(5);
-    glVertexAttribPointer(5, 1, GL_FLOAT, GL_FALSE, sizeof(FoliageInstance),
-                          reinterpret_cast<void*>(16));
-    glVertexAttribDivisor(5, 1);
+    // i_scale (location 5, binding 1)
+    glEnableVertexArrayAttrib(m_starVao, 5);
+    glVertexArrayAttribFormat(m_starVao, 5, 1, GL_FLOAT, GL_FALSE, 16);
+    glVertexArrayAttribBinding(m_starVao, 5, 1);
 
-    // i_colorTint (location 6)
-    glEnableVertexAttribArray(6);
-    glVertexAttribPointer(6, 3, GL_FLOAT, GL_FALSE, sizeof(FoliageInstance),
-                          reinterpret_cast<void*>(20));
-    glVertexAttribDivisor(6, 1);
-
-    glBindVertexArray(0);
+    // i_colorTint (location 6, binding 1)
+    glEnableVertexArrayAttrib(m_starVao, 6);
+    glVertexArrayAttribFormat(m_starVao, 6, 3, GL_FLOAT, GL_FALSE, 20);
+    glVertexArrayAttribBinding(m_starVao, 6, 1);
 }
 
 void FoliageRenderer::generateDefaultTexture()
@@ -416,39 +408,42 @@ void FoliageRenderer::generateDefaultTexture()
         }
     }
 
-    glGenTextures(1, &m_defaultTexture);
-    glBindTexture(GL_TEXTURE_2D, m_defaultTexture);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0,
-                 GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glGenerateMipmap(GL_TEXTURE_2D);
-    glBindTexture(GL_TEXTURE_2D, 0);
+    glCreateTextures(GL_TEXTURE_2D, 1, &m_defaultTexture);
+    glTextureStorage2D(m_defaultTexture, 1 + static_cast<GLsizei>(std::floor(std::log2(std::max(width, height)))),
+                       GL_RGBA8, width, height);
+    glTextureSubImage2D(m_defaultTexture, 0, 0, 0, width, height,
+                        GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+    glTextureParameteri(m_defaultTexture, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTextureParameteri(m_defaultTexture, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTextureParameteri(m_defaultTexture, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTextureParameteri(m_defaultTexture, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glGenerateTextureMipmap(m_defaultTexture);
 }
 
 void FoliageRenderer::uploadInstances(const std::vector<FoliageInstance>& instances)
 {
     int count = static_cast<int>(instances.size());
 
-    glBindBuffer(GL_ARRAY_BUFFER, m_instanceVbo);
-
     if (count > m_instanceCapacity)
     {
         // Grow with headroom to avoid frequent reallocation
         m_instanceCapacity = count + count / 4 + 256;
-        glBufferData(GL_ARRAY_BUFFER,
-                     m_instanceCapacity * static_cast<GLsizeiptr>(sizeof(FoliageInstance)),
-                     nullptr, GL_DYNAMIC_DRAW);
+
+        // Delete old buffer and create new immutable one
+        glDeleteBuffers(1, &m_instanceVbo);
+        glCreateBuffers(1, &m_instanceVbo);
+        glNamedBufferStorage(m_instanceVbo,
+                             m_instanceCapacity * static_cast<GLsizeiptr>(sizeof(FoliageInstance)),
+                             nullptr, GL_DYNAMIC_STORAGE_BIT);
+
+        // Re-bind to VAO binding point 1
+        glVertexArrayVertexBuffer(m_starVao, 1, m_instanceVbo, 0, sizeof(FoliageInstance));
     }
 
     // Upload instance data
-    glBufferSubData(GL_ARRAY_BUFFER, 0,
-                    count * static_cast<GLsizeiptr>(sizeof(FoliageInstance)),
-                    instances.data());
-
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glNamedBufferSubData(m_instanceVbo, 0,
+                         count * static_cast<GLsizeiptr>(sizeof(FoliageInstance)),
+                         instances.data());
 }
 
 } // namespace Vestige

@@ -125,18 +125,19 @@ void TreeRenderer::render(
     {
         // Upload instances
         int count = static_cast<int>(m_lod0Instances.size());
-        glBindBuffer(GL_ARRAY_BUFFER, m_treeInstanceVbo);
         if (count > m_treeInstanceCapacity)
         {
             m_treeInstanceCapacity = count + count / 4 + 64;
-            glBufferData(GL_ARRAY_BUFFER,
-                         m_treeInstanceCapacity * static_cast<GLsizeiptr>(sizeof(TreeDrawInstance)),
-                         nullptr, GL_DYNAMIC_DRAW);
+            glDeleteBuffers(1, &m_treeInstanceVbo);
+            glCreateBuffers(1, &m_treeInstanceVbo);
+            glNamedBufferStorage(m_treeInstanceVbo,
+                                 m_treeInstanceCapacity * static_cast<GLsizeiptr>(sizeof(TreeDrawInstance)),
+                                 nullptr, GL_DYNAMIC_STORAGE_BIT);
+            glVertexArrayVertexBuffer(m_treeVao, 1, m_treeInstanceVbo, 0, sizeof(TreeDrawInstance));
         }
-        glBufferSubData(GL_ARRAY_BUFFER, 0,
-                         count * static_cast<GLsizeiptr>(sizeof(TreeDrawInstance)),
-                         m_lod0Instances.data());
-        glBindBuffer(GL_ARRAY_BUFFER, 0);
+        glNamedBufferSubData(m_treeInstanceVbo, 0,
+                             count * static_cast<GLsizeiptr>(sizeof(TreeDrawInstance)),
+                             m_lod0Instances.data());
 
         m_meshShader.use();
         m_meshShader.setMat4("u_viewProjection", viewProjection);
@@ -148,7 +149,6 @@ void TreeRenderer::render(
         glBindVertexArray(m_treeVao);
         glDrawElementsInstanced(GL_TRIANGLES, m_treeIndexCount, GL_UNSIGNED_INT,
                                 nullptr, count);
-        glBindVertexArray(0);
 
         glDisable(GL_BLEND);
     }
@@ -157,18 +157,19 @@ void TreeRenderer::render(
     if (!m_lod1Instances.empty())
     {
         int count = static_cast<int>(m_lod1Instances.size());
-        glBindBuffer(GL_ARRAY_BUFFER, m_billboardInstanceVbo);
         if (count > m_billboardInstanceCapacity)
         {
             m_billboardInstanceCapacity = count + count / 4 + 64;
-            glBufferData(GL_ARRAY_BUFFER,
-                         m_billboardInstanceCapacity * static_cast<GLsizeiptr>(sizeof(TreeDrawInstance)),
-                         nullptr, GL_DYNAMIC_DRAW);
+            glDeleteBuffers(1, &m_billboardInstanceVbo);
+            glCreateBuffers(1, &m_billboardInstanceVbo);
+            glNamedBufferStorage(m_billboardInstanceVbo,
+                                 m_billboardInstanceCapacity * static_cast<GLsizeiptr>(sizeof(TreeDrawInstance)),
+                                 nullptr, GL_DYNAMIC_STORAGE_BIT);
+            glVertexArrayVertexBuffer(m_billboardVao, 1, m_billboardInstanceVbo, 0, sizeof(TreeDrawInstance));
         }
-        glBufferSubData(GL_ARRAY_BUFFER, 0,
-                         count * static_cast<GLsizeiptr>(sizeof(TreeDrawInstance)),
-                         m_lod1Instances.data());
-        glBindBuffer(GL_ARRAY_BUFFER, 0);
+        glNamedBufferSubData(m_billboardInstanceVbo, 0,
+                             count * static_cast<GLsizeiptr>(sizeof(TreeDrawInstance)),
+                             m_lod1Instances.data());
 
         m_billboardShader.use();
         m_billboardShader.setMat4("u_viewProjection", viewProjection);
@@ -178,8 +179,7 @@ void TreeRenderer::render(
         m_billboardShader.setVec3("u_cameraRight", cameraRight);
         m_billboardShader.setVec3("u_cameraUp", glm::vec3(0.0f, 1.0f, 0.0f));
 
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, m_billboardTexture);
+        glBindTextureUnit(0, m_billboardTexture);
         m_billboardShader.setInt("u_texture", 0);
 
         glEnable(GL_BLEND);
@@ -188,7 +188,6 @@ void TreeRenderer::render(
 
         glBindVertexArray(m_billboardVao);
         glDrawArraysInstanced(GL_TRIANGLES, 0, 6, count);
-        glBindVertexArray(0);
 
         glEnable(GL_CULL_FACE);
         glDisable(GL_BLEND);
@@ -263,57 +262,54 @@ void TreeRenderer::createPlaceholderTree()
 
     m_treeIndexCount = static_cast<int>(indices.size());
 
-    // Create VAO
-    glGenVertexArrays(1, &m_treeVao);
-    glGenBuffers(1, &m_treeVbo);
-    glGenBuffers(1, &m_treeEbo);
-    glGenBuffers(1, &m_treeInstanceVbo);
+    // Create VAO, VBO, EBO, instance VBO (DSA)
+    glCreateVertexArrays(1, &m_treeVao);
+    glCreateBuffers(1, &m_treeVbo);
+    glCreateBuffers(1, &m_treeEbo);
+    glCreateBuffers(1, &m_treeInstanceVbo);
 
-    glBindVertexArray(m_treeVao);
+    // Upload mesh data (immutable, static)
+    glNamedBufferStorage(m_treeVbo, vertices.size() * sizeof(Vertex), vertices.data(), 0);
+    glNamedBufferStorage(m_treeEbo, indices.size() * sizeof(uint32_t), indices.data(), 0);
 
-    // Mesh data
-    glBindBuffer(GL_ARRAY_BUFFER, m_treeVbo);
-    glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(Vertex), vertices.data(), GL_STATIC_DRAW);
+    // Bind VBO to VAO binding point 0
+    glVertexArrayVertexBuffer(m_treeVao, 0, m_treeVbo, 0, sizeof(Vertex));
 
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_treeEbo);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(uint32_t), indices.data(), GL_STATIC_DRAW);
+    // Bind EBO to VAO
+    glVertexArrayElementBuffer(m_treeVao, m_treeEbo);
 
-    // Vertex attributes
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex),
-                          reinterpret_cast<void*>(offsetof(Vertex, position)));
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex),
-                          reinterpret_cast<void*>(offsetof(Vertex, color)));
+    // Vertex attributes (binding 0)
+    glEnableVertexArrayAttrib(m_treeVao, 0);
+    glVertexArrayAttribFormat(m_treeVao, 0, 3, GL_FLOAT, GL_FALSE,
+                              offsetof(Vertex, position));
+    glVertexArrayAttribBinding(m_treeVao, 0, 0);
 
-    // Instance attributes
-    glBindBuffer(GL_ARRAY_BUFFER, m_treeInstanceVbo);
+    glEnableVertexArrayAttrib(m_treeVao, 1);
+    glVertexArrayAttribFormat(m_treeVao, 1, 3, GL_FLOAT, GL_FALSE,
+                              offsetof(Vertex, color));
+    glVertexArrayAttribBinding(m_treeVao, 1, 0);
 
+    // Instance attributes (binding 1)
     // i_position (location 3)
-    glEnableVertexAttribArray(3);
-    glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, sizeof(TreeDrawInstance),
-                          reinterpret_cast<void*>(0));
-    glVertexAttribDivisor(3, 1);
+    glEnableVertexArrayAttrib(m_treeVao, 3);
+    glVertexArrayAttribFormat(m_treeVao, 3, 3, GL_FLOAT, GL_FALSE, 0);
+    glVertexArrayAttribBinding(m_treeVao, 3, 1);
+    glVertexArrayBindingDivisor(m_treeVao, 1, 1);
 
     // i_rotation (location 4)
-    glEnableVertexAttribArray(4);
-    glVertexAttribPointer(4, 1, GL_FLOAT, GL_FALSE, sizeof(TreeDrawInstance),
-                          reinterpret_cast<void*>(12));
-    glVertexAttribDivisor(4, 1);
+    glEnableVertexArrayAttrib(m_treeVao, 4);
+    glVertexArrayAttribFormat(m_treeVao, 4, 1, GL_FLOAT, GL_FALSE, 12);
+    glVertexArrayAttribBinding(m_treeVao, 4, 1);
 
     // i_scale (location 5)
-    glEnableVertexAttribArray(5);
-    glVertexAttribPointer(5, 1, GL_FLOAT, GL_FALSE, sizeof(TreeDrawInstance),
-                          reinterpret_cast<void*>(16));
-    glVertexAttribDivisor(5, 1);
+    glEnableVertexArrayAttrib(m_treeVao, 5);
+    glVertexArrayAttribFormat(m_treeVao, 5, 1, GL_FLOAT, GL_FALSE, 16);
+    glVertexArrayAttribBinding(m_treeVao, 5, 1);
 
     // i_alpha (location 6)
-    glEnableVertexAttribArray(6);
-    glVertexAttribPointer(6, 1, GL_FLOAT, GL_FALSE, sizeof(TreeDrawInstance),
-                          reinterpret_cast<void*>(20));
-    glVertexAttribDivisor(6, 1);
-
-    glBindVertexArray(0);
+    glEnableVertexArrayAttrib(m_treeVao, 6);
+    glVertexArrayAttribFormat(m_treeVao, 6, 1, GL_FLOAT, GL_FALSE, 20);
+    glVertexArrayAttribBinding(m_treeVao, 6, 1);
 }
 
 void TreeRenderer::createBillboardQuad()
@@ -334,47 +330,42 @@ void TreeRenderer::createBillboardQuad()
         {{-1.0f, 2.0f}, {0.0f, 1.0f}},
     };
 
-    glGenVertexArrays(1, &m_billboardVao);
-    glGenBuffers(1, &m_billboardVbo);
-    glGenBuffers(1, &m_billboardInstanceVbo);
+    glCreateVertexArrays(1, &m_billboardVao);
+    glCreateBuffers(1, &m_billboardVbo);
+    glCreateBuffers(1, &m_billboardInstanceVbo);
 
-    glBindVertexArray(m_billboardVao);
+    // Upload quad data (immutable, static)
+    glNamedBufferStorage(m_billboardVbo, sizeof(vertices), vertices, 0);
 
-    glBindBuffer(GL_ARRAY_BUFFER, m_billboardVbo);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+    // Bind VBO to VAO binding point 0
+    glVertexArrayVertexBuffer(m_billboardVao, 0, m_billboardVbo, 0, sizeof(BillboardVertex));
 
-    // Quad vertex attributes
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(BillboardVertex),
-                          reinterpret_cast<void*>(0));
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(BillboardVertex),
-                          reinterpret_cast<void*>(8));
+    // Quad vertex attributes (binding 0)
+    glEnableVertexArrayAttrib(m_billboardVao, 0);
+    glVertexArrayAttribFormat(m_billboardVao, 0, 2, GL_FLOAT, GL_FALSE, 0);
+    glVertexArrayAttribBinding(m_billboardVao, 0, 0);
 
-    // Instance attributes (same layout as TreeDrawInstance)
-    glBindBuffer(GL_ARRAY_BUFFER, m_billboardInstanceVbo);
+    glEnableVertexArrayAttrib(m_billboardVao, 1);
+    glVertexArrayAttribFormat(m_billboardVao, 1, 2, GL_FLOAT, GL_FALSE, 8);
+    glVertexArrayAttribBinding(m_billboardVao, 1, 0);
 
-    glEnableVertexAttribArray(3);
-    glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, sizeof(TreeDrawInstance),
-                          reinterpret_cast<void*>(0));
-    glVertexAttribDivisor(3, 1);
+    // Instance attributes (binding 1, same layout as TreeDrawInstance)
+    glEnableVertexArrayAttrib(m_billboardVao, 3);
+    glVertexArrayAttribFormat(m_billboardVao, 3, 3, GL_FLOAT, GL_FALSE, 0);
+    glVertexArrayAttribBinding(m_billboardVao, 3, 1);
+    glVertexArrayBindingDivisor(m_billboardVao, 1, 1);
 
-    glEnableVertexAttribArray(4);
-    glVertexAttribPointer(4, 1, GL_FLOAT, GL_FALSE, sizeof(TreeDrawInstance),
-                          reinterpret_cast<void*>(12));
-    glVertexAttribDivisor(4, 1);
+    glEnableVertexArrayAttrib(m_billboardVao, 4);
+    glVertexArrayAttribFormat(m_billboardVao, 4, 1, GL_FLOAT, GL_FALSE, 12);
+    glVertexArrayAttribBinding(m_billboardVao, 4, 1);
 
-    glEnableVertexAttribArray(5);
-    glVertexAttribPointer(5, 1, GL_FLOAT, GL_FALSE, sizeof(TreeDrawInstance),
-                          reinterpret_cast<void*>(16));
-    glVertexAttribDivisor(5, 1);
+    glEnableVertexArrayAttrib(m_billboardVao, 5);
+    glVertexArrayAttribFormat(m_billboardVao, 5, 1, GL_FLOAT, GL_FALSE, 16);
+    glVertexArrayAttribBinding(m_billboardVao, 5, 1);
 
-    glEnableVertexAttribArray(6);
-    glVertexAttribPointer(6, 1, GL_FLOAT, GL_FALSE, sizeof(TreeDrawInstance),
-                          reinterpret_cast<void*>(20));
-    glVertexAttribDivisor(6, 1);
-
-    glBindVertexArray(0);
+    glEnableVertexArrayAttrib(m_billboardVao, 6);
+    glVertexArrayAttribFormat(m_billboardVao, 6, 1, GL_FLOAT, GL_FALSE, 20);
+    glVertexArrayAttribBinding(m_billboardVao, 6, 1);
 }
 
 void TreeRenderer::generateBillboardTexture()
@@ -422,16 +413,16 @@ void TreeRenderer::generateBillboardTexture()
         }
     }
 
-    glGenTextures(1, &m_billboardTexture);
-    glBindTexture(GL_TEXTURE_2D, m_billboardTexture);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0,
-                 GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glGenerateMipmap(GL_TEXTURE_2D);
-    glBindTexture(GL_TEXTURE_2D, 0);
+    glCreateTextures(GL_TEXTURE_2D, 1, &m_billboardTexture);
+    GLsizei mipLevels = 1 + static_cast<GLsizei>(std::floor(std::log2(std::max(width, height))));
+    glTextureStorage2D(m_billboardTexture, mipLevels, GL_RGBA8, width, height);
+    glTextureSubImage2D(m_billboardTexture, 0, 0, 0, width, height,
+                        GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+    glTextureParameteri(m_billboardTexture, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTextureParameteri(m_billboardTexture, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTextureParameteri(m_billboardTexture, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTextureParameteri(m_billboardTexture, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glGenerateTextureMipmap(m_billboardTexture);
 }
 
 } // namespace Vestige

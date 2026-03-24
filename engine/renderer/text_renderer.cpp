@@ -54,19 +54,19 @@ bool TextRenderer::initialize(const std::string& fontPath, const std::string& sh
 
 void TextRenderer::setupQuadBuffers()
 {
-    glGenVertexArrays(1, &m_vao);
-    glGenBuffers(1, &m_vbo);
+    glCreateVertexArrays(1, &m_vao);
+    glCreateBuffers(1, &m_vbo);
 
-    glBindVertexArray(m_vao);
-    glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
     // Dynamic buffer for 6 vertices * 4 floats (x, y, u, v) per glyph quad
-    glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 6 * 4, nullptr, GL_DYNAMIC_DRAW);
+    glNamedBufferStorage(m_vbo, sizeof(float) * 6 * 4, nullptr, GL_DYNAMIC_STORAGE_BIT);
 
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(float), nullptr);
+    // Bind VBO to VAO binding point 0
+    glVertexArrayVertexBuffer(m_vao, 0, m_vbo, 0, 4 * sizeof(float));
 
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindVertexArray(0);
+    // Attribute 0: vec4 (x, y, u, v) at binding 0
+    glEnableVertexArrayAttrib(m_vao, 0);
+    glVertexArrayAttribFormat(m_vao, 0, 4, GL_FLOAT, GL_FALSE, 0);
+    glVertexArrayAttribBinding(m_vao, 0, 0);
 }
 
 void TextRenderer::renderText2D(const std::string& text, float x, float y, float scale,
@@ -86,8 +86,7 @@ void TextRenderer::renderText2D(const std::string& text, float x, float y, float
     m_textShader.setVec3("u_textColor", color);
     m_textShader.setInt("u_glyphAtlas", 0);
 
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, m_font.getAtlasTextureId());
+    glBindTextureUnit(0, m_font.getAtlasTextureId());
 
     // Save GL state that text rendering modifies
     GLboolean prevBlend = glIsEnabled(GL_BLEND);
@@ -131,17 +130,12 @@ void TextRenderer::renderText2D(const std::string& text, float x, float y, float
             { xpos,     ypos + h, u0, v1 },
         };
 
-        glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
-        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(vertices), vertices);
-        glBindBuffer(GL_ARRAY_BUFFER, 0);
+        glNamedBufferSubData(m_vbo, 0, sizeof(vertices), vertices);
 
         glDrawArrays(GL_TRIANGLES, 0, 6);
 
         cursorX += static_cast<float>(glyph.advance) / 64.0f * scale;
     }
-
-    glBindVertexArray(0);
-    glBindTexture(GL_TEXTURE_2D, 0);
 
     // Restore GL state
     if (prevDepth) glEnable(GL_DEPTH_TEST); else glDisable(GL_DEPTH_TEST);
@@ -169,8 +163,7 @@ void TextRenderer::renderText3D(const std::string& text, const glm::mat4& modelM
     m_textShader.setVec3("u_textColor", color);
     m_textShader.setInt("u_glyphAtlas", 0);
 
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, m_font.getAtlasTextureId());
+    glBindTextureUnit(0, m_font.getAtlasTextureId());
 
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -206,17 +199,12 @@ void TextRenderer::renderText3D(const std::string& text, const glm::mat4& modelM
             { xpos,     ypos + h, u0, v1 },
         };
 
-        glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
-        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(vertices), vertices);
-        glBindBuffer(GL_ARRAY_BUFFER, 0);
+        glNamedBufferSubData(m_vbo, 0, sizeof(vertices), vertices);
 
         glDrawArrays(GL_TRIANGLES, 0, 6);
 
         cursorX += static_cast<float>(glyph.advance) / 64.0f * pixelScale;
     }
-
-    glBindVertexArray(0);
-    glBindTexture(GL_TEXTURE_2D, 0);
 
     // Restore GL state
     glDepthMask(prevDepthWrite ? GL_TRUE : GL_FALSE);
@@ -232,33 +220,32 @@ std::shared_ptr<Texture> TextRenderer::generateTextHeightMap(const std::string& 
         return nullptr;
     }
 
-    // Create an offscreen FBO with a single-channel texture
+    // Create an offscreen FBO with a single-channel texture (DSA)
     GLuint fbo = 0;
     GLuint texId = 0;
 
-    glGenFramebuffers(1, &fbo);
-    glGenTextures(1, &texId);
+    glCreateFramebuffers(1, &fbo);
+    glCreateTextures(GL_TEXTURE_2D, 1, &texId);
 
-    glBindTexture(GL_TEXTURE_2D, texId);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, textureWidth, textureHeight, 0,
-                 GL_RED, GL_UNSIGNED_BYTE, nullptr);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTextureStorage2D(texId, 1, GL_R8, textureWidth, textureHeight);
+    glTextureParameteri(texId, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTextureParameteri(texId, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTextureParameteri(texId, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTextureParameteri(texId, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
-    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texId, 0);
+    glNamedFramebufferTexture(fbo, GL_COLOR_ATTACHMENT0, texId, 0);
 
     // Check completeness
-    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+    if (glCheckNamedFramebufferStatus(fbo, GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
     {
         Logger::error("TextRenderer: height map FBO not complete");
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glDeleteFramebuffers(1, &fbo);
         glDeleteTextures(1, &texId);
         return nullptr;
     }
+
+    // Bind FBO for rendering (need bind for draw operations)
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
 
     // Clear to background (embossed: black=low, engraved: white=high)
     glViewport(0, 0, textureWidth, textureHeight);
@@ -284,8 +271,8 @@ std::shared_ptr<Texture> TextRenderer::generateTextHeightMap(const std::string& 
     float margin = static_cast<float>(textureWidth) * 0.1f;
     float availableWidth = static_cast<float>(textureWidth) - 2.0f * margin;
     float scale = availableWidth / textWidth;
-    float textHeight = m_font.getLineHeight() * scale;
-    float yOffset = (static_cast<float>(textureHeight) - textHeight) * 0.5f;
+    float textHeightVal = m_font.getLineHeight() * scale;
+    float yOffset = (static_cast<float>(textureHeight) - textHeightVal) * 0.5f;
 
     m_textShader.use();
     m_textShader.setMat4("u_projection", ortho);
@@ -293,8 +280,7 @@ std::shared_ptr<Texture> TextRenderer::generateTextHeightMap(const std::string& 
     m_textShader.setVec3("u_textColor", textColor);
     m_textShader.setInt("u_glyphAtlas", 0);
 
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, m_font.getAtlasTextureId());
+    glBindTextureUnit(0, m_font.getAtlasTextureId());
 
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -330,17 +316,13 @@ std::shared_ptr<Texture> TextRenderer::generateTextHeightMap(const std::string& 
             { xpos,     ypos + h, u0, v1 },
         };
 
-        glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
-        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(vertices), vertices);
-        glBindBuffer(GL_ARRAY_BUFFER, 0);
+        glNamedBufferSubData(m_vbo, 0, sizeof(vertices), vertices);
 
         glDrawArrays(GL_TRIANGLES, 0, 6);
 
         cursorX += static_cast<float>(glyph.advance) / 64.0f * scale;
     }
 
-    glBindVertexArray(0);
-    glBindTexture(GL_TEXTURE_2D, 0);
     glEnable(GL_DEPTH_TEST);
     glDisable(GL_BLEND);
 
@@ -351,10 +333,9 @@ std::shared_ptr<Texture> TextRenderer::generateTextHeightMap(const std::string& 
     // Wrap the GL texture in a Texture object
     // Note: We can't directly assign the texture ID to a Texture since it manages ownership.
     // Instead, read the pixels back and load into a Texture.
-    glBindTexture(GL_TEXTURE_2D, texId);
     std::vector<unsigned char> pixels(static_cast<size_t>(textureWidth) * static_cast<size_t>(textureHeight));
-    glGetTexImage(GL_TEXTURE_2D, 0, GL_RED, GL_UNSIGNED_BYTE, pixels.data());
-    glBindTexture(GL_TEXTURE_2D, 0);
+    glGetTextureImage(texId, 0, GL_RED, GL_UNSIGNED_BYTE,
+                      static_cast<GLsizei>(pixels.size()), pixels.data());
     glDeleteTextures(1, &texId);
 
     auto texture = std::make_shared<Texture>();

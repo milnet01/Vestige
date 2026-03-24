@@ -129,18 +129,15 @@ void TerrainRenderer::render(const Terrain& terrain,
     }
 
     // Bind heightmap (texture unit 0)
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, terrain.getHeightmapTexture());
+    glBindTextureUnit(0, terrain.getHeightmapTexture());
     m_terrainShader.setInt("u_heightmap", 0);
 
     // Bind normal map (texture unit 1)
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, terrain.getNormalMapTexture());
+    glBindTextureUnit(1, terrain.getNormalMapTexture());
     m_terrainShader.setInt("u_normalMap", 1);
 
     // Bind splatmap (texture unit 2)
-    glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, terrain.getSplatmapTexture());
+    glBindTextureUnit(2, terrain.getSplatmapTexture());
     m_terrainShader.setInt("u_splatmap", 2);
 
     // Lighting
@@ -193,9 +190,6 @@ void TerrainRenderer::render(const Terrain& terrain,
         m_lastDrawCallCount++;
         m_lastTriangleCount += m_gridIndexCount / 3;
     }
-
-    glBindVertexArray(0);
-    glActiveTexture(GL_TEXTURE0);
 }
 
 void TerrainRenderer::renderShadow(const Terrain& terrain,
@@ -241,8 +235,7 @@ void TerrainRenderer::renderShadow(const Terrain& terrain,
     }
 
     // Bind heightmap
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, terrain.getHeightmapTexture());
+    glBindTextureUnit(0, terrain.getHeightmapTexture());
     m_shadowShader.setInt("u_heightmap", 0);
 
     glBindVertexArray(m_gridVao);
@@ -255,9 +248,6 @@ void TerrainRenderer::renderShadow(const Terrain& terrain,
 
         glDrawElements(GL_TRIANGLES, m_gridIndexCount, GL_UNSIGNED_INT, nullptr);
     }
-
-    glBindVertexArray(0);
-    glActiveTexture(GL_TEXTURE0);
 }
 
 // ---------------------------------------------------------------------------
@@ -433,28 +423,30 @@ void TerrainRenderer::createGridMesh(int resolution)
 
     m_gridIndexCount = static_cast<int>(indices.size());
 
-    // Create VAO/VBO/EBO
-    glGenVertexArrays(1, &m_gridVao);
-    glGenBuffers(1, &m_gridVbo);
-    glGenBuffers(1, &m_gridEbo);
+    // Create VAO/VBO/EBO (DSA)
+    glCreateVertexArrays(1, &m_gridVao);
+    glCreateBuffers(1, &m_gridVbo);
+    glCreateBuffers(1, &m_gridEbo);
 
-    glBindVertexArray(m_gridVao);
+    // Upload data (immutable, static)
+    glNamedBufferStorage(m_gridVbo,
+                         static_cast<GLsizeiptr>(vertices.size() * sizeof(glm::vec3)),
+                         vertices.data(), 0);
 
-    glBindBuffer(GL_ARRAY_BUFFER, m_gridVbo);
-    glBufferData(GL_ARRAY_BUFFER,
-                 static_cast<GLsizeiptr>(vertices.size() * sizeof(glm::vec3)),
-                 vertices.data(), GL_STATIC_DRAW);
+    glNamedBufferStorage(m_gridEbo,
+                         static_cast<GLsizeiptr>(indices.size() * sizeof(uint32_t)),
+                         indices.data(), 0);
 
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_gridEbo);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER,
-                 static_cast<GLsizeiptr>(indices.size() * sizeof(uint32_t)),
-                 indices.data(), GL_STATIC_DRAW);
+    // Bind VBO to VAO binding point 0
+    glVertexArrayVertexBuffer(m_gridVao, 0, m_gridVbo, 0, sizeof(glm::vec3));
+
+    // Bind EBO to VAO
+    glVertexArrayElementBuffer(m_gridVao, m_gridEbo);
 
     // Vertex attribute: location 0 = vec3 (gridPos.xy + skirtFlag.z)
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(glm::vec3), nullptr);
-
-    glBindVertexArray(0);
+    glEnableVertexArrayAttrib(m_gridVao, 0);
+    glVertexArrayAttribFormat(m_gridVao, 0, 3, GL_FLOAT, GL_FALSE, 0);
+    glVertexArrayAttribBinding(m_gridVao, 0, 0);
 
     Logger::info("TerrainRenderer: created " + std::to_string(resolution)
                  + "x" + std::to_string(resolution) + " grid mesh ("
@@ -469,23 +461,21 @@ void TerrainRenderer::generateDefaultTextures()
 {
     // Simple 1x1 green albedo
     uint8_t greenPixel[4] = {80, 140, 50, 255};
-    glGenTextures(1, &m_defaultAlbedo);
-    glBindTexture(GL_TEXTURE_2D, m_defaultAlbedo);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 1, 1, 0,
-                 GL_RGBA, GL_UNSIGNED_BYTE, greenPixel);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glCreateTextures(GL_TEXTURE_2D, 1, &m_defaultAlbedo);
+    glTextureStorage2D(m_defaultAlbedo, 1, GL_RGBA8, 1, 1);
+    glTextureSubImage2D(m_defaultAlbedo, 0, 0, 0, 1, 1,
+                        GL_RGBA, GL_UNSIGNED_BYTE, greenPixel);
+    glTextureParameteri(m_defaultAlbedo, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTextureParameteri(m_defaultAlbedo, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
     // Flat normal (0.5, 0.5, 1.0) = (0, 0, 1) in tangent space
     uint8_t normalPixel[3] = {128, 128, 255};
-    glGenTextures(1, &m_defaultNormal);
-    glBindTexture(GL_TEXTURE_2D, m_defaultNormal);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, 1, 1, 0,
-                 GL_RGB, GL_UNSIGNED_BYTE, normalPixel);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-
-    glBindTexture(GL_TEXTURE_2D, 0);
+    glCreateTextures(GL_TEXTURE_2D, 1, &m_defaultNormal);
+    glTextureStorage2D(m_defaultNormal, 1, GL_RGB8, 1, 1);
+    glTextureSubImage2D(m_defaultNormal, 0, 0, 0, 1, 1,
+                        GL_RGB, GL_UNSIGNED_BYTE, normalPixel);
+    glTextureParameteri(m_defaultNormal, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTextureParameteri(m_defaultNormal, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 }
 
 } // namespace Vestige

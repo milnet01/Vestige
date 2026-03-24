@@ -372,15 +372,15 @@ void Terrain::createGpuTextures()
     int w = m_config.width;
     int d = m_config.depth;
 
-    // Heightmap: R32F
-    glGenTextures(1, &m_heightmapTex);
-    glBindTexture(GL_TEXTURE_2D, m_heightmapTex);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, w, d, 0,
-                 GL_RED, GL_FLOAT, m_heightData.data());
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    // Heightmap: R32F (DSA)
+    glCreateTextures(GL_TEXTURE_2D, 1, &m_heightmapTex);
+    glTextureStorage2D(m_heightmapTex, 1, GL_R32F, w, d);
+    glTextureSubImage2D(m_heightmapTex, 0, 0, 0, w, d,
+                        GL_RED, GL_FLOAT, m_heightData.data());
+    glTextureParameteri(m_heightmapTex, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTextureParameteri(m_heightmapTex, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTextureParameteri(m_heightmapTex, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTextureParameteri(m_heightmapTex, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
     // Normal map: RGB8 (encoded as n * 0.5 + 0.5)
     std::vector<uint8_t> normalBytes(static_cast<size_t>(w * d * 3));
@@ -392,14 +392,14 @@ void Terrain::createGpuTextures()
         normalBytes[i * 3 + 2] = static_cast<uint8_t>((n.z * 0.5f + 0.5f) * 255.0f);
     }
 
-    glGenTextures(1, &m_normalMapTex);
-    glBindTexture(GL_TEXTURE_2D, m_normalMapTex);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, w, d, 0,
-                 GL_RGB, GL_UNSIGNED_BYTE, normalBytes.data());
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glCreateTextures(GL_TEXTURE_2D, 1, &m_normalMapTex);
+    glTextureStorage2D(m_normalMapTex, 1, GL_RGB8, w, d);
+    glTextureSubImage2D(m_normalMapTex, 0, 0, 0, w, d,
+                        GL_RGB, GL_UNSIGNED_BYTE, normalBytes.data());
+    glTextureParameteri(m_normalMapTex, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTextureParameteri(m_normalMapTex, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTextureParameteri(m_normalMapTex, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTextureParameteri(m_normalMapTex, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
     // Splatmap: RGBA8
     std::vector<uint8_t> splatBytes(static_cast<size_t>(w * d * 4));
@@ -412,16 +412,14 @@ void Terrain::createGpuTextures()
         splatBytes[i * 4 + 3] = static_cast<uint8_t>(s.a * 255.0f);
     }
 
-    glGenTextures(1, &m_splatmapTex);
-    glBindTexture(GL_TEXTURE_2D, m_splatmapTex);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w, d, 0,
-                 GL_RGBA, GL_UNSIGNED_BYTE, splatBytes.data());
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-
-    glBindTexture(GL_TEXTURE_2D, 0);
+    glCreateTextures(GL_TEXTURE_2D, 1, &m_splatmapTex);
+    glTextureStorage2D(m_splatmapTex, 1, GL_RGBA8, w, d);
+    glTextureSubImage2D(m_splatmapTex, 0, 0, 0, w, d,
+                        GL_RGBA, GL_UNSIGNED_BYTE, splatBytes.data());
+    glTextureParameteri(m_splatmapTex, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTextureParameteri(m_splatmapTex, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTextureParameteri(m_splatmapTex, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTextureParameteri(m_splatmapTex, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 }
 
 // ---------------------------------------------------------------------------
@@ -447,10 +445,8 @@ void Terrain::updateHeightmapRegion(int x, int z, int w, int h)
         }
     }
 
-    glBindTexture(GL_TEXTURE_2D, m_heightmapTex);
-    glTexSubImage2D(GL_TEXTURE_2D, 0, x, z, w, h,
-                    GL_RED, GL_FLOAT, region.data());
-    glBindTexture(GL_TEXTURE_2D, 0);
+    glTextureSubImage2D(m_heightmapTex, 0, x, z, w, h,
+                        GL_RED, GL_FLOAT, region.data());
 }
 
 void Terrain::updateNormalMapRegion(int x, int z, int w, int h)
@@ -486,10 +482,8 @@ void Terrain::updateNormalMapRegion(int x, int z, int w, int h)
         }
     }
 
-    glBindTexture(GL_TEXTURE_2D, m_normalMapTex);
-    glTexSubImage2D(GL_TEXTURE_2D, 0, x0, z0, uploadW, uploadH,
-                    GL_RGB, GL_UNSIGNED_BYTE, normalBytes.data());
-    glBindTexture(GL_TEXTURE_2D, 0);
+    glTextureSubImage2D(m_normalMapTex, 0, x0, z0, uploadW, uploadH,
+                        GL_RGB, GL_UNSIGNED_BYTE, normalBytes.data());
 }
 
 void Terrain::updateSplatmapRegion(int x, int z, int w, int h)
@@ -514,10 +508,8 @@ void Terrain::updateSplatmapRegion(int x, int z, int w, int h)
         }
     }
 
-    glBindTexture(GL_TEXTURE_2D, m_splatmapTex);
-    glTexSubImage2D(GL_TEXTURE_2D, 0, x, z, w, h,
-                    GL_RGBA, GL_UNSIGNED_BYTE, splatBytes.data());
-    glBindTexture(GL_TEXTURE_2D, 0);
+    glTextureSubImage2D(m_splatmapTex, 0, x, z, w, h,
+                        GL_RGBA, GL_UNSIGNED_BYTE, splatBytes.data());
 }
 
 // ---------------------------------------------------------------------------

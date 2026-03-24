@@ -80,7 +80,6 @@ void BrushPreviewRenderer::render(const glm::vec3& center, const glm::vec3& norm
 
     glBindVertexArray(m_vao);
     glDrawArrays(GL_LINE_LOOP, 0, m_vertexCount);
-    glBindVertexArray(0);
 
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_CULL_FACE);
@@ -102,18 +101,20 @@ void BrushPreviewRenderer::createCircleGeometry()
 
     m_vertexCount = segments;
 
-    glGenVertexArrays(1, &m_vao);
-    glGenBuffers(1, &m_vbo);
+    glCreateVertexArrays(1, &m_vao);
+    glCreateBuffers(1, &m_vbo);
 
-    glBindVertexArray(m_vao);
-    glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
-    glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(glm::vec3),
-                 vertices.data(), GL_STATIC_DRAW);
+    // Upload data (immutable, static)
+    glNamedBufferStorage(m_vbo, vertices.size() * sizeof(glm::vec3),
+                         vertices.data(), 0);
 
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(glm::vec3), nullptr);
+    // Bind VBO to VAO binding point 0
+    glVertexArrayVertexBuffer(m_vao, 0, m_vbo, 0, sizeof(glm::vec3));
 
-    glBindVertexArray(0);
+    // Attribute 0: vec3 position at binding 0
+    glEnableVertexArrayAttrib(m_vao, 0);
+    glVertexArrayAttribFormat(m_vao, 0, 3, GL_FLOAT, GL_FALSE, 0);
+    glVertexArrayAttribBinding(m_vao, 0, 0);
 }
 
 } // namespace Vestige
