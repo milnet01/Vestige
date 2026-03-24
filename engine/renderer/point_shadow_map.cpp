@@ -15,39 +15,28 @@ PointShadowMap::PointShadowMap(const PointShadowConfig& config)
 {
     int res = config.resolution;
 
-    // Create depth cubemap texture
-    glGenTextures(1, &m_depthCubemap);
-    glBindTexture(GL_TEXTURE_CUBE_MAP, m_depthCubemap);
+    // Create depth cubemap texture — DSA
+    glCreateTextures(GL_TEXTURE_CUBE_MAP, 1, &m_depthCubemap);
+    glTextureStorage2D(m_depthCubemap, 1, GL_DEPTH_COMPONENT24, res, res);
+    glTextureParameteri(m_depthCubemap, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTextureParameteri(m_depthCubemap, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTextureParameteri(m_depthCubemap, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTextureParameteri(m_depthCubemap, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTextureParameteri(m_depthCubemap, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
 
-    for (int i = 0; i < 6; i++)
-    {
-        glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_DEPTH_COMPONENT,
-            res, res, 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
-    }
+    // Create FBO — DSA
+    glCreateFramebuffers(1, &m_fbo);
+    // Attach entire cubemap (all 6 faces) for completeness check
+    glNamedFramebufferTexture(m_fbo, GL_DEPTH_ATTACHMENT, m_depthCubemap, 0);
+    glNamedFramebufferDrawBuffer(m_fbo, GL_NONE);
+    glNamedFramebufferReadBuffer(m_fbo, GL_NONE);
 
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
-
-    // Create FBO
-    glGenFramebuffers(1, &m_fbo);
-    glBindFramebuffer(GL_FRAMEBUFFER, m_fbo);
-    // Attach face 0 initially to validate completeness
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
-        GL_TEXTURE_CUBE_MAP_POSITIVE_X, m_depthCubemap, 0);
-    glDrawBuffer(GL_NONE);
-    glReadBuffer(GL_NONE);
-
-    GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+    GLenum status = glCheckNamedFramebufferStatus(m_fbo, GL_FRAMEBUFFER);
     if (status != GL_FRAMEBUFFER_COMPLETE)
     {
         Logger::error("Point shadow map FBO incomplete: 0x"
             + std::to_string(static_cast<unsigned int>(status)));
     }
-
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
     // Pre-compute the projection matrix (90 degree FOV for cube faces)
     m_shadowProjection = glm::perspective(
@@ -96,8 +85,8 @@ void PointShadowMap::beginFace(int face)
     }
 
     glBindFramebuffer(GL_FRAMEBUFFER, m_fbo);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
-        GL_TEXTURE_CUBE_MAP_POSITIVE_X + face, m_depthCubemap, 0);
+    glNamedFramebufferTextureLayer(m_fbo, GL_DEPTH_ATTACHMENT,
+        m_depthCubemap, 0, face);
     glViewport(0, 0, m_config.resolution, m_config.resolution);
     glClear(GL_DEPTH_BUFFER_BIT);
 }
@@ -109,8 +98,7 @@ void PointShadowMap::endFace()
 
 void PointShadowMap::bindShadowTexture(int textureUnit) const
 {
-    glActiveTexture(GL_TEXTURE0 + static_cast<GLenum>(textureUnit));
-    glBindTexture(GL_TEXTURE_CUBE_MAP, m_depthCubemap);
+    glBindTextureUnit(static_cast<GLuint>(textureUnit), m_depthCubemap);
 }
 
 const glm::mat4& PointShadowMap::getLightSpaceMatrix(int face) const

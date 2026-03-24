@@ -70,13 +70,10 @@ void Framebuffer::unbind()
 
 void Framebuffer::resolve(Framebuffer& destination)
 {
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, m_fboId);
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, destination.getId());
-    glBlitFramebuffer(
+    glBlitNamedFramebuffer(m_fboId, destination.getId(),
         0, 0, m_config.width, m_config.height,
         0, 0, destination.getWidth(), destination.getHeight(),
         GL_COLOR_BUFFER_BIT, GL_NEAREST);
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
 void Framebuffer::resize(int width, int height)
@@ -100,15 +97,7 @@ void Framebuffer::bindColorTexture(int textureUnit)
             + std::to_string(textureUnit));
         return;
     }
-    glActiveTexture(GL_TEXTURE0 + static_cast<GLenum>(textureUnit));
-    if (m_config.samples > 1)
-    {
-        glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, m_colorAttachment);
-    }
-    else
-    {
-        glBindTexture(GL_TEXTURE_2D, m_colorAttachment);
-    }
+    glBindTextureUnit(static_cast<GLuint>(textureUnit), m_colorAttachment);
 }
 
 void Framebuffer::bindDepthTexture(int textureUnit)
@@ -124,8 +113,7 @@ void Framebuffer::bindDepthTexture(int textureUnit)
         Logger::warning("Cannot bind depth renderbuffer as texture — use isDepthTexture=true");
         return;
     }
-    glActiveTexture(GL_TEXTURE0 + static_cast<GLenum>(textureUnit));
-    glBindTexture(GL_TEXTURE_2D, m_depthAttachment);
+    glBindTextureUnit(static_cast<GLuint>(textureUnit), m_depthAttachment);
 }
 
 GLuint Framebuffer::getId() const
@@ -160,8 +148,8 @@ const FramebufferConfig& Framebuffer::getConfig() const
 
 void Framebuffer::create()
 {
-    glGenFramebuffers(1, &m_fboId);
-    glBindFramebuffer(GL_FRAMEBUFFER, m_fboId);
+    // Create FBO with DSA
+    glCreateFramebuffers(1, &m_fboId);
 
     bool isMultisample = m_config.samples > 1;
     GLenum colorFormat = m_config.isFloatingPoint ? GL_RGBA16F : GL_RGBA8;
@@ -169,44 +157,30 @@ void Framebuffer::create()
     // --- Color attachment ---
     if (m_config.hasColorAttachment)
     {
-        glGenTextures(1, &m_colorAttachment);
-
         if (isMultisample)
         {
-            glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, m_colorAttachment);
-            glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, m_config.samples,
-                                   colorFormat, m_config.width, m_config.height, GL_TRUE);
-            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-                                  GL_TEXTURE_2D_MULTISAMPLE, m_colorAttachment, 0);
+            glCreateTextures(GL_TEXTURE_2D_MULTISAMPLE, 1, &m_colorAttachment);
+            glTextureStorage2DMultisample(m_colorAttachment, m_config.samples,
+                                          colorFormat, m_config.width, m_config.height, GL_TRUE);
+            glNamedFramebufferTexture(m_fboId, GL_COLOR_ATTACHMENT0, m_colorAttachment, 0);
         }
         else
         {
-            glBindTexture(GL_TEXTURE_2D, m_colorAttachment);
+            glCreateTextures(GL_TEXTURE_2D, 1, &m_colorAttachment);
+            glTextureStorage2D(m_colorAttachment, 1, colorFormat, m_config.width, m_config.height);
 
-            if (m_config.isFloatingPoint)
-            {
-                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, m_config.width, m_config.height,
-                            0, GL_RGBA, GL_FLOAT, nullptr);
-            }
-            else
-            {
-                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, m_config.width, m_config.height,
-                            0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-            }
-
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-                                  GL_TEXTURE_2D, m_colorAttachment, 0);
+            glTextureParameteri(m_colorAttachment, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            glTextureParameteri(m_colorAttachment, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            glTextureParameteri(m_colorAttachment, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            glTextureParameteri(m_colorAttachment, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+            glNamedFramebufferTexture(m_fboId, GL_COLOR_ATTACHMENT0, m_colorAttachment, 0);
         }
     }
     else
     {
         // Depth-only FBO (e.g., shadow map) — no color output
-        glDrawBuffer(GL_NONE);
-        glReadBuffer(GL_NONE);
+        glNamedFramebufferDrawBuffer(m_fboId, GL_NONE);
+        glNamedFramebufferReadBuffer(m_fboId, GL_NONE);
     }
 
     // --- Depth attachment ---
@@ -217,42 +191,37 @@ void Framebuffer::create()
         if (useDepthTexture)
         {
             // Sampleable depth texture (for shadow maps, SSAO)
-            glGenTextures(1, &m_depthAttachment);
-            glBindTexture(GL_TEXTURE_2D, m_depthAttachment);
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24,
-                        m_config.width, m_config.height,
-                        0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+            glCreateTextures(GL_TEXTURE_2D, 1, &m_depthAttachment);
+            glTextureStorage2D(m_depthAttachment, 1, GL_DEPTH_COMPONENT24,
+                               m_config.width, m_config.height);
+            glTextureParameteri(m_depthAttachment, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+            glTextureParameteri(m_depthAttachment, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            glTextureParameteri(m_depthAttachment, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+            glTextureParameteri(m_depthAttachment, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
             float borderColor[] = {1.0f, 1.0f, 1.0f, 1.0f};
-            glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);
-            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
-                                  GL_TEXTURE_2D, m_depthAttachment, 0);
+            glTextureParameterfv(m_depthAttachment, GL_TEXTURE_BORDER_COLOR, borderColor);
+            glNamedFramebufferTexture(m_fboId, GL_DEPTH_ATTACHMENT, m_depthAttachment, 0);
             m_isDepthRenderbuffer = false;
         }
         else if (isMultisample)
         {
             // Multisampled depth renderbuffer
-            glGenRenderbuffers(1, &m_depthAttachment);
-            glBindRenderbuffer(GL_RENDERBUFFER, m_depthAttachment);
-            glRenderbufferStorageMultisample(GL_RENDERBUFFER, m_config.samples,
-                                           GL_DEPTH24_STENCIL8,
-                                           m_config.width, m_config.height);
-            glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT,
-                                    GL_RENDERBUFFER, m_depthAttachment);
+            glCreateRenderbuffers(1, &m_depthAttachment);
+            glNamedRenderbufferStorageMultisample(m_depthAttachment, m_config.samples,
+                                                  GL_DEPTH24_STENCIL8,
+                                                  m_config.width, m_config.height);
+            glNamedFramebufferRenderbuffer(m_fboId, GL_DEPTH_STENCIL_ATTACHMENT,
+                                           GL_RENDERBUFFER, m_depthAttachment);
             m_isDepthRenderbuffer = true;
         }
         else
         {
             // Regular depth renderbuffer
-            glGenRenderbuffers(1, &m_depthAttachment);
-            glBindRenderbuffer(GL_RENDERBUFFER, m_depthAttachment);
-            glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8,
-                                m_config.width, m_config.height);
-            glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT,
-                                    GL_RENDERBUFFER, m_depthAttachment);
+            glCreateRenderbuffers(1, &m_depthAttachment);
+            glNamedRenderbufferStorage(m_depthAttachment, GL_DEPTH24_STENCIL8,
+                                       m_config.width, m_config.height);
+            glNamedFramebufferRenderbuffer(m_fboId, GL_DEPTH_STENCIL_ATTACHMENT,
+                                           GL_RENDERBUFFER, m_depthAttachment);
             m_isDepthRenderbuffer = true;
         }
     }
@@ -267,8 +236,8 @@ void Framebuffer::create()
     }
 #endif
 
-    // Verify completeness
-    GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+    // Verify completeness (DSA)
+    GLenum status = glCheckNamedFramebufferStatus(m_fboId, GL_FRAMEBUFFER);
     if (status != GL_FRAMEBUFFER_COMPLETE)
     {
         Logger::error("Framebuffer incomplete — status: 0x"
@@ -283,8 +252,6 @@ void Framebuffer::create()
             + (isMultisample ? " (" + std::to_string(m_config.samples) + "x MSAA)" : "")
             + (m_config.isFloatingPoint ? " HDR" : ""));
     }
-
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
 void Framebuffer::cleanup()
