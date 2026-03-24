@@ -187,17 +187,55 @@ glm::mat4 CascadedShadowMap::computeCascadeMatrix(
     return shadowMatrix;
 }
 
+void CascadedShadowMap::setDepthBounds(float near, float far)
+{
+    m_hasDepthBounds = true;
+    m_depthBoundsNear = near;
+    m_depthBoundsFar = far;
+}
+
+void CascadedShadowMap::clearDepthBounds()
+{
+    m_hasDepthBounds = false;
+    m_depthBoundsNear = 0.0f;
+    m_depthBoundsFar = 0.0f;
+}
+
+bool CascadedShadowMap::hasDepthBounds() const
+{
+    return m_hasDepthBounds;
+}
+
 void CascadedShadowMap::update(const DirectionalLight& light, const Camera& camera, float aspectRatio)
 {
     float cameraNear = 0.1f;
     float shadowFar = m_config.shadowDistance;
 
+    // SDSM: tighten the cascade range to where geometry actually exists.
+    // This distributes cascade resolution more effectively.
+    float effectiveNear = cameraNear;
+    float effectiveFar = shadowFar;
+    if (m_hasDepthBounds)
+    {
+        // Clamp to camera near (never closer) and shadow distance (never farther).
+        // Add small margins to avoid popping at exact geometry boundaries.
+        effectiveNear = std::max(cameraNear, m_depthBoundsNear * 0.9f);
+        effectiveFar = std::min(shadowFar, m_depthBoundsFar * 1.1f);
+
+        // Ensure valid range
+        if (effectiveNear >= effectiveFar)
+        {
+            effectiveNear = cameraNear;
+            effectiveFar = shadowFar;
+        }
+    }
+
     // Compute cascade split distances in-place (no heap allocation)
     for (int i = 0; i < m_config.cascadeCount; i++)
     {
         float p = static_cast<float>(i + 1) / static_cast<float>(m_config.cascadeCount);
-        float linear = cameraNear + (shadowFar - cameraNear) * p;
-        float logarithmic = cameraNear * std::pow(shadowFar / cameraNear, p);
+        float linear = effectiveNear + (effectiveFar - effectiveNear) * p;
+        float logarithmic = effectiveNear * std::pow(effectiveFar / effectiveNear, p);
         m_cascadeSplits[static_cast<size_t>(i)] =
             m_config.splitLambda * logarithmic + (1.0f - m_config.splitLambda) * linear;
     }

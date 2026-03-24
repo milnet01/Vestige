@@ -117,6 +117,57 @@ bool Shader::loadFromFiles(const std::string& vertexPath, const std::string& fra
     return success;
 }
 
+bool Shader::loadComputeShader(const std::string& computePath)
+{
+    // Clean up previous program if reloading
+    if (m_programId != 0)
+    {
+        glDeleteProgram(m_programId);
+        m_programId = 0;
+    }
+    m_uniformCache.clear();
+
+    // Read compute shader source
+    std::ifstream computeFile(computePath);
+    if (!computeFile.is_open())
+    {
+        Logger::error("Failed to open compute shader: " + computePath);
+        return false;
+    }
+    std::stringstream computeStream;
+    computeStream << computeFile.rdbuf();
+    std::string computeSource = computeStream.str();
+
+    // Compile compute shader
+    GLuint computeShader = compileShader(GL_COMPUTE_SHADER, computeSource);
+    if (computeShader == 0)
+    {
+        return false;
+    }
+
+    // Link program (compute-only)
+    m_programId = glCreateProgram();
+    glAttachShader(m_programId, computeShader);
+    glLinkProgram(m_programId);
+
+    GLint success = 0;
+    glGetProgramiv(m_programId, GL_LINK_STATUS, &success);
+    glDeleteShader(computeShader);
+
+    if (!success)
+    {
+        char infoLog[512];
+        glGetProgramInfoLog(m_programId, sizeof(infoLog), nullptr, infoLog);
+        Logger::error("Compute shader program linking failed: " + std::string(infoLog));
+        glDeleteProgram(m_programId);
+        m_programId = 0;
+        return false;
+    }
+
+    Logger::debug("Compute shader loaded: " + computePath);
+    return true;
+}
+
 void Shader::use() const
 {
     glUseProgram(m_programId);
@@ -180,7 +231,8 @@ GLuint Shader::compileShader(GLenum type, const std::string& source)
     {
         char infoLog[512];
         glGetShaderInfoLog(shader, sizeof(infoLog), nullptr, infoLog);
-        std::string typeStr = (type == GL_VERTEX_SHADER) ? "vertex" : "fragment";
+        std::string typeStr = (type == GL_VERTEX_SHADER) ? "vertex"
+            : (type == GL_FRAGMENT_SHADER) ? "fragment" : "compute";
         Logger::error("Shader compilation failed (" + typeStr + "): " + infoLog);
         glDeleteShader(shader);
         return 0;

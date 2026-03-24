@@ -126,6 +126,11 @@ GLuint Framebuffer::getColorAttachmentId() const
     return m_colorAttachment;
 }
 
+GLuint Framebuffer::getDepthTextureId() const
+{
+    return m_isDepthRenderbuffer ? 0 : m_depthAttachment;
+}
+
 int Framebuffer::getWidth() const
 {
     return m_config.width;

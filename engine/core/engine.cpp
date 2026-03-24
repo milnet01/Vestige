@@ -374,7 +374,7 @@ bool Engine::initialize(const EngineConfig& config)
             case GLFW_KEY_F7:
             {
                 int current = static_cast<int>(m_renderer->getAntiAliasMode());
-                int next = (current + 1) % 3;
+                int next = (current + 1) % 4;
                 m_renderer->setAntiAliasMode(static_cast<AntiAliasMode>(next));
                 break;
             }
@@ -497,7 +497,7 @@ bool Engine::initialize(const EngineConfig& config)
 
     m_isRunning = true;
     Logger::info("Engine initialized successfully");
-    Logger::info("Controls: Escape=toggle editor/play, WASD=move (play mode), Mouse=look (play mode), F1=wireframe, F2=tonemapper, F3=HDR debug, F4=POM, F5=bloom, F6=SSAO, F7=AA mode, F8=color grading, F9=CSM debug, F10=auto-exposure, F11=diagnostic capture, Ctrl+Q=quit");
+    Logger::info("Controls: Escape=toggle editor/play, WASD=move (play mode), Mouse=look (play mode), F1=wireframe, F2=tonemapper, F3=HDR debug, F4=POM, F5=bloom, F6=SSAO, F7=AA mode (None/MSAA/TAA/SMAA), F8=color grading, F9=CSM debug, F10=auto-exposure, F11=diagnostic capture, Ctrl+Q=quit");
     Logger::info("Editor camera: Alt+LMB=orbit, MMB=pan, Scroll=zoom, F=focus, Numpad 1/3/7=front/right/top");
     Logger::info("Gamepad: Left stick=move, Right stick=look, LB=sprint, Triggers=up/down");
     return true;

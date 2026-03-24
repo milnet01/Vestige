@@ -18,6 +18,8 @@
 #include "renderer/color_grading_lut.h"
 #include "renderer/instance_buffer.h"
 #include "renderer/environment_map.h"
+#include "renderer/depth_reducer.h"
+#include "renderer/smaa.h"
 #include "core/event_bus.h"
 #include "scene/scene.h"
 
@@ -190,6 +192,12 @@ public:
     /// @brief Checks if cascade debug visualization is active.
     bool isCascadeDebug() const;
 
+    /// @brief Enables or disables SDSM (Sample Distribution Shadow Maps).
+    void setSdsmEnabled(bool enabled);
+
+    /// @brief Checks if SDSM is enabled.
+    bool isSdsmEnabled() const;
+
     /// @brief Renders an entire scene from collected render data.
     void renderScene(const SceneRenderData& renderData, const Camera& camera, float aspectRatio);
 
@@ -336,6 +344,12 @@ private:
     std::unique_ptr<CascadedShadowMap> m_cascadedShadowMap;
     bool m_cascadeDebug = false;
 
+    // SDSM (Sample Distribution Shadow Maps)
+    std::unique_ptr<DepthReducer> m_depthReducer;
+    bool m_sdsmEnabled = true;             // Enabled by default
+    float m_sdsmNear = 0.1f;              // Smoothed near bound (lerped between frames)
+    float m_sdsmFar = 150.0f;             // Smoothed far bound (lerped between frames)
+
     // External shadow casters (foliage)
     class FoliageRenderer* m_foliageShadowCaster = nullptr;
     class FoliageManager* m_foliageShadowManager = nullptr;
@@ -376,6 +390,12 @@ private:
     std::unique_ptr<Framebuffer> m_taaSceneFbo;  // Non-MSAA scene FBO for TAA mode
     glm::mat4 m_prevViewProjection = glm::mat4(1.0f);
     glm::mat4 m_lastViewProjection = glm::mat4(1.0f);
+
+    // SMAA
+    std::unique_ptr<Smaa> m_smaa;
+    Shader m_smaaEdgeShader;
+    Shader m_smaaBlendShader;
+    Shader m_smaaNeighborhoodShader;
 
     // Parallax occlusion mapping
     bool m_pomEnabled = true;

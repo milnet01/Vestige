@@ -65,6 +65,9 @@ public:
     /// @brief Gets the color attachment texture/renderbuffer ID.
     GLuint getColorAttachmentId() const;
 
+    /// @brief Gets the depth attachment texture ID (0 if renderbuffer or absent).
+    GLuint getDepthTextureId() const;
+
     /// @brief Gets the framebuffer width.
     int getWidth() const;
 

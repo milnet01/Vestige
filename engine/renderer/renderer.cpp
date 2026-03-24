@@ -259,6 +259,41 @@ bool Renderer::loadShaders(const std::string& assetPath)
         return false;
     }
 
+    // Load SMAA shaders
+    std::string smaaEdgeVertPath = assetPath + "/shaders/smaa_edge.vert.glsl";
+    std::string smaaEdgeFragPath = assetPath + "/shaders/smaa_edge.frag.glsl";
+    if (!m_smaaEdgeShader.loadFromFiles(smaaEdgeVertPath, smaaEdgeFragPath))
+    {
+        Logger::error("Failed to load SMAA edge detection shaders");
+        return false;
+    }
+
+    std::string smaaBlendVertPath = assetPath + "/shaders/smaa_blend.vert.glsl";
+    std::string smaaBlendFragPath = assetPath + "/shaders/smaa_blend.frag.glsl";
+    if (!m_smaaBlendShader.loadFromFiles(smaaBlendVertPath, smaaBlendFragPath))
+    {
+        Logger::error("Failed to load SMAA blend weight shaders");
+        return false;
+    }
+
+    std::string smaaNeighborVertPath = assetPath + "/shaders/smaa_neighborhood.vert.glsl";
+    std::string smaaNeighborFragPath = assetPath + "/shaders/smaa_neighborhood.frag.glsl";
+    if (!m_smaaNeighborhoodShader.loadFromFiles(smaaNeighborVertPath, smaaNeighborFragPath))
+    {
+        Logger::error("Failed to load SMAA neighborhood blending shaders");
+        return false;
+    }
+
+    // Load SDSM depth reduction compute shader
+    m_depthReducer = std::make_unique<DepthReducer>();
+    std::string depthReducePath = assetPath + "/shaders/depth_reduce.comp.glsl";
+    if (!m_depthReducer->init(depthReducePath))
+    {
+        Logger::warning("SDSM depth reducer failed to initialize — SDSM disabled");
+        m_sdsmEnabled = false;
+        m_depthReducer.reset();
+    }
+
     // Load screen-space reflections shader (disabled until G-buffer in Phase 5)
     std::string ssrFragPath = assetPath + "/shaders/ssr.frag.glsl";
     if (!m_ssrShader.loadFromFiles(screenVertPath, ssrFragPath))
@@ -468,6 +503,9 @@ void Renderer::initFramebuffers(int width, int height, int msaaSamples)
 
     m_taa = std::make_unique<Taa>(width, height);
 
+    // SMAA lookup textures and FBOs
+    m_smaa = std::make_unique<Smaa>(width, height);
+
     // Generate SSAO kernel and noise texture
     generateSsaoKernel();
     generateSsaoNoiseTexture();
@@ -569,6 +607,13 @@ void Renderer::endFrame(float deltaTime)
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
     }
 
+    // 2b. SDSM depth reduction (dispatch compute shader on resolved depth)
+    if (m_sdsmEnabled && m_depthReducer && m_resolveDepthFbo)
+    {
+        m_depthReducer->dispatch(m_resolveDepthFbo->getDepthTextureId(),
+                                 m_windowWidth, m_windowHeight);
+    }
+
     glDisable(GL_DEPTH_TEST);
 
     // 3. SSAO pass
@@ -614,11 +659,62 @@ void Renderer::endFrame(float deltaTime)
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
     }
 
-    // 4. TAA motion vectors and resolve
+    // 4. Anti-aliasing resolve (TAA or SMAA)
     // The FBO used as the HDR input for bloom and final composite
     Framebuffer* hdrSourceFbo = m_resolveFbo.get();
 
-    if (isTAA)
+    bool isSMAA = (m_antiAliasMode == AntiAliasMode::SMAA && m_smaa && m_taaSceneFbo);
+
+    if (isSMAA)
+    {
+        glm::vec4 rtMetrics(1.0f / static_cast<float>(m_windowWidth),
+                            1.0f / static_cast<float>(m_windowHeight),
+                            static_cast<float>(m_windowWidth),
+                            static_cast<float>(m_windowHeight));
+
+        // 4a. SMAA edge detection
+        m_smaa->getEdgeFbo().bind();
+        glViewport(0, 0, m_windowWidth, m_windowHeight);
+        glClear(GL_COLOR_BUFFER_BIT);
+
+        m_smaaEdgeShader.use();
+        m_resolveFbo->bindColorTexture(0);
+        m_smaaEdgeShader.setInt("u_colorTexture", 0);
+        m_smaaEdgeShader.setVec4("u_rtMetrics", rtMetrics);
+        m_screenQuad->draw();
+
+        // 4b. SMAA blend weight calculation
+        m_smaa->getBlendFbo().bind();
+        glViewport(0, 0, m_windowWidth, m_windowHeight);
+        glClear(GL_COLOR_BUFFER_BIT);
+
+        m_smaaBlendShader.use();
+        m_smaa->getEdgeFbo().bindColorTexture(0);
+        m_smaaBlendShader.setInt("u_edgeTexture", 0);
+        glBindTextureUnit(1, m_smaa->getAreaTexture());
+        m_smaaBlendShader.setInt("u_areaTexture", 1);
+        glBindTextureUnit(2, m_smaa->getSearchTexture());
+        m_smaaBlendShader.setInt("u_searchTexture", 2);
+        m_smaaBlendShader.setVec4("u_rtMetrics", rtMetrics);
+        m_screenQuad->draw();
+
+        // 4c. SMAA neighborhood blending → output to TAA scene FBO (reused as HDR target)
+        m_taaSceneFbo->bind();
+        glViewport(0, 0, m_windowWidth, m_windowHeight);
+        glClear(GL_COLOR_BUFFER_BIT);
+
+        m_smaaNeighborhoodShader.use();
+        m_resolveFbo->bindColorTexture(0);
+        m_smaaNeighborhoodShader.setInt("u_colorTexture", 0);
+        m_smaa->getBlendFbo().bindColorTexture(1);
+        m_smaaNeighborhoodShader.setInt("u_blendTexture", 1);
+        m_smaaNeighborhoodShader.setVec4("u_rtMetrics", rtMetrics);
+        m_screenQuad->draw();
+
+        // Use SMAA output as bloom/composite input
+        hdrSourceFbo = m_taaSceneFbo.get();
+    }
+    else if (isTAA)
     {
         // 4a. Motion vector pass
         m_taa->getMotionVectorFbo().bind();
@@ -1222,7 +1318,7 @@ bool Renderer::isSsaoEnabled() const
 void Renderer::setAntiAliasMode(AntiAliasMode mode)
 {
     m_antiAliasMode = mode;
-    const char* names[] = {"None", "MSAA 4x", "TAA"};
+    const char* names[] = {"None", "MSAA 4x", "TAA", "SMAA"};
     Logger::info("Anti-aliasing: " + std::string(names[static_cast<int>(mode)]));
 }
 
@@ -1374,6 +1470,21 @@ bool Renderer::isCascadeDebug() const
     return m_cascadeDebug;
 }
 
+void Renderer::setSdsmEnabled(bool enabled)
+{
+    m_sdsmEnabled = enabled;
+    Logger::info(std::string("SDSM: ") + (enabled ? "ON" : "OFF"));
+    if (!enabled && m_cascadedShadowMap)
+    {
+        m_cascadedShadowMap->clearDepthBounds();
+    }
+}
+
+bool Renderer::isSdsmEnabled() const
+{
+    return m_sdsmEnabled;
+}
+
 std::vector<Renderer::InstanceBatch> Renderer::buildInstanceBatches(
     const std::vector<SceneRenderData::RenderItem>& items)
 {
@@ -1460,6 +1571,29 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
 
     // Compute shadow-casting point lights once (used by both shadow pass and uniform upload)
     std::vector<int> shadowCasters = selectShadowCastingPointLights();
+
+    // --- SDSM: read depth bounds from previous frame and update cascade distribution ---
+    if (m_sdsmEnabled && m_depthReducer && m_cascadedShadowMap)
+    {
+        float depthNear = 0.0f;
+        float depthFar = 0.0f;
+        if (m_depthReducer->readBounds(0.1f, depthNear, depthFar))
+        {
+            // Smooth transitions between frames to avoid shadow popping
+            constexpr float LERP_SPEED = 0.15f;
+            m_sdsmNear += (depthNear - m_sdsmNear) * LERP_SPEED;
+            m_sdsmFar += (depthFar - m_sdsmFar) * LERP_SPEED;
+            m_cascadedShadowMap->setDepthBounds(m_sdsmNear, m_sdsmFar);
+        }
+        else
+        {
+            m_cascadedShadowMap->clearDepthBounds();
+        }
+    }
+    else if (m_cascadedShadowMap)
+    {
+        m_cascadedShadowMap->clearDepthBounds();
+    }
 
     // --- Directional shadow pass (cascaded, per-cascade frustum culled) ---
     if (m_cascadedShadowMap && m_hasDirectionalLight)
@@ -2369,6 +2503,9 @@ void Renderer::resizeRenderTarget(int width, int height)
     // Resize TAA FBOs
     if (m_taaSceneFbo) m_taaSceneFbo->resize(width, height);
     if (m_taa) m_taa->resize(width, height);
+
+    // Resize SMAA FBOs
+    if (m_smaa) m_smaa->resize(width, height);
 }
 
 int Renderer::getRenderWidth() const

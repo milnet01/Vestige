@@ -17,7 +17,8 @@ enum class AntiAliasMode
 {
     NONE,
     MSAA_4X,
-    TAA
+    TAA,
+    SMAA
 };
 
 /// @brief Manages TAA state: jitter, history buffer, motion vectors, resolve.

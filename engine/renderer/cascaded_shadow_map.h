@@ -41,6 +41,19 @@ public:
     /// @param aspectRatio Window aspect ratio for projection.
     void update(const DirectionalLight& light, const Camera& camera, float aspectRatio);
 
+    /// @brief Sets tight depth bounds from SDSM analysis to optimize cascade distribution.
+    /// When set, cascade splits are computed within [near, far] instead of
+    /// [cameraNear, shadowDistance], giving better shadow resolution.
+    /// @param near Nearest geometry distance (view-space).
+    /// @param far Farthest geometry distance (view-space).
+    void setDepthBounds(float near, float far);
+
+    /// @brief Clears SDSM depth bounds, reverting to default cascade distribution.
+    void clearDepthBounds();
+
+    /// @brief Returns true if SDSM depth bounds are currently active.
+    bool hasDepthBounds() const;
+
     /// @brief Begins rendering to a specific cascade layer.
     /// @param cascade Cascade index (0 = nearest).
     void beginCascade(int cascade);
@@ -101,6 +114,11 @@ private:
     std::vector<glm::mat4> m_lightSpaceMatrices;
     std::vector<float> m_cascadeSplits;
     std::vector<float> m_texelWorldSizes;
+
+    // SDSM tight depth bounds (set externally from depth buffer analysis)
+    bool m_hasDepthBounds = false;
+    float m_depthBoundsNear = 0.0f;
+    float m_depthBoundsFar = 0.0f;
 };
 
 } // namespace Vestige
