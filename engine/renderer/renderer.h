@@ -20,6 +20,9 @@
 #include "renderer/environment_map.h"
 #include "renderer/depth_reducer.h"
 #include "renderer/smaa.h"
+#include "renderer/mesh_pool.h"
+#include "renderer/indirect_buffer.h"
+#include "renderer/gpu_culler.h"
 #include "core/event_bus.h"
 #include "scene/scene.h"
 
@@ -420,6 +423,12 @@ private:
     // Instanced rendering
     std::unique_ptr<InstanceBuffer> m_instanceBuffer;
     static constexpr int MIN_INSTANCE_BATCH_SIZE = 2;
+
+    // Multi-Draw Indirect (MDI) + GPU frustum culling
+    std::unique_ptr<MeshPool> m_meshPool;
+    std::unique_ptr<IndirectBuffer> m_indirectBuffer;
+    std::unique_ptr<GpuCuller> m_gpuCuller;
+    bool m_mdiEnabled = false;  // Disabled until mesh pool is populated
 
     // Color grading LUT
     std::unique_ptr<ColorGradingLut> m_colorGradingLut;

@@ -40,6 +40,9 @@ set(ENGINE_SOURCES
     renderer/debug_draw.cpp
     renderer/depth_reducer.cpp
     renderer/smaa.cpp
+    renderer/mesh_pool.cpp
+    renderer/indirect_buffer.cpp
+    renderer/gpu_culler.cpp
     renderer/particle_renderer.cpp
     resource/model.cpp
     utils/obj_loader.cpp
