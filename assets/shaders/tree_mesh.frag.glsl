@@ -1,3 +1,5 @@
+/// @file tree_mesh.frag.glsl
+/// @brief Tree mesh LOD fragment shader — outputs instanced vertex color with crossfade alpha discard.
 #version 450 core
 
 in vec3 v_color;

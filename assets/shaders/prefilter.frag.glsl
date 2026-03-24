@@ -1,3 +1,5 @@
+/// @file prefilter.frag.glsl
+/// @brief IBL specular prefilter — convolves the environment map at varying roughness levels for split-sum approximation.
 #version 450 core
 
 in vec3 v_texCoord;

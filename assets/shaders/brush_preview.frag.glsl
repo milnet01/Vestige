@@ -1,3 +1,5 @@
+/// @file brush_preview.frag.glsl
+/// @brief Terrain brush preview fragment shader — renders a dashed semi-transparent overlay for accessibility.
 #version 450 core
 
 uniform vec3 u_color;

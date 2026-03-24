@@ -1,3 +1,5 @@
+/// @file screen_quad.frag.glsl
+/// @brief Final compositing fragment shader with tonemapping, bloom, SSAO, SSR, and TAA integration.
 #version 450 core
 
 in vec2 v_texCoord;

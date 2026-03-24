@@ -1,3 +1,5 @@
+/// @file bloom_bright.frag.glsl
+/// @brief Bloom brightness extraction — isolates pixels above a luminance threshold with soft knee.
 #version 450 core
 
 in vec2 v_texCoord;

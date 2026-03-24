@@ -1,3 +1,5 @@
+/// @file tree_billboard.vert.glsl
+/// @brief Tree billboard LOD vertex shader — camera-facing quads with per-instance transform and crossfade alpha.
 #version 450 core
 
 layout(location = 0) in vec2 a_offset;

@@ -1,3 +1,5 @@
+/// @file ssr.frag.glsl
+/// @brief Screen-space reflections — ray-marches reflection vectors against the depth buffer to approximate local reflections.
 #version 450 core
 
 /// Screen-space reflections — ray-march along the reflection vector in screen

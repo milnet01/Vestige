@@ -24,6 +24,7 @@
 #include <glm/glm.hpp>
 
 #include <memory>
+#include <memory_resource>
 #include <unordered_map>
 #include <vector>
 
@@ -442,6 +443,12 @@ private:
 
     // Frustum culling statistics (updated each frame in renderScene)
     CullingStats m_cullingStats;
+
+    // Per-frame PMR arena for scratch allocations (reset each frame)
+    static constexpr size_t FRAME_ARENA_SIZE = 2 * 1024 * 1024;  // 2 MB
+    alignas(64) char m_frameArena[FRAME_ARENA_SIZE];
+    std::pmr::monotonic_buffer_resource* m_frameResource = nullptr;
+    void resetFrameAllocator();
 };
 
 } // namespace Vestige

@@ -1,3 +1,5 @@
+/// @file outline.frag.glsl
+/// @brief Selection outline fragment shader — outputs a solid color for the selected entity outline.
 #version 450 core
 
 uniform vec3 u_outlineColor;

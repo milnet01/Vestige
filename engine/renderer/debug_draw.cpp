@@ -34,31 +34,26 @@ bool DebugDraw::initialize(const std::string& assetPath)
         return false;
     }
 
-    // Create VAO and VBO
-    glGenVertexArrays(1, &m_vao);
-    glGenBuffers(1, &m_vbo);
-
-    glBindVertexArray(m_vao);
-    glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
-
-    // Pre-allocate VBO with initial capacity
+    // Create VBO with DSA (dynamic storage for per-frame streaming)
     m_vboCapacity = INITIAL_CAPACITY;
-    glBufferData(GL_ARRAY_BUFFER,
-                 static_cast<GLsizeiptr>(m_vboCapacity * sizeof(DebugVertex)),
-                 nullptr, GL_DYNAMIC_DRAW);
+    glCreateBuffers(1, &m_vbo);
+    glNamedBufferStorage(m_vbo,
+                         static_cast<GLsizeiptr>(m_vboCapacity * sizeof(DebugVertex)),
+                         nullptr, GL_DYNAMIC_STORAGE_BIT);
+
+    // Create VAO with DSA
+    glCreateVertexArrays(1, &m_vao);
+    glVertexArrayVertexBuffer(m_vao, 0, m_vbo, 0, sizeof(DebugVertex));
 
     // Position attribute (location 0)
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(DebugVertex),
-                          reinterpret_cast<void*>(offsetof(DebugVertex, position)));
+    glEnableVertexArrayAttrib(m_vao, 0);
+    glVertexArrayAttribFormat(m_vao, 0, 3, GL_FLOAT, GL_FALSE, offsetof(DebugVertex, position));
+    glVertexArrayAttribBinding(m_vao, 0, 0);
 
     // Color attribute (location 1)
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(DebugVertex),
-                          reinterpret_cast<void*>(offsetof(DebugVertex, color)));
-
-    glBindVertexArray(0);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glEnableVertexArrayAttrib(m_vao, 1);
+    glVertexArrayAttribFormat(m_vao, 1, 3, GL_FLOAT, GL_FALSE, offsetof(DebugVertex, color));
+    glVertexArrayAttribBinding(m_vao, 1, 0);
 
     // Reserve space in the CPU-side vertex buffer
     s_vertices.reserve(INITIAL_CAPACITY);
@@ -217,20 +212,22 @@ void DebugDraw::flush(const glm::mat4& viewProjection)
 
     size_t vertexCount = s_vertices.size();
 
-    // Upload vertex data to GPU
-    glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
+    // Upload vertex data to GPU (DSA)
     if (vertexCount > m_vboCapacity)
     {
-        // Grow the VBO
+        // Grow: delete old immutable buffer and create a larger one
+        glDeleteBuffers(1, &m_vbo);
         m_vboCapacity = vertexCount * 2;
-        glBufferData(GL_ARRAY_BUFFER,
-                     static_cast<GLsizeiptr>(m_vboCapacity * sizeof(DebugVertex)),
-                     nullptr, GL_DYNAMIC_DRAW);
+        glCreateBuffers(1, &m_vbo);
+        glNamedBufferStorage(m_vbo,
+                             static_cast<GLsizeiptr>(m_vboCapacity * sizeof(DebugVertex)),
+                             nullptr, GL_DYNAMIC_STORAGE_BIT);
+        // Re-bind new VBO to VAO binding point 0
+        glVertexArrayVertexBuffer(m_vao, 0, m_vbo, 0, sizeof(DebugVertex));
     }
-    glBufferSubData(GL_ARRAY_BUFFER, 0,
-                    static_cast<GLsizeiptr>(vertexCount * sizeof(DebugVertex)),
-                    s_vertices.data());
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glNamedBufferSubData(m_vbo, 0,
+                         static_cast<GLsizeiptr>(vertexCount * sizeof(DebugVertex)),
+                         s_vertices.data());
 
     // Save state
     GLboolean prevDepthMask;

@@ -113,11 +113,26 @@ Renderer::Renderer(EventBus& eventBus)
         onWindowResize(event.width, event.height);
     });
 
+    // Initialize per-frame PMR arena
+    m_frameResource = new std::pmr::monotonic_buffer_resource(
+        m_frameArena, FRAME_ARENA_SIZE, std::pmr::null_memory_resource());
+
     Logger::info("Renderer initialized (OpenGL 4.5, reverse-Z)");
+}
+
+void Renderer::resetFrameAllocator()
+{
+    // Destroy and reconstruct the monotonic resource to "reset" it
+    delete m_frameResource;
+    m_frameResource = new std::pmr::monotonic_buffer_resource(
+        m_frameArena, FRAME_ARENA_SIZE, std::pmr::null_memory_resource());
 }
 
 Renderer::~Renderer()
 {
+    delete m_frameResource;
+    m_frameResource = nullptr;
+
     if (m_ssaoNoiseTexture != 0)
     {
         glDeleteTextures(1, &m_ssaoNoiseTexture);
@@ -1422,6 +1437,9 @@ std::vector<Renderer::InstanceBatch> Renderer::buildInstanceBatches(
 
 void Renderer::renderScene(const SceneRenderData& renderData, const Camera& camera, float aspectRatio)
 {
+    // Reset per-frame scratch allocator (all pmr::vectors from last frame are now invalid)
+    resetFrameAllocator();
+
     // Reset per-frame stats
     m_cullingStats.drawCalls = 0;
     m_cullingStats.instanceBatches = 0;

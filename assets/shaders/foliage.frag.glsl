@@ -1,3 +1,5 @@
+/// @file foliage.frag.glsl
+/// @brief Foliage fragment shader — alpha-tested textured grass/plants with directional lighting and CSM shadows.
 #version 450 core
 
 in vec2 v_texCoord;

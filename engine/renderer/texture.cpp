@@ -14,6 +14,13 @@
 namespace Vestige
 {
 
+/// @brief Computes number of mip levels for a 2D texture.
+static GLsizei computeMipLevels(int width, int height)
+{
+    int maxDim = std::max(width, height);
+    return static_cast<GLsizei>(std::floor(std::log2(maxDim))) + 1;
+}
+
 /// @brief Checks if a file path ends with the given extension (case-insensitive).
 static bool hasExtension(const std::string& path, const std::string& ext)
 {
@@ -137,14 +144,16 @@ bool Texture::loadFromFile(const std::string& filePath, bool linear)
         dataFormat = GL_RED;
     }
 
-    glGenTextures(1, &m_textureId);
-    glBindTexture(GL_TEXTURE_2D, m_textureId);
+    // Create texture with DSA (immutable storage)
+    glCreateTextures(GL_TEXTURE_2D, 1, &m_textureId);
 
-    // Texture filtering
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTextureParameteri(m_textureId, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTextureParameteri(m_textureId, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTextureParameteri(m_textureId, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTextureParameteri(m_textureId, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    GLsizei mipLevels = computeMipLevels(m_width, m_height);
+    glTextureStorage2D(m_textureId, mipLevels, internalFormat, m_width, m_height);
 
     // Set alignment for non-4-byte-aligned rows (RGB=3 bytes, RED=1 byte)
     if (channels != 4)
@@ -152,17 +161,15 @@ bool Texture::loadFromFile(const std::string& filePath, bool linear)
         glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
     }
 
-    // Upload to GPU
-    glTexImage2D(GL_TEXTURE_2D, 0, static_cast<GLint>(internalFormat),
-        m_width, m_height, 0, dataFormat, GL_UNSIGNED_BYTE, data);
-    glGenerateMipmap(GL_TEXTURE_2D);
+    glTextureSubImage2D(m_textureId, 0, 0, 0, m_width, m_height,
+                        dataFormat, GL_UNSIGNED_BYTE, data);
+    glGenerateTextureMipmap(m_textureId);
 
     if (channels != 4)
     {
         glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
     }
 
-    glBindTexture(GL_TEXTURE_2D, 0);
     stbi_image_free(data);
 
     Logger::debug("Texture loaded: " + filePath + " ("
@@ -214,29 +221,31 @@ bool Texture::loadFromMemory(const unsigned char* compressedData, size_t dataSiz
         dataFormat = GL_RED;
     }
 
-    glGenTextures(1, &m_textureId);
-    glBindTexture(GL_TEXTURE_2D, m_textureId);
+    // Create texture with DSA (immutable storage)
+    glCreateTextures(GL_TEXTURE_2D, 1, &m_textureId);
 
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTextureParameteri(m_textureId, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTextureParameteri(m_textureId, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTextureParameteri(m_textureId, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTextureParameteri(m_textureId, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    GLsizei mipLevels = computeMipLevels(m_width, m_height);
+    glTextureStorage2D(m_textureId, mipLevels, internalFormat, m_width, m_height);
 
     if (channels != 4)
     {
         glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
     }
 
-    glTexImage2D(GL_TEXTURE_2D, 0, static_cast<GLint>(internalFormat),
-        m_width, m_height, 0, dataFormat, GL_UNSIGNED_BYTE, data);
-    glGenerateMipmap(GL_TEXTURE_2D);
+    glTextureSubImage2D(m_textureId, 0, 0, 0, m_width, m_height,
+                        dataFormat, GL_UNSIGNED_BYTE, data);
+    glGenerateTextureMipmap(m_textureId);
 
     if (channels != 4)
     {
         glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
     }
 
-    glBindTexture(GL_TEXTURE_2D, 0);
     stbi_image_free(data);
 
     Logger::debug("Texture loaded from memory ("
@@ -289,19 +298,20 @@ bool Texture::loadFromMemory(const unsigned char* rawData, int width, int height
         dataFormat = GL_RED;
     }
 
-    glGenTextures(1, &m_textureId);
-    glBindTexture(GL_TEXTURE_2D, m_textureId);
+    // Create texture with DSA (immutable storage)
+    glCreateTextures(GL_TEXTURE_2D, 1, &m_textureId);
 
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTextureParameteri(m_textureId, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTextureParameteri(m_textureId, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTextureParameteri(m_textureId, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTextureParameteri(m_textureId, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-    glTexImage2D(GL_TEXTURE_2D, 0, static_cast<GLint>(internalFormat),
-        m_width, m_height, 0, dataFormat, GL_UNSIGNED_BYTE, flipped.data());
-    glGenerateMipmap(GL_TEXTURE_2D);
+    GLsizei mipLevels = computeMipLevels(m_width, m_height);
+    glTextureStorage2D(m_textureId, mipLevels, internalFormat, m_width, m_height);
 
-    glBindTexture(GL_TEXTURE_2D, 0);
+    glTextureSubImage2D(m_textureId, 0, 0, 0, m_width, m_height,
+                        dataFormat, GL_UNSIGNED_BYTE, flipped.data());
+    glGenerateTextureMipmap(m_textureId);
 
     Logger::debug("Texture loaded from raw data ("
         + std::to_string(m_width) + "x" + std::to_string(m_height)
@@ -347,21 +357,21 @@ bool Texture::loadFromExr(const std::string& filePath)
         }
     }
 
-    glGenTextures(1, &m_textureId);
-    glBindTexture(GL_TEXTURE_2D, m_textureId);
+    // Create texture with DSA (immutable storage, HDR float)
+    glCreateTextures(GL_TEXTURE_2D, 1, &m_textureId);
 
-    // Texture filtering
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTextureParameteri(m_textureId, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTextureParameteri(m_textureId, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTextureParameteri(m_textureId, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTextureParameteri(m_textureId, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-    // Upload as 16-bit float (half precision — sufficient for normal maps and PBR data)
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F,
-        m_width, m_height, 0, GL_RGBA, GL_FLOAT, data);
-    glGenerateMipmap(GL_TEXTURE_2D);
+    GLsizei mipLevels = computeMipLevels(m_width, m_height);
+    glTextureStorage2D(m_textureId, mipLevels, GL_RGBA16F, m_width, m_height);
 
-    glBindTexture(GL_TEXTURE_2D, 0);
+    glTextureSubImage2D(m_textureId, 0, 0, 0, m_width, m_height,
+                        GL_RGBA, GL_FLOAT, data);
+    glGenerateTextureMipmap(m_textureId);
+
     free(data);
 
     Logger::debug("EXR texture loaded: " + filePath + " ("
@@ -376,17 +386,18 @@ void Texture::createSolidColor(unsigned char r, unsigned char g, unsigned char b
     releaseGpuTexture();
     unsigned char pixel[3] = {r, g, b};
 
-    glGenTextures(1, &m_textureId);
-    glBindTexture(GL_TEXTURE_2D, m_textureId);
+    // Create 1x1 texture with DSA (immutable storage)
+    glCreateTextures(GL_TEXTURE_2D, 1, &m_textureId);
 
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTextureParameteri(m_textureId, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTextureParameteri(m_textureId, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTextureParameteri(m_textureId, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTextureParameteri(m_textureId, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, 1, 1, 0, GL_RGB, GL_UNSIGNED_BYTE, pixel);
-
-    glBindTexture(GL_TEXTURE_2D, 0);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    glTextureStorage2D(m_textureId, 1, GL_RGB8, 1, 1);
+    glTextureSubImage2D(m_textureId, 0, 0, 0, 1, 1, GL_RGB, GL_UNSIGNED_BYTE, pixel);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
 
     m_width = 1;
     m_height = 1;
@@ -394,14 +405,12 @@ void Texture::createSolidColor(unsigned char r, unsigned char g, unsigned char b
 
 void Texture::bind(unsigned int unit) const
 {
-    glActiveTexture(GL_TEXTURE0 + unit);
-    glBindTexture(GL_TEXTURE_2D, m_textureId);
+    glBindTextureUnit(unit, m_textureId);
 }
 
 void Texture::unbind(unsigned int unit)
 {
-    glActiveTexture(GL_TEXTURE0 + unit);
-    glBindTexture(GL_TEXTURE_2D, 0);
+    glBindTextureUnit(unit, 0);
 }
 
 GLuint Texture::getId() const

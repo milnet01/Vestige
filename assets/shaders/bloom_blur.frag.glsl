@@ -1,3 +1,5 @@
+/// @file bloom_blur.frag.glsl
+/// @brief Separable 9-tap Gaussian blur for the bloom post-processing pass.
 #version 450 core
 
 in vec2 v_texCoord;

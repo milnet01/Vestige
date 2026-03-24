@@ -1,3 +1,5 @@
+/// @file foliage.vert.glsl
+/// @brief Foliage vertex shader — instanced grass/plants with wind animation, distance fade, and LOD crossfading.
 #version 450 core
 
 // Star mesh vertex attributes

@@ -1,3 +1,5 @@
+/// @file irradiance_convolution.frag.glsl
+/// @brief IBL diffuse irradiance convolution — integrates the environment map over the hemisphere per texel.
 #version 450 core
 
 in vec3 v_texCoord;

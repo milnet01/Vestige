@@ -59,24 +59,25 @@ void FullscreenQuad::create()
         -1.0f,  1.0f,  0.0f, 1.0f,   // top-left
     };
 
-    glGenVertexArrays(1, &m_vao);
-    glGenBuffers(1, &m_vbo);
+    // Create buffer with DSA (immutable storage for static geometry)
+    glCreateBuffers(1, &m_vbo);
+    glNamedBufferStorage(m_vbo, sizeof(vertices), vertices, 0);
 
-    glBindVertexArray(m_vao);
-    glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+    // Create VAO with DSA
+    glCreateVertexArrays(1, &m_vao);
+
+    // Bind VBO to binding point 0 (stride = 4 floats per vertex)
+    glVertexArrayVertexBuffer(m_vao, 0, m_vbo, 0, 4 * sizeof(float));
 
     // Position attribute (location 0): vec2
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float),
-                         static_cast<void*>(nullptr));
+    glEnableVertexArrayAttrib(m_vao, 0);
+    glVertexArrayAttribFormat(m_vao, 0, 2, GL_FLOAT, GL_FALSE, 0);
+    glVertexArrayAttribBinding(m_vao, 0, 0);
 
     // Texture coordinate attribute (location 1): vec2
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float),
-                         reinterpret_cast<void*>(2 * sizeof(float)));
-
-    glBindVertexArray(0);
+    glEnableVertexArrayAttrib(m_vao, 1);
+    glVertexArrayAttribFormat(m_vao, 1, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float));
+    glVertexArrayAttribBinding(m_vao, 1, 0);
 }
 
 void FullscreenQuad::cleanup()

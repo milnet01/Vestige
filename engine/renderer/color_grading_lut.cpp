@@ -107,8 +107,7 @@ void ColorGradingLut::bind(unsigned int unit) const
         return;
     }
 
-    glActiveTexture(GL_TEXTURE0 + unit);
-    glBindTexture(GL_TEXTURE_3D, m_presets[static_cast<size_t>(m_currentPreset)].textureId);
+    glBindTextureUnit(unit, m_presets[static_cast<size_t>(m_currentPreset)].textureId);
 }
 
 void ColorGradingLut::nextPreset()
@@ -162,20 +161,18 @@ void ColorGradingLut::setEnabled(bool enabled)
 GLuint ColorGradingLut::createTexture3D(const std::vector<unsigned char>& data, int size)
 {
     GLuint texId = 0;
-    glGenTextures(1, &texId);
-    glBindTexture(GL_TEXTURE_3D, texId);
+    glCreateTextures(GL_TEXTURE_3D, 1, &texId);
 
-    glTexImage3D(GL_TEXTURE_3D, 0, GL_RGBA8,
-        size, size, size, 0,
-        GL_RGBA, GL_UNSIGNED_BYTE, data.data());
+    glTextureStorage3D(texId, 1, GL_RGBA8, size, size, size);
+    glTextureSubImage3D(texId, 0, 0, 0, 0, size, size, size,
+                        GL_RGBA, GL_UNSIGNED_BYTE, data.data());
 
-    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+    glTextureParameteri(texId, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTextureParameteri(texId, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTextureParameteri(texId, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTextureParameteri(texId, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTextureParameteri(texId, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
 
-    glBindTexture(GL_TEXTURE_3D, 0);
     return texId;
 }
 

@@ -1,3 +1,5 @@
+/// @file cubemap_render.vert.glsl
+/// @brief Cubemap face rendering vertex shader — used for IBL convolution and prefiltering passes.
 #version 450 core
 
 layout(location = 0) in vec3 position;

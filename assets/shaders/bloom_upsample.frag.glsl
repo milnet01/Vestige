@@ -1,3 +1,5 @@
+/// @file bloom_upsample.frag.glsl
+/// @brief Bloom mip-chain upsampling with a 9-tap tent filter for smooth progressive blending.
 #version 450 core
 
 in vec2 v_texCoord;

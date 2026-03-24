@@ -143,55 +143,53 @@ void Mesh::upload(const std::vector<Vertex>& vertices, const std::vector<uint32_
 
     m_indexCount = static_cast<uint32_t>(indices.size());
 
-    glGenVertexArrays(1, &m_vao);
-    glGenBuffers(1, &m_vbo);
-    glGenBuffers(1, &m_ebo);
-
-    glBindVertexArray(m_vao);
-
-    // Upload vertex data
-    glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
-    glBufferData(GL_ARRAY_BUFFER,
+    // Create buffers with DSA (immutable storage for static geometry)
+    glCreateBuffers(1, &m_vbo);
+    glNamedBufferStorage(m_vbo,
         static_cast<GLsizeiptr>(vertices.size() * sizeof(Vertex)),
-        vertices.data(), GL_STATIC_DRAW);
+        vertices.data(), 0);
 
-    // Upload index data
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_ebo);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER,
+    glCreateBuffers(1, &m_ebo);
+    glNamedBufferStorage(m_ebo,
         static_cast<GLsizeiptr>(indices.size() * sizeof(uint32_t)),
-        indices.data(), GL_STATIC_DRAW);
+        indices.data(), 0);
+
+    // Create VAO with DSA
+    glCreateVertexArrays(1, &m_vao);
+
+    // Bind VBO to binding point 0, EBO to VAO
+    glVertexArrayVertexBuffer(m_vao, 0, m_vbo, 0, sizeof(Vertex));
+    glVertexArrayElementBuffer(m_vao, m_ebo);
 
     // Position attribute (location 0)
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex),
-        reinterpret_cast<void*>(offsetof(Vertex, position)));
+    glEnableVertexArrayAttrib(m_vao, 0);
+    glVertexArrayAttribFormat(m_vao, 0, 3, GL_FLOAT, GL_FALSE, offsetof(Vertex, position));
+    glVertexArrayAttribBinding(m_vao, 0, 0);
 
     // Normal attribute (location 1)
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex),
-        reinterpret_cast<void*>(offsetof(Vertex, normal)));
+    glEnableVertexArrayAttrib(m_vao, 1);
+    glVertexArrayAttribFormat(m_vao, 1, 3, GL_FLOAT, GL_FALSE, offsetof(Vertex, normal));
+    glVertexArrayAttribBinding(m_vao, 1, 0);
 
     // Color attribute (location 2)
-    glEnableVertexAttribArray(2);
-    glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex),
-        reinterpret_cast<void*>(offsetof(Vertex, color)));
+    glEnableVertexArrayAttrib(m_vao, 2);
+    glVertexArrayAttribFormat(m_vao, 2, 3, GL_FLOAT, GL_FALSE, offsetof(Vertex, color));
+    glVertexArrayAttribBinding(m_vao, 2, 0);
 
     // Texture coordinate attribute (location 3)
-    glEnableVertexAttribArray(3);
-    glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex),
-        reinterpret_cast<void*>(offsetof(Vertex, texCoord)));
+    glEnableVertexArrayAttrib(m_vao, 3);
+    glVertexArrayAttribFormat(m_vao, 3, 2, GL_FLOAT, GL_FALSE, offsetof(Vertex, texCoord));
+    glVertexArrayAttribBinding(m_vao, 3, 0);
 
     // Tangent attribute (location 4)
-    glEnableVertexAttribArray(4);
-    glVertexAttribPointer(4, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex),
-        reinterpret_cast<void*>(offsetof(Vertex, tangent)));
+    glEnableVertexArrayAttrib(m_vao, 4);
+    glVertexArrayAttribFormat(m_vao, 4, 3, GL_FLOAT, GL_FALSE, offsetof(Vertex, tangent));
+    glVertexArrayAttribBinding(m_vao, 4, 0);
 
     // Bitangent attribute (location 5)
-    glEnableVertexAttribArray(5);
-    glVertexAttribPointer(5, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex),
-        reinterpret_cast<void*>(offsetof(Vertex, bitangent)));
-
-    glBindVertexArray(0);
+    glEnableVertexArrayAttrib(m_vao, 5);
+    glVertexArrayAttribFormat(m_vao, 5, 3, GL_FLOAT, GL_FALSE, offsetof(Vertex, bitangent));
+    glVertexArrayAttribBinding(m_vao, 5, 0);
 
     // Compute local-space AABB from vertex positions
     if (!vertices.empty())
@@ -232,21 +230,19 @@ void Mesh::setupInstanceAttributes(GLuint instanceVbo) const
         return;
     }
 
-    glBindVertexArray(m_vao);
-    glBindBuffer(GL_ARRAY_BUFFER, instanceVbo);
+    // Bind instance VBO to binding point 1 (binding point 0 is mesh vertex data)
+    glVertexArrayVertexBuffer(m_vao, 1, instanceVbo, 0, sizeof(glm::mat4));
+    glVertexArrayBindingDivisor(m_vao, 1, 1);
 
     // mat4 = 4 x vec4, using locations 6-9
     for (int i = 0; i < 4; i++)
     {
         GLuint loc = static_cast<GLuint>(6 + i);
-        glEnableVertexAttribArray(loc);
-        glVertexAttribPointer(loc, 4, GL_FLOAT, GL_FALSE,
-            sizeof(glm::mat4),
-            reinterpret_cast<void*>(static_cast<size_t>(i) * sizeof(glm::vec4)));
-        glVertexAttribDivisor(loc, 1);
+        glEnableVertexArrayAttrib(m_vao, loc);
+        glVertexArrayAttribFormat(m_vao, loc, 4, GL_FLOAT, GL_FALSE,
+            static_cast<GLuint>(i) * static_cast<GLuint>(sizeof(glm::vec4)));
+        glVertexArrayAttribBinding(m_vao, loc, 1);
     }
-
-    glBindVertexArray(0);
 }
 
 GLuint Mesh::getVao() const

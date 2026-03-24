@@ -187,21 +187,20 @@ bool Font::loadFromFile(const std::string& filePath, int pixelSize)
         m_fallbackGlyph = qIt->second;
     }
 
-    // Upload atlas to GPU (single-channel GL_R8, linear)
+    // Upload atlas to GPU with DSA (single-channel GL_R8, immutable storage)
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);  // Byte-aligned rows
 
-    glGenTextures(1, &m_atlasTexture);
-    glBindTexture(GL_TEXTURE_2D, m_atlasTexture);
+    glCreateTextures(GL_TEXTURE_2D, 1, &m_atlasTexture);
 
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTextureParameteri(m_atlasTexture, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTextureParameteri(m_atlasTexture, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTextureParameteri(m_atlasTexture, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTextureParameteri(m_atlasTexture, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8,
-        atlasWidth, atlasHeight, 0, GL_RED, GL_UNSIGNED_BYTE, atlasData.data());
+    glTextureStorage2D(m_atlasTexture, 1, GL_R8, atlasWidth, atlasHeight);
+    glTextureSubImage2D(m_atlasTexture, 0, 0, 0, atlasWidth, atlasHeight,
+                        GL_RED, GL_UNSIGNED_BYTE, atlasData.data());
 
-    glBindTexture(GL_TEXTURE_2D, 0);
     glPixelStorei(GL_UNPACK_ALIGNMENT, 4);  // Restore default
 
     Logger::info("Font loaded: " + filePath + " (" + std::to_string(pixelSize)

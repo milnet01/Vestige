@@ -1,3 +1,5 @@
+/// @file ssao_blur.frag.glsl
+/// @brief SSAO bilateral blur — 4x4 box blur to smooth the noisy ambient occlusion output.
 #version 450 core
 
 in vec2 v_texCoord;
