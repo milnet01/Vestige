@@ -3,6 +3,7 @@
 #include "editor/scene_serializer.h"
 #include "utils/entity_serializer.h"
 #include "environment/foliage_manager.h"
+#include "environment/terrain.h"
 #include "scene/entity.h"
 #include "scene/scene.h"
 #include "resource/resource_manager.h"
@@ -387,16 +388,17 @@ SceneSerializerResult SceneSerializer::saveScene(
     const Scene& scene,
     const fs::path& path,
     const ResourceManager& resources,
-    const FoliageManager* environment)
+    const FoliageManager* environment,
+    const Terrain* terrain)
 {
     // First do the standard save
     SceneSerializerResult result = saveScene(scene, path, resources);
-    if (!result.success || !environment)
+    if (!result.success || (!environment && !terrain))
     {
         return result;
     }
 
-    // Re-read the saved file, inject environment data, re-write
+    // Re-read the saved file, inject environment/terrain data, re-write
     std::ifstream file(path);
     if (!file.is_open()) return result;
 
@@ -411,17 +413,29 @@ SceneSerializerResult SceneSerializer::saveScene(
     }
     file.close();
 
-    sceneJson["environment"] = environment->serialize();
+    if (environment)
+    {
+        sceneJson["environment"] = environment->serialize();
+        Logger::info("Saved environment data: "
+                     + std::to_string(environment->getTotalFoliageCount()) + " instances");
+    }
+
+    if (terrain && terrain->isInitialized())
+    {
+        sceneJson["terrain"] = terrain->serializeSettings();
+
+        // Save terrain data files alongside the scene file
+        fs::path dir = path.parent_path();
+        fs::path stem = path.stem();
+        terrain->saveHeightmap(dir / (stem.string() + ".heightmap.r32"));
+        terrain->saveSplatmap(dir / (stem.string() + ".splatmap.splat"));
+    }
 
     std::string content = sceneJson.dump(4);
     std::string writeError;
     if (!atomicWriteFile(path, content, writeError))
     {
-        Logger::warning("Failed to write environment data: " + writeError);
-    }
-    else
-    {
-        Logger::info("Saved environment data: " + std::to_string(environment->getTotalFoliageCount()) + " instances");
+        Logger::warning("Failed to write environment/terrain data: " + writeError);
     }
 
     return result;
@@ -431,16 +445,17 @@ SceneSerializerResult SceneSerializer::loadScene(
     Scene& scene,
     const fs::path& path,
     ResourceManager& resources,
-    FoliageManager* environment)
+    FoliageManager* environment,
+    Terrain* terrain)
 {
     // Standard entity load
     SceneSerializerResult result = loadScene(scene, path, resources);
-    if (!result.success || !environment)
+    if (!result.success)
     {
         return result;
     }
 
-    // Load environment data from the same file
+    // Load environment/terrain data from the same file
     std::ifstream file(path);
     if (!file.is_open()) return result;
 
@@ -455,9 +470,29 @@ SceneSerializerResult SceneSerializer::loadScene(
     }
     file.close();
 
-    if (sceneJson.contains("environment") && sceneJson["environment"].is_object())
+    if (environment && sceneJson.contains("environment") && sceneJson["environment"].is_object())
     {
         environment->deserialize(sceneJson["environment"]);
+    }
+
+    if (terrain && sceneJson.contains("terrain") && sceneJson["terrain"].is_object())
+    {
+        terrain->deserializeSettings(sceneJson["terrain"]);
+
+        // Load terrain data files
+        fs::path dir = path.parent_path();
+        fs::path stem = path.stem();
+        fs::path heightmapPath = dir / (stem.string() + ".heightmap.r32");
+        fs::path splatmapPath = dir / (stem.string() + ".splatmap.splat");
+
+        if (fs::exists(heightmapPath))
+        {
+            terrain->loadHeightmap(heightmapPath);
+        }
+        if (fs::exists(splatmapPath))
+        {
+            terrain->loadSplatmap(splatmapPath);
+        }
     }
 
     return result;

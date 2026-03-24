@@ -331,6 +331,11 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera)
                 {
                     m_environmentPanel.setOpen(envOpen);
                 }
+                bool terrainOpen = m_terrainPanel.isOpen();
+                if (ImGui::MenuItem("Terrain", nullptr, &terrainOpen))
+                {
+                    m_terrainPanel.setOpen(terrainOpen);
+                }
                 bool perfOpen = m_performancePanel.isOpen();
                 if (ImGui::MenuItem("Performance", "F12", &perfOpen))
                 {
@@ -726,6 +731,12 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera)
             m_environmentPanel.draw(m_brushTool, *m_foliageManager, m_commandHistory);
         }
 
+        // --- Terrain panel ---
+        if (m_terrain)
+        {
+            m_terrainPanel.draw(m_terrainBrush, *m_terrain, m_commandHistory);
+        }
+
         // --- Performance panel ---
         if (m_profiler)
         {
@@ -1019,6 +1030,23 @@ EnvironmentPanel& Editor::getEnvironmentPanel()
 void Editor::setFoliageManager(FoliageManager* manager)
 {
     m_foliageManager = manager;
+    m_fileMenu.setFoliageManager(manager);
+}
+
+void Editor::setTerrain(Terrain* terrain)
+{
+    m_terrain = terrain;
+    m_fileMenu.setTerrain(terrain);
+}
+
+TerrainBrush& Editor::getTerrainBrush()
+{
+    return m_terrainBrush;
+}
+
+TerrainPanel& Editor::getTerrainPanel()
+{
+    return m_terrainPanel;
 }
 
 void Editor::setProfiler(PerformanceProfiler* profiler)

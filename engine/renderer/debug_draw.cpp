@@ -80,6 +80,7 @@ void DebugDraw::cleanup()
         glDeleteBuffers(1, &m_vbo);
         m_vbo = 0;
     }
+    m_shader.destroy();
     s_vertices.clear();
     m_initialized = false;
 }

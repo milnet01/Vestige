@@ -55,6 +55,16 @@ void FileMenu::setCommandHistory(CommandHistory* history)
     m_commandHistory = history;
 }
 
+void FileMenu::setFoliageManager(FoliageManager* manager)
+{
+    m_foliageManager = manager;
+}
+
+void FileMenu::setTerrain(Terrain* terrain)
+{
+    m_terrain = terrain;
+}
+
 // ---------------------------------------------------------------------------
 // Menu items
 // ---------------------------------------------------------------------------
@@ -431,7 +441,7 @@ void FileMenu::saveScene(Scene* scene)
     }
 
     SceneSerializerResult result = SceneSerializer::saveScene(
-        *scene, m_currentScenePath, *m_resources);
+        *scene, m_currentScenePath, *m_resources, m_foliageManager, m_terrain);
 
     if (result.success)
     {
@@ -473,7 +483,7 @@ void FileMenu::handleOpenResult(Scene* scene, Selection& selection)
     }
 
     SceneSerializerResult result = SceneSerializer::loadScene(
-        *scene, selectedPath, *m_resources);
+        *scene, selectedPath, *m_resources, m_foliageManager, m_terrain);
 
     if (result.success)
     {
@@ -516,7 +526,7 @@ void FileMenu::handleSaveResult(Scene* scene, Selection& selection)
     scene->setName(selectedPath.stem().string());
 
     SceneSerializerResult result = SceneSerializer::saveScene(
-        *scene, m_currentScenePath, *m_resources);
+        *scene, m_currentScenePath, *m_resources, m_foliageManager, m_terrain);
 
     if (result.success)
     {
@@ -586,7 +596,7 @@ void FileMenu::openRecentScene(Scene* scene, Selection& selection)
     }
 
     SceneSerializerResult result = SceneSerializer::loadScene(
-        *scene, m_pendingRecentPath, *m_resources);
+        *scene, m_pendingRecentPath, *m_resources, m_foliageManager, m_terrain);
 
     if (result.success)
     {
@@ -770,7 +780,7 @@ void FileMenu::drawRecoveryModal(Scene* scene, Selection& selection)
             if (scene && m_resources)
             {
                 SceneSerializerResult result = SceneSerializer::loadScene(
-                    *scene, autoSavePath, *m_resources);
+                    *scene, autoSavePath, *m_resources, m_foliageManager, m_terrain);
 
                 if (result.success)
                 {

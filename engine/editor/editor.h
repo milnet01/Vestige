@@ -9,6 +9,7 @@
 #include "editor/file_menu.h"
 #include "editor/panels/asset_browser_panel.h"
 #include "editor/panels/environment_panel.h"
+#include "editor/panels/terrain_panel.h"
 #include "editor/panels/hierarchy_panel.h"
 #include "editor/panels/performance_panel.h"
 #include "editor/panels/history_panel.h"
@@ -18,6 +19,7 @@
 #include "editor/selection.h"
 #include "editor/tools/brush_tool.h"
 #include "editor/tools/brush_preview.h"
+#include "editor/tools/terrain_brush.h"
 
 #include <imgui.h>
 #include <ImGuizmo.h>
@@ -40,6 +42,7 @@ class PerformanceProfiler;
 class Renderer;
 class ResourceManager;
 class Scene;
+class Terrain;
 
 /// @brief Editor/Play mode toggle.
 enum class EditorMode
@@ -168,8 +171,17 @@ public:
     /// @brief Stores a pointer to the FoliageManager for brush painting.
     void setFoliageManager(FoliageManager* manager);
 
+    /// @brief Stores a pointer to the Terrain for sculpting/painting.
+    void setTerrain(Terrain* terrain);
+
     /// @brief Stores a pointer to the PerformanceProfiler.
     void setProfiler(PerformanceProfiler* profiler);
+
+    /// @brief Gets the terrain brush tool.
+    TerrainBrush& getTerrainBrush();
+
+    /// @brief Gets the terrain panel.
+    TerrainPanel& getTerrainPanel();
 
     /// @brief Gets the performance panel.
     PerformancePanel& getPerformancePanel();
@@ -199,12 +211,15 @@ private:
     ImportDialog m_importDialog;
     AssetBrowserPanel m_assetBrowserPanel;
     EnvironmentPanel m_environmentPanel;
+    TerrainPanel m_terrainPanel;
     PerformancePanel m_performancePanel;
     BrushTool m_brushTool;
     BrushPreviewRenderer m_brushPreview;
+    TerrainBrush m_terrainBrush;
     PrefabSystem m_prefabSystem;
     ResourceManager* m_resourceManager = nullptr;
     FoliageManager* m_foliageManager = nullptr;
+    Terrain* m_terrain = nullptr;
     PerformanceProfiler* m_profiler = nullptr;
     std::string m_assetPath;
 

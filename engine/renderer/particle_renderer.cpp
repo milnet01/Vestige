@@ -58,6 +58,7 @@ void ParticleRenderer::shutdown()
         glDeleteBuffers(1, &m_instanceSizeVbo);
         m_instanceSizeVbo = 0;
     }
+    m_shader.destroy();
     m_instanceBufferCapacity = 0;
 }
 

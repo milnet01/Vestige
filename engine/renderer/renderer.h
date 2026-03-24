@@ -257,6 +257,20 @@ public:
     /// @brief Gets the skybox cubemap texture ID (0 if no skybox loaded).
     GLuint getSkyboxTextureId() const;
 
+    /// @brief Gets the cascaded shadow map (for external renderers that need shadow data).
+    /// @return Pointer to the CSM, or nullptr if not initialized.
+    CascadedShadowMap* getCascadedShadowMap() const;
+
+    /// @brief Sets the foliage renderer for shadow casting during the shadow pass.
+    /// @param foliageRenderer Pointer to the foliage renderer (must outlive Renderer).
+    /// @param foliageManager Pointer to the foliage manager for chunk access.
+    /// @brief Sets the foliage renderer for shadow casting during the shadow pass.
+    void setFoliageShadowCaster(class FoliageRenderer* foliageRenderer,
+                                class FoliageManager* foliageManager);
+
+    /// @brief Updates the elapsed time for foliage wind sync in the shadow pass.
+    void setFoliageShadowTime(float time) { m_foliageShadowTime = time; }
+
     /// @brief Gets the text renderer (nullptr if not initialized).
     TextRenderer* getTextRenderer();
 
@@ -320,6 +334,11 @@ private:
     // Shadow mapping (cascaded)
     std::unique_ptr<CascadedShadowMap> m_cascadedShadowMap;
     bool m_cascadeDebug = false;
+
+    // External shadow casters (foliage)
+    class FoliageRenderer* m_foliageShadowCaster = nullptr;
+    class FoliageManager* m_foliageShadowManager = nullptr;
+    float m_foliageShadowTime = 0.0f;  ///< Elapsed time for wind sync in shadow pass.
 
     // Point light shadows
     std::vector<std::unique_ptr<PointShadowMap>> m_pointShadowMaps;

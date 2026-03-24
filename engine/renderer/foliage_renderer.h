@@ -4,6 +4,7 @@
 
 #include "renderer/shader.h"
 #include "renderer/camera.h"
+#include "renderer/light.h"
 #include "environment/foliage_chunk.h"
 
 #include <glm/glm.hpp>
@@ -13,6 +14,8 @@
 
 namespace Vestige
 {
+
+class CascadedShadowMap;
 
 /// @brief Renders foliage instances using instanced 3-quad star meshes with wind animation.
 class FoliageRenderer
@@ -39,11 +42,29 @@ public:
     /// @param viewProjection Combined VP matrix.
     /// @param time Elapsed time for wind animation.
     /// @param maxDistance Distance beyond which foliage is not rendered.
+    /// @param csm Cascaded shadow map for shadow receiving (nullptr = no shadows).
+    /// @param dirLight Directional light for diffuse/translucency (nullptr = unlit).
     void render(const std::vector<const FoliageChunk*>& chunks,
                 const Camera& camera,
                 const glm::mat4& viewProjection,
                 float time,
-                float maxDistance = 100.0f);
+                float maxDistance = 100.0f,
+                CascadedShadowMap* csm = nullptr,
+                const DirectionalLight* dirLight = nullptr);
+
+    /// @brief Renders foliage into a shadow map with alpha testing.
+    /// Only renders instances within shadowMaxDistance for performance.
+    /// @param chunks Visible chunks from FoliageManager::getVisibleChunks().
+    /// @param camera Current camera (for distance culling).
+    /// @param lightSpaceMatrix Light's view-projection matrix.
+    /// @param time Elapsed time for wind animation (must match main pass).
+    void renderShadow(const std::vector<const FoliageChunk*>& chunks,
+                      const Camera& camera,
+                      const glm::mat4& lightSpaceMatrix,
+                      float time);
+
+    /// @brief Maximum distance for grass shadow casting (cascade 0 range).
+    float shadowMaxDistance = 30.0f;
 
     /// @brief Wind direction (normalized XZ).
     glm::vec3 windDirection{1.0f, 0.0f, 0.3f};
@@ -65,6 +86,7 @@ private:
     void uploadInstances(const std::vector<FoliageInstance>& instances);
 
     Shader m_shader;
+    Shader m_shadowShader;
     GLuint m_starVao = 0;
     GLuint m_starVbo = 0;
     GLuint m_instanceVbo = 0;

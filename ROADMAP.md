@@ -480,6 +480,14 @@ The Tabernacle's linen curtains sway gently, the entrance veil drapes realistica
 - [ ] Loading screens (for scene transitions)
 - [ ] Information plaques — approach an object to see a text description
 
+### Camera Modes
+- [ ] Camera mode system (switchable projection and control schemes per scene/game)
+- [ ] First-person camera (existing — WASD + mouse look, perspective projection)
+- [ ] Third-person camera (follow entity with orbit controls, perspective projection)
+- [ ] Isometric camera (fixed-angle orthographic projection, click-to-move input, Diablo-style)
+- [ ] Top-down camera (overhead orthographic, suitable for strategy or map views)
+- [ ] Cinematic camera (spline-based flythrough for guided tours and cutscenes)
+
 ### Localization
 - [ ] Multi-language text support (UTF-8, language selection)
 - [ ] Translatable string table system (all UI/plaque text referenced by key, not hardcoded)
@@ -532,25 +540,39 @@ Application published on Steam. Scenes can be packaged and shared between users.
 
 ### Screen-Space Effects
 - [ ] Screen-space reflections / SSR (real-time reflections on wet floors, polished bronze/gold — complements IBL)
+- [ ] Screen-space global illumination / SSGI (one-bounce diffuse indirect lighting from depth+color buffers — practical "free" GI layer, complements probe-based approaches)
 - [ ] Depth of field (cinematic focus effect for guided tours and screenshots)
 - [ ] Motion blur (per-object and camera-based)
 
 ### Advanced Materials
-- [ ] Subsurface scattering / SSS (light bleeding through thin materials — linen curtains, wax candles, marble, skin)
+- [ ] Subsurface scattering / SSS (light bleeding through thin materials — linen curtains, wax candles, marble, skin; hybrid screen-space diffusion approach or ReSTIR-path-tracing diffusion when RT available; ref: NVIDIA SIGGRAPH 2025)
 - [ ] Anisotropic reflections (brushed metal, hair, silk fabrics)
+- [ ] Strand-based hair and fur rendering (physically-based hair model with proper light scattering — relevant for animal fur, priestly garment fringes; ref: MachineGames/Indiana Jones, SIGGRAPH 2025)
+- [ ] Neural texture compression (2-4x memory reduction via trained neural decompression in shaders — forward-looking, requires cooperative vector hardware support)
 
 ### Global Illumination
 - [ ] Baked lightmaps (pre-computed GI for static architectural scenes — ideal for walkthroughs)
 - [ ] Light probes (capture local lighting conditions at probe positions — varying lighting between rooms)
 - [ ] Reflection probes (local cubemap captures for accurate indoor reflections — Holy Place vs Holy of Holies)
 - [ ] Light probe blending (smooth transitions between probe volumes)
+- [ ] Real-time irradiance probe GI (idTech 8 "Fast as Hell" approach — stochastic probe sampling with surfel shading, fully dynamic, proven at 60 FPS on consoles; replaces baked lighting with real-time probes)
+- [ ] Surfel-based GI (pre-generate surfels per asset at import time, software ray-trace between surfels for indirect lighting — geometry-agnostic, works without hardware RT)
+- [ ] Radiance cascades (Alexander Sannikov's approach — constant-cost GI independent of scene complexity and light count; 2D proven in production, 3D extension is active research area)
+- [ ] ReSTIR GI (reservoir-based spatiotemporal importance resampling for indirect illumination — dramatically improves convergence when hardware RT is available)
 
 ### Vulkan and Ray Tracing
 - [ ] Vulkan rendering backend (alternative to OpenGL)
+- [ ] Vulkan descriptor heap (VK_EXT_descriptor_heap — simplified resource binding, replaces legacy descriptor set model)
 - [ ] Ray tracing — reflections (hardware-accelerated on supported GPUs)
 - [ ] Ray tracing — ambient occlusion
 - [ ] Ray tracing — global illumination
+- [ ] ReSTIR DI (reservoir-based spatiotemporal importance resampling for direct illumination — enables hundreds of shadow-casting lights with stochastic evaluation at fixed cost; ref: NVIDIA RTXDI)
+- [ ] Partitioned top-level acceleration structures / PTLAS (divide scene into clusters, selectively rebuild only changed partitions — 100x faster BVH updates; ref: NVIDIA RTX Mega Geometry, DXR 2.0 CLAS)
+- [ ] Opacity micromaps (encode alpha transparency directly in the acceleration structure — eliminates expensive any-hit shaders for foliage, fences, curtains)
+- [ ] Shader execution reordering / SER (group coherent RT shader invocations — up to 2x RT performance; mandatory in SM 6.9 / Vulkan equivalent)
+- [ ] Software ray tracing fallback (screen-space ray marching + voxel/probe traces for GPUs without hardware RT — the most widely deployed approach in shipping games, e.g. UE5 Lumen software path)
 - [ ] Deferred rendering pipeline
+- [ ] Visibility buffer rendering (store triangle ID + barycentric coords instead of full G-buffer — compute-based material dispatch and deferred texturing; ref: idTech 8, DOOM: The Dark Ages)
 
 ### Tessellation and Geometry
 - [ ] Tessellation (adaptive subdivision for nearby geometry)
@@ -561,10 +583,28 @@ Application published on Steam. Scenes can be packaged and shared between users.
 ### Shadow Techniques
 - [ ] Virtual shadow maps (massive virtual texture shadow map — only allocate tiles visible to camera, consistent detail at all distances, eliminates cascade seams)
 - [ ] Percentage-closer soft shadows / PCSS (contact-hardening shadows — sharp near caster, soft further away)
+- [ ] Stochastic direct lighting (MegaLights-style fixed-budget approach — supports orders of magnitude more shadow-casting lights at constant cost via stochastic evaluation and temporal accumulation; ref: Epic Games SIGGRAPH 2025)
+
+### Upscaling
+- [ ] Render scale slider (render at 50%–100% internal resolution, upscale to display resolution)
+- [ ] AMD FSR 1.0 spatial upscaler (open-source, GPU-agnostic, single post-process pass)
+- [ ] AMD FSR 2.x temporal upscaler (motion-vector-based, requires engine motion vectors and depth; higher quality than spatial; works on all GPUs including RDNA 2 / RX 6600)
+- [ ] Custom spatial upscaler (Lanczos/bicubic + CAS sharpening — built from scratch as a learning exercise)
+- [ ] Frame generation (interpolate additional frames between rendered frames — AMD FSR 3.x or custom optical-flow-based approach; doubles perceived framerate at the cost of latency)
+
+### Anti-Aliasing and Filtering
+- [ ] Global anisotropic filtering quality setting (1x/2x/4x/8x/16x — applied to all scene textures)
+- [ ] Specular anti-aliasing (Toksvig or LEAN mapping — reduces distant surface shimmer from normal maps)
+
+### GPU-Driven Rendering
+- [ ] GPU-driven draw submission (indirect draw calls — GPU decides what to draw, eliminating CPU bottleneck)
+- [ ] GPU frustum and occlusion culling (Hi-Z occlusion culling in compute shader — skip objects hidden behind other objects)
+- [ ] Variable-rate shading / variable-rate compute (control shading rate per screen region — full rate for detail areas, reduced rate for flat surfaces; ref: idTech 8 VRCS)
+- [ ] GL_EXT_mesh_shader integration (OpenGL mesh shaders — replace vertex/geometry pipeline with task+mesh shader stages for GPU-driven geometry processing; available on AMD RDNA2+ via Mesa, avoids requiring Vulkan)
+- [ ] Bindless textures and resources (eliminate texture binding overhead — all textures resident and GPU-addressable)
 
 ### Performance
 - [x] Frustum culling (skip objects outside camera view)
-- [ ] Occlusion culling (skip objects hidden behind other objects)
 - [ ] Volumetric lighting (god rays, fog)
 
 ### VR / Immersive Rendering
@@ -576,7 +616,7 @@ Application published on Steam. Scenes can be packaged and shared between users.
 - [ ] Foveated rendering (reduce detail in peripheral vision on supported headsets)
 
 ### Milestone
-Hybrid rendering with ray-traced effects, VR walkthroughs, baked GI for architectural scenes, and tessellation on supported hardware.
+Hybrid rendering with software and hardware ray-traced effects, real-time global illumination (probe-based and/or surfel GI), GPU-driven rendering pipeline, VR walkthroughs, and tessellation on supported hardware. Scalable from integrated GPUs (SSGI + probes) to discrete RT hardware (ReSTIR + full path tracing).
 
 ---
 
@@ -589,12 +629,14 @@ High-fidelity 3D scenes (like a fully detailed Solomon's Temple) can contain hun
 ### Research Direction (Original Approach)
 Rather than replicating existing commercial solutions, Vestige will explore its own approach to automatic geometry management. Possible research areas:
 - [ ] Automatic mesh simplification (quadric error metrics, academic literature)
-- [ ] Cluster-based mesh decomposition (splitting meshes into independently cullable/LOD-able chunks)
+- [ ] Cluster-based mesh decomposition (splitting meshes into independently cullable/LOD-able chunks — meshlets of ~64-256 triangles)
 - [ ] Screen-space error-driven selection (choose cluster detail based on projected pixel coverage)
 - [ ] Compute shader-driven culling and selection pipeline
 - [ ] Virtual geometry streaming (load/unload clusters on demand from disk)
-- [ ] Mesh shader integration (via Vulkan mesh shader extensions on RDNA2+)
+- [ ] Mesh shader integration (GL_EXT_mesh_shader on OpenGL / VK_EXT_mesh_shader on Vulkan — available on RDNA2+; task shaders cull meshlet clusters, mesh shaders emit surviving triangles)
+- [ ] Micropolygon rendering (ref: Ubisoft Anvil engine, GDC 2026 — GPU-driven streaming architecture with automatic LOD, no manual LOD creation, eliminates popping)
 - [ ] Hybrid rasterization (hardware for large triangles, compute for sub-pixel)
+- [ ] RT acceleration structure co-management (partitioned TLAS that tracks geometry LOD — when geometry detail changes, only affected BVH partitions rebuild; ref: NVIDIA RTX Mega Geometry foliage system)
 - [ ] Novel approaches: SDF-based geometry, surfel-based rendering, or other non-traditional representations
 
 ### Design Principles
@@ -654,19 +696,25 @@ A scene where doors open, torches flicker, guided tours run, NPCs walk patrol ro
 
 ---
 
-## Phase 15: Terrain and Landscape
+## Phase 15: Terrain and Landscape (CORE COMPLETE — Phase 5I)
 **Goal:** Large-scale terrain with heightmap-based elevation for hills, valleys, and natural landscapes.
 
-Environment painting tools (grass, trees, paths, water) are in Phase 5G. This phase focuses on the terrain geometry system that those tools paint onto.
+Core terrain system implemented in Phase 5I. Remaining items are enhancements.
 
 ### Terrain System
-- [ ] Heightmap-based terrain (import or paint elevation in-editor)
-- [ ] Terrain painting tools — raise, lower, smooth, flatten brushes
-- [ ] Multi-layer terrain texturing (paint grass, dirt, rock, sand onto terrain)
+- [x] Heightmap-based terrain (import or paint elevation in-editor) — Phase 5I-1
+- [x] CDLOD quadtree LOD with per-vertex morphing — Phase 5I-1
+- [x] Normal map + splatmap texturing (4 layers) — Phase 5I-2
+- [x] Cascaded shadow map integration — Phase 5I-3
+- [x] Terrain height/normal queries + raycast — Phase 5I-3
+- [x] Terrain painting tools — raise, lower, smooth, flatten brushes — Phase 5I-4
+- [x] Multi-layer terrain texturing (paint grass, dirt, rock, sand onto terrain) — Phase 5I-5
+- [x] Terrain serialization — save/load heightmap + splatmap with scene — Phase 5I-6
+- [x] Terrain LOD — distant terrain uses fewer triangles automatically — Phase 5I-1
 - [ ] Automatic texture blending based on slope and altitude
-- [ ] Terrain LOD — distant terrain uses fewer triangles automatically
 - [ ] Terrain collision (character controller walks on terrain surface)
 - [ ] Terrain chunking (split large terrains into tiles for streaming and culling)
+- [ ] Triplanar mapping for steep slopes
 
 ### Milestone
 Outdoor landscapes surrounding the Temple complex — hills, valleys, and the Kidron Valley with terrain elevation, ready for environment painting from Phase 5G.

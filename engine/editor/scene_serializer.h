@@ -11,6 +11,7 @@ namespace Vestige
 class FoliageManager;
 class ResourceManager;
 class Scene;
+class Terrain;
 
 /// @brief Result of a scene save or load operation.
 struct SceneSerializerResult
@@ -74,19 +75,21 @@ public:
         const Scene& scene,
         const ResourceManager& resources);
 
-    /// @brief Saves scene with environment data.
+    /// @brief Saves scene with environment and terrain data.
     static SceneSerializerResult saveScene(
         const Scene& scene,
         const std::filesystem::path& path,
         const ResourceManager& resources,
-        const FoliageManager* environment);
+        const FoliageManager* environment,
+        const Terrain* terrain = nullptr);
 
-    /// @brief Loads scene with environment data.
+    /// @brief Loads scene with environment and terrain data.
     static SceneSerializerResult loadScene(
         Scene& scene,
         const std::filesystem::path& path,
         ResourceManager& resources,
-        FoliageManager* environment);
+        FoliageManager* environment,
+        Terrain* terrain = nullptr);
 
     /// @brief Reads scene metadata from a file without loading entities.
     /// @param path Input file path.
