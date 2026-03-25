@@ -65,6 +65,7 @@ private:
     GLuint m_queries[BUFFER_COUNT][MAX_PASSES * 2] = {};  // start+end per pass
     const char* m_passNames[MAX_PASSES] = {};
     int m_passCount = 0;
+    int m_bufferPassCount[BUFFER_COUNT] = {};  // passes recorded per buffer
     int m_writeBuffer = 0;
     int m_readBuffer = 0;
     int m_frameCount = 0;
