@@ -10,6 +10,7 @@
 #include <glm/glm.hpp>
 #include <glad/gl.h>
 
+#include <unordered_map>
 #include <vector>
 
 namespace Vestige
@@ -80,8 +81,11 @@ private:
     /// @brief Creates the 3-quad intersecting star mesh (6 triangles, 12 vertices).
     void createStarMesh();
 
-    /// @brief Generates a simple procedural grass blade texture.
-    void generateDefaultTexture();
+    /// @brief Generates procedural textures for each foliage type.
+    void generateTypeTextures();
+
+    /// @brief Generates a single procedural texture for a foliage type.
+    GLuint generateProceduralTexture(uint32_t typeId);
 
     /// @brief Uploads foliage instances to the GPU instance buffer.
     void uploadInstances(const std::vector<FoliageInstance>& instances);
@@ -93,11 +97,11 @@ private:
     GLuint m_instanceVbo = 0;
     int m_instanceCapacity = 0;
 
-    // Default procedural grass texture
-    GLuint m_defaultTexture = 0;
+    // Per-type procedural textures (typeId → GL texture handle)
+    std::unordered_map<uint32_t, GLuint> m_typeTextures;
 
-    // CPU staging buffer (reused each frame to avoid allocation)
-    std::vector<FoliageInstance> m_visibleInstances;
+    // Per-type staging buffers (reused each frame to avoid allocation)
+    std::unordered_map<uint32_t, std::vector<FoliageInstance>> m_visibleByType;
 
     bool m_initialized = false;
 };
