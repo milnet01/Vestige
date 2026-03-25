@@ -3,12 +3,14 @@
 #pragma once
 
 #include "scene/component.h"
+#include "renderer/light.h"
 #include "editor/widgets/animation_curve.h"
 #include "editor/widgets/color_gradient.h"
 
 #include <glm/glm.hpp>
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -67,6 +69,13 @@ struct ParticleEmitterConfig
     };
     BlendMode blendMode = BlendMode::ADDITIVE;
     std::string texturePath;              ///< Optional particle texture
+
+    // Light coupling (fire emitters create a co-located flickering point light)
+    bool emitsLight = false;
+    glm::vec3 lightColor = {1.0f, 0.6f, 0.2f};
+    float lightRange = 5.0f;
+    float lightIntensity = 1.0f;
+    float flickerSpeed = 10.0f;
 };
 
 /// @brief SoA (Structure of Arrays) particle data container.
@@ -87,6 +96,7 @@ struct ParticleData
     std::vector<float> startSpeeds;    ///< Initial speed magnitude (for over-lifetime multiplier)
     std::vector<float> ages;
     std::vector<float> lifetimes;
+    std::vector<float> normalizedAges;  ///< age / lifetime [0, 1] for rendering
 
     /// @brief Allocates all arrays to the given capacity. Resets count to 0.
     void resize(int max);
@@ -127,6 +137,11 @@ public:
 
     /// @brief Returns true if the emitter is currently active (playing and within duration).
     bool isPlaying() const;
+
+    /// @brief Returns a coupled point light if emitsLight is enabled, or nullopt.
+    /// The light flickers based on elapsed time.
+    /// @param worldPos World-space position of the emitter.
+    std::optional<PointLight> getCoupledLight(const glm::vec3& worldPos) const;
 
 private:
     void spawnParticle(const glm::mat4& worldMatrix);

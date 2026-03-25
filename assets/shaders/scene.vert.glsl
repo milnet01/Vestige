@@ -28,6 +28,7 @@ uniform mat4 u_projection;
 uniform bool u_useInstancing;
 uniform bool u_useMDI;
 uniform mat3 u_normalMatrix;  // Precomputed on CPU for non-instanced path
+uniform vec4 u_clipPlane;     // Water clip plane (0,0,0,0 = disabled)
 
 out vec3 v_fragPosition;
 out vec3 v_normal;
@@ -71,6 +72,9 @@ void main()
 
     vec4 worldPosition = model * vec4(position, 1.0);
     gl_Position = u_projection * u_view * worldPosition;
+
+    // Water clip plane for reflection/refraction passes
+    gl_ClipDistance[0] = dot(worldPosition, u_clipPlane);
 
     v_fragPosition = vec3(worldPosition);
     v_normal = normalMatrix * normal;

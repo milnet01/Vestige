@@ -1385,6 +1385,11 @@ GLuint Renderer::getSkyboxTextureId() const
     return m_skybox ? m_skybox->getTextureId() : 0;
 }
 
+GLuint Renderer::getResolvedDepthTexture() const
+{
+    return m_resolveDepthFbo ? m_resolveDepthFbo->getDepthTextureId() : 0;
+}
+
 CascadedShadowMap* Renderer::getCascadedShadowMap() const
 {
     return m_cascadedShadowMap.get();
@@ -1762,6 +1767,9 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
 
     // Upload light uniforms once per frame (not per batch)
     uploadLightUniforms(camera);
+
+    // Disable water clip plane for normal scene rendering
+    m_sceneShader.setVec4("u_clipPlane", glm::vec4(0.0f));
 
     // --- Scene pass: draw all opaque render items ---
     // MDI path: group batches by material, issue one glMultiDrawElementsIndirect per group.

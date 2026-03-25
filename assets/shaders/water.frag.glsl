@@ -1,5 +1,5 @@
 /// @file water.frag.glsl
-/// @brief Water surface fragment shader — Fresnel blending, normal-mapped distortion, and environment reflections.
+/// @brief Water surface fragment shader — Fresnel blending, reflections, refractions, and Beer's law absorption.
 #version 450 core
 
 in vec3 v_worldPos;
@@ -11,8 +11,16 @@ uniform samplerCube u_environmentMap;
 uniform sampler2D u_normalMap;
 uniform sampler2D u_dudvMap;
 
+// Planar reflection/refraction textures
+uniform sampler2D u_reflectionTex;
+uniform sampler2D u_refractionTex;
+uniform sampler2D u_refractionDepthTex;
+uniform bool u_hasReflectionTex;
+uniform bool u_hasRefractionTex;
+
 uniform vec3 u_cameraPos;
 uniform float u_time;
+uniform float u_cameraNear;
 
 // Water parameters
 uniform vec4 u_shallowColor;
@@ -46,7 +54,6 @@ void main()
         vec3 n1 = texture(u_normalMap, scrolledCoords1).rgb * 2.0 - 1.0;
         vec3 n2 = texture(u_normalMap, scrolledCoords2).rgb * 2.0 - 1.0;
         vec3 mapNormal = normalize(n1 + n2);
-        // Blend normal map XZ with wave normal, preserving Y-up
         normal = normalize(vec3(
             normal.x + mapNormal.x * u_normalStrength,
             normal.y,
@@ -54,41 +61,78 @@ void main()
         ));
     }
 
-    // DuDv-based normal perturbation (alternative detail when no normal map)
+    // DuDv-based distortion
+    vec2 totalDistortion = vec2(0.0);
     if (u_hasDudvMap)
     {
         vec2 d1 = texture(u_dudvMap, scrolledCoords1).rg * 2.0 - 1.0;
         vec2 d2 = texture(u_dudvMap, scrolledCoords2).rg * 2.0 - 1.0;
-        vec2 distortion = (d1 + d2) * u_dudvStrength;
+        totalDistortion = (d1 + d2) * u_dudvStrength;
         normal = normalize(vec3(
-            normal.x + distortion.x,
+            normal.x + totalDistortion.x,
             normal.y,
-            normal.z + distortion.y
+            normal.z + totalDistortion.y
         ));
     }
 
     // View direction and reflected direction
     vec3 viewDir = normalize(u_cameraPos - v_worldPos);
-    vec3 reflectedDir = reflect(-viewDir, normal);
 
-    // Reflection from environment cubemap
-    vec4 reflectionColor = vec4(0.6, 0.7, 0.8, 1.0);  // Default sky color
-    if (u_hasEnvironmentMap)
+    // Projective texture coordinates for reflection/refraction
+    vec2 screenUV = (v_clipSpace.xy / v_clipSpace.w) * 0.5 + 0.5;
+
+    // Reflection color
+    vec3 reflectionColor;
+    if (u_hasReflectionTex)
     {
-        reflectionColor = texture(u_environmentMap, reflectedDir);
+        // Planar reflection (flip Y, apply distortion)
+        vec2 reflectUV = vec2(screenUV.x, 1.0 - screenUV.y) + totalDistortion;
+        reflectUV = clamp(reflectUV, 0.001, 0.999);
+        reflectionColor = texture(u_reflectionTex, reflectUV).rgb;
+    }
+    else if (u_hasEnvironmentMap)
+    {
+        vec3 reflectedDir = reflect(-viewDir, normal);
+        reflectionColor = texture(u_environmentMap, reflectedDir).rgb;
+    }
+    else
+    {
+        reflectionColor = vec3(0.6, 0.7, 0.8); // Default sky
+    }
+
+    // Refraction color with Beer's law absorption
+    vec3 refractionColor;
+    float waterThickness = 1.0; // Default for soft edge calculation
+    if (u_hasRefractionTex)
+    {
+        vec2 refractUV = clamp(screenUV + totalDistortion, 0.001, 0.999);
+        refractionColor = texture(u_refractionTex, refractUV).rgb;
+
+        // Beer's law: depth-based absorption
+        float refractionDepth = texture(u_refractionDepthTex, refractUV).r;
+        // Reverse-Z linearization: linearZ = cameraNear / depth
+        float linearRefract = u_cameraNear / max(refractionDepth, 0.00001);
+        float linearWater = u_cameraNear / max(gl_FragCoord.z, 0.00001);
+        waterThickness = max(linearRefract - linearWater, 0.0);
+
+        // Per-channel absorption (red absorbed fastest)
+        vec3 absorptionCoeffs = vec3(0.4, 0.2, 0.1);
+        vec3 absorption = exp(-absorptionCoeffs * waterThickness);
+        refractionColor *= absorption;
+        refractionColor = mix(refractionColor, u_deepColor.rgb, 1.0 - absorption.b);
+    }
+    else
+    {
+        // No refraction FBO: use angle-based shallow/deep blend
+        float cosTheta = max(dot(normal, viewDir), 0.0);
+        float depthFactor = 1.0 - cosTheta;
+        refractionColor = mix(u_shallowColor.rgb, u_deepColor.rgb, depthFactor * depthFactor);
     }
 
     // Fresnel (Schlick approximation, F0 = 0.02 for water)
     float cosTheta = max(dot(normal, viewDir), 0.0);
     float F0 = 0.02;
     float fresnel = F0 + (1.0 - F0) * pow(1.0 - cosTheta, 5.0);
-
-    // Water base color: use shallow color (could add depth-based blend later with refraction FBO)
-    vec4 waterColor = u_shallowColor;
-
-    // Viewing angle blend: more of deep color when looking straight down
-    float depthFactor = 1.0 - cosTheta;
-    waterColor = mix(u_shallowColor, u_deepColor, depthFactor * depthFactor);
 
     // Specular highlight (Blinn-Phong from directional light)
     vec3 lightDir = normalize(-u_lightDirection);
@@ -97,12 +141,17 @@ void main()
     float specular = pow(specAngle, u_specularPower);
     vec3 specularColor = u_lightColor * specular * 0.6;
 
-    // Final: blend water color and reflection using Fresnel, add specular
-    vec3 finalColor = mix(waterColor.rgb, reflectionColor.rgb, fresnel);
+    // Final: blend refraction and reflection using Fresnel, add specular
+    vec3 finalColor = mix(refractionColor, reflectionColor, fresnel);
     finalColor += specularColor;
 
-    // Alpha: mostly opaque, slight transparency at steep viewing angles
+    // Alpha: mostly opaque, soft edge fade at shore/object intersections
     float alpha = mix(0.85, 1.0, fresnel);
+    if (u_hasRefractionTex)
+    {
+        float edgeFade = smoothstep(0.0, 1.0, waterThickness);
+        alpha *= edgeFade;
+    }
 
     fragColor = vec4(finalColor, alpha);
 }

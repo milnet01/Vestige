@@ -621,6 +621,23 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera)
                         m_commandHistory.execute(
                             std::make_unique<CreateEntityCommand>(*scene, e->getId()));
                     }
+                    if (ImGui::BeginMenu("Particle Presets", canSpawnEffect))
+                    {
+                        const char* presetNames[] = {"torch", "candle", "campfire", "smoke", "dust", "incense", "sparks"};
+                        const char* presetLabels[] = {"Torch Fire", "Candle Flame", "Campfire", "Smoke", "Dust Motes", "Incense Smoke", "Sparks"};
+                        for (int i = 0; i < 7; ++i)
+                        {
+                            if (ImGui::MenuItem(presetLabels[i]))
+                            {
+                                Entity* e = EntityFactory::createParticlePreset(*scene, spawnPos, presetNames[i]);
+                                m_selection.select(e->getId());
+                                m_commandHistory.execute(
+                                    std::make_unique<CreateEntityCommand>(*scene, e->getId()));
+                            }
+                        }
+                        ImGui::EndMenu();
+                    }
+                    ImGui::Separator();
                     if (ImGui::MenuItem("Water Surface", nullptr, false, canSpawnEffect))
                     {
                         Entity* e = EntityFactory::createWaterSurface(*scene, spawnPos);

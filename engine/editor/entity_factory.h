@@ -4,6 +4,8 @@
 
 #include <glm/glm.hpp>
 
+#include <string>
+
 namespace Vestige
 {
 
@@ -58,6 +60,11 @@ public:
 
     /// @brief Creates an entity with a ParticleEmitterComponent (default upward fountain).
     static Entity* createParticleEmitter(Scene& scene, const glm::vec3& position);
+
+    /// @brief Creates a particle emitter from a named preset.
+    /// @param presetName One of: "torch", "candle", "campfire", "smoke", "dust", "incense", "sparks"
+    static Entity* createParticlePreset(Scene& scene, const glm::vec3& position,
+                                        const std::string& presetName);
 
     /// @brief Creates an entity with a WaterSurfaceComponent (default pool preset).
     static Entity* createWaterSurface(Scene& scene, const glm::vec3& position);

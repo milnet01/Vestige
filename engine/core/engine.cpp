@@ -102,10 +102,15 @@ bool Engine::initialize(const EngineConfig& config)
         Logger::warning("Particle renderer initialization failed — particles will be unavailable");
     }
 
-    // Initialize water renderer
+    // Initialize water renderer and FBOs
     if (!m_waterRenderer.init(config.assetPath))
     {
         Logger::warning("Water renderer initialization failed — water surfaces will be unavailable");
+    }
+    {
+        int w = config.window.width;
+        int h = config.window.height;
+        m_waterFbo.init(w / 2, h / 2, w / 2, h / 2);
     }
 
     // Initialize performance profiler
@@ -562,12 +567,16 @@ void Engine::run()
             if (vpW > 0 && vpH > 0)
             {
                 m_renderer->resizeRenderTarget(vpW, vpH);
+                m_waterFbo.resize(vpW / 2, vpH / 2, vpW / 2, vpH / 2);
             }
         }
         else
         {
             // Play mode or no editor — render at full window size
-            m_renderer->resizeRenderTarget(m_window->getWidth(), m_window->getHeight());
+            int ww = m_window->getWidth();
+            int wh = m_window->getHeight();
+            m_renderer->resizeRenderTarget(ww, wh);
+            m_waterFbo.resize(ww / 2, wh / 2, ww / 2, wh / 2);
         }
 
         // Check for viewport clicks (uses previous frame's viewport bounds)
@@ -725,9 +734,15 @@ void Engine::run()
                 float elapsed = static_cast<float>(m_timer->getElapsedTime());
                 GLuint skyboxTex = m_renderer->getSkyboxTextureId();
 
+                // Get reflection/refraction textures from water FBOs
+                GLuint reflTex = m_waterFbo.getReflectionTexture();
+                GLuint refrTex = m_waterFbo.getRefractionTexture();
+                GLuint refrDepthTex = m_waterFbo.getRefractionDepthTexture();
+
                 m_profiler.getGpuTimer().beginPass("Water");
                 m_waterRenderer.render(waterItems, *m_camera, aspectRatio,
-                                       elapsed, lightDir, lightColor, skyboxTex);
+                                       elapsed, lightDir, lightColor, skyboxTex,
+                                       reflTex, refrTex, refrDepthTex, 0.1f);
                 m_profiler.getGpuTimer().endPass();
             }
 
@@ -736,8 +751,12 @@ void Engine::run()
             {
                 glm::mat4 viewProj = m_camera->getProjectionMatrix(aspectRatio)
                                    * m_camera->getViewMatrix();
+                GLuint depthTex = m_renderer->getResolvedDepthTexture();
+                int particleW = m_renderer->getRenderWidth();
+                int particleH = m_renderer->getRenderHeight();
                 m_profiler.getGpuTimer().beginPass("Particles");
-                m_particleRenderer.render(m_renderData.particleEmitters, *m_camera, viewProj);
+                m_particleRenderer.render(m_renderData.particleEmitters, *m_camera, viewProj,
+                                          depthTex, particleW, particleH, 0.1f);
                 m_profiler.getGpuTimer().endPass();
             }
         }

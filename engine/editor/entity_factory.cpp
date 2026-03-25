@@ -6,6 +6,7 @@
 #include "scene/mesh_renderer.h"
 #include "scene/light_component.h"
 #include "scene/particle_emitter.h"
+#include "scene/particle_presets.h"
 #include "scene/water_surface.h"
 #include "resource/resource_manager.h"
 #include "renderer/material.h"
@@ -180,6 +181,64 @@ Entity* EntityFactory::createParticleEmitter(Scene& scene, const glm::vec3& posi
     cfg.startLifetimeMax = 2.5f;
     cfg.startColor = glm::vec4(1.0f, 0.8f, 0.3f, 1.0f);  // Warm orange
     cfg.gravity = glm::vec3(0.0f, -3.0f, 0.0f);
+
+    Logger::info("Created: " + entity->getName());
+    return entity;
+}
+
+Entity* EntityFactory::createParticlePreset(Scene& scene, const glm::vec3& position,
+                                             const std::string& presetName)
+{
+    ParticleEmitterConfig preset;
+    std::string entityName = "Particle Emitter";
+
+    if (presetName == "torch")
+    {
+        preset = ParticlePresets::torchFire();
+        entityName = "Torch Fire";
+    }
+    else if (presetName == "candle")
+    {
+        preset = ParticlePresets::candleFlame();
+        entityName = "Candle Flame";
+    }
+    else if (presetName == "campfire")
+    {
+        preset = ParticlePresets::campfire();
+        entityName = "Campfire";
+    }
+    else if (presetName == "smoke")
+    {
+        preset = ParticlePresets::smoke();
+        entityName = "Smoke";
+    }
+    else if (presetName == "dust")
+    {
+        preset = ParticlePresets::dustMotes();
+        entityName = "Dust Motes";
+    }
+    else if (presetName == "incense")
+    {
+        preset = ParticlePresets::incense();
+        entityName = "Incense Smoke";
+    }
+    else if (presetName == "sparks")
+    {
+        preset = ParticlePresets::sparks();
+        entityName = "Sparks";
+    }
+    else
+    {
+        // Unknown preset, fall back to torch
+        preset = ParticlePresets::torchFire();
+        entityName = "Torch Fire";
+    }
+
+    Entity* entity = scene.createEntity(entityName);
+    entity->transform.position = position;
+
+    auto* emitter = entity->addComponent<ParticleEmitterComponent>();
+    emitter->getConfig() = preset;
 
     Logger::info("Created: " + entity->getName());
     return entity;

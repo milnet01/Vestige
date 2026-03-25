@@ -283,6 +283,10 @@ public:
     /// @brief Updates the elapsed time for foliage wind sync in the shadow pass.
     void setFoliageShadowTime(float time) { m_foliageShadowTime = time; }
 
+    /// @brief Gets the resolved depth texture ID for soft particles and effects.
+    /// @return OpenGL texture ID, or 0 if not available.
+    GLuint getResolvedDepthTexture() const;
+
     /// @brief Gets the text renderer (nullptr if not initialized).
     TextRenderer* getTextRenderer();
 
