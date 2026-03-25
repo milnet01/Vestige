@@ -897,6 +897,7 @@ void Engine::shutdown()
     m_terrainRenderer.shutdown();
     m_foliageRenderer.shutdown();
     m_treeRenderer.shutdown();
+    m_waterFbo.shutdown();
     m_waterRenderer.shutdown();
     m_particleRenderer.shutdown();
     m_profiler.shutdown();
