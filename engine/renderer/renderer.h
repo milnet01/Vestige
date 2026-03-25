@@ -203,12 +203,21 @@ public:
 
     /// @brief Renders an entire scene from collected render data.
     /// @param clipPlane Optional clip plane for water reflection/refraction (0,0,0,0 = disabled).
+    /// @param geometryOnly When true, skips shadow passes and FBO rebinding (caller manages FBO).
+    ///        Used for water reflection/refraction passes that reuse existing shadow maps.
     void renderScene(const SceneRenderData& renderData, const Camera& camera, float aspectRatio,
-                     const glm::vec4& clipPlane = glm::vec4(0.0f));
+                     const glm::vec4& clipPlane = glm::vec4(0.0f),
+                     bool geometryOnly = false);
 
     /// @brief Re-binds the active scene FBO and restores viewport.
     /// Call after rendering to an external FBO (e.g., water reflection/refraction).
     void rebindSceneFbo();
+
+    /// @brief Saves view/projection state that geometryOnly renderScene calls overwrite.
+    void saveViewState();
+
+    /// @brief Restores view/projection state saved by saveViewState().
+    void restoreViewState();
 
     /// @brief Per-frame rendering statistics.
     struct CullingStats
@@ -403,6 +412,11 @@ private:
     std::unique_ptr<Framebuffer> m_taaSceneFbo;  // Non-MSAA scene FBO for TAA mode
     glm::mat4 m_prevViewProjection = glm::mat4(1.0f);
     glm::mat4 m_lastViewProjection = glm::mat4(1.0f);
+
+    // Saved view state (for restoring after water FBO passes)
+    glm::mat4 m_savedLastProjection = glm::mat4(1.0f);
+    glm::mat4 m_savedLastView = glm::mat4(1.0f);
+    glm::mat4 m_savedLastViewProjection = glm::mat4(1.0f);
 
     // SMAA
     std::unique_ptr<Smaa> m_smaa;

@@ -1557,15 +1557,32 @@ void Renderer::rebindSceneFbo()
     glViewport(0, 0, m_windowWidth, m_windowHeight);
 }
 
-void Renderer::renderScene(const SceneRenderData& renderData, const Camera& camera, float aspectRatio,
-                            const glm::vec4& clipPlane)
+void Renderer::saveViewState()
 {
-    // Reset per-frame scratch allocator (all pmr::vectors from last frame are now invalid)
-    resetFrameAllocator();
+    m_savedLastProjection = m_lastProjection;
+    m_savedLastView = m_lastView;
+    m_savedLastViewProjection = m_lastViewProjection;
+}
 
-    // Reset per-frame stats
-    m_cullingStats.drawCalls = 0;
-    m_cullingStats.instanceBatches = 0;
+void Renderer::restoreViewState()
+{
+    m_lastProjection = m_savedLastProjection;
+    m_lastView = m_savedLastView;
+    m_lastViewProjection = m_savedLastViewProjection;
+}
+
+void Renderer::renderScene(const SceneRenderData& renderData, const Camera& camera, float aspectRatio,
+                            const glm::vec4& clipPlane, bool geometryOnly)
+{
+    if (!geometryOnly)
+    {
+        // Reset per-frame scratch allocator (all pmr::vectors from last frame are now invalid)
+        resetFrameAllocator();
+
+        // Reset per-frame stats
+        m_cullingStats.drawCalls = 0;
+        m_cullingStats.instanceBatches = 0;
+    }
 
     // Apply lights from scene data
     m_hasDirectionalLight = renderData.hasDirectionalLight;
@@ -1592,52 +1609,55 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
         }
     }
 
-    // Build shadow caster list (filter out non-casting items like ground planes)
-    std::vector<SceneRenderData::RenderItem> shadowCasterItems;
-    for (const auto& item : renderData.renderItems)
-    {
-        if (item.castsShadow)
-        {
-            shadowCasterItems.push_back(item);
-        }
-    }
-    m_cullingStats.shadowCastersTotal = static_cast<int>(shadowCasterItems.size());
-
-    // Compute shadow-casting point lights once (used by both shadow pass and uniform upload)
+    // Compute shadow-casting point lights (needed for uniform upload even in geometry-only mode)
     std::vector<int> shadowCasters = selectShadowCastingPointLights();
 
-    // --- SDSM: read depth bounds from previous frame and update cascade distribution ---
-    if (m_sdsmEnabled && m_depthReducer && m_cascadedShadowMap)
+    if (!geometryOnly)
     {
-        float depthNear = 0.0f;
-        float depthFar = 0.0f;
-        if (m_depthReducer->readBounds(0.1f, depthNear, depthFar))
+        // Build shadow caster list (filter out non-casting items like ground planes)
+        std::vector<SceneRenderData::RenderItem> shadowCasterItems;
+        for (const auto& item : renderData.renderItems)
         {
-            // Smooth transitions between frames to avoid shadow popping
-            constexpr float LERP_SPEED = 0.15f;
-            m_sdsmNear += (depthNear - m_sdsmNear) * LERP_SPEED;
-            m_sdsmFar += (depthFar - m_sdsmFar) * LERP_SPEED;
-            m_cascadedShadowMap->setDepthBounds(m_sdsmNear, m_sdsmFar);
+            if (item.castsShadow)
+            {
+                shadowCasterItems.push_back(item);
+            }
         }
-        else
+        m_cullingStats.shadowCastersTotal = static_cast<int>(shadowCasterItems.size());
+
+        // --- SDSM: read depth bounds from previous frame and update cascade distribution ---
+        if (m_sdsmEnabled && m_depthReducer && m_cascadedShadowMap)
+        {
+            float depthNear = 0.0f;
+            float depthFar = 0.0f;
+            if (m_depthReducer->readBounds(0.1f, depthNear, depthFar))
+            {
+                // Smooth transitions between frames to avoid shadow popping
+                constexpr float LERP_SPEED = 0.15f;
+                m_sdsmNear += (depthNear - m_sdsmNear) * LERP_SPEED;
+                m_sdsmFar += (depthFar - m_sdsmFar) * LERP_SPEED;
+                m_cascadedShadowMap->setDepthBounds(m_sdsmNear, m_sdsmFar);
+            }
+            else
+            {
+                m_cascadedShadowMap->clearDepthBounds();
+            }
+        }
+        else if (m_cascadedShadowMap)
         {
             m_cascadedShadowMap->clearDepthBounds();
         }
-    }
-    else if (m_cascadedShadowMap)
-    {
-        m_cascadedShadowMap->clearDepthBounds();
-    }
 
-    // --- Directional shadow pass (cascaded, per-cascade frustum culled) ---
-    if (m_cascadedShadowMap && m_hasDirectionalLight)
-    {
-        renderShadowPass(shadowCasterItems, camera, aspectRatio);
-    }
+        // --- Directional shadow pass (cascaded, per-cascade frustum culled) ---
+        if (m_cascadedShadowMap && m_hasDirectionalLight)
+        {
+            renderShadowPass(shadowCasterItems, camera, aspectRatio);
+        }
 
-    // --- Point light shadow pass (uses all shadow casters — omnidirectional) ---
-    auto shadowBatches = buildInstanceBatches(shadowCasterItems);
-    renderPointShadowPass(shadowBatches, shadowCasters);
+        // --- Point light shadow pass (uses all shadow casters — omnidirectional) ---
+        auto shadowBatches = buildInstanceBatches(shadowCasterItems);
+        renderPointShadowPass(shadowBatches, shadowCasters);
+    }
 
     // --- Frustum cull for scene pass ---
     // Use the standard (non-reverse-Z) projection for frustum extraction so all
@@ -1677,17 +1697,21 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
     // Build batches from culled+sorted items
     auto batches = buildInstanceBatches(m_culledItems);
 
-    // Re-bind the scene FBO after shadow passes
-    bool isTAA = (m_antiAliasMode == AntiAliasMode::TAA && m_taa && m_taaSceneFbo);
-    if (isTAA)
+    // Re-bind the scene FBO after shadow passes (skip in geometry-only mode —
+    // the caller has already bound the target FBO and we must not overwrite it)
+    if (!geometryOnly)
     {
-        m_taaSceneFbo->bind();
+        bool isTAA = (m_antiAliasMode == AntiAliasMode::TAA && m_taa && m_taaSceneFbo);
+        if (isTAA)
+        {
+            m_taaSceneFbo->bind();
+        }
+        else if (m_msaaFbo)
+        {
+            m_msaaFbo->bind();
+        }
+        glViewport(0, 0, m_windowWidth, m_windowHeight);
     }
-    else if (m_msaaFbo)
-    {
-        m_msaaFbo->bind();
-    }
-    glViewport(0, 0, m_windowWidth, m_windowHeight);
 
     // --- Set cascaded shadow uniforms for the lighting pass ---
     m_sceneShader.use();

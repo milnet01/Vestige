@@ -4,6 +4,7 @@
 #include "core/logger.h"
 #include "scene/mesh_renderer.h"
 #include "scene/light_component.h"
+#include "scene/water_surface.h"
 #include "resource/model.h"
 #include "renderer/frame_diagnostics.h"
 #include "renderer/debug_draw.h"
@@ -737,13 +738,16 @@ void Engine::run()
                 float elapsed = static_cast<float>(m_timer->getElapsedTime());
                 GLuint skyboxTex = m_renderer->getSkyboxTextureId();
 
+                // Save renderer view state (geometryOnly passes overwrite m_lastProjection etc.)
+                m_renderer->saveViewState();
+
                 // --- Refraction pass: render scene below water into refraction FBO ---
                 {
                     glm::vec4 refrClipPlane(0.0f, -1.0f, 0.0f, waterY + 0.1f);
                     glEnable(GL_CLIP_DISTANCE0);
 
                     m_waterFbo.bindRefraction();
-                    m_renderer->renderScene(m_renderData, *m_camera, aspectRatio, refrClipPlane);
+                    m_renderer->renderScene(m_renderData, *m_camera, aspectRatio, refrClipPlane, true);
 
                     if (m_terrain.isInitialized())
                     {
@@ -768,7 +772,7 @@ void Engine::run()
                     glEnable(GL_CLIP_DISTANCE0);
 
                     m_waterFbo.bindReflection();
-                    m_renderer->renderScene(m_renderData, reflectedCamera, aspectRatio, reflClipPlane);
+                    m_renderer->renderScene(m_renderData, reflectedCamera, aspectRatio, reflClipPlane, true);
 
                     if (m_terrain.isInitialized())
                     {
@@ -776,27 +780,16 @@ void Engine::run()
                                                  m_renderer->getCascadedShadowMap(), reflClipPlane);
                     }
 
-                    {
-                        glm::mat4 reflViewProj = reflectedCamera.getProjectionMatrix(aspectRatio)
-                                               * reflectedCamera.getViewMatrix();
-                        auto reflVisibleChunks = m_foliageManager.getVisibleChunks(reflViewProj);
-                        if (!reflVisibleChunks.empty())
-                        {
-                            CascadedShadowMap* csm = m_renderer->getCascadedShadowMap();
-                            const DirectionalLight* reflDirLight =
-                                m_renderData.hasDirectionalLight ? &m_renderData.directionalLight : nullptr;
-                            m_foliageRenderer.render(reflVisibleChunks, reflectedCamera, reflViewProj,
-                                                     elapsed, 100.0f, csm, reflDirLight, reflClipPlane);
-                            m_treeRenderer.render(reflVisibleChunks, reflectedCamera, reflViewProj,
-                                                  elapsed, reflClipPlane);
-                        }
-                    }
+                    // Note: foliage/trees are skipped in the reflection pass because
+                    // the reflected camera is below the ground plane, which causes the
+                    // foliage vertex shader's distance fade and wind to produce artifacts.
 
                     glDisable(GL_CLIP_DISTANCE0);
                 }
 
-                // Restore main scene FBO after water passes
+                // Restore main scene FBO and view state after water passes
                 m_renderer->rebindSceneFbo();
+                m_renderer->restoreViewState();
 
                 // Get reflection/refraction textures from water FBOs
                 GLuint reflTex = m_waterFbo.getReflectionTexture();
@@ -1304,6 +1297,67 @@ void Engine::setupDemoScene()
         Logger::info("Loaded glTF model: " + std::to_string(testModel->getMeshCount()) + " meshes");
     }
 
+    // --- Hill with water basin ---
+    // Outer hill ring (flattened cylinders arranged as a rim)
+    auto hillMat = m_resourceManager->createMaterial("hill");
+    hillMat->setType(MaterialType::PBR);
+    hillMat->setAlbedo(glm::vec3(0.35f, 0.45f, 0.2f));  // Earthy green
+    hillMat->setMetallic(0.0f);
+    hillMat->setRoughness(0.95f);
+
+    glm::vec3 hillCenter(5.0f, 0.0f, 4.0f);
+    float hillRadius = 3.8f;
+    float hillHeight = 0.6f;
+    int rimSegments = 12;
+    for (int i = 0; i < rimSegments; ++i)
+    {
+        float angle = static_cast<float>(i) * 2.0f * glm::pi<float>() / static_cast<float>(rimSegments);
+        float x = hillCenter.x + hillRadius * std::cos(angle);
+        float z = hillCenter.z + hillRadius * std::sin(angle);
+
+        std::string name = "Hill Rim " + std::to_string(i);
+        Entity* rim = scene->createEntity(name);
+        rim->transform.position = glm::vec3(x, hillHeight * 0.5f, z);
+        rim->transform.scale = glm::vec3(2.0f, hillHeight, 2.0f);
+        rim->transform.rotation = glm::vec3(0.0f, -angle * 180.0f / glm::pi<float>(), 0.0f);
+        auto* rimMR = rim->addComponent<MeshRenderer>(cubeMesh, hillMat);
+        rimMR->setBounds(AABB::unitCube());
+    }
+
+    // Hill floor (flat disc under the water)
+    auto basinMat = m_resourceManager->createMaterial("basin_floor");
+    basinMat->setType(MaterialType::PBR);
+    basinMat->setAlbedo(glm::vec3(0.25f, 0.2f, 0.15f));  // Dark muddy
+    basinMat->setMetallic(0.0f);
+    basinMat->setRoughness(1.0f);
+
+    auto basinFloor = m_resourceManager->getPlaneMesh(6.0f);
+    Entity* floor = scene->createEntity("Basin Floor");
+    floor->transform.position = glm::vec3(hillCenter.x, 0.04f, hillCenter.z);
+    auto* floorMR = floor->addComponent<MeshRenderer>(basinFloor, basinMat);
+    floorMR->setCastsShadow(false);
+
+    // Water surface sitting in the basin
+    Entity* waterEntity = scene->createEntity("Water Pool");
+    waterEntity->transform.position = glm::vec3(hillCenter.x, hillHeight * 0.65f, hillCenter.z);
+    {
+        auto* water = waterEntity->addComponent<WaterSurfaceComponent>();
+        auto& wCfg = water->getConfig();
+        wCfg.width = 5.5f;
+        wCfg.depth = 5.5f;
+        wCfg.gridResolution = 32;
+        wCfg.numWaves = 3;
+        wCfg.waves[0] = {0.005f, 3.0f, 0.2f, 10.0f};
+        wCfg.waves[1] = {0.003f, 2.0f, 0.15f, 75.0f};
+        wCfg.waves[2] = {0.002f, 1.5f, 0.25f, 140.0f};
+        wCfg.shallowColor = {0.1f, 0.4f, 0.5f, 0.8f};
+        wCfg.deepColor = {0.02f, 0.1f, 0.25f, 1.0f};
+        wCfg.flowSpeed = 0.15f;
+        wCfg.specularPower = 256.0f;
+        wCfg.dudvStrength = 0.015f;
+        wCfg.normalStrength = 0.8f;
+    }
+
     // --- Demo foliage (10K grass instances around the ground plane) ---
     {
         FoliageTypeConfig grassConfig;
@@ -1336,6 +1390,7 @@ void Engine::setupDemoScene()
             {{-6.0f, 0.0f,  2.0f}, 0.8f},   // Cone
             {{-4.5f, 0.0f,  4.0f}, 0.8f},   // Wedge
             {{ 5.0f, 0.0f, -3.0f}, 2.0f},   // glTF model
+            {{ 5.0f, 0.0f,  4.0f}, 6.0f},   // Hill basin + water
         };
         for (const auto& ex : exclusions)
         {
