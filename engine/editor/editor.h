@@ -80,7 +80,8 @@ public:
     /// @param renderer Renderer reference (for viewport texture). May be nullptr.
     /// @param scene Active scene for hierarchy panel. May be nullptr.
     /// @param camera Camera for gizmo projection. May be nullptr.
-    void drawPanels(Renderer* renderer, Scene* scene, Camera* camera = nullptr);
+    void drawPanels(Renderer* renderer, Scene* scene, Camera* camera = nullptr,
+                    Timer* timer = nullptr, Window* window = nullptr);
 
     /// @brief Finalizes and renders the ImGui frame. Call before Window::swapBuffers().
     void endFrame();

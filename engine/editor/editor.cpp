@@ -132,7 +132,8 @@ void Editor::prepareFrame()
     ImGuizmo::BeginFrame();
 }
 
-void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera)
+void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
+                        Timer* timer, Window* window)
 {
     if (!m_isInitialized)
     {
@@ -757,7 +758,7 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera)
         // --- Performance panel ---
         if (m_profiler)
         {
-            m_performancePanel.draw(*m_profiler, renderer);
+            m_performancePanel.draw(*m_profiler, renderer, timer, window);
         }
 
         // --- Import dialog (file browser + settings modal) ---

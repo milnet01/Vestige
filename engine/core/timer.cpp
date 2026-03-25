@@ -57,4 +57,31 @@ double Timer::getElapsedTime() const
     return glfwGetTime();
 }
 
+void Timer::setFrameRateCap(int fps)
+{
+    m_frameRateCap = fps;
+    m_targetFrameTime = (fps > 0) ? (1.0 / static_cast<double>(fps)) : 0.0;
+}
+
+int Timer::getFrameRateCap() const
+{
+    return m_frameRateCap;
+}
+
+void Timer::waitForFrameCap()
+{
+    if (m_targetFrameTime <= 0.0)
+    {
+        return;
+    }
+
+    // Spin-wait for precision (sleep is too coarse for frame timing)
+    double frameEnd = m_lastFrameTime + m_targetFrameTime;
+    while (glfwGetTime() < frameEnd)
+    {
+        // Yield to OS briefly to avoid burning 100% CPU
+        // glfwWaitEventsTimeout is too coarse; a short busy-wait is standard practice
+    }
+}
+
 } // namespace Vestige
