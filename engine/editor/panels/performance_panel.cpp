@@ -80,6 +80,47 @@ void PerformancePanel::drawOverviewTab(PerformanceProfiler& profiler,
                 static_cast<double>(profiler.getMinFrameTimeMs()),
                 static_cast<double>(profiler.getMaxFrameTimeMs()));
 
+    // Frame rate cap controls (above graphs so always visible)
+    if (timer && window)
+    {
+        int cap = timer->getFrameRateCap();
+        bool vsync = window->isVsyncEnabled();
+
+        int mode = 0;  // 0=Uncapped, 1=60 FPS, 2=VSync
+        if (cap == 60 && !vsync)
+        {
+            mode = 1;
+        }
+        else if (vsync)
+        {
+            mode = 2;
+        }
+
+        ImGui::SameLine(240);
+        const char* modeLabel = (mode == 0) ? "[Uncapped]"
+                              : (mode == 1) ? "[60 FPS cap]"
+                                            : "[VSync]";
+        ImGui::TextDisabled("%s", modeLabel);
+
+        if (ImGui::RadioButton("Uncapped", mode == 0))
+        {
+            timer->setFrameRateCap(0);
+            window->setVsync(false);
+        }
+        ImGui::SameLine();
+        if (ImGui::RadioButton("60 FPS", mode == 1))
+        {
+            timer->setFrameRateCap(60);
+            window->setVsync(false);
+        }
+        ImGui::SameLine();
+        if (ImGui::RadioButton("VSync", mode == 2))
+        {
+            timer->setFrameRateCap(0);
+            window->setVsync(true);
+        }
+    }
+
     ImGui::Separator();
 
     // CPU vs GPU breakdown
@@ -133,46 +174,6 @@ void PerformancePanel::drawOverviewTab(PerformanceProfiler& profiler,
                      offset, fpsOverlay, 0.0f, 120.0f, ImVec2(0, 120));
 
     ImGui::TextDisabled("--- 60 FPS target ---");
-
-    // Frame rate cap controls
-    if (timer && window)
-    {
-        ImGui::Spacing();
-        ImGui::Separator();
-        ImGui::Text("Frame Rate Limit:");
-
-        int cap = timer->getFrameRateCap();
-        bool vsync = window->isVsyncEnabled();
-
-        // Determine current mode
-        int mode = 0;  // 0=Uncapped, 1=60 FPS, 2=VSync
-        if (cap == 60 && !vsync)
-        {
-            mode = 1;
-        }
-        else if (vsync)
-        {
-            mode = 2;
-        }
-
-        if (ImGui::RadioButton("Uncapped", mode == 0))
-        {
-            timer->setFrameRateCap(0);
-            window->setVsync(false);
-        }
-        ImGui::SameLine();
-        if (ImGui::RadioButton("60 FPS", mode == 1))
-        {
-            timer->setFrameRateCap(60);
-            window->setVsync(false);
-        }
-        ImGui::SameLine();
-        if (ImGui::RadioButton("VSync", mode == 2))
-        {
-            timer->setFrameRateCap(0);
-            window->setVsync(true);
-        }
-    }
 }
 
 void PerformancePanel::drawGpuTab(PerformanceProfiler& profiler)

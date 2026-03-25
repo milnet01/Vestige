@@ -250,6 +250,14 @@ private:
 
     // Transform clipboard (Ctrl+Shift+C / Ctrl+Shift+V)
     EntityActions::TransformClipboard m_transformClipboard;
+
+    // On-screen notification overlay (brief message, auto-fades)
+    std::string m_notifyText;
+    float m_notifyTimer = 0.0f;
+
+public:
+    /// @brief Shows a brief notification overlay that fades after ~2 seconds.
+    void showNotification(const std::string& text);
 };
 
 } // namespace Vestige

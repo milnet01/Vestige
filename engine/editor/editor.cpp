@@ -919,6 +919,28 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
         // Tick auto-save timer (writes autosave file every 120s when dirty)
         m_fileMenu.tickAutoSave(scene);
     }
+
+    // Draw notification overlay (if active)
+    if (m_notifyTimer > 0.0f)
+    {
+        float alpha = std::min(m_notifyTimer, 1.0f);
+        ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x * 0.5f,
+                                        40.0f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+        ImGui::SetNextWindowBgAlpha(0.7f * alpha);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.0f, 8.0f));
+        if (ImGui::Begin("##Notification", nullptr,
+                          ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize
+                          | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing
+                          | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoMove
+                          | ImGuiWindowFlags_NoInputs))
+        {
+            ImGui::TextColored(ImVec4(1.0f, 1.0f, 1.0f, alpha), "%s", m_notifyText.c_str());
+        }
+        ImGui::End();
+        ImGui::PopStyleVar(2);
+        m_notifyTimer -= ImGui::GetIO().DeltaTime;
+    }
 }
 
 void Editor::endFrame()
@@ -1075,6 +1097,12 @@ void Editor::setProfiler(PerformanceProfiler* profiler)
 PerformancePanel& Editor::getPerformancePanel()
 {
     return m_performancePanel;
+}
+
+void Editor::showNotification(const std::string& text)
+{
+    m_notifyText = text;
+    m_notifyTimer = 2.0f;
 }
 
 void Editor::processViewportClick(int fboWidth, int fboHeight)
