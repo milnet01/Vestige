@@ -27,14 +27,14 @@ static SceneRenderData::RenderItem makeItem(uintptr_t meshId, uintptr_t matId,
 TEST(InstanceBatchTest, EmptyItemsProducesNoBatches)
 {
     std::vector<SceneRenderData::RenderItem> items;
-    auto batches = Renderer::buildInstanceBatches(items);
+    auto batches = Renderer::buildInstanceBatchesStatic(items);
     EXPECT_TRUE(batches.empty());
 }
 
 TEST(InstanceBatchTest, SingleItemProducesSingleBatch)
 {
     std::vector<SceneRenderData::RenderItem> items = {makeItem(1, 1)};
-    auto batches = Renderer::buildInstanceBatches(items);
+    auto batches = Renderer::buildInstanceBatchesStatic(items);
     ASSERT_EQ(batches.size(), 1u);
     EXPECT_EQ(batches[0].modelMatrices.size(), 1u);
 }
@@ -51,7 +51,7 @@ TEST(InstanceBatchTest, SameMeshMaterialGroupsTogether)
         makeItem(1, 1, m3),
     };
 
-    auto batches = Renderer::buildInstanceBatches(items);
+    auto batches = Renderer::buildInstanceBatchesStatic(items);
     ASSERT_EQ(batches.size(), 1u);
     EXPECT_EQ(batches[0].modelMatrices.size(), 3u);
 }
@@ -63,7 +63,7 @@ TEST(InstanceBatchTest, DifferentMeshesSeparateBatches)
         makeItem(2, 1),  // Different mesh, same material
     };
 
-    auto batches = Renderer::buildInstanceBatches(items);
+    auto batches = Renderer::buildInstanceBatchesStatic(items);
     EXPECT_EQ(batches.size(), 2u);
 }
 
@@ -74,7 +74,7 @@ TEST(InstanceBatchTest, DifferentMaterialsSeparateBatches)
         makeItem(1, 2),  // Same mesh, different material
     };
 
-    auto batches = Renderer::buildInstanceBatches(items);
+    auto batches = Renderer::buildInstanceBatchesStatic(items);
     EXPECT_EQ(batches.size(), 2u);
 }
 
@@ -88,7 +88,7 @@ TEST(InstanceBatchTest, BatchPreservesAllMatrices)
         makeItem(1, 1, m2),
     };
 
-    auto batches = Renderer::buildInstanceBatches(items);
+    auto batches = Renderer::buildInstanceBatchesStatic(items);
     ASSERT_EQ(batches.size(), 1u);
     ASSERT_EQ(batches[0].modelMatrices.size(), 2u);
 
@@ -109,7 +109,7 @@ TEST(InstanceBatchTest, MixedItemsProduceCorrectBatchCount)
         makeItem(1, 1),  // Groups with first
     };
 
-    auto batches = Renderer::buildInstanceBatches(items);
+    auto batches = Renderer::buildInstanceBatchesStatic(items);
     EXPECT_EQ(batches.size(), 3u);
 
     // Find batch for mesh=1, mat=1
@@ -128,7 +128,7 @@ TEST(InstanceBatchTest, MixedItemsProduceCorrectBatchCount)
 TEST(InstanceBatchTest, SingleInstanceBelowThreshold)
 {
     std::vector<SceneRenderData::RenderItem> items = {makeItem(1, 1)};
-    auto batches = Renderer::buildInstanceBatches(items);
+    auto batches = Renderer::buildInstanceBatchesStatic(items);
     ASSERT_EQ(batches.size(), 1u);
     // Batch of size 1 should use non-instanced path (< MIN_INSTANCE_BATCH_SIZE)
     EXPECT_LT(static_cast<int>(batches[0].modelMatrices.size()), 2);
@@ -140,7 +140,7 @@ TEST(InstanceBatchTest, TwoInstancesMeetsThreshold)
         makeItem(1, 1),
         makeItem(1, 1),
     };
-    auto batches = Renderer::buildInstanceBatches(items);
+    auto batches = Renderer::buildInstanceBatchesStatic(items);
     ASSERT_EQ(batches.size(), 1u);
     EXPECT_GE(static_cast<int>(batches[0].modelMatrices.size()), 2);
 }
@@ -158,7 +158,7 @@ TEST(InstanceBatchTest, SamePointersProduceSameBatch)
         items.push_back(makeItem(42, 99));
     }
 
-    auto batches = Renderer::buildInstanceBatches(items);
+    auto batches = Renderer::buildInstanceBatchesStatic(items);
     ASSERT_EQ(batches.size(), 1u);
     EXPECT_EQ(batches[0].modelMatrices.size(), 100u);
 }
@@ -171,6 +171,6 @@ TEST(InstanceBatchTest, ManyUniquePairsAllSeparate)
         items.push_back(makeItem(i, i));
     }
 
-    auto batches = Renderer::buildInstanceBatches(items);
+    auto batches = Renderer::buildInstanceBatchesStatic(items);
     EXPECT_EQ(batches.size(), 50u);
 }

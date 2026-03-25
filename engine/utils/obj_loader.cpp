@@ -5,6 +5,7 @@
 
 #include <glm/glm.hpp>
 
+#include <filesystem>
 #include <fstream>
 #include <sstream>
 #include <unordered_map>
@@ -93,6 +94,18 @@ bool ObjLoader::load(const std::string& filePath,
                      std::vector<Vertex>& outVertices,
                      std::vector<uint32_t>& outIndices)
 {
+    // Validate file size (reject files > 256 MB to prevent OOM)
+    {
+        std::error_code ec;
+        auto fileSize = std::filesystem::file_size(filePath, ec);
+        if (!ec && fileSize > 256 * 1024 * 1024)
+        {
+            Logger::error("OBJ file too large (" + std::to_string(fileSize / (1024 * 1024))
+                + " MB): " + filePath);
+            return false;
+        }
+    }
+
     std::ifstream file(filePath);
     if (!file.is_open())
     {

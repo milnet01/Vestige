@@ -59,7 +59,7 @@ private:
 class CpuProfileScope
 {
 public:
-    CpuProfileScope(const char* name);
+    explicit CpuProfileScope(const char* name);
     ~CpuProfileScope();
 };
 

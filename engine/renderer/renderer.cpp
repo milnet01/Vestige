@@ -113,26 +113,18 @@ Renderer::Renderer(EventBus& eventBus)
         onWindowResize(event.width, event.height);
     });
 
-    // Initialize per-frame PMR arena
-    m_frameResource = new std::pmr::monotonic_buffer_resource(
-        m_frameArena, FRAME_ARENA_SIZE, std::pmr::null_memory_resource());
+    // PMR arena initialized in-class (m_frameResource)
 
     Logger::info("Renderer initialized (OpenGL 4.5, reverse-Z)");
 }
 
 void Renderer::resetFrameAllocator()
 {
-    // Destroy and reconstruct the monotonic resource to "reset" it
-    delete m_frameResource;
-    m_frameResource = new std::pmr::monotonic_buffer_resource(
-        m_frameArena, FRAME_ARENA_SIZE, std::pmr::null_memory_resource());
+    m_frameResource.release();
 }
 
 Renderer::~Renderer()
 {
-    delete m_frameResource;
-    m_frameResource = nullptr;
-
     if (m_ssaoNoiseTexture != 0)
     {
         glDeleteTextures(1, &m_ssaoNoiseTexture);
@@ -1514,10 +1506,58 @@ bool Renderer::isSdsmEnabled() const
     return m_sdsmEnabled;
 }
 
-std::vector<Renderer::InstanceBatch> Renderer::buildInstanceBatches(
+/// Pre-built uniform name strings for cascade shadow uniforms (avoids per-frame string allocations).
+struct CascadeNames
+{
+    std::string splits, lightSpaceMatrices;
+};
+
+static const std::array<CascadeNames, 4>& getCascadeNames()
+{
+    static const auto names = []()
+    {
+        std::array<CascadeNames, 4> arr;
+        for (int i = 0; i < 4; i++)
+        {
+            std::string idx = "[" + std::to_string(i) + "]";
+            arr[static_cast<size_t>(i)] = {
+                "u_cascadeSplits" + idx,
+                "u_cascadeLightSpaceMatrices" + idx
+            };
+        }
+        return arr;
+    }();
+    return names;
+}
+
+/// Pre-built uniform name strings for point shadow uniforms.
+struct PointShadowNames
+{
+    std::string maps, indices, farPlane;
+};
+
+static const std::array<PointShadowNames, 2>& getPointShadowNames()
+{
+    static const auto names = []()
+    {
+        std::array<PointShadowNames, 2> arr;
+        for (int i = 0; i < 2; i++)
+        {
+            std::string idx = "[" + std::to_string(i) + "]";
+            arr[static_cast<size_t>(i)] = {
+                "u_pointShadowMaps" + idx,
+                "u_pointShadowIndices" + idx,
+                "u_pointShadowFarPlane" + idx
+            };
+        }
+        return arr;
+    }();
+    return names;
+}
+
+std::vector<Renderer::InstanceBatch> Renderer::buildInstanceBatchesStatic(
     const std::vector<SceneRenderData::RenderItem>& items)
 {
-    // Hash functor for (mesh*, material*) pair
     struct PairHash
     {
         size_t operator()(const std::pair<const Mesh*, const Material*>& p) const
@@ -1551,6 +1591,46 @@ std::vector<Renderer::InstanceBatch> Renderer::buildInstanceBatches(
     }
 
     return batches;
+}
+
+void Renderer::buildInstanceBatches(
+    const std::vector<SceneRenderData::RenderItem>& items)
+{
+    m_batchIndexMap.clear();
+    m_instanceBatchCount = 0;
+
+    for (const auto& item : items)
+    {
+        auto key = std::make_pair(item.mesh, item.material);
+        auto it = m_batchIndexMap.find(key);
+        if (it != m_batchIndexMap.end())
+        {
+            m_instanceBatches[it->second].modelMatrices.push_back(item.worldMatrix);
+        }
+        else
+        {
+            size_t idx = m_instanceBatchCount;
+            m_batchIndexMap[key] = idx;
+
+            if (idx < m_instanceBatches.size())
+            {
+                // Reuse existing batch (retains modelMatrices capacity)
+                m_instanceBatches[idx].mesh = item.mesh;
+                m_instanceBatches[idx].material = item.material;
+                m_instanceBatches[idx].modelMatrices.clear();
+                m_instanceBatches[idx].modelMatrices.push_back(item.worldMatrix);
+            }
+            else
+            {
+                InstanceBatch batch;
+                batch.mesh = item.mesh;
+                batch.material = item.material;
+                batch.modelMatrices.push_back(item.worldMatrix);
+                m_instanceBatches.push_back(std::move(batch));
+            }
+            m_instanceBatchCount++;
+        }
+    }
 }
 
 void Renderer::rebindSceneFbo()
@@ -1620,20 +1700,20 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
     }
 
     // Compute shadow-casting point lights (needed for uniform upload even in geometry-only mode)
-    std::vector<int> shadowCasters = selectShadowCastingPointLights();
+    selectShadowCastingPointLights();
 
     if (!geometryOnly)
     {
         // Build shadow caster list (filter out non-casting items like ground planes)
-        std::vector<SceneRenderData::RenderItem> shadowCasterItems;
+        m_shadowCasterItems.clear();
         for (const auto& item : renderData.renderItems)
         {
             if (item.castsShadow)
             {
-                shadowCasterItems.push_back(item);
+                m_shadowCasterItems.push_back(item);
             }
         }
-        m_cullingStats.shadowCastersTotal = static_cast<int>(shadowCasterItems.size());
+        m_cullingStats.shadowCastersTotal = static_cast<int>(m_shadowCasterItems.size());
 
         // --- SDSM: read depth bounds from previous frame and update cascade distribution ---
         if (m_sdsmEnabled && m_depthReducer && m_cascadedShadowMap)
@@ -1672,12 +1752,12 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
         // --- Directional shadow pass (cascaded, per-cascade frustum culled) ---
         if (m_cascadedShadowMap && m_hasDirectionalLight)
         {
-            renderShadowPass(shadowCasterItems, camera, aspectRatio);
+            renderShadowPass(m_shadowCasterItems, camera, aspectRatio);
         }
 
         // --- Point light shadow pass (uses all shadow casters — omnidirectional) ---
-        auto shadowBatches = buildInstanceBatches(shadowCasterItems);
-        renderPointShadowPass(shadowBatches, shadowCasters);
+        buildInstanceBatches(m_shadowCasterItems);
+        renderPointShadowPass(m_shadowCasters);
     }
 
     // --- Frustum cull for scene pass ---
@@ -1716,7 +1796,7 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
         });
 
     // Build batches from culled+sorted items
-    auto batches = buildInstanceBatches(m_culledItems);
+    buildInstanceBatches(m_culledItems);
 
     // Re-bind the scene FBO after shadow passes (skip in geometry-only mode —
     // the caller has already bound the target FBO and we must not overwrite it)
@@ -1749,11 +1829,12 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
     {
         int cascadeCount = m_cascadedShadowMap->getCascadeCount();
         m_sceneShader.setInt("u_cascadeCount", cascadeCount);
+        const auto& cascadeNames = getCascadeNames();
         for (int i = 0; i < cascadeCount; i++)
         {
-            m_sceneShader.setFloat("u_cascadeSplits[" + std::to_string(i) + "]",
+            m_sceneShader.setFloat(cascadeNames[static_cast<size_t>(i)].splits,
                 m_cascadedShadowMap->getCascadeSplit(i));
-            m_sceneShader.setMat4("u_cascadeLightSpaceMatrices[" + std::to_string(i) + "]",
+            m_sceneShader.setMat4(cascadeNames[static_cast<size_t>(i)].lightSpaceMatrices,
                 m_cascadedShadowMap->getLightSpaceMatrix(i));
         }
         m_sceneShader.setBool("u_hasShadows", true);
@@ -1766,17 +1847,18 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
         m_sceneShader.setBool("u_cascadeDebug", false);
     }
 
-    // --- Set point shadow uniforms (reusing precomputed shadowCasters) ---
-    int pointShadowCount = static_cast<int>(shadowCasters.size());
+    // --- Set point shadow uniforms (reusing precomputed m_shadowCasters) ---
+    int pointShadowCount = static_cast<int>(m_shadowCasters.size());
     m_sceneShader.setInt("u_pointShadowCount", pointShadowCount);
 
+    const auto& pointShadowNames = getPointShadowNames();
     for (int i = 0; i < pointShadowCount; i++)
     {
         int textureUnit = 4 + i;  // Units 4-5 for point shadow cubemaps
         m_pointShadowMaps[static_cast<size_t>(i)]->bindShadowTexture(textureUnit);
-        m_sceneShader.setInt("u_pointShadowMaps[" + std::to_string(i) + "]", textureUnit);
-        m_sceneShader.setInt("u_pointShadowIndices[" + std::to_string(i) + "]", shadowCasters[static_cast<size_t>(i)]);
-        m_sceneShader.setFloat("u_pointShadowFarPlane[" + std::to_string(i) + "]",
+        m_sceneShader.setInt(pointShadowNames[static_cast<size_t>(i)].maps, textureUnit);
+        m_sceneShader.setInt(pointShadowNames[static_cast<size_t>(i)].indices, m_shadowCasters[static_cast<size_t>(i)]);
+        m_sceneShader.setFloat(pointShadowNames[static_cast<size_t>(i)].farPlane,
             m_pointShadowMaps[static_cast<size_t>(i)]->getConfig().farPlane);
     }
 
@@ -1855,10 +1937,10 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
     if (m_mdiEnabled && m_meshPool && m_meshPool->hasData() && m_indirectBuffer)
     {
         // Group batches by material pointer
-        std::unordered_map<const Material*, std::vector<const InstanceBatch*>> materialGroups;
-        for (const auto& batch : batches)
+        m_materialGroups.clear();
+        for (size_t b = 0; b < m_instanceBatchCount; b++)
         {
-            materialGroups[batch.material].push_back(&batch);
+            m_materialGroups[m_instanceBatches[b].material].push_back(&m_instanceBatches[b]);
         }
 
         m_sceneShader.use();
@@ -1869,7 +1951,7 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
 
         m_meshPool->bind();
 
-        for (const auto& [material, batchPtrs] : materialGroups)
+        for (const auto& [material, batchPtrs] : m_materialGroups)
         {
             // Build indirect commands for this material group
             m_indirectBuffer->clear();
@@ -1909,8 +1991,9 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
     else
     {
         // Legacy path: instanced or single-draw per batch
-        for (const auto& batch : batches)
+        for (size_t b = 0; b < m_instanceBatchCount; b++)
         {
+            const auto& batch = m_instanceBatches[b];
             int count = static_cast<int>(batch.modelMatrices.size());
             if (count >= MIN_INSTANCE_BATCH_SIZE && m_instanceBuffer)
             {
@@ -2060,24 +2143,25 @@ void Renderer::renderShadowPass(const std::vector<SceneRenderData::RenderItem>& 
         auto cascadePlanes = extractFrustumPlanes(lightSpaceMatrix);
 
         // Cull shadow casters against this cascade's frustum
-        std::vector<SceneRenderData::RenderItem> culledCasters;
+        m_cascadeCulledCasters.clear();
         for (const auto& item : shadowCasterItems)
         {
             if (item.worldBounds.getSize() == glm::vec3(0.0f)
                 || isAabbInFrustum(item.worldBounds, cascadePlanes))
             {
-                culledCasters.push_back(item);
+                m_cascadeCulledCasters.push_back(item);
             }
         }
-        totalCascadeCulled += static_cast<int>(culledCasters.size());
+        totalCascadeCulled += static_cast<int>(m_cascadeCulledCasters.size());
 
-        auto batches = buildInstanceBatches(culledCasters);
+        buildInstanceBatches(m_cascadeCulledCasters);
 
         m_cascadedShadowMap->beginCascade(c);
         m_shadowDepthShader.setMat4("u_lightSpaceMatrix", lightSpaceMatrix);
 
-        for (const auto& batch : batches)
+        for (size_t b = 0; b < m_instanceBatchCount; b++)
         {
+            const auto& batch = m_instanceBatches[b];
             int count = static_cast<int>(batch.modelMatrices.size());
             if (count >= MIN_INSTANCE_BATCH_SIZE && m_instanceBuffer)
             {
@@ -2141,22 +2225,20 @@ void Renderer::renderShadowPass(const std::vector<SceneRenderData::RenderItem>& 
     glDisable(GL_DEPTH_CLAMP);
 }
 
-std::vector<int> Renderer::selectShadowCastingPointLights() const
+void Renderer::selectShadowCastingPointLights()
 {
-    std::vector<int> result;
+    m_shadowCasters.clear();
     for (int i = 0; i < static_cast<int>(m_pointLights.size()); i++)
     {
         if (m_pointLights[static_cast<size_t>(i)].castsShadow
-            && static_cast<int>(result.size()) < MAX_POINT_SHADOW_LIGHTS)
+            && static_cast<int>(m_shadowCasters.size()) < MAX_POINT_SHADOW_LIGHTS)
         {
-            result.push_back(i);
+            m_shadowCasters.push_back(i);
         }
     }
-    return result;
 }
 
-void Renderer::renderPointShadowPass(const std::vector<InstanceBatch>& batches,
-                                      const std::vector<int>& shadowCasters)
+void Renderer::renderPointShadowPass(const std::vector<int>& shadowCasters)
 {
     if (shadowCasters.empty())
     {
@@ -2187,8 +2269,9 @@ void Renderer::renderPointShadowPass(const std::vector<InstanceBatch>& batches,
             m_pointShadowDepthShader.setMat4("u_lightSpaceMatrix",
                 shadowMap->getLightSpaceMatrix(face));
 
-            for (const auto& batch : batches)
+            for (size_t b = 0; b < m_instanceBatchCount; b++)
             {
+                const auto& batch = m_instanceBatches[b];
                 int count = static_cast<int>(batch.modelMatrices.size());
                 if (count >= MIN_INSTANCE_BATCH_SIZE && m_instanceBuffer)
                 {

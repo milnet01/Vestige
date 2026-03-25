@@ -168,10 +168,10 @@ public:
     int getDepth() const { return m_config.depth; }
 
     /// @brief Gets the total world-space terrain size (X extent).
-    float getWorldWidth() const { return (m_config.width - 1) * m_config.spacingX; }
+    float getWorldWidth() const { return static_cast<float>(m_config.width - 1) * m_config.spacingX; }
 
     /// @brief Gets the total world-space terrain size (Z extent).
-    float getWorldDepth() const { return (m_config.depth - 1) * m_config.spacingZ; }
+    float getWorldDepth() const { return static_cast<float>(m_config.depth - 1) * m_config.spacingZ; }
 
     /// @brief Gets the LOD distance ranges for per-vertex morphing.
     const std::vector<float>& getLodRanges() const { return m_lodRanges; }

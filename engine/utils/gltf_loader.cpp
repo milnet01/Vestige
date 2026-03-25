@@ -11,6 +11,7 @@
 #include <glm/gtc/quaternion.hpp>
 
 #include <algorithm>
+#include <cstring>
 #include <filesystem>
 #include <limits>
 #include <set>
@@ -19,11 +20,143 @@ namespace Vestige
 {
 
 /// @brief Resolves a relative URI against the directory of the glTF file.
+/// Validates the resolved path stays within the base directory to prevent path traversal.
 static std::string resolveUri(const std::string& gltfDir, const std::string& uri)
 {
+    if (uri.empty())
+    {
+        return {};
+    }
+
     std::filesystem::path base(gltfDir);
     std::filesystem::path resolved = base / uri;
-    return resolved.string();
+
+    // Canonicalize to collapse ".." and symlinks
+    std::error_code ec;
+    auto canonical = std::filesystem::weakly_canonical(resolved, ec);
+    if (ec)
+    {
+        Logger::warning("glTF: cannot resolve URI: " + uri);
+        return {};
+    }
+
+    auto canonicalBase = std::filesystem::weakly_canonical(base, ec);
+    std::string canonStr = canonical.string();
+    std::string baseStr = canonicalBase.string();
+    if (canonStr.compare(0, baseStr.size(), baseStr) != 0)
+    {
+        Logger::warning("glTF: URI escapes asset directory: " + uri);
+        return {};
+    }
+
+    return canonStr;
+}
+
+/// @brief Reads a vec3 from a byte buffer using memcpy (avoids strict aliasing violation).
+static glm::vec3 readVec3(const unsigned char* ptr)
+{
+    float v[3];
+    std::memcpy(v, ptr, sizeof(v));
+    return glm::vec3(v[0], v[1], v[2]);
+}
+
+/// @brief Reads a vec2 from a byte buffer using memcpy.
+static glm::vec2 readVec2(const unsigned char* ptr)
+{
+    float v[2];
+    std::memcpy(v, ptr, sizeof(v));
+    return glm::vec2(v[0], v[1]);
+}
+
+/// @brief Reads a vec4 from a byte buffer using memcpy.
+static glm::vec4 readVec4(const unsigned char* ptr)
+{
+    float v[4];
+    std::memcpy(v, ptr, sizeof(v));
+    return glm::vec4(v[0], v[1], v[2], v[3]);
+}
+
+/// @brief Reads a typed value from a byte buffer using memcpy.
+template <typename T>
+static T readValue(const unsigned char* ptr)
+{
+    T value;
+    std::memcpy(&value, ptr, sizeof(T));
+    return value;
+}
+
+/// @brief Validates accessor bounds and returns the base data pointer if safe, nullptr otherwise.
+/// Checks that accessor, bufferView, and buffer indices are in range, and that the data
+/// region (offset + stride * count) fits within the buffer.
+static const unsigned char* validateAccessorData(
+    const tinygltf::Model& model,
+    int accessorIndex,
+    size_t elementSize,
+    const char* attributeName)
+{
+    if (accessorIndex < 0
+        || static_cast<size_t>(accessorIndex) >= model.accessors.size())
+    {
+        Logger::warning("glTF: accessor index out of range for "
+            + std::string(attributeName));
+        return nullptr;
+    }
+
+    const auto& accessor = model.accessors[static_cast<size_t>(accessorIndex)];
+
+    if (accessor.bufferView < 0
+        || static_cast<size_t>(accessor.bufferView) >= model.bufferViews.size())
+    {
+        Logger::warning("glTF: bufferView index out of range for "
+            + std::string(attributeName));
+        return nullptr;
+    }
+
+    const auto& bufferView = model.bufferViews[static_cast<size_t>(accessor.bufferView)];
+
+    if (bufferView.buffer < 0
+        || static_cast<size_t>(bufferView.buffer) >= model.buffers.size())
+    {
+        Logger::warning("glTF: buffer index out of range for "
+            + std::string(attributeName));
+        return nullptr;
+    }
+
+    const auto& buffer = model.buffers[static_cast<size_t>(bufferView.buffer)];
+
+    // Validate offsets don't exceed buffer
+    size_t totalOffset = bufferView.byteOffset + accessor.byteOffset;
+    if (totalOffset > buffer.data.size())
+    {
+        Logger::warning("glTF: data offset exceeds buffer for "
+            + std::string(attributeName));
+        return nullptr;
+    }
+
+    // Validate stride
+    size_t stride = bufferView.byteStride > 0
+        ? bufferView.byteStride : elementSize;
+    if (stride < elementSize)
+    {
+        Logger::warning("glTF: stride smaller than element for "
+            + std::string(attributeName));
+        return nullptr;
+    }
+
+    // Validate that all elements fit within buffer
+    if (accessor.count > 0)
+    {
+        size_t requiredSize = totalOffset
+            + (accessor.count - 1) * stride + elementSize;
+        if (requiredSize > buffer.data.size())
+        {
+            Logger::warning("glTF: accessor data extends beyond buffer for "
+                + std::string(attributeName));
+            return nullptr;
+        }
+    }
+
+    return buffer.data.data() + totalOffset;
 }
 
 /// @brief Pre-scans materials to determine which image indices are used as sRGB (color) textures.
@@ -80,8 +213,27 @@ static void loadTextures(const tinygltf::Model& gltfModel,
         else if (image.bufferView >= 0)
         {
             // Embedded in GLB buffer — decode from memory
+            if (static_cast<size_t>(image.bufferView) >= gltfModel.bufferViews.size())
+            {
+                Logger::warning("glTF: invalid bufferView for embedded image: " + image.name);
+                outModel.m_textures.push_back(resourceManager.getDefaultTexture());
+                continue;
+            }
             const auto& bufferView = gltfModel.bufferViews[static_cast<size_t>(image.bufferView)];
-            const auto& buffer = gltfModel.buffers[bufferView.buffer];
+            if (bufferView.buffer < 0
+                || static_cast<size_t>(bufferView.buffer) >= gltfModel.buffers.size())
+            {
+                Logger::warning("glTF: invalid buffer for embedded image: " + image.name);
+                outModel.m_textures.push_back(resourceManager.getDefaultTexture());
+                continue;
+            }
+            const auto& buffer = gltfModel.buffers[static_cast<size_t>(bufferView.buffer)];
+            if (bufferView.byteOffset + bufferView.byteLength > buffer.data.size())
+            {
+                Logger::warning("glTF: buffer data out of range for embedded image: " + image.name);
+                outModel.m_textures.push_back(resourceManager.getDefaultTexture());
+                continue;
+            }
             const unsigned char* data = buffer.data.data() + bufferView.byteOffset;
             size_t dataSize = bufferView.byteLength;
 
@@ -307,14 +459,18 @@ static void loadMeshes(const tinygltf::Model& gltfModel, Model& outModel)
                     Logger::warning("glTF: primitive has no POSITION attribute, skipping");
                     continue;
                 }
+
+                const unsigned char* base = validateAccessorData(
+                    gltfModel, it->second, sizeof(float) * 3, "POSITION");
+                if (!base)
+                {
+                    continue;
+                }
+
                 const auto& accessor = gltfModel.accessors[static_cast<size_t>(it->second)];
-                const auto& bufferView = gltfModel.bufferViews[accessor.bufferView];
-                const auto& buffer = gltfModel.buffers[bufferView.buffer];
-                const unsigned char* base = buffer.data.data()
-                    + bufferView.byteOffset + accessor.byteOffset;
-                int stride = bufferView.byteStride
-                    ? static_cast<int>(bufferView.byteStride)
-                    : static_cast<int>(sizeof(float) * 3);
+                const auto& bufferView = gltfModel.bufferViews[static_cast<size_t>(accessor.bufferView)];
+                size_t stride = bufferView.byteStride > 0
+                    ? bufferView.byteStride : sizeof(float) * 3;
 
                 vertices.resize(accessor.count);
                 glm::vec3 minPos(std::numeric_limits<float>::max());
@@ -322,8 +478,7 @@ static void loadMeshes(const tinygltf::Model& gltfModel, Model& outModel)
 
                 for (size_t i = 0; i < accessor.count; i++)
                 {
-                    const float* pos = reinterpret_cast<const float*>(base + stride * i);
-                    vertices[i].position = glm::vec3(pos[0], pos[1], pos[2]);
+                    vertices[i].position = readVec3(base + stride * i);
                     vertices[i].color = glm::vec3(1.0f);  // Default white
                     minPos = glm::min(minPos, vertices[i].position);
                     maxPos = glm::max(maxPos, vertices[i].position);
@@ -344,21 +499,21 @@ static void loadMeshes(const tinygltf::Model& gltfModel, Model& outModel)
                 auto it = primitive.attributes.find("NORMAL");
                 if (it != primitive.attributes.end())
                 {
-                    const auto& accessor = gltfModel.accessors[static_cast<size_t>(it->second)];
-                    const auto& bufferView = gltfModel.bufferViews[accessor.bufferView];
-                    const auto& buffer = gltfModel.buffers[bufferView.buffer];
-                    const unsigned char* base = buffer.data.data()
-                        + bufferView.byteOffset + accessor.byteOffset;
-                    int stride = bufferView.byteStride
-                        ? static_cast<int>(bufferView.byteStride)
-                        : static_cast<int>(sizeof(float) * 3);
-
-                    for (size_t i = 0; i < std::min(accessor.count, vertices.size()); i++)
+                    const unsigned char* base = validateAccessorData(
+                        gltfModel, it->second, sizeof(float) * 3, "NORMAL");
+                    if (base)
                     {
-                        const float* n = reinterpret_cast<const float*>(base + stride * i);
-                        vertices[i].normal = glm::vec3(n[0], n[1], n[2]);
+                        const auto& accessor = gltfModel.accessors[static_cast<size_t>(it->second)];
+                        const auto& bufferView = gltfModel.bufferViews[static_cast<size_t>(accessor.bufferView)];
+                        size_t stride = bufferView.byteStride > 0
+                            ? bufferView.byteStride : sizeof(float) * 3;
+
+                        for (size_t i = 0; i < std::min(accessor.count, vertices.size()); i++)
+                        {
+                            vertices[i].normal = readVec3(base + stride * i);
+                        }
+                        hasNormals = true;
                     }
-                    hasNormals = true;
                 }
             }
 
@@ -367,19 +522,19 @@ static void loadMeshes(const tinygltf::Model& gltfModel, Model& outModel)
                 auto it = primitive.attributes.find("TEXCOORD_0");
                 if (it != primitive.attributes.end())
                 {
-                    const auto& accessor = gltfModel.accessors[static_cast<size_t>(it->second)];
-                    const auto& bufferView = gltfModel.bufferViews[accessor.bufferView];
-                    const auto& buffer = gltfModel.buffers[bufferView.buffer];
-                    const unsigned char* base = buffer.data.data()
-                        + bufferView.byteOffset + accessor.byteOffset;
-                    int stride = bufferView.byteStride
-                        ? static_cast<int>(bufferView.byteStride)
-                        : static_cast<int>(sizeof(float) * 2);
-
-                    for (size_t i = 0; i < std::min(accessor.count, vertices.size()); i++)
+                    const unsigned char* base = validateAccessorData(
+                        gltfModel, it->second, sizeof(float) * 2, "TEXCOORD_0");
+                    if (base)
                     {
-                        const float* uv = reinterpret_cast<const float*>(base + stride * i);
-                        vertices[i].texCoord = glm::vec2(uv[0], uv[1]);
+                        const auto& accessor = gltfModel.accessors[static_cast<size_t>(it->second)];
+                        const auto& bufferView = gltfModel.bufferViews[static_cast<size_t>(accessor.bufferView)];
+                        size_t stride = bufferView.byteStride > 0
+                            ? bufferView.byteStride : sizeof(float) * 2;
+
+                        for (size_t i = 0; i < std::min(accessor.count, vertices.size()); i++)
+                        {
+                            vertices[i].texCoord = readVec2(base + stride * i);
+                        }
                     }
                 }
             }
@@ -390,26 +545,26 @@ static void loadMeshes(const tinygltf::Model& gltfModel, Model& outModel)
                 auto it = primitive.attributes.find("TANGENT");
                 if (it != primitive.attributes.end())
                 {
-                    const auto& accessor = gltfModel.accessors[static_cast<size_t>(it->second)];
-                    const auto& bufferView = gltfModel.bufferViews[accessor.bufferView];
-                    const auto& buffer = gltfModel.buffers[bufferView.buffer];
-                    const unsigned char* base = buffer.data.data()
-                        + bufferView.byteOffset + accessor.byteOffset;
                     // glTF tangent is vec4 (w = handedness)
-                    int stride = bufferView.byteStride
-                        ? static_cast<int>(bufferView.byteStride)
-                        : static_cast<int>(sizeof(float) * 4);
-
-                    for (size_t i = 0; i < std::min(accessor.count, vertices.size()); i++)
+                    const unsigned char* base = validateAccessorData(
+                        gltfModel, it->second, sizeof(float) * 4, "TANGENT");
+                    if (base)
                     {
-                        const float* t = reinterpret_cast<const float*>(base + stride * i);
-                        vertices[i].tangent = glm::vec3(t[0], t[1], t[2]);
-                        // bitangent = cross(N, T.xyz) * T.w
-                        float handedness = t[3];
-                        vertices[i].bitangent = glm::cross(vertices[i].normal,
-                            vertices[i].tangent) * handedness;
+                        const auto& accessor = gltfModel.accessors[static_cast<size_t>(it->second)];
+                        const auto& bufferView = gltfModel.bufferViews[static_cast<size_t>(accessor.bufferView)];
+                        size_t stride = bufferView.byteStride > 0
+                            ? bufferView.byteStride : sizeof(float) * 4;
+
+                        for (size_t i = 0; i < std::min(accessor.count, vertices.size()); i++)
+                        {
+                            glm::vec4 t = readVec4(base + stride * i);
+                            vertices[i].tangent = glm::vec3(t.x, t.y, t.z);
+                            // bitangent = cross(N, T.xyz) * T.w
+                            vertices[i].bitangent = glm::cross(vertices[i].normal,
+                                vertices[i].tangent) * t.w;
+                        }
+                        hasTangents = true;
                     }
-                    hasTangents = true;
                 }
             }
 
@@ -418,35 +573,48 @@ static void loadMeshes(const tinygltf::Model& gltfModel, Model& outModel)
                 auto it = primitive.attributes.find("COLOR_0");
                 if (it != primitive.attributes.end())
                 {
-                    const auto& accessor = gltfModel.accessors[static_cast<size_t>(it->second)];
-                    const auto& bufferView = gltfModel.bufferViews[accessor.bufferView];
-                    const auto& buffer = gltfModel.buffers[bufferView.buffer];
-                    const unsigned char* base = buffer.data.data()
-                        + bufferView.byteOffset + accessor.byteOffset;
-
-                    if (accessor.componentType == TINYGLTF_COMPONENT_TYPE_FLOAT)
+                    size_t elemSize = sizeof(float) * 3;  // Default for float vec3
+                    if (static_cast<size_t>(it->second) < gltfModel.accessors.size())
                     {
-                        int stride = bufferView.byteStride
-                            ? static_cast<int>(bufferView.byteStride)
-                            : static_cast<int>(sizeof(float) * (accessor.type == TINYGLTF_TYPE_VEC4 ? 4 : 3));
-
-                        for (size_t i = 0; i < std::min(accessor.count, vertices.size()); i++)
+                        const auto& acc = gltfModel.accessors[static_cast<size_t>(it->second)];
+                        if (acc.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE)
                         {
-                            const float* c = reinterpret_cast<const float*>(base + stride * i);
-                            vertices[i].color = glm::vec3(c[0], c[1], c[2]);
+                            elemSize = acc.type == TINYGLTF_TYPE_VEC4 ? 4 : 3;
+                        }
+                        else
+                        {
+                            elemSize = sizeof(float) * (acc.type == TINYGLTF_TYPE_VEC4 ? 4 : 3);
                         }
                     }
-                    else if (accessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE)
-                    {
-                        int stride = bufferView.byteStride
-                            ? static_cast<int>(bufferView.byteStride)
-                            : static_cast<int>(accessor.type == TINYGLTF_TYPE_VEC4 ? 4 : 3);
 
-                        for (size_t i = 0; i < std::min(accessor.count, vertices.size()); i++)
+                    const unsigned char* base = validateAccessorData(
+                        gltfModel, it->second, elemSize, "COLOR_0");
+                    if (base)
+                    {
+                        const auto& accessor = gltfModel.accessors[static_cast<size_t>(it->second)];
+                        const auto& bufferView = gltfModel.bufferViews[static_cast<size_t>(accessor.bufferView)];
+
+                        if (accessor.componentType == TINYGLTF_COMPONENT_TYPE_FLOAT)
                         {
-                            const unsigned char* c = base + stride * i;
-                            vertices[i].color = glm::vec3(
-                                c[0] / 255.0f, c[1] / 255.0f, c[2] / 255.0f);
+                            size_t stride = bufferView.byteStride > 0
+                                ? bufferView.byteStride : elemSize;
+
+                            for (size_t i = 0; i < std::min(accessor.count, vertices.size()); i++)
+                            {
+                                vertices[i].color = readVec3(base + stride * i);
+                            }
+                        }
+                        else if (accessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE)
+                        {
+                            size_t stride = bufferView.byteStride > 0
+                                ? bufferView.byteStride : elemSize;
+
+                            for (size_t i = 0; i < std::min(accessor.count, vertices.size()); i++)
+                            {
+                                const unsigned char* c = base + stride * i;
+                                vertices[i].color = glm::vec3(
+                                    c[0] / 255.0f, c[1] / 255.0f, c[2] / 255.0f);
+                            }
                         }
                     }
                 }
@@ -455,42 +623,53 @@ static void loadMeshes(const tinygltf::Model& gltfModel, Model& outModel)
             // --- Read indices ---
             if (primitive.indices >= 0)
             {
-                const auto& accessor = gltfModel.accessors[static_cast<size_t>(primitive.indices)];
-                const auto& bufferView = gltfModel.bufferViews[accessor.bufferView];
-                const auto& buffer = gltfModel.buffers[bufferView.buffer];
-                const unsigned char* base = buffer.data.data()
-                    + bufferView.byteOffset + accessor.byteOffset;
-
-                indices.resize(accessor.count);
-
-                if (accessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT)
+                // Determine element size for the index component type
+                size_t indexElemSize = sizeof(uint32_t);
+                if (static_cast<size_t>(primitive.indices) < gltfModel.accessors.size())
                 {
-                    int stride = bufferView.byteStride
-                        ? static_cast<int>(bufferView.byteStride)
-                        : static_cast<int>(sizeof(uint32_t));
-                    for (size_t i = 0; i < accessor.count; i++)
-                    {
-                        indices[i] = *reinterpret_cast<const uint32_t*>(base + stride * i);
-                    }
+                    int ct = gltfModel.accessors[static_cast<size_t>(primitive.indices)].componentType;
+                    if (ct == TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT)
+                        indexElemSize = sizeof(uint16_t);
+                    else if (ct == TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE)
+                        indexElemSize = 1;
                 }
-                else if (accessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT)
+
+                const unsigned char* base = validateAccessorData(
+                    gltfModel, primitive.indices, indexElemSize, "INDICES");
+                if (base)
                 {
-                    int stride = bufferView.byteStride
-                        ? static_cast<int>(bufferView.byteStride)
-                        : static_cast<int>(sizeof(uint16_t));
-                    for (size_t i = 0; i < accessor.count; i++)
+                    const auto& accessor = gltfModel.accessors[static_cast<size_t>(primitive.indices)];
+                    const auto& bufferView = gltfModel.bufferViews[static_cast<size_t>(accessor.bufferView)];
+
+                    indices.resize(accessor.count);
+
+                    if (accessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT)
                     {
-                        indices[i] = *reinterpret_cast<const uint16_t*>(base + stride * i);
+                        size_t stride = bufferView.byteStride > 0
+                            ? bufferView.byteStride : sizeof(uint32_t);
+                        for (size_t i = 0; i < accessor.count; i++)
+                        {
+                            indices[i] = readValue<uint32_t>(base + stride * i);
+                        }
                     }
-                }
-                else if (accessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE)
-                {
-                    int stride = bufferView.byteStride
-                        ? static_cast<int>(bufferView.byteStride)
-                        : 1;
-                    for (size_t i = 0; i < accessor.count; i++)
+                    else if (accessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT)
                     {
-                        indices[i] = static_cast<uint32_t>(*(base + stride * i));
+                        size_t stride = bufferView.byteStride > 0
+                            ? bufferView.byteStride : sizeof(uint16_t);
+                        for (size_t i = 0; i < accessor.count; i++)
+                        {
+                            indices[i] = static_cast<uint32_t>(
+                                readValue<uint16_t>(base + stride * i));
+                        }
+                    }
+                    else if (accessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE)
+                    {
+                        size_t stride = bufferView.byteStride > 0
+                            ? bufferView.byteStride : 1;
+                        for (size_t i = 0; i < accessor.count; i++)
+                        {
+                            indices[i] = static_cast<uint32_t>(*(base + stride * i));
+                        }
                     }
                 }
             }
@@ -639,6 +818,10 @@ static void buildNodeHierarchy(const tinygltf::Model& gltfModel, Model& outModel
     if (!gltfModel.scenes.empty())
     {
         int sceneIdx = gltfModel.defaultScene >= 0 ? gltfModel.defaultScene : 0;
+        if (static_cast<size_t>(sceneIdx) >= gltfModel.scenes.size())
+        {
+            sceneIdx = 0;
+        }
         const auto& scene = gltfModel.scenes[static_cast<size_t>(sceneIdx)];
         for (int nodeIdx : scene.nodes)
         {
