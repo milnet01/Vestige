@@ -111,7 +111,8 @@ bool Engine::initialize(const EngineConfig& config)
     {
         int w = config.window.width;
         int h = config.window.height;
-        m_waterFbo.init(w / 2, h / 2, w / 2, h / 2);
+        // Water FBOs at 40% resolution for performance (3 scene passes per frame)
+        m_waterFbo.init(w * 2 / 5, h * 2 / 5, w * 2 / 5, h * 2 / 5);
     }
 
     // Initialize performance profiler
@@ -600,7 +601,7 @@ void Engine::run()
             if (vpW > 0 && vpH > 0)
             {
                 m_renderer->resizeRenderTarget(vpW, vpH);
-                m_waterFbo.resize(vpW / 2, vpH / 2, vpW / 2, vpH / 2);
+                m_waterFbo.resize(vpW * 2 / 5, vpH * 2 / 5, vpW * 2 / 5, vpH * 2 / 5);
             }
         }
         else
@@ -609,7 +610,7 @@ void Engine::run()
             int ww = m_window->getWidth();
             int wh = m_window->getHeight();
             m_renderer->resizeRenderTarget(ww, wh);
-            m_waterFbo.resize(ww / 2, wh / 2, ww / 2, wh / 2);
+            m_waterFbo.resize(ww * 2 / 5, wh * 2 / 5, ww * 2 / 5, wh * 2 / 5);
         }
 
         // Check for viewport clicks (uses previous frame's viewport bounds)
