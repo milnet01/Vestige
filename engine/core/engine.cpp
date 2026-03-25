@@ -488,6 +488,34 @@ bool Engine::initialize(const EngineConfig& config)
                                  + (m_editor->getPerformancePanel().isOpen() ? "ON" : "OFF"));
                 }
                 break;
+
+            case GLFW_KEY_V:
+            {
+                // Cycle frame cap: Uncapped → 60 → VSync → Uncapped
+                int currentCap = m_timer.getFrameRateCap();
+                if (currentCap == 0 && !m_window->isVsyncEnabled())
+                {
+                    // Uncapped → 60 FPS cap
+                    m_timer.setFrameRateCap(60);
+                    m_window->setVsync(false);
+                    Logger::info("Frame rate: capped at 60 FPS");
+                }
+                else if (currentCap == 60)
+                {
+                    // 60 cap → VSync
+                    m_timer.setFrameRateCap(0);
+                    m_window->setVsync(true);
+                    Logger::info("Frame rate: VSync ON");
+                }
+                else
+                {
+                    // VSync → Uncapped
+                    m_timer.setFrameRateCap(0);
+                    m_window->setVsync(false);
+                    Logger::info("Frame rate: uncapped");
+                }
+                break;
+            }
         }
     });
 
@@ -503,7 +531,7 @@ bool Engine::initialize(const EngineConfig& config)
 
     m_isRunning = true;
     Logger::info("Engine initialized successfully");
-    Logger::info("Controls: Escape=toggle editor/play, WASD=move (play mode), Mouse=look (play mode), F1=wireframe, F2=tonemapper, F3=HDR debug, F4=POM, F5=bloom, F6=SSAO, F7=AA mode (None/MSAA/TAA/SMAA), F8=color grading, F9=CSM debug, F10=auto-exposure, F11=diagnostic capture, Ctrl+Q=quit");
+    Logger::info("Controls: Escape=toggle editor/play, WASD=move (play mode), Mouse=look (play mode), F1=wireframe, F2=tonemapper, F3=HDR debug, F4=POM, F5=bloom, F6=SSAO, F7=AA mode (None/MSAA/TAA/SMAA), F8=color grading, F9=CSM debug, F10=auto-exposure, F11=diagnostic capture, V=frame cap cycle, Ctrl+Q=quit");
     Logger::info("Editor camera: Alt+LMB=orbit, MMB=pan, Scroll=zoom, F=focus, Numpad 1/3/7=front/right/top");
     Logger::info("Gamepad: Left stick=move, Right stick=look, LB=sprint, Triggers=up/down");
     return true;
@@ -928,7 +956,8 @@ void Engine::run()
             glViewport(0, 0, m_window->getWidth(), m_window->getHeight());
             glClearColor(0.08f, 0.08f, 0.10f, 1.0f);
             glClear(GL_COLOR_BUFFER_BIT);
-            m_editor->drawPanels(m_renderer.get(), activeScene, m_camera.get());
+            m_editor->drawPanels(m_renderer.get(), activeScene, m_camera.get(),
+                                 &m_timer, m_window.get());
             m_editor->endFrame();
         }
         else
@@ -937,7 +966,8 @@ void Engine::run()
             m_renderer->blitToScreen();
             if (m_editor)
             {
-                m_editor->drawPanels(nullptr, nullptr);
+                m_editor->drawPanels(nullptr, nullptr, nullptr,
+                                     &m_timer, m_window.get());
                 m_editor->endFrame();
             }
         }
@@ -945,7 +975,10 @@ void Engine::run()
         // 9. Window — swap buffers (flushes GPU work, making query results available)
         m_window->swapBuffers();
 
-        // 10. End profiler frame (collect GPU results after swap ensures queries are complete)
+        // 10. Frame rate cap (busy-wait for target frame time if capped)
+        m_timer.waitForFrameCap();
+
+        // 11. End profiler frame (collect GPU results after swap ensures queries are complete)
         m_profiler.endFrame(deltaTime);
     }
 

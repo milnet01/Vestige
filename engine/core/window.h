@@ -63,6 +63,12 @@ public:
     /// Call on shutdown so the window restores its state next launch.
     void saveWindowState() const;
 
+    /// @brief Enables or disables vertical sync.
+    void setVsync(bool enabled);
+
+    /// @brief Returns whether vsync is currently enabled.
+    bool isVsyncEnabled() const;
+
 private:
     /// @brief Restores window position and size from the config file.
     /// Called during construction after the window is created.
@@ -77,6 +83,7 @@ private:
     GLFWwindow* m_handle;
     int m_width;
     int m_height;
+    bool m_vsyncEnabled = true;
     EventBus& m_eventBus;
 };
 

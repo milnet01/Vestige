@@ -65,7 +65,8 @@ Window::Window(const WindowConfig& config, EventBus& eventBus)
     Logger::info("GPU: " + std::string(reinterpret_cast<const char*>(glGetString(GL_RENDERER))));
 
     // VSync
-    glfwSwapInterval(config.isVsyncEnabled ? 1 : 0);
+    m_vsyncEnabled = config.isVsyncEnabled;
+    glfwSwapInterval(m_vsyncEnabled ? 1 : 0);
 
     // Store static instance for framebuffer resize callback.
     // The user pointer is reserved for InputManager (set later).
@@ -271,6 +272,17 @@ void Window::restoreWindowState()
                   + std::to_string(h) + " at (" + std::to_string(x) + ", "
                   + std::to_string(y) + ")"
                   + (maximized ? " [maximized]" : ""));
+}
+
+void Window::setVsync(bool enabled)
+{
+    m_vsyncEnabled = enabled;
+    glfwSwapInterval(enabled ? 1 : 0);
+}
+
+bool Window::isVsyncEnabled() const
+{
+    return m_vsyncEnabled;
 }
 
 } // namespace Vestige

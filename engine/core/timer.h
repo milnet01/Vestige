@@ -27,12 +27,23 @@ public:
     /// @return Elapsed time in seconds.
     double getElapsedTime() const;
 
+    /// @brief Sets the target frame rate cap (0 = uncapped).
+    void setFrameRateCap(int fps);
+
+    /// @brief Gets the current frame rate cap (0 = uncapped).
+    int getFrameRateCap() const;
+
+    /// @brief Waits until the target frame time has elapsed. Call after swapBuffers.
+    void waitForFrameCap();
+
 private:
     double m_lastFrameTime;
     float m_deltaTime;
     int m_fps;
     int m_frameCount;
     double m_fpsTimer;
+    int m_frameRateCap = 0;         ///< Target FPS (0 = uncapped)
+    double m_targetFrameTime = 0.0;  ///< 1.0 / cap (0 when uncapped)
 };
 
 } // namespace Vestige
