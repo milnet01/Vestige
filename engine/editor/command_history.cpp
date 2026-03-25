@@ -35,9 +35,13 @@ void CommandHistory::execute(std::unique_ptr<EditorCommand> cmd)
                          m_commands.begin() + static_cast<ptrdiff_t>(trimCount));
         m_currentIndex -= static_cast<int>(trimCount);
 
-        // If the saved version was in the trimmed region, it's permanently lost
-        m_savedVersion -= static_cast<int>(trimCount);
-        // A negative savedVersion that we can never reach again means permanently dirty
+        // The version counter tracks execute/undo/redo operations, not command
+        // indices. When we trim, the saved version may refer to a state we can
+        // no longer reach. Mark it as permanently lost so isDirty() stays true.
+        if (m_savedVersion < m_version - m_currentIndex)
+        {
+            m_savedVersionLost = true;
+        }
     }
 
     Logger::info("Executed: " + m_commands[static_cast<size_t>(m_currentIndex)]->getDescription());
@@ -75,6 +79,7 @@ void CommandHistory::clear()
     m_currentIndex = -1;
     m_version = 0;
     m_savedVersion = 0;
+    m_savedVersionLost = false;
 }
 
 bool CommandHistory::canUndo() const
@@ -89,12 +94,14 @@ bool CommandHistory::canRedo() const
 
 bool CommandHistory::isDirty() const
 {
+    if (m_savedVersionLost) return true;
     return m_version != m_savedVersion;
 }
 
 void CommandHistory::markSaved()
 {
     m_savedVersion = m_version;
+    m_savedVersionLost = false;
 }
 
 const std::vector<std::unique_ptr<EditorCommand>>& CommandHistory::getCommands() const

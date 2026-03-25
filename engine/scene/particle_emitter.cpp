@@ -44,7 +44,11 @@ static glm::vec3 randomUnitSphere()
 void ParticleData::resize(int max)
 {
     maxCount = max;
-    count = 0;
+    // Preserve live particles up to the new capacity (don't reset count to 0)
+    if (count > max)
+    {
+        count = max;
+    }
     positions.resize(static_cast<size_t>(max));
     velocities.resize(static_cast<size_t>(max));
     colors.resize(static_cast<size_t>(max));
@@ -106,11 +110,9 @@ void ParticleEmitterComponent::update(float deltaTime)
     // Check duration (only for non-looping systems)
     bool canEmit = m_config.looping || (m_elapsedTime < m_config.duration);
 
-    // Resize pool if config changed
+    // Resize pool if config changed (resize preserves live particles)
     if (m_data.maxCount != m_config.maxParticles)
     {
-        // Kill excess particles before resize
-        m_data.count = std::min(m_data.count, m_config.maxParticles);
         m_data.resize(m_config.maxParticles);
     }
 

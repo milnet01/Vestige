@@ -1370,7 +1370,7 @@ void Engine::setupDemoScene()
         auto& wCfg = water->getConfig();
         wCfg.width = 5.5f;
         wCfg.depth = 5.5f;
-        wCfg.gridResolution = 32;
+        wCfg.gridResolution = 128;
         wCfg.numWaves = 3;
         wCfg.waves[0] = {0.005f, 3.0f, 0.2f, 10.0f};
         wCfg.waves[1] = {0.003f, 2.0f, 0.15f, 75.0f};

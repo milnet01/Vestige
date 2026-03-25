@@ -109,6 +109,26 @@ void PerformancePanel::drawOverviewTab(PerformanceProfiler& profiler)
 
     // Budget line label
     ImGui::TextDisabled("--- 16.67ms (60 FPS) budget ---");
+
+    ImGui::Spacing();
+
+    // FPS history graph (derived from frame time history)
+    ImGui::Text("FPS History:");
+
+    static float fpsHistory[PerformanceProfiler::HISTORY_SIZE];
+    for (int i = 0; i < PerformanceProfiler::HISTORY_SIZE; ++i)
+    {
+        float ms = history[i];
+        fpsHistory[i] = (ms > 0.0f) ? (1000.0f / ms) : 0.0f;
+    }
+
+    char fpsOverlay[64];
+    snprintf(fpsOverlay, sizeof(fpsOverlay), "%.0f FPS", static_cast<double>(fps));
+
+    ImGui::PlotLines("##FPSHistory", fpsHistory, PerformanceProfiler::HISTORY_SIZE,
+                     offset, fpsOverlay, 0.0f, 120.0f, ImVec2(0, 120));
+
+    ImGui::TextDisabled("--- 60 FPS target ---");
 }
 
 void PerformancePanel::drawGpuTab(PerformanceProfiler& profiler)

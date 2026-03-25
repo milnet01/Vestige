@@ -123,7 +123,6 @@ void TerrainRenderer::render(const Terrain& terrain,
 
     // LOD ranges for per-vertex morphing
     const auto& lodRanges = terrain.getLodRanges();
-    m_terrainShader.setInt("u_maxLodLevels", config.maxLodLevels);
     for (int i = 0; i < config.maxLodLevels && i < 8; ++i)
     {
         m_terrainShader.setFloat("u_lodRanges[" + std::to_string(i) + "]",
@@ -248,7 +247,6 @@ void TerrainRenderer::renderShadow(const Terrain& terrain,
 
     // LOD ranges for per-vertex morphing
     const auto& lodRanges = terrain.getLodRanges();
-    m_shadowShader.setInt("u_maxLodLevels", config.maxLodLevels);
     for (int i = 0; i < config.maxLodLevels && i < 8; ++i)
     {
         m_shadowShader.setFloat("u_lodRanges[" + std::to_string(i) + "]",

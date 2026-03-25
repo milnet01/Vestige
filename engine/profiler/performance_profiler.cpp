@@ -50,6 +50,7 @@ void PerformanceProfiler::endFrame(float deltaTime)
     float sum = 0.0f;
     float minVal = 999.0f;
     float maxVal = 0.0f;
+    int validCount = 0;
     for (int i = 0; i < HISTORY_SIZE; ++i)
     {
         float v = m_frameTimeHistory[i];
@@ -57,9 +58,10 @@ void PerformanceProfiler::endFrame(float deltaTime)
         sum += v;
         minVal = std::min(minVal, v);
         maxVal = std::max(maxVal, v);
+        ++validCount;
     }
 
-    m_avgFrameTime = sum / HISTORY_SIZE;
+    m_avgFrameTime = (validCount > 0) ? (sum / static_cast<float>(validCount)) : 0.0f;
     m_minFrameTime = (minVal < 999.0f) ? minVal : 0.0f;
     m_maxFrameTime = maxVal;
 }

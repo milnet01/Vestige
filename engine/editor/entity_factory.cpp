@@ -254,7 +254,7 @@ Entity* EntityFactory::createWaterSurface(Scene& scene, const glm::vec3& positio
     auto& cfg = water->getConfig();
     cfg.width = 10.0f;
     cfg.depth = 10.0f;
-    cfg.gridResolution = 32;
+    cfg.gridResolution = 128;
     cfg.numWaves = 2;
     cfg.waves[0] = {0.005f, 3.0f, 0.2f, 0.0f};
     cfg.waves[1] = {0.003f, 2.0f, 0.15f, 90.0f};

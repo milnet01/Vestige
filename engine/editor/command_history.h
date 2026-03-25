@@ -63,6 +63,7 @@ private:
     int m_currentIndex = -1;
     int m_version = 0;
     int m_savedVersion = 0;
+    bool m_savedVersionLost = false;  ///< True when trimming removed the saved state
 };
 
 } // namespace Vestige

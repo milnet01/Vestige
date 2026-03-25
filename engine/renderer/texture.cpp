@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <limits>
 #include <vector>
 
 namespace Vestige
@@ -192,6 +193,13 @@ bool Texture::loadFromMemory(const unsigned char* compressedData, size_t dataSiz
     }
 
     stbi_set_flip_vertically_on_load_thread(true);
+
+    // Guard against size_t -> int truncation (stbi uses int for size)
+    if (dataSize > static_cast<size_t>(std::numeric_limits<int>::max()))
+    {
+        Logger::error("Texture::loadFromMemory: data size exceeds INT_MAX");
+        return false;
+    }
 
     int channels = 0;
     unsigned char* data = stbi_load_from_memory(

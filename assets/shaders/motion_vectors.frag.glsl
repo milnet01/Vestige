@@ -7,7 +7,6 @@ in vec2 v_texCoord;
 uniform sampler2D u_depthTexture;         // Current frame depth
 uniform mat4 u_currentInvViewProjection;  // Inverse VP for this frame
 uniform mat4 u_prevViewProjection;        // VP matrix from previous frame
-uniform vec2 u_texelSize;                 // 1.0 / resolution
 
 out vec4 fragColor;
 

@@ -98,12 +98,19 @@ TEST_F(ParticleDataTest, ClearResetsCount)
     EXPECT_EQ(data.maxCount, 100);  // Capacity unchanged
 }
 
-TEST_F(ParticleDataTest, ResizePreservesNothing)
+TEST_F(ParticleDataTest, ResizePreservesLiveParticles)
 {
     spawnAt(0, glm::vec3(1, 0, 0), 5.0f);
-    data.resize(50);
+    EXPECT_EQ(data.count, 1);
+    // Growing should preserve live particles
+    data.resize(200);
+    EXPECT_EQ(data.count, 1);
+    EXPECT_EQ(data.maxCount, 200);
+
+    // Shrinking below count should clamp
+    data.resize(0);
     EXPECT_EQ(data.count, 0);
-    EXPECT_EQ(data.maxCount, 50);
+    EXPECT_EQ(data.maxCount, 0);
 }
 
 // ---------------------------------------------------------------------------

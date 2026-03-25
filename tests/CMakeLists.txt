@@ -38,6 +38,11 @@ add_executable(vestige_tests
     test_foliage_chunk.cpp
     test_spline_path.cpp
     test_biome_preset.cpp
+    test_selection.cpp
+    test_camera.cpp
+    test_cpu_profiler.cpp
+    test_memory_tracker.cpp
+    test_obj_loader.cpp
 )
 
 target_link_libraries(vestige_tests

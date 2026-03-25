@@ -26,29 +26,6 @@ static std::string resolveUri(const std::string& gltfDir, const std::string& uri
     return resolved.string();
 }
 
-/// @brief Reads an accessor's data as a typed span, handling stride and buffer views.
-template <typename T>
-static const T* getAccessorData(const tinygltf::Model& model,
-                                 const tinygltf::Accessor& accessor,
-                                 int& outStride)
-{
-    const auto& bufferView = model.bufferViews[accessor.bufferView];
-    const auto& buffer = model.buffers[bufferView.buffer];
-    const unsigned char* base = buffer.data.data() + bufferView.byteOffset
-                                + accessor.byteOffset;
-    outStride = bufferView.byteStride
-                    ? static_cast<int>(bufferView.byteStride)
-                    : static_cast<int>(sizeof(T));
-    return reinterpret_cast<const T*>(base);
-}
-
-/// @brief Reads a strided element from a byte pointer.
-template <typename T>
-static const T& readStrided(const unsigned char* base, int stride, size_t index)
-{
-    return *reinterpret_cast<const T*>(base + stride * index);
-}
-
 /// @brief Pre-scans materials to determine which image indices are used as sRGB (color) textures.
 /// Images used as baseColor or emissive textures are sRGB; all others (normal, metallic-roughness, AO) are linear.
 static std::set<int> determineSrgbImages(const tinygltf::Model& gltfModel)

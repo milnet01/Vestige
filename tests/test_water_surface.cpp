@@ -18,7 +18,7 @@ TEST(WaterSurfaceConfigTest, DefaultValues)
 
     EXPECT_FLOAT_EQ(config.width, 10.0f);
     EXPECT_FLOAT_EQ(config.depth, 10.0f);
-    EXPECT_EQ(config.gridResolution, 32);
+    EXPECT_EQ(config.gridResolution, 128);
     EXPECT_EQ(config.numWaves, 2);
     EXPECT_EQ(WaterSurfaceConfig::MAX_WAVES, 4);
 }
@@ -121,7 +121,7 @@ TEST(WaterSurfaceComponentTest, DefaultConfig)
 
     EXPECT_FLOAT_EQ(config.width, 10.0f);
     EXPECT_FLOAT_EQ(config.depth, 10.0f);
-    EXPECT_EQ(config.gridResolution, 32);
+    EXPECT_EQ(config.gridResolution, 128);
 }
 
 TEST(WaterSurfaceComponentTest, ConfigIsModifiable)

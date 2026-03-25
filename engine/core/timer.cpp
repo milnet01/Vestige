@@ -19,18 +19,19 @@ Timer::Timer()
 float Timer::update()
 {
     double currentTime = glfwGetTime();
-    m_deltaTime = static_cast<float>(currentTime - m_lastFrameTime);
+    double rawDelta = currentTime - m_lastFrameTime;
     m_lastFrameTime = currentTime;
 
     // Clamp delta time to prevent huge jumps (e.g., after a breakpoint)
+    m_deltaTime = static_cast<float>(rawDelta);
     if (m_deltaTime > 0.25f)
     {
         m_deltaTime = 0.25f;
     }
 
-    // FPS counter — update once per second
+    // FPS counter — use raw (unclamped) elapsed time for accurate measurement
     m_frameCount++;
-    m_fpsTimer += static_cast<double>(m_deltaTime);
+    m_fpsTimer += rawDelta;
     if (m_fpsTimer >= 1.0)
     {
         m_fps = m_frameCount;

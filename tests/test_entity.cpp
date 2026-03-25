@@ -5,6 +5,8 @@
 
 #include <gtest/gtest.h>
 
+#include <set>
+
 using namespace Vestige;
 
 // Simple test component
@@ -144,4 +146,44 @@ TEST(EntityTest, ComponentUpdatedDuringEntityUpdate)
     auto* comp = entity.addComponent<TestComponent>();
     entity.update(1.0f);  // deltaTime = 1.0 -> value += 10
     EXPECT_EQ(comp->value, 10);
+}
+
+TEST(EntityTest, IdsAreUnique)
+{
+    constexpr int COUNT = 100;
+    std::vector<std::unique_ptr<Entity>> entities;
+    entities.reserve(COUNT);
+
+    for (int i = 0; i < COUNT; ++i)
+    {
+        entities.push_back(std::make_unique<Entity>("Entity_" + std::to_string(i)));
+    }
+
+    std::set<uint32_t> ids;
+    for (const auto& e : entities)
+    {
+        ids.insert(e->getId());
+    }
+
+    // All IDs must be distinct
+    EXPECT_EQ(ids.size(), static_cast<size_t>(COUNT));
+}
+
+TEST(EntityTest, IdsAreNonZero)
+{
+    constexpr int COUNT = 50;
+    for (int i = 0; i < COUNT; ++i)
+    {
+        Entity entity("Test_" + std::to_string(i));
+        EXPECT_NE(entity.getId(), 0u) << "Entity ID must never be 0 (sentinel value)";
+    }
+}
+
+TEST(EntityTest, ClonedEntityGetsNewId)
+{
+    Entity original("Original");
+    auto cloned = original.clone();
+
+    EXPECT_NE(cloned->getId(), 0u);
+    EXPECT_NE(cloned->getId(), original.getId());
 }

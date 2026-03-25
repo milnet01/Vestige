@@ -539,8 +539,13 @@ void FoliageManager::deserialize(const nlohmann::json& j)
 
     for (const auto& chunkJson : j["chunks"])
     {
-        int gx = chunkJson["gridX"].get<int>();
-        int gz = chunkJson["gridZ"].get<int>();
+        if (!chunkJson.contains("gridX") || !chunkJson.contains("gridZ"))
+        {
+            Logger::warning("Skipping foliage chunk with missing gridX/gridZ");
+            continue;
+        }
+        int gx = chunkJson.value("gridX", 0);
+        int gz = chunkJson.value("gridZ", 0);
         FoliageChunk& chunk = getOrCreateChunk(gx, gz);
         chunk.deserialize(chunkJson);
     }

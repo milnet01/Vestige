@@ -2,9 +2,9 @@
 /// @brief Material preview fragment shader — renders a sphere with Blinn-Phong or PBR lighting for the editor panel.
 #version 450 core
 
-in vec3 vWorldPos;
-in vec3 vNormal;
-in vec2 vTexCoord;
+in vec3 v_worldPos;
+in vec3 v_normal;
+in vec2 v_texCoord;
 
 out vec4 fragColor;
 
@@ -58,8 +58,8 @@ vec3 fresnelSchlick(float cosTheta, vec3 F0)
 
 void main()
 {
-    vec3 N = normalize(vNormal);
-    vec3 V = normalize(u_viewPos - vWorldPos);
+    vec3 N = normalize(v_normal);
+    vec3 V = normalize(u_viewPos - v_worldPos);
     vec3 L = normalize(-u_lightDir);
     vec3 H = normalize(V + L);
 
@@ -78,7 +78,7 @@ void main()
 
     if (u_hasAlbedoTex)
     {
-        baseColor *= texture(u_albedoTex, vTexCoord).rgb;
+        baseColor *= texture(u_albedoTex, v_texCoord).rgb;
     }
 
     vec3 result;

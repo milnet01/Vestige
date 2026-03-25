@@ -1755,8 +1755,6 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
                 m_cascadedShadowMap->getCascadeSplit(i));
             m_sceneShader.setMat4("u_cascadeLightSpaceMatrices[" + std::to_string(i) + "]",
                 m_cascadedShadowMap->getLightSpaceMatrix(i));
-            m_sceneShader.setFloat("u_cascadeTexelSize[" + std::to_string(i) + "]",
-                m_cascadedShadowMap->getTexelWorldSize(i));
         }
         m_sceneShader.setBool("u_hasShadows", true);
         m_sceneShader.setBool("u_cascadeDebug", m_cascadeDebug);
