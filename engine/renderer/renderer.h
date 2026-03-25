@@ -334,7 +334,8 @@ public:
     };
 
     /// @brief Groups render items by (mesh, material) pair for instanced drawing.
-    static std::vector<InstanceBatch> buildInstanceBatches(
+    /// Static version for unit testing (allocates fresh containers each call).
+    static std::vector<InstanceBatch> buildInstanceBatchesStatic(
         const std::vector<SceneRenderData::RenderItem>& items);
 
 private:
@@ -342,9 +343,8 @@ private:
     void uploadMaterialUniforms(const Material& material);
     void renderShadowPass(const std::vector<SceneRenderData::RenderItem>& shadowCasterItems,
                           const Camera& camera, float aspectRatio);
-    void renderPointShadowPass(const std::vector<InstanceBatch>& batches,
-                               const std::vector<int>& shadowCasters);
-    std::vector<int> selectShadowCastingPointLights() const;
+    void renderPointShadowPass(const std::vector<int>& shadowCasters);
+    void selectShadowCastingPointLights();
     void onWindowResize(int width, int height);
 
     Shader m_sceneShader;
@@ -477,6 +477,27 @@ private:
     // Reusable per-frame vectors (avoid allocation every frame)
     std::vector<SceneRenderData::RenderItem> m_culledItems;
     std::vector<SceneRenderData::RenderItem> m_sortedTransparentItems;
+    std::vector<int> m_shadowCasters;
+    std::vector<SceneRenderData::RenderItem> m_shadowCasterItems;
+    std::vector<SceneRenderData::RenderItem> m_cascadeCulledCasters;
+
+    // Pooled instance batching (avoids per-frame map + vector allocation)
+    struct PairHash
+    {
+        size_t operator()(const std::pair<const Mesh*, const Material*>& p) const
+        {
+            size_t h1 = std::hash<const void*>{}(p.first);
+            size_t h2 = std::hash<const void*>{}(p.second);
+            return h1 ^ (h2 * 2654435761u);
+        }
+    };
+    std::unordered_map<std::pair<const Mesh*, const Material*>, size_t, PairHash> m_batchIndexMap;
+    std::vector<InstanceBatch> m_instanceBatches;
+    size_t m_instanceBatchCount = 0;
+    void buildInstanceBatches(const std::vector<SceneRenderData::RenderItem>& items);
+
+    // Material grouping for MDI path
+    std::unordered_map<const Material*, std::vector<const InstanceBatch*>> m_materialGroups;
 
     // SSAO
     std::unique_ptr<Framebuffer> m_resolveDepthFbo;
@@ -523,7 +544,8 @@ private:
     // Per-frame PMR arena for scratch allocations (reset each frame)
     static constexpr size_t FRAME_ARENA_SIZE = 2 * 1024 * 1024;  // 2 MB
     alignas(64) char m_frameArena[FRAME_ARENA_SIZE];
-    std::pmr::monotonic_buffer_resource* m_frameResource = nullptr;
+    std::pmr::monotonic_buffer_resource m_frameResource{
+        m_frameArena, FRAME_ARENA_SIZE, std::pmr::null_memory_resource()};
     void resetFrameAllocator();
 };
 

@@ -62,7 +62,7 @@ void Logger::log(LogLevel level, const std::string& message)
 
     // Error and above go to stderr, everything else to stdout
     std::ostream& stream = (level >= LogLevel::Error) ? std::cerr : std::cout;
-    stream << "[Vestige][" << levelToString(level) << "] " << message << std::endl;
+    stream << "[Vestige][" << levelToString(level) << "] " << message << '\n';
 }
 
 const char* Logger::levelToString(LogLevel level)

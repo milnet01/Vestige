@@ -65,9 +65,9 @@ struct AABB
 
         for (const auto& corner : corners)
         {
-            glm::vec3 transformed = glm::vec3(matrix * glm::vec4(corner, 1.0f));
-            newMin = glm::min(newMin, transformed);
-            newMax = glm::max(newMax, transformed);
+            glm::vec3 xformed = glm::vec3(matrix * glm::vec4(corner, 1.0f));
+            newMin = glm::min(newMin, xformed);
+            newMax = glm::max(newMax, xformed);
         }
 
         return {newMin, newMax};
