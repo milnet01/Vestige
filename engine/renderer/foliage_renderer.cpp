@@ -39,7 +39,7 @@ bool FoliageRenderer::init(const std::string& assetPath)
     }
 
     createStarMesh();
-    generateDefaultTexture();
+    generateTypeTextures();
 
     m_initialized = true;
     Logger::info("Foliage renderer initialized");
@@ -63,11 +63,14 @@ void FoliageRenderer::shutdown()
         glDeleteBuffers(1, &m_instanceVbo);
         m_instanceVbo = 0;
     }
-    if (m_defaultTexture != 0)
+    for (auto& [typeId, tex] : m_typeTextures)
     {
-        glDeleteTextures(1, &m_defaultTexture);
-        m_defaultTexture = 0;
+        if (tex != 0)
+        {
+            glDeleteTextures(1, &tex);
+        }
     }
+    m_typeTextures.clear();
     m_instanceCapacity = 0;
     m_shader.destroy();
     m_shadowShader.destroy();
@@ -89,21 +92,22 @@ void FoliageRenderer::render(
         return;
     }
 
-    // Collect all visible foliage instances from all visible chunks
-    m_visibleInstances.clear();
+    // Collect visible foliage instances grouped by type
+    for (auto& [typeId, vec] : m_visibleByType)
+    {
+        vec.clear();
+    }
 
     glm::vec3 camPos = camera.getPosition();
     float maxDistSq = maxDistance * maxDistance;
 
     for (const FoliageChunk* chunk : chunks)
     {
-        // Check chunk-level distance (rough cull)
         AABB bounds = chunk->getBounds();
         glm::vec3 chunkCenter = bounds.getCenter();
         glm::vec3 diff = chunkCenter - camPos;
-        // Use XZ distance only (foliage is mostly ground-level)
         float chunkDistSq = diff.x * diff.x + diff.z * diff.z;
-        float chunkRadius = FoliageChunk::CHUNK_SIZE * 0.707f;  // Diagonal half
+        float chunkRadius = FoliageChunk::CHUNK_SIZE * 0.707f;
         if (chunkDistSq > (maxDistance + chunkRadius) * (maxDistance + chunkRadius))
         {
             continue;
@@ -118,21 +122,28 @@ void FoliageRenderer::render(
                 float distSq = d.x * d.x + d.z * d.z;
                 if (distSq <= maxDistSq)
                 {
-                    m_visibleInstances.push_back(inst);
+                    m_visibleByType[typeId].push_back(inst);
                 }
             }
         }
     }
 
-    if (m_visibleInstances.empty())
+    // Check if anything is visible
+    bool anyVisible = false;
+    for (const auto& [typeId, vec] : m_visibleByType)
+    {
+        if (!vec.empty())
+        {
+            anyVisible = true;
+            break;
+        }
+    }
+    if (!anyVisible)
     {
         return;
     }
 
-    // Upload instances to GPU
-    uploadInstances(m_visibleInstances);
-
-    // Render
+    // Set up shared shader state
     m_shader.use();
     m_shader.setMat4("u_viewProjection", viewProjection);
     m_shader.setMat4("u_view", camera.getViewMatrix());
@@ -144,7 +155,6 @@ void FoliageRenderer::render(
     m_shader.setVec3("u_cameraPos", camPos);
     m_shader.setVec4("u_clipPlane", clipPlane);
 
-    // Lighting uniforms
     bool hasShadows = (csm != nullptr && dirLight != nullptr);
     m_shader.setBool("u_hasShadows", hasShadows);
 
@@ -160,7 +170,6 @@ void FoliageRenderer::render(
         m_shader.setBool("u_hasDirectionalLight", false);
     }
 
-    // Shadow map uniforms
     if (hasShadows)
     {
         csm->bindShadowTexture(3);
@@ -178,18 +187,36 @@ void FoliageRenderer::render(
         }
     }
 
-    // Bind grass texture
-    glBindTextureUnit(0, m_defaultTexture);
     m_shader.setInt("u_texture", 0);
 
-    // Draw instanced
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    glDisable(GL_CULL_FACE);  // Star mesh visible from all angles
-
+    glDisable(GL_CULL_FACE);
     glBindVertexArray(m_starVao);
-    glDrawArraysInstanced(GL_TRIANGLES, 0, 18,
-                          static_cast<GLsizei>(m_visibleInstances.size()));
+
+    // Draw each foliage type with its own texture
+    for (const auto& [typeId, instances] : m_visibleByType)
+    {
+        if (instances.empty())
+        {
+            continue;
+        }
+
+        // Bind type-specific texture (fall back to type 0 if unknown)
+        auto texIt = m_typeTextures.find(typeId);
+        if (texIt == m_typeTextures.end())
+        {
+            texIt = m_typeTextures.find(0);
+        }
+        if (texIt != m_typeTextures.end())
+        {
+            glBindTextureUnit(0, texIt->second);
+        }
+
+        uploadInstances(instances);
+        glDrawArraysInstanced(GL_TRIANGLES, 0, 18,
+                              static_cast<GLsizei>(instances.size()));
+    }
 
     glEnable(GL_CULL_FACE);
     glDisable(GL_BLEND);
@@ -206,8 +233,11 @@ void FoliageRenderer::renderShadow(
         return;
     }
 
-    // Collect nearby grass instances only (shadow casting is expensive)
-    m_visibleInstances.clear();
+    // Collect nearby foliage instances grouped by type (shadow casting is expensive)
+    for (auto& [typeId, vec] : m_visibleByType)
+    {
+        vec.clear();
+    }
 
     glm::vec3 camPos = camera.getPosition();
     float maxDistSq = shadowMaxDistance * shadowMaxDistance;
@@ -233,18 +263,11 @@ void FoliageRenderer::renderShadow(
                 float distSq = d.x * d.x + d.z * d.z;
                 if (distSq <= maxDistSq)
                 {
-                    m_visibleInstances.push_back(inst);
+                    m_visibleByType[typeId].push_back(inst);
                 }
             }
         }
     }
-
-    if (m_visibleInstances.empty())
-    {
-        return;
-    }
-
-    uploadInstances(m_visibleInstances);
 
     m_shadowShader.use();
     m_shadowShader.setMat4("u_lightSpaceMatrix", lightSpaceMatrix);
@@ -252,17 +275,32 @@ void FoliageRenderer::renderShadow(
     m_shadowShader.setVec3("u_windDirection", glm::normalize(windDirection));
     m_shadowShader.setFloat("u_windAmplitude", windAmplitude);
     m_shadowShader.setFloat("u_windFrequency", windFrequency);
-
-    // Bind grass texture for alpha testing
-    glBindTextureUnit(0, m_defaultTexture);
     m_shadowShader.setInt("u_texture", 0);
 
-    // Two-sided rendering for grass shadow casting
     glDisable(GL_CULL_FACE);
-
     glBindVertexArray(m_starVao);
-    glDrawArraysInstanced(GL_TRIANGLES, 0, 18,
-                          static_cast<GLsizei>(m_visibleInstances.size()));
+
+    for (const auto& [typeId, instances] : m_visibleByType)
+    {
+        if (instances.empty())
+        {
+            continue;
+        }
+
+        auto texIt = m_typeTextures.find(typeId);
+        if (texIt == m_typeTextures.end())
+        {
+            texIt = m_typeTextures.find(0);
+        }
+        if (texIt != m_typeTextures.end())
+        {
+            glBindTextureUnit(0, texIt->second);
+        }
+
+        uploadInstances(instances);
+        glDrawArraysInstanced(GL_TRIANGLES, 0, 18,
+                              static_cast<GLsizei>(instances.size()));
+    }
 
     glEnable(GL_CULL_FACE);
 }
@@ -365,61 +403,148 @@ void FoliageRenderer::createStarMesh()
     glVertexArrayAttribBinding(m_starVao, 6, 1);
 }
 
-void FoliageRenderer::generateDefaultTexture()
+void FoliageRenderer::generateTypeTextures()
 {
-    // Generate a simple procedural grass blade texture (32x64 RGBA)
+    // Generate procedural textures for each built-in foliage type
+    // 0 = Short Grass, 1 = Tall Grass, 2 = Flowers, 3 = Ferns
+    for (uint32_t typeId = 0; typeId < 4; typeId++)
+    {
+        m_typeTextures[typeId] = generateProceduralTexture(typeId);
+    }
+    Logger::info("Foliage textures generated: 4 types (grass, tall grass, flowers, ferns)");
+}
+
+GLuint FoliageRenderer::generateProceduralTexture(uint32_t typeId)
+{
     const int width = 32;
     const int height = 64;
     std::vector<uint8_t> pixels(width * height * 4);
 
     for (int y = 0; y < height; ++y)
     {
-        float t = static_cast<float>(y) / static_cast<float>(height - 1);  // 0=bottom, 1=top
+        float t = static_cast<float>(y) / static_cast<float>(height - 1);
         for (int x = 0; x < width; ++x)
         {
             float u = static_cast<float>(x) / static_cast<float>(width - 1);
-
-            // Blade shape: narrow at top, wider at bottom
-            float bladeWidth = 0.3f + 0.4f * (1.0f - t);
             float distFromCenter = std::abs(u - 0.5f) * 2.0f;
-            float inBlade = (distFromCenter < bladeWidth) ? 1.0f : 0.0f;
 
-            // Smooth edge
-            if (distFromCenter > bladeWidth * 0.7f && distFromCenter < bladeWidth)
+            float r = 0.0f;
+            float g = 0.0f;
+            float b = 0.0f;
+            float a = 0.0f;
+
+            if (typeId == 0)
             {
-                float edgeT = (distFromCenter - bladeWidth * 0.7f) / (bladeWidth * 0.3f);
-                inBlade = 1.0f - edgeT;
+                // Short Grass — narrow green blade
+                float bladeWidth = 0.3f + 0.4f * (1.0f - t);
+                a = (distFromCenter < bladeWidth) ? 1.0f : 0.0f;
+                if (distFromCenter > bladeWidth * 0.7f && distFromCenter < bladeWidth)
+                {
+                    a = 1.0f - (distFromCenter - bladeWidth * 0.7f) / (bladeWidth * 0.3f);
+                }
+                if (t > 0.8f)
+                {
+                    a *= 1.0f - (t - 0.8f) / 0.2f;
+                }
+                r = 0.15f + 0.1f * (1.0f - t);
+                g = 0.45f + 0.25f * t;
+                b = 0.08f;
+            }
+            else if (typeId == 1)
+            {
+                // Tall Grass — wider, darker blade with drooping tip
+                float bladeWidth = 0.35f + 0.35f * (1.0f - t);
+                a = (distFromCenter < bladeWidth) ? 1.0f : 0.0f;
+                if (distFromCenter > bladeWidth * 0.7f && distFromCenter < bladeWidth)
+                {
+                    a = 1.0f - (distFromCenter - bladeWidth * 0.7f) / (bladeWidth * 0.3f);
+                }
+                if (t > 0.85f)
+                {
+                    a *= 1.0f - (t - 0.85f) / 0.15f;
+                }
+                r = 0.12f + 0.06f * (1.0f - t);
+                g = 0.35f + 0.2f * t;
+                b = 0.06f;
+            }
+            else if (typeId == 2)
+            {
+                // Flowers — green stem with colored petal cluster at top
+                bool isStem = (distFromCenter < 0.15f) && (t < 0.65f);
+                bool isPetal = (t > 0.5f) && (distFromCenter < (0.6f - 0.3f * (t - 0.5f) * 2.0f));
+
+                if (isPetal)
+                {
+                    // Colorful petal — warm red/yellow/pink
+                    r = 0.85f + 0.15f * std::sin(u * 6.28f);
+                    g = 0.35f + 0.2f * t;
+                    b = 0.15f + 0.3f * std::cos(u * 3.14f);
+                    a = 1.0f;
+                    // Soft petal edge
+                    float petalEdge = 0.6f - 0.3f * (t - 0.5f) * 2.0f;
+                    if (distFromCenter > petalEdge * 0.7f)
+                    {
+                        a = 1.0f - (distFromCenter - petalEdge * 0.7f) / (petalEdge * 0.3f);
+                    }
+                    if (t > 0.9f)
+                    {
+                        a *= 1.0f - (t - 0.9f) / 0.1f;
+                    }
+                }
+                else if (isStem)
+                {
+                    r = 0.12f;
+                    g = 0.4f;
+                    b = 0.06f;
+                    a = 1.0f;
+                }
+            }
+            else if (typeId == 3)
+            {
+                // Fern — wide frond shape with jagged edges
+                float frondWidth = 0.5f * (1.0f - 0.6f * t);
+                float jaggedOffset = 0.08f * std::sin(t * 20.0f);
+                float effectiveWidth = frondWidth + jaggedOffset;
+
+                a = (distFromCenter < effectiveWidth) ? 1.0f : 0.0f;
+                if (distFromCenter > effectiveWidth * 0.6f && distFromCenter < effectiveWidth)
+                {
+                    a = 1.0f - (distFromCenter - effectiveWidth * 0.6f) / (effectiveWidth * 0.4f);
+                }
+                if (t > 0.9f)
+                {
+                    a *= 1.0f - (t - 0.9f) / 0.1f;
+                }
+                // Deep green fern color
+                r = 0.08f + 0.05f * (1.0f - t);
+                g = 0.3f + 0.25f * t;
+                b = 0.1f + 0.05f * t;
             }
 
-            // Pointed tip
-            if (t > 0.8f)
-            {
-                float tipT = (t - 0.8f) / 0.2f;
-                inBlade *= (1.0f - tipT);
-            }
-
-            // Color: green with variation
-            float green = 0.45f + 0.25f * t;  // Lighter toward top
-            float red = 0.15f + 0.1f * (1.0f - t);
+            a = std::max(0.0f, std::min(1.0f, a));
 
             int idx = (y * width + x) * 4;
-            pixels[idx + 0] = static_cast<uint8_t>(red * 255.0f);
-            pixels[idx + 1] = static_cast<uint8_t>(green * 255.0f);
-            pixels[idx + 2] = static_cast<uint8_t>(0.08f * 255.0f);
-            pixels[idx + 3] = static_cast<uint8_t>(inBlade * 255.0f);
+            pixels[idx + 0] = static_cast<uint8_t>(r * 255.0f);
+            pixels[idx + 1] = static_cast<uint8_t>(g * 255.0f);
+            pixels[idx + 2] = static_cast<uint8_t>(b * 255.0f);
+            pixels[idx + 3] = static_cast<uint8_t>(a * 255.0f);
         }
     }
 
-    glCreateTextures(GL_TEXTURE_2D, 1, &m_defaultTexture);
-    glTextureStorage2D(m_defaultTexture, 1 + static_cast<GLsizei>(std::floor(std::log2(std::max(width, height)))),
-                       GL_RGBA8, width, height);
-    glTextureSubImage2D(m_defaultTexture, 0, 0, 0, width, height,
+    GLuint texture = 0;
+    glCreateTextures(GL_TEXTURE_2D, 1, &texture);
+    GLsizei mipLevels = 1 + static_cast<GLsizei>(
+        std::floor(std::log2(std::max(width, height))));
+    glTextureStorage2D(texture, mipLevels, GL_RGBA8, width, height);
+    glTextureSubImage2D(texture, 0, 0, 0, width, height,
                         GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
-    glTextureParameteri(m_defaultTexture, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-    glTextureParameteri(m_defaultTexture, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTextureParameteri(m_defaultTexture, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTextureParameteri(m_defaultTexture, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glGenerateTextureMipmap(m_defaultTexture);
+    glTextureParameteri(texture, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTextureParameteri(texture, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTextureParameteri(texture, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTextureParameteri(texture, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glGenerateTextureMipmap(texture);
+
+    return texture;
 }
 
 void FoliageRenderer::uploadInstances(const std::vector<FoliageInstance>& instances)
