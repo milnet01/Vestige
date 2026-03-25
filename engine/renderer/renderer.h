@@ -202,7 +202,13 @@ public:
     bool isSdsmEnabled() const;
 
     /// @brief Renders an entire scene from collected render data.
-    void renderScene(const SceneRenderData& renderData, const Camera& camera, float aspectRatio);
+    /// @param clipPlane Optional clip plane for water reflection/refraction (0,0,0,0 = disabled).
+    void renderScene(const SceneRenderData& renderData, const Camera& camera, float aspectRatio,
+                     const glm::vec4& clipPlane = glm::vec4(0.0f));
+
+    /// @brief Re-binds the active scene FBO and restores viewport.
+    /// Call after rendering to an external FBO (e.g., water reflection/refraction).
+    void rebindSceneFbo();
 
     /// @brief Per-frame rendering statistics.
     struct CullingStats

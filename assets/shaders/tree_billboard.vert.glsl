@@ -14,6 +14,7 @@ layout(location = 6) in float i_alpha;
 uniform mat4 u_viewProjection;
 uniform vec3 u_cameraRight;
 uniform vec3 u_cameraUp;
+uniform vec4 u_clipPlane;     // Water clip plane (0,0,0,0 = disabled)
 
 out vec2 v_texCoord;
 out float v_alpha;
@@ -28,7 +29,9 @@ void main()
         + u_cameraRight * a_offset.x * halfWidth
         + u_cameraUp * a_offset.y * height * 0.5;
 
-    gl_Position = u_viewProjection * vec4(worldPos, 1.0);
+    vec4 worldPosition = vec4(worldPos, 1.0);
+    gl_Position = u_viewProjection * worldPosition;
+    gl_ClipDistance[0] = dot(worldPosition, u_clipPlane);
     v_texCoord = a_texCoord;
     v_alpha = i_alpha;
 }

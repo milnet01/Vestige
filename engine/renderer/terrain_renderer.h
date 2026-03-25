@@ -54,7 +54,8 @@ public:
                 const Camera& camera,
                 float aspectRatio,
                 const SceneRenderData& sceneData,
-                CascadedShadowMap* csm = nullptr);
+                CascadedShadowMap* csm = nullptr,
+                const glm::vec4& clipPlane = glm::vec4(0.0f));
 
     /// @brief Renders the terrain into a shadow map.
     /// @param terrain The terrain data source.

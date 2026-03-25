@@ -24,6 +24,7 @@ uniform int u_maxLodLevels;
 uniform mat4 u_viewProjection;
 uniform mat4 u_view;
 uniform vec3 u_cameraPos;
+uniform vec4 u_clipPlane;     // Water clip plane (0,0,0,0 = disabled)
 
 // Outputs
 out vec2 v_terrainUV;
@@ -83,5 +84,9 @@ void main()
     v_worldPos = vec3(worldXZ.x, height, worldXZ.y);
     v_viewDepth = -(u_view * vec4(v_worldPos, 1.0)).z;
 
-    gl_Position = u_viewProjection * vec4(v_worldPos, 1.0);
+    vec4 worldPosition = vec4(v_worldPos, 1.0);
+    gl_Position = u_viewProjection * worldPosition;
+
+    // Water clip plane for reflection/refraction passes
+    gl_ClipDistance[0] = dot(worldPosition, u_clipPlane);
 }

@@ -722,6 +722,9 @@ void Engine::run()
                     waterItems.push_back({comp, matrix});
                 }
 
+                // Use the first water surface's world Y as the clip plane height
+                float waterY = waterItems[0].worldMatrix[3][1];
+
                 // Get directional light info for specular highlights
                 glm::vec3 lightDir(0.0f, -1.0f, 0.0f);
                 glm::vec3 lightColor(1.0f);
@@ -733,6 +736,67 @@ void Engine::run()
 
                 float elapsed = static_cast<float>(m_timer->getElapsedTime());
                 GLuint skyboxTex = m_renderer->getSkyboxTextureId();
+
+                // --- Refraction pass: render scene below water into refraction FBO ---
+                {
+                    glm::vec4 refrClipPlane(0.0f, -1.0f, 0.0f, waterY + 0.1f);
+                    glEnable(GL_CLIP_DISTANCE0);
+
+                    m_waterFbo.bindRefraction();
+                    m_renderer->renderScene(m_renderData, *m_camera, aspectRatio, refrClipPlane);
+
+                    if (m_terrain.isInitialized())
+                    {
+                        m_terrainRenderer.render(m_terrain, *m_camera, aspectRatio, m_renderData,
+                                                 m_renderer->getCascadedShadowMap(), refrClipPlane);
+                    }
+
+                    glDisable(GL_CLIP_DISTANCE0);
+                }
+
+                // --- Reflection pass: render scene above water with reflected camera ---
+                {
+                    glm::vec4 reflClipPlane(0.0f, 1.0f, 0.0f, -waterY + 0.1f);
+
+                    // Create reflected camera: mirror position and pitch around water plane
+                    Camera reflectedCamera = *m_camera;
+                    glm::vec3 camPos = m_camera->getPosition();
+                    float reflectedY = 2.0f * waterY - camPos.y;
+                    reflectedCamera.setPosition(glm::vec3(camPos.x, reflectedY, camPos.z));
+                    reflectedCamera.setPitch(-m_camera->getPitch());
+
+                    glEnable(GL_CLIP_DISTANCE0);
+
+                    m_waterFbo.bindReflection();
+                    m_renderer->renderScene(m_renderData, reflectedCamera, aspectRatio, reflClipPlane);
+
+                    if (m_terrain.isInitialized())
+                    {
+                        m_terrainRenderer.render(m_terrain, reflectedCamera, aspectRatio, m_renderData,
+                                                 m_renderer->getCascadedShadowMap(), reflClipPlane);
+                    }
+
+                    {
+                        glm::mat4 reflViewProj = reflectedCamera.getProjectionMatrix(aspectRatio)
+                                               * reflectedCamera.getViewMatrix();
+                        auto reflVisibleChunks = m_foliageManager.getVisibleChunks(reflViewProj);
+                        if (!reflVisibleChunks.empty())
+                        {
+                            CascadedShadowMap* csm = m_renderer->getCascadedShadowMap();
+                            const DirectionalLight* reflDirLight =
+                                m_renderData.hasDirectionalLight ? &m_renderData.directionalLight : nullptr;
+                            m_foliageRenderer.render(reflVisibleChunks, reflectedCamera, reflViewProj,
+                                                     elapsed, 100.0f, csm, reflDirLight, reflClipPlane);
+                            m_treeRenderer.render(reflVisibleChunks, reflectedCamera, reflViewProj,
+                                                  elapsed, reflClipPlane);
+                        }
+                    }
+
+                    glDisable(GL_CLIP_DISTANCE0);
+                }
+
+                // Restore main scene FBO after water passes
+                m_renderer->rebindSceneFbo();
 
                 // Get reflection/refraction textures from water FBOs
                 GLuint reflTex = m_waterFbo.getReflectionTexture();
