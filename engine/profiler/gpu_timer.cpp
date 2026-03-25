@@ -70,14 +70,14 @@ void GpuTimer::endFrame()
     // Read results from the oldest buffer (2 frames ago)
     m_readBuffer = (m_writeBuffer + 1) % BUFFER_COUNT;
 
+    // Store the pass count for the buffer we just wrote
+    m_bufferPassCount[m_writeBuffer] = m_passCount;
+
     if (m_frameCount >= BUFFER_COUNT)
     {
         m_results.clear();
-        // We need to know how many passes were recorded in the read buffer.
-        // Since pass count can vary per frame, we read the pass count that was
-        // current when that buffer was written. For simplicity, we use the
-        // current pass count as an approximation (pass structure is stable).
-        int readPassCount = m_passCount;
+        // Read the exact pass count that was recorded in the read buffer
+        int readPassCount = m_bufferPassCount[m_readBuffer];
 
         for (int i = 0; i < readPassCount; ++i)
         {
