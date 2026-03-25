@@ -219,6 +219,20 @@ public:
     /// @brief Restores view/projection state saved by saveViewState().
     void restoreViewState();
 
+    /// @brief Sets caustics parameters for underwater geometry.
+    /// Call each frame when water surfaces exist. Caustics are disabled when not called.
+    /// @param enabled Whether caustics are active this frame.
+    /// @param waterY World-space Y of the water surface.
+    /// @param time Elapsed time for animation.
+    /// @param center XZ center of the water surface.
+    /// @param halfExtent Half-width and half-depth of the water surface.
+    void setCausticsParams(bool enabled, float waterY, float time,
+                           const glm::vec2& center = glm::vec2(0.0f),
+                           const glm::vec2& halfExtent = glm::vec2(0.0f));
+
+    /// @brief Gets the procedural caustics texture ID (for external renderers like terrain).
+    GLuint getCausticsTexture() const { return m_causticsTexture; }
+
     /// @brief Per-frame rendering statistics.
     struct CullingStats
     {
@@ -493,6 +507,15 @@ private:
 
     void generateSsaoKernel();
     void generateSsaoNoiseTexture();
+
+    // Water caustics
+    GLuint m_causticsTexture = 0;
+    bool m_causticsEnabled = false;
+    float m_causticsWaterY = 0.0f;
+    float m_causticsTime = 0.0f;
+    glm::vec2 m_causticsCenter = glm::vec2(0.0f);
+    glm::vec2 m_causticsHalfExtent = glm::vec2(0.0f);
+    void generateCausticsTexture();
 
     // Frustum culling statistics (updated each frame in renderScene)
     CullingStats m_cullingStats;

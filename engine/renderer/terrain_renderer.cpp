@@ -156,6 +156,25 @@ void TerrainRenderer::render(const Terrain& terrain,
         m_terrainShader.setVec3("u_ambientColor", glm::vec3(0.15f));
     }
 
+    // Caustics uniforms for underwater terrain
+    m_terrainShader.setBool("u_causticsEnabled", m_causticsEnabled);
+    if (m_causticsEnabled && m_causticsTexture != 0)
+    {
+        glBindTextureUnit(5, m_causticsTexture);
+        m_terrainShader.setInt("u_causticsTex", 5);
+        m_terrainShader.setFloat("u_causticsScale", 0.1f);
+        m_terrainShader.setFloat("u_causticsIntensity", 0.15f);
+        m_terrainShader.setFloat("u_causticsTime", m_causticsTime);
+        m_terrainShader.setFloat("u_waterY", m_causticsWaterY);
+        m_terrainShader.setVec2("u_waterCenter", m_causticsCenter);
+        m_terrainShader.setVec2("u_waterHalfExtent", m_causticsHalfExtent);
+    }
+    else
+    {
+        glBindTextureUnit(5, 0);
+        m_terrainShader.setInt("u_causticsTex", 5);
+    }
+
     // Shadow uniforms
     bool hasShadows = (csm != nullptr && sceneData.hasDirectionalLight);
     m_terrainShader.setBool("u_hasShadows", hasShadows);
@@ -478,6 +497,17 @@ void TerrainRenderer::generateDefaultTextures()
                         GL_RGB, GL_UNSIGNED_BYTE, normalPixel);
     glTextureParameteri(m_defaultNormal, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTextureParameteri(m_defaultNormal, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+}
+
+void TerrainRenderer::setCausticsParams(bool enabled, float waterY, float time, GLuint causticsTexture,
+                                         const glm::vec2& center, const glm::vec2& halfExtent)
+{
+    m_causticsEnabled = enabled;
+    m_causticsWaterY = waterY;
+    m_causticsTime = time;
+    m_causticsTexture = causticsTexture;
+    m_causticsCenter = center;
+    m_causticsHalfExtent = halfExtent;
 }
 
 } // namespace Vestige

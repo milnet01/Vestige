@@ -131,6 +131,16 @@ uniform float u_maxPrefilterLod;
 // Stochastic tiling
 uniform bool u_stochasticTiling;
 
+// Water caustics (applied to geometry below water surface, within water XZ bounds)
+uniform bool u_causticsEnabled;
+uniform sampler2D u_causticsTex;      // Unit 9
+uniform float u_causticsScale;        // World-space tiling (default 0.1)
+uniform float u_causticsIntensity;    // Additive strength (default 0.3)
+uniform float u_causticsTime;
+uniform float u_waterY;               // Water surface height
+uniform vec2 u_waterCenter;           // Water surface XZ center
+uniform vec2 u_waterHalfExtent;       // Water surface half-width/half-depth
+
 // =============================================================================
 // Stochastic tiling (hex-grid tri-cell blending with random UV offsets)
 // =============================================================================
@@ -1024,6 +1034,44 @@ void main()
 
         // Output alpha: only BLEND mode outputs actual alpha
         fragColor = vec4(result, u_alphaMode == 2 ? alpha : 1.0);
+    }
+
+    // Water caustics — additive light pattern on geometry below the water surface
+    // Only within the water's XZ footprint (not the entire scene)
+    if (u_causticsEnabled && v_fragPosition.y < u_waterY
+        && abs(v_fragPosition.x - u_waterCenter.x) < u_waterHalfExtent.x
+        && abs(v_fragPosition.z - u_waterCenter.y) < u_waterHalfExtent.y)
+    {
+        // Dual scrolling samples with min-blending for organic caustic pattern
+        vec2 causticUV1 = v_fragPosition.xz * u_causticsScale
+                        + u_causticsTime * vec2(0.03, 0.02);
+        vec2 causticUV2 = v_fragPosition.xz * u_causticsScale * 1.4
+                        + u_causticsTime * vec2(-0.02, 0.03);
+
+        // Chromatic aberration — offset R and B channels for rainbow fringing
+        float r1 = texture(u_causticsTex, causticUV1 + vec2(0.001, 0.0)).r;
+        float g1 = texture(u_causticsTex, causticUV1).r;
+        float b1 = texture(u_causticsTex, causticUV1 - vec2(0.001, 0.0)).r;
+        vec3 caustic1 = vec3(r1, g1, b1);
+
+        float r2 = texture(u_causticsTex, causticUV2 + vec2(0.0, 0.001)).r;
+        float g2 = texture(u_causticsTex, causticUV2).r;
+        float b2 = texture(u_causticsTex, causticUV2 - vec2(0.0, 0.001)).r;
+        vec3 caustic2 = vec3(r2, g2, b2);
+
+        vec3 caustics = min(caustic1, caustic2) * u_causticsIntensity;
+
+        // Tint caustics with a subtle blue-green (refracted sunlight through water)
+        caustics *= vec3(0.7, 0.9, 1.0);
+
+        // Fade with depth below water — caustics weaken deeper down
+        float depthBelowWater = u_waterY - v_fragPosition.y;
+        float depthFade = 1.0 - smoothstep(0.0, 5.0, depthBelowWater);
+        caustics *= depthFade;
+
+        // Scale by directional light intensity (caustics are refracted sunlight)
+        float lightScale = u_hasDirLight ? length(u_dirLight_diffuse) * 0.5 : 0.25;
+        fragColor.rgb += caustics * lightScale;
     }
 
     // Cascade debug visualization — tints fragments by cascade index

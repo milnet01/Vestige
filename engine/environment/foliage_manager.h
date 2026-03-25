@@ -77,6 +77,10 @@ public:
     /// @brief Gets a chunk by grid coordinates (nullptr if none exists).
     const FoliageChunk* getChunk(int gridX, int gridZ) const;
 
+    /// @brief Returns pointers to all non-empty chunks (for shadow passes that
+    /// need casters outside the camera frustum).
+    std::vector<const FoliageChunk*> getAllChunks() const;
+
     // --- Scatter API ---
 
     /// @brief Paints scatter instances within a circular area.

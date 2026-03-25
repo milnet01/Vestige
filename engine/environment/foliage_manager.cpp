@@ -472,6 +472,20 @@ std::vector<const FoliageChunk*> FoliageManager::getVisibleChunks(
     return visible;
 }
 
+std::vector<const FoliageChunk*> FoliageManager::getAllChunks() const
+{
+    std::vector<const FoliageChunk*> result;
+    result.reserve(m_chunks.size());
+    for (const auto& [key, chunk] : m_chunks)
+    {
+        if (!chunk->isEmpty())
+        {
+            result.push_back(chunk.get());
+        }
+    }
+    return result;
+}
+
 const FoliageChunk* FoliageManager::getChunk(int gridX, int gridZ) const
 {
     auto it = m_chunks.find(packChunkKey(gridX, gridZ));

@@ -38,6 +38,14 @@ uniform bool u_hasNormalMap;
 uniform bool u_hasDudvMap;
 uniform bool u_hasEnvironmentMap;
 
+// Shore foam
+uniform sampler2D u_foamTex;
+uniform bool u_hasFoamTex;
+uniform float u_foamDistance;      // How far from shore foam extends (metres)
+
+// Soft edge
+uniform float u_softEdgeDistance;  // Water-to-geometry fade distance (metres)
+
 out vec4 fragColor;
 
 void main()
@@ -145,11 +153,25 @@ void main()
     vec3 finalColor = mix(refractionColor, reflectionColor, fresnel);
     finalColor += specularColor;
 
+    // Shore foam — white froth where water meets geometry
+    if (u_hasFoamTex && u_hasRefractionTex && u_foamDistance > 0.0)
+    {
+        float foamFactor = 1.0 - smoothstep(0.0, u_foamDistance, waterThickness);
+        if (foamFactor > 0.01)
+        {
+            // Dual scrolling for animated foam pattern
+            vec2 foamUV1 = v_worldPos.xz * 2.0 + u_time * vec2(0.01, 0.02);
+            vec2 foamUV2 = v_worldPos.xz * 1.5 + u_time * vec2(-0.02, 0.01);
+            float foam = texture(u_foamTex, foamUV1).r * texture(u_foamTex, foamUV2).r;
+            finalColor = mix(finalColor, vec3(1.0), foam * foamFactor * 0.5);
+        }
+    }
+
     // Alpha: mostly opaque, soft edge fade at shore/object intersections
     float alpha = mix(0.85, 1.0, fresnel);
     if (u_hasRefractionTex)
     {
-        float edgeFade = smoothstep(0.0, 1.0, waterThickness);
+        float edgeFade = smoothstep(0.0, u_softEdgeDistance, waterThickness);
         alpha *= edgeFade;
     }
 
