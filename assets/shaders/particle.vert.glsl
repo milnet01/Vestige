@@ -9,6 +9,7 @@ layout(location = 0) in vec2 a_quadPos;
 layout(location = 1) in vec3 a_worldPos;
 layout(location = 2) in vec4 a_color;
 layout(location = 3) in float a_size;
+layout(location = 4) in float a_normalizedAge;
 
 uniform mat4 u_viewProjection;
 uniform vec3 u_cameraRight;
@@ -16,6 +17,7 @@ uniform vec3 u_cameraUp;
 
 out vec2 v_texCoord;
 out vec4 v_color;
+out float v_normalizedAge;
 
 void main()
 {
@@ -29,4 +31,5 @@ void main()
     // Map quad offset (-0.5..0.5) to UV (0..1)
     v_texCoord = a_quadPos + 0.5;
     v_color = a_color;
+    v_normalizedAge = a_normalizedAge;
 }

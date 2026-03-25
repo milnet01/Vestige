@@ -420,6 +420,16 @@ static json serializeParticleEmitter(const ParticleEmitterComponent& comp)
         j["texturePath"] = cfg.texturePath;
     }
 
+    // Light coupling
+    if (cfg.emitsLight)
+    {
+        j["emitsLight"] = true;
+        j["lightColor"] = vec3ToJson(cfg.lightColor);
+        j["lightRange"] = cfg.lightRange;
+        j["lightIntensity"] = cfg.lightIntensity;
+        j["flickerSpeed"] = cfg.flickerSpeed;
+    }
+
     return j;
 }
 
@@ -475,6 +485,13 @@ static void deserializeParticleEmitter(const json& j, ParticleEmitterComponent& 
                         : ParticleEmitterConfig::BlendMode::ADDITIVE;
 
     cfg.texturePath = j.value("texturePath", std::string(""));
+
+    // Light coupling
+    cfg.emitsLight = j.value("emitsLight", false);
+    cfg.lightColor = readVec3(j, "lightColor", cfg.lightColor);
+    cfg.lightRange = j.value("lightRange", cfg.lightRange);
+    cfg.lightIntensity = j.value("lightIntensity", cfg.lightIntensity);
+    cfg.flickerSpeed = j.value("flickerSpeed", cfg.flickerSpeed);
 }
 
 // ---------------------------------------------------------------------------

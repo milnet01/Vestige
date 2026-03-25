@@ -284,6 +284,14 @@ void Scene::collectRenderDataRecursive(const Entity& entity, SceneRenderData& da
     if (particleEmitter && particleEmitter->isEnabled())
     {
         data.particleEmitters.emplace_back(particleEmitter, entity.getWorldMatrix());
+
+        // Collect coupled light from fire emitters
+        glm::vec3 emitterPos = glm::vec3(entity.getWorldMatrix()[3]);
+        auto coupledLight = particleEmitter->getCoupledLight(emitterPos);
+        if (coupledLight.has_value())
+        {
+            data.pointLights.push_back(coupledLight.value());
+        }
     }
 
     // Check for water surface

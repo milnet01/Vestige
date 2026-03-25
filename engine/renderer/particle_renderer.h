@@ -3,6 +3,7 @@
 #pragma once
 
 #include "renderer/shader.h"
+#include "renderer/texture.h"
 #include "renderer/camera.h"
 #include "scene/particle_emitter.h"
 
@@ -10,18 +11,17 @@
 #include <glm/glm.hpp>
 
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace Vestige
 {
 
-class ResourceManager;
-
 /// @brief Renders particles as camera-facing billboards using instanced drawing.
 ///
 /// Manages a static quad VAO and dynamic per-instance data buffers (position,
-/// color, size). Each frame, live particle data is uploaded and drawn in a
-/// single instanced draw call per emitter.
+/// color, size, normalizedAge). Supports texture binding, soft particles via
+/// depth comparison, and per-emitter blend modes.
 class ParticleRenderer
 {
 public:
@@ -44,15 +44,25 @@ public:
     /// @param emitters List of (emitter, worldMatrix) pairs to render.
     /// @param camera Current camera for billboard orientation and sorting.
     /// @param viewProjection The view-projection matrix.
+    /// @param depthTexture Scene depth texture for soft particles (0 = disabled).
+    /// @param screenWidth Viewport width for soft particle UV calculation.
+    /// @param screenHeight Viewport height for soft particle UV calculation.
+    /// @param cameraNear Near plane distance for depth linearization.
     void render(const std::vector<std::pair<const ParticleEmitterComponent*, glm::mat4>>& emitters,
                 const Camera& camera,
-                const glm::mat4& viewProjection);
+                const glm::mat4& viewProjection,
+                GLuint depthTexture = 0,
+                int screenWidth = 0,
+                int screenHeight = 0,
+                float cameraNear = 0.1f);
 
 private:
     void createQuadVao();
     void ensureInstanceBufferCapacity(int count);
+    GLuint getOrLoadTexture(const std::string& path);
 
     Shader m_shader;
+    std::string m_assetPath;
 
     // Static quad geometry (2 triangles)
     GLuint m_quadVao = 0;
@@ -62,12 +72,11 @@ private:
     GLuint m_instancePositionVbo = 0;
     GLuint m_instanceColorVbo = 0;
     GLuint m_instanceSizeVbo = 0;
+    GLuint m_instanceAgeVbo = 0;    // normalizedAge for soft particles
     int m_instanceBufferCapacity = 0;
 
-    // CPU-side staging buffers (avoid per-frame allocation)
-    std::vector<glm::vec3> m_stagingPositions;
-    std::vector<glm::vec4> m_stagingColors;
-    std::vector<float> m_stagingSizes;
+    // Texture cache (path → GL texture ID)
+    std::unordered_map<std::string, std::unique_ptr<Texture>> m_textureCache;
 };
 
 } // namespace Vestige

@@ -59,7 +59,11 @@ void WaterRenderer::render(const std::vector<WaterRenderItem>& waterItems,
                            float time,
                            const glm::vec3& lightDir,
                            const glm::vec3& lightColor,
-                           GLuint environmentCubemap)
+                           GLuint environmentCubemap,
+                           GLuint reflectionTex,
+                           GLuint refractionTex,
+                           GLuint refractionDepthTex,
+                           float cameraNear)
 {
     if (!m_initialized || waterItems.empty())
     {
@@ -81,6 +85,7 @@ void WaterRenderer::render(const std::vector<WaterRenderItem>& waterItems,
     m_waterShader.setMat4("u_projection", projection);
     m_waterShader.setVec3("u_cameraPos", camera.getPosition());
     m_waterShader.setFloat("u_time", time);
+    m_waterShader.setFloat("u_cameraNear", cameraNear);
 
     // Directional light
     m_waterShader.setVec3("u_lightDirection", lightDir);
@@ -108,6 +113,26 @@ void WaterRenderer::render(const std::vector<WaterRenderItem>& waterItems,
         m_waterShader.setBool("u_hasEnvironmentMap", false);
     }
     m_waterShader.setInt("u_environmentMap", 2);
+
+    // Bind reflection texture (texture unit 3)
+    bool hasReflection = (reflectionTex != 0);
+    if (hasReflection)
+    {
+        glBindTextureUnit(3, reflectionTex);
+    }
+    m_waterShader.setInt("u_reflectionTex", 3);
+    m_waterShader.setBool("u_hasReflectionTex", hasReflection);
+
+    // Bind refraction texture + depth (texture units 4, 5)
+    bool hasRefraction = (refractionTex != 0 && refractionDepthTex != 0);
+    if (hasRefraction)
+    {
+        glBindTextureUnit(4, refractionTex);
+        glBindTextureUnit(5, refractionDepthTex);
+    }
+    m_waterShader.setInt("u_refractionTex", 4);
+    m_waterShader.setInt("u_refractionDepthTex", 5);
+    m_waterShader.setBool("u_hasRefractionTex", hasRefraction);
 
     // Draw each water surface
     for (const auto& item : waterItems)

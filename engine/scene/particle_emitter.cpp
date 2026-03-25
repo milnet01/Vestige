@@ -53,6 +53,7 @@ void ParticleData::resize(int max)
     startSpeeds.resize(static_cast<size_t>(max));
     ages.resize(static_cast<size_t>(max));
     lifetimes.resize(static_cast<size_t>(max));
+    normalizedAges.resize(static_cast<size_t>(max));
 }
 
 void ParticleData::kill(int index)
@@ -74,6 +75,7 @@ void ParticleData::kill(int index)
         startSpeeds[index] = startSpeeds[last];
         ages[index] = ages[last];
         lifetimes[index] = lifetimes[last];
+        normalizedAges[index] = normalizedAges[last];
     }
     --count;
 }
@@ -145,6 +147,7 @@ void ParticleEmitterComponent::update(float deltaTime)
         }
 
         float normalizedAge = m_data.ages[i] / m_data.lifetimes[i];
+        m_data.normalizedAges[i] = normalizedAge;
 
         // Apply gravity
         m_data.velocities[i] += m_config.gravity * deltaTime;
@@ -257,6 +260,7 @@ void ParticleEmitterComponent::spawnParticle(const glm::mat4& worldMatrix)
     m_data.startSpeeds[idx] = speed;
     m_data.ages[idx] = 0.0f;
     m_data.lifetimes[idx] = randomFloat(m_config.startLifetimeMin, m_config.startLifetimeMax);
+    m_data.normalizedAges[idx] = 0.0f;
 
     ++m_data.count;
 }
@@ -320,6 +324,34 @@ glm::vec3 ParticleEmitterComponent::generateSpawnDirection() const
             return randomUnitSphere();
         }
     }
+}
+
+std::optional<PointLight> ParticleEmitterComponent::getCoupledLight(const glm::vec3& worldPos) const
+{
+    if (!m_config.emitsLight || m_data.count == 0)
+    {
+        return std::nullopt;
+    }
+
+    // Multi-frequency flicker for organic fire light
+    float t = m_elapsedTime * m_config.flickerSpeed;
+    float flicker = 0.8f + 0.2f * std::sin(t) * std::sin(t * 1.7f + 0.3f);
+    flicker *= (0.9f + 0.1f * std::sin(t * 3.1f + 1.7f));
+
+    PointLight light;
+    light.position = worldPos + glm::vec3(0.0f, 0.2f, 0.0f); // Slightly above emitter
+    light.diffuse = m_config.lightColor * m_config.lightIntensity * flicker;
+    light.ambient = m_config.lightColor * 0.05f;
+    light.specular = m_config.lightColor * 0.3f * flicker;
+
+    // Attenuation for the configured range
+    light.constant = 1.0f;
+    light.linear = 4.5f / m_config.lightRange;
+    light.quadratic = 75.0f / (m_config.lightRange * m_config.lightRange);
+
+    light.castsShadow = false; // Flickering shadows would be distracting
+
+    return light;
 }
 
 } // namespace Vestige

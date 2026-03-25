@@ -16,6 +16,7 @@ set(ENGINE_SOURCES
     scene/scene.cpp
     scene/scene_manager.cpp
     scene/particle_emitter.cpp
+    scene/particle_presets.cpp
     resource/resource_manager.cpp
     resource/async_texture_loader.cpp
     renderer/shader.cpp
@@ -77,6 +78,7 @@ set(ENGINE_SOURCES
     editor/widgets/gradient_editor_widget.cpp
     scene/water_surface.cpp
     renderer/water_renderer.cpp
+    renderer/water_fbo.cpp
     renderer/foliage_renderer.cpp
     renderer/tree_renderer.cpp
     environment/foliage_chunk.cpp

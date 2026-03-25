@@ -1189,6 +1189,45 @@ void InspectorPanel::drawParticleEmitter(Entity& entity)
         ImGui::TreePop();
     }
 
+    // --- Light Coupling ---
+    if (ImGui::TreeNodeEx("Light Coupling", ImGuiTreeNodeFlags_DefaultOpen))
+    {
+        ParticleEmitterConfig lightBefore = cfg;
+        bool lightChanged = false;
+
+        if (ImGui::Checkbox("Emits Light", &cfg.emitsLight))
+        {
+            lightChanged = true;
+        }
+
+        if (cfg.emitsLight)
+        {
+            if (ImGui::ColorEdit3("Light Color", &cfg.lightColor.x))
+            {
+                lightChanged = true;
+            }
+            if (ImGui::DragFloat("Light Range", &cfg.lightRange, 0.1f, 0.5f, 50.0f, "%.1f m"))
+            {
+                lightChanged = true;
+            }
+            if (ImGui::DragFloat("Light Intensity", &cfg.lightIntensity, 0.05f, 0.0f, 10.0f, "%.2f"))
+            {
+                lightChanged = true;
+            }
+            if (ImGui::DragFloat("Flicker Speed", &cfg.flickerSpeed, 0.5f, 1.0f, 30.0f, "%.1f"))
+            {
+                lightChanged = true;
+            }
+        }
+
+        if (lightChanged)
+        {
+            pushParticleUndo(m_commandHistory, m_currentScene, entity.getId(),
+                             lightBefore, cfg, "lightCoupling");
+        }
+        ImGui::TreePop();
+    }
+
     ImGui::Spacing();
 }
 

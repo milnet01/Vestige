@@ -15,6 +15,7 @@
 #include "renderer/debug_draw.h"
 #include "renderer/particle_renderer.h"
 #include "renderer/water_renderer.h"
+#include "renderer/water_fbo.h"
 #include "renderer/foliage_renderer.h"
 #include "renderer/tree_renderer.h"
 #include "renderer/terrain_renderer.h"
@@ -73,6 +74,7 @@ private:
     DebugDraw m_debugDraw;
     ParticleRenderer m_particleRenderer;
     WaterRenderer m_waterRenderer;
+    WaterFbo m_waterFbo;
     FoliageRenderer m_foliageRenderer;
     TreeRenderer m_treeRenderer;
     FoliageManager m_foliageManager;

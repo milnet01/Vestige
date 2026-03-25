@@ -1,5 +1,5 @@
 /// @file water_renderer.h
-/// @brief Water surface renderer with environment map reflections and wave displacement.
+/// @brief Water surface renderer with reflections, refractions, and wave displacement.
 #pragma once
 
 #include "renderer/shader.h"
@@ -21,7 +21,7 @@ struct WaterRenderItem
     glm::mat4 worldMatrix;
 };
 
-/// @brief Renders water surfaces with environment map reflections and wave animation.
+/// @brief Renders water surfaces with planar reflections, refractions, and wave animation.
 class WaterRenderer
 {
 public:
@@ -48,13 +48,21 @@ public:
     /// @param lightDir Directional light direction (world space).
     /// @param lightColor Directional light color.
     /// @param environmentCubemap Skybox cubemap texture ID (0 = none).
+    /// @param reflectionTex Reflection texture from WaterFbo (0 = use cubemap fallback).
+    /// @param refractionTex Refraction texture from WaterFbo (0 = disabled).
+    /// @param refractionDepthTex Refraction depth texture for Beer's law (0 = disabled).
+    /// @param cameraNear Near plane distance for depth linearization.
     void render(const std::vector<WaterRenderItem>& waterItems,
                 const Camera& camera,
                 float aspectRatio,
                 float time,
                 const glm::vec3& lightDir,
                 const glm::vec3& lightColor,
-                GLuint environmentCubemap);
+                GLuint environmentCubemap,
+                GLuint reflectionTex = 0,
+                GLuint refractionTex = 0,
+                GLuint refractionDepthTex = 0,
+                float cameraNear = 0.1f);
 
 private:
     void generateDefaultNormalMap();
