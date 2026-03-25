@@ -370,11 +370,13 @@ bool Engine::initialize(const EngineConfig& config)
             case GLFW_KEY_F5:
                 m_renderer->setBloomEnabled(!m_renderer->isBloomEnabled());
                 Logger::info(std::string("Bloom: ") + (m_renderer->isBloomEnabled() ? "ON" : "OFF"));
+                if (m_editor) m_editor->showNotification(std::string("Bloom: ") + (m_renderer->isBloomEnabled() ? "ON" : "OFF"));
                 break;
 
             case GLFW_KEY_F6:
                 m_renderer->setSsaoEnabled(!m_renderer->isSsaoEnabled());
                 Logger::info(std::string("SSAO: ") + (m_renderer->isSsaoEnabled() ? "ON" : "OFF"));
+                if (m_editor) m_editor->showNotification(std::string("SSAO: ") + (m_renderer->isSsaoEnabled() ? "ON" : "OFF"));
                 break;
 
             case GLFW_KEY_F7:
@@ -416,12 +418,14 @@ bool Engine::initialize(const EngineConfig& config)
                 bool debug = !m_renderer->isCascadeDebug();
                 m_renderer->setCascadeDebug(debug);
                 Logger::info(std::string("CSM debug: ") + (debug ? "ON" : "OFF"));
+                if (m_editor) m_editor->showNotification(std::string("CSM debug: ") + (debug ? "ON" : "OFF"));
                 break;
             }
 
             case GLFW_KEY_F10:
                 m_renderer->setAutoExposure(!m_renderer->isAutoExposure());
                 Logger::info(std::string("Auto-exposure: ") + (m_renderer->isAutoExposure() ? "ON" : "OFF"));
+                if (m_editor) m_editor->showNotification(std::string("Auto-exposure: ") + (m_renderer->isAutoExposure() ? "ON" : "OFF"));
                 break;
 
             case GLFW_KEY_F11:
@@ -492,27 +496,27 @@ bool Engine::initialize(const EngineConfig& config)
             case GLFW_KEY_V:
             {
                 // Cycle frame cap: Uncapped → 60 → VSync → Uncapped
-                int currentCap = m_timer.getFrameRateCap();
+                int currentCap = m_timer->getFrameRateCap();
                 if (currentCap == 0 && !m_window->isVsyncEnabled())
                 {
-                    // Uncapped → 60 FPS cap
-                    m_timer.setFrameRateCap(60);
+                    m_timer->setFrameRateCap(60);
                     m_window->setVsync(false);
                     Logger::info("Frame rate: capped at 60 FPS");
+                    if (m_editor) m_editor->showNotification("Frame rate: 60 FPS cap");
                 }
                 else if (currentCap == 60)
                 {
-                    // 60 cap → VSync
-                    m_timer.setFrameRateCap(0);
+                    m_timer->setFrameRateCap(0);
                     m_window->setVsync(true);
                     Logger::info("Frame rate: VSync ON");
+                    if (m_editor) m_editor->showNotification("Frame rate: VSync");
                 }
                 else
                 {
-                    // VSync → Uncapped
-                    m_timer.setFrameRateCap(0);
+                    m_timer->setFrameRateCap(0);
                     m_window->setVsync(false);
                     Logger::info("Frame rate: uncapped");
+                    if (m_editor) m_editor->showNotification("Frame rate: Uncapped");
                 }
                 break;
             }
@@ -957,7 +961,7 @@ void Engine::run()
             glClearColor(0.08f, 0.08f, 0.10f, 1.0f);
             glClear(GL_COLOR_BUFFER_BIT);
             m_editor->drawPanels(m_renderer.get(), activeScene, m_camera.get(),
-                                 &m_timer, m_window.get());
+                                 m_timer.get(), m_window.get());
             m_editor->endFrame();
         }
         else
@@ -967,7 +971,7 @@ void Engine::run()
             if (m_editor)
             {
                 m_editor->drawPanels(nullptr, nullptr, nullptr,
-                                     &m_timer, m_window.get());
+                                     m_timer.get(), m_window.get());
                 m_editor->endFrame();
             }
         }
@@ -976,7 +980,7 @@ void Engine::run()
         m_window->swapBuffers();
 
         // 10. Frame rate cap (busy-wait for target frame time if capped)
-        m_timer.waitForFrameCap();
+        m_timer->waitForFrameCap();
 
         // 11. End profiler frame (collect GPU results after swap ensures queries are complete)
         m_profiler.endFrame(deltaTime);
