@@ -39,6 +39,13 @@ bool WaterFbo::init(int reflW, int reflH, int refrW, int refrH)
 
 void WaterFbo::resize(int reflW, int reflH, int refrW, int refrH)
 {
+    // Skip if size hasn't changed
+    if (reflW == m_reflectionWidth && reflH == m_reflectionHeight
+        && refrW == m_refractionWidth && refrH == m_refractionHeight)
+    {
+        return;
+    }
+
     shutdown();
     init(reflW, reflH, refrW, refrH);
 }
