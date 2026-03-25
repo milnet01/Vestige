@@ -54,7 +54,8 @@ public:
         auto it = m_listeners.find(std::type_index(typeid(T)));
         if (it != m_listeners.end())
         {
-            // Copy to avoid iterator invalidation if a callback subscribes/unsubscribes
+            // Copy to avoid iterator invalidation if a callback subscribes/unsubscribes.
+            // Typical listener lists are small (1–5 entries), so copy cost is negligible.
             auto listeners = it->second;
             for (const auto& entry : listeners)
             {

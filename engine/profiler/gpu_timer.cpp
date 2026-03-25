@@ -49,7 +49,7 @@ void GpuTimer::beginPass(const char* name)
 {
     if (!m_initialized || m_passCount >= MAX_PASSES) return;
 
-    m_passNames[m_passCount] = name;
+    m_passNames[m_writeBuffer][m_passCount] = name;
     glQueryCounter(m_queries[m_writeBuffer][m_passCount * 2], GL_TIMESTAMP);
 }
 
@@ -90,7 +90,7 @@ void GpuTimer::endFrame()
                                   GL_QUERY_RESULT, &endTime);
 
             GpuPassTiming timing;
-            timing.name = m_passNames[i] ? m_passNames[i] : "Unknown";
+            timing.name = m_passNames[m_readBuffer][i] ? m_passNames[m_readBuffer][i] : "Unknown";
             timing.timeMs = static_cast<float>(endTime - startTime) / 1e6f;
             m_results.push_back(timing);
         }

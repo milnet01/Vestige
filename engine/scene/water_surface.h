@@ -18,7 +18,7 @@ struct WaterSurfaceConfig
     // Geometry
     float width = 10.0f;
     float depth = 10.0f;
-    int gridResolution = 32;  ///< NxN vertices
+    int gridResolution = 128;  ///< NxN vertices (higher = smoother wave displacement)
 
     // Waves (up to 4 summed sine waves)
     static constexpr int MAX_WAVES = 4;

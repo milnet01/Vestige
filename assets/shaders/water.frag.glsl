@@ -50,10 +50,11 @@ out vec4 fragColor;
 
 void main()
 {
-    // Animated texture coordinates for normal/DuDv scrolling
+    // Animated texture coordinates for normal/DuDv scrolling.
+    // Use different scales and diagonal directions to break up tiling regularity.
     float flowOffset = u_time * u_flowSpeed;
-    vec2 scrolledCoords1 = v_texCoord * 4.0 + vec2(flowOffset, 0.0);
-    vec2 scrolledCoords2 = v_texCoord * 4.0 + vec2(0.0, flowOffset * 0.8);
+    vec2 scrolledCoords1 = v_texCoord * 3.7 + vec2(flowOffset * 0.9, flowOffset * 0.3);
+    vec2 scrolledCoords2 = v_texCoord * 5.3 + vec2(-flowOffset * 0.4, flowOffset * 0.7);
 
     // Surface normal (from wave geometry + optional normal map detail)
     vec3 normal = normalize(v_normal);

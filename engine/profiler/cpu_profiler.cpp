@@ -25,8 +25,8 @@ void CpuProfiler::endFrame()
     auto now = Clock::now();
     m_lastFrameTimeMs = std::chrono::duration<float, std::milli>(now - m_frameStart).count();
 
-    // Snapshot for display
-    m_lastFrame = m_currentFrame;
+    // Snapshot for display (move avoids heap allocation)
+    m_lastFrame = std::move(m_currentFrame);
 }
 
 void CpuProfiler::pushScope(const char* name)

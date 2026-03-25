@@ -268,13 +268,20 @@ void FoliageChunk::deserialize(const nlohmann::json& j)
             uint32_t typeId = static_cast<uint32_t>(std::stoul(key));
             for (const auto& item : arr)
             {
+                if (!item.contains("pos") || !item["pos"].is_array() || item["pos"].size() < 3)
+                {
+                    continue;
+                }
                 FoliageInstance inst;
                 auto pos = item["pos"];
                 inst.position = glm::vec3(pos[0].get<float>(), pos[1].get<float>(), pos[2].get<float>());
-                inst.rotation = item["rot"].get<float>();
-                inst.scale = item["scale"].get<float>();
-                auto tint = item["tint"];
-                inst.colorTint = glm::vec3(tint[0].get<float>(), tint[1].get<float>(), tint[2].get<float>());
+                inst.rotation = item.value("rot", 0.0f);
+                inst.scale = item.value("scale", 1.0f);
+                if (item.contains("tint") && item["tint"].is_array() && item["tint"].size() >= 3)
+                {
+                    auto tint = item["tint"];
+                    inst.colorTint = glm::vec3(tint[0].get<float>(), tint[1].get<float>(), tint[2].get<float>());
+                }
                 m_foliage[typeId].push_back(inst);
             }
         }
@@ -285,14 +292,21 @@ void FoliageChunk::deserialize(const nlohmann::json& j)
     {
         for (const auto& item : j["scatter"])
         {
+            if (!item.contains("pos") || !item["pos"].is_array() || item["pos"].size() < 3)
+            {
+                continue;
+            }
             ScatterInstance inst;
             auto pos = item["pos"];
             inst.position = glm::vec3(pos[0].get<float>(), pos[1].get<float>(), pos[2].get<float>());
-            auto rot = item["rot"];
-            inst.rotation = glm::quat(rot[0].get<float>(), rot[1].get<float>(),
-                                       rot[2].get<float>(), rot[3].get<float>());
-            inst.scale = item["scale"].get<float>();
-            inst.meshIndex = item["meshIdx"].get<uint32_t>();
+            if (item.contains("rot") && item["rot"].is_array() && item["rot"].size() >= 4)
+            {
+                auto rot = item["rot"];
+                inst.rotation = glm::quat(rot[0].get<float>(), rot[1].get<float>(),
+                                           rot[2].get<float>(), rot[3].get<float>());
+            }
+            inst.scale = item.value("scale", 1.0f);
+            inst.meshIndex = item.value("meshIdx", static_cast<uint32_t>(0));
             m_scatter.push_back(inst);
         }
     }
@@ -302,12 +316,16 @@ void FoliageChunk::deserialize(const nlohmann::json& j)
     {
         for (const auto& item : j["trees"])
         {
+            if (!item.contains("pos") || !item["pos"].is_array() || item["pos"].size() < 3)
+            {
+                continue;
+            }
             TreeInstance inst;
             auto pos = item["pos"];
             inst.position = glm::vec3(pos[0].get<float>(), pos[1].get<float>(), pos[2].get<float>());
-            inst.rotation = item["rot"].get<float>();
-            inst.scale = item["scale"].get<float>();
-            inst.speciesIndex = item["species"].get<uint32_t>();
+            inst.rotation = item.value("rot", 0.0f);
+            inst.scale = item.value("scale", 1.0f);
+            inst.speciesIndex = item.value("species", static_cast<uint32_t>(0));
             m_trees.push_back(inst);
         }
     }

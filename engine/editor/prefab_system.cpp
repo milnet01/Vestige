@@ -40,6 +40,8 @@ bool PrefabSystem::savePrefab(const Entity& entity, const std::string& name,
 
     // Write to file (sanitize name for filename)
     std::string filename = name;
+    // Remove null bytes
+    filename.erase(std::remove(filename.begin(), filename.end(), '\0'), filename.end());
     for (char& c : filename)
     {
         if (c == '/' || c == '\\' || c == ':' || c == '*'
@@ -47,6 +49,21 @@ bool PrefabSystem::savePrefab(const Entity& entity, const std::string& name,
         {
             c = '_';
         }
+    }
+    // Strip leading/trailing dots and spaces
+    while (!filename.empty() && (filename.front() == '.' || filename.front() == ' '))
+    {
+        filename.erase(filename.begin());
+    }
+    while (!filename.empty() && (filename.back() == '.' || filename.back() == ' '))
+    {
+        filename.pop_back();
+    }
+    // Reject directory traversal
+    if (filename.find("..") != std::string::npos || filename.empty())
+    {
+        Logger::error("Prefab save: invalid name after sanitization");
+        return false;
     }
 
     fs::path filePath = prefabDir / (filename + ".json");

@@ -50,13 +50,6 @@ void main()
         return;
     }
 
-    // Estimate surface normal from depth derivatives to detect self-intersection.
-    // If the light faces the surface (NdotL > 0), the surface is already lit and
-    // contact shadows are unlikely — scale the effect down.
-    float depthC = linearizeDepth(depth);
-    float depthR = linearizeDepth(texture(u_depthTexture, v_texCoord + vec2(u_texelSize.x, 0.0)).r);
-    float depthU = linearizeDepth(texture(u_depthTexture, v_texCoord + vec2(0.0, u_texelSize.y)).r);
-
     // Screen-space depth gradient → approximate view-space normal
     vec3 viewPos = viewPosFromDepth(v_texCoord, depth);
     vec3 viewPosR = viewPosFromDepth(v_texCoord + vec2(u_texelSize.x, 0.0), texture(u_depthTexture, v_texCoord + vec2(u_texelSize.x, 0.0)).r);

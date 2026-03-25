@@ -52,7 +52,6 @@ uniform bool u_hasShadows;
 uniform sampler2DArray u_cascadeShadowMap;  // Unit 3
 uniform int u_cascadeCount;
 uniform float u_cascadeSplits[4];
-uniform float u_cascadeTexelSize[4];
 uniform mat4 u_cascadeLightSpaceMatrices[4];
 uniform bool u_cascadeDebug;
 

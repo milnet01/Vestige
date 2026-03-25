@@ -18,7 +18,6 @@ uniform int u_gridResolution;
 
 // LOD ranges for per-vertex morphing
 uniform float u_lodRanges[8];
-uniform int u_maxLodLevels;
 
 // Camera
 uniform mat4 u_viewProjection;
