@@ -39,6 +39,7 @@ Vestige is a 3D exploration engine built in C++17 with OpenGL 4.5. Its primary p
 6. **No over-engineering.** Start simple, add complexity only when needed.
 7. **Security first.** See SECURITY.md — memory safety, input validation, and secure coding practices are mandatory.
 8. **60 FPS minimum.** All rendering and logic must sustain at least 60 frames per second.
+9. **Mandatory post-phase audit.** After every phase completion, run the full audit process defined in AUDIT_STANDARDS.md before starting the next phase. The audit uses a 5-tier approach (automated tools → grep scans → changed-file review → full-codebase categorical sweep → online research) to cover the entire codebase while minimizing token usage. All findings must be compiled into a report, verified, and a fix plan approved by the user before implementation begins. Also research experimental features that could benefit the engine. See AUDIT_STANDARDS.md for the complete process, checklist, and scaling strategy.
 
 ## Architecture
 Subsystem + Event Bus pattern. See ARCHITECTURE.md for full details.
