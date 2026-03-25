@@ -67,12 +67,14 @@ public:
 private:
     void generateDefaultNormalMap();
     void generateDefaultDudvMap();
+    void generateDefaultFoamTexture();
 
     Shader m_waterShader;
 
     // Default procedural textures
     GLuint m_defaultNormalMap = 0;
     GLuint m_defaultDudvMap = 0;
+    GLuint m_defaultFoamTexture = 0;
 
     bool m_initialized = false;
 };

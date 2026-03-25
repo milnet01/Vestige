@@ -31,6 +31,7 @@ bool WaterRenderer::init(const std::string& assetPath)
 
     generateDefaultNormalMap();
     generateDefaultDudvMap();
+    generateDefaultFoamTexture();
 
     m_initialized = true;
     Logger::info("Water renderer initialized");
@@ -48,6 +49,11 @@ void WaterRenderer::shutdown()
     {
         glDeleteTextures(1, &m_defaultDudvMap);
         m_defaultDudvMap = 0;
+    }
+    if (m_defaultFoamTexture != 0)
+    {
+        glDeleteTextures(1, &m_defaultFoamTexture);
+        m_defaultFoamTexture = 0;
     }
     m_waterShader.destroy();
     m_initialized = false;
@@ -133,6 +139,17 @@ void WaterRenderer::render(const std::vector<WaterRenderItem>& waterItems,
     m_waterShader.setInt("u_refractionTex", 4);
     m_waterShader.setInt("u_refractionDepthTex", 5);
     m_waterShader.setBool("u_hasRefractionTex", hasRefraction);
+
+    // Bind foam texture (texture unit 6)
+    bool hasFoam = (m_defaultFoamTexture != 0);
+    if (hasFoam)
+    {
+        glBindTextureUnit(6, m_defaultFoamTexture);
+    }
+    m_waterShader.setInt("u_foamTex", 6);
+    m_waterShader.setBool("u_hasFoamTex", hasFoam);
+    m_waterShader.setFloat("u_foamDistance", 0.5f);
+    m_waterShader.setFloat("u_softEdgeDistance", 1.0f);
 
     // Draw each water surface
     for (const auto& item : waterItems)
@@ -267,6 +284,49 @@ void WaterRenderer::generateDefaultDudvMap()
     glTextureParameteri(m_defaultDudvMap, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
     glTextureParameteri(m_defaultDudvMap, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glGenerateTextureMipmap(m_defaultDudvMap);
+}
+
+void WaterRenderer::generateDefaultFoamTexture()
+{
+    // Procedural tileable foam texture — white noise clusters
+    // that look like bubbly shore foam.
+    constexpr int size = 256;
+    std::vector<unsigned char> pixels(static_cast<size_t>(size * size));
+
+    for (int y = 0; y < size; ++y)
+    {
+        for (int x = 0; x < size; ++x)
+        {
+            float u = static_cast<float>(x) / static_cast<float>(size);
+            float v = static_cast<float>(y) / static_cast<float>(size);
+            float pi2 = 2.0f * glm::pi<float>();
+
+            // Overlapping bubbles: multiple sine patterns at different scales
+            float f = 0.0f;
+            f += std::sin(u * 12.0f * pi2 + v * 5.0f * pi2) * 0.5f + 0.5f;
+            f *= std::sin(v * 9.0f * pi2 + u * 7.0f * pi2 + 0.8f) * 0.5f + 0.5f;
+            f += (std::sin((u + v * 0.7f) * 18.0f * pi2 + 1.5f) * 0.5f + 0.5f) * 0.4f;
+            f += (std::sin((u * 0.8f - v) * 14.0f * pi2 + 2.3f) * 0.5f + 0.5f) * 0.3f;
+
+            // Threshold to create bubble clusters
+            f = std::max(f - 0.4f, 0.0f) * 2.0f;
+            f = std::min(f, 1.0f);
+
+            pixels[static_cast<size_t>(y * size + x)] =
+                static_cast<unsigned char>(f * 255.0f);
+        }
+    }
+
+    glCreateTextures(GL_TEXTURE_2D, 1, &m_defaultFoamTexture);
+    GLsizei mipLevels = 1 + static_cast<GLsizei>(std::floor(std::log2(size)));
+    glTextureStorage2D(m_defaultFoamTexture, mipLevels, GL_R8, size, size);
+    glTextureSubImage2D(m_defaultFoamTexture, 0, 0, 0, size, size,
+                        GL_RED, GL_UNSIGNED_BYTE, pixels.data());
+    glTextureParameteri(m_defaultFoamTexture, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTextureParameteri(m_defaultFoamTexture, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTextureParameteri(m_defaultFoamTexture, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTextureParameteri(m_defaultFoamTexture, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glGenerateTextureMipmap(m_defaultFoamTexture);
 }
 
 } // namespace Vestige

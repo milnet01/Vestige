@@ -157,6 +157,10 @@ Renderer::~Renderer()
     {
         glDeleteRenderbuffers(1, &m_outlineStencilRbo);
     }
+    if (m_causticsTexture != 0)
+    {
+        glDeleteTextures(1, &m_causticsTexture);
+    }
     Logger::debug("Renderer destroyed");
 }
 
@@ -549,6 +553,9 @@ void Renderer::initFramebuffers(int width, int height, int msaaSamples)
     }
     while (glGetError() != GL_NO_ERROR) {}
 
+    // Generate procedural caustics texture for underwater effects
+    generateCausticsTexture();
+
     Logger::info("Framebuffer pipeline initialized: "
         + std::to_string(width) + "x" + std::to_string(height)
         + " with " + std::to_string(msaaSamples) + "x MSAA + shadow mapping + skybox + bloom + SSAO");
@@ -569,6 +576,9 @@ void Renderer::beginFrame()
 
     glViewport(0, 0, m_windowWidth, m_windowHeight);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+    // Ensure clip distance is clean at frame start (water passes enable/disable it)
+    glDisable(GL_CLIP_DISTANCE0);
 }
 
 void Renderer::endFrame(float deltaTime)
@@ -1636,6 +1646,17 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
                 constexpr float LERP_SPEED = 0.15f;
                 m_sdsmNear += (depthNear - m_sdsmNear) * LERP_SPEED;
                 m_sdsmFar += (depthFar - m_sdsmFar) * LERP_SPEED;
+
+                // Enforce a minimum depth range so cascades don't degenerate into
+                // paper-thin slices when looking at nearby flat surfaces. Without
+                // this, each cascade covers too little depth and the bounding sphere
+                // in light-space becomes tiny, missing nearby shadow casters.
+                constexpr float MIN_DEPTH_RANGE = 15.0f;
+                if (m_sdsmFar - m_sdsmNear < MIN_DEPTH_RANGE)
+                {
+                    m_sdsmFar = m_sdsmNear + MIN_DEPTH_RANGE;
+                }
+
                 m_cascadedShadowMap->setDepthBounds(m_sdsmNear, m_sdsmFar);
             }
             else
@@ -1809,6 +1830,26 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
 
     // Water clip plane for reflection/refraction passes (vec4(0) = disabled)
     m_sceneShader.setVec4("u_clipPlane", clipPlane);
+
+    // Water caustics — bind texture and set uniforms for underwater geometry
+    m_sceneShader.setBool("u_causticsEnabled", m_causticsEnabled);
+    if (m_causticsEnabled && m_causticsTexture != 0)
+    {
+        glBindTextureUnit(9, m_causticsTexture);
+        m_sceneShader.setInt("u_causticsTex", 9);
+        m_sceneShader.setFloat("u_causticsScale", 0.1f);
+        m_sceneShader.setFloat("u_causticsIntensity", 0.15f);
+        m_sceneShader.setFloat("u_causticsTime", m_causticsTime);
+        m_sceneShader.setFloat("u_waterY", m_causticsWaterY);
+        m_sceneShader.setVec2("u_waterCenter", m_causticsCenter);
+        m_sceneShader.setVec2("u_waterHalfExtent", m_causticsHalfExtent);
+    }
+    else
+    {
+        // Mesa requires valid textures for declared samplers
+        glBindTextureUnit(9, m_causticsTexture != 0 ? m_causticsTexture : 0);
+        m_sceneShader.setInt("u_causticsTex", 9);
+    }
 
     // --- Scene pass: draw all opaque render items ---
     // MDI path: group batches by material, issue one glMultiDrawElementsIndirect per group.
@@ -1994,6 +2035,16 @@ void Renderer::renderShadowPass(const std::vector<SceneRenderData::RenderItem>& 
     glDepthFunc(GL_LESS);
     glClearDepth(1.0);
 
+    // Ensure clip distance is disabled — water reflection/refraction passes from
+    // the previous frame may have left it enabled. Shaders that don't write
+    // gl_ClipDistance[0] produce undefined clip values when this is on.
+    glDisable(GL_CLIP_DISTANCE0);
+
+    // Enable depth clamping so shadow casters in front of the near plane are
+    // clamped to depth 0 instead of clipped. This avoids "shadow pancaking"
+    // artifacts without requiring vertex shader modifications.
+    glEnable(GL_DEPTH_CLAMP);
+
     // Update all cascade light-space matrices from the camera frustum
     m_cascadedShadowMap->update(m_directionalLight, camera, aspectRatio);
 
@@ -2061,13 +2112,13 @@ void Renderer::renderShadowPass(const std::vector<SceneRenderData::RenderItem>& 
             }
         }
 
-        // Render foliage into nearby cascades for grass shadow casting
-        if (m_foliageShadowCaster && m_foliageShadowManager && c == 0)
+        // Render foliage shadows into every cascade so grass shadows are visible
+        // at all camera angles. Use ALL chunks (not camera-frustum-culled) because
+        // foliage behind the camera can cast shadows into the visible area. The
+        // per-instance shadowMaxDistance culling keeps the count bounded.
+        if (m_foliageShadowCaster && m_foliageShadowManager)
         {
-            // Use camera's VP for chunk visibility (same as main pass)
-            glm::mat4 viewProj = camera.getCullingProjectionMatrix(aspectRatio)
-                               * camera.getViewMatrix();
-            auto visibleChunks = m_foliageShadowManager->getVisibleChunks(viewProj);
+            auto visibleChunks = m_foliageShadowManager->getAllChunks();
             if (!visibleChunks.empty())
             {
                 m_foliageShadowCaster->renderShadow(
@@ -2085,10 +2136,11 @@ void Renderer::renderShadowPass(const std::vector<SceneRenderData::RenderItem>& 
     m_cullingStats.shadowCastersCulled = (cascadeCount > 0)
         ? totalCascadeCulled / cascadeCount : 0;
 
-    // Restore reverse-Z depth state
+    // Restore reverse-Z depth state and disable shadow-pass-only settings
     glClipControl(GL_LOWER_LEFT, GL_ZERO_TO_ONE);
     glDepthFunc(GL_GEQUAL);
     glClearDepth(0.0);
+    glDisable(GL_DEPTH_CLAMP);
 }
 
 std::vector<int> Renderer::selectShadowCastingPointLights() const
@@ -2336,6 +2388,61 @@ void Renderer::generateSsaoNoiseTexture()
     glTextureParameteri(m_ssaoNoiseTexture, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTextureParameteri(m_ssaoNoiseTexture, GL_TEXTURE_WRAP_S, GL_REPEAT);
     glTextureParameteri(m_ssaoNoiseTexture, GL_TEXTURE_WRAP_T, GL_REPEAT);
+}
+
+void Renderer::generateCausticsTexture()
+{
+    // Procedural tileable caustic pattern using overlapping sine waves
+    // that produce bright spots where waves converge (mimicking light refraction).
+    constexpr int size = 256;
+    std::vector<unsigned char> pixels(static_cast<size_t>(size * size));
+
+    for (int y = 0; y < size; ++y)
+    {
+        for (int x = 0; x < size; ++x)
+        {
+            float u = static_cast<float>(x) / static_cast<float>(size);
+            float v = static_cast<float>(y) / static_cast<float>(size);
+            float pi2 = 2.0f * glm::pi<float>();
+
+            // Multiple sine-wave layers at different frequencies and angles
+            // to produce a caustic-like pattern with bright convergence points
+            float c = 0.0f;
+            c += std::sin(u * 8.0f * pi2 + v * 3.0f * pi2) * 0.5f + 0.5f;
+            c *= std::sin(v * 6.0f * pi2 - u * 4.0f * pi2 + 1.3f) * 0.5f + 0.5f;
+            c += (std::sin((u + v) * 10.0f * pi2 + 0.7f) * 0.5f + 0.5f) * 0.3f;
+            c += (std::sin((u - v) * 7.0f * pi2 + 2.1f) * 0.5f + 0.5f) * 0.2f;
+
+            // Sharpen — raise to a power so only bright spots remain
+            c = std::pow(std::min(c, 1.0f), 2.5f);
+
+            pixels[static_cast<size_t>(y * size + x)] =
+                static_cast<unsigned char>(std::min(c * 255.0f, 255.0f));
+        }
+    }
+
+    glCreateTextures(GL_TEXTURE_2D, 1, &m_causticsTexture);
+    GLsizei mipLevels = 1 + static_cast<GLsizei>(std::floor(std::log2(size)));
+    glTextureStorage2D(m_causticsTexture, mipLevels, GL_R8, size, size);
+    glTextureSubImage2D(m_causticsTexture, 0, 0, 0, size, size,
+                        GL_RED, GL_UNSIGNED_BYTE, pixels.data());
+    glTextureParameteri(m_causticsTexture, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTextureParameteri(m_causticsTexture, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTextureParameteri(m_causticsTexture, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTextureParameteri(m_causticsTexture, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glGenerateTextureMipmap(m_causticsTexture);
+
+    Logger::info("Caustics texture generated (256x256, procedural)");
+}
+
+void Renderer::setCausticsParams(bool enabled, float waterY, float time,
+                                  const glm::vec2& center, const glm::vec2& halfExtent)
+{
+    m_causticsEnabled = enabled;
+    m_causticsWaterY = waterY;
+    m_causticsTime = time;
+    m_causticsCenter = center;
+    m_causticsHalfExtent = halfExtent;
 }
 
 // ---------------------------------------------------------------------------

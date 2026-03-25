@@ -67,6 +67,12 @@ public:
                       float aspectRatio,
                       const glm::mat4& lightSpaceMatrix);
 
+    /// @brief Sets caustics parameters for underwater terrain.
+    /// Call each frame when water surfaces exist.
+    void setCausticsParams(bool enabled, float waterY, float time, GLuint causticsTexture,
+                           const glm::vec2& center = glm::vec2(0.0f),
+                           const glm::vec2& halfExtent = glm::vec2(0.0f));
+
     /// @brief Gets the number of draw calls from the last frame.
     int getLastDrawCallCount() const { return m_lastDrawCallCount; }
 
@@ -96,6 +102,14 @@ private:
 
     // Per-frame staging
     std::vector<TerrainDrawNode> m_drawNodes;
+
+    // Water caustics state
+    bool m_causticsEnabled = false;
+    float m_causticsWaterY = 0.0f;
+    float m_causticsTime = 0.0f;
+    GLuint m_causticsTexture = 0;  // Not owned — borrowed from Renderer
+    glm::vec2 m_causticsCenter = glm::vec2(0.0f);
+    glm::vec2 m_causticsHalfExtent = glm::vec2(0.0f);
 
     // Stats
     int m_lastDrawCallCount = 0;

@@ -23,6 +23,16 @@ uniform int u_cascadeCount;
 uniform float u_cascadeSplits[4];
 uniform mat4 u_cascadeLightSpaceMatrices[4];
 
+// Water caustics (applied to terrain below water surface, within water XZ bounds)
+uniform bool u_causticsEnabled;
+uniform sampler2D u_causticsTex;      // Unit 5
+uniform float u_causticsScale;
+uniform float u_causticsIntensity;
+uniform float u_causticsTime;
+uniform float u_waterY;
+uniform vec2 u_waterCenter;
+uniform vec2 u_waterHalfExtent;
+
 out vec4 fragColor;
 
 // ---------------------------------------------------------------------------
@@ -142,6 +152,39 @@ void main()
     vec3 spec = u_lightColor * specular * NdotL;
 
     vec3 color = ambient + (diffuse + spec) * (1.0 - shadow);
+
+    // Water caustics — additive light pattern on terrain below the water surface
+    if (u_causticsEnabled && v_worldPos.y < u_waterY
+        && abs(v_worldPos.x - u_waterCenter.x) < u_waterHalfExtent.x
+        && abs(v_worldPos.z - u_waterCenter.y) < u_waterHalfExtent.y)
+    {
+        vec2 causticUV1 = v_worldPos.xz * u_causticsScale
+                        + u_causticsTime * vec2(0.03, 0.02);
+        vec2 causticUV2 = v_worldPos.xz * u_causticsScale * 1.4
+                        + u_causticsTime * vec2(-0.02, 0.03);
+
+        float r1 = texture(u_causticsTex, causticUV1 + vec2(0.001, 0.0)).r;
+        float g1 = texture(u_causticsTex, causticUV1).r;
+        float b1 = texture(u_causticsTex, causticUV1 - vec2(0.001, 0.0)).r;
+        vec3 caustic1 = vec3(r1, g1, b1);
+
+        float r2 = texture(u_causticsTex, causticUV2 + vec2(0.0, 0.001)).r;
+        float g2 = texture(u_causticsTex, causticUV2).r;
+        float b2 = texture(u_causticsTex, causticUV2 - vec2(0.0, 0.001)).r;
+        vec3 caustic2 = vec3(r2, g2, b2);
+
+        vec3 caustics = min(caustic1, caustic2) * u_causticsIntensity;
+
+        // Tint caustics with a subtle blue-green (refracted sunlight through water)
+        caustics *= vec3(0.7, 0.9, 1.0);
+
+        float depthBelowWater = u_waterY - v_worldPos.y;
+        float depthFade = 1.0 - smoothstep(0.0, 5.0, depthBelowWater);
+        caustics *= depthFade;
+
+        float lightScale = length(u_lightColor) * 0.25;
+        color += caustics * lightScale;
+    }
 
     fragColor = vec4(color, 1.0);
 }

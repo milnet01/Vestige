@@ -679,6 +679,31 @@ void Engine::run()
             // Sync foliage wind time for shadow pass (must match main foliage pass)
             m_renderer->setFoliageShadowTime(static_cast<float>(m_timer->getElapsedTime()));
 
+            // Set caustics params if water exists (used by scene + terrain shaders)
+            if (!m_renderData.waterSurfaces.empty())
+            {
+                const auto& waterMatrix = m_renderData.waterSurfaces[0].second;
+                float waterY = waterMatrix[3][1];
+                float waterX = waterMatrix[3][0];
+                float waterZ = waterMatrix[3][2];
+                float elapsed = static_cast<float>(m_timer->getElapsedTime());
+
+                // Get water surface dimensions for XZ bounds
+                const auto& waterCfg = m_renderData.waterSurfaces[0].first->getConfig();
+                glm::vec2 center(waterX, waterZ);
+                glm::vec2 halfExtent(waterCfg.width * 0.5f, waterCfg.depth * 0.5f);
+
+                m_renderer->setCausticsParams(true, waterY, elapsed, center, halfExtent);
+                m_terrainRenderer.setCausticsParams(true, waterY, elapsed,
+                                                     m_renderer->getCausticsTexture(),
+                                                     center, halfExtent);
+            }
+            else
+            {
+                m_renderer->setCausticsParams(false, 0.0f, 0.0f);
+                m_terrainRenderer.setCausticsParams(false, 0.0f, 0.0f, 0);
+            }
+
             m_profiler.getGpuTimer().beginPass("Scene");
             m_renderer->renderScene(m_renderData, *m_camera, aspectRatio);
             m_profiler.getGpuTimer().endPass();

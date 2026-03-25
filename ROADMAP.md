@@ -721,6 +721,94 @@ Outdoor landscapes surrounding the Temple complex — hills, valleys, and the Ki
 
 ---
 
+## Phase 16: 2D Game and Scene Support
+**Goal:** Enable the creation of 2D games and scenes alongside the existing 3D capabilities — sprite-based rendering, 2D physics, tilemaps, and a dedicated 2D editor workflow.
+
+Phase 9's camera modes (isometric, top-down, orthographic) provide the viewing foundation. This phase adds the rendering, physics, and tooling needed to build complete 2D experiences.
+
+### 2D Rendering Pipeline
+- [ ] Sprite renderer (textured quads with z-ordering, tint, and flip)
+- [ ] Sprite atlas / batch renderer (minimize draw calls — single VBO for all sprites)
+- [ ] Sprite sheet animation (frame-based playback with configurable speed and looping)
+- [ ] 2D particle system (lightweight point/quad emitters for sparks, dust, rain)
+- [ ] Pixel-perfect rendering mode (integer scaling, nearest-neighbor filtering)
+
+### Tilemap System
+- [ ] Tilemap component (grid of tile IDs referencing a tileset texture)
+- [ ] Multi-layer tilemaps (background, midground, foreground with parallax scrolling)
+- [ ] Tilemap editor — paint tiles from a palette, auto-tiling rules for terrain edges
+- [ ] Animated tiles (water, lava, torches cycle through frames)
+- [ ] Tile collision flags (solid, platform, slope, trigger)
+
+### 2D Physics
+- [ ] 2D rigid body component (Box2D or custom — position, rotation, velocity)
+- [ ] 2D collision shapes (box, circle, polygon, edge chain)
+- [ ] 2D raycasting and overlap queries
+- [ ] One-way platforms (pass through from below, solid from above)
+- [ ] 2D character controller (platformer movement, wall slide, coyote time)
+
+### 2D Lighting (Optional)
+- [ ] 2D point lights with soft shadows (ray-marched or shadow geometry)
+- [ ] Normal-mapped sprites (2D sprites lit by scene lights for depth effect)
+- [ ] Day/night ambient tint system
+
+### 2D Camera
+- [ ] Orthographic 2D camera with smooth follow, deadzone, and look-ahead
+- [ ] Camera bounds (constrain to level extents)
+- [ ] Screen shake and zoom effects
+- [ ] Split-screen support for local multiplayer
+
+### Editor Integration
+- [ ] 2D/3D scene mode toggle in the editor
+- [ ] Sprite import and slicing tool (auto-detect frames in a sprite sheet)
+- [ ] Tilemap painting panel with brush, fill, and rectangle tools
+- [ ] 2D scene hierarchy with layer management and z-order controls
+
+### Milestone
+A complete 2D platformer or top-down game can be built entirely in the editor — sprites, tilemaps, collision, physics, and 2D lighting — without writing code.
+
+---
+
+## Phase 17: Procedural Generation
+**Goal:** Generate content algorithmically — terrain, buildings, vegetation, dungeons, and worlds — enabling large-scale scenes without hand-placing every element.
+
+### Noise and Terrain Generation
+- [ ] Noise library (Perlin, Simplex, Worley/Voronoi, domain warping, fractal brownian motion)
+- [ ] Procedural heightmap generation (configurable octaves, lacunarity, persistence, seed)
+- [ ] Biome distribution from noise (temperature + moisture maps → biome type)
+- [ ] Erosion simulation (hydraulic and thermal erosion for realistic terrain)
+- [ ] Procedural splatmap from terrain features (slope → rock, flat → grass, low → sand)
+
+### Vegetation Generation
+- [ ] L-system tree generator (grammar-based branching — species presets for olive, cedar, palm, acacia)
+- [ ] Procedural bush/shrub generator (randomized billboards or low-poly meshes)
+- [ ] Scatter placement from density maps (noise-driven distribution with spacing rules)
+- [ ] Procedural flower/grass variety (color, height, density variation from noise)
+
+### Building and Structure Generation
+- [ ] Modular building generator (define rules: foundation, walls, floors, roof → output geometry)
+- [ ] Floor plan generator (room partitioning algorithms for interior layouts)
+- [ ] Procedural wall decoration (window placement, door placement, column spacing)
+- [ ] Ancient city layout generator (streets, blocks, plazas from graph algorithms)
+
+### Dungeon and Level Generation
+- [ ] Room-and-corridor generator (BSP tree or cellular automata)
+- [ ] Wave Function Collapse (WFC) for tile-based level generation
+- [ ] Configurable constraints (room count, path length, connectivity, dead-end ratio)
+- [ ] Prefab room placement (hand-crafted rooms connected by generated corridors)
+
+### Runtime and Editor Integration
+- [ ] Procedural generation as editor tool (generate → review → tweak → bake to static scene)
+- [ ] Seed-based reproducibility (same seed always produces the same result)
+- [ ] Live preview while adjusting parameters
+- [ ] Infinite/streaming world generation (chunk-based, generate on demand as camera moves)
+- [ ] Node-based generator graph (connect noise → transform → output nodes visually)
+
+### Milestone
+A procedural world generator that creates varied terrain, forests, and settlements from a single seed — usable both as an editor tool for rapid scene creation and as a runtime system for infinite exploration.
+
+---
+
 ## Commercial Vision
 
 ### Engine Licensing

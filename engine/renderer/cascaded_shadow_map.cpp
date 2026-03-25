@@ -126,21 +126,36 @@ glm::mat4 CascadedShadowMap::computeCascadeMatrix(
 
     glm::mat4 lightView = glm::lookAt(center - lightDir, center, up);
 
-    // Find the AABB of the frustum corners in light-view space
-    float minX = std::numeric_limits<float>::max();
-    float maxX = std::numeric_limits<float>::lowest();
-    float minY = std::numeric_limits<float>::max();
-    float maxY = std::numeric_limits<float>::lowest();
+    // Bounding sphere cascade fitting (industry standard — UE4/5, Unity, Bevy).
+    // Instead of a tight AABB of the sub-frustum in light-space (which degenerates
+    // to a narrow strip when looking steeply down), use the bounding sphere of the
+    // sub-frustum corners. A sphere is rotation-invariant, so the orthographic
+    // projection never shrinks regardless of camera angle. Costs ~30-50% wasted
+    // shadow texels compared to tight AABB, but eliminates edge clipping entirely.
+    float radius = 0.0f;
+    for (const auto& corner : frustumCorners)
+    {
+        float dist = glm::length(corner - center);
+        radius = std::max(radius, dist);
+    }
+    // Round radius up to texel grid for stable shadow edges
+    float worldUnitsPerTexel = (radius * 2.0f) / static_cast<float>(resolution);
+    if (worldUnitsPerTexel > 0.0f)
+    {
+        radius = std::ceil(radius / worldUnitsPerTexel) * worldUnitsPerTexel;
+    }
+
+    float minX = -radius;
+    float maxX =  radius;
+    float minY = -radius;
+    float maxY =  radius;
+
+    // Find Z range in light-view space (still need tight Z for depth precision)
     float minZ = std::numeric_limits<float>::max();
     float maxZ = std::numeric_limits<float>::lowest();
-
     for (const auto& corner : frustumCorners)
     {
         glm::vec4 lsCorner = lightView * glm::vec4(corner, 1.0f);
-        minX = std::min(minX, lsCorner.x);
-        maxX = std::max(maxX, lsCorner.x);
-        minY = std::min(minY, lsCorner.y);
-        maxY = std::max(maxY, lsCorner.y);
         minZ = std::min(minZ, lsCorner.z);
         maxZ = std::max(maxZ, lsCorner.z);
     }
@@ -149,21 +164,6 @@ glm::mat4 CascadedShadowMap::computeCascadeMatrix(
     float zRange = maxZ - minZ;
     minZ -= zRange * 0.5f;
     maxZ += zRange * 0.5f;
-
-    // Snap ortho bounds to texel grid to prevent shadow swimming
-    float worldUnitsPerTexelX = (maxX - minX) / static_cast<float>(resolution);
-    float worldUnitsPerTexelY = (maxY - minY) / static_cast<float>(resolution);
-
-    if (worldUnitsPerTexelX > 0.0f)
-    {
-        minX = std::floor(minX / worldUnitsPerTexelX) * worldUnitsPerTexelX;
-        maxX = std::ceil(maxX / worldUnitsPerTexelX) * worldUnitsPerTexelX;
-    }
-    if (worldUnitsPerTexelY > 0.0f)
-    {
-        minY = std::floor(minY / worldUnitsPerTexelY) * worldUnitsPerTexelY;
-        maxY = std::ceil(maxY / worldUnitsPerTexelY) * worldUnitsPerTexelY;
-    }
 
     glm::mat4 lightProjection = glm::ortho(minX, maxX, minY, maxY, minZ, maxZ);
     glm::mat4 shadowMatrix = lightProjection * lightView;
