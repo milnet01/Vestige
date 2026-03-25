@@ -20,6 +20,7 @@ uniform float u_windAmplitude;
 uniform float u_windFrequency;
 uniform float u_maxDistance;
 uniform vec3 u_cameraPos;
+uniform vec4 u_clipPlane;     // Water clip plane (0,0,0,0 = disabled)
 
 out vec2 v_texCoord;
 out vec3 v_colorTint;
@@ -54,7 +55,11 @@ void main()
     float dist = distance(u_cameraPos, i_position);
     v_alpha = 1.0 - smoothstep(u_maxDistance * 0.8, u_maxDistance, dist);
 
-    gl_Position = u_viewProjection * vec4(worldPos, 1.0);
+    vec4 worldPosition = vec4(worldPos, 1.0);
+    gl_Position = u_viewProjection * worldPosition;
+
+    // Water clip plane for reflection/refraction passes
+    gl_ClipDistance[0] = dot(worldPosition, u_clipPlane);
 
     v_texCoord = a_texCoord;
     v_colorTint = i_colorTint;

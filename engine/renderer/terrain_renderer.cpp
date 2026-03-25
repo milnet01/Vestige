@@ -80,7 +80,8 @@ void TerrainRenderer::render(const Terrain& terrain,
                              const Camera& camera,
                              float aspectRatio,
                              const SceneRenderData& sceneData,
-                             CascadedShadowMap* csm)
+                             CascadedShadowMap* csm,
+                             const glm::vec4& clipPlane)
 {
     if (!m_initialized || !terrain.isInitialized()) return;
 
@@ -110,6 +111,7 @@ void TerrainRenderer::render(const Terrain& terrain,
     m_terrainShader.setMat4("u_view", view);
     m_terrainShader.setVec3("u_viewPos", camera.getPosition());
     m_terrainShader.setVec3("u_cameraPos", camera.getPosition());
+    m_terrainShader.setVec4("u_clipPlane", clipPlane);
 
     // Terrain uniforms
     m_terrainShader.setFloat("u_heightScale", config.heightScale);

@@ -50,7 +50,8 @@ public:
                 float time,
                 float maxDistance = 100.0f,
                 CascadedShadowMap* csm = nullptr,
-                const DirectionalLight* dirLight = nullptr);
+                const DirectionalLight* dirLight = nullptr,
+                const glm::vec4& clipPlane = glm::vec4(0.0f));
 
     /// @brief Renders foliage into a shadow map with alpha testing.
     /// Only renders instances within shadowMaxDistance for performance.

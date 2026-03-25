@@ -45,7 +45,8 @@ public:
     void render(const std::vector<const FoliageChunk*>& chunks,
                 const Camera& camera,
                 const glm::mat4& viewProjection,
-                float time);
+                float time,
+                const glm::vec4& clipPlane = glm::vec4(0.0f));
 
     /// @brief Distance at which LOD0 -> LOD1 transition begins.
     float lodDistance = 50.0f;

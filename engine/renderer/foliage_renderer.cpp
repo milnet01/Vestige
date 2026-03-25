@@ -81,7 +81,8 @@ void FoliageRenderer::render(
     float time,
     float maxDistance,
     CascadedShadowMap* csm,
-    const DirectionalLight* dirLight)
+    const DirectionalLight* dirLight,
+    const glm::vec4& clipPlane)
 {
     if (!m_initialized || chunks.empty())
     {
@@ -141,6 +142,7 @@ void FoliageRenderer::render(
     m_shader.setFloat("u_windFrequency", windFrequency);
     m_shader.setFloat("u_maxDistance", maxDistance);
     m_shader.setVec3("u_cameraPos", camPos);
+    m_shader.setVec4("u_clipPlane", clipPlane);
 
     // Lighting uniforms
     bool hasShadows = (csm != nullptr && dirLight != nullptr);

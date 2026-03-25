@@ -13,6 +13,7 @@ layout(location = 6) in float i_alpha;
 
 uniform mat4 u_viewProjection;
 uniform float u_time;
+uniform vec4 u_clipPlane;     // Water clip plane (0,0,0,0 = disabled)
 
 out vec3 v_color;
 out float v_alpha;
@@ -36,7 +37,9 @@ void main()
     float windPhase = u_time * 1.5 + i_position.x * 0.3 + i_position.z * 0.2;
     worldPos.x += sin(windPhase) * swayAmount * i_scale;
 
-    gl_Position = u_viewProjection * vec4(worldPos, 1.0);
+    vec4 worldPosition = vec4(worldPos, 1.0);
+    gl_Position = u_viewProjection * worldPosition;
+    gl_ClipDistance[0] = dot(worldPosition, u_clipPlane);
     v_color = a_color;
     v_alpha = i_alpha;
 }

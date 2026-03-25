@@ -1543,7 +1543,22 @@ std::vector<Renderer::InstanceBatch> Renderer::buildInstanceBatches(
     return batches;
 }
 
-void Renderer::renderScene(const SceneRenderData& renderData, const Camera& camera, float aspectRatio)
+void Renderer::rebindSceneFbo()
+{
+    bool isTAA = (m_antiAliasMode == AntiAliasMode::TAA && m_taa && m_taaSceneFbo);
+    if (isTAA)
+    {
+        m_taaSceneFbo->bind();
+    }
+    else if (m_msaaFbo)
+    {
+        m_msaaFbo->bind();
+    }
+    glViewport(0, 0, m_windowWidth, m_windowHeight);
+}
+
+void Renderer::renderScene(const SceneRenderData& renderData, const Camera& camera, float aspectRatio,
+                            const glm::vec4& clipPlane)
 {
     // Reset per-frame scratch allocator (all pmr::vectors from last frame are now invalid)
     resetFrameAllocator();
@@ -1768,8 +1783,8 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
     // Upload light uniforms once per frame (not per batch)
     uploadLightUniforms(camera);
 
-    // Disable water clip plane for normal scene rendering
-    m_sceneShader.setVec4("u_clipPlane", glm::vec4(0.0f));
+    // Water clip plane for reflection/refraction passes (vec4(0) = disabled)
+    m_sceneShader.setVec4("u_clipPlane", clipPlane);
 
     // --- Scene pass: draw all opaque render items ---
     // MDI path: group batches by material, issue one glMultiDrawElementsIndirect per group.

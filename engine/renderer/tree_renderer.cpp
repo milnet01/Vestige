@@ -69,7 +69,8 @@ void TreeRenderer::render(
     const std::vector<const FoliageChunk*>& chunks,
     const Camera& camera,
     const glm::mat4& viewProjection,
-    float time)
+    float time,
+    const glm::vec4& clipPlane)
 {
     if (!m_initialized || chunks.empty())
     {
@@ -142,6 +143,7 @@ void TreeRenderer::render(
         m_meshShader.use();
         m_meshShader.setMat4("u_viewProjection", viewProjection);
         m_meshShader.setFloat("u_time", time);
+        m_meshShader.setVec4("u_clipPlane", clipPlane);
 
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -173,6 +175,7 @@ void TreeRenderer::render(
 
         m_billboardShader.use();
         m_billboardShader.setMat4("u_viewProjection", viewProjection);
+        m_billboardShader.setVec4("u_clipPlane", clipPlane);
         // Extract camera right from view matrix (row 0)
         glm::mat4 view = camera.getViewMatrix();
         glm::vec3 cameraRight(view[0][0], view[1][0], view[2][0]);
