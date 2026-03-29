@@ -6,6 +6,8 @@
 #include "scene/mesh_renderer.h"
 #include "scene/light_component.h"
 #include "scene/water_surface.h"
+#include "scene/particle_emitter.h"
+#include "scene/particle_presets.h"
 #include "resource/model.h"
 #include "renderer/frame_diagnostics.h"
 #include "renderer/debug_draw.h"
@@ -2108,6 +2110,22 @@ void Engine::setupTabernacleScene()
     af->light.quadratic = 0.20f;
     af->light.castsShadow = false;
 
+    // Visible fire particles on the altar (campfire preset scaled to altar top)
+    auto* altarParticles = altarFire->addComponent<ParticleEmitterComponent>();
+    ParticleEmitterConfig altarFireCfg = ParticlePresets::campfire();
+    altarFireCfg.emitsLight = false;         // Already have a PointLightComponent
+    altarFireCfg.shapeRadius = altarSide * 0.35f;  // Spread across altar top
+    altarFireCfg.shapeConeAngle = 25.0f;
+    altarFireCfg.emissionRate = 200.0f;      // Large perpetual fire
+    altarFireCfg.maxParticles = 600;
+    altarFireCfg.startLifetimeMin = 0.5f;
+    altarFireCfg.startLifetimeMax = 1.5f;
+    altarFireCfg.startSpeedMin = 1.5f;
+    altarFireCfg.startSpeedMax = 3.0f;
+    altarFireCfg.startSizeMin = 0.08f;
+    altarFireCfg.startSizeMax = 0.30f;
+    altarParticles->getConfig() = altarFireCfg;
+
     // Gate torches — two fire braziers flanking the courtyard entrance
     for (int side = -1; side <= 1; side += 2)
     {
@@ -2124,6 +2142,12 @@ void Engine::setupTabernacleScene()
         tl->light.linear = 0.35f;
         tl->light.quadratic = 0.44f;
         tl->light.castsShadow = false;
+
+        // Visible fire particles on the torch (torchFire preset)
+        auto* torchParticles = torch->addComponent<ParticleEmitterComponent>();
+        ParticleEmitterConfig torchCfg = ParticlePresets::torchFire();
+        torchCfg.emitsLight = false;         // Already have a PointLightComponent
+        torchParticles->getConfig() = torchCfg;
     }
 
     // =====================================================================
