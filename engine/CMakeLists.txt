@@ -39,6 +39,7 @@ set(ENGINE_SOURCES
     renderer/environment_map.cpp
     renderer/light_probe.cpp
     renderer/light_probe_manager.cpp
+    renderer/sh_probe_grid.cpp
     renderer/frame_diagnostics.cpp
     renderer/debug_draw.cpp
     renderer/depth_reducer.cpp
