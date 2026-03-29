@@ -17,6 +17,7 @@
 #include "renderer/text_renderer.h"
 #include "renderer/color_grading_lut.h"
 #include "renderer/instance_buffer.h"
+#include "renderer/light_probe_manager.h"
 #include "renderer/environment_map.h"
 #include "renderer/depth_reducer.h"
 #include "renderer/smaa.h"
@@ -70,9 +71,11 @@ public:
     void endFrame(float deltaTime = 1.0f / 60.0f);
 
     /// @brief Renders a mesh with material and lighting.
+    /// @param boneMatrices Optional bone matrices for skeletal animation (nullptr for static).
     void drawMesh(const Mesh& mesh, const glm::mat4& modelMatrix,
                   const Material& material, const Camera& camera,
-                  float aspectRatio);
+                  float aspectRatio,
+                  const std::vector<glm::mat4>* boneMatrices = nullptr);
 
     /// @brief Sets the clear color (background color).
     void setClearColor(const glm::vec3& color);
@@ -91,6 +94,25 @@ public:
 
     /// @brief Adds a spot light to the scene.
     bool addSpotLight(const SpotLight& light);
+
+    /// @brief Enables or disables the skybox (disable for indoor scenes).
+    void setSkyboxEnabled(bool enabled) { m_skyboxEnabled = enabled; }
+
+    /// @brief Loads an equirectangular HDRI as the skybox and regenerates the IBL environment map.
+    /// @param path File path to equirectangular image (.hdr, .jpg, .png, etc.).
+    /// @return True if loaded and IBL regenerated successfully.
+    bool loadSkyboxHDRI(const std::string& path);
+
+    /// @brief Gets the light probe manager for adding/configuring probes.
+    LightProbeManager* getLightProbeManager() const { return m_lightProbeManager.get(); }
+
+    /// @brief Captures a light probe by rendering the scene from the probe's position.
+    /// @param probeIndex Index of the probe in the LightProbeManager.
+    /// @param renderData Scene geometry and lights to render.
+    /// @param camera The main camera (for shadow computation reference).
+    /// @param aspectRatio Camera aspect ratio.
+    void captureLightProbe(int probeIndex, const SceneRenderData& renderData,
+                           const Camera& camera, float aspectRatio);
 
     /// @brief Enables or disables wireframe rendering mode.
     void setWireframeMode(bool isEnabled);
@@ -205,9 +227,13 @@ public:
     /// @param clipPlane Optional clip plane for water reflection/refraction (0,0,0,0 = disabled).
     /// @param geometryOnly When true, skips shadow passes and FBO rebinding (caller manages FBO).
     ///        Used for water reflection/refraction passes that reuse existing shadow maps.
+    /// @param viewOverride Optional view matrix override (for cubemap face rendering).
+    /// @param projOverride Optional projection matrix override (for cubemap face rendering).
     void renderScene(const SceneRenderData& renderData, const Camera& camera, float aspectRatio,
                      const glm::vec4& clipPlane = glm::vec4(0.0f),
-                     bool geometryOnly = false);
+                     bool geometryOnly = false,
+                     const glm::mat4& viewOverride = glm::mat4(0.0f),
+                     const glm::mat4& projOverride = glm::mat4(0.0f));
 
     /// @brief Re-binds the active scene FBO and restores viewport.
     /// Call after rendering to an external FBO (e.g., water reflection/refraction).
@@ -316,6 +342,15 @@ public:
     /// @return OpenGL texture ID, or 0 if not available.
     GLuint getResolvedDepthTexture() const;
 
+    /// @brief Resolves the MSAA scene color + depth to sampleable textures mid-frame.
+    /// Call after opaques/terrain/foliage, before water rendering.
+    /// The resolve FBOs are overwritten again in endFrame() — safe to use mid-frame.
+    void resolveSceneForWater();
+
+    /// @brief Gets the resolved scene color texture ID (from last resolveSceneForWater call).
+    /// @return OpenGL texture ID, or 0 if not available.
+    GLuint getResolvedColorTexture() const;
+
     /// @brief Gets the text renderer (nullptr if not initialized).
     TextRenderer* getTextRenderer();
 
@@ -331,6 +366,7 @@ public:
         const Mesh* mesh;
         const Material* material;
         std::vector<glm::mat4> modelMatrices;
+        std::vector<const std::vector<glm::mat4>*> boneMatrixPtrs;  ///< Parallel to modelMatrices (nullptr for static)
     };
 
     /// @brief Groups render items by (mesh, material) pair for instanced drawing.
@@ -396,6 +432,9 @@ private:
 
     // Skybox
     std::unique_ptr<Skybox> m_skybox;
+
+    // Light probes
+    std::unique_ptr<LightProbeManager> m_lightProbeManager;
 
     // Text rendering
     std::unique_ptr<TextRenderer> m_textRenderer;
@@ -474,6 +513,12 @@ private:
     // IBL (Image-Based Lighting)
     std::unique_ptr<EnvironmentMap> m_environmentMap;
 
+    // Stored clear color (re-applied each frame — editor may clobber glClearColor)
+    glm::vec3 m_clearColor = glm::vec3(0.1f, 0.1f, 0.12f);
+
+    // Frame counter for staggered cascade updates
+    uint32_t m_shadowFrameCount = 0;
+
     // Reusable per-frame vectors (avoid allocation every frame)
     std::vector<SceneRenderData::RenderItem> m_culledItems;
     std::vector<SceneRenderData::RenderItem> m_sortedTransparentItems;
@@ -528,6 +573,22 @@ private:
 
     void generateSsaoKernel();
     void generateSsaoNoiseTexture();
+
+    bool m_skyboxEnabled = true;
+
+    // Dummy SSBO for model matrices (binding point 0) — Mesa requires all declared
+    // SSBOs to have valid buffers bound, even when the MDI code path is not taken.
+    GLuint m_dummyModelSSBO = 0;
+
+    // Fallback textures — Mesa requires ALL declared samplers to have valid textures
+    // bound at draw time, even when the shader code path doesn't sample them.
+    GLuint m_fallbackTexture = 0;      ///< 1x1 white 2D texture
+    GLuint m_fallbackCubemap = 0;      ///< 1x1 black cubemap
+    GLuint m_fallbackTexArray = 0;     ///< 1x1x1 2D array texture
+
+    // Skeletal animation bone matrix SSBO (binding point 2)
+    GLuint m_boneMatrixSSBO = 0;
+    static constexpr int MAX_BONES = 128;
 
     // Water caustics
     GLuint m_causticsTexture = 0;

@@ -26,6 +26,7 @@ Material::Material()
     , m_emissive(0.0f, 0.0f, 0.0f)
     , m_emissiveStrength(1.0f)
     , m_uvScale(1.0f)
+    , m_iblMultiplier(1.0f)
     , m_metallicRoughnessTexture(nullptr)
     , m_emissiveTexture(nullptr)
     , m_aoTexture(nullptr)
@@ -175,6 +176,16 @@ void Material::setUvScale(float scale)
 float Material::getUvScale() const
 {
     return m_uvScale;
+}
+
+void Material::setIblMultiplier(float multiplier)
+{
+    m_iblMultiplier = glm::clamp(multiplier, 0.0f, 1.0f);
+}
+
+float Material::getIblMultiplier() const
+{
+    return m_iblMultiplier;
 }
 
 // --- PBR properties ---

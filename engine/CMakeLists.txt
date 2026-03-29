@@ -37,6 +37,8 @@ set(ENGINE_SOURCES
     renderer/color_grading_lut.cpp
     renderer/instance_buffer.cpp
     renderer/environment_map.cpp
+    renderer/light_probe.cpp
+    renderer/light_probe_manager.cpp
     renderer/frame_diagnostics.cpp
     renderer/debug_draw.cpp
     renderer/depth_reducer.cpp
@@ -87,6 +89,10 @@ set(ENGINE_SOURCES
     environment/biome_preset.cpp
     environment/terrain.cpp
     renderer/terrain_renderer.cpp
+    animation/skeleton.cpp
+    animation/animation_clip.cpp
+    animation/animation_sampler.cpp
+    animation/skeleton_animator.cpp
     profiler/gpu_timer.cpp
     profiler/cpu_profiler.cpp
     profiler/memory_tracker.cpp

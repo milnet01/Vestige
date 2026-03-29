@@ -200,27 +200,103 @@ void WaterRenderer::render(const std::vector<WaterRenderItem>& waterItems,
     glDisable(GL_BLEND);
 }
 
+// --- Tileable value noise for procedural water textures ---
+namespace
+{
+
+/// Hash function for deterministic pseudo-random values at integer lattice points.
+float hashGrid(int x, int y)
+{
+    // Use unsigned arithmetic — the overflows are intentional (integer hash function)
+    unsigned int n = static_cast<unsigned int>(x + y * 57);
+    n = (n << 13) ^ n;
+    return (1.0f - static_cast<float>((n * (n * n * 15731u + 789221u) + 1376312589u) & 0x7fffffffu)
+            / 1073741824.0f);
+}
+
+/// Smoothed value noise with bilinear interpolation and tileable wrapping.
+float valueNoise(float x, float y, int wrap)
+{
+    int ix = static_cast<int>(std::floor(x)) % wrap;
+    int iy = static_cast<int>(std::floor(y)) % wrap;
+    if (ix < 0) ix += wrap;
+    if (iy < 0) iy += wrap;
+
+    float fx = x - std::floor(x);
+    float fy = y - std::floor(y);
+
+    // Smoothstep interpolation
+    fx = fx * fx * (3.0f - 2.0f * fx);
+    fy = fy * fy * (3.0f - 2.0f * fy);
+
+    int ix1 = (ix + 1) % wrap;
+    int iy1 = (iy + 1) % wrap;
+
+    float a = hashGrid(ix, iy);
+    float b = hashGrid(ix1, iy);
+    float c = hashGrid(ix, iy1);
+    float d = hashGrid(ix1, iy1);
+
+    return a + fx * (b - a) + fy * (c - a) + fx * fy * (a - b - c + d);
+}
+
+/// FBM (fractional Brownian motion) — 4 octaves of tileable value noise.
+/// Creates organic, isotropic patterns with no directional bias.
+float fbm(float x, float y, int baseWrap)
+{
+    float value = 0.0f;
+    float amplitude = 0.5f;
+    int wrap = baseWrap;
+
+    for (int i = 0; i < 4; ++i)
+    {
+        value += amplitude * valueNoise(x, y, wrap);
+        amplitude *= 0.5f;
+        x *= 2.0f;
+        y *= 2.0f;
+        wrap *= 2;
+    }
+    return value;
+}
+
+} // anonymous namespace
+
 void WaterRenderer::generateDefaultNormalMap()
 {
-    // Generate a simple tileable normal map (flat with slight noise for detail)
+    // Generate a tileable normal map from FBM noise height field.
+    // The noise tiles every 8 grid cells — at 256 pixels, each cell = 32 pixels.
     constexpr int size = 256;
-    std::vector<unsigned char> pixels(size * size * 3);
+    constexpr int gridWrap = 8;   // Tiling period in noise grid cells
+    constexpr float normalStr = 2.5f;  // Strength of normal perturbation
 
+    // First generate a height field
+    std::vector<float> heights(static_cast<size_t>(size * size));
+    for (int y = 0; y < size; ++y)
+    {
+        for (int x = 0; x < size; ++x)
+        {
+            float u = static_cast<float>(x) / static_cast<float>(size) * gridWrap;
+            float v = static_cast<float>(y) / static_cast<float>(size) * gridWrap;
+            heights[static_cast<size_t>(y * size + x)] = fbm(u, v, gridWrap);
+        }
+    }
+
+    // Compute normals from height field via finite differences (wrapping for tileability)
+    std::vector<unsigned char> pixels(static_cast<size_t>(size * size * 3));
     for (int y = 0; y < size; ++y)
     {
         for (int x = 0; x < size; ++x)
         {
             int idx = (y * size + x) * 3;
+            int xp = (x + 1) % size;
+            int yp = (y + 1) % size;
 
-            // Base normal pointing up (0, 0, 1) encoded as (128, 128, 255)
-            // Add subtle sine-based ripple pattern for visual interest
-            float u = static_cast<float>(x) / static_cast<float>(size);
-            float v = static_cast<float>(y) / static_cast<float>(size);
+            float h  = heights[static_cast<size_t>(y * size + x)];
+            float hx = heights[static_cast<size_t>(y * size + xp)];
+            float hy = heights[static_cast<size_t>(yp * size + x)];
 
-            float nx = 0.03f * std::sin(u * 12.0f * glm::pi<float>())
-                      + 0.02f * std::sin(v * 8.0f * glm::pi<float>() + 1.5f);
-            float nz = 0.03f * std::sin(v * 10.0f * glm::pi<float>())
-                      + 0.02f * std::sin(u * 6.0f * glm::pi<float>() + 0.7f);
+            float nx = (h - hx) * normalStr;
+            float nz = (h - hy) * normalStr;
             float ny = 1.0f;
 
             // Normalize
@@ -230,9 +306,9 @@ void WaterRenderer::generateDefaultNormalMap()
             nz /= len;
 
             // Encode to [0, 255]
-            pixels[idx + 0] = static_cast<unsigned char>((nx * 0.5f + 0.5f) * 255.0f);
-            pixels[idx + 1] = static_cast<unsigned char>((ny * 0.5f + 0.5f) * 255.0f);
-            pixels[idx + 2] = static_cast<unsigned char>((nz * 0.5f + 0.5f) * 255.0f);
+            pixels[static_cast<size_t>(idx + 0)] = static_cast<unsigned char>((nx * 0.5f + 0.5f) * 255.0f);
+            pixels[static_cast<size_t>(idx + 1)] = static_cast<unsigned char>((ny * 0.5f + 0.5f) * 255.0f);
+            pixels[static_cast<size_t>(idx + 2)] = static_cast<unsigned char>((nz * 0.5f + 0.5f) * 255.0f);
         }
     }
 
@@ -250,9 +326,12 @@ void WaterRenderer::generateDefaultNormalMap()
 
 void WaterRenderer::generateDefaultDudvMap()
 {
-    // Generate a simple tileable DuDv distortion map
+    // Generate a tileable DuDv distortion map from two independent FBM noise fields.
+    // Uses a different grid offset (seed) from the normal map to avoid correlation.
     constexpr int size = 256;
-    std::vector<unsigned char> pixels(size * size * 2);  // RG only
+    constexpr int gridWrap = 8;
+
+    std::vector<unsigned char> pixels(static_cast<size_t>(size * size * 2));  // RG only
 
     for (int y = 0; y < size; ++y)
     {
@@ -260,17 +339,15 @@ void WaterRenderer::generateDefaultDudvMap()
         {
             int idx = (y * size + x) * 2;
 
-            float u = static_cast<float>(x) / static_cast<float>(size);
-            float v = static_cast<float>(y) / static_cast<float>(size);
+            float u = static_cast<float>(x) / static_cast<float>(size) * gridWrap;
+            float v = static_cast<float>(y) / static_cast<float>(size) * gridWrap;
 
-            // Swirling distortion pattern
-            float du = 0.5f + 0.5f * std::sin(u * 8.0f * glm::pi<float>()
-                                              + v * 4.0f * glm::pi<float>());
-            float dv = 0.5f + 0.5f * std::sin(v * 6.0f * glm::pi<float>()
-                                              + u * 10.0f * glm::pi<float>() + 1.0f);
+            // Two independent noise fields offset in space to decorrelate
+            float du = fbm(u + 5.2f, v + 1.3f, gridWrap) * 0.5f + 0.5f;
+            float dv = fbm(u + 9.7f, v + 6.1f, gridWrap) * 0.5f + 0.5f;
 
-            pixels[idx + 0] = static_cast<unsigned char>(du * 255.0f);
-            pixels[idx + 1] = static_cast<unsigned char>(dv * 255.0f);
+            pixels[static_cast<size_t>(idx + 0)] = static_cast<unsigned char>(du * 255.0f);
+            pixels[static_cast<size_t>(idx + 1)] = static_cast<unsigned char>(dv * 255.0f);
         }
     }
 

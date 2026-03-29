@@ -122,10 +122,17 @@ uniform float u_baseColorAlpha;
 
 // IBL (Image-Based Lighting)
 uniform bool u_hasIBL;
-uniform samplerCube u_irradianceMap;    // Unit 14
-uniform samplerCube u_prefilterMap;     // Unit 15
-uniform sampler2D u_brdfLUT;            // Unit 16
+uniform float u_iblMultiplier;          // Per-material IBL scale (0=no sky light, 1=full)
+uniform samplerCube u_irradianceMap;    // Unit 14 — global (sky) IBL
+uniform samplerCube u_prefilterMap;     // Unit 15 — global (sky) IBL
+uniform sampler2D u_brdfLUT;            // Unit 16 — shared BRDF LUT
 uniform float u_maxPrefilterLod;
+
+// Light probes — local IBL override for indoor/enclosed areas
+uniform bool u_hasProbe;
+uniform float u_probeWeight;            // 0=global only, 1=probe only (blends at boundary)
+uniform samplerCube u_probeIrradianceMap;  // Unit 10
+uniform samplerCube u_probePrefilterMap;   // Unit 11
 
 // Stochastic tiling
 uniform bool u_stochasticTiling;
@@ -935,29 +942,44 @@ void main()
         vec3 ambient;
         if (u_hasIBL)
         {
-            // IBL diffuse: irradiance map lookup
+            // Fresnel and diffuse/specular split
             vec3 F = fresnelSchlickRoughness(max(dot(norm, viewDir), 0.0), F0, roughness);
             vec3 kD = (vec3(1.0) - F) * (1.0 - metallic);
-            vec3 irradiance = texture(u_irradianceMap, norm).rgb;
-            vec3 diffuseIBL = kD * irradiance * albedo;
-
-            // IBL specular: prefiltered environment + BRDF LUT
             vec3 R = reflect(-viewDir, norm);
             float lod = roughness * u_maxPrefilterLod;
+
+            // Sample global (sky) IBL
+            vec3 irradiance = texture(u_irradianceMap, norm).rgb;
             vec3 prefilteredColor = textureLod(u_prefilterMap, R, lod).rgb;
+
+            // Blend with light probe IBL if available
+            if (u_hasProbe && u_probeWeight > 0.0)
+            {
+                vec3 probeIrradiance = texture(u_probeIrradianceMap, norm).rgb;
+                vec3 probePrefilt = textureLod(u_probePrefilterMap, R, lod).rgb;
+                irradiance = mix(irradiance, probeIrradiance, u_probeWeight);
+                prefilteredColor = mix(prefilteredColor, probePrefilt, u_probeWeight);
+            }
+
+            vec3 diffuseIBL = kD * irradiance * albedo;
             vec2 brdf = texture(u_brdfLUT, vec2(max(dot(norm, viewDir), 0.0), roughness)).rg;
             vec3 specularIBL = prefilteredColor * (F * brdf.x + brdf.y);
 
-            ambient = (diffuseIBL + specularIBL) * ao;
+            ambient = (diffuseIBL + specularIBL) * ao * u_iblMultiplier;
 
-            // Clearcoat IBL reflection: sharp specular from the clearcoat layer
+            // Clearcoat IBL reflection (uses blended prefilter)
             if (u_clearcoat > 0.0)
             {
                 float ccLod = u_clearcoatRoughness * u_maxPrefilterLod;
                 vec3 ccPrefilt = textureLod(u_prefilterMap, R, ccLod).rgb;
+                if (u_hasProbe && u_probeWeight > 0.0)
+                {
+                    vec3 ccProbe = textureLod(u_probePrefilterMap, R, ccLod).rgb;
+                    ccPrefilt = mix(ccPrefilt, ccProbe, u_probeWeight);
+                }
                 float ccFresnel = pow(1.0 - max(dot(norm, viewDir), 0.0), 5.0) * 0.96 + 0.04;
                 vec3 ccIBL = ccPrefilt * ccFresnel;
-                ambient = ambient * (1.0 - u_clearcoat * ccFresnel) + ccIBL * u_clearcoat * ao;
+                ambient = ambient * (1.0 - u_clearcoat * ccFresnel) + ccIBL * u_clearcoat * ao * u_iblMultiplier;
             }
         }
         else
