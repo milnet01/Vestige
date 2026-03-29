@@ -2,6 +2,7 @@
 /// @brief Engine implementation — main loop and subsystem orchestration.
 #include "core/engine.h"
 #include "core/logger.h"
+#include "renderer/light_probe_manager.h"
 #include "scene/mesh_renderer.h"
 #include "scene/light_component.h"
 #include "scene/water_surface.h"
@@ -80,8 +81,8 @@ bool Engine::initialize(const EngineConfig& config)
     ctrlConfig.moveSpeed = 3.0f;
     m_controller = std::make_unique<FirstPersonController>(*m_camera, *m_inputManager, ctrlConfig);
 
-    // Set up the demo scene
-    setupDemoScene();
+    // Set up the scene
+    setupTabernacleScene();
 
     // Initialize editor (ImGui + docking) — must come after InputManager for callback chaining
     m_editor = std::make_unique<Editor>();
@@ -89,6 +90,12 @@ bool Engine::initialize(const EngineConfig& config)
     {
         Logger::warning("Editor initialization failed — continuing without editor");
         m_editor.reset();
+    }
+
+    // Sync editor camera with the scene's initial camera position
+    if (m_editor && m_editor->getEditorCamera() && m_camera)
+    {
+        m_editor->getEditorCamera()->syncFromCamera(*m_camera);
     }
 
     // Initialize debug draw system for editor overlays (light gizmos, etc.)
@@ -111,8 +118,8 @@ bool Engine::initialize(const EngineConfig& config)
     {
         int w = config.window.width;
         int h = config.window.height;
-        // Water FBOs at 40% resolution for performance (3 scene passes per frame)
-        m_waterFbo.init(w * 2 / 5, h * 2 / 5, w * 2 / 5, h * 2 / 5);
+        // Water FBOs at 25% resolution
+        m_waterFbo.init(w / 4, h / 4, w / 4, h / 4);
     }
 
     // Initialize performance profiler
@@ -144,14 +151,13 @@ bool Engine::initialize(const EngineConfig& config)
         terrainConfig.spacingX = 1.0f;
         terrainConfig.spacingZ = 1.0f;
         terrainConfig.heightScale = 50.0f;
-        terrainConfig.origin = glm::vec3(-128.0f, 0.0f, -128.0f);  // Center at origin
+        terrainConfig.origin = glm::vec3(-128.0f, 0.0f, -128.0f);
         terrainConfig.gridResolution = 33;
         terrainConfig.maxLodLevels = 6;
         terrainConfig.baseLodDistance = 20.0f;
 
         if (m_terrain.initialize(terrainConfig))
         {
-            // Generate test hills with a flat area around the demo objects
             int w = terrainConfig.width;
             int d = terrainConfig.depth;
             float originX = terrainConfig.origin.x;
@@ -162,38 +168,32 @@ bool Engine::initialize(const EngineConfig& config)
                 {
                     float nx = static_cast<float>(x) / static_cast<float>(w - 1);
                     float nz = static_cast<float>(z) / static_cast<float>(d - 1);
-
-                    // World position of this texel
                     float wx = originX + static_cast<float>(x) * terrainConfig.spacingX;
                     float wz = originZ + static_cast<float>(z) * terrainConfig.spacingZ;
 
-                    // Gentle rolling hills using sine waves
                     float h = 0.0f;
                     h += 0.15f * std::sin(nx * 6.28f * 2.0f) * std::cos(nz * 6.28f * 1.5f);
                     h += 0.08f * std::sin(nx * 6.28f * 5.0f + 1.0f) * std::sin(nz * 6.28f * 4.0f);
                     h += 0.04f * std::sin(nx * 6.28f * 11.0f) * std::cos(nz * 6.28f * 9.0f + 2.0f);
                     h = std::max(h, 0.0f);
 
-                    // Flatten near origin where demo objects and grass sit.
-                    // Ground plane sits at y=0.02, so flat terrain at y=0 is just below it.
                     float distFromOrigin = std::sqrt(wx * wx + wz * wz);
-                    float flatRadius = 18.0f;   // Fully flat within 18m (ground plane is 30m)
-                    float blendRadius = 35.0f;  // Blend from flat to hills
+                    float flatRadius = 18.0f;
+                    float blendRadius = 35.0f;
                     if (distFromOrigin < blendRadius)
                     {
                         float t = std::max(0.0f, (distFromOrigin - flatRadius)
                                                 / (blendRadius - flatRadius));
-                        h *= t * t;  // Quadratic ease-in for smooth transition
+                        h *= t * t;
                     }
 
                     m_terrain.setRawHeight(x, z, h);
                 }
             }
 
-            // Upload modified heightmap and recompute normals
             m_terrain.updateHeightmapRegion(0, 0, w, d);
             m_terrain.updateNormalMapRegion(0, 0, w, d);
-            m_terrain.buildQuadtree();  // Rebuild with correct min/max heights
+            m_terrain.buildQuadtree();
         }
         else
         {
@@ -601,7 +601,7 @@ void Engine::run()
             if (vpW > 0 && vpH > 0)
             {
                 m_renderer->resizeRenderTarget(vpW, vpH);
-                m_waterFbo.resize(vpW * 2 / 5, vpH * 2 / 5, vpW * 2 / 5, vpH * 2 / 5);
+                m_waterFbo.resize(vpW / 4, vpH / 4, vpW / 4, vpH / 4);
             }
         }
         else
@@ -610,7 +610,7 @@ void Engine::run()
             int ww = m_window->getWidth();
             int wh = m_window->getHeight();
             m_renderer->resizeRenderTarget(ww, wh);
-            m_waterFbo.resize(ww * 2 / 5, wh * 2 / 5, ww * 2 / 5, wh * 2 / 5);
+            m_waterFbo.resize(ww / 4, wh / 4, ww / 4, wh / 4);
         }
 
         // Check for viewport clicks (uses previous frame's viewport bounds)
@@ -651,7 +651,7 @@ void Engine::run()
             // 3g. Process terrain brush input for sculpting/painting
             TerrainBrush& terrainBrush = m_editor->getTerrainBrush();
             if (terrainBrush.isActive() && !m_editor->isGizmoActive()
-                && m_terrain.isInitialized())
+                && m_terrainEnabled && m_terrain.isInitialized())
             {
                 int vpW = 0, vpH = 0;
                 m_editor->getViewportSize(vpW, vpH);
@@ -742,7 +742,7 @@ void Engine::run()
             m_profiler.getGpuTimer().endPass();
 
             // Render terrain (after opaques, before foliage/water)
-            if (m_terrain.isInitialized())
+            if (m_terrainEnabled && m_terrain.isInitialized())
             {
                 m_profiler.getGpuTimer().beginPass("Terrain");
                 m_terrainRenderer.render(m_terrain, *m_camera, aspectRatio, m_renderData,
@@ -794,12 +794,11 @@ void Engine::run()
                 }
 
                 float elapsed = static_cast<float>(m_timer->getElapsedTime());
-                GLuint skyboxTex = m_renderer->getSkyboxTextureId();
 
                 // Save renderer view state (geometryOnly passes overwrite m_lastProjection etc.)
                 m_renderer->saveViewState();
 
-                // --- Refraction pass: render scene below water into refraction FBO ---
+                // --- Refraction pass: render scene below water ---
                 {
                     glm::vec4 refrClipPlane(0.0f, -1.0f, 0.0f, waterY + 0.1f);
                     glEnable(GL_CLIP_DISTANCE0);
@@ -807,7 +806,7 @@ void Engine::run()
                     m_waterFbo.bindRefraction();
                     m_renderer->renderScene(m_renderData, *m_camera, aspectRatio, refrClipPlane, true);
 
-                    if (m_terrain.isInitialized())
+                    if (m_terrainEnabled && m_terrain.isInitialized())
                     {
                         m_terrainRenderer.render(m_terrain, *m_camera, aspectRatio, m_renderData,
                                                  m_renderer->getCascadedShadowMap(), refrClipPlane);
@@ -832,15 +831,11 @@ void Engine::run()
                     m_waterFbo.bindReflection();
                     m_renderer->renderScene(m_renderData, reflectedCamera, aspectRatio, reflClipPlane, true);
 
-                    if (m_terrain.isInitialized())
+                    if (m_terrainEnabled && m_terrain.isInitialized())
                     {
                         m_terrainRenderer.render(m_terrain, reflectedCamera, aspectRatio, m_renderData,
                                                  m_renderer->getCascadedShadowMap(), reflClipPlane);
                     }
-
-                    // Note: foliage/trees are skipped in the reflection pass because
-                    // the reflected camera is below the ground plane, which causes the
-                    // foliage vertex shader's distance fade and wind to produce artifacts.
 
                     glDisable(GL_CLIP_DISTANCE0);
                 }
@@ -853,6 +848,7 @@ void Engine::run()
                 GLuint reflTex = m_waterFbo.getReflectionTexture();
                 GLuint refrTex = m_waterFbo.getRefractionTexture();
                 GLuint refrDepthTex = m_waterFbo.getRefractionDepthTexture();
+                GLuint skyboxTex = m_renderer->getSkyboxTextureId();
 
                 m_profiler.getGpuTimer().beginPass("Water");
                 m_waterRenderer.render(waterItems, *m_camera, aspectRatio,
@@ -1360,6 +1356,15 @@ void Engine::setupDemoScene()
         Logger::info("Loaded glTF model: " + std::to_string(testModel->getMeshCount()) + " meshes");
     }
 
+    // --- Animated glTF model (skeletal animation test) ---
+    auto cesiumMan = m_resourceManager->loadModel("assets/models/CesiumMan.glb");
+    if (cesiumMan)
+    {
+        Entity* animRoot = cesiumMan->instantiate(*scene, nullptr, "CesiumMan");
+        animRoot->transform.position = glm::vec3(-3.0f, 0.0f, 4.0f);
+        animRoot->transform.scale = glm::vec3(2.0f);
+    }
+
     // --- Hill with water basin ---
     // Outer hill ring (flattened cylinders arranged as a rim)
     auto hillMat = m_resourceManager->createMaterial("hill");
@@ -1468,6 +1473,692 @@ void Engine::setupDemoScene()
     scene->update(0.0f);
 
     Logger::info("Demo scene ready: entities with components, 1 directional + 2 point lights + emissive lava + glass cube + foliage");
+}
+
+void Engine::setupTabernacleScene()
+{
+    Logger::info("Setting up Tabernacle scene...");
+
+    // =========================================================================
+    // Biblical Tabernacle / Tent of Meeting (Exodus 25-40)
+    //
+    // Dimensions (1 cubit = 0.445m, standard/common cubit):
+    //   Tabernacle tent: 30 x 10 x 10 cubits = 13.35 x 4.45 x 4.45 m
+    //   Holy Place:      20 x 10 x 10 cubits = 8.90 x 4.45 x 4.45 m
+    //   Holy of Holies:  10 x 10 x 10 cubits = 4.45 x 4.45 x 4.45 m (perfect cube)
+    //   Outer Court:     100 x 50 cubits     = 44.50 x 22.25 m
+    //
+    // Layout: Entrance faces East. Holy of Holies is at the West end.
+    //   East -> entrance -> Holy Place -> veil -> Holy of Holies -> West
+    //   Z-axis = East-West (entrance at +Z, back at -Z)
+    //   X-axis = North-South
+    // =========================================================================
+
+    // --- Renderer configuration: outdoor desert scene ---
+    m_terrainEnabled = false;
+    m_renderer->setSkyboxEnabled(true);
+    m_renderer->setClearColor(glm::vec3(0.53f, 0.68f, 0.86f));
+    m_renderer->setAutoExposure(false);
+    m_renderer->setExposure(3.0f);  // High: compensates for bright HDRI sky in tonemapper
+    m_renderer->setBloomEnabled(true);
+    m_renderer->setBloomThreshold(2.5f);   // High threshold: only bright specular highlights bloom
+    m_renderer->setBloomIntensity(0.10f);  // Very subtle
+    m_renderer->setSsaoEnabled(true);
+
+    // Load desert HDRI skybox (Goegap Nature Reserve, South Africa — arid Namaqualand)
+    m_renderer->loadSkyboxHDRI("assets/textures/tabernacle/goegap_2k.hdr");
+
+    Scene* scene = m_sceneManager->createScene("Tabernacle");
+
+    // --- Cubit conversion ---
+    const float C = 0.445f;  // 1 cubit in meters (standard/common cubit)
+
+    // --- Tent dimensions ---
+    const float tentL = 30.0f * C;   // 13.35m length (Z)
+    const float tentW = 10.0f * C;   // 4.45m width (X)
+    const float tentH = 10.0f * C;   // 4.45m height (Y)
+    const float wallThick = 0.15f;   // Wall/board thickness
+
+    // Holy Place / Holy of Holies split
+    const float holyPlaceL = 20.0f * C;    // 8.90m
+    const float holyOfHoliesL = 10.0f * C; // 4.45m
+
+    // Tent placement: back wall at Z=0, entrance at Z=tentL
+    const float backZ = 0.0f;
+    const float frontZ = tentL;
+    const float veilZ = holyOfHoliesL;  // Divider between HoH and HP
+
+    // --- Courtyard dimensions ---
+    const float courtL = 100.0f * C;   // 44.50m (Z-axis)
+    const float courtW = 50.0f * C;    // 22.25m (X-axis)
+    const float fenceH = 5.0f * C;     // 2.225m curtain wall height
+    const float courtMargin = 5.0f * C; // Space behind tent
+    const float courtWestZ = backZ - courtMargin;
+    const float courtEastZ = courtWestZ + courtL;
+    const float courtCenterZ = (courtWestZ + courtEastZ) / 2.0f;
+    const float gateW = 20.0f * C;       // 8.90m gate opening
+    const float pillarSpacing = 5.0f * C; // 2.225m between courtyard pillars
+
+    // --- Mesh primitives ---
+    auto cubeMesh   = m_resourceManager->getCubeMesh();
+    auto cylMesh    = m_resourceManager->getCylinderMesh(16);
+    auto sphereMesh = m_resourceManager->getSphereMesh(16, 8);
+
+    // --- Texture paths ---
+    const std::string texBase = "assets/textures/tabernacle/";
+
+    // =====================================================================
+    // MATERIALS
+    // =====================================================================
+
+    // Acacia wood (boards, pillars, furniture frames)
+    auto woodMat = m_resourceManager->createMaterial("tab_acacia_wood");
+    woodMat->setType(MaterialType::PBR);
+    woodMat->setAlbedo(glm::vec3(1.0f));
+    woodMat->setMetallic(0.0f);
+    woodMat->setRoughness(0.85f);
+    woodMat->setDiffuseTexture(m_resourceManager->loadTexture(texBase + "brown_planks_09_diff.jpg"));
+    woodMat->setNormalMap(m_resourceManager->loadTexture(texBase + "brown_planks_09_nor_gl.jpg", true));
+    woodMat->setMetallicRoughnessTexture(m_resourceManager->loadTexture(texBase + "brown_planks_09_rough.jpg", true));
+    woodMat->setDoubleSided(true);
+
+    // Gold (overlays on Ark, Menorah, Incense Altar, Table)
+    auto goldMat = m_resourceManager->createMaterial("tab_gold");
+    goldMat->setType(MaterialType::PBR);
+    goldMat->setAlbedo(glm::vec3(1.0f, 0.77f, 0.31f));  // Physically-based gold
+    goldMat->setMetallic(1.0f);
+    goldMat->setRoughness(0.50f);  // Beaten/hammered gold -- higher roughness shows normal map detail
+    goldMat->setNormalMap(m_resourceManager->loadTexture(texBase + "hammered_gold_nor_gl.jpg", true));
+    goldMat->setDoubleSided(true);
+
+    // Bronze (altar, laver, pillar bases)
+    auto bronzeMat = m_resourceManager->createMaterial("tab_bronze");
+    bronzeMat->setType(MaterialType::PBR);
+    bronzeMat->setAlbedo(glm::vec3(0.90f, 0.65f, 0.45f));  // Physically-based bronze
+    bronzeMat->setMetallic(1.0f);
+    bronzeMat->setRoughness(0.40f);
+    bronzeMat->setNormalMap(m_resourceManager->loadTexture(texBase + "bronze_nor_gl.jpg", true));
+    bronzeMat->setDoubleSided(true);
+
+    // Silver (courtyard pillar caps, board sockets)
+    auto silverMat = m_resourceManager->createMaterial("tab_silver");
+    silverMat->setType(MaterialType::PBR);
+    silverMat->setAlbedo(glm::vec3(0.95f, 0.93f, 0.88f));
+    silverMat->setMetallic(1.0f);
+    silverMat->setRoughness(0.30f);
+    silverMat->setNormalMap(m_resourceManager->loadTexture(texBase + "silver_nor_gl.jpg", true));
+    silverMat->setDoubleSided(true);
+
+    // Linen curtains (inner tent curtains, slightly off-white)
+    auto linenMat = m_resourceManager->createMaterial("tab_linen");
+    linenMat->setType(MaterialType::PBR);
+    linenMat->setAlbedo(glm::vec3(0.9f, 0.88f, 0.82f));
+    linenMat->setMetallic(0.0f);
+    linenMat->setRoughness(0.9f);
+    linenMat->setDiffuseTexture(m_resourceManager->loadTexture(texBase + "rough_linen_diff.jpg"));
+    linenMat->setNormalMap(m_resourceManager->loadTexture(texBase + "rough_linen_nor_gl.jpg", true));
+    linenMat->setMetallicRoughnessTexture(m_resourceManager->loadTexture(texBase + "rough_linen_rough.jpg", true));
+    linenMat->setUvScale(2.0f);
+    linenMat->setDoubleSided(true);
+
+    // White linen (courtyard hangings -- bright white)
+    auto whiteLinenMat = m_resourceManager->createMaterial("tab_white_linen");
+    whiteLinenMat->setType(MaterialType::PBR);
+    whiteLinenMat->setAlbedo(glm::vec3(0.95f, 0.93f, 0.90f));
+    whiteLinenMat->setMetallic(0.0f);
+    whiteLinenMat->setRoughness(0.9f);
+    whiteLinenMat->setDiffuseTexture(m_resourceManager->loadTexture(texBase + "rough_linen_diff.jpg"));
+    whiteLinenMat->setNormalMap(m_resourceManager->loadTexture(texBase + "rough_linen_nor_gl.jpg", true));
+    whiteLinenMat->setMetallicRoughnessTexture(m_resourceManager->loadTexture(texBase + "rough_linen_rough.jpg", true));
+    whiteLinenMat->setUvScale(2.0f);
+    whiteLinenMat->setDoubleSided(true);
+
+    // Goat hair covering (dark, coarse)
+    auto goatHairMat = m_resourceManager->createMaterial("tab_goat_hair");
+    goatHairMat->setType(MaterialType::PBR);
+    goatHairMat->setAlbedo(glm::vec3(0.25f, 0.22f, 0.18f));
+    goatHairMat->setMetallic(0.0f);
+    goatHairMat->setRoughness(0.95f);
+    goatHairMat->setDiffuseTexture(m_resourceManager->loadTexture(texBase + "hessian_230_diff.jpg"));
+    goatHairMat->setNormalMap(m_resourceManager->loadTexture(texBase + "hessian_230_nor_gl.jpg", true));
+    goatHairMat->setMetallicRoughnessTexture(m_resourceManager->loadTexture(texBase + "hessian_230_rough.jpg", true));
+    goatHairMat->setUvScale(3.0f);
+    goatHairMat->setDoubleSided(true);
+
+    // Ram skins dyed red (3rd covering layer)
+    auto redLeatherMat = m_resourceManager->createMaterial("tab_red_leather");
+    redLeatherMat->setType(MaterialType::PBR);
+    redLeatherMat->setAlbedo(glm::vec3(0.7f, 0.15f, 0.1f));
+    redLeatherMat->setMetallic(0.0f);
+    redLeatherMat->setRoughness(0.75f);
+    redLeatherMat->setDiffuseTexture(m_resourceManager->loadTexture(texBase + "red_leather_diff.jpg"));
+    redLeatherMat->setNormalMap(m_resourceManager->loadTexture(texBase + "red_leather_nor_gl.jpg", true));
+    redLeatherMat->setMetallicRoughnessTexture(m_resourceManager->loadTexture(texBase + "red_leather_rough.jpg", true));
+    redLeatherMat->setUvScale(2.0f);
+    redLeatherMat->setDoubleSided(true);
+
+    // Tachash skins (4th/outermost covering layer)
+    auto darkHideMat = m_resourceManager->createMaterial("tab_dark_hide");
+    darkHideMat->setType(MaterialType::PBR);
+    darkHideMat->setAlbedo(glm::vec3(0.25f, 0.22f, 0.20f));
+    darkHideMat->setMetallic(0.0f);
+    darkHideMat->setRoughness(0.9f);
+    darkHideMat->setDiffuseTexture(m_resourceManager->loadTexture(texBase + "dark_hide_diff.jpg"));
+    darkHideMat->setNormalMap(m_resourceManager->loadTexture(texBase + "dark_hide_nor_gl.jpg", true));
+    darkHideMat->setMetallicRoughnessTexture(m_resourceManager->loadTexture(texBase + "dark_hide_rough.jpg", true));
+    darkHideMat->setUvScale(2.0f);
+    darkHideMat->setDoubleSided(true);
+
+    // Sandy ground
+    auto sandMat = m_resourceManager->createMaterial("tab_sand");
+    sandMat->setType(MaterialType::PBR);
+    sandMat->setAlbedo(glm::vec3(1.0f));
+    sandMat->setMetallic(0.0f);
+    sandMat->setRoughness(1.0f);  // Fully rough -- no specular hotspot on desert sand
+    sandMat->setDiffuseTexture(m_resourceManager->loadTexture(texBase + "sandy_gravel_02_diff.jpg"));
+    sandMat->setNormalMap(m_resourceManager->loadTexture(texBase + "sandy_gravel_02_nor_gl.jpg", true));
+    // No metallicRoughness texture -- the rough.jpg has low-roughness areas that create
+    // a camera-tracking specular highlight on the large flat ground plane
+    sandMat->setStochasticTiling(true);
+    sandMat->setUvScale(4.0f);
+    sandMat->setDoubleSided(true);
+
+    // Veil (blue/purple/scarlet -- the dividing curtain and courtyard gate)
+    auto veilMat = m_resourceManager->createMaterial("tab_veil");
+    veilMat->setType(MaterialType::PBR);
+    veilMat->setAlbedo(glm::vec3(0.25f, 0.12f, 0.35f));
+    veilMat->setMetallic(0.0f);
+    veilMat->setRoughness(0.85f);
+    veilMat->setDiffuseTexture(m_resourceManager->loadTexture(texBase + "rough_linen_diff.jpg"));
+    veilMat->setNormalMap(m_resourceManager->loadTexture(texBase + "rough_linen_nor_gl.jpg", true));
+    veilMat->setUvScale(1.5f);
+    veilMat->setDoubleSided(true);
+    // IBL multipliers left at default 1.0 — the light probe system handles
+    // indoor/outdoor IBL transitions properly. Interior surfaces inside the
+    // tent probe volume blend from sky IBL to captured interior IBL.
+
+    // =====================================================================
+    // HELPER LAMBDAS
+    // =====================================================================
+
+    auto makeBox = [&](const std::string& name, glm::vec3 pos, glm::vec3 size,
+                       std::shared_ptr<Material> mat) -> Entity*
+    {
+        Entity* e = scene->createEntity(name);
+        e->transform.position = pos;
+        e->transform.scale = size;
+        auto* mr = e->addComponent<MeshRenderer>(cubeMesh, mat);
+        mr->setBounds(cubeMesh->getLocalBounds());
+        return e;
+    };
+
+    // Cylinder: base mesh is 1m diameter, 1m tall, centered at origin
+    auto makeCylinder = [&](const std::string& name, glm::vec3 pos, float diameter,
+                            float height, std::shared_ptr<Material> mat) -> Entity*
+    {
+        Entity* e = scene->createEntity(name);
+        e->transform.position = pos;
+        e->transform.scale = glm::vec3(diameter, height, diameter);
+        auto* mr = e->addComponent<MeshRenderer>(cylMesh, mat);
+        mr->setBounds(cylMesh->getLocalBounds());
+        return e;
+    };
+
+    // Sphere: base mesh is 1m diameter, centered at origin
+    auto makeSphere = [&](const std::string& name, glm::vec3 pos, glm::vec3 scale,
+                          std::shared_ptr<Material> mat) -> Entity*
+    {
+        Entity* e = scene->createEntity(name);
+        e->transform.position = pos;
+        e->transform.scale = scale;
+        auto* mr = e->addComponent<MeshRenderer>(sphereMesh, mat);
+        mr->setBounds(sphereMesh->getLocalBounds());
+        return e;
+    };
+
+    // =====================================================================
+    // GROUND -- desert sand covering courtyard and surroundings
+    // =====================================================================
+    auto desertPlane = m_resourceManager->getPlaneMesh(courtL + 10.0f);
+    Entity* ground = scene->createEntity("Desert Ground");
+    ground->transform.position = glm::vec3(0.0f, -0.02f, courtCenterZ);
+    auto* groundMR = ground->addComponent<MeshRenderer>(desertPlane, sandMat);
+    groundMR->setCastsShadow(false);
+
+    // =====================================================================
+    // TENT STRUCTURE -- Acacia wood boards forming walls
+    // =====================================================================
+
+    // South wall (X = -tentW/2)
+    makeBox("South Wall", {-tentW / 2.0f, tentH / 2.0f, tentL / 2.0f},
+            {wallThick, tentH, tentL}, woodMat);
+
+    // North wall (X = +tentW/2)
+    makeBox("North Wall", {tentW / 2.0f, tentH / 2.0f, tentL / 2.0f},
+            {wallThick, tentH, tentL}, woodMat);
+
+    // Back (West) wall (Z = 0)
+    makeBox("West Wall", {0.0f, tentH / 2.0f, backZ},
+            {tentW, tentH, wallThick}, woodMat);
+
+    // =====================================================================
+    // ROOF -- Four biblical covering layers (Exodus 26:1-14)
+    // =====================================================================
+
+    // Layer 1: Inner linen curtains with cherubim (visible from inside)
+    makeBox("Linen Ceiling", {0.0f, tentH, tentL / 2.0f},
+            {tentW + 0.3f, 0.05f, tentL + 0.3f}, linenMat);
+
+    // Layer 2: Goat hair curtains
+    makeBox("Goat Hair Roof", {0.0f, tentH + 0.08f, tentL / 2.0f},
+            {tentW + 0.6f, 0.05f, tentL + 0.6f}, goatHairMat);
+
+    // Layer 3: Ram skins dyed red
+    makeBox("Ram Skin Roof", {0.0f, tentH + 0.16f, tentL / 2.0f},
+            {tentW + 0.9f, 0.05f, tentL + 0.9f}, redLeatherMat);
+
+    // Layer 4: Tachash skins (outermost, largest)
+    makeBox("Tachash Roof", {0.0f, tentH + 0.24f, tentL / 2.0f},
+            {tentW + 1.2f, 0.05f, tentL + 1.2f}, darkHideMat);
+
+    // =====================================================================
+    // VEIL -- Dividing curtain between Holy Place and Holy of Holies
+    // =====================================================================
+    auto* veilEntity = makeBox("Veil", {0.0f, tentH / 2.0f, veilZ},
+            {tentW - 0.1f, tentH - 0.1f, 0.05f}, veilMat);
+    veilEntity->getComponent<MeshRenderer>()->setCastsShadow(false);
+
+    // =====================================================================
+    // ENTRANCE SCREEN -- Curtain at east end (partially open for light)
+    // =====================================================================
+    auto* screenL = makeBox("Entrance Screen L", {-tentW / 4.0f - 0.3f, tentH / 2.0f, frontZ},
+            {tentW / 2.0f - 0.5f, tentH - 0.1f, 0.05f}, veilMat);
+    screenL->getComponent<MeshRenderer>()->setCastsShadow(false);
+    auto* screenR = makeBox("Entrance Screen R", {tentW / 4.0f + 0.3f, tentH / 2.0f, frontZ},
+            {tentW / 2.0f - 0.5f, tentH - 0.1f, 0.05f}, veilMat);
+    screenR->getComponent<MeshRenderer>()->setCastsShadow(false);
+
+    // =====================================================================
+    // HOLY OF HOLIES FURNITURE -- Ark of the Covenant (Exodus 25:10-22)
+    // =====================================================================
+
+    float arkL = 2.5f * C;  // 1.1125m
+    float arkW = 1.5f * C;  // 0.6675m
+    float arkH = 1.5f * C;  // 0.6675m
+    float arkY = arkH / 2.0f;
+    float arkZ = holyOfHoliesL / 2.0f;
+
+    makeBox("Ark of the Covenant", {0.0f, arkY, arkZ}, {arkL, arkH, arkW}, goldMat);
+
+    // Mercy Seat (thin gold slab on top)
+    makeBox("Mercy Seat", {0.0f, arkH + 0.03f, arkZ},
+            {arkL + 0.08f, 0.06f, arkW + 0.08f}, goldMat);
+
+    // Cherubim (simplified gold shapes on the mercy seat)
+    float cherubH = 0.5f;
+    makeBox("Cherub Left", {-arkL * 0.3f, arkH + 0.06f + cherubH / 2.0f, arkZ},
+            {0.15f, cherubH, 0.2f}, goldMat);
+    makeBox("Cherub Right", {arkL * 0.3f, arkH + 0.06f + cherubH / 2.0f, arkZ},
+            {0.15f, cherubH, 0.2f}, goldMat);
+
+    // =====================================================================
+    // HOLY PLACE FURNITURE
+    // =====================================================================
+
+    float hpCenterZ = veilZ + holyPlaceL / 2.0f;
+
+    // --- Golden Lampstand / Menorah -- south side (Exodus 25:31-40) ---
+    float menorahX = -tentW / 2.0f + 1.0f;
+    float menorahZ = hpCenterZ;
+    float menorahH = 1.5f;  // ~3 cubits tall (scholarly estimate)
+
+    makeBox("Menorah Base", {menorahX, 0.08f, menorahZ}, {0.4f, 0.16f, 0.4f}, goldMat);
+    makeBox("Menorah Shaft", {menorahX, menorahH / 2.0f, menorahZ},
+            {0.08f, menorahH, 0.08f}, goldMat);
+
+    // 7 lamps (3 pairs + center) -- spheres for lamp cups
+    float branchSpacing = 0.18f;
+    for (int i = -3; i <= 3; i++)
+    {
+        float bx = menorahX + static_cast<float>(i) * branchSpacing;
+        makeSphere("Menorah Lamp " + std::to_string(i + 4),
+                   {bx, menorahH, menorahZ}, {0.08f, 0.08f, 0.08f}, goldMat);
+    }
+
+    // --- Table of Showbread -- north side (Exodus 25:23-30) ---
+    float tableX = tentW / 2.0f - 1.0f;
+    float tableZ = hpCenterZ;
+    float tableH = 1.5f * C;
+    float tableL = 2.0f * C;
+    float tableW_dim = 1.0f * C;
+
+    // Table legs (4 corners)
+    float legW = 0.06f;
+    for (int xi = -1; xi <= 1; xi += 2)
+    {
+        for (int zi = -1; zi <= 1; zi += 2)
+        {
+            float lx = tableX + static_cast<float>(xi) * (tableL / 2.0f - legW);
+            float lz = tableZ + static_cast<float>(zi) * (tableW_dim / 2.0f - legW);
+            makeBox("Table Leg", {lx, tableH / 2.0f, lz}, {legW, tableH, legW}, goldMat);
+        }
+    }
+    // Tabletop
+    makeBox("Showbread Table", {tableX, tableH + 0.025f, tableZ},
+            {tableL, 0.05f, tableW_dim}, goldMat);
+
+    // 12 bread loaves (2 stacks of 6, displayed as 2 columns x 3 rows)
+    for (int stack = 0; stack < 2; stack++)
+    {
+        float sx = tableX + (stack == 0 ? -0.12f : 0.12f);
+        for (int row = 0; row < 3; row++)
+        {
+            float sy = tableH + 0.05f + static_cast<float>(row) * 0.08f + 0.04f;
+            makeBox("Bread Loaf", {sx, sy, tableZ}, {0.15f, 0.06f, 0.12f}, woodMat);
+        }
+    }
+
+    // --- Altar of Incense -- center, before the veil (Exodus 30:1-10) ---
+    float incenseZ = veilZ + 0.8f;
+    float incenseH = 2.0f * C;
+    float incenseW_dim = 1.0f * C;
+
+    makeBox("Incense Altar", {0.0f, incenseH / 2.0f, incenseZ},
+            {incenseW_dim, incenseH, incenseW_dim}, goldMat);
+
+    // 4 horns on top corners
+    float iHornH = 0.1f;
+    for (int xi = -1; xi <= 1; xi += 2)
+    {
+        for (int zi = -1; zi <= 1; zi += 2)
+        {
+            makeBox("Incense Horn",
+                    {static_cast<float>(xi) * incenseW_dim * 0.4f,
+                     incenseH + iHornH / 2.0f,
+                     incenseZ + static_cast<float>(zi) * incenseW_dim * 0.4f},
+                    {0.05f, iHornH, 0.05f}, goldMat);
+        }
+    }
+
+    // =====================================================================
+    // INTERIOR PILLARS -- Gold-topped wooden pillars along tent walls
+    // =====================================================================
+    float intPillarH = tentH - 0.3f;
+    float intPillarDiam = 0.24f;
+    int intPillarCount = 6;
+
+    for (int i = 0; i < intPillarCount; i++)
+    {
+        float z = backZ + wallThick + static_cast<float>(i + 1)
+                  * (tentL / static_cast<float>(intPillarCount + 1));
+
+        float sx = -tentW / 2.0f + wallThick + 0.1f;
+        float nx = tentW / 2.0f - wallThick - 0.1f;
+        std::string idx = std::to_string(i);
+
+        // South side
+        makeCylinder("S Pillar " + idx, {sx, intPillarH / 2.0f, z},
+                     intPillarDiam, intPillarH, woodMat);
+        makeCylinder("S Pillar Cap " + idx, {sx, intPillarH + 0.05f, z},
+                     intPillarDiam + 0.08f, 0.1f, goldMat);
+        makeCylinder("S Pillar Base " + idx, {sx, 0.05f, z},
+                     intPillarDiam + 0.12f, 0.1f, silverMat);
+
+        // North side
+        makeCylinder("N Pillar " + idx, {nx, intPillarH / 2.0f, z},
+                     intPillarDiam, intPillarH, woodMat);
+        makeCylinder("N Pillar Cap " + idx, {nx, intPillarH + 0.05f, z},
+                     intPillarDiam + 0.08f, 0.1f, goldMat);
+        makeCylinder("N Pillar Base " + idx, {nx, 0.05f, z},
+                     intPillarDiam + 0.12f, 0.1f, silverMat);
+    }
+
+    // =====================================================================
+    // OUTER COURTYARD -- Fence walls (Exodus 27:9-19)
+    // =====================================================================
+
+    const float fenceThick = 0.04f;
+
+    // Fence walls: thin linen panels -- disable shadow casting to prevent
+    // shadow map artifacts from the 4cm-thick geometry
+    auto makeFence = [&](const std::string& name, glm::vec3 pos, glm::vec3 size,
+                         std::shared_ptr<Material> mat) -> Entity*
+    {
+        Entity* e = makeBox(name, pos, size, mat);
+        e->getComponent<MeshRenderer>()->setCastsShadow(false);
+        return e;
+    };
+
+    // South wall (X = -courtW/2)
+    makeFence("Court South Wall", {-courtW / 2.0f, fenceH / 2.0f, courtCenterZ},
+              {fenceThick, fenceH, courtL}, whiteLinenMat);
+
+    // North wall (X = +courtW/2)
+    makeFence("Court North Wall", {courtW / 2.0f, fenceH / 2.0f, courtCenterZ},
+              {fenceThick, fenceH, courtL}, whiteLinenMat);
+
+    // West wall (Z = courtWestZ)
+    makeFence("Court West Wall", {0.0f, fenceH / 2.0f, courtWestZ},
+              {courtW, fenceH, fenceThick}, whiteLinenMat);
+
+    // East wall -- two 15-cubit sections flanking the 20-cubit gate (Exodus 27:14-16)
+    const float eastSectionW = 15.0f * C;
+    makeFence("Court East Wall S",
+              {-(gateW / 2.0f + eastSectionW / 2.0f), fenceH / 2.0f, courtEastZ},
+              {eastSectionW, fenceH, fenceThick}, whiteLinenMat);
+    makeFence("Court East Wall N",
+              {(gateW / 2.0f + eastSectionW / 2.0f), fenceH / 2.0f, courtEastZ},
+              {eastSectionW, fenceH, fenceThick}, whiteLinenMat);
+
+    // =====================================================================
+    // COURTYARD GATE -- Blue/purple/scarlet curtain (Exodus 27:16)
+    // =====================================================================
+    makeFence("Courtyard Gate", {0.0f, fenceH / 2.0f, courtEastZ - fenceThick * 1.5f},
+              {gateW, fenceH, fenceThick}, veilMat);
+
+    // =====================================================================
+    // COURTYARD PILLARS -- 60 total with silver caps and bronze bases
+    // =====================================================================
+
+    const float cPillarH = fenceH;
+    const float cPillarDiam = 0.15f;
+    const float capH = 0.08f;
+    const float baseH = 0.08f;
+
+    // Helper to place one courtyard pillar (post + silver cap + bronze base)
+    // Shadow casting disabled -- tiny geometry creates CSM texel flicker artifacts
+    auto makeCourtPillar = [&](const std::string& prefix, float x, float z)
+    {
+        auto* post = makeCylinder(prefix, {x, cPillarH / 2.0f, z}, cPillarDiam, cPillarH, woodMat);
+        post->getComponent<MeshRenderer>()->setCastsShadow(false);
+        auto* cap = makeCylinder(prefix + " Cap", {x, cPillarH + capH / 2.0f, z},
+                     cPillarDiam + 0.04f, capH, silverMat);
+        cap->getComponent<MeshRenderer>()->setCastsShadow(false);
+        auto* base = makeCylinder(prefix + " Base", {x, baseH / 2.0f, z},
+                     cPillarDiam + 0.06f, baseH, bronzeMat);
+        base->getComponent<MeshRenderer>()->setCastsShadow(false);
+    };
+
+    // South wall pillars (20, along X = -courtW/2)
+    for (int i = 0; i < 20; i++)
+    {
+        float z = courtWestZ + static_cast<float>(i) * pillarSpacing;
+        makeCourtPillar("Court S " + std::to_string(i), -courtW / 2.0f, z);
+    }
+
+    // North wall pillars (20, along X = +courtW/2)
+    for (int i = 0; i < 20; i++)
+    {
+        float z = courtWestZ + static_cast<float>(i) * pillarSpacing;
+        makeCourtPillar("Court N " + std::to_string(i), courtW / 2.0f, z);
+    }
+
+    // West wall pillars (10, along Z = courtWestZ)
+    for (int i = 0; i < 10; i++)
+    {
+        float x = -courtW / 2.0f + static_cast<float>(i) * pillarSpacing;
+        makeCourtPillar("Court W " + std::to_string(i), x, courtWestZ);
+    }
+
+    // East wall pillars: 3 south of gate + 4 at gate + 3 north of gate
+    for (int i = 0; i < 3; i++)
+    {
+        float x = -courtW / 2.0f + static_cast<float>(i) * pillarSpacing;
+        makeCourtPillar("Court ES " + std::to_string(i), x, courtEastZ);
+    }
+    for (int i = 0; i < 4; i++)
+    {
+        float x = -gateW / 2.0f + static_cast<float>(i) * (gateW / 3.0f);
+        makeCourtPillar("Court EG " + std::to_string(i), x, courtEastZ);
+    }
+    for (int i = 0; i < 3; i++)
+    {
+        float x = courtW / 2.0f - static_cast<float>(i) * pillarSpacing;
+        makeCourtPillar("Court EN " + std::to_string(i), x, courtEastZ);
+    }
+
+    // =====================================================================
+    // BRONZE ALTAR -- Altar of Burnt Offering (Exodus 27:1-8)
+    // =====================================================================
+
+    float altarZ = courtEastZ - 10.0f * C;  // ~10 cubits inside the gate
+    float altarH = 3.0f * C;
+    float altarSide = 5.0f * C;
+
+    makeBox("Bronze Altar", {0.0f, altarH / 2.0f, altarZ},
+            {altarSide, altarH, altarSide}, bronzeMat);
+
+    // 4 horns on corners
+    float bHornH = 0.2f;
+    for (int xi = -1; xi <= 1; xi += 2)
+    {
+        for (int zi = -1; zi <= 1; zi += 2)
+        {
+            makeBox("Altar Horn",
+                    {static_cast<float>(xi) * altarSide * 0.45f,
+                     altarH + bHornH / 2.0f,
+                     altarZ + static_cast<float>(zi) * altarSide * 0.45f},
+                    {0.08f, bHornH, 0.08f}, bronzeMat);
+        }
+    }
+
+    // Bronze grating at midpoint
+    makeBox("Altar Grating", {0.0f, altarH / 2.0f, altarZ},
+            {altarSide + 0.05f, 0.03f, altarSide + 0.05f}, bronzeMat);
+
+    // =====================================================================
+    // BRONZE LAVER -- Washing basin (Exodus 30:17-21)
+    // =====================================================================
+
+    float laverZ = (altarZ + frontZ) / 2.0f;  // Between altar and tent entrance
+
+    // Pedestal
+    makeCylinder("Laver Pedestal", {0.0f, 0.25f, laverZ}, 0.3f, 0.5f, bronzeMat);
+
+    // Basin (squished sphere for bowl shape)
+    makeSphere("Laver Basin", {0.0f, 0.65f, laverZ}, {0.7f, 0.5f, 0.7f}, bronzeMat);
+
+    // =====================================================================
+    // LIGHTING
+    // =====================================================================
+
+    // Directional light -- bright desert sun
+    Entity* sunEntity = scene->createEntity("Sun");
+    auto* dirLight = sunEntity->addComponent<DirectionalLightComponent>();
+    dirLight->light.direction = glm::normalize(glm::vec3(0.3f, -0.8f, -0.5f));
+    dirLight->light.diffuse = glm::vec3(3.0f, 2.7f, 2.2f);    // Bright desert sun
+    dirLight->light.specular = glm::vec3(1.5f, 1.3f, 1.0f);
+    dirLight->light.ambient = glm::vec3(0.15f, 0.13f, 0.10f);  // Low but visible: tent interior should be dim, not black
+
+    // Menorah light (warm golden glow inside the Holy Place)
+    Entity* menorahLight = scene->createEntity("Menorah Light");
+    menorahLight->transform.position = glm::vec3(menorahX, menorahH + 0.2f, menorahZ);
+    auto* ml = menorahLight->addComponent<PointLightComponent>();
+    ml->light.diffuse = glm::vec3(1.5f, 1.2f, 0.6f);
+    ml->light.specular = glm::vec3(1.0f, 0.9f, 0.5f);
+    ml->light.constant = 1.0f;
+    ml->light.linear = 0.45f;
+    ml->light.quadratic = 0.50f;
+    ml->light.castsShadow = false;  // Interior fill -- directional sun handles shadows
+
+    // Fill light from tent entrance (confined to tent interior)
+    Entity* entranceLight = scene->createEntity("Entrance Light");
+    entranceLight->transform.position = glm::vec3(0.0f, tentH * 0.7f, frontZ - 0.5f);
+    auto* el = entranceLight->addComponent<PointLightComponent>();
+    el->light.diffuse = glm::vec3(1.0f, 0.95f, 0.8f);
+    el->light.specular = glm::vec3(0.8f, 0.75f, 0.6f);
+    el->light.constant = 1.0f;
+    el->light.linear = 0.45f;
+    el->light.quadratic = 0.50f;
+    el->light.castsShadow = false;  // Interior fill -- directional sun handles shadows
+
+    // =====================================================================
+    // FIRE LIGHTS — Perpetual altar fire & gate torches
+    // =====================================================================
+
+    // Bronze Altar fire (Leviticus 6:12-13: "The fire must be kept burning
+    // on the altar continuously; it must not go out.")
+    Entity* altarFire = scene->createEntity("Altar Fire");
+    altarFire->transform.position = glm::vec3(0.0f, altarH + 0.3f, altarZ);
+    auto* af = altarFire->addComponent<PointLightComponent>();
+    af->light.diffuse = glm::vec3(2.5f, 1.4f, 0.4f);   // Warm fire orange
+    af->light.specular = glm::vec3(1.5f, 0.9f, 0.3f);
+    af->light.constant = 1.0f;
+    af->light.linear = 0.22f;
+    af->light.quadratic = 0.20f;
+    af->light.castsShadow = false;
+
+    // Gate torches — two fire braziers flanking the courtyard entrance
+    for (int side = -1; side <= 1; side += 2)
+    {
+        Entity* torch = scene->createEntity(
+            side < 0 ? "Gate Torch South" : "Gate Torch North");
+        torch->transform.position = glm::vec3(
+            static_cast<float>(side) * (gateW / 2.0f + 0.3f),
+            fenceH + 0.2f,
+            courtEastZ);
+        auto* tl = torch->addComponent<PointLightComponent>();
+        tl->light.diffuse = glm::vec3(1.8f, 1.0f, 0.3f);
+        tl->light.specular = glm::vec3(1.0f, 0.6f, 0.2f);
+        tl->light.constant = 1.0f;
+        tl->light.linear = 0.35f;
+        tl->light.quadratic = 0.44f;
+        tl->light.castsShadow = false;
+    }
+
+    // =====================================================================
+    // LIGHT PROBE -- Tent interior (captures local lighting for correct IBL)
+    // =====================================================================
+    auto* probeManager = m_renderer->getLightProbeManager();
+    if (probeManager)
+    {
+        // Probe positioned at the center of the Holy Place, eye height
+        glm::vec3 probePos(0.0f, tentH * 0.5f, veilZ + holyPlaceL * 0.5f);
+
+        // Influence volume covers the entire tent interior
+        AABB tentAABB;
+        tentAABB.min = glm::vec3(-tentW / 2.0f - 0.5f, -0.1f, backZ - 0.5f);
+        tentAABB.max = glm::vec3(tentW / 2.0f + 0.5f, tentH + 0.5f, frontZ + 0.5f);
+
+        int probeIdx = probeManager->addProbe(probePos, tentAABB, 1.5f);
+
+        // Capture the probe after all geometry and lights are placed
+        auto renderData = scene->collectRenderData();
+        m_renderer->captureLightProbe(probeIdx, renderData, *m_camera, 1.0f);
+    }
+
+    // =====================================================================
+    // CAMERA -- Start outside the courtyard gate facing west
+    // =====================================================================
+    m_camera->setPosition(glm::vec3(0.0f, 2.5f, courtEastZ + 5.0f));
+    m_camera->setYaw(-90.0f);
+    m_camera->setPitch(-5.0f);
+
+    scene->update(0.0f);
+
+    Logger::info("Tabernacle scene ready: courtyard (60 pillars, gate, altar, laver), "
+                 "tent (4 roof layers, veil, entrance), Ark, Menorah, Table, Incense Altar, "
+                 "1 light probe (tent interior)");
 }
 
 } // namespace Vestige

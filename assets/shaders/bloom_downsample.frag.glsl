@@ -29,6 +29,10 @@ void main()
     float x = u_srcTexelSize.x;
     float y = u_srcTexelSize.y;
 
+    // Sanitize: clamp NaN/Inf from scene shader to prevent propagation through bloom chain.
+    // NaN spreads through the 13-tap filter and upsample, creating black square artifacts.
+    #define SANITIZE(s) s = clamp(s, vec3(0.0), vec3(65504.0))
+
     // 4 corner samples (2 texels away, bilinear gives 2x2 average each)
     vec3 a = texture(u_sourceTexture, v_texCoord + vec2(-2.0*x,  2.0*y)).rgb;
     vec3 b = texture(u_sourceTexture, v_texCoord + vec2( 0.0,    2.0*y)).rgb;
@@ -47,6 +51,12 @@ void main()
     vec3 k = texture(u_sourceTexture, v_texCoord + vec2( x,  y)).rgb;
     vec3 l = texture(u_sourceTexture, v_texCoord + vec2(-x, -y)).rgb;
     vec3 m = texture(u_sourceTexture, v_texCoord + vec2( x, -y)).rgb;
+
+    SANITIZE(a); SANITIZE(b); SANITIZE(c);
+    SANITIZE(d); SANITIZE(e); SANITIZE(f);
+    SANITIZE(g); SANITIZE(h); SANITIZE(i);
+    SANITIZE(j); SANITIZE(k); SANITIZE(l); SANITIZE(m);
+    #undef SANITIZE
 
     // On the first downsample, apply luminance-based soft threshold to extract
     // only bright areas. Uses BT.709 luminance to preserve color ratios

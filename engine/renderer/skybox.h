@@ -26,6 +26,11 @@ public:
     /// @return True if all faces loaded successfully.
     bool loadCubemap(const std::vector<std::string>& faces);
 
+    /// @brief Loads an equirectangular HDR/LDR image and converts to cubemap on CPU.
+    /// @param path File path to equirectangular image (.hdr, .jpg, .png, etc.).
+    /// @return True if loaded and converted successfully.
+    bool loadEquirectangular(const std::string& path);
+
     /// @brief Draws the skybox. Must be called with depth func set to GL_LEQUAL.
     void draw() const;
 

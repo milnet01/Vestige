@@ -132,17 +132,43 @@ bool EnvironmentMap::initialize(const std::string& assetPath)
 void EnvironmentMap::generate(GLuint skyboxCubemap, bool hasCubemap,
                                const FullscreenQuad& quad, const Shader& /*skyboxShader*/)
 {
+    // Delete old textures if regenerating (prevents GPU memory leaks)
+    if (m_envCubemap != 0)   { glDeleteTextures(1, &m_envCubemap);   m_envCubemap = 0; }
+    if (m_irradianceMap != 0){ glDeleteTextures(1, &m_irradianceMap); m_irradianceMap = 0; }
+    if (m_prefilterMap != 0) { glDeleteTextures(1, &m_prefilterMap);  m_prefilterMap = 0; }
+    if (m_brdfLut != 0)      { glDeleteTextures(1, &m_brdfLut);       m_brdfLut = 0; }
+
     // Step 1: Capture the environment to an HDR cubemap
     captureEnvironment(skyboxCubemap, hasCubemap, m_captureShader);
+    {
+        GLenum err = glGetError();
+        if (err != GL_NO_ERROR)
+            Logger::error("GL error after captureEnvironment: " + std::to_string(err));
+    }
 
     // Step 2: Convolve environment into irradiance cubemap
     generateIrradiance();
+    {
+        GLenum err = glGetError();
+        if (err != GL_NO_ERROR)
+            Logger::error("GL error after generateIrradiance: " + std::to_string(err));
+    }
 
     // Step 3: Prefilter environment for specular reflections
     generatePrefilter();
+    {
+        GLenum err = glGetError();
+        if (err != GL_NO_ERROR)
+            Logger::error("GL error after generatePrefilter: " + std::to_string(err));
+    }
 
     // Step 4: Generate BRDF integration LUT
     generateBrdfLut(quad);
+    {
+        GLenum err = glGetError();
+        if (err != GL_NO_ERROR)
+            Logger::error("GL error after generateBrdfLut: " + std::to_string(err));
+    }
 
     m_ready = true;
     Logger::info("IBL environment maps generated (irradiance "

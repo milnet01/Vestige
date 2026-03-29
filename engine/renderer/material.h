@@ -187,6 +187,14 @@ public:
     /// @brief Checks if this material has an ambient occlusion texture.
     bool hasAoTexture() const;
 
+    /// @brief Sets the IBL (environment lighting) multiplier.
+    /// Use < 1.0 for interior surfaces that shouldn't receive full sky irradiance.
+    /// @param multiplier Clamped to [0.0, 1.0]. Default is 1.0 (full IBL).
+    void setIblMultiplier(float multiplier);
+
+    /// @brief Gets the IBL multiplier.
+    float getIblMultiplier() const;
+
     /// @brief Sets the UV tiling scale (1.0 = default, 0.5 = bricks twice as big, 2.0 = twice as many).
     void setUvScale(float scale);
 
@@ -248,6 +256,7 @@ private:
     glm::vec3 m_emissive;
     float m_emissiveStrength;
     float m_uvScale;
+    float m_iblMultiplier;
     std::shared_ptr<Texture> m_metallicRoughnessTexture;
     std::shared_ptr<Texture> m_emissiveTexture;
     std::shared_ptr<Texture> m_aoTexture;

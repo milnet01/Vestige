@@ -115,6 +115,46 @@ Renderer::Renderer(EventBus& eventBus)
 
     // PMR arena initialized in-class (m_frameResource)
 
+    // Dummy SSBO for model matrices (binding point 0) — Mesa requires all declared
+    // SSBOs to have valid buffers bound, even when the MDI code path is not taken.
+    glCreateBuffers(1, &m_dummyModelSSBO);
+    glNamedBufferStorage(m_dummyModelSSBO,
+        static_cast<GLsizeiptr>(sizeof(glm::mat4)),
+        nullptr, 0);
+
+    // Fallback textures — Mesa requires ALL declared samplers to have valid textures
+    // bound at draw time, even when the shader code path doesn't sample them.
+    {
+        unsigned char white[] = {255, 255, 255, 255};
+        unsigned char black[] = {0, 0, 0, 255};
+
+        // 1x1 white 2D texture (fallback for sampler2D)
+        glCreateTextures(GL_TEXTURE_2D, 1, &m_fallbackTexture);
+        glTextureStorage2D(m_fallbackTexture, 1, GL_RGBA8, 1, 1);
+        glTextureSubImage2D(m_fallbackTexture, 0, 0, 0, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, white);
+
+        // 1x1 black cubemap (fallback for samplerCube)
+        glCreateTextures(GL_TEXTURE_CUBE_MAP, 1, &m_fallbackCubemap);
+        glTextureStorage2D(m_fallbackCubemap, 1, GL_RGBA8, 1, 1);
+        for (int face = 0; face < 6; face++)
+        {
+            glTextureSubImage3D(m_fallbackCubemap, 0, 0, 0, face, 1, 1, 1,
+                                GL_RGBA, GL_UNSIGNED_BYTE, black);
+        }
+
+        // 1x1x1 2D array texture (fallback for sampler2DArray)
+        glCreateTextures(GL_TEXTURE_2D_ARRAY, 1, &m_fallbackTexArray);
+        glTextureStorage3D(m_fallbackTexArray, 1, GL_RGBA8, 1, 1, 1);
+        glTextureSubImage3D(m_fallbackTexArray, 0, 0, 0, 0, 1, 1, 1,
+                            GL_RGBA, GL_UNSIGNED_BYTE, white);
+    }
+
+    // Create bone matrix SSBO for skeletal animation (binding point 2)
+    glCreateBuffers(1, &m_boneMatrixSSBO);
+    glNamedBufferStorage(m_boneMatrixSSBO,
+        static_cast<GLsizeiptr>(MAX_BONES * sizeof(glm::mat4)),
+        nullptr, GL_DYNAMIC_STORAGE_BIT);
+
     Logger::info("Renderer initialized (OpenGL 4.5, reverse-Z)");
 }
 
@@ -152,6 +192,17 @@ Renderer::~Renderer()
     if (m_causticsTexture != 0)
     {
         glDeleteTextures(1, &m_causticsTexture);
+    }
+    if (m_dummyModelSSBO != 0)
+    {
+        glDeleteBuffers(1, &m_dummyModelSSBO);
+    }
+    if (m_fallbackTexture != 0) glDeleteTextures(1, &m_fallbackTexture);
+    if (m_fallbackCubemap != 0) glDeleteTextures(1, &m_fallbackCubemap);
+    if (m_fallbackTexArray != 0) glDeleteTextures(1, &m_fallbackTexArray);
+    if (m_boneMatrixSSBO != 0)
+    {
+        glDeleteBuffers(1, &m_boneMatrixSSBO);
     }
     Logger::debug("Renderer destroyed");
 }
@@ -325,6 +376,29 @@ bool Renderer::loadShaders(const std::string& assetPath)
     }
 
     Logger::info("Shaders loaded successfully");
+
+    // Assign every sampler uniform in the scene shader to its designated texture unit
+    // ONCE at load time. OpenGL sampler uniforms default to 0, which causes "active
+    // samplers with a different type refer to the same texture image unit" errors on
+    // Mesa when different sampler types (sampler2D, samplerCube, sampler2DArray) all
+    // point to unit 0.
+    m_sceneShader.use();
+    m_sceneShader.setInt("u_diffuseTexture", 0);
+    m_sceneShader.setInt("u_normalMap", 1);
+    m_sceneShader.setInt("u_heightMap", 2);
+    m_sceneShader.setInt("u_cascadeShadowMap", 3);
+    m_sceneShader.setInt("u_pointShadowMaps[0]", 4);
+    m_sceneShader.setInt("u_pointShadowMaps[1]", 5);
+    m_sceneShader.setInt("u_metallicRoughnessMap", 6);
+    m_sceneShader.setInt("u_emissiveMap", 7);
+    m_sceneShader.setInt("u_aoMap", 8);
+    m_sceneShader.setInt("u_causticsTex", 9);
+    m_sceneShader.setInt("u_probeIrradianceMap", 10);
+    m_sceneShader.setInt("u_probePrefilterMap", 11);
+    m_sceneShader.setInt("u_irradianceMap", 14);
+    m_sceneShader.setInt("u_prefilterMap", 15);
+    m_sceneShader.setInt("u_brdfLUT", 16);
+
     return true;
 }
 
@@ -545,6 +619,10 @@ void Renderer::initFramebuffers(int width, int height, int msaaSamples)
     }
     while (glGetError() != GL_NO_ERROR) {}
 
+    // Light probe manager (shares irradiance/prefilter convolution shaders)
+    m_lightProbeManager = std::make_unique<LightProbeManager>();
+    m_lightProbeManager->initialize(m_assetPath);
+
     // Generate procedural caustics texture for underwater effects
     generateCausticsTexture();
 
@@ -556,8 +634,9 @@ void Renderer::initFramebuffers(int width, int height, int msaaSamples)
 void Renderer::beginFrame()
 {
     bool isTAA = (m_antiAliasMode == AntiAliasMode::TAA && m_taa && m_taaSceneFbo);
+    bool isSMAA = (m_antiAliasMode == AntiAliasMode::SMAA && m_smaa && m_taaSceneFbo);
 
-    if (isTAA)
+    if (isTAA || isSMAA)
     {
         m_taaSceneFbo->bind();
     }
@@ -566,11 +645,46 @@ void Renderer::beginFrame()
         m_msaaFbo->bind();
     }
 
+    // Restore core depth state — post-processing and ImGui may leave these changed.
+    glEnable(GL_DEPTH_TEST);
+    glDepthMask(GL_TRUE);
+    glDepthFunc(GL_GEQUAL);
+    glClipControl(GL_LOWER_LEFT, GL_ZERO_TO_ONE);
+    glClearDepth(0.0);
+
+    // Re-apply stored clear color every frame — editor mode clobbers glClearColor
+    // for its own background, which would bleed into the scene FBO otherwise.
+    glClearColor(m_clearColor.r, m_clearColor.g, m_clearColor.b, 1.0f);
+
     glViewport(0, 0, m_windowWidth, m_windowHeight);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     // Ensure clip distance is clean at frame start (water passes enable/disable it)
     glDisable(GL_CLIP_DISTANCE0);
+
+    // Bind SSBOs that shaders declare but may not access on every code path.
+    // Mesa requires ALL declared SSBOs to have valid buffers bound at draw time.
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_dummyModelSSBO);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, m_boneMatrixSSBO);
+
+    // Bind fallback textures to ALL sampler units that the scene shader declares.
+    // Mesa requires valid textures even when the shader doesn't sample them.
+    // Units used later (by material uploads, shadow binds, etc.) will be overwritten.
+    glBindTextureUnit(0, m_fallbackTexture);     // u_diffuseTexture
+    glBindTextureUnit(1, m_fallbackTexture);     // u_normalMap
+    glBindTextureUnit(2, m_fallbackTexture);     // u_heightMap
+    glBindTextureUnit(3, m_fallbackTexArray);    // u_cascadeShadowMap (sampler2DArray)
+    glBindTextureUnit(4, m_fallbackCubemap);     // u_pointShadowMaps[0] (samplerCube)
+    glBindTextureUnit(5, m_fallbackCubemap);     // u_pointShadowMaps[1] (samplerCube)
+    glBindTextureUnit(6, m_fallbackTexture);     // u_metallicRoughnessMap
+    glBindTextureUnit(7, m_fallbackTexture);     // u_emissiveMap
+    glBindTextureUnit(8, m_fallbackTexture);     // u_aoMap
+    glBindTextureUnit(9, m_fallbackTexture);     // u_causticsTex
+    glBindTextureUnit(10, m_fallbackCubemap);    // u_probeIrradianceMap (samplerCube)
+    glBindTextureUnit(11, m_fallbackCubemap);    // u_probePrefilterMap (samplerCube)
+    glBindTextureUnit(14, m_fallbackCubemap);    // u_irradianceMap (samplerCube)
+    glBindTextureUnit(15, m_fallbackCubemap);    // u_prefilterMap (samplerCube)
+    glBindTextureUnit(16, m_fallbackTexture);    // u_brdfLUT
 }
 
 void Renderer::endFrame(float deltaTime)
@@ -581,11 +695,13 @@ void Renderer::endFrame(float deltaTime)
     }
 
     bool isTAA = (m_antiAliasMode == AntiAliasMode::TAA && m_taa && m_taaSceneFbo);
+    bool isSMAA = (m_antiAliasMode == AntiAliasMode::SMAA && m_smaa && m_taaSceneFbo);
+    bool usesNonMsaaFbo = (isTAA || isSMAA);
 
     // 1. Resolve scene color → non-multisampled resolve FBO
-    if (isTAA)
+    if (usesNonMsaaFbo)
     {
-        // TAA mode: blit from non-MSAA scene FBO to resolve FBO
+        // TAA/SMAA mode: blit from non-MSAA scene FBO to resolve FBO
         glBindFramebuffer(GL_READ_FRAMEBUFFER, m_taaSceneFbo->getId());
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_resolveFbo->getId());
         glBlitFramebuffer(0, 0, m_windowWidth, m_windowHeight,
@@ -601,7 +717,7 @@ void Renderer::endFrame(float deltaTime)
 
     // Invalidate the source FBO after resolve — tells the driver the multisampled
     // data is no longer needed, avoiding unnecessary writeback to VRAM.
-    if (!isTAA && m_msaaFbo && m_msaaFbo->isMultisampled())
+    if (!usesNonMsaaFbo && m_msaaFbo && m_msaaFbo->isMultisampled())
     {
         glBindFramebuffer(GL_FRAMEBUFFER, m_msaaFbo->getId());
         GLenum attachments[] = { GL_COLOR_ATTACHMENT0, GL_DEPTH_ATTACHMENT };
@@ -610,8 +726,8 @@ void Renderer::endFrame(float deltaTime)
     }
 
     // 2. Resolve depth → sampleable depth texture for SSAO and TAA motion vectors
-    GLuint depthSourceFbo = isTAA ? m_taaSceneFbo->getId()
-                                   : (m_msaaFbo ? m_msaaFbo->getId() : 0);
+    GLuint depthSourceFbo = usesNonMsaaFbo ? m_taaSceneFbo->getId()
+                                            : (m_msaaFbo ? m_msaaFbo->getId() : 0);
     if (m_resolveDepthFbo && depthSourceFbo != 0)
     {
         glBindFramebuffer(GL_READ_FRAMEBUFFER, depthSourceFbo);
@@ -677,8 +793,6 @@ void Renderer::endFrame(float deltaTime)
     // 4. Anti-aliasing resolve (TAA or SMAA)
     // The FBO used as the HDR input for bloom and final composite
     Framebuffer* hdrSourceFbo = m_resolveFbo.get();
-
-    bool isSMAA = (m_antiAliasMode == AntiAliasMode::SMAA && m_smaa && m_taaSceneFbo);
 
     if (isSMAA)
     {
@@ -799,7 +913,7 @@ void Renderer::endFrame(float deltaTime)
             else
             {
                 // Bind the bloom texture and limit sampling to the previous mip
-                glActiveTexture(GL_TEXTURE0);
+                glBindTextureUnit(0, m_bloomTexture);
                 glTextureParameteri(m_bloomTexture, GL_TEXTURE_BASE_LEVEL, mip - 1);
                 glTextureParameteri(m_bloomTexture, GL_TEXTURE_MAX_LEVEL, mip - 1);
                 m_bloomDownsampleShader.setVec2("u_srcTexelSize",
@@ -1029,8 +1143,12 @@ void Renderer::uploadMaterialUniforms(const Material& material)
     if (hasTexture)
     {
         material.getDiffuseTexture()->bind(0);
-        m_sceneShader.setInt("u_diffuseTexture", 0);
     }
+    else
+    {
+        glBindTextureUnit(0, m_fallbackTexture);
+    }
+    m_sceneShader.setInt("u_diffuseTexture", 0);
 
     // Normal map (shared — unit 1)
     bool hasNormalMap = material.hasNormalMap();
@@ -1038,8 +1156,12 @@ void Renderer::uploadMaterialUniforms(const Material& material)
     if (hasNormalMap)
     {
         material.getNormalMap()->bind(1);
-        m_sceneShader.setInt("u_normalMap", 1);
     }
+    else
+    {
+        glBindTextureUnit(1, m_fallbackTexture);
+    }
+    m_sceneShader.setInt("u_normalMap", 1);
 
     // Height map (shared — unit 2)
     bool hasHeightMap = m_pomEnabled && material.isPomEnabled() && material.hasHeightMap();
@@ -1047,9 +1169,13 @@ void Renderer::uploadMaterialUniforms(const Material& material)
     if (hasHeightMap)
     {
         material.getHeightMap()->bind(2);
-        m_sceneShader.setInt("u_heightMap", 2);
         m_sceneShader.setFloat("u_heightScale", material.getHeightScale() * m_pomHeightMultiplier);
     }
+    else
+    {
+        glBindTextureUnit(2, m_fallbackTexture);
+    }
+    m_sceneShader.setInt("u_heightMap", 2);
 
     // PBR uniforms
     if (usePBR)
@@ -1058,6 +1184,7 @@ void Renderer::uploadMaterialUniforms(const Material& material)
         m_sceneShader.setFloat("u_pbrMetallic", material.getMetallic());
         m_sceneShader.setFloat("u_pbrRoughness", material.getRoughness());
         m_sceneShader.setFloat("u_pbrAo", material.getAo());
+        m_sceneShader.setFloat("u_iblMultiplier", material.getIblMultiplier());
         m_sceneShader.setFloat("u_clearcoat", material.getClearcoat());
         m_sceneShader.setFloat("u_clearcoatRoughness", material.getClearcoatRoughness());
         m_sceneShader.setVec3("u_pbrEmissive", material.getEmissive());
@@ -1069,8 +1196,12 @@ void Renderer::uploadMaterialUniforms(const Material& material)
         if (hasMR)
         {
             material.getMetallicRoughnessTexture()->bind(6);
-            m_sceneShader.setInt("u_metallicRoughnessMap", 6);
         }
+        else
+        {
+            glBindTextureUnit(6, m_fallbackTexture);
+        }
+        m_sceneShader.setInt("u_metallicRoughnessMap", 6);
 
         // Emissive map (unit 7)
         bool hasEmissive = material.hasEmissiveTexture();
@@ -1078,8 +1209,12 @@ void Renderer::uploadMaterialUniforms(const Material& material)
         if (hasEmissive)
         {
             material.getEmissiveTexture()->bind(7);
-            m_sceneShader.setInt("u_emissiveMap", 7);
         }
+        else
+        {
+            glBindTextureUnit(7, m_fallbackTexture);
+        }
+        m_sceneShader.setInt("u_emissiveMap", 7);
 
         // AO map (unit 8)
         bool hasAo = material.hasAoTexture();
@@ -1087,8 +1222,12 @@ void Renderer::uploadMaterialUniforms(const Material& material)
         if (hasAo)
         {
             material.getAoTexture()->bind(8);
-            m_sceneShader.setInt("u_aoMap", 8);
         }
+        else
+        {
+            glBindTextureUnit(8, m_fallbackTexture);
+        }
+        m_sceneShader.setInt("u_aoMap", 8);
     }
     else
     {
@@ -1096,8 +1235,13 @@ void Renderer::uploadMaterialUniforms(const Material& material)
         m_sceneShader.setBool("u_hasMetallicRoughnessMap", false);
         m_sceneShader.setBool("u_hasEmissiveMap", false);
         m_sceneShader.setBool("u_hasAoMap", false);
+        m_sceneShader.setFloat("u_iblMultiplier", 1.0f);
         m_sceneShader.setFloat("u_clearcoat", 0.0f);
         m_sceneShader.setFloat("u_clearcoatRoughness", 0.0f);
+        // Mesa requires valid textures for all declared samplers
+        glBindTextureUnit(6, m_fallbackTexture);
+        glBindTextureUnit(7, m_fallbackTexture);
+        glBindTextureUnit(8, m_fallbackTexture);
     }
 
     // Stochastic tiling
@@ -1114,7 +1258,8 @@ void Renderer::uploadMaterialUniforms(const Material& material)
 
 void Renderer::drawMesh(const Mesh& mesh, const glm::mat4& modelMatrix,
                          const Material& material, const Camera& camera,
-                         float /*aspectRatio*/)
+                         float /*aspectRatio*/,
+                         const std::vector<glm::mat4>* boneMatrices)
 {
     m_sceneShader.use();
 
@@ -1126,6 +1271,17 @@ void Renderer::drawMesh(const Mesh& mesh, const glm::mat4& modelMatrix,
         glm::mat3(glm::transpose(glm::inverse(modelMatrix))));
     m_sceneShader.setMat4("u_view", camera.getViewMatrix());
     m_sceneShader.setMat4("u_projection", m_lastProjection);
+
+    // Skeletal animation: upload bone matrices if present
+    bool skinned = (boneMatrices != nullptr && !boneMatrices->empty());
+    m_sceneShader.setBool("u_hasBones", skinned);
+    if (skinned)
+    {
+        GLsizeiptr dataSize = static_cast<GLsizeiptr>(
+            boneMatrices->size() * sizeof(glm::mat4));
+        glNamedBufferSubData(m_boneMatrixSSBO, 0, dataSize, boneMatrices->data());
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, m_boneMatrixSSBO);
+    }
 
     uploadMaterialUniforms(material);
 
@@ -1167,6 +1323,7 @@ void Renderer::drawMesh(const Mesh& mesh, const glm::mat4& modelMatrix,
 
 void Renderer::setClearColor(const glm::vec3& color)
 {
+    m_clearColor = color;
     glClearColor(color.r, color.g, color.b, 1.0f);
 }
 
@@ -1382,6 +1539,166 @@ void Renderer::blitToScreen()
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
+bool Renderer::loadSkyboxHDRI(const std::string& path)
+{
+    if (!m_skybox)
+    {
+        Logger::error("Cannot load HDRI: skybox not initialized");
+        return false;
+    }
+
+    if (!m_skybox->loadEquirectangular(path))
+    {
+        return false;
+    }
+
+    // Regenerate IBL environment maps from the new cubemap
+    if (m_environmentMap && m_environmentMap->isReady())
+    {
+        Logger::info("Regenerating IBL environment maps from HDRI...");
+
+        // Save GL state that generate() might corrupt
+        GLint prevDepthFunc = 0;
+        glGetIntegerv(GL_DEPTH_FUNC, &prevDepthFunc);
+        GLboolean prevDepthMask = GL_TRUE;
+        glGetBooleanv(GL_DEPTH_WRITEMASK, &prevDepthMask);
+        GLint prevClipOrigin = 0;
+        GLint prevClipDepth = 0;
+        glGetIntegerv(GL_CLIP_ORIGIN, &prevClipOrigin);
+        glGetIntegerv(GL_CLIP_DEPTH_MODE, &prevClipDepth);
+
+        m_environmentMap->generate(m_skybox->getTextureId(), true,
+                                   *m_screenQuad, m_skyboxShader);
+
+        // Restore GL state — reverse-Z requires these to be correct
+        glDepthFunc(prevDepthFunc);
+        glDepthMask(prevDepthMask);
+        glClipControl(prevClipOrigin, prevClipDepth);
+        glUseProgram(0);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+        // CRITICAL: generate() leaves a cubemap bound on texture unit 0.
+        // On Mesa AMD, a subsequent sampler2D read from unit 0 triggers
+        // GL_INVALID_OPERATION (mismatched sampler types), silently failing
+        // all draw calls. Bind a 2D fallback texture to clear the cubemap.
+        for (int i = 0; i < 10; i++)
+        {
+            glBindTextureUnit(i, m_fallbackTexture);
+        }
+
+        // Drain any GL errors from IBL generation
+        while (glGetError() != GL_NO_ERROR) {}
+    }
+
+    return true;
+}
+
+void Renderer::captureLightProbe(int probeIndex, const SceneRenderData& renderData,
+                                  const Camera& camera, float aspectRatio)
+{
+    if (!m_lightProbeManager || probeIndex < 0
+        || probeIndex >= m_lightProbeManager->getProbeCount())
+    {
+        Logger::error("captureLightProbe: invalid probe index " + std::to_string(probeIndex));
+        return;
+    }
+
+    const LightProbe* probe = m_lightProbeManager->getProbe(probeIndex);
+    glm::vec3 probePos = probe->getPosition();
+    int faceSize = LightProbe::CAPTURE_RESOLUTION;
+
+    // Create temporary cubemap to capture the scene into
+    GLuint captureCubemap = 0;
+    int mipLevels = static_cast<int>(std::floor(std::log2(faceSize))) + 1;
+    glCreateTextures(GL_TEXTURE_CUBE_MAP, 1, &captureCubemap);
+    glTextureStorage2D(captureCubemap, mipLevels, GL_RGB16F, faceSize, faceSize);
+    glTextureParameteri(captureCubemap, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTextureParameteri(captureCubemap, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTextureParameteri(captureCubemap, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTextureParameteri(captureCubemap, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTextureParameteri(captureCubemap, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+
+    // Create temporary FBO for cubemap face rendering
+    GLuint captureFbo = 0;
+    GLuint captureRbo = 0;
+    glCreateFramebuffers(1, &captureFbo);
+    glCreateRenderbuffers(1, &captureRbo);
+    glNamedRenderbufferStorage(captureRbo, GL_DEPTH_COMPONENT24, faceSize, faceSize);
+    glNamedFramebufferRenderbuffer(captureFbo, GL_DEPTH_ATTACHMENT,
+                                   GL_RENDERBUFFER, captureRbo);
+
+    // Cubemap face view matrices (looking from probe position)
+    static const glm::vec3 TARGETS[6] = {
+        { 1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0,-1, 0}, {0, 0, 1}, {0, 0,-1}
+    };
+    static const glm::vec3 UPS[6] = {
+        {0,-1, 0}, {0,-1, 0}, {0, 0, 1}, {0, 0,-1}, {0,-1, 0}, {0,-1, 0}
+    };
+    glm::mat4 captureProj = glm::perspective(glm::radians(90.0f), 1.0f, 0.1f, 100.0f);
+
+    Logger::info("Capturing light probe " + std::to_string(probeIndex)
+        + " at (" + std::to_string(probePos.x) + ", "
+        + std::to_string(probePos.y) + ", "
+        + std::to_string(probePos.z) + ")");
+
+    // Save GL state
+    GLint viewport[4];
+    glGetIntegerv(GL_VIEWPORT, viewport);
+
+    // Render each cubemap face using geometryOnly mode
+    for (int face = 0; face < 6; face++)
+    {
+        glm::mat4 faceView = glm::lookAt(probePos, probePos + TARGETS[face], UPS[face]);
+
+        glNamedFramebufferTextureLayer(captureFbo, GL_COLOR_ATTACHMENT0,
+                                       captureCubemap, 0, face);
+        glBindFramebuffer(GL_FRAMEBUFFER, captureFbo);
+        glViewport(0, 0, faceSize, faceSize);
+
+        // Use forward-Z for the capture (standard [-1,1] NDC)
+        glClipControl(GL_LOWER_LEFT, GL_NEGATIVE_ONE_TO_ONE);
+        glDepthFunc(GL_LESS);
+        glClearDepth(1.0);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        // Render scene geometry with lighting (no shadows, no post-processing)
+        renderScene(renderData, camera, 1.0f, glm::vec4(0.0f),
+                    true,  // geometryOnly
+                    faceView, captureProj);
+    }
+
+    // Restore GL state
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glViewport(viewport[0], viewport[1], viewport[2], viewport[3]);
+    glClipControl(GL_LOWER_LEFT, GL_ZERO_TO_ONE);
+    glDepthFunc(GL_GEQUAL);
+    glClearDepth(0.0);
+
+    // Generate mipmaps for the capture cubemap
+    glGenerateTextureMipmap(captureCubemap);
+
+    // Generate irradiance + prefilter from the captured cubemap
+    m_lightProbeManager->generateProbe(probeIndex, captureCubemap);
+
+    // Clean up the temporary capture cubemap and FBO
+    glDeleteTextures(1, &captureCubemap);
+    glDeleteFramebuffers(1, &captureFbo);
+    glDeleteRenderbuffers(1, &captureRbo);
+
+    // Drain GL errors and rebind fallback textures
+    while (glGetError() != GL_NO_ERROR) {}
+    for (int i = 0; i < 12; i++)
+    {
+        glBindTextureUnit(i, m_fallbackTexture);
+    }
+    glBindTextureUnit(4, m_fallbackCubemap);
+    glBindTextureUnit(5, m_fallbackCubemap);
+    glBindTextureUnit(10, m_fallbackCubemap);
+    glBindTextureUnit(11, m_fallbackCubemap);
+
+    Logger::info("Light probe " + std::to_string(probeIndex) + " captured and convolved");
+}
+
 GLuint Renderer::getSkyboxTextureId() const
 {
     return m_skybox ? m_skybox->getTextureId() : 0;
@@ -1390,6 +1707,49 @@ GLuint Renderer::getSkyboxTextureId() const
 GLuint Renderer::getResolvedDepthTexture() const
 {
     return m_resolveDepthFbo ? m_resolveDepthFbo->getDepthTextureId() : 0;
+}
+
+GLuint Renderer::getResolvedColorTexture() const
+{
+    return m_resolveFbo ? m_resolveFbo->getColorAttachmentId() : 0;
+}
+
+void Renderer::resolveSceneForWater()
+{
+    bool isTAA = (m_antiAliasMode == AntiAliasMode::TAA && m_taa && m_taaSceneFbo);
+    bool isSMAA = (m_antiAliasMode == AntiAliasMode::SMAA && m_smaa && m_taaSceneFbo);
+    bool usesNonMsaaFbo = (isTAA || isSMAA);
+
+    // Resolve color: scene FBO → resolve FBO
+    if (usesNonMsaaFbo)
+    {
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, m_taaSceneFbo->getId());
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_resolveFbo->getId());
+        glBlitFramebuffer(0, 0, m_windowWidth, m_windowHeight,
+                          0, 0, m_windowWidth, m_windowHeight,
+                          GL_COLOR_BUFFER_BIT, GL_NEAREST);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    }
+    else if (m_msaaFbo)
+    {
+        m_msaaFbo->resolve(*m_resolveFbo);
+    }
+
+    // Resolve depth: scene FBO → resolve depth FBO
+    GLuint depthSourceFbo = usesNonMsaaFbo ? m_taaSceneFbo->getId()
+                                            : (m_msaaFbo ? m_msaaFbo->getId() : 0);
+    if (m_resolveDepthFbo && depthSourceFbo != 0)
+    {
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, depthSourceFbo);
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_resolveDepthFbo->getId());
+        glBlitFramebuffer(0, 0, m_windowWidth, m_windowHeight,
+                          0, 0, m_windowWidth, m_windowHeight,
+                          GL_DEPTH_BUFFER_BIT, GL_NEAREST);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    }
+
+    // Rebind the scene FBO so rendering can continue (water surface, particles)
+    rebindSceneFbo();
 }
 
 CascadedShadowMap* Renderer::getCascadedShadowMap() const
@@ -1578,6 +1938,7 @@ std::vector<Renderer::InstanceBatch> Renderer::buildInstanceBatchesStatic(
         if (it != indexMap.end())
         {
             batches[it->second].modelMatrices.push_back(item.worldMatrix);
+            batches[it->second].boneMatrixPtrs.push_back(item.boneMatrices);
         }
         else
         {
@@ -1586,6 +1947,7 @@ std::vector<Renderer::InstanceBatch> Renderer::buildInstanceBatchesStatic(
             batch.mesh = item.mesh;
             batch.material = item.material;
             batch.modelMatrices.push_back(item.worldMatrix);
+            batch.boneMatrixPtrs.push_back(item.boneMatrices);
             batches.push_back(std::move(batch));
         }
     }
@@ -1606,6 +1968,7 @@ void Renderer::buildInstanceBatches(
         if (it != m_batchIndexMap.end())
         {
             m_instanceBatches[it->second].modelMatrices.push_back(item.worldMatrix);
+            m_instanceBatches[it->second].boneMatrixPtrs.push_back(item.boneMatrices);
         }
         else
         {
@@ -1619,6 +1982,8 @@ void Renderer::buildInstanceBatches(
                 m_instanceBatches[idx].material = item.material;
                 m_instanceBatches[idx].modelMatrices.clear();
                 m_instanceBatches[idx].modelMatrices.push_back(item.worldMatrix);
+                m_instanceBatches[idx].boneMatrixPtrs.clear();
+                m_instanceBatches[idx].boneMatrixPtrs.push_back(item.boneMatrices);
             }
             else
             {
@@ -1626,6 +1991,7 @@ void Renderer::buildInstanceBatches(
                 batch.mesh = item.mesh;
                 batch.material = item.material;
                 batch.modelMatrices.push_back(item.worldMatrix);
+                batch.boneMatrixPtrs.push_back(item.boneMatrices);
                 m_instanceBatches.push_back(std::move(batch));
             }
             m_instanceBatchCount++;
@@ -1636,7 +2002,8 @@ void Renderer::buildInstanceBatches(
 void Renderer::rebindSceneFbo()
 {
     bool isTAA = (m_antiAliasMode == AntiAliasMode::TAA && m_taa && m_taaSceneFbo);
-    if (isTAA)
+    bool isSMAA = (m_antiAliasMode == AntiAliasMode::SMAA && m_smaa && m_taaSceneFbo);
+    if (isTAA || isSMAA)
     {
         m_taaSceneFbo->bind();
     }
@@ -1662,8 +2029,11 @@ void Renderer::restoreViewState()
 }
 
 void Renderer::renderScene(const SceneRenderData& renderData, const Camera& camera, float aspectRatio,
-                            const glm::vec4& clipPlane, bool geometryOnly)
+                            const glm::vec4& clipPlane, bool geometryOnly,
+                            const glm::mat4& viewOverride, const glm::mat4& projOverride)
 {
+    bool hasOverrides = (viewOverride != glm::mat4(0.0f));
+
     if (!geometryOnly)
     {
         // Reset per-frame scratch allocator (all pmr::vectors from last frame are now invalid)
@@ -1764,7 +2134,9 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
     // Use the standard (non-reverse-Z) projection for frustum extraction so all
     // 6 planes are well-defined. The reverse-Z infinite projection produces a
     // degenerate near plane that breaks the Gribb-Hartmann extraction.
-    glm::mat4 cullingVP = camera.getCullingProjectionMatrix(aspectRatio) * camera.getViewMatrix();
+    glm::mat4 cullingVP = hasOverrides
+        ? (projOverride * viewOverride)
+        : (camera.getCullingProjectionMatrix(aspectRatio) * camera.getViewMatrix());
     auto frustumPlanes = extractFrustumPlanes(cullingVP);
 
     // Filter render items to only those inside the view frustum.
@@ -1803,7 +2175,8 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
     if (!geometryOnly)
     {
         bool isTAA = (m_antiAliasMode == AntiAliasMode::TAA && m_taa && m_taaSceneFbo);
-        if (isTAA)
+        bool isSMAAScene = (m_antiAliasMode == AntiAliasMode::SMAA && m_smaa && m_taaSceneFbo);
+        if (isTAA || isSMAAScene)
         {
             m_taaSceneFbo->bind();
         }
@@ -1877,6 +2250,10 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
 
         // Only enable IBL shading when textures are fully generated
         m_sceneShader.setBool("u_hasIBL", m_environmentMap->isReady());
+
+        // Probe defaults: no probe active (overridden per-entity in draw loop)
+        m_sceneShader.setBool("u_hasProbe", false);
+        m_sceneShader.setFloat("u_probeWeight", 0.0f);
     }
     else
     {
@@ -1894,15 +2271,16 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
     }
 
     // Store projection matrix for SSAO
-    glm::mat4 projection = camera.getProjectionMatrix(aspectRatio);
+    // Use overrides if provided (non-zero), otherwise compute from camera
+    glm::mat4 projection = hasOverrides ? projOverride : camera.getProjectionMatrix(aspectRatio);
 
-    // Apply TAA jitter to projection
-    if (m_antiAliasMode == AntiAliasMode::TAA && m_taa)
+    // Apply TAA jitter to projection (only for main pass, not cubemap faces)
+    if (!hasOverrides && m_antiAliasMode == AntiAliasMode::TAA && m_taa)
     {
         projection = m_taa->jitterProjection(projection, m_windowWidth, m_windowHeight);
     }
     m_lastProjection = projection;
-    m_lastView = camera.getViewMatrix();
+    m_lastView = hasOverrides ? viewOverride : camera.getViewMatrix();
     m_lastViewProjection = projection * m_lastView;
 
     // Upload light uniforms once per frame (not per batch)
@@ -1946,6 +2324,7 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
         m_sceneShader.use();
         m_sceneShader.setBool("u_useInstancing", false);
         m_sceneShader.setBool("u_useMDI", true);
+        m_sceneShader.setBool("u_hasBones", false);  // MDI path doesn't support skinning
         m_sceneShader.setMat4("u_view", camera.getViewMatrix());
         m_sceneShader.setMat4("u_projection", m_lastProjection);
 
@@ -1995,12 +2374,36 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
         {
             const auto& batch = m_instanceBatches[b];
             int count = static_cast<int>(batch.modelMatrices.size());
+
+            // Light probe assignment: use first entity position to determine probe for entire batch.
+            // Indoor/outdoor meshes use different materials → different batches → correct probe per batch.
+            if (m_lightProbeManager && m_lightProbeManager->getProbeCount() > 0)
+            {
+                glm::vec3 batchPos = glm::vec3(batch.modelMatrices[0][3]);
+                auto assignment = m_lightProbeManager->assignProbe(batchPos);
+                if (assignment.probe && assignment.weight > 0.0f)
+                {
+                    assignment.probe->bindIrradiance(10);
+                    assignment.probe->bindPrefilter(11);
+                    m_sceneShader.setBool("u_hasProbe", true);
+                    m_sceneShader.setFloat("u_probeWeight", assignment.weight);
+                }
+                else
+                {
+                    glBindTextureUnit(10, m_fallbackCubemap);
+                    glBindTextureUnit(11, m_fallbackCubemap);
+                    m_sceneShader.setBool("u_hasProbe", false);
+                    m_sceneShader.setFloat("u_probeWeight", 0.0f);
+                }
+            }
+
             if (count >= MIN_INSTANCE_BATCH_SIZE && m_instanceBuffer)
             {
                 // Instanced path: set up material once, draw all instances
                 m_sceneShader.use();
                 m_sceneShader.setBool("u_useInstancing", true);
                 m_sceneShader.setBool("u_useMDI", false);
+                m_sceneShader.setBool("u_hasBones", false);  // Instancing doesn't support skinning
 
                 // Upload instance matrices and bind to mesh VAO
                 m_instanceBuffer->upload(batch.modelMatrices);
@@ -2008,7 +2411,7 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
 
                 // Set a dummy u_model (unused but prevents warnings)
                 m_sceneShader.setMat4("u_model", batch.modelMatrices[0]);
-                m_sceneShader.setMat4("u_view", camera.getViewMatrix());
+                m_sceneShader.setMat4("u_view", m_lastView);
                 m_sceneShader.setMat4("u_projection", m_lastProjection);
 
                 uploadMaterialUniforms(*batch.material);
@@ -2033,16 +2436,18 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
             else
             {
                 // Non-instanced path for single-instance batches
-                for (const auto& matrix : batch.modelMatrices)
+                for (size_t mi = 0; mi < batch.modelMatrices.size(); mi++)
                 {
-                    drawMesh(*batch.mesh, matrix, *batch.material, camera, aspectRatio);
+                    drawMesh(*batch.mesh, batch.modelMatrices[mi], *batch.material,
+                             camera, aspectRatio,
+                             mi < batch.boneMatrixPtrs.size() ? batch.boneMatrixPtrs[mi] : nullptr);
                 }
             }
         }
     }
 
     // --- Skybox pass: draw after opaque geometry, before transparent ---
-    if (m_skybox)
+    if (m_skybox && m_skyboxEnabled)
     {
         // Reverse-Z: skybox at depth 0.0 (far plane). GL_GEQUAL ensures:
         //   empty pixels (depth=0.0): 0.0 >= 0.0 → PASS (skybox fills background)
@@ -2097,7 +2502,8 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
 
         for (const auto& item : m_sortedTransparentItems)
         {
-            drawMesh(*item.mesh, item.worldMatrix, *item.material, camera, aspectRatio);
+            drawMesh(*item.mesh, item.worldMatrix, *item.material, camera, aspectRatio,
+                     item.boneMatrices);
         }
 
         glDepthMask(GL_TRUE);
@@ -2131,12 +2537,19 @@ void Renderer::renderShadowPass(const std::vector<SceneRenderData::RenderItem>& 
 
     m_shadowDepthShader.use();
 
-    // Render geometry into each cascade layer with per-cascade frustum culling
+    // Render geometry into each cascade layer with per-cascade frustum culling.
+    // Far cascades update less frequently to reduce shadow pass cost:
+    //   Cascade 0-1: every frame (near detail)
+    //   Cascade 2:   every 2nd frame
+    //   Cascade 3:   every 4th frame
     int cascadeCount = m_cascadedShadowMap->getCascadeCount();
     int totalCascadeCulled = 0;
+    m_shadowFrameCount++;
 
     for (int c = 0; c < cascadeCount; c++)
     {
+        // Skip the farthest cascade on alternating frames (its shadow map persists)
+        if (c == 3 && (m_shadowFrameCount % 2) != 0) continue;
         const glm::mat4& lightSpaceMatrix = m_cascadedShadowMap->getLightSpaceMatrix(c);
 
         // Extract frustum planes from the cascade's orthographic light-space matrix
@@ -2181,9 +2594,22 @@ void Renderer::renderShadowPass(const std::vector<SceneRenderData::RenderItem>& 
             else
             {
                 m_shadowDepthShader.setBool("u_useInstancing", false);
-                for (const auto& matrix : batch.modelMatrices)
+                for (size_t mi = 0; mi < batch.modelMatrices.size(); mi++)
                 {
-                    m_shadowDepthShader.setMat4("u_model", matrix);
+                    // Skeletal animation in shadow pass
+                    const std::vector<glm::mat4>* bones =
+                        (mi < batch.boneMatrixPtrs.size()) ? batch.boneMatrixPtrs[mi] : nullptr;
+                    bool skinned = (bones != nullptr && !bones->empty());
+                    m_shadowDepthShader.setBool("u_hasBones", skinned);
+                    if (skinned)
+                    {
+                        glNamedBufferSubData(m_boneMatrixSSBO, 0,
+                            static_cast<GLsizeiptr>(bones->size() * sizeof(glm::mat4)),
+                            bones->data());
+                        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, m_boneMatrixSSBO);
+                    }
+
+                    m_shadowDepthShader.setMat4("u_model", batch.modelMatrices[mi]);
                     batch.mesh->bind();
                     glDrawElements(GL_TRIANGLES,
                         static_cast<GLsizei>(batch.mesh->getIndexCount()),
@@ -2569,6 +2995,17 @@ void Renderer::renderIdBuffer(const SceneRenderData& renderData,
             float g = static_cast<float>((item.entityId >> 8) & 0xFF) / 255.0f;
             float b = static_cast<float>((item.entityId >> 16) & 0xFF) / 255.0f;
 
+            // Skeletal animation
+            bool skinned = (item.boneMatrices != nullptr && !item.boneMatrices->empty());
+            m_idBufferShader.setBool("u_hasBones", skinned);
+            if (skinned)
+            {
+                glNamedBufferSubData(m_boneMatrixSSBO, 0,
+                    static_cast<GLsizeiptr>(item.boneMatrices->size() * sizeof(glm::mat4)),
+                    item.boneMatrices->data());
+                glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, m_boneMatrixSSBO);
+            }
+
             m_idBufferShader.setVec3("u_entityColor", glm::vec3(r, g, b));
             m_idBufferShader.setMat4("u_model", item.worldMatrix);
 
@@ -2643,6 +3080,7 @@ void Renderer::renderSelectionOutline(const SceneRenderData& renderData,
     {
         const Mesh* mesh;
         glm::mat4 worldMatrix;
+        const std::vector<glm::mat4>* boneMatrices = nullptr;
     };
     std::vector<OutlineItem> outlineItems;
 
@@ -2652,7 +3090,7 @@ void Renderer::renderSelectionOutline(const SceneRenderData& renderData,
         {
             if (selectedSet.count(item.entityId))
             {
-                outlineItems.push_back({item.mesh, item.worldMatrix});
+                outlineItems.push_back({item.mesh, item.worldMatrix, item.boneMatrices});
             }
         }
     };
@@ -2687,6 +3125,15 @@ void Renderer::renderSelectionOutline(const SceneRenderData& renderData,
 
     for (const auto& oi : outlineItems)
     {
+        bool skinned = (oi.boneMatrices != nullptr && !oi.boneMatrices->empty());
+        m_outlineShader.setBool("u_hasBones", skinned);
+        if (skinned)
+        {
+            glNamedBufferSubData(m_boneMatrixSSBO, 0,
+                static_cast<GLsizeiptr>(oi.boneMatrices->size() * sizeof(glm::mat4)),
+                oi.boneMatrices->data());
+            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, m_boneMatrixSSBO);
+        }
         m_outlineShader.setMat4("u_model", oi.worldMatrix);
         oi.mesh->bind();
         glDrawElements(GL_TRIANGLES,
@@ -2706,6 +3153,16 @@ void Renderer::renderSelectionOutline(const SceneRenderData& renderData,
     float outlineScale = 1.05f;
     for (const auto& oi : outlineItems)
     {
+        bool skinned = (oi.boneMatrices != nullptr && !oi.boneMatrices->empty());
+        m_outlineShader.setBool("u_hasBones", skinned);
+        if (skinned)
+        {
+            glNamedBufferSubData(m_boneMatrixSSBO, 0,
+                static_cast<GLsizeiptr>(oi.boneMatrices->size() * sizeof(glm::mat4)),
+                oi.boneMatrices->data());
+            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, m_boneMatrixSSBO);
+        }
+
         // Scale around the object's world-space center
         glm::vec3 center = glm::vec3(oi.worldMatrix[3]);
         glm::mat4 scaledModel = glm::translate(glm::mat4(1.0f), center)
