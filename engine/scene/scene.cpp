@@ -211,6 +211,23 @@ void Scene::collectRenderDataRecursive(const Entity& entity, SceneRenderData& da
         item.castsShadow = meshRenderer->castsShadow();
         item.isLocked = entity.isLocked();
 
+        // Check for skeletal animation — animator may be on this entity or a parent
+        auto* animator = entity.getComponent<SkeletonAnimator>();
+        if (!animator)
+        {
+            const Entity* parent = entity.getParent();
+            while (parent)
+            {
+                animator = parent->getComponent<SkeletonAnimator>();
+                if (animator) break;
+                parent = parent->getParent();
+            }
+        }
+        if (animator && animator->isEnabled() && animator->hasBones())
+        {
+            item.boneMatrices = &animator->getBoneMatrices();
+        }
+
         // BLEND materials go to the transparent list; OPAQUE and MASK go to opaque
         if (item.material->getAlphaMode() == AlphaMode::BLEND)
         {

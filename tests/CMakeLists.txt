@@ -43,6 +43,9 @@ add_executable(vestige_tests
     test_cpu_profiler.cpp
     test_memory_tracker.cpp
     test_obj_loader.cpp
+    test_skeleton.cpp
+    test_animation_sampler.cpp
+    test_skeleton_animator.cpp
 )
 
 target_link_libraries(vestige_tests

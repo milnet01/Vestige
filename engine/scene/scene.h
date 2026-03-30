@@ -7,6 +7,7 @@
 #include "scene/light_component.h"
 #include "scene/particle_emitter.h"
 #include "scene/water_surface.h"
+#include "animation/skeleton_animator.h"
 #include "renderer/camera.h"
 #include "renderer/light.h"
 
@@ -30,6 +31,7 @@ struct SceneRenderData
         uint32_t entityId = 0;
         bool castsShadow = true;
         bool isLocked = false;
+        const std::vector<glm::mat4>* boneMatrices = nullptr;  ///< Skeletal animation (nullptr for static)
     };
 
     std::vector<RenderItem> renderItems;

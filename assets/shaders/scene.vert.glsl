@@ -10,6 +10,10 @@ layout(location = 3) in vec2 texCoord;
 layout(location = 4) in vec3 tangent;
 layout(location = 5) in vec3 bitangent;
 
+// Bone vertex attributes (locations 10-11)
+layout(location = 10) in ivec4 boneIds;
+layout(location = 11) in vec4 boneWeights;
+
 // Per-instance model matrix (locations 6-9, one vec4 column each) — legacy instancing
 layout(location = 6) in vec4 instanceModelCol0;
 layout(location = 7) in vec4 instanceModelCol1;
@@ -22,11 +26,18 @@ layout(std430, binding = 0) buffer ModelMatrices
     mat4 u_modelMatrices[];
 };
 
+// Bone matrices for skeletal animation (binding 2)
+layout(std430, binding = 2) buffer BoneMatrices
+{
+    mat4 u_boneMatrices[];
+};
+
 uniform mat4 u_model;
 uniform mat4 u_view;
 uniform mat4 u_projection;
 uniform bool u_useInstancing;
 uniform bool u_useMDI;
+uniform bool u_hasBones;      // True for skinned meshes — enables bone transform
 uniform mat3 u_normalMatrix;  // Precomputed on CPU for non-instanced path
 uniform vec4 u_clipPlane;     // Water clip plane (0,0,0,0 = disabled)
 
@@ -70,19 +81,46 @@ void main()
         normalMatrix = u_normalMatrix;
     }
 
-    vec4 worldPosition = model * vec4(position, 1.0);
+    // --- Skeletal animation skinning ---
+    vec3 skinnedPos;
+    vec3 skinnedNormal;
+    vec3 skinnedTangent;
+    vec3 skinnedBitangent;
+
+    if (u_hasBones)
+    {
+        mat4 boneTransform = boneWeights.x * u_boneMatrices[boneIds.x]
+                           + boneWeights.y * u_boneMatrices[boneIds.y]
+                           + boneWeights.z * u_boneMatrices[boneIds.z]
+                           + boneWeights.w * u_boneMatrices[boneIds.w];
+
+        skinnedPos       = vec3(boneTransform * vec4(position, 1.0));
+        mat3 boneMat3    = mat3(boneTransform);
+        skinnedNormal    = boneMat3 * normal;
+        skinnedTangent   = boneMat3 * tangent;
+        skinnedBitangent = boneMat3 * bitangent;
+    }
+    else
+    {
+        skinnedPos       = position;
+        skinnedNormal    = normal;
+        skinnedTangent   = tangent;
+        skinnedBitangent = bitangent;
+    }
+
+    vec4 worldPosition = model * vec4(skinnedPos, 1.0);
     gl_Position = u_projection * u_view * worldPosition;
 
     // Water clip plane for reflection/refraction passes
     gl_ClipDistance[0] = dot(worldPosition, u_clipPlane);
 
     v_fragPosition = vec3(worldPosition);
-    v_normal = normalMatrix * normal;
+    v_normal = normalMatrix * skinnedNormal;
 
     // Compute TBN matrix for normal mapping
-    vec3 T = normalize(normalMatrix * tangent);
-    vec3 B = normalize(normalMatrix * bitangent);
-    vec3 N = normalize(normalMatrix * normal);
+    vec3 T = normalize(normalMatrix * skinnedTangent);
+    vec3 B = normalize(normalMatrix * skinnedBitangent);
+    vec3 N = normalize(normalMatrix * skinnedNormal);
     v_TBN = mat3(T, B, N);
 
     v_color = color;

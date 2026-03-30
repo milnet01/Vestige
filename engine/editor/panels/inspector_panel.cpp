@@ -10,6 +10,7 @@
 #include "scene/mesh_renderer.h"
 #include "scene/light_component.h"
 #include "scene/particle_emitter.h"
+#include "scene/water_surface.h"
 #include "editor/commands/particle_property_command.h"
 #include "editor/widgets/curve_editor_widget.h"
 #include "editor/widgets/gradient_editor_widget.h"
@@ -250,6 +251,12 @@ void InspectorPanel::draw(Scene* scene, Selection& selection)
     if (entity->hasComponent<ParticleEmitterComponent>())
     {
         drawParticleEmitter(*entity);
+    }
+
+    // --- Water Surface ---
+    if (entity->hasComponent<WaterSurfaceComponent>())
+    {
+        drawWaterSurface(*entity);
     }
 
     // --- Multi-selection info ---
@@ -1228,6 +1235,91 @@ void InspectorPanel::drawParticleEmitter(Entity& entity)
         ImGui::TreePop();
     }
 
+    ImGui::Spacing();
+}
+
+// ---------------------------------------------------------------------------
+// Water Surface
+// ---------------------------------------------------------------------------
+
+void InspectorPanel::drawWaterSurface(Entity& entity)
+{
+    auto* water = entity.getComponent<WaterSurfaceComponent>();
+    if (!water) return;
+
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4, 3));
+    if (ImGui::CollapsingHeader("Water Surface", ImGuiTreeNodeFlags_DefaultOpen))
+    {
+        auto& config = water->getConfig();
+
+        // --- Reflection mode ---
+        const char* reflModes[] = {"None", "Planar", "Cubemap"};
+        int reflMode = static_cast<int>(config.reflectionMode);
+        if (ImGui::Combo("Reflection Mode", &reflMode, reflModes, 3))
+        {
+            config.reflectionMode = static_cast<WaterReflectionMode>(reflMode);
+        }
+        ImGui::SetItemTooltip("None: cheapest (no reflection)\n"
+                              "Planar: accurate (re-renders scene)\n"
+                              "Cubemap: cheaper (1 face/frame, lower quality)");
+
+        if (config.reflectionMode != WaterReflectionMode::NONE)
+        {
+            float resScale = config.reflectionResolutionScale;
+            if (ImGui::SliderFloat("Reflection Resolution", &resScale, 0.1f, 1.0f, "%.0f%%"))
+            {
+                config.reflectionResolutionScale = resScale;
+            }
+        }
+
+        // --- Refraction ---
+        ImGui::Checkbox("Refraction (Beer's Law)", &config.refractionEnabled);
+        ImGui::SetItemTooltip("Depth-based underwater coloring.\n"
+                              "Disabling saves a full scene render pass.");
+
+        ImGui::Spacing();
+        ImGui::Separator();
+
+        // --- Colors ---
+        ImGui::ColorEdit4("Shallow Color", &config.shallowColor.x);
+        ImGui::ColorEdit4("Deep Color", &config.deepColor.x);
+
+        ImGui::Spacing();
+        ImGui::Separator();
+
+        // --- Surface detail ---
+        ImGui::SliderFloat("Normal Strength", &config.normalStrength, 0.0f, 3.0f);
+        ImGui::SliderFloat("DuDv Strength", &config.dudvStrength, 0.0f, 0.1f, "%.4f");
+        ImGui::SliderFloat("Flow Speed", &config.flowSpeed, 0.0f, 2.0f);
+        ImGui::SliderFloat("Specular Power", &config.specularPower, 1.0f, 512.0f);
+
+        ImGui::Spacing();
+        ImGui::Separator();
+
+        // --- Waves ---
+        ImGui::SliderInt("Wave Count", &config.numWaves, 0, WaterSurfaceConfig::MAX_WAVES);
+        for (int i = 0; i < config.numWaves; ++i)
+        {
+            ImGui::PushID(i);
+            if (ImGui::TreeNode("Wave", "Wave %d", i + 1))
+            {
+                ImGui::SliderFloat("Amplitude", &config.waves[i].amplitude, 0.0f, 0.1f, "%.4f");
+                ImGui::SliderFloat("Wavelength", &config.waves[i].wavelength, 0.1f, 10.0f);
+                ImGui::SliderFloat("Speed", &config.waves[i].speed, 0.0f, 2.0f);
+                ImGui::SliderFloat("Direction", &config.waves[i].direction, 0.0f, 360.0f, "%.0f deg");
+                ImGui::TreePop();
+            }
+            ImGui::PopID();
+        }
+
+        // --- Geometry ---
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::SliderFloat("Width", &config.width, 1.0f, 100.0f);
+        ImGui::SliderFloat("Depth", &config.depth, 1.0f, 100.0f);
+        ImGui::SliderInt("Grid Resolution", &config.gridResolution, 16, 256);
+    }
+    ImGui::PopStyleVar();
     ImGui::Spacing();
 }
 
