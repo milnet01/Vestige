@@ -1252,6 +1252,65 @@ void InspectorPanel::drawWaterSurface(Entity& entity)
     {
         auto& config = water->getConfig();
 
+        // --- Presets ---
+        const char* presets[] = {"Custom", "Still Bath", "Gentle Pool", "Flowing Stream", "Ocean Swell"};
+        static int currentPreset = 0;
+        if (ImGui::Combo("Preset", &currentPreset, presets, 5))
+        {
+            if (currentPreset == 1) // Still Bath
+            {
+                config.numWaves = 1;
+                config.waves[0] = {0.001f, 4.0f, 0.1f, 0.0f};
+                config.flowSpeed = 0.05f;
+                config.normalStrength = 0.3f;
+                config.dudvStrength = 0.005f;
+                config.specularPower = 256.0f;
+                config.shallowColor = {0.15f, 0.35f, 0.45f, 0.7f};
+                config.deepColor = {0.02f, 0.08f, 0.15f, 1.0f};
+            }
+            else if (currentPreset == 2) // Gentle Pool
+            {
+                config.numWaves = 2;
+                config.waves[0] = {0.005f, 3.0f, 0.2f, 10.0f};
+                config.waves[1] = {0.003f, 2.0f, 0.15f, 75.0f};
+                config.flowSpeed = 0.15f;
+                config.normalStrength = 0.8f;
+                config.dudvStrength = 0.015f;
+                config.specularPower = 256.0f;
+                config.shallowColor = {0.1f, 0.4f, 0.5f, 0.8f};
+                config.deepColor = {0.02f, 0.1f, 0.25f, 1.0f};
+            }
+            else if (currentPreset == 3) // Flowing Stream
+            {
+                config.numWaves = 3;
+                config.waves[0] = {0.015f, 1.5f, 0.8f, 0.0f};
+                config.waves[1] = {0.008f, 1.0f, 0.6f, 15.0f};
+                config.waves[2] = {0.004f, 0.8f, 1.0f, -10.0f};
+                config.flowSpeed = 0.6f;
+                config.normalStrength = 1.5f;
+                config.dudvStrength = 0.03f;
+                config.specularPower = 128.0f;
+                config.shallowColor = {0.12f, 0.38f, 0.42f, 0.75f};
+                config.deepColor = {0.03f, 0.12f, 0.2f, 1.0f};
+            }
+            else if (currentPreset == 4) // Ocean Swell
+            {
+                config.numWaves = 4;
+                config.waves[0] = {0.04f, 8.0f, 0.3f, 0.0f};
+                config.waves[1] = {0.025f, 5.0f, 0.25f, 30.0f};
+                config.waves[2] = {0.015f, 3.0f, 0.4f, -20.0f};
+                config.waves[3] = {0.008f, 1.5f, 0.6f, 60.0f};
+                config.flowSpeed = 0.3f;
+                config.normalStrength = 2.0f;
+                config.dudvStrength = 0.04f;
+                config.specularPower = 64.0f;
+                config.shallowColor = {0.05f, 0.3f, 0.4f, 0.85f};
+                config.deepColor = {0.01f, 0.05f, 0.15f, 1.0f};
+            }
+        }
+        ImGui::Spacing();
+        ImGui::Separator();
+
         // --- Reflection mode ---
         const char* reflModes[] = {"None", "Planar", "Cubemap"};
         int reflMode = static_cast<int>(config.reflectionMode);

@@ -198,6 +198,18 @@ private:
     bool m_isInitialized = false;
     bool m_showDemoWindow = false;
     bool m_showControlsWindow = false;
+    bool m_showGrid = true;       ///< Ground-plane grid overlay (1m thin, 10m bold).
+    bool m_showConsole = true;    ///< Console/log panel visibility.
+    bool m_showStatistics = false; ///< Scene statistics panel visibility.
+    bool m_captureScreenshotRequested = false; ///< Menu-triggered screenshot request.
+    bool m_fullscreenViewport = false; ///< Hide all panels for clean viewport.
+
+    // Box selection drag state
+    bool m_boxSelectActive = false;
+    glm::vec2 m_boxSelectStart = glm::vec2(0.0f);
+    glm::vec2 m_boxSelectEnd = glm::vec2(0.0f);
+    bool m_boxSelectPending = false;
+    int m_boxPickX0 = 0, m_boxPickY0 = 0, m_boxPickX1 = 0, m_boxPickY1 = 0;
     bool m_viewportFocused = false;
     bool m_viewportHovered = false;
     GLFWwindow* m_window = nullptr;
@@ -258,6 +270,34 @@ private:
 public:
     /// @brief Shows a brief notification overlay that fades after ~2 seconds.
     void showNotification(const std::string& text);
+
+    /// @brief Returns true if the ground grid overlay should be rendered.
+    bool isGridVisible() const { return m_showGrid; }
+
+    /// @brief Toggles the ground grid overlay.
+    void toggleGrid() { m_showGrid = !m_showGrid; }
+
+    /// @brief Returns true if a box-select region pick is pending.
+    bool isBoxSelectPending() const { return m_boxSelectPending; }
+
+    /// @brief Gets and consumes the box-select FBO-space rectangle.
+    /// Returns false if no pending request.
+    bool consumeBoxSelect(int& x0, int& y0, int& x1, int& y1)
+    {
+        if (!m_boxSelectPending) return false;
+        m_boxSelectPending = false;
+        x0 = m_boxPickX0; y0 = m_boxPickY0;
+        x1 = m_boxPickX1; y1 = m_boxPickY1;
+        return true;
+    }
+
+    /// @brief Returns true (and resets) if a screenshot was requested via menu.
+    bool consumeScreenshotRequest()
+    {
+        bool r = m_captureScreenshotRequested;
+        m_captureScreenshotRequested = false;
+        return r;
+    }
 };
 
 } // namespace Vestige
