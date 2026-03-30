@@ -100,6 +100,7 @@ set(ENGINE_SOURCES
     profiler/performance_profiler.cpp
     editor/panels/performance_panel.cpp
     utils/entity_serializer.cpp
+    utils/material_library.cpp
     testing/visual_test_runner.cpp
     renderer/radiosity_baker.cpp
     # glad OpenGL loader

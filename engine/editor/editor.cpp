@@ -1180,6 +1180,9 @@ void Editor::setResourceManager(ResourceManager* resourceManager)
 
     // Give the file menu access to the resource manager for scene loading
     m_fileMenu.setResourceManager(resourceManager);
+
+    // Give the inspector access for material library operations
+    m_inspectorPanel.setResourceManager(resourceManager);
 }
 
 FileMenu& Editor::getFileMenu()
