@@ -2110,10 +2110,9 @@ void Engine::setupTabernacleScene()
               {eastSectionW, fenceH, fenceThick}, whiteLinenMat);
 
     // =====================================================================
-    // COURTYARD GATE -- Blue/purple/scarlet curtain (Exodus 27:16)
+    // COURTYARD GATE -- Open (curtain pulled aside, not rendered)
+    // The 20-cubit gate opening between the east wall sections is left clear.
     // =====================================================================
-    makeFence("Courtyard Gate", {0.0f, fenceH / 2.0f, courtEastZ - fenceThick * 1.5f},
-              {gateW, fenceH, fenceThick}, veilMat);
 
     // =====================================================================
     // COURTYARD PILLARS -- 60 total with silver caps and bronze bases

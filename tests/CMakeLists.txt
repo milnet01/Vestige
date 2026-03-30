@@ -46,6 +46,10 @@ add_executable(vestige_tests
     test_skeleton.cpp
     test_animation_sampler.cpp
     test_skeleton_animator.cpp
+    test_cubicspline.cpp
+    test_crossfade.cpp
+    test_animation_state_machine.cpp
+    test_root_motion.cpp
 )
 
 target_link_libraries(vestige_tests
