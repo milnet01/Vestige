@@ -501,13 +501,54 @@ The Tabernacle's linen curtains sway gently, the entrance veil drapes realistica
 - [ ] UI scaling options (for readability at different resolutions/distances)
 - [ ] High-contrast mode for UI elements
 
+### Rendering Enhancements
+- [ ] Subsurface scattering (SSS) — light transmission through thin/translucent materials
+  - Per-material SSS parameters: thickness, transmission color, scattering distance
+  - Wrap lighting model for thin surfaces (curtains, fabric, leaves, candle wax)
+  - Thickness map support (variable transmission across a surface)
+  - The Tabernacle's dyed linen curtains should glow softly when sunlight hits the exterior
+  - Fast approximation: pre-integrated skin/fabric BRDF lookup (no ray marching needed)
+- [ ] Volumetric fog / god rays (light shafts through the tent entrance, dust in sunbeams)
+- [ ] Screen-space global illumination (SSGI) — real-time dynamic indirect light
+
 ### Milestone
-A complete walkthrough experience with UI, audio, information displays, multi-language support, and accessibility options.
+A complete walkthrough experience with UI, audio, information displays, multi-language support, accessibility options, and advanced material rendering (SSS, volumetric effects).
 
 ---
 
 ## Phase 10: Distribution
 **Goal:** Package and distribute the application — both finished experiences and the engine itself.
+
+### Cross-Platform Compilation
+The engine targets Linux and Windows from the start (CLAUDE.md). The codebase is mostly portable (CMake, GLFW, GLM, OpenGL, stb, FreeType — all cross-platform), but a small number of platform-specific calls need `#ifdef` guards and the build pipeline needs configuring for both platforms.
+
+#### Platform Portability Fixes
+- [ ] `localtime_r` → `localtime_s` on MSVC (frame_diagnostics.cpp, visual_test_runner.cpp, recent_files.cpp)
+- [ ] `getenv("HOME")` → `getenv("USERPROFILE")` on Windows (frame_diagnostics.cpp, window.cpp)
+- [ ] `/proc/self/status` memory tracking → Windows API equivalent (memory_tracker.cpp)
+- [ ] ASAN/UBSAN flags: MSVC uses `/fsanitize=address` syntax, GCC/Clang use `-fsanitize=` (CMakeLists.txt)
+- [ ] `_FORTIFY_SOURCE` is GCC/Clang-only — skip on MSVC (CMakeLists.txt)
+- [ ] Path separator handling (`/` vs `\`) — use `std::filesystem::path` where needed
+- [ ] Verify `std::filesystem` links without `-lstdc++fs` on target compilers (GCC < 9 needs it)
+
+#### Windows Build Setup
+- [ ] Verify CMake generates valid MSVC / Ninja build on Windows
+- [ ] Test with Visual Studio 2022 (MSVC 17) and MinGW-w64
+- [ ] Resolve any GLFW / OpenGL context differences on Windows (driver-specific)
+- [ ] Verify all FetchContent dependencies build cleanly on MSVC
+- [ ] Windows-specific icon and manifest for the executable
+
+#### CI / CD Pipeline
+- [ ] GitHub Actions workflow: Linux build (GCC + Clang)
+- [ ] GitHub Actions workflow: Windows build (MSVC)
+- [ ] Automated test run on both platforms (unit tests + visual test runner)
+- [ ] Build artifacts: downloadable binaries for both platforms per commit/tag
+- [ ] Release packaging script (zip/tar with executable + assets)
+
+#### Cross-Compilation (Optional)
+- [ ] MinGW-w64 toolchain file for building Windows binaries from Linux
+- [ ] Verify GLFW cross-compiles cleanly with MinGW
+- [ ] Test cross-compiled binary on Windows (or Wine)
 
 ### Asset Pipeline
 - [ ] Texture compression (BC7 for desktop, ASTC for mobile — compress on import, decompress on GPU)

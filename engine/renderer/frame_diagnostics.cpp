@@ -121,28 +121,13 @@ static const char* tonemapModeStr(int mode)
     return "Unknown";
 }
 
-std::string FrameDiagnostics::capture(const Renderer& renderer,
-                                       const Camera& camera,
-                                       int windowWidth, int windowHeight,
-                                       int fps, float deltaTime,
-                                       const std::string& outputDir)
+/// @brief Shared implementation — captures framebuffer and writes PNG + report.
+static std::string captureImpl(const Renderer& renderer,
+                                const Camera& camera,
+                                int windowWidth, int windowHeight,
+                                int fps, float deltaTime,
+                                const std::string& basePath)
 {
-    // Determine output directory
-    std::string dir = outputDir;
-    if (dir.empty())
-    {
-        const char* home = std::getenv("HOME");
-        if (home)
-        {
-            dir = std::string(home) + "/Pictures/Screenshots";
-        }
-        else
-        {
-            dir = "/tmp";
-        }
-    }
-
-    std::string basePath = generateFilenameBase(dir);
     std::string pngPath = basePath + ".png";
     std::string txtPath = basePath + ".txt";
 
@@ -276,6 +261,44 @@ std::string FrameDiagnostics::capture(const Renderer& renderer,
     Logger::info("Frame report saved: " + txtPath);
 
     return pngPath;
+}
+
+std::string FrameDiagnostics::capture(const Renderer& renderer,
+                                       const Camera& camera,
+                                       int windowWidth, int windowHeight,
+                                       int fps, float deltaTime,
+                                       const std::string& outputDir)
+{
+    // Determine output directory
+    std::string dir = outputDir;
+    if (dir.empty())
+    {
+        const char* home = std::getenv("HOME");
+        if (home)
+        {
+            dir = std::string(home) + "/Pictures/Screenshots";
+        }
+        else
+        {
+            dir = "/tmp";
+        }
+    }
+
+    std::string basePath = generateFilenameBase(dir);
+    return captureImpl(renderer, camera, windowWidth, windowHeight,
+                       fps, deltaTime, basePath);
+}
+
+std::string FrameDiagnostics::captureNamed(const Renderer& renderer,
+                                            const Camera& camera,
+                                            int windowWidth, int windowHeight,
+                                            int fps, float deltaTime,
+                                            const std::string& outputDir,
+                                            const std::string& basename)
+{
+    std::string basePath = outputDir + "/" + basename;
+    return captureImpl(renderer, camera, windowWidth, windowHeight,
+                       fps, deltaTime, basePath);
 }
 
 } // namespace Vestige

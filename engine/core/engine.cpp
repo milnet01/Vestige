@@ -4,6 +4,7 @@
 #include "core/logger.h"
 #include "renderer/light_probe_manager.h"
 #include "renderer/sh_probe_grid.h"
+#include "renderer/radiosity_baker.h"
 #include "scene/mesh_renderer.h"
 #include "scene/light_component.h"
 #include "scene/water_surface.h"
@@ -537,6 +538,14 @@ bool Engine::initialize(const EngineConfig& config)
         m_camera->adjustFov(static_cast<float>(event.yOffset));
     });
 
+    m_visualTestMode = config.visualTestMode;
+    if (m_visualTestMode)
+    {
+        setupVisualTestViewpoints();
+        Logger::info("Visual test mode enabled: "
+                     + std::to_string(m_visualTestRunner.viewpointCount()) + " viewpoints");
+    }
+
     m_isRunning = true;
     Logger::info("Engine initialized successfully");
     Logger::info("Controls: Escape=toggle editor/play, WASD=move (play mode), Mouse=look (play mode), F1=wireframe, F2=tonemapper, F3=HDR debug, F4=POM, F5=bloom, F6=SSAO, F7=AA mode (None/MSAA/TAA/SMAA), F8=color grading, F9=CSM debug, F10=auto-exposure, F11=diagnostic capture, V=frame cap cycle, Ctrl+Q=quit");
@@ -548,6 +557,19 @@ bool Engine::initialize(const EngineConfig& config)
 void Engine::run()
 {
     Logger::info("Entering main loop...");
+
+    // Visual test mode: switch to play mode (full-screen blit) and disable FPC
+    if (m_visualTestMode)
+    {
+        if (m_editor)
+        {
+            m_editor->setMode(EditorMode::PLAY);
+            m_isCursorCaptured = true;
+            m_window->setCursorEnabled(false);
+        }
+        m_controller->setEnabled(false);
+        m_visualTestRunner.start("Testing/visual_tests");
+    }
 
     while (m_isRunning)
     {
@@ -976,6 +998,18 @@ void Engine::run()
             }
         }
 
+        // 8.5. Visual test runner — capture screenshots at predefined viewpoints
+        if (m_visualTestMode)
+        {
+            if (m_visualTestRunner.update(*m_camera, *m_renderer,
+                                           m_window->getWidth(), m_window->getHeight(),
+                                           m_timer->getFps(), m_timer->getDeltaTime()))
+            {
+                m_isRunning = false;
+                break;
+            }
+        }
+
         // 9. Window — swap buffers (flushes GPU work, making query results available)
         m_window->swapBuffers();
 
@@ -1034,6 +1068,54 @@ void Engine::shutdown()
 
     m_isRunning = false;
     Logger::info("Engine shutdown complete");
+}
+
+void Engine::setupVisualTestViewpoints()
+{
+    // Tabernacle scene coordinates (must match setupTabernacleScene())
+    const float C = 0.445f;
+    const float tentL = 30.0f * C;              // 13.35m
+    const float frontZ = tentL;                  // Tent entrance
+    const float veilZ = 10.0f * C;              // 4.45m (Holy of Holies divider)
+    const float courtMargin = 5.0f * C;
+    const float courtL = 100.0f * C;            // 44.50m
+    const float courtWestZ = 0.0f - courtMargin; // -2.225m
+    const float courtEastZ = courtWestZ + courtL; // 42.275m
+    const float altarZ = courtEastZ - 10.0f * C; // 37.825m
+
+    const float eyeHeight = 1.7f;
+
+    // 1. Outside the eastern gate — full panorama of the desert + courtyard entrance
+    m_visualTestRunner.addViewpoint({"gate_exterior",
+        glm::vec3(0.0f, 2.0f, courtEastZ + 5.0f), -90.0f, -5.0f, 8, 45.0f});
+
+    // 2. Just inside the gate — looking at the Bronze Altar
+    m_visualTestRunner.addViewpoint({"gate_interior",
+        glm::vec3(0.0f, eyeHeight, courtEastZ - 2.0f), -90.0f, 0.0f, 8, 45.0f});
+
+    // 3. Near the Bronze Altar — slightly offset to see it
+    m_visualTestRunner.addViewpoint({"bronze_altar",
+        glm::vec3(2.0f, eyeHeight, altarZ), -135.0f, -5.0f, 8, 45.0f});
+
+    // 4. Courtyard centre — midway between altar and tent
+    m_visualTestRunner.addViewpoint({"courtyard_centre",
+        glm::vec3(0.0f, eyeHeight, (altarZ + frontZ) / 2.0f), -90.0f, 0.0f, 8, 45.0f});
+
+    // 5. At the tent entrance — looking into the Holy Place
+    m_visualTestRunner.addViewpoint({"tent_entrance",
+        glm::vec3(0.0f, eyeHeight, frontZ - 0.5f), -90.0f, 0.0f, 8, 45.0f});
+
+    // 6. Centre of the Holy Place — see Menorah, Table, Incense Altar
+    m_visualTestRunner.addViewpoint({"holy_place",
+        glm::vec3(0.0f, eyeHeight, (frontZ + veilZ) / 2.0f), -90.0f, 0.0f, 8, 45.0f});
+
+    // 7. Near the Menorah (south wall) — looking across
+    m_visualTestRunner.addViewpoint({"near_menorah",
+        glm::vec3(-1.5f, eyeHeight, 9.0f), 0.0f, 0.0f, 8, 45.0f});
+
+    // 8. Before the Veil — looking toward the Holy of Holies
+    m_visualTestRunner.addViewpoint({"before_veil",
+        glm::vec3(0.0f, eyeHeight, veilZ + 1.5f), -90.0f, 0.0f, 8, 45.0f});
 }
 
 void Engine::drawLightGizmos(Scene& scene, const Selection& selection)
@@ -1559,7 +1641,7 @@ void Engine::setupTabernacleScene()
     woodMat->setType(MaterialType::PBR);
     woodMat->setAlbedo(glm::vec3(1.0f));
     woodMat->setMetallic(0.0f);
-    woodMat->setRoughness(0.85f);
+    woodMat->setRoughness(0.98f);   // Unvarnished ancient acacia — very rough, no sheen
     woodMat->setDiffuseTexture(m_resourceManager->loadTexture(texBase + "brown_planks_09_diff.jpg"));
     woodMat->setNormalMap(m_resourceManager->loadTexture(texBase + "brown_planks_09_nor_gl.jpg", true));
     woodMat->setMetallicRoughnessTexture(m_resourceManager->loadTexture(texBase + "brown_planks_09_rough.jpg", true));
@@ -1676,6 +1758,11 @@ void Engine::setupTabernacleScene()
     veilMat->setNormalMap(m_resourceManager->loadTexture(texBase + "rough_linen_nor_gl.jpg", true));
     veilMat->setUvScale(1.5f);
     veilMat->setDoubleSided(true);
+    // Subtle emissive glow: approximates subsurface scattering — sunlight
+    // filtering through dense dyed fabric produces a warm reddish-purple glow
+    // on the interior side. True SSS is planned for Phase 9.
+    veilMat->setEmissive(glm::vec3(0.12f, 0.04f, 0.10f));
+    veilMat->setEmissiveStrength(0.4f);
     // IBL multipliers left at default 1.0 — the light probe system handles
     // indoor/outdoor IBL transitions properly. Interior surfaces inside the
     // tent probe volume blend from sky IBL to captured interior IBL.
@@ -1767,20 +1854,20 @@ void Engine::setupTabernacleScene()
 
     // =====================================================================
     // VEIL -- Dividing curtain between Holy Place and Holy of Holies
+    // Realistic 5cm thickness. Uses emissive glow to approximate subsurface
+    // scattering (sunlight filtering through dense fabric). True SSS is
+    // planned for Phase 9.
     // =====================================================================
-    auto* veilEntity = makeBox("Veil", {0.0f, tentH / 2.0f, veilZ},
+    makeBox("Veil", {0.0f, tentH / 2.0f, veilZ},
             {tentW - 0.1f, tentH - 0.1f, 0.05f}, veilMat);
-    veilEntity->getComponent<MeshRenderer>()->setCastsShadow(false);
 
     // =====================================================================
     // ENTRANCE SCREEN -- Curtain at east end (partially open for light)
     // =====================================================================
-    auto* screenL = makeBox("Entrance Screen L", {-tentW / 4.0f - 0.3f, tentH / 2.0f, frontZ},
+    makeBox("Entrance Screen L", {-tentW / 4.0f - 0.3f, tentH / 2.0f, frontZ},
             {tentW / 2.0f - 0.5f, tentH - 0.1f, 0.05f}, veilMat);
-    screenL->getComponent<MeshRenderer>()->setCastsShadow(false);
-    auto* screenR = makeBox("Entrance Screen R", {tentW / 4.0f + 0.3f, tentH / 2.0f, frontZ},
+    makeBox("Entrance Screen R", {tentW / 4.0f + 0.3f, tentH / 2.0f, frontZ},
             {tentW / 2.0f - 0.5f, tentH - 0.1f, 0.05f}, veilMat);
-    screenR->getComponent<MeshRenderer>()->setCastsShadow(false);
 
     // =====================================================================
     // HOLY OF HOLIES FURNITURE -- Ark of the Covenant (Exodus 25:10-22)
@@ -2164,19 +2251,33 @@ void Engine::setupTabernacleScene()
         // Grid covers courtyard + some margin
         gridConfig.worldMin = glm::vec3(-courtW / 2.0f - 2.0f, -0.5f, courtWestZ - 2.0f);
         gridConfig.worldMax = glm::vec3(courtW / 2.0f + 2.0f, tentH + 2.0f, courtEastZ + 5.0f);
-        // ~1m probe spacing: tight enough to prevent purple veil bleed
-        // onto nearby wood walls. Capture takes a few seconds but is one-time.
+        // ~2m probe spacing: good balance between quality and bake time.
+        // Radiosity bounces re-capture the entire grid, so probe count matters.
+        // 2m gives ~1000 probes instead of ~8000 at 1m.
         glm::vec3 gridSize = gridConfig.worldMax - gridConfig.worldMin;
         gridConfig.resolution = glm::ivec3(
-            glm::max(2, static_cast<int>(gridSize.x / 1.0f)),
-            glm::max(2, static_cast<int>(gridSize.y / 1.0f)),
-            glm::max(2, static_cast<int>(gridSize.z / 1.0f)));
+            glm::max(2, static_cast<int>(gridSize.x / 2.0f)),
+            glm::max(2, static_cast<int>(gridSize.y / 2.0f)),
+            glm::max(2, static_cast<int>(gridSize.z / 2.0f)));
 
         shGrid->initialize(gridConfig);
 
-        // Capture from scene renders at each probe position
+        // Capture from scene renders at each probe position (direct light pass).
+        // 32×32 face size is sufficient for L2 SH (only 9 coefficients).
         auto renderData = scene->collectRenderData();
-        m_renderer->captureSHGrid(renderData, *m_camera, 1.0f);
+        m_renderer->captureSHGrid(renderData, *m_camera, 1.0f, 32);
+
+        // Radiosity: bake multi-bounce indirect lighting into the SH grid.
+        // Each bounce re-captures the grid with the previous bounce's indirect light
+        // visible in the scene, accumulating realistic light transport.
+        // Uses 16×16 face size for bounces (even faster, L2 tolerates this).
+        RadiosityBaker radiosity;
+        RadiosityConfig radConfig;
+        radConfig.maxBounces = 3;
+        radConfig.convergenceThreshold = 0.02f;
+        radConfig.normalBias = 0.3f;
+        m_renderer->setSHNormalBias(radConfig.normalBias);
+        radiosity.bake(*m_renderer, renderData, *m_camera, 1.0f, radConfig);
     }
 
     // Also keep the cubemap probe for specular reflections inside the tent

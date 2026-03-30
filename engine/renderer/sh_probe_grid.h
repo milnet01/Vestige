@@ -72,6 +72,10 @@ public:
     /// @brief Checks if the grid is uploaded and ready for rendering.
     bool isReady() const;
 
+    /// @brief Checks if the grid has been initialized (CPU storage allocated).
+    /// True after initialize(), even before upload().
+    bool isInitialized() const;
+
     // --- Accessors ---
     glm::vec3 getWorldMin() const { return m_config.worldMin; }
     glm::vec3 getWorldMax() const { return m_config.worldMax; }

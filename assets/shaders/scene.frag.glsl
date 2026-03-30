@@ -139,6 +139,7 @@ uniform bool u_hasSHGrid;
 uniform vec3 u_shGridWorldMin;
 uniform vec3 u_shGridWorldMax;
 uniform sampler3D u_shTex[7];           // Units 17-23
+uniform float u_shNormalBias;           // Normal bias for anti-leak (meters)
 
 // Stochastic tiling
 uniform bool u_stochasticTiling;
@@ -302,8 +303,18 @@ float blockerSearch(vec3 projCoords, int cascade, float bias, vec2 texelSize, fl
 /// PCSS shadow: variable penumbra width based on blocker distance.
 float calcShadowForCascade(int cascade, vec3 normal, vec3 lightDir)
 {
+    // Normal offset: push the shadow test position along the surface normal.
+    // This prevents light leaking through thin walls by moving the test point
+    // toward the lit side of geometry (away from the wall's far edge).
+    float NdotL = dot(normal, lightDir);
+    float normalOffsetScale = clamp(1.0 - NdotL, 0.0, 1.0);
+    vec2 texelSize_ws = 1.0 / vec2(textureSize(u_cascadeShadowMap, 0).xy);
+    // Scale offset by texel size of this cascade (adaptive to cascade resolution)
+    float offsetDist = normalOffsetScale * 0.15;
+    vec3 offsetPos = v_fragPosition + normal * offsetDist;
+
     // Transform fragment position to light space for this cascade
-    vec4 lightSpacePos = u_cascadeLightSpaceMatrices[cascade] * vec4(v_fragPosition, 1.0);
+    vec4 lightSpacePos = u_cascadeLightSpaceMatrices[cascade] * vec4(offsetPos, 1.0);
     vec3 projCoords = lightSpacePos.xyz / lightSpacePos.w;
     projCoords = projCoords * 0.5 + 0.5;
 
@@ -314,8 +325,8 @@ float calcShadowForCascade(int cascade, vec3 normal, vec3 lightDir)
 
     float currentDepth = projCoords.z;
 
-    // Slope-scaled bias
-    float bias = max(0.002 * (1.0 - dot(normal, lightDir)), 0.0003);
+    // Slope-scaled bias (reduced from 0.002 to prevent leak through thin walls)
+    float bias = max(0.0008 * (1.0 - NdotL), 0.0002);
 
     vec2 texelSize = 1.0 / vec2(textureSize(u_cascadeShadowMap, 0).xy);
 
@@ -486,8 +497,12 @@ vec3 fresnelSchlick(float cosTheta, vec3 F0)
 /// Uses Ramamoorthi/Hanrahan optimized constants (basis × cosine lobe pre-baked).
 vec3 evaluateSHGridIrradiance(vec3 worldPos, vec3 normal)
 {
+    // Normal bias: offset sampling point along surface normal to prevent light leaking
+    // through thin walls. Pulls the lookup toward the correct side of geometry.
+    vec3 biasedPos = worldPos + normal * u_shNormalBias;
+
     // Convert world position to grid UV [0,1]
-    vec3 gridUV = (worldPos - u_shGridWorldMin) / (u_shGridWorldMax - u_shGridWorldMin);
+    vec3 gridUV = (biasedPos - u_shGridWorldMin) / (u_shGridWorldMax - u_shGridWorldMin);
     gridUV = clamp(gridUV, vec3(0.001), vec3(0.999));
 
     // Sample 7 textures (hardware trilinear interpolation between 8 probes)

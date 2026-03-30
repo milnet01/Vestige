@@ -275,6 +275,11 @@ bool SHProbeGrid::isReady() const
     return m_ready;
 }
 
+bool SHProbeGrid::isInitialized() const
+{
+    return !m_probeData.empty();
+}
+
 int SHProbeGrid::getProbeCount() const
 {
     return m_config.resolution.x * m_config.resolution.y * m_config.resolution.z;
