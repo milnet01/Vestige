@@ -1,0 +1,25 @@
+/// @file skeleton.cpp
+/// @brief Skeleton implementation.
+#include "animation/skeleton.h"
+
+namespace Vestige
+{
+
+int Skeleton::getJointCount() const
+{
+    return static_cast<int>(m_joints.size());
+}
+
+int Skeleton::findJoint(const std::string& name) const
+{
+    for (int i = 0; i < static_cast<int>(m_joints.size()); ++i)
+    {
+        if (m_joints[i].name == name)
+        {
+            return i;
+        }
+    }
+    return -1;
+}
+
+} // namespace Vestige

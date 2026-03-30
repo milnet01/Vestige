@@ -1,6 +1,7 @@
 /// @file model.cpp
 /// @brief Model instantiation implementation.
 #include "resource/model.h"
+#include "animation/skeleton_animator.h"
 #include "scene/scene.h"
 #include "scene/entity.h"
 #include "scene/mesh_renderer.h"
@@ -46,6 +47,21 @@ Entity* Model::instantiate(Scene& scene, Entity* parent, const std::string& name
         {
             instantiateNode(scene, root, m_nodes[static_cast<size_t>(rootIndex)]);
         }
+    }
+
+    // Attach skeletal animation if this model has a skin and clips
+    if (m_skeleton && !m_animationClips.empty())
+    {
+        auto* animator = root->addComponent<SkeletonAnimator>();
+        animator->setSkeleton(m_skeleton);
+        for (const auto& clip : m_animationClips)
+        {
+            animator->addClip(clip);
+        }
+        // Auto-play the first clip
+        animator->play(m_animationClips[0]->getName());
+        Logger::info("Attached SkeletonAnimator with "
+            + std::to_string(m_animationClips.size()) + " clip(s) to '" + name + "'");
     }
 
     return root;

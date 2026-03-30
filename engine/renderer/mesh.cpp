@@ -191,6 +191,16 @@ void Mesh::upload(const std::vector<Vertex>& vertices, const std::vector<uint32_
     glVertexArrayAttribFormat(m_vao, 5, 3, GL_FLOAT, GL_FALSE, offsetof(Vertex, bitangent));
     glVertexArrayAttribBinding(m_vao, 5, 0);
 
+    // Bone IDs attribute (location 10) — integer format required
+    glEnableVertexArrayAttrib(m_vao, 10);
+    glVertexArrayAttribIFormat(m_vao, 10, 4, GL_INT, offsetof(Vertex, boneIds));
+    glVertexArrayAttribBinding(m_vao, 10, 0);
+
+    // Bone Weights attribute (location 11)
+    glEnableVertexArrayAttrib(m_vao, 11);
+    glVertexArrayAttribFormat(m_vao, 11, 4, GL_FLOAT, GL_FALSE, offsetof(Vertex, boneWeights));
+    glVertexArrayAttribBinding(m_vao, 11, 0);
+
     // Compute local-space AABB from vertex positions
     if (!vertices.empty())
     {

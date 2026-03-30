@@ -5,6 +5,8 @@
 #include "renderer/mesh.h"
 #include "renderer/material.h"
 #include "renderer/texture.h"
+#include "animation/skeleton.h"
+#include "animation/animation_clip.h"
 #include "utils/aabb.h"
 
 #include <glm/glm.hpp>
@@ -92,6 +94,10 @@ public:
     std::vector<std::shared_ptr<Texture>> m_textures;
     std::vector<ModelNode> m_nodes;
     std::vector<int> m_rootNodes;
+
+    // Skeletal animation data (empty/null for static models)
+    std::shared_ptr<Skeleton> m_skeleton;
+    std::vector<std::shared_ptr<AnimationClip>> m_animationClips;
 
 private:
     /// @brief Recursively instantiates a node and its children.

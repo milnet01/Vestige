@@ -12,7 +12,7 @@
 namespace Vestige
 {
 
-/// @brief A single vertex with position, normal, color, texture coordinate, and tangent data.
+/// @brief A single vertex with position, normal, color, texture coordinate, tangent, and bone data.
 struct Vertex
 {
     glm::vec3 position;
@@ -21,6 +21,8 @@ struct Vertex
     glm::vec2 texCoord;
     glm::vec3 tangent;
     glm::vec3 bitangent;
+    glm::ivec4 boneIds = glm::ivec4(0);      ///< Joint indices (up to 4 per vertex)
+    glm::vec4 boneWeights = glm::vec4(0.0f);  ///< Corresponding blend weights (sum to 1.0)
 };
 
 /// @brief Computes tangent and bitangent vectors for normal mapping.
