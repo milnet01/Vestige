@@ -25,13 +25,18 @@ void main()
 
     // Integrate incoming radiance over the hemisphere weighted by cos(theta)
     vec3 irradiance = vec3(0.0);
-    float sampleDelta = 0.025;
-    float nrSamples = 0.0;
+    const float sampleDelta = 0.025;
+    int nrSamples = 0;
+    int phiSteps = int(2.0 * PI / sampleDelta);
+    int thetaSteps = int(0.5 * PI / sampleDelta);
 
-    for (float phi = 0.0; phi < 2.0 * PI; phi += sampleDelta)
+    for (int iPhi = 0; iPhi < phiSteps; iPhi++)
     {
-        for (float theta = 0.0; theta < 0.5 * PI; theta += sampleDelta)
+        float phi = float(iPhi) * sampleDelta;
+        for (int iTheta = 0; iTheta < thetaSteps; iTheta++)
         {
+            float theta = float(iTheta) * sampleDelta;
+
             // Spherical to tangent-space direction
             vec3 tangentSample = vec3(
                 sin(theta) * cos(phi),
@@ -49,6 +54,6 @@ void main()
         }
     }
 
-    irradiance = PI * irradiance / nrSamples;
+    irradiance = PI * irradiance / float(nrSamples);
     fragColor = vec4(irradiance, 1.0);
 }

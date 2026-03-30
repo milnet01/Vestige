@@ -2149,6 +2149,7 @@ void Renderer::buildInstanceBatches(
     const std::vector<SceneRenderData::RenderItem>& items)
 {
     m_batchIndexMap.clear();
+    m_batchIndexMap.reserve(items.size());
     m_instanceBatchCount = 0;
 
     for (const auto& item : items)
@@ -2266,6 +2267,7 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
     {
         // Build shadow caster list (filter out non-casting items like ground planes)
         m_shadowCasterItems.clear();
+        m_shadowCasterItems.reserve(renderData.renderItems.size());
         for (const auto& item : renderData.renderItems)
         {
             if (item.castsShadow)
@@ -2333,6 +2335,7 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
     // Items with zero-size bounds (no explicit AABB set) are always included —
     // it is safer to overdraw than to incorrectly cull visible geometry.
     m_culledItems.clear();
+    m_culledItems.reserve(renderData.renderItems.size());
     for (const auto& item : renderData.renderItems)
     {
         if (item.worldBounds.getSize() == glm::vec3(0.0f)
@@ -2683,6 +2686,7 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
     {
         // Frustum cull transparent items (reuse frustum planes from opaque pass)
         m_sortedTransparentItems.clear();
+        m_sortedTransparentItems.reserve(renderData.transparentItems.size());
         for (const auto& item : renderData.transparentItems)
         {
             if (isAabbInFrustum(item.worldBounds, frustumPlanes))
@@ -2761,6 +2765,7 @@ void Renderer::renderShadowPass(const std::vector<SceneRenderData::RenderItem>& 
 
         // Cull shadow casters against this cascade's frustum
         m_cascadeCulledCasters.clear();
+        m_cascadeCulledCasters.reserve(shadowCasterItems.size());
         for (const auto& item : shadowCasterItems)
         {
             if (item.worldBounds.getSize() == glm::vec3(0.0f)

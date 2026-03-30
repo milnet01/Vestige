@@ -5,6 +5,7 @@
 
 #include <glm/gtc/type_ptr.hpp>
 
+#include <algorithm>
 #include <fstream>
 #include <sstream>
 
@@ -156,9 +157,11 @@ bool Shader::loadComputeShader(const std::string& computePath)
 
     if (!success)
     {
-        char infoLog[512];
-        glGetProgramInfoLog(m_programId, sizeof(infoLog), nullptr, infoLog);
-        Logger::error("Compute shader program linking failed: " + std::string(infoLog));
+        GLint logLength = 0;
+        glGetProgramiv(m_programId, GL_INFO_LOG_LENGTH, &logLength);
+        std::string infoLog(std::max(logLength, 1), '\0');
+        glGetProgramInfoLog(m_programId, static_cast<GLsizei>(infoLog.size()), nullptr, infoLog.data());
+        Logger::error("Compute shader program linking failed: " + infoLog);
         glDeleteProgram(m_programId);
         m_programId = 0;
         return false;
@@ -229,8 +232,10 @@ GLuint Shader::compileShader(GLenum type, const std::string& source)
     glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
     if (!success)
     {
-        char infoLog[512];
-        glGetShaderInfoLog(shader, sizeof(infoLog), nullptr, infoLog);
+        GLint logLength = 0;
+        glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &logLength);
+        std::string infoLog(std::max(logLength, 1), '\0');
+        glGetShaderInfoLog(shader, static_cast<GLsizei>(infoLog.size()), nullptr, infoLog.data());
         std::string typeStr = (type == GL_VERTEX_SHADER) ? "vertex"
             : (type == GL_FRAGMENT_SHADER) ? "fragment" : "compute";
         Logger::error("Shader compilation failed (" + typeStr + "): " + infoLog);
@@ -252,9 +257,11 @@ bool Shader::linkProgram(GLuint vertexShader, GLuint fragmentShader)
     glGetProgramiv(m_programId, GL_LINK_STATUS, &success);
     if (!success)
     {
-        char infoLog[512];
-        glGetProgramInfoLog(m_programId, sizeof(infoLog), nullptr, infoLog);
-        Logger::error("Shader program linking failed: " + std::string(infoLog));
+        GLint logLength = 0;
+        glGetProgramiv(m_programId, GL_INFO_LOG_LENGTH, &logLength);
+        std::string infoLog(std::max(logLength, 1), '\0');
+        glGetProgramInfoLog(m_programId, static_cast<GLsizei>(infoLog.size()), nullptr, infoLog.data());
+        Logger::error("Shader program linking failed: " + infoLog);
         glDeleteProgram(m_programId);
         m_programId = 0;
         return false;

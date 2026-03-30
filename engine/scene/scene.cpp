@@ -3,6 +3,8 @@
 #include "scene/scene.h"
 #include "core/logger.h"
 
+#include <algorithm>
+
 namespace Vestige
 {
 
@@ -37,6 +39,11 @@ SceneRenderData Scene::collectRenderData() const
 
 void Scene::collectRenderData(SceneRenderData& data) const
 {
+    // Preserve previous capacity hints for first-frame pre-allocation.
+    // After the first frame, clear() preserves capacity so no reallocation occurs.
+    size_t prevRenderCount = std::max(data.renderItems.capacity(), size_t(64));
+    size_t prevTransparentCount = std::max(data.transparentItems.capacity(), size_t(16));
+
     data.renderItems.clear();
     data.transparentItems.clear();
     data.pointLights.clear();
@@ -44,6 +51,10 @@ void Scene::collectRenderData(SceneRenderData& data) const
     data.particleEmitters.clear();
     data.waterSurfaces.clear();
     data.hasDirectionalLight = false;
+
+    data.renderItems.reserve(prevRenderCount);
+    data.transparentItems.reserve(prevTransparentCount);
+
     collectRenderDataRecursive(*m_root, data);
 }
 
