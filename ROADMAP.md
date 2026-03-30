@@ -405,9 +405,9 @@ Torches with flickering fire illuminate a room, smoke rises from an altar of inc
 Animated objects and characters are essential for doors, swinging censers, priestly processions, and any living scene. glTF already carries skeletal animation data — this phase makes the engine able to play it.
 
 ### Skeletal Animation System
-- [ ] Bone/joint hierarchy (skeleton loaded from glTF)
-- [ ] Skinned mesh rendering (vertex skinning with bone weights in the vertex shader)
-- [ ] Animation clip playback (keyframe interpolation — position, rotation, scale)
+- [x] Bone/joint hierarchy (skeleton loaded from glTF) — Phase 7A
+- [x] Skinned mesh rendering (vertex skinning with bone weights in the vertex shader) — Phase 7A
+- [x] Animation clip playback (keyframe interpolation — position, rotation, scale) — Phase 7A
 - [ ] Animation blending (cross-fade between clips, layered blending)
 - [ ] Animation state machine (idle → walk → run transitions with conditions)
 - [ ] Root motion support (animation drives entity movement, not just visual)
@@ -426,9 +426,9 @@ Animated objects and characters are essential for doors, swinging censers, pries
 - [ ] IK blending with animation clips (IK layer on top of baked animations)
 
 ### glTF Animation Import
-- [ ] Import skeletal animations from glTF files
+- [x] Import skeletal animations from glTF files — Phase 7A
 - [ ] Import morph target / blend shape animations
-- [ ] Multiple animation clips per model (walk, idle, gesture)
+- [x] Multiple animation clips per model (walk, idle, gesture) — Phase 7A
 
 ### Milestone
 Animated characters walk through the Temple courts, doors swing open on approach, and a golden censer swings rhythmically over the altar of incense.
@@ -755,7 +755,7 @@ Core terrain system implemented in Phase 5I. Remaining items are enhancements.
 - [x] Automatic texture blending based on slope and altitude — Phase 5I enhancement
 - [x] Terrain collision (character controller walks on terrain surface) — Phase 5I enhancement
 - [x] Triplanar mapping for steep slopes — Phase 5I enhancement
-- [ ] Terrain chunking (split large terrains into tiles for streaming and culling) — deferred (not needed for 256m-2km scope; scale single heightmap to 2049x2049 instead)
+- [ ] Terrain chunking (split large terrains into tiles for streaming and culling) — deferred to a future phase (needed for general-purpose engine use with 4km+ terrains)
 
 ### Milestone
 Outdoor landscapes surrounding the Temple complex — hills, valleys, and the Kidron Valley with terrain elevation, ready for environment painting from Phase 5G.

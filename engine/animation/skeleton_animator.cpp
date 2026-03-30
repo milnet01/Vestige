@@ -13,37 +13,43 @@ namespace Vestige
 SkeletonAnimator::SkeletonAnimator() = default;
 SkeletonAnimator::~SkeletonAnimator() = default;
 
-void SkeletonAnimator::update(float deltaTime)
+// ---------------------------------------------------------------------------
+// advanceAndSample — advance a clip's playback time and sample all channels
+// ---------------------------------------------------------------------------
+void SkeletonAnimator::advanceAndSample(
+    int clipIndex, float& time, float deltaTime,
+    std::vector<glm::vec3>& translations,
+    std::vector<glm::quat>& rotations,
+    std::vector<glm::vec3>& scales)
 {
-    if (!m_playing || m_paused || m_activeClipIndex < 0 || !m_skeleton)
+    if (clipIndex < 0 || clipIndex >= static_cast<int>(m_clips.size()))
     {
-        return;
+        return;  // Frozen pose — buffers unchanged
     }
 
-    const auto& clip = m_clips[static_cast<size_t>(m_activeClipIndex)];
+    const auto& clip = m_clips[static_cast<size_t>(clipIndex)];
     if (!clip || clip->getDuration() <= 0.0f)
     {
         return;
     }
 
     // Advance time
-    m_currentTime += deltaTime * m_speed;
+    time += deltaTime * m_speed;
 
     if (m_looping)
     {
-        m_currentTime = std::fmod(m_currentTime, clip->getDuration());
-        if (m_currentTime < 0.0f)
+        time = std::fmod(time, clip->getDuration());
+        if (time < 0.0f)
         {
-            m_currentTime += clip->getDuration();
+            time += clip->getDuration();
         }
     }
-    else if (m_currentTime >= clip->getDuration())
+    else if (time >= clip->getDuration())
     {
-        m_currentTime = clip->getDuration();
-        m_playing = false;
+        time = clip->getDuration();
     }
 
-    // Sample all channels
+    // Sample all channels into the provided buffers
     for (const auto& channel : clip->m_channels)
     {
         int ji = channel.jointIndex;
@@ -56,20 +62,138 @@ void SkeletonAnimator::update(float deltaTime)
         switch (channel.targetPath)
         {
         case AnimTargetPath::TRANSLATION:
-            m_localTranslations[idx] = sampleVec3(channel, m_currentTime);
+            translations[idx] = sampleVec3(channel, time);
             break;
         case AnimTargetPath::ROTATION:
-            m_localRotations[idx] = sampleQuat(channel, m_currentTime);
+            rotations[idx] = sampleQuat(channel, time);
             break;
         case AnimTargetPath::SCALE:
-            m_localScales[idx] = sampleVec3(channel, m_currentTime);
+            scales[idx] = sampleVec3(channel, time);
             break;
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// update — main per-frame update
+// ---------------------------------------------------------------------------
+void SkeletonAnimator::update(float deltaTime)
+{
+    if (!m_playing || m_paused || m_activeClipIndex < 0 || !m_skeleton)
+    {
+        // Clear root motion delta when not playing
+        m_rootMotionDeltaPos = glm::vec3(0.0f);
+        m_rootMotionDeltaRot = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
+        return;
+    }
+
+    if (m_crossfading)
+    {
+        // Advance crossfade timer
+        m_crossfadeTime += deltaTime;
+        float blendFactor = glm::clamp(
+            m_crossfadeTime / m_crossfadeDuration, 0.0f, 1.0f);
+
+        // Sample source (outgoing) clip into source buffers
+        // If m_sourceClipIndex == -1, buffers hold a frozen pose — skip sampling
+        advanceAndSample(m_sourceClipIndex, m_sourceTime, deltaTime,
+                         m_sourceTranslations, m_sourceRotations, m_sourceScales);
+
+        // Sample target (incoming) clip into primary buffers
+        advanceAndSample(m_activeClipIndex, m_currentTime, deltaTime,
+                         m_localTranslations, m_localRotations, m_localScales);
+
+        // Blend per-bone: source → target
+        int jointCount = m_skeleton->getJointCount();
+        for (int j = 0; j < jointCount; ++j)
+        {
+            size_t idx = static_cast<size_t>(j);
+            m_localTranslations[idx] = glm::mix(
+                m_sourceTranslations[idx], m_localTranslations[idx], blendFactor);
+            m_localRotations[idx] = glm::slerp(
+                m_sourceRotations[idx], m_localRotations[idx], blendFactor);
+            m_localScales[idx] = glm::mix(
+                m_sourceScales[idx], m_localScales[idx], blendFactor);
+        }
+
+        // Crossfade complete?
+        if (blendFactor >= 1.0f)
+        {
+            m_crossfading = false;
+            m_sourceClipIndex = -1;
+        }
+    }
+    else
+    {
+        // Single clip playback
+        advanceAndSample(m_activeClipIndex, m_currentTime, deltaTime,
+                         m_localTranslations, m_localRotations, m_localScales);
+
+        // Check if non-looping clip finished
+        if (!m_looping && m_activeClipIndex >= 0)
+        {
+            const auto& clip = m_clips[static_cast<size_t>(m_activeClipIndex)];
+            if (clip && m_currentTime >= clip->getDuration())
+            {
+                m_playing = false;
+            }
+        }
+    }
+
+    // Root motion extraction (after sampling/blending, before bone matrix computation)
+    extractRootMotion();
 
     computeBoneMatrices();
 }
 
+// ---------------------------------------------------------------------------
+// extractRootMotion
+// ---------------------------------------------------------------------------
+void SkeletonAnimator::extractRootMotion()
+{
+    m_rootMotionDeltaPos = glm::vec3(0.0f);
+    m_rootMotionDeltaRot = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
+
+    if (m_rootMotionMode == RootMotionMode::IGNORE)
+    {
+        return;
+    }
+
+    int ri = m_rootMotionBone;
+    if (ri < 0 || ri >= m_skeleton->getJointCount())
+    {
+        return;
+    }
+    size_t ridx = static_cast<size_t>(ri);
+
+    if (!m_rootMotionInitialized)
+    {
+        // First frame: just capture current as baseline, no delta
+        m_prevRootPos = m_localTranslations[ridx];
+        m_prevRootRot = m_localRotations[ridx];
+        m_rootMotionInitialized = true;
+    }
+    else
+    {
+        // Compute delta from previous frame
+        m_rootMotionDeltaPos = m_localTranslations[ridx] - m_prevRootPos;
+        m_rootMotionDeltaRot = glm::inverse(m_prevRootRot) * m_localRotations[ridx];
+
+        // Save current as previous for next frame
+        m_prevRootPos = m_localTranslations[ridx];
+        m_prevRootRot = m_localRotations[ridx];
+    }
+
+    // Zero out the root bone's horizontal motion so the skeleton stays centered
+    // Keep Y translation for vertical movement (jumps, stairs)
+    m_localTranslations[ridx].x = 0.0f;
+    m_localTranslations[ridx].z = 0.0f;
+    m_localRotations[ridx] = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
+}
+
+// ---------------------------------------------------------------------------
+// computeBoneMatrices
+// ---------------------------------------------------------------------------
 void SkeletonAnimator::computeBoneMatrices()
 {
     int jointCount = m_skeleton->getJointCount();
@@ -100,6 +224,9 @@ void SkeletonAnimator::computeBoneMatrices()
     }
 }
 
+// ---------------------------------------------------------------------------
+// clone
+// ---------------------------------------------------------------------------
 std::unique_ptr<Component> SkeletonAnimator::clone() const
 {
     auto copy = std::make_unique<SkeletonAnimator>();
@@ -111,6 +238,8 @@ std::unique_ptr<Component> SkeletonAnimator::clone() const
     copy->m_looping = m_looping;
     copy->m_paused = false;
     copy->m_playing = m_playing;
+    copy->m_rootMotionMode = m_rootMotionMode;
+    copy->m_rootMotionBone = m_rootMotionBone;
     copy->setEnabled(isEnabled());
 
     // Allocate per-instance buffers if skeleton is set
@@ -123,6 +252,11 @@ std::unique_ptr<Component> SkeletonAnimator::clone() const
         copy->m_localScales.resize(count);
         copy->m_globalTransforms.resize(count);
         copy->m_boneMatrices.resize(count, glm::mat4(1.0f));
+
+        // Source buffers for crossfade
+        copy->m_sourceTranslations.resize(count);
+        copy->m_sourceRotations.resize(count);
+        copy->m_sourceScales.resize(count);
 
         // Initialize from bind pose
         for (size_t i = 0; i < count; ++i)
@@ -141,6 +275,9 @@ std::unique_ptr<Component> SkeletonAnimator::clone() const
     return copy;
 }
 
+// ---------------------------------------------------------------------------
+// setSkeleton
+// ---------------------------------------------------------------------------
 void SkeletonAnimator::setSkeleton(std::shared_ptr<Skeleton> skeleton)
 {
     m_skeleton = std::move(skeleton);
@@ -154,6 +291,11 @@ void SkeletonAnimator::setSkeleton(std::shared_ptr<Skeleton> skeleton)
         m_localScales.resize(count);
         m_globalTransforms.resize(count);
         m_boneMatrices.resize(count, glm::mat4(1.0f));
+
+        // Source buffers for crossfade
+        m_sourceTranslations.resize(count);
+        m_sourceRotations.resize(count);
+        m_sourceScales.resize(count);
 
         // Initialize from bind pose
         for (size_t i = 0; i < count; ++i)
@@ -174,6 +316,9 @@ void SkeletonAnimator::setSkeleton(std::shared_ptr<Skeleton> skeleton)
         m_localScales.clear();
         m_globalTransforms.clear();
         m_boneMatrices.clear();
+        m_sourceTranslations.clear();
+        m_sourceRotations.clear();
+        m_sourceScales.clear();
     }
 }
 
@@ -182,6 +327,9 @@ const std::shared_ptr<Skeleton>& SkeletonAnimator::getSkeleton() const
     return m_skeleton;
 }
 
+// ---------------------------------------------------------------------------
+// Clip management
+// ---------------------------------------------------------------------------
 void SkeletonAnimator::addClip(std::shared_ptr<AnimationClip> clip)
 {
     m_clips.push_back(std::move(clip));
@@ -197,6 +345,9 @@ const std::shared_ptr<AnimationClip>& SkeletonAnimator::getClip(int index) const
     return m_clips[static_cast<size_t>(index)];
 }
 
+// ---------------------------------------------------------------------------
+// Playback control (instant switch)
+// ---------------------------------------------------------------------------
 void SkeletonAnimator::play(const std::string& clipName)
 {
     for (int i = 0; i < static_cast<int>(m_clips.size()); ++i)
@@ -219,6 +370,8 @@ void SkeletonAnimator::playIndex(int index)
     m_currentTime = 0.0f;
     m_playing = true;
     m_paused = false;
+    m_crossfading = false;
+    m_rootMotionInitialized = false;
 }
 
 void SkeletonAnimator::stop()
@@ -226,6 +379,8 @@ void SkeletonAnimator::stop()
     m_playing = false;
     m_currentTime = 0.0f;
     m_activeClipIndex = -1;
+    m_crossfading = false;
+    m_rootMotionInitialized = false;
 }
 
 void SkeletonAnimator::setPaused(bool paused)
@@ -273,6 +428,107 @@ int SkeletonAnimator::getActiveClipIndex() const
     return m_activeClipIndex;
 }
 
+// ---------------------------------------------------------------------------
+// Crossfade blending
+// ---------------------------------------------------------------------------
+void SkeletonAnimator::crossfadeTo(const std::string& clipName, float duration)
+{
+    for (int i = 0; i < static_cast<int>(m_clips.size()); ++i)
+    {
+        if (m_clips[static_cast<size_t>(i)]->getName() == clipName)
+        {
+            crossfadeToIndex(i, duration);
+            return;
+        }
+    }
+}
+
+void SkeletonAnimator::crossfadeToIndex(int index, float duration)
+{
+    if (index < 0 || index >= static_cast<int>(m_clips.size()))
+    {
+        return;
+    }
+
+    if (duration <= 0.0f)
+    {
+        // Instant switch
+        playIndex(index);
+        return;
+    }
+
+    if (m_crossfading)
+    {
+        // Already crossfading: snapshot the current blended pose as new source
+        m_sourceTranslations = m_localTranslations;
+        m_sourceRotations = m_localRotations;
+        m_sourceScales = m_localScales;
+        m_sourceClipIndex = -1;  // Frozen pose
+    }
+    else if (m_activeClipIndex >= 0 && m_playing)
+    {
+        // Normal: current clip becomes source
+        m_sourceTranslations = m_localTranslations;
+        m_sourceRotations = m_localRotations;
+        m_sourceScales = m_localScales;
+        m_sourceClipIndex = m_activeClipIndex;
+        m_sourceTime = m_currentTime;
+    }
+    else
+    {
+        // Not playing anything — just start the new clip
+        playIndex(index);
+        return;
+    }
+
+    m_activeClipIndex = index;
+    m_currentTime = 0.0f;
+    m_crossfading = true;
+    m_crossfadeTime = 0.0f;
+    m_crossfadeDuration = duration;
+    m_playing = true;
+    m_paused = false;
+    m_rootMotionInitialized = false;
+}
+
+bool SkeletonAnimator::isCrossfading() const
+{
+    return m_crossfading;
+}
+
+// ---------------------------------------------------------------------------
+// Root motion
+// ---------------------------------------------------------------------------
+void SkeletonAnimator::setRootMotionMode(RootMotionMode mode)
+{
+    m_rootMotionMode = mode;
+    m_rootMotionInitialized = false;
+}
+
+RootMotionMode SkeletonAnimator::getRootMotionMode() const
+{
+    return m_rootMotionMode;
+}
+
+void SkeletonAnimator::setRootMotionBone(int jointIndex)
+{
+    m_rootMotionBone = jointIndex;
+    m_rootMotionInitialized = false;
+}
+
+glm::vec3 SkeletonAnimator::getRootMotionDeltaPosition() const
+{
+    return m_rootMotionDeltaPos;
+}
+
+glm::quat SkeletonAnimator::getRootMotionDeltaRotation() const
+{
+    return m_rootMotionDeltaRot;
+}
+
+// ---------------------------------------------------------------------------
+// Output
+// ---------------------------------------------------------------------------
 const std::vector<glm::mat4>& SkeletonAnimator::getBoneMatrices() const
 {
     return m_boneMatrices;

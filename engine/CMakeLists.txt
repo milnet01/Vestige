@@ -93,6 +93,7 @@ set(ENGINE_SOURCES
     animation/skeleton.cpp
     animation/animation_clip.cpp
     animation/animation_sampler.cpp
+    animation/animation_state_machine.cpp
     animation/skeleton_animator.cpp
     profiler/gpu_timer.cpp
     profiler/cpu_profiler.cpp
