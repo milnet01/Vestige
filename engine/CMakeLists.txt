@@ -95,6 +95,10 @@ set(ENGINE_SOURCES
     animation/animation_sampler.cpp
     animation/animation_state_machine.cpp
     animation/skeleton_animator.cpp
+    animation/easing.cpp
+    animation/tween.cpp
+    animation/ik_solver.cpp
+    animation/morph_target.cpp
     profiler/gpu_timer.cpp
     profiler/cpu_profiler.cpp
     profiler/memory_tracker.cpp

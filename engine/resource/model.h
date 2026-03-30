@@ -7,6 +7,7 @@
 #include "renderer/texture.h"
 #include "animation/skeleton.h"
 #include "animation/animation_clip.h"
+#include "animation/morph_target.h"
 #include "utils/aabb.h"
 
 #include <glm/glm.hpp>
@@ -28,6 +29,7 @@ struct ModelPrimitive
     std::shared_ptr<Mesh> mesh;
     int materialIndex = -1;
     AABB bounds;
+    MorphTargetData morphTargets;  ///< Morph target data (empty for non-morphed meshes)
 };
 
 /// @brief A node in the model's scene graph hierarchy.

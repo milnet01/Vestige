@@ -50,6 +50,10 @@ add_executable(vestige_tests
     test_crossfade.cpp
     test_animation_state_machine.cpp
     test_root_motion.cpp
+    test_easing.cpp
+    test_tween.cpp
+    test_ik_solver.cpp
+    test_morph_target.cpp
 )
 
 target_link_libraries(vestige_tests
