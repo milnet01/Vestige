@@ -2,6 +2,7 @@
 /// @brief First-person controller implementation.
 #include "core/first_person_controller.h"
 #include "core/logger.h"
+#include "environment/terrain.h"
 
 #include <GLFW/glfw3.h>
 
@@ -69,7 +70,7 @@ void FirstPersonController::update(float deltaTime, const std::vector<AABB>& col
     processGamepad(deltaTime, moveDir);
 
     // Apply movement
-    if (glm::length(moveDir) > 0.0f)
+    if (glm::length(moveDir) > 0.0f || m_walkMode)
     {
         // Sprint check
         float speed = m_config.moveSpeed;
@@ -78,24 +79,41 @@ void FirstPersonController::update(float deltaTime, const std::vector<AABB>& col
             speed *= m_config.sprintMultiplier;
         }
 
-        moveDir = glm::normalize(moveDir);
         glm::vec3 currentPos = m_camera.getPosition();
-        glm::vec3 front = m_camera.getFront();
-        glm::vec3 right = glm::normalize(glm::cross(front, glm::vec3(0.0f, 1.0f, 0.0f)));
-
-        // Movement is along the ground plane (Y from up/down keys only)
-        glm::vec3 flatFront = glm::normalize(glm::vec3(front.x, 0.0f, front.z));
-        glm::vec3 flatRight = glm::normalize(glm::vec3(right.x, 0.0f, right.z));
-
         glm::vec3 newPosition = currentPos;
-        newPosition += flatFront * moveDir.z * speed * deltaTime;
-        newPosition += flatRight * moveDir.x * speed * deltaTime;
-        newPosition.y += moveDir.y * speed * deltaTime;
 
-        // Ground clamping — keep at player height
-        newPosition.y = std::max(newPosition.y, m_config.playerHeight);
+        if (glm::length(moveDir) > 0.0f)
+        {
+            moveDir = glm::normalize(moveDir);
+            glm::vec3 front = m_camera.getFront();
+            glm::vec3 right = glm::normalize(glm::cross(front, glm::vec3(0.0f, 1.0f, 0.0f)));
 
-        // Collision detection
+            // Movement is along the ground plane (Y from up/down keys only in fly mode)
+            glm::vec3 flatFront = glm::normalize(glm::vec3(front.x, 0.0f, front.z));
+            glm::vec3 flatRight = glm::normalize(glm::vec3(right.x, 0.0f, right.z));
+
+            newPosition += flatFront * moveDir.z * speed * deltaTime;
+            newPosition += flatRight * moveDir.x * speed * deltaTime;
+
+            if (!m_walkMode)
+            {
+                // Fly mode: vertical movement from Space/Shift
+                newPosition.y += moveDir.y * speed * deltaTime;
+            }
+        }
+
+        // Terrain collision in walk mode
+        if (m_walkMode && m_terrain)
+        {
+            applyTerrainCollision(newPosition, deltaTime);
+        }
+        else
+        {
+            // Fly mode: basic ground clamp at player height
+            newPosition.y = std::max(newPosition.y, m_config.playerHeight);
+        }
+
+        // AABB collision detection
         if (!colliders.empty())
         {
             applyCollision(newPosition, colliders);
@@ -185,6 +203,45 @@ void FirstPersonController::processGamepad(float deltaTime, glm::vec3& moveDir)
     m_isGamepadSprinting = state.buttons[GLFW_GAMEPAD_BUTTON_LEFT_BUMPER] != 0;
 }
 
+void FirstPersonController::applyTerrainCollision(glm::vec3& newPosition, float deltaTime)
+{
+    if (!m_terrain || !m_terrain->isInitialized())
+    {
+        return;
+    }
+
+    float terrainH = m_terrain->getHeight(newPosition.x, newPosition.z);
+    float targetY = terrainH + m_config.playerHeight;
+
+    // Slope limiting: reject movement onto slopes steeper than maxSlopeAngle
+    glm::vec3 terrainNormal = m_terrain->getNormal(newPosition.x, newPosition.z);
+    float cosMaxSlope = std::cos(m_config.maxSlopeAngle * 3.14159265f / 180.0f);
+    if (terrainNormal.y < cosMaxSlope && targetY > m_smoothedTerrainY)
+    {
+        // Slope too steep and we'd be going uphill — revert XZ to previous position
+        glm::vec3 camPos = m_camera.getPosition();
+        newPosition.x = camPos.x;
+        newPosition.z = camPos.z;
+
+        // Recompute height at the reverted position
+        terrainH = m_terrain->getHeight(newPosition.x, newPosition.z);
+        targetY = terrainH + m_config.playerHeight;
+    }
+
+    // Asymmetric exponential damping: fast up, smooth down
+    float lambda = (targetY > m_smoothedTerrainY)
+        ? m_config.terrainDampingUp    // Ascending — respond quickly
+        : m_config.terrainDampingDown; // Descending — ease down gently
+
+    m_smoothedTerrainY = glm::mix(m_smoothedTerrainY, targetY,
+                                   1.0f - std::exp(-lambda * deltaTime));
+
+    // Hard floor: never go below terrain surface
+    m_smoothedTerrainY = std::max(m_smoothedTerrainY, targetY);
+
+    newPosition.y = m_smoothedTerrainY;
+}
+
 void FirstPersonController::applyCollision(glm::vec3& newPosition, const std::vector<AABB>& colliders)
 {
     // Player AABB extends from feet to head. The camera is at eye height,
@@ -246,6 +303,26 @@ AABB FirstPersonController::getPlayerBounds() const
         bodyCenter,
         glm::vec3(m_config.playerRadius * 2.0f, m_config.playerHeight, m_config.playerRadius * 2.0f)
     );
+}
+
+void FirstPersonController::setTerrain(const Terrain* terrain)
+{
+    m_terrain = terrain;
+}
+
+void FirstPersonController::setWalkMode(bool walk)
+{
+    if (walk && !m_walkMode)
+    {
+        // Initialize smoothed height from current camera position
+        m_smoothedTerrainY = m_camera.getPosition().y;
+    }
+    m_walkMode = walk;
+}
+
+bool FirstPersonController::isWalkMode() const
+{
+    return m_walkMode;
 }
 
 } // namespace Vestige

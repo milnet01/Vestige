@@ -205,6 +205,12 @@ bool Engine::initialize(const EngineConfig& config)
         }
     }
 
+    // Give the controller terrain reference for walk-mode collision
+    if (m_terrain.isInitialized())
+    {
+        m_controller->setTerrain(&m_terrain);
+    }
+
     // Wire up foliage shadow casting into the renderer's shadow pass
     m_renderer->setFoliageShadowCaster(&m_foliageRenderer, &m_foliageManager);
 
@@ -497,6 +503,16 @@ bool Engine::initialize(const EngineConfig& config)
                                  + (m_editor->getPerformancePanel().isOpen() ? "ON" : "OFF"));
                 }
                 break;
+
+            case GLFW_KEY_G:
+            {
+                bool walk = !m_controller->isWalkMode();
+                m_controller->setWalkMode(walk);
+                Logger::info(std::string("Movement: ") + (walk ? "Walk (terrain)" : "Fly"));
+                if (m_editor) m_editor->showNotification(
+                    std::string("Movement: ") + (walk ? "Walk (terrain)" : "Fly"));
+                break;
+            }
 
             case GLFW_KEY_V:
             {

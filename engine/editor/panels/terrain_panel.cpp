@@ -48,7 +48,7 @@ void TerrainPanel::draw(TerrainBrush& brush, Terrain& terrain, CommandHistory& /
         }
         if (ImGui::BeginTabItem("Paint"))
         {
-            drawPaintSection(brush);
+            drawPaintSection(brush, terrain);
             ImGui::EndTabItem();
         }
         if (ImGui::BeginTabItem("Settings"))
@@ -106,7 +106,7 @@ void TerrainPanel::drawSculptSection(TerrainBrush& brush)
                        "Alt+LMB to orbit camera instead.");
 }
 
-void TerrainPanel::drawPaintSection(TerrainBrush& brush)
+void TerrainPanel::drawPaintSection(TerrainBrush& brush, Terrain& terrain)
 {
     // Enable/disable brush
     bool active = brush.isActive();
@@ -168,6 +168,36 @@ void TerrainPanel::drawPaintSection(TerrainBrush& brush)
     ImGui::Spacing();
     ImGui::TextWrapped("Hold LMB on terrain to paint. "
                        "Weights are auto-normalized so all layers sum to 1.");
+
+    // --- Auto-texture section ---
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Spacing();
+    ImGui::Text("Auto-Texture (Slope/Altitude)");
+    ImGui::Spacing();
+
+    ImGui::SliderFloat("Slope Grass End", &m_slopeGrassEnd, 0.05f, 0.8f, "%.2f");
+    ImGui::SliderFloat("Slope Rock Start", &m_slopeRockStart, 0.1f, 0.95f, "%.2f");
+    ImGui::SliderFloat("Noise Scale", &m_noiseScale, 0.005f, 0.2f, "%.3f");
+    ImGui::SliderFloat("Noise Amount", &m_noiseAmplitude, 0.0f, 0.3f, "%.2f");
+
+    ImGui::Spacing();
+    if (ImGui::Button("Generate Auto-Texture"))
+    {
+        Terrain::AutoTextureConfig cfg;
+        cfg.slopeGrassEnd = m_slopeGrassEnd;
+        cfg.slopeRockStart = m_slopeRockStart;
+        cfg.noiseScale = m_noiseScale;
+        cfg.noiseAmplitude = m_noiseAmplitude;
+        terrain.generateAutoTexture(cfg);
+    }
+    ImGui::SameLine();
+    ImGui::TextDisabled("(?)");
+    if (ImGui::IsItemHovered())
+    {
+        ImGui::SetTooltip("Generates splatmap from terrain slope and altitude.\n"
+                          "Manual paint overrides this. Layers: Grass/Rock/Dirt/Sand.");
+    }
 }
 
 void TerrainPanel::drawSettingsSection(Terrain& terrain)
