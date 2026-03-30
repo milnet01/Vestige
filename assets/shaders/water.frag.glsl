@@ -1,5 +1,6 @@
 /// @file water.frag.glsl
 /// @brief Water surface fragment shader — Fresnel blending, reflections, refractions, and Beer's law absorption.
+/// Normal and distortion detail is fully procedural (gradient noise FBM) to eliminate texture tiling.
 #version 450 core
 
 in vec3 v_worldPos;
@@ -48,35 +49,97 @@ uniform float u_softEdgeDistance;  // Water-to-geometry fade distance (metres)
 
 out vec4 fragColor;
 
+// --- Procedural gradient noise (Inigo Quilez) ---
+// Returns vec3(noise_value, dNoise/dx, dNoise/dy) — analytical derivatives for free normals.
+// Uses "hash without sine" for cross-platform consistency (Dave Hoskins).
+
+vec2 noiseHash(vec2 x)
+{
+    const vec2 k = vec2(0.3183099, 0.3678794);
+    x = x * k + k.yx;
+    return -1.0 + 2.0 * fract(16.0 * k * fract(x.x * x.y * (x.x + x.y)));
+}
+
+vec3 noised(vec2 p)
+{
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+
+    // Quintic Hermite interpolation (C2 continuous — no visible grid lines)
+    vec2 u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
+    vec2 du = 30.0 * f * f * (f * (f - 2.0) + 1.0);
+
+    vec2 ga = noiseHash(i + vec2(0.0, 0.0));
+    vec2 gb = noiseHash(i + vec2(1.0, 0.0));
+    vec2 gc = noiseHash(i + vec2(0.0, 1.0));
+    vec2 gd = noiseHash(i + vec2(1.0, 1.0));
+
+    float va = dot(ga, f - vec2(0.0, 0.0));
+    float vb = dot(gb, f - vec2(1.0, 0.0));
+    float vc = dot(gc, f - vec2(0.0, 1.0));
+    float vd = dot(gd, f - vec2(1.0, 1.0));
+
+    return vec3(
+        va + u.x * (vb - va) + u.y * (vc - va) + u.x * u.y * (va - vb - vc + vd),
+        ga + u.x * (gb - ga) + u.y * (gc - ga) + u.x * u.y * (ga - gb - gc + gd)
+           + du * (u.yx * (va - vb - vc + vd) + vec2(vb, vc) - va)
+    );
+}
+
+// FBM with analytical derivatives — 3 octaves, rotating domain between octaves
+// to eliminate directional grid bias. Returns vec3(value, dF/dx, dF/dy).
+vec3 waterFbm(vec2 p)
+{
+    float amplitude = 0.5;
+    vec3 result = vec3(0.0);
+    // Rotation matrix (~37.5 degrees) — irrational angle decorrelates octaves
+    const mat2 rot = mat2(0.8, 0.6, -0.6, 0.8);
+
+    for (int i = 0; i < 3; i++)
+    {
+        vec3 n = noised(p);
+        result += amplitude * n;
+        p = rot * p * 2.01; // scale + rotate for next octave
+        amplitude *= 0.5;
+    }
+    return result;
+}
+
 void main()
 {
-    // Animated texture coordinates for normal/DuDv scrolling.
-    // Use different scales and diagonal directions to break up tiling regularity.
-    float flowOffset = u_time * u_flowSpeed;
-    vec2 scrolledCoords1 = v_texCoord * 3.7 + vec2(flowOffset * 0.9, flowOffset * 0.3);
-    vec2 scrolledCoords2 = v_texCoord * 5.3 + vec2(-flowOffset * 0.4, flowOffset * 0.7);
+    float flow = u_time * u_flowSpeed;
 
-    // Surface normal (from wave geometry + optional normal map detail)
+    // --- Procedural surface normals from gradient noise FBM ---
+    // Two overlapping FBM layers at different scales and flow directions.
+    // Uses world-space XZ coordinates — never tiles because noise is continuous.
     vec3 normal = normalize(v_normal);
     if (u_hasNormalMap)
     {
-        vec3 n1 = texture(u_normalMap, scrolledCoords1).rgb * 2.0 - 1.0;
-        vec3 n2 = texture(u_normalMap, scrolledCoords2).rgb * 2.0 - 1.0;
-        vec3 mapNormal = normalize(n1 + n2);
+        // Layer 1: broad swells (~1.5x world scale, flowing ~NE)
+        vec3 n1 = waterFbm(v_worldPos.xz * 1.5 + flow * vec2(1.0, 0.3));
+        // Layer 2: medium ripples (~2.8x scale, flowing ~SW, different rate)
+        vec3 n2 = waterFbm(v_worldPos.xz * 2.8 + flow * vec2(-0.4, 0.8));
+
+        // Combine gradients (analytical derivatives from noise).
+        // Scale by 0.15 to keep ripples subtle — raw FBM gradients reach ~3.0
+        // which would create near-horizontal normals (dark/murky water).
+        vec2 totalGrad = (n1.yz + n2.yz * 0.7) * 0.15;
+
         normal = normalize(vec3(
-            normal.x + mapNormal.x * u_normalStrength,
+            normal.x - totalGrad.x * u_normalStrength,
             normal.y,
-            normal.z + mapNormal.z * u_normalStrength
+            normal.z - totalGrad.y * u_normalStrength
         ));
     }
 
-    // DuDv-based distortion
+    // --- Procedural distortion from noise (replaces DuDv texture sampling) ---
+    // Reuses the gradient from the normal computation as distortion (free — already computed).
     vec2 totalDistortion = vec2(0.0);
     if (u_hasDudvMap)
     {
-        vec2 d1 = texture(u_dudvMap, scrolledCoords1).rg * 2.0 - 1.0;
-        vec2 d2 = texture(u_dudvMap, scrolledCoords2).rg * 2.0 - 1.0;
-        totalDistortion = (d1 + d2) * u_dudvStrength;
+        // Single noise call at offset coords for distortion (decorrelated from normals)
+        vec3 distNoise = waterFbm(v_worldPos.xz * 2.0 + flow * vec2(0.7, -0.3) + vec2(5.2, 1.3));
+        totalDistortion = distNoise.yz * u_dudvStrength;
         normal = normalize(vec3(
             normal.x + totalDistortion.x,
             normal.y,

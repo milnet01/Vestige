@@ -12,6 +12,14 @@
 namespace Vestige
 {
 
+/// @brief Water reflection rendering method.
+enum class WaterReflectionMode
+{
+    NONE,     ///< No reflections (Fresnel + color blend only) — cheapest
+    PLANAR,   ///< Planar reflection FBO — accurate but re-renders scene
+    CUBEMAP   ///< Dynamic cubemap (1 face/frame) — cheaper, lower quality
+};
+
 /// @brief Configuration for a water surface — all tweakable parameters.
 struct WaterSurfaceConfig
 {
@@ -49,8 +57,10 @@ struct WaterSurfaceConfig
     float flowSpeed = 0.3f;
     float specularPower = 128.0f;
 
-    // Reflection
-    float reflectionResolutionScale = 0.5f;  ///< 0.25 to 1.0
+    // Reflection / refraction quality
+    WaterReflectionMode reflectionMode = WaterReflectionMode::PLANAR;
+    float reflectionResolutionScale = 0.25f;  ///< 0.1 to 1.0 (fraction of window resolution)
+    bool refractionEnabled = true;            ///< Beer's law depth coloring (re-renders scene)
 };
 
 /// @brief Entity component that manages a water surface mesh and its parameters.

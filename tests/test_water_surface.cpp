@@ -65,7 +65,9 @@ TEST(WaterSurfaceConfigTest, DefaultSurfaceParameters)
     EXPECT_FLOAT_EQ(config.dudvStrength, 0.02f);
     EXPECT_FLOAT_EQ(config.flowSpeed, 0.3f);
     EXPECT_FLOAT_EQ(config.specularPower, 128.0f);
-    EXPECT_FLOAT_EQ(config.reflectionResolutionScale, 0.5f);
+    EXPECT_FLOAT_EQ(config.reflectionResolutionScale, 0.25f);
+    EXPECT_EQ(config.reflectionMode, WaterReflectionMode::PLANAR);
+    EXPECT_TRUE(config.refractionEnabled);
 }
 
 TEST(WaterSurfaceConfigTest, WaveCountClamped)
