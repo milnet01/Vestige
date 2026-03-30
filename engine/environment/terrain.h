@@ -205,6 +205,24 @@ public:
     /// @return True if the load succeeded.
     bool loadSplatmap(const std::filesystem::path& path);
 
+    /// @brief Configuration for automatic slope/altitude-based splatmap generation.
+    struct AutoTextureConfig
+    {
+        float slopeGrassEnd = 0.3f;    ///< Slope below this is fully grass (0=flat, 1=vertical).
+        float slopeRockStart = 0.6f;   ///< Slope above this is fully rock.
+        float altitudeSandEnd = 0.08f;  ///< Normalized height below this is sand.
+        float altitudeSandStart = 0.02f; ///< Blend start for sand.
+        float altitudeDirtStart = 0.25f; ///< Normalized height above this starts dirt.
+        float altitudeDirtEnd = 0.45f;  ///< Fully dirt above this.
+        float noiseScale = 0.05f;       ///< Noise frequency for breaking up transition lines.
+        float noiseAmplitude = 0.12f;   ///< How much noise perturbs the thresholds.
+    };
+
+    /// @brief Generates splatmap weights automatically from slope and altitude.
+    /// Layers: R=grass, G=rock, B=dirt, A=sand.
+    /// @param config Auto-texture parameters.
+    void generateAutoTexture(const AutoTextureConfig& config);
+
 private:
     void createGpuTextures();
     void computeAllNormals();

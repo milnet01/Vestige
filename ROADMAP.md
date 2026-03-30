@@ -752,10 +752,10 @@ Core terrain system implemented in Phase 5I. Remaining items are enhancements.
 - [x] Multi-layer terrain texturing (paint grass, dirt, rock, sand onto terrain) — Phase 5I-5
 - [x] Terrain serialization — save/load heightmap + splatmap with scene — Phase 5I-6
 - [x] Terrain LOD — distant terrain uses fewer triangles automatically — Phase 5I-1
-- [ ] Automatic texture blending based on slope and altitude
-- [ ] Terrain collision (character controller walks on terrain surface)
-- [ ] Terrain chunking (split large terrains into tiles for streaming and culling)
-- [ ] Triplanar mapping for steep slopes
+- [x] Automatic texture blending based on slope and altitude — Phase 5I enhancement
+- [x] Terrain collision (character controller walks on terrain surface) — Phase 5I enhancement
+- [x] Triplanar mapping for steep slopes — Phase 5I enhancement
+- [ ] Terrain chunking (split large terrains into tiles for streaming and culling) — deferred (not needed for 256m-2km scope; scale single heightmap to 2049x2049 instead)
 
 ### Milestone
 Outdoor landscapes surrounding the Temple complex — hills, valleys, and the Kidron Valley with terrain elevation, ready for environment painting from Phase 5G.

@@ -788,4 +788,135 @@ bool Terrain::loadSplatmap(const std::filesystem::path& path)
     return true;
 }
 
+// Simple hash-based value noise for splatmap perturbation (no external dependency)
+namespace
+{
+
+float hashNoise(float x, float y)
+{
+    // Integer cell coordinates
+    int ix = static_cast<int>(std::floor(x));
+    int iy = static_cast<int>(std::floor(y));
+    float fx = x - std::floor(x);
+    float fy = y - std::floor(y);
+
+    // Smoothstep interpolation weights
+    float ux = fx * fx * (3.0f - 2.0f * fx);
+    float uy = fy * fy * (3.0f - 2.0f * fy);
+
+    // Hash function (simple integer hashing)
+    auto hash = [](int px, int py) -> float {
+        int n = px * 374761393 + py * 668265263;
+        n = (n ^ (n >> 13)) * 1274126177;
+        return static_cast<float>(n & 0x7fffffff) / static_cast<float>(0x7fffffff);
+    };
+
+    float a = hash(ix, iy);
+    float b = hash(ix + 1, iy);
+    float c = hash(ix, iy + 1);
+    float d = hash(ix + 1, iy + 1);
+
+    return a + (b - a) * ux + (c - a) * uy + (a - b - c + d) * ux * uy;
+}
+
+// Fractal Brownian Motion — 3 octaves for natural-looking variation
+float fbmNoise(float x, float y, int octaves = 3)
+{
+    float value = 0.0f;
+    float amplitude = 1.0f;
+    float frequency = 1.0f;
+    float total = 0.0f;
+
+    for (int i = 0; i < octaves; ++i)
+    {
+        value += hashNoise(x * frequency, y * frequency) * amplitude;
+        total += amplitude;
+        amplitude *= 0.5f;
+        frequency *= 2.0f;
+    }
+    return value / total;
+}
+
+} // anonymous namespace
+
+void Terrain::generateAutoTexture(const AutoTextureConfig& config)
+{
+    if (!m_initialized)
+    {
+        Logger::warning("Terrain: cannot auto-texture — not initialized");
+        return;
+    }
+
+    int w = m_config.width;
+    int d = m_config.depth;
+
+    for (int z = 0; z < d; ++z)
+    {
+        for (int x = 0; x < w; ++x)
+        {
+            // Normalized height (0..1)
+            float h = m_heightData[static_cast<size_t>(z * w + x)];
+
+            // Slope from pre-computed normal (0 = flat, 1 = vertical)
+            glm::vec3 normal = m_normalData[static_cast<size_t>(z * w + x)];
+            float slope = 1.0f - normal.y;
+
+            // World position for noise sampling
+            float wx = m_config.origin.x + static_cast<float>(x) * m_config.spacingX;
+            float wz = m_config.origin.z + static_cast<float>(z) * m_config.spacingZ;
+
+            // Noise perturbation to break up uniform transition lines
+            float noise = fbmNoise(wx * config.noiseScale, wz * config.noiseScale)
+                          * 2.0f - 1.0f; // Remap 0..1 to -1..1
+            float perturbedSlope = slope + noise * config.noiseAmplitude;
+            float perturbedHeight = h + noise * config.noiseAmplitude * 0.5f;
+
+            // Smoothstep helper
+            auto smoothstep = [](float edge0, float edge1, float val) -> float {
+                float t = std::clamp((val - edge0) / (edge1 - edge0), 0.0f, 1.0f);
+                return t * t * (3.0f - 2.0f * t);
+            };
+
+            // Layer weights: R=grass, G=rock, B=dirt, A=sand
+            float grass = 1.0f;
+            float rock = smoothstep(config.slopeGrassEnd, config.slopeRockStart, perturbedSlope);
+            float sand = smoothstep(config.altitudeSandEnd, config.altitudeSandStart, perturbedHeight);
+            float dirt = smoothstep(config.altitudeDirtStart, config.altitudeDirtEnd, perturbedHeight);
+
+            // Rock replaces grass on steep slopes
+            grass *= (1.0f - rock);
+
+            // Sand replaces grass/rock at low altitudes
+            float sandFactor = sand;
+            grass *= (1.0f - sandFactor);
+            rock *= (1.0f - sandFactor * 0.5f); // Rock can still show through sand partially
+
+            // Dirt blends in at higher altitudes
+            grass *= (1.0f - dirt * 0.7f);
+
+            // Normalize weights to sum to 1
+            float total = grass + rock + dirt + sand;
+            if (total > 0.0f)
+            {
+                grass /= total;
+                rock /= total;
+                dirt /= total;
+                sand /= total;
+            }
+            else
+            {
+                grass = 1.0f;
+                rock = dirt = sand = 0.0f;
+            }
+
+            m_splatData[static_cast<size_t>(z * w + x)] = glm::vec4(grass, rock, dirt, sand);
+        }
+    }
+
+    // Upload to GPU
+    updateSplatmapRegion(0, 0, w, d);
+
+    Logger::info("Terrain: auto-texture generated (slope/altitude blending)");
+}
+
 } // namespace Vestige

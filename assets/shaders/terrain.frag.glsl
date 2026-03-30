@@ -23,6 +23,13 @@ uniform int u_cascadeCount;
 uniform float u_cascadeSplits[4];
 uniform mat4 u_cascadeLightSpaceMatrices[4];
 
+// Triplanar mapping
+uniform bool u_triplanarEnabled;
+uniform float u_triplanarSharpness; // Blending sharpness (4-8 typical)
+uniform float u_triplanarStart;     // Steepness where triplanar begins (0.4)
+uniform float u_triplanarEnd;       // Steepness where fully triplanar (0.7)
+uniform float u_textureTiling;      // World-space tiling for layer textures
+
 // Water caustics (applied to terrain below water surface, within water XZ bounds)
 uniform bool u_causticsEnabled;
 uniform sampler2D u_causticsTex;      // Unit 5
@@ -111,6 +118,27 @@ float calcTerrainShadow(vec3 normal, vec3 lightDir)
     return shadow * 0.125 * shadowFade;  // 1/8 samples
 }
 
+// ---------------------------------------------------------------------------
+// Triplanar blend weights from world-space normal
+// ---------------------------------------------------------------------------
+vec3 triplanarWeights(vec3 worldNormal, float sharpness)
+{
+    vec3 w = pow(abs(worldNormal), vec3(sharpness));
+    return w / (w.x + w.y + w.z);
+}
+
+// ---------------------------------------------------------------------------
+// Simple procedural tiling pattern for a base color (adds visual variation)
+// Returns a color modulation factor (0.85-1.15) to break up flat colors
+// ---------------------------------------------------------------------------
+float tilingDetail(vec2 uv)
+{
+    // Two-frequency hash pattern for subtle variation
+    vec2 i = floor(uv * 3.7);
+    float h = fract(sin(dot(i, vec2(127.1, 311.7))) * 43758.5453);
+    return mix(0.88, 1.12, h);
+}
+
 void main()
 {
     // Read terrain normal from pre-computed normal map (encoded as n * 0.5 + 0.5)
@@ -120,16 +148,61 @@ void main()
     // Read splatmap weights for base color
     vec4 splat = texture(u_splatmap, v_terrainUV);
 
-    // Simple base colors for each layer (will be replaced with texture arrays in 5I-2)
+    // Simple base colors for each layer (will be replaced with texture arrays later)
     vec3 grassColor = vec3(0.28, 0.52, 0.18);
     vec3 rockColor  = vec3(0.45, 0.42, 0.38);
     vec3 dirtColor  = vec3(0.55, 0.40, 0.25);
     vec3 sandColor  = vec3(0.76, 0.70, 0.50);
 
-    vec3 albedo = grassColor * splat.r
-                + rockColor  * splat.g
-                + dirtColor  * splat.b
-                + sandColor  * splat.a;
+    vec3 albedo;
+    if (u_triplanarEnabled && u_textureTiling > 0.0)
+    {
+        float steepness = 1.0 - abs(normal.y);
+        float triBlend = smoothstep(u_triplanarStart, u_triplanarEnd, steepness);
+
+        // Standard top-down (Y-axis) sampling using worldPos.xz
+        vec2 uvY = v_worldPos.xz * u_textureTiling;
+        float detailY = tilingDetail(uvY);
+
+        vec3 flatAlbedo = (grassColor * splat.r + rockColor * splat.g
+                         + dirtColor * splat.b + sandColor * splat.a) * detailY;
+
+        if (triBlend > 0.001)
+        {
+            // X-axis and Z-axis projections for steep slopes
+            vec3 tw = triplanarWeights(normal, u_triplanarSharpness);
+
+            vec2 uvX = v_worldPos.yz * u_textureTiling;
+            vec2 uvZ = v_worldPos.xy * u_textureTiling;
+
+            // Fix mirroring on negative-facing sides
+            if (normal.x < 0.0) uvX.x = -uvX.x;
+            if (normal.z < 0.0) uvZ.x = -uvZ.x;
+
+            float detailX = tilingDetail(uvX);
+            float detailZ = tilingDetail(uvZ);
+
+            vec3 baseColor = grassColor * splat.r + rockColor * splat.g
+                           + dirtColor * splat.b + sandColor * splat.a;
+
+            vec3 triAlbedo = baseColor * detailX * tw.x
+                           + baseColor * detailY * tw.y
+                           + baseColor * detailZ * tw.z;
+
+            albedo = mix(flatAlbedo, triAlbedo, triBlend);
+        }
+        else
+        {
+            albedo = flatAlbedo;
+        }
+    }
+    else
+    {
+        albedo = grassColor * splat.r
+               + rockColor  * splat.g
+               + dirtColor  * splat.b
+               + sandColor  * splat.a;
+    }
 
     // Directional lighting (Blinn-Phong)
     vec3 lightDir = normalize(-u_lightDirection);

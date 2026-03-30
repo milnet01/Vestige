@@ -141,6 +141,13 @@ void TerrainRenderer::render(const Terrain& terrain,
     glBindTextureUnit(2, terrain.getSplatmapTexture());
     m_terrainShader.setInt("u_splatmap", 2);
 
+    // Triplanar mapping uniforms (conditional on steep slopes)
+    m_terrainShader.setBool("u_triplanarEnabled", true);
+    m_terrainShader.setFloat("u_triplanarSharpness", 6.0f);
+    m_terrainShader.setFloat("u_triplanarStart", 0.4f);
+    m_terrainShader.setFloat("u_triplanarEnd", 0.7f);
+    m_terrainShader.setFloat("u_textureTiling", 0.1f);
+
     // Lighting
     if (sceneData.hasDirectionalLight)
     {

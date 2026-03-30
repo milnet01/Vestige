@@ -28,11 +28,17 @@ public:
 
 private:
     void drawSculptSection(TerrainBrush& brush);
-    void drawPaintSection(TerrainBrush& brush);
+    void drawPaintSection(TerrainBrush& brush, Terrain& terrain);
     void drawSettingsSection(Terrain& terrain);
     void drawImportExportSection(Terrain& terrain);
 
     bool m_open = false;
+
+    // Auto-texture parameters (persisted across draws)
+    float m_slopeGrassEnd = 0.3f;
+    float m_slopeRockStart = 0.6f;
+    float m_noiseScale = 0.05f;
+    float m_noiseAmplitude = 0.12f;
 
     /// @brief Layer names for display.
     static constexpr const char* LAYER_NAMES[4] = {"Grass", "Rock", "Dirt", "Sand"};
