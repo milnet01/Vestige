@@ -1723,9 +1723,10 @@ void Renderer::captureLightProbe(int probeIndex, const SceneRenderData& renderDa
 }
 
 void Renderer::captureSHGrid(const SceneRenderData& renderData,
-                              const Camera& camera, float aspectRatio)
+                              const Camera& camera, float aspectRatio,
+                              int faceSize)
 {
-    if (!m_shProbeGrid || !m_shProbeGrid->isReady())
+    if (!m_shProbeGrid || !m_shProbeGrid->isInitialized())
     {
         Logger::error("captureSHGrid: SH grid not initialized");
         return;
@@ -1736,7 +1737,6 @@ void Renderer::captureSHGrid(const SceneRenderData& renderData,
     glm::vec3 worldMax = m_shProbeGrid->getWorldMax();
     glm::vec3 step = (worldMax - worldMin) / glm::vec3(glm::max(res - 1, glm::ivec3(1)));
 
-    int faceSize = 64;  // Small cubemap per probe (6 faces × 64×64)
     int totalProbes = res.x * res.y * res.z;
 
     Logger::info("Capturing SH probe grid: " + std::to_string(totalProbes) + " probes at "
@@ -2362,7 +2362,7 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
         }
         m_sceneShader.setBool("u_hasShadows", true);
         m_sceneShader.setBool("u_cascadeDebug", m_cascadeDebug);
-        m_sceneShader.setFloat("u_shadowLightSize", 4.0f);  // PCSS light size (texels)
+        m_sceneShader.setFloat("u_shadowLightSize", 2.0f);  // PCSS light size (texels, reduced for thin walls)
     }
     else
     {
@@ -2412,6 +2412,7 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
             m_sceneShader.setBool("u_hasSHGrid", true);
             m_sceneShader.setVec3("u_shGridWorldMin", m_shProbeGrid->getWorldMin());
             m_sceneShader.setVec3("u_shGridWorldMax", m_shProbeGrid->getWorldMax());
+            m_sceneShader.setFloat("u_shNormalBias", m_shNormalBias);
         }
         else
         {

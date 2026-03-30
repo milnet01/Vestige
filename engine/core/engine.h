@@ -22,6 +22,7 @@
 #include "environment/foliage_manager.h"
 #include "environment/terrain.h"
 #include "profiler/performance_profiler.h"
+#include "testing/visual_test_runner.h"
 
 #include <memory>
 
@@ -33,6 +34,7 @@ struct EngineConfig
 {
     WindowConfig window;
     std::string assetPath = "assets";
+    bool visualTestMode = false;  ///< Run automated visual test and exit
 };
 
 /// @brief The central engine — owns all subsystems and runs the main loop.
@@ -59,6 +61,8 @@ public:
 
 private:
     void setupDemoScene();
+    void setupTabernacleScene();
+    void setupVisualTestViewpoints();
     void drawLightGizmos(Scene& scene, const Selection& selection);
 
     EventBus m_eventBus;
@@ -79,8 +83,11 @@ private:
     TreeRenderer m_treeRenderer;
     FoliageManager m_foliageManager;
     Terrain m_terrain;
+    bool m_terrainEnabled = true;  ///< Set false for indoor scenes that don't need terrain
     TerrainRenderer m_terrainRenderer;
     PerformanceProfiler m_profiler;
+    VisualTestRunner m_visualTestRunner;
+    bool m_visualTestMode = false;
 
     bool m_isRunning;
     bool m_isCursorCaptured;

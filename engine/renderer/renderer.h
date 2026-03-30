@@ -110,10 +110,15 @@ public:
     /// @brief Gets the SH probe grid for configuration and capture.
     SHProbeGrid* getSHProbeGrid() const { return m_shProbeGrid.get(); }
 
+    /// @brief Sets the normal bias for SH grid sampling (anti-leak, in meters).
+    void setSHNormalBias(float bias) { m_shNormalBias = bias; }
+
     /// @brief Captures the SH probe grid by rendering cubemaps at each probe position.
     /// Call after scene geometry and lights are placed.
+    /// @param faceSize Cubemap face resolution (default 64; use 16 for fast radiosity bounces).
     void captureSHGrid(const SceneRenderData& renderData,
-                       const Camera& camera, float aspectRatio);
+                       const Camera& camera, float aspectRatio,
+                       int faceSize = 64);
 
     /// @brief Captures a light probe by rendering the scene from the probe's position.
     /// @param probeIndex Index of the probe in the LightProbeManager.
@@ -447,6 +452,7 @@ private:
 
     // SH probe grid
     std::unique_ptr<SHProbeGrid> m_shProbeGrid;
+    float m_shNormalBias = 0.0f;  ///< Normal bias for SH grid sampling (anti-leak)
     GLuint m_fallbackTex3D = 0;  ///< 1×1×1 3D texture for Mesa sampler binding safety
 
     // Text rendering

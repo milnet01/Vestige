@@ -33,6 +33,17 @@ public:
                                int windowWidth, int windowHeight,
                                int fps, float deltaTime,
                                const std::string& outputDir = "");
+
+    /// @brief Captures with a custom filename (for automated visual testing).
+    /// @param outputDir Directory to save files.
+    /// @param basename Filename without extension (e.g. "01_gate_exterior_rot045").
+    /// @return Path to the saved screenshot, or empty string on failure.
+    static std::string captureNamed(const Renderer& renderer,
+                                     const Camera& camera,
+                                     int windowWidth, int windowHeight,
+                                     int fps, float deltaTime,
+                                     const std::string& outputDir,
+                                     const std::string& basename);
 };
 
 } // namespace Vestige
