@@ -314,7 +314,10 @@ public:
 
     /// @brief Blits the final output to the default framebuffer (screen).
     /// Call this in play mode when ImGui is not displaying the viewport.
-    void blitToScreen();
+    /// @brief Blits the output FBO to the default framebuffer (screen).
+    /// @param screenWidth Actual window width (may differ from render resolution).
+    /// @param screenHeight Actual window height.
+    void blitToScreen(int screenWidth = 0, int screenHeight = 0);
 
     /// @brief Renders the scene to the ID buffer for mouse picking.
     /// Call on-demand (when the user clicks in the viewport).

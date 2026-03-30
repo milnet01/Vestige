@@ -631,11 +631,11 @@ void Engine::run()
         }
         else
         {
-            // Play mode or no editor — render at full window size
-            int ww = m_window->getWidth();
-            int wh = m_window->getHeight();
-            m_renderer->resizeRenderTarget(ww, wh);
-            m_waterFbo.resize(ww / 4, wh / 4, ww / 4, wh / 4);
+            // Play mode — render at configured play resolution (independent of window)
+            int rw = m_editor ? m_editor->getPlayModeWidth() : m_window->getWidth();
+            int rh = m_editor ? m_editor->getPlayModeHeight() : m_window->getHeight();
+            m_renderer->resizeRenderTarget(rw, rh);
+            m_waterFbo.resize(rw / 4, rh / 4, rw / 4, rh / 4);
         }
 
         // Check for viewport clicks (uses previous frame's viewport bounds)
@@ -961,9 +961,9 @@ void Engine::run()
                 float cx = std::floor(camPos.x);
                 float cz = std::floor(camPos.z);
                 const float halfExtent = 50.0f;  // 100m x 100m grid
-                const glm::vec3 thinColor(0.35f, 0.35f, 0.35f);
-                const glm::vec3 boldColor(0.55f, 0.55f, 0.55f);
-                const float y = 0.001f;  // Slightly above ground to avoid z-fighting
+                const glm::vec3 thinColor(0.15f, 0.15f, 0.15f);  // Dark neutral grey
+                const glm::vec3 boldColor(0.30f, 0.30f, 0.30f);  // Brighter for 10m lines
+                const float y = 0.03f;  // Well above ground to avoid z-fighting
 
                 for (float x = cx - halfExtent; x <= cx + halfExtent; x += 1.0f)
                 {
@@ -1040,8 +1040,8 @@ void Engine::run()
         }
         else
         {
-            // Play mode: blit output directly to screen, run ImGui frame (hidden)
-            m_renderer->blitToScreen();
+            // Play mode: blit render FBO to screen (may scale if resolutions differ)
+            m_renderer->blitToScreen(m_window->getWidth(), m_window->getHeight());
             if (m_editor)
             {
                 m_editor->drawPanels(nullptr, nullptr, nullptr,

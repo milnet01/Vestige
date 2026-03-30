@@ -1548,18 +1548,57 @@ GLuint Renderer::getOutputTextureId() const
     return 0;
 }
 
-void Renderer::blitToScreen()
+void Renderer::blitToScreen(int screenWidth, int screenHeight)
 {
     if (!m_outputFbo)
     {
         return;
     }
 
+    // Default: screen matches render resolution
+    if (screenWidth <= 0) screenWidth = m_windowWidth;
+    if (screenHeight <= 0) screenHeight = m_windowHeight;
+
     glBindFramebuffer(GL_READ_FRAMEBUFFER, m_outputFbo->getId());
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
-    glBlitFramebuffer(0, 0, m_windowWidth, m_windowHeight,
-                      0, 0, m_windowWidth, m_windowHeight,
-                      GL_COLOR_BUFFER_BIT, GL_NEAREST);
+
+    if (screenWidth == m_windowWidth && screenHeight == m_windowHeight)
+    {
+        // Same size — no scaling needed
+        glBlitFramebuffer(0, 0, m_windowWidth, m_windowHeight,
+                          0, 0, screenWidth, screenHeight,
+                          GL_COLOR_BUFFER_BIT, GL_NEAREST);
+    }
+    else
+    {
+        // Scale render FBO to window with aspect-ratio-preserving letterboxing
+        float renderAspect = static_cast<float>(m_windowWidth) / static_cast<float>(m_windowHeight);
+        float screenAspect = static_cast<float>(screenWidth) / static_cast<float>(screenHeight);
+
+        int dstX = 0, dstY = 0, dstW = screenWidth, dstH = screenHeight;
+        if (renderAspect > screenAspect)
+        {
+            // Render is wider — letterbox top/bottom
+            dstH = static_cast<int>(static_cast<float>(screenWidth) / renderAspect);
+            dstY = (screenHeight - dstH) / 2;
+        }
+        else if (renderAspect < screenAspect)
+        {
+            // Render is taller — pillarbox left/right
+            dstW = static_cast<int>(static_cast<float>(screenHeight) * renderAspect);
+            dstX = (screenWidth - dstW) / 2;
+        }
+
+        // Clear letterbox bars to black
+        glViewport(0, 0, screenWidth, screenHeight);
+        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT);
+
+        glBlitFramebuffer(0, 0, m_windowWidth, m_windowHeight,
+                          dstX, dstY, dstX + dstW, dstY + dstH,
+                          GL_COLOR_BUFFER_BIT, GL_LINEAR);
+    }
+
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 

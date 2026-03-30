@@ -505,6 +505,27 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
                 {
                     ImGui::TextDisabled("Renderer not available");
                 }
+
+                ImGui::Separator();
+                ImGui::Text("Play Mode Resolution");
+                struct ResOption { const char* label; int w; int h; };
+                static const ResOption resOptions[] = {
+                    {"1280 x 720  (720p)",  1280,  720},
+                    {"1600 x 900",          1600,  900},
+                    {"1920 x 1080 (1080p)", 1920, 1080},
+                    {"2560 x 1440 (1440p)", 2560, 1440},
+                    {"3840 x 2160 (4K)",    3840, 2160},
+                };
+                for (const auto& opt : resOptions)
+                {
+                    bool selected = (m_playModeWidth == opt.w && m_playModeHeight == opt.h);
+                    if (ImGui::MenuItem(opt.label, nullptr, selected))
+                    {
+                        m_playModeWidth = opt.w;
+                        m_playModeHeight = opt.h;
+                    }
+                }
+
                 ImGui::EndMenu();
             }
 
@@ -788,9 +809,37 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
             {
                 Logger::clearEntries();
             }
+            ImGui::SameLine();
+            if (ImGui::Button("Copy"))
+            {
+                // Build filtered log text and copy to clipboard
+                std::string logText;
+                for (const auto& e : Logger::getEntries())
+                {
+                    bool include = false;
+                    switch (e.level)
+                    {
+                        case LogLevel::Trace:   include = showTrace; break;
+                        case LogLevel::Debug:   include = showDebug; break;
+                        case LogLevel::Info:    include = showInfo;  break;
+                        case LogLevel::Warning: include = showWarn;  break;
+                        case LogLevel::Error:
+                        case LogLevel::Fatal:   include = showError; break;
+                    }
+                    if (include)
+                    {
+                        logText += "[";
+                        logText += Logger::levelToString(e.level);
+                        logText += "] ";
+                        logText += e.message;
+                        logText += "\n";
+                    }
+                }
+                ImGui::SetClipboardText(logText.c_str());
+            }
             ImGui::Separator();
 
-            // Scrollable log region
+            // Scrollable log region — selectable text for individual line copying
             ImGui::BeginChild("LogScroll", ImVec2(0, 0), false,
                               ImGuiWindowFlags_HorizontalScrollbar);
 
@@ -819,11 +868,17 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
                     case LogLevel::Error:   color = ImVec4(1.0f, 0.3f, 0.3f, 1.0f); break;
                     case LogLevel::Fatal:   color = ImVec4(1.0f, 0.1f, 0.1f, 1.0f); break;
                 }
+                std::string lineText = "[" + std::string(Logger::levelToString(entry.level))
+                                     + "] " + entry.message;
                 ImGui::PushStyleColor(ImGuiCol_Text, color);
-                ImGui::TextUnformatted(
-                    ("[" + std::string(Logger::levelToString(entry.level)) + "] "
-                     + entry.message).c_str());
-                ImGui::PopStyleColor();
+                ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.3f, 0.3f, 0.4f, 0.4f));
+                if (ImGui::Selectable(lineText.c_str(), false,
+                                      ImGuiSelectableFlags_AllowDoubleClick))
+                {
+                    // Single click: copy this line to clipboard
+                    ImGui::SetClipboardText(lineText.c_str());
+                }
+                ImGui::PopStyleColor(2);
             }
 
             // Auto-scroll to bottom when new messages arrive
