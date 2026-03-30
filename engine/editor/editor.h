@@ -204,6 +204,10 @@ private:
     bool m_captureScreenshotRequested = false; ///< Menu-triggered screenshot request.
     bool m_fullscreenViewport = false; ///< Hide all panels for clean viewport.
 
+    // Play mode render resolution
+    int m_playModeWidth = 1920;
+    int m_playModeHeight = 1080;
+
     // Box selection drag state
     bool m_boxSelectActive = false;
     glm::vec2 m_boxSelectStart = glm::vec2(0.0f);
@@ -276,6 +280,11 @@ public:
 
     /// @brief Toggles the ground grid overlay.
     void toggleGrid() { m_showGrid = !m_showGrid; }
+
+    /// @brief Gets/sets the play mode render resolution (independent of window size).
+    int getPlayModeWidth() const { return m_playModeWidth; }
+    int getPlayModeHeight() const { return m_playModeHeight; }
+    void setPlayModeResolution(int w, int h) { m_playModeWidth = w; m_playModeHeight = h; }
 
     /// @brief Returns true if a box-select region pick is pending.
     bool isBoxSelectPending() const { return m_boxSelectPending; }
