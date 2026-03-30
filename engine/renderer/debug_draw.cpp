@@ -232,12 +232,10 @@ void DebugDraw::flush(const glm::mat4& viewProjection)
     // Save state
     GLboolean prevDepthMask;
     glGetBooleanv(GL_DEPTH_WRITEMASK, &prevDepthMask);
-    GLfloat prevLineWidth;
-    glGetFloatv(GL_LINE_WIDTH, &prevLineWidth);
-
-    // Render setup: depth test on, depth write off, line width 2
+    // Render setup: depth test on, depth write off
+    // Note: glLineWidth > 1.0 is unsupported on Mesa/AMD (GL_INVALID_VALUE).
+    // Lines are always 1px wide; use geometry or screen-space techniques for thicker lines.
     glDepthMask(GL_FALSE);
-    glLineWidth(2.0f);
 
     m_shader.use();
     m_shader.setMat4("u_viewProjection", viewProjection);
@@ -248,7 +246,6 @@ void DebugDraw::flush(const glm::mat4& viewProjection)
 
     // Restore state
     glDepthMask(prevDepthMask);
-    glLineWidth(prevLineWidth);
 
     // Clear the buffer for the next frame
     s_vertices.clear();
