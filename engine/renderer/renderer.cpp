@@ -11,6 +11,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 #include <algorithm>
+#include <unordered_set>
 #include <array>
 #include <random>
 
@@ -3212,6 +3213,58 @@ uint32_t Renderer::pickEntityAt(int x, int y)
                 | (static_cast<uint32_t>(pixel[1]) << 8)
                 | (static_cast<uint32_t>(pixel[2]) << 16);
     return id;
+}
+
+std::vector<uint32_t> Renderer::pickEntitiesInRect(int x0, int y0, int x1, int y1)
+{
+    std::vector<uint32_t> result;
+    if (!m_idBufferFbo)
+    {
+        return result;
+    }
+
+    // Normalize so x0 <= x1, y0 <= y1
+    if (x0 > x1) std::swap(x0, x1);
+    if (y0 > y1) std::swap(y0, y1);
+
+    x0 = std::clamp(x0, 0, m_windowWidth - 1);
+    x1 = std::clamp(x1, 0, m_windowWidth - 1);
+    y0 = std::clamp(y0, 0, m_windowHeight - 1);
+    y1 = std::clamp(y1, 0, m_windowHeight - 1);
+
+    int w = x1 - x0 + 1;
+    int h = y1 - y0 + 1;
+    if (w <= 0 || h <= 0)
+    {
+        return result;
+    }
+
+    // Read pixel block — sample every 4th pixel for performance on large selections
+    int step = std::max(1, std::min(w, h) / 64);
+    std::unordered_set<uint32_t> ids;
+
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, m_idBufferFbo->getId());
+
+    for (int py = y0; py <= y1; py += step)
+    {
+        for (int px = x0; px <= x1; px += step)
+        {
+            unsigned char pixel[4] = {0, 0, 0, 0};
+            glReadPixels(px, py, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixel);
+            uint32_t id = static_cast<uint32_t>(pixel[0])
+                        | (static_cast<uint32_t>(pixel[1]) << 8)
+                        | (static_cast<uint32_t>(pixel[2]) << 16);
+            if (id != 0)
+            {
+                ids.insert(id);
+            }
+        }
+    }
+
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+
+    result.assign(ids.begin(), ids.end());
+    return result;
 }
 
 void Renderer::bindOutputFbo()

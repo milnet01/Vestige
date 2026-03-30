@@ -930,6 +930,21 @@ void Engine::run()
                 }
             }
 
+            // Process pending box-select request
+            int bx0, by0, bx1, by1;
+            if (m_editor->consumeBoxSelect(bx0, by0, bx1, by1))
+            {
+                m_renderer->renderIdBuffer(m_renderData, *m_camera, aspectRatio);
+                auto ids = m_renderer->pickEntitiesInRect(bx0, by0, bx1, by1);
+                Selection& sel = m_editor->getSelection();
+                sel.clearSelection();
+                for (uint32_t id : ids)
+                {
+                    sel.addToSelection(id);
+                }
+                Logger::info("Box selected " + std::to_string(ids.size()) + " entities");
+            }
+
             // Render selection outlines into the output FBO
             if (m_editor->getSelection().hasSelection())
             {
@@ -938,7 +953,35 @@ void Engine::run()
                     *m_camera, aspectRatio);
             }
 
-            // 7c. Queue light gizmos for selected entities, then flush debug draw
+            // 7c. Queue ground grid + light gizmos, then flush debug draw
+            if (m_editor->isGridVisible())
+            {
+                // Ground-plane grid centered on camera XZ, snapped to 1m
+                glm::vec3 camPos = m_camera->getPosition();
+                float cx = std::floor(camPos.x);
+                float cz = std::floor(camPos.z);
+                const float halfExtent = 50.0f;  // 100m x 100m grid
+                const glm::vec3 thinColor(0.35f, 0.35f, 0.35f);
+                const glm::vec3 boldColor(0.55f, 0.55f, 0.55f);
+                const float y = 0.001f;  // Slightly above ground to avoid z-fighting
+
+                for (float x = cx - halfExtent; x <= cx + halfExtent; x += 1.0f)
+                {
+                    bool isBold = (static_cast<int>(std::round(x)) % 10 == 0);
+                    const glm::vec3& color = isBold ? boldColor : thinColor;
+                    DebugDraw::line(
+                        glm::vec3(x, y, cz - halfExtent),
+                        glm::vec3(x, y, cz + halfExtent), color);
+                }
+                for (float z = cz - halfExtent; z <= cz + halfExtent; z += 1.0f)
+                {
+                    bool isBold = (static_cast<int>(std::round(z)) % 10 == 0);
+                    const glm::vec3& color = isBold ? boldColor : thinColor;
+                    DebugDraw::line(
+                        glm::vec3(cx - halfExtent, y, z),
+                        glm::vec3(cx + halfExtent, y, z), color);
+                }
+            }
             if (activeScene)
             {
                 drawLightGizmos(*activeScene, m_editor->getSelection());
@@ -984,6 +1027,15 @@ void Engine::run()
             glClear(GL_COLOR_BUFFER_BIT);
             m_editor->drawPanels(m_renderer.get(), activeScene, m_camera.get(),
                                  m_timer.get(), m_window.get());
+
+            // Handle menu-triggered screenshot (same as F11)
+            if (m_editor->consumeScreenshotRequest())
+            {
+                FrameDiagnostics::capture(*m_renderer, *m_camera,
+                    m_window->getWidth(), m_window->getHeight(),
+                    m_timer->getFps(), m_timer->getDeltaTime());
+            }
+
             m_editor->endFrame();
         }
         else

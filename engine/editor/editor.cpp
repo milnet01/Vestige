@@ -11,7 +11,11 @@
 #include "renderer/renderer.h"
 #include "resource/resource_manager.h"
 #include "scene/entity.h"
+#include "scene/light_component.h"
+#include "scene/mesh_renderer.h"
 #include "scene/scene.h"
+
+#include <functional>
 
 #include <imgui.h>
 #include <imgui_internal.h>
@@ -326,6 +330,14 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
                 }
                 ImGui::Separator();
 
+                // Viewport overlays
+                if (ImGui::MenuItem("Ground Grid", "G", m_showGrid))
+                {
+                    m_showGrid = !m_showGrid;
+                }
+
+                ImGui::Separator();
+
                 // Panel toggles
                 bool envOpen = m_environmentPanel.isOpen();
                 if (ImGui::MenuItem("Environment", nullptr, &envOpen))
@@ -336,6 +348,17 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
                 if (ImGui::MenuItem("Terrain", nullptr, &terrainOpen))
                 {
                     m_terrainPanel.setOpen(terrainOpen);
+                }
+                ImGui::MenuItem("Console", nullptr, &m_showConsole);
+                ImGui::MenuItem("Statistics", nullptr, &m_showStatistics);
+                ImGui::Separator();
+                if (ImGui::MenuItem("Capture Screenshot", "F11"))
+                {
+                    m_captureScreenshotRequested = true;
+                }
+                if (ImGui::MenuItem("Fullscreen Viewport", "Ctrl+Shift+F", m_fullscreenViewport))
+                {
+                    m_fullscreenViewport = !m_fullscreenViewport;
                 }
                 bool perfOpen = m_performancePanel.isOpen();
                 if (ImGui::MenuItem("Performance", "F12", &perfOpen))
@@ -697,11 +720,27 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
             // Process Delete, Ctrl+D, Ctrl+Shift+C/V entity shortcuts
             processEntityShortcuts(scene);
 
+            // Draw box selection rectangle overlay
+            if (m_boxSelectActive)
+            {
+                ImDrawList* dl = ImGui::GetWindowDrawList();
+                ImVec2 p0(std::min(m_boxSelectStart.x, m_boxSelectEnd.x),
+                          std::min(m_boxSelectStart.y, m_boxSelectEnd.y));
+                ImVec2 p1(std::max(m_boxSelectStart.x, m_boxSelectEnd.x),
+                          std::max(m_boxSelectStart.y, m_boxSelectEnd.y));
+                dl->AddRectFilled(p0, p1, IM_COL32(60, 120, 220, 40));
+                dl->AddRect(p0, p1, IM_COL32(60, 120, 220, 180), 0.0f, 0, 1.5f);
+            }
+
             m_viewportFocused = ImGui::IsWindowFocused();
             m_viewportHovered = ImGui::IsWindowHovered();
         }
         ImGui::End();
         ImGui::PopStyleVar();
+
+        // --- Side panels (hidden in fullscreen viewport mode) ---
+        if (!m_fullscreenViewport)
+        {
 
         // --- Hierarchy panel ---
         ImGui::Begin("Hierarchy");
@@ -728,10 +767,75 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
         m_inspectorPanel.draw(scene, m_selection);
         ImGui::End();
 
-        ImGui::Begin("Console");
-        ImGui::TextWrapped("Log output will appear here.");
-        ImGui::TextWrapped("(Phase 5F)");
+        if (m_showConsole)
+        {
+        ImGui::Begin("Console", &m_showConsole);
+        {
+            // Filter buttons
+            static bool showTrace = false;
+            static bool showDebug = false;
+            static bool showInfo = true;
+            static bool showWarn = true;
+            static bool showError = true;
+
+            ImGui::Checkbox("Trace", &showTrace); ImGui::SameLine();
+            ImGui::Checkbox("Debug", &showDebug); ImGui::SameLine();
+            ImGui::Checkbox("Info",  &showInfo);  ImGui::SameLine();
+            ImGui::Checkbox("Warn",  &showWarn);  ImGui::SameLine();
+            ImGui::Checkbox("Error", &showError); ImGui::SameLine();
+
+            if (ImGui::Button("Clear"))
+            {
+                Logger::clearEntries();
+            }
+            ImGui::Separator();
+
+            // Scrollable log region
+            ImGui::BeginChild("LogScroll", ImVec2(0, 0), false,
+                              ImGuiWindowFlags_HorizontalScrollbar);
+
+            const auto& entries = Logger::getEntries();
+            for (const auto& entry : entries)
+            {
+                // Filter by level
+                switch (entry.level)
+                {
+                    case LogLevel::Trace:   if (!showTrace) continue; break;
+                    case LogLevel::Debug:   if (!showDebug) continue; break;
+                    case LogLevel::Info:    if (!showInfo)  continue; break;
+                    case LogLevel::Warning: if (!showWarn)  continue; break;
+                    case LogLevel::Error:
+                    case LogLevel::Fatal:   if (!showError) continue; break;
+                }
+
+                // Color by severity
+                ImVec4 color;
+                switch (entry.level)
+                {
+                    case LogLevel::Trace:   color = ImVec4(0.5f, 0.5f, 0.5f, 1.0f); break;
+                    case LogLevel::Debug:   color = ImVec4(0.6f, 0.6f, 0.8f, 1.0f); break;
+                    case LogLevel::Info:    color = ImVec4(0.8f, 0.8f, 0.8f, 1.0f); break;
+                    case LogLevel::Warning: color = ImVec4(1.0f, 0.85f, 0.2f, 1.0f); break;
+                    case LogLevel::Error:   color = ImVec4(1.0f, 0.3f, 0.3f, 1.0f); break;
+                    case LogLevel::Fatal:   color = ImVec4(1.0f, 0.1f, 0.1f, 1.0f); break;
+                }
+                ImGui::PushStyleColor(ImGuiCol_Text, color);
+                ImGui::TextUnformatted(
+                    ("[" + std::string(Logger::levelToString(entry.level)) + "] "
+                     + entry.message).c_str());
+                ImGui::PopStyleColor();
+            }
+
+            // Auto-scroll to bottom when new messages arrive
+            if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY() - 20.0f)
+            {
+                ImGui::SetScrollHereY(1.0f);
+            }
+
+            ImGui::EndChild();
+        }
         ImGui::End();
+        } // m_showConsole
 
         // --- Asset browser panel ---
         ImGui::Begin("Assets");
@@ -760,6 +864,50 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
         {
             m_performancePanel.draw(*m_profiler, renderer, timer, window);
         }
+
+        // --- Scene statistics panel ---
+        if (m_showStatistics && scene)
+        {
+            ImGui::Begin("Statistics", &m_showStatistics);
+
+            // Count entities by traversal
+            int entityCount = 0;
+            int meshCount = 0;
+            int lightCount = 0;
+            std::function<void(Entity*)> countEntities = [&](Entity* e)
+            {
+                if (!e) return;
+                entityCount++;
+                if (e->getComponent<MeshRenderer>()) meshCount++;
+                if (e->getComponent<DirectionalLightComponent>() ||
+                    e->getComponent<PointLightComponent>() ||
+                    e->getComponent<SpotLightComponent>())
+                    lightCount++;
+                for (auto& child : e->getChildren())
+                    countEntities(child.get());
+            };
+            countEntities(scene->getRoot());
+
+            ImGui::Text("Scene: %s", scene->getName().c_str());
+            ImGui::Separator();
+            ImGui::Text("Entities:  %d", entityCount);
+            ImGui::Text("Meshes:    %d", meshCount);
+            ImGui::Text("Lights:    %d", lightCount);
+
+            if (renderer)
+            {
+                const auto& stats = renderer->getCullingStats();
+                ImGui::Separator();
+                ImGui::Text("Draw calls:      %d  (%d instanced)", stats.drawCalls, stats.instanceBatches);
+                ImGui::Text("Opaque objects:  %d / %d visible", stats.culledItems, stats.totalItems);
+                ImGui::Text("Transparent:     %d / %d visible", stats.transparentCulled, stats.transparentTotal);
+                ImGui::Text("Shadow casters:  %d total", stats.shadowCastersTotal);
+            }
+
+            ImGui::End();
+        }
+
+        } // !m_fullscreenViewport (side panels)
 
         // --- Import dialog (file browser + settings modal) ---
         m_importDialog.draw(scene, m_resourceManager, m_selection,
@@ -884,6 +1032,8 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
                         shortcutRow("F10", "Toggle auto-exposure");
                         shortcutRow("F11", "Capture frame diagnostics + screenshot");
                         shortcutRow("F12", "Toggle performance panel");
+                        shortcutRow("G", "Toggle ground grid overlay");
+                        shortcutRow("Ctrl+Shift+F", "Toggle fullscreen viewport");
                         shortcutRow("[ / ]", "Decrease / increase exposure (manual)");
                         shortcutRow("- / =", "Decrease / increase POM height");
                         ImGui::EndTable();
@@ -1111,58 +1261,65 @@ void Editor::processViewportClick(int fboWidth, int fboHeight)
 
     if (!m_isInitialized || m_mode != EditorMode::EDIT)
     {
+        m_boxSelectActive = false;
         return;
     }
 
     ImGuiIO& io = ImGui::GetIO();
-
-    // Check for left mouse click while the viewport is hovered (previous frame's state)
-    if (!io.MouseClicked[0] || !m_viewportHovered)
-    {
-        return;
-    }
-
-    // Ignore clicks while Alt is held (orbit camera uses Alt+LMB)
-    if (io.KeyAlt)
-    {
-        return;
-    }
-
-    // Don't pick when gizmo was hovered/used (previous frame state)
-    if (m_gizmoActive)
-    {
-        return;
-    }
-
-    float mx = io.MousePos.x;
-    float my = io.MousePos.y;
-
-    // Check if click is within stored viewport bounds
     float vpWidth = m_viewportMax.x - m_viewportMin.x;
     float vpHeight = m_viewportMax.y - m_viewportMin.y;
     if (vpWidth <= 0.0f || vpHeight <= 0.0f)
     {
         return;
     }
-    if (mx < m_viewportMin.x || mx > m_viewportMax.x
-        || my < m_viewportMin.y || my > m_viewportMax.y)
+
+    // Helper: map screen pos to FBO pixel coords
+    auto screenToFbo = [&](float sx, float sy, int& outX, int& outY)
     {
-        return;
+        float u = (sx - m_viewportMin.x) / vpWidth;
+        float v = (sy - m_viewportMin.y) / vpHeight;
+        outX = std::clamp(static_cast<int>(u * static_cast<float>(fboWidth)), 0, fboWidth - 1);
+        outY = std::clamp(static_cast<int>((1.0f - v) * static_cast<float>(fboHeight)), 0, fboHeight - 1);
+    };
+
+    // --- Start a drag on LMB press in viewport ---
+    if (io.MouseClicked[0] && m_viewportHovered && !io.KeyAlt && !m_gizmoActive)
+    {
+        m_boxSelectActive = true;
+        m_boxSelectStart = glm::vec2(io.MousePos.x, io.MousePos.y);
+        m_boxSelectEnd = m_boxSelectStart;
     }
 
-    // Map to viewport UV [0,1]
-    float u = (mx - m_viewportMin.x) / vpWidth;
-    float v = (my - m_viewportMin.y) / vpHeight;
+    // --- Update drag end position while dragging ---
+    if (m_boxSelectActive && io.MouseDown[0])
+    {
+        m_boxSelectEnd = glm::vec2(io.MousePos.x, io.MousePos.y);
+    }
 
-    // Map to FBO pixel coordinates (flip Y for OpenGL)
-    m_pickX = static_cast<int>(u * static_cast<float>(fboWidth));
-    m_pickY = static_cast<int>((1.0f - v) * static_cast<float>(fboHeight));
-    m_pickX = std::clamp(m_pickX, 0, fboWidth - 1);
-    m_pickY = std::clamp(m_pickY, 0, fboHeight - 1);
+    // --- On LMB release, decide: point pick or box select ---
+    if (m_boxSelectActive && !io.MouseDown[0])
+    {
+        m_boxSelectActive = false;
+        float dx = std::abs(m_boxSelectEnd.x - m_boxSelectStart.x);
+        float dy = std::abs(m_boxSelectEnd.y - m_boxSelectStart.y);
 
-    m_pickShift = io.KeyShift;
-    m_pickCtrl = io.KeyCtrl;
-    m_pickRequested = true;
+        m_pickShift = io.KeyShift;
+        m_pickCtrl = io.KeyCtrl;
+
+        if (dx < 5.0f && dy < 5.0f)
+        {
+            // Small drag = point pick (same as before)
+            screenToFbo(m_boxSelectStart.x, m_boxSelectStart.y, m_pickX, m_pickY);
+            m_pickRequested = true;
+        }
+        else
+        {
+            // Large drag = box select
+            screenToFbo(m_boxSelectStart.x, m_boxSelectStart.y, m_boxPickX0, m_boxPickY0);
+            screenToFbo(m_boxSelectEnd.x, m_boxSelectEnd.y, m_boxPickX1, m_boxPickY1);
+            m_boxSelectPending = true;
+        }
+    }
 }
 
 bool Editor::isPickRequested() const
@@ -1412,6 +1569,15 @@ void Editor::processGizmoShortcuts()
     {
         m_gizmoMode = (m_gizmoMode == ImGuizmo::WORLD)
             ? ImGuizmo::LOCAL : ImGuizmo::WORLD;
+    }
+    if (ImGui::IsKeyPressed(ImGuiKey_G))
+    {
+        m_showGrid = !m_showGrid;
+    }
+    ImGuiIO& gizmoIo = ImGui::GetIO();
+    if (gizmoIo.KeyCtrl && gizmoIo.KeyShift && ImGui::IsKeyPressed(ImGuiKey_F))
+    {
+        m_fullscreenViewport = !m_fullscreenViewport;
     }
 }
 

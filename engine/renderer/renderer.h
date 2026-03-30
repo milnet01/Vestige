@@ -327,6 +327,14 @@ public:
     /// @return Entity ID, or 0 if background/empty.
     uint32_t pickEntityAt(int x, int y);
 
+    /// @brief Reads a rectangular region of the ID buffer and returns unique entity IDs.
+    /// @param x0 Left pixel X.
+    /// @param y0 Bottom pixel Y.
+    /// @param x1 Right pixel X.
+    /// @param y1 Top pixel Y.
+    /// @return Set of unique non-zero entity IDs in the region.
+    std::vector<uint32_t> pickEntitiesInRect(int x0, int y0, int x1, int y1);
+
     /// @brief Binds the output FBO and sets viewport for overlay rendering (debug draw, etc.).
     void bindOutputFbo();
 
@@ -620,6 +628,7 @@ private:
 
     // Frustum culling statistics (updated each frame in renderScene)
     CullingStats m_cullingStats;
+
 
     // Per-frame PMR arena for scratch allocations (reset each frame)
     static constexpr size_t FRAME_ARENA_SIZE = 2 * 1024 * 1024;  // 2 MB
