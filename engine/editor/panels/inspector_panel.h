@@ -14,6 +14,7 @@ namespace Vestige
 
 class CommandHistory;
 class Entity;
+class ResourceManager;
 class Scene;
 class Selection;
 
@@ -27,6 +28,9 @@ public:
 
     /// @brief Sets the command history for undo support.
     void setCommandHistory(CommandHistory* history) { m_commandHistory = history; }
+
+    /// @brief Sets the resource manager for material library operations.
+    void setResourceManager(ResourceManager* rm) { m_resourceManager = rm; }
 
     /// @brief Draws the inspector contents inside the current ImGui window.
     /// @param scene Active scene (may be nullptr).
@@ -53,6 +57,8 @@ private:
 
     // Undo support
     CommandHistory* m_commandHistory = nullptr;
+    ResourceManager* m_resourceManager = nullptr;
+    std::string m_assetPath;
     Scene* m_currentScene = nullptr;
 
     // Transform edit bracketing (DragFloat start/end tracking)

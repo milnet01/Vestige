@@ -17,6 +17,8 @@
 #include "renderer/material.h"
 #include "renderer/texture.h"
 #include "renderer/light_utils.h"
+#include "resource/resource_manager.h"
+#include "utils/material_library.h"
 
 #include <imgui.h>
 #include <imgui_internal.h>
@@ -149,6 +151,7 @@ static Vec3EditState drawVec3Control(const char* label, glm::vec3& values,
 
 void InspectorPanel::initialize(const std::string& assetPath)
 {
+    m_assetPath = assetPath;
     m_materialPreview.initialize(assetPath);
 }
 
@@ -479,6 +482,51 @@ void InspectorPanel::drawMaterial(Material& material)
     if (!material.name.empty())
     {
         ImGui::Text("Name: %s", material.name.c_str());
+    }
+
+    // --- Material library: save/load presets ---
+    if (m_resourceManager && !m_assetPath.empty())
+    {
+        const std::string& assetPath = m_assetPath;
+
+        // Save button with name input
+        static char saveNameBuf[128] = "";
+        ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 80.0f);
+        ImGui::InputTextWithHint("##MatSaveName", "preset name", saveNameBuf, sizeof(saveNameBuf));
+        ImGui::SameLine();
+        if (ImGui::Button("Save", ImVec2(70, 0)))
+        {
+            std::string saveName(saveNameBuf);
+            if (!saveName.empty())
+            {
+                MaterialLibrary::saveMaterial(saveName, material, *m_resourceManager, assetPath);
+            }
+        }
+
+        // Load combo from existing presets
+        auto presets = MaterialLibrary::listPresets(assetPath);
+        if (!presets.empty())
+        {
+            static int selectedPreset = -1;
+            std::vector<const char*> items;
+            items.reserve(presets.size());
+            for (const auto& p : presets)
+            {
+                items.push_back(p.c_str());
+            }
+            ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 80.0f);
+            ImGui::Combo("##MatLoadPreset", &selectedPreset, items.data(),
+                         static_cast<int>(items.size()));
+            ImGui::SameLine();
+            if (ImGui::Button("Load", ImVec2(70, 0)) && selectedPreset >= 0
+                && selectedPreset < static_cast<int>(presets.size()))
+            {
+                MaterialLibrary::loadMaterial(presets[selectedPreset], material,
+                                              *m_resourceManager, assetPath);
+            }
+        }
+        ImGui::Spacing();
+        ImGui::Separator();
     }
 
     // Material type selector
