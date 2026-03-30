@@ -408,26 +408,26 @@ Animated objects and characters are essential for doors, swinging censers, pries
 - [x] Bone/joint hierarchy (skeleton loaded from glTF) — Phase 7A
 - [x] Skinned mesh rendering (vertex skinning with bone weights in the vertex shader) — Phase 7A
 - [x] Animation clip playback (keyframe interpolation — position, rotation, scale) — Phase 7A
-- [ ] Animation blending (cross-fade between clips, layered blending)
-- [ ] Animation state machine (idle → walk → run transitions with conditions)
-- [ ] Root motion support (animation drives entity movement, not just visual)
+- [x] Animation blending (cross-fade between clips, layered blending) — Phase 7B
+- [x] Animation state machine (idle → walk → run transitions with conditions) — Phase 7B
+- [x] Root motion support (animation drives entity movement, not just visual) — Phase 7B
 
 ### Object Animation
-- [ ] Property animation system (animate any numeric property over time — position, rotation, color, intensity)
-- [ ] Animation curves (linear, ease-in/out, cubic bezier)
-- [ ] Looping, ping-pong, and one-shot playback modes
-- [ ] Animation events (trigger callbacks at specific keyframes — play sound, spawn particles)
+- [x] Property animation system (animate any numeric property over time — position, rotation, color, intensity) — Phase 7C
+- [x] Animation curves (linear, ease-in/out, cubic bezier) — Phase 7C
+- [x] Looping, ping-pong, and one-shot playback modes — Phase 7C
+- [x] Animation events (trigger callbacks at specific keyframes — play sound, spawn particles) — Phase 7C
 
 ### Inverse Kinematics (IK)
-- [ ] Two-bone IK solver (arms, legs — reach for a target position)
-- [ ] Foot IK (plant feet correctly on slopes, stairs, and uneven terrain)
-- [ ] Hand IK (reach for door handles, grab objects, brace against walls)
-- [ ] Look-at / head IK (characters turn head toward points of interest)
-- [ ] IK blending with animation clips (IK layer on top of baked animations)
+- [x] Two-bone IK solver (arms, legs — reach for a target position) — Phase 7D
+- [x] Foot IK (plant feet correctly on slopes, stairs, and uneven terrain) — Phase 7D
+- [x] Hand IK (reach for door handles, grab objects, brace against walls) — Phase 7D (uses two-bone IK)
+- [x] Look-at / head IK (characters turn head toward points of interest) — Phase 7D
+- [x] IK blending with animation clips (IK layer on top of baked animations) — Phase 7D (weight parameter)
 
 ### glTF Animation Import
 - [x] Import skeletal animations from glTF files — Phase 7A
-- [ ] Import morph target / blend shape animations
+- [x] Import morph target / blend shape animations — Phase 7E
 - [x] Multiple animation clips per model (walk, idle, gesture) — Phase 7A
 
 ### Milestone
@@ -551,11 +551,19 @@ The engine targets Linux and Windows from the start (CLAUDE.md). The codebase is
 - [ ] Test cross-compiled binary on Windows (or Wine)
 
 ### Asset Pipeline
-- [ ] Texture compression (BC7 for desktop, ASTC for mobile — compress on import, decompress on GPU)
+- [ ] Texture compression (BC7/KTX2 for desktop, ASTC for mobile — compress on import, load directly to GPU)
 - [ ] Automatic mipmap generation with quality filtering options
 - [ ] Asset cooking / baking (preprocess models, textures, shaders into optimized binary format)
 - [ ] Asset manifest and dependency tracking (know exactly what each scene needs)
 - [ ] Hot-reload during development (detect changed assets, reload without restarting)
+
+### Compression and Size Optimization
+- [ ] GPU texture compression pipeline (BC7/BC1 via KTX2 — ~4x VRAM reduction, faster loads)
+- [ ] Asset packaging (bundle assets into compressed archives with zstd/LZ4 for distribution)
+- [ ] Animation data compression (16-bit half-float positions, smallest-3 quaternion encoding)
+- [ ] Mesh compression (Draco or meshoptimizer for glTF geometry data)
+- [ ] Strip source assets from builds (exclude .blend, raw PSD/EXR source files)
+- [ ] Binary size optimization (link-time optimization, dead code stripping for release builds)
 
 ### Application Distribution
 - [ ] Steam SDK integration

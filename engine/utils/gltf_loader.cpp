@@ -3,6 +3,7 @@
 #include "utils/gltf_loader.h"
 #include "animation/skeleton.h"
 #include "animation/animation_clip.h"
+#include "animation/morph_target.h"
 #include "core/logger.h"
 
 // Must match defines in gltf_loader_impl.cpp to avoid stb_image conflicts
@@ -723,6 +724,99 @@ static void loadMeshes(const tinygltf::Model& gltfModel, Model& outModel)
                 }
             }
 
+            // --- Read morph targets (primitive.targets) ---
+            MorphTargetData morphData;
+            if (!primitive.targets.empty())
+            {
+                morphData.vertexCount = vertices.size();
+
+                for (size_t ti = 0; ti < primitive.targets.size(); ++ti)
+                {
+                    const auto& targetAttrs = primitive.targets[ti];
+                    MorphTarget mt;
+
+                    // Target name from mesh extras or gltfMesh.extras
+                    if (ti < gltfMesh.extras.Size())
+                    {
+                        // Some exporters store target names in mesh extras
+                    }
+                    mt.name = "target_" + std::to_string(ti);
+
+                    // Position deltas
+                    auto posIt = targetAttrs.find("POSITION");
+                    if (posIt != targetAttrs.end() && posIt->second >= 0)
+                    {
+                        const unsigned char* data = validateAccessorData(
+                            gltfModel, posIt->second, sizeof(float) * 3, "morph POSITION");
+                        if (data)
+                        {
+                            const auto& acc = gltfModel.accessors[static_cast<size_t>(posIt->second)];
+                            const auto& bv = gltfModel.bufferViews[static_cast<size_t>(acc.bufferView)];
+                            size_t stride = bv.byteStride > 0 ? bv.byteStride : sizeof(float) * 3;
+                            mt.positionDeltas.resize(acc.count);
+                            for (size_t i = 0; i < acc.count; ++i)
+                            {
+                                const float* fp = reinterpret_cast<const float*>(data + stride * i);
+                                mt.positionDeltas[i] = glm::vec3(fp[0], fp[1], fp[2]);
+                            }
+                        }
+                    }
+
+                    // Normal deltas
+                    auto norIt = targetAttrs.find("NORMAL");
+                    if (norIt != targetAttrs.end() && norIt->second >= 0)
+                    {
+                        const unsigned char* data = validateAccessorData(
+                            gltfModel, norIt->second, sizeof(float) * 3, "morph NORMAL");
+                        if (data)
+                        {
+                            const auto& acc = gltfModel.accessors[static_cast<size_t>(norIt->second)];
+                            const auto& bv = gltfModel.bufferViews[static_cast<size_t>(acc.bufferView)];
+                            size_t stride = bv.byteStride > 0 ? bv.byteStride : sizeof(float) * 3;
+                            mt.normalDeltas.resize(acc.count);
+                            for (size_t i = 0; i < acc.count; ++i)
+                            {
+                                const float* fp = reinterpret_cast<const float*>(data + stride * i);
+                                mt.normalDeltas[i] = glm::vec3(fp[0], fp[1], fp[2]);
+                            }
+                        }
+                    }
+
+                    // Tangent deltas
+                    auto tanIt = targetAttrs.find("TANGENT");
+                    if (tanIt != targetAttrs.end() && tanIt->second >= 0)
+                    {
+                        const unsigned char* data = validateAccessorData(
+                            gltfModel, tanIt->second, sizeof(float) * 3, "morph TANGENT");
+                        if (data)
+                        {
+                            const auto& acc = gltfModel.accessors[static_cast<size_t>(tanIt->second)];
+                            const auto& bv = gltfModel.bufferViews[static_cast<size_t>(acc.bufferView)];
+                            size_t stride = bv.byteStride > 0 ? bv.byteStride : sizeof(float) * 3;
+                            mt.tangentDeltas.resize(acc.count);
+                            for (size_t i = 0; i < acc.count; ++i)
+                            {
+                                const float* fp = reinterpret_cast<const float*>(data + stride * i);
+                                mt.tangentDeltas[i] = glm::vec3(fp[0], fp[1], fp[2]);
+                            }
+                        }
+                    }
+
+                    morphData.targets.push_back(std::move(mt));
+                }
+
+                // Default weights from mesh
+                for (double w : gltfMesh.weights)
+                {
+                    morphData.defaultWeights.push_back(static_cast<float>(w));
+                }
+                // Pad with zeros if fewer weights than targets
+                morphData.defaultWeights.resize(morphData.targets.size(), 0.0f);
+
+                Logger::info("glTF: loaded " + std::to_string(morphData.targets.size())
+                    + " morph target(s) for mesh '" + gltfMesh.name + "'");
+            }
+
             // --- Read indices ---
             if (primitive.indices >= 0)
             {
@@ -806,7 +900,8 @@ static void loadMeshes(const tinygltf::Model& gltfModel, Model& outModel)
             modelPrim.mesh = mesh;
             modelPrim.materialIndex = primitive.material;
             modelPrim.bounds = bounds;
-            outModel.m_primitives.push_back(modelPrim);
+            modelPrim.morphTargets = std::move(morphData);
+            outModel.m_primitives.push_back(std::move(modelPrim));
         }
     }
 }
@@ -1179,9 +1274,13 @@ static void loadAnimations(const tinygltf::Model& gltfModel, Model& outModel)
             {
                 animChannel.targetPath = AnimTargetPath::SCALE;
             }
+            else if (channel.target_path == "weights")
+            {
+                animChannel.targetPath = AnimTargetPath::WEIGHTS;
+            }
             else
             {
-                continue;  // "weights" (morph targets) — Phase 7E
+                continue;  // Unknown target path
             }
 
             // Interpolation
@@ -1207,6 +1306,18 @@ static void loadAnimations(const tinygltf::Model& gltfModel, Model& outModel)
             if (channel.target_path == "rotation")
             {
                 components = 4;  // quaternion xyzw
+            }
+            else if (channel.target_path == "weights")
+            {
+                // For morph targets, components = number of morph targets
+                // The accessor count = timestamps * morphTargetCount
+                // We read all floats and let the consumer interpret them
+                const auto& outAcc = gltfModel.accessors[static_cast<size_t>(sampler.output)];
+                if (!animChannel.timestamps.empty())
+                {
+                    components = static_cast<int>(outAcc.count / animChannel.timestamps.size());
+                    if (components < 1) components = 1;
+                }
             }
             animChannel.values = readFloatAccessor(
                 gltfModel, sampler.output, components, "animation values");

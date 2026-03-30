@@ -21,7 +21,8 @@ enum class AnimTargetPath
 {
     TRANSLATION,  ///< vec3
     ROTATION,     ///< quat (vec4 xyzw in glTF)
-    SCALE         ///< vec3
+    SCALE,        ///< vec3
+    WEIGHTS       ///< float[] (morph target weights, one per target per keyframe)
 };
 
 /// @brief A single animation channel — targets one property of one joint.
