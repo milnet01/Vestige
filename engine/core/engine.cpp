@@ -3,6 +3,7 @@
 #include "core/engine.h"
 #include "core/logger.h"
 #include "renderer/light_probe_manager.h"
+#include "renderer/sh_probe_grid.h"
 #include "scene/mesh_renderer.h"
 #include "scene/light_component.h"
 #include "scene/water_surface.h"
@@ -1519,7 +1520,7 @@ void Engine::setupTabernacleScene()
     const float tentL = 30.0f * C;   // 13.35m length (Z)
     const float tentW = 10.0f * C;   // 4.45m width (X)
     const float tentH = 10.0f * C;   // 4.45m height (Y)
-    const float wallThick = 0.15f;   // Wall/board thickness
+    const float wallThick = 0.40f;   // Wall/board thickness (thick enough for CSM shadow coverage)
 
     // Holy Place / Holy of Holies split
     const float holyPlaceL = 20.0f * C;    // 8.90m
@@ -1748,20 +1749,21 @@ void Engine::setupTabernacleScene()
     // =====================================================================
 
     // Layer 1: Inner linen curtains with cherubim (visible from inside)
+    // Roof layers are 0.15m thick each for proper CSM shadow coverage
     makeBox("Linen Ceiling", {0.0f, tentH, tentL / 2.0f},
-            {tentW + 0.3f, 0.05f, tentL + 0.3f}, linenMat);
+            {tentW + 0.3f, 0.15f, tentL + 0.3f}, linenMat);
 
     // Layer 2: Goat hair curtains
-    makeBox("Goat Hair Roof", {0.0f, tentH + 0.08f, tentL / 2.0f},
-            {tentW + 0.6f, 0.05f, tentL + 0.6f}, goatHairMat);
+    makeBox("Goat Hair Roof", {0.0f, tentH + 0.18f, tentL / 2.0f},
+            {tentW + 0.6f, 0.15f, tentL + 0.6f}, goatHairMat);
 
     // Layer 3: Ram skins dyed red
-    makeBox("Ram Skin Roof", {0.0f, tentH + 0.16f, tentL / 2.0f},
-            {tentW + 0.9f, 0.05f, tentL + 0.9f}, redLeatherMat);
+    makeBox("Ram Skin Roof", {0.0f, tentH + 0.36f, tentL / 2.0f},
+            {tentW + 0.9f, 0.15f, tentL + 0.9f}, redLeatherMat);
 
     // Layer 4: Tachash skins (outermost, largest)
-    makeBox("Tachash Roof", {0.0f, tentH + 0.24f, tentL / 2.0f},
-            {tentW + 1.2f, 0.05f, tentL + 1.2f}, darkHideMat);
+    makeBox("Tachash Roof", {0.0f, tentH + 0.54f, tentL / 2.0f},
+            {tentW + 1.2f, 0.15f, tentL + 1.2f}, darkHideMat);
 
     // =====================================================================
     // VEIL -- Dividing curtain between Holy Place and Holy of Holies
@@ -2153,20 +2155,39 @@ void Engine::setupTabernacleScene()
     // =====================================================================
     // LIGHT PROBE -- Tent interior (captures local lighting for correct IBL)
     // =====================================================================
+
+    // --- SH Probe Grid: covers the entire scene (courtyard + tent) ---
+    auto* shGrid = m_renderer->getSHProbeGrid();
+    if (shGrid)
+    {
+        SHGridConfig gridConfig;
+        // Grid covers courtyard + some margin
+        gridConfig.worldMin = glm::vec3(-courtW / 2.0f - 2.0f, -0.5f, courtWestZ - 2.0f);
+        gridConfig.worldMax = glm::vec3(courtW / 2.0f + 2.0f, tentH + 2.0f, courtEastZ + 5.0f);
+        // ~1m probe spacing: tight enough to prevent purple veil bleed
+        // onto nearby wood walls. Capture takes a few seconds but is one-time.
+        glm::vec3 gridSize = gridConfig.worldMax - gridConfig.worldMin;
+        gridConfig.resolution = glm::ivec3(
+            glm::max(2, static_cast<int>(gridSize.x / 1.0f)),
+            glm::max(2, static_cast<int>(gridSize.y / 1.0f)),
+            glm::max(2, static_cast<int>(gridSize.z / 1.0f)));
+
+        shGrid->initialize(gridConfig);
+
+        // Capture from scene renders at each probe position
+        auto renderData = scene->collectRenderData();
+        m_renderer->captureSHGrid(renderData, *m_camera, 1.0f);
+    }
+
+    // Also keep the cubemap probe for specular reflections inside the tent
     auto* probeManager = m_renderer->getLightProbeManager();
     if (probeManager)
     {
-        // Probe positioned at the center of the Holy Place, eye height
         glm::vec3 probePos(0.0f, tentH * 0.5f, veilZ + holyPlaceL * 0.5f);
-
-        // Influence volume covers the entire tent interior
         AABB tentAABB;
         tentAABB.min = glm::vec3(-tentW / 2.0f - 0.5f, -0.1f, backZ - 0.5f);
         tentAABB.max = glm::vec3(tentW / 2.0f + 0.5f, tentH + 0.5f, frontZ + 0.5f);
-
         int probeIdx = probeManager->addProbe(probePos, tentAABB, 1.5f);
-
-        // Capture the probe after all geometry and lights are placed
         auto renderData = scene->collectRenderData();
         m_renderer->captureLightProbe(probeIdx, renderData, *m_camera, 1.0f);
     }
@@ -2182,7 +2203,7 @@ void Engine::setupTabernacleScene()
 
     Logger::info("Tabernacle scene ready: courtyard (60 pillars, gate, altar, laver), "
                  "tent (4 roof layers, veil, entrance), Ark, Menorah, Table, Incense Altar, "
-                 "1 light probe (tent interior)");
+                 "SH probe grid + cubemap probe");
 }
 
 } // namespace Vestige

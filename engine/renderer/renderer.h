@@ -18,6 +18,7 @@
 #include "renderer/color_grading_lut.h"
 #include "renderer/instance_buffer.h"
 #include "renderer/light_probe_manager.h"
+#include "renderer/sh_probe_grid.h"
 #include "renderer/environment_map.h"
 #include "renderer/depth_reducer.h"
 #include "renderer/smaa.h"
@@ -105,6 +106,14 @@ public:
 
     /// @brief Gets the light probe manager for adding/configuring probes.
     LightProbeManager* getLightProbeManager() const { return m_lightProbeManager.get(); }
+
+    /// @brief Gets the SH probe grid for configuration and capture.
+    SHProbeGrid* getSHProbeGrid() const { return m_shProbeGrid.get(); }
+
+    /// @brief Captures the SH probe grid by rendering cubemaps at each probe position.
+    /// Call after scene geometry and lights are placed.
+    void captureSHGrid(const SceneRenderData& renderData,
+                       const Camera& camera, float aspectRatio);
 
     /// @brief Captures a light probe by rendering the scene from the probe's position.
     /// @param probeIndex Index of the probe in the LightProbeManager.
@@ -435,6 +444,10 @@ private:
 
     // Light probes
     std::unique_ptr<LightProbeManager> m_lightProbeManager;
+
+    // SH probe grid
+    std::unique_ptr<SHProbeGrid> m_shProbeGrid;
+    GLuint m_fallbackTex3D = 0;  ///< 1×1×1 3D texture for Mesa sampler binding safety
 
     // Text rendering
     std::unique_ptr<TextRenderer> m_textRenderer;

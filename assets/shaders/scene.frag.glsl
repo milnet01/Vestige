@@ -134,6 +134,12 @@ uniform float u_probeWeight;            // 0=global only, 1=probe only (blends a
 uniform samplerCube u_probeIrradianceMap;  // Unit 10
 uniform samplerCube u_probePrefilterMap;   // Unit 11
 
+// SH Probe Grid — smooth diffuse ambient from L2 spherical harmonics
+uniform bool u_hasSHGrid;
+uniform vec3 u_shGridWorldMin;
+uniform vec3 u_shGridWorldMax;
+uniform sampler3D u_shTex[7];           // Units 17-23
+
 // Stochastic tiling
 uniform bool u_stochasticTiling;
 
@@ -474,6 +480,52 @@ float geometrySmith(float NdotV, float NdotL, float roughness)
 vec3 fresnelSchlick(float cosTheta, vec3 F0)
 {
     return F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
+}
+
+/// Evaluate L2 SH irradiance from 7 packed RGBA16F 3D textures.
+/// Uses Ramamoorthi/Hanrahan optimized constants (basis × cosine lobe pre-baked).
+vec3 evaluateSHGridIrradiance(vec3 worldPos, vec3 normal)
+{
+    // Convert world position to grid UV [0,1]
+    vec3 gridUV = (worldPos - u_shGridWorldMin) / (u_shGridWorldMax - u_shGridWorldMin);
+    gridUV = clamp(gridUV, vec3(0.001), vec3(0.999));
+
+    // Sample 7 textures (hardware trilinear interpolation between 8 probes)
+    vec4 t0 = texture(u_shTex[0], gridUV);
+    vec4 t1 = texture(u_shTex[1], gridUV);
+    vec4 t2 = texture(u_shTex[2], gridUV);
+    vec4 t3 = texture(u_shTex[3], gridUV);
+    vec4 t4 = texture(u_shTex[4], gridUV);
+    vec4 t5 = texture(u_shTex[5], gridUV);
+    vec4 t6 = texture(u_shTex[6], gridUV);
+
+    // Unpack 9 vec3 coefficients from 7 vec4s
+    // Layout: 27 channels (9 coeffs × RGB) packed sequentially into RGBA
+    vec3 L[9];
+    L[0] = vec3(t0.r, t0.g, t0.b);
+    L[1] = vec3(t0.a, t1.r, t1.g);
+    L[2] = vec3(t1.b, t1.a, t2.r);
+    L[3] = vec3(t2.g, t2.b, t2.a);
+    L[4] = vec3(t3.r, t3.g, t3.b);
+    L[5] = vec3(t3.a, t4.r, t4.g);
+    L[6] = vec3(t4.b, t4.a, t5.r);
+    L[7] = vec3(t5.g, t5.b, t5.a);
+    L[8] = vec3(t6.r, t6.g, t6.b);
+
+    // Ramamoorthi/Hanrahan optimized evaluation (basis constants × cosine lobe)
+    const float c1 = 0.429043;
+    const float c2 = 0.511664;
+    const float c3 = 0.743125;
+    const float c4 = 0.886227;
+    const float c5 = 0.247708;
+
+    vec3 n = normal;
+    return max(vec3(0.0),
+        c4 * L[0] +
+        2.0 * c2 * (L[1]*n.y + L[2]*n.z + L[3]*n.x) +
+        2.0 * c1 * (L[4]*n.x*n.y + L[5]*n.y*n.z + L[7]*n.x*n.z) +
+        c3 * L[8] * (n.x*n.x - n.y*n.y) +
+        c5 * L[6] * (3.0*n.z*n.z - 1.0));
 }
 
 /// Fresnel-Schlick with roughness — prevents harsh edges on rough metals under IBL.
@@ -948,16 +1000,32 @@ void main()
             vec3 R = reflect(-viewDir, norm);
             float lod = roughness * u_maxPrefilterLod;
 
-            // Sample global (sky) IBL
-            vec3 irradiance = texture(u_irradianceMap, norm).rgb;
-            vec3 prefilteredColor = textureLod(u_prefilterMap, R, lod).rgb;
+            // Diffuse irradiance: SH grid (preferred) > cubemap probe > global sky
+            vec3 irradiance;
+            if (u_hasSHGrid)
+            {
+                // SH probe grid: smooth trilinear-interpolated local irradiance
+                irradiance = evaluateSHGridIrradiance(v_fragPosition, norm);
+            }
+            else if (u_hasProbe && u_probeWeight > 0.0)
+            {
+                // Cubemap probe: blend between global and probe irradiance
+                vec3 globalIrr = texture(u_irradianceMap, norm).rgb;
+                vec3 probeIrr = texture(u_probeIrradianceMap, norm).rgb;
+                irradiance = mix(globalIrr, probeIrr, u_probeWeight);
+            }
+            else
+            {
+                // Global sky IBL only
+                irradiance = texture(u_irradianceMap, norm).rgb;
+            }
 
-            // Blend with light probe IBL if available
+            // Specular: always use global prefilter cubemap (SH is diffuse-only)
+            // Cubemap probe can override specular in its influence zone
+            vec3 prefilteredColor = textureLod(u_prefilterMap, R, lod).rgb;
             if (u_hasProbe && u_probeWeight > 0.0)
             {
-                vec3 probeIrradiance = texture(u_probeIrradianceMap, norm).rgb;
                 vec3 probePrefilt = textureLod(u_probePrefilterMap, R, lod).rgb;
-                irradiance = mix(irradiance, probeIrradiance, u_probeWeight);
                 prefilteredColor = mix(prefilteredColor, probePrefilt, u_probeWeight);
             }
 
