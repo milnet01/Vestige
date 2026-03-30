@@ -142,6 +142,13 @@ Renderer::Renderer(EventBus& eventBus)
                                 GL_RGBA, GL_UNSIGNED_BYTE, black);
         }
 
+        // 1x1x1 3D texture (fallback for sampler3D — SH probe grid)
+        glCreateTextures(GL_TEXTURE_3D, 1, &m_fallbackTex3D);
+        glTextureStorage3D(m_fallbackTex3D, 1, GL_RGBA16F, 1, 1, 1);
+        float black4f[] = {0.0f, 0.0f, 0.0f, 0.0f};
+        glTextureSubImage3D(m_fallbackTex3D, 0, 0, 0, 0, 1, 1, 1,
+                            GL_RGBA, GL_FLOAT, black4f);
+
         // 1x1x1 2D array texture (fallback for sampler2DArray)
         glCreateTextures(GL_TEXTURE_2D_ARRAY, 1, &m_fallbackTexArray);
         glTextureStorage3D(m_fallbackTexArray, 1, GL_RGBA8, 1, 1, 1);
@@ -396,6 +403,13 @@ bool Renderer::loadShaders(const std::string& assetPath)
     m_sceneShader.setInt("u_probeIrradianceMap", 10);
     m_sceneShader.setInt("u_probePrefilterMap", 11);
     m_sceneShader.setInt("u_irradianceMap", 14);
+
+    // SH probe grid: 7 sampler3D on units 17-23
+    for (int i = 0; i < SHProbeGrid::SH_TEXTURE_COUNT; i++)
+    {
+        m_sceneShader.setInt("u_shTex[" + std::to_string(i) + "]",
+                             SHProbeGrid::FIRST_TEXTURE_UNIT + i);
+    }
     m_sceneShader.setInt("u_prefilterMap", 15);
     m_sceneShader.setInt("u_brdfLUT", 16);
 
@@ -623,6 +637,9 @@ void Renderer::initFramebuffers(int width, int height, int msaaSamples)
     m_lightProbeManager = std::make_unique<LightProbeManager>();
     m_lightProbeManager->initialize(m_assetPath);
 
+    // SH probe grid (created here, configured and filled by the scene)
+    m_shProbeGrid = std::make_unique<SHProbeGrid>();
+
     // Generate procedural caustics texture for underwater effects
     generateCausticsTexture();
 
@@ -685,6 +702,12 @@ void Renderer::beginFrame()
     glBindTextureUnit(14, m_fallbackCubemap);    // u_irradianceMap (samplerCube)
     glBindTextureUnit(15, m_fallbackCubemap);    // u_prefilterMap (samplerCube)
     glBindTextureUnit(16, m_fallbackTexture);    // u_brdfLUT
+
+    // SH probe grid: 7 sampler3D fallbacks (units 17-23)
+    for (int i = 0; i < SHProbeGrid::SH_TEXTURE_COUNT; i++)
+    {
+        glBindTextureUnit(SHProbeGrid::FIRST_TEXTURE_UNIT + i, m_fallbackTex3D);
+    }
 }
 
 void Renderer::endFrame(float deltaTime)
@@ -1699,6 +1722,133 @@ void Renderer::captureLightProbe(int probeIndex, const SceneRenderData& renderDa
     Logger::info("Light probe " + std::to_string(probeIndex) + " captured and convolved");
 }
 
+void Renderer::captureSHGrid(const SceneRenderData& renderData,
+                              const Camera& camera, float aspectRatio)
+{
+    if (!m_shProbeGrid || !m_shProbeGrid->isReady())
+    {
+        Logger::error("captureSHGrid: SH grid not initialized");
+        return;
+    }
+
+    glm::ivec3 res = m_shProbeGrid->getResolution();
+    glm::vec3 worldMin = m_shProbeGrid->getWorldMin();
+    glm::vec3 worldMax = m_shProbeGrid->getWorldMax();
+    glm::vec3 step = (worldMax - worldMin) / glm::vec3(glm::max(res - 1, glm::ivec3(1)));
+
+    int faceSize = 64;  // Small cubemap per probe (6 faces × 64×64)
+    int totalProbes = res.x * res.y * res.z;
+
+    Logger::info("Capturing SH probe grid: " + std::to_string(totalProbes) + " probes at "
+        + std::to_string(faceSize) + "x" + std::to_string(faceSize) + " per face");
+
+    // Create temporary capture cubemap + FBO
+    GLuint captureCubemap = 0;
+    glCreateTextures(GL_TEXTURE_CUBE_MAP, 1, &captureCubemap);
+    glTextureStorage2D(captureCubemap, 1, GL_RGB16F, faceSize, faceSize);
+    glTextureParameteri(captureCubemap, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTextureParameteri(captureCubemap, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    GLuint captureFbo = 0;
+    GLuint captureRbo = 0;
+    glCreateFramebuffers(1, &captureFbo);
+    glCreateRenderbuffers(1, &captureRbo);
+    glNamedRenderbufferStorage(captureRbo, GL_DEPTH_COMPONENT24, faceSize, faceSize);
+    glNamedFramebufferRenderbuffer(captureFbo, GL_DEPTH_ATTACHMENT,
+                                   GL_RENDERBUFFER, captureRbo);
+
+    // Face view targets + ups
+    static const glm::vec3 TARGETS[6] = {
+        { 1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0,-1, 0}, {0, 0, 1}, {0, 0,-1}
+    };
+    static const glm::vec3 UPS[6] = {
+        {0,-1, 0}, {0,-1, 0}, {0, 0, 1}, {0, 0,-1}, {0,-1, 0}, {0,-1, 0}
+    };
+    glm::mat4 captureProj = glm::perspective(glm::radians(90.0f), 1.0f, 0.1f, 100.0f);
+
+    // Buffer to read back cubemap face data
+    std::vector<float> facePixels(faceSize * faceSize * 3);
+    std::vector<float> cubemapData(6 * faceSize * faceSize * 3);
+
+    // Save GL state
+    GLint viewport[4];
+    glGetIntegerv(GL_VIEWPORT, viewport);
+
+    int captured = 0;
+    for (int z = 0; z < res.z; z++)
+    {
+        for (int y = 0; y < res.y; y++)
+        {
+            for (int x = 0; x < res.x; x++)
+            {
+                glm::vec3 probePos = worldMin + glm::vec3(x, y, z) * step;
+
+                // Render 6 cubemap faces from this position
+                for (int face = 0; face < 6; face++)
+                {
+                    glm::mat4 faceView = glm::lookAt(probePos,
+                        probePos + TARGETS[face], UPS[face]);
+
+                    glNamedFramebufferTextureLayer(captureFbo, GL_COLOR_ATTACHMENT0,
+                                                   captureCubemap, 0, face);
+                    glBindFramebuffer(GL_FRAMEBUFFER, captureFbo);
+                    glViewport(0, 0, faceSize, faceSize);
+
+                    // Forward-Z for capture (standard [-1,1] NDC)
+                    glClipControl(GL_LOWER_LEFT, GL_NEGATIVE_ONE_TO_ONE);
+                    glDepthFunc(GL_LESS);
+                    glClearDepth(1.0);
+                    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+                    renderScene(renderData, camera, 1.0f, glm::vec4(0.0f),
+                                true, faceView, captureProj);
+
+                    // Read back this face
+                    glReadPixels(0, 0, faceSize, faceSize, GL_RGB, GL_FLOAT,
+                                 cubemapData.data() + face * faceSize * faceSize * 3);
+                }
+
+                // Project cubemap to SH
+                glm::vec3 shCoeffs[9];
+                SHProbeGrid::projectCubemapToSH(cubemapData.data(), faceSize, shCoeffs);
+                SHProbeGrid::convolveRadianceToIrradiance(shCoeffs);
+                m_shProbeGrid->setProbeIrradiance(x, y, z, shCoeffs);
+
+                captured++;
+            }
+        }
+    }
+
+    // Restore GL state
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glViewport(viewport[0], viewport[1], viewport[2], viewport[3]);
+    glClipControl(GL_LOWER_LEFT, GL_ZERO_TO_ONE);
+    glDepthFunc(GL_GEQUAL);
+    glClearDepth(0.0);
+
+    // Clean up temporary resources
+    glDeleteTextures(1, &captureCubemap);
+    glDeleteFramebuffers(1, &captureFbo);
+    glDeleteRenderbuffers(1, &captureRbo);
+
+    // Upload SH data to GPU
+    m_shProbeGrid->upload();
+
+    // Drain GL errors and rebind fallbacks
+    while (glGetError() != GL_NO_ERROR) {}
+    for (int i = 0; i < 12; i++)
+    {
+        glBindTextureUnit(i, m_fallbackTexture);
+    }
+    glBindTextureUnit(4, m_fallbackCubemap);
+    glBindTextureUnit(5, m_fallbackCubemap);
+    glBindTextureUnit(10, m_fallbackCubemap);
+    glBindTextureUnit(11, m_fallbackCubemap);
+
+    Logger::info("SH probe grid captured: " + std::to_string(captured)
+        + " probes projected to L2 SH");
+}
+
 GLuint Renderer::getSkyboxTextureId() const
 {
     return m_skybox ? m_skybox->getTextureId() : 0;
@@ -2254,6 +2404,19 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
         // Probe defaults: no probe active (overridden per-entity in draw loop)
         m_sceneShader.setBool("u_hasProbe", false);
         m_sceneShader.setFloat("u_probeWeight", 0.0f);
+
+        // SH probe grid: bind textures and set uniforms if ready
+        if (m_shProbeGrid && m_shProbeGrid->isReady())
+        {
+            m_shProbeGrid->bind();
+            m_sceneShader.setBool("u_hasSHGrid", true);
+            m_sceneShader.setVec3("u_shGridWorldMin", m_shProbeGrid->getWorldMin());
+            m_sceneShader.setVec3("u_shGridWorldMax", m_shProbeGrid->getWorldMax());
+        }
+        else
+        {
+            m_sceneShader.setBool("u_hasSHGrid", false);
+        }
     }
     else
     {
