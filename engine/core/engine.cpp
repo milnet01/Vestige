@@ -126,6 +126,12 @@ bool Engine::initialize(const EngineConfig& config)
         m_waterFbo.init(w / 4, h / 4, w / 4, h / 4);
     }
 
+    // Initialize physics world
+    if (!m_physicsWorld.initialize())
+    {
+        Logger::warning("PhysicsWorld initialization failed — physics will be unavailable");
+    }
+
     // Initialize performance profiler
     m_profiler.init();
 
@@ -716,6 +722,12 @@ void Engine::run()
         // 4. Scene — update entities and components
         m_sceneManager->update(deltaTime);
 
+        // 4b. Physics — step the Jolt simulation
+        if (m_physicsWorld.isInitialized())
+        {
+            m_physicsWorld.update(deltaTime);
+        }
+
         // 5. Controller — process input and update camera
         Scene* activeScene = m_sceneManager->getActiveScene();
         if (activeScene)
@@ -1122,6 +1134,7 @@ void Engine::shutdown()
     m_waterRenderer.shutdown();
     m_particleRenderer.shutdown();
     m_profiler.shutdown();
+    m_physicsWorld.shutdown();
     m_debugDraw.cleanup();
     m_editor.reset();
     m_controller.reset();

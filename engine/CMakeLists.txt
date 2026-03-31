@@ -99,6 +99,9 @@ set(ENGINE_SOURCES
     animation/tween.cpp
     animation/ik_solver.cpp
     animation/morph_target.cpp
+    physics/physics_world.cpp
+    physics/rigid_body.cpp
+    physics/physics_debug.cpp
     profiler/gpu_timer.cpp
     profiler/cpu_profiler.cpp
     profiler/memory_tracker.cpp
@@ -130,6 +133,12 @@ target_include_directories(vestige_engine
         ${freetype_SOURCE_DIR}/include
 )
 
+# Mark Jolt headers as SYSTEM to suppress third-party warnings
+get_target_property(JOLT_INCLUDE_DIRS Jolt INTERFACE_INCLUDE_DIRECTORIES)
+if(JOLT_INCLUDE_DIRS)
+    target_include_directories(vestige_engine SYSTEM PUBLIC ${JOLT_INCLUDE_DIRS})
+endif()
+
 # Link dependencies
 target_link_libraries(vestige_engine
     PUBLIC
@@ -141,6 +150,7 @@ target_link_libraries(vestige_engine
         imguizmo_lib
         imgui_filebrowser
         nlohmann_json::nlohmann_json
+        Jolt
 )
 
 # Suppress warnings from third-party source files compiled as part of the engine
