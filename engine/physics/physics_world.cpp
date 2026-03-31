@@ -8,7 +8,15 @@
 #include <Jolt/Core/Factory.h>
 #include <Jolt/Physics/Body/BodyCreationSettings.h>
 #include <Jolt/Physics/Body/BodyActivationListener.h>
+#include <Jolt/Physics/Collision/RayCast.h>
+#include <Jolt/Physics/Collision/CastResult.h>
+#include <Jolt/Physics/Constraints/HingeConstraint.h>
+#include <Jolt/Physics/Constraints/FixedConstraint.h>
+#include <Jolt/Physics/Constraints/DistanceConstraint.h>
+#include <Jolt/Physics/Constraints/PointConstraint.h>
+#include <Jolt/Physics/Constraints/SliderConstraint.h>
 
+#include <cmath>
 #include <cstdarg>
 #include <cstdio>
 #include <string>
@@ -122,6 +130,17 @@ void PhysicsWorld::shutdown()
         return;
     }
 
+    // Remove all constraints before bodies
+    for (auto& [idx, constraint] : m_constraints)
+    {
+        JPH::TwoBodyConstraint* jc = constraint.getJoltConstraint();
+        if (jc)
+        {
+            m_physicsSystem->RemoveConstraint(jc);
+        }
+    }
+    m_constraints.clear();
+
     // Remove and destroy all bodies
     JPH::BodyInterface& bodyInterface = m_physicsSystem->GetBodyInterface();
     JPH::BodyIDVector bodyIds;
@@ -233,6 +252,9 @@ void PhysicsWorld::destroyBody(JPH::BodyID bodyId)
         return;
     }
 
+    // Remove any constraints referencing this body before destroying it
+    removeConstraintsForBody(bodyId);
+
     JPH::BodyInterface& bodyInterface = m_physicsSystem->GetBodyInterface();
     bodyInterface.RemoveBody(bodyId);
     bodyInterface.DestroyBody(bodyId);
@@ -288,6 +310,429 @@ JPH::BodyInterface& PhysicsWorld::getBodyInterface()
 const JPH::BodyInterface& PhysicsWorld::getBodyInterface() const
 {
     return m_physicsSystem->GetBodyInterface();
+}
+
+// ---------------------------------------------------------------------------
+// Constraint helpers
+// ---------------------------------------------------------------------------
+
+JPH::Body& PhysicsWorld::resolveBodyA(JPH::BodyID bodyA)
+{
+    if (bodyA.IsInvalid())
+    {
+        return JPH::Body::sFixedToWorld;
+    }
+
+    JPH::BodyLockWrite lock(m_physicsSystem->GetBodyLockInterface(), bodyA);
+    if (lock.Succeeded())
+    {
+        return lock.GetBody();
+    }
+
+    Logger::warning("PhysicsWorld: could not lock bodyA, using world anchor");
+    return JPH::Body::sFixedToWorld;
+}
+
+ConstraintHandle PhysicsWorld::registerConstraint(JPH::TwoBodyConstraint* constraint,
+                                                   ConstraintType type,
+                                                   JPH::BodyID bodyA, JPH::BodyID bodyB)
+{
+    ConstraintHandle handle;
+    handle.index = m_nextConstraintIndex++;
+    handle.generation = ++m_constraintGeneration;
+
+    PhysicsConstraint pc;
+    pc.m_constraint = constraint;
+    pc.m_handle = handle;
+    pc.m_type = type;
+    pc.m_bodyA = bodyA;
+    pc.m_bodyB = bodyB;
+
+    m_physicsSystem->AddConstraint(constraint);
+    m_constraints[handle.index] = std::move(pc);
+
+    return handle;
+}
+
+// ---------------------------------------------------------------------------
+// Constraint creation
+// ---------------------------------------------------------------------------
+
+ConstraintHandle PhysicsWorld::addHingeConstraint(
+    JPH::BodyID bodyA, JPH::BodyID bodyB,
+    const glm::vec3& pivotPoint,
+    const glm::vec3& hingeAxis,
+    const glm::vec3& normalAxis,
+    float limitsMinDeg, float limitsMaxDeg,
+    float maxFrictionTorque)
+{
+    if (!m_initialized || bodyB.IsInvalid())
+    {
+        return {};
+    }
+
+    JPH::HingeConstraintSettings settings;
+    settings.mSpace = JPH::EConstraintSpace::WorldSpace;
+    settings.mPoint1 = toJolt(pivotPoint);
+    settings.mPoint2 = toJolt(pivotPoint);
+    settings.mHingeAxis1 = toJolt(hingeAxis);
+    settings.mHingeAxis2 = toJolt(hingeAxis);
+    settings.mNormalAxis1 = toJolt(normalAxis);
+    settings.mNormalAxis2 = toJolt(normalAxis);
+    settings.mLimitsMin = JPH::DegreesToRadians(limitsMinDeg);
+    settings.mLimitsMax = JPH::DegreesToRadians(limitsMaxDeg);
+    settings.mMaxFrictionTorque = maxFrictionTorque;
+
+    JPH::Body& bA = resolveBodyA(bodyA);
+    JPH::BodyLockWrite lockB(m_physicsSystem->GetBodyLockInterface(), bodyB);
+    if (!lockB.Succeeded())
+    {
+        return {};
+    }
+
+    auto* constraint = static_cast<JPH::HingeConstraint*>(
+        settings.Create(bA, lockB.GetBody()));
+
+    return registerConstraint(constraint, ConstraintType::HINGE, bodyA, bodyB);
+}
+
+ConstraintHandle PhysicsWorld::addFixedConstraint(
+    JPH::BodyID bodyA, JPH::BodyID bodyB)
+{
+    if (!m_initialized || bodyB.IsInvalid())
+    {
+        return {};
+    }
+
+    JPH::FixedConstraintSettings settings;
+    settings.mSpace = JPH::EConstraintSpace::WorldSpace;
+    settings.mAutoDetectPoint = true;
+
+    JPH::Body& bA = resolveBodyA(bodyA);
+    JPH::BodyLockWrite lockB(m_physicsSystem->GetBodyLockInterface(), bodyB);
+    if (!lockB.Succeeded())
+    {
+        return {};
+    }
+
+    auto* constraint = static_cast<JPH::FixedConstraint*>(
+        settings.Create(bA, lockB.GetBody()));
+
+    return registerConstraint(constraint, ConstraintType::FIXED, bodyA, bodyB);
+}
+
+ConstraintHandle PhysicsWorld::addDistanceConstraint(
+    JPH::BodyID bodyA, JPH::BodyID bodyB,
+    const glm::vec3& pointA, const glm::vec3& pointB,
+    float minDist, float maxDist,
+    float springFrequency, float springDamping)
+{
+    if (!m_initialized || bodyB.IsInvalid())
+    {
+        return {};
+    }
+
+    JPH::DistanceConstraintSettings settings;
+    settings.mSpace = JPH::EConstraintSpace::WorldSpace;
+    settings.mPoint1 = toJolt(pointA);
+    settings.mPoint2 = toJolt(pointB);
+    settings.mMinDistance = minDist;
+    settings.mMaxDistance = maxDist;
+
+    if (springFrequency > 0.0f)
+    {
+        settings.mLimitsSpringSettings.mMode = JPH::ESpringMode::FrequencyAndDamping;
+        settings.mLimitsSpringSettings.mFrequency = springFrequency;
+        settings.mLimitsSpringSettings.mDamping = springDamping;
+    }
+
+    JPH::Body& bA = resolveBodyA(bodyA);
+    JPH::BodyLockWrite lockB(m_physicsSystem->GetBodyLockInterface(), bodyB);
+    if (!lockB.Succeeded())
+    {
+        return {};
+    }
+
+    auto* constraint = static_cast<JPH::DistanceConstraint*>(
+        settings.Create(bA, lockB.GetBody()));
+
+    return registerConstraint(constraint, ConstraintType::DISTANCE, bodyA, bodyB);
+}
+
+ConstraintHandle PhysicsWorld::addPointConstraint(
+    JPH::BodyID bodyA, JPH::BodyID bodyB,
+    const glm::vec3& pivotPoint)
+{
+    if (!m_initialized || bodyB.IsInvalid())
+    {
+        return {};
+    }
+
+    JPH::PointConstraintSettings settings;
+    settings.mSpace = JPH::EConstraintSpace::WorldSpace;
+    settings.mPoint1 = toJolt(pivotPoint);
+    settings.mPoint2 = toJolt(pivotPoint);
+
+    JPH::Body& bA = resolveBodyA(bodyA);
+    JPH::BodyLockWrite lockB(m_physicsSystem->GetBodyLockInterface(), bodyB);
+    if (!lockB.Succeeded())
+    {
+        return {};
+    }
+
+    auto* constraint = static_cast<JPH::PointConstraint*>(
+        settings.Create(bA, lockB.GetBody()));
+
+    return registerConstraint(constraint, ConstraintType::POINT, bodyA, bodyB);
+}
+
+ConstraintHandle PhysicsWorld::addSliderConstraint(
+    JPH::BodyID bodyA, JPH::BodyID bodyB,
+    const glm::vec3& slideAxis,
+    float limitsMin, float limitsMax,
+    float maxFrictionForce)
+{
+    if (!m_initialized || bodyB.IsInvalid())
+    {
+        return {};
+    }
+
+    JPH::SliderConstraintSettings settings;
+    settings.mSpace = JPH::EConstraintSpace::WorldSpace;
+    settings.mSliderAxis1 = toJolt(slideAxis);
+    settings.mSliderAxis2 = toJolt(slideAxis);
+
+    // Compute a valid normal axis perpendicular to the slide axis
+    JPH::Vec3 axis = toJolt(slideAxis).Normalized();
+    JPH::Vec3 up = JPH::Vec3::sAxisY();
+    if (std::abs(axis.Dot(up)) > 0.99f)
+    {
+        up = JPH::Vec3::sAxisX();
+    }
+    JPH::Vec3 normal = axis.Cross(up).Normalized();
+    settings.mNormalAxis1 = normal;
+    settings.mNormalAxis2 = normal;
+
+    settings.mLimitsMin = limitsMin;
+    settings.mLimitsMax = limitsMax;
+    settings.mMaxFrictionForce = maxFrictionForce;
+
+    JPH::Body& bA = resolveBodyA(bodyA);
+    JPH::BodyLockWrite lockB(m_physicsSystem->GetBodyLockInterface(), bodyB);
+    if (!lockB.Succeeded())
+    {
+        return {};
+    }
+
+    auto* constraint = static_cast<JPH::SliderConstraint*>(
+        settings.Create(bA, lockB.GetBody()));
+
+    return registerConstraint(constraint, ConstraintType::SLIDER, bodyA, bodyB);
+}
+
+// ---------------------------------------------------------------------------
+// Constraint access and removal
+// ---------------------------------------------------------------------------
+
+PhysicsConstraint* PhysicsWorld::getConstraint(ConstraintHandle handle)
+{
+    if (!handle.isValid())
+    {
+        return nullptr;
+    }
+
+    auto it = m_constraints.find(handle.index);
+    if (it == m_constraints.end() || it->second.getHandle().generation != handle.generation)
+    {
+        return nullptr;
+    }
+    return &it->second;
+}
+
+const PhysicsConstraint* PhysicsWorld::getConstraint(ConstraintHandle handle) const
+{
+    if (!handle.isValid())
+    {
+        return nullptr;
+    }
+
+    auto it = m_constraints.find(handle.index);
+    if (it == m_constraints.end() || it->second.getHandle().generation != handle.generation)
+    {
+        return nullptr;
+    }
+    return &it->second;
+}
+
+void PhysicsWorld::removeConstraint(ConstraintHandle handle)
+{
+    if (!m_initialized || !handle.isValid())
+    {
+        return;
+    }
+
+    auto it = m_constraints.find(handle.index);
+    if (it == m_constraints.end() || it->second.getHandle().generation != handle.generation)
+    {
+        return;
+    }
+
+    JPH::TwoBodyConstraint* joltConstraint = it->second.getJoltConstraint();
+    if (joltConstraint)
+    {
+        m_physicsSystem->RemoveConstraint(joltConstraint);
+    }
+
+    m_constraints.erase(it);
+}
+
+void PhysicsWorld::removeConstraintsForBody(JPH::BodyID bodyId)
+{
+    if (!m_initialized || bodyId.IsInvalid())
+    {
+        return;
+    }
+
+    // Collect handles to remove (don't modify map during iteration)
+    std::vector<ConstraintHandle> toRemove;
+    for (const auto& [idx, constraint] : m_constraints)
+    {
+        if (constraint.getBodyA() == bodyId || constraint.getBodyB() == bodyId)
+        {
+            toRemove.push_back(constraint.getHandle());
+        }
+    }
+
+    for (const auto& handle : toRemove)
+    {
+        removeConstraint(handle);
+    }
+}
+
+void PhysicsWorld::checkBreakableConstraints(float deltaTime)
+{
+    if (!m_initialized || deltaTime <= 0.0f)
+    {
+        return;
+    }
+
+    for (auto& [idx, constraint] : m_constraints)
+    {
+        if (constraint.getBreakForce() <= 0.0f || !constraint.isEnabled())
+        {
+            continue;
+        }
+
+        float impulse = 0.0f;
+        switch (constraint.getType())
+        {
+        case ConstraintType::HINGE:
+            if (auto* h = constraint.asHinge())
+            {
+                impulse = toGlm(h->GetTotalLambdaPosition()).length();
+            }
+            break;
+        case ConstraintType::FIXED:
+            if (auto* f = constraint.asFixed())
+            {
+                impulse = toGlm(f->GetTotalLambdaPosition()).length();
+            }
+            break;
+        case ConstraintType::DISTANCE:
+            if (auto* d = constraint.asDistance())
+            {
+                impulse = std::abs(d->GetTotalLambdaPosition());
+            }
+            break;
+        case ConstraintType::POINT:
+            if (auto* p = constraint.asPoint())
+            {
+                impulse = toGlm(p->GetTotalLambdaPosition()).length();
+            }
+            break;
+        case ConstraintType::SLIDER:
+            if (auto* s = constraint.asSlider())
+            {
+                impulse = toGlm(JPH::Vec3(s->GetTotalLambdaPosition()[0],
+                                            s->GetTotalLambdaPosition()[1],
+                                            0.0f)).length();
+            }
+            break;
+        }
+
+        float force = impulse / deltaTime;
+        constraint.m_currentForce = force;
+
+        if (force > constraint.getBreakForce())
+        {
+            constraint.setEnabled(false);
+            Logger::info("Constraint " + std::to_string(constraint.getHandle().index) +
+                         " broke (force: " + std::to_string(force) +
+                         " > threshold: " + std::to_string(constraint.getBreakForce()) + ")");
+        }
+    }
+}
+
+std::vector<ConstraintHandle> PhysicsWorld::getConstraintHandles() const
+{
+    std::vector<ConstraintHandle> handles;
+    handles.reserve(m_constraints.size());
+    for (const auto& [idx, constraint] : m_constraints)
+    {
+        handles.push_back(constraint.getHandle());
+    }
+    return handles;
+}
+
+// ---------------------------------------------------------------------------
+// Raycasting
+// ---------------------------------------------------------------------------
+
+bool PhysicsWorld::rayCast(const glm::vec3& origin, const glm::vec3& direction,
+                            JPH::BodyID& outBodyId, float& outFraction) const
+{
+    if (!m_initialized)
+    {
+        return false;
+    }
+
+    JPH::RRayCast ray(toJolt(origin), toJolt(direction));
+    JPH::RayCastResult result;
+
+    bool hit = m_physicsSystem->GetNarrowPhaseQuery().CastRay(
+        ray, result);
+
+    if (hit)
+    {
+        outBodyId = result.mBodyID;
+        outFraction = result.mFraction;
+    }
+
+    return hit;
+}
+
+void PhysicsWorld::applyImpulseAtPoint(JPH::BodyID bodyId,
+                                        const glm::vec3& impulse,
+                                        const glm::vec3& worldPoint)
+{
+    if (!m_initialized || bodyId.IsInvalid())
+    {
+        return;
+    }
+
+    JPH::BodyInterface& bodyInterface = m_physicsSystem->GetBodyInterface();
+    bodyInterface.AddImpulse(bodyId, toJolt(impulse), toJolt(worldPoint));
+}
+
+JPH::EMotionType PhysicsWorld::getBodyMotionType(JPH::BodyID bodyId) const
+{
+    if (!m_initialized || bodyId.IsInvalid())
+    {
+        return JPH::EMotionType::Static;
+    }
+
+    const JPH::BodyInterface& bodyInterface = m_physicsSystem->GetBodyInterface();
+    return bodyInterface.GetMotionType(bodyId);
 }
 
 } // namespace Vestige

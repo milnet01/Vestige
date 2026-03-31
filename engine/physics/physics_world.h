@@ -3,6 +3,7 @@
 #pragma once
 
 #include "physics/physics_layers.h"
+#include "physics/physics_constraint.h"
 
 #include <Jolt/Jolt.h>
 #include <Jolt/Core/TempAllocator.h>
@@ -15,6 +16,8 @@
 #include <glm/gtc/quaternion.hpp>
 
 #include <memory>
+#include <unordered_map>
+#include <vector>
 
 namespace Vestige
 {
@@ -112,6 +115,79 @@ public:
     const ObjectLayerPairFilter& getObjectPairFilter() const { return m_objectPairFilter; }
     const ObjectVsBroadPhaseFilter& getObjectVsBroadPhaseFilter() const { return m_objectVsBpFilter; }
 
+    // ----- Constraint management -----
+
+    /// @brief Creates a hinge constraint between two bodies.
+    /// Pass invalid BodyID for bodyA to attach bodyB to the world.
+    ConstraintHandle addHingeConstraint(
+        JPH::BodyID bodyA, JPH::BodyID bodyB,
+        const glm::vec3& pivotPoint,
+        const glm::vec3& hingeAxis,
+        const glm::vec3& normalAxis,
+        float limitsMinDeg = -180.0f,
+        float limitsMaxDeg = 180.0f,
+        float maxFrictionTorque = 0.0f);
+
+    /// @brief Creates a fixed constraint welding two bodies together.
+    ConstraintHandle addFixedConstraint(
+        JPH::BodyID bodyA, JPH::BodyID bodyB);
+
+    /// @brief Creates a distance constraint between attachment points.
+    /// Set minDist/maxDist to -1 for auto-detection from body positions.
+    ConstraintHandle addDistanceConstraint(
+        JPH::BodyID bodyA, JPH::BodyID bodyB,
+        const glm::vec3& pointA, const glm::vec3& pointB,
+        float minDist = -1.0f, float maxDist = -1.0f,
+        float springFrequency = 0.0f, float springDamping = 0.0f);
+
+    /// @brief Creates a point (ball-and-socket) constraint.
+    ConstraintHandle addPointConstraint(
+        JPH::BodyID bodyA, JPH::BodyID bodyB,
+        const glm::vec3& pivotPoint);
+
+    /// @brief Creates a slider constraint along an axis.
+    ConstraintHandle addSliderConstraint(
+        JPH::BodyID bodyA, JPH::BodyID bodyB,
+        const glm::vec3& slideAxis,
+        float limitsMin = -1.0f, float limitsMax = 1.0f,
+        float maxFrictionForce = 0.0f);
+
+    /// @brief Returns a constraint by handle, or nullptr if invalid/stale.
+    PhysicsConstraint* getConstraint(ConstraintHandle handle);
+    const PhysicsConstraint* getConstraint(ConstraintHandle handle) const;
+
+    /// @brief Removes a constraint by handle.
+    void removeConstraint(ConstraintHandle handle);
+
+    /// @brief Removes all constraints that reference the given body.
+    void removeConstraintsForBody(JPH::BodyID bodyId);
+
+    /// @brief Checks breakable constraints and disables those exceeding their threshold.
+    /// Call after update() each frame.
+    void checkBreakableConstraints(float deltaTime);
+
+    /// @brief Returns all active constraint handles (for debug drawing, etc.).
+    std::vector<ConstraintHandle> getConstraintHandles() const;
+
+    // ----- Raycasting -----
+
+    /// @brief Casts a ray and returns the closest hit body.
+    /// @param origin Ray origin in world space.
+    /// @param direction Ray direction (not normalized — length = max distance).
+    /// @param outBodyId Set to the hit body ID if hit occurred.
+    /// @param outFraction Set to the fraction along the ray [0,1] where the hit occurred.
+    /// @return True if a body was hit.
+    bool rayCast(const glm::vec3& origin, const glm::vec3& direction,
+                 JPH::BodyID& outBodyId, float& outFraction) const;
+
+    /// @brief Applies an impulse at a specific world-space point on a body.
+    void applyImpulseAtPoint(JPH::BodyID bodyId,
+                              const glm::vec3& impulse,
+                              const glm::vec3& worldPoint);
+
+    /// @brief Returns the motion type of a body.
+    JPH::EMotionType getBodyMotionType(JPH::BodyID bodyId) const;
+
 private:
     std::unique_ptr<JPH::PhysicsSystem> m_physicsSystem;
     std::unique_ptr<JPH::TempAllocatorImpl> m_tempAllocator;
@@ -125,6 +201,19 @@ private:
     int m_collisionSteps = 1;
     float m_accumulator = 0.0f;
     bool m_initialized = false;
+
+    // Constraint storage
+    std::unordered_map<uint32_t, PhysicsConstraint> m_constraints;
+    uint32_t m_nextConstraintIndex = 0;
+    uint32_t m_constraintGeneration = 0;
+
+    /// @brief Resolves bodyA for constraint creation. Invalid ID = Body::sFixedToWorld.
+    JPH::Body& resolveBodyA(JPH::BodyID bodyA);
+
+    /// @brief Registers a newly created constraint and returns its handle.
+    ConstraintHandle registerConstraint(JPH::TwoBodyConstraint* constraint,
+                                         ConstraintType type,
+                                         JPH::BodyID bodyA, JPH::BodyID bodyB);
 };
 
 } // namespace Vestige

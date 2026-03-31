@@ -83,9 +83,77 @@ void PhysicsDebugDraw::draw(const PhysicsWorld& world, DebugDraw& debugDraw,
         }
     }
 
+    // Draw constraints
+    drawConstraints(world, bodyInterface);
+
     // Flush all debug lines
     glm::mat4 vp = camera.getProjectionMatrix(aspectRatio) * camera.getViewMatrix();
     debugDraw.flush(vp);
+}
+
+void PhysicsDebugDraw::drawConstraints(const PhysicsWorld& world,
+                                        const JPH::BodyInterface& bodyInterface)
+{
+    auto handles = world.getConstraintHandles();
+
+    for (const auto& handle : handles)
+    {
+        const PhysicsConstraint* pc = world.getConstraint(handle);
+        if (!pc)
+        {
+            continue;
+        }
+
+        // Broken/disabled constraints drawn in red
+        glm::vec3 color = pc->isEnabled()
+            ? glm::vec3(0.8f, 0.0f, 0.8f)   // Magenta = active constraint
+            : glm::vec3(0.8f, 0.0f, 0.0f);   // Red = disabled/broken
+
+        // Get positions of both bodies
+        glm::vec3 posA(0.0f);
+        if (!pc->getBodyA().IsInvalid())
+        {
+            posA = toGlm(bodyInterface.GetPosition(pc->getBodyA()));
+        }
+
+        glm::vec3 posB(0.0f);
+        if (!pc->getBodyB().IsInvalid())
+        {
+            posB = toGlm(bodyInterface.GetPosition(pc->getBodyB()));
+        }
+
+        // Draw line between connected bodies
+        DebugDraw::line(posA, posB, color);
+
+        // Type-specific markers
+        switch (pc->getType())
+        {
+        case ConstraintType::HINGE:
+        {
+            // Draw a small cross at pivot (midpoint between bodies)
+            glm::vec3 mid = (posA + posB) * 0.5f;
+            float sz = 0.15f;
+            DebugDraw::line(mid - glm::vec3(sz, 0, 0), mid + glm::vec3(sz, 0, 0), color);
+            DebugDraw::line(mid - glm::vec3(0, sz, 0), mid + glm::vec3(0, sz, 0), color);
+            DebugDraw::line(mid - glm::vec3(0, 0, sz), mid + glm::vec3(0, 0, sz), color);
+            break;
+        }
+        case ConstraintType::FIXED:
+        {
+            // Draw X at attachment
+            glm::vec3 mid = (posA + posB) * 0.5f;
+            float sz = 0.1f;
+            DebugDraw::line(mid + glm::vec3(-sz, -sz, 0), mid + glm::vec3(sz, sz, 0), color);
+            DebugDraw::line(mid + glm::vec3(-sz, sz, 0), mid + glm::vec3(sz, -sz, 0), color);
+            break;
+        }
+        case ConstraintType::DISTANCE:
+        case ConstraintType::POINT:
+        case ConstraintType::SLIDER:
+            // Line between bodies is sufficient
+            break;
+        }
+    }
 }
 
 } // namespace Vestige
