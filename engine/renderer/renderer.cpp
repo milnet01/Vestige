@@ -1657,7 +1657,7 @@ bool Renderer::loadSkyboxHDRI(const std::string& path)
 }
 
 void Renderer::captureLightProbe(int probeIndex, const SceneRenderData& renderData,
-                                  const Camera& camera, float aspectRatio)
+                                  const Camera& camera, float /*aspectRatio*/)
 {
     if (!m_lightProbeManager || probeIndex < 0
         || probeIndex >= m_lightProbeManager->getProbeCount())
@@ -1763,7 +1763,7 @@ void Renderer::captureLightProbe(int probeIndex, const SceneRenderData& renderDa
 }
 
 void Renderer::captureSHGrid(const SceneRenderData& renderData,
-                              const Camera& camera, float aspectRatio,
+                              const Camera& camera, float /*aspectRatio*/,
                               int faceSize)
 {
     if (!m_shProbeGrid || !m_shProbeGrid->isInitialized())

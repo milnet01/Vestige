@@ -2,6 +2,8 @@
 /// @brief Morph target CPU blending implementation.
 #include "animation/morph_target.h"
 
+#include <algorithm>
+
 namespace Vestige
 {
 
@@ -14,10 +16,7 @@ void blendMorphPositions(const MorphTargetData& data,
     outPositions.resize(vertCount);
 
     // Start with base positions
-    for (size_t v = 0; v < vertCount; ++v)
-    {
-        outPositions[v] = basePositions[v];
-    }
+    std::copy(basePositions.begin(), basePositions.end(), outPositions.begin());
 
     // Accumulate weighted deltas from each target
     size_t targetCount = data.targetCount();
@@ -46,10 +45,7 @@ void blendMorphNormals(const MorphTargetData& data,
     size_t vertCount = baseNormals.size();
     outNormals.resize(vertCount);
 
-    for (size_t v = 0; v < vertCount; ++v)
-    {
-        outNormals[v] = baseNormals[v];
-    }
+    std::copy(baseNormals.begin(), baseNormals.end(), outNormals.begin());
 
     size_t targetCount = data.targetCount();
     size_t weightCount = weights.size();

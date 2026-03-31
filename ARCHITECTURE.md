@@ -352,3 +352,62 @@ The engine targets Linux and Windows. Platform-specific code is isolated:
 - Any remaining platform-specific code goes in `engine/utils/` with `#ifdef` guards:
   - `VESTIGE_PLATFORM_LINUX`
   - `VESTIGE_PLATFORM_WINDOWS`
+
+---
+
+## 10. Animation Subsystem
+
+The animation system lives in `engine/animation/` and provides skeletal animation, property tweening, inverse kinematics, and morph targets.
+
+### Data Flow
+
+```
+glTF file
+  → GltfLoader (extracts skeleton, clips, morph targets)
+    → Skeleton (joint hierarchy + inverse bind matrices)
+    → AnimationClip (channels of keyframes)
+    → MorphTargetData (per-vertex displacement deltas)
+
+Per frame:
+  AnimationSampler (interpolates keyframes)
+    → SkeletonAnimator (drives playback, crossfade, root motion)
+      → bone matrices (uploaded to GPU for skinning)
+  IK solvers (post-process corrections)
+  TweenManager (property animation on entity components)
+```
+
+### Key Classes
+
+| Class | File | Purpose |
+|-------|------|---------|
+| `Skeleton` | `skeleton.h/cpp` | Joint hierarchy, inverse bind matrices, bind pose |
+| `AnimationClip` | `animation_clip.h/cpp` | Named collection of animation channels (TRS + weights) |
+| `AnimationSampler` | `animation_sampler.h/cpp` | Keyframe interpolation: STEP, LINEAR, CUBICSPLINE |
+| `SkeletonAnimator` | `skeleton_animator.h/cpp` | Component that plays clips, handles crossfade blending and root motion |
+| `AnimationStateMachine` | `animation_state_machine.h/cpp` | Parameter-driven state graph with transitions |
+| `Tween` | `tween.h/cpp` | Property animation with easing, events, and playback modes |
+| `TweenManager` | `tween.h/cpp` | Component managing multiple tweens per entity |
+| `IK Solvers` | `ik_solver.h/cpp` | Two-bone IK, look-at IK, foot IK |
+| `MorphTargetData` | `morph_target.h/cpp` | Blend shape data and CPU blending |
+| `Easing` | `easing.h/cpp` | 32 Penner easing functions + cubic bezier curves |
+
+### Skeletal Animation Pipeline
+
+1. **Sampling** — `AnimationSampler` interpolates keyframes per channel using binary search (`findKeyframe`) and the channel's interpolation mode
+2. **Blending** — `SkeletonAnimator` supports crossfade between two clips via per-bone lerp/slerp with a time-based blend factor
+3. **Hierarchy Walk** — Local transforms (T * R * S) are combined parent-to-child to produce global transforms
+4. **Bone Matrices** — Final output = `globalTransform * inverseBindMatrix`, uploaded as a uniform array for GPU skinning
+5. **Root Motion** — Optionally extracts the root bone's horizontal delta and applies it to the entity's transform
+
+### State Machine
+
+The `AnimationStateMachine` associates named states with clip indices. Transitions fire when parameter-based conditions (float comparisons, bool/trigger checks) are satisfied. Exit time constraints prevent transitions mid-animation. Trigger parameters auto-reset after consumption.
+
+### Inverse Kinematics
+
+Three solvers run as post-processes after the animation pipeline:
+- **Two-Bone IK** — Analytic solution using law of cosines with pole vector alignment
+- **Look-At IK** — Single-joint aim constraint with angle clamping
+- **Foot IK** — Composes two-bone leg IK with ankle-to-ground alignment and pelvis offset
+
+All solvers support weight blending via NLerp between identity and correction quaternions.

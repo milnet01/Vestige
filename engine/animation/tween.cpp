@@ -337,7 +337,7 @@ void TweenManager::cancelAll()
 size_t TweenManager::activeTweenCount() const
 {
     size_t count = 0;
-    for (auto& t : m_tweens)
+    for (const auto& t : m_tweens)
     {
         if (!t.isFinished()) ++count;
     }

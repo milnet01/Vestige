@@ -46,42 +46,77 @@ public:
 
     // --- Factory methods ---
 
+    /// @brief Creates a tween that animates a float value.
     static Tween floatTween(float* target, float from, float to,
                             float duration, EaseType ease = EaseType::LINEAR);
 
+    /// @brief Creates a tween that animates a vec3 value.
     static Tween vec3Tween(glm::vec3* target, const glm::vec3& from, const glm::vec3& to,
                            float duration, EaseType ease = EaseType::LINEAR);
 
+    /// @brief Creates a tween that animates a vec4 value.
     static Tween vec4Tween(glm::vec4* target, const glm::vec4& from, const glm::vec4& to,
                            float duration, EaseType ease = EaseType::LINEAR);
 
+    /// @brief Creates a tween that animates a quaternion value (uses slerp).
     static Tween quatTween(glm::quat* target, const glm::quat& from, const glm::quat& to,
                            float duration, EaseType ease = EaseType::LINEAR);
 
     // --- Builder configuration ---
 
+    /// @brief Sets the playback mode (once, loop, or ping-pong).
     Tween& setPlayback(TweenPlayback mode);
+
+    /// @brief Sets a delay before the tween starts, in seconds.
     Tween& setDelay(float seconds);
+
+    /// @brief Sets the easing function type.
     Tween& setEase(EaseType ease);
+
+    /// @brief Sets a custom cubic bezier easing curve (CSS-style control points).
     Tween& setCustomEase(float x1, float y1, float x2, float y2);
+
+    /// @brief Registers a callback invoked when the tween finishes.
     Tween& onComplete(std::function<void()> callback);
+
+    /// @brief Registers a callback invoked each time a looping tween restarts.
     Tween& onLoop(std::function<void()> callback);
+
+    /// @brief Adds an event that fires when playback passes a normalized time [0,1].
     Tween& addEvent(float normalizedTime, std::function<void()> callback);
 
     // --- Playback control ---
 
+    /// @brief Advances the tween by deltaTime seconds.
     void update(float deltaTime);
+
+    /// @brief Pauses playback.
     void pause();
+
+    /// @brief Resumes playback after pause.
     void resume();
+
+    /// @brief Stops and marks the tween as finished.
     void stop();
+
+    /// @brief Resets elapsed time and restarts playback from the beginning.
     void restart();
 
     // --- Queries ---
 
+    /// @brief Returns true if the tween has finished.
     bool isFinished() const;
+
+    /// @brief Returns true if the tween is paused.
     bool isPaused() const;
+
+    /// @brief Returns the current normalized progress [0,1].
     float getProgress() const;
+
+    /// @brief Returns the target value type.
     TargetType getTargetType() const;
+
+    /// @brief Returns the raw pointer to the animated target.
     void* getTarget() const;
 
 private:
