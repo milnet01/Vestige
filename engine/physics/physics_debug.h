@@ -27,6 +27,9 @@ public:
     bool isEnabled() const { return m_enabled; }
 
 private:
+    void drawConstraints(const PhysicsWorld& world,
+                          const JPH::BodyInterface& bodyInterface);
+
     bool m_enabled = false;
 };
 
