@@ -54,6 +54,8 @@ add_executable(vestige_tests
     test_tween.cpp
     test_ik_solver.cpp
     test_morph_target.cpp
+    test_physics_world.cpp
+    test_rigid_body.cpp
 )
 
 target_link_libraries(vestige_tests

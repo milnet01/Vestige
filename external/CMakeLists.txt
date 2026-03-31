@@ -130,6 +130,21 @@ FetchContent_Declare(json
 )
 FetchContent_MakeAvailable(json)
 
+# Jolt Physics — physics engine (MIT license)
+FetchContent_Declare(
+    JoltPhysics
+    GIT_REPOSITORY https://github.com/jrouwe/JoltPhysics.git
+    GIT_TAG        v5.2.0
+    GIT_SHALLOW    TRUE
+    SOURCE_SUBDIR  Build
+)
+set(TARGET_UNIT_TESTS OFF CACHE BOOL "" FORCE)
+set(TARGET_HELLO_WORLD OFF CACHE BOOL "" FORCE)
+set(TARGET_PERFORMANCE_TEST OFF CACHE BOOL "" FORCE)
+set(TARGET_SAMPLES OFF CACHE BOOL "" FORCE)
+set(TARGET_VIEWER OFF CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(JoltPhysics)
+
 # Google Test — unit testing
 FetchContent_Declare(
     googletest

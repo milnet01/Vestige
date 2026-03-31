@@ -22,6 +22,8 @@
 #include "environment/foliage_manager.h"
 #include "environment/terrain.h"
 #include "profiler/performance_profiler.h"
+#include "physics/physics_world.h"
+#include "physics/physics_debug.h"
 #include "testing/visual_test_runner.h"
 
 #include <memory>
@@ -86,6 +88,8 @@ private:
     bool m_terrainEnabled = true;  ///< Set false for indoor scenes that don't need terrain
     TerrainRenderer m_terrainRenderer;
     PerformanceProfiler m_profiler;
+    PhysicsWorld m_physicsWorld;
+    PhysicsDebugDraw m_physicsDebugDraw;
     VisualTestRunner m_visualTestRunner;
     bool m_visualTestMode = false;
 
