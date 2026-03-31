@@ -24,6 +24,7 @@
 #include "profiler/performance_profiler.h"
 #include "physics/physics_world.h"
 #include "physics/physics_debug.h"
+#include "physics/physics_character_controller.h"
 #include "testing/visual_test_runner.h"
 
 #include <memory>
@@ -66,6 +67,7 @@ private:
     void setupTabernacleScene();
     void setupVisualTestViewpoints();
     void drawLightGizmos(Scene& scene, const Selection& selection);
+    void createPhysicsStaticBodies();
 
     EventBus m_eventBus;
     std::unique_ptr<Window> m_window;
@@ -90,6 +92,8 @@ private:
     PerformanceProfiler m_profiler;
     PhysicsWorld m_physicsWorld;
     PhysicsDebugDraw m_physicsDebugDraw;
+    PhysicsCharacterController m_physicsCharController;
+    bool m_usePhysicsController = false;  ///< Toggle between AABB and physics controller (P key)
     VisualTestRunner m_visualTestRunner;
     bool m_visualTestMode = false;
 

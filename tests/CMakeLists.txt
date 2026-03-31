@@ -56,6 +56,7 @@ add_executable(vestige_tests
     test_morph_target.cpp
     test_physics_world.cpp
     test_rigid_body.cpp
+    test_physics_character_controller.cpp
 )
 
 target_link_libraries(vestige_tests

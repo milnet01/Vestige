@@ -67,6 +67,14 @@ public:
     /// @brief Returns true if walk mode is active.
     bool isWalkMode() const;
 
+    /// @brief Processes only camera look input (mouse + gamepad right stick).
+    /// Used when the physics character controller handles movement.
+    void processLookOnly(float deltaTime);
+
+    /// @brief Computes the desired world-space velocity from input without moving the camera.
+    /// Returns the velocity vector including sprint. Y component is set from Space/Shift.
+    glm::vec3 computeDesiredVelocity(float deltaTime);
+
 private:
     void processKeyboardMovement(float deltaTime, glm::vec3& moveDir);
     void processMouseLook();
