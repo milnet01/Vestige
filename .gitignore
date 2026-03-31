@@ -51,9 +51,9 @@ external/assimp/
 
 # Note: external/glad/ is NOT ignored — it contains pre-generated OpenGL loader files
 
-# Core dumps
-core
-core.*
+# Core dumps (root-level only — avoids matching engine/core/)
+/core
+/core.*
 
 # Log files
 *.log
