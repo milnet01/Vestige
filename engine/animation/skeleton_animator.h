@@ -149,6 +149,9 @@ private:
     /// @brief Extracts root motion delta and zeroes the root bone's horizontal motion.
     void extractRootMotion();
 
+    /// @brief Allocates pose buffers and initializes from bind pose.
+    void initializeBuffers();
+
     std::shared_ptr<Skeleton> m_skeleton;
     std::vector<std::shared_ptr<AnimationClip>> m_clips;
     int m_activeClipIndex = -1;

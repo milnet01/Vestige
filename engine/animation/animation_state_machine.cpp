@@ -32,6 +32,11 @@ int AnimationStateMachine::getStateCount() const
 
 const AnimState& AnimationStateMachine::getState(int index) const
 {
+    static const AnimState s_empty;
+    if (index < 0 || index >= static_cast<int>(m_states.size()))
+    {
+        return s_empty;
+    }
     return m_states[static_cast<size_t>(index)];
 }
 

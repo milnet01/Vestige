@@ -70,6 +70,8 @@ void SkeletonAnimator::advanceAndSample(
         case AnimTargetPath::SCALE:
             scales[idx] = sampleVec3(channel, time);
             break;
+        case AnimTargetPath::WEIGHTS:
+            break;  // Morph target weights — handled by morph target system, not skeleton
         }
     }
 }
@@ -192,6 +194,37 @@ void SkeletonAnimator::extractRootMotion()
 }
 
 // ---------------------------------------------------------------------------
+// initializeBuffers — allocate pose buffers and set bind pose
+// ---------------------------------------------------------------------------
+void SkeletonAnimator::initializeBuffers()
+{
+    int jc = m_skeleton->getJointCount();
+    size_t count = static_cast<size_t>(jc);
+    m_localTranslations.resize(count);
+    m_localRotations.resize(count);
+    m_localScales.resize(count);
+    m_globalTransforms.resize(count);
+    m_boneMatrices.resize(count, glm::mat4(1.0f));
+
+    // Source buffers for crossfade
+    m_sourceTranslations.resize(count);
+    m_sourceRotations.resize(count);
+    m_sourceScales.resize(count);
+
+    // Initialize from bind pose
+    for (size_t i = 0; i < count; ++i)
+    {
+        const auto& joint = m_skeleton->m_joints[i];
+        m_localTranslations[i] = glm::vec3(joint.localBindTransform[3]);
+        m_localRotations[i] = glm::quat_cast(joint.localBindTransform);
+        m_localScales[i] = glm::vec3(
+            glm::length(glm::vec3(joint.localBindTransform[0])),
+            glm::length(glm::vec3(joint.localBindTransform[1])),
+            glm::length(glm::vec3(joint.localBindTransform[2])));
+    }
+}
+
+// ---------------------------------------------------------------------------
 // computeBoneMatrices
 // ---------------------------------------------------------------------------
 void SkeletonAnimator::computeBoneMatrices()
@@ -245,31 +278,7 @@ std::unique_ptr<Component> SkeletonAnimator::clone() const
     // Allocate per-instance buffers if skeleton is set
     if (m_skeleton)
     {
-        int jc = m_skeleton->getJointCount();
-        size_t count = static_cast<size_t>(jc);
-        copy->m_localTranslations.resize(count);
-        copy->m_localRotations.resize(count);
-        copy->m_localScales.resize(count);
-        copy->m_globalTransforms.resize(count);
-        copy->m_boneMatrices.resize(count, glm::mat4(1.0f));
-
-        // Source buffers for crossfade
-        copy->m_sourceTranslations.resize(count);
-        copy->m_sourceRotations.resize(count);
-        copy->m_sourceScales.resize(count);
-
-        // Initialize from bind pose
-        for (size_t i = 0; i < count; ++i)
-        {
-            const auto& joint = m_skeleton->m_joints[i];
-            // Decompose bind transform to TRS
-            copy->m_localTranslations[i] = glm::vec3(joint.localBindTransform[3]);
-            copy->m_localRotations[i] = glm::quat_cast(joint.localBindTransform);
-            copy->m_localScales[i] = glm::vec3(
-                glm::length(glm::vec3(joint.localBindTransform[0])),
-                glm::length(glm::vec3(joint.localBindTransform[1])),
-                glm::length(glm::vec3(joint.localBindTransform[2])));
-        }
+        copy->initializeBuffers();
     }
 
     return copy;
@@ -284,30 +293,7 @@ void SkeletonAnimator::setSkeleton(std::shared_ptr<Skeleton> skeleton)
 
     if (m_skeleton)
     {
-        int jc = m_skeleton->getJointCount();
-        size_t count = static_cast<size_t>(jc);
-        m_localTranslations.resize(count);
-        m_localRotations.resize(count);
-        m_localScales.resize(count);
-        m_globalTransforms.resize(count);
-        m_boneMatrices.resize(count, glm::mat4(1.0f));
-
-        // Source buffers for crossfade
-        m_sourceTranslations.resize(count);
-        m_sourceRotations.resize(count);
-        m_sourceScales.resize(count);
-
-        // Initialize from bind pose
-        for (size_t i = 0; i < count; ++i)
-        {
-            const auto& joint = m_skeleton->m_joints[i];
-            m_localTranslations[i] = glm::vec3(joint.localBindTransform[3]);
-            m_localRotations[i] = glm::quat_cast(joint.localBindTransform);
-            m_localScales[i] = glm::vec3(
-                glm::length(glm::vec3(joint.localBindTransform[0])),
-                glm::length(glm::vec3(joint.localBindTransform[1])),
-                glm::length(glm::vec3(joint.localBindTransform[2])));
-        }
+        initializeBuffers();
     }
     else
     {
@@ -342,6 +328,11 @@ int SkeletonAnimator::getClipCount() const
 
 const std::shared_ptr<AnimationClip>& SkeletonAnimator::getClip(int index) const
 {
+    static const std::shared_ptr<AnimationClip> s_null;
+    if (index < 0 || index >= static_cast<int>(m_clips.size()))
+    {
+        return s_null;
+    }
     return m_clips[static_cast<size_t>(index)];
 }
 
