@@ -1,6 +1,7 @@
 /// @file renderer.cpp
 /// @brief Renderer implementation with Blinn-Phong/PBR lighting, shadows, and FBO pipeline.
 #include "renderer/renderer.h"
+#include "renderer/dynamic_mesh.h"
 #include "renderer/foliage_renderer.h"
 #include "environment/foliage_manager.h"
 #include "scene/scene.h"
@@ -2651,6 +2652,40 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
                 }
             }
         }
+    }
+
+    // --- Cloth pass: draw dynamic cloth meshes (same shader as opaques) ---
+    for (const auto& clothItem : renderData.clothItems)
+    {
+        if (!isAabbInFrustum(clothItem.worldBounds, frustumPlanes))
+        {
+            continue;
+        }
+
+        m_sceneShader.use();
+        m_sceneShader.setBool("u_useInstancing", false);
+        m_sceneShader.setBool("u_useMDI", false);
+        m_sceneShader.setMat4("u_model", clothItem.worldMatrix);
+        m_sceneShader.setMat3("u_normalMatrix",
+            glm::mat3(glm::transpose(glm::inverse(clothItem.worldMatrix))));
+        m_sceneShader.setMat4("u_view", camera.getViewMatrix());
+        m_sceneShader.setMat4("u_projection", m_lastProjection);
+        m_sceneShader.setBool("u_hasBones", false);
+
+        uploadMaterialUniforms(*clothItem.material);
+
+        bool doubleSided = clothItem.material->isDoubleSided();
+        if (doubleSided) glDisable(GL_CULL_FACE);
+        if (m_isWireframe) glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+
+        clothItem.mesh->bind();
+        glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(clothItem.mesh->getIndexCount()),
+                       GL_UNSIGNED_INT, nullptr);
+        m_cullingStats.drawCalls++;
+        clothItem.mesh->unbind();
+
+        if (m_isWireframe) glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+        if (doubleSided) glEnable(GL_CULL_FACE);
     }
 
     // --- Skybox pass: draw after opaque geometry, before transparent ---

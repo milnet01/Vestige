@@ -3,6 +3,7 @@
 #include "core/engine.h"
 #include "core/logger.h"
 #include "physics/jolt_helpers.h"
+#include "physics/cloth_component.h"
 
 #include <Jolt/Physics/Collision/Shape/BoxShape.h>
 #include "renderer/light_probe_manager.h"
@@ -2070,12 +2071,141 @@ void Engine::setupTabernacleScene()
             {tentW - 0.1f, tentH - 0.1f, 0.05f}, veilMat);
 
     // =====================================================================
-    // ENTRANCE SCREEN -- Curtain at east end (partially open for light)
+    // ENTRANCE SCREEN -- Animated cloth curtains at east end
+    // Two curtain panels hanging from the top of the entrance, gently
+    // swaying in the desert breeze. Each covers roughly half the opening.
     // =====================================================================
-    makeBox("Entrance Screen L", {-tentW / 4.0f - 0.3f, tentH / 2.0f, frontZ},
-            {tentW / 2.0f - 0.5f, tentH - 0.1f, 0.05f}, veilMat);
-    makeBox("Entrance Screen R", {tentW / 4.0f + 0.3f, tentH / 2.0f, frontZ},
-            {tentW / 2.0f - 0.5f, tentH - 0.1f, 0.05f}, veilMat);
+    {
+        // Curtain material (reuse veil colors but create separate for cloth)
+        auto entranceCurtainMat = m_resourceManager->createMaterial("tab_entrance_curtain");
+        entranceCurtainMat->setType(MaterialType::PBR);
+        entranceCurtainMat->setAlbedo(glm::vec3(0.25f, 0.12f, 0.35f));
+        entranceCurtainMat->setMetallic(0.0f);
+        entranceCurtainMat->setRoughness(0.85f);
+        entranceCurtainMat->setDiffuseTexture(
+            m_resourceManager->loadTexture(texBase + "rough_linen_diff.jpg"));
+        entranceCurtainMat->setNormalMap(
+            m_resourceManager->loadTexture(texBase + "rough_linen_nor_gl.jpg", true));
+        entranceCurtainMat->setUvScale(1.5f);
+        entranceCurtainMat->setDoubleSided(true);
+        entranceCurtainMat->setEmissive(glm::vec3(0.12f, 0.04f, 0.10f));
+        entranceCurtainMat->setEmissiveStrength(0.4f);
+
+        // Each curtain: grid hangs in XY plane (width along X, height along Y)
+        // Grid width covers half the entrance; height covers tent height
+        float curtainW = tentW / 2.0f - 0.15f;  // Each panel ~2.1m
+        float curtainH = tentH - 0.2f;           // ~4.25m tall
+        uint32_t gridW = 12;                      // Particles along X
+        uint32_t gridH = 24;                      // Particles along Y (taller)
+        float spacingX = curtainW / static_cast<float>(gridW - 1);
+        float spacingY = curtainH / static_cast<float>(gridH - 1);
+        // Use the smaller spacing so constraints are uniform
+        float spacing = std::min(spacingX, spacingY);
+
+        // Recalculate grid size from uniform spacing
+        gridW = static_cast<uint32_t>(curtainW / spacing) + 1;
+        gridH = static_cast<uint32_t>(curtainH / spacing) + 1;
+
+        ClothConfig curtainCfg;
+        curtainCfg.width = gridW;
+        curtainCfg.height = gridH;
+        curtainCfg.spacing = spacing;
+        curtainCfg.particleMass = 0.02f;       // Light fabric
+        curtainCfg.substeps = 10;
+        curtainCfg.stretchCompliance = 0.0001f; // Slightly elastic (not rigid)
+        curtainCfg.shearCompliance = 0.001f;    // Allow shearing
+        curtainCfg.bendCompliance = 0.5f;       // Very soft bending (fabric folds)
+        curtainCfg.damping = 0.05f;              // Moderate damping — settles when wind dies
+
+        // The cloth grid is generated in XZ plane centered at origin.
+        // We want it hanging in XY plane. The entity transform handles
+        // the positioning — we rotate the grid by pinning particles at
+        // their world-space positions (top row = high Y, rest drapes down).
+
+        // --- Left curtain ---
+        {
+            float leftCenterX = -tentW / 4.0f - 0.15f;
+            Entity* leftCurtain = scene->createEntity("Entrance Curtain L");
+            leftCurtain->transform.position = glm::vec3(0.0f, 0.0f, 0.0f);
+
+            auto* clothComp = leftCurtain->addComponent<ClothComponent>();
+            clothComp->initialize(curtainCfg, entranceCurtainMat, 77777u);
+
+            auto& sim = clothComp->getSimulator();
+
+            // Reposition all particles: grid XZ → curtain XY
+            // Pin all at desired positions, then unpin non-top-row
+            for (uint32_t gz = 0; gz < gridH; ++gz)
+            {
+                for (uint32_t gx = 0; gx < gridW; ++gx)
+                {
+                    uint32_t idx = gz * gridW + gx;
+                    float worldX = leftCenterX + (static_cast<float>(gx) -
+                                   static_cast<float>(gridW - 1) * 0.5f) * spacing;
+                    float worldY = tentH - static_cast<float>(gz) * spacing;
+                    float worldZ = frontZ + 0.25f;
+
+                    sim.pinParticle(idx, glm::vec3(worldX, worldY, worldZ));
+                }
+            }
+
+            // Unpin non-top-row particles so they drape under gravity
+            for (uint32_t gz = 1; gz < gridH; ++gz)
+            {
+                for (uint32_t gx = 0; gx < gridW; ++gx)
+                {
+                    sim.unpinParticle(gz * gridW + gx);
+                }
+            }
+
+            sim.setWind(glm::vec3(0.0f, 0.0f, 1.0f), 8.0f);
+            sim.setDragCoefficient(2.0f);
+            sim.setGroundPlane(0.0f);
+
+            clothComp->syncMesh();
+        }
+
+        // --- Right curtain ---
+        {
+            float rightCenterX = tentW / 4.0f + 0.15f;
+            Entity* rightCurtain = scene->createEntity("Entrance Curtain R");
+            rightCurtain->transform.position = glm::vec3(0.0f, 0.0f, 0.0f);
+
+            auto* clothComp = rightCurtain->addComponent<ClothComponent>();
+            clothComp->initialize(curtainCfg, entranceCurtainMat, 99999u);
+
+            auto& sim = clothComp->getSimulator();
+
+            // Pin all at desired positions, then unpin non-top-row
+            for (uint32_t gz = 0; gz < gridH; ++gz)
+            {
+                for (uint32_t gx = 0; gx < gridW; ++gx)
+                {
+                    uint32_t idx = gz * gridW + gx;
+                    float worldX = rightCenterX + (static_cast<float>(gx) -
+                                   static_cast<float>(gridW - 1) * 0.5f) * spacing;
+                    float worldY = tentH - static_cast<float>(gz) * spacing;
+                    float worldZ = frontZ + 0.25f;
+
+                    sim.pinParticle(idx, glm::vec3(worldX, worldY, worldZ));
+                }
+            }
+
+            for (uint32_t gz = 1; gz < gridH; ++gz)
+            {
+                for (uint32_t gx = 0; gx < gridW; ++gx)
+                {
+                    sim.unpinParticle(gz * gridW + gx);
+                }
+            }
+
+            sim.setWind(glm::vec3(0.0f, 0.0f, 1.0f), 8.0f);
+            sim.setDragCoefficient(2.0f);
+            sim.setGroundPlane(0.0f);
+
+            clothComp->syncMesh();
+        }
+    }
 
     // =====================================================================
     // HOLY OF HOLIES FURNITURE -- Ark of the Covenant (Exodus 25:10-22)
@@ -2216,38 +2346,145 @@ void Engine::setupTabernacleScene()
     // OUTER COURTYARD -- Fence walls (Exodus 27:9-19)
     // =====================================================================
 
-    const float fenceThick = 0.04f;
+    // Fence walls: linen cloth panels between pillars, affected by wind.
+    // Stiffer than entrance curtains — taut fabric that ripples subtly.
 
-    // Fence walls: thin linen panels -- disable shadow casting to prevent
-    // shadow map artifacts from the 4cm-thick geometry
-    auto makeFence = [&](const std::string& name, glm::vec3 pos, glm::vec3 size,
-                         std::shared_ptr<Material> mat) -> Entity*
+    // Cloth material for courtyard walls (copy of whiteLinenMat with doubleSided)
+    auto fenceClothMat = m_resourceManager->createMaterial("tab_fence_cloth");
+    fenceClothMat->setType(MaterialType::PBR);
+    fenceClothMat->setAlbedo(glm::vec3(0.95f, 0.93f, 0.90f));
+    fenceClothMat->setMetallic(0.0f);
+    fenceClothMat->setRoughness(0.9f);
+    fenceClothMat->setDiffuseTexture(
+        m_resourceManager->loadTexture(texBase + "rough_linen_diff.jpg"));
+    fenceClothMat->setNormalMap(
+        m_resourceManager->loadTexture(texBase + "rough_linen_nor_gl.jpg", true));
+    fenceClothMat->setMetallicRoughnessTexture(
+        m_resourceManager->loadTexture(texBase + "rough_linen_rough.jpg", true));
+    fenceClothMat->setUvScale(2.0f);
+    fenceClothMat->setDoubleSided(true);
+
+    // Helper: create a cloth fence panel between two anchor points.
+    uint32_t fenceSeedCounter = 100u;  // Unique seed per panel
+    auto makeClothFence = [&](const std::string& name,
+                              glm::vec3 topLeft, glm::vec3 topRight,
+                              float height, float windPerpendicularSign)
     {
-        Entity* e = makeBox(name, pos, size, mat);
-        e->getComponent<MeshRenderer>()->setCastsShadow(false);
-        return e;
+        float panelWidth = glm::length(topRight - topLeft);
+        glm::vec3 along = (topRight - topLeft) / panelWidth;
+
+        // Coarse grid (~0.5m spacing) for performance — fence panels are taut
+        float spacing = 0.5f;
+        uint32_t gridW = std::max(3u, static_cast<uint32_t>(panelWidth / spacing) + 1);
+        uint32_t gridH = std::max(3u, static_cast<uint32_t>(height / spacing) + 1);
+        spacing = std::min(panelWidth / static_cast<float>(gridW - 1),
+                           height / static_cast<float>(gridH - 1));
+
+        ClothConfig cfg;
+        cfg.width = gridW;
+        cfg.height = gridH;
+        cfg.spacing = spacing;
+        cfg.particleMass = 0.04f;
+        cfg.substeps = 4;                   // Fewer substeps (stiff cloth doesn't need many)
+        cfg.stretchCompliance = 0.00002f;   // Very rigid stretch (taut fabric)
+        cfg.shearCompliance = 0.0005f;
+        cfg.bendCompliance = 0.2f;           // Allows rippling
+        cfg.damping = 0.06f;                 // Settles quickly
+
+        Entity* entity = scene->createEntity(name);
+        entity->transform.position = glm::vec3(0.0f);
+
+        // Each panel gets a unique seed so wind timing differs
+        uint32_t seed = fenceSeedCounter++ * 2654435761u;  // Knuth multiplicative hash
+        auto* clothComp = entity->addComponent<ClothComponent>();
+        clothComp->initialize(cfg, fenceClothMat, seed);
+
+        auto& sim = clothComp->getSimulator();
+
+        // Work out the perpendicular direction for the panel (for wind)
+        glm::vec3 up(0, 1, 0);
+        glm::vec3 perp = glm::normalize(glm::cross(along, up)) * windPerpendicularSign;
+
+        // Pin all particles at their world positions
+        for (uint32_t gz = 0; gz < gridH; ++gz)
+        {
+            for (uint32_t gx = 0; gx < gridW; ++gx)
+            {
+                uint32_t idx = gz * gridW + gx;
+                float u = static_cast<float>(gx) / static_cast<float>(gridW - 1);
+                float y = height - static_cast<float>(gz) * spacing;
+                glm::vec3 pos = topLeft + along * (u * panelWidth) + glm::vec3(0, y - height, 0);
+                sim.pinParticle(idx, pos);
+            }
+        }
+
+        // Unpin all except top row — top row stays attached to pillar line
+        for (uint32_t gz = 1; gz < gridH; ++gz)
+        {
+            for (uint32_t gx = 0; gx < gridW; ++gx)
+            {
+                sim.unpinParticle(gz * gridW + gx);
+            }
+        }
+
+        // Gentle wind perpendicular to the panel surface
+        sim.setWind(perp, 6.0f);
+        sim.setDragCoefficient(1.8f);
+        sim.setGroundPlane(0.0f);
+
+        clothComp->syncMesh();
     };
 
-    // South wall (X = -courtW/2)
-    makeFence("Court South Wall", {-courtW / 2.0f, fenceH / 2.0f, courtCenterZ},
-              {fenceThick, fenceH, courtL}, whiteLinenMat);
+    // Split long walls into segments between pillars (~2.225m each)
+    // so each cloth panel is a manageable size.
+    auto makeClothWall = [&](const std::string& baseName,
+                             glm::vec3 start, glm::vec3 end,
+                             float height, float windSign, int segments)
+    {
+        glm::vec3 step = (end - start) / static_cast<float>(segments);
+        for (int i = 0; i < segments; ++i)
+        {
+            glm::vec3 segStart = start + step * static_cast<float>(i);
+            glm::vec3 segEnd = segStart + step;
+            makeClothFence(baseName + " " + std::to_string(i + 1),
+                           segStart, segEnd, height, windSign);
+        }
+    };
 
-    // North wall (X = +courtW/2)
-    makeFence("Court North Wall", {courtW / 2.0f, fenceH / 2.0f, courtCenterZ},
-              {fenceThick, fenceH, courtL}, whiteLinenMat);
+    // South wall: runs along Z at X = -courtW/2, 20 pillar spans
+    makeClothWall("Court South Wall",
+        glm::vec3(-courtW / 2.0f, fenceH, courtWestZ),
+        glm::vec3(-courtW / 2.0f, fenceH, courtEastZ),
+        fenceH, 1.0f, 20);
 
-    // West wall (Z = courtWestZ)
-    makeFence("Court West Wall", {0.0f, fenceH / 2.0f, courtWestZ},
-              {courtW, fenceH, fenceThick}, whiteLinenMat);
+    // North wall: runs along Z at X = +courtW/2, 20 pillar spans
+    makeClothWall("Court North Wall",
+        glm::vec3(courtW / 2.0f, fenceH, courtWestZ),
+        glm::vec3(courtW / 2.0f, fenceH, courtEastZ),
+        fenceH, -1.0f, 20);
 
-    // East wall -- two 15-cubit sections flanking the 20-cubit gate (Exodus 27:14-16)
+    // West wall: runs along X at Z = courtWestZ, 10 pillar spans
+    makeClothWall("Court West Wall",
+        glm::vec3(-courtW / 2.0f, fenceH, courtWestZ),
+        glm::vec3(courtW / 2.0f, fenceH, courtWestZ),
+        fenceH, -1.0f, 10);
+
+    // East wall: two sections flanking the gate
     const float eastSectionW = 15.0f * C;
-    makeFence("Court East Wall S",
-              {-(gateW / 2.0f + eastSectionW / 2.0f), fenceH / 2.0f, courtEastZ},
-              {eastSectionW, fenceH, fenceThick}, whiteLinenMat);
-    makeFence("Court East Wall N",
-              {(gateW / 2.0f + eastSectionW / 2.0f), fenceH / 2.0f, courtEastZ},
-              {eastSectionW, fenceH, fenceThick}, whiteLinenMat);
+    int eastSegments = static_cast<int>(eastSectionW / pillarSpacing);
+
+    // East wall south section
+    float eastSouthStart = -(gateW / 2.0f + eastSectionW);
+    makeClothWall("Court East Wall S",
+        glm::vec3(eastSouthStart, fenceH, courtEastZ),
+        glm::vec3(-gateW / 2.0f, fenceH, courtEastZ),
+        fenceH, 1.0f, std::max(1, eastSegments));
+
+    // East wall north section
+    makeClothWall("Court East Wall N",
+        glm::vec3(gateW / 2.0f, fenceH, courtEastZ),
+        glm::vec3(gateW / 2.0f + eastSectionW, fenceH, courtEastZ),
+        fenceH, 1.0f, std::max(1, eastSegments));
 
     // =====================================================================
     // COURTYARD GATE -- Open (curtain pulled aside, not rendered)
@@ -2501,6 +2738,53 @@ void Engine::setupTabernacleScene()
     }
 
     // =====================================================================
+    // CLOTH DEMO — a fabric banner hanging in the courtyard
+    // =====================================================================
+    {
+        auto clothMat = m_resourceManager->createMaterial("tab_cloth_demo");
+        clothMat->setType(MaterialType::PBR);
+        clothMat->setAlbedo(glm::vec3(0.8f, 0.15f, 0.1f));  // Deep red fabric
+        clothMat->setRoughness(0.85f);
+        clothMat->setMetallic(0.0f);
+        clothMat->setDoubleSided(true);
+
+        Entity* clothEntity = scene->createEntity("ClothBanner");
+        // Position in the courtyard, near the gate
+        clothEntity->transform.position = glm::vec3(3.0f, 3.5f, courtEastZ - 5.0f);
+
+        ClothConfig clothCfg;
+        clothCfg.width = 20;
+        clothCfg.height = 20;
+        clothCfg.spacing = 0.1f;
+        clothCfg.particleMass = 0.05f;
+        clothCfg.substeps = 10;
+        clothCfg.stretchCompliance = 0.0f;
+        clothCfg.shearCompliance = 0.0001f;
+        clothCfg.bendCompliance = 0.05f;
+        clothCfg.damping = 0.02f;
+
+        auto* clothComp = clothEntity->addComponent<ClothComponent>();
+        clothComp->initialize(clothCfg, clothMat, 55555u);
+
+        // Pin the top row (simulate hanging from a pole)
+        auto& sim = clothComp->getSimulator();
+        glm::vec3 basePos = clothEntity->transform.position;
+        for (uint32_t x = 0; x < clothCfg.width; ++x)
+        {
+            uint32_t idx = 0 * clothCfg.width + x;  // Top row (z=0)
+            glm::vec3 particlePos = sim.getPositions()[idx] + basePos;
+            sim.pinParticle(idx, particlePos);
+        }
+
+        // Set gentle wind
+        sim.setWind(glm::vec3(0.0f, 0.0f, 1.0f), 3.0f);
+        sim.setDragCoefficient(1.5f);
+        sim.setGroundPlane(0.0f);
+
+        clothComp->syncMesh();
+    }
+
+    // =====================================================================
     // CAMERA -- Start outside the courtyard gate facing west
     // =====================================================================
     m_camera->setPosition(glm::vec3(0.0f, 2.5f, courtEastZ + 5.0f));
@@ -2511,7 +2795,7 @@ void Engine::setupTabernacleScene()
 
     Logger::info("Tabernacle scene ready: courtyard (60 pillars, gate, altar, laver), "
                  "tent (4 roof layers, veil, entrance), Ark, Menorah, Table, Incense Altar, "
-                 "SH probe grid + cubemap probe");
+                 "cloth demo, SH probe grid + cubemap probe");
 }
 
 } // namespace Vestige

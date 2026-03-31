@@ -13,11 +13,16 @@
 
 #include <memory>
 #include <string>
+
 #include <unordered_map>
 #include <vector>
 
 namespace Vestige
 {
+
+// Forward declarations for cloth rendering
+class DynamicMesh;
+class ClothComponent;
 
 /// @brief Collected render data from a scene — used by the renderer.
 struct SceneRenderData
@@ -46,6 +51,17 @@ struct SceneRenderData
 
     /// @brief Water surfaces with their world matrices.
     std::vector<std::pair<const WaterSurfaceComponent*, glm::mat4>> waterSurfaces;
+
+    /// @brief Cloth items for dynamic mesh rendering.
+    struct ClothRenderItem
+    {
+        const DynamicMesh* mesh;
+        const Material* material;
+        glm::mat4 worldMatrix;
+        AABB worldBounds;
+        uint32_t entityId = 0;
+    };
+    std::vector<ClothRenderItem> clothItems;
 };
 
 /// @brief A complete scene — owns a hierarchy of entities.

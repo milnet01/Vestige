@@ -1,6 +1,7 @@
 /// @file scene.cpp
 /// @brief Scene implementation.
 #include "scene/scene.h"
+#include "physics/cloth_component.h"
 #include "core/logger.h"
 
 #include <algorithm>
@@ -50,6 +51,7 @@ void Scene::collectRenderData(SceneRenderData& data) const
     data.spotLights.clear();
     data.particleEmitters.clear();
     data.waterSurfaces.clear();
+    data.clothItems.clear();
     data.hasDirectionalLight = false;
 
     data.renderItems.reserve(prevRenderCount);
@@ -327,6 +329,19 @@ void Scene::collectRenderDataRecursive(const Entity& entity, SceneRenderData& da
     if (waterSurface && waterSurface->isEnabled())
     {
         data.waterSurfaces.emplace_back(waterSurface, entity.getWorldMatrix());
+    }
+
+    // Check for cloth component
+    auto* cloth = entity.getComponent<ClothComponent>();
+    if (cloth && cloth->isEnabled() && cloth->isReady())
+    {
+        SceneRenderData::ClothRenderItem item;
+        item.mesh = &cloth->getMesh();
+        item.material = cloth->getMaterial().get();
+        item.worldMatrix = entity.getWorldMatrix();
+        item.worldBounds = cloth->getMesh().getLocalBounds().transformed(item.worldMatrix);
+        item.entityId = entity.getId();
+        data.clothItems.push_back(item);
     }
 
     // Recurse into children
