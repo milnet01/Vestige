@@ -1,5 +1,6 @@
 # Build output
 build/
+Testing/
 .cache/
 cmake-build-*/
 out/
@@ -49,3 +50,17 @@ external/googletest/
 external/assimp/
 
 # Note: external/glad/ is NOT ignored — it contains pre-generated OpenGL loader files
+
+# Core dumps
+core
+core.*
+
+# Log files
+*.log
+
+# Profiling output
+*.prof
+perf.data*
+
+# Windows debug symbols
+*.pdb
