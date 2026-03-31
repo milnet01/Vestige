@@ -325,4 +325,117 @@ bool FirstPersonController::isWalkMode() const
     return m_walkMode;
 }
 
+void FirstPersonController::processLookOnly(float deltaTime)
+{
+    if (!m_isEnabled)
+    {
+        return;
+    }
+
+    // Check for gamepad connection changes (same as in update())
+    if (m_gamepadId < 0)
+    {
+        for (int i = GLFW_JOYSTICK_1; i <= GLFW_JOYSTICK_LAST; i++)
+        {
+            if (glfwJoystickIsGamepad(i))
+            {
+                m_gamepadId = i;
+                const char* name = glfwGetGamepadName(i);
+                Logger::info("Gamepad connected: " + std::string(name ? name : "Unknown"));
+                break;
+            }
+        }
+    }
+    else if (!glfwJoystickPresent(m_gamepadId))
+    {
+        Logger::info("Gamepad disconnected");
+        m_gamepadId = -1;
+    }
+
+    // Mouse look
+    processMouseLook();
+
+    // Gamepad right-stick look only
+    if (m_gamepadId >= 0)
+    {
+        GLFWgamepadstate state;
+        if (glfwGetGamepadState(m_gamepadId, &state))
+        {
+            float rightX = applyDeadzone(state.axes[GLFW_GAMEPAD_AXIS_RIGHT_X]);
+            float rightY = applyDeadzone(state.axes[GLFW_GAMEPAD_AXIS_RIGHT_Y]);
+            if (rightX != 0.0f || rightY != 0.0f)
+            {
+                float lookSpeed = m_config.gamepadLookSensitivity * deltaTime;
+                m_camera.rotate(rightX * lookSpeed, -rightY * lookSpeed);
+            }
+        }
+    }
+}
+
+glm::vec3 FirstPersonController::computeDesiredVelocity(float /*deltaTime*/)
+{
+    if (!m_isEnabled)
+    {
+        return glm::vec3(0.0f);
+    }
+
+    glm::vec3 moveDir(0.0f);
+
+    // Keyboard movement
+    if (m_inputManager.isKeyDown(GLFW_KEY_W))    moveDir.z += 1.0f;
+    if (m_inputManager.isKeyDown(GLFW_KEY_S))    moveDir.z -= 1.0f;
+    if (m_inputManager.isKeyDown(GLFW_KEY_D))    moveDir.x += 1.0f;
+    if (m_inputManager.isKeyDown(GLFW_KEY_A))    moveDir.x -= 1.0f;
+    if (m_inputManager.isKeyDown(GLFW_KEY_SPACE))       moveDir.y += 1.0f;
+    if (m_inputManager.isKeyDown(GLFW_KEY_LEFT_SHIFT))  moveDir.y -= 1.0f;
+
+    // Gamepad left-stick movement + triggers
+    if (m_gamepadId >= 0)
+    {
+        GLFWgamepadstate state;
+        if (glfwGetGamepadState(m_gamepadId, &state))
+        {
+            float leftX = applyDeadzone(state.axes[GLFW_GAMEPAD_AXIS_LEFT_X]);
+            float leftY = applyDeadzone(state.axes[GLFW_GAMEPAD_AXIS_LEFT_Y]);
+            if (leftX != 0.0f || leftY != 0.0f)
+            {
+                moveDir.x += leftX;
+                moveDir.z -= leftY;
+            }
+
+            float leftTrigger = (state.axes[GLFW_GAMEPAD_AXIS_LEFT_TRIGGER] + 1.0f) * 0.5f;
+            float rightTrigger = (state.axes[GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER] + 1.0f) * 0.5f;
+            moveDir.y += rightTrigger - leftTrigger;
+
+            m_isGamepadSprinting = state.buttons[GLFW_GAMEPAD_BUTTON_LEFT_BUMPER] != 0;
+        }
+    }
+
+    if (glm::length(moveDir) < 0.001f)
+    {
+        return glm::vec3(0.0f);
+    }
+
+    moveDir = glm::normalize(moveDir);
+
+    // Sprint speed
+    float speed = m_config.moveSpeed;
+    if (m_inputManager.isKeyDown(GLFW_KEY_LEFT_CONTROL) || m_isGamepadSprinting)
+    {
+        speed *= m_config.sprintMultiplier;
+    }
+
+    // Project onto world-space directions using camera orientation
+    glm::vec3 front = m_camera.getFront();
+    glm::vec3 right = glm::normalize(glm::cross(front, glm::vec3(0.0f, 1.0f, 0.0f)));
+    glm::vec3 flatFront = glm::normalize(glm::vec3(front.x, 0.0f, front.z));
+    glm::vec3 flatRight = glm::normalize(glm::vec3(right.x, 0.0f, right.z));
+
+    glm::vec3 velocity = flatFront * moveDir.z * speed
+                       + flatRight * moveDir.x * speed
+                       + glm::vec3(0.0f, moveDir.y * speed, 0.0f);
+
+    return velocity;
+}
+
 } // namespace Vestige

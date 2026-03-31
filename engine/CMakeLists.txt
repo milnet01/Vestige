@@ -101,6 +101,7 @@ set(ENGINE_SOURCES
     animation/morph_target.cpp
     physics/physics_world.cpp
     physics/rigid_body.cpp
+    physics/physics_character_controller.cpp
     physics/physics_debug.cpp
     profiler/gpu_timer.cpp
     profiler/cpu_profiler.cpp

@@ -2,6 +2,9 @@
 /// @brief Engine implementation — main loop and subsystem orchestration.
 #include "core/engine.h"
 #include "core/logger.h"
+#include "physics/jolt_helpers.h"
+
+#include <Jolt/Physics/Collision/Shape/BoxShape.h>
 #include "renderer/light_probe_manager.h"
 #include "renderer/sh_probe_grid.h"
 #include "renderer/radiosity_baker.h"
@@ -215,6 +218,25 @@ bool Engine::initialize(const EngineConfig& config)
     if (m_terrain.isInitialized())
     {
         m_controller->setTerrain(&m_terrain);
+    }
+
+    // Create static physics bodies from scene geometry (for physics character controller)
+    createPhysicsStaticBodies();
+
+    // Initialize physics character controller
+    if (m_physicsWorld.isInitialized())
+    {
+        PhysicsControllerConfig physCtrlConfig;
+        physCtrlConfig.eyeHeight = ctrlConfig.playerHeight;
+        physCtrlConfig.maxSlopeAngle = ctrlConfig.maxSlopeAngle;
+
+        glm::vec3 startFeet = m_camera->getPosition();
+        startFeet.y -= physCtrlConfig.eyeHeight;  // Camera position -> feet position
+
+        if (!m_physicsCharController.initialize(m_physicsWorld, startFeet, physCtrlConfig))
+        {
+            Logger::warning("Physics character controller initialization failed");
+        }
     }
 
     // Wire up foliage shadow casting into the renderer's shadow pass
@@ -514,9 +536,32 @@ bool Engine::initialize(const EngineConfig& config)
             {
                 bool walk = !m_controller->isWalkMode();
                 m_controller->setWalkMode(walk);
-                Logger::info(std::string("Movement: ") + (walk ? "Walk (terrain)" : "Fly"));
+                if (m_physicsCharController.isInitialized())
+                {
+                    m_physicsCharController.setFlyMode(!walk);
+                }
+                Logger::info(std::string("Movement: ") + (walk ? "Walk" : "Fly"));
                 if (m_editor) m_editor->showNotification(
-                    std::string("Movement: ") + (walk ? "Walk (terrain)" : "Fly"));
+                    std::string("Movement: ") + (walk ? "Walk" : "Fly"));
+                break;
+            }
+
+            case GLFW_KEY_P:
+            {
+                if (m_physicsCharController.isInitialized())
+                {
+                    m_usePhysicsController = !m_usePhysicsController;
+                    if (m_usePhysicsController)
+                    {
+                        // Sync camera position to physics controller
+                        glm::vec3 feet = m_camera->getPosition();
+                        feet.y -= m_physicsCharController.getConfig().eyeHeight;
+                        m_physicsCharController.setPosition(feet);
+                    }
+                    std::string mode = m_usePhysicsController ? "Physics (Jolt)" : "Legacy (AABB)";
+                    Logger::info("Controller: " + mode);
+                    if (m_editor) m_editor->showNotification("Controller: " + mode);
+                }
                 break;
             }
 
@@ -570,7 +615,7 @@ bool Engine::initialize(const EngineConfig& config)
 
     m_isRunning = true;
     Logger::info("Engine initialized successfully");
-    Logger::info("Controls: Escape=toggle editor/play, WASD=move (play mode), Mouse=look (play mode), F1=wireframe, F2=tonemapper, F3=HDR debug, F4=POM, F5=bloom, F6=SSAO, F7=AA mode (None/MSAA/TAA/SMAA), F8=color grading, F9=CSM debug, F10=auto-exposure, F11=diagnostic capture, V=frame cap cycle, Ctrl+Q=quit");
+    Logger::info("Controls: Escape=toggle editor/play, WASD=move (play mode), Mouse=look (play mode), F1=wireframe, F2=tonemapper, F3=HDR debug, F4=POM, F5=bloom, F6=SSAO, F7=AA mode (None/MSAA/TAA/SMAA), F8=color grading, F9=CSM debug, F10=auto-exposure, F11=diagnostic capture, V=frame cap cycle, P=toggle physics controller, G=walk/fly, Ctrl+Q=quit");
     Logger::info("Editor camera: Alt+LMB=orbit, MMB=pan, Scroll=zoom, F=focus, Numpad 1/3/7=front/right/top");
     Logger::info("Gamepad: Left stick=move, Right stick=look, LB=sprint, Triggers=up/down");
     return true;
@@ -730,15 +775,27 @@ void Engine::run()
 
         // 5. Controller — process input and update camera
         Scene* activeScene = m_sceneManager->getActiveScene();
-        if (activeScene)
+        if (m_usePhysicsController && m_physicsCharController.isInitialized())
         {
-            activeScene->collectColliders(m_colliders);
+            // Physics controller path: input -> velocity -> Jolt -> camera
+            m_controller->processLookOnly(deltaTime);
+            glm::vec3 velocity = m_controller->computeDesiredVelocity(deltaTime);
+            m_physicsCharController.update(deltaTime, velocity);
+            m_camera->setPosition(m_physicsCharController.getEyePosition());
         }
         else
         {
-            m_colliders.clear();
+            // Legacy AABB controller path
+            if (activeScene)
+            {
+                activeScene->collectColliders(m_colliders);
+            }
+            else
+            {
+                m_colliders.clear();
+            }
+            m_controller->update(deltaTime, m_colliders);
         }
-        m_controller->update(deltaTime, m_colliders);
 
         // 6. Renderer — draw the frame
         int winHeight = m_window->getHeight();
@@ -1134,6 +1191,7 @@ void Engine::shutdown()
     m_waterRenderer.shutdown();
     m_particleRenderer.shutdown();
     m_profiler.shutdown();
+    m_physicsCharController.shutdown();
     m_physicsWorld.shutdown();
     m_debugDraw.cleanup();
     m_editor.reset();
@@ -1149,6 +1207,50 @@ void Engine::shutdown()
 
     m_isRunning = false;
     Logger::info("Engine shutdown complete");
+}
+
+void Engine::createPhysicsStaticBodies()
+{
+    if (!m_physicsWorld.isInitialized())
+    {
+        return;
+    }
+
+    Scene* scene = m_sceneManager->getActiveScene();
+    if (!scene)
+    {
+        return;
+    }
+
+    // Convert all scene AABB colliders to static Jolt box bodies
+    std::vector<AABB> colliders;
+    scene->collectColliders(colliders);
+
+    int count = 0;
+    for (const auto& aabb : colliders)
+    {
+        glm::vec3 center = aabb.getCenter();
+        glm::vec3 size = aabb.getSize();
+        glm::vec3 halfExtents = size * 0.5f;
+
+        // Skip degenerate AABBs
+        if (halfExtents.x < 0.001f || halfExtents.y < 0.001f || halfExtents.z < 0.001f)
+        {
+            continue;
+        }
+
+        JPH::BoxShape* shape = new JPH::BoxShape(
+            JPH::Vec3(halfExtents.x, halfExtents.y, halfExtents.z));
+        m_physicsWorld.createStaticBody(shape, center);
+        ++count;
+    }
+
+    // Add a large ground plane if no terrain-sized collider exists
+    JPH::BoxShape* ground = new JPH::BoxShape(JPH::Vec3(500, 0.5f, 500));
+    m_physicsWorld.createStaticBody(ground, glm::vec3(0, -0.5f, 0));
+
+    Logger::info("Physics: created " + std::to_string(count) +
+                 " static bodies from scene + ground plane");
 }
 
 void Engine::setupVisualTestViewpoints()
