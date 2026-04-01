@@ -5,11 +5,14 @@
 #include "scene/entity.h"
 #include "scene/mesh_renderer.h"
 #include "scene/light_component.h"
+#include "scene/camera_component.h"
 #include "scene/particle_emitter.h"
 #include "scene/water_surface.h"
 #include "animation/skeleton_animator.h"
 #include "renderer/camera.h"
 #include "renderer/light.h"
+
+#include <glad/gl.h>
 
 #include <memory>
 #include <string>
@@ -37,6 +40,10 @@ struct SceneRenderData
         bool castsShadow = true;
         bool isLocked = false;
         const std::vector<glm::mat4>* boneMatrices = nullptr;  ///< Skeletal animation (nullptr for static)
+        const std::vector<float>* morphWeights = nullptr;      ///< Morph target weights (nullptr if no morphs)
+        GLuint morphSSBO = 0;                                  ///< Morph target delta SSBO (0 if no morphs)
+        int morphTargetCount = 0;                              ///< Number of active morph targets
+        int morphVertexCount = 0;                              ///< Vertex count for SSBO indexing
     };
 
     std::vector<RenderItem> renderItems;
@@ -113,6 +120,13 @@ public:
     /// @brief Sets the scene name.
     void setName(const std::string& name);
 
+    /// @brief Sets the active camera component for rendering.
+    /// @param camera Pointer to a CameraComponent in this scene (nullptr to clear).
+    void setActiveCamera(CameraComponent* camera);
+
+    /// @brief Gets the active camera component (nullptr if none set).
+    CameraComponent* getActiveCamera() const;
+
     /// @brief Removes all entities from the scene (keeps the root node).
     void clearEntities();
 
@@ -149,6 +163,7 @@ private:
     std::string m_name;
     std::unique_ptr<Entity> m_root;
     std::unordered_map<uint32_t, Entity*> m_entityIndex;
+    CameraComponent* m_activeCamera = nullptr;
 };
 
 } // namespace Vestige

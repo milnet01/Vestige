@@ -103,8 +103,19 @@ void Scene::setName(const std::string& name)
     m_name = name;
 }
 
+void Scene::setActiveCamera(CameraComponent* camera)
+{
+    m_activeCamera = camera;
+}
+
+CameraComponent* Scene::getActiveCamera() const
+{
+    return m_activeCamera;
+}
+
 void Scene::clearEntities()
 {
+    m_activeCamera = nullptr;
     m_root = std::make_unique<Entity>("Root");
     m_entityIndex.clear();
     m_entityIndex[m_root->getId()] = m_root.get();
@@ -239,6 +250,19 @@ void Scene::collectRenderDataRecursive(const Entity& entity, SceneRenderData& da
         if (animator && animator->isEnabled() && animator->hasBones())
         {
             item.boneMatrices = &animator->getBoneMatrices();
+        }
+        if (animator && animator->isEnabled() && !animator->getMorphWeights().empty())
+        {
+            item.morphWeights = &animator->getMorphWeights();
+        }
+
+        // Morph target SSBO from mesh
+        auto mesh = meshRenderer->getMesh();
+        if (mesh && mesh->getMorphSSBO() != 0)
+        {
+            item.morphSSBO = mesh->getMorphSSBO();
+            item.morphTargetCount = mesh->getMorphTargetCount();
+            item.morphVertexCount = mesh->getMorphVertexCount();
         }
 
         // BLEND materials go to the transparent list; OPAQUE and MASK go to opaque

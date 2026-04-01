@@ -35,7 +35,7 @@ This phase establishes the project skeleton, build system, and core engine loop.
 
 ### Features
 - [x] Mesh class (vertex buffer, index buffer, vertex array)
-- [ ] OBJ model loading (simple format, good for starting)
+- [x] ~~OBJ model loading~~ Superseded by glTF loading (Phase 4) — glTF is the modern standard
 - [x] Texture loading (PNG/JPG via stb_image)
 - [x] UV mapping and texture coordinates
 - [x] Basic materials (diffuse color, specular, shininess)
@@ -59,7 +59,7 @@ This phase establishes the project skeleton, build system, and core engine loop.
 - [x] Entity class with component system
 - [x] Transform component (position, rotation, scale, parent-child hierarchy)
 - [x] MeshRenderer component
-- [ ] Camera component (currently camera is standalone — works for now)
+- [x] Camera component (CameraComponent — entity-based, supports perspective/orthographic, scene tracks active camera)
 - [x] Light components (Directional, Point, Spot)
 - [x] Scene class (holds entity hierarchy)
 - [x] SceneManager (load, unload, switch scenes)
@@ -73,7 +73,7 @@ This phase establishes the project skeleton, build system, and core engine loop.
 
 ---
 
-## Phase 4: Visual Quality (IN PROGRESS)
+## Phase 4: Visual Quality (COMPLETE)
 **Goal:** Make it look good — shadows, better materials, post-processing.
 
 ### Features
@@ -426,6 +426,13 @@ Animated objects and characters are essential for doors, swinging censers, pries
 - [x] IK blending with animation clips (IK layer on top of baked animations) — Phase 7D (weight parameter)
 
 ### Facial Animation and Lip Sync
+- [x] GPU morph target deformation pipeline — Phase 7F
+  - Morph target deltas uploaded to SSBO (binding 3) at model load time
+  - Vertex shader applies weighted position+normal deltas before bone skinning (up to 8 targets)
+  - WEIGHTS animation channel sampling in SkeletonAnimator (linear + step interpolation)
+  - Procedural morph weight API: setMorphWeight(index, value) for game-driven expressions
+  - glTF loader updated: WEIGHTS channels no longer skipped for non-joint nodes
+  - Mesa-safe dummy SSBO binding for morph target buffer
 - [ ] Facial blend shape system (emotion presets — happy, sad, angry, surprised, pain)
   - Layer facial animation on top of body animation
   - Smooth blending between expressions with configurable transition speed
@@ -437,6 +444,35 @@ Animated objects and characters are essential for doors, swinging censers, pries
   - Look-at targets (eyes track points of interest, player, or other NPCs)
   - Blink animation (random blink interval, blink on startle)
   - Pupil dilation (optional — fear, darkness adaptation)
+
+### Motion Matching
+Data-driven animation selection that replaces hand-authored state machines with continuous pose searching. Used by The Last of Us Part II, For Honor, UE5 (built-in), and modern AAA games for fluid locomotion.
+- [ ] Motion database — import and index a large set of animation clips with per-frame feature vectors
+  - Feature vector: joint positions, joint velocities, trajectory (future path positions + facing)
+  - KD-tree or brute-force search over feature vectors for nearest match
+  - Clip annotation: tag clips with locomotion type (walk, run, strafe, turn, stop)
+- [ ] Runtime pose matching — each frame, search the database for the best next pose
+  - Current pose features: extract from current skeleton state
+  - Desired trajectory: from player input (gamepad stick → desired velocity + facing)
+  - Cost function: weighted sum of pose distance + trajectory distance + transition cost
+  - Inertialization blending: smooth transition to matched pose without visible pops (Bollo, GDC 2018)
+- [ ] Motion database preprocessing
+  - Offline feature extraction and normalization
+  - Clip segmentation: split long mocap takes into indexed segments
+  - Mirror generation: auto-generate left/right mirrored clips to double database size
+  - Velocity and acceleration caching for fast runtime queries
+- [ ] Spring-based trajectory prediction
+  - Critically damped spring model for desired velocity/facing (responsive to input changes)
+  - Predict future trajectory 0.5-1.0s ahead for matching
+- [ ] Editor integration
+  - Motion database browser — view clips, features, and annotations
+  - Pose search debugger — visualize matched poses and cost breakdown in real-time
+  - Weight tuning UI for cost function parameters
+- [ ] Performance optimization
+  - KD-tree acceleration for large databases (1000+ clips)
+  - Feature normalization for balanced distance metrics
+  - Budget-based search (limit candidates per frame)
+  - Thread-safe: search on worker thread, apply result on main thread
 
 ### glTF Animation Import
 - [x] Import skeletal animations from glTF files — Phase 7A
@@ -454,19 +490,24 @@ Animated characters walk through the Temple courts, doors swing open on approach
 Physics enables curtains blowing in the wind, objects responding to gravity, doors with realistic hinges, and the linen fabrics of the Tabernacle draping naturally.
 
 ### Rigid Body Dynamics
-- [ ] Physics engine integration (Bullet Physics or Jolt — evaluate both)
-- [ ] Rigid body component (mass, friction, restitution)
-- [ ] Collision shapes (box, sphere, capsule, convex hull, triangle mesh)
-- [ ] Gravity and force application
-- [ ] Collision detection and response (bouncing, sliding, resting)
-- [ ] Kinematic bodies (scripted movement that still collides — doors, platforms)
-- [ ] Physics-based character controller (replace current AABB controller)
+- [x] Physics engine integration (Jolt Physics v5.2.0) — Phase 8A
+- [x] Rigid body component (mass, friction, restitution) — Phase 8A
+- [x] Collision shapes: box, sphere, capsule — Phase 8A
+- [ ] Collision shapes: convex hull, triangle mesh
+- [x] Gravity and force application — Phase 8A
+- [x] Collision detection and response (bouncing, sliding, resting) — Phase 8A
+- [x] Kinematic bodies (scripted movement that still collides — doors, platforms) — Phase 8A
+- [x] Physics-based character controller (CharacterVirtual with stair climbing, floor sticking) — Phase 8B
 
 ### Constraints and Joints
-- [ ] Hinge joints (doors, gates, lids)
-- [ ] Spring/damper constraints (swinging objects, suspension)
-- [ ] Fixed joints (weld objects together)
-- [ ] Rope/chain constraints (hanging lamps, chains)
+- [x] Hinge joints (doors, gates, lids — with motor + angle limits) — Phase 8C
+- [x] Spring/damper constraints (distance constraint with spring params) — Phase 8C
+- [x] Fixed joints (weld objects together) — Phase 8C
+- [x] Rope/chain constraints (distance + point constraints) — Phase 8C
+- [x] Breakable constraints (force threshold triggers break) — Phase 8C
+- [x] Slider constraints (linear movement along axis) — Phase 8C
+- [x] Physics debug visualization (wireframe bodies + constraint lines) — Phase 8C
+- [x] Raycasting (physics world ray queries) — Phase 8B
 
 ### Cloth Simulation
 - [x] Cloth component (XPBD position-based dynamics) — Phase 8D

@@ -896,6 +896,12 @@ static void loadMeshes(const tinygltf::Model& gltfModel, Model& outModel)
             auto mesh = std::make_shared<Mesh>();
             mesh->upload(vertices, indices);
 
+            // Upload morph target deltas to GPU SSBO (if present)
+            if (!morphData.empty())
+            {
+                mesh->uploadMorphTargets(morphData);
+            }
+
             ModelPrimitive modelPrim;
             modelPrim.mesh = mesh;
             modelPrim.materialIndex = primitive.material;
@@ -1249,17 +1255,19 @@ static void loadAnimations(const tinygltf::Model& gltfModel, Model& outModel)
 
         for (const auto& channel : gltfAnim.channels)
         {
-            // Map glTF target node to skeleton joint index
+            // Map glTF target node to skeleton joint index.
+            // WEIGHTS channels target the mesh node, not necessarily a joint.
             auto it = nodeToJoint.find(channel.target_node);
-            if (it == nodeToJoint.end())
+            bool isWeightsChannel = (channel.target_path == "weights");
+            if (it == nodeToJoint.end() && !isWeightsChannel)
             {
-                continue;  // Not a skeleton joint — skip (node anim is Phase 7C)
+                continue;  // Not a skeleton joint and not WEIGHTS — skip
             }
 
             const auto& sampler = gltfAnim.samplers[static_cast<size_t>(channel.sampler)];
 
             AnimationChannel animChannel;
-            animChannel.jointIndex = it->second;
+            animChannel.jointIndex = (it != nodeToJoint.end()) ? it->second : -1;
 
             // Target path
             if (channel.target_path == "translation")

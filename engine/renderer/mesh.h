@@ -3,6 +3,7 @@
 #pragma once
 
 #include "utils/aabb.h"
+#include "animation/morph_target.h"
 
 #include <glad/gl.h>
 #include <glm/glm.hpp>
@@ -71,6 +72,26 @@ public:
     /// Returns a zero-sized AABB if no geometry has been uploaded.
     const AABB& getLocalBounds() const;
 
+    // --- Morph targets ---
+
+    /// @brief Maximum morph targets supported simultaneously by the shader.
+    static constexpr int MAX_MORPH_TARGETS = 8;
+
+    /// @brief Uploads morph target deltas to a GPU SSBO for shader-based deformation.
+    /// Layout: [target0_pos_vert0..N, target1_pos_vert0..N, ..., target0_nor_vert0..N, ...]
+    /// Each element is vec4 (xyz = delta, w = 0).
+    /// @param data Morph target data (position and normal deltas per target).
+    void uploadMorphTargets(const MorphTargetData& data);
+
+    /// @brief Gets the morph target SSBO handle (0 if no morph targets).
+    GLuint getMorphSSBO() const;
+
+    /// @brief Gets the number of morph targets uploaded.
+    int getMorphTargetCount() const;
+
+    /// @brief Gets the vertex count used for morph target indexing.
+    int getMorphVertexCount() const;
+
     /// @brief Creates a unit cube mesh (1x1x1, centered at origin).
     /// @return A mesh containing a colored cube.
     static Mesh createCube();
@@ -109,6 +130,11 @@ private:
     GLuint m_ebo;  // Element Buffer Object (indices)
     uint32_t m_indexCount;
     AABB m_localBounds;  // Computed from vertex positions during upload()
+
+    // Morph target GPU data
+    GLuint m_morphSSBO = 0;
+    int m_morphTargetCount = 0;
+    int m_morphVertexCount = 0;
 };
 
 } // namespace Vestige

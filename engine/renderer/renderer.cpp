@@ -164,6 +164,13 @@ Renderer::Renderer(EventBus& eventBus)
         static_cast<GLsizeiptr>(MAX_BONES * sizeof(glm::mat4)),
         nullptr, GL_DYNAMIC_STORAGE_BIT);
 
+    // Dummy morph target SSBO (binding point 3) — Mesa requires all declared
+    // SSBOs to have valid buffers bound, even when no morph targets are active.
+    glCreateBuffers(1, &m_dummyMorphSSBO);
+    glNamedBufferStorage(m_dummyMorphSSBO,
+        static_cast<GLsizeiptr>(sizeof(glm::vec4)),
+        nullptr, 0);
+
     Logger::info("Renderer initialized (OpenGL 4.5, reverse-Z)");
 }
 
@@ -212,6 +219,10 @@ Renderer::~Renderer()
     if (m_boneMatrixSSBO != 0)
     {
         glDeleteBuffers(1, &m_boneMatrixSSBO);
+    }
+    if (m_dummyMorphSSBO != 0)
+    {
+        glDeleteBuffers(1, &m_dummyMorphSSBO);
     }
     Logger::debug("Renderer destroyed");
 }
@@ -685,6 +696,7 @@ void Renderer::beginFrame()
     // Mesa requires ALL declared SSBOs to have valid buffers bound at draw time.
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_dummyModelSSBO);
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, m_boneMatrixSSBO);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, m_dummyMorphSSBO);
 
     // Bind fallback textures to ALL sampler units that the scene shader declares.
     // Mesa requires valid textures even when the shader doesn't sample them.
@@ -1284,7 +1296,8 @@ void Renderer::uploadMaterialUniforms(const Material& material)
 void Renderer::drawMesh(const Mesh& mesh, const glm::mat4& modelMatrix,
                          const Material& material, const Camera& camera,
                          float /*aspectRatio*/,
-                         const std::vector<glm::mat4>* boneMatrices)
+                         const std::vector<glm::mat4>* boneMatrices,
+                         const float* morphWeights, int morphWeightCount)
 {
     m_sceneShader.use();
 
@@ -1307,6 +1320,22 @@ void Renderer::drawMesh(const Mesh& mesh, const glm::mat4& modelMatrix,
         glNamedBufferSubData(m_boneMatrixSSBO, 0, dataSize, boneMatrices->data());
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, m_boneMatrixSSBO);
     }
+
+    // Morph target deformation: bind SSBO and set weights
+    int activeMorphCount = 0;
+    if (morphWeights && morphWeightCount > 0 && mesh.getMorphSSBO() != 0)
+    {
+        activeMorphCount = std::min(morphWeightCount, mesh.getMorphTargetCount());
+        activeMorphCount = std::min(activeMorphCount, Mesh::MAX_MORPH_TARGETS);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, mesh.getMorphSSBO());
+        m_sceneShader.setInt("u_morphVertexCount", mesh.getMorphVertexCount());
+        for (int i = 0; i < activeMorphCount; ++i)
+        {
+            m_sceneShader.setFloat("u_morphWeights[" + std::to_string(i) + "]",
+                                    morphWeights[i]);
+        }
+    }
+    m_sceneShader.setInt("u_morphTargetCount", activeMorphCount);
 
     uploadMaterialUniforms(material);
 
@@ -2130,6 +2159,7 @@ std::vector<Renderer::InstanceBatch> Renderer::buildInstanceBatchesStatic(
         {
             batches[it->second].modelMatrices.push_back(item.worldMatrix);
             batches[it->second].boneMatrixPtrs.push_back(item.boneMatrices);
+            batches[it->second].morphWeightPtrs.push_back(item.morphWeights);
         }
         else
         {
@@ -2139,6 +2169,7 @@ std::vector<Renderer::InstanceBatch> Renderer::buildInstanceBatchesStatic(
             batch.material = item.material;
             batch.modelMatrices.push_back(item.worldMatrix);
             batch.boneMatrixPtrs.push_back(item.boneMatrices);
+            batch.morphWeightPtrs.push_back(item.morphWeights);
             batches.push_back(std::move(batch));
         }
     }
@@ -2161,6 +2192,7 @@ void Renderer::buildInstanceBatches(
         {
             m_instanceBatches[it->second].modelMatrices.push_back(item.worldMatrix);
             m_instanceBatches[it->second].boneMatrixPtrs.push_back(item.boneMatrices);
+            m_instanceBatches[it->second].morphWeightPtrs.push_back(item.morphWeights);
         }
         else
         {
@@ -2176,6 +2208,8 @@ void Renderer::buildInstanceBatches(
                 m_instanceBatches[idx].modelMatrices.push_back(item.worldMatrix);
                 m_instanceBatches[idx].boneMatrixPtrs.clear();
                 m_instanceBatches[idx].boneMatrixPtrs.push_back(item.boneMatrices);
+                m_instanceBatches[idx].morphWeightPtrs.clear();
+                m_instanceBatches[idx].morphWeightPtrs.push_back(item.morphWeights);
             }
             else
             {
@@ -2184,6 +2218,7 @@ void Renderer::buildInstanceBatches(
                 batch.material = item.material;
                 batch.modelMatrices.push_back(item.worldMatrix);
                 batch.boneMatrixPtrs.push_back(item.boneMatrices);
+                batch.morphWeightPtrs.push_back(item.morphWeights);
                 m_instanceBatches.push_back(std::move(batch));
             }
             m_instanceBatchCount++;
@@ -2646,9 +2681,12 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
                 // Non-instanced path for single-instance batches
                 for (size_t mi = 0; mi < batch.modelMatrices.size(); mi++)
                 {
+                    auto* bones = (mi < batch.boneMatrixPtrs.size()) ? batch.boneMatrixPtrs[mi] : nullptr;
+                    auto* mwPtr = (mi < batch.morphWeightPtrs.size()) ? batch.morphWeightPtrs[mi] : nullptr;
+                    const float* mw = (mwPtr && !mwPtr->empty()) ? mwPtr->data() : nullptr;
+                    int mwc = mw ? static_cast<int>(mwPtr->size()) : 0;
                     drawMesh(*batch.mesh, batch.modelMatrices[mi], *batch.material,
-                             camera, aspectRatio,
-                             mi < batch.boneMatrixPtrs.size() ? batch.boneMatrixPtrs[mi] : nullptr);
+                             camera, aspectRatio, bones, mw, mwc);
                 }
             }
         }
@@ -2745,8 +2783,11 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
 
         for (const auto& item : m_sortedTransparentItems)
         {
+            const float* mw = (item.morphWeights && !item.morphWeights->empty())
+                              ? item.morphWeights->data() : nullptr;
+            int mwc = mw ? static_cast<int>(item.morphWeights->size()) : 0;
             drawMesh(*item.mesh, item.worldMatrix, *item.material, camera, aspectRatio,
-                     item.boneMatrices);
+                     item.boneMatrices, mw, mwc);
         }
 
         glDepthMask(GL_TRUE);

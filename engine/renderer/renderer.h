@@ -73,10 +73,13 @@ public:
 
     /// @brief Renders a mesh with material and lighting.
     /// @param boneMatrices Optional bone matrices for skeletal animation (nullptr for static).
+    /// @param morphWeights Optional morph target weights (nullptr if no morphs).
+    /// @param morphWeightCount Number of morph weights.
     void drawMesh(const Mesh& mesh, const glm::mat4& modelMatrix,
                   const Material& material, const Camera& camera,
                   float aspectRatio,
-                  const std::vector<glm::mat4>* boneMatrices = nullptr);
+                  const std::vector<glm::mat4>* boneMatrices = nullptr,
+                  const float* morphWeights = nullptr, int morphWeightCount = 0);
 
     /// @brief Sets the clear color (background color).
     void setClearColor(const glm::vec3& color);
@@ -392,6 +395,7 @@ public:
         const Material* material;
         std::vector<glm::mat4> modelMatrices;
         std::vector<const std::vector<glm::mat4>*> boneMatrixPtrs;  ///< Parallel to modelMatrices (nullptr for static)
+        std::vector<const std::vector<float>*> morphWeightPtrs;     ///< Parallel to modelMatrices (nullptr if no morphs)
     };
 
     /// @brief Groups render items by (mesh, material) pair for instanced drawing.
@@ -619,6 +623,9 @@ private:
     // Skeletal animation bone matrix SSBO (binding point 2)
     GLuint m_boneMatrixSSBO = 0;
     static constexpr int MAX_BONES = 128;
+
+    // Morph target dummy SSBO (binding point 3) — Mesa safety
+    GLuint m_dummyMorphSSBO = 0;
 
     // Water caustics
     GLuint m_causticsTexture = 0;

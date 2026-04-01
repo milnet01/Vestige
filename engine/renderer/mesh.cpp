@@ -110,12 +110,18 @@ Mesh::Mesh(Mesh&& other) noexcept
     , m_ebo(other.m_ebo)
     , m_indexCount(other.m_indexCount)
     , m_localBounds(other.m_localBounds)
+    , m_morphSSBO(other.m_morphSSBO)
+    , m_morphTargetCount(other.m_morphTargetCount)
+    , m_morphVertexCount(other.m_morphVertexCount)
 {
     other.m_vao = 0;
     other.m_vbo = 0;
     other.m_ebo = 0;
     other.m_indexCount = 0;
     other.m_localBounds = {};
+    other.m_morphSSBO = 0;
+    other.m_morphTargetCount = 0;
+    other.m_morphVertexCount = 0;
 }
 
 Mesh& Mesh::operator=(Mesh&& other) noexcept
@@ -128,11 +134,17 @@ Mesh& Mesh::operator=(Mesh&& other) noexcept
         m_ebo = other.m_ebo;
         m_indexCount = other.m_indexCount;
         m_localBounds = other.m_localBounds;
+        m_morphSSBO = other.m_morphSSBO;
+        m_morphTargetCount = other.m_morphTargetCount;
+        m_morphVertexCount = other.m_morphVertexCount;
         other.m_vao = 0;
         other.m_vbo = 0;
         other.m_ebo = 0;
         other.m_indexCount = 0;
         other.m_localBounds = {};
+        other.m_morphSSBO = 0;
+        other.m_morphTargetCount = 0;
+        other.m_morphVertexCount = 0;
     }
     return *this;
 }
@@ -672,6 +684,82 @@ Mesh Mesh::createWedge()
     return wedge;
 }
 
+void Mesh::uploadMorphTargets(const MorphTargetData& data)
+{
+    if (data.empty() || data.vertexCount == 0)
+    {
+        return;
+    }
+
+    int targetCount = static_cast<int>(std::min(data.targetCount(),
+                                                 static_cast<size_t>(MAX_MORPH_TARGETS)));
+    int vertCount = static_cast<int>(data.vertexCount);
+
+    // SSBO layout: [pos deltas for all targets] [nor deltas for all targets]
+    // Each delta is vec4 (xyz = delta, w = 0) for std430 alignment.
+    // Total elements: targetCount * vertCount * 2 (pos + nor)
+    size_t totalElements = static_cast<size_t>(targetCount) * static_cast<size_t>(vertCount) * 2;
+    std::vector<glm::vec4> buffer(totalElements, glm::vec4(0.0f));
+
+    // Pack position deltas: buffer[t * vertCount + v]
+    for (int t = 0; t < targetCount; ++t)
+    {
+        const auto& target = data.targets[static_cast<size_t>(t)];
+        size_t count = std::min(target.positionDeltas.size(), static_cast<size_t>(vertCount));
+        for (size_t v = 0; v < count; ++v)
+        {
+            const auto& d = target.positionDeltas[v];
+            buffer[static_cast<size_t>(t) * static_cast<size_t>(vertCount) + v] = glm::vec4(d, 0.0f);
+        }
+    }
+
+    // Pack normal deltas: buffer[targetCount * vertCount + t * vertCount + v]
+    size_t norOffset = static_cast<size_t>(targetCount) * static_cast<size_t>(vertCount);
+    for (int t = 0; t < targetCount; ++t)
+    {
+        const auto& target = data.targets[static_cast<size_t>(t)];
+        const auto& deltas = target.normalDeltas;
+        if (deltas.empty()) continue;
+        size_t count = std::min(deltas.size(), static_cast<size_t>(vertCount));
+        for (size_t v = 0; v < count; ++v)
+        {
+            buffer[norOffset + static_cast<size_t>(t) * static_cast<size_t>(vertCount) + v] =
+                glm::vec4(deltas[v], 0.0f);
+        }
+    }
+
+    // Delete old SSBO if any
+    if (m_morphSSBO != 0)
+    {
+        glDeleteBuffers(1, &m_morphSSBO);
+    }
+
+    // Create immutable SSBO
+    glCreateBuffers(1, &m_morphSSBO);
+    glNamedBufferStorage(m_morphSSBO,
+                         static_cast<GLsizeiptr>(buffer.size() * sizeof(glm::vec4)),
+                         buffer.data(),
+                         0);  // No flags — immutable, static data
+
+    m_morphTargetCount = targetCount;
+    m_morphVertexCount = vertCount;
+}
+
+GLuint Mesh::getMorphSSBO() const
+{
+    return m_morphSSBO;
+}
+
+int Mesh::getMorphTargetCount() const
+{
+    return m_morphTargetCount;
+}
+
+int Mesh::getMorphVertexCount() const
+{
+    return m_morphVertexCount;
+}
+
 void Mesh::cleanup()
 {
     if (m_vao != 0)
@@ -689,7 +777,14 @@ void Mesh::cleanup()
         glDeleteBuffers(1, &m_ebo);
         m_ebo = 0;
     }
+    if (m_morphSSBO != 0)
+    {
+        glDeleteBuffers(1, &m_morphSSBO);
+        m_morphSSBO = 0;
+    }
     m_indexCount = 0;
+    m_morphTargetCount = 0;
+    m_morphVertexCount = 0;
 }
 
 } // namespace Vestige

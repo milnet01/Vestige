@@ -53,11 +53,18 @@ void SkeletonAnimator::advanceAndSample(
     for (const auto& channel : clip->m_channels)
     {
         int ji = channel.jointIndex;
-        if (ji < 0 || ji >= m_skeleton->getJointCount())
+
+        // WEIGHTS channels have jointIndex = -1 (they target the mesh, not a joint).
+        // For all other channels, validate the joint index.
+        if (channel.targetPath != AnimTargetPath::WEIGHTS)
         {
-            continue;
+            if (ji < 0 || ji >= m_skeleton->getJointCount())
+            {
+                continue;
+            }
         }
-        size_t idx = static_cast<size_t>(ji);
+
+        size_t idx = (ji >= 0) ? static_cast<size_t>(ji) : 0;
 
         switch (channel.targetPath)
         {
@@ -71,7 +78,64 @@ void SkeletonAnimator::advanceAndSample(
             scales[idx] = sampleVec3(channel, time);
             break;
         case AnimTargetPath::WEIGHTS:
-            break;  // Morph target weights — handled by morph target system, not skeleton
+        {
+            // Morph target weight animation: values are packed as N floats per keyframe
+            // where N = number of morph targets. The jointIndex is -1 for WEIGHTS channels.
+            if (channel.timestamps.empty() || channel.values.empty())
+            {
+                break;
+            }
+            size_t keyCount = channel.timestamps.size();
+            size_t totalValues = channel.values.size();
+            int morphCount = static_cast<int>(totalValues / keyCount);
+            if (morphCount <= 0)
+            {
+                break;
+            }
+
+            // Resize morph weights if needed
+            if (m_morphWeights.size() < static_cast<size_t>(morphCount))
+            {
+                m_morphWeights.resize(static_cast<size_t>(morphCount), 0.0f);
+            }
+
+            // Find keyframe pair for interpolation
+            size_t k = 0;
+            for (size_t t = 0; t + 1 < keyCount; ++t)
+            {
+                if (time < channel.timestamps[t + 1])
+                {
+                    k = t;
+                    break;
+                }
+                k = t;
+            }
+            size_t k1 = std::min(k + 1, keyCount - 1);
+
+            if (channel.interpolation == AnimInterpolation::STEP || k == k1)
+            {
+                for (int m = 0; m < morphCount; ++m)
+                {
+                    m_morphWeights[static_cast<size_t>(m)] =
+                        channel.values[k * static_cast<size_t>(morphCount) + static_cast<size_t>(m)];
+                }
+            }
+            else
+            {
+                float t0 = channel.timestamps[k];
+                float t1 = channel.timestamps[k1];
+                float alpha = (t1 > t0) ? (time - t0) / (t1 - t0) : 0.0f;
+                alpha = glm::clamp(alpha, 0.0f, 1.0f);
+
+                for (int m = 0; m < morphCount; ++m)
+                {
+                    float v0 = channel.values[k * static_cast<size_t>(morphCount) + static_cast<size_t>(m)];
+                    float v1 = channel.values[k1 * static_cast<size_t>(morphCount) + static_cast<size_t>(m)];
+                    m_morphWeights[static_cast<size_t>(m)] = glm::mix(v0, v1, alpha);
+                }
+            }
+            break;
+        }
         }
     }
 }
@@ -528,6 +592,30 @@ const std::vector<glm::mat4>& SkeletonAnimator::getBoneMatrices() const
 bool SkeletonAnimator::hasBones() const
 {
     return m_skeleton && !m_boneMatrices.empty() && m_playing;
+}
+
+// ---------------------------------------------------------------------------
+// Morph Targets
+// ---------------------------------------------------------------------------
+const std::vector<float>& SkeletonAnimator::getMorphWeights() const
+{
+    return m_morphWeights;
+}
+
+void SkeletonAnimator::setMorphWeight(int index, float weight)
+{
+    if (index >= 0 && index < static_cast<int>(m_morphWeights.size()))
+    {
+        m_morphWeights[static_cast<size_t>(index)] = weight;
+    }
+}
+
+void SkeletonAnimator::setMorphTargetCount(int count)
+{
+    if (count > 0)
+    {
+        m_morphWeights.resize(static_cast<size_t>(count), 0.0f);
+    }
 }
 
 } // namespace Vestige

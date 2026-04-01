@@ -9,6 +9,7 @@
 #include "scene/scene.h"
 #include "scene/mesh_renderer.h"
 #include "scene/light_component.h"
+#include "scene/camera_component.h"
 #include "scene/particle_emitter.h"
 #include "scene/water_surface.h"
 #include "physics/cloth_component.h"
@@ -231,6 +232,12 @@ void InspectorPanel::draw(Scene* scene, Selection& selection)
     if (entity->hasComponent<MeshRenderer>())
     {
         drawMeshRenderer(*entity);
+    }
+
+    // --- Camera ---
+    if (entity->hasComponent<CameraComponent>())
+    {
+        drawCameraComponent(*entity);
     }
 
     // --- Light components ---
@@ -869,6 +876,53 @@ static bool drawAttenuationControls(float& constant, float& linear, float& quadr
     }
 
     return changed;
+}
+
+void InspectorPanel::drawCameraComponent(Entity& entity)
+{
+    auto* comp = entity.getComponent<CameraComponent>();
+    if (!comp)
+    {
+        return;
+    }
+
+    if (!drawComponentHeader("Camera"))
+    {
+        return;
+    }
+
+    // Projection type
+    int projType = static_cast<int>(comp->projectionType);
+    const char* projNames[] = {"Perspective", "Orthographic"};
+    if (ImGui::Combo("Projection", &projType, projNames, 2))
+    {
+        comp->projectionType = static_cast<ProjectionType>(projType);
+    }
+
+    if (comp->projectionType == ProjectionType::PERSPECTIVE)
+    {
+        ImGui::SliderFloat("FOV", &comp->fov, 1.0f, 120.0f, "%.1f deg");
+    }
+    else
+    {
+        ImGui::DragFloat("Ortho Size", &comp->orthoSize, 0.1f, 0.1f, 100.0f, "%.1f m");
+    }
+
+    ImGui::DragFloat("Near Plane", &comp->nearPlane, 0.01f, 0.001f, 10.0f, "%.3f m");
+    ImGui::DragFloat("Far Plane (Cull)", &comp->farPlane, 10.0f, 10.0f, 10000.0f, "%.0f m");
+
+    // Active camera toggle
+    auto* scene = m_currentScene;
+    if (scene)
+    {
+        bool isActive = (scene->getActiveCamera() == comp);
+        if (ImGui::Checkbox("Active Camera", &isActive))
+        {
+            scene->setActiveCamera(isActive ? comp : nullptr);
+        }
+    }
+
+    ImGui::Spacing();
 }
 
 void InspectorPanel::drawDirectionalLight(Entity& entity)
