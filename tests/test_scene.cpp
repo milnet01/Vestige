@@ -94,3 +94,71 @@ TEST(SceneManagerTest, UpdateDoesNotCrashWithNoActiveScene)
     SceneManager manager;
     EXPECT_NO_THROW(manager.update(0.016f));
 }
+
+// --- forEachEntity tests ---
+
+TEST(SceneTest, ForEachEntityVisitsAll)
+{
+    Scene scene("TestScene");
+    scene.createEntity("A");
+    scene.createEntity("B");
+    scene.createEntity("C");
+
+    int count = 0;
+    scene.forEachEntity([&](Entity& entity)
+    {
+        (void)entity;
+        count++;
+    });
+
+    EXPECT_EQ(count, 3);
+}
+
+TEST(SceneTest, ForEachEntityVisitsChildren)
+{
+    Scene scene("TestScene");
+    Entity* parent = scene.createEntity("Parent");
+    parent->addChild(std::make_unique<Entity>("Child1"));
+    parent->addChild(std::make_unique<Entity>("Child2"));
+    scene.rebuildEntityIndex();
+
+    std::vector<std::string> names;
+    scene.forEachEntity([&](Entity& entity)
+    {
+        names.push_back(entity.getName());
+    });
+
+    EXPECT_EQ(names.size(), 3u);
+    EXPECT_EQ(names[0], "Parent");
+    EXPECT_EQ(names[1], "Child1");
+    EXPECT_EQ(names[2], "Child2");
+}
+
+TEST(SceneTest, ForEachEntityEmptyScene)
+{
+    Scene scene("Empty");
+    int count = 0;
+    scene.forEachEntity([&](Entity& entity)
+    {
+        (void)entity;
+        count++;
+    });
+    EXPECT_EQ(count, 0);
+}
+
+TEST(SceneTest, ForEachEntityConst)
+{
+    Scene scene("TestScene");
+    scene.createEntity("A");
+    scene.createEntity("B");
+
+    const Scene& constScene = scene;
+    int count = 0;
+    constScene.forEachEntity([&](const Entity& entity)
+    {
+        (void)entity;
+        count++;
+    });
+
+    EXPECT_EQ(count, 2);
+}

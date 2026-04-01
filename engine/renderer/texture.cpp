@@ -53,6 +53,7 @@ Texture::Texture(Texture&& other) noexcept
     : m_textureId(other.m_textureId)
     , m_width(other.m_width)
     , m_height(other.m_height)
+    , m_filterMode(other.m_filterMode)
 {
     other.m_textureId = 0;
     other.m_width = 0;
@@ -70,6 +71,7 @@ Texture& Texture::operator=(Texture&& other) noexcept
         m_textureId = other.m_textureId;
         m_width = other.m_width;
         m_height = other.m_height;
+        m_filterMode = other.m_filterMode;
         other.m_textureId = 0;
         other.m_width = 0;
         other.m_height = 0;
@@ -514,6 +516,55 @@ std::shared_ptr<Texture> Texture::generateNormalFromHeight(
     Logger::info("Generated normal map from height: " + heightMapPath
         + " (" + std::to_string(w) + "x" + std::to_string(h) + ", strength=" + std::to_string(strength) + ")");
     return normalTex;
+}
+
+void Texture::setFilterMode(TextureFilterMode mode)
+{
+    if (m_textureId == 0)
+    {
+        return;
+    }
+
+    m_filterMode = mode;
+
+    switch (mode)
+    {
+        case TextureFilterMode::NEAREST:
+            glTextureParameteri(m_textureId, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_NEAREST);
+            glTextureParameteri(m_textureId, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            glTextureParameterf(m_textureId, GL_TEXTURE_MAX_ANISOTROPY, 1.0f);
+            break;
+        case TextureFilterMode::LINEAR:
+            glTextureParameteri(m_textureId, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_NEAREST);
+            glTextureParameteri(m_textureId, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            glTextureParameterf(m_textureId, GL_TEXTURE_MAX_ANISOTROPY, 1.0f);
+            break;
+        case TextureFilterMode::TRILINEAR:
+            glTextureParameteri(m_textureId, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+            glTextureParameteri(m_textureId, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            glTextureParameterf(m_textureId, GL_TEXTURE_MAX_ANISOTROPY, 1.0f);
+            break;
+        case TextureFilterMode::ANISOTROPIC_4X:
+            glTextureParameteri(m_textureId, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+            glTextureParameteri(m_textureId, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            glTextureParameterf(m_textureId, GL_TEXTURE_MAX_ANISOTROPY, 4.0f);
+            break;
+        case TextureFilterMode::ANISOTROPIC_8X:
+            glTextureParameteri(m_textureId, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+            glTextureParameteri(m_textureId, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            glTextureParameterf(m_textureId, GL_TEXTURE_MAX_ANISOTROPY, 8.0f);
+            break;
+        case TextureFilterMode::ANISOTROPIC_16X:
+            glTextureParameteri(m_textureId, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+            glTextureParameteri(m_textureId, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            glTextureParameterf(m_textureId, GL_TEXTURE_MAX_ANISOTROPY, 16.0f);
+            break;
+    }
+}
+
+TextureFilterMode Texture::getFilterMode() const
+{
+    return m_filterMode;
 }
 
 } // namespace Vestige

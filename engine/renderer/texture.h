@@ -10,6 +10,17 @@
 namespace Vestige
 {
 
+/// @brief Texture filtering mode.
+enum class TextureFilterMode
+{
+    NEAREST,           ///< Point sampling (pixelated).
+    LINEAR,            ///< Bilinear filtering.
+    TRILINEAR,         ///< Trilinear filtering (linear + mipmap blending). Default.
+    ANISOTROPIC_4X,    ///< 4x anisotropic filtering.
+    ANISOTROPIC_8X,    ///< 8x anisotropic filtering.
+    ANISOTROPIC_16X    ///< 16x anisotropic filtering.
+};
+
 /// @brief Loads and manages an OpenGL 2D texture.
 class Texture
 {
@@ -76,6 +87,13 @@ public:
     /// @brief Checks if a texture is loaded.
     bool isLoaded() const;
 
+    /// @brief Sets the texture filtering mode.
+    /// @param mode The desired filter mode.
+    void setFilterMode(TextureFilterMode mode);
+
+    /// @brief Gets the current texture filtering mode.
+    TextureFilterMode getFilterMode() const;
+
     /// @brief Generates a normal map from a height map texture on the CPU.
     /// Computes per-pixel normals using Sobel-filtered height gradients.
     /// @param heightMapPath Path to the height map image file.
@@ -96,6 +114,7 @@ private:
     GLuint m_textureId;
     int m_width;
     int m_height;
+    TextureFilterMode m_filterMode = TextureFilterMode::TRILINEAR;
 };
 
 } // namespace Vestige

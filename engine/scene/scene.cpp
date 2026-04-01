@@ -375,6 +375,40 @@ void Scene::collectRenderDataRecursive(const Entity& entity, SceneRenderData& da
     }
 }
 
+void Scene::forEachEntity(const std::function<void(Entity&)>& fn)
+{
+    if (!m_root) return;
+    std::function<void(Entity&)> visit = [&](Entity& entity)
+    {
+        fn(entity);
+        for (auto& child : entity.getChildren())
+        {
+            visit(*child);
+        }
+    };
+    for (auto& child : m_root->getChildren())
+    {
+        visit(*child);
+    }
+}
+
+void Scene::forEachEntity(const std::function<void(const Entity&)>& fn) const
+{
+    if (!m_root) return;
+    std::function<void(const Entity&)> visit = [&](const Entity& entity)
+    {
+        fn(entity);
+        for (const auto& child : entity.getChildren())
+        {
+            visit(*child);
+        }
+    };
+    for (const auto& child : m_root->getChildren())
+    {
+        visit(*child);
+    }
+}
+
 void Scene::rebuildEntityIndex()
 {
     m_entityIndex.clear();

@@ -114,6 +114,10 @@ set(ENGINE_SOURCES
     profiler/memory_tracker.cpp
     profiler/performance_profiler.cpp
     editor/panels/performance_panel.cpp
+    editor/panels/validation_panel.cpp
+    editor/panels/welcome_panel.cpp
+    editor/tools/ruler_tool.cpp
+    resource/file_watcher.cpp
     utils/entity_serializer.cpp
     utils/material_library.cpp
     testing/visual_test_runner.cpp

@@ -1421,6 +1421,64 @@ Multiplayer matches with 2-16 players: synchronized movement, combat, inventory,
 
 ---
 
+## Phase 20: Build Wizard — Project Creation and Export
+**Goal:** A comprehensive guided wizard that walks users through creating, configuring, and building a complete game or experience from start to finish.
+
+The wizard transforms Vestige from a tool that experts use into a platform that anyone can ship a product with. It combines project setup, scene configuration, gameplay selection, platform targeting, and final build into a single guided flow.
+
+### Project Creation Wizard
+- [ ] New Project wizard — step-by-step project setup
+  - Project name, save location, template selection
+  - Templates: Empty, First-Person Exploration, Horror, Action, Architectural Walkthrough, Biblical Scene
+  - Each template pre-configures: camera mode, lighting, post-processing, sample assets, input scheme
+- [ ] Scene setup assistant — guided scene creation within the wizard
+  - Choose environment: indoor, outdoor, mixed
+  - Set dimensions and scale (e.g., "a 50m x 30m temple courtyard")
+  - Auto-populate with biome preset (desert, forest, courtyard, interior)
+  - Lighting preset (daytime, sunset, night, torchlit interior)
+
+### Game Configuration Wizard
+- [ ] Gameplay mode selector — choose what kind of experience to build
+  - Exploration (no combat, walk and observe)
+  - Horror (combat, inventory, limited resources, atmospheric effects)
+  - Action (full combat, weapons, enemies)
+  - Puzzle (physics interaction, logic gates, pressure plates)
+  - Walking Simulator (narrative, interaction points, guided flow)
+- [ ] Player setup — configure the player character
+  - Controller type: first-person, third-person, isometric, fixed camera
+  - Movement speed, jump height, stamina system (on/off)
+  - Inventory system (on/off, capacity, item categories)
+  - Health system (on/off, max health, regen, damage types)
+- [ ] Audio setup assistant
+  - Background music selection/import
+  - Ambient sound zone configuration
+  - Spatial audio source placement guide
+
+### Build and Export Wizard
+- [ ] Platform targeting — select and configure target platforms
+  - Linux (AppImage, Flatpak)
+  - Windows (standalone .exe, Steam-ready)
+  - Steam integration checklist (achievements, cloud saves, overlay)
+- [ ] Quality presets — configure rendering for target hardware
+  - Low / Medium / High / Ultra presets auto-generated
+  - Custom preset editor (resolution scale, shadow quality, effect toggles)
+  - Performance validation: run benchmark scene, verify 60 FPS on target preset
+- [ ] Asset validation and optimization
+  - Scan for unused assets (textures/models loaded but not referenced)
+  - Texture compression recommendations (BC1-BC7 based on content)
+  - LOD generation suggestions for high-poly models
+  - Total build size estimate
+- [ ] Final build process
+  - One-click build: compile, package assets, generate executable
+  - Build progress with detailed log
+  - Post-build: test launch, generate release notes
+  - Distribution packaging (ZIP, installer, Steam depot)
+
+### Milestone
+A non-programmer can launch the Build Wizard, choose "Biblical Walkthrough" template, configure their Tabernacle scene, set up ambient audio, target Linux + Windows, and click "Build" to produce a distributable application — all without touching code or command-line tools.
+
+---
+
 ## Commercial Vision
 
 ### Engine Licensing

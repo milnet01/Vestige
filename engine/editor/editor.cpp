@@ -28,6 +28,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 
 namespace Vestige
@@ -99,6 +100,19 @@ bool Editor::initialize(GLFWwindow* window, const std::string& assetPath)
     // Wire command history to panels for undo support
     m_inspectorPanel.setCommandHistory(&m_commandHistory);
     m_hierarchyPanel.setCommandHistory(&m_commandHistory);
+
+    // Initialize welcome panel (checks ~/.config/vestige/ for first-launch flag)
+    std::string configDir;
+    const char* home = std::getenv("HOME");
+    if (home)
+    {
+        configDir = std::string(home) + "/.config/vestige";
+    }
+    else
+    {
+        configDir = "/tmp/vestige";
+    }
+    m_welcomePanel.initialize(configDir);
 
     m_isInitialized = true;
     Logger::info("Editor initialized (ImGui + docking + editor camera)");
@@ -335,6 +349,10 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
                 {
                     m_showGrid = !m_showGrid;
                 }
+                if (ImGui::MenuItem("All Light Gizmos", nullptr, m_showAllLightGizmos))
+                {
+                    m_showAllLightGizmos = !m_showAllLightGizmos;
+                }
 
                 ImGui::Separator();
 
@@ -364,6 +382,11 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
                 if (ImGui::MenuItem("Performance", "F12", &perfOpen))
                 {
                     m_performancePanel.setOpen(perfOpen);
+                }
+                bool valOpen = m_validationPanel.isOpen();
+                if (ImGui::MenuItem("Scene Validation", nullptr, &valOpen))
+                {
+                    m_validationPanel.setOpen(valOpen);
                 }
                 ImGui::MenuItem("Demo Window", nullptr, &m_showDemoWindow);
                 ImGui::EndMenu();
@@ -404,6 +427,22 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
                 ImGui::DragFloat("Rotation", &m_snapRotation, 1.0f, 1.0f, 90.0f, "%.0f deg");
                 ImGui::SetNextItemWidth(100.0f);
                 ImGui::DragFloat("Scale##snap", &m_snapScale, 0.01f, 0.01f, 1.0f, "%.2f");
+                ImGui::Separator();
+                if (ImGui::MenuItem("Ruler / Measure", nullptr, m_rulerTool.isActive()))
+                {
+                    if (m_rulerTool.isActive())
+                    {
+                        m_rulerTool.cancel();
+                    }
+                    else
+                    {
+                        m_rulerTool.startMeasurement();
+                    }
+                }
+                if (m_rulerTool.hasMeasurement())
+                {
+                    ImGui::Text("  Distance: %.3f m", static_cast<double>(m_rulerTool.getDistance()));
+                }
                 ImGui::EndMenu();
             }
 
@@ -701,6 +740,10 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
                 {
                     m_showControlsWindow = true;
                 }
+                if (ImGui::MenuItem("Welcome Screen"))
+                {
+                    m_welcomePanel.open();
+                }
                 ImGui::EndMenu();
             }
 
@@ -919,6 +962,12 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
         {
             m_performancePanel.draw(*m_profiler, renderer, timer, window);
         }
+
+        // --- Validation panel ---
+        m_validationPanel.draw(scene, m_selection);
+
+        // --- Welcome panel ---
+        m_welcomePanel.draw();
 
         // --- Scene statistics panel ---
         if (m_showStatistics && scene)
@@ -1146,6 +1195,45 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
         ImGui::PopStyleVar(2);
         m_notifyTimer -= ImGui::GetIO().DeltaTime;
     }
+
+    // Draw ruler measurement overlay
+    if (m_rulerTool.hasMeasurement())
+    {
+        ImGui::SetNextWindowPos(ImVec2(m_viewportMin.x + 10.0f,
+                                        m_viewportMax.y - 40.0f));
+        ImGui::SetNextWindowBgAlpha(0.7f);
+        if (ImGui::Begin("##RulerOverlay", nullptr,
+                          ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize
+                          | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing
+                          | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoMove
+                          | ImGuiWindowFlags_NoInputs))
+        {
+            ImGui::TextColored(ImVec4(0.0f, 1.0f, 1.0f, 1.0f),
+                               "Ruler: %.3f m", static_cast<double>(m_rulerTool.getDistance()));
+        }
+        ImGui::End();
+    }
+    else if (m_rulerTool.isActive())
+    {
+        ImGui::SetNextWindowPos(ImVec2(m_viewportMin.x + 10.0f,
+                                        m_viewportMax.y - 40.0f));
+        ImGui::SetNextWindowBgAlpha(0.7f);
+        if (ImGui::Begin("##RulerOverlay", nullptr,
+                          ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize
+                          | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing
+                          | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoMove
+                          | ImGuiWindowFlags_NoInputs))
+        {
+            const char* hint = (m_rulerTool.getState() == RulerTool::State::WAITING_A)
+                                ? "Click to set point A"
+                                : "Click to set point B";
+            ImGui::TextColored(ImVec4(0.0f, 1.0f, 1.0f, 1.0f), "Ruler: %s", hint);
+        }
+        ImGui::End();
+    }
+
+    // Queue ruler debug draw lines
+    m_rulerTool.queueDebugDraw();
 }
 
 void Editor::endFrame()

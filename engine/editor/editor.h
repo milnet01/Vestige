@@ -15,10 +15,13 @@
 #include "editor/panels/history_panel.h"
 #include "editor/panels/import_dialog.h"
 #include "editor/panels/inspector_panel.h"
+#include "editor/panels/validation_panel.h"
+#include "editor/panels/welcome_panel.h"
 #include "editor/prefab_system.h"
 #include "editor/selection.h"
 #include "editor/tools/brush_tool.h"
 #include "editor/tools/brush_preview.h"
+#include "editor/tools/ruler_tool.h"
 #include "editor/tools/terrain_brush.h"
 
 #include <imgui.h>
@@ -187,6 +190,15 @@ public:
     /// @brief Gets the performance panel.
     PerformancePanel& getPerformancePanel();
 
+    /// @brief Gets the validation panel.
+    ValidationPanel& getValidationPanel() { return m_validationPanel; }
+
+    /// @brief Gets the welcome panel.
+    WelcomePanel& getWelcomePanel() { return m_welcomePanel; }
+
+    /// @brief Gets the ruler tool.
+    RulerTool& getRulerTool() { return m_rulerTool; }
+
 private:
     void setupTheme();
     void drawGizmo(Camera* camera, Scene* scene);
@@ -201,6 +213,7 @@ private:
     bool m_showGrid = true;       ///< Ground-plane grid overlay (1m thin, 10m bold).
     bool m_showConsole = true;    ///< Console/log panel visibility.
     bool m_showStatistics = false; ///< Scene statistics panel visibility.
+    bool m_showAllLightGizmos = false; ///< Draw gizmos for all lights, not just selected.
     bool m_captureScreenshotRequested = false; ///< Menu-triggered screenshot request.
     bool m_fullscreenViewport = false; ///< Hide all panels for clean viewport.
 
@@ -230,8 +243,11 @@ private:
     EnvironmentPanel m_environmentPanel;
     TerrainPanel m_terrainPanel;
     PerformancePanel m_performancePanel;
+    ValidationPanel m_validationPanel;
+    WelcomePanel m_welcomePanel;
     BrushTool m_brushTool;
     BrushPreviewRenderer m_brushPreview;
+    RulerTool m_rulerTool;
     TerrainBrush m_terrainBrush;
     PrefabSystem m_prefabSystem;
     ResourceManager* m_resourceManager = nullptr;
@@ -274,6 +290,12 @@ private:
 public:
     /// @brief Shows a brief notification overlay that fades after ~2 seconds.
     void showNotification(const std::string& text);
+
+    /// @brief Returns true if all light gizmos should be drawn (not just selected).
+    bool isShowAllLightGizmos() const { return m_showAllLightGizmos; }
+
+    /// @brief Toggles drawing gizmos for all lights vs. selected only.
+    void toggleShowAllLightGizmos() { m_showAllLightGizmos = !m_showAllLightGizmos; }
 
     /// @brief Returns true if the ground grid overlay should be rendered.
     bool isGridVisible() const { return m_showGrid; }
