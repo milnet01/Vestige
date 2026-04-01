@@ -4,6 +4,7 @@
 
 #include "editor/commands/paint_scatter_command.h"
 #include "editor/commands/place_tree_command.h"
+#include "environment/density_map.h"
 #include "environment/foliage_instance.h"
 #include "environment/foliage_manager.h"
 
@@ -34,7 +35,8 @@ public:
         SCATTER,
         TREE,
         PATH,
-        ERASER
+        ERASER,
+        DENSITY     ///< Paint the density map directly.
     };
 
     BrushTool() = default;
@@ -84,6 +86,15 @@ public:
     float falloff = 0.5f;          ///< Edge falloff (0=sharp, 1=full taper).
     uint32_t selectedTypeId = 0;   ///< Selected foliage/scatter type.
     uint32_t selectedSpeciesId = 0; ///< Selected tree species.
+
+    /// @brief Density map for spatial modulation (nullptr = no modulation).
+    DensityMap* densityMap = nullptr;
+
+    /// @brief Target density value for DENSITY paint mode (0 = erase, 1 = add).
+    float densityPaintValue = 1.0f;
+
+    /// @brief Brush strength for DENSITY paint mode (0..1).
+    float densityPaintStrength = 0.5f;
 
     /// @brief Foliage type config used for painting.
     FoliageTypeConfig foliageConfig;

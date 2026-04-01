@@ -205,6 +205,23 @@ public:
     /// @return True if the load succeeded.
     bool loadSplatmap(const std::filesystem::path& path);
 
+    /// @brief Configuration for bank blending near water edges.
+    struct BankBlendConfig
+    {
+        float blendWidth = 3.0f;       ///< Distance from water edge to blend over (meters).
+        int bankChannel = 3;           ///< Splatmap channel for the bank material (default: A=sand).
+        float bankStrength = 0.8f;     ///< Maximum blend strength at the water edge (0..1).
+    };
+
+    /// @brief Applies bank blending to the splatmap near a water body.
+    /// Blends the bank material (e.g. sand) into the terrain near the water edge.
+    /// @param waterCenter World XZ center of the water body.
+    /// @param waterHalfExtent World XZ half-extent of the water body.
+    /// @param config Bank blending parameters.
+    void applyBankBlend(const glm::vec2& waterCenter,
+                        const glm::vec2& waterHalfExtent,
+                        const BankBlendConfig& config);
+
     /// @brief Configuration for automatic slope/altitude-based splatmap generation.
     struct AutoTextureConfig
     {

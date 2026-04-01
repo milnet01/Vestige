@@ -212,13 +212,13 @@ void BrushTool::stampAt(const glm::vec3& position, FoliageManager& manager)
     else if (mode == Mode::FOLIAGE)
     {
         auto added = manager.paintFoliage(
-            selectedTypeId, position, radius, density, falloff, foliageConfig);
+            selectedTypeId, position, radius, density, falloff, foliageConfig, densityMap);
         m_strokeAdded.insert(m_strokeAdded.end(), added.begin(), added.end());
     }
     else if (mode == Mode::SCATTER)
     {
         auto added = manager.paintScatter(
-            scatterConfig, selectedTypeId, position, radius, density, falloff);
+            scatterConfig, selectedTypeId, position, radius, density, falloff, densityMap);
         m_scatterAdded.insert(m_scatterAdded.end(), added.begin(), added.end());
     }
     else if (mode == Mode::TREE)
@@ -233,7 +233,11 @@ void BrushTool::stampAt(const glm::vec3& position, FoliageManager& manager)
         auto placed = manager.placeTree(tree, treeConfig.minSpacing);
         m_treesAdded.insert(m_treesAdded.end(), placed.begin(), placed.end());
     }
-    // PATH handled in later phase
+    else if (mode == Mode::DENSITY && densityMap)
+    {
+        densityMap->paint(position, radius, densityPaintValue,
+                          densityPaintStrength, falloff);
+    }
 }
 
 std::vector<ScatterInstanceRef> BrushTool::convertScatterRefs(

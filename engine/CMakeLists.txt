@@ -85,6 +85,7 @@ set(ENGINE_SOURCES
     renderer/water_fbo.cpp
     renderer/foliage_renderer.cpp
     renderer/tree_renderer.cpp
+    environment/density_map.cpp
     environment/foliage_chunk.cpp
     environment/foliage_manager.cpp
     environment/spline_path.cpp

@@ -21,7 +21,8 @@ std::vector<FoliageInstanceRef> FoliageManager::paintFoliage(
     float radius,
     float density,
     float falloff,
-    const FoliageTypeConfig& config)
+    const FoliageTypeConfig& config,
+    const DensityMap* densityMap)
 {
     std::vector<FoliageInstanceRef> added;
 
@@ -68,6 +69,16 @@ std::vector<FoliageInstanceRef> FoliageManager::paintFoliage(
                 {
                     continue;
                 }
+            }
+        }
+
+        // Density map modulation — reject based on spatial density mask
+        if (densityMap)
+        {
+            float mapDensity = densityMap->sample(x, z);
+            if (radiusDist(rng) > mapDensity)
+            {
+                continue;
             }
         }
 
@@ -243,7 +254,8 @@ std::vector<std::pair<uint64_t, ScatterInstance>> FoliageManager::paintScatter(
     const glm::vec3& center,
     float radius,
     float density,
-    float falloff)
+    float falloff,
+    const DensityMap* densityMap)
 {
     std::vector<std::pair<uint64_t, ScatterInstance>> added;
 
@@ -283,6 +295,16 @@ std::vector<std::pair<uint64_t, ScatterInstance>> FoliageManager::paintScatter(
                 {
                     continue;
                 }
+            }
+        }
+
+        // Density map modulation
+        if (densityMap)
+        {
+            float mapDensity = densityMap->sample(x, z);
+            if (radiusDist(rng) > mapDensity)
+            {
+                continue;
             }
         }
 
@@ -447,6 +469,53 @@ void FoliageManager::removeTreeAt(uint64_t chunkKey, const glm::vec3& position)
     auto it = m_chunks.find(chunkKey);
     if (it == m_chunks.end()) return;
     it->second->removeTreesInRadius(position, 0.01f);
+}
+
+// --- Path clearing ---
+
+int FoliageManager::clearAlongPath(const SplinePath& path, float margin)
+{
+    if (path.getWaypointCount() < 2)
+    {
+        return 0;
+    }
+
+    int totalRemoved = 0;
+    float totalLength = path.getLength();
+    if (totalLength < 0.001f)
+    {
+        return 0;
+    }
+
+    float clearRadius = path.width + margin;
+
+    // Sample the spline at intervals smaller than the clear radius
+    // to ensure complete coverage
+    float stepSize = clearRadius * 0.5f;
+    int sampleCount = std::max(2, static_cast<int>(totalLength / stepSize) + 1);
+
+    for (int i = 0; i < sampleCount; ++i)
+    {
+        float t = static_cast<float>(i) / static_cast<float>(sampleCount - 1);
+        glm::vec3 pos = path.evaluate(t);
+
+        auto removedFoliage = eraseAllFoliage(pos, clearRadius);
+        totalRemoved += static_cast<int>(removedFoliage.size());
+
+        auto removedScatter = eraseScatter(pos, clearRadius);
+        totalRemoved += static_cast<int>(removedScatter.size());
+
+        auto removedTrees = eraseTrees(pos, clearRadius);
+        totalRemoved += static_cast<int>(removedTrees.size());
+    }
+
+    if (totalRemoved > 0)
+    {
+        Logger::info("Cleared " + std::to_string(totalRemoved)
+                     + " instances along path '" + path.name + "'");
+    }
+
+    return totalRemoved;
 }
 
 std::vector<const FoliageChunk*> FoliageManager::getVisibleChunks(

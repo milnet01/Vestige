@@ -64,6 +64,7 @@ add_executable(vestige_tests
     test_morph_target_pipeline.cpp
     test_texture_filter.cpp
     test_ruler_tool.cpp
+    test_density_map.cpp
 )
 
 target_link_libraries(vestige_tests
