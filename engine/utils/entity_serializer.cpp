@@ -529,6 +529,9 @@ static json serializeWaterSurface(const WaterSurfaceComponent& comp)
     j["flowSpeed"] = cfg.flowSpeed;
     j["specularPower"] = cfg.specularPower;
     j["reflectionResolutionScale"] = cfg.reflectionResolutionScale;
+    j["causticsEnabled"] = cfg.causticsEnabled;
+    j["causticsIntensity"] = cfg.causticsIntensity;
+    j["causticsScale"] = cfg.causticsScale;
 
     return j;
 }
@@ -566,6 +569,9 @@ static void deserializeWaterSurface(const json& j, WaterSurfaceComponent& comp)
     cfg.specularPower = j.value("specularPower", cfg.specularPower);
     cfg.reflectionResolutionScale = j.value("reflectionResolutionScale",
                                              cfg.reflectionResolutionScale);
+    cfg.causticsEnabled = j.value("causticsEnabled", cfg.causticsEnabled);
+    cfg.causticsIntensity = j.value("causticsIntensity", cfg.causticsIntensity);
+    cfg.causticsScale = j.value("causticsScale", cfg.causticsScale);
 }
 
 // ---------------------------------------------------------------------------

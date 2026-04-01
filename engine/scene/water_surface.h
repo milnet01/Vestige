@@ -57,6 +57,11 @@ struct WaterSurfaceConfig
     float flowSpeed = 0.3f;
     float specularPower = 128.0f;
 
+    // Caustics (animated light patterns on surfaces below water)
+    bool causticsEnabled = true;        ///< Project caustic patterns onto submerged geometry.
+    float causticsIntensity = 0.15f;    ///< Additive brightness of caustic patterns (0.0 to 1.0).
+    float causticsScale = 0.1f;         ///< World-space tiling frequency (smaller = larger patterns).
+
     // Reflection / refraction quality
     WaterReflectionMode reflectionMode = WaterReflectionMode::PLANAR;
     float reflectionResolutionScale = 0.25f;  ///< 0.1 to 1.0 (fraction of window resolution)

@@ -168,8 +168,8 @@ void TerrainRenderer::render(const Terrain& terrain,
     {
         glBindTextureUnit(5, m_causticsTexture);
         m_terrainShader.setInt("u_causticsTex", 5);
-        m_terrainShader.setFloat("u_causticsScale", 0.1f);
-        m_terrainShader.setFloat("u_causticsIntensity", 0.15f);
+        m_terrainShader.setFloat("u_causticsScale", m_causticsScale);
+        m_terrainShader.setFloat("u_causticsIntensity", m_causticsIntensity);
         m_terrainShader.setFloat("u_causticsTime", m_causticsTime);
         m_terrainShader.setFloat("u_waterY", m_causticsWaterY);
         m_terrainShader.setVec2("u_waterCenter", m_causticsCenter);
@@ -505,7 +505,8 @@ void TerrainRenderer::generateDefaultTextures()
 }
 
 void TerrainRenderer::setCausticsParams(bool enabled, float waterY, float time, GLuint causticsTexture,
-                                         const glm::vec2& center, const glm::vec2& halfExtent)
+                                         const glm::vec2& center, const glm::vec2& halfExtent,
+                                         float intensity, float scale)
 {
     m_causticsEnabled = enabled;
     m_causticsWaterY = waterY;
@@ -513,6 +514,8 @@ void TerrainRenderer::setCausticsParams(bool enabled, float waterY, float time, 
     m_causticsTexture = causticsTexture;
     m_causticsCenter = center;
     m_causticsHalfExtent = halfExtent;
+    m_causticsIntensity = intensity;
+    m_causticsScale = scale;
 }
 
 } // namespace Vestige
