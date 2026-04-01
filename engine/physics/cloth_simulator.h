@@ -96,7 +96,10 @@ public:
     // --- Pin constraints ---
 
     /// @brief Pins a particle to a fixed world-space position (inverse mass → 0).
-    void pinParticle(uint32_t index, const glm::vec3& worldPos);
+    /// @param index Particle index (must be < getParticleCount()).
+    /// @param worldPos World-space position to pin the particle at.
+    /// @return true if the particle was pinned, false if index is out of bounds.
+    bool pinParticle(uint32_t index, const glm::vec3& worldPos);
 
     /// @brief Unpins a particle, restoring its original mass.
     void unpinParticle(uint32_t index);
@@ -110,6 +113,8 @@ public:
     // --- Collision ---
 
     /// @brief Adds a sphere collider for the cloth to collide against.
+    /// @param center World-space position of the sphere center.
+    /// @param radius Radius of the sphere. Must be > 0.
     void addSphereCollider(const glm::vec3& center, float radius);
 
     /// @brief Removes all sphere colliders.
@@ -122,9 +127,15 @@ public:
     float getGroundPlane() const;
 
     /// @brief Adds a plane collider (particles stay on the positive-normal side).
-    void addPlaneCollider(const glm::vec3& normal, float offset);
+    /// @param normal Unit normal pointing toward the allowed half-space (auto-normalized).
+    /// @param offset Signed distance from origin along the normal.
+    /// @return true if added, false if normal is zero-length.
+    bool addPlaneCollider(const glm::vec3& normal, float offset);
 
     /// @brief Adds a vertical cylinder collider (Y-axis aligned).
+    /// @param base World-space position of the bottom center of the cylinder (Y-axis aligned).
+    /// @param radius Radius of the cylinder cross-section. Must be > 0.
+    /// @param height Height of the cylinder extending upward from base.y. Must be > 0.
     void addCylinderCollider(const glm::vec3& base, float radius, float height);
 
     /// @brief Removes all plane colliders.
@@ -134,6 +145,8 @@ public:
     void clearCylinderColliders();
 
     /// @brief Adds an axis-aligned box collider.
+    /// @param min Minimum corner of the AABB in world space. Auto-swapped with max if inverted.
+    /// @param max Maximum corner of the AABB in world space. Auto-swapped with min if inverted.
     void addBoxCollider(const glm::vec3& min, const glm::vec3& max);
 
     /// @brief Removes all box colliders.

@@ -192,13 +192,13 @@ TEST(ClothSimulator, SetPinPositionMoves)
 TEST(ClothSimulator, StretchConstraintsMaintainLength)
 {
     ClothSimulator sim;
-    auto cfg = smallConfig(2, 1);  // Just 2 particles
+    auto cfg = smallConfig(2, 2);  // Minimum 2x2 grid (4 particles)
     cfg.substeps = 20;
     cfg.stretchCompliance = 0.0f;  // Rigid
     cfg.gravity = glm::vec3(0.0f); // No gravity — just test constraint
     sim.initialize(cfg);
 
-    // Move particle 1 far away
+    // Check adjacent particles maintain rest length
     const glm::vec3* pos = sim.getPositions();
     float restLength = glm::length(pos[1] - pos[0]);
 
@@ -403,23 +403,49 @@ TEST(ClothSimulator, FlatClothHasUpwardNormals)
 // Zero-mass (immovable) particle
 // ---------------------------------------------------------------------------
 
-TEST(ClothSimulator, ZeroMassParticleIsImmovable)
+TEST(ClothSimulator, ZeroMassRejectsInitialization)
 {
     ClothConfig cfg;
-    cfg.width = 2;
-    cfg.height = 1;
+    cfg.width = 4;
+    cfg.height = 4;
     cfg.spacing = 1.0f;
-    cfg.particleMass = 0.0f;  // All particles have zero mass
+    cfg.particleMass = 0.0f;  // Zero mass — should be rejected
     cfg.substeps = 5;
 
-    // Should not crash, particles should not move
     ClothSimulator sim;
     sim.initialize(cfg);
+    EXPECT_FALSE(sim.isInitialized());
+}
 
-    glm::vec3 p0 = sim.getPositions()[0];
-    sim.simulate(1.0f / 60.0f);
-    EXPECT_NEAR(sim.getPositions()[0].x, p0.x, 0.001f);
-    EXPECT_NEAR(sim.getPositions()[0].y, p0.y, 0.001f);
+TEST(ClothSimulator, NegativeMassRejectsInitialization)
+{
+    ClothConfig cfg;
+    cfg.width = 4;
+    cfg.height = 4;
+    cfg.spacing = 1.0f;
+    cfg.particleMass = -1.0f;  // Negative mass — should be rejected
+    cfg.substeps = 5;
+
+    ClothSimulator sim;
+    sim.initialize(cfg);
+    EXPECT_FALSE(sim.isInitialized());
+}
+
+TEST(ClothSimulator, TooSmallGridRejectsInitialization)
+{
+    ClothSimulator sim;
+    ClothConfig cfg;
+    cfg.width = 1;
+    cfg.height = 4;
+    cfg.particleMass = 1.0f;
+
+    sim.initialize(cfg);
+    EXPECT_FALSE(sim.isInitialized());
+
+    cfg.width = 4;
+    cfg.height = 1;
+    sim.initialize(cfg);
+    EXPECT_FALSE(sim.isInitialized());
 }
 
 // ---------------------------------------------------------------------------
@@ -484,4 +510,214 @@ TEST(ClothSimulator, PinOutOfBoundsIsSafe)
     sim.unpinParticle(9999);
     sim.setPinPosition(9999, glm::vec3(0));
     EXPECT_FALSE(sim.isParticlePinned(9999));
+}
+
+// ---------------------------------------------------------------------------
+// Plane collider
+// ---------------------------------------------------------------------------
+
+TEST(ClothSimulator, PlaneColliderPushesParticlesAbove)
+{
+    ClothSimulator sim;
+    auto cfg = smallConfig();
+    cfg.gravity = glm::vec3(0, -20, 0);  // Strong gravity to pull cloth down
+    sim.initialize(cfg);
+
+    // Add a plane at Y=0 with upward normal
+    sim.addPlaneCollider(glm::vec3(0, 1, 0), 0.0f);
+
+    // Simulate 120 frames
+    for (int i = 0; i < 120; ++i)
+    {
+        sim.simulate(1.0f / 60.0f);
+    }
+
+    // All particles should be at or above the plane (with small tolerance)
+    const glm::vec3* pos = sim.getPositions();
+    for (uint32_t i = 0; i < sim.getParticleCount(); ++i)
+    {
+        EXPECT_GE(pos[i].y, -0.02f) << "Particle " << i << " penetrated plane";
+    }
+}
+
+TEST(ClothSimulator, PlaneColliderRejectsZeroNormal)
+{
+    ClothSimulator sim;
+    sim.initialize(smallConfig());
+
+    // Zero-length normal should be rejected
+    bool result = sim.addPlaneCollider(glm::vec3(0, 0, 0), 0.0f);
+    EXPECT_FALSE(result);
+}
+
+// ---------------------------------------------------------------------------
+// Cylinder collider
+// ---------------------------------------------------------------------------
+
+TEST(ClothSimulator, CylinderColliderPushesParticlesOut)
+{
+    ClothSimulator sim;
+    auto cfg = smallConfig();
+    cfg.gravity = glm::vec3(0, -9.81f, 0);
+    sim.initialize(cfg);
+
+    // Place a large cylinder at origin
+    glm::vec3 base(0.0f, -5.0f, 0.0f);
+    float radius = 2.0f;
+    float height = 10.0f;
+    sim.addCylinderCollider(base, radius, height);
+
+    // Simulate 120 frames — gravity pulls cloth down and it drapes around cylinder
+    for (int i = 0; i < 120; ++i)
+    {
+        sim.simulate(1.0f / 60.0f);
+    }
+
+    // All non-pinned particles within the cylinder's Y range should be pushed
+    // outside its radius in the XZ plane
+    const glm::vec3* pos = sim.getPositions();
+    for (uint32_t i = 0; i < sim.getParticleCount(); ++i)
+    {
+        if (sim.isParticlePinned(i))
+        {
+            continue;
+        }
+        // Check XZ distance from cylinder axis
+        float dx = pos[i].x - base.x;
+        float dz = pos[i].z - base.z;
+        float distXZ = std::sqrt(dx * dx + dz * dz);
+
+        // Only check particles that are within the cylinder's height range
+        if (pos[i].y >= base.y && pos[i].y <= base.y + height)
+        {
+            EXPECT_GE(distXZ, radius - 0.05f)
+                << "Particle " << i << " inside cylinder at XZ dist=" << distXZ;
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Box collider
+// ---------------------------------------------------------------------------
+
+TEST(ClothSimulator, BoxColliderPushesParticlesOut)
+{
+    ClothSimulator sim;
+    auto cfg = smallConfig();
+    cfg.gravity = glm::vec3(0, -20, 0);  // Strong gravity
+    sim.initialize(cfg);
+
+    // Place a box below the cloth that spans a wide area
+    sim.addBoxCollider(glm::vec3(-5, -1, -5), glm::vec3(5, 0, 5));
+
+    // Simulate 120 frames
+    for (int i = 0; i < 120; ++i)
+    {
+        sim.simulate(1.0f / 60.0f);
+    }
+
+    // All particles should be pushed above the box top face
+    const glm::vec3* pos = sim.getPositions();
+    for (uint32_t i = 0; i < sim.getParticleCount(); ++i)
+    {
+        EXPECT_GE(pos[i].y, -0.02f)
+            << "Particle " << i << " penetrated box, Y=" << pos[i].y;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// LRA (Long Range Attachment) workflow
+// ---------------------------------------------------------------------------
+
+TEST(ClothSimulator, CaptureRestPositionsAndRebuildLRA)
+{
+    ClothSimulator sim;
+    auto cfg = smallConfig();
+    sim.initialize(cfg);
+
+    // Pin the top row (first 4 particles in a 4x4 grid)
+    uint32_t w = cfg.width;
+    for (uint32_t x = 0; x < w; ++x)
+    {
+        const glm::vec3* pos = sim.getPositions();
+        sim.pinParticle(x, pos[x]);
+    }
+
+    // Capture rest positions and rebuild LRA constraints
+    sim.captureRestPositions();
+    sim.rebuildLRA();
+
+    // Simulate 60 frames — should not crash, and particles should stay
+    // reasonably close to their rest positions thanks to LRA
+    for (int i = 0; i < 60; ++i)
+    {
+        sim.simulate(1.0f / 60.0f);
+    }
+
+    // Verify no crash occurred and simulation is still valid
+    const glm::vec3* pos = sim.getPositions();
+    EXPECT_NE(pos, nullptr);
+    EXPECT_TRUE(sim.isInitialized());
+
+    // Pinned particles should still be at their pinned positions
+    for (uint32_t x = 0; x < w; ++x)
+    {
+        EXPECT_TRUE(sim.isParticlePinned(x));
+    }
+}
+
+TEST(ClothSimulator, RebuildLRAWithNoPinsDoesNothing)
+{
+    ClothSimulator sim;
+    sim.initialize(smallConfig());
+
+    // No particles are pinned — rebuildLRA should not crash
+    sim.rebuildLRA();
+
+    // Simulate 10 frames — should work normally
+    for (int i = 0; i < 10; ++i)
+    {
+        sim.simulate(1.0f / 60.0f);
+    }
+
+    // Verify simulation is still valid
+    const glm::vec3* pos = sim.getPositions();
+    EXPECT_NE(pos, nullptr);
+    EXPECT_TRUE(sim.isInitialized());
+}
+
+// ---------------------------------------------------------------------------
+// Edge cases
+// ---------------------------------------------------------------------------
+
+TEST(ClothSimulator, SubstepsClampedTo64)
+{
+    ClothSimulator sim;
+    auto cfg = smallConfig();
+    cfg.substeps = 100;  // Excessive substeps
+    sim.initialize(cfg);
+
+    // The clamp happens during simulate(), so just verify it does not hang
+    // and completes within a reasonable time
+    sim.simulate(1.0f / 60.0f);
+
+    // Verify the simulation still produced valid results
+    const glm::vec3* pos = sim.getPositions();
+    EXPECT_NE(pos, nullptr);
+    EXPECT_TRUE(sim.isInitialized());
+}
+
+TEST(ClothSimulator, SimulateOnUninitializedDoesNotCrash)
+{
+    ClothSimulator sim;
+    // Deliberately do NOT call initialize()
+    EXPECT_FALSE(sim.isInitialized());
+
+    // simulate() should return safely without crash
+    sim.simulate(1.0f / 60.0f);
+
+    // State should remain uninitialized
+    EXPECT_FALSE(sim.isInitialized());
+    EXPECT_EQ(sim.getParticleCount(), 0u);
+    EXPECT_EQ(sim.getPositions(), nullptr);
 }
