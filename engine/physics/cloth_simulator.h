@@ -237,8 +237,50 @@ public:
     /// @brief Returns the number of pinned particles.
     uint32_t getPinnedCount() const;
 
-    /// @brief Returns the total number of constraints (stretch + shear + bend).
+    /// @brief Returns the total number of constraints (stretch + shear + bend + dihedral).
     uint32_t getConstraintCount() const;
+
+    /// @brief Returns the number of dihedral bending constraints.
+    uint32_t getDihedralConstraintCount() const;
+
+    // --- Dihedral bending ---
+
+    /// @brief Sets the compliance for dihedral bending constraints (0 = rigid, higher = softer).
+    void setDihedralBendCompliance(float compliance);
+
+    /// @brief Returns the current dihedral bend compliance.
+    float getDihedralBendCompliance() const;
+
+    // --- Adaptive damping ---
+
+    /// @brief Sets the adaptive damping factor (scales damping with average particle speed).
+    /// Total damping = baseDamping + adaptiveFactor * avgSpeed. Set to 0 to disable.
+    void setAdaptiveDamping(float factor);
+
+    /// @brief Returns the adaptive damping factor.
+    float getAdaptiveDamping() const;
+
+    // --- Friction ---
+
+    /// @brief Sets static and kinetic friction coefficients for collider surfaces.
+    /// @param staticCoeff Coulomb static friction (default 0.4).
+    /// @param kineticCoeff Coulomb kinetic friction (default 0.3).
+    void setFriction(float staticCoeff, float kineticCoeff);
+
+    /// @brief Returns the static friction coefficient.
+    float getStaticFriction() const;
+
+    /// @brief Returns the kinetic friction coefficient.
+    float getKineticFriction() const;
+
+    // --- Thick particle model ---
+
+    /// @brief Sets the particle radius for thick-particle collision.
+    /// Added to all collision margins. Default 0.01m (half of 2cm cloth thickness).
+    void setParticleRadius(float radius);
+
+    /// @brief Returns the particle radius.
+    float getParticleRadius() const;
 
 private:
     ClothConfig m_config;
@@ -264,6 +306,23 @@ private:
     std::vector<DistanceConstraint> m_stretchConstraints;
     std::vector<DistanceConstraint> m_shearConstraints;
     std::vector<DistanceConstraint> m_bendConstraints;
+
+    // Dihedral bending constraints (angle between adjacent triangle normals)
+    struct DihedralConstraint
+    {
+        uint32_t p0, p1, p2, p3;  ///< p0/p1 = wing vertices, p2/p3 = shared edge
+        float restAngle;           ///< Rest dihedral angle (radians)
+        float compliance;
+    };
+    std::vector<DihedralConstraint> m_dihedralConstraints;
+    float m_dihedralCompliance = 0.01f;  ///< Default soft bending
+    void buildDihedralConstraints();
+    void solveDihedralConstraint(DihedralConstraint& c, float dtSub);
+
+    // Constraint ordering (BFS depth from pins)
+    std::vector<uint32_t> m_particleDepth;    ///< BFS depth from nearest pin
+    bool m_constraintsSorted = false;
+    void sortConstraintsByDepth();
 
     // Pin constraints
     struct PinConstraint
@@ -303,6 +362,16 @@ private:
     std::vector<uint32_t> m_selfCollisionNeighbors;  ///< Reused per query
     void applySelfCollision();
     bool areGridAdjacent(uint32_t i, uint32_t j) const;
+
+    // Adaptive damping
+    float m_adaptiveDampingFactor = 0.0f;  ///< 0 = disabled, typical 0.1-0.5
+
+    // Friction (Coulomb model)
+    float m_staticFriction = 0.4f;    ///< μs
+    float m_kineticFriction = 0.3f;   ///< μk
+
+    // Thick particle model
+    float m_particleRadius = 0.0f;    ///< 0 = point particles (legacy behavior)
 
     // Wind
     glm::vec3 m_windDirection = glm::vec3(0.0f);
