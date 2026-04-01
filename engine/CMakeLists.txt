@@ -15,6 +15,7 @@ set(ENGINE_SOURCES
     scene/mesh_renderer.cpp
     scene/scene.cpp
     scene/scene_manager.cpp
+    scene/camera_component.cpp
     scene/particle_emitter.cpp
     scene/particle_presets.cpp
     resource/resource_manager.cpp

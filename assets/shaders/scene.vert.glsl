@@ -32,6 +32,15 @@ layout(std430, binding = 2) buffer BoneMatrices
     mat4 u_boneMatrices[];
 };
 
+// Morph target deltas (binding 3)
+// Layout: [pos deltas: target0_vert0..N, target1_vert0..N, ...]
+//         [nor deltas: target0_vert0..N, target1_vert0..N, ...]
+// Each element is vec4 (xyz = delta, w = 0).
+layout(std430, binding = 3) buffer MorphDeltas
+{
+    vec4 u_morphDeltas[];
+};
+
 uniform mat4 u_model;
 uniform mat4 u_view;
 uniform mat4 u_projection;
@@ -40,6 +49,11 @@ uniform bool u_useMDI;
 uniform bool u_hasBones;      // True for skinned meshes — enables bone transform
 uniform mat3 u_normalMatrix;  // Precomputed on CPU for non-instanced path
 uniform vec4 u_clipPlane;     // Water clip plane (0,0,0,0 = disabled)
+
+// Morph target uniforms
+uniform int u_morphTargetCount;   // 0 = no morph targets
+uniform int u_morphVertexCount;   // Vertex count for SSBO indexing
+uniform float u_morphWeights[8];  // Max 8 simultaneous morph targets
 
 out vec3 v_fragPosition;
 out vec3 v_normal;
@@ -81,6 +95,29 @@ void main()
         normalMatrix = u_normalMatrix;
     }
 
+    // --- Morph target deformation (before bone skinning) ---
+    vec3 morphedPos = position;
+    vec3 morphedNor = normal;
+
+    if (u_morphTargetCount > 0)
+    {
+        int vid = gl_VertexID;
+        int vc = u_morphVertexCount;
+        int tc = u_morphTargetCount;
+
+        for (int i = 0; i < tc; i++)
+        {
+            float w = u_morphWeights[i];
+            if (w != 0.0)
+            {
+                // Position delta: buffer[i * vertCount + vertexID]
+                morphedPos += w * u_morphDeltas[i * vc + vid].xyz;
+                // Normal delta: buffer[targetCount * vertCount + i * vertCount + vertexID]
+                morphedNor += w * u_morphDeltas[tc * vc + i * vc + vid].xyz;
+            }
+        }
+    }
+
     // --- Skeletal animation skinning ---
     vec3 skinnedPos;
     vec3 skinnedNormal;
@@ -94,16 +131,16 @@ void main()
                            + boneWeights.z * u_boneMatrices[boneIds.z]
                            + boneWeights.w * u_boneMatrices[boneIds.w];
 
-        skinnedPos       = vec3(boneTransform * vec4(position, 1.0));
+        skinnedPos       = vec3(boneTransform * vec4(morphedPos, 1.0));
         mat3 boneMat3    = mat3(boneTransform);
-        skinnedNormal    = boneMat3 * normal;
+        skinnedNormal    = boneMat3 * morphedNor;
         skinnedTangent   = boneMat3 * tangent;
         skinnedBitangent = boneMat3 * bitangent;
     }
     else
     {
-        skinnedPos       = position;
-        skinnedNormal    = normal;
+        skinnedPos       = morphedPos;
+        skinnedNormal    = morphedNor;
         skinnedTangent   = tangent;
         skinnedBitangent = bitangent;
     }

@@ -45,6 +45,7 @@ private:
     void drawMaterialPbr(Material& material);
     void drawMaterialTextures(Material& material);
     void drawMaterialTransparency(Material& material);
+    void drawCameraComponent(Entity& entity);
     void drawDirectionalLight(Entity& entity);
     void drawPointLight(Entity& entity);
     void drawSpotLight(Entity& entity);

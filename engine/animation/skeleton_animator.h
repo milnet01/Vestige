@@ -135,6 +135,20 @@ public:
     /// @brief Whether this animator has valid bone data to render.
     bool hasBones() const;
 
+    // --- Morph Targets ---
+
+    /// @brief Gets the current morph target weights (sampled from WEIGHTS animation channels).
+    /// Empty if no WEIGHTS channels are present.
+    const std::vector<float>& getMorphWeights() const;
+
+    /// @brief Sets a morph weight by index (for procedural control, e.g., blink, look-at).
+    /// @param index Morph target index.
+    /// @param weight Weight value (typically 0.0 to 1.0).
+    void setMorphWeight(int index, float weight);
+
+    /// @brief Resizes the morph weight array (call once when the target count is known).
+    void setMorphTargetCount(int count);
+
 private:
     /// @brief Evaluates all channels of the current clip at the current time,
     /// then walks the joint hierarchy to compute global transforms and bone matrices.
@@ -182,6 +196,9 @@ private:
     std::vector<glm::vec3> m_sourceTranslations;
     std::vector<glm::quat> m_sourceRotations;
     std::vector<glm::vec3> m_sourceScales;
+
+    // --- Morph target weights ---
+    std::vector<float> m_morphWeights;
 
     // --- Root motion state ---
     RootMotionMode m_rootMotionMode = RootMotionMode::IGNORE;

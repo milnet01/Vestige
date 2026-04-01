@@ -60,6 +60,8 @@ add_executable(vestige_tests
     test_physics_constraint.cpp
     test_cloth_simulator.cpp
     test_cloth_presets.cpp
+    test_camera_component.cpp
+    test_morph_target_pipeline.cpp
 )
 
 target_link_libraries(vestige_tests
