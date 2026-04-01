@@ -105,6 +105,9 @@ set(ENGINE_SOURCES
     animation/facial_presets.cpp
     animation/eye_controller.cpp
     animation/facial_animation.cpp
+    animation/viseme_map.cpp
+    animation/audio_analyzer.cpp
+    animation/lip_sync.cpp
     physics/physics_world.cpp
     physics/rigid_body.cpp
     physics/physics_character_controller.cpp
