@@ -425,6 +425,19 @@ Animated objects and characters are essential for doors, swinging censers, pries
 - [x] Look-at / head IK (characters turn head toward points of interest) — Phase 7D
 - [x] IK blending with animation clips (IK layer on top of baked animations) — Phase 7D (weight parameter)
 
+### Facial Animation and Lip Sync
+- [ ] Facial blend shape system (emotion presets — happy, sad, angry, surprised, pain)
+  - Layer facial animation on top of body animation
+  - Smooth blending between expressions with configurable transition speed
+- [ ] Audio-driven lip sync
+  - Phoneme extraction from audio files (viseme mapping)
+  - Real-time blend shape weights from phoneme stream
+  - Fallback: simple jaw open/close from audio amplitude
+- [ ] Eye animation
+  - Look-at targets (eyes track points of interest, player, or other NPCs)
+  - Blink animation (random blink interval, blink on startle)
+  - Pupil dilation (optional — fear, darkness adaptation)
+
 ### glTF Animation Import
 - [x] Import skeletal animations from glTF files — Phase 7A
 - [x] Import morph target / blend shape animations — Phase 7E
@@ -532,8 +545,65 @@ A hybrid collision system: fast primitive colliders for simple geometry (walls, 
   - Spatial hashing to find nearby cloth particles on the same mesh
   - Prevent cloth from passing through itself when folding
 
+### Ragdoll Physics
+Skeleton-driven ragdoll for realistic death animations, zero-G corpses, and physics-based stumbling.
+- [ ] Skeleton-to-ragdoll transition (on death or trigger, switch from animation to physics-driven bones)
+  - Map skeleton bones to rigid body chain with joint limits per bone
+  - Blend from animation to ragdoll (active ragdoll — partial physics influence for stumbling, hit reactions)
+  - Preserve final animation pose as ragdoll initial state (no snapping)
+- [ ] Joint limit configuration per bone (hinge for knees/elbows, cone-twist for shoulders/hips)
+- [ ] Ragdoll presets (humanoid, quadruped, custom — auto-generate from skeleton)
+- [ ] Powered ragdoll (muscles — ragdoll tries to maintain a pose while physics acts on it)
+  - Use case: enemies stumbling, characters bracing against walls, partial dismemberment
+
+### Object Interaction System
+Pick up, hold, throw, and manipulate physics objects in the world.
+- [ ] Grab system — raycast from camera/hand to select nearby physics objects
+  - Distance-limited (2-3m range), weight-limited (can't grab massive objects)
+  - Visual indicator (highlight, cursor change) when looking at grabbable objects
+- [ ] Hold and carry — grabbed object follows a target point with spring constraint
+  - Object rotates to face camera or maintains grabbed orientation
+  - Collision with world while held (object pushes player away if stuck)
+- [ ] Throw — release grabbed object with velocity from mouse/stick movement
+  - Configurable throw force, arc prediction line (optional)
+- [ ] Physics puzzles — stack objects, weigh down pressure plates, plug leaks, bridge gaps
+- [ ] Stasis/slow-motion on individual objects (slow physics timestep per-body)
+
+### Dynamic Destruction
+Breakable objects, pre-fractured meshes, and runtime deformation.
+- [ ] Pre-fractured mesh system — artist defines fracture pieces at import time
+  - Voronoi fracture tool (split mesh into N pieces along Voronoi cell boundaries)
+  - Fracture pieces stored as child meshes, invisible until break triggers
+  - Break threshold: force/impulse exceeds configurable limit
+- [ ] Runtime break response — on threshold exceeded:
+  - Hide original mesh, spawn fracture pieces as dynamic rigid bodies
+  - Apply radial impulse from impact point
+  - Debris particle spawning (dust, sparks, splinters)
+- [ ] Deformable meshes — vertex displacement from impact (dents in metal, cracks in stone)
+  - Damage decals at deformation point (crack textures, scorch marks)
+- [ ] Breakable constraints — glass panes, wooden boards, weak walls
+  - Fixed joints that break when force exceeds threshold (already in Jolt constraint system)
+- [ ] Chain destruction — breaking one object can trigger adjacent breaks (domino, collapse)
+
+### Dismemberment System
+Runtime limb separation for combat and horror games (Dead Space-style strategic dismemberment).
+- [ ] Dismemberment zones — define severable joints in skeleton (neck, shoulders, elbows, wrists, hips, knees)
+  - Per-joint health/damage threshold for separation
+  - Damage accumulation per zone (not just single hits)
+- [ ] Runtime mesh splitting at dismemberment joints
+  - Generate cap geometry at cut point (procedural disc mesh with wound texture)
+  - Detached limb becomes ragdoll rigid body
+  - Stump gets gore/wound decal
+- [ ] Behavior modification after dismemberment
+  - AI adjusts movement/attack patterns based on remaining limbs
+  - Crawling enemy (both legs removed), one-armed attacks, headless stumbling
+- [ ] Gore system (optional, toggle in settings)
+  - Blood particle spray at cut point
+  - Blood decals on nearby surfaces
+  - Dismembered limbs persist for configurable duration
+
 ### Milestone
-The Tabernacle's linen curtains sway gently, the entrance veil drapes realistically from its poles, and doors throughout Solomon's Temple swing on hinged joints. Cloth correctly drapes over any scene geometry without manual collider placement.
+The Tabernacle's linen curtains sway gently, the entrance veil drapes realistically from its poles, and doors throughout Solomon's Temple swing on hinged joints. Cloth correctly drapes over any scene geometry without manual collider placement. Objects can be grabbed and thrown, enemies ragdoll on death with dismemberable limbs, and destructible objects shatter realistically.
 
 ---
 
@@ -543,12 +613,48 @@ The Tabernacle's linen curtains sway gently, the entrance veil drapes realistica
 ### Features
 - [ ] In-game UI system (menus, HUD, information panels/plaques)
 - [ ] Text rendering (TrueType fonts)
-- [ ] Audio system (background music, ambient sounds)
-- [ ] Spatial audio (3D positioned sound sources — crackling torch, splashing water)
 - [ ] Scene/level configuration files (define scenes in data, not code)
 - [ ] Settings system (resolution, quality presets, keybindings)
 - [ ] Loading screens (for scene transitions)
 - [ ] Information plaques — approach an object to see a text description
+
+### Audio System
+Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music.
+- [ ] Audio engine integration (OpenAL Soft or FMOD — evaluate both)
+  - Streaming playback for music (no loading entire file into memory)
+  - One-shot playback for sound effects (pre-loaded, low latency)
+  - Audio source component — attach to any entity for 3D positioned sound
+- [ ] Spatial audio (3D positioned sound sources — crackling torch, splashing water)
+  - Distance attenuation curves (linear, logarithmic, custom)
+  - HRTF support for headphones (head-related transfer function for accurate 3D positioning)
+  - Doppler effect for fast-moving sources
+- [ ] Audio occlusion and obstruction
+  - Raycast-based occlusion (sound muffled through walls — check line-of-sight to source)
+  - Material-based transmission (wood muffles less than stone; metal reflects)
+  - Diffraction around corners (sound bends around doorways and openings)
+- [ ] Reverb zones — per-room reverb presets
+  - Auto-detect room geometry for reverb parameters (volume → decay time)
+  - Smooth reverb transitions between zones (crossfade as player moves)
+  - Presets: small room, large hall, cave, outdoor, underwater
+- [ ] Environmental ambient audio
+  - Ambient sound zones (per-area ambient loops — wind, water, machinery hum)
+  - Random one-shot environmental sounds (creaking metal, distant impacts, animal calls)
+  - Time-of-day audio changes (crickets at night, birds at dawn)
+  - Weather-driven audio (rain intensity, thunder, wind howl — integrated with Phase 14 weather)
+- [ ] Dynamic music system — adaptive soundtrack that responds to gameplay state
+  - Layered music tracks (ambient, tension, exploration, combat, discovery, danger)
+  - Smooth crossfading between layers based on game state
+  - Stinger system (one-shot musical hits for events — jump scares, discoveries, achievements)
+  - Music intensity tied to gameplay metrics (enemy proximity, health level, combat state)
+  - Silence as a tool — deliberate quiet for tension building
+- [ ] Audio mixing and priorities
+  - Sound priority system (important sounds never cut off by ambient)
+  - Duck/sidechain — lower ambient volume during dialogue or important effects
+  - Maximum concurrent sound limit with priority-based eviction
+- [ ] Editor integration
+  - Audio source placement and preview in editor
+  - Reverb zone visualization (wireframe volumes)
+  - Ambient zone painting (similar to foliage brush)
 
 ### Camera Modes
 - [ ] Camera mode system (switchable projection and control schemes per scene/game)
@@ -570,6 +676,33 @@ The Tabernacle's linen curtains sway gently, the entrance veil drapes realistica
 - [ ] Fully remappable controls (keyboard, mouse, gamepad)
 - [ ] UI scaling options (for readability at different resolutions/distances)
 - [ ] High-contrast mode for UI elements
+
+### Decal System
+Projected textures for blood splatters, scorch marks, claw scratches, bullet holes, and environmental storytelling.
+- [ ] Deferred decal rendering (project decal texture onto G-buffer geometry)
+  - Box-projected decals (oriented bounding box defines projection volume)
+  - Decals modify albedo, normal, roughness, and/or metallic channels
+  - Depth-tested to prevent projection onto distant surfaces
+- [ ] Persistent decals that accumulate during gameplay
+  - Decal pool with maximum count (oldest decals fade when limit reached)
+  - Configurable lifetime and fade curve per decal type
+- [ ] Animated decals (spreading blood pools, flickering holograms, growing cracks)
+  - UV animation (scrolling, scaling over time)
+  - Sprite sheet frame animation for complex effects
+- [ ] Decal presets: blood splatter, bullet hole, scorch mark, claw scratch, footprint, water stain
+- [ ] Editor integration — place and orient decals in editor, preview projection volume
+
+### Post-Processing Effects Suite
+Cinematic and atmospheric post-processing for horror, drama, and stylized rendering.
+- [ ] Film grain (noise overlay, configurable intensity and grain size)
+- [ ] Chromatic aberration (RGB channel offset, stronger at screen edges)
+- [ ] Vignette (screen edge darkening, configurable intensity and radius)
+- [ ] Screen distortion (barrel/pincushion, heat haze, damage effects)
+- [ ] Damage/low-health screen effects (red vignette, blur, heartbeat pulse, desaturation)
+- [ ] Death screen effects (slow desaturation, blur ramp, fade to black)
+- [ ] Color grading per-scene (warm golden interiors, cold blue corridors, sickly green toxic areas)
+- [ ] Lens flare (anamorphic streaks and ghost artifacts from bright lights)
+- [ ] Sharpen filter (contrast-adaptive sharpening for post-upscale clarity)
 
 ### Rendering Enhancements
 - [ ] Subsurface scattering (SSS) — light transmission through thin/translucent materials
@@ -595,18 +728,125 @@ The Tabernacle's linen curtains sway gently, the entrance veil drapes realistica
   - Screen-space radial blur approach (fast, good for single dominant light)
   - Integration with volumetric fog for physically-based light shafts
   - The Tabernacle's tent entrance should cast visible light beams into the dusty interior
-  - God rays through gaps in clouds (when volumetric clouds are available from Phase 13)
+  - God rays through gaps in clouds (when volumetric clouds are available from Phase 14)
 - [ ] Mist / ground fog — localized fog volumes placeable per-entity
   - Box and sphere fog volumes with soft edges (density falloff at boundaries)
   - Animated density (slow turbulence for rolling mist effect)
   - Use case: morning mist around the Bronze Laver, dust clouds near the altar
 
 ### Milestone
-A complete walkthrough experience with UI, audio, information displays, multi-language support, accessibility options, and advanced material rendering (SSS, volumetric fog, god rays).
+A complete walkthrough experience with UI, spatial audio with occlusion and dynamic music, information displays, multi-language support, accessibility options, decals, cinematic post-processing, and advanced material rendering (SSS, volumetric fog, god rays).
 
 ---
 
-## Phase 10: Distribution
+## Phase 10: Gameplay Systems
+**Goal:** Core gameplay mechanics for action, survival, and horror games — combat, inventory, health, saves, and environmental interaction.
+
+These systems transform Vestige from an exploration/walkthrough engine into a full game engine capable of action games like Dead Space, survival horror, RPGs, and more.
+
+### Combat / Weapon System
+- [ ] Weapon component — attach to entity for ranged or melee combat
+  - Fire rate, damage, ammo capacity, reload time, spread/accuracy
+  - Hitscan weapons (raycast on fire — pistols, rifles, plasma cutters)
+  - Projectile weapons (spawn physics projectile — grenades, rockets, bolts)
+  - Melee weapons (short-range cone/sphere overlap check — swords, axes, fists)
+- [ ] Hit detection with per-bone damage zones
+  - Skeleton-aware damage (headshot multiplier, limb damage for dismemberment)
+  - Damage types: kinetic, explosive, fire, electric, plasma (configurable per weapon)
+  - Hit feedback: blood particles, decals, impact sounds, enemy flinch animation
+- [ ] Weapon visual effects
+  - Muzzle flash (particle + point light burst)
+  - Tracer particles for projectiles
+  - Impact effects per surface type (sparks on metal, dust on stone, blood on flesh)
+  - Shell casing ejection (physics-driven particle)
+- [ ] Aiming system
+  - Crosshair / targeting reticle with spread indicator
+  - Aim-down-sights (ADS) with FOV zoom and reduced spread
+  - Laser sight / flashlight attachment (spot light component on weapon)
+- [ ] Weapon upgrade system
+  - Upgrade slots per weapon (damage, capacity, reload speed, special)
+  - Upgrade bench interaction (dedicated UI for weapon modification)
+
+### Health and Damage System
+- [ ] Health component — per-entity health pool with damage/heal methods
+  - Maximum health, current health, regeneration rate (optional)
+  - Damage resistance per type (armor reduces kinetic, insulation reduces fire)
+  - Death trigger — fire event on health reaching zero
+- [ ] Status effects
+  - Bleeding (damage over time, blood trail decals)
+  - Burning (fire particles, increasing damage, extinguish with action)
+  - Stun (brief incapacitation, screen blur)
+  - Poisoned (screen distortion, damage over time, green vignette)
+- [ ] Damage feedback
+  - Directional damage indicator (show which direction damage came from)
+  - Screen effects: red vignette, camera shake, chromatic aberration pulse
+  - Low health warning (heartbeat audio, desaturation, heavier breathing)
+- [ ] Player death and respawn
+  - Death animation/ragdoll transition
+  - Death screen overlay with fade
+  - Respawn at last checkpoint or save point
+
+### Inventory System
+- [ ] Inventory component — grid or list-based item storage per entity
+  - Item slots with stack limits and weight limits
+  - Item categories: weapons, ammo, health, key items, upgrades, consumables
+  - Drag-and-drop inventory UI (ImGui-based for editor, in-game UI for gameplay)
+- [ ] Item pickups — world entities that transfer to inventory on interact
+  - Proximity detection + interact key
+  - Pickup animation and sound
+  - Item glow/highlight for visibility
+- [ ] Consumable items — use from inventory to apply effects
+  - Health packs, stim packs, antidotes, shields
+  - Cooldown between uses
+- [ ] Equipment slots — weapon, armor, helmet, accessory
+  - Visual change on equip (swap mesh/texture on character)
+  - Stat modifications from equipped items
+- [ ] Loot tables — configurable random item drops from enemies/containers
+  - Rarity tiers with drop probability weights
+  - Level-scaled loot (harder areas drop better items)
+
+### Save / Checkpoint System
+- [ ] Full world state serialization
+  - Entity states (position, health, inventory, animation state)
+  - Scene state (doors opened, items collected, enemies killed, triggers fired)
+  - Player state (position, health, inventory, equipped items, quest progress)
+- [ ] Save file management
+  - Manual save (at save points or anywhere, configurable per game)
+  - Auto-save (periodic or at checkpoints)
+  - Quick save / quick load (F5/F9)
+  - Multiple save slots with metadata (screenshot thumbnail, playtime, location)
+- [ ] Checkpoint system
+  - Invisible checkpoint volumes placed in editor
+  - Auto-save on checkpoint entry
+  - Respawn at last checkpoint on death
+- [ ] Save file format
+  - Binary serialization for speed, JSON debug export option
+  - Version stamping for forward compatibility
+  - Compression (zstd) for save file size
+
+### Environmental Hazards
+- [ ] Hazard zones — volumes that apply damage/effects to entities inside
+  - Fire zones (burning damage, fire particles)
+  - Electric zones (periodic shock damage, spark particles, stun effect)
+  - Toxic zones (poison damage over time, green fog particles)
+  - Vacuum/decompression (suffocation timer, objects pulled toward breach)
+  - Radiation (increasing damage with exposure time)
+- [ ] Hazard visual indicators
+  - Particle effects per hazard type
+  - Warning signs and environmental cues
+  - Screen effects when inside hazard (blur, tint, distortion)
+- [ ] Interactive hazards
+  - Exploding barrels (damage radius on destruction)
+  - Electrical panels (shock on contact, can be disabled)
+  - Steam vents (periodic burst, push force on entities)
+  - Collapsing floor/ceiling (trigger-based destruction + damage)
+
+### Milestone
+A complete gameplay loop: explore, fight enemies with upgradeable weapons, take damage and heal, collect items, and save progress. Environmental hazards add tension and puzzle elements. All systems configurable in the editor.
+
+---
+
+## Phase 11: Distribution
 **Goal:** Package and distribute the application — both finished experiences and the engine itself.
 
 ### Cross-Platform Compilation
@@ -674,7 +914,7 @@ Application published on Steam. Scenes can be packaged and shared between users.
 
 ---
 
-## Phase 11: Advanced Rendering
+## Phase 12: Advanced Rendering
 **Goal:** Push visual fidelity with modern techniques.
 
 ### Screen-Space Effects
@@ -759,7 +999,7 @@ Hybrid rendering with software and hardware ray-traced effects, real-time global
 
 ---
 
-## Phase 12: Adaptive Geometry System
+## Phase 13: Adaptive Geometry System
 **Goal:** Handle massive geometric complexity automatically — original approach, not a copy of any existing engine.
 
 ### Problem Statement
@@ -789,7 +1029,7 @@ A system that lets artists import film-quality assets and the engine automatical
 
 ---
 
-## Phase 13: Atmospheric Rendering
+## Phase 14: Atmospheric Rendering
 **Goal:** Procedural sky, weather, time of day, and dynamic atmosphere.
 
 ### Procedural Sky
@@ -887,7 +1127,7 @@ A living sky with dynamic clouds, day/night transitions, weather effects (rain, 
 
 ---
 
-## Phase 14: Scripting and Interactivity
+## Phase 15: Scripting and Interactivity
 **Goal:** Allow scene creators to add behavior and interactivity without writing C++.
 
 ### Visual Scripting
@@ -911,12 +1151,87 @@ A living sky with dynamic clouds, day/night transitions, weather effects (rain, 
 - [ ] Crowd simulation (multiple NPCs navigating without colliding — Temple visitors, priests)
 - [ ] Line-of-sight checks (NPCs react to player visibility)
 
+### Behavior Trees
+Advanced AI decision-making system — far more expressive than state machines for complex enemy behavior.
+- [ ] Behavior tree runtime (tick-based evaluation with running/success/failure states)
+  - Composite nodes: Sequence (AND), Selector (OR), Parallel (concurrent)
+  - Decorator nodes: Inverter, Repeater, Cooldown, Conditional guard, Timeout
+  - Leaf nodes: Actions (move to, attack, patrol, flee) and Conditions (can see player, health low)
+- [ ] Behavior tree editor — visual node graph in the editor
+  - Drag-and-drop node placement and wiring
+  - Live debugging: highlight active node during gameplay
+  - Tree templates: save/load reusable behavior patterns
+- [ ] Utility AI (optional enhancement) — score-based action selection
+  - Each action has a utility function (score based on game state)
+  - Highest-scoring action wins — emergent behavior without explicit tree authoring
+  - Useful for varied NPC behavior (not all enemies act identically)
+
+### AI Perception System
+Sensory system for NPC awareness — sight, sound, and proximity detection.
+- [ ] Vision sense — cone-of-vision with configurable angle and range
+  - Line-of-sight raycast (blocked by walls, objects)
+  - Peripheral vision (wider angle, lower detection speed)
+  - Darkness modifier (reduced detection range in dark areas)
+  - Last-known-position tracking (investigate where player was last seen)
+- [ ] Hearing sense — sound propagation through the environment
+  - Sound events (gunshot, footstep, explosion, door opening) generate detection stimuli
+  - Distance-based detection radius per sound type
+  - Sound occlusion through walls (muffled through closed doors)
+  - Investigation behavior (move to sound source location)
+- [ ] Alert states — multi-level awareness
+  - Unaware → Suspicious → Alert → Combat → Search → Return
+  - Smooth transitions between states (suspicion builds over time)
+  - Alert propagation (alerted enemies alert nearby allies)
+  - Search patterns (systematic area search after losing target)
+
+### AI Director / Encounter Pacing
+Dynamic system that controls encounter intensity and pacing — inspired by Left 4 Dead and Dead Space.
+- [ ] Tension tracking — measure player's current stress level
+  - Metrics: recent damage taken, ammo remaining, health level, time since last encounter
+  - Composite tension score from weighted metrics
+- [ ] Dynamic spawn control
+  - Spawn budget system (allocate enemy points per time window)
+  - Intensity curve: build-up → peak → cooldown → build-up
+  - Ramp difficulty based on player performance (adaptive difficulty)
+- [ ] Encounter scripting
+  - Spawn points with trigger conditions (proximity, line-of-sight, timer)
+  - Vent/closet/ceiling emergence animations (enemies burst from environment)
+  - Ambush choreography (enemies approach from multiple directions)
+- [ ] Pacing tools
+  - Safe zones (areas where director suppresses spawns — save rooms, shops)
+  - Mandatory encounters (story-critical, always spawn regardless of tension)
+  - Random encounters (optional, director-controlled frequency)
+
+### Cutscene and Cinematic System
+In-engine cinematics for story moments, guided tours, and dramatic reveals.
+- [ ] Camera track editor — keyframed camera paths with easing
+  - Position, rotation, FOV keyframes along a timeline
+  - Preview playback in editor
+  - Smooth interpolation (Catmull-Rom spline, bezier curves)
+- [ ] Character animation sequencing
+  - Trigger animation clips on entities at specific timeline points
+  - Facial animation cues (expression changes, lip sync)
+  - IK targets during cutscenes (look at specific objects, reach for doors)
+- [ ] Dialogue system
+  - Subtitle display with configurable style and timing
+  - Dialogue trees (branching conversation choices)
+  - Voice-over audio playback synced to dialogue text
+  - Speaker name/portrait display
+- [ ] Seamless transitions
+  - Gameplay-to-cutscene transition (smooth camera blend, HUD fade)
+  - Cutscene-to-gameplay transition (camera returns to player, controls re-enable)
+  - Skippable cutscenes (player can skip with button press)
+- [ ] Scripted events — triggered sequences without full cutscenes
+  - Camera shake, screen flash, slow motion, forced look-at
+  - Door slam, lights flicker, enemy scripted entrance
+  - Environmental destruction sequences
+
 ### Milestone
-A scene where doors open, torches flicker, guided tours run, NPCs walk patrol routes, and information appears — all configured in the editor without code.
+A scene where doors open, torches flicker, guided tours run, NPCs walk patrol routes using behavior trees and perception systems, enemies dynamically spawn based on AI director pacing, cutscenes play for story moments, and dialogue advances the narrative — all configured in the editor without code.
 
 ---
 
-## Phase 15: Terrain and Landscape (CORE COMPLETE — Phase 5I)
+## Phase 16: Terrain and Landscape (CORE COMPLETE — Phase 5I)
 **Goal:** Large-scale terrain with heightmap-based elevation for hills, valleys, and natural landscapes.
 
 Core terrain system implemented in Phase 5I. Remaining items are enhancements.
@@ -941,7 +1256,7 @@ Outdoor landscapes surrounding the Temple complex — hills, valleys, and the Ki
 
 ---
 
-## Phase 16: 2D Game and Scene Support
+## Phase 17: 2D Game and Scene Support
 **Goal:** Enable the creation of 2D games and scenes alongside the existing 3D capabilities — sprite-based rendering, 2D physics, tilemaps, and a dedicated 2D editor workflow.
 
 Phase 9's camera modes (isometric, top-down, orthographic) provide the viewing foundation. This phase adds the rendering, physics, and tooling needed to build complete 2D experiences.
@@ -989,7 +1304,7 @@ A complete 2D platformer or top-down game can be built entirely in the editor �
 
 ---
 
-## Phase 17: Procedural Generation
+## Phase 18: Procedural Generation
 **Goal:** Generate content algorithmically — terrain, buildings, vegetation, dungeons, and worlds — enabling large-scale scenes without hand-placing every element.
 
 ### Noise and Terrain Generation
@@ -1026,6 +1341,42 @@ A complete 2D platformer or top-down game can be built entirely in the editor �
 
 ### Milestone
 A procedural world generator that creates varied terrain, forests, and settlements from a single seed — usable both as an editor tool for rapid scene creation and as a runtime system for infinite exploration.
+
+---
+
+## Phase 19: Networking and Multiplayer
+**Goal:** Client-server multiplayer architecture for cooperative and competitive game modes.
+
+### Network Architecture
+- [ ] Client-server model (authoritative server, client prediction)
+  - Dedicated server mode (headless, no rendering)
+  - Listen server mode (one player hosts and plays simultaneously)
+  - Network transport layer (UDP with reliability, ordering, and fragmentation)
+- [ ] State synchronization
+  - Entity replication (server pushes entity state to clients)
+  - Interest management (only replicate nearby/relevant entities per client)
+  - Delta compression (send only changed fields, not full state)
+  - Snapshot interpolation (smooth rendering between server updates)
+- [ ] Client-side prediction and reconciliation
+  - Predict movement locally, reconcile with server corrections
+  - Input buffering and server-side rewind for hit detection
+  - Lag compensation (server rewinds time to verify client's shot)
+
+### Multiplayer Gameplay
+- [ ] Player spawning and session management
+  - Lobby system (host game, join game, ready up)
+  - Match lifecycle (waiting → countdown → playing → results)
+  - Team assignment and spawn point selection
+- [ ] Synchronized game state
+  - Health/damage across network (server authoritative)
+  - Weapon fire and hit registration (client-predicted, server-verified)
+  - Item pickup conflict resolution (first-come from server's perspective)
+  - Physics synchronization (server-authoritative rigid bodies, client-predicted character)
+- [ ] Voice chat (optional — push-to-talk with spatial audio)
+- [ ] Anti-cheat basics (server-side validation, movement speed checks, damage verification)
+
+### Milestone
+Multiplayer matches with 2-16 players: synchronized movement, combat, inventory, and physics across a client-server architecture with lag compensation.
 
 ---
 
