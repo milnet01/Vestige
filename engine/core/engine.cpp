@@ -2879,48 +2879,6 @@ void Engine::setupTabernacleScene()
     }
 
     // =====================================================================
-    // CLOTH DEMO — a fabric banner hanging in the courtyard
-    // =====================================================================
-    {
-        ClothPresetConfig bannerPreset = ClothPresets::banner();
-
-        auto clothMat = m_resourceManager->createMaterial("tab_cloth_demo");
-        clothMat->setType(MaterialType::PBR);
-        clothMat->setAlbedo(glm::vec3(0.8f, 0.15f, 0.1f));  // Deep red fabric
-        clothMat->setRoughness(0.85f);
-        clothMat->setMetallic(0.0f);
-        clothMat->setDoubleSided(true);
-
-        Entity* clothEntity = scene->createEntity("ClothBanner");
-        clothEntity->transform.position = glm::vec3(3.0f, 3.5f, courtEastZ - 5.0f);
-
-        ClothConfig clothCfg = bannerPreset.solver;
-        clothCfg.width = 20;
-        clothCfg.height = 20;
-        clothCfg.spacing = 0.1f;
-
-        auto* clothComp = clothEntity->addComponent<ClothComponent>();
-        clothComp->initialize(clothCfg, clothMat, 55555u);
-        clothComp->setPresetType(ClothPresetType::BANNER);
-
-        auto& sim = clothComp->getSimulator();
-        glm::vec3 basePos = clothEntity->transform.position;
-        for (uint32_t x = 0; x < clothCfg.width; ++x)
-        {
-            uint32_t idx = 0 * clothCfg.width + x;  // Top row (z=0)
-            glm::vec3 particlePos = sim.getPositions()[idx] + basePos;
-            sim.pinParticle(idx, particlePos);
-        }
-
-        // Same wind direction as the rest of the scene
-        sim.setWind(sceneWindDir, bannerPreset.windStrength);
-        sim.setDragCoefficient(bannerPreset.dragCoefficient);
-        sim.setGroundPlane(0.0f);
-
-        clothComp->syncMesh();
-    }
-
-    // =====================================================================
     // CAMERA -- Start outside the courtyard gate facing west
     // =====================================================================
     m_camera->setPosition(glm::vec3(0.0f, 2.5f, courtEastZ + 5.0f));
