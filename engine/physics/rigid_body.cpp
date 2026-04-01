@@ -3,10 +3,13 @@
 #include "physics/rigid_body.h"
 #include "physics/jolt_helpers.h"
 #include "scene/entity.h"
+#include "core/logger.h"
 
 #include <Jolt/Physics/Collision/Shape/BoxShape.h>
 #include <Jolt/Physics/Collision/Shape/SphereShape.h>
 #include <Jolt/Physics/Collision/Shape/CapsuleShape.h>
+#include <Jolt/Physics/Collision/Shape/ConvexHullShape.h>
+#include <Jolt/Physics/Collision/Shape/MeshShape.h>
 
 namespace Vestige
 {
@@ -51,6 +54,74 @@ void RigidBody::createBody(PhysicsWorld& world)
         if (shapeSize.x <= 0.0f || shapeSize.y <= 0.0f) return;  // radius, halfHeight
         shape = new JPH::CapsuleShape(shapeSize.y, shapeSize.x);
         break;
+    case CollisionShapeType::CONVEX_HULL:
+    {
+        if (collisionVertices.size() < 4)
+        {
+            Logger::error("Convex hull requires at least 4 vertices, got "
+                          + std::to_string(collisionVertices.size()));
+            return;
+        }
+
+        // Convert glm::vec3 to Jolt Vec3
+        JPH::Array<JPH::Vec3> joltVerts;
+        joltVerts.reserve(collisionVertices.size());
+        for (const auto& v : collisionVertices)
+        {
+            joltVerts.push_back(JPH::Vec3(v.x, v.y, v.z));
+        }
+
+        JPH::ConvexHullShapeSettings settings(joltVerts, JPH::cDefaultConvexRadius);
+        JPH::ShapeSettings::ShapeResult result = settings.Create();
+        if (result.HasError())
+        {
+            Logger::error("Convex hull creation failed: " + std::string(result.GetError().c_str()));
+            return;
+        }
+        shape = result.Get();
+        break;
+    }
+    case CollisionShapeType::MESH:
+    {
+        if (collisionVertices.size() < 3 || collisionIndices.size() < 3)
+        {
+            Logger::error("Mesh shape requires at least 1 triangle");
+            return;
+        }
+
+        // Mesh shapes must be static — force it and warn
+        if (motionType != BodyMotionType::STATIC)
+        {
+            Logger::warning("Mesh collision shapes must be static — forcing STATIC motion type");
+            motionType = BodyMotionType::STATIC;
+        }
+
+        // Build indexed triangle mesh
+        JPH::VertexList joltVerts;
+        joltVerts.reserve(collisionVertices.size());
+        for (const auto& v : collisionVertices)
+        {
+            joltVerts.push_back(JPH::Float3(v.x, v.y, v.z));
+        }
+
+        JPH::IndexedTriangleList joltTris;
+        joltTris.reserve(collisionIndices.size() / 3);
+        for (size_t i = 0; i + 2 < collisionIndices.size(); i += 3)
+        {
+            joltTris.push_back(JPH::IndexedTriangle(
+                collisionIndices[i], collisionIndices[i + 1], collisionIndices[i + 2]));
+        }
+
+        JPH::MeshShapeSettings settings(std::move(joltVerts), std::move(joltTris));
+        JPH::ShapeSettings::ShapeResult result = settings.Create();
+        if (result.HasError())
+        {
+            Logger::error("Mesh shape creation failed: " + std::string(result.GetError().c_str()));
+            return;
+        }
+        shape = result.Get();
+        break;
+    }
     default:
         return;
     }
@@ -127,6 +198,20 @@ void RigidBody::addImpulse(const glm::vec3& impulse)
     }
 }
 
+void RigidBody::setCollisionMesh(const glm::vec3* positions, size_t vertexCount,
+                                  const uint32_t* indices, size_t indexCount)
+{
+    collisionVertices.assign(positions, positions + vertexCount);
+    if (indices && indexCount > 0)
+    {
+        collisionIndices.assign(indices, indices + indexCount);
+    }
+    else
+    {
+        collisionIndices.clear();
+    }
+}
+
 void RigidBody::update(float /*deltaTime*/)
 {
     syncTransform();
@@ -141,6 +226,8 @@ std::unique_ptr<Component> RigidBody::clone() const
     copy->mass = mass;
     copy->friction = friction;
     copy->restitution = restitution;
+    copy->collisionVertices = collisionVertices;
+    copy->collisionIndices = collisionIndices;
     copy->setEnabled(isEnabled());
     // Note: body is NOT cloned — must call createBody() on the clone
     return copy;

@@ -13,6 +13,8 @@
 #include "scene/particle_emitter.h"
 #include "scene/water_surface.h"
 #include "physics/cloth_component.h"
+#include "physics/rigid_body.h"
+#include "physics/fabric_material.h"
 #include "editor/commands/particle_property_command.h"
 #include "editor/widgets/curve_editor_widget.h"
 #include "editor/widgets/gradient_editor_widget.h"
@@ -268,6 +270,12 @@ void InspectorPanel::draw(Scene* scene, Selection& selection)
     if (entity->hasComponent<WaterSurfaceComponent>())
     {
         drawWaterSurface(*entity);
+    }
+
+    // --- Rigid Body ---
+    if (entity->hasComponent<RigidBody>())
+    {
+        drawRigidBody(*entity);
     }
 
     // --- Cloth Simulation ---
@@ -1538,6 +1546,81 @@ void InspectorPanel::drawWaterSurface(Entity& entity)
 }
 
 // ---------------------------------------------------------------------------
+// Rigid Body
+// ---------------------------------------------------------------------------
+
+void InspectorPanel::drawRigidBody(Entity& entity)
+{
+    auto* rb = entity.getComponent<RigidBody>();
+    if (!rb) return;
+
+    if (!drawComponentHeader("Rigid Body")) return;
+
+    // --- Shape type ---
+    const char* shapeNames[] = {"Box", "Sphere", "Capsule", "Convex Hull", "Mesh"};
+    int shapeIdx = static_cast<int>(rb->shapeType);
+    if (ImGui::Combo("Shape", &shapeIdx, shapeNames, 5))
+    {
+        rb->shapeType = static_cast<CollisionShapeType>(shapeIdx);
+    }
+
+    // --- Shape size (only for primitive shapes) ---
+    switch (rb->shapeType)
+    {
+    case CollisionShapeType::BOX:
+        ImGui::DragFloat3("Half Extents", &rb->shapeSize.x, 0.01f, 0.01f, 100.0f, "%.2f");
+        break;
+    case CollisionShapeType::SPHERE:
+        ImGui::DragFloat("Radius", &rb->shapeSize.x, 0.01f, 0.01f, 100.0f, "%.2f");
+        break;
+    case CollisionShapeType::CAPSULE:
+        ImGui::DragFloat("Radius##cap", &rb->shapeSize.x, 0.01f, 0.01f, 50.0f, "%.2f");
+        ImGui::DragFloat("Half Height", &rb->shapeSize.y, 0.01f, 0.01f, 50.0f, "%.2f");
+        break;
+    case CollisionShapeType::CONVEX_HULL:
+        ImGui::Text("Vertices: %zu", rb->collisionVertices.size());
+        break;
+    case CollisionShapeType::MESH:
+        ImGui::Text("Vertices: %zu", rb->collisionVertices.size());
+        ImGui::Text("Triangles: %zu", rb->collisionIndices.size() / 3);
+        break;
+    }
+
+    // --- Motion type ---
+    const char* motionNames[] = {"Static", "Dynamic", "Kinematic"};
+    int motionIdx = static_cast<int>(rb->motionType);
+    if (ImGui::Combo("Motion Type", &motionIdx, motionNames, 3))
+    {
+        rb->motionType = static_cast<BodyMotionType>(motionIdx);
+    }
+
+    if (rb->shapeType == CollisionShapeType::MESH && rb->motionType != BodyMotionType::STATIC)
+    {
+        ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.0f, 1.0f), "Mesh shapes must be Static");
+    }
+
+    // --- Physics properties ---
+    if (rb->motionType == BodyMotionType::DYNAMIC)
+    {
+        ImGui::DragFloat("Mass", &rb->mass, 0.1f, 0.01f, 10000.0f, "%.2f kg");
+    }
+    ImGui::DragFloat("Friction", &rb->friction, 0.01f, 0.0f, 2.0f, "%.2f");
+    ImGui::DragFloat("Restitution", &rb->restitution, 0.01f, 0.0f, 1.0f, "%.2f");
+
+    // --- Status ---
+    if (rb->hasBody())
+    {
+        ImGui::TextColored(ImVec4(0.3f, 0.8f, 0.3f, 1.0f), "Body active");
+    }
+    else
+    {
+        ImGui::TextDisabled("No body (call createBody)");
+    }
+
+    ImGui::Spacing();
+}
+
+// ---------------------------------------------------------------------------
 // Cloth Simulation
 // ---------------------------------------------------------------------------
 
@@ -1566,6 +1649,66 @@ void InspectorPanel::drawClothComponent(Entity& entity)
     {
         auto type = static_cast<ClothPresetType>(presetIdx);
         cloth->applyPreset(type);
+    }
+
+    // --- Fabric material selector ---
+    if (ImGui::TreeNode("Fabric Material"))
+    {
+        int fabricCount = FabricDatabase::getCount();
+
+        // Common fabrics
+        ImGui::TextDisabled("Common:");
+        for (int i = 0; i < static_cast<int>(FabricType::FINE_LINEN); ++i)
+        {
+            auto ftype = static_cast<FabricType>(i);
+            const auto& mat = FabricDatabase::get(ftype);
+            if (ImGui::Selectable(mat.name))
+            {
+                auto presetCfg = FabricDatabase::toPresetConfig(ftype);
+                sim.setParticleMass(presetCfg.solver.particleMass);
+                sim.setSubsteps(presetCfg.solver.substeps);
+                sim.setStretchCompliance(presetCfg.solver.stretchCompliance);
+                sim.setShearCompliance(presetCfg.solver.shearCompliance);
+                sim.setBendCompliance(presetCfg.solver.bendCompliance);
+                sim.setDamping(presetCfg.solver.damping);
+                sim.setDragCoefficient(presetCfg.dragCoefficient);
+                cloth->setPresetType(ClothPresetType::CUSTOM);
+            }
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("%s\n%.0f GSM, friction %.2f",
+                                  mat.description, static_cast<double>(mat.densityGSM),
+                                  static_cast<double>(mat.friction));
+            }
+        }
+
+        // Biblical fabrics
+        ImGui::Spacing();
+        ImGui::TextDisabled("Biblical:");
+        for (int i = static_cast<int>(FabricType::FINE_LINEN); i < fabricCount; ++i)
+        {
+            auto ftype = static_cast<FabricType>(i);
+            const auto& mat = FabricDatabase::get(ftype);
+            if (ImGui::Selectable(mat.name))
+            {
+                auto presetCfg = FabricDatabase::toPresetConfig(ftype);
+                sim.setParticleMass(presetCfg.solver.particleMass);
+                sim.setSubsteps(presetCfg.solver.substeps);
+                sim.setStretchCompliance(presetCfg.solver.stretchCompliance);
+                sim.setShearCompliance(presetCfg.solver.shearCompliance);
+                sim.setBendCompliance(presetCfg.solver.bendCompliance);
+                sim.setDamping(presetCfg.solver.damping);
+                sim.setDragCoefficient(presetCfg.dragCoefficient);
+                cloth->setPresetType(ClothPresetType::CUSTOM);
+            }
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("%s\n%.0f GSM, friction %.2f",
+                                  mat.description, static_cast<double>(mat.densityGSM),
+                                  static_cast<double>(mat.friction));
+            }
+        }
+        ImGui::TreePop();
     }
 
     // --- Reset button ---
