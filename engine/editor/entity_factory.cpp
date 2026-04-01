@@ -10,6 +10,7 @@
 #include "scene/water_surface.h"
 #include "resource/resource_manager.h"
 #include "renderer/material.h"
+#include "utils/procedural_mesh.h"
 #include "core/logger.h"
 
 namespace Vestige
@@ -262,6 +263,191 @@ Entity* EntityFactory::createWaterSurface(Scene& scene, const glm::vec3& positio
     cfg.deepColor = {0.02f, 0.15f, 0.3f, 1.0f};
     cfg.flowSpeed = 0.2f;
     cfg.specularPower = 256.0f;
+
+    Logger::info("Created: " + entity->getName());
+    return entity;
+}
+
+// --- Architectural ---
+
+Entity* EntityFactory::createWall(Scene& scene, ResourceManager& resources,
+                                   const glm::vec3& position)
+{
+    Entity* entity = scene.createEntity("Wall");
+    entity->transform.position = position;
+
+    auto mesh = std::make_shared<Mesh>(ProceduralMeshBuilder::createWall(3.0f, 3.0f, 0.3f));
+    auto material = createDefaultMaterial(resources, entity->getId());
+    entity->addComponent<MeshRenderer>(mesh, material);
+
+    Logger::info("Created: " + entity->getName());
+    return entity;
+}
+
+Entity* EntityFactory::createWallWithDoor(Scene& scene, ResourceManager& resources,
+                                           const glm::vec3& position)
+{
+    Entity* entity = scene.createEntity("Wall with Door");
+    entity->transform.position = position;
+
+    std::vector<WallOpening> openings;
+    openings.push_back({1.0f, 0.0f, 1.0f, 2.1f});  // Centered door
+
+    auto mesh = std::make_shared<Mesh>(
+        ProceduralMeshBuilder::createWallWithOpenings(3.0f, 3.0f, 0.3f, openings));
+    auto material = createDefaultMaterial(resources, entity->getId());
+    entity->addComponent<MeshRenderer>(mesh, material);
+
+    Logger::info("Created: " + entity->getName());
+    return entity;
+}
+
+Entity* EntityFactory::createWallWithWindow(Scene& scene, ResourceManager& resources,
+                                             const glm::vec3& position)
+{
+    Entity* entity = scene.createEntity("Wall with Window");
+    entity->transform.position = position;
+
+    std::vector<WallOpening> openings;
+    openings.push_back({0.75f, 0.9f, 1.5f, 1.2f});  // Centered window
+
+    auto mesh = std::make_shared<Mesh>(
+        ProceduralMeshBuilder::createWallWithOpenings(3.0f, 3.0f, 0.3f, openings));
+    auto material = createDefaultMaterial(resources, entity->getId());
+    entity->addComponent<MeshRenderer>(mesh, material);
+
+    Logger::info("Created: " + entity->getName());
+    return entity;
+}
+
+Entity* EntityFactory::createRoom(Scene& scene, ResourceManager& resources,
+                                   const glm::vec3& position)
+{
+    // Room: 4 walls + floor grouped under a parent
+    Entity* group = scene.createEntity("Room");
+    group->transform.position = position;
+
+    float roomW = 4.0f;
+    float roomD = 4.0f;
+    float wallH = 3.0f;
+    float wallT = 0.3f;
+    float halfW = roomW * 0.5f;
+    float halfD = roomD * 0.5f;
+
+    // Front wall (+Z)
+    {
+        Entity* wall = scene.createEntity("Front Wall");
+        auto mesh = std::make_shared<Mesh>(ProceduralMeshBuilder::createWall(roomW, wallH, wallT));
+        auto material = createDefaultMaterial(resources, wall->getId());
+        wall->addComponent<MeshRenderer>(mesh, material);
+        wall->transform.position = glm::vec3(0.0f, 0.0f, halfD);
+        scene.reparentEntity(wall->getId(), group->getId());
+    }
+
+    // Back wall (-Z)
+    {
+        Entity* wall = scene.createEntity("Back Wall");
+        auto mesh = std::make_shared<Mesh>(ProceduralMeshBuilder::createWall(roomW, wallH, wallT));
+        auto material = createDefaultMaterial(resources, wall->getId());
+        wall->addComponent<MeshRenderer>(mesh, material);
+        wall->transform.position = glm::vec3(0.0f, 0.0f, -halfD);
+        scene.reparentEntity(wall->getId(), group->getId());
+    }
+
+    // Left wall (-X), rotated 90 degrees around Y
+    {
+        Entity* wall = scene.createEntity("Left Wall");
+        auto mesh = std::make_shared<Mesh>(ProceduralMeshBuilder::createWall(roomD, wallH, wallT));
+        auto material = createDefaultMaterial(resources, wall->getId());
+        wall->addComponent<MeshRenderer>(mesh, material);
+        wall->transform.position = glm::vec3(-halfW, 0.0f, 0.0f);
+        wall->transform.rotation = glm::vec3(0.0f, 90.0f, 0.0f);
+        scene.reparentEntity(wall->getId(), group->getId());
+    }
+
+    // Right wall (+X), rotated 90 degrees around Y
+    {
+        Entity* wall = scene.createEntity("Right Wall");
+        auto mesh = std::make_shared<Mesh>(ProceduralMeshBuilder::createWall(roomD, wallH, wallT));
+        auto material = createDefaultMaterial(resources, wall->getId());
+        wall->addComponent<MeshRenderer>(mesh, material);
+        wall->transform.position = glm::vec3(halfW, 0.0f, 0.0f);
+        wall->transform.rotation = glm::vec3(0.0f, 90.0f, 0.0f);
+        scene.reparentEntity(wall->getId(), group->getId());
+    }
+
+    // Floor
+    {
+        Entity* floor = scene.createEntity("Floor");
+        auto mesh = std::make_shared<Mesh>(ProceduralMeshBuilder::createFloor(roomW, roomD, 0.15f));
+        auto material = createDefaultMaterial(resources, floor->getId());
+        material->setAlbedo(glm::vec3(0.5f));
+        floor->addComponent<MeshRenderer>(mesh, material);
+        scene.reparentEntity(floor->getId(), group->getId());
+    }
+
+    Logger::info("Created: " + group->getName() + " (4 walls + floor)");
+    return group;
+}
+
+Entity* EntityFactory::createRoof(Scene& scene, ResourceManager& resources,
+                                   const glm::vec3& position)
+{
+    Entity* entity = scene.createEntity("Roof");
+    entity->transform.position = position;
+
+    auto mesh = std::make_shared<Mesh>(
+        ProceduralMeshBuilder::createRoof(RoofType::GABLE, 4.0f, 4.0f, 1.5f, 0.3f));
+    auto material = createDefaultMaterial(resources, entity->getId());
+    material->setAlbedo(glm::vec3(0.6f, 0.3f, 0.2f));  // Terracotta color
+    entity->addComponent<MeshRenderer>(mesh, material);
+
+    Logger::info("Created: " + entity->getName());
+    return entity;
+}
+
+Entity* EntityFactory::createStairs(Scene& scene, ResourceManager& resources,
+                                     const glm::vec3& position)
+{
+    Entity* entity = scene.createEntity("Stairs");
+    entity->transform.position = position;
+
+    // IBC-compliant: 0.178m rise, 0.279m tread, 1m wide
+    auto mesh = std::make_shared<Mesh>(
+        ProceduralMeshBuilder::createStraightStairs(3.0f, 0.178f, 0.279f, 1.0f));
+    auto material = createDefaultMaterial(resources, entity->getId());
+    entity->addComponent<MeshRenderer>(mesh, material);
+
+    Logger::info("Created: " + entity->getName());
+    return entity;
+}
+
+Entity* EntityFactory::createSpiralStairs(Scene& scene, ResourceManager& resources,
+                                           const glm::vec3& position)
+{
+    Entity* entity = scene.createEntity("Spiral Stairs");
+    entity->transform.position = position;
+
+    auto mesh = std::make_shared<Mesh>(
+        ProceduralMeshBuilder::createSpiralStairs(3.0f, 0.2f, 0.2f, 1.2f, 360.0f));
+    auto material = createDefaultMaterial(resources, entity->getId());
+    entity->addComponent<MeshRenderer>(mesh, material);
+
+    Logger::info("Created: " + entity->getName());
+    return entity;
+}
+
+Entity* EntityFactory::createFloorSlab(Scene& scene, ResourceManager& resources,
+                                        const glm::vec3& position)
+{
+    Entity* entity = scene.createEntity("Floor Slab");
+    entity->transform.position = position;
+
+    auto mesh = std::make_shared<Mesh>(
+        ProceduralMeshBuilder::createFloor(4.0f, 4.0f, 0.15f));
+    auto material = createDefaultMaterial(resources, entity->getId());
+    material->setAlbedo(glm::vec3(0.5f));
+    entity->addComponent<MeshRenderer>(mesh, material);
 
     Logger::info("Created: " + entity->getName());
     return entity;

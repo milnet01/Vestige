@@ -1,11 +1,14 @@
 /// @file entity_actions.cpp
-/// @brief EntityActions implementation — duplicate, delete, transform clipboard.
+/// @brief EntityActions implementation — duplicate, delete, align, distribute, clipboard.
 #include "editor/entity_actions.h"
+#include "editor/command_history.h"
+#include "editor/commands/align_distribute_command.h"
 #include "editor/selection.h"
 #include "scene/entity.h"
 #include "scene/scene.h"
 #include "core/logger.h"
 
+#include <algorithm>
 #include <cctype>
 #include <string>
 #include <utility>
@@ -232,6 +235,181 @@ Entity* groupEntities(Scene& scene, Selection& selection)
     selection.select(group->getId());
     Logger::info("Grouped " + std::to_string(count) + " entities");
     return group;
+}
+
+namespace
+{
+
+float getAxisValue(const glm::vec3& v, AlignAxis axis)
+{
+    switch (axis)
+    {
+        case AlignAxis::X: return v.x;
+        case AlignAxis::Y: return v.y;
+        case AlignAxis::Z: return v.z;
+    }
+    return 0.0f;
+}
+
+void setAxisValue(glm::vec3& v, AlignAxis axis, float value)
+{
+    switch (axis)
+    {
+        case AlignAxis::X: v.x = value; break;
+        case AlignAxis::Y: v.y = value; break;
+        case AlignAxis::Z: v.z = value; break;
+    }
+}
+
+const char* axisName(AlignAxis axis)
+{
+    switch (axis)
+    {
+        case AlignAxis::X: return "X";
+        case AlignAxis::Y: return "Y";
+        case AlignAxis::Z: return "Z";
+    }
+    return "?";
+}
+
+const char* anchorName(AlignAnchor anchor)
+{
+    switch (anchor)
+    {
+        case AlignAnchor::MIN: return "Min";
+        case AlignAnchor::CENTER: return "Center";
+        case AlignAnchor::MAX: return "Max";
+    }
+    return "?";
+}
+
+} // anonymous namespace
+
+void alignEntities(Scene& scene, const Selection& selection,
+                   CommandHistory& history, AlignAxis axis, AlignAnchor anchor)
+{
+    auto ids = selection.getSelectedIds();
+    if (ids.size() < 2) return;
+
+    // Gather positions
+    struct EntityInfo
+    {
+        uint32_t id;
+        glm::vec3 position;
+    };
+    std::vector<EntityInfo> infos;
+    for (uint32_t id : ids)
+    {
+        Entity* e = scene.findEntityById(id);
+        if (e) infos.push_back({id, e->transform.position});
+    }
+    if (infos.size() < 2) return;
+
+    // Compute the target value based on anchor
+    float targetValue = 0.0f;
+    switch (anchor)
+    {
+        case AlignAnchor::MIN:
+        {
+            targetValue = getAxisValue(infos[0].position, axis);
+            for (const auto& info : infos)
+            {
+                targetValue = std::min(targetValue, getAxisValue(info.position, axis));
+            }
+            break;
+        }
+        case AlignAnchor::MAX:
+        {
+            targetValue = getAxisValue(infos[0].position, axis);
+            for (const auto& info : infos)
+            {
+                targetValue = std::max(targetValue, getAxisValue(info.position, axis));
+            }
+            break;
+        }
+        case AlignAnchor::CENTER:
+        {
+            float sum = 0.0f;
+            for (const auto& info : infos)
+            {
+                sum += getAxisValue(info.position, axis);
+            }
+            targetValue = sum / static_cast<float>(infos.size());
+            break;
+        }
+    }
+
+    // Build command entries
+    std::vector<AlignDistributeCommand::Entry> entries;
+    for (const auto& info : infos)
+    {
+        glm::vec3 newPos = info.position;
+        setAxisValue(newPos, axis, targetValue);
+        if (newPos != info.position)
+        {
+            entries.push_back({info.id, info.position, newPos});
+        }
+    }
+
+    if (entries.empty()) return;
+
+    std::string desc = std::string("Align ") + anchorName(anchor) + " " + axisName(axis);
+    history.execute(std::make_unique<AlignDistributeCommand>(scene, desc, std::move(entries)));
+    Logger::info(desc + " (" + std::to_string(entries.size()) + " entities)");
+}
+
+void distributeEntities(Scene& scene, const Selection& selection,
+                        CommandHistory& history, AlignAxis axis)
+{
+    auto ids = selection.getSelectedIds();
+    if (ids.size() < 3) return;
+
+    // Gather positions
+    struct EntityInfo
+    {
+        uint32_t id;
+        glm::vec3 position;
+        float axisVal;
+    };
+    std::vector<EntityInfo> infos;
+    for (uint32_t id : ids)
+    {
+        Entity* e = scene.findEntityById(id);
+        if (e)
+        {
+            float val = getAxisValue(e->transform.position, axis);
+            infos.push_back({id, e->transform.position, val});
+        }
+    }
+    if (infos.size() < 3) return;
+
+    // Sort by axis value
+    std::sort(infos.begin(), infos.end(),
+              [](const EntityInfo& a, const EntityInfo& b) { return a.axisVal < b.axisVal; });
+
+    // Compute even spacing between first and last
+    float minVal = infos.front().axisVal;
+    float maxVal = infos.back().axisVal;
+    float spacing = (maxVal - minVal) / static_cast<float>(infos.size() - 1);
+
+    // Build command entries
+    std::vector<AlignDistributeCommand::Entry> entries;
+    for (size_t i = 1; i + 1 < infos.size(); ++i)
+    {
+        float newVal = minVal + spacing * static_cast<float>(i);
+        glm::vec3 newPos = infos[i].position;
+        setAxisValue(newPos, axis, newVal);
+        if (newPos != infos[i].position)
+        {
+            entries.push_back({infos[i].id, infos[i].position, newPos});
+        }
+    }
+
+    if (entries.empty()) return;
+
+    std::string desc = std::string("Distribute ") + axisName(axis);
+    history.execute(std::make_unique<AlignDistributeCommand>(scene, desc, std::move(entries)));
+    Logger::info(desc + " (" + std::to_string(entries.size()) + " entities)");
 }
 
 } // namespace EntityActions

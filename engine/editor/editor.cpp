@@ -310,6 +310,83 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
                     EntityActions::pasteTransform(
                         *scene, m_selection.getPrimaryId(), m_transformClipboard);
                 }
+
+                ImGui::Separator();
+                bool hasMultiSel = hasSel && m_selection.getSelectedIds().size() >= 2;
+                bool hasTriSel = hasSel && m_selection.getSelectedIds().size() >= 3;
+
+                if (ImGui::BeginMenu("Align", hasMultiSel && scene))
+                {
+                    if (ImGui::MenuItem("Align Left (X Min)"))
+                    {
+                        EntityActions::alignEntities(*scene, m_selection, m_commandHistory,
+                            EntityActions::AlignAxis::X, EntityActions::AlignAnchor::MIN);
+                    }
+                    if (ImGui::MenuItem("Align Right (X Max)"))
+                    {
+                        EntityActions::alignEntities(*scene, m_selection, m_commandHistory,
+                            EntityActions::AlignAxis::X, EntityActions::AlignAnchor::MAX);
+                    }
+                    if (ImGui::MenuItem("Align Center X"))
+                    {
+                        EntityActions::alignEntities(*scene, m_selection, m_commandHistory,
+                            EntityActions::AlignAxis::X, EntityActions::AlignAnchor::CENTER);
+                    }
+                    ImGui::Separator();
+                    if (ImGui::MenuItem("Align Bottom (Y Min)"))
+                    {
+                        EntityActions::alignEntities(*scene, m_selection, m_commandHistory,
+                            EntityActions::AlignAxis::Y, EntityActions::AlignAnchor::MIN);
+                    }
+                    if (ImGui::MenuItem("Align Top (Y Max)"))
+                    {
+                        EntityActions::alignEntities(*scene, m_selection, m_commandHistory,
+                            EntityActions::AlignAxis::Y, EntityActions::AlignAnchor::MAX);
+                    }
+                    if (ImGui::MenuItem("Align Center Y"))
+                    {
+                        EntityActions::alignEntities(*scene, m_selection, m_commandHistory,
+                            EntityActions::AlignAxis::Y, EntityActions::AlignAnchor::CENTER);
+                    }
+                    ImGui::Separator();
+                    if (ImGui::MenuItem("Align Front (Z Min)"))
+                    {
+                        EntityActions::alignEntities(*scene, m_selection, m_commandHistory,
+                            EntityActions::AlignAxis::Z, EntityActions::AlignAnchor::MIN);
+                    }
+                    if (ImGui::MenuItem("Align Back (Z Max)"))
+                    {
+                        EntityActions::alignEntities(*scene, m_selection, m_commandHistory,
+                            EntityActions::AlignAxis::Z, EntityActions::AlignAnchor::MAX);
+                    }
+                    if (ImGui::MenuItem("Align Center Z"))
+                    {
+                        EntityActions::alignEntities(*scene, m_selection, m_commandHistory,
+                            EntityActions::AlignAxis::Z, EntityActions::AlignAnchor::CENTER);
+                    }
+                    ImGui::EndMenu();
+                }
+
+                if (ImGui::BeginMenu("Distribute", hasTriSel && scene))
+                {
+                    if (ImGui::MenuItem("Distribute X"))
+                    {
+                        EntityActions::distributeEntities(*scene, m_selection, m_commandHistory,
+                            EntityActions::AlignAxis::X);
+                    }
+                    if (ImGui::MenuItem("Distribute Y"))
+                    {
+                        EntityActions::distributeEntities(*scene, m_selection, m_commandHistory,
+                            EntityActions::AlignAxis::Y);
+                    }
+                    if (ImGui::MenuItem("Distribute Z"))
+                    {
+                        EntityActions::distributeEntities(*scene, m_selection, m_commandHistory,
+                            EntityActions::AlignAxis::Z);
+                    }
+                    ImGui::EndMenu();
+                }
+
                 ImGui::EndMenu();
             }
 
@@ -627,6 +704,69 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
                     if (ImGui::MenuItem("Wedge", nullptr, false, canSpawnPrimitive))
                     {
                         Entity* e = EntityFactory::createWedge(*scene, *m_resourceManager, spawnPos);
+                        m_selection.select(e->getId());
+                        m_commandHistory.execute(
+                            std::make_unique<CreateEntityCommand>(*scene, e->getId()));
+                    }
+                    ImGui::EndMenu();
+                }
+
+                if (ImGui::BeginMenu("Architecture"))
+                {
+                    if (ImGui::MenuItem("Wall", nullptr, false, canSpawnPrimitive))
+                    {
+                        Entity* e = EntityFactory::createWall(*scene, *m_resourceManager, spawnPos);
+                        m_selection.select(e->getId());
+                        m_commandHistory.execute(
+                            std::make_unique<CreateEntityCommand>(*scene, e->getId()));
+                    }
+                    if (ImGui::MenuItem("Wall with Door", nullptr, false, canSpawnPrimitive))
+                    {
+                        Entity* e = EntityFactory::createWallWithDoor(*scene, *m_resourceManager, spawnPos);
+                        m_selection.select(e->getId());
+                        m_commandHistory.execute(
+                            std::make_unique<CreateEntityCommand>(*scene, e->getId()));
+                    }
+                    if (ImGui::MenuItem("Wall with Window", nullptr, false, canSpawnPrimitive))
+                    {
+                        Entity* e = EntityFactory::createWallWithWindow(*scene, *m_resourceManager, spawnPos);
+                        m_selection.select(e->getId());
+                        m_commandHistory.execute(
+                            std::make_unique<CreateEntityCommand>(*scene, e->getId()));
+                    }
+                    ImGui::Separator();
+                    if (ImGui::MenuItem("Room (4x4x3m)", nullptr, false, canSpawnPrimitive))
+                    {
+                        Entity* e = EntityFactory::createRoom(*scene, *m_resourceManager, spawnPos);
+                        m_selection.select(e->getId());
+                        m_commandHistory.execute(
+                            std::make_unique<CreateEntityCommand>(*scene, e->getId()));
+                    }
+                    if (ImGui::MenuItem("Floor Slab", nullptr, false, canSpawnPrimitive))
+                    {
+                        Entity* e = EntityFactory::createFloorSlab(*scene, *m_resourceManager, spawnPos);
+                        m_selection.select(e->getId());
+                        m_commandHistory.execute(
+                            std::make_unique<CreateEntityCommand>(*scene, e->getId()));
+                    }
+                    if (ImGui::MenuItem("Roof (Gable)", nullptr, false, canSpawnPrimitive))
+                    {
+                        Entity* e = EntityFactory::createRoof(*scene, *m_resourceManager, spawnPos);
+                        m_selection.select(e->getId());
+                        m_commandHistory.execute(
+                            std::make_unique<CreateEntityCommand>(*scene, e->getId()));
+                    }
+                    ImGui::Separator();
+                    if (ImGui::MenuItem("Stairs", nullptr, false, canSpawnPrimitive))
+                    {
+                        Entity* e = EntityFactory::createStairs(*scene, *m_resourceManager, spawnPos);
+                        m_selection.select(e->getId());
+                        m_commandHistory.execute(
+                            std::make_unique<CreateEntityCommand>(*scene, e->getId()));
+                    }
+                    if (ImGui::MenuItem("Spiral Stairs", nullptr, false, canSpawnPrimitive))
+                    {
+                        Entity* e = EntityFactory::createSpiralStairs(*scene, *m_resourceManager, spawnPos);
                         m_selection.select(e->getId());
                         m_commandHistory.execute(
                             std::make_unique<CreateEntityCommand>(*scene, e->getId()));

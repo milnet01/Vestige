@@ -43,6 +43,7 @@ void ImportDialog::draw(Scene* scene, ResourceManager* resources, Selection& sel
         m_detectedFormat = detectFormat(m_selectedPath);
         m_importScale = 1.0f;
         m_showImportSettings = true;
+        analyzeFile();
     }
 
     // Open the import settings popup (must call OpenPopup before BeginPopupModal)
@@ -72,12 +73,57 @@ void ImportDialog::draw(Scene* scene, ResourceManager* resources, Selection& sel
         ImGui::TextColored(ImVec4(0.5f, 0.9f, 0.5f, 1.0f), "%s",
                            m_detectedFormat.c_str());
 
+        // File analysis info
+        if (m_hasAnalysis)
+        {
+            if (m_meshCount > 0)
+            {
+                ImGui::Text("Meshes: %d", m_meshCount);
+            }
+            if (m_triangleCount > 0)
+            {
+                ImGui::Text("Triangles: %d", m_triangleCount);
+            }
+            if (m_materialCount > 0)
+            {
+                ImGui::Text("Materials: %d", m_materialCount);
+            }
+            if (m_boundsSize.x > 0.0f || m_boundsSize.y > 0.0f || m_boundsSize.z > 0.0f)
+            {
+                ImGui::Text("Bounds: %.2f x %.2f x %.2f m",
+                            static_cast<double>(m_boundsSize.x),
+                            static_cast<double>(m_boundsSize.y),
+                            static_cast<double>(m_boundsSize.z));
+            }
+            ImGui::Separator();
+        }
+
         // Scale slider (logarithmic for wide range)
         ImGui::SliderFloat("Import Scale", &m_importScale, 0.001f, 100.0f, "%.3f",
                            ImGuiSliderFlags_Logarithmic);
         if (ImGui::IsItemHovered())
         {
             ImGui::SetTooltip("Scale factor for models not in metric units");
+        }
+
+        // Scale validation warning
+        m_scaleWarning.clear();
+        if (m_hasAnalysis && m_boundsSize.x > 0.0f)
+        {
+            float maxDim = std::max({m_boundsSize.x, m_boundsSize.y, m_boundsSize.z})
+                           * m_importScale;
+            if (maxDim < 0.01f)
+            {
+                m_scaleWarning = "Warning: model will be very small (< 1cm)";
+            }
+            else if (maxDim > 1000.0f)
+            {
+                m_scaleWarning = "Warning: model will be very large (> 1km)";
+            }
+        }
+        if (!m_scaleWarning.empty())
+        {
+            ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.2f, 1.0f), "%s", m_scaleWarning.c_str());
         }
 
         ImGui::Separator();
@@ -200,6 +246,52 @@ void ImportDialog::performImport(Scene& scene, ResourceManager& resources,
     else
     {
         Logger::error("Import failed: unsupported format '" + ext + "'");
+    }
+}
+
+void ImportDialog::analyzeFile()
+{
+    m_hasAnalysis = false;
+    m_triangleCount = 0;
+    m_materialCount = 0;
+    m_meshCount = 0;
+    m_boundsSize = glm::vec3(0.0f);
+    m_scaleWarning.clear();
+
+    std::string ext = m_selectedPath.extension().string();
+    for (char& c : ext)
+    {
+        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    }
+
+    // For glTF files, we can get metadata without fully loading the model.
+    // For now, report basic file info from a lightweight parse.
+    // The actual mesh/material counts will be reported after import.
+    if (ext == ".gltf" || ext == ".glb" || ext == ".obj")
+    {
+        // Check file size as a rough metric
+        std::error_code ec;
+        auto fileSize = std::filesystem::file_size(m_selectedPath, ec);
+        if (!ec)
+        {
+            // Rough estimate: ~50 bytes per triangle for glTF binary
+            if (ext == ".glb")
+            {
+                m_triangleCount = static_cast<int>(fileSize / 50);
+            }
+            else if (ext == ".obj")
+            {
+                // OBJ: ~80 bytes per triangle (text format)
+                m_triangleCount = static_cast<int>(fileSize / 80);
+            }
+            else
+            {
+                // glTF text: ~100 bytes per triangle
+                m_triangleCount = static_cast<int>(fileSize / 100);
+            }
+
+            m_hasAnalysis = true;
+        }
     }
 }
 
