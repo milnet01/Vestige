@@ -17,6 +17,7 @@ set(ENGINE_SOURCES
     scene/scene_manager.cpp
     scene/camera_component.cpp
     scene/particle_emitter.cpp
+    scene/gpu_particle_emitter.cpp
     scene/particle_presets.cpp
     resource/resource_manager.cpp
     resource/async_texture_loader.cpp
@@ -49,6 +50,7 @@ set(ENGINE_SOURCES
     renderer/indirect_buffer.cpp
     renderer/gpu_culler.cpp
     renderer/particle_renderer.cpp
+    renderer/gpu_particle_system.cpp
     resource/model.cpp
     utils/obj_loader.cpp
     utils/gltf_loader.cpp

@@ -1,6 +1,7 @@
 /// @file particle_renderer.cpp
 /// @brief Instanced billboard renderer for particle systems.
 #include "renderer/particle_renderer.h"
+#include "scene/gpu_particle_emitter.h"
 #include "core/logger.h"
 
 #include <glm/gtc/type_ptr.hpp>
@@ -27,6 +28,17 @@ bool ParticleRenderer::init(const std::string& assetPath)
         Logger::error("Failed to load particle shaders");
         return false;
     }
+
+    // Load GPU particle shader (uses SSBO instead of VBOs)
+    std::string gpuVertPath = assetPath + "/shaders/particle_gpu.vert.glsl";
+    if (!m_gpuShader.loadFromFiles(gpuVertPath, fragPath))
+    {
+        Logger::warning("Failed to load GPU particle shaders — GPU rendering unavailable");
+        // Non-fatal: GPU rendering is optional
+    }
+
+    // Create empty VAO for GPU particle rendering (vertices generated in shader)
+    glCreateVertexArrays(1, &m_gpuVao);
 
     createQuadVao();
     Logger::info("Particle renderer initialized");
@@ -65,7 +77,13 @@ void ParticleRenderer::shutdown()
         glDeleteBuffers(1, &m_instanceAgeVbo);
         m_instanceAgeVbo = 0;
     }
+    if (m_gpuVao)
+    {
+        glDeleteVertexArrays(1, &m_gpuVao);
+        m_gpuVao = 0;
+    }
     m_shader.destroy();
+    m_gpuShader.destroy();
     m_instanceBufferCapacity = 0;
     m_textureCache.clear();
 }
@@ -317,6 +335,99 @@ void ParticleRenderer::render(
     // Restore state
     glDepthMask(GL_TRUE);
     glDisable(GL_BLEND);
+}
+
+void ParticleRenderer::renderGPU(
+    const std::vector<const GPUParticleEmitter*>& emitters,
+    const Camera& camera,
+    const glm::mat4& viewProjection,
+    GLuint depthTexture,
+    int screenWidth,
+    int screenHeight,
+    float cameraNear)
+{
+    if (emitters.empty() || m_gpuShader.getId() == 0)
+        return;
+
+    // Extract camera orientation for billboarding
+    glm::mat4 view = camera.getViewMatrix();
+    glm::vec3 cameraRight = glm::vec3(view[0][0], view[1][0], view[2][0]);
+    glm::vec3 cameraUp = glm::vec3(view[0][1], view[1][1], view[2][1]);
+
+    // Soft particles setup
+    bool softParticles = (depthTexture != 0 && screenWidth > 0 && screenHeight > 0);
+
+    glBindVertexArray(m_gpuVao);
+
+    for (const auto* emitter : emitters)
+    {
+        if (!emitter || !emitter->isGPUPath())
+            continue;
+
+        const auto* gpuSys = emitter->getGPUSystem();
+        if (!gpuSys || !gpuSys->isInitialized())
+            continue;
+
+        // Sort alpha-blend particles
+        if (emitter->needsSorting())
+        {
+            // Sort pass was already dispatched during update — use sorted indices
+        }
+
+        const ParticleEmitterConfig& config = emitter->getConfig();
+
+        // Set blend mode
+        glEnable(GL_BLEND);
+        glDepthMask(GL_FALSE);
+
+        if (config.blendMode == ParticleEmitterConfig::BlendMode::ADDITIVE)
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+        else
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+        // Bind particle texture
+        bool hasTexture = false;
+        if (!config.texturePath.empty())
+        {
+            GLuint texId = getOrLoadTexture(config.texturePath);
+            if (texId != 0)
+            {
+                glBindTextureUnit(0, texId);
+                hasTexture = true;
+            }
+        }
+
+        m_gpuShader.use();
+        m_gpuShader.setMat4("u_viewProjection", viewProjection);
+        m_gpuShader.setVec3("u_cameraRight", cameraRight);
+        m_gpuShader.setVec3("u_cameraUp", cameraUp);
+        m_gpuShader.setBool("u_useSortIndices", emitter->needsSorting());
+
+        // Use the shared fragment shader uniforms
+        m_gpuShader.setBool("u_hasTexture", hasTexture);
+        if (hasTexture)
+            m_gpuShader.setInt("u_texture", 0);
+
+        m_gpuShader.setBool("u_softParticles", softParticles);
+        if (softParticles)
+        {
+            glBindTextureUnit(1, depthTexture);
+            m_gpuShader.setInt("u_depthTexture", 1);
+            m_gpuShader.setVec2("u_screenSize", glm::vec2(
+                static_cast<float>(screenWidth), static_cast<float>(screenHeight)));
+            m_gpuShader.setFloat("u_cameraNear", cameraNear);
+            m_gpuShader.setFloat("u_softDistance", 0.5f);
+        }
+
+        // Bind particle SSBO and draw with indirect command
+        gpuSys->bindForRendering();
+        gpuSys->drawIndirect();
+    }
+
+    // Restore state
+    glDepthMask(GL_TRUE);
+    glDisable(GL_BLEND);
+    glBindVertexArray(0);
 }
 
 } // namespace Vestige
