@@ -51,6 +51,7 @@ private:
     void drawEmissiveLight(Entity& entity);
     void drawParticleEmitter(Entity& entity);
     void drawWaterSurface(Entity& entity);
+    void drawClothComponent(Entity& entity);
 
     MaterialPreview m_materialPreview;
     uint32_t m_lastPreviewMaterialId = 0;  ///< Track which material is being previewed

@@ -21,7 +21,8 @@ struct ClothConfig
     float stretchCompliance = 0.0f;    ///< 0 = rigid, higher = stretchy
     float shearCompliance = 0.0001f;   ///< Diagonal stretch resistance
     float bendCompliance = 0.01f;      ///< Bending resistance (higher = softer)
-    float damping = 0.01f;             ///< Velocity damping per substep
+    float damping = 0.01f;             ///< Velocity damping per substep (0.01-0.05 typical)
+    float sleepThreshold = 0.001f;     ///< Kinetic energy per particle below which cloth sleeps
     glm::vec3 gravity = {0, -9.81f, 0};
 };
 
@@ -30,6 +31,30 @@ struct ClothSphereCollider
 {
     glm::vec3 center;
     float radius;
+};
+
+/// @brief A half-space plane collider. Particles are pushed to the positive side.
+/// The plane is defined as: dot(position, normal) >= offset.
+struct ClothPlaneCollider
+{
+    glm::vec3 normal;  ///< Unit normal pointing toward the allowed half-space
+    float offset;      ///< Signed distance from origin along normal
+};
+
+/// @brief A vertical cylinder collider (axis-aligned to Y).
+/// Particles are pushed outside the cylinder's radius.
+struct ClothCylinderCollider
+{
+    glm::vec3 base;    ///< Center of the cylinder's bottom face
+    float radius;      ///< Cylinder radius
+    float height;      ///< Cylinder height (extends upward from base.y)
+};
+
+/// @brief An axis-aligned box collider. Particles are pushed outside the box.
+struct ClothBoxCollider
+{
+    glm::vec3 min;     ///< Minimum corner (lowest X, Y, Z)
+    glm::vec3 max;     ///< Maximum corner (highest X, Y, Z)
 };
 
 /// @brief Pure-CPU cloth simulator. No OpenGL or entity dependencies.
@@ -96,6 +121,24 @@ public:
     /// @brief Returns the current ground plane height.
     float getGroundPlane() const;
 
+    /// @brief Adds a plane collider (particles stay on the positive-normal side).
+    void addPlaneCollider(const glm::vec3& normal, float offset);
+
+    /// @brief Adds a vertical cylinder collider (Y-axis aligned).
+    void addCylinderCollider(const glm::vec3& base, float radius, float height);
+
+    /// @brief Removes all plane colliders.
+    void clearPlaneColliders();
+
+    /// @brief Removes all cylinder colliders.
+    void clearCylinderColliders();
+
+    /// @brief Adds an axis-aligned box collider.
+    void addBoxCollider(const glm::vec3& min, const glm::vec3& max);
+
+    /// @brief Removes all box colliders.
+    void clearBoxColliders();
+
     // --- Wind ---
 
     /// @brief Sets the wind direction and strength.
@@ -107,6 +150,15 @@ public:
     /// @brief Returns the current wind velocity (direction * strength).
     glm::vec3 getWindVelocity() const;
 
+    /// @brief Returns the wind direction (unit vector).
+    glm::vec3 getWindDirection() const;
+
+    /// @brief Returns the wind strength scalar.
+    float getWindStrength() const;
+
+    /// @brief Returns the aerodynamic drag coefficient.
+    float getDragCoefficient() const;
+
     // --- Config ---
 
     /// @brief Updates the substep count.
@@ -117,6 +169,40 @@ public:
 
     /// @brief Returns true if initialize() has been called.
     bool isInitialized() const;
+
+    // --- Live parameter updates (no reinit required) ---
+
+    /// @brief Resets simulation to post-initialize state (particles return to initial positions).
+    void reset();
+
+    /// @brief Captures the current particle positions as the rest/initial state.
+    /// Call after repositioning particles (e.g., via pin-all/unpin for XZ→XY conversion).
+    void captureRestPositions();
+
+    /// @brief Builds Long Range Attachment constraints from current pin/particle positions.
+    /// Call after all pins are finalized and captureRestPositions() has been called.
+    void rebuildLRA();
+
+    /// @brief Updates particle mass for all non-pinned particles.
+    void setParticleMass(float mass);
+
+    /// @brief Updates damping coefficient.
+    void setDamping(float damping);
+
+    /// @brief Updates stretch compliance on all stretch constraints.
+    void setStretchCompliance(float compliance);
+
+    /// @brief Updates shear compliance on all shear constraints.
+    void setShearCompliance(float compliance);
+
+    /// @brief Updates bend compliance on all bend constraints.
+    void setBendCompliance(float compliance);
+
+    /// @brief Returns the number of pinned particles.
+    uint32_t getPinnedCount() const;
+
+    /// @brief Returns the total number of constraints (stretch + shear + bend).
+    uint32_t getConstraintCount() const;
 
 private:
     ClothConfig m_config;
@@ -130,6 +216,7 @@ private:
     std::vector<float> m_originalInverseMasses;  ///< For unpin restore
     std::vector<glm::vec3> m_normals;
     std::vector<glm::vec2> m_texCoords;
+    std::vector<glm::vec3> m_initialPositions;   ///< Snapshot for reset()
 
     // Distance constraints (stretch, shear, bend share the same struct)
     struct DistanceConstraint
@@ -150,8 +237,26 @@ private:
     };
     std::vector<PinConstraint> m_pinConstraints;
 
+    // Long Range Attachment (LRA) constraints — prevent cumulative drift from pins.
+    // Each free particle is tethered to its nearest pinned particle with a maximum
+    // distance equal to the rest-pose distance. Unilateral: only activates when the
+    // particle drifts too far, so it doesn't fight wind or natural draping.
+    // Used by NvCloth, PhysX, Jolt, Obi Cloth. (Kim, Chentanez, Müller, SCA 2012)
+    struct LRAConstraint
+    {
+        uint32_t particleIndex;   ///< The free particle
+        uint32_t pinIndex;        ///< The nearest pinned particle
+        float maxDistance;         ///< Distance in rest pose
+    };
+    std::vector<LRAConstraint> m_lraConstraints;
+    void buildLRAConstraints();    ///< Called after pins are finalized
+    void solveLRAConstraints();    ///< Called after distance constraints each substep
+
     // Collision primitives
     std::vector<ClothSphereCollider> m_sphereColliders;
+    std::vector<ClothPlaneCollider> m_planeColliders;
+    std::vector<ClothCylinderCollider> m_cylinderColliders;
+    std::vector<ClothBoxCollider> m_boxColliders;
     float m_groundPlaneY = -1000.0f;
 
     // Wind
@@ -179,8 +284,13 @@ private:
     uint32_t m_gridH = 0;
     std::vector<uint32_t> m_indices;
 
+    // Sleep state: particles freeze when kinetic energy drops below threshold
+    bool m_sleeping = false;
+    int m_sleepFrames = 0;           ///< Consecutive frames below threshold
+    static constexpr int SLEEP_FRAME_COUNT = 3;  ///< Frames below threshold before sleeping
+
     // Solver internals
-    void solveDistanceConstraint(DistanceConstraint& c, float alphaTilde);
+    void solveDistanceConstraint(DistanceConstraint& c, float alphaTilde, float dtSub);
     void solvePinConstraints();
     void applyCollisions();
     void recomputeNormals();

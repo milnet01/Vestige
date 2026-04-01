@@ -371,7 +371,45 @@ const int MAX_LIGHTS = 16;
 
 ---
 
-## 9. Asset Naming
+## 9. Scene Construction and Spatial Integrity
+
+When building scenes programmatically or through the editor, all placed objects must respect the spatial constraints of the environment. Violations cause visual artifacts (clipping, z-fighting) and simulation failures (cloth crumpling, physics explosions, collider conflicts).
+
+### 9.1 Object Placement Rules
+
+| Rule | Description | Example Violation |
+|------|-------------|-------------------|
+| **No spawning inside colliders** | An object's initial position must not overlap with any active collision volume. Physics colliders that overlap at spawn immediately fight constraints, causing crumpling or explosions. | Cloth curtain particles spawning inside a wall plane collider |
+| **No overlapping static geometry** | Two solid objects must not occupy the same space. Check AABB overlap before placement. | Two boxes with identical or overlapping positions |
+| **Respect interior boundaries** | Child objects (furniture, curtains, fixtures) must fit within the interior space of their containing structure, accounting for wall thickness. | A curtain wider than the opening between walls |
+| **Collider margins** | Dynamic objects interacting with colliders must have a minimum clearance margin (≥ 5cm) between their rest position and the collider surface. Zero-margin or negative-margin configurations cause persistent constraint fighting. | Cloth edge particles at exactly the collider boundary |
+| **Z-fighting prevention** | Coplanar surfaces must be offset by at least 1cm, or use polygon offset. Two surfaces at the same depth will flicker. | A curtain hanging at the exact same Z as the wall behind it |
+
+### 9.2 Collision Setup Rules
+
+| Rule | Description |
+|------|-------------|
+| **Match colliders to geometry** | Collision shapes (spheres, planes, boxes) must approximate the actual rendered geometry. Oversized colliders cause objects to float; undersized colliders allow clipping. Use a small padding (2-5cm) over the geometry radius. |
+| **Shared dimension constants** | Collider dimensions must reference the same variables as the geometry they protect. Never duplicate magic numbers — if a pillar diameter changes, both the mesh and collider must update from a single source of truth. |
+| **Avoid caging colliders** | Enclosing a dynamic object in too many colliders creates a cage where constraints fight each other. Prefer open-sided collision setups that guide motion rather than trap it. |
+| **Collider cost awareness** | Sphere colliders cost 1 dot product + 1 length per particle per substep. Plane colliders cost 1 dot product. Both are trivially cheap — prefer correctness over premature optimization. |
+
+### 9.3 Scene Validation Checklist
+
+Before considering a scene complete, verify:
+
+- [ ] No dynamic objects spawn inside collision volumes
+- [ ] All dynamic objects have clearance margin from colliders (≥ 5cm)
+- [ ] All child objects fit within their containing structure
+- [ ] Collision shapes reference shared dimension constants (no duplicated magic numbers)
+- [ ] No coplanar surfaces at identical depths
+- [ ] Cloth panels sized to fit within their attachment points (pillars, frames, walls)
+- [ ] Cloth collider spheres approximate nearby geometry (pillars, posts, frames)
+- [ ] Visual inspection from multiple angles confirms no clipping at rest or under load
+
+---
+
+## 10. Asset Naming
 
 | Asset Type | Convention | Example |
 |-----------|-----------|---------|

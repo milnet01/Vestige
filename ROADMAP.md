@@ -456,14 +456,84 @@ Physics enables curtains blowing in the wind, objects responding to gravity, doo
 - [ ] Rope/chain constraints (hanging lamps, chains)
 
 ### Cloth Simulation
-- [ ] Cloth component (mass-spring or position-based dynamics)
-- [ ] Wind interaction (cloth responds to wind direction and strength)
-- [ ] Collision with rigid bodies (cloth drapes over objects)
-- [ ] Pin constraints (attach cloth corners to fixed points — hanging curtains)
-- [ ] Presets: linen curtain, tent fabric, priestly garment, banner/flag
+- [x] Cloth component (XPBD position-based dynamics) — Phase 8D
+- [x] Wind interaction (cloth responds to wind direction and strength, gust state machine) — Phase 8D
+- [x] Pin constraints (attach cloth corners to fixed points — hanging curtains) — Phase 8D
+- [x] Presets: linen curtain, tent fabric, banner/flag, heavy drape, stiff fence — Phase 8E
+- [x] Primitive colliders: sphere, plane, cylinder, box — Phase 8E
+- [x] Editor UI for cloth parameters — Phase 8E
+- [ ] Collision with rigid bodies (cloth drapes over objects) — see Cloth Collision below
+
+### Cloth Physics Improvements
+Improvements to the XPBD cloth solver identified through research and testing. Current system has basic settling via LRA constraints + post-solve position blending, but several techniques would improve realism.
+- [ ] Dihedral bending constraints — replace skip-one distance constraints with true angle-based bending
+  - Distance-based bending cannot encode angular information (a curved arc satisfies the distance constraint)
+  - Dihedral constraints measure the angle between adjacent triangle pairs and enforce a rest angle
+  - Provides genuine "flattening" force that actively straightens cloth (Müller 2007, Jolt Physics)
+  - More expensive (4 particles per constraint, cross products) but correct for our coarse grids
+- [ ] Constraint ordering optimization — solve top-to-bottom (from pins downward)
+  - Propagates corrections from fixed boundary in a single pass instead of requiring multiple iterations
+  - Dramatically improves convergence for hanging cloth topologies (sweep ordering)
+- [ ] Adaptive damping — increase damping during calm periods for faster settling
+  - Ramp damping from 0.02 (wind) to 0.12 (calm) based on gust intensity
+  - Prevents oscillation during the return-to-rest phase
+- [ ] Friction on collider surfaces — static and kinetic friction for stable folds
+  - Decompose velocity into normal + tangential after collision correction
+  - Static friction zeroes tangential velocity below a threshold (stable folds on surfaces)
+  - Kinetic friction reduces tangential velocity proportional to normal impulse
+  - Starting coefficient: 0.4 (Bridson et al., Stanford)
+- [ ] Thick particle model (marble model) — inflate particle collision radius to cover mesh edges
+  - Each particle's collision radius = 0.6-0.8× rest length so adjacent spheres overlap
+  - Filter collisions between connected particles
+  - Prevents mesh triangles passing between particles without any particle touching a collider
+  - Reuses existing per-particle collision system (Stanford cloth tutorial)
+
+### Physically-Based Fabric Material System
+A material-driven cloth system analogous to PBR for rendering — define real-world fabric properties and the simulator derives correct behavior automatically.
+- [ ] `FabricMaterial` struct with real-world textile properties
+  - Areal density (GSM — grams per square meter) → maps to particle mass
+  - Tensile stiffness (N/m) → maps to stretch compliance
+  - Shear stiffness (N/m) → maps to shear compliance
+  - Bending rigidity (N·m) → maps to bend compliance
+  - Internal friction (dimensionless) → maps to velocity damping
+  - Air permeability (L/m²/s) → maps to drag coefficient
+  - Thickness (mm) → maps to collision margin
+- [ ] KES-to-XPBD mapping function — convert Kawabata Evaluation System measurements to simulation parameters
+  - KES has published databases for hundreds of fabrics measured since the 1970s
+  - Mapping function converts physical units to compliance values
+  - Validated against real fabric video references
+- [ ] Built-in fabric database — ship common fabric types with correct physical properties
+  - Linen (ancient hand-woven, 200-350 GSM), cotton (80-150 GSM), silk (20-60 GSM)
+  - Goat hair (300-600 GSM), leather (500-1200 GSM), velvet (300-500 GSM)
+  - Each with source-cited physical measurements
+- [ ] Editor integration — select fabric type from dropdown, all parameters auto-filled
+  - Override individual properties for custom materials
+  - Preview shows approximate drape behavior
+
+### Cloth Collision (Hybrid Approach)
+A hybrid collision system: fast primitive colliders for simple geometry (walls, pillars, floors) and triangle mesh colliders for complex/irregular geometry (carved decorations, imported models).
+- [ ] Triangle mesh collider — use actual model triangles as collision surfaces
+  - Extract triangle data from loaded meshes at scene build time
+  - BVH (Bounding Volume Hierarchy) acceleration structure for fast spatial queries
+  - Per-particle: query BVH for nearby triangles, test penetration, push outside
+  - Signed distance field option for static geometry (precomputed, very fast lookups)
+- [ ] Automatic collider generation from scene geometry
+  - Simple shapes auto-detected: axis-aligned boxes, cylinders, spheres fitted to mesh bounds
+  - Complex shapes: auto-build triangle mesh collider from model data
+  - Editor toggle per-entity: "None", "Primitive (auto)", "Mesh (exact)", "Custom"
+- [ ] Jolt Physics integration for mesh collision (optional path)
+  - Use Jolt's `MeshShape` for static scene geometry already registered with the physics world
+  - Query Jolt's collision system for cloth particle penetration tests
+  - Avoids duplicating BVH/mesh data that Jolt already maintains
+- [ ] Edge/triangle collision for cloth mesh (not just particles)
+  - Test cloth mesh edges against collider surfaces to prevent pass-through between particles
+  - Continuous collision detection (CCD) for fast-moving cloth to prevent tunneling
+- [ ] Self-collision detection
+  - Spatial hashing to find nearby cloth particles on the same mesh
+  - Prevent cloth from passing through itself when folding
 
 ### Milestone
-The Tabernacle's linen curtains sway gently, the entrance veil drapes realistically from its poles, and doors throughout Solomon's Temple swing on hinged joints.
+The Tabernacle's linen curtains sway gently, the entrance veil drapes realistically from its poles, and doors throughout Solomon's Temple swing on hinged joints. Cloth correctly drapes over any scene geometry without manual collider placement.
 
 ---
 
@@ -508,11 +578,31 @@ The Tabernacle's linen curtains sway gently, the entrance veil drapes realistica
   - Thickness map support (variable transmission across a surface)
   - The Tabernacle's dyed linen curtains should glow softly when sunlight hits the exterior
   - Fast approximation: pre-integrated skin/fabric BRDF lookup (no ray marching needed)
-- [ ] Volumetric fog / god rays (light shafts through the tent entrance, dust in sunbeams)
 - [ ] Screen-space global illumination (SSGI) — real-time dynamic indirect light
 
+### Fog, Mist, and Volumetric Lighting
+- [ ] Distance fog (linear, exponential, exponential-squared) — basic depth-based fog with configurable color and density
+- [ ] Height fog — exponential fog that thickens below a configurable altitude (ground-hugging mist, valley fog)
+  - Per-scene fog parameters: base height, density falloff, inscattering color
+  - Desert heat haze variant (low-density, warm-tinted, subtle distortion)
+- [ ] Volumetric fog — ray-marched participating media with light scattering
+  - Froxel-based volume (frustum-aligned 3D texture, typically 160x90x64)
+  - Temporal reprojection for stable, low-cost accumulation across frames
+  - Per-light volumetric contribution (directional sun + point/spot lights)
+  - Fog density noise (3D Perlin/Worley) for non-uniform, natural-looking fog
+  - Artist controls: density, anisotropy (forward/back scatter), albedo, extinction
+- [ ] Volumetric god rays / crepuscular rays — visible light shafts from the sun through openings
+  - Screen-space radial blur approach (fast, good for single dominant light)
+  - Integration with volumetric fog for physically-based light shafts
+  - The Tabernacle's tent entrance should cast visible light beams into the dusty interior
+  - God rays through gaps in clouds (when volumetric clouds are available from Phase 13)
+- [ ] Mist / ground fog — localized fog volumes placeable per-entity
+  - Box and sphere fog volumes with soft edges (density falloff at boundaries)
+  - Animated density (slow turbulence for rolling mist effect)
+  - Use case: morning mist around the Bronze Laver, dust clouds near the altar
+
 ### Milestone
-A complete walkthrough experience with UI, audio, information displays, multi-language support, accessibility options, and advanced material rendering (SSS, volumetric effects).
+A complete walkthrough experience with UI, audio, information displays, multi-language support, accessibility options, and advanced material rendering (SSS, volumetric fog, god rays).
 
 ---
 
@@ -700,19 +790,100 @@ A system that lets artists import film-quality assets and the engine automatical
 ---
 
 ## Phase 13: Atmospheric Rendering
-**Goal:** Procedural sky, weather, and time of day.
+**Goal:** Procedural sky, weather, time of day, and dynamic atmosphere.
 
-### Features
-- [ ] Procedural sky model (Rayleigh/Mie scattering)
+### Procedural Sky
+- [ ] Procedural sky model (Rayleigh/Mie scattering) — physically-based atmosphere
+  - Wavelength-dependent scattering for realistic blue sky, orange sunsets, red sunrises
+  - Configurable atmosphere parameters: planet radius, atmosphere height, scattering coefficients
+  - Multiple scattering approximation for accurate horizon color
 - [ ] Full day/night cycle with sun/moon positioning
-- [ ] Volumetric clouds (ray-marched or noise-based)
+  - Sun follows ecliptic path based on latitude and time of year
+  - Moon phase cycle (new → full → new) with correct illumination
+  - Smooth transitions through golden hour, twilight, and night
 - [ ] Dynamic time-of-day lighting (sun color/intensity changes)
+  - Directional light color and intensity automatically track sun position
+  - Ambient light and shadow intensity adjust with time of day
+  - Interior lighting (torches, lamps) becomes more prominent at night
 - [ ] Stars and night sky
-- [ ] Weather effects (rain, dust, fog density changes)
-- [ ] God rays / crepuscular rays through clouds
+  - Star field from catalog data or procedural placement
+  - Milky Way band (subtle texture overlay)
+  - Star brightness modulated by atmospheric extinction near horizon
+
+### Volumetric Clouds
+- [ ] Ray-marched volumetric clouds — 3D noise-based cloud shapes rendered via ray marching
+  - Cloud layer altitude, thickness, and coverage controls
+  - Worley + Perlin noise combination for realistic cloud shapes (cumulus, stratus, cirrus)
+  - Detail noise for cloud edge erosion and internal structure
+  - Light scattering through clouds: silver lining, dark bases, beer-powder approximation
+  - Temporal reprojection for performance (quarter-res marching, 16-frame accumulation)
+- [ ] Cloud shadow projection — clouds cast soft shadows on terrain and scene geometry
+  - Shadow map from cloud density projected along sun direction
+  - Moving shadow patterns as clouds drift across the sky
+- [ ] Cloud animation — wind-driven cloud movement and morphing
+  - Global wind vector drives cloud layer drift (shared with cloth/particle wind system)
+  - Noise offset animation for cloud evolution over time
+  - Weather-dependent coverage (clear sky → partly cloudy → overcast transitions)
+
+### Weather System
+- [ ] Weather controller — central system that drives all weather-related subsystems
+  - Weather state machine: Clear, Cloudy, Overcast, Light Rain, Heavy Rain, Storm, Snow, Dust Storm
+  - Smooth transitions between weather states (gradual cloud buildup, wind increase)
+  - Global wind vector shared with cloth simulation, particle systems, foliage, and clouds
+  - Per-scene weather configuration (desert scenes get dust storms, not snow)
+  - Editor UI: weather state selector, transition speed, wind direction/strength
+- [ ] Rain
+  - GPU particle precipitation (thousands of rain streaks rendered as stretched quads)
+  - Rain collision with surfaces — splash particles on impact (roofs, ground, water)
+  - Wet surface material modification: increased roughness, darker albedo, specular highlights
+  - Rain puddle accumulation on flat surfaces (animated normal-mapped puddle growth)
+  - Rain sound integration (ambient rain loop, splash sounds, intensity-matched volume)
+  - Rain streaks on screen (optional first-person rain-on-lens effect)
+  - Shelter detection: rain blocked by roofs and overhangs (raycast or shadow map test)
+- [ ] Snow
+  - GPU particle snowflakes (slower, larger particles with gentle drift and tumble)
+  - Snow accumulation on surfaces (gradual white overlay on upward-facing geometry)
+  - Accumulation depth map for ground coverage
+  - Footprint trails in accumulated snow (deformation texture at character position)
+  - Snow material: subsurface scattering for translucent snow glow
+- [ ] Hail
+  - Larger, faster particles than rain with bounce on impact
+  - Impact sound effects (metallic ping on bronze altar, thud on fabric)
+  - Cloth interaction: hail impacts add impulse to cloth simulation particles
+- [ ] Dust storms / sandstorms
+  - Volumetric particle clouds with directional wind
+  - Reduced visibility (fog density increase during storm)
+  - Sand accumulation on surfaces (thin layer of sand-colored overlay)
+  - Desert-appropriate for Tabernacle scenes
+- [ ] Overcast sky
+  - Cloud coverage increases to full overcast (uniform grey layer)
+  - Reduced directional light intensity, increased ambient
+  - Flatter, more diffuse shadows (shadow softness increases with cloud coverage)
+  - Color temperature shift (cooler, bluer ambient light under overcast)
+- [ ] Fog and mist density changes with weather
+  - Weather controller adjusts Phase 9 fog parameters dynamically
+  - Morning mist that burns off as sun rises (density tied to time of day)
+  - Thick fog during certain weather states (visibility drops to 20-50m)
+  - Volumetric fog density modulated by weather (heavier in rain, lighter in clear)
+- [ ] Lightning (storm weather state)
+  - Flash illumination (brief full-scene directional light burst)
+  - Branching lightning bolt rendering (procedural line segments or billboard)
+  - Thunder sound with distance-based delay
+  - Brief shadow suppression during flash (everything lit uniformly)
+- [ ] Wind gusts tied to weather
+  - Weather controller sets global wind strength/direction
+  - Cloth panels, particle systems, foliage, and clouds all respond to same wind
+  - Calm in clear weather, moderate in rain, strong gusts in storms
+  - Wind direction shifts during storm transitions
+
+### God Rays with Clouds
+- [ ] Crepuscular rays through cloud gaps — volumetric light shafts from sun through cloud openings
+  - Cloud density used as shadow volume for volumetric lighting
+  - Rays visible in dusty/humid atmosphere (Phase 9 volumetric fog integration)
+  - Anti-crepuscular rays (converging rays opposite the sun) for sunset/sunrise
 
 ### Milestone
-A living sky with dynamic clouds, day/night transitions, and atmospheric lighting.
+A living sky with dynamic clouds, day/night transitions, weather effects (rain, snow, hail, dust storms), and atmospheric lighting that transforms the scene mood.
 
 ---
 

@@ -134,6 +134,21 @@ void ClothSimulator::initialize(const ClothConfig& config, uint32_t seed)
         }
     }
 
+    // Snapshot initial state for reset()
+    m_initialPositions = m_positions;
+
+    // Start in a calm period so the curtain hangs straight before the first gust.
+    // The initial timer gives gravity time to settle the cloth into its natural drape.
+    m_gustCurrent = 0.0f;
+    m_gustTarget = 0.0f;
+    m_gustTimer = randRange(3.0f, 5.0f);  // 3-5 seconds of calm before first gust
+    m_gustRampSpeed = 0.0f;
+    m_windDirOffset = glm::vec3(0.0f);
+    m_windDirTarget = glm::vec3(0.0f);
+    m_dirTimer = randRange(2.0f, 4.0f);
+    m_sleeping = false;
+    m_sleepFrames = 0;
+
     m_initialized = true;
 }
 
@@ -146,17 +161,34 @@ void ClothSimulator::simulate(float deltaTime)
 
     m_elapsed += deltaTime;
 
+    // Update gust state even when sleeping — need to detect when wind returns
+    updateGustState(deltaTime);
+
+    // Sleep check: if cloth is sleeping and wind is calm, skip simulation
+    if (m_sleeping)
+    {
+        if (m_gustCurrent > 0.1f)
+        {
+            // Wind returned — wake up
+            m_sleeping = false;
+            m_sleepFrames = 0;
+        }
+        else
+        {
+            return;  // Still sleeping, skip simulation
+        }
+    }
+
     int substeps = m_config.substeps;
     if (substeps < 1) substeps = 1;
 
     float dtSub = deltaTime / static_cast<float>(substeps);
-    float dtSub2 = dtSub * dtSub;
 
     for (int s = 0; s < substeps; ++s)
     {
         uint32_t count = static_cast<uint32_t>(m_positions.size());
 
-        // 1. Apply external forces (gravity + wind) to velocities
+        // 1. Apply external forces (gravity + wind + rest spring) to velocities
         for (uint32_t i = 0; i < count; ++i)
         {
             if (m_inverseMasses[i] <= 0.0f)
@@ -164,10 +196,31 @@ void ClothSimulator::simulate(float deltaTime)
                 continue;  // Pinned particle
             }
             m_velocities[i] += m_config.gravity * dtSub;
+
+            // (Rest pose correction is applied post-solve via position blending,
+            // not here as a velocity force. See step 8 below.)
         }
         applyWind(dtSub);
 
-        // 2. Predict positions from updated velocities
+        // 2. Velocity clamping: cap particle speed so it cannot travel further
+        // than the collision margin in one substep. Prevents tunneling through
+        // thin colliders at high velocities. (Bridson et al., Stanford)
+        {
+            static constexpr float MAX_TRAVEL = 0.015f;  // Match COLLISION_MARGIN
+            float maxSpeed = MAX_TRAVEL / dtSub;
+            float maxSpeed2 = maxSpeed * maxSpeed;
+            for (uint32_t i = 0; i < count; ++i)
+            {
+                if (m_inverseMasses[i] <= 0.0f) continue;
+                float speed2 = glm::dot(m_velocities[i], m_velocities[i]);
+                if (speed2 > maxSpeed2)
+                {
+                    m_velocities[i] *= maxSpeed / std::sqrt(speed2);
+                }
+            }
+        }
+
+        // 3. Predict positions from updated velocities
         for (uint32_t i = 0; i < count; ++i)
         {
             if (m_inverseMasses[i] <= 0.0f)
@@ -178,33 +231,59 @@ void ClothSimulator::simulate(float deltaTime)
             m_positions[i] += m_velocities[i] * dtSub;
         }
 
-        // 3. Solve constraints (Gauss-Seidel XPBD)
-        // Stretch constraints
+        // 3. Solve constraints (Gauss-Seidel XPBD with Rayleigh damping)
+        // The dtSub is passed to the solver for XPBD Rayleigh damping (gamma term)
         for (auto& c : m_stretchConstraints)
         {
-            float alphaTilde = c.compliance / dtSub2;
-            solveDistanceConstraint(c, alphaTilde);
+            solveDistanceConstraint(c, c.compliance, dtSub);
         }
-        // Shear constraints
         for (auto& c : m_shearConstraints)
         {
-            float alphaTilde = c.compliance / dtSub2;
-            solveDistanceConstraint(c, alphaTilde);
+            solveDistanceConstraint(c, c.compliance, dtSub);
         }
-        // Bend constraints
         for (auto& c : m_bendConstraints)
         {
-            float alphaTilde = c.compliance / dtSub2;
-            solveDistanceConstraint(c, alphaTilde);
+            solveDistanceConstraint(c, c.compliance, dtSub);
         }
 
-        // 4. Solve pin constraints
+        // 4. Long Range Attachment: prevent cumulative drift from pins
+        solveLRAConstraints();
+
+        // 5. Solve pin constraints
         solvePinConstraints();
 
-        // 5. Apply collisions
+        // 6. Apply collisions (first pass — after constraint solving)
         applyCollisions();
 
-        // 6. Update velocities and apply damping
+        // 5b. Re-solve pins after collision (collision may have moved pinned particles)
+        solvePinConstraints();
+
+        // 5c. Apply collisions again (second pass — constraints may have pushed
+        // particles back inside colliders during step 3. Two passes catches most
+        // constraint-vs-collider conflicts without the cost of iterating further.)
+        applyCollisions();
+
+        // 6. Post-solve rest pose blending: gently guide particles toward their
+        // initial straight-hanging positions when wind is calm. Only active for
+        // cloth with LRA constraints (hanging curtains/veils) — taut panels like
+        // fence walls don't need this and it would fight their natural wind bowing.
+        {
+            float restBlend = 1.0f - m_gustCurrent;
+            if (restBlend > 0.01f && !m_lraConstraints.empty())
+            {
+                // Blend factor per substep. Keep small so wind can still
+                // displace the cloth noticeably. At 16 substeps/frame,
+                // 0.015 per substep ≈ 21% correction toward rest per frame.
+                float blend = 0.015f * restBlend;
+                for (uint32_t i = 0; i < count; ++i)
+                {
+                    if (m_inverseMasses[i] <= 0.0f) continue;
+                    m_positions[i] = glm::mix(m_positions[i], m_initialPositions[i], blend);
+                }
+            }
+        }
+
+        // 7. Update velocities and apply damping
         float dampFactor = 1.0f - m_config.damping;
         for (uint32_t i = 0; i < count; ++i)
         {
@@ -216,6 +295,40 @@ void ClothSimulator::simulate(float deltaTime)
             m_velocities[i] = (m_positions[i] - m_prevPositions[i]) / dtSub;
             m_velocities[i] *= dampFactor;
         }
+    }
+
+    // --- Sleep detection ---
+    // Track average kinetic energy per particle. When it drops below the
+    // threshold for several consecutive frames, freeze the cloth.
+    float totalKE = 0.0f;
+    uint32_t freeCount = 0;
+    uint32_t count = static_cast<uint32_t>(m_positions.size());
+    for (uint32_t i = 0; i < count; ++i)
+    {
+        if (m_inverseMasses[i] <= 0.0f) continue;
+        float speed2 = glm::dot(m_velocities[i], m_velocities[i]);
+        float mass = (m_inverseMasses[i] > 0.0f) ? 1.0f / m_inverseMasses[i] : 0.0f;
+        totalKE += 0.5f * mass * speed2;
+        ++freeCount;
+    }
+
+    float avgKE = (freeCount > 0) ? totalKE / static_cast<float>(freeCount) : 0.0f;
+    if (avgKE < m_config.sleepThreshold && m_gustCurrent < 0.05f)
+    {
+        ++m_sleepFrames;
+        if (m_sleepFrames >= SLEEP_FRAME_COUNT)
+        {
+            m_sleeping = true;
+            // Zero all velocities for a clean rest state
+            for (uint32_t i = 0; i < count; ++i)
+            {
+                m_velocities[i] = glm::vec3(0.0f);
+            }
+        }
+    }
+    else
+    {
+        m_sleepFrames = 0;
     }
 
     // Recompute normals for rendering
@@ -344,6 +457,38 @@ float ClothSimulator::getGroundPlane() const
     return m_groundPlaneY;
 }
 
+void ClothSimulator::addPlaneCollider(const glm::vec3& normal, float offset)
+{
+    float len = glm::length(normal);
+    if (len < 1e-7f) return;
+    m_planeColliders.push_back({normal / len, offset});
+}
+
+void ClothSimulator::clearPlaneColliders()
+{
+    m_planeColliders.clear();
+}
+
+void ClothSimulator::addCylinderCollider(const glm::vec3& base, float radius, float height)
+{
+    m_cylinderColliders.push_back({base, std::max(0.0f, radius), std::max(0.0f, height)});
+}
+
+void ClothSimulator::clearCylinderColliders()
+{
+    m_cylinderColliders.clear();
+}
+
+void ClothSimulator::addBoxCollider(const glm::vec3& min, const glm::vec3& max)
+{
+    m_boxColliders.push_back({glm::min(min, max), glm::max(min, max)});
+}
+
+void ClothSimulator::clearBoxColliders()
+{
+    m_boxColliders.clear();
+}
+
 // --- Wind ---
 
 void ClothSimulator::setWind(const glm::vec3& direction, float strength)
@@ -363,6 +508,21 @@ glm::vec3 ClothSimulator::getWindVelocity() const
     return m_windDirection * m_windStrength;
 }
 
+glm::vec3 ClothSimulator::getWindDirection() const
+{
+    return m_windDirection;
+}
+
+float ClothSimulator::getWindStrength() const
+{
+    return m_windStrength;
+}
+
+float ClothSimulator::getDragCoefficient() const
+{
+    return m_dragCoeff;
+}
+
 // --- Config ---
 
 void ClothSimulator::setSubsteps(int substeps)
@@ -380,9 +540,177 @@ bool ClothSimulator::isInitialized() const
     return m_initialized;
 }
 
+// --- Reset and live parameter updates ---
+
+void ClothSimulator::reset()
+{
+    if (!m_initialized)
+    {
+        return;
+    }
+
+    m_positions = m_initialPositions;
+    m_prevPositions = m_initialPositions;
+    m_velocities.assign(m_velocities.size(), glm::vec3(0.0f));
+
+    // Restore pin positions (pins may have been modified after initialize)
+    for (const auto& pin : m_pinConstraints)
+    {
+        m_positions[pin.index] = pin.position;
+        m_prevPositions[pin.index] = pin.position;
+    }
+
+    // Reset gust state machine
+    m_gustCurrent = 0.0f;
+    m_gustTarget = 0.0f;
+    m_gustTimer = 0.0f;
+    m_gustRampSpeed = 0.0f;
+    m_windDirOffset = glm::vec3(0.0f);
+    m_windDirTarget = glm::vec3(0.0f);
+    m_dirTimer = 0.0f;
+    m_elapsed = 0.0f;
+
+    // Clear sleep state
+    m_sleeping = false;
+    m_sleepFrames = 0;
+
+    recomputeNormals();
+}
+
+void ClothSimulator::captureRestPositions()
+{
+    m_initialPositions = m_positions;
+}
+
+void ClothSimulator::rebuildLRA()
+{
+    buildLRAConstraints();
+}
+
+void ClothSimulator::buildLRAConstraints()
+{
+    m_lraConstraints.clear();
+
+    if (m_pinConstraints.empty())
+    {
+        return;
+    }
+
+    uint32_t count = static_cast<uint32_t>(m_positions.size());
+    for (uint32_t i = 0; i < count; ++i)
+    {
+        if (m_inverseMasses[i] <= 0.0f)
+        {
+            continue;  // Skip pinned particles — they don't need tethers
+        }
+
+        // Find the nearest pinned particle
+        float bestDist2 = std::numeric_limits<float>::max();
+        uint32_t bestPin = 0;
+        for (const auto& pin : m_pinConstraints)
+        {
+            glm::vec3 diff = m_positions[i] - m_positions[pin.index];
+            float d2 = glm::dot(diff, diff);
+            if (d2 < bestDist2)
+            {
+                bestDist2 = d2;
+                bestPin = pin.index;
+            }
+        }
+
+        float maxDist = std::sqrt(bestDist2);
+        m_lraConstraints.push_back({i, bestPin, maxDist});
+    }
+}
+
+void ClothSimulator::solveLRAConstraints()
+{
+    for (const auto& lra : m_lraConstraints)
+    {
+        const glm::vec3& pinPos = m_positions[lra.pinIndex];
+        glm::vec3& pos = m_positions[lra.particleIndex];
+        glm::vec3 delta = pos - pinPos;
+        float dist = glm::length(delta);
+
+        // Unilateral: only pull back if drifted too far (not if closer)
+        if (dist > lra.maxDistance && dist > 1e-7f)
+        {
+            pos = pinPos + delta * (lra.maxDistance / dist);
+        }
+    }
+}
+
+void ClothSimulator::setParticleMass(float mass)
+{
+    if (mass <= 0.0f)
+    {
+        return;
+    }
+
+    m_config.particleMass = mass;
+    float invMass = 1.0f / mass;
+
+    for (size_t i = 0; i < m_inverseMasses.size(); ++i)
+    {
+        // Update the stored original mass for all particles
+        m_originalInverseMasses[i] = invMass;
+        // Only update active inverse mass for non-pinned particles
+        // (pinned particles have m_inverseMasses[i] == 0)
+        if (m_inverseMasses[i] > 0.0f)
+        {
+            m_inverseMasses[i] = invMass;
+        }
+    }
+}
+
+void ClothSimulator::setDamping(float damping)
+{
+    m_config.damping = std::max(0.0f, std::min(damping, 1.0f));
+}
+
+void ClothSimulator::setStretchCompliance(float compliance)
+{
+    m_config.stretchCompliance = std::max(0.0f, compliance);
+    for (auto& c : m_stretchConstraints)
+    {
+        c.compliance = m_config.stretchCompliance;
+    }
+}
+
+void ClothSimulator::setShearCompliance(float compliance)
+{
+    m_config.shearCompliance = std::max(0.0f, compliance);
+    for (auto& c : m_shearConstraints)
+    {
+        c.compliance = m_config.shearCompliance;
+    }
+}
+
+void ClothSimulator::setBendCompliance(float compliance)
+{
+    m_config.bendCompliance = std::max(0.0f, compliance);
+    for (auto& c : m_bendConstraints)
+    {
+        c.compliance = m_config.bendCompliance;
+    }
+}
+
+uint32_t ClothSimulator::getPinnedCount() const
+{
+    return static_cast<uint32_t>(m_pinConstraints.size());
+}
+
+uint32_t ClothSimulator::getConstraintCount() const
+{
+    return static_cast<uint32_t>(m_stretchConstraints.size()
+                                  + m_shearConstraints.size()
+                                  + m_bendConstraints.size());
+}
+
 // --- Solver internals ---
 
-void ClothSimulator::solveDistanceConstraint(DistanceConstraint& c, float alphaTilde)
+void ClothSimulator::solveDistanceConstraint(DistanceConstraint& c,
+                                              float compliance, float dtSub)
 {
     glm::vec3& p0 = m_positions[c.i0];
     glm::vec3& p1 = m_positions[c.i1];
@@ -404,12 +732,31 @@ void ClothSimulator::solveDistanceConstraint(DistanceConstraint& c, float alphaT
 
     // XPBD: C = dist - restLength
     float constraint = dist - c.restLength;
-    // ∇C direction
     glm::vec3 gradient = diff / dist;
 
-    // XPBD correction: Δλ = -C / (w0 + w1 + α̃)
-    float denom = wSum + alphaTilde;
-    float deltaLambda = -constraint / denom;
+    // XPBD with Rayleigh damping (Macklin et al. 2016, Section 3.5)
+    // α̃ = compliance / dt²
+    float dtSub2 = dtSub * dtSub;
+    float alphaTilde = compliance / dtSub2;
+
+    // β̃ = damping_coeff * dt²  (Rayleigh damping parameter)
+    // γ = α̃ * β̃ / dt  — velocity-dependent damping integrated into the constraint
+    // This damps oscillations along each constraint direction, providing physically
+    // motivated energy dissipation that helps cloth settle to rest naturally.
+    static constexpr float RAYLEIGH_DAMPING = 3.0e-7f;
+    float betaTilde = RAYLEIGH_DAMPING * dtSub2;
+    float gamma = alphaTilde * betaTilde / dtSub;
+
+    // Velocity along constraint direction (for damping term)
+    glm::vec3 v0 = p0 - m_prevPositions[c.i0];
+    glm::vec3 v1 = p1 - m_prevPositions[c.i1];
+    float dCdt = glm::dot(gradient, v0 - v1);  // Rate of constraint change
+
+    // XPBD correction with Rayleigh damping:
+    // Δλ = -(C + α̃ * λ + γ * dC/dt) / (w0 + w1 + α̃ + γ)
+    // We use λ = 0 per-substep (reset each substep in XPBD small-steps approach)
+    float denom = wSum + alphaTilde + gamma;
+    float deltaLambda = -(constraint + gamma * dCdt) / denom;
 
     p0 += gradient * (w0 * deltaLambda);
     p1 -= gradient * (w1 * deltaLambda);
@@ -425,19 +772,25 @@ void ClothSimulator::solvePinConstraints()
 
 void ClothSimulator::applyCollisions()
 {
+    // Collision margin: particles are pushed to surface + margin rather than
+    // exactly to the surface. This prevents tunneling when discrete time steps
+    // cause a particle to barely touch the surface — without margin, the next
+    // frame's constraint solving can push it back through.
+    static constexpr float COLLISION_MARGIN = 0.015f;  // 1.5cm
+
     uint32_t count = static_cast<uint32_t>(m_positions.size());
 
     // Ground plane collision
+    float groundWithMargin = m_groundPlaneY + COLLISION_MARGIN;
     for (uint32_t i = 0; i < count; ++i)
     {
         if (m_inverseMasses[i] <= 0.0f)
         {
             continue;
         }
-        if (m_positions[i].y < m_groundPlaneY)
+        if (m_positions[i].y < groundWithMargin)
         {
-            m_positions[i].y = m_groundPlaneY;
-            // Zero out downward velocity component
+            m_positions[i].y = groundWithMargin;
             if (m_velocities[i].y < 0.0f)
             {
                 m_velocities[i].y = 0.0f;
@@ -457,17 +810,139 @@ void ClothSimulator::applyCollisions()
 
             glm::vec3 toParticle = m_positions[i] - sphere.center;
             float dist = glm::length(toParticle);
-            if (dist < sphere.radius && dist > 1e-7f)
+            float effectiveR = sphere.radius + COLLISION_MARGIN;
+            if (dist < effectiveR && dist > 1e-7f)
             {
-                // Push particle to surface
+                // Push particle to surface + margin
                 glm::vec3 normal = toParticle / dist;
-                m_positions[i] = sphere.center + normal * sphere.radius;
+                m_positions[i] = sphere.center + normal * effectiveR;
 
                 // Remove inward velocity component
                 float velDotN = glm::dot(m_velocities[i], normal);
                 if (velDotN < 0.0f)
                 {
                     m_velocities[i] -= normal * velDotN;
+                }
+            }
+        }
+    }
+
+    // Box collisions (axis-aligned) — push out along shortest penetration axis
+    // Expand box by margin so particles are kept slightly outside the geometry
+    for (const auto& box : m_boxColliders)
+    {
+        glm::vec3 bMin = box.min - glm::vec3(COLLISION_MARGIN);
+        glm::vec3 bMax = box.max + glm::vec3(COLLISION_MARGIN);
+
+        for (uint32_t i = 0; i < count; ++i)
+        {
+            if (m_inverseMasses[i] <= 0.0f)
+            {
+                continue;
+            }
+
+            const glm::vec3& pos = m_positions[i];
+
+            // Check if particle is inside the expanded box
+            if (pos.x < bMin.x || pos.x > bMax.x ||
+                pos.y < bMin.y || pos.y > bMax.y ||
+                pos.z < bMin.z || pos.z > bMax.z)
+            {
+                continue;  // Outside — no collision
+            }
+
+            // Find the axis with smallest penetration depth and push out
+            float dx_min = pos.x - bMin.x;
+            float dx_max = bMax.x - pos.x;
+            float dy_min = pos.y - bMin.y;
+            float dy_max = bMax.y - pos.y;
+            float dz_min = pos.z - bMin.z;
+            float dz_max = bMax.z - pos.z;
+
+            float minPen = dx_min;
+            glm::vec3 pushDir(-1, 0, 0);
+
+            if (dx_max < minPen) { minPen = dx_max; pushDir = glm::vec3(1, 0, 0); }
+            if (dy_min < minPen) { minPen = dy_min; pushDir = glm::vec3(0, -1, 0); }
+            if (dy_max < minPen) { minPen = dy_max; pushDir = glm::vec3(0, 1, 0); }
+            if (dz_min < minPen) { minPen = dz_min; pushDir = glm::vec3(0, 0, -1); }
+            if (dz_max < minPen) { minPen = dz_max; pushDir = glm::vec3(0, 0, 1); }
+
+            m_positions[i] += pushDir * minPen;
+
+            // Remove velocity component going into the box
+            float velDotN = glm::dot(m_velocities[i], -pushDir);
+            if (velDotN > 0.0f)
+            {
+                m_velocities[i] += pushDir * velDotN;
+            }
+        }
+    }
+
+    // Cylinder collisions (Y-axis aligned) — 2D distance check in XZ plane
+    for (const auto& cyl : m_cylinderColliders)
+    {
+        float cylTop = cyl.base.y + cyl.height;
+        float effectiveR = cyl.radius + COLLISION_MARGIN;
+
+        for (uint32_t i = 0; i < count; ++i)
+        {
+            if (m_inverseMasses[i] <= 0.0f)
+            {
+                continue;
+            }
+
+            // Skip if particle is above or below the cylinder
+            if (m_positions[i].y < cyl.base.y || m_positions[i].y > cylTop)
+            {
+                continue;
+            }
+
+            // 2D distance in XZ plane from cylinder axis
+            float dx = m_positions[i].x - cyl.base.x;
+            float dz = m_positions[i].z - cyl.base.z;
+            float dist2D = std::sqrt(dx * dx + dz * dz);
+
+            if (dist2D < effectiveR && dist2D > 1e-7f)
+            {
+                // Push particle to cylinder surface + margin
+                glm::vec3 normal2D(dx / dist2D, 0.0f, dz / dist2D);
+                m_positions[i] = glm::vec3(cyl.base.x, m_positions[i].y, cyl.base.z)
+                                 + normal2D * effectiveR;
+
+                // Remove inward velocity component
+                float velDotN = glm::dot(m_velocities[i], normal2D);
+                if (velDotN < 0.0f)
+                {
+                    m_velocities[i] -= normal2D * velDotN;
+                }
+            }
+        }
+    }
+
+    // Plane collisions — push particles to positive-normal side.
+    // No margin for planes: they are abstract boundaries (bow-limiters, ceilings),
+    // not physical geometry. Adding margin to planes injects energy that accumulates
+    // through constraint interaction and causes panels to drift.
+    for (const auto& plane : m_planeColliders)
+    {
+        for (uint32_t i = 0; i < count; ++i)
+        {
+            if (m_inverseMasses[i] <= 0.0f)
+            {
+                continue;
+            }
+
+            float dist = glm::dot(m_positions[i], plane.normal) - plane.offset;
+            if (dist < 0.0f)
+            {
+                m_positions[i] -= plane.normal * dist;
+
+                // Remove velocity component going into the plane
+                float velDotN = glm::dot(m_velocities[i], plane.normal);
+                if (velDotN < 0.0f)
+                {
+                    m_velocities[i] -= plane.normal * velDotN;
                 }
             }
         }
@@ -551,9 +1026,12 @@ void ClothSimulator::updateGustState(float dt)
         else
         {
             // Was gusting → go calm (truly still)
+            // Calm periods must be long enough for fabric to swing back to
+            // its natural hanging position. A 4m curtain has a pendulum
+            // period of ~4 seconds, so calm needs 3-7 seconds minimum.
             m_gustTarget = 0.0f;
-            m_gustTimer = randRange(1.0f, 3.5f);   // Calm for 1-3.5 seconds
-            m_gustRampSpeed = randRange(2.0f, 5.0f); // Wind dies off fairly quickly
+            m_gustTimer = randRange(3.0f, 7.0f);   // Calm for 3-7 seconds
+            m_gustRampSpeed = randRange(3.0f, 6.0f); // Wind dies off quickly
         }
     }
 
@@ -628,8 +1106,7 @@ void ClothSimulator::applyWind(float dt)
 
     float t = m_elapsed;
 
-    // Update gust + direction state machines
-    updateGustState(dt);
+    // Gust state is updated once per frame in simulate(), not per substep here.
 
     // Add high-frequency flutter on top of gust envelope
     float flutter = 1.0f + 0.15f * std::sin(t * 7.3f + 1.1f)

@@ -106,6 +106,7 @@ set(ENGINE_SOURCES
     physics/physics_debug.cpp
     physics/cloth_simulator.cpp
     physics/cloth_component.cpp
+    physics/cloth_presets.cpp
     renderer/dynamic_mesh.cpp
     profiler/gpu_timer.cpp
     profiler/cpu_profiler.cpp
