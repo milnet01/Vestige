@@ -2,6 +2,8 @@
 /// @brief CPU-based cloth simulation using XPBD (Extended Position-Based Dynamics).
 #pragma once
 
+#include "physics/spatial_hash.h"
+
 #include <glm/glm.hpp>
 
 #include <cstdint>
@@ -9,6 +11,8 @@
 
 namespace Vestige
 {
+
+class ClothMeshCollider;  // Forward declaration
 
 /// @brief Configuration for cloth simulation.
 struct ClothConfig
@@ -152,6 +156,25 @@ public:
     /// @brief Removes all box colliders.
     void clearBoxColliders();
 
+    /// @brief Adds a triangle mesh collider (non-owning pointer, caller manages lifetime).
+    void addMeshCollider(ClothMeshCollider* collider);
+
+    /// @brief Removes all mesh colliders.
+    void clearMeshColliders();
+
+    /// @brief Enables or disables cloth self-collision detection.
+    void enableSelfCollision(bool enable);
+
+    /// @brief Sets the minimum distance maintained between non-adjacent particles.
+    /// @param distance Cloth thickness (default 0.02m = 2cm).
+    void setSelfCollisionDistance(float distance);
+
+    /// @brief Returns true if self-collision is enabled.
+    bool isSelfCollisionEnabled() const;
+
+    /// @brief Returns the self-collision distance.
+    float getSelfCollisionDistance() const;
+
     // --- Wind ---
 
     /// @brief Sets the wind direction and strength.
@@ -270,7 +293,16 @@ private:
     std::vector<ClothPlaneCollider> m_planeColliders;
     std::vector<ClothCylinderCollider> m_cylinderColliders;
     std::vector<ClothBoxCollider> m_boxColliders;
+    std::vector<ClothMeshCollider*> m_meshColliders;  ///< Non-owning pointers
     float m_groundPlaneY = -1000.0f;
+
+    // Self-collision
+    bool m_selfCollision = false;
+    float m_selfCollisionDist = 0.02f;  ///< 2cm default cloth thickness
+    SpatialHash m_spatialHash;
+    std::vector<uint32_t> m_selfCollisionNeighbors;  ///< Reused per query
+    void applySelfCollision();
+    bool areGridAdjacent(uint32_t i, uint32_t j) const;
 
     // Wind
     glm::vec3 m_windDirection = glm::vec3(0.0f);
