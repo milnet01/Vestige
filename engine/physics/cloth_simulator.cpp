@@ -1,6 +1,7 @@
 /// @file cloth_simulator.cpp
 /// @brief XPBD cloth simulation implementation.
 #include "physics/cloth_simulator.h"
+#include "physics/cloth_mesh_collider.h"
 
 #include <algorithm>
 #include <cmath>
@@ -969,6 +970,166 @@ void ClothSimulator::applyCollisions()
             }
         }
     }
+
+    // Triangle mesh collisions (BVH-accelerated)
+    for (const auto* mesh : m_meshColliders)
+    {
+        if (mesh == nullptr || !mesh->isBuilt())
+        {
+            continue;
+        }
+
+        for (uint32_t i = 0; i < count; ++i)
+        {
+            if (m_inverseMasses[i] <= 0.0f)
+            {
+                continue;
+            }
+
+            glm::vec3 closestPt;
+            glm::vec3 normal;
+            float dist = 0.0f;
+
+            if (mesh->queryClosest(m_positions[i], COLLISION_MARGIN, closestPt, normal, dist))
+            {
+                // Push particle to surface + margin along normal
+                m_positions[i] = closestPt + normal * COLLISION_MARGIN;
+
+                // Remove inward velocity component
+                float velDotN = glm::dot(m_velocities[i], normal);
+                if (velDotN < 0.0f)
+                {
+                    m_velocities[i] -= normal * velDotN;
+                }
+            }
+        }
+    }
+
+    // Self-collision (spatial hash broad phase + distance narrow phase)
+    applySelfCollision();
+}
+
+// ---------------------------------------------------------------------------
+// Mesh collider management
+// ---------------------------------------------------------------------------
+
+void ClothSimulator::addMeshCollider(ClothMeshCollider* collider)
+{
+    if (collider != nullptr)
+    {
+        m_meshColliders.push_back(collider);
+    }
+}
+
+void ClothSimulator::clearMeshColliders()
+{
+    m_meshColliders.clear();
+}
+
+// ---------------------------------------------------------------------------
+// Self-collision
+// ---------------------------------------------------------------------------
+
+void ClothSimulator::enableSelfCollision(bool enable)
+{
+    m_selfCollision = enable;
+}
+
+void ClothSimulator::setSelfCollisionDistance(float distance)
+{
+    m_selfCollisionDist = std::max(distance, 0.001f);
+}
+
+bool ClothSimulator::isSelfCollisionEnabled() const
+{
+    return m_selfCollision;
+}
+
+float ClothSimulator::getSelfCollisionDistance() const
+{
+    return m_selfCollisionDist;
+}
+
+void ClothSimulator::applySelfCollision()
+{
+    if (!m_selfCollision || m_positions.size() < 4)
+    {
+        return;
+    }
+
+    uint32_t count = static_cast<uint32_t>(m_positions.size());
+
+    // Build spatial hash with cell size = 2× collision distance
+    m_spatialHash.build(m_positions.data(), count, m_selfCollisionDist * 2.0f);
+
+    for (uint32_t i = 0; i < count; ++i)
+    {
+        if (m_inverseMasses[i] <= 0.0f)
+        {
+            continue;
+        }
+
+        m_selfCollisionNeighbors.clear();
+        m_spatialHash.query(m_positions[i], m_selfCollisionDist, i,
+                            m_selfCollisionNeighbors);
+
+        for (uint32_t j : m_selfCollisionNeighbors)
+        {
+            // Avoid duplicate pairs (only process i < j)
+            if (j <= i)
+            {
+                continue;
+            }
+            if (m_inverseMasses[j] <= 0.0f)
+            {
+                continue;
+            }
+            // Skip adjacent grid neighbors (they share mesh edges/triangles)
+            if (areGridAdjacent(i, j))
+            {
+                continue;
+            }
+
+            glm::vec3 diff = m_positions[j] - m_positions[i];
+            float dist = glm::length(diff);
+
+            if (dist < m_selfCollisionDist && dist > 1e-7f)
+            {
+                // Push particles apart symmetrically
+                glm::vec3 normal = diff / dist;
+                float correction = (m_selfCollisionDist - dist) * 0.5f;
+                m_positions[i] -= normal * correction;
+                m_positions[j] += normal * correction;
+
+                // Dampen relative velocity along collision normal
+                glm::vec3 relVel = m_velocities[j] - m_velocities[i];
+                float relVelN = glm::dot(relVel, normal);
+                if (relVelN < 0.0f)
+                {
+                    m_velocities[i] += normal * (relVelN * 0.5f);
+                    m_velocities[j] -= normal * (relVelN * 0.5f);
+                }
+            }
+        }
+    }
+}
+
+bool ClothSimulator::areGridAdjacent(uint32_t i, uint32_t j) const
+{
+    if (m_gridW == 0)
+    {
+        return false;
+    }
+
+    uint32_t ri = i / m_gridW;
+    uint32_t ci = i % m_gridW;
+    uint32_t rj = j / m_gridW;
+    uint32_t cj = j % m_gridW;
+
+    int dr = static_cast<int>(ri) - static_cast<int>(rj);
+    int dc = static_cast<int>(ci) - static_cast<int>(cj);
+
+    return (dr >= -1 && dr <= 1 && dc >= -1 && dc <= 1);
 }
 
 void ClothSimulator::recomputeNormals()
