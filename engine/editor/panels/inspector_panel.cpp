@@ -1515,6 +1515,17 @@ void InspectorPanel::drawWaterSurface(Entity& entity)
             ImGui::PopID();
         }
 
+        // --- Caustics ---
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Caustics");
+        ImGui::Checkbox("Enable Caustics", &config.causticsEnabled);
+        if (config.causticsEnabled)
+        {
+            ImGui::SliderFloat("Caustics Intensity", &config.causticsIntensity, 0.0f, 1.0f);
+            ImGui::SliderFloat("Caustics Scale", &config.causticsScale, 0.01f, 0.5f);
+        }
+
         // --- Geometry ---
         ImGui::Spacing();
         ImGui::Separator();

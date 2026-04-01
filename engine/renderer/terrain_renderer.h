@@ -71,7 +71,8 @@ public:
     /// Call each frame when water surfaces exist.
     void setCausticsParams(bool enabled, float waterY, float time, GLuint causticsTexture,
                            const glm::vec2& center = glm::vec2(0.0f),
-                           const glm::vec2& halfExtent = glm::vec2(0.0f));
+                           const glm::vec2& halfExtent = glm::vec2(0.0f),
+                           float intensity = 0.15f, float scale = 0.1f);
 
     /// @brief Gets the number of draw calls from the last frame.
     int getLastDrawCallCount() const { return m_lastDrawCallCount; }
@@ -110,6 +111,8 @@ private:
     GLuint m_causticsTexture = 0;  // Not owned — borrowed from Renderer
     glm::vec2 m_causticsCenter = glm::vec2(0.0f);
     glm::vec2 m_causticsHalfExtent = glm::vec2(0.0f);
+    float m_causticsIntensity = 0.15f;
+    float m_causticsScale = 0.1f;
 
     // Stats
     int m_lastDrawCallCount = 0;

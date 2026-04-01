@@ -863,10 +863,16 @@ void Engine::run()
                 glm::vec2 center(waterX, waterZ);
                 glm::vec2 halfExtent(waterCfg.width * 0.5f, waterCfg.depth * 0.5f);
 
-                m_renderer->setCausticsParams(true, waterY, elapsed, center, halfExtent);
-                m_terrainRenderer.setCausticsParams(true, waterY, elapsed,
+                bool causticsOn = waterCfg.causticsEnabled;
+                m_renderer->setCausticsParams(causticsOn, waterY, elapsed,
+                                               center, halfExtent,
+                                               waterCfg.causticsIntensity,
+                                               waterCfg.causticsScale);
+                m_terrainRenderer.setCausticsParams(causticsOn, waterY, elapsed,
                                                      m_renderer->getCausticsTexture(),
-                                                     center, halfExtent);
+                                                     center, halfExtent,
+                                                     waterCfg.causticsIntensity,
+                                                     waterCfg.causticsScale);
             }
             else
             {

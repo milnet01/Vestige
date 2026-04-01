@@ -2538,8 +2538,8 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
     {
         glBindTextureUnit(9, m_causticsTexture);
         m_sceneShader.setInt("u_causticsTex", 9);
-        m_sceneShader.setFloat("u_causticsScale", 0.1f);
-        m_sceneShader.setFloat("u_causticsIntensity", 0.15f);
+        m_sceneShader.setFloat("u_causticsScale", m_causticsScale);
+        m_sceneShader.setFloat("u_causticsIntensity", m_causticsIntensity);
         m_sceneShader.setFloat("u_causticsTime", m_causticsTime);
         m_sceneShader.setFloat("u_waterY", m_causticsWaterY);
         m_sceneShader.setVec2("u_waterCenter", m_causticsCenter);
@@ -3228,13 +3228,16 @@ void Renderer::generateCausticsTexture()
 }
 
 void Renderer::setCausticsParams(bool enabled, float waterY, float time,
-                                  const glm::vec2& center, const glm::vec2& halfExtent)
+                                  const glm::vec2& center, const glm::vec2& halfExtent,
+                                  float intensity, float scale)
 {
     m_causticsEnabled = enabled;
     m_causticsWaterY = waterY;
     m_causticsTime = time;
     m_causticsCenter = center;
     m_causticsHalfExtent = halfExtent;
+    m_causticsIntensity = intensity;
+    m_causticsScale = scale;
 }
 
 // ---------------------------------------------------------------------------

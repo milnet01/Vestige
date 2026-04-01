@@ -271,7 +271,8 @@ public:
     /// @param halfExtent Half-width and half-depth of the water surface.
     void setCausticsParams(bool enabled, float waterY, float time,
                            const glm::vec2& center = glm::vec2(0.0f),
-                           const glm::vec2& halfExtent = glm::vec2(0.0f));
+                           const glm::vec2& halfExtent = glm::vec2(0.0f),
+                           float intensity = 0.15f, float scale = 0.1f);
 
     /// @brief Gets the procedural caustics texture ID (for external renderers like terrain).
     GLuint getCausticsTexture() const { return m_causticsTexture; }
@@ -634,6 +635,8 @@ private:
     float m_causticsTime = 0.0f;
     glm::vec2 m_causticsCenter = glm::vec2(0.0f);
     glm::vec2 m_causticsHalfExtent = glm::vec2(0.0f);
+    float m_causticsIntensity = 0.15f;
+    float m_causticsScale = 0.1f;
     void generateCausticsTexture();
 
     // Frustum culling statistics (updated each frame in renderScene)
