@@ -10,6 +10,8 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 
+#include <vector>
+
 namespace Vestige
 {
 
@@ -26,7 +28,9 @@ enum class CollisionShapeType : uint8_t
 {
     BOX,
     SPHERE,
-    CAPSULE
+    CAPSULE,
+    CONVEX_HULL,  ///< Built from collisionVertices (Jolt builds hull automatically).
+    MESH          ///< Static-only triangle mesh from collisionVertices + collisionIndices.
 };
 
 /// @brief Component that represents a physics body in the Jolt simulation.
@@ -48,6 +52,19 @@ public:
     float mass = 1.0f;
     float friction = 0.5f;
     float restitution = 0.3f;
+
+    /// @brief Vertex positions for CONVEX_HULL or MESH shapes.
+    /// For CONVEX_HULL, only positions are needed (Jolt builds the hull).
+    /// For MESH, both vertices and indices are required.
+    std::vector<glm::vec3> collisionVertices;
+
+    /// @brief Triangle indices for MESH shapes (3 indices per triangle, CCW winding).
+    std::vector<uint32_t> collisionIndices;
+
+    /// @brief Populates collisionVertices and collisionIndices from mesh vertex data.
+    /// Extracts position components from full vertex structs.
+    void setCollisionMesh(const glm::vec3* positions, size_t vertexCount,
+                          const uint32_t* indices = nullptr, size_t indexCount = 0);
 
     /// @brief Creates the Jolt body in the physics world.
     /// Must be called after the entity has a valid transform.

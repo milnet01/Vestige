@@ -52,6 +52,7 @@ private:
     void drawEmissiveLight(Entity& entity);
     void drawParticleEmitter(Entity& entity);
     void drawWaterSurface(Entity& entity);
+    void drawRigidBody(Entity& entity);
     void drawClothComponent(Entity& entity);
 
     MaterialPreview m_materialPreview;

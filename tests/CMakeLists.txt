@@ -67,6 +67,7 @@ add_executable(vestige_tests
     test_density_map.cpp
     test_procedural_mesh.cpp
     test_facial_animation.cpp
+    test_fabric_material.cpp
 )
 
 target_link_libraries(vestige_tests
