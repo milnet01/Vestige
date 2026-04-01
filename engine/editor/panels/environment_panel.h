@@ -4,6 +4,8 @@
 
 #include "editor/tools/brush_tool.h"
 #include "environment/biome_preset.h"
+#include "environment/density_map.h"
+#include "environment/terrain.h"
 
 namespace Vestige
 {
@@ -20,7 +22,9 @@ public:
     /// @param brushTool The brush tool to configure.
     /// @param manager The foliage manager (for stats display).
     /// @param history Command history (for undo commands).
-    void draw(BrushTool& brushTool, FoliageManager& manager, CommandHistory& history);
+    /// @param terrain Optional terrain for bank blend controls (nullptr = hide controls).
+    void draw(BrushTool& brushTool, FoliageManager& manager, CommandHistory& history,
+              Terrain* terrain = nullptr);
 
     /// @brief Gets the biome library for preset access.
     BiomeLibrary& getBiomeLibrary() { return m_biomeLibrary; }
@@ -31,10 +35,21 @@ public:
     /// @brief Toggle panel visibility.
     void setOpen(bool open) { m_open = open; }
 
+    /// @brief Gets the density map (creates on first access if terrain is set).
+    DensityMap& getDensityMap() { return m_densityMap; }
+
 private:
     bool m_open = false;
     BiomeLibrary m_biomeLibrary;
     int m_selectedBiome = 0;
+
+    // Density map
+    DensityMap m_densityMap;
+
+    // Bank blend
+    Terrain::BankBlendConfig m_bankBlendConfig;
+    glm::vec2 m_bankWaterCenter{0.0f};
+    glm::vec2 m_bankWaterHalfExtent{25.0f};
 };
 
 } // namespace Vestige

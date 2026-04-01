@@ -919,4 +919,123 @@ void Terrain::generateAutoTexture(const AutoTextureConfig& config)
     Logger::info("Terrain: auto-texture generated (slope/altitude blending)");
 }
 
+void Terrain::applyBankBlend(const glm::vec2& waterCenter,
+                              const glm::vec2& waterHalfExtent,
+                              const BankBlendConfig& config)
+{
+    if (!m_initialized)
+    {
+        return;
+    }
+
+    int w = m_config.width;
+    int d = m_config.depth;
+    int ch = std::clamp(config.bankChannel, 0, 3);
+
+    // Compute the water AABB in world space
+    float waterMinX = waterCenter.x - waterHalfExtent.x;
+    float waterMaxX = waterCenter.x + waterHalfExtent.x;
+    float waterMinZ = waterCenter.y - waterHalfExtent.y;
+    float waterMaxZ = waterCenter.y + waterHalfExtent.y;
+
+    // Expand search region by blend width
+    float searchMinX = waterMinX - config.blendWidth;
+    float searchMaxX = waterMaxX + config.blendWidth;
+    float searchMinZ = waterMinZ - config.blendWidth;
+    float searchMaxZ = waterMaxZ + config.blendWidth;
+
+    // Convert to texel range
+    float txMin = 0.0f, tzMin = 0.0f, txMax = 0.0f, tzMax = 0.0f;
+    worldToTexel(searchMinX, searchMinZ, txMin, tzMin);
+    worldToTexel(searchMaxX, searchMaxZ, txMax, tzMax);
+
+    int x0 = std::max(0, static_cast<int>(std::floor(txMin)));
+    int z0 = std::max(0, static_cast<int>(std::floor(tzMin)));
+    int x1 = std::min(w - 1, static_cast<int>(std::ceil(txMax)));
+    int z1 = std::min(d - 1, static_cast<int>(std::ceil(tzMax)));
+
+    // Smoothstep helper
+    auto smoothstep = [](float edge0, float edge1, float val) -> float {
+        float t = std::clamp((val - edge0) / (edge1 - edge0), 0.0f, 1.0f);
+        return t * t * (3.0f - 2.0f * t);
+    };
+
+    for (int z = z0; z <= z1; ++z)
+    {
+        for (int x = x0; x <= x1; ++x)
+        {
+            // Convert texel to world position
+            float wx = m_config.origin.x + static_cast<float>(x) * m_config.spacingX;
+            float wz = m_config.origin.z + static_cast<float>(z) * m_config.spacingZ;
+
+            // Signed distance to water AABB (negative = inside, positive = outside)
+            float dx = std::max(waterMinX - wx, std::max(0.0f, wx - waterMaxX));
+            float dz = std::max(waterMinZ - wz, std::max(0.0f, wz - waterMaxZ));
+            float dist = std::sqrt(dx * dx + dz * dz);
+
+            // Check if we're inside the water body
+            bool insideWater = (wx >= waterMinX && wx <= waterMaxX &&
+                                wz >= waterMinZ && wz <= waterMaxZ);
+
+            float blendFactor = 0.0f;
+            if (insideWater)
+            {
+                // Inside the water: full bank material
+                blendFactor = config.bankStrength;
+            }
+            else if (dist < config.blendWidth)
+            {
+                // Outside but within blend range: smooth falloff
+                blendFactor = config.bankStrength * (1.0f - smoothstep(0.0f, config.blendWidth, dist));
+            }
+            else
+            {
+                continue;  // Outside blend range
+            }
+
+            // Blend bank channel with existing splatmap
+            size_t idx = static_cast<size_t>(z * w + x);
+            glm::vec4& splat = m_splatData[idx];
+
+            // Increase bank channel, decrease others proportionally
+            float currentBank = splat[ch];
+            float newBank = currentBank + (1.0f - currentBank) * blendFactor;
+
+            // Scale other channels down to maintain sum = 1
+            float otherSum = 0.0f;
+            for (int c = 0; c < 4; ++c)
+            {
+                if (c != ch)
+                {
+                    otherSum += splat[c];
+                }
+            }
+
+            if (otherSum > 0.0f)
+            {
+                float scale = (1.0f - newBank) / otherSum;
+                for (int c = 0; c < 4; ++c)
+                {
+                    if (c != ch)
+                    {
+                        splat[c] *= scale;
+                    }
+                }
+            }
+            splat[ch] = newBank;
+        }
+    }
+
+    // Upload modified region to GPU
+    int regionW = x1 - x0 + 1;
+    int regionH = z1 - z0 + 1;
+    if (regionW > 0 && regionH > 0)
+    {
+        updateSplatmapRegion(x0, z0, regionW, regionH);
+    }
+
+    Logger::info("Terrain: bank blending applied (width=" + std::to_string(config.blendWidth)
+                 + "m, channel=" + std::to_string(ch) + ")");
+}
+
 } // namespace Vestige

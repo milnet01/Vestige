@@ -12,7 +12,7 @@ namespace Vestige
 {
 
 void EnvironmentPanel::draw(BrushTool& brushTool, FoliageManager& manager,
-                             CommandHistory& history)
+                             CommandHistory& history, Terrain* terrain)
 {
     (void)history;
 
@@ -59,8 +59,8 @@ void EnvironmentPanel::draw(BrushTool& brushTool, FoliageManager& manager,
     ImGui::SameLine();
 
     int modeInt = static_cast<int>(brushTool.mode);
-    const char* modeNames[] = {"Foliage", "Scatter", "Tree", "Path", "Eraser"};
-    if (ImGui::Combo("##Mode", &modeInt, modeNames, 5))
+    const char* modeNames[] = {"Foliage", "Scatter", "Tree", "Path", "Eraser", "Density"};
+    if (ImGui::Combo("##Mode", &modeInt, modeNames, 6))
     {
         brushTool.mode = static_cast<BrushTool::Mode>(modeInt);
     }
@@ -162,6 +162,93 @@ void EnvironmentPanel::draw(BrushTool& brushTool, FoliageManager& manager,
         ImGui::SliderFloat("Min Spacing", &brushTool.treeConfig.minSpacing,
                            1.0f, 15.0f, "%.1f m");
         ImGui::TextDisabled("Trees closer than this will be rejected");
+    }
+
+    // Density map controls (only in DENSITY mode)
+    if (brushTool.mode == BrushTool::Mode::DENSITY)
+    {
+        ImGui::Text("Density Map");
+
+        if (!m_densityMap.isInitialized())
+        {
+            if (ImGui::Button("Create Density Map"))
+            {
+                // Default: covers 256x256m centered at origin, 1 texel/m
+                m_densityMap.initialize(-128.0f, -128.0f, 256.0f, 256.0f, 1.0f);
+                brushTool.densityMap = &m_densityMap;
+            }
+            ImGui::TextDisabled("No density map. Create one to start painting.");
+        }
+        else
+        {
+            brushTool.densityMap = &m_densityMap;
+
+            ImGui::Text("Size: %dx%d (%.0fm x %.0fm)",
+                        m_densityMap.getWidth(), m_densityMap.getHeight(),
+                        static_cast<double>(m_densityMap.getWorldExtent().x),
+                        static_cast<double>(m_densityMap.getWorldExtent().y));
+
+            ImGui::SliderFloat("Paint Value", &brushTool.densityPaintValue, 0.0f, 1.0f, "%.2f");
+            ImGui::TextDisabled("0 = block foliage, 1 = allow foliage");
+
+            ImGui::SliderFloat("Strength", &brushTool.densityPaintStrength, 0.01f, 1.0f, "%.2f");
+
+            if (ImGui::Button("Fill All"))
+            {
+                m_densityMap.fill(1.0f);
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Clear All"))
+            {
+                m_densityMap.fill(0.0f);
+            }
+        }
+    }
+    else
+    {
+        // When not in density mode, still link density map if it exists
+        if (m_densityMap.isInitialized())
+        {
+            brushTool.densityMap = &m_densityMap;
+        }
+        else
+        {
+            brushTool.densityMap = nullptr;
+        }
+    }
+
+    // Bank blend controls
+    if (terrain && terrain->isInitialized())
+    {
+        ImGui::Separator();
+        if (ImGui::CollapsingHeader("Bank Blending"))
+        {
+            ImGui::SliderFloat("Blend Width", &m_bankBlendConfig.blendWidth,
+                               0.5f, 15.0f, "%.1f m");
+            ImGui::TextDisabled("Distance from water edge to blend bank material");
+
+            const char* channelNames[] = {"R (Grass)", "G (Rock)", "B (Dirt)", "A (Sand)"};
+            ImGui::Combo("Bank Material", &m_bankBlendConfig.bankChannel, channelNames, 4);
+
+            ImGui::SliderFloat("Bank Strength", &m_bankBlendConfig.bankStrength,
+                               0.0f, 1.0f, "%.2f");
+
+            ImGui::DragFloat2("Water Center", &m_bankWaterCenter.x, 0.5f);
+            ImGui::DragFloat2("Water Half-Extent", &m_bankWaterHalfExtent.x, 0.5f, 1.0f, 500.0f);
+
+            if (ImGui::Button("Apply Bank Blend"))
+            {
+                terrain->applyBankBlend(m_bankWaterCenter, m_bankWaterHalfExtent,
+                                        m_bankBlendConfig);
+            }
+            ImGui::SameLine();
+            ImGui::TextDisabled("(?)");
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("Blends bank material into terrain splatmap\n"
+                                  "near the water body edges.");
+            }
+        }
     }
 
     ImGui::Separator();

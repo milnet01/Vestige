@@ -948,7 +948,7 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
         // --- Environment painting panel ---
         if (m_foliageManager)
         {
-            m_environmentPanel.draw(m_brushTool, *m_foliageManager, m_commandHistory);
+            m_environmentPanel.draw(m_brushTool, *m_foliageManager, m_commandHistory, m_terrain);
         }
 
         // --- Terrain panel ---

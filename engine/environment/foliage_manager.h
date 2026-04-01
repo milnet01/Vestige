@@ -2,6 +2,7 @@
 /// @brief Manages the chunk grid of environment instances with paint/erase/cull API.
 #pragma once
 
+#include "environment/density_map.h"
 #include "environment/foliage_chunk.h"
 #include "environment/foliage_instance.h"
 #include "utils/aabb.h"
@@ -42,6 +43,7 @@ public:
     /// @param density Instances per square meter.
     /// @param falloff Edge falloff (0 = sharp edge, 1 = full taper).
     /// @param config Type configuration (scale range, tint variation).
+    /// @param densityMap Optional density map for spatial modulation (nullptr = no modulation).
     /// @return List of added instances with their chunk keys (for undo).
     std::vector<FoliageInstanceRef> paintFoliage(
         uint32_t typeId,
@@ -49,7 +51,8 @@ public:
         float radius,
         float density,
         float falloff,
-        const FoliageTypeConfig& config);
+        const FoliageTypeConfig& config,
+        const DensityMap* densityMap = nullptr);
 
     /// @brief Erases foliage of the given type within a radius.
     /// @return List of removed instances with their chunk keys (for undo).
@@ -89,6 +92,7 @@ public:
     /// @param radius Brush radius.
     /// @param density Instances per m².
     /// @param falloff Edge falloff.
+    /// @param densityMap Optional density map for spatial modulation (nullptr = no modulation).
     /// @return References to added instances (for undo).
     std::vector<std::pair<uint64_t, ScatterInstance>> paintScatter(
         const ScatterTypeConfig& config,
@@ -96,7 +100,8 @@ public:
         const glm::vec3& center,
         float radius,
         float density,
-        float falloff);
+        float falloff,
+        const DensityMap* densityMap = nullptr);
 
     /// @brief Erases scatter instances within a radius.
     /// @return References to removed instances (for undo).
@@ -126,6 +131,14 @@ public:
 
     /// @brief Removes a tree at a specific position (for undo/redo).
     void removeTreeAt(uint64_t chunkKey, const glm::vec3& position);
+
+    // --- Path clearing ---
+
+    /// @brief Erases all foliage, scatter, and trees along a spline path.
+    /// @param path The spline path to clear along.
+    /// @param margin Extra clearance beyond the path's width (meters).
+    /// @return Total number of instances removed.
+    int clearAlongPath(const SplinePath& path, float margin = 0.5f);
 
     // --- Stats ---
 
