@@ -201,6 +201,16 @@ Use **parallel subagents**, each responsible for one audit category. Each subage
 - Precision qualifiers and floating-point safety
 - Vertex attribute layout consistency between C++ and GLSL
 
+**Subagent H — Scene Spatial Integrity**
+- Object placement: no entities spawning inside collision volumes or other solid geometry
+- Containment: child objects (furniture, curtains, fixtures) fit within their containing structure, accounting for wall thickness
+- Collider margins: dynamic objects have ≥ 5cm clearance from collider surfaces at rest position
+- Collider-geometry sync: collision shapes reference the same dimension variables as the geometry they approximate (no duplicated magic numbers)
+- Caging detection: no dynamic object enclosed by colliders on all sides where constraint fighting could occur
+- Z-fighting: no coplanar surfaces at identical depths without offset
+- Cloth-specific: cloth panels sized to fit within attachment points, collider spheres placed at nearby pillars/posts
+- Cross-reference scene construction code against CODING_STANDARDS.md §9 (Scene Construction and Spatial Integrity)
+
 ### Subagent Rules
 - Each subagent uses grep/glob to find relevant files, then reads only those
 - Each subagent returns findings as a concise bullet list: `file:line — issue — severity`
@@ -369,6 +379,17 @@ This is the complete list of what the audit checks. Categories marked with (A) a
 - [ ] SECURITY.md is complete and current
 - [ ] AUDIT_STANDARDS.md is complete and current
 - [ ] API documentation (Doxygen) on all public interfaces
+
+### Scene Spatial Integrity
+- [ ] No entities spawn inside collision volumes or other solid geometry
+- [ ] Child objects fit within their containing structure (accounting for wall thickness)
+- [ ] Dynamic objects have ≥ 5cm clearance from collider surfaces at rest
+- [ ] Collision shapes reference shared dimension constants (no duplicated magic numbers)
+- [ ] No dynamic objects caged by colliders on all sides
+- [ ] No coplanar surfaces at identical depths (z-fighting)
+- [ ] Cloth panels sized to fit within attachment points
+- [ ] Cloth collider spheres placed at nearby rigid geometry (pillars, posts, frames)
+- [ ] Scene construction code complies with CODING_STANDARDS.md §9
 
 ### Cross-Platform & Compatibility
 - [ ] Platform-specific code properly guarded with #ifdef

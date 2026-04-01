@@ -2,6 +2,7 @@
 /// @brief Entity component that owns a ClothSimulator and DynamicMesh for rendering.
 #pragma once
 
+#include "physics/cloth_presets.h"
 #include "physics/cloth_simulator.h"
 #include "renderer/dynamic_mesh.h"
 #include "renderer/material.h"
@@ -44,15 +45,32 @@ public:
     /// Call after externally modifying particle positions (e.g., pinning setup).
     void syncMesh();
 
+    /// @brief Resets the cloth to its initial hanging position.
+    void reset();
+
     /// @brief Returns true if initialize() has been called successfully.
     bool isReady() const;
+
+    /// @brief Gets the current preset type (CUSTOM if manually modified).
+    ClothPresetType getPresetType() const { return m_presetType; }
+
+    /// @brief Sets the preset type tracker (does not apply parameters).
+    void setPresetType(ClothPresetType type) { m_presetType = type; }
+
+    /// @brief Applies a preset's solver and wind parameters without reinitializing the grid.
+    void applyPreset(ClothPresetType type);
 
 private:
     ClothSimulator m_simulator;
     DynamicMesh m_mesh;
     std::shared_ptr<Material> m_material;
     std::vector<Vertex> m_vertexBuffer;  ///< CPU-side vertex data for mesh updates
+    ClothPresetType m_presetType = ClothPresetType::CUSTOM;
+    float m_timeAccumulator = 0.0f;      ///< Fixed timestep accumulator
     bool m_ready = false;
+
+    static constexpr float FIXED_DT = 1.0f / 60.0f;  ///< Simulate at 60 Hz
+    static constexpr int MAX_STEPS_PER_FRAME = 4;     ///< Safety cap
 };
 
 } // namespace Vestige

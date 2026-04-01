@@ -11,6 +11,7 @@
 #include "scene/light_component.h"
 #include "scene/particle_emitter.h"
 #include "scene/water_surface.h"
+#include "physics/cloth_component.h"
 #include "editor/commands/particle_property_command.h"
 #include "editor/widgets/curve_editor_widget.h"
 #include "editor/widgets/gradient_editor_widget.h"
@@ -260,6 +261,12 @@ void InspectorPanel::draw(Scene* scene, Selection& selection)
     if (entity->hasComponent<WaterSurfaceComponent>())
     {
         drawWaterSurface(*entity);
+    }
+
+    // --- Cloth Simulation ---
+    if (entity->hasComponent<ClothComponent>())
+    {
+        drawClothComponent(*entity);
     }
 
     // --- Multi-selection info ---
@@ -1427,6 +1434,159 @@ void InspectorPanel::drawWaterSurface(Entity& entity)
         ImGui::SliderInt("Grid Resolution", &config.gridResolution, 16, 256);
     }
     ImGui::PopStyleVar();
+    ImGui::Spacing();
+}
+
+// ---------------------------------------------------------------------------
+// Cloth Simulation
+// ---------------------------------------------------------------------------
+
+void InspectorPanel::drawClothComponent(Entity& entity)
+{
+    auto* cloth = entity.getComponent<ClothComponent>();
+    if (!cloth || !cloth->isReady()) return;
+
+    if (!drawComponentHeader("Cloth Simulation")) return;
+
+    auto& sim = cloth->getSimulator();
+    const auto& config = sim.getConfig();
+
+    // --- Preset selector ---
+    ClothPresetType currentPreset = cloth->getPresetType();
+    int presetIdx = static_cast<int>(currentPreset);
+
+    const char* presetNames[] = {
+        "Custom", "Linen Curtain", "Tent Fabric", "Banner", "Heavy Drape", "Stiff Fence"
+    };
+    static_assert(static_cast<int>(ClothPresetType::COUNT) == 6,
+                  "Update presetNames if ClothPresetType changes");
+
+    if (ImGui::Combo("Preset", &presetIdx, presetNames,
+                      static_cast<int>(ClothPresetType::COUNT)))
+    {
+        auto type = static_cast<ClothPresetType>(presetIdx);
+        cloth->applyPreset(type);
+    }
+
+    // --- Reset button ---
+    if (ImGui::Button("Reset Simulation"))
+    {
+        cloth->reset();
+    }
+
+    ImGui::Spacing();
+    ImGui::Separator();
+
+    // Track whether user manually edits any parameter (switches preset to Custom)
+    bool paramChanged = false;
+
+    // --- Solver section ---
+    if (ImGui::TreeNodeEx("Solver", ImGuiTreeNodeFlags_DefaultOpen))
+    {
+        // Read-only grid info
+        ImGui::Text("Grid: %u x %u", sim.getGridWidth(), sim.getGridHeight());
+        ImGui::Text("Spacing: %.3f m", static_cast<double>(config.spacing));
+
+        // Editable parameters
+        float mass = config.particleMass;
+        if (ImGui::DragFloat("Mass", &mass, 0.001f, 0.001f, 1.0f, "%.3f kg"))
+        {
+            sim.setParticleMass(mass);
+            paramChanged = true;
+        }
+
+        int substeps = config.substeps;
+        if (ImGui::SliderInt("Substeps", &substeps, 1, 20))
+        {
+            sim.setSubsteps(substeps);
+            paramChanged = true;
+        }
+
+        float damping = config.damping;
+        if (ImGui::DragFloat("Damping", &damping, 0.001f, 0.0f, 0.5f, "%.3f"))
+        {
+            sim.setDamping(damping);
+            paramChanged = true;
+        }
+
+        ImGui::TreePop();
+    }
+
+    // --- Compliance section ---
+    if (ImGui::TreeNodeEx("Compliance", ImGuiTreeNodeFlags_DefaultOpen))
+    {
+        float stretch = config.stretchCompliance;
+        if (ImGui::DragFloat("Stretch", &stretch, 0.00001f, 0.0f, 0.01f, "%.5f"))
+        {
+            sim.setStretchCompliance(stretch);
+            paramChanged = true;
+        }
+
+        float shear = config.shearCompliance;
+        if (ImGui::DragFloat("Shear", &shear, 0.0001f, 0.0f, 0.1f, "%.4f"))
+        {
+            sim.setShearCompliance(shear);
+            paramChanged = true;
+        }
+
+        float bend = config.bendCompliance;
+        if (ImGui::DragFloat("Bend", &bend, 0.01f, 0.0f, 2.0f, "%.3f"))
+        {
+            sim.setBendCompliance(bend);
+            paramChanged = true;
+        }
+
+        ImGui::TreePop();
+    }
+
+    // --- Wind section ---
+    if (ImGui::TreeNodeEx("Wind", ImGuiTreeNodeFlags_DefaultOpen))
+    {
+        glm::vec3 windDir = sim.getWindDirection();
+        float windStrength = sim.getWindStrength();
+
+        if (ImGui::DragFloat3("Direction", &windDir.x, 0.01f, -1.0f, 1.0f, "%.2f"))
+        {
+            float dirLen = glm::length(windDir);
+            if (dirLen > 0.001f)
+            {
+                windDir /= dirLen;
+            }
+            sim.setWind(windDir, windStrength);
+            paramChanged = true;
+        }
+
+        if (ImGui::DragFloat("Strength", &windStrength, 0.1f, 0.0f, 30.0f, "%.1f"))
+        {
+            sim.setWind(windDir, windStrength);
+            paramChanged = true;
+        }
+
+        float drag = sim.getDragCoefficient();
+        if (ImGui::DragFloat("Drag", &drag, 0.1f, 0.0f, 10.0f, "%.1f"))
+        {
+            sim.setDragCoefficient(drag);
+            paramChanged = true;
+        }
+
+        ImGui::TreePop();
+    }
+
+    // --- Info section ---
+    if (ImGui::TreeNode("Info"))
+    {
+        ImGui::Text("Particles: %u", sim.getParticleCount());
+        ImGui::Text("Constraints: %u", sim.getConstraintCount());
+        ImGui::Text("Pinned: %u", sim.getPinnedCount());
+        ImGui::TreePop();
+    }
+
+    // If any parameter was manually changed, switch preset to Custom
+    if (paramChanged && cloth->getPresetType() != ClothPresetType::CUSTOM)
+    {
+        cloth->setPresetType(ClothPresetType::CUSTOM);
+    }
+
     ImGui::Spacing();
 }
 

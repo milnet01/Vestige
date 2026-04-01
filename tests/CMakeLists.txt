@@ -59,6 +59,7 @@ add_executable(vestige_tests
     test_physics_character_controller.cpp
     test_physics_constraint.cpp
     test_cloth_simulator.cpp
+    test_cloth_presets.cpp
 )
 
 target_link_libraries(vestige_tests

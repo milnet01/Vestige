@@ -49,8 +49,29 @@ void ClothComponent::update(float deltaTime)
         return;
     }
 
-    // Run physics simulation
-    m_simulator.simulate(deltaTime);
+    // Fixed timestep accumulator: simulate at a constant rate (60 Hz) regardless
+    // of actual frame rate. This prevents frame-rate-dependent behavior where
+    // high FPS causes the cloth to appear rigid and not settle properly.
+    m_timeAccumulator += deltaTime;
+
+    int steps = 0;
+    while (m_timeAccumulator >= FIXED_DT && steps < MAX_STEPS_PER_FRAME)
+    {
+        m_simulator.simulate(FIXED_DT);
+        m_timeAccumulator -= FIXED_DT;
+        ++steps;
+    }
+
+    // Drain excess accumulation (e.g. after a long pause/hitch)
+    if (m_timeAccumulator > FIXED_DT * static_cast<float>(MAX_STEPS_PER_FRAME))
+    {
+        m_timeAccumulator = 0.0f;
+    }
+
+    if (steps == 0)
+    {
+        return;  // No simulation step this frame — skip mesh upload
+    }
 
     // Copy updated positions and normals into vertex buffer
     uint32_t count = m_simulator.getParticleCount();
@@ -96,6 +117,50 @@ void ClothComponent::syncMesh()
                                    m_simulator.getIndices().end());
     calculateTangents(m_vertexBuffer, indices);
     m_mesh.updateVertices(m_vertexBuffer);
+}
+
+void ClothComponent::reset()
+{
+    if (!m_ready)
+    {
+        return;
+    }
+
+    m_simulator.reset();
+    syncMesh();
+}
+
+void ClothComponent::applyPreset(ClothPresetType type)
+{
+    if (!m_ready)
+    {
+        return;
+    }
+
+    if (type == ClothPresetType::CUSTOM)
+    {
+        m_presetType = ClothPresetType::CUSTOM;
+        return;
+    }
+
+    ClothPresetConfig preset = ClothPresets::getPresetConfig(type);
+
+    // Apply solver parameters without reinitializing the grid
+    m_simulator.setParticleMass(preset.solver.particleMass);
+    m_simulator.setSubsteps(preset.solver.substeps);
+    m_simulator.setDamping(preset.solver.damping);
+    m_simulator.setStretchCompliance(preset.solver.stretchCompliance);
+    m_simulator.setShearCompliance(preset.solver.shearCompliance);
+    m_simulator.setBendCompliance(preset.solver.bendCompliance);
+
+    // Apply wind: preserve existing direction, update strength and drag
+    glm::vec3 windVel = m_simulator.getWindVelocity();
+    float windLen = glm::length(windVel);
+    glm::vec3 windDir = (windLen > 0.001f) ? windVel / windLen : glm::vec3(0.0f, 0.0f, 1.0f);
+    m_simulator.setWind(windDir, preset.windStrength);
+    m_simulator.setDragCoefficient(preset.dragCoefficient);
+
+    m_presetType = type;
 }
 
 ClothSimulator& ClothComponent::getSimulator()
