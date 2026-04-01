@@ -43,11 +43,22 @@ private:
     void performImport(Scene& scene, ResourceManager& resources, Selection& selection,
                        const glm::vec3& spawnPos);
 
+    /// @brief Analyzes the selected file and populates metadata fields.
+    void analyzeFile();
+
     ImGui::FileBrowser m_fileBrowser;
     bool m_showImportSettings = false;
     std::filesystem::path m_selectedPath;
     std::string m_detectedFormat;
     float m_importScale = 1.0f;
+
+    // File analysis metadata
+    int m_triangleCount = 0;
+    int m_materialCount = 0;
+    int m_meshCount = 0;
+    glm::vec3 m_boundsSize = glm::vec3(0.0f);
+    bool m_hasAnalysis = false;
+    std::string m_scaleWarning;
 };
 
 } // namespace Vestige

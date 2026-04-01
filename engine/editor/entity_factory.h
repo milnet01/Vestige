@@ -68,6 +68,37 @@ public:
 
     /// @brief Creates an entity with a WaterSurfaceComponent (default pool preset).
     static Entity* createWaterSurface(Scene& scene, const glm::vec3& position);
+
+    // --- Architectural ---
+
+    /// @brief Creates a wall entity (3m wide, 3m high, 0.3m thick) with PBR material.
+    static Entity* createWall(Scene& scene, ResourceManager& resources, const glm::vec3& position);
+
+    /// @brief Creates a wall with a door opening.
+    static Entity* createWallWithDoor(Scene& scene, ResourceManager& resources,
+                                       const glm::vec3& position);
+
+    /// @brief Creates a wall with a window opening.
+    static Entity* createWallWithWindow(Scene& scene, ResourceManager& resources,
+                                         const glm::vec3& position);
+
+    /// @brief Creates a 4-wall room with floor (4m x 4m x 3m) grouped under a parent.
+    static Entity* createRoom(Scene& scene, ResourceManager& resources, const glm::vec3& position);
+
+    /// @brief Creates a gable roof (4m x 4m, 1.5m peak).
+    static Entity* createRoof(Scene& scene, ResourceManager& resources, const glm::vec3& position);
+
+    /// @brief Creates a straight staircase (3m height, 10 steps, 1m wide).
+    static Entity* createStairs(Scene& scene, ResourceManager& resources,
+                                 const glm::vec3& position);
+
+    /// @brief Creates a spiral staircase (3m height, 360 degrees).
+    static Entity* createSpiralStairs(Scene& scene, ResourceManager& resources,
+                                       const glm::vec3& position);
+
+    /// @brief Creates a floor slab (4m x 4m, 0.15m thick).
+    static Entity* createFloorSlab(Scene& scene, ResourceManager& resources,
+                                    const glm::vec3& position);
 };
 
 } // namespace Vestige

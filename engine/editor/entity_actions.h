@@ -1,15 +1,17 @@
 /// @file entity_actions.h
-/// @brief Standalone editor actions for entity manipulation — duplicate, delete, transform clipboard.
+/// @brief Standalone editor actions for entity manipulation — duplicate, delete, align, distribute.
 #pragma once
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 #include <glm/glm.hpp>
 
 namespace Vestige
 {
 
+class CommandHistory;
 class Entity;
 class Scene;
 class Selection;
@@ -67,6 +69,41 @@ void pasteTransform(Scene& scene, uint32_t entityId, const TransformClipboard& c
 /// @param selection Editor selection (group entity is auto-selected).
 /// @return Pointer to the group entity, or nullptr if fewer than 2 entities selected.
 Entity* groupEntities(Scene& scene, Selection& selection);
+
+/// @brief Axis for align/distribute operations.
+enum class AlignAxis
+{
+    X,   ///< Left/right.
+    Y,   ///< Top/bottom.
+    Z    ///< Front/back.
+};
+
+/// @brief Anchor point for alignment operations.
+enum class AlignAnchor
+{
+    MIN,     ///< Align to the minimum (left/bottom/front).
+    CENTER,  ///< Align to the center.
+    MAX      ///< Align to the maximum (right/top/back).
+};
+
+/// @brief Aligns all selected entities along the given axis and anchor.
+/// Uses world-space positions. Creates an undoable command.
+/// @param scene The active scene.
+/// @param selection Current selection (must have 2+ entities).
+/// @param history Command history for undo support.
+/// @param axis Axis to align along.
+/// @param anchor Anchor point (MIN, CENTER, MAX).
+void alignEntities(Scene& scene, const Selection& selection,
+                   CommandHistory& history, AlignAxis axis, AlignAnchor anchor);
+
+/// @brief Distributes all selected entities evenly along the given axis.
+/// Spaces entities equally between the outermost entities' positions.
+/// @param scene The active scene.
+/// @param selection Current selection (must have 3+ entities).
+/// @param history Command history for undo support.
+/// @param axis Axis to distribute along.
+void distributeEntities(Scene& scene, const Selection& selection,
+                        CommandHistory& history, AlignAxis axis);
 
 } // namespace EntityActions
 

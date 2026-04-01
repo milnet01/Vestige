@@ -52,6 +52,7 @@ set(ENGINE_SOURCES
     resource/model.cpp
     utils/obj_loader.cpp
     utils/gltf_loader.cpp
+    utils/procedural_mesh.cpp
     utils/gltf_loader_impl.cpp
     utils/cube_loader.cpp
     editor/editor.cpp

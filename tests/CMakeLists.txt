@@ -65,6 +65,7 @@ add_executable(vestige_tests
     test_texture_filter.cpp
     test_ruler_tool.cpp
     test_density_map.cpp
+    test_procedural_mesh.cpp
 )
 
 target_link_libraries(vestige_tests
