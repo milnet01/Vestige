@@ -66,7 +66,8 @@ private:
     void setupDemoScene();
     void setupTabernacleScene();
     void setupVisualTestViewpoints();
-    void drawLightGizmos(Scene& scene, const Selection& selection);
+    void drawLightGizmos(Scene& scene, const Selection& selection,
+                         bool showAll = false);
     void createPhysicsStaticBodies();
 
     EventBus m_eventBus;

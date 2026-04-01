@@ -377,6 +377,22 @@ void InspectorPanel::drawTransform(Entity& entity)
         }
     }
 
+    // --- Dimension display (bounding box size in meters) ---
+    if (auto* mr = entity.getComponent<MeshRenderer>())
+    {
+        if (mr->getMesh())
+        {
+            AABB bounds = mr->getMesh()->getLocalBounds();
+            glm::vec3 size = bounds.getSize() * entity.transform.scale;
+            ImGui::Separator();
+            ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f),
+                               "Dimensions: %.2f x %.2f x %.2f m",
+                               static_cast<double>(size.x),
+                               static_cast<double>(size.y),
+                               static_cast<double>(size.z));
+        }
+    }
+
     ImGui::Spacing();
 }
 
@@ -478,6 +494,25 @@ static void drawTextureSlot(const char* label,
 
     ImGui::SameLine();
     ImGui::Text("%s", label);
+
+    // Texture filter mode dropdown (only when texture is loaded)
+    if (texture && texture->isLoaded())
+    {
+        static const char* filterNames[] = {
+            "Nearest", "Linear", "Trilinear",
+            "Anisotropic 4x", "Anisotropic 8x", "Anisotropic 16x"
+        };
+        int filterIndex = static_cast<int>(texture->getFilterMode());
+        ImGui::SetNextItemWidth(140.0f);
+        char comboId[64];
+        std::snprintf(comboId, sizeof(comboId), "Filter##%s", label);
+        if (ImGui::Combo(comboId, &filterIndex, filterNames, 6))
+        {
+            // const_cast is safe here: we're modifying a shared texture's GL state
+            const_cast<Texture*>(texture.get())
+                ->setFilterMode(static_cast<TextureFilterMode>(filterIndex));
+        }
+    }
 
     ImGui::PopID();
 }

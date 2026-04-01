@@ -25,6 +25,7 @@
 #include <GLFW/glfw3.h>
 #include <glm/gtc/matrix_transform.hpp>
 
+#include <algorithm>
 #include <cmath>
 
 namespace Vestige
@@ -1095,7 +1096,8 @@ void Engine::run()
             }
             if (activeScene)
             {
-                drawLightGizmos(*activeScene, m_editor->getSelection());
+                drawLightGizmos(*activeScene, m_editor->getSelection(),
+                                m_editor->isShowAllLightGizmos());
             }
             m_renderer->bindOutputFbo();
             glm::mat4 vp = m_camera->getProjectionMatrix(aspectRatio)
@@ -1327,42 +1329,29 @@ void Engine::setupVisualTestViewpoints()
         glm::vec3(0.0f, eyeHeight, veilZ + 1.5f), -90.0f, 0.0f, 8, 45.0f});
 }
 
-void Engine::drawLightGizmos(Scene& scene, const Selection& selection)
+void Engine::drawLightGizmos(Scene& scene, const Selection& selection,
+                             bool showAll)
 {
-    if (!selection.hasSelection())
+    // Helper lambda to draw gizmos for a single entity
+    auto drawGizmosForEntity = [&](Entity* entity, float brightness)
     {
-        return;
-    }
-
-    const auto& selectedIds = selection.getSelectedIds();
-    for (uint32_t id : selectedIds)
-    {
-        Entity* entity = scene.findEntityById(id);
-        if (!entity)
-        {
-            continue;
-        }
-
         glm::vec3 worldPos = entity->getWorldPosition();
 
         // Directional light: 3 parallel arrows showing direction
         if (auto* dirComp = entity->getComponent<DirectionalLightComponent>())
         {
-            glm::vec3 color = dirComp->light.diffuse;
+            glm::vec3 color = dirComp->light.diffuse * brightness;
             glm::vec3 dir = glm::normalize(dirComp->light.direction);
             float arrowLen = 2.0f;
             float spacing = 0.3f;
 
-            // Build perpendicular vectors for offset arrows
             glm::vec3 up = (std::abs(glm::dot(dir, glm::vec3(0.0f, 1.0f, 0.0f))) > 0.99f)
                            ? glm::vec3(1.0f, 0.0f, 0.0f)
                            : glm::vec3(0.0f, 1.0f, 0.0f);
             glm::vec3 right = glm::normalize(glm::cross(dir, up));
             glm::vec3 fwd = glm::cross(right, dir);
 
-            // Center arrow
             DebugDraw::arrow(worldPos, worldPos + dir * arrowLen, color);
-            // Offset arrows
             DebugDraw::arrow(worldPos + right * spacing,
                              worldPos + right * spacing + dir * arrowLen, color);
             DebugDraw::arrow(worldPos - right * spacing,
@@ -1376,18 +1365,18 @@ void Engine::drawLightGizmos(Scene& scene, const Selection& selection)
         // Point light: wireframe sphere at effective range
         if (auto* ptComp = entity->getComponent<PointLightComponent>())
         {
-            glm::vec3 color = ptComp->light.diffuse;
+            glm::vec3 color = ptComp->light.diffuse * brightness;
             float range = calculateLightRange(ptComp->light.constant,
                                               ptComp->light.linear,
                                               ptComp->light.quadratic);
-            range = std::min(range, 200.0f); // clamp to avoid absurd gizmos
+            range = std::min(range, 200.0f);
             DebugDraw::wireSphere(worldPos, range, color);
         }
 
         // Spot light: cone wireframe
         if (auto* spotComp = entity->getComponent<SpotLightComponent>())
         {
-            glm::vec3 color = spotComp->light.diffuse;
+            glm::vec3 color = spotComp->light.diffuse * brightness;
             float range = calculateLightRange(spotComp->light.constant,
                                               spotComp->light.linear,
                                               spotComp->light.quadratic);
@@ -1398,12 +1387,47 @@ void Engine::drawLightGizmos(Scene& scene, const Selection& selection)
             DebugDraw::cone(worldPos, spotComp->light.direction,
                             range, outerAngleDeg, color);
 
-            // Inner cone (dimmer, to show soft edge)
             float innerAngleDeg = glm::degrees(
                 std::acos(std::clamp(spotComp->light.innerCutoff, -1.0f, 1.0f)));
             glm::vec3 dimColor = color * 0.4f;
             DebugDraw::cone(worldPos, spotComp->light.direction,
                             range, innerAngleDeg, dimColor, 4);
+        }
+    };
+
+    // Draw dimmed gizmos for all lights when showAll is enabled
+    if (showAll)
+    {
+        const auto& selectedIds = selection.getSelectedIds();
+        scene.forEachEntity([&](Entity& entity)
+        {
+            bool isSelected = std::find(selectedIds.begin(), selectedIds.end(),
+                                        entity.getId()) != selectedIds.end();
+            if (isSelected)
+            {
+                return;
+            }
+
+            bool hasLight = entity.hasComponent<DirectionalLightComponent>()
+                         || entity.hasComponent<PointLightComponent>()
+                         || entity.hasComponent<SpotLightComponent>();
+            if (hasLight)
+            {
+                drawGizmosForEntity(&entity, 0.3f);
+            }
+        });
+    }
+
+    // Draw full-brightness gizmos for selected lights
+    if (selection.hasSelection())
+    {
+        for (uint32_t id : selection.getSelectedIds())
+        {
+            Entity* entity = scene.findEntityById(id);
+            if (entity)
+            {
+                drawGizmosForEntity(entity, 1.0f);
+            }
         }
     }
 }

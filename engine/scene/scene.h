@@ -14,6 +14,7 @@
 
 #include <glad/gl.h>
 
+#include <functional>
 #include <memory>
 #include <string>
 
@@ -145,6 +146,13 @@ public:
     /// @param newParentId New parent (0 = scene root).
     /// @return True if reparenting succeeded.
     bool reparentEntity(uint32_t entityId, uint32_t newParentId);
+
+    /// @brief Calls a function for every entity in the scene (depth-first traversal).
+    /// @param fn Callback invoked with each entity reference.
+    void forEachEntity(const std::function<void(Entity&)>& fn);
+
+    /// @brief Calls a function for every entity in the scene (const version).
+    void forEachEntity(const std::function<void(const Entity&)>& fn) const;
 
     /// @brief Rebuilds the entity ID lookup index from the current hierarchy.
     /// Call after bulk operations (e.g., deserialization) that bypass Scene methods.

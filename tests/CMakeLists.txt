@@ -62,6 +62,8 @@ add_executable(vestige_tests
     test_cloth_presets.cpp
     test_camera_component.cpp
     test_morph_target_pipeline.cpp
+    test_texture_filter.cpp
+    test_ruler_tool.cpp
 )
 
 target_link_libraries(vestige_tests
