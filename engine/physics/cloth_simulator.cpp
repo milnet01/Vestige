@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <unordered_map>
 
 namespace Vestige
 {
@@ -149,8 +150,15 @@ void ClothSimulator::initialize(const ClothConfig& config, uint32_t seed)
         }
     }
 
+    // Build dihedral bending constraints from the triangle mesh
+    buildDihedralConstraints();
+
     // Snapshot initial state for reset()
     m_initialPositions = m_positions;
+
+    // Initialize constraint ordering (will sort when pins are set)
+    m_constraintsSorted = false;
+    m_particleDepth.clear();
 
     // Start in a calm period so the curtain hangs straight before the first gust.
     // The initial timer gives gravity time to settle the cloth into its natural drape.
@@ -194,9 +202,33 @@ void ClothSimulator::simulate(float deltaTime)
         }
     }
 
+    // Sort constraints by depth from pins (once, after pins are set)
+    if (!m_constraintsSorted && !m_pinConstraints.empty())
+    {
+        sortConstraintsByDepth();
+    }
+
     int substeps = std::clamp(m_config.substeps, 1, 64);
 
     float dtSub = deltaTime / static_cast<float>(substeps);
+
+    // Adaptive damping: compute average speed for this frame
+    float adaptiveDamp = 0.0f;
+    if (m_adaptiveDampingFactor > 0.0f)
+    {
+        float totalSpeed = 0.0f;
+        uint32_t freeParticles = 0;
+        for (size_t i = 0; i < m_velocities.size(); ++i)
+        {
+            if (m_inverseMasses[i] > 0.0f)
+            {
+                totalSpeed += glm::length(m_velocities[i]);
+                ++freeParticles;
+            }
+        }
+        float avgSpeed = (freeParticles > 0) ? totalSpeed / static_cast<float>(freeParticles) : 0.0f;
+        adaptiveDamp = m_adaptiveDampingFactor * avgSpeed;
+    }
 
     for (int s = 0; s < substeps; ++s)
     {
@@ -259,6 +291,10 @@ void ClothSimulator::simulate(float deltaTime)
         {
             solveDistanceConstraint(c, c.compliance, dtSub);
         }
+        for (auto& c : m_dihedralConstraints)
+        {
+            solveDihedralConstraint(c, dtSub);
+        }
 
         // 4. Long Range Attachment: prevent cumulative drift from pins
         solveLRAConstraints();
@@ -297,8 +333,9 @@ void ClothSimulator::simulate(float deltaTime)
             }
         }
 
-        // 7. Update velocities and apply damping
-        float dampFactor = 1.0f - m_config.damping;
+        // 7. Update velocities and apply damping (base + adaptive)
+        float effectiveDamping = std::min(m_config.damping + adaptiveDamp, 0.95f);
+        float dampFactor = 1.0f - effectiveDamping;
         for (uint32_t i = 0; i < count; ++i)
         {
             if (m_inverseMasses[i] <= 0.0f)
@@ -416,6 +453,7 @@ bool ClothSimulator::pinParticle(uint32_t index, const glm::vec3& worldPos)
     }
 
     m_pinConstraints.push_back({index, worldPos});
+    m_constraintsSorted = false;  // Re-sort on next simulate
     return true;
 }
 
@@ -433,6 +471,7 @@ void ClothSimulator::unpinParticle(uint32_t index)
             [index](const PinConstraint& p) { return p.index == index; }),
         m_pinConstraints.end()
     );
+    m_constraintsSorted = false;  // Re-sort on next simulate
 }
 
 void ClothSimulator::setPinPosition(uint32_t index, const glm::vec3& worldPos)
@@ -597,6 +636,9 @@ void ClothSimulator::reset()
     m_sleeping = false;
     m_sleepFrames = 0;
 
+    // Re-sort constraints after reset (pins may change)
+    m_constraintsSorted = false;
+
     recomputeNormals();
 }
 
@@ -727,7 +769,71 @@ uint32_t ClothSimulator::getConstraintCount() const
 {
     return static_cast<uint32_t>(m_stretchConstraints.size()
                                   + m_shearConstraints.size()
-                                  + m_bendConstraints.size());
+                                  + m_bendConstraints.size()
+                                  + m_dihedralConstraints.size());
+}
+
+uint32_t ClothSimulator::getDihedralConstraintCount() const
+{
+    return static_cast<uint32_t>(m_dihedralConstraints.size());
+}
+
+// --- Dihedral bending ---
+
+void ClothSimulator::setDihedralBendCompliance(float compliance)
+{
+    m_dihedralCompliance = std::max(0.0f, compliance);
+    for (auto& c : m_dihedralConstraints)
+    {
+        c.compliance = m_dihedralCompliance;
+    }
+}
+
+float ClothSimulator::getDihedralBendCompliance() const
+{
+    return m_dihedralCompliance;
+}
+
+// --- Adaptive damping ---
+
+void ClothSimulator::setAdaptiveDamping(float factor)
+{
+    m_adaptiveDampingFactor = std::max(0.0f, factor);
+}
+
+float ClothSimulator::getAdaptiveDamping() const
+{
+    return m_adaptiveDampingFactor;
+}
+
+// --- Friction ---
+
+void ClothSimulator::setFriction(float staticCoeff, float kineticCoeff)
+{
+    m_staticFriction = std::max(0.0f, staticCoeff);
+    m_kineticFriction = std::max(0.0f, kineticCoeff);
+}
+
+float ClothSimulator::getStaticFriction() const
+{
+    return m_staticFriction;
+}
+
+float ClothSimulator::getKineticFriction() const
+{
+    return m_kineticFriction;
+}
+
+// --- Thick particle model ---
+
+void ClothSimulator::setParticleRadius(float radius)
+{
+    m_particleRadius = std::max(0.0f, radius);
+}
+
+float ClothSimulator::getParticleRadius() const
+{
+    return m_particleRadius;
 }
 
 // --- Solver internals ---
@@ -799,9 +905,40 @@ void ClothSimulator::applyCollisions()
     // exactly to the surface. This prevents tunneling when discrete time steps
     // cause a particle to barely touch the surface — without margin, the next
     // frame's constraint solving can push it back through.
-    static constexpr float COLLISION_MARGIN = 0.015f;  // 1.5cm
+    static constexpr float BASE_COLLISION_MARGIN = 0.015f;  // 1.5cm
+    // Thick particle model: add particle radius to collision margin
+    float COLLISION_MARGIN = BASE_COLLISION_MARGIN + m_particleRadius;
 
     uint32_t count = static_cast<uint32_t>(m_positions.size());
+
+    // Friction helper: apply Coulomb friction to tangential velocity at collision
+    auto applyFriction = [this](glm::vec3& velocity, const glm::vec3& normal)
+    {
+        if (m_staticFriction <= 0.0f && m_kineticFriction <= 0.0f)
+        {
+            return;
+        }
+        float vn = glm::dot(velocity, normal);
+        glm::vec3 vNormal = normal * vn;
+        glm::vec3 vTangent = velocity - vNormal;
+        float vtLen = glm::length(vTangent);
+        if (vtLen < 1e-7f)
+        {
+            return;
+        }
+        float normalSpeed = std::abs(vn);
+        if (vtLen < m_staticFriction * normalSpeed)
+        {
+            // Static friction: stick
+            velocity = vNormal;
+        }
+        else
+        {
+            // Kinetic friction: reduce tangential velocity
+            float reduction = m_kineticFriction * normalSpeed / vtLen;
+            velocity = vNormal + vTangent * std::max(0.0f, 1.0f - reduction);
+        }
+    };
 
     // Ground plane collision
     float groundWithMargin = m_groundPlaneY + COLLISION_MARGIN;
@@ -814,10 +951,12 @@ void ClothSimulator::applyCollisions()
         if (m_positions[i].y < groundWithMargin)
         {
             m_positions[i].y = groundWithMargin;
+            glm::vec3 groundNormal(0.0f, 1.0f, 0.0f);
             if (m_velocities[i].y < 0.0f)
             {
                 m_velocities[i].y = 0.0f;
             }
+            applyFriction(m_velocities[i], groundNormal);
         }
     }
 
@@ -846,6 +985,7 @@ void ClothSimulator::applyCollisions()
                 {
                     m_velocities[i] -= normal * velDotN;
                 }
+                applyFriction(m_velocities[i], normal);
             }
         }
     }
@@ -899,6 +1039,7 @@ void ClothSimulator::applyCollisions()
             {
                 m_velocities[i] += pushDir * velDotN;
             }
+            applyFriction(m_velocities[i], pushDir);
         }
     }
 
@@ -939,6 +1080,7 @@ void ClothSimulator::applyCollisions()
                 {
                     m_velocities[i] -= normal2D * velDotN;
                 }
+                applyFriction(m_velocities[i], normal2D);
             }
         }
     }
@@ -967,6 +1109,7 @@ void ClothSimulator::applyCollisions()
                 {
                     m_velocities[i] -= plane.normal * velDotN;
                 }
+                applyFriction(m_velocities[i], plane.normal);
             }
         }
     }
@@ -1001,6 +1144,7 @@ void ClothSimulator::applyCollisions()
                 {
                     m_velocities[i] -= normal * velDotN;
                 }
+                applyFriction(m_velocities[i], normal);
             }
         }
     }
@@ -1130,6 +1274,267 @@ bool ClothSimulator::areGridAdjacent(uint32_t i, uint32_t j) const
     int dc = static_cast<int>(ci) - static_cast<int>(cj);
 
     return (dr >= -1 && dr <= 1 && dc >= -1 && dc <= 1);
+}
+
+// ---------------------------------------------------------------------------
+// Dihedral bending constraints
+// ---------------------------------------------------------------------------
+
+void ClothSimulator::buildDihedralConstraints()
+{
+    m_dihedralConstraints.clear();
+
+    if (m_indices.size() < 6)
+    {
+        return;  // Need at least 2 triangles
+    }
+
+    // Build edge adjacency: for each edge (sorted vertex pair), store the two
+    // triangles that share it and the wing vertices opposite the edge.
+    // Key: (min(v0,v1), max(v0,v1)) → (wing0, wing1, count)
+    struct EdgeInfo
+    {
+        uint32_t wing[2];
+        int count;
+    };
+
+    // Use a map keyed by packed edge (two uint32_t → one uint64_t)
+    std::unordered_map<uint64_t, EdgeInfo> edgeMap;
+    edgeMap.reserve(m_indices.size());
+
+    auto packEdge = [](uint32_t a, uint32_t b) -> uint64_t
+    {
+        if (a > b) std::swap(a, b);
+        return (static_cast<uint64_t>(a) << 32) | static_cast<uint64_t>(b);
+    };
+
+    for (size_t t = 0; t + 2 < m_indices.size(); t += 3)
+    {
+        uint32_t tri[3] = { m_indices[t], m_indices[t + 1], m_indices[t + 2] };
+
+        for (int e = 0; e < 3; ++e)
+        {
+            uint32_t e0 = tri[e];
+            uint32_t e1 = tri[(e + 1) % 3];
+            uint32_t wing = tri[(e + 2) % 3];  // Vertex opposite this edge
+
+            uint64_t key = packEdge(e0, e1);
+            auto it = edgeMap.find(key);
+            if (it == edgeMap.end())
+            {
+                EdgeInfo info{};
+                info.wing[0] = wing;
+                info.count = 1;
+                edgeMap[key] = info;
+            }
+            else if (it->second.count == 1)
+            {
+                it->second.wing[1] = wing;
+                it->second.count = 2;
+            }
+            // count > 2: non-manifold edge, skip
+        }
+    }
+
+    // Create dihedral constraints for all interior edges (shared by exactly 2 triangles)
+    for (const auto& [key, info] : edgeMap)
+    {
+        if (info.count != 2)
+        {
+            continue;
+        }
+
+        uint32_t edgeV0 = static_cast<uint32_t>(key >> 32);
+        uint32_t edgeV1 = static_cast<uint32_t>(key & 0xFFFFFFFF);
+
+        // p0 = wing of triangle 0, p1 = wing of triangle 1
+        // p2 = edge start, p3 = edge end
+        const glm::vec3& p0 = m_positions[info.wing[0]];
+        const glm::vec3& p1 = m_positions[info.wing[1]];
+        const glm::vec3& p2 = m_positions[edgeV0];
+        const glm::vec3& p3 = m_positions[edgeV1];
+
+        // Compute rest angle
+        glm::vec3 n1 = glm::cross(p2 - p0, p3 - p0);
+        glm::vec3 n2 = glm::cross(p3 - p1, p2 - p1);
+        float len1 = glm::length(n1);
+        float len2 = glm::length(n2);
+
+        float restAngle = 0.0f;  // Default flat
+        if (len1 > 1e-7f && len2 > 1e-7f)
+        {
+            n1 /= len1;
+            n2 /= len2;
+            float cosAngle = glm::clamp(glm::dot(n1, n2), -1.0f, 1.0f);
+            restAngle = std::acos(cosAngle);
+        }
+
+        m_dihedralConstraints.push_back({
+            info.wing[0], info.wing[1], edgeV0, edgeV1,
+            restAngle, m_dihedralCompliance
+        });
+    }
+}
+
+void ClothSimulator::solveDihedralConstraint(DihedralConstraint& c, float dtSub)
+{
+    glm::vec3& p0 = m_positions[c.p0];  // Wing vertex 0
+    glm::vec3& p1 = m_positions[c.p1];  // Wing vertex 1
+    glm::vec3& p2 = m_positions[c.p2];  // Shared edge start
+    glm::vec3& p3 = m_positions[c.p3];  // Shared edge end
+
+    float w0 = m_inverseMasses[c.p0];
+    float w1 = m_inverseMasses[c.p1];
+    float w2 = m_inverseMasses[c.p2];
+    float w3 = m_inverseMasses[c.p3];
+
+    float wTotal = w0 + w1 + w2 + w3;
+    if (wTotal <= 0.0f)
+    {
+        return;  // All pinned
+    }
+
+    // Compute triangle normals
+    glm::vec3 n1 = glm::cross(p2 - p0, p3 - p0);
+    glm::vec3 n2 = glm::cross(p3 - p1, p2 - p1);
+    float len1 = glm::length(n1);
+    float len2 = glm::length(n2);
+
+    if (len1 < 1e-7f || len2 < 1e-7f)
+    {
+        return;  // Degenerate triangle
+    }
+
+    n1 /= len1;
+    n2 /= len2;
+
+    // Current dihedral angle
+    float cosAngle = glm::clamp(glm::dot(n1, n2), -1.0f, 1.0f);
+    float phi = std::acos(cosAngle);
+
+    // Constraint value
+    float constraint = phi - c.restAngle;
+    if (std::abs(constraint) < 1e-7f)
+    {
+        return;  // Already at rest angle
+    }
+
+    // Shared edge vector
+    glm::vec3 e = p3 - p2;
+    float elen = glm::length(e);
+    if (elen < 1e-7f)
+    {
+        return;  // Degenerate edge
+    }
+    float invElen = 1.0f / elen;
+
+    // Gradients (Müller et al. 2007)
+    glm::vec3 grad0 = n1 * elen;
+    glm::vec3 grad1 = n2 * elen;
+    glm::vec3 grad2 = n1 * (glm::dot(p0 - p3, e) * invElen)
+                     + n2 * (glm::dot(p1 - p3, e) * invElen);
+    glm::vec3 grad3 = n1 * (glm::dot(p2 - p0, e) * invElen)
+                     + n2 * (glm::dot(p2 - p1, e) * invElen);
+
+    // XPBD correction
+    float dtSub2 = dtSub * dtSub;
+    float alphaTilde = c.compliance / dtSub2;
+
+    float wSum = w0 * glm::dot(grad0, grad0)
+               + w1 * glm::dot(grad1, grad1)
+               + w2 * glm::dot(grad2, grad2)
+               + w3 * glm::dot(grad3, grad3);
+
+    if (wSum + alphaTilde < 1e-10f)
+    {
+        return;
+    }
+
+    float lambda = -constraint / (wSum + alphaTilde);
+
+    // Sign correction: if cross(n1, n2) points along the edge, angle is positive
+    if (glm::dot(glm::cross(n1, n2), e) > 0.0f)
+    {
+        lambda = -lambda;
+    }
+
+    p0 += grad0 * (w0 * lambda);
+    p1 += grad1 * (w1 * lambda);
+    p2 += grad2 * (w2 * lambda);
+    p3 += grad3 * (w3 * lambda);
+}
+
+// ---------------------------------------------------------------------------
+// Constraint ordering (BFS from pins)
+// ---------------------------------------------------------------------------
+
+void ClothSimulator::sortConstraintsByDepth()
+{
+    uint32_t count = static_cast<uint32_t>(m_positions.size());
+    m_particleDepth.assign(count, UINT32_MAX);
+
+    // BFS from all pinned particles
+    std::vector<uint32_t> queue;
+    queue.reserve(count);
+    for (const auto& pin : m_pinConstraints)
+    {
+        m_particleDepth[pin.index] = 0;
+        queue.push_back(pin.index);
+    }
+
+    // Build adjacency from stretch constraints (direct neighbors)
+    std::vector<std::vector<uint32_t>> adj(count);
+    for (const auto& c : m_stretchConstraints)
+    {
+        adj[c.i0].push_back(c.i1);
+        adj[c.i1].push_back(c.i0);
+    }
+
+    // BFS
+    size_t front = 0;
+    while (front < queue.size())
+    {
+        uint32_t cur = queue[front++];
+        uint32_t depth = m_particleDepth[cur];
+        for (uint32_t neighbor : adj[cur])
+        {
+            if (m_particleDepth[neighbor] == UINT32_MAX)
+            {
+                m_particleDepth[neighbor] = depth + 1;
+                queue.push_back(neighbor);
+            }
+        }
+    }
+
+    // Sort each constraint list by minimum depth of participating particles
+    auto depthOf = [this](const DistanceConstraint& c) -> uint32_t
+    {
+        return std::min(m_particleDepth[c.i0], m_particleDepth[c.i1]);
+    };
+
+    std::sort(m_stretchConstraints.begin(), m_stretchConstraints.end(),
+        [&](const DistanceConstraint& a, const DistanceConstraint& b)
+        { return depthOf(a) < depthOf(b); });
+
+    std::sort(m_shearConstraints.begin(), m_shearConstraints.end(),
+        [&](const DistanceConstraint& a, const DistanceConstraint& b)
+        { return depthOf(a) < depthOf(b); });
+
+    std::sort(m_bendConstraints.begin(), m_bendConstraints.end(),
+        [&](const DistanceConstraint& a, const DistanceConstraint& b)
+        { return depthOf(a) < depthOf(b); });
+
+    auto dihedralDepth = [this](const DihedralConstraint& c) -> uint32_t
+    {
+        return std::min({m_particleDepth[c.p0], m_particleDepth[c.p1],
+                         m_particleDepth[c.p2], m_particleDepth[c.p3]});
+    };
+
+    std::sort(m_dihedralConstraints.begin(), m_dihedralConstraints.end(),
+        [&](const DihedralConstraint& a, const DihedralConstraint& b)
+        { return dihedralDepth(a) < dihedralDepth(b); });
+
+    m_constraintsSorted = true;
 }
 
 void ClothSimulator::recomputeNormals()
