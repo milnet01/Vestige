@@ -102,6 +102,9 @@ set(ENGINE_SOURCES
     animation/tween.cpp
     animation/ik_solver.cpp
     animation/morph_target.cpp
+    animation/facial_presets.cpp
+    animation/eye_controller.cpp
+    animation/facial_animation.cpp
     physics/physics_world.cpp
     physics/rigid_body.cpp
     physics/physics_character_controller.cpp
