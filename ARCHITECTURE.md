@@ -411,3 +411,50 @@ Three solvers run as post-processes after the animation pipeline:
 - **Foot IK** — Composes two-bone leg IK with ankle-to-ground alignment and pelvis offset
 
 All solvers support weight blending via NLerp between identity and correction quaternions.
+
+---
+
+## 11. Physics Subsystem
+
+The physics system lives in `engine/physics/` and provides rigid-body dynamics via Jolt Physics, a character controller, cloth simulation, and constraint joints.
+
+### Data Flow
+
+```
+Entity
+  → RigidBody.syncToEntity() copies Jolt transforms → Entity.transform
+  → ClothComponent.update() runs ClothSimulator
+    → copies positions/normals → uploads to DynamicMesh GPU buffer
+```
+
+### Key Classes
+
+| Class | File | Purpose |
+|-------|------|---------|
+| `PhysicsWorld` | `physics_world.h/cpp` | Jolt Physics integration wrapper. Fixed timestep accumulator (60 Hz). Creates/destroys bodies, manages constraints, performs raycasts. Singleton per scene. |
+| `RigidBody` | `rigid_body.h/cpp` | Component attaching physics to entities. Supports STATIC, DYNAMIC, KINEMATIC motion types with BOX, SPHERE, CAPSULE collision shapes. Syncs Jolt body transforms back to entity transforms each frame. |
+| `PhysicsCharacterController` | `physics_character_controller.h/cpp` | Jolt CharacterVirtual wrapper for player movement. Supports walk/fly modes, stair stepping, slope limits, ground detection. |
+| `ClothSimulator` | `cloth_simulator.h/cpp` | Pure CPU XPBD (Extended Position-Based Dynamics) cloth solver. Generates rectangular particle grid with structural, shear, and bending distance constraints. Supports pin constraints, sphere/plane/cylinder/box colliders, wind with gust state machine, sleep detection, LRA (Long Range Attachment) tethers. |
+| `ClothComponent` | `cloth_component.h/cpp` | Links ClothSimulator to the entity/rendering system via DynamicMesh. Fixed 60 Hz timestep accumulator. Fabric presets (linen, tent, banner, drape, fence). |
+| `ClothPresets` | `cloth_presets.h/cpp` | Factory for preset cloth configurations (5 fabric types with calibrated physics parameters). |
+| `PhysicsConstraint` | `physics_constraint.h/cpp` | Jolt constraint wrapper supporting hinge, fixed, slider, spring, and distance joints with breakable force thresholds. |
+
+### Rigid-Body Pipeline
+
+1. **Accumulation** -- `PhysicsWorld` accumulates frame delta time and steps the Jolt simulation at a fixed 60 Hz rate
+2. **Body Sync** -- After each step, `RigidBody.syncToEntity()` reads position and rotation from the Jolt body and writes them to the entity's `Transform` component
+3. **Raycasts** -- `PhysicsWorld` exposes raycast queries against the Jolt broadphase for picking, ground detection, and gameplay logic
+
+### Cloth Pipeline
+
+1. **Timestep** -- `ClothComponent` accumulates delta time and steps `ClothSimulator` at a fixed 60 Hz rate
+2. **XPBD Solve** -- Each step runs substeps of: apply external forces (gravity, wind), solve distance constraints (structural/shear/bending), apply LRA tethers, resolve collisions (sphere/plane/cylinder/box), enforce pin constraints
+3. **Upload** -- After simulation, particle positions and recomputed normals are copied into the `DynamicMesh` vertex buffer via `glBufferSubData`
+
+### Character Controller
+
+`PhysicsCharacterController` wraps Jolt's `CharacterVirtual` to provide player movement with:
+- Walk and fly movement modes
+- Automatic stair stepping
+- Configurable slope angle limits
+- Ground contact detection for gravity and jumping

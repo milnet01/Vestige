@@ -647,9 +647,9 @@ vec3 calcSpotLight(int i, vec3 norm, vec3 viewDir, vec3 baseColor)
         + u_spotLights_linear[i] * dist
         + u_spotLights_quadratic[i] * dist * dist);
 
-    // Spotlight cone — smooth edge falloff
+    // Spotlight cone — smooth edge falloff (guard div/0 if inner == outer)
     float theta = dot(lightDir, normalize(-u_spotLights_direction[i]));
-    float epsilon = u_spotLights_innerCutoff[i] - u_spotLights_outerCutoff[i];
+    float epsilon = max(u_spotLights_innerCutoff[i] - u_spotLights_outerCutoff[i], 0.001);
     float intensity = clamp((theta - u_spotLights_outerCutoff[i]) / epsilon, 0.0, 1.0);
 
     vec3 ambient  = u_spotLights_ambient[i] * baseColor;
@@ -771,9 +771,9 @@ vec3 calcSpotLightPBR(int i, vec3 N, vec3 V, vec3 fragPos, vec3 albedo,
         + u_spotLights_linear[i] * dist
         + u_spotLights_quadratic[i] * dist * dist);
 
-    // Spotlight cone
+    // Spotlight cone (guard div/0 if inner == outer)
     float theta = dot(L, normalize(-u_spotLights_direction[i]));
-    float epsilon = u_spotLights_innerCutoff[i] - u_spotLights_outerCutoff[i];
+    float epsilon = max(u_spotLights_innerCutoff[i] - u_spotLights_outerCutoff[i], 0.001);
     float intensity = clamp((theta - u_spotLights_outerCutoff[i]) / epsilon, 0.0, 1.0);
 
     vec3 radiance = u_spotLights_diffuse[i] * attenuation * intensity;

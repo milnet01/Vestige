@@ -85,9 +85,7 @@ void ClothComponent::update(float deltaTime)
     }
 
     // Recompute tangents for correct normal mapping on deformed geometry
-    std::vector<uint32_t> indices(m_simulator.getIndices().begin(),
-                                   m_simulator.getIndices().end());
-    calculateTangents(m_vertexBuffer, indices);
+    calculateTangents(m_vertexBuffer, m_simulator.getIndices());
 
     // Upload to GPU
     m_mesh.updateVertices(m_vertexBuffer);
@@ -113,9 +111,7 @@ void ClothComponent::syncMesh()
         m_vertexBuffer[i].normal = normals[i];
     }
 
-    std::vector<uint32_t> indices(m_simulator.getIndices().begin(),
-                                   m_simulator.getIndices().end());
-    calculateTangents(m_vertexBuffer, indices);
+    calculateTangents(m_vertexBuffer, m_simulator.getIndices());
     m_mesh.updateVertices(m_vertexBuffer);
 }
 

@@ -35,19 +35,24 @@ void RigidBody::createBody(PhysicsWorld& world)
         rot = glm::quat_cast(owner->getWorldMatrix());
     }
 
-    // Create the collision shape
+    // Create the collision shape with dimension validation per shape type
     JPH::ShapeRefC shape;
     switch (shapeType)
     {
     case CollisionShapeType::BOX:
+        if (shapeSize.x <= 0.0f || shapeSize.y <= 0.0f || shapeSize.z <= 0.0f) return;
         shape = new JPH::BoxShape(JPH::Vec3(shapeSize.x, shapeSize.y, shapeSize.z));
         break;
     case CollisionShapeType::SPHERE:
+        if (shapeSize.x <= 0.0f) return;
         shape = new JPH::SphereShape(shapeSize.x);
         break;
     case CollisionShapeType::CAPSULE:
-        shape = new JPH::CapsuleShape(shapeSize.y, shapeSize.x);  // halfHeight, radius
+        if (shapeSize.x <= 0.0f || shapeSize.y <= 0.0f) return;  // radius, halfHeight
+        shape = new JPH::CapsuleShape(shapeSize.y, shapeSize.x);
         break;
+    default:
+        return;
     }
 
     // Create the body based on motion type

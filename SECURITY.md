@@ -268,3 +268,33 @@ Before merging any code, verify:
 - [ ] No sensitive data in logs
 - [ ] Variables initialized before use
 - [ ] Compiler warnings resolved (no suppressions without justification)
+
+---
+
+## 11. Physics Input Validation
+
+Physics subsystems accept configuration data and simulation parameters that must be validated to prevent crashes, hangs, or undefined behavior.
+
+### ClothConfig Validation
+- **Grid dimensions** must be >= 2 in both width and height -- a 1x1 grid cannot form any constraints
+- **Particle mass** must be > 0 -- zero or negative mass causes division-by-zero in the XPBD solver
+- **Substep count** must be clamped to the range [1, 64] -- zero substeps skip simulation entirely, and excessive substeps cause frame stalls
+
+### Collider Parameter Validation
+- **Plane colliders** must have non-zero normals -- a zero-length normal cannot define a half-space. Normals are auto-normalized, but zero-length input must be rejected (return false)
+- **Sphere colliders** must have radius > 0 -- zero or negative radius produces degenerate collision geometry
+- **Cylinder colliders** must have radius > 0 and height > 0 -- both parameters define the collision volume and must be positive
+
+### Jolt Body Creation
+- **Shape sizes** (half-extents for boxes, radius for spheres, radius/half-height for capsules) must all be positive -- Jolt will assert or produce invalid shapes otherwise
+- **Body IDs** must be checked after creation -- `BodyInterface::CreateBody` can return `nullptr` if the body limit is exceeded or the shape is invalid. Always verify before adding to the physics world
+
+### Floating-Point Safety
+- **Division-by-zero guards** in the XPBD solver -- constraint projections divide by inverse mass sums; skip the projection when the denominator is zero or below epsilon
+- **NaN propagation prevention** -- wind gust calculations and collision response must guard against NaN inputs (e.g., normalizing a zero-length vector). Use length-squared checks before normalization
+- **Infinity clamping** -- clamp particle velocities and position deltas to sane maximums to prevent simulation explosion
+
+### Resource Limits
+- **Maximum grid size** -- enforce an upper bound on grid dimensions (e.g., 256x256 = 65,536 particles) to prevent allocation overflow and ensure the solver completes within frame budget
+- **Substep cap** -- hard limit of 64 substeps per step prevents unbounded CPU time in the XPBD loop
+- **Collider count** -- consider practical limits on the number of active colliders to keep per-particle collision checks bounded

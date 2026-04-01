@@ -14,11 +14,25 @@ void ClothSimulator::initialize(const ClothConfig& config, uint32_t seed)
     m_gridW = config.width;
     m_gridH = config.height;
 
+    // Grid must be at least 2x2 to form triangles and avoid division by zero in UVs/wind
+    if (m_gridW < 2 || m_gridH < 2)
+    {
+        m_initialized = false;
+        return;
+    }
+
+    // Reject non-positive mass (negative mass would invert gravity)
+    if (config.particleMass <= 0.0f)
+    {
+        m_initialized = false;
+        return;
+    }
+
     // Unique RNG seed so each cloth panel has different wind timing
     m_rngState = (seed != 0) ? seed : 12345u;
 
     uint32_t count = m_gridW * m_gridH;
-    float invMass = (config.particleMass > 0.0f) ? 1.0f / config.particleMass : 0.0f;
+    float invMass = 1.0f / config.particleMass;
 
     // Allocate particle arrays
     m_positions.resize(count);
@@ -179,8 +193,7 @@ void ClothSimulator::simulate(float deltaTime)
         }
     }
 
-    int substeps = m_config.substeps;
-    if (substeps < 1) substeps = 1;
+    int substeps = std::clamp(m_config.substeps, 1, 64);
 
     float dtSub = deltaTime / static_cast<float>(substeps);
 
@@ -307,12 +320,19 @@ void ClothSimulator::simulate(float deltaTime)
     {
         if (m_inverseMasses[i] <= 0.0f) continue;
         float speed2 = glm::dot(m_velocities[i], m_velocities[i]);
-        float mass = (m_inverseMasses[i] > 0.0f) ? 1.0f / m_inverseMasses[i] : 0.0f;
+        float mass = 1.0f / m_inverseMasses[i];
         totalKE += 0.5f * mass * speed2;
         ++freeCount;
     }
 
-    float avgKE = (freeCount > 0) ? totalKE / static_cast<float>(freeCount) : 0.0f;
+    // All-pinned cloth has no free particles — skip sleep detection entirely
+    if (freeCount == 0)
+    {
+        recomputeNormals();
+        return;
+    }
+
+    float avgKE = totalKE / static_cast<float>(freeCount);
     if (avgKE < m_config.sleepThreshold && m_gustCurrent < 0.05f)
     {
         ++m_sleepFrames;
@@ -372,11 +392,11 @@ const std::vector<glm::vec2>& ClothSimulator::getTexCoords() const
 
 // --- Pin constraints ---
 
-void ClothSimulator::pinParticle(uint32_t index, const glm::vec3& worldPos)
+bool ClothSimulator::pinParticle(uint32_t index, const glm::vec3& worldPos)
 {
     if (index >= m_positions.size())
     {
-        return;
+        return false;
     }
 
     m_inverseMasses[index] = 0.0f;
@@ -390,11 +410,12 @@ void ClothSimulator::pinParticle(uint32_t index, const glm::vec3& worldPos)
         if (pin.index == index)
         {
             pin.position = worldPos;
-            return;
+            return true;
         }
     }
 
     m_pinConstraints.push_back({index, worldPos});
+    return true;
 }
 
 void ClothSimulator::unpinParticle(uint32_t index)
@@ -457,11 +478,12 @@ float ClothSimulator::getGroundPlane() const
     return m_groundPlaneY;
 }
 
-void ClothSimulator::addPlaneCollider(const glm::vec3& normal, float offset)
+bool ClothSimulator::addPlaneCollider(const glm::vec3& normal, float offset)
 {
     float len = glm::length(normal);
-    if (len < 1e-7f) return;
+    if (len < 1e-7f) return false;
     m_planeColliders.push_back({normal / len, offset});
+    return true;
 }
 
 void ClothSimulator::clearPlaneColliders()

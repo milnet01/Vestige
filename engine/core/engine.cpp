@@ -2045,21 +2045,24 @@ void Engine::setupTabernacleScene()
     // =====================================================================
 
     // Layer 1: Inner linen curtains with cherubim (visible from inside)
-    // Roof layers are 0.15m thick each for proper CSM shadow coverage
+    // Roof layers are 0.15m thick each for proper CSM shadow coverage.
+    // 0.20m center-to-center spacing gives 0.05m gaps (prevents z-fighting).
+    const float roofThick = 0.15f;
+    const float roofGap = 0.20f;
     makeBox("Linen Ceiling", {0.0f, tentH, tentL / 2.0f},
-            {tentW + 0.3f, 0.15f, tentL + 0.3f}, linenMat);
+            {tentW + 0.3f, roofThick, tentL + 0.3f}, linenMat);
 
     // Layer 2: Goat hair curtains
-    makeBox("Goat Hair Roof", {0.0f, tentH + 0.18f, tentL / 2.0f},
-            {tentW + 0.6f, 0.15f, tentL + 0.6f}, goatHairMat);
+    makeBox("Goat Hair Roof", {0.0f, tentH + roofGap, tentL / 2.0f},
+            {tentW + 0.6f, roofThick, tentL + 0.6f}, goatHairMat);
 
     // Layer 3: Ram skins dyed red
-    makeBox("Ram Skin Roof", {0.0f, tentH + 0.36f, tentL / 2.0f},
-            {tentW + 0.9f, 0.15f, tentL + 0.9f}, redLeatherMat);
+    makeBox("Ram Skin Roof", {0.0f, tentH + roofGap * 2.0f, tentL / 2.0f},
+            {tentW + 0.9f, roofThick, tentL + 0.9f}, redLeatherMat);
 
     // Layer 4: Tachash skins (outermost, largest)
-    makeBox("Tachash Roof", {0.0f, tentH + 0.54f, tentL / 2.0f},
-            {tentW + 1.2f, 0.15f, tentL + 1.2f}, darkHideMat);
+    makeBox("Tachash Roof", {0.0f, tentH + roofGap * 3.0f, tentL / 2.0f},
+            {tentW + 1.2f, roofThick, tentL + 1.2f}, darkHideMat);
 
     // Scene-wide prevailing wind direction — all cloth panels share this
     // so wind blows consistently across the entire scene. Desert wind from
@@ -2071,6 +2074,11 @@ void Engine::setupTabernacleScene()
     const float intPillarDiam = 0.24f;
     const int intPillarCount = 6;
 
+    // Cloth hang point: below the linen ceiling bottom (tentH - roofThick/2)
+    // with a small clearance gap to avoid spawning inside the ceiling.
+    const float clothCeilingGap = 0.025f;  // 2.5cm clearance
+    const float clothHangY = tentH - roofThick / 2.0f - clothCeilingGap;
+
     // =====================================================================
     // VEIL -- Animated cloth dividing curtain between Holy Place and Holy of Holies
     // Uses heavy drape preset — dense fabric that barely moves in the sheltered
@@ -2080,7 +2088,7 @@ void Engine::setupTabernacleScene()
     {
         ClothPresetConfig veilPreset = ClothPresets::heavyDrape();
 
-        float veilW = tentW - 0.1f;
+        float veilW = tentW - 2.0f * wallThick - 0.05f;  // Fit within wall inner surfaces
         float veilH = tentH - 0.1f;
         float veilSpacing = 0.2f;
         uint32_t veilGridW = std::max(3u, static_cast<uint32_t>(veilW / veilSpacing) + 1);
@@ -2109,7 +2117,7 @@ void Engine::setupTabernacleScene()
             {
                 uint32_t idx = gz * veilGridW + gx;
                 float worldX = (static_cast<float>(gx) / static_cast<float>(veilGridW - 1) - 0.5f) * veilW;
-                float worldY = tentH - 0.05f - static_cast<float>(gz) * veilSpacing;
+                float worldY = clothHangY - static_cast<float>(gz) * veilSpacing;
                 float worldZ = veilZ;
                 veilSim.pinParticle(idx, glm::vec3(worldX, worldY, worldZ));
             }
@@ -2216,7 +2224,7 @@ void Engine::setupTabernacleScene()
                     float worldX = leftCenterX + (static_cast<float>(gx) -
                                    static_cast<float>(gridW - 1) * 0.5f) * spacing;
                     // Pin below the ceiling — linen ceiling bottom is at tentH - 0.075
-                    float worldY = tentH - 0.1f - static_cast<float>(gz) * spacing;
+                    float worldY = clothHangY - static_cast<float>(gz) * spacing;
                     float worldZ = frontZ + 0.25f;
 
                     sim.pinParticle(idx, glm::vec3(worldX, worldY, worldZ));
@@ -2287,7 +2295,7 @@ void Engine::setupTabernacleScene()
                     float worldX = rightCenterX + (static_cast<float>(gx) -
                                    static_cast<float>(gridW - 1) * 0.5f) * spacing;
                     // Pin below the ceiling — linen ceiling bottom is at tentH - 0.075
-                    float worldY = tentH - 0.1f - static_cast<float>(gz) * spacing;
+                    float worldY = clothHangY - static_cast<float>(gz) * spacing;
                     float worldZ = frontZ + 0.25f;
 
                     sim.pinParticle(idx, glm::vec3(worldX, worldY, worldZ));
