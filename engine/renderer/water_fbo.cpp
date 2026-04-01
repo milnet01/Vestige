@@ -31,9 +31,9 @@ bool WaterFbo::init(int reflW, int reflH, int refrW, int refrH)
         return false;
     }
 
-    Logger::info("Water FBOs initialized (reflection: " + std::to_string(reflW) + "x"
-                 + std::to_string(reflH) + ", refraction: " + std::to_string(refrW) + "x"
-                 + std::to_string(refrH) + ")");
+    Logger::debug("Water FBOs initialized (reflection: " + std::to_string(reflW) + "x"
+                  + std::to_string(reflH) + ", refraction: " + std::to_string(refrW) + "x"
+                  + std::to_string(refrH) + ")");
     return true;
 }
 
