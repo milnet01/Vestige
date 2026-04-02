@@ -648,8 +648,218 @@ The Tabernacle's linen curtains sway gently, the entrance veil drapes realistica
 
 ---
 
-## Phase 9: Polish and Features
-**Goal:** Complete the experience — UI, audio, usability, and accessibility.
+## Formula Pipeline (Cross-Cutting Infrastructure) — IN PROGRESS
+
+Unified physics/lighting formula storage, evaluation, and code generation. Every physics and rendering system (cloth, water, foliage, particles, lighting) currently implements its own formulas independently. The Formula Pipeline provides a shared system for discovering, storing, compiling, and using mathematical formulas across the entire engine.
+
+### Completed
+- [x] EnvironmentForces system — centralized environmental query API (wind, weather, buoyancy, temperature, humidity, wetness)
+- [x] Expression tree AST — 5 node types (literal, variable, binary op, unary op, conditional) with JSON round-trip
+- [x] FormulaLibrary — named formula registry with categories, typed inputs/outputs, coefficients, quality tiers
+- [x] Expression evaluator — scalar tree-walking interpreter for tool-time use
+- [x] Physics templates — 13 built-in formulas (aerodynamic drag, Stokes drag, Fresnel-Schlick, Beer-Lambert, Gerstner wave, buoyancy, inverse-square falloff, exponential fog, Hooke spring, Coulomb friction, terminal velocity, wet darkening, wind deformation)
+
+### In Progress
+
+### Completed (cont.)
+- [x] FormulaCompiler — C++ code generator (expression tree → inline C++ functions with coefficient inlining)
+- [x] FormulaCompiler — GLSL code generator (expression tree → GLSL function snippets, no std:: prefix)
+- [x] LUT generator — sample formulas over input ranges into binary lookup tables (VLUT format with FNV-1a axis hashing)
+- [x] LUT loader — load VLUT files with 1D/2D/3D linear/bilinear/trilinear interpolation, O(1) lookup
+
+### Upcoming
+- [ ] FormulaWorkbench — standalone ImGui tool for interactive formula discovery and coefficient fitting (Levenberg-Marquardt optimizer, data point editor, curve visualizer, validation)
+- [ ] Water formula optimization — apply Formula Pipeline to water rendering bottleneck (caustics LUT, wave approximations)
+- [ ] Quality tier integration — per-formula Full/Approximate/LUT tiers selectable from graphics settings
+
+---
+
+## Phase 9: Domain-Driven System Architecture
+**Goal:** Evolve the engine toward a domain-driven system model where each natural domain (vegetation, water, cloth, terrain, etc.) is owned by a dedicated system that encapsulates ALL behavior for that domain — rendering, physics, animation, audio, defaults, and editor integration. Scenes compose by pulling in only the systems they need.
+
+This is NOT a rewrite — it's a refactor and extension of what already exists. Vestige already partially follows this pattern (terrain system, foliage manager, water renderer, cloth simulator exist as separate subsystems). This phase formalizes the pattern.
+
+Reference: `Vestige Overhaul.md` contains the full architecture document.
+
+---
+
+### Phase 9A: System Infrastructure
+**Goal:** Create the formal system abstraction and registry without breaking any existing code.
+
+#### ISystem Interface
+- [ ] `ISystem` base class with 4 pure virtuals (`getSystemName`, `initialize`, `shutdown`, `update`) and opt-in virtual no-ops (`fixedUpdate`, `submitRenderData`, `syncPhysics`, `registerEditorUI`, `onSceneLoad`, `onSceneUnload`, `serialize`, `deserialize`, `drawDebug`, `reportMetrics`)
+- [ ] Performance budget API (`getFrameBudgetMs` / `setFrameBudgetMs`) — systems automatically reduce quality when approaching their per-frame time budget
+- [ ] `getOwnedComponents()` — each system declares which component types it manages
+
+#### SystemRegistry
+- [ ] Registry that manages all domain system instances (`registerSystem`, `getSystem<T>`, `initializeAll`, `updateAll`, `shutdownAll`)
+- [ ] Auto-activation: scan scene entities for component types, match against each system's `getOwnedComponents()`, activate only systems with matching components present
+- [ ] `forceActivate()` for always-on systems (Atmosphere, Lighting) regardless of scene contents
+- [ ] Integrate into Engine update loop (call `updateAll`, `fixedUpdateAll`, `submitRenderDataAll` in correct order)
+
+#### Cross-System Interaction
+- [ ] Typed event structs for discrete occurrences (`ObjectEnteredWaterEvent`, `DestructionEvent`, `WeatherChangedEvent`, `LightningStrikeEvent`) — use existing Event Bus
+- [ ] Query model for continuous position-dependent data — systems query shared infrastructure (`EnvironmentForces`, `Terrain`) directly rather than receiving per-frame broadcasts
+- [ ] Rule: events for discrete occurrences, queries for continuous data. Systems never `#include` each other.
+
+---
+
+### Phase 9B: Wrap Existing Code into Domain Systems
+**Goal:** Wrap each existing subsystem into a formal domain system class. Each step: create the system class, have it own the existing subsystem instances, register with shared infrastructure. Tests must pass after each step.
+
+#### Domain Systems to Wrap
+- [ ] **Terrain System** — wrap `environment/terrain`, `renderer/terrain_renderer`, brush tools. Owns: heightfield editing, splatmap texturing, collision mesh, LOD, terrain-vegetation integration, road/path system
+- [ ] **Vegetation System** — wrap `environment/foliage_manager`, `environment/density_map`, `renderer/foliage_renderer`, `environment/biome_preset`. Owns: all tree/grass/shrub entities, procedural placement, wind animation (queries EnvironmentForces), LOD, species presets
+- [ ] **Water & Fluid System** — wrap `renderer/water_renderer`, `renderer/water_fbo`, `scene/water_surface`. Owns: ocean/lake/river/puddle entities, surface simulation, rendering (reflections, refractions, caustics), buoyancy (queries EnvironmentForces), shore blending
+- [ ] **Cloth & Soft Body System** — wrap `physics/cloth_simulator`, `physics/cloth_component`, `physics/cloth_presets`, `physics/fabric_material`, `physics/cloth_mesh_collider`, `physics/spatial_hash`. Owns: all cloth entities, XPBD simulation, fabric presets, collision, wind response (queries EnvironmentForces). Performance budget enforced: distant/offscreen cloths auto-reduce quality
+- [ ] **Destruction & Physics System** — wrap `physics/fracture`, `physics/deformable_mesh`, `physics/breakable_component`, `physics/dismemberment`, `physics/rigid_body`, `physics/grab_system`, `physics/ragdoll`. Owns: rigid bodies, destructibles, dismemberment, debris, grabbing, joints, ragdoll
+- [ ] **Character & Animation System** — wrap `animation/` (skeletal, state machine, motion matching, IK, facial, lip sync, morph targets), `physics/physics_character_controller`. Owns: animation playback, blending, motion matching, IK, facial animation, character controller, ragdoll transition
+- [ ] **Particle & VFX System** — wrap `renderer/particle_renderer`, `renderer/gpu_particle_system`, `scene/particle_emitter`, `scene/gpu_particle_emitter`, `scene/particle_presets`. Owns: CPU/GPU particles, VFX presets, decals, trails, screen effects
+- [ ] **Lighting System** — wrap all light/shadow/probe/IBL/radiosity code. Owns: all light types, shadow mapping, IBL, light probes, radiosity baking, volumetric light shafts
+- [ ] **Atmosphere & Weather System** — wrap `environment/environment_forces` (already implemented), `renderer/skybox`, `renderer/environment_map`. Extends EnvironmentForces with sky rendering, clouds, time-of-day, fog, weather transitions, lightning
+
+#### Consistency Guarantees
+Each system provides sensible defaults for its domain. Objects behave correctly the moment they're created:
+- Vegetation automatically responds to wind, has LOD, casts shadows, sways naturally
+- Every water body has correct reflections, refractions, caustics, and depth coloring
+- Cloth automatically gets correct simulation based on fabric type preset
+- Destruction patterns driven by material type, not per-object configuration
+- Characters automatically get working animation pipeline with terrain-adaptive feet
+
+---
+
+### Phase 9C: New Domain Systems
+**Goal:** Build domain systems for capabilities that don't yet exist in the engine.
+
+#### Audio System
+*Scope: multi-month initiative requiring library selection and dedicated design document.*
+- [ ] Audio library integration (evaluate miniaudio, OpenAL Soft, FMOD)
+- [ ] Spatial audio (3D positioned sound sources with distance attenuation)
+- [ ] Ambient soundscapes (biome-based, time-of-day-based)
+- [ ] Sound material interactions (footstep sounds derived from physics material types)
+- [ ] Music system (layered tracks, transitions, adaptive intensity)
+- [ ] Reverb zones (indoor/outdoor, auto-detect room geometry)
+- [ ] Audio occlusion (raycast-based, material-based transmission)
+- [ ] Voice/dialogue playback (integrates with existing lip sync system)
+- [ ] Editor: sound emitter placement, reverb zone painting, audio preview
+
+**Note:** Detailed audio specs are in Phase 10 (Polish and Features). This phase implements the Audio domain system wrapper; Phase 10 details the full feature set.
+
+#### UI & HUD System
+- [ ] In-game UI rendering (health bars, inventory, menus — separate from ImGui editor UI)
+- [ ] In-world UI (floating text, interaction prompts, nameplates)
+- [ ] Screen-space UI (HUD, minimap, crosshair)
+- [ ] Menu system (main menu, pause, settings)
+- [ ] UI theming (consistent style across all elements)
+- [ ] Input routing (game input suppressed when UI is active)
+- [ ] Editor: visual UI layout editor, theme editor, widget library
+
+#### AI & Navigation System (Basics)
+*Scope: requires Recast/Detour library integration and dedicated design document.*
+- [ ] Navmesh generation from terrain and static geometry (integrate Recast/Detour)
+- [ ] Pathfinding (A* on navmesh)
+- [ ] Basic AI state management
+- [ ] Editor: navmesh visualization and bake controls, patrol path placement
+
+**Note:** Advanced AI (behavior trees, perception, AI director) is in Phase 16 (Scripting and Interactivity).
+
+---
+
+### Phase 9D: Editor Enhancements
+**Goal:** Asset viewers and game type templates that make the editor a complete creation tool.
+
+#### Model Viewer Panel
+- [ ] Orbiting camera around the model
+- [ ] Material/texture display
+- [ ] Animation playback (if model has animations)
+- [ ] Skeleton visualization
+- [ ] Bounding box and vertex/triangle count display
+- [ ] Drag from model viewer into scene viewport to place
+
+#### Texture Viewer Panel
+- [ ] Full-resolution display with zoom/pan
+- [ ] Channel isolation (R, G, B, A, RGB)
+- [ ] Mipmap level visualization
+- [ ] Tiling preview (repeat texture to see how it tiles)
+- [ ] Texture metadata (resolution, format, memory size)
+- [ ] PBR texture set grouping (albedo + normal + roughness shown together)
+
+#### HDRI Viewer Panel
+- [ ] Spherical/equirectangular preview
+- [ ] Exposure adjustment
+- [ ] Preview as skybox in mini-viewport
+- [ ] Show irradiance and specular prefiltered versions
+- [ ] One-click set as scene environment map
+
+#### Game Type Templates
+- [ ] **3D First Person** — perspective camera, full 3D physics, FPS controller
+- [ ] **3D Third Person** — perspective camera with follow/orbit cam, character system
+- [ ] **2.5D** — 3D rendering with gameplay constrained to a plane
+- [ ] **Isometric** — fixed-angle orthographic camera, grid-based or free movement
+- [ ] **Top-Down** — orthographic overhead camera, free movement
+- [ ] **Point-and-Click** — fixed or panning camera, click-to-move navigation
+
+Each template configures: camera type/constraints, physics dimensionality, default input mapping, required systems, starter scene layout.
+
+**Note:** 2D templates (Side-Scroller, Shmup) require Phase 9F's sprite renderer and 2D physics.
+
+---
+
+### Phase 9E: Visual Scripting
+**Goal:** No-code gameplay logic via a node-based graph editor.
+
+*Scope: major initiative — essentially building a programming language with an IDE. Requires dedicated design document and evaluation of existing node graph libraries (imnodes, imgui-node-editor).*
+
+- [ ] Node graph infrastructure and renderer
+- [ ] Event nodes (on collision, on trigger enter, on key press, on timer)
+- [ ] Action nodes (move entity, play animation, play sound, spawn entity, destroy entity, set variable)
+- [ ] Flow control (branch, loop, sequence, delay)
+- [ ] Variable system (per-entity and global variables, exposed in inspector)
+- [ ] Pre-built gameplay templates (door that opens, collectible item, damage zone, checkpoint, dialogue trigger)
+
+Prioritize basic event-to-action chains first. Advanced flow control and variable systems come later.
+
+---
+
+### Phase 9F: 2D Game Support
+**Goal:** Enable 2D games alongside existing 3D capabilities.
+
+*Requires renderer additions (sprite batch, 2D physics integration) before 2D game templates become viable.*
+
+- [ ] Sprite renderer (textured quads with z-ordering, tint, flip)
+- [ ] Sprite atlas / batch renderer (single VBO for all sprites)
+- [ ] Sprite sheet animation (frame-based playback)
+- [ ] 2D physics integration (Box2D or Jolt 2D constraint mode)
+- [ ] 2D collision shapes (box, circle, polygon, edge chain)
+- [ ] 2D character controller (platformer movement, wall slide, coyote time)
+- [ ] Tilemap system (grid of tile IDs, multi-layer, auto-tiling, animated tiles)
+- [ ] 2D camera (orthographic with smooth follow, deadzone, bounds)
+- [ ] 2D game type templates (Side-Scroller, Shmup)
+- [ ] Editor: 2D/3D mode toggle, sprite import/slicing, tilemap painting
+
+**Note:** Full 2D specs are in Phase 18 (2D Game and Scene Support). This phase implements the core; Phase 18 has the complete feature set.
+
+---
+
+### Phase 9 Key Principles
+
+1. **Don't break what works.** Every refactoring step leaves the engine functional. Wrap existing code; don't delete and rewrite it.
+2. **Consistency through defaults.** Each system provides sensible defaults. Objects behave correctly the moment they're created. Defaults applied in component constructors and `onSceneLoad`.
+3. **Systems don't know about each other.** Typed events on the Event Bus for discrete occurrences. Query shared infrastructure (EnvironmentForces, Terrain) for continuous data. No `#include` between domain systems.
+4. **The editor is the product.** Every system must have editor UI. If a designer can't use a feature from the editor, it's not done.
+5. **Shared infrastructure stays generic.** The renderer knows meshes and materials, not "trees." The vegetation system knows trees and submits the right meshes to the renderer.
+6. **Performance budgets are mandatory.** Every simulation system (cloth, particles, physics, AI) respects a per-frame time budget and automatically reduces quality to maintain 60 FPS.
+7. **Auto-activation over manual configuration.** The registry discovers required systems from scene component types. No manual system lists.
+
+### Milestone
+All existing subsystems wrapped in formal domain system classes. Audio, UI, and AI basics operational. Model/Texture/HDRI viewer panels in the editor. Game type templates for 3D styles. Visual scripting with basic event-to-action chains. 2D sprite rendering and tilemap support. Designers can build complete games in the editor without writing C++.
+
+---
+
+## Phase 10: Polish and Features
+**Goal:** Complete the experience — rendering enhancements, localization, accessibility, and cinematic effects.
+
+**Note:** Audio System and UI System are now implemented as domain systems in Phase 9C. Camera modes are partially covered by Phase 9D's game type templates. This phase focuses on rendering enhancements, cinematic effects, localization, and accessibility that are system-agnostic.
 
 ### Features
 - [ ] In-game UI system (menus, HUD, information panels/plaques)
@@ -660,7 +870,7 @@ The Tabernacle's linen curtains sway gently, the entrance veil drapes realistica
 - [ ] Information plaques — approach an object to see a text description
 
 ### Audio System
-Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music.
+Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. The Audio domain system (Phase 9C) provides the system wrapper and basic functionality; the detailed feature specs below define the complete implementation.
 - [ ] Audio engine integration (OpenAL Soft or FMOD — evaluate both)
   - Streaming playback for music (no loading entire file into memory)
   - One-shot playback for sound effects (pre-loaded, low latency)
@@ -681,7 +891,7 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music.
   - Ambient sound zones (per-area ambient loops — wind, water, machinery hum)
   - Random one-shot environmental sounds (creaking metal, distant impacts, animal calls)
   - Time-of-day audio changes (crickets at night, birds at dawn)
-  - Weather-driven audio (rain intensity, thunder, wind howl — integrated with Phase 14 weather)
+  - Weather-driven audio (rain intensity, thunder, wind howl — integrated with Phase 15 weather)
 - [ ] Dynamic music system — adaptive soundtrack that responds to gameplay state
   - Layered music tracks (ambient, tension, exploration, combat, discovery, danger)
   - Smooth crossfading between layers based on game state
@@ -769,7 +979,7 @@ Cinematic and atmospheric post-processing for horror, drama, and stylized render
   - Screen-space radial blur approach (fast, good for single dominant light)
   - Integration with volumetric fog for physically-based light shafts
   - The Tabernacle's tent entrance should cast visible light beams into the dusty interior
-  - God rays through gaps in clouds (when volumetric clouds are available from Phase 14)
+  - God rays through gaps in clouds (when volumetric clouds are available from Phase 15)
 - [ ] Mist / ground fog — localized fog volumes placeable per-entity
   - Box and sphere fog volumes with soft edges (density falloff at boundaries)
   - Animated density (slow turbulence for rolling mist effect)
@@ -780,7 +990,7 @@ A complete walkthrough experience with UI, spatial audio with occlusion and dyna
 
 ---
 
-## Phase 10: Gameplay Systems
+## Phase 11: Gameplay Systems
 **Goal:** Core gameplay mechanics for action, survival, and horror games — combat, inventory, health, saves, and environmental interaction.
 
 These systems transform Vestige from an exploration/walkthrough engine into a full game engine capable of action games like Dead Space, survival horror, RPGs, and more.
@@ -887,7 +1097,7 @@ A complete gameplay loop: explore, fight enemies with upgradeable weapons, take 
 
 ---
 
-## Phase 11: Distribution
+## Phase 12: Distribution
 **Goal:** Package and distribute the application — both finished experiences and the engine itself.
 
 ### Cross-Platform Compilation
@@ -955,7 +1165,7 @@ Application published on Steam. Scenes can be packaged and shared between users.
 
 ---
 
-## Phase 12: Advanced Rendering
+## Phase 13: Advanced Rendering
 **Goal:** Push visual fidelity with modern techniques.
 
 ### Screen-Space Effects
@@ -1040,7 +1250,7 @@ Hybrid rendering with software and hardware ray-traced effects, real-time global
 
 ---
 
-## Phase 13: Adaptive Geometry System
+## Phase 14: Adaptive Geometry System
 **Goal:** Handle massive geometric complexity automatically — original approach, not a copy of any existing engine.
 
 ### Problem Statement
@@ -1070,8 +1280,10 @@ A system that lets artists import film-quality assets and the engine automatical
 
 ---
 
-## Phase 14: Atmospheric Rendering
+## Phase 15: Atmospheric Rendering
 **Goal:** Procedural sky, weather, time of day, and dynamic atmosphere.
+
+**Note:** The Atmosphere & Weather domain system (Phase 9B) wraps `EnvironmentForces` and provides the weather state machine, wind field, and system logic. This phase focuses on the advanced *rendering* side: procedural sky, volumetric clouds, precipitation rendering, and atmospheric scattering. The weather controller logic from Phase 9B drives the rendering features here.
 
 ### Procedural Sky
 - [ ] Procedural sky model (Rayleigh/Mie scattering) — physically-based atmosphere
@@ -1142,7 +1354,7 @@ A system that lets artists import film-quality assets and the engine automatical
   - Flatter, more diffuse shadows (shadow softness increases with cloud coverage)
   - Color temperature shift (cooler, bluer ambient light under overcast)
 - [ ] Fog and mist density changes with weather
-  - Weather controller adjusts Phase 9 fog parameters dynamically
+  - Weather controller adjusts Phase 10 fog parameters dynamically
   - Morning mist that burns off as sun rises (density tied to time of day)
   - Thick fog during certain weather states (visibility drops to 20-50m)
   - Volumetric fog density modulated by weather (heavier in rain, lighter in clear)
@@ -1160,7 +1372,7 @@ A system that lets artists import film-quality assets and the engine automatical
 ### God Rays with Clouds
 - [ ] Crepuscular rays through cloud gaps — volumetric light shafts from sun through cloud openings
   - Cloud density used as shadow volume for volumetric lighting
-  - Rays visible in dusty/humid atmosphere (Phase 9 volumetric fog integration)
+  - Rays visible in dusty/humid atmosphere (Phase 10 volumetric fog integration)
   - Anti-crepuscular rays (converging rays opposite the sun) for sunset/sunrise
 
 ### Milestone
@@ -1168,8 +1380,10 @@ A living sky with dynamic clouds, day/night transitions, weather effects (rain, 
 
 ---
 
-## Phase 15: Scripting and Interactivity
+## Phase 16: Scripting and Interactivity
 **Goal:** Allow scene creators to add behavior and interactivity without writing C++.
+
+**Note:** Basic visual scripting (event-to-action chains) and basic AI/navigation are introduced in Phase 9C/9E as domain systems. This phase covers the *advanced* features: behavior trees, AI perception, AI director, cutscene system, and dialogue. The node graph infrastructure from Phase 9E is the foundation for visual scripting here.
 
 ### Visual Scripting
 - [ ] Node-based visual scripting system (connect trigger → action blocks in the editor)
@@ -1272,7 +1486,7 @@ A scene where doors open, torches flicker, guided tours run, NPCs walk patrol ro
 
 ---
 
-## Phase 16: Terrain and Landscape (CORE COMPLETE — Phase 5I)
+## Phase 17: Terrain and Landscape (CORE COMPLETE — Phase 5I)
 **Goal:** Large-scale terrain with heightmap-based elevation for hills, valleys, and natural landscapes.
 
 Core terrain system implemented in Phase 5I. Remaining items are enhancements.
@@ -1297,10 +1511,10 @@ Outdoor landscapes surrounding the Temple complex — hills, valleys, and the Ki
 
 ---
 
-## Phase 17: 2D Game and Scene Support
+## Phase 18: 2D Game and Scene Support
 **Goal:** Enable the creation of 2D games and scenes alongside the existing 3D capabilities — sprite-based rendering, 2D physics, tilemaps, and a dedicated 2D editor workflow.
 
-Phase 9's camera modes (isometric, top-down, orthographic) provide the viewing foundation. This phase adds the rendering, physics, and tooling needed to build complete 2D experiences.
+Phase 9D's game type templates (isometric, top-down, orthographic) provide the viewing foundation, and Phase 9F introduces basic sprite rendering and 2D physics. This phase expands on that foundation with the complete 2D feature set.
 
 ### 2D Rendering Pipeline
 - [ ] Sprite renderer (textured quads with z-ordering, tint, and flip)
@@ -1345,7 +1559,7 @@ A complete 2D platformer or top-down game can be built entirely in the editor �
 
 ---
 
-## Phase 18: Procedural Generation
+## Phase 19: Procedural Generation
 **Goal:** Generate content algorithmically — terrain, buildings, vegetation, dungeons, and worlds — enabling large-scale scenes without hand-placing every element.
 
 ### Noise and Terrain Generation
@@ -1385,7 +1599,7 @@ A procedural world generator that creates varied terrain, forests, and settlemen
 
 ---
 
-## Phase 19: Networking and Multiplayer
+## Phase 20: Networking and Multiplayer
 **Goal:** Client-server multiplayer architecture for cooperative and competitive game modes.
 
 ### Network Architecture
@@ -1421,7 +1635,7 @@ Multiplayer matches with 2-16 players: synchronized movement, combat, inventory,
 
 ---
 
-## Phase 20: Build Wizard — Project Creation and Export
+## Phase 21: Build Wizard — Project Creation and Export
 **Goal:** A comprehensive guided wizard that walks users through creating, configuring, and building a complete game or experience from start to finish.
 
 The wizard transforms Vestige from a tool that experts use into a platform that anyone can ship a product with. It combines project setup, scene configuration, gameplay selection, platform targeting, and final build into a single guided flow.
