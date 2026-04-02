@@ -96,6 +96,11 @@ set(ENGINE_SOURCES
     environment/biome_preset.cpp
     environment/terrain.cpp
     renderer/terrain_renderer.cpp
+    formula/expression.cpp
+    formula/formula.cpp
+    formula/expression_eval.cpp
+    formula/formula_library.cpp
+    formula/physics_templates.cpp
     animation/skeleton.cpp
     animation/animation_clip.cpp
     animation/animation_sampler.cpp
