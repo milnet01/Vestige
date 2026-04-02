@@ -667,8 +667,12 @@ Unified physics/lighting formula storage, evaluation, and code generation. Every
 - [x] LUT generator — sample formulas over input ranges into binary lookup tables (VLUT format with FNV-1a axis hashing)
 - [x] LUT loader — load VLUT files with 1D/2D/3D linear/bilinear/trilinear interpolation, O(1) lookup
 
+### Completed (cont.)
+- [x] CurveFitter — custom Levenberg-Marquardt optimizer (zero external deps, Gaussian elimination, R²/RMSE/max error)
+- [x] FormulaPreset system — named bundles of coefficient overrides for visual styles (9 built-in: Realistic Desert, Tropical Forest, Arctic Tundra, Underwater, Anime/Cel-Shaded, Painterly, Stormy Weather, Calm Interior, Biblical Tabernacle)
+- [x] FormulaWorkbench — standalone ImGui/ImPlot tool with template browser, data editor (CSV import), LM fitter, curve visualizer, residual plots, train/test validation, preset browser, JSON export
+
 ### Upcoming
-- [ ] FormulaWorkbench — standalone ImGui tool for interactive formula discovery and coefficient fitting (Levenberg-Marquardt optimizer, data point editor, curve visualizer, validation)
 - [ ] Water formula optimization — apply Formula Pipeline to water rendering bottleneck (caustics LUT, wave approximations)
 - [ ] Quality tier integration — per-formula Full/Approximate/LUT tiers selectable from graphics settings
 

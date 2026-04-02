@@ -105,6 +105,8 @@ set(ENGINE_SOURCES
     formula/codegen_glsl.cpp
     formula/lut_generator.cpp
     formula/lut_loader.cpp
+    formula/curve_fitter.cpp
+    formula/formula_preset.cpp
     animation/skeleton.cpp
     animation/animation_clip.cpp
     animation/animation_sampler.cpp

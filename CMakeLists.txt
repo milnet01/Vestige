@@ -46,6 +46,12 @@ add_subdirectory(engine)
 # Application executable
 add_subdirectory(app)
 
+# Development tools (FormulaWorkbench, etc.)
+option(VESTIGE_BUILD_TOOLS "Build development tools" ON)
+if(VESTIGE_BUILD_TOOLS)
+    add_subdirectory(tools)
+endif()
+
 # Tests
 if(VESTIGE_BUILD_TESTS)
     enable_testing()
