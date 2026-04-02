@@ -787,6 +787,9 @@ void Engine::run()
             }
         }
 
+        // 3b. Environment — advance gust state machine and weather
+        m_environmentForces.update(deltaTime);
+
         // 4. Scene — update entities and components
         m_sceneManager->update(deltaTime);
 
@@ -896,6 +899,12 @@ void Engine::run()
                                    * m_camera->getViewMatrix();
                 auto visibleChunks = m_foliageManager.getVisibleChunks(viewProj);
                 float elapsed = static_cast<float>(m_timer->getElapsedTime());
+
+                // Sync foliage wind with global environment
+                m_foliageRenderer.windDirection = m_environmentForces.getBaseWindDirection();
+                float envWindSpeed = m_environmentForces.getWindSpeed(m_camera->getPosition());
+                m_foliageRenderer.windAmplitude = 0.08f * std::max(0.2f, envWindSpeed);
+
                 if (!visibleChunks.empty())
                 {
                     m_profiler.getGpuTimer().beginPass("Foliage");
@@ -2091,10 +2100,12 @@ void Engine::setupTabernacleScene()
     makeBox("Tachash Roof", {0.0f, tentH + roofGap * 3.0f, tentL / 2.0f},
             {tentW + 1.2f, roofThick, tentL + 1.2f}, darkHideMat);
 
-    // Scene-wide prevailing wind direction — all cloth panels share this
-    // so wind blows consistently across the entire scene. Desert wind from
-    // the east (positive Z toward the tent entrance, slight northward drift).
-    const glm::vec3 sceneWindDir = glm::normalize(glm::vec3(0.15f, 0.0f, -1.0f));
+    // Scene-wide prevailing wind — configure EnvironmentForces so all
+    // consumers (cloth, foliage, particles, water) blow consistently.
+    // Desert wind from the east (positive Z toward entrance, slight northward drift).
+    m_environmentForces.setWindDirection(glm::vec3(0.15f, 0.0f, -1.0f));
+    m_environmentForces.setWindStrength(1.0f);
+    const glm::vec3 sceneWindDir = m_environmentForces.getBaseWindDirection();
 
     // Interior pillar dimensions (used by veil and curtain colliders)
     const float intPillarH = tentH - 0.3f;

@@ -74,6 +74,7 @@ add_executable(vestige_tests
     test_gpu_particle_system.cpp
     test_motion_matching.cpp
     test_advanced_physics.cpp
+    test_environment_forces.cpp
 )
 
 target_link_libraries(vestige_tests
