@@ -131,6 +131,15 @@ set(ENGINE_SOURCES
     physics/cloth_mesh_collider.cpp
     physics/collider_generator.cpp
     physics/spatial_hash.cpp
+    physics/ragdoll_preset.cpp
+    physics/ragdoll.cpp
+    physics/grab_system.cpp
+    physics/fracture.cpp
+    physics/deformable_mesh.cpp
+    physics/breakable_component.cpp
+    physics/dismemberment_zones.cpp
+    physics/dismemberment.cpp
+    scene/interactable_component.cpp
     renderer/dynamic_mesh.cpp
     profiler/gpu_timer.cpp
     profiler/cpu_profiler.cpp
