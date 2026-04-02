@@ -72,6 +72,7 @@ add_executable(vestige_tests
     test_cloth_collision.cpp
     test_cloth_solver_improvements.cpp
     test_gpu_particle_system.cpp
+    test_motion_matching.cpp
 )
 
 target_link_libraries(vestige_tests

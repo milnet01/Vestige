@@ -110,6 +110,14 @@ set(ENGINE_SOURCES
     animation/viseme_map.cpp
     animation/audio_analyzer.cpp
     animation/lip_sync.cpp
+    animation/feature_vector.cpp
+    animation/kd_tree.cpp
+    animation/motion_database.cpp
+    animation/trajectory_predictor.cpp
+    animation/inertialization.cpp
+    animation/motion_matcher.cpp
+    animation/motion_preprocessor.cpp
+    animation/mirror_generator.cpp
     physics/physics_world.cpp
     physics/rigid_body.cpp
     physics/physics_character_controller.cpp
