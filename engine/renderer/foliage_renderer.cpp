@@ -177,12 +177,19 @@ void FoliageRenderer::render(
 
         int cascadeCount = csm->getCascadeCount();
         m_shader.setInt("u_cascadeCount", cascadeCount);
-        for (int i = 0; i < cascadeCount; ++i)
+        static const char* cascadeSplitNames[4] = {
+            "u_cascadeSplits[0]", "u_cascadeSplits[1]",
+            "u_cascadeSplits[2]", "u_cascadeSplits[3]"
+        };
+        static const char* cascadeMatNames[4] = {
+            "u_cascadeLightSpaceMatrices[0]", "u_cascadeLightSpaceMatrices[1]",
+            "u_cascadeLightSpaceMatrices[2]", "u_cascadeLightSpaceMatrices[3]"
+        };
+        for (int i = 0; i < cascadeCount && i < 4; ++i)
         {
-            std::string idx = std::to_string(i);
-            m_shader.setFloat("u_cascadeSplits[" + idx + "]",
+            m_shader.setFloat(cascadeSplitNames[i],
                               csm->getCascadeSplit(i));
-            m_shader.setMat4("u_cascadeLightSpaceMatrices[" + idx + "]",
+            m_shader.setMat4(cascadeMatNames[i],
                              csm->getLightSpaceMatrix(i));
         }
     }

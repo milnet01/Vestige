@@ -18,7 +18,10 @@ void DeformableMesh::applyImpact(
     if (radius <= 0.0f || depth <= 0.0f)
         return;
 
-    glm::vec3 dir = glm::normalize(impactDirection);
+    float dirLen = glm::length(impactDirection);
+    if (dirLen < 0.0001f)
+        return;
+    glm::vec3 dir = impactDirection / dirLen;
     float radiusSq = radius * radius;
 
     for (auto& vertex : vertices)

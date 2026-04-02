@@ -295,9 +295,9 @@ void GPUParticleSystem::compact()
     if (!m_initialized)
         return;
 
-    // Reset counters before compaction (alive=0, dead=0 — shader will recount)
-    uint32_t zeros[2] = {0, 0};
-    glNamedBufferSubData(m_counterSSBO, 0, 2 * sizeof(uint32_t), zeros);
+    // Reset counters before compaction (alive=0, dead=0, emitCount=0 — shader will recount)
+    uint32_t zeros[3] = {0, 0, 0};
+    glNamedBufferSubData(m_counterSSBO, 0, 3 * sizeof(uint32_t), zeros);
 
     m_compactShader.use();
 
@@ -321,18 +321,19 @@ void GPUParticleSystem::sort(const glm::mat4& viewMatrix)
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, m_counterSSBO);
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 5, m_sortKeySSBO);
 
+    // Bitonic sort requires power-of-2 array size
+    uint32_t n = nextPowerOf2(m_maxParticles);
+    uint32_t groups = (n + 255) / 256;
+
     // Pass 0: Generate sort keys
     m_sortShader.setMat4("u_viewMatrix", viewMatrix);
     m_sortShader.setInt("u_sortPass", 0);
-    m_sortShader.setInt("u_sortCount", static_cast<int>(m_maxParticles));
+    m_sortShader.setInt("u_sortCount", static_cast<int>(n));
 
-    uint32_t groups = (m_maxParticles + 255) / 256;
     glDispatchCompute(groups, 1, 1);
     glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 
-    // Bitonic sort passes
-    uint32_t n = nextPowerOf2(m_maxParticles);
-
+    // Bitonic merge sort passes
     for (uint32_t stage = 1; (1u << stage) <= n; ++stage)
     {
         for (uint32_t step = stage; step >= 1; --step)
