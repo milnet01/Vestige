@@ -77,6 +77,7 @@ add_executable(vestige_tests
     test_environment_forces.cpp
     test_formula_library.cpp
     test_formula_compiler.cpp
+    test_curve_fitter.cpp
 )
 
 target_link_libraries(vestige_tests

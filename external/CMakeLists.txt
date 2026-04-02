@@ -143,7 +143,25 @@ set(TARGET_HELLO_WORLD OFF CACHE BOOL "" FORCE)
 set(TARGET_PERFORMANCE_TEST OFF CACHE BOOL "" FORCE)
 set(TARGET_SAMPLES OFF CACHE BOOL "" FORCE)
 set(TARGET_VIEWER OFF CACHE BOOL "" FORCE)
+set(CPP_RTTI_ENABLED ON CACHE BOOL "" FORCE)
+set(ENABLE_ALL_WARNINGS OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(JoltPhysics)
+
+# ImPlot — 2D plotting extension for ImGui (MIT)
+FetchContent_Declare(
+    implot
+    GIT_REPOSITORY https://github.com/epezent/implot.git
+    GIT_TAG        master
+    GIT_SHALLOW    TRUE
+)
+FetchContent_MakeAvailable(implot)
+add_library(implot_lib STATIC
+    ${implot_SOURCE_DIR}/implot.cpp
+    ${implot_SOURCE_DIR}/implot_items.cpp
+)
+target_include_directories(implot_lib PUBLIC ${implot_SOURCE_DIR})
+target_link_libraries(implot_lib PUBLIC imgui_lib)
+target_compile_options(implot_lib PRIVATE -w)
 
 # Google Test — unit testing
 FetchContent_Declare(

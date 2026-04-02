@@ -1,0 +1,109 @@
+/// @file main.cpp
+/// @brief Entry point for the FormulaWorkbench standalone tool.
+///
+/// Sets up a GLFW window with an OpenGL context, initializes ImGui and ImPlot,
+/// and runs the workbench main loop.
+
+#include "workbench.h"
+
+#include <glad/gl.h>
+#include <GLFW/glfw3.h>
+#include <imgui.h>
+#include <imgui_impl_glfw.h>
+#include <imgui_impl_opengl3.h>
+#include <implot.h>
+
+#include <cstdio>
+
+static void glfwErrorCallback(int error, const char* description)
+{
+    std::fprintf(stderr, "GLFW error %d: %s\n", error, description);
+}
+
+int main()
+{
+    // GLFW init
+    glfwSetErrorCallback(glfwErrorCallback);
+    if (!glfwInit())
+    {
+        std::fprintf(stderr, "Failed to initialize GLFW\n");
+        return 1;
+    }
+
+    // OpenGL 4.5 core
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 5);
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
+
+    GLFWwindow* window = glfwCreateWindow(1600, 900,
+        "Vestige FormulaWorkbench", nullptr, nullptr);
+    if (!window)
+    {
+        std::fprintf(stderr, "Failed to create GLFW window\n");
+        glfwTerminate();
+        return 1;
+    }
+
+    glfwMakeContextCurrent(window);
+    glfwSwapInterval(1);  // V-sync
+
+    // Load OpenGL functions
+    int version = gladLoadGL(glfwGetProcAddress);
+    if (!version)
+    {
+        std::fprintf(stderr, "Failed to initialize glad\n");
+        glfwTerminate();
+        return 1;
+    }
+
+    // ImGui init
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImPlot::CreateContext();
+
+    ImGuiIO& io = ImGui::GetIO();
+    io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+
+    ImGui::StyleColorsDark();
+
+    ImGui_ImplGlfw_InitForOpenGL(window, true);
+    ImGui_ImplOpenGL3_Init("#version 450");
+
+    // Create workbench
+    Vestige::Workbench workbench;
+
+    // Main loop
+    while (!glfwWindowShouldClose(window))
+    {
+        glfwPollEvents();
+
+        ImGui_ImplOpenGL3_NewFrame();
+        ImGui_ImplGlfw_NewFrame();
+        ImGui::NewFrame();
+
+        workbench.render();
+
+        ImGui::Render();
+        int displayW = 0;
+        int displayH = 0;
+        glfwGetFramebufferSize(window, &displayW, &displayH);
+        glViewport(0, 0, displayW, displayH);
+        glClearColor(0.1f, 0.1f, 0.12f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT);
+        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
+        glfwSwapBuffers(window);
+    }
+
+    // Cleanup
+    ImGui_ImplOpenGL3_Shutdown();
+    ImGui_ImplGlfw_Shutdown();
+    ImPlot::DestroyContext();
+    ImGui::DestroyContext();
+
+    glfwDestroyWindow(window);
+    glfwTerminate();
+    return 0;
+}
