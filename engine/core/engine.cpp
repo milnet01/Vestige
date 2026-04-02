@@ -731,16 +731,13 @@ void Engine::run()
             m_waterFbo.resize(rw / 4, rh / 4, rw / 4, rh / 4);
         }
 
-        // Check for viewport clicks (uses previous frame's viewport bounds)
+        // 3e. Editor viewport interaction and camera update
         if (editorActive)
         {
+            // Viewport click processing (uses previous frame's viewport bounds)
             m_editor->processViewportClick(
                 m_renderer->getRenderWidth(), m_renderer->getRenderHeight());
-        }
 
-        // 3e. Update editor camera before rendering (uses previous frame's hover state)
-        if (editorActive)
-        {
             m_editor->updateEditorCamera(deltaTime);
             m_editor->applyEditorCamera(*m_camera);
 

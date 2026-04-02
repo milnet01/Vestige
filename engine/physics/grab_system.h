@@ -73,6 +73,9 @@ private:
     /// @brief Cleans up grab state (constraint, holder body).
     void cleanupGrab(PhysicsWorld& world);
 
+    // Cached world reference for destructor cleanup
+    PhysicsWorld* m_world = nullptr;
+
     // Held object state
     bool m_holding = false;
     Entity* m_heldEntity = nullptr;

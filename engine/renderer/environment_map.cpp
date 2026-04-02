@@ -125,6 +125,14 @@ bool EnvironmentMap::initialize(const std::string& assetPath)
     glNamedFramebufferRenderbuffer(m_captureFbo, GL_DEPTH_ATTACHMENT,
                                    GL_RENDERBUFFER, m_captureRbo);
 
+    GLenum status = glCheckNamedFramebufferStatus(m_captureFbo, GL_FRAMEBUFFER);
+    if (status != GL_FRAMEBUFFER_COMPLETE)
+    {
+        Logger::error("IBL capture FBO incomplete — status: 0x"
+            + std::to_string(static_cast<unsigned int>(status)));
+        return false;
+    }
+
     Logger::info("IBL shaders loaded successfully");
     return true;
 }

@@ -458,3 +458,80 @@ Entity
 - Automatic stair stepping
 - Configurable slope angle limits
 - Ground contact detection for gravity and jumping
+
+### Ragdoll System (Phase 8)
+
+`Ragdoll` wraps Jolt's native ragdoll with Vestige skeleton conversion. `RagdollPreset` defines per-joint shapes, masses, and `SwingTwistConstraint` limits. Supports full ragdoll (limp), powered ragdoll (motors drive toward animation pose), and partial ragdoll (some joints kinematic, others dynamic). Uses `Stabilize()` and `DisableParentChildCollisions()` for stability.
+
+### Object Interaction (Phase 8)
+
+`GrabSystem` provides first-person grab/carry/throw. Uses raycast look-at detection, an invisible kinematic holder body, and a spring-based distance constraint for smooth carrying. `InteractableComponent` marks entities as grabbable with configurable mass limits, throw force, and hold distance.
+
+### Dynamic Destruction (Phase 8)
+
+`Fracture` implements Voronoi-based mesh fracture. Seed points are biased toward the impact location (60% Gaussian near impact, 40% uniform). `BreakableComponent` supports pre-fracture (compute fragments offline, activate on impact). `DeformableMesh` provides soft impact deformation with smooth spatial falloff.
+
+### Dismemberment (Phase 8)
+
+`DismembermentZones` manages per-bone health zones with damage-driven severing and child cascade. `Dismemberment` performs runtime mesh splitting by classifying vertices via bone weight dominance, splitting boundary triangles, and generating cap geometry.
+
+---
+
+## 12. Animation Subsystem (Phases 6-7)
+
+### Facial Animation
+
+`FacialAnimator` drives blend shape weights via emotion presets (happy, sad, angry, surprised, pain) with crossfade transitions. Uses the existing morph target pipeline (`SkeletonAnimator::setMorphWeight()`). `EyeController` handles look-at tracking, procedural blinking, and pupil dilation.
+
+### Audio-Driven Lip Sync
+
+`LipSync` supports two modes: pre-processed phoneme tracks (JSON) and real-time amplitude fallback. `VisemeMap` maps phonemes to viseme blend shapes. `AudioAnalyzer` provides FFT-based frequency analysis and RMS volume detection.
+
+### Motion Matching (Phase 7)
+
+`MotionDatabase` stores sampled animation poses with feature vectors (joint positions, velocities, trajectory). `KDTree` provides O(log n) nearest-neighbor search. `MotionMatcher` performs per-frame search at configurable intervals with `Inertialization` for smooth transitions. `TrajectoryPredictor` extrapolates player intent from input.
+
+---
+
+## 13. Environment Subsystem (Phase 5)
+
+`FoliageManager` handles instanced foliage rendering with LOD and wind animation. `DensityMap` provides a paintable grayscale texture controlling foliage placement density. `Terrain` supports heightmap-based terrain with LOD, splatmap texturing, and sculpting via `TerrainBrush`.
+
+---
+
+## 14. Editor Subsystem (Phase 5)
+
+The editor is an ImGui-based WYSIWYG interface with dockable panels:
+
+- **HierarchyPanel** — scene tree with multi-select, drag reparenting, lock/visibility toggles
+- **InspectorPanel** — component property editing with undo/redo
+- **AssetBrowserPanel** — filesystem browser with thumbnail previews
+- **EnvironmentPanel** — foliage painting, terrain sculpting, density map editing
+- **ValidationPanel** — scene validation warnings
+- **ImportDialog** — model import with preview and scale validation
+
+`CommandHistory` provides undo/redo via the Command pattern. `EntityActions` provides clipboard operations (copy/paste/duplicate). `RulerTool` provides measurement overlay. `BrushTool` handles environment painting with configurable radius and fallback.
+
+---
+
+## 15. GPU Compute Particles (Phase 6)
+
+`GPUParticleSystem` manages a compute shader pipeline: Emit → Simulate → Compact → Sort → IndirectDraw. Uses SSBOs for particle data, atomic counters for allocation, and bitonic sort for back-to-front transparency. `GPUParticleEmitter` provides a composable behavior system (gravity, drag, noise, orbit, vortex, collision). Auto-selects GPU path for emitters with >500 particles.
+
+---
+
+## 16. Profiler Subsystem
+
+`CpuProfiler` tracks per-frame CPU timing with scoped markers. `GpuTimer` uses OpenGL timer queries for per-pass GPU timing. `MemoryTracker` monitors allocation counts. `PerformanceProfiler` aggregates all metrics for the editor performance panel.
+
+---
+
+## 17. Resource Subsystem Extensions (Phase 5)
+
+`FileWatcher` monitors asset directories for changes and triggers reload callbacks. `AsyncTextureLoader` handles background texture loading with GPU upload on the main thread.
+
+---
+
+## 18. Cloth Collision & Solver (Phase 8)
+
+`ClothMeshCollider` provides triangle mesh collision with a `BVH` acceleration structure. `ColliderGenerator` automatically creates simplified collision geometry from scene meshes. `SpatialHash` enables efficient self-collision detection. `FabricMaterial` and `FabricDatabase` provide physically-based material presets (silk, cotton, leather, etc.) with KES-inspired parameters.

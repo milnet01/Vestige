@@ -65,11 +65,17 @@ int DismembermentZones::findZoneForBone(int boneIndex) const
 
 const DismembermentZone& DismembermentZones::getZone(int index) const
 {
+    static const DismembermentZone s_invalidZone{};
+    if (index < 0 || static_cast<size_t>(index) >= m_zones.size())
+        return s_invalidZone;
     return m_zones[static_cast<size_t>(index)];
 }
 
 DismembermentZone& DismembermentZones::getZone(int index)
 {
+    static DismembermentZone s_invalidZone{};
+    if (index < 0 || static_cast<size_t>(index) >= m_zones.size())
+        return s_invalidZone;
     return m_zones[static_cast<size_t>(index)];
 }
 

@@ -53,7 +53,7 @@ void LipSyncPlayer::update(float deltaTime)
     // End of track
     if (m_time >= m_track.duration)
     {
-        if (m_looping)
+        if (m_looping && m_track.duration > 0.0f)
         {
             m_time = std::fmod(m_time, m_track.duration);
         }

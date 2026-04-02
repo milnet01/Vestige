@@ -17,9 +17,10 @@ namespace Vestige
 
 GrabSystem::~GrabSystem()
 {
-    // Note: cleanup requires a PhysicsWorld reference, so caller should
-    // call release() before destruction if objects are still held.
-    m_holding = false;
+    if (m_holding && m_world)
+    {
+        cleanupGrab(*m_world);
+    }
     m_heldEntity = nullptr;
     m_lookedAtEntity = nullptr;
 }
@@ -27,6 +28,8 @@ GrabSystem::~GrabSystem()
 void GrabSystem::update(PhysicsWorld& world, const Camera& camera,
                         Scene& scene, float deltaTime)
 {
+    m_world = &world;
+
     updateLookAt(world, camera, scene);
 
     if (m_holding)
@@ -137,7 +140,10 @@ void GrabSystem::throwObject(PhysicsWorld& world, const glm::vec3& direction,
     cleanupGrab(world);
 
     // Apply throw impulse
-    glm::vec3 impulse = glm::normalize(direction) * force;
+    float dirLen = glm::length(direction);
+    if (dirLen < 0.0001f)
+        return;
+    glm::vec3 impulse = (direction / dirLen) * force;
     world.applyImpulse(bodyId, impulse);
 
     Logger::info("Threw object with force " + std::to_string(force));

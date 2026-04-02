@@ -110,8 +110,7 @@ private:
     /// @brief Extracts and triangulates faces from a convex hull.
     static void buildConvexHullMesh(
         const std::vector<glm::vec3>& hullPoints,
-        FractureFragment& outFragment,
-        const std::vector<glm::vec3>& cellVertices);
+        FractureFragment& outFragment);
 };
 
 } // namespace Vestige

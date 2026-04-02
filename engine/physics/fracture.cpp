@@ -76,7 +76,11 @@ FractureResult Fracture::fractureConvex(
 
             // Bisector plane: midpoint between seeds, normal pointing toward cellSeed
             glm::vec3 midpoint = 0.5f * (cellSeed + seeds[sj]);
-            glm::vec3 normal = glm::normalize(cellSeed - seeds[sj]);
+            glm::vec3 diff = cellSeed - seeds[sj];
+            float diffLen = glm::length(diff);
+            if (diffLen < 0.0001f)
+                continue;  // Skip duplicate seed points
+            glm::vec3 normal = diff / diffLen;
 
             cellVertices = clipConvexByPlane(cellVertices, midpoint, normal);
 
@@ -98,7 +102,7 @@ FractureResult Fracture::fractureConvex(
         fragment.centroid = computeCentroid(cellVertices);
 
         // Build convex hull faces from the cell vertices
-        buildConvexHullMesh(cellVertices, fragment, cellVertices);
+        buildConvexHullMesh(cellVertices, fragment);
 
         // Compute volume
         fragment.volume = std::abs(computeVolume(fragment.positions, fragment.indices));
@@ -295,8 +299,7 @@ void Fracture::triangulateFace(
 
 void Fracture::buildConvexHullMesh(
     const std::vector<glm::vec3>& hullPoints,
-    FractureFragment& outFragment,
-    const std::vector<glm::vec3>& /*cellVertices*/)
+    FractureFragment& outFragment)
 {
     if (hullPoints.size() < 4)
         return;

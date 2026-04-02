@@ -122,10 +122,14 @@ void TerrainRenderer::render(const Terrain& terrain,
     m_terrainShader.setInt("u_gridResolution", config.gridResolution);
 
     // LOD ranges for per-vertex morphing
+    static const char* lodRangeNames[8] = {
+        "u_lodRanges[0]", "u_lodRanges[1]", "u_lodRanges[2]", "u_lodRanges[3]",
+        "u_lodRanges[4]", "u_lodRanges[5]", "u_lodRanges[6]", "u_lodRanges[7]"
+    };
     const auto& lodRanges = terrain.getLodRanges();
     for (int i = 0; i < config.maxLodLevels && i < 8; ++i)
     {
-        m_terrainShader.setFloat("u_lodRanges[" + std::to_string(i) + "]",
+        m_terrainShader.setFloat(lodRangeNames[i],
                                  lodRanges[static_cast<size_t>(i)]);
     }
 
@@ -191,12 +195,19 @@ void TerrainRenderer::render(const Terrain& terrain,
 
         int cascadeCount = csm->getCascadeCount();
         m_terrainShader.setInt("u_cascadeCount", cascadeCount);
-        for (int i = 0; i < cascadeCount; ++i)
+        static const char* cascadeSplitNames[4] = {
+            "u_cascadeSplits[0]", "u_cascadeSplits[1]",
+            "u_cascadeSplits[2]", "u_cascadeSplits[3]"
+        };
+        static const char* cascadeMatNames[4] = {
+            "u_cascadeLightSpaceMatrices[0]", "u_cascadeLightSpaceMatrices[1]",
+            "u_cascadeLightSpaceMatrices[2]", "u_cascadeLightSpaceMatrices[3]"
+        };
+        for (int i = 0; i < cascadeCount && i < 4; ++i)
         {
-            std::string idx = std::to_string(i);
-            m_terrainShader.setFloat("u_cascadeSplits[" + idx + "]",
+            m_terrainShader.setFloat(cascadeSplitNames[i],
                                      csm->getCascadeSplit(i));
-            m_terrainShader.setMat4("u_cascadeLightSpaceMatrices[" + idx + "]",
+            m_terrainShader.setMat4(cascadeMatNames[i],
                                     csm->getLightSpaceMatrix(i));
         }
     }
@@ -253,10 +264,14 @@ void TerrainRenderer::renderShadow(const Terrain& terrain,
     m_shadowShader.setInt("u_gridResolution", config.gridResolution);
 
     // LOD ranges for per-vertex morphing
+    static const char* lodRangeNames[8] = {
+        "u_lodRanges[0]", "u_lodRanges[1]", "u_lodRanges[2]", "u_lodRanges[3]",
+        "u_lodRanges[4]", "u_lodRanges[5]", "u_lodRanges[6]", "u_lodRanges[7]"
+    };
     const auto& lodRanges = terrain.getLodRanges();
     for (int i = 0; i < config.maxLodLevels && i < 8; ++i)
     {
-        m_shadowShader.setFloat("u_lodRanges[" + std::to_string(i) + "]",
+        m_shadowShader.setFloat(lodRangeNames[i],
                                  lodRanges[static_cast<size_t>(i)]);
     }
 

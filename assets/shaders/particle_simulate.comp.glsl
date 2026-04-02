@@ -228,7 +228,7 @@ void main()
         return;
     }
 
-    float normalizedAge = p.age / p.lifetime;
+    float normalizedAge = (p.lifetime > 0.0) ? (p.age / p.lifetime) : 1.0;
     vec3 pos = p.position.xyz;
     vec3 vel = p.velocity.xyz;
 
@@ -267,8 +267,13 @@ void main()
             float dist = length(toCenter);
             if (dist > 0.001)
             {
-                vec3 tangent = normalize(cross(vec3(0, 1, 0), toCenter));
-                vel += tangent * orbitSpeed * u_deltaTime;
+                vec3 crossResult = cross(vec3(0, 1, 0), toCenter);
+                float crossLen = length(crossResult);
+                if (crossLen > 0.001)
+                {
+                    vec3 tangent = crossResult / crossLen;
+                    vel += tangent * orbitSpeed * u_deltaTime;
+                }
             }
         }
         else if (bType == BH_ATTRACT)
@@ -360,6 +365,8 @@ void main()
     if (u_depthCollision)
     {
         vec4 clipPos = u_viewProjection * vec4(pos, 1.0);
+        if (abs(clipPos.w) < 0.0001) { /* skip — particle at camera */ }
+        else {
         vec3 ndc = clipPos.xyz / clipPos.w;
         vec2 screenUV = ndc.xy * 0.5 + 0.5;
 
@@ -377,6 +384,7 @@ void main()
                 killParticle = true; // Check for kill-on-collision behavior
             }
         }
+        } // clipPos.w guard
     }
 
     // Check kill-on-collision

@@ -70,8 +70,8 @@ void main()
         GPUParticle p = particles[idx];
         if ((p.flags & 1u) == 0u)
         {
-            // Dead particles get maximum depth (sorted to end)
-            sortKeys[idx].depth = 0u; // Reverse-Z: 0 = farthest
+            // Dead particles get maximum depth value (sorted to end)
+            sortKeys[idx].depth = 0xFFFFFFFFu;
             sortKeys[idx].index = idx;
             return;
         }

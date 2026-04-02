@@ -881,3 +881,206 @@ TEST_F(AdvancedPhysicsIntegration, FractureAndMeasureFragments)
     // Fragments may not perfectly sum due to Voronoi approximation
     EXPECT_GT(totalVolume, 0.1f);
 }
+
+// ============================================================
+// Additional substantive tests (audit Batch G)
+// ============================================================
+
+// --- Fracture: clip algorithm correctness ---
+
+TEST(FractureClipping, SeedBiasTowardImpact)
+{
+    AABB bounds;
+    bounds.min = glm::vec3(-5.0f);
+    bounds.max = glm::vec3(5.0f);
+
+    glm::vec3 impact(4.0f, 4.0f, 4.0f);
+    auto seeds = Fracture::generateSeeds(bounds, 20, impact, 99);
+
+    ASSERT_EQ(seeds.size(), 20u);
+
+    // Count seeds within 3 units of impact (should be majority due to bias)
+    int nearImpact = 0;
+    for (const auto& s : seeds)
+    {
+        if (glm::distance(s, impact) < 3.0f)
+            ++nearImpact;
+    }
+    EXPECT_GE(nearImpact, 5);  // At least 5 of 20 should be near impact (Gaussian bias)
+}
+
+TEST(FractureClipping, AllSeedsWithinBounds)
+{
+    AABB bounds;
+    bounds.min = glm::vec3(-1.0f);
+    bounds.max = glm::vec3(1.0f);
+
+    auto seeds = Fracture::generateSeeds(bounds, 50, glm::vec3(0.0f), 42);
+
+    for (const auto& s : seeds)
+    {
+        EXPECT_GE(s.x, bounds.min.x);
+        EXPECT_LE(s.x, bounds.max.x);
+        EXPECT_GE(s.y, bounds.min.y);
+        EXPECT_LE(s.y, bounds.max.y);
+        EXPECT_GE(s.z, bounds.min.z);
+        EXPECT_LE(s.z, bounds.max.z);
+    }
+}
+
+TEST(FractureClipping, FragmentCentroidsDistinct)
+{
+    std::vector<glm::vec3> positions = {
+        {-1,-1,-1},{1,-1,-1},{-1,1,-1},{1,1,-1},
+        {-1,-1,1},{1,-1,1},{-1,1,1},{1,1,1}
+    };
+    std::vector<uint32_t> indices = {
+        0,1,2, 1,3,2, 4,5,6, 5,7,6,
+        0,4,6, 0,6,2, 1,5,7, 1,7,3,
+        0,1,5, 0,5,4, 2,3,7, 2,7,6
+    };
+
+    auto result = Fracture::fractureConvex(positions, indices, 4, glm::vec3(0), 123);
+    ASSERT_TRUE(result.success);
+    ASSERT_GE(result.fragments.size(), 2u);
+
+    // All fragment centroids should be distinct
+    for (size_t i = 0; i < result.fragments.size(); ++i)
+    {
+        for (size_t j = i + 1; j < result.fragments.size(); ++j)
+        {
+            float dist = glm::distance(result.fragments[i].centroid,
+                                        result.fragments[j].centroid);
+            EXPECT_GT(dist, 0.01f) << "Fragments " << i << " and " << j
+                                    << " have nearly identical centroids";
+        }
+    }
+}
+
+// --- Dismemberment: vertex classification correctness ---
+
+TEST(DismembermentClassification, VerticesClassifiedByDominantBone)
+{
+    // Create vertices with clear bone weight dominance
+    std::vector<Vertex> verts(4);
+
+    // Vertex 0: fully on bone 0 (body)
+    verts[0].position = glm::vec3(0, 0, 0);
+    verts[0].boneIds = glm::ivec4(0, 0, 0, 0);
+    verts[0].boneWeights = glm::vec4(1.0f, 0.0f, 0.0f, 0.0f);
+
+    // Vertex 1: fully on bone 2 (limb child)
+    verts[1].position = glm::vec3(1, 0, 0);
+    verts[1].boneIds = glm::ivec4(2, 0, 0, 0);
+    verts[1].boneWeights = glm::vec4(1.0f, 0.0f, 0.0f, 0.0f);
+
+    // Vertex 2: mixed — 70% bone 1 (cut bone), 30% bone 0
+    verts[2].position = glm::vec3(0.5f, 0, 0);
+    verts[2].boneIds = glm::ivec4(1, 0, 0, 0);
+    verts[2].boneWeights = glm::vec4(0.7f, 0.3f, 0.0f, 0.0f);
+
+    // Vertex 3: mixed — 40% bone 1, 60% bone 0 (body side wins)
+    verts[3].position = glm::vec3(0.3f, 0, 0);
+    verts[3].boneIds = glm::ivec4(1, 0, 0, 0);
+    verts[3].boneWeights = glm::vec4(0.4f, 0.6f, 0.0f, 0.0f);
+
+    // Skeleton: bone 0 = root, bone 1 = child of 0, bone 2 = child of 1
+    Skeleton skel;
+    Joint j0; j0.name = "Root"; j0.parentIndex = -1; skel.m_joints.push_back(j0);
+    Joint j1; j1.name = "Arm";  j1.parentIndex = 0;  skel.m_joints.push_back(j1);
+    Joint j2; j2.name = "Hand"; j2.parentIndex = 1;  skel.m_joints.push_back(j2);
+
+    std::vector<int> side;
+    Dismemberment::classifyVertices(verts, 1, skel, 0.1f, side);
+
+    ASSERT_EQ(side.size(), 4u);
+    EXPECT_EQ(side[0], 0);  // bone 0 → body
+    EXPECT_EQ(side[1], 1);  // bone 2 (child of cut bone 1) → limb
+    EXPECT_EQ(side[2], 1);  // bone 1 dominant → limb
+    EXPECT_EQ(side[3], 0);  // bone 0 dominant (60% > 40%) → body
+}
+
+// --- DismembermentZones: cascade and reset ---
+
+TEST(DismembermentZonesCascade, SeveringParentSeverChildren)
+{
+    auto skeleton = createTestSkeleton();
+    auto zones = DismembermentZones::createHumanoid(*skeleton);
+
+    // Find the left upper arm zone
+    int leftUpperArm = zones.findZoneForBone(skeleton->findJoint("LeftUpperArm"));
+    ASSERT_GE(leftUpperArm, 0);
+
+    int leftLowerArm = zones.findZoneForBone(skeleton->findJoint("LeftLowerArm"));
+    int leftHand = zones.findZoneForBone(skeleton->findJoint("LeftHand"));
+
+    // Apply lethal damage to upper arm
+    bool severed = zones.applyDamage(leftUpperArm, 200.0f);
+    EXPECT_TRUE(severed);
+
+    // Children should be cascaded
+    if (leftLowerArm >= 0) EXPECT_TRUE(zones.isZoneSevered(leftLowerArm));
+    if (leftHand >= 0) EXPECT_TRUE(zones.isZoneSevered(leftHand));
+
+    // Right arm should be unaffected
+    int rightUpperArm = zones.findZoneForBone(skeleton->findJoint("RightUpperArm"));
+    if (rightUpperArm >= 0) EXPECT_FALSE(zones.isZoneSevered(rightUpperArm));
+}
+
+TEST(DismembermentZonesCascade, ResetRestoresAllZones)
+{
+    auto skeleton = createTestSkeleton();
+    auto zones = DismembermentZones::createHumanoid(*skeleton);
+
+    // Sever everything
+    int head = zones.findZoneForBone(skeleton->findJoint("Head"));
+    if (head >= 0)
+    {
+        zones.applyDamage(head, 999.0f);
+        EXPECT_TRUE(zones.isZoneSevered(head));
+    }
+
+    // Reset
+    zones.reset();
+
+    // All zones should be restored
+    if (head >= 0) EXPECT_FALSE(zones.isZoneSevered(head));
+}
+
+// --- DeformableMesh: impact deformation ---
+
+TEST(DeformableMeshImpact, ZeroDirectionDoesNotCrash)
+{
+    std::vector<Vertex> verts(1);
+    verts[0].position = glm::vec3(0.0f);
+
+    // Zero direction should early-return without NaN
+    DeformableMesh::applyImpact(verts, glm::vec3(0.0f), glm::vec3(0.0f), 1.0f, 0.5f);
+
+    EXPECT_FALSE(std::isnan(verts[0].position.x));
+    EXPECT_FALSE(std::isnan(verts[0].position.y));
+    EXPECT_FALSE(std::isnan(verts[0].position.z));
+}
+
+TEST(DeformableMeshImpact, FalloffDecreases)
+{
+    std::vector<Vertex> verts(3);
+    verts[0].position = glm::vec3(0.0f, 0.0f, 0.0f);   // At impact point
+    verts[1].position = glm::vec3(0.3f, 0.0f, 0.0f);   // Close
+    verts[2].position = glm::vec3(0.9f, 0.0f, 0.0f);   // Far (near edge of radius)
+
+    glm::vec3 origPos0 = verts[0].position;
+    glm::vec3 origPos1 = verts[1].position;
+    glm::vec3 origPos2 = verts[2].position;
+
+    DeformableMesh::applyImpact(verts, glm::vec3(0.0f), glm::vec3(0.0f, -1.0f, 0.0f),
+                                 1.0f, 1.0f);
+
+    // Closest vertex should move the most
+    float disp0 = glm::length(verts[0].position - origPos0);
+    float disp1 = glm::length(verts[1].position - origPos1);
+    float disp2 = glm::length(verts[2].position - origPos2);
+
+    EXPECT_GE(disp0, disp1);
+    EXPECT_GE(disp1, disp2);
+}

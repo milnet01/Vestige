@@ -170,11 +170,13 @@ void WaterRenderer::render(const std::vector<WaterRenderItem>& waterItems,
 
         // Wave parameters
         m_waterShader.setInt("u_numWaves", config.numWaves);
+        static const char* waveParamNames[WaterSurfaceConfig::MAX_WAVES] = {
+            "u_waveParams[0]", "u_waveParams[1]", "u_waveParams[2]", "u_waveParams[3]"
+        };
         for (int i = 0; i < config.numWaves && i < WaterSurfaceConfig::MAX_WAVES; ++i)
         {
             float dirRad = config.waves[i].direction * glm::pi<float>() / 180.0f;
-            std::string prefix = "u_waveParams[" + std::to_string(i) + "]";
-            m_waterShader.setVec4(prefix, glm::vec4(
+            m_waterShader.setVec4(waveParamNames[i], glm::vec4(
                 config.waves[i].amplitude,
                 config.waves[i].wavelength,
                 config.waves[i].speed,

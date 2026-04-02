@@ -49,7 +49,7 @@ struct AABB
     /// @details Recomputes axis-aligned bounds from the 8 transformed corners.
     AABB transformed(const glm::mat4& matrix) const
     {
-        glm::vec3 corners[8] = {
+        const glm::vec3 corners[8] = {
             glm::vec3(min.x, min.y, min.z),
             glm::vec3(max.x, min.y, min.z),
             glm::vec3(min.x, max.y, min.z),

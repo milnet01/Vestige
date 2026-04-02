@@ -126,10 +126,7 @@ SplitResult Dismemberment::splitAtBone(
                 edgePoints.push_back(splitVert.position);
 
                 // Add split vertex to both meshes
-                int bodyIdx = static_cast<int>(result.bodyVertices.size());
                 result.bodyVertices.push_back(splitVert);
-
-                int limbIdx = static_cast<int>(result.limbVertices.size());
                 result.limbVertices.push_back(splitVert);
 
                 // Assign to the correct mesh based on side
@@ -150,8 +147,6 @@ SplitResult Dismemberment::splitAtBone(
                     }
                 }
 
-                (void)bodyIdx;
-                (void)limbIdx;
             }
         }
 
@@ -297,11 +292,18 @@ Vertex Dismemberment::interpolateVertex(const Vertex& a, const Vertex& b, float 
 {
     Vertex result;
     result.position = glm::mix(a.position, b.position, t);
-    result.normal = glm::normalize(glm::mix(a.normal, b.normal, t));
     result.color = glm::mix(a.color, b.color, t);
     result.texCoord = glm::mix(a.texCoord, b.texCoord, t);
-    result.tangent = glm::normalize(glm::mix(a.tangent, b.tangent, t));
-    result.bitangent = glm::normalize(glm::mix(a.bitangent, b.bitangent, t));
+
+    // Safe normalize for interpolated direction vectors (opposite directions can mix to zero)
+    auto safeNormalize = [](const glm::vec3& v) -> glm::vec3
+    {
+        float len = glm::length(v);
+        return (len > 0.0001f) ? (v / len) : glm::vec3(0.0f, 1.0f, 0.0f);
+    };
+    result.normal = safeNormalize(glm::mix(a.normal, b.normal, t));
+    result.tangent = safeNormalize(glm::mix(a.tangent, b.tangent, t));
+    result.bitangent = safeNormalize(glm::mix(a.bitangent, b.bitangent, t));
 
     // Interpolate bone weights — take the dominant side
     if (t < 0.5f)
@@ -329,7 +331,10 @@ void Dismemberment::generateCapMesh(
         return;
 
     // Project edge points onto the cut plane and sort by angle
-    glm::vec3 normal = glm::normalize(cutPlaneNormal);
+    float normalLen = glm::length(cutPlaneNormal);
+    if (normalLen < 0.0001f)
+        return;
+    glm::vec3 normal = cutPlaneNormal / normalLen;
 
     // Build local 2D frame on the cut plane
     glm::vec3 tangent;

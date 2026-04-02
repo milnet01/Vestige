@@ -19,6 +19,7 @@
 namespace Vestige
 {
 
+#ifndef NDEBUG
 /// @brief OpenGL debug message callback — routes driver messages to the engine logger.
 static void GLAPIENTRY glDebugCallback(
     GLenum source, GLenum type, GLuint id, GLenum severity,
@@ -72,6 +73,7 @@ static void GLAPIENTRY glDebugCallback(
             break;
     }
 }
+#endif // NDEBUG
 
 // Frustum plane extraction and AABB-vs-frustum testing moved to utils/frustum.h
 
