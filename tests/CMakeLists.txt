@@ -76,6 +76,7 @@ add_executable(vestige_tests
     test_advanced_physics.cpp
     test_environment_forces.cpp
     test_formula_library.cpp
+    test_formula_compiler.cpp
 )
 
 target_link_libraries(vestige_tests
