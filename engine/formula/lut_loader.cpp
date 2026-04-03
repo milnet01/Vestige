@@ -5,8 +5,10 @@
 
 #include <algorithm>
 #include <cmath>
+#include <climits>
 #include <cstring>
 #include <fstream>
+#include <limits>
 
 namespace Vestige
 {
@@ -95,7 +97,23 @@ bool LutLoader::loadFromFile(const std::string& path)
     size_t totalSamples = 1;
     for (const auto& axis : m_axes)
     {
+        if (axis.size == 0 || totalSamples > SIZE_MAX / axis.size)
+        {
+            Logger::error("LutLoader: integer overflow in totalSamples for: " + path);
+            m_axes.clear();
+            return false;
+        }
         totalSamples *= axis.size;
+    }
+
+    // Check that totalSamples * sizeof(float) fits in std::streamsize
+    constexpr size_t maxStreamSamples =
+        static_cast<size_t>(std::numeric_limits<std::streamsize>::max()) / sizeof(float);
+    if (totalSamples > maxStreamSamples)
+    {
+        Logger::error("LutLoader: data size exceeds streamsize limit for: " + path);
+        m_axes.clear();
+        return false;
     }
 
     m_data.resize(totalSamples);

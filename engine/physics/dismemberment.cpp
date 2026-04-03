@@ -124,29 +124,6 @@ SplitResult Dismemberment::splitAtBone(
 
                 Vertex splitVert = interpolateVertex(va, vb, t);
                 edgePoints.push_back(splitVert.position);
-
-                // Add split vertex to both meshes
-                result.bodyVertices.push_back(splitVert);
-                result.limbVertices.push_back(splitVert);
-
-                // Assign to the correct mesh based on side
-                if (triSide[vi] == 0)
-                {
-                    if (bodyVertMap[triIdx[vi]] < 0)
-                    {
-                        bodyVertMap[triIdx[vi]] = static_cast<int>(result.bodyVertices.size());
-                        result.bodyVertices.push_back(vertices[triIdx[vi]]);
-                    }
-                }
-                else
-                {
-                    if (limbVertMap[triIdx[vi]] < 0)
-                    {
-                        limbVertMap[triIdx[vi]] = static_cast<int>(result.limbVertices.size());
-                        result.limbVertices.push_back(vertices[triIdx[vi]]);
-                    }
-                }
-
             }
         }
 

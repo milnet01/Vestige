@@ -2,7 +2,13 @@
 /// @brief Logger implementation with ring-buffer capture for editor console panel.
 #include "core/logger.h"
 
+#include <chrono>
+#include <ctime>
+#include <filesystem>
+#include <fstream>
+#include <iomanip>
 #include <iostream>
+#include <sstream>
 
 namespace Vestige
 {
@@ -14,6 +20,8 @@ LogLevel Logger::s_level = LogLevel::Info;
 #endif
 
 std::vector<LogEntry> Logger::s_entries;
+
+static std::ofstream s_logFile;
 
 void Logger::setLevel(LogLevel level)
 {
@@ -65,6 +73,37 @@ void Logger::clearEntries()
     s_entries.clear();
 }
 
+void Logger::openLogFile(const std::string& directory)
+{
+    namespace fs = std::filesystem;
+    fs::create_directories(directory);
+
+    // Generate timestamped filename: vestige_YYYYMMDD_HHMMSS.log
+    auto now = std::chrono::system_clock::now();
+    auto time = std::chrono::system_clock::to_time_t(now);
+    std::tm tm{};
+    localtime_r(&time, &tm);
+
+    std::ostringstream filename;
+    filename << directory << "/vestige_"
+             << std::put_time(&tm, "%Y%m%d_%H%M%S") << ".log";
+
+    s_logFile.open(filename.str(), std::ios::out | std::ios::trunc);
+    if (s_logFile.is_open())
+    {
+        info("Log file opened: " + filename.str());
+    }
+}
+
+void Logger::closeLogFile()
+{
+    if (s_logFile.is_open())
+    {
+        s_logFile.flush();
+        s_logFile.close();
+    }
+}
+
 void Logger::log(LogLevel level, const std::string& message)
 {
     if (level < s_level)
@@ -72,9 +111,23 @@ void Logger::log(LogLevel level, const std::string& message)
         return;
     }
 
+    // Format the line
+    std::string line = std::string("[Vestige][") + levelToString(level) + "] " + message;
+
     // Console output
     std::ostream& stream = (level >= LogLevel::Error) ? std::cerr : std::cout;
-    stream << "[Vestige][" << levelToString(level) << "] " << message << '\n';
+    stream << line << '\n';
+
+    // File output
+    if (s_logFile.is_open())
+    {
+        s_logFile << line << '\n';
+        // Flush on warnings/errors so they survive crashes
+        if (level >= LogLevel::Warning)
+        {
+            s_logFile.flush();
+        }
+    }
 
     // Ring buffer for editor console panel
     if (s_entries.size() >= MAX_ENTRIES)

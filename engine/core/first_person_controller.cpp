@@ -21,6 +21,7 @@ FirstPersonController::FirstPersonController(Camera& camera, InputManager& input
     , m_gamepadId(-1)
 {
     m_camera.setSensitivity(config.mouseSensitivity);
+    m_cosMaxSlope = std::cos(m_config.maxSlopeAngle * 3.14159265f / 180.0f);
 
     // Check for connected gamepads
     for (int i = GLFW_JOYSTICK_1; i <= GLFW_JOYSTICK_LAST; i++)
@@ -215,8 +216,7 @@ void FirstPersonController::applyTerrainCollision(glm::vec3& newPosition, float 
 
     // Slope limiting: reject movement onto slopes steeper than maxSlopeAngle
     glm::vec3 terrainNormal = m_terrain->getNormal(newPosition.x, newPosition.z);
-    float cosMaxSlope = std::cos(m_config.maxSlopeAngle * 3.14159265f / 180.0f);
-    if (terrainNormal.y < cosMaxSlope && targetY > m_smoothedTerrainY)
+    if (terrainNormal.y < m_cosMaxSlope && targetY > m_smoothedTerrainY)
     {
         // Slope too steep and we'd be going uphill — revert XZ to previous position
         glm::vec3 camPos = m_camera.getPosition();

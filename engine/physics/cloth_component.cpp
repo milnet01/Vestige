@@ -1,6 +1,7 @@
 /// @file cloth_component.cpp
 /// @brief ClothComponent implementation.
 #include "physics/cloth_component.h"
+#include "profiler/cpu_profiler.h"
 
 namespace Vestige
 {
@@ -44,6 +45,7 @@ void ClothComponent::initialize(const ClothConfig& config, std::shared_ptr<Mater
 
 void ClothComponent::update(float deltaTime)
 {
+    VESTIGE_PROFILE_SCOPE("ClothSim");
     if (!m_ready || !m_isEnabled)
     {
         return;

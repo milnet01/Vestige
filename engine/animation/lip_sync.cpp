@@ -402,9 +402,19 @@ void LipSyncPlayer::applyTrackWeights()
     int idx = findCueAtTime(m_time);
     if (idx < 0)
     {
-        // No cue at current time — use rest pose
+        // No cue at current time — smoothly decay all weights to rest pose.
+        // Pass an empty map so smoothWeights decays every active weight
+        // toward zero and eventually erases them, then applies the cleared
+        // state to the FacialAnimator.
         std::unordered_map<std::string, float> restWeights;
         smoothWeights(restWeights);
+
+        // Force-clear any residual sub-threshold weights that smoothing
+        // has not yet erased, so the face fully returns to rest pose.
+        if (m_facialAnimator != nullptr && m_currentWeights.empty())
+        {
+            m_facialAnimator->clearLipSync();
+        }
         return;
     }
 

@@ -71,6 +71,13 @@ public:
     /// @brief Converts a log level to a short string (e.g. "INFO ").
     static const char* levelToString(LogLevel level);
 
+    /// @brief Opens a log file in the given directory. Creates the directory if needed.
+    /// Called once at engine startup. Subsequent log messages are written to this file.
+    static void openLogFile(const std::string& directory);
+
+    /// @brief Flushes and closes the log file (called at engine shutdown).
+    static void closeLogFile();
+
 private:
     static void log(LogLevel level, const std::string& message);
 

@@ -24,10 +24,9 @@ void PerformanceProfiler::beginFrame()
     // called unconditionally in the render loop).
     m_gpuTimer.beginFrame();
 
-    if (m_enabled)
-    {
-        getCpuProfiler_().beginFrame();
-    }
+    // Always run CPU profiler so VESTIGE_PROFILE_SCOPE data is captured
+    // regardless of whether the performance panel is currently open.
+    getCpuProfiler_().beginFrame();
 }
 
 void PerformanceProfiler::endFrame(float deltaTime)
@@ -35,10 +34,10 @@ void PerformanceProfiler::endFrame(float deltaTime)
     m_currentFrameTimeMs = deltaTime * 1000.0f;
 
     m_gpuTimer.endFrame();
+    getCpuProfiler_().endFrame();
 
     if (m_enabled)
     {
-        getCpuProfiler_().endFrame();
         m_memoryTracker.update();
     }
 

@@ -276,9 +276,12 @@ float blockerSearch(vec3 projCoords, int cascade, float bias, vec2 texelSize, fl
     int blockerCount = 0;
 
     // Rotate Poisson disk per-fragment to break up banding artifacts
-    float angle = interleavedGradientNoise(gl_FragCoord.xy) * 6.28318;
-    float cosA = cos(angle);
-    float sinA = sin(angle);
+    // Compute rotation directly from noise — avoids sin/cos per pixel
+    float noise = interleavedGradientNoise(gl_FragCoord.xy);
+    float cosA = noise * 2.0 - 1.0;  // [-1, 1]
+    float sinA = sqrt(1.0 - cosA * cosA);  // sqrt is cheaper than sin on GPU
+    // Randomize sign of sinA using a second noise evaluation
+    if (fract(noise * 17.0) > 0.5) sinA = -sinA;
     mat2 rotation = mat2(cosA, sinA, -sinA, cosA);
 
     for (int i = 0; i < 16; i++)
@@ -349,10 +352,13 @@ float calcShadowForCascade(int cascade, vec3 normal, vec3 lightDir)
 
     // Step 3: PCF with variable-size kernel
     float shadow = 0.0;
-    float angle = interleavedGradientNoise(gl_FragCoord.xy) * 6.28318;
-    float cosA = cos(angle);
-    float sinA = sin(angle);
-    mat2 rotation = mat2(cosA, sinA, -sinA, cosA);
+    // Compute rotation directly from noise — avoids sin/cos per pixel
+    float pcfNoise = interleavedGradientNoise(gl_FragCoord.xy);
+    float pcfCosA = pcfNoise * 2.0 - 1.0;  // [-1, 1]
+    float pcfSinA = sqrt(1.0 - pcfCosA * pcfCosA);  // sqrt is cheaper than sin on GPU
+    // Randomize sign of sinA using a second noise evaluation
+    if (fract(pcfNoise * 17.0) > 0.5) pcfSinA = -pcfSinA;
+    mat2 rotation = mat2(pcfCosA, pcfSinA, -pcfSinA, pcfCosA);
 
     for (int i = 0; i < 16; i++)
     {
@@ -491,7 +497,9 @@ float geometrySmith(float NdotV, float NdotL, float roughness)
 /// Describes how reflectance changes at grazing angles.
 vec3 fresnelSchlick(float cosTheta, vec3 F0)
 {
-    return F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
+    float x = clamp(1.0 - cosTheta, 0.0, 1.0);
+    float x2 = x * x;
+    return F0 + (1.0 - F0) * (x2 * x2 * x);
 }
 
 /// Evaluate L2 SH irradiance from 7 packed RGBA16F 3D textures.
@@ -547,8 +555,10 @@ vec3 evaluateSHGridIrradiance(vec3 worldPos, vec3 normal)
 /// Fresnel-Schlick with roughness — prevents harsh edges on rough metals under IBL.
 vec3 fresnelSchlickRoughness(float cosTheta, vec3 F0, float roughness)
 {
+    float x = clamp(1.0 - cosTheta, 0.0, 1.0);
+    float x2 = x * x;
     return F0 + (max(vec3(1.0 - roughness), F0) - F0)
-             * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
+             * (x2 * x2 * x);
 }
 
 /// Computes the clearcoat specular contribution for a single light.
@@ -559,7 +569,9 @@ vec3 calcClearcoatLobe(float NdotH, float NdotV, float NdotL, float HdotV,
 {
     float Dc = distributionGGX(NdotH, max(clearcoatRoughness, 0.04));
     float Gc = geometrySmith(NdotV, NdotL, clearcoatRoughness);
-    Fc = pow(1.0 - HdotV, 5.0) * 0.96 + 0.04;  // Schlick with F0=0.04
+    float ccX = 1.0 - HdotV;
+    float ccX2 = ccX * ccX;
+    Fc = (ccX2 * ccX2 * ccX) * 0.96 + 0.04;  // Schlick with F0=0.04
 
     return vec3(Dc * Gc * Fc) / (4.0 * NdotV * NdotL + 0.0001);
 }
@@ -1061,7 +1073,9 @@ void main()
                     vec3 ccProbe = textureLod(u_probePrefilterMap, R, ccLod).rgb;
                     ccPrefilt = mix(ccPrefilt, ccProbe, u_probeWeight);
                 }
-                float ccFresnel = pow(1.0 - max(dot(norm, viewDir), 0.0), 5.0) * 0.96 + 0.04;
+                float ccX = 1.0 - max(dot(norm, viewDir), 0.0);
+                float ccX2 = ccX * ccX;
+                float ccFresnel = (ccX2 * ccX2 * ccX) * 0.96 + 0.04;
                 vec3 ccIBL = ccPrefilt * ccFresnel;
                 ambient = ambient * (1.0 - u_clearcoat * ccFresnel) + ccIBL * u_clearcoat * ao * u_iblMultiplier;
             }

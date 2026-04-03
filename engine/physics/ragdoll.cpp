@@ -158,8 +158,7 @@ void Ragdoll::destroy()
         {
             m_joltRagdoll->RemoveFromPhysicsSystem();
         }
-        delete m_joltRagdoll;
-        m_joltRagdoll = nullptr;
+        m_joltRagdoll = nullptr;  // Release ref — Jolt ref-counting handles deletion
     }
 
     m_settings = nullptr;
@@ -571,7 +570,7 @@ JPH::Ref<JPH::Shape> Ragdoll::createShape(const RagdollJointDef& def) const
 
         case RagdollShapeType::BOX:
         {
-            glm::vec3 halfExtents = glm::max(def.shapeSize, glm::vec3(0.01f));
+            glm::vec3 halfExtents = glm::max(def.shapeSize, glm::vec3(0.05f));
             return new JPH::BoxShape(toJolt(halfExtents));
         }
     }

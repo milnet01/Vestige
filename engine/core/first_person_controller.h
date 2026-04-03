@@ -92,6 +92,7 @@ private:
     bool m_isGamepadSprinting;
     int m_gamepadId;
     float m_smoothedTerrainY = 0.0f; // Smoothed terrain height for damping
+    float m_cosMaxSlope = 0.0f;      // Pre-computed cos(maxSlopeAngle)
 };
 
 } // namespace Vestige

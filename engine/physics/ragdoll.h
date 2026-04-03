@@ -147,8 +147,8 @@ private:
     RagdollState m_state = RagdollState::INACTIVE;
     float m_motorStrength = 1.0f;
 
-    // Jolt ragdoll objects
-    JPH::Ragdoll* m_joltRagdoll = nullptr;
+    // Jolt ragdoll objects (ref-counted via JPH::Ref)
+    JPH::Ref<JPH::Ragdoll> m_joltRagdoll;
     JPH::Ref<JPH::RagdollSettings> m_settings;
     JPH::Ref<JPH::Skeleton> m_joltSkeleton;
 
