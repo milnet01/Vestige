@@ -13,6 +13,7 @@
 #include "scene/particle_emitter.h"
 #include "scene/water_surface.h"
 #include "physics/cloth_component.h"
+#include "scene/pressure_plate_component.h"
 #include "physics/rigid_body.h"
 #include "physics/fabric_material.h"
 #include "editor/commands/particle_property_command.h"
@@ -282,6 +283,11 @@ void InspectorPanel::draw(Scene* scene, Selection& selection)
     if (entity->hasComponent<ClothComponent>())
     {
         drawClothComponent(*entity);
+    }
+
+    if (entity->hasComponent<PressurePlateComponent>())
+    {
+        drawPressurePlate(*entity);
     }
 
     // --- Multi-selection info ---
@@ -1854,6 +1860,36 @@ void InspectorPanel::drawClothComponent(Entity& entity)
     if (paramChanged && cloth->getPresetType() != ClothPresetType::CUSTOM)
     {
         cloth->setPresetType(ClothPresetType::CUSTOM);
+    }
+
+    ImGui::Spacing();
+}
+
+void InspectorPanel::drawPressurePlate(Entity& entity)
+{
+    auto* plate = entity.getComponent<PressurePlateComponent>();
+    if (!plate) return;
+
+    if (!drawComponentHeader("Pressure Plate")) return;
+
+    ImGui::DragFloat("Detection Radius", &plate->detectionRadius, 0.05f, 0.1f, 20.0f, "%.2f m");
+    ImGui::DragFloat("Detection Height", &plate->detectionHeight, 0.05f, 0.0f, 5.0f, "%.2f m");
+    ImGui::DragFloat("Query Interval", &plate->queryInterval, 0.01f, 0.02f, 1.0f, "%.2f s");
+    ImGui::Checkbox("Inverted", &plate->inverted);
+    if (ImGui::IsItemHovered())
+    {
+        ImGui::SetTooltip("When inverted, plate activates when NO bodies are present");
+    }
+
+    ImGui::Separator();
+    if (plate->isActivated())
+    {
+        ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.3f, 1.0f), "ACTIVATED (%zu bodies)",
+                           plate->getOverlapCount());
+    }
+    else
+    {
+        ImGui::TextDisabled("Inactive");
     }
 
     ImGui::Spacing();

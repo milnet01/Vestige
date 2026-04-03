@@ -21,8 +21,14 @@
 #include "editor/selection.h"
 #include "editor/tools/brush_tool.h"
 #include "editor/tools/brush_preview.h"
+#include "editor/tools/cutout_tool.h"
+#include "editor/tools/path_tool.h"
+#include "editor/tools/roof_tool.h"
+#include "editor/tools/room_tool.h"
 #include "editor/tools/ruler_tool.h"
+#include "editor/tools/stair_tool.h"
 #include "editor/tools/terrain_brush.h"
+#include "editor/tools/wall_tool.h"
 
 #include <imgui.h>
 #include <ImGuizmo.h>
@@ -199,6 +205,14 @@ public:
     /// @brief Gets the ruler tool.
     RulerTool& getRulerTool() { return m_rulerTool; }
 
+    /// @brief Gets the architectural tools.
+    WallTool& getWallTool() { return m_wallTool; }
+    RoomTool& getRoomTool() { return m_roomTool; }
+    CutoutTool& getCutoutTool() { return m_cutoutTool; }
+    RoofTool& getRoofTool() { return m_roofTool; }
+    StairTool& getStairTool() { return m_stairTool; }
+    PathTool& getPathTool() { return m_pathTool; }
+
 private:
     void setupTheme();
     void drawGizmo(Camera* camera, Scene* scene);
@@ -249,6 +263,12 @@ private:
     BrushPreviewRenderer m_brushPreview;
     RulerTool m_rulerTool;
     TerrainBrush m_terrainBrush;
+    WallTool m_wallTool;
+    RoomTool m_roomTool;
+    CutoutTool m_cutoutTool;
+    RoofTool m_roofTool;
+    StairTool m_stairTool;
+    PathTool m_pathTool;
     PrefabSystem m_prefabSystem;
     ResourceManager* m_resourceManager = nullptr;
     FoliageManager* m_foliageManager = nullptr;
