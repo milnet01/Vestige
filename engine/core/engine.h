@@ -28,6 +28,7 @@
 #include "physics/physics_debug.h"
 #include "physics/physics_character_controller.h"
 #include "testing/visual_test_runner.h"
+#include "core/system_registry.h"
 
 #include <memory>
 
@@ -102,12 +103,31 @@ private:
     VisualTestRunner m_visualTestRunner;
     bool m_visualTestMode = false;
 
+    SystemRegistry m_systemRegistry;
+
     bool m_isRunning;
     bool m_isCursorCaptured;
 
     // Reusable per-frame data (avoids heap allocation every frame)
     SceneRenderData m_renderData;
     std::vector<AABB> m_colliders;
+
+public:
+    /// @brief Access the system registry (for domain system registration/lookup).
+    SystemRegistry& getSystemRegistry() { return m_systemRegistry; }
+    const SystemRegistry& getSystemRegistry() const { return m_systemRegistry; }
+
+    /// @brief Access the event bus (for cross-system communication).
+    EventBus& getEventBus() { return m_eventBus; }
+
+    /// @brief Access shared infrastructure for domain systems.
+    EnvironmentForces& getEnvironmentForces() { return m_environmentForces; }
+    ResourceManager& getResourceManager() { return *m_resourceManager; }
+    Renderer& getRenderer() { return *m_renderer; }
+    SceneManager& getSceneManager() { return *m_sceneManager; }
+    Terrain& getTerrain() { return m_terrain; }
+    PhysicsWorld& getPhysicsWorld() { return m_physicsWorld; }
+    PerformanceProfiler& getProfiler() { return m_profiler; }
 };
 
 } // namespace Vestige

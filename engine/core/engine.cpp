@@ -640,6 +640,13 @@ bool Engine::initialize(const EngineConfig& config)
                      + std::to_string(m_visualTestRunner.viewpointCount()) + " viewpoints");
     }
 
+    // Initialize all registered domain systems
+    if (!m_systemRegistry.initializeAll(*this))
+    {
+        Logger::error("Failed to initialize domain systems");
+        return false;
+    }
+
     m_isRunning = true;
     Logger::info("Engine initialized successfully");
     Logger::info("Controls: Escape=toggle editor/play, WASD=move (play mode), Mouse=look (play mode), E=interact, F1=wireframe, F2=tonemapper, F3=HDR debug, F4=POM, F5=bloom, F6=SSAO, F7=AA mode (None/MSAA/TAA/SMAA), F8=color grading, F9=CSM debug, F10=auto-exposure, F11=diagnostic capture, V=frame cap cycle, P=toggle physics controller, G=walk/fly, Ctrl+Q=quit");
@@ -907,6 +914,12 @@ void Engine::run()
             VESTIGE_PROFILE_SCOPE("JoltPhysics");
             m_physicsWorld.update(deltaTime);
             m_physicsWorld.checkBreakableConstraints(deltaTime);
+        }
+
+        // 4c. Domain systems — update all active domain systems
+        {
+            VESTIGE_PROFILE_SCOPE("DomainSystems");
+            m_systemRegistry.updateAll(deltaTime);
         }
 
         // 5. Controller — process input and update camera
@@ -1343,6 +1356,9 @@ void Engine::shutdown()
     {
         m_renderer->setFoliageShadowCaster(nullptr, nullptr);
     }
+
+    // Shut down domain systems before destroying GL subsystems
+    m_systemRegistry.shutdownAll();
 
     // Shut down all subsystems that hold GL resources BEFORE destroying the window
     // (the window owns the GL context — GL calls after window destruction crash).

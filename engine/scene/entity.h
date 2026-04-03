@@ -148,6 +148,19 @@ public:
         m_components.erase(id);
     }
 
+    /// @brief Returns the type IDs of all components attached to this entity.
+    /// Used by SystemRegistry for auto-activation based on scene contents.
+    std::vector<uint32_t> getComponentTypeIds() const
+    {
+        std::vector<uint32_t> ids;
+        ids.reserve(m_components.size());
+        for (const auto& pair : m_components)
+        {
+            ids.push_back(pair.first);
+        }
+        return ids;
+    }
+
     // --- Hierarchy ---
 
     /// @brief Adds a child entity at the end. This entity takes ownership.
