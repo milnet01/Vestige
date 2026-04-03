@@ -1825,6 +1825,19 @@ void InspectorPanel::drawClothComponent(Entity& entity)
             paramChanged = true;
         }
 
+        const char* windQualityItems[] = { "Full", "Approximate", "Simple" };
+        int windQuality = static_cast<int>(sim.getWindQuality());
+        if (ImGui::Combo("Wind Quality", &windQuality, windQualityItems, 3))
+        {
+            sim.setWindQuality(static_cast<ClothSimulator::WindQuality>(windQuality));
+        }
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("Full: per-particle noise + per-triangle drag (best quality)\n"
+                              "Approximate: uniform wind + per-triangle drag (good quality)\n"
+                              "Simple: no wind simulation (fastest)");
+        }
+
         ImGui::TreePop();
     }
 

@@ -4,6 +4,7 @@
 #include "formula/expression_eval.h"
 #include "core/logger.h"
 
+#include <climits>
 #include <cstring>
 #include <fstream>
 #include <limits>
@@ -77,6 +78,11 @@ LutGenerateResult LutGenerator::generate(
     size_t totalSamples = 1;
     for (const auto& axis : axes)
     {
+        if (axis.resolution == 0 || totalSamples > SIZE_MAX / axis.resolution)
+        {
+            result.errorMessage = "Integer overflow computing total LUT samples";
+            return result;
+        }
         totalSamples *= axis.resolution;
     }
     result.data.resize(totalSamples);

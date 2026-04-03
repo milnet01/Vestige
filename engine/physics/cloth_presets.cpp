@@ -15,7 +15,7 @@ ClothPresetConfig ClothPresets::linenCurtain()
 {
     ClothPresetConfig preset;
     preset.solver.particleMass = 0.02f;
-    preset.solver.substeps = 16;               // High substeps — better constraint convergence
+    preset.solver.substeps = 6;                // Moderate substeps — good visual quality
     preset.solver.stretchCompliance = 0.00005f; // Very stiff stretch — holds shape
     preset.solver.shearCompliance = 0.0003f;
     preset.solver.bendCompliance = 0.005f;     // Stiff bend — actively unfolds to flat
@@ -57,7 +57,7 @@ ClothPresetConfig ClothPresets::heavyDrape()
 {
     ClothPresetConfig preset;
     preset.solver.particleMass = 0.10f;
-    preset.solver.substeps = 8;
+    preset.solver.substeps = 4;
     preset.solver.stretchCompliance = 0.00001f;
     preset.solver.shearCompliance = 0.0002f;
     preset.solver.bendCompliance = 0.02f;

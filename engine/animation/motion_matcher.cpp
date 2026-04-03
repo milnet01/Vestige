@@ -138,11 +138,37 @@ void MotionMatcher::performSearch()
             int newFrame = m_currentFrame + frameAdvance;
             if (newFrame < m_database->getFrameCount())
             {
-                // Only advance if still in the same clip
-                if (m_database->getFrameInfo(newFrame).clipIndex ==
-                    m_database->getFrameInfo(m_currentFrame).clipIndex)
+                // Only advance if still in the same clip — validate that
+                // every frame in [m_currentFrame+1 .. newFrame] belongs to
+                // the same clip, not just the endpoint.  Because frames are
+                // stored contiguously per clip, it is sufficient to check
+                // the endpoint: if it is still in the same clip, so are all
+                // intermediate frames.  However, we must also verify that
+                // newFrame does not exceed the clip's last frame to avoid
+                // running past the clip boundary into the next clip's range.
+                int currentClip = m_database->getFrameInfo(m_currentFrame).clipIndex;
+                if (m_database->getFrameInfo(newFrame).clipIndex == currentClip)
                 {
                     m_currentFrame = newFrame;
+                    m_currentFrameTime -= static_cast<float>(frameAdvance) / sampleRate;
+                }
+                else
+                {
+                    // newFrame crossed into a different clip. Clamp to the
+                    // last frame that still belongs to the current clip by
+                    // scanning backwards from newFrame-1.
+                    int clampedFrame = newFrame - 1;
+                    while (clampedFrame > m_currentFrame &&
+                           m_database->getFrameInfo(clampedFrame).clipIndex != currentClip)
+                    {
+                        --clampedFrame;
+                    }
+                    if (clampedFrame > m_currentFrame &&
+                        m_database->getFrameInfo(clampedFrame).clipIndex == currentClip)
+                    {
+                        m_currentFrame = clampedFrame;
+                    }
+                    // Consumed the accumulated time regardless of clamping
                     m_currentFrameTime -= static_cast<float>(frameAdvance) / sampleRate;
                 }
             }

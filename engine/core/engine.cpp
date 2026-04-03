@@ -44,6 +44,7 @@ Engine::~Engine()
 
 bool Engine::initialize(const EngineConfig& config)
 {
+    Logger::openLogFile("logs");
     Logger::info("=== Vestige Engine v0.5.0 ===");
     Logger::info("Initializing engine...");
 
@@ -787,15 +788,25 @@ void Engine::run()
             }
         }
 
-        // 3b. Environment — advance gust state machine and weather
-        m_environmentForces.update(deltaTime);
+        // Start profiler early to capture CPU systems (cloth, physics) not just rendering
+        m_profiler.beginFrame();
 
-        // 4. Scene — update entities and components
-        m_sceneManager->update(deltaTime);
+        // 3b. Environment — advance gust state machine and weather
+        {
+            VESTIGE_PROFILE_SCOPE("Environment");
+            m_environmentForces.update(deltaTime);
+        }
+
+        // 4. Scene — update entities and components (includes cloth simulation)
+        {
+            VESTIGE_PROFILE_SCOPE("SceneUpdate");
+            m_sceneManager->update(deltaTime);
+        }
 
         // 4b. Physics — step the Jolt simulation
         if (m_physicsWorld.isInitialized())
         {
+            VESTIGE_PROFILE_SCOPE("JoltPhysics");
             m_physicsWorld.update(deltaTime);
             m_physicsWorld.checkBreakableConstraints(deltaTime);
         }
@@ -832,7 +843,6 @@ void Engine::run()
             continue;  // Skip rendering when minimized
         }
 
-        m_profiler.beginFrame();
         m_renderer->beginFrame();
 
         // Use render target dimensions for aspect ratio (matches viewport panel in editor mode,
@@ -891,7 +901,10 @@ void Engine::run()
             }
 
             m_profiler.getGpuTimer().beginPass("Scene");
-            m_renderer->renderScene(m_renderData, *m_camera, aspectRatio);
+            {
+                VESTIGE_PROFILE_SCOPE("RenderScene");
+                m_renderer->renderScene(m_renderData, *m_camera, aspectRatio);
+            }
             m_profiler.getGpuTimer().endPass();
 
             // Render terrain (after opaques, before foliage/water)
@@ -959,6 +972,7 @@ void Engine::run()
 
                 // --- Refraction pass: render scene below water ---
                 {
+                    VESTIGE_PROFILE_SCOPE("WaterRefraction");
                     glm::vec4 refrClipPlane(0.0f, -1.0f, 0.0f, waterY + 0.1f);
                     glEnable(GL_CLIP_DISTANCE0);
 
@@ -976,6 +990,7 @@ void Engine::run()
 
                 // --- Reflection pass: render scene above water with reflected camera ---
                 {
+                    VESTIGE_PROFILE_SCOPE("WaterReflection");
                     glm::vec4 reflClipPlane(0.0f, 1.0f, 0.0f, -waterY + 0.1f);
 
                     // Create reflected camera: mirror position and pitch around water plane
@@ -1257,6 +1272,7 @@ void Engine::shutdown()
 
     m_isRunning = false;
     Logger::info("Engine shutdown complete");
+    Logger::closeLogFile();
 }
 
 void Engine::createPhysicsStaticBodies()
@@ -1283,8 +1299,11 @@ void Engine::createPhysicsStaticBodies()
         glm::vec3 size = aabb.getSize();
         glm::vec3 halfExtents = size * 0.5f;
 
-        // Skip degenerate AABBs
-        if (halfExtents.x < 0.001f || halfExtents.y < 0.001f || halfExtents.z < 0.001f)
+        // Skip degenerate AABBs — Jolt's default convex radius is 0.05,
+        // so half-extents must be at least that large
+        constexpr float MIN_HALF_EXTENT = 0.05f;
+        if (halfExtents.x < MIN_HALF_EXTENT || halfExtents.y < MIN_HALF_EXTENT ||
+            halfExtents.z < MIN_HALF_EXTENT)
         {
             continue;
         }
@@ -2548,85 +2567,51 @@ void Engine::setupTabernacleScene()
     fenceClothMat->setUvScale(2.0f);
     fenceClothMat->setDoubleSided(true);
 
-    // Stiff fence preset for all courtyard wall panels
-    ClothPresetConfig fencePreset = ClothPresets::stiffFence();
-
-    // Helper: create a cloth fence panel between two anchor points.
-    uint32_t fenceSeedCounter = 100u;  // Unique seed per panel
-    auto makeClothFence = [&](const std::string& name,
-                              glm::vec3 topLeft, glm::vec3 topRight,
-                              float height)
+    // Helper: create a static mesh fence panel between two pillar tops.
+    // Uses a flat quad instead of cloth simulation — the courtyard fence is
+    // taut linen that barely moves, so full XPBD is unnecessary. This saves
+    // ~80 cloth simulations per frame (~200ms CPU).
+    auto makeStaticFence = [&](const std::string& name,
+                               glm::vec3 topLeft, glm::vec3 topRight,
+                               float height)
     {
         float panelWidth = glm::length(topRight - topLeft);
-        glm::vec3 along = (topRight - topLeft) / panelWidth;
+        glm::vec3 along = glm::normalize(topRight - topLeft);
+        glm::vec3 up(0, 1, 0);
+        glm::vec3 normal = glm::normalize(glm::cross(along, up));
 
-        // Coarse grid (~0.5m spacing) for performance — fence panels are taut
-        float spacing = 0.5f;
-        uint32_t gridW = std::max(3u, static_cast<uint32_t>(panelWidth / spacing) + 1);
-        uint32_t gridH = std::max(3u, static_cast<uint32_t>(height / spacing) + 1);
-        spacing = std::min(panelWidth / static_cast<float>(gridW - 1),
-                           height / static_cast<float>(gridH - 1));
+        // Build a simple quad: 4 vertices, 2 triangles, double-sided
+        glm::vec3 bl = topLeft + glm::vec3(0, -height, 0);  // bottom-left
+        glm::vec3 br = topRight + glm::vec3(0, -height, 0); // bottom-right
+        glm::vec3 tl = topLeft;                               // top-left
+        glm::vec3 tr = topRight;                              // top-right
 
-        ClothConfig cfg = fencePreset.solver;
-        cfg.width = gridW;
-        cfg.height = gridH;
-        cfg.spacing = spacing;
+        // UV: tile texture across panel width and height
+        float uScale = panelWidth / 1.0f;  // 1m per UV repeat
+        float vScale = height / 1.0f;
+        glm::vec3 white(1.0f);
+        glm::vec3 tangent = along;
+        glm::vec3 bitangent = up;
+
+        std::vector<Vertex> vertices = {
+            {bl, normal, white, {0.0f, 0.0f}, tangent, bitangent},
+            {br, normal, white, {uScale, 0.0f}, tangent, bitangent},
+            {tr, normal, white, {uScale, vScale}, tangent, bitangent},
+            {tl, normal, white, {0.0f, vScale}, tangent, bitangent},
+        };
+        std::vector<uint32_t> indices = {0, 1, 2, 0, 2, 3};
+
+        auto mesh = std::make_shared<Mesh>();
+        mesh->upload(vertices, indices);
 
         Entity* entity = scene->createEntity(name);
         entity->transform.position = glm::vec3(0.0f);
-
-        // Each panel gets a unique seed so wind timing differs
-        uint32_t seed = fenceSeedCounter++ * 2654435761u;  // Knuth multiplicative hash
-        auto* clothComp = entity->addComponent<ClothComponent>();
-        clothComp->initialize(cfg, fenceClothMat, seed);
-        clothComp->setPresetType(ClothPresetType::STIFF_FENCE);
-
-        auto& sim = clothComp->getSimulator();
-
-        // Pin all particles at their world positions
-        for (uint32_t gz = 0; gz < gridH; ++gz)
-        {
-            for (uint32_t gx = 0; gx < gridW; ++gx)
-            {
-                uint32_t idx = gz * gridW + gx;
-                float u = static_cast<float>(gx) / static_cast<float>(gridW - 1);
-                float y = height - static_cast<float>(gz) * spacing;
-                glm::vec3 pos = topLeft + along * (u * panelWidth) + glm::vec3(0, y - height, 0);
-                sim.pinParticle(idx, pos);
-            }
-        }
-
-        // Unpin all except top row — top row stays attached to pillar line
-        for (uint32_t gz = 1; gz < gridH; ++gz)
-        {
-            for (uint32_t gx = 0; gx < gridW; ++gx)
-            {
-                sim.unpinParticle(gz * gridW + gx);
-            }
-        }
-
-        // Scene-wide wind direction for all fence panels
-        sim.setWind(sceneWindDir, fencePreset.windStrength);
-        sim.setDragCoefficient(fencePreset.dragCoefficient);
-        sim.setGroundPlane(0.0f);
-
-        // Limit how far the panel can bow outward from its rest plane.
-        // Perpendicular direction to the wall — constrain to ±0.3m from rest position.
-        glm::vec3 up(0, 1, 0);
-        glm::vec3 perp = glm::normalize(glm::cross(along, up));
-        float restDist = glm::dot(topLeft, perp);
-        float maxBow = 0.3f;
-        // Positive side: particles must stay at dot(pos, perp) <= restDist + maxBow
-        sim.addPlaneCollider(-perp, -(restDist + maxBow));
-        // Negative side: particles must stay at dot(pos, -perp) <= -restDist + maxBow
-        sim.addPlaneCollider(perp, restDist - maxBow);
-
-        clothComp->syncMesh();
+        auto* mr = entity->addComponent<MeshRenderer>(mesh, fenceClothMat);
+        mr->setCastsShadow(false);  // Thin fabric — no meaningful shadow
     };
 
-    // Split long walls into segments between pillars (~2.225m each)
-    // so each cloth panel is a manageable size.
-    auto makeClothWall = [&](const std::string& baseName,
+    // Split long walls into segments between pillars (~2.225m each).
+    auto makeFenceWall = [&](const std::string& baseName,
                              glm::vec3 start, glm::vec3 end,
                              float height, int segments)
     {
@@ -2635,25 +2620,25 @@ void Engine::setupTabernacleScene()
         {
             glm::vec3 segStart = start + step * static_cast<float>(i);
             glm::vec3 segEnd = segStart + step;
-            makeClothFence(baseName + " " + std::to_string(i + 1),
-                           segStart, segEnd, height);
+            makeStaticFence(baseName + " " + std::to_string(i + 1),
+                            segStart, segEnd, height);
         }
     };
 
     // South wall: runs along Z at X = -courtW/2, 20 pillar spans
-    makeClothWall("Court South Wall",
+    makeFenceWall("Court South Wall",
         glm::vec3(-courtW / 2.0f, fenceH, courtWestZ),
         glm::vec3(-courtW / 2.0f, fenceH, courtEastZ),
         fenceH, 20);
 
     // North wall: runs along Z at X = +courtW/2, 20 pillar spans
-    makeClothWall("Court North Wall",
+    makeFenceWall("Court North Wall",
         glm::vec3(courtW / 2.0f, fenceH, courtWestZ),
         glm::vec3(courtW / 2.0f, fenceH, courtEastZ),
         fenceH, 20);
 
     // West wall: runs along X at Z = courtWestZ, 10 pillar spans
-    makeClothWall("Court West Wall",
+    makeFenceWall("Court West Wall",
         glm::vec3(-courtW / 2.0f, fenceH, courtWestZ),
         glm::vec3(courtW / 2.0f, fenceH, courtWestZ),
         fenceH, 10);
@@ -2664,13 +2649,13 @@ void Engine::setupTabernacleScene()
 
     // East wall south section
     float eastSouthStart = -(gateW / 2.0f + eastSectionW);
-    makeClothWall("Court East Wall S",
+    makeFenceWall("Court East Wall S",
         glm::vec3(eastSouthStart, fenceH, courtEastZ),
         glm::vec3(-gateW / 2.0f, fenceH, courtEastZ),
         fenceH, std::max(1, eastSegments));
 
     // East wall north section
-    makeClothWall("Court East Wall N",
+    makeFenceWall("Court East Wall N",
         glm::vec3(gateW / 2.0f, fenceH, courtEastZ),
         glm::vec3(gateW / 2.0f + eastSectionW, fenceH, courtEastZ),
         fenceH, std::max(1, eastSegments));

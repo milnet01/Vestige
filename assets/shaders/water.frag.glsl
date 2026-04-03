@@ -89,20 +89,35 @@ vec3 noised(vec2 p)
     );
 }
 
-// FBM with analytical derivatives — variable octaves, rotating domain between
-// octaves to eliminate directional grid bias. Returns vec3(value, dF/dx, dF/dy).
-vec3 waterFbm(vec2 p, int octaves)
+// FBM with analytical derivatives — fixed octave counts so the GPU can unroll.
+// Rotating domain between octaves to eliminate directional grid bias.
+// Returns vec3(value, dF/dx, dF/dy).
+// Rotation matrix (~37.5 degrees) — irrational angle decorrelates octaves
+const mat2 fbmRot = mat2(0.8, 0.6, -0.6, 0.8);
+
+vec3 waterFbm2(vec2 p)
 {
     float amplitude = 0.5;
     vec3 result = vec3(0.0);
-    // Rotation matrix (~37.5 degrees) — irrational angle decorrelates octaves
-    const mat2 rot = mat2(0.8, 0.6, -0.6, 0.8);
-
-    for (int i = 0; i < octaves; i++)
+    for (int i = 0; i < 2; i++)
     {
         vec3 n = noised(p);
         result += amplitude * n;
-        p = rot * p * 2.01; // scale + rotate for next octave
+        p = fbmRot * p * 2.01;
+        amplitude *= 0.5;
+    }
+    return result;
+}
+
+vec3 waterFbm3(vec2 p)
+{
+    float amplitude = 0.5;
+    vec3 result = vec3(0.0);
+    for (int i = 0; i < 3; i++)
+    {
+        vec3 n = noised(p);
+        result += amplitude * n;
+        p = fbmRot * p * 2.01;
         amplitude *= 0.5;
     }
     return result;
@@ -122,21 +137,18 @@ void main()
 
     if (u_waterQualityTier <= 1 && u_hasNormalMap)
     {
-        int octaves = (u_waterQualityTier == 0) ? 3 : 2;
-
-        // Layer 1: broad swells (~1.5x world scale, flowing ~NE)
-        vec3 n1 = waterFbm(v_worldPos.xz * 1.5 + flow * vec2(1.0, 0.3), octaves);
-
         vec2 totalGrad;
         if (u_waterQualityTier == 0)
         {
-            // FULL: two normal layers for richer detail
-            vec3 n2 = waterFbm(v_worldPos.xz * 2.8 + flow * vec2(-0.4, 0.8), octaves);
+            // FULL: 3 FBM calls x 3 octaves — two normal layers for richer detail
+            vec3 n1 = waterFbm3(v_worldPos.xz * 1.5 + flow * vec2(1.0, 0.3));
+            vec3 n2 = waterFbm3(v_worldPos.xz * 2.8 + flow * vec2(-0.4, 0.8));
             totalGrad = (n1.yz + n2.yz * 0.7) * 0.15;
         }
         else
         {
-            // APPROXIMATE: single normal layer
+            // APPROXIMATE: 1 FBM call x 2 octaves — single normal layer
+            vec3 n1 = waterFbm2(v_worldPos.xz * 1.5 + flow * vec2(1.0, 0.3));
             totalGrad = n1.yz * 0.15;
         }
 
@@ -149,7 +161,9 @@ void main()
         // --- Procedural distortion from noise ---
         if (u_hasDudvMap)
         {
-            vec3 distNoise = waterFbm(v_worldPos.xz * 2.0 + flow * vec2(0.7, -0.3) + vec2(5.2, 1.3), octaves);
+            vec3 distNoise = (u_waterQualityTier == 0)
+                ? waterFbm3(v_worldPos.xz * 2.0 + flow * vec2(0.7, -0.3) + vec2(5.2, 1.3))
+                : waterFbm2(v_worldPos.xz * 2.0 + flow * vec2(0.7, -0.3) + vec2(5.2, 1.3));
             totalDistortion = distNoise.yz * u_dudvStrength;
             normal = normalize(vec3(
                 normal.x + totalDistortion.x,
@@ -234,7 +248,9 @@ void main()
     // Fresnel (Schlick approximation, F0 = 0.02 for water)
     float cosTheta = max(dot(normal, viewDir), 0.0);
     float F0 = 0.02;
-    float fresnel = F0 + (1.0 - F0) * pow(1.0 - cosTheta, 5.0);
+    float x = 1.0 - cosTheta;
+    float x2 = x * x;
+    float fresnel = F0 + (1.0 - F0) * (x2 * x2 * x);
 
     // Specular highlight (Blinn-Phong from directional light)
     vec3 lightDir = normalize(-u_lightDirection);

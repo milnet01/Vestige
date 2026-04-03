@@ -1,5 +1,6 @@
 # Build output
 build/
+logs/
 Testing/
 .cache/
 cmake-build-*/

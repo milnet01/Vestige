@@ -5,10 +5,33 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <unordered_map>
 
 namespace Vestige
 {
+
+/// @brief Fast inverse square root (Quake III style) with one Newton-Raphson iteration.
+static float fastInvSqrt(float x)
+{
+    float xhalf = 0.5f * x;
+    uint32_t i;
+    std::memcpy(&i, &x, sizeof(uint32_t));
+    i = 0x5f3759df - (i >> 1);
+    std::memcpy(&x, &i, sizeof(uint32_t));
+    x *= 1.5f - xhalf * x * x;  // Newton-Raphson iteration
+    return x;
+}
+
+/// @brief Fast acos approximation (max error ~0.017 rad / ~1 degree).
+static float fastAcos(float x)
+{
+    x = glm::clamp(x, -1.0f, 1.0f);
+    float ax = std::abs(x);
+    float result = (((-0.0187293f * ax + 0.0742610f) * ax - 0.2121144f) * ax + 1.5707288f);
+    result *= std::sqrt(1.0f - ax);
+    return (x < 0.0f) ? 3.14159265f - result : result;
+}
 
 void ClothSimulator::initialize(const ClothConfig& config, uint32_t seed)
 {
@@ -261,7 +284,7 @@ void ClothSimulator::simulate(float deltaTime)
                 float speed2 = glm::dot(m_velocities[i], m_velocities[i]);
                 if (speed2 > maxSpeed2)
                 {
-                    m_velocities[i] *= maxSpeed / std::sqrt(speed2);
+                    m_velocities[i] *= maxSpeed * fastInvSqrt(speed2);
                 }
             }
         }
@@ -558,6 +581,16 @@ void ClothSimulator::setWind(const glm::vec3& direction, float strength)
     float len = glm::length(direction);
     m_windDirection = (len > 0.0f) ? direction / len : glm::vec3(0.0f);
     m_windStrength = strength;
+}
+
+void ClothSimulator::setWindQuality(WindQuality quality)
+{
+    m_windQuality = quality;
+}
+
+ClothSimulator::WindQuality ClothSimulator::getWindQuality() const
+{
+    return m_windQuality;
 }
 
 void ClothSimulator::setDragCoefficient(float drag)
@@ -1366,7 +1399,7 @@ void ClothSimulator::buildDihedralConstraints()
             n1 /= len1;
             n2 /= len2;
             float cosAngle = glm::clamp(glm::dot(n1, n2), -1.0f, 1.0f);
-            restAngle = std::acos(cosAngle);
+            restAngle = fastAcos(cosAngle);
         }
 
         m_dihedralConstraints.push_back({
@@ -1410,7 +1443,7 @@ void ClothSimulator::solveDihedralConstraint(DihedralConstraint& c, float dtSub)
 
     // Current dihedral angle
     float cosAngle = glm::clamp(glm::dot(n1, n2), -1.0f, 1.0f);
-    float phi = std::acos(cosAngle);
+    float phi = fastAcos(cosAngle);
 
     // Constraint value
     float constraint = phi - c.restAngle;
@@ -1578,11 +1611,23 @@ void ClothSimulator::recomputeNormals()
     }
 }
 
-/// @brief Simple hash for pseudo-random per-particle noise.
+/// @brief Fast integer-based hash noise — replaces sin-based GPU-style hash.
+/// Produces same quality pseudo-random distribution as sin(x*127.1+y*311.7)*43758.5
+/// but uses integer bit-mixing (~5 cycles) instead of std::sin (~30 cycles).
 static float hashNoise(float x, float y)
 {
-    float h = std::sin(x * 127.1f + y * 311.7f) * 43758.5453f;
-    return h - std::floor(h);  // [0, 1)
+    // Reinterpret floats as integers for bit mixing
+    uint32_t ix, iy;
+    std::memcpy(&ix, &x, sizeof(uint32_t));
+    std::memcpy(&iy, &y, sizeof(uint32_t));
+
+    // Combine with golden-ratio-derived constants, then avalanche
+    uint32_t h = ix * 0x45d9f3bu + iy * 0x119de1f3u;
+    h ^= h >> 16;
+    h *= 0x45d9f3bu;
+    h ^= h >> 16;
+
+    return static_cast<float>(h & 0x00FFFFFFu) / 16777216.0f;  // [0, 1)
 }
 
 float ClothSimulator::randFloat()
@@ -1687,7 +1732,7 @@ void ClothSimulator::updateGustState(float dt)
 
 void ClothSimulator::applyWind(float dt)
 {
-    if (m_windStrength <= 0.0f || dt <= 0.0f)
+    if (m_windStrength <= 0.0f || dt <= 0.0f || m_windQuality == WindQuality::SIMPLE)
     {
         return;
     }
@@ -1706,8 +1751,9 @@ void ClothSimulator::applyWind(float dt)
     glm::vec3 effectiveDir = m_windDirection + m_windDirOffset;
     glm::vec3 baseWindVel = effectiveDir * (m_windStrength * gustStrength);
 
-    // --- Per-particle perturbation (spatial variation + edge flutter) ---
-    if (m_gridW > 0 && m_gridH > 0)
+    // --- Per-particle perturbation (FULL quality only) ---
+    // Skipped in APPROXIMATE — uniform wind is applied via per-triangle drag below.
+    if (m_windQuality == WindQuality::FULL && m_gridW > 0 && m_gridH > 0)
     {
         for (uint32_t gz = 0; gz < m_gridH; ++gz)
         {
@@ -1749,20 +1795,27 @@ void ClothSimulator::applyWind(float dt)
         }
     }
 
-    // --- Per-triangle aerodynamic drag ---
+    // --- Per-triangle aerodynamic drag (FULL + APPROXIMATE) ---
     for (size_t ti = 0; ti + 2 < m_indices.size(); ti += 3)
     {
         uint32_t i0 = m_indices[ti];
         uint32_t i1 = m_indices[ti + 1];
         uint32_t i2 = m_indices[ti + 2];
 
-        // Spatial turbulence from triangle centroid
-        glm::vec3 centroid = (m_positions[i0] + m_positions[i1] + m_positions[i2]) / 3.0f;
-        float spatialNoise = hashNoise(centroid.x * 3.0f + t * 1.1f,
-                                        centroid.y * 2.0f + t * 0.8f);
-        float turb = 0.5f + spatialNoise;  // [0.5, 1.5]
-
-        glm::vec3 windVel = baseWindVel * turb;
+        // Spatial turbulence from triangle centroid (FULL quality only)
+        glm::vec3 windVel;
+        if (m_windQuality == WindQuality::FULL)
+        {
+            glm::vec3 centroid = (m_positions[i0] + m_positions[i1] + m_positions[i2]) / 3.0f;
+            float spatialNoise = hashNoise(centroid.x * 3.0f + t * 1.1f,
+                                            centroid.y * 2.0f + t * 0.8f);
+            float turb = 0.5f + spatialNoise;  // [0.5, 1.5]
+            windVel = baseWindVel * turb;
+        }
+        else
+        {
+            windVel = baseWindVel;  // APPROXIMATE: uniform wind, no per-triangle noise
+        }
 
         glm::vec3 vAvg = (m_velocities[i0] + m_velocities[i1] + m_velocities[i2]) / 3.0f;
         glm::vec3 vRel = windVel - vAvg;

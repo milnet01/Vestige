@@ -177,6 +177,18 @@ public:
 
     // --- Wind ---
 
+    /// @brief Wind simulation quality tiers.
+    /// Full:        Per-particle noise perturbation + per-triangle aerodynamic drag (expensive).
+    /// Approximate: Uniform wind (no per-particle noise) + per-triangle drag (moderate).
+    /// Simple:      No wind force applied (cheapest).
+    enum class WindQuality { FULL = 0, APPROXIMATE = 1, SIMPLE = 2 };
+
+    /// @brief Sets the wind simulation quality tier.
+    void setWindQuality(WindQuality quality);
+
+    /// @brief Returns the current wind quality tier.
+    WindQuality getWindQuality() const;
+
     /// @brief Sets the wind direction and strength.
     void setWind(const glm::vec3& direction, float strength);
 
@@ -377,6 +389,7 @@ private:
     glm::vec3 m_windDirection = glm::vec3(0.0f);
     float m_windStrength = 0.0f;
     float m_dragCoeff = 1.0f;
+    WindQuality m_windQuality = WindQuality::FULL;
     float m_elapsed = 0.0f;
 
     // Gust state machine: creates realistic blow/calm cycles

@@ -25,14 +25,26 @@ static nlohmann::json overrideToJson(const FormulaOverride& ov)
     return j;
 }
 
-static FormulaOverride overrideFromJson(const nlohmann::json& j)
+static bool overrideFromJson(const nlohmann::json& j, FormulaOverride& ov)
 {
-    FormulaOverride ov;
-    ov.formulaName = j.at("formula").get<std::string>();
-    ov.coefficients = j.at("coefficients").get<std::map<std::string, float>>();
-    if (j.contains("description"))
-        ov.description = j["description"].get<std::string>();
-    return ov;
+    if (!j.contains("formula") || !j.contains("coefficients"))
+    {
+        Logger::warning("FormulaPreset: override entry missing 'formula' or 'coefficients' field, skipping");
+        return false;
+    }
+    try
+    {
+        ov.formulaName = j.at("formula").get<std::string>();
+        ov.coefficients = j.at("coefficients").get<std::map<std::string, float>>();
+        if (j.contains("description"))
+            ov.description = j["description"].get<std::string>();
+    }
+    catch (const nlohmann::json::exception& e)
+    {
+        Logger::warning(std::string("FormulaPreset: malformed override entry: ") + e.what());
+        return false;
+    }
+    return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -67,8 +79,12 @@ FormulaPreset FormulaPreset::fromJson(const nlohmann::json& j)
 
     if (j.contains("overrides"))
     {
-        for (const auto& ov : j["overrides"])
-            p.overrides.push_back(overrideFromJson(ov));
+        for (const auto& item : j["overrides"])
+        {
+            FormulaOverride ov;
+            if (overrideFromJson(item, ov))
+                p.overrides.push_back(std::move(ov));
+        }
     }
     return p;
 }
@@ -159,8 +175,15 @@ size_t FormulaPresetLibrary::loadFromJson(const nlohmann::json& j)
     size_t count = 0;
     for (const auto& item : j)
     {
-        registerPreset(FormulaPreset::fromJson(item));
-        ++count;
+        try
+        {
+            registerPreset(FormulaPreset::fromJson(item));
+            ++count;
+        }
+        catch (const nlohmann::json::exception& e)
+        {
+            Logger::warning(std::string("FormulaPresetLibrary: skipping malformed preset entry: ") + e.what());
+        }
     }
     return count;
 }

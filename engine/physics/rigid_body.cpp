@@ -43,7 +43,7 @@ void RigidBody::createBody(PhysicsWorld& world)
     switch (shapeType)
     {
     case CollisionShapeType::BOX:
-        if (shapeSize.x <= 0.0f || shapeSize.y <= 0.0f || shapeSize.z <= 0.0f) return;
+        if (shapeSize.x < 0.05f || shapeSize.y < 0.05f || shapeSize.z < 0.05f) return;
         shape = new JPH::BoxShape(JPH::Vec3(shapeSize.x, shapeSize.y, shapeSize.z));
         break;
     case CollisionShapeType::SPHERE:

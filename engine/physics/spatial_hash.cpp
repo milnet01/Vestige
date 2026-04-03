@@ -99,8 +99,10 @@ void SpatialHash::query(const glm::vec3& position, float radius, uint32_t selfIn
 
     // Track which hash buckets we've already visited to avoid duplicates
     // from different cell coordinates hashing to the same bucket.
-    size_t visitedBuckets[64];
-    int visitedCount = 0;
+    // Use a dynamic vector instead of a fixed-size array so that
+    // large-radius queries spanning many cells cannot overflow.
+    std::vector<size_t> visitedBuckets;
+    visitedBuckets.reserve(64);  // Pre-allocate for typical case
 
     for (int cz = minCell.z; cz <= maxCell.z; ++cz)
     {
@@ -112,7 +114,7 @@ void SpatialHash::query(const glm::vec3& position, float radius, uint32_t selfIn
 
                 // Skip if we've already processed this bucket
                 bool alreadyVisited = false;
-                for (int v = 0; v < visitedCount; ++v)
+                for (size_t v = 0; v < visitedBuckets.size(); ++v)
                 {
                     if (visitedBuckets[v] == h)
                     {
@@ -124,10 +126,7 @@ void SpatialHash::query(const glm::vec3& position, float radius, uint32_t selfIn
                 {
                     continue;
                 }
-                if (visitedCount < 64)
-                {
-                    visitedBuckets[visitedCount++] = h;
-                }
+                visitedBuckets.push_back(h);
 
                 uint32_t start = m_cellStart[h];
                 uint32_t end = m_cellStart[h + 1];
