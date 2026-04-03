@@ -648,7 +648,7 @@ The Tabernacle's linen curtains sway gently, the entrance veil drapes realistica
 
 ---
 
-## Formula Pipeline (Cross-Cutting Infrastructure) — IN PROGRESS
+## Formula Pipeline (Cross-Cutting Infrastructure) — COMPLETE
 
 Unified physics/lighting formula storage, evaluation, and code generation. Every physics and rendering system (cloth, water, foliage, particles, lighting) currently implements its own formulas independently. The Formula Pipeline provides a shared system for discovering, storing, compiling, and using mathematical formulas across the entire engine.
 
@@ -657,7 +657,7 @@ Unified physics/lighting formula storage, evaluation, and code generation. Every
 - [x] Expression tree AST — 5 node types (literal, variable, binary op, unary op, conditional) with JSON round-trip
 - [x] FormulaLibrary — named formula registry with categories, typed inputs/outputs, coefficients, quality tiers
 - [x] Expression evaluator — scalar tree-walking interpreter for tool-time use
-- [x] Physics templates — 13 built-in formulas (aerodynamic drag, Stokes drag, Fresnel-Schlick, Beer-Lambert, Gerstner wave, buoyancy, inverse-square falloff, exponential fog, Hooke spring, Coulomb friction, terminal velocity, wet darkening, wind deformation)
+- [x] Physics templates — 15 built-in formulas (aerodynamic drag, Stokes drag, Fresnel-Schlick, Beer-Lambert, Gerstner wave, buoyancy, caustic depth fade, water absorption, inverse-square falloff, exponential fog, Hooke spring, Coulomb friction, terminal velocity, wet darkening, wind deformation)
 
 ### In Progress
 
@@ -672,9 +672,9 @@ Unified physics/lighting formula storage, evaluation, and code generation. Every
 - [x] FormulaPreset system — named bundles of coefficient overrides for visual styles (9 built-in: Realistic Desert, Tropical Forest, Arctic Tundra, Underwater, Anime/Cel-Shaded, Painterly, Stormy Weather, Calm Interior, Biblical Tabernacle)
 - [x] FormulaWorkbench — standalone ImGui/ImPlot tool with template browser, data editor (CSV import), LM fitter, curve visualizer, residual plots, train/test validation, preset browser, JSON export
 
-### Upcoming
-- [ ] Water formula optimization — apply Formula Pipeline to water rendering bottleneck (caustics LUT, wave approximations)
-- [ ] Quality tier integration — per-formula Full/Approximate/LUT tiers selectable from graphics settings
+### Completed (cont.)
+- [x] Water formula optimization — quality-tiered caustics (Full: 6 reads + chromatic aberration, Approximate: 2 reads, Simple: 1 read), quality-tiered water FBM noise (3/2/0 octaves), APPROXIMATE expressions for Fresnel and Beer-Lambert, new caustic_depth_fade and water_absorption templates
+- [x] FormulaQualityManager — global + per-category quality tier selection with JSON persistence, per-water-surface quality dropdown in inspector, wired into scene/terrain/water renderers
 
 ---
 

@@ -1534,6 +1534,19 @@ void InspectorPanel::drawWaterSurface(Entity& entity)
             ImGui::SliderFloat("Caustics Scale", &config.causticsScale, 0.01f, 0.5f);
         }
 
+        // --- Quality ---
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Quality");
+        const char* qualityNames[] = {"Full", "Approximate", "Simple"};
+        ImGui::Combo("Quality Tier", &config.qualityTier, qualityNames, 3);
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("Full: best visuals (6 caustic samples, 3-octave noise)\n"
+                              "Approximate: balanced (2 caustic samples, 2-octave noise)\n"
+                              "Simple: fastest (1 caustic sample, texture normals)");
+        }
+
         // --- Geometry ---
         ImGui::Spacing();
         ImGui::Separator();

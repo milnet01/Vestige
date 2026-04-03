@@ -2546,6 +2546,7 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
         m_sceneShader.setFloat("u_waterY", m_causticsWaterY);
         m_sceneShader.setVec2("u_waterCenter", m_causticsCenter);
         m_sceneShader.setVec2("u_waterHalfExtent", m_causticsHalfExtent);
+        m_sceneShader.setInt("u_causticsQuality", m_causticsQuality);
     }
     else
     {

@@ -178,6 +178,7 @@ void TerrainRenderer::render(const Terrain& terrain,
         m_terrainShader.setFloat("u_waterY", m_causticsWaterY);
         m_terrainShader.setVec2("u_waterCenter", m_causticsCenter);
         m_terrainShader.setVec2("u_waterHalfExtent", m_causticsHalfExtent);
+        m_terrainShader.setInt("u_causticsQuality", m_causticsQuality);
     }
     else
     {

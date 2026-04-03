@@ -39,6 +39,9 @@ uniform bool u_hasNormalMap;
 uniform bool u_hasDudvMap;
 uniform bool u_hasEnvironmentMap;
 
+// Quality tier: 0=Full (3 FBM x 3 octaves), 1=Approximate (2 FBM x 2 octaves), 2=Simple (texture only)
+uniform int u_waterQualityTier;
+
 // Shore foam
 uniform sampler2D u_foamTex;
 uniform bool u_hasFoamTex;
@@ -86,16 +89,16 @@ vec3 noised(vec2 p)
     );
 }
 
-// FBM with analytical derivatives — 3 octaves, rotating domain between octaves
-// to eliminate directional grid bias. Returns vec3(value, dF/dx, dF/dy).
-vec3 waterFbm(vec2 p)
+// FBM with analytical derivatives — variable octaves, rotating domain between
+// octaves to eliminate directional grid bias. Returns vec3(value, dF/dx, dF/dy).
+vec3 waterFbm(vec2 p, int octaves)
 {
     float amplitude = 0.5;
     vec3 result = vec3(0.0);
     // Rotation matrix (~37.5 degrees) — irrational angle decorrelates octaves
     const mat2 rot = mat2(0.8, 0.6, -0.6, 0.8);
 
-    for (int i = 0; i < 3; i++)
+    for (int i = 0; i < octaves; i++)
     {
         vec3 n = noised(p);
         result += amplitude * n;
@@ -110,41 +113,68 @@ void main()
     float flow = u_time * u_flowSpeed;
 
     // --- Procedural surface normals from gradient noise FBM ---
-    // Two overlapping FBM layers at different scales and flow directions.
-    // Uses world-space XZ coordinates — never tiles because noise is continuous.
+    // Quality tiers control octave count and number of FBM evaluations:
+    //   FULL (0):        3 FBM calls x 3 octaves = 9 noise evals
+    //   APPROXIMATE (1): 2 FBM calls x 2 octaves = 4 noise evals
+    //   SIMPLE (2):      texture-based normals only (0 noise evals)
     vec3 normal = normalize(v_normal);
-    if (u_hasNormalMap)
-    {
-        // Layer 1: broad swells (~1.5x world scale, flowing ~NE)
-        vec3 n1 = waterFbm(v_worldPos.xz * 1.5 + flow * vec2(1.0, 0.3));
-        // Layer 2: medium ripples (~2.8x scale, flowing ~SW, different rate)
-        vec3 n2 = waterFbm(v_worldPos.xz * 2.8 + flow * vec2(-0.4, 0.8));
+    vec2 totalDistortion = vec2(0.0);
 
-        // Combine gradients (analytical derivatives from noise).
-        // Scale by 0.15 to keep ripples subtle — raw FBM gradients reach ~3.0
-        // which would create near-horizontal normals (dark/murky water).
-        vec2 totalGrad = (n1.yz + n2.yz * 0.7) * 0.15;
+    if (u_waterQualityTier <= 1 && u_hasNormalMap)
+    {
+        int octaves = (u_waterQualityTier == 0) ? 3 : 2;
+
+        // Layer 1: broad swells (~1.5x world scale, flowing ~NE)
+        vec3 n1 = waterFbm(v_worldPos.xz * 1.5 + flow * vec2(1.0, 0.3), octaves);
+
+        vec2 totalGrad;
+        if (u_waterQualityTier == 0)
+        {
+            // FULL: two normal layers for richer detail
+            vec3 n2 = waterFbm(v_worldPos.xz * 2.8 + flow * vec2(-0.4, 0.8), octaves);
+            totalGrad = (n1.yz + n2.yz * 0.7) * 0.15;
+        }
+        else
+        {
+            // APPROXIMATE: single normal layer
+            totalGrad = n1.yz * 0.15;
+        }
 
         normal = normalize(vec3(
             normal.x - totalGrad.x * u_normalStrength,
             normal.y,
             normal.z - totalGrad.y * u_normalStrength
         ));
-    }
 
-    // --- Procedural distortion from noise (replaces DuDv texture sampling) ---
-    // Reuses the gradient from the normal computation as distortion (free — already computed).
-    vec2 totalDistortion = vec2(0.0);
-    if (u_hasDudvMap)
+        // --- Procedural distortion from noise ---
+        if (u_hasDudvMap)
+        {
+            vec3 distNoise = waterFbm(v_worldPos.xz * 2.0 + flow * vec2(0.7, -0.3) + vec2(5.2, 1.3), octaves);
+            totalDistortion = distNoise.yz * u_dudvStrength;
+            normal = normalize(vec3(
+                normal.x + totalDistortion.x,
+                normal.y,
+                normal.z + totalDistortion.y
+            ));
+        }
+    }
+    else if (u_hasNormalMap)
     {
-        // Single noise call at offset coords for distortion (decorrelated from normals)
-        vec3 distNoise = waterFbm(v_worldPos.xz * 2.0 + flow * vec2(0.7, -0.3) + vec2(5.2, 1.3));
-        totalDistortion = distNoise.yz * u_dudvStrength;
+        // SIMPLE: use precomputed normal map texture (no procedural noise)
+        vec2 scrollUV = v_texCoord + flow * vec2(0.1, 0.05);
+        vec3 texNormal = texture(u_normalMap, scrollUV).rgb * 2.0 - 1.0;
         normal = normalize(vec3(
-            normal.x + totalDistortion.x,
+            normal.x + texNormal.x * u_normalStrength * 0.3,
             normal.y,
-            normal.z + totalDistortion.y
+            normal.z + texNormal.z * u_normalStrength * 0.3
         ));
+
+        if (u_hasDudvMap)
+        {
+            vec2 dudvUV = v_texCoord + flow * vec2(-0.05, 0.1);
+            vec2 dudv = texture(u_dudvMap, dudvUV).rg * 2.0 - 1.0;
+            totalDistortion = dudv * u_dudvStrength;
+        }
     }
 
     // View direction and reflected direction

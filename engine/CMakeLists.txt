@@ -107,6 +107,7 @@ set(ENGINE_SOURCES
     formula/lut_loader.cpp
     formula/curve_fitter.cpp
     formula/formula_preset.cpp
+    formula/quality_manager.cpp
     animation/skeleton.cpp
     animation/animation_clip.cpp
     animation/animation_sampler.cpp

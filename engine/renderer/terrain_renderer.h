@@ -74,6 +74,9 @@ public:
                            const glm::vec2& halfExtent = glm::vec2(0.0f),
                            float intensity = 0.15f, float scale = 0.1f);
 
+    /// @brief Set caustics quality tier (0=Full, 1=Approximate, 2=Simple).
+    void setCausticsQuality(int quality) { m_causticsQuality = quality; }
+
     /// @brief Gets the number of draw calls from the last frame.
     int getLastDrawCallCount() const { return m_lastDrawCallCount; }
 
@@ -113,6 +116,7 @@ private:
     glm::vec2 m_causticsHalfExtent = glm::vec2(0.0f);
     float m_causticsIntensity = 0.15f;
     float m_causticsScale = 0.1f;
+    int m_causticsQuality = 0;
 
     // Stats
     int m_lastDrawCallCount = 0;

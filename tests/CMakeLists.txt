@@ -78,6 +78,7 @@ add_executable(vestige_tests
     test_formula_library.cpp
     test_formula_compiler.cpp
     test_curve_fitter.cpp
+    test_quality_manager.cpp
 )
 
 target_link_libraries(vestige_tests

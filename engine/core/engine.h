@@ -20,6 +20,7 @@
 #include "renderer/tree_renderer.h"
 #include "renderer/terrain_renderer.h"
 #include "environment/environment_forces.h"
+#include "formula/quality_manager.h"
 #include "environment/foliage_manager.h"
 #include "environment/terrain.h"
 #include "profiler/performance_profiler.h"
@@ -89,6 +90,7 @@ private:
     TreeRenderer m_treeRenderer;
     FoliageManager m_foliageManager;
     EnvironmentForces m_environmentForces;
+    FormulaQualityManager m_formulaQuality;
     Terrain m_terrain;
     bool m_terrainEnabled = true;  ///< Set false for indoor scenes that don't need terrain
     TerrainRenderer m_terrainRenderer;

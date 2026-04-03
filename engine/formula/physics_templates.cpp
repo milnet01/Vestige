@@ -49,6 +49,8 @@ std::vector<FormulaDefinition> PhysicsTemplates::createAll()
     all.push_back(createBeerLambert());
     all.push_back(createGerstnerWave());
     all.push_back(createBuoyancy());
+    all.push_back(createCausticDepthFade());
+    all.push_back(createWaterAbsorption());
     all.push_back(createInverseSquareFalloff());
     all.push_back(createExponentialFog());
     all.push_back(createHookeSpring());
@@ -169,6 +171,16 @@ FormulaDefinition PhysicsTemplates::createFresnelSchlick()
                     binOp("-", lit(1.0f), var("cosTheta")),
                     lit(5.0f))));
 
+    // APPROXIMATE: power of 3 instead of 5 — less dramatic grazing angle
+    // but avoids the full quintic evaluation. Visually ~95% identical.
+    def.expressions[QT::APPROXIMATE] =
+        binOp("+", var("F0"),
+            binOp("*",
+                binOp("-", lit(1.0f), var("F0")),
+                binOp("pow",
+                    binOp("-", lit(1.0f), var("cosTheta")),
+                    lit(3.0f))));
+
     def.source = "Schlick 1994; matches water.frag.glsl implementation";
     return def;
 }
@@ -194,6 +206,15 @@ FormulaDefinition PhysicsTemplates::createBeerLambert()
             fn("exp",
                 fn("negate",
                     binOp("*", var("alpha"), var("depth")))));
+
+    // APPROXIMATE: linear falloff avoids exp() — max(1 - alpha * depth, 0)
+    // Good for shallow depths; diverges at depth > 1/alpha.
+    def.expressions[QT::APPROXIMATE] =
+        binOp("*", var("I0"),
+            binOp("max",
+                binOp("-", lit(1.0f),
+                    binOp("*", var("alpha"), var("depth"))),
+                lit(0.0f)));
 
     def.source = "Beer-Lambert law; matches water.frag.glsl absorption";
     return def;
@@ -254,6 +275,82 @@ FormulaDefinition PhysicsTemplates::createBuoyancy()
             binOp("*", var("submergedVolume"), var("g")));
 
     def.source = "Archimedes' principle; matches environment_forces.cpp buoyancy";
+    return def;
+}
+
+FormulaDefinition PhysicsTemplates::createCausticDepthFade()
+{
+    // fade = saturate(1 - depth / maxDepth)
+    // Caustics intensity fades linearly with depth below water surface.
+    // FULL tier matches the smoothstep in scene.frag.glsl; APPROXIMATE uses linear.
+    FormulaDefinition def;
+    def.name = "caustic_depth_fade";
+    def.category = "water";
+    def.description = "Caustic intensity fade with depth below water surface. "
+                      "Returns 1.0 at surface, 0.0 at maxDepth.";
+    def.inputs = {
+        {"depth",    VT::FLOAT, "m", 0.0f},
+        {"maxDepth", VT::FLOAT, "m", 5.0f}
+    };
+    def.output = {VT::FLOAT, ""};
+
+    // FULL: smoothstep-like — t = saturate(depth/maxDepth), result = 1 - t*t*(3-2*t)
+    // We express: t = saturate(depth / maxDepth)
+    //             fade = 1 - t * t * (3 - 2 * t)
+    auto t = fn("saturate", binOp("/", var("depth"), var("maxDepth")));
+    auto t2 = fn("saturate", binOp("/", var("depth"), var("maxDepth")));
+    auto t3 = fn("saturate", binOp("/", var("depth"), var("maxDepth")));
+    def.expressions[QT::FULL] =
+        binOp("-", lit(1.0f),
+            binOp("*",
+                binOp("*", std::move(t), std::move(t2)),
+                binOp("-", lit(3.0f),
+                    binOp("*", lit(2.0f), std::move(t3)))));
+
+    // APPROXIMATE: simple linear — saturate(1 - depth / maxDepth)
+    def.expressions[QT::APPROXIMATE] =
+        fn("saturate",
+            binOp("-", lit(1.0f),
+                binOp("/", var("depth"), var("maxDepth"))));
+
+    def.source = "Matches scene.frag.glsl smoothstep(0, 5, depthBelowWater) depth fade";
+    return def;
+}
+
+FormulaDefinition PhysicsTemplates::createWaterAbsorption()
+{
+    // Per-channel Beer-Lambert with water-specific absorption coefficients.
+    // In the shader, this is applied per-channel (R, G, B), but the formula
+    // library represents the scalar version. The shader applies it 3 times
+    // with different alpha values.
+    //
+    // result = exp(-absorptionCoeff * thickness)
+    FormulaDefinition def;
+    def.name = "water_absorption";
+    def.category = "water";
+    def.description = "Per-channel water light absorption (Beer-Lambert). "
+                      "Red light absorbed fastest (0.4), green medium (0.2), "
+                      "blue slowest (0.1). Apply per-channel in shader.";
+    def.inputs = {
+        {"thickness",       VT::FLOAT, "m", 0.0f},
+        {"absorptionCoeff", VT::FLOAT, "",  0.4f}
+    };
+    def.output = {VT::FLOAT, ""};
+
+    // FULL: exp(-absorptionCoeff * thickness)
+    def.expressions[QT::FULL] =
+        fn("exp",
+            fn("negate",
+                binOp("*", var("absorptionCoeff"), var("thickness"))));
+
+    // APPROXIMATE: max(1 - absorptionCoeff * thickness, 0) — linear falloff
+    def.expressions[QT::APPROXIMATE] =
+        binOp("max",
+            binOp("-", lit(1.0f),
+                binOp("*", var("absorptionCoeff"), var("thickness"))),
+            lit(0.0f));
+
+    def.source = "Beer-Lambert with water-specific coefficients from water.frag.glsl";
     return def;
 }
 
