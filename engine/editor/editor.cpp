@@ -520,6 +520,50 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
                 {
                     ImGui::Text("  Distance: %.3f m", static_cast<double>(m_rulerTool.getDistance()));
                 }
+
+                ImGui::Separator();
+                ImGui::TextDisabled("Architectural Tools");
+
+                if (ImGui::MenuItem("Wall Tool", nullptr, m_wallTool.isActive()))
+                {
+                    if (m_wallTool.isActive()) m_wallTool.cancel();
+                    else m_wallTool.activate();
+                }
+                if (m_wallTool.isActive())
+                {
+                    ImGui::DragFloat("  Wall Height", &m_wallTool.height, 0.1f, 0.5f, 20.0f, "%.1f m");
+                    ImGui::DragFloat("  Wall Thickness", &m_wallTool.thickness, 0.01f, 0.05f, 1.0f, "%.2f m");
+                }
+                if (ImGui::MenuItem("Room Tool (Dimensions)"))
+                {
+                    m_roomTool.activateDimensionMode();
+                }
+                if (ImGui::MenuItem("Room Tool (Click)"))
+                {
+                    m_roomTool.activateClickMode();
+                }
+                if (ImGui::MenuItem("Cutout Tool (Door/Window)", nullptr, m_cutoutTool.isActive()))
+                {
+                    if (m_cutoutTool.isActive()) m_cutoutTool.cancel();
+                    else m_cutoutTool.activate();
+                }
+                if (ImGui::MenuItem("Roof Tool"))
+                {
+                    m_roofTool.activate();
+                }
+                if (ImGui::MenuItem("Stair Tool"))
+                {
+                    m_stairTool.activate();
+                }
+
+                ImGui::Separator();
+                ImGui::TextDisabled("Path Tools");
+
+                if (ImGui::MenuItem("Path / Road Tool", nullptr, m_pathTool.isActive()))
+                {
+                    if (m_pathTool.isActive()) m_pathTool.cancel();
+                    else m_pathTool.activate();
+                }
                 ImGui::EndMenu();
             }
 
@@ -1374,6 +1418,28 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
 
     // Queue ruler debug draw lines
     m_rulerTool.queueDebugDraw();
+
+    // Draw architectural tool dialogs
+    if (m_roomTool.showingDialog())
+    {
+        m_roomTool.drawDimensionDialog(*scene, *m_resourceManager, m_commandHistory);
+    }
+    if (m_cutoutTool.showingDialog())
+    {
+        m_cutoutTool.drawConfigDialog(*scene, *m_resourceManager, m_commandHistory);
+    }
+    if (m_roofTool.showingPanel())
+    {
+        m_roofTool.drawConfigPanel();
+    }
+    if (m_stairTool.showingPanel())
+    {
+        m_stairTool.drawConfigPanel();
+    }
+    if (m_pathTool.showingPanel())
+    {
+        m_pathTool.drawConfigPanel();
+    }
 }
 
 void Editor::endFrame()

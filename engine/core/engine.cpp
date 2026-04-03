@@ -786,6 +786,104 @@ void Engine::run()
                                               m_terrain, m_editor->getCommandHistory());
                 }
             }
+
+            // 3h. Process architectural tool clicks (wall, room, roof, stair, path)
+            {
+                Scene* toolScene = m_sceneManager->getActiveScene();
+                int vpW = 0, vpH = 0;
+                m_editor->getViewportSize(vpW, vpH);
+                ImGuiIO& toolIo = ImGui::GetIO();
+                bool clicked = toolIo.MouseClicked[0] && !toolIo.KeyAlt
+                             && !m_editor->isGizmoActive();
+
+                if (vpW > 0 && vpH > 0 && toolScene)
+                {
+                    float mouseX = (toolIo.MousePos.x - m_editor->getViewportMin().x)
+                                 / static_cast<float>(vpW);
+                    float mouseY = (toolIo.MousePos.y - m_editor->getViewportMin().y)
+                                 / static_cast<float>(vpH);
+                    float aspect = static_cast<float>(vpW) / static_cast<float>(vpH);
+                    Ray mouseRay = BrushTool::createRay(*m_camera, mouseX, mouseY, aspect);
+
+                    glm::vec3 hitPoint;
+                    bool hasHit = BrushTool::rayGroundIntersect(mouseRay, hitPoint);
+
+                    // Wall tool
+                    WallTool& wallTool = m_editor->getWallTool();
+                    if (wallTool.isActive())
+                    {
+                        if (hasHit)
+                        {
+                            wallTool.queueDebugDraw(hitPoint);
+                        }
+                        if (clicked && hasHit)
+                        {
+                            wallTool.processClick(hitPoint, *toolScene,
+                                *m_resourceManager, m_editor->getCommandHistory());
+                        }
+                    }
+
+                    // Room tool (click mode)
+                    RoomTool& roomTool = m_editor->getRoomTool();
+                    if (roomTool.getState() == RoomTool::State::WAITING_CORNER
+                        && clicked && hasHit)
+                    {
+                        roomTool.processClick(hitPoint, *toolScene,
+                            *m_resourceManager, m_editor->getCommandHistory());
+                    }
+
+                    // Cutout tool (select wall by picking)
+                    CutoutTool& cutoutTool = m_editor->getCutoutTool();
+                    if (cutoutTool.getState() == CutoutTool::State::SELECT_WALL
+                        && clicked)
+                    {
+                        int pickX = static_cast<int>(mouseX * static_cast<float>(m_renderer->getRenderWidth()));
+                        int pickY = static_cast<int>((1.0f - mouseY) * static_cast<float>(m_renderer->getRenderHeight()));
+                        uint32_t entityId = m_renderer->pickEntityAt(pickX, pickY);
+                        if (entityId != 0)
+                        {
+                            cutoutTool.selectWall(entityId, *toolScene);
+                        }
+                    }
+
+                    // Roof tool (click to place)
+                    RoofTool& roofTool = m_editor->getRoofTool();
+                    if (roofTool.getState() == RoofTool::State::PLACING
+                        && clicked && hasHit)
+                    {
+                        roofTool.processClick(hitPoint, *toolScene,
+                            *m_resourceManager, m_editor->getCommandHistory());
+                    }
+
+                    // Stair tool (click to place)
+                    StairTool& stairTool = m_editor->getStairTool();
+                    if (stairTool.getState() == StairTool::State::PLACING
+                        && clicked && hasHit)
+                    {
+                        stairTool.processClick(hitPoint, *toolScene,
+                            *m_resourceManager, m_editor->getCommandHistory());
+                    }
+
+                    // Path tool
+                    PathTool& pathTool = m_editor->getPathTool();
+                    if (pathTool.isActive())
+                    {
+                        if (hasHit)
+                        {
+                            pathTool.queueDebugDraw(hitPoint);
+                        }
+                        if (clicked && hasHit)
+                        {
+                            pathTool.processClick(hitPoint);
+                        }
+                    }
+                    if (pathTool.finishRequested())
+                    {
+                        pathTool.finishPath(*toolScene,
+                            *m_resourceManager, m_editor->getCommandHistory());
+                    }
+                }
+            }
         }
 
         // Start profiler early to capture CPU systems (cloth, physics) not just rendering

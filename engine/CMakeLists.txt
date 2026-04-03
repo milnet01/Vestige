@@ -55,6 +55,7 @@ set(ENGINE_SOURCES
     utils/obj_loader.cpp
     utils/gltf_loader.cpp
     utils/procedural_mesh.cpp
+    utils/catmull_rom_spline.cpp
     utils/gltf_loader_impl.cpp
     utils/cube_loader.cpp
     editor/editor.cpp
@@ -152,7 +153,9 @@ set(ENGINE_SOURCES
     physics/breakable_component.cpp
     physics/dismemberment_zones.cpp
     physics/dismemberment.cpp
+    physics/stasis_system.cpp
     scene/interactable_component.cpp
+    scene/pressure_plate_component.cpp
     renderer/dynamic_mesh.cpp
     profiler/gpu_timer.cpp
     profiler/cpu_profiler.cpp
@@ -162,6 +165,12 @@ set(ENGINE_SOURCES
     editor/panels/validation_panel.cpp
     editor/panels/welcome_panel.cpp
     editor/tools/ruler_tool.cpp
+    editor/tools/wall_tool.cpp
+    editor/tools/room_tool.cpp
+    editor/tools/cutout_tool.cpp
+    editor/tools/roof_tool.cpp
+    editor/tools/stair_tool.cpp
+    editor/tools/path_tool.cpp
     resource/file_watcher.cpp
     utils/entity_serializer.cpp
     utils/material_library.cpp
