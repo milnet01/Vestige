@@ -6,6 +6,7 @@ set(ENGINE_SOURCES
     core/logger.cpp
     core/timer.cpp
     core/event_bus.cpp
+    core/system_registry.cpp
     core/window.cpp
     core/input_manager.cpp
     core/engine.cpp
