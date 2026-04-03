@@ -32,6 +32,8 @@ public:
     static FormulaDefinition createBeerLambert();
     static FormulaDefinition createGerstnerWave();
     static FormulaDefinition createBuoyancy();
+    static FormulaDefinition createCausticDepthFade();
+    static FormulaDefinition createWaterAbsorption();
 
     // Lighting
     static FormulaDefinition createInverseSquareFalloff();

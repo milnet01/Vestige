@@ -62,6 +62,9 @@ struct WaterSurfaceConfig
     float causticsIntensity = 0.15f;    ///< Additive brightness of caustic patterns (0.0 to 1.0).
     float causticsScale = 0.1f;         ///< World-space tiling frequency (smaller = larger patterns).
 
+    // Quality tier (0=Full, 1=Approximate, 2=Simple)
+    int qualityTier = 0;  ///< Controls shader complexity: noise octaves, caustic samples
+
     // Reflection / refraction quality
     WaterReflectionMode reflectionMode = WaterReflectionMode::PLANAR;
     float reflectionResolutionScale = 0.25f;  ///< 0.1 to 1.0 (fraction of window resolution)

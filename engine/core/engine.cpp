@@ -863,6 +863,16 @@ void Engine::run()
                 glm::vec2 center(waterX, waterZ);
                 glm::vec2 halfExtent(waterCfg.width * 0.5f, waterCfg.depth * 0.5f);
 
+                // Quality tier: use per-surface config if set, else FormulaQualityManager
+                int waterQuality = waterCfg.qualityTier;
+                if (waterQuality == 0 && m_formulaQuality.hasCategoryOverride("water"))
+                {
+                    waterQuality = static_cast<int>(m_formulaQuality.getEffectiveTier("water"));
+                }
+                m_renderer->setCausticsQuality(waterQuality);
+                m_terrainRenderer.setCausticsQuality(waterQuality);
+                m_waterRenderer.setWaterQualityTier(waterQuality);
+
                 bool causticsOn = waterCfg.causticsEnabled;
                 m_renderer->setCausticsParams(causticsOn, waterY, elapsed,
                                                center, halfExtent,

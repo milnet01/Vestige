@@ -97,6 +97,9 @@ void WaterRenderer::render(const std::vector<WaterRenderItem>& waterItems,
     m_waterShader.setVec3("u_lightDirection", lightDir);
     m_waterShader.setVec3("u_lightColor", lightColor);
 
+    // Quality tier
+    m_waterShader.setInt("u_waterQualityTier", m_waterQualityTier);
+
     // Bind default normal map (texture unit 0)
     glBindTextureUnit(0, m_defaultNormalMap);
     m_waterShader.setInt("u_normalMap", 0);

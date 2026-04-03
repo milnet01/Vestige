@@ -64,6 +64,9 @@ public:
                 GLuint refractionDepthTex = 0,
                 float cameraNear = 0.1f);
 
+    /// @brief Set water surface quality tier (0=Full, 1=Approximate, 2=Simple).
+    void setWaterQualityTier(int tier) { m_waterQualityTier = tier; }
+
 private:
     void generateDefaultNormalMap();
     void generateDefaultDudvMap();
@@ -76,6 +79,7 @@ private:
     GLuint m_defaultDudvMap = 0;
     GLuint m_defaultFoamTexture = 0;
 
+    int m_waterQualityTier = 0;  // 0=Full, 1=Approximate, 2=Simple
     bool m_initialized = false;
 };
 

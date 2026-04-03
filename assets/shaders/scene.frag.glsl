@@ -153,6 +153,7 @@ uniform float u_causticsTime;
 uniform float u_waterY;               // Water surface height
 uniform vec2 u_waterCenter;           // Water surface XZ center
 uniform vec2 u_waterHalfExtent;       // Water surface half-width/half-depth
+uniform int u_causticsQuality;        // 0=Full, 1=Approximate, 2=Simple
 
 // =============================================================================
 // Stochastic tiling (hex-grid tri-cell blending with random UV offsets)
@@ -1146,24 +1147,43 @@ void main()
         && abs(v_fragPosition.x - u_waterCenter.x) < u_waterHalfExtent.x
         && abs(v_fragPosition.z - u_waterCenter.y) < u_waterHalfExtent.y)
     {
-        // Dual scrolling samples with min-blending for organic caustic pattern
+        vec3 caustics;
         vec2 causticUV1 = v_fragPosition.xz * u_causticsScale
                         + u_causticsTime * vec2(0.03, 0.02);
-        vec2 causticUV2 = v_fragPosition.xz * u_causticsScale * 1.4
-                        + u_causticsTime * vec2(-0.02, 0.03);
 
-        // Chromatic aberration — offset R and B channels for rainbow fringing
-        float r1 = texture(u_causticsTex, causticUV1 + vec2(0.001, 0.0)).r;
-        float g1 = texture(u_causticsTex, causticUV1).r;
-        float b1 = texture(u_causticsTex, causticUV1 - vec2(0.001, 0.0)).r;
-        vec3 caustic1 = vec3(r1, g1, b1);
+        if (u_causticsQuality == 0)
+        {
+            // FULL: dual scroll + min-blend + chromatic aberration (6 texture reads)
+            vec2 causticUV2 = v_fragPosition.xz * u_causticsScale * 1.4
+                            + u_causticsTime * vec2(-0.02, 0.03);
 
-        float r2 = texture(u_causticsTex, causticUV2 + vec2(0.0, 0.001)).r;
-        float g2 = texture(u_causticsTex, causticUV2).r;
-        float b2 = texture(u_causticsTex, causticUV2 - vec2(0.0, 0.001)).r;
-        vec3 caustic2 = vec3(r2, g2, b2);
+            float r1 = texture(u_causticsTex, causticUV1 + vec2(0.001, 0.0)).r;
+            float g1 = texture(u_causticsTex, causticUV1).r;
+            float b1 = texture(u_causticsTex, causticUV1 - vec2(0.001, 0.0)).r;
+            vec3 caustic1 = vec3(r1, g1, b1);
 
-        vec3 caustics = min(caustic1, caustic2) * u_causticsIntensity;
+            float r2 = texture(u_causticsTex, causticUV2 + vec2(0.0, 0.001)).r;
+            float g2 = texture(u_causticsTex, causticUV2).r;
+            float b2 = texture(u_causticsTex, causticUV2 - vec2(0.0, 0.001)).r;
+            vec3 caustic2 = vec3(r2, g2, b2);
+
+            caustics = min(caustic1, caustic2) * u_causticsIntensity;
+        }
+        else if (u_causticsQuality == 1)
+        {
+            // APPROXIMATE: dual scroll + min-blend, no chromatic aberration (2 reads)
+            vec2 causticUV2 = v_fragPosition.xz * u_causticsScale * 1.4
+                            + u_causticsTime * vec2(-0.02, 0.03);
+            float c1 = texture(u_causticsTex, causticUV1).r;
+            float c2 = texture(u_causticsTex, causticUV2).r;
+            caustics = vec3(min(c1, c2)) * u_causticsIntensity;
+        }
+        else
+        {
+            // SIMPLE: single scroll (1 read)
+            float c = texture(u_causticsTex, causticUV1).r;
+            caustics = vec3(c) * u_causticsIntensity * 0.7;
+        }
 
         // Tint caustics with a subtle blue-green (refracted sunlight through water)
         caustics *= vec3(0.7, 0.9, 1.0);

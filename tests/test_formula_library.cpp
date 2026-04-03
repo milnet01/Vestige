@@ -774,7 +774,7 @@ TEST(FormulaLibrary, LoadSingleObjectJson)
 TEST(PhysicsTemplates, CreateAllReturnsExpectedCount)
 {
     auto all = PhysicsTemplates::createAll();
-    EXPECT_EQ(all.size(), 13u);
+    EXPECT_EQ(all.size(), 15u);
 
     // Each has a name, category, and FULL expression
     for (const auto& def : all)
@@ -790,7 +790,7 @@ TEST(PhysicsTemplates, RegisterBuiltinTemplates)
 {
     FormulaLibrary lib;
     lib.registerBuiltinTemplates();
-    EXPECT_EQ(lib.count(), 13u);
+    EXPECT_EQ(lib.count(), 15u);
 
     // Spot-check a few
     EXPECT_NE(lib.findByName("aerodynamic_drag"), nullptr);
