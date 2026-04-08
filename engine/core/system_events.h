@@ -7,7 +7,10 @@
 
 #include "core/event.h"
 
+#include <glm/glm.hpp>
+
 #include <cstdint>
+#include <string>
 
 namespace Vestige
 {
@@ -66,6 +69,29 @@ struct TerrainModifiedEvent : public Event
         : minX(x0), minZ(z0), maxX(x1), maxZ(z1)
     {
     }
+};
+
+/// @brief Fired to request a one-shot sound effect at a position.
+/// Other systems can trigger sounds without depending on AudioSystem directly.
+struct AudioPlayEvent : public Event
+{
+    std::string clipPath;
+    glm::vec3 position;
+    float volume;
+
+    AudioPlayEvent(const std::string& path, const glm::vec3& pos, float vol = 1.0f)
+        : clipPath(path), position(pos), volume(vol)
+    {
+    }
+};
+
+/// @brief Fired when a navmesh has been baked from scene geometry.
+struct NavMeshBakedEvent : public Event
+{
+    int polyCount;
+    float bakeTimeMs;
+
+    NavMeshBakedEvent(int polys, float ms) : polyCount(polys), bakeTimeMs(ms) {}
 };
 
 } // namespace Vestige

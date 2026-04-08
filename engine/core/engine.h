@@ -37,6 +37,7 @@ class TreeRenderer;
 class Terrain;
 class TerrainRenderer;
 class PhysicsCharacterController;
+class UISystem;
 
 /// @brief Configuration for the engine.
 struct EngineConfig
@@ -108,6 +109,7 @@ private:
     PhysicsCharacterController* m_physicsCharController = nullptr;
     bool m_usePhysicsController = false;  ///< Toggle between AABB and physics controller
     bool m_terrainEnabled = true;         ///< Set false for indoor scenes
+    UISystem* m_uiSystem = nullptr;       ///< Cached pointer for render loop
 
     SystemRegistry m_systemRegistry;
 
