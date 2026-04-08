@@ -186,11 +186,32 @@ set(ENGINE_SOURCES
     utils/material_library.cpp
     testing/visual_test_runner.cpp
     renderer/radiosity_baker.cpp
+    # Audio system
+    audio/audio_engine.cpp
+    audio/audio_clip.cpp
+    audio/audio_source_component.cpp
+    systems/audio_system.cpp
+    # UI/HUD system
+    ui/sprite_batch_renderer.cpp
+    ui/ui_element.cpp
+    ui/ui_canvas.cpp
+    ui/ui_label.cpp
+    ui/ui_image.cpp
+    ui/ui_panel.cpp
+    systems/ui_system.cpp
+    # Navigation system
+    navigation/nav_mesh_builder.cpp
+    navigation/nav_mesh_query.cpp
+    navigation/nav_agent_component.cpp
+    systems/navigation_system.cpp
     # glad OpenGL loader
     ${CMAKE_SOURCE_DIR}/external/glad/src/gl.c
     # stb_image implementation
     ${CMAKE_SOURCE_DIR}/external/stb/stb_image_impl.cpp
     ${CMAKE_SOURCE_DIR}/external/stb/stb_image_write_impl.cpp
+    # Audio decoder implementations (dr_libs + stb_vorbis)
+    ${CMAKE_SOURCE_DIR}/external/dr_libs/dr_libs_impl.cpp
+    ${CMAKE_SOURCE_DIR}/external/stb/stb_vorbis_impl.cpp
 )
 
 # Create static library
@@ -202,6 +223,7 @@ target_include_directories(vestige_engine
         ${CMAKE_CURRENT_SOURCE_DIR}
         ${CMAKE_SOURCE_DIR}/external/glad/include
         ${CMAKE_SOURCE_DIR}/external/stb
+        ${CMAKE_SOURCE_DIR}/external/dr_libs
         ${tinyexr_SOURCE_DIR}
         ${tinygltf_SOURCE_DIR}
     PRIVATE
@@ -226,6 +248,9 @@ target_link_libraries(vestige_engine
         imgui_filebrowser
         nlohmann_json::nlohmann_json
         Jolt
+        OpenAL::OpenAL
+        RecastNavigation::Recast
+        RecastNavigation::Detour
 )
 
 # Suppress warnings from third-party source files compiled as part of the engine
@@ -234,6 +259,8 @@ set_source_files_properties(
     ${CMAKE_SOURCE_DIR}/external/stb/stb_image_write_impl.cpp
     ${CMAKE_SOURCE_DIR}/external/glad/src/gl.c
     ${CMAKE_CURRENT_SOURCE_DIR}/utils/gltf_loader_impl.cpp
+    ${CMAKE_SOURCE_DIR}/external/dr_libs/dr_libs_impl.cpp
+    ${CMAKE_SOURCE_DIR}/external/stb/stb_vorbis_impl.cpp
     PROPERTIES COMPILE_FLAGS "-w"
 )
 

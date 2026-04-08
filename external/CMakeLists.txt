@@ -163,6 +163,39 @@ target_include_directories(implot_lib PUBLIC ${implot_SOURCE_DIR})
 target_link_libraries(implot_lib PUBLIC imgui_lib)
 target_compile_options(implot_lib PRIVATE -w)
 
+# OpenAL Soft — spatial audio (LGPL 2.0+)
+FetchContent_Declare(
+    openal-soft
+    GIT_REPOSITORY https://github.com/kcat/openal-soft.git
+    GIT_TAG        1.24.1
+    GIT_SHALLOW    TRUE
+)
+set(ALSOFT_UTILS OFF CACHE BOOL "" FORCE)
+set(ALSOFT_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(ALSOFT_INSTALL OFF CACHE BOOL "" FORCE)
+set(ALSOFT_INSTALL_CONFIG OFF CACHE BOOL "" FORCE)
+set(ALSOFT_INSTALL_HRTF_DATA OFF CACHE BOOL "" FORCE)
+set(ALSOFT_INSTALL_AMBDEC_PRESETS OFF CACHE BOOL "" FORCE)
+set(ALSOFT_INSTALL_UTILS OFF CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(openal-soft)
+
+# Recast Navigation — navmesh generation and pathfinding (ZLib license)
+FetchContent_Declare(
+    recastnavigation
+    GIT_REPOSITORY https://github.com/recastnavigation/recastnavigation.git
+    GIT_TAG        v1.6.0
+    GIT_SHALLOW    TRUE
+)
+set(RECASTNAVIGATION_DEMO OFF CACHE BOOL "" FORCE)
+set(RECASTNAVIGATION_TESTS OFF CACHE BOOL "" FORCE)
+set(RECASTNAVIGATION_EXAMPLES OFF CACHE BOOL "" FORCE)
+# Recast's CMakeLists.txt uses cmake_minimum_required(VERSION 3.0) which is
+# deprecated in CMake 3.27+. Allow it to configure anyway.
+set(CMAKE_POLICY_VERSION_MINIMUM 3.5 CACHE STRING "" FORCE)
+FetchContent_MakeAvailable(recastnavigation)
+# Restore policy version for subsequent projects
+unset(CMAKE_POLICY_VERSION_MINIMUM CACHE)
+
 # Google Test — unit testing
 FetchContent_Declare(
     googletest

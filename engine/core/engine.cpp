@@ -13,6 +13,9 @@
 #include "systems/destruction_system.h"
 #include "systems/character_system.h"
 #include "systems/lighting_system.h"
+#include "systems/audio_system.h"
+#include "systems/ui_system.h"
+#include "systems/navigation_system.h"
 #include "renderer/particle_renderer.h"
 #include "renderer/water_renderer.h"
 #include "renderer/water_fbo.h"
@@ -151,6 +154,12 @@ bool Engine::initialize(const EngineConfig& config)
     m_systemRegistry.registerSystem<DestructionSystem>();
     auto* charSys    = m_systemRegistry.registerSystem<CharacterSystem>();
     m_systemRegistry.registerSystem<LightingSystem>();
+
+    // Phase 9C: new domain systems
+    m_systemRegistry.registerSystem<AudioSystem>();
+    auto* uiSys = m_systemRegistry.registerSystem<UISystem>();
+    m_systemRegistry.registerSystem<NavigationSystem>();
+    m_uiSystem = uiSys;
 
     // Cache raw pointers for hot-path render loop access
     m_environmentForces    = &atmoSys->getEnvironmentForces();
@@ -1233,6 +1242,13 @@ void Engine::run()
         {
             // Play mode: blit render FBO to screen (may scale if resolutions differ)
             m_renderer->blitToScreen(m_window->getWidth(), m_window->getHeight());
+
+            // Render in-game UI overlay (after scene, before editor)
+            if (m_uiSystem && m_uiSystem->isActive())
+            {
+                m_uiSystem->renderUI(m_window->getWidth(), m_window->getHeight());
+            }
+
             if (m_editor)
             {
                 m_editor->drawPanels(nullptr, nullptr, nullptr,
