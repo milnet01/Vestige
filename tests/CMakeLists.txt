@@ -84,6 +84,7 @@ add_executable(vestige_tests
     test_pressure_plate.cpp
     test_stasis_system.cpp
     test_system_registry.cpp
+    test_domain_systems.cpp
 )
 
 target_link_libraries(vestige_tests

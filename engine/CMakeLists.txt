@@ -7,6 +7,15 @@ set(ENGINE_SOURCES
     core/timer.cpp
     core/event_bus.cpp
     core/system_registry.cpp
+    systems/atmosphere_system.cpp
+    systems/particle_system.cpp
+    systems/water_system.cpp
+    systems/vegetation_system.cpp
+    systems/terrain_system.cpp
+    systems/cloth_system.cpp
+    systems/destruction_system.cpp
+    systems/character_system.cpp
+    systems/lighting_system.cpp
     core/window.cpp
     core/input_manager.cpp
     core/engine.cpp
