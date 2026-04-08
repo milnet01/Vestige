@@ -13,27 +13,30 @@
 #include "resource/resource_manager.h"
 #include "editor/editor.h"
 #include "renderer/debug_draw.h"
-#include "renderer/particle_renderer.h"
-#include "renderer/water_renderer.h"
-#include "renderer/water_fbo.h"
-#include "renderer/foliage_renderer.h"
-#include "renderer/tree_renderer.h"
-#include "renderer/terrain_renderer.h"
-#include "environment/environment_forces.h"
 #include "formula/quality_manager.h"
-#include "environment/foliage_manager.h"
-#include "environment/terrain.h"
 #include "profiler/performance_profiler.h"
 #include "physics/physics_world.h"
 #include "physics/physics_debug.h"
-#include "physics/physics_character_controller.h"
 #include "testing/visual_test_runner.h"
 #include "core/system_registry.h"
 
 #include <memory>
+#include <string>
 
 namespace Vestige
 {
+
+// Forward declarations for domain system-owned types (accessed via cached pointers)
+class EnvironmentForces;
+class ParticleRenderer;
+class WaterRenderer;
+class WaterFbo;
+class FoliageManager;
+class FoliageRenderer;
+class TreeRenderer;
+class Terrain;
+class TerrainRenderer;
+class PhysicsCharacterController;
 
 /// @brief Configuration for the engine.
 struct EngineConfig
@@ -84,24 +87,27 @@ private:
     std::unique_ptr<ResourceManager> m_resourceManager;
     std::unique_ptr<Editor> m_editor;
     DebugDraw m_debugDraw;
-    ParticleRenderer m_particleRenderer;
-    WaterRenderer m_waterRenderer;
-    WaterFbo m_waterFbo;
-    FoliageRenderer m_foliageRenderer;
-    TreeRenderer m_treeRenderer;
-    FoliageManager m_foliageManager;
-    EnvironmentForces m_environmentForces;
     FormulaQualityManager m_formulaQuality;
-    Terrain m_terrain;
-    bool m_terrainEnabled = true;  ///< Set false for indoor scenes that don't need terrain
-    TerrainRenderer m_terrainRenderer;
     PerformanceProfiler m_profiler;
     PhysicsWorld m_physicsWorld;
     PhysicsDebugDraw m_physicsDebugDraw;
-    PhysicsCharacterController m_physicsCharController;
-    bool m_usePhysicsController = false;  ///< Toggle between AABB and physics controller (P key)
     VisualTestRunner m_visualTestRunner;
     bool m_visualTestMode = false;
+    std::string m_assetPath;
+
+    // Cached pointers to domain system-owned subsystems (set during registration)
+    EnvironmentForces* m_environmentForces = nullptr;
+    ParticleRenderer* m_particleRenderer = nullptr;
+    WaterRenderer* m_waterRenderer = nullptr;
+    WaterFbo* m_waterFbo = nullptr;
+    FoliageManager* m_foliageManager = nullptr;
+    FoliageRenderer* m_foliageRenderer = nullptr;
+    TreeRenderer* m_treeRenderer = nullptr;
+    Terrain* m_terrain = nullptr;
+    TerrainRenderer* m_terrainRenderer = nullptr;
+    PhysicsCharacterController* m_physicsCharController = nullptr;
+    bool m_usePhysicsController = false;  ///< Toggle between AABB and physics controller
+    bool m_terrainEnabled = true;         ///< Set false for indoor scenes
 
     SystemRegistry m_systemRegistry;
 
@@ -121,13 +127,18 @@ public:
     EventBus& getEventBus() { return m_eventBus; }
 
     /// @brief Access shared infrastructure for domain systems.
-    EnvironmentForces& getEnvironmentForces() { return m_environmentForces; }
+    const std::string& getAssetPath() const { return m_assetPath; }
+    Window& getWindow() { return *m_window; }
+    Camera& getCamera() { return *m_camera; }
     ResourceManager& getResourceManager() { return *m_resourceManager; }
     Renderer& getRenderer() { return *m_renderer; }
     SceneManager& getSceneManager() { return *m_sceneManager; }
-    Terrain& getTerrain() { return m_terrain; }
     PhysicsWorld& getPhysicsWorld() { return m_physicsWorld; }
     PerformanceProfiler& getProfiler() { return m_profiler; }
+
+    /// @brief Access domain system-owned subsystems (via cached pointers).
+    EnvironmentForces& getEnvironmentForces() { return *m_environmentForces; }
+    Terrain& getTerrain() { return *m_terrain; }
 };
 
 } // namespace Vestige

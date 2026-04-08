@@ -4,6 +4,25 @@
 #include "core/logger.h"
 #include "physics/jolt_helpers.h"
 #include "physics/cloth_component.h"
+#include "systems/atmosphere_system.h"
+#include "systems/particle_system.h"
+#include "systems/water_system.h"
+#include "systems/vegetation_system.h"
+#include "systems/terrain_system.h"
+#include "systems/cloth_system.h"
+#include "systems/destruction_system.h"
+#include "systems/character_system.h"
+#include "systems/lighting_system.h"
+#include "renderer/particle_renderer.h"
+#include "renderer/water_renderer.h"
+#include "renderer/water_fbo.h"
+#include "renderer/foliage_renderer.h"
+#include "renderer/tree_renderer.h"
+#include "renderer/terrain_renderer.h"
+#include "environment/environment_forces.h"
+#include "environment/foliage_manager.h"
+#include "environment/terrain.h"
+#include "physics/physics_character_controller.h"
 
 #include <Jolt/Physics/Collision/Shape/BoxShape.h>
 #include "renderer/light_probe_manager.h"
@@ -48,6 +67,8 @@ bool Engine::initialize(const EngineConfig& config)
     Logger::info("=== Vestige Engine v0.5.0 ===");
     Logger::info("Initializing engine...");
 
+    m_assetPath = config.assetPath;
+
     // Create window (also initializes GLFW and OpenGL context)
     m_window = std::make_unique<Window>(config.window, m_eventBus);
 
@@ -91,9 +112,6 @@ bool Engine::initialize(const EngineConfig& config)
     ctrlConfig.moveSpeed = 3.0f;
     m_controller = std::make_unique<FirstPersonController>(*m_camera, *m_inputManager, ctrlConfig);
 
-    // Set up the scene
-    setupTabernacleScene();
-
     // Initialize editor (ImGui + docking) — must come after InputManager for callback chaining
     m_editor = std::make_unique<Editor>();
     if (!m_editor->initialize(m_window->getHandle(), config.assetPath))
@@ -114,25 +132,7 @@ bool Engine::initialize(const EngineConfig& config)
         Logger::warning("DebugDraw initialization failed — gizmos will be unavailable");
     }
 
-    // Initialize particle renderer
-    if (!m_particleRenderer.init(config.assetPath))
-    {
-        Logger::warning("Particle renderer initialization failed — particles will be unavailable");
-    }
-
-    // Initialize water renderer and FBOs
-    if (!m_waterRenderer.init(config.assetPath))
-    {
-        Logger::warning("Water renderer initialization failed — water surfaces will be unavailable");
-    }
-    {
-        int w = config.window.width;
-        int h = config.window.height;
-        // Water FBOs at 25% resolution
-        m_waterFbo.init(w / 4, h / 4, w / 4, h / 4);
-    }
-
-    // Initialize physics world
+    // Initialize physics world (shared infrastructure — used by multiple domain systems)
     if (!m_physicsWorld.initialize())
     {
         Logger::warning("PhysicsWorld initialization failed — physics will be unavailable");
@@ -141,116 +141,44 @@ bool Engine::initialize(const EngineConfig& config)
     // Initialize performance profiler
     m_profiler.init();
 
-    // Initialize foliage renderer
-    if (!m_foliageRenderer.init(config.assetPath))
-    {
-        Logger::warning("Foliage renderer initialization failed — foliage will be unavailable");
-    }
+    // Register domain systems (order = update order)
+    auto* atmoSys    = m_systemRegistry.registerSystem<AtmosphereSystem>();
+    auto* particleSys = m_systemRegistry.registerSystem<ParticleVfxSystem>();
+    auto* waterSys   = m_systemRegistry.registerSystem<WaterSystem>();
+    auto* vegSys     = m_systemRegistry.registerSystem<VegetationSystem>();
+    auto* terrainSys = m_systemRegistry.registerSystem<TerrainSystem>();
+    m_systemRegistry.registerSystem<ClothSystem>();
+    m_systemRegistry.registerSystem<DestructionSystem>();
+    auto* charSys    = m_systemRegistry.registerSystem<CharacterSystem>();
+    m_systemRegistry.registerSystem<LightingSystem>();
 
-    // Initialize tree renderer
-    if (!m_treeRenderer.init(config.assetPath))
-    {
-        Logger::warning("Tree renderer initialization failed — trees will be unavailable");
-    }
+    // Cache raw pointers for hot-path render loop access
+    m_environmentForces    = &atmoSys->getEnvironmentForces();
+    m_particleRenderer     = &particleSys->getParticleRenderer();
+    m_waterRenderer        = &waterSys->getWaterRenderer();
+    m_waterFbo             = &waterSys->getWaterFbo();
+    m_foliageManager       = &vegSys->getFoliageManager();
+    m_foliageRenderer      = &vegSys->getFoliageRenderer();
+    m_treeRenderer         = &vegSys->getTreeRenderer();
+    m_terrain              = &terrainSys->getTerrain();
+    m_terrainRenderer      = &terrainSys->getTerrainRenderer();
+    m_physicsCharController = &charSys->getPhysicsCharController();
 
-    // Initialize terrain renderer
-    if (!m_terrainRenderer.init(config.assetPath))
-    {
-        Logger::warning("Terrain renderer initialization failed — terrain will be unavailable");
-    }
-
-    // Initialize terrain with default config
-    {
-        TerrainConfig terrainConfig;
-        terrainConfig.width = 257;
-        terrainConfig.depth = 257;
-        terrainConfig.spacingX = 1.0f;
-        terrainConfig.spacingZ = 1.0f;
-        terrainConfig.heightScale = 50.0f;
-        terrainConfig.origin = glm::vec3(-128.0f, 0.0f, -128.0f);
-        terrainConfig.gridResolution = 33;
-        terrainConfig.maxLodLevels = 6;
-        terrainConfig.baseLodDistance = 20.0f;
-
-        if (m_terrain.initialize(terrainConfig))
-        {
-            int w = terrainConfig.width;
-            int d = terrainConfig.depth;
-            float originX = terrainConfig.origin.x;
-            float originZ = terrainConfig.origin.z;
-            for (int z = 0; z < d; ++z)
-            {
-                for (int x = 0; x < w; ++x)
-                {
-                    float nx = static_cast<float>(x) / static_cast<float>(w - 1);
-                    float nz = static_cast<float>(z) / static_cast<float>(d - 1);
-                    float wx = originX + static_cast<float>(x) * terrainConfig.spacingX;
-                    float wz = originZ + static_cast<float>(z) * terrainConfig.spacingZ;
-
-                    float h = 0.0f;
-                    h += 0.15f * std::sin(nx * 6.28f * 2.0f) * std::cos(nz * 6.28f * 1.5f);
-                    h += 0.08f * std::sin(nx * 6.28f * 5.0f + 1.0f) * std::sin(nz * 6.28f * 4.0f);
-                    h += 0.04f * std::sin(nx * 6.28f * 11.0f) * std::cos(nz * 6.28f * 9.0f + 2.0f);
-                    h = std::max(h, 0.0f);
-
-                    float distFromOrigin = std::sqrt(wx * wx + wz * wz);
-                    float flatRadius = 18.0f;
-                    float blendRadius = 35.0f;
-                    if (distFromOrigin < blendRadius)
-                    {
-                        float t = std::max(0.0f, (distFromOrigin - flatRadius)
-                                                / (blendRadius - flatRadius));
-                        h *= t * t;
-                    }
-
-                    m_terrain.setRawHeight(x, z, h);
-                }
-            }
-
-            m_terrain.updateHeightmapRegion(0, 0, w, d);
-            m_terrain.updateNormalMapRegion(0, 0, w, d);
-            m_terrain.buildQuadtree();
-        }
-        else
-        {
-            Logger::warning("Terrain initialization failed");
-        }
-    }
-
-    // Give the controller terrain reference for walk-mode collision
-    if (m_terrain.isInitialized())
-    {
-        m_controller->setTerrain(&m_terrain);
-    }
+    // Set up the scene (after cached pointers are set — scene setup uses m_environmentForces etc.)
+    setupTabernacleScene();
 
     // Create static physics bodies from scene geometry (for physics character controller)
     createPhysicsStaticBodies();
 
-    // Initialize physics character controller
-    if (m_physicsWorld.isInitialized())
-    {
-        PhysicsControllerConfig physCtrlConfig;
-        physCtrlConfig.eyeHeight = ctrlConfig.playerHeight;
-        physCtrlConfig.maxSlopeAngle = ctrlConfig.maxSlopeAngle;
-
-        glm::vec3 startFeet = m_camera->getPosition();
-        startFeet.y -= physCtrlConfig.eyeHeight;  // Camera position -> feet position
-
-        if (!m_physicsCharController.initialize(m_physicsWorld, startFeet, physCtrlConfig))
-        {
-            Logger::warning("Physics character controller initialization failed");
-        }
-    }
-
     // Wire up foliage shadow casting into the renderer's shadow pass
-    m_renderer->setFoliageShadowCaster(&m_foliageRenderer, &m_foliageManager);
+    m_renderer->setFoliageShadowCaster(m_foliageRenderer, m_foliageManager);
 
     // Give the editor access to the resource manager and foliage manager
     if (m_editor)
     {
         m_editor->setResourceManager(m_resourceManager.get());
-        m_editor->setFoliageManager(&m_foliageManager);
-        m_editor->setTerrain(&m_terrain);
+        m_editor->setFoliageManager(m_foliageManager);
+        m_editor->setTerrain(m_terrain);
         m_editor->setProfiler(&m_profiler);
         m_editor->getBrushPreview().init(config.assetPath);
     }
@@ -539,9 +467,9 @@ bool Engine::initialize(const EngineConfig& config)
             {
                 bool walk = !m_controller->isWalkMode();
                 m_controller->setWalkMode(walk);
-                if (m_physicsCharController.isInitialized())
+                if (m_physicsCharController->isInitialized())
                 {
-                    m_physicsCharController.setFlyMode(!walk);
+                    m_physicsCharController->setFlyMode(!walk);
                 }
                 Logger::info(std::string("Movement: ") + (walk ? "Walk" : "Fly"));
                 if (m_editor) m_editor->showNotification(
@@ -551,15 +479,15 @@ bool Engine::initialize(const EngineConfig& config)
 
             case GLFW_KEY_P:
             {
-                if (m_physicsCharController.isInitialized())
+                if (m_physicsCharController->isInitialized())
                 {
                     m_usePhysicsController = !m_usePhysicsController;
                     if (m_usePhysicsController)
                     {
                         // Sync camera position to physics controller
                         glm::vec3 feet = m_camera->getPosition();
-                        feet.y -= m_physicsCharController.getConfig().eyeHeight;
-                        m_physicsCharController.setPosition(feet);
+                        feet.y -= m_physicsCharController->getConfig().eyeHeight;
+                        m_physicsCharController->setPosition(feet);
                     }
                     std::string mode = m_usePhysicsController ? "Physics (Jolt)" : "Legacy (AABB)";
                     Logger::info("Controller: " + mode);
@@ -647,6 +575,12 @@ bool Engine::initialize(const EngineConfig& config)
         return false;
     }
 
+    // Post-init wiring: give the controller terrain reference for walk-mode collision
+    if (m_terrain && m_terrain->isInitialized())
+    {
+        m_controller->setTerrain(m_terrain);
+    }
+
     m_isRunning = true;
     Logger::info("Engine initialized successfully");
     Logger::info("Controls: Escape=toggle editor/play, WASD=move (play mode), Mouse=look (play mode), E=interact, F1=wireframe, F2=tonemapper, F3=HDR debug, F4=POM, F5=bloom, F6=SSAO, F7=AA mode (None/MSAA/TAA/SMAA), F8=color grading, F9=CSM debug, F10=auto-exposure, F11=diagnostic capture, V=frame cap cycle, P=toggle physics controller, G=walk/fly, Ctrl+Q=quit");
@@ -727,7 +661,7 @@ void Engine::run()
             if (vpW > 0 && vpH > 0)
             {
                 m_renderer->resizeRenderTarget(vpW, vpH);
-                m_waterFbo.resize(vpW / 4, vpH / 4, vpW / 4, vpH / 4);
+                m_waterFbo->resize(vpW / 4, vpH / 4, vpW / 4, vpH / 4);
             }
         }
         else
@@ -736,7 +670,7 @@ void Engine::run()
             int rw = m_editor ? m_editor->getPlayModeWidth() : m_window->getWidth();
             int rh = m_editor ? m_editor->getPlayModeHeight() : m_window->getHeight();
             m_renderer->resizeRenderTarget(rw, rh);
-            m_waterFbo.resize(rw / 4, rh / 4, rw / 4, rh / 4);
+            m_waterFbo->resize(rw / 4, rh / 4, rw / 4, rh / 4);
         }
 
         // 3e. Editor viewport interaction and camera update
@@ -767,14 +701,14 @@ void Engine::run()
                     Ray mouseRay = BrushTool::createRay(*m_camera, mouseX, mouseY, aspect);
                     bool mouseDown = brushIo.MouseDown[0] && !brushIo.KeyAlt;
                     brush.processInput(mouseRay, mouseDown, deltaTime,
-                                       m_foliageManager, m_editor->getCommandHistory());
+                                       *m_foliageManager, m_editor->getCommandHistory());
                 }
             }
 
             // 3g. Process terrain brush input for sculpting/painting
             TerrainBrush& terrainBrush = m_editor->getTerrainBrush();
             if (terrainBrush.isActive() && !m_editor->isGizmoActive()
-                && m_terrainEnabled && m_terrain.isInitialized())
+                && m_terrainEnabled && m_terrain->isInitialized())
             {
                 int vpW = 0, vpH = 0;
                 m_editor->getViewportSize(vpW, vpH);
@@ -790,7 +724,7 @@ void Engine::run()
                     Ray mouseRay = BrushTool::createRay(*m_camera, mouseX, mouseY, aspect);
                     bool mouseDown = brushIo.MouseDown[0] && !brushIo.KeyAlt;
                     terrainBrush.processInput(mouseRay, mouseDown, deltaTime,
-                                              m_terrain, m_editor->getCommandHistory());
+                                              *m_terrain, m_editor->getCommandHistory());
                 }
             }
 
@@ -896,11 +830,7 @@ void Engine::run()
         // Start profiler early to capture CPU systems (cloth, physics) not just rendering
         m_profiler.beginFrame();
 
-        // 3b. Environment — advance gust state machine and weather
-        {
-            VESTIGE_PROFILE_SCOPE("Environment");
-            m_environmentForces.update(deltaTime);
-        }
+        // 3b. Environment — now handled by AtmosphereSystem via SystemRegistry::updateAll()
 
         // 4. Scene — update entities and components (includes cloth simulation)
         {
@@ -924,13 +854,13 @@ void Engine::run()
 
         // 5. Controller — process input and update camera
         Scene* activeScene = m_sceneManager->getActiveScene();
-        if (m_usePhysicsController && m_physicsCharController.isInitialized())
+        if (m_usePhysicsController && m_physicsCharController->isInitialized())
         {
             // Physics controller path: input -> velocity -> Jolt -> camera
             m_controller->processLookOnly(deltaTime);
             glm::vec3 velocity = m_controller->computeDesiredVelocity(deltaTime);
-            m_physicsCharController.update(deltaTime, velocity);
-            m_camera->setPosition(m_physicsCharController.getEyePosition());
+            m_physicsCharController->update(deltaTime, velocity);
+            m_camera->setPosition(m_physicsCharController->getEyePosition());
         }
         else
         {
@@ -991,15 +921,15 @@ void Engine::run()
                     waterQuality = static_cast<int>(m_formulaQuality.getEffectiveTier("water"));
                 }
                 m_renderer->setCausticsQuality(waterQuality);
-                m_terrainRenderer.setCausticsQuality(waterQuality);
-                m_waterRenderer.setWaterQualityTier(waterQuality);
+                m_terrainRenderer->setCausticsQuality(waterQuality);
+                m_waterRenderer->setWaterQualityTier(waterQuality);
 
                 bool causticsOn = waterCfg.causticsEnabled;
                 m_renderer->setCausticsParams(causticsOn, waterY, elapsed,
                                                center, halfExtent,
                                                waterCfg.causticsIntensity,
                                                waterCfg.causticsScale);
-                m_terrainRenderer.setCausticsParams(causticsOn, waterY, elapsed,
+                m_terrainRenderer->setCausticsParams(causticsOn, waterY, elapsed,
                                                      m_renderer->getCausticsTexture(),
                                                      center, halfExtent,
                                                      waterCfg.causticsIntensity,
@@ -1008,7 +938,7 @@ void Engine::run()
             else
             {
                 m_renderer->setCausticsParams(false, 0.0f, 0.0f);
-                m_terrainRenderer.setCausticsParams(false, 0.0f, 0.0f, 0);
+                m_terrainRenderer->setCausticsParams(false, 0.0f, 0.0f, 0);
             }
 
             m_profiler.getGpuTimer().beginPass("Scene");
@@ -1019,10 +949,10 @@ void Engine::run()
             m_profiler.getGpuTimer().endPass();
 
             // Render terrain (after opaques, before foliage/water)
-            if (m_terrainEnabled && m_terrain.isInitialized())
+            if (m_terrainEnabled && m_terrain->isInitialized())
             {
                 m_profiler.getGpuTimer().beginPass("Terrain");
-                m_terrainRenderer.render(m_terrain, *m_camera, aspectRatio, m_renderData,
+                m_terrainRenderer->render(*m_terrain, *m_camera, aspectRatio, m_renderData,
                                          m_renderer->getCascadedShadowMap());
                 m_profiler.getGpuTimer().endPass();
             }
@@ -1031,13 +961,13 @@ void Engine::run()
             {
                 glm::mat4 viewProj = m_camera->getProjectionMatrix(aspectRatio)
                                    * m_camera->getViewMatrix();
-                auto visibleChunks = m_foliageManager.getVisibleChunks(viewProj);
+                auto visibleChunks = m_foliageManager->getVisibleChunks(viewProj);
                 float elapsed = static_cast<float>(m_timer->getElapsedTime());
 
                 // Sync foliage wind with global environment
-                m_foliageRenderer.windDirection = m_environmentForces.getBaseWindDirection();
-                float envWindSpeed = m_environmentForces.getWindSpeed(m_camera->getPosition());
-                m_foliageRenderer.windAmplitude = 0.08f * std::max(0.2f, envWindSpeed);
+                m_foliageRenderer->windDirection = m_environmentForces->getBaseWindDirection();
+                float envWindSpeed = m_environmentForces->getWindSpeed(m_camera->getPosition());
+                m_foliageRenderer->windAmplitude = 0.08f * std::max(0.2f, envWindSpeed);
 
                 if (!visibleChunks.empty())
                 {
@@ -1047,9 +977,9 @@ void Engine::run()
                     CascadedShadowMap* csm = m_renderer->getCascadedShadowMap();
                     const DirectionalLight* dirLight =
                         m_renderData.hasDirectionalLight ? &m_renderData.directionalLight : nullptr;
-                    m_foliageRenderer.render(visibleChunks, *m_camera, viewProj, elapsed,
+                    m_foliageRenderer->render(visibleChunks, *m_camera, viewProj, elapsed,
                                              100.0f, csm, dirLight);
-                    m_treeRenderer.render(visibleChunks, *m_camera, viewProj, elapsed);
+                    m_treeRenderer->render(visibleChunks, *m_camera, viewProj, elapsed);
                     m_profiler.getGpuTimer().endPass();
                 }
             }
@@ -1087,12 +1017,12 @@ void Engine::run()
                     glm::vec4 refrClipPlane(0.0f, -1.0f, 0.0f, waterY + 0.1f);
                     glEnable(GL_CLIP_DISTANCE0);
 
-                    m_waterFbo.bindRefraction();
+                    m_waterFbo->bindRefraction();
                     m_renderer->renderScene(m_renderData, *m_camera, aspectRatio, refrClipPlane, true);
 
-                    if (m_terrainEnabled && m_terrain.isInitialized())
+                    if (m_terrainEnabled && m_terrain->isInitialized())
                     {
-                        m_terrainRenderer.render(m_terrain, *m_camera, aspectRatio, m_renderData,
+                        m_terrainRenderer->render(*m_terrain, *m_camera, aspectRatio, m_renderData,
                                                  m_renderer->getCascadedShadowMap(), refrClipPlane);
                     }
 
@@ -1113,12 +1043,12 @@ void Engine::run()
 
                     glEnable(GL_CLIP_DISTANCE0);
 
-                    m_waterFbo.bindReflection();
+                    m_waterFbo->bindReflection();
                     m_renderer->renderScene(m_renderData, reflectedCamera, aspectRatio, reflClipPlane, true);
 
-                    if (m_terrainEnabled && m_terrain.isInitialized())
+                    if (m_terrainEnabled && m_terrain->isInitialized())
                     {
-                        m_terrainRenderer.render(m_terrain, reflectedCamera, aspectRatio, m_renderData,
+                        m_terrainRenderer->render(*m_terrain, reflectedCamera, aspectRatio, m_renderData,
                                                  m_renderer->getCascadedShadowMap(), reflClipPlane);
                     }
 
@@ -1130,13 +1060,13 @@ void Engine::run()
                 m_renderer->restoreViewState();
 
                 // Get reflection/refraction textures from water FBOs
-                GLuint reflTex = m_waterFbo.getReflectionTexture();
-                GLuint refrTex = m_waterFbo.getRefractionTexture();
-                GLuint refrDepthTex = m_waterFbo.getRefractionDepthTexture();
+                GLuint reflTex = m_waterFbo->getReflectionTexture();
+                GLuint refrTex = m_waterFbo->getRefractionTexture();
+                GLuint refrDepthTex = m_waterFbo->getRefractionDepthTexture();
                 GLuint skyboxTex = m_renderer->getSkyboxTextureId();
 
                 m_profiler.getGpuTimer().beginPass("Water");
-                m_waterRenderer.render(waterItems, *m_camera, aspectRatio,
+                m_waterRenderer->render(waterItems, *m_camera, aspectRatio,
                                        elapsed, lightDir, lightColor, skyboxTex,
                                        reflTex, refrTex, refrDepthTex, 0.1f);
                 m_profiler.getGpuTimer().endPass();
@@ -1151,7 +1081,7 @@ void Engine::run()
                 int particleW = m_renderer->getRenderWidth();
                 int particleH = m_renderer->getRenderHeight();
                 m_profiler.getGpuTimer().beginPass("Particles");
-                m_particleRenderer.render(m_renderData.particleEmitters, *m_camera, viewProj,
+                m_particleRenderer->render(m_renderData.particleEmitters, *m_camera, viewProj,
                                           depthTex, particleW, particleH, 0.1f);
                 m_profiler.getGpuTimer().endPass();
             }
@@ -1357,20 +1287,12 @@ void Engine::shutdown()
         m_renderer->setFoliageShadowCaster(nullptr, nullptr);
     }
 
-    // Shut down domain systems before destroying GL subsystems
+    // Shut down domain systems (handles terrain, foliage, water, particles, character controller)
+    // Must happen before destroying the window (GL context).
     m_systemRegistry.shutdownAll();
 
-    // Shut down all subsystems that hold GL resources BEFORE destroying the window
-    // (the window owns the GL context — GL calls after window destruction crash).
-    m_terrain.shutdown();
-    m_terrainRenderer.shutdown();
-    m_foliageRenderer.shutdown();
-    m_treeRenderer.shutdown();
-    m_waterFbo.shutdown();
-    m_waterRenderer.shutdown();
-    m_particleRenderer.shutdown();
+    // Shut down remaining engine-owned subsystems
     m_profiler.shutdown();
-    m_physicsCharController.shutdown();
     m_physicsWorld.shutdown();
     m_debugDraw.cleanup();
     m_editor.reset();
@@ -1913,7 +1835,7 @@ void Engine::setupDemoScene()
         {
             for (float z = -groundHalf + 1.0f; z < groundHalf - 1.0f; z += 3.0f)
             {
-                m_foliageManager.paintFoliage(
+                m_foliageManager->paintFoliage(
                     0, glm::vec3(x, 0.0f, z), 3.0f, 6.0f, 0.3f, grassConfig);
             }
         }
@@ -1935,11 +1857,11 @@ void Engine::setupDemoScene()
         };
         for (const auto& ex : exclusions)
         {
-            m_foliageManager.eraseAllFoliage(ex.pos, ex.radius);
+            m_foliageManager->eraseAllFoliage(ex.pos, ex.radius);
         }
 
-        Logger::info("Demo foliage: " + std::to_string(m_foliageManager.getTotalFoliageCount())
-                     + " grass instances across " + std::to_string(m_foliageManager.getChunkCount()) + " chunks");
+        Logger::info("Demo foliage: " + std::to_string(m_foliageManager->getTotalFoliageCount())
+                     + " grass instances across " + std::to_string(m_foliageManager->getChunkCount()) + " chunks");
     }
 
     // Initial scene update to compute world matrices
@@ -2246,9 +2168,9 @@ void Engine::setupTabernacleScene()
     // Scene-wide prevailing wind — configure EnvironmentForces so all
     // consumers (cloth, foliage, particles, water) blow consistently.
     // Desert wind from the east (positive Z toward entrance, slight northward drift).
-    m_environmentForces.setWindDirection(glm::vec3(0.15f, 0.0f, -1.0f));
-    m_environmentForces.setWindStrength(1.0f);
-    const glm::vec3 sceneWindDir = m_environmentForces.getBaseWindDirection();
+    m_environmentForces->setWindDirection(glm::vec3(0.15f, 0.0f, -1.0f));
+    m_environmentForces->setWindStrength(1.0f);
+    const glm::vec3 sceneWindDir = m_environmentForces->getBaseWindDirection();
 
     // Interior pillar dimensions (used by veil and curtain colliders)
     const float intPillarH = tentH - 0.3f;
