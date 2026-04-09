@@ -37,20 +37,20 @@ compile_commands.json
 .DS_Store
 Thumbs.db
 
-# Claude Code local settings
-.claude/settings.local.json
+# Claude Code local data (settings, worktrees, plans)
+.claude/
 
 # ImGui layout state
 imgui.ini
 
-# Dependency directories (fetched by CMake)
+# Dependency directories (fetched by CMake at build time)
 external/glfw/
 external/glm/
-external/stb/
 external/googletest/
 external/assimp/
 
-# Note: external/glad/ is NOT ignored — it contains pre-generated OpenGL loader files
+# Note: external/glad/, external/stb/, and external/dr_libs/ are NOT ignored —
+# they contain vendored source files committed to the repo.
 
 # Core dumps (root-level only — avoids matching engine/core/)
 /core
