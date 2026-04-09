@@ -509,6 +509,14 @@ void AssetBrowserPanel::drawGrid()
             ImGui::EndDragDropSource();
         }
 
+        // Double-click opens in appropriate viewer
+        if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)
+            && !entry.isDirectory)
+        {
+            m_pendingOpenPath = entry.fullPath;
+            m_pendingOpenType = entry.type;
+        }
+
         // Tooltip with full filename
         if (ImGui::IsItemHovered())
         {

@@ -17,6 +17,10 @@
 #include "editor/panels/inspector_panel.h"
 #include "editor/panels/validation_panel.h"
 #include "editor/panels/welcome_panel.h"
+#include "editor/panels/texture_viewer_panel.h"
+#include "editor/panels/hdri_viewer_panel.h"
+#include "editor/panels/model_viewer_panel.h"
+#include "editor/panels/template_dialog.h"
 #include "editor/prefab_system.h"
 #include "editor/selection.h"
 #include "editor/tools/brush_tool.h"
@@ -213,6 +217,11 @@ public:
     StairTool& getStairTool() { return m_stairTool; }
     PathTool& getPathTool() { return m_pathTool; }
 
+    /// @brief Gets the asset viewer panels.
+    TextureViewerPanel& getTextureViewerPanel() { return m_textureViewerPanel; }
+    HdriViewerPanel& getHdriViewerPanel() { return m_hdriViewerPanel; }
+    ModelViewerPanel& getModelViewerPanel() { return m_modelViewerPanel; }
+
 private:
     void setupTheme();
     void drawGizmo(Camera* camera, Scene* scene);
@@ -259,6 +268,10 @@ private:
     PerformancePanel m_performancePanel;
     ValidationPanel m_validationPanel;
     WelcomePanel m_welcomePanel;
+    TextureViewerPanel m_textureViewerPanel;
+    HdriViewerPanel m_hdriViewerPanel;
+    ModelViewerPanel m_modelViewerPanel;
+    TemplateDialog m_templateDialog;
     BrushTool m_brushTool;
     BrushPreviewRenderer m_brushPreview;
     RulerTool m_rulerTool;

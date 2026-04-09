@@ -83,6 +83,25 @@ private:
     std::chrono::steady_clock::time_point m_lastPoll;
 
     ResourceManager* m_resources = nullptr;
+
+    // Double-click routing to asset viewers
+    std::string m_pendingOpenPath;
+    AssetType m_pendingOpenType = AssetType::UNKNOWN;
+
+public:
+    /// @brief Returns true if a double-clicked asset is pending for viewer open.
+    bool hasPendingOpen() const { return !m_pendingOpenPath.empty(); }
+
+    /// @brief Consumes the pending open request.
+    /// @param outPath Set to the asset file path.
+    /// @param outType Set to the asset type.
+    void consumePendingOpen(std::string& outPath, AssetType& outType)
+    {
+        outPath = m_pendingOpenPath;
+        outType = m_pendingOpenType;
+        m_pendingOpenPath.clear();
+        m_pendingOpenType = AssetType::UNKNOWN;
+    }
 };
 
 } // namespace Vestige
