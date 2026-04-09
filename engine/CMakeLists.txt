@@ -174,6 +174,10 @@ set(ENGINE_SOURCES
     editor/panels/performance_panel.cpp
     editor/panels/validation_panel.cpp
     editor/panels/welcome_panel.cpp
+    editor/panels/texture_viewer_panel.cpp
+    editor/panels/hdri_viewer_panel.cpp
+    editor/panels/model_viewer_panel.cpp
+    editor/panels/template_dialog.cpp
     editor/tools/ruler_tool.cpp
     editor/tools/wall_tool.cpp
     editor/tools/room_tool.cpp

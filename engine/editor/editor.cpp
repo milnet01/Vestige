@@ -7,6 +7,7 @@
 #include "editor/commands/composite_command.h"
 #include "editor/commands/entity_property_command.h"
 #include "core/logger.h"
+#include "core/timer.h"
 #include "renderer/camera.h"
 #include "renderer/renderer.h"
 #include "resource/resource_manager.h"
@@ -90,6 +91,11 @@ bool Editor::initialize(GLFWwindow* window, const std::string& assetPath)
     // Initialize the inspector panel (material preview, etc.)
     m_inspectorPanel.initialize(assetPath);
 
+    // Initialize asset viewer panels
+    m_textureViewerPanel.initialize(assetPath);
+    m_hdriViewerPanel.initialize(assetPath);
+    m_modelViewerPanel.initialize(assetPath);
+
     // Note: asset browser is initialized when setResourceManager() is called
     // because it needs a ResourceManager for texture loading.
 
@@ -127,6 +133,11 @@ void Editor::shutdown()
     }
 
     m_editorCamera.reset();
+
+    // Cleanup asset viewer panels
+    m_textureViewerPanel.cleanup();
+    m_hdriViewerPanel.cleanup();
+    m_modelViewerPanel.cleanup();
 
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
@@ -185,6 +196,9 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
             ImGui::DockBuilderDockWindow("Console", bottom);
             ImGui::DockBuilderDockWindow("Assets", bottom);
             ImGui::DockBuilderDockWindow("History", bottom);
+            ImGui::DockBuilderDockWindow("Model Viewer", bottom);
+            ImGui::DockBuilderDockWindow("Texture Viewer", bottom);
+            ImGui::DockBuilderDockWindow("HDRI Viewer", bottom);
             ImGui::DockBuilderDockWindow("Viewport", main);
 
             ImGui::DockBuilderFinish(dockspaceId);
@@ -228,6 +242,10 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
                 if (ImGui::MenuItem("Import Model...", "Ctrl+I"))
                 {
                     m_importDialog.open();
+                }
+                if (ImGui::MenuItem("New from Template..."))
+                {
+                    m_templateDialog.open();
                 }
                 ImGui::Separator();
                 if (ImGui::MenuItem("Quit", "Ctrl+Q"))
@@ -465,6 +483,24 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
                 {
                     m_validationPanel.setOpen(valOpen);
                 }
+                ImGui::Separator();
+                ImGui::TextDisabled("Asset Viewers");
+                bool modelViewerOpen = m_modelViewerPanel.isOpen();
+                if (ImGui::MenuItem("Model Viewer", nullptr, &modelViewerOpen))
+                {
+                    m_modelViewerPanel.setOpen(modelViewerOpen);
+                }
+                bool texViewerOpen = m_textureViewerPanel.isOpen();
+                if (ImGui::MenuItem("Texture Viewer", nullptr, &texViewerOpen))
+                {
+                    m_textureViewerPanel.setOpen(texViewerOpen);
+                }
+                bool hdriViewerOpen = m_hdriViewerPanel.isOpen();
+                if (ImGui::MenuItem("HDRI Viewer", nullptr, &hdriViewerOpen))
+                {
+                    m_hdriViewerPanel.setOpen(hdriViewerOpen);
+                }
+                ImGui::Separator();
                 ImGui::MenuItem("Demo Window", nullptr, &m_showDemoWindow);
                 ImGui::EndMenu();
             }
@@ -1149,6 +1185,66 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
 
         // --- Validation panel ---
         m_validationPanel.draw(scene, m_selection);
+
+        // --- Asset viewer panels ---
+        m_textureViewerPanel.draw();
+        m_hdriViewerPanel.draw(renderer);
+        float dt = timer ? timer->getDeltaTime() : (1.0f / 60.0f);
+        m_modelViewerPanel.draw(scene, m_resourceManager, dt);
+
+        // --- Template dialog ---
+        m_templateDialog.draw(scene, m_resourceManager, renderer,
+                               m_selection, m_fileMenu);
+
+        // --- Asset browser double-click routing ---
+        if (m_assetBrowserPanel.hasPendingOpen())
+        {
+            std::string pendingPath;
+            AssetType pendingType;
+            m_assetBrowserPanel.consumePendingOpen(pendingPath, pendingType);
+
+            if (pendingType == AssetType::TEXTURE)
+            {
+                auto tex = std::make_shared<Texture>();
+                std::string ext = std::filesystem::path(pendingPath).extension().string();
+                std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+                bool isHdr = (ext == ".hdr" || ext == ".exr");
+
+                if (isHdr)
+                {
+                    m_hdriViewerPanel.openHdri(pendingPath, m_resourceManager);
+                }
+                else
+                {
+                    bool linear = false;
+                    // Detect linear textures by common suffixes
+                    std::string stem = std::filesystem::path(pendingPath).stem().string();
+                    std::string lowerStem = stem;
+                    std::transform(lowerStem.begin(), lowerStem.end(), lowerStem.begin(), ::tolower);
+                    if (lowerStem.find("normal") != std::string::npos ||
+                        lowerStem.find("roughness") != std::string::npos ||
+                        lowerStem.find("metallic") != std::string::npos ||
+                        lowerStem.find("ao") != std::string::npos ||
+                        lowerStem.find("height") != std::string::npos)
+                    {
+                        linear = true;
+                    }
+
+                    if (tex->loadFromFile(pendingPath, linear))
+                    {
+                        m_textureViewerPanel.openTexture(tex, pendingPath);
+                    }
+                }
+            }
+            else if (pendingType == AssetType::MESH && m_resourceManager)
+            {
+                auto model = m_resourceManager->loadModel(pendingPath);
+                if (model)
+                {
+                    m_modelViewerPanel.openModel(model, pendingPath);
+                }
+            }
+        }
 
         // --- Welcome panel ---
         m_welcomePanel.draw();
