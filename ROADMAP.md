@@ -802,14 +802,29 @@ Each template configures: camera type/constraints, physics dimensionality, defau
 
 *Scope: major initiative — essentially building a programming language with an IDE. Requires dedicated design document and evaluation of existing node graph libraries (imnodes, imgui-node-editor).*
 
-- [ ] Node graph infrastructure and renderer
+**Node Graph Infrastructure:**
+- [ ] Node graph infrastructure and renderer (evaluate imnodes vs imgui-node-editor)
+- [ ] Node type registry (extensible node catalog with typed input/output pins)
+- [ ] Connection validation (type-safe pin connections with visual feedback)
+- [ ] Graph serialization (save/load node graphs as JSON)
+- [ ] Graph compilation (convert node graph to executable logic)
+
+**Gameplay Scripting Nodes:**
 - [ ] Event nodes (on collision, on trigger enter, on key press, on timer)
 - [ ] Action nodes (move entity, play animation, play sound, spawn entity, destroy entity, set variable)
 - [ ] Flow control (branch, loop, sequence, delay)
 - [ ] Variable system (per-entity and global variables, exposed in inspector)
 - [ ] Pre-built gameplay templates (door that opens, collectible item, damage zone, checkpoint, dialogue trigger)
 
-Prioritize basic event-to-action chains first. Advanced flow control and variable systems come later.
+**Formula Node Editor** (extends FormulaWorkbench):
+- [ ] Visual formula composition via math nodes (add, multiply, sin, cos, pow, clamp, lerp, etc.)
+- [ ] Variable input nodes (bind to formula inputs and coefficients)
+- [ ] Output node with real-time curve preview
+- [ ] Drag-and-drop from PhysicsTemplates catalog into the node graph
+- [ ] Convert node graph to ExpressionTree for use in FormulaLibrary
+- [ ] Bidirectional: load existing ExpressionTree formulas into the node editor for visual editing
+
+Prioritize basic event-to-action chains first. The formula node editor builds on the same node graph infrastructure. Advanced flow control and variable systems come later.
 
 ---
 
