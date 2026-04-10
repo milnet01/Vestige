@@ -161,5 +161,5 @@ if __name__ == "__main__":
         stream=sys.stderr,
     )
 
-    print("Audit Tool Web UI: http://127.0.0.1:5000")
-    app.run(host="127.0.0.1", port=5000, debug=False, threaded=True)
+    print("Audit Tool Web UI: http://127.0.0.1:5800")
+    app.run(host="127.0.0.1", port=5800, debug=False, threaded=True)
