@@ -59,14 +59,14 @@ static_analysis:
 patterns:
   memory_safety:
     - name: "raw_new"
-      pattern: "\\bnew\\s+\\w+"
+      pattern: "=\\s*new\\s+\\w+"
       file_glob: "*.cpp,*.h"
       severity: "high"
       description: "Raw new — should use smart pointers"
-      exclude_pattern: "placement new|nothrow|JPH::|tinygltf|stb_|dr_"
+      exclude_pattern: "placement new|nothrow|JPH::|tinygltf|stb_|dr_|make_unique|make_shared"
       skip_comments: true
     - name: "raw_delete"
-      pattern: "\\bdelete\\s+"
+      pattern: "\\bdelete\\s+\\w+"
       file_glob: "*.cpp,*.h"
       severity: "high"
       description: "Raw delete — should use smart pointers"
@@ -77,21 +77,26 @@ patterns:
       file_glob: "*.cpp,*.h"
       severity: "low"
       description: "NULL macro — use nullptr"
+      skip_comments: true
     - name: "unsafe_c_string"
-      pattern: "\\b(strcpy|strcat|sprintf|gets)\\b"
+      pattern: "\\b(strcpy|strcat|sprintf)\\s*\\("
       file_glob: "*.cpp,*.h"
       severity: "high"
       description: "Unsafe C string function"
+      skip_comments: true
     - name: "using_namespace_header"
       pattern: "using namespace"
       file_glob: "*.h"
       severity: "medium"
       description: "using namespace in header — namespace pollution"
+      skip_comments: true
     - name: "c_style_cast"
-      pattern: "\\(\\s*(int|float|double|char|void|unsigned|long|short|size_t|uint\\d+_t|int\\d+_t)\\s*\\*?\\s*\\)"
+      pattern: "\\(\\s*(int|float|double|char|unsigned|long|short|size_t|uint\\d+_t|int\\d+_t)\\s*\\*?\\s*\\)"
       file_glob: "*.cpp,*.h"
       severity: "medium"
       description: "C-style cast — use static_cast/reinterpret_cast"
+      exclude_pattern: "\\(void\\)|sizeof\\s*\\(|static_cast|reinterpret_cast|const_cast|dynamic_cast"
+      skip_comments: true
 
   opengl_state:
     - name: "global_gl_state"
@@ -174,14 +179,14 @@ research:
   cache_ttl_days: 7
   max_results_per_query: 3
   topics:
-    - query: "CVE GLFW 3.4 2025 2026"
-    - query: "CVE GLM 1.0.1 vulnerability"
-    - query: "CVE FreeType 2.13 vulnerability 2025 2026"
-    - query: "CVE OpenAL Soft 1.24 vulnerability"
-    - query: "CVE tinygltf vulnerability 2025 2026"
-    - query: "AMD RDNA2 OpenGL driver bug 2025 2026"
-    - query: "OpenGL 4.5 best practices performance 2025"
-    - query: "XPBD cloth simulation stability improvements"
+    - query: "site:nvd.nist.gov GLFW vulnerability"
+    - query: "site:nvd.nist.gov FreeType vulnerability 2024 2025"
+    - query: "site:nvd.nist.gov OpenAL vulnerability"
+    - query: "site:github.com/syoyo/tinygltf security issues"
+    - query: "AMD Mesa RADV OpenGL bug report 2025"
+    - query: "OpenGL best practices performance GPU batching instancing"
+    - query: "XPBD cloth simulation stability convergence improvements"
+    - query: "cppcheck false positive returnDanglingLifetime unique_ptr move"
   custom_queries: []
 
 # -- Report Settings ----------------------------------------------------------

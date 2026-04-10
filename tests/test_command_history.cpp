@@ -240,10 +240,10 @@ TEST(CommandHistoryTest, CompositeCommandUndoesInReverse)
     history.undo();
 
     // Undo order: -3, -2, -1 (reverse)
-    ASSERT_EQ(log.size(), 3u);
-    EXPECT_EQ(log[0], -3);
-    EXPECT_EQ(log[1], -2);
-    EXPECT_EQ(log[2], -1);
+    ASSERT_EQ(log.size(), 3u);  // ASSERT aborts test if false — indices below are safe
+    EXPECT_EQ(log[0], -3);  // cppcheck-suppress containerOutOfBounds
+    EXPECT_EQ(log[1], -2);  // cppcheck-suppress containerOutOfBounds
+    EXPECT_EQ(log[2], -1);  // cppcheck-suppress containerOutOfBounds
 }
 
 // ---------------------------------------------------------------------------
