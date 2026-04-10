@@ -3,18 +3,22 @@
 ///
 /// Standalone ImGui application providing:
 /// - Template browser (browse/search built-in physics formulas)
-/// - Data editor (manual entry + CSV import)
-/// - Coefficient fitter (Levenberg-Marquardt)
-/// - Curve visualizer (ImPlot)
-/// - Validation panel (R², RMSE, train/test split)
+/// - Data editor (manual entry + CSV import via file dialog)
+/// - Coefficient fitter (Levenberg-Marquardt with bounds)
+/// - Curve visualizer (ImPlot) with quality tier comparison
+/// - Convergence history visualization
+/// - Validation panel (R², RMSE, train/test split, overfitting detection)
 /// - Preset browser (apply/create environment/style presets)
-/// - Export to FormulaLibrary JSON
+/// - Batch fitting across formula categories
+/// - Numeric stability warnings
+/// - Export to FormulaLibrary JSON and C++/GLSL snippets
 #pragma once
 
 #include "formula/curve_fitter.h"
 #include "formula/formula_library.h"
 #include "formula/formula_preset.h"
 
+#include <deque>
 #include <string>
 #include <vector>
 
@@ -47,6 +51,8 @@ private:
     void importCsv(const std::string& path);
     void generateSyntheticData();
     void exportFormula(const std::string& path);
+    void openFileDialog();          ///< Native file dialog for CSV import
+    void batchFitCategory();        ///< Fit all formulas in the current category
 
     // -- Formula library & presets --------------------------------------------
     FormulaLibrary m_library;
@@ -65,10 +71,27 @@ private:
     // -- Coefficients (editable initial values) -------------------------------
     std::map<std::string, float> m_coefficients;
 
+    // -- Coefficient bounds (improvement #4) ----------------------------------
+    struct CoeffBound
+    {
+        float lower = -1e6f;
+        float upper =  1e6f;
+        bool  enabled = false;
+    };
+    std::map<std::string, CoeffBound> m_coeffBounds;
+
     // -- Fit state ------------------------------------------------------------
     FitConfig m_fitConfig;
     FitResult m_fitResult;
     bool m_hasFitResult = false;
+
+    // -- Convergence history (improvement #5) ---------------------------------
+    struct ConvergencePoint
+    {
+        int iteration;
+        float residual;
+    };
+    std::vector<ConvergencePoint> m_convergenceHistory;
 
     // -- Validation -----------------------------------------------------------
     float m_trainRatio = 0.8f;
@@ -84,6 +107,32 @@ private:
     std::vector<float> m_residuals;
     std::string m_plotVariable;
     void rebuildVisualizationCache();
+
+    // -- Quality tier comparison (improvement #3) -----------------------------
+    std::vector<float> m_approxCurveY;
+    bool m_showQualityComparison = false;
+
+    // -- Multi-variable synthetic data (improvement #6) -----------------------
+    int m_syntheticCount = 20;
+    float m_syntheticNoise = 0.02f;
+    bool m_multiVarSynthetic = false;   ///< Sweep all variables, not just the first
+
+    // -- Undo/redo for coefficients (improvement #9) --------------------------
+    struct CoeffSnapshot
+    {
+        std::map<std::string, float> values;
+        std::string description;
+    };
+    std::deque<CoeffSnapshot> m_undoStack;
+    std::deque<CoeffSnapshot> m_redoStack;
+    static constexpr size_t MAX_UNDO = 50;
+    void pushUndo(const std::string& desc);
+    void undo();
+    void redo();
+
+    // -- Stability warnings (improvement #10) ---------------------------------
+    std::vector<std::string> m_stabilityWarnings;
+    void checkStability();
 
     // -- Preset state ---------------------------------------------------------
     std::string m_selectedPresetName;

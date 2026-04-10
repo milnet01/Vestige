@@ -1,6 +1,8 @@
 /// @file workbench.cpp
 /// @brief FormulaWorkbench implementation.
 #include "workbench.h"
+#include "formula/codegen_cpp.h"
+#include "formula/codegen_glsl.h"
 #include "formula/expression_eval.h"
 #include "formula/lut_generator.h"
 
@@ -8,8 +10,11 @@
 #include <implot.h>
 
 #include <algorithm>
+#include <cmath>
+#include <cstdio>
 #include <cstring>
 #include <fstream>
+#include <iomanip>
 #include <random>
 #include <sstream>
 
@@ -81,7 +86,7 @@ void Workbench::render()
 }
 
 // ---------------------------------------------------------------------------
-// Menu bar
+// Menu bar  (Improvement #2: file dialog, #8: batch fit)
 // ---------------------------------------------------------------------------
 
 void Workbench::renderMenuBar()
@@ -91,18 +96,25 @@ void Workbench::renderMenuBar()
         if (ImGui::BeginMenu("File"))
         {
             if (ImGui::MenuItem("Import CSV..."))
-            {
-                // For now, use the text input in data editor
-                m_statusMessage = "Use the CSV path field in the Data Editor panel.";
-                m_statusTimer = 3.0f;
-            }
+                openFileDialog();
             if (ImGui::MenuItem("Export Formula..."))
                 exportFormula(m_exportPath);
+            ImGui::Separator();
+            if (ImGui::MenuItem("Batch Fit Category"))
+                batchFitCategory();
             ImGui::Separator();
             if (ImGui::MenuItem("Quit"))
             {
                 // Signal window close — handled by main loop checking glfwWindowShouldClose
             }
+            ImGui::EndMenu();
+        }
+        if (ImGui::BeginMenu("Edit"))
+        {
+            if (ImGui::MenuItem("Undo", "Ctrl+Z", false, !m_undoStack.empty()))
+                undo();
+            if (ImGui::MenuItem("Redo", "Ctrl+Y", false, !m_redoStack.empty()))
+                redo();
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("Help"))
@@ -196,7 +208,7 @@ void Workbench::renderTemplateBrowser()
 }
 
 // ---------------------------------------------------------------------------
-// Data editor
+// Data editor  (Improvement #6: multi-variable synthetic controls)
 // ---------------------------------------------------------------------------
 
 void Workbench::renderDataEditor()
@@ -216,10 +228,30 @@ void Workbench::renderDataEditor()
     ImGui::SameLine();
     if (ImGui::Button("Import"))
         importCsv(csvPath);
+    ImGui::SameLine();
+    if (ImGui::Button("Browse..."))
+        openFileDialog();
 
     ImGui::SameLine();
     if (ImGui::Button("Generate Synthetic"))
         generateSyntheticData();
+
+    // Synthetic data controls (Improvement #6)
+    if (ImGui::CollapsingHeader("Synthetic Data Options"))
+    {
+        ImGui::InputInt("Sample Count", &m_syntheticCount);
+        m_syntheticCount = std::max(2, std::min(m_syntheticCount, 10000));
+        ImGui::InputFloat("Noise Level", &m_syntheticNoise, 0.001f, 0.01f, "%.4f");
+        m_syntheticNoise = std::max(0.0f, std::min(m_syntheticNoise, 1.0f));
+        ImGui::Checkbox("Multi-Variable Sweep", &m_multiVarSynthetic);
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip(
+                "When enabled, sweeps ALL scalar variables simultaneously,\n"
+                "generating a grid of data points instead of sweeping only\n"
+                "the first variable.");
+        }
+    }
 
     ImGui::Text("Data points: %zu", m_dataPoints.size());
 
@@ -309,7 +341,7 @@ void Workbench::renderDataEditor()
 }
 
 // ---------------------------------------------------------------------------
-// Fitting controls
+// Fitting controls  (Improvements #4, #5, #9, #10)
 // ---------------------------------------------------------------------------
 
 void Workbench::renderFittingControls()
@@ -323,13 +355,68 @@ void Workbench::renderFittingControls()
         return;
     }
 
-    // Editable coefficient initial values
+    // Undo/Redo buttons (Improvement #9)
+    {
+        bool canUndo = !m_undoStack.empty();
+        bool canRedo = !m_redoStack.empty();
+        if (!canUndo)
+            ImGui::BeginDisabled();
+        if (ImGui::Button("Undo"))
+            undo();
+        if (!canUndo)
+            ImGui::EndDisabled();
+
+        ImGui::SameLine();
+
+        if (!canRedo)
+            ImGui::BeginDisabled();
+        if (ImGui::Button("Redo"))
+            redo();
+        if (!canRedo)
+            ImGui::EndDisabled();
+
+        if (!m_undoStack.empty())
+        {
+            ImGui::SameLine();
+            ImGui::TextDisabled("(%s)", m_undoStack.back().description.c_str());
+        }
+    }
+
+    ImGui::Separator();
+
+    // Editable coefficient initial values with bounds (Improvement #4)
     ImGui::Text("Initial Coefficients:");
     for (auto& [name, val] : m_coefficients)
     {
+        ImGui::PushID(name.c_str());
+
         ImGui::SetNextItemWidth(120);
-        std::string label = name;
-        ImGui::InputFloat(label.c_str(), &val, 0.0f, 0.0f, "%.6f");
+        if (ImGui::InputFloat("##val", &val, 0.0f, 0.0f, "%.6f"))
+        {
+            // Coefficient edited manually -- no undo push here;
+            // undo is pushed on fit/apply actions, not per-keystroke.
+        }
+        ImGui::SameLine();
+        ImGui::Text("%s", name.c_str());
+
+        // Coefficient bound controls (Improvement #4)
+        CoeffBound& bound = m_coeffBounds[name];
+        ImGui::SameLine();
+        ImGui::Checkbox("Bound", &bound.enabled);
+        if (bound.enabled)
+        {
+            ImGui::Indent(20.0f);
+            ImGui::SetNextItemWidth(80);
+            ImGui::InputFloat("Min", &bound.lower, 0.0f, 0.0f, "%.4f");
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(80);
+            ImGui::InputFloat("Max", &bound.upper, 0.0f, 0.0f, "%.4f");
+            if (bound.lower > bound.upper)
+                std::swap(bound.lower, bound.upper);
+            ImGui::Unindent(20.0f);
+        }
+
+        ImGui::PopID();
     }
 
     ImGui::Separator();
@@ -368,10 +455,49 @@ void Workbench::renderFittingControls()
         else
             ImGui::TextColored(ImVec4(0.8f, 0.2f, 0.2f, 1.0f), "NOT CONVERGED");
 
-        ImGui::Text("Iterations: %d", m_fitResult.iterations);
+        ImGui::Text("Iterations: %d / %d", m_fitResult.iterations,
+                     m_fitConfig.maxIterations);
+
+        // Progress bar (Improvement #5)
+        float progress = (m_fitConfig.maxIterations > 0)
+            ? static_cast<float>(m_fitResult.iterations) /
+              static_cast<float>(m_fitConfig.maxIterations)
+            : 1.0f;
+        progress = std::min(progress, 1.0f);
+        char progressLabel[64];
+        std::snprintf(progressLabel, sizeof(progressLabel), "%d / %d iterations",
+                      m_fitResult.iterations, m_fitConfig.maxIterations);
+        ImGui::ProgressBar(progress, ImVec2(-1, 0), progressLabel);
+
         ImGui::Text("R-squared:  %.6f", static_cast<double>(m_fitResult.rSquared));
         ImGui::Text("RMSE:       %.6f", static_cast<double>(m_fitResult.rmse));
         ImGui::Text("Max Error:  %.6f", static_cast<double>(m_fitResult.maxError));
+
+        // Convergence history chart (Improvement #5)
+        if (!m_convergenceHistory.empty())
+        {
+            ImGui::Separator();
+            ImGui::Text("Convergence History:");
+
+            // Prepare arrays for ImPlot
+            std::vector<float> histIter;
+            std::vector<float> histResid;
+            histIter.reserve(m_convergenceHistory.size());
+            histResid.reserve(m_convergenceHistory.size());
+            for (const auto& cp : m_convergenceHistory)
+            {
+                histIter.push_back(static_cast<float>(cp.iteration));
+                histResid.push_back(cp.residual);
+            }
+
+            if (ImPlot::BeginPlot("##Convergence", ImVec2(-1, 150)))
+            {
+                ImPlot::SetupAxes("Max Iterations", "R-squared");
+                ImPlot::PlotLine("R2", histIter.data(), histResid.data(),
+                                 static_cast<int>(histIter.size()));
+                ImPlot::EndPlot();
+            }
+        }
 
         ImGui::Separator();
         ImGui::Text("Fitted Coefficients:");
@@ -383,9 +509,22 @@ void Workbench::renderFittingControls()
         // Apply fitted values as new initial values
         if (ImGui::Button("Apply to Initial Values"))
         {
+            pushUndo("Apply fitted values");
             m_coefficients = m_fitResult.coefficients;
             m_statusMessage = "Fitted values applied as initial values.";
             m_statusTimer = 2.0f;
+        }
+    }
+
+    // Stability warnings (Improvement #10)
+    if (!m_stabilityWarnings.empty())
+    {
+        ImGui::Separator();
+        ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.0f, 1.0f), "Stability Warnings:");
+        for (const auto& warning : m_stabilityWarnings)
+        {
+            ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.0f, 1.0f), "  - %s",
+                               warning.c_str());
         }
     }
 
@@ -393,7 +532,7 @@ void Workbench::renderFittingControls()
 }
 
 // ---------------------------------------------------------------------------
-// Visualizer (ImPlot)
+// Visualizer (ImPlot)  (Improvement #3: quality tier comparison)
 // ---------------------------------------------------------------------------
 
 void Workbench::renderVisualizer()
@@ -436,6 +575,16 @@ void Workbench::renderVisualizer()
         }
     }
 
+    // Quality comparison checkbox (Improvement #3)
+    if (ImGui::Checkbox("Show Quality Comparison", &m_showQualityComparison))
+        rebuildVisualizationCache();
+    if (ImGui::IsItemHovered())
+    {
+        ImGui::SetTooltip(
+            "Overlay the APPROXIMATE tier curve alongside the FULL tier curve\n"
+            "to compare quality tiers visually.");
+    }
+
     // Build data arrays for plotting
     if (m_dataX.empty() || m_dataX.size() != m_dataPoints.size())
         rebuildVisualizationCache();
@@ -458,8 +607,18 @@ void Workbench::renderVisualizer()
         // Fitted curve (only if we have a fit result)
         if (m_hasFitResult && !m_curveX.empty())
         {
-            ImPlot::PlotLine("Fitted", m_curveX.data(), m_curveY.data(),
+            ImPlot::PlotLine("Fitted (Full)", m_curveX.data(), m_curveY.data(),
                              static_cast<int>(m_curveX.size()));
+
+            // Approximate tier overlay (Improvement #3)
+            // ImPlot auto-assigns a distinct color to each named series
+            if (m_showQualityComparison && !m_approxCurveY.empty() &&
+                m_approxCurveY.size() == m_curveX.size())
+            {
+                ImPlot::PlotLine("Fitted (Approx)", m_curveX.data(),
+                                 m_approxCurveY.data(),
+                                 static_cast<int>(m_curveX.size()));
+            }
         }
 
         ImPlot::EndPlot();
@@ -491,7 +650,7 @@ void Workbench::renderVisualizer()
 }
 
 // ---------------------------------------------------------------------------
-// Validation panel
+// Validation panel  (Improvement #11: export to C++/GLSL)
 // ---------------------------------------------------------------------------
 
 void Workbench::renderValidation()
@@ -553,6 +712,101 @@ void Workbench::renderValidation()
     ImGui::InputText("Output Path", m_exportPath, sizeof(m_exportPath));
     if (ImGui::Button("Export to JSON"))
         exportFormula(m_exportPath);
+
+    // C++/GLSL export buttons (Improvement #11)
+    if (m_selectedFormula)
+    {
+        ImGui::Separator();
+        ImGui::Text("Copy Formula as Code:");
+
+        if (ImGui::Button("Copy as C++"))
+        {
+            // Build a temporary formula definition with current coefficients
+            // (fitted if available, otherwise initial values)
+            std::map<std::string, float> coeffsToUse = m_hasFitResult
+                ? m_fitResult.coefficients
+                : m_coefficients;
+
+            const ExprNode* expr = m_selectedFormula->getExpression(QualityTier::FULL);
+            if (expr)
+            {
+                // Build inline expression with coefficients baked in
+                std::string cppExpr = CodegenCpp::emitExpression(*expr, coeffsToUse);
+
+                // Build a complete function snippet
+                std::ostringstream out;
+                out << "// " << m_selectedFormula->description << "\n";
+                out << "// Coefficients:";
+                for (const auto& [cname, cval] : coeffsToUse)
+                    out << " " << cname << "=" << cval;
+                out << "\n";
+
+                std::string funcName = CodegenCpp::toCppFunctionName(m_selectedFormula->name);
+                std::string retType = CodegenCpp::toCppType(m_selectedFormula->output.type);
+                out << "inline " << retType << " " << funcName << "(";
+                bool first = true;
+                for (const auto& input : m_selectedFormula->inputs)
+                {
+                    if (!first) out << ", ";
+                    out << CodegenCpp::toCppParamType(input.type) << " " << input.name;
+                    first = false;
+                }
+                out << ")\n{\n    return " << cppExpr << ";\n}\n";
+
+                ImGui::SetClipboardText(out.str().c_str());
+                m_statusMessage = "C++ code copied to clipboard.";
+                m_statusTimer = 2.0f;
+            }
+            else
+            {
+                m_statusMessage = "No expression available for C++ export.";
+                m_statusTimer = 2.0f;
+            }
+        }
+
+        ImGui::SameLine();
+
+        if (ImGui::Button("Copy as GLSL"))
+        {
+            std::map<std::string, float> coeffsToUse = m_hasFitResult
+                ? m_fitResult.coefficients
+                : m_coefficients;
+
+            const ExprNode* expr = m_selectedFormula->getExpression(QualityTier::FULL);
+            if (expr)
+            {
+                std::string glslExpr = CodegenGlsl::emitExpression(*expr, coeffsToUse);
+
+                std::ostringstream out;
+                out << "// " << m_selectedFormula->description << "\n";
+                out << "// Coefficients:";
+                for (const auto& [cname, cval] : coeffsToUse)
+                    out << " " << cname << "=" << cval;
+                out << "\n";
+
+                std::string funcName = CodegenGlsl::toGlslFunctionName(m_selectedFormula->name);
+                std::string retType = CodegenGlsl::toGlslType(m_selectedFormula->output.type);
+                out << retType << " " << funcName << "(";
+                bool first = true;
+                for (const auto& input : m_selectedFormula->inputs)
+                {
+                    if (!first) out << ", ";
+                    out << CodegenGlsl::toGlslType(input.type) << " " << input.name;
+                    first = false;
+                }
+                out << ")\n{\n    return " << glslExpr << ";\n}\n";
+
+                ImGui::SetClipboardText(out.str().c_str());
+                m_statusMessage = "GLSL code copied to clipboard.";
+                m_statusTimer = 2.0f;
+            }
+            else
+            {
+                m_statusMessage = "No expression available for GLSL export.";
+                m_statusTimer = 2.0f;
+            }
+        }
+    }
 
     ImGui::End();
 }
@@ -643,6 +897,8 @@ void Workbench::renderPresetBrowser()
         ImGui::Separator();
         if (ImGui::Button("Apply Preset to Library"))
         {
+            pushUndo("Apply preset: " + selectedPreset->displayName);
+
             size_t applied = FormulaPresetLibrary::applyPreset(
                 *selectedPreset, m_library);
             m_statusMessage = "Applied preset '" + selectedPreset->displayName +
@@ -676,9 +932,13 @@ void Workbench::selectFormula(const std::string& name)
         m_dataPoints.clear();
         m_curveX.clear();
         m_curveY.clear();
+        m_approxCurveY.clear();
         m_dataX.clear();
         m_dataY.clear();
         m_residuals.clear();
+        m_convergenceHistory.clear();
+        m_stabilityWarnings.clear();
+        m_coeffBounds.clear();
 
         // Default plot variable
         for (const auto& inp : m_selectedFormula->inputs)
@@ -692,20 +952,67 @@ void Workbench::selectFormula(const std::string& name)
     }
 }
 
+// ---------------------------------------------------------------------------
+// runFit  (Improvements #4, #5, #10)
+// ---------------------------------------------------------------------------
+
 void Workbench::runFit()
 {
     if (!m_selectedFormula || m_dataPoints.empty() || m_coefficients.empty())
         return;
 
+    pushUndo("Before curve fit");
+
+    // Convergence history: run fitter with exponentially increasing max iters
+    // to observe how R-squared improves (Improvement #5)
+    m_convergenceHistory.clear();
+
+    std::vector<int> iterSteps;
+    for (int step = 1; step <= m_fitConfig.maxIterations; step *= 2)
+        iterSteps.push_back(step);
+    // Always include the actual configured max
+    if (iterSteps.empty() || iterSteps.back() != m_fitConfig.maxIterations)
+        iterSteps.push_back(m_fitConfig.maxIterations);
+
+    for (int maxIter : iterSteps)
+    {
+        FitConfig stepConfig = m_fitConfig;
+        stepConfig.maxIterations = maxIter;
+
+        FitResult stepResult = CurveFitter::fit(
+            *m_selectedFormula, m_dataPoints, m_coefficients,
+            QualityTier::FULL, stepConfig);
+
+        ConvergencePoint cp;
+        cp.iteration = maxIter;
+        cp.residual = stepResult.rSquared;
+        m_convergenceHistory.push_back(cp);
+    }
+
+    // Final fit with full configured iterations
     m_fitResult = CurveFitter::fit(*m_selectedFormula, m_dataPoints,
                                    m_coefficients, QualityTier::FULL,
                                    m_fitConfig);
+
+    // Clamp coefficients to bounds if enabled (Improvement #4)
+    for (auto& [name, val] : m_fitResult.coefficients)
+    {
+        auto boundIt = m_coeffBounds.find(name);
+        if (boundIt != m_coeffBounds.end() && boundIt->second.enabled)
+        {
+            val = std::max(boundIt->second.lower, std::min(val, boundIt->second.upper));
+        }
+    }
+
     m_hasFitResult = true;
 
     m_statusMessage = m_fitResult.converged
-        ? "Fit converged! R²=" + std::to_string(m_fitResult.rSquared)
+        ? "Fit converged! R2=" + std::to_string(m_fitResult.rSquared)
         : "Fit did not converge: " + m_fitResult.statusMessage;
     m_statusTimer = 3.0f;
+
+    // Check numeric stability (Improvement #10)
+    checkStability();
 
     rebuildVisualizationCache();
 }
@@ -769,8 +1076,8 @@ void Workbench::runValidation()
     m_testResult.coefficients = m_trainResult.coefficients;
 
     m_hasValidation = true;
-    m_statusMessage = "Validation complete. Train R²=" +
-                      std::to_string(m_trainResult.rSquared) + " Test R²=" +
+    m_statusMessage = "Validation complete. Train R2=" +
+                      std::to_string(m_trainResult.rSquared) + " Test R2=" +
                       std::to_string(m_testResult.rSquared);
     m_statusTimer = 3.0f;
 }
@@ -864,6 +1171,42 @@ void Workbench::importCsv(const std::string& path)
     rebuildVisualizationCache();
 }
 
+// ---------------------------------------------------------------------------
+// openFileDialog  (Improvement #2)
+// ---------------------------------------------------------------------------
+
+void Workbench::openFileDialog()
+{
+    // Use kdialog on KDE, fall back to zenity
+    FILE* pipe = popen(
+        "kdialog --getopenfilename ~ 'CSV Files (*.csv)' 2>/dev/null || "
+        "zenity --file-selection --title='Select CSV File' "
+        "--file-filter='CSV files|*.csv' 2>/dev/null",
+        "r");
+    if (pipe)
+    {
+        char buf[512];
+        if (std::fgets(buf, sizeof(buf), pipe))
+        {
+            std::string path(buf);
+            // Trim trailing whitespace/newline
+            path.erase(path.find_last_not_of(" \t\r\n") + 1);
+            if (!path.empty())
+                importCsv(path);
+        }
+        pclose(pipe);
+    }
+    else
+    {
+        m_statusMessage = "Could not open file dialog. Use the CSV path field instead.";
+        m_statusTimer = 3.0f;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// generateSyntheticData  (Improvement #6: multi-variable sweep)
+// ---------------------------------------------------------------------------
+
 void Workbench::generateSyntheticData()
 {
     if (!m_selectedFormula)
@@ -877,57 +1220,124 @@ void Workbench::generateSyntheticData()
     std::unordered_map<std::string, float> coeffMap(
         m_coefficients.begin(), m_coefficients.end());
 
-    // Find the first scalar input to sweep
-    std::string sweepVar;
-    float sweepMin = 0.0f;
-    float sweepMax = 10.0f;
+    // Collect scalar inputs
+    std::vector<const FormulaInput*> scalarInputs;
     for (const auto& inp : m_selectedFormula->inputs)
     {
         if (inp.type == FormulaValueType::FLOAT)
-        {
-            sweepVar = inp.name;
-            sweepMin = inp.defaultValue * 0.1f;
-            sweepMax = inp.defaultValue * 3.0f;
-            if (sweepMax <= sweepMin)
-            {
-                sweepMin = 0.0f;
-                sweepMax = 10.0f;
-            }
-            break;
-        }
+            scalarInputs.push_back(&inp);
     }
 
-    if (sweepVar.empty())
+    if (scalarInputs.empty())
     {
         m_statusMessage = "No scalar input to sweep.";
         m_statusTimer = 3.0f;
         return;
     }
 
-    // Generate 20 data points with slight noise
     m_dataPoints.clear();
     std::mt19937 rng(123);
-    std::normal_distribution<float> noise(0.0f, 0.02f);
+    std::normal_distribution<float> noise(0.0f, m_syntheticNoise);
 
-    for (int i = 0; i < 20; ++i)
+    int count = std::max(2, m_syntheticCount);
+
+    if (m_multiVarSynthetic && scalarInputs.size() > 1)
     {
-        float t = static_cast<float>(i) / 19.0f;
-        float x = sweepMin + t * (sweepMax - sweepMin);
+        // Multi-variable grid sweep (Improvement #6)
+        // Compute samples per dimension so total is approximately m_syntheticCount
+        int numVars = static_cast<int>(scalarInputs.size());
+        int samplesPerDim = std::max(2, static_cast<int>(
+            std::round(std::pow(static_cast<double>(count), 1.0 / numVars))));
 
-        DataPoint dp;
-        // Set all variables to defaults first
-        for (const auto& inp : m_selectedFormula->inputs)
-            dp.variables[inp.name] = inp.defaultValue;
-        dp.variables[sweepVar] = x;
+        // Compute ranges for each variable
+        struct VarRange
+        {
+            std::string name;
+            float rangeMin;
+            float rangeMax;
+        };
+        std::vector<VarRange> ranges;
+        for (const auto* inp : scalarInputs)
+        {
+            float sweepMin = inp->defaultValue * 0.1f;
+            float sweepMax = inp->defaultValue * 3.0f;
+            if (sweepMax <= sweepMin)
+            {
+                sweepMin = 0.0f;
+                sweepMax = 10.0f;
+            }
+            ranges.push_back({inp->name, sweepMin, sweepMax});
+        }
 
-        float val = eval.evaluate(*expr, dp.variables, coeffMap);
-        dp.observed = val * (1.0f + noise(rng));  // Add ~2% noise
-        m_dataPoints.push_back(dp);
+        // Generate grid using multi-dimensional index iteration
+        int totalPoints = 1;
+        for (int d = 0; d < numVars; ++d)
+            totalPoints *= samplesPerDim;
+
+        // Cap at a reasonable maximum to avoid massive allocations
+        totalPoints = std::min(totalPoints, 100000);
+
+        for (int idx = 0; idx < totalPoints; ++idx)
+        {
+            DataPoint dp;
+            // Set all variables to defaults
+            for (const auto& inp : m_selectedFormula->inputs)
+                dp.variables[inp.name] = inp.defaultValue;
+
+            // Decode linear index into per-dimension indices
+            int remaining = idx;
+            for (int d = 0; d < numVars; ++d)
+            {
+                int dimIdx = remaining % samplesPerDim;
+                remaining /= samplesPerDim;
+
+                float t = static_cast<float>(dimIdx) /
+                          static_cast<float>(samplesPerDim - 1);
+                float val = ranges[d].rangeMin + t * (ranges[d].rangeMax - ranges[d].rangeMin);
+                dp.variables[ranges[d].name] = val;
+            }
+
+            float predicted = eval.evaluate(*expr, dp.variables, coeffMap);
+            dp.observed = predicted * (1.0f + noise(rng));
+            m_dataPoints.push_back(dp);
+        }
+
+        m_statusMessage = "Generated " + std::to_string(totalPoints) +
+                          " multi-variable synthetic data points (" +
+                          std::to_string(samplesPerDim) + " per dimension).";
+    }
+    else
+    {
+        // Single-variable sweep (original behavior)
+        const FormulaInput* sweepInput = scalarInputs[0];
+        float sweepMin = sweepInput->defaultValue * 0.1f;
+        float sweepMax = sweepInput->defaultValue * 3.0f;
+        if (sweepMax <= sweepMin)
+        {
+            sweepMin = 0.0f;
+            sweepMax = 10.0f;
+        }
+
+        for (int i = 0; i < count; ++i)
+        {
+            float t = static_cast<float>(i) / static_cast<float>(count - 1);
+            float x = sweepMin + t * (sweepMax - sweepMin);
+
+            DataPoint dp;
+            // Set all variables to defaults first
+            for (const auto& inp : m_selectedFormula->inputs)
+                dp.variables[inp.name] = inp.defaultValue;
+            dp.variables[sweepInput->name] = x;
+
+            float val = eval.evaluate(*expr, dp.variables, coeffMap);
+            dp.observed = val * (1.0f + noise(rng));
+            m_dataPoints.push_back(dp);
+        }
+
+        m_statusMessage = "Generated " + std::to_string(count) + " synthetic data points.";
     }
 
-    m_statusMessage = "Generated 20 synthetic data points.";
     m_statusTimer = 3.0f;
-
     rebuildVisualizationCache();
 }
 
@@ -969,7 +1379,336 @@ void Workbench::exportFormula(const std::string& path)
 }
 
 // ---------------------------------------------------------------------------
-// Visualization cache
+// batchFitCategory  (Improvement #8)
+// ---------------------------------------------------------------------------
+
+void Workbench::batchFitCategory()
+{
+    auto formulas = (m_categoryFilter == "All")
+        ? m_library.getAll()
+        : m_library.findByCategory(m_categoryFilter);
+
+    if (formulas.empty())
+    {
+        m_statusMessage = "No formulas in category '" + m_categoryFilter + "'.";
+        m_statusTimer = 3.0f;
+        return;
+    }
+
+    int totalFormulas = 0;
+    int convergedCount = 0;
+    float totalR2 = 0.0f;
+    std::vector<std::string> failedNames;
+
+    for (const auto* formula : formulas)
+    {
+        if (!formula || formula->coefficients.empty())
+            continue;
+
+        // Generate synthetic data for this formula
+        const ExprNode* expr = formula->getExpression(QualityTier::FULL);
+        if (!expr)
+            continue;
+
+        // Find a scalar variable to sweep
+        const FormulaInput* sweepInput = nullptr;
+        for (const auto& inp : formula->inputs)
+        {
+            if (inp.type == FormulaValueType::FLOAT)
+            {
+                sweepInput = &inp;
+                break;
+            }
+        }
+        if (!sweepInput)
+            continue;
+
+        float sweepMin = sweepInput->defaultValue * 0.1f;
+        float sweepMax = sweepInput->defaultValue * 3.0f;
+        if (sweepMax <= sweepMin)
+        {
+            sweepMin = 0.0f;
+            sweepMax = 10.0f;
+        }
+
+        // Generate synthetic data
+        ExpressionEvaluator eval;
+        std::unordered_map<std::string, float> coeffMap(
+            formula->coefficients.begin(), formula->coefficients.end());
+
+        std::mt19937 rng(42);
+        std::normal_distribution<float> noise(0.0f, 0.02f);
+
+        std::vector<DataPoint> synthData;
+        for (int i = 0; i < 20; ++i)
+        {
+            float t = static_cast<float>(i) / 19.0f;
+            float x = sweepMin + t * (sweepMax - sweepMin);
+
+            DataPoint dp;
+            for (const auto& inp : formula->inputs)
+                dp.variables[inp.name] = inp.defaultValue;
+            dp.variables[sweepInput->name] = x;
+
+            float val = eval.evaluate(*expr, dp.variables, coeffMap);
+            dp.observed = val * (1.0f + noise(rng));
+            synthData.push_back(dp);
+        }
+
+        // Perturb initial coefficients slightly so fitting has work to do
+        std::map<std::string, float> initialCoeffs = formula->coefficients;
+        std::uniform_real_distribution<float> perturbDist(0.8f, 1.2f);
+        for (auto& [cname, cval] : initialCoeffs)
+            cval *= perturbDist(rng);
+
+        // Run fit
+        FitResult result = CurveFitter::fit(*formula, synthData, initialCoeffs,
+                                            QualityTier::FULL, m_fitConfig);
+
+        ++totalFormulas;
+        if (result.converged)
+        {
+            ++convergedCount;
+            totalR2 += result.rSquared;
+        }
+        else
+        {
+            failedNames.push_back(formula->name);
+        }
+    }
+
+    // Build result message
+    std::ostringstream msg;
+    msg << "Batch fit: " << convergedCount << "/" << totalFormulas << " converged";
+    if (convergedCount > 0)
+    {
+        msg << ", avg R2=" << std::fixed << std::setprecision(4)
+            << (totalR2 / static_cast<float>(convergedCount));
+    }
+    if (!failedNames.empty())
+    {
+        msg << ". Failed: ";
+        for (size_t i = 0; i < failedNames.size() && i < 5; ++i)
+        {
+            if (i > 0) msg << ", ";
+            msg << failedNames[i];
+        }
+        if (failedNames.size() > 5)
+            msg << " (+" << (failedNames.size() - 5) << " more)";
+    }
+
+    m_statusMessage = msg.str();
+    m_statusTimer = 5.0f;
+}
+
+// ---------------------------------------------------------------------------
+// Undo/Redo  (Improvement #9)
+// ---------------------------------------------------------------------------
+
+void Workbench::pushUndo(const std::string& desc)
+{
+    CoeffSnapshot snap;
+    snap.values = m_coefficients;
+    snap.description = desc;
+
+    m_undoStack.push_back(snap);
+    while (m_undoStack.size() > MAX_UNDO)
+        m_undoStack.pop_front();
+
+    // Clear redo stack on new action
+    m_redoStack.clear();
+}
+
+void Workbench::undo()
+{
+    if (m_undoStack.empty())
+        return;
+
+    // Save current state to redo stack
+    CoeffSnapshot current;
+    current.values = m_coefficients;
+    current.description = "redo";
+    m_redoStack.push_back(current);
+
+    // Restore from undo stack
+    const CoeffSnapshot& snap = m_undoStack.back();
+    m_coefficients = snap.values;
+    m_undoStack.pop_back();
+
+    m_statusMessage = "Undo applied.";
+    m_statusTimer = 1.5f;
+}
+
+void Workbench::redo()
+{
+    if (m_redoStack.empty())
+        return;
+
+    // Save current state to undo stack
+    CoeffSnapshot current;
+    current.values = m_coefficients;
+    current.description = "undo";
+    m_undoStack.push_back(current);
+
+    // Restore from redo stack
+    const CoeffSnapshot& snap = m_redoStack.back();
+    m_coefficients = snap.values;
+    m_redoStack.pop_back();
+
+    m_statusMessage = "Redo applied.";
+    m_statusTimer = 1.5f;
+}
+
+// ---------------------------------------------------------------------------
+// checkStability  (Improvement #10)
+// ---------------------------------------------------------------------------
+
+void Workbench::checkStability()
+{
+    m_stabilityWarnings.clear();
+
+    if (!m_selectedFormula || !m_hasFitResult)
+        return;
+
+    const auto& coeffs = m_fitResult.coefficients;
+
+    // Walk through the expression tree looking for risky patterns.
+    // We approximate by checking coefficient values against known risky thresholds.
+    for (const auto& [name, val] : coeffs)
+    {
+        float absVal = std::abs(val);
+
+        // Check for very large values that could overflow in exp()
+        if (absVal > 80.0f)
+        {
+            m_stabilityWarnings.push_back(
+                "Coefficient '" + name + "' = " + std::to_string(val) +
+                " is very large. May cause overflow in exp() operations.");
+        }
+
+        // Check for near-zero values that could appear in denominators
+        if (absVal > 0.0f && absVal < 1e-6f)
+        {
+            m_stabilityWarnings.push_back(
+                "Coefficient '" + name + "' = " + std::to_string(val) +
+                " is near zero. May cause instability if used in a denominator.");
+        }
+
+        // Check for NaN or Inf
+        if (std::isnan(val))
+        {
+            m_stabilityWarnings.push_back(
+                "Coefficient '" + name + "' is NaN! Fitting may have diverged.");
+        }
+        if (std::isinf(val))
+        {
+            m_stabilityWarnings.push_back(
+                "Coefficient '" + name + "' is Inf! Fitting diverged.");
+        }
+    }
+
+    // Walk the expression tree for structural risks
+    const ExprNode* expr = m_selectedFormula->getExpression(QualityTier::FULL);
+    if (!expr)
+        return;
+
+    // Use a simple recursive lambda to detect risky patterns
+    struct RiskChecker
+    {
+        const std::map<std::string, float>& coefficients;
+        std::vector<std::string>& warnings;
+
+        void check(const ExprNode& node)
+        {
+            if (node.type == ExprNodeType::BINARY_OP)
+            {
+                // Division where denominator is a coefficient near zero
+                if (node.op == "/" && node.children.size() >= 2)
+                {
+                    const ExprNode& denom = *node.children[1];
+                    if (denom.type == ExprNodeType::VARIABLE)
+                    {
+                        auto it = coefficients.find(denom.name);
+                        if (it != coefficients.end() && std::abs(it->second) < 1e-4f)
+                        {
+                            warnings.push_back(
+                                "Division by coefficient '" + denom.name +
+                                "' which is near zero (" +
+                                std::to_string(it->second) + ").");
+                        }
+                    }
+                }
+
+                // pow with large exponents
+                if (node.op == "pow" && node.children.size() >= 2)
+                {
+                    const ExprNode& exponent = *node.children[1];
+                    if (exponent.type == ExprNodeType::VARIABLE)
+                    {
+                        auto it = coefficients.find(exponent.name);
+                        if (it != coefficients.end() && std::abs(it->second) > 20.0f)
+                        {
+                            warnings.push_back(
+                                "Power with large exponent coefficient '" +
+                                exponent.name + "' = " +
+                                std::to_string(it->second) +
+                                ". May cause extreme values.");
+                        }
+                    }
+                }
+            }
+
+            if (node.type == ExprNodeType::UNARY_OP)
+            {
+                // exp of potentially large values
+                if (node.op == "exp" && !node.children.empty())
+                {
+                    const ExprNode& arg = *node.children[0];
+                    if (arg.type == ExprNodeType::VARIABLE)
+                    {
+                        auto it = coefficients.find(arg.name);
+                        if (it != coefficients.end() && std::abs(it->second) > 20.0f)
+                        {
+                            warnings.push_back(
+                                "exp() of large coefficient '" + arg.name +
+                                "' = " + std::to_string(it->second) +
+                                ". Risk of overflow.");
+                        }
+                    }
+                }
+
+                // sqrt of negative values
+                if (node.op == "sqrt" && !node.children.empty())
+                {
+                    const ExprNode& arg = *node.children[0];
+                    if (arg.type == ExprNodeType::VARIABLE)
+                    {
+                        auto it = coefficients.find(arg.name);
+                        if (it != coefficients.end() && it->second < 0.0f)
+                        {
+                            warnings.push_back(
+                                "sqrt() of negative coefficient '" + arg.name +
+                                "' = " + std::to_string(it->second) + ".");
+                        }
+                    }
+                }
+            }
+
+            // Recurse into children
+            for (const auto& child : node.children)
+            {
+                if (child)
+                    check(*child);
+            }
+        }
+    };
+
+    RiskChecker checker{coeffs, m_stabilityWarnings};
+    checker.check(*expr);
+}
+
+// ---------------------------------------------------------------------------
+// Visualization cache  (Improvement #3: quality tier comparison)
 // ---------------------------------------------------------------------------
 
 void Workbench::rebuildVisualizationCache()
@@ -978,6 +1717,7 @@ void Workbench::rebuildVisualizationCache()
     m_dataY.clear();
     m_curveX.clear();
     m_curveY.clear();
+    m_approxCurveY.clear();
     m_residuals.clear();
 
     if (!m_selectedFormula || m_dataPoints.empty() || m_plotVariable.empty())
@@ -1029,6 +1769,27 @@ void Workbench::rebuildVisualizationCache()
         float y = eval.evaluate(*expr, vars, coeffMap);
         m_curveX.push_back(x);
         m_curveY.push_back(y);
+    }
+
+    // Quality tier comparison (Improvement #3)
+    if (m_showQualityComparison)
+    {
+        const ExprNode* approxExpr =
+            m_selectedFormula->getExpression(QualityTier::APPROXIMATE);
+        if (approxExpr)
+        {
+            m_approxCurveY.reserve(CURVE_SAMPLES);
+            for (int i = 0; i < CURVE_SAMPLES; ++i)
+            {
+                ExpressionEvaluator::VariableMap vars;
+                for (const auto& inp : m_selectedFormula->inputs)
+                    vars[inp.name] = inp.defaultValue;
+                vars[m_plotVariable] = m_curveX[i];
+
+                float y = eval.evaluate(*approxExpr, vars, coeffMap);
+                m_approxCurveY.push_back(y);
+            }
+        }
     }
 
     // Compute residuals at data points

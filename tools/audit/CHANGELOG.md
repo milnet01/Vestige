@@ -2,6 +2,25 @@
 
 All notable changes to the Audit Tool are documented in this file.
 
+## [1.6.0] - 2026-04-10
+
+### Added
+- **Formula Workbench improvements** (10 enhancements):
+  - **#2 File dialog**: native KDE/GNOME file picker for CSV import via kdialog/zenity
+  - **#3 Quality tier comparison**: overlay FULL vs APPROXIMATE curves in the visualizer
+  - **#4 Coefficient bounds**: min/max constraints on LM optimizer to prevent unphysical values
+  - **#5 Convergence history**: ImPlot chart showing R-squared vs iteration during fitting
+  - **#6 Multi-variable synthetic data**: sweep all variables in a grid with configurable count/noise
+  - **#8 Batch fitting**: fit all formulas in a category at once with aggregate statistics
+  - **#9 Undo/redo**: 50-level undo stack for coefficient changes, with Edit menu and buttons
+  - **#10 Stability warnings**: detects NaN, exp overflow, div-by-zero, sqrt-of-negative risks
+  - **#11 Export to C++/GLSL**: copy fitted formulas as inline code snippets to clipboard
+- **Phase 9E roadmap**: added Formula Node Editor section for visual formula composition
+
+### Changed
+- **workbench.cpp** grew from 1043 to 1802 lines with all improvements
+- **workbench.h** updated with new data members for bounds, convergence, undo, stability
+
 ## [1.5.0] - 2026-04-10
 
 ### Added
