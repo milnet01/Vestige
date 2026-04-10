@@ -218,7 +218,7 @@ const $ = s => document.querySelector(s);
 const $$ = s => document.querySelectorAll(s);
 const TIER_NAMES = {1:'Build & Static Analysis',2:'Pattern Scanning',3:'Changed Files',4:'Statistics',5:'Online Research'};
 
-let state = {running:false, results:null, eventSource:null, findings:[], sortCol:'severity', sortDir:'asc', autoScroll:true};
+let state = {running:false, results:null, eventSource:null, findings:[], sortCol:'severity', sortDir:'asc', autoScroll:true, tiersDone:0, tiersTotal:5};
 
 // --- Tab switching ---
 $$('.tab-btn').forEach(btn => btn.addEventListener('click', () => {
@@ -284,10 +284,12 @@ function setRunning(running, tiers){
   $('#btn-run').disabled = running;
   $('#btn-stop').disabled = !running;
   const badge = $('#status-badge');
-  if(running){ badge.textContent='Running'; badge.className='badge badge-running'; }
+  if(running){ badge.textContent='Running 0%'; badge.className='badge badge-running'; }
   else { badge.textContent='Idle'; badge.className='badge badge-idle'; }
 
   if(running){
+    state.tiersDone = 0;
+    state.tiersTotal = (tiers||[1,2,3,4,5]).length;
     $('#progress-section').style.display = 'block';
     let html = '';
     (tiers||[1,2,3,4,5]).forEach(t => {
@@ -322,32 +324,45 @@ function handleEvent(ev){
   }
 }
 
+// Tier 1 has 3 sub-steps with known relative durations
+const T1_STEPS = {build:{start:0,end:33}, cppcheck:{start:33,end:66}, 'clang-tidy':{start:66,end:100}};
+
+function setTierProgress(tier, pct, label){
+  const fill = $(`#pf-${tier}`);
+  const status = $(`#ts-${tier}`);
+  if(fill) fill.style.width = pct+'%';
+  if(status) status.textContent = label || pct+'%';
+}
+
 function onTierStart(ev){
   const fill = $(`#pf-${ev.tier}`);
-  const status = $(`#ts-${ev.tier}`);
-  if(fill){ fill.classList.add('active'); fill.style.width='30%'; }
-  if(status) status.textContent = 'running';
+  if(fill){ fill.classList.add('active'); fill.style.width='5%'; }
+  setTierProgress(ev.tier, 5, '5%');
 }
 function onStepStart(ev){
   const el = $(`#step-${ev.tier}`);
   if(el) el.textContent = `  \u25b8 ${ev.step}...`;
-  const fill = $(`#pf-${ev.tier}`);
-  if(fill){
-    const pcts = {build:'20%',cppcheck:'50%','clang-tidy':'75%'};
-    fill.style.width = pcts[ev.step]||'50%';
-  }
+  const s = T1_STEPS[ev.step];
+  if(s) setTierProgress(ev.tier, s.start + 5, (s.start + 5)+'%');
+  else setTierProgress(ev.tier, 50, '50%');
 }
 function onStepEnd(ev){
   const el = $(`#step-${ev.tier}`);
   if(el) el.textContent = `  \u2713 ${ev.step} (${ev.findings} findings)`;
+  const s = T1_STEPS[ev.step];
+  if(s) setTierProgress(ev.tier, s.end, s.end+'%');
 }
 function onTierEnd(ev){
   const fill = $(`#pf-${ev.tier}`);
-  const status = $(`#ts-${ev.tier}`);
   const step = $(`#step-${ev.tier}`);
-  if(fill){ fill.classList.remove('active'); fill.classList.add('done'); }
-  if(status) status.textContent = 'done';
+  if(fill){ fill.classList.remove('active'); fill.classList.add('done'); fill.style.width='100%'; }
+  setTierProgress(ev.tier, 100, '100%');
   if(step) step.textContent = '';
+  // Update overall badge percentage
+  state.tiersDone++;
+  const overall = Math.round((state.tiersDone / state.tiersTotal) * 100);
+  const badge = $('#status-badge');
+  if(badge && state.running) badge.textContent = `Running ${overall}%`;
 }
 function onComplete(ev){
   state.results = ev.results;
