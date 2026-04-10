@@ -2,6 +2,22 @@
 
 All notable changes to the Audit Tool are documented in this file.
 
+## [1.4.0] - 2026-04-10
+
+### Added
+- **Copy Claude Prompt** button: generates a ready-to-paste prompt with timestamped report path, finding summary, date/time, and step-by-step fix instructions
+- **Auto-detect on project change**: changing the Project Root field triggers automatic project detection (language, build system, source dirs, tools, dependencies)
+- **Visual Config Builder**: Config tab replaced with a categorized visual editor showing auto-detected settings with toggles, dropdowns, and threshold inputs; "Edit Raw YAML" button for full control
+- **/api/detect** endpoint: returns structured project detection results for the config builder
+- **Version control**: clickable version badge in header opens changelog modal
+- **CHANGELOG.md**: full release history viewable from the web UI
+- **/api/version** endpoint: returns version string and changelog content
+
+### Changed
+- Config path auto-updates when switching projects (finds existing config or generates new path)
+- Claude prompt now references the timestamped report filename and includes generation date/time
+- Report filenames always include date-time (`AUTOMATED_AUDIT_REPORT_2026-04-10_150340.md`)
+
 ## [1.3.0] - 2026-04-10
 
 ### Added

@@ -1,4 +1,4 @@
-# Audit Tool v1.3.0
+# Audit Tool v1.4.0
 
 Automated code audit tool with LLM-optimized reporting. Runs 5 audit tiers mechanically and produces a condensed report (~3K tokens) that an LLM can consume in one shot, cutting audit token usage by ~80-90%.
 
