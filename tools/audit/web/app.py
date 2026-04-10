@@ -125,6 +125,53 @@ def api_init():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/detect", methods=["POST"])
+def api_detect():
+    """Detect project settings without writing a config file.
+
+    Returns structured data for the visual config builder.
+    """
+    data = request.get_json(silent=True) or {}
+    project_root = data.get("project_root", DEFAULT_ROOT)
+    root = Path(project_root)
+
+    if not root.is_dir():
+        return jsonify({"error": f"Not a directory: {project_root}"}), 400
+
+    try:
+        from lib.auto_config import detect_project
+        detected = detect_project(root)
+
+        # Also check what tools are available
+        import shutil
+        tools = {
+            "cppcheck": shutil.which("cppcheck") is not None,
+            "clang_tidy": shutil.which("clang-tidy") is not None,
+            "git": shutil.which("git") is not None,
+            "cmake": shutil.which("cmake") is not None,
+        }
+        try:
+            import lizard
+            tools["lizard"] = True
+        except ImportError:
+            tools["lizard"] = False
+
+        detected["available_tools"] = tools
+
+        # Check if a config file already exists
+        config_path = root / "audit_config.yaml"
+        detected["existing_config"] = str(config_path) if config_path.exists() else None
+
+        # Check for audit tool config in tools/audit/
+        tools_config = root / "tools" / "audit" / "audit_config.yaml"
+        if tools_config.exists():
+            detected["existing_config"] = str(tools_config)
+
+        return jsonify(detected)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/report")
 def api_report():
     """Return the generated markdown report."""
