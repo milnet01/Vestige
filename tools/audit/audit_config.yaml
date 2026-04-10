@@ -1,0 +1,195 @@
+# =============================================================================
+# Vestige Engine — Audit Configuration
+# =============================================================================
+# This file configures the automated audit tool for the Vestige 3D engine.
+# For other projects, copy this file and adjust the values.
+# Run: python3 tools/audit/audit.py
+# =============================================================================
+
+project:
+  name: "Vestige"
+  root: "."
+  language: "cpp"
+  source_dirs: ["engine/", "app/", "tests/"]
+  shader_dirs: ["assets/shaders/"]
+  shader_glob: "*.glsl"
+  source_extensions: [".cpp", ".h"]
+  exclude_dirs: ["external/", "build/", ".git/", ".claude/", ".cache/"]
+  exclude_file_patterns: []
+
+# -- Tier 1: Build & Tests ---------------------------------------------------
+build:
+  system: "cmake"
+  build_dir: "build"
+  configure_cmd: null  # Set to "cmake -B build" if build dir doesn't exist
+  build_cmd: "cmake --build build 2>&1"
+  warning_regex: "warning:|error:"
+  test_cmd: "cd build && ctest --output-on-failure 2>&1"
+  sanitizer:
+    enabled: false
+    configure_cmd: >-
+      cmake -B build-asan -DCMAKE_BUILD_TYPE=Debug
+      -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer"
+    build_cmd: "cmake --build build-asan"
+    test_cmd: "cd build-asan && ctest --output-on-failure"
+
+# -- Tier 1: Static Analysis -------------------------------------------------
+static_analysis:
+  cppcheck:
+    enabled: true
+    binary: null  # Auto-detected
+    args: >-
+      --enable=all --std=c++17
+      --suppress=missingIncludeSystem
+      --suppress=unusedFunction
+      -I engine/ -I external/
+    output_format: "xml"
+    targets: ["engine/", "app/", "tests/"]
+    timeout: 600
+  clang_tidy:
+    enabled: true
+    binary: null  # Auto-detected
+    compile_commands: "build/compile_commands.json"
+    checks: "bugprone-*,performance-*,modernize-*,readability-*,cppcoreguidelines-*"
+    fallback_flags: "-std=c++17 -I engine/ -I external/"
+    max_files: 50
+    timeout: 600
+
+# -- Tier 2: Pattern Scanning ------------------------------------------------
+patterns:
+  memory_safety:
+    - name: "raw_new"
+      pattern: "\\bnew\\s+\\w+"
+      file_glob: "*.cpp,*.h"
+      severity: "high"
+      description: "Raw new — should use smart pointers"
+      exclude_pattern: "placement new|nothrow|JPH::|tinygltf|stb_|dr_"
+      skip_comments: true
+    - name: "raw_delete"
+      pattern: "\\bdelete\\s+"
+      file_glob: "*.cpp,*.h"
+      severity: "high"
+      description: "Raw delete — should use smart pointers"
+      exclude_pattern: "JPH::|tinygltf|stb_|dr_"
+      skip_comments: true
+    - name: "null_macro"
+      pattern: "\\bNULL\\b"
+      file_glob: "*.cpp,*.h"
+      severity: "low"
+      description: "NULL macro — use nullptr"
+    - name: "unsafe_c_string"
+      pattern: "\\b(strcpy|strcat|sprintf|gets)\\b"
+      file_glob: "*.cpp,*.h"
+      severity: "high"
+      description: "Unsafe C string function"
+    - name: "using_namespace_header"
+      pattern: "using namespace"
+      file_glob: "*.h"
+      severity: "medium"
+      description: "using namespace in header — namespace pollution"
+    - name: "c_style_cast"
+      pattern: "\\(\\s*(int|float|double|char|void|unsigned|long|short|size_t|uint\\d+_t|int\\d+_t)\\s*\\*?\\s*\\)"
+      file_glob: "*.cpp,*.h"
+      severity: "medium"
+      description: "C-style cast — use static_cast/reinterpret_cast"
+
+  opengl_state:
+    - name: "global_gl_state"
+      pattern: "\\b(glClipControl|glDepthFunc|glCullFace|glPolygonMode)\\b"
+      file_glob: "*.cpp,*.h"
+      severity: "medium"
+      description: "Global GL state change — verify restore"
+    - name: "framebuffer_no_check"
+      pattern: "glBindFramebuffer"
+      file_glob: "*.cpp,*.h"
+      severity: "medium"
+      description: "Framebuffer bind — verify completeness check nearby"
+
+  performance:
+    - name: "std_endl"
+      pattern: "std::endl"
+      file_glob: "*.cpp,*.h"
+      severity: "low"
+      description: "std::endl flushes stream — use '\\n'"
+    - name: "shared_ptr"
+      pattern: "std::shared_ptr"
+      file_glob: "*.cpp,*.h"
+      severity: "low"
+      description: "shared_ptr — verify unique_ptr not sufficient"
+    - name: "push_back_loop"
+      pattern: "push_back\\("
+      file_glob: "*.cpp"
+      severity: "low"
+      description: "push_back — verify not in hot render/update loop without reserve"
+
+  code_quality:
+    - name: "todo_fixme"
+      pattern: "\\b(TODO|FIXME|HACK|WORKAROUND|XXX)\\b"
+      file_glob: "*.cpp,*.h"
+      severity: "info"
+      description: "Deferred work marker"
+    - name: "warning_suppression"
+      pattern: "(NOLINT|#pragma\\s+warning)"
+      file_glob: "*.cpp,*.h"
+      severity: "low"
+      description: "Warning suppression — verify justification"
+    - name: "empty_catch"
+      pattern: "catch\\s*\\([^)]*\\)\\s*\\{\\s*\\}"
+      file_glob: "*.cpp,*.h"
+      severity: "medium"
+      description: "Empty catch block — silently swallowed error"
+    - name: "dead_code_markers"
+      pattern: "//\\s*(unused|removed|old|deprecated)"
+      file_glob: "*.cpp,*.h"
+      severity: "low"
+      description: "Dead code marker — consider removing"
+
+  shader:
+    - name: "shader_discard"
+      pattern: "\\bdiscard\\b"
+      file_glob: "*.glsl"
+      severity: "info"
+      description: "Fragment discard — performance concern on some GPUs"
+    - name: "unbounded_loop"
+      pattern: "while\\s*\\(\\s*true\\s*\\)"
+      file_glob: "*.glsl"
+      severity: "high"
+      description: "Unbounded loop — potential GPU hang"
+
+# -- Tier 3: Changed File Analysis -------------------------------------------
+changes:
+  base_ref: "HEAD~1"
+
+# -- Tier 4: Data Collection -------------------------------------------------
+tier4:
+  gpu_resource_pattern: "GLuint\\s+m_"
+  event_subscribe_pattern: "subscribe<"
+  event_unsubscribe_pattern: "unsubscribe"
+  complexity_threshold: 500
+
+# -- Tier 5: Online Research --------------------------------------------------
+research:
+  enabled: true
+  cache_dir: ".audit_cache"
+  cache_ttl_days: 7
+  max_results_per_query: 3
+  topics:
+    - query: "CVE GLFW 3.4 2025 2026"
+    - query: "CVE GLM 1.0.1 vulnerability"
+    - query: "CVE FreeType 2.13 vulnerability 2025 2026"
+    - query: "CVE OpenAL Soft 1.24 vulnerability"
+    - query: "CVE tinygltf vulnerability 2025 2026"
+    - query: "AMD RDNA2 OpenGL driver bug 2025 2026"
+    - query: "OpenGL 4.5 best practices performance 2025"
+    - query: "XPBD cloth simulation stability improvements"
+  custom_queries: []
+
+# -- Report Settings ----------------------------------------------------------
+report:
+  output_path: "docs/AUTOMATED_AUDIT_REPORT.md"
+  max_findings_per_category: 100
+  include_json_blocks: true
+  include_token_estimate: true
+
+# -- Which tiers to run (override with --tiers CLI flag) ----------------------
+tiers: [1, 2, 3, 4, 5]
