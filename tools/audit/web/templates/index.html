@@ -721,15 +721,25 @@ async function loadHistory(){
 function viewReport(filename){ window.open('/api/reports/'+encodeURIComponent(filename),'_blank'); }
 
 // --- Copy Claude Prompt ---
-$('#btn-copy-prompt').addEventListener('click', () => {
+$('#btn-copy-prompt').addEventListener('click', async () => {
   const root = $('#project-root').value;
-  const reportPath = root + '/docs/AUTOMATED_AUDIT_REPORT.md';
+  // Find the most recent timestamped report filename
+  let reportFile = 'AUTOMATED_AUDIT_REPORT.md';
+  try {
+    const resp = await fetch('/api/reports');
+    const data = await resp.json();
+    if(data.reports?.length) reportFile = data.reports[0].filename;
+  } catch(e) {}
+  const reportPath = root + '/docs/' + reportFile;
+
   const f = state.results?.findings || [];
   const counts = {critical:0,high:0,medium:0,low:0};
   f.forEach(x => { if(counts[x.severity]!==undefined) counts[x.severity]++; });
+  const now = new Date().toLocaleString();
   const prompt = `Please read the automated audit report and implement fixes for all findings.
 
 Report: ${reportPath}
+Generated: ${now}
 
 Summary: ${f.length} findings (${counts.critical} critical, ${counts.high} high, ${counts.medium} medium, ${counts.low} low)
 
