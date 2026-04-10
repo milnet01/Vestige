@@ -136,6 +136,28 @@ td.file{font-family:var(--mono);font-size:12px;max-width:300px;overflow:hidden;t
 .modal-body li{margin:2px 0}
 .modal-body strong{color:var(--text)}
 
+/* Copy prompt box */
+.prompt-box{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:12px;margin-top:12px;position:relative}
+.prompt-box pre{font-family:var(--mono);font-size:12px;white-space:pre-wrap;word-break:break-all;color:var(--text);line-height:1.6;max-height:200px;overflow-y:auto}
+.prompt-box .copy-btn{position:absolute;top:8px;right:8px;padding:4px 10px;font-size:11px}
+.prompt-box .copy-btn.copied{color:var(--ok);border-color:var(--ok)}
+
+/* Config builder */
+.config-builder{display:flex;flex-direction:column;gap:16px}
+.config-section{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:12px}
+.config-section h4{font-size:13px;color:var(--accent);margin-bottom:8px;display:flex;align-items:center;gap:8px}
+.config-section .detected-badge{font-size:10px;padding:1px 6px;border-radius:8px;background:#1a3024;color:var(--ok)}
+.config-row{display:flex;align-items:center;gap:12px;padding:4px 0;font-size:13px}
+.config-row label{flex:1;display:flex;align-items:center;gap:6px;cursor:pointer}
+.config-row .desc{color:var(--text2);font-size:11px;margin-left:auto}
+.config-row input[type=checkbox]{accent-color:var(--accent)}
+.config-row input[type=text],.config-row input[type=number],.config-row select{background:var(--surface);border:1px solid var(--border);color:var(--text);padding:4px 8px;border-radius:4px;font-size:12px;font-family:var(--mono)}
+.config-row input[type=number]{width:60px}
+.tag-list{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+.tag{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;background:var(--surface);border:1px solid var(--border);border-radius:12px;font-size:11px;font-family:var(--mono)}
+.detect-spinner{display:inline-block;width:12px;height:12px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .6s linear infinite;margin-left:4px}
+@keyframes spin{to{transform:rotate(360deg)}}
+
 /* Log viewer */
 #log-section{margin-top:auto}
 .log-header{display:flex;align-items:center;gap:8px;padding:8px 16px;border-bottom:1px solid var(--border)}
@@ -228,6 +250,7 @@ td.file{font-family:var(--mono);font-size:12px;max-width:300px;overflow:hidden;t
   <section id="log-section">
     <div class="log-header">
       <span>Live Log</span>
+      <button id="btn-copy-prompt" class="btn-secondary" disabled style="font-size:11px;padding:4px 10px" title="Copy a prompt for Claude Code to read and fix the audit findings">Copy Claude Prompt</button>
       <button id="btn-report" class="btn-secondary" disabled style="font-size:11px;padding:4px 10px">View Report</button>
       <button id="btn-clear-log" class="btn-secondary" style="font-size:11px;padding:4px 10px">Clear</button>
     </div>
@@ -251,7 +274,7 @@ const $ = s => document.querySelector(s);
 const $$ = s => document.querySelectorAll(s);
 const TIER_NAMES = {1:'Build & Static Analysis',2:'Pattern Scanning',3:'Changed Files',4:'Statistics',5:'Online Research'};
 
-let state = {running:false, results:null, eventSource:null, findings:[], sortCol:'severity', sortDir:'asc', autoScroll:true, tiersDone:0, tiersTotal:5};
+let state = {running:false, results:null, eventSource:null, findings:[], sortCol:'severity', sortDir:'asc', autoScroll:true, tiersDone:0, tiersTotal:5, detected:null};
 
 // --- Changelog modal ---
 $('#version-label').addEventListener('click', async () => {
@@ -434,6 +457,7 @@ function onComplete(ev){
   const badge = $('#status-badge');
   badge.textContent='Done'; badge.className='badge badge-done';
   $('#btn-report').disabled = false;
+  $('#btn-copy-prompt').disabled = false;
   if(state.eventSource) state.eventSource.close();
   renderResults(ev.results);
   $('#results-section').style.display = 'block';
@@ -696,19 +720,189 @@ async function loadHistory(){
 }
 function viewReport(filename){ window.open('/api/reports/'+encodeURIComponent(filename),'_blank'); }
 
-// --- Config tab ---
+// --- Copy Claude Prompt ---
+$('#btn-copy-prompt').addEventListener('click', () => {
+  const root = $('#project-root').value;
+  const reportPath = root + '/docs/AUTOMATED_AUDIT_REPORT.md';
+  const f = state.results?.findings || [];
+  const counts = {critical:0,high:0,medium:0,low:0};
+  f.forEach(x => { if(counts[x.severity]!==undefined) counts[x.severity]++; });
+  const prompt = `Please read the automated audit report and implement fixes for all findings.
+
+Report: ${reportPath}
+
+Summary: ${f.length} findings (${counts.critical} critical, ${counts.high} high, ${counts.medium} medium, ${counts.low} low)
+
+Instructions:
+1. Read the report file above
+2. Fix all CRITICAL and HIGH findings first
+3. Then address MEDIUM findings
+4. Run the test suite after fixes to ensure nothing breaks
+5. Commit the fixes when done`;
+
+  navigator.clipboard.writeText(prompt).then(() => {
+    const btn = $('#btn-copy-prompt');
+    btn.textContent = 'Copied!';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = 'Copy Claude Prompt'; btn.classList.remove('copied'); }, 2000);
+  });
+});
+
+// --- Auto-detect on project change ---
+let detectTimeout = null;
+$('#project-root').addEventListener('change', () => { autoDetectProject(); });
+$('#project-root').addEventListener('blur', () => { autoDetectProject(); });
+
+async function autoDetectProject(){
+  const root = $('#project-root').value.trim();
+  if(!root) return;
+  // Debounce
+  if(detectTimeout) clearTimeout(detectTimeout);
+  detectTimeout = setTimeout(async () => {
+    try {
+      const resp = await fetch('/api/detect', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({project_root: root})
+      });
+      const data = await resp.json();
+      if(data.error) return;
+
+      state.detected = data;
+
+      // Auto-set config path
+      if(data.existing_config) {
+        $('#config-path').value = data.existing_config;
+      } else {
+        $('#config-path').value = root + '/audit_config.yaml';
+      }
+
+      // If Config tab is visible, refresh it
+      if($('#tab-config').classList.contains('active')) renderConfigBuilder();
+    } catch(e) { /* silent */ }
+  }, 500);
+}
+
+// --- Config Builder (visual) ---
 async function loadConfig(){
+  // First try to detect project settings
+  const root = $('#project-root').value.trim();
+  if(!state.detected && root) {
+    try {
+      const resp = await fetch('/api/detect', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({project_root: root})
+      });
+      const data = await resp.json();
+      if(!data.error) state.detected = data;
+    } catch(e) {}
+  }
+  renderConfigBuilder();
+}
+
+function renderConfigBuilder(){
+  const d = state.detected || {};
+  const proj = d.project || {};
+  const build = d.build || {};
+  const sa = d.static_analysis || {};
+  const tools = d.available_tools || {};
+  const t4 = d.tier4 || {};
+  const research = d.research || {};
+  const patterns = d.patterns || {};
+  const patCats = Object.keys(patterns);
+  const lang = proj.language || 'cpp';
+
+  const srcDirs = (proj.source_dirs||[]).map(s=>`<span class="tag">${esc(s)}</span>`).join('');
+  const shaderDirs = (proj.shader_dirs||[]).map(s=>`<span class="tag">${esc(s)}</span>`).join('');
+  const exDirs = (proj.exclude_dirs||[]).map(s=>`<span class="tag">${esc(s)}</span>`).join('');
+  const deps = (research.topics||[]).map(t=>t.query||'').filter(Boolean);
+
+  $('#tab-config').innerHTML = `
+    <div class="config-builder">
+      <div style="display:flex;gap:8px;margin-bottom:4px">
+        <button class="btn-primary" style="font-size:12px;padding:4px 12px" onclick="saveConfigFromBuilder()">Save Config</button>
+        <button class="btn-secondary" style="font-size:12px;padding:4px 12px" onclick="autoDetectProject().then(renderConfigBuilder)">Re-detect</button>
+        <button class="btn-secondary" style="font-size:12px;padding:4px 12px" onclick="showRawYaml()">Edit Raw YAML</button>
+        <span id="config-status" style="font-size:12px;color:var(--text2);line-height:28px"></span>
+      </div>
+
+      <div class="config-section">
+        <h4>Project <span class="detected-badge">auto-detected</span></h4>
+        <div class="config-row"><label>Name</label><input type="text" id="cb-name" value="${esc(proj.name||'')}" style="width:200px"></div>
+        <div class="config-row"><label>Language</label>
+          <select id="cb-lang"><option ${lang==='cpp'?'selected':''}>cpp</option><option ${lang==='c'?'selected':''}>c</option><option ${lang==='python'?'selected':''}>python</option><option ${lang==='rust'?'selected':''}>rust</option><option ${lang==='go'?'selected':''}>go</option><option ${lang==='java'?'selected':''}>java</option><option ${lang==='js'?'selected':''}>js</option><option ${lang==='ts'?'selected':''}>ts</option></select>
+        </div>
+        <div class="config-row"><label>Source Dirs</label><div class="tag-list">${srcDirs||'<span class="tag">src/</span>'}</div></div>
+        ${shaderDirs?`<div class="config-row"><label>Shader Dirs</label><div class="tag-list">${shaderDirs}</div></div>`:''}
+        <div class="config-row"><label>Exclude Dirs</label><div class="tag-list">${exDirs}</div></div>
+      </div>
+
+      <div class="config-section">
+        <h4>Build & Tests</h4>
+        <div class="config-row"><label>Build System</label><span style="color:var(--text)">${esc(build.system||'none')}</span></div>
+        <div class="config-row"><label>Build Command</label><input type="text" id="cb-build-cmd" value="${esc(build.build_cmd||'')}" style="flex:1"></div>
+        <div class="config-row"><label>Test Command</label><input type="text" id="cb-test-cmd" value="${esc(build.test_cmd||'')}" style="flex:1"></div>
+      </div>
+
+      <div class="config-section">
+        <h4>Static Analysis</h4>
+        <div class="config-row"><label><input type="checkbox" id="cb-cppcheck" ${sa.cppcheck?.enabled?'checked':''}${!tools.cppcheck?' disabled':''}> cppcheck</label><span class="desc">${tools.cppcheck?'installed':'not found'}</span></div>
+        <div class="config-row"><label><input type="checkbox" id="cb-clangtidy" ${sa.clang_tidy?.enabled?'checked':''}${!tools.clang_tidy?' disabled':''}> clang-tidy</label><span class="desc">${tools.clang_tidy?'installed':'not found'}</span></div>
+      </div>
+
+      <div class="config-section">
+        <h4>Tier 4 Analysis</h4>
+        <div class="config-row"><label><input type="checkbox" id="cb-uniform" checked> Uniform-Shader Sync</label><span class="desc">Cross-reference GLSL uniforms with C++ setters</span></div>
+        <div class="config-row"><label><input type="checkbox" id="cb-includes" checked> Include Analysis</label><span class="desc">Heavy headers, forward-decl candidates</span></div>
+        <div class="config-row"><label><input type="checkbox" id="cb-complexity" checked${!tools.lizard?' disabled':''}> Complexity (lizard)</label><span class="desc">${tools.lizard?'installed':'not installed'}</span></div>
+        <div class="config-row"><label>Complexity Threshold</label><input type="number" id="cb-cc-threshold" value="15" min="5" max="50"></div>
+        <div class="config-row"><label>Large File Threshold</label><input type="number" id="cb-loc-threshold" value="500" min="100" max="5000"> <span class="desc">lines</span></div>
+      </div>
+
+      <div class="config-section">
+        <h4>Pattern Categories (${patCats.length} detected)</h4>
+        ${patCats.map(c=>{
+          const cnt = (patterns[c]||[]).length;
+          return `<div class="config-row"><label><input type="checkbox" class="cb-pat-cat" data-cat="${esc(c)}" checked> ${esc(c.replace(/_/g,' '))}</label><span class="desc">${cnt} patterns</span></div>`;
+        }).join('')}
+      </div>
+
+      <div class="config-section">
+        <h4>Research</h4>
+        <div class="config-row"><label><input type="checkbox" id="cb-research" ${research.enabled!==false?'checked':''}> DuckDuckGo Search</label></div>
+        <div class="config-row"><label><input type="checkbox" id="cb-nvd" checked> NVD CVE Database</label></div>
+        ${deps.length?`<div class="config-row"><label>CVE Queries (${deps.length})</label></div><div class="tag-list" style="padding:0 0 0 8px">${deps.slice(0,8).map(q=>`<span class="tag">${esc(q.replace('CVE ','').replace(' vulnerability',''))}</span>`).join('')}${deps.length>8?`<span class="tag">+${deps.length-8} more</span>`:''}</div>`:''}
+      </div>
+    </div>`;
+}
+
+async function saveConfigFromBuilder(){
+  // Build config from UI state and call /api/init to generate it,
+  // or build YAML string and save via PUT /api/config
+  const root = $('#project-root').value.trim();
+  const configPath = $('#config-path').value.trim();
+
+  const resp = await fetch('/api/init', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({project_root: root, output_path: configPath})
+  });
+  const data = await resp.json();
+  const status = $('#config-status');
+  if(data.error){ if(status){status.textContent='Error: '+data.error; status.style.color='var(--critical)';} }
+  else { if(status){status.textContent='Config saved!'; status.style.color='var(--ok)'; setTimeout(()=>{status.textContent='';},3000);} }
+}
+
+async function showRawYaml(){
   const resp = await fetch('/api/config?path='+encodeURIComponent($('#config-path').value));
   const text = await resp.text();
   $('#tab-config').innerHTML = `
     <div style="margin-bottom:8px;display:flex;gap:8px">
-      <button class="btn-primary" style="font-size:12px;padding:4px 12px" onclick="saveConfig()">Save</button>
-      <button class="btn-secondary" style="font-size:12px;padding:4px 12px" onclick="loadConfig()">Reload</button>
+      <button class="btn-primary" style="font-size:12px;padding:4px 12px" onclick="saveRawYaml()">Save</button>
+      <button class="btn-secondary" style="font-size:12px;padding:4px 12px" onclick="renderConfigBuilder()">Back to Builder</button>
       <span id="config-status" style="font-size:12px;color:var(--text2);line-height:28px"></span>
     </div>
     <textarea id="config-editor" style="width:100%;height:400px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:8px;font-family:var(--mono);font-size:12px;resize:vertical;tab-size:2">${esc(text)}</textarea>`;
 }
-async function saveConfig(){
+async function saveRawYaml(){
   const editor = $('#config-editor');
   if(!editor) return;
   const resp = await fetch('/api/config',{
@@ -717,8 +911,8 @@ async function saveConfig(){
   });
   const data = await resp.json();
   const status = $('#config-status');
-  if(data.error){ if(status) status.textContent='Error: '+data.error; status.style.color='var(--critical)'; }
-  else { if(status) status.textContent='Saved!'; status.style.color='var(--ok)'; setTimeout(()=>{if(status)status.textContent='';},3000); }
+  if(data.error){ if(status){status.textContent='Error: '+data.error; status.style.color='var(--critical)';} }
+  else { if(status){status.textContent='Saved!'; status.style.color='var(--ok)'; setTimeout(()=>{status.textContent='';},3000);} }
 }
 
 // Tab activation hooks — load data lazily
