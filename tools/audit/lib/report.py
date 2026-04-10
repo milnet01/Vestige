@@ -8,6 +8,7 @@ from collections import defaultdict
 from datetime import datetime
 
 from .config import Config
+from .diff_report import ReportDiff
 from .findings import (
     AuditData,
     ChangeSummary,
@@ -42,6 +43,7 @@ class ReportBuilder:
         research_results: list[ResearchResult] | None,
         tiers_run: list[int],
         duration: float,
+        diff: ReportDiff | None = None,
     ) -> str:
         """Build the full report and write to file. Returns the report text."""
         deduped = deduplicate(findings)
@@ -55,6 +57,10 @@ class ReportBuilder:
 
         # Executive Summary
         sections.append(self._build_summary(deduped, tier1_summary, audit_data, tiers_run, duration))
+
+        # Differential report section (if available)
+        if diff is not None:
+            sections.append(self._build_diff_section(diff))
 
         # Tier 1: Build & Static Analysis
         if 1 in tiers_run:
@@ -97,11 +103,59 @@ class ReportBuilder:
         # Update the base path as a copy (or symlink) so "latest" is always accessible
         base_path.write_text(report)
 
+        # Write JSON sidecar with deduplicated findings for differential reporting
+        sidecar_name = f"{stem}_{timestamp}_results.json"
+        sidecar_path = base_dir / sidecar_name
+        sidecar_data = [f.to_dict() for f in deduped]
+        sidecar_path.write_text(json.dumps(sidecar_data, indent=2))
+        log.info("JSON sidecar written to %s (%d findings)", sidecar_path, len(sidecar_data))
+
         log.info("Report written to %s (%d chars, ~%d tokens)",
                  timestamped, len(report), estimate_tokens(report))
         log.info("Latest copy: %s", base_path)
 
         return report
+
+    def _build_diff_section(self, diff: ReportDiff) -> str:
+        """Build the differential comparison section."""
+        lines = ["## Differential Report", ""]
+
+        if diff.previous_path:
+            lines.append(f"**Compared against:** `{diff.previous_path}`")
+            lines.append("")
+
+        lines.append(f"- **New findings:** {len(diff.new_findings)}")
+        lines.append(f"- **Resolved findings:** {len(diff.resolved_findings)}")
+        lines.append(f"- **Persistent findings:** {diff.persistent_count}")
+        lines.append("")
+
+        # List new HIGH+ findings in detail
+        high_or_above = [
+            f for f in diff.new_findings
+            if f.get("severity", "info") in ("critical", "high")
+        ]
+        if high_or_above:
+            lines.append("### New HIGH+ Findings")
+            lines.append("")
+            lines.append("| Severity | File | Line | Issue |")
+            lines.append("|----------|------|------|-------|")
+            for f in high_or_above:
+                title = f.get("title", "").replace("|", "/")[:100]
+                lines.append(
+                    f"| {f.get('severity', '?').upper()} "
+                    f"| `{f.get('file', '')}` "
+                    f"| {f.get('line', '-')} "
+                    f"| {title} |"
+                )
+            lines.append("")
+        elif diff.new_findings:
+            lines.append("No new HIGH or CRITICAL findings (all new findings are MEDIUM or below).")
+            lines.append("")
+        else:
+            lines.append("No new findings since the previous audit.")
+            lines.append("")
+
+        return "\n".join(lines)
 
     def _build_summary(
         self,
@@ -356,6 +410,67 @@ class ReportBuilder:
                 lines.append(f"- `{lf['file']}`: {lf['lines']:,} lines")
             if len(data.large_files) > 10:
                 lines.append(f"- *({len(data.large_files) - 10} more)*")
+            lines.append("")
+
+        # Uniform-Shader Sync
+        us = data.uniform_sync
+        if us:
+            dns = us.get("declared_not_set", [])
+            snd = us.get("set_not_declared", [])
+            if dns or snd:
+                lines.append(f"### Uniform-Shader Sync ({len(dns)} declared-not-set, "
+                             f"{len(snd)} set-not-declared)")
+                if dns:
+                    lines.append("\n**Declared in GLSL but never set from C++:**")
+                    for u in dns[:15]:
+                        lines.append(f"- `{u['uniform']}` in `{u['shader']}`")
+                if snd:
+                    lines.append("\n**Set from C++ but not declared in any shader:**")
+                    for u in snd[:15]:
+                        lines.append(f"- `{u['uniform']}` in `{u['cpp_file']}`")
+                lines.append("")
+            else:
+                lines.append(f"### Uniform-Shader Sync ({us.get('total_shader_uniforms', 0)} "
+                             f"shader, {us.get('total_cpp_uniforms', 0)} C++) — all synced")
+                lines.append("")
+
+        # Include Analysis
+        ia = data.include_analysis
+        if ia:
+            heavy = ia.get("heavy_headers", [])
+            fwd = ia.get("forward_decl_candidates", [])
+            circ = ia.get("circular_pairs", [])
+            if heavy or fwd or circ:
+                lines.append(f"### Include Analysis ({len(heavy)} heavy headers, "
+                             f"{len(fwd)} forward-decl candidates, {len(circ)} circular)")
+                if heavy:
+                    lines.append("\n**Heavy headers (most includes):**")
+                    for h in heavy[:10]:
+                        lines.append(f"- `{h['file']}`: {h['includes']} includes")
+                if fwd:
+                    lines.append("\n**Forward declaration candidates:**")
+                    for f in fwd[:10]:
+                        lines.append(f"- `{f['file']}` includes `{f['includes']}` "
+                                     f"but only uses `{f['class']}` as ptr/ref")
+                if circ:
+                    lines.append("\n**Circular includes:**")
+                    for a, b in circ[:5]:
+                        lines.append(f"- `{a}` <-> `{b}`")
+                lines.append("")
+
+        # Complexity
+        cx = data.complexity
+        if cx and cx.get("hotspots"):
+            lines.append(f"### Complexity (avg CC={cx['avg_complexity']}, "
+                         f"max CC={cx['max_complexity']}, "
+                         f"{cx['functions_analyzed']} functions)")
+            lines.append("")
+            lines.append("| Function | File | Line | CC |")
+            lines.append("|----------|------|------|----|")
+            for h in cx["hotspots"][:10]:
+                lines.append(f"| `{h['name']}` | `{h['file']}` | {h['line']} | {h['complexity']} |")
+            if len(cx["hotspots"]) > 10:
+                lines.append(f"| ... | | | *({len(cx['hotspots']) - 10} more)* |")
             lines.append("")
 
         return "\n".join(lines)

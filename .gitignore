@@ -69,4 +69,5 @@ perf.data*
 # Audit tool cache and generated reports
 .audit_cache/
 docs/AUTOMATED_AUDIT_REPORT*.md
+docs/AUTOMATED_AUDIT_REPORT*_results.json
 **/__pycache__/

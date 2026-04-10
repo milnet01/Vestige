@@ -13,6 +13,41 @@ from .utils import run_cmd, enumerate_files, relative_path
 log = logging.getLogger("audit")
 
 
+def _ensure_compile_commands(config: Config, cc_path: Path | None) -> bool:
+    """Ensure compile_commands.json exists, auto-generating via CMake if needed.
+
+    Returns ``True`` if a usable compile database is present after this call.
+    """
+    if cc_path is not None and cc_path.exists():
+        return True
+
+    build_system = config.get("build", "system", default="cmake")
+    if build_system != "cmake":
+        return False
+
+    build_dir = config.get("build", "build_dir", default="build")
+    abs_build_dir = config.root / build_dir
+
+    log.info("compile_commands.json not found — attempting CMake auto-generation "
+             "in %s", abs_build_dir)
+
+    rc, stdout, stderr = run_cmd(
+        f"cmake -B {abs_build_dir} -DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+        cwd=config.root,
+        timeout=120,
+    )
+
+    generated = (abs_build_dir / "compile_commands.json").exists()
+    if generated:
+        log.info("Auto-generated compile_commands.json in %s", abs_build_dir)
+    else:
+        log.warning("CMake completed (rc=%d) but compile_commands.json was not created", rc)
+        if stderr:
+            log.debug("CMake stderr: %s", stderr[:500])
+
+    return generated
+
+
 def run(config: Config) -> list[Finding]:
     """Run clang-tidy and parse results into findings."""
     findings: list[Finding] = []
@@ -39,12 +74,9 @@ def run(config: Config) -> list[Finding]:
         log.warning("No source files found for clang-tidy")
         return findings
 
-    # Check for compile_commands.json
-    has_compile_db = False
-    if compile_commands:
-        cc_path = config.root / compile_commands
-        if cc_path.exists():
-            has_compile_db = True
+    # Check for compile_commands.json — auto-generate if possible
+    cc_path = (config.root / compile_commands) if compile_commands else None
+    has_compile_db = _ensure_compile_commands(config, cc_path)
 
     if not has_compile_db:
         log.warning("compile_commands.json not found — clang-tidy results will have "
@@ -54,7 +86,12 @@ def run(config: Config) -> list[Finding]:
     # Build command
     file_list = " ".join(f'"{f}"' for f in source_files)
     if has_compile_db:
-        cc_dir = (config.root / compile_commands).parent
+        if cc_path is not None and cc_path.exists():
+            cc_dir = cc_path.parent
+        else:
+            # Auto-generated — lives in the build directory
+            build_dir = config.get("build", "build_dir", default="build")
+            cc_dir = config.root / build_dir
         cmd = f"{binary} -p {cc_dir} --checks='{checks}' {file_list}"
     else:
         cmd = f"{binary} --checks='{checks}' {file_list} -- {fallback_flags}"

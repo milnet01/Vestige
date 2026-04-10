@@ -66,10 +66,25 @@ def run(config: Config) -> AuditData:
         all_files, config
     )
 
+    # Uniform-shader sync analysis
+    if config.shader_dirs:
+        from . import tier4_uniforms
+        data.uniform_sync = tier4_uniforms.analyze_uniforms(config).to_dict()
+
+    # Include dependency analysis
+    from . import tier4_includes
+    data.include_analysis = tier4_includes.analyze_includes(config).to_dict()
+
+    # Complexity analysis (requires lizard)
+    from . import tier4_complexity
+    complexity_result, complexity_findings = tier4_complexity.analyze_complexity(config)
+    if complexity_result:
+        data.complexity = complexity_result.to_dict()
+
     log.info("Tier 4: %d LOC, %d GPU classes, %d event files, %d deferred markers",
              data.total_loc, len(data.gpu_resource_classes),
              len(data.event_lifecycle), len(data.deferred_markers))
-    return data
+    return data, complexity_findings
 
 
 def _get_subsystem(path: Path, root: Path) -> str:

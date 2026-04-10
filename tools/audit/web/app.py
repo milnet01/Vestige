@@ -149,6 +149,56 @@ def api_config():
     return Response(path.read_text(), mimetype="text/plain")
 
 
+@app.route("/api/config", methods=["PUT"])
+def api_config_save():
+    """Save updated YAML config."""
+    import yaml
+
+    data = request.get_json(silent=True) or {}
+    config_path = Path(data.get("path", DEFAULT_CONFIG))
+    content = data.get("content", "")
+
+    # Validate YAML
+    try:
+        yaml.safe_load(content)
+    except yaml.YAMLError as e:
+        return jsonify({"error": f"Invalid YAML: {e}"}), 400
+
+    # Backup before overwriting
+    if config_path.exists():
+        backup = config_path.with_suffix(".yaml.bak")
+        backup.write_text(config_path.read_text())
+
+    config_path.write_text(content)
+    return jsonify({"status": "saved"})
+
+
+@app.route("/api/reports")
+def api_reports():
+    """List all timestamped audit reports."""
+    report_dir = Path(DEFAULT_ROOT) / "docs"
+    reports = []
+    for f in sorted(report_dir.glob("AUTOMATED_AUDIT_REPORT_*.md"), reverse=True):
+        stat = f.stat()
+        reports.append({
+            "filename": f.name,
+            "path": str(f),
+            "size": stat.st_size,
+            "modified": stat.st_mtime,
+        })
+    return jsonify({"reports": reports[:50]})
+
+
+@app.route("/api/reports/<path:filename>")
+def api_report_file(filename: str):
+    """Return a specific timestamped report."""
+    report_dir = Path(DEFAULT_ROOT) / "docs"
+    path = report_dir / filename
+    if not path.exists() or not str(path.resolve()).startswith(str(report_dir.resolve())):
+        return jsonify({"error": "Not found"}), 404
+    return Response(path.read_text(), mimetype="text/plain")
+
+
 if __name__ == "__main__":
     # Suppress verbose library logs
     logging.getLogger("werkzeug").setLevel(logging.WARNING)
