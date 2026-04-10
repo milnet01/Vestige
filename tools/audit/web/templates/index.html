@@ -146,11 +146,13 @@ td.file{font-family:var(--mono);font-size:12px;max-width:300px;overflow:hidden;t
     <form id="config-form">
       <div class="form-group">
         <label>Project Root</label>
-        <input type="text" id="project-root" value="{{ default_root }}">
+        <input type="text" id="project-root" list="project-list" value="{{ default_root }}" placeholder="Enter path or select from recent...">
+        <datalist id="project-list"></datalist>
       </div>
       <div class="form-group">
         <label>Config File</label>
-        <input type="text" id="config-path" value="{{ default_config }}">
+        <input type="text" id="config-path" list="config-list" value="{{ default_config }}" placeholder="Enter path or select from recent...">
+        <datalist id="config-list"></datalist>
       </div>
       <div class="form-group">
         <label>Base Ref (Tier 3)</label>
@@ -589,6 +591,33 @@ function renderResearch(research){
 }
 
 function esc(s){ if(!s) return ''; const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+
+// --- Recent projects (localStorage) ---
+function getRecent(key){ try { return JSON.parse(localStorage.getItem(key)||'[]'); } catch { return []; } }
+function addRecent(key, val){
+  if(!val) return;
+  let arr = getRecent(key);
+  arr = arr.filter(v => v !== val);
+  arr.unshift(val);
+  if(arr.length > 10) arr = arr.slice(0,10);
+  localStorage.setItem(key, JSON.stringify(arr));
+  populateDatalist(key);
+}
+function populateDatalist(key){
+  const listId = key === 'recent_projects' ? 'project-list' : 'config-list';
+  const dl = $(`#${listId}`);
+  if(!dl) return;
+  dl.innerHTML = getRecent(key).map(v => `<option value="${esc(v)}">`).join('');
+}
+populateDatalist('recent_projects');
+populateDatalist('recent_configs');
+
+// Save project/config on successful audit start
+const origSubmit = $('#config-form').onsubmit;
+$('#config-form').addEventListener('submit', () => {
+  addRecent('recent_projects', $('#project-root').value);
+  addRecent('recent_configs', $('#config-path').value);
+}, true);
 
 // --- Recover state on page load ---
 (async()=>{
