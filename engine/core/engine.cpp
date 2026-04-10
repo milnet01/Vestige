@@ -124,7 +124,7 @@ bool Engine::initialize(const EngineConfig& config)
     }
 
     // Sync editor camera with the scene's initial camera position
-    if (m_editor && m_editor->getEditorCamera() && m_camera)
+    if (m_editor && m_editor->getEditorCamera())
     {
         m_editor->getEditorCamera()->syncFromCamera(*m_camera);
     }
@@ -996,7 +996,9 @@ void Engine::run()
             // Render water surfaces (after opaques, before particles)
             if (!m_renderData.waterSurfaces.empty())
             {
-                std::vector<WaterRenderItem> waterItems;
+                // Reuse vector across frames to avoid per-frame heap allocation
+                static std::vector<WaterRenderItem> waterItems;
+                waterItems.clear();
                 waterItems.reserve(m_renderData.waterSurfaces.size());
                 for (const auto& [comp, matrix] : m_renderData.waterSurfaces)
                 {

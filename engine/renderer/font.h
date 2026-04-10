@@ -34,6 +34,9 @@ public:
     Font(const Font&) = delete;
     Font& operator=(const Font&) = delete;
 
+    Font(Font&& other) noexcept;
+    Font& operator=(Font&& other) noexcept;
+
     /// @brief Loads a font from a .ttf file and builds the glyph atlas.
     /// @param filePath Path to the .ttf font file.
     /// @param pixelSize Font size in pixels.

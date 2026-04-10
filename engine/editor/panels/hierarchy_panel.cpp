@@ -86,7 +86,7 @@ void HierarchyPanel::draw(Scene* scene, Selection& selection)
     {
         if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ENTITY_ID"))
         {
-            m_pendingReparentEntityId = *(const uint32_t*)payload->Data;
+            m_pendingReparentEntityId = *reinterpret_cast<const uint32_t*>(payload->Data);
             m_pendingReparentTargetId = 0;
         }
         ImGui::EndDragDropTarget();
@@ -580,7 +580,7 @@ void HierarchyPanel::drawEntityNode(Entity& entity, Scene& scene, Selection& sel
     {
         if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ENTITY_ID"))
         {
-            m_pendingReparentEntityId = *(const uint32_t*)payload->Data;
+            m_pendingReparentEntityId = *reinterpret_cast<const uint32_t*>(payload->Data);
             m_pendingReparentTargetId = id;
         }
         ImGui::EndDragDropTarget();

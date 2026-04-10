@@ -421,7 +421,14 @@ private:
     void solvePinConstraints();
     void applyCollisions();
     void recomputeNormals();
-    void applyWind(float dt);
+    void precomputeWind();     ///< Cache noise-dependent wind data once per simulate()
+    void applyWind(float dt);  ///< Apply cached wind data per substep
+
+    // Cached per-frame wind data (computed once in precomputeWind, used N times in applyWind)
+    std::vector<glm::vec3> m_cachedParticleWind;  ///< Per-particle perturbation strength
+    std::vector<float> m_cachedTriangleTurb;       ///< Per-triangle spatial turbulence factor
+    float m_cachedFlutter = 1.0f;                  ///< Cached flutter value for this frame
+    bool m_windPrecomputed = false;                ///< True after precomputeWind() runs
 };
 
 } // namespace Vestige

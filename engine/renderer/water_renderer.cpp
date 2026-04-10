@@ -33,6 +33,16 @@ bool WaterRenderer::init(const std::string& assetPath)
     generateDefaultDudvMap();
     generateDefaultFoamTexture();
 
+    // Create 1x1 black fallback cubemap (Mesa AMD requires valid textures on all samplers)
+    glCreateTextures(GL_TEXTURE_CUBE_MAP, 1, &m_fallbackCubemap);
+    glTextureStorage2D(m_fallbackCubemap, 1, GL_RGBA8, 1, 1);
+    uint8_t black[4] = {0, 0, 0, 255};
+    for (int face = 0; face < 6; ++face)
+    {
+        glTextureSubImage3D(m_fallbackCubemap, 0, 0, 0, face, 1, 1, 1,
+                            GL_RGBA, GL_UNSIGNED_BYTE, black);
+    }
+
     m_initialized = true;
     Logger::info("Water renderer initialized");
     return true;
@@ -54,6 +64,11 @@ void WaterRenderer::shutdown()
     {
         glDeleteTextures(1, &m_defaultFoamTexture);
         m_defaultFoamTexture = 0;
+    }
+    if (m_fallbackCubemap != 0)
+    {
+        glDeleteTextures(1, &m_fallbackCubemap);
+        m_fallbackCubemap = 0;
     }
     m_waterShader.destroy();
     m_initialized = false;
@@ -111,6 +126,8 @@ void WaterRenderer::render(const std::vector<WaterRenderItem>& waterItems,
     m_waterShader.setBool("u_hasDudvMap", m_defaultDudvMap != 0);
 
     // Bind environment cubemap (texture unit 2)
+    // Always bind a valid texture — Mesa AMD requires all declared samplers to have
+    // valid textures bound at draw time, even if shader logic doesn't sample them.
     if (environmentCubemap != 0)
     {
         glBindTextureUnit(2, environmentCubemap);
@@ -118,7 +135,7 @@ void WaterRenderer::render(const std::vector<WaterRenderItem>& waterItems,
     }
     else
     {
-        glBindTextureUnit(2, 0);
+        glBindTextureUnit(2, m_fallbackCubemap);
         m_waterShader.setBool("u_hasEnvironmentMap", false);
     }
     m_waterShader.setInt("u_environmentMap", 2);
@@ -176,14 +193,14 @@ void WaterRenderer::render(const std::vector<WaterRenderItem>& waterItems,
         static const char* waveParamNames[WaterSurfaceConfig::MAX_WAVES] = {
             "u_waveParams[0]", "u_waveParams[1]", "u_waveParams[2]", "u_waveParams[3]"
         };
+        constexpr float DEG_TO_RAD = 3.14159265358979323846f / 180.0f;
         for (int i = 0; i < config.numWaves && i < WaterSurfaceConfig::MAX_WAVES; ++i)
         {
-            float dirRad = config.waves[i].direction * glm::pi<float>() / 180.0f;
             m_waterShader.setVec4(waveParamNames[i], glm::vec4(
                 config.waves[i].amplitude,
                 config.waves[i].wavelength,
                 config.waves[i].speed,
-                dirRad
+                config.waves[i].direction * DEG_TO_RAD
             ));
         }
 
@@ -304,11 +321,18 @@ void WaterRenderer::generateDefaultNormalMap()
             float nz = (h - hy) * normalStr;
             float ny = 1.0f;
 
-            // Normalize
+            // Normalize (guard against zero-length vector)
             float len = std::sqrt(nx * nx + ny * ny + nz * nz);
-            nx /= len;
-            ny /= len;
-            nz /= len;
+            if (len > 1e-7f)
+            {
+                nx /= len;
+                ny /= len;
+                nz /= len;
+            }
+            else
+            {
+                nx = 0.0f; ny = 1.0f; nz = 0.0f;
+            }
 
             // Encode to [0, 255]
             pixels[static_cast<size_t>(idx + 0)] = static_cast<unsigned char>((nx * 0.5f + 0.5f) * 255.0f);

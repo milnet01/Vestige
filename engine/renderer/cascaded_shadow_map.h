@@ -35,6 +35,9 @@ public:
     CascadedShadowMap(const CascadedShadowMap&) = delete;
     CascadedShadowMap& operator=(const CascadedShadowMap&) = delete;
 
+    CascadedShadowMap(CascadedShadowMap&& other) noexcept;
+    CascadedShadowMap& operator=(CascadedShadowMap&& other) noexcept;
+
     /// @brief Updates all cascade light-space matrices from the camera frustum.
     /// @param light The directional light source.
     /// @param camera The main camera (defines the view frustum).

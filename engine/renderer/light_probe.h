@@ -28,6 +28,9 @@ public:
     LightProbe(const LightProbe&) = delete;
     LightProbe& operator=(const LightProbe&) = delete;
 
+    LightProbe(LightProbe&& other) noexcept;
+    LightProbe& operator=(LightProbe&& other) noexcept;
+
     // --- Configuration ---
 
     void setPosition(const glm::vec3& position);

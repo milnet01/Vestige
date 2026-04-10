@@ -173,7 +173,7 @@ void EnvironmentForces::updateGustState(float dt)
     glm::vec3 dirDiff = m_windDirTarget - m_windDirOffset;
     float dirLen = glm::length(dirDiff);
     float dirStep = 0.8f * dt;
-    if (dirLen < dirStep)
+    if (dirLen <= dirStep || dirLen < 1e-6f)
     {
         m_windDirOffset = m_windDirTarget;
     }
@@ -191,6 +191,10 @@ void EnvironmentForces::update(float deltaTime)
 {
     m_elapsed += deltaTime;
     updateGustState(deltaTime);
+
+    // Cache flutter value (depends only on m_elapsed — constant for all queries this frame)
+    m_cachedFlutter = 1.0f + 0.15f * std::sin(m_elapsed * 7.3f + 1.1f)
+                          + 0.08f * std::sin(m_elapsed * 13.7f + 3.2f);
 
     // Accumulate/drain surface wetness based on precipitation
     if (m_weather.precipitation > 0.0f)
@@ -218,11 +222,7 @@ glm::vec3 EnvironmentForces::getWindVelocity(const glm::vec3& worldPos) const
         return glm::vec3(0.0f);
     }
 
-    // High-frequency flutter (same as ClothSimulator::applyWind)
-    float flutter = 1.0f + 0.15f * std::sin(m_elapsed * 7.3f + 1.1f)
-                        + 0.08f * std::sin(m_elapsed * 13.7f + 3.2f);
-
-    float gustStrength = m_gustCurrent * flutter;
+    float gustStrength = m_gustCurrent * m_cachedFlutter;
 
     // Effective direction with gust offset
     glm::vec3 effectiveDir = m_windDirection + m_windDirOffset;

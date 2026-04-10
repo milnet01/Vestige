@@ -154,8 +154,4 @@ void main()
     }
 
     fragColor = vec4(finalColor, texel.a * v_alpha);
-
-    // Discard fully faded fragments
-    if (fragColor.a < 0.01)
-        discard;
 }

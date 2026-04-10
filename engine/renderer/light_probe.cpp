@@ -52,6 +52,71 @@ LightProbe::~LightProbe()
     if (m_prefilterMap != 0)  glDeleteTextures(1, &m_prefilterMap);
 }
 
+LightProbe::LightProbe(LightProbe&& other) noexcept
+    : m_position(other.m_position)
+    , m_influenceAABB(other.m_influenceAABB)
+    , m_fadeDistance(other.m_fadeDistance)
+    , m_irradianceShader(other.m_irradianceShader)
+    , m_prefilterShader(other.m_prefilterShader)
+    , m_cubeVao(other.m_cubeVao)
+    , m_cubeVbo(other.m_cubeVbo)
+    , m_captureFbo(other.m_captureFbo)
+    , m_captureRbo(other.m_captureRbo)
+    , m_irradianceMap(other.m_irradianceMap)
+    , m_prefilterMap(other.m_prefilterMap)
+    , m_ready(other.m_ready)
+{
+    other.m_irradianceShader = nullptr;
+    other.m_prefilterShader = nullptr;
+    other.m_cubeVao = 0;
+    other.m_cubeVbo = 0;
+    other.m_captureFbo = 0;
+    other.m_captureRbo = 0;
+    other.m_irradianceMap = 0;
+    other.m_prefilterMap = 0;
+    other.m_ready = false;
+}
+
+LightProbe& LightProbe::operator=(LightProbe&& other) noexcept
+{
+    if (this != &other)
+    {
+        // Destroy own GPU resources
+        if (m_cubeVao != 0)    glDeleteVertexArrays(1, &m_cubeVao);
+        if (m_cubeVbo != 0)    glDeleteBuffers(1, &m_cubeVbo);
+        if (m_captureFbo != 0) glDeleteFramebuffers(1, &m_captureFbo);
+        if (m_captureRbo != 0) glDeleteRenderbuffers(1, &m_captureRbo);
+        if (m_irradianceMap != 0) glDeleteTextures(1, &m_irradianceMap);
+        if (m_prefilterMap != 0)  glDeleteTextures(1, &m_prefilterMap);
+
+        // Transfer all state
+        m_position = other.m_position;
+        m_influenceAABB = other.m_influenceAABB;
+        m_fadeDistance = other.m_fadeDistance;
+        m_irradianceShader = other.m_irradianceShader;
+        m_prefilterShader = other.m_prefilterShader;
+        m_cubeVao = other.m_cubeVao;
+        m_cubeVbo = other.m_cubeVbo;
+        m_captureFbo = other.m_captureFbo;
+        m_captureRbo = other.m_captureRbo;
+        m_irradianceMap = other.m_irradianceMap;
+        m_prefilterMap = other.m_prefilterMap;
+        m_ready = other.m_ready;
+
+        // Zero the source
+        other.m_irradianceShader = nullptr;
+        other.m_prefilterShader = nullptr;
+        other.m_cubeVao = 0;
+        other.m_cubeVbo = 0;
+        other.m_captureFbo = 0;
+        other.m_captureRbo = 0;
+        other.m_irradianceMap = 0;
+        other.m_prefilterMap = 0;
+        other.m_ready = false;
+    }
+    return *this;
+}
+
 void LightProbe::setPosition(const glm::vec3& position) { m_position = position; }
 glm::vec3 LightProbe::getPosition() const { return m_position; }
 

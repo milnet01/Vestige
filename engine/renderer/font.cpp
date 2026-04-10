@@ -24,6 +24,61 @@ Font::~Font()
     }
 }
 
+Font::Font(Font&& other) noexcept
+    : m_glyphs(std::move(other.m_glyphs))
+    , m_atlasTexture(other.m_atlasTexture)
+    , m_atlasWidth(other.m_atlasWidth)
+    , m_atlasHeight(other.m_atlasHeight)
+    , m_lineHeight(other.m_lineHeight)
+    , m_ascender(other.m_ascender)
+    , m_descender(other.m_descender)
+    , m_pixelSize(other.m_pixelSize)
+    , m_fallbackGlyph(other.m_fallbackGlyph)
+{
+    other.m_atlasTexture = 0;
+    other.m_atlasWidth = 0;
+    other.m_atlasHeight = 0;
+    other.m_lineHeight = 0.0f;
+    other.m_ascender = 0.0f;
+    other.m_descender = 0.0f;
+    other.m_pixelSize = 0;
+    other.m_fallbackGlyph = GlyphInfo{};
+}
+
+Font& Font::operator=(Font&& other) noexcept
+{
+    if (this != &other)
+    {
+        // Destroy own GPU resources
+        if (m_atlasTexture != 0)
+        {
+            glDeleteTextures(1, &m_atlasTexture);
+        }
+
+        // Transfer all state
+        m_glyphs = std::move(other.m_glyphs);
+        m_atlasTexture = other.m_atlasTexture;
+        m_atlasWidth = other.m_atlasWidth;
+        m_atlasHeight = other.m_atlasHeight;
+        m_lineHeight = other.m_lineHeight;
+        m_ascender = other.m_ascender;
+        m_descender = other.m_descender;
+        m_pixelSize = other.m_pixelSize;
+        m_fallbackGlyph = other.m_fallbackGlyph;
+
+        // Zero the source
+        other.m_atlasTexture = 0;
+        other.m_atlasWidth = 0;
+        other.m_atlasHeight = 0;
+        other.m_lineHeight = 0.0f;
+        other.m_ascender = 0.0f;
+        other.m_descender = 0.0f;
+        other.m_pixelSize = 0;
+        other.m_fallbackGlyph = GlyphInfo{};
+    }
+    return *this;
+}
+
 bool Font::loadFromFile(const std::string& filePath, int pixelSize)
 {
     FT_Library ft;

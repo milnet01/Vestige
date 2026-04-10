@@ -91,7 +91,7 @@ void MotionDatabase::sampleClip(int clipIdx, const AnimClipEntry& entry,
 
     const auto& clip = *entry.clip;
     float duration = clip.getDuration();
-    if (duration <= 0.0f)
+    if (duration <= 0.0f || sampleRate <= 0.0f)
         return;
 
     float dt = 1.0f / sampleRate;

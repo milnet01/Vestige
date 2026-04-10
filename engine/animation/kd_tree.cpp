@@ -83,8 +83,14 @@ void KDTree::buildRecursive(int nodeIndex, int start, int count, int depth)
 
 int KDTree::findHighestVarianceDimension(int start, int count) const
 {
+    if (count <= 0)
+    {
+        return 0;
+    }
+
     int bestDim = 0;
     float bestVariance = -1.0f;
+    float invCount = 1.0f / static_cast<float>(count);
 
     for (int d = 0; d < m_numFeatures; ++d)
     {
@@ -97,8 +103,8 @@ int KDTree::findHighestVarianceDimension(int start, int count) const
             sum += val;
             sumSq += val * val;
         }
-        float mean = sum / static_cast<float>(count);
-        float variance = sumSq / static_cast<float>(count) - mean * mean;
+        float mean = sum * invCount;
+        float variance = sumSq * invCount - mean * mean;
 
         if (variance > bestVariance)
         {
