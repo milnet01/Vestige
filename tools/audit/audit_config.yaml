@@ -188,6 +188,11 @@ research:
     - query: "XPBD cloth simulation stability convergence improvements"
     - query: "cppcheck false positive returnDanglingLifetime unique_ptr move"
   custom_queries: []
+  # Auto-detected improvement research — scans codebase for technologies
+  # and generates queries for better approaches / new features
+  improvements:
+    enabled: true
+    max_queries: 10  # cap to avoid excessive search time
 
 # -- Report Settings ----------------------------------------------------------
 report:

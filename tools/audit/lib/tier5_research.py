@@ -58,6 +58,16 @@ def run(config: Config, findings: list | None = None) -> list[ResearchResult]:
         if q:
             queries.append(q)
 
+    # Auto-detected improvement queries (scan codebase for technologies)
+    try:
+        from .tier5_improvements import get_improvement_queries
+        improvement_queries = get_improvement_queries(config)
+        if improvement_queries:
+            log.info("Tier 5: %d improvement queries from tech detection", len(improvement_queries))
+            queries.extend(improvement_queries)
+    except Exception as e:
+        log.warning("Tech detection failed: %s", e)
+
     if not queries:
         log.info("No research queries configured — skipping Tier 5")
         return results
