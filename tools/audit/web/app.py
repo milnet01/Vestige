@@ -17,7 +17,7 @@ sys.path.insert(0, str(AUDIT_ROOT))
 
 from web.audit_bridge import AuditSession
 
-VERSION = "1.6.0"
+VERSION = "1.6.1"
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
 session = AuditSession()
@@ -206,8 +206,17 @@ def api_config_save():
     import yaml
 
     data = request.get_json(silent=True) or {}
-    config_path = Path(data.get("path", DEFAULT_CONFIG))
+    config_path = Path(data.get("path", DEFAULT_CONFIG)).resolve()
     content = data.get("content", "")
+
+    # Security: restrict writes to project root or audit tool directory
+    allowed_roots = [Path(DEFAULT_ROOT).resolve(), AUDIT_ROOT.resolve()]
+    if not any(str(config_path).startswith(str(r)) for r in allowed_roots):
+        return jsonify({"error": "Path outside project directory"}), 403
+
+    # Only allow .yaml/.yml files
+    if config_path.suffix not in (".yaml", ".yml"):
+        return jsonify({"error": "Only YAML files can be saved"}), 400
 
     # Validate YAML
     try:
@@ -244,8 +253,12 @@ def api_reports():
 def api_report_file(filename: str):
     """Return a specific timestamped report."""
     report_dir = Path(DEFAULT_ROOT) / "docs"
-    path = report_dir / filename
-    if not path.exists() or not str(path.resolve()).startswith(str(report_dir.resolve())):
+    path = (report_dir / filename).resolve()
+    try:
+        path.relative_to(report_dir.resolve())
+    except ValueError:
+        return jsonify({"error": "Access denied"}), 403
+    if not path.exists():
         return jsonify({"error": "Not found"}), 404
     return Response(path.read_text(), mimetype="text/plain")
 

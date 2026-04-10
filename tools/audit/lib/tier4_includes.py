@@ -16,8 +16,6 @@ log = logging.getLogger("audit")
 
 INCLUDE_RE = re.compile(r'#include\s*"([^"]+)"')
 FORWARD_DECL_RE = re.compile(r"^\s*class\s+(\w+)\s*;", re.MULTILINE)
-POINTER_REF_RE = re.compile(r"\b{}\s*[*&]")
-TEMPLATE_USE_RE = re.compile(r"<\s*{}\s*[>,]")
 
 
 @dataclass

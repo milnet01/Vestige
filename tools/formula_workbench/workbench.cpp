@@ -4,7 +4,6 @@
 #include "formula/codegen_cpp.h"
 #include "formula/codegen_glsl.h"
 #include "formula/expression_eval.h"
-#include "formula/lut_generator.h"
 
 #include <imgui.h>
 #include <implot.h>
@@ -12,7 +11,6 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
-#include <cstring>
 #include <fstream>
 #include <iomanip>
 #include <random>
@@ -1148,9 +1146,13 @@ void Workbench::importCsv(const std::string& path)
             {
                 values.push_back(std::stof(cell));
             }
-            catch (...)
+            catch (const std::invalid_argument&)
             {
-                values.push_back(0.0f);
+                values.push_back(0.0f);  // Non-numeric cell
+            }
+            catch (const std::out_of_range&)
+            {
+                values.push_back(0.0f);  // Value too large for float
             }
         }
 
@@ -1240,6 +1242,7 @@ void Workbench::generateSyntheticData()
     std::normal_distribution<float> noise(0.0f, m_syntheticNoise);
 
     int count = std::max(2, m_syntheticCount);
+    m_dataPoints.reserve(static_cast<size_t>(count));
 
     if (m_multiVarSynthetic && scalarInputs.size() > 1)
     {
@@ -1755,15 +1758,18 @@ void Workbench::rebuildVisualizationCache()
 
     // Sample 100 points for the curve
     constexpr int CURVE_SAMPLES = 100;
+    m_curveX.reserve(CURVE_SAMPLES);
+    m_curveY.reserve(CURVE_SAMPLES);
+
+    // Build variable map once, update sweep variable per sample
+    ExpressionEvaluator::VariableMap vars;
+    for (const auto& inp : m_selectedFormula->inputs)
+        vars[inp.name] = inp.defaultValue;
+
     for (int i = 0; i < CURVE_SAMPLES; ++i)
     {
         float t = static_cast<float>(i) / static_cast<float>(CURVE_SAMPLES - 1);
         float x = xMin + t * (xMax - xMin);
-
-        // Build variable map with defaults + sweep variable
-        ExpressionEvaluator::VariableMap vars;
-        for (const auto& inp : m_selectedFormula->inputs)
-            vars[inp.name] = inp.defaultValue;
         vars[m_plotVariable] = x;
 
         float y = eval.evaluate(*expr, vars, coeffMap);

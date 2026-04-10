@@ -14,7 +14,7 @@ from .utils import enumerate_files, relative_path, count_lines
 log = logging.getLogger("audit")
 
 
-def run(config: Config) -> AuditData:
+def run(config: Config) -> tuple[AuditData, list]:
     """Collect codebase statistics and structural audits."""
     data = AuditData()
 

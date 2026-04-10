@@ -2,6 +2,21 @@
 
 All notable changes to the Audit Tool are documented in this file.
 
+## [1.6.1] - 2026-04-10
+
+### Fixed
+- **Path traversal in /api/reports**: used `relative_to()` check instead of string prefix matching
+- **Arbitrary file write in /api/config PUT**: restricted writes to project root, YAML files only
+- **Workbench CSV bare catch(...)**: replaced with specific `std::invalid_argument` + `std::out_of_range`
+- **NVD API rate limiting**: increased delay to 7s unauthenticated (safely under 5 req/30s limit), added HTTP 429 detection
+- **Suppress file robustness**: added defensive check for malformed lines
+
+### Changed
+- **Workbench performance**: moved VariableMap allocation outside curve sampling loop (100x fewer allocations), added `reserve()` for synthetic data vectors
+- **Removed dead code**: unused `#include <cstring>`, `#include "formula/lut_generator.h"` from workbench.cpp, unused `POINTER_REF_RE`/`TEMPLATE_USE_RE` from tier4_includes.py
+- **Type annotation**: fixed `tier4_stats.run()` return type to `tuple[AuditData, list]`
+- **NVD error handling**: specific exception types (`urllib.error.HTTPError`, `URLError`) instead of generic `Exception`
+
 ## [1.6.0] - 2026-04-10
 
 ### Added
