@@ -24,6 +24,44 @@ ColorGradingLut::~ColorGradingLut()
     }
 }
 
+ColorGradingLut::ColorGradingLut(ColorGradingLut&& other) noexcept
+    : m_presets(std::move(other.m_presets))
+    , m_currentPreset(other.m_currentPreset)
+    , m_intensity(other.m_intensity)
+    , m_enabled(other.m_enabled)
+{
+    other.m_currentPreset = 0;
+    other.m_intensity = 1.0f;
+    other.m_enabled = false;
+}
+
+ColorGradingLut& ColorGradingLut::operator=(ColorGradingLut&& other) noexcept
+{
+    if (this != &other)
+    {
+        // Destroy own GPU resources
+        for (auto& preset : m_presets)
+        {
+            if (preset.textureId != 0)
+            {
+                glDeleteTextures(1, &preset.textureId);
+            }
+        }
+
+        // Transfer all state
+        m_presets = std::move(other.m_presets);
+        m_currentPreset = other.m_currentPreset;
+        m_intensity = other.m_intensity;
+        m_enabled = other.m_enabled;
+
+        // Zero the source
+        other.m_currentPreset = 0;
+        other.m_intensity = 1.0f;
+        other.m_enabled = false;
+    }
+    return *this;
+}
+
 void ColorGradingLut::initialize()
 {
     // Preset 0: Neutral (identity)

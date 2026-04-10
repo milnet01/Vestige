@@ -147,6 +147,9 @@ private:
     glm::vec3 m_windDirTarget = glm::vec3(0.0f);
     float m_dirTimer = 0.0f;
 
+    // Cached per-frame flutter (computed once in update(), used by all wind queries)
+    float m_cachedFlutter = 1.0f;
+
     // Spatial noise
     float m_turbulenceScale = 10.0f;
 

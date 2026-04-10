@@ -86,8 +86,11 @@ void ClothComponent::update(float deltaTime)
         m_vertexBuffer[i].normal = normals[i];
     }
 
-    // Recompute tangents for correct normal mapping on deformed geometry
-    calculateTangents(m_vertexBuffer, m_simulator.getIndices());
+    // Recompute tangents only if the material uses a normal map
+    if (m_material && m_material->hasNormalMap())
+    {
+        calculateTangents(m_vertexBuffer, m_simulator.getIndices());
+    }
 
     // Upload to GPU
     m_mesh.updateVertices(m_vertexBuffer);

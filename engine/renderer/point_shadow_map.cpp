@@ -58,6 +58,51 @@ PointShadowMap::~PointShadowMap()
     }
 }
 
+PointShadowMap::PointShadowMap(PointShadowMap&& other) noexcept
+    : m_config(other.m_config)
+    , m_fbo(other.m_fbo)
+    , m_depthCubemap(other.m_depthCubemap)
+    , m_shadowProjection(other.m_shadowProjection)
+{
+    for (int i = 0; i < 6; i++)
+    {
+        m_lightSpaceMatrices[i] = other.m_lightSpaceMatrices[i];
+    }
+    other.m_fbo = 0;
+    other.m_depthCubemap = 0;
+}
+
+PointShadowMap& PointShadowMap::operator=(PointShadowMap&& other) noexcept
+{
+    if (this != &other)
+    {
+        // Destroy own GPU resources
+        if (m_fbo != 0)
+        {
+            glDeleteFramebuffers(1, &m_fbo);
+        }
+        if (m_depthCubemap != 0)
+        {
+            glDeleteTextures(1, &m_depthCubemap);
+        }
+
+        // Transfer all state
+        m_config = other.m_config;
+        m_fbo = other.m_fbo;
+        m_depthCubemap = other.m_depthCubemap;
+        m_shadowProjection = other.m_shadowProjection;
+        for (int i = 0; i < 6; i++)
+        {
+            m_lightSpaceMatrices[i] = other.m_lightSpaceMatrices[i];
+        }
+
+        // Zero the source
+        other.m_fbo = 0;
+        other.m_depthCubemap = 0;
+    }
+    return *this;
+}
+
 void PointShadowMap::update(const glm::vec3& lightPos)
 {
     // 6 view matrices: +X, -X, +Y, -Y, +Z, -Z

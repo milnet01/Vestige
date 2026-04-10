@@ -32,6 +32,9 @@ public:
     PointShadowMap(const PointShadowMap&) = delete;
     PointShadowMap& operator=(const PointShadowMap&) = delete;
 
+    PointShadowMap(PointShadowMap&& other) noexcept;
+    PointShadowMap& operator=(PointShadowMap&& other) noexcept;
+
     /// @brief Computes the 6 light-space matrices for a given light position.
     /// @param lightPos World-space position of the point light.
     void update(const glm::vec3& lightPos);

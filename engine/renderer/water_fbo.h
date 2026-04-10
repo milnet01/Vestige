@@ -22,6 +22,9 @@ public:
     WaterFbo(const WaterFbo&) = delete;
     WaterFbo& operator=(const WaterFbo&) = delete;
 
+    WaterFbo(WaterFbo&& other) noexcept;
+    WaterFbo& operator=(WaterFbo&& other) noexcept;
+
     /// @brief Creates reflection and refraction FBOs.
     /// @param reflW Reflection FBO width.
     /// @param reflH Reflection FBO height.

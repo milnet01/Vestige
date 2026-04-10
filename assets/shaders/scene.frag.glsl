@@ -268,25 +268,29 @@ int getCascadeIndex()
     return u_cascadeCount - 1;
 }
 
+/// Compute Poisson disk rotation matrix from interleaved gradient noise.
+/// Shared between blocker search and PCF to avoid redundant computation.
+mat2 poissonRotation()
+{
+    float noise = interleavedGradientNoise(gl_FragCoord.xy);
+    float cosA = noise * 2.0 - 1.0;  // [-1, 1]
+    float sinA = sqrt(1.0 - cosA * cosA);  // sqrt is cheaper than sin on GPU
+    if (fract(noise * 17.0) > 0.5) sinA = -sinA;
+    return mat2(cosA, sinA, -sinA, cosA);
+}
+
 /// PCSS blocker search: find average depth of occluders in a search region.
+/// Uses 8 samples (half the Poisson disk) — blockers need less precision than PCF.
 /// Returns average blocker depth, or -1.0 if no blockers found.
-float blockerSearch(vec3 projCoords, int cascade, float bias, vec2 texelSize, float searchRadius)
+float blockerSearch(vec3 projCoords, int cascade, float bias, vec2 texelSize,
+                    float searchRadius, mat2 rotation)
 {
     float blockerSum = 0.0;
     int blockerCount = 0;
 
-    // Rotate Poisson disk per-fragment to break up banding artifacts
-    // Compute rotation directly from noise — avoids sin/cos per pixel
-    float noise = interleavedGradientNoise(gl_FragCoord.xy);
-    float cosA = noise * 2.0 - 1.0;  // [-1, 1]
-    float sinA = sqrt(1.0 - cosA * cosA);  // sqrt is cheaper than sin on GPU
-    // Randomize sign of sinA using a second noise evaluation
-    if (fract(noise * 17.0) > 0.5) sinA = -sinA;
-    mat2 rotation = mat2(cosA, sinA, -sinA, cosA);
-
-    for (int i = 0; i < 16; i++)
+    for (int i = 0; i < 8; i++)
     {
-        vec2 offset = rotation * POISSON_DISK[i] * searchRadius * texelSize;
+        vec2 offset = rotation * POISSON_DISK[i * 2] * searchRadius * texelSize;
         float sampleDepth = texture(u_cascadeShadowMap,
             vec3(projCoords.xy + offset, float(cascade))).r;
 
@@ -334,9 +338,13 @@ float calcShadowForCascade(int cascade, vec3 normal, vec3 lightDir)
 
     vec2 texelSize = 1.0 / vec2(textureSize(u_cascadeShadowMap, 0).xy);
 
-    // Step 1: Blocker search — find average occluder depth
+    // Shared rotation matrix for both blocker search and PCF
+    mat2 rotation = poissonRotation();
+
+    // Step 1: Blocker search — find average occluder depth (8 samples)
     float searchRadius = u_shadowLightSize;
-    float avgBlockerDepth = blockerSearch(projCoords, cascade, bias, texelSize, searchRadius);
+    float avgBlockerDepth = blockerSearch(projCoords, cascade, bias, texelSize,
+                                          searchRadius, rotation);
 
     // No blockers found → fully lit
     if (avgBlockerDepth < 0.0)
@@ -350,15 +358,8 @@ float calcShadowForCascade(int cascade, vec3 normal, vec3 lightDir)
                           / max(avgBlockerDepth, 0.001);
     penumbraWidth = clamp(penumbraWidth, 1.0, u_shadowLightSize * 4.0);
 
-    // Step 3: PCF with variable-size kernel
+    // Step 3: PCF with variable-size kernel (16 samples)
     float shadow = 0.0;
-    // Compute rotation directly from noise — avoids sin/cos per pixel
-    float pcfNoise = interleavedGradientNoise(gl_FragCoord.xy);
-    float pcfCosA = pcfNoise * 2.0 - 1.0;  // [-1, 1]
-    float pcfSinA = sqrt(1.0 - pcfCosA * pcfCosA);  // sqrt is cheaper than sin on GPU
-    // Randomize sign of sinA using a second noise evaluation
-    if (fract(pcfNoise * 17.0) > 0.5) pcfSinA = -pcfSinA;
-    mat2 rotation = mat2(pcfCosA, pcfSinA, -pcfSinA, pcfCosA);
 
     for (int i = 0; i < 16; i++)
     {

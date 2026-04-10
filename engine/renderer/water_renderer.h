@@ -78,8 +78,9 @@ private:
     GLuint m_defaultNormalMap = 0;
     GLuint m_defaultDudvMap = 0;
     GLuint m_defaultFoamTexture = 0;
+    GLuint m_fallbackCubemap = 0;  ///< 1x1 black cubemap for Mesa AMD sampler safety
 
-    int m_waterQualityTier = 0;  // 0=Full, 1=Approximate, 2=Simple
+    int m_waterQualityTier = 1;  // 0=Full, 1=Approximate, 2=Simple (default Approximate)
     bool m_initialized = false;
 };
 

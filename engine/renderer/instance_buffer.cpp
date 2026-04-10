@@ -18,6 +18,36 @@ InstanceBuffer::~InstanceBuffer()
     }
 }
 
+InstanceBuffer::InstanceBuffer(InstanceBuffer&& other) noexcept
+    : m_vbo(other.m_vbo)
+    , m_instanceCount(other.m_instanceCount)
+    , m_capacity(other.m_capacity)
+{
+    other.m_vbo = 0;
+    other.m_instanceCount = 0;
+    other.m_capacity = 0;
+}
+
+InstanceBuffer& InstanceBuffer::operator=(InstanceBuffer&& other) noexcept
+{
+    if (this != &other)
+    {
+        if (m_vbo != 0)
+        {
+            glDeleteBuffers(1, &m_vbo);
+        }
+
+        m_vbo = other.m_vbo;
+        m_instanceCount = other.m_instanceCount;
+        m_capacity = other.m_capacity;
+
+        other.m_vbo = 0;
+        other.m_instanceCount = 0;
+        other.m_capacity = 0;
+    }
+    return *this;
+}
+
 void InstanceBuffer::upload(const std::vector<glm::mat4>& matrices)
 {
     m_instanceCount = matrices.size();

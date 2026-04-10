@@ -20,6 +20,9 @@ public:
     InstanceBuffer(const InstanceBuffer&) = delete;
     InstanceBuffer& operator=(const InstanceBuffer&) = delete;
 
+    InstanceBuffer(InstanceBuffer&& other) noexcept;
+    InstanceBuffer& operator=(InstanceBuffer&& other) noexcept;
+
     /// @brief Uploads model matrices to the GPU buffer.
     /// Reuses existing buffer capacity when possible.
     void upload(const std::vector<glm::mat4>& matrices);

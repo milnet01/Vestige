@@ -11,6 +11,64 @@ WaterFbo::~WaterFbo()
     shutdown();
 }
 
+WaterFbo::WaterFbo(WaterFbo&& other) noexcept
+    : m_reflectionFbo(other.m_reflectionFbo)
+    , m_reflectionColorTex(other.m_reflectionColorTex)
+    , m_reflectionDepthRbo(other.m_reflectionDepthRbo)
+    , m_reflectionWidth(other.m_reflectionWidth)
+    , m_reflectionHeight(other.m_reflectionHeight)
+    , m_refractionFbo(other.m_refractionFbo)
+    , m_refractionColorTex(other.m_refractionColorTex)
+    , m_refractionDepthTex(other.m_refractionDepthTex)
+    , m_refractionWidth(other.m_refractionWidth)
+    , m_refractionHeight(other.m_refractionHeight)
+{
+    other.m_reflectionFbo = 0;
+    other.m_reflectionColorTex = 0;
+    other.m_reflectionDepthRbo = 0;
+    other.m_reflectionWidth = 0;
+    other.m_reflectionHeight = 0;
+    other.m_refractionFbo = 0;
+    other.m_refractionColorTex = 0;
+    other.m_refractionDepthTex = 0;
+    other.m_refractionWidth = 0;
+    other.m_refractionHeight = 0;
+}
+
+WaterFbo& WaterFbo::operator=(WaterFbo&& other) noexcept
+{
+    if (this != &other)
+    {
+        // Destroy own GPU resources
+        shutdown();
+
+        // Transfer all state
+        m_reflectionFbo = other.m_reflectionFbo;
+        m_reflectionColorTex = other.m_reflectionColorTex;
+        m_reflectionDepthRbo = other.m_reflectionDepthRbo;
+        m_reflectionWidth = other.m_reflectionWidth;
+        m_reflectionHeight = other.m_reflectionHeight;
+        m_refractionFbo = other.m_refractionFbo;
+        m_refractionColorTex = other.m_refractionColorTex;
+        m_refractionDepthTex = other.m_refractionDepthTex;
+        m_refractionWidth = other.m_refractionWidth;
+        m_refractionHeight = other.m_refractionHeight;
+
+        // Zero the source
+        other.m_reflectionFbo = 0;
+        other.m_reflectionColorTex = 0;
+        other.m_reflectionDepthRbo = 0;
+        other.m_reflectionWidth = 0;
+        other.m_reflectionHeight = 0;
+        other.m_refractionFbo = 0;
+        other.m_refractionColorTex = 0;
+        other.m_refractionDepthTex = 0;
+        other.m_refractionWidth = 0;
+        other.m_refractionHeight = 0;
+    }
+    return *this;
+}
+
 bool WaterFbo::init(int reflW, int reflH, int refrW, int refrH)
 {
     createReflectionFbo(reflW, reflH);

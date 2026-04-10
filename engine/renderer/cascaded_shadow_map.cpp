@@ -61,6 +61,59 @@ CascadedShadowMap::~CascadedShadowMap()
     }
 }
 
+CascadedShadowMap::CascadedShadowMap(CascadedShadowMap&& other) noexcept
+    : m_config(other.m_config)
+    , m_fbo(other.m_fbo)
+    , m_depthTextureArray(other.m_depthTextureArray)
+    , m_lightSpaceMatrices(std::move(other.m_lightSpaceMatrices))
+    , m_cascadeSplits(std::move(other.m_cascadeSplits))
+    , m_texelWorldSizes(std::move(other.m_texelWorldSizes))
+    , m_hasDepthBounds(other.m_hasDepthBounds)
+    , m_depthBoundsNear(other.m_depthBoundsNear)
+    , m_depthBoundsFar(other.m_depthBoundsFar)
+{
+    other.m_fbo = 0;
+    other.m_depthTextureArray = 0;
+    other.m_hasDepthBounds = false;
+    other.m_depthBoundsNear = 0.0f;
+    other.m_depthBoundsFar = 0.0f;
+}
+
+CascadedShadowMap& CascadedShadowMap::operator=(CascadedShadowMap&& other) noexcept
+{
+    if (this != &other)
+    {
+        // Destroy own GPU resources
+        if (m_depthTextureArray != 0)
+        {
+            glDeleteTextures(1, &m_depthTextureArray);
+        }
+        if (m_fbo != 0)
+        {
+            glDeleteFramebuffers(1, &m_fbo);
+        }
+
+        // Transfer all state
+        m_config = other.m_config;
+        m_fbo = other.m_fbo;
+        m_depthTextureArray = other.m_depthTextureArray;
+        m_lightSpaceMatrices = std::move(other.m_lightSpaceMatrices);
+        m_cascadeSplits = std::move(other.m_cascadeSplits);
+        m_texelWorldSizes = std::move(other.m_texelWorldSizes);
+        m_hasDepthBounds = other.m_hasDepthBounds;
+        m_depthBoundsNear = other.m_depthBoundsNear;
+        m_depthBoundsFar = other.m_depthBoundsFar;
+
+        // Zero the source
+        other.m_fbo = 0;
+        other.m_depthTextureArray = 0;
+        other.m_hasDepthBounds = false;
+        other.m_depthBoundsNear = 0.0f;
+        other.m_depthBoundsFar = 0.0f;
+    }
+    return *this;
+}
+
 std::vector<float> CascadedShadowMap::computeSplitDistances(
     float nearPlane, float farPlane, int cascadeCount, float lambda)
 {

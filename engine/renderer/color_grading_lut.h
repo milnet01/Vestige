@@ -30,6 +30,9 @@ public:
     ColorGradingLut(const ColorGradingLut&) = delete;
     ColorGradingLut& operator=(const ColorGradingLut&) = delete;
 
+    ColorGradingLut(ColorGradingLut&& other) noexcept;
+    ColorGradingLut& operator=(ColorGradingLut&& other) noexcept;
+
     /// @brief Generates the neutral LUT and built-in presets.
     void initialize();
 

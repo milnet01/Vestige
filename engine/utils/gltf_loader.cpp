@@ -401,6 +401,14 @@ static void generateFlatNormals(std::vector<Vertex>& vertices,
     // Accumulate face normals
     for (size_t i = 0; i + 2 < indices.size(); i += 3)
     {
+        // H8: Bounds check — skip triangles with out-of-range indices
+        if (indices[i] >= vertices.size()
+            || indices[i + 1] >= vertices.size()
+            || indices[i + 2] >= vertices.size())
+        {
+            continue;
+        }
+
         const glm::vec3& p0 = vertices[indices[i]].position;
         const glm::vec3& p1 = vertices[indices[i + 1]].position;
         const glm::vec3& p2 = vertices[indices[i + 2]].position;
@@ -1264,6 +1272,14 @@ static void loadAnimations(const tinygltf::Model& gltfModel, Model& outModel)
                 continue;  // Not a skeleton joint and not WEIGHTS — skip
             }
 
+            // H9: Bounds check on animation sampler index
+            if (channel.sampler < 0
+                || static_cast<size_t>(channel.sampler) >= gltfAnim.samplers.size())
+            {
+                Logger::warning("glTF: animation '" + gltfAnim.name
+                    + "' has out-of-range sampler index " + std::to_string(channel.sampler));
+                continue;
+            }
             const auto& sampler = gltfAnim.samplers[static_cast<size_t>(channel.sampler)];
 
             AnimationChannel animChannel;
@@ -1351,6 +1367,25 @@ static void loadAnimations(const tinygltf::Model& gltfModel, Model& outModel)
 std::unique_ptr<Model> GltfLoader::load(const std::string& filePath,
                                          ResourceManager& resourceManager)
 {
+    // H7: File size limit (256 MB) — reject before handing to tinygltf
+    constexpr std::uintmax_t MAX_GLTF_SIZE = 256ULL * 1024ULL * 1024ULL;
+    {
+        std::error_code ec;
+        auto fileSize = std::filesystem::file_size(filePath, ec);
+        if (ec)
+        {
+            Logger::error("glTF: cannot stat file: " + filePath
+                + " — " + ec.message());
+            return nullptr;
+        }
+        if (fileSize > MAX_GLTF_SIZE)
+        {
+            Logger::error("glTF: file exceeds 256 MB limit ("
+                + std::to_string(fileSize / (1024 * 1024)) + " MB): " + filePath);
+            return nullptr;
+        }
+    }
+
     tinygltf::Model gltfModel;
     tinygltf::TinyGLTF loader;
 
