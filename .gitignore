@@ -65,3 +65,7 @@ perf.data*
 
 # Windows debug symbols
 *.pdb
+
+# Audit tool cache and generated reports
+.audit_cache/
+docs/AUTOMATED_AUDIT_REPORT.md
