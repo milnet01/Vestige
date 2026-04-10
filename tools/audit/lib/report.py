@@ -479,13 +479,40 @@ class ReportBuilder:
         if not results:
             return "## Tier 5: Online Research\n\nNo research performed.\n"
 
-        # Filter out empty/error results for cleaner output
-        valid = [r for r in results if r.results and not r.error]
+        # Separate improvement queries from general/CVE queries
+        improvement_keywords = ("improvements", "best practices", "techniques",
+                                "alternatives", "optimization", "latest", "modern")
+        improvements = [r for r in results if r.results and not r.error
+                        and any(kw in r.query.lower() for kw in improvement_keywords)]
+        security = [r for r in results if r.results and not r.error
+                    and r not in improvements]
         errors = [r for r in results if r.error]
+        valid = [r for r in results if r.results and not r.error]
 
         lines = [f"## Tier 5: Online Research ({len(valid)}/{len(results)} queries returned results)", ""]
 
-        for r in valid:
+        # Improvement research first (most actionable)
+        if improvements:
+            lines.append(f"### Improvement Opportunities ({len(improvements)} topics)")
+            lines.append("")
+            for r in improvements:
+                cached_tag = " (cached)" if r.cached else ""
+                lines.append(f"**{r.query}**{cached_tag}")
+                for item in r.results[:2]:
+                    title = item.get("title", "")
+                    url = item.get("url", "")
+                    snippet = item.get("snippet", "")[:150]
+                    lines.append(f"- [{title}]({url})")
+                    if snippet:
+                        lines.append(f"  > {snippet}")
+                lines.append("")
+
+        # Security / CVE research
+        if security:
+            lines.append(f"### Security & CVE Research ({len(security)} topics)")
+            lines.append("")
+
+        for r in security:
             cached_tag = " (cached)" if r.cached else ""
             lines.append(f"### {r.query}{cached_tag}")
             for item in r.results:
