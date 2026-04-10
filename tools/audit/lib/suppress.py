@@ -28,8 +28,9 @@ def load_suppressions(root: Path, filename: str = ".audit_suppress") -> set[str]
         if not line or line.startswith("#"):
             continue
         # Take only the first token (the hash); anything after is annotation
-        token = line.split()[0]
-        keys.add(token)
+        parts = line.split()
+        if parts:
+            keys.add(parts[0])
 
     log.info("Loaded %d suppression keys from %s", len(keys), path)
     return keys

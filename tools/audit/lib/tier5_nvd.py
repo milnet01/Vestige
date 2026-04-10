@@ -6,6 +6,7 @@ import hashlib
 import json
 import logging
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
@@ -57,7 +58,13 @@ def query_nvd(
     try:
         response = urllib.request.urlopen(req, timeout=30)
         data = json.loads(response.read())
-    except Exception as e:
+    except urllib.error.HTTPError as e:
+        if e.code == 429:
+            log.warning("NVD API rate limited for '%s' — backing off", keyword)
+        else:
+            log.warning("NVD API HTTP %d for '%s': %s", e.code, keyword, e)
+        return []
+    except (urllib.error.URLError, OSError, json.JSONDecodeError) as e:
         log.warning("NVD API query failed for '%s': %s", keyword, e)
         return []
 
@@ -155,11 +162,11 @@ def run_nvd_queries(
 
         results.append(ResearchResult(query=query, results=formatted))
 
-        # Rate limit: 6 seconds between requests without API key
+        # Rate limit: NVD allows 5 req/30s unauthenticated, 50 req/30s with key
         if not api_key:
-            time.sleep(6.0)
+            time.sleep(7.0)  # ~4.3 req/30s — safely under 5 req/30s limit
         else:
-            time.sleep(1.0)
+            time.sleep(0.7)  # ~42 req/30s — safely under 50 req/30s limit
 
     cached_count = sum(1 for r in results if r.cached)
     log.info("NVD: %d results (%d cached, %d fresh)",
