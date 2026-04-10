@@ -110,7 +110,7 @@ class ReportBuilder:
         log.info("JSON sidecar written to %s (%d findings)", sidecar_path, len(sidecar_data))
 
         log.info("Report written to %s (%d chars, ~%d tokens)",
-                 timestamped, len(report), estimate_tokens(report))
+                 output_path, len(report), estimate_tokens(report))
         log.info("Latest copy: %s", base_path)
 
         return report

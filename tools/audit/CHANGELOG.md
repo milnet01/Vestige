@@ -7,11 +7,12 @@ All notable changes to the Audit Tool are documented in this file.
 ### Added
 - **Technology detection**: auto-scans codebase for 35+ known techniques (SSAO, PBR, XPBD, motion matching, cloth simulation, etc.) and generates targeted improvement research queries
 - **Improvement research**: Tier 5 now searches for better approaches, newer algorithms, and improved implementations for detected technologies
+- **Best practices research**: auto-generates "best practices / common mistakes / pitfalls" queries for the top 8 most-used technologies in the codebase
 - **Report split**: Tier 5 report separates "Improvement Opportunities" from "Security & CVE Research" for clarity
 - **Versioning & Changelog standards**: section 10 in AUDIT_TOOL_STANDARDS.md mandates changelog updates with every code change
 
 ### Changed
-- **Tier 5 research** now runs both configured queries AND auto-detected improvement queries (capped at 10)
+- **Tier 5 research** now runs both configured queries AND auto-detected improvement + best practices queries
 - **Config**: new `research.improvements.enabled` and `research.improvements.max_queries` settings
 
 ## [1.4.0] - 2026-04-10

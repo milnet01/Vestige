@@ -199,6 +199,22 @@ def detect_technologies(config: Config) -> list[TechDetection]:
                 query=query,
             ))
 
+    # Generate "best practices" queries for the top-used technologies
+    # (separate from improvement queries — focused on correct usage, not new features)
+    sorted_detections = sorted(detections, key=lambda d: -d.files_matched)
+    for det in sorted_detections[:8]:
+        # Extract a short tech name from the query for the best practices search
+        short_name = det.query.split(" improvements")[0].split(" latest")[0].split(" efficient")[0]
+        bp_query = f"{short_name} best practices common mistakes pitfalls {year}"
+        if bp_query not in seen_queries:
+            seen_queries.add(bp_query)
+            detections.append(TechDetection(
+                category=f"{det.category} (best practices)",
+                pattern=det.pattern,
+                files_matched=det.files_matched,
+                query=bp_query,
+            ))
+
     # Add language-specific generic queries
     lang_queries = LANGUAGE_IMPROVEMENT_QUERIES.get(config.language, [])
     for q in lang_queries:
@@ -212,8 +228,8 @@ def detect_technologies(config: Config) -> list[TechDetection]:
                 query=query,
             ))
 
-    log.info("Tech detection: %d technologies found across %d files",
-             len(detections), len(file_contents))
+    log.info("Tech detection: %d technologies found (%d improvement + best practices queries) "
+             "across %d files", len(detections), len(seen_queries), len(file_contents))
     return detections
 
 
