@@ -196,12 +196,16 @@ td.file{font-family:var(--mono);font-size:12px;max-width:300px;overflow:hidden;t
       <button class="tab-btn" data-tab="changes">Changes</button>
       <button class="tab-btn" data-tab="stats">Stats</button>
       <button class="tab-btn" data-tab="research">Research</button>
+      <button class="tab-btn" data-tab="history">History</button>
+      <button class="tab-btn" data-tab="config">Config</button>
     </div>
     <div id="tab-summary" class="tab-content active"></div>
     <div id="tab-findings" class="tab-content"></div>
     <div id="tab-changes" class="tab-content"></div>
     <div id="tab-stats" class="tab-content"></div>
     <div id="tab-research" class="tab-content"></div>
+    <div id="tab-history" class="tab-content"></div>
+    <div id="tab-config" class="tab-content"></div>
   </section>
 
   <!-- Log -->
@@ -618,6 +622,53 @@ $('#config-form').addEventListener('submit', () => {
   addRecent('recent_projects', $('#project-root').value);
   addRecent('recent_configs', $('#config-path').value);
 }, true);
+
+// --- History tab ---
+async function loadHistory(){
+  const resp = await fetch('/api/reports');
+  const data = await resp.json();
+  const reports = data.reports||[];
+  if(!reports.length){ $('#tab-history').innerHTML='<p style="color:var(--text2)">No previous reports found.</p>'; return; }
+  const rows = reports.map(r=>{
+    const date = new Date(r.modified*1000).toLocaleString();
+    const kb = (r.size/1024).toFixed(1);
+    return `<tr><td>${esc(r.filename)}</td><td>${date}</td><td>${kb} KB</td>
+      <td><button class="btn-secondary" style="font-size:11px;padding:2px 8px" onclick="viewReport('${esc(r.filename)}')">View</button></td></tr>`;
+  }).join('');
+  $('#tab-history').innerHTML = `<table><thead><tr><th>Report</th><th>Date</th><th>Size</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+function viewReport(filename){ window.open('/api/reports/'+encodeURIComponent(filename),'_blank'); }
+
+// --- Config tab ---
+async function loadConfig(){
+  const resp = await fetch('/api/config?path='+encodeURIComponent($('#config-path').value));
+  const text = await resp.text();
+  $('#tab-config').innerHTML = `
+    <div style="margin-bottom:8px;display:flex;gap:8px">
+      <button class="btn-primary" style="font-size:12px;padding:4px 12px" onclick="saveConfig()">Save</button>
+      <button class="btn-secondary" style="font-size:12px;padding:4px 12px" onclick="loadConfig()">Reload</button>
+      <span id="config-status" style="font-size:12px;color:var(--text2);line-height:28px"></span>
+    </div>
+    <textarea id="config-editor" style="width:100%;height:400px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:8px;font-family:var(--mono);font-size:12px;resize:vertical;tab-size:2">${esc(text)}</textarea>`;
+}
+async function saveConfig(){
+  const editor = $('#config-editor');
+  if(!editor) return;
+  const resp = await fetch('/api/config',{
+    method:'PUT', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({path:$('#config-path').value, content:editor.value})
+  });
+  const data = await resp.json();
+  const status = $('#config-status');
+  if(data.error){ if(status) status.textContent='Error: '+data.error; status.style.color='var(--critical)'; }
+  else { if(status) status.textContent='Saved!'; status.style.color='var(--ok)'; setTimeout(()=>{if(status)status.textContent='';},3000); }
+}
+
+// Tab activation hooks — load data lazily
+document.addEventListener('click', e=>{
+  if(e.target.dataset?.tab==='history') loadHistory();
+  if(e.target.dataset?.tab==='config') loadConfig();
+});
 
 // --- Recover state on page load ---
 (async()=>{

@@ -206,3 +206,32 @@ def _detect_tools(raw: dict) -> None:
         else:
             log.warning("clang-tidy not found — Tier 1 clang-tidy will be skipped")
             ct["enabled"] = False
+
+
+def apply_pattern_preset(raw: dict, preset: str, language: str) -> None:
+    """Override the patterns section based on a named preset.
+
+    Presets: strict (all), relaxed (HIGH+ only), security, performance.
+    """
+    from .findings import Severity
+    from .auto_config import _get_language_defaults
+
+    lang_defaults = _get_language_defaults(language)
+    all_patterns = lang_defaults.get("patterns", {})
+
+    if preset == "strict":
+        raw["patterns"] = all_patterns
+    elif preset == "relaxed":
+        filtered: dict = {}
+        for cat, pats in all_patterns.items():
+            high_pats = [p for p in pats
+                         if Severity.from_string(p.get("severity", "info")) <= Severity.HIGH]
+            if high_pats:
+                filtered[cat] = high_pats
+        raw["patterns"] = filtered
+    elif preset == "security":
+        raw["patterns"] = {k: v for k, v in all_patterns.items()
+                           if k in ("memory_safety", "security")}
+    elif preset == "performance":
+        raw["patterns"] = {k: v for k, v in all_patterns.items()
+                           if k in ("performance",)}

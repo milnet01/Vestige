@@ -67,6 +67,7 @@ class Finding:
             "title": self.title,
             "detail": self.detail,
             "pattern_name": self.pattern_name,
+            "dedup_key": self.dedup_key,
         }
 
 
@@ -111,9 +112,12 @@ class AuditData:
     deferred_markers: list[dict[str, Any]] = field(default_factory=list)
     deferred_by_subsystem: dict[str, int] = field(default_factory=dict)
     large_files: list[dict[str, Any]] = field(default_factory=list)
+    uniform_sync: dict[str, Any] | None = None
+    include_analysis: dict[str, Any] | None = None
+    complexity: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        d = {
             "loc_by_subsystem": self.loc_by_subsystem,
             "total_loc": self.total_loc,
             "file_count": self.file_count,
@@ -123,6 +127,13 @@ class AuditData:
             "deferred_markers_total": len(self.deferred_markers),
             "large_files": self.large_files,
         }
+        if self.uniform_sync:
+            d["uniform_sync"] = self.uniform_sync
+        if self.include_analysis:
+            d["include_analysis"] = self.include_analysis
+        if self.complexity:
+            d["complexity"] = self.complexity
+        return d
 
 
 @dataclass

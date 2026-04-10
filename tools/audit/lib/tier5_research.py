@@ -74,6 +74,14 @@ def run(config: Config, findings: list | None = None) -> list[ResearchResult]:
         if not result.cached:
             time.sleep(1.0)
 
+    # NVD API queries (if configured)
+    try:
+        from .tier5_nvd import run_nvd_queries
+        nvd_results = run_nvd_queries(research_config, cache_dir, cache_ttl)
+        results.extend(nvd_results)
+    except Exception as e:
+        log.warning("NVD queries failed: %s", e)
+
     cached_count = sum(1 for r in results if r.cached)
     log.info("Tier 5: %d results (%d cached, %d fresh)",
              len(results), cached_count, len(results) - cached_count)

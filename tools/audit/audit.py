@@ -103,6 +103,38 @@ def main() -> int:
         action="store_true",
         help="Auto-detect project settings and generate audit_config.yaml",
     )
+    parser.add_argument(
+        "--suppress-show",
+        action="store_true",
+        help="Print current suppressions from .audit_suppress and exit",
+    )
+    parser.add_argument(
+        "--suppress-add",
+        metavar="KEY",
+        default=None,
+        help="Add a dedup_key to .audit_suppress and exit",
+    )
+    parser.add_argument(
+        "--diff",
+        action="store_true",
+        help="Include differential report comparing against previous audit results",
+    )
+    parser.add_argument(
+        "--ci",
+        action="store_true",
+        help="CI mode: emit GitHub Actions annotations and set exit code by severity",
+    )
+    parser.add_argument(
+        "--patterns",
+        choices=["strict", "relaxed", "security", "performance"],
+        default=None,
+        help="Use a pattern preset instead of config patterns",
+    )
+    parser.add_argument(
+        "--html",
+        action="store_true",
+        help="Also generate a self-contained HTML report",
+    )
 
     args = parser.parse_args()
 
@@ -122,6 +154,28 @@ def main() -> int:
     logging.getLogger("httpcore").setLevel(logging.WARNING)
     logging.getLogger("primp").setLevel(logging.WARNING)
     logging.getLogger("duckduckgo_search").setLevel(logging.WARNING)
+
+    # --suppress-show: print current suppressions and exit
+    if args.suppress_show:
+        from lib.suppress import load_suppressions
+        # Determine root: use --project-root if given, else cwd
+        root = Path(args.project_root).resolve() if args.project_root else Path.cwd()
+        keys = load_suppressions(root)
+        if not keys:
+            print("No suppressions configured (no .audit_suppress file or it is empty).")
+        else:
+            print(f"{len(keys)} suppressed finding(s):")
+            for k in sorted(keys):
+                print(f"  {k}")
+        return 0
+
+    # --suppress-add: add a key and exit
+    if args.suppress_add:
+        from lib.suppress import save_suppression
+        root = Path(args.project_root).resolve() if args.project_root else Path.cwd()
+        save_suppression(root, args.suppress_add, annotation="added via --suppress-add")
+        print(f"Added suppression: {args.suppress_add}")
+        return 0
 
     # --init: auto-generate config and exit
     if args.init:
@@ -149,6 +203,11 @@ def main() -> int:
         config.raw["changes"]["base_ref"] = args.base_ref
     if args.no_research:
         config.raw["research"]["enabled"] = False
+
+    # --patterns preset: override patterns from config
+    if args.patterns:
+        from lib.config import apply_pattern_preset
+        apply_pattern_preset(config.raw, args.patterns, config.language)
 
     # --list-patterns: print patterns and exit
     if args.list_patterns:
@@ -182,12 +241,41 @@ def main() -> int:
     runner = AuditRunner(config, verbose=args.verbose)
     results = runner.run()
 
+    # Compute differential report if requested
+    diff = None
+    if args.diff:
+        from lib.diff_report import load_previous_results, compute_diff
+        report_dir = config.report_path.parent
+        current_stem = config.report_path.stem
+        previous = load_previous_results(report_dir, current_stem)
+        if previous is not None:
+            diff = compute_diff(previous, results.findings)
+            diff.previous_path = str(report_dir)
+            log.info("Diff: %d new, %d resolved, %d persistent",
+                     len(diff.new_findings), len(diff.resolved_findings),
+                     diff.persistent_count)
+        else:
+            log.info("No previous results found — skipping differential report")
+
     if args.json_output:
         # JSON output to stdout
-        print(json.dumps(results.to_dict(), indent=2))
+        output_data = results.to_dict()
+        if diff is not None:
+            output_data["diff"] = diff.to_dict()
+        print(json.dumps(output_data, indent=2))
+    elif args.ci:
+        # CI mode: emit annotations
+        from lib.ci_output import format_github_annotations, write_step_summary, get_exit_code
+        annotations = format_github_annotations(results.findings)
+        if annotations:
+            print(annotations)
+        write_step_summary(results.to_dict())
+        # Still generate the markdown report
+        runner.build_report(results, diff=diff)
+        return get_exit_code(results.findings)
     else:
         # Build markdown report
-        report = runner.build_report(results)
+        report = runner.build_report(results, diff=diff)
         log.info("Done. Report: %s", config.report_path)
 
     # Exit code
