@@ -3,15 +3,19 @@
 from __future__ import annotations
 
 import logging
+import threading
 import time
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Callable
 
 from .config import Config
 from .findings import AuditData, ChangeSummary, Finding, ResearchResult
 from .report import ReportBuilder
 
 log = logging.getLogger("audit")
+
+# Type alias for progress callbacks
+ProgressCallback = Callable[[str, dict[str, Any]], None]
 
 
 @dataclass
@@ -45,45 +49,56 @@ class AuditResults:
 class AuditRunner:
     """Orchestrates audit tiers and assembles results."""
 
-    def __init__(self, config: Config, verbose: bool = False):
+    def __init__(
+        self,
+        config: Config,
+        verbose: bool = False,
+        progress_callback: ProgressCallback | None = None,
+    ):
         self.config = config
         self.verbose = verbose
+        self._progress_cb = progress_callback
 
-    def run(self) -> AuditResults:
+    def _emit(self, event: str, **data: Any) -> None:
+        """Send a progress event if a callback is registered."""
+        if self._progress_cb:
+            self._progress_cb(event, data)
+
+    def run(self, cancel_event: threading.Event | None = None) -> AuditResults:
         """Run all enabled audit tiers."""
         results = AuditResults()
         tiers = self.config.enabled_tiers
         start = time.monotonic()
 
         log.info("Starting audit: %s (tiers: %s)", self.config.project_name, tiers)
+        self._emit("audit_start", project=self.config.project_name, tiers=tiers)
 
-        # Tier 1: Build & Static Analysis
-        if 1 in tiers:
-            results.tiers_run.append(1)
-            self._run_tier1(results)
+        tier_dispatch = {
+            1: ("Build & Static Analysis", self._run_tier1),
+            2: ("Pattern Scanning", self._run_tier2),
+            3: ("Changed Files", self._run_tier3),
+            4: ("Statistics", self._run_tier4),
+            5: ("Online Research", self._run_tier5),
+        }
 
-        # Tier 2: Pattern Scanning
-        if 2 in tiers:
-            results.tiers_run.append(2)
-            self._run_tier2(results)
+        for tier_num in [1, 2, 3, 4, 5]:
+            if tier_num not in tiers:
+                continue
+            if cancel_event and cancel_event.is_set():
+                self._emit("cancelled")
+                log.info("Audit cancelled by user")
+                break
 
-        # Tier 3: Changed File Analysis
-        if 3 in tiers:
-            results.tiers_run.append(3)
-            self._run_tier3(results)
-
-        # Tier 4: Statistics & Data Collection
-        if 4 in tiers:
-            results.tiers_run.append(4)
-            self._run_tier4(results)
-
-        # Tier 5: Online Research
-        if 5 in tiers:
-            results.tiers_run.append(5)
-            self._run_tier5(results)
+            name, handler = tier_dispatch[tier_num]
+            results.tiers_run.append(tier_num)
+            self._emit("tier_start", tier=tier_num, name=name)
+            handler(results)
+            self._emit("tier_end", tier=tier_num, findings_count=len(results.findings))
 
         results.duration = time.monotonic() - start
         log.info("Audit complete in %.1fs — %d findings", results.duration, len(results.findings))
+        self._emit("audit_end", duration=round(results.duration, 1),
+                   total_findings=len(results.findings))
 
         return results
 
@@ -91,21 +106,24 @@ class AuditRunner:
         """Run Tier 1: Build, tests, cppcheck, clang-tidy."""
         log.info("=== Tier 1: Build & Static Analysis ===")
 
-        # Build and tests
+        self._emit("step_start", tier=1, step="build")
         from . import tier1_build
         build_findings, build_summary = tier1_build.run(self.config)
         results.findings.extend(build_findings)
         results.tier1_summary = build_summary
+        self._emit("step_end", tier=1, step="build", findings=len(build_findings))
 
-        # cppcheck
+        self._emit("step_start", tier=1, step="cppcheck")
         from . import tier1_cppcheck
         cppcheck_findings = tier1_cppcheck.run(self.config)
         results.findings.extend(cppcheck_findings)
+        self._emit("step_end", tier=1, step="cppcheck", findings=len(cppcheck_findings))
 
-        # clang-tidy
+        self._emit("step_start", tier=1, step="clang-tidy")
         from . import tier1_clangtidy
         clangtidy_findings = tier1_clangtidy.run(self.config)
         results.findings.extend(clangtidy_findings)
+        self._emit("step_end", tier=1, step="clang-tidy", findings=len(clangtidy_findings))
 
     def _run_tier2(self, results: AuditResults) -> None:
         """Run Tier 2: Pattern scanning."""

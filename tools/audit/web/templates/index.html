@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Audit Tool</title>
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+<style>
+:root{
+  --bg:#0d1117;--surface:#161b22;--surface2:#1c2129;--border:#30363d;
+  --text:#e6edf3;--text2:#8b949e;--accent:#58a6ff;
+  --critical:#f85149;--high:#d29922;--medium:#e3b341;--low:#58a6ff;--info:#8b949e;
+  --ok:#3fb950;--radius:6px;--font:system-ui,-apple-system,sans-serif;
+  --mono:'JetBrains Mono','Fira Code','Cascadia Code',monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:var(--font);background:var(--bg);color:var(--text);font-size:14px;min-height:100vh;display:flex;flex-direction:column}
+header{background:var(--surface);border-bottom:1px solid var(--border);padding:12px 24px;display:flex;align-items:center;gap:16px}
+header h1{font-size:18px;font-weight:600;flex:1}
+.badge{padding:3px 10px;border-radius:12px;font-size:12px;font-weight:600;text-transform:uppercase}
+.badge-idle{background:#30363d;color:var(--text2)}
+.badge-running{background:#1f3a2d;color:var(--ok);animation:pulse 2s infinite}
+.badge-done{background:#1a3024;color:var(--ok)}
+.badge-error{background:#3d1418;color:var(--critical)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}
+main{flex:1;display:flex;flex-direction:column;max-width:1400px;width:100%;margin:0 auto;padding:16px 24px;gap:16px}
+section{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius)}
+.section-title{font-size:13px;font-weight:600;text-transform:uppercase;color:var(--text2);letter-spacing:.5px;padding:12px 16px;border-bottom:1px solid var(--border)}
+
+/* Config panel */
+#config-panel{padding:16px}
+#config-form{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.form-group{display:flex;flex-direction:column;gap:4px}
+.form-group label{font-size:12px;color:var(--text2);font-weight:500}
+.form-group input{background:var(--bg);border:1px solid var(--border);color:var(--text);padding:8px 10px;border-radius:4px;font-family:var(--mono);font-size:13px}
+.form-group input:focus{outline:none;border-color:var(--accent)}
+.form-row{grid-column:1/-1;display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+.tier-checks{display:flex;gap:12px;flex-wrap:wrap}
+.tier-checks label{display:flex;align-items:center;gap:5px;cursor:pointer;font-size:13px;padding:4px 8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;user-select:none}
+.tier-checks label:has(input:checked){border-color:var(--accent);background:#0d1f3c}
+.tier-checks input[type=checkbox]{accent-color:var(--accent)}
+.actions{display:flex;gap:8px;margin-left:auto}
+button{font-family:var(--font);font-size:13px;padding:8px 16px;border-radius:4px;border:1px solid var(--border);cursor:pointer;font-weight:500;transition:all .15s}
+.btn-primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+.btn-primary:hover{opacity:.9}
+.btn-primary:disabled{opacity:.4;cursor:not-allowed}
+.btn-danger{background:transparent;color:var(--critical);border-color:var(--critical)}
+.btn-danger:hover{background:#3d1418}
+.btn-danger:disabled{opacity:.3;cursor:not-allowed}
+.btn-secondary{background:transparent;color:var(--text2);border-color:var(--border)}
+.btn-secondary:hover{color:var(--text);background:var(--surface2)}
+
+/* Progress */
+#progress-section{padding:16px;display:none}
+.tier-row{display:flex;align-items:center;gap:12px;padding:6px 0}
+.tier-label{width:200px;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.progress-bar{flex:1;height:6px;background:var(--bg);border-radius:3px;overflow:hidden}
+.progress-fill{height:100%;border-radius:3px;transition:width .5s ease;width:0}
+.progress-fill.active{background:var(--accent);animation:barPulse 1.5s infinite}
+.progress-fill.done{background:var(--ok);width:100%!important}
+.progress-fill.error{background:var(--critical)}
+@keyframes barPulse{0%,100%{opacity:1}50%{opacity:.6}}
+.tier-status{width:80px;font-size:12px;color:var(--text2);text-align:right}
+.tier-step{font-size:11px;color:var(--text2);margin-left:212px;padding:2px 0}
+
+/* Results tabs */
+#results-section{display:none;overflow:hidden}
+.tab-nav{display:flex;border-bottom:1px solid var(--border);background:var(--surface2)}
+.tab-btn{padding:10px 20px;background:none;border:none;color:var(--text2);cursor:pointer;font-size:13px;font-weight:500;border-bottom:2px solid transparent;transition:all .15s}
+.tab-btn:hover{color:var(--text)}
+.tab-btn.active{color:var(--accent);border-bottom-color:var(--accent)}
+.tab-content{display:none;padding:16px;max-height:500px;overflow:auto}
+.tab-content.active{display:block}
+
+/* Summary cards */
+.summary-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:16px}
+.card{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:14px;text-align:center}
+.card .value{font-size:28px;font-weight:700;line-height:1.2}
+.card .label{font-size:11px;color:var(--text2);text-transform:uppercase;margin-top:4px}
+.card.critical .value{color:var(--critical)}
+.card.high .value{color:var(--high)}
+.card.medium .value{color:var(--medium)}
+.card.low .value{color:var(--low)}
+.card.ok .value{color:var(--ok)}
+
+/* Findings table */
+.filter-bar{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+.filter-bar select,.filter-bar input{background:var(--bg);border:1px solid var(--border);color:var(--text);padding:6px 8px;border-radius:4px;font-size:12px}
+.filter-bar input{flex:1;min-width:200px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border);color:var(--text2);font-weight:600;cursor:pointer;user-select:none;white-space:nowrap;font-size:12px}
+th:hover{color:var(--text)}
+th.sorted::after{content:" \u25b2";font-size:10px}
+th.sorted.desc::after{content:" \u25bc"}
+td{padding:6px 10px;border-bottom:1px solid #21262d;vertical-align:top}
+tr:hover td{background:var(--surface2)}
+.sev-badge{display:inline-block;padding:1px 6px;border-radius:3px;font-size:11px;font-weight:600;text-transform:uppercase}
+.sev-critical{background:#3d1418;color:var(--critical)}
+.sev-high{background:#3d2e00;color:var(--high)}
+.sev-medium{background:#3d3500;color:var(--medium)}
+.sev-low{background:#0d1f3c;color:var(--low)}
+.sev-info{background:#21262d;color:var(--info)}
+td.file{font-family:var(--mono);font-size:12px;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* Changes & stats */
+.subsystem-badge{display:inline-block;padding:2px 8px;background:var(--bg);border:1px solid var(--border);border-radius:12px;font-size:11px;margin:2px}
+.stat-section{margin-bottom:16px}
+.stat-section h4{font-size:13px;color:var(--text2);margin-bottom:8px}
+.bar-chart{display:flex;flex-direction:column;gap:4px}
+.bar-row{display:flex;align-items:center;gap:8px}
+.bar-label{width:120px;font-size:12px;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bar-track{flex:1;height:14px;background:var(--bg);border-radius:2px;overflow:hidden}
+.bar-fill{height:100%;background:var(--accent);border-radius:2px;min-width:2px}
+.bar-value{width:60px;font-size:12px;color:var(--text2)}
+
+/* Research */
+.research-card{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:12px;margin-bottom:10px}
+.research-card h4{font-size:13px;margin-bottom:8px}
+.research-result{margin-bottom:8px;padding-left:12px;border-left:2px solid var(--border)}
+.research-result a{color:var(--accent);font-size:12px;text-decoration:none}
+.research-result a:hover{text-decoration:underline}
+.research-result .snippet{font-size:12px;color:var(--text2);margin-top:2px}
+
+/* Log viewer */
+#log-section{margin-top:auto}
+.log-header{display:flex;align-items:center;gap:8px;padding:8px 16px;border-bottom:1px solid var(--border)}
+.log-header span{font-size:12px;font-weight:600;text-transform:uppercase;color:var(--text2);flex:1}
+#log-output{height:180px;overflow-y:auto;padding:8px 12px;font-family:var(--mono);font-size:12px;line-height:1.6;background:var(--bg)}
+.log-line{white-space:pre-wrap;word-break:break-all}
+.log-info{color:var(--text2)}
+.log-warning{color:var(--medium)}
+.log-error{color:var(--critical)}
+.log-debug{color:#484f58}
+</style>
+</head>
+<body>
+<header>
+  <svg width="24" height="24" viewBox="0 0 100 100"><circle cx="50" cy="50" r="45" fill="none" stroke="#58a6ff" stroke-width="6"/><path d="M30 52 L45 67 L72 35" fill="none" stroke="#3fb950" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <h1>Audit Tool</h1>
+  <span id="status-badge" class="badge badge-idle">Idle</span>
+</header>
+
+<main>
+  <!-- Config Panel -->
+  <section id="config-panel">
+    <form id="config-form">
+      <div class="form-group">
+        <label>Project Root</label>
+        <input type="text" id="project-root" value="{{ default_root }}">
+      </div>
+      <div class="form-group">
+        <label>Config File</label>
+        <input type="text" id="config-path" value="{{ default_config }}">
+      </div>
+      <div class="form-group">
+        <label>Base Ref (Tier 3)</label>
+        <input type="text" id="base-ref" value="HEAD~1" placeholder="HEAD~1, v1.0, tag...">
+      </div>
+      <div class="form-group">
+        <label>Options</label>
+        <div style="display:flex;gap:8px;align-items:center;padding-top:4px">
+          <label style="font-size:13px;display:flex;align-items:center;gap:4px;cursor:pointer">
+            <input type="checkbox" id="verbose-check"> Verbose
+          </label>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="tier-checks">
+          <label><input type="checkbox" name="tier" value="1" checked> 1: Build</label>
+          <label><input type="checkbox" name="tier" value="2" checked> 2: Patterns</label>
+          <label><input type="checkbox" name="tier" value="3" checked> 3: Changes</label>
+          <label><input type="checkbox" name="tier" value="4" checked> 4: Stats</label>
+          <label><input type="checkbox" name="tier" value="5" checked> 5: Research</label>
+        </div>
+        <div class="actions">
+          <button type="button" id="btn-init" class="btn-secondary">Init Config</button>
+          <button type="button" id="btn-stop" class="btn-danger" disabled>Stop</button>
+          <button type="submit" id="btn-run" class="btn-primary">Run Audit</button>
+        </div>
+      </div>
+    </form>
+  </section>
+
+  <!-- Progress -->
+  <section id="progress-section">
+    <div id="tier-progress"></div>
+  </section>
+
+  <!-- Results -->
+  <section id="results-section">
+    <div class="tab-nav">
+      <button class="tab-btn active" data-tab="summary">Summary</button>
+      <button class="tab-btn" data-tab="findings">Findings</button>
+      <button class="tab-btn" data-tab="changes">Changes</button>
+      <button class="tab-btn" data-tab="stats">Stats</button>
+      <button class="tab-btn" data-tab="research">Research</button>
+    </div>
+    <div id="tab-summary" class="tab-content active"></div>
+    <div id="tab-findings" class="tab-content"></div>
+    <div id="tab-changes" class="tab-content"></div>
+    <div id="tab-stats" class="tab-content"></div>
+    <div id="tab-research" class="tab-content"></div>
+  </section>
+
+  <!-- Log -->
+  <section id="log-section">
+    <div class="log-header">
+      <span>Live Log</span>
+      <button id="btn-report" class="btn-secondary" disabled style="font-size:11px;padding:4px 10px">View Report</button>
+      <button id="btn-clear-log" class="btn-secondary" style="font-size:11px;padding:4px 10px">Clear</button>
+    </div>
+    <div id="log-output"></div>
+  </section>
+</main>
+
+<script>
+const $ = s => document.querySelector(s);
+const $$ = s => document.querySelectorAll(s);
+const TIER_NAMES = {1:'Build & Static Analysis',2:'Pattern Scanning',3:'Changed Files',4:'Statistics',5:'Online Research'};
+
+let state = {running:false, results:null, eventSource:null, findings:[], sortCol:'severity', sortDir:'asc', autoScroll:true};
+
+// --- Tab switching ---
+$$('.tab-btn').forEach(btn => btn.addEventListener('click', () => {
+  $$('.tab-btn').forEach(b => b.classList.remove('active'));
+  $$('.tab-content').forEach(c => c.classList.remove('active'));
+  btn.classList.add('active');
+  $(`#tab-${btn.dataset.tab}`).classList.add('active');
+}));
+
+// --- Run ---
+$('#config-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const tiers = [...$$('input[name=tier]:checked')].map(c => +c.value);
+  if(!tiers.length) return alert('Select at least one tier');
+
+  const resp = await fetch('/api/run', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({
+      project_root: $('#project-root').value,
+      config_path: $('#config-path').value,
+      tiers, base_ref: $('#base-ref').value,
+      verbose: $('#verbose-check').checked,
+    })
+  });
+  const data = await resp.json();
+  if(data.error) return alert(data.error);
+
+  setRunning(true, tiers);
+  connectSSE();
+});
+
+// --- Stop ---
+$('#btn-stop').addEventListener('click', async () => {
+  await fetch('/api/stop', {method:'POST'});
+  $('#btn-stop').disabled = true;
+});
+
+// --- Init ---
+$('#btn-init').addEventListener('click', async () => {
+  const root = $('#project-root').value;
+  const resp = await fetch('/api/init', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({project_root: root})
+  });
+  const data = await resp.json();
+  if(data.error) alert('Init failed: '+data.error);
+  else { alert('Config generated: '+data.config_path); $('#config-path').value = data.config_path; }
+});
+
+// --- View Report ---
+$('#btn-report').addEventListener('click', () => window.open('/api/report','_blank'));
+
+// --- Clear Log ---
+$('#btn-clear-log').addEventListener('click', () => { $('#log-output').innerHTML = ''; });
+
+// --- Log auto-scroll ---
+$('#log-output').addEventListener('scroll', function(){
+  state.autoScroll = this.scrollTop + this.clientHeight >= this.scrollHeight - 20;
+});
+
+function setRunning(running, tiers){
+  state.running = running;
+  $('#btn-run').disabled = running;
+  $('#btn-stop').disabled = !running;
+  const badge = $('#status-badge');
+  if(running){ badge.textContent='Running'; badge.className='badge badge-running'; }
+  else { badge.textContent='Idle'; badge.className='badge badge-idle'; }
+
+  if(running){
+    $('#progress-section').style.display = 'block';
+    let html = '';
+    (tiers||[1,2,3,4,5]).forEach(t => {
+      html += `<div class="tier-row" data-tier="${t}">
+        <span class="tier-label">Tier ${t}: ${TIER_NAMES[t]}</span>
+        <div class="progress-bar"><div class="progress-fill" id="pf-${t}"></div></div>
+        <span class="tier-status" id="ts-${t}">pending</span>
+      </div><div class="tier-step" id="step-${t}"></div>`;
+    });
+    $('#tier-progress').innerHTML = html;
+  }
+}
+
+// --- SSE ---
+function connectSSE(){
+  if(state.eventSource) state.eventSource.close();
+  state.eventSource = new EventSource('/api/events');
+  state.eventSource.onmessage = e => handleEvent(JSON.parse(e.data));
+  state.eventSource.onerror = () => {};
+}
+
+function handleEvent(ev){
+  switch(ev.type){
+    case 'tier_start': onTierStart(ev); break;
+    case 'step_start': onStepStart(ev); break;
+    case 'step_end': onStepEnd(ev); break;
+    case 'tier_end': onTierEnd(ev); break;
+    case 'log': appendLog(ev); break;
+    case 'complete': onComplete(ev); break;
+    case 'error': onError(ev); break;
+    case 'cancelled': onCancelled(ev); break;
+  }
+}
+
+function onTierStart(ev){
+  const fill = $(`#pf-${ev.tier}`);
+  const status = $(`#ts-${ev.tier}`);
+  if(fill){ fill.classList.add('active'); fill.style.width='30%'; }
+  if(status) status.textContent = 'running';
+}
+function onStepStart(ev){
+  const el = $(`#step-${ev.tier}`);
+  if(el) el.textContent = `  \u25b8 ${ev.step}...`;
+  const fill = $(`#pf-${ev.tier}`);
+  if(fill){
+    const pcts = {build:'20%',cppcheck:'50%','clang-tidy':'75%'};
+    fill.style.width = pcts[ev.step]||'50%';
+  }
+}
+function onStepEnd(ev){
+  const el = $(`#step-${ev.tier}`);
+  if(el) el.textContent = `  \u2713 ${ev.step} (${ev.findings} findings)`;
+}
+function onTierEnd(ev){
+  const fill = $(`#pf-${ev.tier}`);
+  const status = $(`#ts-${ev.tier}`);
+  const step = $(`#step-${ev.tier}`);
+  if(fill){ fill.classList.remove('active'); fill.classList.add('done'); }
+  if(status) status.textContent = 'done';
+  if(step) step.textContent = '';
+}
+function onComplete(ev){
+  state.results = ev.results;
+  state.findings = ev.results.findings||[];
+  setRunning(false);
+  const badge = $('#status-badge');
+  badge.textContent='Done'; badge.className='badge badge-done';
+  $('#btn-report').disabled = false;
+  if(state.eventSource) state.eventSource.close();
+  renderResults(ev.results);
+  $('#results-section').style.display = 'block';
+}
+function onError(ev){
+  setRunning(false);
+  const badge = $('#status-badge');
+  badge.textContent='Error'; badge.className='badge badge-error';
+  if(state.eventSource) state.eventSource.close();
+  appendLog({level:'error',message:'ERROR: '+ev.message});
+}
+function onCancelled(){
+  setRunning(false);
+  const badge = $('#status-badge');
+  badge.textContent='Cancelled'; badge.className='badge badge-idle';
+  if(state.eventSource) state.eventSource.close();
+  appendLog({level:'warning',message:'Audit cancelled by user.'});
+}
+
+// --- Log ---
+function appendLog(ev){
+  const el = $('#log-output');
+  const div = document.createElement('div');
+  div.className = `log-line log-${ev.level||'info'}`;
+  div.textContent = ev.message||'';
+  el.appendChild(div);
+  if(state.autoScroll) el.scrollTop = el.scrollHeight;
+}
+
+// --- Results rendering ---
+function renderResults(r){
+  renderSummary(r);
+  renderFindings(r.findings||[]);
+  renderChanges(r.change_summary);
+  renderStats(r.audit_data);
+  renderResearch(r.research||[]);
+}
+
+function renderSummary(r){
+  const f = r.findings||[];
+  const counts = {critical:0,high:0,medium:0,low:0,info:0};
+  f.forEach(x => counts[x.severity]=(counts[x.severity]||0)+1);
+  const t1 = r.tier1_summary||{};
+  const build = t1.build||{};
+  const tests = t1.tests||{};
+
+  $('#tab-summary').innerHTML = `
+    <div class="summary-cards">
+      <div class="card critical"><div class="value">${counts.critical}</div><div class="label">Critical</div></div>
+      <div class="card high"><div class="value">${counts.high}</div><div class="label">High</div></div>
+      <div class="card medium"><div class="value">${counts.medium}</div><div class="label">Medium</div></div>
+      <div class="card low"><div class="value">${counts.low}</div><div class="label">Low</div></div>
+      <div class="card"><div class="value">${f.length}</div><div class="label">Total</div></div>
+      <div class="card ok"><div class="value">${tests.passed||0}</div><div class="label">Tests Passed</div></div>
+      <div class="card ${tests.failed?'critical':'ok'}"><div class="value">${tests.failed||0}</div><div class="label">Tests Failed</div></div>
+      <div class="card"><div class="value">${r.duration||0}s</div><div class="label">Duration</div></div>
+    </div>
+    <p style="color:var(--text2);font-size:13px">Build: ${build.ok?'\u2705 Clean':'\u274c Failed'} &nbsp;|&nbsp; LOC: ${(r.audit_data?.total_loc||0).toLocaleString()} &nbsp;|&nbsp; Files: ${r.audit_data?.file_count||'?'}</p>`;
+}
+
+function renderFindings(findings){
+  state.findings = findings;
+  const html = `
+    <div class="filter-bar">
+      <select id="sev-filter"><option value="all">All Severities</option>
+        <option value="critical">Critical</option><option value="high">High</option>
+        <option value="medium">Medium</option><option value="low">Low</option><option value="info">Info</option></select>
+      <select id="cat-filter"><option value="all">All Categories</option></select>
+      <select id="tier-filter"><option value="all">All Tiers</option>
+        <option value="1">Tier 1</option><option value="2">Tier 2</option>
+        <option value="3">Tier 3</option><option value="4">Tier 4</option><option value="5">Tier 5</option></select>
+      <input type="search" id="find-search" placeholder="Search findings...">
+    </div>
+    <div style="max-height:400px;overflow:auto">
+      <table><thead><tr>
+        <th data-col="severity" style="width:80px">Severity</th>
+        <th data-col="file">File</th>
+        <th data-col="line" style="width:50px">Line</th>
+        <th data-col="category" style="width:100px">Category</th>
+        <th data-col="title">Issue</th>
+        <th data-col="source_tier" style="width:40px">Tier</th>
+      </tr></thead><tbody id="findings-body"></tbody></table>
+    </div>
+    <div id="findings-count" style="padding:8px 0;font-size:12px;color:var(--text2)"></div>`;
+  $('#tab-findings').innerHTML = html;
+
+  // Populate category filter
+  const cats = [...new Set(findings.map(f=>f.category))].sort();
+  const catSel = $('#cat-filter');
+  cats.forEach(c => { const o = document.createElement('option'); o.value=c; o.textContent=c; catSel.appendChild(o); });
+
+  // Bind events
+  $$('#tab-findings th[data-col]').forEach(th => th.addEventListener('click', ()=>sortFindings(th.dataset.col)));
+  ['#sev-filter','#cat-filter','#tier-filter'].forEach(s => $(s).addEventListener('change', filterFindings));
+  $('#find-search').addEventListener('input', filterFindings);
+
+  filterFindings();
+}
+
+const SEV_ORDER = {critical:0,high:1,medium:2,low:3,info:4};
+
+function filterFindings(){
+  const sev = $('#sev-filter')?.value||'all';
+  const cat = $('#cat-filter')?.value||'all';
+  const tier = $('#tier-filter')?.value||'all';
+  const q = ($('#find-search')?.value||'').toLowerCase();
+
+  let rows = state.findings.filter(f => {
+    if(sev!=='all' && f.severity!==sev) return false;
+    if(cat!=='all' && f.category!==cat) return false;
+    if(tier!=='all' && f.source_tier!==+tier) return false;
+    if(q && !f.file.toLowerCase().includes(q) && !f.title.toLowerCase().includes(q)) return false;
+    return true;
+  });
+
+  rows.sort((a,b)=>{
+    let va=a[state.sortCol], vb=b[state.sortCol];
+    if(state.sortCol==='severity'){va=SEV_ORDER[va]??9;vb=SEV_ORDER[vb]??9;}
+    if(state.sortCol==='line'){va=va||0;vb=vb||0;}
+    if(va<vb) return state.sortDir==='asc'?-1:1;
+    if(va>vb) return state.sortDir==='asc'?1:-1;
+    return 0;
+  });
+
+  const body = $('#findings-body');
+  // Cap at 500 rows for performance
+  const shown = rows.slice(0,500);
+  body.innerHTML = shown.map(f=>`<tr>
+    <td><span class="sev-badge sev-${f.severity}">${f.severity}</span></td>
+    <td class="file" title="${esc(f.file)}">${esc(f.file)}</td>
+    <td>${f.line||''}</td>
+    <td>${esc(f.category)}</td>
+    <td title="${esc(f.title)}">${esc(f.title)}</td>
+    <td>${f.source_tier}</td>
+  </tr>`).join('');
+
+  const count = $('#findings-count');
+  if(count) count.textContent = `Showing ${shown.length} of ${rows.length} findings (${state.findings.length} total)`;
+
+  $$('#tab-findings th[data-col]').forEach(th => {
+    th.classList.toggle('sorted', th.dataset.col===state.sortCol);
+    th.classList.toggle('desc', th.dataset.col===state.sortCol && state.sortDir==='desc');
+  });
+}
+
+function sortFindings(col){
+  if(state.sortCol===col) state.sortDir = state.sortDir==='asc'?'desc':'asc';
+  else { state.sortCol=col; state.sortDir='asc'; }
+  filterFindings();
+}
+
+function renderChanges(cs){
+  if(!cs||!cs.changed_files?.length){ $('#tab-changes').innerHTML='<p style="color:var(--text2)">No change data.</p>'; return; }
+  const subs = (cs.subsystems_touched||[]).map(s=>`<span class="subsystem-badge">${esc(s)}</span>`).join('');
+  const rows = cs.changed_files.map(f=>`<tr>
+    <td class="file">${esc(f.file)}</td><td>${f.status}</td>
+    <td style="color:var(--ok)">+${f.added||0}</td><td style="color:var(--critical)">-${f.removed||0}</td>
+    <td>${(f.changed_functions||[]).join(', ')}</td>
+  </tr>`).join('');
+  $('#tab-changes').innerHTML = `
+    <p style="margin-bottom:12px">Subsystems: ${subs} &nbsp; Delta: <strong>+${cs.total_delta?.['+']||0}/-${cs.total_delta?.['-']||0}</strong></p>
+    <table><thead><tr><th>File</th><th>Status</th><th>Added</th><th>Removed</th><th>Functions</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+function renderStats(ad){
+  if(!ad){ $('#tab-stats').innerHTML='<p style="color:var(--text2)">No stats data.</p>'; return; }
+  const loc = ad.loc_by_subsystem||{};
+  const maxLoc = Math.max(...Object.values(loc),1);
+  const bars = Object.entries(loc).map(([k,v])=>`
+    <div class="bar-row"><span class="bar-label">${esc(k)}</span>
+    <div class="bar-track"><div class="bar-fill" style="width:${(v/maxLoc*100).toFixed(1)}%"></div></div>
+    <span class="bar-value">${v.toLocaleString()}</span></div>`).join('');
+
+  let gpuHtml = '';
+  const gpu = ad.gpu_resource_classes||[];
+  const incomplete = gpu.filter(c=>c.status!=='OK');
+  if(incomplete.length){
+    gpuHtml = `<div class="stat-section"><h4>Rule of Five Issues (${incomplete.length})</h4><table><thead><tr><th>Class</th><th>File</th><th>Move Ctor</th><th>Move Assign</th></tr></thead><tbody>` +
+      incomplete.map(c=>`<tr><td>${c.class}</td><td class="file">${c.file}</td><td>${c.move_ctor?'\u2705':'\u274c'}</td><td>${c.move_assign?'\u2705':'\u274c'}</td></tr>`).join('') +
+      '</tbody></table></div>';
+  } else if(gpu.length) gpuHtml = `<p style="color:var(--ok);margin-bottom:12px">\u2705 All ${gpu.length} GPU resource classes pass Rule of Five</p>`;
+
+  let evHtml = '';
+  const evLeaks = (ad.event_lifecycle||[]).filter(e=>e.status!=='OK');
+  if(evLeaks.length){
+    evHtml = `<div class="stat-section"><h4>Event Lifecycle Issues (${evLeaks.length})</h4><ul style="padding-left:20px">` +
+      evLeaks.map(e=>`<li><code>${e.file}</code>: ${e.subscribes} subs, ${e.unsubscribes} unsubs</li>`).join('') + '</ul></div>';
+  }
+
+  const markers = ad.deferred_markers_by_subsystem||{};
+  let markerHtml = '';
+  if(Object.keys(markers).length){
+    markerHtml = `<div class="stat-section"><h4>Deferred Markers (${ad.deferred_markers_total||0})</h4>` +
+      Object.entries(markers).map(([k,v])=>`<span class="subsystem-badge">${k}: ${v}</span>`).join(' ') + '</div>';
+  }
+
+  $('#tab-stats').innerHTML = `
+    <div class="stat-section"><h4>LOC by Subsystem (${ad.total_loc?.toLocaleString()||'?'} total, ${ad.file_count||'?'} files)</h4>
+    <div class="bar-chart">${bars}</div></div>
+    ${gpuHtml}${evHtml}${markerHtml}`;
+}
+
+function renderResearch(research){
+  if(!research?.length){ $('#tab-research').innerHTML='<p style="color:var(--text2)">No research data.</p>'; return; }
+  const html = research.map(r=>{
+    if(r.error) return `<div class="research-card"><h4>${esc(r.query)}</h4><p style="color:var(--critical)">${esc(r.error)}</p></div>`;
+    if(!r.results?.length) return `<div class="research-card"><h4>${esc(r.query)}</h4><p style="color:var(--text2)">No results.</p></div>`;
+    const items = r.results.map(i=>`<div class="research-result">
+      <strong>${esc(i.title)}</strong><br>
+      <a href="${esc(i.url)}" target="_blank">${esc(i.url)}</a>
+      ${i.snippet?`<div class="snippet">${esc(i.snippet)}</div>`:''}
+    </div>`).join('');
+    return `<div class="research-card"><h4>${esc(r.query)}${r.cached?' <span style="color:var(--text2)">(cached)</span>':''}</h4>${items}</div>`;
+  }).join('');
+  $('#tab-research').innerHTML = html;
+}
+
+function esc(s){ if(!s) return ''; const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+
+// --- Recover state on page load ---
+(async()=>{
+  const resp = await fetch('/api/status');
+  const s = await resp.json();
+  if(s.running) { setRunning(true); connectSSE(); }
+  else if(s.results) { state.results=s.results; state.findings=s.results.findings||[];
+    const badge=$('#status-badge'); badge.textContent='Done'; badge.className='badge badge-done';
+    $('#btn-report').disabled=false; renderResults(s.results); $('#results-section').style.display='block'; }
+})();
+</script>
+</body>
+</html>
