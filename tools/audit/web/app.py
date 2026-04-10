@@ -17,12 +17,15 @@ sys.path.insert(0, str(AUDIT_ROOT))
 
 from web.audit_bridge import AuditSession
 
+VERSION = "1.3.0"
+
 app = Flask(__name__, template_folder="templates", static_folder="static")
 session = AuditSession()
 
 # Default project root (can be overridden via the UI)
 DEFAULT_ROOT = str(AUDIT_ROOT.parent.parent)  # /mnt/Storage/Scripts/Linux/3D_Engine
 DEFAULT_CONFIG = str(AUDIT_ROOT / "audit_config.yaml")
+CHANGELOG_PATH = AUDIT_ROOT / "CHANGELOG.md"
 
 
 @app.route("/")
@@ -32,6 +35,7 @@ def index():
         "index.html",
         default_root=DEFAULT_ROOT,
         default_config=DEFAULT_CONFIG,
+        version=VERSION,
     )
 
 
@@ -197,6 +201,15 @@ def api_report_file(filename: str):
     if not path.exists() or not str(path.resolve()).startswith(str(report_dir.resolve())):
         return jsonify({"error": "Not found"}), 404
     return Response(path.read_text(), mimetype="text/plain")
+
+
+@app.route("/api/version")
+def api_version():
+    """Return version and changelog."""
+    changelog = ""
+    if CHANGELOG_PATH.exists():
+        changelog = CHANGELOG_PATH.read_text()
+    return jsonify({"version": VERSION, "changelog": changelog})
 
 
 if __name__ == "__main__":
