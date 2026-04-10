@@ -503,6 +503,7 @@ To add support for a new language:
    - Provide an example config snippet
 
 3. **No changes needed** to `runner.py`, `report.py`, `tier2_patterns.py`, or any tier module — they are language-agnostic.
+4. **Update `CHANGELOG.md`** with an Added entry and bump `VERSION`.
 
 ### 9.2 Adding a New Tier
 
@@ -516,7 +517,8 @@ To add a new tier (e.g., Tier 6: Complexity Analysis):
 4. Add tier checkbox to `web/templates/index.html`
 5. Update `TIER_NAMES` dict in the frontend JavaScript
 6. Add tests in `tests/test_tier6_complexity.py`
-7. Update `README.md` and this standards document
+7. Update `CHANGELOG.md` with an Added entry and bump `VERSION`
+8. Update `README.md` and this standards document
 
 ### 9.3 Adding a New Static Analysis Tool
 
@@ -532,6 +534,7 @@ To add a new tool to Tier 1 (e.g., `clangtidy` → `clanganalyzer`):
 3. Add config section under `static_analysis:` in `audit_config.yaml`
 4. Add tool to auto-detection in `config.py:_detect_tools()`
 5. Update Tier 1 step percentages in frontend `T1_STEPS`
+6. Update `CHANGELOG.md` with an Added entry and bump `VERSION`
 
 ### 9.4 Adding New Report Sections
 
@@ -541,10 +544,70 @@ To add a new section to the report:
 2. Call it from `build()` gated on the relevant tier
 3. Follow the compactness rules: tables for listings, JSON only for structured data, count omitted items
 4. Verify the overall report stays under the 5,000 token target
+5. Update `CHANGELOG.md` with an Added entry and bump `VERSION`
 
 ---
 
-## 10. Release Checklist
+## 10. Versioning & Changelog
+
+### 10.1 Version Numbering
+
+Follow [Semantic Versioning](https://semver.org/) — `MAJOR.MINOR.PATCH`:
+
+| Increment | When |
+|-----------|------|
+| **MAJOR** | Breaking changes to CLI flags, config schema, API endpoints, or report format |
+| **MINOR** | New features, new tiers, new analysis modules, new CLI flags, new API endpoints |
+| **PATCH** | Bug fixes, false positive corrections, pattern refinements, documentation updates |
+
+The version is stored in `web/app.py:VERSION` and displayed in the web UI header.
+
+### 10.2 Changelog Rules
+
+**`CHANGELOG.md` must be updated in the same commit as the code change.** This is mandatory, not optional.
+
+Update the changelog for:
+- Every new feature (Added)
+- Every bug fix (Fixed)
+- Every behavior change (Changed)
+- Every removal (Removed)
+- Every deprecation (Deprecated)
+- Every security fix (Security)
+
+### 10.3 Changelog Format
+
+Follow [Keep a Changelog](https://keepachangelog.com/) format:
+
+```markdown
+## [X.Y.Z] - YYYY-MM-DD
+
+### Added
+- **Feature name**: one-line description of what it does
+
+### Fixed
+- **Bug description**: what was wrong and what the fix does
+
+### Changed
+- **What changed**: old behavior → new behavior
+```
+
+Rules:
+- Newest version at the top of the file
+- Each entry starts with `**Bold name**:` followed by a description
+- Group entries by type (Added, Fixed, Changed, Removed, Deprecated, Security)
+- Include the date in ISO format (`YYYY-MM-DD`)
+- Every entry should be understandable without reading the code
+
+### 10.4 When to Bump the Version
+
+- **Bump `VERSION` in `web/app.py`** in the same commit as the changelog update
+- **Update the version in `README.md`** header (`# Audit Tool vX.Y.Z`)
+- Multiple changes in one session can share a single version bump (group them)
+- Patch fixes within the same day can amend the current version entry rather than creating a new one
+
+---
+
+## 11. Release Checklist
 
 Before any release or significant update:
 
@@ -561,7 +624,9 @@ Before any release or significant update:
 - [ ] All public functions have docstrings
 - [ ] All functions have type annotations
 - [ ] No bare `except:` clauses
-- [ ] `README.md` is up to date
+- [ ] `CHANGELOG.md` is up to date with all changes in this release
+- [ ] `VERSION` in `web/app.py` matches the latest changelog entry
+- [ ] `README.md` version header matches and documents all features
 - [ ] `AUDIT_TOOL_STANDARDS.md` is up to date
 - [ ] `.gitignore` includes `.audit_cache/`, `__pycache__/`, generated reports
 
