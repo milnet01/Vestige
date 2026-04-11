@@ -97,6 +97,13 @@ class AuditRunner:
             self._run_tier5(results)
             self._emit("tier_end", tier=5, findings_count=len(results.findings))
 
+        # Apply severity overrides before suppression
+        from .findings import apply_severity_overrides
+        severity_overrides = self.config.get("severity_overrides", default=[])
+        if severity_overrides:
+            results.findings = apply_severity_overrides(results.findings, severity_overrides)
+            log.info("Applied %d severity override rules", len(severity_overrides))
+
         # Apply finding suppressions before reporting
         from .suppress import load_suppressions, filter_suppressed
         suppressed = load_suppressions(self.config.root)
@@ -109,30 +116,71 @@ class AuditRunner:
         self._emit("audit_end", duration=round(results.duration, 1),
                    total_findings=len(results.findings))
 
+        # Save trend snapshot after each run
+        try:
+            from .trends import save_snapshot
+            report_dir = self.config.report_path.parent
+            report_dir.mkdir(parents=True, exist_ok=True)
+            save_snapshot(report_dir, results.findings)
+        except Exception as e:
+            log.warning("Failed to save trend snapshot: %s", e)
+
         return results
 
     def _run_tier1(self, results: AuditResults) -> None:
-        """Run Tier 1: Build, tests, cppcheck, clang-tidy."""
+        """Run Tier 1: Build, cppcheck, clang-tidy in parallel."""
         log.info("=== Tier 1: Build & Static Analysis ===")
 
-        self._emit("step_start", tier=1, step="build")
-        from . import tier1_build
-        build_findings, build_summary = tier1_build.run(self.config)
-        results.findings.extend(build_findings)
-        results.tier1_summary = build_summary
-        self._emit("step_end", tier=1, step="build", findings=len(build_findings))
+        def run_build() -> tuple[list[Finding], dict]:
+            """Execute build step and return (findings, summary)."""
+            self._emit("step_start", tier=1, step="build")
+            from . import tier1_build
+            findings, summary = tier1_build.run(self.config)
+            self._emit("step_end", tier=1, step="build", findings=len(findings))
+            return findings, summary
 
-        self._emit("step_start", tier=1, step="cppcheck")
-        from . import tier1_cppcheck
-        cppcheck_findings = tier1_cppcheck.run(self.config)
-        results.findings.extend(cppcheck_findings)
-        self._emit("step_end", tier=1, step="cppcheck", findings=len(cppcheck_findings))
+        def run_cppcheck() -> list[Finding]:
+            """Execute cppcheck step and return findings."""
+            self._emit("step_start", tier=1, step="cppcheck")
+            from . import tier1_cppcheck
+            findings = tier1_cppcheck.run(self.config)
+            self._emit("step_end", tier=1, step="cppcheck", findings=len(findings))
+            return findings
 
-        self._emit("step_start", tier=1, step="clang-tidy")
-        from . import tier1_clangtidy
-        clangtidy_findings = tier1_clangtidy.run(self.config)
-        results.findings.extend(clangtidy_findings)
-        self._emit("step_end", tier=1, step="clang-tidy", findings=len(clangtidy_findings))
+        def run_clangtidy() -> list[Finding]:
+            """Execute clang-tidy step and return findings."""
+            self._emit("step_start", tier=1, step="clang-tidy")
+            from . import tier1_clangtidy
+            findings = tier1_clangtidy.run(self.config)
+            self._emit("step_end", tier=1, step="clang-tidy", findings=len(findings))
+            return findings
+
+        with ThreadPoolExecutor(max_workers=3, thread_name_prefix="tier1") as executor:
+            build_future = executor.submit(run_build)
+            cppcheck_future = executor.submit(run_cppcheck)
+            clangtidy_future = executor.submit(run_clangtidy)
+
+            # Collect build results
+            try:
+                build_findings, build_summary = build_future.result()
+                results.findings.extend(build_findings)
+                results.tier1_summary = build_summary
+            except Exception as e:
+                log.error("Build step failed: %s", e)
+
+            # Collect cppcheck results
+            try:
+                cppcheck_findings = cppcheck_future.result()
+                results.findings.extend(cppcheck_findings)
+            except Exception as e:
+                log.error("cppcheck step failed: %s", e)
+
+            # Collect clang-tidy results
+            try:
+                clangtidy_findings = clangtidy_future.result()
+                results.findings.extend(clangtidy_findings)
+            except Exception as e:
+                log.error("clang-tidy step failed: %s", e)
 
     def _run_parallel_tiers(
         self,
@@ -191,6 +239,17 @@ class AuditRunner:
 
     def build_report(self, results: AuditResults, diff=None) -> str:
         """Generate the markdown report from results."""
+        # Load trend data if available
+        trend_report = None
+        try:
+            from .trends import load_snapshots, compute_trends
+            report_dir = self.config.report_path.parent
+            snapshots = load_snapshots(report_dir)
+            if len(snapshots) >= 2:
+                trend_report = compute_trends(snapshots)
+        except Exception as e:
+            log.warning("Failed to load trend data: %s", e)
+
         builder = ReportBuilder(self.config)
         return builder.build(
             findings=results.findings,
@@ -201,4 +260,5 @@ class AuditRunner:
             tiers_run=results.tiers_run,
             duration=results.duration,
             diff=diff,
+            trend_report=trend_report,
         )

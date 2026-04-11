@@ -79,6 +79,7 @@ add_executable(vestige_tests
     test_formula_compiler.cpp
     test_curve_fitter.cpp
     test_quality_manager.cpp
+    test_formula_tools.cpp
     test_architectural_tools.cpp
     test_catmull_rom_spline.cpp
     test_pressure_plate.cpp
@@ -86,6 +87,7 @@ add_executable(vestige_tests
     test_system_registry.cpp
     test_domain_systems.cpp
     test_editor_viewers.cpp
+    test_node_graph.cpp
 )
 
 target_link_libraries(vestige_tests

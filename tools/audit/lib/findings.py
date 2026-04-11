@@ -85,6 +85,37 @@ def deduplicate(findings: list[Finding]) -> list[Finding]:
     return sorted(seen.values(), key=lambda f: (f.severity, f.file, f.line or 0))
 
 
+def apply_severity_overrides(
+    findings: list[Finding],
+    overrides: list[dict],
+) -> list[Finding]:
+    """Modify finding severities based on pattern_name overrides.
+
+    Each entry in *overrides* should have ``pattern_name`` and ``severity``
+    keys.  Findings whose :pyattr:`pattern_name` matches are updated in
+    place.  Returns the (mutated) findings list for convenience.
+    """
+    if not overrides:
+        return findings
+
+    # Build a lookup: pattern_name -> target Severity
+    override_map: dict[str, Severity] = {}
+    for entry in overrides:
+        name = entry.get("pattern_name", "")
+        sev_str = entry.get("severity", "")
+        if name and sev_str:
+            override_map[name] = Severity.from_string(sev_str)
+
+    if not override_map:
+        return findings
+
+    for finding in findings:
+        if finding.pattern_name in override_map:
+            finding.severity = override_map[finding.pattern_name]
+
+    return findings
+
+
 @dataclass
 class ChangeSummary:
     """Summary of git changes for Tier 3."""

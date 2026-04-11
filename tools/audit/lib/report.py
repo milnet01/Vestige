@@ -6,6 +6,7 @@ import json
 import logging
 from collections import defaultdict
 from datetime import datetime
+from typing import Any
 
 from .config import Config
 from .diff_report import ReportDiff
@@ -44,6 +45,7 @@ class ReportBuilder:
         tiers_run: list[int],
         duration: float,
         diff: ReportDiff | None = None,
+        trend_report: Any = None,
     ) -> str:
         """Build the full report and write to file. Returns the report text."""
         deduped = deduplicate(findings)
@@ -61,6 +63,10 @@ class ReportBuilder:
         # Differential report section (if available)
         if diff is not None:
             sections.append(self._build_diff_section(diff))
+
+        # Trend section (if available)
+        if trend_report is not None:
+            sections.append(self._build_trend_section(trend_report))
 
         # Tier 1: Build & Static Analysis
         if 1 in tiers_run:
@@ -470,6 +476,34 @@ class ReportBuilder:
                 lines.append(f"| `{h['name']}` | `{h['file']}` | {h['line']} | {h['complexity']} |")
             if len(cx["hotspots"]) > 10:
                 lines.append(f"| ... | | | *({len(cx['hotspots']) - 10} more)* |")
+            lines.append("")
+
+        return "\n".join(lines)
+
+    def _build_trend_section(self, trend_report: Any) -> str:
+        """Build the finding trend section from a TrendReport."""
+        lines = ["## Finding Trends", ""]
+
+        direction = trend_report.direction
+        delta = trend_report.finding_delta
+        delta_str = f"+{delta}" if delta > 0 else str(delta)
+
+        lines.append(f"**Overall trend:** {direction} ({delta_str} findings)")
+        lines.append("")
+
+        categories = trend_report.categories
+        if categories:
+            # Group categories by direction
+            improving = [c for c, d in categories.items() if d == "improving"]
+            worsening = [c for c, d in categories.items() if d == "worsening"]
+            stable = [c for c, d in categories.items() if d == "stable"]
+
+            if improving:
+                lines.append(f"**Improving:** {', '.join(improving)}")
+            if worsening:
+                lines.append(f"**Worsening:** {', '.join(worsening)}")
+            if stable:
+                lines.append(f"**Stable:** {', '.join(stable)}")
             lines.append("")
 
         return "\n".join(lines)

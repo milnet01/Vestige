@@ -46,6 +46,28 @@ public:
 
     // Material
     static FormulaDefinition createWetDarkening();
+
+    // PBR Lighting
+    static FormulaDefinition createGGXDistribution();
+    static FormulaDefinition createSchlickGeometry();
+    static FormulaDefinition createACESTonemap();
+    static FormulaDefinition createSpotConeFalloff();
+
+    // Animation
+    static FormulaDefinition createEaseInSine();
+    static FormulaDefinition createFastNegExp();
+
+    // Post-Processing
+    static FormulaDefinition createBloomThreshold();
+    static FormulaDefinition createVignette();
+
+    // Camera
+    static FormulaDefinition createExposureEV();
+    static FormulaDefinition createDofCoC();
+
+    // Terrain
+    static FormulaDefinition createHeightBlend();
+    static FormulaDefinition createThermalErosion();
 };
 
 } // namespace Vestige
