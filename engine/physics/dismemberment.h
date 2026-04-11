@@ -75,9 +75,6 @@ public:
         std::vector<int>& outSide);
 
 private:
-    /// @brief Checks if a bone is a child (descendant) of another bone.
-    static bool isBoneChildOf(const Skeleton& skeleton, int boneIndex, int parentBoneIndex);
-
     /// @brief Interpolates a vertex between two vertices at parameter t.
     static Vertex interpolateVertex(const Vertex& a, const Vertex& b, float t);
 

@@ -3,7 +3,6 @@
 #include "animation/animation_sampler.h"
 
 #include <algorithm>
-#include <cmath>
 
 namespace Vestige
 {
@@ -50,6 +49,8 @@ static float computeT(const std::vector<float>& timestamps, int index, float tim
 static glm::vec3 readVec3(const std::vector<float>& values, int keyIndex)
 {
     size_t base = static_cast<size_t>(keyIndex) * 3;
+    if (base + 2 >= values.size())
+        return glm::vec3(0.0f);
     return glm::vec3(values[base], values[base + 1], values[base + 2]);
 }
 
@@ -58,6 +59,8 @@ static glm::vec3 readVec3(const std::vector<float>& values, int keyIndex)
 static glm::quat readQuat(const std::vector<float>& values, int keyIndex)
 {
     size_t base = static_cast<size_t>(keyIndex) * 4;
+    if (base + 3 >= values.size())
+        return glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
     // glm::quat constructor is (w, x, y, z)
     return glm::quat(values[base + 3], values[base], values[base + 1], values[base + 2]);
 }
@@ -68,6 +71,8 @@ static glm::vec3 readVec3Cubic(const std::vector<float>& values, int keyIndex, i
 {
     // Each keyframe has 3 vec3s (9 floats): [in-tangent(3), value(3), out-tangent(3)]
     size_t base = static_cast<size_t>(keyIndex) * 9 + static_cast<size_t>(tripletIndex) * 3;
+    if (base + 2 >= values.size())
+        return glm::vec3(0.0f);
     return glm::vec3(values[base], values[base + 1], values[base + 2]);
 }
 
@@ -77,6 +82,8 @@ static glm::quat readQuatCubic(const std::vector<float>& values, int keyIndex, i
 {
     // Each keyframe has 3 vec4s (12 floats): [in-tangent(4), value(4), out-tangent(4)]
     size_t base = static_cast<size_t>(keyIndex) * 12 + static_cast<size_t>(tripletIndex) * 4;
+    if (base + 3 >= values.size())
+        return glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
     return glm::quat(values[base + 3], values[base], values[base + 1], values[base + 2]);
 }
 

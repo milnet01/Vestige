@@ -13,6 +13,9 @@ void main()
 {
     vec3 color = texture(u_hdrTexture, v_texCoord).rgb;
 
+    // Sanitize: clamp to prevent Inf/NaN propagation through bloom chain
+    color = clamp(color, vec3(0.0), vec3(65504.0));
+
     // BT.709 luminance
     float luminance = dot(color, vec3(0.2126, 0.7152, 0.0722));
 

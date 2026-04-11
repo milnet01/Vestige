@@ -67,8 +67,6 @@ public:
 private:
     bool m_fractured = false;
     std::vector<FractureFragment> m_fragments;
-    glm::vec3 m_lastImpactPoint = glm::vec3(0.0f);
-    glm::vec3 m_lastImpulse = glm::vec3(0.0f);
     uint32_t m_fractureSeed = 0;
 };
 

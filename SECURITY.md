@@ -158,33 +158,78 @@ Third-party libraries can introduce vulnerabilities.
 | glad | Generated, committed | glad generator |
 | stb_image | Specific commit | GitHub |
 | Google Test | Tagged release | GitHub |
-| Assimp | Tagged release (Phase 2+) | GitHub |
+| Jolt Physics | Tagged release | GitHub |
+| Recast Navigation | Tagged release | GitHub |
+| OpenAL-Soft | System package | kcat/openal-soft |
+| FreeType | FetchContent | GitHub |
+| nlohmann/json | Tagged release | GitHub |
+| dr_libs | Specific commit | GitHub |
+| imgui | Embedded in external/ | GitHub |
+
+### Known CVEs and Mitigations (Reviewed 2026-04-11)
+
+| Library | CVE / Issue | Severity | Mitigation |
+|---------|-------------|----------|------------|
+| **FreeType** | CVE-2025-27363 (OOB write, actively exploited) | HIGH | Update to FreeType >= 2.13.1. Monitor for CVE-2026-23865 (fixed in 2.14.2) |
+| **stb_image** | GHSL-2023-145 through GHSL-2023-151 (7 vulns incl. double-free) | HIGH | Validate dimensions after load (done: 16384x16384 max). Never load untrusted images on background threads without mutex. Monitor upstream |
+| **dr_libs** | CVE-2025-14369 (integer overflow in dr_flac) | HIGH | Validate audio metadata before decoding (done: sample rate, channel, frame limits). Update to latest master post-March 2026 |
+| **dr_libs** | Issue #296 (heap overflow in drwav smpl chunk) | HIGH | Update to latest master. Fixed in commit post-March 2026 |
+| **nlohmann/json** | CVE-2024-38525 (uncaught exception on malformed unicode) | MEDIUM | Wrap all JSON parsing in try/catch. Enforce file size limits on untrusted JSON |
+| **Recast Navigation** | Issue #798 (OOB write in sampleVelocityAdaptive) | MEDIUM | Pin version. Validate nav mesh params. Monitor for upstream fix |
+| **GLM** | PR #1253 (SIMD normalize precision) | LOW | Test with ASan if using GLM_FORCE_INTRINSICS |
+
+**Sources:**
+- FreeType: https://nvd.nist.gov/vuln/detail/CVE-2025-27363
+- stb_image: https://securitylab.github.com/advisories/GHSL-2023-145_GHSL-2023-151_stb_image_h/
+- dr_flac: https://medium.com/@caplanmaor/integer-overflow-in-dr-flac-cve-2025-14369-2785de317496
+- dr_wav: https://github.com/mackron/dr_libs/issues/296
+- nlohmann/json: https://nvd.nist.gov/vuln/detail/CVE-2024-38525
+- Recast: https://github.com/recastnavigation/recastnavigation/issues/798
 
 ---
 
 ## 6. Build Security
 
-### Compiler Hardening Flags
-Always compile with security-relevant warnings and protections:
+### Compiler Hardening Flags (OpenSSF Compliance)
+Always compile with security-relevant warnings and protections. Based on the
+[OpenSSF Compiler Options Hardening Guide](https://best.openssf.org/Compiler-Hardening-Guides/Compiler-Options-Hardening-Guide-for-C-and-C++.html).
 
 ```cmake
-# Warnings — treat all warnings as errors in CI
+# Warnings
 target_compile_options(vestige_engine PRIVATE
     -Wall -Wextra -Wpedantic
     -Wformat=2                    # Format string vulnerabilities
-    -Wconversion                  # Implicit type conversions
+    -Wconversion -Wsign-conversion # Implicit type conversions
     -Wshadow                      # Variable shadowing
     -Wnull-dereference            # Null pointer dereference
     -Wdouble-promotion            # Float to double promotion
+    -Wimplicit-fallthrough         # Missing break in switch
+    -Werror=format-security        # Format string security errors
 )
 
-# Security hardening
+# Runtime hardening (all builds)
 target_compile_options(vestige_engine PRIVATE
     -fstack-protector-strong      # Stack buffer overflow detection
-    -D_FORTIFY_SOURCE=2           # Runtime buffer overflow checks
+    -fstack-clash-protection      # Stack clash attack protection
+    -ftrivial-auto-var-init=zero  # Zero-init stack variables
+    -fno-delete-null-pointer-checks # Preserve null checks in optimized code
+    -fno-strict-overflow          # Treat signed overflow as defined
 )
 
-# Debug builds — additional sanitizers
+# Runtime definitions
+target_compile_definitions(vestige_engine PRIVATE
+    _FORTIFY_SOURCE=3             # Buffer overflow checks (GCC 12+, requires -O1+)
+    _GLIBCXX_ASSERTIONS           # libstdc++ container precondition checks
+)
+
+# Linker hardening
+target_link_options(vestige_engine PUBLIC
+    -Wl,-z,relro -Wl,-z,now      # Full RELRO (GOT hardening)
+    -Wl,-z,noexecstack            # Non-executable stack
+    -Wl,--as-needed               # Eliminate unnecessary deps
+)
+
+# Debug builds — sanitizers
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     target_compile_options(vestige_engine PRIVATE
         -fsanitize=address        # Memory error detector
@@ -192,6 +237,8 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     )
 endif()
 ```
+
+**Source:** [CMake Implementation of OpenSSF Hardening](https://www.stevenengelhardt.com/2024/11/12/cmake-implementation-of-openssf-compiler-hardening-options/)
 
 ### Build Configurations
 | Config | Purpose | Optimizations | Debug Info | Sanitizers |
@@ -268,6 +315,9 @@ Before merging any code, verify:
 - [ ] No sensitive data in logs
 - [ ] Variables initialized before use
 - [ ] Compiler warnings resolved (no suppressions without justification)
+- [ ] Audio files validated (sample rate, channel count, frame count within limits)
+- [ ] Exception handlers use specific types (no `catch (...)` in new code)
+- [ ] JSON parsing wrapped in try/catch with file size limits for untrusted input
 
 ---
 
@@ -298,3 +348,20 @@ Physics subsystems accept configuration data and simulation parameters that must
 - **Maximum grid size** -- enforce an upper bound on grid dimensions (e.g., 256x256 = 65,536 particles) to prevent allocation overflow and ensure the solver completes within frame budget
 - **Substep cap** -- hard limit of 64 substeps per step prevents unbounded CPU time in the XPBD loop
 - **Collider count** -- consider practical limits on the number of active colliders to keep per-particle collision checks bounded
+
+---
+
+## 12. Audio Input Validation
+
+Audio decoders (dr_wav, dr_mp3, dr_flac, stb_vorbis) parse untrusted file metadata that can trigger integer overflows and excessive memory allocation (see CVE-2025-14369).
+
+### Validation Limits (enforced in AudioClip::load*)
+- **Maximum frames**: 86,400,000 (~30 minutes at 48kHz)
+- **Maximum channels**: 8
+- **Sample rate range**: 8,000 Hz to 192,000 Hz
+- **Reject files exceeding these limits** with a logged error before any buffer allocation
+
+### Integer Overflow Prevention
+- Compute `totalFrames * channels` using `size_t` arithmetic to prevent 32-bit overflow
+- Validate metadata before allocating decode buffers
+- Always free decoder-allocated memory on validation failure

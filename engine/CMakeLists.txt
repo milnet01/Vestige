@@ -238,10 +238,20 @@ target_include_directories(vestige_engine
         ${freetype_SOURCE_DIR}/include
 )
 
-# Mark Jolt headers as SYSTEM to suppress third-party warnings
+# Mark third-party headers as SYSTEM to suppress their warnings
 get_target_property(JOLT_INCLUDE_DIRS Jolt INTERFACE_INCLUDE_DIRECTORIES)
 if(JOLT_INCLUDE_DIRS)
     target_include_directories(vestige_engine SYSTEM PUBLIC ${JOLT_INCLUDE_DIRS})
+endif()
+
+# Recast Navigation headers trigger -Wconversion in their inline functions
+get_target_property(RECAST_INCLUDE_DIRS RecastNavigation::Recast INTERFACE_INCLUDE_DIRECTORIES)
+if(RECAST_INCLUDE_DIRS)
+    target_include_directories(vestige_engine SYSTEM PUBLIC ${RECAST_INCLUDE_DIRS})
+endif()
+get_target_property(DETOUR_INCLUDE_DIRS RecastNavigation::Detour INTERFACE_INCLUDE_DIRECTORIES)
+if(DETOUR_INCLUDE_DIRS)
+    target_include_directories(vestige_engine SYSTEM PUBLIC ${DETOUR_INCLUDE_DIRS})
 endif()
 
 # Link dependencies
@@ -272,22 +282,47 @@ set_source_files_properties(
     PROPERTIES COMPILE_FLAGS "-w"
 )
 
-# Compiler warnings
+# Compiler warnings (OpenSSF Compiler Hardening Guide compliance)
 target_compile_options(vestige_engine PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:
         -Wall -Wextra -Wpedantic
         -Wformat=2
         -Wconversion
+        -Wsign-conversion
         -Wshadow
         -Wnull-dereference
         -Wdouble-promotion
+        -Wimplicit-fallthrough
+        -Werror=format-security
         -fstack-protector-strong
+        -fstack-clash-protection
+        -ftrivial-auto-var-init=zero
+        -fno-delete-null-pointer-checks
+        -fno-strict-overflow
     >
 )
 
-# Runtime buffer overflow detection (requires -O1 or higher)
+# Linker hardening (RELRO, non-executable stack, PIE)
+target_link_options(vestige_engine PUBLIC
+    $<$<CXX_COMPILER_ID:GNU,Clang>:
+        -Wl,-z,relro
+        -Wl,-z,now
+        -Wl,-z,noexecstack
+        -Wl,--as-needed
+    >
+)
+target_compile_options(vestige_engine PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-fPIE>
+)
+
+# Runtime buffer overflow detection and libstdc++ assertions
+# _FORTIFY_SOURCE=3 requires GCC 12+ and -O1 or higher
+# _GLIBCXX_ASSERTIONS enables precondition checks on container operations
 target_compile_definitions(vestige_engine PRIVATE
-    $<$<AND:$<CXX_COMPILER_ID:GNU,Clang>,$<NOT:$<CONFIG:Debug>>>:_FORTIFY_SOURCE=2>
+    $<$<AND:$<CXX_COMPILER_ID:GNU,Clang>,$<NOT:$<CONFIG:Debug>>>:
+        _FORTIFY_SOURCE=3
+    >
+    $<$<CXX_COMPILER_ID:GNU,Clang>:_GLIBCXX_ASSERTIONS>
 )
 
 # Debug sanitizers

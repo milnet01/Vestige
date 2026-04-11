@@ -31,8 +31,7 @@ void BreakableComponent::fracture(const glm::vec3& impactPoint, const glm::vec3&
     if (m_fractured)
         return;
 
-    m_lastImpactPoint = impactPoint;
-    m_lastImpulse = impulse;
+    (void)impulse;
     m_fractured = true;
 
     Logger::info("Entity fractured at (" +

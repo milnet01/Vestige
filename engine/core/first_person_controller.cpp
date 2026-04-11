@@ -21,7 +21,7 @@ FirstPersonController::FirstPersonController(Camera& camera, InputManager& input
     , m_gamepadId(-1)
 {
     m_camera.setSensitivity(config.mouseSensitivity);
-    m_cosMaxSlope = std::cos(m_config.maxSlopeAngle * 3.14159265f / 180.0f);
+    m_cosMaxSlope = std::cos(glm::radians(m_config.maxSlopeAngle));
 
     // Check for connected gamepads
     for (int i = GLFW_JOYSTICK_1; i <= GLFW_JOYSTICK_LAST; i++)

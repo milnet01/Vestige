@@ -14,9 +14,17 @@
 #include "stb_vorbis.c"
 
 #include <algorithm>
+#include <cstdint>
 
 namespace Vestige
 {
+
+/// @brief Maximum audio duration in frames to prevent excessive memory allocation
+/// from malicious or corrupted audio files (CVE-2025-14369).
+static constexpr uint64_t MAX_AUDIO_FRAMES = 48000 * 60 * 30;  // ~30 minutes at 48kHz
+static constexpr uint32_t MAX_AUDIO_CHANNELS = 8;
+static constexpr uint32_t MIN_SAMPLE_RATE = 8000;
+static constexpr uint32_t MAX_SAMPLE_RATE = 192000;
 
 float AudioClip::getDurationSeconds() const
 {
@@ -78,11 +86,20 @@ std::optional<AudioClip> AudioClip::loadWav(const std::string& filePath)
     auto channels = wav.channels;
     auto sampleRate = wav.sampleRate;
 
+    if (channels == 0 || channels > MAX_AUDIO_CHANNELS ||
+        sampleRate < MIN_SAMPLE_RATE || sampleRate > MAX_SAMPLE_RATE ||
+        totalFrames > MAX_AUDIO_FRAMES)
+    {
+        Logger::error("[AudioClip] WAV metadata out of range: " + filePath);
+        drwav_uninit(&wav);
+        return std::nullopt;
+    }
+
     AudioClip clip;
     clip.m_channels = channels;
     clip.m_sampleRate = sampleRate;
     clip.m_frameCount = totalFrames;
-    clip.m_samples.resize(static_cast<size_t>(totalFrames * channels));
+    clip.m_samples.resize(static_cast<size_t>(totalFrames) * static_cast<size_t>(channels));
 
     drwav_uint64 framesRead = drwav_read_pcm_frames_s16(
         &wav, totalFrames, clip.m_samples.data());
@@ -113,11 +130,20 @@ std::optional<AudioClip> AudioClip::loadMp3(const std::string& filePath)
         return std::nullopt;
     }
 
+    if (config.channels == 0 || config.channels > MAX_AUDIO_CHANNELS ||
+        config.sampleRate < MIN_SAMPLE_RATE || config.sampleRate > MAX_SAMPLE_RATE ||
+        totalFrames > MAX_AUDIO_FRAMES)
+    {
+        Logger::error("[AudioClip] MP3 metadata out of range: " + filePath);
+        drmp3_free(pSamples, nullptr);
+        return std::nullopt;
+    }
+
     AudioClip clip;
     clip.m_channels = config.channels;
     clip.m_sampleRate = config.sampleRate;
     clip.m_frameCount = totalFrames;
-    auto totalSamples = static_cast<size_t>(totalFrames * config.channels);
+    auto totalSamples = static_cast<size_t>(totalFrames) * static_cast<size_t>(config.channels);
     clip.m_samples.assign(pSamples, pSamples + totalSamples);
     drmp3_free(pSamples, nullptr);
 
@@ -142,11 +168,20 @@ std::optional<AudioClip> AudioClip::loadFlac(const std::string& filePath)
         return std::nullopt;
     }
 
+    if (channels == 0 || channels > MAX_AUDIO_CHANNELS ||
+        sampleRate < MIN_SAMPLE_RATE || sampleRate > MAX_SAMPLE_RATE ||
+        totalFrames > MAX_AUDIO_FRAMES)
+    {
+        Logger::error("[AudioClip] FLAC metadata out of range: " + filePath);
+        drflac_free(pSamples, nullptr);
+        return std::nullopt;
+    }
+
     AudioClip clip;
     clip.m_channels = channels;
     clip.m_sampleRate = sampleRate;
     clip.m_frameCount = totalFrames;
-    auto totalSamples = static_cast<size_t>(totalFrames * channels);
+    auto totalSamples = static_cast<size_t>(totalFrames) * static_cast<size_t>(channels);
     clip.m_samples.assign(pSamples, pSamples + totalSamples);
     drflac_free(pSamples, nullptr);
 
@@ -171,11 +206,20 @@ std::optional<AudioClip> AudioClip::loadOgg(const std::string& filePath)
         return std::nullopt;
     }
 
+    if (channels <= 0 || static_cast<uint32_t>(channels) > MAX_AUDIO_CHANNELS ||
+        sampleRate < static_cast<int>(MIN_SAMPLE_RATE) || sampleRate > static_cast<int>(MAX_SAMPLE_RATE) ||
+        static_cast<uint64_t>(totalFrames) > MAX_AUDIO_FRAMES)
+    {
+        Logger::error("[AudioClip] OGG metadata out of range: " + filePath);
+        free(pSamples);
+        return std::nullopt;
+    }
+
     AudioClip clip;
     clip.m_channels = static_cast<uint32_t>(channels);
     clip.m_sampleRate = static_cast<uint32_t>(sampleRate);
     clip.m_frameCount = static_cast<uint64_t>(totalFrames);
-    auto totalSamples = static_cast<size_t>(totalFrames * channels);
+    auto totalSamples = static_cast<size_t>(totalFrames) * static_cast<size_t>(channels);
     clip.m_samples.assign(pSamples, pSamples + totalSamples);
     free(pSamples);  // stb_vorbis uses malloc
 
