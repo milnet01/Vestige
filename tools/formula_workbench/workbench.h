@@ -26,7 +26,7 @@ namespace Vestige
 {
 
 /// @brief Version string for the FormulaWorkbench.
-inline constexpr const char* WORKBENCH_VERSION = "1.2.0";
+inline constexpr const char* WORKBENCH_VERSION = "1.3.0";
 
 /// @brief Interactive formula workbench application.
 class Workbench
@@ -108,6 +108,14 @@ private:
     std::vector<float> m_dataX;
     std::vector<float> m_dataY;
     std::vector<float> m_residuals;
+
+    // -- Statistical diagnostics -----------------------------------------------
+    float m_adjustedRSquared = 0.0f;
+    float m_aic = 0.0f;
+    float m_bic = 0.0f;
+    int m_paramCount = 0;
+    bool m_showResidualPlot = true;
+
     std::string m_plotVariable;
     void rebuildVisualizationCache();
 
@@ -146,8 +154,6 @@ private:
     std::string m_statusMessage;
     float m_statusTimer = 0.0f;
 
-    // -- First frame flag -----------------------------------------------------
-    bool m_firstFrame = true;
 };
 
 } // namespace Vestige

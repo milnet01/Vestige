@@ -17,10 +17,18 @@ sys.path.insert(0, str(AUDIT_ROOT))
 
 from web.audit_bridge import AuditSession
 
-VERSION = "1.9.0"
+VERSION = "2.0.0"
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
 session = AuditSession()
+
+
+@app.after_request
+def add_security_headers(response):
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    return response
 
 # Default project root (can be overridden via the UI)
 DEFAULT_ROOT = str(AUDIT_ROOT.parent.parent)  # /mnt/Storage/Scripts/Linux/3D_Engine
@@ -211,8 +219,11 @@ def api_config_save():
 
     # Security: restrict writes to project root or audit tool directory
     allowed_roots = [Path(DEFAULT_ROOT).resolve(), AUDIT_ROOT.resolve()]
-    if not any(str(config_path).startswith(str(r)) for r in allowed_roots):
-        return jsonify({"error": "Path outside project directory"}), 403
+    try:
+        if not any(config_path.is_relative_to(r) for r in allowed_roots):
+            return jsonify({"error": "Path outside project directory"}), 403
+    except (TypeError, ValueError):
+        return jsonify({"error": "Invalid path"}), 403
 
     # Only allow .yaml/.yml files
     if config_path.suffix not in (".yaml", ".yml"):

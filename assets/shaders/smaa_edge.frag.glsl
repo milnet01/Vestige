@@ -51,8 +51,9 @@ void main()
                              max(abs(L - Lbottom), deltaTop));
 
     // Local contrast adaptation: only keep edges that are strong relative to neighbors
+    // Guard against division by zero in uniform regions
     edges *= step(vec2(1.0), SMAA_LOCAL_CONTRAST_ADAPTATION * vec2(deltaLeft, deltaTop)
-                              / vec2(maxDeltaLeft, maxDeltaTop));
+                              / max(vec2(maxDeltaLeft, maxDeltaTop), vec2(0.0001)));
 
     fragColor = vec4(edges, 0.0, 1.0);
 }

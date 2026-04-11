@@ -218,6 +218,7 @@ Renderer::~Renderer()
     if (m_fallbackTexture != 0) glDeleteTextures(1, &m_fallbackTexture);
     if (m_fallbackCubemap != 0) glDeleteTextures(1, &m_fallbackCubemap);
     if (m_fallbackTexArray != 0) glDeleteTextures(1, &m_fallbackTexArray);
+    if (m_fallbackTex3D != 0) glDeleteTextures(1, &m_fallbackTex3D);
     if (m_boneMatrixSSBO != 0)
     {
         glDeleteBuffers(1, &m_boneMatrixSSBO);
@@ -861,8 +862,6 @@ void Renderer::endFrame(float deltaTime)
         m_smaaBlendShader.setInt("u_edgeTexture", 0);
         glBindTextureUnit(1, m_smaa->getAreaTexture());
         m_smaaBlendShader.setInt("u_areaTexture", 1);
-        glBindTextureUnit(2, m_smaa->getSearchTexture());
-        m_smaaBlendShader.setInt("u_searchTexture", 2);
         m_smaaBlendShader.setVec4("u_rtMetrics", rtMetrics);
         m_screenQuad->draw();
 
@@ -1317,8 +1316,10 @@ void Renderer::drawMesh(const Mesh& mesh, const glm::mat4& modelMatrix,
     m_sceneShader.setBool("u_hasBones", skinned);
     if (skinned)
     {
+        size_t boneCount = std::min(boneMatrices->size(),
+                                     static_cast<size_t>(MAX_BONES));
         GLsizeiptr dataSize = static_cast<GLsizeiptr>(
-            boneMatrices->size() * sizeof(glm::mat4));
+            boneCount * sizeof(glm::mat4));
         glNamedBufferSubData(m_boneMatrixSSBO, 0, dataSize, boneMatrices->data());
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, m_boneMatrixSSBO);
     }
@@ -2502,14 +2503,13 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
     }
     else
     {
-        // No environment map at all — bind dummy textures to satisfy Mesa
-        // Cubemap samplers on units 14, 15 — bind zero textures
-        glBindTextureUnit(14, 0);
+        // No environment map at all — bind fallback textures to satisfy Mesa
+        // (Mesa AMD requires ALL declared samplers to have valid textures bound)
+        glBindTextureUnit(14, m_fallbackCubemap);
         m_sceneShader.setInt("u_irradianceMap", 14);
-        glBindTextureUnit(15, 0);
+        glBindTextureUnit(15, m_fallbackCubemap);
         m_sceneShader.setInt("u_prefilterMap", 15);
-        // 2D sampler on unit 16 — bind zero texture
-        glBindTextureUnit(16, 0);
+        glBindTextureUnit(16, m_fallbackTexture);
         m_sceneShader.setInt("u_brdfLUT", 16);
         m_sceneShader.setFloat("u_maxPrefilterLod", 0.0f);
         m_sceneShader.setBool("u_hasIBL", false);
@@ -2551,7 +2551,7 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
     else
     {
         // Mesa requires valid textures for declared samplers
-        glBindTextureUnit(9, m_causticsTexture != 0 ? m_causticsTexture : 0);
+        glBindTextureUnit(9, m_causticsTexture != 0 ? m_causticsTexture : m_fallbackTexture);
         m_sceneShader.setInt("u_causticsTex", 9);
     }
 
@@ -3005,16 +3005,16 @@ void Renderer::renderPointShadowPass(const std::vector<int>& shadowCasters)
                 else
                 {
                     m_pointShadowDepthShader.setBool("u_useInstancing", false);
+                    batch.mesh->bind();
                     for (const auto& matrix : batch.modelMatrices)
                     {
                         m_pointShadowDepthShader.setMat4("u_model", matrix);
-                        batch.mesh->bind();
                         glDrawElements(GL_TRIANGLES,
                             static_cast<GLsizei>(batch.mesh->getIndexCount()),
                             GL_UNSIGNED_INT, nullptr);
                         m_cullingStats.drawCalls++;
-                        batch.mesh->unbind();
                     }
+                    batch.mesh->unbind();
                 }
             }
 
@@ -3312,7 +3312,7 @@ void Renderer::renderIdBuffer(const SceneRenderData& renderData,
     drawItems(renderData.transparentItems);
 
     // Restore clear color
-    glClearColor(0.1f, 0.1f, 0.12f, 1.0f);
+    glClearColor(m_clearColor.r, m_clearColor.g, m_clearColor.b, 1.0f);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
@@ -3365,29 +3365,32 @@ std::vector<uint32_t> Renderer::pickEntitiesInRect(int x0, int y0, int x1, int y
         return result;
     }
 
-    // Read pixel block — sample every 4th pixel for performance on large selections
-    int step = std::max(1, std::min(w, h) / 64);
+    // Read entire rectangle in one GPU call, then scan CPU-side buffer
     std::unordered_set<uint32_t> ids;
 
     glBindFramebuffer(GL_READ_FRAMEBUFFER, m_idBufferFbo->getId());
 
-    for (int py = y0; py <= y1; py += step)
+    std::vector<unsigned char> pixels(static_cast<size_t>(w * h * 4));
+    glReadPixels(x0, y0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+
+    // Sample every Nth pixel for performance on large selections
+    int step = std::max(1, std::min(w, h) / 64);
+    for (int py = 0; py < h; py += step)
     {
-        for (int px = x0; px <= x1; px += step)
+        for (int px = 0; px < w; px += step)
         {
-            unsigned char pixel[4] = {0, 0, 0, 0};
-            glReadPixels(px, py, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixel);
-            uint32_t id = static_cast<uint32_t>(pixel[0])
-                        | (static_cast<uint32_t>(pixel[1]) << 8)
-                        | (static_cast<uint32_t>(pixel[2]) << 16);
+            size_t offset = static_cast<size_t>((py * w + px) * 4);
+            uint32_t id = static_cast<uint32_t>(pixels[offset])
+                        | (static_cast<uint32_t>(pixels[offset + 1]) << 8)
+                        | (static_cast<uint32_t>(pixels[offset + 2]) << 16);
             if (id != 0)
             {
                 ids.insert(id);
             }
         }
     }
-
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
 
     result.assign(ids.begin(), ids.end());
     return result;

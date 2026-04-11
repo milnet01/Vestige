@@ -19,5 +19,9 @@ target_link_libraries(formula_workbench PRIVATE
 target_compile_options(formula_workbench PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:
         -Wall -Wextra -Wpedantic
+        -fstack-protector-strong
+        -D_GLIBCXX_ASSERTIONS
+        -Wformat=2
+        -Werror=format-security
     >
 )

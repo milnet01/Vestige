@@ -2,7 +2,6 @@
 /// @brief Engine implementation — main loop and subsystem orchestration.
 #include "core/engine.h"
 #include "core/logger.h"
-#include "physics/jolt_helpers.h"
 #include "physics/cloth_component.h"
 #include "systems/atmosphere_system.h"
 #include "systems/particle_system.h"
@@ -28,8 +27,6 @@
 #include "physics/physics_character_controller.h"
 
 #include <Jolt/Physics/Collision/Shape/BoxShape.h>
-#include "renderer/light_probe_manager.h"
-#include "renderer/sh_probe_grid.h"
 #include "renderer/radiosity_baker.h"
 #include "scene/mesh_renderer.h"
 #include "scene/light_component.h"

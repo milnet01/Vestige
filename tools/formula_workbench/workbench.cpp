@@ -80,7 +80,6 @@ void Workbench::render()
         ImGui::End();
     }
 
-    m_firstFrame = false;
 }
 
 // ---------------------------------------------------------------------------
@@ -635,7 +634,7 @@ void Workbench::renderVisualizer()
     }
 
     // Residual plot
-    if (m_hasFitResult && !m_residuals.empty())
+    if (m_showResidualPlot && m_hasFitResult && !m_residuals.empty())
     {
         if (ImPlot::BeginPlot("Residuals", ImVec2(-1, 200)))
         {
@@ -714,6 +713,18 @@ void Workbench::renderValidation()
                                "Warning: possible overfitting (train R2 >> test R2)");
         }
     }
+
+    // Statistical diagnostics
+    if (m_hasFitResult)
+    {
+        ImGui::Separator();
+        ImGui::Text("Adjusted R²: %.4f", static_cast<double>(m_adjustedRSquared));
+        ImGui::Text("AIC: %.1f", static_cast<double>(m_aic));
+        ImGui::Text("BIC: %.1f", static_cast<double>(m_bic));
+        ImGui::Text("Parameters: %d", m_paramCount);
+    }
+
+    ImGui::Checkbox("Show Residual Plot", &m_showResidualPlot);
 
     ImGui::Separator();
 
@@ -1024,6 +1035,25 @@ void Workbench::runFit()
     // Check numeric stability (Improvement #10)
     checkStability();
 
+    // Compute adjusted R², AIC, BIC
+    {
+        int n = static_cast<int>(m_dataPoints.size());
+        m_paramCount = static_cast<int>(m_fitResult.coefficients.size());
+        if (n > m_paramCount + 1)
+        {
+            m_adjustedRSquared = 1.0f - (1.0f - m_fitResult.rSquared)
+                                 * static_cast<float>(n - 1) / static_cast<float>(n - m_paramCount - 1);
+
+            // AIC = n * ln(SSE/n) + 2k
+            double sse = static_cast<double>(m_fitResult.rmse) * m_fitResult.rmse * n;
+            if (sse > 0.0)
+            {
+                m_aic = static_cast<float>(n * std::log(sse / n) + 2.0 * m_paramCount);
+                m_bic = static_cast<float>(n * std::log(sse / n) + m_paramCount * std::log(static_cast<double>(n)));
+            }
+        }
+    }
+
     rebuildVisualizationCache();
 }
 
@@ -1061,28 +1091,28 @@ void Workbench::runValidation()
     std::unordered_map<std::string, float> coeffMap(
         m_trainResult.coefficients.begin(), m_trainResult.coefficients.end());
 
-    float sumSqResid = 0.0f;
+    double sumSqResid = 0.0;
     float maxErr = 0.0f;
-    float sumObs = 0.0f;
+    double sumObs = 0.0;
     for (const auto& dp : testData)
-        sumObs += dp.observed;
-    float meanObs = sumObs / static_cast<float>(testData.size());
+        sumObs += static_cast<double>(dp.observed);
+    double meanObs = sumObs / static_cast<double>(testData.size());
 
-    float ssTot = 0.0f;
+    double ssTot = 0.0;
     for (const auto& dp : testData)
     {
         float predicted = eval.evaluate(*expr, dp.variables, coeffMap);
-        float resid = predicted - dp.observed;
+        double resid = static_cast<double>(predicted) - static_cast<double>(dp.observed);
         sumSqResid += resid * resid;
-        maxErr = std::max(maxErr, std::abs(resid));
+        maxErr = std::max(maxErr, std::abs(predicted - dp.observed));
 
-        float diff = dp.observed - meanObs;
+        double diff = static_cast<double>(dp.observed) - meanObs;
         ssTot += diff * diff;
     }
 
-    m_testResult.rmse = std::sqrt(sumSqResid / static_cast<float>(testData.size()));
+    m_testResult.rmse = static_cast<float>(std::sqrt(sumSqResid / static_cast<double>(testData.size())));
     m_testResult.maxError = maxErr;
-    m_testResult.rSquared = (ssTot > 1e-15f) ? (1.0f - sumSqResid / ssTot) : 1.0f;
+    m_testResult.rSquared = (ssTot > 1e-15) ? static_cast<float>(1.0 - sumSqResid / ssTot) : 1.0f;
     m_testResult.coefficients = m_trainResult.coefficients;
 
     m_hasValidation = true;
@@ -1126,8 +1156,17 @@ void Workbench::importCsv(const std::string& path)
         while (std::getline(ss, col, ','))
         {
             // Trim whitespace
-            col.erase(0, col.find_first_not_of(" \t\r\n"));
-            col.erase(col.find_last_not_of(" \t\r\n") + 1);
+            auto firstNonWs = col.find_first_not_of(" \t\r\n");
+            if (firstNonWs == std::string::npos) { col.clear(); }
+            else
+            {
+                col.erase(0, firstNonWs);
+                auto lastNonWs = col.find_last_not_of(" \t\r\n");
+                if (lastNonWs != std::string::npos)
+                    col.erase(lastNonWs + 1);
+                else
+                    col.clear();
+            }
             headers.push_back(col);
         }
     }
@@ -1141,6 +1180,7 @@ void Workbench::importCsv(const std::string& path)
 
     // Last column is observed value; rest are variables
     size_t imported = 0;
+    int badCells = 0;
     std::string line;
     while (std::getline(file, line))
     {
@@ -1152,19 +1192,30 @@ void Workbench::importCsv(const std::string& path)
         std::vector<float> values;
         while (std::getline(ss, cell, ','))
         {
-            cell.erase(0, cell.find_first_not_of(" \t\r\n"));
-            cell.erase(cell.find_last_not_of(" \t\r\n") + 1);
+            auto firstNonWs = cell.find_first_not_of(" \t\r\n");
+            if (firstNonWs == std::string::npos) { cell.clear(); }
+            else
+            {
+                cell.erase(0, firstNonWs);
+                auto lastNonWs = cell.find_last_not_of(" \t\r\n");
+                if (lastNonWs != std::string::npos)
+                    cell.erase(lastNonWs + 1);
+                else
+                    cell.clear();
+            }
             try
             {
                 values.push_back(std::stof(cell));
             }
             catch (const std::invalid_argument&)
             {
-                values.push_back(0.0f);  // Non-numeric cell
+                values.push_back(0.0f);
+                ++badCells;
             }
             catch (const std::out_of_range&)
             {
-                values.push_back(0.0f);  // Value too large for float
+                values.push_back(0.0f);
+                ++badCells;
             }
         }
 
@@ -1180,6 +1231,8 @@ void Workbench::importCsv(const std::string& path)
     }
 
     m_statusMessage = "Imported " + std::to_string(imported) + " data points from CSV.";
+    if (badCells > 0)
+        m_statusMessage = "Warning: " + std::to_string(badCells) + " cells could not be parsed (set to 0). " + m_statusMessage;
     m_statusTimer = 3.0f;
 
     rebuildVisualizationCache();
@@ -1203,8 +1256,11 @@ void Workbench::openFileDialog()
         if (std::fgets(buf, sizeof(buf), pipe))
         {
             std::string path(buf);
-            // Trim trailing whitespace/newline
-            path.erase(path.find_last_not_of(" \t\r\n") + 1);
+            auto lastNonWs = path.find_last_not_of(" \t\r\n");
+            if (lastNonWs != std::string::npos)
+                path.erase(lastNonWs + 1);
+            else
+                path.clear();
             if (!path.empty())
                 importCsv(path);
         }
@@ -1410,10 +1466,19 @@ void Workbench::batchFitCategory()
         return;
     }
 
+    struct BatchResult
+    {
+        std::string name;
+        float rSquared;
+        float aic;
+        bool converged;
+    };
+
     int totalFormulas = 0;
     int convergedCount = 0;
     float totalR2 = 0.0f;
     std::vector<std::string> failedNames;
+    std::vector<BatchResult> batchResults;
 
     for (const auto* formula : formulas)
     {
@@ -1454,8 +1519,9 @@ void Workbench::batchFitCategory()
         std::mt19937 rng(42);
         std::normal_distribution<float> noise(0.0f, 0.02f);
 
+        constexpr int SYNTH_COUNT = 20;
         std::vector<DataPoint> synthData;
-        for (int i = 0; i < 20; ++i)
+        for (int i = 0; i < SYNTH_COUNT; ++i)
         {
             float t = static_cast<float>(i) / 19.0f;
             float x = sweepMin + t * (sweepMax - sweepMin);
@@ -1480,6 +1546,26 @@ void Workbench::batchFitCategory()
         FitResult result = CurveFitter::fit(*formula, synthData, initialCoeffs,
                                             QualityTier::FULL, m_fitConfig);
 
+        // Compute AIC for this formula
+        float formulaAic = 0.0f;
+        if (result.converged)
+        {
+            int n = SYNTH_COUNT;
+            int k = static_cast<int>(result.coefficients.size());
+            double sse = static_cast<double>(result.rmse) * result.rmse * n;
+            if (sse > 0.0 && n > k + 1)
+            {
+                formulaAic = static_cast<float>(n * std::log(sse / n) + 2.0 * k);
+            }
+        }
+
+        BatchResult br;
+        br.name = formula->name;
+        br.rSquared = result.rSquared;
+        br.aic = formulaAic;
+        br.converged = result.converged;
+        batchResults.push_back(br);
+
         ++totalFormulas;
         if (result.converged)
         {
@@ -1491,6 +1577,16 @@ void Workbench::batchFitCategory()
             failedNames.push_back(formula->name);
         }
     }
+
+    // Sort converged results by AIC (ascending = better fit)
+    std::sort(batchResults.begin(), batchResults.end(),
+              [](const BatchResult& a, const BatchResult& b)
+              {
+                  // Converged results first, then sort by AIC ascending
+                  if (a.converged != b.converged)
+                      return a.converged;
+                  return a.aic < b.aic;
+              });
 
     // Build result message
     std::ostringstream msg;
@@ -1510,6 +1606,28 @@ void Workbench::batchFitCategory()
         }
         if (failedNames.size() > 5)
             msg << " (+" << (failedNames.size() - 5) << " more)";
+    }
+
+    // Append AIC ranking for converged formulas
+    if (!batchResults.empty())
+    {
+        msg << "\nAIC Ranking: ";
+        int rank = 0;
+        for (const auto& br : batchResults)
+        {
+            if (!br.converged)
+                continue;
+            if (rank > 0)
+                msg << ", ";
+            msg << br.name << " (AIC=" << std::fixed << std::setprecision(1) << br.aic << ")";
+            ++rank;
+            if (rank >= 5)
+            {
+                if (convergedCount > 5)
+                    msg << " (+" << (convergedCount - 5) << " more)";
+                break;
+            }
+        }
     }
 
     m_statusMessage = msg.str();
@@ -1762,6 +1880,8 @@ void Workbench::rebuildVisualizationCache()
         m_fitResult.coefficients.begin(), m_fitResult.coefficients.end());
 
     // Find X range from data
+    if (m_dataX.empty())
+        return;
     float xMin = *std::min_element(m_dataX.begin(), m_dataX.end());
     float xMax = *std::max_element(m_dataX.begin(), m_dataX.end());
     float padding = (xMax - xMin) * 0.05f;
@@ -1814,7 +1934,7 @@ void Workbench::rebuildVisualizationCache()
     for (const auto& dp : m_dataPoints)
     {
         float predicted = eval.evaluate(*expr, dp.variables, coeffMap);
-        m_residuals.push_back(predicted - dp.observed);
+        m_residuals.push_back(dp.observed - predicted);
     }
 }
 

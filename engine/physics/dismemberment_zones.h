@@ -78,6 +78,7 @@ private:
     void severChildren(int zoneIndex);
 
     std::vector<DismembermentZone> m_zones;
+    DismembermentZone m_dummyZone;  ///< Per-instance dummy for out-of-bounds access
 };
 
 } // namespace Vestige

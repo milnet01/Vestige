@@ -42,7 +42,7 @@ class AuditSession:
     """Manages a single audit run with event streaming."""
 
     def __init__(self) -> None:
-        self.event_queue: queue.Queue = queue.Queue()
+        self.event_queue: queue.Queue = queue.Queue(maxsize=1000)
         self._thread: threading.Thread | None = None
         self._cancel_flag = threading.Event()
         self._log_handler: QueueLogHandler | None = None
@@ -133,7 +133,10 @@ class AuditSession:
         """Called by AuditRunner on each progress event."""
         data["type"] = event_type
         data["timestamp"] = time.time()
-        self.event_queue.put(data)
+        try:
+            self.event_queue.put_nowait(data)
+        except queue.Full:
+            pass
 
     def get_status(self) -> dict[str, Any]:
         """Return current session state."""

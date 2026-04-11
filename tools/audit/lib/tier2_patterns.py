@@ -37,59 +37,61 @@ def run(config: Config) -> list[Finding]:
     # Build a mapping of file extension globs -> files for efficient matching
     max_per_cat = config.get("report", "max_findings_per_category", default=100)
 
+    # Pre-compile all regex patterns once (not per-file)
+    compiled_patterns: list[tuple[str, dict, re.Pattern, re.Pattern | None, list[str]]] = []
     for category_name, pattern_list in patterns_config.items():
         if not isinstance(pattern_list, list):
             continue
-
-        cat_count = 0
         for pat_def in pattern_list:
-            if cat_count >= max_per_cat:
-                break
-
-            name = pat_def.get("name", "unnamed")
             regex_str = pat_def.get("pattern", "")
-            file_glob = pat_def.get("file_glob", "*")
-            severity_str = pat_def.get("severity", "low")
-            description = pat_def.get("description", "")
-            exclude_pattern = pat_def.get("exclude_pattern", "")
-            skip_comments = pat_def.get("skip_comments", False)
-
             try:
                 regex = re.compile(regex_str)
             except re.error as e:
-                log.warning("Invalid regex in pattern '%s': %s", name, e)
+                log.warning("Invalid regex in pattern '%s': %s",
+                            pat_def.get("name", "unnamed"), e)
                 continue
-
             exclude_re = None
+            exclude_pattern = pat_def.get("exclude_pattern", "")
             if exclude_pattern:
                 try:
                     exclude_re = re.compile(exclude_pattern)
                 except re.error:
                     pass
+            globs = [g.strip() for g in pat_def.get("file_glob", "*").split(",")]
+            compiled_patterns.append((category_name, pat_def, regex, exclude_re, globs))
 
-            # Parse file_glob (comma-separated)
-            globs = [g.strip() for g in file_glob.split(",")]
+    cat_counts: dict[str, int] = {}
+    for category_name, pat_def, regex, exclude_re, globs in compiled_patterns:
+        cat_count = cat_counts.get(category_name, 0)
+        if cat_count >= max_per_cat:
+            continue
 
-            matching_files = _filter_files(all_files, globs)
+        name = pat_def.get("name", "unnamed")
+        severity_str = pat_def.get("severity", "low")
+        description = pat_def.get("description", "")
+        skip_comments = pat_def.get("skip_comments", False)
 
-            for fpath in matching_files:
+        matching_files = _filter_files(all_files, globs)
+
+        for fpath in matching_files:
+            if cat_count >= max_per_cat:
+                break
+            hits = _scan_file(fpath, regex, exclude_re, skip_comments)
+            for line_num, line_text in hits:
                 if cat_count >= max_per_cat:
                     break
-                hits = _scan_file(fpath, regex, exclude_re, skip_comments)
-                for line_num, line_text in hits:
-                    if cat_count >= max_per_cat:
-                        break
-                    findings.append(Finding(
-                        file=relative_path(fpath, config.root),
-                        line=line_num,
-                        severity=Severity.from_string(severity_str),
-                        category=category_name,
-                        source_tier=2,
-                        title=description,
-                        detail=line_text.strip()[:200],
-                        pattern_name=name,
-                    ))
-                    cat_count += 1
+                findings.append(Finding(
+                    file=relative_path(fpath, config.root),
+                    line=line_num,
+                    severity=Severity.from_string(severity_str),
+                    category=category_name,
+                    source_tier=2,
+                    title=description,
+                    detail=line_text.strip()[:200],
+                    pattern_name=name,
+                ))
+                cat_count += 1
+        cat_counts[category_name] = cat_count
 
     log.info("Tier 2: %d total findings", len(findings))
     return findings

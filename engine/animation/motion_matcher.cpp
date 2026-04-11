@@ -3,7 +3,6 @@
 
 #include "animation/motion_matcher.h"
 #include "animation/skeleton_animator.h"
-#include "core/logger.h"
 
 #include <chrono>
 #include <cmath>
@@ -54,9 +53,10 @@ void MotionMatcher::performSearch()
     if (numFeatures <= 0)
         return;
 
-    // Build query vector
-    std::vector<float> query(static_cast<size_t>(numFeatures), 0.0f);
-    buildQueryVector(query.data());
+    // Reuse query vector across searches to avoid per-search allocation
+    m_queryBuffer.resize(static_cast<size_t>(numFeatures));
+    std::fill(m_queryBuffer.begin(), m_queryBuffer.end(), 0.0f);
+    buildQueryVector(m_queryBuffer.data());
 
     // Time the search
     auto startTime = std::chrono::high_resolution_clock::now();
@@ -64,7 +64,7 @@ void MotionMatcher::performSearch()
     // Search with exclusion of current frame neighborhood
     int excludeRadius = static_cast<int>(m_searchInterval * 30.0f); // ~3 frames at 30Hz
     MotionSearchResult result = m_database->search(
-        query.data(), m_tagMask, m_currentFrame, excludeRadius);
+        m_queryBuffer.data(), m_tagMask, m_currentFrame, excludeRadius);
 
     auto endTime = std::chrono::high_resolution_clock::now();
     m_searchTimeMicros = std::chrono::duration<float, std::micro>(

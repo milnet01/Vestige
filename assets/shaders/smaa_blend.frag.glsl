@@ -4,7 +4,6 @@
 
 uniform sampler2D u_edgeTexture;
 uniform sampler2D u_areaTexture;
-uniform sampler2D u_searchTexture;
 uniform vec4 u_rtMetrics; // (1/width, 1/height, width, height)
 
 in vec2 v_texCoord;

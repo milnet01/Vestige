@@ -2,7 +2,6 @@
 /// @brief Motion matching feature schema and extraction implementation.
 
 #include "animation/feature_vector.h"
-#include "animation/skeleton.h"
 
 #include <cmath>
 #include <numeric>
