@@ -2,6 +2,33 @@
 
 All notable changes to the Audit Tool are documented in this file.
 
+## [2.0.0] - 2026-04-11
+
+### Added
+- **Cognitive complexity analysis (Tier 4)**: New `tier4_cognitive.py` module implementing SonarSource's cognitive complexity algorithm — per-function scoring with nesting penalty, logical operator tracking, and control flow break counting for C/C++, Python, Rust, Go, Java, JS, TS
+- **SARIF 2.1.0 output**: New `sarif_output.py` module and `--sarif` CLI flag — generates industry-standard SARIF JSON for GitHub Code Scanning and VS Code integration
+- **Buffer overflow detection (Tier 2)**: 8 new patterns — `gets` (CWE-242), `strcpy`/`strcat`/`sprintf`/`vsprintf` (CWE-120), `scanf` family (CWE-120), format string injection (CWE-134), off-by-one `<= .size()` (CWE-193)
+- **Memory leak detection (Tier 2)**: `malloc`/`calloc`/`realloc` (CWE-401), `fopen` without RAII (CWE-772), use-after-`std::move` (CWE-416)
+- **Modern C++ best practices (Tier 2)**: 8 new patterns — deprecated `auto_ptr`/`random_shuffle`/`bind1st`, deprecated throw spec, throw in destructor, catch by value (slicing), raw mutex lock (CWE-667), non-const mutable statics (CWE-362)
+- **Python best practices (Tier 2)**: 5 new patterns — mutable default arguments, wildcard imports, builtin shadowing, `== None` (PEP 8), assert in production
+- **Secret/credential detection (Tier 2)**: 5 patterns — hardcoded passwords (CWE-798), private keys (CWE-321), AWS access keys, GitHub tokens, generic API keys
+- **Performance anti-patterns (Tier 2)**: `std::string`/`std::vector` passed by value, `.size() == 0` vs `.empty()`
+- **Include ordering analysis (Tier 4)**: Checks C++ source files for Google-style include order (corresponding header → C system → C++ stdlib → third-party → project)
+- **Deep circular dependency detection (Tier 4)**: Upgraded from direct A↔B detection to full Tarjan's SCC algorithm for multi-file cycles (A→B→C→A)
+- **Configurable cognitive complexity threshold** in audit_config.yaml (`tier4.cognitive.threshold`, default 15)
+- Test suites: `test_tier4_cognitive.py`, `test_sarif_output.py`, `test_tier4_includes_extended.py`
+
+### Fixed
+- **Path traversal in `/api/config` PUT** — replaced `str.startswith()` with `Path.is_relative_to()` for proper canonicalization
+- **Unbounded event queue** — `Queue(maxsize=1000)` prevents memory growth on SSE disconnect
+- **Regex compilation in Tier 2** — patterns pre-compiled once before file loop (~15% faster)
+
+### Changed
+- Web UI security headers added: `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy`
+- C-style cast pattern expanded to include GL types (`GLuint`, `GLint`, `GLfloat`, etc.)
+- Report builder adds Cognitive Complexity and Include Order Violations sections
+- AuditData extended with `cognitive_complexity` field
+
 ## [1.9.0] - 2026-04-11
 
 ### Added

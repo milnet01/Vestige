@@ -387,12 +387,16 @@ int MotionDatabase::getFeatureCount() const
 
 const FrameInfo& MotionDatabase::getFrameInfo(int frameIndex) const
 {
-    return m_frameInfo[static_cast<size_t>(frameIndex)];
+    size_t idx = static_cast<size_t>(std::clamp(frameIndex, 0,
+        static_cast<int>(m_frameInfo.size()) - 1));
+    return m_frameInfo[idx];
 }
 
 const SkeletonPose& MotionDatabase::getPose(int frameIndex) const
 {
-    return m_poses[static_cast<size_t>(frameIndex)];
+    size_t idx = static_cast<size_t>(std::clamp(frameIndex, 0,
+        static_cast<int>(m_poses.size()) - 1));
+    return m_poses[idx];
 }
 
 const FeatureSchema& MotionDatabase::getSchema() const

@@ -2,6 +2,24 @@
 
 All notable changes to the Formula Workbench are documented in this file.
 
+## [1.3.0] - 2026-04-11
+
+### Fixed
+- **CRITICAL: string::npos undefined behavior** in CSV import and file dialog — `find_last_not_of()` / `find_first_not_of()` results now checked before use, preventing undefined behavior on all-whitespace strings
+- **HIGH: Empty container dereference** — added `m_dataX.empty()` guard before `min_element`/`max_element` in `rebuildVisualizationCache()`
+- **HIGH: Silent CSV data corruption** — unparseable cells now tracked with counter, user warned with status message instead of silent 0.0f insertion
+- **MEDIUM: Float precision loss** — statistical accumulators (`sumSqResid`, `sumObs`, `ssTot`) changed from `float` to `double` for proper precision in validation
+- **LOW: Unused member** — removed `m_firstFrame` (set but never read)
+
+### Added
+- **Adjusted R-squared** — penalizes extra parameters, displayed in validation panel
+- **AIC/BIC model selection** — Akaike and Bayesian Information Criteria computed after fitting, displayed in validation and used for batch fit ranking
+- **Residual plot** — scatter plot of residuals vs fitted values with zero line, toggleable via checkbox
+- **Build security hardening** — added `-fstack-protector-strong`, `-D_GLIBCXX_ASSERTIONS`, `-Wformat=2`, `-Werror=format-security` to CMakeLists.txt
+
+### Changed
+- Batch fit results now sorted by AIC (ascending = better model)
+
 ## [1.2.0] - 2026-04-11
 
 ### Added

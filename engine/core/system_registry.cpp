@@ -1,7 +1,6 @@
 /// @file system_registry.cpp
 /// @brief SystemRegistry implementation -- domain system lifecycle and dispatch.
 #include "core/system_registry.h"
-#include "core/i_system.h"
 #include "core/logger.h"
 #include "scene/scene.h"
 #include "scene/entity.h"

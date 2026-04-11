@@ -651,6 +651,43 @@ class ReportBuilder:
                         lines.append(f"- *({len(ss) - 10} more)*")
                     lines.append("")
 
+        # Cognitive Complexity
+        cog = data.cognitive_complexity
+        if cog:
+            above = cog.get("above_threshold", 0)
+            avg = cog.get("avg_complexity", 0)
+            max_c = cog.get("max_complexity", 0)
+            total_fn = cog.get("total_functions", 0)
+            if above > 0:
+                lines.append(f"### Cognitive Complexity ({above} functions above threshold, "
+                             f"avg={avg:.1f}, max={max_c})")
+                lines.append("")
+                lines.append("| Function | File | Line | Score |")
+                lines.append("|----------|------|------|-------|")
+                for fn in cog.get("functions", [])[:15]:
+                    lines.append(
+                        f"| `{fn['name']}` | `{fn['file']}` "
+                        f"| {fn['line']} | {fn['score']} |")
+                if above > 15:
+                    lines.append(f"| ... | | | *({above - 15} more)* |")
+                lines.append("")
+            else:
+                lines.append(f"### Cognitive Complexity — all {total_fn} functions below threshold "
+                             f"(avg={avg:.1f})")
+                lines.append("")
+
+        # Include Order Violations
+        inc = data.include_analysis
+        if inc:
+            order_viol = inc.get("order_violations", [])
+            if order_viol:
+                lines.append(f"### Include Order Violations ({len(order_viol)})")
+                lines.append("")
+                for v in order_viol[:10]:
+                    lines.append(f"- `{v['file']}` line {v['line']}: "
+                                 f"`#include \"{v['include']}\"` out of order")
+                lines.append("")
+
         return "\n".join(lines)
 
     def _build_trend_section(self, trend_report: Any) -> str:

@@ -31,7 +31,7 @@ public:
     /// @return True if loaded and converted successfully.
     bool loadEquirectangular(const std::string& path);
 
-    /// @brief Draws the skybox. Must be called with depth func set to GL_LEQUAL.
+    /// @brief Draws the skybox. Uses reverse-Z with GL_GEQUAL depth func.
     void draw() const;
 
     /// @brief Checks if a cubemap texture is loaded.

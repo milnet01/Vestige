@@ -135,6 +135,11 @@ def main() -> int:
         action="store_true",
         help="Also generate a self-contained HTML report",
     )
+    parser.add_argument(
+        "--sarif",
+        action="store_true",
+        help="Also generate a SARIF 2.1.0 report",
+    )
 
     args = parser.parse_args()
 
@@ -296,6 +301,13 @@ def main() -> int:
         html_path.parent.mkdir(parents=True, exist_ok=True)
         html_path.write_text(html_content)
         log.info("HTML report written to %s", html_path)
+
+    # Generate SARIF report if requested
+    if args.sarif and not args.json_output:
+        from lib.sarif_output import write_sarif
+        sarif_path = config.report_path.with_suffix(".sarif")
+        write_sarif(results.findings, sarif_path)
+        log.info("SARIF report written to %s", sarif_path)
 
     # Exit code
     if results.has_critical:

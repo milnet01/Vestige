@@ -117,6 +117,9 @@ private:
     float m_lastMatchClipTime = 0.0f;
     float m_searchTimeMicros = 0.0f;
     int m_framesSinceTransition = 0;
+
+    // Reusable query buffer (avoids per-search heap allocation)
+    std::vector<float> m_queryBuffer;
 };
 
 } // namespace Vestige

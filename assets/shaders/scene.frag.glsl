@@ -274,7 +274,7 @@ mat2 poissonRotation()
 {
     float noise = interleavedGradientNoise(gl_FragCoord.xy);
     float cosA = noise * 2.0 - 1.0;  // [-1, 1]
-    float sinA = sqrt(1.0 - cosA * cosA);  // sqrt is cheaper than sin on GPU
+    float sinA = sqrt(max(0.0, 1.0 - cosA * cosA));  // guard against FP rounding past +/-1
     if (fract(noise * 17.0) > 0.5) sinA = -sinA;
     return mat2(cosA, sinA, -sinA, cosA);
 }
@@ -468,6 +468,7 @@ int findPointShadowIndex(int lightIdx)
 /// Describes the statistical distribution of microfacet normals.
 float distributionGGX(float NdotH, float roughness)
 {
+    roughness = max(roughness, 0.04);  // prevent NaN at roughness=0
     float a = roughness * roughness;
     float a2 = a * a;
     float NdotH2 = NdotH * NdotH;

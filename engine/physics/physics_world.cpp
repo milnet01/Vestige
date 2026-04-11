@@ -316,21 +316,28 @@ const JPH::BodyInterface& PhysicsWorld::getBodyInterface() const
 // Constraint helpers
 // ---------------------------------------------------------------------------
 
-JPH::Body& PhysicsWorld::resolveBodyA(JPH::BodyID bodyA)
+JPH::Body* PhysicsWorld::resolveBodyA(JPH::BodyID bodyA)
 {
     if (bodyA.IsInvalid())
     {
-        return JPH::Body::sFixedToWorld;
+        return &JPH::Body::sFixedToWorld;
     }
 
+    // Note: the caller must hold its own lock on bodyA, or use this pointer
+    // only within the scope of the caller's lock on bodyB (Jolt allows
+    // locking multiple bodies if done through BodyLockMultiWrite, but for
+    // our use case — constraint creation — we lock bodyA here transiently
+    // just to get its pointer).  Jolt body pointers remain stable as long as
+    // the body is not destroyed, so the pointer is safe to use after unlock
+    // provided the body is still alive.
     JPH::BodyLockWrite lock(m_physicsSystem->GetBodyLockInterface(), bodyA);
     if (lock.Succeeded())
     {
-        return lock.GetBody();
+        return &lock.GetBody();
     }
 
     Logger::warning("PhysicsWorld: could not lock bodyA, using world anchor");
-    return JPH::Body::sFixedToWorld;
+    return &JPH::Body::sFixedToWorld;
 }
 
 ConstraintHandle PhysicsWorld::registerConstraint(JPH::TwoBodyConstraint* constraint,
@@ -383,7 +390,7 @@ ConstraintHandle PhysicsWorld::addHingeConstraint(
     settings.mLimitsMax = JPH::DegreesToRadians(limitsMaxDeg);
     settings.mMaxFrictionTorque = maxFrictionTorque;
 
-    JPH::Body& bA = resolveBodyA(bodyA);
+    JPH::Body* bA = resolveBodyA(bodyA);
     JPH::BodyLockWrite lockB(m_physicsSystem->GetBodyLockInterface(), bodyB);
     if (!lockB.Succeeded())
     {
@@ -391,7 +398,7 @@ ConstraintHandle PhysicsWorld::addHingeConstraint(
     }
 
     auto* constraint = static_cast<JPH::HingeConstraint*>(
-        settings.Create(bA, lockB.GetBody()));
+        settings.Create(*bA, lockB.GetBody()));
 
     return registerConstraint(constraint, ConstraintType::HINGE, bodyA, bodyB);
 }
@@ -408,7 +415,7 @@ ConstraintHandle PhysicsWorld::addFixedConstraint(
     settings.mSpace = JPH::EConstraintSpace::WorldSpace;
     settings.mAutoDetectPoint = true;
 
-    JPH::Body& bA = resolveBodyA(bodyA);
+    JPH::Body* bA = resolveBodyA(bodyA);
     JPH::BodyLockWrite lockB(m_physicsSystem->GetBodyLockInterface(), bodyB);
     if (!lockB.Succeeded())
     {
@@ -416,7 +423,7 @@ ConstraintHandle PhysicsWorld::addFixedConstraint(
     }
 
     auto* constraint = static_cast<JPH::FixedConstraint*>(
-        settings.Create(bA, lockB.GetBody()));
+        settings.Create(*bA, lockB.GetBody()));
 
     return registerConstraint(constraint, ConstraintType::FIXED, bodyA, bodyB);
 }
@@ -446,7 +453,7 @@ ConstraintHandle PhysicsWorld::addDistanceConstraint(
         settings.mLimitsSpringSettings.mDamping = springDamping;
     }
 
-    JPH::Body& bA = resolveBodyA(bodyA);
+    JPH::Body* bA = resolveBodyA(bodyA);
     JPH::BodyLockWrite lockB(m_physicsSystem->GetBodyLockInterface(), bodyB);
     if (!lockB.Succeeded())
     {
@@ -454,7 +461,7 @@ ConstraintHandle PhysicsWorld::addDistanceConstraint(
     }
 
     auto* constraint = static_cast<JPH::DistanceConstraint*>(
-        settings.Create(bA, lockB.GetBody()));
+        settings.Create(*bA, lockB.GetBody()));
 
     return registerConstraint(constraint, ConstraintType::DISTANCE, bodyA, bodyB);
 }
@@ -473,7 +480,7 @@ ConstraintHandle PhysicsWorld::addPointConstraint(
     settings.mPoint1 = toJolt(pivotPoint);
     settings.mPoint2 = toJolt(pivotPoint);
 
-    JPH::Body& bA = resolveBodyA(bodyA);
+    JPH::Body* bA = resolveBodyA(bodyA);
     JPH::BodyLockWrite lockB(m_physicsSystem->GetBodyLockInterface(), bodyB);
     if (!lockB.Succeeded())
     {
@@ -481,7 +488,7 @@ ConstraintHandle PhysicsWorld::addPointConstraint(
     }
 
     auto* constraint = static_cast<JPH::PointConstraint*>(
-        settings.Create(bA, lockB.GetBody()));
+        settings.Create(*bA, lockB.GetBody()));
 
     return registerConstraint(constraint, ConstraintType::POINT, bodyA, bodyB);
 }
@@ -517,7 +524,7 @@ ConstraintHandle PhysicsWorld::addSliderConstraint(
     settings.mLimitsMax = limitsMax;
     settings.mMaxFrictionForce = maxFrictionForce;
 
-    JPH::Body& bA = resolveBodyA(bodyA);
+    JPH::Body* bA = resolveBodyA(bodyA);
     JPH::BodyLockWrite lockB(m_physicsSystem->GetBodyLockInterface(), bodyB);
     if (!lockB.Succeeded())
     {
@@ -525,7 +532,7 @@ ConstraintHandle PhysicsWorld::addSliderConstraint(
     }
 
     auto* constraint = static_cast<JPH::SliderConstraint*>(
-        settings.Create(bA, lockB.GetBody()));
+        settings.Create(*bA, lockB.GetBody()));
 
     return registerConstraint(constraint, ConstraintType::SLIDER, bodyA, bodyB);
 }
@@ -629,13 +636,13 @@ void PhysicsWorld::checkBreakableConstraints(float deltaTime)
         case ConstraintType::HINGE:
             if (auto* h = constraint.asHinge())
             {
-                impulse = toGlm(h->GetTotalLambdaPosition()).length();
+                impulse = glm::length(toGlm(h->GetTotalLambdaPosition()));
             }
             break;
         case ConstraintType::FIXED:
             if (auto* f = constraint.asFixed())
             {
-                impulse = toGlm(f->GetTotalLambdaPosition()).length();
+                impulse = glm::length(toGlm(f->GetTotalLambdaPosition()));
             }
             break;
         case ConstraintType::DISTANCE:
@@ -647,15 +654,16 @@ void PhysicsWorld::checkBreakableConstraints(float deltaTime)
         case ConstraintType::POINT:
             if (auto* p = constraint.asPoint())
             {
-                impulse = toGlm(p->GetTotalLambdaPosition()).length();
+                impulse = glm::length(toGlm(p->GetTotalLambdaPosition()));
             }
             break;
         case ConstraintType::SLIDER:
             if (auto* s = constraint.asSlider())
             {
-                impulse = toGlm(JPH::Vec3(s->GetTotalLambdaPosition()[0],
-                                            s->GetTotalLambdaPosition()[1],
-                                            0.0f)).length();
+                impulse = glm::length(toGlm(JPH::Vec3(
+                    s->GetTotalLambdaPosition()[0],
+                    s->GetTotalLambdaPosition()[1],
+                    0.0f)));
             }
             break;
         }

@@ -10,7 +10,6 @@ layout(location = 1) in vec2 a_texCoord;
 layout(location = 3) in vec3 i_position;
 layout(location = 4) in float i_rotation;
 layout(location = 5) in float i_scale;
-layout(location = 6) in vec3 i_colorTint;
 
 uniform mat4 u_lightSpaceMatrix;
 uniform float u_time;

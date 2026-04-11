@@ -115,6 +115,8 @@ void AnimationStateMachine::update(SkeletonAnimator& animator, float /*deltaTime
         }
 
         // Transition fires!
+        if (transition.toState < 0 || transition.toState >= getStateCount())
+            continue;
         m_currentState = transition.toState;
         const auto& targetState = m_states[static_cast<size_t>(m_currentState)];
         animator.setSpeed(targetState.playbackSpeed);

@@ -78,9 +78,9 @@ void Inertialization::start(const std::vector<glm::vec3>& srcPositions,
 
             // Convert to axis-angle
             float angle = 2.0f * std::acos(glm::clamp(diff.w, -1.0f, 1.0f));
-            if (angle > 1e-6f)
+            float sinHalf = std::sin(angle / 2.0f);
+            if (angle > 1e-6f && sinHalf > 1e-6f)
             {
-                float sinHalf = std::sin(angle / 2.0f);
                 glm::vec3 axis(diff.x / sinHalf, diff.y / sinHalf, diff.z / sinHalf);
                 state.rotationOffset = axis * angle;
             }

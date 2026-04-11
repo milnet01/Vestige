@@ -208,7 +208,7 @@ private:
     uint32_t m_constraintGeneration = 0;
 
     /// @brief Resolves bodyA for constraint creation. Invalid ID = Body::sFixedToWorld.
-    JPH::Body& resolveBodyA(JPH::BodyID bodyA);
+    JPH::Body* resolveBodyA(JPH::BodyID bodyA);
 
     /// @brief Registers a newly created constraint and returns its handle.
     ConstraintHandle registerConstraint(JPH::TwoBodyConstraint* constraint,

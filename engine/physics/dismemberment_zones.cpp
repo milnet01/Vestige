@@ -73,9 +73,12 @@ const DismembermentZone& DismembermentZones::getZone(int index) const
 
 DismembermentZone& DismembermentZones::getZone(int index)
 {
-    static DismembermentZone s_invalidZone{};
+    // Return a per-instance dummy zone instead of a shared mutable static,
+    // so callers that accidentally modify the return value don't corrupt
+    // future "invalid zone" queries across different instances.
+    m_dummyZone = DismembermentZone{};
     if (index < 0 || static_cast<size_t>(index) >= m_zones.size())
-        return s_invalidZone;
+        return m_dummyZone;
     return m_zones[static_cast<size_t>(index)];
 }
 

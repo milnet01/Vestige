@@ -105,13 +105,21 @@ def run(config: Config) -> tuple[AuditData, list]:
     data.refactoring = refactor_result.to_dict()
     complexity_findings.extend(refactor_findings)
 
+    # Cognitive complexity analysis
+    from . import tier4_cognitive
+    cognitive_result, cognitive_findings = tier4_cognitive.analyze_cognitive_complexity(config)
+    data.cognitive_complexity = cognitive_result.to_dict()
+    complexity_findings.extend(cognitive_findings)
+
     log.info("Tier 4: %d LOC, %d GPU classes, %d event files, %d deferred markers, "
-             "%d dead code, %d build audit, %d clone pairs, %d refactoring smells",
+             "%d dead code, %d build audit, %d clone pairs, %d refactoring smells, "
+             "%d high cognitive complexity",
              data.total_loc, len(data.gpu_resource_classes),
              len(data.event_lifecycle), len(data.deferred_markers),
              len(deadcode_result.unused_functions) + len(deadcode_result.unused_includes),
              len(build_audit_findings),
-             len(dup_result.clone_pairs), refactor_result.total_smells)
+             len(dup_result.clone_pairs), refactor_result.total_smells,
+             cognitive_result.above_threshold)
     return data, complexity_findings
 
 

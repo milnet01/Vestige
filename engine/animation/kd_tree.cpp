@@ -37,11 +37,10 @@ void KDTree::build(const float* features, int numFrames, int numFeatures)
 
 void KDTree::buildRecursive(int nodeIndex, int start, int count, int depth)
 {
-    Node& node = m_nodes[static_cast<size_t>(nodeIndex)];
-
     // Leaf node if count is small enough
     if (count <= MAX_LEAF_SIZE)
     {
+        Node& node = m_nodes[static_cast<size_t>(nodeIndex)];
         node.splitDimension = -1;
         node.frameStart = start;
         node.frameCount = count;
@@ -50,7 +49,6 @@ void KDTree::buildRecursive(int nodeIndex, int start, int count, int depth)
 
     // Find dimension with highest variance
     int splitDim = findHighestVarianceDimension(start, count);
-    node.splitDimension = splitDim;
 
     // Sort indices by the split dimension value and find the median
     int mid = count / 2;
@@ -65,16 +63,20 @@ void KDTree::buildRecursive(int nodeIndex, int start, int count, int depth)
         });
 
     int medianFrame = m_indices[static_cast<size_t>(start + mid)];
-    node.splitValue = m_features[medianFrame * m_numFeatures + splitDim];
+    float splitValue = m_features[medianFrame * m_numFeatures + splitDim];
 
-    // Create child nodes
+    // Create child nodes — push_back may reallocate m_nodes, so we must NOT
+    // hold a reference to m_nodes[nodeIndex] across these calls.
     int leftIdx = static_cast<int>(m_nodes.size());
     m_nodes.push_back({});
     int rightIdx = static_cast<int>(m_nodes.size());
     m_nodes.push_back({});
 
-    node.leftChild = leftIdx;
-    node.rightChild = rightIdx;
+    // Now safe to write — no more push_back calls before recursion
+    m_nodes[static_cast<size_t>(nodeIndex)].splitDimension = splitDim;
+    m_nodes[static_cast<size_t>(nodeIndex)].splitValue = splitValue;
+    m_nodes[static_cast<size_t>(nodeIndex)].leftChild = leftIdx;
+    m_nodes[static_cast<size_t>(nodeIndex)].rightChild = rightIdx;
 
     // Recurse
     buildRecursive(leftIdx, start, mid, depth + 1);

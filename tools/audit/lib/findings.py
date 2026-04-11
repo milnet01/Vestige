@@ -150,6 +150,7 @@ class AuditData:
     build_audit: dict[str, Any] | None = None
     duplication: dict[str, Any] | None = None
     refactoring: dict[str, Any] | None = None
+    cognitive_complexity: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         d = {
@@ -176,6 +177,8 @@ class AuditData:
             d["duplication"] = self.duplication
         if self.refactoring:
             d["refactoring"] = self.refactoring
+        if self.cognitive_complexity:
+            d["cognitive_complexity"] = self.cognitive_complexity
         return d
 
 

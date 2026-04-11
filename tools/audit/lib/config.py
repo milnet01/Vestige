@@ -98,6 +98,11 @@ DEFAULTS: dict[str, Any] = {
             "max_nesting_depth": 4,
             "max_findings": 50,
         },
+        "cognitive": {
+            "enabled": True,
+            "threshold": 15,
+            "max_findings": 50,
+        },
     },
     "research": {
         "enabled": True,

@@ -244,6 +244,11 @@ tier4:
     max_elif_chain: 5          # Long else-if chain threshold
     max_nesting_depth: 4       # Deep nesting threshold
     max_findings: 50
+  # Cognitive complexity analysis (SonarSource algorithm)
+  cognitive:
+    enabled: true
+    threshold: 15              # Functions scoring above this are flagged
+    max_findings: 50
 
 # -- Tier 5: Online Research --------------------------------------------------
 research:
