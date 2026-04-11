@@ -82,6 +82,22 @@ DEFAULTS: dict[str, Any] = {
         "event_subscribe_pattern": r"subscribe<",
         "event_unsubscribe_pattern": r"unsubscribe",
         "complexity_threshold": 500,
+        "duplication": {
+            "enabled": True,
+            "min_lines": 5,
+            "min_tokens": 50,
+            "normalize_ids": True,
+            "max_findings": 50,
+        },
+        "refactoring": {
+            "enabled": True,
+            "max_params": 5,
+            "max_functions_per_file": 15,
+            "max_case_labels": 7,
+            "max_elif_chain": 5,
+            "max_nesting_depth": 4,
+            "max_findings": 50,
+        },
     },
     "research": {
         "enabled": True,
@@ -180,7 +196,10 @@ def load_config(path: str | Path | None, project_root: str | Path | None = None)
     if project_root:
         root = Path(project_root).resolve()
     else:
-        root = Path(raw.get("project", {}).get("root", ".")).resolve()
+        # Resolve root relative to the config file's directory, not CWD,
+        # so the tool works regardless of where it's invoked from.
+        config_dir = Path(path).resolve().parent if path else Path.cwd()
+        root = (config_dir / raw.get("project", {}).get("root", ".")).resolve()
 
     # Auto-detect tools
     _detect_tools(raw)

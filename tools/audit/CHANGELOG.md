@@ -2,6 +2,50 @@
 
 All notable changes to the Audit Tool are documented in this file.
 
+## [1.9.0] - 2026-04-11
+
+### Added
+- **Code duplication detection (Tier 4)**: New `tier4_duplication.py` module using Rabin-Karp rolling hash to detect Type-1 (exact) and Type-2 (renamed variable) code clones across all supported languages — pure Python, no external dependencies
+- **Refactoring opportunity analysis (Tier 4)**: New `tier4_refactoring.py` module detects 5 code smells:
+  - **Long parameter lists**: functions with >5 params (configurable), per-language regex with Python `self`/`cls`/`*args` exclusion
+  - **God files**: files with >15 function definitions (configurable)
+  - **Large switch/if-else chains**: >7 case labels or >5 elif/else-if branches (configurable)
+  - **Deep nesting**: >4 levels of brace/indentation nesting (configurable), brace-counting for C-family, indentation for Python
+  - **Similar function signatures**: cross-file functions with identical parameter type lists
+- Per-language detection for C/C++, Python, Rust, Go, Java, JavaScript, TypeScript
+- Configurable thresholds for all detectors (`tier4.duplication.*`, `tier4.refactoring.*`)
+- Test suites: `test_tier4_duplication.py` (23 tests) and `test_tier4_refactoring.py` (38 tests)
+
+### Changed
+- AuditData extended with `duplication` and `refactoring` fields
+- Report builder adds Code Duplication and Refactoring Opportunities sections
+- Tier 4 log summary includes clone pair and refactoring smell counts
+
+## [1.8.0] - 2026-04-11
+
+### Added
+- **Security pattern category (Tier 2)**: 9 new patterns covering path traversal, command injection, missing O_CLOEXEC, decompression bombs, socket permissions, unsafe deserialization, unbounded buffers, predictable temp files, missing null checks — all with CWE references
+- **Dead code detection (Tier 4)**: New `tier4_deadcode.py` module with per-language analyzers:
+  - **C/C++**: unused function declarations, unreferenced definitions, unused `#include` directives (Qt-aware: skips signals, slots, virtual overrides)
+  - **Python**: unused private functions, unused `import` statements
+  - **Rust**: unreferenced `fn` definitions (skips trait impls, test functions)
+  - **JS/TS**: unused `import` statements (named and default imports)
+- **Build system audit (Tier 4)**: New `tier4_build_audit.py` module checks CMakeLists.txt for 8 security hardening flags (stack protector, FORTIFY_SOURCE, RELRO, PIE, etc.), 3 warning flags (-Wall, -Wextra, -Wpedantic), and 3 CMake best practices — with CWE references for each missing flag
+- **Diff-aware security scanning (Tier 3)**: Scans added lines in git diffs for 9 security-sensitive patterns (new system calls, shell command concatenation, path traversal, SQL injection, deserialization, fork without FD cleanup)
+- **Domain-specific security research (Tier 5)**: Auto-detects application domain (terminal emulator, Qt app, Lua scripting, network/IPC, web server, crypto, database, game engine) and generates targeted security research queries (terminal CVEs, PTY security, Qt injection, Lua sandbox escapes, etc.)
+- **Search result quality filtering (Tier 5)**: Filters non-English results (Chinese, Japanese, Korean, Arabic, Cyrillic), spam, and irrelevant domains; uses `region=us-en` for DuckDuckGo queries; requests 2x results to compensate for filtering
+- Security patterns added to auto-config defaults for C++, Python, JavaScript/TypeScript
+
+### Fixed
+- **raw_new false positives**: Qt parent-child allocations (`new QWidget(parent)`, layouts, actions, labels) now excluded from raw_new pattern — eliminates ~100 false positives on Qt projects
+- Tier 5 research returning non-English results (Chinese zhihu.com, Japanese qiita.com, etc.)
+- Tier 5 research returning irrelevant results (caching StackOverflow posts for CVE queries)
+
+### Changed
+- Tier 3 `run()` now returns `tuple[ChangeSummary, list[Finding]]` (was just `ChangeSummary`) to include diff security findings
+- AuditData extended with `dead_code` and `build_audit` fields
+- Report builder adds Dead Code, Build System Audit, and Diff Security Scan sections
+
 ## [1.7.0] - 2026-04-11
 
 ### Added

@@ -81,9 +81,37 @@ def run(config: Config) -> tuple[AuditData, list]:
     if complexity_result:
         data.complexity = complexity_result.to_dict()
 
-    log.info("Tier 4: %d LOC, %d GPU classes, %d event files, %d deferred markers",
+    # Dead code detection
+    from . import tier4_deadcode
+    deadcode_result, deadcode_findings = tier4_deadcode.analyze_dead_code(config)
+    data.dead_code = deadcode_result.to_dict()
+    complexity_findings.extend(deadcode_findings)
+
+    # Build system audit
+    from . import tier4_build_audit
+    build_audit_result, build_audit_findings = tier4_build_audit.analyze_build_system(config)
+    data.build_audit = build_audit_result.to_dict()
+    complexity_findings.extend(build_audit_findings)
+
+    # Code duplication detection
+    from . import tier4_duplication
+    dup_result, dup_findings = tier4_duplication.analyze_duplication(config)
+    data.duplication = dup_result.to_dict()
+    complexity_findings.extend(dup_findings)
+
+    # Refactoring opportunity analysis
+    from . import tier4_refactoring
+    refactor_result, refactor_findings = tier4_refactoring.analyze_refactoring(config)
+    data.refactoring = refactor_result.to_dict()
+    complexity_findings.extend(refactor_findings)
+
+    log.info("Tier 4: %d LOC, %d GPU classes, %d event files, %d deferred markers, "
+             "%d dead code, %d build audit, %d clone pairs, %d refactoring smells",
              data.total_loc, len(data.gpu_resource_classes),
-             len(data.event_lifecycle), len(data.deferred_markers))
+             len(data.event_lifecycle), len(data.deferred_markers),
+             len(deadcode_result.unused_functions) + len(deadcode_result.unused_includes),
+             len(build_audit_findings),
+             len(dup_result.clone_pairs), refactor_result.total_smells)
     return data, complexity_findings
 
 

@@ -146,6 +146,10 @@ class AuditData:
     uniform_sync: dict[str, Any] | None = None
     include_analysis: dict[str, Any] | None = None
     complexity: dict[str, Any] | None = None
+    dead_code: dict[str, Any] | None = None
+    build_audit: dict[str, Any] | None = None
+    duplication: dict[str, Any] | None = None
+    refactoring: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         d = {
@@ -164,6 +168,14 @@ class AuditData:
             d["include_analysis"] = self.include_analysis
         if self.complexity:
             d["complexity"] = self.complexity
+        if self.dead_code:
+            d["dead_code"] = self.dead_code
+        if self.build_audit:
+            d["build_audit"] = self.build_audit
+        if self.duplication:
+            d["duplication"] = self.duplication
+        if self.refactoring:
+            d["refactoring"] = self.refactoring
         return d
 
 

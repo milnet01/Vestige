@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import re
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -14,12 +15,69 @@ from .findings import ResearchResult
 
 log = logging.getLogger("audit")
 
-# Try importing duckduckgo_search — graceful fallback if not installed
+# Try importing ddgs (new name) or duckduckgo_search (old name)
 try:
-    from duckduckgo_search import DDGS
+    from ddgs import DDGS
     HAS_DDGS = True
 except ImportError:
-    HAS_DDGS = False
+    try:
+        from duckduckgo_search import DDGS
+        HAS_DDGS = True
+    except ImportError:
+        HAS_DDGS = False
+
+# ---------------------------------------------------------------------------
+# Result quality filtering
+# ---------------------------------------------------------------------------
+
+# Domains that reliably produce relevant technical results
+_TRUSTED_DOMAINS = frozenset({
+    "github.com", "stackoverflow.com", "nvd.nist.gov", "cve.org",
+    "cwe.mitre.org", "wiki.sei.cmu.edu", "owasp.org",
+    "learn.microsoft.com", "developer.mozilla.org", "doc.qt.io",
+    "docs.python.org", "docs.rs", "pkg.go.dev",
+    "man7.org", "lwn.net", "pubs.opengroup.org",
+    "khronos.org", "opengl.org", "learnopengl.com",
+    "en.cppreference.com", "cplusplus.com",
+    "security.googleblog.com", "blog.cloudflare.com",
+    "hackerone.com", "portswigger.net",
+})
+
+# Patterns indicating non-English or irrelevant results
+_IRRELEVANT_PATTERNS = re.compile(
+    r"[\u4e00-\u9fff]|"           # Chinese characters
+    r"[\u3040-\u309f]|"           # Hiragana
+    r"[\u30a0-\u30ff]|"           # Katakana
+    r"[\uac00-\ud7af]|"           # Korean
+    r"[\u0600-\u06ff]|"           # Arabic
+    r"[\u0400-\u04ff]{10,}|"      # Long Cyrillic blocks
+    r"zhihu\.com|"
+    r"csdn\.net|"
+    r"qiita\.com|"
+    r"habr\.com|"
+    r"tistory\.com|"
+    r"nocache|"                    # Generic caching noise
+    r"coupon|discount|buy now"     # Spam
+)
+
+
+def _is_relevant_result(result: dict) -> bool:
+    """Filter out non-English and irrelevant search results."""
+    title = result.get("title", "")
+    url = result.get("url", "")
+    snippet = result.get("snippet", "")
+    combined = f"{title} {url} {snippet}"
+
+    if _IRRELEVANT_PATTERNS.search(combined):
+        return False
+
+    # Reject results with mostly non-ASCII titles (likely non-English)
+    if title:
+        ascii_ratio = sum(1 for c in title if ord(c) < 128) / max(len(title), 1)
+        if ascii_ratio < 0.5:
+            return False
+
+    return True
 
 
 def run(config: Config, findings: list | None = None) -> list[ResearchResult]:
@@ -57,6 +115,16 @@ def run(config: Config, findings: list | None = None) -> list[ResearchResult]:
     for q in research_config.get("custom_queries", []):
         if q:
             queries.append(q)
+
+    # Auto-generated domain-specific security queries
+    try:
+        from .tier5_improvements import get_security_queries
+        sec_queries = get_security_queries(config)
+        if sec_queries:
+            log.info("Tier 5: %d domain-specific security queries", len(sec_queries))
+            queries.extend(sec_queries)
+    except Exception as e:
+        log.warning("Security query generation failed: %s", e)
 
     # Auto-detected improvement queries (scan codebase for technologies)
     try:
@@ -109,7 +177,7 @@ def _search_with_cache(
     cache_ttl: timedelta,
     max_results: int,
 ) -> ResearchResult:
-    """Search with file-based caching."""
+    """Search with file-based caching and result quality filtering."""
     cache_file = cache_dir / f"{_cache_key(query)}.json"
 
     # Check cache
@@ -127,11 +195,12 @@ def _search_with_cache(
         except (json.JSONDecodeError, ValueError, KeyError):
             pass  # Stale or corrupt cache — re-fetch
 
-    # Live search
+    # Live search — request extra results so we have enough after filtering
     try:
         log.debug("Searching: %s", query)
         ddgs = DDGS()
-        raw_results = ddgs.text(query, max_results=max_results)
+        # Request 2x results to account for filtering, enforce English region
+        raw_results = ddgs.text(query, region="us-en", max_results=max_results * 2)
 
         formatted = [
             {
@@ -142,15 +211,26 @@ def _search_with_cache(
             for r in raw_results
         ]
 
+        # Filter out non-English and irrelevant results
+        filtered = [r for r in formatted if _is_relevant_result(r)]
+
+        # If filtering removed everything, fall back to unfiltered (better than nothing)
+        if not filtered and formatted:
+            log.debug("All results filtered for '%s' — keeping original", query)
+            filtered = formatted
+
+        # Cap to requested max
+        filtered = filtered[:max_results]
+
         # Write to cache
         cache_data = {
             "query": query,
             "timestamp": datetime.now().isoformat(),
-            "results": formatted,
+            "results": filtered,
         }
         cache_file.write_text(json.dumps(cache_data, indent=2))
 
-        return ResearchResult(query=query, results=formatted)
+        return ResearchResult(query=query, results=filtered)
 
     except Exception as e:
         log.warning("Search failed for '%s': %s", query, e)

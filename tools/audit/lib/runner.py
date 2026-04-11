@@ -204,8 +204,8 @@ class AuditRunner:
                 return {"tier": 2, "findings": findings}
             elif tier_num == 3:
                 from . import tier3_changes
-                change_summary = tier3_changes.run(self.config)
-                return {"tier": 3, "findings": [], "change_summary": change_summary}
+                change_summary, diff_findings = tier3_changes.run(self.config)
+                return {"tier": 3, "findings": diff_findings, "change_summary": change_summary}
             elif tier_num == 4:
                 from . import tier4_stats
                 audit_data, complexity_findings = tier4_stats.run(self.config)

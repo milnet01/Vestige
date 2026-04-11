@@ -8,7 +8,7 @@
 
 project:
   name: "Vestige"
-  root: "."
+  root: "../.."
   language: "cpp"
   source_dirs: ["engine/", "app/", "tests/"]
   shader_dirs: ["assets/shaders/"]
@@ -63,7 +63,7 @@ patterns:
       file_glob: "*.cpp,*.h"
       severity: "high"
       description: "Raw new — should use smart pointers"
-      exclude_pattern: "placement new|nothrow|JPH::|tinygltf|stb_|dr_|make_unique|make_shared"
+      exclude_pattern: "placement new|nothrow|JPH::|tinygltf|stb_|dr_|make_unique|make_shared|new Q\\w+\\(|new Q\\w+\\s*\\{|QVBoxLayout|QHBoxLayout|QGridLayout|QFormLayout|QAction|QMenu|QLabel|QWidget"
       skip_comments: true
     - name: "raw_delete"
       pattern: "\\bdelete\\s+\\w+"
@@ -96,6 +96,63 @@ patterns:
       severity: "medium"
       description: "C-style cast — use static_cast/reinterpret_cast"
       exclude_pattern: "\\(void\\)|sizeof\\s*\\(|static_cast|reinterpret_cast|const_cast|dynamic_cast"
+      skip_comments: true
+
+  security:
+    - name: "path_traversal"
+      pattern: "(QDir|QFile|std::ofstream|std::ifstream|fopen).*\\+.*(?:Id|Name|Path|name|path|id|file|dir)"
+      file_glob: "*.cpp"
+      severity: "high"
+      description: "Path concatenation with user-controlled input — verify sanitization"
+      skip_comments: true
+    - name: "command_injection"
+      pattern: "(?:system|popen|exec[lv]p?)\\s*\\(.*\\+|QProcess.*start.*\\+|\"(?:cd|rm|mv|cp|sh|bash)\\s.*\\+"
+      file_glob: "*.cpp"
+      severity: "high"
+      description: "Shell command constructed from string concatenation — command injection risk"
+      skip_comments: true
+    - name: "missing_fd_cloexec"
+      pattern: "\\b(?:forkpty|fork)\\s*\\("
+      file_glob: "*.cpp"
+      severity: "medium"
+      description: "fork/forkpty — verify FD_CLOEXEC set and FDs closed in child (CWE-403)"
+      skip_comments: true
+    - name: "decompression_bomb"
+      pattern: "\\b(?:qUncompress|inflate|decompress|gunzip|unzip|LZ4_decompress)\\b"
+      file_glob: "*.cpp"
+      severity: "high"
+      description: "Decompression without size limit — potential decompression bomb (CWE-409)"
+      skip_comments: true
+    - name: "socket_permissions"
+      pattern: "\\b(?:listen|bind)\\s*\\(.*(?:Unix|Local|AF_UNIX)"
+      file_glob: "*.cpp"
+      severity: "medium"
+      description: "Unix socket — verify restrictive file permissions after bind/listen"
+      skip_comments: true
+    - name: "unsafe_deserialization"
+      pattern: "\\b(?:luaL_dofile|luaL_loadfile|luaL_loadbuffer|pickle\\.load|yaml\\.load|readObjectFromFile)\\b"
+      file_glob: "*.cpp,*.py"
+      severity: "high"
+      description: "Loading untrusted data — verify input validation / sandbox (CWE-502)"
+      skip_comments: true
+    - name: "unbounded_buffer"
+      pattern: "(?:push_back|append|\\+=).*(?:readAll|recv|read\\(|fread)(?!.*(?:max|limit|cap|size_check|MAX))"
+      file_glob: "*.cpp"
+      severity: "medium"
+      description: "Unbounded buffer growth from I/O — verify size limits"
+      skip_comments: true
+    - name: "predictable_temp"
+      pattern: "(?:/tmp/|/var/tmp/).*\\+|tmpnam\\(|tempnam\\(|mktemp\\("
+      file_glob: "*.cpp"
+      severity: "medium"
+      description: "Predictable temporary file path — use mkstemp/QTemporaryFile (CWE-377)"
+      skip_comments: true
+    - name: "missing_null_check"
+      pattern: "->\\w+.*=.*(?:dynamic_cast|find|lookup|get).*(?:nullptr|NULL|null)"
+      file_glob: "*.cpp"
+      severity: "medium"
+      description: "Dereference after potentially-null operation — verify null check"
+      exclude_pattern: "if\\s*\\(|\\?|assert"
       skip_comments: true
 
   opengl_state:
@@ -171,6 +228,22 @@ tier4:
   event_subscribe_pattern: "subscribe<"
   event_unsubscribe_pattern: "unsubscribe"
   complexity_threshold: 500
+  # Code duplication detection
+  duplication:
+    enabled: true
+    min_lines: 5         # Minimum block size in lines
+    min_tokens: 50       # Minimum block size in tokens
+    normalize_ids: true  # Enable Type-2 (renamed variable) detection
+    max_findings: 50
+  # Refactoring opportunity analysis
+  refactoring:
+    enabled: true
+    max_params: 5              # Long parameter list threshold
+    max_functions_per_file: 15 # God file threshold
+    max_case_labels: 7         # Large switch threshold
+    max_elif_chain: 5          # Long else-if chain threshold
+    max_nesting_depth: 4       # Deep nesting threshold
+    max_findings: 50
 
 # -- Tier 5: Online Research --------------------------------------------------
 research:
