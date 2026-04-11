@@ -19,7 +19,7 @@ LogLevel Logger::s_level = LogLevel::Trace;
 LogLevel Logger::s_level = LogLevel::Info;
 #endif
 
-std::vector<LogEntry> Logger::s_entries;
+std::deque<LogEntry> Logger::s_entries;
 
 static std::ofstream s_logFile;
 
@@ -63,7 +63,7 @@ void Logger::fatal(const std::string& message)
     log(LogLevel::Fatal, message);
 }
 
-const std::vector<LogEntry>& Logger::getEntries()
+const std::deque<LogEntry>& Logger::getEntries()
 {
     return s_entries;
 }
@@ -76,13 +76,31 @@ void Logger::clearEntries()
 void Logger::openLogFile(const std::string& directory)
 {
     namespace fs = std::filesystem;
-    fs::create_directories(directory);
+
+    // Close any previously opened log file before opening a new one
+    closeLogFile();
+
+    try
+    {
+        fs::create_directories(directory);
+    }
+    catch (const fs::filesystem_error& e)
+    {
+        // Can't log to file, but still output to console
+        std::cerr << "[Vestige][ERROR] Failed to create log directory '" << directory
+                  << "': " << e.what() << '\n';
+        return;
+    }
 
     // Generate timestamped filename: vestige_YYYYMMDD_HHMMSS.log
     auto now = std::chrono::system_clock::now();
     auto time = std::chrono::system_clock::to_time_t(now);
     std::tm tm{};
+#ifdef _WIN32
+    localtime_s(&tm, &time);
+#else
     localtime_r(&time, &tm);
+#endif
 
     std::ostringstream filename;
     filename << directory << "/vestige_"
@@ -92,6 +110,10 @@ void Logger::openLogFile(const std::string& directory)
     if (s_logFile.is_open())
     {
         info("Log file opened: " + filename.str());
+    }
+    else
+    {
+        std::cerr << "[Vestige][ERROR] Failed to open log file: " << filename.str() << '\n';
     }
 }
 
@@ -129,10 +151,10 @@ void Logger::log(LogLevel level, const std::string& message)
         }
     }
 
-    // Ring buffer for editor console panel
+    // Ring buffer for editor console panel (deque for O(1) front removal)
     if (s_entries.size() >= MAX_ENTRIES)
     {
-        s_entries.erase(s_entries.begin());
+        s_entries.pop_front();
     }
     s_entries.push_back({level, message});
 }

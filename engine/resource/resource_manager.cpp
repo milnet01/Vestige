@@ -6,6 +6,8 @@
 #include "utils/gltf_loader.h"
 #include "core/logger.h"
 
+#include <stdexcept>
+
 namespace Vestige
 {
 
@@ -282,7 +284,11 @@ std::shared_ptr<Mesh> ResourceManager::getMeshByKey(const std::string& key)
             float size = std::stof(key.substr(16));
             return getPlaneMesh(size);
         }
-        catch (...)
+        catch (const std::invalid_argument&)
+        {
+            return getPlaneMesh();
+        }
+        catch (const std::out_of_range&)
         {
             return getPlaneMesh();
         }
@@ -299,7 +305,10 @@ std::shared_ptr<Mesh> ResourceManager::getMeshByKey(const std::string& key)
                 return getSphereMesh(sectors, stacks);
             }
         }
-        catch (...)
+        catch (const std::invalid_argument&)
+        {
+        }
+        catch (const std::out_of_range&)
         {
         }
         return getSphereMesh();
@@ -311,7 +320,11 @@ std::shared_ptr<Mesh> ResourceManager::getMeshByKey(const std::string& key)
             uint32_t sectors = static_cast<uint32_t>(std::stoi(key.substr(19)));
             return getCylinderMesh(sectors);
         }
-        catch (...)
+        catch (const std::invalid_argument&)
+        {
+            return getCylinderMesh();
+        }
+        catch (const std::out_of_range&)
         {
             return getCylinderMesh();
         }
@@ -328,7 +341,10 @@ std::shared_ptr<Mesh> ResourceManager::getMeshByKey(const std::string& key)
                 return getConeMesh(sectors, stacks);
             }
         }
-        catch (...)
+        catch (const std::invalid_argument&)
+        {
+        }
+        catch (const std::out_of_range&)
         {
         }
         return getConeMesh();

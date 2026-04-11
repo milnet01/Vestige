@@ -2,6 +2,7 @@
 /// @brief Centralized logging with severity levels and in-memory ring buffer for console panel.
 #pragma once
 
+#include <deque>
 #include <string>
 #include <vector>
 
@@ -63,7 +64,7 @@ public:
     static void fatal(const std::string& message);
 
     /// @brief Returns the ring buffer of recent log entries (up to MAX_ENTRIES).
-    static const std::vector<LogEntry>& getEntries();
+    static const std::deque<LogEntry>& getEntries();
 
     /// @brief Clears all buffered log entries.
     static void clearEntries();
@@ -82,7 +83,7 @@ private:
     static void log(LogLevel level, const std::string& message);
 
     static LogLevel s_level;
-    static std::vector<LogEntry> s_entries;
+    static std::deque<LogEntry> s_entries;
     static constexpr size_t MAX_ENTRIES = 1000;
 };
 

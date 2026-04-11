@@ -4,6 +4,9 @@
 
 #include <GLFW/glfw3.h>
 
+#include <chrono>
+#include <thread>
+
 namespace Vestige
 {
 
@@ -75,12 +78,19 @@ void Timer::waitForFrameCap()
         return;
     }
 
-    // Spin-wait for precision (sleep is too coarse for frame timing)
+    // Hybrid sleep-then-spin for precision without burning 100% CPU.
+    // Sleep while >1ms away, then spin-wait for the final sub-millisecond.
     double frameEnd = m_lastFrameTime + m_targetFrameTime;
+    double remaining = frameEnd - glfwGetTime();
+    while (remaining > 0.001)
+    {
+        std::this_thread::sleep_for(std::chrono::microseconds(500));
+        remaining = frameEnd - glfwGetTime();
+    }
+    // Final spin-wait for sub-millisecond precision
     while (glfwGetTime() < frameEnd)
     {
-        // Yield to OS briefly to avoid burning 100% CPU
-        // glfwWaitEventsTimeout is too coarse; a short busy-wait is standard practice
+        std::this_thread::yield();
     }
 }
 

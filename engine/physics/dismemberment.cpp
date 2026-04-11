@@ -239,6 +239,9 @@ void Dismemberment::classifyVertices(
             if (weight < weightThreshold)
                 continue;
 
+            if (boneIdx < 0 || boneIdx >= jointCount)
+                continue;
+
             if (limbBones.count(boneIdx))
             {
                 limbWeight += weight;
@@ -251,18 +254,6 @@ void Dismemberment::classifyVertices(
 
         outSide[vi] = (limbWeight > bodyWeight) ? 1 : 0;
     }
-}
-
-bool Dismemberment::isBoneChildOf(const Skeleton& skeleton, int boneIndex, int parentBoneIndex)
-{
-    int current = boneIndex;
-    while (current >= 0)
-    {
-        if (current == parentBoneIndex)
-            return true;
-        current = skeleton.m_joints[static_cast<size_t>(current)].parentIndex;
-    }
-    return false;
 }
 
 Vertex Dismemberment::interpolateVertex(const Vertex& a, const Vertex& b, float t)
