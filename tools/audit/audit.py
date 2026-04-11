@@ -278,6 +278,25 @@ def main() -> int:
         report = runner.build_report(results, diff=diff)
         log.info("Done. Report: %s", config.report_path)
 
+    # Generate HTML report if requested
+    if args.html and not args.json_output:
+        from lib.html_report import generate_html_report
+        try:
+            from lib.trends import load_snapshots, compute_trends
+            report_dir = config.report_path.parent
+            snapshots = load_snapshots(report_dir)
+            trend_report = compute_trends(snapshots) if len(snapshots) >= 2 else None
+        except Exception:
+            trend_report = None
+
+        html_content = generate_html_report(results, config, trend_report=trend_report)
+        base_path = config.report_path
+        timestamp = __import__("datetime").datetime.now().strftime("%Y-%m-%d_%H%M%S")
+        html_path = base_path.parent / f"{base_path.stem}_{timestamp}.html"
+        html_path.parent.mkdir(parents=True, exist_ok=True)
+        html_path.write_text(html_content)
+        log.info("HTML report written to %s", html_path)
+
     # Exit code
     if results.has_critical:
         return 2

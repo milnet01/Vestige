@@ -188,6 +188,17 @@ research:
     - query: "XPBD cloth simulation stability convergence improvements"
     - query: "cppcheck false positive returnDanglingLifetime unique_ptr move"
   custom_queries: []
+  # NVD (National Vulnerability Database) direct API queries
+  nvd:
+    enabled: true
+    api_key: "<REDACTED-rotated-2026-04-13>"  # Pending activation (up to 7 days from 2026-04-11)
+    api_key_env: "NVD_API_KEY"  # Fallback: check this env var if api_key is null
+    dependencies:
+      - "GLFW"
+      - "FreeType"
+      - "OpenAL"
+      - "nlohmann json"
+      - "stb image"
   # Auto-detected improvement research — scans codebase for technologies
   # and generates queries for better approaches / new features
   improvements:

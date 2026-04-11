@@ -774,7 +774,7 @@ TEST(FormulaLibrary, LoadSingleObjectJson)
 TEST(PhysicsTemplates, CreateAllReturnsExpectedCount)
 {
     auto all = PhysicsTemplates::createAll();
-    EXPECT_EQ(all.size(), 15u);
+    EXPECT_EQ(all.size(), 27u);
 
     // Each has a name, category, and FULL expression
     for (const auto& def : all)
@@ -790,14 +790,21 @@ TEST(PhysicsTemplates, RegisterBuiltinTemplates)
 {
     FormulaLibrary lib;
     lib.registerBuiltinTemplates();
-    EXPECT_EQ(lib.count(), 15u);
+    EXPECT_EQ(lib.count(), 27u);
 
-    // Spot-check a few
+    // Spot-check original formulas
     EXPECT_NE(lib.findByName("aerodynamic_drag"), nullptr);
     EXPECT_NE(lib.findByName("fresnel_schlick"), nullptr);
     EXPECT_NE(lib.findByName("beer_lambert"), nullptr);
     EXPECT_NE(lib.findByName("hooke_spring"), nullptr);
     EXPECT_NE(lib.findByName("wet_darkening"), nullptr);
+    // Spot-check new formulas
+    EXPECT_NE(lib.findByName("ggx_distribution"), nullptr);
+    EXPECT_NE(lib.findByName("schlick_geometry"), nullptr);
+    EXPECT_NE(lib.findByName("aces_tonemap"), nullptr);
+    EXPECT_NE(lib.findByName("spot_cone_falloff"), nullptr);
+    EXPECT_NE(lib.findByName("ease_in_sine"), nullptr);
+    EXPECT_NE(lib.findByName("fast_neg_exp"), nullptr);
 }
 
 TEST(PhysicsTemplates, CategoriesAreCorrect)
@@ -806,8 +813,9 @@ TEST(PhysicsTemplates, CategoriesAreCorrect)
     lib.registerBuiltinTemplates();
 
     auto cats = lib.getCategories();
-    // Should have: lighting, material, physics, water, wind
-    EXPECT_EQ(cats.size(), 5u);
+    // Should have: animation, camera, lighting, material, physics,
+    //              post_processing, rendering, terrain, water, wind
+    EXPECT_EQ(cats.size(), 10u);
 }
 
 TEST(PhysicsTemplates, AerodynamicDragEvaluates)
@@ -955,4 +963,600 @@ TEST(PhysicsTemplates, TemplateJsonRoundTrip)
         EXPECT_TRUE(restored.hasTier(QualityTier::FULL))
             << "Missing FULL tier after round-trip for " << def.name;
     }
+}
+
+// ===========================================================================
+// New formula evaluation tests
+// ===========================================================================
+
+TEST(PhysicsTemplates, GGXDistributionEvaluates)
+{
+    auto def = PhysicsTemplates::createGGXDistribution();
+    ExpressionEvaluator eval;
+
+    std::unordered_map<std::string, float> coeffs(
+        def.coefficients.begin(), def.coefficients.end());
+
+    // At NdotH=1 (specular peak): denom_inner = alpha^2, so
+    // D = alpha^2 / (PI * (alpha^2)^2) = 1 / (PI * alpha^2)
+    ExpressionEvaluator::VariableMap vars = {{"NdotH", 1.0f}};
+    float peak = eval.evaluate(*def.getExpression(), vars, coeffs);
+    float a2 = 0.25f * 0.25f;  // alpha=0.25 => a2=0.0625
+    float expectedPeak = 1.0f / (3.14159265f * a2);  // ~5.093
+    EXPECT_NEAR(peak, expectedPeak, 0.01f);
+
+    // At NdotH=0 (perpendicular): denom_inner = 0*(a2-1)+1 = 1
+    // D = alpha^2 / (PI * 1) = alpha^2 / PI
+    vars["NdotH"] = 0.0f;
+    float perp = eval.evaluate(*def.getExpression(), vars, coeffs);
+    float expectedPerp = a2 / 3.14159265f;  // ~0.0199
+    EXPECT_NEAR(perp, expectedPerp, 0.001f);
+
+    // With rougher surface (alpha=1.0, NdotH=1): D = 1/(PI*1) = 1/PI
+    coeffs["alpha"] = 1.0f;
+    vars["NdotH"] = 1.0f;
+    float rough = eval.evaluate(*def.getExpression(), vars, coeffs);
+    EXPECT_NEAR(rough, 1.0f / 3.14159265f, 0.001f);
+}
+
+TEST(PhysicsTemplates, SchlickGeometryEvaluates)
+{
+    auto def = PhysicsTemplates::createSchlickGeometry();
+    ExpressionEvaluator eval;
+
+    std::unordered_map<std::string, float> coeffs(
+        def.coefficients.begin(), def.coefficients.end());
+
+    // At NdotV=1: G1 = 1 / (1*(1-k)+k) = 1 / 1 = 1
+    ExpressionEvaluator::VariableMap vars = {{"NdotV", 1.0f}};
+    float g1 = eval.evaluate(*def.getExpression(), vars, coeffs);
+    EXPECT_NEAR(g1, 1.0f, 1e-5f);
+
+    // At NdotV=0: G1 = 0 / (0*(1-k)+k) = 0
+    vars["NdotV"] = 0.0f;
+    float g0 = eval.evaluate(*def.getExpression(), vars, coeffs);
+    EXPECT_NEAR(g0, 0.0f, 1e-5f);
+
+    // At NdotV=0.5, k=0.125: G1 = 0.5 / (0.5*0.875 + 0.125) = 0.5 / 0.5625
+    vars["NdotV"] = 0.5f;
+    float gm = eval.evaluate(*def.getExpression(), vars, coeffs);
+    EXPECT_NEAR(gm, 0.5f / 0.5625f, 0.001f);
+}
+
+TEST(PhysicsTemplates, ACESTonemapEvaluates)
+{
+    auto def = PhysicsTemplates::createACESTonemap();
+    ExpressionEvaluator eval;
+
+    std::unordered_map<std::string, float> coeffs(
+        def.coefficients.begin(), def.coefficients.end());
+
+    // At x=0: numerator=0, result=0
+    ExpressionEvaluator::VariableMap vars = {{"x", 0.0f}};
+    float dark = eval.evaluate(*def.getExpression(), vars, coeffs);
+    EXPECT_NEAR(dark, 0.0f, 1e-5f);
+
+    // At x=1.0: (1*(2.51+0.03))/(1*(2.43+0.59)+0.14) = 2.54/3.16 ~ 0.8038
+    vars["x"] = 1.0f;
+    float mid = eval.evaluate(*def.getExpression(), vars, coeffs);
+    EXPECT_NEAR(mid, 2.54f / 3.16f, 0.01f);
+
+    // APPROXIMATE (Reinhard): x/(x+1), at x=1 should be 0.5
+    float reinhard = eval.evaluate(
+        *def.getExpression(QualityTier::APPROXIMATE), vars, coeffs);
+    EXPECT_NEAR(reinhard, 0.5f, 1e-5f);
+}
+
+TEST(PhysicsTemplates, SpotConeFalloffEvaluates)
+{
+    auto def = PhysicsTemplates::createSpotConeFalloff();
+    ExpressionEvaluator eval;
+
+    std::unordered_map<std::string, float> coeffs(
+        def.coefficients.begin(), def.coefficients.end());
+
+    // Inside inner cone (theta > innerCutoff): intensity = 1.0
+    ExpressionEvaluator::VariableMap vars = {{"theta", 0.98f}};
+    float inside = eval.evaluate(*def.getExpression(), vars, coeffs);
+    EXPECT_NEAR(inside, 1.0f, 0.01f);
+
+    // Outside outer cone (theta < outerCutoff): intensity = 0.0
+    vars["theta"] = 0.85f;
+    float outside = eval.evaluate(*def.getExpression(), vars, coeffs);
+    EXPECT_NEAR(outside, 0.0f, 0.01f);
+
+    // Midway between cutoffs: should be ~0.5
+    float midTheta = (0.9659f + 0.9063f) / 2.0f;
+    vars["theta"] = midTheta;
+    float mid = eval.evaluate(*def.getExpression(), vars, coeffs);
+    EXPECT_NEAR(mid, 0.5f, 0.05f);
+}
+
+TEST(PhysicsTemplates, EaseInSineEvaluates)
+{
+    auto def = PhysicsTemplates::createEaseInSine();
+    ExpressionEvaluator eval;
+
+    std::unordered_map<std::string, float> coeffs(
+        def.coefficients.begin(), def.coefficients.end());
+
+    // At t=0: 1 - cos(0) = 0
+    ExpressionEvaluator::VariableMap vars = {{"t", 0.0f}};
+    float start = eval.evaluate(*def.getExpression(), vars, coeffs);
+    EXPECT_NEAR(start, 0.0f, 1e-5f);
+
+    // At t=1: 1 - cos(PI/2) = 1 - 0 = 1
+    vars["t"] = 1.0f;
+    float end = eval.evaluate(*def.getExpression(), vars, coeffs);
+    EXPECT_NEAR(end, 1.0f, 1e-4f);
+
+    // At t=0.5: 1 - cos(PI/4) = 1 - 0.7071 ~ 0.2929
+    vars["t"] = 0.5f;
+    float mid = eval.evaluate(*def.getExpression(), vars, coeffs);
+    EXPECT_NEAR(mid, 1.0f - std::cos(0.5f * 1.5707963f), 0.001f);
+
+    // APPROXIMATE should be close but not identical
+    float approx = eval.evaluate(
+        *def.getExpression(QualityTier::APPROXIMATE), vars, coeffs);
+    EXPECT_NEAR(approx, mid, 0.05f);  // Within 5% at t=0.5
+}
+
+TEST(PhysicsTemplates, FastNegExpEvaluates)
+{
+    auto def = PhysicsTemplates::createFastNegExp();
+    ExpressionEvaluator eval;
+
+    std::unordered_map<std::string, float> coeffs(
+        def.coefficients.begin(), def.coefficients.end());
+
+    // At x=0: exp(-0) = 1.0
+    ExpressionEvaluator::VariableMap vars = {{"x", 0.0f}};
+    float zero = eval.evaluate(*def.getExpression(), vars, coeffs);
+    EXPECT_NEAR(zero, 1.0f, 1e-5f);
+
+    // At x=1: exp(-1) ~ 0.3679
+    vars["x"] = 1.0f;
+    float one = eval.evaluate(*def.getExpression(), vars, coeffs);
+    EXPECT_NEAR(one, std::exp(-1.0f), 0.001f);
+
+    // APPROXIMATE at x=1: 1/(1+1+0.48+0.235) = 1/2.715 ~ 0.3683
+    float approx = eval.evaluate(
+        *def.getExpression(QualityTier::APPROXIMATE), vars, coeffs);
+    EXPECT_NEAR(approx, one, 0.01f);  // Within 1% at x=1
+
+    // APPROXIMATE at x=0 should also be 1.0
+    vars["x"] = 0.0f;
+    float approxZero = eval.evaluate(
+        *def.getExpression(QualityTier::APPROXIMATE), vars, coeffs);
+    EXPECT_NEAR(approxZero, 1.0f, 1e-5f);
+}
+
+// ===========================================================================
+// Existing formulas — APPROXIMATE tier tests
+// ===========================================================================
+
+TEST(PhysicsTemplates, InverseSquareFalloffApproximate)
+{
+    auto def = PhysicsTemplates::createInverseSquareFalloff();
+    EXPECT_TRUE(def.hasTier(QualityTier::APPROXIMATE));
+
+    ExpressionEvaluator eval;
+    std::unordered_map<std::string, float> coeffs(
+        def.coefficients.begin(), def.coefficients.end());
+
+    // At distance=0: FULL = 1/constant = 1.0, APPROX = 1/(1+0) = 1.0
+    ExpressionEvaluator::VariableMap vars = {{"distance", 0.0f}};
+    float full0 = eval.evaluate(*def.getExpression(QualityTier::FULL), vars, coeffs);
+    float approx0 = eval.evaluate(*def.getExpression(QualityTier::APPROXIMATE), vars, coeffs);
+    EXPECT_NEAR(full0, 1.0f, 0.01f);
+    EXPECT_NEAR(approx0, 1.0f, 0.01f);
+
+    // At distance=5: both should be < 1 and approximately similar
+    vars["distance"] = 5.0f;
+    float full5 = eval.evaluate(*def.getExpression(QualityTier::FULL), vars, coeffs);
+    float approx5 = eval.evaluate(*def.getExpression(QualityTier::APPROXIMATE), vars, coeffs);
+    EXPECT_GT(full5, 0.0f);
+    EXPECT_GT(approx5, 0.0f);
+    EXPECT_LT(full5, 1.0f);
+    EXPECT_LT(approx5, 1.0f);
+}
+
+TEST(PhysicsTemplates, ExponentialFogApproximate)
+{
+    auto def = PhysicsTemplates::createExponentialFog();
+    EXPECT_TRUE(def.hasTier(QualityTier::APPROXIMATE));
+
+    ExpressionEvaluator eval;
+    std::unordered_map<std::string, float> coeffs(
+        def.coefficients.begin(), def.coefficients.end());
+
+    // At distance=0: both should be 1.0
+    ExpressionEvaluator::VariableMap vars = {{"distance", 0.0f}};
+    float full0 = eval.evaluate(*def.getExpression(QualityTier::FULL), vars, coeffs);
+    float approx0 = eval.evaluate(*def.getExpression(QualityTier::APPROXIMATE), vars, coeffs);
+    EXPECT_NEAR(full0, 1.0f, 1e-5f);
+    EXPECT_NEAR(approx0, 1.0f, 1e-5f);
+
+    // At distance=50: FULL = exp(-0.5) ~ 0.607, APPROX = max(0.5, 0) = 0.5
+    vars["distance"] = 50.0f;
+    float full50 = eval.evaluate(*def.getExpression(QualityTier::FULL), vars, coeffs);
+    float approx50 = eval.evaluate(*def.getExpression(QualityTier::APPROXIMATE), vars, coeffs);
+    EXPECT_NEAR(full50, std::exp(-0.5f), 0.01f);
+    EXPECT_NEAR(approx50, 0.5f, 1e-5f);
+}
+
+TEST(PhysicsTemplates, GerstnerWaveApproximate)
+{
+    auto def = PhysicsTemplates::createGerstnerWave();
+    EXPECT_TRUE(def.hasTier(QualityTier::APPROXIMATE));
+
+    ExpressionEvaluator eval;
+    std::unordered_map<std::string, float> coeffs(
+        def.coefficients.begin(), def.coefficients.end());
+
+    // At x=0, t=0: FULL = sin(0)=0, APPROX = cos(0)=1*amplitude
+    ExpressionEvaluator::VariableMap vars = {{"x", 0.0f}, {"t", 0.0f}};
+    float full = eval.evaluate(*def.getExpression(QualityTier::FULL), vars, coeffs);
+    float approx = eval.evaluate(*def.getExpression(QualityTier::APPROXIMATE), vars, coeffs);
+    EXPECT_NEAR(full, 0.0f, 1e-5f);
+    EXPECT_NEAR(approx, 0.5f, 1e-5f);  // amplitude * cos(0) = 0.5
+}
+
+// ===========================================================================
+// New APPROXIMATE tiers for existing FULL-only templates
+// ===========================================================================
+
+TEST(PhysicsTemplates, StokesDragApproximate)
+{
+    auto def = PhysicsTemplates::createStokesDrag();
+    EXPECT_TRUE(def.hasTier(QualityTier::APPROXIMATE));
+
+    ExpressionEvaluator eval;
+    std::unordered_map<std::string, float> coeffs(
+        def.coefficients.begin(), def.coefficients.end());
+
+    // velocity=2.0, radius=0.001, mu=1.81e-5
+    // FULL: 6 * pi * 1.81e-5 * 0.001 * 2.0 = 6*3.14159*1.81e-5*0.001*2
+    // APPROX: 1.81e-5 * 0.001 * 2.0 * 18.85
+    ExpressionEvaluator::VariableMap vars = {
+        {"velocity", 2.0f},
+        {"radius", 0.001f}
+    };
+    float full = eval.evaluate(*def.getExpression(QualityTier::FULL), vars, coeffs);
+    float approx = eval.evaluate(*def.getExpression(QualityTier::APPROXIMATE), vars, coeffs);
+
+    // Both should be very close (18.85 ~ 6*pi = 18.8496)
+    EXPECT_NEAR(full, approx, full * 0.01f);
+    EXPECT_GT(full, 0.0f);
+}
+
+TEST(PhysicsTemplates, HookeSpringApproximate)
+{
+    auto def = PhysicsTemplates::createHookeSpring();
+    EXPECT_TRUE(def.hasTier(QualityTier::APPROXIMATE));
+
+    ExpressionEvaluator eval;
+    std::unordered_map<std::string, float> coeffs(
+        def.coefficients.begin(), def.coefficients.end());
+
+    // Extension: x=1.5, restLength=1.0, k=100
+    // FULL: -100 * (1.5 - 1.0) = -50
+    // APPROX: 100 * abs(1.5 - 1.0) = 50 (always positive magnitude)
+    ExpressionEvaluator::VariableMap vars = {{"x", 1.5f}, {"restLength", 1.0f}};
+    float full = eval.evaluate(*def.getExpression(QualityTier::FULL), vars, coeffs);
+    float approx = eval.evaluate(*def.getExpression(QualityTier::APPROXIMATE), vars, coeffs);
+    EXPECT_NEAR(full, -50.0f, 0.01f);
+    EXPECT_NEAR(approx, 50.0f, 0.01f);
+
+    // Compression: x=0.5
+    // FULL: -100 * (0.5 - 1.0) = 50
+    // APPROX: 100 * abs(0.5 - 1.0) = 50
+    vars["x"] = 0.5f;
+    float fullComp = eval.evaluate(*def.getExpression(QualityTier::FULL), vars, coeffs);
+    float approxComp = eval.evaluate(*def.getExpression(QualityTier::APPROXIMATE), vars, coeffs);
+    EXPECT_NEAR(fullComp, 50.0f, 0.01f);
+    EXPECT_NEAR(approxComp, 50.0f, 0.01f);
+}
+
+TEST(PhysicsTemplates, WetDarkeningApproximate)
+{
+    auto def = PhysicsTemplates::createWetDarkening();
+    EXPECT_TRUE(def.hasTier(QualityTier::APPROXIMATE));
+
+    ExpressionEvaluator eval;
+    std::unordered_map<std::string, float> coeffs(
+        def.coefficients.begin(), def.coefficients.end());
+
+    // With default darkFactor=0.5, FULL and APPROXIMATE should match exactly
+    ExpressionEvaluator::VariableMap vars = {{"albedo", 0.8f}, {"wetness", 1.0f}};
+    float full = eval.evaluate(*def.getExpression(QualityTier::FULL), vars, coeffs);
+    float approx = eval.evaluate(*def.getExpression(QualityTier::APPROXIMATE), vars, coeffs);
+    EXPECT_NEAR(full, 0.4f, 1e-5f);
+    EXPECT_NEAR(approx, 0.4f, 1e-5f);
+
+    // Dry surface: both should return albedo unchanged
+    vars["wetness"] = 0.0f;
+    float fullDry = eval.evaluate(*def.getExpression(QualityTier::FULL), vars, coeffs);
+    float approxDry = eval.evaluate(*def.getExpression(QualityTier::APPROXIMATE), vars, coeffs);
+    EXPECT_NEAR(fullDry, 0.8f, 1e-5f);
+    EXPECT_NEAR(approxDry, 0.8f, 1e-5f);
+}
+
+// ===========================================================================
+// Post-Processing formula templates
+// ===========================================================================
+
+TEST(PhysicsTemplates, BloomThresholdExists)
+{
+    FormulaLibrary lib;
+    lib.registerBuiltinTemplates();
+
+    const FormulaDefinition* bloom = lib.findByName("bloom_threshold");
+    ASSERT_NE(bloom, nullptr);
+    EXPECT_EQ(bloom->category, "post_processing");
+    EXPECT_TRUE(bloom->hasTier(QualityTier::FULL));
+    EXPECT_TRUE(bloom->hasTier(QualityTier::APPROXIMATE));
+}
+
+TEST(PhysicsTemplates, BloomThresholdEvaluates)
+{
+    auto def = PhysicsTemplates::createBloomThreshold();
+    ExpressionEvaluator eval;
+
+    std::unordered_map<std::string, float> coeffs(
+        def.coefficients.begin(), def.coefficients.end());
+
+    // Below threshold: luminance=0.5, threshold=1.0 -> max(0, -0.5) = 0
+    // FULL: 0 / (-0.5 + 0.5) = 0/0 -> safe div returns 0
+    ExpressionEvaluator::VariableMap vars = {{"luminance", 0.5f}};
+    float below = eval.evaluate(*def.getExpression(QualityTier::FULL), vars, coeffs);
+    EXPECT_NEAR(below, 0.0f, 0.01f);
+
+    // Above threshold: luminance=2.0, threshold=1.0
+    // FULL: max(0, 1.0) / (1.0 + 0.5) = 1.0 / 1.5 ~ 0.667
+    vars["luminance"] = 2.0f;
+    float above = eval.evaluate(*def.getExpression(QualityTier::FULL), vars, coeffs);
+    EXPECT_NEAR(above, 1.0f / 1.5f, 0.01f);
+
+    // APPROXIMATE (hard threshold): max(0, 2.0 - 1.0) = 1.0
+    float approxAbove = eval.evaluate(
+        *def.getExpression(QualityTier::APPROXIMATE), vars, coeffs);
+    EXPECT_NEAR(approxAbove, 1.0f, 0.01f);
+
+    // APPROXIMATE below threshold: max(0, 0.5 - 1.0) = 0
+    vars["luminance"] = 0.5f;
+    float approxBelow = eval.evaluate(
+        *def.getExpression(QualityTier::APPROXIMATE), vars, coeffs);
+    EXPECT_NEAR(approxBelow, 0.0f, 0.01f);
+}
+
+TEST(PhysicsTemplates, VignetteExists)
+{
+    FormulaLibrary lib;
+    lib.registerBuiltinTemplates();
+
+    const FormulaDefinition* vig = lib.findByName("vignette");
+    ASSERT_NE(vig, nullptr);
+    EXPECT_EQ(vig->category, "post_processing");
+    EXPECT_TRUE(vig->hasTier(QualityTier::FULL));
+    EXPECT_TRUE(vig->hasTier(QualityTier::APPROXIMATE));
+}
+
+TEST(PhysicsTemplates, VignetteEvaluates)
+{
+    auto def = PhysicsTemplates::createVignette();
+    ExpressionEvaluator eval;
+
+    std::unordered_map<std::string, float> coeffs(
+        def.coefficients.begin(), def.coefficients.end());
+
+    // At center (distance=0): result = 1 - 0.5 * 0^2 = 1.0
+    ExpressionEvaluator::VariableMap vars = {{"distance", 0.0f}};
+    float center = eval.evaluate(*def.getExpression(QualityTier::FULL), vars, coeffs);
+    EXPECT_NEAR(center, 1.0f, 1e-5f);
+
+    // At edge (distance=1): result = 1 - 0.5 * 1^2 = 0.5
+    vars["distance"] = 1.0f;
+    float edge = eval.evaluate(*def.getExpression(QualityTier::FULL), vars, coeffs);
+    EXPECT_NEAR(edge, 0.5f, 1e-5f);
+
+    // APPROXIMATE at center: max(0, 1 - 0.5*0) = 1.0
+    vars["distance"] = 0.0f;
+    float approxCenter = eval.evaluate(
+        *def.getExpression(QualityTier::APPROXIMATE), vars, coeffs);
+    EXPECT_NEAR(approxCenter, 1.0f, 1e-5f);
+
+    // APPROXIMATE at edge: max(0, 1 - 0.5*1) = 0.5
+    vars["distance"] = 1.0f;
+    float approxEdge = eval.evaluate(
+        *def.getExpression(QualityTier::APPROXIMATE), vars, coeffs);
+    EXPECT_NEAR(approxEdge, 0.5f, 1e-5f);
+}
+
+// ===========================================================================
+// Camera formula templates
+// ===========================================================================
+
+TEST(PhysicsTemplates, ExposureEVExists)
+{
+    FormulaLibrary lib;
+    lib.registerBuiltinTemplates();
+
+    const FormulaDefinition* exp = lib.findByName("exposure_ev");
+    ASSERT_NE(exp, nullptr);
+    EXPECT_EQ(exp->category, "camera");
+    EXPECT_TRUE(exp->hasTier(QualityTier::FULL));
+    EXPECT_TRUE(exp->hasTier(QualityTier::APPROXIMATE));
+}
+
+TEST(PhysicsTemplates, ExposureEVEvaluates)
+{
+    auto def = PhysicsTemplates::createExposureEV();
+    ExpressionEvaluator eval;
+
+    std::unordered_map<std::string, float> coeffs(
+        def.coefficients.begin(), def.coefficients.end());
+
+    // At EV=0: 1 / (pow(2,0) * 1.2) = 1 / 1.2 ~ 0.8333
+    ExpressionEvaluator::VariableMap vars = {{"ev", 0.0f}};
+    float ev0 = eval.evaluate(*def.getExpression(QualityTier::FULL), vars, coeffs);
+    EXPECT_NEAR(ev0, 1.0f / 1.2f, 0.01f);
+
+    // At EV=1: 1 / (2 * 1.2) = 1 / 2.4 ~ 0.4167
+    vars["ev"] = 1.0f;
+    float ev1 = eval.evaluate(*def.getExpression(QualityTier::FULL), vars, coeffs);
+    EXPECT_NEAR(ev1, 1.0f / 2.4f, 0.01f);
+
+    // APPROXIMATE at EV=0: pow(2, 0) * 0.833 = 0.833
+    vars["ev"] = 0.0f;
+    float approx0 = eval.evaluate(
+        *def.getExpression(QualityTier::APPROXIMATE), vars, coeffs);
+    EXPECT_NEAR(approx0, 0.833f, 0.01f);
+
+    // APPROXIMATE at EV=1: pow(2, -1) * 0.833 = 0.5 * 0.833 = 0.4165
+    vars["ev"] = 1.0f;
+    float approx1 = eval.evaluate(
+        *def.getExpression(QualityTier::APPROXIMATE), vars, coeffs);
+    EXPECT_NEAR(approx1, 0.5f * 0.833f, 0.01f);
+}
+
+TEST(PhysicsTemplates, DofCoCExists)
+{
+    FormulaLibrary lib;
+    lib.registerBuiltinTemplates();
+
+    const FormulaDefinition* dof = lib.findByName("dof_coc");
+    ASSERT_NE(dof, nullptr);
+    EXPECT_EQ(dof->category, "camera");
+    EXPECT_TRUE(dof->hasTier(QualityTier::FULL));
+    EXPECT_TRUE(dof->hasTier(QualityTier::APPROXIMATE));
+}
+
+TEST(PhysicsTemplates, DofCoCEvaluates)
+{
+    auto def = PhysicsTemplates::createDofCoC();
+    ExpressionEvaluator eval;
+
+    std::unordered_map<std::string, float> coeffs(
+        def.coefficients.begin(), def.coefficients.end());
+
+    // At focus distance (depth=5.0): CoC = 0 (in focus)
+    ExpressionEvaluator::VariableMap vars = {{"depth", 5.0f}};
+    float atFocus = eval.evaluate(*def.getExpression(QualityTier::FULL), vars, coeffs);
+    EXPECT_NEAR(atFocus, 0.0f, 0.01f);
+
+    // Out of focus (depth=3.0):
+    // abs(2.8 * 0.05 * (5.0 - 3.0) / (3.0 * (5.0 - 0.05)))
+    // = abs(2.8 * 0.05 * 2.0 / (3.0 * 4.95))
+    // = abs(0.28 / 14.85) ~ 0.01886
+    vars["depth"] = 3.0f;
+    float outOfFocus = eval.evaluate(*def.getExpression(QualityTier::FULL), vars, coeffs);
+    float expected = std::abs(2.8f * 0.05f * 2.0f / (3.0f * 4.95f));
+    EXPECT_NEAR(outOfFocus, expected, 0.001f);
+
+    // APPROXIMATE at focus distance: abs(2.8 * 0 / 5.0) = 0
+    vars["depth"] = 5.0f;
+    float approxFocus = eval.evaluate(
+        *def.getExpression(QualityTier::APPROXIMATE), vars, coeffs);
+    EXPECT_NEAR(approxFocus, 0.0f, 0.01f);
+
+    // APPROXIMATE out of focus: abs(2.8 * (5.0-3.0) / 5.0) = abs(5.6/5) = 1.12
+    vars["depth"] = 3.0f;
+    float approxOut = eval.evaluate(
+        *def.getExpression(QualityTier::APPROXIMATE), vars, coeffs);
+    EXPECT_NEAR(approxOut, std::abs(2.8f * 2.0f / 5.0f), 0.01f);
+}
+
+// ===========================================================================
+// Terrain formula templates
+// ===========================================================================
+
+TEST(PhysicsTemplates, HeightBlendExists)
+{
+    FormulaLibrary lib;
+    lib.registerBuiltinTemplates();
+
+    const FormulaDefinition* hb = lib.findByName("height_blend");
+    ASSERT_NE(hb, nullptr);
+    EXPECT_EQ(hb->category, "terrain");
+    EXPECT_TRUE(hb->hasTier(QualityTier::FULL));
+    EXPECT_TRUE(hb->hasTier(QualityTier::APPROXIMATE));
+}
+
+TEST(PhysicsTemplates, HeightBlendEvaluates)
+{
+    auto def = PhysicsTemplates::createHeightBlend();
+    ExpressionEvaluator eval;
+
+    std::unordered_map<std::string, float> coeffs(
+        def.coefficients.begin(), def.coefficients.end());
+
+    // heightA clearly higher: saturate((1.0 - 0.0 + 0.5) / 0.1) = saturate(15) = 1.0
+    ExpressionEvaluator::VariableMap vars = {
+        {"heightA", 1.0f}, {"heightB", 0.0f}, {"blendFactor", 0.5f}
+    };
+    float aHigher = eval.evaluate(*def.getExpression(QualityTier::FULL), vars, coeffs);
+    EXPECT_NEAR(aHigher, 1.0f, 0.01f);
+
+    // heightB clearly higher: saturate((0.0 - 1.0 + 0.0) / 0.1) = saturate(-10) = 0.0
+    vars = {{"heightA", 0.0f}, {"heightB", 1.0f}, {"blendFactor", 0.0f}};
+    float bHigher = eval.evaluate(*def.getExpression(QualityTier::FULL), vars, coeffs);
+    EXPECT_NEAR(bHigher, 0.0f, 0.01f);
+
+    // APPROXIMATE step function: heightA + blendFactor > heightB -> 1.0
+    vars = {{"heightA", 1.0f}, {"heightB", 0.0f}, {"blendFactor", 0.5f}};
+    float approxA = eval.evaluate(
+        *def.getExpression(QualityTier::APPROXIMATE), vars, coeffs);
+    EXPECT_NEAR(approxA, 1.0f, 0.01f);
+
+    // APPROXIMATE: heightA + blendFactor < heightB -> 0.0
+    vars = {{"heightA", 0.0f}, {"heightB", 1.0f}, {"blendFactor", 0.0f}};
+    float approxB = eval.evaluate(
+        *def.getExpression(QualityTier::APPROXIMATE), vars, coeffs);
+    EXPECT_NEAR(approxB, 0.0f, 0.01f);
+}
+
+TEST(PhysicsTemplates, ThermalErosionExists)
+{
+    FormulaLibrary lib;
+    lib.registerBuiltinTemplates();
+
+    const FormulaDefinition* te = lib.findByName("thermal_erosion");
+    ASSERT_NE(te, nullptr);
+    EXPECT_EQ(te->category, "terrain");
+    EXPECT_TRUE(te->hasTier(QualityTier::FULL));
+    EXPECT_TRUE(te->hasTier(QualityTier::APPROXIMATE));
+}
+
+TEST(PhysicsTemplates, ThermalErosionEvaluates)
+{
+    auto def = PhysicsTemplates::createThermalErosion();
+    ExpressionEvaluator eval;
+
+    std::unordered_map<std::string, float> coeffs(
+        def.coefficients.begin(), def.coefficients.end());
+
+    // Below talus angle: slope=0.3, talusAngle=0.577 -> max(0, -0.277) = 0
+    ExpressionEvaluator::VariableMap vars = {{"slope", 0.3f}, {"dt", 0.016f}};
+    float below = eval.evaluate(*def.getExpression(QualityTier::FULL), vars, coeffs);
+    EXPECT_NEAR(below, 0.0f, 1e-5f);
+
+    // Above talus angle: slope=1.0, talusAngle=0.577
+    // transfer = 0.5 * max(0, 1.0 - 0.577) * 0.016 = 0.5 * 0.423 * 0.016 ~ 0.003384
+    vars["slope"] = 1.0f;
+    float above = eval.evaluate(*def.getExpression(QualityTier::FULL), vars, coeffs);
+    EXPECT_NEAR(above, 0.5f * 0.423f * 0.016f, 0.001f);
+
+    // APPROXIMATE below talus: saturate(0.3 - 0.577) = saturate(-0.277) = 0
+    vars["slope"] = 0.3f;
+    float approxBelow = eval.evaluate(
+        *def.getExpression(QualityTier::APPROXIMATE), vars, coeffs);
+    EXPECT_NEAR(approxBelow, 0.0f, 1e-5f);
+
+    // APPROXIMATE above talus: saturate(1.0 - 0.577) = saturate(0.423) = 0.423
+    // transfer = 0.5 * 0.423 * 0.016 ~ 0.003384 (same as FULL for slope < 1+talus)
+    vars["slope"] = 1.0f;
+    float approxAbove = eval.evaluate(
+        *def.getExpression(QualityTier::APPROXIMATE), vars, coeffs);
+    EXPECT_NEAR(approxAbove, 0.5f * 0.423f * 0.016f, 0.001f);
 }

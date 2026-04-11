@@ -803,11 +803,13 @@ Each template configures: camera type/constraints, physics dimensionality, defau
 *Scope: major initiative — essentially building a programming language with an IDE. Requires dedicated design document and evaluation of existing node graph libraries (imnodes, imgui-node-editor).*
 
 **Node Graph Infrastructure:**
-- [ ] Node graph infrastructure and renderer (evaluate imnodes vs imgui-node-editor)
-- [ ] Node type registry (extensible node catalog with typed input/output pins)
-- [ ] Connection validation (type-safe pin connections with visual feedback)
-- [ ] Graph serialization (save/load node graphs as JSON)
-- [ ] Graph compilation (convert node graph to executable logic)
+- [x] Node graph data structures (NodeGraph, Node, Port, Connection in engine/formula/node_graph.h/.cpp)
+- [x] Node type registry (factory helpers: createMathNode, createFunctionNode, createLiteralNode, createVariableNode, createOutputNode)
+- [x] Connection validation (cycle detection via BFS, type checking, duplicate rejection)
+- [x] Graph serialization (JSON round-trip with version tag, 61 unit tests)
+- [x] Graph-to-ExpressionTree conversion (bidirectional: toExpressionTree + fromExpressionTree)
+- [ ] Node graph renderer (evaluate imnodes vs imgui-node-editor)
+- [ ] Graph compilation to executable logic (beyond expression trees)
 
 **Gameplay Scripting Nodes:**
 - [ ] Event nodes (on collision, on trigger enter, on key press, on timer)
@@ -817,12 +819,13 @@ Each template configures: camera type/constraints, physics dimensionality, defau
 - [ ] Pre-built gameplay templates (door that opens, collectible item, damage zone, checkpoint, dialogue trigger)
 
 **Formula Node Editor** (extends FormulaWorkbench):
-- [ ] Visual formula composition via math nodes (add, multiply, sin, cos, pow, clamp, lerp, etc.)
-- [ ] Variable input nodes (bind to formula inputs and coefficients)
-- [ ] Output node with real-time curve preview
-- [ ] Drag-and-drop from PhysicsTemplates catalog into the node graph
-- [ ] Convert node graph to ExpressionTree for use in FormulaLibrary
-- [ ] Bidirectional: load existing ExpressionTree formulas into the node editor for visual editing
+- [x] Math node types (add, multiply, sin, cos, pow, clamp, lerp, etc.) — factory helpers implemented
+- [x] Variable input nodes (bind to formula inputs and coefficients) — createVariableNode()
+- [x] Convert node graph to ExpressionTree for use in FormulaLibrary — toExpressionTree()
+- [x] Bidirectional: load existing ExpressionTree formulas into the node editor — fromExpressionTree()
+- [ ] Output node with real-time curve preview (requires ImGui integration)
+- [ ] Drag-and-drop from PhysicsTemplates catalog into the node graph (requires UI)
+- [ ] Visual formula composition UI (ImGui node editor rendering)
 
 Prioritize basic event-to-action chains first. The formula node editor builds on the same node graph infrastructure. Advanced flow control and variable systems come later.
 

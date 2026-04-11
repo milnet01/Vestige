@@ -119,6 +119,10 @@ set(ENGINE_SOURCES
     formula/curve_fitter.cpp
     formula/formula_preset.cpp
     formula/quality_manager.cpp
+    formula/node_graph.cpp
+    formula/sensitivity_analysis.cpp
+    formula/formula_benchmark.cpp
+    formula/formula_doc_generator.cpp
     animation/skeleton.cpp
     animation/animation_clip.cpp
     animation/animation_sampler.cpp

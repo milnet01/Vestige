@@ -298,8 +298,118 @@ TEST(WaterFormulas, QualityTierFallback)
 {
     FormulaDefinition wave = PhysicsTemplates::createGerstnerWave();
 
-    // Gerstner wave has no APPROXIMATE tier — should fall back to FULL
-    EXPECT_FALSE(wave.hasTier(QualityTier::APPROXIMATE));
+    // Gerstner wave now has an APPROXIMATE tier (cos-based phase shift)
+    EXPECT_TRUE(wave.hasTier(QualityTier::APPROXIMATE));
     const ExprNode* expr = wave.getExpression(QualityTier::APPROXIMATE);
-    EXPECT_NE(expr, nullptr);  // Falls back to FULL
+    EXPECT_NE(expr, nullptr);
+
+    // LUT tier still doesn't exist — should fall back to FULL
+    EXPECT_FALSE(wave.hasTier(QualityTier::LUT));
+    const ExprNode* lutExpr = wave.getExpression(QualityTier::LUT);
+    EXPECT_NE(lutExpr, nullptr);  // Falls back to FULL
+}
+
+// ---------------------------------------------------------------------------
+// New category: post_processing — quality manager override tests
+// ---------------------------------------------------------------------------
+
+TEST(FormulaQualityManager, PostProcessingCategoryOverride)
+{
+    FormulaQualityManager mgr;
+    mgr.setGlobalTier(QualityTier::FULL);
+    mgr.setCategoryTier("post_processing", QualityTier::APPROXIMATE);
+
+    EXPECT_EQ(mgr.getEffectiveTier("post_processing"), QualityTier::APPROXIMATE);
+    EXPECT_EQ(mgr.getEffectiveTier("water"), QualityTier::FULL);
+    EXPECT_TRUE(mgr.hasCategoryOverride("post_processing"));
+}
+
+TEST(FormulaQualityManager, PostProcessingInLibrary)
+{
+    FormulaLibrary lib;
+    lib.registerBuiltinTemplates();
+
+    auto ppFormulas = lib.findByCategory("post_processing");
+    EXPECT_EQ(ppFormulas.size(), 2);
+
+    // Verify both templates exist
+    EXPECT_NE(lib.findByName("bloom_threshold"), nullptr);
+    EXPECT_NE(lib.findByName("vignette"), nullptr);
+}
+
+// ---------------------------------------------------------------------------
+// New category: camera — quality manager override tests
+// ---------------------------------------------------------------------------
+
+TEST(FormulaQualityManager, CameraCategoryOverride)
+{
+    FormulaQualityManager mgr;
+    mgr.setGlobalTier(QualityTier::FULL);
+    mgr.setCategoryTier("camera", QualityTier::LUT);
+
+    EXPECT_EQ(mgr.getEffectiveTier("camera"), QualityTier::LUT);
+    EXPECT_EQ(mgr.getEffectiveTier("terrain"), QualityTier::FULL);
+    EXPECT_TRUE(mgr.hasCategoryOverride("camera"));
+}
+
+TEST(FormulaQualityManager, CameraInLibrary)
+{
+    FormulaLibrary lib;
+    lib.registerBuiltinTemplates();
+
+    auto camFormulas = lib.findByCategory("camera");
+    EXPECT_EQ(camFormulas.size(), 2);
+
+    EXPECT_NE(lib.findByName("exposure_ev"), nullptr);
+    EXPECT_NE(lib.findByName("dof_coc"), nullptr);
+}
+
+// ---------------------------------------------------------------------------
+// New category: terrain — quality manager override tests
+// ---------------------------------------------------------------------------
+
+TEST(FormulaQualityManager, TerrainCategoryOverride)
+{
+    FormulaQualityManager mgr;
+    mgr.setGlobalTier(QualityTier::APPROXIMATE);
+    mgr.setCategoryTier("terrain", QualityTier::FULL);
+
+    EXPECT_EQ(mgr.getEffectiveTier("terrain"), QualityTier::FULL);
+    EXPECT_EQ(mgr.getEffectiveTier("camera"), QualityTier::APPROXIMATE);
+    EXPECT_TRUE(mgr.hasCategoryOverride("terrain"));
+}
+
+TEST(FormulaQualityManager, TerrainInLibrary)
+{
+    FormulaLibrary lib;
+    lib.registerBuiltinTemplates();
+
+    auto terrainFormulas = lib.findByCategory("terrain");
+    EXPECT_EQ(terrainFormulas.size(), 2);
+
+    EXPECT_NE(lib.findByName("height_blend"), nullptr);
+    EXPECT_NE(lib.findByName("thermal_erosion"), nullptr);
+}
+
+// ---------------------------------------------------------------------------
+// All new categories in JSON round-trip
+// ---------------------------------------------------------------------------
+
+TEST(FormulaQualityManager, NewCategoriesJsonRoundTrip)
+{
+    FormulaQualityManager mgr;
+    mgr.setGlobalTier(QualityTier::FULL);
+    mgr.setCategoryTier("post_processing", QualityTier::APPROXIMATE);
+    mgr.setCategoryTier("camera", QualityTier::LUT);
+    mgr.setCategoryTier("terrain", QualityTier::APPROXIMATE);
+
+    nlohmann::json j = mgr.toJson();
+
+    FormulaQualityManager mgr2;
+    mgr2.fromJson(j);
+
+    EXPECT_EQ(mgr2.getEffectiveTier("post_processing"), QualityTier::APPROXIMATE);
+    EXPECT_EQ(mgr2.getEffectiveTier("camera"), QualityTier::LUT);
+    EXPECT_EQ(mgr2.getEffectiveTier("terrain"), QualityTier::APPROXIMATE);
+    EXPECT_EQ(mgr2.getEffectiveTier("water"), QualityTier::FULL);
 }

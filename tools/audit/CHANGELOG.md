@@ -2,6 +2,21 @@
 
 All notable changes to the Audit Tool are documented in this file.
 
+## [1.7.0] - 2026-04-11
+
+### Added
+- **Parallel Tier 1**: build, cppcheck, and clang-tidy now run concurrently via ThreadPoolExecutor(max_workers=3), matching tiers 2-4 parallelization
+- **NVD API key support**: config-driven API key with environment variable fallback (`NVD_API_KEY`), key validation on startup, adjusted rate limits (0.6s authenticated vs 7.0s unauthenticated)
+- **Configurable severity overrides**: per-project `severity_overrides` in config to promote/demote finding severities by pattern_name
+- **Finding trend tracking**: `lib/trends.py` module saves snapshots after each audit, computes improving/worsening/stable trends per category across runs
+- **HTML report output**: `--html` flag generates a self-contained HTML report with dark theme, sortable findings table, severity badges, tier breakdown cards, and SVG trend chart
+- **Expanded test suite**: 9 new test files (187+ new tests) covering suppress, ci_output, diff_report, tier5_nvd, tier5_research, tier5_improvements, auto_config, trends, html_report
+
+### Changed
+- `severity_overrides` applied after all tiers run but before suppression filtering
+- Report builder accepts optional `trend_report` parameter for trend section rendering
+- NVD rate limiting reduced from 0.7s to 0.6s with API key (safely under 50 req/30s)
+
 ## [1.6.1] - 2026-04-10
 
 ### Fixed

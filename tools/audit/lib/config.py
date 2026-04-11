@@ -90,7 +90,14 @@ DEFAULTS: dict[str, Any] = {
         "max_results_per_query": 3,
         "topics": [],
         "custom_queries": [],
+        "nvd": {
+            "enabled": False,
+            "api_key": None,
+            "api_key_env": "NVD_API_KEY",
+            "dependencies": [],
+        },
     },
+    "severity_overrides": [],
     "report": {
         "output_path": "docs/AUTOMATED_AUDIT_REPORT.md",
         "max_findings_per_category": 100,
