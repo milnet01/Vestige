@@ -1,7 +1,8 @@
-"""Tier 5: Technology detection and improvement research.
+"""Tier 5: Technology detection, improvement research, and domain-specific security queries.
 
 Scans the codebase for known techniques, algorithms, and libraries,
-then generates research queries for better approaches and new features.
+then generates research queries for better approaches, new features,
+and domain-specific security vulnerabilities.
 """
 
 from __future__ import annotations
@@ -245,3 +246,128 @@ def get_improvement_queries(config: Config) -> list[str]:
     # Sort by number of files matched (most used tech first), then cap
     detections.sort(key=lambda d: -d.files_matched)
     return [d.query for d in detections[:max_queries]]
+
+
+# ---------------------------------------------------------------------------
+# Domain-specific security research queries
+# ---------------------------------------------------------------------------
+
+# Each entry: (regex_pattern, file_globs, domain_name, list of security queries)
+SECURITY_SIGNATURES: list[tuple[str, str, str, list[str]]] = [
+    # Terminal emulator
+    (r"(?:terminal|vt100|vt220|xterm|ansi.?escape|pty|forkpty|termios)", "*.cpp,*.h",
+     "Terminal Emulator", [
+         "CVE terminal emulator escape sequence injection {year}",
+         "terminal emulator security ANSI escape sequence attack",
+         "PTY security file descriptor leak forkpty best practices",
+         "site:nvd.nist.gov terminal emulator vulnerability {year}",
+     ]),
+    # Qt application
+    (r"#include\s*<Q(?:Application|Widget|MainWindow|Dialog)", "*.cpp,*.h",
+     "Qt Application", [
+         "Qt6 security best practices untrusted data {year}",
+         "Qt QProcess command injection prevention",
+         "Qt application security hardening checklist",
+     ]),
+    # Lua scripting / plugins
+    (r"(?:lua_|luaL_|lua\.h|lauxlib)", "*.cpp,*.h",
+     "Lua Scripting", [
+         "Lua sandbox escape bytecode vulnerability {year}",
+         "Lua 5.4 sandbox security best practices",
+         "Lua embedding security getmetatable string metatable",
+     ]),
+    # Network / sockets
+    (r"(?:QTcpSocket|QLocalSocket|AF_UNIX|socket\s*\(|listen\s*\()", "*.cpp,*.h",
+     "Network/IPC", [
+         "Unix domain socket security permissions race condition",
+         "IPC security local privilege escalation {year}",
+     ]),
+    # Session / data persistence
+    (r"(?:serialize|deserialize|QDataStream|qCompress|qUncompress)", "*.cpp,*.h",
+     "Data Persistence", [
+         "Qt QDataStream deserialization vulnerability",
+         "decompression bomb zip bomb detection prevention",
+         "session file security path traversal {year}",
+     ]),
+    # Web server / HTTP
+    (r"(?:express|fastify|http\.createServer|flask|django|gin\.Default)", "*.js,*.ts,*.py,*.go",
+     "Web Server", [
+         "OWASP top 10 {year} web application security",
+         "HTTP header injection prevention best practices",
+     ]),
+    # Cryptography
+    (r"(?:openssl|crypto|AES|RSA|SHA256|bcrypt|argon2|pbkdf2)", "*.cpp,*.h,*.py,*.js,*.go",
+     "Cryptography", [
+         "cryptography best practices deprecated algorithms {year}",
+         "CVE OpenSSL vulnerability {year}",
+     ]),
+    # Database
+    (r"(?:sqlite3|mysql|postgres|mongodb|redis|leveldb)", "*.cpp,*.h,*.py,*.js,*.go",
+     "Database", [
+         "SQL injection prevention parameterized queries best practices",
+         "database connection security TLS certificate validation",
+     ]),
+    # File I/O intensive
+    (r"(?:fopen|ifstream|ofstream|QFile|open\s*\(.*O_)", "*.cpp,*.h",
+     "File I/O", [
+         "TOCTOU race condition file operations C++ prevention",
+         "symlink attack prevention file operations {year}",
+     ]),
+    # Game engine / 3D
+    (r"(?:OpenGL|Vulkan|DirectX|glfw|SDL2|render)", "*.cpp,*.h",
+     "Game Engine", [
+         "game engine security shader injection {year}",
+         "OpenGL driver crash denial of service prevention",
+     ]),
+]
+
+
+def get_security_queries(config: Config) -> list[str]:
+    """Detect application domain and generate targeted security research queries."""
+    from datetime import datetime
+    year = datetime.now().year
+
+    all_files = enumerate_files(
+        root=config.root,
+        source_dirs=config.source_dirs,
+        extensions=config.source_extensions,
+        exclude_dirs=config.exclude_dirs,
+    )
+
+    # Read file contents
+    import fnmatch
+    file_contents: dict[Path, str] = {}
+    for f in all_files:
+        try:
+            file_contents[f] = f.read_text(errors="replace")
+        except OSError:
+            pass
+
+    queries: list[str] = []
+    seen_domains: set[str] = set()
+
+    for regex_str, file_glob_str, domain, domain_queries in SECURITY_SIGNATURES:
+        globs = [g.strip() for g in file_glob_str.split(",")]
+        regex = re.compile(regex_str, re.IGNORECASE)
+
+        match_count = 0
+        for fpath, content in file_contents.items():
+            if not any(fnmatch.fnmatch(fpath.name, g) for g in globs):
+                continue
+            if regex.search(content):
+                match_count += 1
+
+        if match_count > 0 and domain not in seen_domains:
+            seen_domains.add(domain)
+            for q in domain_queries:
+                expanded = q.replace("{year}", str(year))
+                if expanded not in queries:
+                    queries.append(expanded)
+            log.info("Security domain detected: %s (%d files)", domain, match_count)
+
+    # Cap to avoid excessive queries
+    max_queries = config.get("research", "improvements", "max_queries", default=10)
+    if len(queries) > max_queries:
+        queries = queries[:max_queries]
+
+    return queries

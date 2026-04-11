@@ -119,10 +119,22 @@ void Workbench::renderMenuBar()
         {
             if (ImGui::MenuItem("About"))
             {
-                m_statusMessage = "Vestige FormulaWorkbench — FP-4 Formula Pipeline";
+                m_statusMessage = std::string("Vestige FormulaWorkbench v")
+                    + WORKBENCH_VERSION + " — FP-4 Formula Pipeline";
                 m_statusTimer = 3.0f;
             }
             ImGui::EndMenu();
+        }
+        // Right-aligned version indicator
+        {
+            const char* versionText = WORKBENCH_VERSION;
+            float textWidth = ImGui::CalcTextSize(versionText).x;
+            float availWidth = ImGui::GetContentRegionAvail().x;
+            if (availWidth > textWidth)
+            {
+                ImGui::SameLine(ImGui::GetWindowWidth() - textWidth - 16.0f);
+                ImGui::TextDisabled("v%s", versionText);
+            }
         }
         ImGui::EndMenuBar();
     }

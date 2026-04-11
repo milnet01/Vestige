@@ -14,6 +14,7 @@
 #include <implot.h>
 
 #include <cstdio>
+#include <string>
 
 static void glfwErrorCallback(int error, const char* description)
 {
@@ -36,8 +37,10 @@ int main()
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
 
+    std::string windowTitle = std::string("Vestige FormulaWorkbench v")
+        + Vestige::WORKBENCH_VERSION;
     GLFWwindow* window = glfwCreateWindow(1600, 900,
-        "Vestige FormulaWorkbench", nullptr, nullptr);
+        windowTitle.c_str(), nullptr, nullptr);
     if (!window)
     {
         std::fprintf(stderr, "Failed to create GLFW window\n");

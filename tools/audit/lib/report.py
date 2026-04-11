@@ -78,7 +78,7 @@ class ReportBuilder:
 
         # Tier 3: Changed Files
         if 3 in tiers_run and change_summary:
-            sections.append(self._build_tier3_section(change_summary))
+            sections.append(self._build_tier3_section(change_summary, deduped))
 
         # Tier 4: Statistics
         if 4 in tiers_run and audit_data:
@@ -333,8 +333,8 @@ class ReportBuilder:
 
         return "\n".join(lines)
 
-    def _build_tier3_section(self, cs: ChangeSummary) -> str:
-        """Build Tier 3 changed files section."""
+    def _build_tier3_section(self, cs: ChangeSummary, findings: list[Finding] | None = None) -> str:
+        """Build Tier 3 changed files section with diff security findings."""
         if not cs.changed_files:
             return "## Tier 3: Changed Files\n\nNo changes detected.\n"
 
@@ -354,6 +354,23 @@ class ReportBuilder:
             lines.append(f"| `{f['file']}` | {f['status']} | "
                          f"+{f.get('added', 0)}/-{f.get('removed', 0)} | {func_str} |")
         lines.append("")
+
+        # Diff security findings
+        if findings:
+            diff_sec = [f for f in findings if f.category == "diff_security"]
+            if diff_sec:
+                lines.append(f"### Diff Security Scan ({len(diff_sec)} findings in new code)")
+                lines.append("")
+                lines.append("| Severity | File | Line | Issue |")
+                lines.append("|----------|------|------|-------|")
+                for f in diff_sec[:20]:
+                    title = f.title.replace("|", "/")[:100]
+                    lines.append(f"| {f.severity.name} | `{f.file}` | "
+                                 f"{f.line or '-'} | {title} |")
+                if len(diff_sec) > 20:
+                    lines.append(f"| ... | | | *({len(diff_sec) - 20} more)* |")
+                lines.append("")
+
         return "\n".join(lines)
 
     def _build_tier4_section(self, data: AuditData) -> str:
@@ -477,6 +494,162 @@ class ReportBuilder:
             if len(cx["hotspots"]) > 10:
                 lines.append(f"| ... | | | *({len(cx['hotspots']) - 10} more)* |")
             lines.append("")
+
+        # Dead Code
+        dc = data.dead_code
+        if dc:
+            unused_funcs = dc.get("unused_functions", [])
+            unused_incs = dc.get("unused_includes", [])
+            if unused_funcs or unused_incs:
+                lines.append(f"### Dead Code ({len(unused_funcs)} unused functions, "
+                             f"{len(unused_incs)} unused includes)")
+                lines.append("")
+                if unused_funcs:
+                    lines.append("**Unused functions:**")
+                    lines.append("")
+                    lines.append("| Function | File | Line | Reason |")
+                    lines.append("|----------|------|------|--------|")
+                    for uf in unused_funcs[:15]:
+                        lines.append(f"| `{uf['name']}()` | `{uf['file']}` | "
+                                     f"{uf['line']} | {uf['reason']} |")
+                    if len(unused_funcs) > 15:
+                        lines.append(f"| ... | | | *({len(unused_funcs) - 15} more)* |")
+                    lines.append("")
+                if unused_incs:
+                    lines.append("**Unused includes:**")
+                    lines.append("")
+                    lines.append("| File | Line | Include |")
+                    lines.append("|------|------|---------|")
+                    for ui in unused_incs[:15]:
+                        lines.append(f"| `{ui['file']}` | {ui['line']} | "
+                                     f"`{ui['include']}` |")
+                    if len(unused_incs) > 15:
+                        lines.append(f"| ... | | *({len(unused_incs) - 15} more)* |")
+                    lines.append("")
+
+        # Build System Audit
+        ba = data.build_audit
+        if ba:
+            sec_flags = ba.get("security_flags", [])
+            warn_flags = ba.get("warning_flags", [])
+            best_practices = ba.get("best_practices", [])
+            missing_sec = [f for f in sec_flags if f["status"] == "missing"]
+            missing_warn = [f for f in warn_flags if f["status"] == "missing"]
+            missing_bp = [f for f in best_practices if f["status"] == "missing"]
+
+            if missing_sec or missing_warn or missing_bp:
+                lines.append(f"### Build System Audit ({len(missing_sec)} missing security flags, "
+                             f"{len(missing_warn)} missing warning flags, "
+                             f"{len(missing_bp)} missing best practices)")
+                lines.append("")
+                if missing_sec:
+                    lines.append("**Missing security hardening flags:**")
+                    lines.append("")
+                    lines.append("| Flag | Description | CWE |")
+                    lines.append("|------|-------------|-----|")
+                    for f in missing_sec:
+                        lines.append(f"| `{f['flag']}` | {f['description']} | "
+                                     f"{f.get('cwe', '')} |")
+                    lines.append("")
+                if missing_warn:
+                    lines.append("**Missing warning flags:**")
+                    lines.append("")
+                    for f in missing_warn:
+                        lines.append(f"- `{f['flag']}`: {f['description']}")
+                    lines.append("")
+                if missing_bp:
+                    lines.append("**Missing CMake best practices:**")
+                    lines.append("")
+                    for f in missing_bp:
+                        lines.append(f"- `{f['check']}`: {f['description']}")
+                    lines.append("")
+            else:
+                lines.append(f"### Build System Audit — all checks pass "
+                             f"({len(sec_flags)} security, {len(warn_flags)} warning, "
+                             f"{len(best_practices)} best practices)")
+                lines.append("")
+
+        # Code Duplication
+        dup = data.duplication
+        if dup:
+            clone_pairs = dup.get("clone_pairs", [])
+            dup_pct = dup.get("duplication_pct", 0)
+            dup_lines = dup.get("duplicated_lines", 0)
+            if clone_pairs:
+                lines.append(f"### Code Duplication ({len(clone_pairs)} clone pairs, "
+                             f"{dup_lines:,} duplicated lines, {dup_pct}%)")
+                lines.append("")
+                lines.append("| File A | Lines A | File B | Lines B | Lines | Type |")
+                lines.append("|--------|---------|--------|---------|-------|------|")
+                for cp in clone_pairs[:15]:
+                    lines.append(
+                        f"| `{cp['file_a']}` | {cp['start_a']}-{cp['end_a']} "
+                        f"| `{cp['file_b']}` | {cp['start_b']}-{cp['end_b']} "
+                        f"| {cp['lines']} | Type-{cp['clone_type']} |")
+                if len(clone_pairs) > 15:
+                    lines.append(f"| ... | | | | | *({len(clone_pairs) - 15} more)* |")
+                lines.append("")
+            else:
+                lines.append(f"### Code Duplication — no significant clones detected "
+                             f"({dup.get('files_scanned', 0)} files scanned)")
+                lines.append("")
+
+        # Refactoring Opportunities
+        ref = data.refactoring
+        if ref:
+            total = ref.get("total_smells", 0)
+            if total > 0:
+                lines.append(f"### Refactoring Opportunities ({total} code smells)")
+                lines.append("")
+                lpl = ref.get("long_param_lists", [])
+                if lpl:
+                    lines.append(f"**Long parameter lists ({len(lpl)}):**")
+                    lines.append("")
+                    for item in lpl[:10]:
+                        lines.append(f"- `{item['name']}()` in `{item['file']}` "
+                                     f"line {item['line']}: {item['params']} params")
+                    if len(lpl) > 10:
+                        lines.append(f"- *({len(lpl) - 10} more)*")
+                    lines.append("")
+                gf = ref.get("god_files", [])
+                if gf:
+                    lines.append(f"**God files ({len(gf)}):**")
+                    lines.append("")
+                    for item in gf[:10]:
+                        lines.append(f"- `{item['file']}`: {item['functions']} functions")
+                    if len(gf) > 10:
+                        lines.append(f"- *({len(gf) - 10} more)*")
+                    lines.append("")
+                lsc = ref.get("large_switch_chains", [])
+                if lsc:
+                    lines.append(f"**Large switch/if-else chains ({len(lsc)}):**")
+                    lines.append("")
+                    for item in lsc[:10]:
+                        lines.append(f"- `{item['file']}` line {item['line']}: "
+                                     f"{item['count']} {item['type']}")
+                    if len(lsc) > 10:
+                        lines.append(f"- *({len(lsc) - 10} more)*")
+                    lines.append("")
+                dn = ref.get("deep_nesting", [])
+                if dn:
+                    lines.append(f"**Deep nesting ({len(dn)}):**")
+                    lines.append("")
+                    for item in dn[:10]:
+                        lines.append(f"- `{item['name']}()` in `{item['file']}` "
+                                     f"line {item['line']}: depth {item['depth']}")
+                    if len(dn) > 10:
+                        lines.append(f"- *({len(dn) - 10} more)*")
+                    lines.append("")
+                ss = ref.get("similar_signatures", [])
+                if ss:
+                    lines.append(f"**Similar function signatures ({len(ss)}):**")
+                    lines.append("")
+                    for item in ss[:10]:
+                        lines.append(f"- `{item['name_a']}()` and `{item['name_b']}()` "
+                                     f"share params `({item['param_types']})`")
+                    if len(ss) > 10:
+                        lines.append(f"- *({len(ss) - 10} more)*")
+                    lines.append("")
 
         return "\n".join(lines)
 

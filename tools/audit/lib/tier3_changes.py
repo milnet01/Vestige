@@ -1,4 +1,4 @@
-"""Tier 3: Git diff analysis — changed files, function signatures, subsystem mapping."""
+"""Tier 3: Git diff analysis — changed files, function signatures, subsystem mapping, diff-aware security scanning."""
 
 from __future__ import annotations
 
@@ -7,22 +7,45 @@ import re
 from pathlib import Path
 
 from .config import Config
-from .findings import ChangeSummary
+from .findings import ChangeSummary, Finding, Severity
 from .utils import run_cmd
 
 log = logging.getLogger("audit")
 
+# Security-sensitive patterns to scan in added lines (new code only)
+_DIFF_SECURITY_PATTERNS: list[dict] = [
+    {"name": "new_system_call", "pattern": r"\b(system|popen|exec[lv]p?)\s*\(",
+     "severity": "high", "description": "New system/exec call in changed code"},
+    {"name": "new_shell_concat", "pattern": r'"(?:cd|rm|sh|bash)\s.*\+',
+     "severity": "high", "description": "Shell command string concatenation in new code"},
+    {"name": "new_path_concat", "pattern": r"(?:QDir|QFile|fopen|ofstream|ifstream).*\+.*(?:name|path|id|file)",
+     "severity": "high", "description": "File path from concatenation in new code — verify sanitization"},
+    {"name": "new_raw_sql", "pattern": r'(?:exec|query|execute)\s*\(.*["\'].*(?:SELECT|INSERT|UPDATE|DELETE).*\+',
+     "severity": "high", "description": "SQL concatenation in new code — use parameterized queries"},
+    {"name": "new_eval", "pattern": r"\b(eval|exec)\s*\(",
+     "severity": "high", "description": "eval/exec in new code — code injection risk"},
+    {"name": "new_unsafe_c_str", "pattern": r"\b(strcpy|strcat|sprintf|gets)\s*\(",
+     "severity": "high", "description": "Unsafe C string function in new code"},
+    {"name": "new_socket_listen", "pattern": r"\blisten\s*\(",
+     "severity": "medium", "description": "New socket listener — verify permissions and binding"},
+    {"name": "new_deserialization", "pattern": r"\b(luaL_dofile|pickle\.load|yaml\.load|readObjectFromFile)\b",
+     "severity": "high", "description": "Deserialization in new code — verify input validation"},
+    {"name": "new_fork", "pattern": r"\b(forkpty|fork)\s*\(",
+     "severity": "medium", "description": "New fork — verify FD cleanup and O_CLOEXEC"},
+]
 
-def run(config: Config) -> ChangeSummary:
-    """Analyze git changes since base_ref."""
+
+def run(config: Config) -> tuple[ChangeSummary, list[Finding]]:
+    """Analyze git changes since base_ref. Returns (summary, security_findings)."""
     summary = ChangeSummary()
+    findings: list[Finding] = []
     base_ref = config.get("changes", "base_ref", default="HEAD~1")
 
     # Check we're in a git repo
     git_dir = config.root / ".git"
     if not git_dir.exists():
         log.warning("Not a git repository — skipping Tier 3")
-        return summary
+        return summary, findings
 
     log.info("Tier 3: analyzing changes since %s", base_ref)
 
@@ -33,7 +56,7 @@ def run(config: Config) -> ChangeSummary:
     )
     if rc != 0:
         log.warning("git diff failed (bad base_ref '%s'?) — skipping Tier 3", base_ref)
-        return summary
+        return summary, findings
 
     changed_files = _parse_name_status(stdout)
 
@@ -68,20 +91,25 @@ def run(config: Config) -> ChangeSummary:
             subsystems.add(subsystem)
             entry["subsystem"] = subsystem
 
-        # Extract changed function names (for C++ files)
-        if fname.endswith((".cpp", ".h")):
+        # Extract changed function names (for source files)
+        source_exts = tuple(config.source_extensions)
+        if fname.endswith(source_exts):
             funcs = _get_changed_functions(config.root, base_ref, fname)
             if funcs:
                 entry["changed_functions"] = funcs
+
+        # Diff-aware security scanning on added lines
+        diff_findings = _scan_diff_for_security(config.root, base_ref, fname)
+        findings.extend(diff_findings)
 
         summary.changed_files.append(entry)
 
     summary.subsystems_touched = sorted(subsystems)
 
-    log.info("Tier 3: %d changed files across %d subsystems (+%d/-%d lines)",
+    log.info("Tier 3: %d changed files across %d subsystems (+%d/-%d lines), %d security findings",
              len(summary.changed_files), len(subsystems),
-             summary.total_added, summary.total_removed)
-    return summary
+             summary.total_added, summary.total_removed, len(findings))
+    return summary, findings
 
 
 def _parse_name_status(output: str) -> list[dict]:
@@ -148,3 +176,54 @@ def _get_changed_functions(root: Path, base_ref: str, filename: str) -> list[str
                 funcs.add(func_m.group(1))
 
     return sorted(funcs)
+
+
+def _scan_diff_for_security(root: Path, base_ref: str, filename: str) -> list[Finding]:
+    """Scan added lines in a diff for security-sensitive patterns."""
+    # Only scan source files
+    if not filename.endswith((".cpp", ".h", ".hpp", ".py", ".js", ".ts", ".go", ".rs",
+                               ".java", ".c", ".cc", ".cxx")):
+        return []
+
+    rc, stdout, _ = run_cmd(
+        f"git diff -U0 {base_ref} -- {filename}",
+        cwd=root,
+    )
+    if rc != 0:
+        return []
+
+    findings: list[Finding] = []
+    current_line = 0
+
+    for diff_line in stdout.splitlines():
+        # Track line numbers from hunk headers
+        hunk_match = re.match(r"@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@", diff_line)
+        if hunk_match:
+            current_line = int(hunk_match.group(1))
+            continue
+
+        # Only scan added lines (not removed or context)
+        if not diff_line.startswith("+") or diff_line.startswith("+++"):
+            if not diff_line.startswith("-"):
+                current_line += 1
+            continue
+
+        added_content = diff_line[1:]  # Strip the leading +
+
+        for pat_def in _DIFF_SECURITY_PATTERNS:
+            if re.search(pat_def["pattern"], added_content):
+                findings.append(Finding(
+                    file=filename,
+                    line=current_line,
+                    severity=Severity.from_string(pat_def["severity"]),
+                    category="diff_security",
+                    source_tier=3,
+                    title=pat_def["description"],
+                    detail=added_content.strip()[:200],
+                    pattern_name=f"diff_{pat_def['name']}",
+                ))
+                break  # One finding per line
+
+        current_line += 1
+
+    return findings
