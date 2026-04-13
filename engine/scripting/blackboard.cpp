@@ -1,6 +1,7 @@
 /// @file blackboard.cpp
 /// @brief Blackboard and VariableDef implementation.
 #include "scripting/blackboard.h"
+#include "core/logger.h"
 
 namespace Vestige
 {
@@ -67,7 +68,22 @@ VariableDef VariableDef::fromJson(const nlohmann::json& j)
 
 void Blackboard::set(const std::string& key, const ScriptValue& value)
 {
-    m_values[key] = value;
+    // Updates to existing keys always succeed. Insertions are refused once
+    // the per-scope cap is reached to bound memory growth.
+    auto it = m_values.find(key);
+    if (it != m_values.end())
+    {
+        it->second = value;
+        return;
+    }
+    if (m_values.size() >= MAX_KEYS)
+    {
+        Logger::warning("[Blackboard] Refusing to insert key '" + key +
+                        "' — scope already at MAX_KEYS (" +
+                        std::to_string(MAX_KEYS) + ")");
+        return;
+    }
+    m_values.emplace(key, value);
 }
 
 ScriptValue Blackboard::get(const std::string& key) const

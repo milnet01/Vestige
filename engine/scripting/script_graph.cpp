@@ -4,10 +4,46 @@
 #include "core/logger.h"
 
 #include <algorithm>
+#include <filesystem>
 #include <fstream>
 
 namespace Vestige
 {
+
+namespace
+{
+
+/// @brief Truncate a string read from JSON to prevent memory abuse via crafted
+/// .vscript files. Returns a copy clamped to MAX_STRING_BYTES bytes.
+std::string clampString(std::string s, size_t maxBytes)
+{
+    if (s.size() > maxBytes)
+    {
+        Logger::warning("[ScriptGraph] String exceeded " +
+                        std::to_string(maxBytes) +
+                        " bytes — truncated");
+        s.resize(maxBytes);
+    }
+    return s;
+}
+
+/// @brief Reject file paths that traverse outside their starting directory
+/// via `..` components. Does not enforce a specific root — callers must also
+/// validate the final path is under an expected asset directory when possible.
+bool isPathTraversalSafe(const std::string& filePath)
+{
+    std::filesystem::path p(filePath);
+    for (const auto& part : p)
+    {
+        if (part == "..")
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+} // namespace
 
 // ---------------------------------------------------------------------------
 // Node management
@@ -251,18 +287,30 @@ ScriptGraph ScriptGraph::fromJson(const nlohmann::json& j)
 {
     ScriptGraph graph;
     graph.version = j.value("version", 1);
-    graph.name = j.value("name", std::string{});
+    graph.name = clampString(j.value("name", std::string{}), MAX_STRING_BYTES);
     graph.nextNodeId = j.value("nextNodeId", static_cast<uint32_t>(1));
     graph.nextConnectionId = j.value("nextConnectionId", static_cast<uint32_t>(1));
 
-    // Nodes
-    if (j.contains("nodes"))
+    // Nodes — cap count to reject crafted graphs that would exhaust memory.
+    if (j.contains("nodes") && j["nodes"].is_array())
     {
-        for (const auto& nj : j["nodes"])
+        const auto& nodesArr = j["nodes"];
+        if (nodesArr.size() > MAX_NODES)
         {
+            Logger::error("[ScriptGraph] Node count " +
+                          std::to_string(nodesArr.size()) +
+                          " exceeds MAX_NODES (" + std::to_string(MAX_NODES) +
+                          ") — truncating");
+        }
+        const size_t nodeLimit = std::min<size_t>(nodesArr.size(), MAX_NODES);
+        graph.nodes.reserve(nodeLimit);
+        for (size_t i = 0; i < nodeLimit; ++i)
+        {
+            const auto& nj = nodesArr[i];
             ScriptNodeDef node;
             node.id = nj.value("id", static_cast<uint32_t>(0));
-            node.typeName = nj.value("type", std::string{});
+            node.typeName = clampString(nj.value("type", std::string{}),
+                                        MAX_STRING_BYTES);
             node.posX = nj.value("posX", 0.0f);
             node.posY = nj.value("posY", 0.0f);
 
@@ -271,7 +319,8 @@ ScriptGraph ScriptGraph::fromJson(const nlohmann::json& j)
                 for (auto it = nj["properties"].begin();
                      it != nj["properties"].end(); ++it)
                 {
-                    node.properties[it.key()] = ScriptValue::fromJson(it.value());
+                    std::string key = clampString(it.key(), MAX_STRING_BYTES);
+                    node.properties[key] = ScriptValue::fromJson(it.value());
                 }
             }
 
@@ -279,27 +328,51 @@ ScriptGraph ScriptGraph::fromJson(const nlohmann::json& j)
         }
     }
 
-    // Connections
-    if (j.contains("connections"))
+    // Connections — cap count.
+    if (j.contains("connections") && j["connections"].is_array())
     {
-        for (const auto& cj : j["connections"])
+        const auto& connsArr = j["connections"];
+        if (connsArr.size() > MAX_CONNECTIONS)
         {
+            Logger::error("[ScriptGraph] Connection count " +
+                          std::to_string(connsArr.size()) +
+                          " exceeds MAX_CONNECTIONS (" +
+                          std::to_string(MAX_CONNECTIONS) + ") — truncating");
+        }
+        const size_t connLimit = std::min<size_t>(connsArr.size(),
+                                                   MAX_CONNECTIONS);
+        graph.connections.reserve(connLimit);
+        for (size_t i = 0; i < connLimit; ++i)
+        {
+            const auto& cj = connsArr[i];
             ScriptConnection c;
             c.id = cj.value("id", static_cast<uint32_t>(0));
             c.sourceNode = cj.value("srcNode", static_cast<uint32_t>(0));
-            c.sourcePin = cj.value("srcPin", std::string{});
+            c.sourcePin = clampString(cj.value("srcPin", std::string{}),
+                                       MAX_STRING_BYTES);
             c.targetNode = cj.value("tgtNode", static_cast<uint32_t>(0));
-            c.targetPin = cj.value("tgtPin", std::string{});
+            c.targetPin = clampString(cj.value("tgtPin", std::string{}),
+                                       MAX_STRING_BYTES);
             graph.connections.push_back(c);
         }
     }
 
-    // Variables
-    if (j.contains("variables"))
+    // Variables — cap count.
+    if (j.contains("variables") && j["variables"].is_array())
     {
-        for (const auto& vj : j["variables"])
+        const auto& varsArr = j["variables"];
+        if (varsArr.size() > MAX_VARIABLES)
         {
-            graph.variables.push_back(VariableDef::fromJson(vj));
+            Logger::error("[ScriptGraph] Variable count " +
+                          std::to_string(varsArr.size()) +
+                          " exceeds MAX_VARIABLES (" +
+                          std::to_string(MAX_VARIABLES) + ") — truncating");
+        }
+        const size_t varLimit = std::min<size_t>(varsArr.size(), MAX_VARIABLES);
+        graph.variables.reserve(varLimit);
+        for (size_t i = 0; i < varLimit; ++i)
+        {
+            graph.variables.push_back(VariableDef::fromJson(varsArr[i]));
         }
     }
 
@@ -312,6 +385,13 @@ ScriptGraph ScriptGraph::fromJson(const nlohmann::json& j)
 
 ScriptGraph ScriptGraph::loadFromFile(const std::string& filePath)
 {
+    // Reject paths containing `..` components before touching the filesystem.
+    if (!isPathTraversalSafe(filePath))
+    {
+        Logger::error("[ScriptGraph] Rejected path (traversal): " + filePath);
+        return {};
+    }
+
     std::ifstream file(filePath);
     if (!file.is_open())
     {
@@ -323,6 +403,17 @@ ScriptGraph ScriptGraph::loadFromFile(const std::string& filePath)
     {
         nlohmann::json j = nlohmann::json::parse(file);
         auto graph = fromJson(j);
+
+        // Post-load validation: reject graphs with dangling connections or
+        // duplicate node IDs rather than failing opaquely during execution.
+        std::string validateErr;
+        if (!graph.validate(validateErr))
+        {
+            Logger::error("[ScriptGraph] Validation failed for " + filePath +
+                          ": " + validateErr);
+            return {};
+        }
+
         Logger::info("[ScriptGraph] Loaded: " + filePath + " (" +
                      std::to_string(graph.nodes.size()) + " nodes, " +
                      std::to_string(graph.connections.size()) + " connections)");

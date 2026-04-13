@@ -2,6 +2,7 @@
 /// @brief Common types for the visual scripting system: pins, connections, nodes.
 #pragma once
 
+#include "scripting/pin_id.h"
 #include "scripting/script_value.h"
 
 #include <cstdint>
@@ -26,12 +27,18 @@ enum class PinDirection
 };
 
 /// @brief Definition of a pin on a node type (template, not instance).
+///
+/// `id` is populated at registration time (NodeTypeRegistry::registerNode)
+/// from `name` via internPin(). Lambdas / hot paths look up values by `id`
+/// to avoid string hashing on every read; the editor still uses `name` for
+/// display.
 struct PinDef
 {
     PinKind kind = PinKind::DATA;
     std::string name;
     ScriptDataType dataType = ScriptDataType::FLOAT;
     ScriptValue defaultValue;
+    PinId id = INVALID_PIN_ID; ///< Set by NodeTypeRegistry::registerNode.
 };
 
 /// @brief A runtime pin on a specific node instance.

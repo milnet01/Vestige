@@ -9,6 +9,16 @@ namespace Vestige
 
 void NodeTypeRegistry::registerNode(NodeTypeDescriptor descriptor)
 {
+    // Intern every pin name once at registration so the runtime hot path
+    // can compare/lookup by integer id (audit M10).
+    for (auto& pin : descriptor.inputDefs)
+    {
+        pin.id = internPin(pin.name);
+    }
+    for (auto& pin : descriptor.outputDefs)
+    {
+        pin.id = internPin(pin.name);
+    }
     m_nodes[descriptor.typeName] = std::move(descriptor);
 }
 

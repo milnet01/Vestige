@@ -38,16 +38,28 @@ public:
     /// @brief Read a data input pin's value.
     /// If connected, evaluates the source node's output. Otherwise returns the
     /// pin's default value or the node's property override.
+    ///
+    /// PinId form is the hot path used by node lambdas (audit M10). The
+    /// `const std::string&` overload interns the name and forwards — keeps
+    /// test code and editor lookups readable.
+    ScriptValue readInput(const ScriptNodeInstance& node, PinId pinId);
     ScriptValue readInput(const ScriptNodeInstance& node,
                           const std::string& pinName);
 
     /// @brief Typed convenience wrapper for readInput.
     template <typename T>
-    T readInputAs(const ScriptNodeInstance& node, const std::string& pinName);
+    T readInputAs(const ScriptNodeInstance& node, PinId pinId);
+    template <typename T>
+    T readInputAs(const ScriptNodeInstance& node, const std::string& pinName)
+    {
+        return readInputAs<T>(node, internPin(pinName));
+    }
 
     // -- Output value setting --
 
     /// @brief Set a data output pin's value (called from node execute functions).
+    void setOutput(const ScriptNodeInstance& node, PinId pinId,
+                   const ScriptValue& value);
     void setOutput(const ScriptNodeInstance& node, const std::string& pinName,
                    const ScriptValue& value);
 
@@ -56,6 +68,7 @@ public:
     /// @brief Trigger an execution output pin, continuing the chain.
     /// Follows the connection from the named output pin to the next node
     /// and calls that node's execute function.
+    void triggerOutput(const ScriptNodeInstance& node, PinId pinId);
     void triggerOutput(const ScriptNodeInstance& node,
                        const std::string& pinName);
 
@@ -106,20 +119,32 @@ public:
     int callDepth() const { return m_callDepth; }
     int nodesExecuted() const { return m_nodesExecuted; }
 
+    /// @brief Maximum nested executeNode() calls within a single context.
+    /// Prevents infinite recursion via a cycle of execution-pin connections.
+    /// 256 leaves plenty of room for legitimate branch/sequence/switch
+    /// nesting while catching pathological graphs. Counter is local to one
+    /// ScriptContext and resets when the context is destroyed, so latent
+    /// re-triggers and new event dispatches start fresh (see
+    /// ScriptInstance::MAX_EVENT_REENTRY_DEPTH for cross-dispatch bounds).
     static constexpr int MAX_CALL_DEPTH = 256;
+
+    /// @brief Maximum total nodes executed within a single chain. Guards
+    /// against runaway non-recursive patterns (e.g., a 10,000-step sequence).
+    /// 1000 covers typical gameplay logic; values well beyond that typically
+    /// indicate a design problem worth surfacing.
     static constexpr int MAX_NODES_PER_CHAIN = 1000;
 
 private:
     /// @brief Find the connection from a node's output pin to a target input.
     const ScriptConnection* findOutputConnection(uint32_t nodeId,
-                                                  const std::string& pinName) const;
+                                                  PinId pinId) const;
 
     /// @brief Find the connection feeding a node's input pin.
     const ScriptConnection* findInputConnection(uint32_t nodeId,
-                                                 const std::string& pinName) const;
+                                                 PinId pinId) const;
 
     /// @brief Evaluate a pure node's output value by calling its execute function.
-    ScriptValue evaluatePureNode(uint32_t nodeId, const std::string& outputPin);
+    ScriptValue evaluatePureNode(uint32_t nodeId, PinId outputPinId);
 
     ScriptInstance& m_instance;
     const NodeTypeRegistry& m_registry;
@@ -138,58 +163,58 @@ private:
 
 template <>
 inline bool ScriptContext::readInputAs<bool>(
-    const ScriptNodeInstance& node, const std::string& pinName)
+    const ScriptNodeInstance& node, PinId pinId)
 {
-    return readInput(node, pinName).asBool();
+    return readInput(node, pinId).asBool();
 }
 
 template <>
 inline int32_t ScriptContext::readInputAs<int32_t>(
-    const ScriptNodeInstance& node, const std::string& pinName)
+    const ScriptNodeInstance& node, PinId pinId)
 {
-    return readInput(node, pinName).asInt();
+    return readInput(node, pinId).asInt();
 }
 
 template <>
 inline float ScriptContext::readInputAs<float>(
-    const ScriptNodeInstance& node, const std::string& pinName)
+    const ScriptNodeInstance& node, PinId pinId)
 {
-    return readInput(node, pinName).asFloat();
+    return readInput(node, pinId).asFloat();
 }
 
 template <>
 inline std::string ScriptContext::readInputAs<std::string>(
-    const ScriptNodeInstance& node, const std::string& pinName)
+    const ScriptNodeInstance& node, PinId pinId)
 {
-    return readInput(node, pinName).asString();
+    return readInput(node, pinId).asString();
 }
 
 template <>
 inline glm::vec3 ScriptContext::readInputAs<glm::vec3>(
-    const ScriptNodeInstance& node, const std::string& pinName)
+    const ScriptNodeInstance& node, PinId pinId)
 {
-    return readInput(node, pinName).asVec3();
+    return readInput(node, pinId).asVec3();
 }
 
 template <>
 inline glm::vec4 ScriptContext::readInputAs<glm::vec4>(
-    const ScriptNodeInstance& node, const std::string& pinName)
+    const ScriptNodeInstance& node, PinId pinId)
 {
-    return readInput(node, pinName).asVec4();
+    return readInput(node, pinId).asVec4();
 }
 
 template <>
 inline glm::quat ScriptContext::readInputAs<glm::quat>(
-    const ScriptNodeInstance& node, const std::string& pinName)
+    const ScriptNodeInstance& node, PinId pinId)
 {
-    return readInput(node, pinName).asQuat();
+    return readInput(node, pinId).asQuat();
 }
 
 template <>
 inline uint32_t ScriptContext::readInputAs<uint32_t>(
-    const ScriptNodeInstance& node, const std::string& pinName)
+    const ScriptNodeInstance& node, PinId pinId)
 {
-    return readInput(node, pinName).asEntityId();
+    return readInput(node, pinId).asEntityId();
 }
 
 } // namespace Vestige

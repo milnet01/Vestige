@@ -37,6 +37,10 @@ public:
     NodeTypeRegistry& nodeRegistry() { return m_nodeRegistry; }
     const NodeTypeRegistry& nodeRegistry() const { return m_nodeRegistry; }
 
+    // -- Engine access (for subscription callbacks that need it) --
+    Engine* engine() { return m_engine; }
+    const Engine* engine() const { return m_engine; }
+
     // -- Blackboards --
     Blackboard& sceneBlackboard() { return m_sceneBlackboard; }
     Blackboard& appBlackboard() { return m_appBlackboard; }
@@ -60,6 +64,11 @@ public:
     /// @brief Unregister a script instance. Unsubscribes event nodes, cancels
     /// pending latent actions, and removes it from the active list.
     void unregisterInstance(ScriptInstance& instance);
+
+    /// @brief Check whether a given instance pointer is currently registered.
+    /// Used by EventBus callbacks to guard against calling back into an
+    /// instance that has already been unregistered or destroyed.
+    bool isInstanceActive(const ScriptInstance* instance) const;
 
 private:
     /// @brief Register all built-in node types.

@@ -34,6 +34,40 @@ Entity* readEntityInput(ScriptContext& ctx, const ScriptNodeInstance& node,
     return ctx.resolveEntity(id);
 }
 
+/// @brief Register a vec3-valued transform setter node. Covers the
+/// SetPosition/SetRotation/SetScale pattern where the only thing that
+/// varies is the display name, data-pin name, default value, and which
+/// Transform member the vec3 is assigned to (audit L3).
+void registerTransformVec3Setter(
+    NodeTypeRegistry& registry,
+    const char* typeName,
+    const char* displayName,
+    const char* tooltip,
+    const char* pinName,
+    glm::vec3 defaultValue,
+    glm::vec3 Transform::*member)
+{
+    registry.registerNode({
+        typeName, displayName, "Transform", tooltip,
+        {
+            {PinKind::EXECUTION, "Exec", ScriptDataType::BOOL, {}},
+            {PinKind::DATA, "entity", ScriptDataType::ENTITY, ScriptValue::entityId(0)},
+            {PinKind::DATA, pinName, ScriptDataType::VEC3, ScriptValue(defaultValue)},
+        },
+        {{PinKind::EXECUTION, "Then", ScriptDataType::BOOL, {}}},
+        "", false, false,
+        [pinName, member](ScriptContext& ctx, const ScriptNodeInstance& node)
+        {
+            auto value = ctx.readInputAs<glm::vec3>(node, pinName);
+            if (Entity* e = readEntityInput(ctx, node, "entity"))
+            {
+                e->transform.*member = value;
+            }
+            ctx.triggerOutput(node, "Then");
+        }
+    });
+}
+
 } // namespace
 
 void registerActionNodeTypes(NodeTypeRegistry& registry)
@@ -147,78 +181,18 @@ void registerActionNodeTypes(NodeTypeRegistry& registry)
 
     // -----------------------------------------------------------------------
     // SetPosition / SetRotation / SetScale — entity transform edits.
+    // All three follow an identical pattern; deduplicated through
+    // registerTransformVec3Setter (audit L3).
     // -----------------------------------------------------------------------
-    registry.registerNode({
-        "SetPosition",
-        "Set Position",
-        "Transform",
+    registerTransformVec3Setter(registry, "SetPosition", "Set Position",
         "Sets an entity's local position",
-        {
-            {PinKind::EXECUTION, "Exec", ScriptDataType::BOOL, {}},
-            {PinKind::DATA, "entity", ScriptDataType::ENTITY, ScriptValue::entityId(0)},
-            {PinKind::DATA, "position", ScriptDataType::VEC3, ScriptValue(glm::vec3(0.0f))},
-        },
-        {{PinKind::EXECUTION, "Then", ScriptDataType::BOOL, {}}},
-        "",
-        false, false,
-        [](ScriptContext& ctx, const ScriptNodeInstance& node)
-        {
-            auto pos = ctx.readInputAs<glm::vec3>(node, "position");
-            if (Entity* e = readEntityInput(ctx, node, "entity"))
-            {
-                e->transform.position = pos;
-            }
-            ctx.triggerOutput(node, "Then");
-        }
-    });
-
-    registry.registerNode({
-        "SetRotation",
-        "Set Rotation",
-        "Transform",
+        "position", glm::vec3(0.0f), &Transform::position);
+    registerTransformVec3Setter(registry, "SetRotation", "Set Rotation",
         "Sets an entity's local rotation (Euler degrees)",
-        {
-            {PinKind::EXECUTION, "Exec", ScriptDataType::BOOL, {}},
-            {PinKind::DATA, "entity", ScriptDataType::ENTITY, ScriptValue::entityId(0)},
-            {PinKind::DATA, "rotation", ScriptDataType::VEC3, ScriptValue(glm::vec3(0.0f))},
-        },
-        {{PinKind::EXECUTION, "Then", ScriptDataType::BOOL, {}}},
-        "",
-        false, false,
-        [](ScriptContext& ctx, const ScriptNodeInstance& node)
-        {
-            auto rot = ctx.readInputAs<glm::vec3>(node, "rotation");
-            if (Entity* e = readEntityInput(ctx, node, "entity"))
-            {
-                e->transform.rotation = rot;
-            }
-            ctx.triggerOutput(node, "Then");
-        }
-    });
-
-    registry.registerNode({
-        "SetScale",
-        "Set Scale",
-        "Transform",
+        "rotation", glm::vec3(0.0f), &Transform::rotation);
+    registerTransformVec3Setter(registry, "SetScale", "Set Scale",
         "Sets an entity's local scale",
-        {
-            {PinKind::EXECUTION, "Exec", ScriptDataType::BOOL, {}},
-            {PinKind::DATA, "entity", ScriptDataType::ENTITY, ScriptValue::entityId(0)},
-            {PinKind::DATA, "scale", ScriptDataType::VEC3, ScriptValue(glm::vec3(1.0f))},
-        },
-        {{PinKind::EXECUTION, "Then", ScriptDataType::BOOL, {}}},
-        "",
-        false, false,
-        [](ScriptContext& ctx, const ScriptNodeInstance& node)
-        {
-            auto s = ctx.readInputAs<glm::vec3>(node, "scale");
-            if (Entity* e = readEntityInput(ctx, node, "entity"))
-            {
-                e->transform.scale = s;
-            }
-            ctx.triggerOutput(node, "Then");
-        }
-    });
+        "scale", glm::vec3(1.0f), &Transform::scale);
 
     // -----------------------------------------------------------------------
     // ApplyForce / ApplyImpulse — physics body actions.

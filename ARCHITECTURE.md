@@ -535,3 +535,35 @@ The editor is an ImGui-based WYSIWYG interface with dockable panels:
 ## 18. Cloth Collision & Solver (Phase 8)
 
 `ClothMeshCollider` provides triangle mesh collision with a `BVH` acceleration structure. `ColliderGenerator` automatically creates simplified collision geometry from scene meshes. `SpatialHash` enables efficient self-collision detection. `FabricMaterial` and `FabricDatabase` provide physically-based material presets (silk, cotton, leather, etc.) with KES-inspired parameters.
+
+---
+
+## 19. Scripting Subsystem (Phase 9E)
+
+`ScriptingSystem` is a domain `ISystem` implementing visual graph-based gameplay logic. Live in `engine/scripting/`. See `docs/PHASE9E_DESIGN.md` for the full design rationale and anti-patterns studied.
+
+### Data model
+
+- **`ScriptGraph`** — the serialized `.vscript` asset: nodes, connections, variables. Immutable at runtime after load. Validated on load (dangling connection references are rejected); size-capped against crafted inputs (`MAX_NODES`, `MAX_CONNECTIONS`, `MAX_VARIABLES`, `MAX_STRING_BYTES`).
+- **`ScriptValue`** — type-erased variant covering bool, int32, float, string, vec2/3/4, quat, and entity-ID. Acts as the common currency for data pins.
+- **`Blackboard`** — string-keyed variable store with a per-scope cap (`MAX_KEYS`). Six-scope model (Flow/Graph/Entity/Scene/Application/Saved) per Unity's proven design; currently only Flow + Graph are fully wired.
+- **`NodeTypeDescriptor`** + **`NodeTypeRegistry`** — descriptor-driven node registration. Each descriptor carries input/output pin defs, an optional eventTypeName for EventBus binding, and an `execute` lambda. The registry is populated at system `initialize()` from six category files (`core_nodes.cpp`, `event_nodes.cpp`, `action_nodes.cpp`, `pure_nodes.cpp`, `flow_nodes.cpp`, `latent_nodes.cpp`).
+
+### Runtime
+
+- **`ScriptInstance`** — per-entity runtime state bound to one graph. Holds per-node `ScriptNodeInstance` entries, the graph-scope blackboard, pending latent actions, and event-subscription IDs for cleanup. Maintains hot-path caches (`updateNodes`, `outputByNode`, `inputByNode`) built once at `initialize()` time to keep per-frame lookups `O(pins-per-node)` instead of `O(graph-connections)`.
+- **`ScriptContext`** — short-lived execution record for one impulse through the graph. Offers the pin-pull / pin-trigger API that node lambdas use, plus call-depth and node-count guards against runaway scripts.
+
+### EventBus bridge
+
+`ScriptingSystem::subscribeEventNodes` walks a graph's event nodes and subscribes each to the engine's `EventBus` via a templated helper. Subscriptions capture a `ScriptingSystem*` + `ScriptInstance*` pair and guard every callback with `isInstanceActive()` — a liveness lookup against `m_activeInstances` — so the lambdas cannot use-after-free even if an instance is destroyed without a matching `unregisterInstance()` call.
+
+### Per-frame work
+
+The system's `update()` runs two passes:
+1. **`tickUpdateNodes`** — fires each active instance's cached `OnUpdate` node IDs.
+2. **`tickLatentActions`** — single-pass partition of each instance's pending actions into `completed` and `pending`, then fires completed continuations (which may themselves schedule new latents). `O(N)` per tick.
+
+### Integration
+
+The scripting system depends only on `core/event_bus`, `core/i_system`, and scene/entity lookups. It does not own or mutate engine state directly; it always publishes back through `EventBus` events (`PublishEvent` node) or through the entity API reached via `ScriptContext::resolveEntity`. Node categories can be extended without modifying the core interpreter.

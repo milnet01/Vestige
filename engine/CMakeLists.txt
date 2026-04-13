@@ -214,6 +214,7 @@ set(ENGINE_SOURCES
     systems/navigation_system.cpp
     # Visual scripting system
     scripting/script_value.cpp
+    scripting/pin_id.cpp
     scripting/blackboard.cpp
     scripting/node_type_registry.cpp
     scripting/script_graph.cpp

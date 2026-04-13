@@ -10,6 +10,7 @@
 #include "scripting/node_type_registry.h"
 #include "scripting/script_context.h"
 #include "core/engine.h"
+#include "core/logger.h"
 #include "scene/entity.h"
 #include "scene/scene.h"
 #include "physics/physics_world.h"
@@ -21,6 +22,23 @@
 
 namespace Vestige
 {
+
+namespace
+{
+
+/// @brief Replace NaN/Inf with 0. Prevents poisoning downstream logic when
+/// math inputs or intermediate results go non-finite.
+inline float sanitize(float v)
+{
+    return std::isfinite(v) ? v : 0.0f;
+}
+
+inline glm::vec3 sanitize(glm::vec3 v)
+{
+    return {sanitize(v.x), sanitize(v.y), sanitize(v.z)};
+}
+
+} // namespace
 
 void registerPureNodeTypes(NodeTypeRegistry& registry)
 {
@@ -107,9 +125,9 @@ void registerPureNodeTypes(NodeTypeRegistry& registry)
         "", true, false,
         [](ScriptContext& ctx, const ScriptNodeInstance& node)
         {
-            float a = ctx.readInputAs<float>(node, "A");
-            float b = ctx.readInputAs<float>(node, "B");
-            ctx.setOutput(node, "Result", ScriptValue(a + b));
+            float a = sanitize(ctx.readInputAs<float>(node, "A"));
+            float b = sanitize(ctx.readInputAs<float>(node, "B"));
+            ctx.setOutput(node, "Result", ScriptValue(sanitize(a + b)));
         }
     });
 
@@ -124,9 +142,9 @@ void registerPureNodeTypes(NodeTypeRegistry& registry)
         "", true, false,
         [](ScriptContext& ctx, const ScriptNodeInstance& node)
         {
-            float a = ctx.readInputAs<float>(node, "A");
-            float b = ctx.readInputAs<float>(node, "B");
-            ctx.setOutput(node, "Result", ScriptValue(a - b));
+            float a = sanitize(ctx.readInputAs<float>(node, "A"));
+            float b = sanitize(ctx.readInputAs<float>(node, "B"));
+            ctx.setOutput(node, "Result", ScriptValue(sanitize(a - b)));
         }
     });
 
@@ -141,9 +159,9 @@ void registerPureNodeTypes(NodeTypeRegistry& registry)
         "", true, false,
         [](ScriptContext& ctx, const ScriptNodeInstance& node)
         {
-            float a = ctx.readInputAs<float>(node, "A");
-            float b = ctx.readInputAs<float>(node, "B");
-            ctx.setOutput(node, "Result", ScriptValue(a * b));
+            float a = sanitize(ctx.readInputAs<float>(node, "A"));
+            float b = sanitize(ctx.readInputAs<float>(node, "B"));
+            ctx.setOutput(node, "Result", ScriptValue(sanitize(a * b)));
         }
     });
 
@@ -158,10 +176,25 @@ void registerPureNodeTypes(NodeTypeRegistry& registry)
         "", true, false,
         [](ScriptContext& ctx, const ScriptNodeInstance& node)
         {
-            float a = ctx.readInputAs<float>(node, "A");
-            float b = ctx.readInputAs<float>(node, "B");
-            float r = (std::abs(b) < 1e-9f) ? 0.0f : (a / b);
-            ctx.setOutput(node, "Result", ScriptValue(r));
+            float a = sanitize(ctx.readInputAs<float>(node, "A"));
+            float b = sanitize(ctx.readInputAs<float>(node, "B"));
+            float r;
+            if (std::abs(b) < 1e-9f)
+            {
+                // Silent 0 on div-by-zero can mask logic bugs (audit L1);
+                // emit a single warning so it's visible without flooding logs
+                // when the node runs every frame.
+                Logger::warning(
+                    "[MathDiv] division by ~0 (B=" + std::to_string(b) +
+                    ") in node " + std::to_string(node.nodeId) +
+                    " — returning 0");
+                r = 0.0f;
+            }
+            else
+            {
+                r = a / b;
+            }
+            ctx.setOutput(node, "Result", ScriptValue(sanitize(r)));
         }
     });
 
@@ -177,9 +210,9 @@ void registerPureNodeTypes(NodeTypeRegistry& registry)
         "", true, false,
         [](ScriptContext& ctx, const ScriptNodeInstance& node)
         {
-            float v = ctx.readInputAs<float>(node, "Value");
-            float mn = ctx.readInputAs<float>(node, "Min");
-            float mx = ctx.readInputAs<float>(node, "Max");
+            float v = sanitize(ctx.readInputAs<float>(node, "Value"));
+            float mn = sanitize(ctx.readInputAs<float>(node, "Min"));
+            float mx = sanitize(ctx.readInputAs<float>(node, "Max"));
             if (mx < mn) std::swap(mn, mx);
             float r = std::max(mn, std::min(v, mx));
             ctx.setOutput(node, "Result", ScriptValue(r));
@@ -198,10 +231,11 @@ void registerPureNodeTypes(NodeTypeRegistry& registry)
         "", true, false,
         [](ScriptContext& ctx, const ScriptNodeInstance& node)
         {
-            float a = ctx.readInputAs<float>(node, "A");
-            float b = ctx.readInputAs<float>(node, "B");
-            float t = std::max(0.0f, std::min(1.0f, ctx.readInputAs<float>(node, "Alpha")));
-            ctx.setOutput(node, "Result", ScriptValue(a + (b - a) * t));
+            float a = sanitize(ctx.readInputAs<float>(node, "A"));
+            float b = sanitize(ctx.readInputAs<float>(node, "B"));
+            float t = std::max(0.0f, std::min(1.0f,
+                                              sanitize(ctx.readInputAs<float>(node, "Alpha"))));
+            ctx.setOutput(node, "Result", ScriptValue(sanitize(a + (b - a) * t)));
         }
     });
 
@@ -233,10 +267,10 @@ void registerPureNodeTypes(NodeTypeRegistry& registry)
         "", true, false,
         [](ScriptContext& ctx, const ScriptNodeInstance& node)
         {
-            auto v = ctx.readInputAs<glm::vec3>(node, "V");
+            auto v = sanitize(ctx.readInputAs<glm::vec3>(node, "V"));
             float len = glm::length(v);
             glm::vec3 r = (len > 1e-9f) ? v / len : glm::vec3(0.0f);
-            ctx.setOutput(node, "Result", ScriptValue(r));
+            ctx.setOutput(node, "Result", ScriptValue(sanitize(r)));
         }
     });
 

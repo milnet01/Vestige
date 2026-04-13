@@ -45,7 +45,15 @@ struct VariableDef
 class Blackboard
 {
 public:
-    /// @brief Set a variable value. Creates the variable if it does not exist.
+    /// @brief Soft cap on number of variables per scope. A malicious or buggy
+    /// script that grows the blackboard unbounded (e.g. by creating new keys
+    /// each frame) will be refused further insertions once this limit is hit.
+    /// Existing keys can still be updated.
+    static constexpr size_t MAX_KEYS = 1024;
+
+    /// @brief Set a variable value. Creates the variable if it does not exist
+    /// and the per-scope cap has not been reached. Updates to existing keys
+    /// always succeed.
     void set(const std::string& key, const ScriptValue& value);
 
     /// @brief Get a variable value. Returns a default float(0) if not found.
@@ -54,13 +62,13 @@ public:
     /// @brief Check if a variable exists.
     bool has(const std::string& key) const;
 
-    /// @brief Remove a variable.
+    /// @brief Remove a variable. Returns true if the key was present.
     bool remove(const std::string& key);
 
-    /// @brief Remove all variables.
+    /// @brief Remove all variables from this blackboard.
     void clear();
 
-    /// @brief Get the number of stored variables.
+    /// @brief Number of stored variables.
     size_t size() const { return m_values.size(); }
 
     /// @brief Read-only access to all stored values.
@@ -70,7 +78,11 @@ public:
     }
 
     // -- Serialization --
+
+    /// @brief Serialize all variables to a JSON object (keys = variable names).
     nlohmann::json toJson() const;
+    /// @brief Build a Blackboard from a JSON object produced by toJson().
+    /// Malformed entries are skipped; the per-scope cap still applies.
     static Blackboard fromJson(const nlohmann::json& j);
 
 private:

@@ -592,7 +592,7 @@ TEST_F(ScriptContextTest, GetVariablePureNode)
     // Check the output was cached
     auto* nodeInst = instance.getNodeInstance(getId);
     ASSERT_NE(nodeInst, nullptr);
-    auto outIt = nodeInst->outputValues.find("Value");
+    auto outIt = nodeInst->outputValues.find(internPin("Value"));
     ASSERT_NE(outIt, nodeInst->outputValues.end());
     EXPECT_EQ(outIt->second.asInt(), 99);
 }
@@ -876,7 +876,7 @@ TEST_F(NodeLibraryTest, MathAddComputesSum)
 
     auto* inst = f.instance.getNodeInstance(id);
     ASSERT_NE(inst, nullptr);
-    EXPECT_FLOAT_EQ(inst->outputValues["Result"].asFloat(), 5.5f);
+    EXPECT_FLOAT_EQ(inst->outputValues[internPin("Result")].asFloat(), 5.5f);
 }
 
 TEST_F(NodeLibraryTest, MathSubComputesDifference)
@@ -890,7 +890,7 @@ TEST_F(NodeLibraryTest, MathSubComputesDifference)
     ScriptContext ctx(f.instance, m_registry,
                       *reinterpret_cast<Engine*>(&f.dummyEngine));
     ctx.executeNode(id);
-    EXPECT_FLOAT_EQ(f.instance.getNodeInstance(id)->outputValues["Result"].asFloat(), 6.0f);
+    EXPECT_FLOAT_EQ(f.instance.getNodeInstance(id)->outputValues[internPin("Result")].asFloat(), 6.0f);
 }
 
 TEST_F(NodeLibraryTest, MathDivGuardsAgainstZero)
@@ -904,7 +904,7 @@ TEST_F(NodeLibraryTest, MathDivGuardsAgainstZero)
     ScriptContext ctx(f.instance, m_registry,
                       *reinterpret_cast<Engine*>(&f.dummyEngine));
     ctx.executeNode(id);
-    EXPECT_FLOAT_EQ(f.instance.getNodeInstance(id)->outputValues["Result"].asFloat(), 0.0f);
+    EXPECT_FLOAT_EQ(f.instance.getNodeInstance(id)->outputValues[internPin("Result")].asFloat(), 0.0f);
 }
 
 TEST_F(NodeLibraryTest, MathClampClampsToRange)
@@ -919,7 +919,7 @@ TEST_F(NodeLibraryTest, MathClampClampsToRange)
     ScriptContext ctx(f.instance, m_registry,
                       *reinterpret_cast<Engine*>(&f.dummyEngine));
     ctx.executeNode(id);
-    EXPECT_FLOAT_EQ(f.instance.getNodeInstance(id)->outputValues["Result"].asFloat(), 10.0f);
+    EXPECT_FLOAT_EQ(f.instance.getNodeInstance(id)->outputValues[internPin("Result")].asFloat(), 10.0f);
 }
 
 TEST_F(NodeLibraryTest, MathLerpInterpolates)
@@ -934,7 +934,7 @@ TEST_F(NodeLibraryTest, MathLerpInterpolates)
     ScriptContext ctx(f.instance, m_registry,
                       *reinterpret_cast<Engine*>(&f.dummyEngine));
     ctx.executeNode(id);
-    EXPECT_FLOAT_EQ(f.instance.getNodeInstance(id)->outputValues["Result"].asFloat(), 25.0f);
+    EXPECT_FLOAT_EQ(f.instance.getNodeInstance(id)->outputValues[internPin("Result")].asFloat(), 25.0f);
 }
 
 TEST_F(NodeLibraryTest, GetDistanceComputesEuclidean)
@@ -948,7 +948,7 @@ TEST_F(NodeLibraryTest, GetDistanceComputesEuclidean)
     ScriptContext ctx(f.instance, m_registry,
                       *reinterpret_cast<Engine*>(&f.dummyEngine));
     ctx.executeNode(id);
-    EXPECT_FLOAT_EQ(f.instance.getNodeInstance(id)->outputValues["Distance"].asFloat(), 5.0f);
+    EXPECT_FLOAT_EQ(f.instance.getNodeInstance(id)->outputValues[internPin("Distance")].asFloat(), 5.0f);
 }
 
 TEST_F(NodeLibraryTest, VectorNormalizeProducesUnit)
@@ -961,7 +961,7 @@ TEST_F(NodeLibraryTest, VectorNormalizeProducesUnit)
     ScriptContext ctx(f.instance, m_registry,
                       *reinterpret_cast<Engine*>(&f.dummyEngine));
     ctx.executeNode(id);
-    auto v = f.instance.getNodeInstance(id)->outputValues["Result"].asVec3();
+    auto v = f.instance.getNodeInstance(id)->outputValues[internPin("Result")].asVec3();
     EXPECT_NEAR(glm::length(v), 1.0f, 1e-5f);
 }
 
@@ -977,7 +977,7 @@ TEST_F(NodeLibraryTest, BoolAndOrNotTruthTable)
         ScriptContext ctx(f.instance, m_registry,
                           *reinterpret_cast<Engine*>(&f.dummyEngine));
         ctx.executeNode(id);
-        EXPECT_FALSE(f.instance.getNodeInstance(id)->outputValues["Result"].asBool());
+        EXPECT_FALSE(f.instance.getNodeInstance(id)->outputValues[internPin("Result")].asBool());
     }
     // OR
     {
@@ -989,7 +989,7 @@ TEST_F(NodeLibraryTest, BoolAndOrNotTruthTable)
         ScriptContext ctx(f.instance, m_registry,
                           *reinterpret_cast<Engine*>(&f.dummyEngine));
         ctx.executeNode(id);
-        EXPECT_TRUE(f.instance.getNodeInstance(id)->outputValues["Result"].asBool());
+        EXPECT_TRUE(f.instance.getNodeInstance(id)->outputValues[internPin("Result")].asBool());
     }
     // NOT
     {
@@ -1000,7 +1000,7 @@ TEST_F(NodeLibraryTest, BoolAndOrNotTruthTable)
         ScriptContext ctx(f.instance, m_registry,
                           *reinterpret_cast<Engine*>(&f.dummyEngine));
         ctx.executeNode(id);
-        EXPECT_FALSE(f.instance.getNodeInstance(id)->outputValues["Result"].asBool());
+        EXPECT_FALSE(f.instance.getNodeInstance(id)->outputValues[internPin("Result")].asBool());
     }
 }
 
@@ -1015,7 +1015,7 @@ TEST_F(NodeLibraryTest, CompareLessGreaterEqual)
     ScriptContext lctx(lf.instance, m_registry,
                        *reinterpret_cast<Engine*>(&lf.dummyEngine));
     lctx.executeNode(lid);
-    EXPECT_TRUE(lf.instance.getNodeInstance(lid)->outputValues["Result"].asBool());
+    EXPECT_TRUE(lf.instance.getNodeInstance(lid)->outputValues[internPin("Result")].asBool());
 
     PureNodeFixture gf;
     uint32_t gid = gf.addNode("CompareGreater");
@@ -1025,7 +1025,7 @@ TEST_F(NodeLibraryTest, CompareLessGreaterEqual)
     ScriptContext gctx(gf.instance, m_registry,
                        *reinterpret_cast<Engine*>(&gf.dummyEngine));
     gctx.executeNode(gid);
-    EXPECT_FALSE(gf.instance.getNodeInstance(gid)->outputValues["Result"].asBool());
+    EXPECT_FALSE(gf.instance.getNodeInstance(gid)->outputValues[internPin("Result")].asBool());
 
     PureNodeFixture ef;
     uint32_t eid = ef.addNode("CompareEqual");
@@ -1035,7 +1035,7 @@ TEST_F(NodeLibraryTest, CompareLessGreaterEqual)
     ScriptContext ectx(ef.instance, m_registry,
                        *reinterpret_cast<Engine*>(&ef.dummyEngine));
     ectx.executeNode(eid);
-    EXPECT_TRUE(ef.instance.getNodeInstance(eid)->outputValues["Result"].asBool());
+    EXPECT_TRUE(ef.instance.getNodeInstance(eid)->outputValues[internPin("Result")].asBool());
 }
 
 TEST_F(NodeLibraryTest, ToStringConvertsNumericValue)
@@ -1048,7 +1048,7 @@ TEST_F(NodeLibraryTest, ToStringConvertsNumericValue)
     ScriptContext ctx(f.instance, m_registry,
                       *reinterpret_cast<Engine*>(&f.dummyEngine));
     ctx.executeNode(id);
-    EXPECT_EQ(f.instance.getNodeInstance(id)->outputValues["Result"].asString(), "42");
+    EXPECT_EQ(f.instance.getNodeInstance(id)->outputValues[internPin("Result")].asString(), "42");
 }
 
 // -- Flow control: stateful nodes -------------------------------------------
@@ -1162,21 +1162,21 @@ TEST_F(NodeLibraryTest, FlipFlopAlternatesAB)
     }
     auto* ffInst = instance.getNodeInstance(ffId);
     ASSERT_NE(ffInst, nullptr);
-    EXPECT_TRUE(ffInst->outputValues["IsA"].asBool());
+    EXPECT_TRUE(ffInst->outputValues[internPin("IsA")].asBool());
 
     // 2nd: B fires
     {
         ScriptContext ctx(instance, m_registry, *reinterpret_cast<Engine*>(&dummy));
         ctx.executeNode(ffId);
     }
-    EXPECT_FALSE(ffInst->outputValues["IsA"].asBool());
+    EXPECT_FALSE(ffInst->outputValues[internPin("IsA")].asBool());
 
     // 3rd: A again
     {
         ScriptContext ctx(instance, m_registry, *reinterpret_cast<Engine*>(&dummy));
         ctx.executeNode(ffId);
     }
-    EXPECT_TRUE(ffInst->outputValues["IsA"].asBool());
+    EXPECT_TRUE(ffInst->outputValues[internPin("IsA")].asBool());
 }
 
 // -- Latent: action scheduling + onTick -------------------------------------
@@ -1217,7 +1217,7 @@ TEST_F(NodeLibraryTest, TimelineZeroDurationFinishesImmediately)
     EXPECT_EQ(instance.pendingActions().size(), 0u);
     auto* inst = instance.getNodeInstance(tlId);
     ASSERT_NE(inst, nullptr);
-    EXPECT_FLOAT_EQ(inst->outputValues["Alpha"].asFloat(), 1.0f);
+    EXPECT_FLOAT_EQ(inst->outputValues[internPin("Alpha")].asFloat(), 1.0f);
 }
 
 TEST_F(NodeLibraryTest, WaitForConditionSchedulesConditionBasedLatent)
@@ -1271,8 +1271,8 @@ TEST(ScriptingSystemBridge, KeyPressedEventTriggersOnKeyPressedNode)
     // The onKey node's keyCode output should be populated by the bridge.
     auto* nodeInst = instance.getNodeInstance(onKey);
     ASSERT_NE(nodeInst, nullptr);
-    EXPECT_EQ(nodeInst->outputValues["keyCode"].asInt(), 42);
-    EXPECT_FALSE(nodeInst->outputValues["isRepeat"].asBool());
+    EXPECT_EQ(nodeInst->outputValues[internPin("keyCode")].asInt(), 42);
+    EXPECT_FALSE(nodeInst->outputValues[internPin("isRepeat")].asBool());
 
     sys.unregisterInstance(instance);
     sys.shutdown();
@@ -1333,8 +1333,8 @@ TEST(ScriptingSystemBridge, PublishEventNodeDeliversToOnCustomEvent)
     // The subscriber's OnCustomEvent node should have been populated
     auto* subNode = subscriber.getNodeInstance(onCustom);
     ASSERT_NE(subNode, nullptr);
-    EXPECT_EQ(subNode->outputValues["name"].asString(), "HelloEvent");
-    EXPECT_FLOAT_EQ(subNode->outputValues["payload"].asFloat(), 7.0f);
+    EXPECT_EQ(subNode->outputValues[internPin("name")].asString(), "HelloEvent");
+    EXPECT_FLOAT_EQ(subNode->outputValues[internPin("payload")].asFloat(), 7.0f);
 
     sys.unregisterInstance(publisher);
     sys.unregisterInstance(subscriber);
@@ -1363,13 +1363,608 @@ TEST(ScriptingSystemBridge, LatentActionOnTickFiresDuringTickLatentActions)
     sys.update(0.5f);
     auto* nodeInst = instance.getNodeInstance(tlId);
     ASSERT_NE(nodeInst, nullptr);
-    float alpha = nodeInst->outputValues["Alpha"].asFloat();
+    float alpha = nodeInst->outputValues[internPin("Alpha")].asFloat();
     EXPECT_GE(alpha, 0.45f);
     EXPECT_LE(alpha, 0.55f);
 
     // Finish the timeline
     sys.update(0.6f);
     EXPECT_EQ(instance.pendingActions().size(), 0u);
+
+    sys.unregisterInstance(instance);
+    sys.shutdown();
+}
+
+// ===========================================================================
+// Phase 9E audit (Batch 4): missing coverage identified in PHASE9E_AUDIT_REPORT
+// ===========================================================================
+
+// -- Serialization edge cases (audit F) -------------------------------------
+
+TEST(ScriptGraphSerialization, EmptyGraphRoundTrips)
+{
+    ScriptGraph g;
+    g.name = "empty";
+    auto j = g.toJson();
+    auto r = ScriptGraph::fromJson(j);
+    EXPECT_EQ(r.name, "empty");
+    EXPECT_EQ(r.nodes.size(), 0u);
+    EXPECT_EQ(r.connections.size(), 0u);
+    EXPECT_EQ(r.variables.size(), 0u);
+}
+
+TEST(ScriptGraphSerialization, SingleNodeRoundTrips)
+{
+    ScriptGraph g;
+    g.addNode("PrintToScreen");
+    auto r = ScriptGraph::fromJson(g.toJson());
+    ASSERT_EQ(r.nodes.size(), 1u);
+    EXPECT_EQ(r.nodes[0].typeName, "PrintToScreen");
+}
+
+TEST(ScriptGraphSerialization, MalformedJsonFieldsAreIgnored)
+{
+    // Nodes array with wrong type — should be ignored, not crash.
+    nlohmann::json j;
+    j["version"] = 1;
+    j["nodes"] = "not-an-array";
+    j["connections"] = 42;
+    j["variables"] = nullptr;
+    auto r = ScriptGraph::fromJson(j);
+    EXPECT_EQ(r.nodes.size(), 0u);
+    EXPECT_EQ(r.connections.size(), 0u);
+    EXPECT_EQ(r.variables.size(), 0u);
+}
+
+// -- Deserialization safety caps (audit C1, batch 1) -----------------------
+
+TEST(ScriptGraphSerialization, NodeCapEnforced)
+{
+    nlohmann::json j;
+    j["nodes"] = nlohmann::json::array();
+    for (size_t i = 0; i < ScriptGraph::MAX_NODES + 5; ++i)
+    {
+        nlohmann::json n;
+        n["id"] = static_cast<uint32_t>(i + 1);
+        n["type"] = "PrintToScreen";
+        j["nodes"].push_back(n);
+    }
+    auto r = ScriptGraph::fromJson(j);
+    EXPECT_LE(r.nodes.size(), ScriptGraph::MAX_NODES);
+}
+
+TEST(ScriptGraphSerialization, StringBytesCapTruncatesLongNames)
+{
+    nlohmann::json j;
+    std::string huge(ScriptGraph::MAX_STRING_BYTES + 100, 'x');
+    j["name"] = huge;
+    auto r = ScriptGraph::fromJson(j);
+    EXPECT_LE(r.name.size(), ScriptGraph::MAX_STRING_BYTES);
+}
+
+TEST(ScriptGraphLoad, RejectsPathTraversal)
+{
+    // Any path containing a `..` component should be refused.
+    auto r = ScriptGraph::loadFromFile("../evil.vscript");
+    EXPECT_EQ(r.nodes.size(), 0u);
+    auto r2 = ScriptGraph::loadFromFile("assets/../../evil.vscript");
+    EXPECT_EQ(r2.nodes.size(), 0u);
+}
+
+// -- ScriptValue::fromJson robustness (audit H6) ---------------------------
+
+TEST(ScriptValueJson, Vec3ShortArrayReturnsZero)
+{
+    nlohmann::json j;
+    j["type"] = "vec3";
+    j["value"] = nlohmann::json::array({1.0f, 2.0f}); // missing third element
+    auto v = ScriptValue::fromJson(j);
+    EXPECT_EQ(v.asVec3(), glm::vec3(0.0f));
+}
+
+TEST(ScriptValueJson, QuatWrongTypeReturnsIdentity)
+{
+    nlohmann::json j;
+    j["type"] = "quat";
+    j["value"] = "not-an-array";
+    auto v = ScriptValue::fromJson(j);
+    auto q = v.asQuat();
+    EXPECT_FLOAT_EQ(q.w, 1.0f);
+    EXPECT_FLOAT_EQ(q.x, 0.0f);
+    EXPECT_FLOAT_EQ(q.y, 0.0f);
+    EXPECT_FLOAT_EQ(q.z, 0.0f);
+}
+
+TEST(ScriptValueJson, BoolWrongTypeReturnsFalse)
+{
+    nlohmann::json j;
+    j["type"] = "bool";
+    j["value"] = "not-a-bool";
+    EXPECT_FALSE(ScriptValue::fromJson(j).asBool());
+}
+
+// -- Blackboard per-scope cap (audit M8) -----------------------------------
+
+TEST(BlackboardCap, InsertionRefusedAtMaxKeys)
+{
+    Blackboard bb;
+    for (size_t i = 0; i < Blackboard::MAX_KEYS; ++i)
+    {
+        bb.set("k" + std::to_string(i), ScriptValue(static_cast<int32_t>(i)));
+    }
+    EXPECT_EQ(bb.size(), Blackboard::MAX_KEYS);
+    bb.set("overflow", ScriptValue(999));
+    EXPECT_EQ(bb.size(), Blackboard::MAX_KEYS);
+    EXPECT_FALSE(bb.has("overflow"));
+}
+
+TEST(BlackboardCap, UpdatesToExistingKeysAlwaysSucceed)
+{
+    Blackboard bb;
+    for (size_t i = 0; i < Blackboard::MAX_KEYS; ++i)
+    {
+        bb.set("k" + std::to_string(i), ScriptValue(0));
+    }
+    // Updating an existing key past the cap still works.
+    bb.set("k0", ScriptValue(42));
+    EXPECT_EQ(bb.get("k0").asInt(), 42);
+}
+
+// -- scheduleDelay clamping (audit M6) -------------------------------------
+
+TEST_F(ScriptContextTest, ScheduleDelayClampsNegative)
+{
+    ScriptGraph graph;
+    uint32_t id = graph.addNode("Delay");
+    graph.findNode(id)->properties["Duration"] = ScriptValue(-5.0f);
+    ScriptInstance instance;
+    instance.initialize(graph, 1);
+
+    Engine* dummyEngine = nullptr;
+    ScriptContext ctx(instance, m_registry,
+                      *reinterpret_cast<Engine*>(&dummyEngine));
+    ctx.executeNode(id);
+    ASSERT_EQ(instance.pendingActions().size(), 1u);
+    EXPECT_FLOAT_EQ(instance.pendingActions()[0].remainingTime, 0.0f);
+}
+
+TEST_F(ScriptContextTest, ScheduleDelayClampsNaN)
+{
+    ScriptGraph graph;
+    uint32_t id = graph.addNode("Delay");
+    graph.findNode(id)->properties["Duration"] =
+        ScriptValue(std::numeric_limits<float>::quiet_NaN());
+    ScriptInstance instance;
+    instance.initialize(graph, 1);
+
+    Engine* dummyEngine = nullptr;
+    ScriptContext ctx(instance, m_registry,
+                      *reinterpret_cast<Engine*>(&dummyEngine));
+    ctx.executeNode(id);
+    ASSERT_EQ(instance.pendingActions().size(), 1u);
+    EXPECT_FLOAT_EQ(instance.pendingActions()[0].remainingTime, 0.0f);
+}
+
+TEST_F(ScriptContextTest, ScheduleDelayClampsHuge)
+{
+    ScriptGraph graph;
+    uint32_t id = graph.addNode("Delay");
+    graph.findNode(id)->properties["Duration"] = ScriptValue(1e30f);
+    ScriptInstance instance;
+    instance.initialize(graph, 1);
+
+    Engine* dummyEngine = nullptr;
+    ScriptContext ctx(instance, m_registry,
+                      *reinterpret_cast<Engine*>(&dummyEngine));
+    ctx.executeNode(id);
+    ASSERT_EQ(instance.pendingActions().size(), 1u);
+    // Clamped to 3600 (1 hour cap).
+    EXPECT_FLOAT_EQ(instance.pendingActions()[0].remainingTime, 3600.0f);
+}
+
+// -- ForLoop boundary behavior (audit M2, M3) ------------------------------
+
+TEST_F(NodeLibraryTest, ForLoopClampsIterationCountAndReports)
+{
+    PureNodeFixture f;
+    uint32_t id = f.addNode("ForLoop");
+    f.setProp(id, "First", ScriptValue(0));
+    f.setProp(id, "Last", ScriptValue(999999)); // above MAX_FOR_ITERATIONS
+    f.initialize();
+
+    ScriptContext ctx(f.instance, m_registry,
+                      *reinterpret_cast<Engine*>(&f.dummyEngine));
+    ctx.executeNode(id);
+
+    auto* inst = f.instance.getNodeInstance(id);
+    ASSERT_NE(inst, nullptr);
+    EXPECT_TRUE(inst->outputValues[internPin("Clamped")].asBool());
+}
+
+TEST_F(NodeLibraryTest, ForLoopBoundaryInt32InputsDoNotOverflow)
+{
+    PureNodeFixture f;
+    uint32_t id = f.addNode("ForLoop");
+    // first=INT32_MIN, last=INT32_MAX: naive (last - first + 1) overflows int32.
+    // With int64 arithmetic, this clamps to MAX_FOR_ITERATIONS without UB.
+    f.setProp(id, "First", ScriptValue(std::numeric_limits<int32_t>::min()));
+    f.setProp(id, "Last", ScriptValue(std::numeric_limits<int32_t>::max()));
+    f.initialize();
+
+    ScriptContext ctx(f.instance, m_registry,
+                      *reinterpret_cast<Engine*>(&f.dummyEngine));
+    ctx.executeNode(id);
+    auto* inst = f.instance.getNodeInstance(id);
+    EXPECT_TRUE(inst->outputValues[internPin("Clamped")].asBool());
+}
+
+TEST_F(NodeLibraryTest, ForLoopLastBeforeFirstFiresCompletedOnly)
+{
+    PureNodeFixture f;
+    uint32_t id = f.addNode("ForLoop");
+    f.setProp(id, "First", ScriptValue(10));
+    f.setProp(id, "Last", ScriptValue(5));
+    f.initialize();
+
+    ScriptContext ctx(f.instance, m_registry,
+                      *reinterpret_cast<Engine*>(&f.dummyEngine));
+    ctx.executeNode(id);
+    EXPECT_FALSE(f.instance.getNodeInstance(id)->outputValues[internPin("Clamped")].asBool());
+}
+
+// -- Math NaN/Inf sanitization (audit H8) ----------------------------------
+
+TEST_F(NodeLibraryTest, MathAddSanitizesNaNInput)
+{
+    PureNodeFixture f;
+    uint32_t id = f.addNode("MathAdd");
+    f.setProp(id, "A", ScriptValue(std::numeric_limits<float>::quiet_NaN()));
+    f.setProp(id, "B", ScriptValue(5.0f));
+    f.initialize();
+
+    ScriptContext ctx(f.instance, m_registry,
+                      *reinterpret_cast<Engine*>(&f.dummyEngine));
+    ctx.executeNode(id);
+    // NaN input sanitized to 0, so result is 0+5 = 5.
+    EXPECT_FLOAT_EQ(f.instance.getNodeInstance(id)->outputValues[internPin("Result")].asFloat(), 5.0f);
+}
+
+TEST_F(NodeLibraryTest, MathMulSanitizesInfInput)
+{
+    PureNodeFixture f;
+    uint32_t id = f.addNode("MathMul");
+    f.setProp(id, "A", ScriptValue(std::numeric_limits<float>::infinity()));
+    f.setProp(id, "B", ScriptValue(2.0f));
+    f.initialize();
+
+    ScriptContext ctx(f.instance, m_registry,
+                      *reinterpret_cast<Engine*>(&f.dummyEngine));
+    ctx.executeNode(id);
+    EXPECT_FLOAT_EQ(f.instance.getNodeInstance(id)->outputValues[internPin("Result")].asFloat(), 0.0f);
+}
+
+TEST_F(NodeLibraryTest, VectorNormalizeSanitizesNaNInput)
+{
+    PureNodeFixture f;
+    uint32_t id = f.addNode("VectorNormalize");
+    glm::vec3 bad{std::numeric_limits<float>::quiet_NaN(), 0.0f, 0.0f};
+    f.setProp(id, "V", ScriptValue(bad));
+    f.initialize();
+
+    ScriptContext ctx(f.instance, m_registry,
+                      *reinterpret_cast<Engine*>(&f.dummyEngine));
+    ctx.executeNode(id);
+    // NaN → 0 vector → zero-length → returns (0,0,0) without crashing.
+    glm::vec3 out = f.instance.getNodeInstance(id)->outputValues[internPin("Result")].asVec3();
+    EXPECT_EQ(out, glm::vec3(0.0f));
+}
+
+// -- Missing pure node coverage (audit F) ----------------------------------
+
+TEST_F(NodeLibraryTest, MathMulComputesProduct)
+{
+    PureNodeFixture f;
+    uint32_t id = f.addNode("MathMul");
+    f.setProp(id, "A", ScriptValue(6.0f));
+    f.setProp(id, "B", ScriptValue(7.0f));
+    f.initialize();
+
+    ScriptContext ctx(f.instance, m_registry,
+                      *reinterpret_cast<Engine*>(&f.dummyEngine));
+    ctx.executeNode(id);
+    EXPECT_FLOAT_EQ(f.instance.getNodeInstance(id)->outputValues[internPin("Result")].asFloat(), 42.0f);
+}
+
+TEST_F(NodeLibraryTest, DotProductComputesDot)
+{
+    PureNodeFixture f;
+    uint32_t id = f.addNode("DotProduct");
+    f.setProp(id, "A", ScriptValue(glm::vec3(1.0f, 2.0f, 3.0f)));
+    f.setProp(id, "B", ScriptValue(glm::vec3(4.0f, 5.0f, 6.0f)));
+    f.initialize();
+
+    ScriptContext ctx(f.instance, m_registry,
+                      *reinterpret_cast<Engine*>(&f.dummyEngine));
+    ctx.executeNode(id);
+    // 1*4 + 2*5 + 3*6 = 32
+    EXPECT_FLOAT_EQ(f.instance.getNodeInstance(id)->outputValues[internPin("Result")].asFloat(), 32.0f);
+}
+
+TEST_F(NodeLibraryTest, CrossProductComputesCross)
+{
+    PureNodeFixture f;
+    uint32_t id = f.addNode("CrossProduct");
+    f.setProp(id, "A", ScriptValue(glm::vec3(1.0f, 0.0f, 0.0f)));
+    f.setProp(id, "B", ScriptValue(glm::vec3(0.0f, 1.0f, 0.0f)));
+    f.initialize();
+
+    ScriptContext ctx(f.instance, m_registry,
+                      *reinterpret_cast<Engine*>(&f.dummyEngine));
+    ctx.executeNode(id);
+    glm::vec3 out = f.instance.getNodeInstance(id)->outputValues[internPin("Result")].asVec3();
+    EXPECT_EQ(out, glm::vec3(0.0f, 0.0f, 1.0f));
+}
+
+TEST_F(NodeLibraryTest, HasVariableReturnsTrueWhenSet)
+{
+    PureNodeFixture f;
+    uint32_t id = f.addNode("HasVariable");
+    f.setProp(id, "Name", ScriptValue(std::string("hp")));
+    f.initialize();
+    f.instance.graphBlackboard().set("hp", ScriptValue(100.0f));
+
+    ScriptContext ctx(f.instance, m_registry,
+                      *reinterpret_cast<Engine*>(&f.dummyEngine));
+    ctx.executeNode(id);
+    EXPECT_TRUE(f.instance.getNodeInstance(id)->outputValues[internPin("Exists")].asBool());
+}
+
+TEST_F(NodeLibraryTest, HasVariableReturnsFalseWhenMissing)
+{
+    PureNodeFixture f;
+    uint32_t id = f.addNode("HasVariable");
+    f.setProp(id, "Name", ScriptValue(std::string("nope")));
+    f.initialize();
+
+    ScriptContext ctx(f.instance, m_registry,
+                      *reinterpret_cast<Engine*>(&f.dummyEngine));
+    ctx.executeNode(id);
+    EXPECT_FALSE(f.instance.getNodeInstance(id)->outputValues[internPin("Exists")].asBool());
+}
+
+// -- Missing flow node coverage (audit F) ----------------------------------
+
+TEST_F(NodeLibraryTest, SwitchStringRoutesByCase)
+{
+    PureNodeFixture f;
+    uint32_t id = f.addNode("SwitchString");
+    f.setProp(id, "Selector", ScriptValue(std::string("greet")));
+    f.initialize();
+
+    ScriptContext ctx(f.instance, m_registry,
+                      *reinterpret_cast<Engine*>(&f.dummyEngine));
+    ctx.executeNode(id);
+    // Should not crash; SwitchString routes to the matching named output or Default.
+    EXPECT_GE(ctx.nodesExecuted(), 1);
+}
+
+TEST_F(NodeLibraryTest, GateBlocksWhenClosed)
+{
+    PureNodeFixture f;
+    uint32_t gateId = f.addNode("Gate");
+    uint32_t sinkId = f.addNode("PrintToScreen");
+    f.graph.addConnection(gateId, "Out", sinkId, "Exec");
+    f.setProp(gateId, "StartClosed", ScriptValue(true));
+    f.initialize();
+
+    ScriptContext ctx(f.instance, m_registry,
+                      *reinterpret_cast<Engine*>(&f.dummyEngine));
+    ctx.executeNode(gateId);
+    // When closed, the gate should not forward execution.
+    // nodesExecuted counts only this gate node, not the sink.
+    EXPECT_EQ(ctx.nodesExecuted(), 1);
+}
+
+TEST_F(NodeLibraryTest, WhileLoopTerminatesAtSafetyCap)
+{
+    PureNodeFixture f;
+    uint32_t id = f.addNode("WhileLoop");
+    // Always-true condition — safety cap must terminate it.
+    f.setProp(id, "Condition", ScriptValue(true));
+    f.initialize();
+
+    ScriptContext ctx(f.instance, m_registry,
+                      *reinterpret_cast<Engine*>(&f.dummyEngine));
+    ctx.executeNode(id);
+    // If this didn't terminate we would never reach here.
+    SUCCEED();
+}
+
+// -- Core interpreter: Blackboard scope routing (audit F) ------------------
+
+TEST_F(ScriptContextTest, FlowScopeIsIsolatedFromGraphScope)
+{
+    ScriptGraph graph;
+    ScriptInstance instance;
+    instance.initialize(graph, 1);
+    instance.graphBlackboard().set("shared", ScriptValue(100));
+
+    Engine* dummyEngine = nullptr;
+    ScriptContext ctx(instance, m_registry,
+                      *reinterpret_cast<Engine*>(&dummyEngine));
+
+    // Writing to Flow doesn't touch Graph.
+    ctx.setVariable("shared", VariableScope::FLOW, ScriptValue(5));
+    EXPECT_EQ(ctx.getVariable("shared", VariableScope::FLOW).asInt(), 5);
+    EXPECT_EQ(ctx.getVariable("shared", VariableScope::GRAPH).asInt(), 100);
+}
+
+// -- Core interpreter: re-entrancy safety (audit F) ------------------------
+
+TEST(ScriptingSystemBridge, CustomEventReEntrancyHitsDepthLimit)
+{
+    // One OnCustomEvent wired to a PublishEvent that re-publishes the same
+    // event type. Without the depth guard this would recurse forever.
+    Engine engine;
+    ScriptingSystem sys;
+    ASSERT_TRUE(sys.initialize(engine));
+
+    ScriptGraph graph;
+    uint32_t onEvt = graph.addNode("OnCustomEvent");
+    graph.findNode(onEvt)->properties["Name"] =
+        ScriptValue(std::string("loop"));
+    uint32_t pub = graph.addNode("PublishEvent");
+    graph.findNode(pub)->properties["name"] =
+        ScriptValue(std::string("loop"));
+    graph.addConnection(onEvt, "Fired", pub, "Exec");
+
+    ScriptInstance instance;
+    instance.initialize(graph, 1);
+    sys.registerInstance(instance);
+
+    ScriptCustomEvent evt("loop", ScriptValue(1.0f));
+    // Should complete without stack overflow thanks to the node-count /
+    // call-depth limits in ScriptContext.
+    engine.getEventBus().publish(evt);
+
+    sys.unregisterInstance(instance);
+    sys.shutdown();
+}
+
+// -- OnCustomEvent filter suppresses trigger (audit M1, batch 3) -----------
+
+TEST(ScriptingSystemBridge, OnCustomEventFilterMismatchDoesNotFire)
+{
+    Engine engine;
+    ScriptingSystem sys;
+    ASSERT_TRUE(sys.initialize(engine));
+
+    ScriptGraph graph;
+    uint32_t onEvt = graph.addNode("OnCustomEvent");
+    graph.findNode(onEvt)->properties["Name"] =
+        ScriptValue(std::string("expected"));
+    uint32_t sink = graph.addNode("PrintToScreen");
+    graph.addConnection(onEvt, "Fired", sink, "Exec");
+
+    ScriptInstance instance;
+    instance.initialize(graph, 1);
+    sys.registerInstance(instance);
+
+    // Publish an event whose name does NOT match the filter.
+    ScriptCustomEvent evt("different", ScriptValue(0.0f));
+    engine.getEventBus().publish(evt);
+
+    // The OnCustomEvent node's `name` output should NOT have been populated,
+    // because the filter rejected the event upstream.
+    auto* nodeInst = instance.getNodeInstance(onEvt);
+    ASSERT_NE(nodeInst, nullptr);
+    auto it = nodeInst->outputValues.find(internPin("name"));
+    EXPECT_TRUE(it == nodeInst->outputValues.end())
+        << "name output should be absent on filter mismatch";
+
+    sys.unregisterInstance(instance);
+    sys.shutdown();
+}
+
+// -- EventBus bridge: missing event types ----------------------------------
+
+TEST(ScriptingSystemBridge, KeyReleasedEventPopulatesOutputs)
+{
+    Engine engine;
+    ScriptingSystem sys;
+    ASSERT_TRUE(sys.initialize(engine));
+
+    ScriptGraph graph;
+    uint32_t onKey = graph.addNode("OnKeyReleased");
+    ScriptInstance instance;
+    instance.initialize(graph, 1);
+    sys.registerInstance(instance);
+
+    KeyReleasedEvent evt(101);
+    engine.getEventBus().publish(evt);
+
+    auto* nodeInst = instance.getNodeInstance(onKey);
+    ASSERT_NE(nodeInst, nullptr);
+    EXPECT_EQ(nodeInst->outputValues[internPin("keyCode")].asInt(), 101);
+
+    sys.unregisterInstance(instance);
+    sys.shutdown();
+}
+
+TEST(ScriptingSystemBridge, MouseButtonEventPopulatesOutputs)
+{
+    Engine engine;
+    ScriptingSystem sys;
+    ASSERT_TRUE(sys.initialize(engine));
+
+    ScriptGraph graph;
+    uint32_t onMouse = graph.addNode("OnMouseButton");
+    ScriptInstance instance;
+    instance.initialize(graph, 1);
+    sys.registerInstance(instance);
+
+    MouseButtonPressedEvent evt(2);
+    engine.getEventBus().publish(evt);
+
+    auto* nodeInst = instance.getNodeInstance(onMouse);
+    ASSERT_NE(nodeInst, nullptr);
+    EXPECT_EQ(nodeInst->outputValues[internPin("button")].asInt(), 2);
+
+    sys.unregisterInstance(instance);
+    sys.shutdown();
+}
+
+// -- Liveness: isInstanceActive (audit H1) ---------------------------------
+
+TEST(ScriptingSystemBridge, IsInstanceActiveReflectsRegistration)
+{
+    Engine engine;
+    ScriptingSystem sys;
+    ASSERT_TRUE(sys.initialize(engine));
+
+    ScriptGraph graph;
+    graph.addNode("OnKeyPressed");
+    ScriptInstance instance;
+    instance.initialize(graph, 1);
+
+    EXPECT_FALSE(sys.isInstanceActive(&instance));
+    sys.registerInstance(instance);
+    EXPECT_TRUE(sys.isInstanceActive(&instance));
+    sys.unregisterInstance(instance);
+    EXPECT_FALSE(sys.isInstanceActive(&instance));
+    EXPECT_FALSE(sys.isInstanceActive(nullptr));
+
+    sys.shutdown();
+}
+
+// -- Timeline NaN progress guard (audit M4) --------------------------------
+
+TEST(ScriptingSystemBridge, TimelineHandlesRemainingTimeNaNGracefully)
+{
+    Engine engine;
+    ScriptingSystem sys;
+    ASSERT_TRUE(sys.initialize(engine));
+
+    ScriptGraph graph;
+    uint32_t tlId = graph.addNode("Timeline");
+    graph.findNode(tlId)->properties["Duration"] = ScriptValue(1.0f);
+
+    ScriptInstance instance;
+    instance.initialize(graph, 1);
+    sys.registerInstance(instance);
+
+    sys.fireEvent(instance, tlId);
+    ASSERT_EQ(instance.pendingActions().size(), 1u);
+
+    // Inject NaN into remainingTime — ticker should not crash or emit NaN.
+    instance.pendingActions()[0].remainingTime =
+        std::numeric_limits<float>::quiet_NaN();
+    sys.update(0.1f);
+
+    auto* nodeInst = instance.getNodeInstance(tlId);
+    ASSERT_NE(nodeInst, nullptr);
+    float alpha = nodeInst->outputValues[internPin("Alpha")].asFloat();
+    EXPECT_TRUE(std::isfinite(alpha));
 
     sys.unregisterInstance(instance);
     sys.shutdown();

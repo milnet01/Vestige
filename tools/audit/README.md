@@ -1,6 +1,21 @@
-# Audit Tool v1.6.0
+# Audit Tool
 
 Automated code audit tool with LLM-optimized reporting. Runs 5 audit tiers mechanically and produces a condensed report (~3K tokens) that an LLM can consume in one shot, cutting audit token usage by ~80-90%.
+
+Current version is in `CHANGELOG.md`; major releases are tagged in the file.
+
+## Project relationship
+
+This tool lives inside the Vestige engine repository but is designed to run against **any** C++, Python, Rust, Go, Java, JavaScript, or TypeScript project (see `--init` auto-detection). It is not engine-specific — the Vestige repo is just its primary user today.
+
+| Concern | Engine | Audit Tool |
+|---------|--------|------------|
+| Version source | (follows phase milestones) | `CHANGELOG.md` + version badge in web UI |
+| Changelog | `ROADMAP.md` phases | `tools/audit/CHANGELOG.md` |
+| Release cadence | Phase-gated | Feature-gated (see CHANGELOG) |
+| External users | one (this repo) | designed for N; Vestige is user #1 |
+
+When the tool gains a second active user, it's a candidate to move to its own repository (git submodule or standalone install). Until then: monorepo with a clean seam — the tool has no `#include` into the engine source tree, the engine has no runtime dependency on the tool.
 
 ## Quick Start
 
