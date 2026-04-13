@@ -107,3 +107,79 @@ def test_api_init_rejects_non_yaml_suffix(client, web_app):
         },
     )
     assert response.status_code == 400
+
+
+# --- Input validation guards (FIXPLAN C1a) ---
+
+
+def test_api_run_rejects_injection_in_base_ref(client, web_app):
+    """`base_ref: HEAD; touch /tmp/pwn` must be rejected with 400."""
+    response = client.post(
+        "/api/run",
+        json={
+            "project_root": web_app.DEFAULT_ROOT,
+            "config_path": web_app.DEFAULT_CONFIG,
+            "base_ref": "HEAD; touch /tmp/pwn_c1a",
+            "tiers": [1],
+        },
+    )
+    assert response.status_code == 400
+    # Confirm the injection did NOT run.
+    assert not Path("/tmp/pwn_c1a").exists()
+
+
+def test_api_run_rejects_backtick_in_base_ref(client, web_app):
+    """Backtick and $() command substitution must be rejected."""
+    for bad in ("`whoami`", "$(whoami)", "HEAD && rm -rf /"):
+        response = client.post(
+            "/api/run",
+            json={
+                "project_root": web_app.DEFAULT_ROOT,
+                "config_path": web_app.DEFAULT_CONFIG,
+                "base_ref": bad,
+                "tiers": [1],
+            },
+        )
+        assert response.status_code == 400, f"expected 400 for {bad!r}"
+
+
+def test_api_run_accepts_normal_git_refs(client, web_app, monkeypatch):
+    """Normal refs like `HEAD~1`, `origin/main`, `v1.2.3`, hashes must pass validation."""
+    # Stub AuditSession.start so we don't actually kick off a subprocess.
+    from web import audit_bridge
+    monkeypatch.setattr(
+        audit_bridge.AuditSession, "start",
+        lambda self, **kw: None,
+    )
+    for good in ("HEAD", "HEAD~5", "v1.2.3", "origin/main", "abc123def456"):
+        response = client.post(
+            "/api/run",
+            json={
+                "project_root": web_app.DEFAULT_ROOT,
+                "config_path": web_app.DEFAULT_CONFIG,
+                "base_ref": good,
+                "tiers": [1],
+            },
+        )
+        assert response.status_code in (200, 409, 500), (
+            f"unexpected {response.status_code} for {good!r}: {response.data!r}"
+        )
+
+
+def test_api_run_rejects_bad_tiers(client, web_app):
+    """tiers must be a list of ints in [1,5]; reject strings, floats, huge ints."""
+    for bad in ("[1,2,3]", [99], [0], [1.5], "not a list"):
+        response = client.post(
+            "/api/run",
+            json={
+                "project_root": web_app.DEFAULT_ROOT,
+                "config_path": web_app.DEFAULT_CONFIG,
+                "base_ref": "HEAD",
+                "tiers": bad,
+            },
+        )
+        assert response.status_code == 400, f"expected 400 for tiers={bad!r}"
+
+
+# NVD API key shape-validation tests live in test_tier5_nvd.py (same
+# _resolve_api_key function); keeping them close to the unit under test.
