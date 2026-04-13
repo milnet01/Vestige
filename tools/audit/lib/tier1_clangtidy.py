@@ -32,7 +32,8 @@ def _ensure_compile_commands(config: Config, cc_path: Path | None) -> bool:
              "in %s", abs_build_dir)
 
     rc, stdout, stderr = run_cmd(
-        f"cmake -B {abs_build_dir} -DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+        ["cmake", "-B", str(abs_build_dir),
+         "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON"],
         cwd=config.root,
         timeout=120,
     )
@@ -83,8 +84,7 @@ def run(config: Config) -> list[Finding]:
                      "many false positives from missing includes. Consider running: "
                      "cmake -B build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON")
 
-    # Build command
-    file_list = " ".join(f'"{f}"' for f in source_files)
+    # Build argv list for shell=False execution (AUDIT.md §C1 / FIXPLAN C1b).
     if has_compile_db:
         if cc_path is not None and cc_path.exists():
             cc_dir = cc_path.parent
@@ -92,9 +92,13 @@ def run(config: Config) -> list[Finding]:
             # Auto-generated — lives in the build directory
             build_dir = config.get("build", "build_dir", default="build")
             cc_dir = config.root / build_dir
-        cmd = f"{binary} -p {cc_dir} --checks='{checks}' {file_list}"
+        cmd: list[str] = [binary, "-p", str(cc_dir),
+                          f"--checks={checks}"] + list(source_files)
     else:
-        cmd = f"{binary} --checks='{checks}' {file_list} -- {fallback_flags}"
+        # Trailing `--` separates clang-tidy options from compiler flags.
+        import shlex as _shlex
+        cmd = ([binary, f"--checks={checks}"] + list(source_files) +
+               ["--"] + _shlex.split(fallback_flags))
 
     log.info("Running clang-tidy on %d files...", len(source_files))
     rc, stdout, stderr = run_cmd(cmd, cwd=config.root, timeout=timeout)

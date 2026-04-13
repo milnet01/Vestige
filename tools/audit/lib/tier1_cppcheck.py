@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import shlex
 from pathlib import Path
 
 from .config import Config
@@ -23,13 +24,23 @@ def run(config: Config) -> list[Finding]:
 
     binary = cpp_config.get("binary", "cppcheck")
     args = cpp_config.get("args", "")
-    targets = " ".join(cpp_config.get("targets", []))
+    targets = cpp_config.get("targets", [])
     timeout = cpp_config.get("timeout", 600)
 
-    # Use XML output for structured parsing
-    cmd = f"{binary} --xml --xml-version=2 {args} {targets}"
-    log.info("Running cppcheck...")
+    # Build argv list for shell=False execution (AUDIT.md §C1 / FIXPLAN C1b).
+    # `args` is authored in audit_config.yaml as a shell-shaped string; split
+    # it with shlex so embedded quotes and escape sequences behave the same
+    # as they would under a shell but without shell metachar interpretation
+    # in the overall command line. `targets` is a YAML list of source dirs.
+    cmd: list[str] = [binary, "--xml", "--xml-version=2"]
+    if args:
+        cmd.extend(shlex.split(args))
+    if isinstance(targets, str):
+        cmd.extend(shlex.split(targets))
+    else:
+        cmd.extend(targets)
 
+    log.info("Running cppcheck...")
     rc, stdout, stderr = run_cmd(cmd, cwd=config.root, timeout=timeout)
 
     if rc == -1 and "TIMEOUT" in stderr:

@@ -8,7 +8,7 @@ from pathlib import Path
 
 from .config import Config
 from .findings import Finding, Severity
-from .utils import run_cmd
+from .utils import run_shell_cmd
 
 log = logging.getLogger("audit")
 
@@ -26,8 +26,12 @@ def run_build(config: Config) -> tuple[list[Finding], dict]:
         log.info("No build command configured — skipping build check")
         return findings, summary
 
+    # build_cmd is user-authored (e.g. "cmake --build build 2>&1"); shell
+    # interpretation is legitimately needed for redirection / chaining.
+    # Use run_shell_cmd so the shell=True surface is explicit + auditable
+    # (AUDIT.md §C1 / FIXPLAN C1b).
     log.info("Running build...")
-    rc, stdout, stderr = run_cmd(build_cmd, cwd=config.root, timeout=300)
+    rc, stdout, stderr = run_shell_cmd(build_cmd, cwd=config.root, timeout=300)
     output = stdout + "\n" + stderr
     warning_regex = config.get("build", "warning_regex", default=r"warning:|error:")
 
@@ -88,8 +92,9 @@ def run_tests(config: Config) -> tuple[list[Finding], dict]:
         log.info("No test command configured — skipping tests")
         return findings, summary
 
+    # test_cmd is user-authored (e.g. "cd build && ctest ..."); see build.
     log.info("Running tests...")
-    rc, stdout, stderr = run_cmd(test_cmd, cwd=config.root, timeout=600)
+    rc, stdout, stderr = run_shell_cmd(test_cmd, cwd=config.root, timeout=600)
     output = stdout + "\n" + stderr
 
     # Parse ctest summary line: "X% tests passed, N tests failed out of M"
