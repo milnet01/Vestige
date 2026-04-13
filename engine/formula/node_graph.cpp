@@ -1,6 +1,7 @@
 /// @file node_graph.cpp
 /// @brief Node graph implementation for the visual formula editor (Phase 9E).
 #include "formula/node_graph.h"
+#include "core/logger.h"
 
 #include <algorithm>
 #include <queue>
@@ -666,15 +667,21 @@ struct FromExprHelper
 
         case ExprNodeType::CONDITIONAL:
         {
-            // Build condition, true branch, false branch
-            NodeId condId = buildNode(*expr.children[0], depth + 1);
-            NodeId trueId = buildNode(*expr.children[1], depth + 1);
-            NodeId falseId = buildNode(*expr.children[2], depth + 1);
-            // Conditional nodes are not directly supported in the node graph yet;
-            // represent as a literal 0 placeholder.
-            (void)condId;
-            (void)trueId;
-            (void)falseId;
+            // AUDIT.md §M10 / FIXPLAN: conditional nodes are not yet
+            // representable in the node graph. Previously we silently
+            // dropped the semantics to literal(0) and orphaned the two
+            // branch sub-trees — round-trip lost logic. Now log a
+            // warning so the user sees the loss; still produces a
+            // working-but-reduced graph so imports don't hard-fail.
+            //
+            // Full fix (adding a conditional node type) is deferred
+            // until the node graph gains non-float control semantics.
+            (void)buildNode(*expr.children[0], depth + 1);
+            (void)buildNode(*expr.children[1], depth + 1);
+            (void)buildNode(*expr.children[2], depth + 1);
+            Logger::warning("[NodeGraph] CONDITIONAL expression lost on "
+                            "import — no node-graph equivalent exists. "
+                            "Replaced with literal(0). See AUDIT.md §M10.");
             Node n = NodeGraph::createLiteralNode(0.0f);
             n.posX = static_cast<float>(depth) * 200.0f;
             n.posY = static_cast<float>(yCounter++) * 100.0f;
@@ -967,9 +974,17 @@ NodeGraph NodeGraph::fromJson(const nlohmann::json& j)
     graph.m_nextPortId = j.value("nextPortId", static_cast<PortId>(1));
     graph.m_nextConnectionId = j.value("nextConnectionId", static_cast<ConnectionId>(1));
 
-    // Deserialize nodes
+    // Deserialize nodes.
+    //
+    // AUDIT.md §M9 / FIXPLAN: previously `m_nodes[node.id] = std::move(node)`
+    // silently overwrote duplicate IDs and any serialised m_nextNodeId
+    // smaller than a present id could cause future addNode() to collide
+    // with existing nodes. Now: duplicate IDs throw; m_nextNodeId is
+    // recomputed as max(id)+1 after the load to guarantee forward
+    // uniqueness regardless of the serialised counter value.
     if (j.contains("nodes"))
     {
+        NodeId maxId = 0;
         for (const auto& nj : j["nodes"])
         {
             Node node;
@@ -1014,7 +1029,20 @@ NodeGraph NodeGraph::fromJson(const nlohmann::json& j)
                 }
             }
 
+            if (graph.m_nodes.find(node.id) != graph.m_nodes.end())
+            {
+                throw std::runtime_error(
+                    "NodeGraph::fromJson: duplicate node id " +
+                    std::to_string(node.id) + " (AUDIT.md §M9)");
+            }
+            if (node.id > maxId) maxId = node.id;
             graph.m_nodes[node.id] = std::move(node);
+        }
+        // Defensive: ensure any future addNode() picks an id strictly
+        // greater than every present id, regardless of what was saved.
+        if (maxId + 1 > graph.m_nextNodeId)
+        {
+            graph.m_nextNodeId = maxId + 1;
         }
     }
 

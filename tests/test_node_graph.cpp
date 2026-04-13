@@ -879,6 +879,57 @@ TEST(NodeGraph_Json, PreservesPortDataTypes)
     EXPECT_EQ(node->outputs[0].dataType, PortDataType::FLOAT);
 }
 
+TEST(NodeGraph_Json, DuplicateNodeIdThrows)
+{
+    // AUDIT.md §M9 / FIXPLAN: fromJson must refuse duplicate node IDs
+    // rather than silently overwriting.
+    nlohmann::json j;
+    j["version"] = 1;
+    j["nextNodeId"] = 100;
+    j["nextPortId"] = 1;
+    j["nextConnectionId"] = 1;
+    j["nodes"] = nlohmann::json::array();
+    nlohmann::json n1;
+    n1["id"] = 42;
+    n1["operation"] = "literal";
+    n1["category"] = "input";
+    n1["literalValue"] = 1.0f;
+    j["nodes"].push_back(n1);
+    nlohmann::json n2;
+    n2["id"] = 42;        // deliberate duplicate
+    n2["operation"] = "literal";
+    n2["category"] = "input";
+    n2["literalValue"] = 2.0f;
+    j["nodes"].push_back(n2);
+    j["connections"] = nlohmann::json::array();
+
+    EXPECT_THROW(NodeGraph::fromJson(j), std::runtime_error);
+}
+
+TEST(NodeGraph_Json, NextNodeIdReclampedAgainstMax)
+{
+    // §M9: if serialised m_nextNodeId is <= any present id, fromJson
+    // must recompute to max(id)+1 so subsequent addNode() calls never
+    // collide with existing nodes.
+    NodeGraph g;
+    NodeId high = 0;
+    for (int i = 0; i < 5; ++i)
+    {
+        high = g.addNode(NodeGraph::createLiteralNode(float(i)));
+    }
+
+    // Tamper with the serialised counter to simulate an old or hostile
+    // save with nextNodeId smaller than a present id.
+    nlohmann::json j = g.toJson();
+    j["nextNodeId"] = 1;
+
+    NodeGraph restored = NodeGraph::fromJson(j);
+    NodeId fresh = restored.addNode(NodeGraph::createLiteralNode(42.0f));
+    EXPECT_GT(fresh, high)
+        << "addNode after fromJson with tampered nextNodeId must still "
+           "produce a strictly greater id — AUDIT.md §M9.";
+}
+
 // ===========================================================================
 // Enum string conversions
 // ===========================================================================
