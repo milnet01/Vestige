@@ -73,4 +73,8 @@ perf.data*
 .audit_cache/
 docs/AUTOMATED_AUDIT_REPORT*.md
 docs/AUTOMATED_AUDIT_REPORT*_results.json
+# Trend snapshots are per-run diagnostic state (AUDIT.md §L9 / FIXPLAN I5).
+# Rolling retention of N is driven by `audit.py --keep-snapshots N`;
+# everything under this pattern remains developer-local.
+docs/trend_snapshot_*.json
 **/__pycache__/
