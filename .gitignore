@@ -43,6 +43,9 @@ Thumbs.db
 # ImGui layout state
 imgui.ini
 
+# imgui-node-editor per-canvas layout state (Phase 9E-3)
+NodeEditor.json
+
 # Dependency directories (fetched by CMake at build time)
 external/glfw/
 external/glm/
