@@ -2,6 +2,22 @@
 
 All notable changes to the Formula Workbench are documented in this file.
 
+## [1.3.2] - 2026-04-13
+
+### Fixed
+- **§M11 RFC 4180 CSV support.** `importCsv` previously split cells with
+  `getline(ss, cell, ',')`, breaking on any Excel-exported CSV with
+  quoted fields (e.g. `"1,234.56",5.0` split into three cells). The
+  new `splitCsvLine` lambda handles quoted comma literals and `""`-
+  escaped quotes inline; embedded newlines inside quotes remain
+  out-of-scope but short rows are dropped by the existing length
+  guard so the fit dataset stays consistent.
+- **§L2 File-dialog popen truncation.** Previously read up to 512
+  bytes from the kdialog/zenity output. Linux PATH_MAX is 4096; long
+  paths were silently truncated and the fit import would fail with a
+  cryptic file-not-found. Now loops `fgets` to EOF into a
+  `std::string`, trimming trailing whitespace at the end.
+
 ## [1.3.1] - 2026-04-13
 
 ### Fixed
