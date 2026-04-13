@@ -133,5 +133,11 @@ void main()
 
     // Blend
     vec3 result = mix(currentColor, historyColor, feedback);
+
+    // AUDIT.md §L5 / FIXPLAN: cheap NaN safety on the final result. A
+    // single NaN accumulated into history would poison neighbouring
+    // samples forever under the reprojection loop; clamping floor to
+    // 0.0 replaces negatives/NaNs without touching valid HDR highlights.
+    result = max(result, vec3(0.0));
     fragColor = vec4(result, 1.0);
 }
