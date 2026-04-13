@@ -2,6 +2,11 @@
 
 All notable changes to the Audit Tool are documented in this file.
 
+## [2.0.1] - 2026-04-13
+
+### Security
+- **CRITICAL: Scrubbed committed NVD API key** from `audit_config.yaml:272` (audit finding C2). Literal `api_key:` field is now `null` by default; use the `NVD_API_KEY` env var only. `_resolve_api_key` emits a warning if a future committer re-adds a literal.
+
 ## [2.0.0] - 2026-04-11
 
 ### Added

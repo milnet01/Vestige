@@ -108,9 +108,17 @@ def _resolve_api_key(nvd_config: dict) -> str | None:
 
     Checks config ``api_key`` first, then falls back to the environment
     variable named by ``api_key_env`` (default ``NVD_API_KEY``).
+
+    Emits a warning if ``api_key`` is a literal in the YAML — committing a
+    key to the repo is a credential-leak vector (see AUDIT.md §C2).
     """
     key = nvd_config.get("api_key")
     if key:
+        log.warning(
+            "NVD api_key is set as a literal in audit_config.yaml — this is a "
+            "credential-leak risk. Set it to null and use the NVD_API_KEY env "
+            "var instead."
+        )
         return key
     env_var = nvd_config.get("api_key_env", "NVD_API_KEY")
     return os.environ.get(env_var)
