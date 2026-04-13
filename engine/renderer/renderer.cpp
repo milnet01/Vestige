@@ -1792,6 +1792,14 @@ void Renderer::captureLightProbe(int probeIndex, const SceneRenderData& renderDa
     glBindTextureUnit(10, m_fallbackCubemap);
     glBindTextureUnit(11, m_fallbackCubemap);
 
+    // AUDIT.md §L4 / FIXPLAN: also rebind 3D sampler fallbacks after a
+    // capture so a subsequent capture (or immediate frame render) cannot
+    // read stale SH probe grid state on units 17-23.
+    for (int i = 0; i < SHProbeGrid::SH_TEXTURE_COUNT; i++)
+    {
+        glBindTextureUnit(SHProbeGrid::FIRST_TEXTURE_UNIT + i, m_fallbackTex3D);
+    }
+
     Logger::info("Light probe " + std::to_string(probeIndex) + " captured and convolved");
 }
 
@@ -1917,6 +1925,13 @@ void Renderer::captureSHGrid(const SceneRenderData& renderData,
     glBindTextureUnit(5, m_fallbackCubemap);
     glBindTextureUnit(10, m_fallbackCubemap);
     glBindTextureUnit(11, m_fallbackCubemap);
+
+    // AUDIT.md §L4 / FIXPLAN: rebind 3D sampler fallbacks so a subsequent
+    // capture or frame render cannot read stale SH probe grid state.
+    for (int i = 0; i < SHProbeGrid::SH_TEXTURE_COUNT; i++)
+    {
+        glBindTextureUnit(SHProbeGrid::FIRST_TEXTURE_UNIT + i, m_fallbackTex3D);
+    }
 
     Logger::info("SH probe grid captured: " + std::to_string(captured)
         + " probes projected to L2 SH");
@@ -2730,7 +2745,18 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
     }
 
     // --- Skybox pass: draw after opaque geometry, before transparent ---
-    if (m_skybox && m_skyboxEnabled)
+    //
+    // AUDIT.md §M14 / FIXPLAN: hardened against forward-Z capture paths.
+    // The skybox fragment shader writes gl_FragDepth = 0.0, relying on
+    // reverse-Z's GL_GEQUAL to paint only pixels that still have the
+    // initial cleared depth (0.0). In the forward-Z cubemap capture
+    // (captureLightProbe / captureSHGrid), the pipeline uses GL_LESS
+    // and clearDepth(1.0) — if geometryOnly were ever to stop excluding
+    // the skybox pass, gl_FragDepth=0 would pass GL_LESS and fill
+    // the entire framebuffer with skybox in front of geometry.
+    // geometryOnly=true gates the skybox pass here; this condition is
+    // the single source of truth that callers depend on.
+    if (m_skybox && m_skyboxEnabled && !geometryOnly)
     {
         // Reverse-Z: skybox at depth 0.0 (far plane). GL_GEQUAL ensures:
         //   empty pixels (depth=0.0): 0.0 >= 0.0 → PASS (skybox fills background)
