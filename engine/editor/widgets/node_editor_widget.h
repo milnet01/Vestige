@@ -18,6 +18,9 @@
 namespace ax::NodeEditor
 {
 struct EditorContext;
+enum class SaveReasonFlags : uint32_t;  // forward-declared to avoid pulling
+                                        // the library header into every
+                                        // translation unit.
 }
 
 namespace Vestige
@@ -80,8 +83,23 @@ public:
     void link(uintptr_t linkId, uintptr_t fromPin, uintptr_t toPin);
 
 private:
+    // AUDIT.md §H16 / FIXPLAN H1: the SaveSettings / LoadSettings callbacks
+    // that override the library's default file-based persistence live in
+    // the .cpp so we don't need to leak the imgui_node_editor.h types
+    // into every translation unit that includes this header. The .cpp
+    // passes `this` through Config::UserPointer so the callbacks can
+    // read m_settingsFile and m_isShuttingDown.
+
     ax::NodeEditor::EditorContext* m_context = nullptr;
     std::string m_settingsFile;
+    bool m_isShuttingDown = false;  ///< Set for the duration of shutdown().
+
+    // Grant the free-function callbacks in node_editor_widget.cpp access
+    // to the private members above.
+    friend bool nodeEditorWidget_saveSettings(
+        const char* data, size_t size,
+        ax::NodeEditor::SaveReasonFlags reason, void* userPointer);
+    friend size_t nodeEditorWidget_loadSettings(char* data, void* userPointer);
 };
 
 } // namespace Vestige
