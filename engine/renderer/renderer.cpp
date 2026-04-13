@@ -329,6 +329,19 @@ bool Renderer::loadShaders(const std::string& assetPath)
         return false;
     }
 
+    // AUDIT.md §H15 / FIXPLAN G1: per-object motion vector shader, used
+    // for the overlay pass after the camera-motion pass.
+    std::string motionVecObjVertPath =
+        assetPath + "/shaders/motion_vectors_object.vert.glsl";
+    std::string motionVecObjFragPath =
+        assetPath + "/shaders/motion_vectors_object.frag.glsl";
+    if (!m_motionVectorObjectShader.loadFromFiles(motionVecObjVertPath,
+                                                   motionVecObjFragPath))
+    {
+        Logger::error("Failed to load per-object motion vector shader");
+        return false;
+    }
+
     // Load SMAA shaders
     std::string smaaEdgeVertPath = assetPath + "/shaders/smaa_edge.vert.glsl";
     std::string smaaEdgeFragPath = assetPath + "/shaders/smaa_edge.frag.glsl";
@@ -883,10 +896,16 @@ void Renderer::endFrame(float deltaTime)
     }
     else if (isTAA)
     {
-        // 4a. Motion vector pass
+        // 4a. Motion vector pass — camera motion fallback for skybox + sky.
+        // AUDIT.md §H15 / FIXPLAN G1: this full-screen pass writes the
+        // camera-motion-only reprojection for every pixel; the per-object
+        // overlay pass below then OVERWRITES motion where geometry sits,
+        // using each entity's current-vs-previous world matrix. Depth
+        // test off here (full-screen quad); on for the overlay.
         m_taa->getMotionVectorFbo().bind();
         glViewport(0, 0, m_windowWidth, m_windowHeight);
-        glClear(GL_COLOR_BUFFER_BIT);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        glDisable(GL_DEPTH_TEST);
 
         m_motionVectorShader.use();
         m_resolveDepthFbo->bindDepthTexture(0);
@@ -898,6 +917,48 @@ void Renderer::endFrame(float deltaTime)
             glm::vec2(1.0f / static_cast<float>(m_windowWidth),
                       1.0f / static_cast<float>(m_windowHeight)));
         m_screenQuad->draw();
+
+        // 4a'. Per-object motion vector overlay (AUDIT.md §H15 / FIXPLAN G1).
+        // Re-render opaque geometry with per-draw u_model / u_prevModel
+        // uniforms. Depth test + write is on so nearest geometry wins.
+        // Dynamic / animated objects now produce correct motion; static
+        // objects produce the same result as the camera-only pass above.
+        // Skinning + morph paths are out of scope here — the overlay
+        // still writes the rigid-body motion, which is better than the
+        // camera-only fallback but will undershoot on animated meshes.
+        // TODO: emit motion directly from the main geometry pass via MRT
+        // for zero-cost correct motion on skinned/morphed objects.
+        glEnable(GL_DEPTH_TEST);
+        glDepthFunc(GL_LESS);
+        glDepthMask(GL_TRUE);
+
+        m_motionVectorObjectShader.use();
+        m_motionVectorObjectShader.setMat4("u_viewProjection", m_lastViewProjection);
+        m_motionVectorObjectShader.setMat4("u_prevViewProjection", m_prevViewProjection);
+
+        if (m_currentRenderData)
+        {
+            for (const auto& item : m_currentRenderData->renderItems)
+            {
+                if (!item.mesh) continue;
+                auto it = m_prevWorldMatrices.find(item.entityId);
+                const glm::mat4 prevModel =
+                    (it != m_prevWorldMatrices.end()) ? it->second : item.worldMatrix;
+
+                m_motionVectorObjectShader.setMat4("u_model", item.worldMatrix);
+                m_motionVectorObjectShader.setMat4("u_prevModel", prevModel);
+                item.mesh->bind();
+                glDrawElements(GL_TRIANGLES,
+                               static_cast<GLsizei>(item.mesh->getIndexCount()),
+                               GL_UNSIGNED_INT, nullptr);
+                item.mesh->unbind();
+            }
+        }
+
+        // Restore reverse-Z + depth state for the rest of the post-process
+        // pipeline. All subsequent full-screen passes assume depth-test off.
+        glDepthFunc(GL_GEQUAL);
+        glDisable(GL_DEPTH_TEST);
 
         // 4b. TAA resolve pass
         m_taa->getCurrentFbo().bind();
@@ -1154,6 +1215,34 @@ void Renderer::endFrame(float deltaTime)
         m_taa->swapBuffers();
         m_taa->nextFrame();
         m_prevViewProjection = m_lastViewProjection;
+
+        // AUDIT.md §H15 / FIXPLAN G1: snapshot this frame's world
+        // matrices so the per-object motion vector overlay next frame
+        // can compute prev→curr per entity. Only scene items are
+        // tracked; transients (particle quads, debug lines) do not
+        // participate in TAA reprojection anyway.
+        if (m_currentRenderData)
+        {
+            m_prevWorldMatrices.clear();
+            for (const auto& item : m_currentRenderData->renderItems)
+            {
+                if (item.entityId != 0)
+                {
+                    m_prevWorldMatrices[item.entityId] = item.worldMatrix;
+                }
+            }
+            for (const auto& item : m_currentRenderData->transparentItems)
+            {
+                if (item.entityId != 0)
+                {
+                    m_prevWorldMatrices[item.entityId] = item.worldMatrix;
+                }
+            }
+        }
+        // Clear the cached pointer — it must not be dereferenced after
+        // endFrame returns since the scene may be mutated before the
+        // next renderScene call.
+        m_currentRenderData = nullptr;
     }
 
     glEnable(GL_DEPTH_TEST);
@@ -2277,6 +2366,12 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
                             const glm::vec4& clipPlane, bool geometryOnly,
                             const glm::mat4& viewOverride, const glm::mat4& projOverride)
 {
+    // AUDIT.md §H15 / FIXPLAN G1: stash for endFrame()'s motion vector
+    // overlay pass. Only the non-geometryOnly main render is used; capture
+    // paths (light probes, SH grid) set geometryOnly=true and must not
+    // overwrite the main frame's renderData pointer.
+    if (!geometryOnly) m_currentRenderData = &renderData;
+
     bool hasOverrides = (viewOverride != glm::mat4(0.0f));
 
     if (!geometryOnly)

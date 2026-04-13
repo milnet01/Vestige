@@ -427,6 +427,18 @@ private:
     Shader m_ssaoBlurShader;
     Shader m_taaResolveShader;
     Shader m_motionVectorShader;
+
+    // AUDIT.md §H15 / FIXPLAN G1: per-object motion vector pass.
+    // Runs after the full-screen camera-motion pass and overwrites the
+    // motion buffer wherever scene geometry lives, so TAA reprojection
+    // of dynamic / animated objects reproduces their real motion
+    // instead of showing only the camera's.
+    Shader m_motionVectorObjectShader;
+    std::unordered_map<uint32_t, glm::mat4> m_prevWorldMatrices;
+    /// @brief Most recent SceneRenderData pointer set by renderScene(),
+    /// consumed by endFrame()'s motion vector overlay pass. Nulled after
+    /// use so stale pointers cannot be dereferenced.
+    const SceneRenderData* m_currentRenderData = nullptr;
     Shader m_idBufferShader;
     Shader m_outlineShader;
     EventBus& m_eventBus;

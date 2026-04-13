@@ -45,6 +45,15 @@ struct SceneRenderData
         GLuint morphSSBO = 0;                                  ///< Morph target delta SSBO (0 if no morphs)
         int morphTargetCount = 0;                              ///< Number of active morph targets
         int morphVertexCount = 0;                              ///< Vertex count for SSBO indexing
+
+        // AUDIT.md §H15 / FIXPLAN G1: per-object previous-frame world
+        // matrix, used by the motion-vector pass so TAA can reproject
+        // dynamic / animated objects correctly. The renderer owns a
+        // cache keyed by entityId; this field is populated during the
+        // motion vector pass (left as identity at construction — the
+        // initialised-to-worldMatrix fallback lives in the renderer so
+        // non-motion-path consumers don't pay the copy cost).
+        glm::mat4 prevWorldMatrix = glm::mat4(1.0f);
     };
 
     std::vector<RenderItem> renderItems;
