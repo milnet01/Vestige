@@ -17,7 +17,7 @@ sys.path.insert(0, str(AUDIT_ROOT))
 
 from web.audit_bridge import AuditSession
 
-VERSION = "2.0.0"
+VERSION = "2.0.3"
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
 session = AuditSession()
@@ -34,6 +34,28 @@ def add_security_headers(response):
 DEFAULT_ROOT = str(AUDIT_ROOT.parent.parent)  # /mnt/Storage/Scripts/Linux/3D_Engine
 DEFAULT_CONFIG = str(AUDIT_ROOT / "audit_config.yaml")
 CHANGELOG_PATH = AUDIT_ROOT / "CHANGELOG.md"
+
+
+def _allowed_roots() -> list[Path]:
+    """Paths the web UI is allowed to read/write under."""
+    return [Path(DEFAULT_ROOT).resolve(), AUDIT_ROOT.resolve()]
+
+
+def _is_safe_path(path: Path) -> bool:
+    """Return True if path resolves to a location inside an allowed root.
+
+    Used to block path-traversal in GET/POST endpoints that accept a
+    user-supplied ``path`` / ``output_path`` (AUDIT.md §H1-H3). Follows
+    the same pattern as the PUT /api/config handler, which was already
+    hardened in 2.0.0 but whose sibling GET handlers were overlooked.
+    """
+    try:
+        resolved = path.resolve()
+        return any(
+            resolved.is_relative_to(root) for root in _allowed_roots()
+        )
+    except (TypeError, ValueError, OSError):
+        return False
 
 
 @app.route("/")
@@ -125,9 +147,21 @@ def api_init():
     if not output_path:
         output_path = str(Path(project_root) / "audit_config.yaml")
 
+    # Security (AUDIT.md §H3): reject writes outside allowed roots, and
+    # refuse anything that isn't a .yaml/.yml file.
+    out_p = Path(output_path)
+    if not _is_safe_path(out_p):
+        return jsonify({"error": "output_path outside allowed roots"}), 403
+    if out_p.suffix not in (".yaml", ".yml"):
+        return jsonify({"error": "output_path must be .yaml or .yml"}), 400
+
+    root_p = Path(project_root)
+    if not _is_safe_path(root_p):
+        return jsonify({"error": "project_root outside allowed roots"}), 403
+
     try:
         from lib.auto_config import generate_config
-        generate_config(Path(project_root), Path(output_path))
+        generate_config(root_p, out_p)
         return jsonify({"status": "ok", "config_path": output_path})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -185,10 +219,13 @@ def api_report():
     """Return the generated markdown report."""
     report_path = Path(DEFAULT_ROOT) / "docs" / "AUTOMATED_AUDIT_REPORT.md"
 
-    # Allow override via query param
+    # Allow override via query param, but only inside allowed roots
+    # (AUDIT.md §H1): previously no check → arbitrary file read.
     custom = request.args.get("path")
     if custom:
         report_path = Path(custom)
+        if not _is_safe_path(report_path):
+            return jsonify({"error": "path outside allowed roots"}), 403
 
     if not report_path.exists():
         return jsonify({"error": "Report not generated yet"}), 404
@@ -202,6 +239,11 @@ def api_config():
     config_path = request.args.get("path", DEFAULT_CONFIG)
     path = Path(config_path)
 
+    # Security (AUDIT.md §H2): the PUT sibling was hardened in 2.0.0;
+    # the GET wasn't. Apply the same allowed-roots check.
+    if not _is_safe_path(path):
+        return jsonify({"error": "path outside allowed roots"}), 403
+
     if not path.exists():
         return jsonify({"error": f"Config not found: {config_path}"}), 404
 
@@ -214,16 +256,14 @@ def api_config_save():
     import yaml
 
     data = request.get_json(silent=True) or {}
-    config_path = Path(data.get("path", DEFAULT_CONFIG)).resolve()
+    config_path = Path(data.get("path", DEFAULT_CONFIG))
     content = data.get("content", "")
 
-    # Security: restrict writes to project root or audit tool directory
-    allowed_roots = [Path(DEFAULT_ROOT).resolve(), AUDIT_ROOT.resolve()]
-    try:
-        if not any(config_path.is_relative_to(r) for r in allowed_roots):
-            return jsonify({"error": "Path outside project directory"}), 403
-    except (TypeError, ValueError):
-        return jsonify({"error": "Invalid path"}), 403
+    # Security: restrict writes to project root or audit tool directory.
+    # Shared helper across all file-path endpoints (AUDIT.md §H1-H3).
+    if not _is_safe_path(config_path):
+        return jsonify({"error": "Path outside project directory"}), 403
+    config_path = config_path.resolve()
 
     # Only allow .yaml/.yml files
     if config_path.suffix not in (".yaml", ".yml"):

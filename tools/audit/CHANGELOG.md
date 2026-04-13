@@ -2,6 +2,11 @@
 
 All notable changes to the Audit Tool are documented in this file.
 
+## [2.0.3] - 2026-04-13
+
+### Security
+- **HIGH: Path-traversal fix in web UI GET/POST endpoints** (AUDIT.md §H1-H3). Three routes accepted a user-supplied path without containment: `GET /api/report`, `GET /api/config`, and `POST /api/init`. The sibling PUT `/api/config` was hardened in 2.0.0 but its three siblings were overlooked — an attacker on 127.0.0.1:5800 (e.g. a malicious local site via CSRF) could read arbitrary files (`/etc/passwd`, SSH keys) and overwrite files outside the project tree. Introduced `_is_safe_path()` helper that canonicalises via `Path.resolve()` + `is_relative_to()` against the allowed-root list, and refactored all four endpoints to use it. Added 11 tests in `tests/test_web_app.py`.
+
 ## [2.0.2] - 2026-04-13
 
 ### Fixed
