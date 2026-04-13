@@ -6,6 +6,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import time
 import urllib.error
 import urllib.parse
@@ -111,6 +112,9 @@ def _resolve_api_key(nvd_config: dict) -> str | None:
 
     Emits a warning if ``api_key`` is a literal in the YAML — committing a
     key to the repo is a credential-leak vector (see AUDIT.md §C2).
+
+    Shape-validates the resolved key (AUDIT.md §H4): refuses keys with
+    characters that could CRLF-inject the request header.
     """
     key = nvd_config.get("api_key")
     if key:
@@ -119,9 +123,23 @@ def _resolve_api_key(nvd_config: dict) -> str | None:
             "credential-leak risk. Set it to null and use the NVD_API_KEY env "
             "var instead."
         )
-        return key
-    env_var = nvd_config.get("api_key_env", "NVD_API_KEY")
-    return os.environ.get(env_var)
+    else:
+        env_var = nvd_config.get("api_key_env", "NVD_API_KEY")
+        key = os.environ.get(env_var)
+
+    if key and not _API_KEY_SHAPE.fullmatch(key):
+        log.warning(
+            "NVD api_key has unexpected shape (CRLF / non-alphanumeric?) — "
+            "ignoring and falling back to unauthenticated requests."
+        )
+        return None
+    return key
+
+
+# NVD issues UUID-style keys: 36 chars, hex with dashes. Be slightly
+# permissive in case the format evolves, but reject anything that could
+# inject into an HTTP header (\r\n, spaces, control chars).
+_API_KEY_SHAPE = re.compile(r"^[A-Za-z0-9-]{16,64}$")
 
 
 def _validate_api_key(api_key: str) -> bool:

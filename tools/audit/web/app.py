@@ -6,10 +6,18 @@ from __future__ import annotations
 import json
 import logging
 import queue
+import re
 import sys
 from pathlib import Path
 
 from flask import Flask, Response, jsonify, render_template, request
+
+
+# Accept typical git refs: `HEAD`, `HEAD~5`, `v1.2.3`, `origin/main`, hashes.
+# Rejects anything that could break out of a shell context (semicolons,
+# backticks, $-expansion, etc.). Length cap is generous enough for ref
+# names + suffix, tight enough to refuse long injection payloads.
+_GIT_REF_RE = re.compile(r"^[A-Za-z0-9._/~^-]{1,128}$")
 
 # Ensure lib is importable
 AUDIT_ROOT = Path(__file__).resolve().parent.parent
@@ -17,7 +25,7 @@ sys.path.insert(0, str(AUDIT_ROOT))
 
 from web.audit_bridge import AuditSession
 
-VERSION = "2.0.3"
+VERSION = "2.0.4"
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
 session = AuditSession()
@@ -81,6 +89,26 @@ def api_run():
     tiers = data.get("tiers", [1, 2, 3, 4, 5])
     base_ref = data.get("base_ref", "HEAD~1")
     verbose = data.get("verbose", False)
+
+    # Security (AUDIT.md §C1 / FIXPLAN C1a): validate ref-shaped values
+    # before they're passed into subprocess.run(…, shell=True). This
+    # narrows the command-injection attack surface until C1b lands the
+    # full shell=False refactor.
+    if not isinstance(base_ref, str) or not _GIT_REF_RE.fullmatch(base_ref):
+        return jsonify({"error": "invalid base_ref"}), 400
+
+    # Paths must stay inside the allowed roots. project_root may be the
+    # engine root (default) or anywhere under it.
+    if not _is_safe_path(Path(project_root)):
+        return jsonify({"error": "project_root outside allowed roots"}), 403
+    if not _is_safe_path(Path(config_path)):
+        return jsonify({"error": "config_path outside allowed roots"}), 403
+
+    # tiers must be a list of small ints (1-5). Reject anything exotic.
+    if not isinstance(tiers, list) or not all(
+        isinstance(t, int) and 1 <= t <= 5 for t in tiers
+    ):
+        return jsonify({"error": "tiers must be a list of ints in [1,5]"}), 400
 
     try:
         session.start(

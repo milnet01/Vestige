@@ -74,25 +74,34 @@ class TestCVEResultToDict:
 
 
 class TestResolveApiKey:
-    """_resolve_api_key should check config first, then environment."""
+    """_resolve_api_key should check config first, then environment.
+
+    Keys must match `[A-Za-z0-9-]{16,64}` (AUDIT.md §H4) to prevent CRLF
+    header injection; real NVD keys are UUID-shaped. Tests use realistic
+    UUIDs so the shape-validator doesn't reject them.
+    """
+
+    CONFIG_KEY = "11111111-2222-3333-4444-555555555555"
+    ENV_KEY = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+    CUSTOM_ENV_KEY = "99999999-8888-7777-6666-555555555555"
 
     def test_config_key_takes_priority(self):
-        nvd_config = {"api_key": "config_key", "api_key_env": "NVD_API_KEY"}
-        with patch.dict(os.environ, {"NVD_API_KEY": "env_key"}):
+        nvd_config = {"api_key": self.CONFIG_KEY, "api_key_env": "NVD_API_KEY"}
+        with patch.dict(os.environ, {"NVD_API_KEY": self.ENV_KEY}):
             result = _resolve_api_key(nvd_config)
-        assert result == "config_key"
+        assert result == self.CONFIG_KEY
 
     def test_falls_back_to_env(self):
         nvd_config = {"api_key": None, "api_key_env": "NVD_API_KEY"}
-        with patch.dict(os.environ, {"NVD_API_KEY": "env_key"}):
+        with patch.dict(os.environ, {"NVD_API_KEY": self.ENV_KEY}):
             result = _resolve_api_key(nvd_config)
-        assert result == "env_key"
+        assert result == self.ENV_KEY
 
     def test_custom_env_var_name(self):
         nvd_config = {"api_key": None, "api_key_env": "CUSTOM_NVD_KEY"}
-        with patch.dict(os.environ, {"CUSTOM_NVD_KEY": "custom_env"}):
+        with patch.dict(os.environ, {"CUSTOM_NVD_KEY": self.CUSTOM_ENV_KEY}):
             result = _resolve_api_key(nvd_config)
-        assert result == "custom_env"
+        assert result == self.CUSTOM_ENV_KEY
 
     def test_no_key_available(self):
         nvd_config = {"api_key": None, "api_key_env": "NVD_API_KEY"}
@@ -102,10 +111,31 @@ class TestResolveApiKey:
 
     def test_empty_config_key_falls_back(self):
         nvd_config = {"api_key": "", "api_key_env": "NVD_API_KEY"}
-        with patch.dict(os.environ, {"NVD_API_KEY": "env_key"}):
+        with patch.dict(os.environ, {"NVD_API_KEY": self.ENV_KEY}):
             result = _resolve_api_key(nvd_config)
         # Empty string is falsy, so should fall back
-        assert result == "env_key"
+        assert result == self.ENV_KEY
+
+    def test_crlf_injection_rejected(self):
+        """Keys with \\r\\n must be rejected (AUDIT.md §H4)."""
+        nvd_config = {"api_key": None, "api_key_env": "NVD_API_KEY"}
+        with patch.dict(os.environ, {"NVD_API_KEY": "foo\r\nX-Admin: 1"}):
+            result = _resolve_api_key(nvd_config)
+        assert result is None
+
+    def test_too_short_key_rejected(self):
+        """A <16-char key is rejected as implausibly short."""
+        nvd_config = {"api_key": None, "api_key_env": "NVD_API_KEY"}
+        with patch.dict(os.environ, {"NVD_API_KEY": "short"}):
+            result = _resolve_api_key(nvd_config)
+        assert result is None
+
+    def test_space_in_key_rejected(self):
+        """Spaces must be rejected — not in the allowed character set."""
+        nvd_config = {"api_key": None, "api_key_env": "NVD_API_KEY"}
+        with patch.dict(os.environ, {"NVD_API_KEY": "11111111 22222222 33333333"}):
+            result = _resolve_api_key(nvd_config)
+        assert result is None
 
 
 # ---------------------------------------------------------------------------

@@ -2,6 +2,13 @@
 
 All notable changes to the Audit Tool are documented in this file.
 
+## [2.0.4] - 2026-04-13
+
+### Security
+- **HIGH: Input-validation guards at web UI `/api/run`** (AUDIT.md §C1 / FIXPLAN C1a). `base_ref` is now matched against `^[A-Za-z0-9._/~^-]{1,128}$`, `project_root` and `config_path` checked via `_is_safe_path()`, and `tiers` shape-validated (must be list[int] in [1,5]). This narrows the command-injection surface that `shell=True` in `run_cmd` exposes; the full `shell=False` refactor is deferred to the upcoming C1b.
+- **HIGH: NVD API key shape validation** (AUDIT.md §H4 / FIXPLAN C1c). `_resolve_api_key()` now rejects keys that don't match `^[A-Za-z0-9-]{16,64}$`, preventing CRLF header injection via a malicious `NVD_API_KEY` env var. Existing `TestResolveApiKey` tests updated to use realistic UUID-shaped keys; three new tests cover CRLF, too-short, and space-containing keys.
+- Added 6 new tests (`test_api_run_rejects_injection_in_base_ref`, `test_api_run_rejects_backtick_in_base_ref`, `test_api_run_accepts_normal_git_refs`, `test_api_run_rejects_bad_tiers`, and NVD rejection cases). Full suite: 453 passing.
+
 ## [2.0.3] - 2026-04-13
 
 ### Security
