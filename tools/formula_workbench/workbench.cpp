@@ -9,6 +9,7 @@
 #include <implot.h>
 
 #include <algorithm>
+#include <cassert>
 #include <cmath>
 #include <cstdio>
 #include <fstream>
@@ -1930,12 +1931,25 @@ void Workbench::rebuildVisualizationCache()
         }
     }
 
-    // Compute residuals at data points
+    // Compute residuals at data points. Filter identically to the m_dataX
+    // extraction above (line 1860-1868): only include points that have the
+    // current plot variable. Prior to this fix the residual loop iterated
+    // ALL data points, so m_residuals could drift out of sync with m_dataX
+    // whenever any point lacked m_plotVariable — displaying residuals
+    // against the wrong X values. (AUDIT.md §H10 / FIXPLAN E2.)
     for (const auto& dp : m_dataPoints)
     {
+        auto it = dp.variables.find(m_plotVariable);
+        if (it == dp.variables.end())
+            continue;
         float predicted = eval.evaluate(*expr, dp.variables, coeffMap);
         m_residuals.push_back(dp.observed - predicted);
     }
+
+    // Invariant: after filtering identically, counts must agree. Guards
+    // against a future edit reintroducing the drift.
+    assert(m_residuals.size() == m_dataX.size() &&
+           "residual count must match filtered m_dataX count");
 }
 
 } // namespace Vestige
