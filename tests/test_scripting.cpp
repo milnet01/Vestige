@@ -1526,6 +1526,55 @@ TEST(ScriptGraphLoad, RejectsPathTraversal)
     EXPECT_EQ(r2.nodes.size(), 0u);
 }
 
+TEST(ScriptGraphLoad, RejectsAbsolutePath)
+{
+    // AUDIT.md §M6 / FIXPLAN: absolute paths bypass the implicit cwd scope
+    // and previously passed the `..`-only check. Now rejected outright.
+    auto r = ScriptGraph::loadFromFile("/etc/passwd");
+    EXPECT_EQ(r.nodes.size(), 0u);
+}
+
+TEST(ScriptGraphLoad, RejectsHomeTildePath)
+{
+    // `~` is shell-only tilde expansion; std::filesystem does not resolve
+    // it. Rejecting avoids a surprise where `~/foo` reads a relative file
+    // named literally "~".
+    auto r = ScriptGraph::loadFromFile("~/evil.vscript");
+    EXPECT_EQ(r.nodes.size(), 0u);
+}
+
+TEST(ScriptGraphLoad, RejectsEmptyPath)
+{
+    auto r = ScriptGraph::loadFromFile("");
+    EXPECT_EQ(r.nodes.size(), 0u);
+}
+
+TEST(ScriptGraph, AddConnectionClampsPinNames)
+{
+    // AUDIT.md §M5 / FIXPLAN: editor path also clamps pin-name strings
+    // so unbounded names from programmatic calls cannot bypass the load-
+    // path clampString guards.
+    ScriptGraph g;
+    uint32_t a = g.addNode("PrintToScreen");
+    uint32_t b = g.addNode("PrintToScreen");
+    const std::string huge(10 * 1024, 'x');
+    uint32_t connId = g.addConnection(a, huge, b, huge);
+    ASSERT_NE(connId, 0u);
+
+    // Find the connection and verify pin names are clamped.
+    bool found = false;
+    for (const auto& c : g.connections)
+    {
+        if (c.id == connId)
+        {
+            EXPECT_LE(c.sourcePin.size(), ScriptGraph::MAX_STRING_BYTES);
+            EXPECT_LE(c.targetPin.size(), ScriptGraph::MAX_STRING_BYTES);
+            found = true;
+        }
+    }
+    EXPECT_TRUE(found);
+}
+
 // -- ScriptValue::fromJson robustness (audit H6) ---------------------------
 
 TEST(ScriptValueJson, Vec3ShortArrayReturnsZero)

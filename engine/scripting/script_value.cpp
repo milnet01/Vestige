@@ -277,6 +277,10 @@ nlohmann::json ScriptValue::toJson() const
         else if constexpr (std::is_same_v<T, glm::vec4>)
             j["value"] = {val.x, val.y, val.z, val.w};
         else if constexpr (std::is_same_v<T, glm::quat>)
+            // AUDIT.md §M8: quat JSON order is [w, x, y, z] — NOT the
+            // vec4 [x, y, z, w] order. Symmetric with the fromJson reader
+            // below, which calls glm::quat(f[0], f[1], f[2], f[3]) = the
+            // glm::quat(w, x, y, z) constructor. Keep in sync if changing.
             j["value"] = {val.w, val.x, val.y, val.z};
         else if constexpr (std::is_same_v<T, uint32_t>)
         {
@@ -348,6 +352,8 @@ ScriptValue ScriptValue::fromJson(const nlohmann::json& j)
         return readFloats(4, f) ? ScriptValue(glm::vec4(f[0], f[1], f[2], f[3]))
                                  : ScriptValue(glm::vec4(0.0f));
     case ScriptDataType::QUAT:
+        // AUDIT.md §M8: JSON order is [w, x, y, z] — matches the glm::quat
+        // constructor signature and the toJson writer above. Keep in sync.
         return readFloats(4, f) ? ScriptValue(glm::quat(f[0], f[1], f[2], f[3]))
                                  : ScriptValue(glm::quat(1.0f, 0.0f, 0.0f, 0.0f));
     case ScriptDataType::ENTITY:

@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <unordered_set>
 
 namespace Vestige
 {
@@ -393,6 +394,26 @@ void ScriptingSystem::subscribeEventNodes(ScriptInstance& instance)
         // OnAudioFinished, OnVariableChanged) are registered as descriptors
         // so they appear in the palette but are not wired yet — they require
         // new engine events that do not exist yet.
+        else
+        {
+            // AUDIT.md §M7 / FIXPLAN: warn on unknown eventTypeName so that
+            // typos don't silently produce non-firing nodes. The known-not-
+            // yet-wired set is explicitly ignored to avoid noise.
+            static const std::unordered_set<std::string> kKnownUnwired = {
+                "TriggerEnterEvent", "TriggerExitEvent",
+                "CollisionEnterEvent", "CollisionExitEvent",
+                "AudioFinishedEvent", "VariableChangedEvent"
+            };
+            if (kKnownUnwired.count(eventTypeName) == 0)
+            {
+                Logger::warning(std::string("[ScriptingSystem] No "
+                    "subscription branch for eventTypeName '") +
+                    eventTypeName + "' on node id " +
+                    std::to_string(nodeDef.id) + " (type '" +
+                    nodeDef.typeName + "'). Node will never fire — likely "
+                    "a typo. See AUDIT.md §M7.");
+            }
+        }
 
         if (subId != 0)
         {
