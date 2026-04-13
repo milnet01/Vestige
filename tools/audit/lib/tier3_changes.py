@@ -49,9 +49,10 @@ def run(config: Config) -> tuple[ChangeSummary, list[Finding]]:
 
     log.info("Tier 3: analyzing changes since %s", base_ref)
 
-    # Get changed files with status
+    # Get changed files with status (shell=False; base_ref is validated at
+    # the web-UI boundary before reaching here, AUDIT.md §C1 / FIXPLAN C1b).
     rc, stdout, _ = run_cmd(
-        f"git diff --name-status {base_ref}",
+        ["git", "diff", "--name-status", base_ref],
         cwd=config.root,
     )
     if rc != 0:
@@ -62,7 +63,7 @@ def run(config: Config) -> tuple[ChangeSummary, list[Finding]]:
 
     # Get line counts
     rc, numstat_out, _ = run_cmd(
-        f"git diff --numstat {base_ref}",
+        ["git", "diff", "--numstat", base_ref],
         cwd=config.root,
     )
     line_counts = _parse_numstat(numstat_out)
@@ -151,7 +152,7 @@ def _get_subsystem(path: str) -> str:
 def _get_changed_functions(root: Path, base_ref: str, filename: str) -> list[str]:
     """Extract function names from changed hunks."""
     rc, stdout, _ = run_cmd(
-        f"git diff -U0 {base_ref} -- {filename}",
+        ["git", "diff", "-U0", base_ref, "--", filename],
         cwd=root,
     )
     if rc != 0:
@@ -186,7 +187,7 @@ def _scan_diff_for_security(root: Path, base_ref: str, filename: str) -> list[Fi
         return []
 
     rc, stdout, _ = run_cmd(
-        f"git diff -U0 {base_ref} -- {filename}",
+        ["git", "diff", "-U0", base_ref, "--", filename],
         cwd=root,
     )
     if rc != 0:

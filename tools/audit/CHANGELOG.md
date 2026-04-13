@@ -2,6 +2,15 @@
 
 All notable changes to the Audit Tool are documented in this file.
 
+## [2.0.5] - 2026-04-13
+
+### Security
+- **CRITICAL: Subprocess shell=False refactor** (AUDIT.md §C1 / FIXPLAN C1b). `run_cmd` previously defaulted to `shell=True` and took a single command string; callers built that string with f-strings from YAML-supplied values, giving any reader of `audit_config.yaml` an injection vector through `binary:`, `args:`, and `build_dir:` — and any caller of `POST /api/run` an injection vector through `base_ref`.
+  - Split into two explicit functions: `run_cmd(cmd: list[str], …)` is now the type-enforced default (refuses strings via `TypeError`), and `run_shell_cmd(cmd: str, …)` is the opt-in for user-authored strings that legitimately need shell interpretation (`build_cmd: "cd build && ctest"`, `test_cmd`).
+  - Updated all internal callers to use argv lists: `tier1_cppcheck`, `tier1_clangtidy` (both cmake auto-gen and the main call), and `tier3_changes` (four git invocations).
+  - `tier1_build` routes user-authored strings through `run_shell_cmd` explicitly — combined with the C1a validation guards, shell=True is still used for `build_cmd`/`test_cmd` but the paths reaching it are named, auditable, and non-attacker-steerable.
+- Added 7 tests in `tests/test_utils_subprocess.py` covering both positives and the specific negative case of "metacharacter in argument does not spawn a subshell". The `touch /tmp/pwn_c1b_refactor_test` probe confirms shell metachars are literal strings under the new contract.
+
 ## [2.0.4] - 2026-04-13
 
 ### Security
