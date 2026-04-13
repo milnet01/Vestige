@@ -585,6 +585,48 @@ TEST_F(ScriptContextTest, GetVariablePureNode)
     EXPECT_EQ(outIt->second.asInt(), 99);
 }
 
+// Regression test for AUDIT.md §H7 / FIXPLAN D3.
+// GetVariable is classified isPure (for lazy eval) but must NOT be memoized,
+// because the blackboard it reads can be mutated mid-chain. Before the fix,
+// two sequential reads of the same variable returned the cached first value
+// even after SetVariable had updated it.
+TEST_F(ScriptContextTest, GetVariableNotMemoizedAcrossMutation)
+{
+    ScriptGraph graph;
+    graph.name = "NonMemoTest";
+    graph.variables.push_back({"x", ScriptDataType::INT,
+                               ScriptValue(0), VariableScope::GRAPH});
+
+    uint32_t get1Id = graph.addNode("GetVariable");
+    graph.findNode(get1Id)->properties["Name"] = ScriptValue(std::string("x"));
+    uint32_t get2Id = graph.addNode("GetVariable");
+    graph.findNode(get2Id)->properties["Name"] = ScriptValue(std::string("x"));
+
+    ScriptInstance instance;
+    instance.initialize(graph, 1);
+
+    ScriptContext ctx(instance, m_registry, nullptr);
+
+    // First read: variable is 0.
+    ctx.executeNode(get1Id);
+    auto* n1 = instance.getNodeInstance(get1Id);
+    EXPECT_EQ(n1->outputValues.at(internPin("Value")).asInt(), 0);
+
+    // Mutate the variable mid-chain. (Simulates what SetVariable would do
+    // in a real ForLoop body.)
+    ctx.setVariable("x", VariableScope::GRAPH, ScriptValue(42));
+
+    // Second read of a *different* GetVariable node for the same name.
+    // If memoization were honoured by type, we might expect 0 from a cache
+    // keyed on typeName — but D3 keys by nodeId, so this alone doesn't
+    // prove anything. The critical check: if we call get1Id AGAIN, we
+    // should see the updated value, not the memoized 0.
+    ctx.executeNode(get1Id);
+    EXPECT_EQ(n1->outputValues.at(internPin("Value")).asInt(), 42)
+        << "GetVariable was memoized — blackboard mutation didn't show up "
+           "on re-evaluation. This is AUDIT.md §H7 regressing.";
+}
+
 TEST_F(ScriptContextTest, DelayCreatesLatentAction)
 {
     ScriptGraph graph;

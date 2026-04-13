@@ -213,7 +213,8 @@ void registerCoreNodeTypes(NodeTypeRegistry& registry)
             auto name = ctx.readInputAs<std::string>(node, "Name");
             auto value = ctx.getVariable(name, VariableScope::GRAPH);
             ctx.setOutput(node, "Value", value);
-        }
+        },
+        false, // memoizable — NO: blackboard reads depend on call-time state (AUDIT.md §H7)
     });
 
     // -----------------------------------------------------------------------
