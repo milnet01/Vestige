@@ -2,6 +2,30 @@
 
 All notable changes to the Audit Tool are documented in this file.
 
+## [2.0.6] - 2026-04-13
+
+### Audit fallout (AUDIT.md §L7, §M19, §M21, §M23, §L9 / FIXPLAN J + I5)
+
+- **§L7**: NVD response body capped at 16 MB. `tier5_nvd.query_keyword`
+  was previously unbounded; a compromised proxy or gzip bomb could wedge
+  the process.
+- **§M19 / §J5**: subprocess output capped at 64 MB per stream. cppcheck
+  on large codebases used to be able to emit 100+ MB of XML into stderr
+  and blow past `capture_output`'s default memory. Helper `_capped()`
+  in `utils.py` logs a warning when truncation occurs.
+- **§M21 / §J7**: pattern-scanner false-positive fixes:
+  - `raw_new` Qt-widget exclude now lists the actual Qt classes instead
+    of `new Q\\w+\\(` (which swallowed ordinary types starting with 'Q').
+  - `predictable_temp` anchored with `\\b` so `my_mktemp_wrapper(` no
+    longer false-positives.
+  - `null_macro` excludes `#define FOO_NULL 0` and `*_NULL` tokens.
+- **§M23 / §J4**: SARIF output now emits `run.originalUriBaseIds` with
+  a `SRCROOT` binding (uriBaseId: `SRCROOT`, not `%SRCROOT%`). Fixes
+  GitHub Advanced Security and VS Code SARIF viewer rejection.
+- **§L9 / §I5**: new `--keep-snapshots N` CLI flag. When set, the trend
+  snapshot saver retains only the N most recent `trend_snapshot_*.json`
+  files in `docs/`. Default behaviour is unchanged (keep all).
+
 ## [2.0.5] - 2026-04-13
 
 ### Security

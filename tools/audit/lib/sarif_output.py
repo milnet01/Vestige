@@ -65,11 +65,15 @@ def _build_result(finding: Finding) -> dict:
     }
 
     if finding.file:
+        # AUDIT.md §M23 / FIXPLAN J4: uriBaseId is a symbolic name
+        # (not `%SRCROOT%` — the legacy SARIF-1 placeholder form).
+        # The corresponding URI binding lives in
+        # run.originalUriBaseIds below.
         location: dict = {
             "physicalLocation": {
                 "artifactLocation": {
                     "uri": finding.file,
-                    "uriBaseId": "%SRCROOT%",
+                    "uriBaseId": "SRCROOT",
                 },
             },
         }
@@ -93,6 +97,21 @@ def generate_sarif(findings: list[Finding], version: str = "2.0.0") -> dict:
                         "version": version,
                         "informationUri": TOOL_INFO_URI,
                         "rules": _build_rules(findings),
+                    },
+                },
+                # AUDIT.md §M23 / FIXPLAN J4: SARIF 2.1 requires
+                # originalUriBaseIds when artifactLocation.uri uses a
+                # relative path with a uriBaseId. Without this, GitHub
+                # Advanced Security and the VS Code SARIF viewer reject
+                # the file as invalid.
+                "originalUriBaseIds": {
+                    "SRCROOT": {
+                        "uri": "file:///",
+                        "description": {
+                            "text": "Repository root (filled in by the "
+                                    "consuming tool — Vestige audit emits "
+                                    "paths relative to the project root).",
+                        },
                     },
                 },
                 "results": [_build_result(f) for f in findings],

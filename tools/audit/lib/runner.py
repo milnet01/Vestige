@@ -55,10 +55,14 @@ class AuditRunner:
         config: Config,
         verbose: bool = False,
         progress_callback: ProgressCallback | None = None,
+        keep_snapshots: int | None = None,
     ):
         self.config = config
         self.verbose = verbose
         self._progress_cb = progress_callback
+        # AUDIT.md §L9 / FIXPLAN I5: None = unlimited (legacy); positive
+        # integer = rolling retention of trend snapshot files.
+        self.keep_snapshots = keep_snapshots
 
     def _emit(self, event: str, **data: Any) -> None:
         """Send a progress event if a callback is registered."""
@@ -121,7 +125,8 @@ class AuditRunner:
             from .trends import save_snapshot
             report_dir = self.config.report_path.parent
             report_dir.mkdir(parents=True, exist_ok=True)
-            save_snapshot(report_dir, results.findings)
+            save_snapshot(report_dir, results.findings,
+                          keep=self.keep_snapshots)
         except Exception as e:
             log.warning("Failed to save trend snapshot: %s", e)
 

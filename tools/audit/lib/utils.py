@@ -23,6 +23,24 @@ from pathlib import Path
 
 log = logging.getLogger("audit")
 
+# AUDIT.md §M19 / FIXPLAN J5: cap subprocess captured output. cppcheck on
+# large codebases can emit 100+ MB of XML into stderr, blowing past
+# process memory when captured via capture_output=True. Truncate at
+# 64 MB per stream and log a warning so the caller knows parsing may
+# have missed entries at the tail.
+MAX_CAPTURED_OUTPUT_BYTES = 64 * 1024 * 1024
+
+
+def _capped(text: str, stream_name: str, cmd_desc: str) -> str:
+    if len(text) > MAX_CAPTURED_OUTPUT_BYTES:
+        log.warning(
+            "%s output from %s exceeded %d bytes — truncated "
+            "(findings at the tail may be missed)",
+            stream_name, cmd_desc, MAX_CAPTURED_OUTPUT_BYTES,
+        )
+        return text[:MAX_CAPTURED_OUTPUT_BYTES]
+    return text
+
 
 def run_cmd(
     cmd: list[str],
@@ -53,7 +71,12 @@ def run_cmd(
         )
         elapsed = time.monotonic() - start
         log.debug("  -> %d in %.1fs", result.returncode, elapsed)
-        return result.returncode, result.stdout, result.stderr
+        desc = " ".join(cmd[:3]) if cmd else "<empty>"
+        return (
+            result.returncode,
+            _capped(result.stdout, "stdout", desc),
+            _capped(result.stderr, "stderr", desc),
+        )
     except subprocess.TimeoutExpired:
         elapsed = time.monotonic() - start
         log.warning("Command timed out after %.1fs: %s", elapsed, cmd)
