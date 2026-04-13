@@ -15,6 +15,11 @@ void ScriptInstance::initialize(const ScriptGraph& graph, uint32_t entityId)
     m_pendingActions.clear();
     m_subscriptions.clear();
 
+    // Bump generation — latent-action callbacks captured under a previous
+    // generation will see the mismatch and drop rather than dereference
+    // nodeId into the rebuilt instance (AUDIT.md §H9, FIXPLAN D4).
+    ++m_generation;
+
     // Create runtime node instances from the graph definition
     for (const auto& nodeDef : graph.nodes)
     {

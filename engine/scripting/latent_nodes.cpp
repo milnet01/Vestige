@@ -114,6 +114,13 @@ void registerLatentNodeTypes(NodeTypeRegistry& registry)
 
             ScriptInstance* inst = &ctx.instance();
             uint32_t nodeId = node.nodeId;
+            // AUDIT.md §H9 / FIXPLAN D4: snapshot the instance's generation
+            // token so the callback can tell if initialize() has run (and
+            // potentially rebuilt the graph) since we enqueued this action.
+            // If generation doesn't match at tick time, drop silently rather
+            // than dereferencing a nodeId that now refers to a different
+            // node in the rebuilt instance.
+            uint32_t capturedGen = inst->generation();
 
             PendingLatentAction action;
             action.nodeId = nodeId;
@@ -121,8 +128,12 @@ void registerLatentNodeTypes(NodeTypeRegistry& registry)
             action.remainingTime = duration;
             action.totalDuration = duration;
             action.onTick =
-                [inst, nodeId](float progress)
+                [inst, nodeId, capturedGen](float progress)
                 {
+                    if (inst->generation() != capturedGen)
+                    {
+                        return;  // instance was re-initialised; stale callback.
+                    }
                     ScriptNodeInstance* mut = inst->getNodeInstance(nodeId);
                     if (mut)
                     {

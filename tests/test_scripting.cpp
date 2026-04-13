@@ -648,6 +648,73 @@ TEST_F(ScriptContextTest, DelayCreatesLatentAction)
     EXPECT_FLOAT_EQ(instance.pendingActions()[0].remainingTime, 2.5f);
 }
 
+// Regression test for AUDIT.md §H9 / FIXPLAN D4.
+// Timeline schedules an onTick lambda that captures ScriptInstance*. If the
+// instance is re-initialised mid-tick (editor test-play cycle), the nodeId
+// may now refer to a different node in the rebuilt graph. The fix is a
+// generation token: the callback captures the generation at scheduling
+// time and no-ops if the instance has been re-initialised since.
+TEST_F(ScriptContextTest, ScriptInstanceGenerationBumpedOnReinit)
+{
+    ScriptGraph graph;
+    graph.name = "GenTest";
+    graph.addNode("PrintToScreen");
+
+    ScriptInstance instance;
+    instance.initialize(graph, 1);
+    const uint32_t gen1 = instance.generation();
+
+    // Re-initialise — simulates the editor test-play cycle.
+    instance.initialize(graph, 1);
+    const uint32_t gen2 = instance.generation();
+
+    EXPECT_NE(gen1, gen2)
+        << "ScriptInstance::initialize() must bump generation so latent-"
+           "action callbacks can detect stale references (AUDIT.md §H9)";
+    EXPECT_GT(gen2, gen1);
+}
+
+TEST_F(ScriptContextTest, StaleCallbackDetectedViaGeneration)
+{
+    // Simulate the pattern from latent_nodes.cpp Timeline: a callback
+    // captures (instance ptr, nodeId, generation). If the instance is
+    // re-initialised between scheduling and firing, generation mismatch
+    // tells the callback to no-op instead of writing to whatever node
+    // happens to live at that ID in the rebuilt graph.
+
+    ScriptGraph graph;
+    graph.name = "StaleCbTest";
+    uint32_t nodeId = graph.addNode("PrintToScreen");
+
+    ScriptInstance instance;
+    instance.initialize(graph, 1);
+
+    // Schedule: capture the snapshot that Timeline/MoveTo capture.
+    ScriptInstance* inst = &instance;
+    uint32_t capturedGen = inst->generation();
+    uint32_t capturedNode = nodeId;
+    bool fired = false;
+
+    auto callback = [inst, capturedGen, capturedNode, &fired]()
+    {
+        if (inst->generation() != capturedGen) return;
+        auto* ni = inst->getNodeInstance(capturedNode);
+        if (ni) fired = true;
+    };
+
+    // Fire pre-reinit — should set fired=true.
+    callback();
+    EXPECT_TRUE(fired);
+
+    // Re-init; schedule check should now fail.
+    fired = false;
+    instance.initialize(graph, 1);
+    callback();
+    EXPECT_FALSE(fired)
+        << "Callback fired across a re-init — generation check didn't "
+           "catch the stale reference (AUDIT.md §H9)";
+}
+
 TEST_F(ScriptContextTest, CallDepthLimit)
 {
     // Create a graph where A -> B -> A (cycle via execution pins)
