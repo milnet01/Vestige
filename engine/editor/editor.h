@@ -15,6 +15,7 @@
 #include "editor/panels/history_panel.h"
 #include "editor/panels/import_dialog.h"
 #include "editor/panels/inspector_panel.h"
+#include "editor/panels/script_editor_panel.h"
 #include "editor/panels/validation_panel.h"
 #include "editor/panels/welcome_panel.h"
 #include "editor/panels/texture_viewer_panel.h"
@@ -206,6 +207,9 @@ public:
     /// @brief Gets the welcome panel.
     WelcomePanel& getWelcomePanel() { return m_welcomePanel; }
 
+    /// @brief Gets the visual script editor panel (Phase 9E-3).
+    ScriptEditorPanel& getScriptEditorPanel() { return m_scriptEditorPanel; }
+
     /// @brief Gets the ruler tool.
     RulerTool& getRulerTool() { return m_rulerTool; }
 
@@ -268,6 +272,7 @@ private:
     PerformancePanel m_performancePanel;
     ValidationPanel m_validationPanel;
     WelcomePanel m_welcomePanel;
+    ScriptEditorPanel m_scriptEditorPanel;
     TextureViewerPanel m_textureViewerPanel;
     HdriViewerPanel m_hdriViewerPanel;
     ModelViewerPanel m_modelViewerPanel;

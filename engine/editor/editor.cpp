@@ -119,6 +119,9 @@ bool Editor::initialize(GLFWwindow* window, const std::string& assetPath)
         configDir = "/tmp/vestige";
     }
     m_welcomePanel.initialize(configDir);
+    // Pass empty settings path while we chase a shutdown SEGV — the
+    // imgui-node-editor settings save path is the leading suspect.
+    m_scriptEditorPanel.initialize({});
 
     m_isInitialized = true;
     Logger::info("Editor initialized (ImGui + docking + editor camera)");
@@ -138,6 +141,12 @@ void Editor::shutdown()
     m_textureViewerPanel.cleanup();
     m_hdriViewerPanel.cleanup();
     m_modelViewerPanel.cleanup();
+
+    // Shut down imgui-node-editor BEFORE the ImGui context is destroyed.
+    // ed::DestroyEditor touches ImGui internals on teardown; if we let this
+    // run from the panel's destructor after ImGui::DestroyContext, it reads
+    // freed memory and SEGVs.
+    m_scriptEditorPanel.shutdown();
 
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
@@ -464,6 +473,14 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
                 }
                 ImGui::MenuItem("Console", nullptr, &m_showConsole);
                 ImGui::MenuItem("Statistics", nullptr, &m_showStatistics);
+                {
+                    bool scriptOpen = m_scriptEditorPanel.isOpen();
+                    if (ImGui::MenuItem("Script Editor", nullptr, &scriptOpen))
+                    {
+                        if (scriptOpen) m_scriptEditorPanel.open();
+                        else            m_scriptEditorPanel.close();
+                    }
+                }
                 ImGui::Separator();
                 if (ImGui::MenuItem("Capture Screenshot", "F11"))
                 {
@@ -1248,6 +1265,9 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
 
         // --- Welcome panel ---
         m_welcomePanel.draw();
+
+        // --- Script editor panel (Phase 9E-3) ---
+        m_scriptEditorPanel.draw();
 
         // --- Scene statistics panel ---
         if (m_showStatistics && scene)
