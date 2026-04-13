@@ -51,6 +51,14 @@ public:
 
     /// @brief Format a float value as a GLSL literal (no 'f' suffix).
     static std::string floatLiteral(float val);
+
+    /// @brief GLSL prelude declaring safeDiv/safeSqrt/safeLog.
+    ///
+    /// Prepended automatically by generateFile(). Exposed publicly so
+    /// ad-hoc callers (tests, tools) that splice an individual emitted
+    /// function into a larger shader can include the same prelude and
+    /// keep evaluator/GLSL semantics aligned (AUDIT.md §H12).
+    static std::string safeMathPrelude();
 };
 
 } // namespace Vestige

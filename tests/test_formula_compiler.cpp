@@ -10,6 +10,7 @@
 #include "formula/lut_generator.h"
 #include "formula/lut_loader.h"
 #include "formula/physics_templates.h"
+#include "formula/safe_math.h"
 
 #include <gtest/gtest.h>
 #include <cmath>
@@ -233,6 +234,105 @@ TEST(CodegenGlsl, GenerateFile)
     EXPECT_NE(file.find("DO NOT EDIT"), std::string::npos);
     EXPECT_NE(file.find("aerodynamicDrag"), std::string::npos);
     EXPECT_NE(file.find("fresnelSchlick"), std::string::npos);
+    // AUDIT.md §H12 / FIXPLAN E4: prelude must be emitted before functions.
+    EXPECT_NE(file.find("safeDiv"), std::string::npos);
+    EXPECT_NE(file.find("safeSqrt"), std::string::npos);
+    EXPECT_NE(file.find("safeLog"), std::string::npos);
+}
+
+// ===========================================================================
+// Safe-math parity: evaluator and codegen must agree on degenerate inputs
+// ===========================================================================
+//
+// AUDIT.md §H12 / FIXPLAN E4. Before: evaluator guarded /0, sqrt(-x),
+// log(<=0); codegen emitted bare math. LM fitter validated against safe
+// evaluator → emitted shader was NaN. Tests here assert both paths now
+// emit or express the safe-math wrappers.
+
+TEST(SafeMathParity, CodegenCppEmitsSafeDivOnDivision)
+{
+    auto div = ExprNode::binaryOp("/",
+        ExprNode::variable("a"), ExprNode::variable("b"));
+    std::string code = CodegenCpp::emitExpression(*div, {});
+    EXPECT_NE(code.find("SafeMath::safeDiv"), std::string::npos)
+        << "Emitted C++ must use safeDiv, not bare /, for parity with "
+           "ExpressionEvaluator (AUDIT.md §H12).";
+    EXPECT_EQ(code.find(" / "), std::string::npos)
+        << "Emitted C++ must not contain bare ' / ' for the division op.";
+}
+
+TEST(SafeMathParity, CodegenCppEmitsSafeSqrtAndLog)
+{
+    auto sq = ExprNode::unaryOp("sqrt", ExprNode::variable("x"));
+    EXPECT_NE(CodegenCpp::emitExpression(*sq, {}).find("SafeMath::safeSqrt"),
+              std::string::npos);
+
+    auto lg = ExprNode::unaryOp("log", ExprNode::variable("x"));
+    EXPECT_NE(CodegenCpp::emitExpression(*lg, {}).find("SafeMath::safeLog"),
+              std::string::npos);
+}
+
+TEST(SafeMathParity, CodegenGlslEmitsSafeDivAndHelpers)
+{
+    auto div = ExprNode::binaryOp("/",
+        ExprNode::variable("a"), ExprNode::variable("b"));
+    EXPECT_NE(CodegenGlsl::emitExpression(*div, {}).find("safeDiv("),
+              std::string::npos);
+
+    auto sq = ExprNode::unaryOp("sqrt", ExprNode::variable("x"));
+    EXPECT_NE(CodegenGlsl::emitExpression(*sq, {}).find("safeSqrt("),
+              std::string::npos);
+
+    auto lg = ExprNode::unaryOp("log", ExprNode::variable("x"));
+    EXPECT_NE(CodegenGlsl::emitExpression(*lg, {}).find("safeLog("),
+              std::string::npos);
+}
+
+TEST(SafeMathParity, GlslPreludeDefinesAllThreeHelpers)
+{
+    std::string prelude = CodegenGlsl::safeMathPrelude();
+    EXPECT_NE(prelude.find("float safeDiv"), std::string::npos);
+    EXPECT_NE(prelude.find("float safeSqrt"), std::string::npos);
+    EXPECT_NE(prelude.find("float safeLog"), std::string::npos);
+}
+
+TEST(SafeMathParity, EvaluatorAndHelpersAgreeOnDegenerateInputs)
+{
+    // Evaluator now routes through SafeMath; assert the contract still
+    // holds on the exact degenerate inputs that used to diverge.
+    ExpressionEvaluator eval;
+
+    // Divide by zero → 0 (not inf/NaN).
+    auto div = ExprNode::binaryOp("/",
+        ExprNode::literal(1.0f), ExprNode::literal(0.0f));
+    EXPECT_FLOAT_EQ(eval.evaluate(*div, {}), 0.0f);
+
+    // sqrt(-x) → sqrt(|x|).
+    auto sq = ExprNode::unaryOp("sqrt", ExprNode::literal(-9.0f));
+    EXPECT_FLOAT_EQ(eval.evaluate(*sq, {}), 3.0f);
+
+    // log(-x) → 0.
+    auto lg = ExprNode::unaryOp("log", ExprNode::literal(-1.0f));
+    EXPECT_FLOAT_EQ(eval.evaluate(*lg, {}), 0.0f);
+
+    // log(0) → 0.
+    auto lgz = ExprNode::unaryOp("log", ExprNode::literal(0.0f));
+    EXPECT_FLOAT_EQ(eval.evaluate(*lgz, {}), 0.0f);
+}
+
+TEST(SafeMathParity, HelpersMatchEvaluatorPrecisely)
+{
+    // Direct call into the helper namespace — the point is the *same
+    // function body* lives in eval and codegen. The evaluator test above
+    // proves eval calls the helpers; this test pins the helpers'
+    // concrete contracts.
+    EXPECT_FLOAT_EQ(SafeMath::safeDiv(1.0f, 0.0f), 0.0f);
+    EXPECT_FLOAT_EQ(SafeMath::safeDiv(6.0f, 3.0f), 2.0f);
+    EXPECT_FLOAT_EQ(SafeMath::safeSqrt(-16.0f), 4.0f);
+    EXPECT_FLOAT_EQ(SafeMath::safeSqrt(16.0f), 4.0f);
+    EXPECT_FLOAT_EQ(SafeMath::safeLog(0.0f), 0.0f);
+    EXPECT_FLOAT_EQ(SafeMath::safeLog(-5.0f), 0.0f);
+    EXPECT_NEAR(SafeMath::safeLog(2.71828f), 1.0f, 1e-4f);
 }
 
 // ===========================================================================

@@ -2,6 +2,7 @@
 /// @brief Tree-walking expression evaluator implementation.
 #include "formula/expression_eval.h"
 #include "formula/formula.h"
+#include "formula/safe_math.h"
 
 #include <algorithm>
 #include <cmath>
@@ -51,11 +52,7 @@ static float evalNode(const ExprNode& node,
         if (node.op == "+")   return left + right;
         if (node.op == "-")   return left - right;
         if (node.op == "*")   return left * right;
-        if (node.op == "/")
-        {
-            if (right == 0.0f) return 0.0f;  // Safe division
-            return left / right;
-        }
+        if (node.op == "/")   return SafeMath::safeDiv(left, right);
         if (node.op == "pow") return std::pow(left, right);
         if (node.op == "min") return std::fmin(left, right);
         if (node.op == "max") return std::fmax(left, right);
@@ -74,10 +71,10 @@ static float evalNode(const ExprNode& node,
 
         if (node.op == "sin")      return std::sin(arg);
         if (node.op == "cos")      return std::cos(arg);
-        if (node.op == "sqrt")     return std::sqrt(std::fabs(arg));  // Safe sqrt
+        if (node.op == "sqrt")     return SafeMath::safeSqrt(arg);
         if (node.op == "abs")      return std::fabs(arg);
         if (node.op == "exp")      return std::exp(arg);
-        if (node.op == "log")      return (arg > 0.0f) ? std::log(arg) : 0.0f;  // Safe log
+        if (node.op == "log")      return SafeMath::safeLog(arg);
         if (node.op == "floor")    return std::floor(arg);
         if (node.op == "ceil")     return std::ceil(arg);
         if (node.op == "negate")   return -arg;
