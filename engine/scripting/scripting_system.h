@@ -50,9 +50,24 @@ public:
     /// @brief Manually execute an event on a specific instance (for testing).
     void fireEvent(ScriptInstance& instance, uint32_t nodeId);
 
+    /// @brief Register a script instance for active execution. Subscribes its
+    /// event nodes to the EventBus and adds it to the active list.
+    ///
+    /// Call this after the instance's graph has been assigned to make the
+    /// script live. Call unregisterInstance() before destroying the instance.
+    void registerInstance(ScriptInstance& instance);
+
+    /// @brief Unregister a script instance. Unsubscribes event nodes, cancels
+    /// pending latent actions, and removes it from the active list.
+    void unregisterInstance(ScriptInstance& instance);
+
 private:
     /// @brief Register all built-in node types.
     void registerCoreNodes();
+
+    /// @brief Subscribe all event nodes in the given instance's graph to the
+    /// EventBus. Handled by eventTypeName string dispatch.
+    void subscribeEventNodes(ScriptInstance& instance);
 
     /// @brief Tick all pending latent actions (timers, conditions).
     void tickLatentActions(float deltaTime);

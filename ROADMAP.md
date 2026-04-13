@@ -817,15 +817,23 @@ Each template configures: camera type/constraints, physics dimensionality, defau
 - [x] 6-level variable scoping (Flow, Graph, Entity, Scene, Application, Saved) via Blackboard
 - [x] 43 unit tests for scripting infrastructure
 - [x] Design document with library evaluation (docs/PHASE9E_DESIGN.md, imgui-node-editor chosen)
-- [ ] Node graph renderer (imgui-node-editor integration)
+- [x] **Phase 9E-2:** EventBus bridge — string-dispatched subscription from event nodes to typed C++ engine events; per-instance subscription tracking; automatic cleanup on scene unload
+- [x] **Phase 9E-2:** 12 event nodes (OnKeyPressed, OnKeyReleased, OnMouseButton, OnSceneLoaded, OnWeatherChanged, OnCustomEvent wired; OnTrigger/Collision/Audio/Variable stubs registered for palette completeness)
+- [x] **Phase 9E-2:** 15 action nodes (PlaySound, SpawnEntity, DestroyEntity, SetPosition, SetRotation, SetScale, ApplyForce, ApplyImpulse, SetVisibility, SetLightColor, SetLightIntensity, PublishEvent live; PlayAnimation/SpawnParticles/SetMaterial stubs)
+- [x] **Phase 9E-2:** 22 pure nodes (GetPosition, GetRotation, FindEntityByName, MathAdd/Sub/Mul/Div, MathClamp, MathLerp, GetDistance, VectorNormalize, DotProduct, CrossProduct, BoolAnd/Or/Not, CompareEqual/Less/Greater, ToString, HasVariable, Raycast)
+- [x] **Phase 9E-2:** 7 flow control nodes (SwitchInt, SwitchString, ForLoop with iteration cap, WhileLoop with safety valve, Gate, DoOnce, FlipFlop — stateful nodes persist across executions via ScriptNodeInstance::runtimeState)
+- [x] **Phase 9E-2:** 4 latent nodes (WaitForEvent, WaitForCondition, Timeline with onTick progress callback, MoveTo with entity-lookup-by-ID for safety)
+- [x] **Phase 9E-2:** ScriptCustomEvent for PublishEvent ↔ OnCustomEvent round-trip with name filtering
+- [x] **Phase 9E-2:** 29 new unit tests — registration, math, vector, boolean, comparison, flow control, latent scheduling, and end-to-end EventBus bridge delivery (70 registered node types total)
+- [ ] Node graph renderer (imgui-node-editor integration) — Phase 9E-3
 - [ ] Graph compilation to executable logic (beyond expression trees)
 
 **Gameplay Scripting Nodes:**
-- [ ] Event nodes (on collision, on trigger enter, on key press, on timer)
-- [ ] Action nodes (move entity, play animation, play sound, spawn entity, destroy entity, set variable)
-- [ ] Flow control (branch, loop, sequence, delay)
-- [ ] Variable system (per-entity and global variables, exposed in inspector)
-- [ ] Pre-built gameplay templates (door that opens, collectible item, damage zone, checkpoint, dialogue trigger)
+- [x] Event nodes (keypress, mouse button, scene loaded, weather changed, custom events; trigger/collision stubs pending engine events)
+- [x] Action nodes (move entity, play sound, spawn entity, destroy entity, set variable, visibility, light color/intensity, publish custom event; animation/particle/material stubs pending integration)
+- [x] Flow control (branch, sequence, delay, switch, for/while loops, gate, do-once, flip-flop)
+- [x] Variable system (per-graph blackboard; per-entity/scene/app scoping infrastructure in place — inspector exposure lands with Phase 9E-3 editor UI)
+- [ ] Pre-built gameplay templates (door that opens, collectible item, damage zone, checkpoint, dialogue trigger) — Phase 9E-4
 
 **Formula Node Editor** (extends FormulaWorkbench):
 - [x] Math node types (add, multiply, sin, cos, pow, clamp, lerp, etc.) — factory helpers implemented
