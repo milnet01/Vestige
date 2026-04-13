@@ -2,6 +2,11 @@
 
 All notable changes to the Audit Tool are documented in this file.
 
+## [2.0.2] - 2026-04-13
+
+### Fixed
+- **False-positive flood**: cppcheck now runs with `--inline-suppr` (in both the existing `audit_config.yaml` and the `--init` template via `auto_config.py`). In-source `// cppcheck-suppress <rule>` comments are now honoured, eliminating ~6 HIGH findings per run at `engine/formula/node_graph.cpp:495`, `engine/scene/entity.cpp:60,79`, and `tests/test_command_history.cpp:244-246` that were correctly suppressed in source but re-reported every audit (AUDIT.md finding AT-A1).
+
 ## [2.0.1] - 2026-04-13
 
 ### Security

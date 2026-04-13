@@ -38,8 +38,12 @@ static_analysis:
   cppcheck:
     enabled: true
     binary: null  # Auto-detected
+    # --inline-suppr: honour `// cppcheck-suppress <rule>` comments in source.
+    # Without this, inline-suppressed false positives are re-reported every
+    # audit (e.g. engine/scene/entity.cpp:60,79; formula/node_graph.cpp:495;
+    # tests/test_command_history.cpp:244-246 — all verified FP, see AUDIT.md).
     args: >-
-      --enable=all --std=c++17
+      --enable=all --std=c++17 --inline-suppr
       --suppress=missingIncludeSystem
       --suppress=unusedFunction
       -I engine/ -I external/
