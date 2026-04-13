@@ -19,6 +19,21 @@ void NodeTypeRegistry::registerNode(NodeTypeDescriptor descriptor)
     {
         pin.id = internPin(pin.name);
     }
+
+    // Populate pin-name → index maps (AUDIT.md §M3 / FIXPLAN H2). Built
+    // once here so editor renderers can resolve pin names in O(1) per
+    // frame instead of scanning the vectors.
+    descriptor.inputIndexByName.clear();
+    descriptor.outputIndexByName.clear();
+    for (size_t i = 0; i < descriptor.inputDefs.size(); ++i)
+    {
+        descriptor.inputIndexByName[descriptor.inputDefs[i].name] = i;
+    }
+    for (size_t i = 0; i < descriptor.outputDefs.size(); ++i)
+    {
+        descriptor.outputIndexByName[descriptor.outputDefs[i].name] = i;
+    }
+
     m_nodes[descriptor.typeName] = std::move(descriptor);
 }
 

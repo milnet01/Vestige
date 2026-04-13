@@ -57,6 +57,16 @@ struct NodeTypeDescriptor
     /// (which use positional construction up through ``execute``) continue
     /// to compile without touching every call site.
     bool memoizable = true;
+
+    /// @brief Pin-name → index lookup tables (AUDIT.md §M3 / FIXPLAN H2).
+    ///
+    /// Populated by NodeTypeRegistry::registerNode() at startup so the
+    /// editor's per-frame connection renderer can resolve pin names in
+    /// O(1) instead of scanning inputDefs/outputDefs each frame. Kept
+    /// in sync with inputDefs/outputDefs; do not mutate directly —
+    /// re-register the descriptor to change pin sets.
+    std::unordered_map<std::string, size_t> inputIndexByName;
+    std::unordered_map<std::string, size_t> outputIndexByName;
 };
 
 /// @brief Registry mapping type names to their descriptors.
