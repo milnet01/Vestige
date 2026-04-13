@@ -49,15 +49,18 @@ public:
     >;
 
     ScriptValue() = default;
-    ScriptValue(bool v)               : m_value(v) {}
-    ScriptValue(int32_t v)            : m_value(v) {}
-    ScriptValue(float v)              : m_value(v) {}
-    ScriptValue(const std::string& v) : m_value(v) {}
-    ScriptValue(const char* v)        : m_value(std::string(v)) {}
-    ScriptValue(glm::vec2 v)          : m_value(v) {}
-    ScriptValue(glm::vec3 v)          : m_value(v) {}
-    ScriptValue(glm::vec4 v)          : m_value(v) {}
-    ScriptValue(glm::quat v)          : m_value(v) {}
+    // Single-arg constructors are explicit so values only enter the variant
+    // via deliberate `ScriptValue(x)` calls — no implicit conversions from
+    // raw primitives at call sites (CODING_STANDARDS §7; audit M12).
+    explicit ScriptValue(bool v)               : m_value(v) {}
+    explicit ScriptValue(int32_t v)            : m_value(v) {}
+    explicit ScriptValue(float v)              : m_value(v) {}
+    explicit ScriptValue(const std::string& v) : m_value(v) {}
+    explicit ScriptValue(const char* v)        : m_value(std::string(v)) {}
+    explicit ScriptValue(glm::vec2 v)          : m_value(v) {}
+    explicit ScriptValue(glm::vec3 v)          : m_value(v) {}
+    explicit ScriptValue(glm::vec4 v)          : m_value(v) {}
+    explicit ScriptValue(glm::quat v)          : m_value(v) {}
 
     /// @brief Create a ScriptValue holding an entity ID.
     static ScriptValue entityId(uint32_t id)
@@ -70,19 +73,35 @@ public:
 
     // -- Type queries --
 
+    /// @brief Returns the canonical ScriptDataType of the held value.
     ScriptDataType getType() const;
+    /// @brief True if the held value matches the given type (accounts for
+    /// entity-ID tagging on uint32_t).
     bool isType(ScriptDataType type) const;
 
     // -- Typed access (returns default if wrong type) --
 
+    /// @brief Coerce to bool. Returns false for non-bool types; non-zero
+    /// numeric types return true.
     bool        asBool() const;
+    /// @brief Coerce to int32. Returns truncated integer for float, parsed
+    /// value for numeric strings, 0 otherwise.
     int32_t     asInt() const;
+    /// @brief Coerce to float. Returns 0.0f for non-numeric types.
     float       asFloat() const;
+    /// @brief Stringify. Returns a human-readable representation for every
+    /// held type. Vectors use "(x, y, z)" form.
     std::string asString() const;
+    /// @brief Coerce to vec2. Returns (0,0) if not a vec2.
     glm::vec2   asVec2() const;
+    /// @brief Coerce to vec3. Returns (0,0,0) if not a vec3.
     glm::vec3   asVec3() const;
+    /// @brief Coerce to vec4. Returns (0,0,0,0) if not a vec4/color.
     glm::vec4   asVec4() const;
+    /// @brief Coerce to quaternion. Returns identity if not a quat.
     glm::quat   asQuat() const;
+    /// @brief Get the held entity ID. Returns 0 if this value is not tagged
+    /// as an entity.
     uint32_t    asEntityId() const;
 
     // -- Conversion --

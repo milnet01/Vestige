@@ -2,12 +2,23 @@
 /// @brief ScriptValue implementation.
 #include "scripting/script_value.h"
 
+#include <array>
 
 namespace Vestige
 {
 
 // ---------------------------------------------------------------------------
 // Enum string conversions
+// ---------------------------------------------------------------------------
+//
+// The three 11-case switch statements in this file (toString/fromString and
+// the fromJson dispatcher) are flagged by audit tooling as "large switch
+// chains" (audit L4). They are retained by design: the ScriptDataType enum
+// IS the discriminator for the ScriptValue variant, so there is no non-switch
+// form that's clearer or safer. Any new ScriptDataType value must be added in
+// exactly these three sites, which a switch makes mechanically enforceable.
+// A std::array<const char*> lookup by enum value would be equally valid for
+// to/from string; a table-dispatched fromJson would actually be worse.
 // ---------------------------------------------------------------------------
 
 const char* scriptDataTypeToString(ScriptDataType type)
@@ -290,30 +301,59 @@ ScriptValue ScriptValue::fromJson(const nlohmann::json& j)
 
     const auto& val = j["value"];
 
+    // Helper to safely extract N floats from a JSON array. Returns a default
+    // value on malformed input (short array, wrong type) instead of throwing
+    // into callers that may not have wrapped us in try/catch.
+    auto readFloats = [&val](size_t n, std::array<float, 4>& out) -> bool
+    {
+        if (!val.is_array() || val.size() < n)
+        {
+            return false;
+        }
+        for (size_t i = 0; i < n; ++i)
+        {
+            if (!val[i].is_number())
+            {
+                return false;
+            }
+            out[i] = val[i].get<float>();
+        }
+        return true;
+    };
+
+    std::array<float, 4> f{0.0f, 0.0f, 0.0f, 0.0f};
+
     switch (type)
     {
     case ScriptDataType::BOOL:
-        return ScriptValue(val.get<bool>());
+        return val.is_boolean() ? ScriptValue(val.get<bool>())
+                                 : ScriptValue(false);
     case ScriptDataType::INT:
-        return ScriptValue(val.get<int32_t>());
+        return val.is_number() ? ScriptValue(val.get<int32_t>())
+                                : ScriptValue(int32_t{0});
     case ScriptDataType::FLOAT:
-        return ScriptValue(val.get<float>());
+        return val.is_number() ? ScriptValue(val.get<float>())
+                                : ScriptValue(0.0f);
     case ScriptDataType::STRING:
-        return ScriptValue(val.get<std::string>());
+        return val.is_string() ? ScriptValue(val.get<std::string>())
+                                : ScriptValue(std::string{});
     case ScriptDataType::VEC2:
-        return ScriptValue(glm::vec2(val[0].get<float>(), val[1].get<float>()));
+        return readFloats(2, f) ? ScriptValue(glm::vec2(f[0], f[1]))
+                                 : ScriptValue(glm::vec2(0.0f));
     case ScriptDataType::VEC3:
-        return ScriptValue(glm::vec3(val[0].get<float>(), val[1].get<float>(),
-                                     val[2].get<float>()));
+        return readFloats(3, f) ? ScriptValue(glm::vec3(f[0], f[1], f[2]))
+                                 : ScriptValue(glm::vec3(0.0f));
     case ScriptDataType::VEC4:
     case ScriptDataType::COLOR:
-        return ScriptValue(glm::vec4(val[0].get<float>(), val[1].get<float>(),
-                                     val[2].get<float>(), val[3].get<float>()));
+        return readFloats(4, f) ? ScriptValue(glm::vec4(f[0], f[1], f[2], f[3]))
+                                 : ScriptValue(glm::vec4(0.0f));
     case ScriptDataType::QUAT:
-        return ScriptValue(glm::quat(val[0].get<float>(), val[1].get<float>(),
-                                     val[2].get<float>(), val[3].get<float>()));
+        return readFloats(4, f) ? ScriptValue(glm::quat(f[0], f[1], f[2], f[3]))
+                                 : ScriptValue(glm::quat(1.0f, 0.0f, 0.0f, 0.0f));
     case ScriptDataType::ENTITY:
-        return ScriptValue::entityId(val.get<uint32_t>());
+        return val.is_number_unsigned()
+                   ? ScriptValue::entityId(val.get<uint32_t>())
+                   : ScriptValue::entityId(0);
     case ScriptDataType::ANY:
         if (val.is_boolean()) return ScriptValue(val.get<bool>());
         if (val.is_number_integer()) return ScriptValue(val.get<int32_t>());

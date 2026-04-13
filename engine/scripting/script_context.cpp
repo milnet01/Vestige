@@ -4,6 +4,8 @@
 #include "core/engine.h"
 #include "core/logger.h"
 
+#include <cmath>
+
 namespace Vestige
 {
 
@@ -20,11 +22,10 @@ ScriptContext::ScriptContext(ScriptInstance& instance,
 // Data evaluation (pull)
 // ---------------------------------------------------------------------------
 
-ScriptValue ScriptContext::readInput(const ScriptNodeInstance& node,
-                                    const std::string& pinName)
+ScriptValue ScriptContext::readInput(const ScriptNodeInstance& node, PinId pinId)
 {
     // Check if there is a connection feeding this input pin
-    const ScriptConnection* conn = findInputConnection(node.nodeId, pinName);
+    const ScriptConnection* conn = findInputConnection(node.nodeId, pinId);
 
     if (conn)
     {
@@ -37,8 +38,10 @@ ScriptValue ScriptContext::readInput(const ScriptNodeInstance& node,
             return ScriptValue(0.0f);
         }
 
-        // Check if the source already has a cached output value
-        auto cachedIt = sourceNode->outputValues.find(conn->sourcePin);
+        // Check if the source already has a cached output value. The lookup
+        // key is interned PinId — no string hashing on the hot path (M10).
+        const PinId sourcePinId = internPin(conn->sourcePin);
+        auto cachedIt = sourceNode->outputValues.find(sourcePinId);
         if (cachedIt != sourceNode->outputValues.end())
         {
             return cachedIt->second;
@@ -48,27 +51,30 @@ ScriptValue ScriptContext::readInput(const ScriptNodeInstance& node,
         const NodeTypeDescriptor* desc = m_registry.findNode(sourceNode->typeName);
         if (desc && desc->isPure && desc->execute)
         {
-            return evaluatePureNode(conn->sourceNode, conn->sourcePin);
+            return evaluatePureNode(conn->sourceNode, sourcePinId);
         }
 
         // Impure node without cached value — return its default
         return ScriptValue(0.0f);
     }
 
-    // Not connected — check property overrides, then return default
-    auto propIt = node.properties.find(pinName);
+    // Not connected — check property overrides, then return default. Property
+    // lookup is string-keyed because the on-disk schema uses strings; we only
+    // pay this cost on unconnected pins, not the hot path.
+    const std::string& pinNameStr = pinName(pinId);
+    auto propIt = node.properties.find(pinNameStr);
     if (propIt != node.properties.end())
     {
         return propIt->second;
     }
 
-    // Look up the pin default from the type descriptor
+    // Look up the pin default from the type descriptor (compare by interned id).
     const NodeTypeDescriptor* desc = m_registry.findNode(node.typeName);
     if (desc)
     {
         for (const auto& pinDef : desc->inputDefs)
         {
-            if (pinDef.name == pinName)
+            if (pinDef.id == pinId)
             {
                 return pinDef.defaultValue;
             }
@@ -78,36 +84,53 @@ ScriptValue ScriptContext::readInput(const ScriptNodeInstance& node,
     return ScriptValue(0.0f);
 }
 
+ScriptValue ScriptContext::readInput(const ScriptNodeInstance& node,
+                                    const std::string& pinNameStr)
+{
+    return readInput(node, internPin(pinNameStr));
+}
+
 // ---------------------------------------------------------------------------
 // Output value setting
 // ---------------------------------------------------------------------------
 
-void ScriptContext::setOutput(const ScriptNodeInstance& node,
-                              const std::string& pinName,
+void ScriptContext::setOutput(const ScriptNodeInstance& node, PinId pinId,
                               const ScriptValue& value)
 {
     // We need non-const access to set the cached value
     ScriptNodeInstance* mutableNode = m_instance.getNodeInstance(node.nodeId);
     if (mutableNode)
     {
-        mutableNode->outputValues[pinName] = value;
+        mutableNode->outputValues[pinId] = value;
     }
+}
+
+void ScriptContext::setOutput(const ScriptNodeInstance& node,
+                              const std::string& pinNameStr,
+                              const ScriptValue& value)
+{
+    setOutput(node, internPin(pinNameStr), value);
 }
 
 // ---------------------------------------------------------------------------
 // Execution flow (push)
 // ---------------------------------------------------------------------------
 
-void ScriptContext::triggerOutput(const ScriptNodeInstance& node,
-                                  const std::string& pinName)
+void ScriptContext::triggerOutput(const ScriptNodeInstance& node, PinId pinId)
 {
-    const ScriptConnection* conn = findOutputConnection(node.nodeId, pinName);
+    const ScriptConnection* conn = findOutputConnection(node.nodeId, pinId);
     if (!conn)
     {
         return; // No connection from this output — chain ends here
     }
 
     executeNode(conn->targetNode);
+}
+
+void ScriptContext::triggerOutput(const ScriptNodeInstance& node,
+                                  const std::string& pinNameStr)
+{
+    triggerOutput(node, internPin(pinNameStr));
 }
 
 void ScriptContext::executeNode(uint32_t nodeId)
@@ -206,10 +229,30 @@ void ScriptContext::setVariable(const std::string& name, VariableScope scope,
 void ScriptContext::scheduleDelay(const ScriptNodeInstance& node,
                                   const std::string& outputPin, float seconds)
 {
+    // Clamp to [0, MAX_DELAY_SECONDS] to reject negative, NaN, or huge values
+    // that would make the action effectively never fire (or fire immediately
+    // with garbage state). 1 hour is a reasonable upper bound for gameplay.
+    constexpr float MAX_DELAY_SECONDS = 3600.0f;
+    float clamped = seconds;
+    if (!std::isfinite(clamped) || clamped < 0.0f)
+    {
+        Logger::warning("[ScriptContext] scheduleDelay received invalid "
+                        "seconds (" + std::to_string(seconds) +
+                        ") — clamping to 0");
+        clamped = 0.0f;
+    }
+    else if (clamped > MAX_DELAY_SECONDS)
+    {
+        Logger::warning("[ScriptContext] scheduleDelay seconds (" +
+                        std::to_string(seconds) + ") exceeds max (" +
+                        std::to_string(MAX_DELAY_SECONDS) + ") — clamping");
+        clamped = MAX_DELAY_SECONDS;
+    }
+
     PendingLatentAction action;
     action.nodeId = node.nodeId;
     action.outputPin = outputPin;
-    action.remainingTime = seconds;
+    action.remainingTime = clamped;
     m_instance.addLatentAction(std::move(action));
 }
 
@@ -267,33 +310,19 @@ Entity* ScriptContext::resolveEntity(uint32_t entityId)
 // ---------------------------------------------------------------------------
 
 const ScriptConnection* ScriptContext::findOutputConnection(
-    uint32_t nodeId, const std::string& pinName) const
+    uint32_t nodeId, PinId pinId) const
 {
-    for (const auto& c : m_instance.graph().connections)
-    {
-        if (c.sourceNode == nodeId && c.sourcePin == pinName)
-        {
-            return &c;
-        }
-    }
-    return nullptr;
+    // Delegates to ScriptInstance's pre-built index (audit H4).
+    return m_instance.findOutputConnection(nodeId, pinId);
 }
 
 const ScriptConnection* ScriptContext::findInputConnection(
-    uint32_t nodeId, const std::string& pinName) const
+    uint32_t nodeId, PinId pinId) const
 {
-    for (const auto& c : m_instance.graph().connections)
-    {
-        if (c.targetNode == nodeId && c.targetPin == pinName)
-        {
-            return &c;
-        }
-    }
-    return nullptr;
+    return m_instance.findInputConnection(nodeId, pinId);
 }
 
-ScriptValue ScriptContext::evaluatePureNode(uint32_t nodeId,
-                                             const std::string& outputPin)
+ScriptValue ScriptContext::evaluatePureNode(uint32_t nodeId, PinId outputPinId)
 {
     ScriptNodeInstance* nodeInst = m_instance.getNodeInstance(nodeId);
     if (!nodeInst)
@@ -321,7 +350,7 @@ ScriptValue ScriptContext::evaluatePureNode(uint32_t nodeId,
     --m_callDepth;
 
     // Return the cached output value
-    auto it = nodeInst->outputValues.find(outputPin);
+    auto it = nodeInst->outputValues.find(outputPinId);
     if (it != nodeInst->outputValues.end())
     {
         return it->second;

@@ -19,13 +19,21 @@ namespace
 {
 
 /// @brief Safety cap for WhileLoop iteration to prevent runaway scripts.
+/// 10,000 lets legitimate bounded loops (e.g. iterating through entities in
+/// a scene) run comfortably while terminating infinite conditions in milliseconds.
+/// The cap is hit silently with a warning in the logs — consider expanding to
+/// a dedicated "Aborted" output pin if designers ask for in-graph visibility.
 constexpr int MAX_WHILE_ITERATIONS = 10000;
 
-/// @brief Safety cap for ForLoop iteration count.
+/// @brief Safety cap for ForLoop iteration count. Same reasoning as
+/// MAX_WHILE_ITERATIONS; surfaces through the node's "Clamped" output pin
+/// so designers can branch on the truncation (audit M3).
 constexpr int MAX_FOR_ITERATIONS = 10000;
 
-/// @brief Get the mutable runtime state map for a node.
-std::unordered_map<std::string, ScriptValue>* getMutableRuntimeState(
+/// @brief Get the mutable runtime state map for a node. Keyed by PinId
+/// (audit M10). Stateful flow nodes (DoOnce, Gate, FlipFlop) write/read
+/// flag values keyed by interned pin-name handles.
+std::unordered_map<PinId, ScriptValue>* getMutableRuntimeState(
     ScriptContext& ctx, uint32_t nodeId)
 {
     ScriptNodeInstance* mut = ctx.instance().getNodeInstance(nodeId);
@@ -131,6 +139,11 @@ void registerFlowNodeTypes(NodeTypeRegistry& registry)
             {PinKind::EXECUTION, "Body", ScriptDataType::BOOL, {}},
             {PinKind::DATA, "Index", ScriptDataType::INT, ScriptValue(0)},
             {PinKind::EXECUTION, "Completed", ScriptDataType::BOOL, {}},
+            // "Clamped" signals that the designer's requested iteration count
+            // exceeded MAX_FOR_ITERATIONS and the loop was truncated (audit M3).
+            // Scripts can branch on this to surface a runtime warning or to
+            // fall back to a paged strategy.
+            {PinKind::DATA, "Clamped", ScriptDataType::BOOL, ScriptValue(false)},
         },
         "",
         false, false,
@@ -139,28 +152,45 @@ void registerFlowNodeTypes(NodeTypeRegistry& registry)
             int32_t first = ctx.readInputAs<int32_t>(node, "First");
             int32_t last = ctx.readInputAs<int32_t>(node, "Last");
 
+            static const PinId pinClamped = internPin("Clamped");
+            static const PinId pinIndex   = internPin("Index");
+
+            ScriptNodeInstance* mutNode = ctx.instance().getNodeInstance(node.nodeId);
+            if (mutNode)
+            {
+                mutNode->outputValues[pinClamped] = ScriptValue(false);
+            }
+
             if (last < first)
             {
                 ctx.triggerOutput(node, "Completed");
                 return;
             }
 
-            int32_t count = last - first + 1;
-            if (count > MAX_FOR_ITERATIONS)
+            // Compute the iteration count in int64 to avoid signed overflow
+            // at boundary inputs (e.g. first=INT32_MIN, last=INT32_MAX).
+            const int64_t count64 =
+                static_cast<int64_t>(last) - static_cast<int64_t>(first) + 1;
+            const bool clamped = (count64 > MAX_FOR_ITERATIONS);
+            int32_t count = clamped ? MAX_FOR_ITERATIONS
+                                    : static_cast<int32_t>(count64);
+            if (clamped)
             {
                 Logger::warning(
-                    "[ForLoop] Iteration count " + std::to_string(count) +
+                    "[ForLoop] Iteration count " + std::to_string(count64) +
                     " exceeds MAX_FOR_ITERATIONS — clamping");
-                count = MAX_FOR_ITERATIONS;
+                if (mutNode)
+                {
+                    mutNode->outputValues[pinClamped] = ScriptValue(true);
+                }
             }
 
-            ScriptNodeInstance* mutNode = ctx.instance().getNodeInstance(node.nodeId);
             for (int32_t i = 0; i < count; ++i)
             {
                 int32_t index = first + i;
                 if (mutNode)
                 {
-                    mutNode->outputValues["Index"] = ScriptValue(index);
+                    mutNode->outputValues[pinIndex] = ScriptValue(index);
                 }
                 ctx.triggerOutput(node, "Body");
             }
@@ -230,16 +260,19 @@ void registerFlowNodeTypes(NodeTypeRegistry& registry)
         false, false,
         [](ScriptContext& ctx, const ScriptNodeInstance& node)
         {
+            static const PinId stateInit = internPin("_init");
+            static const PinId stateOpen = internPin("_open");
+
             // Gate uses runtime state to track open/closed.
             auto* state = getMutableRuntimeState(ctx, node.nodeId);
             if (!state) return;
 
             // Initialise on first execution
-            if (state->find("_init") == state->end())
+            if (state->find(stateInit) == state->end())
             {
                 bool startClosed = ctx.readInputAs<bool>(node, "StartClosed");
-                (*state)["_open"] = ScriptValue(!startClosed);
-                (*state)["_init"] = ScriptValue(true);
+                (*state)[stateOpen] = ScriptValue(!startClosed);
+                (*state)[stateInit] = ScriptValue(true);
             }
 
             // The Gate node's execute is called by whichever exec input fired.
@@ -251,9 +284,11 @@ void registerFlowNodeTypes(NodeTypeRegistry& registry)
             // via the StartClosed property and passes through Enter unconditionally
             // when open.
             //
-            // TODO Phase 9E-3: extend the interpreter with an "entryPin" field on
-            // ScriptContext so nodes can distinguish which input fired.
-            bool isOpen = (*state)["_open"].asBool();
+            // Phase 9E-3 prerequisite: extend the interpreter with an
+            // "entryPin" field on ScriptContext so nodes can distinguish
+            // which input fired. Tracked in docs/PHASE9E3_DESIGN.md
+            // (Gate/multi-input-pin section).
+            bool isOpen = (*state)[stateOpen].asBool();
             if (isOpen)
             {
                 ctx.triggerOutput(node, "Out");
@@ -276,13 +311,15 @@ void registerFlowNodeTypes(NodeTypeRegistry& registry)
         false, false,
         [](ScriptContext& ctx, const ScriptNodeInstance& node)
         {
+            static const PinId stateFired = internPin("_fired");
+
             auto* state = getMutableRuntimeState(ctx, node.nodeId);
             if (!state) return;
 
-            auto it = state->find("_fired");
+            auto it = state->find(stateFired);
             if (it == state->end() || !it->second.asBool())
             {
-                (*state)["_fired"] = ScriptValue(true);
+                (*state)[stateFired] = ScriptValue(true);
                 ctx.triggerOutput(node, "Then");
             }
             // else: blocked — no output
@@ -307,16 +344,19 @@ void registerFlowNodeTypes(NodeTypeRegistry& registry)
         false, false,
         [](ScriptContext& ctx, const ScriptNodeInstance& node)
         {
+            static const PinId stateIsA = internPin("_isA");
+            static const PinId pinIsA   = internPin("IsA");
+
             auto* state = getMutableRuntimeState(ctx, node.nodeId);
             if (!state) return;
 
-            auto it = state->find("_isA");
+            auto it = state->find(stateIsA);
             bool nextIsA = (it == state->end()) ? true : it->second.asBool();
 
             ScriptNodeInstance* mutNode = ctx.instance().getNodeInstance(node.nodeId);
             if (mutNode)
             {
-                mutNode->outputValues["IsA"] = ScriptValue(nextIsA);
+                mutNode->outputValues[pinIsA] = ScriptValue(nextIsA);
             }
 
             if (nextIsA)
@@ -329,7 +369,7 @@ void registerFlowNodeTypes(NodeTypeRegistry& registry)
             }
 
             // Toggle for next call
-            (*state)["_isA"] = ScriptValue(!nextIsA);
+            (*state)[stateIsA] = ScriptValue(!nextIsA);
         }
     });
 }

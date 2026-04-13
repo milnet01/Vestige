@@ -100,12 +100,14 @@ void registerLatentNodeTypes(NodeTypeRegistry& registry)
         false, true,
         [](ScriptContext& ctx, const ScriptNodeInstance& node)
         {
+            static const PinId pinAlpha = internPin("Alpha");
+
             float duration = ctx.readInputAs<float>(node, "Duration");
             if (duration <= 0.0f)
             {
                 // Degenerate case: finish immediately with Alpha = 1.
                 ScriptNodeInstance* mut = ctx.instance().getNodeInstance(node.nodeId);
-                if (mut) mut->outputValues["Alpha"] = ScriptValue(1.0f);
+                if (mut) mut->outputValues[pinAlpha] = ScriptValue(1.0f);
                 ctx.triggerOutput(node, "Finished");
                 return;
             }
@@ -124,7 +126,7 @@ void registerLatentNodeTypes(NodeTypeRegistry& registry)
                     ScriptNodeInstance* mut = inst->getNodeInstance(nodeId);
                     if (mut)
                     {
-                        mut->outputValues["Alpha"] = ScriptValue(progress);
+                        mut->outputValues[pinAlpha] = ScriptValue(progress);
                     }
                     // Note: we intentionally do NOT re-trigger "Update" from
                     // the onTick callback to avoid needing a ScriptContext

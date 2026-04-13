@@ -1,0 +1,24 @@
+{
+  "timestamp": "2026-04-13T09:10:12.438592",
+  "finding_count": 5577,
+  "by_severity": {
+    "info": 112,
+    "low": 764,
+    "medium": 4652,
+    "high": 49
+  },
+  "by_category": {
+    "cppcheck": 471,
+    "clang_tidy": 4443,
+    "memory_safety": 18,
+    "opengl_state": 98,
+    "performance": 100,
+    "code_quality": 5,
+    "shader": 17,
+    "complexity": 50,
+    "dead_code": 247,
+    "duplication": 50,
+    "refactoring": 50,
+    "cognitive_complexity": 28
+  }
+}

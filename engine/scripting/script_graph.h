@@ -21,6 +21,13 @@ struct ScriptGraph
 {
     static constexpr int CURRENT_VERSION = 1;
 
+    // -- Deserialization safety caps (reject crafted .vscript files that would
+    //    exhaust memory). See PHASE9E_AUDIT_REPORT C1/H6/H7/M7/M8.
+    static constexpr size_t MAX_NODES        = 10'000;
+    static constexpr size_t MAX_CONNECTIONS  = 100'000;
+    static constexpr size_t MAX_VARIABLES    = 1'024;
+    static constexpr size_t MAX_STRING_BYTES = 256;
+
     int version = CURRENT_VERSION;
     std::string name;
 

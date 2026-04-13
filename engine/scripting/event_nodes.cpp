@@ -143,13 +143,10 @@ void registerEventNodeTypes(NodeTypeRegistry& registry)
         false, false,
         [](ScriptContext& ctx, const ScriptNodeInstance& node)
         {
-            // Filtering is applied by the EventBus callback via an internal
-            // "_filtered" flag written to the node's output values.
-            auto it = node.outputValues.find("_filtered");
-            if (it != node.outputValues.end() && it->second.asBool())
-            {
-                return;
-            }
+            // Filtering is applied upstream in the EventBus callback —
+            // subscribeFilteredEventNode suppresses the trigger on filter
+            // mismatch, so if this execute fires at all, the event already
+            // passed the name filter. Just forward execution.
             ctx.triggerOutput(node, "Fired");
         }
     });

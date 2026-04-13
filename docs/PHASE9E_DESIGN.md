@@ -1,7 +1,7 @@
 # Phase 9E Design Document: Visual Scripting
 
 **Date:** 2026-04-11
-**Status:** Proposal (awaiting review)
+**Status:** Implemented for 9E-1 and 9E-2 (core infrastructure + EventBus bridge + 60 node types); 9E-3 (editor UI) in planning.
 
 ---
 
