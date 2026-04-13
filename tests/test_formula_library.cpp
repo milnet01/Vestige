@@ -428,18 +428,89 @@ TEST(ExprEval, ComplexExpression)
 
 TEST(ExprEval, UnknownBinaryOpThrows)
 {
+    // Post-AUDIT.md §H11: factories validate. Build manually to bypass the
+    // factory and confirm the evaluator still rejects unknown ops as a
+    // defence-in-depth measure.
     ExpressionEvaluator eval;
-    auto node = ExprNode::binaryOp("bogus",
-        ExprNode::literal(1.0f),
-        ExprNode::literal(2.0f));
+    auto node = std::make_unique<ExprNode>();
+    node->type = ExprNodeType::BINARY_OP;
+    node->op = "bogus";
+    node->children.push_back(ExprNode::literal(1.0f));
+    node->children.push_back(ExprNode::literal(2.0f));
     EXPECT_THROW(eval.evaluate(*node, {}), std::runtime_error);
 }
 
 TEST(ExprEval, UnknownUnaryOpThrows)
 {
     ExpressionEvaluator eval;
-    auto node = ExprNode::unaryOp("bogus", ExprNode::literal(1.0f));
+    auto node = std::make_unique<ExprNode>();
+    node->type = ExprNodeType::UNARY_OP;
+    node->op = "bogus";
+    node->children.push_back(ExprNode::literal(1.0f));
     EXPECT_THROW(eval.evaluate(*node, {}), std::runtime_error);
+}
+
+TEST(ExprEval, FactoryRejectsDisallowedBinaryOp)
+{
+    // AUDIT.md §H11 / FIXPLAN E3: factory allowlist.
+    EXPECT_THROW(
+        ExprNode::binaryOp("bogus", ExprNode::literal(1.0f), ExprNode::literal(2.0f)),
+        std::runtime_error);
+    // Spliced-shell-command style name must also be rejected.
+    EXPECT_THROW(
+        ExprNode::binaryOp("+) || system(\"rm -rf /\"",
+                           ExprNode::literal(1.0f),
+                           ExprNode::literal(2.0f)),
+        std::runtime_error);
+}
+
+TEST(ExprEval, FactoryRejectsDisallowedUnaryOp)
+{
+    EXPECT_THROW(
+        ExprNode::unaryOp("bogus", ExprNode::literal(1.0f)),
+        std::runtime_error);
+    // Any non-identifier-shaped fn name must fail the allowlist.
+    EXPECT_THROW(
+        ExprNode::unaryOp("sin; rm -rf /", ExprNode::literal(1.0f)),
+        std::runtime_error);
+}
+
+TEST(ExprEval, FactoryRejectsInvalidVariableName)
+{
+    // Canonical injection-vector example from AUDIT.md §H11.
+    EXPECT_THROW(
+        ExprNode::variable("x); system(\"rm -rf /\"); float y("),
+        std::runtime_error);
+    // Leading digit — not a valid C identifier.
+    EXPECT_THROW(ExprNode::variable("1x"), std::runtime_error);
+    // Empty name.
+    EXPECT_THROW(ExprNode::variable(""), std::runtime_error);
+    // Dashes/hyphens/spaces not allowed.
+    EXPECT_THROW(ExprNode::variable("a-b"), std::runtime_error);
+    EXPECT_THROW(ExprNode::variable("a b"), std::runtime_error);
+    // Valid names still accepted.
+    EXPECT_NO_THROW(ExprNode::variable("x"));
+    EXPECT_NO_THROW(ExprNode::variable("_foo"));
+    EXPECT_NO_THROW(ExprNode::variable("my_var123"));
+}
+
+TEST(ExprEval, FromJsonRejectsInjectedName)
+{
+    // Round-trip: crafted preset JSON must not build an ExprNode.
+    nlohmann::json j = {
+        {"var", "x); system(\"rm -rf /\"); float y("}
+    };
+    EXPECT_THROW(ExprNode::fromJson(j), std::runtime_error);
+}
+
+TEST(ExprEval, FromJsonRejectsInjectedOp)
+{
+    nlohmann::json j = {
+        {"op", "; rm -rf /"},
+        {"left", 1.0},
+        {"right", 2.0}
+    };
+    EXPECT_THROW(ExprNode::fromJson(j), std::runtime_error);
 }
 
 // ===========================================================================
