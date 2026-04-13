@@ -1290,18 +1290,23 @@ void Workbench::openFileDialog()
         "r");
     if (pipe)
     {
-        char buf[512];
-        if (std::fgets(buf, sizeof(buf), pipe))
+        // AUDIT.md §L2 / FIXPLAN: read the full pipe output rather than a
+        // single 512-byte chunk. Linux path limit (PATH_MAX) is 4096 bytes,
+        // and kdialog/zenity may return a whole line plus trailing
+        // newline. Read everything; fgets loops until EOF.
+        std::string path;
+        char buf[1024];
+        while (std::fgets(buf, sizeof(buf), pipe))
         {
-            std::string path(buf);
-            auto lastNonWs = path.find_last_not_of(" \t\r\n");
-            if (lastNonWs != std::string::npos)
-                path.erase(lastNonWs + 1);
-            else
-                path.clear();
-            if (!path.empty())
-                importCsv(path);
+            path.append(buf);
         }
+        auto lastNonWs = path.find_last_not_of(" \t\r\n");
+        if (lastNonWs != std::string::npos)
+            path.erase(lastNonWs + 1);
+        else
+            path.clear();
+        if (!path.empty())
+            importCsv(path);
         pclose(pipe);
     }
     else

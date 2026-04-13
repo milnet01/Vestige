@@ -27,7 +27,22 @@ class ScriptingSystem : public ISystem
 public:
     // -- ISystem interface --
     const std::string& getSystemName() const override;
+
+    /// @brief Initialise the scripting system.
+    ///
+    /// NOT idempotent in the current implementation (AUDIT.md §L1): calling
+    /// initialize() twice registers the built-in node types twice, which
+    /// NodeTypeRegistry handles without crashing but produces duplicate
+    /// entries. Callers must pair every initialize() with a shutdown()
+    /// before re-initialising. The engine lifecycle guarantees this by
+    /// construction; unit tests that need to re-initialise should call
+    /// shutdown() first.
     bool initialize(Engine& engine) override;
+
+    /// @brief Tear down the scripting system.
+    ///
+    /// Destroys all script instances, blackboards, and node registry
+    /// entries so the system is safe to initialise again.
     void shutdown() override;
     void update(float deltaTime) override;
     void onSceneLoad(Scene& scene) override;
