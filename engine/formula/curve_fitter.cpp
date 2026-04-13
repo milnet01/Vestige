@@ -205,9 +205,33 @@ FitResult CurveFitter::fit(const FormulaDefinition& formula,
     std::vector<float> residuals;
     computeResiduals(*expr, data, coeffNames, coeffValues, residuals);
 
-    float currentError = 0.0f;
+    // AUDIT.md §H13 / FIXPLAN E1: bail on non-finite initial residuals.
+    // Without this check, NaN propagates through the iteration loop,
+    // `trialError < NaN` is always false so no step is ever accepted,
+    // and we silently run to maxIterations reporting `converged=false`
+    // with garbage coefficients.
     for (float r : residuals)
-        currentError += r * r;
+    {
+        if (!std::isfinite(r))
+        {
+            result.statusMessage =
+                "Failed: non-finite residual on initial evaluation "
+                "(check input domain — inputs may cross a safe-math guard "
+                "or the formula may produce NaN/Inf for the given data)";
+            result.iterations = 0;
+            result.finalError = std::numeric_limits<float>::infinity();
+            for (size_t j = 0; j < N; ++j)
+                result.coefficients[coeffNames[j]] = coeffValues[j];
+            return result;
+        }
+    }
+
+    // Accumulate error in double precision — matches workbench v1.3.0 fix.
+    // Single-precision sums over thousands of squared residuals lose bits
+    // in the low end (AUDIT.md §L3).
+    double currentError = 0.0;
+    for (float r : residuals)
+        currentError += static_cast<double>(r) * static_cast<double>(r);
 
     float lambda = config.initialLambda;
 
@@ -286,9 +310,28 @@ FitResult CurveFitter::fit(const FormulaDefinition& formula,
         std::vector<float> trialResiduals;
         computeResiduals(*expr, data, coeffNames, trialCoeffs, trialResiduals);
 
-        float trialError = 0.0f;
+        // AUDIT.md §H13: reject trial steps that produce non-finite
+        // residuals rather than letting NaN pollute the accumulator.
+        bool trialFinite = true;
         for (float r : trialResiduals)
-            trialError += r * r;
+        {
+            if (!std::isfinite(r)) { trialFinite = false; break; }
+        }
+        if (!trialFinite)
+        {
+            lambda *= config.lambdaUpFactor;
+            if (lambda > 1e15f)
+            {
+                result.statusMessage =
+                    "Failed: trial step produced non-finite residuals";
+                break;
+            }
+            continue;
+        }
+
+        double trialError = 0.0;
+        for (float r : trialResiduals)
+            trialError += static_cast<double>(r) * static_cast<double>(r);
 
         if (trialError < currentError)
         {
@@ -296,11 +339,11 @@ FitResult CurveFitter::fit(const FormulaDefinition& formula,
             coeffValues = trialCoeffs;
             residuals = trialResiduals;
 
-            float relChange = (currentError - trialError) / (currentError + 1e-30f);
+            double relChange = (currentError - trialError) / (currentError + 1e-30);
             currentError = trialError;
             lambda /= config.lambdaDownFactor;
 
-            if (relChange < config.convergenceThreshold)
+            if (relChange < static_cast<double>(config.convergenceThreshold))
             {
                 result.converged = true;
                 result.statusMessage = "Converged (error change below threshold)";
@@ -324,7 +367,7 @@ FitResult CurveFitter::fit(const FormulaDefinition& formula,
 
     // Store final coefficients
     result.iterations = iter;
-    result.finalError = currentError;
+    result.finalError = static_cast<float>(currentError);
     for (size_t j = 0; j < N; ++j)
         result.coefficients[coeffNames[j]] = coeffValues[j];
 
@@ -332,34 +375,38 @@ FitResult CurveFitter::fit(const FormulaDefinition& formula,
     // Recompute residuals with final coefficients
     computeResiduals(*expr, data, coeffNames, coeffValues, residuals);
 
-    // RMSE and max error
-    float sumSqResid = 0.0f;
+    // RMSE, max error, and r² accumulators use double precision — matches
+    // the workbench v1.3.0 fix; single-precision accumulation over large
+    // datasets loses low-order bits (AUDIT.md §L3).
+    double sumSqResid = 0.0;
     float maxErr = 0.0f;
     for (size_t i = 0; i < M; ++i)
     {
-        sumSqResid += residuals[i] * residuals[i];
+        sumSqResid += static_cast<double>(residuals[i])
+                    * static_cast<double>(residuals[i]);
         maxErr = std::max(maxErr, std::abs(residuals[i]));
     }
-    result.rmse = std::sqrt(sumSqResid / static_cast<float>(M));
+    result.rmse = static_cast<float>(
+        std::sqrt(sumSqResid / static_cast<double>(M)));
     result.maxError = maxErr;
 
     // R-squared: 1 - SS_res / SS_tot
-    float mean = 0.0f;
+    double mean = 0.0;
     for (const auto& dp : data)
-        mean += dp.observed;
-    mean /= static_cast<float>(M);
+        mean += static_cast<double>(dp.observed);
+    mean /= static_cast<double>(M);
 
-    float ssTot = 0.0f;
+    double ssTot = 0.0;
     for (const auto& dp : data)
     {
-        float diff = dp.observed - mean;
+        double diff = static_cast<double>(dp.observed) - mean;
         ssTot += diff * diff;
     }
 
-    if (ssTot > 1e-15f)
-        result.rSquared = 1.0f - sumSqResid / ssTot;
+    if (ssTot > 1e-15)
+        result.rSquared = static_cast<float>(1.0 - sumSqResid / ssTot);
     else
-        result.rSquared = (sumSqResid < 1e-15f) ? 1.0f : 0.0f;
+        result.rSquared = (sumSqResid < 1e-15) ? 1.0f : 0.0f;
 
     return result;
 }
