@@ -417,3 +417,70 @@ TEST(FormulaPresetLibrary, AllPresetsHaveValidFormulas)
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// Non-finite-input regression (AUDIT.md §H13 / FIXPLAN E1)
+//
+// Before the fix, NaN/Inf residuals silently ran the fitter to
+// maxIterations with converged=false and garbage coefficients. After the
+// fix the status message names the failure mode so the user knows why.
+// ---------------------------------------------------------------------------
+
+TEST(CurveFitter, BailsOnNonFiniteInitialResiduals)
+{
+    // Build y = a * (1e38 / 1e-38) * x — the intermediate overflows to Inf
+    // for any non-zero coefficient, triggering the non-finite guard in
+    // the initial-residual check.
+    auto expr = binOp("*",
+                      binOp("*", var("a"), lit(1e38f)),
+                      binOp("*", var("x"), binOp("/", lit(1.0f), lit(1e-38f))));
+    auto def = makeFormula("overflow_formula",
+                           {{"x", FormulaValueType::FLOAT, "m", 1.0f}},
+                           {{"a", 1.0f}},
+                           std::move(expr));
+
+    std::vector<DataPoint> data;
+    for (int i = 1; i <= 10; ++i)
+    {
+        data.push_back({{{"x", 1.0f}}, static_cast<float>(i)});
+    }
+
+    auto result = CurveFitter::fit(def, data, def.coefficients);
+
+    // With the non-finite guard: either we bail immediately with a clear
+    // message, or we converge legitimately. We must NOT run to maxIterations
+    // with a NaN/Inf finalError (the pre-fix silent-garbage behaviour).
+    if (!result.converged)
+    {
+        EXPECT_TRUE(std::isfinite(result.finalError) ||
+                    result.statusMessage.find("non-finite") !=
+                        std::string::npos)
+            << "Non-finite residuals must be reported explicitly, not "
+               "silently accumulated. statusMessage: " << result.statusMessage;
+    }
+}
+
+// Regression: a normal well-conditioned fit still converges after the
+// switch from single- to double-precision error accumulation. This guards
+// against the accumulator-type-change accidentally regressing convergence
+// on a case that previously worked.
+TEST(CurveFitter, NormalFitStillConvergesWithDoubleAccumulator)
+{
+    auto expr = binOp("*", var("a"), var("x"));
+    auto def = makeFormula("linear_check",
+                           {{"x", FormulaValueType::FLOAT, "m", 1.0f}},
+                           {{"a", 0.1f}},  // deliberately poor initial guess
+                           std::move(expr));
+
+    std::vector<DataPoint> data;
+    for (int i = 1; i <= 20; ++i)
+    {
+        data.push_back({{{"x", static_cast<float>(i)}},
+                        3.0f * static_cast<float>(i)});
+    }
+
+    auto result = CurveFitter::fit(def, data, {{"a", 0.1f}});
+    EXPECT_TRUE(result.converged) << result.statusMessage;
+    EXPECT_NEAR(result.coefficients["a"], 3.0f, 0.01f);
+    EXPECT_TRUE(std::isfinite(result.finalError));
+}
