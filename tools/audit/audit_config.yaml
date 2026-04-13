@@ -269,8 +269,12 @@ research:
   # NVD (National Vulnerability Database) direct API queries
   nvd:
     enabled: true
-    api_key: "<REDACTED-rotated-2026-04-13>"  # Pending activation (up to 7 days from 2026-04-11)
-    api_key_env: "NVD_API_KEY"  # Fallback: check this env var if api_key is null
+    # SECURITY: NEVER commit an API key here. Use the NVD_API_KEY env var.
+    # The previous literal key committed in this file was rotated on 2026-04-13
+    # per AUDIT.md §C2. Leaving `api_key: null` and relying on the env var is
+    # the only supported configuration.
+    api_key: null
+    api_key_env: "NVD_API_KEY"  # Required: set this env var to use NVD rate limits
     dependencies:
       - "GLFW"
       - "FreeType"
