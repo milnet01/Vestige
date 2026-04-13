@@ -145,15 +145,20 @@ public:
 
     // -- Find nodes by type --
 
-    /// @brief Find all node instances of a given type name. O(N) — prefer the
-    /// cached accessors (updateNodes(), etc.) on hot paths.
+    /// @brief Find all node instances of a given type name. Backed by the
+    /// pre-built type index (audit M9) — O(1) average map lookup with no
+    /// per-call allocation. Returns an empty vector for unknown types.
+    const std::vector<uint32_t>& nodesByType(const std::string& typeName) const;
+
+    /// @brief Backwards-compatible by-value variant. Internally calls
+    /// nodesByType() and copies. Prefer nodesByType() on hot paths.
     std::vector<uint32_t> findNodesByType(const std::string& typeName) const;
 
     // -- Hot-path caches (populated in initialize(), immutable thereafter) --
 
     /// @brief Cached IDs of OnUpdate nodes. Avoids a per-frame linear scan of
-    /// all nodes inside ScriptingSystem::tickUpdateNodes (audit H3).
-    const std::vector<uint32_t>& updateNodes() const { return m_updateNodes; }
+    /// all nodes inside ScriptingSystem::tickUpdateNodes (audit H3 → M9).
+    const std::vector<uint32_t>& updateNodes() const;
 
     /// @brief Find the (first) connection whose source is the given node/pin.
     /// Uses a pre-built index: O(pins-per-node) instead of O(total-connections)
@@ -193,8 +198,8 @@ private:
     std::vector<uint32_t> m_subscriptions; ///< EventBus subscription IDs
     int m_eventDispatchDepth = 0;
 
-    // Hot-path caches (see audit H3/H4).
-    std::vector<uint32_t> m_updateNodes;
+    // Hot-path caches (see audit H3/H4/M9).
+    std::unordered_map<std::string, std::vector<uint32_t>> m_typeIndex;
     std::unordered_map<uint32_t, std::vector<PinConnection>> m_outputByNode;
     std::unordered_map<uint32_t, std::vector<PinConnection>> m_inputByNode;
 };

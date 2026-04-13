@@ -38,20 +38,27 @@ ScriptValue ScriptContext::readInput(const ScriptNodeInstance& node, PinId pinId
             return ScriptValue(0.0f);
         }
 
-        // Check if the source already has a cached output value. The lookup
-        // key is interned PinId — no string hashing on the hot path (M10).
         const PinId sourcePinId = internPin(conn->sourcePin);
+        const NodeTypeDescriptor* desc = m_registry.findNode(sourceNode->typeName);
+
+        // Pure nodes always route through evaluatePureNode so the per-chain
+        // memo cache (m_pureCache, audit M11) is authoritative. The
+        // ScriptNodeInstance::outputValues map is per-instance and persists
+        // across ScriptContexts — using it for pure nodes would freeze their
+        // first-ever evaluation forever, which defeats the per-execution
+        // semantics M11 provides.
+        if (desc && desc->isPure && desc->execute)
+        {
+            return evaluatePureNode(conn->sourceNode, sourcePinId);
+        }
+
+        // Impure node — outputValues is the per-chain cache (cleared at the
+        // start of each impure execute by executeNode). A populated entry
+        // means the source already ran in this chain.
         auto cachedIt = sourceNode->outputValues.find(sourcePinId);
         if (cachedIt != sourceNode->outputValues.end())
         {
             return cachedIt->second;
-        }
-
-        // Source has no cached value — evaluate if it's a pure node
-        const NodeTypeDescriptor* desc = m_registry.findNode(sourceNode->typeName);
-        if (desc && desc->isPure && desc->execute)
-        {
-            return evaluatePureNode(conn->sourceNode, sourcePinId);
         }
 
         // Impure node without cached value — return its default
@@ -124,7 +131,14 @@ void ScriptContext::triggerOutput(const ScriptNodeInstance& node, PinId pinId)
         return; // No connection from this output — chain ends here
     }
 
+    // Stash the target's input pin so the callee's execute lambda can read
+    // it via ctx.entryPin() (audit L6 — Gate and other multi-input nodes).
+    // Save/restore around the call so back-to-back triggerOutput calls in
+    // the caller observe their own m_entryPin, not the last callee's.
+    const PinId savedEntry = m_entryPin;
+    m_entryPin = internPin(conn->targetPin);
     executeNode(conn->targetNode);
+    m_entryPin = savedEntry;
 }
 
 void ScriptContext::triggerOutput(const ScriptNodeInstance& node,
@@ -324,6 +338,19 @@ const ScriptConnection* ScriptContext::findInputConnection(
 
 ScriptValue ScriptContext::evaluatePureNode(uint32_t nodeId, PinId outputPinId)
 {
+    // Per-execution memoization (audit M11). Keyed by (nodeId, pinId) packed
+    // into a uint64_t. A pure node read N times inside one execute() chain
+    // (e.g. via a ForLoop body that pulls the same value each iteration) now
+    // runs once instead of N times. The cache dies with this ScriptContext,
+    // so latent re-triggers and new event dispatches start fresh.
+    const uint64_t cacheKey = (static_cast<uint64_t>(nodeId) << 32) |
+                              static_cast<uint64_t>(outputPinId);
+    auto cacheIt = m_pureCache.find(cacheKey);
+    if (cacheIt != m_pureCache.end())
+    {
+        return cacheIt->second;
+    }
+
     ScriptNodeInstance* nodeInst = m_instance.getNodeInstance(nodeId);
     if (!nodeInst)
     {
@@ -351,12 +378,11 @@ ScriptValue ScriptContext::evaluatePureNode(uint32_t nodeId, PinId outputPinId)
 
     // Return the cached output value
     auto it = nodeInst->outputValues.find(outputPinId);
-    if (it != nodeInst->outputValues.end())
-    {
-        return it->second;
-    }
-
-    return ScriptValue(0.0f);
+    ScriptValue result = (it != nodeInst->outputValues.end())
+                             ? it->second
+                             : ScriptValue(0.0f);
+    m_pureCache.emplace(cacheKey, result);
+    return result;
 }
 
 } // namespace Vestige

@@ -262,6 +262,10 @@ void registerFlowNodeTypes(NodeTypeRegistry& registry)
         {
             static const PinId stateInit = internPin("_init");
             static const PinId stateOpen = internPin("_open");
+            static const PinId pinEnter  = internPin("Enter");
+            static const PinId pinOpen   = internPin("Open");
+            static const PinId pinClose  = internPin("Close");
+            static const PinId pinToggle = internPin("Toggle");
 
             // Gate uses runtime state to track open/closed.
             auto* state = getMutableRuntimeState(ctx, node.nodeId);
@@ -275,20 +279,30 @@ void registerFlowNodeTypes(NodeTypeRegistry& registry)
                 (*state)[stateInit] = ScriptValue(true);
             }
 
-            // The Gate node's execute is called by whichever exec input fired.
-            // We can't distinguish inputs natively (there's only one exec lambda),
-            // so we use a convention: the context sets a "pin fired" marker via
-            // outputValues before calling. Since we don't have that yet, use a
-            // simpler model: only the "Enter" path runs through; Open/Close/Toggle
-            // are reserved for a future extension. For now, the Gate is controlled
-            // via the StartClosed property and passes through Enter unconditionally
-            // when open.
-            //
-            // Phase 9E-3 prerequisite: extend the interpreter with an
-            // "entryPin" field on ScriptContext so nodes can distinguish
-            // which input fired. Tracked in docs/PHASE9E3_DESIGN.md
-            // (Gate/multi-input-pin section).
-            bool isOpen = (*state)[stateOpen].asBool();
+            // Dispatch on the input pin that fired this execution chain
+            // (audit L6 — entryPin field on ScriptContext). Defaults to
+            // Enter when called directly via executeNode (no incoming
+            // connection), preserving the historical behavior.
+            const PinId entry = ctx.entryPin();
+            if (entry == pinOpen)
+            {
+                (*state)[stateOpen] = ScriptValue(true);
+                return;
+            }
+            if (entry == pinClose)
+            {
+                (*state)[stateOpen] = ScriptValue(false);
+                return;
+            }
+            if (entry == pinToggle)
+            {
+                (*state)[stateOpen] = ScriptValue(!(*state)[stateOpen].asBool());
+                return;
+            }
+            // entry == pinEnter (or INVALID_PIN_ID for direct execute):
+            // pass-through when open.
+            (void)pinEnter;
+            const bool isOpen = (*state)[stateOpen].asBool();
             if (isOpen)
             {
                 ctx.triggerOutput(node, "Out");
