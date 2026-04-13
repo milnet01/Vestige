@@ -546,11 +546,15 @@ vec3 evaluateSHGridIrradiance(vec3 worldPos, vec3 normal)
     const float c5 = 0.247708;
 
     vec3 n = normal;
+    // Ramamoorthi-Hanrahan Eq. 13: L_22·(x²−y²) uses c1 (0.429043), not c3.
+    // Fixing this removes the ~1.73× over-weight on the band-2 chromatic tilt
+    // that was visible on horizontal surfaces oriented along X/Y axes.
+    // See AUDIT.md §H14, PHASE3_RESEARCH.md §H14.
     return max(vec3(0.0),
         c4 * L[0] +
         2.0 * c2 * (L[1]*n.y + L[2]*n.z + L[3]*n.x) +
         2.0 * c1 * (L[4]*n.x*n.y + L[5]*n.y*n.z + L[7]*n.x*n.z) +
-        c3 * L[8] * (n.x*n.x - n.y*n.y) +
+        c1 * L[8] * (n.x*n.x - n.y*n.y) +
         c5 * L[6] * (3.0*n.z*n.z - 1.0));
 }
 
