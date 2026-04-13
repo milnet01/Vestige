@@ -88,6 +88,7 @@ add_executable(vestige_tests
     test_domain_systems.cpp
     test_editor_viewers.cpp
     test_node_graph.cpp
+    test_scripting.cpp
 )
 
 target_link_libraries(vestige_tests

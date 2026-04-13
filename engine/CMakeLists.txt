@@ -212,6 +212,16 @@ set(ENGINE_SOURCES
     navigation/nav_mesh_query.cpp
     navigation/nav_agent_component.cpp
     systems/navigation_system.cpp
+    # Visual scripting system
+    scripting/script_value.cpp
+    scripting/blackboard.cpp
+    scripting/node_type_registry.cpp
+    scripting/script_graph.cpp
+    scripting/script_instance.cpp
+    scripting/script_context.cpp
+    scripting/script_component.cpp
+    scripting/scripting_system.cpp
+    scripting/core_nodes.cpp
     # glad OpenGL loader
     ${CMAKE_SOURCE_DIR}/external/glad/src/gl.c
     # stb_image implementation

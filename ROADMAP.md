@@ -808,7 +808,16 @@ Each template configures: camera type/constraints, physics dimensionality, defau
 - [x] Connection validation (cycle detection via BFS, type checking, duplicate rejection)
 - [x] Graph serialization (JSON round-trip with version tag, 61 unit tests)
 - [x] Graph-to-ExpressionTree conversion (bidirectional: toExpressionTree + fromExpressionTree)
-- [ ] Node graph renderer (evaluate imnodes vs imgui-node-editor)
+- [x] Visual scripting data model (ScriptValue, Blackboard, ScriptGraph, ScriptNodeDef, ScriptConnection in engine/scripting/)
+- [x] Node type registry (NodeTypeDescriptor with execute functions, categorized palette lookup)
+- [x] Graph interpreter (ScriptContext: impulse-driven execution, lazy data pull, call depth + node count safety limits)
+- [x] Runtime instances (ScriptInstance with per-graph blackboard, latent action queue, event subscriptions)
+- [x] ScriptComponent (entity attachment) + ScriptingSystem (ISystem with update loop, latent tick, event bridge)
+- [x] 10 core node types (OnStart, OnUpdate, OnDestroy, Branch, Sequence, Delay, SetVariable, GetVariable, PrintToScreen, LogMessage)
+- [x] 6-level variable scoping (Flow, Graph, Entity, Scene, Application, Saved) via Blackboard
+- [x] 43 unit tests for scripting infrastructure
+- [x] Design document with library evaluation (docs/PHASE9E_DESIGN.md, imgui-node-editor chosen)
+- [ ] Node graph renderer (imgui-node-editor integration)
 - [ ] Graph compilation to executable logic (beyond expression trees)
 
 **Gameplay Scripting Nodes:**
