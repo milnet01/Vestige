@@ -1,8 +1,8 @@
 /// @file codegen_cpp.cpp
 /// @brief C++ code generator implementation.
 #include "formula/codegen_cpp.h"
+#include "formula/safe_math.h"
 
-#include <algorithm>
 #include <cmath>
 #include <iomanip>
 #include <sstream>
@@ -44,9 +44,17 @@ std::string CodegenCpp::emitExpression(const ExprNode& node,
         std::string l = emitExpression(left, coefficients);
         std::string r = emitExpression(right, coefficients);
 
-        if (node.op == "+" || node.op == "-" || node.op == "*" || node.op == "/")
+        if (node.op == "+" || node.op == "-" || node.op == "*")
         {
             return "(" + l + " " + node.op + " " + r + ")";
+        }
+        // AUDIT.md §H12 / FIXPLAN E4: emit safe division to match evaluator
+        // semantics (divide-by-zero → 0, not NaN/inf). Without this, the
+        // LM fitter validates coefficients under safe math, then the emitted
+        // header crashes on degenerate inputs with different semantics.
+        if (node.op == "/")
+        {
+            return "Vestige::SafeMath::safeDiv(" + l + ", " + r + ")";
         }
         if (node.op == "pow")
         {
@@ -88,9 +96,16 @@ std::string CodegenCpp::emitExpression(const ExprNode& node,
         if (node.op == "sign")
             return "(" + arg + " > 0.0f ? 1.0f : (" + arg + " < 0.0f ? -1.0f : 0.0f))";
 
-        // Standard math functions: sin, cos, sqrt, abs, exp, log, floor, ceil
+        // Safe-math wrappers for ops that the evaluator guards against
+        // degenerate inputs (AUDIT.md §H12 / FIXPLAN E4).
+        if (node.op == "sqrt")
+            return "Vestige::SafeMath::safeSqrt(" + arg + ")";
+        if (node.op == "log")
+            return "Vestige::SafeMath::safeLog(" + arg + ")";
+
+        // Standard math functions that need no domain guards.
         static const std::unordered_set<std::string> kStdMathFns = {
-            "sin", "cos", "sqrt", "abs", "exp", "log", "floor", "ceil"
+            "sin", "cos", "abs", "exp", "floor", "ceil"
         };
         if (kStdMathFns.count(node.op) == 0)
         {
@@ -98,7 +113,6 @@ std::string CodegenCpp::emitExpression(const ExprNode& node,
                 "CodegenCpp: unknown unary op '" + node.op +
                 "' — not in allowlist (AUDIT.md §H11)");
         }
-        // sqrt/log will be switched to safe wrappers in FIXPLAN E4.
         return "std::" + node.op + "(" + arg + ")";
     }
 
@@ -168,7 +182,11 @@ std::string CodegenCpp::generateHeader(const std::vector<const FormulaDefinition
     out << "#pragma once\n\n";
     out << "#include <algorithm>\n";
     out << "#include <cmath>\n";
-    out << "#include <glm/glm.hpp>\n\n";
+    out << "#include <glm/glm.hpp>\n";
+    // AUDIT.md §H12 / FIXPLAN E4: safe-math helpers keep emitted functions
+    // behaviourally identical to the tree-walking evaluator the LM curve
+    // fitter validates coefficients against.
+    out << "#include \"formula/safe_math.h\"\n\n";
     out << "namespace Vestige::Formulas\n{\n\n";
 
     for (const auto* formula : formulas)
