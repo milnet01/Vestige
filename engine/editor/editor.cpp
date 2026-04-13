@@ -119,9 +119,14 @@ bool Editor::initialize(GLFWwindow* window, const std::string& assetPath)
         configDir = "/tmp/vestige";
     }
     m_welcomePanel.initialize(configDir);
-    // Pass empty settings path while we chase a shutdown SEGV — the
-    // imgui-node-editor settings save path is the leading suspect.
-    m_scriptEditorPanel.initialize({});
+
+    // AUDIT.md §H16 / FIXPLAN H1: settings file is re-enabled now that
+    // NodeEditorWidget routes Save/Load through an m_isShuttingDown-gated
+    // callback — the library's own DestroyEditor save path was the SEGV
+    // source. Runtime edits persist to this file; shutdown suppresses
+    // the final save.
+    const std::string nodeEditorSettingsPath = configDir + "/NodeEditor.json";
+    m_scriptEditorPanel.initialize(nodeEditorSettingsPath);
 
     m_isInitialized = true;
     Logger::info("Editor initialized (ImGui + docking + editor camera)");
