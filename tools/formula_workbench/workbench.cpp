@@ -1140,6 +1140,72 @@ void Workbench::importCsv(const std::string& path)
         return;
     }
 
+    // AUDIT.md §M11 / FIXPLAN: RFC 4180-aware line splitter. The prior
+    // getline(ss, cell, ',') broke on any Excel-exported CSV with quoted
+    // fields (e.g. `"1,234.56",5.0` would split into three cells). Now
+    // `"a, b"` is a single cell and `""` inside quotes is an escaped quote.
+    // Embedded newlines inside quoted fields are NOT supported — flagged
+    // as out-of-scope here; the import will still produce a short row and
+    // the row-length mismatch guard below will drop it.
+    auto splitCsvLine = [](const std::string& line) -> std::vector<std::string>
+    {
+        std::vector<std::string> out;
+        std::string cell;
+        bool inQuotes = false;
+        for (size_t i = 0; i < line.size(); ++i)
+        {
+            char c = line[i];
+            if (inQuotes)
+            {
+                if (c == '"')
+                {
+                    // RFC 4180: `""` inside a quoted field is a literal ".
+                    if (i + 1 < line.size() && line[i + 1] == '"')
+                    {
+                        cell.push_back('"');
+                        ++i;
+                    }
+                    else
+                    {
+                        inQuotes = false;
+                    }
+                }
+                else
+                {
+                    cell.push_back(c);
+                }
+            }
+            else
+            {
+                if (c == '"' && cell.empty())
+                {
+                    inQuotes = true;
+                }
+                else if (c == ',')
+                {
+                    out.push_back(std::move(cell));
+                    cell.clear();
+                }
+                else
+                {
+                    cell.push_back(c);
+                }
+            }
+        }
+        out.push_back(std::move(cell));
+        return out;
+    };
+
+    auto trim = [](std::string& s)
+    {
+        auto firstNonWs = s.find_first_not_of(" \t\r\n");
+        if (firstNonWs == std::string::npos) { s.clear(); return; }
+        s.erase(0, firstNonWs);
+        auto lastNonWs = s.find_last_not_of(" \t\r\n");
+        if (lastNonWs != std::string::npos)
+            s.erase(lastNonWs + 1);
+    };
+
     // Read header line
     std::string headerLine;
     if (!std::getline(file, headerLine))
@@ -1149,28 +1215,9 @@ void Workbench::importCsv(const std::string& path)
         return;
     }
 
-    // Parse headers
-    std::vector<std::string> headers;
-    {
-        std::istringstream ss(headerLine);
-        std::string col;
-        while (std::getline(ss, col, ','))
-        {
-            // Trim whitespace
-            auto firstNonWs = col.find_first_not_of(" \t\r\n");
-            if (firstNonWs == std::string::npos) { col.clear(); }
-            else
-            {
-                col.erase(0, firstNonWs);
-                auto lastNonWs = col.find_last_not_of(" \t\r\n");
-                if (lastNonWs != std::string::npos)
-                    col.erase(lastNonWs + 1);
-                else
-                    col.clear();
-            }
-            headers.push_back(col);
-        }
-    }
+    // Parse headers (RFC 4180-aware)
+    std::vector<std::string> headers = splitCsvLine(headerLine);
+    for (auto& h : headers) trim(h);
 
     if (headers.size() < 2)
     {
@@ -1188,22 +1235,12 @@ void Workbench::importCsv(const std::string& path)
         if (line.empty())
             continue;
 
-        std::istringstream ss(line);
-        std::string cell;
+        std::vector<std::string> cells = splitCsvLine(line);
         std::vector<float> values;
-        while (std::getline(ss, cell, ','))
+        values.reserve(cells.size());
+        for (auto& cell : cells)
         {
-            auto firstNonWs = cell.find_first_not_of(" \t\r\n");
-            if (firstNonWs == std::string::npos) { cell.clear(); }
-            else
-            {
-                cell.erase(0, firstNonWs);
-                auto lastNonWs = cell.find_last_not_of(" \t\r\n");
-                if (lastNonWs != std::string::npos)
-                    cell.erase(lastNonWs + 1);
-                else
-                    cell.clear();
-            }
+            trim(cell);
             try
             {
                 values.push_back(std::stof(cell));
