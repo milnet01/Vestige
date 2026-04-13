@@ -6,6 +6,23 @@
 namespace Vestige
 {
 
+namespace
+{
+// Mirror of ScriptGraph::MAX_STRING_BYTES. Kept local so blackboard.cpp
+// doesn't pull in the full ScriptGraph header (which transitively includes
+// nlohmann/json + vector + script_common).
+constexpr size_t kBlackboardMaxStringBytes = 256;
+
+std::string clampKey(std::string s)
+{
+    if (s.size() > kBlackboardMaxStringBytes)
+    {
+        s.resize(kBlackboardMaxStringBytes);
+    }
+    return s;
+}
+} // namespace
+
 // ---------------------------------------------------------------------------
 // VariableScope string conversions
 // ---------------------------------------------------------------------------
@@ -126,9 +143,14 @@ Blackboard Blackboard::fromJson(const nlohmann::json& j)
     Blackboard bb;
     if (j.is_object())
     {
+        // AUDIT.md §H6 / FIXPLAN D2: route every insert through set() so the
+        // MAX_KEYS cap documented in blackboard.h:86 is enforced on the load
+        // path — previously a crafted save file could insert unbounded keys.
+        // Also clamp key length, matching ScriptGraph::loadFromFile's
+        // treatment of user-supplied strings (script_graph.cpp:290+).
         for (auto it = j.begin(); it != j.end(); ++it)
         {
-            bb.m_values[it.key()] = ScriptValue::fromJson(it.value());
+            bb.set(clampKey(it.key()), ScriptValue::fromJson(it.value()));
         }
     }
     return bb;

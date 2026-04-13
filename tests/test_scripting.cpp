@@ -1510,6 +1510,38 @@ TEST(BlackboardCap, UpdatesToExistingKeysAlwaysSucceed)
     EXPECT_EQ(bb.get("k0").asInt(), 42);
 }
 
+// Regression test for AUDIT.md §H6 / FIXPLAN D2: crafted JSON must not
+// bypass the MAX_KEYS cap. Prior to the fix, fromJson wrote directly into
+// m_values, allowing an attacker to create a blackboard with millions of
+// keys via a malicious save file.
+TEST(BlackboardCap, FromJsonHonoursMaxKeys)
+{
+    nlohmann::json j = nlohmann::json::object();
+    // Try to insert 2× MAX_KEYS via the load path.
+    for (size_t i = 0; i < Blackboard::MAX_KEYS * 2; ++i)
+    {
+        j["overflow_" + std::to_string(i)] = nlohmann::json{
+            {"type", "int"}, {"value", static_cast<int>(i)}};
+    }
+    auto bb = Blackboard::fromJson(j);
+    EXPECT_LE(bb.size(), Blackboard::MAX_KEYS);
+}
+
+// Regression test for AUDIT.md §H6 / FIXPLAN D2: crafted JSON with long
+// key names must be clamped on load, matching ScriptGraph::loadFromFile's
+// handling of user-supplied strings.
+TEST(BlackboardCap, FromJsonClampsLongKeys)
+{
+    const std::string longKey(1024, 'K');  // far exceeds the 256-byte cap
+    nlohmann::json j = nlohmann::json::object();
+    j[longKey] = nlohmann::json{{"type", "int"}, {"value", 1}};
+    auto bb = Blackboard::fromJson(j);
+    // Key must exist but be length-clamped to 256 bytes.
+    EXPECT_EQ(bb.size(), 1u);
+    EXPECT_FALSE(bb.has(longKey));
+    EXPECT_TRUE(bb.has(std::string(256, 'K')));
+}
+
 // -- scheduleDelay clamping (audit M6) -------------------------------------
 
 TEST_F(ScriptContextTest, ScheduleDelayClampsNegative)
