@@ -57,6 +57,30 @@ void SystemRegistry::shutdownAll()
     Logger::info("SystemRegistry: all systems shut down");
 }
 
+void SystemRegistry::clear()
+{
+    if (m_systems.empty())
+    {
+        return;
+    }
+
+    // Drop the type lookup first — any stale getSystem<T>() call after
+    // clear() should return nullptr rather than dangle into freed memory.
+    m_typeMap.clear();
+
+    // Destroy in reverse registration order, mirroring shutdownAll(), so a
+    // system registered later (which may depend on systems registered
+    // earlier) is torn down first.
+    while (!m_systems.empty())
+    {
+        m_systems.pop_back();
+    }
+
+    // shutdownAll() already cleared this; reset defensively in case clear()
+    // is called without a prior shutdownAll().
+    m_initialized = false;
+}
+
 void SystemRegistry::updateAll(float deltaTime)
 {
     for (auto& system : m_systems)

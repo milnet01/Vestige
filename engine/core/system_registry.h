@@ -120,7 +120,25 @@ public:
     bool initializeAll(Engine& engine);
 
     /// @brief Shuts down all systems in reverse registration order.
+    ///
+    /// This calls each system's `shutdown()` method but does NOT destroy the
+    /// system instances. Pair with `clear()` to actually release them while
+    /// shared infrastructure (Renderer, Window, GL context) is still alive.
     void shutdownAll();
+
+    /// @brief Destroys all owned systems in reverse registration order.
+    ///
+    /// AUDIT.md §H17: must be called from `Engine::shutdown()` while the
+    /// Renderer, Window, and GL context are still alive — otherwise system
+    /// destructors run during `~Engine` member cleanup, after those
+    /// dependencies have already been freed, and dereference dangling
+    /// pointers / dead GL handles. The original symptom was a SEGV reported
+    /// by ASan immediately after the "Engine shutdown complete" log line.
+    ///
+    /// Idempotent: safe to call on an already-empty registry, or after
+    /// another `clear()`. Calling `shutdownAll()` is not required first
+    /// (system destructors will run normally) but is the conventional order.
+    void clear();
 
     // -----------------------------------------------------------------------
     // Per-frame dispatch

@@ -1304,7 +1304,15 @@ void Engine::shutdown()
 
     // Shut down domain systems (handles terrain, foliage, water, particles, character controller)
     // Must happen before destroying the window (GL context).
+    //
+    // AUDIT.md §H17: shutdownAll() invokes each system's shutdown() but does
+    // NOT destroy the system instances — the unique_ptrs remain in the
+    // registry. Without a follow-up clear(), the systems' destructors only
+    // run during ~Engine member cleanup, AFTER m_renderer.reset() and
+    // m_window.reset() below have freed the renderer + GL context.
+    // clear() forces destruction here while those dependencies are alive.
     m_systemRegistry.shutdownAll();
+    m_systemRegistry.clear();
 
     // Shut down remaining engine-owned subsystems
     m_profiler.shutdown();
