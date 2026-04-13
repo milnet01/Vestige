@@ -64,6 +64,12 @@ float geometrySmith(float NdotV, float NdotL, float roughness)
 /// Returns (scale, bias) for the split-sum approximation: specular = F0 * scale + bias.
 vec2 integrateBRDF(float NdotV, float roughness)
 {
+    // AUDIT.md §M13 / FIXPLAN F2: the left column of the LUT (NdotV=0, i.e.
+    // grazing view) must be Fresnel-peaked white, not black. Zero NdotV
+    // yields V.z=0, so G_Vis → 0/0 → 0 and the LUT integrates to (0,0).
+    // UE4 reference clamps NdotV to a small epsilon at entry.
+    NdotV = max(NdotV, 1e-4);
+
     vec3 V;
     V.x = sqrt(1.0 - NdotV * NdotV);  // sin
     V.y = 0.0;

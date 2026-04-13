@@ -432,9 +432,15 @@ float calcPointShadow(int shadowIdx, vec3 fragPos, vec3 lightPos, vec3 normal)
     float currentDepth = length(fragToLight);
     float farPlane = u_pointShadowFarPlane[shadowIdx];
 
-    // Slope-scaled bias (matches CSM approach)
+    // AUDIT.md §M17 / FIXPLAN F2: slope-scaled bias scaled by farPlane.
+    // The old 0.05/0.005 values were fine for ~20m farPlanes but caused
+    // Peter-Panning in Tabernacle-scale interiors (~5m farPlane) and
+    // acne on outdoor-scale scenes (~100m farPlane). Scaling by farPlane
+    // keeps bias proportional to the depth unit being compared.
     vec3 lightDir = normalize(-fragToLight);
-    float bias = max(0.05 * (1.0 - dot(normal, lightDir)), 0.005);
+    float biasScale = farPlane * 0.001;  // 0.05 at farPlane=50 → prior default
+    float bias = max(biasScale * 5.0 * (1.0 - dot(normal, lightDir)),
+                     biasScale * 0.5);
 
     // Use compile-time constant index for sampler access
     if (shadowIdx == 0)

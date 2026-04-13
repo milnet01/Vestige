@@ -50,12 +50,33 @@ void main()
         return;
     }
 
-    // Screen-space depth gradient → approximate view-space normal
+    // Screen-space depth gradient → approximate view-space normal.
+    // AUDIT.md §M18 / FIXPLAN F2: same central-difference upgrade as SSR
+    // (§M16). Four-tap sampling with edge rejection replaces the prior
+    // forward-only difference that produced garbage normals at depth
+    // discontinuities. Garbage normals here caused spurious contact
+    // shadows along silhouettes.
     vec3 viewPos = viewPosFromDepth(v_texCoord, depth);
-    vec3 viewPosR = viewPosFromDepth(v_texCoord + vec2(u_texelSize.x, 0.0), texture(u_depthTexture, v_texCoord + vec2(u_texelSize.x, 0.0)).r);
-    vec3 viewPosU = viewPosFromDepth(v_texCoord + vec2(0.0, u_texelSize.y), texture(u_depthTexture, v_texCoord + vec2(0.0, u_texelSize.y)).r);
-    vec3 ddx = viewPosR - viewPos;
-    vec3 ddy = viewPosU - viewPos;
+    vec2 tx = vec2(u_texelSize.x, 0.0);
+    vec2 ty = vec2(0.0, u_texelSize.y);
+    vec3 viewPosL = viewPosFromDepth(v_texCoord - tx, texture(u_depthTexture, v_texCoord - tx).r);
+    vec3 viewPosR = viewPosFromDepth(v_texCoord + tx, texture(u_depthTexture, v_texCoord + tx).r);
+    vec3 viewPosD = viewPosFromDepth(v_texCoord - ty, texture(u_depthTexture, v_texCoord - ty).r);
+    vec3 viewPosU = viewPosFromDepth(v_texCoord + ty, texture(u_depthTexture, v_texCoord + ty).r);
+
+    // Reject edges where left/right or down/up diverge sharply.
+    float edgeThreshold = max(abs(viewPos.z) * 0.05, 0.05);
+    bool edgeX = abs((viewPosR.z - viewPos.z) - (viewPos.z - viewPosL.z)) > edgeThreshold;
+    bool edgeY = abs((viewPosU.z - viewPos.z) - (viewPos.z - viewPosD.z)) > edgeThreshold;
+    if (edgeX || edgeY)
+    {
+        // Cannot trust the normal at a silhouette; skip contact shadow.
+        fragColor = 1.0;
+        return;
+    }
+
+    vec3 ddx = 0.5 * (viewPosR - viewPosL);
+    vec3 ddy = 0.5 * (viewPosU - viewPosD);
     vec3 approxNormal = normalize(cross(ddx, ddy));
 
     // Light direction in view space (pointing toward the light)
