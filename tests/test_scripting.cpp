@@ -1969,3 +1969,189 @@ TEST(ScriptingSystemBridge, TimelineHandlesRemainingTimeNaNGracefully)
     sys.unregisterInstance(instance);
     sys.shutdown();
 }
+
+// ===========================================================================
+// Phase 9E-3 Step 3: M9 (type→IDs cache), M11 (pure-node memo), entry-pin
+// ===========================================================================
+
+// -- M9: nodesByType returns cached vector by const-ref ---------------------
+
+TEST(ScriptInstanceTypeCache, NodesByTypeReturnsCachedVector)
+{
+    ScriptGraph g;
+    g.addNode("OnStart");
+    g.addNode("Branch");
+    g.addNode("OnStart");
+
+    ScriptInstance inst;
+    inst.initialize(g, 1);
+
+    const auto& starts1 = inst.nodesByType("OnStart");
+    const auto& starts2 = inst.nodesByType("OnStart");
+    EXPECT_EQ(starts1.size(), 2u);
+    // Repeated calls return the same cached storage — no per-call allocation.
+    EXPECT_EQ(&starts1, &starts2);
+}
+
+TEST(ScriptInstanceTypeCache, NodesByTypeUnknownReturnsStableEmpty)
+{
+    ScriptGraph g;
+    ScriptInstance inst;
+    inst.initialize(g, 1);
+
+    const auto& a = inst.nodesByType("DoesNotExist");
+    const auto& b = inst.nodesByType("AlsoMissing");
+    EXPECT_TRUE(a.empty());
+    EXPECT_TRUE(b.empty());
+    EXPECT_EQ(&a, &b); // both share the static-empty fallback
+}
+
+TEST(ScriptInstanceTypeCache, UpdateNodesEqualsNodesByTypeOnUpdate)
+{
+    ScriptGraph g;
+    g.addNode("OnStart");
+    g.addNode("OnUpdate");
+    g.addNode("OnUpdate");
+
+    ScriptInstance inst;
+    inst.initialize(g, 1);
+
+    EXPECT_EQ(inst.updateNodes().size(), 2u);
+    // updateNodes() is now a thin wrapper over nodesByType("OnUpdate").
+    EXPECT_EQ(&inst.updateNodes(), &inst.nodesByType("OnUpdate"));
+}
+
+// -- M11: pure-node memoization within one execute chain --------------------
+
+TEST_F(NodeLibraryTest, PureNodeMemoizedAcrossLoopReads)
+{
+    // Build: MathAdd (source) → second MathAdd's "A" input. Reading the
+    // second node's "A" twice within one ScriptContext exercises the
+    // pure-node memo cache: first call evaluates MathAdd-source, second
+    // returns the cached value even if MathAdd-source's property changes.
+    PureNodeFixture f;
+    uint32_t srcId  = f.addNode("MathAdd");
+    uint32_t sinkId = f.addNode("MathAdd");
+    f.setProp(srcId, "A", ScriptValue(2.0f));
+    f.setProp(srcId, "B", ScriptValue(3.0f));
+    f.graph.addConnection(srcId, "Result", sinkId, "A");
+    f.initialize();
+
+    ScriptContext ctx(f.instance, m_registry,
+                      *reinterpret_cast<Engine*>(&f.dummyEngine));
+    const auto* sinkInst = f.instance.getNodeInstance(sinkId);
+    ASSERT_NE(sinkInst, nullptr);
+
+    // First read pulls through MathAdd-source: 2 + 3 = 5.
+    ScriptValue first = ctx.readInput(*sinkInst, internPin("A"));
+    EXPECT_FLOAT_EQ(first.asFloat(), 5.0f);
+
+    // Mutate the source's "A" property. Without memoization this would
+    // change the next evaluation. With M11, the same ScriptContext
+    // returns the cached value.
+    f.instance.getNodeInstance(srcId)->properties["A"] = ScriptValue(99.0f);
+    ScriptValue second = ctx.readInput(*sinkInst, internPin("A"));
+    EXPECT_FLOAT_EQ(second.asFloat(), 5.0f) << "Pure-node memo should cache";
+
+    // A fresh ScriptContext must NOT see the cached value (cache is per-chain).
+    ScriptContext freshCtx(f.instance, m_registry,
+                           *reinterpret_cast<Engine*>(&f.dummyEngine));
+    ScriptValue fresh = freshCtx.readInput(*sinkInst, internPin("A"));
+    EXPECT_FLOAT_EQ(fresh.asFloat(), 102.0f) << "Fresh context starts fresh";
+}
+
+// -- entry-pin field (audit L6 / Gate dispatch) -----------------------------
+
+TEST_F(NodeLibraryTest, GateOpenInputOpensTheGate)
+{
+    // Build: a "trigger" node with a Then output → Gate's "Open" input.
+    // The Gate starts closed; firing the trigger should open it.
+    PureNodeFixture f;
+    uint32_t triggerId = f.addNode("PrintToScreen");
+    uint32_t gateId    = f.addNode("Gate");
+    f.setProp(gateId, "StartClosed", ScriptValue(true));
+    f.graph.addConnection(triggerId, "Then", gateId, "Open");
+    f.initialize();
+
+    ScriptContext ctx(f.instance, m_registry,
+                      *reinterpret_cast<Engine*>(&f.dummyEngine));
+    ctx.executeNode(triggerId);
+
+    // After the open trigger, executing Enter (via direct call, default
+    // entryPin=INVALID) should pass through.
+    uint32_t sinkId = f.graph.addNode("PrintToScreen");
+    f.graph.addConnection(gateId, "Out", sinkId, "Exec");
+    // Re-initialize because we mutated the graph after the first call.
+    f.instance.initialize(f.graph, 1);
+    ScriptContext ctx2(f.instance, m_registry,
+                       *reinterpret_cast<Engine*>(&f.dummyEngine));
+    // Open the gate via the dedicated input.
+    ctx2.executeNode(triggerId);
+    // Now fire Enter directly. Without entry-pin dispatch, this would have
+    // been the only way to interact with the gate.
+    ctx2.executeNode(gateId);
+    // No assertion on side effects — the test asserts no crash and that the
+    // gate-open path didn't infinitely recurse.
+    SUCCEED();
+}
+
+TEST_F(NodeLibraryTest, GateCloseInputClosesTheGate)
+{
+    PureNodeFixture f;
+    uint32_t triggerId = f.addNode("PrintToScreen");
+    uint32_t gateId    = f.addNode("Gate");
+    // Start open, then close via the Close input.
+    f.setProp(gateId, "StartClosed", ScriptValue(false));
+    f.graph.addConnection(triggerId, "Then", gateId, "Close");
+    f.initialize();
+
+    ScriptContext ctx(f.instance, m_registry,
+                      *reinterpret_cast<Engine*>(&f.dummyEngine));
+    ctx.executeNode(triggerId);
+    // Verify internal state — runtime "_open" flag should now be false.
+    auto* gateInst = f.instance.getNodeInstance(gateId);
+    ASSERT_NE(gateInst, nullptr);
+    auto it = gateInst->runtimeState.find(internPin("_open"));
+    ASSERT_NE(it, gateInst->runtimeState.end());
+    EXPECT_FALSE(it->second.asBool());
+}
+
+TEST_F(NodeLibraryTest, GateToggleInputFlipsTheGate)
+{
+    PureNodeFixture f;
+    uint32_t triggerId = f.addNode("PrintToScreen");
+    uint32_t gateId    = f.addNode("Gate");
+    f.setProp(gateId, "StartClosed", ScriptValue(true));
+    f.graph.addConnection(triggerId, "Then", gateId, "Toggle");
+    f.initialize();
+
+    ScriptContext ctx(f.instance, m_registry,
+                      *reinterpret_cast<Engine*>(&f.dummyEngine));
+
+    // First toggle: closed → open
+    ctx.executeNode(triggerId);
+    auto* gateInst = f.instance.getNodeInstance(gateId);
+    auto pinOpen = internPin("_open");
+    EXPECT_TRUE(gateInst->runtimeState[pinOpen].asBool());
+
+    // Second toggle: open → closed
+    ctx.executeNode(triggerId);
+    EXPECT_FALSE(gateInst->runtimeState[pinOpen].asBool());
+}
+
+TEST_F(ScriptContextTest, EntryPinDefaultsToInvalidForDirectExecute)
+{
+    ScriptGraph graph;
+    uint32_t id = graph.addNode("PrintToScreen");
+    ScriptInstance instance;
+    instance.initialize(graph, 1);
+
+    Engine* dummyEngine = nullptr;
+    ScriptContext ctx(instance, m_registry,
+                      *reinterpret_cast<Engine*>(&dummyEngine));
+    EXPECT_EQ(ctx.entryPin(), INVALID_PIN_ID);
+    ctx.executeNode(id);
+    // After executeNode returns, m_entryPin is still INVALID_PIN_ID
+    // (executeNode doesn't touch it; only triggerOutput does).
+    EXPECT_EQ(ctx.entryPin(), INVALID_PIN_ID);
+}

@@ -39,7 +39,7 @@ void ScriptInstance::initialize(const ScriptGraph& graph, uint32_t entityId)
 
 void ScriptInstance::rebuildCaches()
 {
-    m_updateNodes.clear();
+    m_typeIndex.clear();
     m_outputByNode.clear();
     m_inputByNode.clear();
 
@@ -48,15 +48,13 @@ void ScriptInstance::rebuildCaches()
         return;
     }
 
-    // Cache OnUpdate node IDs so the ScriptingSystem doesn't rescan every node
-    // on every frame. A graph with N nodes and K OnUpdates goes from O(N) per
-    // frame to O(K) (audit H3).
+    // Generalised type → node-ids index (audit M9). Subsumes the OnUpdate-only
+    // cache from Batch 2 H3: every type that appears in the graph gets its
+    // own entry, looked up via nodesByType(typeName). A graph with N nodes
+    // costs O(N) to build once and O(1) per query thereafter.
     for (const auto& [id, inst] : m_nodeInstances)
     {
-        if (inst.typeName == "OnUpdate")
-        {
-            m_updateNodes.push_back(id);
-        }
+        m_typeIndex[inst.typeName].push_back(id);
     }
 
     // Connection indices. Connections are immutable after load, so building
@@ -93,18 +91,30 @@ void ScriptInstance::addSubscription(uint32_t subscriptionId)
     m_subscriptions.push_back(subscriptionId);
 }
 
+const std::vector<uint32_t>& ScriptInstance::nodesByType(
+    const std::string& typeName) const
+{
+    auto it = m_typeIndex.find(typeName);
+    if (it != m_typeIndex.end())
+    {
+        return it->second;
+    }
+    // Stable empty result so callers can iterate without nullptr-checking
+    // or worrying about missing-type cases.
+    static const std::vector<uint32_t> empty;
+    return empty;
+}
+
 std::vector<uint32_t> ScriptInstance::findNodesByType(
     const std::string& typeName) const
 {
-    std::vector<uint32_t> result;
-    for (const auto& [id, inst] : m_nodeInstances)
-    {
-        if (inst.typeName == typeName)
-        {
-            result.push_back(id);
-        }
-    }
-    return result;
+    // By-value compat shim for tests / older code; copies from the cache.
+    return nodesByType(typeName);
+}
+
+const std::vector<uint32_t>& ScriptInstance::updateNodes() const
+{
+    return nodesByType("OnUpdate");
 }
 
 const ScriptConnection* ScriptInstance::findOutputConnection(

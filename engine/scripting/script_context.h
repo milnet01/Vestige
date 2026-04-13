@@ -7,7 +7,9 @@
 #include "scripting/script_value.h"
 #include "scripting/node_type_registry.h"
 
+#include <cstdint>
 #include <string>
+#include <unordered_map>
 
 namespace Vestige
 {
@@ -114,6 +116,15 @@ public:
     /// treated as a raw entity ID looked up in the active scene.
     class Entity* resolveEntity(uint32_t entityId);
 
+    // -- Multi-input dispatch (audit L6) --
+
+    /// @brief PinId of the input pin whose connection routed execution into
+    /// the currently-executing node. INVALID_PIN_ID for the initial entry
+    /// of an execution chain (no incoming connection). Multi-input nodes
+    /// (Gate's Open/Close/Toggle, future merge nodes) dispatch on this to
+    /// distinguish which input fired.
+    PinId entryPin() const { return m_entryPin; }
+
     // -- Diagnostics --
 
     int callDepth() const { return m_callDepth; }
@@ -152,9 +163,18 @@ private:
 
     int m_callDepth = 0;
     int m_nodesExecuted = 0;
+    PinId m_entryPin = INVALID_PIN_ID; ///< Set by triggerOutput before executeNode.
 
     // Blackboard references for non-owned scopes
     Blackboard m_flowBlackboard; ///< Flow scope — local to this execution chain
+
+    /// @brief Memoization cache for pure-node outputs (audit M11). Key packs
+    /// `(nodeId << 32) | pinId` — a pure node read multiple times within the
+    /// same execute() chain only runs once, eliminating the multiplicative
+    /// cost when pure nodes are pulled inside ForLoop bodies. Cache lives on
+    /// the ScriptContext stack and dies with it, so cross-tick or
+    /// cross-event-dispatch staleness is impossible.
+    std::unordered_map<uint64_t, ScriptValue> m_pureCache;
 };
 
 // ---------------------------------------------------------------------------
