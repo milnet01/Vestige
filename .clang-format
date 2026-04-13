@@ -1,0 +1,63 @@
+# .clang-format — Vestige 3D Engine
+#
+# Mirrors CODING_STANDARDS.md §3 (AUDIT.md §M26 / FIXPLAN I2).
+#
+# Usage:
+#   clang-format -i path/to/file.cpp      # format in place
+#   clang-format --dry-run --Werror ...   # CI / pre-commit check
+#
+# Intentionally NOT enabled as a hard gate on every commit yet — a
+# reformatting sweep would touch most of the codebase. The config is
+# here so new code can be formatted with `--dry-run --Werror` and
+# existing files can be formatted opportunistically when edited.
+
+BasedOnStyle: Google
+Language: Cpp
+Standard: c++17
+
+# Vestige-specific overrides
+IndentWidth: 4
+UseTab: Never
+TabWidth: 4
+ColumnLimit: 120
+
+BreakBeforeBraces: Allman
+AllowShortFunctionsOnASingleLine: Empty
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+AllowShortCaseLabelsOnASingleLine: false
+AllowShortBlocksOnASingleLine: Never
+
+# Pointer/reference alignment: attach to type (CODING_STANDARDS.md §3)
+PointerAlignment: Left
+ReferenceAlignment: Left
+
+# Access specifier indentation
+AccessModifierOffset: -4
+IndentAccessModifiers: false
+EmptyLineBeforeAccessModifier: LogicalBlock
+
+# Namespaces
+NamespaceIndentation: None
+FixNamespaceComments: true
+
+# Includes: keep grouping as-is for now; sweeping sort would churn
+# across the codebase.
+SortIncludes: Never
+IncludeBlocks: Preserve
+
+# Line-ending preferences
+DerivePointerAlignment: false
+KeepEmptyLinesAtTheStartOfBlocks: false
+MaxEmptyLinesToKeep: 1
+
+# Misc consistency
+SpaceBeforeParens: ControlStatements
+SpacesInParentheses: false
+SpacesInSquareBrackets: false
+SpacesInAngles: false
+Cpp11BracedListStyle: true
+AlignAfterOpenBracket: Align
+AlignConsecutiveAssignments: false
+AlignConsecutiveDeclarations: false
+AlignTrailingComments: true

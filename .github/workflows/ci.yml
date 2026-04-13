@@ -1,0 +1,151 @@
+# .github/workflows/ci.yml — Vestige 3D Engine CI
+#
+# AUDIT.md §M25 / FIXPLAN I1: first CI for the project. Linux Debug
+# and Release builds, run ctest, then run the repo's own audit tool
+# at Tier 1 so every PR stays clean against the same static checks we
+# use locally.
+#
+# CI intentionally does NOT run Tier 5 (CVE research) — that needs the
+# NVD API key and would leak warnings about missing env state on forks.
+# Local developers and release builds still do Tier 5.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux-build-test:
+    name: Linux ${{ matrix.config }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        config: [Debug, Release]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            cmake \
+            ninja-build \
+            pkg-config \
+            libgl1-mesa-dev \
+            libglu1-mesa-dev \
+            libx11-dev \
+            libxrandr-dev \
+            libxinerama-dev \
+            libxcursor-dev \
+            libxi-dev \
+            libxxf86vm-dev \
+            libwayland-dev \
+            libxkbcommon-dev \
+            xvfb \
+            python3 \
+            python3-pip \
+            python3-xmltodict \
+            python3-yaml \
+            python3-flask \
+            cppcheck
+
+      - name: Cache CMake FetchContent deps
+        uses: actions/cache@v4
+        with:
+          path: |
+            build/_deps
+          key: cmake-deps-${{ matrix.config }}-${{ hashFiles('**/CMakeLists.txt') }}
+          restore-keys: |
+            cmake-deps-${{ matrix.config }}-
+
+      - name: Configure
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=${{ matrix.config }} \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+
+      - name: Build
+        run: cmake --build build -j $(nproc)
+
+      - name: Run tests
+        run: |
+          # xvfb-run provides a virtual X display so tests that incidentally
+          # touch GLFW/GL don't fail in the headless runner.
+          xvfb-run --auto-servernum ctest --test-dir build --output-on-failure -j $(nproc)
+
+      - name: Upload test logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ctest-logs-${{ matrix.config }}
+          path: |
+            build/Testing/**/*.log
+            build/Testing/**/*.xml
+          if-no-files-found: ignore
+
+  audit-tool-tier1:
+    name: Audit tool Tier 1 (static)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install audit tool dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cppcheck \
+            clang-tidy \
+            python3 \
+            python3-pip \
+            python3-xmltodict \
+            python3-yaml \
+            python3-flask \
+            build-essential \
+            cmake \
+            ninja-build \
+            libgl1-mesa-dev libglu1-mesa-dev \
+            libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
+            libxxf86vm-dev libwayland-dev libxkbcommon-dev
+
+      - name: Configure (for compile_commands.json)
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+
+      - name: Run audit Tier 1
+        run: |
+          python3 tools/audit/audit.py -t 1 --no-color || {
+            echo "::error::Tier 1 audit failed — see tier1 output above."
+            exit 1
+          }
+
+      - name: Upload audit reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-tier1-report
+          path: |
+            docs/AUTOMATED_AUDIT_REPORT.md
+            docs/AUTOMATED_AUDIT_REPORT_*.md
+            docs/AUTOMATED_AUDIT_REPORT_*.json
+          if-no-files-found: ignore
