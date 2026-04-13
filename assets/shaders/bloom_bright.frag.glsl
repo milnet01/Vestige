@@ -9,6 +9,16 @@ uniform float u_threshold;
 
 out vec4 fragColor;
 
+// AUDIT.md §M15 / FIXPLAN F2: deep-hue bloom firefly clamp.
+//
+// A saturated-hue pixel (e.g. bright red: (100,0,0) at threshold 1) has
+// luminance ≈ 21.26 but the color channel is 100; with the old epsilon
+// 1e-4 the red channel amplifies to ~21.26× and combined with the soft
+// knee contribution could reach five figures. This leaks a firefly into
+// the blurred mipchain that dominates the final composite.
+const float BLOOM_EPSILON = 1e-2;    // conservative: no 10000× amplification
+const float MAX_BLOOM     = 256.0;   // hard clamp after divide
+
 void main()
 {
     vec3 color = texture(u_hdrTexture, v_texCoord).rgb;
@@ -22,5 +32,7 @@ void main()
     // Soft knee: smooth transition instead of hard cutoff (reduces firefly artifacts)
     float contribution = max(0.0, luminance - u_threshold);
     contribution = contribution / (contribution + 1.0);
-    fragColor = vec4(color * contribution / (luminance + 0.0001), 1.0);
+    vec3 bright = color * contribution / max(luminance, BLOOM_EPSILON);
+    bright = min(bright, vec3(MAX_BLOOM));
+    fragColor = vec4(bright, 1.0);
 }

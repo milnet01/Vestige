@@ -52,15 +52,38 @@ void main()
 
     vec3 viewPos = viewPosFromDepth(v_texCoord, depth);
 
-    // Approximate view-space normal from depth derivatives
-    float depthR = texture(u_depthTexture, v_texCoord + vec2(u_texelSize.x, 0.0)).r;
-    float depthU = texture(u_depthTexture, v_texCoord + vec2(0.0, u_texelSize.y)).r;
+    // AUDIT.md §M16 / FIXPLAN F2: central differences with gradient-
+    // disagreement rejection. The previous forward-only gradients produced
+    // garbage normals at depth discontinuities (silhouette halos). Four-tap
+    // central differences sample both sides; if |left - right| or
+    // |down - up| diverge much more than |this - neighbour|, the pixel is
+    // on an edge and SSR should skip it rather than trust the normal.
+    vec2 tx = vec2(u_texelSize.x, 0.0);
+    vec2 ty = vec2(0.0, u_texelSize.y);
+    float depthL = texture(u_depthTexture, v_texCoord - tx).r;
+    float depthR = texture(u_depthTexture, v_texCoord + tx).r;
+    float depthD = texture(u_depthTexture, v_texCoord - ty).r;
+    float depthU = texture(u_depthTexture, v_texCoord + ty).r;
 
-    // Use central differences where possible for better quality
-    vec3 viewPosR = viewPosFromDepth(v_texCoord + vec2(u_texelSize.x, 0.0), depthR);
-    vec3 viewPosU = viewPosFromDepth(v_texCoord + vec2(0.0, u_texelSize.y), depthU);
-    vec3 ddx = viewPosR - viewPos;
-    vec3 ddy = viewPosU - viewPos;
+    vec3 viewPosL = viewPosFromDepth(v_texCoord - tx, depthL);
+    vec3 viewPosR = viewPosFromDepth(v_texCoord + tx, depthR);
+    vec3 viewPosD = viewPosFromDepth(v_texCoord - ty, depthD);
+    vec3 viewPosU = viewPosFromDepth(v_texCoord + ty, depthU);
+
+    // Reject if left/right or down/up disagree with each other (edge).
+    // Measured in view-space units: 10cm threshold at 1m scene scale is
+    // a reasonable default for the Tabernacle and outdoor scenes.
+    float edgeThreshold = max(abs(viewPos.z) * 0.05, 0.05);
+    bool edgeX = abs((viewPosR.z - viewPos.z) - (viewPos.z - viewPosL.z)) > edgeThreshold;
+    bool edgeY = abs((viewPosU.z - viewPos.z) - (viewPos.z - viewPosD.z)) > edgeThreshold;
+    if (edgeX || edgeY)
+    {
+        fragColor = vec4(0.0);
+        return;
+    }
+
+    vec3 ddx = 0.5 * (viewPosR - viewPosL);
+    vec3 ddy = 0.5 * (viewPosU - viewPosD);
     vec3 normal = normalize(cross(ddx, ddy));
 
     // View direction (from camera origin to fragment)
