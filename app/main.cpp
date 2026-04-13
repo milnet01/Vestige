@@ -22,6 +22,14 @@ int main(int argc, char* argv[])
             config.visualTestMode = true;
             Vestige::Logger::info("Visual test mode enabled via CLI");
         }
+        else if (std::strncmp(argv[i], "--isolate-feature=", 18) == 0)
+        {
+            // Diagnostic toggle for bisecting visual regressions. The
+            // engine logs and applies the disable in initialize().
+            config.isolateFeature = argv[i] + 18;
+            Vestige::Logger::info("Isolate feature requested: " +
+                                  config.isolateFeature);
+        }
     }
 
     Vestige::Engine engine;

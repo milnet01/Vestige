@@ -928,6 +928,12 @@ void Renderer::endFrame(float deltaTime)
         // camera-only fallback but will undershoot on animated meshes.
         // TODO: emit motion directly from the main geometry pass via MRT
         // for zero-cost correct motion on skinned/morphed objects.
+        //
+        // Diagnostic: --isolate-feature=motion-overlay flips
+        // m_objectMotionOverlayEnabled false to skip this pass entirely
+        // (TAA reverts to camera-only motion). Used to bisect the
+        // 2026-04-13 visual regression.
+        if (m_objectMotionOverlayEnabled) {
         glEnable(GL_DEPTH_TEST);
         glDepthFunc(GL_LESS);
         glDepthMask(GL_TRUE);
@@ -959,6 +965,7 @@ void Renderer::endFrame(float deltaTime)
         // pipeline. All subsequent full-screen passes assume depth-test off.
         glDepthFunc(GL_GEQUAL);
         glDisable(GL_DEPTH_TEST);
+        }  // end if (m_objectMotionOverlayEnabled)
 
         // 4b. TAA resolve pass
         m_taa->getCurrentFbo().bind();
@@ -1311,7 +1318,9 @@ void Renderer::uploadMaterialUniforms(const Material& material)
         m_sceneShader.setFloat("u_pbrMetallic", material.getMetallic());
         m_sceneShader.setFloat("u_pbrRoughness", material.getRoughness());
         m_sceneShader.setFloat("u_pbrAo", material.getAo());
-        m_sceneShader.setFloat("u_iblMultiplier", material.getIblMultiplier());
+        m_sceneShader.setFloat("u_iblMultiplier",
+            (m_iblMultiplierOverride >= 0.0f) ? m_iblMultiplierOverride
+                                              : material.getIblMultiplier());
         m_sceneShader.setFloat("u_clearcoat", material.getClearcoat());
         m_sceneShader.setFloat("u_clearcoatRoughness", material.getClearcoatRoughness());
         m_sceneShader.setVec3("u_pbrEmissive", material.getEmissive());
@@ -1362,7 +1371,8 @@ void Renderer::uploadMaterialUniforms(const Material& material)
         m_sceneShader.setBool("u_hasMetallicRoughnessMap", false);
         m_sceneShader.setBool("u_hasEmissiveMap", false);
         m_sceneShader.setBool("u_hasAoMap", false);
-        m_sceneShader.setFloat("u_iblMultiplier", 1.0f);
+        m_sceneShader.setFloat("u_iblMultiplier",
+            (m_iblMultiplierOverride >= 0.0f) ? m_iblMultiplierOverride : 1.0f);
         m_sceneShader.setFloat("u_clearcoat", 0.0f);
         m_sceneShader.setFloat("u_clearcoatRoughness", 0.0f);
         // Mesa requires valid textures for all declared samplers
@@ -1601,6 +1611,57 @@ void Renderer::setBloomEnabled(bool isEnabled)
 bool Renderer::isBloomEnabled() const
 {
     return m_bloomEnabled;
+}
+
+void Renderer::setObjectMotionOverlayEnabled(bool isEnabled)
+{
+    m_objectMotionOverlayEnabled = isEnabled;
+    Logger::info(std::string("Per-object motion vector overlay: ") +
+                 (isEnabled ? "ON" : "OFF"));
+}
+
+bool Renderer::isObjectMotionOverlayEnabled() const
+{
+    return m_objectMotionOverlayEnabled;
+}
+
+void Renderer::setIblMultiplierOverride(float multiplier)
+{
+    m_iblMultiplierOverride = multiplier;
+    if (multiplier < 0.0f)
+    {
+        Logger::info("IBL multiplier override: cleared (per-material values)");
+    }
+    else
+    {
+        Logger::info("IBL multiplier override: " + std::to_string(multiplier));
+    }
+}
+
+float Renderer::getIblMultiplierOverride() const
+{
+    return m_iblMultiplierOverride;
+}
+
+void Renderer::setIblSubScales(float diffuseScale, float specularScale)
+{
+    m_sceneShader.use();
+    m_sceneShader.setFloat("u_iblDiffuseScale", diffuseScale);
+    m_sceneShader.setFloat("u_iblSpecularScale", specularScale);
+    Logger::info("IBL sub-scales: diffuse=" + std::to_string(diffuseScale) +
+                 " specular=" + std::to_string(specularScale));
+}
+
+void Renderer::setShGridForceDisabled(bool isDisabled)
+{
+    m_shGridForceDisabled = isDisabled;
+    Logger::info(std::string("SH grid force-disabled: ") +
+                 (isDisabled ? "ON (fallback to cubemap/sky)" : "OFF"));
+}
+
+bool Renderer::isShGridForceDisabled() const
+{
+    return m_shGridForceDisabled;
 }
 
 void Renderer::setBloomThreshold(float threshold)
@@ -2598,7 +2659,7 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
         m_sceneShader.setFloat("u_probeWeight", 0.0f);
 
         // SH probe grid: bind textures and set uniforms if ready
-        if (m_shProbeGrid && m_shProbeGrid->isReady())
+        if (m_shProbeGrid && m_shProbeGrid->isReady() && !m_shGridForceDisabled)
         {
             m_shProbeGrid->bind();
             m_sceneShader.setBool("u_hasSHGrid", true);
@@ -2841,22 +2902,32 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
 
     // --- Skybox pass: draw after opaque geometry, before transparent ---
     //
-    // AUDIT.md §M14 / FIXPLAN: hardened against forward-Z capture paths.
-    // The skybox fragment shader writes gl_FragDepth = 0.0, relying on
-    // reverse-Z's GL_GEQUAL to paint only pixels that still have the
-    // initial cleared depth (0.0). In the forward-Z cubemap capture
-    // (captureLightProbe / captureSHGrid), the pipeline uses GL_LESS
-    // and clearDepth(1.0) — if geometryOnly were ever to stop excluding
-    // the skybox pass, gl_FragDepth=0 would pass GL_LESS and fill
-    // the entire framebuffer with skybox in front of geometry.
-    // geometryOnly=true gates the skybox pass here; this condition is
-    // the single source of truth that callers depend on.
-    if (m_skybox && m_skyboxEnabled && !geometryOnly)
+    // AUDIT.md §H18 (Z-convention-aware skybox; supersedes §M14 gate).
+    // Previously the skybox vertex shader hard-coded `gl_Position.z = 0`,
+    // which is the far plane in reverse-Z (main render) but the MIDDLE of
+    // the depth buffer in forward-Z (capture paths). The §M14 fix worked
+    // around that by gating the skybox out of geometryOnly captures, but
+    // that left the SH probe-grid radiosity bake without a sky direct
+    // contribution — multi-bounce on high-albedo materials (white linen,
+    // gold) then compounded 60-70% per bounce instead of converging to a
+    // sky-bounded equilibrium, blowing every textured surface to white.
+    //
+    // The skybox vertex shader now reads u_skyboxFarDepth and emits
+    // z = u_skyboxFarDepth * w, so z/w = u_skyboxFarDepth after the
+    // perspective divide. The right value depends on which Z convention
+    // is active for THIS render:
+    //   reverse-Z (main render, GL_GEQUAL, cleared 0): u_skyboxFarDepth = 0
+    //   forward-Z (capture passes, GL_LESS,  cleared 1): u_skyboxFarDepth ≈ 1
+    // For forward-Z we use 0.99999 (not exactly 1.0) so GL_LESS still
+    // passes against the cleared-far buffer (0.99999 < 1.0 = true) but
+    // fails against any opaque geometry (which has depth < 0.99999 in
+    // forward-Z = closer than the far plane).
+    //
+    // `geometryOnly` is the cleanest proxy for the capture path — both
+    // captureLightProbe and captureSHGrid call renderScene with
+    // geometryOnly=true under forward-Z; main rendering uses reverse-Z.
+    if (m_skybox && m_skyboxEnabled)
     {
-        // Reverse-Z: skybox at depth 0.0 (far plane). GL_GEQUAL ensures:
-        //   empty pixels (depth=0.0): 0.0 >= 0.0 → PASS (skybox fills background)
-        //   geometry pixels (depth>0): 0.0 >= 0.02 → FAIL (skybox hidden by geometry)
-        // No depth func change needed — GL_GEQUAL is already set.
         glDepthMask(GL_FALSE);   // Don't write to depth buffer
         glDisable(GL_CULL_FACE); // We're inside the cube — must see inner faces
 
@@ -2865,6 +2936,7 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
         // Use the (potentially jittered) projection so TAA accumulates the skybox correctly
         m_skyboxShader.setMat4("u_projection", m_lastProjection);
         m_skyboxShader.setBool("u_hasCubemap", m_skybox->hasTexture());
+        m_skyboxShader.setFloat("u_skyboxFarDepth", geometryOnly ? 0.99999f : 0.0f);
 
         if (m_skybox->hasTexture())
         {
