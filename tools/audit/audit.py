@@ -140,6 +140,14 @@ def main() -> int:
         action="store_true",
         help="Also generate a SARIF 2.1.0 report",
     )
+    parser.add_argument(
+        "--keep-snapshots",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Retain only the N most recent trend_snapshot_*.json files "
+             "in docs/ (default: keep all). See AUDIT.md §L9.",
+    )
 
     args = parser.parse_args()
 
@@ -243,7 +251,8 @@ def main() -> int:
         return 0
 
     # Run the audit
-    runner = AuditRunner(config, verbose=args.verbose)
+    runner = AuditRunner(config, verbose=args.verbose,
+                         keep_snapshots=args.keep_snapshots)
     results = runner.run()
 
     # Compute differential report if requested

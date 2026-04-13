@@ -57,9 +57,19 @@ def query_nvd(
     if api_key:
         req.add_header("apiKey", api_key)
 
+    # AUDIT.md §L7 / FIXPLAN J: cap response body size. The NVD API
+    # normally returns <1 MB per keyword but a compromised upstream or
+    # gzip bomb could wedge the process. 16 MB is generous but still
+    # bounds worst-case memory.
+    MAX_NVD_BODY_BYTES = 16 * 1024 * 1024
     try:
         response = urllib.request.urlopen(req, timeout=30)
-        data = json.loads(response.read())
+        body = response.read(MAX_NVD_BODY_BYTES + 1)
+        if len(body) > MAX_NVD_BODY_BYTES:
+            log.warning("NVD response for '%s' exceeded %d bytes — "
+                        "truncated, skipping", keyword, MAX_NVD_BODY_BYTES)
+            return []
+        data = json.loads(body)
     except urllib.error.HTTPError as e:
         if e.code == 429:
             log.warning("NVD API rate limited for '%s' — backing off", keyword)

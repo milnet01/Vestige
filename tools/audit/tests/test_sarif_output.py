@@ -136,12 +136,23 @@ class TestGenerateSarif:
         assert len(run["tool"]["driver"]["rules"]) == 3
 
     def test_location_uri_and_region(self):
+        # AUDIT.md §M23 / FIXPLAN J4: uriBaseId is the symbolic name
+        # "SRCROOT" (matching run.originalUriBaseIds), NOT the legacy
+        # SARIF-1 placeholder form `%SRCROOT%` that SARIF 2.1 consumers
+        # (GitHub Advanced Security, VS Code viewer) reject.
         finding = _make_finding(file="engine/core/event.h", line=99)
         sarif = generate_sarif([finding])
         loc = sarif["runs"][0]["results"][0]["locations"][0]["physicalLocation"]
         assert loc["artifactLocation"]["uri"] == "engine/core/event.h"
-        assert loc["artifactLocation"]["uriBaseId"] == "%SRCROOT%"
+        assert loc["artifactLocation"]["uriBaseId"] == "SRCROOT"
         assert loc["region"]["startLine"] == 99
+
+        # The same run must define SRCROOT in originalUriBaseIds so
+        # consumers can resolve the relative URI.
+        run = sarif["runs"][0]
+        assert "originalUriBaseIds" in run
+        assert "SRCROOT" in run["originalUriBaseIds"]
+        assert "uri" in run["originalUriBaseIds"]["SRCROOT"]
 
     def test_finding_without_line_has_no_region(self):
         finding = _make_finding(line=None)

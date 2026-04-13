@@ -62,10 +62,17 @@ class TrendReport:
 def save_snapshot(
     results_dir: Path,
     findings: list[Finding],
+    keep: int | None = None,
 ) -> TrendSnapshot:
     """Save a JSON snapshot of current findings to results_dir.
 
     Returns the saved :class:`TrendSnapshot`.
+
+    AUDIT.md §L9 / FIXPLAN I5: *keep* caps the number of trend snapshots
+    retained on disk. Older files are unlinked after the new snapshot
+    lands. Pass ``None`` (the default) to preserve legacy behaviour and
+    keep every snapshot ever taken; pass a positive integer to enable
+    rolling retention.
     """
     now = datetime.now()
     timestamp = now.isoformat()
@@ -89,7 +96,38 @@ def save_snapshot(
     path.write_text(json.dumps(snapshot.to_dict(), indent=2))
     log.info("Trend snapshot saved: %s (%d findings)", path, len(findings))
 
+    if keep is not None and keep > 0:
+        _prune_old_snapshots(results_dir, keep)
+
     return snapshot
+
+
+def _prune_old_snapshots(results_dir: Path, keep: int) -> None:
+    """Delete all but the newest *keep* trend snapshots.
+
+    Invoked from :func:`save_snapshot` when the caller opts in via the
+    ``keep`` parameter. The most-recent snapshot (the one just written)
+    is always retained; older files are unlinked. Errors are logged
+    rather than raised so a filesystem glitch cannot hide a fresh
+    snapshot that just saved successfully.
+    """
+    try:
+        all_snaps = sorted(
+            results_dir.glob("trend_snapshot_*.json"),
+            key=lambda p: p.name,
+            reverse=True,
+        )
+    except OSError as exc:
+        log.warning("Could not enumerate snapshots for pruning: %s", exc)
+        return
+
+    stale = all_snaps[keep:]
+    for p in stale:
+        try:
+            p.unlink()
+            log.info("Pruned old snapshot: %s", p)
+        except OSError as exc:
+            log.warning("Could not delete stale snapshot %s: %s", p, exc)
 
 
 def load_snapshots(

@@ -62,12 +62,17 @@ static_analysis:
 # -- Tier 2: Pattern Scanning ------------------------------------------------
 patterns:
   memory_safety:
+    # AUDIT.md §M21 / FIXPLAN J7: tightened. The prior exclude
+    # `new Q\\w+\\(` matched ordinary types starting with 'Q' (e.g.
+    # `new Quad()`) as if they were Qt widgets. Restrict to the actual
+    # Qt widget classes we expect to see. For non-Qt projects this
+    # exclude is effectively inert.
     - name: "raw_new"
       pattern: "=\\s*new\\s+\\w+"
       file_glob: "*.cpp,*.h"
       severity: "high"
       description: "Raw new — should use smart pointers"
-      exclude_pattern: "placement new|nothrow|JPH::|tinygltf|stb_|dr_|make_unique|make_shared|new Q\\w+\\(|new Q\\w+\\s*\\{|QVBoxLayout|QHBoxLayout|QGridLayout|QFormLayout|QAction|QMenu|QLabel|QWidget"
+      exclude_pattern: "placement new|nothrow|JPH::|tinygltf|stb_|dr_|make_unique|make_shared|\\bnew Q(Widget|Action|Menu|Label|VBoxLayout|HBoxLayout|GridLayout|FormLayout|PushButton|LineEdit|CheckBox|ComboBox|SpinBox|Slider|Dialog)\\b"
       skip_comments: true
     - name: "raw_delete"
       pattern: "\\bdelete\\s+\\w+"
@@ -76,11 +81,15 @@ patterns:
       description: "Raw delete — should use smart pointers"
       exclude_pattern: "JPH::|tinygltf|stb_|dr_"
       skip_comments: true
+    # AUDIT.md §M21 / FIXPLAN J7: reject #define FOO_NULL ... lines.
+    # The `\\bNULL\\b` match was firing on constant names ending in
+    # _NULL (e.g. `#define FOO_NULL 0`) and on TLS config tokens.
     - name: "null_macro"
       pattern: "\\bNULL\\b"
       file_glob: "*.cpp,*.h"
       severity: "low"
       description: "NULL macro — use nullptr"
+      exclude_pattern: "^\\s*#define\\s+\\w*NULL\\w*|_NULL\\b"
       skip_comments: true
     - name: "unsafe_c_string"
       pattern: "\\b(strcpy|strcat|sprintf)\\s*\\("
@@ -145,8 +154,10 @@ patterns:
       severity: "medium"
       description: "Unbounded buffer growth from I/O — verify size limits"
       skip_comments: true
+    # AUDIT.md §M21 / FIXPLAN J7: anchor mktemp/tmpnam/tempnam with \b
+    # so wrappers like `my_mktemp_wrapper(` don't false-positive.
     - name: "predictable_temp"
-      pattern: "(?:/tmp/|/var/tmp/).*\\+|tmpnam\\(|tempnam\\(|mktemp\\("
+      pattern: "(?:/tmp/|/var/tmp/).*\\+|\\btmpnam\\(|\\btempnam\\(|\\bmktemp\\("
       file_glob: "*.cpp"
       severity: "medium"
       description: "Predictable temporary file path — use mkstemp/QTemporaryFile (CWE-377)"
