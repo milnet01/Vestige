@@ -122,6 +122,17 @@ public:
     void addLatentAction(PendingLatentAction action);
     std::vector<PendingLatentAction>& pendingActions() { return m_pendingActions; }
 
+    // -- Generation token (AUDIT.md §H9, FIXPLAN D4) -----------------------
+    //
+    // Incremented on every initialize() call so latent-action callbacks
+    // that capture this instance by raw pointer can validate the instance
+    // hasn't been re-initialised (e.g. editor test-play cycle) since the
+    // callback was enqueued. A mismatch means the captured nodeId may now
+    // refer to a different node in a rebuilt graph — the callback should
+    // drop rather than dereference.
+
+    uint32_t generation() const { return m_generation; }
+
     // -- Event subscriptions (for cleanup) --
 
     void addSubscription(uint32_t subscriptionId);
@@ -190,6 +201,7 @@ private:
 
     const ScriptGraph* m_graph = nullptr;
     uint32_t m_entityId = 0;
+    uint32_t m_generation = 0;  ///< Bumped on every initialize(); see AUDIT.md §H9.
     bool m_active = false;
 
     std::unordered_map<uint32_t, ScriptNodeInstance> m_nodeInstances;
