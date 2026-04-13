@@ -108,7 +108,8 @@ void registerPureNodeTypes(NodeTypeRegistry& registry)
                 }
             }
             ctx.setOutput(node, "entity", result);
-        }
+        },
+        false, // memoizable — NO: scene lookups reflect live spawn/destroy state (AUDIT.md §H7)
     });
 
     // -----------------------------------------------------------------------
@@ -442,7 +443,8 @@ void registerPureNodeTypes(NodeTypeRegistry& registry)
             auto name = ctx.readInputAs<std::string>(node, "Name");
             bool exists = ctx.instance().graphBlackboard().has(name);
             ctx.setOutput(node, "Exists", ScriptValue(exists));
-        }
+        },
+        false, // memoizable — NO: blackboard state can change mid-chain (AUDIT.md §H7)
     });
 
     // -----------------------------------------------------------------------

@@ -41,6 +41,22 @@ struct NodeTypeDescriptor
     /// For pure nodes: called when output data is pulled.
     using ExecuteFn = std::function<void(ScriptContext&, const ScriptNodeInstance&)>;
     ExecuteFn execute;
+
+    /// @brief Whether this pure node's output can be memoized within a chain.
+    ///
+    /// Defaults to ``true`` so existing pure nodes (Add, Multiply, Compare)
+    /// keep their M11 per-execution-memo optimization. Set to ``false`` for
+    /// nodes that *read* mutable state mid-chain — e.g. GetVariable reads
+    /// the blackboard, which may be mutated by SetVariable in the same
+    /// chain; FindEntityByName queries the scene, which a spawn/destroy
+    /// elsewhere may change. Memoizing these caused WhileLoop.Condition
+    /// to freeze at its first value and GetVariable inside a loop body
+    /// to return stale reads (AUDIT.md §H7 / §H8, FIXPLAN D3).
+    ///
+    /// Placed at the end of the struct so existing aggregate initializers
+    /// (which use positional construction up through ``execute``) continue
+    /// to compile without touching every call site.
+    bool memoizable = true;
 };
 
 /// @brief Registry mapping type names to their descriptors.

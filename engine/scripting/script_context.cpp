@@ -342,13 +342,15 @@ ScriptValue ScriptContext::evaluatePureNode(uint32_t nodeId, PinId outputPinId)
     // (e.g. via a ForLoop body that pulls the same value each iteration) now
     // runs once instead of N times. The cache dies with this ScriptContext,
     // so latent re-triggers and new event dispatches start fresh.
+    //
+    // D3/AUDIT.md §H7 — nodes that *read* mutable state (GetVariable,
+    // FindEntityByName, HasVariable, etc.) are classified isPure=true for
+    // lazy evaluation but are NOT memoizable: their output depends on the
+    // blackboard/scene at call time, not just on (nodeId, pinId). Gate them
+    // with desc->memoizable, which defaults to true so stateless pure nodes
+    // (Add, Multiply, Compare) keep the optimization.
     const uint64_t cacheKey = (static_cast<uint64_t>(nodeId) << 32) |
                               static_cast<uint64_t>(outputPinId);
-    auto cacheIt = m_pureCache.find(cacheKey);
-    if (cacheIt != m_pureCache.end())
-    {
-        return cacheIt->second;
-    }
 
     ScriptNodeInstance* nodeInst = m_instance.getNodeInstance(nodeId);
     if (!nodeInst)
@@ -360,6 +362,17 @@ ScriptValue ScriptContext::evaluatePureNode(uint32_t nodeId, PinId outputPinId)
     if (!desc || !desc->execute)
     {
         return ScriptValue(0.0f);
+    }
+
+    const bool canMemoize = desc->memoizable;
+
+    if (canMemoize)
+    {
+        auto cacheIt = m_pureCache.find(cacheKey);
+        if (cacheIt != m_pureCache.end())
+        {
+            return cacheIt->second;
+        }
     }
 
     // Safety check for recursive evaluation
@@ -380,7 +393,10 @@ ScriptValue ScriptContext::evaluatePureNode(uint32_t nodeId, PinId outputPinId)
     ScriptValue result = (it != nodeInst->outputValues.end())
                              ? it->second
                              : ScriptValue(0.0f);
-    m_pureCache.emplace(cacheKey, result);
+    if (canMemoize)
+    {
+        m_pureCache.emplace(cacheKey, result);
+    }
     return result;
 }
 
