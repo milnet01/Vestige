@@ -22,13 +22,16 @@ Taa::Taa(int width, int height)
     m_currentFbo = std::make_unique<Framebuffer>(colorConfig);
     m_historyFbo = std::make_unique<Framebuffer>(colorConfig);
 
-    // Motion vector FBO: full-res, RGBA16F (only RG used), no depth
+    // Motion vector FBO: full-res, RGBA16F (only RG used).
+    // AUDIT.md §H15 / FIXPLAN G1: depth attachment required so the
+    // per-object overlay pass can depth-test against geometry it has
+    // drawn earlier in the pass.
     FramebufferConfig mvConfig;
     mvConfig.width = width;
     mvConfig.height = height;
     mvConfig.samples = 1;
     mvConfig.hasColorAttachment = true;
-    mvConfig.hasDepthAttachment = false;
+    mvConfig.hasDepthAttachment = true;
     mvConfig.isFloatingPoint = true;
 
     m_motionVectorFbo = std::make_unique<Framebuffer>(mvConfig);
