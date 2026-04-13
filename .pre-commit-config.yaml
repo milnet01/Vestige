@@ -1,0 +1,41 @@
+# .pre-commit-config.yaml — Vestige 3D Engine
+#
+# AUDIT.md §M27 / FIXPLAN I4: enforce the "VERSION + CHANGELOG in the
+# same commit as any tool/engine change" rule noted in CLAUDE.md /
+# memory. Without automation this is manually policed and easy to
+# forget on small commits.
+#
+# Install (once per clone):
+#   pipx install pre-commit  # or: pip install --user pre-commit
+#   pre-commit install
+#
+# After install, every `git commit` runs these hooks; mismatched
+# commits fail before the commit is created so the fix is a simple
+# `git add CHANGELOG.md && git commit --amend`.
+
+repos:
+  - repo: local
+    hooks:
+      - id: audit-tool-changelog
+        name: audit tool CHANGELOG + VERSION updated together
+        entry: scripts/check_changelog_pair.sh
+        args: ["tools/audit/", "tools/audit/CHANGELOG.md", "tools/audit/VERSION"]
+        language: script
+        pass_filenames: false
+        always_run: true
+
+      - id: workbench-changelog
+        name: workbench CHANGELOG + VERSION updated together
+        entry: scripts/check_changelog_pair.sh
+        args: ["tools/formula_workbench/", "tools/formula_workbench/CHANGELOG.md", "tools/formula_workbench/VERSION"]
+        language: script
+        pass_filenames: false
+        always_run: true
+
+      - id: engine-changelog
+        name: engine CHANGELOG + VERSION updated together
+        entry: scripts/check_changelog_pair.sh
+        args: ["engine/", "CHANGELOG.md", "VERSION"]
+        language: script
+        pass_filenames: false
+        always_run: true
