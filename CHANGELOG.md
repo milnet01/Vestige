@@ -9,6 +9,30 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### Fixed — 2026-04-13 post-audit follow-up
+
+- **§H17 SystemRegistry destruction lifetime**: shutdown SEGV reported
+  immediately after "Engine shutdown complete" (ASan: `SEGV on unknown
+  address … pc == address`, then nested-bug abort). Root cause was
+  structural, not the H16 ImGui-node-editor race: `SystemRegistry::shutdownAll()`
+  called each system's `shutdown()` but left the unique_ptr<ISystem> entries
+  in the vector. The systems' destructors therefore ran during `~Engine`
+  member cleanup — *after* `m_renderer.reset()` and `m_window.reset()` had
+  already destroyed the renderer and torn down the GL context — so any
+  system dtor that touched a cached Renderer*/Window* or freed a GL
+  handle dereferenced freed memory or called a dead driver function
+  pointer. New `SystemRegistry::clear()` destroys the systems in reverse
+  registration order; `Engine::shutdown()` calls it immediately after
+  `shutdownAll()` so destruction happens while shared infrastructure is
+  still alive. Closes the H16 runtime-verification deferral noted at
+  CHANGELOG.md "Deferred to ROADMAP" — H16 (ed::DestroyEditor SaveSettings
+  race) was correct as far as it went; §H17 was the second, independent
+  shutdown path that masked the H16 fix's success. Six new unit tests in
+  `tests/test_system_registry.cpp` pin the contract: destructors run in
+  reverse order inside `clear()`, the registry empties, `clear()` is
+  idempotent, and the canonical `shutdownAll()` → `clear()` sequence
+  produces the expected eight-event log.
+
 ### Security — 2026-04-13 audit cycle
 - Flask web UI of the audit tool hardened against path-traversal and shell-injection (affects local-dev setups that ran the web UI only; no public deployment). Details in `tools/audit/CHANGELOG.md` v2.0.1–2.0.6.
 - **Formula codegen injection hardened** (AUDIT.md §H11). `ExprNode::variable/binaryOp/unaryOp` factories + `fromJson` now validate identifiers against `[A-Za-z_][A-Za-z0-9_]*` and operators against an allowlist. Codegen (C++ + GLSL) throws on unknown op instead of raw-splicing. A crafted preset JSON like `{"var": "x); system(\"rm -rf /\"); float y("}` is now rejected at load time, well before any generated header is compiled.

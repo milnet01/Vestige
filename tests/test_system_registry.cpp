@@ -31,6 +31,15 @@ public:
     {
     }
 
+    ~MockSystem() override
+    {
+        // AUDIT.md §H17 verification hook: lets tests confirm WHEN the
+        // destructor runs relative to shutdown() / clear() calls. Critical
+        // because the original bug was destructors running too late
+        // (during ~Engine instead of ~Engine::shutdown()).
+        s_callLog.push_back(m_name + "::destructor");
+    }
+
     const std::string& getSystemName() const override { return m_name; }
 
     bool initialize(Engine& /*engine*/) override
@@ -219,6 +228,92 @@ TEST_F(SystemRegistryTest, ShutdownWithoutInitDoesNotCrash)
 {
     registry.registerSystem<MockSystem>("A");
     EXPECT_NO_THROW(registry.shutdownAll());
+}
+
+// =============================================================================
+// AUDIT.md §H17 — clear() destroys systems while engine is alive
+// =============================================================================
+//
+// The bug clear() fixes: shutdownAll() invokes shutdown() but leaves the
+// systems in the unique_ptr vector. Their destructors only run when the
+// registry itself is destroyed — which, in Engine::shutdown(), happens
+// during ~Engine after Renderer/Window/GL context are already gone.
+//
+// These tests pin the contract that destructors run synchronously inside
+// clear(), in reverse registration order, and that clear() is idempotent.
+
+TEST_F(SystemRegistryTest, ClearDestroysSystemsInReverseOrder)
+{
+    registry.registerSystem<MockSystem>("A");
+    registry.registerSystem<MockSystem>("B");
+    registry.registerSystem<MockSystem>("C");
+
+    MockSystem::s_callLog.clear();
+    registry.clear();
+
+    ASSERT_EQ(MockSystem::s_callLog.size(), 3u);
+    EXPECT_EQ(MockSystem::s_callLog[0], "C::destructor");
+    EXPECT_EQ(MockSystem::s_callLog[1], "B::destructor");
+    EXPECT_EQ(MockSystem::s_callLog[2], "A::destructor");
+}
+
+TEST_F(SystemRegistryTest, ClearEmptiesRegistry)
+{
+    registry.registerSystem<MockSystem>("A");
+    registry.registerSystem<MockSystem>("B");
+    EXPECT_EQ(registry.getSystemCount(), 2u);
+
+    registry.clear();
+
+    EXPECT_EQ(registry.getSystemCount(), 0u);
+    EXPECT_EQ(registry.getSystem<MockSystem>(), nullptr);
+}
+
+TEST_F(SystemRegistryTest, ClearOnEmptyRegistryIsSafe)
+{
+    EXPECT_NO_THROW(registry.clear());
+    EXPECT_EQ(registry.getSystemCount(), 0u);
+}
+
+TEST_F(SystemRegistryTest, ClearIsIdempotent)
+{
+    registry.registerSystem<MockSystem>("A");
+    registry.clear();
+    EXPECT_NO_THROW(registry.clear());
+    EXPECT_EQ(registry.getSystemCount(), 0u);
+}
+
+TEST_F(SystemRegistryTest, ShutdownAllThenClearRunsBothInOrder)
+{
+    // Models the Engine::shutdown() call sequence: shutdown() first to give
+    // each system a chance to release engine-owned resources, THEN clear()
+    // to actually destroy them while shared infrastructure is alive.
+    registry.registerSystem<MockSystem>("A");
+    registry.registerSystem<MockSystem>("B");
+    registry.initializeAll(dummyEngine());
+
+    MockSystem::s_callLog.clear();
+    registry.shutdownAll();
+    registry.clear();
+
+    ASSERT_EQ(MockSystem::s_callLog.size(), 4u);
+    EXPECT_EQ(MockSystem::s_callLog[0], "B::shutdown");
+    EXPECT_EQ(MockSystem::s_callLog[1], "A::shutdown");
+    EXPECT_EQ(MockSystem::s_callLog[2], "B::destructor");
+    EXPECT_EQ(MockSystem::s_callLog[3], "A::destructor");
+}
+
+TEST_F(SystemRegistryTest, ClearWithoutShutdownStillDestroys)
+{
+    // Defensive: clear() should work even if shutdownAll() wasn't called.
+    // (Tests/embedders may legitimately register-and-drop without an init.)
+    registry.registerSystem<MockSystem>("A");
+    MockSystem::s_callLog.clear();
+
+    registry.clear();
+
+    ASSERT_EQ(MockSystem::s_callLog.size(), 1u);
+    EXPECT_EQ(MockSystem::s_callLog[0], "A::destructor");
 }
 
 // =============================================================================
