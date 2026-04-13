@@ -94,6 +94,7 @@ set(ENGINE_SOURCES
     editor/widgets/color_gradient.cpp
     editor/widgets/curve_editor_widget.cpp
     editor/widgets/gradient_editor_widget.cpp
+    editor/widgets/node_editor_widget.cpp
     scene/water_surface.cpp
     renderer/water_renderer.cpp
     renderer/water_fbo.cpp
@@ -177,6 +178,7 @@ set(ENGINE_SOURCES
     profiler/performance_profiler.cpp
     editor/panels/performance_panel.cpp
     editor/panels/validation_panel.cpp
+    editor/panels/script_editor_panel.cpp
     editor/panels/welcome_panel.cpp
     editor/panels/texture_viewer_panel.cpp
     editor/panels/hdri_viewer_panel.cpp
@@ -280,6 +282,7 @@ target_link_libraries(vestige_engine
         imgui_lib
         imguizmo_lib
         imgui_filebrowser
+        imgui_node_editor_lib
         nlohmann_json::nlohmann_json
         Jolt
         OpenAL::OpenAL
