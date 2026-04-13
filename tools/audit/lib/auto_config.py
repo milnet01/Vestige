@@ -111,7 +111,7 @@ def _get_language_defaults(lang: str) -> dict:
             "static_analysis": {
                 "cppcheck": {
                     "enabled": True,
-                    "args": "--enable=all --std=c++17 --suppress=missingIncludeSystem --suppress=unusedFunction",
+                    "args": "--enable=all --std=c++17 --inline-suppr --suppress=missingIncludeSystem --suppress=unusedFunction",
                 },
                 "clang_tidy": {
                     "enabled": True,
@@ -126,7 +126,7 @@ def _get_language_defaults(lang: str) -> dict:
             "static_analysis": {
                 "cppcheck": {
                     "enabled": True,
-                    "args": "--enable=all --std=c11 --suppress=missingIncludeSystem",
+                    "args": "--enable=all --std=c11 --inline-suppr --suppress=missingIncludeSystem",
                 },
                 "clang_tidy": {
                     "enabled": True,
