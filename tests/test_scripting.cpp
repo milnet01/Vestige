@@ -475,11 +475,7 @@ TEST_F(ScriptContextTest, BranchTrue)
     instance.setActive(true);
 
     // Execute the Branch node
-    // We need a real Engine, but for this test we create a dummy
-    // Since PrintToScreen only calls Logger, it will work with any Engine*
-    Engine* dummyEngine = nullptr;
-    ScriptContext ctx(instance, m_registry,
-                      *reinterpret_cast<Engine*>(&dummyEngine));
+    ScriptContext ctx(instance, m_registry, nullptr);
     ctx.executeNode(branchId);
 
     // The branch should have executed (callDepth back to 0, nodesExecuted > 0)
@@ -510,9 +506,7 @@ TEST_F(ScriptContextTest, BranchFalse)
     ScriptInstance instance;
     instance.initialize(graph, 1);
 
-    Engine* dummyEngine = nullptr;
-    ScriptContext ctx(instance, m_registry,
-                      *reinterpret_cast<Engine*>(&dummyEngine));
+    ScriptContext ctx(instance, m_registry, nullptr);
     ctx.executeNode(branchId);
 
     // False path should have been taken (2 nodes: Branch + PrintToScreen)
@@ -533,9 +527,7 @@ TEST_F(ScriptContextTest, SequenceExecutesAll)
     ScriptInstance instance;
     instance.initialize(graph, 1);
 
-    Engine* dummyEngine = nullptr;
-    ScriptContext ctx(instance, m_registry,
-                      *reinterpret_cast<Engine*>(&dummyEngine));
+    ScriptContext ctx(instance, m_registry, nullptr);
     ctx.executeNode(seqId);
 
     // Sequence + 2 PrintToScreen = 3 nodes
@@ -556,9 +548,7 @@ TEST_F(ScriptContextTest, SetAndGetVariable)
     ScriptInstance instance;
     instance.initialize(graph, 1);
 
-    Engine* dummyEngine = nullptr;
-    ScriptContext ctx(instance, m_registry,
-                      *reinterpret_cast<Engine*>(&dummyEngine));
+    ScriptContext ctx(instance, m_registry, nullptr);
     ctx.executeNode(setId);
 
     // Check that the variable was set in the graph blackboard
@@ -582,9 +572,7 @@ TEST_F(ScriptContextTest, GetVariablePureNode)
     ScriptInstance instance;
     instance.initialize(graph, 1);
 
-    Engine* dummyEngine = nullptr;
-    ScriptContext ctx(instance, m_registry,
-                      *reinterpret_cast<Engine*>(&dummyEngine));
+    ScriptContext ctx(instance, m_registry, nullptr);
 
     // Manually execute the pure node
     ctx.executeNode(getId);
@@ -608,9 +596,7 @@ TEST_F(ScriptContextTest, DelayCreatesLatentAction)
     ScriptInstance instance;
     instance.initialize(graph, 1);
 
-    Engine* dummyEngine = nullptr;
-    ScriptContext ctx(instance, m_registry,
-                      *reinterpret_cast<Engine*>(&dummyEngine));
+    ScriptContext ctx(instance, m_registry, nullptr);
     ctx.executeNode(delayId);
 
     // A latent action should have been registered
@@ -636,9 +622,7 @@ TEST_F(ScriptContextTest, CallDepthLimit)
     ScriptInstance instance;
     instance.initialize(graph, 1);
 
-    Engine* dummyEngine = nullptr;
-    ScriptContext ctx(instance, m_registry,
-                      *reinterpret_cast<Engine*>(&dummyEngine));
+    ScriptContext ctx(instance, m_registry, nullptr);
     ctx.executeNode(id1);
 
     // Should have been stopped by the safety limit
@@ -842,8 +826,6 @@ struct PureNodeFixture
 {
     ScriptGraph graph;
     ScriptInstance instance;
-    Engine* dummyEngine = nullptr;
-
     uint32_t addNode(const std::string& typeName)
     {
         return graph.addNode(typeName);
@@ -871,7 +853,7 @@ TEST_F(NodeLibraryTest, MathAddComputesSum)
     f.initialize();
 
     ScriptContext ctx(f.instance, m_registry,
-                      *reinterpret_cast<Engine*>(&f.dummyEngine));
+                      nullptr);
     ctx.executeNode(id);
 
     auto* inst = f.instance.getNodeInstance(id);
@@ -888,7 +870,7 @@ TEST_F(NodeLibraryTest, MathSubComputesDifference)
     f.initialize();
 
     ScriptContext ctx(f.instance, m_registry,
-                      *reinterpret_cast<Engine*>(&f.dummyEngine));
+                      nullptr);
     ctx.executeNode(id);
     EXPECT_FLOAT_EQ(f.instance.getNodeInstance(id)->outputValues[internPin("Result")].asFloat(), 6.0f);
 }
@@ -902,7 +884,7 @@ TEST_F(NodeLibraryTest, MathDivGuardsAgainstZero)
     f.initialize();
 
     ScriptContext ctx(f.instance, m_registry,
-                      *reinterpret_cast<Engine*>(&f.dummyEngine));
+                      nullptr);
     ctx.executeNode(id);
     EXPECT_FLOAT_EQ(f.instance.getNodeInstance(id)->outputValues[internPin("Result")].asFloat(), 0.0f);
 }
@@ -917,7 +899,7 @@ TEST_F(NodeLibraryTest, MathClampClampsToRange)
     f.initialize();
 
     ScriptContext ctx(f.instance, m_registry,
-                      *reinterpret_cast<Engine*>(&f.dummyEngine));
+                      nullptr);
     ctx.executeNode(id);
     EXPECT_FLOAT_EQ(f.instance.getNodeInstance(id)->outputValues[internPin("Result")].asFloat(), 10.0f);
 }
@@ -932,7 +914,7 @@ TEST_F(NodeLibraryTest, MathLerpInterpolates)
     f.initialize();
 
     ScriptContext ctx(f.instance, m_registry,
-                      *reinterpret_cast<Engine*>(&f.dummyEngine));
+                      nullptr);
     ctx.executeNode(id);
     EXPECT_FLOAT_EQ(f.instance.getNodeInstance(id)->outputValues[internPin("Result")].asFloat(), 25.0f);
 }
@@ -946,7 +928,7 @@ TEST_F(NodeLibraryTest, GetDistanceComputesEuclidean)
     f.initialize();
 
     ScriptContext ctx(f.instance, m_registry,
-                      *reinterpret_cast<Engine*>(&f.dummyEngine));
+                      nullptr);
     ctx.executeNode(id);
     EXPECT_FLOAT_EQ(f.instance.getNodeInstance(id)->outputValues[internPin("Distance")].asFloat(), 5.0f);
 }
@@ -959,7 +941,7 @@ TEST_F(NodeLibraryTest, VectorNormalizeProducesUnit)
     f.initialize();
 
     ScriptContext ctx(f.instance, m_registry,
-                      *reinterpret_cast<Engine*>(&f.dummyEngine));
+                      nullptr);
     ctx.executeNode(id);
     auto v = f.instance.getNodeInstance(id)->outputValues[internPin("Result")].asVec3();
     EXPECT_NEAR(glm::length(v), 1.0f, 1e-5f);
@@ -975,7 +957,7 @@ TEST_F(NodeLibraryTest, BoolAndOrNotTruthTable)
         f.setProp(id, "B", ScriptValue(false));
         f.initialize();
         ScriptContext ctx(f.instance, m_registry,
-                          *reinterpret_cast<Engine*>(&f.dummyEngine));
+                          nullptr);
         ctx.executeNode(id);
         EXPECT_FALSE(f.instance.getNodeInstance(id)->outputValues[internPin("Result")].asBool());
     }
@@ -987,7 +969,7 @@ TEST_F(NodeLibraryTest, BoolAndOrNotTruthTable)
         f.setProp(id, "B", ScriptValue(false));
         f.initialize();
         ScriptContext ctx(f.instance, m_registry,
-                          *reinterpret_cast<Engine*>(&f.dummyEngine));
+                          nullptr);
         ctx.executeNode(id);
         EXPECT_TRUE(f.instance.getNodeInstance(id)->outputValues[internPin("Result")].asBool());
     }
@@ -998,7 +980,7 @@ TEST_F(NodeLibraryTest, BoolAndOrNotTruthTable)
         f.setProp(id, "A", ScriptValue(true));
         f.initialize();
         ScriptContext ctx(f.instance, m_registry,
-                          *reinterpret_cast<Engine*>(&f.dummyEngine));
+                          nullptr);
         ctx.executeNode(id);
         EXPECT_FALSE(f.instance.getNodeInstance(id)->outputValues[internPin("Result")].asBool());
     }
@@ -1013,7 +995,7 @@ TEST_F(NodeLibraryTest, CompareLessGreaterEqual)
     lf.setProp(lid, "B", ScriptValue(10.0f));
     lf.initialize();
     ScriptContext lctx(lf.instance, m_registry,
-                       *reinterpret_cast<Engine*>(&lf.dummyEngine));
+                       nullptr);
     lctx.executeNode(lid);
     EXPECT_TRUE(lf.instance.getNodeInstance(lid)->outputValues[internPin("Result")].asBool());
 
@@ -1023,7 +1005,7 @@ TEST_F(NodeLibraryTest, CompareLessGreaterEqual)
     gf.setProp(gid, "B", ScriptValue(10.0f));
     gf.initialize();
     ScriptContext gctx(gf.instance, m_registry,
-                       *reinterpret_cast<Engine*>(&gf.dummyEngine));
+                       nullptr);
     gctx.executeNode(gid);
     EXPECT_FALSE(gf.instance.getNodeInstance(gid)->outputValues[internPin("Result")].asBool());
 
@@ -1033,7 +1015,7 @@ TEST_F(NodeLibraryTest, CompareLessGreaterEqual)
     ef.setProp(eid, "B", ScriptValue(5.0f));
     ef.initialize();
     ScriptContext ectx(ef.instance, m_registry,
-                       *reinterpret_cast<Engine*>(&ef.dummyEngine));
+                       nullptr);
     ectx.executeNode(eid);
     EXPECT_TRUE(ef.instance.getNodeInstance(eid)->outputValues[internPin("Result")].asBool());
 }
@@ -1046,7 +1028,7 @@ TEST_F(NodeLibraryTest, ToStringConvertsNumericValue)
     f.initialize();
 
     ScriptContext ctx(f.instance, m_registry,
-                      *reinterpret_cast<Engine*>(&f.dummyEngine));
+                      nullptr);
     ctx.executeNode(id);
     EXPECT_EQ(f.instance.getNodeInstance(id)->outputValues[internPin("Result")].asString(), "42");
 }
@@ -1065,9 +1047,7 @@ TEST_F(NodeLibraryTest, SwitchIntRoutesByCase)
 
     ScriptInstance instance;
     instance.initialize(graph, 1);
-
-    Engine* dummy = nullptr;
-    ScriptContext ctx(instance, m_registry, *reinterpret_cast<Engine*>(&dummy));
+    ScriptContext ctx(instance, m_registry, nullptr);
     ctx.executeNode(switchId);
 
     // Switch + Case2's PrintToScreen = 2 nodes executed
@@ -1084,9 +1064,7 @@ TEST_F(NodeLibraryTest, SwitchIntRoutesToDefault)
 
     ScriptInstance instance;
     instance.initialize(graph, 1);
-
-    Engine* dummy = nullptr;
-    ScriptContext ctx(instance, m_registry, *reinterpret_cast<Engine*>(&dummy));
+    ScriptContext ctx(instance, m_registry, nullptr);
     ctx.executeNode(switchId);
 
     EXPECT_EQ(ctx.nodesExecuted(), 2);
@@ -1106,9 +1084,7 @@ TEST_F(NodeLibraryTest, ForLoopIteratesExpectedTimes)
 
     ScriptInstance instance;
     instance.initialize(graph, 1);
-
-    Engine* dummy = nullptr;
-    ScriptContext ctx(instance, m_registry, *reinterpret_cast<Engine*>(&dummy));
+    ScriptContext ctx(instance, m_registry, nullptr);
     ctx.executeNode(forId);
 
     // ForLoop + 4 Body prints + 1 Completed print = 6
@@ -1124,17 +1100,15 @@ TEST_F(NodeLibraryTest, DoOnceFiresOnlyOnce)
 
     ScriptInstance instance;
     instance.initialize(graph, 1);
-
-    Engine* dummy = nullptr;
     // First execution fires
     {
-        ScriptContext ctx(instance, m_registry, *reinterpret_cast<Engine*>(&dummy));
+        ScriptContext ctx(instance, m_registry, nullptr);
         ctx.executeNode(doOnceId);
         EXPECT_EQ(ctx.nodesExecuted(), 2); // DoOnce + Print
     }
     // Second execution should be blocked
     {
-        ScriptContext ctx(instance, m_registry, *reinterpret_cast<Engine*>(&dummy));
+        ScriptContext ctx(instance, m_registry, nullptr);
         ctx.executeNode(doOnceId);
         EXPECT_EQ(ctx.nodesExecuted(), 1); // Only DoOnce
     }
@@ -1153,11 +1127,9 @@ TEST_F(NodeLibraryTest, FlipFlopAlternatesAB)
 
     ScriptInstance instance;
     instance.initialize(graph, 1);
-
-    Engine* dummy = nullptr;
     // 1st: A fires (IsA=true initially)
     {
-        ScriptContext ctx(instance, m_registry, *reinterpret_cast<Engine*>(&dummy));
+        ScriptContext ctx(instance, m_registry, nullptr);
         ctx.executeNode(ffId);
     }
     auto* ffInst = instance.getNodeInstance(ffId);
@@ -1166,14 +1138,14 @@ TEST_F(NodeLibraryTest, FlipFlopAlternatesAB)
 
     // 2nd: B fires
     {
-        ScriptContext ctx(instance, m_registry, *reinterpret_cast<Engine*>(&dummy));
+        ScriptContext ctx(instance, m_registry, nullptr);
         ctx.executeNode(ffId);
     }
     EXPECT_FALSE(ffInst->outputValues[internPin("IsA")].asBool());
 
     // 3rd: A again
     {
-        ScriptContext ctx(instance, m_registry, *reinterpret_cast<Engine*>(&dummy));
+        ScriptContext ctx(instance, m_registry, nullptr);
         ctx.executeNode(ffId);
     }
     EXPECT_TRUE(ffInst->outputValues[internPin("IsA")].asBool());
@@ -1189,9 +1161,7 @@ TEST_F(NodeLibraryTest, TimelineSchedulesLatentWithTickCallback)
 
     ScriptInstance instance;
     instance.initialize(graph, 1);
-
-    Engine* dummy = nullptr;
-    ScriptContext ctx(instance, m_registry, *reinterpret_cast<Engine*>(&dummy));
+    ScriptContext ctx(instance, m_registry, nullptr);
     ctx.executeNode(tlId);
 
     ASSERT_EQ(instance.pendingActions().size(), 1u);
@@ -1208,9 +1178,7 @@ TEST_F(NodeLibraryTest, TimelineZeroDurationFinishesImmediately)
 
     ScriptInstance instance;
     instance.initialize(graph, 1);
-
-    Engine* dummy = nullptr;
-    ScriptContext ctx(instance, m_registry, *reinterpret_cast<Engine*>(&dummy));
+    ScriptContext ctx(instance, m_registry, nullptr);
     ctx.executeNode(tlId);
 
     // No latent action should be scheduled
@@ -1229,9 +1197,7 @@ TEST_F(NodeLibraryTest, WaitForConditionSchedulesConditionBasedLatent)
     ScriptInstance instance;
     instance.initialize(graph, 1);
     instance.graphBlackboard().set("flag", ScriptValue(false));
-
-    Engine* dummy = nullptr;
-    ScriptContext ctx(instance, m_registry, *reinterpret_cast<Engine*>(&dummy));
+    ScriptContext ctx(instance, m_registry, nullptr);
     ctx.executeNode(wId);
 
     ASSERT_EQ(instance.pendingActions().size(), 1u);
@@ -1552,9 +1518,7 @@ TEST_F(ScriptContextTest, ScheduleDelayClampsNegative)
     ScriptInstance instance;
     instance.initialize(graph, 1);
 
-    Engine* dummyEngine = nullptr;
-    ScriptContext ctx(instance, m_registry,
-                      *reinterpret_cast<Engine*>(&dummyEngine));
+    ScriptContext ctx(instance, m_registry, nullptr);
     ctx.executeNode(id);
     ASSERT_EQ(instance.pendingActions().size(), 1u);
     EXPECT_FLOAT_EQ(instance.pendingActions()[0].remainingTime, 0.0f);
@@ -1569,9 +1533,7 @@ TEST_F(ScriptContextTest, ScheduleDelayClampsNaN)
     ScriptInstance instance;
     instance.initialize(graph, 1);
 
-    Engine* dummyEngine = nullptr;
-    ScriptContext ctx(instance, m_registry,
-                      *reinterpret_cast<Engine*>(&dummyEngine));
+    ScriptContext ctx(instance, m_registry, nullptr);
     ctx.executeNode(id);
     ASSERT_EQ(instance.pendingActions().size(), 1u);
     EXPECT_FLOAT_EQ(instance.pendingActions()[0].remainingTime, 0.0f);
@@ -1585,9 +1547,7 @@ TEST_F(ScriptContextTest, ScheduleDelayClampsHuge)
     ScriptInstance instance;
     instance.initialize(graph, 1);
 
-    Engine* dummyEngine = nullptr;
-    ScriptContext ctx(instance, m_registry,
-                      *reinterpret_cast<Engine*>(&dummyEngine));
+    ScriptContext ctx(instance, m_registry, nullptr);
     ctx.executeNode(id);
     ASSERT_EQ(instance.pendingActions().size(), 1u);
     // Clamped to 3600 (1 hour cap).
@@ -1605,7 +1565,7 @@ TEST_F(NodeLibraryTest, ForLoopClampsIterationCountAndReports)
     f.initialize();
 
     ScriptContext ctx(f.instance, m_registry,
-                      *reinterpret_cast<Engine*>(&f.dummyEngine));
+                      nullptr);
     ctx.executeNode(id);
 
     auto* inst = f.instance.getNodeInstance(id);
@@ -1624,7 +1584,7 @@ TEST_F(NodeLibraryTest, ForLoopBoundaryInt32InputsDoNotOverflow)
     f.initialize();
 
     ScriptContext ctx(f.instance, m_registry,
-                      *reinterpret_cast<Engine*>(&f.dummyEngine));
+                      nullptr);
     ctx.executeNode(id);
     auto* inst = f.instance.getNodeInstance(id);
     EXPECT_TRUE(inst->outputValues[internPin("Clamped")].asBool());
@@ -1639,7 +1599,7 @@ TEST_F(NodeLibraryTest, ForLoopLastBeforeFirstFiresCompletedOnly)
     f.initialize();
 
     ScriptContext ctx(f.instance, m_registry,
-                      *reinterpret_cast<Engine*>(&f.dummyEngine));
+                      nullptr);
     ctx.executeNode(id);
     EXPECT_FALSE(f.instance.getNodeInstance(id)->outputValues[internPin("Clamped")].asBool());
 }
@@ -1655,7 +1615,7 @@ TEST_F(NodeLibraryTest, MathAddSanitizesNaNInput)
     f.initialize();
 
     ScriptContext ctx(f.instance, m_registry,
-                      *reinterpret_cast<Engine*>(&f.dummyEngine));
+                      nullptr);
     ctx.executeNode(id);
     // NaN input sanitized to 0, so result is 0+5 = 5.
     EXPECT_FLOAT_EQ(f.instance.getNodeInstance(id)->outputValues[internPin("Result")].asFloat(), 5.0f);
@@ -1670,7 +1630,7 @@ TEST_F(NodeLibraryTest, MathMulSanitizesInfInput)
     f.initialize();
 
     ScriptContext ctx(f.instance, m_registry,
-                      *reinterpret_cast<Engine*>(&f.dummyEngine));
+                      nullptr);
     ctx.executeNode(id);
     EXPECT_FLOAT_EQ(f.instance.getNodeInstance(id)->outputValues[internPin("Result")].asFloat(), 0.0f);
 }
@@ -1684,7 +1644,7 @@ TEST_F(NodeLibraryTest, VectorNormalizeSanitizesNaNInput)
     f.initialize();
 
     ScriptContext ctx(f.instance, m_registry,
-                      *reinterpret_cast<Engine*>(&f.dummyEngine));
+                      nullptr);
     ctx.executeNode(id);
     // NaN → 0 vector → zero-length → returns (0,0,0) without crashing.
     glm::vec3 out = f.instance.getNodeInstance(id)->outputValues[internPin("Result")].asVec3();
@@ -1702,7 +1662,7 @@ TEST_F(NodeLibraryTest, MathMulComputesProduct)
     f.initialize();
 
     ScriptContext ctx(f.instance, m_registry,
-                      *reinterpret_cast<Engine*>(&f.dummyEngine));
+                      nullptr);
     ctx.executeNode(id);
     EXPECT_FLOAT_EQ(f.instance.getNodeInstance(id)->outputValues[internPin("Result")].asFloat(), 42.0f);
 }
@@ -1716,7 +1676,7 @@ TEST_F(NodeLibraryTest, DotProductComputesDot)
     f.initialize();
 
     ScriptContext ctx(f.instance, m_registry,
-                      *reinterpret_cast<Engine*>(&f.dummyEngine));
+                      nullptr);
     ctx.executeNode(id);
     // 1*4 + 2*5 + 3*6 = 32
     EXPECT_FLOAT_EQ(f.instance.getNodeInstance(id)->outputValues[internPin("Result")].asFloat(), 32.0f);
@@ -1731,7 +1691,7 @@ TEST_F(NodeLibraryTest, CrossProductComputesCross)
     f.initialize();
 
     ScriptContext ctx(f.instance, m_registry,
-                      *reinterpret_cast<Engine*>(&f.dummyEngine));
+                      nullptr);
     ctx.executeNode(id);
     glm::vec3 out = f.instance.getNodeInstance(id)->outputValues[internPin("Result")].asVec3();
     EXPECT_EQ(out, glm::vec3(0.0f, 0.0f, 1.0f));
@@ -1746,7 +1706,7 @@ TEST_F(NodeLibraryTest, HasVariableReturnsTrueWhenSet)
     f.instance.graphBlackboard().set("hp", ScriptValue(100.0f));
 
     ScriptContext ctx(f.instance, m_registry,
-                      *reinterpret_cast<Engine*>(&f.dummyEngine));
+                      nullptr);
     ctx.executeNode(id);
     EXPECT_TRUE(f.instance.getNodeInstance(id)->outputValues[internPin("Exists")].asBool());
 }
@@ -1759,7 +1719,7 @@ TEST_F(NodeLibraryTest, HasVariableReturnsFalseWhenMissing)
     f.initialize();
 
     ScriptContext ctx(f.instance, m_registry,
-                      *reinterpret_cast<Engine*>(&f.dummyEngine));
+                      nullptr);
     ctx.executeNode(id);
     EXPECT_FALSE(f.instance.getNodeInstance(id)->outputValues[internPin("Exists")].asBool());
 }
@@ -1774,7 +1734,7 @@ TEST_F(NodeLibraryTest, SwitchStringRoutesByCase)
     f.initialize();
 
     ScriptContext ctx(f.instance, m_registry,
-                      *reinterpret_cast<Engine*>(&f.dummyEngine));
+                      nullptr);
     ctx.executeNode(id);
     // Should not crash; SwitchString routes to the matching named output or Default.
     EXPECT_GE(ctx.nodesExecuted(), 1);
@@ -1790,7 +1750,7 @@ TEST_F(NodeLibraryTest, GateBlocksWhenClosed)
     f.initialize();
 
     ScriptContext ctx(f.instance, m_registry,
-                      *reinterpret_cast<Engine*>(&f.dummyEngine));
+                      nullptr);
     ctx.executeNode(gateId);
     // When closed, the gate should not forward execution.
     // nodesExecuted counts only this gate node, not the sink.
@@ -1806,7 +1766,7 @@ TEST_F(NodeLibraryTest, WhileLoopTerminatesAtSafetyCap)
     f.initialize();
 
     ScriptContext ctx(f.instance, m_registry,
-                      *reinterpret_cast<Engine*>(&f.dummyEngine));
+                      nullptr);
     ctx.executeNode(id);
     // If this didn't terminate we would never reach here.
     SUCCEED();
@@ -1821,9 +1781,7 @@ TEST_F(ScriptContextTest, FlowScopeIsIsolatedFromGraphScope)
     instance.initialize(graph, 1);
     instance.graphBlackboard().set("shared", ScriptValue(100));
 
-    Engine* dummyEngine = nullptr;
-    ScriptContext ctx(instance, m_registry,
-                      *reinterpret_cast<Engine*>(&dummyEngine));
+    ScriptContext ctx(instance, m_registry, nullptr);
 
     // Writing to Flow doesn't touch Graph.
     ctx.setVariable("shared", VariableScope::FLOW, ScriptValue(5));
@@ -2070,7 +2028,7 @@ TEST_F(NodeLibraryTest, PureNodeMemoizedAcrossLoopReads)
     f.initialize();
 
     ScriptContext ctx(f.instance, m_registry,
-                      *reinterpret_cast<Engine*>(&f.dummyEngine));
+                      nullptr);
     const auto* sinkInst = f.instance.getNodeInstance(sinkId);
     ASSERT_NE(sinkInst, nullptr);
 
@@ -2087,7 +2045,7 @@ TEST_F(NodeLibraryTest, PureNodeMemoizedAcrossLoopReads)
 
     // A fresh ScriptContext must NOT see the cached value (cache is per-chain).
     ScriptContext freshCtx(f.instance, m_registry,
-                           *reinterpret_cast<Engine*>(&f.dummyEngine));
+                           nullptr);
     ScriptValue fresh = freshCtx.readInput(*sinkInst, internPin("A"));
     EXPECT_FLOAT_EQ(fresh.asFloat(), 102.0f) << "Fresh context starts fresh";
 }
@@ -2106,7 +2064,7 @@ TEST_F(NodeLibraryTest, GateOpenInputOpensTheGate)
     f.initialize();
 
     ScriptContext ctx(f.instance, m_registry,
-                      *reinterpret_cast<Engine*>(&f.dummyEngine));
+                      nullptr);
     ctx.executeNode(triggerId);
 
     // After the open trigger, executing Enter (via direct call, default
@@ -2116,7 +2074,7 @@ TEST_F(NodeLibraryTest, GateOpenInputOpensTheGate)
     // Re-initialize because we mutated the graph after the first call.
     f.instance.initialize(f.graph, 1);
     ScriptContext ctx2(f.instance, m_registry,
-                       *reinterpret_cast<Engine*>(&f.dummyEngine));
+                       nullptr);
     // Open the gate via the dedicated input.
     ctx2.executeNode(triggerId);
     // Now fire Enter directly. Without entry-pin dispatch, this would have
@@ -2138,7 +2096,7 @@ TEST_F(NodeLibraryTest, GateCloseInputClosesTheGate)
     f.initialize();
 
     ScriptContext ctx(f.instance, m_registry,
-                      *reinterpret_cast<Engine*>(&f.dummyEngine));
+                      nullptr);
     ctx.executeNode(triggerId);
     // Verify internal state — runtime "_open" flag should now be false.
     auto* gateInst = f.instance.getNodeInstance(gateId);
@@ -2158,7 +2116,7 @@ TEST_F(NodeLibraryTest, GateToggleInputFlipsTheGate)
     f.initialize();
 
     ScriptContext ctx(f.instance, m_registry,
-                      *reinterpret_cast<Engine*>(&f.dummyEngine));
+                      nullptr);
 
     // First toggle: closed → open
     ctx.executeNode(triggerId);
@@ -2178,9 +2136,7 @@ TEST_F(ScriptContextTest, EntryPinDefaultsToInvalidForDirectExecute)
     ScriptInstance instance;
     instance.initialize(graph, 1);
 
-    Engine* dummyEngine = nullptr;
-    ScriptContext ctx(instance, m_registry,
-                      *reinterpret_cast<Engine*>(&dummyEngine));
+    ScriptContext ctx(instance, m_registry, nullptr);
     EXPECT_EQ(ctx.entryPin(), INVALID_PIN_ID);
     ctx.executeNode(id);
     // After executeNode returns, m_entryPin is still INVALID_PIN_ID

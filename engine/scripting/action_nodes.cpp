@@ -95,9 +95,9 @@ void registerActionNodeTypes(NodeTypeRegistry& registry)
             auto pos = ctx.readInputAs<glm::vec3>(node, "position");
             auto vol = ctx.readInputAs<float>(node, "volume");
 
-            if (!clip.empty() && reinterpret_cast<uintptr_t>(&ctx.engine()) != 0)
+            if (!clip.empty() && ctx.engine() != nullptr)
             {
-                auto* audioSys = ctx.engine().getSystemRegistry()
+                auto* audioSys = ctx.engine()->getSystemRegistry()
                                     .getSystem<AudioSystem>();
                 if (audioSys && audioSys->isAvailable())
                 {
@@ -469,10 +469,10 @@ void registerActionNodeTypes(NodeTypeRegistry& registry)
             auto name = ctx.readInputAs<std::string>(node, "name");
             auto payload = ctx.readInput(node, "payload");
 
-            if (reinterpret_cast<uintptr_t>(&ctx.engine()) != 0)
+            if (ctx.engine() != nullptr)
             {
                 ScriptCustomEvent event(name, payload);
-                ctx.engine().getEventBus().publish(event);
+                ctx.engine()->getEventBus().publish(event);
             }
             ctx.triggerOutput(node, "Then");
         }

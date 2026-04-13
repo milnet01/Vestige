@@ -30,10 +30,16 @@ public:
     /// @brief Create a context for executing within a specific instance.
     /// @param instance The script instance (owns graph + runtime state).
     /// @param registry The node type registry (for looking up execute functions).
-    /// @param engine The engine (for EventBus, systems, etc.).
+    /// @param engine The engine (for EventBus, systems, etc.). May be
+    ///   ``nullptr`` for unit tests that only exercise the interpreter;
+    ///   nodes that need the engine must check before deref (see
+    ///   ``engine()``). Previously this was ``Engine&`` and tests used a
+    ///   ``reinterpret_cast<Engine*>(&nullptr)`` hack to get around the
+    ///   reference-must-be-valid rule — that was UB optimizable to false
+    ///   under -O2, fixed by making the pointer nullable here (AUDIT.md §H5).
     ScriptContext(ScriptInstance& instance,
                   const NodeTypeRegistry& registry,
-                  Engine& engine);
+                  Engine* engine);
 
     // -- Data evaluation (pull from connected outputs or use default) --
 
@@ -99,7 +105,9 @@ public:
 
     // -- Engine access --
 
-    Engine& engine() { return m_engine; }
+    /// @brief Engine pointer (may be null in tests — always check before
+    /// dereferencing).
+    Engine* engine() { return m_engine; }
     ScriptInstance& instance() { return m_instance; }
 
     // -- Scene/entity convenience (may return nullptr in headless tests) --
@@ -159,7 +167,7 @@ private:
 
     ScriptInstance& m_instance;
     const NodeTypeRegistry& m_registry;
-    Engine& m_engine;
+    Engine* m_engine;  ///< Nullable; see constructor docstring.
 
     int m_callDepth = 0;
     int m_nodesExecuted = 0;
