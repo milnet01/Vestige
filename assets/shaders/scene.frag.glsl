@@ -123,6 +123,11 @@ uniform float u_baseColorAlpha;
 // IBL (Image-Based Lighting)
 uniform bool u_hasIBL;
 uniform float u_iblMultiplier;          // Per-material IBL scale (0=no sky light, 1=full)
+// Diagnostic IBL split scales (default 1.0). Set independently to 0 to
+// isolate which sub-component (diffuse irradiance vs specular prefilter)
+// is responsible for a regression. Bisects the 2026-04-13 white-out.
+uniform float u_iblDiffuseScale = 1.0;
+uniform float u_iblSpecularScale = 1.0;
 uniform samplerCube u_irradianceMap;    // Unit 14 — global (sky) IBL
 uniform samplerCube u_prefilterMap;     // Unit 15 — global (sky) IBL
 uniform sampler2D u_brdfLUT;            // Unit 16 — shared BRDF LUT
@@ -556,12 +561,28 @@ vec3 evaluateSHGridIrradiance(vec3 worldPos, vec3 normal)
     // Fixing this removes the ~1.73× over-weight on the band-2 chromatic tilt
     // that was visible on horizontal surfaces oriented along X/Y axes.
     // See AUDIT.md §H14, PHASE3_RESEARCH.md §H14.
-    return max(vec3(0.0),
+    vec3 E = max(vec3(0.0),
         c4 * L[0] +
         2.0 * c2 * (L[1]*n.y + L[2]*n.z + L[3]*n.x) +
         2.0 * c1 * (L[4]*n.x*n.y + L[5]*n.y*n.z + L[7]*n.x*n.z) +
         c1 * L[8] * (n.x*n.x - n.y*n.y) +
         c5 * L[6] * (3.0*n.z*n.z - 1.0));
+
+    // AUDIT.md §H19: Ramamoorthi-Hanrahan returns E (irradiance,
+    // ∫ L(ω) cos(θ) dω). The shader's diffuseIBL formula at the call
+    // site assumes E/π input — that's the convention LearnOpenGL's
+    // pre-filtered irradiance cubemap follows (PI multiplied in during
+    // convolution sampling, then DIVIDED by π / nrSamples to give the
+    // final stored E/π value). Without this division, the SH grid path
+    // returned the un-divided E, making diffuseIBL = albedo * E instead
+    // of albedo * E / π — i.e. effective albedo = π × real_albedo.
+    // For typical materials (real_albedo ≥ 1/π ≈ 0.318), this pushes
+    // the radiosity transfer factor above 1 and the bake series
+    // diverges instead of converging. With the fix, effective albedo
+    // = real_albedo (always < 1 for physical materials) and
+    // multi-bounce converges geometrically as expected.
+    const float INV_PI = 0.31830988618379067;
+    return E * INV_PI;
 }
 
 /// Fresnel-Schlick with roughness — prevents harsh edges on rough metals under IBL.
@@ -1069,9 +1090,9 @@ void main()
                 prefilteredColor = mix(prefilteredColor, probePrefilt, u_probeWeight);
             }
 
-            vec3 diffuseIBL = kD * irradiance * albedo;
+            vec3 diffuseIBL = kD * irradiance * albedo * u_iblDiffuseScale;
             vec2 brdf = texture(u_brdfLUT, vec2(max(dot(norm, viewDir), 0.0), roughness)).rg;
-            vec3 specularIBL = prefilteredColor * (F * brdf.x + brdf.y);
+            vec3 specularIBL = prefilteredColor * (F * brdf.x + brdf.y) * u_iblSpecularScale;
 
             ambient = (diffuseIBL + specularIBL) * ao * u_iblMultiplier;
 

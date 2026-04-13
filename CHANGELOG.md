@@ -11,6 +11,49 @@ may change any interface without notice.
 
 ### Fixed — 2026-04-13 post-audit follow-up
 
+- **§H19 SH grid irradiance was missing the /π conversion** — the *real*
+  cause of the "everything textured looks emissive" white-out reported
+  by the user. `evaluateSHGridIrradiance` returns Ramamoorthi-Hanrahan
+  irradiance E (`∫ L(ω) cos(θ) dω`); the diffuse-IBL formula at the
+  call site is `kD * irradiance * albedo`, which assumes the *pre-divided*
+  value E/π that LearnOpenGL's pre-filtered irradiance cubemap stores
+  (PI is multiplied in during the convolution, then implicitly divided
+  back out via `(1/nrSamples) * PI`). Without the /π division, the SH
+  grid path produced a diffuse contribution π × the correct value, so
+  the radiosity transfer factor became `π × albedo`. For any albedo
+  ≥ 1/π ≈ 0.318 — i.e. all common materials — that's > 1, and the
+  multi-bounce bake series diverged instead of converging. Observed
+  energy growth ~1.7× per bounce matched `π × scene-average-albedo
+  ≈ π × 0.54` exactly. Fix: divide the SH evaluation result by π so
+  it matches the cubemap convention. Bake now converges geometrically
+  (Tabernacle scene: 5.47 → 6.16 → 6.49, deltas 0.69 → 0.33).
+
+- **§H18 skybox vertex shader was Z-convention-blind** — masked the
+  §H19 bug below the surface. The shader hard-coded `gl_Position.z = 0`,
+  which is the far plane in reverse-Z (main render path) but the *middle*
+  of the depth buffer in forward-Z (capture passes used by
+  `captureLightProbe` and `captureSHGrid`). Without this fix, the §M14
+  workaround had to gate the skybox out of capture passes entirely,
+  leaving the SH probe-grid bake without any sky direct contribution
+  and forcing it to feed off pure inter-geometry bounce — the exact
+  configuration where §H19's missing /π factor blew up. The shader now
+  reads `u_skyboxFarDepth` and emits `z = u_skyboxFarDepth * w`, so
+  z/w = u_skyboxFarDepth after the perspective divide. The renderer
+  sets the uniform per pass: 0 for reverse-Z main render, 0.99999 for
+  forward-Z capture (close-but-not-equal-to-1.0 so GL_LESS still
+  passes against the cleared far buffer). The §M14 `&& !geometryOnly`
+  gate is removed since the skybox now draws correctly in both Z
+  conventions. Sky direct light is back in the SH grid bake.
+
+- **Diagnostic CLI flag `--isolate-feature=NAME`** retained for future
+  regression bisection. Recognised values: `motion-overlay`, `bloom`,
+  `ssao`, `ibl`, `ibl-diffuse`, `ibl-specular`, `sh-grid`. Each disables
+  one specific renderer feature so a `--visual-test` run's frame
+  reports can be diff-mechanically compared against a baseline to
+  identify the offending subsystem. Used to find §H18+§H19 in 5
+  short visual-test passes — without it the bisection would have
+  required either reverting commits or interactive shader editing.
+
 - **§H17 SystemRegistry destruction lifetime**: shutdown SEGV reported
   immediately after "Engine shutdown complete" (ASan: `SEGV on unknown
   address … pc == address`, then nested-bug abort). Root cause was

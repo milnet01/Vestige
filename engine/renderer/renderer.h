@@ -198,6 +198,38 @@ public:
     /// @brief Checks if SSAO is enabled.
     bool isSsaoEnabled() const;
 
+    /// @brief Diagnostic toggle for the per-object motion vector overlay
+    ///        added by AUDIT.md §H15 / commit a122e85. When false the TAA
+    ///        path uses only the camera-only full-screen motion pass —
+    ///        ghosting on dynamic geometry returns, but rules the overlay
+    ///        out as a regression source. No production reason to disable.
+    void setObjectMotionOverlayEnabled(bool isEnabled);
+    bool isObjectMotionOverlayEnabled() const;
+
+    /// @brief Diagnostic global override for u_iblMultiplier sent to the
+    ///        scene shader. -1 (default) means use each material's own
+    ///        getIblMultiplier(); >= 0 forces every draw to use this value.
+    ///        Set to 0 to rule IBL specular/diffuse out as the regression
+    ///        source (BRDF LUT change in commit c1b641a). Negative values
+    ///        restore per-material behaviour.
+    void setIblMultiplierOverride(float multiplier);
+    float getIblMultiplierOverride() const;
+
+    /// @brief Diagnostic IBL split scales — independently zero out the
+    ///        diffuse-irradiance or specular-prefilter contribution to
+    ///        further bisect which IBL sub-component blew up. Sets the
+    ///        u_iblDiffuseScale / u_iblSpecularScale shader uniforms
+    ///        once on the scene program (uniforms persist).
+    void setIblSubScales(float diffuseScale, float specularScale);
+
+    /// @brief Diagnostic: when true, force u_hasSHGrid=false in the scene
+    ///        shader regardless of whether a baked SH grid is ready.
+    ///        Falls the IBL-diffuse path back to cubemap probe / sky
+    ///        irradiance, which was the only path active before the
+    ///        Tabernacle radiosity bake landed.
+    void setShGridForceDisabled(bool isDisabled);
+    bool isShGridForceDisabled() const;
+
     /// @brief Sets the anti-aliasing mode (MSAA, TAA, or None).
     void setAntiAliasMode(AntiAliasMode mode);
 
@@ -546,6 +578,11 @@ private:
     float m_bloomThreshold = 1.0f;
     float m_bloomIntensity = 0.04f;
     float m_bloomFilterRadius = 1.0f;
+
+    // Diagnostic toggles (CLI: --isolate-feature). See header docs above.
+    bool m_objectMotionOverlayEnabled = true;
+    float m_iblMultiplierOverride = -1.0f;  // <0 means "use material's value"
+    bool m_shGridForceDisabled = false;
 
     // Instanced rendering
     std::unique_ptr<InstanceBuffer> m_instanceBuffer;

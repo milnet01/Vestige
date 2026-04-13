@@ -587,6 +587,48 @@ bool Engine::initialize(const EngineConfig& config)
         m_controller->setTerrain(m_terrain);
     }
 
+    // Apply --isolate-feature CLI override (visual-regression bisection).
+    // Logged loudly so accompanying frame reports are easy to attribute.
+    if (!config.isolateFeature.empty())
+    {
+        const std::string& f = config.isolateFeature;
+        Logger::info("=== --isolate-feature=" + f + " ===");
+        if (f == "motion-overlay")
+        {
+            m_renderer->setObjectMotionOverlayEnabled(false);
+        }
+        else if (f == "bloom")
+        {
+            m_renderer->setBloomEnabled(false);
+        }
+        else if (f == "ssao")
+        {
+            m_renderer->setSsaoEnabled(false);
+        }
+        else if (f == "ibl")
+        {
+            m_renderer->setIblMultiplierOverride(0.0f);
+        }
+        else if (f == "ibl-diffuse")
+        {
+            m_renderer->setIblSubScales(0.0f, 1.0f);
+        }
+        else if (f == "ibl-specular")
+        {
+            m_renderer->setIblSubScales(1.0f, 0.0f);
+        }
+        else if (f == "sh-grid")
+        {
+            m_renderer->setShGridForceDisabled(true);
+        }
+        else
+        {
+            Logger::warning("Unknown --isolate-feature value: '" + f +
+                "' (expected: motion-overlay, bloom, ssao, ibl, "
+                "ibl-diffuse, ibl-specular, sh-grid)");
+        }
+    }
+
     m_isRunning = true;
     Logger::info("Engine initialized successfully");
     Logger::info("Controls: Escape=toggle editor/play, WASD=move (play mode), Mouse=look (play mode), E=interact, F1=wireframe, F2=tonemapper, F3=HDR debug, F4=POM, F5=bloom, F6=SSAO, F7=AA mode (None/MSAA/TAA/SMAA), F8=color grading, F9=CSM debug, F10=auto-exposure, F11=diagnostic capture, V=frame cap cycle, P=toggle physics controller, G=walk/fly, Ctrl+Q=quit");

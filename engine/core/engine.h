@@ -45,6 +45,12 @@ struct EngineConfig
     WindowConfig window;
     std::string assetPath = "assets";
     bool visualTestMode = false;  ///< Run automated visual test and exit
+
+    /// @brief Diagnostic feature isolation (CLI: --isolate-feature=NAME).
+    /// Disables one feature so visual-test runs can mechanically bisect
+    /// regressions. Recognised names: "motion-overlay", "bloom", "ssao",
+    /// "ibl". Empty string = no override.
+    std::string isolateFeature;
 };
 
 /// @brief The central engine — owns all subsystems and runs the main loop.
