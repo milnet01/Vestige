@@ -2,6 +2,11 @@
 
 All notable changes to the Formula Workbench are documented in this file.
 
+## [1.3.1] - 2026-04-13
+
+### Fixed
+- **HIGH: Residual plot filter drift** (AUDIT.md §H10). `rebuildVisualizationCache` populated `m_dataX` only for data points whose `variables` map contained `m_plotVariable`, but populated `m_residuals` for *every* data point. When any row lacked the plot variable, the residual plot correlated `residuals[i]` against a mismatched `X[i]` — showing correct-looking but silently wrong data. Fix: filter the residual loop identically; add an `assert(m_residuals.size() == m_dataX.size())` invariant to guard against re-drift.
+
 ## [1.3.0] - 2026-04-11
 
 ### Fixed
