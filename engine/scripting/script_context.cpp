@@ -11,7 +11,7 @@ namespace Vestige
 
 ScriptContext::ScriptContext(ScriptInstance& instance,
                             const NodeTypeRegistry& registry,
-                            Engine& engine)
+                            Engine* engine)
     : m_instance(instance)
     , m_registry(registry)
     , m_engine(engine)
@@ -288,14 +288,13 @@ void ScriptContext::scheduleWaitForCondition(const ScriptNodeInstance& node,
 
 Scene* ScriptContext::activeScene()
 {
-    // Guard against a null-Engine pattern used in lightweight unit tests.
-    // Reading the reference address is well-defined, but calling methods on
-    // it isn't — so we bail out if the address is zero.
-    if (reinterpret_cast<uintptr_t>(&m_engine) == 0)
+    // m_engine is nullable — unit tests construct ScriptContext with nullptr
+    // when they only exercise the interpreter (AUDIT.md §H5, FIXPLAN D1).
+    if (!m_engine)
     {
         return nullptr;
     }
-    return m_engine.getSceneManager().getActiveScene();
+    return m_engine->getSceneManager().getActiveScene();
 }
 
 Entity* ScriptContext::findEntity(uint32_t entityId)

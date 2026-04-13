@@ -68,7 +68,7 @@ SubscriptionId subscribeOneEventNode(
             populate(event, *nodeInst);
             instance->incrementEventDispatchDepth();
             {
-                ScriptContext ctx(*instance, sys->nodeRegistry(), *sys->engine());
+                ScriptContext ctx(*instance, sys->nodeRegistry(), sys->engine());
                 ctx.triggerOutput(*nodeInst, triggerPin);
             }
             instance->decrementEventDispatchDepth();
@@ -116,7 +116,7 @@ SubscriptionId subscribeFilteredEventNode(
             }
             instance->incrementEventDispatchDepth();
             {
-                ScriptContext ctx(*instance, sys->nodeRegistry(), *sys->engine());
+                ScriptContext ctx(*instance, sys->nodeRegistry(), sys->engine());
                 ctx.triggerOutput(*nodeInst, triggerPin);
             }
             instance->decrementEventDispatchDepth();
@@ -385,7 +385,7 @@ void ScriptingSystem::subscribeEventNodes(ScriptInstance& instance)
                     ScriptNodeInstance* ni = instancePtr->getNodeInstance(nodeId);
                     if (!ni) return;
                     ScriptContext ctx(*instancePtr, sys->nodeRegistry(),
-                                      *sys->engine());
+                                      sys->engine());
                     ctx.triggerOutput(*ni, "Destroying");
                 });
         }
@@ -412,7 +412,7 @@ void ScriptingSystem::fireEvent(ScriptInstance& instance, uint32_t nodeId)
         return;
     }
 
-    ScriptContext ctx(instance, m_nodeRegistry, *m_engine);
+    ScriptContext ctx(instance, m_nodeRegistry, m_engine);
     ctx.executeNode(nodeId);
 }
 
@@ -448,7 +448,7 @@ void ScriptingSystem::tickUpdateNodes(float deltaTime)
             static const PinId pinDeltaTime = internPin("deltaTime");
             nodeInst->outputValues[pinDeltaTime] = ScriptValue(deltaTime);
 
-            ScriptContext ctx(*instance, m_nodeRegistry, *m_engine);
+            ScriptContext ctx(*instance, m_nodeRegistry, m_engine);
             ctx.triggerOutput(*nodeInst, "Tick");
         }
     }
@@ -535,7 +535,7 @@ void ScriptingSystem::tickLatentActions(float deltaTime)
             ScriptNodeInstance* nodeInst = instance->getNodeInstance(action.nodeId);
             if (nodeInst)
             {
-                ScriptContext ctx(*instance, m_nodeRegistry, *m_engine);
+                ScriptContext ctx(*instance, m_nodeRegistry, m_engine);
                 ctx.triggerOutput(*nodeInst, action.outputPin);
             }
         }

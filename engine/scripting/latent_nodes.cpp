@@ -183,7 +183,14 @@ void registerLatentNodeTypes(NodeTypeRegistry& registry)
             // Capture a stable Engine pointer (not the context — it's
             // stack-local and destroyed when execute returns). The entity is
             // looked up by ID each tick so a destroy mid-move is handled.
-            Engine* engine = &ctx.engine();
+            // engine() may be nullptr in tests; the move action needs a real
+            // engine to look up entities anyway, so skip scheduling if null.
+            Engine* engine = ctx.engine();
+            if (!engine)
+            {
+                ctx.triggerOutput(node, "Finished");
+                return;
+            }
             uint32_t capturedId = resolvedId;
 
             PendingLatentAction action;

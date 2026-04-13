@@ -476,10 +476,10 @@ void registerPureNodeTypes(NodeTypeRegistry& registry)
 
             bool hit = false;
             float fraction = 0.0f;
-            if (reinterpret_cast<uintptr_t>(&ctx.engine()) != 0)
+            if (ctx.engine() != nullptr)
             {
                 JPH::BodyID bodyId;
-                hit = ctx.engine().getPhysicsWorld().rayCast(
+                hit = ctx.engine()->getPhysicsWorld().rayCast(
                     origin, dir, bodyId, fraction);
             }
             ctx.setOutput(node, "hit", ScriptValue(hit));
