@@ -7,6 +7,15 @@
 #include "scripting/script_instance.h"
 #include "scripting/script_context.h"
 #include "scripting/core_nodes.h"
+#include "scripting/event_nodes.h"
+#include "scripting/action_nodes.h"
+#include "scripting/pure_nodes.h"
+#include "scripting/flow_nodes.h"
+#include "scripting/latent_nodes.h"
+#include "scripting/scripting_system.h"
+#include "scripting/script_events.h"
+#include "core/engine.h"
+#include "core/event.h"
 
 #include <gtest/gtest.h>
 
@@ -688,4 +697,680 @@ TEST(ScriptEnums, VariableScopeRoundTrip)
         auto restored = variableScopeFromString(str);
         EXPECT_EQ(scope, restored) << "Failed for: " << str;
     }
+}
+
+// ===========================================================================
+// Phase 9E-2: expanded node library tests
+// ===========================================================================
+
+/// @brief Fixture that registers every node category for Phase 9E-2 tests.
+/// Most tests use a fake "dummy engine" pointer — node implementations guard
+/// access to engine/scene where relevant.
+class NodeLibraryTest : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        registerCoreNodeTypes(m_registry);
+        registerEventNodeTypes(m_registry);
+        registerActionNodeTypes(m_registry);
+        registerPureNodeTypes(m_registry);
+        registerFlowNodeTypes(m_registry);
+        registerLatentNodeTypes(m_registry);
+    }
+
+    NodeTypeRegistry m_registry;
+};
+
+// -- Registration completeness ---------------------------------------------
+
+TEST_F(NodeLibraryTest, RegistersExpectedEventNodes)
+{
+    const char* expected[] = {
+        "OnKeyPressed", "OnKeyReleased", "OnMouseButton",
+        "OnSceneLoaded", "OnWeatherChanged", "OnCustomEvent",
+        "OnTriggerEnter", "OnTriggerExit",
+        "OnCollisionEnter", "OnCollisionExit",
+        "OnAudioFinished", "OnVariableChanged"
+    };
+    for (const char* name : expected)
+    {
+        EXPECT_TRUE(m_registry.hasNode(name)) << "Missing: " << name;
+    }
+}
+
+TEST_F(NodeLibraryTest, RegistersExpectedActionNodes)
+{
+    const char* expected[] = {
+        "PlaySound", "SpawnEntity", "DestroyEntity",
+        "SetPosition", "SetRotation", "SetScale",
+        "ApplyForce", "ApplyImpulse",
+        "PlayAnimation", "SpawnParticles",
+        "SetMaterial", "SetVisibility",
+        "SetLightColor", "SetLightIntensity",
+        "PublishEvent"
+    };
+    for (const char* name : expected)
+    {
+        EXPECT_TRUE(m_registry.hasNode(name)) << "Missing: " << name;
+    }
+}
+
+TEST_F(NodeLibraryTest, RegistersExpectedPureNodes)
+{
+    const char* expected[] = {
+        "GetPosition", "GetRotation", "FindEntityByName",
+        "MathAdd", "MathSub", "MathMul", "MathDiv",
+        "MathClamp", "MathLerp",
+        "GetDistance", "VectorNormalize", "DotProduct", "CrossProduct",
+        "BoolAnd", "BoolOr", "BoolNot",
+        "CompareEqual", "CompareLess", "CompareGreater",
+        "ToString", "HasVariable", "Raycast"
+    };
+    for (const char* name : expected)
+    {
+        EXPECT_TRUE(m_registry.hasNode(name)) << "Missing: " << name;
+    }
+}
+
+TEST_F(NodeLibraryTest, RegistersExpectedFlowNodes)
+{
+    const char* expected[] = {
+        "SwitchInt", "SwitchString", "ForLoop", "WhileLoop",
+        "Gate", "DoOnce", "FlipFlop"
+    };
+    for (const char* name : expected)
+    {
+        EXPECT_TRUE(m_registry.hasNode(name)) << "Missing: " << name;
+    }
+}
+
+TEST_F(NodeLibraryTest, RegistersExpectedLatentNodes)
+{
+    const char* expected[] = {
+        "WaitForEvent", "WaitForCondition", "Timeline", "MoveTo"
+    };
+    for (const char* name : expected)
+    {
+        const NodeTypeDescriptor* desc = m_registry.findNode(name);
+        ASSERT_NE(desc, nullptr) << "Missing: " << name;
+        EXPECT_TRUE(desc->isLatent) << name << " should be marked latent";
+    }
+}
+
+TEST_F(NodeLibraryTest, EventNodesHaveCorrectEventTypeNames)
+{
+    struct Expect { const char* node; const char* eventType; };
+    Expect cases[] = {
+        {"OnKeyPressed", "KeyPressedEvent"},
+        {"OnKeyReleased", "KeyReleasedEvent"},
+        {"OnMouseButton", "MouseButtonPressedEvent"},
+        {"OnSceneLoaded", "SceneLoadedEvent"},
+        {"OnWeatherChanged", "WeatherChangedEvent"},
+        {"OnCustomEvent", "ScriptCustomEvent"},
+    };
+    for (const auto& c : cases)
+    {
+        const NodeTypeDescriptor* desc = m_registry.findNode(c.node);
+        ASSERT_NE(desc, nullptr) << c.node;
+        EXPECT_EQ(desc->eventTypeName, c.eventType) << c.node;
+    }
+}
+
+TEST_F(NodeLibraryTest, PureNodesAreMarkedPure)
+{
+    const char* expected[] = {
+        "MathAdd", "MathClamp", "BoolAnd", "CompareEqual",
+        "DotProduct", "GetDistance", "ToString", "GetPosition",
+        "VectorNormalize", "HasVariable"
+    };
+    for (const char* name : expected)
+    {
+        const NodeTypeDescriptor* desc = m_registry.findNode(name);
+        ASSERT_NE(desc, nullptr) << name;
+        EXPECT_TRUE(desc->isPure) << name << " should be pure";
+    }
+}
+
+// -- Pure math/vector/bool nodes (safe with dummy engine) -------------------
+
+namespace
+{
+
+/// @brief Convenience helper for building a single-node test graph.
+struct PureNodeFixture
+{
+    ScriptGraph graph;
+    ScriptInstance instance;
+    Engine* dummyEngine = nullptr;
+
+    uint32_t addNode(const std::string& typeName)
+    {
+        return graph.addNode(typeName);
+    }
+
+    void setProp(uint32_t nodeId, const std::string& pin, const ScriptValue& v)
+    {
+        graph.findNode(nodeId)->properties[pin] = v;
+    }
+
+    void initialize()
+    {
+        instance.initialize(graph, 1);
+    }
+};
+
+} // namespace
+
+TEST_F(NodeLibraryTest, MathAddComputesSum)
+{
+    PureNodeFixture f;
+    uint32_t id = f.addNode("MathAdd");
+    f.setProp(id, "A", ScriptValue(2.0f));
+    f.setProp(id, "B", ScriptValue(3.5f));
+    f.initialize();
+
+    ScriptContext ctx(f.instance, m_registry,
+                      *reinterpret_cast<Engine*>(&f.dummyEngine));
+    ctx.executeNode(id);
+
+    auto* inst = f.instance.getNodeInstance(id);
+    ASSERT_NE(inst, nullptr);
+    EXPECT_FLOAT_EQ(inst->outputValues["Result"].asFloat(), 5.5f);
+}
+
+TEST_F(NodeLibraryTest, MathSubComputesDifference)
+{
+    PureNodeFixture f;
+    uint32_t id = f.addNode("MathSub");
+    f.setProp(id, "A", ScriptValue(10.0f));
+    f.setProp(id, "B", ScriptValue(4.0f));
+    f.initialize();
+
+    ScriptContext ctx(f.instance, m_registry,
+                      *reinterpret_cast<Engine*>(&f.dummyEngine));
+    ctx.executeNode(id);
+    EXPECT_FLOAT_EQ(f.instance.getNodeInstance(id)->outputValues["Result"].asFloat(), 6.0f);
+}
+
+TEST_F(NodeLibraryTest, MathDivGuardsAgainstZero)
+{
+    PureNodeFixture f;
+    uint32_t id = f.addNode("MathDiv");
+    f.setProp(id, "A", ScriptValue(10.0f));
+    f.setProp(id, "B", ScriptValue(0.0f));
+    f.initialize();
+
+    ScriptContext ctx(f.instance, m_registry,
+                      *reinterpret_cast<Engine*>(&f.dummyEngine));
+    ctx.executeNode(id);
+    EXPECT_FLOAT_EQ(f.instance.getNodeInstance(id)->outputValues["Result"].asFloat(), 0.0f);
+}
+
+TEST_F(NodeLibraryTest, MathClampClampsToRange)
+{
+    PureNodeFixture f;
+    uint32_t id = f.addNode("MathClamp");
+    f.setProp(id, "Value", ScriptValue(15.0f));
+    f.setProp(id, "Min", ScriptValue(0.0f));
+    f.setProp(id, "Max", ScriptValue(10.0f));
+    f.initialize();
+
+    ScriptContext ctx(f.instance, m_registry,
+                      *reinterpret_cast<Engine*>(&f.dummyEngine));
+    ctx.executeNode(id);
+    EXPECT_FLOAT_EQ(f.instance.getNodeInstance(id)->outputValues["Result"].asFloat(), 10.0f);
+}
+
+TEST_F(NodeLibraryTest, MathLerpInterpolates)
+{
+    PureNodeFixture f;
+    uint32_t id = f.addNode("MathLerp");
+    f.setProp(id, "A", ScriptValue(0.0f));
+    f.setProp(id, "B", ScriptValue(100.0f));
+    f.setProp(id, "Alpha", ScriptValue(0.25f));
+    f.initialize();
+
+    ScriptContext ctx(f.instance, m_registry,
+                      *reinterpret_cast<Engine*>(&f.dummyEngine));
+    ctx.executeNode(id);
+    EXPECT_FLOAT_EQ(f.instance.getNodeInstance(id)->outputValues["Result"].asFloat(), 25.0f);
+}
+
+TEST_F(NodeLibraryTest, GetDistanceComputesEuclidean)
+{
+    PureNodeFixture f;
+    uint32_t id = f.addNode("GetDistance");
+    f.setProp(id, "A", ScriptValue(glm::vec3(0.0f, 0.0f, 0.0f)));
+    f.setProp(id, "B", ScriptValue(glm::vec3(3.0f, 4.0f, 0.0f)));
+    f.initialize();
+
+    ScriptContext ctx(f.instance, m_registry,
+                      *reinterpret_cast<Engine*>(&f.dummyEngine));
+    ctx.executeNode(id);
+    EXPECT_FLOAT_EQ(f.instance.getNodeInstance(id)->outputValues["Distance"].asFloat(), 5.0f);
+}
+
+TEST_F(NodeLibraryTest, VectorNormalizeProducesUnit)
+{
+    PureNodeFixture f;
+    uint32_t id = f.addNode("VectorNormalize");
+    f.setProp(id, "V", ScriptValue(glm::vec3(3.0f, 0.0f, 4.0f)));
+    f.initialize();
+
+    ScriptContext ctx(f.instance, m_registry,
+                      *reinterpret_cast<Engine*>(&f.dummyEngine));
+    ctx.executeNode(id);
+    auto v = f.instance.getNodeInstance(id)->outputValues["Result"].asVec3();
+    EXPECT_NEAR(glm::length(v), 1.0f, 1e-5f);
+}
+
+TEST_F(NodeLibraryTest, BoolAndOrNotTruthTable)
+{
+    // AND
+    {
+        PureNodeFixture f;
+        uint32_t id = f.addNode("BoolAnd");
+        f.setProp(id, "A", ScriptValue(true));
+        f.setProp(id, "B", ScriptValue(false));
+        f.initialize();
+        ScriptContext ctx(f.instance, m_registry,
+                          *reinterpret_cast<Engine*>(&f.dummyEngine));
+        ctx.executeNode(id);
+        EXPECT_FALSE(f.instance.getNodeInstance(id)->outputValues["Result"].asBool());
+    }
+    // OR
+    {
+        PureNodeFixture f;
+        uint32_t id = f.addNode("BoolOr");
+        f.setProp(id, "A", ScriptValue(true));
+        f.setProp(id, "B", ScriptValue(false));
+        f.initialize();
+        ScriptContext ctx(f.instance, m_registry,
+                          *reinterpret_cast<Engine*>(&f.dummyEngine));
+        ctx.executeNode(id);
+        EXPECT_TRUE(f.instance.getNodeInstance(id)->outputValues["Result"].asBool());
+    }
+    // NOT
+    {
+        PureNodeFixture f;
+        uint32_t id = f.addNode("BoolNot");
+        f.setProp(id, "A", ScriptValue(true));
+        f.initialize();
+        ScriptContext ctx(f.instance, m_registry,
+                          *reinterpret_cast<Engine*>(&f.dummyEngine));
+        ctx.executeNode(id);
+        EXPECT_FALSE(f.instance.getNodeInstance(id)->outputValues["Result"].asBool());
+    }
+}
+
+TEST_F(NodeLibraryTest, CompareLessGreaterEqual)
+{
+    // A=5, B=10 — Less is true, Greater is false, Equal is false
+    PureNodeFixture lf;
+    uint32_t lid = lf.addNode("CompareLess");
+    lf.setProp(lid, "A", ScriptValue(5.0f));
+    lf.setProp(lid, "B", ScriptValue(10.0f));
+    lf.initialize();
+    ScriptContext lctx(lf.instance, m_registry,
+                       *reinterpret_cast<Engine*>(&lf.dummyEngine));
+    lctx.executeNode(lid);
+    EXPECT_TRUE(lf.instance.getNodeInstance(lid)->outputValues["Result"].asBool());
+
+    PureNodeFixture gf;
+    uint32_t gid = gf.addNode("CompareGreater");
+    gf.setProp(gid, "A", ScriptValue(5.0f));
+    gf.setProp(gid, "B", ScriptValue(10.0f));
+    gf.initialize();
+    ScriptContext gctx(gf.instance, m_registry,
+                       *reinterpret_cast<Engine*>(&gf.dummyEngine));
+    gctx.executeNode(gid);
+    EXPECT_FALSE(gf.instance.getNodeInstance(gid)->outputValues["Result"].asBool());
+
+    PureNodeFixture ef;
+    uint32_t eid = ef.addNode("CompareEqual");
+    ef.setProp(eid, "A", ScriptValue(5.0f));
+    ef.setProp(eid, "B", ScriptValue(5.0f));
+    ef.initialize();
+    ScriptContext ectx(ef.instance, m_registry,
+                       *reinterpret_cast<Engine*>(&ef.dummyEngine));
+    ectx.executeNode(eid);
+    EXPECT_TRUE(ef.instance.getNodeInstance(eid)->outputValues["Result"].asBool());
+}
+
+TEST_F(NodeLibraryTest, ToStringConvertsNumericValue)
+{
+    PureNodeFixture f;
+    uint32_t id = f.addNode("ToString");
+    f.setProp(id, "Value", ScriptValue(42));
+    f.initialize();
+
+    ScriptContext ctx(f.instance, m_registry,
+                      *reinterpret_cast<Engine*>(&f.dummyEngine));
+    ctx.executeNode(id);
+    EXPECT_EQ(f.instance.getNodeInstance(id)->outputValues["Result"].asString(), "42");
+}
+
+// -- Flow control: stateful nodes -------------------------------------------
+
+TEST_F(NodeLibraryTest, SwitchIntRoutesByCase)
+{
+    ScriptGraph graph;
+    uint32_t switchId = graph.addNode("SwitchInt");
+    uint32_t c0 = graph.addNode("PrintToScreen");
+    uint32_t c2 = graph.addNode("PrintToScreen");
+    graph.findNode(switchId)->properties["Value"] = ScriptValue(2);
+    graph.addConnection(switchId, "Case 0", c0, "Exec");
+    graph.addConnection(switchId, "Case 2", c2, "Exec");
+
+    ScriptInstance instance;
+    instance.initialize(graph, 1);
+
+    Engine* dummy = nullptr;
+    ScriptContext ctx(instance, m_registry, *reinterpret_cast<Engine*>(&dummy));
+    ctx.executeNode(switchId);
+
+    // Switch + Case2's PrintToScreen = 2 nodes executed
+    EXPECT_EQ(ctx.nodesExecuted(), 2);
+}
+
+TEST_F(NodeLibraryTest, SwitchIntRoutesToDefault)
+{
+    ScriptGraph graph;
+    uint32_t switchId = graph.addNode("SwitchInt");
+    uint32_t def = graph.addNode("PrintToScreen");
+    graph.findNode(switchId)->properties["Value"] = ScriptValue(99);
+    graph.addConnection(switchId, "Default", def, "Exec");
+
+    ScriptInstance instance;
+    instance.initialize(graph, 1);
+
+    Engine* dummy = nullptr;
+    ScriptContext ctx(instance, m_registry, *reinterpret_cast<Engine*>(&dummy));
+    ctx.executeNode(switchId);
+
+    EXPECT_EQ(ctx.nodesExecuted(), 2);
+}
+
+TEST_F(NodeLibraryTest, ForLoopIteratesExpectedTimes)
+{
+    ScriptGraph graph;
+    uint32_t forId = graph.addNode("ForLoop");
+    uint32_t body = graph.addNode("PrintToScreen");
+    uint32_t completed = graph.addNode("PrintToScreen");
+
+    graph.findNode(forId)->properties["First"] = ScriptValue(1);
+    graph.findNode(forId)->properties["Last"] = ScriptValue(4);
+    graph.addConnection(forId, "Body", body, "Exec");
+    graph.addConnection(forId, "Completed", completed, "Exec");
+
+    ScriptInstance instance;
+    instance.initialize(graph, 1);
+
+    Engine* dummy = nullptr;
+    ScriptContext ctx(instance, m_registry, *reinterpret_cast<Engine*>(&dummy));
+    ctx.executeNode(forId);
+
+    // ForLoop + 4 Body prints + 1 Completed print = 6
+    EXPECT_EQ(ctx.nodesExecuted(), 6);
+}
+
+TEST_F(NodeLibraryTest, DoOnceFiresOnlyOnce)
+{
+    ScriptGraph graph;
+    uint32_t doOnceId = graph.addNode("DoOnce");
+    uint32_t print = graph.addNode("PrintToScreen");
+    graph.addConnection(doOnceId, "Then", print, "Exec");
+
+    ScriptInstance instance;
+    instance.initialize(graph, 1);
+
+    Engine* dummy = nullptr;
+    // First execution fires
+    {
+        ScriptContext ctx(instance, m_registry, *reinterpret_cast<Engine*>(&dummy));
+        ctx.executeNode(doOnceId);
+        EXPECT_EQ(ctx.nodesExecuted(), 2); // DoOnce + Print
+    }
+    // Second execution should be blocked
+    {
+        ScriptContext ctx(instance, m_registry, *reinterpret_cast<Engine*>(&dummy));
+        ctx.executeNode(doOnceId);
+        EXPECT_EQ(ctx.nodesExecuted(), 1); // Only DoOnce
+    }
+}
+
+TEST_F(NodeLibraryTest, FlipFlopAlternatesAB)
+{
+    ScriptGraph graph;
+    uint32_t ffId = graph.addNode("FlipFlop");
+    uint32_t aPrint = graph.addNode("PrintToScreen");
+    uint32_t bPrint = graph.addNode("PrintToScreen");
+    graph.findNode(aPrint)->properties["Message"] = ScriptValue(std::string("A"));
+    graph.findNode(bPrint)->properties["Message"] = ScriptValue(std::string("B"));
+    graph.addConnection(ffId, "A", aPrint, "Exec");
+    graph.addConnection(ffId, "B", bPrint, "Exec");
+
+    ScriptInstance instance;
+    instance.initialize(graph, 1);
+
+    Engine* dummy = nullptr;
+    // 1st: A fires (IsA=true initially)
+    {
+        ScriptContext ctx(instance, m_registry, *reinterpret_cast<Engine*>(&dummy));
+        ctx.executeNode(ffId);
+    }
+    auto* ffInst = instance.getNodeInstance(ffId);
+    ASSERT_NE(ffInst, nullptr);
+    EXPECT_TRUE(ffInst->outputValues["IsA"].asBool());
+
+    // 2nd: B fires
+    {
+        ScriptContext ctx(instance, m_registry, *reinterpret_cast<Engine*>(&dummy));
+        ctx.executeNode(ffId);
+    }
+    EXPECT_FALSE(ffInst->outputValues["IsA"].asBool());
+
+    // 3rd: A again
+    {
+        ScriptContext ctx(instance, m_registry, *reinterpret_cast<Engine*>(&dummy));
+        ctx.executeNode(ffId);
+    }
+    EXPECT_TRUE(ffInst->outputValues["IsA"].asBool());
+}
+
+// -- Latent: action scheduling + onTick -------------------------------------
+
+TEST_F(NodeLibraryTest, TimelineSchedulesLatentWithTickCallback)
+{
+    ScriptGraph graph;
+    uint32_t tlId = graph.addNode("Timeline");
+    graph.findNode(tlId)->properties["Duration"] = ScriptValue(2.0f);
+
+    ScriptInstance instance;
+    instance.initialize(graph, 1);
+
+    Engine* dummy = nullptr;
+    ScriptContext ctx(instance, m_registry, *reinterpret_cast<Engine*>(&dummy));
+    ctx.executeNode(tlId);
+
+    ASSERT_EQ(instance.pendingActions().size(), 1u);
+    EXPECT_EQ(instance.pendingActions()[0].outputPin, "Finished");
+    EXPECT_FLOAT_EQ(instance.pendingActions()[0].totalDuration, 2.0f);
+    EXPECT_TRUE(static_cast<bool>(instance.pendingActions()[0].onTick));
+}
+
+TEST_F(NodeLibraryTest, TimelineZeroDurationFinishesImmediately)
+{
+    ScriptGraph graph;
+    uint32_t tlId = graph.addNode("Timeline");
+    graph.findNode(tlId)->properties["Duration"] = ScriptValue(0.0f);
+
+    ScriptInstance instance;
+    instance.initialize(graph, 1);
+
+    Engine* dummy = nullptr;
+    ScriptContext ctx(instance, m_registry, *reinterpret_cast<Engine*>(&dummy));
+    ctx.executeNode(tlId);
+
+    // No latent action should be scheduled
+    EXPECT_EQ(instance.pendingActions().size(), 0u);
+    auto* inst = instance.getNodeInstance(tlId);
+    ASSERT_NE(inst, nullptr);
+    EXPECT_FLOAT_EQ(inst->outputValues["Alpha"].asFloat(), 1.0f);
+}
+
+TEST_F(NodeLibraryTest, WaitForConditionSchedulesConditionBasedLatent)
+{
+    ScriptGraph graph;
+    uint32_t wId = graph.addNode("WaitForCondition");
+    graph.findNode(wId)->properties["VarName"] = ScriptValue(std::string("flag"));
+
+    ScriptInstance instance;
+    instance.initialize(graph, 1);
+    instance.graphBlackboard().set("flag", ScriptValue(false));
+
+    Engine* dummy = nullptr;
+    ScriptContext ctx(instance, m_registry, *reinterpret_cast<Engine*>(&dummy));
+    ctx.executeNode(wId);
+
+    ASSERT_EQ(instance.pendingActions().size(), 1u);
+    EXPECT_TRUE(static_cast<bool>(instance.pendingActions()[0].condition));
+    // Condition should return false initially
+    EXPECT_FALSE(instance.pendingActions()[0].condition());
+
+    // Flip the flag — condition now returns true
+    instance.graphBlackboard().set("flag", ScriptValue(true));
+    EXPECT_TRUE(instance.pendingActions()[0].condition());
+}
+
+// -- EventBus bridge: end-to-end via a default Engine ----------------------
+
+TEST(ScriptingSystemBridge, KeyPressedEventTriggersOnKeyPressedNode)
+{
+    Engine engine;  // default-constructed: EventBus is usable, other subsystems are not
+    ScriptingSystem sys;
+    ASSERT_TRUE(sys.initialize(engine));
+
+    // Build a graph: OnKeyPressed -> PrintToScreen
+    ScriptGraph graph;
+    graph.name = "BridgeTest";
+    uint32_t onKey = graph.addNode("OnKeyPressed");
+    uint32_t printer = graph.addNode("PrintToScreen");
+    graph.addConnection(onKey, "Pressed", printer, "Exec");
+
+    ScriptInstance instance;
+    instance.initialize(graph, 1);
+    sys.registerInstance(instance);
+
+    // Publish a KeyPressedEvent — the bridge should fire onKey's execute,
+    // which triggers the PrintToScreen node.
+    KeyPressedEvent evt(42, false);
+    engine.getEventBus().publish(evt);
+
+    // The onKey node's keyCode output should be populated by the bridge.
+    auto* nodeInst = instance.getNodeInstance(onKey);
+    ASSERT_NE(nodeInst, nullptr);
+    EXPECT_EQ(nodeInst->outputValues["keyCode"].asInt(), 42);
+    EXPECT_FALSE(nodeInst->outputValues["isRepeat"].asBool());
+
+    sys.unregisterInstance(instance);
+    sys.shutdown();
+}
+
+TEST(ScriptingSystemBridge, UnregisterCleansUpSubscriptions)
+{
+    Engine engine;
+    ScriptingSystem sys;
+    ASSERT_TRUE(sys.initialize(engine));
+
+    ScriptGraph graph;
+    graph.addNode("OnKeyPressed");
+    graph.addNode("OnMouseButton");
+
+    ScriptInstance instance;
+    instance.initialize(graph, 1);
+    sys.registerInstance(instance);
+
+    // Should have subscribed to at least two event types
+    EXPECT_GE(instance.subscriptions().size(), 2u);
+
+    sys.unregisterInstance(instance);
+    EXPECT_EQ(instance.subscriptions().size(), 0u);
+    EXPECT_FALSE(instance.isActive());
+
+    sys.shutdown();
+}
+
+TEST(ScriptingSystemBridge, PublishEventNodeDeliversToOnCustomEvent)
+{
+    Engine engine;
+    ScriptingSystem sys;
+    ASSERT_TRUE(sys.initialize(engine));
+
+    // Two graphs: publisher and subscriber
+    ScriptGraph pubGraph;
+    uint32_t pubNode = pubGraph.addNode("PublishEvent");
+    pubGraph.findNode(pubNode)->properties["name"] =
+        ScriptValue(std::string("HelloEvent"));
+    pubGraph.findNode(pubNode)->properties["payload"] = ScriptValue(7.0f);
+    ScriptInstance publisher;
+    publisher.initialize(pubGraph, 1);
+
+    ScriptGraph subGraph;
+    uint32_t onCustom = subGraph.addNode("OnCustomEvent");
+    subGraph.findNode(onCustom)->properties["Name"] =
+        ScriptValue(std::string("HelloEvent"));
+    ScriptInstance subscriber;
+    subscriber.initialize(subGraph, 2);
+
+    sys.registerInstance(publisher);
+    sys.registerInstance(subscriber);
+
+    // Fire the publisher's PublishEvent node manually
+    sys.fireEvent(publisher, pubNode);
+
+    // The subscriber's OnCustomEvent node should have been populated
+    auto* subNode = subscriber.getNodeInstance(onCustom);
+    ASSERT_NE(subNode, nullptr);
+    EXPECT_EQ(subNode->outputValues["name"].asString(), "HelloEvent");
+    EXPECT_FLOAT_EQ(subNode->outputValues["payload"].asFloat(), 7.0f);
+
+    sys.unregisterInstance(publisher);
+    sys.unregisterInstance(subscriber);
+    sys.shutdown();
+}
+
+TEST(ScriptingSystemBridge, LatentActionOnTickFiresDuringTickLatentActions)
+{
+    Engine engine;
+    ScriptingSystem sys;
+    ASSERT_TRUE(sys.initialize(engine));
+
+    ScriptGraph graph;
+    uint32_t tlId = graph.addNode("Timeline");
+    graph.findNode(tlId)->properties["Duration"] = ScriptValue(1.0f);
+
+    ScriptInstance instance;
+    instance.initialize(graph, 1);
+    sys.registerInstance(instance);
+
+    // Manually fire the Timeline's execute to schedule the latent action
+    sys.fireEvent(instance, tlId);
+    ASSERT_EQ(instance.pendingActions().size(), 1u);
+
+    // Simulate half a second elapsing — onTick should have set Alpha ~0.5
+    sys.update(0.5f);
+    auto* nodeInst = instance.getNodeInstance(tlId);
+    ASSERT_NE(nodeInst, nullptr);
+    float alpha = nodeInst->outputValues["Alpha"].asFloat();
+    EXPECT_GE(alpha, 0.45f);
+    EXPECT_LE(alpha, 0.55f);
+
+    // Finish the timeline
+    sys.update(0.6f);
+    EXPECT_EQ(instance.pendingActions().size(), 0u);
+
+    sys.unregisterInstance(instance);
+    sys.shutdown();
 }

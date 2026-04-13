@@ -87,6 +87,20 @@ public:
     Engine& engine() { return m_engine; }
     ScriptInstance& instance() { return m_instance; }
 
+    // -- Scene/entity convenience (may return nullptr in headless tests) --
+
+    /// @brief Get the active scene, or nullptr if none / engine is uninitialised.
+    class Scene* activeScene();
+
+    /// @brief Look up an entity by ID in the active scene. Returns nullptr
+    /// if no scene is active or the entity doesn't exist.
+    class Entity* findEntity(uint32_t entityId);
+
+    /// @brief Resolve an entity reference: value 0 means "owner entity"
+    /// (the entity this script instance is attached to). Any other value is
+    /// treated as a raw entity ID looked up in the active scene.
+    class Entity* resolveEntity(uint32_t entityId);
+
     // -- Diagnostics --
 
     int callDepth() const { return m_callDepth; }

@@ -34,15 +34,32 @@ struct ScriptNodeInstance
 
     /// @brief Cached output pin values, set during execute().
     std::unordered_map<std::string, ScriptValue> outputValues;
+
+    /// @brief Persistent per-node runtime state for stateful nodes.
+    /// Survives across execute() calls (unlike outputValues, which is cleared).
+    /// Used by DoOnce, Gate, FlipFlop, ForLoop index, etc.
+    std::unordered_map<std::string, ScriptValue> runtimeState;
 };
 
-/// @brief A pending latent action (e.g. Delay timer, WaitForEvent).
+/// @brief A pending latent action (e.g. Delay timer, WaitForEvent, Timeline).
 struct PendingLatentAction
 {
     uint32_t nodeId = 0;
-    std::string outputPin;  ///< Which output pin to trigger when resuming
-    float remainingTime = 0.0f; ///< For time-based latent actions (Delay)
-    std::function<bool()> condition; ///< For condition-based waits (returns true when done)
+    std::string outputPin;  ///< Output pin to trigger when the action completes
+
+    /// @brief Remaining time in seconds (time-based actions). Set to < 0 to mean
+    /// "not time-based" (condition-only). Reaching 0 fires outputPin.
+    float remainingTime = 0.0f;
+
+    /// @brief Total duration (for progress calculation). 0 if not used.
+    float totalDuration = 0.0f;
+
+    /// @brief For condition-based waits — returns true when the wait is satisfied.
+    std::function<bool()> condition;
+
+    /// @brief Optional per-frame callback invoked before completion. Receives
+    /// progress in [0,1] (1 = complete). Used by Timeline / MoveTo.
+    std::function<void(float progress)> onTick;
 };
 
 /// @brief Runtime instance of a ScriptGraph, owning execution state.

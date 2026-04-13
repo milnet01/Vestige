@@ -1,6 +1,7 @@
 /// @file script_context.cpp
 /// @brief ScriptContext interpreter implementation.
 #include "scripting/script_context.h"
+#include "core/engine.h"
 #include "core/logger.h"
 
 namespace Vestige
@@ -222,6 +223,43 @@ void ScriptContext::scheduleWaitForCondition(const ScriptNodeInstance& node,
     action.remainingTime = -1.0f; // Not time-based
     action.condition = std::move(condition);
     m_instance.addLatentAction(std::move(action));
+}
+
+// ---------------------------------------------------------------------------
+// Scene/entity helpers
+// ---------------------------------------------------------------------------
+
+Scene* ScriptContext::activeScene()
+{
+    // Guard against a null-Engine pattern used in lightweight unit tests.
+    // Reading the reference address is well-defined, but calling methods on
+    // it isn't — so we bail out if the address is zero.
+    if (reinterpret_cast<uintptr_t>(&m_engine) == 0)
+    {
+        return nullptr;
+    }
+    return m_engine.getSceneManager().getActiveScene();
+}
+
+Entity* ScriptContext::findEntity(uint32_t entityId)
+{
+    if (entityId == 0)
+    {
+        return nullptr;
+    }
+    Scene* scene = activeScene();
+    if (!scene)
+    {
+        return nullptr;
+    }
+    return scene->findEntityById(entityId);
+}
+
+Entity* ScriptContext::resolveEntity(uint32_t entityId)
+{
+    // 0 means "owner entity" — this script's attached entity.
+    uint32_t resolved = (entityId == 0) ? m_instance.entityId() : entityId;
+    return findEntity(resolved);
 }
 
 // ---------------------------------------------------------------------------
