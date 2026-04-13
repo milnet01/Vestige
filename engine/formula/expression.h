@@ -84,7 +84,28 @@ struct ExprNode
     nlohmann::json toJson() const;
 
     /// @brief Deserializes an expression tree from JSON.
+    ///
+    /// Validates variable names against [A-Za-z_][A-Za-z0-9_]* and operators
+    /// against an allowlist, per AUDIT.md §H11 / FIXPLAN E3 (codegen-injection
+    /// hardening). Throws std::runtime_error on unrecognised format,
+    /// disallowed operator, or invalid identifier.
     static std::unique_ptr<ExprNode> fromJson(const nlohmann::json& j);
+
+    // -- Validation helpers (AUDIT.md §H11, FIXPLAN E3) ---------------------
+    //
+    // These are the single source of truth used by factory functions and
+    // fromJson so that every path building an ExprNode rejects hostile
+    // inputs before they reach codegen.
+
+    /// @brief True if @p name is a valid C-style identifier, <=128 chars.
+    static bool isValidVariableName(const std::string& name);
+
+    /// @brief True if @p op is one of the binary ops codegen understands.
+    ///        Mirrors the switch arms in codegen_cpp/codegen_glsl.
+    static bool isAllowedBinaryOp(const std::string& op);
+
+    /// @brief True if @p op is one of the unary ops codegen understands.
+    static bool isAllowedUnaryOp(const std::string& op);
 };
 
 } // namespace Vestige

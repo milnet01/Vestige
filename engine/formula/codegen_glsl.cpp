@@ -6,6 +6,8 @@
 #include <cmath>
 #include <iomanip>
 #include <sstream>
+#include <stdexcept>
+#include <unordered_set>
 
 namespace Vestige
 {
@@ -66,7 +68,11 @@ std::string CodegenGlsl::emitExpression(const ExprNode& node,
         {
             return "dot(" + l + ", " + r + ")";
         }
-        return "(" + l + " " + node.op + " " + r + ")";
+        // Validated at ExprNode construction (AUDIT.md §H11); reaching here
+        // means the tree was mutated post-construction with a disallowed op.
+        throw std::runtime_error(
+            "CodegenGlsl: unknown binary op '" + node.op +
+            "' — not in allowlist (AUDIT.md §H11)");
     }
 
     case ExprNodeType::UNARY_OP:
@@ -83,6 +89,16 @@ std::string CodegenGlsl::emitExpression(const ExprNode& node,
             return "sign(" + arg + ")";
 
         // GLSL built-in functions: sin, cos, sqrt, abs, exp, log, floor, ceil
+        static const std::unordered_set<std::string> kBuiltins = {
+            "sin", "cos", "sqrt", "abs", "exp", "log", "floor", "ceil"
+        };
+        if (kBuiltins.count(node.op) == 0)
+        {
+            throw std::runtime_error(
+                "CodegenGlsl: unknown unary op '" + node.op +
+                "' — not in allowlist (AUDIT.md §H11)");
+        }
+        // sqrt/log will be switched to safe wrappers in FIXPLAN E4.
         return node.op + "(" + arg + ")";
     }
 

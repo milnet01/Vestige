@@ -7,6 +7,7 @@
 #include <iomanip>
 #include <sstream>
 #include <stdexcept>
+#include <unordered_set>
 
 namespace Vestige
 {
@@ -67,7 +68,11 @@ std::string CodegenCpp::emitExpression(const ExprNode& node,
         {
             return "glm::dot(" + l + ", " + r + ")";
         }
-        return "(" + l + " " + node.op + " " + r + ")";
+        // Validated at ExprNode construction (AUDIT.md §H11); reaching here
+        // means the tree was mutated post-construction with a disallowed op.
+        throw std::runtime_error(
+            "CodegenCpp: unknown binary op '" + node.op +
+            "' — not in allowlist (AUDIT.md §H11)");
     }
 
     case ExprNodeType::UNARY_OP:
@@ -84,6 +89,16 @@ std::string CodegenCpp::emitExpression(const ExprNode& node,
             return "(" + arg + " > 0.0f ? 1.0f : (" + arg + " < 0.0f ? -1.0f : 0.0f))";
 
         // Standard math functions: sin, cos, sqrt, abs, exp, log, floor, ceil
+        static const std::unordered_set<std::string> kStdMathFns = {
+            "sin", "cos", "sqrt", "abs", "exp", "log", "floor", "ceil"
+        };
+        if (kStdMathFns.count(node.op) == 0)
+        {
+            throw std::runtime_error(
+                "CodegenCpp: unknown unary op '" + node.op +
+                "' — not in allowlist (AUDIT.md §H11)");
+        }
+        // sqrt/log will be switched to safe wrappers in FIXPLAN E4.
         return "std::" + node.op + "(" + arg + ")";
     }
 
