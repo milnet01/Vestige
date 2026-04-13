@@ -27,12 +27,36 @@ std::string clampString(std::string s, size_t maxBytes)
     return s;
 }
 
-/// @brief Reject file paths that traverse outside their starting directory
-/// via `..` components. Does not enforce a specific root — callers must also
-/// validate the final path is under an expected asset directory when possible.
+/// @brief Reject file paths that attempt traversal outside the caller's
+/// expected scope. Previously this only rejected `..` components, giving
+/// false confidence — absolute paths like `/etc/passwd` passed through.
+///
+/// AUDIT.md §M6 / FIXPLAN: tighten to also reject absolute paths and
+/// explicit root-references (`~`). Callers that need to load from
+/// arbitrary paths can opt in by resolving + prefix-checking against a
+/// known asset root using std::filesystem::canonical upstream.
 bool isPathTraversalSafe(const std::string& filePath)
 {
+    if (filePath.empty())
+    {
+        return false;
+    }
+
     std::filesystem::path p(filePath);
+
+    // Absolute paths escape the implicit working-directory scope.
+    if (p.is_absolute())
+    {
+        return false;
+    }
+
+    // Leading `~` is shell tilde-expansion — not resolved by std::filesystem
+    // but user-visible home reference. Reject to avoid surprise.
+    if (!filePath.empty() && filePath.front() == '~')
+    {
+        return false;
+    }
+
     for (const auto& part : p)
     {
         if (part == "..")
@@ -126,11 +150,19 @@ uint32_t ScriptGraph::addConnection(uint32_t srcNode, const std::string& srcPin,
         return 0;
     }
 
+    // AUDIT.md §M5 / FIXPLAN: clamp pin names on the editor path too.
+    // The on-disk load routes through clampString in fromJson (see below);
+    // the editor previously did not, leaving unbounded pin-name growth
+    // possible via repeated addConnection calls from a scripted editor
+    // action.
+    const std::string clampedSrcPin = clampString(srcPin, MAX_STRING_BYTES);
+    const std::string clampedTgtPin = clampString(tgtPin, MAX_STRING_BYTES);
+
     // Duplicate check
     for (const auto& c : connections)
     {
-        if (c.sourceNode == srcNode && c.sourcePin == srcPin &&
-            c.targetNode == tgtNode && c.targetPin == tgtPin)
+        if (c.sourceNode == srcNode && c.sourcePin == clampedSrcPin &&
+            c.targetNode == tgtNode && c.targetPin == clampedTgtPin)
         {
             return 0;
         }
@@ -140,7 +172,7 @@ uint32_t ScriptGraph::addConnection(uint32_t srcNode, const std::string& srcPin,
     // (each input pin accepts only one connection)
     for (const auto& c : connections)
     {
-        if (c.targetNode == tgtNode && c.targetPin == tgtPin)
+        if (c.targetNode == tgtNode && c.targetPin == clampedTgtPin)
         {
             return 0;
         }
@@ -149,9 +181,9 @@ uint32_t ScriptGraph::addConnection(uint32_t srcNode, const std::string& srcPin,
     ScriptConnection conn;
     conn.id = nextConnectionId++;
     conn.sourceNode = srcNode;
-    conn.sourcePin = srcPin;
+    conn.sourcePin = clampedSrcPin;
     conn.targetNode = tgtNode;
-    conn.targetPin = tgtPin;
+    conn.targetPin = clampedTgtPin;
     connections.push_back(conn);
     return conn.id;
 }
