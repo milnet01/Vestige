@@ -28,6 +28,16 @@ MAX_DETAIL_PER_TOOL = 20
 MAX_DETAIL_PER_PATTERN_CAT = 15
 
 
+def _signed(n: int) -> str:
+    """Format an integer with an explicit sign for delta-style display."""
+    return f"+{n}" if n > 0 else str(n)
+
+
+def _signed_float(n: float) -> str:
+    """Format a float with an explicit sign and one decimal place."""
+    return f"+{n:.1f}" if n > 0 else f"{n:.1f}"
+
+
 class ReportBuilder:
     """Builds a condensed markdown report optimized for LLM consumption."""
 
@@ -51,6 +61,7 @@ class ReportBuilder:
         duration: float,
         diff: ReportDiff | None = None,
         trend_report: Any = None,
+        baseline_comparison: Any = None,
     ) -> str:
         """Build the full report and write to file. Returns the report text."""
         deduped = deduplicate(findings)
@@ -72,6 +83,13 @@ class ReportBuilder:
 
         # Executive Summary
         sections.append(self._build_summary(deduped, tier1_summary, audit_data, tiers_run, duration))
+
+        # Baseline Comparison (D5) — previous-vs-current delta. Always
+        # rendered when the audit has at least one prior snapshot to
+        # compare against; no flag required. Skipped silently on the
+        # first run (when `baseline_comparison` is None).
+        if baseline_comparison is not None:
+            sections.append(self._build_baseline_section(baseline_comparison))
 
         # Differential report section (if available)
         if diff is not None:
@@ -133,6 +151,77 @@ class ReportBuilder:
         log.info("Latest copy: %s", base_path)
 
         return report
+
+    def _build_baseline_section(self, comp: Any) -> str:
+        """Render the previous-vs-current run delta block (D5).
+
+        Compact section answering "what changed since last audit?":
+        build status transition, test pass/fail delta, severity-level
+        finding deltas, and the top moving categories. The renderer
+        suppresses fields that aren't meaningful (e.g. build_status when
+        the previous snapshot was a legacy record without baseline
+        metadata) so older snapshot files don't produce misleading
+        zero-deltas.
+        """
+        lines = ["## Baseline Comparison", ""]
+
+        # Header — pin the comparison to the previous timestamp so a
+        # reviewer can find the prior report. Trim ISO timestamp
+        # microseconds for readability.
+        prev_ts = (comp.previous_timestamp or "")[:19]
+        if prev_ts:
+            lines.append(f"**Compared against:** previous run at `{prev_ts}`")
+            lines.append("")
+
+        # Build + test transitions. Only meaningful when the previous
+        # snapshot carried baseline data — pre-2.2.0 snapshots set
+        # build_ok=None and we should not invent "OK→OK" out of zeros.
+        if comp.previous_captured_baseline:
+            if comp.build_status_change:
+                lines.append(f"- **Build:** {comp.build_status_change}")
+            if comp.test_failed_delta != 0 or comp.test_passed_delta != 0:
+                pf = _signed(comp.test_passed_delta)
+                ff = _signed(comp.test_failed_delta)
+                lines.append(
+                    f"- **Tests:** passed {pf}, failed {ff}"
+                )
+            if comp.loc_delta != 0:
+                lines.append(f"- **LOC:** {_signed(comp.loc_delta)}")
+            if comp.file_count_delta != 0:
+                lines.append(f"- **Files:** {_signed(comp.file_count_delta)}")
+            if abs(comp.duration_delta) >= 0.5:
+                lines.append(
+                    f"- **Duration:** {_signed_float(comp.duration_delta)}s"
+                )
+        elif comp.build_status_change:
+            # Previous run was legacy — only surface current build state.
+            lines.append(f"- **Build:** {comp.build_status_change} (no prior baseline)")
+
+        # Findings delta — always show overall + severity breakdown.
+        lines.append(f"- **Findings:** {_signed(comp.finding_delta)} total")
+        if comp.severity_deltas:
+            sev_order = ["critical", "high", "medium", "low", "info"]
+            parts = []
+            for sev in sev_order:
+                if sev in comp.severity_deltas:
+                    parts.append(f"{sev} {_signed(comp.severity_deltas[sev])}")
+            if parts:
+                lines.append(f"  - by severity: {', '.join(parts)}")
+
+        # Top movers — categories with the largest absolute change.
+        # Cap at 5 to keep token footprint bounded; the full picture
+        # is in the per-tier sections below.
+        if comp.category_deltas:
+            movers = sorted(
+                comp.category_deltas.items(),
+                key=lambda kv: abs(kv[1]),
+                reverse=True,
+            )[:5]
+            mover_str = ", ".join(f"{c} {_signed(d)}" for c, d in movers)
+            lines.append(f"  - top movers: {mover_str}")
+
+        lines.append("")
+        return "\n".join(lines)
 
     def _build_diff_section(self, diff: ReportDiff) -> str:
         """Build the differential comparison section."""

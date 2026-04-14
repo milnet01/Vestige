@@ -8,10 +8,12 @@ from pathlib import Path
 
 import pytest
 
-from lib.findings import Finding, Severity
+from lib.findings import AuditData, Finding, Severity
 from lib.trends import (
+    BaselineComparison,
     TrendReport,
     TrendSnapshot,
+    compute_baseline_comparison,
     compute_trends,
     load_snapshots,
     save_snapshot,
@@ -263,3 +265,242 @@ class TestTrendReportToDict:
         assert d["direction"] == "improving"
         assert d["finding_delta"] == -5
         assert d["categories"]["memory"] == "improving"
+
+
+# ---------------------------------------------------------------------------
+# D5 — Baseline metadata round-trip + compute_baseline_comparison
+# ---------------------------------------------------------------------------
+
+
+class TestTrendSnapshotBaselineFields:
+    """Baseline metadata added in 2.2.0 must round-trip through JSON."""
+
+    def test_baseline_fields_default_to_neutral(self):
+        snap = TrendSnapshot()
+        # build_ok=None signals "not captured" (legacy snapshot)
+        assert snap.build_ok is None
+        assert snap.tests_passed == 0
+        assert snap.total_loc == 0
+        assert snap.duration_seconds == 0.0
+
+    def test_to_dict_includes_baseline(self):
+        snap = TrendSnapshot(
+            build_ok=True,
+            build_warnings=3,
+            tests_passed=100,
+            tests_failed=2,
+            total_loc=12345,
+            duration_seconds=42.7,
+        )
+        d = snap.to_dict()
+        assert d["build_ok"] is True
+        assert d["build_warnings"] == 3
+        assert d["tests_passed"] == 100
+        assert d["tests_failed"] == 2
+        assert d["total_loc"] == 12345
+        assert d["duration_seconds"] == 42.7
+
+    def test_from_dict_legacy_snapshot_defaults(self):
+        """Pre-2.2.0 snapshots only had finding_count + by_severity/category."""
+        data = {
+            "timestamp": "2026-04-10T08:00:00",
+            "finding_count": 5,
+            "by_severity": {"high": 5},
+            "by_category": {"memory": 5},
+        }
+        snap = TrendSnapshot.from_dict(data)
+        # No baseline → build_ok must be None so the comparator can
+        # tell legacy from "build was OK".
+        assert snap.build_ok is None
+        assert snap.tests_passed == 0
+        assert snap.total_loc == 0
+
+    def test_round_trip_preserves_baseline(self):
+        snap = TrendSnapshot(
+            timestamp="2026-04-14T10:00:00",
+            finding_count=10,
+            by_severity={"high": 4, "low": 6},
+            by_category={"memory": 4, "style": 6},
+            build_ok=False,
+            build_errors=2,
+            tests_passed=99,
+            tests_failed=1,
+            total_loc=10000,
+            file_count=200,
+            duration_seconds=58.3,
+        )
+        restored = TrendSnapshot.from_dict(snap.to_dict())
+        assert restored.build_ok is False
+        assert restored.build_errors == 2
+        assert restored.tests_passed == 99
+        assert restored.tests_failed == 1
+        assert restored.total_loc == 10000
+        assert restored.file_count == 200
+        assert restored.duration_seconds == 58.3
+
+
+class TestSaveSnapshotBaseline:
+    """save_snapshot should capture tier1/audit_data when supplied."""
+
+    def test_captures_baseline_metadata(self, tmp_path: Path):
+        tier1 = {
+            "build": {"build_ok": True, "warnings": 2, "errors": 0},
+            "tests": {"passed": 50, "failed": 1, "skipped": 3},
+        }
+        ad = AuditData(total_loc=8000, file_count=120)
+        snap = save_snapshot(
+            tmp_path,
+            findings=[],
+            tier1_summary=tier1,
+            audit_data=ad,
+            duration=12.3,
+        )
+        assert snap.build_ok is True
+        assert snap.build_warnings == 2
+        assert snap.tests_passed == 50
+        assert snap.tests_failed == 1
+        assert snap.total_loc == 8000
+        assert snap.file_count == 120
+        assert snap.duration_seconds == 12.3
+
+    def test_omitted_baseline_args_keep_defaults(self, tmp_path: Path):
+        """Legacy callers (no baseline kwargs) must still work."""
+        snap = save_snapshot(tmp_path, findings=[])
+        assert snap.build_ok is None
+        assert snap.total_loc == 0
+        assert snap.duration_seconds == 0.0
+
+    def test_missing_build_key_does_not_invent_state(self, tmp_path: Path):
+        """tier1_summary may lack 'build' if Tier 1 was skipped."""
+        snap = save_snapshot(
+            tmp_path,
+            findings=[],
+            tier1_summary={"tests": {"passed": 5}},
+            duration=1.0,
+        )
+        # No build → build_ok stays None, not False.
+        assert snap.build_ok is None
+        assert snap.tests_passed == 5
+
+
+class TestComputeBaselineComparison:
+    """compute_baseline_comparison contrasts newest vs second-newest."""
+
+    def test_returns_none_for_single_snapshot(self):
+        assert compute_baseline_comparison([TrendSnapshot()]) is None
+
+    def test_returns_none_for_empty(self):
+        assert compute_baseline_comparison([]) is None
+
+    def test_finding_delta_basic(self):
+        snapshots = [
+            TrendSnapshot(timestamp="t2", finding_count=15),
+            TrendSnapshot(timestamp="t1", finding_count=10),
+        ]
+        comp = compute_baseline_comparison(snapshots)
+        assert comp is not None
+        assert comp.finding_delta == 5
+        assert comp.previous_timestamp == "t1"
+        assert comp.current_timestamp == "t2"
+
+    def test_severity_deltas_only_emit_nonzero(self):
+        snapshots = [
+            TrendSnapshot(by_severity={"high": 3, "low": 5, "info": 10}),
+            TrendSnapshot(by_severity={"high": 5, "low": 5, "info": 8}),
+        ]
+        comp = compute_baseline_comparison(snapshots)
+        assert comp is not None
+        assert comp.severity_deltas == {"high": -2, "info": 2}
+        # "low" unchanged → omitted from the dict
+        assert "low" not in comp.severity_deltas
+
+    def test_category_deltas_track_movement(self):
+        snapshots = [
+            TrendSnapshot(by_category={"memory": 2, "perf": 8, "style": 4}),
+            TrendSnapshot(by_category={"memory": 5, "perf": 4, "security": 1}),
+        ]
+        comp = compute_baseline_comparison(snapshots)
+        assert comp is not None
+        # memory dropped, perf rose, style appeared, security disappeared
+        assert comp.category_deltas["memory"] == -3
+        assert comp.category_deltas["perf"] == 4
+        assert comp.category_deltas["style"] == 4
+        assert comp.category_deltas["security"] == -1
+
+    def test_build_status_transition(self):
+        snapshots = [
+            TrendSnapshot(build_ok=False),
+            TrendSnapshot(build_ok=True),
+        ]
+        comp = compute_baseline_comparison(snapshots)
+        assert comp is not None
+        assert comp.build_status_change == "OK→FAILED"
+        assert comp.previous_captured_baseline is True
+
+    def test_build_status_unchanged_collapses_to_label(self):
+        snapshots = [
+            TrendSnapshot(build_ok=True),
+            TrendSnapshot(build_ok=True),
+        ]
+        comp = compute_baseline_comparison(snapshots)
+        assert comp is not None
+        # Single label (no arrow) for stable build state.
+        assert comp.build_status_change == "OK"
+
+    def test_legacy_previous_suppresses_baseline_fields(self):
+        """Previous snapshot lacks build_ok → flag previous_captured_baseline=False."""
+        snapshots = [
+            TrendSnapshot(build_ok=True, total_loc=5000, tests_passed=100),
+            TrendSnapshot(build_ok=None, total_loc=0, tests_passed=0),  # legacy
+        ]
+        comp = compute_baseline_comparison(snapshots)
+        assert comp is not None
+        assert comp.previous_captured_baseline is False
+        # Build_status_change still surfaces current state ("OK") so the
+        # renderer can present it with a "no prior baseline" caveat.
+        assert comp.build_status_change == "OK"
+
+    def test_test_and_loc_deltas(self):
+        snapshots = [
+            TrendSnapshot(
+                tests_passed=110, tests_failed=2,
+                total_loc=12000, file_count=180, duration_seconds=45.0,
+            ),
+            TrendSnapshot(
+                tests_passed=100, tests_failed=0,
+                total_loc=10000, file_count=170, duration_seconds=40.0,
+            ),
+        ]
+        comp = compute_baseline_comparison(snapshots)
+        assert comp is not None
+        assert comp.test_passed_delta == 10
+        assert comp.test_failed_delta == 2
+        assert comp.loc_delta == 2000
+        assert comp.file_count_delta == 10
+        assert comp.duration_delta == 5.0
+
+
+class TestBaselineComparisonToDict:
+    """BaselineComparison.to_dict is part of the JSON sidecar surface."""
+
+    def test_to_dict_contains_all_fields(self):
+        comp = BaselineComparison(
+            previous_timestamp="t1",
+            current_timestamp="t2",
+            finding_delta=3,
+            severity_deltas={"high": 1},
+            category_deltas={"memory": 1},
+            build_status_change="OK",
+            test_passed_delta=2,
+            test_failed_delta=0,
+            loc_delta=100,
+            file_count_delta=2,
+            duration_delta=1.5,
+            previous_captured_baseline=True,
+        )
+        d = comp.to_dict()
+        assert d["finding_delta"] == 3
+        assert d["severity_deltas"]["high"] == 1
+        assert d["build_status_change"] == "OK"
+        assert d["loc_delta"] == 100
+        assert d["previous_captured_baseline"] is True
