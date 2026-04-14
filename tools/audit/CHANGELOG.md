@@ -2,6 +2,21 @@
 
 All notable changes to the Audit Tool are documented in this file.
 
+## [2.4.1] - 2026-04-14
+
+### Changed (open-source prep — personal-path scrub)
+- `lib/agent_playbook.py`, `web/app.py`, `AUDIT_TOOL_STANDARDS.md`: removed
+  hardcoded absolute paths (`/mnt/Storage/...`) from docstrings, comments,
+  and example code. No behaviour change — the runtime code in
+  `web/app.py` was already portable via `AUDIT_ROOT.parent.parent`; only
+  the trailing explanatory comment leaked the path.
+- `CHANGELOG.md`: rewrote the 2.4.0 `/mnt/Storage/Scripts/audit_prompt.md`
+  reference to describe the manual audit prompt generically, so the
+  historical entry no longer leaks the maintainer's filesystem layout.
+
+Part of the pre-open-source audit checklist (§3 Personal / Machine-Specific
+Data). See `docs/PRE_OPEN_SOURCE_AUDIT.md`.
+
 ## [2.4.0] - 2026-04-14
 
 ### Added (D2 — Cross-source corroboration layer)
@@ -265,7 +280,7 @@ All notable changes to the Audit Tool are documented in this file.
   Code session handed this report) to follow Baseline → Verify → Cite →
   Approval Gate → Implement+Test rather than jumping straight to fixes.
   Closes the largest rigour gap between the automated report output and
-  the manual-audit prompt at `/mnt/Storage/Scripts/audit_prompt.md`.
+  the manual-audit prompt used when running audits by hand.
 
   The playbook is parameterised by:
   - `tier1_summary` — if build failed or tests failed > 0, a
