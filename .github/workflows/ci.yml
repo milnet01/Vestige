@@ -126,11 +126,30 @@ jobs:
             libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
             libxxf86vm-dev libwayland-dev libxkbcommon-dev
 
+      - name: Cache CMake FetchContent deps
+        uses: actions/cache@v4
+        with:
+          path: |
+            build/_deps
+          key: cmake-deps-Debug-${{ hashFiles('**/CMakeLists.txt') }}
+          restore-keys: |
+            cmake-deps-Debug-
+
       - name: Configure (for compile_commands.json)
         run: |
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Debug \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+
+      - name: Build
+        # Tier 1 invokes `cmake --build build` internally (audit_config.yaml
+        # build.build_cmd) to detect compiler warnings. Without this step the
+        # audit does a cold build from scratch inside its own 300 s subprocess
+        # timeout and reports Build: FAILED even when the build would succeed.
+        # Running the build here as a native CI step — no internal timeout —
+        # means audit.py's subsequent `cmake --build` is a warm no-op and the
+        # test binary exists so Tier 1's test step sees all 1768 tests.
+        run: cmake --build build -j $(nproc)
 
       - name: Run audit Tier 1
         # --ci: emit ::error/::warning annotations per finding + write

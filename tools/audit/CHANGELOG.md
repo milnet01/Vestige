@@ -2,6 +2,38 @@
 
 All notable changes to the Audit Tool are documented in this file.
 
+## [2.0.8] - 2026-04-14
+
+### Fixed
+- **CI `audit-tool-tier1` job was failing with false Build/Test
+  failures.** The job configured `build/` but never ran a build step.
+  When `audit.py -t 1` subsequently invoked `cmake --build build 2>&1`
+  (per `audit_config.yaml` `build.build_cmd`), it hit a cold build of
+  the engine + FetchContent deps from scratch inside its own 300 s
+  subprocess timeout. The timeout tripped, `Build: FAILED, 0 warnings,
+  0 errors` was reported (though the build would succeed given more
+  time), and the subsequent test step saw only 3 tests (0/1/2) because
+  the test binary was never produced — masking the fact that the
+  project has 1768 tests. Clang-tidy then ran against 50 files cold
+  and also hit its 600 s ceiling. See milnet01/Vestige CI run
+  24385438965 / job 71218095739.
+
+### Changed
+- `.github/workflows/ci.yml` `audit-tool-tier1` job now:
+  1. Restores the `build/_deps` FetchContent cache (same pattern
+     `linux-build-test` already uses) so GLFW / glm / JoltPhysics /
+     etc. don't re-download from scratch every run.
+  2. Runs `cmake --build build -j $(nproc)` as an explicit native CI
+     step **before** invoking the audit tool. The native step has no
+     internal subprocess timeout, so cold builds finish. When
+     `audit.py` subsequently runs its own `cmake --build build`, the
+     tree is warm and the invocation is a no-op, leaving budget for
+     cppcheck + clang-tidy.
+
+  Root-cause fix, not a timeout bump — per CLAUDE.md rule #10,
+  raising the 300 s ceiling would have masked the real issue
+  (redundant cold build inside the audit job).
+
 ## [2.0.7] - 2026-04-14
 
 ### Fixed
