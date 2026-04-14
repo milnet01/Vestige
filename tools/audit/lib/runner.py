@@ -120,13 +120,23 @@ class AuditRunner:
         self._emit("audit_end", duration=round(results.duration, 1),
                    total_findings=len(results.findings))
 
-        # Save trend snapshot after each run
+        # Save trend snapshot after each run. D5 (2.2.0): also pass
+        # tier1_summary, audit_data, and duration so the snapshot carries
+        # baseline metadata for the next run's Baseline Comparison
+        # section. tier1_summary may be empty when Tier 1 wasn't run;
+        # save_snapshot handles that gracefully.
         try:
             from .trends import save_snapshot
             report_dir = self.config.report_path.parent
             report_dir.mkdir(parents=True, exist_ok=True)
-            save_snapshot(report_dir, results.findings,
-                          keep=self.keep_snapshots)
+            save_snapshot(
+                report_dir,
+                results.findings,
+                keep=self.keep_snapshots,
+                tier1_summary=results.tier1_summary,
+                audit_data=results.audit_data,
+                duration=results.duration,
+            )
         except Exception as e:
             log.warning("Failed to save trend snapshot: %s", e)
 
@@ -244,14 +254,23 @@ class AuditRunner:
 
     def build_report(self, results: AuditResults, diff=None) -> str:
         """Generate the markdown report from results."""
-        # Load trend data if available
+        # Load trend data if available. The just-saved snapshot is
+        # included in the load (snapshots[0]); snapshots[1] is the
+        # immediately preceding run that the Baseline Comparison
+        # contrasts against.
         trend_report = None
+        baseline_comparison = None
         try:
-            from .trends import load_snapshots, compute_trends
+            from .trends import (
+                compute_baseline_comparison,
+                compute_trends,
+                load_snapshots,
+            )
             report_dir = self.config.report_path.parent
             snapshots = load_snapshots(report_dir)
             if len(snapshots) >= 2:
                 trend_report = compute_trends(snapshots)
+                baseline_comparison = compute_baseline_comparison(snapshots)
         except Exception as e:
             log.warning("Failed to load trend data: %s", e)
 
@@ -266,4 +285,5 @@ class AuditRunner:
             duration=results.duration,
             diff=diff,
             trend_report=trend_report,
+            baseline_comparison=baseline_comparison,
         )

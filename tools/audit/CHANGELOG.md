@@ -2,6 +2,78 @@
 
 All notable changes to the Audit Tool are documented in this file.
 
+## [2.2.0] - 2026-04-14
+
+### Added (D5 — Baseline Comparison)
+- **Run-over-run delta block at the top of every report.** New
+  `_build_baseline_section` in `lib/report.py` answers "what changed
+  since the last audit?" without forcing reviewers to diff JSON sidecars
+  by hand. Rendered automatically on any run with at least one prior
+  trend snapshot — no `--diff` flag required, no opt-in config knob.
+
+  Section content (only non-zero deltas rendered, to keep noise low):
+  - **Build** — the previous→current transition (`OK→FAILED`, `FAILED→OK`)
+    or a single label when unchanged.
+  - **Tests** — passed/failed pass-count deltas.
+  - **LOC / Files / Duration** — codebase metric deltas.
+  - **Findings** — total delta + by-severity breakdown
+    (critical → high → medium → low → info).
+  - **Top movers** — up to 5 categories with the largest absolute change.
+
+  When the previous snapshot is a legacy (pre-2.2.0) record without
+  baseline metadata, build/test/LOC lines are suppressed so we don't
+  report a misleading "+100 tests passed" diff against zeros. The build
+  status, when known, still surfaces with a "no prior baseline" caveat.
+
+### Changed
+- `lib/trends.py`:
+  - `TrendSnapshot` extended with optional baseline fields: `build_ok`
+    (`bool | None` — None means "not captured"), `build_warnings`,
+    `build_errors`, `tests_passed`, `tests_failed`, `tests_skipped`,
+    `total_loc`, `file_count`, `duration_seconds`. All defaulted; older
+    snapshot files deserialize cleanly via `from_dict`.
+  - `save_snapshot` accepts new optional kwargs: `tier1_summary`,
+    `audit_data`, `duration`. Legacy callers (no kwargs) still work; the
+    snapshot just won't carry baseline info, which the comparator
+    detects.
+  - New `BaselineComparison` dataclass + `compute_baseline_comparison`
+    function. Compares newest vs second-newest snapshot (immediate
+    run-over-run delta), distinct from the existing `compute_trends`
+    which does newest-vs-oldest (long-horizon trajectory).
+- `lib/runner.py`:
+  - `run()` now passes `tier1_summary`, `audit_data`, and `duration`
+    into `save_snapshot` so each snapshot captures baseline metadata.
+  - `build_report()` loads snapshots, computes the comparison, and
+    forwards it to `ReportBuilder.build()`.
+- `lib/report.py`:
+  - `ReportBuilder.build()` accepts a new optional `baseline_comparison`
+    parameter; the renderer is a no-op when None (first run case).
+  - Helpers `_signed`/`_signed_float` for delta formatting.
+
+### Tests
+- `tests/test_trends.py` — 16 new cases covering snapshot baseline-field
+  round-trip, save_snapshot capture, missing-key safety, and
+  `compute_baseline_comparison` over six scenarios (single snapshot,
+  finding delta, severity deltas, category movers, build transitions,
+  legacy previous, test/LOC deltas).
+- `tests/test_report.py` — 10 new cases on the rendered section: absent
+  on first run, present + headers when comparison provided, build
+  transition rendering, test/LOC delta rendering, no-op suppression,
+  legacy-previous caveat path, severity ordering, top-mover cap, and
+  total-report token budget.
+
+### Design notes
+- The `Differential Report` (opt-in, finding-level new/resolved) and
+  `Finding Trends` (long-horizon trajectory) sections remain unchanged.
+  The new Baseline Comparison fills the immediate-delta gap that used
+  to require visual inspection of two consecutive reports.
+- Section position: directly after Executive Summary, before Diff. The
+  ordering reads as "current state → what changed since last → which
+  findings are new specifically".
+- Backwards compatibility is preserved both ways: legacy snapshots load
+  with neutral defaults, and legacy callers of `save_snapshot` keep
+  working without recompile.
+
 ## [2.1.0] - 2026-04-14
 
 ### Added (D1 — Agent Playbook)

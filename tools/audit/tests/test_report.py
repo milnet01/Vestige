@@ -16,6 +16,7 @@ from lib.findings import (
     Severity,
 )
 from lib.report import ReportBuilder
+from lib.trends import BaselineComparison
 from lib.utils import estimate_tokens
 
 
@@ -36,10 +37,24 @@ def _make_config(tmp_path: Path, **overrides) -> Config:
     return Config(raw=raw, root=tmp_path)
 
 
+def _baseline_block(report: str) -> str:
+    """Extract just the '## Baseline Comparison' section from a report.
+
+    Used to scope assertions so they don't accidentally match strings
+    elsewhere in the report (e.g. the Tier 1 section legitimately
+    contains a `**Tests:**` line for the current run).
+    """
+    start = report.index("## Baseline Comparison")
+    # Next H2 (or end of report) marks the section boundary.
+    end = report.find("\n## ", start + 1)
+    return report[start:end] if end != -1 else report[start:]
+
+
 def _build_report(
     tmp_path: Path,
     findings: list[Finding] | None = None,
     config_overrides: dict | None = None,
+    baseline_comparison: BaselineComparison | None = None,
 ) -> str:
     """Convenience wrapper to build a report and return the text."""
     cfg = _make_config(tmp_path, **(config_overrides or {}))
@@ -58,6 +73,7 @@ def _build_report(
         research_results=[],
         tiers_run=[1, 2, 3, 4],
         duration=1.5,
+        baseline_comparison=baseline_comparison,
     )
 
 
@@ -205,3 +221,156 @@ class TestReportFileWriting:
         docs = tmp_path / "docs"
         md_files = list(docs.glob("AUTOMATED_AUDIT_REPORT_*.md"))
         assert len(md_files) >= 1
+
+
+# ---------------------------------------------------------------------------
+# D5 — Baseline Comparison section
+# ---------------------------------------------------------------------------
+
+
+class TestBaselineSection:
+    """The Baseline Comparison section is rendered when comparison provided."""
+
+    def test_section_absent_when_no_comparison(self, tmp_path: Path):
+        report = _build_report(tmp_path, baseline_comparison=None)
+        assert "## Baseline Comparison" not in report
+
+    def test_section_present_when_comparison_provided(self, tmp_path: Path):
+        comp = BaselineComparison(
+            previous_timestamp="2026-04-13T10:00:00",
+            current_timestamp="2026-04-14T10:00:00",
+            finding_delta=2,
+            severity_deltas={"high": 2},
+            previous_captured_baseline=True,
+            build_status_change="OK",
+        )
+        report = _build_report(tmp_path, baseline_comparison=comp)
+        assert "## Baseline Comparison" in report
+        assert "Compared against:** previous run at `2026-04-13T10:00:00`" in report
+        assert "**Findings:** +2 total" in report
+        assert "high +2" in report
+
+    def test_build_status_transition_rendered(self, tmp_path: Path):
+        comp = BaselineComparison(
+            previous_timestamp="t1",
+            current_timestamp="t2",
+            finding_delta=0,
+            build_status_change="OK→FAILED",
+            previous_captured_baseline=True,
+        )
+        report = _build_report(tmp_path, baseline_comparison=comp)
+        assert "**Build:** OK→FAILED" in report
+
+    def test_test_delta_rendered(self, tmp_path: Path):
+        comp = BaselineComparison(
+            previous_timestamp="t1",
+            current_timestamp="t2",
+            finding_delta=0,
+            test_passed_delta=-3,
+            test_failed_delta=2,
+            previous_captured_baseline=True,
+        )
+        report = _build_report(tmp_path, baseline_comparison=comp)
+        assert "**Tests:** passed -3, failed +2" in report
+
+    def test_loc_and_file_deltas_rendered(self, tmp_path: Path):
+        comp = BaselineComparison(
+            previous_timestamp="t1",
+            current_timestamp="t2",
+            finding_delta=0,
+            loc_delta=250,
+            file_count_delta=-2,
+            previous_captured_baseline=True,
+        )
+        report = _build_report(tmp_path, baseline_comparison=comp)
+        assert "**LOC:** +250" in report
+        assert "**Files:** -2" in report
+
+    def test_unchanged_metrics_omit_lines(self, tmp_path: Path):
+        """No-op deltas must not emit visual noise.
+
+        Note: assertions are scoped to the Baseline Comparison section
+        only — the Tier 1 section legitimately includes a `**Tests:**`
+        line for the current run.
+        """
+        comp = BaselineComparison(
+            previous_timestamp="t1",
+            current_timestamp="t2",
+            finding_delta=0,
+            previous_captured_baseline=True,
+            build_status_change="OK",
+        )
+        report = _build_report(tmp_path, baseline_comparison=comp)
+        section = _baseline_block(report)
+        assert "Tests:**" not in section  # 0/0 deltas suppressed
+        assert "LOC:**" not in section
+        assert "Files:**" not in section
+
+    def test_legacy_previous_suppresses_test_loc_lines(self, tmp_path: Path):
+        comp = BaselineComparison(
+            previous_timestamp="t1",
+            current_timestamp="t2",
+            finding_delta=4,
+            severity_deltas={"high": 4},
+            build_status_change="OK",
+            test_passed_delta=100,  # noise from legacy zero-baseline
+            loc_delta=10000,
+            previous_captured_baseline=False,
+        )
+        report = _build_report(tmp_path, baseline_comparison=comp)
+        section = _baseline_block(report)
+        # Test/LOC lines should be suppressed when baseline wasn't captured
+        # (otherwise we'd report misleading 100-test "improvements").
+        assert "Tests:**" not in section
+        assert "LOC:**" not in section
+        # But the build label still surfaces with the caveat.
+        assert "no prior baseline" in section
+
+    def test_severity_delta_ordering(self, tmp_path: Path):
+        comp = BaselineComparison(
+            previous_timestamp="t1",
+            current_timestamp="t2",
+            finding_delta=0,
+            severity_deltas={"low": -2, "critical": 1, "high": 3},
+            previous_captured_baseline=True,
+        )
+        report = _build_report(tmp_path, baseline_comparison=comp)
+        # Severity order must follow the Severity enum: critical, high, low.
+        idx_crit = report.index("critical +1")
+        idx_high = report.index("high +3")
+        idx_low = report.index("low -2")
+        assert idx_crit < idx_high < idx_low
+
+    def test_top_movers_capped_at_5(self, tmp_path: Path):
+        """Long category lists should not blow the report up."""
+        comp = BaselineComparison(
+            previous_timestamp="t1",
+            current_timestamp="t2",
+            finding_delta=0,
+            category_deltas={f"cat_{i}": (i + 1) for i in range(20)},
+            previous_captured_baseline=True,
+        )
+        report = _build_report(tmp_path, baseline_comparison=comp)
+        # The biggest mover (cat_19, +20) should be present; cat_0 (+1) must not.
+        assert "cat_19 +20" in report
+        assert "cat_0 +1" not in report
+
+    def test_section_under_token_budget(self, tmp_path: Path):
+        """The baseline section must stay compact (~100 tokens or so)."""
+        comp = BaselineComparison(
+            previous_timestamp="2026-04-13T10:00:00",
+            current_timestamp="2026-04-14T10:00:00",
+            finding_delta=10,
+            severity_deltas={"critical": 1, "high": 3, "medium": 2, "low": 4, "info": 0},
+            category_deltas={f"cat_{i}": i for i in range(20)},
+            build_status_change="OK→FAILED",
+            test_passed_delta=-5,
+            test_failed_delta=3,
+            loc_delta=500,
+            file_count_delta=2,
+            duration_delta=10.5,
+            previous_captured_baseline=True,
+        )
+        report = _build_report(tmp_path, baseline_comparison=comp)
+        # Whole report still under the 5K ceiling that test_report enforces.
+        assert estimate_tokens(report) < 5000
