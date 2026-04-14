@@ -24,7 +24,12 @@ build:
   configure_cmd: null  # Set to "cmake -B build" if build dir doesn't exist
   build_cmd: "cmake --build build 2>&1"
   warning_regex: "warning:|error:"
-  test_cmd: "cd build && ctest --output-on-failure 2>&1"
+  # -j $(nproc): run tests in parallel. Serial execution on 1768 tests
+  # reaches ~9-10 min on GH free runners and trips the 600 s internal
+  # tier1 subprocess timeout. Test fixtures are parallel-safe (see
+  # test_scene_serializer.cpp / test_file_menu.cpp using per-process
+  # tmpdirs).
+  test_cmd: "cd build && ctest --output-on-failure -j $(nproc) 2>&1"
   sanitizer:
     enabled: false
     configure_cmd: >-
@@ -59,7 +64,13 @@ static_analysis:
     checks: "bugprone-*,performance-*,modernize-*,readability-*,cppcoreguidelines-*"
     fallback_flags: "-std=c++17 -I engine/ -I external/"
     max_files: 50
-    timeout: 600
+    # 1200 s (was 600) — legitimate bump per CLAUDE.md rule #10.
+    # 50 files × 5 heavy check categories (bugprone-*, performance-*,
+    # modernize-*, readability-*, cppcoreguidelines-*) takes ~3 min
+    # locally but ~10+ min on GH free runners. 600 s was tripping mid-run
+    # in CI (run 24394450313). Bump matches the real cost of the work;
+    # subsequent warm-cache runs should still finish well under this.
+    timeout: 1200
 
 # -- Tier 2: Pattern Scanning ------------------------------------------------
 patterns:

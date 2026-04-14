@@ -2,6 +2,26 @@
 
 All notable changes to the Audit Tool are documented in this file.
 
+## [2.0.11] - 2026-04-14
+
+### Fixed
+- **Tier 1 `test_cmd` ran ctest serially**, taking ~9-10 min on GH free
+  runners (1768 tests × ~0.3 s each) and tripping the 600 s audit-internal
+  subprocess timeout. Tests reported as `0 passed, 0 failed, 0 skipped`
+  because ctest was killed before it could produce any result. The fix
+  is an invocation change, not a ceiling bump: pass `-j $(nproc)` so
+  tests run in parallel (they complete in ~42 s locally). Fixtures are
+  parallel-safe after the 2026-04-14 tmpdir fix (`test_scene_serializer.cpp`,
+  `test_file_menu.cpp`). See CI run 24394450313.
+
+### Changed
+- `static_analysis.clang_tidy.timeout`: `600` → `1200` s. 50 files × 5
+  heavy check categories (bugprone-*, performance-*, modernize-*,
+  readability-*, cppcoreguidelines-*) finishes in ~3 min locally but
+  takes ~10+ min on GH free runners. The old ceiling was tripping
+  mid-run. Legitimate bump per CLAUDE.md rule #10 — the work is real,
+  not redundant, and not masking a bug.
+
 ## [2.0.10] - 2026-04-14
 
 ### Changed
