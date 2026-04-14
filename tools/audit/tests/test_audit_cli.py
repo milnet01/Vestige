@@ -122,4 +122,53 @@ class TestAuditCliAcceptsNoColor:
         )
         # The critical assertion: no argparse rejection.
         assert "unrecognized arguments" not in result.stderr
+
+
+class TestNvdTestCli:
+    """--nvd-test flag: validate NVD API key without running a full audit.
+
+    We exercise the error paths (key missing, key shape invalid) without
+    hitting the real NVD service, so the tests stay fast and hermetic.
+    A shape-valid-but-server-rejected key would require a live network
+    call and is left to integration testing.
+    """
+
+    def test_nvd_test_in_help_text(self):
+        """--help should mention the new flag."""
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT_DIR / "audit.py"), "--help"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
         assert result.returncode == 0
+        assert "--nvd-test" in result.stdout
+
+    def test_missing_key_exits_one(self, monkeypatch):
+        """No NVD_API_KEY → exit 1 with an actionable message on stderr."""
+        env = {**__import__("os").environ}
+        env.pop("NVD_API_KEY", None)
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT_DIR / "audit.py"), "--nvd-test"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            env=env,
+        )
+        assert result.returncode == 1
+        assert "No NVD_API_KEY" in result.stderr
+        assert "export NVD_API_KEY" in result.stderr  # actionable hint
+
+    def test_malformed_key_exits_two(self, monkeypatch):
+        """NVD_API_KEY with bad shape (CRLF/whitespace) → exit 2."""
+        env = {**__import__("os").environ,
+               "NVD_API_KEY": "bad key with spaces"}
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT_DIR / "audit.py"), "--nvd-test"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            env=env,
+        )
+        assert result.returncode == 2
+        assert "rejected" in result.stderr.lower() or "fails" in result.stderr.lower()

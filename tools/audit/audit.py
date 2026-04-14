@@ -172,6 +172,13 @@ def main() -> int:
         help="Remove a dedup_key from .audit_verified and exit. (D3)",
     )
     parser.add_argument(
+        "--nvd-test",
+        action="store_true",
+        help="Validate the NVD API key (from NVD_API_KEY env or config) "
+             "with a single test query and exit. Exit code 0 = authenticated, "
+             "1 = unauthenticated/no key, 2 = key present but rejected.",
+    )
+    parser.add_argument(
         "--diff",
         action="store_true",
         help="Include differential report comparing against previous audit results",
@@ -293,6 +300,39 @@ def main() -> int:
             print(f"Key not found in .audit_verified: {args.verified_remove}",
                   file=sys.stderr)
             return 1
+
+    # --nvd-test: validate the NVD API key and exit
+    if args.nvd_test:
+        from lib.tier5_nvd import _resolve_api_key, _validate_api_key
+        # Build a minimal nvd_config from env var (no config file needed).
+        env_var = os.environ.get("NVD_API_KEY")
+        if not env_var:
+            print("No NVD_API_KEY in environment.", file=sys.stderr)
+            print("To activate authenticated NVD queries (50 req/30s "
+                  "instead of 5 req/30s), export the key:",
+                  file=sys.stderr)
+            print("  export NVD_API_KEY='your-key-here'", file=sys.stderr)
+            return 1
+        key = _resolve_api_key({"api_key": None, "api_key_env": "NVD_API_KEY"})
+        if key is None:
+            # _resolve_api_key may have rejected the key on shape grounds
+            print("NVD_API_KEY rejected — fails the shape check "
+                  "(CRLF / non-alphanumeric characters). "
+                  "Check for copy-paste whitespace or newlines.",
+                  file=sys.stderr)
+            return 2
+        if _validate_api_key(key):
+            print("NVD API key: OK (authenticated access confirmed).")
+            print("Authenticated rate limit: 50 requests per 30 seconds "
+                  "(vs 5 unauthenticated).")
+            return 0
+        else:
+            print("NVD API key: REJECTED by the server.", file=sys.stderr)
+            print("The key has the right shape but the server "
+                  "returned a non-200 response. Possible causes: "
+                  "not yet activated, revoked, or quota exhausted.",
+                  file=sys.stderr)
+            return 2
 
     # --init: auto-generate config and exit
     if args.init:
