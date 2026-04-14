@@ -13,6 +13,14 @@
 #include <filesystem>
 #include <fstream>
 
+#ifdef _WIN32
+#include <process.h>
+#define VESTIGE_GETPID() _getpid()
+#else
+#include <unistd.h>
+#define VESTIGE_GETPID() getpid()
+#endif
+
 using namespace Vestige;
 namespace fs = std::filesystem;
 
@@ -25,7 +33,11 @@ class SceneSerializerTest : public ::testing::Test
 protected:
     void SetUp() override
     {
-        m_testDir = fs::temp_directory_path() / "vestige_test_scenes";
+        // Unique per-process: ctest -j runs each TEST_F as a separate
+        // process; a shared path let one process's TearDown remove_all
+        // another process's in-flight files.
+        m_testDir = fs::temp_directory_path()
+                  / ("vestige_test_scenes_" + std::to_string(VESTIGE_GETPID()));
         fs::create_directories(m_testDir);
     }
 
