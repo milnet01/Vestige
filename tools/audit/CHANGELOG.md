@@ -2,6 +2,42 @@
 
 All notable changes to the Audit Tool are documented in this file.
 
+## [2.6.1] - 2026-04-14
+
+### Added — `--nvd-test` CLI flag (NVD API key activation prep)
+
+Standalone smoke test for the NVD API key without running a full audit.
+Useful for validating the key on its activation day (reference memory
+notes key activation expected around 2026-04-18) and for CI pipelines
+that want to fail fast if a key goes stale.
+
+Usage:
+```
+$ export NVD_API_KEY='your-key-here'
+$ python3 tools/audit/audit.py --nvd-test
+NVD API key: OK (authenticated access confirmed).
+Authenticated rate limit: 50 requests per 30 seconds (vs 5 unauthenticated).
+```
+
+Exit codes:
+- `0` — key accepted by NVD (authenticated access works)
+- `1` — no `NVD_API_KEY` in environment (unauthenticated)
+- `2` — key present but rejected (bad shape OR server rejected: not
+  yet activated, revoked, quota exhausted)
+
+Existing NVD machinery (rate limiting, shape validation, env-var
+resolution) is unchanged. This flag is just a thin CLI wrapper around
+the already-private `_resolve_api_key` and `_validate_api_key` helpers
+in `lib/tier5_nvd.py`.
+
+### Tests
+- `tests/test_audit_cli.py`: +3 hermetic tests for the three exit-code
+  paths (help text, missing key, malformed key). Live server
+  validation is deliberately not tested unit-level; the server-rejects
+  path is covered by existing `_validate_api_key` tests.
+
+Totals: 666 → 669 tests passing.
+
 ## [2.6.0] - 2026-04-14
 
 ### Added (D4 — Tier 6: Feature Coverage)
