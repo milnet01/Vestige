@@ -8,6 +8,7 @@ from collections import defaultdict
 from datetime import datetime
 from typing import Any
 
+from . import agent_playbook
 from .config import Config
 from .diff_report import ReportDiff
 from .findings import (
@@ -34,6 +35,10 @@ class ReportBuilder:
         self.config = config
         self.include_json = config.get("report", "include_json_blocks", default=True)
         self.include_tokens = config.get("report", "include_token_estimate", default=True)
+        self.include_playbook = config.get("report", "include_playbook", default=True)
+        self.approval_threshold = agent_playbook.threshold_from_string(
+            config.get("report", "approval_gate_threshold", default="medium")
+        )
 
     def build(
         self,
@@ -56,6 +61,14 @@ class ReportBuilder:
         sections.append(f"**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         sections.append(f"**Tiers run:** {tiers_run}")
         sections.append("")
+
+        # Agent Playbook — 5-phase instruction block for the downstream LLM
+        # consumer. Placed before the Executive Summary so the agent reads
+        # "do not jump to fixes" before the finding counts.
+        if self.include_playbook:
+            sections.append(
+                agent_playbook.build(deduped, tier1_summary, self.approval_threshold)
+            )
 
         # Executive Summary
         sections.append(self._build_summary(deduped, tier1_summary, audit_data, tiers_run, duration))
