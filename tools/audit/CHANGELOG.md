@@ -2,6 +2,94 @@
 
 All notable changes to the Audit Tool are documented in this file.
 
+## [2.4.0] - 2026-04-14
+
+### Added (D2 — Cross-source corroboration layer)
+- **Findings flagged by two or more independent sources at the same
+  `(file, line)` are now tagged `[CORROB]` and, by default, promoted
+  one severity level.** Closes the biggest remaining rigour gap versus
+  the manual audit prompt, which explicitly weights findings by how
+  many independent signals converge on the same location.
+
+  Conversely, *solo* (uncorroborated) hits whose `pattern_name` is in
+  the configured `demoted_patterns` list are demoted to INFO — these
+  are the known-noisy tier-2 patterns (`std_endl`, `push_back_loop`,
+  `todo_fixme`, `dead_code_markers`, `shared_ptr`) where a single match
+  in isolation is rarely actionable and drowns out real issues.
+
+  Severity adjustments run **before** `severity_overrides` and
+  `suppressions`, so an explicit user override or a SUPPRESS.yaml entry
+  still has the final say.
+
+### Changed
+- `lib/findings.py`:
+  - `Finding` gained two new fields:
+    - `corroborated_by: list[str]` — sorted list of other `source_key`
+      values that flagged the same `(file, line)`. Empty list = solo
+      finding.
+    - `source_key` (computed property) — stable identifier used by the
+      corroboration layer to decide whether two findings came from
+      *independent* mechanisms. Mapping: tier 1 cppcheck → `cppcheck`,
+      tier 1 clang-tidy → `clang_tidy`, other tier 1 → `build`, tier 2
+      (all patterns) → `pattern_scan` (same grep-based mechanism,
+      intentionally not self-corroborating), tier 3 → `tier3_diff`,
+      tier 4 → `tier4_{category}` (each submodule distinct), tier 5 →
+      `tier5_research`.
+  - `to_dict` surfaces `corroborated_by` only when non-empty, keeping
+    the JSON sidecar and SARIF output compact for solo findings.
+  - `deduplicate` now merges `corroborated_by` across collapsed
+    duplicates so dedup-ordering swaps don't lose signal.
+- `lib/corroboration.py` (new module):
+  - `corroborate(findings, config)` groups findings by `(file, line)`,
+    tags any with ≥2 distinct `source_key` values, applies
+    `promote_level` severity bump (clamped at CRITICAL), and demotes
+    solo `demoted_patterns` hits to INFO.
+  - `promote_level=0` → tag-only mode (no severity change).
+  - `enabled: false` → full no-op.
+  - Findings without a line number can't be positionally corroborated
+    and skip both promotion and demotion.
+- `lib/runner.py`:
+  - Pipeline reordered to `dedup → corroborate → overrides → suppress`
+    so user overrides remain the final arbiter of severity.
+  - `ReportBuilder.build()` still calls `deduplicate()` (idempotent —
+    protects future callers that bypass the runner pipeline).
+- `lib/report.py`:
+  - Tier 1 cppcheck/clang-tidy tables, Tier 2 pattern table, and Tier 3
+    diff-security table all render `[CORROB]` on corroborated entries
+    (short tag to minimise token-cost inflation).
+  - Executive Summary JSON gained `findings.corroborated` count so the
+    downstream agent can see the multi-source-signal total at a glance.
+- `audit_config.yaml`:
+  - New `corroboration:` block: `enabled` (default `true`),
+    `promote_level` (default `1`), `demoted_patterns` (seeded with the
+    five tier-2 patterns above).
+
+### Tests
+- `tests/test_findings.py` — 14 new cases covering:
+  - `source_key` mapping for all five tiers (cppcheck, clang_tidy,
+    build default, pattern_scan, tier3_diff, per-category tier 4,
+    tier5_research, unknown-tier fallback).
+  - `corroborated_by` omission when empty / inclusion when populated.
+  - `deduplicate` merging `corroborated_by` when swapping the kept
+    finding and when keeping the first finding.
+- `tests/test_corroboration.py` (new file) — 23 cases covering:
+  - Solo / same-source / different-line / different-file / `None`-line
+    findings do NOT corroborate.
+  - cppcheck + pattern, three-source, and tier-4 submodule corroboration.
+  - Severity promotion (`MEDIUM→HIGH`, `LOW→MEDIUM`, `promote_level=2`,
+    CRITICAL clamping, `promote_level=0` tag-only, solo not promoted).
+  - Demotion of noisy solo patterns, non-demotion when corroborated,
+    non-touching of non-noisy patterns or already-INFO findings.
+  - `enabled=false` no-op, `None` config defaults to enabled, empty
+    list, in-place identity, merging with preexisting tags.
+
+### Migration notes
+- Existing `audit_config.yaml` files without a `corroboration:` block
+  pick up the default behaviour (enabled, `promote_level=1`, empty
+  `demoted_patterns` — so no automatic demotion, but corroboration
+  still tags+promotes). To opt out entirely, set `corroboration:
+  {enabled: false}`.
+
 ## [2.3.0] - 2026-04-14
 
 ### Added (D6 — Version-scoped NVD queries / `affects_pinned` tag)

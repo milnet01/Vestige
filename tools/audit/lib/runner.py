@@ -101,8 +101,21 @@ class AuditRunner:
             self._run_tier5(results)
             self._emit("tier_end", tier=5, findings_count=len(results.findings))
 
-        # Apply severity overrides before suppression
-        from .findings import apply_severity_overrides
+        # D2 (2.4.0): dedup + corroborate BEFORE severity_overrides so
+        # explicit user overrides remain the final say. Ordering:
+        #   1. deduplicate    — collapse same-dedup_key entries
+        #   2. corroborate    — tag/promote/demote based on multi-source signal
+        #   3. overrides      — user's explicit severity choices win
+        #   4. suppressions   — last-mile filter
+        # Dedup is idempotent; ReportBuilder.build() calling it again is
+        # harmless but avoids regressions if future callers bypass the
+        # runner pipeline.
+        from .findings import apply_severity_overrides, deduplicate
+        from .corroboration import corroborate
+        results.findings = deduplicate(results.findings)
+        corr_cfg = self.config.get("corroboration", default={}) or {}
+        results.findings = corroborate(results.findings, corr_cfg)
+
         severity_overrides = self.config.get("severity_overrides", default=[])
         if severity_overrides:
             results.findings = apply_severity_overrides(results.findings, severity_overrides)

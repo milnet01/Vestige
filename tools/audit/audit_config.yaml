@@ -346,5 +346,24 @@ report:
   # "medium" mirrors the manual audit's approval threshold.
   approval_gate_threshold: "medium"
 
+# -- Corroboration (D2, audit tool 2.4.0) ------------------------------------
+# Cross-source corroboration layer. When two or more *independent* sources
+# (e.g. cppcheck + tier-2 regex, or complexity + cognitive_complexity)
+# flag the same (file, line), the finding is tagged `[CORROB]` and its
+# severity is promoted by `promote_level` steps. Solo (uncorroborated)
+# hits whose `pattern_name` appears in `demoted_patterns` are demoted to
+# INFO — these are the known-noisy tier-2 patterns where one match in
+# isolation is rarely actionable. Severity adjustments run BEFORE
+# severity_overrides / suppressions so user choices still win.
+corroboration:
+  enabled: true
+  promote_level: 1
+  demoted_patterns:
+    - "std_endl"
+    - "push_back_loop"
+    - "todo_fixme"
+    - "dead_code_markers"
+    - "shared_ptr"
+
 # -- Which tiers to run (override with --tiers CLI flag) ----------------------
 tiers: [1, 2, 3, 4, 5]

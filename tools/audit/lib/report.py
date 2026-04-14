@@ -38,6 +38,16 @@ def _signed_float(n: float) -> str:
     return f"+{n:.1f}" if n > 0 else f"{n:.1f}"
 
 
+def _corr_prefix(f: Finding) -> str:
+    """Return a compact `[CORROB]` tag when a finding has corroboration.
+
+    D2 (2.4.0): surfaces the multi-source signal in the report so the
+    downstream agent can weight corroborated hits above solo ones. Kept
+    short to minimise token-cost inflation across large tables.
+    """
+    return "[CORROB] " if f.corroborated_by else ""
+
+
 class ReportBuilder:
     """Builds a condensed markdown report optimized for LLM consumption."""
 
@@ -274,8 +284,11 @@ class ReportBuilder:
     ) -> str:
         """Build the executive summary with JSON block."""
         counts = defaultdict(int)
+        corroborated_total = 0
         for f in findings:
             counts[f.severity.name.lower()] += 1
+            if f.corroborated_by:
+                corroborated_total += 1
 
         build_info = tier1_summary.get("build", {})
         test_info = tier1_summary.get("tests", {})
@@ -288,6 +301,11 @@ class ReportBuilder:
                 "low": counts.get("low", 0),
                 "info": counts.get("info", 0),
                 "total": len(findings),
+                # D2 (2.4.0): count of findings where ≥2 independent
+                # sources flagged the same (file, line). Surfaced so the
+                # downstream agent can weight corroborated hits above
+                # solo ones at a glance.
+                "corroborated": corroborated_total,
             },
             "build": {
                 "ok": build_info.get("build_ok", None),
@@ -376,7 +394,7 @@ class ReportBuilder:
             lines.append("| Severity | File | Line | Issue |")
             lines.append("|----------|------|------|-------|")
             for f in shown:
-                title = f.title.replace("|", "/")[:100]
+                title = _corr_prefix(f) + f.title.replace("|", "/")[:100]
                 lines.append(f"| {f.severity.name} | `{f.file}` | {f.line or '-'} | {title} |")
             if len(important) > max_detail:
                 lines.append(f"| ... | | | *({len(important) - max_detail} more HIGH+ findings)* |")
@@ -426,7 +444,8 @@ class ReportBuilder:
                 lines.append("|------|------|---------|-------|")
                 for f in to_show:
                     detail = f.detail.replace("|", "\\|").replace("\n", " ")[:60]
-                    lines.append(f"| `{f.file}` | {f.line} | {f.pattern_name} | `{detail}` |")
+                    pattern_cell = _corr_prefix(f) + f.pattern_name
+                    lines.append(f"| `{f.file}` | {f.line} | {pattern_cell} | `{detail}` |")
 
                 remaining = len(cat_findings) - len(to_show)
                 if remaining > 0:
@@ -466,7 +485,7 @@ class ReportBuilder:
                 lines.append("| Severity | File | Line | Issue |")
                 lines.append("|----------|------|------|-------|")
                 for f in diff_sec[:20]:
-                    title = f.title.replace("|", "/")[:100]
+                    title = _corr_prefix(f) + f.title.replace("|", "/")[:100]
                     lines.append(f"| {f.severity.name} | `{f.file}` | "
                                  f"{f.line or '-'} | {title} |")
                 if len(diff_sec) > 20:

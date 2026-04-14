@@ -46,6 +46,11 @@ class Finding:
     title: str
     detail: str = ""
     pattern_name: str = ""
+    # D2 (2.4.0): list of distinct source_keys that independently flagged
+    # the same (file, line). Populated by lib.corroboration.corroborate()
+    # after dedup. Empty list = solo finding. A single entry means exactly
+    # one *other* source also flagged this line.
+    corroborated_by: list[str] = field(default_factory=list)
     _dedup_key: str = field(default="", repr=False)
 
     def __post_init__(self) -> None:
@@ -57,8 +62,37 @@ class Finding:
     def dedup_key(self) -> str:
         return self._dedup_key
 
+    @property
+    def source_key(self) -> str:
+        """Stable identifier for the tool/tier that produced this finding.
+
+        D2 (2.4.0): Used by the corroboration layer to decide whether two
+        findings at the same (file, line) came from *independent* sources.
+        Two tier-2 pattern hits share `pattern_scan` (same grep-based
+        mechanism, not corroboration); cppcheck + clang-tidy at the same
+        line are distinct sources and do corroborate each other.
+        """
+        if self.source_tier == 1:
+            if self.category == "cppcheck":
+                return "cppcheck"
+            if self.category == "clang_tidy":
+                return "clang_tidy"
+            return "build"
+        if self.source_tier == 2:
+            return "pattern_scan"
+        if self.source_tier == 3:
+            return "tier3_diff"
+        if self.source_tier == 4:
+            # Each tier-4 submodule has its own category, so these remain
+            # distinct sources (complexity + cognitive_complexity both
+            # flagging a function is genuine corroboration).
+            return f"tier4_{self.category}"
+        if self.source_tier == 5:
+            return "tier5_research"
+        return f"tier{self.source_tier}"
+
     def to_dict(self) -> dict[str, Any]:
-        return {
+        d: dict[str, Any] = {
             "file": self.file,
             "line": self.line,
             "severity": self.severity.name.lower(),
@@ -69,10 +103,23 @@ class Finding:
             "pattern_name": self.pattern_name,
             "dedup_key": self.dedup_key,
         }
+        # Only surface corroborated_by when it's non-empty — keeps the
+        # JSON sidecar and SARIF output compact for the common case of
+        # solo findings.
+        if self.corroborated_by:
+            d["corroborated_by"] = list(self.corroborated_by)
+        return d
 
 
 def deduplicate(findings: list[Finding]) -> list[Finding]:
-    """Remove duplicate findings, keeping the one from the earliest tier."""
+    """Remove duplicate findings, keeping the one from the earliest tier.
+
+    D2 (2.4.0): when two findings share a dedup_key, the kept finding's
+    corroborated_by list is merged with the discarded one's. This is
+    independent of the cross-source corroboration pass in
+    lib.corroboration; it just ensures that any already-set tags
+    survive deduplication.
+    """
     seen: dict[str, Finding] = {}
     for f in findings:
         if f.dedup_key not in seen:
@@ -81,7 +128,14 @@ def deduplicate(findings: list[Finding]) -> list[Finding]:
             existing = seen[f.dedup_key]
             # Keep the one with richer detail (lower tier = automated tools = richer)
             if f.source_tier < existing.source_tier:
+                # Merge corroboration tags from the discarded finding so
+                # information isn't lost on tier-ordering swaps.
+                merged = sorted(set(f.corroborated_by) | set(existing.corroborated_by))
+                f.corroborated_by = merged
                 seen[f.dedup_key] = f
+            else:
+                merged = sorted(set(existing.corroborated_by) | set(f.corroborated_by))
+                existing.corroborated_by = merged
     return sorted(seen.values(), key=lambda f: (f.severity, f.file, f.line or 0))
 
 
