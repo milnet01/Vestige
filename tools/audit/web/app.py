@@ -25,7 +25,7 @@ sys.path.insert(0, str(AUDIT_ROOT))
 
 from web.audit_bridge import AuditSession
 
-VERSION = "2.0.9"
+VERSION = "2.0.10"
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
 session = AuditSession()

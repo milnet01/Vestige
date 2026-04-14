@@ -492,14 +492,24 @@ bool NodeGraph::validate(std::string& errorOut) const
 std::unique_ptr<ExprNode> NodeGraph::nodeToExpr(NodeId nodeId,
                                                  std::vector<bool>& visited) const
 {
-    // Guard against cycles (should not happen in a validated graph)
-    if (nodeId < visited.size() && visited[nodeId])
-    {
-        return nullptr;
-    }
+    // Ensure visited is large enough first, so all subsequent accesses are
+    // unconditionally in-bounds. The previous form
+    // (`if (nodeId < visited.size() && visited[nodeId])`) relied on &&
+    // short-circuit, which cppcheck's flow analysis doesn't model. The
+    // restructured form below is structurally safer, but cppcheck still
+    // can't prove resize() grew the container, so the first downstream
+    // access carries an inline suppression (cppcheck gives up tracking
+    // after that so subsequent accesses don't re-fire). Runtime-safe:
+    // the resize guarantees `visited.size() > nodeId`.
     if (nodeId >= visited.size())
     {
         visited.resize(static_cast<size_t>(nodeId) + 1, false);
+    }
+    // Guard against cycles (should not happen in a validated graph).
+    // cppcheck-suppress containerOutOfBounds  ; size invariant established by resize above
+    if (visited[nodeId])
+    {
+        return nullptr;
     }
     visited[nodeId] = true;
 

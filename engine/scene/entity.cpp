@@ -54,16 +54,15 @@ void Entity::update(float deltaTime, const glm::mat4& parentWorldMatrix)
 Entity* Entity::addChild(std::unique_ptr<Entity> child)
 {
     child->m_parent = this;
-    // cppcheck-suppress returnDanglingLifetime  ; ptr remains valid — ownership transferred to m_children via std::move
     Entity* ptr = child.get();
     m_children.push_back(std::move(child));
+    // cppcheck-suppress returnDanglingLifetime  ; ownership moved to m_children above; ptr remains valid through the container
     return ptr;
 }
 
 Entity* Entity::insertChild(std::unique_ptr<Entity> child, size_t index)
 {
     child->m_parent = this;
-    // cppcheck-suppress returnDanglingLifetime  ; ptr remains valid — ownership transferred to m_children via std::move
     Entity* ptr = child.get();
 
     if (index >= m_children.size())
@@ -76,6 +75,7 @@ Entity* Entity::insertChild(std::unique_ptr<Entity> child, size_t index)
                           std::move(child));
     }
 
+    // cppcheck-suppress returnDanglingLifetime  ; ownership moved to m_children above; ptr remains valid through the container
     return ptr;
 }
 
