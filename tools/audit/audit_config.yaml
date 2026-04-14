@@ -303,11 +303,24 @@ research:
     # the only supported configuration.
     api_key: null
     api_key_env: "NVD_API_KEY"  # Required: set this env var to use NVD rate limits
+    # D6 (audit tool 2.3.0): each entry can be a bare string (name-only,
+    # no version filtering) or a dict {name, version} — the version
+    # form tags each returned CVE with `affects_pinned` so the report
+    # highlights CVEs that actually hit the pinned version and
+    # de-emphasises keyword-match noise. Versions below track
+    # `external/CMakeLists.txt` FetchContent_Declare GIT_TAGs as of
+    # 2026-04-14. Bump these in the same PR that bumps GIT_TAG.
     dependencies:
-      - "GLFW"
-      - "FreeType"
-      - "OpenAL"
-      - "nlohmann json"
+      - { name: "GLFW",           version: "3.4" }
+      - { name: "FreeType",       version: "2.13.3" }    # GIT_TAG VER-2-13-3
+      - { name: "OpenAL",         version: "1.24.1" }    # openal-soft
+      - { name: "nlohmann json",  version: "3.12.0" }
+      - { name: "JoltPhysics",    version: "5.2.0" }
+      - { name: "Recast",         version: "1.6.0" }     # recastnavigation
+      - { name: "tinygltf",       version: "2.9.4" }
+      - { name: "googletest",     version: "1.15.2" }
+      # stb_image is header-only with no published version — keep
+      # legacy string form so a keyword search still runs.
       - "stb image"
   # Auto-detected improvement research — scans codebase for technologies
   # and generates queries for better approaches / new features
