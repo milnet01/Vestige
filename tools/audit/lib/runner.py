@@ -89,8 +89,10 @@ class AuditRunner:
                 self._run_tier1(results)
                 self._emit("tier_end", tier=1, findings_count=len(results.findings))
 
-        # Phase 2: Tiers 2, 3, 4 can run in parallel (independent of each other)
-        parallel_tiers = [t for t in [2, 3, 4] if t in tiers]
+        # Phase 2: Tiers 2, 3, 4, 6 can run in parallel (independent of each other).
+        # D4 (2.6.0): Tier 6 (feature coverage) is filesystem-only, no cross
+        # dependencies on other tiers, so it joins the parallel group.
+        parallel_tiers = [t for t in [2, 3, 4, 6] if t in tiers]
         if parallel_tiers and not (cancel_event and cancel_event.is_set()):
             self._run_parallel_tiers(results, parallel_tiers, cancel_event)
 
@@ -228,8 +230,13 @@ class AuditRunner:
         tier_nums: list[int],
         cancel_event: threading.Event | None,
     ) -> None:
-        """Run tiers 2-4 in parallel using threads. Each returns its data independently."""
-        tier_names = {2: "Pattern Scanning", 3: "Changed Files", 4: "Statistics"}
+        """Run tiers 2-4, 6 in parallel using threads. Each returns its data independently."""
+        tier_names = {
+            2: "Pattern Scanning",
+            3: "Changed Files",
+            4: "Statistics",
+            6: "Feature Coverage",
+        }
 
         def run_tier(tier_num: int) -> dict:
             """Execute a single tier and return its results."""
@@ -250,6 +257,11 @@ class AuditRunner:
                 from . import tier4_stats
                 audit_data, complexity_findings = tier4_stats.run(self.config)
                 return {"tier": 4, "findings": complexity_findings, "audit_data": audit_data}
+            elif tier_num == 6:
+                # D4 (2.6.0): Tier 6 feature coverage — subsystems without tests
+                from . import tier6_coverage
+                findings = tier6_coverage.run(self.config)
+                return {"tier": 6, "findings": findings}
             return {"tier": tier_num, "findings": []}
 
         with ThreadPoolExecutor(max_workers=3, thread_name_prefix="tier") as executor:

@@ -119,13 +119,23 @@ DEFAULTS: dict[str, Any] = {
         },
     },
     "severity_overrides": [],
+    # D4 (2.6.0): Tier 6 — feature coverage sweep. Heuristic check that
+    # every engine/<subsystem>/ directory has at least one test file
+    # referencing it via #include or filename prefix.
+    "tier6": {
+        "enabled": True,
+        "engine_dir": "engine",
+        "tests_dir": "tests",
+        "excluded_subsystems": [],
+        "thin_threshold": 3,
+    },
     "report": {
         "output_path": "docs/AUTOMATED_AUDIT_REPORT.md",
         "max_findings_per_category": 100,
         "include_json_blocks": True,
         "include_token_estimate": True,
     },
-    "tiers": [1, 2, 3, 4, 5],
+    "tiers": [1, 2, 3, 4, 5, 6],
 }
 
 

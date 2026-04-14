@@ -365,5 +365,16 @@ corroboration:
     - "dead_code_markers"
     - "shared_ptr"
 
+# -- Tier 6 — Feature coverage sweep (D4, 2.6.0) ------------------------------
+# Flags engine subsystems (engine/<name>/) that have zero or very few test
+# files referencing them. Purely heuristic — measures breadth of test
+# coverage, not code line/branch coverage.
+tier6:
+  enabled: true
+  engine_dir: "engine"          # relative path to subsystem dirs
+  tests_dir: "tests"            # relative path to test source files
+  thin_threshold: 3             # <3 tests → INFO "thin coverage", 0 → MEDIUM "no coverage"
+  excluded_subsystems: []       # names to ignore on top of built-in "testing/"
+
 # -- Which tiers to run (override with --tiers CLI flag) ----------------------
-tiers: [1, 2, 3, 4, 5]
+tiers: [1, 2, 3, 4, 5, 6]
