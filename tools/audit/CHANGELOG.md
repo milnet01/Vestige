@@ -2,6 +2,49 @@
 
 All notable changes to the Audit Tool are documented in this file.
 
+## [2.0.7] - 2026-04-14
+
+### Fixed
+- **CI Tier 1 job was failing on every push to `main`** with
+  `audit.py: error: unrecognized arguments: --no-color`. The
+  `.github/workflows/ci.yml` "Audit tool Tier 1 (static)" step invokes
+  `python3 tools/audit/audit.py -t 1 --no-color`, but argparse didn't
+  define `--no-color`, so the step exited non-zero before any audit ran
+  (and the artifact upload subsequently reported "No files were found",
+  masking the root cause as a missing-report issue). Run IDs on
+  milnet01/Vestige: 24368940403, 24362882238, and every push since the
+  workflow landed the flag.
+
+### Added
+- `--no-color` CLI flag implementing the
+  [NO_COLOR](https://no-color.org) convention. When set (or when
+  `NO_COLOR` is already present in the environment, or stdout is not
+  attached to a TTY), the flag writes `NO_COLOR=1` into `os.environ`
+  so that child subprocesses — cppcheck, clang-tidy, git — inherit
+  the preference and suppress their own ANSI escape sequences. The
+  audit tool itself currently emits no ANSI; suppression is delegated
+  to children, which is the useful behaviour for CI log readability.
+- `apply_no_color(explicit, env, stdout_is_tty)` helper in `audit.py`,
+  exposed for unit testing. Kept as a free function (not a class
+  method) so tests can inject `env` and `stdout_is_tty` without
+  constructing a full argparse namespace.
+- `tests/test_audit_cli.py` — 9 tests covering explicit flag, env-var
+  inheritance, non-TTY auto-detection, empty-string edge case, and an
+  end-to-end `subprocess` check that the exact failing CI invocation
+  (`-t 1 --no-color`) now parses without `unrecognized arguments`.
+
+### Changed
+- `.github/workflows/ci.yml` Tier 1 step now invokes
+  `audit.py -t 1 --ci --no-color` (previously `-t 1 --no-color`).
+  Adding `--ci` aligns the workflow with the design in
+  `AUDIT.md §M25`, `EXPERIMENTAL.md`, and `FIXPLAN.md:248`: per-finding
+  `::error::` / `::warning::` annotations, a step summary written to
+  `$GITHUB_STEP_SUMMARY`, and severity-keyed exit codes (0 clean / 1
+  HIGH / 2 CRITICAL). As a side-benefit, `--ci` always invokes
+  `runner.build_report`, so the artifact-upload step no longer logs
+  `No files were found with the provided path:
+  docs/AUTOMATED_AUDIT_REPORT.md`.
+
 ## [2.0.6] - 2026-04-13
 
 ### Audit fallout (AUDIT.md §L7, §M19, §M21, §M23, §L9 / FIXPLAN J + I5)

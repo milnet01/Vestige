@@ -133,9 +133,15 @@ jobs:
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
       - name: Run audit Tier 1
+        # --ci: emit ::error/::warning annotations per finding + write
+        # step summary to $GITHUB_STEP_SUMMARY. Exit code encodes finding
+        # severity (0 = clean, 1 = HIGH, 2 = CRITICAL) per AUDIT.md §M25
+        # and FIXPLAN I1's original design.
+        # --no-color: propagate NO_COLOR=1 to cppcheck/clang-tidy/git
+        # children so downloaded log artifacts stay free of ANSI escapes.
         run: |
-          python3 tools/audit/audit.py -t 1 --no-color || {
-            echo "::error::Tier 1 audit failed — see tier1 output above."
+          python3 tools/audit/audit.py -t 1 --ci --no-color || {
+            echo "::error::Tier 1 audit failed — see annotations above."
             exit 1
           }
 

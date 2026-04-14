@@ -9,6 +9,7 @@ Usage:
     python3 tools/audit/audit.py -c other_config.yaml  # Different project
     python3 tools/audit/audit.py --json                # Raw JSON output
     python3 tools/audit/audit.py --no-research         # Skip web research
+    python3 tools/audit/audit.py --no-color            # Disable ANSI (CI-friendly)
 """
 
 from __future__ import annotations
@@ -16,6 +17,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -37,6 +39,43 @@ def find_default_config() -> Path:
     if cwd_config.exists():
         return cwd_config
     return default  # Will error in load_config if missing
+
+
+def apply_no_color(
+    explicit: bool,
+    env: dict[str, str] | None = None,
+    stdout_is_tty: bool | None = None,
+) -> bool:
+    """Apply the [NO_COLOR](https://no-color.org) convention for this process
+    and any subprocesses it spawns.
+
+    Returns True if color output should be suppressed. When True, sets
+    ``NO_COLOR=1`` in ``env`` (default: ``os.environ``) so child tools
+    (cppcheck, clang-tidy, git, etc.) inherit the preference — the audit
+    tool itself currently emits no ANSI, so suppression is delegated to
+    children.
+
+    Color is suppressed if any of the following holds:
+
+    * ``explicit`` is True (``--no-color`` CLI flag passed)
+    * ``NO_COLOR`` is already set to a non-empty value in ``env``
+      (per the no-color.org spec: presence is the signal, regardless
+      of value)
+    * stdout is not attached to a TTY (piped, redirected, or CI)
+
+    The ``env`` and ``stdout_is_tty`` parameters are injection points for
+    tests; production callers should leave them at their defaults.
+    """
+    if env is None:
+        env = os.environ  # type: ignore[assignment]
+    if stdout_is_tty is None:
+        stdout_is_tty = sys.stdout.isatty()
+
+    env_no_color = env.get("NO_COLOR", "")
+    disable = explicit or bool(env_no_color) or not stdout_is_tty
+    if disable:
+        env["NO_COLOR"] = "1"
+    return disable
 
 
 def main() -> int:
@@ -148,8 +187,22 @@ def main() -> int:
         help="Retain only the N most recent trend_snapshot_*.json files "
              "in docs/ (default: keep all). See AUDIT.md §L9.",
     )
+    parser.add_argument(
+        "--no-color",
+        action="store_true",
+        dest="no_color",
+        help="Disable ANSI colour in output and in child tools (cppcheck, "
+             "clang-tidy, git). Sets NO_COLOR=1 in the environment so all "
+             "spawned subprocesses inherit the preference. Auto-enabled "
+             "when stdout is not a TTY or NO_COLOR is already set. "
+             "See https://no-color.org.",
+    )
 
     args = parser.parse_args()
+
+    # Apply the NO_COLOR convention before anything else runs — this must
+    # happen before subprocesses are spawned so they inherit the env var.
+    apply_no_color(args.no_color)
 
     # Setup logging
     log_level = logging.DEBUG if args.verbose else logging.INFO
