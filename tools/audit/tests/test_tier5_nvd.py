@@ -15,10 +15,14 @@ from lib.findings import ResearchResult
 from lib.tier5_nvd import (
     CVEResult,
     NVD_API_URL,
+    _extract_cpe_version,
     _resolve_api_key,
     _validate_api_key,
+    cve_affects_version,
+    parse_semver,
     query_nvd,
     run_nvd_queries,
+    version_in_range,
 )
 
 
@@ -283,3 +287,459 @@ class TestRunNvdQueriesCacheHits:
             results = run_nvd_queries(config, tmp_path, timedelta(days=7))
 
         mock_query.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# D6 — version parsing
+# ---------------------------------------------------------------------------
+
+
+class TestParseSemver:
+    """parse_semver must handle the FetchContent_Declare GIT_TAG formats."""
+
+    @pytest.mark.parametrize(
+        "inp,expected",
+        [
+            ("3.4",         (3, 4)),
+            ("v2.9.4",      (2, 9, 4)),
+            ("1.24.1",      (1, 24, 1)),
+            ("VER-2-13-3",  (2, 13, 3)),   # FreeType convention
+            ("3.12.0",      (3, 12, 0)),
+            ("V5.2.0",      (5, 2, 0)),    # uppercase V
+            ("0.9.3",       (0, 9, 3)),
+            ("10.0.0",      (10, 0, 0)),   # multi-digit major
+        ],
+    )
+    def test_parses_known_formats(self, inp, expected):
+        assert parse_semver(inp) == expected
+
+    @pytest.mark.parametrize("inp", ["", None, "master", "docking", "HEAD"])
+    def test_unparseable_returns_none(self, inp):
+        assert parse_semver(inp) is None
+
+    def test_trailing_suffix_dropped(self):
+        """Pre-release tags keep the numeric prefix."""
+        # "1.0.0-rc1" → (1, 0, 0, 1) because we extract all digit runs.
+        # That's fine for tuple comparison; 1.0.0 < 1.0.0-rc1 tuple-wise.
+        result = parse_semver("1.0.0-rc1")
+        assert result is not None
+        assert result[:3] == (1, 0, 0)
+
+
+class TestVersionInRange:
+    """version_in_range mirrors NVD's four-bound cpeMatch shape."""
+
+    def test_within_start_including_end_excluding(self):
+        # [3.0.0, 3.3.7) — 3.3.0 is in range, 3.3.7 is not.
+        assert version_in_range((3, 3, 0), start_including="3.0.0", end_excluding="3.3.7")
+        assert not version_in_range((3, 3, 7), start_including="3.0.0", end_excluding="3.3.7")
+
+    def test_start_excluding_boundary(self):
+        # (3.0.0, 3.3.0] — 3.0.0 itself excluded.
+        assert not version_in_range((3, 0, 0), start_excluding="3.0.0", end_including="3.3.0")
+        assert version_in_range((3, 0, 1), start_excluding="3.0.0", end_including="3.3.0")
+
+    def test_end_including_boundary(self):
+        # [1.0.0, 1.2.3] — 1.2.3 included.
+        assert version_in_range((1, 2, 3), start_including="1.0.0", end_including="1.2.3")
+        assert not version_in_range((1, 2, 4), start_including="1.0.0", end_including="1.2.3")
+
+    def test_below_start_returns_false(self):
+        assert not version_in_range((2, 9, 9), start_including="3.0.0")
+
+    def test_above_end_returns_false(self):
+        assert not version_in_range((3, 4, 0), end_excluding="3.4.0")
+
+    def test_exact_match_when_no_range(self):
+        """If no range bounds, fall through to exact-pin comparison."""
+        assert version_in_range((3, 4), exact="3.4")
+        assert not version_in_range((3, 4), exact="3.3")
+
+    def test_no_bounds_no_exact_returns_false(self):
+        """Defensive: caller treats as unknown/no-match."""
+        assert not version_in_range((3, 4))
+
+    def test_unparseable_bound_ignored(self):
+        """Unparseable bounds default to "no bound on that side"."""
+        # end_excluding="garbage" → ignored, so only start bound checked.
+        assert version_in_range((99, 0), start_including="3.0.0", end_excluding="garbage")
+
+
+class TestExtractCpeVersion:
+    """CPE 2.3 URIs have a fixed 13-field structure; we need field 5."""
+
+    def test_extracts_version_field(self):
+        cpe = "cpe:2.3:a:glfw:glfw:3.3.0:*:*:*:*:*:*:*"
+        assert _extract_cpe_version(cpe) == "3.3.0"
+
+    def test_wildcard_version(self):
+        cpe = "cpe:2.3:a:vendor:product:*:*:*:*:*:*:*:*"
+        assert _extract_cpe_version(cpe) == "*"
+
+    def test_short_string_returns_empty(self):
+        assert _extract_cpe_version("cpe:2.3:a") == ""
+
+    def test_empty_returns_empty(self):
+        assert _extract_cpe_version("") == ""
+
+
+# ---------------------------------------------------------------------------
+# D6 — cve_affects_version
+# ---------------------------------------------------------------------------
+
+
+class TestCveAffectsVersion:
+    """cve_affects_version tri-state returns True / False / None."""
+
+    def _cve_with_range(self, start_incl: str, end_excl: str) -> dict:
+        return {
+            "configurations": [{
+                "nodes": [{
+                    "operator": "OR",
+                    "negate": False,
+                    "cpeMatch": [{
+                        "vulnerable": True,
+                        "criteria": "cpe:2.3:a:glfw:glfw:*:*:*:*:*:*:*:*",
+                        "versionStartIncluding": start_incl,
+                        "versionEndExcluding": end_excl,
+                    }],
+                }],
+            }],
+        }
+
+    def test_pinned_in_range_returns_true(self):
+        cve = self._cve_with_range("3.0.0", "3.3.7")
+        assert cve_affects_version(cve, "3.3.0") is True
+
+    def test_pinned_above_range_returns_false(self):
+        cve = self._cve_with_range("3.0.0", "3.3.7")
+        assert cve_affects_version(cve, "3.4") is False
+
+    def test_pinned_below_range_returns_false(self):
+        cve = self._cve_with_range("3.0.0", "3.3.7")
+        assert cve_affects_version(cve, "2.9.0") is False
+
+    def test_no_pinned_version_returns_none(self):
+        cve = self._cve_with_range("3.0.0", "3.3.7")
+        assert cve_affects_version(cve, None) is None
+
+    def test_unparseable_pinned_returns_none(self):
+        cve = self._cve_with_range("3.0.0", "3.3.7")
+        assert cve_affects_version(cve, "master") is None
+
+    def test_no_configurations_returns_none(self):
+        cve = {"id": "CVE-2024-0001"}
+        assert cve_affects_version(cve, "3.4") is None
+
+    def test_non_vulnerable_cpe_ignored(self):
+        """cpeMatch entries with vulnerable=False are runtime-env notes."""
+        cve = {
+            "configurations": [{
+                "nodes": [{
+                    "cpeMatch": [{
+                        "vulnerable": False,
+                        "criteria": "cpe:2.3:o:linux:kernel:*:*:*:*:*:*:*:*",
+                        "versionStartIncluding": "3.0.0",
+                        "versionEndExcluding": "99.0.0",
+                    }],
+                }],
+            }],
+        }
+        # No vulnerable entries → no affirmative match, return None
+        # (configurations present but no vulnerable range examined).
+        assert cve_affects_version(cve, "3.4") is None
+
+    def test_exact_cpe_version_match(self):
+        """A CPE with a pinned version (no range bounds) requires exact match."""
+        cve = {
+            "configurations": [{
+                "nodes": [{
+                    "cpeMatch": [{
+                        "vulnerable": True,
+                        "criteria": "cpe:2.3:a:glfw:glfw:3.3.0:*:*:*:*:*:*:*",
+                    }],
+                }],
+            }],
+        }
+        assert cve_affects_version(cve, "3.3.0") is True
+        assert cve_affects_version(cve, "3.4") is False
+
+    def test_multiple_nodes_any_match_wins(self):
+        """If any vulnerable cpeMatch hits, affects_pinned is True."""
+        cve = {
+            "configurations": [{
+                "nodes": [{
+                    "cpeMatch": [
+                        {
+                            "vulnerable": True,
+                            "criteria": "cpe:2.3:a:glfw:glfw:*:*:*:*:*:*:*:*",
+                            "versionStartIncluding": "1.0.0",
+                            "versionEndExcluding": "2.0.0",
+                        },
+                        {
+                            "vulnerable": True,
+                            "criteria": "cpe:2.3:a:glfw:glfw:*:*:*:*:*:*:*:*",
+                            "versionStartIncluding": "3.0.0",
+                            "versionEndExcluding": "3.5.0",
+                        },
+                    ],
+                }],
+            }],
+        }
+        assert cve_affects_version(cve, "3.4") is True
+
+
+# ---------------------------------------------------------------------------
+# D6 — CVEResult title prefix + sort
+# ---------------------------------------------------------------------------
+
+
+class TestCVEResultAffectsPinnedTag:
+    """CVEResult.to_dict surfaces the affects_pinned tag in the title."""
+
+    def test_affects_pinned_true_prefix(self):
+        cve = CVEResult(
+            cve_id="CVE-2024-1234",
+            base_score=7.5, severity="HIGH",
+            affects_pinned=True, pinned_version="3.4",
+        )
+        d = cve.to_dict()
+        assert d["title"].startswith("[AFFECTS PINNED 3.4]")
+        assert d["affects_pinned"] is True
+        assert d["pinned_version"] == "3.4"
+
+    def test_affects_pinned_false_prefix(self):
+        cve = CVEResult(
+            cve_id="CVE-2024-9999",
+            base_score=5.5, severity="MEDIUM",
+            affects_pinned=False, pinned_version="3.4",
+        )
+        d = cve.to_dict()
+        assert d["title"].startswith("[unaffected@3.4]")
+
+    def test_affects_pinned_none_no_prefix(self):
+        """None (unknown) state should not add a prefix to avoid noise."""
+        cve = CVEResult(cve_id="CVE-2024-0001", affects_pinned=None)
+        d = cve.to_dict()
+        assert not d["title"].startswith("[")
+
+    def test_no_pinned_version_no_prefix_even_if_true(self):
+        """Edge: affects_pinned=True with empty pinned_version → skip prefix.
+
+        Shouldn't happen in practice (query_nvd sets both together) but
+        the renderer must not crash or emit "[AFFECTS PINNED ]" with a
+        trailing space.
+        """
+        cve = CVEResult(cve_id="CVE-2024-0001", affects_pinned=True, pinned_version="")
+        d = cve.to_dict()
+        assert "[AFFECTS PINNED" not in d["title"]
+
+
+class TestQueryNvdSortsAffectsPinnedFirst:
+    """query_nvd must sort affects_pinned=True before False/None."""
+
+    def _mock_response(self, data: dict) -> MagicMock:
+        response = MagicMock()
+        response.read.return_value = json.dumps(data).encode()
+        return response
+
+    def test_affects_pinned_cves_lead(self):
+        # Two CVEs: first keyword-matches but doesn't hit 3.4, second does.
+        api_data = {
+            "vulnerabilities": [
+                {
+                    "cve": {
+                        "id": "CVE-OLD",
+                        "descriptions": [{"lang": "en", "value": "old stuff"}],
+                        "metrics": {"cvssMetricV31": [{"cvssData":
+                            {"baseScore": 9.8, "baseSeverity": "CRITICAL"}}]},
+                        "configurations": [{"nodes": [{"cpeMatch": [{
+                            "vulnerable": True,
+                            "criteria": "cpe:2.3:a:glfw:glfw:*:*:*:*:*:*:*:*",
+                            "versionStartIncluding": "1.0.0",
+                            "versionEndExcluding": "2.0.0",
+                        }]}]}],
+                    }
+                },
+                {
+                    "cve": {
+                        "id": "CVE-HITS",
+                        "descriptions": [{"lang": "en", "value": "hits 3.4"}],
+                        "metrics": {"cvssMetricV31": [{"cvssData":
+                            {"baseScore": 5.5, "baseSeverity": "MEDIUM"}}]},
+                        "configurations": [{"nodes": [{"cpeMatch": [{
+                            "vulnerable": True,
+                            "criteria": "cpe:2.3:a:glfw:glfw:*:*:*:*:*:*:*:*",
+                            "versionStartIncluding": "3.0.0",
+                            "versionEndExcluding": "3.5.0",
+                        }]}]}],
+                    }
+                },
+            ]
+        }
+        with patch("lib.tier5_nvd.urllib.request.urlopen",
+                   return_value=self._mock_response(api_data)):
+            results = query_nvd("glfw", pinned_version="3.4")
+        # CVE-HITS (affects_pinned=True) must come first despite lower CVSS.
+        assert results[0].cve_id == "CVE-HITS"
+        assert results[0].affects_pinned is True
+        assert results[1].cve_id == "CVE-OLD"
+        assert results[1].affects_pinned is False
+
+    def test_no_pinned_version_returns_unsorted_by_affects(self):
+        """Without pinned_version, every affects_pinned is None (rank 1).
+
+        Secondary sort by CVSS descending kicks in.
+        """
+        api_data = {
+            "vulnerabilities": [
+                {
+                    "cve": {
+                        "id": "CVE-LOW",
+                        "descriptions": [{"lang": "en", "value": "low"}],
+                        "metrics": {"cvssMetricV31": [{"cvssData":
+                            {"baseScore": 3.0, "baseSeverity": "LOW"}}]},
+                    }
+                },
+                {
+                    "cve": {
+                        "id": "CVE-HIGH",
+                        "descriptions": [{"lang": "en", "value": "high"}],
+                        "metrics": {"cvssMetricV31": [{"cvssData":
+                            {"baseScore": 9.0, "baseSeverity": "CRITICAL"}}]},
+                    }
+                },
+            ]
+        }
+        with patch("lib.tier5_nvd.urllib.request.urlopen",
+                   return_value=self._mock_response(api_data)):
+            results = query_nvd("foo")
+        # All affects_pinned=None → secondary sort by CVSS descending.
+        assert results[0].cve_id == "CVE-HIGH"
+        assert results[1].cve_id == "CVE-LOW"
+
+
+# ---------------------------------------------------------------------------
+# D6 — run_nvd_queries dict-form dependencies
+# ---------------------------------------------------------------------------
+
+
+class TestRunNvdQueriesDictForm:
+    """Dependencies can be strings (legacy) or {name, version} dicts."""
+
+    def test_dict_form_passes_version_to_query(self, tmp_path: Path):
+        config = {
+            "nvd": {
+                "enabled": True, "api_key": None, "api_key_env": "NVD_MISSING",
+                "dependencies": [{"name": "GLFW", "version": "3.4"}],
+            },
+            "max_results_per_query": 5,
+        }
+        with patch.dict(os.environ, {}, clear=True), \
+             patch("lib.tier5_nvd.query_nvd", return_value=[]) as mock_query, \
+             patch("lib.tier5_nvd.time.sleep"), \
+             patch("lib.tier5_nvd._validate_api_key"):
+            run_nvd_queries(config, tmp_path, timedelta(days=7))
+
+        mock_query.assert_called_once()
+        call_kwargs = mock_query.call_args.kwargs
+        assert call_kwargs.get("pinned_version") == "3.4"
+
+    def test_string_form_passes_none_version(self, tmp_path: Path):
+        """Legacy string form must continue working (no version filter)."""
+        config = {
+            "nvd": {
+                "enabled": True, "api_key": None, "api_key_env": "NVD_MISSING",
+                "dependencies": ["GLFW"],
+            },
+            "max_results_per_query": 5,
+        }
+        with patch.dict(os.environ, {}, clear=True), \
+             patch("lib.tier5_nvd.query_nvd", return_value=[]) as mock_query, \
+             patch("lib.tier5_nvd.time.sleep"), \
+             patch("lib.tier5_nvd._validate_api_key"):
+            run_nvd_queries(config, tmp_path, timedelta(days=7))
+
+        mock_query.assert_called_once()
+        assert mock_query.call_args.kwargs.get("pinned_version") is None
+
+    def test_mixed_dep_forms_all_queried(self, tmp_path: Path):
+        config = {
+            "nvd": {
+                "enabled": True, "api_key": None, "api_key_env": "NVD_MISSING",
+                "dependencies": [
+                    {"name": "GLFW", "version": "3.4"},
+                    "stb image",  # legacy string
+                    {"name": "OpenAL", "version": "1.24.1"},
+                ],
+            },
+            "max_results_per_query": 5,
+        }
+        with patch.dict(os.environ, {}, clear=True), \
+             patch("lib.tier5_nvd.query_nvd", return_value=[]) as mock_query, \
+             patch("lib.tier5_nvd.time.sleep"), \
+             patch("lib.tier5_nvd._validate_api_key"):
+            run_nvd_queries(config, tmp_path, timedelta(days=7))
+
+        assert mock_query.call_count == 3
+
+    def test_malformed_dep_skipped_not_crashed(self, tmp_path: Path):
+        """An int/list/None entry must be logged and skipped, not raised."""
+        config = {
+            "nvd": {
+                "enabled": True, "api_key": None, "api_key_env": "NVD_MISSING",
+                "dependencies": [42, {"name": "GLFW"}, None],
+            },
+            "max_results_per_query": 5,
+        }
+        with patch.dict(os.environ, {}, clear=True), \
+             patch("lib.tier5_nvd.query_nvd", return_value=[]) as mock_query, \
+             patch("lib.tier5_nvd.time.sleep"), \
+             patch("lib.tier5_nvd._validate_api_key"):
+            results = run_nvd_queries(config, tmp_path, timedelta(days=7))
+
+        # Only the GLFW entry (dict with name, no version) is valid → one call.
+        assert mock_query.call_count == 1
+
+    def test_dict_without_name_skipped(self, tmp_path: Path):
+        config = {
+            "nvd": {
+                "enabled": True, "api_key": None, "api_key_env": "NVD_MISSING",
+                "dependencies": [{"version": "3.4"}, {"name": "", "version": "1.0"}],
+            },
+            "max_results_per_query": 5,
+        }
+        with patch.dict(os.environ, {}, clear=True), \
+             patch("lib.tier5_nvd.query_nvd", return_value=[]) as mock_query, \
+             patch("lib.tier5_nvd.time.sleep"), \
+             patch("lib.tier5_nvd._validate_api_key"):
+            run_nvd_queries(config, tmp_path, timedelta(days=7))
+
+        mock_query.assert_not_called()
+
+    def test_version_scoped_cache_separate_from_unversioned(self, tmp_path: Path):
+        """Cache key changes with pinned_version so a version bump busts the cache."""
+        config_v1 = {
+            "nvd": {
+                "enabled": True, "api_key": None, "api_key_env": "NVD_MISSING",
+                "dependencies": [{"name": "GLFW", "version": "3.3"}],
+            },
+            "max_results_per_query": 5,
+        }
+        config_v2 = {
+            "nvd": {
+                "enabled": True, "api_key": None, "api_key_env": "NVD_MISSING",
+                "dependencies": [{"name": "GLFW", "version": "3.4"}],
+            },
+            "max_results_per_query": 5,
+        }
+
+        with patch.dict(os.environ, {}, clear=True), \
+             patch("lib.tier5_nvd.query_nvd", return_value=[]) as mock_query, \
+             patch("lib.tier5_nvd.time.sleep"), \
+             patch("lib.tier5_nvd._validate_api_key"):
+            run_nvd_queries(config_v1, tmp_path, timedelta(days=7))
+            run_nvd_queries(config_v2, tmp_path, timedelta(days=7))
+
+        # Different versions → different cache keys → both call query_nvd.
+        assert mock_query.call_count == 2

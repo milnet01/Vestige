@@ -23,20 +23,210 @@ log = logging.getLogger("audit")
 NVD_API_URL = "https://services.nvd.nist.gov/rest/json/cves/2.0"
 
 
+# D6 (2.3.0) — version parsing tuned to the formats we actually see in
+# FetchContent_Declare GIT_TAGs and NVD CPE version strings across
+# Vestige's deps. Handles "3.4", "v2.9.4", "1.24.1", "VER-2-13-3"
+# (FreeType), "3.12.0". Returns None for inputs we can't make sense of
+# (e.g. branch names "master", "docking") so the caller can treat those
+# as "unknown version, can't tag affects_pinned".
+_VERSION_TOKEN_RE = re.compile(r"\d+")
+
+
+def parse_semver(s: str | None) -> tuple[int, ...] | None:
+    """Normalise a version string to a tuple of ints for comparison.
+
+    Examples::
+
+        parse_semver("3.4")         -> (3, 4)
+        parse_semver("v2.9.4")      -> (2, 9, 4)
+        parse_semver("1.24.1")      -> (1, 24, 1)
+        parse_semver("VER-2-13-3")  -> (2, 13, 3)
+        parse_semver("3.12.0")      -> (3, 12, 0)
+        parse_semver("master")      -> None
+        parse_semver("")            -> None
+
+    The parse is intentionally permissive because CPEs sometimes embed
+    versions in lowered-dot or dashed forms (e.g. "2_13_3"), and
+    FreeType's own "VER-N-N-N" tag style would reject a strict semver
+    regex. We just extract ascending numeric tokens and return them as
+    a tuple; tuple comparison then gives the right ordering.
+
+    Pre-release / build metadata suffixes ("1.0.0-rc1", "2.3.4+build5")
+    are dropped — everything after the first non-digit/non-separator is
+    ignored. This is good enough for NVD range filtering (which uses
+    plain numeric versions) and avoids a full PEP 440 / SemVer 2.0
+    implementation just for tagging CVEs.
+    """
+    if not s:
+        return None
+    # Drop common prefix noise.
+    s_clean = s.strip().lstrip("vV").removeprefix("VER-")
+    tokens = _VERSION_TOKEN_RE.findall(s_clean)
+    if not tokens:
+        return None
+    return tuple(int(t) for t in tokens)
+
+
+def version_in_range(
+    pinned: tuple[int, ...],
+    start_including: str | None = None,
+    start_excluding: str | None = None,
+    end_including: str | None = None,
+    end_excluding: str | None = None,
+    exact: str | None = None,
+) -> bool:
+    """Return True if *pinned* falls inside the NVD-shaped version range.
+
+    NVD cpeMatch nodes use four optional bounds:
+        - ``versionStartIncluding`` / ``versionStartExcluding``
+        - ``versionEndIncluding`` / ``versionEndExcluding``
+
+    Plus an exact version embedded in the CPE criteria string itself
+    (field 5 of the 2.3 CPE URI). ``exact`` is only consulted when none
+    of the range bounds are set — the presence of a start/end bound is
+    the NVD's signal that the match is a range, not a pin.
+
+    All bounds are parsed via :func:`parse_semver`; unparseable bounds
+    are ignored (treated as "no bound on this side"). This is the
+    defensive choice — emitting a False on an unparseable CPE would
+    silently hide a potentially-relevant CVE.
+    """
+    def _parse_bound(v: str | None) -> tuple[int, ...] | None:
+        return parse_semver(v) if v else None
+
+    si = _parse_bound(start_including)
+    se = _parse_bound(start_excluding)
+    ei = _parse_bound(end_including)
+    ee = _parse_bound(end_excluding)
+
+    # If any range bound is present, use it — otherwise fall through to
+    # the exact-pin check so a CPE like ``cpe:2.3:a:glfw:glfw:3.3::*``
+    # (no range, exact 3.3) correctly returns True only for pinned=3.3.
+    any_range = any(b is not None for b in (si, se, ei, ee))
+    if any_range:
+        if si is not None and pinned < si:
+            return False
+        if se is not None and pinned <= se:
+            return False
+        if ei is not None and pinned > ei:
+            return False
+        if ee is not None and pinned >= ee:
+            return False
+        return True
+
+    exact_parsed = _parse_bound(exact)
+    if exact_parsed is None:
+        # No bounds and no parseable exact version — we can't decide.
+        # Caller treats this as "unknown" (affects_pinned=None).
+        return False
+    return pinned == exact_parsed
+
+
+def _extract_cpe_version(criteria: str) -> str:
+    """Pull field 5 (version) out of a CPE 2.3 URI string.
+
+    CPE 2.3 URIs have a fixed 13-field colon-separated structure:
+    ``cpe:2.3:{part}:{vendor}:{product}:{version}:...``. We tolerate
+    malformed strings by returning an empty string — the caller treats
+    that the same as "no exact version supplied".
+    """
+    try:
+        parts = criteria.split(":")
+        # Field 5 is the version field (0-indexed in Python).
+        return parts[5] if len(parts) > 5 else ""
+    except (AttributeError, IndexError):
+        return ""
+
+
+def cve_affects_version(
+    cve_dict: dict,
+    pinned_version: str | None,
+) -> bool | None:
+    """Decide whether *pinned_version* is affected by this CVE.
+
+    Returns:
+        - ``True``  — at least one ``vulnerable`` cpeMatch range covers
+          the pinned version.
+        - ``False`` — configurations were present and parseable, but
+          none of the vulnerable ranges match.
+        - ``None``  — cannot determine (no pinned version, no parseable
+          configurations, or unparseable pinned version).
+
+    This three-state return is deliberate. Surfacing "False" for a
+    keyword-matched CVE that doesn't actually affect the pinned version
+    is the whole point of D6; but conflating False with None (the
+    "couldn't tell" case) would mask missing-data situations and let a
+    potentially-relevant CVE slip past review unflagged.
+    """
+    pinned = parse_semver(pinned_version)
+    if pinned is None:
+        return None
+
+    configs = cve_dict.get("configurations", [])
+    if not configs:
+        return None
+
+    any_match_seen = False
+    for cfg in configs:
+        for node in cfg.get("nodes", []):
+            for m in node.get("cpeMatch", []):
+                if not m.get("vulnerable", False):
+                    continue
+                any_match_seen = True
+                exact = _extract_cpe_version(m.get("criteria", ""))
+                if version_in_range(
+                    pinned,
+                    start_including=m.get("versionStartIncluding"),
+                    start_excluding=m.get("versionStartExcluding"),
+                    end_including=m.get("versionEndIncluding"),
+                    end_excluding=m.get("versionEndExcluding"),
+                    exact=exact if exact and exact != "*" else None,
+                ):
+                    return True
+
+    # Configurations present but no vulnerable cpeMatch examined → unknown.
+    # Configurations present and every range was examined → definitely False.
+    return False if any_match_seen else None
+
+
 @dataclass
 class CVEResult:
-    """A single CVE from the NVD."""
+    """A single CVE from the NVD.
+
+    D6 (2.3.0): ``affects_pinned`` tags whether a project-specific
+    pinned version falls into the CVE's affected-version range.
+    ``None`` is the "unknown" state (no pinned version supplied, no
+    parseable CPE config); ``True``/``False`` are confident verdicts.
+    ``pinned_version`` is the version string we compared against, kept
+    for rendering in the title prefix so a reviewer sees *what* was
+    matched, not just that a match happened.
+    """
     cve_id: str = ""
     description: str = ""
     published: str = ""
     base_score: float | None = None
     severity: str = ""
+    affects_pinned: bool | None = None
+    pinned_version: str = ""
 
     def to_dict(self) -> dict[str, Any]:
+        # Surface the affects_pinned tag as a title prefix so it shows
+        # up verbatim in the markdown report without any renderer
+        # changes. `[AFFECTS PINNED X.Y]` draws the eye for the case
+        # the reviewer actually cares about; `[unaffected@X.Y]` marks
+        # false-positive noise explicitly without hiding it.
+        if self.affects_pinned is True and self.pinned_version:
+            tag = f"[AFFECTS PINNED {self.pinned_version}] "
+        elif self.affects_pinned is False and self.pinned_version:
+            tag = f"[unaffected@{self.pinned_version}] "
+        else:
+            tag = ""
         return {
-            "title": f"{self.cve_id} (CVSS: {self.base_score or 'N/A'}, {self.severity})",
+            "title": f"{tag}{self.cve_id} (CVSS: {self.base_score or 'N/A'}, {self.severity})",
             "url": f"https://nvd.nist.gov/vuln/detail/{self.cve_id}",
             "snippet": self.description[:200],
+            "affects_pinned": self.affects_pinned,
+            "pinned_version": self.pinned_version,
         }
 
 
@@ -44,8 +234,17 @@ def query_nvd(
     keyword: str,
     max_results: int = 5,
     api_key: str | None = None,
+    pinned_version: str | None = None,
 ) -> list[CVEResult]:
-    """Query NVD API 2.0 for CVEs matching keyword."""
+    """Query NVD API 2.0 for CVEs matching keyword.
+
+    D6 (2.3.0): when *pinned_version* is supplied, each returned CVE
+    is post-filtered via :func:`cve_affects_version` against the CVE's
+    ``configurations`` tree. The result is stored on
+    :attr:`CVEResult.affects_pinned` (``True``/``False``/``None``) so
+    the report can highlight CVEs that actually hit the project's
+    pinned version and de-emphasise the keyword-match noise.
+    """
     params = {
         "keywordSearch": keyword,
         "resultsPerPage": str(max_results),
@@ -103,14 +302,30 @@ def query_nvd(
                 severity = cvss_data.get("baseSeverity", "")
                 break
 
+        # D6: compute affects_pinned from the CVE's configurations.
+        # cve_affects_version handles the None (unknown) case when no
+        # pinned_version was supplied.
+        affects = cve_affects_version(cve, pinned_version)
+
         results.append(CVEResult(
             cve_id=cve.get("id", ""),
             description=desc[:300],
             published=cve.get("published", "")[:10],
             base_score=score,
             severity=severity,
+            affects_pinned=affects,
+            pinned_version=pinned_version or "",
         ))
 
+    # Sort affects_pinned=True first, then unknown (None), then False.
+    # Secondary sort by CVSS score descending so the most severe
+    # affects-pinned CVE leads the list. None < number comparisons
+    # would raise in Python 3, so coerce missing scores to 0.
+    def _sort_key(c: CVEResult) -> tuple[int, float]:
+        rank = {True: 0, None: 1, False: 2}[c.affects_pinned]
+        return (rank, -(c.base_score or 0.0))
+
+    results.sort(key=_sort_key)
     return results
 
 
@@ -209,9 +424,32 @@ def run_nvd_queries(
 
     results: list[ResearchResult] = []
 
-    for dep_name in dependencies:
-        query = f"NVD: {dep_name}"
-        cache_file = cache_dir / f"nvd_{hashlib.sha256(dep_name.encode()).hexdigest()[:16]}.json"
+    for dep in dependencies:
+        # D6 (2.3.0): a dep can be either a bare string (legacy,
+        # name-only) or a dict {name, version} that narrows CVE results
+        # to those actually affecting the pinned version. Reject
+        # malformed entries without crashing the whole tier.
+        if isinstance(dep, str):
+            dep_name = dep
+            pinned_version: str | None = None
+        elif isinstance(dep, dict):
+            dep_name = str(dep.get("name", "")).strip()
+            pinned_version_raw = dep.get("version")
+            pinned_version = str(pinned_version_raw) if pinned_version_raw else None
+        else:
+            log.warning("NVD: skipping malformed dependency entry: %r", dep)
+            continue
+
+        if not dep_name:
+            log.warning("NVD: skipping dependency with empty name: %r", dep)
+            continue
+
+        # Cache key includes the version so the same dep at different
+        # pinned versions caches separately (otherwise a version bump
+        # would return a stale affects_pinned verdict).
+        cache_ident = f"{dep_name}@{pinned_version}" if pinned_version else dep_name
+        query = f"NVD: {cache_ident}"
+        cache_file = cache_dir / f"nvd_{hashlib.sha256(cache_ident.encode()).hexdigest()[:16]}.json"
 
         # Check cache
         if cache_file.exists():
@@ -219,7 +457,7 @@ def run_nvd_queries(
                 cached = json.loads(cache_file.read_text())
                 cached_time = datetime.fromisoformat(cached.get("timestamp", ""))
                 if datetime.now() - cached_time < cache_ttl:
-                    log.debug("NVD cache hit: %s", dep_name)
+                    log.debug("NVD cache hit: %s", cache_ident)
                     results.append(ResearchResult(
                         query=query,
                         results=cached.get("results", []),
@@ -230,13 +468,18 @@ def run_nvd_queries(
                 pass
 
         # Live query
-        cves = query_nvd(dep_name, max_results=max_results, api_key=api_key)
+        cves = query_nvd(
+            dep_name,
+            max_results=max_results,
+            api_key=api_key,
+            pinned_version=pinned_version,
+        )
 
         formatted = [c.to_dict() for c in cves]
 
         # Cache
         cache_data = {
-            "query": dep_name,
+            "query": cache_ident,
             "timestamp": datetime.now().isoformat(),
             "results": formatted,
         }

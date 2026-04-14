@@ -2,6 +2,100 @@
 
 All notable changes to the Audit Tool are documented in this file.
 
+## [2.3.0] - 2026-04-14
+
+### Added (D6 — Version-scoped NVD queries / `affects_pinned` tag)
+- **Each NVD CVE is now tagged with whether the project's pinned
+  dependency version actually falls into its affected-version range.**
+  Turns Tier 5 from "here are CVEs that mention the keyword GLFW" into
+  "here are CVEs that *actually affect* GLFW 3.4 as pinned in
+  `external/CMakeLists.txt`" — the biggest signal-to-noise win in
+  Tier 5 since cache-backed research landed.
+
+  Three-state tag (`True`/`False`/`None`):
+  - `[AFFECTS PINNED 3.4]` title prefix — the pinned version falls in
+    at least one vulnerable cpeMatch range; review is warranted.
+  - `[unaffected@3.4]` title prefix — configurations parsed cleanly and
+    the pinned version is *not* in any vulnerable range; keyword-match
+    noise, de-emphasised.
+  - No prefix — unknown (no pinned version supplied, or no parseable
+    CPE configurations in the CVE).
+
+  CVEs are sorted so `affects_pinned=True` leads each NVD query,
+  secondary-sorted by CVSS descending.
+
+### Changed
+- `lib/tier5_nvd.py`:
+  - New helpers: `parse_semver` (handles `3.4`, `v2.9.4`, `VER-2-13-3`,
+    `1.24.1`; returns `None` for `master`/`docking`), `version_in_range`
+    (mirrors NVD's four-bound `cpeMatch` shape — `versionStartIncluding`,
+    `versionStartExcluding`, `versionEndIncluding`, `versionEndExcluding`,
+    with fallthrough to exact-pin), `_extract_cpe_version` (field 5 of
+    CPE 2.3 URI), and `cve_affects_version` (tri-state decision over a
+    CVE's full `configurations` tree).
+  - `CVEResult` gained `affects_pinned: bool | None` and
+    `pinned_version: str` fields. `to_dict` surfaces both the title
+    prefix and the raw fields (so downstream consumers can filter).
+  - `query_nvd` accepts `pinned_version`, parses CVE `configurations`,
+    computes `affects_pinned` per result, and returns the list
+    pre-sorted (affects-pinned first, then by CVSS descending).
+  - `run_nvd_queries` accepts either string-form deps (legacy) or
+    dict-form `{name, version}`. Malformed entries (int/list/None,
+    dicts without a name) are logged and skipped — no crash. Cache
+    key incorporates the pinned version so a version bump busts the
+    cache cleanly.
+- `audit_config.yaml`:
+  - Vestige's NVD dependency list switched to dict form with pinned
+    versions tracking `external/CMakeLists.txt` as of 2026-04-14:
+    GLFW 3.4, FreeType 2.13.3 (from GIT_TAG `VER-2-13-3`), OpenAL 1.24.1,
+    nlohmann/json 3.12.0, JoltPhysics 5.2.0, Recast 1.6.0, tinygltf 2.9.4,
+    googletest 1.15.2.
+  - Added the four newly-scanned deps (JoltPhysics, Recast, tinygltf,
+    googletest) — previously only keyword-matched via web search; now
+    CPE-filtered for pinned-version relevance.
+  - `stb image` kept as a legacy string entry (header-only, no
+    published version to pin against).
+
+### Tests
+- `tests/test_tier5_nvd.py` — 47 new cases covering:
+  - `parse_semver` across all observed GIT_TAG formats + unparseables.
+  - `version_in_range` over all four bound combinations plus
+    start-excluding / end-including / exact-only / unparseable-bound
+    edge cases.
+  - `_extract_cpe_version` shape handling (wildcards, short strings).
+  - `cve_affects_version` tri-state over: in/above/below range, no
+    pinned version, unparseable pinned, no configurations, non-
+    vulnerable cpeMatch nodes ignored, exact CPE-version match,
+    multiple-nodes any-match wins.
+  - `CVEResult.to_dict` title-prefix rendering for True/False/None +
+    edge case (affects_pinned=True with empty pinned_version → no
+    trailing-space artefact).
+  - `query_nvd` sort order: affects-pinned first even when secondary
+    CVSS is lower; no-pinned-version falls through to CVSS-descending.
+  - `run_nvd_queries`: dict form passes pinned_version through; string
+    form passes None; mixed forms all run; malformed entries skipped;
+    dicts without `name` skipped; cache key changes with version
+    (version bump busts cache).
+- Full audit suite: 568 passed.
+
+### Design notes
+- Auto-detection of pinned versions from `external/CMakeLists.txt`
+  `FetchContent_Declare GIT_TAG` was explicitly kept out of scope for
+  D6. That detector belongs in `lib/auto_config.py` (where project
+  scanning already lives) and would ship as a separate follow-up;
+  D6 just gives the audit config the shape it needs to accept the
+  data.
+- Tri-state `affects_pinned` (`True`/`False`/`None`) is deliberate.
+  Conflating False with None (the "couldn't decide" case) would mask
+  missing-data situations and let a potentially-relevant CVE slip past
+  review unflagged. The title-prefix renderer uses only confident
+  verdicts; None gets no prefix, preserving the caller's visibility.
+- `parse_semver` is intentionally permissive (extracts digit runs) so
+  it handles FreeType's `VER-N-N-N` tag style without a custom parser,
+  while still keeping the resulting tuple comparable. Pre-release
+  suffixes (`-rc1`) keep their numeric prefix; this is fine for NVD
+  range filtering which always uses plain numeric versions.
+
 ## [2.2.0] - 2026-04-14
 
 ### Added (D5 — Baseline Comparison)
