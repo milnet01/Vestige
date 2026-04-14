@@ -2,6 +2,34 @@
 
 All notable changes to the Audit Tool are documented in this file.
 
+## [2.0.12] - 2026-04-14
+
+### Fixed
+- **CI `audit-tool-tier1` job reported 4 Timer test failures** after the
+  2.0.11 parallelism fix let ctest complete: `TimerTest.InitialState`,
+  `.UpdateReturnsDeltaTime`, `.DeltaTimeIsClamped`, `.ElapsedTimeIncreases`.
+  Root cause: `test_timer.cpp` calls `glfwInit()` in SetUp, which fails
+  in a headless environment. `linux-build-test` avoids this by wrapping
+  ctest with `xvfb-run --auto-servernum`; the audit job never got the
+  same treatment. Previous job failures (timeout, cppcheck HIGHs) were
+  tripping earlier, so this regression didn't surface until now. See CI
+  run 24395499747.
+
+### Changed
+- `.github/workflows/ci.yml` `audit-tool-tier1` job:
+  1. Apt-installs `xvfb` alongside other build deps.
+  2. Wraps the `python3 tools/audit/audit.py -t 1 --ci --no-color`
+     invocation in `xvfb-run --auto-servernum`, matching linux-build-test.
+  The audit tool itself / `audit_config.yaml` stays untouched — the
+  display requirement is Vestige-test-specific, handled in the workflow
+  rather than leaked into the generic audit config.
+
+### Follow-up (out of scope)
+- `engine/core/timer.{h,cpp}` uses `glfwGetTime()` for delta/FPS. Swap
+  to `std::chrono::steady_clock` so `test_timer.cpp` doesn't need a
+  display. Behaviour is identical on Linux (both ultimately read
+  `clock_gettime(CLOCK_MONOTONIC)`). Deferred to avoid scope creep.
+
 ## [2.0.11] - 2026-04-14
 
 ### Fixed

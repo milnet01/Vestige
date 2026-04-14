@@ -129,6 +129,7 @@ jobs:
             build-essential \
             cmake \
             ninja-build \
+            xvfb \
             libgl1-mesa-dev libglu1-mesa-dev \
             libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
             libxxf86vm-dev libwayland-dev libxkbcommon-dev
@@ -165,8 +166,14 @@ jobs:
         # and FIXPLAN I1's original design.
         # --no-color: propagate NO_COLOR=1 to cppcheck/clang-tidy/git
         # children so downloaded log artifacts stay free of ANSI escapes.
+        # xvfb-run: GLFW-backed tests (e.g. test_timer.cpp calling
+        # glfwInit in SetUp) need an X display. Without this the Timer
+        # tests fail because glfwGetTime returns uninitialised state.
+        # Matches how linux-build-test wraps its ctest invocation.
+        # Follow-up: Timer should use std::chrono::steady_clock so the
+        # test doesn't need a display at all.
         run: |
-          python3 tools/audit/audit.py -t 1 --ci --no-color || {
+          xvfb-run --auto-servernum python3 tools/audit/audit.py -t 1 --ci --no-color || {
             echo "::error::Tier 1 audit failed — see annotations above."
             exit 1
           }
