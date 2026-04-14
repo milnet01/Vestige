@@ -45,6 +45,9 @@ python3 tools/audit/audit.py --ci
 
 # Only HIGH+ severity patterns
 python3 tools/audit/audit.py --patterns relaxed
+
+# Disable ANSI colour (CI-friendly; auto-enabled on non-TTY stdout)
+python3 tools/audit/audit.py --no-color
 ```
 
 ### Web UI
@@ -157,7 +160,7 @@ tiers: [1, 2, 3, 4, 5]
 usage: audit.py [-h] [--config PATH] [--tiers N [N ...]] [--output PATH]
                 [--base-ref REF] [--project-root DIR] [--no-research]
                 [--verbose] [--dry-run] [--json] [--list-patterns] [--init]
-                [--diff] [--ci] [--patterns PRESET] [--html]
+                [--diff] [--ci] [--patterns PRESET] [--html] [--no-color]
                 [--suppress-show] [--suppress-add KEY]
 
 Options:
@@ -176,6 +179,11 @@ Options:
   --ci                    CI mode: emit GitHub Actions annotations
   --patterns PRESET       Use a pattern preset: strict, relaxed, security, performance
   --html                  Also generate a self-contained HTML report
+  --no-color              Disable ANSI colour in output and in child tools
+                          (cppcheck, clang-tidy, git). Sets NO_COLOR=1 in
+                          the environment. Auto-enabled when stdout is not
+                          a TTY or NO_COLOR is already set. See
+                          https://no-color.org.
   --suppress-show         Print current suppressions from .audit_suppress
   --suppress-add KEY      Add a dedup_key to .audit_suppress
 ```

@@ -620,6 +620,8 @@ Before any release or significant update:
 - [ ] `--init` generates valid, loadable config for a Python project
 - [ ] `--no-research` works (offline mode)
 - [ ] `--json` output is valid JSON parseable by `jq`
+- [ ] `--no-color` parses and sets `NO_COLOR=1` for children (verify via
+      `python3 audit.py -t 1 --no-color --dry-run`)
 - [ ] No `print()` statements in `lib/` modules
 - [ ] All public functions have docstrings
 - [ ] All functions have type annotations
