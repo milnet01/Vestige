@@ -2,6 +2,22 @@
 
 All notable changes to the Audit Tool are documented in this file.
 
+## [2.0.10] - 2026-04-14
+
+### Changed
+- `audit_config.yaml` — updated the `--inline-suppr` comment to reflect
+  the current false-positive sites after engine-side fixes landed:
+  `engine/scene/entity.cpp` (return-ptr-after-std::move) and
+  `engine/formula/node_graph.cpp` (post-resize access). Previous comment
+  referenced stale line numbers.
+
+### Notes
+- The `--ci` exit-code contract (0 clean / 1 HIGH / 2 CRITICAL) did its
+  job this release: it surfaced three pre-existing HIGH cppcheck findings
+  in engine source that inline suppressions were supposed to silence but
+  weren't attaching to the right lines. Engine-side fix shipped in the
+  same commit as this bump (see repo history). No tool change required.
+
 ## [2.0.9] - 2026-04-14
 
 ### Fixed
