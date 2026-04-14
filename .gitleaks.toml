@@ -1,0 +1,47 @@
+# Gitleaks config for Vestige.
+#
+# Keeps the generic-api-key rule active (it catches real leaks like the
+# NVD key incident of 2026-04-13) while silencing documented false
+# positives that the heuristic can't distinguish from real secrets.
+#
+# Extends the default Gitleaks rule set — do NOT override [[rules]]
+# without copying them in, or scans will miss everything Gitleaks ships
+# out of the box.
+
+[extend]
+useDefault = true
+
+# ---------------------------------------------------------------------------
+# Allowlist — confirmed false positives
+# ---------------------------------------------------------------------------
+# Gitleaks matches globally; per-file pinning keeps the allowlist narrow
+# so a real leak anywhere else is still caught.
+
+[[allowlists]]
+description = "source_key test constants in the audit tool are not secrets"
+paths = [
+    '''tools/audit/tests/test_findings\.py$''',
+]
+# Fingerprint = Commit:File:RuleID:StartLine, but Gitleaks also accepts
+# raw regex matches. These strings are test assertions on the value of
+# Finding.source_key, which the generic-api-key rule flags because the
+# strings look hex-ish. They are literal constants, not secrets.
+regexes = [
+    '''tier4_complexity''',
+    '''tier4_cognitive_complexity''',
+    '''tier4_duplication''',
+]
+
+[[allowlists]]
+description = "Dead NVD API key — rotated 2026-04-13, still appears in history"
+# The SECURITY writeup in AUDIT.md §C2 and the historical commits
+# 5aa7ebaf / f5cc472 / 91d66a87 contain the pre-rotation literal. The
+# key has been rotated at NVD and is no longer valid. A `git filter-repo`
+# sweep is scheduled for pre-launch to scrub the history; until then,
+# allowlist the exact dead UUID so current-state scans stay green.
+#
+# Intentionally unscoped to a path — any occurrence of this specific
+# UUID is guaranteed to be a reference to the rotated-and-dead key.
+regexes = [
+    '''<REDACTED-rotated-2026-04-13>''',
+]

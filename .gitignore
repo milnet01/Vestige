@@ -78,3 +78,29 @@ docs/AUTOMATED_AUDIT_REPORT*_results.json
 # everything under this pattern remains developer-local.
 docs/trend_snapshot_*.json
 **/__pycache__/
+
+# Secrets — defense in depth. We also run gitleaks; these patterns
+# prevent accidental staging of common credential-bearing files in the
+# first place. See SECURITY.md and the pre-open-source audit checklist.
+.env
+.env.*
+!.env.example
+!.env.template
+*.key
+*.pem
+*.p12
+*.pfx
+*.token
+credentials.json
+credentials.yaml
+secrets.json
+secrets.yaml
+.aws/
+.ssh/
+id_rsa
+id_ed25519
+*.netrc
+
+# Local audit tool state — per-user, not per-project
+.audit_suppress.local
+.audit_verified.local

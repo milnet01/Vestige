@@ -34,15 +34,20 @@ Build + tests baseline confirmed clean from last automated run (0 warnings, 1695
 - **Risk of fix:** Moderate. Every shell-using caller must be updated; `cd`-into-build patterns must become `cwd=`; output redirection must move to Python file handling. Has to ship atomically to avoid partial-refactor regressions.
 
 ### C2 — NVD API key committed in plaintext
-- **Location:** `tools/audit/audit_config.yaml:272`.
+- **Location:** `tools/audit/audit_config.yaml:272` (historical, pre-fix).
 - **Evidence:**
   ```yaml
-  api_key: "<REDACTED-rotated-2026-04-13>"  # Pending activation (up to 7 days from 2026-04-11)
+  api_key: "<REDACTED — rotated 2026-04-13 per SECURITY note below>"  # pre-fix form
   ```
-- **Impact:** Key is in git history permanently (even if removed now). Rotate before push. Memory notes the key is "pending activation" — treat as active-once-pushed regardless.
-- **Proposed fix:** Remove literal; keep `api_key_env: "NVD_API_KEY"` path only. Loader warns when `api_key` is a non-null literal. Rotate the key at NVD.
-- **Verification:** `git grep bcb87fe8` → empty (current working tree); `NVD_API_KEY=… python3 audit.py -t 5` still works.
-- **Risk of fix:** Low. One-line scrub + rotation. Must happen before any public push.
+  (The original literal UUID was redacted from this writeup on 2026-04-14 to keep
+  gitleaks scans clean. The key itself was rotated at NVD on 2026-04-13 and is
+  no longer valid. The pre-fix value is still in `git log -p` under commits
+  `5aa7ebaf` and `91d66a87`; scrub via `git filter-repo` is scheduled as part
+  of the pre-open-source launch checklist before first public push.)
+- **Impact:** Key was in git history permanently (even after removal). It's been rotated, so the leaked value is now dead, but a history rewrite is still required before public release so old clones can't be used to prove "this key was leaked here."
+- **Status:** Remediated in-code on 2026-04-13 (literal removed from `audit_config.yaml`, `api_key_env: "NVD_API_KEY"` path only; loader warns on non-null literal). Key rotated at NVD same day. History rewrite pending pre-launch.
+- **Verification:** `git grep bcb87fe8-3842-4699` → empty in current working tree; `NVD_API_KEY=… python3 audit.py --nvd-test` still works once the new key is activated (expected ~2026-04-18).
+- **Risk of remaining work:** Low. One-line `git filter-repo --replace-text` + force-push, executed locally then pushed just before the repo goes public.
 
 ---
 
