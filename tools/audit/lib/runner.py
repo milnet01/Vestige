@@ -101,12 +101,12 @@ class AuditRunner:
             self._run_tier5(results)
             self._emit("tier_end", tier=5, findings_count=len(results.findings))
 
-        # D2 (2.4.0): dedup + corroborate BEFORE severity_overrides so
-        # explicit user overrides remain the final say. Ordering:
+        # Pipeline ordering:
         #   1. deduplicate    — collapse same-dedup_key entries
-        #   2. corroborate    — tag/promote/demote based on multi-source signal
+        #   2. corroborate    — tag/promote/demote based on multi-source signal (D2, 2.4.0)
         #   3. overrides      — user's explicit severity choices win
-        #   4. suppressions   — last-mile filter
+        #   4. verified tags  — apply human-review signal (D3, 2.5.0), tag only (no filter)
+        #   5. suppressions   — last-mile filter
         # Dedup is idempotent; ReportBuilder.build() calling it again is
         # harmless but avoids regressions if future callers bypass the
         # runner pipeline.
@@ -120,6 +120,18 @@ class AuditRunner:
         if severity_overrides:
             results.findings = apply_severity_overrides(results.findings, severity_overrides)
             log.info("Applied %d severity override rules", len(severity_overrides))
+
+        # D3 (2.5.0): tag verified findings so reviewers can distinguish
+        # reviewed-real-still-needs-fixing from not-yet-looked-at. This
+        # runs before suppressions because suppression is a last-mile
+        # filter — if a finding is both verified and suppressed, the
+        # suppression takes effect (reviewer chose to hide it).
+        from .verified import load_verified, apply_verified_tags
+        verified_keys = load_verified(self.config.root)
+        if verified_keys:
+            verified_count = apply_verified_tags(results.findings, verified_keys)
+            log.info("Tagged %d findings as [VERIFIED] from %d keys",
+                     verified_count, len(verified_keys))
 
         # Apply finding suppressions before reporting
         from .suppress import load_suppressions, filter_suppressed
