@@ -2,6 +2,26 @@
 
 All notable changes to the Audit Tool are documented in this file.
 
+## [2.0.9] - 2026-04-14
+
+### Fixed
+- **CI `audit-tool-tier1` job hit its 20-min job ceiling before clang-tidy
+  could finish**, cancelling the run. The 2.0.8 fix (explicit Build step +
+  FetchContent cache) did its job — audit-internal `cmake --build` was a
+  warm 5-second no-op, cppcheck completed in ~1.5 min — but the cold
+  Debug build itself takes ~12 min on GH free runners and clang-tidy over
+  50 files × 5 heavy check categories (bugprone-*, performance-*,
+  modernize-*, readability-*, cppcoreguidelines-*) needs ~8-10 min on
+  top. Total cold-start cost ~22 min; 20-min ceiling was never going to
+  hold. See milnet01/Vestige CI run 24391001628 / job.
+
+### Changed
+- `.github/workflows/ci.yml` `audit-tool-tier1.timeout-minutes`:
+  `20` → `45` (matching `linux-build-test`). Legitimate ceiling bump per
+  CLAUDE.md rule #10 — the work inside the job is real (cold build +
+  heavy static analysis), not redundant or masking a bug. Warm runs
+  finish much faster thanks to the `build/_deps` cache added in 2.0.8.
+
 ## [2.0.8] - 2026-04-14
 
 ### Fixed

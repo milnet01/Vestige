@@ -101,7 +101,14 @@ jobs:
   audit-tool-tier1:
     name: Audit tool Tier 1 (static)
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    # 45-min ceiling matches linux-build-test. Rationale: this job does the
+    # full Debug build (~12 min cold on GH free runners) + cppcheck (~1.5 min)
+    # + clang-tidy on 50 files across 5 heavy check categories (bugprone-*,
+    # performance-*, modernize-*, readability-*, cppcoreguidelines-*, ~8-10
+    # min). Cold-start worst case ~22 min; warm runs (build/_deps cached) are
+    # faster. The previous 20-min ceiling was cutting clang-tidy mid-run.
+    # See milnet01/Vestige CI run 24391001628 for the data.
+    timeout-minutes: 45
     steps:
       - name: Checkout
         uses: actions/checkout@v4
