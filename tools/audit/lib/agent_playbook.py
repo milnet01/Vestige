@@ -3,8 +3,8 @@
 The playbook block instructs a downstream LLM audit agent (e.g. a Claude Code
 session consuming the report) to follow a Discovery → Verify → Cite → Approval
 → Implement+Test cycle before touching any code. This closes the biggest gap
-between the automated report output and the manual-audit rigour documented in
-``/mnt/Storage/Scripts/audit_prompt.md``.
+between the automated report output and the manual-audit rigour the project
+applies when running audits by hand.
 
 The renderer is pure — it reads already-computed data (finding counts via the
 caller, ``tier1_summary`` for baseline warnings) and produces markdown. Keeping

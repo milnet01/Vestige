@@ -25,7 +25,7 @@ sys.path.insert(0, str(AUDIT_ROOT))
 
 from web.audit_bridge import AuditSession
 
-VERSION = "2.4.0"
+VERSION = "2.4.1"
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
 session = AuditSession()
@@ -38,8 +38,9 @@ def add_security_headers(response):
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     return response
 
-# Default project root (can be overridden via the UI)
-DEFAULT_ROOT = str(AUDIT_ROOT.parent.parent)  # /mnt/Storage/Scripts/Linux/3D_Engine
+# Default project root (can be overridden via the UI).
+# Resolves to the repo root (two directories up from tools/audit/web/).
+DEFAULT_ROOT = str(AUDIT_ROOT.parent.parent)
 DEFAULT_CONFIG = str(AUDIT_ROOT / "audit_config.yaml")
 CHANGELOG_PATH = AUDIT_ROOT / "CHANGELOG.md"
 

@@ -34,7 +34,7 @@ class AuditSession:
 
 # Constants: UPPER_SNAKE_CASE
 MAX_DETAIL_PER_TOOL = 20
-DEFAULT_ROOT = "/mnt/Storage/Scripts/Linux/3D_Engine"
+DEFAULT_TIMEOUT_SECONDS = 300
 
 # Private methods/attributes: _leading_underscore
 def _emit(self, event, **data):
