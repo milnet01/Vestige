@@ -321,6 +321,17 @@ report:
   max_findings_per_category: 100
   include_json_blocks: true
   include_token_estimate: true
+  # Agent Playbook — 5-phase instruction block rendered at the top of the
+  # report, telling the downstream LLM consumer (e.g. a Claude Code session
+  # handed this report) to follow Baseline → Verify → Cite → Approval Gate
+  # → Implement+Test rather than jumping straight to fixes. Closes the
+  # biggest rigour gap vs the manual-audit prompt. Set to false to skip.
+  include_playbook: true
+  # Minimum finding severity that requires user approval before the agent
+  # applies a fix. One of: "critical", "high", "medium", "low", "info".
+  # Findings below this bar may be auto-fixed (trivial / obvious). Default
+  # "medium" mirrors the manual audit's approval threshold.
+  approval_gate_threshold: "medium"
 
 # -- Which tiers to run (override with --tiers CLI flag) ----------------------
 tiers: [1, 2, 3, 4, 5]

@@ -2,6 +2,49 @@
 
 All notable changes to the Audit Tool are documented in this file.
 
+## [2.1.0] - 2026-04-14
+
+### Added (D1 — Agent Playbook)
+- **Inline 5-phase audit prompt at the top of every report.** New
+  `lib/agent_playbook.py` renders a "Read This First" section above the
+  Executive Summary that instructs the downstream LLM consumer (a Claude
+  Code session handed this report) to follow Baseline → Verify → Cite →
+  Approval Gate → Implement+Test rather than jumping straight to fixes.
+  Closes the largest rigour gap between the automated report output and
+  the manual-audit prompt at `/mnt/Storage/Scripts/audit_prompt.md`.
+
+  The playbook is parameterised by:
+  - `tier1_summary` — if build failed or tests failed > 0, a
+    **Baseline is already broken** callout opens the section so the agent
+    surfaces pre-existing breakage before running Phase 2.
+  - Approval-gate threshold — controls the "wait for user approval at
+    {severity} or higher" sentence in Phase 4.
+
+  Size: ~600 tokens, well inside the 800-token budget asserted in
+  `tests/test_agent_playbook.py::TestBuildTokenBudget`. 25 new tests
+  cover threshold parsing, phase rendering, baseline-broken branching,
+  parametrised threshold phrasing, and the token ceiling.
+
+### New config knobs (default both enabled)
+- `report.include_playbook: true` — set to `false` to skip the playbook
+  (e.g. for downstream consumers that already have the instructions).
+- `report.approval_gate_threshold: "medium"` — one of `critical`, `high`,
+  `medium`, `low`, `info`. Findings below this severity may be auto-fixed
+  by the agent without waiting for user approval. Default `medium` mirrors
+  the manual audit's implicit threshold.
+
+### Design notes
+- Renderer is pure (no I/O, no mutation) so unit tests are trivial.
+- Import in `lib/report.py` is `from . import agent_playbook` so the
+  renderer is called as `agent_playbook.build(...)` — mirrors the
+  existing tier module style.
+- Findings list is accepted but not inlined — counts already live in the
+  Executive Summary below the playbook, so duplication is avoided.
+- Pinned-version CVE scoping and finding corroboration (planned D2 / D6)
+  will build on this scaffold: the playbook content is a pure function of
+  inputs, so later tiers can pass a richer `tier1_summary`-like dict
+  without changing the callers.
+
 ## [2.0.12] - 2026-04-14
 
 ### Fixed
