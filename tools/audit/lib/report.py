@@ -139,6 +139,10 @@ class ReportBuilder:
         if 5 in tiers_run and research_results:
             sections.append(self._build_tier5_section(research_results))
 
+        # D4 (2.6.0): Tier 6 — Feature Coverage
+        if 6 in tiers_run:
+            sections.append(self._build_tier6_section(deduped))
+
         report = "\n".join(sections)
 
         # Token estimate footer
@@ -913,6 +917,65 @@ class ReportBuilder:
             lines.append("### Research Errors")
             for r in errors:
                 lines.append(f"- {r.query}: {r.error}")
+            lines.append("")
+
+        return "\n".join(lines)
+
+    def _build_tier6_section(self, findings: list[Finding]) -> str:
+        """Build Tier 6 feature-coverage section.
+
+        D4 (2.6.0): emits a compact section listing subsystems with no
+        coverage or thin coverage. Findings are tier=6 and are rendered
+        independently of the Tier 1-3 tables (feature coverage is a
+        directory-level heuristic, not a per-line finding, so it gets
+        its own section for clarity).
+        """
+        tier6 = [f for f in findings if f.source_tier == 6]
+        if not tier6:
+            return ("## Tier 6: Feature Coverage\n\n"
+                    "No subsystems flagged. Every discovered `engine/<name>/` "
+                    "directory has at least the configured threshold of test "
+                    "coverage.\n")
+
+        no_cov = [f for f in tier6 if f.pattern_name == "tier6_no_coverage"]
+        thin = [f for f in tier6 if f.pattern_name == "tier6_thin_coverage"]
+
+        lines = [
+            f"## Tier 6: Feature Coverage "
+            f"({len(no_cov)} uncovered, {len(thin)} thin)",
+            "",
+            "Heuristic: a subsystem is considered covered when a test file "
+            "references it via `#include` or filename prefix. Measures "
+            "breadth, not line/branch coverage.",
+            "",
+        ]
+
+        if no_cov:
+            lines.append("### Uncovered Subsystems (MEDIUM)")
+            lines.append("")
+            lines.append("| Subsystem | Details |")
+            lines.append("|-----------|---------|")
+            for f in no_cov:
+                prefix = _corr_prefix(f)
+                # Strip the trailing slash and the engine_dir for a cleaner label.
+                label = f.file.rstrip("/").rsplit("/", 1)[-1]
+                lines.append(f"| {prefix}`{label}` | {f.detail[:120]} |")
+            lines.append("")
+
+        if thin:
+            lines.append("### Thin Coverage (INFO)")
+            lines.append("")
+            lines.append("| Subsystem | Tests | Note |")
+            lines.append("|-----------|-------|------|")
+            for f in thin:
+                prefix = _corr_prefix(f)
+                label = f.file.rstrip("/").rsplit("/", 1)[-1]
+                # Title is like "Subsystem `foo` has only 2 test file(s)"
+                # — extract the count for the table column.
+                import re
+                m = re.search(r"only (\d+) test", f.title)
+                test_count = m.group(1) if m else "?"
+                lines.append(f"| {prefix}`{label}` | {test_count} | {f.detail[:100]} |")
             lines.append("")
 
         return "\n".join(lines)

@@ -2,6 +2,70 @@
 
 All notable changes to the Audit Tool are documented in this file.
 
+## [2.6.0] - 2026-04-14
+
+### Added (D4 — Tier 6: Feature Coverage)
+- **New `lib/tier6_coverage.py` module.** Heuristic sweep that flags
+  engine subsystems lacking test coverage. A subsystem (a top-level
+  `engine/<name>/` directory) is considered "covered" when at least one
+  test file under `tests/` references it via either:
+  - `#include "engine/<name>/..."` / `<engine/<name>/...>`, or
+  - A filename starting with `test_<name>`
+
+  Coverage thresholds:
+  - **0 test files** → MEDIUM finding (`tier6_no_coverage`)
+  - **1 to (thin_threshold-1) test files** → INFO finding (`tier6_thin_coverage`)
+  - **≥ thin_threshold** → silent (adequately covered)
+
+  This is a *breadth* signal, not line/branch coverage. Its value is
+  surfacing subsystems that nobody has written a single test for —
+  closing another rigour gap versus the manual audit prompt, which asks
+  reviewers to walk every subsystem and check for tests.
+
+### Config
+- New `tier6` section in `audit_config.yaml` / `DEFAULTS`:
+  ```yaml
+  tier6:
+    enabled: true
+    engine_dir: "engine"
+    tests_dir: "tests"
+    thin_threshold: 3
+    excluded_subsystems: []   # on top of built-in ["testing"]
+  ```
+- Default `tiers` list now `[1, 2, 3, 4, 5, 6]`.
+
+### Pipeline integration
+- Tier 6 joins the parallel-tier thread pool (with tiers 2, 3, 4) since
+  it's filesystem-only and independent of other tiers' findings.
+- `Finding.source_key` fallback (`f"tier{N}"`) already correctly maps
+  tier-6 findings to `tier6`, so they don't cross-corroborate with
+  other tiers. No changes to the corroboration layer.
+
+### Rendering
+- New `_build_tier6_section()` in `lib/report.py`. Produces a compact
+  two-table section: uncovered subsystems (MEDIUM) and thin coverage
+  (INFO). Section header documents the heuristic so readers understand
+  that visible but unused tests (math mirrored from shaders, etc.)
+  legitimately won't be detected.
+
+### Tests
+- `tests/test_tier6_coverage.py` — 24 tests covering subsystem
+  discovery, coverage counting (via include, via filename prefix,
+  both signals), and the `run()` integration (disabled, no engine
+  dir, zero/thin/adequate coverage, custom exclusions, threshold
+  tuning, source_tier/source_key correctness).
+
+Totals: 604 (2.4.0) → 642 (2.5.0) → **666 tests passing** (2.6.0).
+
+### Migration
+Existing configs that pre-date Tier 6 pick up the new defaults
+automatically. To disable the new tier:
+```yaml
+tier6:
+  enabled: false
+```
+Or drop `6` from the `tiers` list. No behaviour change to tiers 1-5.
+
 ## [2.5.0] - 2026-04-14
 
 ### Added (D3 — Human-review verification layer)
