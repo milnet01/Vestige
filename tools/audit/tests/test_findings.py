@@ -189,6 +189,43 @@ class TestDeduplicate:
         assert len(result) == 1
         assert result[0] is f
 
+    def test_dedup_merges_corroborated_by_when_swapping(self):
+        """When a lower-tier finding replaces a higher-tier one, the
+        kept finding should absorb any corroborated_by tags from the
+        discarded finding — dedup shouldn't discard signal.
+        """
+        high = Finding("f.cpp", 10, Severity.HIGH, "cat", 3, "dup",
+                       corroborated_by=["pattern_scan"])
+        low = Finding("f.cpp", 10, Severity.HIGH, "cat", 1, "dup",
+                      corroborated_by=["clang_tidy"])
+        result = deduplicate([high, low])
+        assert len(result) == 1
+        assert result[0].source_tier == 1
+        assert result[0].corroborated_by == ["clang_tidy", "pattern_scan"]
+
+    def test_dedup_merges_corroborated_by_when_keeping(self):
+        """When a higher-tier finding arrives after a lower-tier one,
+        the kept (lower-tier) finding should absorb the discarded
+        tags rather than losing them.
+        """
+        low = Finding("f.cpp", 10, Severity.HIGH, "cat", 1, "dup",
+                      corroborated_by=["pattern_scan"])
+        high = Finding("f.cpp", 10, Severity.HIGH, "cat", 3, "dup",
+                       corroborated_by=["cppcheck"])
+        result = deduplicate([low, high])
+        assert len(result) == 1
+        assert result[0].source_tier == 1
+        assert result[0].corroborated_by == ["cppcheck", "pattern_scan"]
+
+    def test_dedup_merged_tags_are_unique(self):
+        """Repeated tags across duplicates should not produce duplicates."""
+        a = Finding("f.cpp", 10, Severity.HIGH, "cat", 1, "dup",
+                    corroborated_by=["cppcheck"])
+        b = Finding("f.cpp", 10, Severity.HIGH, "cat", 1, "dup",
+                    corroborated_by=["cppcheck"])
+        result = deduplicate([a, b])
+        assert result[0].corroborated_by == ["cppcheck"]
+
 
 # ---------------------------------------------------------------------------
 # Finding.to_dict
@@ -234,6 +271,70 @@ class TestFindingToDict:
         assert "_dedup_key" not in d
         assert "dedup_key" in d
         assert len(d["dedup_key"]) == 16
+
+    def test_corroborated_by_omitted_when_empty(self):
+        """Solo findings should not include corroborated_by in their dict."""
+        f = Finding("f.cpp", 1, Severity.LOW, "cat", 2, "t")
+        assert "corroborated_by" not in f.to_dict()
+
+    def test_corroborated_by_included_when_populated(self):
+        """Corroborated findings surface the source list in their dict."""
+        f = Finding("f.cpp", 1, Severity.LOW, "cat", 2, "t",
+                    corroborated_by=["cppcheck"])
+        d = f.to_dict()
+        assert d["corroborated_by"] == ["cppcheck"]
+
+
+# ---------------------------------------------------------------------------
+# Finding.source_key (D2)
+# ---------------------------------------------------------------------------
+
+
+class TestFindingSourceKey:
+    """source_key identifies the tool/tier that produced a finding."""
+
+    def test_tier1_cppcheck(self):
+        f = Finding("f.cpp", 1, Severity.HIGH, "cppcheck", 1, "t")
+        assert f.source_key == "cppcheck"
+
+    def test_tier1_clang_tidy(self):
+        f = Finding("f.cpp", 1, Severity.HIGH, "clang_tidy", 1, "t")
+        assert f.source_key == "clang_tidy"
+
+    def test_tier1_build_defaults(self):
+        """Tier 1 categories other than cppcheck/clang_tidy map to 'build'."""
+        f = Finding("f.cpp", 1, Severity.HIGH, "build", 1, "t")
+        assert f.source_key == "build"
+        f2 = Finding("f.cpp", 1, Severity.HIGH, "tests", 1, "t")
+        assert f2.source_key == "build"
+
+    def test_tier2_pattern_scan(self):
+        """All tier 2 patterns share one source_key — same grep mechanism."""
+        f = Finding("f.cpp", 1, Severity.LOW, "memory_safety", 2, "t",
+                    pattern_name="raw_new")
+        assert f.source_key == "pattern_scan"
+
+    def test_tier3_diff(self):
+        f = Finding("f.cpp", 1, Severity.HIGH, "diff_security", 3, "t")
+        assert f.source_key == "tier3_diff"
+
+    def test_tier4_submodules_are_distinct(self):
+        """Each tier 4 category has its own source_key."""
+        complexity = Finding("f.cpp", 1, Severity.MEDIUM, "complexity", 4, "t")
+        cognitive = Finding("f.cpp", 1, Severity.MEDIUM, "cognitive_complexity", 4, "t")
+        dup = Finding("f.cpp", 1, Severity.MEDIUM, "duplication", 4, "t")
+        assert complexity.source_key == "tier4_complexity"
+        assert cognitive.source_key == "tier4_cognitive_complexity"
+        assert dup.source_key == "tier4_duplication"
+        assert len({complexity.source_key, cognitive.source_key, dup.source_key}) == 3
+
+    def test_tier5_research(self):
+        f = Finding("f.cpp", 1, Severity.INFO, "research", 5, "t")
+        assert f.source_key == "tier5_research"
+
+    def test_unknown_tier_fallback(self):
+        f = Finding("f.cpp", 1, Severity.INFO, "x", 9, "t")
+        assert f.source_key == "tier9"
 
 
 # ---------------------------------------------------------------------------
