@@ -1723,35 +1723,153 @@ A non-programmer can launch the Build Wizard, choose "Biblical Walkthrough" temp
 
 ---
 
-## Commercial Vision
+## Phase 22: Collaborative Editing — Real-Time Multi-User Projects
+**Goal:** Allow multiple contributors to work on the same Vestige project simultaneously — editing scenes, placing geometry, tweaking materials, and configuring gameplay in real time. Think "Google Docs for 3D scenes."
 
-### Engine Licensing
-Vestige has the long-term potential to be licensed to other developers as a standalone engine and editor. The goal is to provide a complete, accessible creation tool — particularly suited to architectural visualization, historical reconstruction, and exploration experiences.
+This is a late-stage feature: the editor (Phase 5), asset pipeline (Phase 5E), and project/build system (Phase 21) must be stable before a multi-user layer can be bolted on. Collaborative editing is distinct from **Phase 20 (runtime multiplayer for gameplay)** — this phase is about editor-time collaboration during project development, not about networked gameplay inside a shipped game.
 
-#### Licensing Model
-- **Free tier:** Free to use for learning, non-commercial projects, and small teams
-- **Revenue royalty:** 5% royalty on gross revenue above a threshold (e.g., first $100,000 revenue-free) for commercial products built with Vestige
-- **Alternative:** One-time or subscription license options for studios that prefer predictable costs
-- **Open development:** Transparent roadmap, community feedback shapes priorities
+### Architecture Approach
+- [ ] Choose synchronization model
+  - CRDTs (Conflict-free Replicated Data Types) — eventual consistency, works offline, merges automatically, well-suited to scene graphs
+  - Operational Transformation — requires a central server, lower complexity for linear data (scripts, config)
+  - Hybrid: CRDT for scene graph + transforms, OT for text assets (scripts, shaders, config files)
+- [ ] Topology
+  - Self-hosted server (LAN or VPN) — simple, no ongoing service cost, privacy-preserving
+  - Optional community relay for contributors on different networks
+  - P2P fallback (WebRTC-style) for small teams without server infrastructure
+- [ ] Transport
+  - WebSocket for the editor control channel
+  - Binary delta encoding for scene updates (avoid full-scene broadcasts)
+  - Compressed block transfer for large binary assets (textures, models)
+  - Bandwidth and latency budgets per operation type
 
-#### What Makes Vestige Licensable
-- Complete editor — non-programmers can build full scenes without writing code
-- Metric-scale architectural tools — purpose-built for room/building construction
-- Biblical/historical focus — a niche no other engine specifically serves
-- Modern rendering — PBR, shadows, particles, water, atmospheric effects
-- Cross-platform — Linux and Windows from day one
+### User Presence and Awareness
+- [ ] Active user indicators
+  - Connected-users panel with per-user cursor colors
+  - Avatar / name labels following each user's 3D cursor in the scene view
+  - Visual highlight on objects another user is editing (color tint or lock icon)
+- [ ] Selection and focus sharing
+  - See which object another user has selected
+  - "Follow user" mode — jump to another user's viewport for pair-editing
+  - Camera-tween when switching to a follow target (avoid nausea-inducing snaps)
+- [ ] In-scene chat and comments
+  - Position-anchored comment pins ("Need to redo the roof here")
+  - Text chat panel with scene-context linking
+  - Voice chat integration (deferred — post-1.0)
 
-#### Prerequisites (before licensing is viable)
-- [ ] Stable, well-documented editor (Phase 5 complete)
-- [ ] Scene save/load working reliably
-- [ ] Comprehensive documentation and tutorials
-- [ ] Bug tracker and version release process
-- [ ] Engine API documentation for advanced users who do want to code
-- [ ] License agreement and terms drafted
-- [ ] Website and community channels
+### Conflict Resolution
+- [ ] Property-level soft locks (warn, don't block — keeps flow state)
+- [ ] Last-write-wins for transform/material scalars, user-configurable per field
+- [ ] Automatic merge for structurally independent changes (adding different objects, editing different materials)
+- [ ] Visual 3-way diff for manual resolution when automatic merge fails
+- [ ] Cross-user undo history — undo my changes without clobbering yours
+- [ ] Per-scene changelog with attribution (who changed what, when)
+
+### Permissions and Roles
+- [ ] Role model: **Owner** / **Editor** / **Reviewer (read-only)** / **Guest (tour mode)**
+- [ ] Per-scene or per-subsystem permissions (e.g., "Alice owns lighting, Bob owns geometry")
+- [ ] Activity audit log — who edited what, when (also useful for the pre-open-source audit discipline)
+- [ ] Session management (invite links, revoke access, expire stale sessions)
+
+### Offline Mode and Sync
+- [ ] Work offline; queue changes; sync on reconnect
+- [ ] Conflict detection on reconnect with clear "your changes / their changes / merged" view
+- [ ] Local project state remains authoritative for the disconnected user until merge
+- [ ] Background asset sync with progress indication (textures, models can be large)
+
+### Asset Pipeline Integration
+- [ ] Shared asset library across team
+- [ ] Exclusive lock mode for large binary assets that don't merge well (e.g., `.blend`, high-poly models)
+- [ ] Change notifications when another user modifies a referenced asset
+- [ ] Optional Git-backed asset versioning for teams already using Git-LFS
+
+### Quality and Stability Gates
+- [ ] Deterministic scene serialization — identical input → identical output (required for any merge strategy to work)
+- [ ] Comprehensive serialization test coverage before any networking code is written
+- [ ] Fuzz testing: random edit sequences from multiple clients, assert final state converges across all clients
 
 ### Milestone
-Vestige available for download with a clear license, documentation, and at least one showcase project (Tabernacle walkthrough) demonstrating its capabilities.
+A team of 3+ contributors can join the same Vestige project over a network. They can simultaneously edit different parts of a scene — one placing geometry, one tweaking materials, one scripting gameplay — and see each other's changes in real time without conflicts. Offline edits merge cleanly on reconnect. All common edit operations have conflict-free paths, and destructive operations prompt for explicit resolution.
+
+### Dependencies
+- Phase 5 (Editor) — complete ✓
+- Phase 5E (Asset Pipeline) — complete ✓
+- Deterministic scene serialization (must land before networking)
+- Networking transport layer (can share with Phase 20 or be independent; decide during design)
+
+### Notes
+- This phase is partly enabled by going open source: external contributors can propose and prototype sync algorithms on a public repo, and the feature is exactly the kind of thing a community can help battle-test.
+
+---
+
+## Open-Source Release
+
+### License and Release Model
+Vestige will be released as **free and open-source software under the MIT License**. Anyone may use, modify, redistribute, or build commercial products on top of the engine — including closed-source games — provided they keep the copyright notice. There are no royalties, no revenue thresholds, and no paid tiers. The engine is the free foundation; value to the maintainer comes from the **biblical/historical showcase projects** shipped separately as commercial products on Steam (see Target Projects, below).
+
+#### Why MIT
+- Widest contributor acceptance — corporate contributors' legal teams approve MIT without friction
+- Permissive: users can sell games built with the engine, fork it, or embed it in proprietary products
+- Three-paragraph license — contributors actually read and understand it
+- Compatible with all permissive dependencies already in the engine (GLFW, GLM, ImGui, Jolt, etc.)
+
+Alternatives considered: `0BSD` / `MIT-0` (even fewer requirements but less recognized), `Apache-2.0` (adds explicit patent grant; valuable for larger corporate projects, overkill here), `CC0` / `Unlicense` (rejected by some corporate contributors due to legal ambiguity).
+
+#### What Goes in the Open Repo
+- Engine source code (rendering, scene, physics, audio, editor, tooling)
+- Audit tool and Formula Workbench
+- Documentation (ARCHITECTURE, CODING_STANDARDS, ROADMAP, etc.)
+- Sample scenes using **CC0 / self-made** assets only (no licensed content)
+- CI workflows, tests, build scripts
+
+#### What Stays Private / Separate
+- **Tabernacle / Solomon's Temple / future biblical showcase projects** — each in its own separate repo, proprietary assets, sold on Steam
+- Personal configuration (asset library paths, API keys, user-specific settings) — read from per-user config files, never committed
+- Any asset from the personal asset library that is not redistributable
+
+#### Contribution Model
+- MIT with **DCO (Developer Certificate of Origin)** sign-off (`git commit -s`) — lightweight legal clarity without a heavyweight CLA
+- Public issue tracker and pull requests (GitHub Discussions for questions)
+- Contribution guidelines (`CONTRIBUTING.md`): coding standards reference, test requirements, audit-tool-clean expectation
+- Code of Conduct (Contributor Covenant)
+- Solo-maintainer response cadence explicitly documented — no SLA, best-effort triage
+
+#### AI-Assisted Development (Transparency)
+Vestige is developed with heavy use of AI coding assistance — specifically Anthropic's Claude Code. This is disclosed upfront in the README so contributors and users know what they're looking at.
+
+- **AI in contributions is welcome and must be disclosed.** Contributors should mention AI use in PR descriptions (e.g., "drafted with Claude Code, reviewed and tested by me"). This is a transparency norm, not a filter — AI-assisted PRs are evaluated on the same merits as any other.
+- **Human accountability.** Every commit must have a human author who has read, understood, and validated the change. "The AI wrote it" is never sufficient justification for anything — the committer owns the outcome.
+- **Copyright clarity.** Per current US Copyright Office guidance (2023), purely AI-generated material isn't copyrightable, but human-directed AI-assisted work is copyrightable by the human. All Vestige commits fall in the latter category: the copyright line lists the human author/maintainer only.
+
+#### Versioning and Compatibility
+- **Semantic versioning** from 1.0 onwards. Pre-1.0 releases (0.x) may break APIs between minor versions as the engine stabilizes.
+- **Commitment to backwards compatibility.** Once an API is in 1.0, breaking changes require a major version bump, and the rationale is documented in CHANGELOG. Deprecated APIs stay for at least one major version with a clear migration path.
+- **Exception.** If the industry shifts in a way that makes an old approach unworkable (e.g., a GPU API transition, a C++ standard replacing a core primitive), breaking changes are acceptable with advance notice — but this is a rare, documented event, not a regular occurrence.
+
+#### Re-licensing Policy
+- **The engine will stay MIT.** There is no intent to dual-license, re-license to a proprietary model, or add a CLA enabling re-license. Contributors can contribute in confidence that their code won't be relicensed out from under them.
+- This removes any need for a heavyweight CLA — DCO sign-off is sufficient.
+
+#### Prerequisites (before public release)
+- [ ] Complete the [Pre-Open-Source Audit Checklist](docs/PRE_OPEN_SOURCE_AUDIT.md) — secrets, personal paths, asset boundaries, license headers, third-party attribution
+- [ ] Add `LICENSE` (MIT) at repo root
+- [ ] Add `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, issue / PR templates
+- [ ] Add `THIRD_PARTY_NOTICES.md` with every dependency's license text
+- [ ] Verify engine builds from a fresh clone with no reference to the user's asset library
+- [ ] Ensure CI runs as a public project (no private runners, no required secrets, NVD key optional)
+- [ ] Separate Tabernacle / Solomon's Temple content into dedicated private repos
+- [ ] Stable editor (Phase 5 complete ✓) and reliable scene save/load (✓)
+- [ ] Initial README setting expectations: "early-stage, API unstable, solo-maintained, contributions welcome"
+- [ ] Decide on public communication channel (GitHub Discussions is the zero-cost default)
+
+### Milestone
+Vestige is public on GitHub under the MIT License, builds cleanly from a fresh clone on Linux and Windows, passes CI on every PR, and has at least one showcase project (Tabernacle walkthrough — separate commercial repo) linked from the README as a production-quality example of what the engine can do.
+
+### Post-Release Commitments (what staying open means)
+- Stable, documented API once the engine hits 1.0 — semver from that point forward
+- Public changelog for every release
+- Security disclosures handled through `SECURITY.md`
+- Bus-factor note in README: if solo maintenance stops, the project will be archived with a clear pointer in the README rather than silently abandoned
 
 ---
 
