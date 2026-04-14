@@ -374,3 +374,52 @@ class TestBaselineSection:
         report = _build_report(tmp_path, baseline_comparison=comp)
         # Whole report still under the 5K ceiling that test_report enforces.
         assert estimate_tokens(report) < 5000
+
+
+# ---------------------------------------------------------------------------
+# D3 — [VERIFIED] prefix rendering
+# ---------------------------------------------------------------------------
+
+
+class TestVerifiedPrefix:
+    """`[VERIFIED]` + `[CORROB]` should render in report tables and JSON summary."""
+
+    def test_verified_prefix_appears_in_title(self, tmp_path: Path):
+        f = Finding("a.cpp", 10, Severity.HIGH, "cppcheck", 1, "a real bug")
+        f.verified = True
+        report = _build_report(tmp_path, findings=[f])
+        assert "[VERIFIED]" in report
+
+    def test_no_verified_prefix_when_unverified(self, tmp_path: Path):
+        f = Finding("a.cpp", 10, Severity.HIGH, "cppcheck", 1, "some issue")
+        report = _build_report(tmp_path, findings=[f])
+        assert "[VERIFIED]" not in report
+
+    def test_verified_and_corrob_both_render(self, tmp_path: Path):
+        """When both tags apply, both prefixes must appear."""
+        f = Finding("a.cpp", 10, Severity.HIGH, "cppcheck", 1, "dual-tagged",
+                    corroborated_by=["pattern_scan"])
+        f.verified = True
+        report = _build_report(tmp_path, findings=[f])
+        assert "[VERIFIED]" in report
+        assert "[CORROB]" in report
+        # Verified comes first (human review is the stronger signal)
+        v_pos = report.index("[VERIFIED]")
+        c_pos = report.index("[CORROB]")
+        assert v_pos < c_pos
+
+    def test_verified_count_in_executive_summary(self, tmp_path: Path):
+        """The executive summary JSON should carry a `verified` count."""
+        f1 = Finding("a.cpp", 10, Severity.HIGH, "cppcheck", 1, "v1")
+        f1.verified = True
+        f2 = Finding("b.cpp", 20, Severity.LOW, "cppcheck", 1, "v2")
+        f2.verified = True
+        f3 = Finding("c.cpp", 30, Severity.INFO, "cppcheck", 1, "unverified")
+        report = _build_report(tmp_path, findings=[f1, f2, f3])
+        # Grab the executive summary JSON block
+        import re
+        match = re.search(r"```json\s*\n(\{.*?\n\})\s*\n```", report, re.DOTALL)
+        assert match is not None, "Expected a JSON block in the report"
+        payload = json.loads(match.group(1))
+        assert payload["findings"]["verified"] == 2
+        assert payload["findings"]["total"] == 3

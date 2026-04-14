@@ -51,6 +51,12 @@ class Finding:
     # after dedup. Empty list = solo finding. A single entry means exactly
     # one *other* source also flagged this line.
     corroborated_by: list[str] = field(default_factory=list)
+    # D3 (2.5.0): True when a human has confirmed this finding is real
+    # (via `--verified-add KEY` or an entry in `.audit_verified`). The tag
+    # is a reviewer signal — it does not change severity or filter the
+    # finding out. Purpose: distinguish "reviewed, real, still needs fix"
+    # from "not yet looked at" across runs.
+    verified: bool = False
     _dedup_key: str = field(default="", repr=False)
 
     def __post_init__(self) -> None:
@@ -108,6 +114,10 @@ class Finding:
         # solo findings.
         if self.corroborated_by:
             d["corroborated_by"] = list(self.corroborated_by)
+        # D3 (2.5.0): same pattern — only surface `verified` when True so
+        # unverified findings keep a compact dict.
+        if self.verified:
+            d["verified"] = True
         return d
 
 
@@ -119,6 +129,11 @@ def deduplicate(findings: list[Finding]) -> list[Finding]:
     independent of the cross-source corroboration pass in
     lib.corroboration; it just ensures that any already-set tags
     survive deduplication.
+
+    D3 (2.5.0): the `verified` flag also survives dedup — if either
+    finding in the pair was verified, the kept finding retains the tag.
+    Verification is a human-review signal; losing it on a tier-ordering
+    swap would silently discard reviewer effort.
     """
     seen: dict[str, Finding] = {}
     for f in findings:
@@ -132,10 +147,12 @@ def deduplicate(findings: list[Finding]) -> list[Finding]:
                 # information isn't lost on tier-ordering swaps.
                 merged = sorted(set(f.corroborated_by) | set(existing.corroborated_by))
                 f.corroborated_by = merged
+                f.verified = f.verified or existing.verified
                 seen[f.dedup_key] = f
             else:
                 merged = sorted(set(existing.corroborated_by) | set(f.corroborated_by))
                 existing.corroborated_by = merged
+                existing.verified = existing.verified or f.verified
     return sorted(seen.values(), key=lambda f: (f.severity, f.file, f.line or 0))
 
 

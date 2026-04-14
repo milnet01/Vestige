@@ -2,6 +2,69 @@
 
 All notable changes to the Audit Tool are documented in this file.
 
+## [2.5.0] - 2026-04-14
+
+### Added (D3 — Human-review verification layer)
+- **`.audit_verified` file + `[VERIFIED]` tag.** Maintainers who review a
+  report and confirm a finding is real can now persist that decision
+  across runs. Matching findings render with a `[VERIFIED]` prefix in
+  tier tables and surface as `verified: true` in JSON/SARIF output.
+
+  Verification is a **tag, not a filter** — verified findings stay
+  visible. The tag lets reviewers distinguish "reviewed and real, still
+  needs fixing" from "not yet looked at" without losing the finding.
+  Suppression (`.audit_suppress`) is the existing filter; a finding can
+  legitimately be both verified (yes, real) and suppressed (but hide it
+  anyway), in which case suppression still wins.
+
+  Pipeline ordering:
+  1. deduplicate
+  2. corroborate  (D2, 2.4.0)
+  3. severity_overrides
+  4. **verified tagging**  (D3, 2.5.0)
+  5. suppression filter
+
+### CLI
+- `--verified-show` — list currently verified keys and exit
+- `--verified-add KEY` — add a dedup_key to `.audit_verified` and exit
+- `--verified-remove KEY` — remove a key from `.audit_verified` and exit
+
+Mirrors the existing `--suppress-show` / `--suppress-add` pattern.
+
+### Changed
+- `lib/findings.py`:
+  - `Finding` gained a `verified: bool = False` field.
+  - `to_dict()` surfaces `verified: true` only when True (compact output
+    preserved for the common unverified case).
+  - `deduplicate()` merges the `verified` flag across same-dedup_key
+    entries so a verified tag isn't silently lost on a tier-ordering
+    swap (same shape as the `corroborated_by` merge from 2.4.0).
+- `lib/report.py`:
+  - `_corr_prefix()` now renders `[VERIFIED][CORROB]` combinations,
+    with `[VERIFIED]` first because human review is the stronger
+    signal than mere multi-tool agreement.
+  - Executive Summary JSON now carries a `verified` count alongside
+    the existing `corroborated` count.
+- `lib/runner.py`: added verified-tagging step between
+  severity_overrides and suppression.
+
+### New files
+- `lib/verified.py` — `load_verified`, `apply_verified_tags`,
+  `save_verified`, `remove_verified`. Mirrors `lib/suppress.py`.
+- `tests/test_verified.py` — 25 tests covering file I/O, tagging,
+  dedup flag preservation.
+
+### Tests
+- `tests/test_findings.py`: +3 tests for the `verified` field on
+  Finding / `to_dict()`.
+- `tests/test_report.py`: +4 tests for `[VERIFIED]` rendering and the
+  new `verified` executive-summary count.
+
+### Migration
+No config changes required. The feature is dormant until you start
+adding keys to `.audit_verified` (or use `--verified-add`). Existing
+`.audit_suppress` workflows are unchanged.
+
 ## [2.4.1] - 2026-04-14
 
 ### Changed (open-source prep — personal-path scrub)

@@ -39,13 +39,23 @@ def _signed_float(n: float) -> str:
 
 
 def _corr_prefix(f: Finding) -> str:
-    """Return a compact `[CORROB]` tag when a finding has corroboration.
+    """Return a compact prefix combining `[VERIFIED]` and `[CORROB]` tags.
 
-    D2 (2.4.0): surfaces the multi-source signal in the report so the
-    downstream agent can weight corroborated hits above solo ones. Kept
-    short to minimise token-cost inflation across large tables.
+    D2 (2.4.0) introduced `[CORROB]` to surface multi-source confirmation.
+    D3 (2.5.0) added `[VERIFIED]` to surface human review confirmation.
+
+    When a finding has both tags, `[VERIFIED]` comes first because human
+    review is the stronger signal (a corroborated-but-unverified finding
+    may still be two tools catching the same false positive). Kept short
+    and bracketed to minimise token-cost inflation across large tables
+    and to remain greppable.
     """
-    return "[CORROB] " if f.corroborated_by else ""
+    parts: list[str] = []
+    if f.verified:
+        parts.append("[VERIFIED]")
+    if f.corroborated_by:
+        parts.append("[CORROB]")
+    return (" ".join(parts) + " ") if parts else ""
 
 
 class ReportBuilder:
@@ -285,10 +295,13 @@ class ReportBuilder:
         """Build the executive summary with JSON block."""
         counts = defaultdict(int)
         corroborated_total = 0
+        verified_total = 0
         for f in findings:
             counts[f.severity.name.lower()] += 1
             if f.corroborated_by:
                 corroborated_total += 1
+            if f.verified:
+                verified_total += 1
 
         build_info = tier1_summary.get("build", {})
         test_info = tier1_summary.get("tests", {})
@@ -306,6 +319,11 @@ class ReportBuilder:
                 # downstream agent can weight corroborated hits above
                 # solo ones at a glance.
                 "corroborated": corroborated_total,
+                # D3 (2.5.0): count of findings that a human has
+                # explicitly marked as real via `--verified-add` or
+                # `.audit_verified`. These are the ones reviewers have
+                # confirmed still need fixing.
+                "verified": verified_total,
             },
             "build": {
                 "ok": build_info.get("build_ok", None),

@@ -284,6 +284,23 @@ class TestFindingToDict:
         d = f.to_dict()
         assert d["corroborated_by"] == ["cppcheck"]
 
+    def test_verified_omitted_when_false(self):
+        """Unverified findings (the default) omit the `verified` key."""
+        f = Finding("f.cpp", 1, Severity.LOW, "cat", 2, "t")
+        assert "verified" not in f.to_dict()
+
+    def test_verified_included_when_true(self):
+        """Verified findings surface `verified: true` in their dict."""
+        f = Finding("f.cpp", 1, Severity.LOW, "cat", 2, "t")
+        f.verified = True
+        d = f.to_dict()
+        assert d["verified"] is True
+
+    def test_verified_defaults_to_false(self):
+        """A fresh Finding should default to verified=False."""
+        f = Finding("f.cpp", 1, Severity.LOW, "cat", 2, "t")
+        assert f.verified is False
+
 
 # ---------------------------------------------------------------------------
 # Finding.source_key (D2)

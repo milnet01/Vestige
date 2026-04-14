@@ -154,6 +154,24 @@ def main() -> int:
         help="Add a dedup_key to .audit_suppress and exit",
     )
     parser.add_argument(
+        "--verified-show",
+        action="store_true",
+        help="Print current verified keys from .audit_verified and exit (D3)",
+    )
+    parser.add_argument(
+        "--verified-add",
+        metavar="KEY",
+        default=None,
+        help="Add a dedup_key to .audit_verified and exit. Findings with "
+             "this key will carry a [VERIFIED] tag on future runs. (D3)",
+    )
+    parser.add_argument(
+        "--verified-remove",
+        metavar="KEY",
+        default=None,
+        help="Remove a dedup_key from .audit_verified and exit. (D3)",
+    )
+    parser.add_argument(
         "--diff",
         action="store_true",
         help="Include differential report comparing against previous audit results",
@@ -242,6 +260,39 @@ def main() -> int:
         save_suppression(root, args.suppress_add, annotation="added via --suppress-add")
         print(f"Added suppression: {args.suppress_add}")
         return 0
+
+    # --verified-show: print current verified keys and exit (D3)
+    if args.verified_show:
+        from lib.verified import load_verified
+        root = Path(args.project_root).resolve() if args.project_root else Path.cwd()
+        keys = load_verified(root)
+        if not keys:
+            print("No verified findings (no .audit_verified file or it is empty).")
+        else:
+            print(f"{len(keys)} verified finding(s):")
+            for k in sorted(keys):
+                print(f"  {k}")
+        return 0
+
+    # --verified-add: add a key and exit (D3)
+    if args.verified_add:
+        from lib.verified import save_verified
+        root = Path(args.project_root).resolve() if args.project_root else Path.cwd()
+        save_verified(root, args.verified_add, annotation="added via --verified-add")
+        print(f"Verified: {args.verified_add}")
+        return 0
+
+    # --verified-remove: remove a key and exit (D3)
+    if args.verified_remove:
+        from lib.verified import remove_verified
+        root = Path(args.project_root).resolve() if args.project_root else Path.cwd()
+        if remove_verified(root, args.verified_remove):
+            print(f"Removed verified: {args.verified_remove}")
+            return 0
+        else:
+            print(f"Key not found in .audit_verified: {args.verified_remove}",
+                  file=sys.stderr)
+            return 1
 
     # --init: auto-generate config and exit
     if args.init:
