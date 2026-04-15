@@ -84,6 +84,7 @@ docs/trend_snapshot_*.json
 # want to commit them post-launch as a historical record.
 docs/LAUNCH_ANNOUNCEMENT.md
 docs/LAUNCH_DAY_RUNBOOK.md
+docs/LAUNCH_POSTS.md
 
 # Secrets — defense in depth. We also run gitleaks; these patterns
 # prevent accidental staging of common credential-bearing files in the
