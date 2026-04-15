@@ -30,13 +30,13 @@ shipped in this repo carry their own licenses, listed below.
 
 | File | Source | License | Attribution required |
 |------|--------|---------|----------------------|
-| `CesiumMan.glb` | Khronos glTF Sample Models | CC-BY 4.0 | Yes — Cesium Inc. |
-| `Fox.glb` | Khronos glTF Sample Models | CC0 | No |
-| `RiggedFigure.glb` | Khronos glTF Sample Models | CC-BY 4.0 | Yes |
+| `CesiumMan.glb` | [Khronos glTF Sample Assets](https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/CesiumMan) | **CC-BY 4.0** with Trademark Limitations | © 2017 Cesium |
+| `Fox.glb` | [Khronos glTF Sample Assets](https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/Fox) | Mesh: **CC0 1.0**; rigging/animation/conversion: **CC-BY 4.0** (composite) | tomkranis, @AsoboStudio, @scurest |
+| `RiggedFigure.glb` | [Khronos glTF Sample Assets](https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/RiggedFigure) | **CC-BY 4.0** | © 2017 Cesium |
 
-> **TODO before public push**: verify each model's exact license at
-> https://github.com/KhronosGroup/glTF-Sample-Models. Add full
-> attribution lines to `THIRD_PARTY_NOTICES.md`.
+Full attribution lines reproduced in
+[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) for licence-compliance
+scanners.
 
 ---
 
@@ -88,7 +88,10 @@ render with their albedo colour) until CC0 replacements are wired in.
 
 1. ~~**`default.ttf`**: identify and document, or replace.~~ ✅ Done — Arimo OFL 1.1, `OFL.txt` shipped alongside.
 2. ~~**`everytexture-com-stock-rocks-*`**: confirm license.~~ ✅ Done — license forbids redistribution; files untracked.
-3. **glTF model attribution**: collect the per-model CC-BY notices into
+3. ~~**glTF model attribution**: collect the per-model CC-BY notices into
+   `THIRD_PARTY_NOTICES.md`.~~ ✅ Done — verified each model's exact
+   license at the Khronos glTF Sample Assets repo and reproduced the
+   required attribution lines in both this file and
    `THIRD_PARTY_NOTICES.md`.
 4. **Demo-scene texture replacements**: swap the *three* references in
    `engine/core/engine.cpp` that point to non-redistributable files

@@ -62,9 +62,42 @@ the individual files for the canonical license text.
 ## Asset attributions
 
 Per-asset licenses, sources, and attributions live in
-[ASSET_LICENSES.md](ASSET_LICENSES.md). Notable redistributable assets
-that ship in this repo include CC0 textures from Poly Haven and CC-BY
-glTF sample models from the Khronos Group.
+[ASSET_LICENSES.md](ASSET_LICENSES.md). The required attributions for
+shipped assets that demand them under their license terms are
+reproduced here so this file is self-contained for downstream
+licence-compliance scanning.
+
+### glTF sample models — `assets/models/`
+
+Source: <https://github.com/KhronosGroup/glTF-Sample-Assets>
+
+- **`CesiumMan.glb`** — © 2017 Cesium. Licensed under
+  **CC-BY 4.0 International with Trademark Limitations**. The Cesium
+  trademark/logo is non-copyrightable but separately reserved.
+- **`Fox.glb`** — composite work under three licenses:
+  - Mesh (PixelMannen): **CC0 1.0 Universal** (no attribution required)
+  - Rigging & animation (tomkranis): **CC-BY 4.0 International**
+  - glTF conversion (AsoboStudio and scurest): **CC-BY 4.0 International**
+  Required attribution: tomkranis, @AsoboStudio, @scurest.
+- **`RiggedFigure.glb`** — © 2017 Cesium. Licensed under
+  **CC-BY 4.0 International**.
+
+### Font — `assets/fonts/`
+
+- **`default.ttf`** — Arimo. Digitized data © 2010 Google Corporation.
+  © 2012 Red Hat, Inc. Licensed under **SIL Open Font License 1.1**.
+  License text in `assets/fonts/OFL.txt`.
+
+### Textures — `assets/textures/` (in-engine subset)
+
+- All `*_2k.jpg` files derived from Poly Haven CC0 sets
+  (`red_brick_4k`, `brick_wall_005_4k`, `plank_flooring_04_4k`).
+  **CC0** — no attribution required.
+- `label_[1-4].png` — engine-authored. **MIT** (matches engine LICENSE).
+
+The larger 4K Poly Haven assets pulled in via `FetchContent` from the
+`VestigeAssets` repo are also CC0; per-asset attribution lives in
+`VestigeAssets/ASSET_LICENSES.md`.
 
 ---
 
