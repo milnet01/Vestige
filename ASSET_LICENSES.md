@@ -41,12 +41,15 @@ shipped in this repo carry their own licenses, listed below.
 
 ## Fonts — `assets/fonts/`
 
-| File | Source | License |
-|------|--------|---------|
-| `default.ttf` | **Unknown — verify before public push** | TBD |
+| File | Source | License | Attribution |
+|------|--------|---------|-------------|
+| `default.ttf` | Arimo by Steve Matteson | **SIL Open Font License 1.1** (OFL) | "Digitized data © 2010 Google Corporation; © 2012 Red Hat, Inc., with Reserved Font Name 'Arimo'" |
+| `OFL.txt`     | Accompanying license text | OFL preamble + license body | n/a |
 
-> **TODO**: identify the source of `default.ttf`. If unknown, replace
-> with a known-permissive font (DejaVu / Liberation / Noto / Inter).
+The OFL permits free use, modification, bundling, and redistribution,
+including in commercial software, provided the license text is included
+alongside the font file (which `OFL.txt` satisfies) and the Reserved
+Font Name "Arimo" is not used for derivative works.
 
 ---
 
@@ -62,13 +65,14 @@ shipped in this repo carry their own licenses, listed below.
 | `*_4k.blend.zip` | Poly Haven `.blend` archives | **CC0** | 38–77 MB each |
 | `*_4k.blend/textures/*` | Extracted Poly Haven blend assets | **CC0** | Up to ~36MB each |
 | `label_[1-4].png` | Engine-authored block labels | MIT | Used in demo scene |
-| `everytexture-com-stock-rocks-*` | everytexture.com | **TBD — verify** | Used as ground texture in demo scene |
+| ~~`everytexture-com-stock-rocks-*`~~ | ~~everytexture.com~~ | **Excluded — see below** | Was used as ground texture; license forbids redistribution |
 
 ### Excluded (not in public repo, kept locally via `.gitignore`)
 
 | Pattern | Source | Reason for exclusion |
 |---------|--------|----------------------|
 | `Texturelabs_*.jpg` (46 files) | texturelabs.org | License permits free *use* but **forbids redistribution** in other asset packs / repos |
+| `everytexture-com-stock-rocks-*` (4 files) | everytexture.com | License permits free personal/commercial use but **forbids redistribution** in other repositories. Per the site's Terms and Conditions: "You will not redistribute any of the content from everytexture.com unless this content is specifically made for redistribution." |
 | `tabernacle/*` (29 files) | Mixed Poly Haven + project-specific | Destined for the separate private biblical-project repo (commercial Steam release) |
 
 The local maintainer keeps these files on disk so the demo scene and
@@ -82,15 +86,18 @@ render with their albedo colour) until CC0 replacements are wired in.
 
 ## Open redistribution gaps (TODO before first public push)
 
-1. **`default.ttf`**: identify and document, or replace.
-2. **`everytexture-com-stock-rocks-*`**: confirm the everytexture.com
-   license permits redistribution. If not, exclude like Texturelabs.
+1. ~~**`default.ttf`**: identify and document, or replace.~~ ✅ Done — Arimo OFL 1.1, `OFL.txt` shipped alongside.
+2. ~~**`everytexture-com-stock-rocks-*`**: confirm license.~~ ✅ Done — license forbids redistribution; files untracked.
 3. **glTF model attribution**: collect the per-model CC-BY notices into
    `THIRD_PARTY_NOTICES.md`.
-4. **Demo-scene texture replacements**: swap the two Texturelabs
-   references in `engine/core/engine.cpp:1621` (Gold) and `:1629`
-   (Wood) for Poly Haven CC0 alternatives so the public-repo clone
-   renders the demo correctly.
+4. **Demo-scene texture replacements**: swap the *three* references in
+   `engine/core/engine.cpp` that point to non-redistributable files
+   (Texturelabs_Metal_124M for the Gold block at :1621,
+   Texturelabs_Glass_120M for the Wood block at :1629, and the
+   everytexture rocks for the ground at :1595/:1597/:1645) for Poly
+   Haven CC0 alternatives so the public-repo clone renders the demo
+   correctly. Locally the maintainer's files stay in place — these
+   replacements are about the public clone experience.
 5. **Separate public assets repo**: migrate the large Poly Haven
    `.blend.zip` archives and 4K texture variants out of the engine
    repo to keep clone size manageable. Engine loads from a configured
