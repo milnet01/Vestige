@@ -76,6 +76,31 @@ python3 tools/audit/audit.py -c /path/to/your/project/audit_config.yaml
 | 3 | Git diff analysis (changed files, functions modified, subsystems touched) | ~1s |
 | 4 | LOC stats, Rule-of-Five audit, event lifecycle, uniform-shader sync, include analysis, cyclomatic complexity | ~2s |
 | 5 | Web research via DuckDuckGo + NVD CVE database with file-based caching | ~10s |
+| 6 | Feature coverage sweep — flags engine subsystems with no/thin test coverage (D4, 2.6.0; D5 keyword map, 2.7.0) | <1s |
+
+Tiers 2, 3, 4, and 6 run in parallel via `ThreadPoolExecutor`. Tier 1
+must complete first (build before analysis); Tier 5 runs last
+(needs findings for context).
+
+### D2 — Cross-source corroboration (2.4.0)
+
+Findings flagged by **two or more independent sources** at the same
+`(file, line)` are tagged `[CORROB]` and (by default) promoted one
+severity level. Conversely, solo hits whose `pattern_name` is in the
+configured `demoted_patterns` list (`std_endl`, `push_back_loop`,
+`todo_fixme`, etc.) are demoted to INFO. Closes the biggest rigour
+gap versus the manual audit prompt, which weights findings by
+multi-source agreement. See `corroboration:` in the config.
+
+### D3 — Human-review verification (2.5.0)
+
+Maintainers reviewing a report can mark a finding as confirmed-real
+via `--verified-add <dedup_key>`. The key is persisted to
+`.audit_verified` and matching findings carry a `[VERIFIED]` prefix
+on subsequent runs. Verification is a *tag*, not a filter — verified
+findings stay visible. Lets reviewers distinguish "reviewed-real-
+still-needs-fixing" from "not-yet-looked-at" without losing the
+finding.
 
 ## Configuration
 
@@ -160,8 +185,11 @@ tiers: [1, 2, 3, 4, 5]
 usage: audit.py [-h] [--config PATH] [--tiers N [N ...]] [--output PATH]
                 [--base-ref REF] [--project-root DIR] [--no-research]
                 [--verbose] [--dry-run] [--json] [--list-patterns] [--init]
-                [--diff] [--ci] [--patterns PRESET] [--html] [--no-color]
+                [--diff] [--ci] [--patterns PRESET] [--html] [--sarif]
+                [--keep-snapshots N] [--no-color]
                 [--suppress-show] [--suppress-add KEY]
+                [--verified-show] [--verified-add KEY] [--verified-remove KEY]
+                [--nvd-test]
 
 Options:
   --config, -c PATH       Path to audit_config.yaml
@@ -179,6 +207,8 @@ Options:
   --ci                    CI mode: emit GitHub Actions annotations
   --patterns PRESET       Use a pattern preset: strict, relaxed, security, performance
   --html                  Also generate a self-contained HTML report
+  --sarif                 Also generate a SARIF 2.1.0 report
+  --keep-snapshots N      Retain only the N most recent trend snapshots
   --no-color              Disable ANSI colour in output and in child tools
                           (cppcheck, clang-tidy, git). Sets NO_COLOR=1 in
                           the environment. Auto-enabled when stdout is not
@@ -186,6 +216,11 @@ Options:
                           https://no-color.org.
   --suppress-show         Print current suppressions from .audit_suppress
   --suppress-add KEY      Add a dedup_key to .audit_suppress
+  --verified-show         Print current verified keys from .audit_verified (D3)
+  --verified-add KEY      Mark a finding's dedup_key as reviewed-and-real (D3)
+  --verified-remove KEY   Revoke a verified-key entry (D3)
+  --nvd-test              Validate NVD API key with a single test query and exit
+                          (exit 0 = OK, 1 = no key, 2 = key rejected)
 ```
 
 ### Exit Codes
@@ -221,6 +256,48 @@ python3 tools/audit/audit.py --json | jq '.findings[] | .dedup_key'
 ```
 
 Suppressions are stored in `.audit_suppress` (one key per line, with comments).
+
+### Finding Verification (D3 — 2.5.0)
+
+Mark a finding as reviewed-and-confirmed-real so future runs surface
+it with a `[VERIFIED]` prefix. Distinguishes "real bug, still needs
+fixing" from "not yet looked at" — without filtering it out the way
+suppression does.
+
+```bash
+# View current verified keys
+python3 tools/audit/audit.py --verified-show
+
+# Mark a finding as confirmed-real (annotation auto-added)
+python3 tools/audit/audit.py --verified-add a1b2c3d4e5f6g7h8
+
+# Revoke verification (e.g. if added in error)
+python3 tools/audit/audit.py --verified-remove a1b2c3d4e5f6g7h8
+```
+
+Verified keys are stored in `.audit_verified` (same format as
+`.audit_suppress`). If a finding is both verified and suppressed,
+suppression wins (the finding is removed from the report — you've
+explicitly asked to hide a known-real finding, which is a valid
+choice).
+
+Pipeline ordering: dedup → corroborate → severity_overrides →
+verified-tag → suppress.
+
+### NVD API key smoke test (2.6.1)
+
+Validate the NVD API key without running a full audit. Useful at key
+activation time and as a fail-fast CI step.
+
+```bash
+$ export NVD_API_KEY='your-key-here'
+$ python3 tools/audit/audit.py --nvd-test
+NVD API key: OK (authenticated access confirmed).
+Authenticated rate limit: 50 requests per 30 seconds (vs 5 unauthenticated).
+```
+
+Exit codes: `0` = OK, `1` = no key in env, `2` = key shape invalid
+or server-rejected (not yet activated, revoked, quota exhausted).
 
 ### Differential Reporting
 
@@ -347,26 +424,38 @@ lib/runner.py  <-- progress_callback --> web/audit_bridge.py
     +-- tier1_cppcheck.py                    +-- QueueLogHandler (log capture)
     +-- tier1_clangtidy.py                   +-- SSE event streaming
     |                                        +-- Report history API
-    +-- tier2_patterns.py (parallel) ----+
-    +-- tier3_changes.py  (parallel) ----|-- ThreadPoolExecutor
-    +-- tier4_stats.py    (parallel) ----+
-    |     +-- tier4_uniforms.py
-    |     +-- tier4_includes.py
-    |     +-- tier4_complexity.py
+    +-- tier2_patterns.py    (parallel) -+
+    +-- tier3_changes.py     (parallel) -|-- ThreadPoolExecutor
+    +-- tier4_stats.py       (parallel) -|
+    |     +-- tier4_uniforms.py          |
+    |     +-- tier4_includes.py          |
+    |     +-- tier4_complexity.py        |
+    +-- tier6_coverage.py    (parallel) -+   (D4, 2.6.0)
     |
     +-- tier5_research.py
     |     +-- tier5_nvd.py (NVD API)
     |
-    +-- suppress.py (finding suppression)
-    +-- diff_report.py (differential reporting)
-    +-- ci_output.py (GitHub Actions annotations)
+    +-- corroboration.py (D2 — multi-source [CORROB] tagging)
+    +-- verified.py      (D3 — human-review [VERIFIED] tagging)
+    +-- suppress.py      (finding suppression)
+    +-- diff_report.py   (differential reporting)
+    +-- ci_output.py     (GitHub Actions annotations)
+    |
+    v
+Pipeline (post-tiers): dedup → corroborate → overrides → verified → suppress
     |
     v
 lib/report.py --> docs/AUTOMATED_AUDIT_REPORT_{timestamp}.md
                   docs/AUTOMATED_AUDIT_REPORT_{timestamp}_results.json
+                  docs/AUTOMATED_AUDIT_REPORT.md (latest copy)
+                  docs/trend_snapshot_{timestamp}.json
 ```
 
-**Parallel execution**: Tiers 2, 3, and 4 run concurrently via `ThreadPoolExecutor`. Tier 1 runs first (build must complete). Tier 5 runs last (needs findings for context).
+**Parallel execution**: Tiers 2, 3, 4, and 6 run concurrently via `ThreadPoolExecutor`. Tier 1 runs first (build must complete). Tier 5 runs last (needs findings for context).
+
+**Corroboration tagging (D2)**: `.audit_config.yaml` `corroboration:` block controls how findings flagged by ≥2 independent sources at the same `(file, line)` are promoted/demoted. `[CORROB]` tag in report tables, `corroborated_by` list in JSON output.
+
+**Verification tagging (D3)**: `.audit_verified` file marks reviewer-confirmed findings with a `[VERIFIED]` prefix without filtering them out.
 
 **Suppression**: `.audit_suppress` file filters known false positives by dedup_key before report generation.
 
@@ -375,7 +464,7 @@ lib/report.py --> docs/AUTOMATED_AUDIT_REPORT_{timestamp}.md
 ## Testing
 
 ```bash
-# Run the test suite (120 tests)
+# Run the test suite (~700 tests, <2s)
 cd tools/audit && python3 -m pytest tests/ -v
 
 # Run with coverage
