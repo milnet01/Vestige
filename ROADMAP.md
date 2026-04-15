@@ -1963,13 +1963,13 @@ Already done (2026-04-14 / 2026-04-15):
 - [x] Pre-launch checklist drafted at [`docs/PRE_OPEN_SOURCE_AUDIT.md`](docs/PRE_OPEN_SOURCE_AUDIT.md) (11 sections, scrubbed for completed items)
 - [x] Personal-path scrub across all docs, code, and changelogs
 - [x] Gitleaks config + secret-history rewrite (rotated NVD key scrubbed from history; `.git` shrunk 552 MB → 21 MB)
-- [x] Add issue / PR templates under `.github/` *(deferred — see remaining list)*
+- [x] Initial public-facing `README.md` at repo root (status disclosure, feature-by-phase matrix, quick-start, repo layout, documentation index)
+- [x] Issue + PR templates under `.github/` (bug-report, feature-request, `config.yml` redirecting security to SECURITY.md and questions to Discussions; PR template with DCO + coding-standards + tests + audit-tool + CHANGELOG + Formula-Workbench + AI-disclosure checklist)
+- [x] `SECURITY.md` prefaced with a public vulnerability-disclosure section (scope, reporting address, timelines, safe-harbour)
 - [x] Stable editor (Phase 5 complete) and reliable scene save/load
 
 Still pending before flipping public:
-- [ ] **Initial public-facing `README.md`** — the engine currently has only `CLAUDE.md`. Need a README that opens with: "early-stage, API unstable, solo-maintained, contributions welcome but response time variable" plus build instructions, screenshot, and links to ROADMAP / CONTRIBUTING / CODE_OF_CONDUCT / SECURITY / ASSET_LICENSES.
-- [ ] **Issue + PR templates under `.github/`** — bug-report, feature-request, security-redirect templates; PR checklist (tests added, audit-tool clean, CHANGELOG updated, DCO signed).
-- [ ] **CI hardening pass** — verify `.github/workflows/` runs on a public fork: no private runners, no required secrets, `NVD_API_KEY` is optional, fresh-clone build still works without VestigeAssets when `VESTIGE_FETCH_ASSETS=OFF`.
+- [ ] **CI hardening pass** — verify `.github/workflows/` runs on a public fork: no private runners, no required secrets, `NVD_API_KEY` is optional, fresh-clone build still works without VestigeAssets when `VESTIGE_FETCH_ASSETS=OFF`. **Reminder:** at go-live, remove `-DVESTIGE_FETCH_ASSETS=OFF` from `ci.yml` so the full asset pack gets exercised in CI (temporary flag added while VestigeAssets is still private).
 - [ ] **Decide on public communication channel** — GitHub Discussions is the zero-cost default; Discord / Matrix are alternatives.
 - [ ] **Decide whether to migrate biblical content to a separate private `Tabernacle` repo now or later.** Currently the `assets/textures/tabernacle/` files and tabernacle-loading scene code are local-only (gitignored). The cleaner long-term home is a private GitHub repo so the maintainer can sync development across machines. Not blocking for engine open-source release.
 - [ ] **Re-run the full pre-launch checklist end-to-end** with a fresh `gitleaks detect --log-opts=--all`, asset license re-verification, dry-run clone+build on a clean directory.

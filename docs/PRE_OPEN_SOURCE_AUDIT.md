@@ -150,8 +150,8 @@ Some docs were written for an internal audience and may leak private context or 
 - [x] ~~`AUDIT.md`, `AUDIT_TOOL_AND_WORKBENCH_IMPROVEMENTS.md`, `DISCOVERY.md`, `FIXPLAN.md` — strong internal-planning flavor.~~ ✅ Done (2026-04-15) — **maintainer decision: remove**. Previous audits performed against the codebase are not for the public and have nothing to do with downstream users of the engine. All "previous-audit" docs removed from tracking; future ones caught by `.gitignore` patterns. Process/standards docs kept (`AUDIT_STANDARDS.md`, `tools/audit/AUDIT_TOOL_STANDARDS.md`).
 - [x] ~~`docs/AUTOMATED_AUDIT_REPORT_*.md` files — timestamped internal reports.~~ ✅ Done (2026-04-15) — same decision as above. Automated-run snapshots (both `.md` and `.json` variants) `.gitignore`d; the JSON result files additionally leaked absolute filesystem paths, which is now blocked at the tracking layer. Historical `.md` snapshots were never tracked in the first place (confirmed via `git ls-files`).
 - [x] ~~`docs/*_RESEARCH.md` — research notes.~~ ✅ Done (2026-04-15) — kept as-is. These are design rationale documents (e.g. `CLOTH_SIMULATION_RESEARCH.md`, `BVH_COLLISION_RESEARCH.md`) that cite upstream papers and tutorials; they help explain *why* subsystems are built the way they are. Spot-checked — citations are standard fair-use-style references (links to papers / docs), not embedded copyrighted content.
-- [ ] `EXPERIMENTAL.md` — fine to publish if it describes what the engine can/can't do; scrub if it describes unreleased commercial plans.
-- [ ] `ROADMAP.md` — great to publish; verify the **Open-Source Release** section still reflects the current licensing choice (see §1).
+- [x] ~~`EXPERIMENTAL.md`~~ ✅ Done (2026-04-15) — removed. The file was explicitly framed as "Surfaced during the 2026-04-13 full audit" and referenced removed audit finding IDs (H16, AT-A4, H12, M23, M27…). Two of its items (E8 engine-level VERSION/CHANGELOG, E9 minimal CI) were already shipped. The still-live forward-looking items can be added to `ROADMAP.md` as they become actionable. Consistent with the no-previous-audits policy applied in §7.
+- [x] ~~`ROADMAP.md`~~ ✅ Done (2026-04-15) — verified. The **Open-Source Release** section (lines 1903-1988) accurately reflects MIT, DCO, AI-disclosure, semver-from-1.0, no-relicense pledge, and the contribution model. Reconciled stale "Still pending" items (README / `.github/` templates / SECURITY disclosure) against the launch-prep paperwork commit (`eaf3c06`), and added a self-referential reminder to remove `VESTIGE_FETCH_ASSETS=OFF` from CI at go-live.
 
 ---
 
@@ -181,12 +181,8 @@ Some docs were written for an internal audience and may leak private context or 
 
 - [x] ~~Review commit author names and emails across history.~~ ✅ Done — single identity in history (`milnet01 <aant.schemel@gmail.com>`); confirmed publishable.
 - [x] ~~Large binary files in history bloat the public repo.~~ ✅ Done — `git filter-repo` sweep on 2026-04-15 removed 100 historical asset paths (Texturelabs / tabernacle / everytexture / migrated 4K assets). `.git` shrunk from 552 MB to 21 MB. Backup tag `pre-asset-history-sweep-2026-04-15` preserved on remote.
-- [ ] If you've committed and later deleted *additional* large assets after the 2026-04-15 sweep, they're still in history. Consider:
-  ```bash
-  git filter-repo --analyze   # reports largest blobs
-  ```
-  Decide whether to strip or accept the size.
-- [ ] Review recent commit messages for: profanity, personal frustration notes ("this stupid bug"), references to private conversations, temporary password/token pastes.
+- [x] ~~Check for post-2026-04-15 large-asset leaks in history.~~ ✅ Done (2026-04-15) — ran `git rev-list --objects --all | git cat-file --batch-check` sorted by blob size. Top 20 blobs (≈17 MB total) are all expected: Poly Haven CC0 2K demo textures (brick/plank/red_brick sets, 2-3.4 MB each), vendored `external/glad/` and `external/dr_libs/` / `external/stb/` single-header libs (200-880 KB each), attributed Khronos glTF models (CesiumMan 438 KB, Fox 162 KB), and `assets/fonts/default.ttf` (Arimo OFL, 414 KB). No surprise large blobs post-sweep. Total `.git` size stayed at ~21 MB as expected.
+- [x] ~~Review recent commit messages for profanity / personal frustration / private-conversation refs / temporary credential pastes.~~ ✅ Done (2026-04-15) — skimmed the last 80 commit subjects. All professional, technical, well-scoped. No profanity, no "stupid bug" notes, no private conversation references, no temporary-token pastes. Clean.
 
 ---
 
