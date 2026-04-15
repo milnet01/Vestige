@@ -2,6 +2,64 @@
 
 All notable changes to the Audit Tool are documented in this file.
 
+## [2.7.0] - 2026-04-15
+
+### Added (D5 — Tier 6 subsystem keyword map)
+- **`tier6.subsystem_keywords`** — per-subsystem extra filename prefixes
+  that count as test coverage. Closes a real-world false-negative
+  pattern: feature-named tests that don't `#include` production code
+  directly (because they mirror logic from shaders or test pure math)
+  weren't credited to the subsystem they actually test.
+
+  Example: `tests/test_bloom.cpp` mirrors renderer math without
+  `#include "engine/renderer/..."`. Listing `bloom` under
+  `renderer:` in the keyword map now counts it as renderer coverage.
+
+  Configuration shape:
+  ```yaml
+  tier6:
+    subsystem_keywords:
+      renderer:
+        - bloom
+        - ssao
+        - shadow_map
+      audio:
+        - lip_sync
+  ```
+
+  Matching: prefix-style — a test counts if its filename starts with
+  `test_<keyword>`. Each test still counts at most once per subsystem
+  regardless of how many signals it satisfies (we measure breadth,
+  not signal strength).
+
+### Impact on Vestige
+- Tier 6 finding count dropped from 13 to 4 (9 false-negative MEDIUMs
+  + 1 false-negative INFO cleared). The remaining 4 findings are
+  genuine gaps:
+  - `navigation` (no tests)
+  - `audio` (1 test: lip_sync)
+  - `profiler` (1 test: cpu_profiler)
+  - `ui` (2 tests: file_menu, editor_viewers)
+
+### Default config
+`audit_config.yaml` now ships a Vestige-specific keyword map covering
+~11 subsystems and 60+ test-name keywords. Other projects starting
+from this config can edit or empty the map as appropriate.
+
+### Tests
++8 new tests (677 total, was 669).
+- TestCountCoverageForSubsystem: 5 new tests covering the
+  `extra_keywords` parameter (filename match, prefix match, no-match,
+  no-double-count, empty-list-is-noop).
+- TestRun: 3 new tests covering the keyword map flowing through
+  config (promotes uncovered → covered, dict-shape per subsystem,
+  default-empty fallback preserves prior behaviour).
+
+### Migration
+Backwards compatible. Existing configs without `subsystem_keywords`
+behave exactly as before. Add the key to silence false-negative
+findings without touching the actual test count.
+
 ## [2.6.1] - 2026-04-14
 
 ### Added — `--nvd-test` CLI flag (NVD API key activation prep)

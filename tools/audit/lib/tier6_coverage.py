@@ -84,19 +84,28 @@ def _discover_subsystems(
 def _count_coverage_for_subsystem(
     subsystem: str,
     test_files: list[Path],
+    extra_keywords: list[str] | None = None,
 ) -> int:
     """Return the number of test files that reference *subsystem*.
 
-    Two signals count:
+    Three signals count:
       * ``#include ..."engine/<subsystem>/..."`` or ``<engine/<subsystem>/...>``
       * Filename starting with ``test_<subsystem>`` (e.g. ``test_camera.cpp``
         for the ``scene`` subsystem is a weaker signal than the include,
         but for cases where the subsystem name *is* the file prefix it
         is highly correlated with coverage).
+      * Filename starting with ``test_<keyword>`` for any keyword in
+        *extra_keywords*. This catches feature-named tests that don't
+        carry the subsystem name in their filename or include the
+        production source directly — e.g. ``test_bloom.cpp`` mirrors
+        renderer math without ``#include "engine/renderer/..."``, and
+        the maintainer wants it counted as renderer coverage. (D5,
+        2.7.0.) The keyword check uses the same prefix rule
+        (``test_<keyword>``) and case-sensitive matching.
 
     A test file is counted at most once per subsystem even if it
-    satisfies both signals — we're measuring breadth of coverage, not
-    signal strength.
+    satisfies multiple signals — we're measuring breadth of coverage,
+    not signal strength.
     """
     # Build regex that matches either quoted or angle-bracket include
     # paths referencing engine/<subsystem>/...
@@ -104,12 +113,16 @@ def _count_coverage_for_subsystem(
         rf'#\s*include\s*["<]engine/{re.escape(subsystem)}/',
     )
     name_prefix = f"test_{subsystem}"
+    keyword_prefixes = [f"test_{kw}" for kw in (extra_keywords or [])]
 
     count = 0
     for test_path in test_files:
         matched = False
         if test_path.name.startswith(name_prefix):
             matched = True
+        if not matched and keyword_prefixes:
+            if any(test_path.name.startswith(p) for p in keyword_prefixes):
+                matched = True
         if not matched:
             # Read only the head of the file — includes are at the top.
             # 4KB is enough for the longest reasonable include block.
@@ -182,6 +195,13 @@ def run(config: Config) -> list[Finding]:
       on top of the built-in exclusions (``testing``).
     - ``tier6.thin_threshold`` (default 3) — fewer than this many test
       files → INFO-level thin-coverage finding; zero → MEDIUM.
+    - ``tier6.subsystem_keywords`` (default ``{}``) — D5 (2.7.0): per-
+      subsystem extra filename prefixes to count as coverage. Useful
+      when feature-named tests don't include the production code
+      directly (e.g. ``test_bloom.cpp`` mirrors renderer math without
+      ``#include "engine/renderer/..."`` — list ``bloom`` under
+      ``renderer:`` to count it). Shape:
+      ``{subsystem_name: [keyword1, keyword2, ...]}``.
     """
     cfg = config.get("tier6", default={}) or {}
     if not cfg.get("enabled", True):
@@ -193,6 +213,7 @@ def run(config: Config) -> list[Finding]:
     extra_excluded = frozenset(cfg.get("excluded_subsystems", []) or [])
     excluded = _DEFAULT_EXCLUDED_SUBSYSTEMS | extra_excluded
     thin_threshold = int(cfg.get("thin_threshold", 3))
+    keyword_map: dict[str, list[str]] = cfg.get("subsystem_keywords", {}) or {}
 
     engine_root = (config.root / engine_rel).resolve()
     tests_root = (config.root / tests_rel).resolve()
@@ -208,12 +229,13 @@ def run(config: Config) -> list[Finding]:
         for entry in tests_root.rglob("*.cpp"):
             if entry.is_file():
                 test_files.append(entry)
-    log.info("Tier 6: %d subsystems, %d test files",
-             len(subsystems), len(test_files))
+    log.info("Tier 6: %d subsystems, %d test files, %d keyword maps",
+             len(subsystems), len(test_files), len(keyword_map))
 
     findings: list[Finding] = []
     for subsystem in subsystems:
-        count = _count_coverage_for_subsystem(subsystem, test_files)
+        keywords = keyword_map.get(subsystem)
+        count = _count_coverage_for_subsystem(subsystem, test_files, keywords)
         if count == 0:
             findings.append(_make_finding(subsystem, 0, engine_rel))
         elif count < thin_threshold:

@@ -365,16 +365,102 @@ corroboration:
     - "dead_code_markers"
     - "shared_ptr"
 
-# -- Tier 6 — Feature coverage sweep (D4, 2.6.0) ------------------------------
+# -- Tier 6 — Feature coverage sweep (D4, 2.6.0; D5 keyword map, 2.7.0) -----
 # Flags engine subsystems (engine/<name>/) that have zero or very few test
 # files referencing them. Purely heuristic — measures breadth of test
 # coverage, not code line/branch coverage.
+#
+# subsystem_keywords (D5 / 2.7.0): per-subsystem extra filename prefixes
+# that count as coverage. Necessary when feature-named tests don't
+# include the production code directly (e.g. test_bloom.cpp mirrors
+# renderer math without `#include "engine/renderer/..."` — listing
+# `bloom` under `renderer:` makes it count as renderer coverage).
+# Prefix matching: a test counts if its filename starts with
+# `test_<keyword>`. Each test still counts at most once per subsystem
+# regardless of how many signals it satisfies.
 tier6:
   enabled: true
   engine_dir: "engine"          # relative path to subsystem dirs
   tests_dir: "tests"            # relative path to test source files
   thin_threshold: 3             # <3 tests → INFO "thin coverage", 0 → MEDIUM "no coverage"
   excluded_subsystems: []       # names to ignore on top of built-in "testing/"
+  subsystem_keywords:
+    audio:
+      - lip_sync
+    core:
+      - event_bus
+      - logger
+      - memory_tracker
+      - quality_manager
+      - timer
+      - system_registry
+      - domain_systems
+    profiler:
+      - cpu_profiler
+    renderer:
+      - bloom
+      - cascaded_shadow_map
+      - color_grading
+      - emissive_lighting
+      - framebuffer
+      - frustum_culling
+      - hdr_pipeline
+      - ibl
+      - instanced_rendering
+      - pbr_material
+      - point_shadow_map
+      - pom
+      - shadow_map
+      - ssao
+      - taa
+      - texture_filter
+      - transparency
+      - tangent_calc
+      - skybox
+      - text_rendering
+    resource:
+      - async_texture_loader
+      - obj_loader
+      - gltf_loader
+    systems:
+      - pressure_plate
+      - system_registry
+      - stasis_system
+    ui:
+      - file_menu
+      - editor_viewers
+    utils:
+      - aabb
+      - cubicspline
+      - catmull_rom_spline
+      - easing
+      - tween
+      - curve_fitter
+      - logger
+    editor:
+      - command_history
+      - editor_viewers
+      - file_menu
+      - ruler_tool
+      - architectural_tools
+      - node_graph
+      - selection
+    environment:
+      - biome_preset
+      - environment_forces
+      - density_map
+      - foliage_chunk
+      - water_surface
+    scene:
+      - scene_serializer
+      - entity
+      - camera
+      - camera_component
+    scripting:
+      - node_graph
+      - formula_compiler
+      - formula_library
+      - formula_tools
 
 # -- Which tiers to run (override with --tiers CLI flag) ----------------------
 tiers: [1, 2, 3, 4, 5, 6]

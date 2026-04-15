@@ -170,6 +170,49 @@ class TestCountCoverageForSubsystem:
         c = _write_test(tests_dir, "test_c.cpp", includes=["engine/scene/c.h"])
         assert _count_coverage_for_subsystem("scene", [a, b, c]) == 3
 
+    # D5 (2.7.0) — extra_keywords parameter
+
+    def test_extra_keyword_matches_filename(self, tmp_path: Path):
+        """A test_<keyword>*.cpp file counts when keyword is in the list."""
+        tests_dir = tmp_path / "tests"
+        t = _write_test(tests_dir, "test_bloom.cpp")  # no include, no `test_renderer*` prefix
+        assert _count_coverage_for_subsystem("renderer", [t]) == 0
+        assert _count_coverage_for_subsystem(
+            "renderer", [t], extra_keywords=["bloom"]) == 1
+
+    def test_extra_keyword_prefix_match(self, tmp_path: Path):
+        """Keyword prefix-matches the filename (e.g. `bloom` matches
+        `test_bloom_filter.cpp` too)."""
+        tests_dir = tmp_path / "tests"
+        t = _write_test(tests_dir, "test_bloom_filter.cpp")
+        assert _count_coverage_for_subsystem(
+            "renderer", [t], extra_keywords=["bloom"]) == 1
+
+    def test_extra_keyword_no_match(self, tmp_path: Path):
+        """Unrelated keywords don't artificially inflate coverage."""
+        tests_dir = tmp_path / "tests"
+        t = _write_test(tests_dir, "test_unrelated.cpp")
+        assert _count_coverage_for_subsystem(
+            "renderer", [t], extra_keywords=["bloom", "shadow"]) == 0
+
+    def test_extra_keyword_no_double_count(self, tmp_path: Path):
+        """A test that satisfies BOTH the include signal AND a keyword
+        prefix is still counted once (we measure breadth, not strength)."""
+        tests_dir = tmp_path / "tests"
+        t = _write_test(tests_dir, "test_bloom.cpp",
+                        includes=["engine/renderer/bloom.h"])
+        assert _count_coverage_for_subsystem(
+            "renderer", [t], extra_keywords=["bloom"]) == 1
+
+    def test_extra_keyword_empty_list_is_noop(self, tmp_path: Path):
+        """Passing an empty list behaves the same as None."""
+        tests_dir = tmp_path / "tests"
+        t = _write_test(tests_dir, "test_unrelated.cpp")
+        assert _count_coverage_for_subsystem(
+            "renderer", [t], extra_keywords=[]) == 0
+        assert _count_coverage_for_subsystem(
+            "renderer", [t], extra_keywords=None) == 0
+
 
 # ---------------------------------------------------------------------------
 # run() — end to end
@@ -277,3 +320,52 @@ class TestRun:
         cfg = self._build_config(tmp_path)
         findings = run(cfg)
         assert all(f.source_key == "tier6" for f in findings)
+
+    def test_subsystem_keywords_promote_to_covered(self, tmp_path: Path):
+        """D5: a subsystem flagged uncovered without keywords becomes covered
+        once the keyword map names tests that match it."""
+        _make_engine_layout(tmp_path, ["renderer"])
+        tests_dir = tmp_path / "tests"
+        # 3 feature-named tests, none referencing engine/renderer/ via include
+        for name in ("test_bloom.cpp", "test_ssao.cpp", "test_shadow_map.cpp"):
+            _write_test(tests_dir, name)
+        # Without keywords: uncovered (0 → MEDIUM)
+        cfg_plain = self._build_config(tmp_path, thin_threshold=3)
+        findings_plain = run(cfg_plain)
+        assert len(findings_plain) == 1
+        from lib.findings import Severity
+        assert findings_plain[0].severity == Severity.MEDIUM
+        # With keywords: 3 covered → silent
+        cfg_kw = self._build_config(tmp_path, thin_threshold=3)
+        cfg_kw.raw["tier6"]["subsystem_keywords"] = {
+            "renderer": ["bloom", "ssao", "shadow_map"]
+        }
+        findings_kw = run(cfg_kw)
+        assert findings_kw == []
+
+    def test_subsystem_keywords_dict_shape(self, tmp_path: Path):
+        """Each subsystem name maps to its own keyword list."""
+        _make_engine_layout(tmp_path, ["renderer", "audio"])
+        tests_dir = tmp_path / "tests"
+        _write_test(tests_dir, "test_bloom.cpp")
+        _write_test(tests_dir, "test_lip_sync.cpp")
+        cfg = self._build_config(tmp_path, thin_threshold=1)
+        cfg.raw["tier6"]["subsystem_keywords"] = {
+            "renderer": ["bloom"],
+            "audio": ["lip_sync"],
+        }
+        findings = run(cfg)
+        # Both subsystems get exactly 1 test; threshold=1 means adequate.
+        assert findings == []
+
+    def test_subsystem_keywords_default_empty_dict(self, tmp_path: Path):
+        """Missing subsystem_keywords config falls back to no keyword
+        signal (current behaviour stays the default)."""
+        _make_engine_layout(tmp_path, ["orphan"])
+        tests_dir = tmp_path / "tests"
+        _write_test(tests_dir, "test_unrelated.cpp")
+        cfg = self._build_config(tmp_path)
+        # Don't set subsystem_keywords at all
+        cfg.raw["tier6"].pop("subsystem_keywords", None)
+        findings = run(cfg)
+        assert len(findings) == 1  # uncovered as before
