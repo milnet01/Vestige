@@ -1851,16 +1851,33 @@ Vestige is developed with heavy use of AI coding assistance — specifically Ant
 - This removes any need for a heavyweight CLA — DCO sign-off is sufficient.
 
 #### Prerequisites (before public release)
-- [ ] Complete the [Pre-Open-Source Audit Checklist](docs/PRE_OPEN_SOURCE_AUDIT.md) — secrets, personal paths, asset boundaries, license headers, third-party attribution
-- [ ] Add `LICENSE` (MIT) at repo root
-- [ ] Add `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, issue / PR templates
-- [ ] Add `THIRD_PARTY_NOTICES.md` with every dependency's license text
-- [ ] Verify engine builds from a fresh clone with no reference to the user's asset library
-- [ ] Ensure CI runs as a public project (no private runners, no required secrets, NVD key optional)
-- [ ] Separate Tabernacle / Solomon's Temple content into dedicated private repos
-- [ ] Stable editor (Phase 5 complete ✓) and reliable scene save/load (✓)
-- [ ] Initial README setting expectations: "early-stage, API unstable, solo-maintained, contributions welcome"
-- [ ] Decide on public communication channel (GitHub Discussions is the zero-cost default)
+
+Already done (2026-04-14 / 2026-04-15):
+- [x] Add `LICENSE` (MIT, © 2026 Anthony Schemel) at repo root
+- [x] Add `CONTRIBUTING.md` (DCO sign-off, AI-disclosure policy, build instructions)
+- [x] Add `CODE_OF_CONDUCT.md` (Contributor Covenant 2.1, by reference)
+- [x] Add `THIRD_PARTY_NOTICES.md` covering 15 FetchContent deps + 3 vendored sources + asset attributions
+- [x] Add `ASSET_LICENSES.md` documenting every shipped asset
+- [x] Apply SPDX-License-Identifier headers to all 703 owned source files
+- [x] Verify engine builds from a fresh clone (CMake `FetchContent` pulls VestigeAssets at configure time; demo renders with all-CC0 / pure-PBR materials)
+- [x] Asset license boundary: Texturelabs / everytexture / tabernacle untracked from public repo
+- [x] Large CC0 assets (~390 MB) split into the separate `milnet01/VestigeAssets` repo
+- [x] Pre-launch checklist drafted at [`docs/PRE_OPEN_SOURCE_AUDIT.md`](docs/PRE_OPEN_SOURCE_AUDIT.md) (11 sections, scrubbed for completed items)
+- [x] Personal-path scrub across all docs, code, and changelogs
+- [x] Gitleaks config + secret-history rewrite (rotated NVD key scrubbed from history; `.git` shrunk 552 MB → 21 MB)
+- [x] Add issue / PR templates under `.github/` *(deferred — see remaining list)*
+- [x] Stable editor (Phase 5 complete) and reliable scene save/load
+
+Still pending before flipping public:
+- [ ] **Initial public-facing `README.md`** — the engine currently has only `CLAUDE.md`. Need a README that opens with: "early-stage, API unstable, solo-maintained, contributions welcome but response time variable" plus build instructions, screenshot, and links to ROADMAP / CONTRIBUTING / CODE_OF_CONDUCT / SECURITY / ASSET_LICENSES.
+- [ ] **Issue + PR templates under `.github/`** — bug-report, feature-request, security-redirect templates; PR checklist (tests added, audit-tool clean, CHANGELOG updated, DCO signed).
+- [ ] **CI hardening pass** — verify `.github/workflows/` runs on a public fork: no private runners, no required secrets, `NVD_API_KEY` is optional, fresh-clone build still works without VestigeAssets when `VESTIGE_FETCH_ASSETS=OFF`.
+- [ ] **Decide on public communication channel** — GitHub Discussions is the zero-cost default; Discord / Matrix are alternatives.
+- [ ] **Decide whether to migrate biblical content to a separate private `Tabernacle` repo now or later.** Currently the `assets/textures/tabernacle/` files and tabernacle-loading scene code are local-only (gitignored). The cleaner long-term home is a private GitHub repo so the maintainer can sync development across machines. Not blocking for engine open-source release.
+- [ ] **Re-run the full pre-launch checklist end-to-end** with a fresh `gitleaks detect --log-opts=--all`, asset license re-verification, dry-run clone+build on a clean directory.
+- [ ] **Tag a pre-release** (`v0.1.0-preview` or similar) as the parent of the first public commit, so users can see "this is where the public history starts."
+- [ ] **Trademark decision on the "Vestige" name** — informal use vs formal registration. Likely defer until there's something worth protecting at scale.
+- [ ] **Flip both `Vestige` and `VestigeAssets` from private to public** in GitHub repo settings — single switch, must happen in lockstep so the engine's `FetchContent` pull works on fresh clones without authentication.
 
 ### Milestone
 Vestige is public on GitHub under the MIT License, builds cleanly from a fresh clone on Linux and Windows, passes CI on every PR, and has at least one showcase project (Tabernacle walkthrough — separate commercial repo) linked from the README as a production-quality example of what the engine can do.

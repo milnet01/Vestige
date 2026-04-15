@@ -25,39 +25,21 @@ Everything else depends on these choices. Do not proceed past Section 1 until th
 
 ## 2. Secret Scanning (automated + manual)
 
-- [ ] Install and run a secret scanner across the working tree AND full git history:
-  ```bash
-  # Option A: gitleaks (recommended — fast, easy to CI)
-  gitleaks detect --source . --verbose --redact
-  gitleaks detect --source . --log-opts="--all" --verbose --redact  # full history
-
-  # Option B: trufflehog (also scans history + verifies against live services)
-  trufflehog git file://. --only-verified
-  ```
-- [ ] Manually grep for known secret-shaped strings (catches what scanners miss):
-  ```
-  api[_-]?key, secret, token, password, bearer, authorization,
-  BEGIN RSA, BEGIN PRIVATE KEY, BEGIN OPENSSH, ssh-rsa, ssh-ed25519,
-  AKIA (AWS), ghp_ (GitHub PAT), sk-ant- (Anthropic), sk- (OpenAI),
-  xoxb- (Slack), nvd-api
-  ```
-- [ ] Specifically verify the **NVD API key** referenced in user memory is NOT in the repo (code, config, docs, commits, or `.env` files). It lives in external config only.
-- [ ] Check `.gitignore` covers all common secret locations:
-  ```
-  .env, .env.*, *.key, *.pem, *.p12, credentials.json, secrets.yaml,
-  .aws/, .ssh/, *.token
-  ```
-- [ ] If secrets were ever committed: **rewrite git history** with `git filter-repo` (not `filter-branch`, which is deprecated and error-prone). Force-push only after the rewrite is verified locally. **Rotate every exposed credential** regardless — assume it's leaked the moment it was ever pushed to a remote.
+- [x] ~~Install and run a secret scanner across the working tree AND full git history.~~ ✅ Done — gitleaks 8.30.1 installed locally; `.gitleaks.toml` config in repo with allowlist for the 3 known false positives. **Re-run before each public push** to confirm zero leaks.
+- [x] ~~Manually grep for known secret-shaped strings.~~ ✅ Done — confirmed no real secrets remain (rotated NVD key was the only real hit; scrubbed from history via `git filter-repo` on 2026-04-15).
+- [x] ~~Specifically verify the **NVD API key** is NOT in the repo.~~ ✅ Done — rotated 2026-04-13, removed from current HEAD, and history-rewritten on 2026-04-15 (commits `5aa7eba` / `f5cc472` / `91d66a8` no longer contain the literal). Backup tag `pre-key-redaction-backup-2026-04-14` preserved on remote in case a rollback is ever needed.
+- [x] ~~Check `.gitignore` covers all common secret locations.~~ ✅ Done — `.env*`, `*.key`, `*.pem`, `*.p12`, `*.token`, `credentials.*`, `secrets.*`, `.aws/`, `.ssh/`, `id_rsa`, `id_ed25519`, `*.netrc` patterns added.
+- [x] ~~If secrets were ever committed: rewrite git history.~~ ✅ Done — `git filter-repo --replace-text` redacted the rotated NVD key. **One more pre-launch sweep recommended** with `gitleaks detect --log-opts=--all` to confirm.
 
 ---
 
 ## 3. Personal / Machine-Specific Data
 
-- [ ] Grep for hardcoded absolute paths that leak your machine layout:
+- [x] ~~Grep for hardcoded absolute paths that leak your machine layout.~~ ✅ Done (audit tool 2.4.1, commit `1c9a6b5`) — scrubbed from `tools/audit/web/app.py`, `tools/audit/lib/agent_playbook.py`, `tools/audit/AUDIT_TOOL_STANDARDS.md`, `tools/audit/CHANGELOG.md`. Re-grep before public push:
   ```
   /home/ants, /home/<username>, /mnt/Storage, C:\Users\
   ```
-  Known hits on the current tree:
+  Original hits on the working tree (now resolved):
   - `tools/audit/web/app.py`
   - `tools/audit/lib/agent_playbook.py`
   - `tools/audit/AUDIT_TOOL_STANDARDS.md`
@@ -111,20 +93,15 @@ Everything else depends on these choices. Do not proceed past Section 1 until th
 
 ## 6. License, Copyright, and Repo Metadata
 
-- [ ] Add `LICENSE` file at repo root with the chosen license text (verbatim from https://spdx.org/licenses/).
-- [ ] Add copyright headers to source files:
-  ```cpp
-  // Copyright (c) 2026 <Your Name>
-  // SPDX-License-Identifier: MIT
-  ```
-  (Batch-apply via a script. Use SPDX identifiers — tools understand them.)
-- [ ] Add `README.md` with: what the engine is, current status ("early-stage, API unstable"), build instructions, minimum system requirements, quick-start, license line, contact/discussion channel.
-- [ ] Add `CONTRIBUTING.md`: how to build from source, coding standards reference, testing requirements, PR expectations, DCO sign-off instruction if you chose DCO.
-- [ ] Add `CODE_OF_CONDUCT.md` (Contributor Covenant is the de facto standard).
+- [x] ~~Add `LICENSE` file at repo root.~~ ✅ Done — MIT, © 2026 Anthony Schemel (commit `689b78e`).
+- [x] ~~Add copyright headers to source files.~~ ✅ Done — 703 files in `engine/`, `tests/`, `tools/`, `assets/shaders/` now carry `// Copyright (c) 2026 Anthony Schemel` + `// SPDX-License-Identifier: MIT` (commit `601e45b`).
+- [ ] **Add `README.md`** with: what the engine is, current status ("early-stage, API unstable, solo-maintained"), build instructions, minimum system requirements, quick-start, license line, contact/discussion channel. Currently the repo only has `CLAUDE.md` (AI-collaboration instructions); a public-facing `README.md` is the highest-impact remaining gap.
+- [x] ~~Add `CONTRIBUTING.md`.~~ ✅ Done (commit `4353634`) — DCO sign-off, AI-disclosure policy, build instructions, audit-tool-clean expectation, contributor cadence note.
+- [x] ~~Add `CODE_OF_CONDUCT.md`.~~ ✅ Done (commit `4353634`) — adopts Contributor Covenant 2.1 by reference.
 - [ ] Add `SECURITY.md` — you already have one; verify the disclosure contact is an address you're willing to publish.
-- [ ] Add `.github/ISSUE_TEMPLATE/` with: bug report, feature request, security (redirect to SECURITY.md).
-- [ ] Add `.github/PULL_REQUEST_TEMPLATE.md` with a checklist (tests added, audit tool clean, CHANGELOG updated).
-- [ ] Add `NOTICE` or `THIRD_PARTY_NOTICES.md` for dependency attribution.
+- [ ] **Add `.github/ISSUE_TEMPLATE/`** with: bug report, feature request, security (redirect to SECURITY.md).
+- [ ] **Add `.github/PULL_REQUEST_TEMPLATE.md`** with a checklist (tests added, audit tool clean, CHANGELOG updated, DCO signed).
+- [x] ~~Add `THIRD_PARTY_NOTICES.md` for dependency attribution.~~ ✅ Done (commit `4353634`) — covers 15 FetchContent deps, 3 vendored sources (glad/stb/dr_libs), and shipped asset attributions (glTF models, Arimo OFL, Poly Haven CC0).
 
 ---
 
@@ -154,12 +131,9 @@ Some docs were written for an internal audience and may leak private context or 
 
 ## 9. Git History Hygiene
 
-- [ ] Review commit author names and emails across history:
-  ```bash
-  git log --format='%an <%ae>' | sort -u
-  ```
-  Confirm every identity is one you're comfortable publishing.
-- [ ] Large binary files in history bloat the public repo. If you've committed and later deleted large assets, they're still in history. Consider:
+- [x] ~~Review commit author names and emails across history.~~ ✅ Done — single identity in history (`milnet01 <aant.schemel@gmail.com>`); confirmed publishable.
+- [x] ~~Large binary files in history bloat the public repo.~~ ✅ Done — `git filter-repo` sweep on 2026-04-15 removed 100 historical asset paths (Texturelabs / tabernacle / everytexture / migrated 4K assets). `.git` shrunk from 552 MB to 21 MB. Backup tag `pre-asset-history-sweep-2026-04-15` preserved on remote.
+- [ ] If you've committed and later deleted *additional* large assets after the 2026-04-15 sweep, they're still in history. Consider:
   ```bash
   git filter-repo --analyze   # reports largest blobs
   ```
@@ -182,7 +156,18 @@ Some docs were written for an internal audience and may leak private context or 
 - [ ] Write a launch post / README opening paragraph that sets expectations: "solo-maintained, early-stage, API unstable, contributions welcome but response time variable."
 - [ ] Decide on a communication channel: GitHub Discussions (zero setup), Discord, Matrix. Easier to add than to remove.
 - [ ] Decide on a **public roadmap visibility** — the current ROADMAP.md is very detailed. Great for credibility; may also invite "when is X?" pressure. Either is fine; just know which you're signing up for.
-- [ ] Archive or rotate any credentials that EVER lived in the repo, regardless of whether you scrubbed history.
+- [x] ~~Archive or rotate any credentials that EVER lived in the repo, regardless of whether you scrubbed history.~~ ✅ Done — NVD API key rotated 2026-04-13, history scrubbed 2026-04-15. No other credentials ever lived in the repo per gitleaks scans.
+- [ ] **One final pre-launch sweep**, in this order:
+  ```bash
+  gitleaks detect --source . --config .gitleaks.toml --log-opts=--all
+  python3 tools/audit/audit.py        # full audit, expect zero new findings
+  rm -rf build && cmake -B build -S . && cmake --build build -j && ctest --test-dir build
+  ```
+  All three must succeed cleanly.
+- [ ] **Tag a pre-release** (`v0.1.0-preview` or similar) on `Vestige` AND `VestigeAssets` together — the engine's `external/CMakeLists.txt` currently pins `VestigeAssets v0.1.0`; bump both repos in lockstep.
+- [ ] **Flip both `Vestige` AND `VestigeAssets` from private to public in GitHub Settings.** Must happen together so the engine's CMake `FetchContent` works on fresh clones without authentication. This is the actual "go-live" moment.
+- [ ] Verify a fresh clone (`git clone https://github.com/milnet01/Vestige.git`) on a clean machine still configures, builds, and runs the demo scene.
+- [ ] Announce on whatever channel you chose. Pin the launch issue / discussion thread.
 
 ---
 
