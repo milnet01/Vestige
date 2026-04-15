@@ -61,10 +61,34 @@ if(VESTIGE_BUILD_TESTS)
     add_subdirectory(tests)
 endif()
 
-# Copy assets to build output
-add_custom_target(copy_assets ALL
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-        ${CMAKE_SOURCE_DIR}/assets
-        ${CMAKE_BINARY_DIR}/bin/assets
-    COMMENT "Copying assets to build directory"
-)
+# Copy assets to build output.
+#
+# Two sources are merged into ${CMAKE_BINARY_DIR}/bin/assets:
+#   1. ${CMAKE_SOURCE_DIR}/assets — small in-engine assets (shaders,
+#      fonts, glTF sample models, 2K demo textures, block labels)
+#   2. ${VESTIGE_ASSETS_DIR}/assets — large CC0 textures pulled from the
+#      VestigeAssets repo via FetchContent (4K diffuse JPGs, .blend.zip
+#      archives, extracted blend dirs). Optional; controlled by
+#      VESTIGE_FETCH_ASSETS in external/CMakeLists.txt.
+#
+# Order matters: in-engine assets are copied SECOND so they take
+# precedence on path collisions (none expected today, but keeps the
+# engine repo authoritative for shared paths).
+if(VESTIGE_FETCH_ASSETS AND VESTIGE_ASSETS_DIR AND EXISTS "${VESTIGE_ASSETS_DIR}/assets")
+    add_custom_target(copy_assets ALL
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${VESTIGE_ASSETS_DIR}/assets
+            ${CMAKE_BINARY_DIR}/bin/assets
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${CMAKE_SOURCE_DIR}/assets
+            ${CMAKE_BINARY_DIR}/bin/assets
+        COMMENT "Copying assets (engine repo + VestigeAssets) to build directory"
+    )
+else()
+    add_custom_target(copy_assets ALL
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${CMAKE_SOURCE_DIR}/assets
+            ${CMAKE_BINARY_DIR}/bin/assets
+        COMMENT "Copying assets (engine repo only) to build directory"
+    )
+endif()

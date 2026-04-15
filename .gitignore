@@ -120,3 +120,12 @@ assets/textures/tabernacle/
 # everytexture.com textures — license permits free personal/commercial
 # use but explicitly forbids redistribution. See ASSET_LICENSES.md.
 assets/textures/everytexture-com-stock-rocks-*/
+#
+# Large CC0 assets that live in the milnet01/VestigeAssets repo and are
+# pulled in via CMake FetchContent at configure time. Listing them here
+# stops `git add` from re-introducing them to the engine repo when the
+# maintainer has them locally for builds. Patterns mirror what's tracked
+# in VestigeAssets/assets/textures/.
+assets/textures/*_4k.jpg
+assets/textures/*_4k.blend.zip
+assets/textures/*_4k.blend/
