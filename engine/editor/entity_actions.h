@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file entity_actions.h
 /// @brief Standalone editor actions for entity manipulation — duplicate, delete, align, distribute.
 #pragma once

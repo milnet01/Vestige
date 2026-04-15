@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file nav_mesh_query.cpp
 /// @brief NavMeshQuery implementation — Detour pathfinding.
 #include "navigation/nav_mesh_query.h"

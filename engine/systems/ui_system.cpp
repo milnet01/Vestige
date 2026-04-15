@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file ui_system.cpp
 /// @brief UISystem implementation.
 #include "systems/ui_system.h"

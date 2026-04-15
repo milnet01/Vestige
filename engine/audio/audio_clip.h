@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file audio_clip.h
 /// @brief Decoded audio data container for loading WAV, MP3, FLAC, and OGG files.
 #pragma once

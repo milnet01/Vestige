@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file delete_entity_command.h
 /// @brief Undoable entity deletion — takes ownership of the removed subtree.
 #pragma once

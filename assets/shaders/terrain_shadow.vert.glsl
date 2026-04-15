@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file terrain_shadow.vert.glsl
 /// @brief Terrain shadow depth vertex shader — position + heightmap + skirts.
 #version 450 core

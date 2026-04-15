@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file foliage_renderer.cpp
 /// @brief FoliageRenderer implementation — instanced star-mesh grass with wind.
 #include "renderer/foliage_renderer.h"

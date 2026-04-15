@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file stair_tool.cpp
 /// @brief StairTool implementation -- configure and place stair entities.
 #include "editor/tools/stair_tool.h"

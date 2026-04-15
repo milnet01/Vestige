@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Anthony Schemel
+# SPDX-License-Identifier: MIT
+
 """Tests for audit.py CLI entry-point helpers.
 
 Covers ``apply_no_color`` — the NO_COLOR convention handler wired into

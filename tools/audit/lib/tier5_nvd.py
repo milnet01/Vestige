@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Anthony Schemel
+# SPDX-License-Identifier: MIT
+
 """Tier 5: NVD (National Vulnerability Database) API integration for CVE queries."""
 
 from __future__ import annotations

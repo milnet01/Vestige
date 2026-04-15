@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file kd_tree.cpp
 /// @brief KD-tree nearest-neighbor search implementation.
 

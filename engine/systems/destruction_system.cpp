@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file destruction_system.cpp
 /// @brief DestructionSystem implementation.
 #include "systems/destruction_system.h"

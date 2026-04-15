@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file foliage.vert.glsl
 /// @brief Foliage vertex shader — instanced grass/plants with wind animation, distance fade, and LOD crossfading.
 #version 450 core

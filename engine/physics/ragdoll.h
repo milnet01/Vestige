@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file ragdoll.h
 /// @brief Ragdoll system — wraps Jolt's native ragdoll with Vestige skeleton conversion.
 #pragma once

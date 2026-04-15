@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (c) 2026 Anthony Schemel
+# SPDX-License-Identifier: MIT
+
 """Flask web interface for the audit tool."""
 
 from __future__ import annotations

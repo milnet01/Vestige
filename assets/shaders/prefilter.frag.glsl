@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file prefilter.frag.glsl
 /// @brief IBL specular prefilter — convolves the environment map at varying roughness levels for split-sum approximation.
 #version 450 core

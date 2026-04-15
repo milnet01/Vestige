@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file test_shadow_map.cpp
 /// @brief Unit tests for the ShadowConfig struct and shadow map configuration.
 #include "renderer/shadow_map.h"

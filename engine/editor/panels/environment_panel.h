@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file environment_panel.h
 /// @brief ImGui panel for environment painting — brush settings, palette, biome presets.
 #pragma once

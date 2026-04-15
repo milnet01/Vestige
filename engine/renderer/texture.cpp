@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file texture.cpp
 /// @brief Texture implementation using stb_image and tinyexr.
 #include "renderer/texture.h"

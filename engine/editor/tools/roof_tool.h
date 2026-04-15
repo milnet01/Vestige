@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file roof_tool.h
 /// @brief Roof generation tool -- configure and place roof entities.
 #pragma once

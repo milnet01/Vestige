@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file cloth_presets.h
 /// @brief Factory methods for common cloth simulation configurations.
 #pragma once

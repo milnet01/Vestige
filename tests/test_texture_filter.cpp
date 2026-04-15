@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file test_texture_filter.cpp
 /// @brief Unit tests for TextureFilterMode enum and Texture filter mode tracking.
 #include "renderer/texture.h"

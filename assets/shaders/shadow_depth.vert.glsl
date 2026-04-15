@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file shadow_depth.vert.glsl
 /// @brief Directional shadow map vertex shader — transforms geometry into light space with instancing and skeletal animation support.
 #version 450 core

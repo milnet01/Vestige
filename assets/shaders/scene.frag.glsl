@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file scene.frag.glsl
 /// @brief Main scene PBR fragment shader — multi-light Blinn-Phong/PBR with CSM shadows, normal mapping, and IBL.
 #version 450 core

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file scene_manager.h
 /// @brief Manages loading, switching, and updating scenes.
 #pragma once

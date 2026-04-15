@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Anthony Schemel
+# SPDX-License-Identifier: MIT
+
 """SARIF 2.1.0 output — convert audit findings to SARIF format."""
 
 from __future__ import annotations

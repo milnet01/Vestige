@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file first_person_controller.h
 /// @brief First-person character controller with keyboard, mouse, and gamepad input.
 #pragma once

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file debug_line.frag.glsl
 /// @brief Debug line fragment shader — outputs per-vertex color for debug and gizmo lines.
 #version 450 core

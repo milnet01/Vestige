@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file taa_resolve.frag.glsl
 /// @brief Temporal anti-aliasing resolve — blends current frame with clamped history using YCoCg variance clipping.
 #version 450 core

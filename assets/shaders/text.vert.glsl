@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file text.vert.glsl
 /// @brief Text rendering vertex shader — transforms glyph quads with packed position and UV data.
 #version 450 core

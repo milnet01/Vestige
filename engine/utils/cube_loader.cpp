@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file cube_loader.cpp
 /// @brief Parser for .cube LUT files.
 #include "utils/cube_loader.h"

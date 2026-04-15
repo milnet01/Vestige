@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file particle_compact.comp.glsl
 /// @brief Stream compaction — removes dead particles and rebuilds the free list.
 ///

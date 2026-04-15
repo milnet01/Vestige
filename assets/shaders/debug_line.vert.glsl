@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file debug_line.vert.glsl
 /// @brief Debug line vertex shader — transforms colored line vertices for gizmo and debug visualization.
 #version 450 core

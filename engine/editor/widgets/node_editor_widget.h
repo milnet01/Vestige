@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file node_editor_widget.h
 /// @brief Thin C++ wrapper around the imgui-node-editor library.
 ///

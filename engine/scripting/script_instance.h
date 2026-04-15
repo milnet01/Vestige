@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file script_instance.h
 /// @brief Runtime state for one visual script graph attached to one entity.
 #pragma once

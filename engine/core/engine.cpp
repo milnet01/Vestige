@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file engine.cpp
 /// @brief Engine implementation — main loop and subsystem orchestration.
 #include "core/engine.h"

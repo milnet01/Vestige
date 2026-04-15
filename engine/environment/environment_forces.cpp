@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file environment_forces.cpp
 /// @brief Centralized environmental force system implementation.
 #include "environment/environment_forces.h"

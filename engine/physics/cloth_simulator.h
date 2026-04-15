@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file cloth_simulator.h
 /// @brief CPU-based cloth simulation using XPBD (Extended Position-Based Dynamics).
 #pragma once

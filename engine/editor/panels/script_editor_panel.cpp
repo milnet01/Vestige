@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file script_editor_panel.cpp
 /// @brief ScriptEditorPanel implementation.
 #include "editor/panels/script_editor_panel.h"

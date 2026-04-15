@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file interactable_component.h
 /// @brief Component marking entities as interactable (grabbable, pushable, toggleable).
 #pragma once

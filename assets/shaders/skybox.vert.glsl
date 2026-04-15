@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file skybox.vert.glsl
 /// @brief Skybox vertex shader — strips view translation so the sky is always centered on the camera.
 #version 450 core

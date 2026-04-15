@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file dynamic_mesh.h
 /// @brief GPU mesh with per-frame vertex streaming for deformable geometry (cloth, soft bodies).
 #pragma once

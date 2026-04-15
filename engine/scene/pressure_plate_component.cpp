@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file pressure_plate_component.cpp
 /// @brief PressurePlateComponent implementation -- sphere overlap detection for triggers.
 #include "scene/pressure_plate_component.h"

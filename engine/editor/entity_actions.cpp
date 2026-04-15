@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file entity_actions.cpp
 /// @brief EntityActions implementation — duplicate, delete, align, distribute, clipboard.
 #include "editor/entity_actions.h"

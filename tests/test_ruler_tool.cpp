@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file test_ruler_tool.cpp
 /// @brief Unit tests for the RulerTool measurement system.
 #include "editor/tools/ruler_tool.h"

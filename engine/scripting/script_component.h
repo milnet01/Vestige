@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file script_component.h
 /// @brief Entity component that attaches visual scripts to an entity.
 #pragma once

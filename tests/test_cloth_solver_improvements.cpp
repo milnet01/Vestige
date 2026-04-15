@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file test_cloth_solver_improvements.cpp
 /// @brief Unit tests for Batch 11 cloth solver improvements: dihedral bending,
 ///        constraint ordering, adaptive damping, friction, thick particle model.

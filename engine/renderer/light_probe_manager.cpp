@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file light_probe_manager.cpp
 /// @brief Light probe manager implementation.
 #include "renderer/light_probe_manager.h"

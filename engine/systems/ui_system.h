@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file ui_system.h
 /// @brief Domain system for in-game UI and HUD rendering.
 #pragma once

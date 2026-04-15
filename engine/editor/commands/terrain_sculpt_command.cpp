@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file terrain_sculpt_command.cpp
 /// @brief Undoable commands for terrain heightmap sculpting and splatmap painting.
 

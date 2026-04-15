@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file tree_mesh.vert.glsl
 /// @brief Tree mesh LOD vertex shader — instanced rendering with per-instance rotation, scale, and crossfade alpha.
 #version 450 core

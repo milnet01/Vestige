@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file point_shadow_depth.frag.glsl
 /// @brief Point light shadow cubemap fragment shader — writes linear distance from light as depth.
 #version 450 core

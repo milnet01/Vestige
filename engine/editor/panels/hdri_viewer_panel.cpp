@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file hdri_viewer_panel.cpp
 /// @brief HDRI viewer panel implementation.
 #include "editor/panels/hdri_viewer_panel.h"

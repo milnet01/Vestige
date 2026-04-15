@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Anthony Schemel
+# SPDX-License-Identifier: MIT
+
 """Tier 4: Build system audit — check CMakeLists.txt for security hardening, warnings, best practices."""
 
 from __future__ import annotations

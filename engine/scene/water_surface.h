@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file water_surface.h
 /// @brief Water surface component with configurable waves, colors, and rendering parameters.
 #pragma once

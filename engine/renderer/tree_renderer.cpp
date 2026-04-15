@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file tree_renderer.cpp
 /// @brief TreeRenderer implementation — placeholder trees with LOD and billboard crossfade.
 #include "renderer/tree_renderer.h"

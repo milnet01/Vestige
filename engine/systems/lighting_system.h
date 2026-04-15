@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file lighting_system.h
 /// @brief Domain system for lighting, shadows, and global illumination.
 #pragma once

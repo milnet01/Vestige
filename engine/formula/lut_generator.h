@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file lut_generator.h
 /// @brief Binary LUT generator for the Formula Pipeline.
 ///

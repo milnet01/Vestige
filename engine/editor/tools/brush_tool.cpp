@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file brush_tool.cpp
 /// @brief BrushTool implementation — mouse ray intersection, stamp logic, undo.
 #include "editor/tools/brush_tool.h"

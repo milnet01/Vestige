@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Anthony Schemel
+# SPDX-License-Identifier: MIT
+
 """Tests for lib.ci_output — GitHub Actions annotation formatting, step summary, exit codes."""
 
 from __future__ import annotations

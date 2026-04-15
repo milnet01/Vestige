@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file gpu_culler.cpp
 /// @brief GPU-driven frustum culling implementation.
 #include "renderer/gpu_culler.h"

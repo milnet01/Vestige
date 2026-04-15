@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file smaa_blend.vert.glsl
 /// @brief SMAA blend weight calculation vertex shader — precomputes search offsets.
 #version 450 core

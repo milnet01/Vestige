@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file material.h
 /// @brief Surface material properties for Blinn-Phong and PBR shading.
 #pragma once

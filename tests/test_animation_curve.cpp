@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file test_animation_curve.cpp
 /// @brief Unit tests for AnimationCurve and ColorGradient.
 #include "editor/widgets/animation_curve.h"

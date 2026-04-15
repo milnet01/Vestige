@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file smaa_edge.frag.glsl
 /// @brief SMAA luma-based edge detection with local contrast adaptation.
 #version 450 core

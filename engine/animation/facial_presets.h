@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file facial_presets.h
 /// @brief Emotion presets and ARKit 52 blend shape name constants.
 #pragma once

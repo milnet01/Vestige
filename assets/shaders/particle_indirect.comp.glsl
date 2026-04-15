@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file particle_indirect.comp.glsl
 /// @brief Updates the indirect draw command with the current alive particle count.
 ///

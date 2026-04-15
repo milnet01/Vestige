@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file entity_factory.cpp
 /// @brief EntityFactory implementation — spawns entities from the editor Create menu.
 #include "editor/entity_factory.h"

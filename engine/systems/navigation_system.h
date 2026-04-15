@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file navigation_system.h
 /// @brief Domain system for navmesh pathfinding and navigation.
 #pragma once

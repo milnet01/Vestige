@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file aabb.h
 /// @brief Axis-Aligned Bounding Box for collision detection.
 #pragma once

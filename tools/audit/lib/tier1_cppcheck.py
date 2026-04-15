@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Anthony Schemel
+# SPDX-License-Identifier: MIT
+
 """Tier 1: cppcheck static analysis with XML output parsing."""
 
 from __future__ import annotations

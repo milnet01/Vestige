@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file biome_preset.h
 /// @brief Biome presets — composable layers of foliage, scatter, and trees.
 #pragma once

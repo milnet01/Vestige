@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file collider_generator.h
 /// @brief Utility to generate cloth collision shapes from mesh data.
 #pragma once

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file entity_serializer.cpp
 /// @brief Entity tree serialization/deserialization implementation.
 #include "utils/entity_serializer.h"

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file file_menu.cpp
 /// @brief File menu implementation — save/load, unsaved changes dialog, auto-save, recent files.
 #include "editor/file_menu.h"

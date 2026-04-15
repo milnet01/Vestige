@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file physics_templates.cpp
 /// @brief Built-in physics and rendering formula template implementations.
 #include "formula/physics_templates.h"

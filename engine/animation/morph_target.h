@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file morph_target.h
 /// @brief Morph target (blend shape) data structures and CPU blending.
 #pragma once

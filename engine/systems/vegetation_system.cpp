@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file vegetation_system.cpp
 /// @brief VegetationSystem implementation.
 #include "systems/vegetation_system.h"

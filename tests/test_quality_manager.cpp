@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file test_quality_manager.cpp
 /// @brief Unit tests for FormulaQualityManager and water formula quality tiers.
 #include <gtest/gtest.h>

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file animation_sampler.h
 /// @brief Stateless functions that evaluate animation channels at a given time.
 #pragma once

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file test_camera.cpp
 /// @brief Unit tests for the Camera class (pure-math, no OpenGL context needed).
 #include "renderer/camera.h"

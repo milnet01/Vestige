@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file lut_loader.cpp
 /// @brief Binary LUT loader implementation.
 #include "formula/lut_loader.h"

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file sh_probe_grid.cpp
 /// @brief SH probe grid implementation — cubemap projection, convolution, GPU upload.
 #include "renderer/sh_probe_grid.h"

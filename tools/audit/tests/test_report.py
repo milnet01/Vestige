@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Anthony Schemel
+# SPDX-License-Identifier: MIT
+
 """Tests for lib.report — ReportBuilder.build() output format and constraints."""
 
 from __future__ import annotations

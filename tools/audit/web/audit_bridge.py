@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Anthony Schemel
+# SPDX-License-Identifier: MIT
+
 """Bridge between AuditRunner and the web UI — threading, events, log capture."""
 
 from __future__ import annotations

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file file_menu.h
 /// @brief File menu for scene save/load, unsaved changes dialog, and dirty tracking.
 #pragma once

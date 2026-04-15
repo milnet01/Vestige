@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file command_history.h
 /// @brief Undo/redo stack manager with version-counter dirty tracking.
 #pragma once

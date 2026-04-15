@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file test_hdr_pipeline.cpp
 /// @brief Unit tests for the HDR rendering pipeline math (tone mapping, gamma correction).
 ///

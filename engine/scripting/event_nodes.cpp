@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file event_nodes.cpp
 /// @brief Implementation of event-driven script node types.
 ///

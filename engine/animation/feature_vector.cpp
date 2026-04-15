@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file feature_vector.cpp
 /// @brief Motion matching feature schema and extraction implementation.
 

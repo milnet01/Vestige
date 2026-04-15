@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file color_gradient.h
 /// @brief Color gradient with draggable stops for particle color over lifetime.
 #pragma once

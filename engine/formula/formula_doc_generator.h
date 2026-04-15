@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file formula_doc_generator.h
 /// @brief Auto-generates markdown documentation from formula template metadata.
 ///

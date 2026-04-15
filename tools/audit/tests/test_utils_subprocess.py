@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Anthony Schemel
+# SPDX-License-Identifier: MIT
+
 """Tests for the run_cmd / run_shell_cmd split (AUDIT.md §C1 / FIXPLAN C1b)."""
 
 from __future__ import annotations

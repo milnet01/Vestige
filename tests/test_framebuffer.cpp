@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file test_framebuffer.cpp
 /// @brief Unit tests for the FramebufferConfig struct.
 #include "renderer/framebuffer.h"

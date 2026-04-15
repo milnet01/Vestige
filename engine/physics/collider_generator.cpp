@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file collider_generator.cpp
 /// @brief Collider generation utility implementation.
 #include "physics/collider_generator.h"

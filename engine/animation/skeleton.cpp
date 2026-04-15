@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file skeleton.cpp
 /// @brief Skeleton implementation.
 #include "animation/skeleton.h"

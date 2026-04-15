@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file point_shadow_depth.vert.glsl
 /// @brief Point light shadow cubemap vertex shader — transforms geometry into light space with instancing support.
 #version 450 core

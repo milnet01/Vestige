@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file resource_manager.h
 /// @brief Caches loaded assets (meshes, textures, materials) to prevent reloading.
 #pragma once

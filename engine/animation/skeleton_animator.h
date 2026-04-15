@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file skeleton_animator.h
 /// @brief Component that plays skeletal animations and computes bone matrices.
 #pragma once

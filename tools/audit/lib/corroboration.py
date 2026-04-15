@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Anthony Schemel
+# SPDX-License-Identifier: MIT
+
 """Cross-source corroboration layer (D2, 2.4.0).
 
 A finding gains credibility when more than one *independent* source

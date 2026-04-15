@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file text_renderer.cpp
 /// @brief TextRenderer implementation.
 #include "renderer/text_renderer.h"

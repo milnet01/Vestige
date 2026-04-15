@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file test_crossfade.cpp
 /// @brief Unit tests for animation crossfade blending.
 #include "animation/skeleton_animator.h"

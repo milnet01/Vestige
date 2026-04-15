@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file animation_clip.h
 /// @brief Animation clip data — keyframe channels loaded from glTF animations.
 #pragma once

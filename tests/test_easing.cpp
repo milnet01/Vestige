@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file test_easing.cpp
 /// @brief Unit tests for easing functions and cubic bezier curves.
 #include "animation/easing.h"

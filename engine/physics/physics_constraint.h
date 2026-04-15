@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file physics_constraint.h
 /// @brief Constraint wrapper and handle for the Jolt physics constraint system.
 #pragma once

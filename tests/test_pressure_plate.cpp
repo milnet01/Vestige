@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file test_pressure_plate.cpp
 /// @brief Unit tests for PressurePlateComponent configuration and state.
 /// @note Physics overlap queries require a full Jolt setup and are not tested here.

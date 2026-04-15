@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Anthony Schemel
+# SPDX-License-Identifier: MIT
+
 """Tier 1: clang-tidy static analysis with text output parsing."""
 
 from __future__ import annotations

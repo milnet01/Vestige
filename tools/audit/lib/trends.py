@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Anthony Schemel
+# SPDX-License-Identifier: MIT
+
 """Finding trend tracking — compare findings across multiple audit runs."""
 
 from __future__ import annotations

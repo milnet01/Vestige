@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file roof_tool.cpp
 /// @brief RoofTool implementation -- configure and place roof entities.
 #include "editor/tools/roof_tool.h"

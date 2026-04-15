@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file window.cpp
 /// @brief Window implementation using GLFW and OpenGL 4.5.
 #include "core/window.h"

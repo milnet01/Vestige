@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file test_text_rendering.cpp
 /// @brief Tests for text rendering subsystem (Font, GlyphInfo, TextRenderer).
 #include <gtest/gtest.h>

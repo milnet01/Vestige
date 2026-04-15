@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file gpu_particle_system.cpp
 /// @brief GPU compute shader particle pipeline implementation.
 

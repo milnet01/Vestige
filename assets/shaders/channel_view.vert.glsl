@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file channel_view.vert.glsl
 /// @brief Fullscreen quad vertex shader for texture/HDRI channel viewer.
 #version 450 core

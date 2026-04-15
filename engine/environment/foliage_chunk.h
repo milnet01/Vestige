@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file foliage_chunk.h
 /// @brief 16m x 16m spatial cell storing foliage, scatter, and tree instances.
 #pragma once

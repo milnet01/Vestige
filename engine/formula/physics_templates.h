@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file physics_templates.h
 /// @brief Pre-built formula templates for common physics and rendering equations.
 ///

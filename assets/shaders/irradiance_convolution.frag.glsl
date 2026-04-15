@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file irradiance_convolution.frag.glsl
 /// @brief IBL diffuse irradiance convolution — integrates the environment map over the hemisphere per texel.
 #version 450 core

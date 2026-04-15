@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file brush_preview.vert.glsl
 /// @brief Terrain brush preview vertex shader — transforms the brush indicator mesh.
 #version 450 core

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file physics_debug.h
 /// @brief Debug wireframe visualization for physics collision shapes.
 #pragma once

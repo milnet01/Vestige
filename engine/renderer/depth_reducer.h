@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file depth_reducer.h
 /// @brief GPU depth buffer min/max reduction for SDSM cascade optimization.
 #pragma once

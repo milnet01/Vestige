@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file particle_emit.comp.glsl
 /// @brief GPU particle emission — spawns new particles into free pool slots.
 ///

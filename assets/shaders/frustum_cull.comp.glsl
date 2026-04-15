@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file frustum_cull.comp.glsl
 /// @brief GPU frustum culling — tests object AABBs against 6 frustum planes.
 ///

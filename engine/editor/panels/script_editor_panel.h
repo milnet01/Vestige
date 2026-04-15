@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file script_editor_panel.h
 /// @brief Dockable editor panel for visual scripts (Phase 9E-3).
 ///

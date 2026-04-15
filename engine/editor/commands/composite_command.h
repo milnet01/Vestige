@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file composite_command.h
 /// @brief Groups multiple sub-commands into a single undo step.
 #pragma once

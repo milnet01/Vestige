@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file editor.cpp
 /// @brief Editor implementation — ImGui lifecycle, docking workspace, editor camera, theme.
 #include "editor/editor.h"

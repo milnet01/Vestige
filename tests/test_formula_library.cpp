@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file test_formula_library.cpp
 /// @brief Unit tests for the Formula Pipeline FP-2: expression tree, evaluator,
 ///        formula definitions, library, and built-in physics templates.

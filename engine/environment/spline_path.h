@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file spline_path.h
 /// @brief Catmull-Rom spline for paths and streams with mesh generation.
 #pragma once

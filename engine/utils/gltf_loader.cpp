@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file gltf_loader.cpp
 /// @brief glTF 2.0 loading implementation with native PBR material support.
 #include "utils/gltf_loader.h"

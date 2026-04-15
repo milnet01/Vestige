@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file foliage.frag.glsl
 /// @brief Foliage fragment shader — alpha-tested textured grass/plants with directional lighting and CSM shadows.
 #version 450 core

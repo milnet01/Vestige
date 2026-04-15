@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file audio_analyzer.h
 /// @brief Real-time audio analysis for amplitude-based lip sync fallback.
 #pragma once

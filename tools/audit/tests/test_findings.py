@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Anthony Schemel
+# SPDX-License-Identifier: MIT
+
 """Tests for lib.findings — Severity, Finding, deduplicate, data models."""
 
 from __future__ import annotations

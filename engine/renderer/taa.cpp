@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file taa.cpp
 /// @brief TAA implementation.
 #include "renderer/taa.h"

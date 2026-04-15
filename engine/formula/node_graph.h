@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file node_graph.h
 /// @brief Node graph data structures for the visual formula editor (Phase 9E).
 ///

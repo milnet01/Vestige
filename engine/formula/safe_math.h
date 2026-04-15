@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file safe_math.h
 /// @brief Single source of truth for formula-pipeline safe-math semantics.
 ///

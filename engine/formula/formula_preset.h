@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file formula_preset.h
 /// @brief Named bundles of formula overrides for visual styles and environments.
 ///

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file framebuffer.h
 /// @brief OpenGL framebuffer object wrapper for off-screen rendering.
 #pragma once

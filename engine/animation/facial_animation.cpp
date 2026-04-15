@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file facial_animation.cpp
 /// @brief FacialAnimator implementation: emotion transitions, layer merging.
 

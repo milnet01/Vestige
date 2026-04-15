@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file terrain.vert.glsl
 /// @brief CDLOD terrain vertex shader — heightmap displacement with per-vertex morphing and edge skirts.
 #version 450 core

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file test_scene_serializer.cpp
 /// @brief Unit tests for scene save/load round-trip serialization.
 #include "editor/scene_serializer.h"

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file asset_browser_panel.cpp
 /// @brief Asset browser panel implementation.
 #include "editor/panels/asset_browser_panel.h"

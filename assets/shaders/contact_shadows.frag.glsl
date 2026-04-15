@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file contact_shadows.frag.glsl
 /// @brief Screen-space contact shadows — ray-marches toward the light to catch fine shadow detail at object contacts.
 #version 450 core

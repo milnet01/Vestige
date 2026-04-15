@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file terrain.frag.glsl
 /// @brief CDLOD terrain fragment shader — normal-mapped PBR lighting with CSM shadows.
 #version 450 core

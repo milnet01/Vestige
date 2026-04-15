@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file tree_billboard.frag.glsl
 /// @brief Tree billboard LOD fragment shader — alpha-tested texture sampling with crossfade discard.
 #version 450 core

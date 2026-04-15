@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file mesh.cpp
 /// @brief Mesh implementation.
 #include "renderer/mesh.h"

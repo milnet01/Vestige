@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file text.frag.glsl
 /// @brief Text rendering fragment shader — samples glyph atlas alpha and applies text color.
 #version 450 core

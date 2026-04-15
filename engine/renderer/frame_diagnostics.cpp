@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file frame_diagnostics.cpp
 /// @brief Frame capture and diagnostic report implementation.
 #include "renderer/frame_diagnostics.h"

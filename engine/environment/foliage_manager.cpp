@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file foliage_manager.cpp
 /// @brief FoliageManager implementation — chunk grid management, painting, and culling.
 #include "environment/foliage_manager.h"

@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Anthony Schemel
+# SPDX-License-Identifier: MIT
+
 """Tier 5: Online research via DuckDuckGo with file-based caching."""
 
 from __future__ import annotations

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file destruction_system.h
 /// @brief Domain system for destruction, fracture, and physics objects.
 #pragma once

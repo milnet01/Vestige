@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file mesh_renderer.h
 /// @brief Component that makes an entity visible by attaching a mesh and material.
 #pragma once

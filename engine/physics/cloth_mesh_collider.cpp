@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file cloth_mesh_collider.cpp
 /// @brief Triangle mesh collider implementation.
 #include "physics/cloth_mesh_collider.h"

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file curve_fitter.cpp
 /// @brief Levenberg-Marquardt curve fitter implementation.
 #include "formula/curve_fitter.h"

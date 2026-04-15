@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file file_watcher.cpp
 /// @brief FileWatcher implementation — polls filesystem for asset changes.
 #include "resource/file_watcher.h"

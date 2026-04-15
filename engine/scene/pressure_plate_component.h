@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file pressure_plate_component.h
 /// @brief Physics puzzle trigger component -- activates when objects are placed on it.
 #pragma once

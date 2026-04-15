@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file test_command_history.cpp
 /// @brief Unit tests for CommandHistory undo/redo and dirty tracking.
 #include "editor/command_history.h"

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file ui_canvas.h
 /// @brief Screen-space UI canvas that manages an element hierarchy.
 #pragma once

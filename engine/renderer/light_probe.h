@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file light_probe.h
 /// @brief Local IBL light probe — captures and stores environment lighting at a specific position.
 #pragma once

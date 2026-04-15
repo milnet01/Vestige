@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file screen_quad.frag.glsl
 /// @brief Final compositing fragment shader with tonemapping, bloom, SSAO, SSR, and TAA integration.
 #version 450 core

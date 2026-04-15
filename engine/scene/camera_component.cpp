@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file camera_component.cpp
 /// @brief Camera component implementation.
 #include "scene/camera_component.h"

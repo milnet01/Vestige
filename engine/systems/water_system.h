@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file water_system.h
 /// @brief Domain system for water surfaces, rendering, and fluid effects.
 #pragma once

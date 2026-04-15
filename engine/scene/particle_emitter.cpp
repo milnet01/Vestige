@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file particle_emitter.cpp
 /// @brief Particle emitter CPU simulation.
 #include "scene/particle_emitter.h"

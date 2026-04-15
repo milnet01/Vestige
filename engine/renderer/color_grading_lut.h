@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file color_grading_lut.h
 /// @brief 3D LUT management for color grading post-processing.
 #pragma once

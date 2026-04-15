@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file foliage_instance.h
 /// @brief Per-instance data structs for foliage, scatter objects, and trees.
 #pragma once

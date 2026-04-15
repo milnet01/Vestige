@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file engine.h
 /// @brief Central engine class that owns and orchestrates all subsystems.
 #pragma once

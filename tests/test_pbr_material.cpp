@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file test_pbr_material.cpp
 /// @brief Tests for PBR material properties and MaterialType switching.
 #include <gtest/gtest.h>

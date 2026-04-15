@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file timer.h
 /// @brief Frame timing and FPS tracking.
 #pragma once

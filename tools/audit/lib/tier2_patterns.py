@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Anthony Schemel
+# SPDX-License-Identifier: MIT
+
 """Tier 2: Configurable regex pattern scanning across source files."""
 
 from __future__ import annotations

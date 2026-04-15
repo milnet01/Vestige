@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file test_memory_tracker.cpp
 /// @brief Unit tests for the MemoryTracker.
 #include "profiler/memory_tracker.h"

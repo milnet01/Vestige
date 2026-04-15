@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file texture_viewer_panel.h
 /// @brief Texture viewer panel — full-resolution display with zoom/pan, channel isolation,
 ///        mipmap visualization, tiling preview, and PBR texture set grouping.

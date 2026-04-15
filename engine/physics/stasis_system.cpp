@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file stasis_system.cpp
 /// @brief StasisSystem implementation -- per-body freeze and slow-motion effects.
 #include "physics/stasis_system.h"

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file dismemberment_zones.h
 /// @brief Dismemberment zone definitions and damage tracking.
 #pragma once

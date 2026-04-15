@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file animation_curve.cpp
 /// @brief AnimationCurve implementation.
 #include "editor/widgets/animation_curve.h"

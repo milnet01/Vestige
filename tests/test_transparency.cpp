@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file test_transparency.cpp
 /// @brief Unit tests for transparency / alpha blending (alpha mode, cutoff, sorting).
 #include <gtest/gtest.h>

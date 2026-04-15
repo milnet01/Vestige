@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file motion_vectors_object.frag.glsl
 /// @brief Per-object motion vector fragment shader (AUDIT.md §H15 / FIXPLAN G1).
 ///

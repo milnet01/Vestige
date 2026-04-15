@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file particle_system.h
 /// @brief Domain system for CPU/GPU particle rendering and VFX.
 #pragma once

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file light.h
 /// @brief Light types for Blinn-Phong shading.
 #pragma once

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file animation_curve.h
 /// @brief Keyframe-based animation curve with linear interpolation.
 #pragma once

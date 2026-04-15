@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file model_viewer_panel.cpp
 /// @brief Model viewer panel implementation.
 #include "editor/panels/model_viewer_panel.h"

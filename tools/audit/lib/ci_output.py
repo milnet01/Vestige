@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Anthony Schemel
+# SPDX-License-Identifier: MIT
+
 """CI integration — format findings as GitHub Actions annotations."""
 
 from __future__ import annotations

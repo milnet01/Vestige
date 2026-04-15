@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file jolt_helpers.h
 /// @brief Coordinate conversion helpers between GLM and Jolt math types.
 #pragma once

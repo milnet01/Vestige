@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Anthony Schemel
+# SPDX-License-Identifier: MIT
+
 """Tier 6: Feature coverage — flag subsystems without test coverage.
 
 D4 (2.6.0): the manual audit prompt asks reviewers to check whether each

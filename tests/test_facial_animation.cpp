@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file test_facial_animation.cpp
 /// @brief Unit tests for facial animation: presets, eye controller, facial animator.
 

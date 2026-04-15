@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file node_type_registry.cpp
 /// @brief NodeTypeRegistry implementation.
 #include "scripting/node_type_registry.h"

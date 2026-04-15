@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Anthony Schemel
+# SPDX-License-Identifier: MIT
+
 """Self-contained HTML report generator for audit results."""
 
 from __future__ import annotations

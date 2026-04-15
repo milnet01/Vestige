@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file test_architectural_tools.cpp
 /// @brief Unit tests for architectural tool state machines (Wall, Room, Cutout, Roof, Stair).
 

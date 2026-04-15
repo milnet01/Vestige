@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file character_system.cpp
 /// @brief CharacterSystem implementation.
 #include "systems/character_system.h"

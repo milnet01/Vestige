@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file atmosphere_system.cpp
 /// @brief AtmosphereSystem implementation.
 #include "systems/atmosphere_system.h"

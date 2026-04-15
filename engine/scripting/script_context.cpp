@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file script_context.cpp
 /// @brief ScriptContext interpreter implementation.
 #include "scripting/script_context.h"

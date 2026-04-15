@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file trajectory_predictor.cpp
 /// @brief Spring-damper trajectory prediction implementation.
 

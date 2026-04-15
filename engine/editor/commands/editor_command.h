@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file editor_command.h
 /// @brief Abstract base class for undoable editor commands.
 #pragma once

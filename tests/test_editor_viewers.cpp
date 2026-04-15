@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file test_editor_viewers.cpp
 /// @brief Tests for Phase 9D editor viewer panels and game templates.
 #include <gtest/gtest.h>

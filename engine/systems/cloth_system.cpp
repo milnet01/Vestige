@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file cloth_system.cpp
 /// @brief ClothSystem implementation.
 #include "systems/cloth_system.h"

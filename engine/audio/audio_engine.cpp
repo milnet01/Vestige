@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file audio_engine.cpp
 /// @brief AudioEngine implementation — OpenAL device, source pool, buffer cache.
 #include "audio/audio_engine.h"

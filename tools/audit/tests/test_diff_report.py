@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Anthony Schemel
+# SPDX-License-Identifier: MIT
+
 """Tests for lib.diff_report — load_previous_results, compute_diff, ReportDiff."""
 
 from __future__ import annotations

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file particle_presets.cpp
 /// @brief Factory methods for common particle effect configurations.
 #include "scene/particle_presets.h"

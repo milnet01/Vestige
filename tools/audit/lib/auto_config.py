@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Anthony Schemel
+# SPDX-License-Identifier: MIT
+
 """Auto-detect project settings and generate audit_config.yaml."""
 
 from __future__ import annotations

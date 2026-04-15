@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file bvh.cpp
 /// @brief AABB BVH construction (binned SAH), refit, and proximity queries.
 #include "physics/bvh.h"

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file core_nodes.h
 /// @brief Registration of the 10 core visual scripting node types.
 #pragma once

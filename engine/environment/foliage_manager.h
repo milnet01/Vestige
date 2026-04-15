@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file foliage_manager.h
 /// @brief Manages the chunk grid of environment instances with paint/erase/cull API.
 #pragma once

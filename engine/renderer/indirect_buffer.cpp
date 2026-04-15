@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file indirect_buffer.cpp
 /// @brief Indirect draw command buffer and matrix SSBO implementation.
 #include "renderer/indirect_buffer.h"

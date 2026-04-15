@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file skybox.cpp
 /// @brief Skybox implementation.
 #include "renderer/skybox.h"

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file test_aabb.cpp
 /// @brief Unit tests for the AABB collision system.
 #include "utils/aabb.h"

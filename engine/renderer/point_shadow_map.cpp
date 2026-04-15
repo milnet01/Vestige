@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file point_shadow_map.cpp
 /// @brief Point light shadow map implementation (depth cubemap).
 #include "renderer/point_shadow_map.h"

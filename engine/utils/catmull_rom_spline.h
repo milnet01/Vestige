@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file catmull_rom_spline.h
 /// @brief Catmull-Rom spline evaluation for path/road generation.
 #pragma once

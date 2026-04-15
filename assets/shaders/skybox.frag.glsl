@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file skybox.frag.glsl
 /// @brief Skybox fragment shader — samples cubemap or renders a procedural gradient sky.
 #version 450 core

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file morph_target.cpp
 /// @brief Morph target CPU blending implementation.
 #include "animation/morph_target.h"

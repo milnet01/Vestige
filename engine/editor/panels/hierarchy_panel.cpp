@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file hierarchy_panel.cpp
 /// @brief Scene hierarchy panel implementation.
 #include "editor/panels/hierarchy_panel.h"

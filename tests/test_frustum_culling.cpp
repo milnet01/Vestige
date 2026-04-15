@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file test_frustum_culling.cpp
 /// @brief Unit tests for frustum plane extraction and AABB-vs-frustum culling.
 #include "utils/frustum.h"

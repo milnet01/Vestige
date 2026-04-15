@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file smaa_edge.vert.glsl
 /// @brief SMAA edge detection vertex shader — precomputes neighbor offsets.
 #version 450 core

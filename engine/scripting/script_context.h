@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file script_context.h
 /// @brief Execution context for interpreting visual script graphs.
 #pragma once

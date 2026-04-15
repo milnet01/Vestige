@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file script_common.h
 /// @brief Common types for the visual scripting system: pins, connections, nodes.
 #pragma once

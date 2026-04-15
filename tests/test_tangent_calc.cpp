@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file test_tangent_calc.cpp
 /// @brief Unit tests for tangent/bitangent calculation (normal mapping support).
 #include "renderer/mesh.h"

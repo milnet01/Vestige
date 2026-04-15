@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file rigid_body.cpp
 /// @brief RigidBody component implementation.
 #include "physics/rigid_body.h"

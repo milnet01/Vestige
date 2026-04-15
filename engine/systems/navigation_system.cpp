@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file navigation_system.cpp
 /// @brief NavigationSystem implementation.
 #include "systems/navigation_system.h"

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file test_catmull_rom_spline.cpp
 /// @brief Unit tests for CatmullRomSpline evaluation, tangents, sampling, and arc length.
 

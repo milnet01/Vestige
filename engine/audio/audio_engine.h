@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file audio_engine.h
 /// @brief OpenAL wrapper for device management, source pooling, and listener control.
 #pragma once

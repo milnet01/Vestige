@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file rigid_body.h
 /// @brief RigidBody component — attaches a Jolt physics body to an entity.
 #pragma once

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file frustum.h
 /// @brief Frustum plane extraction and AABB-vs-frustum culling utilities.
 #pragma once

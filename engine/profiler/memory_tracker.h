@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file memory_tracker.h
 /// @brief CPU heap and GPU VRAM usage tracking.
 #pragma once

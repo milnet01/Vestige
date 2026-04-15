@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file test_cascaded_shadow_map.cpp
 /// @brief Unit tests for cascaded shadow map frustum splitting and matrix computation.
 #include <gtest/gtest.h>

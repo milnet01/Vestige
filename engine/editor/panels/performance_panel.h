@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file performance_panel.h
 /// @brief ImGui panel for real-time performance profiling dashboard.
 #pragma once

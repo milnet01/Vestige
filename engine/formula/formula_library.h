@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file formula_library.h
 /// @brief Registry of named formulas with JSON persistence.
 ///

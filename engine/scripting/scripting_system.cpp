@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file scripting_system.cpp
 /// @brief ScriptingSystem implementation — visual script lifecycle and execution.
 #include "scripting/scripting_system.h"

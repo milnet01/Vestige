@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file formula_benchmark.cpp
 /// @brief Performance benchmarking implementation for formula quality tiers.
 #include "formula/formula_benchmark.h"

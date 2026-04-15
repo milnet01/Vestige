@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file codegen_cpp.h
 /// @brief C++ code generator for the Formula Pipeline.
 ///

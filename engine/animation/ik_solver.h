@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file ik_solver.h
 /// @brief Inverse kinematics solvers (two-bone IK, look-at IK, foot IK).
 #pragma once

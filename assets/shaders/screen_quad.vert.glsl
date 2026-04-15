@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file screen_quad.vert.glsl
 /// @brief Full-screen quad vertex shader for post-processing passes.
 #version 450 core

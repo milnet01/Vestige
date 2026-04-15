@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file nav_mesh_builder.h
 /// @brief Wraps Recast for navmesh generation from scene geometry.
 #pragma once

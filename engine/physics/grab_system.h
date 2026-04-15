@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file grab_system.h
 /// @brief Object grab/carry/throw system.
 #pragma once

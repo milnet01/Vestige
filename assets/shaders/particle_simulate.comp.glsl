@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file particle_simulate.comp.glsl
 /// @brief GPU particle simulation — applies composable behaviors, physics, and aging.
 ///

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file test_formula_compiler.cpp
 /// @brief Unit tests for the Formula Pipeline FP-3: C++/GLSL code generators,
 ///        LUT generator, and LUT loader.

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file nav_mesh_builder.cpp
 /// @brief NavMeshBuilder implementation — Recast navmesh generation.
 #include "navigation/nav_mesh_builder.h"

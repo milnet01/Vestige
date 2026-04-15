@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file breakable_component.h
 /// @brief Component marking entities as destructible with Voronoi fracture.
 #pragma once

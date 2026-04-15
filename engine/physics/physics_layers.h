@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file physics_layers.h
 /// @brief Jolt broadphase and object layer definitions with collision filtering.
 #pragma once

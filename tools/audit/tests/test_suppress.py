@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Anthony Schemel
+# SPDX-License-Identifier: MIT
+
 """Tests for lib.suppress — load_suppressions, filter_suppressed, save_suppression."""
 
 from __future__ import annotations

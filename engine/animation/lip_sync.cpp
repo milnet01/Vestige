@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file lip_sync.cpp
 /// @brief Lip sync player: Rhubarb track playback and amplitude fallback.
 ///

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file cubemap_render.vert.glsl
 /// @brief Cubemap face rendering vertex shader — used for IBL convolution and prefiltering passes.
 #version 450 core

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file gradient_editor_widget.h
 /// @brief ImGui widget for editing ColorGradient stops.
 #pragma once

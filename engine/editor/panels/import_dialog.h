@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file import_dialog.h
 /// @brief Model import dialog — file browser with scale control and format detection.
 #pragma once

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file test_procedural_mesh.cpp
 /// @brief Unit tests for ProceduralMeshBuilder, align/distribute, and import dialog.
 

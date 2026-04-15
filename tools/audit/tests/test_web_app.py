@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Anthony Schemel
+# SPDX-License-Identifier: MIT
+
 """Tests for the Flask web UI path-safety helper (AUDIT.md §H1-H3)."""
 
 from __future__ import annotations

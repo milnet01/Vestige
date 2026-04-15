@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file test_environment_forces.cpp
 /// @brief Tests for the centralized EnvironmentForces system.
 #include "environment/environment_forces.h"

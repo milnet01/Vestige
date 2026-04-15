@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file test_ssao.cpp
 /// @brief Unit tests for SSAO math (kernel generation, depth linearization, occlusion logic).
 #include <gtest/gtest.h>

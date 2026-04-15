@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file terrain_system.h
 /// @brief Domain system for terrain editing, rendering, and collision.
 #pragma once

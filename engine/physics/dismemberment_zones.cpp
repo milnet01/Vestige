@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file dismemberment_zones.cpp
 /// @brief Dismemberment zone management implementation.
 

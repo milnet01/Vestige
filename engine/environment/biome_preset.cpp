@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file biome_preset.cpp
 /// @brief BiomePreset and BiomeLibrary implementation.
 #include "environment/biome_preset.h"

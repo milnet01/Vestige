@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file test_node_graph.cpp
 /// @brief Unit tests for NodeGraph data structures (Phase 9E node editor).
 #include "formula/node_graph.h"

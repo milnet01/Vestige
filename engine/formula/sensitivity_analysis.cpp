@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file sensitivity_analysis.cpp
 /// @brief Sensitivity analysis implementation using central finite differences.
 #include "formula/sensitivity_analysis.h"

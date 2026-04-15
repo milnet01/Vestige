@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file equirect_preview.frag.glsl
 /// @brief Equirectangular HDRI preview with rotation and exposure control.
 #version 450 core

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file point_shadow_map.h
 /// @brief Omnidirectional shadow mapping using a depth cubemap for point lights.
 #pragma once

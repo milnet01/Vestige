@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Anthony Schemel
+# SPDX-License-Identifier: MIT
+
 """Tests for lib.sarif_output — SARIF 2.1.0 generation."""
 
 from __future__ import annotations

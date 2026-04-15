@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file radiosity_baker.cpp
 /// @brief Multi-bounce indirect lighting baker implementation.
 #include "renderer/radiosity_baker.h"

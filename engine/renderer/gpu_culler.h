@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file gpu_culler.h
 /// @brief GPU-driven frustum culling via compute shader.
 #pragma once

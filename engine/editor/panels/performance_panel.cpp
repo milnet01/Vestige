@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file performance_panel.cpp
 /// @brief PerformancePanel implementation — ImGui dashboard with tabs.
 #include "editor/panels/performance_panel.h"

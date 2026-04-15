@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file entity.h
 /// @brief Entity class — a named object in the scene with components and transform.
 #pragma once

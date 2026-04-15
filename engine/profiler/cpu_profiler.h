@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file cpu_profiler.h
 /// @brief RAII scope-based CPU profiler with hierarchical flat array storage.
 #pragma once

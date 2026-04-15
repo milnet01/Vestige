@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file path_tool.h
 /// @brief Interactive spline-based path/road creation tool.
 #pragma once

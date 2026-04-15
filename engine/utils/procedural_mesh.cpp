@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file procedural_mesh.cpp
 /// @brief ProceduralMeshBuilder implementation — generates architectural geometry.
 #include "utils/procedural_mesh.h"

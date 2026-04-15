@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file facial_presets.cpp
 /// @brief Built-in emotion preset data based on FACS Action Unit research.
 

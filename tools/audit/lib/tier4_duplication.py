@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Anthony Schemel
+# SPDX-License-Identifier: MIT
+
 """Tier 4: Code duplication detection using Rabin-Karp rolling hash."""
 
 from __future__ import annotations

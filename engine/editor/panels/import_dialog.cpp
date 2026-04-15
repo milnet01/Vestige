@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file import_dialog.cpp
 /// @brief ImportDialog implementation — file browser + import settings modal.
 #include "editor/panels/import_dialog.h"

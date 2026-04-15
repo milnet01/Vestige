@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file test_biome_preset.cpp
 /// @brief Unit tests for BiomePreset and BiomeLibrary.
 #include <gtest/gtest.h>

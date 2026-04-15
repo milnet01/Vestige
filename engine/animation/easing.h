@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file easing.h
 /// @brief Easing functions for animation (Penner equations + cubic bezier).
 #pragma once

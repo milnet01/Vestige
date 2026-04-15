@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file lip_sync.h
 /// @brief Lip sync player: pre-baked track playback and real-time amplitude fallback.
 #pragma once

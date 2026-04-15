@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file selection.cpp
 /// @brief Selection implementation.
 #include "editor/selection.h"

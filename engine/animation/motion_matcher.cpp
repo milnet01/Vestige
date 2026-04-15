@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file motion_matcher.cpp
 /// @brief Runtime motion matching driver implementation.
 

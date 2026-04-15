@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file formula_preset.cpp
 /// @brief Formula preset implementation with built-in environment/style presets.
 #include "formula/formula_preset.h"

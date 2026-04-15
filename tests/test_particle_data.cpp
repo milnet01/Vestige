@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file test_particle_data.cpp
 /// @brief Unit tests for the ParticleData SoA container and ParticleEmitterComponent.
 #include "scene/particle_emitter.h"

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file easing.cpp
 /// @brief Easing function implementations (Robert Penner equations + cubic bezier).
 #include "animation/easing.h"

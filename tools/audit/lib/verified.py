@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Anthony Schemel
+# SPDX-License-Identifier: MIT
+
 """Finding verification via .audit_verified file.
 
 D3 (2.5.0): Verification is a human-review signal. When a maintainer reviews

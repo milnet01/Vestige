@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file lut_loader.h
 /// @brief Binary LUT loader for the Formula Pipeline.
 ///

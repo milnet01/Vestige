@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file wall_tool.cpp
 /// @brief WallTool implementation -- interactive two-click wall placement.
 #include "editor/tools/wall_tool.h"

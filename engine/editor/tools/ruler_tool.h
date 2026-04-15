@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file ruler_tool.h
 /// @brief Two-click measurement tool for the editor viewport.
 #pragma once

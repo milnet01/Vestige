@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file editor_camera.cpp
 /// @brief Editor orbit camera implementation.
 #include "editor/editor_camera.h"

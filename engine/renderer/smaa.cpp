@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file smaa.cpp
 /// @brief SMAA implementation with runtime lookup texture generation.
 #include "renderer/smaa.h"

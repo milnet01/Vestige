@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file bloom_downsample.frag.glsl
 /// @brief Bloom mip-chain downsampling with Karis average to suppress firefly artifacts.
 #version 450 core

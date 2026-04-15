@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file texture.h
 /// @brief OpenGL texture loading and management.
 #pragma once

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file recent_files.h
 /// @brief Manages a persistent list of recently opened scene files.
 #pragma once

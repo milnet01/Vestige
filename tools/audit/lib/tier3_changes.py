@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Anthony Schemel
+# SPDX-License-Identifier: MIT
+
 """Tier 3: Git diff analysis — changed files, function signatures, subsystem mapping, diff-aware security scanning."""
 
 from __future__ import annotations

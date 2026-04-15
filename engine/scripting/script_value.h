@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file script_value.h
 /// @brief Type-erased value type for visual scripting data pins.
 #pragma once

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file cutout_tool.cpp
 /// @brief CutoutTool implementation -- cut door/window openings in walls.
 #include "editor/tools/cutout_tool.h"

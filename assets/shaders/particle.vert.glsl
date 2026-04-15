@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file particle.vert.glsl
 /// @brief Billboard particle vertex shader — camera-facing quads via instancing.
 #version 450 core

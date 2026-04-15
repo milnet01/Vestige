@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file paint_foliage_command.h
 /// @brief Undo command for foliage paint/erase strokes.
 #pragma once

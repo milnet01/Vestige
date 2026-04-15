@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Anthony Schemel
+# SPDX-License-Identifier: MIT
+
 """Tests for lib.tier5_improvements — TECHNOLOGY_SIGNATURES, detect_technologies, get_improvement_queries."""
 
 from __future__ import annotations

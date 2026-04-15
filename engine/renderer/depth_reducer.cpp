@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file depth_reducer.cpp
 /// @brief GPU depth buffer min/max reduction implementation.
 #include "renderer/depth_reducer.h"

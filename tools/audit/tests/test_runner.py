@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Anthony Schemel
+# SPDX-License-Identifier: MIT
+
 """Tests for lib.runner — AuditRunner orchestration, progress events, cancellation."""
 
 from __future__ import annotations

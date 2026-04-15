@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file tree_mesh.frag.glsl
 /// @brief Tree mesh LOD fragment shader — outputs instanced vertex color with crossfade alpha discard.
 #version 450 core

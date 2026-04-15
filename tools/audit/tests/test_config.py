@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Anthony Schemel
+# SPDX-License-Identifier: MIT
+
 """Tests for lib.config — load_config, Config accessors, _detect_tools."""
 
 from __future__ import annotations

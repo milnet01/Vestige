@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file history_panel.cpp
 /// @brief History panel implementation — scrollable undo/redo list.
 #include "editor/panels/history_panel.h"

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file smaa_neighborhood.frag.glsl
 /// @brief SMAA neighborhood blending — final pass, blends pixels using computed weights.
 #version 450 core

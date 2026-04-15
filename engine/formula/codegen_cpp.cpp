@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file codegen_cpp.cpp
 /// @brief C++ code generator implementation.
 #include "formula/codegen_cpp.h"

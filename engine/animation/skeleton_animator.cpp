@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file skeleton_animator.cpp
 /// @brief SkeletonAnimator component implementation.
 #include "animation/skeleton_animator.h"

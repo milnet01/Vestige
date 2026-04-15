@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file curve_fitter.h
 /// @brief Levenberg-Marquardt curve fitter for formula coefficients.
 ///
