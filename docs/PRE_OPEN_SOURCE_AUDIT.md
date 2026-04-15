@@ -166,16 +166,15 @@ Some docs were written for an internal audience and may leak private context or 
 - [x] ~~`.pre-commit-config.yaml` — verify all hooks are public / installable by contributors~~ ✅ Done (2026-04-15). All three hooks are `repo: local` and invoke the committed `scripts/check_changelog_pair.sh` (confirmed present via `git ls-files`). No external pre-commit hook repos → no network access to third-party hook sources required at install time. Dangling "(AUDIT.md §M27 / FIXPLAN I4)" citation scrubbed from the file header and replaced with a plain-English explanation plus an explicit note that the config is fork-portable.
 - [x] ~~Confirm `build/` is gitignored~~ ✅ Done — `.gitignore:2`: `build/`.
 - [ ] **Add a CMake version matrix to CI.** Non-blocking follow-up — deferred to post-launch polish. The engine's `external/CMakeLists.txt` uses a SOURCE_SUBDIR trick to populate FetchContent deps without invoking their upstream `add_subdirectory`. The trick is stable today but depends on CMake FetchContent semantics that periodically tighten (CMP0169 already bit us once on `FetchContent_Populate`). Once the launch is settled, extend the `strategy.matrix` to include `cmake: ["3.20", "3.28", "latest"]` so silent regressions surface in a PR check rather than a downstream user's report. Migration paths if the SOURCE_SUBDIR pattern ever breaks are documented in the `IF THIS BREAKS` block at the top of `external/CMakeLists.txt`. Not a launch blocker — the first downstream report on a new CMake version will still be fast to triage given the `IF THIS BREAKS` notes.
-- [ ] **Remove `-DVESTIGE_FETCH_ASSETS=OFF` from `.github/workflows/ci.yml`** when
-      `milnet01/VestigeAssets` goes public alongside `Vestige`. Temporary
-      flag added 2026-04-15 after CI started failing with
-      `fatal: could not read Username for 'https://github.com'` on the
-      unauthenticated clone of the still-private sibling repo. The engine
-      supports the off-state (top-level `CMakeLists.txt:87` falls back to
-      in-engine assets only), so build + ctest coverage is preserved in
-      the meantime. See the comment on the `Configure` step in
-      `linux-build-test` for the full rationale. Pair this flip with the
-      "flip both repos public" item in §11.
+- [ ] **Flip `-DVESTIGE_FETCH_ASSETS=OFF` to `ON` in `.github/workflows/ci.yml`** when
+      `milnet01/VestigeAssets` eventually goes public (~v1.0.0, after its
+      final redistributability audit). The flag now matches the engine's
+      **default** (`OFF`, set in `external/CMakeLists.txt` at launch
+      2026-04-15) — it's no longer a temporary stopgap, just an explicit
+      assertion that CI is testing the fresh-public-clone path. When
+      VestigeAssets goes public, flip the engine default back to `ON` in
+      `external/CMakeLists.txt` and remove the CI override in the same
+      commit so CI exercises the full asset pipeline again.
 
 ---
 
@@ -190,7 +189,7 @@ Some docs were written for an internal audience and may leak private context or 
 
 ## 10. Pre-Launch Dry Run
 
-- [ ] Clone the repo into a fresh directory with nothing else around and try to build it from scratch, following only the README. This catches "works on your machine" dependencies. **Status:** partially covered by CI (ubuntu-24.04 runners do a clean-clone configure + build + ctest on every push, currently green). A true fresh-box build — different distro, different compiler, cold FetchContent cache — is still recommended before go-live. Can be expedited by cloning from the local path (`git clone /mnt/Storage/Scripts/Linux/3D_Engine /tmp/vestige-dry-run && cd /tmp/vestige-dry-run && cmake -B build -S . -DVESTIGE_FETCH_ASSETS=OFF && cmake --build build -j && ctest --test-dir build`). Deferred to the maintainer-side pre-launch window.
+- [x] ~~Clone the repo into a fresh directory with nothing else around and try to build it from scratch, following only the README.~~ ✅ Done (2026-04-15). Cloned `/mnt/Storage/Scripts/Linux/3D_Engine` into `/tmp/vestige-dry-run` and ran the README's exact build + test commands (`cmake -B build -S . -DCMAKE_BUILD_TYPE=Release && cmake --build build -j && ctest --test-dir build`). Configure 81 s (cold FetchContent), build 100%, ctest 1770/1770 passed (1 expected skip). No "works-on-my-machine" leaks — nothing outside the tracked tree was needed. This validates the README instructions verbatim. A cross-distro build remains advisable post-flip; CI covers ubuntu-24.04 cleanly.
 - [ ] Have a friend or second Claude Code session do the same clean-clone build.
 - [x] ~~Open the repo in a fresh editor window and grep the project's own directory for: your full name, home address, personal phone, any credential-looking strings. Last chance.~~ ✅ Done (2026-04-15) — final sweep:
   - `Anthony Schemel` — 253 hits across 250 files; all MIT copyright headers (`// Copyright (c) 2026 Anthony Schemel`) in shader/engine/test/tool sources, plus the intentional disclosures in `README.md`, `LICENSE`, and this checklist. No other personal references (no home address, no phone, no license plates).
@@ -217,9 +216,9 @@ Some docs were written for an internal audience and may leak private context or 
   All three must succeed cleanly. **Helper available:** `scripts/final_launch_sweep.sh` runs all three steps in order, aborts on first failure, respects `NO_COLOR`, and supports `SKIP_GITLEAKS` / `SKIP_AUDIT` / `SKIP_BUILD` env overrides for iterative re-runs. Checked in 2026-04-15.
 
   **Launch-mode audit gating (default).** The audit tool always returns non-zero when *any* findings exist — that's correct for a developer workflow ("eyeball every new finding") but wrong for a launch sweep whose job is "are there regressions vs the last known-clean baseline?" Step 2 therefore runs in launch-mode by default: it parses the `docs/trend_snapshot_*.json` file the audit just wrote, finds the most recent *comparable* prior snapshot (same tier set, determined by matching `by_category` keys), and aborts only on: (a) build break, (b) more tests failing than before, (c) CRITICAL/HIGH finding count increased since the comparable prior. Absolute counts are surfaced as advisories for human review. Strict "any-findings fails" behaviour is available via `STRICT_MODE=1` if needed.
-- [ ] **Tag a pre-release** (`v0.1.0-preview` or similar) on `Vestige` AND `VestigeAssets` together — the engine's `external/CMakeLists.txt` currently pins `VestigeAssets v0.1.0`; bump both repos in lockstep.
-- [ ] **Flip both `Vestige` AND `VestigeAssets` from private to public in GitHub Settings.** Must happen together so the engine's CMake `FetchContent` works on fresh clones without authentication. This is the actual "go-live" moment.
-- [ ] Verify a fresh clone (`git clone https://github.com/milnet01/Vestige.git`) on a clean machine still configures, builds, and runs the demo scene.
+- [ ] **Tag a pre-release** on `Vestige` matching the engine VERSION at launch (`v0.1.3-preview` as of 2026-04-15). The sibling `VestigeAssets` repo is **not** tagged or flipped now — it stays private until ~v1.0.0 after its own redistributability audit completes. The engine's default `VESTIGE_FETCH_ASSETS=OFF` (set in `external/CMakeLists.txt`) ensures fresh public clones build cleanly without the sibling repo.
+- [ ] **Flip `Vestige` from private to public in GitHub Settings.** Single-repo flip. When VestigeAssets goes public later, flip the engine's `VESTIGE_FETCH_ASSETS` default back to `ON` in the same commit that drops the CI override — see the "flip flag" item in §8.
+- [ ] Verify a fresh clone (`git clone https://github.com/milnet01/Vestige.git`) on a clean machine still configures, builds, and runs the demo scene. The default build path (`VESTIGE_FETCH_ASSETS=OFF`) uses only in-engine assets and should work without authentication.
 - [ ] Announce on whatever channel you chose. Pin the launch issue / discussion thread.
 
 ---

@@ -9,6 +9,32 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### Changed — 2026-04-15 launch-prep: `VESTIGE_FETCH_ASSETS` default → OFF
+
+- **Default changed** in `external/CMakeLists.txt`: fresh clones no
+  longer attempt to pull the `milnet01/VestigeAssets` CC0 asset pack.
+  The sibling repo stays private until ~v1.0.0 pending a final
+  redistributability audit of every 4K texture and `.blend.zip`
+  archive. The engine's demo scene renders correctly against the
+  in-engine 2K CC0 set shipped in `assets/` (Poly Haven plank /
+  brick / red_brick, glTF sample models, Arimo font) — no asset
+  download is required. Maintainers with access to the private
+  sibling repo can opt in with `-DVESTIGE_FETCH_ASSETS=ON`.
+
+- Public docs updated to reflect the new default and the
+  private-assets-repo status: `README.md`, `ASSET_LICENSES.md`,
+  `SECURITY.md`, `THIRD_PARTY_NOTICES.md`, `ROADMAP.md`. CI comments
+  in `.github/workflows/ci.yml` rewritten: the `-DVESTIGE_FETCH_ASSETS=OFF`
+  flag is now an explicit default-match (testing the fresh-public-clone
+  path), not a temporary stopgap.
+
+- Launch-sweep script (`scripts/final_launch_sweep.sh`) end-of-run
+  message updated: no "remove the flag" step, single-repo flip only.
+
+When VestigeAssets later goes public the flip is a single commit
+that sets the default back to `ON`, drops the explicit flag from
+CI, and re-links the sibling repo in `README.md`.
+
 ### Changed — 2026-04-15 launch-prep: Timer → `std::chrono::steady_clock`
 
 - **`engine/core/timer.cpp` no longer depends on GLFW.** Switched the

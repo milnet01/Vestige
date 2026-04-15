@@ -396,21 +396,25 @@ FetchContent_MakeAvailable(googletest)
 # VestigeAssets — large CC0 textures (Poly Haven 4K diffuse JPGs,
 # .blend.zip archives, extracted blend dirs). Split out from the
 # engine repo to keep clones small. See ASSET_LICENSES.md and the
-# top-level CMakeLists.txt copy_assets target — it merges this
-# repo's assets/ into the build output alongside the in-engine
-# small assets.
+# top-level CMakeLists.txt copy_assets target — when enabled, it
+# merges this repo's assets/ into the build output alongside the
+# in-engine small assets.
 #
 # The repo has no CMakeLists.txt — Populate (not MakeAvailable) so
 # CMake just clones it without trying to add_subdirectory. The
 # clone path is exposed as ${vestige_assets_SOURCE_DIR}.
 #
-# Set VESTIGE_FETCH_ASSETS=OFF to skip (e.g., offline builds, or
-# when the assets repo is unreachable). The engine still builds
-# and runs; the demo simply uses the smaller in-engine 2K
-# variants and falls back to flat-colour materials where the 4K
-# files would normally be.
+# Default OFF while milnet01/VestigeAssets is still private
+# (pending full CC0 provenance re-audit before the v1.0.0 release).
+# Fresh public clones build cleanly without authentication: the
+# engine's demo scene uses the smaller in-engine 2K CC0 textures
+# (Poly Haven plank_flooring_04, the glTF sample models, Arimo font)
+# and falls back to flat-colour materials where the 4K variants
+# would normally be. Set VESTIGE_FETCH_ASSETS=ON explicitly (and
+# authenticate to the private repo) to opt in; once VestigeAssets
+# goes public the default will flip back to ON.
 option(VESTIGE_FETCH_ASSETS
-    "Pull large CC0 assets from milnet01/VestigeAssets via FetchContent" ON)
+    "Pull large CC0 assets from milnet01/VestigeAssets via FetchContent (private until ~v1.0.0)" OFF)
 if(VESTIGE_FETCH_ASSETS)
     FetchContent_Declare(
         vestige_assets

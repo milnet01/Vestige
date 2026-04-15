@@ -95,9 +95,12 @@ Source: <https://github.com/KhronosGroup/glTF-Sample-Assets>
   **CC0** — no attribution required.
 - `label_[1-4].png` — engine-authored. **MIT** (matches engine LICENSE).
 
-The larger 4K Poly Haven assets pulled in via `FetchContent` from the
-`VestigeAssets` repo are also CC0; per-asset attribution lives in
-`VestigeAssets/ASSET_LICENSES.md`.
+The larger 4K Poly Haven assets that will eventually ship in the
+separate `VestigeAssets` repo are also CC0; per-asset attribution will
+live in `VestigeAssets/ASSET_LICENSES.md`. That repo is private at
+launch time and is expected to go public closer to v1.0.0 after a
+final redistributability audit — the engine builds and runs cleanly
+without it (see `VESTIGE_FETCH_ASSETS` in `external/CMakeLists.txt`).
 
 ---
 

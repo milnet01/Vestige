@@ -100,10 +100,17 @@ cmake --build build -j
 
 The first configure pulls third-party dependencies via CMake
 `FetchContent` (GLFW, GLM, ImGui, Jolt, OpenAL Soft, FreeType, and
-others — see [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)) plus
-the shared CC0 asset pack from
-[`VestigeAssets`](https://github.com/milnet01/VestigeAssets). Plan for
-several minutes on a cold build; warm builds are incremental.
+others — see [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)). Plan
+for several minutes on a cold build; warm builds are incremental.
+
+The engine ships with a small set of CC0 demo assets in `assets/`
+(Poly Haven 2K textures, glTF sample models, Arimo font) — no extra
+asset download is required for the demo scene. A larger separate
+pack of 4K CC0 textures and blend files will land in a sibling repo
+(`milnet01/VestigeAssets`) closer to the v1.0.0 release, once every
+asset has been re-audited for full redistributability. Until then
+`VESTIGE_FETCH_ASSETS` in `external/CMakeLists.txt` defaults to OFF
+and can be ignored.
 
 ### Run the tests
 

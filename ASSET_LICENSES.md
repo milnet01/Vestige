@@ -12,8 +12,11 @@ shipped in this repo carry their own licenses, listed below.
 > tabernacle content have been removed from the public repo (see
 > `.gitignore`). The large CC0 assets (Poly Haven 4K textures,
 > `.blend.zip` files, extracted blend dirs) have been migrated to
-> the **separate `VestigeAssets` repo** and are pulled in via CMake
-> `FetchContent` at configure time. See
+> the **separate `VestigeAssets` repo**, which stays private until
+> ~v1.0.0 pending a final redistributability audit of every asset.
+> The engine's `external/CMakeLists.txt` exposes `VESTIGE_FETCH_ASSETS`
+> (default OFF) to opt in when available. Fresh public clones build
+> cleanly without it. See
 > [`docs/PRE_OPEN_SOURCE_AUDIT.md`](docs/PRE_OPEN_SOURCE_AUDIT.md) §4.
 
 ---
@@ -82,7 +85,8 @@ references any Texturelabs or everytexture files: the **Gold** block
 renders as pure PBR (metallic/roughness albedo, no diffuse texture),
 the **Wood** block uses the CC0 Poly Haven `plank_flooring_04` set
 already shipped in the repo, and the **ground** renders untextured
-grey until a CC0 ground material lands via `VestigeAssets`.
+grey until a CC0 ground material lands via `VestigeAssets` (which
+goes public closer to v1.0.0 — see the status box at the top).
 
 ---
 
@@ -113,10 +117,17 @@ grey until a CC0 ground material lands via `VestigeAssets`.
 5. ~~**Separate public assets repo**: migrate the large Poly Haven
    `.blend.zip` archives and 4K texture variants out of the engine
    repo to keep clone size manageable.~~ ✅ Done — created
-   `milnet01/VestigeAssets` (currently private), pulled in via CMake
-   `FetchContent` at configure time. The engine's `external/CMakeLists.txt`
-   pins `GIT_TAG v0.1.0`. Bump that pin in lockstep with VestigeAssets
-   tags. Both repos will go public together.
+   `milnet01/VestigeAssets`, pulled in via CMake `FetchContent` when
+   `VESTIGE_FETCH_ASSETS=ON`. The engine's `external/CMakeLists.txt`
+   pins `GIT_TAG v0.1.0`.
+
+   **Assets-repo visibility status:** still private as of the
+   engine's public launch. The final redistributability audit for
+   every 4K texture / `.blend.zip` archive happens closer to v1.0.0;
+   the engine's public fallback (the in-engine 2K CC0 set) keeps
+   fresh clones building and the demo rendering correctly without
+   the asset pack. Flip to public when the audit is complete and the
+   pin to update in lockstep with the tag.
 
 ---
 

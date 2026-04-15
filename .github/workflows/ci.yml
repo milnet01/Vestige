@@ -74,15 +74,14 @@ jobs:
             cmake-deps-${{ matrix.config }}-
 
       - name: Configure
-        # -DVESTIGE_FETCH_ASSETS=OFF: during open-source launch prep the
-        # milnet01/VestigeAssets sibling repo (large CC0 asset pack
-        # pulled via FetchContent) is still private, so an unauthenticated
-        # GitHub Actions clone fails with
-        #   `fatal: could not read Username for 'https://github.com'`.
-        # The engine supports the off-state out of the box (top-level
-        # CMakeLists.txt falls back to in-engine assets only), which is
-        # sufficient for build + ctest coverage. **Remove this flag**
-        # once both repos go public together — see PRE_OPEN_SOURCE_AUDIT.md §11.
+        # -DVESTIGE_FETCH_ASSETS=OFF matches the engine default while the
+        # milnet01/VestigeAssets sibling repo is still private. Passed
+        # explicitly in CI so the intent is clear when reading the
+        # workflow: we're testing the default fresh-public-clone build
+        # path, not an opt-in maintainer build with authenticated access
+        # to the private asset repo. Flip to ON when VestigeAssets goes
+        # public (targeted for ~v1.0.0 after the final redistributability
+        # audit — see external/CMakeLists.txt and ASSET_LICENSES.md).
         run: |
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=${{ matrix.config }} \
@@ -155,8 +154,8 @@ jobs:
 
       - name: Configure (for compile_commands.json)
         # -DVESTIGE_FETCH_ASSETS=OFF: see the comment on the Configure
-        # step in linux-build-test above. Must be removed in lockstep
-        # with VestigeAssets going public at launch.
+        # step in linux-build-test above. Flips to ON in lockstep with
+        # VestigeAssets going public (targeted for ~v1.0.0).
         run: |
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Debug \

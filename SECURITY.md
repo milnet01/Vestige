@@ -27,9 +27,9 @@ Out of scope for this contact channel:
   FreeType, OpenAL Soft, etc.) — report those to the respective upstream
   project. The engine's CVE-mitigation list lives in
   [`§5 Dependency Security`](#5-dependency-security) below.
-- Asset content in the separate
-  [`milnet01/VestigeAssets`](https://github.com/milnet01/VestigeAssets)
-  repo (CC0 asset pack — no executable code).
+- Asset content in the separate `milnet01/VestigeAssets` repo (CC0
+  asset pack, currently private pending a final redistributability
+  audit before ~v1.0.0; no executable code).
 - Issues in downstream projects built *with* Vestige.
 
 ### How to report
