@@ -2,6 +2,18 @@
 
 All notable changes to the Audit Tool are documented in this file.
 
+## [2.8.1] - 2026-04-15
+
+### Changed (open-source prep — self-referential path scrub)
+
+The 2.4.1 CHANGELOG entry that documented the `/mnt/Storage/...`
+scrub ironically quoted the literal path it was describing as
+removed, so a raw `grep '/mnt/Storage'` over the tree still hit in
+the remediation entry itself. Rewrote that bullet to describe the
+manual-audit-prompt reference generically. Doc-only — no runtime
+or behaviour change. Part of `docs/PRE_OPEN_SOURCE_AUDIT.md` §3
+(personal / machine-specific data sweep).
+
 ## [2.8.0] - 2026-04-15
 
 ### Improved (auto_config — CMake pinned-version extraction)
@@ -286,9 +298,9 @@ adding keys to `.audit_verified` (or use `--verified-add`). Existing
   and example code. No behaviour change — the runtime code in
   `web/app.py` was already portable via `AUDIT_ROOT.parent.parent`; only
   the trailing explanatory comment leaked the path.
-- `CHANGELOG.md`: rewrote the 2.4.0 `/mnt/Storage/Scripts/audit_prompt.md`
-  reference to describe the manual audit prompt generically, so the
-  historical entry no longer leaks the maintainer's filesystem layout.
+- `CHANGELOG.md`: rewrote the 2.4.0 manual-audit-prompt reference
+  generically, so the historical entry no longer leaks the
+  maintainer's filesystem layout.
 
 Part of the pre-open-source audit checklist (§3 Personal / Machine-Specific
 Data). See `docs/PRE_OPEN_SOURCE_AUDIT.md`.
