@@ -116,3 +116,7 @@ assets/textures/Texturelabs_*
 # private repo for commercial Steam release; not part of the open
 # engine.
 assets/textures/tabernacle/
+#
+# everytexture.com textures — license permits free personal/commercial
+# use but explicitly forbids redistribution. See ASSET_LICENSES.md.
+assets/textures/everytexture-com-stock-rocks-*/
