@@ -9,6 +9,36 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### Changed — 2026-04-15 launch-prep: Timer → `std::chrono::steady_clock`
+
+- **`engine/core/timer.cpp` no longer depends on GLFW.** Switched the
+  time source from `glfwGetTime()` to `std::chrono::steady_clock` via a
+  private `elapsedSecondsSince(origin)` helper. Public API is unchanged
+  — callers still see the same `update()` / `getDeltaTime()` /
+  `getFps()` / `getElapsedTime()` semantics. The only observable
+  behavioural difference is `getElapsedTime()`'s epoch: previously
+  "seconds since GLFW init", now "seconds since Timer construction".
+  The sole non-test caller (wind animation in `engine::render`) only
+  uses rate-of-change, so the epoch shift is invisible.
+
+- **`tests/test_timer.cpp` is now a pure unit test.** Removed
+  `glfwInit()` / `glfwTerminate()` from `SetUp`/`TearDown`. Added two
+  new tests: `ElapsedTimeAdvancesWithWallClock` (verifies monotonic
+  advance across a 10 ms `sleep_for`) and `FrameRateCapRoundTrip`
+  (verifies the uncapped/capped/uncapped setter round-trip).
+
+- **Root cause for the test-suite flakiness surfaced by
+  `scripts/final_launch_sweep.sh`.** `glfwInit()` pulled in
+  libfontconfig / libglib global caches, which LeakSanitizer flagged
+  as an 88-byte leak at process exit under parallel `ctest -j nproc`.
+  The test logic itself always passed, but the LSan leak tripped the
+  harness's exit code — giving flaky 1-3 test failures across
+  back-to-back sweep runs, which in turn cascaded into launch-sweep
+  "regressions" (`tests_failed` contributes to the audit HIGH count).
+  Removing the GLFW init removes the whole libglib/libfontconfig
+  lifecycle from `vestige_tests` (it was the only test that called
+  `glfwInit`). Five consecutive parallel runs now pass 100%.
+
 ### Fixed — 2026-04-13 post-audit follow-up
 
 - **§H19 SH grid irradiance was missing the /π conversion** — the *real*

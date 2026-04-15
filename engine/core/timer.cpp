@@ -2,10 +2,15 @@
 // SPDX-License-Identifier: MIT
 
 /// @file timer.cpp
-/// @brief Timer implementation using GLFW time functions.
+/// @brief Timer implementation using std::chrono::steady_clock.
+///
+/// Previously used `glfwGetTime()`, which forced every Timer unit test
+/// to `glfwInit()` / `glfwTerminate()` and pulled in libfontconfig /
+/// libglib global caches. Those caches trip LeakSanitizer on parallel
+/// ctest runs (the 88-byte libglib leak that made the launch sweep
+/// flaky). steady_clock removes the windowing-system dependency from
+/// the timing path entirely — Timer is now a pure utility.
 #include "core/timer.h"
-
-#include <GLFW/glfw3.h>
 
 #include <chrono>
 #include <thread>
@@ -13,8 +18,20 @@
 namespace Vestige
 {
 
+namespace
+{
+
+double elapsedSecondsSince(std::chrono::steady_clock::time_point origin)
+{
+    using namespace std::chrono;
+    return duration<double>(steady_clock::now() - origin).count();
+}
+
+} // namespace
+
 Timer::Timer()
-    : m_lastFrameTime(glfwGetTime())
+    : m_origin(Clock::now())
+    , m_lastFrameTime(0.0)
     , m_deltaTime(0.0f)
     , m_fps(0)
     , m_frameCount(0)
@@ -24,7 +41,7 @@ Timer::Timer()
 
 float Timer::update()
 {
-    double currentTime = glfwGetTime();
+    double currentTime = elapsedSecondsSince(m_origin);
     double rawDelta = currentTime - m_lastFrameTime;
     m_lastFrameTime = currentTime;
 
@@ -60,7 +77,7 @@ int Timer::getFps() const
 
 double Timer::getElapsedTime() const
 {
-    return glfwGetTime();
+    return elapsedSecondsSince(m_origin);
 }
 
 void Timer::setFrameRateCap(int fps)
@@ -84,14 +101,14 @@ void Timer::waitForFrameCap()
     // Hybrid sleep-then-spin for precision without burning 100% CPU.
     // Sleep while >1ms away, then spin-wait for the final sub-millisecond.
     double frameEnd = m_lastFrameTime + m_targetFrameTime;
-    double remaining = frameEnd - glfwGetTime();
+    double remaining = frameEnd - elapsedSecondsSince(m_origin);
     while (remaining > 0.001)
     {
         std::this_thread::sleep_for(std::chrono::microseconds(500));
-        remaining = frameEnd - glfwGetTime();
+        remaining = frameEnd - elapsedSecondsSince(m_origin);
     }
     // Final spin-wait for sub-millisecond precision
-    while (glfwGetTime() < frameEnd)
+    while (elapsedSecondsSince(m_origin) < frameEnd)
     {
         std::this_thread::yield();
     }

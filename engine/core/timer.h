@@ -5,10 +5,16 @@
 /// @brief Frame timing and FPS tracking.
 #pragma once
 
+#include <chrono>
+
 namespace Vestige
 {
 
 /// @brief Tracks frame timing, delta time, and frames per second.
+///
+/// Uses `std::chrono::steady_clock` internally so unit tests do not
+/// need a windowing/GL context. Monotonic — safe against wall-clock
+/// adjustments.
 class Timer
 {
 public:
@@ -40,12 +46,15 @@ public:
     void waitForFrameCap();
 
 private:
-    double m_lastFrameTime;
+    using Clock = std::chrono::steady_clock;
+
+    Clock::time_point m_origin;      ///< Reference point for all elapsed-time queries.
+    double m_lastFrameTime;          ///< Seconds since m_origin at the last update().
     float m_deltaTime;
     int m_fps;
     int m_frameCount;
     double m_fpsTimer;
-    int m_frameRateCap = 0;         ///< Target FPS (0 = uncapped)
+    int m_frameRateCap = 0;          ///< Target FPS (0 = uncapped)
     double m_targetFrameTime = 0.0;  ///< 1.0 / cap (0 when uncapped)
 };
 
