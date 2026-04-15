@@ -46,11 +46,11 @@ Everything else depends on these choices. Do not proceed past Section 1 until th
   - `tools/audit/CHANGELOG.md`
 
   Replace with environment variables, config entries, or relative paths. User-specific values (asset library location, scratch dirs) must be read from a per-user config, not baked into code.
-- [ ] Grep for personal identifiers: full name, personal email (beyond the Git author name you've already chosen to publish), home address, phone number, license plates, house photos in committed screenshots.
-- [ ] Review `imgui.ini` and similar editor layout files — these can contain window paths, recent-file lists. Decide whether to commit a clean default or `.gitignore` them.
-- [ ] Review committed screenshots/recordings for incidentally captured personal info (desktop notifications, browser tabs, system tray apps).
-- [ ] Check `.clang-format`, CMake presets, and IDE configs for machine-specific paths.
-- [ ] Review `CLAUDE.md` and any other AI-assistant memory files — these often contain project context that's fine to publish, but occasionally contain private notes. Skim before shipping.
+- [x] ~~Grep for personal identifiers~~ ✅ Done (2026-04-15). Sweep: `Anthony Schemel` — appears only in MIT copyright headers (703 files, intentional, public) and in this checklist. `aant.schemel@gmail.com` — appears only in `SECURITY.md` (public disclosure address, intentional) and this checklist. No home address, phone, license plates. `/home/ants` — zero matches. `C:\Users\` — zero matches. `/mnt/Storage` — one self-referential leak found in `tools/audit/CHANGELOG.md` §2.4.1 (the "path scrub" entry ironically quoted the literal path it described as removed); scrubbed in audit tool 2.8.1 (commit `838d5b2`).
+- [x] ~~Review `imgui.ini` and similar editor layout files~~ ✅ Done (2026-04-15) — `imgui.ini` is `.gitignore`d (line 44) and confirmed untracked via `git ls-files`. `NodeEditor.json` likewise ignored (line 47). No other layout files found.
+- [x] ~~Review committed screenshots/recordings for incidentally captured personal info~~ ✅ Done (2026-04-15) — `git ls-files` shows no `.png`/`.jpg`/`.mp4`/`.gif` screenshots or recordings are tracked. Contributor screenshots live in `~/Pictures/Screenshots/` per maintainer convention (never committed).
+- [x] ~~Check `.clang-format`, CMake presets, and IDE configs for machine-specific paths~~ ✅ Done (2026-04-15). `.clang-format` — standard Google-base config with Vestige overrides, no paths. No `CMakePresets.json` in the repo. No `.vscode/`, `.idea/`, or `*.code-workspace` committed (gitignore lines 10-11).
+- [x] ~~Review `CLAUDE.md` and any other AI-assistant memory files~~ ✅ Done (2026-04-15) — see §7. Clean for public; no action needed.
 
 ---
 
@@ -102,13 +102,13 @@ Everything else depends on these choices. Do not proceed past Section 1 until th
 
 ## 5. Third-Party Dependencies and Attribution
 
-- [ ] List every dependency pulled in via `CMakeLists.txt` / `FetchContent` (GLFW, GLM, ImGui, Jolt, OpenAL, FreeType, etc.). Versions pinned.
-- [ ] For each dependency, capture its license in `THIRD_PARTY_NOTICES.md`. Most are MIT / BSD / zlib (compatible with any permissive engine license), but verify — especially:
-  - FreeType (FTL or GPLv2 dual-license — choose which one applies)
-  - Jolt Physics (MIT)
-  - OpenAL-Soft (LGPL — dynamic linking is fine; static linking has implications)
-- [ ] Confirm no GPL/AGPL dependencies are statically linked. LGPL is OK via dynamic linking only.
-- [ ] If you use any code snippets copied from Stack Overflow, tutorials, or papers — attribute them. MIT-licensed SO content can be used with attribution; CC-BY-SA content (some docs) cannot be embedded in an MIT project without care.
+- [x] ~~List every dependency pulled in via `CMakeLists.txt` / `FetchContent`~~ ✅ Done — 15 FetchContent deps + 3 vendored sources (glad / stb / dr_libs) tabulated in [`THIRD_PARTY_NOTICES.md`](../THIRD_PARTY_NOTICES.md). All `GIT_TAG` / URL versions pinned in `external/CMakeLists.txt`.
+- [x] ~~For each dependency, capture its license~~ ✅ Done in `THIRD_PARTY_NOTICES.md`. Special cases resolved:
+  - **FreeType** — FreeType Project License (BSD-style) explicitly chosen over the GPLv2 dual-licence alternative; version `VER-2-13-3` pinned.
+  - **Jolt Physics** — MIT, version `v5.2.0`.
+  - **OpenAL Soft** — LGPL v2.1, version `1.24.1`, linked **dynamically** (`external/CMakeLists.txt:352-365` uses the default shared-lib target; `engine/CMakeLists.txt:288` links `OpenAL::OpenAL`). No `LIBTYPE=STATIC` override anywhere.
+- [x] ~~Confirm no GPL/AGPL dependencies are statically linked.~~ ✅ Done — no GPL/AGPL deps in the set. FreeType is BSD-style; OpenAL is LGPL dynamic. `grep -n 'GPL\|AGPL'` across `CMakeLists.txt`, `external/CMakeLists.txt`, `THIRD_PARTY_NOTICES.md`, `SECURITY.md` returns only the explanatory notes (OpenAL-Soft LGPL comment, FreeType-not-GPLv2 note).
+- [x] ~~If you use any code snippets copied from Stack Overflow, tutorials, or papers — attribute them.~~ ✅ Done — searched for `stackoverflow`, `stack overflow`, `StackOverflow` across the owned tree. Four hits, none are copied code: `tests/test_scripting.cpp:1977` ("stack overflow" as a CS term in a recursion-limit test comment); `tools/audit/lib/tier5_research.py:38` and `tools/audit/IMPROVEMENTS_FROM_*.md:95` (listing `stackoverflow.com` as a trusted search domain for the CVE-research tier); `external/dr_libs/dr_wav.h` (vendored upstream library, carries its own licence). No SO snippets, tutorial code, or paper algorithms that would require CC-BY-SA attribution.
 
 ---
 
@@ -146,10 +146,10 @@ Everything else depends on these choices. Do not proceed past Section 1 until th
 
 Some docs were written for an internal audience and may leak private context or be confusing to outsiders. Review each:
 
-- [ ] `CLAUDE.md` — decide whether to keep as-is, rewrite for public audience, or move to a private branch. (Signals "AI-assisted development" which some contributors will judge either way.)
-- [ ] `AUDIT.md`, `AUDIT_STANDARDS.md`, `AUDIT_TOOL_AND_WORKBENCH_IMPROVEMENTS.md`, `DISCOVERY.md`, `FIXPLAN.md` — strong internal-planning flavor. Decide: publish (shows rigor), move to `docs/internal/` with a note, or omit.
-- [ ] `docs/AUTOMATED_AUDIT_REPORT_*.md` files — timestamped internal reports. These **should probably be gitignored going forward** and not published. Historical ones can stay if clean.
-- [ ] `docs/*_RESEARCH.md` — research notes. Usually fine to publish; review for anything cited under fair-use that wouldn't survive redistribution.
+- [x] ~~`CLAUDE.md` — decide whether to keep as-is, rewrite for public audience, or move to a private branch.~~ ✅ Done (2026-04-15) — skimmed and kept as-is. Covers tech stack, hardware specs, performance targets, architecture pointer, key rules, and coding standards summary. No private notes, no secrets. The AI-collaboration norm is already publicly documented in `CONTRIBUTING.md` § AI-assisted contributions.
+- [x] ~~`AUDIT.md`, `AUDIT_TOOL_AND_WORKBENCH_IMPROVEMENTS.md`, `DISCOVERY.md`, `FIXPLAN.md` — strong internal-planning flavor.~~ ✅ Done (2026-04-15) — **maintainer decision: remove**. Previous audits performed against the codebase are not for the public and have nothing to do with downstream users of the engine. All "previous-audit" docs removed from tracking; future ones caught by `.gitignore` patterns. Process/standards docs kept (`AUDIT_STANDARDS.md`, `tools/audit/AUDIT_TOOL_STANDARDS.md`).
+- [x] ~~`docs/AUTOMATED_AUDIT_REPORT_*.md` files — timestamped internal reports.~~ ✅ Done (2026-04-15) — same decision as above. Automated-run snapshots (both `.md` and `.json` variants) `.gitignore`d; the JSON result files additionally leaked absolute filesystem paths, which is now blocked at the tracking layer. Historical `.md` snapshots were never tracked in the first place (confirmed via `git ls-files`).
+- [x] ~~`docs/*_RESEARCH.md` — research notes.~~ ✅ Done (2026-04-15) — kept as-is. These are design rationale documents (e.g. `CLOTH_SIMULATION_RESEARCH.md`, `BVH_COLLISION_RESEARCH.md`) that cite upstream papers and tutorials; they help explain *why* subsystems are built the way they are. Spot-checked — citations are standard fair-use-style references (links to papers / docs), not embedded copyrighted content.
 - [ ] `EXPERIMENTAL.md` — fine to publish if it describes what the engine can/can't do; scrub if it describes unreleased commercial plans.
 - [ ] `ROADMAP.md` — great to publish; verify the **Open-Source Release** section still reflects the current licensing choice (see §1).
 

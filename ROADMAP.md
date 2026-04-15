@@ -826,7 +826,7 @@ Each template configures: camera type/constraints, physics dimensionality, defau
 - [x] **Phase 9E-2:** ScriptCustomEvent for PublishEvent ↔ OnCustomEvent round-trip with name filtering
 - [x] **Phase 9E-2:** 29 new unit tests — registration, math, vector, boolean, comparison, flow control, latent scheduling, and end-to-end EventBus bridge delivery (70 registered node types total)
 - [ ] Node graph renderer (imgui-node-editor integration) — Phase 9E-3
-  - Step 4 canvas + File-menu are code-complete; the 2026-04-13 audit fixed the shutdown SEGV (AUDIT.md §H16) by routing `Config::SaveSettings`/`LoadSettings` through a shutdown-gated callback so `ed::DestroyEditor` no longer touches torn-down ImGui state. Settings persistence re-enabled at `~/.config/vestige/NodeEditor.json`. **Runtime verification pending**: launch the editor, open + edit the script panel, close the editor, confirm clean shutdown + layout restore on next launch.
+  - Step 4 canvas + File-menu are code-complete; a shutdown SEGV was fixed by routing `Config::SaveSettings`/`LoadSettings` through a shutdown-gated callback so `ed::DestroyEditor` no longer touches torn-down ImGui state. Settings persistence re-enabled at `~/.config/vestige/NodeEditor.json`. **Runtime verification pending**: launch the editor, open + edit the script panel, close the editor, confirm clean shutdown + layout restore on next launch.
 - [ ] Graph compilation to executable logic (beyond expression trees)
 
 **Gameplay Scripting Nodes:**
@@ -844,7 +844,7 @@ Each template configures: camera type/constraints, physics dimensionality, defau
 - [ ] Output node with real-time curve preview (requires ImGui integration)
 - [ ] Drag-and-drop from PhysicsTemplates catalog into the node graph (requires UI)
 - [ ] Visual formula composition UI (ImGui node editor rendering)
-- [ ] **CONDITIONAL node type** (AUDIT.md §M10 follow-up). `ExprNode` supports ternary `if/then/else` but `NodeGraph::fromExpressionTree` currently drops it to `literal(0)` with a warning — round-trip from formula → node graph loses logic. Needs a dedicated branching node with 3 inputs (condition, then, else) and an inverse mapping in `toExpressionTree`. Low effort; unblocks PhysicsTemplates that use conditionals (e.g. saturation curves).
+- [ ] **CONDITIONAL node type**. `ExprNode` supports ternary `if/then/else` but `NodeGraph::fromExpressionTree` currently drops it to `literal(0)` with a warning — round-trip from formula → node graph loses logic. Needs a dedicated branching node with 3 inputs (condition, then, else) and an inverse mapping in `toExpressionTree`. Low effort; unblocks PhysicsTemplates that use conditionals (e.g. saturation curves).
 
 Prioritize basic event-to-action chains first. The formula node editor builds on the same node graph infrastructure. Advanced flow control and variable systems come later.
 
@@ -992,7 +992,7 @@ Cinematic and atmospheric post-processing for horror, drama, and stylized render
   - The Tabernacle's dyed linen curtains should glow softly when sunlight hits the exterior
   - Fast approximation: pre-integrated skin/fabric BRDF lookup (no ray marching needed)
 - [ ] Screen-space global illumination (SSGI) — real-time dynamic indirect light
-- [ ] **Motion vectors from geometry pass via MRT** (AUDIT.md §H15 follow-up). The 2026-04-13 audit added a per-object overlay pass that re-renders opaque geometry after the full-screen camera-motion pass with per-draw `u_model` / `u_prevModel` matrices (`assets/shaders/motion_vectors_object.{vert,frag}.glsl`). This fixes rigid-body TAA ghosting but re-draws every opaque item. Cleaner: emit motion vectors directly from the main scene pass via an MRT attachment (RG16F motion buffer alongside the HDR color target) and drop the overlay pass. Must also handle skinned and morph-target meshes — currently those fall through to rigid-body motion only, which undershoots by the animation delta. Prerequisite for correct TAA + FSR 2.x on any content with animated characters.
+- [ ] **Motion vectors from geometry pass via MRT.** Today the renderer uses a per-object overlay pass that re-renders opaque geometry after the full-screen camera-motion pass with per-draw `u_model` / `u_prevModel` matrices (`assets/shaders/motion_vectors_object.{vert,frag}.glsl`). This fixes rigid-body TAA ghosting but re-draws every opaque item. Cleaner: emit motion vectors directly from the main scene pass via an MRT attachment (RG16F motion buffer alongside the HDR color target) and drop the overlay pass. Must also handle skinned and morph-target meshes — currently those fall through to rigid-body motion only, which undershoots by the animation delta. Prerequisite for correct TAA + FSR 2.x on any content with animated characters.
 
 ### Fog, Mist, and Volumetric Lighting
 - [ ] Distance fog (linear, exponential, exponential-squared) — basic depth-based fog with configurable color and density

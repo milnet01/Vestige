@@ -105,6 +105,29 @@ id_ed25519
 .audit_suppress.local
 .audit_verified.local
 
+# Audit artefacts — see docs/PRE_OPEN_SOURCE_AUDIT.md §7.
+# Audit-session outputs (findings lists, discovery logs, fix plans,
+# automated-run snapshots) are local to the maintainer's workflow and
+# aren't shipped in the public repo. Automated JSON result files embed
+# absolute filesystem paths from the run machine, which would leak the
+# maintainer's layout if published; the .md snapshots are per-run and
+# superseded by each subsequent run.
+#
+# Process/standards docs stay tracked (AUDIT_STANDARDS.md,
+# tools/audit/AUDIT_TOOL_STANDARDS.md, tools/audit/README.md, the audit
+# tool source itself). docs/PRE_OPEN_SOURCE_AUDIT.md is the active
+# open-source launch checklist and stays tracked.
+/AUDIT.md
+/AUDIT_TOOL_AND_WORKBENCH_IMPROVEMENTS.md
+/DISCOVERY.md
+/FIXPLAN.md
+docs/AUDIT_[0-9]*.md
+docs/CODE_AUDIT_REPORT.md
+docs/PHASE*_AUDIT*.md
+docs/AUTOMATED_AUDIT_REPORT*.md
+docs/AUTOMATED_AUDIT_REPORT*.json
+tools/audit/IMPROVEMENTS_FROM_*.md
+
 # Non-redistributable assets — kept locally for the maintainer's use,
 # excluded from the public repo. See docs/PRE_OPEN_SOURCE_AUDIT.md §4.
 #

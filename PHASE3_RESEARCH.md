@@ -88,7 +88,7 @@ Key facts from the page:
 
 ## H9 — Lambda lifetime across hot-reload
 
-**Source:** Internal design bug. Same class as 9E audit's H1 finding (see `tools/audit/IMPROVEMENTS_FROM_9E_AUDIT.md`). The generalized "lambda captures raw pointer that outlives the captured object" pattern is well-documented in C++ code-review guidance; the 9E doc §3a proposes the tool learn to detect it.
+**Source:** Internal design bug. The generalized "lambda captures raw pointer that outlives the captured object" pattern is well-documented in C++ code-review guidance and is a natural candidate for static-analysis detection in the audit tool.
 
 **Applies because:** `engine/scripting/latent_nodes.cpp:103` captures `ScriptInstance*` in a lambda stored on a container that can outlive an instance re-init.
 
