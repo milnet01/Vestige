@@ -104,3 +104,15 @@ id_ed25519
 # Local audit tool state — per-user, not per-project
 .audit_suppress.local
 .audit_verified.local
+
+# Non-redistributable assets — kept locally for the maintainer's use,
+# excluded from the public repo. See docs/PRE_OPEN_SOURCE_AUDIT.md §4.
+#
+# Texturelabs textures — texturelabs.org allows free use but
+# *forbids redistribution* in other asset packs / repos.
+assets/textures/Texturelabs_*
+#
+# Tabernacle / biblical project content — destined for a separate
+# private repo for commercial Steam release; not part of the open
+# engine.
+assets/textures/tabernacle/
