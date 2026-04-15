@@ -190,17 +190,22 @@ Some docs were written for an internal audience and may leak private context or 
 
 ## 10. Pre-Launch Dry Run
 
-- [ ] Clone the repo into a fresh directory with nothing else around and try to build it from scratch, following only the README. This catches "works on your machine" dependencies.
+- [ ] Clone the repo into a fresh directory with nothing else around and try to build it from scratch, following only the README. This catches "works on your machine" dependencies. **Status:** partially covered by CI (ubuntu-24.04 runners do a clean-clone configure + build + ctest on every push, currently green). A true fresh-box build — different distro, different compiler, cold FetchContent cache — is still recommended before go-live. Can be expedited by cloning from the local path (`git clone /mnt/Storage/Scripts/Linux/3D_Engine /tmp/vestige-dry-run && cd /tmp/vestige-dry-run && cmake -B build -S . -DVESTIGE_FETCH_ASSETS=OFF && cmake --build build -j && ctest --test-dir build`). Deferred to the maintainer-side pre-launch window.
 - [ ] Have a friend or second Claude Code session do the same clean-clone build.
-- [ ] Open the repo in a fresh editor window and grep the project's own directory for: your full name, home address, personal phone, any credential-looking strings. Last chance.
+- [x] ~~Open the repo in a fresh editor window and grep the project's own directory for: your full name, home address, personal phone, any credential-looking strings. Last chance.~~ ✅ Done (2026-04-15) — final sweep:
+  - `Anthony Schemel` — 253 hits across 250 files; all MIT copyright headers (`// Copyright (c) 2026 Anthony Schemel`) in shader/engine/test/tool sources, plus the intentional disclosures in `README.md`, `LICENSE`, and this checklist. No other personal references (no home address, no phone, no license plates).
+  - `aant.schemel@gmail.com` — 2 hits: `SECURITY.md` (public disclosure address, intentional) and this checklist.
+  - `/home/ants`, `/mnt/Storage`, `C:\Users\` — the only working-tree occurrences are (a) documentation-of-documentation in this checklist and `tools/audit/CHANGELOG.md` describing the 2.4.1/2.8.1 path-scrubs, and (b) placeholder `/home/user/` + `C:\Users\user\` illustrative examples in `docs/PROJECT_MANAGEMENT_RESEARCH.md` showing cross-platform path conventions. No actual machine-specific paths baked into code or tooling.
+  - `milnet01` — all hits are the public GitHub handle referenced in clone URLs / CI comments / asset-repo pointers. Intentional and public.
+  - Credential-shaped strings — covered by gitleaks (§11 item 5 script below); dead NVD key allowlisted in `.gitleaks.toml`.
 - [ ] Tag a pre-release (`v0.x.0-preview`) as the first public commit's parent, so users can see "this is where the public history starts."
 
 ---
 
 ## 11. Day-Zero Launch Prep
 
-- [ ] Write a launch post / README opening paragraph that sets expectations: "solo-maintained, early-stage, API unstable, contributions welcome but response time variable."
-- [ ] Decide on a communication channel: GitHub Discussions (zero setup), Discord, Matrix. Easier to add than to remove.
+- [x] ~~Write a launch post / README opening paragraph that sets expectations: "solo-maintained, early-stage, API unstable, contributions welcome but response time variable."~~ ✅ Done (2026-04-15) — served by `README.md` lines 8-17. The opening blockquote explicitly states solo-maintained, early-stage, API unstable, breaking changes between 0.x minor versions, contributions welcome with one-pass-per-week cadence, and points readers at `ROADMAP.md` for direction. A separate announcement-style blog post is optional and can be written at launch time; the README opening is sufficient for the GitHub landing-page "about" box and discoverability.
+- [ ] Decide on a communication channel: GitHub Discussions (zero setup), Discord, Matrix. Easier to add than to remove. **Note:** `.github/ISSUE_TEMPLATE/config.yml` already points the "Questions & discussion" link at `https://github.com/milnet01/Vestige/discussions`, which will 404 until Discussions is enabled in repo settings. Enabling GitHub Discussions at go-live is the lowest-friction default; Discord/Matrix can layer on later if volume warrants it.
 - [ ] Decide on a **public roadmap visibility** — the current ROADMAP.md is very detailed. Great for credibility; may also invite "when is X?" pressure. Either is fine; just know which you're signing up for.
 - [x] ~~Archive or rotate any credentials that EVER lived in the repo, regardless of whether you scrubbed history.~~ ✅ Done — NVD API key rotated 2026-04-13, history scrubbed 2026-04-15. No other credentials ever lived in the repo per gitleaks scans.
 - [ ] **One final pre-launch sweep**, in this order:
@@ -209,7 +214,7 @@ Some docs were written for an internal audience and may leak private context or 
   python3 tools/audit/audit.py        # full audit, expect zero new findings
   rm -rf build && cmake -B build -S . && cmake --build build -j && ctest --test-dir build
   ```
-  All three must succeed cleanly.
+  All three must succeed cleanly. **Helper available:** `scripts/final_launch_sweep.sh` runs all three steps in order, aborts on first failure, respects `NO_COLOR`, and supports `SKIP_GITLEAKS` / `SKIP_AUDIT` / `SKIP_BUILD` env overrides for iterative re-runs. Checked in 2026-04-15.
 - [ ] **Tag a pre-release** (`v0.1.0-preview` or similar) on `Vestige` AND `VestigeAssets` together — the engine's `external/CMakeLists.txt` currently pins `VestigeAssets v0.1.0`; bump both repos in lockstep.
 - [ ] **Flip both `Vestige` AND `VestigeAssets` from private to public in GitHub Settings.** Must happen together so the engine's CMake `FetchContent` works on fresh clones without authentication. This is the actual "go-live" moment.
 - [ ] Verify a fresh clone (`git clone https://github.com/milnet01/Vestige.git`) on a clean machine still configures, builds, and runs the demo scene.

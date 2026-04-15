@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # scripts/check_changelog_pair.sh
 #
-# AUDIT.md §M27 / FIXPLAN I4 pre-commit hook helper. Given a source path
-# prefix plus its CHANGELOG + VERSION files, fail the commit if any file
-# under the prefix is staged but the CHANGELOG/VERSION pair is not.
+# Pre-commit hook helper. Given a source path prefix plus its CHANGELOG
+# + VERSION files, fail the commit if any file under the prefix is
+# staged but the CHANGELOG/VERSION pair is not.
 #
 # Usage:
 #   check_changelog_pair.sh <prefix> <changelog_path> <version_path>
@@ -67,7 +67,7 @@ fi
 if [[ "$failed" -ne 0 ]]; then
     echo "" >&2
     echo "This repo requires CHANGELOG.md (and VERSION if present) to be updated" >&2
-    echo "in the same commit as any code change under '$prefix' (AUDIT.md §M27)." >&2
+    echo "in the same commit as any code change under '$prefix'." >&2
     echo "Affected files:" >&2
     echo "$affected" | sed 's/^/  /' >&2
     echo "" >&2
