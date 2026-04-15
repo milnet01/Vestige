@@ -1,5 +1,29 @@
 include(FetchContent)
 
+# ---------------------------------------------------------------------------
+# Helper: silence informational deprecation warnings from upstream
+# vendored dependencies that still declare an old cmake_minimum_required
+# value. The warning is purely a hint to the upstream maintainer
+# ("update your VERSION argument") and adds noise to our build log
+# without indicating any real problem on our side.
+#
+# Usage:
+#     _vestige_silence_upstream_dep_warnings()
+#     FetchContent_MakeAvailable(some_old_dep)
+#     _vestige_restore_dep_warnings()
+#
+# CMAKE_WARN_DEPRECATED is restored immediately after, so deprecation
+# warnings about OUR code still surface normally.
+# ---------------------------------------------------------------------------
+macro(_vestige_silence_upstream_dep_warnings)
+    set(_vestige_warn_dep_save ${CMAKE_WARN_DEPRECATED})
+    set(CMAKE_WARN_DEPRECATED OFF CACHE BOOL "" FORCE)
+endmacro()
+macro(_vestige_restore_dep_warnings)
+    set(CMAKE_WARN_DEPRECATED ${_vestige_warn_dep_save} CACHE BOOL "" FORCE)
+    unset(_vestige_warn_dep_save)
+endmacro()
+
 # GLFW — windowing and input
 FetchContent_Declare(
     glfw
@@ -20,7 +44,9 @@ FetchContent_Declare(
     GIT_TAG        1.0.1
     GIT_SHALLOW    TRUE
 )
+_vestige_silence_upstream_dep_warnings()
 FetchContent_MakeAvailable(glm)
+_vestige_restore_dep_warnings()
 
 # tinyexr — EXR image loading (single-header, like stb_image)
 FetchContent_Declare(
@@ -29,7 +55,9 @@ FetchContent_Declare(
     GIT_TAG        v1.0.9
     GIT_SHALLOW    TRUE
 )
+_vestige_silence_upstream_dep_warnings()
 FetchContent_MakeAvailable(tinyexr)
+_vestige_restore_dep_warnings()
 
 # tinygltf — glTF 2.0 model loading
 FetchContent_Declare(
@@ -37,11 +65,13 @@ FetchContent_Declare(
     GIT_REPOSITORY https://github.com/syoyo/tinygltf.git
     GIT_TAG        v2.9.4
     GIT_SHALLOW    TRUE
+    # Skip add_subdirectory — the engine defines its own INTERFACE
+    # target below using the populated source tree. SOURCE_SUBDIR
+    # pointing at a non-existent path silences the CMP0169-deprecated
+    # FetchContent_Populate path (CMake 3.18+; project min is 3.20).
+    SOURCE_SUBDIR  __engine_defines_target__
 )
-FetchContent_GetProperties(tinygltf)
-if(NOT tinygltf_POPULATED)
-    FetchContent_Populate(tinygltf)
-endif()
+FetchContent_MakeAvailable(tinygltf)
 add_library(tinygltf INTERFACE)
 target_include_directories(tinygltf INTERFACE ${tinygltf_SOURCE_DIR})
 # Make source dir available to parent scope (for engine include paths)
@@ -59,7 +89,9 @@ set(FT_DISABLE_BROTLI ON CACHE BOOL "" FORCE)
 set(FT_DISABLE_PNG ON CACHE BOOL "" FORCE)
 set(FT_DISABLE_BZIP2 ON CACHE BOOL "" FORCE)
 set(FT_DISABLE_ZLIB OFF CACHE BOOL "" FORCE)
+_vestige_silence_upstream_dep_warnings()
 FetchContent_MakeAvailable(freetype)
+_vestige_restore_dep_warnings()
 
 # Dear ImGui — immediate-mode GUI (docking branch for panel docking)
 FetchContent_Declare(
@@ -67,11 +99,11 @@ FetchContent_Declare(
     GIT_REPOSITORY https://github.com/ocornut/imgui.git
     GIT_TAG        docking
     GIT_SHALLOW    TRUE
+    # Engine defines `imgui_lib` STATIC target below from the
+    # populated tree — SOURCE_SUBDIR skip pattern (CMake 3.18+).
+    SOURCE_SUBDIR  __engine_defines_target__
 )
-FetchContent_GetProperties(imgui)
-if(NOT imgui_POPULATED)
-    FetchContent_Populate(imgui)
-endif()
+FetchContent_MakeAvailable(imgui)
 add_library(imgui_lib STATIC
     ${imgui_SOURCE_DIR}/imgui.cpp
     ${imgui_SOURCE_DIR}/imgui_demo.cpp
@@ -95,11 +127,10 @@ FetchContent_Declare(
     GIT_REPOSITORY https://github.com/CedricGuillemet/ImGuizmo.git
     GIT_TAG        master
     GIT_SHALLOW    TRUE
+    # Engine defines `imguizmo_lib` STATIC target below — SOURCE_SUBDIR skip.
+    SOURCE_SUBDIR  __engine_defines_target__
 )
-FetchContent_GetProperties(imguizmo)
-if(NOT imguizmo_POPULATED)
-    FetchContent_Populate(imguizmo)
-endif()
+FetchContent_MakeAvailable(imguizmo)
 add_library(imguizmo_lib STATIC
     ${imguizmo_SOURCE_DIR}/ImGuizmo.cpp
 )
@@ -114,11 +145,10 @@ FetchContent_Declare(
     GIT_REPOSITORY https://github.com/AirGuanZ/imgui-filebrowser.git
     GIT_TAG        master
     GIT_SHALLOW    TRUE
+    # Engine defines `imgui_filebrowser` INTERFACE target below — SOURCE_SUBDIR skip.
+    SOURCE_SUBDIR  __engine_defines_target__
 )
-FetchContent_GetProperties(imgui_filebrowser)
-if(NOT imgui_filebrowser_POPULATED)
-    FetchContent_Populate(imgui_filebrowser)
-endif()
+FetchContent_MakeAvailable(imgui_filebrowser)
 add_library(imgui_filebrowser INTERFACE)
 target_include_directories(imgui_filebrowser INTERFACE ${imgui_filebrowser_SOURCE_DIR})
 target_link_libraries(imgui_filebrowser INTERFACE imgui_lib)
@@ -141,11 +171,11 @@ FetchContent_Declare(
     GIT_REPOSITORY https://github.com/thedmd/imgui-node-editor.git
     GIT_TAG        v0.9.3
     GIT_SHALLOW    TRUE
+    # Engine defines `imgui_node_editor_lib` STATIC target below
+    # (after the ImGui 1.92.x compat string-rewrite) — SOURCE_SUBDIR skip.
+    SOURCE_SUBDIR  __engine_defines_target__
 )
-FetchContent_GetProperties(imgui_node_editor)
-if(NOT imgui_node_editor_POPULATED)
-    FetchContent_Populate(imgui_node_editor)
-endif()
+FetchContent_MakeAvailable(imgui_node_editor)
 
 # ---------------------------------------------------------------------------
 # ImGui 1.92.x compatibility patch — see comment above.
@@ -290,7 +320,9 @@ set(RECASTNAVIGATION_EXAMPLES OFF CACHE BOOL "" FORCE)
 # Recast's CMakeLists.txt uses cmake_minimum_required(VERSION 3.0) which is
 # deprecated in CMake 3.27+. Allow it to configure anyway.
 set(CMAKE_POLICY_VERSION_MINIMUM 3.5 CACHE STRING "" FORCE)
+_vestige_silence_upstream_dep_warnings()
 FetchContent_MakeAvailable(recastnavigation)
+_vestige_restore_dep_warnings()
 # Restore policy version for subsequent projects
 unset(CMAKE_POLICY_VERSION_MINIMUM CACHE)
 
@@ -328,11 +360,16 @@ if(VESTIGE_FETCH_ASSETS)
         GIT_REPOSITORY https://github.com/milnet01/VestigeAssets.git
         GIT_TAG        v0.1.0
         GIT_SHALLOW    TRUE
+        # SOURCE_SUBDIR points at a path that does not exist inside the
+        # assets repo (which has no CMakeLists.txt). This tells the
+        # newer FetchContent_MakeAvailable pattern to populate-only
+        # without trying to add_subdirectory, and avoids the
+        # CMP0169-deprecated direct call to FetchContent_Populate.
+        # SOURCE_SUBDIR has been available since CMake 3.18; project
+        # min is 3.20 so no bump needed.
+        SOURCE_SUBDIR  __no_cmakelists_in_assets_repo__
     )
-    FetchContent_GetProperties(vestige_assets)
-    if(NOT vestige_assets_POPULATED)
-        FetchContent_Populate(vestige_assets)
-    endif()
+    FetchContent_MakeAvailable(vestige_assets)
     set(VESTIGE_ASSETS_DIR "${vestige_assets_SOURCE_DIR}" CACHE INTERNAL
         "Path to the populated VestigeAssets clone")
 endif()
