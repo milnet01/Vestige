@@ -609,23 +609,100 @@ def _go_patterns() -> dict:
 # ---------------------------------------------------------------------------
 
 def _detect_cmake_deps(root: Path) -> list[dict]:
-    """Try to extract dependency names from CMakeLists.txt files."""
+    """Extract dependency names + pinned versions from CMakeLists.txt files.
+
+    Captures three forms:
+
+    1. ``find_package(Foo X.Y)`` — version is the optional second arg.
+    2. ``FetchContent_Declare(name ... GIT_TAG <version> ...)`` — the
+       canonical form for source-fetched deps. We look up to the
+       closing parenthesis for a ``GIT_TAG`` line. (D5 / 2.8.0 — was
+       previously version-blank.)
+    3. ``FetchContent_Declare(name ... URL <url> ...)`` — used for
+       tarball-based fetches (e.g. nlohmann/json release tarballs).
+       The version is extracted from the URL path component that
+       looks like a version (``v3.12.0``, ``3.12.0``, etc.).
+
+    The version extraction is intentionally permissive — anything that
+    looks like a version token is captured. A blank version is still
+    returned for cases we can't parse, so the caller can decide whether
+    to query NVD without a version filter or skip the dep.
+    """
+    # Skip CMakeLists.txt that live inside build artifact directories or
+    # third-party source trees — those produce noise (every dep's own
+    # find_package probes get reported as if they were our project's
+    # deps). The matched substrings are checked against any path
+    # component, so `build/`, `external/foo-src/`, `build/_deps/...`
+    # all get filtered.
+    BUILD_ARTIFACT_PARTS = {
+        "build", "out", "_deps", "__pycache__",
+        ".git", ".cache", "node_modules",
+    }
+
+    def _is_in_artifact_dir(path: Path) -> bool:
+        # Path component check: skip anything whose path contains a known
+        # artifact-dir name. Also skip CMake build trees that match
+        # patterns like `build_release/`, `cmake-build-debug/`.
+        for part in path.parts:
+            if part in BUILD_ARTIFACT_PARTS:
+                return True
+            if part.startswith("build_") or part.startswith("cmake-build-"):
+                return True
+            # Skip third-party source trees (FetchContent extracts into
+            # `<build>/_deps/<name>-src/` and developers sometimes vendor
+            # into `external/<name>/`). The `_deps/` check above covers
+            # FetchContent. For vendored deps under external/, the deps
+            # we care about are declared at the top-level CMakeLists.txt
+            # via FetchContent_Declare or in external/CMakeLists.txt
+            # itself — not in nested vendored CMakeLists.
+            if part == "external" and path.parts.index(part) < len(path.parts) - 2:
+                # external/foo/CMakeLists.txt → skip; external/CMakeLists.txt → keep
+                return True
+        return False
+
     deps: list[dict] = []
     for cmake_file in root.rglob("CMakeLists.txt"):
+        if _is_in_artifact_dir(cmake_file):
+            continue
         try:
             content = cmake_file.read_text(errors="replace")
         except OSError:
             continue
 
-        # find_package(Foo VERSION)
-        for m in re.finditer(r"find_package\s*\(\s*(\w+)(?:\s+(\d[\d.]*))?\s*", content):
+        # 1. find_package(Foo VERSION)
+        for m in re.finditer(
+            r"find_package\s*\(\s*(\w+)(?:\s+(\d[\d.]*))?\s*",
+            content,
+        ):
             deps.append({"name": m.group(1), "version": m.group(2) or ""})
 
-        # FetchContent_Declare(name GIT_TAG ...)
-        for m in re.finditer(r"FetchContent_Declare\s*\(\s*(\w+)", content):
-            deps.append({"name": m.group(1), "version": ""})
+        # 2 + 3. FetchContent_Declare(name ... GIT_TAG/URL ... )
+        # Match across newlines up to the closing paren. Use [^)] to
+        # avoid greedy-runaway across multiple Declare blocks.
+        for m in re.finditer(
+            r"FetchContent_Declare\s*\(\s*(\w+)([^)]*)\)",
+            content,
+            re.DOTALL,
+        ):
+            name = m.group(1)
+            body = m.group(2)
+            version = ""
+            # Prefer GIT_TAG (explicit pin)
+            tag_m = re.search(r"GIT_TAG\s+([^\s)]+)", body)
+            if tag_m:
+                version = tag_m.group(1)
+            else:
+                # Try URL — pull a version-shaped token from the path
+                url_m = re.search(r"URL\s+(\S+)", body)
+                if url_m:
+                    url = url_m.group(1)
+                    # Look for /vX.Y.Z/ or /X.Y.Z/ in the URL path
+                    ver_m = re.search(r"/(v?\d+(?:\.\d+){1,3})(?:/|\.)", url)
+                    if ver_m:
+                        version = ver_m.group(1)
+            deps.append({"name": name, "version": version})
 
-    # Deduplicate by name
+    # Deduplicate by lowercase name; first occurrence wins
     seen: set[str] = set()
     unique: list[dict] = []
     for d in deps:

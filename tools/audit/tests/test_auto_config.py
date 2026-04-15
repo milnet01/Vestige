@@ -13,6 +13,7 @@ from lib.auto_config import (
     BUILD_SYSTEMS,
     LANGUAGE_SIGNATURES,
     _detect_build_system,
+    _detect_cmake_deps,
     _detect_language,
     _detect_source_dirs,
     _get_language_defaults,
@@ -213,3 +214,232 @@ class TestDetectSourceDirs:
     def test_empty_project_defaults_to_src(self, tmp_path: Path):
         dirs = _detect_source_dirs(tmp_path, [".cpp"])
         assert dirs == ["src/"]
+
+
+# ---------------------------------------------------------------------------
+# CMake dependency detection — D5 (2.8.0) version-pin extraction
+# ---------------------------------------------------------------------------
+
+
+class TestDetectCmakeDeps:
+    """_detect_cmake_deps should pull names + pinned versions from
+    find_package and FetchContent_Declare blocks."""
+
+    def test_no_cmakelists_returns_empty(self, tmp_path: Path):
+        assert _detect_cmake_deps(tmp_path) == []
+
+    def test_find_package_with_version(self, tmp_path: Path):
+        (tmp_path / "CMakeLists.txt").write_text(
+            "find_package(Boost 1.74)\n"
+        )
+        deps = _detect_cmake_deps(tmp_path)
+        assert deps == [{"name": "Boost", "version": "1.74"}]
+
+    def test_find_package_without_version(self, tmp_path: Path):
+        (tmp_path / "CMakeLists.txt").write_text(
+            "find_package(Threads REQUIRED)\n"
+        )
+        deps = _detect_cmake_deps(tmp_path)
+        assert deps == [{"name": "Threads", "version": ""}]
+
+    def test_fetchcontent_with_git_tag(self, tmp_path: Path):
+        """FetchContent_Declare with GIT_TAG must capture both name and version."""
+        (tmp_path / "CMakeLists.txt").write_text(
+            "FetchContent_Declare(\n"
+            "    glfw\n"
+            "    GIT_REPOSITORY https://github.com/glfw/glfw.git\n"
+            "    GIT_TAG        3.4\n"
+            "    GIT_SHALLOW    TRUE\n"
+            ")\n"
+        )
+        deps = _detect_cmake_deps(tmp_path)
+        assert deps == [{"name": "glfw", "version": "3.4"}]
+
+    def test_fetchcontent_with_git_tag_v_prefix(self, tmp_path: Path):
+        """A `v` prefix on GIT_TAG (e.g. v1.2.3) is captured verbatim."""
+        (tmp_path / "CMakeLists.txt").write_text(
+            "FetchContent_Declare(joltphysics GIT_TAG v5.2.0)\n"
+        )
+        deps = _detect_cmake_deps(tmp_path)
+        assert deps == [{"name": "joltphysics", "version": "v5.2.0"}]
+
+    def test_fetchcontent_with_freetype_style_tag(self, tmp_path: Path):
+        """FreeType uses VER-N-N-N tag style; captured verbatim."""
+        (tmp_path / "CMakeLists.txt").write_text(
+            "FetchContent_Declare(\n"
+            "    freetype\n"
+            "    GIT_TAG VER-2-13-3\n"
+            ")\n"
+        )
+        deps = _detect_cmake_deps(tmp_path)
+        assert deps == [{"name": "freetype", "version": "VER-2-13-3"}]
+
+    def test_fetchcontent_with_url_extracts_version(self, tmp_path: Path):
+        """URL form (e.g. nlohmann/json release tarball) extracts the
+        version-shaped path component."""
+        (tmp_path / "CMakeLists.txt").write_text(
+            "FetchContent_Declare(json\n"
+            "    URL https://github.com/nlohmann/json/releases/download/v3.12.0/json.tar.xz\n"
+            ")\n"
+        )
+        deps = _detect_cmake_deps(tmp_path)
+        assert deps == [{"name": "json", "version": "v3.12.0"}]
+
+    def test_fetchcontent_branch_tag_yields_blank(self, tmp_path: Path):
+        """A branch name like `master` or `docking` isn't a version; we
+        capture it as the version literal anyway since git accepts it
+        and the consumer (NVD lookup) will treat blank-or-non-numeric
+        as 'no version filter'."""
+        (tmp_path / "CMakeLists.txt").write_text(
+            "FetchContent_Declare(imgui GIT_TAG docking)\n"
+        )
+        deps = _detect_cmake_deps(tmp_path)
+        # We capture the literal — caller decides what to do with it.
+        assert deps == [{"name": "imgui", "version": "docking"}]
+
+    def test_multiple_fetchcontent_blocks(self, tmp_path: Path):
+        """Multiple FetchContent_Declare blocks in one file must each be parsed."""
+        (tmp_path / "CMakeLists.txt").write_text(
+            "FetchContent_Declare(\n"
+            "    glfw\n"
+            "    GIT_TAG 3.4\n"
+            ")\n"
+            "FetchContent_Declare(\n"
+            "    glm\n"
+            "    GIT_TAG 1.0.1\n"
+            ")\n"
+            "FetchContent_Declare(\n"
+            "    googletest\n"
+            "    GIT_TAG v1.15.2\n"
+            ")\n"
+        )
+        deps = _detect_cmake_deps(tmp_path)
+        names = {d["name"] for d in deps}
+        assert names == {"glfw", "glm", "googletest"}
+        versions = {d["name"]: d["version"] for d in deps}
+        assert versions["glfw"] == "3.4"
+        assert versions["glm"] == "1.0.1"
+        assert versions["googletest"] == "v1.15.2"
+
+    def test_mixed_find_package_and_fetchcontent(self, tmp_path: Path):
+        (tmp_path / "CMakeLists.txt").write_text(
+            "find_package(OpenGL 4.5 REQUIRED)\n"
+            "FetchContent_Declare(glfw GIT_TAG 3.4)\n"
+        )
+        deps = _detect_cmake_deps(tmp_path)
+        assert {"name": "OpenGL", "version": "4.5"} in deps
+        assert {"name": "glfw", "version": "3.4"} in deps
+
+    def test_dedup_keeps_first_occurrence(self, tmp_path: Path):
+        """If the same dep is declared twice (e.g. nested CMakeLists),
+        the first occurrence wins."""
+        (tmp_path / "CMakeLists.txt").write_text(
+            "FetchContent_Declare(glfw GIT_TAG 3.4)\n"
+            "FetchContent_Declare(glfw GIT_TAG 3.5)\n"
+        )
+        deps = _detect_cmake_deps(tmp_path)
+        assert deps == [{"name": "glfw", "version": "3.4"}]
+
+    def test_dedup_case_insensitive(self, tmp_path: Path):
+        """`Boost` and `boost` shouldn't both appear."""
+        (tmp_path / "CMakeLists.txt").write_text(
+            "find_package(Boost 1.74)\n"
+            "FetchContent_Declare(boost GIT_TAG 1.85)\n"
+        )
+        deps = _detect_cmake_deps(tmp_path)
+        assert len(deps) == 1
+        assert deps[0]["name"] == "Boost"
+
+    def test_recurses_into_subdirs(self, tmp_path: Path):
+        """Nested CMakeLists.txt files (typical for external/) are found."""
+        (tmp_path / "CMakeLists.txt").write_text(
+            "find_package(OpenGL REQUIRED)\n"
+        )
+        (tmp_path / "external").mkdir()
+        (tmp_path / "external" / "CMakeLists.txt").write_text(
+            "FetchContent_Declare(glfw GIT_TAG 3.4)\n"
+        )
+        deps = _detect_cmake_deps(tmp_path)
+        names = {d["name"] for d in deps}
+        assert "OpenGL" in names
+        assert "glfw" in names
+
+    def test_no_runaway_match_across_blocks(self, tmp_path: Path):
+        """The regex must not match across separate FetchContent_Declare
+        blocks (would happen with naive `.*` instead of `[^)]`)."""
+        (tmp_path / "CMakeLists.txt").write_text(
+            "FetchContent_Declare(\n"
+            "    a\n"
+            "    GIT_REPOSITORY https://example.com/a.git\n"
+            ")\n"
+            "FetchContent_Declare(\n"
+            "    b\n"
+            "    GIT_TAG 2.0\n"
+            ")\n"
+        )
+        deps = _detect_cmake_deps(tmp_path)
+        # `a` has no GIT_TAG; should yield "" not "2.0" from leaking
+        # across to `b`'s block.
+        a_dep = next(d for d in deps if d["name"] == "a")
+        b_dep = next(d for d in deps if d["name"] == "b")
+        assert a_dep["version"] == ""
+        assert b_dep["version"] == "2.0"
+
+    def test_skips_build_dir(self, tmp_path: Path):
+        """find_package calls inside build/ shouldn't pollute the result."""
+        (tmp_path / "CMakeLists.txt").write_text(
+            "FetchContent_Declare(myproj GIT_TAG 1.0)\n"
+        )
+        # Simulate FetchContent extracting a third-party dep into
+        # build/_deps/foo-src/ that has its own find_package noise.
+        nested = tmp_path / "build" / "_deps" / "foo-src"
+        nested.mkdir(parents=True)
+        (nested / "CMakeLists.txt").write_text(
+            "find_package(SDL2 REQUIRED)\n"
+            "find_package(OpenGL REQUIRED)\n"
+        )
+        deps = _detect_cmake_deps(tmp_path)
+        names = {d["name"] for d in deps}
+        assert "myproj" in names
+        assert "SDL2" not in names
+        assert "OpenGL" not in names
+
+    def test_keeps_external_top_level(self, tmp_path: Path):
+        """external/CMakeLists.txt at the top of external/ should be
+        scanned — that's where projects typically declare their
+        FetchContent deps. Only NESTED external/<dep>/CMakeLists.txt
+        gets skipped."""
+        (tmp_path / "CMakeLists.txt").write_text(
+            "find_package(OpenGL REQUIRED)\n"
+        )
+        ext = tmp_path / "external"
+        ext.mkdir()
+        (ext / "CMakeLists.txt").write_text(
+            "FetchContent_Declare(glfw GIT_TAG 3.4)\n"
+        )
+        # Vendored sub-dir with its own CMakeLists — should be skipped
+        vendor = ext / "vendored_dep"
+        vendor.mkdir()
+        (vendor / "CMakeLists.txt").write_text(
+            "find_package(Boost 1.74)\n"
+        )
+        deps = _detect_cmake_deps(tmp_path)
+        names = {d["name"] for d in deps}
+        assert "OpenGL" in names
+        assert "glfw" in names
+        assert "Boost" not in names
+
+    def test_skips_cmake_build_dirs(self, tmp_path: Path):
+        """build_release/, cmake-build-debug/ etc. should be skipped too."""
+        for build_name in ("build_release", "cmake-build-debug", "out"):
+            d = tmp_path / build_name
+            d.mkdir()
+            (d / "CMakeLists.txt").write_text(
+                "find_package(Polluter 9.9)\n"
+            )
+        (tmp_path / "CMakeLists.txt").write_text(
+            "FetchContent_Declare(real GIT_TAG 1.0)\n"
+        )
+        deps = _detect_cmake_deps(tmp_path)
+        names = {d["name"] for d in deps}
+        assert names == {"real"}

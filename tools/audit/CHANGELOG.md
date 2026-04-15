@@ -2,6 +2,61 @@
 
 All notable changes to the Audit Tool are documented in this file.
 
+## [2.8.0] - 2026-04-15
+
+### Improved (auto_config — CMake pinned-version extraction)
+
+`_detect_cmake_deps` previously returned every `FetchContent_Declare`
+name with a blank version. Two real-world consequences:
+- `audit.py --init` generated NVD configs that couldn't filter
+  CVE results to the actual pinned versions.
+- Maintainers had to manually keep `research.nvd.dependencies`
+  versions in sync with `external/CMakeLists.txt` `GIT_TAG` lines.
+
+This release fixes both by extracting the version from each block:
+- **`GIT_TAG <version>`** — preferred form. Captures `3.4`, `v2.9.4`,
+  `VER-2-13-3` (FreeType), branch names like `master`/`docking`
+  verbatim. Downstream NVD lookup treats unparseable versions as
+  "no version filter" rather than failing.
+- **`URL https://.../v3.12.0/...`** — used by tarball-based fetches
+  (e.g. `nlohmann/json` release downloads). Captures the
+  version-shaped path component.
+
+### Improved (auto_config — recursion noise filtering)
+
+`rglob("CMakeLists.txt")` previously walked into `build/`, `_deps/`,
+nested `external/<dep>/`, and other build-artifact directories where
+third-party libraries' own `find_package` probes for system libraries
+(SDL2, OpenGL, ALSA, PulseAudio, etc.) were being misreported as
+project deps.
+
+New `_is_in_artifact_dir` helper skips:
+- `build/`, `out/`, `_deps/`, `__pycache__/`, `node_modules/`, `.git/`, `.cache/`
+- `build_*/`, `cmake-build-*/` patterns (multi-config builds)
+- `external/<dep>/` nested vendored CMakeLists (top-level
+  `external/CMakeLists.txt` is preserved — that's where projects
+  declare their FetchContent deps)
+
+Real-world impact on Vestige: 65 reported deps → 16 reported deps,
+matching the actual count of `FetchContent_Declare` blocks in
+`external/CMakeLists.txt`.
+
+### Tests
++17 new tests (677 → 694 total, all passing).
+- TestDetectCmakeDeps: 14 tests covering find_package, GIT_TAG (with
+  `v` prefix, FreeType-style, branch names), URL form, multi-block
+  parsing, mixed forms, deduplication (case-insensitive, first-wins),
+  recursion, and the no-runaway-across-blocks regex guarantee.
+- 3 additional tests for the artifact-dir filtering: build/ is
+  skipped, external/ top-level is preserved, build_*/cmake-build-*/
+  patterns are skipped.
+
+### Migration
+Backwards compatible. `audit.py --init` now generates richer NVD
+dependency blocks out of the box, but existing hand-maintained
+configs (like `tools/audit/audit_config.yaml` for Vestige) are
+untouched.
+
 ## [2.7.0] - 2026-04-15
 
 ### Added (D5 — Tier 6 subsystem keyword map)
