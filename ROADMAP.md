@@ -1887,6 +1887,7 @@ Vestige is public on GitHub under the MIT License, builds cleanly from a fresh c
 - Public changelog for every release
 - Security disclosures handled through `SECURITY.md`
 - Bus-factor note in README: if solo maintenance stops, the project will be archived with a clear pointer in the README rather than silently abandoned
+- **CMake version matrix in CI.** The engine's `external/CMakeLists.txt` uses a SOURCE_SUBDIR trick to populate dependencies without invoking their upstream `add_subdirectory`. The trick is stable today but depends on FetchContent semantics that CMake periodically tightens. CI should run the build on multiple CMake versions (e.g. project min `3.20`, current LTS-distro `3.28`, and `latest`) so silent FetchContent regressions surface in a PR check rather than a downstream report. See the `IF THIS BREAKS` block in `external/CMakeLists.txt` for the migration paths if the SOURCE_SUBDIR pattern is ever deprecated.
 
 ---
 

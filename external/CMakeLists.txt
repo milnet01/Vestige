@@ -24,6 +24,63 @@ macro(_vestige_restore_dep_warnings)
     unset(_vestige_warn_dep_save)
 endmacro()
 
+# ---------------------------------------------------------------------------
+# IF THIS BREAKS — FetchContent compatibility notes for future maintainers.
+# ---------------------------------------------------------------------------
+#
+# Several FetchContent_Declare blocks below use the pattern:
+#
+#     FetchContent_Declare(name ... SOURCE_SUBDIR __engine_defines_target__)
+#     FetchContent_MakeAvailable(name)
+#
+# This is a deliberate trick. The engine wants to populate (download +
+# extract) a dependency without invoking add_subdirectory on its
+# upstream CMakeLists — usually because the engine defines its own
+# INTERFACE / STATIC library target from the populated source tree
+# (e.g. imgui_lib, tinygltf, vestige_assets which has no CMakeLists at
+# all). Pointing SOURCE_SUBDIR at a non-existent path tells
+# FetchContent_MakeAvailable "populate but skip add_subdirectory".
+#
+# Why this pattern, and not FetchContent_Populate?
+#   - CMake 3.27 deprecated direct FetchContent_Populate(name) calls
+#     under policy CMP0169. The Populate function is scheduled for
+#     eventual removal in some future CMake.
+#   - SOURCE_SUBDIR has been stable since CMake 3.18; project min is
+#     3.20. The trick is widely used for header-only / asset-only deps
+#     and CMake has no announced deprecation for it.
+#
+# IF a future CMake breaks this pattern (e.g. by failing when
+# SOURCE_SUBDIR points at a non-existent path), the migration paths in
+# rough order of effort:
+#
+#   1. OVERRIDE_FIND_PACKAGE (CMake 3.24+) — declare the dep and route
+#      a find_package() call through FetchContent. Only works for some
+#      shapes (deps that already publish a *Config.cmake).
+#
+#   2. Use the dep's upstream CMakeLists.txt with EXCLUDE_FROM_ALL
+#      (CMake 3.28+) — keeps the dep's targets out of the default ALL
+#      target while letting us link them. Works when upstream has a
+#      build system; the cost is that upstream's targets clutter the
+#      project namespace.
+#
+#   3. ExternalProject_Add(... DOWNLOAD_ONLY ...) — completely
+#      separate configure step from the parent build. Bulletproof but
+#      heavy: requires a second cmake invocation.
+#
+#   4. A small CMake module wrapping file(DOWNLOAD) +
+#      file(ARCHIVE_EXTRACT) — bypasses FetchContent entirely. Most
+#      work to write but most resilient to FetchContent API churn.
+#
+#   5. Vendor the dep directly (commit it to external/<name>/) — same
+#      trade-off as we already make for stb / glad / dr_libs. Loses
+#      the version-pin benefit and adds repo size.
+#
+# Hedge: see the "CMake version matrix" note in ROADMAP.md
+# Post-Release Commitments and docs/PRE_OPEN_SOURCE_AUDIT.md §8 — CI
+# should test against multiple CMake versions to catch silent
+# regressions before they hit production builds.
+# ---------------------------------------------------------------------------
+
 # GLFW — windowing and input
 FetchContent_Declare(
     glfw

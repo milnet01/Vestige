@@ -126,6 +126,7 @@ Some docs were written for an internal audience and may leak private context or 
 - [ ] Verify the audit tool works as a public check — does it require the NVD API key? If so, document the `NVD_API_KEY` environment variable and make its absence non-fatal.
 - [ ] `.pre-commit-config.yaml` — verify all hooks are public / installable by contributors.
 - [ ] Confirm `build/` is gitignored (it is; 53 LICENSE files confirm it pulls deps there).
+- [ ] **Add a CMake version matrix to CI.** The engine's `external/CMakeLists.txt` uses a SOURCE_SUBDIR trick to populate FetchContent deps without invoking their upstream `add_subdirectory`. The trick is stable today but depends on CMake FetchContent semantics that periodically tighten (CMP0169 already bit us once on `FetchContent_Populate`). Run the build on at least three CMake versions: the project min `3.20`, the current LTS-distro `3.28`, and `latest`. Catches silent regressions in a PR check rather than a downstream user's report. Migration paths if the pattern ever does break are documented in the `IF THIS BREAKS` block at the top of `external/CMakeLists.txt`.
 
 ---
 
