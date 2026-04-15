@@ -1,9 +1,8 @@
 # .pre-commit-config.yaml — Vestige 3D Engine
 #
-# AUDIT.md §M27 / FIXPLAN I4: enforce the "VERSION + CHANGELOG in the
-# same commit as any tool/engine change" rule noted in CLAUDE.md /
-# memory. Without automation this is manually policed and easy to
-# forget on small commits.
+# Enforces the "VERSION + CHANGELOG updated in the same commit as any
+# tool or engine change" rule. Without automation this is manually
+# policed and easy to forget on small commits.
 #
 # Install (once per clone):
 #   pipx install pre-commit  # or: pip install --user pre-commit
@@ -12,6 +11,11 @@
 # After install, every `git commit` runs these hooks; mismatched
 # commits fail before the commit is created so the fix is a simple
 # `git add CHANGELOG.md && git commit --amend`.
+#
+# All hooks are `repo: local` and invoke a committed shell script
+# (`scripts/check_changelog_pair.sh`) — no external pre-commit hook
+# repositories, so the config installs cleanly on any fork without
+# network access to third-party hook sources.
 
 repos:
   - repo: local

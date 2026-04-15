@@ -1,13 +1,13 @@
 # .github/workflows/ci.yml — Vestige 3D Engine CI
 #
-# AUDIT.md §M25 / FIXPLAN I1: first CI for the project. Linux Debug
-# and Release builds, run ctest, then run the repo's own audit tool
-# at Tier 1 so every PR stays clean against the same static checks we
-# use locally.
+# Linux Debug and Release builds, run ctest, then run the repo's own
+# audit tool at Tier 1 so every PR stays clean against the same static
+# checks contributors use locally.
 #
 # CI intentionally does NOT run Tier 5 (CVE research) — that needs the
-# NVD API key and would leak warnings about missing env state on forks.
-# Local developers and release builds still do Tier 5.
+# NVD API key (NVD_API_KEY env var) and would leak warnings about
+# missing env state on PRs from forks (where the secret isn't
+# available). Local developers and release builds run Tier 5.
 
 name: CI
 
@@ -175,9 +175,8 @@ jobs:
 
       - name: Run audit Tier 1
         # --ci: emit ::error/::warning annotations per finding + write
-        # step summary to $GITHUB_STEP_SUMMARY. Exit code encodes finding
-        # severity (0 = clean, 1 = HIGH, 2 = CRITICAL) per AUDIT.md §M25
-        # and FIXPLAN I1's original design.
+        # step summary to $GITHUB_STEP_SUMMARY. Exit code encodes
+        # finding severity (0 = clean, 1 = HIGH, 2 = CRITICAL).
         # --no-color: propagate NO_COLOR=1 to cppcheck/clang-tidy/git
         # children so downloaded log artifacts stay free of ANSI escapes.
         # xvfb-run: GLFW-backed tests (e.g. test_timer.cpp calling
