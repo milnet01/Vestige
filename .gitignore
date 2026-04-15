@@ -79,6 +79,12 @@ docs/AUTOMATED_AUDIT_REPORT*_results.json
 docs/trend_snapshot_*.json
 **/__pycache__/
 
+# Launch-day drafts — tactical artefacts (announcement copy, go-live
+# command runbook) intentionally kept developer-local. Unignore if you
+# want to commit them post-launch as a historical record.
+docs/LAUNCH_ANNOUNCEMENT.md
+docs/LAUNCH_DAY_RUNBOOK.md
+
 # Secrets — defense in depth. We also run gitleaks; these patterns
 # prevent accidental staging of common credential-bearing files in the
 # first place. See SECURITY.md and the pre-open-source audit checklist.
