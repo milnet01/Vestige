@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Anthony Schemel
+# SPDX-License-Identifier: MIT
+
 """Tests for lib.tier4_refactoring — refactoring opportunity detection."""
 
 from __future__ import annotations

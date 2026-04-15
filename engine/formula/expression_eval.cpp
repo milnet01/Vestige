@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file expression_eval.cpp
 /// @brief Tree-walking expression evaluator implementation.
 #include "formula/expression_eval.h"

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file procedural_mesh.h
 /// @brief Static utility for generating architectural meshes (walls, roofs, stairs, floors).
 #pragma once

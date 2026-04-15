@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file first_person_controller.cpp
 /// @brief First-person controller implementation.
 #include "core/first_person_controller.h"

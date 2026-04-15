@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file material_library.cpp
 /// @brief Material preset save/load implementation.
 #include "utils/material_library.h"

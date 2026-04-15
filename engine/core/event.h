@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file event.h
 /// @brief Event base class and common engine events.
 #pragma once

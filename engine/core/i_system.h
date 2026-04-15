@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file i_system.h
 /// @brief Abstract base class for all domain systems in the engine.
 #pragma once

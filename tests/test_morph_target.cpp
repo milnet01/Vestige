@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file test_morph_target.cpp
 /// @brief Unit tests for morph target data structures and CPU blending.
 #include "animation/morph_target.h"

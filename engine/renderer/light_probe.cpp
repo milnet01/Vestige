@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file light_probe.cpp
 /// @brief Light probe implementation — IBL capture and convolution.
 #include "renderer/light_probe.h"

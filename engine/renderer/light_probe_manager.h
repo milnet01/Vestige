@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file light_probe_manager.h
 /// @brief Manages light probes — capture orchestration and per-entity probe assignment.
 #pragma once

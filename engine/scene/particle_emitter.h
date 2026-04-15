@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file particle_emitter.h
 /// @brief Particle emitter component with SoA data container and CPU simulation.
 #pragma once

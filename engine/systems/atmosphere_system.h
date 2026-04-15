@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file atmosphere_system.h
 /// @brief Domain system for weather, wind, and atmospheric effects.
 #pragma once

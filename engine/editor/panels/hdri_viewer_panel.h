@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file hdri_viewer_panel.h
 /// @brief HDRI viewer panel — equirectangular preview, skybox mini-viewport,
 ///        exposure control, and one-click scene environment setting.

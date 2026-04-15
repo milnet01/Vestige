@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file foliage_shadow.frag.glsl
 /// @brief Foliage shadow depth fragment shader — alpha test only.
 #version 450 core

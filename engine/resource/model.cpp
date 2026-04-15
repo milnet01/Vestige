@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file model.cpp
 /// @brief Model instantiation implementation.
 #include "resource/model.h"

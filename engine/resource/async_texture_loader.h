@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file async_texture_loader.h
 /// @brief Background thread texture decoding with main-thread GPU upload.
 #pragma once

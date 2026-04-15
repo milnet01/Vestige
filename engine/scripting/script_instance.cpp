@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file script_instance.cpp
 /// @brief ScriptInstance implementation.
 #include "scripting/script_instance.h"

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file water_renderer.h
 /// @brief Water surface renderer with reflections, refractions, and wave displacement.
 #pragma once

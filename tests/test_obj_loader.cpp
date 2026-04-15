@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file test_obj_loader.cpp
 /// @brief Unit tests for the ObjLoader (Wavefront OBJ parsing).
 #include "utils/obj_loader.h"

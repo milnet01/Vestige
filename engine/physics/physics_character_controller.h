@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file physics_character_controller.h
 /// @brief Physics-based character controller wrapping Jolt's CharacterVirtual.
 #pragma once

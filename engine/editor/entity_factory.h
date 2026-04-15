@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file entity_factory.h
 /// @brief Static helper functions for spawning entities from the editor Create menu.
 #pragma once

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file ragdoll_preset.h
 /// @brief Ragdoll preset definitions — body shapes, joint limits, and mass per bone.
 #pragma once

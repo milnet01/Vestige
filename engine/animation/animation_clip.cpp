@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file animation_clip.cpp
 /// @brief AnimationClip implementation.
 #include "animation/animation_clip.h"

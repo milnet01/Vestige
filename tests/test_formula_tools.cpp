@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file test_formula_tools.cpp
 /// @brief Unit tests for formula utility modules: sensitivity analysis,
 ///        performance benchmarking, and documentation generator.

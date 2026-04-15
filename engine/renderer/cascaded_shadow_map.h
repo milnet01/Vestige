@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file cascaded_shadow_map.h
 /// @brief Cascaded shadow maps for directional lights with frustum-fitted cascades.
 #pragma once

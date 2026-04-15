@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file template_dialog.h
 /// @brief Game type template dialog — creates pre-configured scenes for different game types.
 #pragma once

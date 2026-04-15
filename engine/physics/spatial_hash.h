@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file spatial_hash.h
 /// @brief Spatial hash grid for broad-phase collision detection.
 ///

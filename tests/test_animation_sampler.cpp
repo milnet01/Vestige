@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file test_animation_sampler.cpp
 /// @brief Unit tests for animation sampling (interpolation).
 #include "animation/animation_sampler.h"

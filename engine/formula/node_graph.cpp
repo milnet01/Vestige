@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file node_graph.cpp
 /// @brief Node graph implementation for the visual formula editor (Phase 9E).
 #include "formula/node_graph.h"

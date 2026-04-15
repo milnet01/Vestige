@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file mesh_pool.h
 /// @brief Shared mega-buffer for packing all scene mesh geometry into one VBO/IBO.
 #pragma once

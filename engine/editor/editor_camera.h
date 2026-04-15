@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file editor_camera.h
 /// @brief Orbit/pan/zoom camera for the scene editor.
 #pragma once

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 #version 450 core
 
 layout (location = 0) in vec2 a_position;

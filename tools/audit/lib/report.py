@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Anthony Schemel
+# SPDX-License-Identifier: MIT
+
 """Report builder — assembles audit findings into an LLM-optimized markdown report."""
 
 from __future__ import annotations

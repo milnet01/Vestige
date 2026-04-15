@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file brush_tool.h
 /// @brief Brush tool for painting environment instances in the editor viewport.
 #pragma once

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file terrain_renderer.cpp
 /// @brief CDLOD terrain renderer with instanced grid mesh and splatmap texturing.
 

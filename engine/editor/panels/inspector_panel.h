@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file inspector_panel.h
 /// @brief Inspector panel — displays and edits properties of the selected entity.
 #pragma once

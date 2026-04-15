@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file renderer.h
 /// @brief Core OpenGL rendering system with Blinn-Phong/PBR lighting, shadows, and FBO pipeline.
 #pragma once

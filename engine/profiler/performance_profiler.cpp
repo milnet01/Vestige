@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file performance_profiler.cpp
 /// @brief PerformanceProfiler implementation — frame time tracking and subsystem coordination.
 #include "profiler/performance_profiler.h"

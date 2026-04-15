@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Anthony Schemel
+# SPDX-License-Identifier: MIT
+
 """AuditRunner — orchestrates all audit tiers and produces the final report."""
 
 from __future__ import annotations

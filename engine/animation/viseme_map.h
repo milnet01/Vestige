@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file viseme_map.h
 /// @brief Viseme definitions and ARKit blend shape mapping for lip sync.
 #pragma once

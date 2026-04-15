@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file test_foliage_chunk.cpp
 /// @brief Unit tests for FoliageChunk and FoliageManager.
 #include <gtest/gtest.h>

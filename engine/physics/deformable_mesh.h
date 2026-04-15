@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file deformable_mesh.h
 /// @brief Mesh deformation utilities (denting, impact damage).
 #pragma once

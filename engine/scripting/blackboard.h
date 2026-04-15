@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file blackboard.h
 /// @brief Key-value variable store for visual scripting.
 #pragma once

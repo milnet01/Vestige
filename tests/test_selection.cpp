@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file test_selection.cpp
 /// @brief Unit tests for the Selection class (editor entity selection management).
 #include "editor/selection.h"

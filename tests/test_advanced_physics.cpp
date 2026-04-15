@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file test_advanced_physics.cpp
 /// @brief Unit tests for Batch 12: Ragdoll, Interaction, Fracture, Dismemberment.
 

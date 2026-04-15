@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file smaa_neighborhood.vert.glsl
 /// @brief SMAA neighborhood blending vertex shader — precomputes neighbor offset.
 #version 450 core

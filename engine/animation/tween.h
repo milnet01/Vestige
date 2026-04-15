@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file tween.h
 /// @brief Property animation (tween) system with easing and events.
 #pragma once

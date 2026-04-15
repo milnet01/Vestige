@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file material_preview.frag.glsl
 /// @brief Material preview fragment shader — renders a sphere with Blinn-Phong or PBR lighting for the editor panel.
 #version 450 core

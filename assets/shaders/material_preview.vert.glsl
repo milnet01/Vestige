@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file material_preview.vert.glsl
 /// @brief Material preview vertex shader — transforms preview sphere geometry with cofactor normal matrix.
 #version 450 core

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file material_preview.h
 /// @brief Renders a small material preview sphere to an offscreen FBO.
 #pragma once

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file water.frag.glsl
 /// @brief Water surface fragment shader — Fresnel blending, reflections, refractions, and Beer's law absorption.
 /// Normal and distortion detail is fully procedural (gradient noise FBM) to eliminate texture tiling.

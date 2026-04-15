@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file ui_panel.h
 /// @brief UI background panel element.
 #pragma once

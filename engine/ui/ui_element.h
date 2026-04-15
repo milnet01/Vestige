@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file ui_element.h
 /// @brief Base class for all in-game UI elements.
 #pragma once

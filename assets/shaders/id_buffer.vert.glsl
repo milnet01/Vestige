@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file id_buffer.vert.glsl
 /// @brief Entity ID buffer vertex shader — transforms geometry for the color-encoded picking pass.
 #version 450 core

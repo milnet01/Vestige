@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file reparent_command.h
 /// @brief Undoable entity reparenting — move entity to a new parent.
 #pragma once

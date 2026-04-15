@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Anthony Schemel
+# SPDX-License-Identifier: MIT
+
 """Differential reporting -- compare current audit against previous."""
 
 from __future__ import annotations

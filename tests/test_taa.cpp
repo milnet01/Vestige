@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file test_taa.cpp
 /// @brief Tests for TAA (Temporal Anti-Aliasing) logic.
 #include <gtest/gtest.h>

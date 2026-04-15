@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file bloom_bright.frag.glsl
 /// @brief Bloom brightness extraction — isolates pixels above a luminance threshold with soft knee.
 #version 450 core

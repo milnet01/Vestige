@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file vegetation_system.h
 /// @brief Domain system for foliage, trees, and vegetation rendering.
 #pragma once

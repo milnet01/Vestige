@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file brush_preview.frag.glsl
 /// @brief Terrain brush preview fragment shader — renders a dashed semi-transparent overlay for accessibility.
 #version 450 core

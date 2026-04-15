@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file component.h
 /// @brief Base component class for the entity-component system.
 #pragma once

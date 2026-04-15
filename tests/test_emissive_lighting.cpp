@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file test_emissive_lighting.cpp
 /// @brief Tests for emissive material lighting and EmissiveLightComponent.
 #include <gtest/gtest.h>

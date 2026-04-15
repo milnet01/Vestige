@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file recent_files.cpp
 /// @brief Recent files manager implementation.
 #include "editor/recent_files.h"

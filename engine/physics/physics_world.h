@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file physics_world.h
 /// @brief Jolt PhysicsSystem wrapper — the central physics subsystem.
 #pragma once

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file stasis_system.h
 /// @brief Per-body time freeze / slow-motion system.
 #pragma once

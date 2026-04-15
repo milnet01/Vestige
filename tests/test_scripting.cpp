@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file test_scripting.cpp
 /// @brief Unit tests for visual scripting infrastructure (Phase 9E-1).
 #include "scripting/script_value.h"

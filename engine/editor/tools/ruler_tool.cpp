@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file ruler_tool.cpp
 /// @brief RulerTool implementation.
 #include "editor/tools/ruler_tool.h"

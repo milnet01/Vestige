@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file cpu_profiler.cpp
 /// @brief CpuProfiler implementation — scope timing with hierarchical storage.
 #include "profiler/cpu_profiler.h"

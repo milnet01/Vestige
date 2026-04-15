@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file lighting_system.cpp
 /// @brief LightingSystem implementation.
 #include "systems/lighting_system.h"

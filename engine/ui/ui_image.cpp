@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file ui_image.cpp
 /// @brief UIImage implementation.
 #include "ui/ui_image.h"

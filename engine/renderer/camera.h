@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file camera.h
 /// @brief First-person camera with keyboard and mouse controls.
 #pragma once

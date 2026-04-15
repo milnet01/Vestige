@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file scene_manager.cpp
 /// @brief SceneManager implementation.
 #include "scene/scene_manager.h"

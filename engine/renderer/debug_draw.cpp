@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file debug_draw.cpp
 /// @brief Immediate-mode debug line rendering implementation.
 #include "renderer/debug_draw.h"

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file cascaded_shadow_map.cpp
 /// @brief Cascaded shadow map implementation.
 #include "renderer/cascaded_shadow_map.h"

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file ssr.frag.glsl
 /// @brief Screen-space reflections — ray-marches reflection vectors against the depth buffer to approximate local reflections.
 #version 450 core

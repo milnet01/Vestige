@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file window.h
 /// @brief GLFW window management and OpenGL context.
 #pragma once

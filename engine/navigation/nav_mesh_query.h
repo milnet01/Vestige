@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file nav_mesh_query.h
 /// @brief Wraps Detour for navmesh pathfinding queries.
 #pragma once

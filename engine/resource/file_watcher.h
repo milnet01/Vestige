@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file file_watcher.h
 /// @brief Monitors asset directories for file changes and triggers reload callbacks.
 #pragma once

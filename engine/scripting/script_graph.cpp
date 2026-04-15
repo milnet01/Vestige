@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file script_graph.cpp
 /// @brief ScriptGraph implementation — node/connection management and JSON I/O.
 #include "scripting/script_graph.h"

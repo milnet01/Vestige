@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Anthony Schemel
+# SPDX-License-Identifier: MIT
+
 """Tier 5: Technology detection, improvement research, and domain-specific security queries.
 
 Scans the codebase for known techniques, algorithms, and libraries,

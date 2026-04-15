@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Anthony Schemel
+# SPDX-License-Identifier: MIT
+
 """Shared fixtures for the audit tool test suite."""
 
 from __future__ import annotations

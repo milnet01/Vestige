@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file test_animation_state_machine.cpp
 /// @brief Unit tests for the animation state machine.
 #include "animation/animation_state_machine.h"

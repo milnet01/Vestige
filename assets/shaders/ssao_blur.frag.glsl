@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file ssao_blur.frag.glsl
 /// @brief SSAO bilateral blur — 4x4 box blur to smooth the noisy ambient occlusion output.
 #version 450 core

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file indirect_buffer.h
 /// @brief Draw command buffer and per-instance SSBO for Multi-Draw Indirect.
 #pragma once

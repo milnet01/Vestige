@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file shader.cpp
 /// @brief Shader implementation.
 #include "renderer/shader.h"

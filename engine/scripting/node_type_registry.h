@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file node_type_registry.h
 /// @brief Registry of all available visual scripting node types.
 #pragma once

@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Anthony Schemel
+# SPDX-License-Identifier: MIT
+
 """Tier 4: Uniform-shader sync check — cross-reference GLSL declarations with C++ setter calls."""
 
 from __future__ import annotations

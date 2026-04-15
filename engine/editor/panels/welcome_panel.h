@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file welcome_panel.h
 /// @brief Welcome / getting started panel shown on first launch.
 #pragma once

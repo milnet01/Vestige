@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file script_value.cpp
 /// @brief ScriptValue implementation.
 #include "scripting/script_value.h"

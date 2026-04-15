@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file cube_loader.h
 /// @brief Parser for .cube LUT files (industry standard color grading format).
 #pragma once

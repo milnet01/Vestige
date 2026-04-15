@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file environment_map.h
 /// @brief IBL (Image-Based Lighting) environment map with irradiance, prefilter, and BRDF LUT.
 #pragma once

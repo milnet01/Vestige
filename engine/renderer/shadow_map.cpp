@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file shadow_map.cpp
 /// @brief Directional shadow map implementation.
 #include "renderer/shadow_map.h"

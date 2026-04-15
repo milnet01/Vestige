@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file create_entity_command.h
 /// @brief Undoable entity creation — undo removes, redo re-inserts.
 #pragma once

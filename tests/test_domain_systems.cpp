@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file test_domain_systems.cpp
 /// @brief Tests for Phase 9B/9C domain system wrappers.
 #include <gtest/gtest.h>

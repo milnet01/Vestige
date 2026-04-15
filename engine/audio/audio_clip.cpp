@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file audio_clip.cpp
 /// @brief AudioClip implementation — loads and decodes audio files.
 #include "audio/audio_clip.h"

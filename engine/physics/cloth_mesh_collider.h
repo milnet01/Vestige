@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file cloth_mesh_collider.h
 /// @brief Triangle mesh collider for cloth simulation using BVH acceleration.
 #pragma once

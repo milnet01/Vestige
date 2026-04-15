@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file command_history.cpp
 /// @brief CommandHistory implementation — undo/redo stack with dirty tracking.
 #include "editor/command_history.h"

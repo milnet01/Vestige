@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file foliage_chunk.cpp
 /// @brief FoliageChunk implementation — spatial cell for environment instances.
 #include "environment/foliage_chunk.h"

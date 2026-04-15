@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file motion_preprocessor.cpp
 /// @brief Offline motion database building pipeline implementation.
 

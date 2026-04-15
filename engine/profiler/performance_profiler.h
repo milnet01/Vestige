@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file performance_profiler.h
 /// @brief Central performance profiling hub — aggregates GPU, CPU, and memory data.
 #pragma once

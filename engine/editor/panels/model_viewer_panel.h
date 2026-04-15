@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file model_viewer_panel.h
 /// @brief Model viewer panel — 3D model preview with orbit camera, animation playback,
 ///        skeleton visualization, and drag-to-place.

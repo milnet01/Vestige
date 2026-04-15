@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file font.cpp
 /// @brief Font implementation using FreeType for glyph rasterization.
 #include "renderer/font.h"

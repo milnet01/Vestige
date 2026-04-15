@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file logger.h
 /// @brief Centralized logging with severity levels and in-memory ring buffer for console panel.
 #pragma once

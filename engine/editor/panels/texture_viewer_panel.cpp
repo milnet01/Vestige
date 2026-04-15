@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file texture_viewer_panel.cpp
 /// @brief Texture viewer panel implementation.
 #include "editor/panels/texture_viewer_panel.h"

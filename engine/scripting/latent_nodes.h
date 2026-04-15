@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file latent_nodes.h
 /// @brief Registration of latent (suspend-and-resume) script node types.
 #pragma once

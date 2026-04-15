@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file font.h
 /// @brief TrueType font loading and glyph atlas generation via FreeType.
 #pragma once

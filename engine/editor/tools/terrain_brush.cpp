@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file terrain_brush.cpp
 /// @brief Brush tool for terrain sculpting and texture painting.
 

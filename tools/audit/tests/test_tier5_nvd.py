@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Anthony Schemel
+# SPDX-License-Identifier: MIT
+
 """Tests for lib.tier5_nvd — CVEResult, query_nvd, run_nvd_queries."""
 
 from __future__ import annotations

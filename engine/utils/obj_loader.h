@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file obj_loader.h
 /// @brief Wavefront OBJ file loader.
 #pragma once

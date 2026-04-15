@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file inspector_panel.cpp
 /// @brief Inspector panel implementation — property editing for selected entities.
 #include "editor/panels/inspector_panel.h"

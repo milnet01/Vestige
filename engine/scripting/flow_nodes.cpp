@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file flow_nodes.cpp
 /// @brief Flow control nodes — routing execution without side effects.
 ///

@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Anthony Schemel
+# SPDX-License-Identifier: MIT
+
 """Agent Playbook — 5-phase audit prompt rendered inline at the top of the report.
 
 The playbook block instructs a downstream LLM audit agent (e.g. a Claude Code

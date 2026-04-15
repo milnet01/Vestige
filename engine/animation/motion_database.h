@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file motion_database.h
 /// @brief Motion matching database — stores feature vectors and supports search.
 #pragma once

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file test_cloth_collision.cpp
 /// @brief Unit tests for BVH, SpatialHash, ClothMeshCollider, ColliderGenerator,
 ///        and ClothSimulator mesh/self-collision integration.

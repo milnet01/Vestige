@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file test_stasis_system.cpp
 /// @brief Unit tests for StasisSystem state management.
 /// @note Actual physics freeze/restore requires a full Jolt setup and is not tested here.

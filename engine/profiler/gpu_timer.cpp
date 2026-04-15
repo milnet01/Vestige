@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file gpu_timer.cpp
 /// @brief GpuTimer implementation — triple-buffered GL_TIMESTAMP queries.
 #include "profiler/gpu_timer.h"

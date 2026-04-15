@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file core_nodes.cpp
 /// @brief Registration of the 10 core visual scripting node types.
 #include "scripting/core_nodes.h"

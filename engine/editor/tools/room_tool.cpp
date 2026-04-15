@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file room_tool.cpp
 /// @brief RoomTool implementation -- rectangular room creation.
 #include "editor/tools/room_tool.h"

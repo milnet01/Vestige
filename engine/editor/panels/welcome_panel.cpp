@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file welcome_panel.cpp
 /// @brief Welcome panel implementation.
 #include "editor/panels/welcome_panel.h"

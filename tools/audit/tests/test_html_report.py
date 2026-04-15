@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Anthony Schemel
+# SPDX-License-Identifier: MIT
+
 """Tests for lib.html_report — generate_html_report produces valid HTML."""
 
 from __future__ import annotations

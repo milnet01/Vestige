@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file prefab_system.h
 /// @brief Save/load entity hierarchies as reusable prefab JSON files.
 #pragma once

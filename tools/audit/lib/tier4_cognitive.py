@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Anthony Schemel
+# SPDX-License-Identifier: MIT
+
 """Tier 4: Cognitive complexity analysis (SonarSource algorithm)."""
 
 from __future__ import annotations

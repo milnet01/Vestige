@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file validation_panel.h
 /// @brief Scene validation panel — checks for common issues and missing assets.
 #pragma once

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file place_tree_command.h
 /// @brief Undo command for tree placement and removal.
 #pragma once

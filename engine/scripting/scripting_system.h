@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file scripting_system.h
 /// @brief Domain system for visual scripting — manages script lifecycle and execution.
 #pragma once

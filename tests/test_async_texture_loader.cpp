@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file test_async_texture_loader.cpp
 /// @brief Tests for the asynchronous texture loading system.
 #include <gtest/gtest.h>

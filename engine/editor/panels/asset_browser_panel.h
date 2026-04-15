@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file asset_browser_panel.h
 /// @brief Asset browser panel — folder navigation and thumbnail grid for project assets.
 #pragma once

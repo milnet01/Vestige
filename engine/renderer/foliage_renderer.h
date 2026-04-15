@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file foliage_renderer.h
 /// @brief Instanced renderer for grass and ground cover using star-mesh geometry.
 #pragma once

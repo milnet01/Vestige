@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Anthony Schemel
+# SPDX-License-Identifier: MIT
+
 """Shared utilities: subprocess execution, file enumeration, token estimation.
 
 Subprocess policy (AUDIT.md §C1 / FIXPLAN C1b):

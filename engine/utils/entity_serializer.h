@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file entity_serializer.h
 /// @brief Serializes/deserializes entity trees to/from JSON (reusable for prefabs and scenes).
 #pragma once

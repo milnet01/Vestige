@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file animation_state_machine.cpp
 /// @brief AnimationStateMachine implementation.
 #include "animation/animation_state_machine.h"

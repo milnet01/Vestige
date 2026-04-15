@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file basic.vert.glsl
 /// @brief Basic vertex shader with model-view-projection transform and normal matrix via cofactor.
 #version 450 core

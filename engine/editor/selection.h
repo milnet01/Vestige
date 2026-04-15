@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file selection.h
 /// @brief Tracks which entities are selected in the editor.
 #pragma once

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file template_dialog.cpp
 /// @brief Game type template dialog implementation.
 #include "editor/panels/template_dialog.h"

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file spline_path.cpp
 /// @brief SplinePath implementation — Catmull-Rom spline evaluation and mesh generation.
 #include "environment/spline_path.h"

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file water_system.cpp
 /// @brief WaterSystem implementation.
 #include "systems/water_system.h"

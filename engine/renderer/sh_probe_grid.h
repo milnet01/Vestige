@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file sh_probe_grid.h
 /// @brief Spherical Harmonics probe grid for smooth diffuse ambient lighting.
 #pragma once

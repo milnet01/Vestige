@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file logger.cpp
 /// @brief Logger implementation with ring-buffer capture for editor console panel.
 #include "core/logger.h"

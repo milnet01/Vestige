@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file tween.cpp
 /// @brief Tween and TweenManager implementation.
 #include "animation/tween.h"

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file shadow_map.h
 /// @brief Directional light shadow mapping with depth FBO and PCF filtering.
 #pragma once

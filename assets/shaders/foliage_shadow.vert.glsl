@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file foliage_shadow.vert.glsl
 /// @brief Foliage shadow depth vertex shader — same wind animation as main pass.
 #version 450 core

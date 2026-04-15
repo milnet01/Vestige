@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file test_system_registry.cpp
 /// @brief Unit tests for ISystem, SystemRegistry, and cross-system events.
 /// @note These tests don't require a full engine setup -- they use mock systems

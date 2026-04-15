@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file mirror_generator.h
 /// @brief Animation mirroring for motion matching database doubling.
 #pragma once

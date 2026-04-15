@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file history_panel.h
 /// @brief Undo history panel — scrollable list of commands with click-to-jump.
 #pragma once

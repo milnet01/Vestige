@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file test_spline_path.cpp
 /// @brief Unit tests for SplinePath (Catmull-Rom spline evaluation and mesh generation).
 #include <gtest/gtest.h>

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file shader.h
 /// @brief OpenGL shader program compilation and management.
 #pragma once

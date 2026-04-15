@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file nav_agent_component.h
 /// @brief Entity component for navigation agents.
 #pragma once

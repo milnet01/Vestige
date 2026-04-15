@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file light_utils.h
 /// @brief Utility functions for light range calculation, attenuation, and color temperature.
 #pragma once

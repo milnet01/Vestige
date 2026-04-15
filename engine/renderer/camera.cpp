@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file camera.cpp
 /// @brief Camera implementation.
 #include "renderer/camera.h"

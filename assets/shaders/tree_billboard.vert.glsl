@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file tree_billboard.vert.glsl
 /// @brief Tree billboard LOD vertex shader — camera-facing quads with per-instance transform and crossfade alpha.
 #version 450 core

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file formula.cpp
 /// @brief FormulaDefinition implementation with JSON serialization.
 #include "formula/formula.h"

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file test_morph_target_pipeline.cpp
 /// @brief Tests for the GPU morph target deformation pipeline (WEIGHTS sampling, SSBO, weight API).
 #include <gtest/gtest.h>

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file test_physics_character_controller.cpp
 /// @brief Unit tests for the PhysicsCharacterController.
 #include "physics/physics_character_controller.h"

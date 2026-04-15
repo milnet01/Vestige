@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file event_bus.h
 /// @brief Publish/subscribe event system for decoupled subsystem communication.
 #pragma once

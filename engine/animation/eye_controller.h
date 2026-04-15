@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file eye_controller.h
 /// @brief Procedural eye animation: blink, look-at gaze, and saccade noise.
 #pragma once

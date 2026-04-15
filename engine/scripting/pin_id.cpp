@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file pin_id.cpp
 /// @brief PinId intern table implementation. See pin_id.h for the design.
 #include "scripting/pin_id.h"

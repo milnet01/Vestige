@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file id_buffer.frag.glsl
 /// @brief Entity ID buffer fragment shader — outputs the entity ID as an RGB color for mouse picking.
 #version 450 core

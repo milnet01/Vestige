@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file event_bus.cpp
 /// @brief EventBus implementation.
 #include "core/event_bus.h"

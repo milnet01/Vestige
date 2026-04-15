@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file cloth_system.h
 /// @brief Domain system for cloth and soft body simulation.
 #pragma once

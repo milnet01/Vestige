@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file cloth_component.cpp
 /// @brief ClothComponent implementation.
 #include "physics/cloth_component.h"

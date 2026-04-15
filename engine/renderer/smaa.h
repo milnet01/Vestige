@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file smaa.h
 /// @brief SMAA (Subpixel Morphological Anti-Aliasing) implementation.
 #pragma once

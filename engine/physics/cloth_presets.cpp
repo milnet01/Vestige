@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file cloth_presets.cpp
 /// @brief Cloth simulation preset parameter values.
 ///

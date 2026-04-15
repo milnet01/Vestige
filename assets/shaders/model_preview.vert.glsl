@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file model_preview.vert.glsl
 /// @brief Model viewer vertex shader — matches the engine Vertex struct layout.
 ///        Paired with material_preview.frag.glsl for the same PBR/Blinn-Phong output.

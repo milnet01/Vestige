@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file camera_component.h
 /// @brief Camera component for attaching cameras to entities in the scene graph.
 #pragma once

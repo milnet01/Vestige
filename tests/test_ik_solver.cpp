@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file test_ik_solver.cpp
 /// @brief Unit tests for inverse kinematics solvers.
 #include "animation/ik_solver.h"

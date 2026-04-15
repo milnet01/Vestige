@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file wall_tool.h
 /// @brief Interactive two-click wall placement tool.
 #pragma once

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file renderer.cpp
 /// @brief Renderer implementation with Blinn-Phong/PBR lighting, shadows, and FBO pipeline.
 #include "renderer/renderer.h"

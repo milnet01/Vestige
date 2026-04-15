@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Anthony Schemel
+# SPDX-License-Identifier: MIT
+
 """Finding suppression via .audit_suppress file."""
 
 from __future__ import annotations

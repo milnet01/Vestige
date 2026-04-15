@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file tree_renderer.h
 /// @brief Renders trees with mesh LOD and billboard crossfade at distance.
 #pragma once

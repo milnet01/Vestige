@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file gradient_editor_widget.cpp
 /// @brief ImGui gradient editor widget implementation.
 #include "editor/widgets/gradient_editor_widget.h"

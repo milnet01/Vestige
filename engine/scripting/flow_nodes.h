@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file flow_nodes.h
 /// @brief Registration of flow control script node types.
 #pragma once

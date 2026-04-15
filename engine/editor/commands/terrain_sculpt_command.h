@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file terrain_sculpt_command.h
 /// @brief Undoable command for terrain heightmap sculpting.
 #pragma once

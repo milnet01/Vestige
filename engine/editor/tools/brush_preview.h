@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file brush_preview.h
 /// @brief Renders a circle decal at the brush position for visual feedback.
 #pragma once

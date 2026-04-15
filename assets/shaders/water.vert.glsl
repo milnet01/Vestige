@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file water.vert.glsl
 /// @brief Water surface vertex shader — displaces vertices with Gerstner wave summation.
 #version 450 core

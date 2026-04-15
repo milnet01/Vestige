@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file facial_animation.h
 /// @brief FacialAnimator component: emotion presets, eye animation, and lip sync layering.
 #pragma once

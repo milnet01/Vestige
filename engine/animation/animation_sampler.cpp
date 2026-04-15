@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file animation_sampler.cpp
 /// @brief Animation channel interpolation implementation.
 #include "animation/animation_sampler.h"

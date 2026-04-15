@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file terrain_system.cpp
 /// @brief TerrainSystem implementation.
 #include "systems/terrain_system.h"

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file script_component.cpp
 /// @brief ScriptComponent implementation.
 #include "scripting/script_component.h"

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file kd_tree.h
 /// @brief KD-tree for fast nearest-neighbor search in feature space.
 #pragma once

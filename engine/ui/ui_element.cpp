@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file ui_element.cpp
 /// @brief UIElement base class implementation.
 #include "ui/ui_element.h"

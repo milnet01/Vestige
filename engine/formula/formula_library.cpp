@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file formula_library.cpp
 /// @brief FormulaLibrary implementation.
 #include "formula/formula_library.h"

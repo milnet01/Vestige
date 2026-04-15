@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file test_lip_sync.cpp
 /// @brief Unit tests for viseme mapping, audio analysis, and lip sync playback.
 

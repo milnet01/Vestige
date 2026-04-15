@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file equirect_preview.vert.glsl
 /// @brief Fullscreen quad vertex shader for equirectangular HDRI preview.
 #version 450 core

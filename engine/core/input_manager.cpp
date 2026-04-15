@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file input_manager.cpp
 /// @brief Input manager implementation.
 #include "core/input_manager.h"

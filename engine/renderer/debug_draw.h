@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file debug_draw.h
 /// @brief Immediate-mode debug line rendering for editor overlays (light gizmos, etc.).
 #pragma once

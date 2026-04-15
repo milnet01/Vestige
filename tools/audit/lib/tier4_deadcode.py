@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Anthony Schemel
+# SPDX-License-Identifier: MIT
+
 """Tier 4: Dead code detection — unused functions, unused includes, unreferenced symbols."""
 
 from __future__ import annotations

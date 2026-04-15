@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file environment_panel.cpp
 /// @brief EnvironmentPanel implementation — brush tool ImGui controls.
 #include "editor/panels/environment_panel.h"

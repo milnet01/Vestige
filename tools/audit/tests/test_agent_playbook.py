@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Anthony Schemel
+# SPDX-License-Identifier: MIT
+
 """Tests for lib.agent_playbook — 5-phase prompt renderer."""
 
 from __future__ import annotations

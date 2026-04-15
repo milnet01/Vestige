@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file test_gltf_loader.cpp
 /// @brief Tests for ModelNode transform math and Model data structure.
 #include <gtest/gtest.h>

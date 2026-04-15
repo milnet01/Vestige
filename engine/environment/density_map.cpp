@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file density_map.cpp
 /// @brief DensityMap implementation — world-space density texture for foliage modulation.
 #include "environment/density_map.h"

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file nav_mesh_config.h
 /// @brief Configuration parameters for navmesh generation.
 #pragma once

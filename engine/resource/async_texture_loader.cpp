@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file async_texture_loader.cpp
 /// @brief AsyncTextureLoader implementation.
 #include "resource/async_texture_loader.h"

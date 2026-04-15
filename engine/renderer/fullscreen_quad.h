@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file fullscreen_quad.h
 /// @brief Fullscreen quad for post-processing and screen-space effects.
 #pragma once

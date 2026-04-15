@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file test_root_motion.cpp
 /// @brief Unit tests for root motion extraction.
 #include "animation/skeleton_animator.h"

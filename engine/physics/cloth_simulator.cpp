@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file cloth_simulator.cpp
 /// @brief XPBD cloth simulation implementation.
 #include "physics/cloth_simulator.h"

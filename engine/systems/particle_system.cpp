@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file particle_system.cpp
 /// @brief ParticleVfxSystem implementation.
 #include "systems/particle_system.h"

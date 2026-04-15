@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file particle_renderer.cpp
 /// @brief Instanced billboard renderer for particle systems.
 #include "renderer/particle_renderer.h"

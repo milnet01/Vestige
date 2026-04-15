@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file frame_diagnostics.h
 /// @brief Frame capture and diagnostic report for visual analysis.
 #pragma once

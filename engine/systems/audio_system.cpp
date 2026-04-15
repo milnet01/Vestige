@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file audio_system.cpp
 /// @brief AudioSystem implementation.
 #include "systems/audio_system.h"

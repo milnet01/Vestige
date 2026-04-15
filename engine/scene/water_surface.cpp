@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file water_surface.cpp
 /// @brief Water surface component implementation — grid mesh generation and management.
 #include "scene/water_surface.h"

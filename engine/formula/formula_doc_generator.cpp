@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file formula_doc_generator.cpp
 /// @brief Markdown documentation generator for formula templates.
 #include "formula/formula_doc_generator.h"

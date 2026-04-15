@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file room_tool.h
 /// @brief Room creation tool -- enter dimensions or click corners.
 #pragma once

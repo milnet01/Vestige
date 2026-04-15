@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file gltf_loader.h
 /// @brief Loads glTF 2.0 models (.gltf / .glb) via tinygltf.
 #pragma once

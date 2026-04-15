@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file node_editor_widget.cpp
 /// @brief NodeEditorWidget implementation. Bridges to imgui-node-editor.
 #include "editor/widgets/node_editor_widget.h"

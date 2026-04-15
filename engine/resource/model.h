@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file model.h
 /// @brief Model, ModelNode, and ModelPrimitive — represents a loaded glTF scene graph.
 #pragma once

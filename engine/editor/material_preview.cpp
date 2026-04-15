@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file material_preview.cpp
 /// @brief Material preview sphere rendering implementation.
 #include "editor/material_preview.h"

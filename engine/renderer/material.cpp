@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file material.cpp
 /// @brief Material implementation.
 #include "renderer/material.h"

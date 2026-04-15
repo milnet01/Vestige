@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file material_library.h
 /// @brief Save/load reusable material presets as JSON files.
 #pragma once

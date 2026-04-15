@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file input_manager.h
 /// @brief Keyboard, mouse, and gamepad input handling.
 #pragma once

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file pure_nodes.cpp
 /// @brief Pure data nodes — lazy-evaluated math, vector, boolean, comparison
 /// operations plus read-only entity queries.

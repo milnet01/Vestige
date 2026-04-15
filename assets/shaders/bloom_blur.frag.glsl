@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file bloom_blur.frag.glsl
 /// @brief Separable 9-tap Gaussian blur for the bloom post-processing pass.
 #version 450 core

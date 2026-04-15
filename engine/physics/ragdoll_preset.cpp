@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file ragdoll_preset.cpp
 /// @brief Ragdoll preset definitions implementation.
 

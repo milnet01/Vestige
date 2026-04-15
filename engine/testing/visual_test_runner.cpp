@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file visual_test_runner.cpp
 /// @brief Automated visual test runner implementation.
 #include "testing/visual_test_runner.h"

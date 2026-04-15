@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file validation_panel.cpp
 /// @brief Validation panel implementation — scene issue detection.
 #include "editor/panels/validation_panel.h"

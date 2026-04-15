@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Anthony Schemel
+# SPDX-License-Identifier: MIT
+
 """Tests for lib.tier6_coverage — D4 feature coverage layer."""
 
 from __future__ import annotations

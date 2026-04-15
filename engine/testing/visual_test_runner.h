@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file visual_test_runner.h
 /// @brief Automated visual testing — drives the camera through predefined
 ///        viewpoints and captures screenshots + diagnostic reports.

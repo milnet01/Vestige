@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file scene.h
 /// @brief A complete 3D scene containing entities, lights, and a camera.
 #pragma once

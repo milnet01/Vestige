@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file action_nodes.cpp
 /// @brief Side-effectful action nodes — modify entities, physics, audio, etc.
 ///

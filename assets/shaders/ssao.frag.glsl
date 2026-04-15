@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file ssao.frag.glsl
 /// @brief Screen-space ambient occlusion — kernel-based depth sampling to estimate local occlusion.
 #version 450 core

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file stair_tool.h
 /// @brief Stair/ramp creation tool with configurable parameters.
 #pragma once

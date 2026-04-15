@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file text_renderer.h
 /// @brief 2D/3D text rendering and text-based height map generation.
 #pragma once

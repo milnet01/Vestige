@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file test_gpu_particle_system.cpp
 /// @brief Unit tests for the GPU particle system (CPU-side logic).
 ///

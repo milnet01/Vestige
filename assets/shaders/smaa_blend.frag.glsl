@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file smaa_blend.frag.glsl
 /// @brief SMAA blend weight calculation — searches edge patterns and looks up area texture.
 #version 450 core

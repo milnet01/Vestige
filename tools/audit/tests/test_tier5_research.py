@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Anthony Schemel
+# SPDX-License-Identifier: MIT
+
 """Tests for lib.tier5_research — _cache_key, _search_with_cache, run()."""
 
 from __future__ import annotations

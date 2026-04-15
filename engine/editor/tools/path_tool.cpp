@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file path_tool.cpp
 /// @brief PathTool implementation -- interactive spline-based path/road creation.
 #include "editor/tools/path_tool.h"

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file test_water_surface.cpp
 /// @brief Unit tests for WaterSurfaceConfig and WaterSurfaceComponent.
 #include "scene/water_surface.h"

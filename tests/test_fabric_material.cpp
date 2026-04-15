@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file test_fabric_material.cpp
 /// @brief Unit tests for the fabric material database and physics foundation.
 #include <gtest/gtest.h>

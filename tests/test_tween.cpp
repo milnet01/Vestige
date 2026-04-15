@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file test_tween.cpp
 /// @brief Unit tests for the tween system (property animation).
 #include "animation/tween.h"

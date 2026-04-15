@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file cloth_component.h
 /// @brief Entity component that owns a ClothSimulator and DynamicMesh for rendering.
 #pragma once

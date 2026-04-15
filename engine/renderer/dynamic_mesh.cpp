@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file dynamic_mesh.cpp
 /// @brief DynamicMesh implementation.
 #include "renderer/dynamic_mesh.h"

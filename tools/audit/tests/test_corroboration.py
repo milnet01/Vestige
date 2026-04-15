@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Anthony Schemel
+# SPDX-License-Identifier: MIT
+
 """Tests for lib.corroboration — D2 cross-source corroboration layer."""
 
 from __future__ import annotations

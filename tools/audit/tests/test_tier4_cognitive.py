@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Anthony Schemel
+# SPDX-License-Identifier: MIT
+
 """Tests for lib.tier4_cognitive — cognitive complexity analysis."""
 
 from __future__ import annotations

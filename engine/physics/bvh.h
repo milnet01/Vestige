@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file bvh.h
 /// @brief AABB Bounding Volume Hierarchy for triangle mesh proximity queries.
 ///

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file water_fbo.h
 /// @brief Manages reflection and refraction FBOs for water rendering.
 #pragma once

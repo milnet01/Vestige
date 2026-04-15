@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file density_map.h
 /// @brief Paintable density map for spatial foliage distribution control.
 #pragma once

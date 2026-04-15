@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file scene_serializer.cpp
 /// @brief Scene save/load implementation.
 #include "editor/scene_serializer.h"

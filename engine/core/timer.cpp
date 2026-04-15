@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file timer.cpp
 /// @brief Timer implementation using GLFW time functions.
 #include "core/timer.h"

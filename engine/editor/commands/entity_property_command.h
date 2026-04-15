@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file entity_property_command.h
 /// @brief Undoable entity property changes — name, visible, locked, active.
 #pragma once

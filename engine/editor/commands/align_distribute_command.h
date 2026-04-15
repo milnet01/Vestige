@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file align_distribute_command.h
 /// @brief Undoable align/distribute operations on multiple entities.
 #pragma once

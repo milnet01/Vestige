@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file pin_id.h
 /// @brief Interned pin name → integer ID mapping for hot-path performance.
 ///

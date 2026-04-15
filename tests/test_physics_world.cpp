@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file test_physics_world.cpp
 /// @brief Unit tests for the PhysicsWorld subsystem.
 #include "physics/physics_world.h"

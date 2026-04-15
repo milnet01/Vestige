@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file basic.frag.glsl
 /// @brief Basic fragment shader with simple directional lighting and vertex colors.
 #version 450 core

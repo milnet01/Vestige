@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file water_renderer.cpp
 /// @brief Water surface rendering implementation.
 #include "renderer/water_renderer.h"

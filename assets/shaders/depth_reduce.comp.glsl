@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file depth_reduce.comp.glsl
 /// @brief Parallel min/max depth reduction for SDSM (Sample Distribution Shadow Maps).
 ///

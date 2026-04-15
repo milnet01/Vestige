@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file taa.h
 /// @brief Temporal Anti-Aliasing with Halton jitter, motion vectors, and history clamping.
 #pragma once

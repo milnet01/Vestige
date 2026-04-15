@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file instance_buffer.cpp
 /// @brief GPU buffer for per-instance model matrices.
 #include "renderer/instance_buffer.h"

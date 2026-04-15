@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file prefab_system.cpp
 /// @brief PrefabSystem implementation — save/load entity trees as JSON files.
 #include "editor/prefab_system.h"

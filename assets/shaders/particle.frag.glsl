@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file particle.frag.glsl
 /// @brief Particle fragment shader with texture support and soft particles.
 #version 450 core

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file scene.vert.glsl
 /// @brief Main scene vertex shader — transforms geometry with instancing, MDI, TBN matrix, and TAA jitter support.
 #version 460 core

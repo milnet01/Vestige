@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file skeleton.h
 /// @brief Joint hierarchy and skeleton data loaded from glTF skins.
 #pragma once

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file expression_eval.h
 /// @brief Tree-walking expression evaluator for tool-time formula evaluation.
 ///

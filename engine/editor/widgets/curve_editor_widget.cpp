@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file curve_editor_widget.cpp
 /// @brief ImGui curve editor widget implementation.
 #include "editor/widgets/curve_editor_widget.h"
