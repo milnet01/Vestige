@@ -1591,15 +1591,14 @@ void Engine::setupDemoScene()
 
     auto groundMat = m_resourceManager->createMaterial("ground");
     groundMat->setType(MaterialType::PBR);
-    groundMat->setAlbedo(glm::vec3(1.0f));
+    // Untextured grey ground — the original everytexture.com rock
+    // textures are not redistributable in the public repo. A richer
+    // ground material will land via the separate VestigeAssets repo
+    // (see ASSET_LICENSES.md). Local maintainers retain the original
+    // files (gitignored) and can re-enable a textured ground there.
+    groundMat->setAlbedo(glm::vec3(0.55f, 0.52f, 0.50f));
     groundMat->setMetallic(0.0f);
     groundMat->setRoughness(0.9f);
-    groundMat->setDiffuseTexture(m_resourceManager->loadTexture(
-        "assets/textures/everytexture-com-stock-rocks-texture-00038-2048/everytexture.com-stock-rocks-texture-00038-diffuse-2048.jpg"));
-    groundMat->setNormalMap(m_resourceManager->loadTexture(
-        "assets/textures/everytexture-com-stock-rocks-texture-00038-2048/everytexture.com-stock-rocks-texture-00038-normal-2048.jpg", true));
-    groundMat->setStochasticTiling(true);
-    groundMat->setUvScale(6.0f);
 
     // Block 1 — Red Brick (left) — sealed/glazed brick with clearcoat
     auto redBrickMat = m_resourceManager->createMaterial("red_brick");
@@ -1616,20 +1615,29 @@ void Engine::setupDemoScene()
     redBrickMat->setUvScale(0.5f);
 
     // Block 2 — Gold (center)
+    // The original Texturelabs metal diffuse is not redistributable; the
+    // PBR metallic/roughness/albedo combination below renders convincingly
+    // as gold on its own. A richer textured gold is queued for the
+    // separate VestigeAssets repo (see ASSET_LICENSES.md).
     auto goldMat = m_resourceManager->createMaterial("gold");
     goldMat->setType(MaterialType::PBR);
     goldMat->setAlbedo(glm::vec3(1.4f, 1.1f, 0.5f));
     goldMat->setMetallic(1.0f);
     goldMat->setRoughness(0.25f);
-    goldMat->setDiffuseTexture(m_resourceManager->loadTexture("assets/textures/Texturelabs_Metal_124M.jpg"));
 
     // Block 3 — Wood (right)
+    // Switched from non-redistributable Texturelabs_Glass_120M to the
+    // CC0 Poly Haven `plank_flooring_04` set already shipped in the repo.
+    // Adds proper normal + roughness maps that the previous setup lacked.
     auto woodMat = m_resourceManager->createMaterial("wood");
     woodMat->setType(MaterialType::PBR);
     woodMat->setAlbedo(glm::vec3(1.0f));
     woodMat->setMetallic(0.0f);
     woodMat->setRoughness(0.9f);
-    woodMat->setDiffuseTexture(m_resourceManager->loadTexture("assets/textures/Texturelabs_Glass_120M.jpg"));
+    woodMat->setDiffuseTexture(m_resourceManager->loadTexture("assets/textures/plank_flooring_04_diff_2k.jpg"));
+    woodMat->setNormalMap(m_resourceManager->loadTexture("assets/textures/plank_flooring_04_nor_gl_2k.jpg", true));
+    woodMat->setMetallicRoughnessTexture(
+        m_resourceManager->loadTexture("assets/textures/plank_flooring_04_rough_2k.jpg", true));
 
     // Block 4 — Rough Brick (back)
     auto roughBrickMat = m_resourceManager->createMaterial("rough_brick");
@@ -1642,14 +1650,9 @@ void Engine::setupDemoScene()
 
     // --- Height maps for POM ---
 
-    // Ground — rock bump/height map
-    auto groundHeightTex = std::make_shared<Texture>();
-    if (groundHeightTex->loadFromFile(
-        "assets/textures/everytexture-com-stock-rocks-texture-00038-2048/everytexture.com-stock-rocks-texture-00038-bump-2048.jpg", true))
-    {
-        groundMat->setHeightMap(groundHeightTex);
-        groundMat->setHeightScale(0.06f);
-    }
+    // Ground height map removed alongside the everytexture rock textures
+    // (see notes above). When the VestigeAssets repo ships a ground
+    // material it can rewire setHeightMap() here.
 
     // Block 1 — embossed label "1" over red brick displacement
     auto redBrickHeightTex = std::make_shared<Texture>();
@@ -1968,7 +1971,12 @@ void Engine::setupTabernacleScene()
     m_renderer->setBloomIntensity(0.10f);  // Very subtle
     m_renderer->setSsaoEnabled(true);
 
-    // Load desert HDRI skybox (Goegap Nature Reserve, South Africa — arid Namaqualand)
+    // Load desert HDRI skybox (Goegap Nature Reserve, South Africa — arid Namaqualand).
+    // The `tabernacle/` asset directory is part of the separate biblical-project
+    // repo (commercial Steam release) and is not present in fresh public clones
+    // of the engine. Local maintainers retain it for development; the call below
+    // will silently fail to load when the file is absent, leaving the previous
+    // skybox state in place.
     m_renderer->loadSkyboxHDRI("assets/textures/tabernacle/goegap_2k.hdr");
 
     Scene* scene = m_sceneManager->createScene("Tabernacle");
