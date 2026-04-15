@@ -7,12 +7,13 @@ status. Keep it up to date when adding or removing assets.
 The engine code itself is MIT-licensed (see [LICENSE](LICENSE)). Assets
 shipped in this repo carry their own licenses, listed below.
 
-> **Status as of 2026-04-15**: this is a transitional inventory. The
-> non-redistributable Texturelabs textures and the biblical-project
+> **Status as of 2026-04-15**: the non-redistributable Texturelabs
+> textures, the everytexture.com rocks, and the biblical-project
 > tabernacle content have been removed from the public repo (see
-> `.gitignore`). Larger CC0 assets (Poly Haven 4K textures and
-> `.blend.zip` files) are slated for migration to a separate
-> public assets repo so engine clones stay small. See
+> `.gitignore`). The large CC0 assets (Poly Haven 4K textures,
+> `.blend.zip` files, extracted blend dirs) have been migrated to
+> the **separate `VestigeAssets` repo** and are pulled in via CMake
+> `FetchContent` at configure time. See
 > [`docs/PRE_OPEN_SOURCE_AUDIT.md`](docs/PRE_OPEN_SOURCE_AUDIT.md) §4.
 
 ---
@@ -59,13 +60,12 @@ Font Name "Arimo" is not used for derivative works.
 
 | Pattern | Source | License | Notes |
 |---------|--------|---------|-------|
-| `red_brick_*.jpg` | Poly Haven `red_brick_4k` | **CC0** | 4K variants are large (~13MB each) |
-| `brick_wall_005_*.jpg` | Poly Haven `brick_wall_005_4k` | **CC0** | 4K diff is ~13MB |
-| `plank_flooring_04_*.jpg` | Poly Haven `plank_flooring_04_4k` | **CC0** | 4K rough is ~12MB |
-| `*_4k.blend.zip` | Poly Haven `.blend` archives | **CC0** | 38–77 MB each |
-| `*_4k.blend/textures/*` | Extracted Poly Haven blend assets | **CC0** | Up to ~36MB each |
+| `red_brick_diff_2k.jpg` (+ `_nor_gl_2k`, `_disp_2k`, `_rough_2k`) | Poly Haven `red_brick_4k` | **CC0** | 2K variants used by demo scene |
+| `brick_wall_005_diff_2k.jpg` (+ siblings) | Poly Haven `brick_wall_005_4k` | **CC0** | 2K variants used by demo scene |
+| `plank_flooring_04_diff_2k.jpg` (+ siblings) | Poly Haven `plank_flooring_04_4k` | **CC0** | 2K variants used by demo scene |
 | `label_[1-4].png` | Engine-authored block labels | MIT | Used in demo scene |
 | ~~`everytexture-com-stock-rocks-*`~~ | ~~everytexture.com~~ | **Excluded — see below** | Was used as ground texture; license forbids redistribution |
+| ~~`*_4k.jpg`, `*_4k.blend.zip`, `*_4k.blend/`~~ | Poly Haven CC0 4K variants | **Moved to VestigeAssets repo** | Pulled in at configure time via CMake `FetchContent`; engine clones stay small |
 
 ### Excluded (not in public repo, kept locally via `.gitignore`)
 
@@ -98,10 +98,13 @@ render with their albedo colour) until CC0 replacements are wired in.
    Haven CC0 alternatives so the public-repo clone renders the demo
    correctly. Locally the maintainer's files stay in place — these
    replacements are about the public clone experience.
-5. **Separate public assets repo**: migrate the large Poly Haven
+5. ~~**Separate public assets repo**: migrate the large Poly Haven
    `.blend.zip` archives and 4K texture variants out of the engine
-   repo to keep clone size manageable. Engine loads from a configured
-   path (env var or CMake-time download).
+   repo to keep clone size manageable.~~ ✅ Done — created
+   `milnet01/VestigeAssets` (currently private), pulled in via CMake
+   `FetchContent` at configure time. The engine's `external/CMakeLists.txt`
+   pins `GIT_TAG v0.1.0`. Bump that pin in lockstep with VestigeAssets
+   tags. Both repos will go public together.
 
 ---
 

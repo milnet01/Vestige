@@ -303,3 +303,36 @@ FetchContent_Declare(
 )
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
+
+# VestigeAssets — large CC0 textures (Poly Haven 4K diffuse JPGs,
+# .blend.zip archives, extracted blend dirs). Split out from the
+# engine repo to keep clones small. See ASSET_LICENSES.md and the
+# top-level CMakeLists.txt copy_assets target — it merges this
+# repo's assets/ into the build output alongside the in-engine
+# small assets.
+#
+# The repo has no CMakeLists.txt — Populate (not MakeAvailable) so
+# CMake just clones it without trying to add_subdirectory. The
+# clone path is exposed as ${vestige_assets_SOURCE_DIR}.
+#
+# Set VESTIGE_FETCH_ASSETS=OFF to skip (e.g., offline builds, or
+# when the assets repo is unreachable). The engine still builds
+# and runs; the demo simply uses the smaller in-engine 2K
+# variants and falls back to flat-colour materials where the 4K
+# files would normally be.
+option(VESTIGE_FETCH_ASSETS
+    "Pull large CC0 assets from milnet01/VestigeAssets via FetchContent" ON)
+if(VESTIGE_FETCH_ASSETS)
+    FetchContent_Declare(
+        vestige_assets
+        GIT_REPOSITORY https://github.com/milnet01/VestigeAssets.git
+        GIT_TAG        v0.1.0
+        GIT_SHALLOW    TRUE
+    )
+    FetchContent_GetProperties(vestige_assets)
+    if(NOT vestige_assets_POPULATED)
+        FetchContent_Populate(vestige_assets)
+    endif()
+    set(VESTIGE_ASSETS_DIR "${vestige_assets_SOURCE_DIR}" CACHE INTERNAL
+        "Path to the populated VestigeAssets clone")
+endif()
