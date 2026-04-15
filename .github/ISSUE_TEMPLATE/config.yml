@@ -1,0 +1,12 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/milnet01/Vestige/blob/main/SECURITY.md
+    about: >-
+      Do NOT open a public issue. Report security issues privately per the
+      disclosure process in SECURITY.md.
+  - name: Question / discussion
+    url: https://github.com/milnet01/Vestige/discussions
+    about: >-
+      Questions, design discussions, and general chat belong in GitHub
+      Discussions, not the issue tracker.

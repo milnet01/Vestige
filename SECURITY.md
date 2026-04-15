@@ -1,6 +1,107 @@
-# Vestige Security Standards
+# Vestige Security
 
-This document defines the security standards for the Vestige 3D Engine. Since the engine is a commercial product targeting Steam distribution, security must be considered at every stage of development.
+This document covers two things: how to **report a security issue** in
+Vestige (for users and contributors), and the internal **security
+standards** Vestige development follows (for anyone modifying the
+engine source).
+
+> Short version: email
+> [aant.schemel@gmail.com](mailto:aant.schemel@gmail.com) with a
+> subject line beginning `[vestige-security]` — do not open a public
+> issue or pull request for an unpatched vulnerability.
+
+---
+
+## Vulnerability disclosure
+
+### Scope
+
+Security reports are welcome for anything in the
+[`milnet01/Vestige`](https://github.com/milnet01/Vestige) engine
+repository: C++ source, shaders, the audit / Formula Workbench tools,
+bundled assets, and the CI configuration.
+
+Out of scope for this contact channel:
+
+- Vulnerabilities in upstream dependencies (GLFW, GLM, Jolt, ImGui,
+  FreeType, OpenAL Soft, etc.) — report those to the respective upstream
+  project. The engine's CVE-mitigation list lives in
+  [`§5 Dependency Security`](#5-dependency-security) below.
+- Asset content in the separate
+  [`milnet01/VestigeAssets`](https://github.com/milnet01/VestigeAssets)
+  repo (CC0 asset pack — no executable code).
+- Issues in downstream projects built *with* Vestige.
+
+### How to report
+
+Send an email to
+[aant.schemel@gmail.com](mailto:aant.schemel@gmail.com) with
+`[vestige-security]` at the start of the subject line. Please include:
+
+1. **A clear description** of the vulnerability.
+2. **Reproduction steps** — minimal repro preferred (specific commit
+   SHA, build configuration, and any assets or input files required).
+3. **Impact assessment** — your best read on severity and the
+   attack surface (e.g. "crashes the engine on any malformed glTF
+   file", "lets a scene file escape the asset directory sandbox",
+   "is a memory-safety issue in the physics loader").
+4. **Proposed mitigation**, if you have one.
+5. **Your preferred attribution** in the eventual fix changelog
+   (your name, handle, or anonymous — your call).
+
+PGP is not currently required. If you need an encrypted channel, say
+so in a first-contact email (no sensitive content) and a key exchange
+can be arranged.
+
+### What to expect back
+
+This is a solo-maintained project, so the timeline is best-effort:
+
+- **Acknowledgement:** within ~7 days of your email. If you don't hear
+  back in two weeks, reply to the same thread or open a public issue
+  with only a request-to-contact (no details).
+- **Triage assessment:** within ~14 days of acknowledgement. This
+  covers severity, reproducibility, and a rough remediation plan.
+- **Fix and disclosure:** coordinated with you. Typical window is up
+  to 90 days from triage for a non-trivial fix. For fixes already in
+  progress, sooner.
+- **Credit:** the fix commit and `CHANGELOG.md` entry will credit you
+  as requested unless you asked to remain anonymous.
+
+Please do **not** publicly disclose the vulnerability (conference talk,
+blog post, tweet, public GitHub issue, etc.) until we have a fix
+released and have agreed on disclosure timing. If you believe an issue
+is being actively exploited in the wild, say so in the initial email
+— that shortens the timeline.
+
+### Rewards
+
+Vestige does **not** run a paid bug-bounty programme. Good-faith
+reports are gratefully acknowledged in the changelog and release
+notes; there is no monetary reward.
+
+### Safe-harbour statement
+
+Security research conducted in good faith under these guidelines will
+not be treated as a license or terms-of-service violation by the
+project maintainer. This covers: reverse-engineering the engine,
+running fuzzers and static analysers against your own local build,
+reporting findings privately to the contact above, and declining to
+publicly disclose before a fix ships.
+
+It does **not** cover: attacking infrastructure that isn't yours
+(CI runners, other users' machines, the maintainer's accounts),
+exfiltrating data, denial-of-service against shared services, or
+disclosing vulnerabilities before a fix ships.
+
+---
+
+# Security standards (internal)
+
+The remainder of this document defines the security standards for the
+Vestige 3D Engine. Since the engine is a commercial product targeting
+Steam distribution, security must be considered at every stage of
+development.
 
 ---
 

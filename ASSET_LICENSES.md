@@ -77,10 +77,12 @@ Font Name "Arimo" is not used for derivative works.
 
 The local maintainer keeps these files on disk so the demo scene and
 tabernacle scene render normally during development. They are not
-present in the public repo. Two demo materials currently reference
-Texturelabs files (`Gold` and `Wood` blocks in `engine.cpp`); these
-will fall back gracefully on a fresh clone (textures null, materials
-render with their albedo colour) until CC0 replacements are wired in.
+present in the public repo. The demo scene in `engine.cpp` no longer
+references any Texturelabs or everytexture files: the **Gold** block
+renders as pure PBR (metallic/roughness albedo, no diffuse texture),
+the **Wood** block uses the CC0 Poly Haven `plank_flooring_04` set
+already shipped in the repo, and the **ground** renders untextured
+grey until a CC0 ground material lands via `VestigeAssets`.
 
 ---
 
@@ -93,14 +95,21 @@ render with their albedo colour) until CC0 replacements are wired in.
    license at the Khronos glTF Sample Assets repo and reproduced the
    required attribution lines in both this file and
    `THIRD_PARTY_NOTICES.md`.
-4. **Demo-scene texture replacements**: swap the *three* references in
+4. ~~**Demo-scene texture replacements**: swap the *three* references in
    `engine/core/engine.cpp` that point to non-redistributable files
    (Texturelabs_Metal_124M for the Gold block at :1621,
    Texturelabs_Glass_120M for the Wood block at :1629, and the
    everytexture rocks for the ground at :1595/:1597/:1645) for Poly
    Haven CC0 alternatives so the public-repo clone renders the demo
-   correctly. Locally the maintainer's files stay in place — these
-   replacements are about the public clone experience.
+   correctly.~~ ✅ Done — Gold is now pure PBR (no diffuse texture
+   needed, metallic=1.0 / roughness=0.25 render convincingly on their
+   own); Wood switched to the CC0 Poly Haven `plank_flooring_04` set
+   already shipped in the repo (now with proper normal + roughness
+   maps it lacked before); ground renders untextured grey pending a
+   CC0 rock material via the `VestigeAssets` repo. The demo scene in
+   the public repo now configures and renders correctly from a clean
+   clone — the maintainer's local Texturelabs / everytexture files
+   remain untracked for offline development only.
 5. ~~**Separate public assets repo**: migrate the large Poly Haven
    `.blend.zip` archives and 4K texture variants out of the engine
    repo to keep clone size manageable.~~ ✅ Done — created

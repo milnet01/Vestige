@@ -56,26 +56,47 @@ Everything else depends on these choices. Do not proceed past Section 1 until th
 
 ## 4. Asset Boundary
 
-> ⚠️ **CRITICAL LAUNCH BLOCKER** — current `assets/` directory has content that likely cannot be redistributed under MIT. Must be resolved before any public push.
+> ✅ **RESOLVED as of 2026-04-15** — the assets directory now ships
+> only redistributable content. All previously-identified blockers
+> have been remediated; see the individual line items below.
 
-### Known concerns (as of 2026-04-14)
-- **`assets/textures/Texturelabs_*.jpg`** — from texturelabs.org. Their license permits free use but **explicitly forbids redistribution in other asset packs, tools, or repositories**. These **cannot** ship in an open-source repo. Options:
-  1. Replace with CC0 equivalents (ambientCG, Poly Haven, CC0 Textures, OpenGameArt)
-  2. Remove entirely and point sample scenes at downloaded-on-first-run assets
-  3. Contact texturelabs.org and request explicit redistribution permission (unlikely to be granted)
-- **`assets/models/CesiumMan.glb` / `Fox.glb` / `RiggedFigure.glb`** — glTF sample models from Khronos / Cesium, typically **CC-BY 4.0** (redistributable with attribution). Verify exact source and license, then record in `THIRD_PARTY_NOTICES.md`.
-- **`assets/fonts/default.ttf`** — unknown source. Fonts are a notorious licensing trap: verify it's OFL / Apache / MIT licensed. If not, replace with a known-free font (DejaVu, Liberation, Noto, Inter).
+### Known concerns — status
+- [x] ~~**`assets/textures/Texturelabs_*.jpg`** — from texturelabs.org. License
+      forbids redistribution.~~ ✅ Done — 46 files `.gitignore`d (`.gitignore:113`:
+      `assets/textures/Texturelabs_*`). Demo-scene code in `engine/core/engine.cpp`
+      now uses CC0 Poly Haven `plank_flooring_04` for the Wood block and a
+      texture-less PBR gold (metallic/roughness) for the Gold block;
+      maintainer keeps local copies untracked for offline development only.
+- [x] ~~**`assets/models/CesiumMan.glb` / `Fox.glb` / `RiggedFigure.glb`**~~ —
+      ✅ Done (commit `564e4fd`) — each model verified against the Khronos
+      glTF Sample Assets repo, per-model attribution recorded in
+      `ASSET_LICENSES.md` (§Models) and `THIRD_PARTY_NOTICES.md`.
+- [x] ~~**`assets/fonts/default.ttf`**~~ — ✅ Done (commit `31c8e58`) —
+      identified as Arimo by Steve Matteson, SIL OFL 1.1; `OFL.txt` shipped
+      alongside the font; Reserved Font Name "Arimo" preserved.
+- [x] ~~**`assets/textures/everytexture-com-stock-rocks-*`**~~ — ✅ Done —
+      license forbids redistribution; files `.gitignore`d; demo ground now
+      renders untextured grey until a CC0 replacement lands via
+      `VestigeAssets`.
 
-### General audit
-- [ ] Enumerate every asset in `assets/` and verify:
-  - Source URL documented
-  - License documented (CC0, CC-BY, OFL, bought-with-redistribution-rights, self-made, etc.)
-  - License permits redistribution (not all "free" licenses do)
-  - Attribution requirement captured in `THIRD_PARTY_NOTICES.md`
-- [ ] Confirm assets from `/mnt/Storage/3D Engine Assets/` that are licensed for personal use only are **not** in the engine repo. Asset library references in code resolve via a config path, not a hardcoded `/mnt/...` string.
-- [ ] Biblical project content (Tabernacle, Solomon's Temple models/textures) lives in **separate repos**. Confirm no leakage into the engine repo.
-- [ ] Audio and fonts double-check: every `.ttf`, `.otf`, `.wav`, `.mp3`, `.ogg` has a verified-redistributable license.
-- [ ] Create `ASSET_LICENSES.md` (or extend `THIRD_PARTY_NOTICES.md`) listing every shipped asset with source + license + attribution.
+### General audit — status
+- [x] ~~Enumerate every asset in `assets/` and verify source + license +
+      redistribution + attribution.~~ ✅ Done — [`ASSET_LICENSES.md`](../ASSET_LICENSES.md)
+      tabulates shaders (MIT, engine-authored), models (Khronos CC-BY 4.0 /
+      CC0), fonts (OFL 1.1), and textures (Poly Haven CC0 + engine-authored
+      labels), with an explicit "excluded" table for the non-redistributable
+      files kept locally.
+- [x] ~~Confirm assets from `/mnt/Storage/3D Engine Assets/` are not in the
+      engine repo.~~ ✅ Done — verified by gitleaks sweep and `git ls-files`
+      grep; all hardcoded `/mnt/...` paths scrubbed (audit tool 2.4.1).
+- [x] ~~Biblical project content lives in **separate repos**.~~ ✅ Done —
+      `tabernacle/` content `.gitignore`d; removed from history in the
+      2026-04-15 `git filter-repo` sweep.
+- [x] ~~Audio and fonts double-check.~~ ✅ Done — no `.wav`/`.mp3`/`.ogg`
+      shipped in the engine repo; the single shipped font (`default.ttf`)
+      is OFL 1.1.
+- [x] ~~Create `ASSET_LICENSES.md`.~~ ✅ Done — at repo root, linked
+      from `README.md` and `THIRD_PARTY_NOTICES.md`.
 
 ---
 
@@ -95,12 +116,28 @@ Everything else depends on these choices. Do not proceed past Section 1 until th
 
 - [x] ~~Add `LICENSE` file at repo root.~~ ✅ Done — MIT, © 2026 Anthony Schemel (commit `689b78e`).
 - [x] ~~Add copyright headers to source files.~~ ✅ Done — 703 files in `engine/`, `tests/`, `tools/`, `assets/shaders/` now carry `// Copyright (c) 2026 Anthony Schemel` + `// SPDX-License-Identifier: MIT` (commit `601e45b`).
-- [ ] **Add `README.md`** with: what the engine is, current status ("early-stage, API unstable, solo-maintained"), build instructions, minimum system requirements, quick-start, license line, contact/discussion channel. Currently the repo only has `CLAUDE.md` (AI-collaboration instructions); a public-facing `README.md` is the highest-impact remaining gap.
+- [x] ~~**Add `README.md`**~~ ✅ Done (2026-04-15) — public-facing README at
+      repo root covering what Vestige is / isn't, project status
+      disclosure, feature matrix by phase, quick-start build + test
+      instructions, repository layout, documentation index, tooling
+      pointers, contributing summary, security-reporting pointer, and
+      license line.
 - [x] ~~Add `CONTRIBUTING.md`.~~ ✅ Done (commit `4353634`) — DCO sign-off, AI-disclosure policy, build instructions, audit-tool-clean expectation, contributor cadence note.
 - [x] ~~Add `CODE_OF_CONDUCT.md`.~~ ✅ Done (commit `4353634`) — adopts Contributor Covenant 2.1 by reference.
-- [ ] Add `SECURITY.md` — you already have one; verify the disclosure contact is an address you're willing to publish.
-- [ ] **Add `.github/ISSUE_TEMPLATE/`** with: bug report, feature request, security (redirect to SECURITY.md).
-- [ ] **Add `.github/PULL_REQUEST_TEMPLATE.md`** with a checklist (tests added, audit tool clean, CHANGELOG updated, DCO signed).
+- [x] ~~Add `SECURITY.md`~~ ✅ Done (2026-04-15) — existing internal
+      security-standards doc now prefaced with a "Vulnerability
+      disclosure" section covering scope, reporting address
+      (`aant.schemel@gmail.com` with `[vestige-security]` subject
+      prefix), expected timelines, rewards (none — good-faith credit
+      in the changelog), and a safe-harbour statement.
+- [x] ~~**Add `.github/ISSUE_TEMPLATE/`**~~ ✅ Done (2026-04-15) —
+      `bug_report.md`, `feature_request.md`, `config.yml` (blank issues
+      disabled; contact links redirect to SECURITY.md and Discussions).
+- [x] ~~**Add `.github/PULL_REQUEST_TEMPLATE.md`**~~ ✅ Done (2026-04-15) —
+      summary + kind-of-change classifier + contributor checklist
+      (DCO, coding standards, tests, ctest, audit tool, CHANGELOG,
+      Formula Workbench use, no-workarounds discipline) + explicit
+      AI-assistance disclosure line.
 - [x] ~~Add `THIRD_PARTY_NOTICES.md` for dependency attribution.~~ ✅ Done (commit `4353634`) — covers 15 FetchContent deps, 3 vendored sources (glad/stb/dr_libs), and shipped asset attributions (glTF models, Arimo OFL, Poly Haven CC0).
 
 ---
@@ -127,6 +164,16 @@ Some docs were written for an internal audience and may leak private context or 
 - [ ] `.pre-commit-config.yaml` — verify all hooks are public / installable by contributors.
 - [ ] Confirm `build/` is gitignored (it is; 53 LICENSE files confirm it pulls deps there).
 - [ ] **Add a CMake version matrix to CI.** The engine's `external/CMakeLists.txt` uses a SOURCE_SUBDIR trick to populate FetchContent deps without invoking their upstream `add_subdirectory`. The trick is stable today but depends on CMake FetchContent semantics that periodically tighten (CMP0169 already bit us once on `FetchContent_Populate`). Run the build on at least three CMake versions: the project min `3.20`, the current LTS-distro `3.28`, and `latest`. Catches silent regressions in a PR check rather than a downstream user's report. Migration paths if the pattern ever does break are documented in the `IF THIS BREAKS` block at the top of `external/CMakeLists.txt`.
+- [ ] **Remove `-DVESTIGE_FETCH_ASSETS=OFF` from `.github/workflows/ci.yml`** when
+      `milnet01/VestigeAssets` goes public alongside `Vestige`. Temporary
+      flag added 2026-04-15 after CI started failing with
+      `fatal: could not read Username for 'https://github.com'` on the
+      unauthenticated clone of the still-private sibling repo. The engine
+      supports the off-state (top-level `CMakeLists.txt:87` falls back to
+      in-engine assets only), so build + ctest coverage is preserved in
+      the meantime. See the comment on the `Configure` step in
+      `linux-build-test` for the full rationale. Pair this flip with the
+      "flip both repos public" item in §11.
 
 ---
 
