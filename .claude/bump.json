@@ -9,10 +9,12 @@
       "replace": "VERSION {NEW}"
     }
   ],
-  "post_check": "bash tools/hook-on-version-edit.sh < <(echo '{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"CMakeLists.txt\"}}')",
+  "$todos_run_before_post_check": "Todo 1 below MUST be done BEFORE running `post_check`. The post_check is the version-edit hook which compares CMakeLists.txt VERSION against CHANGELOG.md's topmost `## [X.Y.Z]` heading; if CHANGELOG still says `[Unreleased]`, the post_check passes (Unreleased is treated as in-sync), but the release is incomplete. Run todo 1, then post_check, then audit + tag.",
   "todos": [
-    "Promote `## [Unreleased]` in CHANGELOG.md to `## [{NEW}] - {TODAY}` and write the body. Or, if [Unreleased] is empty, add a fresh `## [{NEW}] - {TODAY}` section above [Unreleased].",
-    "Run the audit: `python3 tools/audit/audit.py -t 1 2 3` and triage findings before committing.",
+    "Promote `## [Unreleased]` in CHANGELOG.md to `## [{NEW}] - {TODAY}` and write the body. Or, if [Unreleased] is empty, add a fresh `## [{NEW}] - {TODAY}` section above [Unreleased]. **Required before post_check meaningfully validates.** Consider invoking the `changelog-writer` subagent to draft the body from the commit range since the previous tag.",
+    "Run post_check: `bash tools/hook-on-version-edit.sh < <(echo '{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"CMakeLists.txt\"}}')`. Confirm no systemMessage emitted (= no drift).",
+    "Run the audit: `python3 tools/audit/audit.py -t 1 2 3` and pipe findings to the `audit-triage` subagent before committing — typical filter ratio is ~85% noise.",
     "Tag the commit: `git tag v{NEW}` (Vestige convention from prior releases)."
-  ]
+  ],
+  "post_check": "bash tools/hook-on-version-edit.sh < <(echo '{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"CMakeLists.txt\"}}')"
 }
