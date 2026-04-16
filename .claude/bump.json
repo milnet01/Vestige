@@ -1,0 +1,18 @@
+{
+  "$comment": "Recipe consumed by ~/.claude/skills/bump/SKILL.md. Vestige's project() block spans multiple lines, so version_pattern targets the indented VERSION line.",
+  "version_source": "CMakeLists.txt",
+  "version_pattern": "VERSION\\s+([0-9]+\\.[0-9]+\\.[0-9]+)",
+  "files": [
+    {
+      "path": "CMakeLists.txt",
+      "pattern": "VERSION {OLD}",
+      "replace": "VERSION {NEW}"
+    }
+  ],
+  "post_check": "bash tools/hook-on-version-edit.sh < <(echo '{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"CMakeLists.txt\"}}')",
+  "todos": [
+    "Promote `## [Unreleased]` in CHANGELOG.md to `## [{NEW}] - {TODAY}` and write the body. Or, if [Unreleased] is empty, add a fresh `## [{NEW}] - {TODAY}` section above [Unreleased].",
+    "Run the audit: `python3 tools/audit/audit.py -t 1 2 3` and triage findings before committing.",
+    "Tag the commit: `git tag v{NEW}` (Vestige convention from prior releases)."
+  ]
+}

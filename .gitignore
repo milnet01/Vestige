@@ -37,8 +37,14 @@ compile_commands.json
 .DS_Store
 Thumbs.db
 
-# Claude Code local data (settings, worktrees, plans)
-.claude/
+# Claude Code local data (settings, worktrees, plans). Trailing /* (not /)
+# so the negations below can re-include team-shared config.
+.claude/*
+# Team-shared Claude Code config that SHOULD be in version control:
+#   settings.json — project-level hooks (e.g. PostToolUse drift check)
+#   bump.json     — recipe consumed by the user-level /bump skill
+!.claude/settings.json
+!.claude/bump.json
 
 # ImGui layout state
 imgui.ini
