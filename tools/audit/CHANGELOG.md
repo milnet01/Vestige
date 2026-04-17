@@ -2,6 +2,61 @@
 
 All notable changes to the Audit Tool are documented in this file.
 
+## [2.10.0] - 2026-04-17
+
+### Added (self-learning Phase 2 — feedback-driven severity demotion)
+
+Completes the loop started in 2.9.0. Phase 1 accumulated per-rule
+`hits / verified / suppressed` counters in `.audit_stats.json`. Phase
+2 reads those counters and automatically lowers the severity of
+findings whose rule has crossed a noise threshold on prior runs —
+the loudest false-positive sources stop polluting the top of the
+report on the next audit, without requiring a human to hand-edit
+`severity_overrides`.
+
+**Added**
+- **`lib.stats.compute_demotions(stats, policy)`** — returns
+  `{rule_id: severity_steps}` for rules meeting policy. Default
+  policy is "≥10 hits, ≥90 % noise, 0 verified" — tight enough
+  that a rule with even one verified hit is spared.
+- **`lib.findings.apply_auto_demotions(findings, demotions)`** —
+  mutates severity in place, clamped at `Severity.INFO`. Returns a
+  `{rule_id: count}` map of what actually got demoted this run.
+- **`auto_demote` config section** with five knobs: `enabled`,
+  `min_hits`, `noise_threshold`, `demote_steps`,
+  `require_zero_verified`, `exempt`. Defaults conservative.
+- **16 new tests** in `tests/test_stats.py` covering the policy
+  gates (min_hits, threshold, verified-as-safety, exempt list,
+  steps) and the mutation path (single-step, multi-step,
+  clamp-at-INFO, non-matching finding untouched).
+
+**Changed**
+- **`lib/runner.py`** — inserts `compute_demotions` +
+  `apply_auto_demotions` between `apply_severity_overrides` and the
+  verified-tag pass. Ordering matters: user `severity_overrides`
+  run first and win, so an explicit user choice is never
+  overridden by the automated demoter. Every demotion logs a line
+  of the form `"Auto-demoted N findings under rule 'X' (historical
+  noise 97% across 120 hits)"` so the user can always see WHY a
+  rule moved.
+
+**Safety model.** The demoter never silences a finding — it only
+lowers severity. `Severity.INFO` is the floor; beyond that the
+finding still appears in the report, just at the bottom.
+`require_zero_verified: true` by default means any verified hit
+blocks demotion; a rule that's produced even one real find is
+not automatically demoted. Opt in to verified-tolerant demotion
+(`require_zero_verified: false`) only after a rule has clearly
+regressed in quality.
+
+**Verified end-to-end** against Vestige tier-2: seeded
+`.audit_stats.json` with a 100%-noise rule, re-ran the audit, 38
+findings for that rule correctly dropped from MEDIUM to LOW. The
+log emitted `"Auto-demoted 38 findings under rule 'global_gl_state'
+(historical noise 100% across 100 hits)"` — transparent, reversible
+(reset via `--stats-reset`), and bounded to the exact rules the
+numbers call out.
+
 ## [2.9.0] - 2026-04-17
 
 ### Added (self-learning Phase 1 — per-rule statistics + self-triage)

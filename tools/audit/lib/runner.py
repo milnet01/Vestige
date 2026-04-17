@@ -126,6 +126,37 @@ class AuditRunner:
             results.findings = apply_severity_overrides(results.findings, severity_overrides)
             log.info("Applied %d severity override rules", len(severity_overrides))
 
+        # Phase 2 of the self-learning loop — auto-demote rules whose
+        # historical noise_ratio exceeds the configured threshold.
+        # Reads the (previous runs') .audit_stats.json; the CURRENT
+        # run's results don't influence this pass (they'll be written
+        # to stats at the end of this pipeline, affecting the NEXT
+        # run). User severity_overrides above run first and take
+        # precedence — an explicit user choice is never overridden
+        # by the auto-demoter.
+        try:
+            from .findings import apply_auto_demotions
+            from .stats import compute_demotions, load_stats
+            auto_cfg = self.config.get("auto_demote", default={}) or {}
+            prior_stats = load_stats(self.config.root)
+            demotions = compute_demotions(prior_stats, auto_cfg)
+            if demotions:
+                applied = apply_auto_demotions(results.findings, demotions)
+                if applied:
+                    for rid, count in sorted(applied.items()):
+                        r = prior_stats.rules.get(rid)
+                        noise = f"{r.noise_ratio * 100:.0f}%" if r else "?"
+                        log.info(
+                            "Auto-demoted %d findings under rule '%s' "
+                            "(historical noise %s across %s hits)",
+                            count, rid, noise,
+                            r.hits if r else "?",
+                        )
+        except Exception as e:
+            # Self-learning is diagnostic; a bug here must not break
+            # the audit run.
+            log.warning("Auto-demotion step failed: %s", e)
+
         # D3 (2.5.0): tag verified findings so reviewers can distinguish
         # reviewed-real-still-needs-fixing from not-yet-looked-at. This
         # runs before suppressions because suppression is a last-mile

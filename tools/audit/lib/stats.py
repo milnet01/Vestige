@@ -340,3 +340,80 @@ def render_triage_markdown(stats: AuditStats, min_hits: int = 5) -> str:
         lines.append("*No stats yet — run the audit at least once.*\n")
 
     return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Phase 2 — feedback-driven severity demotion.
+# Reads accumulated stats and produces a demotion map that the runner
+# applies to the next run's findings. Policy is explicit, configurable,
+# and logged so the user can always see WHY a rule got demoted.
+# ---------------------------------------------------------------------------
+
+# Default policy. Matches what AUDIT_TOOL_IMPROVEMENTS.md called
+# "strong candidates for demotion": ≥90% noise over ≥10 hits with zero
+# verified findings. Tightened further: any `verified` hit blocks
+# demotion because it means the rule HAS produced at least one real
+# signal, and silencing it would hide a proven-real category.
+DEFAULT_DEMOTION_POLICY: dict[str, Any] = {
+    "enabled": True,
+    "min_hits": 10,
+    "noise_threshold": 0.9,
+    "demote_steps": 1,
+    "require_zero_verified": True,
+    "exempt": [],           # list of rule_ids never demoted
+}
+
+
+def compute_demotions(
+    stats: AuditStats,
+    policy: dict[str, Any] | None = None,
+) -> dict[str, int]:
+    """Return ``{rule_id: severity_steps_to_demote}`` for rules meeting policy.
+
+    The steps value is always positive (Severity is IntEnum where higher
+    values = lower severity, so "demote by N steps" = ``severity += N``,
+    clamped at ``Severity.INFO``). Rules that don't meet policy do not
+    appear in the result.
+
+    Policy shape (all optional, merged over DEFAULT_DEMOTION_POLICY):
+      - ``enabled`` (bool): master switch. Default True.
+      - ``min_hits`` (int): minimum hits before a rule is considered.
+      - ``noise_threshold`` (float, 0-1): noise_ratio must be ≥ this.
+      - ``demote_steps`` (int): how many severity steps to drop.
+      - ``require_zero_verified`` (bool): if True, any verified hit
+        blocks demotion. Safety default — a rule that fired 50 times
+        with 49 suppressed and 1 verified is still producing real
+        signal; silencing it loses that signal.
+      - ``exempt`` (list[str]): rule_ids that are never demoted.
+
+    Returns an empty dict when the policy is disabled or no rules qualify.
+    """
+    merged = dict(DEFAULT_DEMOTION_POLICY)
+    if policy:
+        merged.update({k: v for k, v in policy.items() if v is not None})
+
+    if not merged.get("enabled", True):
+        return {}
+
+    min_hits = int(merged.get("min_hits", 10))
+    threshold = float(merged.get("noise_threshold", 0.9))
+    steps = int(merged.get("demote_steps", 1))
+    require_zero_verified = bool(merged.get("require_zero_verified", True))
+    exempt = set(merged.get("exempt", []) or [])
+
+    if steps <= 0:
+        return {}
+
+    out: dict[str, int] = {}
+    for rid, rule in stats.rules.items():
+        if rid in exempt:
+            continue
+        if rule.hits < min_hits:
+            continue
+        if require_zero_verified and rule.verified > 0:
+            continue
+        if rule.noise_ratio < threshold:
+            continue
+        out[rid] = steps
+    return out
+

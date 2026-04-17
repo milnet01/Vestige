@@ -190,6 +190,43 @@ def apply_severity_overrides(
     return findings
 
 
+def apply_auto_demotions(
+    findings: list[Finding],
+    demotions: dict[str, int],
+) -> dict[str, int]:
+    """Lower the severity of findings whose pattern_name is in *demotions*.
+
+    Phase 2 of the audit self-learning loop. The demotion map comes
+    from :func:`lib.stats.compute_demotions`, which reads
+    ``.audit_stats.json`` and returns rule_ids whose historical
+    noise_ratio exceeded the configured threshold.
+
+    Severity is clamped at :attr:`Severity.INFO` (the least severe
+    level). ``steps`` of 0 or negative values are ignored — use an
+    empty dict to disable.
+
+    Returns a ``{rule_id: count_demoted_this_run}`` map so the caller
+    can log a structured summary. Mutates findings in place.
+    """
+    if not demotions:
+        return {}
+
+    applied: dict[str, int] = {}
+    for f in findings:
+        # Mirror stats._rule_id so a fallback rule_id (category:title)
+        # also gets demoted. Tier-4 findings often leave pattern_name
+        # blank but still deserve the same treatment.
+        from .stats import _rule_id  # local import avoids a cycle
+        rid = _rule_id(f)
+        steps = demotions.get(rid, 0)
+        if steps <= 0:
+            continue
+        new_value = min(int(Severity.INFO), int(f.severity) + steps)
+        f.severity = Severity(new_value)
+        applied[rid] = applied.get(rid, 0) + 1
+    return applied
+
+
 @dataclass
 class ChangeSummary:
     """Summary of git changes for Tier 3."""

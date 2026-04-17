@@ -122,6 +122,22 @@ DEFAULTS: dict[str, Any] = {
         },
     },
     "severity_overrides": [],
+    # Phase 2 of the audit self-learning loop (tool 2.10.0). Reads
+    # .audit_stats.json written by Phase 1 and lowers the severity of
+    # findings whose historical noise_ratio exceeds `noise_threshold`
+    # over at least `min_hits` observations. Safety default
+    # `require_zero_verified: true` means any verified hit blocks
+    # demotion — a rule with one real find per 50 noisy hits is still
+    # producing real signal, and silencing it would lose that signal.
+    # See lib/stats.py `compute_demotions` + `DEFAULT_DEMOTION_POLICY`.
+    "auto_demote": {
+        "enabled": True,
+        "min_hits": 10,
+        "noise_threshold": 0.9,
+        "demote_steps": 1,
+        "require_zero_verified": True,
+        "exempt": [],
+    },
     # D4 (2.6.0): Tier 6 — feature coverage sweep. Heuristic check that
     # every engine/<subsystem>/ directory has at least one test file
     # referencing it via #include or filename prefix.

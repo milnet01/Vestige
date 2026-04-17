@@ -12,12 +12,14 @@ import pytest
 
 from lib.findings import Finding, Severity
 from lib.stats import (
+    DEFAULT_DEMOTION_POLICY,
     MAX_RUN_HISTORY,
     STATS_SCHEMA_VERSION,
     AuditStats,
     RuleStat,
     RunSummary,
     _rule_id,
+    compute_demotions,
     load_stats,
     render_triage_markdown,
     save_stats,
@@ -279,3 +281,111 @@ class TestRenderTriage:
         mild_pos = out.find("`mild`")
         assert loud_pos > 0 and mild_pos > 0
         assert loud_pos < mild_pos
+
+
+# ---------------------------------------------------------------------------
+# compute_demotions — Phase 2 severity-demotion policy
+# ---------------------------------------------------------------------------
+
+
+def _stats_with(**rule_kwargs) -> AuditStats:
+    """Build AuditStats with a single rule whose kwargs are supplied."""
+    s = AuditStats()
+    rid = rule_kwargs.get("rule_id", "rule_x")
+    s.rules[rid] = RuleStat(**rule_kwargs)
+    return s
+
+
+class TestComputeDemotionsPolicyGates:
+    def test_empty_stats_yields_no_demotions(self):
+        assert compute_demotions(AuditStats()) == {}
+
+    def test_disabled_policy_short_circuits(self):
+        s = _stats_with(rule_id="x", hits=100, suppressed=100)
+        assert compute_demotions(s, {"enabled": False}) == {}
+
+    def test_below_min_hits_is_not_demoted(self):
+        s = _stats_with(rule_id="x", hits=5, suppressed=5)
+        # Default min_hits = 10
+        assert compute_demotions(s) == {}
+
+    def test_below_noise_threshold_is_not_demoted(self):
+        s = _stats_with(rule_id="x", hits=20, suppressed=10)
+        # 50% noise, default threshold 90%
+        assert compute_demotions(s) == {}
+
+    def test_meets_all_gates_is_demoted(self):
+        s = _stats_with(rule_id="noisy", hits=20, suppressed=20)
+        result = compute_demotions(s)
+        assert result == {"noisy": 1}
+
+    def test_verified_hit_blocks_demotion_by_default(self):
+        # 1 verified out of 50 should protect the rule — it has
+        # produced at least one real finding.
+        s = _stats_with(rule_id="x", hits=50, suppressed=49, verified=1)
+        assert compute_demotions(s) == {}
+
+    def test_opt_out_of_zero_verified_gate(self):
+        s = _stats_with(rule_id="x", hits=50, suppressed=49, verified=1)
+        assert compute_demotions(
+            s, {"require_zero_verified": False}
+        ) == {"x": 1}
+
+    def test_exempt_list_skips_matching_rules(self):
+        s = AuditStats()
+        s.rules["a"] = RuleStat(rule_id="a", hits=20, suppressed=20)
+        s.rules["b"] = RuleStat(rule_id="b", hits=20, suppressed=20)
+        result = compute_demotions(s, {"exempt": ["a"]})
+        assert result == {"b": 1}
+
+    def test_custom_steps_reflected_in_output(self):
+        s = _stats_with(rule_id="x", hits=20, suppressed=20)
+        assert compute_demotions(s, {"demote_steps": 2}) == {"x": 2}
+
+    def test_zero_or_negative_steps_disables(self):
+        s = _stats_with(rule_id="x", hits=20, suppressed=20)
+        assert compute_demotions(s, {"demote_steps": 0}) == {}
+        assert compute_demotions(s, {"demote_steps": -1}) == {}
+
+    def test_none_valued_policy_key_falls_back_to_default(self):
+        # A config file may leave a key as None (YAML null). None
+        # values should merge as "use default" rather than overwrite
+        # a functional default with nothing.
+        s = _stats_with(rule_id="x", hits=20, suppressed=20)
+        # Default min_hits=10 should still apply.
+        assert compute_demotions(s, {"min_hits": None}) == {"x": 1}
+
+
+class TestApplyAutoDemotions:
+    def test_no_demotions_noops(self):
+        from lib.findings import apply_auto_demotions
+        f = _mk_finding("rule_a", severity=Severity.HIGH)
+        result = apply_auto_demotions([f], {})
+        assert result == {}
+        assert f.severity == Severity.HIGH
+
+    def test_single_step_demotion(self):
+        from lib.findings import apply_auto_demotions
+        f = _mk_finding("rule_a", severity=Severity.HIGH)
+        applied = apply_auto_demotions([f], {"rule_a": 1})
+        assert applied == {"rule_a": 1}
+        assert f.severity == Severity.MEDIUM
+
+    def test_multi_step_demotion(self):
+        from lib.findings import apply_auto_demotions
+        f = _mk_finding("rule_a", severity=Severity.HIGH)
+        apply_auto_demotions([f], {"rule_a": 2})
+        assert f.severity == Severity.LOW
+
+    def test_clamps_at_info(self):
+        from lib.findings import apply_auto_demotions
+        f = _mk_finding("rule_a", severity=Severity.LOW)
+        apply_auto_demotions([f], {"rule_a": 10})
+        # Severity.INFO is the floor — further demotion is a no-op.
+        assert f.severity == Severity.INFO
+
+    def test_non_matching_finding_untouched(self):
+        from lib.findings import apply_auto_demotions
+        f = _mk_finding("other_rule", severity=Severity.CRITICAL)
+        apply_auto_demotions([f], {"rule_a": 1})
+        assert f.severity == Severity.CRITICAL
