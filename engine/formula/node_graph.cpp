@@ -416,9 +416,10 @@ bool NodeGraph::wouldCreateCycle(NodeId sourceNode, NodeId targetNode) const
                 {
                     return true;
                 }
-                if (visited.count(c.targetNode) == 0)
+                // insert() returns {iter, inserted}; use the bool directly
+                // to avoid a redundant count() probe (cppcheck: stlFindInsert).
+                if (visited.insert(c.targetNode).second)
                 {
-                    visited.insert(c.targetNode);
                     frontier.push(c.targetNode);
                 }
             }

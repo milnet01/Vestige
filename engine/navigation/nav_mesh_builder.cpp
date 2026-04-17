@@ -18,6 +18,7 @@
 #include <glm/gtc/type_ptr.hpp>
 
 #include <chrono>
+#include <cstring>
 
 namespace Vestige
 {
@@ -109,11 +110,16 @@ void NavMeshBuilder::collectSceneGeometry(Scene& scene,
         // Record base vertex index for offset
         int baseVertex = static_cast<int>(vertices.size() / 3);
 
-        // Transform and add vertices
+        // Transform and add vertices. Copy the three position floats out of
+        // the uint8_t buffer via memcpy rather than reinterpret_cast to the
+        // raw bytes — the latter is a strict-aliasing violation and was
+        // flagged by cppcheck (invalidPointerCast, portability). memcpy is
+        // the standard-blessed way to reinterpret bytes as a different
+        // trivially-copyable type and optimises to the same load on AMD64.
         for (size_t v = 0; v < numVertices; ++v)
         {
-            const float* pos = reinterpret_cast<const float*>(
-                vboData.data() + v * VERTEX_STRIDE);
+            float pos[3];
+            std::memcpy(pos, vboData.data() + v * VERTEX_STRIDE, sizeof(pos));
             glm::vec4 worldPos = worldMatrix * glm::vec4(pos[0], pos[1], pos[2], 1.0f);
             vertices.push_back(worldPos.x);
             vertices.push_back(worldPos.y);

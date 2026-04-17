@@ -9,6 +9,42 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### Fixed — 2026-04-17 cppcheck audit cycle
+
+Eight actionable cppcheck findings from the 2026-04-16 audit run (1
+portability bug, 7 performance hits) against a noise baseline of ~300
+raw findings. Triage kept local per `AUDIT_STANDARDS.md`.
+
+- **`engine/navigation/nav_mesh_builder.cpp`: strict-aliasing UB in
+  scene-geometry collection.** `reinterpret_cast<const float*>` on a
+  `uint8_t*` VBO buffer violated the strict-aliasing rule; `-O2` is
+  free to reorder or elide such loads, so the UB was latent rather
+  than visibly buggy. Switched to `std::memcpy` into a local
+  `float[3]` — the standard-blessed way to reinterpret bytes as a
+  different trivially-copyable type. Compiles to the same load on
+  AMD64; portable under strict-aliasing. cppcheck:
+  `invalidPointerCast` (portability).
+
+- **`engine/formula/lut_generator.cpp`: redundant map lookup in
+  default-variable insertion.** `vars.find(name) == end()` followed
+  by `vars[name] = default` is now `vars.try_emplace(name, default)`
+  — one traversal instead of two. cppcheck: `stlFindInsert`.
+
+- **`engine/formula/node_graph.cpp`: redundant set probe in
+  cycle-detection frontier.** `visited.count(target) == 0` followed
+  by `visited.insert(target)` is now
+  `if (visited.insert(target).second)` — `insert` returns
+  `{iter, inserted}`, so a single call replaces the count-then-insert
+  pair. cppcheck: `stlFindInsert`.
+
+- **`engine/utils/cube_loader.cpp` + `tests/test_color_grading.cpp`:
+  `line.find(x) == 0` → `line.rfind(x, 0) == 0`.** The
+  `rfind(x, 0)` overload only searches at position 0 so it
+  short-circuits as soon as the prefix matches or fails; the
+  `find(x) == 0` form scans the whole string before reporting the
+  position. C++17-compatible equivalent of `starts_with()` (which is
+  C++20). Seven call sites updated. cppcheck: `stlIfStrFind`.
+
 ### Changed — 2026-04-15 launch-prep: `VESTIGE_FETCH_ASSETS` default → OFF
 
 - **Default changed** in `external/CMakeLists.txt`: fresh clones no

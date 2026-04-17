@@ -38,8 +38,10 @@ CubeData CubeLoader::load(const std::string& filePath)
             continue;
         }
 
-        // Parse metadata
-        if (line.find("TITLE") == 0)
+        // Parse metadata. rfind(x, 0) == 0 is the C++17-compatible
+        // equivalent of starts_with() — short-circuits at position 0
+        // instead of scanning the whole string (cppcheck: stlIfStrFind).
+        if (line.rfind("TITLE", 0) == 0)
         {
             // TITLE "name" or TITLE name
             size_t start = line.find('"');
@@ -58,7 +60,7 @@ CubeData CubeLoader::load(const std::string& filePath)
             continue;
         }
 
-        if (line.find("LUT_3D_SIZE") == 0)
+        if (line.rfind("LUT_3D_SIZE", 0) == 0)
         {
             std::istringstream iss(line.substr(12));
             iss >> lutSize;
@@ -72,8 +74,8 @@ CubeData CubeLoader::load(const std::string& filePath)
         }
 
         // Skip other metadata lines
-        if (line.find("DOMAIN_MIN") == 0 || line.find("DOMAIN_MAX") == 0
-            || line.find("LUT_1D_SIZE") == 0)
+        if (line.rfind("DOMAIN_MIN", 0) == 0 || line.rfind("DOMAIN_MAX", 0) == 0
+            || line.rfind("LUT_1D_SIZE", 0) == 0)
         {
             continue;
         }

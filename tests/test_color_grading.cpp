@@ -272,7 +272,10 @@ static TestCubeData parseCubeString(const std::string& content)
         {
             continue;
         }
-        if (line.find("LUT_3D_SIZE") == 0)
+        // rfind(x, 0) == 0 is the C++17-compatible equivalent of starts_with()
+        // — short-circuits at position 0 instead of scanning the whole string
+        // (cppcheck: stlIfStrFind).
+        if (line.rfind("LUT_3D_SIZE", 0) == 0)
         {
             std::istringstream iss(line.substr(12));
             iss >> lutSize;
@@ -282,7 +285,7 @@ static TestCubeData parseCubeString(const std::string& content)
             }
             continue;
         }
-        if (line.find("TITLE") == 0 || line.find("DOMAIN") == 0)
+        if (line.rfind("TITLE", 0) == 0 || line.rfind("DOMAIN", 0) == 0)
         {
             continue;
         }

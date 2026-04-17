@@ -100,13 +100,12 @@ LutGenerateResult LutGenerator::generate(
         vars[name] = val;
     }
 
-    // Add input defaults for variables not on axes and not in extraVars
+    // Add input defaults for variables not on axes and not in extraVars.
+    // try_emplace is a no-op when the key already exists, so it avoids
+    // the explicit find() lookup (cppcheck: stlFindInsert).
     for (const auto& input : formula.inputs)
     {
-        if (vars.find(input.name) == vars.end())
-        {
-            vars[input.name] = input.defaultValue;
-        }
+        vars.try_emplace(input.name, input.defaultValue);
     }
 
     result.minValue = std::numeric_limits<float>::max();
