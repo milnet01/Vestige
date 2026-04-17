@@ -208,6 +208,27 @@ def main() -> int:
         help="Also generate a SARIF 2.1.0 report",
     )
     parser.add_argument(
+        "--self-triage",
+        action="store_true",
+        help="Emit a per-rule noise-ratio triage report from .audit_stats.json "
+             "and exit. The report ranks rules by (noise_ratio × hits) so "
+             "loud false-positive sources surface first — the automated "
+             "equivalent of a hand-written AUDIT_TOOL_IMPROVEMENTS.md. "
+             "Runs an audit first if no stats file exists yet.",
+    )
+    parser.add_argument(
+        "--stats-show",
+        action="store_true",
+        help="Print the raw .audit_stats.json contents (cumulative per-rule "
+             "counters + rolling run history) and exit.",
+    )
+    parser.add_argument(
+        "--stats-reset",
+        action="store_true",
+        help="Delete .audit_stats.json and exit. Use when a major rule "
+             "rewrite makes the prior counters misleading.",
+    )
+    parser.add_argument(
         "--keep-snapshots",
         type=int,
         default=None,
@@ -290,6 +311,38 @@ def main() -> int:
         root = Path(args.project_root).resolve() if args.project_root else Path.cwd()
         save_verified(root, args.verified_add, annotation="added via --verified-add")
         print(f"Verified: {args.verified_add}")
+        return 0
+
+    # --stats-show: print raw stats JSON and exit
+    if args.stats_show:
+        from lib.stats import load_stats
+        root = Path(args.project_root).resolve() if args.project_root else Path.cwd()
+        stats = load_stats(root)
+        print(json.dumps(stats.to_dict(), indent=2, sort_keys=True))
+        return 0
+
+    # --stats-reset: delete the stats file and exit
+    if args.stats_reset:
+        root = Path(args.project_root).resolve() if args.project_root else Path.cwd()
+        path = root / ".audit_stats.json"
+        if path.exists():
+            path.unlink()
+            print(f"Removed {path}")
+        else:
+            print(f"No stats file at {path} — nothing to remove.")
+        return 0
+
+    # --self-triage: emit the triage markdown and exit
+    if args.self_triage:
+        from lib.stats import load_stats, render_triage_markdown
+        root = Path(args.project_root).resolve() if args.project_root else Path.cwd()
+        stats = load_stats(root)
+        if not stats.rules:
+            print("No stats recorded yet. Run an audit first:",
+                  file=sys.stderr)
+            print(f"  python3 {sys.argv[0]}", file=sys.stderr)
+            return 1
+        print(render_triage_markdown(stats))
         return 0
 
     # --verified-remove: remove a key and exit (D3)

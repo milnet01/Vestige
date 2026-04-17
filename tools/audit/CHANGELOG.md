@@ -2,6 +2,52 @@
 
 All notable changes to the Audit Tool are documented in this file.
 
+## [2.9.0] - 2026-04-17
+
+### Added (self-learning Phase 1 — per-rule statistics + self-triage)
+
+First half of the self-learning loop sketched in
+`docs/FORMULA_WORKBENCH_SELF_LEARNING_DESIGN.md` §6. The audit tool
+now persists per-rule `hits / verified / suppressed` counters into
+`.audit_stats.json` after every run, and a new `--self-triage`
+subcommand emits a ranked markdown report — the automated equivalent
+of the hand-written `AUDIT_TOOL_IMPROVEMENTS.md` that caught the
+4 × 30 = 110 FPs in the 2026-04-16 Vestige triage.
+
+**Added**
+- **`lib/stats.py`** — `RuleStat`, `RunSummary`, `AuditStats`
+  dataclasses + `load_stats` / `save_stats` / `update_stats` /
+  `render_triage_markdown`. Schema versioned (v1); corrupt or
+  unknown-schema files start fresh rather than misparse.
+- **`--self-triage`** — prints a markdown report ranking rules by
+  `noise_ratio × hits`. Rules with ≥90 % noise over ≥10 hits surface
+  in a "Recommended actions" section. Separate "Not yet ranked"
+  list captures rules with <5 hits so they aren't lost.
+- **`--stats-show`** — dump the raw `.audit_stats.json` JSON.
+- **`--stats-reset`** — delete the stats file (for when a major
+  rule rewrite makes the prior counters misleading).
+- **`tests/test_stats.py`** — 23 tests covering the ratio maths,
+  corrupt-file recovery, run-history capping, verified/suppressed
+  counter increments, and triage-markdown rendering.
+
+**Changed**
+- **`lib/runner.py`** — hooks `update_stats` into the pipeline
+  immediately before `filter_suppressed` runs. Ordering matters:
+  pattern_names that get suppressed still need to increment their
+  rule's `suppressed` counter, otherwise a rule with 100 % noise
+  would look the same as a rule that never fired. Stats failures
+  are caught and logged — they never break the run.
+
+**Rolling history cap** — `MAX_RUN_HISTORY = 50`. Per-rule counters
+are cumulative and never truncated; only the `runs[]` list rolls.
+Keeps the file small on long-running CI pipelines.
+
+**Not yet done (Phase 2, tracked)** — feeding `noise_ratio` back
+into automatic severity demotion on the next run. Phase 1 is the
+data collection layer; Phase 2 is the decision layer that reads
+from it. Landing Phase 1 independently means the counters start
+accumulating now, so when Phase 2 lands it has real data to act on.
+
 ## [2.8.1] - 2026-04-15
 
 ### Changed (open-source prep — self-referential path scrub)

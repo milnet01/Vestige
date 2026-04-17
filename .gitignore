@@ -117,6 +117,10 @@ id_ed25519
 # Local audit tool state — per-user, not per-project
 .audit_suppress.local
 .audit_verified.local
+# Per-run audit stats — cumulative counters, rolling run history
+# (see tools/audit/lib/stats.py). Not committed; each developer's
+# copy reflects their own audit runs + verify/suppress actions.
+.audit_stats.json
 
 # Audit artefacts — see docs/PRE_OPEN_SOURCE_AUDIT.md §7.
 # Audit-session outputs (findings lists, discovery logs, fix plans,

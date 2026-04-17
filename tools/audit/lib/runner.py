@@ -141,6 +141,31 @@ class AuditRunner:
         # Apply finding suppressions before reporting
         from .suppress import load_suppressions, filter_suppressed
         suppressed = load_suppressions(self.config.root)
+
+        # Update per-rule statistics BEFORE the suppress filter removes
+        # entries — the whole point of the stats layer is to notice when
+        # a rule fires 30 times and gets suppressed 30 times, which
+        # requires seeing the suppressed findings too. See
+        # ``lib/stats.py`` module docstring.
+        try:
+            from .stats import load_stats, save_stats, update_stats
+            stats = load_stats(self.config.root)
+            pre_filter_duration = time.monotonic() - start
+            update_stats(
+                stats=stats,
+                findings=results.findings,
+                suppressed_keys=suppressed,
+                tiers_run=results.tiers_run,
+                duration_s=pre_filter_duration,
+            )
+            save_stats(stats, self.config.root)
+            log.info("Updated .audit_stats.json — %d rules tracked",
+                     len(stats.rules))
+        except Exception as e:
+            # Stats are a diagnostic sidecar; never break the run on
+            # stats-layer failure.
+            log.warning("Failed to update audit stats: %s", e)
+
         if suppressed:
             results.findings, suppressed_count = filter_suppressed(results.findings, suppressed)
             log.info("Suppressed %d findings (%d active)", suppressed_count, len(results.findings))
