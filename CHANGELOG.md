@@ -9,7 +9,9 @@ may change any interface without notice.
 
 ## [Unreleased]
 
-### Fixed — 2026-04-17 cppcheck audit cycle
+## [0.1.4] - 2026-04-17
+
+### Fixed — cppcheck audit cycle
 
 Eight actionable cppcheck findings from the 2026-04-16 audit run (1
 portability bug, 7 performance hits) against a noise baseline of ~300
@@ -45,7 +47,9 @@ raw findings. Triage kept local per `AUDIT_STANDARDS.md`.
   position. C++17-compatible equivalent of `starts_with()` (which is
   C++20). Seven call sites updated. cppcheck: `stlIfStrFind`.
 
-### Changed — 2026-04-15 launch-prep: `VESTIGE_FETCH_ASSETS` default → OFF
+## [0.1.3] - 2026-04-15
+
+### Changed — launch-prep: `VESTIGE_FETCH_ASSETS` default → OFF
 
 - **Default changed** in `external/CMakeLists.txt`: fresh clones no
   longer attempt to pull the `milnet01/VestigeAssets` CC0 asset pack.
@@ -71,7 +75,7 @@ When VestigeAssets later goes public the flip is a single commit
 that sets the default back to `ON`, drops the explicit flag from
 CI, and re-links the sibling repo in `README.md`.
 
-### Changed — 2026-04-15 launch-prep: Timer → `std::chrono::steady_clock`
+### Changed — launch-prep: Timer → `std::chrono::steady_clock`
 
 - **`engine/core/timer.cpp` no longer depends on GLFW.** Switched the
   time source from `glfwGetTime()` to `std::chrono::steady_clock` via a
@@ -101,78 +105,113 @@ CI, and re-links the sibling repo in `README.md`.
   lifecycle from `vestige_tests` (it was the only test that called
   `glfwInit`). Five consecutive parallel runs now pass 100%.
 
-### Fixed — 2026-04-13 post-audit follow-up
+## [0.1.2] - 2026-04-13
 
-- **§H19 SH grid irradiance was missing the /π conversion** — the *real*
-  cause of the "everything textured looks emissive" white-out reported
-  by the user. `evaluateSHGridIrradiance` returns Ramamoorthi-Hanrahan
+### Fixed — §H18 + §H19 divergent SH grid radiosity bake
+
+Post-audit follow-up. User reported every textured surface looked
+like an emissive light after the §H14 SH basis correction landed;
+bisection via the new `--isolate-feature` CLI flag localised it to
+the IBL diffuse path, specifically the SH probe-grid contribution.
+Two real bugs, neither addressed by §H14 / §M14:
+
+- **§H19 SH grid irradiance was missing the /π conversion** — the
+  *real* cause. `evaluateSHGridIrradiance` returns Ramamoorthi-Hanrahan
   irradiance E (`∫ L(ω) cos(θ) dω`); the diffuse-IBL formula at the
-  call site is `kD * irradiance * albedo`, which assumes the *pre-divided*
-  value E/π that LearnOpenGL's pre-filtered irradiance cubemap stores
-  (PI is multiplied in during the convolution, then implicitly divided
-  back out via `(1/nrSamples) * PI`). Without the /π division, the SH
-  grid path produced a diffuse contribution π × the correct value, so
-  the radiosity transfer factor became `π × albedo`. For any albedo
-  ≥ 1/π ≈ 0.318 — i.e. all common materials — that's > 1, and the
-  multi-bounce bake series diverged instead of converging. Observed
-  energy growth ~1.7× per bounce matched `π × scene-average-albedo
-  ≈ π × 0.54` exactly. Fix: divide the SH evaluation result by π so
-  it matches the cubemap convention. Bake now converges geometrically
-  (Tabernacle scene: 5.47 → 6.16 → 6.49, deltas 0.69 → 0.33).
+  call site is `kD * irradiance * albedo`, which assumes the
+  *pre-divided* value E/π that LearnOpenGL's pre-filtered irradiance
+  cubemap stores (PI is multiplied in during the convolution, then
+  implicitly divided back out via `(1/nrSamples) * PI`). Without the
+  /π division, the SH grid path produced a diffuse contribution
+  π × the correct value, so the radiosity transfer factor became
+  `π × albedo`. For any albedo ≥ 1/π ≈ 0.318 — i.e. all common
+  materials — that's > 1, and the multi-bounce bake series diverged
+  instead of converging. Observed energy growth ~1.7× per bounce
+  matched `π × scene-average-albedo ≈ π × 0.54` exactly. Fix: divide
+  the SH evaluation result by π so it matches the cubemap convention.
+  Bake now converges geometrically (Tabernacle scene: 5.47 → 6.16 →
+  6.49, deltas 0.69 → 0.33).
 
 - **§H18 skybox vertex shader was Z-convention-blind** — masked the
-  §H19 bug below the surface. The shader hard-coded `gl_Position.z = 0`,
-  which is the far plane in reverse-Z (main render path) but the *middle*
-  of the depth buffer in forward-Z (capture passes used by
-  `captureLightProbe` and `captureSHGrid`). Without this fix, the §M14
-  workaround had to gate the skybox out of capture passes entirely,
-  leaving the SH probe-grid bake without any sky direct contribution
-  and forcing it to feed off pure inter-geometry bounce — the exact
-  configuration where §H19's missing /π factor blew up. The shader now
-  reads `u_skyboxFarDepth` and emits `z = u_skyboxFarDepth * w`, so
-  z/w = u_skyboxFarDepth after the perspective divide. The renderer
-  sets the uniform per pass: 0 for reverse-Z main render, 0.99999 for
-  forward-Z capture (close-but-not-equal-to-1.0 so GL_LESS still
-  passes against the cleared far buffer). The §M14 `&& !geometryOnly`
-  gate is removed since the skybox now draws correctly in both Z
-  conventions. Sky direct light is back in the SH grid bake.
+  §H19 bug below the surface. The shader hard-coded
+  `gl_Position.z = 0`, which is the far plane in reverse-Z (main
+  render path) but the *middle* of the depth buffer in forward-Z
+  (capture passes used by `captureLightProbe` and `captureSHGrid`).
+  Without this fix, the §M14 workaround had to gate the skybox out
+  of capture passes entirely, leaving the SH probe-grid bake without
+  any sky direct contribution and forcing it to feed off pure
+  inter-geometry bounce — the exact configuration where §H19's
+  missing /π factor blew up. The shader now reads `u_skyboxFarDepth`
+  and emits `z = u_skyboxFarDepth * w`, so z/w = u_skyboxFarDepth
+  after the perspective divide. The renderer sets the uniform per
+  pass: 0 for reverse-Z main render, 0.99999 for forward-Z capture
+  (close-but-not-equal-to-1.0 so GL_LESS still passes against the
+  cleared far buffer). The §M14 `&& !geometryOnly` gate is removed
+  since the skybox now draws correctly in both Z conventions. Sky
+  direct light is back in the SH grid bake.
 
-- **Diagnostic CLI flag `--isolate-feature=NAME`** retained for future
-  regression bisection. Recognised values: `motion-overlay`, `bloom`,
-  `ssao`, `ibl`, `ibl-diffuse`, `ibl-specular`, `sh-grid`. Each disables
-  one specific renderer feature so a `--visual-test` run's frame
-  reports can be diff-mechanically compared against a baseline to
-  identify the offending subsystem. Used to find §H18+§H19 in 5
-  short visual-test passes — without it the bisection would have
-  required either reverting commits or interactive shader editing.
+- **Diagnostic CLI flag `--isolate-feature=NAME`** retained for
+  future regression bisection. Recognised values: `motion-overlay`,
+  `bloom`, `ssao`, `ibl`, `ibl-diffuse`, `ibl-specular`, `sh-grid`.
+  Each disables one specific renderer feature so a `--visual-test`
+  run's frame reports can be diff-mechanically compared against a
+  baseline to identify the offending subsystem. Used to find
+  §H18+§H19 in 5 short visual-test passes — without it the bisection
+  would have required either reverting commits or interactive shader
+  editing.
 
-- **§H17 SystemRegistry destruction lifetime**: shutdown SEGV reported
-  immediately after "Engine shutdown complete" (ASan: `SEGV on unknown
-  address … pc == address`, then nested-bug abort). Root cause was
-  structural, not the H16 ImGui-node-editor race: `SystemRegistry::shutdownAll()`
-  called each system's `shutdown()` but left the unique_ptr<ISystem> entries
-  in the vector. The systems' destructors therefore ran during `~Engine`
-  member cleanup — *after* `m_renderer.reset()` and `m_window.reset()` had
-  already destroyed the renderer and torn down the GL context — so any
-  system dtor that touched a cached Renderer*/Window* or freed a GL
-  handle dereferenced freed memory or called a dead driver function
-  pointer. New `SystemRegistry::clear()` destroys the systems in reverse
-  registration order; `Engine::shutdown()` calls it immediately after
-  `shutdownAll()` so destruction happens while shared infrastructure is
-  still alive. Closes the H16 runtime-verification deferral noted at
-  CHANGELOG.md "Deferred to ROADMAP" — H16 (ed::DestroyEditor SaveSettings
-  race) was correct as far as it went; §H17 was the second, independent
-  shutdown path that masked the H16 fix's success. Six new unit tests in
-  `tests/test_system_registry.cpp` pin the contract: destructors run in
-  reverse order inside `clear()`, the registry empties, `clear()` is
-  idempotent, and the canonical `shutdownAll()` → `clear()` sequence
-  produces the expected eight-event log.
+## [0.1.1] - 2026-04-13
 
-### Security — 2026-04-13 audit cycle
+### Fixed — §H17 SystemRegistry destruction lifetime
+
+Post-audit follow-up to the 0.1.0 audit cycle. The §H16 fix
+(gated `SaveSettings` during `ed::DestroyEditor`) closed one
+shutdown SEGV but a second, independent SEGV remained, surfacing as
+ASan "SEGV on unknown address (PC == address)" + nested-bug abort
+immediately after the "Engine shutdown complete" log line.
+
+- **§H17 SystemRegistry destruction lifetime**: root cause was
+  structural, not the §H16 ImGui-node-editor race:
+  `SystemRegistry::shutdownAll()` called each system's `shutdown()`
+  but left the `unique_ptr<ISystem>` entries in the vector. The
+  systems' destructors therefore ran during `~Engine` member
+  cleanup — *after* `m_renderer.reset()` and `m_window.reset()` had
+  already destroyed the renderer and torn down the GL context — so
+  any system dtor that touched a cached Renderer*/Window* or freed a
+  GL handle dereferenced freed memory or called a dead driver
+  function pointer. New `SystemRegistry::clear()` destroys the
+  systems in reverse registration order; `Engine::shutdown()` calls
+  it immediately after `shutdownAll()` so destruction happens while
+  shared infrastructure is still alive. Closes the §H16
+  runtime-verification deferral — §H16 (ed::DestroyEditor
+  SaveSettings race) was correct as far as it went; §H17 was the
+  second, independent shutdown path that masked the §H16 fix's
+  success. Six new unit tests in `tests/test_system_registry.cpp`
+  pin the contract: destructors run in reverse order inside
+  `clear()`, the registry empties, `clear()` is idempotent, and the
+  canonical `shutdownAll()` → `clear()` sequence produces the
+  expected eight-event log.
+
+## [0.1.0] - 2026-04-13
+
+Initial changelog entry. Prior history captured in `ROADMAP.md` Phase
+notes and `docs/PHASE*.md` design documents.
+
+Subsystems in place as of this release:
+- Core (engine/window/input/event-bus/system-registry)
+- Renderer (OpenGL 4.5 PBR forward, IBL, TAA, SSAO, bloom, shadows, SH probe grid)
+- Animation (skeleton, IK, morph, motion matching, lip sync)
+- Physics (rigid body, constraints, character controller, cloth)
+- Scripting (Phase 9E visual scripting, 60+ node types)
+- Formula (template library, Levenberg-Marquardt curve fitter, codegen)
+- Editor (ImGui dock-based; Phase 9E-3 node editor panel in progress)
+- Scene / Resource / Navigation / Profiler / UI / Audio
+
+### Security — audit cycle
 - Flask web UI of the audit tool hardened against path-traversal and shell-injection (affects local-dev setups that ran the web UI only; no public deployment). Details in `tools/audit/CHANGELOG.md` v2.0.1–2.0.6.
 - **Formula codegen injection hardened** (AUDIT.md §H11). `ExprNode::variable/binaryOp/unaryOp` factories + `fromJson` now validate identifiers against `[A-Za-z_][A-Za-z0-9_]*` and operators against an allowlist. Codegen (C++ + GLSL) throws on unknown op instead of raw-splicing. A crafted preset JSON like `{"var": "x); system(\"rm -rf /\"); float y("}` is now rejected at load time, well before any generated header is compiled.
 
-### Fixed — 2026-04-13 audit cycle
+### Fixed — audit cycle
 
 **Scripting (§H5–§H9, §M5–§M8)**
 - **§H5 UB `&ref == 0` guards**: `Engine& m_engine` → `Engine*`. `reinterpret_cast<uintptr_t>(&m_engine) == 0` was undefined behavior that `-O2` could fold to false, crashing release builds on paths that rely on the guard.
@@ -227,18 +266,3 @@ Three known gaps documented in ROADMAP.md:
 - Per-object motion vectors via MRT (eliminates the overlay pass; enables skinned/morphed motion) — Phase 10 rendering enhancements.
 - `NodeGraph` CONDITIONAL node type (preserves `ExprNode` conditional round-trip) — Phase 9E visual scripting.
 - imgui-node-editor shutdown SEGV visual confirmation — Phase 9E-3 step-4 acceptance (code-level race is closed; needs one editor launch to verify).
-
-## [0.1.0] - 2026-04-13
-
-Initial changelog entry. Prior history captured in `ROADMAP.md` Phase
-notes and `docs/PHASE*.md` design documents.
-
-Subsystems in place as of this release:
-- Core (engine/window/input/event-bus/system-registry)
-- Renderer (OpenGL 4.5 PBR forward, IBL, TAA, SSAO, bloom, shadows, SH probe grid)
-- Animation (skeleton, IK, morph, motion matching, lip sync)
-- Physics (rigid body, constraints, character controller, cloth)
-- Scripting (Phase 9E visual scripting, 60+ node types)
-- Formula (template library, Levenberg-Marquardt curve fitter, codegen)
-- Editor (ImGui dock-based; Phase 9E-3 node editor panel in progress)
-- Scene / Resource / Navigation / Profiler / UI / Audio
