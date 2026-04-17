@@ -1,0 +1,25 @@
+{
+  "$comment": "Reference case for stokes_drag (F = 6 * pi * mu * radius * velocity). Single coefficient (mu) with canonical air-at-20C viscosity. Tolerance is percent-relative rather than absolute because mu is tiny (1.81e-5).",
+
+  "formula_name": "stokes_drag",
+
+  "canonical_coefficients": {
+    "mu": 1.81e-5
+  },
+
+  "input_sweep": {
+    "velocity": { "min": 0.1, "max": 5.0, "count": 15 },
+    "radius":   { "values": [0.001, 0.002, 0.005, 0.01] }
+  },
+
+  "expected": {
+    "r_squared_min": 0.999,
+    "rmse_max":      1e-6,
+    "coefficients": {
+      "mu": { "expected": 1.81e-5, "relative_tolerance": 0.05 }
+    },
+    "must_converge": true
+  },
+
+  "notes": "Two-input product-sweep (60 points). `relative_tolerance` style used instead of absolute because mu is O(1e-5); ±5 % is a realistic regression bound for this scale."
+}

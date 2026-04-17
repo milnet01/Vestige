@@ -2,6 +2,107 @@
 
 All notable changes to the Formula Workbench are documented in this file.
 
+## [1.7.0] - 2026-04-17
+
+**Completes Phase 2–3 of the self-learning design**
+(`docs/FORMULA_WORKBENCH_SELF_LEARNING_DESIGN.md`). Three new CLI
+tiers land together: reference-case regression harness (§3.4), PySR
+symbolic regression shell-out (§3.5), and LLM-guided formula ranking
+(§3.6). Phases 1 and 2 of the design are now entirely live; Phase 3's
+two tiers (§3.5, §3.6) ship as optional Python-side drivers so
+PySR/anthropic-SDK remain optional dependencies that don't touch
+the default build.
+
+### Added — §3.4 reference-case regression harness
+
+- **`tools/formula_workbench/reference_cases/`** — three seed JSON
+  specs: `beer_lambert.json`, `stokes_drag.json`,
+  `fresnel_schlick.json`. Each names a library formula, a canonical
+  coefficient set, an input-sweep spec, and an expected envelope
+  (R² min, RMSE max, per-coefficient tolerance).
+- **`tools/formula_workbench/reference_harness.{h,cpp}`** — parses
+  spec JSON, synthesizes a dataset from the canonical coefficients,
+  runs the LM fitter starting from the library defaults (never the
+  canonical values — that would be tautological), compares the
+  recovered coefficients against the envelope.
+- **`tests/test_reference_harness.cpp`** — parameterized Google
+  Test that discovers every `.json` under `reference_cases/` at
+  compile time (via a `VESTIGE_REFERENCE_CASES_DIR` macro passed
+  from CMake) and runs each as a separate test case. Dropping a
+  new spec into the directory automatically gains a test on the
+  next build. 7 tests total (3 cases + 4 harness meta-tests). Full
+  suite: 1807 passing (+7 from 1800).
+
+### Added — §3.5 PySR symbolic-regression tier
+
+- **`--symbolic-regression <csv>`** CLI flag shells out to
+  `scripts/pysr_driver.py`. Optional: install with
+  `pip install pysr` (pulls Julia ~300 MB on first run). Without
+  PySR, the driver prints a clear install hint and exits 2.
+- **`scripts/pysr_driver.py`** — reads the CSV (last column = obs),
+  runs PySR's multi-objective evolutionary search, emits a
+  markdown leaderboard of discovered equations + a machine-readable
+  JSON block. `--niterations`, `--binary-ops`, `--unary-ops`,
+  `--max-complexity` knobs for search tuning.
+- Complexity cap defaults to 20 — guards against the
+  nested-sin-of-log mutants PySR sometimes evolves (per the design
+  doc's §3.5 risk note).
+
+### Added — §3.6 LLM-guided formula ranking
+
+- **`--suggest-formulas <csv>`** CLI flag pipes the built-in
+  FormulaLibrary as JSON to `scripts/llm_rank.py`, which
+  constructs a prompt from library metadata + dataset summary
+  (n_points, variable list, min/max/mean/stdev of observations,
+  first 10 rows) and calls Anthropic's Claude for a ranked
+  shortlist of plausible formulas. Defaults to Haiku 4.5
+  (fastest/cheapest model accurate enough for shortlisting).
+- **`--dump-library`** CLI flag — emits the FormulaLibrary as JSON
+  to stdout. Also the stdin feed for `llm_rank.py`.
+- **`scripts/llm_rank.py`** — reads CSV + library JSON, calls
+  Anthropic, prints ranked markdown. Needs `ANTHROPIC_API_KEY` env
+  var; missing key or missing `anthropic` SDK → exit 2 with
+  actionable install/config message.
+- Per the design doc §3.6 safety note, the LLM stays advisory —
+  it ranks plausibility, the fitter still does the actual fitting.
+
+### Changed
+
+- **`workbench.h`** `WORKBENCH_VERSION` 1.6.0 → 1.7.0.
+- **`main.cpp`** — three new branch points before GLFW init:
+  `--symbolic-regression`, `--suggest-formulas`, `--dump-library`.
+  All CLI tiers continue to branch before GLFW so they stay
+  headless-safe.
+- **`benchmark.{h,cpp}`** — new `runSymbolicRegressionCli`,
+  `runSuggestFormulasCli`, `runDumpLibraryCli`, `dumpLibraryJson`,
+  plus internal `findDriverScript` (locates Python drivers in
+  install-dir / source-tree / cwd) and `runDriver` (fork+exec with
+  optional stdin pipe, inherits parent stdout/stderr).
+- **`tests/CMakeLists.txt`** — wires `test_reference_harness.cpp`
+  + `reference_harness.cpp` into the test target; passes
+  `VESTIGE_REFERENCE_CASES_DIR` as a compile-time path so the
+  test doesn't depend on cwd.
+
+### Verified
+
+- Full build + 1807 tests pass.
+- `--symbolic-regression` emits the PySR install hint when PySR
+  isn't installed (graceful degrade, exit 2).
+- `--suggest-formulas` emits the `ANTHROPIC_API_KEY` guidance when
+  the key isn't set (graceful degrade, exit 2).
+- `--dump-library` emits the full FormulaLibrary as formatted JSON.
+
+### Not yet done (tracked in design doc)
+
+- §3.5's graft-PySR-output-into-template-browser flow — the CLI
+  tier works, the GUI integration that lets the workbench import a
+  PySR-discovered expression as a new library entry is still the
+  next step.
+- §3.6 UI panel — right now the LLM is CLI-only. A "Suggestions"
+  panel inside the workbench that displays the ranked shortlist
+  alongside the template browser would make the feature
+  discoverable for non-CLI users.
+
 ## [1.6.0] - 2026-04-17
 
 ### Added (self-learning Phase 1 §3.3 — `--self-benchmark` CLI)

@@ -1,0 +1,25 @@
+{
+  "$comment": "Reference case for beer_lambert (I = I0 * exp(-alpha * depth)). The harness generates a dataset from `canonical_coefficients` + `input_sweep`, runs the LM fitter against it, and asserts the fitted output lies within `expected`. A regression in the fitter shows up here as a tolerance overshoot on reproducible test data.",
+
+  "formula_name": "beer_lambert",
+
+  "canonical_coefficients": {
+    "alpha": 0.4
+  },
+
+  "input_sweep": {
+    "I0":    { "values": [1.0] },
+    "depth": { "min": 0.0, "max": 5.0, "count": 25 }
+  },
+
+  "expected": {
+    "r_squared_min": 0.999,
+    "rmse_max":      0.005,
+    "coefficients": {
+      "alpha": { "expected": 0.4, "tolerance": 0.01 }
+    },
+    "must_converge": true
+  },
+
+  "notes": "α=0.4 matches the engine's water-shader absorption coefficient. Bounds chosen generously enough to tolerate minor fitter changes but tight enough to catch a real regression (e.g. a ±5% drift in recovered alpha)."
+}

@@ -1,0 +1,24 @@
+{
+  "$comment": "Reference case for fresnel_schlick (R = F0 + (1-F0)*(1-cosTheta)^5). Simple single-input, single-coefficient polynomial — a good regression target because LM should converge fast and exactly on a smooth 5th-power curve.",
+
+  "formula_name": "fresnel_schlick",
+
+  "canonical_coefficients": {
+    "F0": 0.02
+  },
+
+  "input_sweep": {
+    "cosTheta": { "min": 0.0, "max": 1.0, "count": 21 }
+  },
+
+  "expected": {
+    "r_squared_min": 0.9999,
+    "rmse_max":      0.001,
+    "coefficients": {
+      "F0": { "expected": 0.02, "tolerance": 0.002 }
+    },
+    "must_converge": true
+  },
+
+  "notes": "F0=0.02 is water at n=1.33. Coefficient tolerance of 0.002 is 10 % of the canonical value — the fitter should do much better than that, so a breach indicates a real regression."
+}

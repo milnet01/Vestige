@@ -94,13 +94,22 @@ add_executable(vestige_tests
     # the test target compiles it directly.
     test_fit_history.cpp
     test_benchmark.cpp
+    test_reference_harness.cpp
     ${CMAKE_SOURCE_DIR}/tools/formula_workbench/fit_history.cpp
     ${CMAKE_SOURCE_DIR}/tools/formula_workbench/benchmark.cpp
+    ${CMAKE_SOURCE_DIR}/tools/formula_workbench/reference_harness.cpp
 )
 
 target_include_directories(vestige_tests
     PRIVATE
         ${CMAKE_SOURCE_DIR}/tools/formula_workbench
+)
+
+# §3.4 reference-case harness needs to know where the JSON specs live.
+# Pass the absolute source path so tests run from any cwd.
+target_compile_definitions(vestige_tests
+    PRIVATE
+        VESTIGE_REFERENCE_CASES_DIR="${CMAKE_SOURCE_DIR}/tools/formula_workbench/reference_cases"
 )
 
 target_link_libraries(vestige_tests

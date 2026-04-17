@@ -100,4 +100,33 @@ std::string renderBenchmarkMarkdown(const std::vector<BenchmarkEntry>& entries);
 ///   formula_workbench --self-benchmark data.csv --output report.md
 std::optional<int> runBenchmarkCli(int argc, char** argv);
 
+/// @brief §3.5 — shell out to ``scripts/pysr_driver.py`` for symbolic
+/// regression. Returns the driver's exit code when the flag is handled.
+///
+/// Usage:
+///   formula_workbench --symbolic-regression data.csv
+///
+/// The driver is optional: when PySR isn't installed the driver
+/// prints an install hint on stderr and exits 2, which the CLI
+/// forwards verbatim. No PySR dependency on the Workbench build.
+std::optional<int> runSymbolicRegressionCli(int argc, char** argv);
+
+/// @brief §3.6 — shell out to ``scripts/llm_rank.py`` for
+/// LLM-guided formula ranking. Returns the driver's exit code.
+///
+/// Usage:
+///   formula_workbench --suggest-formulas data.csv
+///
+/// The C++ side dumps the built-in FormulaLibrary as JSON and pipes
+/// it into the driver's stdin; the driver constructs a prompt and
+/// calls the Anthropic API. Exits 2 on missing ANTHROPIC_API_KEY or
+/// anthropic SDK.
+std::optional<int> runSuggestFormulasCli(int argc, char** argv);
+
+/// @brief Emit the built-in FormulaLibrary as JSON to stdout.
+/// Used by ``--dump-library`` and by ``--suggest-formulas`` as the
+/// metadata piped into the LLM driver.
+void dumpLibraryJson(const FormulaLibrary& library);
+std::optional<int> runDumpLibraryCli(int argc, char** argv);
+
 } // namespace Vestige

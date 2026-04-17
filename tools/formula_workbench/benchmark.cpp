@@ -5,12 +5,18 @@
 
 #include "formula/formula.h"
 
+#include <nlohmann/json.hpp>
+
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <sstream>
+#include <sys/wait.h>
+#include <unistd.h>
 
 namespace Vestige
 {
@@ -455,6 +461,235 @@ std::optional<int> runBenchmarkCli(int argc, char** argv)
         f << md;
     }
     return 0;
+}
+
+// ---------------------------------------------------------------------------
+// §3.5 / §3.6 — Python driver shell-outs and library JSON dump.
+//
+// Both CLI tiers live in Python (PySR and the Anthropic SDK are both
+// Python-first), so the C++ side's job is just to locate the driver,
+// invoke it with the right argv + stdin, and forward the exit code.
+// This keeps PySR/Anthropic as optional dependencies that don't
+// touch the default Workbench build.
+// ---------------------------------------------------------------------------
+
+namespace
+{
+
+// Locate the scripts directory relative to the executable. Tries
+// three candidate layouts in order:
+//   1. Alongside the running binary (install layout).
+//   2. Source tree (development layout: tools/formula_workbench/scripts/).
+//   3. Current working directory.
+// First hit wins.
+std::string findDriverScript(const char* name)
+{
+    namespace fs = std::filesystem;
+    const char* self_exe_candidates[] = {
+        "/proc/self/exe",
+    };
+    fs::path exe;
+    for (const char* p : self_exe_candidates)
+    {
+        std::error_code ec;
+        exe = fs::read_symlink(p, ec);
+        if (!ec && !exe.empty()) break;
+    }
+
+    std::vector<fs::path> search;
+    if (!exe.empty())
+    {
+        // bin/ → parent dir → tools/formula_workbench/scripts/
+        search.push_back(exe.parent_path() / "scripts" / name);
+        search.push_back(exe.parent_path().parent_path()
+                         / "tools" / "formula_workbench" / "scripts" / name);
+    }
+    search.push_back(fs::path("tools/formula_workbench/scripts") / name);
+    search.push_back(fs::path("scripts") / name);
+
+    for (const auto& p : search)
+    {
+        std::error_code ec;
+        if (fs::exists(p, ec)) return p.string();
+    }
+    return {};
+}
+
+// Fork + exec a driver script with optional stdin pipe. Returns the
+// child's exit code, or -1 on spawn failure. The parent's stdout/
+// stderr are inherited, so the driver's output lands on our TTY
+// directly — no buffering.
+int runDriver(const std::string& script,
+              const std::vector<std::string>& argv,
+              const std::string& stdinContents = {})
+{
+    int pipefd[2] = {-1, -1};
+    if (!stdinContents.empty())
+    {
+        if (pipe(pipefd) != 0)
+        {
+            std::fprintf(stderr, "error: pipe() failed\n");
+            return -1;
+        }
+    }
+
+    pid_t pid = fork();
+    if (pid < 0)
+    {
+        std::fprintf(stderr, "error: fork() failed\n");
+        if (pipefd[0] >= 0) { close(pipefd[0]); close(pipefd[1]); }
+        return -1;
+    }
+
+    if (pid == 0)
+    {
+        // Child
+        if (pipefd[0] >= 0)
+        {
+            dup2(pipefd[0], STDIN_FILENO);
+            close(pipefd[0]);
+            close(pipefd[1]);
+        }
+        std::vector<char*> c_argv;
+        c_argv.push_back(const_cast<char*>("python3"));
+        c_argv.push_back(const_cast<char*>(script.c_str()));
+        for (const auto& a : argv) c_argv.push_back(const_cast<char*>(a.c_str()));
+        c_argv.push_back(nullptr);
+        execvp("python3", c_argv.data());
+        std::fprintf(stderr, "error: exec python3 failed\n");
+        _exit(127);
+    }
+
+    // Parent
+    if (pipefd[0] >= 0)
+    {
+        close(pipefd[0]);
+        ssize_t total = 0;
+        const char* buf = stdinContents.data();
+        const ssize_t need = static_cast<ssize_t>(stdinContents.size());
+        while (total < need)
+        {
+            ssize_t n = write(pipefd[1], buf + total, need - total);
+            if (n <= 0) break;
+            total += n;
+        }
+        close(pipefd[1]);
+    }
+
+    int status = 0;
+    waitpid(pid, &status, 0);
+    if (WIFEXITED(status))
+        return WEXITSTATUS(status);
+    return -1;
+}
+
+nlohmann::json formulaMetaToJson(const FormulaDefinition& f)
+{
+    nlohmann::json j;
+    j["name"]        = f.name;
+    j["category"]    = f.category;
+    j["description"] = f.description;
+    nlohmann::json ins = nlohmann::json::array();
+    for (const auto& inp : f.inputs)
+    {
+        nlohmann::json i;
+        i["name"]  = inp.name;
+        i["unit"]  = inp.unit;
+        ins.push_back(i);
+    }
+    j["inputs"] = ins;
+    nlohmann::json coeffs = nlohmann::json::object();
+    for (const auto& [k, v] : f.coefficients) coeffs[k] = v;
+    j["default_coefficients"] = coeffs;
+    j["source"] = f.source;
+    return j;
+}
+
+} // namespace
+
+void dumpLibraryJson(const FormulaLibrary& library)
+{
+    nlohmann::json arr = nlohmann::json::array();
+    for (const auto* f : library.getAll())
+    {
+        if (f) arr.push_back(formulaMetaToJson(*f));
+    }
+    nlohmann::json root;
+    root["formulas"] = arr;
+    std::fputs(root.dump(2).c_str(), stdout);
+    std::fputc('\n', stdout);
+}
+
+std::optional<int> runDumpLibraryCli(int argc, char** argv)
+{
+    for (int i = 1; i < argc; ++i)
+    {
+        if (std::string(argv[i]) == "--dump-library")
+        {
+            FormulaLibrary library;
+            library.registerBuiltinTemplates();
+            dumpLibraryJson(library);
+            return 0;
+        }
+    }
+    return std::nullopt;
+}
+
+std::optional<int> runSymbolicRegressionCli(int argc, char** argv)
+{
+    std::string csv;
+    for (int i = 1; i < argc; ++i)
+    {
+        if (std::string(argv[i]) == "--symbolic-regression" && i + 1 < argc)
+            csv = argv[++i];
+    }
+    if (csv.empty()) return std::nullopt;
+
+    const std::string script = findDriverScript("pysr_driver.py");
+    if (script.empty())
+    {
+        std::fprintf(stderr,
+            "error: pysr_driver.py not found. Expected at "
+            "tools/formula_workbench/scripts/pysr_driver.py relative "
+            "to the executable or source tree.\n");
+        return 1;
+    }
+    return runDriver(script, {csv});
+}
+
+std::optional<int> runSuggestFormulasCli(int argc, char** argv)
+{
+    std::string csv;
+    for (int i = 1; i < argc; ++i)
+    {
+        if (std::string(argv[i]) == "--suggest-formulas" && i + 1 < argc)
+            csv = argv[++i];
+    }
+    if (csv.empty()) return std::nullopt;
+
+    const std::string script = findDriverScript("llm_rank.py");
+    if (script.empty())
+    {
+        std::fprintf(stderr,
+            "error: llm_rank.py not found. Expected at "
+            "tools/formula_workbench/scripts/llm_rank.py relative to "
+            "the executable or source tree.\n");
+        return 1;
+    }
+
+    // Dump library to JSON and pipe it in via stdin so the driver
+    // can shape the LLM prompt around the current set of formulas.
+    FormulaLibrary library;
+    library.registerBuiltinTemplates();
+    nlohmann::json arr = nlohmann::json::array();
+    for (const auto* f : library.getAll())
+    {
+        if (f) arr.push_back(formulaMetaToJson(*f));
+    }
+    nlohmann::json root;
+    root["formulas"] = arr;
+    const std::string libJson = root.dump(2);
+    return runDriver(script, {csv}, libJson);
 }
 
 } // namespace Vestige

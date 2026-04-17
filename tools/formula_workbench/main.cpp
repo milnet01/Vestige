@@ -34,6 +34,23 @@ int main(int argc, char** argv)
     // headless CI or SSH session would fail trying to open a window.
     if (auto rc = Vestige::runBenchmarkCli(argc, argv))
         return *rc;
+
+    // §3.5 — PySR symbolic regression. Shells out to a Python driver;
+    // optional dependency (pip install pysr). Headless.
+    if (auto rc = Vestige::runSymbolicRegressionCli(argc, argv))
+        return *rc;
+
+    // §3.6 — LLM hypothesis ranking. Shells out to a Python driver
+    // that calls the Anthropic API. Needs ANTHROPIC_API_KEY + the
+    // anthropic SDK. Headless.
+    if (auto rc = Vestige::runSuggestFormulasCli(argc, argv))
+        return *rc;
+
+    // --dump-library — emit the built-in FormulaLibrary as JSON to
+    // stdout. Useful for downstream tooling; also used internally
+    // as stdin to llm_rank.py when --suggest-formulas runs.
+    if (auto rc = Vestige::runDumpLibraryCli(argc, argv))
+        return *rc;
     // GLFW init
     glfwSetErrorCallback(glfwErrorCallback);
     if (!glfwInit())
