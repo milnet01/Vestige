@@ -2,6 +2,60 @@
 
 All notable changes to the Formula Workbench are documented in this file.
 
+## [1.4.0] - 2026-04-17
+
+### Added (self-learning Phase 1 §3.1 — fit history persistence)
+
+First mechanism of the self-learning loop sketched in
+`docs/FORMULA_WORKBENCH_SELF_LEARNING_DESIGN.md`. Every exported fit
+now lands in `.fit_history.json` at the working directory, so future
+sessions have cross-session memory of what fit what. Phase 1 §3.2
+(learned initial guesses — seed LM from the most recent exported
+fit) and §3.3 (`--self-benchmark` leaderboard) build on this
+storage layer; landing them independently means the history starts
+accumulating now, with real data ready when §3.2/§3.3 land.
+
+**Added**
+- **`tools/formula_workbench/fit_history.{h,cpp}`** — `FitHistory`
+  class with load/save/record, a 64-bit FNV-1a dataset hash
+  (`hashDataset`), and a meta-feature extractor (`computeMeta` →
+  n_points, per-variable domain, variance-of-observed). Schema
+  versioned (v1); corrupt or unknown-schema files clear the
+  in-memory history rather than misparse.
+- **Per-formula entry cap** — `MAX_ENTRIES_PER_FORMULA = 20`. When
+  recording would exceed the cap, the oldest entry for that formula
+  is evicted; other formulas are untouched. Keeps the file size
+  bounded even across months of daily use.
+- **`lastExportedCoeffsFor(name)`** — returns the coefficient map
+  from the most recent `exported` fit for the named formula (or
+  empty). Phase 1 §3.2 uses this to seed LM next time the user
+  picks the same formula.
+- **`tests/test_fit_history.cpp`** — 16 Google Test cases covering
+  load/save round-trip, corrupt + wrong-schema recovery, eviction
+  policy (cap + don't-evict-others), `lastExportedCoeffsFor`
+  selection, hash determinism/sensitivity, and meta-feature
+  correctness (population-variance form).
+
+**Changed**
+- **`workbench.cpp::exportFormula`** — at the end of a successful
+  export, constructs a `FitHistoryEntry` (ISO-8601 UTC timestamp,
+  formula name, dataset hash, meta, fitted coefficients,
+  R²/RMSE/AIC/BIC, LM convergence info, `user_action:"exported"`)
+  and appends it to `.fit_history.json`. Only exported fits are
+  persisted — ephemeral in-session tweaking doesn't pollute the
+  history. Failures are logged but don't block the export.
+
+**File location + gitignore.** `.fit_history.json` is
+developer-local (per-user fitting decisions, per-machine datasets),
+not committed. The gitignore change lands in the same commit.
+
+**Not yet done** (tracked for next round):
+- §3.2 — seed LM with `lastExportedCoeffsFor(formula_name)` when
+  the user reselects a formula with history. Trivial follow-up
+  once this layer is stable.
+- §3.3 — `--self-benchmark` CLI mode. Needs the fit loop extracted
+  from `runFit()` into a reusable function first.
+
 ## [1.3.2] - 2026-04-13
 
 ### Fixed

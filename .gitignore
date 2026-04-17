@@ -122,6 +122,13 @@ id_ed25519
 # copy reflects their own audit runs + verify/suppress actions.
 .audit_stats.json
 
+# Formula Workbench fit history — per-user, per-machine record of
+# exported fits (see tools/formula_workbench/fit_history.h). Feeds
+# §3.2 (learned LM initial guesses) and §3.3 (--self-benchmark).
+# Developer-local, not committed. Design:
+# docs/FORMULA_WORKBENCH_SELF_LEARNING_DESIGN.md.
+.fit_history.json
+
 # Audit artefacts — see docs/PRE_OPEN_SOURCE_AUDIT.md §7.
 # Audit-session outputs (findings lists, discovery logs, fix plans,
 # automated-run snapshots) are local to the maintainer's workflow and

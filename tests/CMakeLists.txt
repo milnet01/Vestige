@@ -89,6 +89,16 @@ add_executable(vestige_tests
     test_editor_viewers.cpp
     test_node_graph.cpp
     test_scripting.cpp
+    # FormulaWorkbench tool-side unit tests. The .cpp lives under
+    # tools/formula_workbench/ and isn't part of vestige_engine, so
+    # the test target compiles it directly.
+    test_fit_history.cpp
+    ${CMAKE_SOURCE_DIR}/tools/formula_workbench/fit_history.cpp
+)
+
+target_include_directories(vestige_tests
+    PRIVATE
+        ${CMAKE_SOURCE_DIR}/tools/formula_workbench
 )
 
 target_link_libraries(vestige_tests

@@ -1,6 +1,7 @@
 /// @file workbench.cpp
 /// @brief FormulaWorkbench implementation.
 #include "workbench.h"
+#include "fit_history.h"
 #include "formula/codegen_cpp.h"
 #include "formula/codegen_glsl.h"
 #include "formula/expression_eval.h"
@@ -10,8 +11,10 @@
 
 #include <algorithm>
 #include <cassert>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <ctime>
 #include <fstream>
 #include <iomanip>
 #include <random>
@@ -1490,6 +1493,46 @@ void Workbench::exportFormula(const std::string& path)
     file << j.dump(2);
     m_statusMessage = "Exported formula to: " + path;
     m_statusTimer = 3.0f;
+
+    // Phase 1 §3.1 of the self-learning loop — persist this fit to
+    // .fit_history.json so future sessions can seed LM from it
+    // (§3.2) and so the planned --self-benchmark rank-by-AIC flow
+    // (§3.3) has data to work with. Only exported fits are recorded
+    // — ephemeral in-session tweaking isn't worth polluting the
+    // history with. Failures are logged to the status bar but don't
+    // block the export.
+    if (m_hasFitResult && !m_dataPoints.empty())
+    {
+        FitHistory history(".fit_history.json");
+        history.load();  // OK if absent
+
+        FitHistoryEntry entry;
+        // ISO-8601 UTC timestamp, seconds resolution — matches the
+        // audit tool's .audit_stats.json convention.
+        {
+            const auto now  = std::chrono::system_clock::now();
+            const auto secs = std::chrono::system_clock::to_time_t(now);
+            std::tm tm{};
+            gmtime_r(&secs, &tm);
+            char buf[32];
+            std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%SZ", &tm);
+            entry.timestamp = buf;
+        }
+        entry.formula_name = m_selectedFormula->name;
+        entry.data_hash    = FitHistory::hashDataset(m_dataPoints);
+        entry.data_meta    = FitHistory::computeMeta(m_dataPoints);
+        entry.coefficients = m_fitResult.coefficients;
+        entry.r_squared    = m_fitResult.rSquared;
+        entry.rmse         = m_fitResult.rmse;
+        entry.aic          = m_aic;
+        entry.bic          = m_bic;
+        entry.iterations   = m_fitResult.iterations;
+        entry.converged    = m_fitResult.converged;
+        entry.user_action  = "exported";
+
+        history.record(entry);
+        history.save();
+    }
 }
 
 // ---------------------------------------------------------------------------
