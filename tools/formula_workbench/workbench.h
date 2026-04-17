@@ -26,7 +26,7 @@ namespace Vestige
 {
 
 /// @brief Version string for the FormulaWorkbench.
-inline constexpr const char* WORKBENCH_VERSION = "1.4.0";
+inline constexpr const char* WORKBENCH_VERSION = "1.5.0";
 
 /// @brief Interactive formula workbench application.
 class Workbench
@@ -73,6 +73,20 @@ private:
 
     // -- Coefficients (editable initial values) -------------------------------
     std::map<std::string, float> m_coefficients;
+
+    /// @brief §3.2 seed-from-history tracking.
+    ///
+    /// When selectFormula() finds a prior exported fit in
+    /// .fit_history.json for the selected formula, it seeds
+    /// m_coefficients from that fit instead of the library's default
+    /// initial guess. This flag records that the seeding happened so
+    /// the UI can surface a small "seeded from history" badge — the
+    /// user should always know when the tool is using remembered
+    /// values vs. library defaults, because it changes the initial
+    /// starting point of Levenberg-Marquardt and can dramatically
+    /// change convergence behaviour.
+    bool        m_seededFromHistory = false;
+    std::string m_seededFromTimestamp;   ///< ISO-8601, empty when not seeded.
 
     // -- Coefficient bounds (improvement #4) ----------------------------------
     struct CoeffBound

@@ -399,6 +399,29 @@ void Workbench::renderFittingControls()
 
     // Editable coefficient initial values with bounds (Improvement #4)
     ImGui::Text("Initial Coefficients:");
+
+    // §3.2 — "seeded from history" badge. When selectFormula()
+    // pulled initial values out of .fit_history.json instead of the
+    // library defaults, surface that here: the user needs to know
+    // why their coefficients look different from a fresh template.
+    // Silent seeding would make convergence behaviour feel
+    // non-deterministic.
+    if (m_seededFromHistory)
+    {
+        ImGui::SameLine();
+        ImVec4 seedBadgeColor(0.35f, 0.65f, 1.0f, 1.0f);  // soft blue
+        ImGui::PushStyleColor(ImGuiCol_Text, seedBadgeColor);
+        if (!m_seededFromTimestamp.empty())
+        {
+            ImGui::Text("(seeded from fit @ %s)",
+                        m_seededFromTimestamp.c_str());
+        }
+        else
+        {
+            ImGui::Text("(seeded from prior fit)");
+        }
+        ImGui::PopStyleColor();
+    }
     for (auto& [name, val] : m_coefficients)
     {
         ImGui::PushID(name.c_str());
@@ -952,6 +975,54 @@ void Workbench::selectFormula(const std::string& name)
     {
         // Copy coefficients as initial fit values
         m_coefficients = m_selectedFormula->coefficients;
+        m_seededFromHistory = false;
+        m_seededFromTimestamp.clear();
+
+        // §3.2 — seed LM starting point from the most recent
+        // exported fit for this formula, if one exists. LM is
+        // sensitive to initial guesses; a starting point near the
+        // previous converged minimum typically converges in far
+        // fewer iterations than the library's static default. The
+        // coefficient names must match between history and current
+        // library definition — mismatches (library evolved since
+        // the fit was recorded) are silently skipped, so stale
+        // history degrades gracefully.
+        {
+            FitHistory history(".fit_history.json");
+            if (history.load())
+            {
+                const auto prior = history.lastExportedCoeffsFor(name);
+                if (!prior.empty())
+                {
+                    bool any_applied = false;
+                    for (auto& [coeff_name, val] : m_coefficients)
+                    {
+                        auto it = prior.find(coeff_name);
+                        if (it != prior.end())
+                        {
+                            val = it->second;
+                            any_applied = true;
+                        }
+                    }
+                    if (any_applied)
+                    {
+                        m_seededFromHistory = true;
+                        // Pull the timestamp from the matching
+                        // entry so the UI badge can name it.
+                        const auto entries = history.forFormula(name);
+                        for (auto it = entries.rbegin(); it != entries.rend(); ++it)
+                        {
+                            if (it->user_action == "exported")
+                            {
+                                m_seededFromTimestamp = it->timestamp;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         m_hasFitResult = false;
         m_hasValidation = false;
         m_dataPoints.clear();

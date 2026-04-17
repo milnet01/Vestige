@@ -2,6 +2,57 @@
 
 All notable changes to the Formula Workbench are documented in this file.
 
+## [1.5.0] - 2026-04-17
+
+### Added (self-learning Phase 1 §3.2 — learned initial guesses)
+
+Second mechanism of the Workbench self-learning loop. When the user
+selects a formula, `selectFormula()` now consults
+`.fit_history.json` (written by §3.1 since 1.4.0) and seeds the
+Levenberg-Marquardt starting point from the most recent exported
+fit for that formula. LM convergence is notoriously sensitive to
+initial guesses — a starting point near the previous converged
+minimum typically reaches R² >= 0.99 in a fraction of the iterations
+the library's static default would need.
+
+**Behaviour**
+- When `FitHistory::lastExportedCoeffsFor(name)` returns a non-empty
+  map, matching coefficient names are overwritten with the
+  historical values. Coefficients without a match stay at the
+  library default — so a library evolution that *adds* a coefficient
+  degrades gracefully rather than erroring.
+- The UI surfaces a blue "(seeded from fit @ TIMESTAMP)" badge next
+  to "Initial Coefficients:" so the user can always see when the
+  tool is using remembered values vs. library defaults. Silent
+  seeding would make convergence behaviour feel non-deterministic
+  across sessions.
+- When no history exists for the selected formula, behaviour is
+  unchanged from 1.3.x — library defaults are used.
+
+**Added**
+- `Workbench::m_seededFromHistory` (bool) + `m_seededFromTimestamp`
+  (string) — UI state flagging whether the current coefficient set
+  came from history.
+
+**Changed**
+- `workbench.cpp::selectFormula` — merges any matching coefficients
+  from `FitHistory::lastExportedCoeffsFor(name)` into
+  `m_coefficients` right after copying the library defaults. Clears
+  the seed state on every reselect so stale badges can't linger.
+- `renderFittingControls` — renders the seed badge when
+  `m_seededFromHistory` is set.
+
+**Coverage.** The seeding path uses `FitHistory::lastExportedCoeffsFor`
+end-to-end; that method has comprehensive tests under
+`TestFitHistoryLastExport` in `tests/test_fit_history.cpp`. The GUI
+hookup is straightforward wiring.
+
+**Not yet done** (tracked):
+- §3.3 `--self-benchmark` CLI mode — batch-fits every library
+  formula against a dataset and emits a ΔAIC leaderboard. Needs
+  the fit loop extracted from `runFit()` into a reusable function
+  first.
+
 ## [1.4.0] - 2026-04-17
 
 ### Added (self-learning Phase 1 §3.1 — fit history persistence)
