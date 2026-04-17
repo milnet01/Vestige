@@ -3,7 +3,13 @@
 ///
 /// Sets up a GLFW window with an OpenGL context, initializes ImGui and ImPlot,
 /// and runs the workbench main loop.
+///
+/// CLI mode: `--self-benchmark <csv>` runs headless against the given
+/// dataset, emits a markdown leaderboard ranked by AIC, and exits —
+/// never initialising GLFW. See `benchmark.h` (§3.3 of the self-learning
+/// design).
 
+#include "benchmark.h"
 #include "workbench.h"
 
 #include <glad/gl.h>
@@ -21,8 +27,13 @@ static void glfwErrorCallback(int error, const char* description)
     std::fprintf(stderr, "GLFW error %d: %s\n", error, description);
 }
 
-int main()
+int main(int argc, char** argv)
 {
+    // §3.3 — CLI benchmark mode. Runs headless, so it must branch
+    // BEFORE GLFW / ImGui / ImPlot initialisation; otherwise a
+    // headless CI or SSH session would fail trying to open a window.
+    if (auto rc = Vestige::runBenchmarkCli(argc, argv))
+        return *rc;
     // GLFW init
     glfwSetErrorCallback(glfwErrorCallback);
     if (!glfwInit())

@@ -2,6 +2,78 @@
 
 All notable changes to the Formula Workbench are documented in this file.
 
+## [1.6.0] - 2026-04-17
+
+### Added (self-learning Phase 1 §3.3 — `--self-benchmark` CLI)
+
+Closes the Phase 1 trio. The Workbench can now batch-fit every
+library formula to the same dataset and emit a markdown leaderboard
+ranked by AIC ascending — the decision-ready comparison statisticians
+actually use (Burnham & Anderson 2004; ΔAIC < 2 indistinguishable,
+> 10 decisive). Previously the user had to click through each formula
+individually, which in practice meant they stopped after 2 or 3.
+
+**Usage**
+
+```
+formula_workbench --self-benchmark data.csv               # stdout
+formula_workbench --self-benchmark data.csv --output r.md # file
+formula_workbench                                         # GUI (unchanged)
+formula_workbench --help
+```
+
+The CLI branches before GLFW/ImGui init, so it runs headless —
+works over SSH, in CI, no display required.
+
+**Output shape**
+
+Markdown with a leaderboard table (rank | formula | R² | RMSE |
+AIC | BIC | ΔAIC | iter | converged) and a separate "Skipped"
+section listing formulas that couldn't be attempted (dataset lacked
+the required input variables, formula has no coefficients to fit,
+etc.). ΔAIC is computed relative to the best (first-ranked) fittable
+entry so the user can read "this formula is within 2 AIC of the
+winner" at a glance.
+
+**Added**
+- `tools/formula_workbench/benchmark.{h,cpp}` — pure non-GUI
+  module with `computeAicBic`, `loadCsvDataset`, `runBenchmark`,
+  `renderBenchmarkMarkdown`, `runBenchmarkCli`. No ImGui, no GLFW —
+  uses only the engine's formula/curve_fitter libraries.
+- CSV loader factored out of `workbench.cpp::importCsv` (same
+  RFC 4180 rules — quoted commas, `""` escapes). Benchmark mode
+  doesn't need to drag the GUI along just to read a file.
+- Degeneracy guards in `computeAicBic` — returns
+  `{degenerate: true}` when `n ≤ k+1` or `SSE ≤ 0` rather than
+  producing NaN/Inf that would pollute the leaderboard.
+- `tests/test_benchmark.cpp` — 14 Google Test cases covering
+  the AIC/BIC closed form, degeneracy guards, CSV happy path +
+  4 error cases, ranking order (fittable-first, AIC ascending),
+  ΔAIC=0 for the winner, and the markdown renderer's structural
+  shape (header, two-section grouping). Full suite: 1800 passing
+  (+14 from 1786).
+
+**Changed**
+- `tools/formula_workbench/main.cpp` — takes `(argc, argv)`,
+  calls `runBenchmarkCli` before `glfwInit()`. Returns early with
+  the CLI's exit code when the flag is handled; otherwise falls
+  through to the usual GUI path.
+- `tools/CMakeLists.txt` — adds `benchmark.cpp` to the workbench
+  target.
+- `tests/CMakeLists.txt` — adds the benchmark test pair (source
+  + test).
+
+**Verified end-to-end** against a hand-crafted sin(x) dataset —
+the CLI emits a leaderboard with `aces_tonemap` ranked #1 (the
+only library formula whose sole float variable is `x`), every other
+formula honestly reported as "skipped: dataset lacks required input
+variables". Exactly the behaviour you want: transparent about which
+formulas couldn't even be attempted.
+
+**Closes Phase 1** of the design. Phase 2 (§3.4 regression harness)
+and Phase 3 (§3.5 PySR tier) remain tracked in
+`docs/FORMULA_WORKBENCH_SELF_LEARNING_DESIGN.md`.
+
 ## [1.5.0] - 2026-04-17
 
 ### Added (self-learning Phase 1 §3.2 — learned initial guesses)

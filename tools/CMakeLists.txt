@@ -6,6 +6,7 @@ add_executable(formula_workbench
     formula_workbench/main.cpp
     formula_workbench/workbench.cpp
     formula_workbench/fit_history.cpp
+    formula_workbench/benchmark.cpp
 )
 
 target_include_directories(formula_workbench PRIVATE

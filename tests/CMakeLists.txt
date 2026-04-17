@@ -93,7 +93,9 @@ add_executable(vestige_tests
     # tools/formula_workbench/ and isn't part of vestige_engine, so
     # the test target compiles it directly.
     test_fit_history.cpp
+    test_benchmark.cpp
     ${CMAKE_SOURCE_DIR}/tools/formula_workbench/fit_history.cpp
+    ${CMAKE_SOURCE_DIR}/tools/formula_workbench/benchmark.cpp
 )
 
 target_include_directories(vestige_tests
