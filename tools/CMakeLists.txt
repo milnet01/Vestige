@@ -9,6 +9,7 @@ add_executable(formula_workbench
     formula_workbench/benchmark.cpp
     formula_workbench/async_driver.cpp
     formula_workbench/pysr_parser.cpp
+    formula_workbench/markdown_render.cpp
 )
 
 target_include_directories(formula_workbench PRIVATE

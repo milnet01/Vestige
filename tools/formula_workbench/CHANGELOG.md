@@ -2,6 +2,88 @@
 
 All notable changes to the Formula Workbench are documented in this file.
 
+## [1.13.0] - 2026-04-18
+
+### Added — W3: markdown rendering in the Suggestions panel
+
+Closes W3 from `docs/SELF_LEARNING_ROADMAP.md`. The LLM-ranked
+shortlist that `scripts/llm_rank.py` emits is markdown — until now the
+panel showed it as raw text in a read-only multiline box, which is
+legible but not pleasant. The panel now renders headings, pipe tables,
+fenced code, horizontal rules, and inline backtick code spans as real
+ImGui widgets.
+
+**New `markdown_render.{h,cpp}`**
+
+- Pure parser: `markdown::parseMarkdown(std::string_view)` →
+  `std::vector<markdown::Block>`. Blocks are `Heading` (level 1..3),
+  `Paragraph`, `Table` (headers + rows), `HorizontalRule`, or
+  `CodeBlock`. No ImGui dependency in the parser, so the test runner
+  exercises it headlessly.
+- Parser handles the subset that `llm_rank.py` and `pysr_driver.py`
+  actually emit: ATX-style headings with required space after `#`,
+  blank-line paragraph breaks, GFM pipe tables (separator row with
+  optional alignment colons, GFM-style outer-pipe-optional),
+  backslash-escaped pipes inside cells, `---` / `***` / `___`
+  horizontal rules, and triple-backtick fences (including language
+  tags like ```` ```json ````).
+- `markdown::renderMarkdownBlocks` is the only function that touches
+  ImGui. Headings get level-tiered colours (warm yellow / soft green /
+  soft blue); H1 draws a separator below. Tables become
+  `ImGui::BeginTable` with Borders + RowBg + SizingStretchProp. Code
+  blocks render in cyan with preserved newlines. Inline backticks in
+  paragraph text colour their word span cyan while the surrounding
+  prose stays default.
+- Bold markers (`**foo**`) are stripped before rendering; the
+  Workbench doesn't load a bold font and verbatim asterisks look
+  worse than plain text.
+- Inline renderer tokenises each paragraph on whitespace + backticks
+  and hand-wraps with `CalcTextSize` so cyan code spans sit inline
+  with prose and the whole paragraph wraps at the panel width.
+
+**Wired: Suggestions panel renders markdown by default**
+
+- `renderSuggestionsPanel()` now parses `m_suggestionsOutput` once
+  per fresh driver run (re-parse triggered by clearing the block
+  cache on the Done-path) and calls `renderMarkdownBlocks` inside a
+  child region.
+- A "Show raw markdown" checkbox toggles back to the old read-only
+  multiline buffer for copy-paste and diffing.
+
+**Tests (`tests/test_markdown_render.cpp`, 17 new cases)**
+
+- Edge cases: empty / whitespace-only input, single paragraph,
+  multi-line paragraph joined by newline, blank-line paragraph
+  separation, heading immediately after paragraph flushes.
+- Headings: levels 1/2/3, `####` treated as paragraph (subset
+  boundary), `#nospace` not a heading.
+- Tables: basic header + body, GFM-without-outer-pipes,
+  `:---:` alignment colons accepted, non-table pipe lines (no
+  separator below) stay as paragraphs, cell whitespace trimmed,
+  `\|` inside cells preserved literally.
+- Other blocks: horizontal rule (`---` / `***` / `___` variants),
+  fenced code block with and without language tag.
+- End-to-end: a document mirroring the real shape of
+  `scripts/llm_rank.py` output (heading → metadata paragraph →
+  ranked table → caveats heading → caveats paragraph) parses into
+  the expected 5-block sequence.
+
+**Files changed**
+
+- `tools/formula_workbench/markdown_render.h` (new)
+- `tools/formula_workbench/markdown_render.cpp` (new)
+- `tools/formula_workbench/workbench.h` (include, state, version
+  bump to 1.13.0)
+- `tools/formula_workbench/workbench.cpp` (include, render path,
+  cache invalidation on new output)
+- `tools/CMakeLists.txt` (add markdown_render.cpp)
+- `tests/CMakeLists.txt` (add test + source)
+- `tests/test_markdown_render.cpp` (new)
+- `docs/SELF_LEARNING_ROADMAP.md` (shipped row, W3 removed from
+  Outstanding table)
+
+All 1859 tests green (1842 prior + 17 new).
+
 ## [1.12.0] - 2026-04-18
 
 ### Added — W2c: PySR expression → ExprNode parser, "Import as library" wired

@@ -1,6 +1,6 @@
 # Self-learning roadmap — audit tool + Formula Workbench
 
-Consolidated handoff doc as of 2026-04-18 (rev 2). Lists everything that's
+Consolidated handoff doc as of 2026-04-18 (rev 3). Lists everything that's
 shipped and everything that's tracked-but-not-started for the
 self-learning loops in both tools. Pairs with
 `docs/FORMULA_WORKBENCH_SELF_LEARNING_DESIGN.md` (the design that
@@ -34,6 +34,7 @@ header_guards, binary_in_repo, dup_files).
 | 1.10.0 | 2026-04-18 | W1 — async-worker pattern for Python driver calls. New `AsyncDriverJob` (`async_driver.{h,cpp}`) wrapping `runDriverCaptured` in a `std::async` worker; tri-state `Idle/Running/Done` polled from the render loop. Suggestions panel no longer blocks the GUI; elapsed-seconds counter shown while running. Prereq for W2. No cancellation / streaming yet — those land with W2. 7 new tests. |
 | 1.11.0 | 2026-04-18 | W2a + W2b — "Discover via PySR" panel with streaming + cancel. Extracted `spawnDriverProcess` low-level helper so the async path can expose the child PID; `AsyncDriverJob` now runs the stdout read loop on its worker thread with `drainStdoutChunk()` for live frame-by-frame output and `cancel()` for SIGTERM (auto-escalates to SIGKILL after 3s grace). New `renderPySRPanel`: Discover + Cancel buttons, niterations / max-complexity sliders, live raw-output pane, sortable leaderboard parsed from the driver's JSON tail. W2c (library-import via PySR expression parser) deferred. 4 new tests (streaming, cancel, SIGKILL escalation, cancel-when-idle). |
 | 1.12.0 | 2026-04-18 | W2c — PySR expression-string → `ExprNode` parser wired into the Suggestions leaderboard. New `pysr_parser.{h,cpp}` (recursive-descent, precedence-climbing, supports `+ - * / ^ ** cos sin exp log sqrt abs floor ceil` and unary `-`); everything flows through the `ExprNode::*` factories so the H11 codegen allowlist gates every imported tree. Per-row Import buttons in the leaderboard build a `FormulaDefinition` under category `"imported"` and register it in the live library. 19 new parser tests (grammar + rejection paths). |
+| 1.13.0 | 2026-04-18 | W3 — markdown rendering in the Suggestions panel. New `markdown_render.{h,cpp}` (pure parser + ImGui-only renderer) handles the subset `llm_rank.py` emits: headings 1–3, pipe tables, `---` rules, fenced code, inline backtick code spans, `**bold**` stripped. Suggestions panel renders the LLM shortlist as a real ImGui table instead of raw markdown; a "Show raw markdown" toggle keeps copy-paste available. 17 new parser tests. |
 
 Related: `docs/FORMULA_WORKBENCH_SELF_LEARNING_DESIGN.md` is the
 original six-mechanism plan.
@@ -49,7 +50,6 @@ left on the audit-tool side from the 2026-04-16 report.
 
 | # | Item | Priority | Size | Notes |
 |---|------|---------:|-----:|-------|
-| W3 | Markdown rendering in the Suggestions panel | low | small | Panel shows raw markdown today (`\| Rank \| Formula \| ... \|`). Perfectly legible for tables of ≤10 rows but would look nicer rendered. ImGui Markdown extensions exist. |
 | W5 (cont.) | Keep adding reference cases as the library grows | low | small | Five specs shipped (`beer_lambert`, `exponential_fog`, `fresnel_schlick`, `hooke_spring`, `stokes_drag`). Library has ~27 formulas total; adding a spec per formula over time gives broader regression coverage. Each spec ~25 lines of JSON, auto-discovered by the test. |
 | W6 | Confidence-weighted meta-feature matching (design §3.1 advanced) | low | medium | `lastExportedCoeffsFor` picks the absolute-latest exported fit regardless of data similarity. A data-shape-aware ranker would prefer the most recent fit whose `data_meta` matches the current dataset's meta-features — avoiding the case where a user fits two very different datasets on the same formula and the newer fit seeds the older one badly. |
 

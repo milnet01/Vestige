@@ -3,6 +3,7 @@
 #include "workbench.h"
 #include "benchmark.h"
 #include "fit_history.h"
+#include "markdown_render.h"
 #include "pysr_parser.h"
 #include "formula/codegen_cpp.h"
 #include "formula/codegen_glsl.h"
@@ -2274,7 +2275,8 @@ void Workbench::renderSuggestionsPanel()
         }
         else
         {
-            m_suggestionsOutput = result.stdout_text;
+            m_suggestionsOutput       = result.stdout_text;
+            m_suggestionsBlocks.clear();   // force re-parse on next frame
         }
     }
 
@@ -2319,14 +2321,40 @@ void Workbench::renderSuggestionsPanel()
     if (!m_suggestionsOutput.empty())
     {
         ImGui::Separator();
-        // Read-only multiline. ImGui doesn't render markdown, so the
-        // user sees the table source verbatim — which is fine for a
-        // shortlist of ≤10 rows and preserves the LLM's commentary.
-        ImVec2 avail = ImGui::GetContentRegionAvail();
-        ImGui::InputTextMultiline("##suggestions",
-                                  m_suggestionsOutput.data(),
-                                  m_suggestionsOutput.size() + 1,
-                                  avail, ImGuiInputTextFlags_ReadOnly);
+        ImGui::Checkbox("Show raw markdown", &m_suggestionsShowRaw);
+        ImGui::SameLine();
+        ImGui::TextDisabled("(toggle to copy-paste or debug)");
+        ImGui::Spacing();
+
+        if (m_suggestionsShowRaw)
+        {
+            // Raw mode: the old read-only buffer, handy when the user
+            // wants to select-all and paste into another document or
+            // diff against a previous run.
+            ImVec2 avail = ImGui::GetContentRegionAvail();
+            ImGui::InputTextMultiline("##suggestions_raw",
+                                      m_suggestionsOutput.data(),
+                                      m_suggestionsOutput.size() + 1,
+                                      avail, ImGuiInputTextFlags_ReadOnly);
+        }
+        else
+        {
+            // W3 (1.13.0): rendered markdown — headings coloured,
+            // pipe-tables turned into real ImGui tables, inline
+            // backticks highlighted in cyan. Parsed lazily once per
+            // new driver output; the Done-path clears the cache so
+            // a fresh run is always re-parsed.
+            if (m_suggestionsBlocks.empty())
+            {
+                m_suggestionsBlocks =
+                    markdown::parseMarkdown(m_suggestionsOutput);
+            }
+            ImGui::BeginChild("##suggestions_rendered",
+                              ImGui::GetContentRegionAvail(),
+                              false);
+            markdown::renderMarkdownBlocks(m_suggestionsBlocks);
+            ImGui::EndChild();
+        }
     }
 
     ImGui::End();

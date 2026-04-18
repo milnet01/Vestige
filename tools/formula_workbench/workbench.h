@@ -15,6 +15,7 @@
 #pragma once
 
 #include "async_driver.h"
+#include "markdown_render.h"
 #include "formula/curve_fitter.h"
 #include "formula/formula_library.h"
 #include "formula/formula_preset.h"
@@ -27,7 +28,7 @@ namespace Vestige
 {
 
 /// @brief Version string for the FormulaWorkbench.
-inline constexpr const char* WORKBENCH_VERSION = "1.12.0";
+inline constexpr const char* WORKBENCH_VERSION = "1.13.0";
 
 /// @brief Interactive formula workbench application.
 class Workbench
@@ -206,6 +207,16 @@ private:
     std::string     m_suggestionsOutput;  ///< Full markdown from the driver.
     std::string     m_suggestionsError;   ///< Short human-readable failure.
     AsyncDriverJob  m_suggestionsJob;     ///< Worker-thread wrapper around runDriverCaptured.
+
+    /// @brief W3 (1.13.0) — rendered-markdown state.
+    ///
+    /// The panel defaults to rendered-markdown view; the checkbox
+    /// toggles back to the raw multiline buffer for copy-paste. The
+    /// block list is re-parsed lazily when the source buffer changes;
+    /// we use the string size as a cheap "content fingerprint" so we
+    /// don't re-parse every frame.
+    bool                                 m_suggestionsShowRaw = false;
+    std::vector<markdown::Block>         m_suggestionsBlocks;
     void runLlmSuggestions();
 
     // -- §3.5 GUI — PySR symbolic regression panel (W2, 1.11.0) ----------------
