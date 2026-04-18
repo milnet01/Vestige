@@ -34,6 +34,41 @@ def run(config: Config) -> list[Finding]:
         exclude_dirs=config.exclude_dirs,
     )
 
+    # Task A1 — rule-source file exclusion. Files that register
+    # audit rules (and therefore contain the tokens the rules are
+    # looking for as *descriptive text*, not as code) produce
+    # 100% false positives when a scan happens to include them.
+    # The canonical example: `tools/audit/lib/auto_config.py` has
+    # rule bodies like `{"description": "gets() is inherently unsafe"}`
+    # — the `unsafe_gets` rule matches on that line.
+    #
+    # Honour two sources: per-project `exclude_file_patterns` in the
+    # config (already declared in DEFAULTS but previously unread), and
+    # a hard-coded set of built-in audit rule-source files so the
+    # exclusion applies even when the user forgot to configure it.
+    # Matching is a glob on the filename only (not the full path), so
+    # a project that ships its own `auto_config.py` gets the same
+    # protection for free.
+    user_excludes = config.get("project", "exclude_file_patterns", default=[]) or []
+    builtin_excludes = [
+        # Vestige audit tool's rule-source; see header docstring.
+        "auto_config.py",
+    ]
+    exclude_file_globs = list(user_excludes) + builtin_excludes
+
+    def _is_file_excluded(path: Path) -> bool:
+        name = path.name
+        return any(fnmatch.fnmatch(name, g) for g in exclude_file_globs)
+
+    if exclude_file_globs:
+        pre = len(all_files)
+        all_files = [f for f in all_files if not _is_file_excluded(f)]
+        skipped = pre - len(all_files)
+        if skipped > 0:
+            log.info("Tier 2: excluded %d file(s) matching "
+                     "exclude_file_patterns/builtin rule-source list",
+                     skipped)
+
     log.info("Tier 2: scanning %d files against %d pattern categories",
              len(all_files), len(patterns_config))
 
@@ -112,10 +147,15 @@ def _filter_files(files: list[Path], globs: list[str]) -> list[Path]:
 
 
 def _classify_line(line: str, in_block_comment: bool) -> tuple[str, bool]:
-    """Strip comments and string literals from a line, preserving positions.
+    """Strip C/C++ comments and string literals from a line.
 
     Returns (effective_line, still_in_block_comment). Comments and strings
     are replaced with spaces so regex column positions stay approximately correct.
+
+    Python / shell-style ``#`` comments and triple-quoted strings are
+    handled by ``_classify_line_python`` — dispatch by file extension
+    lives in ``_scan_file``. Separating the two keeps each classifier
+    simple and testable.
     """
     result: list[str] = []
     i = 0
@@ -166,6 +206,98 @@ def _classify_line(line: str, in_block_comment: bool) -> tuple[str, bool]:
     return ("".join(result), in_block_comment)
 
 
+def _is_python_like(path: Path) -> bool:
+    """True for files whose comment syntax is Python-style (# + triple-quoted).
+
+    Covers ``.py`` and also shell / yaml / toml families where ``#``
+    starts a line comment. Keeps dispatch simple — the goal is
+    "treat `#` as a comment" rather than precise language parsing.
+    """
+    return path.suffix.lower() in {
+        ".py", ".pyi", ".pyx",
+        ".sh", ".bash", ".zsh",
+        ".yaml", ".yml", ".toml", ".ini", ".cfg",
+        ".rb",
+    }
+
+
+def _classify_line_python(
+    line: str, in_triple: tuple[bool, str]
+) -> tuple[str, tuple[bool, str]]:
+    """Strip Python-style ``#`` comments and triple-quoted strings.
+
+    State tuple is ``(inside_triple_quoted, quote_char)``. Single-line
+    strings (``"..."`` / ``'...'``) are also masked so rules matching
+    bare identifiers don't fire on string literals. Triple-quoted
+    strings can span multiple lines; when a triple-quote opens
+    mid-line the rest of the line is replaced with spaces and the
+    caller stays in the triple state until the closing triple
+    appears on a subsequent line.
+    """
+    result: list[str] = []
+    i = 0
+    inside_triple, triple_char = in_triple
+    n = len(line)
+
+    # Resume an open triple-quoted string from a previous line.
+    if inside_triple:
+        end_marker = triple_char * 3
+        idx = line.find(end_marker)
+        if idx == -1:
+            # Entire line is inside the string; mask and keep the state.
+            return (" " * n, (True, triple_char))
+        result.append(" " * (idx + 3))
+        i = idx + 3
+        inside_triple = False
+
+    in_string: str | None = None
+    while i < n:
+        c = line[i]
+        if inside_triple:
+            end_marker = triple_char * 3
+            idx = line.find(end_marker, i)
+            if idx == -1:
+                result.append(" " * (n - i))
+                return ("".join(result), (True, triple_char))
+            result.append(" " * (idx + 3 - i))
+            i = idx + 3
+            inside_triple = False
+            continue
+        if in_string is not None:
+            if c == "\\" and i + 1 < n:
+                result.append("  ")
+                i += 2
+                continue
+            if c == in_string:
+                in_string = None
+            result.append(" ")
+            i += 1
+            continue
+        if c == "#":
+            # Rest of line is a comment.
+            break
+        if c in ('"', "'"):
+            # Triple-quoted string start?
+            if i + 2 < n and line[i + 1] == c and line[i + 2] == c:
+                end_marker = c * 3
+                close = line.find(end_marker, i + 3)
+                if close == -1:
+                    # Opens on this line, doesn't close — rest of
+                    # line is string, carry state into next line.
+                    result.append(" " * (n - i))
+                    return ("".join(result), (True, c))
+                result.append(" " * (close + 3 - i))
+                i = close + 3
+                continue
+            in_string = c
+            result.append(" ")
+            i += 1
+            continue
+        result.append(c)
+        i += 1
+    return ("".join(result), (False, ""))
+
+
 def _scan_file(
     path: Path,
     regex: re.Pattern,
@@ -179,11 +311,16 @@ def _scan_file(
 
     hits: list[tuple[int, str]] = []
     in_block = False
+    in_triple: tuple[bool, str] = (False, "")
+    python_like = _is_python_like(path)
     try:
         with open(path, "r", errors="replace") as f:
             for i, line in enumerate(f, start=1):
                 if skip_comments:
-                    effective, in_block = _classify_line(line, in_block)
+                    if python_like:
+                        effective, in_triple = _classify_line_python(line, in_triple)
+                    else:
+                        effective, in_block = _classify_line(line, in_block)
                     if regex.search(effective):
                         if exclude_re and exclude_re.search(effective):
                             continue

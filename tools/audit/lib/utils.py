@@ -134,10 +134,53 @@ def enumerate_files(
     extensions: list[str],
     exclude_dirs: list[str],
 ) -> list[Path]:
-    """Enumerate source files matching extensions, excluding directories."""
-    files: list[Path] = []
-    exclude_set = {(root / d).resolve() for d in exclude_dirs}
+    """Enumerate source files matching extensions, excluding directories.
 
+    Task A3 — when ``root`` is a git checkout, defer to ``git ls-files``
+    for the raw enumeration so .gitignored paths (``__pycache__/``,
+    Claude-managed worktrees under ``.claude/``, build artefacts not
+    on ``exclude_dirs``) are honoured automatically. Falls back to
+    ``rglob`` when git isn't available or the root isn't a checkout.
+    The Ants-side audit rules already took this approach; this
+    brings the Python audit to parity.
+    """
+    exclude_set = {(root / d).resolve() for d in exclude_dirs}
+    ext_set = {e.lower() for e in extensions}
+
+    def _excluded(path: Path) -> bool:
+        try:
+            resolved = path.resolve()
+        except OSError:
+            return False
+        return any(resolved.is_relative_to(ex) for ex in exclude_set)
+
+    git_files = _git_ls_files(root)
+    if git_files is not None:
+        files: list[Path] = []
+        src_prefixes = [Path(d).as_posix().rstrip("/") for d in source_dirs]
+        for rel in git_files:
+            p = Path(rel)
+            if p.suffix.lower() not in ext_set:
+                continue
+            posix = p.as_posix()
+            # Only files under at least one source dir (or at root when
+            # source_dirs is ["."]). Matches the existing rglob shape.
+            in_src = any(
+                prefix == "" or prefix == "."
+                or posix == prefix
+                or posix.startswith(prefix + "/")
+                for prefix in src_prefixes
+            ) if src_prefixes else True
+            if not in_src:
+                continue
+            full = root / p
+            if _excluded(full):
+                continue
+            files.append(full)
+        return sorted(set(files))
+
+    # Non-git fallback — original rglob logic.
+    files = []
     for src_dir in source_dirs:
         base = root / src_dir
         if not base.exists():
@@ -145,11 +188,34 @@ def enumerate_files(
             continue
         for ext in extensions:
             for path in base.rglob(f"*{ext}"):
-                if any(path.resolve().is_relative_to(ex) for ex in exclude_set):
+                if _excluded(path):
                     continue
                 files.append(path)
-
     return sorted(set(files))
+
+
+def _git_ls_files(root: Path) -> list[str] | None:
+    """Return ``git ls-files`` output for ``root``, or ``None`` if not a git repo.
+
+    Uses ``--cached --others --exclude-standard`` so uncommitted-but-
+    not-ignored files are included (matching developer expectations:
+    an audit should see code that's been typed but not yet committed).
+    Any subprocess error (git missing, bare checkout, permission
+    issue) returns ``None`` so the caller falls back cleanly.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(root), "ls-files",
+             "--cached", "--others", "--exclude-standard"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        return None
+    if result.returncode != 0:
+        return None
+    return [line for line in result.stdout.splitlines() if line]
 
 
 def relative_path(path: Path, root: Path) -> str:

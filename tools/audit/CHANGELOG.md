@@ -2,6 +2,74 @@
 
 All notable changes to the Audit Tool are documented in this file.
 
+## [2.11.0] - 2026-04-18
+
+### Added (triage-noise close-out — tasks A1, A2, A3)
+
+Closes the three deferred items from the 2026-04-16 `ants-audit`
+triage that wouldn't have bitten Vestige's current config but made
+the tool misbehave when pointed at arbitrary projects. All three
+shipped together because they share the "make tier-2 behave on
+Python codebases" theme.
+
+**A1 — rule-source file exclusion** (`tier2_patterns.py`). The
+previously-declared-but-never-read `project.exclude_file_patterns`
+config key is now honoured (basename glob match). A built-in
+exclusion for `auto_config.py` is also applied unconditionally —
+it's the audit tool's own rule-source file, and the noise pattern
+(description strings self-matching the rules they describe) is
+inherent, not a config mistake. A project that ships its own
+`auto_config.py` gets the same protection for free. Skipped files
+are logged at INFO so the exclusion is never silent.
+
+**A2 — `skip_comments` now understands Python and shell syntax**
+(`tier2_patterns._classify_line_python`). The C/C++ classifier
+handled `//` and `/* */`; it didn't handle `#` comments or
+triple-quoted strings, so `skip_comments: true` silently did
+nothing on `.py` / `.sh` / `.yaml` / `.toml` / `.cfg` files. The
+new Python classifier masks `#` comments, single-quoted strings,
+and triple-quoted strings (multi-line state carried across lines
+via a `(inside_triple, quote_char)` tuple). `_scan_file` dispatches
+by file extension — `.py / .pyi / .pyx / .sh / .bash / .zsh / .yaml
+/ .yml / .toml / .ini / .cfg / .rb` get the Python path; everything
+else keeps the C/C++ path.
+
+**A3 — `utils.enumerate_files` prefers `git ls-files` when
+available.** Parallels the Ants-side rule fix shipped on
+2026-04-17. When the root is a git checkout, enumeration defers to
+`git ls-files --cached --others --exclude-standard` so
+`.gitignore`'d paths (`__pycache__/*.pyc`, Claude worktrees under
+`.claude/`, build artefacts not on `exclude_dirs`) drop out for
+free. Falls back to the original `rglob` logic when git is
+unavailable or the root isn't a checkout. Tested against a real
+mini-repo: enumeration correctly returns `src/real.py` and
+omits `src/__pycache__/real.cpython-311.pyc`.
+
+### Added tests
+
+- **`tests/test_tier2_python_and_excludes.py`** — 21 Google-style
+  pytest cases covering all three changes:
+  - `_is_python_like` extension detection
+  - `_classify_line_python` hash comments, single/triple strings,
+    multi-line triple state carry-over, "word in comment"
+    regression test
+  - `_scan_file` dispatch (Python vs C++ files)
+  - Rule-source exclusion (built-in + user pattern)
+  - `_git_ls_files` fallback on non-git roots
+  - `enumerate_files` full integration test against a real git
+    repo with a `.gitignore`'d `__pycache__`
+
+Full suite: 754 passing (+21 from 733).
+
+### Deferred (tracked)
+
+Nothing from the 2026-04-16 triage is now outstanding — the
+original list is fully addressed across audit 2.9.0 / 2.10.0 /
+2.11.0 and the Ants 2026-04-17 rule fixes. See
+`docs/SELF_LEARNING_ROADMAP.md` for items in adjacent areas
+(Phase 3 "propose-fix" suggestion layer, unified pattern
+write-up).
+
 ## [2.10.0] - 2026-04-17
 
 ### Added (self-learning Phase 2 — feedback-driven severity demotion)
