@@ -2151,7 +2151,6 @@ void Workbench::runLlmSuggestions()
 {
     m_suggestionsOutput.clear();
     m_suggestionsError.clear();
-    m_suggestionsPending = true;
 
     // Pre-flight: need a dataset to rank against. No silent fallback
     // to synthetic data here — the whole point of the panel is to
@@ -2161,7 +2160,6 @@ void Workbench::runLlmSuggestions()
     {
         m_suggestionsError = "No data points to rank against. "
                              "Load a CSV or generate synthetic data first.";
-        m_suggestionsPending = false;
         return;
     }
 
@@ -2175,7 +2173,6 @@ void Workbench::runLlmSuggestions()
             "llm_rank.py not found. Expected at "
             "tools/formula_workbench/scripts/llm_rank.py relative to the "
             "executable or source tree.";
-        m_suggestionsPending = false;
         return;
     }
 
@@ -2193,7 +2190,6 @@ void Workbench::runLlmSuggestions()
         if (!out)
         {
             m_suggestionsError = "Cannot write temp CSV: " + csvPath.string();
-            m_suggestionsPending = false;
             return;
         }
         // Union of variable names across all data points — handles the
@@ -2229,23 +2225,18 @@ void Workbench::runLlmSuggestions()
 
     const std::string libJson = libraryToJsonString(m_library);
     const std::vector<std::string> driverArgs{csvPath.string()};
-    const auto result = runDriverCaptured(script, driverArgs, libJson);
-    m_suggestionsPending = false;
 
-    if (!result.error.empty())
+    // W1 (1.10.0): driver call runs on a worker thread via
+    // ``AsyncDriverJob``. The result is drained in
+    // ``renderSuggestionsPanel`` each frame once the job transitions
+    // to ``Done``. If a previous run is still in flight, ``start``
+    // returns false and we surface that to the user — the UI button
+    // is already disabled in this case, so this is belt-and-braces.
+    if (!m_suggestionsJob.start(script, driverArgs, libJson))
     {
-        m_suggestionsError = "Driver spawn failed: " + result.error;
+        m_suggestionsError = "A previous suggestion run is still in flight.";
         return;
     }
-    if (result.exit_code != 0)
-    {
-        m_suggestionsError =
-            "Driver exited with code " + std::to_string(result.exit_code)
-            + " — missing ANTHROPIC_API_KEY or `anthropic` SDK? "
-              "Check the terminal for a detailed message.";
-        return;
-    }
-    m_suggestionsOutput = result.stdout_text;
 
     // Leave the temp CSV behind on disk — developers debugging a
     // bad ranking sometimes want to re-run the driver manually
@@ -2257,6 +2248,32 @@ void Workbench::renderSuggestionsPanel()
 {
     ImGui::Begin("Suggestions (LLM)");
 
+    // W1 (1.10.0): drain the async job once per frame. If the worker
+    // finished since last frame, pull the CapturedDriverOutput and
+    // populate the panel's output / error strings. Must happen before
+    // the button / status block so the UI reflects the latest state
+    // in the same frame the result lands.
+    if (m_suggestionsJob.poll() == AsyncDriverJob::State::Done)
+    {
+        const auto result = m_suggestionsJob.takeResult();
+        if (!result.error.empty())
+        {
+            m_suggestionsError = "Driver spawn failed: " + result.error;
+        }
+        else if (result.exit_code != 0)
+        {
+            m_suggestionsError =
+                "Driver exited with code "
+                + std::to_string(result.exit_code)
+                + " — missing ANTHROPIC_API_KEY or `anthropic` SDK? "
+                  "Check the terminal for a detailed message.";
+        }
+        else
+        {
+            m_suggestionsOutput = result.stdout_text;
+        }
+    }
+
     ImGui::TextWrapped(
         "Rank which library formulas are most physically plausible for "
         "the current dataset. Needs ANTHROPIC_API_KEY in the environment "
@@ -2264,7 +2281,8 @@ void Workbench::renderSuggestionsPanel()
         "fitter still does the actual fit.");
     ImGui::Separator();
 
-    const bool canRun = !m_suggestionsPending && !m_dataPoints.empty();
+    const bool isRunning = m_suggestionsJob.isRunning();
+    const bool canRun    = !isRunning && !m_dataPoints.empty();
 
     if (!canRun)
         ImGui::BeginDisabled();
@@ -2275,10 +2293,10 @@ void Workbench::renderSuggestionsPanel()
     if (!canRun)
         ImGui::EndDisabled();
 
-    if (m_suggestionsPending)
+    if (isRunning)
     {
         ImGui::SameLine();
-        ImGui::TextUnformatted("running…");
+        ImGui::Text("running %.1fs…", m_suggestionsJob.elapsedSeconds());
     }
     else if (m_dataPoints.empty())
     {

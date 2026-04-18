@@ -14,6 +14,7 @@
 /// - Export to FormulaLibrary JSON and C++/GLSL snippets
 #pragma once
 
+#include "async_driver.h"
 #include "formula/curve_fitter.h"
 #include "formula/formula_library.h"
 #include "formula/formula_preset.h"
@@ -26,7 +27,7 @@ namespace Vestige
 {
 
 /// @brief Version string for the FormulaWorkbench.
-inline constexpr const char* WORKBENCH_VERSION = "1.9.0";
+inline constexpr const char* WORKBENCH_VERSION = "1.10.0";
 
 /// @brief Interactive formula workbench application.
 class Workbench
@@ -185,12 +186,13 @@ private:
     //
     // On-demand panel that pipes the dataset + library metadata to
     // scripts/llm_rank.py and displays the ranked markdown shortlist
-    // the LLM returns. Blocking for now (LLM responses are 1-2s);
-    // a later refinement can hoist this onto a worker thread if
-    // users routinely hit multi-second latencies.
-    std::string m_suggestionsOutput;      ///< Full markdown from the driver.
-    std::string m_suggestionsError;       ///< Short human-readable failure.
-    bool        m_suggestionsPending = false;  ///< True during blocking run.
+    // the LLM returns. W1 (1.10.0): run the driver on a worker
+    // thread via ``AsyncDriverJob`` and poll from the render loop so
+    // the UI stays responsive even when the LLM takes several
+    // seconds.
+    std::string     m_suggestionsOutput;  ///< Full markdown from the driver.
+    std::string     m_suggestionsError;   ///< Short human-readable failure.
+    AsyncDriverJob  m_suggestionsJob;     ///< Worker-thread wrapper around runDriverCaptured.
     void runLlmSuggestions();
 };
 

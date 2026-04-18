@@ -7,6 +7,7 @@ add_executable(formula_workbench
     formula_workbench/workbench.cpp
     formula_workbench/fit_history.cpp
     formula_workbench/benchmark.cpp
+    formula_workbench/async_driver.cpp
 )
 
 target_include_directories(formula_workbench PRIVATE

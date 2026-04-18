@@ -2,6 +2,75 @@
 
 All notable changes to the Formula Workbench are documented in this file.
 
+## [1.10.0] - 2026-04-18
+
+### Added — W1: async-worker pattern for Python driver calls
+
+Closes W1 from `docs/SELF_LEARNING_ROADMAP.md`. Replaces the
+blocking `runDriverCaptured` call path with a render-loop-friendly
+tri-state job object. Prereq for W2 (§3.5 "Discover via PySR" GUI
+— PySR runs take minutes and would freeze the UI entirely under
+the old blocking model).
+
+**New: `AsyncDriverJob` (`async_driver.{h,cpp}`)**
+- Wraps a single async invocation of `runDriverCaptured` via
+  `std::async(std::launch::async, ...)`.
+- Tri-state lifecycle: `Idle` → `Running` → `Done`. Exposed via
+  `poll()` (non-blocking, call every frame) and `isRunning()`
+  (side-effect-free).
+- `start(script, argv, stdinContents)` launches the worker and
+  returns immediately; rejects with `false` while a previous run
+  is in flight so a double-click can't spawn two concurrent
+  processes.
+- `takeResult()` drains the `CapturedDriverOutput` once `Done` and
+  resets the job to `Idle`. Calling before `Done` returns an empty
+  result with `error = "no result pending"` — protects callers
+  against blocking on `future::get()`.
+- `elapsedSeconds()` for UI spinners ("running 2.3s…").
+
+**Wired into `Workbench::runLlmSuggestions`**
+- Suggestions panel no longer blocks the render loop. The button
+  still disables while running (via `isRunning()`), but the rest
+  of the GUI stays responsive.
+- `renderSuggestionsPanel` polls the job each frame, drains the
+  result when `Done`, and renders elapsed seconds while the
+  worker is alive.
+- `m_suggestionsPending` bool replaced with `m_suggestionsJob`
+  member of type `AsyncDriverJob`.
+
+**Explicit non-goals for W1 (deferred to W2)**
+- **No cancellation.** LLM suggestions complete in 1-2 s and don't
+  need it. PySR (W2) needs process-level cancel via SIGTERM on
+  the child PID, which requires threading the PID out of
+  `runDriverCaptured` — a non-trivial change that belongs in W2
+  alongside the Cancel-button UX.
+- **No incremental stdout streaming.** `runDriverCaptured` still
+  buffers the full stdout then returns. PySR's minutes-long runs
+  will want streaming output; that arrives with W2.
+
+**Tests (`tests/test_async_driver.cpp`, 7 cases)**
+- `FinishesWithCapturedStdout` — happy path, exit 0 + stdout text.
+- `NonZeroExitCodePropagates` — exit 42 surfaces in result.
+- `DoubleStartRejectedWhileRunning` — second `start()` returns
+  false while the worker is alive.
+- `TakeResultBeforeDoneReturnsError` — drain-before-`Done` yields
+  the documented error string, never blocks.
+- `ResetsToIdleAfterTakeResult` — same job instance can be reused.
+- `StdinPayloadDeliveredToChild` — library JSON piping path works.
+- `ElapsedSecondsZeroWhenIdleNonZeroWhenRunning` — UI timer sanity.
+
+### Files changed
+- `tools/formula_workbench/async_driver.h` (new, 106 lines)
+- `tools/formula_workbench/async_driver.cpp` (new, 92 lines)
+- `tools/formula_workbench/workbench.h` (+`AsyncDriverJob` member,
+  -pending bool, `WORKBENCH_VERSION` → 1.10.0)
+- `tools/formula_workbench/workbench.cpp` (non-blocking runner,
+  poll-and-drain in render panel)
+- `tools/CMakeLists.txt` + `tests/CMakeLists.txt` (register new
+  sources)
+- `tests/test_async_driver.cpp` (new, 7 GTest cases)
+- `docs/SELF_LEARNING_ROADMAP.md` (W1 moved to Shipped)
+
 ## [1.9.0] - 2026-04-18
 
 ### Added — small-scope roadmap items (W4, W5, W7, W8)
