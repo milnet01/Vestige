@@ -129,6 +129,12 @@ id_ed25519
 # docs/FORMULA_WORKBENCH_SELF_LEARNING_DESIGN.md.
 .fit_history.json
 
+# Formula Workbench LLM per-call cost log (JSONL, see W7 in
+# docs/SELF_LEARNING_ROADMAP.md). Appended every time llm_rank.py
+# makes an Anthropic API call. Developer-local spend audit; not
+# committed.
+.llm_calls.log
+
 # Audit artefacts — see docs/PRE_OPEN_SOURCE_AUDIT.md §7.
 # Audit-session outputs (findings lists, discovery logs, fix plans,
 # automated-run snapshots) are local to the maintainer's workflow and

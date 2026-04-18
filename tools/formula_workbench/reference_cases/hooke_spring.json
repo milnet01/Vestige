@@ -1,0 +1,25 @@
+{
+  "$comment": "Reference case for hooke_spring (F = -k * (x - restLength)). Single coefficient (k, spring constant). Two inputs — displacement sweep plus a fixed rest length. A straightforward linear-response fit that the LM should nail within a handful of iterations.",
+
+  "formula_name": "hooke_spring",
+
+  "canonical_coefficients": {
+    "k": 100.0
+  },
+
+  "input_sweep": {
+    "x":          { "min": -1.0, "max": 1.0, "count": 21 },
+    "restLength": { "values": [0.0] }
+  },
+
+  "expected": {
+    "r_squared_min": 0.9999,
+    "rmse_max":      0.5,
+    "coefficients": {
+      "k": { "expected": 100.0, "relative_tolerance": 0.01 }
+    },
+    "must_converge": true
+  },
+
+  "notes": "Linear in k — the fitter should recover k exactly. rmse_max=0.5 is lenient because the observed magnitude scales with k; relative-tolerance on k keeps the real assertion tight."
+}

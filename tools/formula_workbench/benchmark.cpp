@@ -3,6 +3,7 @@
 
 #include "benchmark.h"
 
+#include "fit_history.h"
 #include "formula/formula.h"
 
 #include <nlohmann/json.hpp>
@@ -225,6 +226,17 @@ runBenchmark(const FormulaLibrary& library,
              const std::vector<DataPoint>& data)
 {
     std::vector<BenchmarkEntry> out;
+
+    // W8 — give each formula the benefit of its last exported fit
+    // as an initial guess. Matches what the GUI does via §3.2
+    // (lastExportedCoeffsFor on selectFormula) so the CLI
+    // leaderboard isn't systematically penalising formulas the
+    // user has previously fit well. History lookup is best-effort;
+    // missing / corrupt / absent file silently falls back to
+    // library defaults.
+    FitHistory history(".fit_history.json");
+    const bool have_history = history.load();
+
     const auto all = library.getAll();
     for (const auto* formula : all)
     {
@@ -248,9 +260,23 @@ runBenchmark(const FormulaLibrary& library,
             continue;
         }
 
+        // Seed coefficients: start from library defaults, overwrite
+        // with any matching entries from the most recent exported
+        // fit. Names that don't match (library evolved) keep the
+        // default. See §3.2 for the equivalent GUI path.
+        std::map<std::string, float> initial = formula->coefficients;
+        if (have_history)
+        {
+            const auto prior = history.lastExportedCoeffsFor(formula->name);
+            for (auto& [k, v] : initial)
+            {
+                auto it = prior.find(k);
+                if (it != prior.end()) v = it->second;
+            }
+        }
+
         FitResult fr = CurveFitter::fit(
-            *formula, data, formula->coefficients,
-            QualityTier::FULL, {});
+            *formula, data, initial, QualityTier::FULL, {});
 
         BenchmarkEntry e;
         e.formula_name = formula->name;

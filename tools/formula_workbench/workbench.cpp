@@ -766,6 +766,23 @@ void Workbench::renderValidation()
     if (ImGui::Button("Export to JSON"))
         exportFormula(m_exportPath);
 
+    // W4 — pin-this-fit toggle. Silently-remembered seeding made
+    // outlier fits poison the history well; this lets the user
+    // keep the export without the history side-effect.
+    ImGui::SameLine();
+    ImGui::Checkbox("Remember for future seeding##remember_fit",
+                    &m_rememberFitForSeeding);
+    if (ImGui::IsItemHovered())
+    {
+        ImGui::SetTooltip(
+            "On: the fit is appended to .fit_history.json with "
+            "user_action=\"exported\" and seeds future Levenberg-\n"
+            "Marquardt starts for this formula (§3.2).\n"
+            "Off: the fit is still logged but with "
+            "user_action=\"discarded\", so it won't be picked up as\n"
+            "a seed next session. Useful for one-off experimental fits.");
+    }
+
     // C++/GLSL export buttons (Improvement #11)
     if (m_selectedFormula)
     {
@@ -1604,7 +1621,12 @@ void Workbench::exportFormula(const std::string& path)
         entry.bic          = m_bic;
         entry.iterations   = m_fitResult.iterations;
         entry.converged    = m_fitResult.converged;
-        entry.user_action  = "exported";
+        // W4 — only "exported" entries feed §3.2 seeding. A user
+        // who unchecked "Remember for future seeding" gets the fit
+        // logged but not used as a seed — the history remains
+        // complete, just the selection query (lastExportedCoeffsFor)
+        // skips it.
+        entry.user_action  = m_rememberFitForSeeding ? "exported" : "discarded";
 
         history.record(entry);
         history.save();

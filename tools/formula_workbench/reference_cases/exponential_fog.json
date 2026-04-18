@@ -1,0 +1,24 @@
+{
+  "$comment": "Reference case for exponential_fog (f = 1 - exp(-density * distance)). Single coefficient (density), single input variable. Shape: saturating curve from 0 → 1. Complement to beer_lambert (same exp-family formula, different orientation).",
+
+  "formula_name": "exponential_fog",
+
+  "canonical_coefficients": {
+    "density": 0.01
+  },
+
+  "input_sweep": {
+    "distance": { "min": 0.0, "max": 500.0, "count": 25 }
+  },
+
+  "expected": {
+    "r_squared_min": 0.9999,
+    "rmse_max":      0.005,
+    "coefficients": {
+      "density": { "expected": 0.01, "relative_tolerance": 0.02 }
+    },
+    "must_converge": true
+  },
+
+  "notes": "density=0.01 matches the engine default; at distance=500 the fog factor reaches ~0.993 which gives LM a full range of data to fit against. Relative-tolerance 2 % is tight enough to catch any drift in the exp() approximation path."
+}

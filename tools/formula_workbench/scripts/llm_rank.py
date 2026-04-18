@@ -30,11 +30,53 @@ from __future__ import annotations
 
 import argparse
 import csv
+import datetime
 import json
 import os
 import statistics
 import sys
 from pathlib import Path
+
+
+# W7 — per-call cost log. Appended as JSONL at the project root.
+# Entries accumulate across invocations so the user can audit spend
+# without logging into the dashboard. Format is additive-only: adding
+# new fields is safe, renaming fields is a breaking change.
+COST_LOG_PATH = Path(".llm_calls.log")
+
+
+# Rough $/MTok pricing for the default model family. Numbers are
+# order-of-magnitude only — real cost should come from the response's
+# `usage` field, which we log verbatim. These constants let us emit a
+# best-effort estimated_cost_usd for users eyeballing the JSONL.
+# Update when Anthropic adjusts pricing; the log format tolerates
+# stale estimates because we also record the raw token counts.
+_MODEL_PRICING_USD_PER_MTOK = {
+    "claude-haiku-4-5":   {"input": 1.00,  "output": 5.00},
+    "claude-sonnet-4-6":  {"input": 3.00,  "output": 15.00},
+    "claude-opus-4-7":    {"input": 15.00, "output": 75.00},
+}
+
+
+def _estimate_cost_usd(model: str, input_tokens: int, output_tokens: int) -> float:
+    """Return a best-effort USD cost estimate; 0.0 for unknown models."""
+    # Match by model-family prefix so specific snapshots
+    # (claude-haiku-4-5-20251001) get the family's pricing.
+    for family, prices in _MODEL_PRICING_USD_PER_MTOK.items():
+        if model.startswith(family):
+            return (input_tokens  * prices["input"]
+                  + output_tokens * prices["output"]) / 1_000_000.0
+    return 0.0
+
+
+def _append_cost_log_entry(entry: dict) -> None:
+    """Append a JSONL line to the cost log. Silent on I/O failure —
+    auditing is best-effort; an unwritable cwd shouldn't break the run."""
+    try:
+        with COST_LOG_PATH.open("a") as f:
+            f.write(json.dumps(entry) + "\n")
+    except OSError:
+        pass
 
 
 PROMPT_TEMPLATE = """You are helping a physics / rendering engineer pick the best model for a dataset.
@@ -171,6 +213,27 @@ def main() -> int:
         block.text for block in resp.content
         if getattr(block, "type", "") == "text"
     )
+
+    # W7 — append a cost-log entry. `resp.usage` carries the
+    # authoritative token counts from the API; estimated_cost_usd is
+    # a best-effort derived figure from our pricing constants.
+    input_tokens  = getattr(resp.usage, "input_tokens",  0)
+    output_tokens = getattr(resp.usage, "output_tokens", 0)
+    _append_cost_log_entry({
+        "timestamp":           datetime.datetime.now(
+                                   datetime.timezone.utc).isoformat(
+                                   timespec="seconds"),
+        "model":               args.model,
+        "csv_path":            str(args.csv_path),
+        "n_points":            len(rows),
+        "input_tokens":        input_tokens,
+        "output_tokens":       output_tokens,
+        "total_tokens":        input_tokens + output_tokens,
+        "estimated_cost_usd":  _estimate_cost_usd(
+                                   args.model, input_tokens, output_tokens),
+        "stop_reason":         getattr(resp, "stop_reason", ""),
+    })
+
     print(f"# Formula ranking — {args.csv_path.name}\n")
     print(f"Model: `{args.model}`. Dataset: {len(rows)} points, "
           f"inputs {input_names}, output `{obs_name}`.\n")

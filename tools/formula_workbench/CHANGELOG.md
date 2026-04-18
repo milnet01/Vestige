@@ -2,6 +2,81 @@
 
 All notable changes to the Formula Workbench are documented in this file.
 
+## [1.9.0] - 2026-04-18
+
+### Added — small-scope roadmap items (W4, W5, W7, W8)
+
+Four close-outs from `docs/SELF_LEARNING_ROADMAP.md`, grouped into
+one release because they touch disjoint surfaces and each is small
+on its own. W1 (async-worker pattern), W2 (§3.5 GUI), W3 (markdown
+rendering), and W6 (confidence-weighted meta-features) remain
+deferred — they each need more design work than a single commit.
+
+**W5 — two more reference cases**
+- `reference_cases/hooke_spring.json` — linear Hooke spring
+  (F = -k · (x - restLength), k = 100). Relative-tolerance
+  assertion on k.
+- `reference_cases/exponential_fog.json` — saturating exp-family
+  fog factor (f = 1 - exp(-density · distance), density = 0.01).
+  Complements `beer_lambert` (same exp-family, inverted).
+- Reference-case suite now covers 5 formulas (beer_lambert,
+  exponential_fog, fresnel_schlick, hooke_spring, stokes_drag).
+  All 5 auto-discovered by `test_reference_harness.cpp` at build
+  time — no CMake change needed.
+
+**W8 — `--self-benchmark` consults `.fit_history.json`**
+- `runBenchmark` now seeds each formula's LM initial coefficients
+  from `lastExportedCoeffsFor(formula_name)` when history exists.
+  Matches the GUI's §3.2 behaviour so the CLI leaderboard isn't
+  systematically penalising formulas the user has previously fit.
+  Missing / corrupt history silently falls back to library
+  defaults.
+
+**W4 — pin-this-fit toggle** (§3.2 history-poisoning mitigation)
+- Checkbox "Remember for future seeding" next to the Export
+  button in the fitting-controls panel, defaults to on.
+- When unchecked, the fit is still appended to `.fit_history.json`
+  but with `user_action: "discarded"` instead of `"exported"`.
+  `lastExportedCoeffsFor` skips non-exported entries, so a
+  discarded fit is visible to auditors but can't bias future
+  seeding.
+- Use case: export an outlier / experimental fit without
+  polluting the seed well for that formula. Replaces the
+  scorched-earth alternative of deleting the history file.
+
+**W7 — LLM per-call cost log**
+- `scripts/llm_rank.py` appends one JSONL entry to `.llm_calls.log`
+  per Anthropic API call: timestamp, model, CSV path, n_points,
+  input/output/total tokens, estimated USD cost (best-effort from
+  local pricing constants; authoritative token counts come from
+  `resp.usage`), and stop_reason.
+- `.llm_calls.log` added to `.gitignore` (developer-local spend
+  audit, not committed).
+- Append is best-effort — silent on `OSError` so an unwritable cwd
+  can't break the ranking pipeline.
+- Pricing constants cover Haiku 4.5, Sonnet 4.6, Opus 4.7; match
+  by model-family prefix so specific snapshots
+  (claude-haiku-4-5-20251001) inherit the family's pricing.
+
+### Changed
+
+- **`WORKBENCH_VERSION`** 1.8.0 → 1.9.0.
+- **`workbench.h`** adds `m_rememberFitForSeeding` member (default true).
+- **`workbench.cpp::exportFormula`** sets `user_action` from the
+  flag.
+- **`renderFittingControls`** renders the checkbox with a tooltip
+  explaining the two states.
+- **`benchmark.cpp::runBenchmark`** loads `.fit_history.json` once
+  at the start of the call and consults it per formula.
+
+### Verified
+
+- 1809 tests pass (+2 from 1807 — the two new reference cases).
+- Full build clean for both `formula_workbench` and `vestige_tests`.
+- Manual inspection: the pin toggle appears next to Export with
+  tooltip; defaults on; checkbox state round-trips through
+  `exportFormula`.
+
 ## [1.8.0] - 2026-04-18
 
 ### Added (§3.6 GUI — in-Workbench Suggestions panel)

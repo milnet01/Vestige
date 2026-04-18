@@ -26,7 +26,7 @@ namespace Vestige
 {
 
 /// @brief Version string for the FormulaWorkbench.
-inline constexpr const char* WORKBENCH_VERSION = "1.8.0";
+inline constexpr const char* WORKBENCH_VERSION = "1.9.0";
 
 /// @brief Interactive formula workbench application.
 class Workbench
@@ -168,6 +168,18 @@ private:
     char m_exportPath[256] = "formula_export.json";
     std::string m_statusMessage;
     float m_statusTimer = 0.0f;
+
+    /// @brief §3.2 / W4 — pin-this-fit toggle.
+    ///
+    /// When ``true`` (default), the fit recorded on the next export
+    /// gets ``user_action: "exported"`` in ``.fit_history.json`` and
+    /// becomes a seed source for future sessions. When ``false``
+    /// (user opted out for this fit), the entry is still logged but
+    /// with ``user_action: "discarded"`` — present in the history
+    /// but ignored by ``lastExportedCoeffsFor``. Lets a user export
+    /// an outlier or experimental fit without poisoning the seed
+    /// well for the formula.
+    bool m_rememberFitForSeeding = true;
 
     // -- §3.6 GUI — LLM-ranked formula shortlist -------------------------------
     //
