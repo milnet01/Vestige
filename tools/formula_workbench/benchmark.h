@@ -129,4 +129,40 @@ std::optional<int> runSuggestFormulasCli(int argc, char** argv);
 void dumpLibraryJson(const FormulaLibrary& library);
 std::optional<int> runDumpLibraryCli(int argc, char** argv);
 
+/// @brief Serialise a FormulaLibrary to a JSON string (same shape
+/// emitted by ``--dump-library``). Exposed so the GUI's Suggestions
+/// panel (§3.6 GUI) can pipe it through to ``llm_rank.py`` without
+/// writing to stdout.
+std::string libraryToJsonString(const FormulaLibrary& library);
+
+/// @brief Captured output of a Python driver invocation.
+///
+/// ``exit_code`` is the driver's exit status, or ``-1`` on spawn /
+/// pipe failure — in which case ``error`` carries a short
+/// explanation. ``stdout_text`` holds whatever the driver printed
+/// to stdout (trimmed of trailing null bytes but NOT whitespace).
+struct CapturedDriverOutput
+{
+    int exit_code = -1;
+    std::string stdout_text;
+    std::string error;
+};
+
+/// @brief Run a Python driver and capture its stdout.
+///
+/// Same script-locator semantics as the CLI path, but pipes stdout
+/// back to the caller instead of inheriting the parent TTY. Used by
+/// the GUI Suggestions panel (§3.6 GUI). Stderr is inherited so
+/// error messages from the driver still surface in the terminal
+/// that launched the Workbench.
+CapturedDriverOutput runDriverCaptured(
+    const std::string& script,
+    const std::vector<std::string>& argv,
+    const std::string& stdinContents = {});
+
+/// @brief Locate a Python driver script (install / source / cwd).
+/// Returns an empty string when not found. Exposed so GUI paths
+/// can emit a precise "install the driver" error before spawning.
+std::string findDriverScriptPath(const char* name);
+
 } // namespace Vestige

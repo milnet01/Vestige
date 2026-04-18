@@ -692,4 +692,115 @@ std::optional<int> runSuggestFormulasCli(int argc, char** argv)
     return runDriver(script, {csv}, libJson);
 }
 
+// ---------------------------------------------------------------------------
+// GUI-side helpers (§3.6 GUI). Public wrappers around the anonymous-
+// namespace implementations so workbench.cpp doesn't need to
+// duplicate the fork+exec logic.
+// ---------------------------------------------------------------------------
+
+std::string findDriverScriptPath(const char* name)
+{
+    return findDriverScript(name);
+}
+
+std::string libraryToJsonString(const FormulaLibrary& library)
+{
+    nlohmann::json arr = nlohmann::json::array();
+    for (const auto* f : library.getAll())
+    {
+        if (f) arr.push_back(formulaMetaToJson(*f));
+    }
+    nlohmann::json root;
+    root["formulas"] = arr;
+    return root.dump(2);
+}
+
+CapturedDriverOutput runDriverCaptured(
+    const std::string& script,
+    const std::vector<std::string>& argv,
+    const std::string& stdinContents)
+{
+    // Two pipes: one to feed stdin to the child, one to capture its
+    // stdout. Stderr is deliberately left inheriting the parent — we
+    // want python import errors visible in the launching terminal
+    // so users can diagnose missing packages without having to
+    // squint at a string field in the GUI.
+    CapturedDriverOutput result;
+    int in_pipe[2]  = {-1, -1};
+    int out_pipe[2] = {-1, -1};
+    const bool needStdin = !stdinContents.empty();
+    if (needStdin && pipe(in_pipe) != 0)
+    {
+        result.error = "pipe() for stdin failed";
+        return result;
+    }
+    if (pipe(out_pipe) != 0)
+    {
+        if (needStdin) { close(in_pipe[0]); close(in_pipe[1]); }
+        result.error = "pipe() for stdout failed";
+        return result;
+    }
+
+    pid_t pid = fork();
+    if (pid < 0)
+    {
+        if (needStdin) { close(in_pipe[0]); close(in_pipe[1]); }
+        close(out_pipe[0]); close(out_pipe[1]);
+        result.error = "fork() failed";
+        return result;
+    }
+
+    if (pid == 0)
+    {
+        if (needStdin)
+        {
+            dup2(in_pipe[0], STDIN_FILENO);
+            close(in_pipe[0]);
+            close(in_pipe[1]);
+        }
+        dup2(out_pipe[1], STDOUT_FILENO);
+        close(out_pipe[0]);
+        close(out_pipe[1]);
+
+        std::vector<char*> c_argv;
+        c_argv.push_back(const_cast<char*>("python3"));
+        c_argv.push_back(const_cast<char*>(script.c_str()));
+        for (const auto& a : argv) c_argv.push_back(const_cast<char*>(a.c_str()));
+        c_argv.push_back(nullptr);
+        execvp("python3", c_argv.data());
+        _exit(127);
+    }
+
+    // Parent: stream stdin into child if needed, then read stdout.
+    if (needStdin)
+    {
+        close(in_pipe[0]);
+        ssize_t total = 0;
+        const char* buf = stdinContents.data();
+        const ssize_t need = static_cast<ssize_t>(stdinContents.size());
+        while (total < need)
+        {
+            ssize_t n = write(in_pipe[1], buf + total, need - total);
+            if (n <= 0) break;
+            total += n;
+        }
+        close(in_pipe[1]);
+    }
+
+    close(out_pipe[1]);
+    char buf[4096];
+    while (true)
+    {
+        ssize_t n = read(out_pipe[0], buf, sizeof(buf));
+        if (n <= 0) break;
+        result.stdout_text.append(buf, buf + n);
+    }
+    close(out_pipe[0]);
+
+    int status = 0;
+    waitpid(pid, &status, 0);
+    result.exit_code = WIFEXITED(status) ? WEXITSTATUS(status) : -1;
+    return result;
+}
+
 } // namespace Vestige

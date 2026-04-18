@@ -2,6 +2,79 @@
 
 All notable changes to the Formula Workbench are documented in this file.
 
+## [1.8.0] - 2026-04-18
+
+### Added (§3.6 GUI — in-Workbench Suggestions panel)
+
+Follow-up to the 1.7.0 CLI work: the LLM-ranked formula shortlist is
+now discoverable inside the Workbench itself, not just via
+`--suggest-formulas` on the command line. New "Suggestions (LLM)"
+panel docked alongside the template browser with a single-click
+"Suggest Formulas" button that operates on the currently-loaded
+dataset and displays the ranked markdown shortlist inline.
+
+**Added**
+- **`Workbench::renderSuggestionsPanel()`** — ImGui panel with
+  a Run button, status line, and a read-only multi-line text area
+  that holds the driver's markdown output. Errors surface in red
+  inside the panel so the user doesn't have to check the terminal.
+- **`Workbench::runLlmSuggestions()`** — writes the current
+  `m_dataPoints` to a `/tmp/workbench_suggest_<pid>.csv` (union of
+  variable names across all points, stable alphabetical order so
+  the CSV is deterministic), dumps the library to JSON via the
+  existing `libraryToJsonString`, and pipes both through to
+  `scripts/llm_rank.py` via `runDriverCaptured`. Blocking call —
+  Haiku 4.5 responses are a second or two, and a modal-free
+  blocking wait is simpler than a worker-thread path for this
+  latency budget.
+- **`Vestige::runDriverCaptured`** (in `benchmark.{h,cpp}`) — new
+  public helper that forks a Python driver with both stdin and
+  stdout pipes attached, captures stdout into a string, inherits
+  stderr (so import errors remain visible in the launching
+  terminal). Complement to the existing `runDriver` which
+  inherits both streams (right for CLI passthrough, wrong for
+  GUI capture).
+- **`Vestige::libraryToJsonString`** / **`findDriverScriptPath`**
+  — public wrappers around the anonymous-namespace helpers
+  previously used only by the CLI path, so the GUI can reach the
+  same script-locator logic without duplicating it.
+
+**Changed**
+- **`Workbench::render()`** — calls `renderSuggestionsPanel()`
+  after the preset browser. Panel is dockable alongside everything
+  else in the workbench layout.
+- **`workbench.h`** adds `m_suggestionsOutput`, `m_suggestionsError`,
+  `m_suggestionsPending` members; `runLlmSuggestions` /
+  `renderSuggestionsPanel` method declarations.
+- **`WORKBENCH_VERSION`** 1.7.0 → 1.8.0.
+
+**Pre-flight checks.** Before spawning the driver, the panel:
+1. Refuses when `m_dataPoints.empty()` with a clear message —
+   silent fallback to synthetic data would produce misleading
+   suggestions.
+2. Checks the driver exists at one of the known locations; if
+   not, surfaces the expected path so the user can diagnose a
+   broken install without leaving the Workbench.
+3. Forwards driver exit codes verbatim with a hint about the two
+   common causes (missing `ANTHROPIC_API_KEY`, missing
+   `anthropic` SDK).
+
+**Known trade-off.** The panel blocks the UI thread while the
+driver runs. Haiku 4.5's typical 1–2 s latency keeps this bearable,
+but if the user runs `--model claude-opus-4-7` via a config tweak,
+the Workbench will freeze for the duration. A worker-thread path
+is tracked but deliberately deferred — the pattern we'd want
+(async I/O on a separate std::thread, poll from the render loop)
+is worth building once and reusing for the §3.5 GUI too.
+
+**Not yet done** (tracked in design doc):
+- §3.5 GUI ("Discover via PySR" button + auto-import of discovered
+  expressions into the library). Still deferred because PySR runs
+  take minutes; needs the async-worker pattern mentioned above.
+- Markdown rendering inside the panel (currently shows the markdown
+  source verbatim — fine for a table of ≤10 rows, would be
+  prettier rendered).
+
 ## [1.7.0] - 2026-04-17
 
 **Completes Phase 2–3 of the self-learning design**

@@ -1,6 +1,7 @@
 /// @file workbench.cpp
 /// @brief FormulaWorkbench implementation.
 #include "workbench.h"
+#include "benchmark.h"
 #include "fit_history.h"
 #include "formula/codegen_cpp.h"
 #include "formula/codegen_glsl.h"
@@ -15,10 +16,13 @@
 #include <cmath>
 #include <cstdio>
 #include <ctime>
+#include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <random>
+#include <set>
 #include <sstream>
+#include <unistd.h>
 
 namespace Vestige
 {
@@ -67,6 +71,7 @@ void Workbench::render()
     renderVisualizer();
     renderValidation();
     renderPresetBrowser();
+    renderSuggestionsPanel();
 
     // Status bar
     if (m_statusTimer > 0.0f)
@@ -2106,6 +2111,181 @@ void Workbench::rebuildVisualizationCache()
     // against a future edit reintroducing the drift.
     assert(m_residuals.size() == m_dataX.size() &&
            "residual count must match filtered m_dataX count");
+}
+
+// ---------------------------------------------------------------------------
+// §3.6 GUI — LLM-ranked formula shortlist panel.
+//
+// Two pieces: `runLlmSuggestions()` is the headless worker (writes the
+// dataset to a temp CSV, dumps the library as JSON, forks the Python
+// driver, reads its stdout into m_suggestionsOutput). `renderSuggestionsPanel()`
+// is the ImGui face (Run button + status line + scrollable markdown).
+// The panel blocks the UI while the driver runs — acceptable because
+// Haiku responses are a second or two. If latency becomes an issue, move
+// this to a worker thread.
+// ---------------------------------------------------------------------------
+
+void Workbench::runLlmSuggestions()
+{
+    m_suggestionsOutput.clear();
+    m_suggestionsError.clear();
+    m_suggestionsPending = true;
+
+    // Pre-flight: need a dataset to rank against. No silent fallback
+    // to synthetic data here — the whole point of the panel is to
+    // reason about the user's real data, and a suggestion based on
+    // synthetic points would be misleading.
+    if (m_dataPoints.empty())
+    {
+        m_suggestionsError = "No data points to rank against. "
+                             "Load a CSV or generate synthetic data first.";
+        m_suggestionsPending = false;
+        return;
+    }
+
+    // Locate the Python driver before writing anything. If it's
+    // missing, surface the install path in the panel so the user
+    // can diagnose without leaving the Workbench.
+    const std::string script = findDriverScriptPath("llm_rank.py");
+    if (script.empty())
+    {
+        m_suggestionsError =
+            "llm_rank.py not found. Expected at "
+            "tools/formula_workbench/scripts/llm_rank.py relative to the "
+            "executable or source tree.";
+        m_suggestionsPending = false;
+        return;
+    }
+
+    // Materialise the current dataset as a temp CSV. The driver
+    // takes a path, so we need a real file — but it lives in /tmp
+    // and gets written / overwritten on every run; no persistence
+    // concerns. Header: every variable name + "observed" as the
+    // last column (matches the driver's loader expectations).
+    namespace fs = std::filesystem;
+    const auto csvPath = fs::temp_directory_path()
+                       / ("workbench_suggest_"
+                          + std::to_string(::getpid()) + ".csv");
+    {
+        std::ofstream out(csvPath);
+        if (!out)
+        {
+            m_suggestionsError = "Cannot write temp CSV: " + csvPath.string();
+            m_suggestionsPending = false;
+            return;
+        }
+        // Union of variable names across all data points — handles the
+        // (rare) case where different points have different variable
+        // sets. Stable alphabetical order so the CSV is deterministic.
+        std::set<std::string> names;
+        for (const auto& dp : m_dataPoints)
+            for (const auto& [k, _] : dp.variables) names.insert(k);
+        std::vector<std::string> ordered(names.begin(), names.end());
+
+        bool first = true;
+        for (const auto& n : ordered)
+        {
+            if (!first) out << ",";
+            out << n;
+            first = false;
+        }
+        out << (ordered.empty() ? "" : ",") << "observed\n";
+
+        for (const auto& dp : m_dataPoints)
+        {
+            first = true;
+            for (const auto& n : ordered)
+            {
+                if (!first) out << ",";
+                auto it = dp.variables.find(n);
+                out << (it != dp.variables.end() ? it->second : 0.0f);
+                first = false;
+            }
+            out << (ordered.empty() ? "" : ",") << dp.observed << "\n";
+        }
+    }
+
+    const std::string libJson = libraryToJsonString(m_library);
+    const std::vector<std::string> driverArgs{csvPath.string()};
+    const auto result = runDriverCaptured(script, driverArgs, libJson);
+    m_suggestionsPending = false;
+
+    if (!result.error.empty())
+    {
+        m_suggestionsError = "Driver spawn failed: " + result.error;
+        return;
+    }
+    if (result.exit_code != 0)
+    {
+        m_suggestionsError =
+            "Driver exited with code " + std::to_string(result.exit_code)
+            + " — missing ANTHROPIC_API_KEY or `anthropic` SDK? "
+              "Check the terminal for a detailed message.";
+        return;
+    }
+    m_suggestionsOutput = result.stdout_text;
+
+    // Leave the temp CSV behind on disk — developers debugging a
+    // bad ranking sometimes want to re-run the driver manually
+    // against the exact same data. It's a few KB in /tmp; the OS
+    // cleans it up on next boot.
+}
+
+void Workbench::renderSuggestionsPanel()
+{
+    ImGui::Begin("Suggestions (LLM)");
+
+    ImGui::TextWrapped(
+        "Rank which library formulas are most physically plausible for "
+        "the current dataset. Needs ANTHROPIC_API_KEY in the environment "
+        "and the `anthropic` Python SDK. The LLM stays advisory — the "
+        "fitter still does the actual fit.");
+    ImGui::Separator();
+
+    const bool canRun = !m_suggestionsPending && !m_dataPoints.empty();
+
+    if (!canRun)
+        ImGui::BeginDisabled();
+    if (ImGui::Button("Suggest Formulas", ImVec2(200, 32)))
+    {
+        runLlmSuggestions();
+    }
+    if (!canRun)
+        ImGui::EndDisabled();
+
+    if (m_suggestionsPending)
+    {
+        ImGui::SameLine();
+        ImGui::TextUnformatted("running…");
+    }
+    else if (m_dataPoints.empty())
+    {
+        ImGui::SameLine();
+        ImGui::TextDisabled("(load data first)");
+    }
+
+    if (!m_suggestionsError.empty())
+    {
+        ImGui::Separator();
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.5f, 0.5f, 1.0f));
+        ImGui::TextWrapped("%s", m_suggestionsError.c_str());
+        ImGui::PopStyleColor();
+    }
+
+    if (!m_suggestionsOutput.empty())
+    {
+        ImGui::Separator();
+        // Read-only multiline. ImGui doesn't render markdown, so the
+        // user sees the table source verbatim — which is fine for a
+        // shortlist of ≤10 rows and preserves the LLM's commentary.
+        ImVec2 avail = ImGui::GetContentRegionAvail();
+        ImGui::InputTextMultiline("##suggestions",
+                                  m_suggestionsOutput.data(),
+                                  m_suggestionsOutput.size() + 1,
+                                  avail, ImGuiInputTextFlags_ReadOnly);
+    }
+
+    ImGui::End();
 }
 
 } // namespace Vestige

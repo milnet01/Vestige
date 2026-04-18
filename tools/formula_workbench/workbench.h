@@ -26,7 +26,7 @@ namespace Vestige
 {
 
 /// @brief Version string for the FormulaWorkbench.
-inline constexpr const char* WORKBENCH_VERSION = "1.7.0";
+inline constexpr const char* WORKBENCH_VERSION = "1.8.0";
 
 /// @brief Interactive formula workbench application.
 class Workbench
@@ -46,6 +46,7 @@ private:
     void renderVisualizer();
     void renderValidation();
     void renderPresetBrowser();
+    void renderSuggestionsPanel();   ///< §3.6 GUI — LLM-ranked formula shortlist.
 
     // -- Actions --------------------------------------------------------------
     void selectFormula(const std::string& name);
@@ -168,6 +169,17 @@ private:
     std::string m_statusMessage;
     float m_statusTimer = 0.0f;
 
+    // -- §3.6 GUI — LLM-ranked formula shortlist -------------------------------
+    //
+    // On-demand panel that pipes the dataset + library metadata to
+    // scripts/llm_rank.py and displays the ranked markdown shortlist
+    // the LLM returns. Blocking for now (LLM responses are 1-2s);
+    // a later refinement can hoist this onto a worker thread if
+    // users routinely hit multi-second latencies.
+    std::string m_suggestionsOutput;      ///< Full markdown from the driver.
+    std::string m_suggestionsError;       ///< Short human-readable failure.
+    bool        m_suggestionsPending = false;  ///< True during blocking run.
+    void runLlmSuggestions();
 };
 
 } // namespace Vestige
