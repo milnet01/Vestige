@@ -1,0 +1,25 @@
+{
+  "$comment": "Reference case for buoyancy (F = fluidDensity * submergedVolume * g). Single free coefficient (g); the two inputs are swept over realistic water + volume ranges. Linear in g, so this is the easiest possible three-factor product fit — a cheap sanity check that the LM pipeline does not regress on a trivial case.",
+
+  "formula_name": "buoyancy",
+
+  "canonical_coefficients": {
+    "g": 9.81
+  },
+
+  "input_sweep": {
+    "fluidDensity":    { "values": [997.0, 1025.0] },
+    "submergedVolume": { "min": 0.01, "max": 1.0, "count": 10 }
+  },
+
+  "expected": {
+    "r_squared_min": 0.9999,
+    "rmse_max":      0.5,
+    "coefficients": {
+      "g": { "expected": 9.81, "relative_tolerance": 0.01 }
+    },
+    "must_converge": true
+  },
+
+  "notes": "fluidDensity sweeps freshwater (997) and seawater (1025); submergedVolume from ≈half-litre to 1 m³. F scales to ~10 kN at the high end; rmse_max=0.5 N is strict relative to the signal. relative_tolerance 1 % on g is realistic for a linear fit."
+}

@@ -2,6 +2,52 @@
 
 All notable changes to the Formula Workbench are documented in this file.
 
+## [1.14.0] - 2026-04-19
+
+### Added — W5 (cont.): five more reference cases
+
+Extends the §3.4 reference-case harness from 5 specs to 10 (doubling
+coverage). Each spec is a small JSON in
+`tools/formula_workbench/reference_cases/` that the parameterised
+GTest picks up automatically — no C++ wiring needed per case.
+
+New specs:
+
+- `aerodynamic_drag.json` — 36-point 3-input product sweep
+  (vDotN × surfaceArea × airDensity). Recovers Cd=0.47 to 1 %
+  relative. Covers the *wind* family.
+- `buoyancy.json` — 20-point fluidDensity × submergedVolume sweep
+  for fresh + seawater. Recovers g=9.81 to 1 % relative. Trivial
+  linear fit — sanity check against LM regressions on the simplest
+  possible three-factor product.
+- `inverse_square_falloff.json` — the first three-coefficient
+  reference case. 40-point distance sweep recovers {constant=1.0,
+  linear=0.09, quadratic=0.032} with 5 % relative tolerance on the
+  two d-dependent terms (partial aliasing for intermediate
+  distances is realistic). Covers the *lighting* family.
+- `vignette.json` — first fully-nonlinear coefficient fit (falloff
+  sits inside pow()). 25-point radial-distance sweep recovers
+  {intensity=0.5, falloff=2.0}. Catches regressions in LM's
+  step-size schedule or Jacobian path that would pass linear cases.
+- `wet_darkening.json` — 110-point 2D grid (albedo × wetness).
+  Recovers darkFactor=0.5 to 2 % relative. Fills out the *material*
+  category.
+
+All 10 reference cases pass (tolerances verified against the current
+LM implementation — no loosening required). Total test count is
+1864.
+
+**Files changed**
+
+- `tools/formula_workbench/reference_cases/aerodynamic_drag.json` (new)
+- `tools/formula_workbench/reference_cases/buoyancy.json` (new)
+- `tools/formula_workbench/reference_cases/inverse_square_falloff.json` (new)
+- `tools/formula_workbench/reference_cases/vignette.json` (new)
+- `tools/formula_workbench/reference_cases/wet_darkening.json` (new)
+- `tools/formula_workbench/workbench.h` (version bump to 1.14.0)
+- `tools/formula_workbench/CHANGELOG.md` (this entry)
+- `docs/SELF_LEARNING_ROADMAP.md` (shipped row, updated W5 cont. count)
+
 ## [1.13.0] - 2026-04-18
 
 ### Added — W3: markdown rendering in the Suggestions panel

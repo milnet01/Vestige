@@ -28,7 +28,7 @@ namespace Vestige
 {
 
 /// @brief Version string for the FormulaWorkbench.
-inline constexpr const char* WORKBENCH_VERSION = "1.13.0";
+inline constexpr const char* WORKBENCH_VERSION = "1.14.0";
 
 /// @brief Interactive formula workbench application.
 class Workbench

@@ -1,0 +1,28 @@
+{
+  "$comment": "Reference case for inverse_square_falloff (atten = 1 / (constant + linear*d + quadratic*d^2)). Three free coefficients — the most multi-parameter fit in the reference set to date. Shape is a rational function; LM has to resolve the constant/linear/quadratic contributions simultaneously from a single-variable sweep.",
+
+  "formula_name": "inverse_square_falloff",
+
+  "canonical_coefficients": {
+    "constant":  1.0,
+    "linear":    0.09,
+    "quadratic": 0.032
+  },
+
+  "input_sweep": {
+    "distance": { "min": 0.1, "max": 20.0, "count": 40 }
+  },
+
+  "expected": {
+    "r_squared_min": 0.9999,
+    "rmse_max":      0.001,
+    "coefficients": {
+      "constant":  { "expected": 1.0,   "relative_tolerance": 0.02 },
+      "linear":    { "expected": 0.09,  "relative_tolerance": 0.05 },
+      "quadratic": { "expected": 0.032, "relative_tolerance": 0.05 }
+    },
+    "must_converge": true
+  },
+
+  "notes": "Coefficients match the OpenGL standard attenuation defaults. 40-point sweep spans the near-light high-attenuation region (d=0.1) through the quadratic-dominated tail (d=20). Linear / quadratic tolerances at 5 % are a bit loose because the two terms partially alias for intermediate distances — that mutual information is what a real regression in LM's damping strategy would perturb."
+}

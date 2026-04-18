@@ -1,0 +1,26 @@
+{
+  "$comment": "Reference case for aerodynamic_drag (F = 0.5 * Cd * airDensity * surfaceArea * vDotN). Three-input product-sweep with a single drag-coefficient to recover. Canonical Cd=0.47 is a flat plate / sphere; the library default matches so LM starts on the answer and must hold there across a 3D sweep.",
+
+  "formula_name": "aerodynamic_drag",
+
+  "canonical_coefficients": {
+    "Cd": 0.47
+  },
+
+  "input_sweep": {
+    "vDotN":       { "min": 0.5, "max": 30.0, "count": 12 },
+    "surfaceArea": { "values": [0.5, 1.0, 2.0] },
+    "airDensity":  { "values": [1.225] }
+  },
+
+  "expected": {
+    "r_squared_min": 0.9999,
+    "rmse_max":      0.5,
+    "coefficients": {
+      "Cd": { "expected": 0.47, "relative_tolerance": 0.01 }
+    },
+    "must_converge": true
+  },
+
+  "notes": "36-point sweep (12 velocities × 3 areas × 1 density). F scales linearly with Cd so the fit is well-conditioned; relative_tolerance 1 % keeps the assertion tight while rmse_max=0.5 absorbs the O(10)-magnitude forces at the high-velocity end of the sweep."
+}
