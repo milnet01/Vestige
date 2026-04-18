@@ -9,6 +9,7 @@
 
 #include <imgui.h>
 #include <implot.h>
+#include <nlohmann/json.hpp>
 
 #include <algorithm>
 #include <cassert>
@@ -19,6 +20,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
+#include <optional>
 #include <random>
 #include <set>
 #include <sstream>
@@ -72,6 +74,7 @@ void Workbench::render()
     renderValidation();
     renderPresetBrowser();
     renderSuggestionsPanel();
+    renderPySRPanel();
 
     // Status bar
     if (m_statusTimer > 0.0f)
@@ -2322,6 +2325,356 @@ void Workbench::renderSuggestionsPanel()
         ImGui::InputTextMultiline("##suggestions",
                                   m_suggestionsOutput.data(),
                                   m_suggestionsOutput.size() + 1,
+                                  avail, ImGuiInputTextFlags_ReadOnly);
+    }
+
+    ImGui::End();
+}
+
+// ---------------------------------------------------------------------------
+// §3.5 GUI — "Discover via PySR" panel (W2, 1.11.0)
+// ---------------------------------------------------------------------------
+// Shells out to scripts/pysr_driver.py via AsyncDriverJob. Unlike the
+// LLM Suggestions panel, a PySR run can take minutes, so this panel
+// exercises the W2 additions to AsyncDriverJob: drainStdoutChunk for
+// live progress and cancel() for user-initiated termination.
+//
+// Output contract (pysr_driver.py): markdown header + table, then a
+// ```json fenced block containing {equations: [...]}. We display the
+// raw stream while running, then parse the JSON tail into
+// m_pysrEquations on Done and render as a sortable ImGui table.
+// ---------------------------------------------------------------------------
+
+namespace
+{
+
+// Extract the {"equations": [...]}-shaped JSON from the last ```json
+// fence in the driver's stdout. Returns nullopt when the fence isn't
+// present (run cancelled before completion, or driver errored).
+std::optional<std::vector<Workbench::PySREquation>> parsePySRJsonTail(
+    const std::string& stdoutText)
+{
+    const std::string openFence  = "```json";
+    const std::string closeFence = "```";
+    const auto openPos = stdoutText.rfind(openFence);
+    if (openPos == std::string::npos)
+        return std::nullopt;
+
+    const auto contentStart = openPos + openFence.size();
+    const auto closePos = stdoutText.find(closeFence, contentStart);
+    if (closePos == std::string::npos)
+        return std::nullopt;
+
+    const std::string payload = stdoutText.substr(
+        contentStart, closePos - contentStart);
+
+    try
+    {
+        const auto root = nlohmann::json::parse(payload);
+        if (!root.contains("equations") || !root["equations"].is_array())
+            return std::nullopt;
+
+        std::vector<Workbench::PySREquation> out;
+        for (const auto& eq : root["equations"])
+        {
+            Workbench::PySREquation row;
+            row.complexity = eq.value("complexity", 0);
+            row.loss       = eq.value("loss", 0.0f);
+            row.score      = eq.value("score", 0.0f);
+            row.equation   = eq.value("equation", std::string{});
+            out.push_back(std::move(row));
+        }
+        return out;
+    }
+    catch (const nlohmann::json::exception&)
+    {
+        // Driver emitted something that looked like JSON but wasn't
+        // parseable (truncated stream, NaN/inf literals, etc.).
+        // Falling through keeps the raw stream visible so the user
+        // can still diagnose — the table just stays empty.
+        return std::nullopt;
+    }
+}
+
+} // namespace
+
+void Workbench::runPySR()
+{
+    m_pysrStreamingOutput.clear();
+    m_pysrError.clear();
+    m_pysrEquations.clear();
+
+    if (m_dataPoints.empty())
+    {
+        m_pysrError = "No data points to discover against. "
+                      "Load a CSV or generate synthetic data first.";
+        return;
+    }
+
+    const std::string script = findDriverScriptPath("pysr_driver.py");
+    if (script.empty())
+    {
+        m_pysrError =
+            "pysr_driver.py not found. Expected at "
+            "tools/formula_workbench/scripts/pysr_driver.py relative to the "
+            "executable or source tree.";
+        return;
+    }
+
+    // Materialise the dataset to a temp CSV — pysr_driver.py takes
+    // a path. Same shape as the Suggestions panel: variable columns
+    // in stable alphabetical order, then "observed" as the last
+    // column. Stable ordering matters so a fit on the same dataset
+    // reproduces byte-identically.
+    namespace fs = std::filesystem;
+    const auto csvPath = fs::temp_directory_path()
+                       / ("workbench_pysr_"
+                          + std::to_string(::getpid()) + ".csv");
+    {
+        std::ofstream out(csvPath);
+        if (!out)
+        {
+            m_pysrError = "Cannot write temp CSV: " + csvPath.string();
+            return;
+        }
+        std::set<std::string> names;
+        for (const auto& dp : m_dataPoints)
+            for (const auto& [k, _] : dp.variables) names.insert(k);
+        std::vector<std::string> ordered(names.begin(), names.end());
+
+        bool first = true;
+        for (const auto& n : ordered)
+        {
+            if (!first) out << ",";
+            out << n;
+            first = false;
+        }
+        out << (ordered.empty() ? "" : ",") << "observed\n";
+
+        for (const auto& dp : m_dataPoints)
+        {
+            first = true;
+            for (const auto& n : ordered)
+            {
+                if (!first) out << ",";
+                auto it = dp.variables.find(n);
+                out << (it != dp.variables.end() ? it->second : 0.0f);
+                first = false;
+            }
+            out << (ordered.empty() ? "" : ",") << dp.observed << "\n";
+        }
+    }
+
+    const std::vector<std::string> driverArgs{
+        csvPath.string(),
+        "--niterations",    std::to_string(m_pysrNiterations),
+        "--max-complexity", std::to_string(m_pysrMaxComplexity),
+    };
+
+    if (!m_pysrJob.start(script, driverArgs, {}))
+    {
+        m_pysrError = "A previous PySR run is still in flight.";
+        return;
+    }
+}
+
+void Workbench::renderPySRPanel()
+{
+    ImGui::Begin("Discover via PySR");
+
+    // Drain streaming bytes every frame so the panel reflects
+    // the child's progress in real time. drainStdoutChunk is a
+    // mutex-protected swap, so the cost is bounded per-frame.
+    const std::string chunk = m_pysrJob.drainStdoutChunk();
+    if (!chunk.empty())
+        m_pysrStreamingOutput += chunk;
+
+    // Transition to Done once the worker reports it. Also parse the
+    // JSON tail into m_pysrEquations at this point — we only try
+    // once per run, so repeatedly re-parsing on subsequent frames
+    // is wasted work.
+    if (m_pysrJob.poll() == AsyncDriverJob::State::Done)
+    {
+        const auto result = m_pysrJob.takeResult();
+        // Make sure any final chunk emitted between the last drain
+        // and Done lands in the panel. drainStdoutChunk + result's
+        // stdout_text don't overlap — the result holds the COMPLETE
+        // stream, the chunk channel held only what hadn't been
+        // drained yet. Use whichever is longer so partial-drain and
+        // full-capture paths both converge on the same display.
+        if (result.stdout_text.size() > m_pysrStreamingOutput.size())
+            m_pysrStreamingOutput = result.stdout_text;
+
+        if (!result.error.empty())
+        {
+            m_pysrError = "Driver: " + result.error;
+        }
+        else if (result.exit_code == 2)
+        {
+            m_pysrError =
+                "PySR not installed. Install with `pip install pysr` "
+                "(also pulls Julia ~300 MB on first install).";
+        }
+        else if (result.exit_code != 0)
+        {
+            m_pysrError =
+                "Driver exited with code "
+                + std::to_string(result.exit_code)
+                + " — check the terminal for details.";
+        }
+
+        if (auto parsed = parsePySRJsonTail(m_pysrStreamingOutput))
+            m_pysrEquations = std::move(*parsed);
+    }
+
+    ImGui::TextWrapped(
+        "Symbolic regression via PySR. Searches for an analytic "
+        "formula that fits the current dataset. Runs can take tens "
+        "of seconds to minutes depending on niterations and "
+        "max-complexity.");
+    ImGui::Separator();
+
+    // Tuning knobs. Disabled mid-run to avoid the "what args did
+    // this run actually use?" ambiguity — the sliders reflect the
+    // NEXT run, so editing them while one is in flight would be
+    // misleading.
+    const bool isRunning = m_pysrJob.isRunning();
+    if (isRunning)
+        ImGui::BeginDisabled();
+    ImGui::SliderInt("niterations",    &m_pysrNiterations,    5, 200);
+    ImGui::SliderInt("max-complexity", &m_pysrMaxComplexity,  5, 40);
+    if (isRunning)
+        ImGui::EndDisabled();
+
+    ImGui::Separator();
+
+    const bool canRun = !isRunning && !m_dataPoints.empty();
+    if (!canRun)
+        ImGui::BeginDisabled();
+    if (ImGui::Button("Discover via PySR", ImVec2(200, 32)))
+    {
+        runPySR();
+    }
+    if (!canRun)
+        ImGui::EndDisabled();
+
+    ImGui::SameLine();
+    if (!isRunning)
+        ImGui::BeginDisabled();
+    if (ImGui::Button("Cancel", ImVec2(100, 32)))
+    {
+        m_pysrJob.cancel();
+    }
+    if (!isRunning)
+        ImGui::EndDisabled();
+
+    if (isRunning)
+    {
+        ImGui::SameLine();
+        ImGui::Text("running %.1fs…", m_pysrJob.elapsedSeconds());
+    }
+    else if (m_dataPoints.empty())
+    {
+        ImGui::SameLine();
+        ImGui::TextDisabled("(load data first)");
+    }
+
+    if (!m_pysrError.empty())
+    {
+        ImGui::Separator();
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.5f, 0.5f, 1.0f));
+        ImGui::TextWrapped("%s", m_pysrError.c_str());
+        ImGui::PopStyleColor();
+    }
+
+    // Leaderboard — populated post-Done from the JSON tail. Shown
+    // alongside the raw stream, not instead of it, so the user can
+    // still see PySR's human-readable header.
+    if (!m_pysrEquations.empty())
+    {
+        ImGui::Separator();
+        ImGui::Text("Discovered equations (%zu):",
+                    m_pysrEquations.size());
+
+        constexpr ImGuiTableFlags tableFlags =
+            ImGuiTableFlags_Borders
+            | ImGuiTableFlags_RowBg
+            | ImGuiTableFlags_Sortable
+            | ImGuiTableFlags_SortMulti
+            | ImGuiTableFlags_ScrollY;
+        const ImVec2 tableSize(0.0f, 180.0f);
+        if (ImGui::BeginTable("##pysr_leaderboard", 4,
+                              tableFlags, tableSize))
+        {
+            ImGui::TableSetupScrollFreeze(0, 1);
+            ImGui::TableSetupColumn("Complexity",
+                                    ImGuiTableColumnFlags_DefaultSort
+                                    | ImGuiTableColumnFlags_WidthFixed, 90.0f);
+            ImGui::TableSetupColumn("Loss",
+                                    ImGuiTableColumnFlags_WidthFixed, 90.0f);
+            ImGui::TableSetupColumn("Score",
+                                    ImGuiTableColumnFlags_WidthFixed, 90.0f);
+            ImGui::TableSetupColumn("Equation",
+                                    ImGuiTableColumnFlags_WidthStretch);
+            ImGui::TableHeadersRow();
+
+            if (ImGuiTableSortSpecs* sortSpecs = ImGui::TableGetSortSpecs())
+            {
+                if (sortSpecs->SpecsDirty && sortSpecs->SpecsCount > 0)
+                {
+                    const auto& s = sortSpecs->Specs[0];
+                    std::sort(m_pysrEquations.begin(), m_pysrEquations.end(),
+                        [&](const PySREquation& a, const PySREquation& b) {
+                            const bool asc =
+                                (s.SortDirection == ImGuiSortDirection_Ascending);
+                            switch (s.ColumnIndex)
+                            {
+                                case 0: return asc ? a.complexity < b.complexity
+                                                   : a.complexity > b.complexity;
+                                case 1: return asc ? a.loss < b.loss
+                                                   : a.loss > b.loss;
+                                case 2: return asc ? a.score < b.score
+                                                   : a.score > b.score;
+                                default: return asc ? a.equation < b.equation
+                                                    : a.equation > b.equation;
+                            }
+                        });
+                    sortSpecs->SpecsDirty = false;
+                }
+            }
+
+            for (const auto& eq : m_pysrEquations)
+            {
+                ImGui::TableNextRow();
+                ImGui::TableSetColumnIndex(0);
+                ImGui::Text("%d", eq.complexity);
+                ImGui::TableSetColumnIndex(1);
+                ImGui::Text("%.4g", eq.loss);
+                ImGui::TableSetColumnIndex(2);
+                ImGui::Text("%.4g", eq.score);
+                ImGui::TableSetColumnIndex(3);
+                ImGui::TextUnformatted(eq.equation.c_str());
+            }
+            ImGui::EndTable();
+        }
+
+        // W2c placeholder — explicit note that library-import is
+        // still a follow-up. Avoids the "why doesn't this button do
+        // anything" confusion that a disabled Import button would
+        // create.
+        ImGui::TextDisabled(
+            "(Import-as-library requires a PySR expression parser — "
+            "tracked as W2c in the self-learning roadmap.)");
+    }
+
+    if (!m_pysrStreamingOutput.empty())
+    {
+        ImGui::Separator();
+        ImGui::TextDisabled("Raw PySR output:");
+        ImVec2 avail = ImGui::GetContentRegionAvail();
+        ImGui::InputTextMultiline("##pysr_raw",
+                                  m_pysrStreamingOutput.data(),
+                                  m_pysrStreamingOutput.size() + 1,
                                   avail, ImGuiInputTextFlags_ReadOnly);
     }
 

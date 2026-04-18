@@ -741,44 +741,43 @@ std::string libraryToJsonString(const FormulaLibrary& library)
     return root.dump(2);
 }
 
-CapturedDriverOutput runDriverCaptured(
+DriverProcess spawnDriverProcess(
     const std::string& script,
     const std::vector<std::string>& argv,
-    const std::string& stdinContents)
+    bool wantStdin)
 {
     // Two pipes: one to feed stdin to the child, one to capture its
     // stdout. Stderr is deliberately left inheriting the parent — we
     // want python import errors visible in the launching terminal
     // so users can diagnose missing packages without having to
     // squint at a string field in the GUI.
-    CapturedDriverOutput result;
+    DriverProcess proc;
     int in_pipe[2]  = {-1, -1};
     int out_pipe[2] = {-1, -1};
-    const bool needStdin = !stdinContents.empty();
-    if (needStdin && pipe(in_pipe) != 0)
+    if (wantStdin && pipe(in_pipe) != 0)
     {
-        result.error = "pipe() for stdin failed";
-        return result;
+        proc.error = "pipe() for stdin failed";
+        return proc;
     }
     if (pipe(out_pipe) != 0)
     {
-        if (needStdin) { close(in_pipe[0]); close(in_pipe[1]); }
-        result.error = "pipe() for stdout failed";
-        return result;
+        if (wantStdin) { close(in_pipe[0]); close(in_pipe[1]); }
+        proc.error = "pipe() for stdout failed";
+        return proc;
     }
 
     pid_t pid = fork();
     if (pid < 0)
     {
-        if (needStdin) { close(in_pipe[0]); close(in_pipe[1]); }
+        if (wantStdin) { close(in_pipe[0]); close(in_pipe[1]); }
         close(out_pipe[0]); close(out_pipe[1]);
-        result.error = "fork() failed";
-        return result;
+        proc.error = "fork() failed";
+        return proc;
     }
 
     if (pid == 0)
     {
-        if (needStdin)
+        if (wantStdin)
         {
             dup2(in_pipe[0], STDIN_FILENO);
             close(in_pipe[0]);
@@ -797,34 +796,58 @@ CapturedDriverOutput runDriverCaptured(
         _exit(127);
     }
 
-    // Parent: stream stdin into child if needed, then read stdout.
-    if (needStdin)
+    // Parent: close the child's ends of each pipe, hand the caller
+    // theirs. Caller drives stdin write-and-close + stdout read-to-EOF.
+    if (wantStdin)
     {
         close(in_pipe[0]);
+        proc.stdin_fd = in_pipe[1];
+    }
+    close(out_pipe[1]);
+    proc.stdout_fd = out_pipe[0];
+    proc.pid       = static_cast<int>(pid);
+    return proc;
+}
+
+CapturedDriverOutput runDriverCaptured(
+    const std::string& script,
+    const std::vector<std::string>& argv,
+    const std::string& stdinContents)
+{
+    CapturedDriverOutput result;
+    const bool needStdin = !stdinContents.empty();
+    DriverProcess proc = spawnDriverProcess(script, argv, needStdin);
+    if (proc.pid < 0)
+    {
+        result.error = proc.error;
+        return result;
+    }
+
+    if (needStdin)
+    {
         ssize_t total = 0;
         const char* buf = stdinContents.data();
         const ssize_t need = static_cast<ssize_t>(stdinContents.size());
         while (total < need)
         {
-            ssize_t n = write(in_pipe[1], buf + total, need - total);
+            ssize_t n = write(proc.stdin_fd, buf + total, need - total);
             if (n <= 0) break;
             total += n;
         }
-        close(in_pipe[1]);
+        close(proc.stdin_fd);
     }
 
-    close(out_pipe[1]);
     char buf[4096];
     while (true)
     {
-        ssize_t n = read(out_pipe[0], buf, sizeof(buf));
+        ssize_t n = read(proc.stdout_fd, buf, sizeof(buf));
         if (n <= 0) break;
         result.stdout_text.append(buf, buf + n);
     }
-    close(out_pipe[0]);
+    close(proc.stdout_fd);
 
     int status = 0;
-    waitpid(pid, &status, 0);
+    waitpid(static_cast<pid_t>(proc.pid), &status, 0);
     result.exit_code = WIFEXITED(status) ? WEXITSTATUS(status) : -1;
     return result;
 }

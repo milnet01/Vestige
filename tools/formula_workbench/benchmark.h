@@ -148,6 +148,39 @@ struct CapturedDriverOutput
     std::string error;
 };
 
+/// @brief Handle to a running Python driver child process.
+///
+/// Returned by ``spawnDriverProcess`` so streaming consumers
+/// (W2 ``AsyncDriverJob``) can pump stdin, read stdout
+/// incrementally, send signals, and reap. On failure, ``pid`` is
+/// negative and ``error`` holds the reason; callers must NOT read
+/// from or close the file descriptors in that case (they're -1).
+///
+/// Caller owns the lifecycle: write ``stdin_fd`` then close it,
+/// read ``stdout_fd`` until EOF then close it, and waitpid on
+/// ``pid`` to reap. ``AsyncDriverJob::m_worker`` does exactly
+/// this on a background thread; ``runDriverCaptured`` does it
+/// synchronously on the caller's thread.
+struct DriverProcess
+{
+    int pid       = -1;   ///< Real type is pid_t; int avoids pulling <sys/types.h> into callers.
+    int stdout_fd = -1;   ///< Read end of the child's stdout pipe.
+    int stdin_fd  = -1;   ///< Write end of the child's stdin pipe, or -1 when no stdin requested.
+    std::string error;    ///< Populated when pid == -1.
+};
+
+/// @brief Fork+exec a Python driver, returning a handle the caller
+///        drives. See ``DriverProcess`` for ownership semantics.
+///
+/// This is the low-level primitive that both ``runDriverCaptured``
+/// (synchronous) and ``AsyncDriverJob`` (streaming + cancellable)
+/// build on. Extracted in 1.11.0 so the async path can expose the
+/// child PID without duplicating the fork+exec boilerplate.
+DriverProcess spawnDriverProcess(
+    const std::string& script,
+    const std::vector<std::string>& argv,
+    bool wantStdin);
+
 /// @brief Run a Python driver and capture its stdout.
 ///
 /// Same script-locator semantics as the CLI path, but pipes stdout

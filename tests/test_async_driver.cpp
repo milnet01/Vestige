@@ -207,3 +207,134 @@ TEST(AsyncDriverJob, ElapsedSecondsZeroWhenIdleNonZeroWhenRunning)
               AsyncDriverJob::State::Done);
     (void)job.takeResult();
 }
+
+// ---------------------------------------------------------------------------
+// W2a — streaming. drainStdoutChunk returns each chunk as the child
+// prints it, before the child exits. Child prints three lines with
+// sleeps between them; the main-thread drain must see progress rather
+// than just the final concatenated blob.
+// ---------------------------------------------------------------------------
+
+TEST(AsyncDriverJob, DrainStdoutChunkReturnsIncrementalOutput)
+{
+    const auto script = writeTempScript("stream",
+        "import sys, time\n"
+        "for i in range(3):\n"
+        "    sys.stdout.write(f'chunk{i}\\n')\n"
+        "    sys.stdout.flush()\n"
+        "    time.sleep(0.1)\n");
+
+    AsyncDriverJob job;
+    ASSERT_TRUE(job.start(script.string(), {}, {}));
+
+    // Poll for ~500ms collecting chunks. We expect at least two
+    // distinct drain calls to return non-empty data — proving the
+    // stream is actually incremental and not just buffered-until-exit.
+    std::string combined;
+    int nonEmptyDrains = 0;
+    using clock = std::chrono::steady_clock;
+    const auto deadline = clock::now() + std::chrono::milliseconds(1500);
+    while (clock::now() < deadline)
+    {
+        std::string chunk = job.drainStdoutChunk();
+        if (!chunk.empty())
+        {
+            combined += chunk;
+            ++nonEmptyDrains;
+        }
+        if (job.poll() == AsyncDriverJob::State::Done)
+            break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    }
+
+    // Drain any final chunk that arrived in the same frame as Done.
+    combined += job.drainStdoutChunk();
+
+    EXPECT_GE(nonEmptyDrains, 2)
+        << "expected streaming across multiple drains, got " << nonEmptyDrains;
+    EXPECT_EQ(combined, "chunk0\nchunk1\nchunk2\n");
+
+    // takeResult sees the FULL stdout — drained chunks are not
+    // re-delivered, but the captured result is independent.
+    const auto result = job.takeResult();
+    EXPECT_EQ(result.exit_code, 0);
+    EXPECT_EQ(result.stdout_text, "chunk0\nchunk1\nchunk2\n");
+}
+
+// ---------------------------------------------------------------------------
+// W2a — cancel. A long-sleeping child gets SIGTERMed and reaches Done
+// well before its natural sleep would have elapsed. The result's
+// error field marks the run as user-cancelled for UI display.
+// ---------------------------------------------------------------------------
+
+TEST(AsyncDriverJob, CancelSIGTERMsTheChildProcess)
+{
+    const auto script = writeTempScript("longsleep",
+        "import time\ntime.sleep(60)\n");
+
+    AsyncDriverJob job;
+    ASSERT_TRUE(job.start(script.string(), {}, {}));
+
+    // Give the child a moment to actually enter sleep().
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    ASSERT_TRUE(job.isRunning());
+
+    const auto t0 = std::chrono::steady_clock::now();
+    EXPECT_TRUE(job.cancel());
+
+    const auto state = pollUntilDone(job, std::chrono::seconds(3));
+    ASSERT_EQ(state, AsyncDriverJob::State::Done);
+
+    const auto t1 = std::chrono::steady_clock::now();
+    const auto elapsed = std::chrono::duration_cast<
+        std::chrono::milliseconds>(t1 - t0).count();
+    EXPECT_LT(elapsed, 2000)
+        << "cancel() should terminate the child well under the 60s sleep";
+
+    const auto result = job.takeResult();
+    EXPECT_NE(result.exit_code, 0);
+    EXPECT_EQ(result.error, "cancelled by user");
+}
+
+// ---------------------------------------------------------------------------
+// W2a — cancel rejected when idle. Matches the UI contract: the
+// Cancel button is disabled outside a run, so a stray click must not
+// crash or mutate state.
+// ---------------------------------------------------------------------------
+
+TEST(AsyncDriverJob, CancelReturnsFalseWhenIdle)
+{
+    AsyncDriverJob job;
+    EXPECT_FALSE(job.cancel());
+}
+
+// ---------------------------------------------------------------------------
+// W2a — SIGKILL escalation. A child that ignores SIGTERM still gets
+// reaped once ``poll()`` crosses the grace window. ``SIGTERM`` is
+// trapped with ``signal.signal`` in the child so the polite signal
+// is a no-op — only SIGKILL brings it down.
+// ---------------------------------------------------------------------------
+
+TEST(AsyncDriverJob, PollEscalatesToSIGKILLAfterGrace)
+{
+    const auto script = writeTempScript("sigterm_ignore",
+        "import signal, time\n"
+        "signal.signal(signal.SIGTERM, signal.SIG_IGN)\n"
+        "time.sleep(60)\n");
+
+    AsyncDriverJob job;
+    ASSERT_TRUE(job.start(script.string(), {}, {}));
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    ASSERT_TRUE(job.cancel());
+
+    // Must wait > CANCEL_SIGKILL_GRACE_SECONDS for the escalator to
+    // fire, plus some slack for the child to exit and be reaped.
+    const auto timeout = std::chrono::milliseconds(
+        static_cast<int>(
+            (AsyncDriverJob::CANCEL_SIGKILL_GRACE_SECONDS + 2.0f) * 1000.0f));
+    ASSERT_EQ(pollUntilDone(job, timeout), AsyncDriverJob::State::Done);
+
+    const auto result = job.takeResult();
+    EXPECT_NE(result.exit_code, 0);
+    EXPECT_EQ(result.error, "cancelled by user");
+}

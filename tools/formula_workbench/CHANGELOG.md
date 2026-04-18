@@ -2,6 +2,93 @@
 
 All notable changes to the Formula Workbench are documented in this file.
 
+## [1.11.0] - 2026-04-18
+
+### Added — W2: "Discover via PySR" panel + async primitives for streaming & cancel
+
+Closes W2a and W2b from `docs/SELF_LEARNING_ROADMAP.md`. W2c
+(library-import from PySR expression strings) remains outstanding —
+it needs a mini-parser for PySR expression syntax and is tracked
+separately.
+
+**W2a — primitive extensions on `AsyncDriverJob`**
+
+- New `spawnDriverProcess` low-level helper in `benchmark.{h,cpp}`
+  returns a `DriverProcess` handle (pid + stdout_fd + stdin_fd) so
+  streaming consumers can drive the child directly. Existing
+  `runDriverCaptured` is now a thin wrapper — synchronous callers
+  keep the identical API and behaviour.
+- `AsyncDriverJob` now runs the stdout read loop on its worker
+  thread, feeding both a `drainStdoutChunk()` channel (for the
+  main-thread renderer to pull new bytes each frame) and the final
+  `CapturedDriverOutput.stdout_text` (full concatenation delivered
+  at `Done`). The two views are non-overlapping by design.
+- `cancel()` sends `SIGTERM` to the stored child PID. `poll()`
+  auto-escalates to `SIGKILL` after
+  `CANCEL_SIGKILL_GRACE_SECONDS` (3s default) if the child ignores
+  the polite signal. PySR's embedded Julia runtime has been
+  observed to ignore SIGTERM during GC, so the escalator is
+  load-bearing rather than cosmetic.
+- Destructor joins a running worker (sending SIGKILL first so the
+  join doesn't block forever). Prevents zombie threads on caller
+  drop.
+- Result `error` field now distinguishes "cancelled by user"
+  (SIGTERM/SIGKILL received) from "terminated by signal N" (driver
+  crashed).
+
+**W2b — "Discover via PySR" panel**
+
+- New ImGui panel `renderPySRPanel` (`workbench.cpp`) with a
+  Discover button, Cancel button, niterations slider (5-200),
+  max-complexity slider (5-40), elapsed-time label, live raw
+  stdout pane, and a sortable leaderboard table.
+- Live streaming: each frame pulls any new bytes from
+  `AsyncDriverJob::drainStdoutChunk` and appends them to the
+  panel's output. The user sees PySR's progress header immediately
+  rather than waiting tens of seconds for the final blob.
+- Leaderboard: once the worker reports `Done`, the panel parses
+  the last ` ```json ` fenced block in the stdout stream and
+  renders equations as a sortable table (complexity / loss /
+  score / equation, default-sorted by complexity). Sort columns
+  are clickable; multi-column sort via ImGuiTableFlags_SortMulti.
+- "Import as library formula" — NOT implemented. An explicit
+  disabled-text placeholder in the panel points at W2c so the
+  absence isn't mysterious.
+
+**Tests (`tests/test_async_driver.cpp`, 4 new cases)**
+
+- `DrainStdoutChunkReturnsIncrementalOutput` — child prints three
+  chunks with 100ms sleeps between them; main-thread drain must
+  observe at least two non-empty chunks before EOF. Proves streaming
+  is actually streaming, not just end-of-run buffered delivery.
+- `CancelSIGTERMsTheChildProcess` — long-sleeping child gets
+  cancelled; the job reaches `Done` well under 2s, exit_code ≠ 0,
+  error field = "cancelled by user".
+- `CancelReturnsFalseWhenIdle` — contract for the UI button when
+  nothing is running.
+- `PollEscalatesToSIGKILLAfterGrace` — child installs a
+  `SIGTERM`-ignoring handler and loops; the poll-driven SIGKILL
+  still brings it down inside the grace window.
+
+**Explicit non-goals (W2c)**
+
+- **Library import.** PySR expression strings like
+  `sin(log(x0^2))` need a parser into `ExprNode`. Handled as its
+  own follow-up — the design doc flags this as a mini-project in
+  its own right.
+
+### Files changed
+
+- `tools/formula_workbench/async_driver.{h,cpp}` (streaming,
+  cancel, destructor safety net)
+- `tools/formula_workbench/benchmark.{h,cpp}` (new
+  `spawnDriverProcess`; `runDriverCaptured` refactored on top)
+- `tools/formula_workbench/workbench.{h,cpp}` (new
+  `renderPySRPanel` + `runPySR` + `PySREquation` row struct,
+  `WORKBENCH_VERSION` → 1.11.0)
+- `tests/test_async_driver.cpp` (+4 GTest cases)
+- `docs/SELF_LEARNING_ROADMAP.md` (W2 rows updated)
+
 ## [1.10.0] - 2026-04-18
 
 ### Added — W1: async-worker pattern for Python driver calls

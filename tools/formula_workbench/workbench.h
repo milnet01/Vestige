@@ -27,7 +27,7 @@ namespace Vestige
 {
 
 /// @brief Version string for the FormulaWorkbench.
-inline constexpr const char* WORKBENCH_VERSION = "1.10.0";
+inline constexpr const char* WORKBENCH_VERSION = "1.11.0";
 
 /// @brief Interactive formula workbench application.
 class Workbench
@@ -37,6 +37,18 @@ public:
 
     /// @brief Renders all workbench panels. Call each frame.
     void render();
+
+    /// @brief One row of the PySR symbolic-regression leaderboard.
+    ///        Public so the free-function JSON parser in
+    ///        ``workbench.cpp`` can construct instances without
+    ///        having to be a friend of the class.
+    struct PySREquation
+    {
+        int         complexity = 0;
+        float       loss       = 0.0f;
+        float       score      = 0.0f;
+        std::string equation;
+    };
 
 private:
     // -- Panel renderers ------------------------------------------------------
@@ -48,6 +60,7 @@ private:
     void renderValidation();
     void renderPresetBrowser();
     void renderSuggestionsPanel();   ///< §3.6 GUI — LLM-ranked formula shortlist.
+    void renderPySRPanel();          ///< §3.5 GUI — PySR symbolic regression discovery.
 
     // -- Actions --------------------------------------------------------------
     void selectFormula(const std::string& name);
@@ -194,6 +207,26 @@ private:
     std::string     m_suggestionsError;   ///< Short human-readable failure.
     AsyncDriverJob  m_suggestionsJob;     ///< Worker-thread wrapper around runDriverCaptured.
     void runLlmSuggestions();
+
+    // -- §3.5 GUI — PySR symbolic regression panel (W2, 1.11.0) ----------------
+    //
+    // Shells out to scripts/pysr_driver.py via the same AsyncDriverJob
+    // substrate as the Suggestions panel, but with two additions:
+    // (a) incremental streaming — PySR runs are long (30 s – minutes)
+    // and the panel must show progress; (b) Cancel button backed by
+    // ``AsyncDriverJob::cancel()`` (SIGTERM → SIGKILL grace).
+    //
+    // Once the run finishes, the JSON tail emitted by the driver is
+    // parsed into m_pysrEquations and rendered as a sortable
+    // leaderboard. "Import as library formula" is NOT wired yet — the
+    // PySR expression-string parser is tracked as W2c.
+    std::string               m_pysrStreamingOutput;  ///< Raw stdout accumulated so far.
+    std::string               m_pysrError;
+    std::vector<PySREquation> m_pysrEquations;        ///< Populated on Done from the JSON tail.
+    AsyncDriverJob            m_pysrJob;
+    int                       m_pysrNiterations = 40;
+    int                       m_pysrMaxComplexity = 20;
+    void runPySR();
 };
 
 } // namespace Vestige
