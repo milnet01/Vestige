@@ -421,7 +421,18 @@ void Workbench::renderFittingControls()
         ImGui::SameLine();
         ImVec4 seedBadgeColor(0.35f, 0.65f, 1.0f, 1.0f);  // soft blue
         ImGui::PushStyleColor(ImGuiCol_Text, seedBadgeColor);
-        if (!m_seededFromTimestamp.empty())
+        if (!m_seededFromTimestamp.empty() && m_seededSimilarity > 0.0f)
+        {
+            // W6 — include the data-shape similarity score so the
+            // user can tell a strong match (≥0.9) from a borderline
+            // one (≈0.5). A weak similarity means the seed is
+            // nudging LM in the right ballpark but not pinpointing
+            // the answer.
+            ImGui::Text("(seeded from fit @ %s, data similarity %.2f)",
+                        m_seededFromTimestamp.c_str(),
+                        m_seededSimilarity);
+        }
+        else if (!m_seededFromTimestamp.empty())
         {
             ImGui::Text("(seeded from fit @ %s)",
                         m_seededFromTimestamp.c_str());
@@ -1004,6 +1015,7 @@ void Workbench::selectFormula(const std::string& name)
         m_coefficients = m_selectedFormula->coefficients;
         m_seededFromHistory = false;
         m_seededFromTimestamp.clear();
+        m_seededSimilarity = 0.0f;
 
         // §3.2 — seed LM starting point from the most recent
         // exported fit for this formula, if one exists. LM is
@@ -1072,6 +1084,61 @@ void Workbench::selectFormula(const std::string& name)
                 break;
             }
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// W6 — data-shape-aware re-seed once data is loaded
+// ---------------------------------------------------------------------------
+//
+// selectFormula() seeds m_coefficients from the newest exported fit
+// regardless of data similarity — it has to, because there's no data
+// yet to compute a meta-feature fingerprint against. As soon as the
+// user imports a CSV or generates synthetic data, importCsv() /
+// generateSyntheticData() call this method to replace that provisional
+// seed with one chosen by shape-match. If nothing in history clears
+// the similarity threshold, fall back to the library's default
+// coefficients — a mismatched seed is worse than a cold start.
+
+void Workbench::reseedFromHistoryForCurrentData()
+{
+    if (!m_selectedFormula || m_dataPoints.empty())
+        return;   // selectFormula's provisional seed stands until data arrives
+
+    FitHistory history(".fit_history.json");
+    if (!history.load())
+        return;
+
+    const auto currentMeta = FitHistory::computeMeta(m_dataPoints);
+    const auto seed = history.bestSeedFor(m_selectedFormulaName, currentMeta);
+
+    if (seed.coefficients.empty())
+    {
+        // No entry met the threshold — revert to library defaults.
+        // Cleaner than leaving the selectFormula-time seed in place
+        // when we now know it doesn't match the data well.
+        m_coefficients          = m_selectedFormula->coefficients;
+        m_seededFromHistory     = false;
+        m_seededFromTimestamp.clear();
+        m_seededSimilarity      = 0.0f;
+        return;
+    }
+
+    bool any_applied = false;
+    for (auto& [coeff_name, val] : m_coefficients)
+    {
+        auto it = seed.coefficients.find(coeff_name);
+        if (it != seed.coefficients.end())
+        {
+            val = it->second;
+            any_applied = true;
+        }
+    }
+    if (any_applied)
+    {
+        m_seededFromHistory     = true;
+        m_seededFromTimestamp   = seed.timestamp;
+        m_seededSimilarity      = seed.similarity;
     }
 }
 
@@ -1374,6 +1441,13 @@ void Workbench::importCsv(const std::string& path)
         m_statusMessage = "Warning: " + std::to_string(badCells) + " cells could not be parsed (set to 0). " + m_statusMessage;
     m_statusTimer = 3.0f;
 
+    // W6 — now that data is loaded, re-evaluate the history seed
+    // using the current dataset's meta-features. This may replace
+    // the data-agnostic seed from selectFormula with a better-
+    // matching one, or fall back to library defaults if no prior fit
+    // is similar enough to justify seeding.
+    reseedFromHistoryForCurrentData();
+
     rebuildVisualizationCache();
 }
 
@@ -1553,6 +1627,10 @@ void Workbench::generateSyntheticData()
     }
 
     m_statusTimer = 3.0f;
+
+    // W6 — apply data-shape-aware seed (see importCsv for rationale).
+    reseedFromHistoryForCurrentData();
+
     rebuildVisualizationCache();
 }
 

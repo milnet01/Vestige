@@ -6,6 +6,7 @@
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <filesystem>
@@ -231,6 +232,126 @@ std::map<std::string, float> FitHistory::lastExportedCoeffsFor(
             return it->coefficients;
     }
     return {};
+}
+
+// ---------------------------------------------------------------------------
+// W6 — data-shape-aware seeding
+// ---------------------------------------------------------------------------
+
+namespace
+{
+
+// Symmetric log-ratio similarity for strictly-positive scalar
+// features (n_points, variance). Equal values → 1.0. A factor-of-two
+// mismatch → 0.5. Monotonically decreasing; floors at 0.
+//
+// The "+1" offset in the variance path is to prevent log2(0/anything)
+// from going to -infinity. For n_points this isn't needed because the
+// value is always ≥ 1 on any non-empty dataset, but we reuse the
+// function for symmetry.
+float logRatioSim(float a, float b)
+{
+    if (a <= 0.0f && b <= 0.0f)
+        return 1.0f;   // both zero — indistinguishable at this axis
+    const float lo = std::min(a, b);
+    const float hi = std::max(a, b);
+    if (lo <= 0.0f)
+    {
+        // One zero, the other not — treat as mismatch.
+        return 0.0f;
+    }
+    const float ratio = hi / lo;            // >= 1
+    const float logR  = std::log2(ratio);   // >= 0
+    return 1.0f / (1.0f + logR);
+}
+
+// Intersection-over-union for two closed intervals. Returns 0 when
+// the intervals don't overlap, 1 when they are identical, and a
+// ratio in between for partial overlap. Handles the degenerate
+// "width-zero" case by falling back to "equal endpoints → 1, else 0".
+float intervalIoU(float aMin, float aMax,
+                  float bMin, float bMax)
+{
+    const float intersectLo = std::max(aMin, bMin);
+    const float intersectHi = std::min(aMax, bMax);
+    if (intersectHi < intersectLo)
+        return 0.0f;   // disjoint
+
+    const float unionLo = std::min(aMin, bMin);
+    const float unionHi = std::max(aMax, bMax);
+    const float unionW  = unionHi - unionLo;
+    if (unionW <= 0.0f)
+    {
+        // Both intervals are points (width zero). Same point → 1,
+        // different points → 0 (already handled above).
+        return (aMin == bMin) ? 1.0f : 0.0f;
+    }
+    const float interW = intersectHi - intersectLo;
+    return interW / unionW;
+}
+
+} // namespace
+
+float FitHistory::similarity(const FitHistoryMeta& a, const FitHistoryMeta& b)
+{
+    // 60 % weight: domain overlap per variable, averaged over
+    // variables that appear in BOTH metas. Variables present only on
+    // one side count as 0 contribution — they drag the average down.
+    float  domainAccum     = 0.0f;
+    size_t domainDenom     = 0;
+
+    // Union of variable keys.
+    std::vector<std::string> allKeys;
+    allKeys.reserve(a.domain.size() + b.domain.size());
+    for (const auto& [k, _] : a.domain) allKeys.push_back(k);
+    for (const auto& [k, _] : b.domain)
+    {
+        if (std::find(allKeys.begin(), allKeys.end(), k) == allKeys.end())
+            allKeys.push_back(k);
+    }
+    for (const auto& k : allKeys)
+    {
+        auto itA = a.domain.find(k);
+        auto itB = b.domain.find(k);
+        if (itA != a.domain.end() && itB != b.domain.end())
+        {
+            domainAccum += intervalIoU(itA->second.first,  itA->second.second,
+                                       itB->second.first,  itB->second.second);
+        }
+        // one-sided variables contribute 0 to the numerator
+        ++domainDenom;
+    }
+    const float domainSim = (domainDenom > 0)
+                                ? domainAccum / static_cast<float>(domainDenom)
+                                : 1.0f;   // both metas empty → call it identical
+
+    // 20 % weight each: point count and variance.
+    const float nSim = logRatioSim(static_cast<float>(a.n_points),
+                                   static_cast<float>(b.n_points));
+    const float vSim = logRatioSim(a.variance, b.variance);
+
+    return 0.6f * domainSim + 0.2f * nSim + 0.2f * vSim;
+}
+
+SeedMatch FitHistory::bestSeedFor(const std::string& name,
+                                    const FitHistoryMeta& currentMeta,
+                                    float threshold) const
+{
+    SeedMatch best;
+    // Newest-first scan so ties break toward the most recent entry.
+    for (auto it = m_entries.rbegin(); it != m_entries.rend(); ++it)
+    {
+        if (it->formula_name != name || it->user_action != "exported")
+            continue;
+        const float s = similarity(currentMeta, it->data_meta);
+        if (s >= threshold && s > best.similarity)
+        {
+            best.similarity   = s;
+            best.coefficients = it->coefficients;
+            best.timestamp    = it->timestamp;
+        }
+    }
+    return best;
 }
 
 std::string FitHistory::hashDataset(const std::vector<DataPoint>& data)

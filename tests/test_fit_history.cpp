@@ -264,3 +264,225 @@ TEST(FitHistoryMetaCalc, VariancePopulationForm)
     };
     EXPECT_NEAR(FitHistory::computeMeta(data).variance, 8.0f / 3.0f, 1e-5f);
 }
+
+// ---------------------------------------------------------------------------
+// W6 — similarity() and bestSeedFor()
+// ---------------------------------------------------------------------------
+
+namespace
+{
+
+FitHistoryMeta makeMeta(int n, float variance,
+                        std::map<std::string, std::pair<float, float>> domain)
+{
+    FitHistoryMeta m;
+    m.n_points = n;
+    m.variance = variance;
+    m.domain   = std::move(domain);
+    return m;
+}
+
+} // namespace
+
+TEST(FitHistorySimilarity, IdenticalMetaScoresOne)
+{
+    const auto m = makeMeta(50, 0.5f, {{"x", {0.0f, 10.0f}}});
+    EXPECT_NEAR(FitHistory::similarity(m, m), 1.0f, 1e-5f);
+}
+
+TEST(FitHistorySimilarity, EmptyMetasMatch)
+{
+    FitHistoryMeta empty;
+    // Both metas empty — the similarity function should treat the
+    // absence of features as "indistinguishable" rather than "zero".
+    EXPECT_NEAR(FitHistory::similarity(empty, empty), 1.0f, 1e-5f);
+}
+
+TEST(FitHistorySimilarity, DisjointDomainsScoreLow)
+{
+    const auto a = makeMeta(50, 0.5f, {{"x", {0.0f,  10.0f}}});
+    const auto b = makeMeta(50, 0.5f, {{"x", {100.0f, 500.0f}}});
+    const float s = FitHistory::similarity(a, b);
+    // Domain term is 0, remaining 40 % comes from matching n_points
+    // and variance → 0.4 ceiling. Must stay under the default 0.5
+    // threshold so disjoint-range fits do NOT seed each other.
+    EXPECT_LT(s, 0.5f);
+    EXPECT_GT(s, 0.35f);
+}
+
+TEST(FitHistorySimilarity, PartialDomainOverlap)
+{
+    // Intervals [0, 10] and [5, 15] — intersection 5, union 15 → 1/3.
+    const auto a = makeMeta(50, 0.5f, {{"x", {0.0f,  10.0f}}});
+    const auto b = makeMeta(50, 0.5f, {{"x", {5.0f,  15.0f}}});
+    const float s = FitHistory::similarity(a, b);
+    // 0.6 * (1/3) + 0.2 * 1.0 + 0.2 * 1.0 = 0.6
+    EXPECT_NEAR(s, 0.6f, 0.02f);
+}
+
+TEST(FitHistorySimilarity, MultipleVariablesAveraged)
+{
+    const auto a = makeMeta(50, 0.5f,
+        {{"x", {0.0f, 10.0f}}, {"y", {0.0f, 10.0f}}});
+    const auto b = makeMeta(50, 0.5f,
+        {{"x", {0.0f, 10.0f}}, {"y", {5.0f, 15.0f}}});
+    // Domain: x → 1.0, y → 1/3; avg = (1 + 1/3) / 2 = 2/3.
+    // Composite: 0.6*2/3 + 0.2 + 0.2 = 0.4 + 0.4 = 0.8.
+    EXPECT_NEAR(FitHistory::similarity(a, b), 0.8f, 0.02f);
+}
+
+TEST(FitHistorySimilarity, PointCountLogRatioFalloff)
+{
+    const auto a = makeMeta(100, 0.5f, {{"x", {0.0f, 10.0f}}});
+    const auto b = makeMeta(200, 0.5f, {{"x", {0.0f, 10.0f}}});
+    // 2x n_points mismatch → nSim ≈ 1/(1+log2(2)) = 0.5.
+    // Composite: 0.6*1 + 0.2*0.5 + 0.2*1 = 0.9.
+    EXPECT_NEAR(FitHistory::similarity(a, b), 0.9f, 0.02f);
+}
+
+TEST(FitHistorySimilarity, OneSidedVariableDragsScore)
+{
+    // a has one variable; b has two — the extra variable on b counts
+    // as a 0 overlap for that axis, so the domain average is halved.
+    const auto a = makeMeta(50, 0.5f, {{"x", {0.0f, 10.0f}}});
+    const auto b = makeMeta(50, 0.5f,
+        {{"x", {0.0f, 10.0f}}, {"y", {0.0f, 10.0f}}});
+    // Domain average: (1 + 0) / 2 = 0.5. Composite: 0.6*0.5 + 0.2 + 0.2 = 0.7.
+    EXPECT_NEAR(FitHistory::similarity(a, b), 0.7f, 0.02f);
+}
+
+TEST(FitHistoryBestSeed, PrefersMostSimilarOverMostRecent)
+{
+    FitHistory h("/tmp/vestige_seed_test_nope.json");
+    // Older fit on matching data.
+    FitHistoryEntry matching;
+    matching.timestamp     = "2026-04-10T10:00:00Z";
+    matching.formula_name  = "beer_lambert";
+    matching.user_action   = "exported";
+    matching.data_meta     = makeMeta(50, 0.5f, {{"depth", {0.0f, 5.0f}}});
+    matching.coefficients  = {{"alpha", 0.4f}};
+    h.record(matching);
+
+    // Newer fit on totally different data (disjoint domain).
+    FitHistoryEntry recent;
+    recent.timestamp    = "2026-04-18T10:00:00Z";
+    recent.formula_name = "beer_lambert";
+    recent.user_action  = "exported";
+    recent.data_meta    = makeMeta(50, 0.5f, {{"depth", {100.0f, 500.0f}}});
+    recent.coefficients = {{"alpha", 99.0f}};   // obviously wrong for the matching query
+    h.record(recent);
+
+    const auto current = makeMeta(50, 0.5f, {{"depth", {0.0f, 5.0f}}});
+    const auto seed = h.bestSeedFor("beer_lambert", current);
+    ASSERT_FALSE(seed.coefficients.empty());
+    EXPECT_FLOAT_EQ(seed.coefficients.at("alpha"), 0.4f);
+    EXPECT_EQ(seed.timestamp, "2026-04-10T10:00:00Z");
+    EXPECT_GT(seed.similarity, 0.99f);
+}
+
+TEST(FitHistoryBestSeed, ReturnsEmptyBelowThreshold)
+{
+    FitHistory h("/tmp/vestige_seed_test_nope.json");
+    FitHistoryEntry farAway;
+    farAway.timestamp    = "2026-04-10T10:00:00Z";
+    farAway.formula_name = "beer_lambert";
+    farAway.user_action  = "exported";
+    farAway.data_meta    = makeMeta(5, 1000.0f, {{"depth", {1000.0f, 5000.0f}}});
+    farAway.coefficients = {{"alpha", 99.0f}};
+    h.record(farAway);
+
+    const auto current = makeMeta(100, 0.1f, {{"depth", {0.0f, 5.0f}}});
+    const auto seed = h.bestSeedFor("beer_lambert", current);
+    EXPECT_TRUE(seed.coefficients.empty());
+    EXPECT_LT(seed.similarity, FitHistory::DEFAULT_SEED_SIMILARITY_THRESHOLD);
+}
+
+TEST(FitHistoryBestSeed, IgnoresDiscardedEntries)
+{
+    FitHistory h("/tmp/vestige_seed_test_nope.json");
+    FitHistoryEntry discarded;
+    discarded.timestamp    = "2026-04-10T10:00:00Z";
+    discarded.formula_name = "beer_lambert";
+    discarded.user_action  = "discarded";   // not a seed source per W4
+    discarded.data_meta    = makeMeta(50, 0.5f, {{"depth", {0.0f, 5.0f}}});
+    discarded.coefficients = {{"alpha", 0.4f}};
+    h.record(discarded);
+
+    const auto current = makeMeta(50, 0.5f, {{"depth", {0.0f, 5.0f}}});
+    const auto seed = h.bestSeedFor("beer_lambert", current);
+    EXPECT_TRUE(seed.coefficients.empty());
+}
+
+TEST(FitHistoryBestSeed, IgnoresOtherFormulas)
+{
+    FitHistory h("/tmp/vestige_seed_test_nope.json");
+    FitHistoryEntry other;
+    other.timestamp    = "2026-04-10T10:00:00Z";
+    other.formula_name = "stokes_drag";
+    other.user_action  = "exported";
+    other.data_meta    = makeMeta(50, 0.5f, {{"depth", {0.0f, 5.0f}}});
+    other.coefficients = {{"alpha", 0.4f}};
+    h.record(other);
+
+    const auto current = makeMeta(50, 0.5f, {{"depth", {0.0f, 5.0f}}});
+    const auto seed = h.bestSeedFor("beer_lambert", current);
+    EXPECT_TRUE(seed.coefficients.empty());
+}
+
+TEST(FitHistoryBestSeed, EmptyHistoryReturnsEmpty)
+{
+    FitHistory h("/tmp/vestige_seed_test_nope.json");
+    const auto current = makeMeta(50, 0.5f, {{"depth", {0.0f, 5.0f}}});
+    const auto seed = h.bestSeedFor("beer_lambert", current);
+    EXPECT_TRUE(seed.coefficients.empty());
+    EXPECT_FLOAT_EQ(seed.similarity, 0.0f);
+}
+
+TEST(FitHistoryBestSeed, TiesBreakTowardMostRecent)
+{
+    FitHistory h("/tmp/vestige_seed_test_nope.json");
+    // Two exported fits on identical data; seed should come from the
+    // newer one (the existing lastExportedCoeffsFor behaviour stays
+    // the tiebreaker).
+    FitHistoryEntry older;
+    older.timestamp    = "2026-04-10T10:00:00Z";
+    older.formula_name = "beer_lambert";
+    older.user_action  = "exported";
+    older.data_meta    = makeMeta(50, 0.5f, {{"depth", {0.0f, 5.0f}}});
+    older.coefficients = {{"alpha", 0.4f}};
+    h.record(older);
+
+    FitHistoryEntry newer;
+    newer.timestamp    = "2026-04-18T10:00:00Z";
+    newer.formula_name = "beer_lambert";
+    newer.user_action  = "exported";
+    newer.data_meta    = makeMeta(50, 0.5f, {{"depth", {0.0f, 5.0f}}});
+    newer.coefficients = {{"alpha", 0.42f}};
+    h.record(newer);
+
+    const auto current = makeMeta(50, 0.5f, {{"depth", {0.0f, 5.0f}}});
+    const auto seed = h.bestSeedFor("beer_lambert", current);
+    ASSERT_FALSE(seed.coefficients.empty());
+    EXPECT_FLOAT_EQ(seed.coefficients.at("alpha"), 0.42f);
+    EXPECT_EQ(seed.timestamp, "2026-04-18T10:00:00Z");
+}
+
+TEST(FitHistoryBestSeed, CustomThresholdOverride)
+{
+    FitHistory h("/tmp/vestige_seed_test_nope.json");
+    FitHistoryEntry moderate;
+    moderate.timestamp    = "2026-04-10T10:00:00Z";
+    moderate.formula_name = "beer_lambert";
+    moderate.user_action  = "exported";
+    moderate.data_meta    = makeMeta(50, 0.5f, {{"depth", {5.0f, 15.0f}}});
+    moderate.coefficients = {{"alpha", 0.4f}};
+    h.record(moderate);
+
+    const auto current = makeMeta(50, 0.5f, {{"depth", {0.0f, 10.0f}}});
+    // Default threshold 0.5 — this one scores 0.6, should pass.
+    const auto highThresh = h.bestSeedFor("beer_lambert", current);
+    EXPECT_FALSE(highThresh.coefficients.empty());
+    // Raise threshold to 0.9 — same entry now below, should return empty.
+    const auto strict = h.bestSeedFor("beer_lambert", current, 0.9f);
+    EXPECT_TRUE(strict.coefficients.empty());
+}

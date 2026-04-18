@@ -28,7 +28,7 @@ namespace Vestige
 {
 
 /// @brief Version string for the FormulaWorkbench.
-inline constexpr const char* WORKBENCH_VERSION = "1.14.0";
+inline constexpr const char* WORKBENCH_VERSION = "1.15.0";
 
 /// @brief Interactive formula workbench application.
 class Workbench
@@ -92,17 +92,36 @@ private:
 
     /// @brief §3.2 seed-from-history tracking.
     ///
-    /// When selectFormula() finds a prior exported fit in
-    /// .fit_history.json for the selected formula, it seeds
-    /// m_coefficients from that fit instead of the library's default
-    /// initial guess. This flag records that the seeding happened so
-    /// the UI can surface a small "seeded from history" badge — the
-    /// user should always know when the tool is using remembered
-    /// values vs. library defaults, because it changes the initial
-    /// starting point of Levenberg-Marquardt and can dramatically
-    /// change convergence behaviour.
+    /// When selectFormula() or reseedFromHistoryForCurrentData()
+    /// finds a prior exported fit in .fit_history.json for the
+    /// selected formula, it seeds m_coefficients from that fit
+    /// instead of the library's default initial guess. This flag
+    /// records that the seeding happened so the UI can surface a
+    /// small "seeded from history" badge — the user should always
+    /// know when the tool is using remembered values vs. library
+    /// defaults, because it changes the initial starting point of
+    /// Levenberg-Marquardt and can dramatically change convergence
+    /// behaviour.
+    ///
+    /// W6 (1.15.0): when data has been loaded,
+    /// m_seededSimilarity holds the ``FitHistory::similarity`` score
+    /// of the match in [0, 1]; the badge displays it. At
+    /// selectFormula time (no data yet) the similarity is set to
+    /// 0.0 and the badge omits it.
     bool        m_seededFromHistory = false;
     std::string m_seededFromTimestamp;   ///< ISO-8601, empty when not seeded.
+    float       m_seededSimilarity = 0.0f;
+
+    /// @brief W6 — re-seed m_coefficients from .fit_history.json
+    ///        using the currently-loaded dataset's meta-features.
+    ///
+    /// Invoked from ``importCsv`` and ``generateSyntheticData`` once
+    /// m_dataPoints has been populated. Picks the exported fit whose
+    /// ``data_meta`` is most similar to the current dataset; falls
+    /// back to library defaults when no match clears
+    /// ``FitHistory::DEFAULT_SEED_SIMILARITY_THRESHOLD``. No-op when
+    /// no formula is selected.
+    void reseedFromHistoryForCurrentData();
 
     // -- Coefficient bounds (improvement #4) ----------------------------------
     struct CoeffBound

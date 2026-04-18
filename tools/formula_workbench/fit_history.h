@@ -69,6 +69,21 @@ struct FitHistoryEntry
     std::string user_action;                    ///< "exported" | "discarded" | "iterated".
 };
 
+/// @brief Result of a data-shape-aware seed lookup.
+///
+/// Returned by ``FitHistory::bestSeedFor``. ``coefficients`` is
+/// empty when no prior entry met the similarity threshold — callers
+/// should then fall back to library defaults. ``similarity`` is the
+/// normalized score in ``[0, 1]`` that earned this entry the win,
+/// useful for the UI badge (e.g. "seeded from fit @ 2026-04-12
+/// (data similarity 0.82)").
+struct SeedMatch
+{
+    std::map<std::string, float> coefficients;
+    std::string                  timestamp;
+    float                        similarity = 0.0f;
+};
+
 /// @brief Load/save/query interface over ``.fit_history.json``.
 class FitHistory
 {
@@ -84,6 +99,14 @@ public:
     /// which keeps the file under a few hundred KB even for busy
     /// workflows.
     static constexpr size_t MAX_ENTRIES_PER_FORMULA = 20;
+
+    /// Default similarity threshold for ``bestSeedFor``. Entries
+    /// below this are not considered — library defaults seed the
+    /// fit instead. 0.5 is calibrated so that same-domain /
+    /// same-scale datasets pass, while wildly different scales fall
+    /// through to a cold start (which is the whole point of W6:
+    /// a mismatched seed is worse than a library default).
+    static constexpr float DEFAULT_SEED_SIMILARITY_THRESHOLD = 0.5f;
 
     /// Construct pointing at the given file path. Does not read
     /// from disk — call ``load()`` explicitly (lets tests construct
@@ -116,7 +139,54 @@ public:
     /// Coefficients from the most recent ``exported`` fit for
     /// ``name``. Empty map when no such entry exists. Used by §3.2
     /// to seed LM with the last successful fit.
+    ///
+    /// Data-shape-agnostic: the newest exported fit wins regardless
+    /// of whether its dataset resembles the current one. Prefer
+    /// ``bestSeedFor`` when the caller has current ``FitHistoryMeta``
+    /// available; this method is still correct for paths that do
+    /// not (CLI tools, offline analysis).
     std::map<std::string, float> lastExportedCoeffsFor(const std::string& name) const;
+
+    /// @brief W6 — data-shape-aware seed lookup.
+    ///
+    /// Finds the exported entry for ``name`` whose ``data_meta``
+    /// is most similar to ``currentMeta``, subject to
+    /// ``similarity >= threshold``. When no entry clears the
+    /// threshold, the returned ``SeedMatch`` has empty
+    /// ``coefficients`` — callers should then seed from library
+    /// defaults instead. Ties are broken by recency.
+    ///
+    /// This is the seeding interface the Workbench uses once the
+    /// user has loaded data: it prevents the case where fitting
+    /// two very different datasets on the same formula causes the
+    /// newer fit to seed the older one badly. See
+    /// ``docs/FORMULA_WORKBENCH_SELF_LEARNING_DESIGN.md`` §3.1
+    /// advanced.
+    SeedMatch bestSeedFor(const std::string& name,
+                          const FitHistoryMeta& currentMeta,
+                          float threshold = DEFAULT_SEED_SIMILARITY_THRESHOLD) const;
+
+    /// @brief Similarity between two meta-feature fingerprints,
+    ///        normalized to ``[0, 1]`` (1.0 = identical).
+    ///
+    /// Composite of three terms:
+    ///   - 60 % domain-overlap ratio (intersection ÷ union of each
+    ///     variable's [min, max] range, averaged across variables
+    ///     that appear in both metas — variables present only on
+    ///     one side count as 0 overlap).
+    ///   - 20 % ``n_points`` similarity via log2-ratio falloff
+    ///     (equal = 1.0, 2× different ≈ 0.5, 4× ≈ 0.33).
+    ///   - 20 % variance similarity via the same log2-ratio
+    ///     falloff, with a small additive offset so that zero
+    ///     variance doesn't blow up.
+    ///
+    /// Domain dominates because it is the strongest predictor of
+    /// "would the old coefficients even make sense on this data?".
+    /// A fit at x ∈ [0, 5] tells you almost nothing about the
+    /// coefficients that best fit the same formula over x ∈
+    /// [100, 500].
+    static float similarity(const FitHistoryMeta& a,
+                            const FitHistoryMeta& b);
 
     /// Clear all entries (testing helper; also useful when a library
     /// rewrite makes prior entries meaningless).

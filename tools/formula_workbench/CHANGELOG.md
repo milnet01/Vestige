@@ -2,6 +2,81 @@
 
 All notable changes to the Formula Workbench are documented in this file.
 
+## [1.15.0] - 2026-04-19
+
+### Added — W6: confidence-weighted meta-feature matching for seeding
+
+Closes W6 from `docs/SELF_LEARNING_ROADMAP.md`. The §3.2 seed-from-
+history path used to pick the newest exported fit for the selected
+formula regardless of data similarity — which misbehaves when the
+user fits two very different datasets on the same formula (the newer
+fit then seeds the older one badly). W6 replaces that with a
+shape-aware picker.
+
+**New in `fit_history.{h,cpp}`**
+
+- `FitHistory::similarity(a, b) -> float` — pure, static, unit-
+  tested. Composite score in [0, 1]:
+    - 60 % domain overlap (interval intersection ÷ union per
+      variable, averaged across the union of variable keys — one-
+      sided variables contribute 0)
+    - 20 % `n_points` similarity via log₂-ratio falloff (equal →
+      1.0, 2× different → ~0.5, 4× → ~0.33)
+    - 20 % variance similarity via the same log₂-ratio form.
+  Domain dominates because it's the strongest predictor of
+  "would the old coefficients make sense on this data?".
+- `FitHistory::bestSeedFor(name, currentMeta, threshold=0.5)` →
+  `SeedMatch`. Scans exported entries for the formula, returns
+  the highest-similarity match above `threshold`. Ties break
+  toward recency. Empty `SeedMatch` when nothing clears the bar —
+  caller should fall back to library defaults.
+- `DEFAULT_SEED_SIMILARITY_THRESHOLD = 0.5` — calibrated so that
+  same-domain, same-scale datasets pass; wildly different scales
+  fall through (disjoint-domain pairs cap at ~0.4). The whole
+  point of W6 is that a cold start beats a bad seed.
+
+**Wired: Workbench re-seeds once data is loaded**
+
+- `Workbench::reseedFromHistoryForCurrentData()` — invoked at the
+  end of `importCsv` and `generateSyntheticData`. Computes the
+  current dataset's meta fingerprint, calls `bestSeedFor`, and
+  either applies the matched coefficients or reverts to library
+  defaults.
+- `selectFormula` still uses `lastExportedCoeffsFor` (data-
+  agnostic) as a provisional seed — it has to, because no data
+  exists yet. The provisional seed is replaced as soon as data
+  lands.
+- Seed badge now reads "seeded from fit @ TIMESTAMP, data
+  similarity 0.XX" — users can distinguish a strong match (≥0.9)
+  from a borderline one (~0.5) at a glance.
+
+**Tests (`tests/test_fit_history.cpp`, 14 new cases)**
+
+- `similarity` shape: identical / empty / disjoint domains /
+  partial domain overlap (1:3 → expected 0.6 composite) /
+  multi-variable averaging / n_points log-ratio falloff /
+  one-sided variables halve the domain average.
+- `bestSeedFor` behaviour: prefers most-similar over most-recent
+  even when older, returns empty below threshold, ignores
+  discarded entries (preserves W4 opt-out), ignores other
+  formulas, empty history, ties break toward recency, custom
+  threshold override.
+
+All 1878 tests green (1864 prior + 14 new).
+
+**Files changed**
+
+- `tools/formula_workbench/fit_history.h` (SeedMatch, similarity,
+  bestSeedFor declarations)
+- `tools/formula_workbench/fit_history.cpp` (implementations)
+- `tools/formula_workbench/workbench.h` (reseed method + similarity
+  state; version bump to 1.15.0)
+- `tools/formula_workbench/workbench.cpp` (reseed method + wire-up
+  from data-load paths + badge text)
+- `tests/test_fit_history.cpp` (14 new cases)
+- `docs/SELF_LEARNING_ROADMAP.md` (shipped row, W6 removed from
+  Outstanding)
+
 ## [1.14.0] - 2026-04-19
 
 ### Added — W5 (cont.): five more reference cases
