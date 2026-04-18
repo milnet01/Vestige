@@ -27,7 +27,7 @@ namespace Vestige
 {
 
 /// @brief Version string for the FormulaWorkbench.
-inline constexpr const char* WORKBENCH_VERSION = "1.11.0";
+inline constexpr const char* WORKBENCH_VERSION = "1.12.0";
 
 /// @brief Interactive formula workbench application.
 class Workbench
@@ -227,6 +227,14 @@ private:
     int                       m_pysrNiterations = 40;
     int                       m_pysrMaxComplexity = 20;
     void runPySR();
+
+    /// @brief W2c — parse a PySR equation string and register it as a
+    ///        new ``FormulaDefinition`` in ``m_library`` under the
+    ///        "imported" category. Variables referenced in the
+    ///        expression become the formula's inputs. On parse failure
+    ///        writes a human-readable message to ``m_pysrError`` and
+    ///        returns false.
+    bool importPySREquationAsLibrary(const PySREquation& eq);
 };
 
 } // namespace Vestige

@@ -96,10 +96,12 @@ add_executable(vestige_tests
     test_benchmark.cpp
     test_reference_harness.cpp
     test_async_driver.cpp
+    test_pysr_parser.cpp
     ${CMAKE_SOURCE_DIR}/tools/formula_workbench/fit_history.cpp
     ${CMAKE_SOURCE_DIR}/tools/formula_workbench/benchmark.cpp
     ${CMAKE_SOURCE_DIR}/tools/formula_workbench/reference_harness.cpp
     ${CMAKE_SOURCE_DIR}/tools/formula_workbench/async_driver.cpp
+    ${CMAKE_SOURCE_DIR}/tools/formula_workbench/pysr_parser.cpp
 )
 
 target_include_directories(vestige_tests

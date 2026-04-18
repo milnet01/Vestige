@@ -2,6 +2,79 @@
 
 All notable changes to the Formula Workbench are documented in this file.
 
+## [1.12.0] - 2026-04-18
+
+### Added — W2c: PySR expression → ExprNode parser, "Import as library" wired
+
+Closes W2c from `docs/SELF_LEARNING_ROADMAP.md` — the last outstanding
+piece of the W2 "Discover via PySR" feature. The placeholder in the
+leaderboard is replaced with real Import buttons.
+
+**New `pysr_parser.{h,cpp}`**
+
+- Recursive-descent parser with precedence climbing. Grammar:
+  `expr = addExpr`, `addExpr = mulExpr (('+'|'-') mulExpr)*`,
+  `mulExpr = unary (('*'|'/') unary)*`, `unary = ('-'|'+') unary | powExpr`,
+  `powExpr = primary (('^'|'**') unary)?` (right-associative),
+  `primary = NUMBER | IDENT '(' expr ')' | IDENT | '(' expr ')'`.
+- Supports the PySR-driver default operator set: binary `+ - * /`,
+  unary `cos sin exp log sqrt abs floor ceil`, power via both `^`
+  (Julia / PySR-native) and `**` (sympy). Unary minus → `negate`
+  node; unary plus is a no-op.
+- Every `ExprNode` is built through the `ExprNode::variable` /
+  `binaryOp` / `unaryOp` factories, so the H11 codegen allowlist is
+  enforced on every imported tree — a hostile equation string cannot
+  bypass it.
+- Unknown functions (e.g. `square(x)`, which PySR users may opt into
+  via custom unary sets but our driver never emits) produce a
+  readable error with the position of the offending identifier.
+- Returns a `ParseResult { tree, variables, error }`. `variables`
+  collects distinct identifier references in first-seen order so the
+  import can populate `FormulaDefinition::inputs` without a second
+  pass.
+
+**Wired: per-row Import buttons in the PySR leaderboard**
+
+- `Workbench::importPySREquationAsLibrary(const PySREquation&)`
+  parses the equation, builds a `FormulaDefinition` under category
+  `"imported"`, names it `pysr_<YYYYMMDDHHMMSS>_c<complexity>` (with
+  numeric suffix on collision), registers it in `m_library`, and
+  flashes a status bar message.
+- Leaderboard now has a 5th column with a `SmallButton("Import")`
+  per row. `PushID(rowIndex)` guarantees unique ImGui IDs even when
+  two rows are label-identical. Import column is `NoSort` — button
+  rows shouldn't shuffle under the user's cursor.
+- Parse failure from the parser surfaces verbatim in `m_pysrError`
+  so the user sees exactly which function / character was unknown.
+
+**Tests (`tests/test_pysr_parser.cpp`, 19 new cases)**
+
+- Shape checks: literal, variable, unary functions (each of the 8),
+  power via both `^` and `**`, power right-associativity.
+- Value checks via the existing `ExpressionEvaluator`: arithmetic
+  precedence (left-assoc subtract/divide, tight multiplication),
+  unary minus, scientific-notation literals, nested `sin(log(exp(1)))`,
+  realistic Gaussian-ish equation.
+- `CollectsDistinctVariableNames` verifies the first-seen-unique
+  ordering used to populate `FormulaInput`.
+- Rejection paths: unknown function, unbalanced parens, trailing
+  garbage, empty expression, bare operator, unexpected character.
+- `IsRecognisedFunctionAllowlist` guards the allowlist directly.
+
+**Files changed**
+
+- `tools/formula_workbench/pysr_parser.{h,cpp}` — new.
+- `tools/formula_workbench/workbench.{h,cpp}` — version bump 1.11.0
+  → 1.12.0, `importPySREquationAsLibrary` method, leaderboard column
+  5, placeholder removed, `pysr_parser.h` include.
+- `tools/CMakeLists.txt` — registers `pysr_parser.cpp` for
+  `formula_workbench`.
+- `tests/CMakeLists.txt` — registers `test_pysr_parser.cpp` and
+  `pysr_parser.cpp` for the test target.
+- `tests/test_pysr_parser.cpp` — new.
+
+All 1839 tests green.
+
 ## [1.11.0] - 2026-04-18
 
 ### Added — W2: "Discover via PySR" panel + async primitives for streaming & cancel

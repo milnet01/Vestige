@@ -3,6 +3,7 @@
 #include "workbench.h"
 #include "benchmark.h"
 #include "fit_history.h"
+#include "pysr_parser.h"
 #include "formula/codegen_cpp.h"
 #include "formula/codegen_glsl.h"
 #include "formula/expression_eval.h"
@@ -2478,6 +2479,81 @@ void Workbench::runPySR()
     }
 }
 
+// ---------------------------------------------------------------------------
+// W2c — import a PySR equation row as a FormulaLibrary entry
+// ---------------------------------------------------------------------------
+//
+// The parsed ExprNode is the FULL-tier expression. APPROXIMATE/LUT tiers
+// are left unset — imports default to a single-tier formula; the user can
+// add cheaper tiers later via the template editor. Coefficients are empty
+// because PySR bakes its discovered constants directly into the
+// expression tree as LITERAL nodes.
+
+bool Workbench::importPySREquationAsLibrary(const PySREquation& eq)
+{
+    pysr::ParseResult parsed = pysr::parseExpression(eq.equation);
+    if (!parsed.tree)
+    {
+        m_pysrError = "Import failed: " + parsed.error
+                    + " (equation: " + eq.equation + ")";
+        return false;
+    }
+
+    // Build a unique name: "pysr_<YYYYMMDDHHMMSS>_c<complexity>". If a
+    // library entry already uses that name (user clicked Import twice
+    // in the same second), append a disambiguating suffix so the second
+    // click doesn't silently overwrite the first.
+    const std::time_t now = std::time(nullptr);
+    std::tm tm{};
+    localtime_r(&now, &tm);
+    char tsbuf[32] = {};
+    std::strftime(tsbuf, sizeof(tsbuf), "%Y%m%d%H%M%S", &tm);
+
+    std::string name = "pysr_" + std::string(tsbuf)
+                     + "_c" + std::to_string(eq.complexity);
+    int suffix = 0;
+    while (m_library.findByName(name) != nullptr)
+    {
+        ++suffix;
+        name = "pysr_" + std::string(tsbuf)
+             + "_c" + std::to_string(eq.complexity)
+             + "_" + std::to_string(suffix);
+    }
+
+    FormulaDefinition def;
+    def.name        = name;
+    def.category    = "imported";
+    def.description = "Imported from PySR (complexity " +
+                      std::to_string(eq.complexity) +
+                      ", loss " + std::to_string(eq.loss) +
+                      "): " + eq.equation;
+    def.output      = {FormulaValueType::FLOAT, ""};
+    def.accuracy    = 0.0f;
+    def.source      = "PySR symbolic regression, " + std::string(tsbuf);
+
+    // Each referenced variable becomes an input. The workbench writes
+    // inputs in alphabetical order to the driver's CSV; PySR's
+    // variable_names are preserved through the driver's JSON tail,
+    // so what the parser saw are those same names.
+    for (const auto& varName : parsed.variables)
+    {
+        FormulaInput in;
+        in.name         = varName;
+        in.type         = FormulaValueType::FLOAT;
+        in.unit         = "";
+        in.defaultValue = 0.0f;
+        def.inputs.push_back(std::move(in));
+    }
+
+    def.expressions[QualityTier::FULL] = std::move(parsed.tree);
+
+    m_library.registerFormula(std::move(def));
+    m_statusMessage = "Imported PySR formula as '" + name + "'.";
+    m_statusTimer = 3.0f;
+    m_pysrError.clear();
+    return true;
+}
+
 void Workbench::renderPySRPanel()
 {
     ImGui::Begin("Discover via PySR");
@@ -2603,7 +2679,7 @@ void Workbench::renderPySRPanel()
             | ImGuiTableFlags_SortMulti
             | ImGuiTableFlags_ScrollY;
         const ImVec2 tableSize(0.0f, 180.0f);
-        if (ImGui::BeginTable("##pysr_leaderboard", 4,
+        if (ImGui::BeginTable("##pysr_leaderboard", 5,
                               tableFlags, tableSize))
         {
             ImGui::TableSetupScrollFreeze(0, 1);
@@ -2616,6 +2692,12 @@ void Workbench::renderPySRPanel()
                                     ImGuiTableColumnFlags_WidthFixed, 90.0f);
             ImGui::TableSetupColumn("Equation",
                                     ImGuiTableColumnFlags_WidthStretch);
+            // Import column is not sortable — sort would move the
+            // buttons around under the user's cursor as they scan
+            // the leaderboard, which is just disorienting.
+            ImGui::TableSetupColumn("Import",
+                                    ImGuiTableColumnFlags_NoSort
+                                    | ImGuiTableColumnFlags_WidthFixed, 90.0f);
             ImGui::TableHeadersRow();
 
             if (ImGuiTableSortSpecs* sortSpecs = ImGui::TableGetSortSpecs())
@@ -2643,6 +2725,11 @@ void Workbench::renderPySRPanel()
                 }
             }
 
+            // Row-index counter used to make each Import button's
+            // ImGui ID unique — two equations with identical
+            // (complexity, loss, score, equation) would otherwise
+            // collide on the "Import" label alone.
+            int rowIndex = 0;
             for (const auto& eq : m_pysrEquations)
             {
                 ImGui::TableNextRow();
@@ -2654,17 +2741,22 @@ void Workbench::renderPySRPanel()
                 ImGui::Text("%.4g", eq.score);
                 ImGui::TableSetColumnIndex(3);
                 ImGui::TextUnformatted(eq.equation.c_str());
+                ImGui::TableSetColumnIndex(4);
+                ImGui::PushID(rowIndex);
+                if (ImGui::SmallButton("Import"))
+                {
+                    importPySREquationAsLibrary(eq);
+                }
+                ImGui::PopID();
+                ++rowIndex;
             }
             ImGui::EndTable();
         }
 
-        // W2c placeholder — explicit note that library-import is
-        // still a follow-up. Avoids the "why doesn't this button do
-        // anything" confusion that a disabled Import button would
-        // create.
         ImGui::TextDisabled(
-            "(Import-as-library requires a PySR expression parser — "
-            "tracked as W2c in the self-learning roadmap.)");
+            "Import adds the row as a new entry under category "
+            "'imported'. Unknown-function rows (e.g. `square(x0)`) "
+            "are rejected with an error.");
     }
 
     if (!m_pysrStreamingOutput.empty())
