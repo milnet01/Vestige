@@ -764,10 +764,18 @@ static void loadMeshes(const tinygltf::Model& gltfModel, Model& outModel)
                             const auto& acc = gltfModel.accessors[static_cast<size_t>(posIt->second)];
                             const auto& bv = gltfModel.bufferViews[static_cast<size_t>(acc.bufferView)];
                             size_t stride = bv.byteStride > 0 ? bv.byteStride : sizeof(float) * 3;
+                            // Copy via memcpy rather than reinterpret_cast —
+                            // glTF byteStride is not guaranteed to keep the
+                            // float triple 4-byte aligned, and reinterpret
+                            // of unsigned char* to float* is a strict-aliasing
+                            // violation regardless of alignment. Mirrors the
+                            // nav_mesh_builder fix from engine 0.1.4 (commit
+                            // 1f6fd24); completes that sweep.
                             mt.positionDeltas.resize(acc.count);
                             for (size_t i = 0; i < acc.count; ++i)
                             {
-                                const float* fp = reinterpret_cast<const float*>(data + stride * i);
+                                float fp[3];
+                                std::memcpy(fp, data + stride * i, sizeof(fp));
                                 mt.positionDeltas[i] = glm::vec3(fp[0], fp[1], fp[2]);
                             }
                         }
@@ -787,7 +795,8 @@ static void loadMeshes(const tinygltf::Model& gltfModel, Model& outModel)
                             mt.normalDeltas.resize(acc.count);
                             for (size_t i = 0; i < acc.count; ++i)
                             {
-                                const float* fp = reinterpret_cast<const float*>(data + stride * i);
+                                float fp[3];
+                                std::memcpy(fp, data + stride * i, sizeof(fp));
                                 mt.normalDeltas[i] = glm::vec3(fp[0], fp[1], fp[2]);
                             }
                         }
@@ -807,7 +816,8 @@ static void loadMeshes(const tinygltf::Model& gltfModel, Model& outModel)
                             mt.tangentDeltas.resize(acc.count);
                             for (size_t i = 0; i < acc.count; ++i)
                             {
-                                const float* fp = reinterpret_cast<const float*>(data + stride * i);
+                                float fp[3];
+                                std::memcpy(fp, data + stride * i, sizeof(fp));
                                 mt.tangentDeltas[i] = glm::vec3(fp[0], fp[1], fp[2]);
                             }
                         }

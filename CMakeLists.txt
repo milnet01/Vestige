@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 project(Vestige
-    VERSION 0.1.4
+    VERSION 0.1.5
     DESCRIPTION "Vestige 3D Engine"
     LANGUAGES CXX C
 )

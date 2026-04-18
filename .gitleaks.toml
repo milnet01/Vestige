@@ -33,6 +33,19 @@ regexes = [
 ]
 
 [[allowlists]]
+description = "Audit tool JSON sidecars — rule IDs / short hashes are not secrets"
+# `tools/audit/audit.py` emits per-run JSON results files with hex-ish
+# rule IDs and short commit hashes that trip the generic-api-key
+# regex. The 2026-04-18 audit surfaced 3,479 such hits across the
+# AUTOMATED_AUDIT_REPORT_*_results.json set, all false positives.
+# Scoping the allowlist to the report filename pattern keeps the rule
+# live everywhere else (including tools/audit/*.py itself, where a
+# real key literal would still be caught).
+paths = [
+    '''docs/AUTOMATED_AUDIT_REPORT_[0-9_\-]+_results\.json$''',
+]
+
+[[allowlists]]
 description = "Dead NVD API key — rotated 2026-04-13, still appears in history"
 # The SECURITY writeup in AUDIT.md §C2 and the historical commits
 # 5aa7ebaf / f5cc472 / 91d66a87 contain the pre-rotation literal. The

@@ -9,6 +9,34 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-04-18
+
+### Fixed — completes 2026-04-16 strict-aliasing sweep
+
+One actionable finding from the 2026-04-18 full audit (5,149 raw
+findings, 1 actionable = 0.02% post-triage). Closes out the morph-
+target sites that were missed in engine 0.1.4 (commit `1f6fd24`).
+
+- **`engine/utils/gltf_loader.cpp` (lines 770, 790, 810): strict-
+  aliasing UB in morph-target delta loading.** The 0.1.4 sweep fixed
+  the matching pattern in `nav_mesh_builder.cpp` but left three
+  identical sites in the glTF morph-target POSITION/NORMAL/TANGENT
+  loops unpatched. glTF `byteStride` is not required to preserve
+  4-byte alignment, and `reinterpret_cast<const float*>` on an
+  `unsigned char*` is a strict-aliasing violation regardless of
+  alignment — `-O2` is free to reorder or elide the loads. Replaced
+  each cast with `float fp[3]; std::memcpy(fp, data + stride*i,
+  sizeof(fp));` — same AMD64 codegen, portable under strict-aliasing.
+  cppcheck: `invalidPointerCast` (portability) × 3.
+
+### Tooling
+
+- **`.gitleaksignore`**: added `docs/AUTOMATED_AUDIT_REPORT_*` so
+  gitleaks stops re-emitting 3,500+ false-positive `generic-api-key`
+  hits on every audit. The hits are our own audit tool's JSON
+  `results` sidecars — rule IDs and short hashes tripping the
+  generic-API-key regex. No real secrets in repo.
+
 ## [0.1.4] - 2026-04-17
 
 ### Fixed — cppcheck audit cycle
