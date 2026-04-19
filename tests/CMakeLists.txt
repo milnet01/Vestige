@@ -93,6 +93,7 @@ add_executable(vestige_tests
     test_editor_viewers.cpp
     test_navigation_panel.cpp
     test_cloth_solver_backend.cpp
+    test_cloth_constraint_graph.cpp
     test_gpu_cloth_simulator.cpp
     test_node_graph.cpp
     test_scripting.cpp

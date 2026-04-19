@@ -9,6 +9,52 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-19 Phase 9B Step 4: cloth_constraints + greedy graph colouring
+
+XPBD distance-constraint solver lands on the GPU.
+
+New compute shader `assets/shaders/cloth_constraints.comp.glsl` —
+one thread per constraint within a colour group, computes the XPBD
+position correction `Δp = -C / (w0 + w1 + α̃) · n` (with
+`α̃ = compliance / dt²`), and writes both endpoints back to the
+positions SSBO. Within a colour no two constraints share a particle,
+so writes are race-free without atomics. Pinned-on-both-ends and
+zero-length constraints are short-circuited.
+
+New module `engine/physics/cloth_constraint_graph.{h,cpp}` —
+pure-CPU helpers used at `initialize()` time:
+- `generateGridConstraints()` builds stretch (W·H structural edges)
+  and shear (down-right + down-left diagonals) constraints, mirroring
+  the topology of the CPU `ClothSimulator`.
+- `colourConstraints()` runs greedy graph colouring over those
+  constraints, reorders them in place by colour, and returns
+  per-colour `[offset, count]` slices. A 64-bit per-particle bitset
+  tracks "colours seen so far"; the lowest unused bit becomes the
+  constraint's colour. For a regular grid this lands at ~5 colours
+  (well under the Δ+1 = 7 worst case).
+
+`GpuClothSimulator` upgrades:
+- New SSBO `BIND_CONSTRAINTS = 4` holds `GpuConstraint[]`
+  (i0, i1, restLength, compliance — 16 B each, std430 friendly).
+- `simulate()` now runs an XPBD substep loop (default 10 substeps,
+  matches the CPU path). Each substep: wind dispatch → barrier →
+  integrate → barrier → for each colour { constraint dispatch →
+  barrier }. Damping is split across substeps so visual behaviour
+  is comparable as substep count varies.
+- `setSubsteps()` accessor (clamps to ≥ 1). `getConstraintCount()` /
+  `getColourCount()` accessors for telemetry + tests.
+
+The cutover from `ClothSimulator` to `GpuClothSimulator` inside
+`ClothComponent` is still gated behind Step 10; until then this
+backend is exercised by tests + manual instantiation only.
+
+Tests: 8 new `ClothConstraintGraph.*` tests (counts, rest lengths,
+edge cases, the load-bearing "no shared particle within colour"
+invariant on an 8×8 grid, conservative colour-count sanity check on
+16×16, and the offset/count partition contract); 3 new
+`GpuClothSimulator.*` tests (constraint count is zero pre-init,
+substep clamping, binding-enum pinning). Suite: 1917/1917 passing.
+
 ### 2026-04-19 Phase 9B Step 3: cloth_wind + cloth_integrate compute shaders
 
 First real GPU work. Two compute shaders land:

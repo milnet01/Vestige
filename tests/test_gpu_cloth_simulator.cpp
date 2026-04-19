@@ -93,3 +93,31 @@ TEST(GpuClothSimulator, ParameterSettersCompileAndAccept)
     sim.setDamping(0.02f);
     SUCCEED();
 }
+
+// -- Step 4 surface --
+
+TEST(GpuClothSimulator, ConstraintCountIsZeroBeforeInit)
+{
+    GpuClothSimulator sim;
+    EXPECT_EQ(sim.getConstraintCount(), 0u);
+    EXPECT_EQ(sim.getColourCount(),     0u);
+    EXPECT_EQ(sim.getConstraintsSSBO(), 0u);
+}
+
+TEST(GpuClothSimulator, SetSubstepsClampsToOne)
+{
+    GpuClothSimulator sim;
+    sim.setSubsteps(0);
+    EXPECT_EQ(sim.getSubsteps(), 1) << "substep count must be clamped to >= 1";
+    sim.setSubsteps(-3);
+    EXPECT_EQ(sim.getSubsteps(), 1);
+    sim.setSubsteps(20);
+    EXPECT_EQ(sim.getSubsteps(), 20);
+}
+
+TEST(GpuClothSimulator, BindConstraintsEnumPinned)
+{
+    // Constraints SSBO binding 4 is the contract with the cloth_constraints
+    // compute shader. Pin it so a refactor can't silently shift it.
+    EXPECT_EQ(static_cast<GLuint>(GpuClothSimulator::BIND_CONSTRAINTS), 4u);
+}

@@ -9,6 +9,8 @@
 
 #include <GLFW/glfw3.h>
 
+#include <algorithm>
+
 namespace Vestige
 {
 
@@ -40,6 +42,12 @@ void GpuClothSimulator::setShaderPath(const std::string& path)
     m_shaderPath = path;
 }
 
+void GpuClothSimulator::setSubsteps(int substeps)
+{
+    if (substeps < 1) substeps = 1;
+    m_substeps = substeps;
+}
+
 void GpuClothSimulator::initialize(const ClothConfig& config, uint32_t /*seed*/)
 {
     if (m_initialized) destroyBuffers();
@@ -49,6 +57,7 @@ void GpuClothSimulator::initialize(const ClothConfig& config, uint32_t /*seed*/)
     m_particleCount = m_gridW * m_gridH;
     m_gravity       = config.gravity;
     m_damping       = config.damping;
+    m_substeps      = (config.substeps < 1) ? 1 : config.substeps;
 
     if (m_particleCount == 0)
     {
@@ -58,6 +67,7 @@ void GpuClothSimulator::initialize(const ClothConfig& config, uint32_t /*seed*/)
 
     buildInitialGrid(config);
     createBuffers();
+    buildAndUploadConstraints(config);
     loadShadersIfNeeded();
 
     m_initialized = true;
@@ -72,8 +82,9 @@ void GpuClothSimulator::loadShadersIfNeeded()
 {
     if (m_shadersLoaded || m_shaderPath.empty()) return;
 
-    const std::string windPath  = m_shaderPath + "/cloth_wind.comp.glsl";
-    const std::string integPath = m_shaderPath + "/cloth_integrate.comp.glsl";
+    const std::string windPath        = m_shaderPath + "/cloth_wind.comp.glsl";
+    const std::string integPath       = m_shaderPath + "/cloth_integrate.comp.glsl";
+    const std::string constraintsPath = m_shaderPath + "/cloth_constraints.comp.glsl";
 
     if (!m_windShader.loadComputeShader(windPath))
     {
@@ -85,7 +96,39 @@ void GpuClothSimulator::loadShadersIfNeeded()
         Logger::error("[GpuClothSimulator] Failed to load " + integPath);
         return;
     }
+    if (!m_constraintsShader.loadComputeShader(constraintsPath))
+    {
+        Logger::error("[GpuClothSimulator] Failed to load " + constraintsPath);
+        return;
+    }
     m_shadersLoaded = true;
+}
+
+void GpuClothSimulator::buildAndUploadConstraints(const ClothConfig& config)
+{
+    m_constraints.clear();
+    m_colourRanges.clear();
+    m_constraintCount = 0;
+
+    generateGridConstraints(m_gridW, m_gridH, m_positionMirror,
+                             config.stretchCompliance,
+                             config.shearCompliance,
+                             m_constraints);
+    if (m_constraints.empty()) return;
+
+    m_colourRanges = colourConstraints(m_constraints, m_particleCount);
+    m_constraintCount = static_cast<uint32_t>(m_constraints.size());
+
+    glCreateBuffers(1, &m_constraintsSSBO);
+    glNamedBufferStorage(
+        m_constraintsSSBO,
+        static_cast<GLsizeiptr>(m_constraintCount * sizeof(GpuConstraint)),
+        m_constraints.data(),
+        /*flags=*/0);  // Immutable for the cloth's lifetime.
+
+    Logger::info("[GpuClothSimulator] Built " + std::to_string(m_constraintCount)
+                 + " constraints in " + std::to_string(m_colourRanges.size())
+                 + " colour groups");
 }
 
 void GpuClothSimulator::simulate(float deltaTime)
@@ -93,33 +136,65 @@ void GpuClothSimulator::simulate(float deltaTime)
     if (!m_initialized || !m_shadersLoaded) return;
     if (deltaTime <= 0.0f) return;
 
-    const GLuint groups = (m_particleCount + 63u) / 64u;
+    const GLuint particleGroups = (m_particleCount + 63u) / 64u;
+    const float  dtSub          = deltaTime / static_cast<float>(m_substeps);
+    const float  dtSubSquared   = dtSub * dtSub;
 
-    // 1. Wind / external forces → updates velocities only.
-    m_windShader.use();
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, BIND_VELOCITIES, m_velocitiesSSBO);
-    m_windShader.setUInt("u_particleCount", m_particleCount);
-    m_windShader.setVec3("u_gravity",       m_gravity);
-    m_windShader.setVec3("u_windVelocity",  m_windVelocity);
-    m_windShader.setFloat("u_dragCoeff",    m_dragCoeff);
-    m_windShader.setFloat("u_deltaTime",    deltaTime);
-    glDispatchCompute(groups, 1, 1);
-    glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+    // Damping is intended as a per-frame coefficient on the CPU path; spread
+    // it across substeps here so behaviour stays comparable as substep count
+    // changes. Cap to [0,1] so a misconfigured damping can't flip the sign.
+    const float dampingPerSub = (m_substeps > 0)
+        ? std::min(1.0f, std::max(0.0f, m_damping / static_cast<float>(m_substeps)))
+        : m_damping;
 
-    // 2. Symplectic Euler integration → updates positions + prev positions.
-    m_integrateShader.use();
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, BIND_POSITIONS,      m_positionsSSBO);
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, BIND_PREV_POSITIONS, m_prevPositionsSSBO);
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, BIND_VELOCITIES,     m_velocitiesSSBO);
-    m_integrateShader.setUInt("u_particleCount", m_particleCount);
-    m_integrateShader.setFloat("u_deltaTime",    deltaTime);
-    m_integrateShader.setFloat("u_damping",      m_damping);
-    glDispatchCompute(groups, 1, 1);
-    glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+    for (int s = 0; s < m_substeps; ++s)
+    {
+        // 1. Wind / external forces → updates velocities only.
+        m_windShader.use();
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, BIND_VELOCITIES, m_velocitiesSSBO);
+        m_windShader.setUInt("u_particleCount", m_particleCount);
+        m_windShader.setVec3("u_gravity",       m_gravity);
+        m_windShader.setVec3("u_windVelocity",  m_windVelocity);
+        m_windShader.setFloat("u_dragCoeff",    m_dragCoeff);
+        m_windShader.setFloat("u_deltaTime",    dtSub);
+        glDispatchCompute(particleGroups, 1, 1);
+        glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+
+        // 2. Symplectic Euler integration → updates positions + prev positions.
+        m_integrateShader.use();
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, BIND_POSITIONS,      m_positionsSSBO);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, BIND_PREV_POSITIONS, m_prevPositionsSSBO);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, BIND_VELOCITIES,     m_velocitiesSSBO);
+        m_integrateShader.setUInt("u_particleCount", m_particleCount);
+        m_integrateShader.setFloat("u_deltaTime",    dtSub);
+        m_integrateShader.setFloat("u_damping",      dampingPerSub);
+        glDispatchCompute(particleGroups, 1, 1);
+        glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+
+        // 3. Distance-constraint solve — one Gauss-Seidel sweep through every
+        //    colour. Within a colour, no two constraints share a particle, so
+        //    the writes are race-free without atomics.
+        if (m_constraintCount > 0)
+        {
+            m_constraintsShader.use();
+            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, BIND_POSITIONS,   m_positionsSSBO);
+            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, BIND_CONSTRAINTS, m_constraintsSSBO);
+            m_constraintsShader.setFloat("u_dtSubSquared", dtSubSquared);
+            for (const auto& range : m_colourRanges)
+            {
+                if (range.count == 0) continue;
+                m_constraintsShader.setUInt("u_colorOffset", range.offset);
+                m_constraintsShader.setUInt("u_colorCount",  range.count);
+                const GLuint constraintGroups = (range.count + 63u) / 64u;
+                glDispatchCompute(constraintGroups, 1, 1);
+                glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+            }
+        }
+    }
 
     // CPU mirror is now stale — refreshed lazily on getPositions() / getNormals().
     m_positionsDirty = true;
-    m_normalsDirty   = false;  // Normals don't move in Step 3 (Step 8's job).
+    m_normalsDirty   = false;  // Normals don't move in Step 4 (Step 8's job).
 }
 
 void GpuClothSimulator::reset()
@@ -290,6 +365,7 @@ void GpuClothSimulator::destroyBuffers()
     if (m_positionsSSBO)     { glDeleteBuffers(1, &m_positionsSSBO);     m_positionsSSBO = 0; }
     if (m_prevPositionsSSBO) { glDeleteBuffers(1, &m_prevPositionsSSBO); m_prevPositionsSSBO = 0; }
     if (m_velocitiesSSBO)    { glDeleteBuffers(1, &m_velocitiesSSBO);    m_velocitiesSSBO = 0; }
+    if (m_constraintsSSBO)   { glDeleteBuffers(1, &m_constraintsSSBO);   m_constraintsSSBO = 0; }
     if (m_normalsSSBO)       { glDeleteBuffers(1, &m_normalsSSBO);       m_normalsSSBO = 0; }
     if (m_indicesSSBO)       { glDeleteBuffers(1, &m_indicesSSBO);       m_indicesSSBO = 0; }
     m_initialized = false;
@@ -301,6 +377,9 @@ void GpuClothSimulator::destroyBuffers()
     m_normalsDirty   = false;
     m_indices.clear();
     m_texCoords.clear();
+    m_constraints.clear();
+    m_colourRanges.clear();
+    m_constraintCount = 0;
     m_shadersLoaded = false;  // Shader objects retain GPU state across init cycles.
 }
 
