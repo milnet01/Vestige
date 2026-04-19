@@ -248,7 +248,7 @@ bool Skybox::loadEquirectangular(const std::string& path)
     glTextureStorage2D(m_cubemapTexture, 1, GL_RGB16F, faceSize, faceSize);
 
     // Convert each cubemap face
-    std::vector<float> faceData(faceSize * faceSize * 3);
+    std::vector<float> faceData(static_cast<size_t>(faceSize * faceSize * 3));
     constexpr float PI = 3.14159265358979323846f;
 
     for (int face = 0; face < 6; face++)
@@ -338,7 +338,7 @@ bool Skybox::loadEquirectangular(const std::string& path)
                 // Clamp to prevent extreme HDR values / NaN from poisoning IBL
                 color = glm::clamp(color, glm::vec3(0.0f), glm::vec3(50.0f));
 
-                int outIdx = (y * faceSize + x) * 3;
+                size_t outIdx = static_cast<size_t>((y * faceSize + x) * 3);
                 faceData[outIdx + 0] = color.r;
                 faceData[outIdx + 1] = color.g;
                 faceData[outIdx + 2] = color.b;

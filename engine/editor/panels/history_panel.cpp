@@ -48,7 +48,7 @@ void HistoryPanel::draw(CommandHistory& history)
 
         // Build label: "N. Description"
         std::string label = std::to_string(i + 1) + ". "
-            + commands[i]->getDescription();
+            + commands[static_cast<size_t>(i)]->getDescription();
 
         if (ImGui::Selectable(label.c_str(), isCurrent))
         {

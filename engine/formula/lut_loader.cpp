@@ -7,8 +7,6 @@
 #include "core/logger.h"
 
 #include <algorithm>
-#include <cmath>
-#include <climits>
 #include <cstring>
 #include <fstream>
 #include <limits>

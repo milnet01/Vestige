@@ -7,8 +7,6 @@
 #include "scene/gpu_particle_emitter.h"
 #include "core/logger.h"
 
-#include <glm/gtc/type_ptr.hpp>
-
 namespace Vestige
 {
 

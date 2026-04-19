@@ -5,8 +5,6 @@
 /// @brief FormulaDefinition implementation with JSON serialization.
 #include "formula/formula.h"
 
-#include <stdexcept>
-
 namespace Vestige
 {
 

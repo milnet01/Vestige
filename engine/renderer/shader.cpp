@@ -158,7 +158,7 @@ bool Shader::loadComputeShader(const std::string& computePath)
     {
         GLint logLength = 0;
         glGetProgramiv(m_programId, GL_INFO_LOG_LENGTH, &logLength);
-        std::string infoLog(std::max(logLength, 1), '\0');
+        std::string infoLog(static_cast<size_t>(std::max(logLength, 1)), '\0');
         glGetProgramInfoLog(m_programId, static_cast<GLsizei>(infoLog.size()), nullptr, infoLog.data());
         Logger::error("Compute shader program linking failed: " + infoLog);
         glDeleteProgram(m_programId);
@@ -233,7 +233,7 @@ void Shader::setMat4(std::string_view name, const glm::mat4& value) const
     {
         GLint logLength = 0;
         glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &logLength);
-        std::string infoLog(std::max(logLength, 1), '\0');
+        std::string infoLog(static_cast<size_t>(std::max(logLength, 1)), '\0');
         glGetShaderInfoLog(shader, static_cast<GLsizei>(infoLog.size()), nullptr, infoLog.data());
         std::string typeStr = (type == GL_VERTEX_SHADER) ? "vertex"
             : (type == GL_FRAGMENT_SHADER) ? "fragment" : "compute";
@@ -258,7 +258,7 @@ bool Shader::linkProgram(GLuint vertexShader, GLuint fragmentShader)
     {
         GLint logLength = 0;
         glGetProgramiv(m_programId, GL_INFO_LOG_LENGTH, &logLength);
-        std::string infoLog(std::max(logLength, 1), '\0');
+        std::string infoLog(static_cast<size_t>(std::max(logLength, 1)), '\0');
         glGetProgramInfoLog(m_programId, static_cast<GLsizei>(infoLog.size()), nullptr, infoLog.data());
         Logger::error("Shader program linking failed: " + infoLog);
         glDeleteProgram(m_programId);

@@ -7,7 +7,6 @@
 #include "animation/feature_vector.h"
 
 #include <cmath>
-#include <numeric>
 
 namespace Vestige
 {

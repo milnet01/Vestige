@@ -49,7 +49,7 @@ std::vector<FoliageInstanceRef> FoliageManager::paintFoliage(
     std::uniform_real_distribution<float> scaleDist(config.minScale, config.maxScale);
     std::uniform_real_distribution<float> tintDist(-1.0f, 1.0f);
 
-    added.reserve(targetCount);
+    added.reserve(static_cast<size_t>(targetCount));
 
     for (int i = 0; i < targetCount; ++i)
     {
@@ -277,7 +277,7 @@ std::vector<std::pair<uint64_t, ScatterInstance>> FoliageManager::paintScatter(
     std::uniform_real_distribution<float> radiusDist(0.0f, 1.0f);
     std::uniform_real_distribution<float> scaleDist(config.minScale, config.maxScale);
 
-    added.reserve(targetCount);
+    added.reserve(static_cast<size_t>(targetCount));
 
     for (int i = 0; i < targetCount; ++i)
     {

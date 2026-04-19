@@ -96,7 +96,7 @@ const BiomePreset& BiomeLibrary::getPreset(int index) const
     {
         return empty;
     }
-    return m_presets[index];
+    return m_presets[static_cast<size_t>(index)];
 }
 
 std::vector<std::string> BiomeLibrary::getPresetNames() const
@@ -120,7 +120,7 @@ nlohmann::json BiomeLibrary::serializeUserPresets() const
     nlohmann::json arr = nlohmann::json::array();
     for (int i = m_builtInCount; i < static_cast<int>(m_presets.size()); ++i)
     {
-        arr.push_back(m_presets[i].serialize());
+        arr.push_back(m_presets[static_cast<size_t>(i)].serialize());
     }
     return arr;
 }

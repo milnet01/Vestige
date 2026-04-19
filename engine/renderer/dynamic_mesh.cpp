@@ -4,7 +4,6 @@
 /// @file dynamic_mesh.cpp
 /// @brief DynamicMesh implementation.
 #include "renderer/dynamic_mesh.h"
-#include "core/logger.h"
 
 #include <limits>
 

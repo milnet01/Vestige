@@ -6,8 +6,6 @@
 #include "scene/camera_component.h"
 #include "scene/entity.h"
 
-#include <glm/gtc/matrix_transform.hpp>
-
 #include <cmath>
 
 namespace Vestige

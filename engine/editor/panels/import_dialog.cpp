@@ -14,7 +14,6 @@
 #include "scene/scene.h"
 
 #include <imgui.h>
-#include <glm/glm.hpp>
 
 #include <cctype>
 

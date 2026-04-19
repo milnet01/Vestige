@@ -8,8 +8,6 @@
 
 #include <imgui.h>
 
-#include <glm/gtc/constants.hpp>
-
 #include <algorithm>
 #include <cmath>
 

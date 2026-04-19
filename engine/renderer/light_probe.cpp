@@ -10,7 +10,6 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 #include <algorithm>
-#include <cmath>
 
 namespace Vestige
 {
@@ -267,12 +266,12 @@ void LightProbe::renderCube() const
 
 void LightProbe::bindIrradiance(int unit) const
 {
-    glBindTextureUnit(unit, m_irradianceMap);
+    glBindTextureUnit(static_cast<GLuint>(unit), m_irradianceMap);
 }
 
 void LightProbe::bindPrefilter(int unit) const
 {
-    glBindTextureUnit(unit, m_prefilterMap);
+    glBindTextureUnit(static_cast<GLuint>(unit), m_prefilterMap);
 }
 
 bool LightProbe::containsPoint(const glm::vec3& point) const

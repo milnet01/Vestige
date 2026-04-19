@@ -9,7 +9,6 @@
 #include "core/logger.h"
 
 #include <glad/gl.h>
-#include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
 #include <cmath>
@@ -366,17 +365,17 @@ void EnvironmentMap::generateBrdfLut(const FullscreenQuad& quad)
 
 void EnvironmentMap::bindIrradiance(int unit) const
 {
-    glBindTextureUnit(unit, m_irradianceMap);
+    glBindTextureUnit(static_cast<GLuint>(unit), m_irradianceMap);
 }
 
 void EnvironmentMap::bindPrefilter(int unit) const
 {
-    glBindTextureUnit(unit, m_prefilterMap);
+    glBindTextureUnit(static_cast<GLuint>(unit), m_prefilterMap);
 }
 
 void EnvironmentMap::bindBrdfLut(int unit) const
 {
-    glBindTextureUnit(unit, m_brdfLut);
+    glBindTextureUnit(static_cast<GLuint>(unit), m_brdfLut);
 }
 
 bool EnvironmentMap::isReady() const

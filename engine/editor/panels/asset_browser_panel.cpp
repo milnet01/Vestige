@@ -5,7 +5,6 @@
 /// @brief Asset browser panel implementation.
 #include "editor/panels/asset_browser_panel.h"
 #include "resource/resource_manager.h"
-#include "renderer/texture.h"
 #include "core/logger.h"
 
 #include <imgui.h>

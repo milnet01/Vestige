@@ -7,7 +7,6 @@
 #include "editor/widgets/color_gradient.h"
 
 #include <imgui.h>
-#include <imgui_internal.h>
 
 #include <algorithm>
 
@@ -88,7 +87,7 @@ bool drawGradientEditor(const char* label, ColorGradient& gradient, float width,
 
     for (int i = 0; i < static_cast<int>(gradient.stops.size()); ++i)
     {
-        auto& stop = gradient.stops[i];
+        auto& stop = gradient.stops[static_cast<size_t>(i)];
         float markerX = barPos.x + stop.position * barWidth;
 
         // Marker triangle (pointing up at the bar)
@@ -177,7 +176,7 @@ bool drawGradientEditor(const char* label, ColorGradient& gradient, float width,
         && s_selectedStop >= 0
         && s_selectedStop < static_cast<int>(gradient.stops.size()))
     {
-        auto& stop = gradient.stops[s_selectedStop];
+        auto& stop = gradient.stops[static_cast<size_t>(s_selectedStop)];
         ImGui::Spacing();
         ImGui::Text("Stop %d (pos: %.2f)", s_selectedStop,
                     static_cast<double>(stop.position));

@@ -9,6 +9,71 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-19 manual audit — L41 clean-warning-flag sweep + include-cleaner pass
+
+Closes the last deferred item from the 2026-04-19 audit backlog (L41,
+``-Wformat=2 -Wshadow -Wnull-dereference -Wconversion -Wsign-conversion``)
+and does an engine-wide unused-include pass. All 1883 tests pass; engine
+and full build compile with **zero warnings, zero errors** under the
+hardened warning set.
+
+#### L41 — warning-flag sweep
+
+The flags were already in ``engine/CMakeLists.txt`` (added by a prior
+audit commit) but had been producing 633 warnings — mostly third-party
+cascade from vendored GLM headers and ``-Wmissing-field-initializers``
+noise in the visual-scripting node tables. Root cause fixed in the
+three highest-leverage places, then the remaining 148 in-project
+``-Wsign-conversion`` warnings cleaned file-by-file.
+
+- ``engine/CMakeLists.txt`` — promoted ``glm-header-only`` to SYSTEM
+  via ``set_target_properties(glm-header-only PROPERTIES SYSTEM TRUE)``
+  (CMake 3.25+). Earlier ``target_include_directories(vestige_engine
+  SYSTEM ...)`` was no-op because the original ``-I`` from
+  ``glm-header-only``'s ``INTERFACE_INCLUDE_DIRECTORIES`` still preceded
+  any re-export. Removed 346 cascaded GLM warnings.
+- ``engine/scripting/node_type_registry.h`` — added ``= {}``
+  default-member-initializers to ``NodeTypeDescriptor::inputIndexByName``
+  and ``outputIndexByName``. Removed 136 ``-Wmissing-field-initializers``
+  warnings from the six ``*_nodes.cpp`` aggregate registration sites
+  without touching every call site.
+- ``engine/physics/ragdoll.cpp:491`` — default-initialized
+  ``glm::vec3/vec4/quat`` out-params before ``glm::decompose`` so the
+  compiler can prove definite-assignment even though the function always
+  overwrites; silences ``-Wmaybe-uninitialized``.
+- ``engine/editor/panels/texture_viewer_panel.cpp:608`` — ``PbrRole
+  role`` initialised to ``ALBEDO`` before a non-pass-through
+  out-parameter helper that may leave it untouched when no suffix
+  matches.
+- ``engine/audio/audio_engine.h`` — ``std::vector<bool>
+  m_sourceInUse`` → ``std::vector<uint8_t>`` to sidestep the
+  specialised-bitvector proxy-reference weirdness and the GCC 15
+  libstdc++ ``-Warray-bounds`` false positive in ``stl_bvector.h``
+  ``resize()``. Corresponding ``assign(MAX_SOURCES, 0u)`` in the cpp.
+- 26 source files touched for 148 ``-Wsign-conversion`` fixes —
+  ``size_t`` loop aliases in hot paths (``particle_emitter.cpp``, etc.)
+  and ``static_cast<size_t>/GLuint/GLsizeiptr/GLenum`` at call sites
+  elsewhere. Hot loops (particle kill/update/spawn) use a local
+  ``const size_t u = static_cast<size_t>(i);`` alias to keep indexing
+  readable.
+
+#### Include-cleaner pass
+
+Ran ``clang-include-cleaner --disable-insert`` across all 224
+``engine/*.cpp`` files. 82 unused includes removed from 78 files; 14
+flagged removals were reverted as false positives (``<glm/gtc/matrix_transform.hpp>``
+providing unqualified ``glm::lookAt/perspective/translate`` calls not
+visible to the checker, ``<ft2build.h>`` needed for the
+``FT_FREETYPE_H`` macro in ``font.cpp``). Report preserved at
+``.unused_includes_report.txt`` for reproducibility.
+
+#### clang-side fix
+
+- ``editor/panels/model_viewer_panel.cpp:670-671`` — explicit
+  ``static_cast<float>`` on the ``(int) / 10.0f`` truncate-to-one-decimal
+  expression. Silences clang ``-Wimplicit-int-float-conversion`` while
+  keeping the intentional truncation semantics.
+
 ### 2026-04-19 manual audit — low-item close-out + research update
 
 Finishes the remaining Low-severity items from the 2026-04-19 audit

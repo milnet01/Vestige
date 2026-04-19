@@ -10,7 +10,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <complex>
 
 namespace Vestige
 {

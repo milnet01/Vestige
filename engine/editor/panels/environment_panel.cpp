@@ -280,13 +280,13 @@ void EnvironmentPanel::draw(BrushTool& brushTool, FoliageManager& manager,
         {
             // Build combo items
             std::string preview = (m_selectedBiome >= 0 && m_selectedBiome < static_cast<int>(names.size()))
-                ? names[m_selectedBiome] : "None";
+                ? names[static_cast<size_t>(m_selectedBiome)] : "None";
             if (ImGui::BeginCombo("Biome", preview.c_str()))
             {
                 for (int i = 0; i < static_cast<int>(names.size()); ++i)
                 {
                     bool selected = (i == m_selectedBiome);
-                    if (ImGui::Selectable(names[i].c_str(), selected))
+                    if (ImGui::Selectable(names[static_cast<size_t>(i)].c_str(), selected))
                     {
                         m_selectedBiome = i;
                     }

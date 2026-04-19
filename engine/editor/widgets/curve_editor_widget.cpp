@@ -7,7 +7,6 @@
 #include "editor/widgets/animation_curve.h"
 
 #include <imgui.h>
-#include <imgui_internal.h>
 
 #include <algorithm>
 
@@ -100,7 +99,7 @@ bool drawCurveEditor(const char* label, AnimationCurve& curve, float width, floa
     ImVec2 mousePos = ImGui::GetMousePos();
     for (int i = 0; i < static_cast<int>(curve.keyframes.size()); ++i)
     {
-        auto& kf = curve.keyframes[i];
+        auto& kf = curve.keyframes[static_cast<size_t>(i)];
         ImVec2 handlePos = curveToPixel(kf.time, kf.value, canvasPos, canvasSize);
 
         float dx = mousePos.x - handlePos.x;

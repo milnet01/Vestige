@@ -8,8 +8,6 @@
 #include "renderer/cascaded_shadow_map.h"
 #include "core/logger.h"
 
-#include <glm/gtc/type_ptr.hpp>
-
 namespace Vestige
 {
 

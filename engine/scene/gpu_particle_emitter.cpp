@@ -246,8 +246,9 @@ void GPUParticleEmitter::buildBehaviorsFromConfig()
         m_behaviorBlock.colorStopCount = stopCount;
         for (int i = 0; i < stopCount; ++i)
         {
-            m_behaviorBlock.colorStops[i] = stops[i].color;
-            m_behaviorBlock.colorStopTimes[i] = stops[i].position;
+            const size_t u = static_cast<size_t>(i);
+            m_behaviorBlock.colorStops[i] = stops[u].color;
+            m_behaviorBlock.colorStopTimes[i] = stops[u].position;
         }
     }
     else
@@ -263,8 +264,9 @@ void GPUParticleEmitter::buildBehaviorsFromConfig()
         m_behaviorBlock.sizeKeyCount = keyCount;
         for (int i = 0; i < keyCount; ++i)
         {
-            m_behaviorBlock.sizeKeys[i] = keys[i].value;
-            m_behaviorBlock.sizeKeyTimes[i] = keys[i].time;
+            const size_t u = static_cast<size_t>(i);
+            m_behaviorBlock.sizeKeys[i] = keys[u].value;
+            m_behaviorBlock.sizeKeyTimes[i] = keys[u].time;
         }
     }
     else
@@ -280,8 +282,9 @@ void GPUParticleEmitter::buildBehaviorsFromConfig()
         m_behaviorBlock.speedKeyCount = keyCount;
         for (int i = 0; i < keyCount; ++i)
         {
-            m_behaviorBlock.speedKeys[i] = keys[i].value;
-            m_behaviorBlock.speedKeyTimes[i] = keys[i].time;
+            const size_t u = static_cast<size_t>(i);
+            m_behaviorBlock.speedKeys[i] = keys[u].value;
+            m_behaviorBlock.speedKeyTimes[i] = keys[u].time;
         }
     }
     else

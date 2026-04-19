@@ -78,7 +78,7 @@ void WaterSurfaceComponent::buildMesh() const
     // Generate vertices: position (3) + texCoord (2)
     int vertCount = res * res;
     std::vector<float> vertices;
-    vertices.reserve(vertCount * 5);
+    vertices.reserve(static_cast<size_t>(vertCount * 5));
 
     for (int z = 0; z < res; ++z)
     {
@@ -102,15 +102,15 @@ void WaterSurfaceComponent::buildMesh() const
     int quadsPerRow = res - 1;
     m_indexCount = quadsPerRow * quadsPerRow * 6;
     std::vector<unsigned int> indices;
-    indices.reserve(m_indexCount);
+    indices.reserve(static_cast<size_t>(m_indexCount));
 
     for (int z = 0; z < quadsPerRow; ++z)
     {
         for (int x = 0; x < quadsPerRow; ++x)
         {
-            unsigned int topLeft = z * res + x;
+            unsigned int topLeft = static_cast<unsigned int>(z * res + x);
             unsigned int topRight = topLeft + 1;
-            unsigned int bottomLeft = (z + 1) * res + x;
+            unsigned int bottomLeft = static_cast<unsigned int>((z + 1) * res + x);
             unsigned int bottomRight = bottomLeft + 1;
 
             indices.push_back(topLeft);

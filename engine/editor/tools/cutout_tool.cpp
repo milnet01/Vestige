@@ -4,18 +4,15 @@
 /// @file cutout_tool.cpp
 /// @brief CutoutTool implementation -- cut door/window openings in walls.
 #include "editor/tools/cutout_tool.h"
-#include "editor/commands/create_entity_command.h"
 #include "editor/command_history.h"
 #include "scene/scene.h"
 #include "scene/entity.h"
 #include "scene/mesh_renderer.h"
 #include "resource/resource_manager.h"
-#include "renderer/material.h"
 #include "utils/procedural_mesh.h"
 #include "core/logger.h"
 
 #include <imgui.h>
-#include <glm/glm.hpp>
 
 #include <memory>
 #include <string>

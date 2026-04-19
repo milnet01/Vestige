@@ -15,8 +15,6 @@
 #include "utils/procedural_mesh.h"
 #include "core/logger.h"
 
-#include <glm/glm.hpp>
-
 #include <cmath>
 #include <memory>
 #include <string>

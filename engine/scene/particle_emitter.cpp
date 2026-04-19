@@ -8,7 +8,6 @@
 
 #include <glm/gtc/constants.hpp>
 
-#include <algorithm>
 #include <cmath>
 #include <random>
 
@@ -74,15 +73,17 @@ void ParticleData::kill(int index)
     int last = count - 1;
     if (index != last)
     {
-        positions[index] = positions[last];
-        velocities[index] = velocities[last];
-        colors[index] = colors[last];
-        sizes[index] = sizes[last];
-        startSizes[index] = startSizes[last];
-        startSpeeds[index] = startSpeeds[last];
-        ages[index] = ages[last];
-        lifetimes[index] = lifetimes[last];
-        normalizedAges[index] = normalizedAges[last];
+        const size_t idx = static_cast<size_t>(index);
+        const size_t lst = static_cast<size_t>(last);
+        positions[idx] = positions[lst];
+        velocities[idx] = velocities[lst];
+        colors[idx] = colors[lst];
+        sizes[idx] = sizes[lst];
+        startSizes[idx] = startSizes[lst];
+        startSpeeds[idx] = startSpeeds[lst];
+        ages[idx] = ages[lst];
+        lifetimes[idx] = lifetimes[lst];
+        normalizedAges[idx] = normalizedAges[lst];
     }
     --count;
 }
@@ -142,48 +143,49 @@ void ParticleEmitterComponent::update(float deltaTime)
     // --- Update existing particles ---
     for (int i = m_data.count - 1; i >= 0; --i)
     {
-        m_data.ages[i] += deltaTime;
+        const size_t u = static_cast<size_t>(i);
+        m_data.ages[u] += deltaTime;
 
         // Kill expired
-        if (m_data.ages[i] >= m_data.lifetimes[i])
+        if (m_data.ages[u] >= m_data.lifetimes[u])
         {
             m_data.kill(i);
             continue;
         }
 
-        float normalizedAge = m_data.ages[i] / m_data.lifetimes[i];
-        m_data.normalizedAges[i] = normalizedAge;
+        float normalizedAge = m_data.ages[u] / m_data.lifetimes[u];
+        m_data.normalizedAges[u] = normalizedAge;
 
         // Apply gravity
-        m_data.velocities[i] += m_config.gravity * deltaTime;
+        m_data.velocities[u] += m_config.gravity * deltaTime;
 
         // Over-lifetime: color
         if (m_config.useColorOverLifetime)
         {
-            m_data.colors[i] = m_config.colorOverLifetime.evaluate(normalizedAge);
+            m_data.colors[u] = m_config.colorOverLifetime.evaluate(normalizedAge);
         }
 
         // Over-lifetime: size (multiplier on start size)
         if (m_config.useSizeOverLifetime)
         {
             float mult = m_config.sizeOverLifetime.evaluate(normalizedAge);
-            m_data.sizes[i] = m_data.startSizes[i] * mult;
+            m_data.sizes[u] = m_data.startSizes[u] * mult;
         }
 
         // Over-lifetime: speed (multiplier on velocity magnitude)
         if (m_config.useSpeedOverLifetime)
         {
             float speedMult = m_config.speedOverLifetime.evaluate(normalizedAge);
-            float currentSpeed = glm::length(m_data.velocities[i]);
+            float currentSpeed = glm::length(m_data.velocities[u]);
             if (currentSpeed > 0.0001f)
             {
-                float targetSpeed = m_data.startSpeeds[i] * speedMult;
-                m_data.velocities[i] = glm::normalize(m_data.velocities[i]) * targetSpeed;
+                float targetSpeed = m_data.startSpeeds[u] * speedMult;
+                m_data.velocities[u] = glm::normalize(m_data.velocities[u]) * targetSpeed;
             }
         }
 
         // Integrate position
-        m_data.positions[i] += m_data.velocities[i] * deltaTime;
+        m_data.positions[u] += m_data.velocities[u] * deltaTime;
     }
 }
 
@@ -243,7 +245,7 @@ bool ParticleEmitterComponent::isPlaying() const
 
 void ParticleEmitterComponent::spawnParticle(const glm::mat4& worldMatrix)
 {
-    int idx = m_data.count;
+    const size_t idx = static_cast<size_t>(m_data.count);
 
     // Position: entity world position + shape offset
     glm::vec3 worldPos = glm::vec3(worldMatrix[3]);

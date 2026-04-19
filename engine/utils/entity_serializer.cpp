@@ -594,7 +594,7 @@ static void deserializeWaterSurface(const json& j, WaterSurfaceComponent& comp)
                              WaterSurfaceConfig::MAX_WAVES);
         for (int i = 0; i < count; ++i)
         {
-            const auto& w = j["waves"][i];
+            const auto& w = j["waves"][static_cast<size_t>(i)];
             cfg.waves[i].amplitude = w.value("amplitude", cfg.waves[i].amplitude);
             cfg.waves[i].wavelength = w.value("wavelength", cfg.waves[i].wavelength);
             cfg.waves[i].speed = w.value("speed", cfg.waves[i].speed);

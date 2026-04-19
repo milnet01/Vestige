@@ -7,7 +7,6 @@
 #include "formula/expression_eval.h"
 #include "core/logger.h"
 
-#include <climits>
 #include <cstring>
 #include <fstream>
 #include <limits>

@@ -9,8 +9,6 @@
 #include "renderer/material.h"
 
 #include <imgui.h>
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtc/type_ptr.hpp>
 
 #include <algorithm>
 #include <cmath>
@@ -669,8 +667,8 @@ void ModelViewerPanel::drawAnimationControls(float /*deltaTime*/)
         ImGui::SetNextItemWidth(-1.0f);
         ImGui::ProgressBar(duration > 0.0f ? currentTime / duration : 0.0f,
                             ImVec2(0.0f, 0.0f),
-                            (std::to_string(static_cast<int>(currentTime * 10) / 10.0f) +
-                             "s / " + std::to_string(static_cast<int>(duration * 10) / 10.0f) +
+                            (std::to_string(static_cast<float>(static_cast<int>(currentTime * 10)) / 10.0f) +
+                             "s / " + std::to_string(static_cast<float>(static_cast<int>(duration * 10)) / 10.0f) +
                              "s").c_str());
     }
 }

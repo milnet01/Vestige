@@ -51,7 +51,7 @@ bool AudioEngine::initialize()
 
     // Preallocate source pool
     m_sourcePool.resize(MAX_SOURCES);
-    m_sourceInUse.resize(MAX_SOURCES, false);
+    m_sourceInUse.assign(MAX_SOURCES, 0u);
     alGenSources(MAX_SOURCES, m_sourcePool.data());
 
     ALenum err = alGetError();

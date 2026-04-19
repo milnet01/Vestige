@@ -21,8 +21,6 @@
 #include "systems/audio_system.h"
 #include "physics/rigid_body.h"
 
-#include <glm/gtc/quaternion.hpp>
-
 namespace Vestige
 {
 

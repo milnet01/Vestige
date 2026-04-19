@@ -13,7 +13,6 @@
 #include "utils/frustum.h"
 
 #include <glad/gl.h>
-#include <glm/gtc/matrix_transform.hpp>
 
 #include <algorithm>
 #include <unordered_set>
@@ -766,7 +765,7 @@ void Renderer::beginFrame()
     // SH probe grid: 7 sampler3D fallbacks (units 17-23)
     for (int i = 0; i < SHProbeGrid::SH_TEXTURE_COUNT; i++)
     {
-        glBindTextureUnit(SHProbeGrid::FIRST_TEXTURE_UNIT + i, m_fallbackTex3D);
+        glBindTextureUnit(static_cast<GLuint>(SHProbeGrid::FIRST_TEXTURE_UNIT + i), m_fallbackTex3D);
     }
 }
 
@@ -1858,9 +1857,9 @@ bool Renderer::loadSkyboxHDRI(const std::string& path)
                                    *m_screenQuad, m_skyboxShader);
 
         // Restore GL state — reverse-Z requires these to be correct
-        glDepthFunc(prevDepthFunc);
+        glDepthFunc(static_cast<GLenum>(prevDepthFunc));
         glDepthMask(prevDepthMask);
-        glClipControl(prevClipOrigin, prevClipDepth);
+        glClipControl(static_cast<GLenum>(prevClipOrigin), static_cast<GLenum>(prevClipDepth));
         glUseProgram(0);
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
@@ -1870,7 +1869,7 @@ bool Renderer::loadSkyboxHDRI(const std::string& path)
         // all draw calls. Bind a 2D fallback texture to clear the cubemap.
         for (int i = 0; i < 10; i++)
         {
-            glBindTextureUnit(i, m_fallbackTexture);
+            glBindTextureUnit(static_cast<GLuint>(i), m_fallbackTexture);
         }
 
         // Drain any GL errors from IBL generation
@@ -1989,7 +1988,7 @@ void Renderer::captureLightProbe(int probeIndex, const SceneRenderData& renderDa
     while (glGetError() != GL_NO_ERROR) {}
     for (int i = 0; i < 12; i++)
     {
-        glBindTextureUnit(i, m_fallbackTexture);
+        glBindTextureUnit(static_cast<GLuint>(i), m_fallbackTexture);
     }
     glBindTextureUnit(4, m_fallbackCubemap);
     glBindTextureUnit(5, m_fallbackCubemap);
@@ -2001,7 +2000,7 @@ void Renderer::captureLightProbe(int probeIndex, const SceneRenderData& renderDa
     // read stale SH probe grid state on units 17-23.
     for (int i = 0; i < SHProbeGrid::SH_TEXTURE_COUNT; i++)
     {
-        glBindTextureUnit(SHProbeGrid::FIRST_TEXTURE_UNIT + i, m_fallbackTex3D);
+        glBindTextureUnit(static_cast<GLuint>(SHProbeGrid::FIRST_TEXTURE_UNIT + i), m_fallbackTex3D);
     }
 
     Logger::info("Light probe " + std::to_string(probeIndex) + " captured and convolved");
@@ -2136,7 +2135,7 @@ void Renderer::captureSHGrid(const SceneRenderData& renderData,
     while (glGetError() != GL_NO_ERROR) {}
     for (int i = 0; i < 12; i++)
     {
-        glBindTextureUnit(i, m_fallbackTexture);
+        glBindTextureUnit(static_cast<GLuint>(i), m_fallbackTexture);
     }
     glBindTextureUnit(4, m_fallbackCubemap);
     glBindTextureUnit(5, m_fallbackCubemap);
@@ -2147,7 +2146,7 @@ void Renderer::captureSHGrid(const SceneRenderData& renderData,
     // capture or frame render cannot read stale SH probe grid state.
     for (int i = 0; i < SHProbeGrid::SH_TEXTURE_COUNT; i++)
     {
-        glBindTextureUnit(SHProbeGrid::FIRST_TEXTURE_UNIT + i, m_fallbackTex3D);
+        glBindTextureUnit(static_cast<GLuint>(SHProbeGrid::FIRST_TEXTURE_UNIT + i), m_fallbackTex3D);
     }
 
     Logger::info("SH probe grid captured: " + std::to_string(captured)

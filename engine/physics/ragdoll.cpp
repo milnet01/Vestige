@@ -487,10 +487,12 @@ JPH::Ref<JPH::RagdollSettings> Ragdoll::buildSettings(
         {
             const glm::mat4& boneWorld = boneWorldMatrices[static_cast<size_t>(vestigeIdx)];
 
-            // Decompose matrix into position and rotation
-            glm::vec3 scale, translation, skew;
-            glm::vec4 perspective;
-            glm::quat rotation;
+            // Decompose matrix into position and rotation. Default-init the
+            // out params so the compiler can reason about them even though
+            // glm::decompose always overwrites; silences -Wmaybe-uninitialized.
+            glm::vec3 scale(0.0f), translation(0.0f), skew(0.0f);
+            glm::vec4 perspective(0.0f);
+            glm::quat rotation(1.0f, 0.0f, 0.0f, 0.0f);
             glm::decompose(boneWorld, scale, rotation, translation, skew, perspective);
 
             part.mPosition = JPH::RVec3(

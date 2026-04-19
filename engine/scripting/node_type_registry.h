@@ -68,8 +68,8 @@ struct NodeTypeDescriptor
     /// O(1) instead of scanning inputDefs/outputDefs each frame. Kept
     /// in sync with inputDefs/outputDefs; do not mutate directly —
     /// re-register the descriptor to change pin sets.
-    std::unordered_map<std::string, size_t> inputIndexByName;
-    std::unordered_map<std::string, size_t> outputIndexByName;
+    std::unordered_map<std::string, size_t> inputIndexByName = {};
+    std::unordered_map<std::string, size_t> outputIndexByName = {};
 };
 
 /// @brief Registry mapping type names to their descriptors.

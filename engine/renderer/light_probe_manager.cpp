@@ -69,7 +69,7 @@ void LightProbeManager::generateProbe(int probeIndex, GLuint capturedCubemap)
         return;
     }
 
-    m_probes[probeIndex]->generateFromCubemap(capturedCubemap);
+    m_probes[static_cast<size_t>(probeIndex)]->generateFromCubemap(capturedCubemap);
 }
 
 ProbeAssignment LightProbeManager::assignProbe(const glm::vec3& worldPos) const
@@ -105,7 +105,7 @@ const LightProbe* LightProbeManager::getProbe(int index) const
     {
         return nullptr;
     }
-    return m_probes[index].get();
+    return m_probes[static_cast<size_t>(index)].get();
 }
 
 void LightProbeManager::clear()

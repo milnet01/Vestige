@@ -5,7 +5,6 @@
 /// @brief Scene implementation.
 #include "scene/scene.h"
 #include "physics/cloth_component.h"
-#include "core/logger.h"
 
 #include <algorithm>
 

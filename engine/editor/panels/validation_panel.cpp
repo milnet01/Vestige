@@ -8,9 +8,6 @@
 #include "scene/scene.h"
 #include "scene/entity.h"
 #include "scene/mesh_renderer.h"
-#include "scene/light_component.h"
-#include "renderer/material.h"
-#include "renderer/texture.h"
 
 #include <imgui.h>
 

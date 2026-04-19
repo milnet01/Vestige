@@ -7,8 +7,6 @@
 #include "physics/ragdoll_preset.h"
 #include "animation/skeleton.h"
 
-#include <glm/gtc/constants.hpp>
-
 namespace Vestige
 {
 

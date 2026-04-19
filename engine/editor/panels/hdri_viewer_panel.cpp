@@ -9,7 +9,6 @@
 #include "resource/resource_manager.h"
 
 #include <imgui.h>
-#include <glm/gtc/matrix_transform.hpp>
 
 #include <algorithm>
 #include <cmath>

@@ -10,8 +10,6 @@
 #include "editor/command_history.h"
 #include "renderer/camera.h"
 
-#include <glm/gtc/matrix_transform.hpp>
-
 #include <cmath>
 #include <random>
 

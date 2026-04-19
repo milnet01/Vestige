@@ -8,14 +8,12 @@
 #include "scene/scene.h"
 #include "scene/entity.h"
 #include "scene/mesh_renderer.h"
-#include "renderer/mesh.h"
 
 #include <Recast.h>
 #include <DetourNavMesh.h>
 #include <DetourNavMeshBuilder.h>
 
 #include <glad/gl.h>
-#include <glm/gtc/type_ptr.hpp>
 
 #include <chrono>
 #include <cstring>

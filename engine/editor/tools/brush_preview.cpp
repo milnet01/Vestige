@@ -7,7 +7,6 @@
 #include "core/logger.h"
 
 #include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtc/type_ptr.hpp>
 
 #include <cmath>
 #include <vector>
@@ -108,7 +107,7 @@ void BrushPreviewRenderer::createCircleGeometry()
     glCreateBuffers(1, &m_vbo);
 
     // Upload data (immutable, static)
-    glNamedBufferStorage(m_vbo, vertices.size() * sizeof(glm::vec3),
+    glNamedBufferStorage(m_vbo, static_cast<GLsizeiptr>(vertices.size() * sizeof(glm::vec3)),
                          vertices.data(), 0);
 
     // Bind VBO to VAO binding point 0

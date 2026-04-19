@@ -6,8 +6,6 @@
 #include "renderer/tree_renderer.h"
 #include "core/logger.h"
 
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtc/type_ptr.hpp>
 #include <glm/gtc/constants.hpp>
 
 #include <cmath>
@@ -275,8 +273,8 @@ void TreeRenderer::createPlaceholderTree()
     glCreateBuffers(1, &m_treeInstanceVbo);
 
     // Upload mesh data (immutable, static)
-    glNamedBufferStorage(m_treeVbo, vertices.size() * sizeof(Vertex), vertices.data(), 0);
-    glNamedBufferStorage(m_treeEbo, indices.size() * sizeof(uint32_t), indices.data(), 0);
+    glNamedBufferStorage(m_treeVbo, static_cast<GLsizeiptr>(vertices.size() * sizeof(Vertex)), vertices.data(), 0);
+    glNamedBufferStorage(m_treeEbo, static_cast<GLsizeiptr>(indices.size() * sizeof(uint32_t)), indices.data(), 0);
 
     // Bind VBO to VAO binding point 0
     glVertexArrayVertexBuffer(m_treeVao, 0, m_treeVbo, 0, sizeof(Vertex));
@@ -389,7 +387,7 @@ void TreeRenderer::generateBillboardTexture()
             float u = static_cast<float>(x) / static_cast<float>(width - 1);
             float cx = u - 0.5f;
 
-            int idx = (y * width + x) * 4;
+            size_t idx = static_cast<size_t>((y * width + x) * 4);
 
             // Trunk (bottom 40%, narrow)
             if (v < 0.4f && std::abs(cx) < 0.08f)

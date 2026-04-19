@@ -4,7 +4,6 @@
 /// @file indirect_buffer.cpp
 /// @brief Indirect draw command buffer and matrix SSBO implementation.
 #include "renderer/indirect_buffer.h"
-#include "core/logger.h"
 
 namespace Vestige
 {

@@ -52,7 +52,7 @@ inline glm::mat4 toGlm(const JPH::Mat44& m)
     glm::mat4 result;
     for (int col = 0; col < 4; ++col)
     {
-        JPH::Vec4 c = m.GetColumn4(col);
+        JPH::Vec4 c = m.GetColumn4(static_cast<JPH::uint>(col));
         result[col][0] = c.GetX();
         result[col][1] = c.GetY();
         result[col][2] = c.GetZ();

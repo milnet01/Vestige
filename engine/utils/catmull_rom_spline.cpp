@@ -61,10 +61,10 @@ glm::vec3 CatmullRomSpline::evaluate(float t) const
     int i2 = segment + 1;
     int i3 = glm::clamp(segment + 2, 0, static_cast<int>(m_points.size()) - 1);
 
-    const glm::vec3& p0 = m_points[i0];
-    const glm::vec3& p1 = m_points[i1];
-    const glm::vec3& p2 = m_points[i2];
-    const glm::vec3& p3 = m_points[i3];
+    const glm::vec3& p0 = m_points[static_cast<size_t>(i0)];
+    const glm::vec3& p1 = m_points[static_cast<size_t>(i1)];
+    const glm::vec3& p2 = m_points[static_cast<size_t>(i2)];
+    const glm::vec3& p3 = m_points[static_cast<size_t>(i3)];
 
     // Catmull-Rom formula:
     // q(t) = 0.5 * ((2*P1) + (-P0 + P2)*t + (2*P0 - 5*P1 + 4*P2 - P3)*t^2
@@ -114,10 +114,10 @@ glm::vec3 CatmullRomSpline::evaluateTangent(float t) const
     int i2 = segment + 1;
     int i3 = glm::clamp(segment + 2, 0, static_cast<int>(m_points.size()) - 1);
 
-    const glm::vec3& p0 = m_points[i0];
-    const glm::vec3& p1 = m_points[i1];
-    const glm::vec3& p2 = m_points[i2];
-    const glm::vec3& p3 = m_points[i3];
+    const glm::vec3& p0 = m_points[static_cast<size_t>(i0)];
+    const glm::vec3& p1 = m_points[static_cast<size_t>(i1)];
+    const glm::vec3& p2 = m_points[static_cast<size_t>(i2)];
+    const glm::vec3& p3 = m_points[static_cast<size_t>(i3)];
 
     // Derivative of Catmull-Rom:
     // q'(t) = 0.5 * ((-P0 + P2) + (4*P0 - 10*P1 + 8*P2 - 2*P3)*t
@@ -148,7 +148,7 @@ std::vector<glm::vec3> CatmullRomSpline::sample(int samplesPerSegment) const
 
     int segmentCount = static_cast<int>(m_points.size()) - 1;
     int totalSamples = segmentCount * samplesPerSegment + 1; // +1 for the final point
-    result.reserve(totalSamples);
+    result.reserve(static_cast<size_t>(totalSamples));
 
     for (int i = 0; i < totalSamples; ++i)
     {

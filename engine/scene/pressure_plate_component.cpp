@@ -8,13 +8,9 @@
 #include "physics/physics_world.h"
 #include "core/logger.h"
 
-#include <Jolt/Jolt.h>
-#include <Jolt/Physics/PhysicsSystem.h>
 #include <Jolt/Physics/Collision/Shape/SphereShape.h>
 #include <Jolt/Physics/Collision/CollideShape.h>
 #include <Jolt/Physics/Collision/CollisionCollectorImpl.h>
-
-#include <algorithm>
 
 namespace Vestige
 {

@@ -25,11 +25,9 @@
 #include "renderer/material.h"
 #include "renderer/texture.h"
 #include "renderer/light_utils.h"
-#include "resource/resource_manager.h"
 #include "utils/material_library.h"
 
 #include <imgui.h>
-#include <imgui_internal.h>
 #include <glad/gl.h>
 
 #include <algorithm>
@@ -587,7 +585,7 @@ void InspectorPanel::drawMaterial(Material& material)
             if (ImGui::Button("Load", ImVec2(70, 0)) && selectedPreset >= 0
                 && selectedPreset < static_cast<int>(presets.size()))
             {
-                MaterialLibrary::loadMaterial(presets[selectedPreset], material,
+                MaterialLibrary::loadMaterial(presets[static_cast<size_t>(selectedPreset)], material,
                                               *m_resourceManager, assetPath);
             }
         }

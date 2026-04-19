@@ -10,8 +10,6 @@
 #include "scene/mesh_renderer.h"
 #include "core/logger.h"
 
-#include <glm/gtc/matrix_transform.hpp>
-
 namespace Vestige
 {
 

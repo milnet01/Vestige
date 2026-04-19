@@ -6,9 +6,6 @@
 #include "renderer/sh_probe_grid.h"
 #include "core/logger.h"
 
-#include <glm/glm.hpp>
-
-#include <algorithm>
 #include <cmath>
 
 namespace Vestige
@@ -77,7 +74,7 @@ bool SHProbeGrid::initialize(const SHGridConfig& config)
     m_config = config;
 
     int totalProbes = config.resolution.x * config.resolution.y * config.resolution.z;
-    m_probeData.resize(totalProbes * SH_COEFF_COUNT, glm::vec3(0.0f));
+    m_probeData.resize(static_cast<size_t>(totalProbes * SH_COEFF_COUNT), glm::vec3(0.0f));
 
     Logger::info("SH probe grid initialized: "
         + std::to_string(config.resolution.x) + "x"
@@ -97,7 +94,7 @@ void SHProbeGrid::setProbeIrradiance(int x, int y, int z, const glm::vec3 coeffs
     int idx = probeIndex(x, y, z) * SH_COEFF_COUNT;
     for (int i = 0; i < SH_COEFF_COUNT; i++)
     {
-        m_probeData[idx + i] = coeffs[i];
+        m_probeData[static_cast<size_t>(idx + i)] = coeffs[i];
     }
 }
 
@@ -106,7 +103,7 @@ void SHProbeGrid::getProbeIrradiance(int x, int y, int z, glm::vec3 coeffs[9]) c
     int idx = probeIndex(x, y, z) * SH_COEFF_COUNT;
     for (int i = 0; i < SH_COEFF_COUNT; i++)
     {
-        coeffs[i] = m_probeData[idx + i];
+        coeffs[i] = m_probeData[static_cast<size_t>(idx + i)];
     }
 }
 
@@ -228,7 +225,7 @@ void SHProbeGrid::upload()
     // tex5: L[6].b, L[7].r, L[7].g, L[7].b
     // tex6: L[8].r, L[8].g, L[8].b, 0.0
 
-    std::vector<float> texData(totalProbes * 4); // 4 floats per texel
+    std::vector<float> texData(static_cast<size_t>(totalProbes * 4)); // 4 floats per texel
 
     for (int t = 0; t < SH_TEXTURE_COUNT; t++)
     {
@@ -246,14 +243,15 @@ void SHProbeGrid::upload()
                 int coeffIdx = globalChannel / 3;  // Which SH coefficient (0-8)
                 int colorIdx = globalChannel % 3;  // Which color channel (R=0, G=1, B=2)
 
-                const glm::vec3& val = m_probeData[p * SH_COEFF_COUNT + coeffIdx];
+                const glm::vec3& val = m_probeData[static_cast<size_t>(p * SH_COEFF_COUNT + coeffIdx)];
                 rgba[c] = val[colorIdx];
             }
 
-            texData[p * 4 + 0] = rgba[0];
-            texData[p * 4 + 1] = rgba[1];
-            texData[p * 4 + 2] = rgba[2];
-            texData[p * 4 + 3] = rgba[3];
+            const size_t pBase = static_cast<size_t>(p * 4);
+            texData[pBase + 0] = rgba[0];
+            texData[pBase + 1] = rgba[1];
+            texData[pBase + 2] = rgba[2];
+            texData[pBase + 3] = rgba[3];
         }
 
         glTextureSubImage3D(m_textures[t], 0, 0, 0, 0, rx, ry, rz,
@@ -269,7 +267,7 @@ void SHProbeGrid::bind() const
 {
     for (int i = 0; i < SH_TEXTURE_COUNT; i++)
     {
-        glBindTextureUnit(FIRST_TEXTURE_UNIT + i, m_textures[i]);
+        glBindTextureUnit(static_cast<GLuint>(FIRST_TEXTURE_UNIT + i), m_textures[i]);
     }
 }
 

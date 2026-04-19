@@ -5,7 +5,6 @@
 /// @brief Object grab/carry/throw system implementation.
 
 #include "physics/grab_system.h"
-#include "physics/jolt_helpers.h"
 #include "physics/rigid_body.h"
 #include "scene/interactable_component.h"
 #include "scene/scene.h"

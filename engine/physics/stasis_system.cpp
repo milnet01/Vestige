@@ -7,8 +7,6 @@
 #include "physics/physics_world.h"
 #include "core/logger.h"
 
-#include <Jolt/Jolt.h>
-#include <Jolt/Physics/PhysicsSystem.h>
 #include <Jolt/Physics/Body/BodyInterface.h>
 
 #include <string>

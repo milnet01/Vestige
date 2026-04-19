@@ -16,7 +16,6 @@
 
 #include <algorithm>
 #include <array>
-#include <cmath>
 
 namespace Vestige
 {

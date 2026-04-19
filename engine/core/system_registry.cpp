@@ -8,7 +8,6 @@
 #include "scene/scene.h"
 #include "scene/entity.h"
 
-#include <algorithm>
 #include <chrono>
 #include <unordered_set>
 

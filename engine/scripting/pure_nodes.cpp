@@ -18,8 +18,6 @@
 #include "scene/scene.h"
 #include "physics/physics_world.h"
 
-#include <glm/gtc/quaternion.hpp>
-
 #include <algorithm>
 #include <cmath>
 #include <mutex>

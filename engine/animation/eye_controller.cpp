@@ -7,8 +7,6 @@
 #include "animation/eye_controller.h"
 #include "animation/facial_presets.h"
 
-#include <glm/gtc/constants.hpp>
-
 #include <algorithm>
 
 namespace Vestige

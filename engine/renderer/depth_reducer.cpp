@@ -8,7 +8,6 @@
 
 #include <cmath>
 #include <cstring>
-#include <limits>
 
 namespace Vestige
 {

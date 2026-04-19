@@ -17,7 +17,7 @@ int Skeleton::findJoint(const std::string& name) const
 {
     for (int i = 0; i < static_cast<int>(m_joints.size()); ++i)
     {
-        if (m_joints[i].name == name)
+        if (m_joints[static_cast<size_t>(i)].name == name)
         {
             return i;
         }

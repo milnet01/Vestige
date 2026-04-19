@@ -4,7 +4,6 @@
 /// @file text_renderer.cpp
 /// @brief TextRenderer implementation.
 #include "renderer/text_renderer.h"
-#include "renderer/framebuffer.h"
 #include "core/logger.h"
 
 #include <glad/gl.h>

@@ -46,7 +46,6 @@
 
 #include <imgui.h>
 #include <GLFW/glfw3.h>
-#include <glm/gtc/matrix_transform.hpp>
 
 #include <algorithm>
 #include <cmath>

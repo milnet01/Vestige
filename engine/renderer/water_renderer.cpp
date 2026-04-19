@@ -6,7 +6,6 @@
 #include "renderer/water_renderer.h"
 #include "core/logger.h"
 
-#include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/constants.hpp>
 
 #include <cmath>

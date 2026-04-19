@@ -6,8 +6,6 @@
 #include "animation/skeleton_animator.h"
 #include "animation/animation_sampler.h"
 
-#include <glm/gtc/matrix_transform.hpp>
-
 #include <cmath>
 
 namespace Vestige

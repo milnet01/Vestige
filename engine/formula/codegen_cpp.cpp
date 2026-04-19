@@ -4,7 +4,6 @@
 /// @file codegen_cpp.cpp
 /// @brief C++ code generator implementation.
 #include "formula/codegen_cpp.h"
-#include "formula/safe_math.h"
 
 #include <cmath>
 #include <iomanip>

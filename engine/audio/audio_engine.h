@@ -89,9 +89,12 @@ private:
     ALCcontext* m_context = nullptr;
     bool m_available = false;
 
-    // Source pool
+    // Source pool. Using uint8_t rather than bool because std::vector<bool>
+    // is a specialized proxy-reference container (not a true std::vector)
+    // and on GCC 15 its resize() triggers a -Warray-bounds false positive
+    // in libstdc++ stl_bvector.h.
     std::vector<unsigned int> m_sourcePool;
-    std::vector<bool> m_sourceInUse;
+    std::vector<uint8_t> m_sourceInUse;
 
     // Buffer cache (path -> OpenAL buffer ID)
     std::unordered_map<std::string, unsigned int> m_bufferCache;

@@ -6,7 +6,6 @@
 
 #include "animation/mirror_generator.h"
 
-#include <algorithm>
 #include <cctype>
 
 namespace Vestige

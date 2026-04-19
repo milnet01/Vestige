@@ -41,7 +41,7 @@ void SplinePath::setWaypointPosition(int index, const glm::vec3& position)
 {
     if (index >= 0 && index < static_cast<int>(m_waypoints.size()))
     {
-        m_waypoints[index] = position;
+        m_waypoints[static_cast<size_t>(index)] = position;
     }
 }
 
@@ -71,8 +71,8 @@ glm::vec3 SplinePath::evaluate(float t) const
     int i2 = std::min(n - 1, segment + 1);
     int i3 = std::min(n - 1, segment + 2);
 
-    return catmullRom(m_waypoints[i0], m_waypoints[i1],
-                      m_waypoints[i2], m_waypoints[i3], localT);
+    return catmullRom(m_waypoints[static_cast<size_t>(i0)], m_waypoints[static_cast<size_t>(i1)],
+                      m_waypoints[static_cast<size_t>(i2)], m_waypoints[static_cast<size_t>(i3)], localT);
 }
 
 glm::vec3 SplinePath::evaluateTangent(float t) const
@@ -96,8 +96,8 @@ glm::vec3 SplinePath::evaluateTangent(float t) const
     int i2 = std::min(n - 1, segment + 1);
     int i3 = std::min(n - 1, segment + 2);
 
-    glm::vec3 deriv = catmullRomDerivative(m_waypoints[i0], m_waypoints[i1],
-                                            m_waypoints[i2], m_waypoints[i3], localT);
+    glm::vec3 deriv = catmullRomDerivative(m_waypoints[static_cast<size_t>(i0)], m_waypoints[static_cast<size_t>(i1)],
+                                            m_waypoints[static_cast<size_t>(i2)], m_waypoints[static_cast<size_t>(i3)], localT);
     float len = glm::length(deriv);
     if (len < 1e-6f) return glm::vec3(0.0f, 0.0f, 1.0f);
     return deriv / len;
@@ -129,11 +129,12 @@ PathMeshData SplinePath::generatePathMesh(float halfWidth, float sampleSpacing) 
     if (totalLength < 0.001f) return mesh;
 
     int sampleCount = std::max(2, static_cast<int>(totalLength / sampleSpacing) + 1);
+    const size_t sampleCountU = static_cast<size_t>(sampleCount);
 
-    mesh.positions.reserve(sampleCount * 2);
-    mesh.normals.reserve(sampleCount * 2);
-    mesh.uvs.reserve(sampleCount * 2);
-    mesh.indices.reserve((sampleCount - 1) * 6);
+    mesh.positions.reserve(sampleCountU * 2);
+    mesh.normals.reserve(sampleCountU * 2);
+    mesh.uvs.reserve(sampleCountU * 2);
+    mesh.indices.reserve((sampleCountU - 1) * 6);
 
     float accLength = 0.0f;
     glm::vec3 prevPos = evaluate(0.0f);
@@ -193,11 +194,12 @@ PathMeshData SplinePath::generateStreamMesh(float halfWidth, float sampleSpacing
     if (totalLength < 0.001f) return mesh;
 
     int sampleCount = std::max(2, static_cast<int>(totalLength / sampleSpacing) + 1);
+    const size_t sampleCountU = static_cast<size_t>(sampleCount);
 
-    mesh.positions.reserve(sampleCount * 2);
-    mesh.normals.reserve(sampleCount * 2);
-    mesh.uvs.reserve(sampleCount * 2);
-    mesh.indices.reserve((sampleCount - 1) * 6);
+    mesh.positions.reserve(sampleCountU * 2);
+    mesh.normals.reserve(sampleCountU * 2);
+    mesh.uvs.reserve(sampleCountU * 2);
+    mesh.indices.reserve((sampleCountU - 1) * 6);
 
     float accLength = 0.0f;
     glm::vec3 prevPos = evaluate(0.0f);

@@ -6,7 +6,6 @@
 
 #include "physics/dismemberment.h"
 #include "animation/skeleton.h"
-#include "core/logger.h"
 
 #include <algorithm>
 #include <cmath>

@@ -6,7 +6,6 @@
 #include "resource/async_texture_loader.h"
 #include "core/logger.h"
 
-#include <chrono>
 #include <stb_image.h>
 
 namespace Vestige

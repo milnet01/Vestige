@@ -6,8 +6,6 @@
 
 #include "physics/deformable_mesh.h"
 
-#include <cmath>
-
 namespace Vestige
 {
 

@@ -5,9 +5,6 @@
 /// @brief ProceduralMeshBuilder implementation — generates architectural geometry.
 #include "utils/procedural_mesh.h"
 
-#include <glm/glm.hpp>
-#include <glm/gtc/constants.hpp>
-
 #include <algorithm>
 #include <cmath>
 

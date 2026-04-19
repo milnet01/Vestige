@@ -57,7 +57,7 @@ void CpuProfiler::popScope()
 
     int index = m_scopeStack.back();
     m_scopeStack.pop_back();
-    m_currentFrame[index].endMs = elapsed;
+    m_currentFrame[static_cast<size_t>(index)].endMs = elapsed;
 }
 
 // RAII scope helper

@@ -7,7 +7,6 @@
 #include "animation/kd_tree.h"
 
 #include <algorithm>
-#include <cmath>
 #include <numeric>
 
 namespace Vestige

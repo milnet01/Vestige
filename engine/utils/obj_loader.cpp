@@ -6,8 +6,6 @@
 #include "utils/obj_loader.h"
 #include "core/logger.h"
 
-#include <glm/glm.hpp>
-
 #include <filesystem>
 #include <fstream>
 #include <sstream>

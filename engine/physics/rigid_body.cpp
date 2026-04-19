@@ -4,7 +4,6 @@
 /// @file rigid_body.cpp
 /// @brief RigidBody component implementation.
 #include "physics/rigid_body.h"
-#include "physics/jolt_helpers.h"
 #include "scene/entity.h"
 #include "core/logger.h"
 

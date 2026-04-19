@@ -6,8 +6,6 @@
 #include "editor/tools/ruler_tool.h"
 #include "renderer/debug_draw.h"
 
-#include <glm/glm.hpp>
-
 namespace Vestige
 {
 

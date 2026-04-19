@@ -273,6 +273,15 @@ if(DETOUR_INCLUDE_DIRS)
     target_include_directories(vestige_engine SYSTEM PUBLIC ${DETOUR_INCLUDE_DIRS})
 endif()
 
+# GLM vendored headers trigger -Wsign-conversion in qualifier.hpp (packed_highp
+# array indexing on int literal). Promote the underlying `glm-header-only`
+# INTERFACE target to SYSTEM (CMake 3.25+) so consumers see its include dirs
+# via -isystem instead of -I. `glm-header-only` is where GLM defines the real
+# include path (the `glm` target re-exports it via link_libraries).
+if(TARGET glm-header-only)
+    set_target_properties(glm-header-only PROPERTIES SYSTEM TRUE)
+endif()
+
 # Link dependencies
 target_link_libraries(vestige_engine
     PUBLIC

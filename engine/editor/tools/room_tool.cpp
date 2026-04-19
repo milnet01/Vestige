@@ -15,7 +15,6 @@
 #include "core/logger.h"
 
 #include <imgui.h>
-#include <glm/glm.hpp>
 
 #include <memory>
 #include <string>

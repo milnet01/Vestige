@@ -7,8 +7,6 @@
 #include "renderer/cascaded_shadow_map.h"
 #include "core/logger.h"
 
-#include <glm/gtc/type_ptr.hpp>
-
 #include <cmath>
 
 namespace Vestige
@@ -371,7 +369,7 @@ void FoliageRenderer::createStarMesh()
     glCreateBuffers(1, &m_starVbo);
 
     // Upload star mesh geometry (immutable, static)
-    glNamedBufferStorage(m_starVbo, vertices.size() * sizeof(Vertex),
+    glNamedBufferStorage(m_starVbo, static_cast<GLsizeiptr>(vertices.size() * sizeof(Vertex)),
                          vertices.data(), 0);
 
     // Bind VBO to VAO binding point 0
@@ -541,7 +539,7 @@ GLuint FoliageRenderer::generateProceduralTexture(uint32_t typeId)
 
             a = std::max(0.0f, std::min(1.0f, a));
 
-            int idx = (y * width + x) * 4;
+            size_t idx = static_cast<size_t>((y * width + x) * 4);
             pixels[idx + 0] = static_cast<uint8_t>(r * 255.0f);
             pixels[idx + 1] = static_cast<uint8_t>(g * 255.0f);
             pixels[idx + 2] = static_cast<uint8_t>(b * 255.0f);

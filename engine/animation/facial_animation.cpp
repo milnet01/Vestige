@@ -8,8 +8,6 @@
 #include "animation/skeleton_animator.h"
 #include "core/logger.h"
 
-#include <glm/glm.hpp>
-
 #include <algorithm>
 
 namespace Vestige

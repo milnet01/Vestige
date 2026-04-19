@@ -11,7 +11,6 @@
 
 #include <imgui.h>
 
-#include <algorithm>
 #include <cstdio>
 
 namespace Vestige

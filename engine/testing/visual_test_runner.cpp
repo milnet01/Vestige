@@ -9,7 +9,6 @@
 #include "core/logger.h"
 
 #include <chrono>
-#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>

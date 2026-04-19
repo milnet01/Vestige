@@ -7,7 +7,6 @@
 #include "core/logger.h"
 
 #include <imgui.h>
-#include <glm/gtc/type_ptr.hpp>
 
 #include <algorithm>
 #include <cmath>
@@ -605,7 +604,7 @@ std::vector<PbrTextureGroup> TextureViewerPanel::detectPbrGroups(
         }
 
         std::string stem = entry.path().stem().string();
-        PbrRole role;
+        PbrRole role = PbrRole::ALBEDO;  // default; overwritten on match
         std::string baseName = extractBaseName(stem, role);
 
         if (baseName.empty())

@@ -8,7 +8,6 @@
 #include "core/logger.h"
 #include "utils/json_size_cap.h"
 
-#include <algorithm>
 #include <fstream>
 #include <set>
 
