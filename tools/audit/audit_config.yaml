@@ -277,6 +277,39 @@ tier4:
     enabled: true
     threshold: 15              # Functions scoring above this are flagged
     max_findings: 50
+  # Per-frame heap-alloc detection (audit 2.14.0 — idea #18). Walks
+  # functions whose name matches one of `function_patterns` (substring,
+  # case-insensitive) and flags allocations inside them. Loop-nested
+  # allocations are MEDIUM; non-loop allocations are LOW.
+  per_frame_alloc:
+    enabled: true
+    function_patterns:
+      - render
+      - draw
+      - update
+      - onframe
+      - onupdate
+      - tick
+    max_findings: 50
+  # Dead public-API detection (audit 2.14.0 — idea #25). Lists public
+  # class / free-function declarations from headers and flags those with
+  # zero external callers. Severity LOW — pure cleanup hint.
+  dead_public_api:
+    enabled: true
+    # Extra symbol names to skip on top of the built-in blocklist
+    # (init/run/begin/end/size/data/etc).
+    name_blocklist: []
+    max_findings: 50
+  # DRY token-shingle similarity (audit 2.14.0 — idea #28). Hashes
+  # K-token windows in each file and reports file pairs whose Jaccard
+  # similarity exceeds `similarity_threshold`. Complements the
+  # line-based duplication scan above; catches reflowed near-duplicates.
+  token_shingle:
+    enabled: true
+    shingle_size: 7
+    similarity_threshold: 0.6
+    min_tokens: 80
+    max_findings: 30
 
 # -- Tier 5: Online Research --------------------------------------------------
 research:

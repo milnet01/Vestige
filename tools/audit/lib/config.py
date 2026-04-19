@@ -28,147 +28,192 @@ def _deep_merge(base: dict, overlay: dict) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Defaults — every field has a sensible fallback
+# Defaults — every field has a sensible fallback.
+#
+# Defaults are split into per-section module-level dicts and assembled
+# into the public ``DEFAULTS`` symbol at the bottom of this block. This
+# keeps each section's edit surface small (adding a new tier-4 detector
+# is one localised change to ``_DEFAULTS_TIER4``, not a scroll-and-find
+# in a 140-line dict).
 # ---------------------------------------------------------------------------
 
-DEFAULTS: dict[str, Any] = {
-    "project": {
-        "name": "Project",
-        "root": ".",
-        "language": "cpp",
-        "source_dirs": ["src/"],
-        "shader_dirs": [],
-        "shader_glob": "*.glsl",
-        "source_extensions": [".cpp", ".h"],
-        "exclude_dirs": ["external/", "build/", ".git/", ".claude/"],
-        "exclude_file_patterns": [],
-    },
-    "build": {
-        "system": "cmake",
-        "build_dir": "build",
+_DEFAULTS_PROJECT: dict[str, Any] = {
+    "name": "Project",
+    "root": ".",
+    "language": "cpp",
+    "source_dirs": ["src/"],
+    "shader_dirs": [],
+    "shader_glob": "*.glsl",
+    "source_extensions": [".cpp", ".h"],
+    "exclude_dirs": ["external/", "build/", ".git/", ".claude/"],
+    "exclude_file_patterns": [],
+}
+
+_DEFAULTS_BUILD: dict[str, Any] = {
+    "system": "cmake",
+    "build_dir": "build",
+    "configure_cmd": None,
+    "build_cmd": None,
+    "warning_regex": r"warning:|error:",
+    "test_cmd": None,
+    "sanitizer": {
+        "enabled": False,
         "configure_cmd": None,
         "build_cmd": None,
-        "warning_regex": r"warning:|error:",
         "test_cmd": None,
-        "sanitizer": {
-            "enabled": False,
-            "configure_cmd": None,
-            "build_cmd": None,
-            "test_cmd": None,
-        },
     },
-    "static_analysis": {
-        "cppcheck": {
-            "enabled": True,
-            "binary": None,
-            "args": "--enable=all --std=c++17 --suppress=missingIncludeSystem --suppress=unusedFunction",
-            "output_format": "xml",
-            "targets": [],
-            "timeout": 600,
-        },
-        "clang_tidy": {
-            "enabled": False,
-            "binary": None,
-            "compile_commands": None,
-            "checks": "bugprone-*,performance-*,modernize-*",
-            "fallback_flags": "-std=c++17",
-            "max_files": 50,
-            "timeout": 600,
-        },
+}
+
+_DEFAULTS_STATIC_ANALYSIS: dict[str, Any] = {
+    "cppcheck": {
+        "enabled": True,
+        "binary": None,
+        "args": "--enable=all --std=c++17 --suppress=missingIncludeSystem --suppress=unusedFunction",
+        "output_format": "xml",
+        "targets": [],
+        "timeout": 600,
     },
+    "clang_tidy": {
+        "enabled": False,
+        "binary": None,
+        "compile_commands": None,
+        "checks": "bugprone-*,performance-*,modernize-*",
+        "fallback_flags": "-std=c++17",
+        "max_files": 50,
+        "timeout": 600,
+    },
+}
+
+_DEFAULTS_CHANGES: dict[str, Any] = {
+    "base_ref": "HEAD~1",
+}
+
+_DEFAULTS_TIER4: dict[str, Any] = {
+    "gpu_resource_pattern": r"GLuint\s+m_",
+    "event_subscribe_pattern": r"subscribe<",
+    "event_unsubscribe_pattern": r"unsubscribe",
+    "complexity_threshold": 500,
+    "duplication": {
+        "enabled": True,
+        "min_lines": 5,
+        "min_tokens": 50,
+        "normalize_ids": True,
+        "max_findings": 50,
+    },
+    "refactoring": {
+        "enabled": True,
+        "max_params": 5,
+        "max_functions_per_file": 15,
+        "max_case_labels": 7,
+        "max_elif_chain": 5,
+        "max_nesting_depth": 4,
+        "max_findings": 50,
+    },
+    "cognitive": {
+        "enabled": True,
+        "threshold": 15,
+        "max_findings": 50,
+    },
+    # audit 2.13.0 — three new detectors (ideas #10, #26, #27)
+    "copyright": {
+        "enabled": True,
+        "year_range_min": 2020,
+        "max_findings": 50,
+    },
+    "dead_shaders": {
+        "enabled": True,
+        "max_findings": 30,
+    },
+    "file_read_gcount": {
+        "enabled": True,
+        "window_lines": 20,
+        "max_findings": 30,
+    },
+    # audit 2.14.0 — three new detectors (ideas #18, #25, #28)
+    "per_frame_alloc": {
+        "enabled": True,
+        "function_patterns": [
+            "render", "draw", "update",
+            "onframe", "onupdate", "tick",
+        ],
+        "max_findings": 50,
+    },
+    "dead_public_api": {
+        "enabled": True,
+        "name_blocklist": [],
+        "max_findings": 50,
+    },
+    "token_shingle": {
+        "enabled": True,
+        "shingle_size": 7,
+        "similarity_threshold": 0.6,
+        "min_tokens": 80,
+        "max_findings": 30,
+    },
+}
+
+_DEFAULTS_RESEARCH: dict[str, Any] = {
+    "enabled": True,
+    "cache_dir": ".audit_cache",
+    "cache_ttl_days": 7,
+    "max_results_per_query": 3,
+    "topics": [],
+    "custom_queries": [],
+    "nvd": {
+        "enabled": False,
+        "api_key": None,
+        "api_key_env": "NVD_API_KEY",
+        "dependencies": [],
+    },
+}
+
+# Phase 2 of the audit self-learning loop (tool 2.10.0). Reads
+# .audit_stats.json written by Phase 1 and lowers the severity of
+# findings whose historical noise_ratio exceeds `noise_threshold`
+# over at least `min_hits` observations. Safety default
+# `require_zero_verified: true` means any verified hit blocks
+# demotion — a rule with one real find per 50 noisy hits is still
+# producing real signal, and silencing it would lose that signal.
+# See lib/stats.py `compute_demotions` + `DEFAULT_DEMOTION_POLICY`.
+_DEFAULTS_AUTO_DEMOTE: dict[str, Any] = {
+    "enabled": True,
+    "min_hits": 10,
+    "noise_threshold": 0.9,
+    "demote_steps": 1,
+    "require_zero_verified": True,
+    "exempt": [],
+}
+
+# D4 (2.6.0): Tier 6 — feature coverage sweep. Heuristic check that
+# every engine/<subsystem>/ directory has at least one test file
+# referencing it via #include or filename prefix.
+_DEFAULTS_TIER6: dict[str, Any] = {
+    "enabled": True,
+    "engine_dir": "engine",
+    "tests_dir": "tests",
+    "excluded_subsystems": [],
+    "thin_threshold": 3,
+}
+
+_DEFAULTS_REPORT: dict[str, Any] = {
+    "output_path": "docs/AUTOMATED_AUDIT_REPORT.md",
+    "max_findings_per_category": 100,
+    "include_json_blocks": True,
+    "include_token_estimate": True,
+}
+
+DEFAULTS: dict[str, Any] = {
+    "project": _DEFAULTS_PROJECT,
+    "build": _DEFAULTS_BUILD,
+    "static_analysis": _DEFAULTS_STATIC_ANALYSIS,
     "patterns": {},
-    "changes": {
-        "base_ref": "HEAD~1",
-    },
-    "tier4": {
-        "gpu_resource_pattern": r"GLuint\s+m_",
-        "event_subscribe_pattern": r"subscribe<",
-        "event_unsubscribe_pattern": r"unsubscribe",
-        "complexity_threshold": 500,
-        "duplication": {
-            "enabled": True,
-            "min_lines": 5,
-            "min_tokens": 50,
-            "normalize_ids": True,
-            "max_findings": 50,
-        },
-        "refactoring": {
-            "enabled": True,
-            "max_params": 5,
-            "max_functions_per_file": 15,
-            "max_case_labels": 7,
-            "max_elif_chain": 5,
-            "max_nesting_depth": 4,
-            "max_findings": 50,
-        },
-        "cognitive": {
-            "enabled": True,
-            "threshold": 15,
-            "max_findings": 50,
-        },
-        # audit 2.13.0 — three new detectors (ideas #10, #26, #27)
-        "copyright": {
-            "enabled": True,
-            "year_range_min": 2020,
-            "max_findings": 50,
-        },
-        "dead_shaders": {
-            "enabled": True,
-            "max_findings": 30,
-        },
-        "file_read_gcount": {
-            "enabled": True,
-            "window_lines": 20,
-            "max_findings": 30,
-        },
-    },
-    "research": {
-        "enabled": True,
-        "cache_dir": ".audit_cache",
-        "cache_ttl_days": 7,
-        "max_results_per_query": 3,
-        "topics": [],
-        "custom_queries": [],
-        "nvd": {
-            "enabled": False,
-            "api_key": None,
-            "api_key_env": "NVD_API_KEY",
-            "dependencies": [],
-        },
-    },
+    "changes": _DEFAULTS_CHANGES,
+    "tier4": _DEFAULTS_TIER4,
+    "research": _DEFAULTS_RESEARCH,
     "severity_overrides": [],
-    # Phase 2 of the audit self-learning loop (tool 2.10.0). Reads
-    # .audit_stats.json written by Phase 1 and lowers the severity of
-    # findings whose historical noise_ratio exceeds `noise_threshold`
-    # over at least `min_hits` observations. Safety default
-    # `require_zero_verified: true` means any verified hit blocks
-    # demotion — a rule with one real find per 50 noisy hits is still
-    # producing real signal, and silencing it would lose that signal.
-    # See lib/stats.py `compute_demotions` + `DEFAULT_DEMOTION_POLICY`.
-    "auto_demote": {
-        "enabled": True,
-        "min_hits": 10,
-        "noise_threshold": 0.9,
-        "demote_steps": 1,
-        "require_zero_verified": True,
-        "exempt": [],
-    },
-    # D4 (2.6.0): Tier 6 — feature coverage sweep. Heuristic check that
-    # every engine/<subsystem>/ directory has at least one test file
-    # referencing it via #include or filename prefix.
-    "tier6": {
-        "enabled": True,
-        "engine_dir": "engine",
-        "tests_dir": "tests",
-        "excluded_subsystems": [],
-        "thin_threshold": 3,
-    },
-    "report": {
-        "output_path": "docs/AUTOMATED_AUDIT_REPORT.md",
-        "max_findings_per_category": 100,
-        "include_json_blocks": True,
-        "include_token_estimate": True,
-    },
+    "auto_demote": _DEFAULTS_AUTO_DEMOTE,
+    "tier6": _DEFAULTS_TIER6,
+    "report": _DEFAULTS_REPORT,
     "tiers": [1, 2, 3, 4, 5, 6],
 }
 
@@ -216,7 +261,7 @@ class Config:
 
     @property
     def enabled_tiers(self) -> list[int]:
-        return self.get("tiers", default=[1, 2, 3, 4, 5])
+        return self.get("tiers", default=[1, 2, 3, 4, 5, 6])
 
     @property
     def patterns(self) -> dict[str, list[dict]]:

@@ -132,10 +132,29 @@ def run(config: Config) -> tuple[AuditData, list]:
     data.file_read_gcount = gcount_result.to_dict()
     complexity_findings.extend(gcount_findings)
 
+    # Per-frame heap allocations (audit 2.14.0 — idea #18)
+    from . import tier4_per_frame_alloc
+    pfa_result, pfa_findings = tier4_per_frame_alloc.analyze_per_frame_alloc(config)
+    data.per_frame_alloc = pfa_result.to_dict()
+    complexity_findings.extend(pfa_findings)
+
+    # Dead public-API surface (audit 2.14.0 — idea #25)
+    from . import tier4_dead_public_api
+    dpa_result, dpa_findings = tier4_dead_public_api.analyze_dead_public_api(config)
+    data.dead_public_api = dpa_result.to_dict()
+    complexity_findings.extend(dpa_findings)
+
+    # DRY token-shingle similarity (audit 2.14.0 — idea #28)
+    from . import tier4_token_shingle
+    ts_result, ts_findings = tier4_token_shingle.analyze_token_shingle(config)
+    data.token_shingle = ts_result.to_dict()
+    complexity_findings.extend(ts_findings)
+
     log.info("Tier 4: %d LOC, %d GPU classes, %d event files, %d deferred markers, "
              "%d dead code, %d build audit, %d clone pairs, %d refactoring smells, "
              "%d high cognitive complexity, %d missing headers, %d dead shaders, "
-             "%d unchecked reads",
+             "%d unchecked reads, %d per-frame allocs, %d dead public APIs, "
+             "%d token-shingle pairs",
              data.total_loc, len(data.gpu_resource_classes),
              len(data.event_lifecycle), len(data.deferred_markers),
              len(deadcode_result.unused_functions) + len(deadcode_result.unused_includes),
@@ -144,7 +163,10 @@ def run(config: Config) -> tuple[AuditData, list]:
              cognitive_result.above_threshold,
              len(copyright_result.missing_files),
              len(shader_result.dead_shaders),
-             len(gcount_result.findings))
+             len(gcount_result.findings),
+             len(pfa_result.findings),
+             len(dpa_result.dead_symbols),
+             len(ts_result.pairs))
     return data, complexity_findings
 
 

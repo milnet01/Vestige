@@ -2,6 +2,67 @@
 
 All notable changes to the Audit Tool are documented in this file.
 
+## [2.14.0] - 2026-04-19
+
+### Added (Batch 7 detector rules — final close-out from 2.12.0/2.13.0 queue)
+
+Three new tier-4 detectors, closing out the last queued items from
+`AUDIT_TOOL_IMPROVEMENTS.md` "Still queued (audit 2.14.0+)" — ideas
+#18, #25, and #28. Each needed a different shape of analysis (loop-aware
+scan, cross-file grep, token-shingle hashing) that didn't fit as a
+one-line tier-2 regex.
+
+- **`per_frame_heap_alloc`** (`lib/tier4_per_frame_alloc.py` ·
+  `PerFrameAllocResult`, severity **MEDIUM** in-loop / **LOW** otherwise,
+  category `performance`) — detector **#18**. Walks every C++ function
+  whose name matches one of the configured per-frame patterns
+  (default: `render`, `draw`, `update`, `onframe`, `onupdate`, `tick`)
+  and flags heap allocations inside the body. Tracks brace-balanced
+  loop nesting so allocations inside `for`/`while`/`do` get MEDIUM
+  while non-loop allocations get LOW. Allocation kinds detected: `new`,
+  `std::make_unique`, `std::make_shared`, sized `std::vector` ctor,
+  sized `std::string` ctor, and the `"..." + std::to_string(...)`
+  string-concat pattern. Honours `// ALLOC-OK` and `// per-frame-ok`
+  reviewer-ack markers and skips `static const` / `static inline`
+  one-shot initialisers.
+
+- **`dead_public_api`** (`lib/tier4_dead_public_api.py` ·
+  `DeadPublicApiResult`, severity **LOW**, category `dead_code`) —
+  detector **#25**. Scans every public header for class/struct
+  definitions and free-function declarations, then greps the full
+  source corpus for word-bounded matches. Symbols whose total
+  occurrence count is ≤ 1 (only the declaration itself) are flagged as
+  candidates for removal. Built-in name blocklist skips noisy verbs
+  (`init`/`run`/`begin`/`end`/`size`/...) and short identifiers (< 4
+  chars). Extra blocklist entries can be added via
+  `tier4.dead_public_api.name_blocklist`.
+
+- **`token_shingle_similarity`** (`lib/tier4_token_shingle.py` ·
+  `TokenShingleResult`, severity **LOW**, category `duplication`) —
+  detector **#28**. Tokenises each source file (comments and string
+  literals stripped), hashes overlapping K-token windows (default
+  K=7), and reports file pairs whose Jaccard similarity exceeds
+  `similarity_threshold` (default 0.6). Complements the existing
+  line-based `tier4_duplication` Rabin-Karp scan — catches
+  near-duplicates that the line-aligned scan misses (reflowed
+  formatting, copy-pasted bodies whose statement boundaries shifted).
+
+All three plug into `tier4_stats.py` alongside the existing tier-4
+submodules; their output is exposed on `AuditData.per_frame_alloc`,
+`AuditData.dead_public_api`, `AuditData.token_shingle`. 45 new unit
+tests in `tests/test_tier4_{per_frame_alloc,dead_public_api,token_shingle}.py`.
+
+Smoke run against the engine codebase produces sane volume:
+- per_frame_alloc: 63 findings across 238 per-frame functions
+- dead_public_api: 4 dead / 2398 public symbols (~0.17%)
+- token_shingle: 5 similar pairs across 597 files
+
+### Updated
+
+- `AUDIT_TOOL_IMPROVEMENTS.md` — ideas #18, #25, #28 moved from "Still
+  queued" to shipped. The 2026-04-19 detector-ideas list is now fully
+  closed out.
+
 ## [2.13.0] - 2026-04-19
 
 ### Added (Batch 6 detector rules — queue close-out from 2.12.0)

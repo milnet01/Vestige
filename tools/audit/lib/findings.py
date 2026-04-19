@@ -266,6 +266,10 @@ class AuditData:
     copyright_audit: dict[str, Any] | None = None
     dead_shaders: dict[str, Any] | None = None
     file_read_gcount: dict[str, Any] | None = None
+    # audit 2.14.0 — three new tier-4 detectors (ideas #18, #25, #28)
+    per_frame_alloc: dict[str, Any] | None = None
+    dead_public_api: dict[str, Any] | None = None
+    token_shingle: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         d = {
@@ -300,6 +304,12 @@ class AuditData:
             d["dead_shaders"] = self.dead_shaders
         if self.file_read_gcount:
             d["file_read_gcount"] = self.file_read_gcount
+        if self.per_frame_alloc:
+            d["per_frame_alloc"] = self.per_frame_alloc
+        if self.dead_public_api:
+            d["dead_public_api"] = self.dead_public_api
+        if self.token_shingle:
+            d["token_shingle"] = self.token_shingle
         return d
 
 
