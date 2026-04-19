@@ -19,9 +19,16 @@ void CommandHistory::execute(std::unique_ptr<EditorCommand> cmd)
     // Execute the command
     cmd->execute();
 
-    // Discard any redo branch (commands after current index)
+    // Discard any redo branch (commands after current index).
+    // If the saved state lives in the discarded branch (savedVersion > version),
+    // it can no longer be reached — mark it lost so isDirty() stays true even
+    // when the new execute happens to bump m_version back to the old saved value.
     if (m_currentIndex + 1 < static_cast<int>(m_commands.size()))
     {
+        if (m_savedVersion > m_version)
+        {
+            m_savedVersionLost = true;
+        }
         m_commands.erase(m_commands.begin() + m_currentIndex + 1, m_commands.end());
     }
 
@@ -38,10 +45,11 @@ void CommandHistory::execute(std::unique_ptr<EditorCommand> cmd)
                          m_commands.begin() + static_cast<ptrdiff_t>(trimCount));
         m_currentIndex -= static_cast<int>(trimCount);
 
-        // The version counter tracks execute/undo/redo operations, not command
-        // indices. When we trim, the saved version may refer to a state we can
-        // no longer reach. Mark it as permanently lost so isDirty() stays true.
-        if (m_savedVersion < m_version - m_currentIndex)
+        // Lowest reachable version after trim is achieved by undoing down to
+        // index -1 (before the oldest remaining command): that is
+        // m_version - (m_currentIndex + 1). If the saved version sits below
+        // that floor it is permanently unreachable.
+        if (m_savedVersion < m_version - m_currentIndex - 1)
         {
             m_savedVersionLost = true;
         }

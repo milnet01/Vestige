@@ -185,6 +185,45 @@ TEST(CommandHistoryTest, DirtyAfterUndoPastSaved)
     EXPECT_TRUE(history.isDirty());  // Before saved version
 }
 
+// Regression: undo then execute a new command must not look "clean" just
+// because the version counter happens to collide with the saved version.
+// Without the redo-branch invalidation, the sequence exec→save→undo→exec
+// would end with m_version == m_savedVersion and isDirty() == false.
+TEST(CommandHistoryTest, DirtyAfterUndoThenNewExecute)
+{
+    int value = 0;
+    CommandHistory history;
+
+    history.execute(std::make_unique<IncrementCommand>(value));  // v=1
+    history.markSaved();                                           // sv=1
+    EXPECT_FALSE(history.isDirty());
+
+    history.undo();                                                // v=0
+    EXPECT_TRUE(history.isDirty());
+
+    history.execute(std::make_unique<IncrementCommand>(value));  // v=1 again,
+                                                                   // but saved
+                                                                   // state was
+                                                                   // discarded.
+    EXPECT_TRUE(history.isDirty());
+}
+
+// Regression: saving after some executes, then undoing back and executing a
+// new command, must also leave the saved state unreachable.
+TEST(CommandHistoryTest, DirtyAfterDeepUndoThenNewExecute)
+{
+    int value = 0;
+    CommandHistory history;
+
+    history.execute(std::make_unique<IncrementCommand>(value));  // v=1
+    history.execute(std::make_unique<IncrementCommand>(value));  // v=2
+    history.markSaved();                                           // sv=2
+    history.undo();                                                // v=1
+    history.execute(std::make_unique<IncrementCommand>(value));  // v=2 (new)
+
+    EXPECT_TRUE(history.isDirty());  // Saved state lived on the discarded branch
+}
+
 // ---------------------------------------------------------------------------
 // Command limit
 // ---------------------------------------------------------------------------

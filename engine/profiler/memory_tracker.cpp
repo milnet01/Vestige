@@ -58,8 +58,23 @@ void MemoryTracker::recordAlloc(size_t bytes)
 
 void MemoryTracker::recordFree(size_t bytes)
 {
-    s_allocatedBytes.fetch_sub(bytes, std::memory_order_relaxed);
-    s_allocationCount.fetch_sub(1, std::memory_order_relaxed);
+    // Clamp at zero on double-free / free-without-alloc. Plain fetch_sub would
+    // wrap these atomics to SIZE_MAX and render every downstream display
+    // nonsensical.
+    size_t current = s_allocatedBytes.load(std::memory_order_relaxed);
+    size_t desired = 0;
+    do
+    {
+        desired = (bytes > current) ? 0 : (current - bytes);
+    } while (!s_allocatedBytes.compare_exchange_weak(
+        current, desired, std::memory_order_relaxed));
+
+    size_t count = s_allocationCount.load(std::memory_order_relaxed);
+    while (count > 0
+           && !s_allocationCount.compare_exchange_weak(
+                   count, count - 1, std::memory_order_relaxed))
+    {
+    }
 }
 
 void MemoryTracker::readGpuVram()

@@ -1289,6 +1289,84 @@ Application published on Steam. Scenes can be packaged and shared between users.
 ### Milestone
 Hybrid rendering with software and hardware ray-traced effects, real-time global illumination (probe-based and/or surfel GI), GPU-driven rendering pipeline, VR walkthroughs, and tessellation on supported hardware. Scalable from integrated GPUs (SSGI + probes) to discrete RT hardware (ReSTIR + full path tracing).
 
+### 2026-04 Research Update — GDC 2026 / SIGGRAPH 2025 shader survey
+
+Sourced from a 2026-04-19 research sweep (GDC 2026 rendering track + 2024-2026
+general shader research). Each item is rated ★1-5 on impact-per-effort for
+Vestige specifically (OpenGL 4.5, AMD RX 6600 target, 60 FPS budget). Items
+already listed above are cross-referenced so we don't duplicate work.
+
+**Newly identified (add to Phase 13):**
+
+- [ ] ★★★★★ **Spatiotemporal blue noise (STBN) textures** — swap the engine's
+      existing dither / SSAO / SSR / stochastic-sample noise sources for
+      NVIDIA STBN masks; immediate TAA convergence improvement for
+      essentially zero runtime cost. Drop-in texture swap. Ref:
+      https://github.com/NVIDIA-RTX/STBN · https://arxiv.org/pdf/2112.09629 ·
+      FAST thresholding 2025 follow-up:
+      https://blog.demofox.org/2025/05/27/thresholding-modern-blue-noise-textures/
+- [ ] ★★★★★ **Screen-space indirect lighting with visibility bitmask
+      (SSILVB)** — near-drop-in replacement for the existing SSAO/GTAO pass
+      that adds thin-surface-correct one-bounce indirect color. ~1 ms on a
+      6950XT, pure GLSL available. Ref: https://arxiv.org/abs/2301.11376 ·
+      https://cdrinmatane.github.io/posts/ssaovb-code/
+- [ ] ★★★★ **Two-level BVH compute ray tracer (TLAS/BLAS)** — prerequisite
+      infrastructure for hybrid SSR, ReSTIR, soft shadows, area-light
+      shadows; compute-only so it runs on RDNA2 under OpenGL. Ref:
+      https://jacco.ompf2.com/2022/06/03/how-to-build-a-bvh-part-9a-to-the-gpu/ ·
+      https://interplayoflight.wordpress.com/2020/11/01/adding-support-for-two-level-acceleration-for-raytracing/
+- [ ] ★★★ **Hybrid SSR → compute-RT reflection fallback** — keep the SSR
+      pass as the fast primary, fall back to a BVH trace only on screen-edge
+      miss. Removes SSR's worst artifact without the cost of pure-RT
+      reflections. Depends on two-level BVH above. Ref:
+      https://gpuopen.com/fidelityfx-sssr/ ·
+      https://gpuopen.com/fidelityfx-hybrid-reflections/
+- [ ] ★★★ **Physical camera post-process stack** — bokeh DoF (gather-based,
+      hexagonal/circular), anamorphic lens flare via streak kernel,
+      sub-pixel chromatic aberration on highlights, physical vignette.
+      Each curve (bokeh kernel shape, flare falloff, CA radial offset) is a
+      natural Formula Workbench target. Ref:
+      https://extremeistan.wordpress.com/2014/09/24/physically-based-camera-rendering/
+
+**Already in the roadmap — priority hints from the survey:**
+
+- **Volumetric froxel fog (Phase 13 "Volumetric lighting")** ★★★★★ — single
+      biggest realism uplift for Tabernacle/Temple interiors (shafts of
+      light, incense haze). Elevate from back-burner to near-term once SH
+      probe grid lands. Ref: Frostbite
+      https://www.ea.com/frostbite/news/physically-based-unified-volumetric-rendering-in-frostbite
+- **FSR 2.x temporal upscaler (Phase 13 "Upscaling")** ★★★★★ — GL port
+      already exists and uses Vestige's existing motion-vector + TAA
+      plumbing. Unlocks headroom for every later feature. Ref:
+      https://github.com/JuanDiegoMontoya/FidelityFX-FSR2-OpenGL
+- **Sparse virtual shadow maps (Phase 13 "Virtual shadow maps")** ★★★★ —
+      Stratus open-source GL4.6 reference impl exists; solves CSM flicker
+      and edge-resolution issues in large interiors. Ref:
+      https://ktstephano.github.io/rendering/stratusgfx/svsm
+- **GPU-driven MDI + Hi-Z (Phase 13 "GPU-Driven Rendering")** ★★★★ —
+      foundation for every later geometry/RT feature. Already flagged as
+      "highest-ROI OpenGL 4.5 item" — the survey reinforces this.
+- **Radiance Cascades (Phase 13 "Radiance cascades")** ★★★★ — noise-free,
+      scene-complexity-independent GI; strong long-term architecture bet
+      complementary to the SH probe grid. Ref:
+      https://80.lv/articles/radiance-cascades-new-approach-to-calculating-global-illumination ·
+      https://jason.today/rc
+
+**Explicitly deferred (keep on the list, but not worth sprinting now):**
+
+- **MegaLights (Phase 13 "MegaLights")** — requires SVSMs + two-level BVH
+      first; re-evaluate once those land.
+- **ReSTIR DI/GI (Phase 13)** — requires BVH + reservoirs plumbing; slot
+      in after the hybrid reflection / software-RT items prove out.
+- **Variable-rate shading (Phase 13 "Variable-rate shading")** — driver
+      risk on Mesa AMD; verify exposure before investing.
+- **Mesh shaders via `GL_NV_mesh_shader`** — NV-only today; wait for the
+      Vulkan backend (Phase 13 "Vulkan rendering backend") before pursuing.
+- **3D Gaussian splatting** — asset-pipeline feature, not a core-renderer
+      feature; revisit as part of the open-source examples.
+- **Neural radiance cache** — GL4.5 lacks the cooperative-matrix ops that
+      make ML-in-shader practical; defer until Vulkan + matrix extensions.
+
 ---
 
 ## Phase 14: Adaptive Geometry System

@@ -9,6 +9,95 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-19 manual audit — low-item close-out + research update
+
+Finishes the remaining Low-severity items from the 2026-04-19 audit
+backlog and folds in a GDC 2026 / SIGGRAPH 2025 shader-research survey.
+All 1883 tests pass.
+
+#### Dead code / small correctness (L11, L13, L23, L24, L25, L30, L31, L33, L35, L39, L40)
+
+- `FileWatcher::m_onChanged` (and its dispatch branch in ``rescan()``)
+  deleted — the setter had already gone in L5 so every `if (m_onChanged)`
+  site was unreachable.
+- ``engine.cpp:1471,1478`` — Jolt ``BoxShape* new`` results marked
+  ``const`` (cppcheck ``constVariablePointer``).
+- ``editor.cpp`` — ``tonemapNames`` / ``aaNames`` moved into their
+  branch scope (dead outside ``BeginMenu``). Three ``ImGuiIO&`` locals
+  that never mutate the returned reference converted to
+  ``const ImGuiIO&``.
+- ``command_history.cpp`` — dirty-tracking arithmetic was not
+  closed-form correct: undo-then-execute-new could land
+  ``m_version == m_savedVersion`` even though the saved state lived on
+  the discarded redo branch. Added explicit ``m_savedVersionLost``
+  update on redo-branch discard and tightened the trim off-by-one. Two
+  new regression tests (``DirtyAfterUndoThenNewExecute``,
+  ``DirtyAfterDeepUndoThenNewExecute``) cover both paths.
+- ``memory_tracker.cpp::recordFree`` — added compare-exchange loop that
+  clamps at zero instead of letting a double-free or
+  free-without-alloc wrap both atomics to ``SIZE_MAX``. Two regression
+  tests added.
+- ``pure_nodes.cpp::MathDiv`` — div-by-zero warning was firing every
+  frame when a node graph fed a persistent zero. Rate-limited to the
+  first occurrence per ``nodeId`` via a mutex-guarded
+  ``std::unordered_set``.
+- ``markdown_render.cpp`` — dead ``if (cells.empty())`` branch removed;
+  ``splitTableRow`` always returns at least one cell.
+- ``workbench.cpp:2189`` — inner ``VariableMap vars`` that shadowed the
+  outer loop variable was rebuilt every iteration of a 100-sample
+  loop. Reuse the main curve's map.
+- ``workbench.cpp:249`` — ``static char csvPath[256]`` bumped to
+  ``[4096]`` (PATH_MAX). 256 silently truncated deeply-nested paths.
+
+#### DRY refactors (L12, L13, L14)
+
+- New ``engine/renderer/ibl_prefilter.h`` — extracted the mip×face
+  prefilter loop shared by ``EnvironmentMap`` and ``LightProbe`` into
+  ``runIblPrefilterLoop()``. ~35 lines of identical code collapsed to
+  a single call site in each class.
+- New ``engine/utils/deterministic_lcg_rng.h`` — ``DeterministicLcgRng``
+  class replaces the byte-for-byte duplicated LCG
+  (``state * 1664525 + 1013904223``) in ``ClothSimulator`` and
+  ``EnvironmentForces``. Preserves the exact output sequence for both
+  callers.
+- New ``engine/renderer/scoped_forward_z.h`` — RAII helper that saves
+  the current clip/depth state, switches to forward-Z
+  (``GL_NEGATIVE_ONE_TO_ONE`` + ``GL_LESS`` + ``clearDepth(1.0)``),
+  and restores on destruction. Replaces four manual save/switch/restore
+  triples in ``renderer.cpp`` (light-probe capture, SH-grid capture,
+  directional CSM shadow pass, point-shadow pass) so a thrown
+  exception or early-return never leaves the reverse-Z pipeline in a
+  corrupt state.
+
+#### Shader hardening (L15-L20)
+
+- Added local ``safeNormalize(v, fallback)`` to ``scene.vert.glsl`` and
+  ``scene.frag.glsl`` (``vec3 = dot-and-inversesqrt`` guarded by a
+  ``1e-12`` length-squared floor). Applied to the TBN basis
+  (``scene.vert.glsl:161-163``), shadow-bias ``lightDir`` in point
+  shadow sampling (``scene.frag.glsl:448``), and camera view direction
+  (``scene.frag.glsl:989``). Per Rule 11 the epsilon carries a ``TODO:
+  revisit via Formula Workbench once reference data is available``
+  comment.
+- Added ``safeClipDivide(clip)`` to ``motion_vectors_object.frag.glsl``
+  so a vertex on the camera plane (``w ≈ 0``) can't produce NaN motion
+  vectors that later leak through TAA bilinear sampling.
+- ``scene.vert.glsl`` morph-target loop now iterates
+  ``min(u_morphTargetCount, MAX_MORPH_TARGETS)`` so a stale/corrupt
+  uniform can never index past the 8-element ``u_morphWeights`` array.
+- ``particle_simulate.comp.glsl`` gradient / curve loops likewise
+  capped at compile-time ``MAX_COLOR_STOPS - 1`` / ``MAX_CURVE_KEYS -
+  1``.
+
+#### Roadmap update — GDC 2026 / SIGGRAPH 2025 research survey
+
+Added ``ROADMAP.md`` § "2026-04 Research Update" under Phase 13 listing
+newly identified techniques (spatiotemporal blue noise, SSILVB,
+two-level BVH compute RT, hybrid SSR → RT fallback, physical camera
+post stack) and priority hints for existing roadmap items (volumetric
+froxel fog, FSR 2.x, sparse virtual shadow maps, GPU-driven MDI,
+radiance cascades). Cites primary sources for each.
+
 ### 2026-04-19 manual audit — Batch 4 delegated sweep (L2-L10, L21, L22)
 
 Mechanical cleanup sourced from the 2026-04-19 audit report. Delegated

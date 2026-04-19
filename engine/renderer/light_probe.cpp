@@ -4,6 +4,7 @@
 /// @file light_probe.cpp
 /// @brief Light probe implementation — IBL capture and convolution.
 #include "renderer/light_probe.h"
+#include "renderer/ibl_prefilter.h"
 #include "core/logger.h"
 
 #include <glm/gtc/matrix_transform.hpp>
@@ -245,40 +246,16 @@ void LightProbe::generatePrefilter(GLuint envCubemap)
     glBindTextureUnit(0, envCubemap);
     m_prefilterShader->setInt("u_environmentMap", 0);
 
-    GLint viewport[4];
-    glGetIntegerv(GL_VIEWPORT, viewport);
-
-    glBindFramebuffer(GL_FRAMEBUFFER, m_captureFbo);
-    glDisable(GL_CULL_FACE);
-
-    for (int mip = 0; mip < MAX_MIP_LEVELS; mip++)
-    {
-        int mipWidth = PREFILTER_RESOLUTION >> mip;
-        int mipHeight = PREFILTER_RESOLUTION >> mip;
-        if (mipWidth < 1) mipWidth = 1;
-        if (mipHeight < 1) mipHeight = 1;
-
-        glNamedRenderbufferStorage(m_captureRbo, GL_DEPTH_COMPONENT24,
-                                   mipWidth, mipHeight);
-        glViewport(0, 0, mipWidth, mipHeight);
-
-        float roughness = static_cast<float>(mip)
-                        / static_cast<float>(MAX_MIP_LEVELS - 1);
-        m_prefilterShader->setFloat("u_roughness", roughness);
-
-        for (int face = 0; face < 6; face++)
-        {
-            m_prefilterShader->setMat4("u_view", CAPTURE_VIEWS[face]);
-            glNamedFramebufferTextureLayer(m_captureFbo, GL_COLOR_ATTACHMENT0,
-                                           m_prefilterMap, mip, face);
-            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-            renderCube();
-        }
-    }
-
-    glEnable(GL_CULL_FACE);
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    glViewport(viewport[0], viewport[1], viewport[2], viewport[3]);
+    IblPrefilterParams params;
+    params.shader = m_prefilterShader;
+    params.captureFbo = m_captureFbo;
+    params.captureRbo = m_captureRbo;
+    params.prefilterMap = m_prefilterMap;
+    params.captureViews = CAPTURE_VIEWS;
+    params.resolution = PREFILTER_RESOLUTION;
+    params.mipLevels = MAX_MIP_LEVELS;
+    params.drawCube = [this]() { renderCube(); };
+    runIblPrefilterLoop(params);
 }
 
 void LightProbe::renderCube() const

@@ -15,10 +15,21 @@ in vec4 v_prevClip;
 
 out vec4 fragColor;
 
+// Guard against the vertex being on / behind the camera plane (w ~= 0).
+// Without this a divide-by-zero produces NaN/Inf in the motion vector,
+// which TAA resolve then clamps away — but the NaN can leak into
+// neighbouring pixels via bilinear sampling.
+// TODO: revisit clip-divide epsilon via Formula Workbench once reference
+// data is available (currently using the conventional 1e-6 guard).
+vec2 safeClipDivide(vec4 clip)
+{
+    return (abs(clip.w) > 1e-6) ? (clip.xy / clip.w) : vec2(0.0);
+}
+
 void main()
 {
-    vec2 currNDC = v_currentClip.xy / v_currentClip.w;
-    vec2 prevNDC = v_prevClip.xy  / v_prevClip.w;
+    vec2 currNDC = safeClipDivide(v_currentClip);
+    vec2 prevNDC = safeClipDivide(v_prevClip);
 
     vec2 currUV = currNDC * 0.5 + 0.5;
     vec2 prevUV = prevNDC * 0.5 + 0.5;

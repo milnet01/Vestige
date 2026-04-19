@@ -6,6 +6,7 @@
 #include "renderer/renderer.h"
 #include "renderer/dynamic_mesh.h"
 #include "renderer/foliage_renderer.h"
+#include "renderer/scoped_forward_z.h"
 #include "environment/foliage_manager.h"
 #include "scene/scene.h"
 #include "core/logger.h"
@@ -1947,34 +1948,31 @@ void Renderer::captureLightProbe(int probeIndex, const SceneRenderData& renderDa
     GLint viewport[4];
     glGetIntegerv(GL_VIEWPORT, viewport);
 
-    // Render each cubemap face using geometryOnly mode
-    for (int face = 0; face < 6; face++)
     {
-        glm::mat4 faceView = glm::lookAt(probePos, probePos + TARGETS[face], UPS[face]);
+        ScopedForwardZ forwardZ;  // reverse-Z is restored on scope exit
 
-        glNamedFramebufferTextureLayer(captureFbo, GL_COLOR_ATTACHMENT0,
-                                       captureCubemap, 0, face);
-        glBindFramebuffer(GL_FRAMEBUFFER, captureFbo);
-        glViewport(0, 0, faceSize, faceSize);
+        // Render each cubemap face using geometryOnly mode
+        for (int face = 0; face < 6; face++)
+        {
+            glm::mat4 faceView = glm::lookAt(probePos, probePos + TARGETS[face], UPS[face]);
 
-        // Use forward-Z for the capture (standard [-1,1] NDC)
-        glClipControl(GL_LOWER_LEFT, GL_NEGATIVE_ONE_TO_ONE);
-        glDepthFunc(GL_LESS);
-        glClearDepth(1.0);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+            glNamedFramebufferTextureLayer(captureFbo, GL_COLOR_ATTACHMENT0,
+                                           captureCubemap, 0, face);
+            glBindFramebuffer(GL_FRAMEBUFFER, captureFbo);
+            glViewport(0, 0, faceSize, faceSize);
 
-        // Render scene geometry with lighting (no shadows, no post-processing)
-        renderScene(renderData, camera, 1.0f, glm::vec4(0.0f),
-                    true,  // geometryOnly
-                    faceView, captureProj);
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+            // Render scene geometry with lighting (no shadows, no post-processing)
+            renderScene(renderData, camera, 1.0f, glm::vec4(0.0f),
+                        true,  // geometryOnly
+                        faceView, captureProj);
+        }
     }
 
-    // Restore GL state
+    // Restore FBO + viewport (clip/depth already restored by ScopedForwardZ)
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glViewport(viewport[0], viewport[1], viewport[2], viewport[3]);
-    glClipControl(GL_LOWER_LEFT, GL_ZERO_TO_ONE);
-    glDepthFunc(GL_GEQUAL);
-    glClearDepth(0.0);
 
     // Generate mipmaps for the capture cubemap
     glGenerateTextureMipmap(captureCubemap);
@@ -2078,56 +2076,53 @@ void Renderer::captureSHGrid(const SceneRenderData& renderData,
     glGetIntegerv(GL_VIEWPORT, viewport);
 
     int captured = 0;
-    for (int z = 0; z < res.z; z++)
     {
-        for (int y = 0; y < res.y; y++)
+        ScopedForwardZ forwardZ;  // reverse-Z is restored on scope exit
+
+        for (int z = 0; z < res.z; z++)
         {
-            for (int x = 0; x < res.x; x++)
+            for (int y = 0; y < res.y; y++)
             {
-                glm::vec3 probePos = worldMin + glm::vec3(x, y, z) * step;
-
-                // Render 6 cubemap faces from this position
-                for (int face = 0; face < 6; face++)
+                for (int x = 0; x < res.x; x++)
                 {
-                    glm::mat4 faceView = glm::lookAt(probePos,
-                        probePos + TARGETS[face], UPS[face]);
+                    glm::vec3 probePos = worldMin + glm::vec3(x, y, z) * step;
 
-                    glNamedFramebufferTextureLayer(captureFbo, GL_COLOR_ATTACHMENT0,
-                                                   captureCubemap, 0, face);
-                    glBindFramebuffer(GL_FRAMEBUFFER, captureFbo);
-                    glViewport(0, 0, faceSize, faceSize);
+                    // Render 6 cubemap faces from this position
+                    for (int face = 0; face < 6; face++)
+                    {
+                        glm::mat4 faceView = glm::lookAt(probePos,
+                            probePos + TARGETS[face], UPS[face]);
 
-                    // Forward-Z for capture (standard [-1,1] NDC)
-                    glClipControl(GL_LOWER_LEFT, GL_NEGATIVE_ONE_TO_ONE);
-                    glDepthFunc(GL_LESS);
-                    glClearDepth(1.0);
-                    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+                        glNamedFramebufferTextureLayer(captureFbo, GL_COLOR_ATTACHMENT0,
+                                                       captureCubemap, 0, face);
+                        glBindFramebuffer(GL_FRAMEBUFFER, captureFbo);
+                        glViewport(0, 0, faceSize, faceSize);
 
-                    renderScene(renderData, camera, 1.0f, glm::vec4(0.0f),
-                                true, faceView, captureProj);
+                        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-                    // Read back this face
-                    glReadPixels(0, 0, faceSize, faceSize, GL_RGB, GL_FLOAT,
-                                 cubemapData.data() + face * faceSize * faceSize * 3);
+                        renderScene(renderData, camera, 1.0f, glm::vec4(0.0f),
+                                    true, faceView, captureProj);
+
+                        // Read back this face
+                        glReadPixels(0, 0, faceSize, faceSize, GL_RGB, GL_FLOAT,
+                                     cubemapData.data() + face * faceSize * faceSize * 3);
+                    }
+
+                    // Project cubemap to SH
+                    glm::vec3 shCoeffs[9];
+                    SHProbeGrid::projectCubemapToSH(cubemapData.data(), faceSize, shCoeffs);
+                    SHProbeGrid::convolveRadianceToIrradiance(shCoeffs);
+                    m_shProbeGrid->setProbeIrradiance(x, y, z, shCoeffs);
+
+                    captured++;
                 }
-
-                // Project cubemap to SH
-                glm::vec3 shCoeffs[9];
-                SHProbeGrid::projectCubemapToSH(cubemapData.data(), faceSize, shCoeffs);
-                SHProbeGrid::convolveRadianceToIrradiance(shCoeffs);
-                m_shProbeGrid->setProbeIrradiance(x, y, z, shCoeffs);
-
-                captured++;
             }
         }
     }
 
-    // Restore GL state
+    // Restore FBO + viewport (clip/depth already restored by ScopedForwardZ)
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glViewport(viewport[0], viewport[1], viewport[2], viewport[3]);
-    glClipControl(GL_LOWER_LEFT, GL_ZERO_TO_ONE);
-    glDepthFunc(GL_GEQUAL);
-    glClearDepth(0.0);
 
     // Clean up temporary resources
     glDeleteTextures(1, &captureCubemap);
@@ -3076,9 +3071,7 @@ void Renderer::renderShadowPass(const std::vector<SceneRenderData::RenderItem>& 
     // Must restore GL_NEGATIVE_ONE_TO_ONE because glClipControl(GL_ZERO_TO_ONE)
     // clips z < 0 which discards half the shadow casters from glm::ortho's
     // [-1,1] range. This was the root cause of disappearing shadows at distance.
-    glClipControl(GL_LOWER_LEFT, GL_NEGATIVE_ONE_TO_ONE);
-    glDepthFunc(GL_LESS);
-    glClearDepth(1.0);
+    ScopedForwardZ forwardZ;  // reverse-Z state is restored on function exit
 
     // Ensure clip distance is disabled — water reflection/refraction passes from
     // the previous frame may have left it enabled. Shaders that don't write
@@ -3205,10 +3198,7 @@ void Renderer::renderShadowPass(const std::vector<SceneRenderData::RenderItem>& 
     m_cullingStats.shadowCastersCulled = (cascadeCount > 0)
         ? totalCascadeCulled / cascadeCount : 0;
 
-    // Restore reverse-Z depth state and disable shadow-pass-only settings
-    glClipControl(GL_LOWER_LEFT, GL_ZERO_TO_ONE);
-    glDepthFunc(GL_GEQUAL);
-    glClearDepth(0.0);
+    // Disable shadow-pass-only settings (reverse-Z restored by ScopedForwardZ)
     glDisable(GL_DEPTH_CLAMP);
 }
 
@@ -3233,9 +3223,7 @@ void Renderer::renderPointShadowPass(const std::vector<int>& shadowCasters)
     }
 
     // Point shadow maps use forward-Z with [-1,1] NDC depth range
-    glClipControl(GL_LOWER_LEFT, GL_NEGATIVE_ONE_TO_ONE);
-    glDepthFunc(GL_LESS);
-    glClearDepth(1.0);
+    ScopedForwardZ forwardZ;  // reverse-Z is restored on function exit
     m_pointShadowDepthShader.use();
 
     for (size_t s = 0; s < shadowCasters.size(); s++)
@@ -3294,11 +3282,7 @@ void Renderer::renderPointShadowPass(const std::vector<int>& shadowCasters)
             shadowMap->endFace();
         }
     }
-
-    // Restore reverse-Z depth state
-    glClipControl(GL_LOWER_LEFT, GL_ZERO_TO_ONE);
-    glDepthFunc(GL_GEQUAL);
-    glClearDepth(0.0);
+    // reverse-Z restored by ScopedForwardZ on function exit
 }
 
 /// Pre-built uniform name strings for point lights (avoids per-frame string allocations).

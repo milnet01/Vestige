@@ -22,6 +22,18 @@ in mat3 v_TBN;
 
 out vec4 fragColor;
 
+// Normalize `v`; fall back to `fallback` when length is too small to divide
+// safely. Used wherever a degenerate input (camera at fragment position,
+// fragment at point-light origin, zero-length normal) would otherwise
+// produce NaN/Inf directions.
+// TODO: revisit safeNormalize epsilon via Formula Workbench once reference
+// data is available (currently using the conventional 1e-6 guard).
+vec3 safeNormalize(vec3 v, vec3 fallback)
+{
+    float lenSq = dot(v, v);
+    return (lenSq > 1e-12) ? (v * inversesqrt(lenSq)) : fallback;
+}
+
 // Material (Blinn-Phong)
 uniform vec3 u_materialDiffuse;
 uniform vec3 u_materialSpecular;
@@ -445,7 +457,9 @@ float calcPointShadow(int shadowIdx, vec3 fragPos, vec3 lightPos, vec3 normal)
     // Peter-Panning in Tabernacle-scale interiors (~5m farPlane) and
     // acne on outdoor-scale scenes (~100m farPlane). Scaling by farPlane
     // keeps bias proportional to the depth unit being compared.
-    vec3 lightDir = normalize(-fragToLight);
+    // safeNormalize so a fragment sitting exactly at the light position
+    // (fragToLight == 0) doesn't produce a NaN bias term.
+    vec3 lightDir = safeNormalize(-fragToLight, vec3(0.0, 1.0, 0.0));
     float biasScale = farPlane * 0.001;  // 0.05 at farPlane=50 → prior default
     float bias = max(biasScale * 5.0 * (1.0 - dot(normal, lightDir)),
                      biasScale * 0.5);
@@ -986,7 +1000,10 @@ void main()
         norm = normalize(v_normal);
     }
 
-    vec3 viewDir = normalize(u_viewPosition - v_fragPosition);
+    // safeNormalize so a fragment coincident with the camera origin
+    // (distance 0) doesn't produce a NaN view direction.
+    vec3 viewDir = safeNormalize(u_viewPosition - v_fragPosition,
+                                  vec3(0.0, 0.0, 1.0));
 
     if (u_usePBR)
     {

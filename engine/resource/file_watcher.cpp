@@ -95,23 +95,13 @@ void FileWatcher::rescan()
         auto existing = m_timestamps.find(path);
         if (existing == m_timestamps.end())
         {
-            // New file detected
             m_timestamps[path] = writeTime;
-            if (m_onChanged)
-            {
-                Logger::debug("FileWatcher: new file " + path);
-                m_onChanged(path);
-            }
+            Logger::debug("FileWatcher: new file " + path);
         }
         else if (writeTime != existing->second)
         {
-            // File modified
             existing->second = writeTime;
-            if (m_onChanged)
-            {
-                Logger::debug("FileWatcher: modified " + path);
-                m_onChanged(path);
-            }
+            Logger::debug("FileWatcher: modified " + path);
         }
     }
 }

@@ -61,7 +61,7 @@ void ClothSimulator::initialize(const ClothConfig& config, uint32_t seed)
     }
 
     // Unique RNG seed so each cloth panel has different wind timing
-    m_rngState = (seed != 0) ? seed : 12345u;
+    m_rng.seed((seed != 0) ? seed : 12345u);
 
     uint32_t count = m_gridW * m_gridH;
     float invMass = 1.0f / config.particleMass;
@@ -194,11 +194,11 @@ void ClothSimulator::initialize(const ClothConfig& config, uint32_t seed)
     // The initial timer gives gravity time to settle the cloth into its natural drape.
     m_gustCurrent = 0.0f;
     m_gustTarget = 0.0f;
-    m_gustTimer = randRange(3.0f, 5.0f);  // 3-5 seconds of calm before first gust
+    m_gustTimer = m_rng.nextRange(3.0f, 5.0f);  // 3-5 seconds of calm before first gust
     m_gustRampSpeed = 0.0f;
     m_windDirOffset = glm::vec3(0.0f);
     m_windDirTarget = glm::vec3(0.0f);
-    m_dirTimer = randRange(2.0f, 4.0f);
+    m_dirTimer = m_rng.nextRange(2.0f, 4.0f);
     m_sleeping = false;
     m_sleepFrames = 0;
 
@@ -1643,18 +1643,6 @@ static float hashNoise(float x, float y)
     return static_cast<float>(h & 0x00FFFFFFu) / 16777216.0f;  // [0, 1)
 }
 
-float ClothSimulator::randFloat()
-{
-    // LCG: fast, deterministic, no stdlib dependency
-    m_rngState = m_rngState * 1664525u + 1013904223u;
-    return static_cast<float>(m_rngState & 0x00FFFFFFu) / 16777216.0f;  // [0, 1)
-}
-
-float ClothSimulator::randRange(float lo, float hi)
-{
-    return lo + randFloat() * (hi - lo);
-}
-
 void ClothSimulator::updateGustState(float dt)
 {
     // --- Gust strength state machine ---
@@ -1665,9 +1653,9 @@ void ClothSimulator::updateGustState(float dt)
         if (m_gustTarget < 0.3f)
         {
             // Was calm → start a gust
-            m_gustTarget = randRange(0.5f, 1.0f);
-            m_gustTimer = randRange(1.5f, 4.0f);   // Blow for 1.5-4 seconds
-            m_gustRampSpeed = randRange(1.5f, 4.0f); // Ramp up speed
+            m_gustTarget = m_rng.nextRange(0.5f, 1.0f);
+            m_gustTimer = m_rng.nextRange(1.5f, 4.0f);   // Blow for 1.5-4 seconds
+            m_gustRampSpeed = m_rng.nextRange(1.5f, 4.0f); // Ramp up speed
         }
         else
         {
@@ -1676,8 +1664,8 @@ void ClothSimulator::updateGustState(float dt)
             // its natural hanging position. A 4m curtain has a pendulum
             // period of ~4 seconds, so calm needs 3-7 seconds minimum.
             m_gustTarget = 0.0f;
-            m_gustTimer = randRange(3.0f, 7.0f);   // Calm for 3-7 seconds
-            m_gustRampSpeed = randRange(3.0f, 6.0f); // Wind dies off quickly
+            m_gustTimer = m_rng.nextRange(3.0f, 7.0f);   // Calm for 3-7 seconds
+            m_gustRampSpeed = m_rng.nextRange(3.0f, 6.0f); // Wind dies off quickly
         }
     }
 
@@ -1698,35 +1686,35 @@ void ClothSimulator::updateGustState(float dt)
     if (m_dirTimer <= 0.0f)
     {
         // Pick a new direction offset — occasionally large shifts
-        float shift = randFloat();
+        float shift = m_rng.nextFloat();
         if (shift < 0.15f)
         {
             // Big direction change (15% chance): partially reverse or strong side gust
             m_windDirTarget = glm::vec3(
-                randRange(-0.8f, 0.8f),
-                randRange(-0.3f, 0.3f),
-                randRange(-0.5f, 0.4f)   // Can partially reverse
+                m_rng.nextRange(-0.8f, 0.8f),
+                m_rng.nextRange(-0.3f, 0.3f),
+                m_rng.nextRange(-0.5f, 0.4f)   // Can partially reverse
             );
         }
         else if (shift < 0.5f)
         {
             // Medium shift (35% chance)
             m_windDirTarget = glm::vec3(
-                randRange(-0.4f, 0.4f),
-                randRange(-0.15f, 0.15f),
-                randRange(-0.1f, 0.2f)
+                m_rng.nextRange(-0.4f, 0.4f),
+                m_rng.nextRange(-0.15f, 0.15f),
+                m_rng.nextRange(-0.1f, 0.2f)
             );
         }
         else
         {
             // Small drift or return to base (50% chance)
             m_windDirTarget = glm::vec3(
-                randRange(-0.15f, 0.15f),
-                randRange(-0.05f, 0.05f),
+                m_rng.nextRange(-0.15f, 0.15f),
+                m_rng.nextRange(-0.05f, 0.05f),
                 0.0f
             );
         }
-        m_dirTimer = randRange(1.0f, 5.0f);
+        m_dirTimer = m_rng.nextRange(1.0f, 5.0f);
     }
 
     // Smoothly interpolate direction offset

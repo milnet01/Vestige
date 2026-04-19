@@ -54,9 +54,25 @@ uniform mat3 u_normalMatrix;  // Precomputed on CPU for non-instanced path
 uniform vec4 u_clipPlane;     // Water clip plane (0,0,0,0 = disabled)
 
 // Morph target uniforms
-uniform int u_morphTargetCount;   // 0 = no morph targets
-uniform int u_morphVertexCount;   // Vertex count for SSBO indexing
-uniform float u_morphWeights[8];  // Max 8 simultaneous morph targets
+// Cap on simultaneous morph targets; must match the u_morphWeights[] size
+// below and the C++-side MAX_MORPH_TARGETS constant.
+const int MAX_MORPH_TARGETS = 8;
+
+uniform int u_morphTargetCount;                   // 0 = no morph targets
+uniform int u_morphVertexCount;                   // Vertex count for SSBO indexing
+uniform float u_morphWeights[MAX_MORPH_TARGETS];  // Per-target blend weight
+
+// Normalize `v`; fall back to `fallback` when length is too small for the
+// division to be numerically meaningful. Prevents NaN/Inf propagation into
+// the TBN basis when a mesh has degenerate tangents or a skinning / morph
+// combination collapses a vector to zero.
+// TODO: revisit safeNormalize epsilon via Formula Workbench once reference
+// data is available (currently using the conventional 1e-6 guard).
+vec3 safeNormalize(vec3 v, vec3 fallback)
+{
+    float lenSq = dot(v, v);
+    return (lenSq > 1e-12) ? (v * inversesqrt(lenSq)) : fallback;
+}
 
 out vec3 v_fragPosition;
 out vec3 v_normal;
@@ -106,9 +122,15 @@ void main()
     {
         int vid = gl_VertexID;
         int vc = u_morphVertexCount;
+        // `tc` addresses the normal-delta region of the buffer and must
+        // match the engine-side upload count exactly, so it stays
+        // unclamped. `loopCount` bounds the iteration so a corrupt /
+        // out-of-range uniform can never drive the loop past the
+        // u_morphWeights[] array size.
         int tc = u_morphTargetCount;
+        int loopCount = min(tc, MAX_MORPH_TARGETS);
 
-        for (int i = 0; i < tc; i++)
+        for (int i = 0; i < loopCount; i++)
         {
             float w = u_morphWeights[i];
             if (w != 0.0)
@@ -157,10 +179,12 @@ void main()
     v_fragPosition = vec3(worldPosition);
     v_normal = normalMatrix * skinnedNormal;
 
-    // Compute TBN matrix for normal mapping
-    vec3 T = normalize(normalMatrix * skinnedTangent);
-    vec3 B = normalize(normalMatrix * skinnedBitangent);
-    vec3 N = normalize(normalMatrix * skinnedNormal);
+    // Compute TBN matrix for normal mapping. Fall back to world-axis basis
+    // vectors when any of the skinned/morphed inputs collapse to zero, so a
+    // zero-length tangent never produces NaN lighting.
+    vec3 T = safeNormalize(normalMatrix * skinnedTangent,   vec3(1.0, 0.0, 0.0));
+    vec3 B = safeNormalize(normalMatrix * skinnedBitangent, vec3(0.0, 1.0, 0.0));
+    vec3 N = safeNormalize(normalMatrix * skinnedNormal,    vec3(0.0, 0.0, 1.0));
     v_TBN = mat3(T, B, N);
 
     v_color = color;

@@ -22,6 +22,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <mutex>
+#include <unordered_set>
 
 namespace Vestige
 {
@@ -39,6 +41,16 @@ inline float sanitize(float v)
 inline glm::vec3 sanitize(glm::vec3 v)
 {
     return {sanitize(v.x), sanitize(v.y), sanitize(v.z)};
+}
+
+/// @brief Returns true if this nodeId has not yet logged in this process.
+/// Used to rate-limit per-node warnings so a 60 Hz lambda doesn't flood logs.
+bool shouldLogOnceForNode(uint64_t nodeId)
+{
+    static std::mutex s_mu;
+    static std::unordered_set<uint64_t> s_seen;
+    std::lock_guard<std::mutex> lk(s_mu);
+    return s_seen.insert(nodeId).second;
 }
 
 } // namespace
@@ -185,13 +197,16 @@ void registerPureNodeTypes(NodeTypeRegistry& registry)
             float r;
             if (std::abs(b) < 1e-9f)
             {
-                // Silent 0 on div-by-zero can mask logic bugs (audit L1);
-                // emit a single warning so it's visible without flooding logs
-                // when the node runs every frame.
-                Logger::warning(
-                    "[MathDiv] division by ~0 (B=" + std::to_string(b) +
-                    ") in node " + std::to_string(node.nodeId) +
-                    " — returning 0");
+                // Silent 0 on div-by-zero can mask logic bugs (audit L1).
+                // Rate-limit to first occurrence per nodeId so a 60 Hz node
+                // graph doesn't flood logs with identical warnings.
+                if (shouldLogOnceForNode(node.nodeId))
+                {
+                    Logger::warning(
+                        "[MathDiv] division by ~0 (B=" + std::to_string(b) +
+                        ") in node " + std::to_string(node.nodeId) +
+                        " — returning 0 (further occurrences suppressed)");
+                }
                 r = 0.0f;
             }
             else

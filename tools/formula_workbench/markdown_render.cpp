@@ -91,8 +91,8 @@ bool isTableSeparatorRow(std::string_view line)
     if (s.empty() || s.find('|') == std::string_view::npos)
         return false;
     auto cells = splitTableRow(s);
-    if (cells.empty())
-        return false;
+    // splitTableRow always returns at least one (possibly empty) cell; we
+    // rely on the per-cell empty-check below to reject malformed rows.
     for (const auto& cell : cells)
     {
         std::string_view c = cell;

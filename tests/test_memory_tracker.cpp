@@ -95,6 +95,26 @@ TEST_F(MemoryTrackerTest, PeakDoesNotDecreaseAfterFree)
     EXPECT_GE(peakB, peakA);
 }
 
+// Regression: a free without a matching alloc (or a double-free) must clamp
+// at zero, not wrap the underlying atomic to SIZE_MAX.
+TEST_F(MemoryTrackerTest, RecordFreeUnderflowClampsAtZero)
+{
+    MemoryTracker::recordAlloc(64);
+    // Free more than we allocated.
+    MemoryTracker::recordFree(1024);
+
+    EXPECT_EQ(MemoryTracker::getCpuAllocatedBytes(), m_baseBytes);
+    EXPECT_EQ(MemoryTracker::getCpuAllocationCount(), m_baseCount);
+}
+
+TEST_F(MemoryTrackerTest, RecordFreeWithoutAllocIsNoop)
+{
+    MemoryTracker::recordFree(512);
+
+    EXPECT_EQ(MemoryTracker::getCpuAllocatedBytes(), m_baseBytes);
+    EXPECT_EQ(MemoryTracker::getCpuAllocationCount(), m_baseCount);
+}
+
 TEST_F(MemoryTrackerTest, GpuStatsDefaultToZero)
 {
     MemoryTracker tracker;

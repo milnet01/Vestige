@@ -40,22 +40,7 @@ void EnvironmentForces::reset()
     m_turbulenceScale = 10.0f;
     m_weather = WeatherState{};
     m_waterLevel = -1000.0f;
-    m_rngState = 54321u;
-}
-
-// ============================================================================
-// RNG (identical LCG to ClothSimulator for deterministic behavior)
-// ============================================================================
-
-float EnvironmentForces::randFloat()
-{
-    m_rngState = m_rngState * 1664525u + 1013904223u;
-    return static_cast<float>(m_rngState & 0x00FFFFFFu) / 16777216.0f;
-}
-
-float EnvironmentForces::randRange(float lo, float hi)
-{
-    return lo + randFloat() * (hi - lo);
+    m_rng.seed(54321u);
 }
 
 // ============================================================================
@@ -110,9 +95,9 @@ void EnvironmentForces::updateGustState(float dt)
         if (m_gustTarget < 0.3f)
         {
             // Was calm -> start a gust
-            m_gustTarget = randRange(0.5f, 1.0f);
-            m_gustTimer = randRange(1.5f, 4.0f);
-            m_gustRampSpeed = randRange(1.5f, 4.0f);
+            m_gustTarget = m_rng.nextRange(0.5f, 1.0f);
+            m_gustTimer = m_rng.nextRange(1.5f, 4.0f);
+            m_gustRampSpeed = m_rng.nextRange(1.5f, 4.0f);
         }
         else
         {
@@ -120,8 +105,8 @@ void EnvironmentForces::updateGustState(float dt)
             // Calm periods need 3-7 seconds for pendulum-like fabric
             // to swing back to natural hanging position.
             m_gustTarget = 0.0f;
-            m_gustTimer = randRange(3.0f, 7.0f);
-            m_gustRampSpeed = randRange(3.0f, 6.0f);
+            m_gustTimer = m_rng.nextRange(3.0f, 7.0f);
+            m_gustRampSpeed = m_rng.nextRange(3.0f, 6.0f);
         }
     }
 
@@ -141,35 +126,35 @@ void EnvironmentForces::updateGustState(float dt)
     m_dirTimer -= dt;
     if (m_dirTimer <= 0.0f)
     {
-        float shift = randFloat();
+        float shift = m_rng.nextFloat();
         if (shift < 0.15f)
         {
             // Big direction change (15% chance)
             m_windDirTarget = glm::vec3(
-                randRange(-0.8f, 0.8f),
-                randRange(-0.3f, 0.3f),
-                randRange(-0.5f, 0.4f)
+                m_rng.nextRange(-0.8f, 0.8f),
+                m_rng.nextRange(-0.3f, 0.3f),
+                m_rng.nextRange(-0.5f, 0.4f)
             );
         }
         else if (shift < 0.5f)
         {
             // Medium shift (35% chance)
             m_windDirTarget = glm::vec3(
-                randRange(-0.4f, 0.4f),
-                randRange(-0.15f, 0.15f),
-                randRange(-0.1f, 0.2f)
+                m_rng.nextRange(-0.4f, 0.4f),
+                m_rng.nextRange(-0.15f, 0.15f),
+                m_rng.nextRange(-0.1f, 0.2f)
             );
         }
         else
         {
             // Small drift (50% chance)
             m_windDirTarget = glm::vec3(
-                randRange(-0.15f, 0.15f),
-                randRange(-0.05f, 0.05f),
+                m_rng.nextRange(-0.15f, 0.15f),
+                m_rng.nextRange(-0.05f, 0.05f),
                 0.0f
             );
         }
-        m_dirTimer = randRange(1.0f, 5.0f);
+        m_dirTimer = m_rng.nextRange(1.0f, 5.0f);
     }
 
     // Smoothly interpolate direction offset

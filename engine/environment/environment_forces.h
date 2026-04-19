@@ -9,9 +9,9 @@
 /// wind field inspired by Ghost of Tsushima (GDC 2020).
 #pragma once
 
-#include <glm/glm.hpp>
+#include "utils/deterministic_lcg_rng.h"
 
-#include <cstdint>
+#include <glm/glm.hpp>
 
 namespace Vestige
 {
@@ -162,11 +162,9 @@ private:
     // Water level for buoyancy
     float m_waterLevel = -1000.0f;
 
-    // RNG (LCG: fast, deterministic)
-    uint32_t m_rngState = 54321u;
+    // RNG (shared deterministic LCG — see utils/deterministic_lcg_rng.h).
+    DeterministicLcgRng m_rng{54321u};
 
-    float randFloat();
-    float randRange(float lo, float hi);
     void updateGustState(float dt);
 
     /// @brief Hash noise for spatial wind variation. Returns [0, 1).

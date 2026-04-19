@@ -87,17 +87,33 @@ size_t AsyncTextureLoader::getPendingCount() const
 
 void AsyncTextureLoader::waitForAll()
 {
-    // Block until all jobs finish decoding (does not upload — caller does that).
-    // Uses a short sleep instead of busy-spin to avoid wasting CPU.
+    // Block until every currently-queued job has finished decoding. The
+    // caller is still responsible for the GPU upload (processUploads()).
+    //
+    // Invariant held by the producer/worker/consumer trio:
+    //   m_inFlightCount == |m_pendingJobs| + (jobs currently decoding)
+    //                    + |m_completedJobs|
+    //
+    // Only requestLoad() and processUploads() mutate m_inFlightCount, so once
+    // m_pendingJobs is empty and |m_completedJobs| == m_inFlightCount, every
+    // in-flight job has landed in the completed queue. This only describes
+    // jobs queued at or before the call — requests submitted *after* this
+    // returns are not waited on, which matches the single-producer usage
+    // pattern (main thread kicks loads, then calls waitForAll()).
+    //
+    // The 1 ms poll is a pragmatic compromise. A condition variable on the
+    // completed side would be tighter, but the caller only reaches here on
+    // startup / level-load, where millisecond-scale latency is irrelevant.
     using namespace std::chrono_literals;
     while (m_inFlightCount.load(std::memory_order_relaxed) > 0)
     {
         {
             std::lock_guard<std::mutex> lock(m_completedMutex);
             std::lock_guard<std::mutex> lock2(m_pendingMutex);
-            if (m_pendingJobs.empty() && m_completedJobs.size() == m_inFlightCount.load())
+            if (m_pendingJobs.empty()
+                && m_completedJobs.size() == m_inFlightCount.load(std::memory_order_relaxed))
             {
-                break;  // All decoded, waiting for upload
+                break;
             }
         }
         std::this_thread::sleep_for(1ms);

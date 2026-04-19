@@ -44,22 +44,29 @@ struct BehaviorData
     float params[6];
 };
 
+// Hard caps matching the uniform-array sizes below. Every loop over one of
+// these arrays uses `min(count, MAX_*)` so a stale / corrupt count uniform
+// can't drive a loop past the array bounds.
+const int MAX_BEHAVIORS = 16;
+const int MAX_COLOR_STOPS = 8;
+const int MAX_CURVE_KEYS = 8;
+
 layout(std140, binding = 4) uniform BehaviorBlock
 {
-    BehaviorData behaviors[16];
+    BehaviorData behaviors[MAX_BEHAVIORS];
     int behaviorCount;
     int colorStopCount;
     int sizeKeyCount;
     int speedKeyCount;
-    // Color gradient (up to 8 RGBA stops with times)
-    vec4 colorStops[8];
-    float colorStopTimes[8];
-    // Size over lifetime (up to 8 keyframes)
-    float sizeKeys[8];
-    float sizeKeyTimes[8];
-    // Speed over lifetime (up to 8 keyframes)
-    float speedKeys[8];
-    float speedKeyTimes[8];
+    // Color gradient (up to MAX_COLOR_STOPS RGBA stops with times)
+    vec4 colorStops[MAX_COLOR_STOPS];
+    float colorStopTimes[MAX_COLOR_STOPS];
+    // Size over lifetime (up to MAX_CURVE_KEYS keyframes)
+    float sizeKeys[MAX_CURVE_KEYS];
+    float sizeKeyTimes[MAX_CURVE_KEYS];
+    // Speed over lifetime (up to MAX_CURVE_KEYS keyframes)
+    float speedKeys[MAX_CURVE_KEYS];
+    float speedKeyTimes[MAX_CURVE_KEYS];
 };
 
 uniform float u_deltaTime;
@@ -178,8 +185,11 @@ vec4 sampleColorGradient(float t)
 
     t = clamp(t, 0.0, 1.0);
 
-    // Find segment
-    for (int i = 0; i < colorStopCount - 1; i++)
+    // Cap iteration at MAX_COLOR_STOPS - 1 to guarantee the array index
+    // `colorStopTimes[i + 1]` below can never exceed the uniform bounds,
+    // even if colorStopCount is mis-uploaded.
+    int stopLoop = min(colorStopCount - 1, MAX_COLOR_STOPS - 1);
+    for (int i = 0; i < stopLoop; i++)
     {
         if (t <= colorStopTimes[i + 1])
         {
@@ -187,10 +197,11 @@ vec4 sampleColorGradient(float t)
             return mix(colorStops[i], colorStops[i + 1], clamp(segT, 0.0, 1.0));
         }
     }
-    return colorStops[colorStopCount - 1];
+    int lastStop = clamp(colorStopCount - 1, 0, MAX_COLOR_STOPS - 1);
+    return colorStops[lastStop];
 }
 
-float sampleCurve(float t, float keys[8], float times[8], int keyCount)
+float sampleCurve(float t, float keys[MAX_CURVE_KEYS], float times[MAX_CURVE_KEYS], int keyCount)
 {
     if (keyCount <= 0)
         return 1.0;
@@ -199,7 +210,10 @@ float sampleCurve(float t, float keys[8], float times[8], int keyCount)
 
     t = clamp(t, 0.0, 1.0);
 
-    for (int i = 0; i < keyCount - 1; i++)
+    // Cap loop iterations to MAX_CURVE_KEYS - 1 so `times[i + 1]` below
+    // can never index out of bounds, even if keyCount is mis-uploaded.
+    int keyLoop = min(keyCount - 1, MAX_CURVE_KEYS - 1);
+    for (int i = 0; i < keyLoop; i++)
     {
         if (t <= times[i + 1])
         {
@@ -207,7 +221,8 @@ float sampleCurve(float t, float keys[8], float times[8], int keyCount)
             return mix(keys[i], keys[i + 1], clamp(segT, 0.0, 1.0));
         }
     }
-    return keys[keyCount - 1];
+    int lastKey = clamp(keyCount - 1, 0, MAX_CURVE_KEYS - 1);
+    return keys[lastKey];
 }
 
 void main()

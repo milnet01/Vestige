@@ -228,7 +228,7 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
 
         // Process undo/redo shortcuts (Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z)
         {
-            ImGuiIO& undoIo = ImGui::GetIO();
+            const ImGuiIO& undoIo = ImGui::GetIO();
             if (!ImGui::IsPopupOpen("Unsaved Changes"))
             {
                 if (undoIo.KeyCtrl && !undoIo.KeyShift
@@ -641,9 +641,9 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
 
                     // Tonemapping
                     int tonemapMode = renderer->getTonemapMode();
-                    const char* tonemapNames[] = {"Reinhard", "ACES Filmic", "None (linear)"};
                     if (ImGui::BeginMenu("Tonemapping (F2)"))
                     {
+                        const char* tonemapNames[] = {"Reinhard", "ACES Filmic", "None (linear)"};
                         for (int i = 0; i < 3; ++i)
                         {
                             if (ImGui::MenuItem(tonemapNames[i], nullptr, tonemapMode == i))
@@ -687,9 +687,9 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
 
                     // Anti-aliasing
                     AntiAliasMode aaMode = renderer->getAntiAliasMode();
-                    const char* aaNames[] = {"None", "MSAA 4x", "TAA", "SMAA"};
                     if (ImGui::BeginMenu("Anti-Aliasing (F7)"))
                     {
+                        const char* aaNames[] = {"None", "MSAA 4x", "TAA", "SMAA"};
                         for (int i = 0; i < 4; ++i)
                         {
                             if (ImGui::MenuItem(aaNames[i], nullptr,
@@ -2050,7 +2050,7 @@ void Editor::processGizmoShortcuts()
     {
         m_showGrid = !m_showGrid;
     }
-    ImGuiIO& gizmoIo = ImGui::GetIO();
+    const ImGuiIO& gizmoIo = ImGui::GetIO();
     if (gizmoIo.KeyCtrl && gizmoIo.KeyShift && ImGui::IsKeyPressed(ImGuiKey_F))
     {
         m_fullscreenViewport = !m_fullscreenViewport;
@@ -2065,7 +2065,7 @@ void Editor::processEntityShortcuts(Scene* scene)
         return;
     }
 
-    ImGuiIO& io = ImGui::GetIO();
+    const ImGuiIO& io = ImGui::GetIO();
 
     // Delete key — delete all selected entities (via commands for undo)
     if (ImGui::IsKeyPressed(ImGuiKey_Delete) && m_selection.hasSelection())

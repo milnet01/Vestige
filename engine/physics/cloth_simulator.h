@@ -6,6 +6,7 @@
 #pragma once
 
 #include "physics/spatial_hash.h"
+#include "utils/deterministic_lcg_rng.h"
 
 #include <glm/glm.hpp>
 
@@ -403,10 +404,8 @@ private:
     glm::vec3 m_windDirOffset = glm::vec3(0.0f);  ///< Current direction offset
     glm::vec3 m_windDirTarget = glm::vec3(0.0f);  ///< Target direction offset
     float m_dirTimer = 0.0f;          ///< Time until next direction change
-    uint32_t m_rngState = 12345u;     ///< Simple LCG state for deterministic randomness
+    DeterministicLcgRng m_rng{12345u};  ///< Shared LCG for deterministic randomness
 
-    float randFloat();                ///< Returns [0, 1) from internal RNG
-    float randRange(float lo, float hi);
     void updateGustState(float dt);
 
     // Grid topology

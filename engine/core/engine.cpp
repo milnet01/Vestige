@@ -1468,14 +1468,14 @@ void Engine::createPhysicsStaticBodies()
             continue;
         }
 
-        JPH::BoxShape* shape = new JPH::BoxShape(
+        JPH::BoxShape* const shape = new JPH::BoxShape(
             JPH::Vec3(halfExtents.x, halfExtents.y, halfExtents.z));
         m_physicsWorld.createStaticBody(shape, center);
         ++count;
     }
 
     // Add a large ground plane if no terrain-sized collider exists
-    JPH::BoxShape* ground = new JPH::BoxShape(JPH::Vec3(500, 0.5f, 500));
+    JPH::BoxShape* const ground = new JPH::BoxShape(JPH::Vec3(500, 0.5f, 500));
     m_physicsWorld.createStaticBody(ground, glm::vec3(0, -0.5f, 0));
 
     Logger::info("Physics: created " + std::to_string(count) +

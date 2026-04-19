@@ -5,9 +5,7 @@
 /// @brief Monitors asset directories for file changes and triggers reload callbacks.
 #pragma once
 
-#include <chrono>
 #include <filesystem>
-#include <functional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -22,9 +20,6 @@ namespace Vestige
 class FileWatcher
 {
 public:
-    /// @brief Callback type: receives the path of the changed file.
-    using ChangeCallback = std::function<void(const std::string& path)>;
-
     /// @brief Starts watching files in the given root directory.
     /// @param rootPath Directory to watch (e.g., "assets/").
     /// @param extensions File extensions to track (e.g., {".png", ".jpg", ".gltf"}).
@@ -44,7 +39,6 @@ private:
 
     std::string m_rootPath;
     std::vector<std::string> m_extensions;
-    ChangeCallback m_onChanged;
 
     /// @brief Map of file path to last known write time.
     std::unordered_map<std::string, std::filesystem::file_time_type> m_timestamps;

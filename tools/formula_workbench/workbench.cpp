@@ -245,8 +245,9 @@ void Workbench::renderDataEditor()
         return;
     }
 
-    // CSV import
-    static char csvPath[256] = "";
+    // CSV import. PATH_MAX on Linux is 4096; a 256-byte buffer silently
+    // truncates deeply-nested paths without any user signal.
+    static char csvPath[4096] = "";
     ImGui::InputText("CSV Path", csvPath, sizeof(csvPath));
     ImGui::SameLine();
     if (ImGui::Button("Import"))
@@ -2176,7 +2177,11 @@ void Workbench::rebuildVisualizationCache()
         m_curveY.push_back(y);
     }
 
-    // Quality tier comparison (Improvement #3)
+    // Quality tier comparison (Improvement #3).
+    // Reuse the same `vars` map as the main curve loop — rebuilding it every
+    // iteration inside a 100-sample loop was pure overhead, and the shadowed
+    // inner name was confusing enough that a reader could wrongly assume the
+    // two loops observed independent state.
     if (m_showQualityComparison)
     {
         const ExprNode* approxExpr =
@@ -2186,11 +2191,7 @@ void Workbench::rebuildVisualizationCache()
             m_approxCurveY.reserve(CURVE_SAMPLES);
             for (int i = 0; i < CURVE_SAMPLES; ++i)
             {
-                ExpressionEvaluator::VariableMap vars;
-                for (const auto& inp : m_selectedFormula->inputs)
-                    vars[inp.name] = inp.defaultValue;
                 vars[m_plotVariable] = m_curveX[i];
-
                 float y = eval.evaluate(*approxExpr, vars, coeffMap);
                 m_approxCurveY.push_back(y);
             }
