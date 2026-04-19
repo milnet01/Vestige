@@ -4,7 +4,6 @@
 /// @file welcome_panel.cpp
 /// @brief Welcome panel implementation.
 #include "editor/panels/welcome_panel.h"
-#include "core/logger.h"
 
 #include <imgui.h>
 

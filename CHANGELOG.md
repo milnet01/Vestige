@@ -81,6 +81,20 @@ existing cases (``HelpersMatchEvaluatorPrecisely``,
   ``framebuffer.cpp``, ``water_fbo.cpp``, ``text_renderer.cpp``.
   **(AUDIT M15.)**
 
+#### Low severity (4, safe subset)
+
+- **`engine/editor/panels/welcome_panel.cpp`** — dropped unused
+  ``#include "core/logger.h"``. **(AUDIT L36.)**
+- **`engine/formula/formula_preset.cpp::loadFromJson`** — renamed local
+  ``count`` → ``loaded`` so it no longer shadows the
+  ``FormulaPresetLibrary::count()`` member. **(AUDIT L37.)**
+- **`engine/editor/panels/inspector_panel.cpp`** — removed the dead
+  ``before = cfg;`` assignment; the variable goes out of scope at the
+  following ``ImGui::TreePop()``. **(AUDIT L38.)**
+- **`engine/core/engine.cpp`** — explicit ``default: break;`` on the
+  keyboard-event switch (L28), and ``const Exclusion exclusions[]``
+  for the foliage exclusion table (L26).
+
 #### Housekeeping
 
 - **`.gitignore`** — ignore ``/audit_rule_quality.json`` (raw

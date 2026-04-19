@@ -176,20 +176,20 @@ size_t FormulaPresetLibrary::applyPreset(const FormulaPreset& preset,
 
 size_t FormulaPresetLibrary::loadFromJson(const nlohmann::json& j)
 {
-    size_t count = 0;
+    size_t loaded = 0;
     for (const auto& item : j)
     {
         try
         {
             registerPreset(FormulaPreset::fromJson(item));
-            ++count;
+            ++loaded;
         }
         catch (const nlohmann::json::exception& e)
         {
             Logger::warning(std::string("FormulaPresetLibrary: skipping malformed preset entry: ") + e.what());
         }
     }
-    return count;
+    return loaded;
 }
 
 size_t FormulaPresetLibrary::loadFromFile(const std::string& path)

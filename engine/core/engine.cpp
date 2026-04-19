@@ -556,6 +556,12 @@ bool Engine::initialize(const EngineConfig& config)
                 }
                 break;
             }
+
+            // AUDIT L28: the upstream if-chain filters this switch to the
+            // exact set of keys handled above. Explicit default silences
+            // clang-tidy's bugprone-switch-missing-default-case.
+            default:
+                break;
         }
     });
 
@@ -1914,7 +1920,7 @@ void Engine::setupDemoScene()
         }
         // Clear grass around scene objects so it doesn't poke through
         struct Exclusion { glm::vec3 pos; float radius; };
-        Exclusion exclusions[] = {
+        const Exclusion exclusions[] = {
             {{-3.0f, 0.0f, -1.0f}, 1.2f},   // Red Brick cube
             {{ 0.0f, 0.0f,  0.0f}, 1.2f},   // Gold cube
             {{ 3.0f, 0.0f, -1.0f}, 1.2f},   // Wood cube

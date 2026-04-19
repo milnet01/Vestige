@@ -1352,7 +1352,9 @@ void InspectorPanel::drawParticleEmitter(Entity& entity)
         {
             pushParticleUndo(m_commandHistory, m_currentScene, entity.getId(),
                              before, cfg, "renderer");
-            before = cfg;
+            // AUDIT L38: `before = cfg;` here was dead — the variable goes
+            // out of scope at TreePop() on the next line, and the subsequent
+            // TreeNode("Light Coupling") block creates its own `lightBefore`.
         }
         ImGui::TreePop();
     }
