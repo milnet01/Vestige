@@ -151,6 +151,7 @@ id_ed25519
 /AUDIT_TOOL_AND_WORKBENCH_IMPROVEMENTS.md
 /DISCOVERY.md
 /FIXPLAN.md
+/audit_rule_quality.json
 docs/AUDIT_[0-9]*.md
 docs/CODE_AUDIT_REPORT.md
 docs/PHASE*_AUDIT*.md

@@ -106,8 +106,10 @@ TEST(CodegenCpp, EmitBinaryOps)
     auto mul = ExprNode::binaryOp("*", ExprNode::literal(2.0f), ExprNode::variable("x"));
     EXPECT_NE(CodegenCpp::emitExpression(*mul, {}).find("*"), std::string::npos);
 
+    // AUDIT M11: pow emits through SafeMath::safePow, not bare std::pow.
     auto pw = ExprNode::binaryOp("pow", ExprNode::variable("x"), ExprNode::literal(2.0f));
-    EXPECT_NE(CodegenCpp::emitExpression(*pw, {}).find("std::pow"), std::string::npos);
+    EXPECT_NE(CodegenCpp::emitExpression(*pw, {}).find("SafeMath::safePow"),
+              std::string::npos);
 
     auto mn = ExprNode::binaryOp("min", ExprNode::variable("a"), ExprNode::variable("b"));
     EXPECT_NE(CodegenCpp::emitExpression(*mn, {}).find("std::min"), std::string::npos);
@@ -218,7 +220,8 @@ TEST(CodegenGlsl, GenerateFunction)
     EXPECT_NE(code.find("float"), std::string::npos);
     EXPECT_NE(code.find("cosTheta"), std::string::npos);
     EXPECT_NE(code.find("return"), std::string::npos);
-    EXPECT_NE(code.find("pow("), std::string::npos);
+    // AUDIT M11: pow is emitted as safePow so the prelude-provided guard is used.
+    EXPECT_NE(code.find("safePow("), std::string::npos);
     // Should NOT have C++ artifacts
     EXPECT_EQ(code.find("std::"), std::string::npos);
     EXPECT_EQ(code.find("inline"), std::string::npos);
@@ -237,10 +240,11 @@ TEST(CodegenGlsl, GenerateFile)
     EXPECT_NE(file.find("DO NOT EDIT"), std::string::npos);
     EXPECT_NE(file.find("aerodynamicDrag"), std::string::npos);
     EXPECT_NE(file.find("fresnelSchlick"), std::string::npos);
-    // AUDIT.md §H12 / FIXPLAN E4: prelude must be emitted before functions.
+    // AUDIT H12 / M11: prelude must be emitted before functions.
     EXPECT_NE(file.find("safeDiv"), std::string::npos);
     EXPECT_NE(file.find("safeSqrt"), std::string::npos);
     EXPECT_NE(file.find("safeLog"), std::string::npos);
+    EXPECT_NE(file.find("safePow"), std::string::npos);
 }
 
 // ===========================================================================
@@ -275,6 +279,20 @@ TEST(SafeMathParity, CodegenCppEmitsSafeSqrtAndLog)
               std::string::npos);
 }
 
+TEST(SafeMathParity, CodegenCppEmitsSafePowOnPow)
+{
+    // AUDIT M11: emitted C++ must wrap pow in safePow so pow(-x, 0.5)
+    // projects to 0 instead of returning NaN and poisoning the fitter.
+    auto pw = ExprNode::binaryOp("pow",
+        ExprNode::variable("a"), ExprNode::variable("b"));
+    std::string code = CodegenCpp::emitExpression(*pw, {});
+    EXPECT_NE(code.find("SafeMath::safePow"), std::string::npos)
+        << "Emitted C++ must use safePow, not bare std::pow, for parity with "
+           "ExpressionEvaluator (AUDIT M11).";
+    EXPECT_EQ(code.find("std::pow"), std::string::npos)
+        << "Emitted C++ must not contain bare std::pow for the pow op.";
+}
+
 TEST(SafeMathParity, CodegenGlslEmitsSafeDivAndHelpers)
 {
     auto div = ExprNode::binaryOp("/",
@@ -289,14 +307,20 @@ TEST(SafeMathParity, CodegenGlslEmitsSafeDivAndHelpers)
     auto lg = ExprNode::unaryOp("log", ExprNode::variable("x"));
     EXPECT_NE(CodegenGlsl::emitExpression(*lg, {}).find("safeLog("),
               std::string::npos);
+
+    auto pw = ExprNode::binaryOp("pow",
+        ExprNode::variable("a"), ExprNode::variable("b"));
+    EXPECT_NE(CodegenGlsl::emitExpression(*pw, {}).find("safePow("),
+              std::string::npos);
 }
 
-TEST(SafeMathParity, GlslPreludeDefinesAllThreeHelpers)
+TEST(SafeMathParity, GlslPreludeDefinesAllFourHelpers)
 {
     std::string prelude = CodegenGlsl::safeMathPrelude();
     EXPECT_NE(prelude.find("float safeDiv"), std::string::npos);
     EXPECT_NE(prelude.find("float safeSqrt"), std::string::npos);
     EXPECT_NE(prelude.find("float safeLog"), std::string::npos);
+    EXPECT_NE(prelude.find("float safePow"), std::string::npos);
 }
 
 TEST(SafeMathParity, EvaluatorAndHelpersAgreeOnDegenerateInputs)
@@ -336,6 +360,16 @@ TEST(SafeMathParity, HelpersMatchEvaluatorPrecisely)
     EXPECT_FLOAT_EQ(SafeMath::safeLog(0.0f), 0.0f);
     EXPECT_FLOAT_EQ(SafeMath::safeLog(-5.0f), 0.0f);
     EXPECT_NEAR(SafeMath::safeLog(2.71828f), 1.0f, 1e-4f);
+
+    // AUDIT M11: safePow degenerate-math contract.
+    EXPECT_FLOAT_EQ(SafeMath::safePow(2.0f, 3.0f), 8.0f);            // identity
+    EXPECT_FLOAT_EQ(SafeMath::safePow(-2.0f, 3.0f), -8.0f);          // integer exponent passes through
+    EXPECT_FLOAT_EQ(SafeMath::safePow(-2.0f, 2.0f), 4.0f);           // integer exponent passes through
+    EXPECT_FLOAT_EQ(SafeMath::safePow(-4.0f, 0.5f), 0.0f);           // fractional exponent on negative → 0 (not NaN)
+    EXPECT_FLOAT_EQ(SafeMath::safePow(0.0f, 0.0f), 1.0f);            // 0^0 matches std::pow
+    EXPECT_FLOAT_EQ(SafeMath::safePow(3.0f, 0.0f), 1.0f);
+    EXPECT_NEAR(SafeMath::safePow(4.0f, 0.5f), 2.0f, 1e-5f);
+    EXPECT_FALSE(std::isnan(SafeMath::safePow(-1.0f, 0.3333f)));     // invariant: never NaN
 }
 
 // ===========================================================================

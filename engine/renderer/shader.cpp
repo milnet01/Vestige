@@ -5,12 +5,11 @@
 /// @brief Shader implementation.
 #include "renderer/shader.h"
 #include "core/logger.h"
+#include "utils/json_size_cap.h"
 
 #include <glm/gtc/type_ptr.hpp>
 
 #include <algorithm>
-#include <fstream>
-#include <sstream>
 
 namespace Vestige
 {
@@ -70,27 +69,25 @@ bool Shader::loadFromFiles(const std::string& vertexPath, const std::string& fra
     }
     m_uniformCache.clear();
 
-    // Read vertex shader source
-    std::ifstream vertexFile(vertexPath);
-    if (!vertexFile.is_open())
+    // AUDIT M26: shader sources must stay bounded; a hostile/corrupt .glsl
+    // file was previously slurped via ``<< rdbuf()`` with no cap. 8 MB is
+    // comfortably above any real shader (engine ships ~20 KB worst case).
+    constexpr std::uintmax_t MAX_SHADER_BYTES = 8ULL * 1024ULL * 1024ULL;
+    auto vertexOpt = JsonSizeCap::loadTextFileWithSizeCap(
+        vertexPath, "Shader (vertex)", MAX_SHADER_BYTES);
+    if (!vertexOpt)
     {
-        Logger::error("Failed to open vertex shader: " + vertexPath);
         return false;
     }
-    std::stringstream vertexStream;
-    vertexStream << vertexFile.rdbuf();
-    std::string vertexSource = vertexStream.str();
+    std::string vertexSource = std::move(*vertexOpt);
 
-    // Read fragment shader source
-    std::ifstream fragmentFile(fragmentPath);
-    if (!fragmentFile.is_open())
+    auto fragmentOpt = JsonSizeCap::loadTextFileWithSizeCap(
+        fragmentPath, "Shader (fragment)", MAX_SHADER_BYTES);
+    if (!fragmentOpt)
     {
-        Logger::error("Failed to open fragment shader: " + fragmentPath);
         return false;
     }
-    std::stringstream fragmentStream;
-    fragmentStream << fragmentFile.rdbuf();
-    std::string fragmentSource = fragmentStream.str();
+    std::string fragmentSource = std::move(*fragmentOpt);
 
     // Compile shaders
     GLuint vertexShader = compileShader(GL_VERTEX_SHADER, vertexSource);
@@ -131,16 +128,15 @@ bool Shader::loadComputeShader(const std::string& computePath)
     }
     m_uniformCache.clear();
 
-    // Read compute shader source
-    std::ifstream computeFile(computePath);
-    if (!computeFile.is_open())
+    // Read compute shader source (8 MB cap — see loadFromFiles).
+    constexpr std::uintmax_t MAX_SHADER_BYTES = 8ULL * 1024ULL * 1024ULL;
+    auto computeOpt = JsonSizeCap::loadTextFileWithSizeCap(
+        computePath, "Shader (compute)", MAX_SHADER_BYTES);
+    if (!computeOpt)
     {
-        Logger::error("Failed to open compute shader: " + computePath);
         return false;
     }
-    std::stringstream computeStream;
-    computeStream << computeFile.rdbuf();
-    std::string computeSource = computeStream.str();
+    std::string computeSource = std::move(*computeOpt);
 
     // Compile compute shader
     GLuint computeShader = compileShader(GL_COMPUTE_SHADER, computeSource);

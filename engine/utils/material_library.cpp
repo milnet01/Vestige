@@ -7,6 +7,7 @@
 #include "renderer/material.h"
 #include "resource/resource_manager.h"
 #include "core/logger.h"
+#include "utils/json_size_cap.h"
 
 #include <nlohmann/json.hpp>
 
@@ -217,21 +218,13 @@ bool loadMaterial(const std::string& name, Material& target,
                   ResourceManager& resources, const std::string& assetPath)
 {
     std::string filepath = materialsDir(assetPath) + "/" + name + ".json";
-    std::ifstream file(filepath);
-    if (!file.is_open())
+    auto j = JsonSizeCap::loadJsonWithSizeCap(filepath, "MaterialLibrary");
+    if (!j)
     {
-        Logger::error("MaterialLibrary: Failed to read " + filepath);
         return false;
     }
 
-    json j = json::parse(file, nullptr, false);
-    if (j.is_discarded())
-    {
-        Logger::error("MaterialLibrary: Invalid JSON in " + filepath);
-        return false;
-    }
-
-    applyMat(j, target, resources);
+    applyMat(*j, target, resources);
     Logger::info("MaterialLibrary: Loaded preset '" + name + "'");
     return true;
 }

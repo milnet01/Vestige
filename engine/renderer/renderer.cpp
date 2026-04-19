@@ -564,6 +564,19 @@ void Renderer::initFramebuffers(int width, int height, int msaaSamples)
         // Single FBO, we'll attach different mip levels as needed
         glCreateFramebuffers(1, &m_bloomFbo);
 
+        // Verify completeness with a placeholder mip-0 attachment. The bloom
+        // passes re-attach different mips at draw time; this just ensures the
+        // base configuration is valid once, at creation.
+        glNamedFramebufferTexture(m_bloomFbo, GL_COLOR_ATTACHMENT0, m_bloomTexture, 0);
+        {
+            GLenum status = glCheckNamedFramebufferStatus(m_bloomFbo, GL_FRAMEBUFFER);
+            if (status != GL_FRAMEBUFFER_COMPLETE)
+            {
+                Logger::error("Bloom FBO incomplete — status: 0x"
+                    + std::to_string(status));
+            }
+        }
+
         Logger::debug("Bloom mip-chain created: " + std::to_string(BLOOM_MIP_COUNT)
             + " levels from " + std::to_string(m_bloomMipWidths[0]) + "x"
             + std::to_string(m_bloomMipHeights[0]));
@@ -1899,6 +1912,22 @@ void Renderer::captureLightProbe(int probeIndex, const SceneRenderData& renderDa
     glNamedRenderbufferStorage(captureRbo, GL_DEPTH_COMPONENT24, faceSize, faceSize);
     glNamedFramebufferRenderbuffer(captureFbo, GL_DEPTH_ATTACHMENT,
                                    GL_RENDERBUFFER, captureRbo);
+    // Placeholder color attachment (face 0) so completeness can be checked
+    // before the per-face render loop starts swapping layers.
+    glNamedFramebufferTextureLayer(captureFbo, GL_COLOR_ATTACHMENT0,
+                                   captureCubemap, 0, 0);
+    {
+        GLenum status = glCheckNamedFramebufferStatus(captureFbo, GL_FRAMEBUFFER);
+        if (status != GL_FRAMEBUFFER_COMPLETE)
+        {
+            Logger::error("Light probe capture FBO incomplete — status: 0x"
+                + std::to_string(status));
+            glDeleteTextures(1, &captureCubemap);
+            glDeleteFramebuffers(1, &captureFbo);
+            glDeleteRenderbuffers(1, &captureRbo);
+            return;
+        }
+    }
 
     // Cubemap face view matrices (looking from probe position)
     static const glm::vec3 TARGETS[6] = {
@@ -2014,6 +2043,22 @@ void Renderer::captureSHGrid(const SceneRenderData& renderData,
     glNamedRenderbufferStorage(captureRbo, GL_DEPTH_COMPONENT24, faceSize, faceSize);
     glNamedFramebufferRenderbuffer(captureFbo, GL_DEPTH_ATTACHMENT,
                                    GL_RENDERBUFFER, captureRbo);
+    // Placeholder color attachment (face 0) so completeness can be checked
+    // once before the triple-nested capture loop swaps layers per probe/face.
+    glNamedFramebufferTextureLayer(captureFbo, GL_COLOR_ATTACHMENT0,
+                                   captureCubemap, 0, 0);
+    {
+        GLenum status = glCheckNamedFramebufferStatus(captureFbo, GL_FRAMEBUFFER);
+        if (status != GL_FRAMEBUFFER_COMPLETE)
+        {
+            Logger::error("SH-grid capture FBO incomplete — status: 0x"
+                + std::to_string(status));
+            glDeleteTextures(1, &captureCubemap);
+            glDeleteFramebuffers(1, &captureFbo);
+            glDeleteRenderbuffers(1, &captureRbo);
+            return;
+        }
+    }
 
     // Face view targets + ups
     static const glm::vec3 TARGETS[6] = {

@@ -6,6 +6,7 @@
 #include "formula/formula_library.h"
 #include "formula/physics_templates.h"
 #include "core/logger.h"
+#include "utils/json_size_cap.h"
 
 #include <algorithm>
 #include <fstream>
@@ -134,23 +135,12 @@ size_t FormulaLibrary::loadFromJson(const nlohmann::json& j)
 
 size_t FormulaLibrary::loadFromFile(const std::string& path)
 {
-    std::ifstream file(path);
-    if (!file.is_open())
+    auto j = JsonSizeCap::loadJsonWithSizeCap(path, "FormulaLibrary");
+    if (!j)
     {
-        Logger::warning("FormulaLibrary: cannot open file: " + path);
         return 0;
     }
-
-    try
-    {
-        nlohmann::json j = nlohmann::json::parse(file);
-        return loadFromJson(j);
-    }
-    catch (const std::exception& e)
-    {
-        Logger::warning("FormulaLibrary: JSON parse error in " + path + ": " + e.what());
-        return 0;
-    }
+    return loadFromJson(*j);
 }
 
 nlohmann::json FormulaLibrary::toJson() const

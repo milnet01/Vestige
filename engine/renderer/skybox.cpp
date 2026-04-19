@@ -11,6 +11,8 @@
 #include <stb_image.h>
 
 #include <cmath>
+#include <filesystem>
+#include <system_error>
 #include <vector>
 
 namespace Vestige
@@ -176,6 +178,26 @@ bool Skybox::loadCubemap(const std::vector<std::string>& faces)
 
 bool Skybox::loadEquirectangular(const std::string& path)
 {
+    // AUDIT M26: cap on-disk equirect size before handing off to stb_image.
+    // A hostile 10 GB HDR header would otherwise drive stbi into multi-GB
+    // allocations. 512 MB comfortably admits 16K²×3 floats (768 MB would
+    // exceed the cap, forcing a downscaled asset — consistent with the
+    // 1024² face-size ceiling below).
+    {
+        namespace fs = std::filesystem;
+        std::error_code ec;
+        const std::uintmax_t sz = fs::file_size(path, ec);
+        constexpr std::uintmax_t MAX_EQUIRECT_BYTES =
+            512ULL * 1024ULL * 1024ULL;
+        if (!ec && sz > MAX_EQUIRECT_BYTES)
+        {
+            Logger::error("Skybox equirect exceeds "
+                + std::to_string(MAX_EQUIRECT_BYTES) + "-byte cap: "
+                + path + " (" + std::to_string(sz) + " bytes)");
+            return false;
+        }
+    }
+
     // Load equirectangular image (HDR float or LDR byte)
     // No vertical flip: row 0 = top of image = north pole (sky).
     // The sampling math maps directions to UV with this convention.

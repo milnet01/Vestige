@@ -56,7 +56,7 @@ static float evalNode(const ExprNode& node,
         if (node.op == "-")   return left - right;
         if (node.op == "*")   return left * right;
         if (node.op == "/")   return SafeMath::safeDiv(left, right);
-        if (node.op == "pow") return std::pow(left, right);
+        if (node.op == "pow") return SafeMath::safePow(left, right);
         if (node.op == "min") return std::fmin(left, right);
         if (node.op == "max") return std::fmax(left, right);
         if (node.op == "mod") return std::fmod(left, right);

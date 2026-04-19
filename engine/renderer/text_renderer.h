@@ -80,6 +80,19 @@ public:
 private:
     void setupQuadBuffers();
 
+    /// @brief Upper bound on glyphs per renderText2D / renderText3D call.
+    ///
+    /// Strings beyond this limit are truncated rather than fall back to
+    /// chunked draws — HUD lines in practice are much shorter, and a bounded
+    /// VBO keeps the batched-upload path simple (one ``glNamedBufferSubData``
+    /// + one ``glDrawArrays`` per string, instead of N of each per glyph).
+    /// 1024 glyphs ≈ 96 KB of vertex data, which is still a cheap upload.
+    static constexpr int  MAX_GLYPHS_PER_CALL = 1024;
+    static constexpr int  VERTS_PER_GLYPH     = 6;
+    static constexpr int  FLOATS_PER_VERT     = 4;
+    static constexpr std::size_t VBO_BYTES    =
+        sizeof(float) * VERTS_PER_GLYPH * FLOATS_PER_VERT * MAX_GLYPHS_PER_CALL;
+
     Font m_font;
     Shader m_textShader;
     GLuint m_vao = 0;

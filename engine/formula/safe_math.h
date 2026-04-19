@@ -57,10 +57,35 @@ inline float safeLog(float x)
     return (x > 0.0f) ? std::log(x) : 0.0f;
 }
 
-/// @brief GLSL-source prelude that defines the same three helpers.
+/// @brief Power with degenerate-math guard.
+///
+/// ``std::pow(negative, non-integer)`` returns NaN, which then propagates
+/// through the LM fitter residuals and poisons R² / AIC / BIC. Mirror the
+/// safeDiv/Sqrt/Log convention: degenerate math is projected to 0 so the
+/// optimiser stays in finite-value space. Integer exponents (including 0)
+/// are passed through unchanged — `pow(-2, 3)` remains defined. (AUDIT
+/// M11; authored alongside the Workbench harness so the three evaluation
+/// paths never drift again.)
+inline float safePow(float base, float exp)
+{
+    if (base < 0.0f)
+    {
+        // Integer exponent (within float precision) → standard behaviour.
+        const float rounded = std::round(exp);
+        if (std::fabs(exp - rounded) < 1e-6f && std::isfinite(rounded))
+        {
+            return std::pow(base, exp);
+        }
+        // Fractional negative base → degenerate; project to 0.
+        return 0.0f;
+    }
+    return std::pow(base, exp);
+}
+
+/// @brief GLSL-source prelude that defines the same four helpers.
 ///
 /// CodegenGlsl prepends this to every generated file so the emitted
-/// shader behaves identically to the evaluator for all three guarded
+/// shader behaves identically to the evaluator for all four guarded
 /// operations. Kept as a function returning a constant string (rather
 /// than a string_view constant) so the definition lives alongside the
 /// C++ implementation.
@@ -68,10 +93,18 @@ inline const char* glslPrelude()
 {
     return
         "// Vestige SafeMath prelude — matches engine/formula/safe_math.h.\n"
-        "// See AUDIT.md §H12 / FIXPLAN E4 for motivation.\n"
+        "// See AUDIT.md §H12 / FIXPLAN E4 and AUDIT M11 for motivation.\n"
         "float safeDiv(float l, float r) { return (r == 0.0) ? 0.0 : (l / r); }\n"
         "float safeSqrt(float x) { return sqrt(abs(x)); }\n"
-        "float safeLog(float x) { return (x > 0.0) ? log(x) : 0.0; }\n";
+        "float safeLog(float x) { return (x > 0.0) ? log(x) : 0.0; }\n"
+        "float safePow(float b, float e) {\n"
+        "    if (b < 0.0) {\n"
+        "        float r = floor(e + 0.5);\n"
+        "        if (abs(e - r) < 1e-6) { return pow(b, e); }\n"
+        "        return 0.0;\n"
+        "    }\n"
+        "    return pow(b, e);\n"
+        "}\n";
 }
 
 } // namespace Vestige::SafeMath

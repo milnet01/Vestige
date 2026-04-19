@@ -196,6 +196,19 @@ void LightProbe::generateIrradiance(GLuint envCubemap)
                                IRRADIANCE_RESOLUTION, IRRADIANCE_RESOLUTION);
     glNamedFramebufferRenderbuffer(m_captureFbo, GL_DEPTH_ATTACHMENT,
                                    GL_RENDERBUFFER, m_captureRbo);
+    // Placeholder color attachment (face 0) so completeness can be verified
+    // once before the per-face render loop swaps layers.
+    glNamedFramebufferTextureLayer(m_captureFbo, GL_COLOR_ATTACHMENT0,
+                                   m_irradianceMap, 0, 0);
+    {
+        GLenum status = glCheckNamedFramebufferStatus(m_captureFbo, GL_FRAMEBUFFER);
+        if (status != GL_FRAMEBUFFER_COMPLETE)
+        {
+            Logger::error("Light probe irradiance FBO incomplete — status: 0x"
+                + std::to_string(status));
+            return;
+        }
+    }
 
     glBindFramebuffer(GL_FRAMEBUFFER, m_captureFbo);
     glViewport(0, 0, IRRADIANCE_RESOLUTION, IRRADIANCE_RESOLUTION);

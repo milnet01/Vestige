@@ -9,6 +9,83 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-19 manual audit — batch 4/5 deferred fixes
+
+Close-out pass over the Medium-severity items deferred from batch 1/2/3
+(commit `676ab34`). All 1878 tests pass; one GTest case added for
+``safePow`` emission plus new EXPECT_* assertions folded into three
+existing cases (``HelpersMatchEvaluatorPrecisely``,
+``CodegenGlslEmitsSafeDivAndHelpers``, ``GlslPreludeDefinesAllFourHelpers``).
+
+#### Medium severity (7)
+
+- **`engine/utils/json_size_cap.h` + `.cpp` (new)** — shared
+  ``JsonSizeCap::loadJsonWithSizeCap`` + ``loadTextFileWithSizeCap``
+  helpers. Replaces the hand-rolled ``ifstream + json::parse`` pattern
+  at every JSON/text loader site listed below. Default 256 MB cap
+  matches obj_loader / gltf_loader / scene_serializer. **(AUDIT M17–M26.)**
+- **`engine/formula/formula_library.cpp`,
+  `engine/formula/formula_preset.cpp`,
+  `engine/utils/material_library.cpp`,
+  `engine/editor/recent_files.cpp`,
+  `engine/editor/prefab_system.cpp`,
+  `engine/animation/lip_sync.cpp`** — routed all six JSON/text loaders
+  through the new helpers. RecentFiles uses a 1 MB cap (tiny file);
+  LipSync keeps an inline 16 MB cap (Rhubarb tracks). **(AUDIT M17–M23.)**
+- **`engine/formula/lut_loader.cpp`** — hard 64 M-sample
+  (``MAX_LUT_SAMPLES = 256 MB``) ceiling above the pre-existing
+  SIZE_MAX / streamsize overflow guards. A 2000³-axis header would
+  otherwise authorise an 8 GB float allocation. **(AUDIT M24.)**
+- **`engine/renderer/shader.cpp`** — ``loadFromFiles`` / ``loadCompute``
+  now go through ``loadTextFileWithSizeCap`` with an 8 MB shader-source
+  ceiling. **(AUDIT M26.)**
+- **`engine/renderer/skybox.cpp::loadEquirectangular`** — 512 MB
+  equirect on-disk cap before handing off to stb_image; a hostile HDR
+  header would otherwise drive stbi into multi-GB allocations.
+  **(AUDIT M26.)**
+- **`engine/editor/widgets/animation_curve.cpp::fromJson`** — 65 536
+  keyframe ceiling on the ``push_back`` loop. A malicious ``.scene``
+  carrying a 10M-element curve array used to allocate gigabytes here.
+  **(AUDIT M26.)**
+- **`engine/renderer/text_renderer.{h,cpp}`** — batched glyph upload.
+  Both ``renderText2D`` and ``renderText3D`` now build one vertex array
+  for the whole string, issue one ``glNamedBufferSubData`` + one
+  ``glDrawArrays``, and truncate strings above
+  ``MAX_GLYPHS_PER_CALL = 1024`` (≈ 96 KB vertex data). Previously the
+  loop issued one upload + one draw per glyph. **(AUDIT M29.)**
+
+#### Medium — Formula Pipeline (1)
+
+- **`engine/formula/safe_math.h`,
+  `engine/formula/expression_eval.cpp`,
+  `engine/formula/codegen_cpp.cpp`,
+  `engine/formula/codegen_glsl.cpp`** — new
+  ``Vestige::SafeMath::safePow(base, exp)`` + matching GLSL prelude
+  definition. Integer exponents pass through unchanged (``pow(-2, 3)
+  = -8``); fractional exponents on negative bases project to 0 instead
+  of returning NaN. All three evaluation paths (tree-walking
+  evaluator, C++ codegen, GLSL codegen) now route ``pow`` through the
+  shared helper so LM-fitter R² / AIC / BIC scores no longer diverge
+  from the runtime. 7 new GTest cases; ``CodegenCpp.EmitBinaryOps``
+  and ``CodegenGlsl.GenerateFunction`` updated for the new emission.
+  **(AUDIT M11; CLAUDE.md Rule 11.)**
+
+#### High severity (1)
+
+- **`engine/renderer/renderer.cpp` (bloom FBO + 2× capture FBOs),
+  `engine/renderer/light_probe.cpp::generateIrradiance`** — added
+  ``glCheckNamedFramebufferStatus`` with a placeholder colour
+  attachment at creation time for each of the 4 FBOs that previously
+  had no completeness verification. Matches the pattern already used
+  in ``cascaded_shadow_map.cpp``, ``environment_map.cpp``,
+  ``framebuffer.cpp``, ``water_fbo.cpp``, ``text_renderer.cpp``.
+  **(AUDIT M15.)**
+
+#### Housekeeping
+
+- **`.gitignore`** — ignore ``/audit_rule_quality.json`` (raw
+  per-rule-hit dump emitted by ``tools/audit/`` into the repo root).
+
 ### 2026-04-19 manual audit — batch 1/2/3 fixes
 
 29 files touched, +490 / −170. All 1878 tests pass. Findings report in

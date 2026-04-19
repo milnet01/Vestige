@@ -5,6 +5,7 @@
 /// @brief Recent files manager implementation.
 #include "editor/recent_files.h"
 #include "core/logger.h"
+#include "utils/json_size_cap.h"
 
 #include <nlohmann/json.hpp>
 
@@ -28,22 +29,14 @@ void RecentFiles::load()
         return;
     }
 
-    std::ifstream file(storagePath);
-    if (!file.is_open())
+    // Recent-files list is tiny; cap at 1 MB to reject pathological inputs.
+    auto parsed = JsonSizeCap::loadJsonWithSizeCap(
+        storagePath.string(), "RecentFiles", 1ULL * 1024ULL * 1024ULL);
+    if (!parsed)
     {
         return;
     }
-
-    json data;
-    try
-    {
-        data = json::parse(file);
-    }
-    catch (const json::parse_error&)
-    {
-        Logger::warning("RecentFiles: could not parse " + storagePath.string());
-        return;
-    }
+    const json& data = *parsed;
 
     if (!data.contains("recent_files") || !data["recent_files"].is_array())
     {

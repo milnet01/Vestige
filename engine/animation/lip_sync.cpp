@@ -19,6 +19,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <filesystem>
 #include <fstream>
 #include <sstream>
 
@@ -99,6 +100,25 @@ void LipSyncPlayer::setFacialAnimator(FacialAnimator* animator)
 
 bool LipSyncPlayer::loadTrack(const std::string& jsonPath)
 {
+    // Rhubarb tracks are small (seconds of audio → KB of JSON); cap at 16 MB
+    // to reject pathological inputs without eliminating legitimate tracks.
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    const std::uintmax_t sz = fs::file_size(jsonPath, ec);
+    if (ec)
+    {
+        Logger::error("LipSyncPlayer: Failed to stat track file: " + jsonPath);
+        return false;
+    }
+    constexpr std::uintmax_t MAX_LIPSYNC_BYTES = 16ULL * 1024ULL * 1024ULL;
+    if (sz > MAX_LIPSYNC_BYTES)
+    {
+        Logger::error("LipSyncPlayer: Track file exceeds "
+            + std::to_string(MAX_LIPSYNC_BYTES) + "-byte cap: " + jsonPath
+            + " (" + std::to_string(sz) + " bytes)");
+        return false;
+    }
+
     std::ifstream file(jsonPath);
     if (!file.is_open())
     {

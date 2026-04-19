@@ -94,10 +94,20 @@ AnimationCurve AnimationCurve::fromJson(const nlohmann::json& j)
     AnimationCurve curve;
     curve.keyframes.clear();
 
+    // AUDIT M26: unbounded push_back in the previous revision meant a
+    // malicious .scene JSON with a 10M-element curve array would allocate
+    // gigabytes here. Real curves carry tens of keyframes at most — cap
+    // comfortably above legitimate use.
+    constexpr size_t MAX_KEYFRAMES = 65536;
+
     if (j.is_array())
     {
         for (const auto& item : j)
         {
+            if (curve.keyframes.size() >= MAX_KEYFRAMES)
+            {
+                break;
+            }
             Keyframe kf;
             kf.time = item.value("t", 0.0f);
             kf.value = item.value("v", 0.0f);

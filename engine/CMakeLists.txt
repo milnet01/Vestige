@@ -68,6 +68,7 @@ set(ENGINE_SOURCES
     utils/catmull_rom_spline.cpp
     utils/gltf_loader_impl.cpp
     utils/cube_loader.cpp
+    utils/json_size_cap.cpp
     editor/editor.cpp
     editor/editor_camera.cpp
     editor/entity_actions.cpp

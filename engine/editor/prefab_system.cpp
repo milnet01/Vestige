@@ -5,6 +5,7 @@
 /// @brief PrefabSystem implementation — save/load entity trees as JSON files.
 #include "editor/prefab_system.h"
 #include "utils/entity_serializer.h"
+#include "utils/json_size_cap.h"
 #include "scene/entity.h"
 #include "core/logger.h"
 
@@ -87,23 +88,13 @@ bool PrefabSystem::savePrefab(const Entity& entity, const std::string& name,
 Entity* PrefabSystem::loadPrefab(const std::string& filePath, Scene& scene,
                                  ResourceManager& resources)
 {
-    std::ifstream file(filePath);
-    if (!file.is_open())
+    auto parsed = JsonSizeCap::loadJsonWithSizeCap(
+        filePath, "Prefab load", JsonSizeCap::DEFAULT_MAX_BYTES, /*strict=*/true);
+    if (!parsed)
     {
-        Logger::error("Prefab load: could not open " + filePath);
         return nullptr;
     }
-
-    json prefab;
-    try
-    {
-        prefab = json::parse(file);
-    }
-    catch (const json::parse_error& e)
-    {
-        Logger::error("Prefab load: JSON parse error in " + filePath + " — " + e.what());
-        return nullptr;
-    }
+    const json& prefab = *parsed;
 
     if (!prefab.contains("root") || !prefab["root"].is_object())
     {

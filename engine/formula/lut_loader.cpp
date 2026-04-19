@@ -109,6 +109,20 @@ bool LutLoader::loadFromFile(const std::string& path)
         totalSamples *= axis.size;
     }
 
+    // AUDIT M24: hard ceiling independent of streamsize. A 3-axis LUT with
+    // 2000 samples per axis header-declared would be 8 GB of float storage
+    // but still within streamsize bounds on 64-bit. Cap at 64 M samples
+    // (256 MB), comfortably above legitimate use (e.g. 256³ = 16.7 M).
+    constexpr size_t MAX_LUT_SAMPLES = 64ULL * 1024ULL * 1024ULL;
+    if (totalSamples > MAX_LUT_SAMPLES)
+    {
+        Logger::error("LutLoader: totalSamples " + std::to_string(totalSamples)
+                      + " exceeds " + std::to_string(MAX_LUT_SAMPLES)
+                      + " cap for: " + path);
+        m_axes.clear();
+        return false;
+    }
+
     // Check that totalSamples * sizeof(float) fits in std::streamsize
     constexpr size_t maxStreamSamples =
         static_cast<size_t>(std::numeric_limits<std::streamsize>::max()) / sizeof(float);

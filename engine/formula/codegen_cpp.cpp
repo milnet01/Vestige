@@ -61,7 +61,7 @@ std::string CodegenCpp::emitExpression(const ExprNode& node,
         }
         if (node.op == "pow")
         {
-            return "std::pow(" + l + ", " + r + ")";
+            return "Vestige::SafeMath::safePow(" + l + ", " + r + ")";
         }
         if (node.op == "min")
         {

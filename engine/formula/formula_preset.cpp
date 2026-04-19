@@ -6,6 +6,7 @@
 #include "formula/formula_preset.h"
 #include "formula/formula_library.h"
 #include "core/logger.h"
+#include "utils/json_size_cap.h"
 
 #include <algorithm>
 #include <fstream>
@@ -193,19 +194,12 @@ size_t FormulaPresetLibrary::loadFromJson(const nlohmann::json& j)
 
 size_t FormulaPresetLibrary::loadFromFile(const std::string& path)
 {
-    std::ifstream file(path);
-    if (!file.is_open())
+    auto j = JsonSizeCap::loadJsonWithSizeCap(path, "FormulaPresetLibrary");
+    if (!j)
     {
-        Logger::warning("FormulaPresetLibrary: cannot open: " + path);
         return 0;
     }
-    nlohmann::json j = nlohmann::json::parse(file, nullptr, false);
-    if (j.is_discarded())
-    {
-        Logger::warning("FormulaPresetLibrary: invalid JSON: " + path);
-        return 0;
-    }
-    return loadFromJson(j);
+    return loadFromJson(*j);
 }
 
 nlohmann::json FormulaPresetLibrary::toJson() const

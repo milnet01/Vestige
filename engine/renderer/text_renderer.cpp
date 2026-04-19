@@ -60,8 +60,11 @@ void TextRenderer::setupQuadBuffers()
     glCreateVertexArrays(1, &m_vao);
     glCreateBuffers(1, &m_vbo);
 
-    // Dynamic buffer for 6 vertices * 4 floats (x, y, u, v) per glyph quad
-    glNamedBufferStorage(m_vbo, sizeof(float) * 6 * 4, nullptr, GL_DYNAMIC_STORAGE_BIT);
+    // AUDIT M29: batch the whole string into one upload + one draw. Size the
+    // VBO up-front to the per-call glyph ceiling. Strings longer than this
+    // are truncated (see MAX_GLYPHS_PER_CALL); HUD lines in practice are
+    // well under 256 chars.
+    glNamedBufferStorage(m_vbo, VBO_BYTES, nullptr, GL_DYNAMIC_STORAGE_BIT);
 
     // Bind VBO to VAO binding point 0
     glVertexArrayVertexBuffer(m_vao, 0, m_vbo, 0, 4 * sizeof(float));
@@ -107,8 +110,21 @@ void TextRenderer::renderText2D(const std::string& text, float x, float y, float
     float cursorX = x;
     float cursorY = y + m_font.getAscender() * scale;
 
+    // AUDIT M29: build one vertex array for the whole string, upload + draw
+    // once. Previously this loop did one glNamedBufferSubData + glDrawArrays
+    // per glyph, causing dozens of calls per HUD line.
+    std::vector<float> verts;
+    const std::size_t glyphCap =
+        std::min<std::size_t>(text.size(), MAX_GLYPHS_PER_CALL);
+    verts.reserve(glyphCap * VERTS_PER_GLYPH * FLOATS_PER_VERT);
+
+    int emitted = 0;
     for (char c : text)
     {
+        if (emitted >= MAX_GLYPHS_PER_CALL)
+        {
+            break;
+        }
         const GlyphInfo& glyph = m_font.getGlyph(c);
 
         float xpos = cursorX + static_cast<float>(glyph.bearing.x) * scale;
@@ -121,23 +137,26 @@ void TextRenderer::renderText2D(const std::string& text, float x, float y, float
         float u1 = u0 + glyph.atlasSize.x;
         float v1 = v0 + glyph.atlasSize.y;
 
-        // Two triangles for the glyph quad
-        float vertices[6][4] =
-        {
-            { xpos,     ypos,     u0, v0 },
-            { xpos + w, ypos,     u1, v0 },
-            { xpos,     ypos + h, u0, v1 },
-
-            { xpos + w, ypos,     u1, v0 },
-            { xpos + w, ypos + h, u1, v1 },
-            { xpos,     ypos + h, u0, v1 },
-        };
-
-        glNamedBufferSubData(m_vbo, 0, sizeof(vertices), vertices);
-
-        glDrawArrays(GL_TRIANGLES, 0, 6);
+        verts.insert(verts.end(), {
+            xpos,     ypos,     u0, v0,
+            xpos + w, ypos,     u1, v0,
+            xpos,     ypos + h, u0, v1,
+            xpos + w, ypos,     u1, v0,
+            xpos + w, ypos + h, u1, v1,
+            xpos,     ypos + h, u0, v1,
+        });
+        ++emitted;
 
         cursorX += static_cast<float>(glyph.advance) / 64.0f * scale;
+    }
+
+    if (emitted > 0)
+    {
+        glNamedBufferSubData(m_vbo, 0,
+            static_cast<GLsizeiptr>(verts.size() * sizeof(float)),
+            verts.data());
+        glDrawArrays(GL_TRIANGLES, 0,
+            static_cast<GLsizei>(emitted * VERTS_PER_GLYPH));
     }
 
     // Restore GL state
@@ -177,8 +196,19 @@ void TextRenderer::renderText3D(const std::string& text, const glm::mat4& modelM
     float cursorX = 0.0f;
     float pixelScale = scale / static_cast<float>(m_font.getPixelSize());
 
+    // AUDIT M29: batched upload — see renderText2D for rationale.
+    std::vector<float> verts;
+    const std::size_t glyphCap =
+        std::min<std::size_t>(text.size(), MAX_GLYPHS_PER_CALL);
+    verts.reserve(glyphCap * VERTS_PER_GLYPH * FLOATS_PER_VERT);
+
+    int emitted = 0;
     for (char c : text)
     {
+        if (emitted >= MAX_GLYPHS_PER_CALL)
+        {
+            break;
+        }
         const GlyphInfo& glyph = m_font.getGlyph(c);
 
         float xpos = cursorX + static_cast<float>(glyph.bearing.x) * pixelScale;
@@ -191,22 +221,26 @@ void TextRenderer::renderText3D(const std::string& text, const glm::mat4& modelM
         float u1 = u0 + glyph.atlasSize.x;
         float v1 = v0 + glyph.atlasSize.y;
 
-        float vertices[6][4] =
-        {
-            { xpos,     ypos,     u0, v0 },
-            { xpos + w, ypos,     u1, v0 },
-            { xpos,     ypos + h, u0, v1 },
-
-            { xpos + w, ypos,     u1, v0 },
-            { xpos + w, ypos + h, u1, v1 },
-            { xpos,     ypos + h, u0, v1 },
-        };
-
-        glNamedBufferSubData(m_vbo, 0, sizeof(vertices), vertices);
-
-        glDrawArrays(GL_TRIANGLES, 0, 6);
+        verts.insert(verts.end(), {
+            xpos,     ypos,     u0, v0,
+            xpos + w, ypos,     u1, v0,
+            xpos,     ypos + h, u0, v1,
+            xpos + w, ypos,     u1, v0,
+            xpos + w, ypos + h, u1, v1,
+            xpos,     ypos + h, u0, v1,
+        });
+        ++emitted;
 
         cursorX += static_cast<float>(glyph.advance) / 64.0f * pixelScale;
+    }
+
+    if (emitted > 0)
+    {
+        glNamedBufferSubData(m_vbo, 0,
+            static_cast<GLsizeiptr>(verts.size() * sizeof(float)),
+            verts.data());
+        glDrawArrays(GL_TRIANGLES, 0,
+            static_cast<GLsizei>(emitted * VERTS_PER_GLYPH));
     }
 
     // Restore GL state
