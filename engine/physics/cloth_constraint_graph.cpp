@@ -32,14 +32,19 @@ void generateGridConstraints(
     const std::vector<glm::vec3>& positions,
     float stretchCompliance,
     float shearCompliance,
+    float bendCompliance,
     std::vector<GpuConstraint>& outConstraints)
 {
     if (gridW < 2 || gridH < 2) return;
 
-    // Pre-reserve to avoid repeated reallocations on large grids.
+    // Pre-reserve to avoid repeated reallocations on large grids. Bend term
+    // is non-negative because we already early-out on grids smaller than 2x2.
     const uint32_t stretchCount = 2 * gridW * gridH - gridW - gridH;
     const uint32_t shearCount   = 2 * (gridW - 1) * (gridH - 1);
-    outConstraints.reserve(outConstraints.size() + stretchCount + shearCount);
+    const uint32_t bendCount    = (gridW >= 3 ? (gridW - 2) * gridH : 0)
+                                + (gridH >= 3 ? gridW * (gridH - 2) : 0);
+    outConstraints.reserve(outConstraints.size()
+                            + stretchCount + shearCount + bendCount);
 
     for (uint32_t z = 0; z < gridH; ++z)
     {
@@ -70,6 +75,18 @@ void generateGridConstraints(
             {
                 outConstraints.push_back(
                     makeConstraint(idx, idx + gridW - 1, positions, shearCompliance));
+            }
+            // Bend — skip-one right
+            if (x + 2 < gridW)
+            {
+                outConstraints.push_back(
+                    makeConstraint(idx, idx + 2, positions, bendCompliance));
+            }
+            // Bend — skip-one down
+            if (z + 2 < gridH)
+            {
+                outConstraints.push_back(
+                    makeConstraint(idx, idx + 2 * gridW, positions, bendCompliance));
             }
         }
     }

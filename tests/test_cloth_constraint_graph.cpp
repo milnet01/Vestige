@@ -43,17 +43,59 @@ std::vector<glm::vec3> makeFlatGrid(uint32_t W, uint32_t H, float spacing = 1.0f
 
 // -- generateGridConstraints --
 
-TEST(ClothConstraintGraph, GeneratesExpectedStretchAndShearCounts)
+TEST(ClothConstraintGraph, GeneratesExpectedStretchShearBendCounts)
 {
     constexpr uint32_t W = 4, H = 4;
     auto positions = makeFlatGrid(W, H);
 
     std::vector<GpuConstraint> cs;
-    generateGridConstraints(W, H, positions, 0.0f, 0.0001f, cs);
+    generateGridConstraints(W, H, positions, 0.0f, 0.0001f, /*bend=*/0.01f, cs);
 
     // Stretch: 2 * W * H - W - H = 32 - 8 = 24.
     // Shear:   2 * (W-1) * (H-1) = 18.
-    EXPECT_EQ(cs.size(), 24u + 18u);
+    // Bend:    (W-2) * H + W * (H-2) = 8 + 8 = 16.
+    EXPECT_EQ(cs.size(), 24u + 18u + 16u);
+}
+
+TEST(ClothConstraintGraph, BendConstraintsHaveSkipOneRestLength)
+{
+    constexpr uint32_t W = 5, H = 5;
+    constexpr float spacing = 1.0f;
+    auto positions = makeFlatGrid(W, H, spacing);
+
+    std::vector<GpuConstraint> cs;
+    generateGridConstraints(W, H, positions, 0.0f, 0.0f, /*bend=*/0.01f, cs);
+
+    // Find any bend constraint by its compliance value (uniqueness in this fixture)
+    // and verify its rest length is 2 * spacing — the skip-one distance.
+    bool foundBend = false;
+    for (const auto& c : cs)
+    {
+        if (c.compliance == 0.01f)
+        {
+            EXPECT_NEAR(c.restLength, 2.0f * spacing, 1e-5f)
+                << "bend constraint " << c.i0 << "-" << c.i1
+                << " should span two grid cells";
+            foundBend = true;
+        }
+    }
+    EXPECT_TRUE(foundBend) << "expected at least one bend constraint on a 5x5 grid";
+}
+
+TEST(ClothConstraintGraph, NoBendConstraintsForGridSmallerThanThree)
+{
+    // Bend edges are skip-one — they require at least 3 particles along an axis.
+    // A 2xN grid should produce only stretch + shear, never bend.
+    constexpr uint32_t W = 2, H = 4;
+    auto positions = makeFlatGrid(W, H);
+    std::vector<GpuConstraint> cs;
+    generateGridConstraints(W, H, positions, 0.0f, 0.0f, /*bend=*/0.01f, cs);
+
+    // Stretch X: (W-1)*H = 4. Stretch Z: W*(H-1) = 6. Total stretch = 10.
+    // Shear:     2*(W-1)*(H-1) = 6.
+    // Bend X:    needs W >= 3 → 0.
+    // Bend Z:    W * (H-2) = 4.
+    EXPECT_EQ(cs.size(), 10u + 6u + 4u);
 }
 
 TEST(ClothConstraintGraph, RestLengthMatchesEuclideanDistance)
@@ -62,7 +104,7 @@ TEST(ClothConstraintGraph, RestLengthMatchesEuclideanDistance)
     auto positions = makeFlatGrid(W, H, /*spacing=*/2.0f);
 
     std::vector<GpuConstraint> cs;
-    generateGridConstraints(W, H, positions, 0.0f, 0.0f, cs);
+    generateGridConstraints(W, H, positions, 0.0f, 0.0f, /*bend=*/0.0f, cs);
 
     // First constraint should be the (0,0)–(1,0) horizontal edge, rest = 2.0f.
     ASSERT_FALSE(cs.empty());
@@ -75,7 +117,7 @@ TEST(ClothConstraintGraph, NoConstraintsForDegenerateGrid)
 {
     auto positions = makeFlatGrid(1, 1);
     std::vector<GpuConstraint> cs;
-    generateGridConstraints(1, 1, positions, 0.0f, 0.0f, cs);
+    generateGridConstraints(1, 1, positions, 0.0f, 0.0f, /*bend=*/0.0f, cs);
     EXPECT_TRUE(cs.empty());
 }
 
@@ -85,7 +127,7 @@ TEST(ClothConstraintGraph, AppendsToExistingBuffer)
     auto positions = makeFlatGrid(W, H);
     std::vector<GpuConstraint> cs;
     cs.push_back(GpuConstraint{99, 100, 1.0f, 0.0f});  // sentinel
-    generateGridConstraints(W, H, positions, 0.0f, 0.0001f, cs);
+    generateGridConstraints(W, H, positions, 0.0f, 0.0001f, /*bend=*/0.01f, cs);
     EXPECT_GT(cs.size(), 1u);
     EXPECT_EQ(cs[0].i0, 99u) << "existing entries must be preserved";
 }
@@ -101,7 +143,7 @@ TEST(ClothConstraintGraph, ColouringHasNoSharedParticleWithinColour)
     auto positions = makeFlatGrid(W, H);
 
     std::vector<GpuConstraint> cs;
-    generateGridConstraints(W, H, positions, 0.0f, 0.0001f, cs);
+    generateGridConstraints(W, H, positions, 0.0f, 0.0001f, /*bend=*/0.01f, cs);
     auto ranges = colourConstraints(cs, W * H);
 
     ASSERT_FALSE(ranges.empty());
@@ -121,18 +163,18 @@ TEST(ClothConstraintGraph, ColouringHasNoSharedParticleWithinColour)
 
 TEST(ClothConstraintGraph, ColouringIsConservativeForRegularGrid)
 {
-    // A regular grid's stretch + shear graph has max degree 6 (4 stretch
-    // neighbours + 2 of 4 shear diagonals at interior points). Greedy
-    // colouring should land well within Δ+1 = 7 colours; we sanity-cap at 12
-    // so an algorithm regression that explodes the colour count fails loudly.
+    // A regular grid with stretch + shear + bend has max degree 12 at
+    // interior particles (4 stretch + 4 shear + 4 bend edges each), so the
+    // greedy bound is Δ+1 = 13 colours in the worst case. Sanity-cap at 16
+    // to leave a little headroom but still flag a real algorithmic regression.
     constexpr uint32_t W = 16, H = 16;
     auto positions = makeFlatGrid(W, H);
 
     std::vector<GpuConstraint> cs;
-    generateGridConstraints(W, H, positions, 0.0f, 0.0001f, cs);
+    generateGridConstraints(W, H, positions, 0.0f, 0.0001f, /*bend=*/0.01f, cs);
     auto ranges = colourConstraints(cs, W * H);
 
-    EXPECT_LE(ranges.size(), 12u)
+    EXPECT_LE(ranges.size(), 16u)
         << "greedy colouring produced an unexpectedly high colour count";
     EXPECT_GE(ranges.size(), 4u)
         << "regular grid should need at least 4 colours";
@@ -146,7 +188,7 @@ TEST(ClothConstraintGraph, RangesPartitionTheConstraintArray)
     auto positions = makeFlatGrid(W, H);
 
     std::vector<GpuConstraint> cs;
-    generateGridConstraints(W, H, positions, 0.0f, 0.0001f, cs);
+    generateGridConstraints(W, H, positions, 0.0f, 0.0001f, /*bend=*/0.01f, cs);
     const size_t totalBefore = cs.size();
     auto ranges = colourConstraints(cs, W * H);
 

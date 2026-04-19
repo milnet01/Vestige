@@ -9,6 +9,31 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-19 Phase 9B Step 5: bend constraints (skip-one distance edges)
+
+`generateGridConstraints()` extended with a `bendCompliance`
+parameter and now also emits skip-one stretch edges along X and Z
+(`(x,z)–(x+2,z)` and `(x,z)–(x,z+2)`). Bend edges share the same
+XPBD distance-constraint shader as stretch/shear — only the rest
+length and compliance differ — so they slot transparently into the
+existing colour partitioning + multi-pass dispatch loop.
+
+`GpuClothSimulator::buildAndUploadConstraints()` now passes
+`config.bendCompliance` through. Cloth resists folding rather than
+just pulling apart along the grid lines.
+
+Per-interior-particle degree of the constraint graph rises from 8
+(stretch+shear) to 12 (+ skip-one in 4 cardinal directions), so
+greedy colouring's worst case rises from Δ+1=9 to 13. The
+`ColouringIsConservativeForRegularGrid` cap was loosened from 12
+to 16 colours to match (still flags any real algorithmic
+regression).
+
+Tests: 2 new bend-focused tests (`BendConstraintsHaveSkipOneRestLength`
+verifying rest = 2·spacing, `NoBendConstraintsForGridSmallerThanThree`
+guarding the 2×N edge case). Existing test counts updated.
+Suite: 1919/1919 passing.
+
 ### 2026-04-19 Phase 9B Step 4: cloth_constraints + greedy graph colouring
 
 XPBD distance-constraint solver lands on the GPU.

@@ -42,8 +42,8 @@ struct ColourRange
     uint32_t count;
 };
 
-/// @brief Appends every stretch and shear distance constraint for a regular
-///        cloth grid into @a outConstraints.
+/// @brief Appends every stretch, shear, and bend distance constraint for a
+///        regular cloth grid into @a outConstraints.
 ///
 /// Mirrors the topology built by `ClothSimulator::initialize()` so the GPU
 /// backend produces the same drape behaviour as the CPU reference.
@@ -52,14 +52,16 @@ struct ColourRange
 ///   constraints for a `W×H` grid.
 /// - **Shear** diagonals: `(x,z)–(x+1,z+1)` and `(x,z)–(x−1,z+1)` —
 ///   `2·(W−1)·(H−1)` constraints.
-///
-/// Bend (skip-one) constraints are intentionally **not** generated here —
-/// they land in Step 5 (`cloth_constraints.comp.glsl` colour expansion).
+/// - **Bend** (skip-one) edges: `(x,z)–(x+2,z)` and `(x,z)–(x,z+2)` —
+///   `(W−2)·H + W·(H−2)` constraints. They share the same XPBD distance-
+///   constraint solver as stretch/shear; only the rest length and compliance
+///   differ.
 void generateGridConstraints(
     uint32_t gridW, uint32_t gridH,
     const std::vector<glm::vec3>& positions,
     float stretchCompliance,
     float shearCompliance,
+    float bendCompliance,
     std::vector<GpuConstraint>& outConstraints);
 
 /// @brief Reorders @a constraints in-place into colour groups.

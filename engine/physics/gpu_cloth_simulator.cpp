@@ -113,6 +113,7 @@ void GpuClothSimulator::buildAndUploadConstraints(const ClothConfig& config)
     generateGridConstraints(m_gridW, m_gridH, m_positionMirror,
                              config.stretchCompliance,
                              config.shearCompliance,
+                             config.bendCompliance,
                              m_constraints);
     if (m_constraints.empty()) return;
 
