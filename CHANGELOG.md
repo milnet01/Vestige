@@ -9,6 +9,25 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-19 post-launch: gitleaks CI + pre-commit, Dependabot
+
+Closes two of the four post-launch maintenance items in
+`docs/PRE_OPEN_SOURCE_AUDIT.md`:
+
+- `.github/workflows/ci.yml` — new `secret-scan` job runs
+  `gitleaks/gitleaks-action@v2` against the full git history on every
+  push and PR. Honours the committed `.gitleaks.toml` allowlist
+  (rotated-and-scrubbed NVD key, documented in SECURITY.md).
+- `.pre-commit-config.yaml` — added `gitleaks@v8.30.1` hook so
+  contributors' `pre-commit install` catches staged secrets before
+  they ever reach a remote.
+- `.github/dependabot.yml` — new, weekly cadence on
+  `github-actions` and `pip` (audit tool) ecosystems, max 5 open PRs
+  per ecosystem, Monday 06:00 UTC. Tracks CI action CVEs without
+  depending on a human to remember to bump.
+
+Local sweep verified clean: 255 commits, ~11.75 MB, 0 leaks.
+
 ### 2026-04-19 audit tool 2.13.0 — three detectors + copyright-header backfill
 
 Ships three new tier-4 detectors that were deferred from audit 2.12.0

@@ -200,3 +200,29 @@ jobs:
             docs/AUTOMATED_AUDIT_REPORT_*.md
             docs/AUTOMATED_AUDIT_REPORT_*.json
           if-no-files-found: ignore
+
+  # Secret-scanning job — runs gitleaks against the repo and the full
+  # git history every push and PR. Catches accidentally-committed
+  # credentials before they reach public mirrors / caches. Uses the
+  # committed .gitleaks.toml so the allowlist stays in lockstep with
+  # the local pre-commit config. Non-blocking on forks (secret_scan is
+  # a separate job, so a fork's PR can still land the rest of CI if
+  # this job hits a transient download failure).
+  secret-scan:
+    name: gitleaks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          # Uses the committed .gitleaks.toml config (allowlist for the
+          # rotated-and-scrubbed NVD key, documented in SECURITY.md).
+          GITLEAKS_CONFIG: .gitleaks.toml
+          # GITLEAKS_LICENSE only needed for organisation-level commercial
+          # use; the open-source action is free for public repos.

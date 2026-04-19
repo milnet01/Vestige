@@ -1,0 +1,51 @@
+# Dependabot configuration — Vestige 3D Engine
+#
+# Watches for security and feature updates on the ecosystems Vestige
+# actually uses. Engine dependencies themselves are pinned via
+# CMake FetchContent `GIT_TAG` in `external/CMakeLists.txt` (not a
+# Dependabot-supported ecosystem), so this config focuses on what
+# IS supported: GitHub Actions and the Python tooling in
+# `tools/audit/`. The audit tool's NVD-aware tier 5 already covers
+# the C++ FetchContent deps for CVE tracking.
+#
+# Cadence: weekly, limited PR churn (max 5 open PRs per ecosystem)
+# to match a solo-maintainer triage rhythm.
+
+version: 2
+updates:
+  # Keep the CI action versions current (security-sensitive: these run
+  # with access to GITHUB_TOKEN).
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Etc/UTC"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "github-actions"
+    commit-message:
+      prefix: "ci"
+      include: "scope"
+
+  # Audit tool's Python dependencies. The tool currently has no
+  # requirements.txt (stdlib-only by design), but Dependabot can
+  # watch pyproject.toml / setup.py if one ever gets added. This
+  # block is a placeholder that becomes active the moment such a
+  # file lands, without needing a new commit to enable it.
+  - package-ecosystem: "pip"
+    directory: "/tools/audit"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Etc/UTC"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "python"
+    commit-message:
+      prefix: "audit"
+      include: "scope"

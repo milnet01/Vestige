@@ -12,10 +12,12 @@
 # commits fail before the commit is created so the fix is a simple
 # `git add CHANGELOG.md && git commit --amend`.
 #
-# All hooks are `repo: local` and invoke a committed shell script
+# Existing hooks are `repo: local` and invoke a committed shell script
 # (`scripts/check_changelog_pair.sh`) — no external pre-commit hook
-# repositories, so the config installs cleanly on any fork without
-# network access to third-party hook sources.
+# repositories needed for the CHANGELOG checks, so that subset installs
+# cleanly on any fork without network access to third-party hook
+# sources. The gitleaks hook below pulls from its public repo (any
+# contributor's first `pre-commit install` will auto-fetch it).
 
 repos:
   - repo: local
@@ -43,3 +45,16 @@ repos:
         language: script
         pass_filenames: false
         always_run: true
+
+  # Secret-scanner. Uses the committed .gitleaks.toml allowlist (which
+  # covers the rotated-and-scrubbed NVD key documented in SECURITY.md).
+  # The hook runs against STAGED changes only; the full-history sweep
+  # runs in CI (.github/workflows/ci.yml :: secret-scan job). Requires
+  # `gitleaks` on PATH — install via:
+  #   - macOS:   brew install gitleaks
+  #   - Linux:   go install github.com/gitleaks/gitleaks/v8@latest
+  #              or download a release binary from the project page.
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks

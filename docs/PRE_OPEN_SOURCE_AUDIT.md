@@ -219,8 +219,8 @@ Some docs were written for an internal audience and may leak private context or 
 
 ## Post-Launch Maintenance (ongoing)
 
-- [ ] Add a secret-scan step to CI (`gitleaks` as a pre-commit and PR check) so contributors can't accidentally reintroduce secrets.
-- [ ] Enable GitHub's secret scanning and Dependabot security updates.
+- [x] ~~Add a secret-scan step to CI (`gitleaks` as a pre-commit and PR check) so contributors can't accidentally reintroduce secrets.~~ ✅ Done (2026-04-19) — `gitleaks` added both as a CI job (`.github/workflows/ci.yml` :: `secret-scan`) running against full `fetch-depth: 0` history, and as a pre-commit hook (`.pre-commit-config.yaml` pulling `gitleaks/gitleaks@v8.30.1`). Uses the existing `.gitleaks.toml` allowlist. Local sweep verified clean (255 commits, ~11.75 MB, 0 leaks).
+- [x] ~~Enable GitHub's secret scanning and Dependabot security updates.~~ ✅ Done (2026-04-19) — `.github/dependabot.yml` added with weekly cadence (`github-actions` + `pip` ecosystems, max 5 open PRs per ecosystem, Monday 06:00 UTC). GitHub-native secret scanning is enabled by default for public repos and needs no config file.
 - [ ] Set up a triage rhythm: one pass per week on issues and PRs is the minimum sustainable cadence for a solo maintainer.
 - [ ] Revisit the ROADMAP quarterly; update with "shipped in v0.x" as things land.
 
