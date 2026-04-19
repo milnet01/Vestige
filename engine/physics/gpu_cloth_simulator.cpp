@@ -35,6 +35,11 @@ bool GpuClothSimulator::isSupported()
     return (major > 4) || (major == 4 && minor >= 5);
 }
 
+void GpuClothSimulator::setShaderPath(const std::string& path)
+{
+    m_shaderPath = path;
+}
+
 void GpuClothSimulator::initialize(const ClothConfig& config, uint32_t /*seed*/)
 {
     if (m_initialized) destroyBuffers();
@@ -42,6 +47,8 @@ void GpuClothSimulator::initialize(const ClothConfig& config, uint32_t /*seed*/)
     m_gridW = config.width;
     m_gridH = config.height;
     m_particleCount = m_gridW * m_gridH;
+    m_gravity       = config.gravity;
+    m_damping       = config.damping;
 
     if (m_particleCount == 0)
     {
@@ -51,35 +58,143 @@ void GpuClothSimulator::initialize(const ClothConfig& config, uint32_t /*seed*/)
 
     buildInitialGrid(config);
     createBuffers();
+    loadShadersIfNeeded();
 
     m_initialized = true;
     Logger::info("[GpuClothSimulator] Initialized "
                  + std::to_string(m_gridW) + "x" + std::to_string(m_gridH)
-                 + " grid (" + std::to_string(m_particleCount) + " particles)");
+                 + " grid (" + std::to_string(m_particleCount) + " particles), "
+                 + (m_shadersLoaded ? "compute pipeline live"
+                                    : "compute pipeline OFF (no shader path)"));
 }
 
-void GpuClothSimulator::simulate(float /*deltaTime*/)
+void GpuClothSimulator::loadShadersIfNeeded()
 {
-    // Step 2: no-op. Force/integrate/constraint compute dispatches land in
-    // Steps 3–5. Particles do not move.
+    if (m_shadersLoaded || m_shaderPath.empty()) return;
+
+    const std::string windPath  = m_shaderPath + "/cloth_wind.comp.glsl";
+    const std::string integPath = m_shaderPath + "/cloth_integrate.comp.glsl";
+
+    if (!m_windShader.loadComputeShader(windPath))
+    {
+        Logger::error("[GpuClothSimulator] Failed to load " + windPath);
+        return;
+    }
+    if (!m_integrateShader.loadComputeShader(integPath))
+    {
+        Logger::error("[GpuClothSimulator] Failed to load " + integPath);
+        return;
+    }
+    m_shadersLoaded = true;
+}
+
+void GpuClothSimulator::simulate(float deltaTime)
+{
+    if (!m_initialized || !m_shadersLoaded) return;
+    if (deltaTime <= 0.0f) return;
+
+    const GLuint groups = (m_particleCount + 63u) / 64u;
+
+    // 1. Wind / external forces → updates velocities only.
+    m_windShader.use();
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, BIND_VELOCITIES, m_velocitiesSSBO);
+    m_windShader.setUInt("u_particleCount", m_particleCount);
+    m_windShader.setVec3("u_gravity",       m_gravity);
+    m_windShader.setVec3("u_windVelocity",  m_windVelocity);
+    m_windShader.setFloat("u_dragCoeff",    m_dragCoeff);
+    m_windShader.setFloat("u_deltaTime",    deltaTime);
+    glDispatchCompute(groups, 1, 1);
+    glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+
+    // 2. Symplectic Euler integration → updates positions + prev positions.
+    m_integrateShader.use();
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, BIND_POSITIONS,      m_positionsSSBO);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, BIND_PREV_POSITIONS, m_prevPositionsSSBO);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, BIND_VELOCITIES,     m_velocitiesSSBO);
+    m_integrateShader.setUInt("u_particleCount", m_particleCount);
+    m_integrateShader.setFloat("u_deltaTime",    deltaTime);
+    m_integrateShader.setFloat("u_damping",      m_damping);
+    glDispatchCompute(groups, 1, 1);
+    glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+
+    // CPU mirror is now stale — refreshed lazily on getPositions() / getNormals().
+    m_positionsDirty = true;
+    m_normalsDirty   = false;  // Normals don't move in Step 3 (Step 8's job).
 }
 
 void GpuClothSimulator::reset()
 {
     if (!m_initialized) return;
-    // No simulation has occurred (Step 2 simulate is a no-op), so the GPU
-    // state already matches the initial grid. Nothing to do until later
-    // steps introduce mutable particle state on the GPU.
+
+    // Re-upload the initial grid into all four particle SSBOs so the GPU
+    // state matches the rest pose, then mark the CPU mirror dirty so the
+    // next getPositions() picks the rest pose up too. The CPU mirror was
+    // built in buildInitialGrid() and is preserved across simulate() calls
+    // (only its values are mutated by readback), so we can use it directly
+    // as the rest-pose source.
+    std::vector<glm::vec4> rest(m_particleCount);
+    for (uint32_t i = 0; i < m_particleCount; ++i)
+    {
+        rest[i] = glm::vec4(m_positionMirror[i], 1.0f);
+    }
+    const GLsizeiptr bytes = static_cast<GLsizeiptr>(m_particleCount * sizeof(glm::vec4));
+    glNamedBufferSubData(m_positionsSSBO,     0, bytes, rest.data());
+    glNamedBufferSubData(m_prevPositionsSSBO, 0, bytes, rest.data());
+
+    std::vector<glm::vec4> zeros(m_particleCount, glm::vec4(0.0f));
+    glNamedBufferSubData(m_velocitiesSSBO,    0, bytes, zeros.data());
+
+    // Mirror already holds the initial grid; mark clean.
+    m_positionsDirty = false;
+    m_normalsDirty   = false;
 }
 
 const glm::vec3* GpuClothSimulator::getPositions() const
 {
+    readbackPositionsIfDirty();
     return m_positionMirror.empty() ? nullptr : m_positionMirror.data();
 }
 
 const glm::vec3* GpuClothSimulator::getNormals() const
 {
+    readbackNormalsIfDirty();
     return m_normalMirror.empty() ? nullptr : m_normalMirror.data();
+}
+
+void GpuClothSimulator::readbackPositionsIfDirty() const
+{
+    if (!m_positionsDirty || m_positionsSSBO == 0) return;
+
+    // SSBO stores vec4 (xyz + w invMass). Stage into a local vec4 buffer,
+    // then narrow into the vec3 mirror. This stalls the pipeline — Step 8
+    // moves the renderer to draw directly from the SSBO so the per-frame
+    // path skips this entirely.
+    std::vector<glm::vec4> staging(m_particleCount);
+    glGetNamedBufferSubData(
+        m_positionsSSBO, 0,
+        static_cast<GLsizeiptr>(m_particleCount * sizeof(glm::vec4)),
+        staging.data());
+    for (uint32_t i = 0; i < m_particleCount; ++i)
+    {
+        m_positionMirror[i] = glm::vec3(staging[i]);
+    }
+    m_positionsDirty = false;
+}
+
+void GpuClothSimulator::readbackNormalsIfDirty() const
+{
+    if (!m_normalsDirty || m_normalsSSBO == 0) return;
+
+    std::vector<glm::vec4> staging(m_particleCount);
+    glGetNamedBufferSubData(
+        m_normalsSSBO, 0,
+        static_cast<GLsizeiptr>(m_particleCount * sizeof(glm::vec4)),
+        staging.data());
+    for (uint32_t i = 0; i < m_particleCount; ++i)
+    {
+        m_normalMirror[i] = glm::vec3(staging[i]);
+    }
+    m_normalsDirty = false;
 }
 
 void GpuClothSimulator::buildInitialGrid(const ClothConfig& config)
@@ -182,8 +297,11 @@ void GpuClothSimulator::destroyBuffers()
     m_gridW = m_gridH = 0;
     m_positionMirror.clear();
     m_normalMirror.clear();
+    m_positionsDirty = false;
+    m_normalsDirty   = false;
     m_indices.clear();
     m_texCoords.clear();
+    m_shadersLoaded = false;  // Shader objects retain GPU state across init cycles.
 }
 
 } // namespace Vestige

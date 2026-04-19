@@ -190,6 +190,11 @@ void Shader::setInt(std::string_view name, int value) const
     glUniform1i(getUniformLocation(name), value);
 }
 
+void Shader::setUInt(std::string_view name, unsigned int value) const
+{
+    glUniform1ui(getUniformLocation(name), value);
+}
+
 void Shader::setFloat(std::string_view name, float value) const
 {
     glUniform1f(getUniformLocation(name), value);

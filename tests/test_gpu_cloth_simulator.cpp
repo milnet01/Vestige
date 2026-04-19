@@ -72,3 +72,24 @@ TEST(GpuClothSimulator, SsboHandlesAreZeroBeforeInit)
     EXPECT_EQ(sim.getNormalsSSBO(),       0u);
     EXPECT_EQ(sim.getIndicesSSBO(),       0u);
 }
+
+// -- Step 3 surface --
+
+TEST(GpuClothSimulator, HasShadersDefaultsFalse)
+{
+    GpuClothSimulator sim;
+    EXPECT_FALSE(sim.hasShaders());
+}
+
+TEST(GpuClothSimulator, ParameterSettersCompileAndAccept)
+{
+    // Smoke-check the per-frame parameter setters added in Step 3 — the
+    // shaders consume these uniforms but the C++ accessors are pure
+    // member writes so they're testable without a GL context.
+    GpuClothSimulator sim;
+    sim.setShaderPath("/dev/null/shaders");   // No load attempted yet
+    sim.setDragCoefficient(0.5f);
+    sim.setWindVelocity(glm::vec3(1.0f, 0.0f, 0.0f));
+    sim.setDamping(0.02f);
+    SUCCEED();
+}

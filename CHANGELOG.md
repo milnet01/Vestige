@@ -9,6 +9,50 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-19 Phase 9B Step 3: cloth_wind + cloth_integrate compute shaders
+
+First real GPU work. Two compute shaders land:
+- `assets/shaders/cloth_wind.comp.glsl` — applies gravity + uniform
+  wind-drag force to per-particle velocities. `local_size_x = 64` to
+  fit AMD wavefronts. Per-particle noise / per-triangle drag (the CPU
+  path's FULL wind tier) is intentionally deferred.
+- `assets/shaders/cloth_integrate.comp.glsl` — symplectic Euler with
+  velocity damping. Snapshots `prev` then advances `pos += vel · dt`.
+  Pinned particles (positions[i].w == 0) are skipped — the inverse-mass
+  channel is reserved for Step 9 LRA / pin work; Step 3 leaves every
+  particle's w at 1 (free).
+
+`GpuClothSimulator::simulate()` now dispatches: bind velocities → wind
+shader → `glMemoryBarrier` → bind positions/prev/velocities → integrate
+shader → `glMemoryBarrier` → mark CPU mirror dirty. Free-fall cloth
+visibly drops under gravity in the editor.
+
+Loading: `setShaderPath()` must be called pre-`initialize()`. Without
+a shader path the SSBOs still allocate but `simulate()` is a no-op
+(CPU mirror returns the rest pose), so any caller that forgets to wire
+up the shader directory degrades gracefully rather than crashing.
+
+CPU readback: `getPositions()` / `getNormals()` are now lazy — each
+calls `glGetNamedBufferSubData` and stages vec4→vec3 only when the
+mirror is dirty. The dirty flag is set by `simulate()` and cleared by
+the next reader. Per-frame readback while the renderer still uploads
+through `ClothComponent`'s vertex buffer; Step 8 will switch the
+renderer to read SSBOs directly and skip readback entirely on the hot
+path.
+
+`reset()` re-uploads the rest-pose grid into positions/prev and zeros
+velocities. Mirror is left clean (it was never moved by simulate; only
+mutated by readback).
+
+`Shader::setUInt()` added (just `glUniform1ui`) — used by the cloth
+shaders' `uniform uint u_particleCount`. Reusable for future GLSL
+unsigned uniforms.
+
+Tests: 2 new unit tests (`HasShadersDefaultsFalse`,
+`ParameterSettersCompileAndAccept`); 1906/1906 passing. GPU dispatch
+correctness is a visual-launch verification item per the
+`tests/test_gpu_particle_system.cpp` precedent.
+
 ### 2026-04-19 Phase 9B Step 2: GpuClothSimulator skeleton
 
 New backend `engine/physics/gpu_cloth_simulator.{h,cpp}` — the GPU

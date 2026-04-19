@@ -60,6 +60,9 @@ public:
     /// @brief Sets an integer uniform.
     void setInt(std::string_view name, int value) const;
 
+    /// @brief Sets an unsigned-integer uniform (GLSL `uint`).
+    void setUInt(std::string_view name, unsigned int value) const;
+
     /// @brief Sets a float uniform.
     void setFloat(std::string_view name, float value) const;
 
