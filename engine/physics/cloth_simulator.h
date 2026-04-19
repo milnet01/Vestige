@@ -5,6 +5,7 @@
 /// @brief CPU-based cloth simulation using XPBD (Extended Position-Based Dynamics).
 #pragma once
 
+#include "physics/cloth_solver_backend.h"
 #include "physics/spatial_hash.h"
 #include "utils/deterministic_lcg_rng.h"
 
@@ -70,36 +71,42 @@ struct ClothBoxCollider
 /// Generates a rectangular grid of particles connected by distance constraints
 /// (structural, shear, bending). Uses XPBD for iteration-count-independent
 /// stiffness. Supports pin constraints, sphere/plane collision, and wind.
-class ClothSimulator
+///
+/// Implements `IClothSolverBackend` for the per-frame simulation loop so a
+/// future `GpuClothSimulator` (Phase 9B GPU compute pipeline) can slot into
+/// the same code paths. Configuration mutators below remain on the concrete
+/// type during the transitional phase — see
+/// `docs/PHASE9B_GPU_CLOTH_DESIGN.md` § 4.
+class ClothSimulator : public IClothSolverBackend
 {
 public:
     /// @brief Initializes the cloth grid, particles, and constraints.
     /// @param seed Unique seed for wind randomness (different seed = different timing).
-    void initialize(const ClothConfig& config, uint32_t seed = 0);
+    void initialize(const ClothConfig& config, uint32_t seed = 0) override;
 
     /// @brief Advances the simulation by deltaTime seconds.
-    void simulate(float deltaTime);
+    void simulate(float deltaTime) override;
 
     /// @brief Returns the total number of particles.
-    uint32_t getParticleCount() const;
+    uint32_t getParticleCount() const override;
 
     /// @brief Returns a pointer to the particle positions array.
-    const glm::vec3* getPositions() const;
+    const glm::vec3* getPositions() const override;
 
     /// @brief Returns a pointer to the per-vertex normals (recomputed after simulate).
-    const glm::vec3* getNormals() const;
+    const glm::vec3* getNormals() const override;
 
     /// @brief Returns the grid width (particles along X).
-    uint32_t getGridWidth() const;
+    uint32_t getGridWidth() const override;
 
     /// @brief Returns the grid height (particles along Z).
-    uint32_t getGridHeight() const;
+    uint32_t getGridHeight() const override;
 
     /// @brief Returns the triangle index buffer for rendering.
-    const std::vector<uint32_t>& getIndices() const;
+    const std::vector<uint32_t>& getIndices() const override;
 
     /// @brief Returns the UV coordinates for each particle.
-    const std::vector<glm::vec2>& getTexCoords() const;
+    const std::vector<glm::vec2>& getTexCoords() const override;
 
     // --- Pin constraints ---
 
@@ -220,12 +227,12 @@ public:
     const ClothConfig& getConfig() const;
 
     /// @brief Returns true if initialize() has been called.
-    bool isInitialized() const;
+    bool isInitialized() const override;
 
     // --- Live parameter updates (no reinit required) ---
 
     /// @brief Resets simulation to post-initialize state (particles return to initial positions).
-    void reset();
+    void reset() override;
 
     /// @brief Captures the current particle positions as the rest/initial state.
     /// Call after repositioning particles (e.g., via pin-all/unpin for XZ→XY conversion).

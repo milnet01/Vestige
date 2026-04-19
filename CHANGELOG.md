@@ -9,6 +9,34 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-19 Phase 9B Step 1: IClothSolverBackend interface
+
+New header `engine/physics/cloth_solver_backend.h` declaring
+`IClothSolverBackend` — the per-frame simulation contract that
+both `ClothSimulator` (CPU XPBD) and the upcoming
+`GpuClothSimulator` (Phase 9B GPU compute) will satisfy.
+
+Scope is intentionally lean: only the lifecycle + readback methods
+are virtual (`initialize`, `simulate`, `reset`, `isInitialized`,
+`getParticleCount`, `getPositions`, `getNormals`, `getIndices`,
+`getTexCoords`, `getGridWidth/Height`). Configuration mutators
+(`setWind`, `addSphereCollider`, `pinParticle`, etc.) remain on
+the concrete `ClothSimulator` type during the transitional phase
+and will widen as the GPU backend matures — see
+`docs/PHASE9B_GPU_CLOTH_DESIGN.md` § 4.
+
+`ClothSimulator` now inherits from `IClothSolverBackend` and
+marks the 11 methods `override`. No behavioural change.
+`ClothComponent` keeps its concrete embedding (`ClothSimulator
+m_simulator`) for now; the cutover to `unique_ptr<IClothSolverBackend>`
+lands in a later step once `GpuClothSimulator` exists.
+
+Tests: 4 new unit tests in `tests/test_cloth_solver_backend.cpp`
+covering polymorphic construction, initialize-through-interface,
+simulate-and-reset round-trip, and virtual-destructor safety.
+Suite: 1899/1899 passing (no cloth regressions across 80 existing
+cloth tests).
+
 ### 2026-04-19 Phase 9C: Navigation editor — visualisation + bake controls
 
 New `NavigationPanel` editor panel
