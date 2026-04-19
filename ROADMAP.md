@@ -1989,6 +1989,29 @@ A user opens Vestige, configures their AI provider (cloud API key or local model
 
 ---
 
+## Phase 24: Structural / Architectural Physics
+**Goal:** Make every hanging / tethered / socketed asset obey the laws of physics, not just look like it does.
+
+Design doc: [`docs/PHASE24_STRUCTURAL_PHYSICS_DESIGN.md`](docs/PHASE24_STRUCTURAL_PHYSICS_DESIGN.md)
+
+### Features
+- [ ] XPBD cloth particle ↔ Jolt rigid body kinematic attachment (curtains pinned to moving poles)
+- [ ] Inextensible tether / distance-max constraint with tagged-union endpoints (particle / rigid body / static anchor)
+- [ ] Slider-ring authoring on top of the existing `Jolt::SliderConstraint` wrapper (bronze rings on acacia poles)
+- [ ] Fixed-joint authoring for pillar-to-socket and crossbar-to-pillar (existing wrapper, new UI)
+- [ ] Editor attachment panel: pin-to-body / slider-ring / tether picker with vertex-picker gizmo
+- [ ] Scene-serialization round-trip for attachments + tethers
+- [ ] Formula Workbench entries for every new tuning coefficient (ring friction, tether compliance, pendulum damping, cord tensile modulus) — per CLAUDE.md Rule 11
+- [ ] Tabernacle structural pass: re-rig the demo scene so nothing hangs in mid air (48 boards + 5 bars/side + 10 inner curtains + 11 goat-hair curtains + 2 coverings + veil + screen + 60 outer pillars + linen walls + tent-pegs-and-cords)
+
+### Milestone
+Load the demo scene, let it settle — every particle above Y=0 is attached through a chain of joints to a static anchor. Apply a wind gust and the linen panels swing in a coordinated ~4 s pendulum without rubber-banding. Pull the entrance screen aside via script and the rings bunch along the pole and stay bunched.
+
+### Why This Is Its Own Phase, Not Part of the Rendering-Realism Track
+The rendering research update (Phase 13 "2026-04 Research Update") makes pixels look photoreal. Without Phase 24, the result is photoreal curtains floating in mid air — *worse* than the current lower-fidelity-but-also-floating state, because the realism of the material makes the physics error more visible, not less. Phases 13 and 24 should land in parallel; neither is useful alone for the Tabernacle / Temple showcase projects.
+
+---
+
 ## Open-Source Release
 
 ### License and Release Model

@@ -98,6 +98,28 @@ post stack) and priority hints for existing roadmap items (volumetric
 froxel fog, FSR 2.x, sparse virtual shadow maps, GPU-driven MDI,
 radiance cascades). Cites primary sources for each.
 
+#### Phase 24 — Structural / Architectural Physics (design doc)
+
+Draft design document for the attachment-physics phase:
+``docs/PHASE24_STRUCTURAL_PHYSICS_DESIGN.md``. Cross-referenced from
+``ROADMAP.md``. Covers:
+
+- XPBD cloth particle ↔ Jolt rigid body kinematic attachment (pattern
+  used by Chaos Cloth, Obi Cloth, PhysX FleX).
+- Tagged-union tether constraint (particle / rigid body / static
+  anchor endpoints) with one-sided distance-max XPBD projection.
+- Slider-ring authoring on top of the existing
+  ``Jolt::SliderConstraint`` wrapper.
+- Editor attachment panel + vertex-picker gizmo.
+- Full Tabernacle structural rigging spec: 48 boards + 5 bars/side +
+  21 curtains + 2 coverings + veil + screen + 60 outer pillars +
+  linen walls + tent-pegs-and-cords.
+- Formula Workbench entries for every new tuning coefficient.
+
+Rationale added to ``ROADMAP.md``: Phase 24 must land alongside the
+rendering-realism pass, because photoreal curtains floating in mid air
+are *worse* than the current lower-fidelity floating curtains.
+
 ### 2026-04-19 manual audit — Batch 4 delegated sweep (L2-L10, L21, L22)
 
 Mechanical cleanup sourced from the 2026-04-19 audit report. Delegated
