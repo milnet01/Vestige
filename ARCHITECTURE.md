@@ -567,3 +567,13 @@ The system's `update()` runs two passes:
 ### Integration
 
 The scripting system depends only on `core/event_bus`, `core/i_system`, and scene/entity lookups. It does not own or mutate engine state directly; it always publishes back through `EventBus` events (`PublishEvent` node) or through the entity API reached via `ScriptContext::resolveEntity`. Node categories can be extended without modifying the core interpreter.
+
+### Editor integration (Phase 9E-3)
+
+The in-editor authoring UI lives in `engine/editor/widgets/node_editor_widget.{h,cpp}` (thin wrapper over `imgui-node-editor` by thedmd, pulled in via `external/CMakeLists.txt`) and `engine/editor/panels/script_editor_panel.{h,cpp}` (dockable panel hosting the canvas). The split follows the engine's standard widget-vs-panel convention (see §14): `NodeEditorWidget` is the reusable graph-canvas primitive; `ScriptEditorPanel` is the visual-scripting-specific host with its New/Open/Save/Save As menu.
+
+The Phase 9E-3 design document (`docs/PHASE9E3_DESIGN.md`) walks the 16-step plan. As of 2026-04-19, Steps 1–3 (library integration + the three audit-debt items: M9 type→IDs cache, M10 pin-name interning, M11 per-execution pure-node memoization, plus L6 `entryPin` field on `ScriptContext`) are shipped; Step 4 (canvas + save/load menu, no palette/properties yet) is WIP. Remaining steps cover the palette, per-type property editors, type-aware pin-drag popup, variables panel, breakpoint UI + pause/step debugger, flow animation, and a phase-closeout audit.
+
+Editor-side edits flow back through the existing `CommandHistory` (§14) via new `ScriptAddNodeCommand` / `ScriptRemoveNodeCommand` / `ScriptAddConnectionCommand` / `ScriptRemoveConnectionCommand` / `ScriptSetPropertyCommand` — so undo/redo is consistent with every other editor operation and every AI-authored change (Phase 23) will automatically be undo-complete.
+
+Hot-reload during play: saving a `.vscript` asset while the scene is live re-parses the graph and rebinds the runtime; variable state persists across reload; pending latent actions are dropped with a log note. No rebuild step.

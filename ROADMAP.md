@@ -674,24 +674,26 @@ Reference: `Vestige Overhaul.md` contains the full architecture document.
 
 ---
 
-### Phase 9A: System Infrastructure
+### Phase 9A: System Infrastructure (COMPLETE)
 **Goal:** Create the formal system abstraction and registry without breaking any existing code.
 
+Shipped via commit `dfbb96b` — "Phase 9A: Domain system infrastructure — ISystem, SystemRegistry, cross-system events".
+
 #### ISystem Interface
-- [ ] `ISystem` base class with 4 pure virtuals (`getSystemName`, `initialize`, `shutdown`, `update`) and opt-in virtual no-ops (`fixedUpdate`, `submitRenderData`, `syncPhysics`, `registerEditorUI`, `onSceneLoad`, `onSceneUnload`, `serialize`, `deserialize`, `drawDebug`, `reportMetrics`)
-- [ ] Performance budget API (`getFrameBudgetMs` / `setFrameBudgetMs`) — systems automatically reduce quality when approaching their per-frame time budget
-- [ ] `getOwnedComponents()` — each system declares which component types it manages
+- [x] `ISystem` base class with 4 pure virtuals (`getSystemName`, `initialize`, `shutdown`, `update`) and opt-in virtual no-ops (`fixedUpdate`, `submitRenderData`, `onSceneLoad`, `onSceneUnload`, `drawDebug`, `reportMetrics`) — `engine/core/i_system.h`. The original brainstorm listed `syncPhysics` / `registerEditorUI` / `serialize` / `deserialize` as opt-ins; those did not ship on the interface and are handled elsewhere (physics owns its own sync, serializer is a free function, editor UI is its own layer).
+- [x] Performance budget API (`getFrameBudgetMs` / `setFrameBudgetMs`) — `i_system.h:119`
+- [x] `getOwnedComponentTypes()` — each system declares which component types it manages (minor rename from design: `getOwnedComponents` → `getOwnedComponentTypes`)
 
 #### SystemRegistry
-- [ ] Registry that manages all domain system instances (`registerSystem`, `getSystem<T>`, `initializeAll`, `updateAll`, `shutdownAll`)
-- [ ] Auto-activation: scan scene entities for component types, match against each system's `getOwnedComponents()`, activate only systems with matching components present
-- [ ] `forceActivate()` for always-on systems (Atmosphere, Lighting) regardless of scene contents
-- [ ] Integrate into Engine update loop (call `updateAll`, `fixedUpdateAll`, `submitRenderDataAll` in correct order)
+- [x] Registry that manages all domain system instances (`registerSystem`, `getSystem<T>`, `initializeAll`, `updateAll`, `shutdownAll`) — `engine/core/system_registry.h`
+- [x] Auto-activation: scan scene entities for component types, match against each system's `getOwnedComponentTypes()`, activate only systems with matching components present (`system_registry.cpp:209` "auto-activated")
+- [x] `isForceActive()` for always-on systems (Atmosphere, Lighting) regardless of scene contents (minor rename: `forceActivate()` → `isForceActive()` — `system_registry.cpp:181`)
+- [x] Integrate into Engine update loop (`updateAll`, `fixedUpdateAll`, `submitRenderDataAll` — `engine.cpp:956`)
 
 #### Cross-System Interaction
-- [ ] Typed event structs for discrete occurrences (`ObjectEnteredWaterEvent`, `DestructionEvent`, `WeatherChangedEvent`, `LightningStrikeEvent`) — use existing Event Bus
-- [ ] Query model for continuous position-dependent data — systems query shared infrastructure (`EnvironmentForces`, `Terrain`) directly rather than receiving per-frame broadcasts
-- [ ] Rule: events for discrete occurrences, queries for continuous data. Systems never `#include` each other.
+- [x] Typed event structs for discrete occurrences on `engine/core/system_events.h` — `SceneLoadedEvent`, `SceneUnloadedEvent`, `WeatherChangedEvent`, `EntityDestroyedEvent`, `TerrainModifiedEvent`, `AudioPlayEvent`, `NavMeshBakedEvent`. Additional concept-level events (`ObjectEnteredWaterEvent`, `LightningStrikeEvent`) can be added lazily as domains need them — the pattern and EventBus plumbing are in place.
+- [x] Query model for continuous position-dependent data — systems query `EnvironmentForces` / `Terrain` directly via shared infrastructure (see `AtmosphereSystem`, `WaterSystem`)
+- [x] Rule: events for discrete occurrences, queries for continuous data. Systems never `#include` each other.
 
 ---
 
@@ -720,76 +722,84 @@ Each system provides sensible defaults for its domain. Objects behave correctly 
 
 ---
 
-### Phase 9C: New Domain Systems
+### Phase 9C: New Domain Systems (FOUNDATIONS SHIPPED)
 **Goal:** Build domain systems for capabilities that don't yet exist in the engine.
+
+Foundations shipped via commit `fa0b100` — "Phase 9C: New domain systems — Audio (OpenAL Soft), UI/HUD, Navigation (Recast/Detour)". Each sub-system landed with an `ISystem` wrapper and the minimum viable feature set; richer capabilities are queued for later phases as noted per sub-system.
 
 #### Audio System
 *Scope: multi-month initiative requiring library selection and dedicated design document.*
-- [ ] Audio library integration (evaluate miniaudio, OpenAL Soft, FMOD)
-- [ ] Spatial audio (3D positioned sound sources with distance attenuation)
-- [ ] Ambient soundscapes (biome-based, time-of-day-based)
-- [ ] Sound material interactions (footstep sounds derived from physics material types)
-- [ ] Music system (layered tracks, transitions, adaptive intensity)
-- [ ] Reverb zones (indoor/outdoor, auto-detect room geometry)
-- [ ] Audio occlusion (raycast-based, material-based transmission)
-- [ ] Voice/dialogue playback (integrates with existing lip sync system)
-- [ ] Editor: sound emitter placement, reverb zone painting, audio preview
+- [x] Audio library integration — OpenAL Soft selected; `engine/audio/audio_engine.{h,cpp}` + `engine/systems/audio_system.{h,cpp}`; dr_libs/stb_vorbis decoders.
+- [x] Spatial audio — 3D positioned sound sources with distance attenuation (`AudioSourceComponent::spatial`, `AudioEngine` listener pose).
+- [ ] Ambient soundscapes (biome-based, time-of-day-based) — **deferred to Phase 10.**
+- [ ] Sound material interactions (footstep sounds derived from physics material types) — **deferred to Phase 10.**
+- [ ] Music system (layered tracks, transitions, adaptive intensity) — **deferred to Phase 10.**
+- [ ] Reverb zones (indoor/outdoor, auto-detect room geometry) — **deferred to Phase 10.**
+- [ ] Audio occlusion (raycast-based, material-based transmission) — **deferred to Phase 10.**
+- [ ] Voice/dialogue playback (integrates with existing lip sync system) — **deferred to Phase 10.**
+- [ ] Editor: sound emitter placement, reverb zone painting, audio preview — **deferred to Phase 10.**
 
-**Note:** Detailed audio specs are in Phase 10 (Polish and Features). This phase implements the Audio domain system wrapper; Phase 10 details the full feature set.
+**Note:** Detailed audio specs are in Phase 10 (Polish and Features). Phase 9C implemented the Audio domain-system wrapper + OpenAL integration + spatial audio; Phase 10 will deliver the full feature set.
 
 #### UI & HUD System
-- [ ] In-game UI rendering (health bars, inventory, menus — separate from ImGui editor UI)
-- [ ] In-world UI (floating text, interaction prompts, nameplates)
-- [ ] Screen-space UI (HUD, minimap, crosshair)
-- [ ] Menu system (main menu, pause, settings)
-- [ ] UI theming (consistent style across all elements)
-- [ ] Input routing (game input suppressed when UI is active)
-- [ ] Editor: visual UI layout editor, theme editor, widget library
+- [x] In-game UI rendering — `engine/ui/sprite_batch_renderer.{h,cpp}` + `UIElement` hierarchy (`UICanvas`, `UIImage`, `UILabel`, `UIPanel`) + `engine/systems/ui_system.{h,cpp}`; sprite shaders `assets/shaders/ui_sprite.{vert,frag}.glsl`. Separate from the ImGui editor overlay.
+- [ ] In-world UI (floating text, interaction prompts, nameplates) — **not yet.**
+- [ ] Screen-space UI (HUD, minimap, crosshair) — **not yet** (UIElement primitives are in place; HUD-specific widgets aren't).
+- [ ] Menu system (main menu, pause, settings) — **not yet.**
+- [ ] UI theming (consistent style across all elements) — **not yet.**
+- [ ] Input routing (game input suppressed when UI is active) — **not yet.**
+- [ ] Editor: visual UI layout editor, theme editor, widget library — **not yet.**
 
 #### AI & Navigation System (Basics)
 *Scope: requires Recast/Detour library integration and dedicated design document.*
-- [ ] Navmesh generation from terrain and static geometry (integrate Recast/Detour)
-- [ ] Pathfinding (A* on navmesh)
-- [ ] Basic AI state management
-- [ ] Editor: navmesh visualization and bake controls, patrol path placement
+- [x] Navmesh generation from terrain and static geometry — Recast via `engine/navigation/nav_mesh_builder.{h,cpp}` + `engine/systems/navigation_system.{h,cpp}`.
+- [x] Pathfinding (A* on navmesh) — Detour via `engine/navigation/nav_mesh_query.{h,cpp}`; `NavAgentComponent` for per-entity agents.
+- [ ] Basic AI state management — **not yet** (behaviour-tree / state-machine work lives in Phase 16).
+- [ ] Editor: navmesh visualization and bake controls, patrol path placement — **not yet.**
 
 **Note:** Advanced AI (behavior trees, perception, AI director) is in Phase 16 (Scripting and Interactivity).
 
 ---
 
-### Phase 9D: Editor Enhancements
+### Phase 9D: Editor Enhancements (COMPLETE)
 **Goal:** Asset viewers and game type templates that make the editor a complete creation tool.
 
+Shipped via commit `6a40da4` — "Phase 9D: Editor enhancements — asset viewers and game type templates".
+
 #### Model Viewer Panel
-- [ ] Orbiting camera around the model
-- [ ] Material/texture display
-- [ ] Animation playback (if model has animations)
-- [ ] Skeleton visualization
-- [ ] Bounding box and vertex/triangle count display
-- [ ] Drag from model viewer into scene viewport to place
+Implementation: `engine/editor/panels/model_viewer_panel.{h,cpp}`
+- [x] Orbiting camera around the model
+- [x] Material/texture display
+- [x] Animation playback (if model has animations)
+- [x] Skeleton visualization
+- [x] Bounding box and vertex/triangle count display
+- [x] Drag from model viewer into scene viewport to place
 
 #### Texture Viewer Panel
-- [ ] Full-resolution display with zoom/pan
-- [ ] Channel isolation (R, G, B, A, RGB)
-- [ ] Mipmap level visualization
-- [ ] Tiling preview (repeat texture to see how it tiles)
-- [ ] Texture metadata (resolution, format, memory size)
-- [ ] PBR texture set grouping (albedo + normal + roughness shown together)
+Implementation: `engine/editor/panels/texture_viewer_panel.{h,cpp}`
+- [x] Full-resolution display with zoom/pan
+- [x] Channel isolation (R, G, B, A, RGB)
+- [x] Mipmap level visualization
+- [x] Tiling preview (repeat texture to see how it tiles)
+- [x] Texture metadata (resolution, format, memory size)
+- [x] PBR texture set grouping (albedo + normal + roughness shown together)
 
 #### HDRI Viewer Panel
-- [ ] Spherical/equirectangular preview
-- [ ] Exposure adjustment
-- [ ] Preview as skybox in mini-viewport
-- [ ] Show irradiance and specular prefiltered versions
-- [ ] One-click set as scene environment map
+Implementation: `engine/editor/panels/hdri_viewer_panel.{h,cpp}`
+- [x] Spherical/equirectangular preview
+- [x] Exposure adjustment
+- [x] Preview as skybox in mini-viewport
+- [x] Show irradiance and specular prefiltered versions
+- [x] One-click set as scene environment map
 
 #### Game Type Templates
-- [ ] **3D First Person** — perspective camera, full 3D physics, FPS controller
-- [ ] **3D Third Person** — perspective camera with follow/orbit cam, character system
-- [ ] **2.5D** — 3D rendering with gameplay constrained to a plane
-- [ ] **Isometric** — fixed-angle orthographic camera, grid-based or free movement
-- [ ] **Top-Down** — orthographic overhead camera, free movement
-- [ ] **Point-and-Click** — fixed or panning camera, click-to-move navigation
+Implementation: `engine/editor/panels/template_dialog.{h,cpp}` — `GameTemplateType` enum with all 6 variants.
+- [x] **3D First Person** — perspective camera, full 3D physics, FPS controller (`FIRST_PERSON_3D`)
+- [x] **3D Third Person** — perspective camera with follow/orbit cam, character system (`THIRD_PERSON_3D`)
+- [x] **2.5D** — 3D rendering with gameplay constrained to a plane (`TWO_POINT_FIVE_D`)
+- [x] **Isometric** — fixed-angle orthographic camera, grid-based or free movement (`ISOMETRIC`)
+- [x] **Top-Down** — orthographic overhead camera, free movement (`TOP_DOWN`)
+- [x] **Point-and-Click** — fixed or panning camera, click-to-move navigation (`POINT_AND_CLICK`)
 
 Each template configures: camera type/constraints, physics dimensionality, default input mapping, required systems, starter scene layout.
 

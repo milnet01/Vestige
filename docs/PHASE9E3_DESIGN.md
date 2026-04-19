@@ -524,17 +524,19 @@ Total: ~16 commits, each independently revertable. No commit leaves the build br
 
 A binding checklist. **All items required** for 9E-3 to be considered complete and the post-phase audit to start.
 
-- [ ] All 16 implementation steps committed; all tests pass.
-- [ ] Library integration is one of: thedmd master v0.9.3, pthom imgui_bundle branch, or documented downgrade.
-- [ ] **M9** generalised type→IDs cache shipped; `findNodesByType` no longer allocates on the hot path.
-- [ ] **M10** pin-name interning shipped; `ScriptNodeInstance::outputValues` uses `PinId`; string overloads remain as compat wrappers.
-- [ ] **M11** per-execution pure-node memoization shipped; benchmark shows the multiplicative-in-loops behavior eliminated.
-- [ ] **L6** Gate node uses the new `entryPin` field (TODO comment removed).
-- [ ] All Step 16 audit findings resolved.
-- [ ] Performance benchmark test passes (script update ≤ 1 ms / frame at 100-node test graph).
-- [ ] Visual test pass on dev hardware: 60 FPS sustained with editor open + 200-node graph + play session live.
-- [ ] CHANGELOG / ROADMAP updated.
-- [ ] ARCHITECTURE.md §19 updated to mention editor integration.
+**Progress so far (2026-04-19 doc sync):** Steps 1–3 of §11 are shipped (commits `cffd755`, `e0c56c2`); Step 4 is WIP on branch (`8feeffe`). Steps 5–16 remain. The four audit-debt items (M9 / M10 / M11 / L6) and the library-integration spike landed with Step 1–3 ahead of the full panel work.
+
+- [ ] All 16 implementation steps committed; all tests pass. — **Steps 1–3 done, Step 4 WIP, 12 remaining.**
+- [x] Library integration is one of: thedmd master v0.9.3, pthom imgui_bundle branch, or documented downgrade. — `thedmd/imgui-node-editor` master via `external/CMakeLists.txt:227`; engine builds `imgui_node_editor_lib` STATIC.
+- [x] **M9** generalised type→IDs cache shipped; `findNodesByType` no longer allocates on the hot path. — commit `e0c56c2`.
+- [x] **M10** pin-name interning shipped; `ScriptNodeInstance::outputValues` uses `PinId`; string overloads remain as compat wrappers. — commit `cffd755`; `engine/scripting/pin_id.{h,cpp}`.
+- [x] **M11** per-execution pure-node memoization shipped; benchmark shows the multiplicative-in-loops behavior eliminated. — commit `e0c56c2`; `ScriptContext::m_executionMemo`, `NodeTypeDescriptor::memoizable`.
+- [x] **L6** Gate node uses the new `entryPin` field (TODO comment removed). — commit `e0c56c2`; `flow_nodes.cpp:289` reads `ctx.entryPin()`, TODO comment removed.
+- [ ] All Step 16 audit findings resolved. — **Step 16 (phase audit) not yet run.**
+- [ ] Performance benchmark test passes (script update ≤ 1 ms / frame at 100-node test graph). — **Step 15 not yet shipped.**
+- [ ] Visual test pass on dev hardware: 60 FPS sustained with editor open + 200-node graph + play session live. — **blocked on Step 5–14 (panels + interaction).**
+- [ ] CHANGELOG / ROADMAP updated. — Phase 9E-1 / 9E-2 are in `CHANGELOG.md`; 9E-3 entries land with each step.
+- [x] ARCHITECTURE.md §19 updated to mention editor integration. — 2026-04-19 doc-sync pass added the "Editor integration (Phase 9E-3)" subsection describing `ScriptEditorPanel`, `NodeEditorWidget`, and the currently-landed Step 4 scope.
 
 ---
 
