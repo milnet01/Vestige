@@ -9,6 +9,37 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-19 Phase 9B Step 2: GpuClothSimulator skeleton
+
+New backend `engine/physics/gpu_cloth_simulator.{h,cpp}` — the GPU
+half of the IClothSolverBackend dual. Step 2 scope is buffer
+plumbing only: SSBO allocation in `initialize()`, teardown in the
+destructor, no-op `simulate()`, CPU mirror returned by `getPositions()`
+/ `getNormals()`. The compute-shader dispatches land incrementally
+in Steps 3–9 per the design doc.
+
+Five SSBOs are allocated up-front using DSA (`glCreateBuffers` /
+`glNamedBufferStorage`): positions, prev positions, velocities,
+normals, indices. All particle buffers use `vec4` layout (xyz + w
+padding / future inverse-mass channel) to dodge std430's vec3-array
+padding pitfall — same workaround the GPU particle pipeline already
+uses on Mesa AMD. Binding indices are pinned via a
+`BufferBinding` enum (0/1/2/6/7) that pairs with the cloth_*.comp.glsl
+contract from the design doc.
+
+`isSupported()` is a no-context-safe probe: returns false if no GL
+context is current, otherwise checks for GL ≥ 4.5 (DSA + compute +
+SSBO). Callers can call it before `initialize()` to decide whether
+to construct the GPU backend at all.
+
+Tests: 5 new unit tests in `tests/test_gpu_cloth_simulator.cpp`
+covering default state, polymorphic construction via
+`unique_ptr<IClothSolverBackend>`, the no-context probe path,
+SSBO-handle-zero-pre-init invariants, and a guard against
+accidental SSBO-binding-index reordering. Suite: 1904/1904 passing
+(no regressions; 6 cloth-backend tests now alongside the 80
+existing cloth tests).
+
 ### 2026-04-19 Phase 9B Step 1: IClothSolverBackend interface
 
 New header `engine/physics/cloth_solver_backend.h` declaring
