@@ -2,6 +2,61 @@
 
 All notable changes to the Audit Tool are documented in this file.
 
+## [2.13.0] - 2026-04-19
+
+### Added (Batch 6 detector rules — queue close-out from 2.12.0)
+
+Three new tier-4 detectors, closing out ideas #10, #26, and #27 from
+`AUDIT_TOOL_IMPROVEMENTS.md` "Still queued (audit 2.13.0+)". These
+needed either multi-line window analysis or cross-file grep logic and
+didn't fit as one-line tier-2 regex rules, which is why they deferred
+from 2.12.0.
+
+- **`file_read_no_gcount`** (`lib/tier4_file_read_gcount.py` ·
+  `FileReadGcountResult`, severity **MEDIUM**, category `bug`) —
+  detector **#10**. Flags `stream.read(buf, N)` call-sites with no
+  `.gcount()` / `.good()` / `.fail()` / `.eof()` reference in the
+  following N-line window (default 20, configurable via
+  `tier4.file_read_gcount.window_lines`). Binary reads on
+  `std::istream` silently truncate on short reads; without one of
+  those post-checks the caller operates on stale buffer memory.
+  Excludes `.read_text()`, `fs::read`, `std::filesystem`, the
+  rule-source files (`auto_config.py`, `tier2_patterns.py`, this
+  detector itself), and `.read(` tokens sitting inside double-quoted
+  string literals (avoids flagging embedded Python snippets passed
+  to subprocesses, e.g. the `sys.stdin.read()` payload in
+  `tests/test_async_driver.cpp`).
+
+- **`dead_shader`** (`lib/tier4_dead_shaders.py` · `DeadShaderResult`,
+  severity **LOW**, category `dead_code`) — detector **#26**. Flags
+  `.glsl` files under `shader_dirs` whose basename does not appear as
+  a substring anywhere in the `source_dirs` corpus. Substring match,
+  not regex — this is deliberate to avoid the 2026-04-19 FP where
+  `ssr.frag.glsl` was incorrectly flagged because its only reference
+  was via `shaderDir + "ssr.frag"`. The detector now accepts
+  `ssr.frag.glsl`, `ssr.frag`, **or** `ssr` as evidence of use.
+
+- **`missing_copyright_header`** (`lib/tier4_copyright.py` ·
+  `CopyrightResult`, severity **LOW**, category `copyright`) —
+  detector **#27**. Verifies every source file's first 3 lines
+  (shebang-adjusted: shifts to lines 2–4 when line 1 starts with
+  `#!`) contain a `Copyright (c) <YEAR> <NAME>` line and an
+  `SPDX-License-Identifier` line. Accepts `//`, `#`, and `--`
+  comment tokens so C/C++, GLSL, Python, shell, CMake, Lua, and SQL
+  are all covered. Exempts `__init__.py` (package markers commonly
+  empty) and non-`CMakeLists.txt` `.txt` files.
+
+All three plug into `tier4_stats.py` alongside the existing tier-4
+submodules; their output is exposed on `AuditData.file_read_gcount`,
+`AuditData.dead_shaders`, `AuditData.copyright_audit`. 35 new unit
+tests in `tests/test_tier4_{file_read_gcount,dead_shaders,copyright}.py`.
+
+### Updated
+
+- `AUDIT_TOOL_IMPROVEMENTS.md` — ideas #10, #26, #27 moved from "Still
+  queued" to shipped. Remaining queued items (#18 per-frame-heap-alloc,
+  #25 dead-public-API cross-repo grep, #28 DRY token-shingle hashing).
+
 ## [2.12.0] - 2026-04-19
 
 ### Added (Batch 5 detector rules — from 2026-04-19 audit report)

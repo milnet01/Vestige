@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 #include "utils/json_size_cap.h"
 
 #include <filesystem>

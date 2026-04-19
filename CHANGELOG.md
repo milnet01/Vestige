@@ -9,6 +9,34 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-19 audit tool 2.13.0 — three detectors + copyright-header backfill
+
+Ships three new tier-4 detectors that were deferred from audit 2.12.0
+(they need multi-line windows or cross-file grep logic). All three
+produce **zero findings** against the current Vestige tree after a
+small copyright-header backfill in this same commit. 801+ audit-tool
+unit tests pass (+35 new, +4 extra during FP tightening).
+
+- **`file_read_no_gcount`** (tier 4, medium) — flags `stream.read(buf,
+  N)` calls with no `.gcount() / .good() / .fail() / .eof()` check in
+  the next N-line window. Also excludes `.read(` tokens inside
+  double-quoted string literals so embedded Python snippets (e.g.
+  `sys.stdin.read()` in `tests/test_async_driver.cpp`) don't false
+  fire.
+- **`dead_shader`** (tier 4, low) — flags `.glsl` files whose basename
+  (or stem) does not appear as a substring anywhere in the source
+  corpus. Substring-not-regex is deliberate to avoid the 2026-04-19
+  `ssr.frag.glsl` FP caused by runtime-constructed shader paths.
+- **`missing_copyright_header`** (tier 4, low) — per-file check that
+  the first 3 lines (shebang-adjusted) contain a `Copyright (c) YEAR
+  NAME` line and an `SPDX-License-Identifier` line. Covers `//`, `#`,
+  `--` comment tokens.
+
+Copyright backfill for the five files the new detector caught:
+
+- `app/CMakeLists.txt`, `engine/CMakeLists.txt`, `tests/CMakeLists.txt`
+- `engine/utils/json_size_cap.h`, `engine/utils/json_size_cap.cpp`
+
 ### 2026-04-19 manual audit — L41 clean-warning-flag sweep + include-cleaner pass
 
 Closes the last deferred item from the 2026-04-19 audit backlog (L41,

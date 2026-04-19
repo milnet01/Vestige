@@ -114,15 +114,37 @@ def run(config: Config) -> tuple[AuditData, list]:
     data.cognitive_complexity = cognitive_result.to_dict()
     complexity_findings.extend(cognitive_findings)
 
+    # Copyright-header audit (audit 2.13.0 — idea #27)
+    from . import tier4_copyright
+    copyright_result, copyright_findings = tier4_copyright.analyze_copyright(config)
+    data.copyright_audit = copyright_result.to_dict()
+    complexity_findings.extend(copyright_findings)
+
+    # Dead-shader detection (audit 2.13.0 — idea #26)
+    from . import tier4_dead_shaders
+    shader_result, shader_findings = tier4_dead_shaders.analyze_dead_shaders(config)
+    data.dead_shaders = shader_result.to_dict()
+    complexity_findings.extend(shader_findings)
+
+    # file.read() without .gcount() (audit 2.13.0 — idea #10)
+    from . import tier4_file_read_gcount
+    gcount_result, gcount_findings = tier4_file_read_gcount.analyze_file_read_gcount(config)
+    data.file_read_gcount = gcount_result.to_dict()
+    complexity_findings.extend(gcount_findings)
+
     log.info("Tier 4: %d LOC, %d GPU classes, %d event files, %d deferred markers, "
              "%d dead code, %d build audit, %d clone pairs, %d refactoring smells, "
-             "%d high cognitive complexity",
+             "%d high cognitive complexity, %d missing headers, %d dead shaders, "
+             "%d unchecked reads",
              data.total_loc, len(data.gpu_resource_classes),
              len(data.event_lifecycle), len(data.deferred_markers),
              len(deadcode_result.unused_functions) + len(deadcode_result.unused_includes),
              len(build_audit_findings),
              len(dup_result.clone_pairs), refactor_result.total_smells,
-             cognitive_result.above_threshold)
+             cognitive_result.above_threshold,
+             len(copyright_result.missing_files),
+             len(shader_result.dead_shaders),
+             len(gcount_result.findings))
     return data, complexity_findings
 
 

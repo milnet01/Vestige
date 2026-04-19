@@ -106,6 +106,21 @@ DEFAULTS: dict[str, Any] = {
             "threshold": 15,
             "max_findings": 50,
         },
+        # audit 2.13.0 — three new detectors (ideas #10, #26, #27)
+        "copyright": {
+            "enabled": True,
+            "year_range_min": 2020,
+            "max_findings": 50,
+        },
+        "dead_shaders": {
+            "enabled": True,
+            "max_findings": 30,
+        },
+        "file_read_gcount": {
+            "enabled": True,
+            "window_lines": 20,
+            "max_findings": 30,
+        },
     },
     "research": {
         "enabled": True,

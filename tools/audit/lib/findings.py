@@ -262,6 +262,10 @@ class AuditData:
     duplication: dict[str, Any] | None = None
     refactoring: dict[str, Any] | None = None
     cognitive_complexity: dict[str, Any] | None = None
+    # audit 2.13.0 — three new tier-4 detectors (ideas #10, #26, #27)
+    copyright_audit: dict[str, Any] | None = None
+    dead_shaders: dict[str, Any] | None = None
+    file_read_gcount: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         d = {
@@ -290,6 +294,12 @@ class AuditData:
             d["refactoring"] = self.refactoring
         if self.cognitive_complexity:
             d["cognitive_complexity"] = self.cognitive_complexity
+        if self.copyright_audit:
+            d["copyright_audit"] = self.copyright_audit
+        if self.dead_shaders:
+            d["dead_shaders"] = self.dead_shaders
+        if self.file_read_gcount:
+            d["file_read_gcount"] = self.file_read_gcount
         return d
 
 
