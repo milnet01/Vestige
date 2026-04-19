@@ -9,6 +9,26 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-19 GI roadmap sync + SH-probe-grid unit tests
+
+Reconciles `docs/GI_ROADMAP.md` with the actual engine state — SH
+probe grid (2026-03-29) and radiosity baker (2026-03-30) landed
+months ago but were still marked "Planned" in the roadmap. Next GI
+step is now **SSGI** (Screen-Space Global Illumination), promoted
+from MEDIUM to HIGH priority.
+
+- `docs/GI_ROADMAP.md` — items 2 (SH grid) and 3 (radiosity) marked
+  IMPLEMENTED with file pointers and dates; implementation-order
+  list struck out the shipped items; item 4 (SSGI) flagged as the
+  next priority.
+- `tests/test_sh_probe_grid.cpp` — new unit-test file (6 tests, 1889
+  total). Covers the pure-math statics that had no coverage:
+  `projectCubemapToSH` (uniform-colour/zero/clamped-HDR cases) and
+  `convolveRadianceToIrradiance` (Ramamoorthi-Hanrahan 2001 cosine
+  coefficients, and the combined pipeline). GPU upload/bind paths
+  remain covered by the live scene-renderer capture path (need a GL
+  context).
+
 ### 2026-04-19 post-launch: gitleaks CI + pre-commit, Dependabot
 
 Closes two of the four post-launch maintenance items in

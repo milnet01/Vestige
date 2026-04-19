@@ -12,21 +12,20 @@ This document outlines all global illumination (GI) techniques planned for the V
 **How it works:** Captures local environment into cubemap, convolves irradiance + prefilter maps. Per-entity assignment based on AABB influence volume.
 **Limitations:** Coarse spatial resolution, no smooth transitions between many probes, high memory per probe (~2.5 MB each).
 
-### 2. SH Probe Grid — PRIORITY: HIGH (Next)
-**Status:** Planned
-**How it works:** 3D grid of Spherical Harmonic probes (L2, 9 coefficients × 3 channels = 27 floats per probe). Entities sample the grid with trilinear interpolation for smooth ambient lighting everywhere. ~81 KB for a 10×5×15 grid.
-**Advantages:** Smooth transitions, tiny memory footprint, fast GPU evaluation, works anywhere in the grid.
-**Data sources:** Initial capture from scene renders (like current probes), later filled by radiosity.
+### 2. SH Probe Grid — IMPLEMENTED (2026-03-29)
+**Status:** IMPLEMENTED
+**Files:** `engine/renderer/sh_probe_grid.h/cpp`; shader integration in `assets/shaders/scene.frag.glsl`; captured via `Renderer::captureSHGrid()`.
+**How it works:** 3D grid of Spherical Harmonic probes (L2, 9 coefficients × 3 channels = 27 floats per probe). Stored in 7× RGBA16F 3D textures bound at units 17–23 with hardware trilinear interpolation for smooth spatial blending. ~81 KB for a 10×5×15 grid. Design notes in `docs/SH_PROBE_GRID_DESIGN.md`.
 **Replaces:** Per-entity cubemap probe assignment for diffuse ambient.
 
-### 3. Radiosity — PRIORITY: HIGH (After SH Grid)
-**Status:** Planned
-**How it works:** Offline light transport simulation. Discretizes scene surfaces into patches, computes form factors (visibility × geometry between patch pairs), iteratively propagates light. Results stored in SH probe grid or as lightmaps.
-**Advantages:** Physically accurate multi-bounce diffuse, handles complex enclosed spaces perfectly.
+### 3. Radiosity — IMPLEMENTED (2026-03-30)
+**Status:** IMPLEMENTED
+**Files:** `engine/renderer/radiosity_baker.h/cpp`.
+**How it works:** Iterative gathering approach — each iteration re-captures the SH probe grid with the previous bounce's indirect lighting visible in the scene. After N iterations the grid contains N bounces of indirect light. Default config: 4 bounces, 0.02 energy-change convergence threshold, 0.3 m normal bias for anti-leak. Converges in 2–3 bounces (~12 s on RX 6600).
 **Use case:** Bake at scene load. Tent interior gets correct doorway bounce light, altar fire illumination on nearby surfaces.
-**Approach:** Hemicube-based form factor computation (render 5 faces per patch at low resolution).
+**Future enhancement:** hemicube-based per-patch form factor computation if fully static scenes ever need lightmap-quality output (see item 7).
 
-### 4. Screen-Space Global Illumination (SSGI) — PRIORITY: MEDIUM
+### 4. Screen-Space Global Illumination (SSGI) — PRIORITY: HIGH (NEXT)
 **Status:** Planned
 **How it works:** Real-time post-process. Traces rays in screen space using depth buffer to find nearby lit surfaces, gathers their reflected color as indirect light.
 **Advantages:** Fully dynamic, no baking, responds to moving lights and objects.
@@ -69,9 +68,9 @@ Future:         VXGI (replaces both SH grid + SSGI for fully dynamic GI)
 
 ## Implementation Order
 
-1. **SH Probe Grid** — Replace cubemap probes with SH grid for diffuse ambient
-2. **Radiosity** — Compute actual bounce light to fill the SH grid
-3. **SSGI** — Add real-time indirect for dynamic content
+1. ~~**SH Probe Grid** — Replace cubemap probes with SH grid for diffuse ambient~~ **SHIPPED 2026-03-29**
+2. ~~**Radiosity** — Compute actual bounce light to fill the SH grid~~ **SHIPPED 2026-03-30**
+3. **SSGI** — Add real-time indirect for dynamic content (**next**)
 4. **Lightmaps** — UV-based radiosity output for maximum static quality
 5. **VXGI** — Full dynamic GI (post-Vulkan)
 6. **LPV** — Evaluate if needed alongside VXGI

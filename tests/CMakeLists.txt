@@ -31,6 +31,7 @@ add_executable(vestige_tests
     test_instanced_rendering.cpp
     test_cascaded_shadow_map.cpp
     test_ibl.cpp
+    test_sh_probe_grid.cpp
     test_frustum_culling.cpp
     test_scene_serializer.cpp
     test_file_menu.cpp
