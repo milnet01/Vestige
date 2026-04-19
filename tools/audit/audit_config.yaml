@@ -245,6 +245,16 @@ patterns:
       file_glob: "*.glsl"
       severity: "high"
       description: "Unbounded loop — potential GPU hang"
+    # Phase 9B GPU cloth pipeline: std430 array stride for vec3 is 16 B on
+    # some drivers (Mesa AMD has bitten us), not 12 B. SSBO arrays must use
+    # vec4 layout with the w channel as padding / inverse mass. Flag vec3[]
+    # in compute shaders so the same pitfall doesn't sneak back in via a
+    # follow-up commit.
+    - name: "ssbo_vec3_array"
+      pattern: "\\bvec3\\s+\\w+\\s*\\[\\s*\\]"
+      file_glob: "*.comp.glsl"
+      severity: "medium"
+      description: "vec3[] in compute shader — std430 stride is 16 B; use vec4 with w padding"
 
 # -- Tier 3: Changed File Analysis -------------------------------------------
 changes:

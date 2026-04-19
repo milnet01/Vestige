@@ -105,6 +105,27 @@ _vestige_silence_upstream_dep_warnings()
 FetchContent_MakeAvailable(glm)
 _vestige_restore_dep_warnings()
 
+# Mark GLM's include directories as SYSTEM so its headers (e.g.
+# `glm/detail/qualifier.hpp`) aren't subject to the engine's `-Werror
+# -Wsign-conversion`. Newer CMake (3.25+) does this automatically with
+# `FetchContent_MakeAvailable(... SYSTEM)`, but the cmake-compat CI matrix
+# still runs against 3.20.6 where that flag doesn't exist. Apply the same
+# escape hatch unconditionally so behaviour is identical across versions.
+if(TARGET glm)
+    get_target_property(_vestige_glm_inc glm INTERFACE_INCLUDE_DIRECTORIES)
+    if(_vestige_glm_inc)
+        set_target_properties(glm PROPERTIES
+            INTERFACE_SYSTEM_INCLUDE_DIRECTORIES "${_vestige_glm_inc}")
+    endif()
+endif()
+if(TARGET glm::glm)
+    get_target_property(_vestige_glm_inc glm::glm INTERFACE_INCLUDE_DIRECTORIES)
+    if(_vestige_glm_inc)
+        set_target_properties(glm::glm PROPERTIES
+            INTERFACE_SYSTEM_INCLUDE_DIRECTORIES "${_vestige_glm_inc}")
+    endif()
+endif()
+
 # tinyexr — EXR image loading (single-header, like stb_image)
 FetchContent_Declare(
     tinyexr

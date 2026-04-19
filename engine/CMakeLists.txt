@@ -216,6 +216,7 @@ set(ENGINE_SOURCES
     systems/ui_system.cpp
     # Navigation system
     navigation/nav_mesh_builder.cpp
+    physics/cloth_backend_factory.cpp
     physics/cloth_constraint_graph.cpp
     physics/gpu_cloth_simulator.cpp
     navigation/nav_mesh_query.cpp

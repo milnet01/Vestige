@@ -9,6 +9,84 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-19 Phase 9B GPU compute cloth pipeline — feature complete
+
+Bundles Steps 7–11 of the Phase 9B GPU cloth migration (Steps 1–6
+shipped earlier today). The XPBD cloth solver is now fully
+implemented on the GPU as a parallel alternative to the existing
+CPU `ClothSimulator`.
+
+**Step 7 — collision (sphere + plane + ground).** New compute shader
+`assets/shaders/cloth_collision.comp.glsl`. Per-particle thread loops
+over sphere + plane collider arrays (passed as a UBO at
+binding 3, std140 layout, capped at 32 spheres + 16 planes). Pushes
+particles to `surface + collisionMargin` and zeros inward velocity.
+New mutators: `addSphereCollider`, `clearSphereColliders`,
+`addPlaneCollider`, `clearPlaneColliders`, `setGroundPlane`,
+`setCollisionMargin`. UBO uploaded lazily when collider state changes.
+Cylinder + box + mesh colliders deferred per the design doc.
+
+**Step 8 — normals.** New compute shader
+`assets/shaders/cloth_normals.comp.glsl`. Per-particle thread walks
+the (up to) 6 grid-adjacent triangles, accumulates area-weighted
+face normals, normalises. Atomic-free — each particle is the sole
+writer of its own normal slot. Runs once per frame (not per substep)
+since normals are for rendering, not physics. Render path still goes
+through `ClothComponent`'s vertex buffer for now; the SSBO-direct
+render path is bundled with the deferred `ClothComponent` cutover.
+
+**Step 9 — pins + LRA tethers.** New compute shader
+`assets/shaders/cloth_lra.comp.glsl` — unilateral tethers that
+activate only when a free particle has drifted past its rest-pose
+distance from its nearest pin. No graph colouring needed (each
+thread writes only its own particle). New `GpuLraConstraint` type
++ `generateLraConstraints()` helper. Pin support on
+`GpuClothSimulator`: `pinParticle` / `unpinParticle` /
+`setPinPosition` / `isParticlePinned` / `getPinnedCount`,
+`rebuildLRA()`. CPU position mirror's `w` channel is the source of
+truth for pin state; positions SSBO is re-uploaded when pins change.
+
+**Step 10 — auto CPU↔GPU select factory.** New module
+`engine/physics/cloth_backend_factory.{h,cpp}` with
+`chooseClothBackend()` (pure CPU, testable) and
+`createClothSolverBackend()` (constructs the chosen backend). Three
+policies: `AUTO`, `FORCE_CPU`, `FORCE_GPU`. Threshold:
+`GPU_AUTO_SELECT_THRESHOLD = 1024` particles (≈ 32×32 grid). The
+`ClothComponent` swap to `unique_ptr<IClothSolverBackend>` is
+intentionally a follow-up commit — the factory is in place and
+unit-tested so the cutover is a one-line change at the call site
+plus broadening the `IClothSolverBackend` interface to cover the
+mutator surface used by `inspector_panel`.
+
+**Step 11 — sweep.**
+- `tools/audit/audit_config.yaml` gains a new `shader.ssbo_vec3_array`
+  rule that flags `vec3 \w+\[\]` in `*.comp.glsl` files. std430's
+  array stride for `vec3` is 16 B on Mesa AMD (and is implementation-
+  defined elsewhere); the GPU cloth pipeline uses `vec4` everywhere
+  with `w` as padding / inverse mass. The audit rule guards against a
+  follow-up commit silently reintroducing the pitfall.
+- `ROADMAP.md` Phase 9B "GPU Compute Cloth Pipeline" item ticked,
+  with deferred follow-ups documented inline (GPU self-collision,
+  GPU mesh-collider, GPU tearing, `ClothComponent` cutover, Vulkan
+  port, perf-acceptance gate).
+
+**Test coverage delta across Steps 7–11**: 13 new tests
+(`GpuClothSimulator.*` collider defaults / accept / reject / clear /
+binding pin; `GpuClothSimulator.*` pin defaults / LRA binding;
+`ClothConstraintGraph.*` LRA empty / tether-every-free-particle;
+`ClothBackendFactory.*` AUTO / FORCE_CPU / FORCE_GPU / no-context
+fallback / threshold pin / CPU-create-and-init). Suite: **1945/1945**
+passing across the full engine (up from 1899 at Step 1 entry).
+
+**What's still gated:** the GPU backend is implemented and
+unit-tested but is not yet wired into `ClothComponent::m_simulator`.
+The factory exists; the call-site swap and the broader
+`IClothSolverBackend` interface widening are a follow-up because
+they touch every `getSimulator()` caller (especially
+`inspector_panel.cpp`). When that lands, the
+`docs/PHASE9B_GPU_CLOTH_DESIGN.md` § 7 perf-acceptance gates
+(100×100 ≥ 120 FPS on RX 6600, etc.) become the merge criteria.
+
 ### 2026-04-19 Phase 9B Step 6: cloth_dihedral.comp.glsl + dihedral constraints
 
 Per-quad-pair angle-based bending lands on the GPU. Different math

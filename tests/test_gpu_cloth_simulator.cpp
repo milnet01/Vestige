@@ -137,3 +137,99 @@ TEST(GpuClothSimulator, DihedralCountAndColoursZeroBeforeInit)
     EXPECT_EQ(sim.getDihedralColourCount(), 0u);
     EXPECT_EQ(sim.getDihedralsSSBO(),       0u);
 }
+
+// -- Step 7 surface --
+
+TEST(GpuClothSimulator, ColliderDefaults)
+{
+    GpuClothSimulator sim;
+    EXPECT_EQ(sim.getSphereColliderCount(), 0u);
+    EXPECT_EQ(sim.getPlaneColliderCount(),  0u);
+    EXPECT_FLOAT_EQ(sim.getCollisionMargin(), 0.015f);
+    EXPECT_LT(sim.getGroundPlane(), -100.0f) << "ground default should be far below scene";
+}
+
+TEST(GpuClothSimulator, AddSphereColliderIncrementsCount)
+{
+    GpuClothSimulator sim;
+    sim.addSphereCollider(glm::vec3(0.0f, 1.0f, 0.0f), 0.5f);
+    EXPECT_EQ(sim.getSphereColliderCount(), 1u);
+    sim.addSphereCollider(glm::vec3(2.0f, 0.0f, 0.0f), 1.0f);
+    EXPECT_EQ(sim.getSphereColliderCount(), 2u);
+}
+
+TEST(GpuClothSimulator, AddSphereColliderRejectsZeroRadius)
+{
+    GpuClothSimulator sim;
+    sim.addSphereCollider(glm::vec3(0.0f), 0.0f);
+    sim.addSphereCollider(glm::vec3(0.0f), -1.0f);
+    EXPECT_EQ(sim.getSphereColliderCount(), 0u);
+}
+
+TEST(GpuClothSimulator, ClearSphereCollidersResetsCount)
+{
+    GpuClothSimulator sim;
+    sim.addSphereCollider(glm::vec3(0.0f), 0.5f);
+    sim.addSphereCollider(glm::vec3(1.0f), 0.5f);
+    sim.clearSphereColliders();
+    EXPECT_EQ(sim.getSphereColliderCount(), 0u);
+}
+
+TEST(GpuClothSimulator, AddPlaneColliderRejectsZeroNormal)
+{
+    GpuClothSimulator sim;
+    EXPECT_FALSE(sim.addPlaneCollider(glm::vec3(0.0f), 1.0f));
+    EXPECT_EQ(sim.getPlaneColliderCount(), 0u);
+    EXPECT_TRUE(sim.addPlaneCollider(glm::vec3(0.0f, 1.0f, 0.0f), 0.0f));
+    EXPECT_EQ(sim.getPlaneColliderCount(), 1u);
+}
+
+TEST(GpuClothSimulator, BindCollidersUboEnumPinned)
+{
+    EXPECT_EQ(static_cast<GLuint>(GpuClothSimulator::BIND_COLLIDERS_UBO), 3u);
+}
+
+// -- Step 9 surface (pins + LRA, CPU-side state only) --
+
+TEST(GpuClothSimulator, PinDefaultsAreZero)
+{
+    GpuClothSimulator sim;
+    EXPECT_EQ(sim.getPinnedCount(), 0u);
+    EXPECT_EQ(sim.getLraCount(),    0u);
+    EXPECT_FALSE(sim.isParticlePinned(0));
+}
+
+TEST(GpuClothSimulator, BindLrasEnumPinned)
+{
+    EXPECT_EQ(static_cast<GLuint>(GpuClothSimulator::BIND_LRAS), 8u);
+}
+
+TEST(ClothConstraintGraph, GenerateLraEmptyForNoPins)
+{
+    std::vector<glm::vec3> positions(16, glm::vec3(0.0f));
+    std::vector<uint32_t>  pins;
+    std::vector<GpuLraConstraint> lras;
+    generateLraConstraints(positions, pins, lras);
+    EXPECT_TRUE(lras.empty());
+}
+
+TEST(ClothConstraintGraph, GenerateLraTethersEveryFreeParticle)
+{
+    // 4 particles in a line; pin index 0; expect 3 LRA tethers all referencing pin 0.
+    std::vector<glm::vec3> positions = {
+        {0,0,0}, {1,0,0}, {2,0,0}, {3,0,0}
+    };
+    std::vector<uint32_t> pins = {0};
+    std::vector<GpuLraConstraint> lras;
+    generateLraConstraints(positions, pins, lras);
+
+    ASSERT_EQ(lras.size(), 3u);
+    for (const auto& l : lras)
+    {
+        EXPECT_EQ(l.pinIndex, 0u);
+        EXPECT_NE(l.particleIndex, 0u);
+    }
+    EXPECT_FLOAT_EQ(lras[0].maxDistance, 1.0f);
+    EXPECT_FLOAT_EQ(lras[1].maxDistance, 2.0f);
+    EXPECT_FLOAT_EQ(lras[2].maxDistance, 3.0f);
+}

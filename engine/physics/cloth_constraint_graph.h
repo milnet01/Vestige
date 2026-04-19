@@ -120,4 +120,28 @@ std::vector<ColourRange> colourDihedralConstraints(
     std::vector<GpuDihedralConstraint>& constraints,
     uint32_t particleCount);
 
+/// @brief GPU-resident layout for a Long-Range Attachment constraint.
+///
+/// Each free particle is tethered to its nearest pinned particle. Unilateral:
+/// the constraint only activates when the particle has drifted past
+/// `maxDistance` from its pin. No graph colouring is needed because each LRA
+/// writes only its own particle (the pin is read-only).
+struct GpuLraConstraint
+{
+    uint32_t particleIndex;
+    uint32_t pinIndex;
+    float    maxDistance;
+    float    pad;
+};
+
+/// @brief Builds LRA constraints from a particle set + pin set.
+///
+/// For each unpinned particle, finds the nearest pinned particle and emits an
+/// LRA tether equal to their current Euclidean distance. Returns no-op if the
+/// pin set is empty.
+void generateLraConstraints(
+    const std::vector<glm::vec3>& positions,
+    const std::vector<uint32_t>& pinIndices,
+    std::vector<GpuLraConstraint>& outConstraints);
+
 } // namespace Vestige

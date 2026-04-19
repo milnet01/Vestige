@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cassert>
 #include <cmath>
+#include <limits>
 #include <unordered_map>
 
 namespace Vestige
@@ -327,6 +328,53 @@ std::vector<ColourRange> colourDihedralConstraints(
         ranges[colour].count = count;
     }
     return ranges;
+}
+
+// ---------------------------------------------------------------------------
+// LRA constraints
+// ---------------------------------------------------------------------------
+
+void generateLraConstraints(
+    const std::vector<glm::vec3>& positions,
+    const std::vector<uint32_t>& pinIndices,
+    std::vector<GpuLraConstraint>& outConstraints)
+{
+    if (pinIndices.empty()) return;
+
+    // Mark which particles are pinned so we can skip them in the outer loop.
+    std::vector<bool> isPinned(positions.size(), false);
+    for (uint32_t p : pinIndices)
+    {
+        if (p < isPinned.size()) isPinned[p] = true;
+    }
+
+    outConstraints.reserve(outConstraints.size() + positions.size() - pinIndices.size());
+
+    for (uint32_t i = 0; i < positions.size(); ++i)
+    {
+        if (isPinned[i]) continue;
+
+        // Nearest pin (Euclidean). For typical hanging cloths the pin set is
+        // a top edge (≤ W pins), so this O(P) loop per particle is cheap.
+        float    bestDist2 = std::numeric_limits<float>::max();
+        uint32_t bestPin   = pinIndices[0];
+        for (uint32_t p : pinIndices)
+        {
+            const glm::vec3 diff = positions[i] - positions[p];
+            const float     d2   = glm::dot(diff, diff);
+            if (d2 < bestDist2)
+            {
+                bestDist2 = d2;
+                bestPin   = p;
+            }
+        }
+
+        GpuLraConstraint lra{};
+        lra.particleIndex = i;
+        lra.pinIndex      = bestPin;
+        lra.maxDistance   = std::sqrt(bestDist2);
+        outConstraints.push_back(lra);
+    }
 }
 
 } // namespace Vestige

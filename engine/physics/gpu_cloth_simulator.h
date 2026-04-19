@@ -85,17 +85,77 @@ public:
     /// @return true if GL ≥ 4.3 with compute + SSBO; false otherwise (or no context).
     static bool isSupported();
 
-    /// @brief SSBO binding indices match the contract in the design doc § 4.
+    /// @brief SSBO / UBO binding indices match the contract in the design doc § 4.
     enum BufferBinding : GLuint
     {
         BIND_POSITIONS         = 0,
         BIND_PREV_POSITIONS    = 1,
         BIND_VELOCITIES        = 2,
+        BIND_COLLIDERS_UBO     = 3,
         BIND_CONSTRAINTS       = 4,
         BIND_DIHEDRALS         = 5,
         BIND_NORMALS           = 6,
         BIND_INDICES           = 7,
+        BIND_LRAS              = 8,
     };
+
+    // -- Pin mutators (Step 9) --
+
+    /// @brief Pins a particle to a fixed world-space position.
+    /// @return true if pinned, false if @a index is out of bounds.
+    bool pinParticle(uint32_t index, const glm::vec3& worldPos);
+
+    /// @brief Unpins a particle (restores inverse mass).
+    void unpinParticle(uint32_t index);
+
+    /// @brief Moves an already-pinned particle to a new world-space position.
+    void setPinPosition(uint32_t index, const glm::vec3& worldPos);
+
+    /// @brief Returns true if the given particle is currently pinned.
+    bool isParticlePinned(uint32_t index) const;
+
+    /// @brief Number of pinned particles.
+    uint32_t getPinnedCount() const { return static_cast<uint32_t>(m_pinIndices.size()); }
+
+    /// @brief Rebuilds the LRA tether set from the current pin set + positions.
+    /// Call after all pins are finalised. No-op if there are no pins.
+    void rebuildLRA();
+
+    /// @brief Number of LRA constraints currently active.
+    uint32_t getLraCount() const { return m_lraCount; }
+
+    // -- Collider mutators (Step 7) --
+
+    /// @brief Adds a sphere collider. World-space center + positive radius.
+    void addSphereCollider(const glm::vec3& center, float radius);
+
+    /// @brief Removes all sphere colliders.
+    void clearSphereColliders();
+
+    /// @brief Adds a half-space plane collider. Normal auto-normalised; offset is along normal.
+    /// @return true if added, false if normal was zero-length.
+    bool addPlaneCollider(const glm::vec3& normal, float offset);
+
+    /// @brief Removes all plane colliders.
+    void clearPlaneColliders();
+
+    /// @brief Sets the world-space Y of the ground plane. Particles stay at or above.
+    void setGroundPlane(float worldY);
+
+    /// @brief Returns the current ground plane Y.
+    float getGroundPlane() const { return m_groundY; }
+
+    /// @brief Sets the collision margin (default 0.015 m). Pushes particles `surface + margin`.
+    void setCollisionMargin(float margin);
+
+    /// @brief Returns the current collision margin.
+    float getCollisionMargin() const { return m_collisionMargin; }
+
+    /// @brief Number of sphere colliders currently active.
+    uint32_t getSphereColliderCount() const { return static_cast<uint32_t>(m_sphereColliders.size()); }
+
+    /// @brief Number of plane colliders currently active.
+    uint32_t getPlaneColliderCount() const { return static_cast<uint32_t>(m_planeColliders.size()); }
 
     GLuint getPositionsSSBO() const { return m_positionsSSBO; }
     GLuint getPrevPositionsSSBO() const { return m_prevPositionsSSBO; }
@@ -127,6 +187,8 @@ private:
     void buildInitialGrid(const ClothConfig& config);
     void buildAndUploadConstraints(const ClothConfig& config);
     void buildAndUploadDihedrals(const ClothConfig& config);
+    void uploadCollidersIfDirty();
+    void uploadPinsIfDirty();
     void loadShadersIfNeeded();
     void readbackPositionsIfDirty() const;
     void readbackNormalsIfDirty() const;
@@ -146,6 +208,7 @@ private:
     mutable bool m_normalsDirty   = false;
     std::vector<uint32_t> m_indices;
     std::vector<glm::vec2> m_texCoords;
+    std::vector<float>    m_invMassMirror;  ///< 1 = free, 0 = pinned. Source of truth for pin state.
 
     // SSBOs (named to mirror BufferBinding enum).
     GLuint m_positionsSSBO     = 0;
@@ -155,6 +218,8 @@ private:
     GLuint m_dihedralsSSBO     = 0;
     GLuint m_normalsSSBO       = 0;
     GLuint m_indicesSSBO       = 0;
+    GLuint m_collidersUBO      = 0;
+    GLuint m_lraSSBO           = 0;
 
     // Distance constraint graph + colouring.
     std::vector<GpuConstraint> m_constraints;
@@ -171,8 +236,29 @@ private:
     Shader m_integrateShader;
     Shader m_constraintsShader;
     Shader m_dihedralShader;
+    Shader m_collisionShader;
+    Shader m_normalsShader;
+    Shader m_lraShader;
     bool m_shadersLoaded = false;
     std::string m_shaderPath;
+
+    // Collider state (CPU-mirror; uploaded to UBO when dirty).
+    static constexpr int MAX_GPU_SPHERE_COLLIDERS = 32;
+    static constexpr int MAX_GPU_PLANE_COLLIDERS  = 16;
+    std::vector<glm::vec4> m_sphereColliders;   // xyz=center, w=radius
+    std::vector<glm::vec4> m_planeColliders;    // xyz=normal, w=offset
+    float m_groundY         = -1000.0f;
+    float m_collisionMargin = 0.015f;
+    bool  m_collidersDirty  = true;
+
+    // Pin + LRA state (Step 9). Pin set is tracked as a sorted unique vector
+    // of particle indices. The CPU position mirror's `w` channel is the
+    // single source of truth for pinned-vs-free; the GPU positions SSBO is
+    // re-uploaded when pin state changes.
+    std::vector<uint32_t>           m_pinIndices;
+    std::vector<GpuLraConstraint>   m_lras;
+    uint32_t                         m_lraCount      = 0;
+    bool                             m_pinsDirty     = false;
 
     // Per-frame parameters (uniforms uploaded inside simulate()).
     glm::vec3 m_gravity      = glm::vec3(0.0f, -9.81f, 0.0f);

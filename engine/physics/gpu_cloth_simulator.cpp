@@ -48,6 +48,160 @@ void GpuClothSimulator::setSubsteps(int substeps)
     m_substeps = substeps;
 }
 
+void GpuClothSimulator::addSphereCollider(const glm::vec3& center, float radius)
+{
+    if (radius <= 0.0f) return;
+    if (m_sphereColliders.size() >= static_cast<size_t>(MAX_GPU_SPHERE_COLLIDERS))
+    {
+        Logger::warning("[GpuClothSimulator] sphere collider cap reached ("
+                        + std::to_string(MAX_GPU_SPHERE_COLLIDERS)
+                        + "); silently dropping this one");
+        return;
+    }
+    m_sphereColliders.emplace_back(center, radius);
+    m_collidersDirty = true;
+}
+
+void GpuClothSimulator::clearSphereColliders()
+{
+    if (m_sphereColliders.empty()) return;
+    m_sphereColliders.clear();
+    m_collidersDirty = true;
+}
+
+bool GpuClothSimulator::addPlaneCollider(const glm::vec3& normal, float offset)
+{
+    const float len = glm::length(normal);
+    if (len <= 1e-7f) return false;
+    if (m_planeColliders.size() >= static_cast<size_t>(MAX_GPU_PLANE_COLLIDERS))
+    {
+        Logger::warning("[GpuClothSimulator] plane collider cap reached ("
+                        + std::to_string(MAX_GPU_PLANE_COLLIDERS)
+                        + "); silently dropping this one");
+        return false;
+    }
+    m_planeColliders.emplace_back(normal / len, offset);
+    m_collidersDirty = true;
+    return true;
+}
+
+void GpuClothSimulator::clearPlaneColliders()
+{
+    if (m_planeColliders.empty()) return;
+    m_planeColliders.clear();
+    m_collidersDirty = true;
+}
+
+void GpuClothSimulator::setGroundPlane(float worldY)
+{
+    if (worldY == m_groundY) return;
+    m_groundY = worldY;
+    m_collidersDirty = true;
+}
+
+void GpuClothSimulator::setCollisionMargin(float margin)
+{
+    if (margin < 0.0f) margin = 0.0f;
+    if (margin == m_collisionMargin) return;
+    m_collisionMargin = margin;
+    m_collidersDirty = true;
+}
+
+bool GpuClothSimulator::pinParticle(uint32_t index, const glm::vec3& worldPos)
+{
+    if (index >= m_particleCount) return false;
+    m_positionMirror[index] = worldPos;
+    if (m_invMassMirror[index] != 0.0f)
+    {
+        m_invMassMirror[index] = 0.0f;
+        m_pinIndices.push_back(index);
+    }
+    m_pinsDirty = true;
+    return true;
+}
+
+void GpuClothSimulator::unpinParticle(uint32_t index)
+{
+    if (index >= m_particleCount) return;
+    if (m_invMassMirror[index] == 0.0f)
+    {
+        m_invMassMirror[index] = 1.0f;
+        m_pinIndices.erase(
+            std::remove(m_pinIndices.begin(), m_pinIndices.end(), index),
+            m_pinIndices.end());
+        m_pinsDirty = true;
+    }
+}
+
+void GpuClothSimulator::setPinPosition(uint32_t index, const glm::vec3& worldPos)
+{
+    if (index >= m_particleCount) return;
+    if (m_invMassMirror[index] != 0.0f) return;  // Not pinned: silently ignore.
+    m_positionMirror[index] = worldPos;
+    m_pinsDirty = true;
+}
+
+bool GpuClothSimulator::isParticlePinned(uint32_t index) const
+{
+    return index < m_invMassMirror.size() && m_invMassMirror[index] == 0.0f;
+}
+
+void GpuClothSimulator::rebuildLRA()
+{
+    m_lras.clear();
+    if (m_pinIndices.empty())
+    {
+        m_lraCount = 0;
+        if (m_lraSSBO) { glDeleteBuffers(1, &m_lraSSBO); m_lraSSBO = 0; }
+        return;
+    }
+
+    generateLraConstraints(m_positionMirror, m_pinIndices, m_lras);
+    m_lraCount = static_cast<uint32_t>(m_lras.size());
+    if (m_lraCount == 0) return;
+
+    // Re-allocate the SSBO if size changed (or first build).
+    if (m_lraSSBO) { glDeleteBuffers(1, &m_lraSSBO); m_lraSSBO = 0; }
+    glCreateBuffers(1, &m_lraSSBO);
+    glNamedBufferStorage(
+        m_lraSSBO,
+        static_cast<GLsizeiptr>(m_lraCount * sizeof(GpuLraConstraint)),
+        m_lras.data(),
+        /*flags=*/0);
+}
+
+void GpuClothSimulator::uploadPinsIfDirty()
+{
+    if (!m_pinsDirty || m_positionsSSBO == 0) return;
+
+    // Re-pack the entire positions buffer from the CPU mirror. Cheap (a few
+    // hundred KB at typical sizes) and avoids tracking per-particle dirty
+    // bits. Velocities for newly-pinned particles are zeroed so the integrate
+    // shader's w==0 short-circuit can't be sabotaged by stale velocity.
+    std::vector<glm::vec4> packed(m_particleCount);
+    for (uint32_t i = 0; i < m_particleCount; ++i)
+    {
+        packed[i] = glm::vec4(m_positionMirror[i], m_invMassMirror[i]);
+    }
+    const GLsizeiptr bytes =
+        static_cast<GLsizeiptr>(m_particleCount * sizeof(glm::vec4));
+    glNamedBufferSubData(m_positionsSSBO,     0, bytes, packed.data());
+    glNamedBufferSubData(m_prevPositionsSSBO, 0, bytes, packed.data());
+
+    // Zero velocities for currently-pinned particles to prevent residual
+    // motion before the integrate shader skips them.
+    if (!m_pinIndices.empty())
+    {
+        std::vector<glm::vec4> velPacked(m_particleCount);
+        glGetNamedBufferSubData(
+            m_velocitiesSSBO, 0, bytes, velPacked.data());
+        for (uint32_t p : m_pinIndices) velPacked[p] = glm::vec4(0.0f);
+        glNamedBufferSubData(m_velocitiesSSBO, 0, bytes, velPacked.data());
+    }
+
+    m_pinsDirty = false;
+}
+
 void GpuClothSimulator::initialize(const ClothConfig& config, uint32_t /*seed*/)
 {
     if (m_initialized) destroyBuffers();
@@ -108,7 +262,67 @@ void GpuClothSimulator::loadShadersIfNeeded()
         Logger::error("[GpuClothSimulator] Failed to load " + dihedralPath);
         return;
     }
+    const std::string collisionPath = m_shaderPath + "/cloth_collision.comp.glsl";
+    if (!m_collisionShader.loadComputeShader(collisionPath))
+    {
+        Logger::error("[GpuClothSimulator] Failed to load " + collisionPath);
+        return;
+    }
+    const std::string normalsPath = m_shaderPath + "/cloth_normals.comp.glsl";
+    if (!m_normalsShader.loadComputeShader(normalsPath))
+    {
+        Logger::error("[GpuClothSimulator] Failed to load " + normalsPath);
+        return;
+    }
+    const std::string lraPath = m_shaderPath + "/cloth_lra.comp.glsl";
+    if (!m_lraShader.loadComputeShader(lraPath))
+    {
+        Logger::error("[GpuClothSimulator] Failed to load " + lraPath);
+        return;
+    }
     m_shadersLoaded = true;
+}
+
+void GpuClothSimulator::uploadCollidersIfDirty()
+{
+    if (!m_collidersDirty) return;
+
+    // std140 layout — array stride for vec4 is 16, so the C++ side just needs
+    // contiguous glm::vec4 arrays. Pad unused slots to zero so the shader's
+    // bounded loop is harmless when sphereCount/planeCount < MAX_*.
+    struct ColliderBlock
+    {
+        glm::vec4 spheres[MAX_GPU_SPHERE_COLLIDERS];
+        glm::vec4 planes [MAX_GPU_PLANE_COLLIDERS];
+        int   sphereCount;
+        int   planeCount;
+        float groundY;
+        float collisionMargin;
+    };
+    static_assert(sizeof(ColliderBlock) % 16 == 0,
+                  "ColliderBlock must be 16-byte aligned for std140 UBO upload");
+
+    if (m_collidersUBO == 0)
+    {
+        glCreateBuffers(1, &m_collidersUBO);
+        glNamedBufferStorage(m_collidersUBO, sizeof(ColliderBlock),
+                              nullptr, GL_DYNAMIC_STORAGE_BIT);
+    }
+
+    ColliderBlock block{};
+    const size_t sphereN = std::min(m_sphereColliders.size(),
+                                     static_cast<size_t>(MAX_GPU_SPHERE_COLLIDERS));
+    const size_t planeN  = std::min(m_planeColliders.size(),
+                                     static_cast<size_t>(MAX_GPU_PLANE_COLLIDERS));
+    for (size_t i = 0; i < sphereN; ++i) block.spheres[i] = m_sphereColliders[i];
+    for (size_t i = 0; i < planeN;  ++i) block.planes[i]  = m_planeColliders[i];
+    block.sphereCount     = static_cast<int>(sphereN);
+    block.planeCount      = static_cast<int>(planeN);
+    block.groundY         = m_groundY;
+    block.collisionMargin = m_collisionMargin;
+
+    glNamedBufferSubData(m_collidersUBO, 0, sizeof(ColliderBlock), &block);
+    m_collidersDirty = false;
 }
 
 void GpuClothSimulator::buildAndUploadConstraints(const ClothConfig& config)
@@ -175,6 +389,9 @@ void GpuClothSimulator::simulate(float deltaTime)
 {
     if (!m_initialized || !m_shadersLoaded) return;
     if (deltaTime <= 0.0f) return;
+
+    uploadCollidersIfDirty();
+    uploadPinsIfDirty();
 
     const GLuint particleGroups = (m_particleCount + 63u) / 64u;
     const float  dtSub          = deltaTime / static_cast<float>(m_substeps);
@@ -250,11 +467,55 @@ void GpuClothSimulator::simulate(float deltaTime)
                 glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
             }
         }
+
+        // 5. Collision response — sphere + plane + ground. One thread per
+        //    particle; each particle is the unique writer of its position
+        //    and velocity entries so no atomics are needed even though
+        //    multiple colliders may all act on the same particle within
+        //    one shader invocation (the loops are serial inside the thread).
+        if (m_collidersUBO != 0)
+        {
+            m_collisionShader.use();
+            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, BIND_POSITIONS,  m_positionsSSBO);
+            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, BIND_VELOCITIES, m_velocitiesSSBO);
+            glBindBufferBase(GL_UNIFORM_BUFFER,        BIND_COLLIDERS_UBO, m_collidersUBO);
+            m_collisionShader.setUInt("u_particleCount", m_particleCount);
+            glDispatchCompute(particleGroups, 1, 1);
+            glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+        }
+
+        // 6. LRA tether solve — unilateral; each thread is the unique writer
+        //    of its own particle, pin position is read-only. No colouring
+        //    needed.
+        if (m_lraCount > 0 && m_lraSSBO != 0)
+        {
+            m_lraShader.use();
+            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, BIND_POSITIONS, m_positionsSSBO);
+            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, BIND_LRAS,      m_lraSSBO);
+            m_lraShader.setUInt("u_lraCount", m_lraCount);
+            const GLuint lraGroups = (m_lraCount + 63u) / 64u;
+            glDispatchCompute(lraGroups, 1, 1);
+            glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+        }
+    }
+
+    // 6. Normal recomputation — runs once per frame (not per substep) since
+    //    normals are for rendering, not physics. One thread per particle walks
+    //    the (up to) 6 grid-adjacent triangles via the cloth_normals shader.
+    {
+        m_normalsShader.use();
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, BIND_POSITIONS, m_positionsSSBO);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, BIND_NORMALS,   m_normalsSSBO);
+        m_normalsShader.setUInt("u_particleCount", m_particleCount);
+        m_normalsShader.setUInt("u_gridW",         m_gridW);
+        m_normalsShader.setUInt("u_gridH",         m_gridH);
+        glDispatchCompute(particleGroups, 1, 1);
+        glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
     }
 
     // CPU mirror is now stale — refreshed lazily on getPositions() / getNormals().
     m_positionsDirty = true;
-    m_normalsDirty   = false;  // Normals don't move in Step 4 (Step 8's job).
+    m_normalsDirty   = true;
 }
 
 void GpuClothSimulator::reset()
@@ -345,6 +606,7 @@ void GpuClothSimulator::buildInitialGrid(const ClothConfig& config)
     m_positionMirror.resize(m_particleCount);
     m_normalMirror.resize(m_particleCount, glm::vec3(0.0f, 1.0f, 0.0f));
     m_texCoords.resize(m_particleCount);
+    m_invMassMirror.assign(m_particleCount, 1.0f);  // All free until pin applied.
 
     const float wMinus1 = static_cast<float>(W - 1);
     const float hMinus1 = static_cast<float>(H - 1);
@@ -387,7 +649,7 @@ void GpuClothSimulator::createBuffers()
     std::vector<glm::vec4> initialVec4(m_particleCount);
     for (uint32_t i = 0; i < m_particleCount; ++i)
     {
-        initialVec4[i] = glm::vec4(m_positionMirror[i], 1.0f);
+        initialVec4[i] = glm::vec4(m_positionMirror[i], m_invMassMirror[i]);
     }
 
     const GLsizeiptr vec4Bytes = static_cast<GLsizeiptr>(m_particleCount * sizeof(glm::vec4));
@@ -427,6 +689,8 @@ void GpuClothSimulator::destroyBuffers()
     if (m_velocitiesSSBO)    { glDeleteBuffers(1, &m_velocitiesSSBO);    m_velocitiesSSBO = 0; }
     if (m_constraintsSSBO)   { glDeleteBuffers(1, &m_constraintsSSBO);   m_constraintsSSBO = 0; }
     if (m_dihedralsSSBO)     { glDeleteBuffers(1, &m_dihedralsSSBO);     m_dihedralsSSBO = 0; }
+    if (m_collidersUBO)      { glDeleteBuffers(1, &m_collidersUBO);      m_collidersUBO = 0; }
+    if (m_lraSSBO)           { glDeleteBuffers(1, &m_lraSSBO);           m_lraSSBO = 0; }
     if (m_normalsSSBO)       { glDeleteBuffers(1, &m_normalsSSBO);       m_normalsSSBO = 0; }
     if (m_indicesSSBO)       { glDeleteBuffers(1, &m_indicesSSBO);       m_indicesSSBO = 0; }
     m_initialized = false;
@@ -444,6 +708,14 @@ void GpuClothSimulator::destroyBuffers()
     m_dihedrals.clear();
     m_dihedralColourRanges.clear();
     m_dihedralCount = 0;
+    m_sphereColliders.clear();
+    m_planeColliders.clear();
+    m_collidersDirty = true;
+    m_pinIndices.clear();
+    m_lras.clear();
+    m_lraCount = 0;
+    m_pinsDirty = false;
+    m_invMassMirror.clear();
     m_shadersLoaded = false;  // Shader objects retain GPU state across init cycles.
 }
 
