@@ -230,6 +230,7 @@ bool Engine::initialize(const EngineConfig& config)
         m_editor->setFoliageManager(m_foliageManager);
         m_editor->setTerrain(m_terrain);
         m_editor->setProfiler(&m_profiler);
+        m_editor->setNavigationSystem(m_systemRegistry.getSystem<NavigationSystem>());
         m_editor->getBrushPreview().init(config.assetPath);
     }
 
@@ -1285,6 +1286,24 @@ void Engine::run()
                 drawLightGizmos(*activeScene, m_editor->getSelection(),
                                 m_editor->isShowAllLightGizmos());
             }
+
+            // Navmesh polygon overlay (editor toggle in the Navigation panel).
+            if (m_editor->getNavigationPanel().isVisualizationEnabled())
+            {
+                if (auto* nav = m_systemRegistry.getSystem<NavigationSystem>();
+                    nav && nav->hasNavMesh())
+                {
+                    std::vector<glm::vec3> segs;
+                    nav->getBuilder().extractPolygonEdges(
+                        segs, m_editor->getNavigationPanel().getOverlayLift());
+                    const glm::vec3& color = m_editor->getNavigationPanel().getOverlayColor();
+                    for (size_t i = 0; i + 1 < segs.size(); i += 2)
+                    {
+                        DebugDraw::line(segs[i], segs[i + 1], color);
+                    }
+                }
+            }
+
             m_renderer->bindOutputFbo();
             glm::mat4 vp = m_camera->getProjectionMatrix(aspectRatio)
                          * m_camera->getViewMatrix();

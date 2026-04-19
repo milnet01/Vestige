@@ -57,6 +57,14 @@ public:
     /// @brief Gets the time taken for the last build in milliseconds.
     float getLastBuildTimeMs() const { return m_lastBuildTimeMs; }
 
+    /// @brief Appends polygon-edge line segments to the output buffer.
+    /// Each consecutive pair of vec3s forms one edge segment (suitable for
+    /// `GL_LINES` consumption). No-op if no navmesh is built. The optional
+    /// @a yLift is added to each vertex's Y to lift edges off coincident
+    /// ground geometry (avoids z-fighting with the floor in debug overlay).
+    void extractPolygonEdges(std::vector<glm::vec3>& outSegments,
+                              float yLift = 0.0f) const;
+
 private:
     dtNavMesh* m_navMesh = nullptr;
     int m_polyCount = 0;

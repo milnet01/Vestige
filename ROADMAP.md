@@ -755,7 +755,7 @@ Foundations shipped via commit `fa0b100` — "Phase 9C: New domain systems — A
 - [x] Navmesh generation from terrain and static geometry — Recast via `engine/navigation/nav_mesh_builder.{h,cpp}` + `engine/systems/navigation_system.{h,cpp}`.
 - [x] Pathfinding (A* on navmesh) — Detour via `engine/navigation/nav_mesh_query.{h,cpp}`; `NavAgentComponent` for per-entity agents.
 - [ ] Basic AI state management — **not yet** (behaviour-tree / state-machine work lives in Phase 16).
-- [ ] Editor: navmesh visualization and bake controls, patrol path placement — **not yet.**
+- [x] Editor: navmesh visualization and bake controls — `engine/editor/panels/navigation_panel.{h,cpp}`. `Window → Navigation` menu toggle; ImGui controls for all `NavMeshBuildConfig` fields; `Bake` / `Clear` buttons drive `NavigationSystem::bakeNavMesh()`; "Show polygon overlay" toggle draws every navmesh polygon's edges via `DebugDraw::line` (configurable colour + Y-lift). 6 unit tests in `tests/test_navigation_panel.cpp`. Patrol-path placement deferred to Phase 16 (AI behaviour trees).
 
 **Note:** Advanced AI (behavior trees, perception, AI director) is in Phase 16 (Scripting and Interactivity).
 

@@ -91,6 +91,7 @@ add_executable(vestige_tests
     test_system_registry.cpp
     test_domain_systems.cpp
     test_editor_viewers.cpp
+    test_navigation_panel.cpp
     test_node_graph.cpp
     test_scripting.cpp
     # FormulaWorkbench tool-side unit tests. The .cpp lives under

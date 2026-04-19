@@ -9,6 +9,61 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-19 Phase 9C: Navigation editor — visualisation + bake controls
+
+New `NavigationPanel` editor panel
+(`engine/editor/panels/navigation_panel.{h,cpp}`) drives the
+Navigation domain system from the editor: exposes Recast build
+parameters as ImGui `DragFloat`/`DragInt` widgets, fires
+`NavigationSystem::bakeNavMesh()` on a button press, reports
+last-bake polygon count and wall-clock time, and provides a
+"Show polygon overlay" toggle that draws every navmesh polygon's
+edges via the engine's `DebugDraw` line renderer (configurable
+colour + Y-lift to avoid z-fighting).
+
+Wiring:
+- `Editor::setNavigationSystem()` accepts the live system pointer
+  during engine init (mirrors `setFoliageManager` / `setTerrain` /
+  `setProfiler`).
+- `NavMeshBuilder::extractPolygonEdges()` walks Detour tiles via
+  the public const `getTile()` overload, skipping
+  `DT_POLYTYPE_OFFMESH_CONNECTION` polys, appending segment
+  endpoints to a caller-supplied buffer.
+- `engine.cpp` calls the extractor + `DebugDraw::line` in the
+  existing per-frame debug-draw pass when the panel toggle is on.
+- `Window` menu gets a new `Navigation` toggle next to `Terrain`.
+
+Tests: 6 new unit tests in `tests/test_navigation_panel.cpp`
+covering panel defaults, toggle behaviour, overlay parameter
+sanity, and the `extractPolygonEdges()` empty-mesh + append
+contracts. Suite: 1895/1895 passing.
+
+Closes the **Editor: navmesh visualization and bake controls**
+item under Phase 9C → AI & Navigation in `ROADMAP.md`. Patrol
+path placement remains deferred to Phase 16 (AI behaviour trees).
+
+### 2026-04-19 Phase 9B GPU compute cloth — design doc
+
+New design document `docs/PHASE9B_GPU_CLOTH_DESIGN.md` for the
+last-remaining Phase 9B sub-item: migrating the XPBD cloth solver
+to a GPU compute pipeline (SSBO storage + 4 compute shaders +
+red-black graph colouring + auto CPU↔GPU select). Implementation
+gated on maintainer review per CLAUDE.md research-first rule;
+covers algorithm, file layout, buffer layout, workgroup sizing,
+testing strategy, perf acceptance criteria, risks, and explicit
+out-of-scope items.
+
+### 2026-04-19 tooling: CMake compatibility CI matrix
+
+`.github/workflows/ci.yml` gains a separate `cmake-compat` job
+exercising the engine's declared minimum (`3.20.6`) and the
+latest upstream CMake on every push/PR via
+`jwlawson/actions-setup-cmake@v2`. Release-only, build-and-test
+(no audit), kept separate from `linux-build-test` so main-CI cost
+is unchanged. Catches FetchContent / SOURCE_SUBDIR regressions
+before downstream users report them. Closes the
+`PRE_OPEN_SOURCE_AUDIT.md` §8 follow-up.
+
 ### 2026-04-19 tooling: pretool frugal-output Bash hook
 
 Adds a `PreToolUse` hook (`tools/hook-pretool-bash-frugal.sh`) that

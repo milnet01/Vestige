@@ -24,6 +24,7 @@
 #include "editor/panels/texture_viewer_panel.h"
 #include "editor/panels/hdri_viewer_panel.h"
 #include "editor/panels/model_viewer_panel.h"
+#include "editor/panels/navigation_panel.h"
 #include "editor/panels/template_dialog.h"
 #include "editor/prefab_system.h"
 #include "editor/selection.h"
@@ -55,6 +56,7 @@ namespace Vestige
 class Camera;
 class EventBus;
 class FoliageManager;
+class NavigationSystem;
 class PerformanceProfiler;
 class Renderer;
 class ResourceManager;
@@ -195,6 +197,9 @@ public:
     /// @brief Stores a pointer to the PerformanceProfiler.
     void setProfiler(PerformanceProfiler* profiler);
 
+    /// @brief Stores a pointer to the NavigationSystem (for the Navigation panel).
+    void setNavigationSystem(NavigationSystem* navSystem);
+
     /// @brief Gets the terrain brush tool.
     TerrainBrush& getTerrainBrush();
 
@@ -228,6 +233,10 @@ public:
     TextureViewerPanel& getTextureViewerPanel() { return m_textureViewerPanel; }
     HdriViewerPanel& getHdriViewerPanel() { return m_hdriViewerPanel; }
     ModelViewerPanel& getModelViewerPanel() { return m_modelViewerPanel; }
+
+    /// @brief Gets the navigation (navmesh) panel.
+    NavigationPanel& getNavigationPanel() { return m_navigationPanel; }
+    const NavigationPanel& getNavigationPanel() const { return m_navigationPanel; }
 
 private:
     static void setupTheme();
@@ -279,6 +288,7 @@ private:
     TextureViewerPanel m_textureViewerPanel;
     HdriViewerPanel m_hdriViewerPanel;
     ModelViewerPanel m_modelViewerPanel;
+    NavigationPanel m_navigationPanel;
     TemplateDialog m_templateDialog;
     BrushTool m_brushTool;
     BrushPreviewRenderer m_brushPreview;
@@ -295,6 +305,7 @@ private:
     FoliageManager* m_foliageManager = nullptr;
     Terrain* m_terrain = nullptr;
     PerformanceProfiler* m_profiler = nullptr;
+    NavigationSystem* m_navigationSystem = nullptr;
     std::string m_assetPath;
 
     // Viewport bounds (stored from drawPanels, used next frame for click detection)

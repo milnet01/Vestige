@@ -201,6 +201,78 @@ jobs:
             docs/AUTOMATED_AUDIT_REPORT_*.json
           if-no-files-found: ignore
 
+  # CMake compatibility matrix. The main linux-build-test job runs against
+  # whatever cmake ships with ubuntu-24.04 (currently 3.28.x). This separate
+  # compat job exercises the engine's declared minimum (3.20) and the latest
+  # upstream release on each push/PR, so downstream users on either edge see
+  # regressions surface in a PR check rather than a bug report. Release-only,
+  # build-and-test (no audit), to keep the cost bounded. PRE_OPEN_SOURCE_AUDIT.md
+  # §8 follow-up: the engine's external/CMakeLists.txt SOURCE_SUBDIR pattern
+  # depends on FetchContent semantics that have tightened before (CMP0169).
+  cmake-compat:
+    name: CMake ${{ matrix.cmake }} (Release)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        cmake: ["3.20.6", "latest"]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            ninja-build \
+            pkg-config \
+            libgl1-mesa-dev \
+            libglu1-mesa-dev \
+            libx11-dev \
+            libxrandr-dev \
+            libxinerama-dev \
+            libxcursor-dev \
+            libxi-dev \
+            libxxf86vm-dev \
+            libwayland-dev \
+            libxkbcommon-dev \
+            xvfb
+
+      - name: Install CMake ${{ matrix.cmake }}
+        uses: jwlawson/actions-setup-cmake@v2
+        with:
+          cmake-version: ${{ matrix.cmake }}
+
+      - name: Verify CMake version
+        run: cmake --version
+
+      - name: Cache CMake FetchContent deps
+        uses: actions/cache@v4
+        with:
+          path: |
+            build/_deps
+          key: cmake-deps-compat-${{ matrix.cmake }}-${{ hashFiles('**/CMakeLists.txt') }}
+          restore-keys: |
+            cmake-deps-compat-${{ matrix.cmake }}-
+
+      - name: Configure
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+            -DVESTIGE_FETCH_ASSETS=OFF
+
+      - name: Build
+        run: cmake --build build -j $(nproc)
+
+      - name: Run tests
+        run: |
+          xvfb-run --auto-servernum ctest --test-dir build --output-on-failure -j $(nproc)
+
   # Secret-scanning job — runs gitleaks against the repo and the full
   # git history every push and PR. Catches accidentally-committed
   # credentials before they reach public mirrors / caches. Uses the

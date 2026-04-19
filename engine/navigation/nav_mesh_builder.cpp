@@ -367,4 +367,46 @@ bool NavMeshBuilder::buildFromScene(Scene& scene, const NavMeshBuildConfig& conf
     return true;
 }
 
+void NavMeshBuilder::extractPolygonEdges(std::vector<glm::vec3>& outSegments,
+                                          float yLift) const
+{
+    if (!m_navMesh) return;
+
+    // Walk all tiles → all polygons → all edges. Each polygon edge becomes
+    // two glm::vec3s appended to outSegments (start, end). Detour stores
+    // vertex coordinates as 3 floats interleaved in tile->verts[].
+    //
+    // The const-qualified `getTile(int) const` overload is the public one —
+    // route through a const* alias so we don't pick up the private
+    // non-const overload.
+    const dtNavMesh* mesh = m_navMesh;
+    const int maxTiles = mesh->getMaxTiles();
+    for (int t = 0; t < maxTiles; ++t)
+    {
+        const dtMeshTile* tile = mesh->getTile(t);
+        if (!tile || !tile->header) continue;
+
+        const int polyCount = tile->header->polyCount;
+        for (int i = 0; i < polyCount; ++i)
+        {
+            const dtPoly& poly = tile->polys[i];
+            // Skip off-mesh connections (poly type encodes them); those are
+            // 2-vertex "links" between disjoint navmesh patches and aren't
+            // useful for the polygon outline overlay.
+            if (poly.getType() == DT_POLYTYPE_OFFMESH_CONNECTION) continue;
+
+            const int vc = poly.vertCount;
+            for (int e = 0; e < vc; ++e)
+            {
+                const unsigned short ia = poly.verts[e];
+                const unsigned short ib = poly.verts[(e + 1) % vc];
+                const float* va = &tile->verts[ia * 3];
+                const float* vb = &tile->verts[ib * 3];
+                outSegments.emplace_back(va[0], va[1] + yLift, va[2]);
+                outSegments.emplace_back(vb[0], vb[1] + yLift, vb[2]);
+            }
+        }
+    }
+}
+
 } // namespace Vestige

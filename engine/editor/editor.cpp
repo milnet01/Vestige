@@ -18,6 +18,7 @@
 #include "scene/light_component.h"
 #include "scene/mesh_renderer.h"
 #include "scene/scene.h"
+#include "systems/navigation_system.h"
 
 #include <functional>
 
@@ -478,6 +479,11 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
                 if (ImGui::MenuItem("Terrain", nullptr, &terrainOpen))
                 {
                     m_terrainPanel.setOpen(terrainOpen);
+                }
+                bool navOpen = m_navigationPanel.isOpen();
+                if (ImGui::MenuItem("Navigation", nullptr, &navOpen))
+                {
+                    m_navigationPanel.setOpen(navOpen);
                 }
                 ImGui::MenuItem("Console", nullptr, &m_showConsole);
                 ImGui::MenuItem("Statistics", nullptr, &m_showStatistics);
@@ -1202,6 +1208,9 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
             m_terrainPanel.draw(m_terrainBrush, *m_terrain, m_commandHistory);
         }
 
+        // --- Navigation panel ---
+        m_navigationPanel.draw(m_navigationSystem, scene);
+
         // --- Performance panel ---
         if (m_profiler)
         {
@@ -1718,6 +1727,11 @@ TerrainPanel& Editor::getTerrainPanel()
 void Editor::setProfiler(PerformanceProfiler* profiler)
 {
     m_profiler = profiler;
+}
+
+void Editor::setNavigationSystem(NavigationSystem* navSystem)
+{
+    m_navigationSystem = navSystem;
 }
 
 PerformancePanel& Editor::getPerformancePanel()
