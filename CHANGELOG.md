@@ -9,6 +9,56 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-19 Phase 9B Step 6: cloth_dihedral.comp.glsl + dihedral constraints
+
+Per-quad-pair angle-based bending lands on the GPU. Different math
+from the skip-one *distance* bend (Step 5): a dihedral constraint
+binds two adjacent triangles via their shared edge and constrains
+the angle between their face normals to a rest angle (Müller et al.
+2007 — same formulation the CPU `ClothSimulator::solveDihedralConstraint`
+uses, so behaviour matches).
+
+New compute shader `assets/shaders/cloth_dihedral.comp.glsl` —
+`local_size_x = 32` (smaller workgroup than the distance shader to
+match the larger per-thread register footprint of 4-particle
+gradient computation). Reads the dihedral SSBO, computes face
+normals for both triangles, the current/rest angle delta, the four
+gradient vectors, and writes corrections to all four particles.
+
+New types in `cloth_constraint_graph`:
+- `GpuDihedralConstraint` — `uvec4 p` (wing0, wing1, edge0, edge1)
+  + `vec4 params` (restAngle, compliance, padding) → 32 B std430.
+- `generateDihedralConstraints()` — walks the triangle index buffer,
+  hashes each edge `(min(v0,v1), max(v0,v1))` into an
+  `unordered_map`, and emits one constraint per edge shared by
+  exactly two triangles. Boundary and non-manifold edges are skipped.
+- `colourDihedralConstraints()` — same greedy 64-bit-bitset algorithm
+  as the distance variant, generalised to 4 endpoints. Within a
+  colour no two dihedrals touch any of the same four particles.
+
+`GpuClothSimulator` upgrades:
+- New SSBO `BIND_DIHEDRALS = 5` (32 B per constraint).
+- New `m_dihedralShader`, loaded alongside the others when shader
+  path is set.
+- `simulate()` substep loop gains a step 4 (dihedral solve) right
+  after the distance solve; same per-colour structure but smaller
+  workgroup count (32 vs 64).
+- New accessors `getDihedralCount()`, `getDihedralColourCount()`,
+  `getDihedralsSSBO()`.
+- `destroyBuffers()` and `reset()` clean up the dihedral state.
+
+For a 4×4 grid: 21 dihedral constraints (formula `3MN − M − N` for
+M=N=3). For a flat grid every rest angle is 0 — the cloth's neutral
+pose is "lay flat", and the constraint pushes back proportional to
+how far folded the cloth deviates from that pose.
+
+Tests: 6 new dihedral tests in `test_cloth_constraint_graph.cpp`
+(analytical count formula, flat-grid rest angle = 0, single-triangle
+yields no dihedrals, the load-bearing "no shared particle within
+colour" invariant on a 6×6, partition contract, struct-size pin).
+2 new `GpuClothSimulator.*` tests (binding-enum pin, default-state
+zero accessors). Suite: 1927/1927 passing.
+
 ### 2026-04-19 Phase 9B Step 5: bend constraints (skip-one distance edges)
 
 `generateGridConstraints()` extended with a `bendCompliance`

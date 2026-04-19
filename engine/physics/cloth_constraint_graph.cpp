@@ -8,6 +8,8 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cmath>
+#include <unordered_map>
 
 namespace Vestige
 {
@@ -150,6 +152,166 @@ std::vector<ColourRange> colourConstraints(
     {
         sortedColours[i] = assignedColour[indices[i]];
     }
+
+    std::vector<ColourRange> ranges(maxColour, {0, 0});
+    uint32_t cursor = 0;
+    for (uint32_t colour = 0; colour < maxColour; ++colour)
+    {
+        ranges[colour].offset = cursor;
+        uint32_t count = 0;
+        while (cursor < sortedColours.size() && sortedColours[cursor] == colour)
+        {
+            ++cursor;
+            ++count;
+        }
+        ranges[colour].count = count;
+    }
+    return ranges;
+}
+
+// ---------------------------------------------------------------------------
+// Dihedral constraints
+// ---------------------------------------------------------------------------
+
+namespace
+{
+inline uint64_t packEdgeKey(uint32_t a, uint32_t b)
+{
+    if (a > b) std::swap(a, b);
+    return (static_cast<uint64_t>(a) << 32) | static_cast<uint64_t>(b);
+}
+} // namespace
+
+void generateDihedralConstraints(
+    const std::vector<uint32_t>& indices,
+    const std::vector<glm::vec3>& positions,
+    float compliance,
+    std::vector<GpuDihedralConstraint>& outConstraints)
+{
+    if (indices.size() < 6) return;  // Need at least two triangles.
+
+    struct EdgeInfo
+    {
+        uint32_t wing[2];
+        int      count;
+    };
+
+    std::unordered_map<uint64_t, EdgeInfo> edgeMap;
+    edgeMap.reserve(indices.size());
+
+    for (size_t t = 0; t + 2 < indices.size(); t += 3)
+    {
+        const uint32_t tri[3] = {indices[t], indices[t + 1], indices[t + 2]};
+        for (int e = 0; e < 3; ++e)
+        {
+            const uint32_t e0   = tri[e];
+            const uint32_t e1   = tri[(e + 1) % 3];
+            const uint32_t wing = tri[(e + 2) % 3];
+            const uint64_t key  = packEdgeKey(e0, e1);
+
+            auto it = edgeMap.find(key);
+            if (it == edgeMap.end())
+            {
+                EdgeInfo info{};
+                info.wing[0] = wing;
+                info.count = 1;
+                edgeMap[key] = info;
+            }
+            else if (it->second.count == 1)
+            {
+                it->second.wing[1] = wing;
+                it->second.count = 2;
+            }
+            // count > 2: non-manifold edge — skip silently.
+        }
+    }
+
+    for (const auto& [key, info] : edgeMap)
+    {
+        if (info.count != 2) continue;
+
+        const uint32_t edgeV0 = static_cast<uint32_t>(key >> 32);
+        const uint32_t edgeV1 = static_cast<uint32_t>(key & 0xFFFFFFFFu);
+
+        // p0 = wing 0, p1 = wing 1, p2 = edge start, p3 = edge end (matches CPU
+        // ClothSimulator's dihedral solver and the GLSL shader's binding).
+        const glm::vec3& p0 = positions[info.wing[0]];
+        const glm::vec3& p1 = positions[info.wing[1]];
+        const glm::vec3& p2 = positions[edgeV0];
+        const glm::vec3& p3 = positions[edgeV1];
+
+        glm::vec3 n1 = glm::cross(p2 - p0, p3 - p0);
+        glm::vec3 n2 = glm::cross(p3 - p1, p2 - p1);
+        const float len1 = glm::length(n1);
+        const float len2 = glm::length(n2);
+
+        float restAngle = 0.0f;
+        if (len1 > 1e-7f && len2 > 1e-7f)
+        {
+            n1 /= len1;
+            n2 /= len2;
+            const float cosAngle = std::clamp(glm::dot(n1, n2), -1.0f, 1.0f);
+            restAngle = std::acos(cosAngle);
+        }
+
+        GpuDihedralConstraint c{};
+        c.p0         = info.wing[0];
+        c.p1         = info.wing[1];
+        c.p2         = edgeV0;
+        c.p3         = edgeV1;
+        c.restAngle  = restAngle;
+        c.compliance = compliance;
+        outConstraints.push_back(c);
+    }
+}
+
+std::vector<ColourRange> colourDihedralConstraints(
+    std::vector<GpuDihedralConstraint>& constraints,
+    uint32_t particleCount)
+{
+    if (constraints.empty()) return {};
+    assert(particleCount > 0);
+
+    std::vector<uint64_t> particleColours(particleCount, 0ULL);
+    std::vector<uint32_t> assignedColour(constraints.size(), 0);
+    uint32_t maxColour = 0;
+
+    for (size_t i = 0; i < constraints.size(); ++i)
+    {
+        const auto& c = constraints[i];
+        const uint64_t forbidden = particleColours[c.p0] | particleColours[c.p1]
+                                  | particleColours[c.p2] | particleColours[c.p3];
+
+        uint32_t colour = 0;
+        for (; colour < 64; ++colour)
+        {
+            if ((forbidden & (1ULL << colour)) == 0) break;
+        }
+        assert(colour < 64 && "Dihedral graph has a particle of degree >= 64");
+
+        assignedColour[i] = colour;
+        const uint64_t bit = 1ULL << colour;
+        particleColours[c.p0] |= bit;
+        particleColours[c.p1] |= bit;
+        particleColours[c.p2] |= bit;
+        particleColours[c.p3] |= bit;
+        if (colour + 1 > maxColour) maxColour = colour + 1;
+    }
+
+    std::vector<size_t> idx(constraints.size());
+    for (size_t i = 0; i < idx.size(); ++i) idx[i] = i;
+    std::stable_sort(idx.begin(), idx.end(),
+        [&](size_t a, size_t b) {
+            return assignedColour[a] < assignedColour[b];
+        });
+
+    std::vector<GpuDihedralConstraint> reordered(constraints.size());
+    for (size_t i = 0; i < idx.size(); ++i) reordered[i] = constraints[idx[i]];
+    constraints = std::move(reordered);
+
+    std::vector<uint32_t> sortedColours(constraints.size());
+    for (size_t i = 0; i < idx.size(); ++i)
+        sortedColours[i] = assignedColour[idx[i]];
 
     std::vector<ColourRange> ranges(maxColour, {0, 0});
     uint32_t cursor = 0;

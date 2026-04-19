@@ -13,8 +13,10 @@
 
 #include "physics/cloth_constraint_graph.h"
 
+#include <cstdint>
 #include <set>
 #include <utility>
+#include <vector>
 
 using namespace Vestige;
 
@@ -210,4 +212,136 @@ TEST(ClothConstraintGraph, EmptyConstraintsYieldEmptyRanges)
     std::vector<GpuConstraint> cs;
     auto ranges = colourConstraints(cs, /*particleCount=*/16);
     EXPECT_TRUE(ranges.empty());
+}
+
+// -- Dihedral generation + colouring (Step 6) --
+
+namespace
+{
+
+// Build the same triangle index buffer that GpuClothSimulator's grid builder
+// produces, so dihedral edge-walking sees a manifold mesh identical to what
+// the runtime feeds it.
+std::vector<uint32_t> makeGridIndices(uint32_t W, uint32_t H)
+{
+    std::vector<uint32_t> idx;
+    idx.reserve((W - 1) * (H - 1) * 6);
+    for (uint32_t z = 0; z + 1 < H; ++z)
+    {
+        for (uint32_t x = 0; x + 1 < W; ++x)
+        {
+            const uint32_t i0 = z * W + x;
+            const uint32_t i1 = z * W + (x + 1);
+            const uint32_t i2 = (z + 1) * W + x;
+            const uint32_t i3 = (z + 1) * W + (x + 1);
+            idx.push_back(i0); idx.push_back(i2); idx.push_back(i1);
+            idx.push_back(i1); idx.push_back(i2); idx.push_back(i3);
+        }
+    }
+    return idx;
+}
+
+} // namespace
+
+TEST(ClothConstraintGraph, DihedralCountMatchesAnalyticalFormula)
+{
+    // For an M×N quad grid (M=W-1, N=H-1) using the diagonal triangulation,
+    // dihedrals = 3*M*N - M - N (one per cell-internal diagonal + one per
+    // shared horizontal edge + one per shared vertical edge between cells).
+    constexpr uint32_t W = 4, H = 4;
+    auto positions = makeFlatGrid(W, H);
+    auto indices   = makeGridIndices(W, H);
+
+    std::vector<GpuDihedralConstraint> ds;
+    generateDihedralConstraints(indices, positions, /*compliance=*/0.01f, ds);
+
+    constexpr uint32_t M = W - 1;
+    constexpr uint32_t N = H - 1;
+    constexpr uint32_t expected = 3 * M * N - M - N;
+    EXPECT_EQ(ds.size(), expected);
+}
+
+TEST(ClothConstraintGraph, DihedralRestAngleIsZeroForFlatGrid)
+{
+    // A flat grid has all triangles coplanar → every dihedral rest angle == 0.
+    constexpr uint32_t W = 5, H = 5;
+    auto positions = makeFlatGrid(W, H);
+    auto indices   = makeGridIndices(W, H);
+
+    std::vector<GpuDihedralConstraint> ds;
+    generateDihedralConstraints(indices, positions, /*compliance=*/0.01f, ds);
+    ASSERT_FALSE(ds.empty());
+    for (const auto& d : ds)
+    {
+        EXPECT_NEAR(d.restAngle, 0.0f, 1e-4f);
+    }
+}
+
+TEST(ClothConstraintGraph, DihedralEmptyForSingleTriangle)
+{
+    // One triangle has no shared edges → no dihedrals.
+    std::vector<glm::vec3> positions = {
+        {0, 0, 0}, {1, 0, 0}, {0, 0, 1}
+    };
+    std::vector<uint32_t> indices = {0, 1, 2};
+    std::vector<GpuDihedralConstraint> ds;
+    generateDihedralConstraints(indices, positions, 0.01f, ds);
+    EXPECT_TRUE(ds.empty());
+}
+
+TEST(ClothConstraintGraph, DihedralColouringHasNoSharedParticleWithinColour)
+{
+    // The load-bearing invariant for the GPU pass: within a colour, the
+    // four-particle endpoint sets of any two dihedrals must be disjoint.
+    constexpr uint32_t W = 6, H = 6;
+    auto positions = makeFlatGrid(W, H);
+    auto indices   = makeGridIndices(W, H);
+
+    std::vector<GpuDihedralConstraint> ds;
+    generateDihedralConstraints(indices, positions, 0.01f, ds);
+    auto ranges = colourDihedralConstraints(ds, W * H);
+
+    ASSERT_FALSE(ranges.empty());
+    for (const auto& r : ranges)
+    {
+        std::set<uint32_t> seen;
+        for (uint32_t k = 0; k < r.count; ++k)
+        {
+            const auto& d = ds[r.offset + k];
+            EXPECT_TRUE(seen.insert(d.p0).second);
+            EXPECT_TRUE(seen.insert(d.p1).second);
+            EXPECT_TRUE(seen.insert(d.p2).second);
+            EXPECT_TRUE(seen.insert(d.p3).second);
+        }
+    }
+}
+
+TEST(ClothConstraintGraph, DihedralRangesPartitionTheConstraintArray)
+{
+    constexpr uint32_t W = 5, H = 5;
+    auto positions = makeFlatGrid(W, H);
+    auto indices   = makeGridIndices(W, H);
+
+    std::vector<GpuDihedralConstraint> ds;
+    generateDihedralConstraints(indices, positions, 0.01f, ds);
+    const size_t before = ds.size();
+    auto ranges = colourDihedralConstraints(ds, W * H);
+
+    EXPECT_EQ(ds.size(), before);
+    uint32_t expectedOffset = 0;
+    uint32_t total = 0;
+    for (const auto& r : ranges)
+    {
+        EXPECT_EQ(r.offset, expectedOffset);
+        expectedOffset += r.count;
+        total += r.count;
+    }
+    EXPECT_EQ(total, static_cast<uint32_t>(ds.size()));
+}
+
+TEST(ClothConstraintGraph, DihedralStructIsThirtyTwoBytes)
+{
+    // The std430 layout uses uvec4 + vec4 → 32 B. Pin so a refactor that
+    // removes the padding silently breaks GPU upload alignment.
+    EXPECT_EQ(sizeof(GpuDihedralConstraint), 32u);
 }

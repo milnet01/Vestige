@@ -121,3 +121,19 @@ TEST(GpuClothSimulator, BindConstraintsEnumPinned)
     // compute shader. Pin it so a refactor can't silently shift it.
     EXPECT_EQ(static_cast<GLuint>(GpuClothSimulator::BIND_CONSTRAINTS), 4u);
 }
+
+// -- Step 6 surface --
+
+TEST(GpuClothSimulator, BindDihedralsEnumPinned)
+{
+    // Dihedral SSBO binding 5 is the contract with cloth_dihedral.comp.glsl.
+    EXPECT_EQ(static_cast<GLuint>(GpuClothSimulator::BIND_DIHEDRALS), 5u);
+}
+
+TEST(GpuClothSimulator, DihedralCountAndColoursZeroBeforeInit)
+{
+    GpuClothSimulator sim;
+    EXPECT_EQ(sim.getDihedralCount(),       0u);
+    EXPECT_EQ(sim.getDihedralColourCount(), 0u);
+    EXPECT_EQ(sim.getDihedralsSSBO(),       0u);
+}

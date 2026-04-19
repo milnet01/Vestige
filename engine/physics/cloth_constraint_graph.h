@@ -35,6 +35,25 @@ struct GpuConstraint
     float    compliance;
 };
 
+/// @brief GPU-resident layout for a dihedral bending constraint (std430).
+///
+/// Four particle indices (`p0`/`p1` are the wing vertices opposite the shared
+/// edge; `p2`/`p3` are the shared-edge endpoints), the rest dihedral angle
+/// between the two adjacent triangles, and the XPBD compliance factor.
+/// Padded to 32 bytes to satisfy std430 alignment when packed as a uvec4 +
+/// vec4 in the GLSL `cloth_dihedral.comp.glsl` shader.
+struct GpuDihedralConstraint
+{
+    uint32_t p0;
+    uint32_t p1;
+    uint32_t p2;
+    uint32_t p3;
+    float    restAngle;
+    float    compliance;
+    float    pad0;
+    float    pad1;
+};
+
 /// @brief Half-open `[offset, offset+count)` slice into a constraint array.
 struct ColourRange
 {
@@ -77,6 +96,28 @@ void generateGridConstraints(
 /// @return Per-colour `[offset, count]` slices into @a constraints.
 std::vector<ColourRange> colourConstraints(
     std::vector<GpuConstraint>& constraints,
+    uint32_t particleCount);
+
+/// @brief Builds dihedral bending constraints from a triangle index buffer.
+///
+/// For every edge shared by exactly two triangles ("interior edge"), emits a
+/// dihedral constraint between the two wing vertices and the two edge
+/// endpoints, with rest angle equal to the current angle between the
+/// triangles' face normals. Boundary edges (shared by only one triangle) and
+/// non-manifold edges (shared by three or more) are skipped.
+void generateDihedralConstraints(
+    const std::vector<uint32_t>& indices,
+    const std::vector<glm::vec3>& positions,
+    float compliance,
+    std::vector<GpuDihedralConstraint>& outConstraints);
+
+/// @brief Greedy graph-colours dihedral constraints (4 particles each).
+///
+/// Same algorithm as `colourConstraints` for the 2-particle case, generalised
+/// to four particles. Within a colour no two dihedral constraints touch any
+/// of the same four particles.
+std::vector<ColourRange> colourDihedralConstraints(
+    std::vector<GpuDihedralConstraint>& constraints,
     uint32_t particleCount);
 
 } // namespace Vestige

@@ -68,6 +68,7 @@ void GpuClothSimulator::initialize(const ClothConfig& config, uint32_t /*seed*/)
     buildInitialGrid(config);
     createBuffers();
     buildAndUploadConstraints(config);
+    buildAndUploadDihedrals(config);
     loadShadersIfNeeded();
 
     m_initialized = true;
@@ -101,6 +102,12 @@ void GpuClothSimulator::loadShadersIfNeeded()
         Logger::error("[GpuClothSimulator] Failed to load " + constraintsPath);
         return;
     }
+    const std::string dihedralPath = m_shaderPath + "/cloth_dihedral.comp.glsl";
+    if (!m_dihedralShader.loadComputeShader(dihedralPath))
+    {
+        Logger::error("[GpuClothSimulator] Failed to load " + dihedralPath);
+        return;
+    }
     m_shadersLoaded = true;
 }
 
@@ -129,6 +136,38 @@ void GpuClothSimulator::buildAndUploadConstraints(const ClothConfig& config)
 
     Logger::info("[GpuClothSimulator] Built " + std::to_string(m_constraintCount)
                  + " constraints in " + std::to_string(m_colourRanges.size())
+                 + " colour groups");
+}
+
+void GpuClothSimulator::buildAndUploadDihedrals(const ClothConfig& config)
+{
+    m_dihedrals.clear();
+    m_dihedralColourRanges.clear();
+    m_dihedralCount = 0;
+
+    // Use the same compliance the CPU dihedral solver defaults to
+    // (`m_dihedralCompliance = 0.01f`). The runtime accessor `setDihedralBendCompliance`
+    // on the CPU type covers tuning; the GPU backend will mirror that surface in
+    // a later step. For Step 6 we lock to the CPU default so visual parity holds.
+    constexpr float dihedralCompliance = 0.01f;
+    (void)config;  // bend distance compliance is separate (config.bendCompliance is for Step 5).
+
+    generateDihedralConstraints(m_indices, m_positionMirror,
+                                 dihedralCompliance, m_dihedrals);
+    if (m_dihedrals.empty()) return;
+
+    m_dihedralColourRanges = colourDihedralConstraints(m_dihedrals, m_particleCount);
+    m_dihedralCount = static_cast<uint32_t>(m_dihedrals.size());
+
+    glCreateBuffers(1, &m_dihedralsSSBO);
+    glNamedBufferStorage(
+        m_dihedralsSSBO,
+        static_cast<GLsizeiptr>(m_dihedralCount * sizeof(GpuDihedralConstraint)),
+        m_dihedrals.data(),
+        /*flags=*/0);
+
+    Logger::info("[GpuClothSimulator] Built " + std::to_string(m_dihedralCount)
+                 + " dihedrals in " + std::to_string(m_dihedralColourRanges.size())
                  + " colour groups");
 }
 
@@ -188,6 +227,26 @@ void GpuClothSimulator::simulate(float deltaTime)
                 m_constraintsShader.setUInt("u_colorCount",  range.count);
                 const GLuint constraintGroups = (range.count + 63u) / 64u;
                 glDispatchCompute(constraintGroups, 1, 1);
+                glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+            }
+        }
+
+        // 4. Dihedral bending solve — same per-colour structure, smaller
+        //    workgroups (32 vs 64) because the per-thread register footprint is
+        //    larger (4 particles + gradient computations).
+        if (m_dihedralCount > 0)
+        {
+            m_dihedralShader.use();
+            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, BIND_POSITIONS, m_positionsSSBO);
+            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, BIND_DIHEDRALS, m_dihedralsSSBO);
+            m_dihedralShader.setFloat("u_dtSubSquared", dtSubSquared);
+            for (const auto& range : m_dihedralColourRanges)
+            {
+                if (range.count == 0) continue;
+                m_dihedralShader.setUInt("u_colorOffset", range.offset);
+                m_dihedralShader.setUInt("u_colorCount",  range.count);
+                const GLuint dihedralGroups = (range.count + 31u) / 32u;
+                glDispatchCompute(dihedralGroups, 1, 1);
                 glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
             }
         }
@@ -367,6 +426,7 @@ void GpuClothSimulator::destroyBuffers()
     if (m_prevPositionsSSBO) { glDeleteBuffers(1, &m_prevPositionsSSBO); m_prevPositionsSSBO = 0; }
     if (m_velocitiesSSBO)    { glDeleteBuffers(1, &m_velocitiesSSBO);    m_velocitiesSSBO = 0; }
     if (m_constraintsSSBO)   { glDeleteBuffers(1, &m_constraintsSSBO);   m_constraintsSSBO = 0; }
+    if (m_dihedralsSSBO)     { glDeleteBuffers(1, &m_dihedralsSSBO);     m_dihedralsSSBO = 0; }
     if (m_normalsSSBO)       { glDeleteBuffers(1, &m_normalsSSBO);       m_normalsSSBO = 0; }
     if (m_indicesSSBO)       { glDeleteBuffers(1, &m_indicesSSBO);       m_indicesSSBO = 0; }
     m_initialized = false;
@@ -381,6 +441,9 @@ void GpuClothSimulator::destroyBuffers()
     m_constraints.clear();
     m_colourRanges.clear();
     m_constraintCount = 0;
+    m_dihedrals.clear();
+    m_dihedralColourRanges.clear();
+    m_dihedralCount = 0;
     m_shadersLoaded = false;  // Shader objects retain GPU state across init cycles.
 }
 
