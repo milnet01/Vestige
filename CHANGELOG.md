@@ -9,6 +9,73 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-19 tooling: pretool frugal-output Bash hook
+
+Adds a `PreToolUse` hook (`tools/hook-pretool-bash-frugal.sh`) that
+bounces known-noisy commands (`pytest` without `-q`, `cmake --build`
+without a tail/redirect, `ctest -V`, `tools/audit/audit.py`) with a
+one-line reminder pointing at `| tail -200` / `--quiet` / `> /tmp/
+<name>.log`. Bypassed via a trailing `# frugal:ok` marker. Saves
+~5–20 k context tokens per accidental verbose run.
+
+`.claude/settings.json` — three read-only allowlist additions
+(`gitleaks detect *`, `semgrep --config *`,
+`clang-include-cleaner --disable-insert *`). Most observed traffic
+was already covered by Claude Code's built-in allowlist or existing
+cmake/ctest/cppcheck/clang-tidy entries.
+
+### 2026-04-19 audit tool 2.14.0 — three detectors close out the 30-idea list
+
+Ships the final three queued detectors from the 2026-04-19
+"30 consolidated detector ideas" list. The list is now fully shipped.
+
+- **`per_frame_heap_alloc`** (tier 4, MEDIUM in-loop / LOW otherwise)
+  — idea **#18**. Flags heap allocations inside per-frame functions
+  (`render` / `draw` / `update` / `tick`). Brace-balanced loop
+  tracking; honours `// ALLOC-OK` reviewer markers and skips
+  `static const` one-shot initialisers.
+- **`dead_public_api`** (tier 4, LOW) — idea **#25**. Flags public
+  class / free-function declarations with zero external callers via
+  word-bounded full-corpus grep.
+- **`token_shingle_similarity`** (tier 4, LOW) — idea **#28**. Jaccard
+  similarity over hashed K-token windows; complements line-aligned
+  `tier4_duplication` by catching reflowed near-duplicates.
+
+Also in this commit:
+- `lib/config.py` `DEFAULTS` dict split into per-section module-level
+  blocks (`_DEFAULTS_PROJECT` / `_BUILD` / `_TIER4` / …) assembled
+  at the bottom — adding a future detector default is now a
+  localised edit.
+- `lib/config.py` `Config.enabled_tiers` fallback fixed: was
+  `[1..5]`, now matches `DEFAULTS["tiers"] = [1..6]`.
+
+45 new unit tests; full audit suite now at 850 passing. Smoke run
+against the engine: 63 per-frame allocs / 238 functions, 4 / 2398
+dead public APIs, 5 similar pairs / 597 files — all real signal, no
+FP flood.
+
+### 2026-04-19 docs: sync ROADMAP / PHASE9E3_DESIGN / ARCHITECTURE §19
+
+Pure documentation-sync pass (no code, no tests). Phases 9A / 9C /
+9D had been shipping code without corresponding checkbox /
+annotation updates in `ROADMAP.md`; Phase 9E-3's acceptance-criteria
+checklist hadn't reflected what actually landed in commits `cffd755`
+/ `e0c56c2`.
+
+- **ROADMAP.md** — Phase 9A marked COMPLETE (10 sub-bullets ticked
+  with file refs and noted renames); Phase 9C marked FOUNDATIONS
+  SHIPPED (3 items ticked, 15 annotated "deferred to Phase 10" or
+  "not yet"); Phase 9D marked COMPLETE (all 4 sub-sections ticked,
+  game-template enum confirmed covering all 6 variants).
+- **docs/PHASE9E3_DESIGN.md** §13 — 5 acceptance-criteria items
+  ticked with commit refs (library integration, M9 / M10 / M11,
+  L6); progress header added noting Steps 1–3 shipped, Step 4 WIP,
+  12 remaining.
+- **ARCHITECTURE.md §19** — new "Editor integration (Phase 9E-3)"
+  subsection describing the `NodeEditorWidget` / `ScriptEditorPanel`
+  split, current Step 4 scope, `CommandHistory` integration plan,
+  and hot-reload contract.
+
 ### 2026-04-19 L41 follow-up: `-Werror` lock-in
 
 Enables `-Werror` on the `vestige_engine` target now that the 2026-04-19

@@ -1,5 +1,7 @@
 # Light Probes Design Document
 
+**Status:** Implemented. `engine/renderer/light_probe.{h,cpp}` + `light_probe_manager.{h,cpp}` ship the cubemap-based per-zone probes described in this design. The SH probe grid that followed (see `docs/GI_ROADMAP.md` item 2) layered smooth diffuse ambient on top. This document is retained as the original design record.
+
 ## Problem
 
 The engine has a single global IBL (Image-Based Lighting) environment map derived from the skybox. Every surface — indoors or outdoors — samples the same sky for ambient and specular reflections. This causes:

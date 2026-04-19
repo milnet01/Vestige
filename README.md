@@ -49,24 +49,32 @@ mid-range hardware (reference: AMD RX 6600 / Ryzen 5 5600).
 
 ## Feature status
 
-Core subsystems are complete through **Phase 8** (see
-[`ROADMAP.md`](ROADMAP.md) for the detailed phase plan):
+Core subsystems are complete through **Phase 9** (domain-driven systems
++ visual scripting foundations; editor UI for scripts is in progress —
+Phase 9E-3 Steps 1–3 shipped). See [`ROADMAP.md`](ROADMAP.md) for the
+detailed phase plan.
 
-| Area                     | Status        | Notes                                               |
-|--------------------------|---------------|-----------------------------------------------------|
-| Window / context / input | Complete      | GLFW, OpenGL 4.5, keyboard/mouse/gamepad            |
-| Scene graph / ECS        | Complete      | Entity + component system, parent-child transforms  |
-| Rendering (forward + PBR)| Complete      | PBR materials, IBL, POM, SSAO, bloom, tone mapping  |
-| Shadows                  | Complete      | Cascaded shadow maps + point / spot shadows         |
-| Global illumination      | Partial       | SH probe grid + radiosity; see `docs/GI_ROADMAP.md` |
-| Editor (Phase 5)         | Complete      | Dockable ImGui editor, gizmos, undo/redo, console   |
-| Particles / effects      | Complete      | GPU-instanced particle system                       |
-| Animation                | Complete      | Skeletal animation, glTF-driven                     |
-| Physics                  | Complete      | Jolt Physics + cloth (XPBD)                         |
-| Terrain                  | Core complete | Chunking + streaming pending                        |
-| Scripting / gameplay     | Planned       | Phases 9, 11, 16                                    |
-| Networking / multiplayer | Planned       | Phase 20                                            |
-| Vulkan backend           | Planned       | Long-term                                           |
+| Area                     | Status        | Notes                                                                 |
+|--------------------------|---------------|-----------------------------------------------------------------------|
+| Window / context / input | Complete      | GLFW, OpenGL 4.5, keyboard/mouse/gamepad                              |
+| Scene graph / ECS        | Complete      | Entity + component system, parent-child transforms                    |
+| Rendering (forward + PBR)| Complete      | PBR materials, IBL, POM, SSAO, bloom, tone mapping                    |
+| Shadows                  | Complete      | Cascaded shadow maps + point / spot shadows                           |
+| Global illumination      | Partial       | SH probe grid + radiosity shipped; SSGI next (`docs/GI_ROADMAP.md`)   |
+| Editor (Phase 5)         | Complete      | Dockable ImGui editor, gizmos, undo/redo, console                     |
+| Particles / effects      | Complete      | GPU-instanced particle system                                         |
+| Animation                | Complete      | Skeletal animation, motion matching, facial, lip sync                 |
+| Physics                  | Complete      | Jolt Physics + cloth (XPBD) + ragdoll + fracture                      |
+| Audio                    | Foundation    | OpenAL Soft + spatial audio; polish in Phase 10                       |
+| UI / HUD                 | Foundation    | Sprite renderer + UIElement primitives; menus/theming in follow-ons   |
+| Navigation / pathfinding | Foundation    | Recast navmesh + Detour A*; AI state / editor tooling in follow-ons   |
+| Visual scripting         | In progress   | Phase 9E-1/9E-2 shipped (60 node types); 9E-3 editor UI 3 of 16 steps |
+| Formula Pipeline         | Complete      | Expression trees, workbench, C++/GLSL codegen, quality tiers          |
+| Terrain                  | Core complete | Chunking + streaming pending                                          |
+| AI assistance in editor  | Planned       | Phase 23 — design doc pending                                         |
+| Structural / attachments | Planned       | Phase 24 — design doc drafted                                         |
+| Networking / multiplayer | Planned       | Phase 20                                                              |
+| Vulkan backend           | Planned       | Long-term                                                             |
 
 ---
 

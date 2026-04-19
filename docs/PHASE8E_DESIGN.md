@@ -2,7 +2,7 @@
 
 **Date:** 2026-03-31
 **Phase:** 8E — Cloth Polish and Scene Integration
-**Status:** Design
+**Status:** Implemented. `engine/physics/cloth_presets.{h,cpp}` + `engine/physics/fabric_material.{h,cpp}` ship the preset library and inspector integration described here. This document is retained as the original design record.
 **Depends on:** Phase 8D (Cloth Simulation — complete)
 
 ---

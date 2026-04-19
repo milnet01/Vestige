@@ -2,7 +2,7 @@
 
 **Date:** 2026-03-31
 **Phase:** 8 — Physics
-**Status:** Design
+**Status:** Implemented. All sub-phases (8A–8G) are shipped; Phase 8 is marked COMPLETE in `ROADMAP.md`. This document is retained as the original design record.
 
 ---
 

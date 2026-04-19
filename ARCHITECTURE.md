@@ -2,11 +2,13 @@
 
 This document describes the overall architecture of the Vestige 3D Engine.
 
+> **How to read this document.** Sections 1–9 describe the original Phase-1 skeleton (core subsystems, engine loop, event bus, scene graph, rendering basics, folder structure) and are still authoritative for those foundations. Sections 10–19 document everything that's been added since: animation, physics, environment, editor, GPU particles, profiling, cloth collision, and the scripting + editor-integration layer. When a subsystem appears in both halves of the document, the later section is the current reality.
+
 ---
 
 ## 1. High-Level Overview
 
-Vestige uses a **Subsystem + Event Bus** architecture. The engine is composed of independent subsystems that are orchestrated by a central Engine class. Subsystems communicate through a shared Event Bus, keeping them decoupled from each other.
+Vestige uses a **Subsystem + Event Bus** architecture. The engine is composed of independent subsystems that are orchestrated by a central Engine class. Subsystems communicate through a shared Event Bus, keeping them decoupled from each other. Since Phase 9A the subsystem pattern is formalised via the `ISystem` interface (§19 introduces the variant; see also `engine/core/i_system.h` and `system_registry.h`) — every domain system (rendering, physics, animation, audio, navigation, UI, scripting, …) implements `ISystem` and registers with the central `SystemRegistry`, which drives their `initialize → update → fixedUpdate → submitRenderData → shutdown` lifecycle in order each frame.
 
 ```
 ┌─────────────────────────────────────────────────────┐
@@ -211,102 +213,176 @@ Entities are containers that hold Components. Components provide behavior and da
 5. Swap buffers
 ```
 
-### Future Phases
-- **Shadow pass:** Render depth from light's perspective before main pass
-- **Post-processing:** Render to framebuffer, apply screen-space effects
-- **Deferred rendering:** Geometry pass → Lighting pass (for many lights)
-- **Ray tracing:** Hybrid RT for reflections, ambient occlusion, global illumination
+### Later additions (status as of 2026-04-19)
+- **Shadow pass:** shipped — directional CSM (4 cascades), point shadows, spot shadows (§ Phase 4 + 5)
+- **Post-processing:** shipped — TAA, bloom, SSAO, tone mapping (Reinhard / ACES), color grading LUT, parallax occlusion mapping
+- **SMAA anti-aliasing:** shipped (`engine/renderer/smaa.{h,cpp}`)
+- **IBL prefilter + BRDF LUT:** shipped via `engine/renderer/environment_map.{h,cpp}` and `light_probe.{h,cpp}`; unified prefilter loop in `ibl_prefilter.h`
+- **GPU-driven instancing / culling:** shipped — frustum-culled MDI via `engine/renderer/gpu_culler.{h,cpp}` and `indirect_buffer.{h,cpp}`
+- **Global illumination:** SH probe grid + radiosity bake shipped (§ see `docs/GI_ROADMAP.md`); SSGI next; hybrid RT / cone tracing remain planned.
+- **Deferred rendering:** not started — forward-plus with GPU culling has been sufficient so far
+- **Vulkan backend:** planned (long-term roadmap)
+- **Ray tracing:** planned (long-term, post-Vulkan)
 
 ---
 
 ## 7. Folder Structure
 
+Current layout as of 2026-04-19. File lists below are representative — see each directory for the full contents.
+
 ```
 vestige/
-├── CMakeLists.txt                  # Root CMake build file
-├── CLAUDE.md                       # Project context for Claude Code
-├── CODING_STANDARDS.md             # Coding standards document
-├── ARCHITECTURE.md                 # This file
-├── ROADMAP.md                      # Feature roadmap
-├── .gitignore                      # Git ignore rules
+├── CMakeLists.txt                    # Root CMake build
+├── CLAUDE.md                         # Project context for Claude Code
+├── CODING_STANDARDS.md
+├── ARCHITECTURE.md                   # This file
+├── ROADMAP.md                        # Feature roadmap
+├── CHANGELOG.md                      # Engine changelog
+├── VERSION                           # Engine version string (0.1.5 at time of writing)
+├── README.md  SECURITY.md  CONTRIBUTING.md  CODE_OF_CONDUCT.md
+├── LICENSE  ASSET_LICENSES.md  THIRD_PARTY_NOTICES.md
+├── .gitleaks.toml  .pre-commit-config.yaml  .clang-format
 │
-├── engine/                         # Engine library (builds as static lib)
+├── engine/                           # Engine library (static)
 │   ├── CMakeLists.txt
-│   ├── core/
-│   │   ├── engine.h
-│   │   ├── engine.cpp
-│   │   ├── window.h
-│   │   ├── window.cpp
-│   │   ├── event.h                 # Event base class and common events
-│   │   ├── event_bus.h
-│   │   ├── event_bus.cpp
-│   │   ├── input_manager.h
-│   │   ├── input_manager.cpp
-│   │   ├── timer.h
-│   │   ├── timer.cpp
-│   │   ├── logger.h
-│   │   └── logger.cpp
-│   ├── renderer/
-│   │   ├── renderer.h
-│   │   ├── renderer.cpp
-│   │   ├── shader.h
-│   │   ├── shader.cpp
-│   │   ├── mesh.h
-│   │   ├── mesh.cpp
-│   │   ├── texture.h
-│   │   ├── texture.cpp
-│   │   ├── camera.h
-│   │   ├── camera.cpp
-│   │   ├── material.h
-│   │   ├── material.cpp
-│   │   ├── light.h
-│   │   └── light.cpp
-│   ├── scene/
-│   │   ├── scene.h
-│   │   ├── scene.cpp
-│   │   ├── scene_manager.h
-│   │   ├── scene_manager.cpp
-│   │   ├── entity.h
-│   │   ├── entity.cpp
-│   │   ├── component.h
-│   │   └── component.cpp
-│   ├── resource/
-│   │   ├── resource_manager.h
-│   │   └── resource_manager.cpp
-│   └── utils/
-│       ├── file_utils.h
-│       └── file_utils.cpp
+│   ├── core/                         # Engine, Window, Timer, Logger, InputManager,
+│   │                                 #   EventBus, ISystem, SystemRegistry,
+│   │                                 #   SystemEvents, FirstPersonController
+│   ├── renderer/                     # Renderer, Shader, Mesh, Texture, Camera,
+│   │                                 #   Material, Framebuffer, ShadowMap (CSM +
+│   │                                 #   point), Skybox, TAA, SMAA, Bloom, SSAO,
+│   │                                 #   TonemapLUT, EnvironmentMap, LightProbe,
+│   │                                 #   SHProbeGrid, RadiosityBaker,
+│   │                                 #   InstanceBuffer, IndirectBuffer, GpuCuller,
+│   │                                 #   ParticleRenderer, GpuParticleSystem,
+│   │                                 #   WaterRenderer, WaterFbo, FoliageRenderer,
+│   │                                 #   TreeRenderer, TerrainRenderer, TextRenderer,
+│   │                                 #   DebugDraw, MeshPool, IblPrefilter,
+│   │                                 #   ScopedForwardZ, FrameDiagnostics
+│   ├── scene/                        # Scene, SceneManager, Entity, Component,
+│   │                                 #   MeshRenderer, CameraComponent,
+│   │                                 #   LightComponent (Directional/Point/Spot),
+│   │                                 #   ParticleEmitter, GpuParticleEmitter,
+│   │                                 #   ParticlePresets, WaterSurface,
+│   │                                 #   InteractableComponent, PressurePlateComponent
+│   ├── resource/                     # ResourceManager, Model, AsyncTextureLoader,
+│   │                                 #   FileWatcher
+│   ├── utils/                        # ObjLoader, GltfLoader, ProceduralMesh,
+│   │                                 #   CatmullRomSpline, CubeLoader,
+│   │                                 #   EntitySerializer, MaterialLibrary,
+│   │                                 #   JsonSizeCap, DeterministicLcgRng
+│   ├── physics/                      # PhysicsWorld, RigidBody, CharacterController,
+│   │                                 #   PhysicsConstraint, ClothSimulator,
+│   │                                 #   ClothComponent, ClothPresets, FabricMaterial,
+│   │                                 #   ClothMeshCollider, Bvh, SpatialHash,
+│   │                                 #   Ragdoll (+ RagdollPreset), GrabSystem,
+│   │                                 #   Fracture, DeformableMesh, BreakableComponent,
+│   │                                 #   Dismemberment, StasisSystem, PhysicsDebug
+│   ├── animation/                    # Skeleton, AnimationClip, AnimationSampler,
+│   │                                 #   AnimationStateMachine, SkeletonAnimator,
+│   │                                 #   Easing, Tween, IkSolver, MorphTarget,
+│   │                                 #   FacialAnimation (+ FacialPresets, EyeController,
+│   │                                 #   VisemeMap, AudioAnalyzer, LipSync),
+│   │                                 #   MotionMatcher (+ FeatureVector, KdTree,
+│   │                                 #   MotionDatabase, TrajectoryPredictor,
+│   │                                 #   Inertialization, MotionPreprocessor,
+│   │                                 #   MirrorGenerator)
+│   ├── environment/                  # Terrain, EnvironmentForces, DensityMap,
+│   │                                 #   FoliageChunk, FoliageManager, SplinePath,
+│   │                                 #   BiomePreset
+│   ├── formula/                      # Expression, ExpressionEval, Formula,
+│   │                                 #   FormulaLibrary, PhysicsTemplates,
+│   │                                 #   CodegenCpp, CodegenGlsl, LutGenerator,
+│   │                                 #   LutLoader, CurveFitter, FormulaPreset,
+│   │                                 #   QualityManager, NodeGraph,
+│   │                                 #   SensitivityAnalysis, FormulaBenchmark,
+│   │                                 #   FormulaDocGenerator
+│   ├── audio/                        # AudioEngine (OpenAL Soft wrapper),
+│   │                                 #   AudioClip, AudioSourceComponent
+│   ├── ui/                           # SpriteBatchRenderer, UIElement hierarchy
+│   │                                 #   (UICanvas / UIImage / UILabel / UIPanel),
+│   │                                 #   UiSignal
+│   ├── navigation/                   # NavMeshBuilder (Recast), NavMeshQuery (Detour),
+│   │                                 #   NavMeshConfig, NavAgentComponent
+│   ├── scripting/                    # ScriptValue, PinId, Blackboard,
+│   │                                 #   NodeTypeRegistry, ScriptGraph,
+│   │                                 #   ScriptInstance, ScriptContext,
+│   │                                 #   ScriptComponent; node categories under
+│   │                                 #   core_nodes/event_nodes/action_nodes/
+│   │                                 #   pure_nodes/flow_nodes/latent_nodes
+│   ├── systems/                      # Domain ISystem implementations:
+│   │                                 #   Atmosphere, Particle, Water, Vegetation,
+│   │                                 #   Terrain, Cloth, Destruction, Character,
+│   │                                 #   Lighting, Audio, UI, Navigation,
+│   │                                 #   Scripting
+│   ├── editor/                       # Dockable ImGui editor
+│   │   ├── editor.cpp / editor_camera.cpp / selection.cpp / entity_factory.cpp /
+│   │   │   entity_actions.cpp / command_history.cpp / file_menu.cpp /
+│   │   │   recent_files.cpp / scene_serializer.cpp / material_preview.cpp /
+│   │   │   prefab_system.cpp
+│   │   ├── panels/                   # Hierarchy, Inspector, AssetBrowser, History,
+│   │   │                             #   ImportDialog, Environment, Terrain,
+│   │   │                             #   Performance, Validation, ScriptEditor,
+│   │   │                             #   TextureViewer, HdriViewer, ModelViewer,
+│   │   │                             #   TemplateDialog, Welcome
+│   │   ├── widgets/                  # AnimationCurve, ColorGradient,
+│   │   │                             #   CurveEditorWidget, GradientEditorWidget,
+│   │   │                             #   NodeEditorWidget
+│   │   ├── tools/                    # Brush/TerrainBrush, Ruler, Wall, Room,
+│   │   │                             #   Cutout, Roof, Stair, Path (+ BrushPreview)
+│   │   └── commands/                 # TerrainSculptCommand + scripting commands
+│   ├── profiler/                     # GpuTimer, CpuProfiler, MemoryTracker,
+│   │                                 #   PerformanceProfiler
+│   └── testing/                      # VisualTestRunner
 │
-├── app/                            # Application executable
+├── app/                              # Application executable
 │   ├── CMakeLists.txt
-│   └── main.cpp                    # Entry point
+│   └── main.cpp
 │
-├── assets/                         # Runtime assets (copied to build output)
-│   ├── shaders/                    # GLSL shader files
-│   ├── textures/                   # Image files (PNG, JPG)
-│   ├── models/                     # 3D model files (OBJ, glTF)
-│   └── fonts/                      # Font files (TTF)
+├── assets/                           # Runtime assets (copied to build)
+│   ├── shaders/                      # ~60 GLSL programs (vert/frag/geom/comp)
+│   ├── textures/                     # CC0 Poly Haven 2K PBR sets
+│   ├── models/                       # glTF sample models (CesiumMan, Fox, …)
+│   └── fonts/                        # Arimo (OFL 1.1)
 │
-├── external/                       # Third-party dependencies
-│   └── CMakeLists.txt              # Fetches GLFW, GLM, etc.
+├── external/                         # Third-party dependencies
+│   ├── CMakeLists.txt                # FetchContent wiring (GLFW, GLM, ImGui,
+│   │                                 #   ImGuizmo, imgui-node-editor, Jolt,
+│   │                                 #   OpenAL Soft, Recast/Detour, FreeType,
+│   │                                 #   nlohmann/json, tinyexr, tinygltf, …)
+│   ├── glad/                         # Vendored GLAD OpenGL loader
+│   ├── stb/                          # Vendored stb single-header libs
+│   └── dr_libs/                      # Vendored dr_wav / dr_mp3 / dr_flac
 │
-└── tests/                          # Unit tests (Google Test)
-    ├── CMakeLists.txt
-    ├── test_event_bus.cpp
-    ├── test_timer.cpp
-    └── ...
+├── tools/
+│   ├── audit/                        # Python audit tool (tier 1-6 static analysis)
+│   └── formula_workbench/            # Interactive formula fitter + codegen UI
+│
+├── tests/                            # Google Test suites (~1880 tests)
+│
+├── docs/                             # Design + research notes + roadmaps
+│   (PHASE*_DESIGN.md, *_RESEARCH.md, GI_ROADMAP.md, PRE_OPEN_SOURCE_AUDIT.md,
+│    TABERNACLE_SPECIFICATIONS.md, SH_PROBE_GRID_DESIGN.md, …)
+│
+├── scripts/                          # pre-commit + launch runbook scripts
+├── packaging/                        # vestige-editor wrapper + .desktop entry
+└── .github/
+    ├── workflows/ci.yml              # CI — Debug + Release builds, audit tier 1,
+    │                                 #   gitleaks secret scan, CMake matrix
+    ├── ISSUE_TEMPLATE/
+    ├── PULL_REQUEST_TEMPLATE.md
+    └── dependabot.yml                # Weekly github-actions + pip updates
 ```
 
-### Build Output
+### Build output
 ```
-build/                              # Out-of-source build (not in repo)
-├── engine/
-│   └── libvestige_engine.a         # Static library
-├── app/
-│   └── vestige                     # Executable
-├── tests/
-│   └── vestige_tests               # Test executable
-└── assets/                         # Copied assets
+build/
+├── lib/libvestige_engine.a         # Static engine library
+├── bin/vestige                      # Main engine binary (editor + runtime)
+├── bin/vestige-editor               # Thin wrapper symlink / script
+├── bin/vestige_tests                # Google Test runner
+├── bin/formula_workbench            # Interactive formula tool
+└── _deps/                           # FetchContent-pulled third-party sources
 ```
 
 ---

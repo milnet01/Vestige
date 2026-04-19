@@ -1,9 +1,17 @@
 # Formula Workbench — Self-Learning & Self-Improvement Design
 
-Status: proposal (2026-04-17). No code written yet. Pairs with the audit-tool
-self-learning conversation on the same day — the two tools share a lot of
-mechanism even though their domains (static analysis vs numerical fitting)
-look unrelated at first glance.
+Status: **Implementation in flight** (originally proposed 2026-04-17; see
+`docs/SELF_LEARNING_ROADMAP.md` for the shipped-vs-queued ledger). The six
+original mechanisms W1–W6 plus the extended W2a/W2b/W2c split, W7 and W8
+have shipped in Workbench 1.9.0–1.15.0 (2026-04-18 and 2026-04-19):
+W1 async-worker driver, W2a/W2b/W2c PySR Discover panel + import,
+W3 markdown rendering, W4 pin-this-fit toggle, W5 + cont. reference-case
+harness (10 specs), W6 confidence-weighted meta-feature seeding,
+W7 LLM per-call cost log, W8 self-benchmark LM seeding.
+
+Pairs with the audit-tool self-learning conversation on the same day — the
+two tools share a lot of mechanism even though their domains (static
+analysis vs numerical fitting) look unrelated at first glance.
 
 ## 1. Executive summary
 

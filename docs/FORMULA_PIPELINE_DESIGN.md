@@ -1,5 +1,7 @@
 # Phase 9: Formula Pipeline Design Document
 
+**Status:** Implemented. All six sub-phases (FP-1 through FP-6) shipped. `engine/formula/` contains `expression.{h,cpp}`, `expression_eval.{h,cpp}`, `formula.{h,cpp}`, `formula_library.{h,cpp}`, `codegen_cpp.{h,cpp}`, `codegen_glsl.{h,cpp}`, `curve_fitter.{h,cpp}`, `formula_preset.{h,cpp}`, `quality_manager.{h,cpp}`, `lut_generator.{h,cpp}`, `lut_loader.{h,cpp}`, `formula_benchmark.{h,cpp}`, `formula_doc_generator.{h,cpp}`, `node_graph.{h,cpp}`, `sensitivity_analysis.{h,cpp}`, plus the `physics_templates.cpp` library. `EnvironmentForces` is shipped in `engine/environment/environment_forces.{h,cpp}`. This document is retained as the original design record.
+
 ## Overview
 
 The Formula Pipeline is a cross-cutting infrastructure system that provides:

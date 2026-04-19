@@ -1,5 +1,7 @@
 # FP-5 + FP-6: Water Formula Optimization & Quality Tier Integration
 
+**Status:** Implemented. FP-5 water formula variants ship in `engine/formula/physics_templates.cpp` and the shader variants under `assets/shaders/water_*.glsl`; FP-6 `QualityManager` ships as `engine/formula/quality_manager.{h,cpp}` with `Full / Approximate / LUT` tiers selectable at runtime. This document is retained as the original design record.
+
 ## Overview
 
 FP-5 applies the Formula Pipeline to the water rendering system, creating quality-tiered

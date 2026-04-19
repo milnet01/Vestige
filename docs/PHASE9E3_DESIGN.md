@@ -1,7 +1,7 @@
 # Phase 9E-3 Design Document: Visual Scripting Editor UI
 
-**Date:** 2026-04-13
-**Status:** Proposal (awaiting review)
+**Date:** 2026-04-13 (original); 2026-04-19 (status update)
+**Status:** In progress — Steps 1–3 shipped (`cffd755` lib integration + M10 pin interning, `e0c56c2` M9 type cache + M11 pure memo + L6 entry pin). Step 4 (canvas + menu) WIP on `8feeffe`. Steps 5–16 remaining. See §13 Acceptance Criteria for the detailed checklist.
 **Parent:** `docs/PHASE9E_DESIGN.md`
 **Research:** `docs/PHASE9E3_RESEARCH.md`
 **Audit baseline:** `docs/PHASE9E_AUDIT_REPORT.md`

@@ -2,7 +2,7 @@
 
 **Date:** 2026-03-31
 **Phase:** 8C
-**Status:** Design
+**Status:** Implemented. `engine/physics/physics_constraint.{h,cpp}` wraps Jolt's HINGE / FIXED / DISTANCE / POINT / SLIDER constraints. This document is retained as the original design record.
 **Depends on:** Phase 8A (Jolt integration), Phase 8B (character controller)
 
 ---
