@@ -34,17 +34,8 @@ public:
     /// @return Shared pointer to the texture, or nullptr on failure.
     std::shared_ptr<Texture> loadTexture(const std::string& filePath, bool linear = false);
 
-    /// @brief Loads a texture asynchronously (placeholder until ready).
-    /// @param filePath Path to the image file.
-    /// @param linear If true, load as linear data.
-    /// @return Shared pointer to a Texture that will be populated when ready.
-    std::shared_ptr<Texture> loadTextureAsync(const std::string& filePath, bool linear = false);
-
     /// @brief Processes completed async texture uploads (call once per frame).
     void processAsyncUploads();
-
-    /// @brief Gets the number of textures still loading asynchronously.
-    size_t getAsyncPendingCount() const;
 
     /// @brief Gets a solid-color fallback texture.
     std::shared_ptr<Texture> getDefaultTexture();
@@ -90,9 +81,6 @@ public:
     /// @param filePath Path to the .gltf or .glb file.
     /// @return Shared pointer to the model, or nullptr on failure.
     std::shared_ptr<Model> loadModel(const std::string& filePath);
-
-    /// @brief Gets the number of cached models.
-    size_t getModelCount() const;
 
     // --- Reverse lookup (for serialization) ---
 

@@ -673,7 +673,7 @@ FoliageChunk& FoliageManager::getOrCreateChunk(int gridX, int gridZ)
     return ref;
 }
 
-std::pair<int, int> FoliageManager::worldToGrid(const glm::vec3& pos) const
+/*static*/ std::pair<int, int> FoliageManager::worldToGrid(const glm::vec3& pos)
 {
     int gx = static_cast<int>(std::floor(pos.x / FoliageChunk::CHUNK_SIZE));
     int gz = static_cast<int>(std::floor(pos.z / FoliageChunk::CHUNK_SIZE));

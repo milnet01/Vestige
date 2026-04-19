@@ -59,7 +59,7 @@ public:
     void bind() const;
 
     /// @brief Unbinds the vertex array.
-    void unbind() const;
+    static void unbind();
 
     /// @brief Gets the number of indices (for glDrawElements).
     uint32_t getIndexCount() const;

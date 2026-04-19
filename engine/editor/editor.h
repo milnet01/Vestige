@@ -230,7 +230,7 @@ public:
     ModelViewerPanel& getModelViewerPanel() { return m_modelViewerPanel; }
 
 private:
-    void setupTheme();
+    static void setupTheme();
     void drawGizmo(Camera* camera, Scene* scene);
     void drawGizmoOverlay();
     void processGizmoShortcuts();

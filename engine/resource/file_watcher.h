@@ -31,16 +31,10 @@ public:
     void initialize(const std::string& rootPath,
                     const std::vector<std::string>& extensions);
 
-    /// @brief Registers a callback for when a file changes.
-    void setOnFileChanged(ChangeCallback callback);
-
     /// @brief Polls the filesystem for changes. Call once per frame.
     /// Actual polling only occurs every m_pollInterval seconds.
     /// @param deltaTime Time since last frame.
     void update(float deltaTime);
-
-    /// @brief Returns the number of tracked files.
-    size_t getTrackedFileCount() const { return m_timestamps.size(); }
 
     /// @brief Force an immediate rescan (ignores poll interval).
     void rescan();

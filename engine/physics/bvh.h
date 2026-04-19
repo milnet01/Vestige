@@ -104,9 +104,9 @@ private:
     static constexpr int NUM_BINS = 8;
 
     int buildRecursive(int start, int end, std::vector<TriInfo>& tris);
-    void findBestSplit(int start, int end, const std::vector<TriInfo>& tris,
-                       const glm::vec3& nodeMin, const glm::vec3& nodeMax,
-                       int& bestAxis, float& bestPos, float& bestCost) const;
+    static void findBestSplit(int start, int end, const std::vector<TriInfo>& tris,
+                              const glm::vec3& nodeMin, const glm::vec3& nodeMax,
+                              int& bestAxis, float& bestPos, float& bestCost);
 
     static float surfaceArea(const glm::vec3& bMin, const glm::vec3& bMax);
     static float distToAABB(const glm::vec3& point,

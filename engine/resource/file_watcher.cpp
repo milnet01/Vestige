@@ -26,11 +26,6 @@ void FileWatcher::initialize(const std::string& rootPath,
                  + " files in " + rootPath);
 }
 
-void FileWatcher::setOnFileChanged(ChangeCallback callback)
-{
-    m_onChanged = std::move(callback);
-}
-
 void FileWatcher::update(float deltaTime)
 {
     if (!m_initialized)

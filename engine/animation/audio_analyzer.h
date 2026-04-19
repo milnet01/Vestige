@@ -60,7 +60,7 @@ public:
 
 private:
     /// @brief Performs radix-2 Cooley-Tukey FFT in-place.
-    void computeFFT(std::vector<float>& real, std::vector<float>& imag);
+    static void computeFFT(std::vector<float>& real, std::vector<float>& imag);
 
     float m_rms = 0.0f;
     float m_spectralCentroid = 0.0f;

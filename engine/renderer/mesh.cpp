@@ -238,7 +238,7 @@ void Mesh::bind() const
     glBindVertexArray(m_vao);
 }
 
-void Mesh::unbind() const
+/*static*/ void Mesh::unbind()
 {
     glBindVertexArray(0);
 }

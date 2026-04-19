@@ -181,18 +181,6 @@ DriverProcess spawnDriverProcess(
     const std::vector<std::string>& argv,
     bool wantStdin);
 
-/// @brief Run a Python driver and capture its stdout.
-///
-/// Same script-locator semantics as the CLI path, but pipes stdout
-/// back to the caller instead of inheriting the parent TTY. Used by
-/// the GUI Suggestions panel (§3.6 GUI). Stderr is inherited so
-/// error messages from the driver still surface in the terminal
-/// that launched the Workbench.
-CapturedDriverOutput runDriverCaptured(
-    const std::string& script,
-    const std::vector<std::string>& argv,
-    const std::string& stdinContents = {});
-
 /// @brief Locate a Python driver script (install / source / cwd).
 /// Returns an empty string when not found. Exposed so GUI paths
 /// can emit a precise "install the driver" error before spawning.

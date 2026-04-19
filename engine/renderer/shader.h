@@ -79,7 +79,7 @@ public:
     void setMat4(std::string_view name, const glm::mat4& value) const;
 
 private:
-    GLuint compileShader(GLenum type, const std::string& source);
+    static GLuint compileShader(GLenum type, const std::string& source);
     bool linkProgram(GLuint vertexShader, GLuint fragmentShader);
     GLint getUniformLocation(std::string_view name) const;
 

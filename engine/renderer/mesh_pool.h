@@ -57,7 +57,7 @@ public:
     void bind() const;
 
     /// @brief Unbinds the shared VAO.
-    void unbind() const;
+    static void unbind();
 
     /// @brief Gets the shared VAO handle (for instance attribute setup).
     GLuint getVao() const;

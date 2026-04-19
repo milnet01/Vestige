@@ -161,7 +161,7 @@ public:
     void bindForRendering() const;
 
     /// @brief Issues glDrawArraysIndirect to render particles.
-    void drawIndirect() const;
+    static void drawIndirect();
 
     /// @brief Returns the particle SSBO handle (for shader binding).
     GLuint getParticleSSBO() const;
@@ -184,7 +184,7 @@ private:
     void createBuffers(uint32_t maxParticles);
     void initializeFreeList(uint32_t maxParticles);
     void uploadBehaviorBlock(const BehaviorBlock& behaviors);
-    uint32_t nextPowerOf2(uint32_t n) const;
+    static uint32_t nextPowerOf2(uint32_t n);
 
     bool m_initialized = false;
     uint32_t m_maxParticles = 0;

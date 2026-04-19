@@ -183,7 +183,7 @@ private:
     FoliageChunk& getOrCreateChunk(int gridX, int gridZ);
 
     /// @brief Converts a world position to chunk grid coordinates.
-    std::pair<int, int> worldToGrid(const glm::vec3& pos) const;
+    static std::pair<int, int> worldToGrid(const glm::vec3& pos);
 
     /// Maps packed (gridX, gridZ) key -> chunk.
     std::unordered_map<uint64_t, std::unique_ptr<FoliageChunk>> m_chunks;

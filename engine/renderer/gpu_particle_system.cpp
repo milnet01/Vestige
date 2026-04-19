@@ -393,7 +393,7 @@ void GPUParticleSystem::bindForRendering() const
     glBindBuffer(GL_DRAW_INDIRECT_BUFFER, m_indirectDrawSSBO);
 }
 
-void GPUParticleSystem::drawIndirect() const
+/*static*/ void GPUParticleSystem::drawIndirect()
 {
     glDrawArraysIndirect(GL_TRIANGLES, nullptr);
 }
@@ -461,7 +461,7 @@ void GPUParticleSystem::uploadBehaviorBlock(const BehaviorBlock& behaviors)
     glNamedBufferSubData(m_behaviorUBO, 0, sizeof(BehaviorBlockGPU), &gpu);
 }
 
-uint32_t GPUParticleSystem::nextPowerOf2(uint32_t n) const
+/*static*/ uint32_t GPUParticleSystem::nextPowerOf2(uint32_t n)
 {
     if (n == 0) return 1;
     n--;

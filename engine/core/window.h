@@ -40,7 +40,7 @@ public:
     Window& operator=(Window&&) = delete;
 
     /// @brief Polls OS events (keyboard, mouse, window events).
-    void pollEvents();
+    static void pollEvents();
 
     /// @brief Swaps the front and back framebuffers.
     void swapBuffers();

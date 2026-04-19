@@ -160,7 +160,7 @@ void DynamicMesh::bind() const
     glBindVertexArray(m_vao);
 }
 
-void DynamicMesh::unbind() const
+/*static*/ void DynamicMesh::unbind()
 {
     glBindVertexArray(0);
 }

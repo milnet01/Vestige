@@ -67,7 +67,7 @@ void MeshPool::bind() const
     glBindVertexArray(m_vao);
 }
 
-void MeshPool::unbind() const
+/*static*/ void MeshPool::unbind()
 {
     glBindVertexArray(0);
 }

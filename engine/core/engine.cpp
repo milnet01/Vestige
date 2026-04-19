@@ -493,7 +493,7 @@ bool Engine::initialize(const EngineConfig& config)
                 if (m_editor && m_editor->getMode() == EditorMode::EDIT)
                 {
                     Scene* focusScene = m_sceneManager->getActiveScene();
-                    Entity* selected = nullptr;
+                    const Entity* selected = nullptr;
                     if (focusScene)
                     {
                         selected = m_editor->getSelection().getPrimaryEntity(*focusScene);
@@ -1217,7 +1217,7 @@ void Engine::run()
                 // Log the selection result
                 if (entityId != 0 && activeScene)
                 {
-                    Entity* picked = activeScene->findEntityById(entityId);
+                    const Entity* picked = activeScene->findEntityById(entityId);
                     if (picked)
                     {
                         Logger::info("Selected: '" + picked->getName() + "' (ID " + std::to_string(entityId) + ")");
@@ -1534,12 +1534,12 @@ void Engine::drawLightGizmos(Scene& scene, const Selection& selection,
                              bool showAll)
 {
     // Helper lambda to draw gizmos for a single entity
-    auto drawGizmosForEntity = [&](Entity* entity, float brightness)
+    auto drawGizmosForEntity = [&](const Entity* entity, float brightness)
     {
         glm::vec3 worldPos = entity->getWorldPosition();
 
         // Directional light: 3 parallel arrows showing direction
-        if (auto* dirComp = entity->getComponent<DirectionalLightComponent>())
+        if (const auto* dirComp = entity->getComponent<DirectionalLightComponent>())
         {
             glm::vec3 color = dirComp->light.diffuse * brightness;
             glm::vec3 dir = glm::normalize(dirComp->light.direction);
@@ -1564,7 +1564,7 @@ void Engine::drawLightGizmos(Scene& scene, const Selection& selection,
         }
 
         // Point light: wireframe sphere at effective range
-        if (auto* ptComp = entity->getComponent<PointLightComponent>())
+        if (const auto* ptComp = entity->getComponent<PointLightComponent>())
         {
             glm::vec3 color = ptComp->light.diffuse * brightness;
             float range = calculateLightRange(ptComp->light.constant,
@@ -1575,7 +1575,7 @@ void Engine::drawLightGizmos(Scene& scene, const Selection& selection,
         }
 
         // Spot light: cone wireframe
-        if (auto* spotComp = entity->getComponent<SpotLightComponent>())
+        if (const auto* spotComp = entity->getComponent<SpotLightComponent>())
         {
             glm::vec3 color = spotComp->light.diffuse * brightness;
             float range = calculateLightRange(spotComp->light.constant,
@@ -1624,7 +1624,7 @@ void Engine::drawLightGizmos(Scene& scene, const Selection& selection,
     {
         for (uint32_t id : selection.getSelectedIds())
         {
-            Entity* entity = scene.findEntityById(id);
+            const Entity* entity = scene.findEntityById(id);
             if (entity)
             {
                 drawGizmosForEntity(entity, 1.0f);

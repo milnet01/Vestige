@@ -41,46 +41,12 @@ std::shared_ptr<Texture> ResourceManager::loadTexture(const std::string& filePat
     return texture;
 }
 
-std::shared_ptr<Texture> ResourceManager::loadTextureAsync(const std::string& filePath, bool linear)
-{
-    std::string cacheKey = filePath + (linear ? ":linear" : ":srgb");
-
-    // Check cache — return immediately if already loaded
-    auto it = m_textures.find(cacheKey);
-    if (it != m_textures.end())
-    {
-        return it->second;
-    }
-
-    // Create an empty texture (placeholder — isLoaded() returns false until uploaded)
-    auto texture = std::make_shared<Texture>();
-    m_textures[cacheKey] = texture;
-
-    // Create async loader on first use
-    if (!m_asyncLoader)
-    {
-        m_asyncLoader = std::make_unique<AsyncTextureLoader>();
-    }
-
-    m_asyncLoader->requestLoad(filePath, texture, linear);
-    return texture;
-}
-
 void ResourceManager::processAsyncUploads()
 {
     if (m_asyncLoader)
     {
         m_asyncLoader->processUploads(2);
     }
-}
-
-size_t ResourceManager::getAsyncPendingCount() const
-{
-    if (m_asyncLoader)
-    {
-        return m_asyncLoader->getPendingCount();
-    }
-    return 0;
 }
 
 std::shared_ptr<Texture> ResourceManager::getDefaultTexture()
@@ -243,11 +209,6 @@ std::shared_ptr<Model> ResourceManager::loadModel(const std::string& filePath)
     auto shared = std::shared_ptr<Model>(std::move(model));
     m_models[filePath] = shared;
     return shared;
-}
-
-size_t ResourceManager::getModelCount() const
-{
-    return m_models.size();
 }
 
 std::string ResourceManager::findMeshKey(const std::shared_ptr<Mesh>& mesh) const

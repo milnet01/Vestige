@@ -102,7 +102,7 @@ Window::~Window()
     Logger::debug("GLFW terminated");
 }
 
-void Window::pollEvents()
+/*static*/ void Window::pollEvents()
 {
     glfwPollEvents();
 }

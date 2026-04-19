@@ -287,7 +287,7 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
                 bool hasSel = m_selection.hasSelection();
                 if (ImGui::MenuItem("Duplicate", "Ctrl+D", false, hasSel && scene))
                 {
-                    Entity* clone = EntityActions::duplicateEntity(
+                    const Entity* clone = EntityActions::duplicateEntity(
                         *scene, m_selection, m_selection.getPrimaryId());
                     if (clone)
                     {
@@ -324,7 +324,7 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
                 }
                 if (ImGui::MenuItem("Toggle Visibility", "H", false, hasSel && scene))
                 {
-                    Entity* entity = scene->findEntityById(m_selection.getPrimaryId());
+                    const Entity* entity = scene->findEntityById(m_selection.getPrimaryId());
                     if (entity)
                     {
                         bool oldVis = entity->isVisible();
@@ -443,7 +443,7 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
                 }
                 if (ImGui::MenuItem("Focus Selection", "F", false, hasEditorCam && scene))
                 {
-                    Entity* selected = m_selection.hasSelection()
+                    const Entity* selected = m_selection.hasSelection()
                         ? m_selection.getPrimaryEntity(*scene) : nullptr;
                     if (selected)
                     {
@@ -1059,7 +1059,7 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
         // Process pending "Save as Prefab" from hierarchy context menu
         if (m_hierarchyPanel.hasPendingSavePrefab() && scene && m_resourceManager)
         {
-            Entity* entity = scene->findEntityById(
+            const Entity* entity = scene->findEntityById(
                 m_hierarchyPanel.getPendingSavePrefabEntityId());
             if (entity)
             {
@@ -1286,7 +1286,7 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
             int entityCount = 0;
             int meshCount = 0;
             int lightCount = 0;
-            std::function<void(Entity*)> countEntities = [&](Entity* e)
+            std::function<void(const Entity*)> countEntities = [&](const Entity* e)
             {
                 if (!e) return;
                 entityCount++;
@@ -1295,7 +1295,7 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
                     e->getComponent<PointLightComponent>() ||
                     e->getComponent<SpotLightComponent>())
                     lightCount++;
-                for (auto& child : e->getChildren())
+                for (const auto& child : e->getChildren())
                     countEntities(child.get());
             };
             countEntities(scene->getRoot());
@@ -1920,7 +1920,7 @@ void Editor::drawGizmo(Camera* camera, Scene* scene)
     {
         // Convert world-space result to local space (account for parent transform)
         glm::mat4 localMatrix = model;
-        Entity* parent = entity->getParent();
+        const Entity* parent = entity->getParent();
         if (parent)
         {
             localMatrix = glm::inverse(parent->getWorldMatrix()) * model;
@@ -1965,7 +1965,7 @@ void Editor::drawGizmo(Camera* camera, Scene* scene)
         // Drag ends — record a TransformCommand if the transform actually changed
         if (scene && m_gizmoStartEntityId != 0)
         {
-            Entity* target = scene->findEntityById(m_gizmoStartEntityId);
+            const Entity* target = scene->findEntityById(m_gizmoStartEntityId);
             if (target)
             {
                 bool changed = (target->transform.position != m_gizmoStartPosition)
@@ -2097,7 +2097,7 @@ void Editor::processEntityShortcuts(Scene* scene)
     if (io.KeyCtrl && !io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_D)
         && m_selection.hasSelection())
     {
-        Entity* clone = EntityActions::duplicateEntity(*scene, m_selection, m_selection.getPrimaryId());
+        const Entity* clone = EntityActions::duplicateEntity(*scene, m_selection, m_selection.getPrimaryId());
         if (clone)
         {
             m_commandHistory.execute(
@@ -2119,7 +2119,7 @@ void Editor::processEntityShortcuts(Scene* scene)
     if (!io.KeyCtrl && !io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_H)
         && m_selection.hasSelection())
     {
-        Entity* entity = scene->findEntityById(m_selection.getPrimaryId());
+        const Entity* entity = scene->findEntityById(m_selection.getPrimaryId());
         if (entity)
         {
             bool oldVis = entity->isVisible();
@@ -2151,7 +2151,7 @@ void Editor::processEntityShortcuts(Scene* scene)
     }
 }
 
-void Editor::setupTheme()
+/*static*/ void Editor::setupTheme()
 {
     ImGui::StyleColorsDark();
 

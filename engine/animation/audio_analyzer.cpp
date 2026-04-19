@@ -188,7 +188,7 @@ void AudioAnalyzer::reset()
 // Radix-2 Cooley-Tukey FFT (in-place, decimation-in-time)
 // ---------------------------------------------------------------------------
 
-void AudioAnalyzer::computeFFT(std::vector<float>& real, std::vector<float>& imag)
+/*static*/ void AudioAnalyzer::computeFFT(std::vector<float>& real, std::vector<float>& imag)
 {
     size_t n = real.size();
 

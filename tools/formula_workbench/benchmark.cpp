@@ -809,47 +809,4 @@ DriverProcess spawnDriverProcess(
     return proc;
 }
 
-CapturedDriverOutput runDriverCaptured(
-    const std::string& script,
-    const std::vector<std::string>& argv,
-    const std::string& stdinContents)
-{
-    CapturedDriverOutput result;
-    const bool needStdin = !stdinContents.empty();
-    DriverProcess proc = spawnDriverProcess(script, argv, needStdin);
-    if (proc.pid < 0)
-    {
-        result.error = proc.error;
-        return result;
-    }
-
-    if (needStdin)
-    {
-        ssize_t total = 0;
-        const char* buf = stdinContents.data();
-        const ssize_t need = static_cast<ssize_t>(stdinContents.size());
-        while (total < need)
-        {
-            ssize_t n = write(proc.stdin_fd, buf + total, need - total);
-            if (n <= 0) break;
-            total += n;
-        }
-        close(proc.stdin_fd);
-    }
-
-    char buf[4096];
-    while (true)
-    {
-        ssize_t n = read(proc.stdout_fd, buf, sizeof(buf));
-        if (n <= 0) break;
-        result.stdout_text.append(buf, buf + n);
-    }
-    close(proc.stdout_fd);
-
-    int status = 0;
-    waitpid(static_cast<pid_t>(proc.pid), &status, 0);
-    result.exit_code = WIFEXITED(status) ? WEXITSTATUS(status) : -1;
-    return result;
-}
-
 } // namespace Vestige

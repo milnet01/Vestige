@@ -120,9 +120,9 @@ int BVH::buildRecursive(int start, int end, std::vector<TriInfo>& tris)
     return nodeIdx;
 }
 
-void BVH::findBestSplit(int start, int end, const std::vector<TriInfo>& tris,
-                         const glm::vec3& nodeMin, const glm::vec3& nodeMax,
-                         int& bestAxis, float& bestPos, float& bestCost) const
+/*static*/ void BVH::findBestSplit(int start, int end, const std::vector<TriInfo>& tris,
+                                    const glm::vec3& nodeMin, const glm::vec3& nodeMax,
+                                    int& bestAxis, float& bestPos, float& bestCost)
 {
     bestCost = FLT_MAX;
     bestAxis = 0;

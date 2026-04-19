@@ -9,6 +9,50 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-19 manual audit — Batch 4 delegated sweep (L2-L10, L21, L22)
+
+Mechanical cleanup sourced from the 2026-04-19 audit report. Delegated
+to a subagent so the main thread stayed focused on structural work.
+All 1878 tests pass.
+
+#### Dead public API (L2-L7) — 6 methods deleted after cross-repo grep
+
+- `ResourceManager::loadTextureAsync` / `getAsyncPendingCount` /
+  `getModelCount` — zero callers anywhere (engine, tests, tools, app).
+- `FileWatcher::setOnFileChanged` / `getTrackedFileCount` — zero
+  callers. ``m_onChanged`` is now permanently default-constructed;
+  the dispatch branch in ``rescan()`` is unreachable and flagged for
+  a future follow-up removal.
+- `Benchmark::runDriverCaptured` — superseded by the W1 async-worker
+  path (workbench 1.10.0). Doc references in `async_driver.*` and
+  `SELF_LEARNING_ROADMAP.md` kept as historical context.
+
+#### Dead shaders (L8-L10) — 4 of 5 deleted
+
+- Deleted: ``bloom_blur.frag.glsl``, ``bloom_bright.frag.glsl``,
+  ``basic.vert.glsl``, ``basic.frag.glsl``.
+- **Kept**: ``ssr.frag.glsl`` — the audit entry was wrong; it's
+  loaded at ``engine/renderer/renderer.cpp:397``. Flagged in the
+  audit-tool improvements doc as a FP risk for detector #26
+  (dead-shader grep).
+
+#### L21 — `const Entity*` sweep (14 sites)
+
+Converted non-mutating ``Entity*`` locals to ``const Entity*`` across
+``editor.cpp`` (10 sites) and ``engine.cpp`` (4 sites). ~16 other
+sites (``EntityFactory::createXxx``/``scene->createEntity`` results)
+were skipped — those pointers are mutated immediately after creation.
+
+#### L22 — `static` (10 functions)
+
+Marked the listed member functions that never touch ``this`` as
+``static``: ``AudioAnalyzer::computeFFT``, ``Window::pollEvents``,
+``Editor::setupTheme``, ``FoliageManager::worldToGrid``,
+``BVH::findBestSplit`` (was ``const``, now ``static``),
+``Shader::compileShader``, three ``unbind()`` variants (``Mesh``,
+``MeshPool``, ``DynamicMesh``), ``GPUParticleSystem::nextPowerOf2``,
+``GPUParticleSystem::drawIndirect``.
+
 ### Editor launcher — CLI, wrapper, .desktop
 
 Makes the editor discoverable to downstream users of the engine: a

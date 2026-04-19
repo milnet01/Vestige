@@ -220,7 +220,7 @@ void Shader::setMat4(std::string_view name, const glm::mat4& value) const
     glUniformMatrix4fv(getUniformLocation(name), 1, GL_FALSE, glm::value_ptr(value));
 }
 
-GLuint Shader::compileShader(GLenum type, const std::string& source)
+/*static*/ GLuint Shader::compileShader(GLenum type, const std::string& source)
 {
     GLuint shader = glCreateShader(type);
     const char* src = source.c_str();
