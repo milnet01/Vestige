@@ -1,5 +1,7 @@
 # SH Probe Grid Design Document
 
+**Status:** Implemented. `engine/renderer/sh_probe_grid.{h,cpp}` ships the L2 SH probe grid (9 coefficients × 3 channels per probe; 7× RGBA16F 3D textures with hardware trilinear interpolation; texture units 17–23); scene-shader integration in `assets/shaders/scene.frag.glsl`; unit coverage in `tests/test_sh_probe_grid.cpp`. This document is retained as the original design record.
+
 ## Problem
 
 The current light probe system uses a single cubemap probe per zone. This has limitations:

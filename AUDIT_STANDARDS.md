@@ -41,7 +41,22 @@ Run these tools and capture their output. These catch mechanical issues for free
 # Clean rebuild with all warnings
 cmake --build build --clean-first 2>&1 | grep -E "warning:|error:"
 ```
-The project must compile with `-Wall -Wextra -Wpedantic -Wconversion -Wshadow` and zero warnings.
+The project must compile with the full hardened warning set (`engine/CMakeLists.txt`) and **zero** warnings:
+
+```
+-Werror
+-Wall -Wextra -Wpedantic
+-Wformat=2
+-Wconversion
+-Wsign-conversion
+-Wshadow
+-Wnull-dereference
+-Wdouble-promotion
+-Wimplicit-fallthrough
+-Werror=format-security
+```
+
+`-Werror` has been on since the 2026-04-19 L41 sweep — any new warning is a build break, not a slow leak.
 
 ### 3.2 Static Analysis — cppcheck
 ```bash
