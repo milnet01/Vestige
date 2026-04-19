@@ -54,6 +54,16 @@ struct EngineConfig
     /// regressions. Recognised names: "motion-overlay", "bloom", "ssao",
     /// "ibl". Empty string = no override.
     std::string isolateFeature;
+
+    /// @brief Optional .scene file to load at startup (CLI: --scene PATH).
+    /// When set, replaces the built-in demo scene. Resolved against CWD
+    /// then `assetPath` + "scenes/". Empty string = use built-in demo.
+    std::string startupScene;
+
+    /// @brief If true, start directly in first-person PLAY mode with the
+    /// editor UI hidden (CLI: --play). Default is EDIT mode with the
+    /// editor visible.
+    bool startInPlayMode = false;
 };
 
 /// @brief The central engine — owns all subsystems and runs the main loop.

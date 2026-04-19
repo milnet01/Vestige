@@ -118,15 +118,46 @@ and can be ignored.
 ctest --test-dir build --output-on-failure
 ```
 
-### Run the demo scene
+### Launching the editor
+
+Vestige is a single binary that hosts both the editor and the
+first-person runtime. After a build, run it directly from the build
+tree:
 
 ```bash
-./build/Vestige
+./build/bin/vestige-editor          # editor, demo scene (default)
+./build/bin/vestige-editor --play   # first-person walkthrough
+./build/bin/vestige-editor --scene path/to/my.scene
+./build/bin/vestige-editor --help   # full CLI reference
 ```
 
-Controls: **WASD** + mouse to move, **Shift** to sprint, **Esc** to
-release the cursor. Gamepad input (Xbox / PlayStation) is supported via
-GLFW.
+`vestige-editor` is a thin wrapper around the `vestige` binary; you
+can invoke either. The wrapper exists so desktop launchers and
+menu shortcuts have a stable, obviously-editor-named entry point.
+
+A Linux `.desktop` entry ships in `packaging/vestige-editor.desktop`
+and is installed to `${prefix}/share/applications/` when you run
+`cmake --install build` — menu integration then picks it up
+automatically. Icons are pulled from the system theme by name
+(`vestige`), so providing one is optional until we ship a branded
+asset.
+
+### Controls
+
+| Key              | Action                                             |
+|------------------|----------------------------------------------------|
+| **Esc**          | Toggle between editor and first-person play mode   |
+| **WASD** + mouse | Move (play mode); Shift to sprint                  |
+| **F1**           | Toggle wireframe                                   |
+| **F2**           | Cycle tonemapper (Reinhard → ACES → linear clamp)  |
+| **F3**           | HDR false-color luminance overlay                  |
+| **F4**           | Toggle Parallax Occlusion Mapping                  |
+| **[** / **]**    | Decrease / increase manual exposure                |
+| **F10**          | Toggle performance profiler overlay                |
+| **F11**          | Capture screenshot + frame diagnostics             |
+| **F12**          | Toggle fullscreen                                  |
+
+Gamepad input (Xbox / PlayStation) is supported via GLFW.
 
 ---
 

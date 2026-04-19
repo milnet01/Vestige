@@ -41,6 +41,7 @@
 #include "renderer/debug_draw.h"
 #include "renderer/light_utils.h"
 #include "editor/tools/brush_tool.h"
+#include "editor/scene_serializer.h"
 #include "profiler/cpu_profiler.h"
 
 #include <imgui.h>
@@ -49,6 +50,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <filesystem>
 
 namespace Vestige
 {
@@ -176,6 +178,46 @@ bool Engine::initialize(const EngineConfig& config)
     // Set up the scene (after cached pointers are set — scene setup uses m_environmentForces etc.)
     setupTabernacleScene();
 
+    // Optional CLI-driven scene replacement (`--scene PATH`). Resolves the
+    // path against the CWD first, then `<assetPath>/scenes/`. Loading
+    // replaces the built-in demo entities; terrain and foliage managers
+    // are fed into the load so a scene with environment data round-trips.
+    if (!config.startupScene.empty())
+    {
+        namespace fs = std::filesystem;
+        fs::path resolved = config.startupScene;
+        if (!fs::exists(resolved))
+        {
+            fs::path alt = fs::path(config.assetPath) / "scenes" / config.startupScene;
+            if (fs::exists(alt))
+            {
+                resolved = alt;
+            }
+        }
+
+        Scene* activeScene = m_sceneManager->getActiveScene();
+        if (activeScene && fs::exists(resolved))
+        {
+            auto result = SceneSerializer::loadScene(
+                *activeScene, resolved, *m_resourceManager,
+                m_foliageManager, m_terrain);
+            if (result.success)
+            {
+                Logger::info("Loaded startup scene: " + resolved.string()
+                    + " (" + std::to_string(result.entityCount) + " entities)");
+            }
+            else
+            {
+                Logger::error("Failed to load --scene " + resolved.string()
+                    + ": " + result.errorMessage + " — keeping built-in demo");
+            }
+        }
+        else
+        {
+            Logger::error("--scene path not found: " + config.startupScene);
+        }
+    }
+
     // Create static physics bodies from scene geometry (for physics character controller)
     createPhysicsStaticBodies();
 
@@ -192,8 +234,8 @@ bool Engine::initialize(const EngineConfig& config)
         m_editor->getBrushPreview().init(config.assetPath);
     }
 
-    // Start in editor mode — cursor visible, FPS controller disabled
-    if (m_editor)
+    // Startup mode — editor (default) or play (CLI `--play`).
+    if (m_editor && !config.startInPlayMode)
     {
         m_window->setCursorEnabled(true);
         m_isCursorCaptured = false;
@@ -201,9 +243,15 @@ bool Engine::initialize(const EngineConfig& config)
     }
     else
     {
-        // Fallback: no editor, start in play mode
+        // Play mode: hide cursor, enable FPS controller, flip the editor
+        // to PLAY so the UI hides. Matches the Esc-toggle code path.
+        if (m_editor)
+        {
+            m_editor->setMode(EditorMode::PLAY);
+        }
         m_window->setCursorEnabled(false);
         m_isCursorCaptured = true;
+        m_controller->setEnabled(true);
     }
 
     // Subscribe to window close event

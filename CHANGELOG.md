@@ -9,6 +9,43 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### Editor launcher — CLI, wrapper, .desktop
+
+Makes the editor discoverable to downstream users of the engine: a
+stable ``vestige-editor`` entry point, a proper ``--help``, and a
+Linux desktop-menu integration.
+
+- **`app/main.cpp`** — reworked CLI parser. New flags: ``--editor``
+  (explicit), ``--play`` (start in first-person mode with editor UI
+  hidden), ``--scene PATH`` (load a saved scene instead of the demo),
+  ``--assets PATH`` (override the asset directory), and ``-h``/
+  ``--help`` (prints a full usage summary with examples). Unknown
+  arguments produce a helpful error and exit code 2. The existing
+  ``--visual-test`` and ``--isolate-feature`` flags are preserved.
+- **`engine/core/engine.h` / `engine.cpp`** — ``EngineConfig`` gained
+  ``startupScene`` and ``startInPlayMode``. ``Engine::initialize``
+  calls ``SceneSerializer::loadScene`` after the built-in scene is
+  set up (so a failed load falls back to the demo without crashing);
+  paths are resolved against CWD first, then ``<assets>/scenes/``.
+  When ``startInPlayMode`` is set the editor is flipped to
+  ``EditorMode::PLAY`` and the cursor is captured at startup.
+- **`packaging/vestige-editor.sh`** — thin bash wrapper that ``exec``s
+  the sibling ``vestige`` binary. Lets desktop launchers reference a
+  stable, obviously-named entry point without us having to ship two
+  distinct binaries.
+- **`packaging/vestige-editor.desktop`** — standard XDG desktop entry.
+  Categories ``Graphics;3DGraphics;Development;Game``, MIME type
+  ``application/x-vestige-scene`` (reserved for future scene-file
+  registration), icon name ``vestige``.
+- **`app/CMakeLists.txt`** — new ``editor_launcher`` custom target
+  copies the wrapper + ``.desktop`` into ``build/bin/`` every build,
+  and a Linux-only ``install()`` block places them at
+  ``${prefix}/bin/vestige-editor`` and
+  ``${prefix}/share/applications/vestige-editor.desktop``.
+- **`README.md`** — new "Launching the editor" section with CLI
+  examples and a controls table. Fixes the stale ``./build/Vestige``
+  path (actual: ``./build/bin/vestige``).
+
 ### 2026-04-19 manual audit — batch 4/5 deferred fixes
 
 Close-out pass over the Medium-severity items deferred from batch 1/2/3

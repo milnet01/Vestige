@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=Vestige Editor
+GenericName=3D Scene Editor
+Comment=First-person architectural walkthrough engine and scene editor
+Exec=vestige-editor %f
+Icon=vestige
+Terminal=false
+Categories=Graphics;3DGraphics;Development;Game;
+MimeType=application/x-vestige-scene;
+Keywords=3D;OpenGL;engine;editor;walkthrough;
+StartupNotify=true
+StartupWMClass=Vestige
