@@ -744,11 +744,11 @@ Foundations shipped via commit `fa0b100` — "Phase 9C: New domain systems — A
 #### UI & HUD System
 - [x] In-game UI rendering — `engine/ui/sprite_batch_renderer.{h,cpp}` + `UIElement` hierarchy (`UICanvas`, `UIImage`, `UILabel`, `UIPanel`) + `engine/systems/ui_system.{h,cpp}`; sprite shaders `assets/shaders/ui_sprite.{vert,frag}.glsl`. Separate from the ImGui editor overlay.
 - [ ] In-world UI (floating text, interaction prompts, nameplates) — **not yet.**
-- [ ] Screen-space UI (HUD, minimap, crosshair) — **not yet** (UIElement primitives are in place; HUD-specific widgets aren't).
-- [ ] Menu system (main menu, pause, settings) — **not yet.**
-- [ ] UI theming (consistent style across all elements) — **not yet.**
-- [ ] Input routing (game input suppressed when UI is active) — **not yet.**
-- [ ] Editor: visual UI layout editor, theme editor, widget library — **not yet.**
+- [x] Screen-space UI (HUD, minimap, crosshair) — `engine/ui/ui_crosshair.{h,cpp}` (centred plus with configurable arms / gap), `ui_progress_bar.{h,cpp}` (ratio-based fill, clamped), `ui_fps_counter.{h,cpp}` (smoothed EMA + TextRenderer drawing). Minimap deferred (needs render-target + camera-frustum overlay).
+- [ ] Menu system (main menu, pause, settings) — **not yet.** Strong Claude Design candidate for visual mockups.
+- [x] UI theming — `engine/ui/ui_theme.h` (`UITheme` struct: bg / text / accent palettes + crosshair / progress-bar sizes + default text scale; `UISystem::getTheme()` returns mutable ref so game projects can override per-field at startup).
+- [x] Input routing — `UISystem::setModalCapture(bool)` for sticky modal capture (pause menu, dialog) + `updateMouseHit()` for cursor-over-interactive-element capture. `wantsCaptureInput()` is the union; game input handlers consult it each frame.
+- [ ] Editor: visual UI layout editor, theme editor, widget library — **not yet.** Multi-week initiative.
 
 #### AI & Navigation System (Basics)
 *Scope: requires Recast/Detour library integration and dedicated design document.*

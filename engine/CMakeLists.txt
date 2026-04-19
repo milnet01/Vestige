@@ -213,6 +213,9 @@ set(ENGINE_SOURCES
     ui/ui_label.cpp
     ui/ui_image.cpp
     ui/ui_panel.cpp
+    ui/ui_crosshair.cpp
+    ui/ui_progress_bar.cpp
+    ui/ui_fps_counter.cpp
     systems/ui_system.cpp
     # Navigation system
     navigation/nav_mesh_builder.cpp
@@ -281,13 +284,20 @@ if(DETOUR_INCLUDE_DIRS)
 endif()
 
 # GLM vendored headers trigger -Wsign-conversion in qualifier.hpp (packed_highp
-# array indexing on int literal). Promote the underlying `glm-header-only`
-# INTERFACE target to SYSTEM (CMake 3.25+) so consumers see its include dirs
-# via -isystem instead of -I. `glm-header-only` is where GLM defines the real
-# include path (the `glm` target re-exports it via link_libraries).
-if(TARGET glm-header-only)
-    set_target_properties(glm-header-only PROPERTIES SYSTEM TRUE)
-endif()
+# array indexing on int literal). The CMake 3.25+ shorthand
+# `set_target_properties(glm-header-only PROPERTIES SYSTEM TRUE)` is silently
+# ignored on the 3.20.6 cmake-compat CI matrix runner — replicate the explicit
+# Detour pattern instead: pull GLM's interface include dirs and re-add them
+# to vestige_engine as SYSTEM PUBLIC so consumers see -isystem rather than -I.
+foreach(_glm_target glm-header-only glm::glm glm)
+    if(TARGET ${_glm_target})
+        get_target_property(_glm_inc ${_glm_target} INTERFACE_INCLUDE_DIRECTORIES)
+        if(_glm_inc)
+            target_include_directories(vestige_engine SYSTEM PUBLIC ${_glm_inc})
+            break()
+        endif()
+    endif()
+endforeach()
 
 # Link dependencies
 target_link_libraries(vestige_engine

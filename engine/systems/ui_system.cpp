@@ -36,9 +36,14 @@ void UISystem::shutdown()
 
 void UISystem::update(float /*deltaTime*/)
 {
-    // Hit testing for interactive elements will be added when InputManager
-    // is exposed through Engine. For now, no UI elements are interactive.
-    m_wantsCaptureInput = false;
+    // The cursor-over-interactive cache is maintained by `updateMouseHit()`
+    // (called from the engine input loop). Modal capture is sticky until
+    // game code clears it via `setModalCapture(false)`. Nothing to do here.
+}
+
+void UISystem::updateMouseHit(const glm::vec2& cursor, int screenWidth, int screenHeight)
+{
+    m_cursorOverInteractive = m_canvas.hitTest(cursor, screenWidth, screenHeight);
 }
 
 void UISystem::renderUI(int screenWidth, int screenHeight)

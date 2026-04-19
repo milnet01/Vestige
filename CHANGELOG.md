@@ -9,6 +9,46 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-19 Phase 9C UI batch 1 — theme + input routing + HUD widgets
+
+Ticks 3 of the 6 remaining Phase 9C UI/HUD sub-items.
+
+**UITheme** (`engine/ui/ui_theme.h`) — central style struct consulted by
+in-game UI elements. Bg / text / accent palettes, HUD-specific crosshair
++ progress-bar colours, default text scale + crosshair / progress-bar
+sizes. `UITheme::defaultTheme()` returns sane neutrals; game projects
+override per-field via `UISystem::getTheme()` (mutable ref). Marketing-
+facing visual lock-in is best driven by Claude Design mockups before
+freezing the final palette.
+
+**Input routing** — `UISystem::setModalCapture(bool)` for sticky modal
+capture (pause menu, dialog), `updateMouseHit(cursor, w, h)` for
+cursor-over-interactive-element capture. `wantsCaptureInput()` returns
+the union — game input handlers consult it each frame and skip
+movement / look / fire bindings when true. The pre-existing
+`m_wantsCaptureInput` field stays for ABI continuity but the canonical
+sources are now the modal flag + the cursor-hit cache.
+
+**HUD widgets** — three `UIElement` subclasses:
+- `UICrosshair` — centred plus pattern with configurable arm length,
+  thickness, and centre gap. Always renders at viewport centre
+  regardless of the base UIElement's anchor / position (matches FPS
+  reticle conventions).
+- `UIProgressBar` — horizontal bar with `value / maxValue` fill ratio
+  (clamped to [0,1]); separate fill / empty colours; skips the fill
+  draw call when ratio == 0.
+- `UIFpsCounter` — smoothed FPS via exponential moving average (caller
+  feeds `tick(dt)` each frame); drawn through `TextRenderer::renderText2D`
+  with `"%.0f FPS"` formatting.
+
+**Tests:** 12 new (`UITheme.*`, `UIProgressBar.*`, `UIFpsCounter.*`,
+`UICrosshair.*`, `UISystemInput.*`). Suite: 1957/1957 passing.
+
+**Still pending in Phase 9C UI/HUD:** in-world UI (floating text,
+interaction prompts), menu system (main menu / pause / settings —
+Claude Design candidate for visual mockups), editor visual UI layout
+editor (multi-week initiative).
+
 ### 2026-04-19 Phase 9B GPU compute cloth pipeline — feature complete
 
 Bundles Steps 7–11 of the Phase 9B GPU cloth migration (Steps 1–6
