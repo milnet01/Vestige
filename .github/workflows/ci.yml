@@ -65,7 +65,7 @@ jobs:
             cppcheck
 
       - name: Cache CMake FetchContent deps
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             build/_deps
@@ -144,7 +144,7 @@ jobs:
             libxxf86vm-dev libwayland-dev libxkbcommon-dev
 
       - name: Cache CMake FetchContent deps
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             build/_deps
@@ -251,7 +251,7 @@ jobs:
         run: cmake --version
 
       - name: Cache CMake FetchContent deps
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             build/_deps
