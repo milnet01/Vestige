@@ -314,9 +314,15 @@ set_source_files_properties(
     PROPERTIES COMPILE_FLAGS "-w"
 )
 
-# Compiler warnings (OpenSSF Compiler Hardening Guide compliance)
+# Compiler warnings (OpenSSF Compiler Hardening Guide compliance).
+# -Werror is on: the 2026-04-19 L41 sweep drove the engine to zero
+# warnings under this flag set, and -Werror locks that in — future
+# regressions fail the build instead of silently accumulating. If a
+# warning ever needs a justified suppression, prefer a #pragma at the
+# narrowest possible scope; do not disable the flag globally.
 target_compile_options(vestige_engine PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:
+        -Werror
         -Wall -Wextra -Wpedantic
         -Wformat=2
         -Wconversion

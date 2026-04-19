@@ -9,6 +9,18 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-19 L41 follow-up: `-Werror` lock-in
+
+Enables `-Werror` on the `vestige_engine` target now that the 2026-04-19
+L41 sweep drove it to zero warnings under the full
+`-Wformat=2 / -Wconversion / -Wsign-conversion / -Wshadow /
+-Wnull-dereference / -Wdouble-promotion / -Wimplicit-fallthrough` set.
+Future regressions now fail the build instead of silently accumulating.
+
+Build clean, 1889/1889 tests pass. If a warning ever needs a justified
+suppression in the future, the policy is a narrowly-scoped `#pragma`
+at the call site — never a global flag removal.
+
 ### 2026-04-19 GI roadmap sync + SH-probe-grid unit tests
 
 Reconciles `docs/GI_ROADMAP.md` with the actual engine state — SH
