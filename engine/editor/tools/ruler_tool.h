@@ -50,10 +50,15 @@ public:
     /// @brief Gets the current state.
     State getState() const { return m_state; }
 
-    /// @brief Returns true if the tool is actively waiting for input.
+    /// @brief Returns true if the tool is actively consuming viewport clicks.
+    /// Includes MEASURED because processClick() restarts the measurement
+    /// on a click in that state — callers must not route those clicks to
+    /// other tools.
     bool isActive() const
     {
-        return m_state == State::WAITING_A || m_state == State::WAITING_B;
+        return m_state == State::WAITING_A
+            || m_state == State::WAITING_B
+            || m_state == State::MEASURED;
     }
 
     /// @brief Returns true if a measurement result is available.

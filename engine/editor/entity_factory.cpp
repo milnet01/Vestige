@@ -194,7 +194,7 @@ Entity* EntityFactory::createParticlePreset(Scene& scene, const glm::vec3& posit
                                              const std::string& presetName)
 {
     ParticleEmitterConfig preset;
-    std::string entityName = "Particle Emitter";
+    std::string entityName;
 
     if (presetName == "torch")
     {

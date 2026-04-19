@@ -209,6 +209,12 @@ def api_detect():
     project_root = data.get("project_root", DEFAULT_ROOT)
     root = Path(project_root)
 
+    # AUDIT H5: sibling endpoints all gate `project_root` on _is_safe_path;
+    # `/api/detect` previously did not, allowing a local (or CSRF-susceptible)
+    # caller to enumerate directories outside the allowed roots.
+    if not _is_safe_path(root):
+        return jsonify({"error": "Path outside allowed roots"}), 403
+
     if not root.is_dir():
         return jsonify({"error": f"Not a directory: {project_root}"}), 400
 
@@ -275,6 +281,12 @@ def api_config():
     # the GET wasn't. Apply the same allowed-roots check.
     if not _is_safe_path(path):
         return jsonify({"error": "path outside allowed roots"}), 403
+
+    # AUDIT M27: the PUT sibling restricts to .yaml/.yml — mirror here so a
+    # safe-path-rooted read doesn't hand out arbitrary source files (e.g.
+    # SECURITY.md, .cpp) when the attacker controls the `path` query string.
+    if path.suffix not in (".yaml", ".yml"):
+        return jsonify({"error": "Only YAML files can be read"}), 400
 
     if not path.exists():
         return jsonify({"error": f"Config not found: {config_path}"}), 404

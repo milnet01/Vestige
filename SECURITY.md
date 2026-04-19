@@ -278,6 +278,8 @@ Third-party libraries can introduce vulnerabilities.
 | **nlohmann/json** | CVE-2024-38525 (uncaught exception on malformed unicode) | MEDIUM | Wrap all JSON parsing in try/catch. Enforce file size limits on untrusted JSON |
 | **Recast Navigation** | Issue #798 (OOB write in sampleVelocityAdaptive) | MEDIUM | Pin version. Validate nav mesh params. Monitor for upstream fix |
 | **GLM** | PR #1253 (SIMD normalize precision) | LOW | Test with ASan if using GLM_FORCE_INTRINSICS |
+| **AMD amdgpu kernel driver** | CVE-2026-23213 (SMU reset MMIO flaw — RDNA2/RDNA3 incl. RX 6000 series) | MEDIUM | Document recommended Linux kernel. Fix backported to 6.9+. Affects users, not the engine; surfaces as spurious GPU hangs on repeated resets |
+| **Mesa RadeonSI** | 25.3 / 26.0 OpenGL 4.1 uniform VRAM leak; 26.0.2 GL_FEEDBACK X-coord regression (legacy GL only) | LOW | Recommend minimum Mesa 26.0.4 (fixed 2026-04-01) or 26.0.5 (2026-04-15). Vestige uses core-profile 4.5, not affected by GL_FEEDBACK issue |
 
 **Sources:**
 - FreeType: https://nvd.nist.gov/vuln/detail/CVE-2025-27363
@@ -286,6 +288,13 @@ Third-party libraries can introduce vulnerabilities.
 - dr_wav: https://github.com/mackron/dr_libs/issues/296
 - nlohmann/json: https://nvd.nist.gov/vuln/detail/CVE-2024-38525
 - Recast: https://github.com/recastnavigation/recastnavigation/issues/798
+- AMD CVE-2026-23213: https://www.amd.com/en/resources/product-security/bulletin/amd-sb-6024.html
+- Mesa 26.0.2 notes: https://docs.mesa3d.org/relnotes/26.0.2.html
+
+### Recommended support matrix (Linux)
+- Minimum Linux kernel: **6.9+** (AMD CVE-2026-23213 amdgpu SMU-reset fix backport).
+- Minimum Mesa: **26.0.4** (OpenGL 4.1 uniform VRAM leak fix + GL_FEEDBACK regression fixed).
+- Tested on: openSUSE Tumbleweed (dev host), Ubuntu 24.04 LTS target.
 
 ---
 

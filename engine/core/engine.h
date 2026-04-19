@@ -112,6 +112,9 @@ private:
     WaterFbo* m_waterFbo = nullptr;
     FoliageManager* m_foliageManager = nullptr;
     FoliageRenderer* m_foliageRenderer = nullptr;
+    // Scratch vector for per-frame visible-foliage-chunk list — keeps its
+    // capacity across frames so the hot path doesn't heap-alloc. (AUDIT H9.)
+    std::vector<const class FoliageChunk*> m_scratchVisibleChunks;
     TreeRenderer* m_treeRenderer = nullptr;
     Terrain* m_terrain = nullptr;
     TerrainRenderer* m_terrainRenderer = nullptr;

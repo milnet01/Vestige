@@ -16,6 +16,8 @@
 
 #include <nlohmann/json.hpp>
 
+#include <filesystem>
+
 using json = nlohmann::json;
 
 namespace Vestige
@@ -26,6 +28,37 @@ namespace EntitySerializer
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/// @brief Validates a scene-JSON-sourced asset path. Rejects empty,
+///        absolute, or ``..``-containing paths so a hostile ``.scene``
+///        file can't coerce the engine into loading ``/etc/passwd`` or
+///        ``../../../secret`` via a texture slot. Returns the raw path
+///        on success, empty string on rejection (callers treat empty as
+///        "no texture"). (AUDIT H3.)
+static std::string sanitizeAssetPath(const std::string& raw, const char* fieldName)
+{
+    if (raw.empty())
+    {
+        return {};
+    }
+    std::filesystem::path p(raw);
+    if (p.is_absolute())
+    {
+        Logger::warning(std::string("scene: absolute path rejected for ")
+            + fieldName + ": " + raw);
+        return {};
+    }
+    for (const auto& part : p)
+    {
+        if (part == "..")
+        {
+            Logger::warning(std::string("scene: path traversal rejected for ")
+                + fieldName + ": " + raw);
+            return {};
+        }
+    }
+    return raw;
+}
 
 static json vec3ToJson(const glm::vec3& v)
 {
@@ -197,26 +230,29 @@ static std::shared_ptr<Material> deserializeMaterial(
     // Shared textures
     if (j.contains("diffuseTexture"))
     {
-        auto tex = resources.loadTexture(j["diffuseTexture"].get<std::string>(), false);
-        if (tex)
+        auto path = sanitizeAssetPath(j["diffuseTexture"].get<std::string>(), "diffuseTexture");
+        if (!path.empty())
         {
-            material->setDiffuseTexture(tex);
+            auto tex = resources.loadTexture(path, false);
+            if (tex) { material->setDiffuseTexture(tex); }
         }
     }
     if (j.contains("normalMap"))
     {
-        auto tex = resources.loadTexture(j["normalMap"].get<std::string>(), true);
-        if (tex)
+        auto path = sanitizeAssetPath(j["normalMap"].get<std::string>(), "normalMap");
+        if (!path.empty())
         {
-            material->setNormalMap(tex);
+            auto tex = resources.loadTexture(path, true);
+            if (tex) { material->setNormalMap(tex); }
         }
     }
     if (j.contains("heightMap"))
     {
-        auto tex = resources.loadTexture(j["heightMap"].get<std::string>(), true);
-        if (tex)
+        auto path = sanitizeAssetPath(j["heightMap"].get<std::string>(), "heightMap");
+        if (!path.empty())
         {
-            material->setHeightMap(tex);
+            auto tex = resources.loadTexture(path, true);
+            if (tex) { material->setHeightMap(tex); }
         }
     }
 
@@ -227,28 +263,31 @@ static std::shared_ptr<Material> deserializeMaterial(
     // PBR textures
     if (j.contains("metallicRoughnessTexture"))
     {
-        auto tex = resources.loadTexture(
-            j["metallicRoughnessTexture"].get<std::string>(), true);
-        if (tex)
+        auto path = sanitizeAssetPath(
+            j["metallicRoughnessTexture"].get<std::string>(), "metallicRoughnessTexture");
+        if (!path.empty())
         {
-            material->setMetallicRoughnessTexture(tex);
+            auto tex = resources.loadTexture(path, true);
+            if (tex) { material->setMetallicRoughnessTexture(tex); }
         }
     }
     if (j.contains("emissiveTexture"))
     {
-        auto tex = resources.loadTexture(
-            j["emissiveTexture"].get<std::string>(), false);
-        if (tex)
+        auto path = sanitizeAssetPath(
+            j["emissiveTexture"].get<std::string>(), "emissiveTexture");
+        if (!path.empty())
         {
-            material->setEmissiveTexture(tex);
+            auto tex = resources.loadTexture(path, false);
+            if (tex) { material->setEmissiveTexture(tex); }
         }
     }
     if (j.contains("aoTexture"))
     {
-        auto tex = resources.loadTexture(j["aoTexture"].get<std::string>(), true);
-        if (tex)
+        auto path = sanitizeAssetPath(j["aoTexture"].get<std::string>(), "aoTexture");
+        if (!path.empty())
         {
-            material->setAoTexture(tex);
+            auto tex = resources.loadTexture(path, true);
+            if (tex) { material->setAoTexture(tex); }
         }
     }
 

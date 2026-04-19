@@ -1,5 +1,24 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(cmake --build *)",
+      "Bash(cmake -B *)",
+      "Bash(ctest *)",
+      "Bash(ctest -R *)",
+      "Bash(ctest --test-dir *)",
+      "Bash(ctest --output-on-failure *)",
+      "Bash(make -j*)",
+      "Bash(make -C *)",
+      "Bash(cppcheck *)",
+      "Bash(clang-tidy *)",
+      "mcp__filesystem__read_text_file",
+      "mcp__filesystem__list_directory",
+      "mcp__filesystem__directory_tree",
+      "mcp__filesystem__list_allowed_directories",
+      "mcp__filesystem__get_file_info"
+    ]
+  },
   "hooks": {
     "PostToolUse": [
       {

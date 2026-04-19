@@ -477,6 +477,10 @@ private:
     Shader m_idBufferShader;
     Shader m_outlineShader;
     EventBus& m_eventBus;
+    // Subscription token for the WindowResizeEvent handler — torn down in
+    // ~Renderer so the lambda's captured ``this`` can't be called after we
+    // begin destruction. (AUDIT M9.)
+    SubscriptionId m_windowResizeSubscription = 0;
     std::string m_assetPath;
 
     // Framebuffer pipeline
@@ -506,6 +510,9 @@ private:
     class FoliageRenderer* m_foliageShadowCaster = nullptr;
     class FoliageManager* m_foliageShadowManager = nullptr;
     float m_foliageShadowTime = 0.0f;  ///< Elapsed time for wind sync in shadow pass.
+    // Scratch vector for the per-cascade foliage-chunk list — its capacity is
+    // preserved across frames so the shadow pass doesn't heap-alloc. (AUDIT H9.)
+    mutable std::vector<const class FoliageChunk*> m_scratchFoliageChunks;
 
     // Point light shadows
     std::vector<std::unique_ptr<PointShadowMap>> m_pointShadowMaps;
@@ -699,9 +706,11 @@ private:
     CullingStats m_cullingStats;
 
 
-    // Per-frame PMR arena for scratch allocations (reset each frame)
+    // Per-frame PMR arena for scratch allocations (reset each frame).
+    // Value-initialized so cppcheck's uninitMemberVar rule stops firing;
+    // the pmr arena overwrites this storage on first allocation anyway.
     static constexpr size_t FRAME_ARENA_SIZE = 2 * 1024 * 1024;  // 2 MB
-    alignas(64) char m_frameArena[FRAME_ARENA_SIZE];
+    alignas(64) char m_frameArena[FRAME_ARENA_SIZE]{};
     std::pmr::monotonic_buffer_resource m_frameResource{
         m_frameArena, FRAME_ARENA_SIZE, std::pmr::null_memory_resource()};
     void resetFrameAllocator();

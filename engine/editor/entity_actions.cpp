@@ -357,8 +357,9 @@ void alignEntities(Scene& scene, const Selection& selection,
     if (entries.empty()) return;
 
     std::string desc = std::string("Align ") + anchorName(anchor) + " " + axisName(axis);
+    const size_t count = entries.size();
     history.execute(std::make_unique<AlignDistributeCommand>(scene, desc, std::move(entries)));
-    Logger::info(desc + " (" + std::to_string(entries.size()) + " entities)");
+    Logger::info(desc + " (" + std::to_string(count) + " entities)");
 }
 
 void distributeEntities(Scene& scene, const Selection& selection,
@@ -411,8 +412,9 @@ void distributeEntities(Scene& scene, const Selection& selection,
     if (entries.empty()) return;
 
     std::string desc = std::string("Distribute ") + axisName(axis);
+    const size_t count = entries.size();
     history.execute(std::make_unique<AlignDistributeCommand>(scene, desc, std::move(entries)));
-    Logger::info(desc + " (" + std::to_string(entries.size()) + " entities)");
+    Logger::info(desc + " (" + std::to_string(count) + " entities)");
 }
 
 } // namespace EntityActions

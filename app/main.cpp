@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
 /// @file main.cpp
 /// @brief Vestige application entry point.
 #include "core/engine.h"

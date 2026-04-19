@@ -77,15 +77,27 @@ public:
     void removeFoliage(const std::vector<FoliageInstanceRef>& instances);
 
     /// @brief Returns pointers to all chunks that intersect the view frustum.
+    /// Allocates a fresh vector on every call — prefer the out-param overload
+    /// for per-frame rendering callers.
     std::vector<const FoliageChunk*> getVisibleChunks(
         const glm::mat4& viewProjection) const;
+
+    /// @brief Out-param overload — caller supplies the vector (whose capacity
+    /// is preserved across frames), avoiding a heap allocation per cascade per
+    /// frame on render hot paths. (AUDIT H9.)
+    void getVisibleChunks(const glm::mat4& viewProjection,
+                          std::vector<const FoliageChunk*>& out) const;
 
     /// @brief Gets a chunk by grid coordinates (nullptr if none exists).
     const FoliageChunk* getChunk(int gridX, int gridZ) const;
 
     /// @brief Returns pointers to all non-empty chunks (for shadow passes that
-    /// need casters outside the camera frustum).
+    /// need casters outside the camera frustum). By-value form allocates each
+    /// call; use the out-param overload in hot paths.
     std::vector<const FoliageChunk*> getAllChunks() const;
+
+    /// @brief Out-param overload — see getVisibleChunks. (AUDIT H9.)
+    void getAllChunks(std::vector<const FoliageChunk*>& out) const;
 
     // --- Scatter API ---
 

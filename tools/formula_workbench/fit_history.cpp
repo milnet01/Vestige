@@ -21,10 +21,13 @@ namespace
 
 // Deterministic hex-string encoder for a 64-bit value. Avoids locale
 // sensitivity and std::hex stream state leakage.
+// AUDIT M6: use ``unsigned long long`` (64-bit everywhere) + ``%llx``.
+// ``unsigned long`` is only 32-bit on Windows LLP64, so the previous
+// format truncated the high 32 bits of any post-2^32 hash there.
 std::string toHex64(std::uint64_t v)
 {
     char buf[17];
-    std::snprintf(buf, sizeof(buf), "%016lx", static_cast<unsigned long>(v));
+    std::snprintf(buf, sizeof(buf), "%016llx", static_cast<unsigned long long>(v));
     return std::string(buf);
 }
 

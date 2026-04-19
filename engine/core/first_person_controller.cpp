@@ -9,6 +9,7 @@
 
 #include <GLFW/glfw3.h>
 
+#include <algorithm>
 #include <cmath>
 
 namespace Vestige
@@ -274,6 +275,17 @@ void FirstPersonController::applyCollision(glm::vec3& newPosition, const std::ve
 
 float FirstPersonController::applyDeadzone(float value) const
 {
+    // AUDIT M28: sanitize at the input boundary — a faulty HID report or
+    // driver bug can produce NaN or out-of-range axis values that would
+    // otherwise propagate into camera rotation and movement. Finite check
+    // first (NaN compares false with every clamp bound), then clamp to the
+    // GLFW-documented [-1, 1] envelope.
+    if (!std::isfinite(value))
+    {
+        return 0.0f;
+    }
+    value = std::clamp(value, -1.0f, 1.0f);
+
     if (std::abs(value) < m_config.gamepadDeadzone)
     {
         return 0.0f;

@@ -951,11 +951,15 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
 - [ ] Language selection in settings menu
 
 ### Accessibility
-- [ ] Colorblind modes (protanopia, deuteranopia, tritanopia filters)
-- [ ] Subtitle / closed caption system for spatial audio cues
+- [ ] Colorblind modes (Deuteranopia, Protanopia, Tritanopia LUT modes applied post-tonemap — ref: IGDA GA-SIG GDC 2026 roundtable)
+- [ ] Subtitle / closed caption system for spatial audio cues, with size presets (Small / Medium / Large / XL)
 - [ ] Fully remappable controls (keyboard, mouse, gamepad)
-- [ ] UI scaling options (for readability at different resolutions/distances)
+- [ ] UI scaling presets (1.0× / 1.25× / 1.5× / 2.0× — minimum 1.4× recommended for partially-sighted users)
 - [ ] High-contrast mode for UI elements
+- [ ] Reduced-flashing / photosensitivity safe mode (caps camera shake, strobes, muzzle-flash alpha)
+- [ ] Depth-of-field toggle (off by default in accessibility preset)
+- [ ] Motion-blur toggle (off by default in accessibility preset)
+- [ ] Screen-reader friendly UI labels (ARIA-like semantic tags on ImGui widgets where feasible)
 
 ### Decal System
 Projected textures for blood splatters, scorch marks, claw scratches, bullet holes, and environmental storytelling.
@@ -974,6 +978,10 @@ Projected textures for blood splatters, scorch marks, claw scratches, bullet hol
 
 ### Post-Processing Effects Suite
 Cinematic and atmospheric post-processing for horror, drama, and stylized rendering.
+
+**Tonemapping policy:** ACES 1.3 remains the default (matches current `HDR rendering and tone mapping` item from Phase 4). ACES 2.0 is opt-in only — the 2.0 committee prioritised SDR compatibility over HDR gamut usage, which desaturates HDR highlights by design (ref: Tarpini / Gilbert commentary, March 2026 — https://daejeonchronicles.com/2026/03/11/aces-2-0-we-are-in-for-some-further-years-of-bad-hdr/). Author any custom exposure / highlight curves via the Formula Workbench.
+
+- [ ] ACES 2.0 tonemap option (opt-in alternative to the ACES 1.3 default; kept side-by-side for HDR output, user-selectable)
 - [ ] Film grain (noise overlay, configurable intensity and grain size)
 - [ ] Chromatic aberration (RGB channel offset, stronger at screen edges)
 - [ ] Vignette (screen edge darkening, configurable intensity and radius)
@@ -1211,13 +1219,14 @@ Application published on Steam. Scenes can be packaged and shared between users.
 - [ ] Neural texture compression (2-4x memory reduction via trained neural decompression in shaders — forward-looking, requires cooperative vector hardware support)
 
 ### Global Illumination
-- [ ] Baked lightmaps (pre-computed GI for static architectural scenes — ideal for walkthroughs)
+- [ ] Baked lightmaps with SH-fit storage (WishGI approach — pre-computed GI for static architectural scenes stored as per-mesh SH probes via inverse distribution; ~5% of classic lightmap memory, fragment-shader sampling with no extra pass; ref: Zhu et al. "WishGI" SIGGRAPH 2025 — https://dl.acm.org/doi/10.1145/3730935)
 - [ ] Light probes (capture local lighting conditions at probe positions — varying lighting between rooms)
 - [ ] Reflection probes (local cubemap captures for accurate indoor reflections — Holy Place vs Holy of Holies)
 - [ ] Light probe blending (smooth transitions between probe volumes)
-- [ ] Real-time irradiance probe GI (idTech 8 "Fast as Hell" approach — stochastic probe sampling with surfel shading, fully dynamic, proven at 60 FPS on consoles; replaces baked lighting with real-time probes)
-- [ ] Surfel-based GI (pre-generate surfels per asset at import time, software ray-trace between surfels for indirect lighting — geometry-agnostic, works without hardware RT)
-- [ ] Radiance cascades (Alexander Sannikov's approach — constant-cost GI independent of scene complexity and light count; 2D proven in production, 3D extension is active research area)
+- [ ] Real-time irradiance probe GI (idTech 8 "Fast as Hell" approach — stochastic probe sampling with surfel shading, fully dynamic, proven at 60 FPS on consoles; replaces baked lighting with real-time probes; ref: Sousa SIGGRAPH 2025 — https://advances.realtimerendering.com/s2025/content/SOUSA_SIGGRAPH_2025_Final.pdf)
+- [ ] Surfel + SH probe hybrid (surfels sample indirect irradiance via software SDF ray-marching, write into the SH probe grid, temporal accumulation smooths residual noise; geometry-agnostic, no hardware RT required; pairs the idTech 8 surfel allocator with Vestige's planned SH grid)
+- [ ] Brixelizer-style software ray-traced GI via sparse SDF fields (compute-only, RDNA2-feasible — primary software-RT fallback for diffuse/specular indirect before the Vulkan/HW-RT backend lands; ref: AMD FidelityFX Brixelizer GI — https://gpuopen.com/fidelityfx-brixelizer/)
+- [ ] Radiance cascades (Alexander Sannikov's approach — constant-cost GI independent of scene complexity and light count; 2D proven in production, 3D extension is active research area; ref: Holographic RC arXiv 2505.02041, JTLee98 3D Vulkan PoC)
 - [ ] ReSTIR GI (reservoir-based spatiotemporal importance resampling for indirect illumination — dramatically improves convergence when hardware RT is available)
 
 ### Vulkan and Ray Tracing
@@ -1227,7 +1236,7 @@ Application published on Steam. Scenes can be packaged and shared between users.
 - [ ] Ray tracing — ambient occlusion
 - [ ] Ray tracing — global illumination
 - [ ] ReSTIR DI (reservoir-based spatiotemporal importance resampling for direct illumination — enables hundreds of shadow-casting lights with stochastic evaluation at fixed cost; ref: NVIDIA RTXDI)
-- [ ] Partitioned top-level acceleration structures / PTLAS (divide scene into clusters, selectively rebuild only changed partitions — 100x faster BVH updates; ref: NVIDIA RTX Mega Geometry, DXR 2.0 CLAS)
+- [ ] Partitioned top-level acceleration structures / PTLAS (divide scene into clusters, selectively rebuild only changed partitions — 100x faster BVH updates; ref: NVIDIA RTX Mega Geometry, DXR 2.0 CLAS — NVIDIA-only today via `VK_NV_cluster_acceleration_structure` / `VK_NV_partitioned_acceleration_structure`; watch for `VK_KHR_` upstreaming before RDNA2 becomes viable)
 - [ ] Opacity micromaps (encode alpha transparency directly in the acceleration structure — eliminates expensive any-hit shaders for foliage, fences, curtains)
 - [ ] Shader execution reordering / SER (group coherent RT shader invocations — up to 2x RT performance; mandatory in SM 6.9 / Vulkan equivalent)
 - [ ] Software ray tracing fallback (screen-space ray marching + voxel/probe traces for GPUs without hardware RT — the most widely deployed approach in shipping games, e.g. UE5 Lumen software path)
@@ -1241,9 +1250,10 @@ Application published on Steam. Scenes can be packaged and shared between users.
 - [ ] Tessellated terrain (adaptive detail for landscapes)
 
 ### Shadow Techniques
-- [ ] Virtual shadow maps (massive virtual texture shadow map — only allocate tiles visible to camera, consistent detail at all distances, eliminates cascade seams)
-- [ ] Percentage-closer soft shadows / PCSS (contact-hardening shadows — sharp near caster, soft further away)
-- [ ] Stochastic direct lighting (MegaLights-style fixed-budget approach — supports orders of magnitude more shadow-casting lights at constant cost via stochastic evaluation and temporal accumulation; ref: Epic Games SIGGRAPH 2025)
+- [ ] Virtual shadow maps (massive virtual texture shadow map — only allocate tiles visible to camera, consistent detail at all distances, eliminates cascade seams; data-structure portion feasible on OpenGL 4.5 via `ARB_sparse_texture`, mesh-shader-optimal version deferred to the Vulkan backend)
+- [ ] Percentage-closer soft shadows / PCSS (contact-hardening shadows — sharp near caster, soft further away; author the filter-radius curve via the Formula Workbench)
+- [ ] HypeHype stochastic tile-based lighting (first, simpler many-lights rung — two-stage tile resampling with stratified reservoirs, no RT or mesh shaders required; ref: Lempinen SIGGRAPH 2025 — https://advances.realtimerendering.com/s2025/content/s2025_stb_lighting_v1.1_notes.pdf)
+- [ ] MegaLights stochastic area shadows (fixed-budget evaluation of hundreds-to-thousands of shadow-casting lights via tile-based reservoir sampling + temporal reuse; SVGF-style denoiser; supersedes PCSS for area lights once SDF ray-marching is in place; ref: Narkowicz & Costa SIGGRAPH 2025 — https://advances.realtimerendering.com/s2025/content/MegaLights_Stochastic_Direct_Lighting_2025.pdf)
 
 ### Upscaling
 - [ ] Render scale slider (render at 50%–100% internal resolution, upscale to display resolution)
@@ -1257,11 +1267,12 @@ Application published on Steam. Scenes can be packaged and shared between users.
 - [ ] Specular anti-aliasing (Toksvig or LEAN mapping — reduces distant surface shimmer from normal maps)
 
 ### GPU-Driven Rendering
-- [ ] GPU-driven draw submission (indirect draw calls — GPU decides what to draw, eliminating CPU bottleneck)
-- [ ] GPU frustum and occlusion culling (Hi-Z occlusion culling in compute shader — skip objects hidden behind other objects)
+- [ ] **[Highest-ROI OpenGL 4.5 item]** GPU-driven MDI with Hi-Z occlusion culling (compute-shader Hi-Z build + `glMultiDrawElementsIndirectCount`; expected 10-30% FPS gain on >1k-object scenes; ref: Anno 117 Pax Romana GDC 2026, idTech 8 SIGGRAPH 2025 — https://schedule.gdconf.com/session/all-rays-lead-to-rome-next-gen-graphics-in-anno-117-pax-romana/915067)
+- [ ] GPU frustum and occlusion culling (Hi-Z occlusion culling in compute shader — skip objects hidden behind other objects; lands as part of the GPU-driven MDI item above)
 - [ ] Variable-rate shading / variable-rate compute (control shading rate per screen region — full rate for detail areas, reduced rate for flat surfaces; ref: idTech 8 VRCS)
 - [ ] GL_EXT_mesh_shader integration (OpenGL mesh shaders — replace vertex/geometry pipeline with task+mesh shader stages for GPU-driven geometry processing; available on AMD RDNA2+ via Mesa, avoids requiring Vulkan)
 - [ ] Bindless textures and resources (eliminate texture binding overhead — all textures resident and GPU-addressable)
+- [ ] Shader language unification via Slang (migrate GLSL shaders to Slang IR — compiles to SPIR-V for OpenGL 4.5 today via `ARB_gl_spirv` + `ARB_spirv_extensions`, and to Vulkan + DXIL + OptiX + CUDA for future backends; supports generics, interfaces, differentiable shaders; Khronos governance; production use in Source 2 (CS2, Dota 2); prerequisite for low-friction Vulkan backend — ref: https://shader-slang.org/)
 
 ### Performance
 - [x] Frustum culling (skip objects outside camera view)

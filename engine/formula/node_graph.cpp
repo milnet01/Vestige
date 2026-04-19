@@ -801,12 +801,11 @@ Node NodeGraph::createFunctionNode(const std::string& function)
     {
         node.category = NodeCategory::CLAMPING;
     }
-    else if (function == "abs" || function == "sqrt" || function == "negate")
-    {
-        node.category = NodeCategory::MATH_ADVANCED;
-    }
     else
     {
+        // Covers abs/sqrt/negate and any future unknown function — all
+        // classified as MATH_ADVANCED. (Previously had a redundant elif
+        // for abs/sqrt/negate that set the same category — AUDIT L29.)
         node.category = NodeCategory::MATH_ADVANCED;
     }
 

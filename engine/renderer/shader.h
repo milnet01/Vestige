@@ -8,8 +8,9 @@
 #include <glad/gl.h>
 #include <glm/glm.hpp>
 
+#include <map>
 #include <string>
-#include <unordered_map>
+#include <string_view>
 
 namespace Vestige
 {
@@ -49,37 +50,43 @@ public:
     /// @brief Releases the GL program now (safe to call before context teardown).
     void destroy();
 
+    // Uniform setters take ``std::string_view`` so string literals and
+    // ``const char*`` callers cost zero heap allocations on cache hits
+    // (AUDIT H6). ``std::string`` arguments convert implicitly.
+
     /// @brief Sets a boolean uniform.
-    void setBool(const std::string& name, bool value) const;
+    void setBool(std::string_view name, bool value) const;
 
     /// @brief Sets an integer uniform.
-    void setInt(const std::string& name, int value) const;
+    void setInt(std::string_view name, int value) const;
 
     /// @brief Sets a float uniform.
-    void setFloat(const std::string& name, float value) const;
+    void setFloat(std::string_view name, float value) const;
 
     /// @brief Sets a vec2 uniform.
-    void setVec2(const std::string& name, const glm::vec2& value) const;
+    void setVec2(std::string_view name, const glm::vec2& value) const;
 
     /// @brief Sets a vec3 uniform.
-    void setVec3(const std::string& name, const glm::vec3& value) const;
+    void setVec3(std::string_view name, const glm::vec3& value) const;
 
     /// @brief Sets a vec4 uniform.
-    void setVec4(const std::string& name, const glm::vec4& value) const;
+    void setVec4(std::string_view name, const glm::vec4& value) const;
 
     /// @brief Sets a mat3 uniform.
-    void setMat3(const std::string& name, const glm::mat3& value) const;
+    void setMat3(std::string_view name, const glm::mat3& value) const;
 
     /// @brief Sets a mat4 uniform.
-    void setMat4(const std::string& name, const glm::mat4& value) const;
+    void setMat4(std::string_view name, const glm::mat4& value) const;
 
 private:
     GLuint compileShader(GLenum type, const std::string& source);
     bool linkProgram(GLuint vertexShader, GLuint fragmentShader);
-    GLint getUniformLocation(const std::string& name) const;
+    GLint getUniformLocation(std::string_view name) const;
 
     GLuint m_programId;
-    mutable std::unordered_map<std::string, GLint> m_uniformCache;
+    // std::less<> is transparent so find(string_view) works without
+    // constructing a std::string on every cache-hit lookup.
+    mutable std::map<std::string, GLint, std::less<>> m_uniformCache;
 };
 
 } // namespace Vestige

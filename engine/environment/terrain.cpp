@@ -720,8 +720,17 @@ bool Terrain::loadHeightmap(const std::filesystem::path& path)
     }
 
     file.seekg(0);
-    file.read(reinterpret_cast<char*>(m_heightData.data()),
-              static_cast<std::streamsize>(m_heightData.size() * sizeof(float)));
+    const auto wantBytes = static_cast<std::streamsize>(m_heightData.size() * sizeof(float));
+    file.read(reinterpret_cast<char*>(m_heightData.data()), wantBytes);
+    // AUDIT M25: short reads (mid-read I/O error, file truncated between
+    // tellg() and read()) would leave m_heightData half-fresh / half-stale.
+    if (file.gcount() != wantBytes)
+    {
+        Logger::error("Terrain: heightmap read short: got "
+                     + std::to_string(file.gcount()) + " / "
+                     + std::to_string(wantBytes) + " bytes");
+        return false;
+    }
 
     // Rebuild GPU textures and quadtree from loaded data
     updateHeightmapRegion(0, 0, m_config.width, m_config.depth);
@@ -782,8 +791,18 @@ bool Terrain::loadSplatmap(const std::filesystem::path& path)
     }
 
     file.seekg(0);
-    file.read(reinterpret_cast<char*>(m_splatData.data()),
-              static_cast<std::streamsize>(m_splatData.size() * sizeof(glm::vec4)));
+    const auto wantSplatBytes =
+        static_cast<std::streamsize>(m_splatData.size() * sizeof(glm::vec4));
+    file.read(reinterpret_cast<char*>(m_splatData.data()), wantSplatBytes);
+    // AUDIT M25: check gcount so a truncated splatmap doesn't leak stale
+    // bytes into the freshly-sized buffer.
+    if (file.gcount() != wantSplatBytes)
+    {
+        Logger::error("Terrain: splatmap read short: got "
+                     + std::to_string(file.gcount()) + " / "
+                     + std::to_string(wantSplatBytes) + " bytes");
+        return false;
+    }
 
     updateSplatmapRegion(0, 0, m_config.width, m_config.depth);
 

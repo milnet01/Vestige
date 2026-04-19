@@ -184,42 +184,42 @@ GLuint Shader::getId() const
     return m_programId;
 }
 
-void Shader::setBool(const std::string& name, bool value) const
+void Shader::setBool(std::string_view name, bool value) const
 {
     glUniform1i(getUniformLocation(name), static_cast<int>(value));
 }
 
-void Shader::setInt(const std::string& name, int value) const
+void Shader::setInt(std::string_view name, int value) const
 {
     glUniform1i(getUniformLocation(name), value);
 }
 
-void Shader::setFloat(const std::string& name, float value) const
+void Shader::setFloat(std::string_view name, float value) const
 {
     glUniform1f(getUniformLocation(name), value);
 }
 
-void Shader::setVec2(const std::string& name, const glm::vec2& value) const
+void Shader::setVec2(std::string_view name, const glm::vec2& value) const
 {
     glUniform2fv(getUniformLocation(name), 1, glm::value_ptr(value));
 }
 
-void Shader::setVec3(const std::string& name, const glm::vec3& value) const
+void Shader::setVec3(std::string_view name, const glm::vec3& value) const
 {
     glUniform3fv(getUniformLocation(name), 1, glm::value_ptr(value));
 }
 
-void Shader::setVec4(const std::string& name, const glm::vec4& value) const
+void Shader::setVec4(std::string_view name, const glm::vec4& value) const
 {
     glUniform4fv(getUniformLocation(name), 1, glm::value_ptr(value));
 }
 
-void Shader::setMat3(const std::string& name, const glm::mat3& value) const
+void Shader::setMat3(std::string_view name, const glm::mat3& value) const
 {
     glUniformMatrix3fv(getUniformLocation(name), 1, GL_FALSE, glm::value_ptr(value));
 }
 
-void Shader::setMat4(const std::string& name, const glm::mat4& value) const
+void Shader::setMat4(std::string_view name, const glm::mat4& value) const
 {
     glUniformMatrix4fv(getUniformLocation(name), 1, GL_FALSE, glm::value_ptr(value));
 }
@@ -273,20 +273,24 @@ bool Shader::linkProgram(GLuint vertexShader, GLuint fragmentShader)
     return true;
 }
 
-GLint Shader::getUniformLocation(const std::string& name) const
+GLint Shader::getUniformLocation(std::string_view name) const
 {
+    // Transparent find — no std::string allocation on the hot-path cache hit.
     auto it = m_uniformCache.find(name);
     if (it != m_uniformCache.end())
     {
         return it->second;
     }
 
-    GLint location = glGetUniformLocation(m_programId, name.c_str());
-    m_uniformCache[name] = location;
+    // Miss: allocate once to build a null-terminated C string for glGet...
+    // and to key the cache for subsequent hits.
+    std::string key(name);
+    GLint location = glGetUniformLocation(m_programId, key.c_str());
+    m_uniformCache.emplace(std::move(key), location);
 
     if (location == -1)
     {
-        Logger::debug("Uniform not found (may be optimized out): " + name);
+        Logger::debug("Uniform not found (may be optimized out): " + std::string(name));
     }
     return location;
 }

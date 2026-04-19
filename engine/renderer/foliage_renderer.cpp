@@ -119,13 +119,17 @@ void FoliageRenderer::render(
         for (uint32_t typeId : chunk->getFoliageTypeIds())
         {
             const auto& instances = chunk->getFoliage(typeId);
+            // AUDIT M30: hoist the map lookup out of the per-instance loop —
+            // one hash probe per (chunk, typeId) instead of per (chunk, typeId,
+            // instance). Thousands of probes per frame become tens.
+            auto& visibleVec = m_visibleByType[typeId];
             for (const auto& inst : instances)
             {
                 glm::vec3 d = inst.position - camPos;
                 float distSq = d.x * d.x + d.z * d.z;
                 if (distSq <= maxDistSq)
                 {
-                    m_visibleByType[typeId].push_back(inst);
+                    visibleVec.push_back(inst);
                 }
             }
         }
@@ -267,13 +271,17 @@ void FoliageRenderer::renderShadow(
         for (uint32_t typeId : chunk->getFoliageTypeIds())
         {
             const auto& instances = chunk->getFoliage(typeId);
+            // AUDIT M30: hoist the map lookup out of the per-instance loop —
+            // one hash probe per (chunk, typeId) instead of per (chunk, typeId,
+            // instance). Thousands of probes per frame become tens.
+            auto& visibleVec = m_visibleByType[typeId];
             for (const auto& inst : instances)
             {
                 glm::vec3 d = inst.position - camPos;
                 float distSq = d.x * d.x + d.z * d.z;
                 if (distSq <= maxDistSq)
                 {
-                    m_visibleByType[typeId].push_back(inst);
+                    visibleVec.push_back(inst);
                 }
             }
         }

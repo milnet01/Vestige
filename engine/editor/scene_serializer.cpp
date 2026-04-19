@@ -30,6 +30,46 @@ namespace Vestige
 // Helpers
 // ---------------------------------------------------------------------------
 
+/// @brief Maximum on-disk size of a .scene file (matches obj_loader /
+///        gltf_loader caps). A malicious or corrupt scene file would
+///        otherwise be parsed into unbounded memory and OOM-kill the
+///        process. (AUDIT H4.)
+static constexpr std::uintmax_t MAX_SCENE_FILE_BYTES = 256ull * 1024 * 1024;
+
+/// @brief Opens and parses a .scene file, enforcing the size cap. On
+///        success fills ``outJson`` and returns empty string; on failure
+///        returns a human-readable error and leaves ``outJson`` empty.
+static std::string openAndParseSceneJson(const fs::path& path, json& outJson)
+{
+    std::error_code ec;
+    const std::uintmax_t sz = fs::file_size(path, ec);
+    if (ec)
+    {
+        return "Could not stat file: " + path.string();
+    }
+    if (sz > MAX_SCENE_FILE_BYTES)
+    {
+        return "Scene file exceeds " + std::to_string(MAX_SCENE_FILE_BYTES)
+             + "-byte cap: " + path.string() + " (" + std::to_string(sz) + " bytes)";
+    }
+
+    std::ifstream file(path);
+    if (!file.is_open())
+    {
+        return "Could not open file: " + path.string();
+    }
+
+    try
+    {
+        outJson = json::parse(file);
+    }
+    catch (const json::parse_error& e)
+    {
+        return "JSON parse error in " + path.string() + ": " + e.what();
+    }
+    return {};
+}
+
 /// @brief Returns the current time as an ISO 8601 UTC string.
 static std::string currentTimestamp()
 {
@@ -246,28 +286,14 @@ SceneSerializerResult SceneSerializer::loadScene(
 {
     SceneSerializerResult result;
 
-    // Read file
-    std::ifstream file(path);
-    if (!file.is_open())
-    {
-        result.errorMessage = "Could not open file: " + path.string();
-        Logger::error("Scene load: " + result.errorMessage);
-        return result;
-    }
-
-    // Parse JSON
+    // Read + parse (size-capped) JSON
     json sceneJson;
-    try
+    if (auto err = openAndParseSceneJson(path, sceneJson); !err.empty())
     {
-        sceneJson = json::parse(file);
-    }
-    catch (const json::parse_error& e)
-    {
-        result.errorMessage = "JSON parse error in " + path.string() + ": " + e.what();
+        result.errorMessage = std::move(err);
         Logger::error("Scene load: " + result.errorMessage);
         return result;
     }
-    file.close();
 
     // Validate scene envelope
     if (!sceneJson.contains("vestige_scene") || !sceneJson["vestige_scene"].is_object())
@@ -359,18 +385,8 @@ SceneMetadata SceneSerializer::readMetadata(const fs::path& path)
 {
     SceneMetadata metadata;
 
-    std::ifstream file(path);
-    if (!file.is_open())
-    {
-        return metadata;
-    }
-
     json sceneJson;
-    try
-    {
-        sceneJson = json::parse(file);
-    }
-    catch (const json::parse_error&)
+    if (!openAndParseSceneJson(path, sceneJson).empty())
     {
         return metadata;
     }
@@ -409,19 +425,11 @@ SceneSerializerResult SceneSerializer::saveScene(
     }
 
     // Re-read the saved file, inject environment/terrain data, re-write
-    std::ifstream file(path);
-    if (!file.is_open()) return result;
-
     json sceneJson;
-    try
-    {
-        sceneJson = json::parse(file);
-    }
-    catch (const json::parse_error&)
+    if (!openAndParseSceneJson(path, sceneJson).empty())
     {
         return result;
     }
-    file.close();
 
     if (environment)
     {
@@ -465,20 +473,12 @@ SceneSerializerResult SceneSerializer::loadScene(
         return result;
     }
 
-    // Load environment/terrain data from the same file
-    std::ifstream file(path);
-    if (!file.is_open()) return result;
-
+    // Load environment/terrain data from the same file (reuse size-capped helper)
     json sceneJson;
-    try
-    {
-        sceneJson = json::parse(file);
-    }
-    catch (const json::parse_error&)
+    if (!openAndParseSceneJson(path, sceneJson).empty())
     {
         return result;
     }
-    file.close();
 
     if (environment && sceneJson.contains("environment") && sceneJson["environment"].is_object())
     {

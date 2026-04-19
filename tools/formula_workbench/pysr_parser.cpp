@@ -7,7 +7,7 @@
 
 #include <algorithm>
 #include <cctype>
-#include <cstdlib>
+#include <charconv>
 #include <stdexcept>
 #include <unordered_set>
 
@@ -164,6 +164,13 @@ private:
 // Parser (precedence climbing)
 // ---------------------------------------------------------------------------
 
+// Upper bound on parse-recursion depth. Without this a deeply-nested
+// expression like "((((((x))))))…" or "---…---x" would blow the call
+// stack (AUDIT M3; same class as ImageMagick CVE-2026-33902 / Hot
+// Chocolate CVE-2026-40324). 256 is ample for any hand-authored PySR
+// expression — empirical PySR output rarely nests past ~10.
+static constexpr int MAX_PARSE_DEPTH = 256;
+
 class Parser
 {
 public:
@@ -191,9 +198,26 @@ public:
     }
 
 private:
+    // RAII guard for recursion-depth counting.
+    struct DepthGuard
+    {
+        int& depth;
+        explicit DepthGuard(int& d) : depth(d)
+        {
+            ++depth;
+            if (depth > MAX_PARSE_DEPTH)
+            {
+                throw std::runtime_error(
+                    "expression nesting exceeds MAX_PARSE_DEPTH = "
+                    + std::to_string(MAX_PARSE_DEPTH));
+            }
+        }
+        ~DepthGuard() { --depth; }
+    };
     // addExpr ::= mulExpr ( ('+' | '-') mulExpr )*
     std::unique_ptr<ExprNode> parseAdd()
     {
+        DepthGuard guard(m_depth);
         auto left = parseMul();
         while (m_current.type == TokenType::Plus
                || m_current.type == TokenType::Minus)
@@ -224,6 +248,7 @@ private:
     // unary ::= '-' unary | '+' unary | powExpr
     std::unique_ptr<ExprNode> parseUnary()
     {
+        DepthGuard guard(m_depth);
         if (m_current.type == TokenType::Minus)
         {
             advance();
@@ -258,15 +283,20 @@ private:
     // primary ::= NUMBER | IDENT '(' expr ')' | IDENT | '(' expr ')'
     std::unique_ptr<ExprNode> parsePrimary()
     {
+        DepthGuard guard(m_depth);
         if (m_current.type == TokenType::Number)
         {
-            // std::strtof is locale-aware; PySR emits '.' as decimal
-            // separator regardless of locale, so use it carefully.
-            // setlocale changes are global, so rely on the canonical
-            // "C" locale being default for the tool.
-            const std::string text = m_current.text;
+            // AUDIT M4: std::from_chars is locale-independent, unlike the
+            // previous std::strtof which would misparse "1.5" on locales
+            // using ',' as the decimal separator if setlocale changed the
+            // global C locale. Fallback to 0.0f on malformed input (the
+            // tokenizer should have already rejected it, but be defensive).
+            const std::string& text = m_current.text;
+            float v = 0.0f;
+            auto [ptr, ec] = std::from_chars(text.data(), text.data() + text.size(), v);
+            (void)ptr;
+            (void)ec;
             advance();
-            const float v = std::strtof(text.c_str(), nullptr);
             return ExprNode::literal(v);
         }
 
@@ -338,6 +368,7 @@ private:
     Tokenizer                m_tokenizer;
     Token                    m_current;
     std::vector<std::string> m_variables;
+    int                      m_depth = 0;  ///< Recursion depth — see DepthGuard / MAX_PARSE_DEPTH.
 };
 
 } // namespace

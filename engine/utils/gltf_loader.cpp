@@ -52,7 +52,19 @@ static std::string resolveUri(const std::string& gltfDir, const std::string& uri
     auto canonicalBase = std::filesystem::weakly_canonical(base, ec);
     std::string canonStr = canonical.string();
     std::string baseStr = canonicalBase.string();
-    if (canonStr.compare(0, baseStr.size(), baseStr) != 0)
+    // AUDIT M16: append the preferred separator so a prefix match doesn't
+    // accept sibling directories that share the base's leading characters
+    // (e.g. base=/assets/foo, canon=/assets/foo_evil/x.png). Normalise both
+    // ends to the same trailing-slash form before comparing.
+    if (!baseStr.empty()
+        && baseStr.back() != static_cast<char>(std::filesystem::path::preferred_separator))
+    {
+        baseStr.push_back(static_cast<char>(std::filesystem::path::preferred_separator));
+    }
+    // Allow equality (e.g. base itself) AND strict descendants (canon
+    // starts with base + separator).
+    if (canonStr != canonicalBase.string()
+        && canonStr.compare(0, baseStr.size(), baseStr) != 0)
     {
         Logger::warning("glTF: URI escapes asset directory: " + uri);
         return {};
@@ -467,7 +479,8 @@ static void loadMeshes(const tinygltf::Model& gltfModel, Model& outModel)
             std::vector<uint32_t> indices;
 
             // --- Read POSITION ---
-            bool hasPositions = false;
+            // Every path that doesn't populate `vertices` continue's; no separate
+            // `hasPositions` flag needed post-block.
             AABB bounds;
             {
                 auto it = primitive.attributes.find("POSITION");
@@ -502,12 +515,6 @@ static void loadMeshes(const tinygltf::Model& gltfModel, Model& outModel)
                 }
 
                 bounds = {minPos, maxPos};
-                hasPositions = true;
-            }
-
-            if (!hasPositions)
-            {
-                continue;
             }
 
             // --- Read NORMAL ---
@@ -1235,7 +1242,17 @@ static std::vector<float> readFloatAccessor(const tinygltf::Model& gltfModel,
     size_t stride = bufferView.byteStride > 0
         ? bufferView.byteStride : sizeof(float) * static_cast<size_t>(componentsPerElement);
 
-    result.resize(accessor.count * static_cast<size_t>(componentsPerElement));
+    // Guard against attacker-controlled accessor.count * componentsPerElement
+    // overflowing size_t — silent overflow would size result to a tiny vector
+    // and the memcpy below would walk off the end. (AUDIT H2.)
+    const size_t cpe = static_cast<size_t>(componentsPerElement);
+    if (componentsPerElement <= 0 || accessor.count > SIZE_MAX / cpe)
+    {
+        Logger::warning("glTF: accessor.count * componentsPerElement overflows size_t for "
+            + std::string(label));
+        return result;
+    }
+    result.resize(accessor.count * cpe);
 
     for (size_t i = 0; i < accessor.count; i++)
     {

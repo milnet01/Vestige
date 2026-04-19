@@ -9,6 +9,177 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-19 manual audit — batch 1/2/3 fixes
+
+29 files touched, +490 / −170. All 1878 tests pass. Findings report in
+`docs/AUDIT_2026-04-19.md` (gitignored per `docs/AUDIT_[0-9]*.md`).
+
+#### High severity (12)
+
+- **`engine/renderer/renderer.cpp` (per-object motion-vector overlay):**
+  switched `glDepthFunc(GL_LESS)` → `GL_GREATER` so the pass writes
+  under the engine's reverse-Z convention. The motion FBO is cleared
+  with `glClearDepth(0.0)` (= far in reverse-Z); under `GL_LESS` no
+  fragment ever passed, leaving TAA on camera-only motion for all
+  dynamic objects. Fixes the 2026-04-13 visual regression flagged in
+  the source comment at line 938.
+- **`engine/utils/gltf_loader.cpp::readFloatAccessor`:** added
+  `accessor.count > SIZE_MAX / componentsPerElement` overflow check
+  before `result.resize(...)` — a malicious glTF could otherwise size
+  the output to a tiny vector and have the subsequent `memcpy` walk
+  off the end.
+- **`engine/utils/entity_serializer.cpp` (6 texture-slot sites):** new
+  file-scope `sanitizeAssetPath` rejects absolute paths and `..`
+  components in scene-JSON-sourced texture paths (`diffuseTexture`,
+  `normalMap`, `heightMap`, `metallicRoughnessTexture`,
+  `emissiveTexture`, `aoTexture`). Scene loading no longer trusts
+  untrusted paths directly to `ResourceManager::loadTexture`.
+- **`engine/editor/scene_serializer.cpp`:** new static helper
+  `openAndParseSceneJson` with a 256 MB file-size cap (matches
+  obj_loader / gltf_loader). Replaces 4 separate `json::parse(file)`
+  call sites that previously had no ceiling — a 10 GB `.scene` would
+  OOM-kill the process.
+- **`tools/audit/web/app.py::/api/detect`:** added `_is_safe_path(root)`
+  403 guard that every sibling endpoint was already enforcing. The
+  endpoint could previously be used to probe arbitrary filesystem
+  directories via the web UI.
+- **`engine/renderer/shader.h` + `.cpp`:** all `set*` setters now take
+  `std::string_view` (was `const std::string&`). The uniform cache is
+  now `std::map<std::string, GLint, std::less<>>` (transparent) so
+  `const char*` / string-literal callers cost zero heap allocations on
+  cache hits. Was ~250 temporary `std::string` allocations per frame
+  per `renderScene` call, most ≥16 chars and therefore past libstdc++
+  SSO.
+- **`engine/renderer/renderer.cpp::drawMesh` (morph path):**
+  pre-cached the `u_morphWeights[0..7]` uniform names as
+  `static const std::array<std::string, 8>` so we don't rebuild the
+  indexed name via `std::to_string` + concat on every morph-targeted
+  draw.
+- **`engine/renderer/renderer.cpp::renderScene` (MDI material
+  grouping):** `m_materialGroups` now clears each inner vector
+  (preserving capacity) instead of clearing the outer map — was
+  destroying every per-material vector's buffer and re-allocating on
+  every frame's `push_back` chain.
+- **`engine/environment/foliage_manager.{h,cpp}`:** added out-param
+  overloads of `getAllChunks` and `getVisibleChunks` so the shadow
+  pass (up to 4 cascades per frame) and main foliage render reuse
+  scratch vectors (`Renderer::m_scratchFoliageChunks`,
+  `Engine::m_scratchVisibleChunks`) instead of allocating a fresh
+  `std::vector<const FoliageChunk*>` per call.
+- **`engine/renderer/renderer.cpp::captureIrradiance`:** deleted the
+  unused `std::vector<float> facePixels(faceSize²·3)` — allocation was
+  never read or written; only `cubemapData` at line 2042 was the
+  actual read target. Also promoted `faceSize * faceSize * 3` to
+  `size_t` arithmetic for overflow safety.
+- **`engine/utils/gltf_loader.cpp::loadGltf` (POSITION read):** removed
+  the unreachable `if (!hasPositions) continue;` defensive check; every
+  path that fails to populate positions already `continue`s earlier.
+- **`engine/editor/entity_factory.cpp::createParticlePreset`:** removed
+  the dead `std::string entityName = "Particle Emitter"` initializer —
+  every `if`/`else if`/`else` branch overwrote it, making the literal
+  suggest a fallback that never activated.
+
+#### Medium severity (15)
+
+- **`tools/formula_workbench/async_driver.cpp`:** narrowed the
+  PID-reuse TOCTOU race by clearing `m_childPid` to -1 *before*
+  `waitpid()`. Linux only frees the PID on `waitpid`, so the stale-pid
+  window is now zero inside normal cancel/poll flows. Full pidfd-based
+  fix deferred to a future glibc 2.36+ upgrade.
+- **`tools/formula_workbench/async_driver.cpp::start`:** try/catch
+  around `std::thread` construction — on OOM-throw the orphaned child
+  is now reaped via `SIGKILL` + `waitpid`, and pipe fds are closed.
+  Previously leaked both on a vanishingly rare but possible failure.
+- **`tools/formula_workbench/pysr_parser.cpp`:** added
+  `MAX_PARSE_DEPTH = 256` via RAII `DepthGuard` in
+  `parseAdd` / `parseUnary` / `parsePrimary`. Closes a stack-overflow
+  DoS on deeply nested expressions (same pattern as CVE-2026-33902
+  ImageMagick FX parser, CVE-2026-40324 Hot Chocolate GraphQL parser).
+- **`tools/formula_workbench/pysr_parser.cpp`:** swapped `std::strtof`
+  for `std::from_chars` — the former is locale-aware and would misparse
+  `"1.5"` as `1` under a German locale. `from_chars` is locale-free
+  (C++17, libstdc++ 11+).
+- **`tools/formula_workbench/fit_history.cpp::toHex64`:** format string
+  `%016lx` + `unsigned long` cast silently truncated the high 32 bits
+  of a `uint64_t` on Windows (LLP64 — `unsigned long` is 32-bit).
+  Swapped to `%016llx` + `unsigned long long`.
+- **`engine/editor/entity_actions.cpp` (align + distribute):** two
+  use-after-move bugs — `entries.size()` was read *after*
+  `std::move(entries)` on the preceding line, so "N entities" always
+  logged as 0. Captured `size_t count = entries.size()` before the
+  move.
+- **`engine/animation/motion_database.cpp::getFrameInfo / getPose`:**
+  added empty-database guards — `std::clamp(x, 0, size()-1)` is UB
+  when the database is empty (hi < lo). Now returns a static empty
+  `FrameInfo` / `SkeletonPose` in that case.
+- **`engine/renderer/renderer.{h,cpp}`:** stored the
+  `WindowResizeEvent` subscription token and unsubscribed it in
+  `~Renderer`. Engine owns both `Renderer` and `EventBus`, and
+  `~Renderer` runs first — a resize event published during teardown
+  would previously call into a half-destroyed `Renderer`.
+- **`engine/editor/tools/ruler_tool.h::isActive`:** now includes the
+  `MEASURED` state. `processClick` still consumes clicks in `MEASURED`
+  (restarts the measurement); callers that gated viewport-click
+  routing on `isActive()` were double-routing those clicks.
+- **`engine/utils/gltf_loader.cpp::resolveUri`:** path-prefix check now
+  appends a separator before comparing, so `base=/assets/foo` no
+  longer accepts `/assets/foo_evil/x.png`.
+- **`engine/environment/terrain.cpp::loadHeightmap` / `loadSplatmap`:**
+  added `file.gcount()` checks after `file.read(...)`. A truncated
+  terrain file was previously leaving `m_heightData` / `m_splatData`
+  with partial fresh + partial stale contents.
+- **`tools/audit/web/app.py::/api/config` (GET):** extension gate now
+  restricts to `.yaml` / `.yml` (mirroring the PUT sibling). Was
+  previously able to read any file inside allowed roots.
+- **`engine/core/first_person_controller.cpp::applyDeadzone`:** added
+  `std::isfinite(v)` + `std::clamp(v, -1.0f, 1.0f)` on gamepad axis
+  input. A faulty HID report / driver bug could produce NaN or
+  out-of-range values that propagated into camera rotation.
+- **`engine/renderer/foliage_renderer.cpp`:** hoisted the
+  `m_visibleByType[typeId]` map lookup out of the per-instance loop.
+  Thousands of `unordered_map::operator[]` hash probes per frame
+  become tens.
+- **`engine/renderer/renderer.h::m_frameArena`:** added `{}`
+  value-initialization to silence the recurring cppcheck
+  `uninitMemberVar` — the pmr arena overwrites this storage anyway,
+  but cppcheck needed an explicit initializer to stop re-flagging it
+  every audit run.
+
+#### Low (4)
+
+- **`VERSION`**: synced `0.1.4 → 0.1.5` to match CMakeLists.txt (drift
+  introduced in commit `200d75f`; `scripts/check_changelog_pair.sh`
+  expects these to match).
+- **`engine/renderer/renderer.cpp`**: removed dead
+  `setVec2("u_texelSize", ...)` call — the matching shader uniform
+  was never declared in `motion_vectors.frag.glsl`, so the set was a
+  silent no-op.
+- **`app/main.cpp`**, **`tools/formula_workbench/main.cpp`**: added the
+  standard `// Copyright (c) 2026 Anthony Schemel` + SPDX-License
+  headers that every other `.cpp`/`.h` in the repo carries.
+- **`engine/formula/node_graph.cpp`**: collapsed the redundant
+  `else if (abs|sqrt|negate)` branch into the final `else` — both
+  already assigned `MATH_ADVANCED` (clang-tidy
+  `bugprone-branch-clone`).
+
+### Documentation
+
+- **`ROADMAP.md`**: 6 sections updated from the GDC 2026 /
+  SIGGRAPH 2025 research pass. WishGI SH-fit lightmaps, Brixelizer SDF
+  GI (primary RDNA2-feasible software-RT path), HypeHype + MegaLights
+  stochastic lighting split, GPU-driven MDI + Hi-Z flagged as the
+  highest-ROI OpenGL 4.5 item, Slang language unification added,
+  partitioned TLAS annotated with the VK_KHR watch note, tonemapping
+  policy (ACES 1.3 default, 2.0 opt-in), accessibility section
+  expanded with 4 new items. References linked to slide PDFs.
+- **`SECURITY.md`**: added CVE-2026-23213 (AMD amdgpu kernel SMU-reset
+  flaw — RDNA2/RDNA3) and Mesa 26.0.x regression notes. New Linux
+  support matrix: minimum kernel 6.9+, minimum Mesa 26.0.4.
+- **`.claude/settings.json`**: added a read-only permission allowlist
+  (15 entries — cmake/ctest/make/cppcheck/clang-tidy plus
+  MCP filesystem read tools) to reduce per-turn prompts during audit
+  sessions.
+
 ## [0.1.5] - 2026-04-18
 
 ### Fixed — completes 2026-04-16 strict-aliasing sweep

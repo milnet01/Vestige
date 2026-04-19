@@ -390,6 +390,12 @@ int MotionDatabase::getFeatureCount() const
 
 const FrameInfo& MotionDatabase::getFrameInfo(int frameIndex) const
 {
+    // std::clamp(x, 0, -1) is UB (hi < lo); guard against an empty database.
+    if (m_frameInfo.empty())
+    {
+        static const FrameInfo s_empty{};
+        return s_empty;
+    }
     size_t idx = static_cast<size_t>(std::clamp(frameIndex, 0,
         static_cast<int>(m_frameInfo.size()) - 1));
     return m_frameInfo[idx];
@@ -397,6 +403,11 @@ const FrameInfo& MotionDatabase::getFrameInfo(int frameIndex) const
 
 const SkeletonPose& MotionDatabase::getPose(int frameIndex) const
 {
+    if (m_poses.empty())
+    {
+        static const SkeletonPose s_empty{};
+        return s_empty;
+    }
     size_t idx = static_cast<size_t>(std::clamp(frameIndex, 0,
         static_cast<int>(m_poses.size()) - 1));
     return m_poses[idx];

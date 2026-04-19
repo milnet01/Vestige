@@ -74,9 +74,35 @@ bool AsyncDriverJob::start(const std::string& script,
     m_startedAt = std::chrono::steady_clock::now();
     m_state.store(State::Running, std::memory_order_release);
 
-    m_worker = std::thread(&AsyncDriverJob::workerMain,
-                           this, std::move(proc),
-                           std::move(stdinContents));
+    // Stash pid + fds BEFORE move-construction so we can reap the child
+    // if std::thread construction throws (OOM on pthread_create). Without
+    // this, a throw leaves an orphaned child + leaked pipe descriptors.
+    // (AUDIT M5.)
+    const int orphanPid      = proc.pid;
+    const int orphanStdinFd  = proc.stdin_fd;
+    const int orphanStdoutFd = proc.stdout_fd;
+    try
+    {
+        m_worker = std::thread(&AsyncDriverJob::workerMain,
+                               this, std::move(proc),
+                               std::move(stdinContents));
+    }
+    catch (...)
+    {
+        if (orphanStdinFd  >= 0) ::close(orphanStdinFd);
+        if (orphanStdoutFd >= 0) ::close(orphanStdoutFd);
+        if (orphanPid > 0)
+        {
+            ::kill(static_cast<pid_t>(orphanPid), SIGKILL);
+            int status = 0;
+            ::waitpid(static_cast<pid_t>(orphanPid), &status, 0);
+        }
+        m_childPid.store(-1, std::memory_order_release);
+        m_result = {};
+        m_result.error = "worker thread construction failed";
+        m_state.store(State::Done, std::memory_order_release);
+        return true;   // surface the failure via the normal Done handoff
+    }
     return true;
 }
 
@@ -118,6 +144,15 @@ void AsyncDriverJob::workerMain(DriverProcess proc, std::string stdinContents)
     }
     ::close(proc.stdout_fd);
 
+    // AUDIT M1/M2: zero m_childPid BEFORE waitpid so cancel()/poll()
+    // can no longer read a stale pid and signal a recycled process.
+    // Linux only frees a PID on waitpid; clearing the atomic just
+    // before the reap call closes the TOCTOU window (the pid is still
+    // reserved to this zombie). pidfd_open + pidfd_send_signal would
+    // be the fully race-free fix (glibc 2.36+); this is the minimal
+    // portable narrowing until that migration lands.
+    m_childPid.store(-1, std::memory_order_release);
+
     int status = 0;
     ::waitpid(static_cast<pid_t>(proc.pid), &status, 0);
     if (WIFEXITED(status))
@@ -143,7 +178,7 @@ void AsyncDriverJob::workerMain(DriverProcess proc, std::string stdinContents)
         m_result.error = "child exited abnormally";
     }
 
-    m_childPid.store(-1, std::memory_order_release);
+    // (m_childPid was already cleared pre-waitpid, see AUDIT M1/M2 note above.)
     m_state.store(State::Done, std::memory_order_release);
 }
 

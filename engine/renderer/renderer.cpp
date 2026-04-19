@@ -114,11 +114,15 @@ Renderer::Renderer(EventBus& eventBus)
     // Default clear color (dark grey)
     glClearColor(0.1f, 0.1f, 0.12f, 1.0f);
 
-    // Subscribe to window resize events
-    m_eventBus.subscribe<WindowResizeEvent>([this](const WindowResizeEvent& event)
-    {
-        onWindowResize(event.width, event.height);
-    });
+    // Subscribe to window resize events. Store the subscription token so
+    // the dtor can tear it down — otherwise the lambda's captured ``this``
+    // becomes a dangling reference when ``~Renderer`` runs before
+    // ``~EventBus`` (engine.h declaration order). (AUDIT M9.)
+    m_windowResizeSubscription = m_eventBus.subscribe<WindowResizeEvent>(
+        [this](const WindowResizeEvent& event)
+        {
+            onWindowResize(event.width, event.height);
+        });
 
     // PMR arena initialized in-class (m_frameResource)
 
@@ -186,6 +190,15 @@ void Renderer::resetFrameAllocator()
 
 Renderer::~Renderer()
 {
+    // Drop the EventBus subscription before any GL teardown — otherwise
+    // a WindowResizeEvent published during shutdown would call a member
+    // on half-destroyed state. (AUDIT M9.)
+    if (m_windowResizeSubscription != 0)
+    {
+        m_eventBus.unsubscribe(m_windowResizeSubscription);
+        m_windowResizeSubscription = 0;
+    }
+
     if (m_ssaoNoiseTexture != 0)
     {
         glDeleteTextures(1, &m_ssaoNoiseTexture);
@@ -916,9 +929,6 @@ void Renderer::endFrame(float deltaTime)
         m_motionVectorShader.setMat4("u_currentInvViewProjection",
             glm::inverse(m_lastViewProjection));
         m_motionVectorShader.setMat4("u_prevViewProjection", m_prevViewProjection);
-        m_motionVectorShader.setVec2("u_texelSize",
-            glm::vec2(1.0f / static_cast<float>(m_windowWidth),
-                      1.0f / static_cast<float>(m_windowHeight)));
         m_screenQuad->draw();
 
         // 4a'. Per-object motion vector overlay (AUDIT.md §H15 / FIXPLAN G1).
@@ -938,7 +948,11 @@ void Renderer::endFrame(float deltaTime)
         // 2026-04-13 visual regression.
         if (m_objectMotionOverlayEnabled) {
         glEnable(GL_DEPTH_TEST);
-        glDepthFunc(GL_LESS);
+        // Reverse-Z is globally active (glClipControl ZERO_TO_ONE, clearDepth 0.0);
+        // the motion FBO's depth was cleared to 0 (= far), so GL_LESS would never
+        // pass. GL_GREATER matches the engine-wide reverse-Z convention.
+        // (Fixes the 2026-04-13 visual regression referenced above.)
+        glDepthFunc(GL_GREATER);
         glDepthMask(GL_TRUE);
 
         m_motionVectorObjectShader.use();
@@ -1434,9 +1448,19 @@ void Renderer::drawMesh(const Mesh& mesh, const glm::mat4& modelMatrix,
         activeMorphCount = std::min(activeMorphCount, Mesh::MAX_MORPH_TARGETS);
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, mesh.getMorphSSBO());
         m_sceneShader.setInt("u_morphVertexCount", mesh.getMorphVertexCount());
+        // Pre-cache the indexed uniform names so we don't build
+        // "u_morphWeights[i]" on every draw. (AUDIT H7.)
+        static const std::array<std::string, Mesh::MAX_MORPH_TARGETS> MORPH_NAMES = []{
+            std::array<std::string, Mesh::MAX_MORPH_TARGETS> a;
+            for (int i = 0; i < Mesh::MAX_MORPH_TARGETS; ++i)
+            {
+                a[static_cast<size_t>(i)] = "u_morphWeights[" + std::to_string(i) + "]";
+            }
+            return a;
+        }();
         for (int i = 0; i < activeMorphCount; ++i)
         {
-            m_sceneShader.setFloat("u_morphWeights[" + std::to_string(i) + "]",
+            m_sceneShader.setFloat(MORPH_NAMES[static_cast<size_t>(i)],
                                     morphWeights[i]);
         }
     }
@@ -2001,8 +2025,8 @@ void Renderer::captureSHGrid(const SceneRenderData& renderData,
     glm::mat4 captureProj = glm::perspective(glm::radians(90.0f), 1.0f, 0.1f, 100.0f);
 
     // Buffer to read back cubemap face data
-    std::vector<float> facePixels(faceSize * faceSize * 3);
-    std::vector<float> cubemapData(6 * faceSize * faceSize * 3);
+    std::vector<float> cubemapData(6 * static_cast<size_t>(faceSize)
+                                   * static_cast<size_t>(faceSize) * 3);
 
     // Save GL state
     GLint viewport[4];
@@ -2734,8 +2758,14 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
     // Falls back to legacy instanced/single-draw when MDI is unavailable.
     if (m_mdiEnabled && m_meshPool && m_meshPool->hasData() && m_indirectBuffer)
     {
-        // Group batches by material pointer
-        m_materialGroups.clear();
+        // Group batches by material pointer. Clear each inner vector (preserving
+        // its capacity) instead of clearing the whole map — the outer map erase
+        // would free every per-material vector's heap buffer, forcing fresh
+        // allocations on every push_back below each frame. (AUDIT H8.)
+        for (auto& [material, batchPtrs] : m_materialGroups)
+        {
+            batchPtrs.clear();
+        }
         for (size_t b = 0; b < m_instanceBatchCount; b++)
         {
             m_materialGroups[m_instanceBatches[b].material].push_back(&m_instanceBatches[b]);
@@ -3110,11 +3140,13 @@ void Renderer::renderShadowPass(const std::vector<SceneRenderData::RenderItem>& 
         // per-instance shadowMaxDistance culling keeps the count bounded.
         if (m_foliageShadowCaster && m_foliageShadowManager)
         {
-            auto visibleChunks = m_foliageShadowManager->getAllChunks();
-            if (!visibleChunks.empty())
+            // Reuse the scratch vector across cascades to avoid per-cascade
+            // heap allocation in the shadow pass hot path. (AUDIT H9.)
+            m_foliageShadowManager->getAllChunks(m_scratchFoliageChunks);
+            if (!m_scratchFoliageChunks.empty())
             {
                 m_foliageShadowCaster->renderShadow(
-                    visibleChunks, camera, lightSpaceMatrix,
+                    m_scratchFoliageChunks, camera, lightSpaceMatrix,
                     m_foliageShadowTime);
                 // Restore shadow depth shader — foliage shadow binds its own shader
                 m_shadowDepthShader.use();

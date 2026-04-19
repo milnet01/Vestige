@@ -521,12 +521,13 @@ int FoliageManager::clearAlongPath(const SplinePath& path, float margin)
     return totalRemoved;
 }
 
-std::vector<const FoliageChunk*> FoliageManager::getVisibleChunks(
-    const glm::mat4& viewProjection) const
+void FoliageManager::getVisibleChunks(
+    const glm::mat4& viewProjection,
+    std::vector<const FoliageChunk*>& out) const
 {
     FrustumPlanes planes = extractFrustumPlanes(viewProjection);
-    std::vector<const FoliageChunk*> visible;
-    visible.reserve(m_chunks.size());
+    out.clear();
+    out.reserve(m_chunks.size());
 
     for (const auto& [key, chunk] : m_chunks)
     {
@@ -537,24 +538,36 @@ std::vector<const FoliageChunk*> FoliageManager::getVisibleChunks(
 
         if (isAabbInFrustum(chunk->getBounds(), planes))
         {
-            visible.push_back(chunk.get());
+            out.push_back(chunk.get());
         }
     }
+}
 
+std::vector<const FoliageChunk*> FoliageManager::getVisibleChunks(
+    const glm::mat4& viewProjection) const
+{
+    std::vector<const FoliageChunk*> visible;
+    getVisibleChunks(viewProjection, visible);
     return visible;
+}
+
+void FoliageManager::getAllChunks(std::vector<const FoliageChunk*>& out) const
+{
+    out.clear();
+    out.reserve(m_chunks.size());
+    for (const auto& [key, chunk] : m_chunks)
+    {
+        if (!chunk->isEmpty())
+        {
+            out.push_back(chunk.get());
+        }
+    }
 }
 
 std::vector<const FoliageChunk*> FoliageManager::getAllChunks() const
 {
     std::vector<const FoliageChunk*> result;
-    result.reserve(m_chunks.size());
-    for (const auto& [key, chunk] : m_chunks)
-    {
-        if (!chunk->isEmpty())
-        {
-            result.push_back(chunk.get());
-        }
-    }
+    getAllChunks(result);
     return result;
 }
 

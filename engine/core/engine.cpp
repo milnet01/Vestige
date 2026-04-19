@@ -1012,7 +1012,9 @@ void Engine::run()
             {
                 glm::mat4 viewProj = m_camera->getProjectionMatrix(aspectRatio)
                                    * m_camera->getViewMatrix();
-                auto visibleChunks = m_foliageManager->getVisibleChunks(viewProj);
+                // Out-param form reuses m_scratchVisibleChunks' capacity. (AUDIT H9.)
+                m_foliageManager->getVisibleChunks(viewProj, m_scratchVisibleChunks);
+                auto& visibleChunks = m_scratchVisibleChunks;
                 float elapsed = static_cast<float>(m_timer->getElapsedTime());
 
                 // Sync foliage wind with global environment
