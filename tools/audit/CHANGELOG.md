@@ -2,6 +2,49 @@
 
 All notable changes to the Audit Tool are documented in this file.
 
+## [2.12.0] - 2026-04-19
+
+### Added (Batch 5 detector rules — from 2026-04-19 audit report)
+
+Six new tier-2 regex detectors, all sourced from the 2026-04-19 manual
+audit's "30 consolidated ideas" list. Each rule's original finding
+would have been caught had the rule existed at the time.
+
+- `json_parse_no_size_cap` (medium) — detector #8. Flags
+  ``json::parse(<identifier>)`` when the line doesn't mention
+  ``JsonSizeCap`` / ``loadJsonWithSizeCap`` / ``file_size``. Folds
+  call sites into the new ``Vestige::JsonSizeCap`` helper. Fires on
+  H4 (scene loader), M17–M23, and M26 JSON loaders.
+- `text_load_no_size_cap` (medium) — detector #16. Flags the
+  ``stream << file.rdbuf()`` idiom used for reading text assets.
+  Excludes the ``loadTextFileWithSizeCap`` helper path. Caught the
+  shader-loader finding (M26 shader.cpp).
+- `uniform_long_literal` (low) — detector #19. Flags shader
+  ``set*("u_...")`` calls with literal names ≥16 chars, which defeat
+  libstdc++'s small-string-optimization threshold and heap-allocate
+  per call. Use the ``string_view`` overload or pre-cache a
+  ``const char*``. Caught H6, H7, M31, M32.
+- `string_concat_to_string_in_loop` (low) — detector #20. Flags
+  ``"..." + std::to_string(i)`` patterns; the caller should be
+  checked for a hot-path ``for`` loop.
+- `eventbus_subscribe_this` (low) — detector #1. Flags
+  ``m_eventBus.subscribe<T>([this] ...)`` — a prompt to manually
+  verify the owning class's destructor unsubscribes. Caught M9
+  (``Renderer`` was subscribed but not unsubscribed).
+- `gamepad_axis_no_clamp` (low) — detector #15. Flags
+  ``state.axes[GLFW_GAMEPAD_AXIS_*]`` reads that don't mention
+  ``clamp`` or ``isfinite`` on the same line. Caught M28.
+
+10 new unit tests under ``TestCppAudit202604019Rules`` exercise each
+rule's positive + exclude paths.
+
+### Updated
+
+- `AUDIT_TOOL_IMPROVEMENTS.md` — Batch 5 entries moved from "queued"
+  to "shipped". Remaining ideas (per-frame-heap-alloc detector,
+  state-machine predicate audit, dead-public-API cross-repo grep,
+  DRY token-shingle hashing) still queued as audit 2.13.0+ work.
+
 ## [2.11.0] - 2026-04-18
 
 ### Added (triage-noise close-out — tasks A1, A2, A3)

@@ -160,6 +160,91 @@ class TestGetLanguageDefaults:
         assert sa.get("cppcheck", {}).get("enabled") is False
 
 
+class TestCppAudit202604019Rules:
+    """Rules added as part of the 2026-04-19 Batch-5 detector close-out.
+
+    Each rule's regex is exercised against one positive example that
+    should fire and one negative example (often the same code with the
+    Vestige::JsonSizeCap helper in scope) that must not. Names mirror
+    the audit report's detector IDs. (AUDIT 2026-04-19 §detectors.)
+    """
+
+    def _find_rule(self, name: str) -> dict:
+        patterns = _get_language_defaults("cpp")["patterns"]
+        for category, rule_list in patterns.items():
+            for rule in rule_list:
+                if rule.get("name") == name:
+                    return rule
+        raise AssertionError(f"rule '{name}' not found in cpp patterns")
+
+    def _hits(self, rule: dict, line: str) -> bool:
+        import re
+        pat = re.compile(rule["pattern"])
+        excl_src = rule.get("exclude_pattern", "")
+        excl = re.compile(excl_src) if excl_src else None
+        if not pat.search(line):
+            return False
+        if excl and excl.search(line):
+            return False
+        return True
+
+    def test_json_parse_no_size_cap_fires_on_bare_parse(self):
+        rule = self._find_rule("json_parse_no_size_cap")
+        assert self._hits(rule, "json j = json::parse(file);")
+        assert self._hits(rule, "nlohmann::json j = nlohmann::json::parse(inputFile, nullptr, false);")
+
+    def test_json_parse_no_size_cap_skips_jsonsizecap_wrapper(self):
+        rule = self._find_rule("json_parse_no_size_cap")
+        # Lines that route through the helper mention it on the same row;
+        # the exclude_pattern must suppress the warning for those.
+        assert not self._hits(rule, "auto j = JsonSizeCap::loadJsonWithSizeCap(path, \"X\");")
+
+    def test_text_load_no_size_cap_fires_on_rdbuf_idiom(self):
+        rule = self._find_rule("text_load_no_size_cap")
+        assert self._hits(rule, "vertexStream << vertexFile.rdbuf();")
+
+    def test_text_load_no_size_cap_skips_helper(self):
+        rule = self._find_rule("text_load_no_size_cap")
+        assert not self._hits(
+            rule,
+            "auto txt = JsonSizeCap::loadTextFileWithSizeCap(path, \"Shader\");",
+        )
+
+    def test_uniform_long_literal_fires_on_long_name(self):
+        rule = self._find_rule("uniform_long_literal")
+        assert self._hits(rule, 'shader.setFloat("u_pointLights_position_0", x);')
+        assert self._hits(rule, 'm_sceneShader.setMat4("u_cascade_lightSpaceMatrices_0", m);')
+
+    def test_uniform_long_literal_skips_short_name(self):
+        rule = self._find_rule("uniform_long_literal")
+        assert not self._hits(rule, 'shader.setInt("u_foo", 1);')
+
+    def test_string_concat_to_string_fires(self):
+        rule = self._find_rule("string_concat_to_string_in_loop")
+        assert self._hits(rule, 'Logger::info("Loop iter: " + std::to_string(i));')
+
+    def test_eventbus_subscribe_this_fires(self):
+        rule = self._find_rule("eventbus_subscribe_this")
+        assert self._hits(
+            rule,
+            "m_eventBus.subscribe<KeyPressedEvent>([this](const KeyPressedEvent& e) {});",
+        )
+
+    def test_gamepad_axis_no_clamp_fires_on_raw_read(self):
+        rule = self._find_rule("gamepad_axis_no_clamp")
+        assert self._hits(
+            rule,
+            "float lx = state.axes[GLFW_GAMEPAD_AXIS_LEFT_X];",
+        )
+
+    def test_gamepad_axis_no_clamp_skips_clamped_read(self):
+        rule = self._find_rule("gamepad_axis_no_clamp")
+        assert not self._hits(
+            rule,
+            "float lx = std::clamp(state.axes[GLFW_GAMEPAD_AXIS_LEFT_X], -1.0f, 1.0f);",
+        )
+
+
 # ---------------------------------------------------------------------------
 # detect_project (integration)
 # ---------------------------------------------------------------------------

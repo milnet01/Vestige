@@ -305,6 +305,34 @@ def _cpp_patterns() -> dict:
              "file_glob": "*.cpp", "severity": "high",
              "description": "Loading untrusted code — verify sandbox (CWE-502)",
              "skip_comments": True},
+            # AUDIT 2026-04-19 §detector-8: json::parse(file) with no nearby
+            # file_size / MAX_* cap is unbounded — an adversarial JSON blob
+            # drives multi-GB allocation. Fold into loadJsonWithSizeCap.
+            # Exclude the helper itself and sites that already hand off to
+            # it (they contain `loadJsonWithSizeCap` or `file_size` nearby,
+            # but that's a cross-line check; use exclude_pattern to skip
+            # the most obvious-by-line-token FP).
+            {"name": "json_parse_no_size_cap",
+             "pattern": "(?:nlohmann::)?json::parse\\s*\\(\\s*"
+                        "[a-zA-Z_][a-zA-Z0-9_]*\\s*[,\\)]",
+             "file_glob": "*.cpp", "severity": "medium",
+             "description": "json::parse(identifier) — verify file-size cap "
+                            "via Vestige::JsonSizeCap or equivalent "
+                            "(AUDIT H4/M17-M26, CWE-400)",
+             "exclude_pattern": "JsonSizeCap|loadJsonWithSizeCap|file_size",
+             "skip_comments": True},
+            # AUDIT 2026-04-19 §detector-16: shader / text-asset load via
+            # `stream << rdbuf()` with no size cap. Mirrors the gltf/obj
+            # loader pattern; 10GB GLSL file would otherwise be slurped
+            # into memory.
+            {"name": "text_load_no_size_cap",
+             "pattern": "<<\\s*\\w+File\\.rdbuf\\s*\\(\\s*\\)",
+             "file_glob": "*.cpp", "severity": "medium",
+             "description": "Stream read via rdbuf() — add file-size cap "
+                            "(AUDIT M26, CWE-400). Use Vestige::JsonSizeCap::"
+                            "loadTextFileWithSizeCap.",
+             "exclude_pattern": "JsonSizeCap|loadTextFileWithSizeCap",
+             "skip_comments": True},
             {"name": "predictable_temp",
              "pattern": "(?:/tmp/|/var/tmp/).*\\+|tmpnam\\(|tempnam\\(|mktemp\\(",
              "file_glob": "*.cpp", "severity": "medium",
@@ -353,6 +381,29 @@ def _cpp_patterns() -> dict:
         "performance": [
             {"name": "std_endl", "pattern": "std::endl", "file_glob": "*.cpp,*.h",
              "severity": "low", "description": "std::endl flushes stream — use '\\n'"},
+            # AUDIT 2026-04-19 §detector-19: shader setter with a string
+            # literal long enough to defeat libstdc++'s SSO (≥16 chars).
+            # Each call heap-allocates a std::string temporary — hundreds
+            # of allocs per frame when called inside the render loop. The
+            # Shader class now has string_view overloads; use those.
+            {"name": "uniform_long_literal",
+             "pattern": "\\.set(?:Bool|Int|Float|Vec[234]|Mat[234])"
+                        "\\s*\\(\\s*\"[A-Za-z_][A-Za-z0-9_\\[\\]\\.]{15,}\"",
+             "file_glob": "*.cpp", "severity": "low",
+             "description": "Long uniform name literal defeats SSO — use "
+                            "string_view overload or pre-cache as const char* "
+                            "(AUDIT H6/H7/M31/M32)",
+             "skip_comments": True},
+            # AUDIT 2026-04-19 §detector-20: `"..." + std::to_string(i)` or
+            # `std::to_string(i) + "..."` inside a function-body `for` loop
+            # allocates a new temporary std::string each iteration. Ofttimes
+            # the right fix is a pre-cached `names[i]` array.
+            {"name": "string_concat_to_string_in_loop",
+             "pattern": "\"[^\"]*\"\\s*\\+\\s*std::to_string\\s*\\(",
+             "file_glob": "*.cpp", "severity": "low",
+             "description": "String + std::to_string — check caller for hot-path "
+                            "loop; pre-cache names array if so (AUDIT H7, M31, M32)",
+             "skip_comments": True},
             {"name": "shared_ptr", "pattern": "std::shared_ptr", "file_glob": "*.cpp,*.h",
              "severity": "low", "description": "shared_ptr — verify unique_ptr not sufficient"},
             {"name": "pass_string_by_value",
@@ -379,6 +430,28 @@ def _cpp_patterns() -> dict:
             {"name": "empty_catch", "pattern": "catch\\s*\\([^)]*\\)\\s*\\{\\s*\\}",
              "file_glob": "*.cpp,*.h", "severity": "medium",
              "description": "Empty catch block — silently swallowed error (CWE-390)"},
+            # AUDIT 2026-04-19 §detector-1: EventBus subscribe with [this]
+            # capture. The subscription outlives a destroyed subscriber
+            # unless the dtor calls unsubscribe on the same bus. Any hit
+            # here is a prompt to check the class dtor manually.
+            {"name": "eventbus_subscribe_this",
+             "pattern": "(?:EventBus|eventBus|m_eventBus|m_eventbus)"
+                        "\\s*[.>-]+\\s*subscribe\\s*<[^>]+>\\s*\\(\\s*\\[\\s*this",
+             "file_glob": "*.cpp", "severity": "low",
+             "description": "EventBus::subscribe captures [this] — verify "
+                            "matching unsubscribe in the class destructor "
+                            "(AUDIT M9)",
+             "skip_comments": True},
+            # AUDIT 2026-04-19 §detector-15: gamepad axis read without
+            # clamping / isfinite. A bad HID or driver bug lets NaN flow
+            # through rotate()/translate() and pollute the camera.
+            {"name": "gamepad_axis_no_clamp",
+             "pattern": "\\.axes\\s*\\[\\s*GLFW_GAMEPAD_AXIS_",
+             "file_glob": "*.cpp", "severity": "low",
+             "description": "Gamepad axis read — verify std::clamp + isfinite "
+                            "on the value (AUDIT M28)",
+             "exclude_pattern": "clamp|isfinite",
+             "skip_comments": True},
         ],
         "secrets": [
             {"name": "hardcoded_password",
