@@ -12,6 +12,9 @@
       "Bash(make -C *)",
       "Bash(cppcheck *)",
       "Bash(clang-tidy *)",
+      "Bash(gitleaks detect *)",
+      "Bash(semgrep --config *)",
+      "Bash(clang-include-cleaner --disable-insert *)",
       "mcp__filesystem__read_text_file",
       "mcp__filesystem__list_directory",
       "mcp__filesystem__directory_tree",
@@ -20,6 +23,19 @@
     ]
   },
   "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash /mnt/Storage/Scripts/Linux/3D_Engine/tools/hook-pretool-bash-frugal.sh",
+            "statusMessage": "Checking command output cap…",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "Edit|Write",
