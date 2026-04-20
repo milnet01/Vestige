@@ -38,14 +38,14 @@ static int findKeyframe(const std::vector<float>& timestamps, float time)
 /// @brief Computes the interpolation factor between two keyframes.
 static float computeT(const std::vector<float>& timestamps, int index, float time)
 {
-    float t0 = timestamps[static_cast<size_t>(index)];
-    float t1 = timestamps[static_cast<size_t>(index) + 1];
-    float duration = t1 - t0;
-    if (duration <= 0.0f)
+    float startTime = timestamps[static_cast<size_t>(index)];
+    float endTime   = timestamps[static_cast<size_t>(index) + 1];
+    float duration  = endTime - startTime;
+    if (duration <= 0.0F)
     {
-        return 0.0f;
+        return 0.0F;
     }
-    return std::clamp((time - t0) / duration, 0.0f, 1.0f);
+    return std::clamp((time - startTime) / duration, 0.0F, 1.0F);
 }
 
 /// @brief Reads a vec3 from a flat float array at the given keyframe index.
