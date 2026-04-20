@@ -9,6 +9,16 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-20 Phase 9E-4 — gameplay templates menu in ScriptEditorPanel
+
+Wires the 5 shipped gameplay templates into the Script Editor menu bar
+so they're one click away from the canvas rather than buried behind a
+C++ call. New `Templates` menu (between `File` and `View`) lists
+Door Opens / Collectible Item / Damage Zone / Checkpoint /
+Dialogue Trigger; hovering each item shows its one-line description,
+clicking replaces the current graph with the template (sets `m_dirty`
+and clears `m_currentPath` so the next save prompts for a path).
+
 ### 2026-04-20 Phase 9E-4 — pre-built gameplay script templates
 
 Designer-side starter graphs for the five gameplay patterns called out

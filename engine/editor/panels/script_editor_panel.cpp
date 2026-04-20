@@ -7,6 +7,7 @@
 
 #include "core/logger.h"
 #include "scripting/node_type_registry.h"
+#include "scripting/script_templates.h"
 
 #include <imgui.h>
 
@@ -128,6 +129,37 @@ void ScriptEditorPanel::drawMenuBar()
         if (ImGui::MenuItem("Save As…", "Ctrl+Shift+S"))
         {
             m_saveBrowser.Open();
+        }
+        ImGui::EndMenu();
+    }
+
+    if (ImGui::BeginMenu("Templates"))
+    {
+        // Phase 9E-4 starter graphs — clicking replaces the current graph
+        // with the selected template so designers can iterate rather than
+        // wiring common patterns from scratch. Lives under "Templates" (not
+        // nested under File) to keep the flow visible one click away.
+        const GameplayTemplate templates[] = {
+            GameplayTemplate::DOOR_OPENS,
+            GameplayTemplate::COLLECTIBLE_ITEM,
+            GameplayTemplate::DAMAGE_ZONE,
+            GameplayTemplate::CHECKPOINT,
+            GameplayTemplate::DIALOGUE_TRIGGER,
+        };
+        for (auto t : templates)
+        {
+            const char* name = gameplayTemplateDisplayName(t);
+            const char* tooltip = gameplayTemplateDescription(t);
+            if (ImGui::MenuItem(name))
+            {
+                m_graph = buildGameplayTemplate(t);
+                m_currentPath.clear();
+                m_dirty = true;
+            }
+            if (tooltip[0] != '\0' && ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("%s", tooltip);
+            }
         }
         ImGui::EndMenu();
     }
