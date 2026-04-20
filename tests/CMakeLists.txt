@@ -99,6 +99,7 @@ add_executable(vestige_tests
     test_ui_widgets.cpp
     test_ui_system_input.cpp
     test_ui_world_projection.cpp
+    test_ui_design_widgets.cpp
     test_node_graph.cpp
     test_scripting.cpp
     # FormulaWorkbench tool-side unit tests. The .cpp lives under

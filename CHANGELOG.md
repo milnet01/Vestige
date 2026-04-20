@@ -9,6 +9,72 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-20 Phase 9C UI batch 3 — Claude Design Vellum theme + interactive widget set
+
+Translates the `vestige-ui-hud-inworld` Claude Design hand-off into
+native engine widgets. Two visual registers (Vellum primary,
+Plumbline alternative) and the full interactive widget family
+needed for the menu prefabs.
+
+**`UITheme` widening** — palette now matches the design's Vellum
+register: warm bone text on deep walnut-ink, burnished-brass accent.
+New fields: `bgBase`, `bgRaised`, `panelStroke`, `panelStrokeStrong`,
+`rule`, `ruleStrong`, `accentInk` (text drawn on accent fills).
+Component sizing tokens added (`buttonHeight`, `sliderTrackHeight`,
+`checkboxSize`, `dropdownHeight`, `keybindKeyMinWidth`, etc.) +
+type sizes (display 88, H1 42, body 18, caption 14, etc.) + font
+family logical names (`fontDisplay = "Cormorant Garamond"`,
+`fontUI = "Inter Tight"`, `fontMono = "JetBrains Mono"` —
+asset-side font swap is a follow-up; the engine still renders Arimo
+until the OFL fonts ship). `UITheme::plumbline()` static returns the
+alternative register with cooler near-black backgrounds and the same
+component sizing.
+
+**Five new widgets:**
+- `UIButton` — `.btn` family. Variants: `DEFAULT`, `PRIMARY`, `GHOST`,
+  `DANGER`. State enum (`NORMAL`/`HOVERED`/`PRESSED`/`DISABLED`)
+  drives colour selection. Hover renders a 4 px brass tick on the
+  left edge for `DEFAULT`/`DANGER` (matches the design's `.btn::before`).
+  Optional `UIButtonShortcut` renders a key-cap on the right edge.
+  `small` flag toggles `.btn--sm` height.
+- `UISlider` — track + accent fill + 16×16 thumb with 2 px accent
+  ring + right-aligned mono value readout. Optional formatter
+  callback (defaults to `"N %"`). Optional tick marks across the
+  track. `ratio()` accessor exposes the clamped fill fraction.
+- `UICheckbox` — 20×20 box; accent-filled with a checkmark drawn in
+  `accentInk` when checked, 1.5 px stroked when unchecked. Hover
+  brightens the stroke. Inline label drawn 12 px to the right.
+- `UIDropdown` — 40 px tall, mono caret indicator, hover/open states
+  brighten the border. Open state draws a popup menu with the option
+  list (selected option in accent). `currentLabel()` returns the
+  display string for the active option.
+- `UIKeybindRow` — label / key-cap / CLEAR layout. Listening state
+  renders "PRESS KEY..." in accent on accent-bordered key-cap.
+
+Stylistic decisions echo the design verbatim: the accent tick on the
+left edge of menu buttons, dropdown caret as an ASCII arrow until
+the engine font ships arrow glyphs, key-cap as a bordered mono
+fragment, hover-brightened panel-stroke language across all widgets.
+
+**Tests:** 13 new (`UIThemeRegisters.*` covering Vellum warm-bone
+text invariant, Plumbline darker-background invariant, accent /
+accentInk luma contrast, and shared component sizing across both
+registers; `UIButton.*` covering defaults, small-flag height,
+without-theme safety; `UISlider.*` for ratio clamping + degenerate
+range; `UICheckbox.*` defaults; `UIDropdown.*` `currentLabel()`
+out-of-range handling + closed defaults; `UIKeybindRow.*` defaults).
+Plus one `UITheme.AccentDimIsDarkerShadeOfAccent` rewrite — old test
+asserted dim was translucent (my earlier batch-1 interpretation);
+new design uses dim as a darker opaque shade for pressed states, so
+the assertion now compares luma instead of alpha. Suite: 1980/1980
+passing.
+
+**Still pending in Phase 9C UI/HUD (in-flight):** menu prefab
+factories (Main / Pause / Settings) — widgets are in place; next
+commit composes them into the three menu canvases per the design's
+React layouts. Editor visual UI layout editor remains a separate
+larger initiative.
+
 ### 2026-04-20 Phase 9C UI batch 2 — in-world UI
 
 Ticks the 4th of 6 remaining Phase 9C UI/HUD sub-items. Two new

@@ -33,12 +33,18 @@ TEST(UITheme, DefaultsAreInValidRanges)
     EXPECT_GT(t.defaultTextScale, 0.0f);
 }
 
-TEST(UITheme, AccentDimIsPartiallyTransparent)
+TEST(UITheme, AccentDimIsDarkerShadeOfAccent)
 {
-    // Sanity-check the accent / accent-dim relationship — dim should share
-    // hue but be more transparent so layered focus rings work as expected.
+    // Per the Claude Design Vellum register, accentDim is the darker
+    // burnished-brass shade used for pressed states (#8A6A2A vs the bright
+    // #C89A3E accent), not a translucent overlay. Both are fully opaque;
+    // dim is darker in luminance.
     UITheme t = UITheme::defaultTheme();
-    EXPECT_LT(t.accentDim.a, t.accent.a);
+    EXPECT_FLOAT_EQ(t.accentDim.a, 1.0f);
+    EXPECT_FLOAT_EQ(t.accent.a,    1.0f);
+    const float accentLuma = 0.299f * t.accent.r + 0.587f * t.accent.g + 0.114f * t.accent.b;
+    const float dimLuma    = 0.299f * t.accentDim.r + 0.587f * t.accentDim.g + 0.114f * t.accentDim.b;
+    EXPECT_LT(dimLuma, accentLuma);
 }
 
 // -- UIProgressBar --

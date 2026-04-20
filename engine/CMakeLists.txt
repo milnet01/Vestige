@@ -219,6 +219,12 @@ set(ENGINE_SOURCES
     ui/ui_world_projection.cpp
     ui/ui_world_label.cpp
     ui/ui_interaction_prompt.cpp
+    ui/ui_theme.cpp
+    ui/ui_button.cpp
+    ui/ui_slider.cpp
+    ui/ui_checkbox.cpp
+    ui/ui_dropdown.cpp
+    ui/ui_keybind_row.cpp
     systems/ui_system.cpp
     # Navigation system
     navigation/nav_mesh_builder.cpp
