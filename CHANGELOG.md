@@ -9,6 +9,47 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-20 Phase 9C UI batch 4 — menu prefabs (Main / Pause / Settings)
+
+Composes the Phase 9C widget set into the three menu canvases per
+the `vestige-ui-hud-inworld` Claude Design layouts.
+
+New module `engine/ui/menu_prefabs.{h,cpp}` with three factory
+functions, each taking a fresh `UICanvas` + theme + text renderer
+and populating the canvas with positioned widgets:
+
+- `buildMainMenu` — top chrome rule, "VESTIGE" wordmark + 5-item
+  button list (New Walkthrough / Continue / Templates / Settings /
+  Quit) on the left, continue card on the right, footer with
+  keyboard shortcut hints. Quit uses `UIButtonStyle::DANGER`.
+- `buildPauseMenu` — tinted scrim, centred 720×760 modal panel with
+  4 corner brackets in accent (drawn as 8 thin strips), "PAUSED"
+  caption + "The walk is held." headline, 7 buttons (Resume primary,
+  Quit-to-Desktop danger, others default), footer line with autosave
+  + slot info.
+- `buildSettingsMenu` — full-bleed modal (inset 120/80 px), header
+  with title + ESC close ghost button, header rule, 300-px-wide
+  sidebar with 5 categories (first one accent-highlighted), vertical
+  rule separating sidebar from content area, footer with dirty
+  indicator + Restore Defaults / Revert / Apply buttons.
+
+**Settings is chrome-only by design.** Per-category controls are
+per-game integration — the engine can't know which settings any
+given game project exposes. The chrome guarantees every game's
+settings menu shares the same framing + footer language.
+
+Builders are safe to call without a `TextRenderer*` (the nullptr
+passes through to text elements which skip the draw call). This
+lets game projects construct prefabs at startup before the renderer
+is wired.
+
+Tests: 6 new (`MenuPrefabs.*` covering element-count bounds for each
+prefab, Plumbline-register parity, double-build duplication,
+nullptr-safety). Suite: 1986/1986 passing.
+
+**Phase 9C UI/HUD: 5 of 6 done.** Only the editor visual UI layout
+editor remains as a separate larger initiative.
+
 ### 2026-04-20 Phase 9C UI batch 3 — Claude Design Vellum theme + interactive widget set
 
 Translates the `vestige-ui-hud-inworld` Claude Design hand-off into

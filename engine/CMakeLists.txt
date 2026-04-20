@@ -225,6 +225,7 @@ set(ENGINE_SOURCES
     ui/ui_checkbox.cpp
     ui/ui_dropdown.cpp
     ui/ui_keybind_row.cpp
+    ui/menu_prefabs.cpp
     systems/ui_system.cpp
     # Navigation system
     navigation/nav_mesh_builder.cpp
