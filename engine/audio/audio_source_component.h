@@ -5,6 +5,7 @@
 /// @brief Entity component for 3D positioned audio sources.
 #pragma once
 
+#include "audio/audio_attenuation.h"
 #include "scene/component.h"
 
 #include <string>
@@ -30,11 +31,25 @@ public:
     /// @brief Pitch multiplier (1.0 = normal).
     float pitch = 1.0f;
 
-    /// @brief Distance at which attenuation begins (meters).
+    /// @brief Distance at which attenuation begins (meters). Maps to
+    ///        `AttenuationParams::referenceDistance` for OpenAL.
     float minDistance = 1.0f;
 
-    /// @brief Distance at which sound is inaudible (meters).
+    /// @brief Distance at which sound is inaudible (meters). Maps to
+    ///        `AttenuationParams::maxDistance` for OpenAL.
     float maxDistance = 50.0f;
+
+    /// @brief Steepness of the attenuation curve. 1.0 matches the
+    ///        canonical form of `attenuationModel`; 2.0 produces a
+    ///        sharper falloff; 0.0 flattens the curve entirely.
+    float rolloffFactor = 1.0f;
+
+    /// @brief Distance-attenuation curve this source follows.
+    ///
+    /// Defaults to `InverseDistance` to match the engine-wide Phase
+    /// 9C behaviour, so existing scenes sound identical until they
+    /// explicitly opt into a different curve.
+    AttenuationModel attenuationModel = AttenuationModel::InverseDistance;
 
     /// @brief Whether the sound loops.
     bool loop = false;

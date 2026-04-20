@@ -62,8 +62,10 @@ bool AudioEngine::initialize()
         m_sourceInUse.clear();
     }
 
-    // Set default distance model
-    alDistanceModel(AL_INVERSE_DISTANCE_CLAMPED);
+    // Set default distance model. Keep in sync with m_distanceModel so
+    // setDistanceModel() + getDistanceModel() report truth even if the
+    // caller never explicitly set it.
+    alDistanceModel(static_cast<ALenum>(alDistanceModelFor(m_distanceModel)));
 
     m_available = true;
     Logger::info("[AudioEngine] Initialized (" +
@@ -252,7 +254,33 @@ void AudioEngine::playSound(const std::string& filePath, const glm::vec3& positi
     alSourcei(source, AL_LOOPING, loop ? AL_TRUE : AL_FALSE);
     alSourcef(source, AL_REFERENCE_DISTANCE, 1.0f);
     alSourcef(source, AL_MAX_DISTANCE, 50.0f);
+    alSourcef(source, AL_ROLLOFF_FACTOR, 1.0f);
     alSourcei(source, AL_SOURCE_RELATIVE, AL_FALSE);  // 3D positioned
+    alSourcePlay(source);
+}
+
+void AudioEngine::playSoundSpatial(const std::string& filePath,
+                                   const glm::vec3& position,
+                                   const AttenuationParams& params,
+                                   float volume,
+                                   bool loop)
+{
+    if (!m_available) return;
+
+    ALuint buffer = loadBuffer(filePath);
+    if (buffer == 0) return;
+
+    ALuint source = acquireSource();
+    if (source == 0) return;
+
+    alSourcei(source, AL_BUFFER, static_cast<ALint>(buffer));
+    alSource3f(source, AL_POSITION, position.x, position.y, position.z);
+    alSourcef(source, AL_GAIN, volume);
+    alSourcei(source, AL_LOOPING, loop ? AL_TRUE : AL_FALSE);
+    alSourcef(source, AL_REFERENCE_DISTANCE, params.referenceDistance);
+    alSourcef(source, AL_MAX_DISTANCE,       params.maxDistance);
+    alSourcef(source, AL_ROLLOFF_FACTOR,     params.rolloffFactor);
+    alSourcei(source, AL_SOURCE_RELATIVE, AL_FALSE);
     alSourcePlay(source);
 }
 
@@ -281,6 +309,15 @@ void AudioEngine::playSound2D(const std::string& filePath, float volume)
     alSourcei(source, AL_LOOPING, AL_FALSE);
     alSourcei(source, AL_SOURCE_RELATIVE, AL_TRUE);  // Relative to listener (2D)
     alSourcePlay(source);
+}
+
+void AudioEngine::setDistanceModel(AttenuationModel model)
+{
+    m_distanceModel = model;
+    if (m_available)
+    {
+        alDistanceModel(static_cast<ALenum>(alDistanceModelFor(model)));
+    }
 }
 
 void AudioEngine::stopAll()

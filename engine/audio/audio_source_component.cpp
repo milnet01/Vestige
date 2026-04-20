@@ -11,14 +11,16 @@ namespace Vestige
 std::unique_ptr<Component> AudioSourceComponent::clone() const
 {
     auto copy = std::make_unique<AudioSourceComponent>();
-    copy->clipPath = clipPath;
-    copy->volume = volume;
-    copy->pitch = pitch;
-    copy->minDistance = minDistance;
-    copy->maxDistance = maxDistance;
-    copy->loop = loop;
-    copy->autoPlay = autoPlay;
-    copy->spatial = spatial;
+    copy->clipPath          = clipPath;
+    copy->volume            = volume;
+    copy->pitch             = pitch;
+    copy->minDistance       = minDistance;
+    copy->maxDistance       = maxDistance;
+    copy->rolloffFactor     = rolloffFactor;
+    copy->attenuationModel  = attenuationModel;
+    copy->loop              = loop;
+    copy->autoPlay          = autoPlay;
+    copy->spatial           = spatial;
     return copy;
 }
 

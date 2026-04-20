@@ -107,6 +107,7 @@ add_executable(vestige_tests
     test_ui_accessible.cpp
     test_input_bindings.cpp
     test_post_process_accessibility.cpp
+    test_audio_attenuation.cpp
     test_menu_prefabs.cpp
     test_ui_layout_panel.cpp
     test_node_graph.cpp

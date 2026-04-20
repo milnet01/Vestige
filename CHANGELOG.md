@@ -9,6 +9,52 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-20 Phase 10 audio — Distance attenuation curves
+
+First Phase 10 audio slice. Adds selectable distance-attenuation
+curves for spatial sources, replacing the previous single-curve
+(inverse-distance-clamped, hard-coded refDist=1 / maxDist=50)
+behaviour with three canonical curves + a pass-through.
+
+- `engine/audio/audio_attenuation.{h,cpp}` — new `AttenuationModel`
+  enum (`None` / `Linear` / `InverseDistance` / `Exponential`) +
+  `AttenuationParams` (referenceDistance / maxDistance /
+  rolloffFactor). Pure-function `computeAttenuation(model, params,
+  distance)` reproduces OpenAL's math for CPU-side uses (priority
+  sorting, virtual-voice culling, editor preview).
+- `alDistanceModelFor(model)` maps each model to the matching
+  `AL_*_DISTANCE_CLAMPED` constant, returned as `int` so the header
+  doesn't pull in `<AL/al.h>`.
+- `AudioEngine::setDistanceModel(model)` swaps the engine-wide
+  curve (defaults to `InverseDistance`, matching the Phase 9C
+  behaviour — adoption is non-breaking).
+- `AudioEngine::playSoundSpatial(path, position, params, volume,
+  loop)` — new overload accepting `AttenuationParams`. Sets
+  `AL_REFERENCE_DISTANCE`, `AL_MAX_DISTANCE`, `AL_ROLLOFF_FACTOR`
+  per-source. The legacy `playSound` overload still ships its
+  previous hard-coded values.
+- `AudioSourceComponent` — new `attenuationModel` + `rolloffFactor`
+  fields; `clone` carries them. Defaults match engine-wide defaults.
+- `tests/test_audio_attenuation.cpp` — 15 new tests: model labels;
+  model → AL-constant mapping; unity-gain-below-reference invariant
+  across every curve; `None` pass-through at any distance; linear
+  hits zero at max-distance, halfway point is half gain, clamps
+  past max; inverse-distance matches classic formula at d=2 and
+  d=5, monotonic falloff, clamps at max; exponential matches power
+  formula including inverse-square at rolloff=2; flat at rolloff=0;
+  clamps at max; negative-distance safety; zero-span linear safety;
+  rolloff=0 flattens inverse-distance.
+
+*Rule 11 note*: These are textbook canonical forms (OpenAL 1.1 spec
+§3.4). They have no coefficients to fit against reference data, so
+the Formula Workbench rule — use workbench for numerical design —
+doesn't apply here. Each formula is documented inline with its
+spec-section reference.
+
+Follow-ups within the *"Spatial audio"* parent bullet: HRTF support
+(OpenAL Soft ALC_HRTF_SOFT extension) and Doppler effect
+(`alDopplerFactor` + per-source velocity).
+
 ### 2026-04-20 Phase 10 — DoF + motion-blur accessibility toggles
 
 Final Phase 10 accessibility slice. Closes the last two accessibility

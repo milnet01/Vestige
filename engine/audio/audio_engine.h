@@ -5,6 +5,7 @@
 /// @brief OpenAL wrapper for device management, source pooling, and listener control.
 #pragma once
 
+#include "audio/audio_attenuation.h"
 #include "audio/audio_clip.h"
 
 #include <glm/glm.hpp>
@@ -73,10 +74,32 @@ public:
     void playSound(const std::string& filePath, const glm::vec3& position,
                    float volume = 1.0f, bool loop = false);
 
+    /// @brief Plays a spatial sound with explicit attenuation parameters.
+    ///
+    /// The engine-wide distance model (`setDistanceModel`) determines
+    /// which curve OpenAL evaluates; per-source `referenceDistance`
+    /// / `maxDistance` / `rolloffFactor` tune that curve.
+    void playSoundSpatial(const std::string& filePath,
+                          const glm::vec3& position,
+                          const AttenuationParams& params,
+                          float volume = 1.0f,
+                          bool loop = false);
+
     /// @brief Plays a non-spatial (2D) sound (fire-and-forget).
     /// @param filePath Path to the audio file.
     /// @param volume Volume (0.0 to 1.0).
     void playSound2D(const std::string& filePath, float volume = 1.0f);
+
+    /// @brief Sets the engine-wide distance-attenuation model.
+    ///
+    /// Every playing source follows this curve; per-source
+    /// `AttenuationParams` tune it. Defaults to `InverseDistance`
+    /// (matches OpenAL's own default + the engine's Phase 9C
+    /// behaviour, so adopting this API is non-breaking).
+    void setDistanceModel(AttenuationModel model);
+
+    /// @brief Returns the engine-wide distance-attenuation model.
+    AttenuationModel getDistanceModel() const { return m_distanceModel; }
 
     /// @brief Stops all playing sources.
     void stopAll();
@@ -88,6 +111,7 @@ private:
     ALCdevice* m_device = nullptr;
     ALCcontext* m_context = nullptr;
     bool m_available = false;
+    AttenuationModel m_distanceModel = AttenuationModel::InverseDistance;
 
     // Source pool. Using uint8_t rather than bool because std::vector<bool>
     // is a specialized proxy-reference container (not a true std::vector)

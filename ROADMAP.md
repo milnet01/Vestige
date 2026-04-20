@@ -914,9 +914,9 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
   - One-shot playback for sound effects (pre-loaded, low latency)
   - Audio source component — attach to any entity for 3D positioned sound
 - [ ] Spatial audio (3D positioned sound sources — crackling torch, splashing water)
-  - Distance attenuation curves (linear, logarithmic, custom)
-  - HRTF support for headphones (head-related transfer function for accurate 3D positioning)
-  - Doppler effect for fast-moving sources
+  - [x] Distance attenuation curves (linear, logarithmic, custom) — `AttenuationModel` enum (`None` / `Linear` / `InverseDistance` / `Exponential`) + `AttenuationParams` (referenceDistance / maxDistance / rolloffFactor) + pure-function `computeAttenuation(model, params, distance)` in `engine/audio/audio_attenuation.{h,cpp}`. Each model matches an OpenAL `AL_*_DISTANCE_CLAMPED` constant via `alDistanceModelFor(model)`. `AudioEngine::setDistanceModel` swaps the engine-wide curve; `AudioEngine::playSoundSpatial(path, position, params, volume, loop)` accepts per-source attenuation; `AudioSourceComponent` carries `attenuationModel` + `rolloffFactor`. Canonical forms, no magic constants — Formula Workbench rule doesn't apply (no coefficients to fit). 15 new unit tests.
+  - [ ] HRTF support for headphones (head-related transfer function for accurate 3D positioning)
+  - [ ] Doppler effect for fast-moving sources
 - [ ] Audio occlusion and obstruction
   - Raycast-based occlusion (sound muffled through walls — check line-of-sight to source)
   - Material-based transmission (wood muffles less than stone; metal reflects)

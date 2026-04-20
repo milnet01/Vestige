@@ -225,6 +225,7 @@ set(ENGINE_SOURCES
     audio/audio_engine.cpp
     audio/audio_clip.cpp
     audio/audio_source_component.cpp
+    audio/audio_attenuation.cpp
     systems/audio_system.cpp
     # UI/HUD system
     ui/sprite_batch_renderer.cpp
