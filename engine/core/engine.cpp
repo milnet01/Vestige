@@ -96,7 +96,7 @@ bool Engine::initialize(const EngineConfig& config)
     m_renderer->initFramebuffers(m_window->getWidth(), m_window->getHeight(), 4);
 
     // Initialize text rendering (optional — continues without it)
-    if (!m_renderer->initTextRenderer(config.assetPath + "/fonts/default.ttf", config.assetPath))
+    if (!m_renderer->initTextRenderer(config.assetPath + "/fonts/inter_tight.ttf", config.assetPath))
     {
         Logger::warning("Text rendering unavailable (font not found)");
     }

@@ -1,22 +1,73 @@
-This file accompanies `default.ttf`, which is the Arimo font, redistributed
-under the SIL Open Font License, Version 1.1.
+Vestige 3D Engine — bundled fonts (SIL Open Font License 1.1)
+==============================================================
 
+This file accompanies the four font files shipped under
+`assets/fonts/`. Each font is a separate work, redistributed under
+the SIL Open Font License Version 1.1 (OFL). The OFL body text appears
+once at the bottom; per-font copyright headers (and any Reserved Font
+Name conditions) are listed individually so each font's attribution is
+clear.
+
+Reserved Font Names protected by clause 3 of the OFL:
+  - "Arimo"               — Steve Matteson / Google / Red Hat
+  - "Inter Tight"         — The Inter Project Authors
+  - "Cormorant Garamond"  — The Cormorant Project Authors / Catharsis Fonts
+  - "JetBrains Mono"      — The JetBrains Mono Project Authors
+
+Engine-modified or derivative versions MUST NOT use the names above.
+Distributing the engine's `assets/fonts/*.ttf` files unmodified preserves
+the original Reserved Font Names; that is the supported configuration.
+
+------------------------------------------------------------------
+arimo.ttf — Arimo
+------------------------------------------------------------------
 Digitized data copyright (c) 2010 Google Corporation.
 Copyright (c) 2012 Red Hat, Inc., with Reserved Font Name "Arimo".
 
-Arimo was designed by Steve Matteson as a sans-serif font metrically
-compatible with Arial, suitable for documents and on-screen reading.
+Bundled for backwards-compatibility with Vestige < 0.6.2 — the engine
+loaded `default.ttf` (Arimo) as the sole UI font. Inter Tight is now
+the canonical UI font; Arimo is kept as a fallback.
 
 Source: https://fonts.google.com/specimen/Arimo
 
-This Font Software is licensed under the SIL Open Font License, Version 1.1.
-This license is copied below, and is also available with a FAQ at:
-https://openfontlicense.org
+------------------------------------------------------------------
+inter_tight.ttf — Inter Tight (variable weight)
+------------------------------------------------------------------
+Copyright 2022 The Inter Project Authors
+(https://github.com/rsms/inter-tight)
 
+Default UI font as of Vestige 0.6.2 — chosen for cleaner FreeType
+rasterisation at small sizes than Arimo. Variable axis: weight (Thin
+through Black; engine renders 500/600 in practice).
 
------------------------------------------------------------
+Source: https://fonts.google.com/specimen/Inter+Tight
+
+------------------------------------------------------------------
+cormorant_garamond.ttf — Cormorant Garamond (variable weight)
+------------------------------------------------------------------
+Copyright 2015 the Cormorant Project Authors
+(github.com/CatharsisFonts/Cormorant)
+
+Display face. Used for the wordmark and modal titles per the
+`vestige-ui-hud-inworld` Claude Design hand-off (Vellum register).
+Variable axis: weight.
+
+Source: https://fonts.google.com/specimen/Cormorant+Garamond
+
+------------------------------------------------------------------
+jetbrains_mono.ttf — JetBrains Mono (variable weight)
+------------------------------------------------------------------
+Copyright 2020 The JetBrains Mono Project Authors
+(https://github.com/JetBrains/JetBrainsMono)
+
+Mono face. Used for captions, micro labels, key-caps, slider value
+readouts, and tabular numerics. Variable axis: weight.
+
+Source: https://fonts.google.com/specimen/JetBrains+Mono
+
+==================================================================
 SIL OPEN FONT LICENSE Version 1.1 - 26 February 2007
------------------------------------------------------------
+==================================================================
 
 PREAMBLE
 The goals of the Open Font License (OFL) are to stimulate worldwide

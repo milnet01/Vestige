@@ -82,11 +82,26 @@ Source: <https://github.com/KhronosGroup/glTF-Sample-Assets>
 - **`RiggedFigure.glb`** — © 2017 Cesium. Licensed under
   **CC-BY 4.0 International**.
 
-### Font — `assets/fonts/`
+### Fonts — `assets/fonts/`
 
-- **`default.ttf`** — Arimo. Digitized data © 2010 Google Corporation.
-  © 2012 Red Hat, Inc. Licensed under **SIL Open Font License 1.1**.
-  License text in `assets/fonts/OFL.txt`.
+All four bundled font files are licensed under the
+**SIL Open Font License 1.1**. Consolidated license text + per-font
+copyright headers in `assets/fonts/OFL.txt`.
+
+- **`arimo.ttf`** — Arimo by Steve Matteson. Digitized data
+  © 2010 Google Corporation; © 2012 Red Hat, Inc. Reserved Font Name
+  "Arimo". Kept as backwards-compatibility fallback after the
+  Inter Tight swap.
+- **`inter_tight.ttf`** — Inter Tight (variable weight).
+  © 2022 The Inter Project Authors. Reserved Font Name "Inter Tight".
+  Default UI font as of Vestige 0.6.2.
+- **`cormorant_garamond.ttf`** — Cormorant Garamond (variable weight).
+  © 2015 the Cormorant Project Authors / Catharsis Fonts.
+  Reserved Font Name "Cormorant Garamond". Display face for the
+  wordmark + modal titles per the Phase 9C design hand-off.
+- **`jetbrains_mono.ttf`** — JetBrains Mono (variable weight).
+  © 2020 The JetBrains Mono Project Authors. Reserved Font Name
+  "JetBrains Mono". Mono face for captions / numerics / key-caps.
 
 ### Textures — `assets/textures/` (in-engine subset)
 

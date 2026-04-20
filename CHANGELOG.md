@@ -9,6 +9,44 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-20 Phase 9C font swap — Inter Tight / Cormorant Garamond / JetBrains Mono
+
+Asset-side change to back the typography pairing specified in the
+`vestige-ui-hud-inworld` Claude Design hand-off.
+
+Three new OFL fonts added under `assets/fonts/`:
+- **`inter_tight.ttf`** (variable weight, 568 KB) — UI default,
+  rasterises cleaner at small sizes through FreeType than Arimo did.
+- **`cormorant_garamond.ttf`** (variable weight, 1.14 MB) — display
+  face for the wordmark + modal titles (Vellum register).
+- **`jetbrains_mono.ttf`** (variable weight, 183 KB) — mono face
+  for captions / micro labels / key-caps / numerics.
+
+`default.ttf` was removed from the engine — its two call sites
+(`engine/core/engine.cpp` text renderer init, `engine/editor/editor.cpp`
+ImGui font load) now load `inter_tight.ttf` directly. Arimo is
+preserved as `assets/fonts/arimo.ttf` for backwards-compatibility
+with any external consumer that referenced the old default by path.
+
+`assets/fonts/OFL.txt` rewritten as a consolidated manifest carrying
+per-font copyright headers (Arimo, Inter Tight, Cormorant Garamond,
+JetBrains Mono) above the single shared OFL 1.1 body. Each font's
+Reserved Font Name is called out separately so the OFL clause-3
+restriction is unambiguous.
+
+`ASSET_LICENSES.md` and `THIRD_PARTY_NOTICES.md` updated to list all
+four fonts with attributions.
+
+**Caveat:** `TextRenderer` is still single-font today — it loads
+whichever TTF was passed to `initialize()` and renders everything
+through that face. The `UITheme::fontDisplay` / `fontUI` / `fontMono`
+logical names are forward-looking metadata. Multi-font support
+(routing labels through one face, wordmark through another) is a
+separate `TextRenderer` refactor not covered by this commit.
+
+Suite: 1986/1986 still passing (no test depended on the old
+`default.ttf` path).
+
 ### 2026-04-20 Phase 9C UI batch 4 — menu prefabs (Main / Pause / Settings)
 
 Composes the Phase 9C widget set into the three menu canvases per

@@ -71,8 +71,10 @@ bool Editor::initialize(GLFWwindow* window, const std::string& assetPath)
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
     // Do NOT enable ViewportsEnable — causes severe framerate drops on Linux/Mesa AMD
 
-    // Load editor font (larger for accessibility — user is partially sighted)
-    std::string fontPath = assetPath + "/fonts/default.ttf";
+    // Load editor font (larger for accessibility — user is partially sighted).
+    // Inter Tight chosen for cleaner FreeType rasterisation at small sizes
+    // than Arimo (the previous default) per the Phase 9C design hand-off.
+    std::string fontPath = assetPath + "/fonts/inter_tight.ttf";
     ImFont* font = io.Fonts->AddFontFromFileTTF(fontPath.c_str(), 18.0f);
     if (!font)
     {

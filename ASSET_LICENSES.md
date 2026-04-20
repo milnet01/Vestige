@@ -47,13 +47,28 @@ scanners.
 
 | File | Source | License | Attribution |
 |------|--------|---------|-------------|
-| `default.ttf` | Arimo by Steve Matteson | **SIL Open Font License 1.1** (OFL) | "Digitized data © 2010 Google Corporation; © 2012 Red Hat, Inc., with Reserved Font Name 'Arimo'" |
-| `OFL.txt`     | Accompanying license text | OFL preamble + license body | n/a |
+| `arimo.ttf`              | Arimo by Steve Matteson                  | **SIL Open Font License 1.1** (OFL) | "Digitized data © 2010 Google Corporation; © 2012 Red Hat, Inc., with Reserved Font Name 'Arimo'" |
+| `inter_tight.ttf`        | Inter Tight (variable) by Rasmus Andersson + The Inter Project Authors | **OFL 1.1** | "Copyright 2022 The Inter Project Authors (https://github.com/rsms/inter-tight)" — Reserved Font Name "Inter Tight" |
+| `cormorant_garamond.ttf` | Cormorant Garamond (variable) by Catharsis Fonts / The Cormorant Project Authors | **OFL 1.1** | "Copyright 2015 the Cormorant Project Authors (github.com/CatharsisFonts/Cormorant)" — Reserved Font Name "Cormorant Garamond" |
+| `jetbrains_mono.ttf`     | JetBrains Mono (variable) by The JetBrains Mono Project Authors | **OFL 1.1** | "Copyright 2020 The JetBrains Mono Project Authors (https://github.com/JetBrains/JetBrainsMono)" — Reserved Font Name "JetBrains Mono" |
+| `OFL.txt`                | Accompanying license text                | OFL preamble + per-font copyright headers + license body | n/a |
 
 The OFL permits free use, modification, bundling, and redistribution,
 including in commercial software, provided the license text is included
-alongside the font file (which `OFL.txt` satisfies) and the Reserved
-Font Name "Arimo" is not used for derivative works.
+alongside the font files (which the consolidated `OFL.txt` satisfies)
+and the Reserved Font Names listed above are not used for derivative
+works. Distributing the engine's `assets/fonts/*.ttf` files unmodified
+preserves the original Reserved Font Names.
+
+**Why three new fonts?** The Phase 9C UI/HUD design hand-off
+(`vestige-ui-hud-inworld`) specifies a typography pairing:
+**Cormorant Garamond** for the wordmark + modal titles (display),
+**Inter Tight** for body / button / label text (UI — replaces Arimo as
+the canonical default; rasterises cleaner at small sizes through
+FreeType), and **JetBrains Mono** for captions / micro labels /
+key-caps / numeric readouts (mono). Arimo is retained for
+backwards-compatibility with code paths that still reference the
+historical default.
 
 ---
 
