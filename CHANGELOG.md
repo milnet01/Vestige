@@ -9,6 +9,49 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-20 Phase 10 — UI scaling presets + high-contrast mode
+
+First Phase 10 accessibility slice. Addresses two roadmap bullets
+directly: *"UI scaling presets (1.0× / 1.25× / 1.5× / 2.0× — minimum
+1.4× recommended for partially-sighted users)"* and *"High-contrast
+mode for UI elements"*.
+
+- `engine/ui/ui_theme.h/.cpp` — added `UIScalePreset` enum + free
+  function `scaleFactorOf(preset)` returning the numeric multiplier.
+  Added two pure-function transforms on `UITheme`:
+  - `UITheme::withScale(factor)` — returns a copy with every pixel
+    size field (buttons, sliders, checkboxes, dropdowns, keybinds,
+    type sizes, crosshair, focus ring, panel borders, progress bars)
+    multiplied. Palette, motion timing (`transitionDuration`), and
+    font family names are intentionally left untouched.
+  - `UITheme::withHighContrast()` — returns a copy with a pure-
+    black / pure-white palette, full-alpha panel strokes, and a
+    saturated amber accent. Sizes stay untouched so high-contrast
+    composes cleanly on top of any scale preset.
+- `engine/systems/ui_system.{h,cpp}` — `UISystem` now tracks a base
+  theme (`m_baseTheme`), a scale preset, and a high-contrast flag.
+  New API: `setBaseTheme`, `getBaseTheme`, `setScalePreset`,
+  `getScalePreset`, `setHighContrastMode`, `isHighContrastMode`.
+  Each setter triggers an idempotent `rebuildTheme` that composes
+  `withScale` then (if enabled) `withHighContrast` onto the base.
+- `tests/test_ui_theme_accessibility.cpp` — 14 new tests: preset
+  factors, full-field scale coverage at 1.5×, palette-and-motion
+  invariants under scale, identity-at-1.0 fixed point, high-contrast
+  palette invariants (pure-black bg, pure-white text, full-alpha
+  strokes, discriminable disabled text), UISystem defaults, scale
+  rebuild, high-contrast rebuild, composition of the two, toggle-off
+  round-trip, and `setBaseTheme` preserving active scale. Suite
+  2117 → 2131.
+
+### 2026-04-20 ROADMAP housekeeping — Phase 9F-4 checkbox flipped
+
+Line 873 was a stale unchecked *"2D character controller"* item that
+had actually been shipped in commit ec62677 (Phase 9F-4) alongside
+the 2D camera. Flipped to `[x]` with a backpointer to the
+implementation location and the feature set that landed (coyote
+time, jump buffering, variable-jump cut, wall slide, ground/air
+acceleration, ground friction).
+
 ### 2026-04-20 Cursor Bridge — MCP-driven editor tab management
 
 Shipped a two-part local bridge that lets Claude Code (or any MCP

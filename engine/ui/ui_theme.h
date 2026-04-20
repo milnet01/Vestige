@@ -110,6 +110,37 @@ struct UITheme
 
     /// @brief The Plumbline alternative — monastic minimal, near-black + single accent.
     static UITheme plumbline();
+
+    /// @brief Returns a copy with every pixel-size field multiplied by `factor`.
+    ///
+    /// Accessibility helper: used by `UISystem::setScalePreset` to apply
+    /// 1.0× / 1.25× / 1.5× / 2.0× UI scaling (Phase 10 accessibility).
+    /// Only size fields are touched — palette, motion timing, and font
+    /// family names are left untouched. `transitionDuration` is motion
+    /// (seconds) and is intentionally not scaled.
+    UITheme withScale(float factor) const;
+
+    /// @brief Returns a copy with colours substituted for the high-contrast
+    ///        palette (pure-black bg, pure-white text, full-alpha strokes,
+    ///        brightened accent). Sizes are left untouched — combine with
+    ///        `withScale` when both are wanted.
+    UITheme withHighContrast() const;
 };
+
+/// @brief UI scale presets exposed to users via the Settings menu.
+///
+/// Matches the Phase 10 accessibility target: *"UI scaling presets
+/// (1.0× / 1.25× / 1.5× / 2.0× — minimum 1.4× recommended for
+/// partially-sighted users)"*.
+enum class UIScalePreset
+{
+    X1_0,  ///< 1.00× — baseline (1080p reference).
+    X1_25, ///< 1.25× — mild scale-up.
+    X1_5,  ///< 1.50× — minimum recommended for partially-sighted users.
+    X2_0,  ///< 2.00× — large-text register.
+};
+
+/// @brief Returns the numeric multiplier for a `UIScalePreset`.
+float scaleFactorOf(UIScalePreset preset);
 
 } // namespace Vestige

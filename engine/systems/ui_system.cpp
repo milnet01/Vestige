@@ -46,6 +46,34 @@ void UISystem::updateMouseHit(const glm::vec2& cursor, int screenWidth, int scre
     m_cursorOverInteractive = m_canvas.hitTest(cursor, screenWidth, screenHeight);
 }
 
+void UISystem::setBaseTheme(const UITheme& base)
+{
+    m_baseTheme = base;
+    rebuildTheme();
+}
+
+void UISystem::setScalePreset(UIScalePreset preset)
+{
+    m_scalePreset = preset;
+    rebuildTheme();
+}
+
+void UISystem::setHighContrastMode(bool enabled)
+{
+    m_highContrast = enabled;
+    rebuildTheme();
+}
+
+void UISystem::rebuildTheme()
+{
+    UITheme t = m_baseTheme.withScale(scaleFactorOf(m_scalePreset));
+    if (m_highContrast)
+    {
+        t = t.withHighContrast();
+    }
+    m_theme = t;
+}
+
 void UISystem::renderUI(int screenWidth, int screenHeight)
 {
     if (!m_spriteBatch.isInitialized() || m_canvas.getElementCount() == 0)

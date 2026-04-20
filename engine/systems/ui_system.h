@@ -71,15 +71,56 @@ public:
     void updateMouseHit(const glm::vec2& cursor, int screenWidth, int screenHeight);
 
     /// @brief Returns the active theme (mutable so game code can override per-field).
+    ///
+    /// Note: a subsequent call to `setScalePreset` / `setHighContrastMode` /
+    /// `setBaseTheme` rebuilds the active theme from the stored base, which
+    /// discards per-field overrides applied through this accessor. To keep
+    /// overrides across accessibility toggles, bake them into the base
+    /// theme via `setBaseTheme`.
     UITheme& getTheme() { return m_theme; }
     const UITheme& getTheme() const { return m_theme; }
 
+    /// @brief Returns the stored base theme — the unscaled, non-high-contrast
+    ///        palette that every accessibility transform composes on top of.
+    const UITheme& getBaseTheme() const { return m_baseTheme; }
+
+    /// @brief Replaces the base theme. Rebuilds the active theme immediately
+    ///        so current scale / high-contrast selections stay applied.
+    void setBaseTheme(const UITheme& base);
+
+    /// @brief Applies a UI scale preset (Phase 10 accessibility).
+    ///
+    /// 1.0× / 1.25× / 1.5× / 2.0× of every pixel-size field on the theme.
+    /// Partially-sighted users should select 1.5× (the minimum recommended
+    /// in Phase 10) or 2.0×.
+    void setScalePreset(UIScalePreset preset);
+
+    /// @brief Returns the currently selected scale preset.
+    UIScalePreset getScalePreset() const { return m_scalePreset; }
+
+    /// @brief Toggles high-contrast UI mode (Phase 10 accessibility).
+    ///
+    /// Swaps the palette for a pure-black-on-white register with saturated
+    /// accent colours. Sizing stays under scale-preset control so users can
+    /// combine high-contrast + 2.0× if needed.
+    void setHighContrastMode(bool enabled);
+
+    /// @brief True when high-contrast mode is currently applied.
+    bool isHighContrastMode() const { return m_highContrast; }
+
 private:
+    /// @brief Recomputes `m_theme` from `m_baseTheme` with the current
+    ///        scale preset and high-contrast flag applied. Idempotent.
+    void rebuildTheme();
+
     static inline const std::string m_name = "UI";
     SpriteBatchRenderer m_spriteBatch;
     UICanvas m_canvas;
     Engine* m_engine = nullptr;
-    UITheme m_theme = UITheme::defaultTheme();
+    UITheme m_baseTheme = UITheme::defaultTheme();
+    UITheme m_theme     = UITheme::defaultTheme();
+    UIScalePreset m_scalePreset = UIScalePreset::X1_0;
+    bool m_highContrast          = false;
     bool m_modalCapture          = false;
     bool m_cursorOverInteractive = false;
     // Kept for ABI continuity but no longer the canonical capture source —
