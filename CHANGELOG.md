@@ -9,6 +9,35 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-20 Cursor Bridge — MCP-driven editor tab management
+
+Shipped a two-part local bridge that lets Claude Code (or any MCP
+client) drive Cursor / VS Code tab state. A companion to the official
+Claude Code extension which already handles inline diffs and
+selection-as-context — this adds tab *management* (open, focus, close-
+others, list, reveal) that the official extension does not expose.
+
+Lives under `tools/cursor_bridge/`:
+
+- `extension/` — VS Code extension, Cursor-compatible via the standard
+  extension API. TypeScript, listens on `127.0.0.1:39801` (loopback
+  only — no remote exposure). NDJSON protocol, one request per line:
+  `{ id, command, args }` → `{ id, ok, result | error }`. Six commands:
+  `ide_open_file`, `ide_focus`, `ide_close_others`,
+  `ide_close_all_except`, `ide_get_open_tabs`, `ide_reveal_in_explorer`.
+  Non-file tabs (settings, walkthroughs, diff editors) are left alone
+  by the close helpers.
+- `mcp_server/` — Node MCP server (stdio transport). Registers the six
+  tools, forwards each call over TCP to the extension. Short-lived
+  per-call connections + 5 s timeout so a reloaded extension doesn't
+  leave the server in a bad state.
+- `README.md` with install steps (sideload the .vsix, register the MCP
+  server in `~/.claude/mcp_config.json`, restart Claude Code).
+
+Both TypeScript projects compile cleanly with `npm run compile` and
+ship their own `.gitignore` so `node_modules/` and `dist/` stay out of
+the tree.
+
 ### 2026-04-20 Phase 9F-6 — Editor 2D panels + template dialog wiring
 
 Shipped the editor-side hooks that let designers work with 2D scenes

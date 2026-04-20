@@ -1,0 +1,31 @@
+{
+  "name": "vestige-cursor-bridge",
+  "displayName": "Vestige Cursor Bridge",
+  "description": "Local bridge that lets Claude Code drive Cursor tab management (open, close, focus, reveal).",
+  "version": "0.1.0",
+  "license": "MIT",
+  "publisher": "vestige-engine",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Other"],
+  "activationEvents": ["onStartupFinished"],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "vestigeCursorBridge.status",
+        "title": "Vestige Cursor Bridge: Show Status"
+      }
+    ]
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -p ./ --watch"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.3.0"
+  }
+}
