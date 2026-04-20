@@ -111,6 +111,8 @@ add_executable(vestige_tests
     test_sprite_renderer.cpp
     test_physics2d_system.cpp
     test_tilemap.cpp
+    test_camera_2d.cpp
+    test_character_controller_2d.cpp
     # FormulaWorkbench tool-side unit tests. The .cpp lives under
     # tools/formula_workbench/ and isn't part of vestige_engine, so
     # the test target compiles it directly.

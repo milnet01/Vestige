@@ -36,6 +36,8 @@ set(ENGINE_SOURCES
     scene/rigid_body_2d_component.cpp
     scene/collider_2d_component.cpp
     scene/tilemap_component.cpp
+    scene/camera_2d_component.cpp
+    scene/character_controller_2d_component.cpp
     resource/resource_manager.cpp
     resource/async_texture_loader.cpp
     renderer/shader.cpp

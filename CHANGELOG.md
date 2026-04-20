@@ -9,6 +9,35 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-20 Phase 9F-4 — 2D camera + platformer character controller
+
+Shipped the 2D camera (ortho smooth-follow with deadzone + world bounds)
+and the platformer character controller (coyote time, jump buffering,
+variable jump cut, wall slide, ground friction). Both ship as
+component + free-function pairs rather than new ISystem classes —
+callers decide when to step them (editor, game loop, scripted sequence)
+without paying for an auto-drive in scenes that don't use them.
+
+- `engine/scene/camera_2d_component.{h,cpp}` — orthoHalfHeight, follow
+  offset, deadzone, smoothTimeSec, maxSpeed, worldBounds clamp. The
+  critical-damped spring integrator is the same formula Unity's
+  SmoothDamp uses; first-frame snap avoids a visible sweep-in.
+  `updateCamera2DFollow(camera, target, dt)` is the step helper.
+- `engine/scene/character_controller_2d_component.{h,cpp}` — tuning
+  (maxSpeed, acceleration, airAcceleration, groundFriction,
+  jumpVelocity, variableJumpCut, coyoteTimeSec, jumpBufferSec,
+  wallSlideMaxSpeed) + runtime state (onGround, onWall,
+  timeSinceGrounded, jumpBufferRemaining, jumpingFromBuffer).
+  `stepCharacterController2D(ctrl, entity, physics, input, dt)` reads
+  the body's current velocity, applies input + timers + friction +
+  wall-slide, writes a new velocity, returns true on jump so callers
+  can trigger SFX / particles.
+- 16 new unit tests: camera deadzone suppression, follow after leaving
+  deadzone, bounds clamp, zero-smooth instant snap, clone reset;
+  controller acceleration, jump on ground, coyote-time late jump,
+  buffered jump on landing, buffer expiry, variable jump cut, wall-slide
+  cap, ground friction decel. Full suite **2086 → 2111 passing**.
+
 ### 2026-04-20 Phase 9F-3 — Tilemap component + renderer helper
 
 Shipped multi-layer tilemaps with animated tiles. The tilemap is just
