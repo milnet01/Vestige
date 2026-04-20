@@ -9,6 +9,45 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-20 Phase 9C closeout — editor UI layout + theme panel
+
+The 6th (and last) Phase 9C UI/HUD sub-item. New editor panel
+`engine/editor/panels/ui_layout_panel.{h,cpp}` registered under
+`Window → UI Layout`.
+
+**Two tabs:**
+
+- **Element tree inspector.** Given a `UICanvas*`, shows each root
+  element with visibility / interactivity flags + anchor tag, click
+  to select; inspector below exposes the selected element's
+  `position` / `size` (drag-float), `anchor` (combo), `visible` /
+  `interactive` (checkbox). Edits propagate live to the rendered
+  canvas.
+
+- **Theme editor.** Full color-picker + size-drag surface over the
+  active `UITheme`: backgrounds (bgBase / bgRaised / panelBg /
+  panelBgHover / panelBgPressed), strokes/rules, text hierarchy,
+  accent+ink, HUD, and component sizes (button / slider / checkbox /
+  dropdown / keybind / crosshair / transition duration). "Reset to
+  Vellum" / "Reset to Plumbline" buttons for quick-switch between
+  the two shipped registers.
+
+Supporting change: `UICanvas::getElementAt(size_t)` added (const +
+non-const) so the panel can walk the element list without owning
+the canvas.
+
+**Out of scope for this panel (follow-ups):** drag-place widget
+palette and JSON canvas serialisation. Both gated on factoring the
+editor's ImGui viewport out of `editor.cpp` so the panel can capture
+viewport mouse events without fighting the main viewport.
+
+Tests: 5 new (`UILayoutPanel.*` defaults + toggle;
+`UICanvasAccessor.*` null-when-empty, out-of-range returns null,
+returns added elements in order, const overload). Suite: 1991/1991
+passing.
+
+**Phase 9C UI/HUD is now feature-complete across all 6 sub-items.**
+
 ### 2026-04-20 Phase 9B Step 12 — ClothComponent cutover to `unique_ptr<IClothSolverBackend>`
 
 The last deferred item from the Phase 9B GPU compute cloth pipeline.

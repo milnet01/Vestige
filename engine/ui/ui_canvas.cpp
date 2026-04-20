@@ -44,4 +44,16 @@ bool UICanvas::hitTest(const glm::vec2& point, int screenWidth, int screenHeight
     return false;
 }
 
+UIElement* UICanvas::getElementAt(size_t index)
+{
+    if (index >= m_elements.size()) return nullptr;
+    return m_elements[index].get();
+}
+
+const UIElement* UICanvas::getElementAt(size_t index) const
+{
+    if (index >= m_elements.size()) return nullptr;
+    return m_elements[index].get();
+}
+
 } // namespace Vestige

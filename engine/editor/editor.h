@@ -25,6 +25,7 @@
 #include "editor/panels/hdri_viewer_panel.h"
 #include "editor/panels/model_viewer_panel.h"
 #include "editor/panels/navigation_panel.h"
+#include "editor/panels/ui_layout_panel.h"
 #include "editor/panels/template_dialog.h"
 #include "editor/prefab_system.h"
 #include "editor/selection.h"
@@ -238,6 +239,10 @@ public:
     NavigationPanel& getNavigationPanel() { return m_navigationPanel; }
     const NavigationPanel& getNavigationPanel() const { return m_navigationPanel; }
 
+    /// @brief Gets the UI layout / theme editor panel.
+    UILayoutPanel& getUILayoutPanel() { return m_uiLayoutPanel; }
+    const UILayoutPanel& getUILayoutPanel() const { return m_uiLayoutPanel; }
+
 private:
     static void setupTheme();
     void drawGizmo(Camera* camera, Scene* scene);
@@ -289,6 +294,7 @@ private:
     HdriViewerPanel m_hdriViewerPanel;
     ModelViewerPanel m_modelViewerPanel;
     NavigationPanel m_navigationPanel;
+    UILayoutPanel m_uiLayoutPanel;
     TemplateDialog m_templateDialog;
     BrushTool m_brushTool;
     BrushPreviewRenderer m_brushPreview;

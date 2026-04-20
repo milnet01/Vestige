@@ -48,6 +48,11 @@ public:
     /// @return True if an interactive element is hit.
     bool hitTest(const glm::vec2& point, int screenWidth, int screenHeight) const;
 
+    /// @brief Non-owning access to the N-th root element (for the editor
+    /// layout inspector). Returns nullptr if @a index is out of range.
+    UIElement*       getElementAt(size_t index);
+    const UIElement* getElementAt(size_t index) const;
+
 private:
     std::vector<std::unique_ptr<UIElement>> m_elements;
 };

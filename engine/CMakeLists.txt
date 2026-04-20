@@ -188,6 +188,7 @@ set(ENGINE_SOURCES
     editor/panels/hdri_viewer_panel.cpp
     editor/panels/model_viewer_panel.cpp
     editor/panels/navigation_panel.cpp
+    editor/panels/ui_layout_panel.cpp
     editor/panels/template_dialog.cpp
     editor/tools/ruler_tool.cpp
     editor/tools/wall_tool.cpp

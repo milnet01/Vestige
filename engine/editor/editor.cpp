@@ -487,6 +487,11 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
                 {
                     m_navigationPanel.setOpen(navOpen);
                 }
+                bool uiLayoutOpen = m_uiLayoutPanel.isOpen();
+                if (ImGui::MenuItem("UI Layout", nullptr, &uiLayoutOpen))
+                {
+                    m_uiLayoutPanel.setOpen(uiLayoutOpen);
+                }
                 ImGui::MenuItem("Console", nullptr, &m_showConsole);
                 ImGui::MenuItem("Statistics", nullptr, &m_showStatistics);
                 {
@@ -1212,6 +1217,13 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
 
         // --- Navigation panel ---
         m_navigationPanel.draw(m_navigationSystem, scene);
+
+        // --- UI Layout panel ---
+        // Engine doesn't own a single "the" canvas — game projects attach
+        // their own. The panel is still useful for inspecting an empty state
+        // + live-editing the theme. Game code can push a specific canvas in
+        // via uiLayoutPanel.draw(&canvas, &theme) outside the editor loop.
+        m_uiLayoutPanel.draw(/*canvas=*/nullptr, /*theme=*/nullptr);
 
         // --- Performance panel ---
         if (m_profiler)
