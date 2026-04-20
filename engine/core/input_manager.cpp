@@ -61,6 +61,53 @@ glm::vec2 InputManager::getScrollDelta() const
     return m_scrollDelta;
 }
 
+bool InputManager::isBindingDown(const InputBinding& binding) const
+{
+    if (!binding.isBound() || m_window == nullptr) return false;
+
+    switch (binding.device)
+    {
+        case InputDevice::Keyboard:
+            return glfwGetKey(m_window, binding.code) == GLFW_PRESS;
+
+        case InputDevice::Mouse:
+            return glfwGetMouseButton(m_window, binding.code) == GLFW_PRESS;
+
+        case InputDevice::Gamepad:
+        {
+            // Check every connected gamepad slot — the user shouldn't
+            // have to pick which controller is "player 1" before
+            // remapped bindings work. Single-player convenience; a
+            // future multiplayer split binds a specific joystick id.
+            for (int jid = GLFW_JOYSTICK_1; jid <= GLFW_JOYSTICK_LAST; ++jid)
+            {
+                if (glfwJoystickPresent(jid) == GLFW_FALSE) continue;
+                if (glfwJoystickIsGamepad(jid) == GLFW_FALSE) continue;
+                GLFWgamepadstate state;
+                if (glfwGetGamepadState(jid, &state) == GLFW_FALSE) continue;
+                if (binding.code < 0
+                    || binding.code >= static_cast<int>(sizeof(state.buttons)))
+                {
+                    continue;
+                }
+                if (state.buttons[binding.code] == GLFW_PRESS) return true;
+            }
+            return false;
+        }
+
+        case InputDevice::None:
+            return false;
+    }
+    return false;
+}
+
+bool InputManager::isActionDown(const InputActionMap& map,
+                                const std::string& actionId) const
+{
+    return Vestige::isActionDown(map, actionId,
+        [this](const InputBinding& b) { return isBindingDown(b); });
+}
+
 void InputManager::keyCallback(GLFWwindow* window, int key, int /*scancode*/, int action, int /*mods*/)
 {
     auto* self = static_cast<InputManager*>(glfwGetWindowUserPointer(window));

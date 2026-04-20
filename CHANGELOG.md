@@ -9,6 +9,68 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-20 Phase 10 — Remappable controls (action map)
+
+Sixth Phase 10 accessibility slice. Addresses the roadmap bullet
+*"Fully remappable controls (keyboard, mouse, gamepad)"*. Ships the
+data model + query path + GLFW integration; persistence and per-
+game default loading are follow-ups.
+
+- `engine/input/input_bindings.{h,cpp}` — new action-map
+  architecture (Unity Input System / Unreal Enhanced Input / Godot
+  InputMap pattern). `InputDevice` enum (None / Keyboard / Mouse /
+  Gamepad). `InputBinding` with factory helpers (`key(glfwKey)`,
+  `mouse(btn)`, `gamepad(btn)`, `none()`), equality, and
+  `isBound()`. `InputAction` with id + label + category + three
+  binding slots (primary / secondary / gamepad) + `matches(binding)`
+  any-slot predicate.
+- `InputActionMap` — insertion-order registry with a parallel
+  defaults snapshot. APIs: `addAction` (re-registering an id
+  replaces both the live entry and the defaults snapshot, matching
+  editor hot-reload expectations), `findAction`,
+  `findActionBoundTo` (reverse lookup), `findConflicts(binding,
+  excludeSelfId)` (for rebind-UI "already assigned to X" warnings —
+  excludes the currently-rebinding action so it doesn't flag
+  itself), per-slot setters, `clearSlot(id, slot)`,
+  `resetToDefaults()` (map-wide), and
+  `resetActionToDefaults(id)` (single action — other user rebinds
+  kept).
+- `bindingDisplayLabel(binding)` — readable name for every GLFW
+  key / mouse button / gamepad button. Gamepad names follow GLFW's
+  Xbox layout convention (A / B / X / Y / LB / RB / D-Pad Up …);
+  PlayStation users see that vocabulary per GLFW's documented
+  translation. Unbound renders as em-dash "—".
+- Pure-function `isActionDown(map, id, bindingChecker)` is the
+  query path. `bindingChecker` is caller-supplied so tests run
+  without a GLFW context. Handles null-checker + unknown-id
+  gracefully.
+- `engine/core/input_manager.{h,cpp}` — thin GLFW shim:
+  `InputManager::isBindingDown` dispatches to
+  `glfwGetKey` / `glfwGetMouseButton` / `glfwGetGamepadState` (the
+  last polling every connected joystick slot so single-player
+  users don't have to pick "player 1" before remaps work).
+  `InputManager::isActionDown(map, id)` is a one-liner wrapping
+  the free function with its own `isBindingDown` closure.
+- `tests/test_input_bindings.cpp` — 30 new tests covering:
+  `InputBinding` default / factory / equality; `InputAction`
+  `matches()`; map insertion order; lookup; re-registration
+  replacement; reverse lookup; conflict detection including
+  self-exclusion; per-slot setters returning false for unknown
+  ids; `clearSlot` valid + invalid indices; map-wide and single-
+  action reset-to-defaults; keyboard / mouse / gamepad display
+  labels; unbound em-dash; `isActionDown` true/false paths; any-
+  of-three-slots sufficiency; unknown-id; no-slots-bound; null
+  binding checker.
+
+Follow-ups (intentionally not in this slice): JSON save/load of
+user rebinds (trivial additional I/O layer once Phase 10's
+settings-persistence story is chosen), per-game default action-map
+bundles, and routing the existing `FirstPersonController` /
+engine input paths through the action map (currently they still
+call `isKeyDown(GLFW_KEY_W)` directly — a mechanical swap best
+done as a dedicated slice so input regressions are easy to
+bisect).
+
 ### 2026-04-20 Phase 10 — Screen-reader / ARIA-like UI semantics
 
 Fifth Phase 10 accessibility slice. Addresses the roadmap bullet

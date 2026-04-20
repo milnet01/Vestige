@@ -61,6 +61,7 @@ set(ENGINE_SOURCES
     accessibility/photosensitive_safety.cpp
     ui/subtitle.cpp
     ui/ui_accessible.cpp
+    input/input_bindings.cpp
     renderer/instance_buffer.cpp
     renderer/environment_map.cpp
     renderer/light_probe.cpp

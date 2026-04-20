@@ -6,8 +6,11 @@
 #pragma once
 
 #include "core/event_bus.h"
+#include "input/input_bindings.h"
 
 #include <glm/glm.hpp>
+
+#include <string>
 
 struct GLFWwindow;
 
@@ -47,6 +50,21 @@ public:
     /// @brief Gets the scroll wheel offset since the last frame.
     /// @return Scroll delta (x, y).
     glm::vec2 getScrollDelta() const;
+
+    // -- Action-map integration (Phase 10 remappable controls) --
+
+    /// @brief Polls a single `InputBinding` against the current GLFW
+    ///        state. Keyboard + mouse bindings are answered directly;
+    ///        gamepad bindings check every connected joystick slot
+    ///        (GLFW_JOYSTICK_1..LAST) so the user doesn't have to pick
+    ///        which controller they plugged in.
+    /// @returns true if the physical input is currently held.
+    bool isBindingDown(const InputBinding& binding) const;
+
+    /// @brief Convenience wrapper — true iff any slot of @a actionId
+    ///        in @a map is currently down.
+    bool isActionDown(const InputActionMap& map,
+                      const std::string& actionId) const;
 
 private:
     static void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
