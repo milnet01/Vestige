@@ -141,4 +141,11 @@ UITheme UITheme::withHighContrast() const
     return t;
 }
 
+UITheme UITheme::withReducedMotion() const
+{
+    UITheme t = *this;
+    t.transitionDuration = 0.0f;
+    return t;
+}
+
 } // namespace Vestige

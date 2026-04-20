@@ -199,3 +199,67 @@ TEST(UISystemTheme, SetBaseThemeKeepsScaleApplied)
     // Palette now reflects Plumbline's cold near-black.
     EXPECT_FLOAT_EQ(ui.getTheme().bgBase.r, plumb.bgBase.r);
 }
+
+// -- Reduced motion --
+
+TEST(UITheme_ReducedMotion, ZerosTransitionDuration)
+{
+    UITheme base = UITheme::defaultTheme();
+    UITheme rm   = base.withReducedMotion();
+    EXPECT_GT(base.transitionDuration, 0.0f);
+    EXPECT_FLOAT_EQ(rm.transitionDuration, 0.0f);
+}
+
+TEST(UITheme_ReducedMotion, LeavesPaletteAndSizesUntouched)
+{
+    UITheme base = UITheme::defaultTheme();
+    UITheme rm   = base.withReducedMotion();
+    EXPECT_EQ(rm.bgBase,        base.bgBase);
+    EXPECT_EQ(rm.textPrimary,   base.textPrimary);
+    EXPECT_EQ(rm.accent,        base.accent);
+    EXPECT_FLOAT_EQ(rm.buttonHeight,       base.buttonHeight);
+    EXPECT_FLOAT_EQ(rm.typeBody,           base.typeBody);
+    EXPECT_FLOAT_EQ(rm.focusRingThickness, base.focusRingThickness);
+}
+
+TEST(UISystemTheme, SetReducedMotionRebuildsActiveTheme)
+{
+    UISystem ui;
+    EXPECT_FALSE(ui.isReducedMotion());
+    EXPECT_GT(ui.getTheme().transitionDuration, 0.0f);
+
+    ui.setReducedMotion(true);
+    EXPECT_TRUE(ui.isReducedMotion());
+    EXPECT_FLOAT_EQ(ui.getTheme().transitionDuration, 0.0f);
+
+    // Base theme keeps its original motion timing — canonical source.
+    EXPECT_GT(ui.getBaseTheme().transitionDuration, 0.0f);
+}
+
+TEST(UISystemTheme, ReducedMotionComposesWithScaleAndHighContrast)
+{
+    UISystem ui;
+    const float baseBtn = ui.getBaseTheme().buttonHeight;
+
+    ui.setScalePreset(UIScalePreset::X2_0);
+    ui.setHighContrastMode(true);
+    ui.setReducedMotion(true);
+
+    // All three applied simultaneously.
+    EXPECT_FLOAT_EQ(ui.getTheme().buttonHeight,       baseBtn * 2.0f);
+    EXPECT_FLOAT_EQ(ui.getTheme().bgBase.r,           0.0f);
+    EXPECT_FLOAT_EQ(ui.getTheme().textPrimary.r,      1.0f);
+    EXPECT_FLOAT_EQ(ui.getTheme().transitionDuration, 0.0f);
+}
+
+TEST(UISystemTheme, TogglingReducedMotionOffRestoresTransitionDuration)
+{
+    UISystem ui;
+    const float baseTransition = ui.getBaseTheme().transitionDuration;
+
+    ui.setReducedMotion(true);
+    ui.setReducedMotion(false);
+
+    EXPECT_FALSE(ui.isReducedMotion());
+    EXPECT_FLOAT_EQ(ui.getTheme().transitionDuration, baseTransition);
+}

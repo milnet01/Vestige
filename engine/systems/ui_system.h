@@ -108,9 +108,22 @@ public:
     /// @brief True when high-contrast mode is currently applied.
     bool isHighContrastMode() const { return m_highContrast; }
 
+    /// @brief Toggles reduced-motion UI mode (Phase 10 photosensitivity
+    ///        safe mode).
+    ///
+    /// Zeros `transitionDuration` on the active theme so UI transitions
+    /// snap instead of easing. Composes with `setScalePreset` and
+    /// `setHighContrastMode` so users can run any combination of the
+    /// three accessibility toggles simultaneously.
+    void setReducedMotion(bool enabled);
+
+    /// @brief True when reduced-motion mode is currently applied.
+    bool isReducedMotion() const { return m_reducedMotion; }
+
 private:
     /// @brief Recomputes `m_theme` from `m_baseTheme` with the current
-    ///        scale preset and high-contrast flag applied. Idempotent.
+    ///        scale preset, high-contrast, and reduced-motion flags
+    ///        applied. Idempotent.
     void rebuildTheme();
 
     static inline const std::string m_name = "UI";
@@ -121,6 +134,7 @@ private:
     UITheme m_theme     = UITheme::defaultTheme();
     UIScalePreset m_scalePreset = UIScalePreset::X1_0;
     bool m_highContrast          = false;
+    bool m_reducedMotion         = false;
     bool m_modalCapture          = false;
     bool m_cursorOverInteractive = false;
     // Kept for ABI continuity but no longer the canonical capture source —

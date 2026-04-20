@@ -125,6 +125,14 @@ struct UITheme
     ///        brightened accent). Sizes are left untouched — combine with
     ///        `withScale` when both are wanted.
     UITheme withHighContrast() const;
+
+    /// @brief Returns a copy with motion timings zeroed out for the
+    ///        photosensitivity / reduced-motion preset.
+    ///
+    /// Sets `transitionDuration` to 0 — transitions snap instantly instead
+    /// of easing. Palette and sizing are left untouched so this composes
+    /// cleanly with `withScale` and `withHighContrast`.
+    UITheme withReducedMotion() const;
 };
 
 /// @brief UI scale presets exposed to users via the Settings menu.

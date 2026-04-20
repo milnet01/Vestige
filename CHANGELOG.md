@@ -9,6 +9,51 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-20 Phase 10 — Photosensitivity safe mode (reduced flashing)
+
+Third Phase 10 accessibility slice. Addresses the roadmap bullet
+*"Reduced-flashing / photosensitivity safe mode (caps camera shake,
+strobes, muzzle-flash alpha)"*.
+
+- `engine/accessibility/photosensitive_safety.{h,cpp}` — new
+  `PhotosensitiveLimits` struct with published, research-grounded caps
+  (WCAG 2.2 SC 2.3.1 "Three Flashes or Below Threshold", Epilepsy
+  Society photosensitive-games guidance, IGDA GA-SIG / Xbox / Ubisoft
+  accessibility best-practice bullets): max flash α 0.25, shake scale
+  0.25, max strobe 2 Hz, bloom intensity scale 0.6. Four pure-function
+  helpers — `clampFlashAlpha`, `clampShakeAmplitude`, `clampStrobeHz`,
+  `limitBloomIntensity` — that subsystems call before handing values
+  downstream. Identity pass-through when disabled — zero runtime cost.
+  Per-caller override of the defaults (e.g. a horror sequence tightening
+  the flash ceiling) via an optional `limits` parameter.
+- `engine/ui/ui_theme.{h,cpp}` — new `UITheme::withReducedMotion()`
+  pure transform that zeroes `transitionDuration` (the reduce-motion
+  hook that was already flagged in the field's doc comment). Palette
+  and sizing are left untouched so the transform composes cleanly.
+- `engine/systems/ui_system.{h,cpp}` — `setReducedMotion(bool)` /
+  `isReducedMotion()` accessibility accessors. `rebuildTheme` now
+  composes **scale → high-contrast → reduced-motion**, so users can
+  run any combination of the three accessibility toggles
+  simultaneously.
+- `tests/test_photosensitive_safety.cpp` — 13 new tests covering:
+  disabled-is-identity for every helper, published default limits,
+  flash-alpha ceiling clamping, shake amplitude scaling, strobe-Hz
+  ceiling, bloom intensity scaling, and per-caller override of the
+  defaults.
+- `tests/test_ui_theme_accessibility.cpp` — 5 new tests covering:
+  `withReducedMotion` zeros `transitionDuration`, leaves palette +
+  sizes untouched, `UISystem::setReducedMotion` rebuilds the active
+  theme, reduced-motion composes with scale + high-contrast, and
+  toggling off restores the base transition timing.
+
+Today's accessibility composition surface: UI scale 1.0×/1.25×/1.5×/
+2.0× + high-contrast mode + reduced-motion mode + colour-vision-
+deficiency simulation. Each stage is an independent pure transform;
+all four can run simultaneously. The clamp helpers are ready for
+future shake/flash/strobe systems to consult — they currently wire
+only into the UI transition duration because that's the only
+reduced-motion-sensitive system the engine ships today.
+
 ### 2026-04-20 Phase 10 — Colorblind simulation filter (CVD matrices)
 
 Second Phase 10 accessibility slice. Addresses the roadmap bullet

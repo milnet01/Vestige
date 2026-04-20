@@ -64,12 +64,22 @@ void UISystem::setHighContrastMode(bool enabled)
     rebuildTheme();
 }
 
+void UISystem::setReducedMotion(bool enabled)
+{
+    m_reducedMotion = enabled;
+    rebuildTheme();
+}
+
 void UISystem::rebuildTheme()
 {
     UITheme t = m_baseTheme.withScale(scaleFactorOf(m_scalePreset));
     if (m_highContrast)
     {
         t = t.withHighContrast();
+    }
+    if (m_reducedMotion)
+    {
+        t = t.withReducedMotion();
     }
     m_theme = t;
 }
