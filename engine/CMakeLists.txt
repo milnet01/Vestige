@@ -216,6 +216,9 @@ set(ENGINE_SOURCES
     ui/ui_crosshair.cpp
     ui/ui_progress_bar.cpp
     ui/ui_fps_counter.cpp
+    ui/ui_world_projection.cpp
+    ui/ui_world_label.cpp
+    ui/ui_interaction_prompt.cpp
     systems/ui_system.cpp
     # Navigation system
     navigation/nav_mesh_builder.cpp

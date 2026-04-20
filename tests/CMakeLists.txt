@@ -98,6 +98,7 @@ add_executable(vestige_tests
     test_gpu_cloth_simulator.cpp
     test_ui_widgets.cpp
     test_ui_system_input.cpp
+    test_ui_world_projection.cpp
     test_node_graph.cpp
     test_scripting.cpp
     # FormulaWorkbench tool-side unit tests. The .cpp lives under

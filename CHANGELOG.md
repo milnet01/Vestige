@@ -9,6 +9,48 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-20 Phase 9C UI batch 2 — in-world UI
+
+Ticks the 4th of 6 remaining Phase 9C UI/HUD sub-items. Two new
+elements + one extracted helper.
+
+`ui/ui_world_projection.{h,cpp}` — pure-CPU `projectWorldToScreen()`
+helper. Takes a world point + combined view-projection matrix +
+viewport size, returns a `WorldToScreenResult` with the top-left-origin
+screen pixel coords + NDC depth + a `visible` flag (false when the
+point is behind the camera or outside the [-1, 1] NDC clip box).
+Extracted as a free function so the projection + frustum-cull logic
+is testable without a GL context.
+
+`ui/ui_world_label.{h,cpp}` — `UIWorldLabel`. Anchors to a
+`worldPosition`, projects each frame, and draws via
+`TextRenderer::renderText2D` at the resulting screen pixel.
+`screenOffset` lifts the label above the anchor (e.g. above an
+entity's head). The base UIElement's `position` / `anchor` fields
+are intentionally ignored — world-space anchoring takes precedence.
+Off-screen / behind-camera labels are silently skipped.
+
+`ui/ui_interaction_prompt.{h,cpp}` — `UIInteractionPrompt` extends
+`UIWorldLabel`. Two text fields (`keyLabel`, `actionVerb`) compose
+into "Press [keyLabel] to actionVerb". Linear distance-based alpha
+fade: full opacity at `fadeNear` (default 2.5 m), zero at `fadeFar`
+(default 4.0 m). Camera distance is consulted before any projection
+work so off-range prompts cost nothing.
+
+Nameplate use case is handled by `UIWorldLabel` directly — game code
+calls `nameplate.worldPosition = entity.getWorldPosition() + headOffset`
+each frame.
+
+Tests: 11 new (`UIWorldProjection.*` covering behind-camera cull,
+centred-when-directly-ahead, off-screen cull, NDC depth bounds,
+zero-viewport defensive case; `UIInteractionPrompt.*` covering text
+composition, fade-at-bounds, linear midpoint, default interactivity).
+Suite: 1967/1967 passing.
+
+**Still pending in Phase 9C UI/HUD (2 of 6):** menu system (best
+driven by Claude Design mockups for the visual look first) + editor
+visual UI layout editor.
+
 ### 2026-04-19 Phase 9C UI batch 1 — theme + input routing + HUD widgets
 
 Ticks 3 of the 6 remaining Phase 9C UI/HUD sub-items.

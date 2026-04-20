@@ -743,12 +743,12 @@ Foundations shipped via commit `fa0b100` — "Phase 9C: New domain systems — A
 
 #### UI & HUD System
 - [x] In-game UI rendering — `engine/ui/sprite_batch_renderer.{h,cpp}` + `UIElement` hierarchy (`UICanvas`, `UIImage`, `UILabel`, `UIPanel`) + `engine/systems/ui_system.{h,cpp}`; sprite shaders `assets/shaders/ui_sprite.{vert,frag}.glsl`. Separate from the ImGui editor overlay.
-- [ ] In-world UI (floating text, interaction prompts, nameplates) — **not yet.**
+- [x] In-world UI — `engine/ui/ui_world_label.{h,cpp}` (3D-anchored floating text with frustum-culled world-to-screen projection via the pure-CPU `ui_world_projection.{h,cpp}` helper) + `ui_interaction_prompt.{h,cpp}` (`UIWorldLabel` subclass with "Press [KEY] to action" formatting + linear distance-based alpha fade between `fadeNear` and `fadeFar`). Nameplates use `UIWorldLabel` directly with a per-frame `worldPosition` setter from game code that follows the entity. 11 unit tests in `tests/test_ui_world_projection.cpp`.
 - [x] Screen-space UI (HUD, minimap, crosshair) — `engine/ui/ui_crosshair.{h,cpp}` (centred plus with configurable arms / gap), `ui_progress_bar.{h,cpp}` (ratio-based fill, clamped), `ui_fps_counter.{h,cpp}` (smoothed EMA + TextRenderer drawing). Minimap deferred (needs render-target + camera-frustum overlay).
-- [ ] Menu system (main menu, pause, settings) — **not yet.** Strong Claude Design candidate for visual mockups.
+- [ ] Menu system (main menu, pause, settings) — **not yet.** Best to drive visual look from Claude Design mockups first; the C++ side is a button widget + nav state machine + a couple of menu prefabs.
 - [x] UI theming — `engine/ui/ui_theme.h` (`UITheme` struct: bg / text / accent palettes + crosshair / progress-bar sizes + default text scale; `UISystem::getTheme()` returns mutable ref so game projects can override per-field at startup).
 - [x] Input routing — `UISystem::setModalCapture(bool)` for sticky modal capture (pause menu, dialog) + `updateMouseHit()` for cursor-over-interactive-element capture. `wantsCaptureInput()` is the union; game input handlers consult it each frame.
-- [ ] Editor: visual UI layout editor, theme editor, widget library — **not yet.** Multi-week initiative.
+- [ ] Editor: visual UI layout editor, theme editor, widget library — **not yet.** Larger initiative — drag-place widgets in a viewport, live theme preview, serialise canvases to JSON.
 
 #### AI & Navigation System (Basics)
 *Scope: requires Recast/Detour library integration and dedicated design document.*
