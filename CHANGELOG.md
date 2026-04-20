@@ -9,6 +9,42 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-20 Phase 10 — Subtitle / closed-caption queue + size presets
+
+Fourth Phase 10 accessibility slice. Addresses the roadmap bullet
+*"Subtitle / closed caption system for spatial audio cues, with size
+presets (Small / Medium / Large / XL)"*.
+
+- `engine/ui/subtitle.{h,cpp}` — headless `SubtitleQueue` FIFO with
+  per-tick countdown and push-newest / drop-oldest overflow. Default
+  concurrent cap is 3, matching BBC caption guidelines and the
+  2–3-lines-at-once recommendation from Romero-Fresco 2019 reading-
+  speed research. `clear()` for scene transitions;
+  `setMaxConcurrent(n)` trims in-place if n < current size.
+- `Subtitle` authored struct: `text`, `speaker`, `durationSeconds`,
+  `category` (`Dialogue` / `Narrator` / `SoundCue`), and
+  `directionDegrees` (0 = front, 90 = right, … — ready for spatial
+  audio integration to surface a direction hint).
+- `SubtitleSizePreset` ladder (`Small` 1.00× / `Medium` 1.25× /
+  `Large` 1.50× / `XL` 2.00×) with `subtitleScaleFactorOf(preset)`
+  helper. Ratios intentionally mirror `UIScalePreset` so a user who
+  knows the UI ladder understands the caption ladder, and the two
+  compose: a consumer multiplies `UITheme::typeCaption` by the
+  subtitle factor, then by the UI-wide scale factor.
+- `tests/test_subtitle.cpp` — 17 new tests: size-preset ladder;
+  empty-queue baseline; enqueue / tick countdown; zero-second
+  expiry; over-budget long-frame expiry; selective expiry; FIFO
+  order; overflow eviction; `setMaxConcurrent` trim-in-place; raising
+  the cap no-op; `clear`; category + spatial-direction round-trip;
+  dialogue-speaker preservation; negative-duration clamp.
+
+Rendering is deliberately out of scope for this slice — the queue is
+headless so it can be unit tested without GL context and reused by any
+future UI register (HUD caption strip, log overlay, etc.). Rendering
+lands when audio-event wiring is designed, at which point the renderer
+reads `queue.activeSubtitles()` and draws each entry at
+`typeCaption × subtitleScaleFactor × uiScaleFactor` pixels.
+
 ### 2026-04-20 Phase 10 — Photosensitivity safe mode (reduced flashing)
 
 Third Phase 10 accessibility slice. Addresses the roadmap bullet
