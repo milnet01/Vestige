@@ -873,7 +873,7 @@ Prioritize basic event-to-action chains first. The formula node editor builds on
 - [ ] 2D character controller (platformer movement, wall slide, coyote time)
 - [x] **Phase 9F-3:** Tilemap system — `engine/scene/tilemap_component.{h,cpp}` ships multi-layer grids (TileId uint16, 0 = empty), named layers with sort order, animated tiles via frame-sequence definitions, global animation time wrapping at 1 hour. `engine/renderer/tilemap_renderer.{h,cpp}` converts a tilemap into SpriteInstance records for the shared sprite pass — no dedicated shader. Auto-tiling defers to Phase 18 per the design doc; authoring + rendering + animation are live. 12 new unit tests.
 - [x] **Phase 9F-4:** 2D camera (orthographic with smooth follow, deadzone, bounds) — `engine/scene/camera_2d_component.{h,cpp}` ships orthoHalfHeight + follow offset + deadzone + Unity-style SmoothDamp spring + optional world-bounds clamp. `updateCamera2DFollow(camera, target, dt)` is the step helper.
-- [ ] 2D game type templates (Side-Scroller, Shmup)
+- [x] **Phase 9F-5:** 2D game type templates (Side-Scroller, Shmup) — `engine/scene/game_templates_2d.{h,cpp}` ships `createSideScrollerTemplate` (player + ground + platforms + Camera2D follow) and `createShmupTemplate` (kinematic player + scrolling tilemap + locked ortho camera). Optional atlas binding via `GameTemplate2DConfig`; templates ship without sprites when designers want to plug in their own art later.
 - [ ] Editor: 2D/3D mode toggle, sprite import/slicing, tilemap painting
 
 **Note:** Full 2D specs are in Phase 18 (2D Game and Scene Support). This phase implements the core; Phase 18 has the complete feature set.

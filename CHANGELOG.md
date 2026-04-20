@@ -9,6 +9,28 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-20 Phase 9F-5 — 2D game-type templates (Side-Scroller + Shmup)
+
+Ship two starter-scene generators designers can instantiate from the
+editor (9F-6 wires them into the TemplateDialog). Each template
+composes the existing 2D components (SpriteComponent, RigidBody2D,
+Collider2D, CharacterController2D, Camera2D, Tilemap) into a wired
+scene that Just Works out of the box.
+
+- `engine/scene/game_templates_2d.{h,cpp}`:
+  - `createSideScrollerTemplate(scene, config)` — player (capsule,
+    fixedRotation, CharacterController2D), ground, two platforms, and a
+    smoothed-follow camera clamped to world bounds.
+  - `createShmupTemplate(scene, config)` — kinematic gravity-free player,
+    scrolling-backdrop tilemap on sorting layer -100, locked
+    orthographic camera.
+  - Optional atlas binding via `GameTemplate2DConfig`: when provided,
+    the template attaches SpriteComponents with the config-specified
+    frame names; when omitted the structure ships without sprites so
+    designers can drop assets later.
+- 9 new unit tests covering entity layout, component presence / types,
+  camera configuration, and graceful no-atlas fallback.
+
 ### 2026-04-20 Phase 9F-4 — 2D camera + platformer character controller
 
 Shipped the 2D camera (ortho smooth-follow with deadzone + world bounds)

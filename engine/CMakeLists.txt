@@ -38,6 +38,7 @@ set(ENGINE_SOURCES
     scene/tilemap_component.cpp
     scene/camera_2d_component.cpp
     scene/character_controller_2d_component.cpp
+    scene/game_templates_2d.cpp
     resource/resource_manager.cpp
     resource/async_texture_loader.cpp
     renderer/shader.cpp
