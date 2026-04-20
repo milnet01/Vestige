@@ -252,6 +252,7 @@ set(ENGINE_SOURCES
     scripting/pure_nodes.cpp
     scripting/flow_nodes.cpp
     scripting/latent_nodes.cpp
+    scripting/script_templates.cpp
     # glad OpenGL loader
     ${CMAKE_SOURCE_DIR}/external/glad/src/gl.c
     # stb_image implementation

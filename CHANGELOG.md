@@ -9,6 +9,75 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-20 Phase 9E-4 — pre-built gameplay script templates
+
+Designer-side starter graphs for the five gameplay patterns called out
+in the Phase 9E roadmap (door that opens, collectible item, damage
+zone, checkpoint, dialogue trigger). New module
+`engine/scripting/script_templates.{h,cpp}` exposes:
+
+- `GameplayTemplate` enum (five values above).
+- `buildGameplayTemplate(GameplayTemplate)` → fully-wired `ScriptGraph`
+  whose `.name` matches the template so loaded instances survive
+  round-trip through JSON.
+- `gameplayTemplateDisplayName` / `gameplayTemplateDescription` for
+  editor palette presentation.
+
+All templates start from `OnTriggerEnter` — the stub event on the
+EventBus side is already registered in the node registry with the
+correct pin set, so the graphs are valid *now* and fire automatically
+the moment trigger / collision events are wired through.
+
+**Template wiring summary** (per-instance property defaults set via
+`ScriptNodeDef::properties` so the graph is self-explanatory):
+
+- `DOOR_OPENS` — `OnTriggerEnter` → `DoOnce` fan-outs to `PlayAnimation`
+  ("DoorOpen", blend 0.2s) and `PlaySound`
+  ("assets/sounds/door_open.ogg", vol 0.8).
+- `COLLECTIBLE_ITEM` — `OnTriggerEnter` → `PlaySound`
+  ("assets/sounds/pickup.ogg") → `SetVariable` (score ← 1) →
+  `DestroyEntity` (self, via entity-input 0 fallback).
+- `DAMAGE_ZONE` — `OnTriggerEnter` → `PublishEvent` ("damage",
+  payload 10).
+- `CHECKPOINT` — `OnTriggerEnter` → `DoOnce` → `SetVariable`
+  ("lastCheckpoint" ← piped `otherEntity`) → `PrintToScreen`.
+- `DIALOGUE_TRIGGER` — `OnTriggerEnter` → `DoOnce` → `PublishEvent`
+  ("dialogue_started", "greeting") → `PrintToScreen`.
+
+Tests: 8 in `tests/test_script_templates.cpp` — each of the 5 templates
+validates and every connection's pin names resolve against the
+populated `NodeTypeRegistry`; JSON round-trip preserves graph shape;
+metadata coverage for all enum values; a sanity invariant that every
+shipped template starts from `OnTriggerEnter`. Test-suite total:
+2003 / 2003 (1 pre-existing skip).
+
+### 2026-04-20 Phase 9E — CONDITIONAL node type (formula ternary round-trip)
+
+Closes the last lossy conversion path in the Formula Workbench → node
+graph round-trip. `ExprNodeType::CONDITIONAL` (ternary `if/then/else`)
+now has a dedicated node-graph representation rather than silently
+falling back to `literal(0)` with a warning.
+
+**New API.** `NodeGraph::createConditionalNode()` builds an `If` node
+with 3 typed float inputs (`Condition`, `Then`, `Else`) and a single
+`Result` output, categorised as `INTERPOLATION` alongside lerp /
+smoothstep.
+
+**Bidirectional conversion.** `fromExpressionTree` now emits a real
+conditional node with its three branch sub-trees wired up, and
+`nodeToExpr` dispatches by `operation == "conditional"` before the
+generic 1-input / 2-input branches so a 3-input node doesn't fall
+through to the `literal(0)` fallback. The old `Logger::warning(...)`
+path (AUDIT §M10 note) is deleted; `<core/logger.h>` include in
+`node_graph.cpp` removed along with it.
+
+Tests: 4 new in `tests/test_node_graph.cpp`
+(`NodeGraph_Factory.CreateConditionalNode`,
+`NodeGraph_ExprTree.FromExpressionTreeConditional`,
+`RoundTripConditionalExpr`, `RoundTripNestedConditional`). Suite:
+1995/1995 passing (1 pre-existing skipped). Unblocks PhysicsTemplates
+with ternary saturation curves.
+
 ### 2026-04-20 Phase 9C closeout — editor UI layout + theme panel
 
 The 6th (and last) Phase 9C UI/HUD sub-item. New editor panel

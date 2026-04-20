@@ -104,6 +104,7 @@ add_executable(vestige_tests
     test_ui_layout_panel.cpp
     test_node_graph.cpp
     test_scripting.cpp
+    test_script_templates.cpp
     # FormulaWorkbench tool-side unit tests. The .cpp lives under
     # tools/formula_workbench/ and isn't part of vestige_engine, so
     # the test target compiles it directly.

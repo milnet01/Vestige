@@ -844,7 +844,7 @@ Each template configures: camera type/constraints, physics dimensionality, defau
 - [x] Action nodes (move entity, play sound, spawn entity, destroy entity, set variable, visibility, light color/intensity, publish custom event; animation/particle/material stubs pending integration)
 - [x] Flow control (branch, sequence, delay, switch, for/while loops, gate, do-once, flip-flop)
 - [x] Variable system (per-graph blackboard; per-entity/scene/app scoping infrastructure in place — inspector exposure lands with Phase 9E-3 editor UI)
-- [ ] Pre-built gameplay templates (door that opens, collectible item, damage zone, checkpoint, dialogue trigger) — Phase 9E-4
+- [x] Pre-built gameplay templates (door that opens, collectible item, damage zone, checkpoint, dialogue trigger) — Phase 9E-4. `engine/scripting/script_templates.{h,cpp}` ships 5 starter graphs (`GameplayTemplate::DOOR_OPENS / COLLECTIBLE_ITEM / DAMAGE_ZONE / CHECKPOINT / DIALOGUE_TRIGGER`) wired from the existing registered nodes. Each template is a self-contained `ScriptGraph` with sensible property overrides (clip paths, variable names, event names) so designers drop it on a trigger volume entity and iterate. Tests: 8 in `tests/test_script_templates.cpp` (each template validates + resolves every connection pin against `NodeTypeRegistry`; JSON round-trip; metadata coverage; trigger-entry-point invariant). Uses `OnTriggerEnter` + `OnCollisionEnter` — still stub events on the EventBus side, but graphs are graph-valid now and fire automatically once those events are wired.
 
 **Formula Node Editor** (extends FormulaWorkbench):
 - [x] Math node types (add, multiply, sin, cos, pow, clamp, lerp, etc.) — factory helpers implemented
@@ -854,7 +854,7 @@ Each template configures: camera type/constraints, physics dimensionality, defau
 - [ ] Output node with real-time curve preview (requires ImGui integration)
 - [ ] Drag-and-drop from PhysicsTemplates catalog into the node graph (requires UI)
 - [ ] Visual formula composition UI (ImGui node editor rendering)
-- [ ] **CONDITIONAL node type**. `ExprNode` supports ternary `if/then/else` but `NodeGraph::fromExpressionTree` currently drops it to `literal(0)` with a warning — round-trip from formula → node graph loses logic. Needs a dedicated branching node with 3 inputs (condition, then, else) and an inverse mapping in `toExpressionTree`. Low effort; unblocks PhysicsTemplates that use conditionals (e.g. saturation curves).
+- [x] **CONDITIONAL node type**. `NodeGraph::createConditionalNode()` ships a 3-input branching node (Condition / Then / Else → Result); `fromExpressionTree` builds it directly from `ExprNodeType::CONDITIONAL` instead of the former lossy `literal(0)` fallback, and `nodeToExpr` detects `operation == "conditional"` to rebuild `ExprNode::conditional` on export. Unblocks PhysicsTemplates with ternary saturation curves. Tests: `NodeGraph_Factory.CreateConditionalNode`, `NodeGraph_ExprTree.FromExpressionTreeConditional`, `RoundTripConditionalExpr`, `RoundTripNestedConditional`.
 
 Prioritize basic event-to-action chains first. The formula node editor builds on the same node graph infrastructure. Advanced flow control and variable systems come later.
 

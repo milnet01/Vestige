@@ -156,6 +156,10 @@ public:
     static Node createLiteralNode(float value);
     static Node createVariableNode(const std::string& name);
     static Node createOutputNode();
+    /// @brief Conditional (ternary) branching node: 3 inputs (Condition, Then, Else), 1 output.
+    /// Round-trips to/from ExprNode::conditional so formulas using if/then/else survive
+    /// the expression-tree ↔ node-graph conversion without lossy fallback.
+    static Node createConditionalNode();
 
     // -- JSON serialization --
     nlohmann::json toJson() const;

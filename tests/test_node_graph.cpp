@@ -136,6 +136,21 @@ TEST(NodeGraph_Factory, CreateOutputNode)
     EXPECT_EQ(node.inputs[0].name, "Value");
 }
 
+TEST(NodeGraph_Factory, CreateConditionalNode)
+{
+    Node node = NodeGraph::createConditionalNode();
+    EXPECT_EQ(node.name, "If");
+    EXPECT_EQ(node.operation, "conditional");
+    ASSERT_EQ(node.inputs.size(), 3u);
+    ASSERT_EQ(node.outputs.size(), 1u);
+    EXPECT_EQ(node.inputs[0].name, "Condition");
+    EXPECT_EQ(node.inputs[1].name, "Then");
+    EXPECT_EQ(node.inputs[2].name, "Else");
+    EXPECT_EQ(node.outputs[0].name, "Result");
+    EXPECT_EQ(node.inputs[0].direction, PortDirection::INPUT);
+    EXPECT_EQ(node.outputs[0].direction, PortDirection::OUTPUT);
+}
+
 // ===========================================================================
 // Port lookup helpers
 // ===========================================================================
@@ -766,6 +781,97 @@ TEST(NodeGraph_ExprTree, RoundTripSinExpr)
     ASSERT_EQ(roundTripped->children.size(), 1u);
     EXPECT_EQ(roundTripped->children[0]->type, ExprNodeType::VARIABLE);
     EXPECT_EQ(roundTripped->children[0]->name, "theta");
+}
+
+TEST(NodeGraph_ExprTree, FromExpressionTreeConditional)
+{
+    // x > 0 ? a : b  — model the comparison itself as a variable "cmp"
+    // so the 3-input conditional is exercised without requiring a
+    // dedicated comparison node type.
+    auto expr = ExprNode::conditional(
+        ExprNode::variable("cmp"),
+        ExprNode::variable("a"),
+        ExprNode::variable("b"));
+
+    NodeGraph graph = NodeGraph::fromExpressionTree(*expr);
+
+    // variables cmp/a/b (3) + conditional + output = 5 nodes
+    EXPECT_EQ(graph.nodeCount(), 5u);
+    // cmp→cond[0], a→cond[1], b→cond[2], cond→output = 4 connections
+    EXPECT_EQ(graph.connectionCount(), 4u);
+}
+
+TEST(NodeGraph_ExprTree, RoundTripConditionalExpr)
+{
+    auto original = ExprNode::conditional(
+        ExprNode::variable("cond"),
+        ExprNode::variable("thenVal"),
+        ExprNode::variable("elseVal"));
+
+    NodeGraph graph = NodeGraph::fromExpressionTree(*original);
+
+    NodeId outputId = 0;
+    for (const auto& [id, node] : graph.getNodes())
+    {
+        if (node.operation == "output")
+        {
+            outputId = id;
+            break;
+        }
+    }
+    ASSERT_NE(outputId, 0u);
+
+    auto roundTripped = graph.toExpressionTree(outputId);
+    ASSERT_NE(roundTripped, nullptr);
+    EXPECT_EQ(roundTripped->type, ExprNodeType::CONDITIONAL);
+    ASSERT_EQ(roundTripped->children.size(), 3u);
+    EXPECT_EQ(roundTripped->children[0]->type, ExprNodeType::VARIABLE);
+    EXPECT_EQ(roundTripped->children[0]->name, "cond");
+    EXPECT_EQ(roundTripped->children[1]->type, ExprNodeType::VARIABLE);
+    EXPECT_EQ(roundTripped->children[1]->name, "thenVal");
+    EXPECT_EQ(roundTripped->children[2]->type, ExprNodeType::VARIABLE);
+    EXPECT_EQ(roundTripped->children[2]->name, "elseVal");
+}
+
+TEST(NodeGraph_ExprTree, RoundTripNestedConditional)
+{
+    // if(outerCond, if(innerCond, a, b), c)
+    auto original = ExprNode::conditional(
+        ExprNode::variable("outerCond"),
+        ExprNode::conditional(
+            ExprNode::variable("innerCond"),
+            ExprNode::variable("a"),
+            ExprNode::variable("b")),
+        ExprNode::variable("c"));
+
+    NodeGraph graph = NodeGraph::fromExpressionTree(*original);
+
+    NodeId outputId = 0;
+    for (const auto& [id, node] : graph.getNodes())
+    {
+        if (node.operation == "output")
+        {
+            outputId = id;
+            break;
+        }
+    }
+    ASSERT_NE(outputId, 0u);
+
+    auto roundTripped = graph.toExpressionTree(outputId);
+    ASSERT_NE(roundTripped, nullptr);
+    EXPECT_EQ(roundTripped->type, ExprNodeType::CONDITIONAL);
+    ASSERT_EQ(roundTripped->children.size(), 3u);
+
+    // Outer condition preserved
+    EXPECT_EQ(roundTripped->children[0]->name, "outerCond");
+    // Then-branch is a nested conditional
+    EXPECT_EQ(roundTripped->children[1]->type, ExprNodeType::CONDITIONAL);
+    ASSERT_EQ(roundTripped->children[1]->children.size(), 3u);
+    EXPECT_EQ(roundTripped->children[1]->children[0]->name, "innerCond");
+    EXPECT_EQ(roundTripped->children[1]->children[1]->name, "a");
+    EXPECT_EQ(roundTripped->children[1]->children[2]->name, "b");
+    // Else-branch preserved
+    EXPECT_EQ(roundTripped->children[2]->name, "c");
 }
 
 // ===========================================================================

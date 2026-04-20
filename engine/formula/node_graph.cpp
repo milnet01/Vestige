@@ -4,7 +4,6 @@
 /// @file node_graph.cpp
 /// @brief Node graph implementation for the visual formula editor (Phase 9E).
 #include "formula/node_graph.h"
-#include "core/logger.h"
 
 #include <algorithm>
 #include <queue>
@@ -569,6 +568,20 @@ std::unique_ptr<ExprNode> NodeGraph::nodeToExpr(NodeId nodeId,
         return ExprNode::literal(port.defaultValue);
     };
 
+    // Conditional (ternary) node: 3 inputs (Condition, Then, Else), 1 output.
+    // Dispatched by operation name before the generic input-count branches
+    // because 3-input nodes would otherwise fall through to the literal(0)
+    // fallback and silently drop logic on round-trip (former AUDIT §M10).
+    if (node->operation == "conditional" && node->inputs.size() == 3)
+    {
+        auto cond = resolveInput(node->inputs[0]);
+        auto thenExpr = resolveInput(node->inputs[1]);
+        auto elseExpr = resolveInput(node->inputs[2]);
+        return ExprNode::conditional(std::move(cond),
+                                     std::move(thenExpr),
+                                     std::move(elseExpr));
+    }
+
     // Unary function nodes (1 input, 1 output)
     if (node->inputs.size() == 1)
     {
@@ -681,25 +694,33 @@ struct FromExprHelper
 
         case ExprNodeType::CONDITIONAL:
         {
-            // AUDIT.md §M10 / FIXPLAN: conditional nodes are not yet
-            // representable in the node graph. Previously we silently
-            // dropped the semantics to literal(0) and orphaned the two
-            // branch sub-trees — round-trip lost logic. Now log a
-            // warning so the user sees the loss; still produces a
-            // working-but-reduced graph so imports don't hard-fail.
-            //
-            // Full fix (adding a conditional node type) is deferred
-            // until the node graph gains non-float control semantics.
-            (void)buildNode(*expr.children[0], depth + 1);
-            (void)buildNode(*expr.children[1], depth + 1);
-            (void)buildNode(*expr.children[2], depth + 1);
-            Logger::warning("[NodeGraph] CONDITIONAL expression lost on "
-                            "import — no node-graph equivalent exists. "
-                            "Replaced with literal(0). See AUDIT.md §M10.");
-            Node n = NodeGraph::createLiteralNode(0.0f);
-            n.posX = static_cast<float>(depth) * 200.0f;
-            n.posY = static_cast<float>(yCounter++) * 100.0f;
-            return graph.addNode(std::move(n));
+            // Conditional (ternary) round-trip support.
+            // Previously this path dropped to literal(0) — resolved by
+            // adding a dedicated 3-input conditional node type whose
+            // nodeToExpr() counterpart rebuilds ExprNode::conditional().
+            NodeId condId = buildNode(*expr.children[0], depth + 1);
+            NodeId thenId = buildNode(*expr.children[1], depth + 1);
+            NodeId elseId = buildNode(*expr.children[2], depth + 1);
+
+            Node condNode = NodeGraph::createConditionalNode();
+            condNode.posX = static_cast<float>(depth) * 200.0f;
+            condNode.posY = static_cast<float>(yCounter++) * 100.0f;
+            NodeId condNodeId = graph.addNode(std::move(condNode));
+
+            const Node* condPtr = graph.getNode(condNodeId);
+            const Node* condSrc = graph.getNode(condId);
+            const Node* thenSrc = graph.getNode(thenId);
+            const Node* elseSrc = graph.getNode(elseId);
+            if (condPtr && condSrc && thenSrc && elseSrc)
+            {
+                graph.connect(condId, condSrc->outputs[0].id,
+                              condNodeId, condPtr->inputs[0].id);
+                graph.connect(thenId, thenSrc->outputs[0].id,
+                              condNodeId, condPtr->inputs[1].id);
+                graph.connect(elseId, elseSrc->outputs[0].id,
+                              condNodeId, condPtr->inputs[2].id);
+            }
+            return condNodeId;
         }
         }
 
@@ -887,6 +908,45 @@ Node NodeGraph::createOutputNode()
     input.defaultValue = 0.0f;
 
     node.inputs.push_back(input);
+
+    return node;
+}
+
+Node NodeGraph::createConditionalNode()
+{
+    Node node;
+    node.name = "If";
+    node.operation = "conditional";
+    node.category = NodeCategory::INTERPOLATION;
+
+    // Three inputs: condition (non-zero selects Then), then value, else value.
+    Port condition;
+    condition.name = "Condition";
+    condition.direction = PortDirection::INPUT;
+    condition.dataType = PortDataType::FLOAT;
+    condition.defaultValue = 0.0f;
+
+    Port thenPort;
+    thenPort.name = "Then";
+    thenPort.direction = PortDirection::INPUT;
+    thenPort.dataType = PortDataType::FLOAT;
+    thenPort.defaultValue = 0.0f;
+
+    Port elsePort;
+    elsePort.name = "Else";
+    elsePort.direction = PortDirection::INPUT;
+    elsePort.dataType = PortDataType::FLOAT;
+    elsePort.defaultValue = 0.0f;
+
+    Port output;
+    output.name = "Result";
+    output.direction = PortDirection::OUTPUT;
+    output.dataType = PortDataType::FLOAT;
+
+    node.inputs.push_back(condition);
+    node.inputs.push_back(thenPort);
+    node.inputs.push_back(elsePort);
+    node.outputs.push_back(output);
 
     return node;
 }
