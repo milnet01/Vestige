@@ -57,6 +57,7 @@ set(ENGINE_SOURCES
     renderer/font.cpp
     renderer/text_renderer.cpp
     renderer/color_grading_lut.cpp
+    renderer/color_vision_filter.cpp
     renderer/instance_buffer.cpp
     renderer/environment_map.cpp
     renderer/light_probe.cpp

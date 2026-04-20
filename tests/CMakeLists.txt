@@ -101,6 +101,7 @@ add_executable(vestige_tests
     test_ui_world_projection.cpp
     test_ui_design_widgets.cpp
     test_ui_theme_accessibility.cpp
+    test_color_vision_filter.cpp
     test_menu_prefabs.cpp
     test_ui_layout_panel.cpp
     test_node_graph.cpp

@@ -9,6 +9,43 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-20 Phase 10 — Colorblind simulation filter (CVD matrices)
+
+Second Phase 10 accessibility slice. Addresses the roadmap bullet
+*"Colorblind modes (Deuteranopia, Protanopia, Tritanopia LUT modes
+applied post-tonemap)"*.
+
+- `engine/renderer/color_vision_filter.h/.cpp` — new `ColorVisionMode`
+  enum (`Normal`, `Protanopia`, `Deuteranopia`, `Tritanopia`) and a
+  `colorVisionMatrix(mode)` lookup returning the 3×3 RGB simulation
+  matrix. Coefficients are the canonical Viénot/Brettel/Mollon 1999
+  dichromat projections — the dataset cited by Unity, Unreal, and the
+  IGDA GA-SIG accessibility guidance. `colorVisionModeLabel(mode)`
+  provides a stable string for future settings UIs.
+- `assets/shaders/screen_quad.frag.glsl` — two new uniforms
+  (`u_colorVisionEnabled`, `u_colorVisionMatrix`) applied between the
+  artistic color-grading LUT and the sRGB gamma conversion, so the
+  simulation reflects the final displayed colour. Clamped to `[0,1]`
+  to contain any minor over/undershoot from the matrix multiply.
+- `engine/renderer/renderer.{h,cpp}` — added `setColorVisionMode` /
+  `getColorVisionMode` and `m_colorVisionMode` (default `Normal`).
+  The composite pass sets `u_colorVisionEnabled=false` in the Normal
+  case so the multiply is skipped — zero-cost when off.
+- `tests/test_color_vision_filter.cpp` — 12 new tests covering:
+  identity transform, labelling, Brettel coefficient values per mode,
+  row-sum-1 invariant (equivalent to preserving achromatic input),
+  characteristic dichromat projections (red→yellow for protanopes,
+  green shifted toward red for deuteranopes, blue→cyan-band for
+  tritanopes), and black/white fixed-point preservation across all
+  three modes.
+
+Composes with the existing UI accessibility state: a partially-sighted
+user with colour-vision deficiency can run UI scale 1.5× + high-
+contrast + a CVD simulation mode simultaneously; each stage is an
+independent transform. The simulation is off by default; enable via
+`Renderer::setColorVisionMode(ColorVisionMode::...)` or a future
+settings panel.
+
 ### 2026-04-20 Phase 10 — UI scaling presets + high-contrast mode
 
 First Phase 10 accessibility slice. Addresses two roadmap bullets

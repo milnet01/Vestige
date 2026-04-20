@@ -30,6 +30,11 @@ uniform bool u_lutEnabled;
 uniform sampler3D u_lutTexture;        // Unit 13
 uniform float u_lutIntensity;
 
+// Accessibility: color-vision-deficiency simulation
+// (Viénot/Brettel/Mollon 1999 3x3 RGB projection)
+uniform bool u_colorVisionEnabled;
+uniform mat3 u_colorVisionMatrix;
+
 out vec4 fragColor;
 
 /// Reinhard tone mapping: simple, preserves color ratios.
@@ -122,6 +127,14 @@ void main()
         vec3 lutCoord = clamp(color, 0.0, 1.0) * ((lutSize - 1.0) / lutSize) + vec3(0.5 / lutSize);
         vec3 graded = texture(u_lutTexture, lutCoord).rgb;
         color = mix(color, graded, u_lutIntensity);
+    }
+
+    // 7b. Color-vision-deficiency simulation (post-grade, pre-gamma).
+    //     Matrix is identity when disabled, so the branch exists only to
+    //     skip the multiply in the common case.
+    if (u_colorVisionEnabled)
+    {
+        color = clamp(u_colorVisionMatrix * color, vec3(0.0), vec3(1.0));
     }
 
     // 8. Gamma correction: linear → sRGB

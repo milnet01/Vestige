@@ -19,6 +19,7 @@
 #include "renderer/taa.h"
 #include "renderer/text_renderer.h"
 #include "renderer/color_grading_lut.h"
+#include "renderer/color_vision_filter.h"
 #include "renderer/instance_buffer.h"
 #include "renderer/light_probe_manager.h"
 #include "renderer/sh_probe_grid.h"
@@ -158,6 +159,14 @@ public:
 
     /// @brief Gets the current tonemapper mode.
     int getTonemapMode() const;
+
+    /// @brief Sets the color-vision-deficiency simulation mode
+    ///        (accessibility). Applied post-grade, pre-gamma in
+    ///        screen_quad.frag.
+    void setColorVisionMode(ColorVisionMode mode);
+
+    /// @brief Gets the current color-vision-deficiency simulation mode.
+    ColorVisionMode getColorVisionMode() const;
 
     /// @brief Sets the HDR debug mode: 0=off, 1=false-color luminance.
     void setDebugMode(int mode);
@@ -548,6 +557,7 @@ private:
     float m_autoExposureTarget = 0.25f;     // Target average luminance (mid-grey)
     int m_tonemapMode = 1;    // Default to ACES Filmic
     int m_debugMode = 0;      // 0 = off
+    ColorVisionMode m_colorVisionMode = ColorVisionMode::Normal;
 
     // Anti-aliasing mode
     AntiAliasMode m_antiAliasMode = AntiAliasMode::MSAA_4X;

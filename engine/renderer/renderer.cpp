@@ -1244,6 +1244,12 @@ void Renderer::endFrame(float deltaTime)
             lutActive ? m_colorGradingLut->getIntensity() : 0.0f);
     }
 
+    // Accessibility: color-vision-deficiency simulation matrix
+    bool cvdActive = (m_colorVisionMode != ColorVisionMode::Normal);
+    m_screenShader.setBool("u_colorVisionEnabled", cvdActive);
+    m_screenShader.setMat3("u_colorVisionMatrix",
+        colorVisionMatrix(m_colorVisionMode));
+
     m_screenQuad->draw();
 
     // 7. Swap TAA history buffers
@@ -1611,6 +1617,16 @@ void Renderer::setDebugMode(int mode)
 int Renderer::getDebugMode() const
 {
     return m_debugMode;
+}
+
+void Renderer::setColorVisionMode(ColorVisionMode mode)
+{
+    m_colorVisionMode = mode;
+}
+
+ColorVisionMode Renderer::getColorVisionMode() const
+{
+    return m_colorVisionMode;
 }
 
 void Renderer::setPomEnabled(bool isEnabled)

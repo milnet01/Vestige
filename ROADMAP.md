@@ -961,7 +961,7 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
 - [ ] Language selection in settings menu
 
 ### Accessibility
-- [ ] Colorblind modes (Deuteranopia, Protanopia, Tritanopia LUT modes applied post-tonemap — ref: IGDA GA-SIG GDC 2026 roundtable)
+- [x] Colorblind modes (Deuteranopia, Protanopia, Tritanopia LUT modes applied post-tonemap — ref: IGDA GA-SIG GDC 2026 roundtable) — `ColorVisionMode` enum + `colorVisionMatrix()` lookup in `engine/renderer/color_vision_filter.{h,cpp}`. Canonical Viénot/Brettel/Mollon 1999 3×3 RGB simulation matrices. `Renderer::setColorVisionMode` feeds `u_colorVisionEnabled` + `u_colorVisionMatrix` to `screen_quad.frag`, applied between the artistic LUT and the sRGB gamma stage. Identity is a fast path (no multiply when Normal). 12 new unit tests.
 - [ ] Subtitle / closed caption system for spatial audio cues, with size presets (Small / Medium / Large / XL)
 - [ ] Fully remappable controls (keyboard, mouse, gamepad)
 - [x] UI scaling presets (1.0× / 1.25× / 1.5× / 2.0×) — `UIScalePreset` enum + `UITheme::withScale(factor)` pure transform applied via `UISystem::setScalePreset`. Multiplies every pixel-size field (buttons, sliders, checkboxes, dropdowns, keybinds, type sizes, crosshair, focus ring, panel borders) while leaving palette + motion timing untouched. Rebuild is idempotent and composes with high-contrast mode.
