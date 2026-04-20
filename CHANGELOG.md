@@ -9,6 +9,53 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-20 Phase 10 — Screen-reader / ARIA-like UI semantics
+
+Fifth Phase 10 accessibility slice. Addresses the roadmap bullet
+*"Screen-reader friendly UI labels (ARIA-like semantic tags on
+widgets where feasible)"*. Ships the metadata layer and tree-walk
+enumeration that a future TTS / screen-reader bridge consumes — the
+bridge itself is deferred pending a platform-dependent design
+decision (AT-SPI vs. UIAutomation vs. a cross-platform VoiceOver-
+style in-engine reader).
+
+- `engine/ui/ui_accessible.{h,cpp}` — new `UIAccessibleRole` enum
+  (`Button` / `Checkbox` / `Slider` / `Dropdown` / `KeybindRow` /
+  `Label` / `Panel` / `Image` / `ProgressBar` / `Crosshair` /
+  `Unknown`) + `UIAccessibleInfo` struct (role + label +
+  description + hint + value, mirroring WAI-ARIA 1.2's
+  `role / aria-label / aria-describedby / aria-keyshortcuts /
+  aria-valuetext`). `uiAccessibleRoleLabel(role)` returns a stable
+  human-readable string used by tests and debug panels.
+- `engine/ui/ui_element.{h,cpp}` — every `UIElement` now carries
+  an `m_accessible` member exposed via `accessible()` getter pair.
+  New virtual `collectAccessible(vector<Snapshot>&)` walks the
+  subtree and emits an entry per element that has either a non-
+  `Unknown` role or a non-empty label. Hidden subtrees are skipped
+  entirely (a screen reader must not announce UI the sighted user
+  cannot see).
+- `engine/ui/ui_canvas.{h,cpp}` — new `UICanvas::collectAccessible()`
+  returns the canvas-wide flat snapshot list.
+- Every shipping widget sets its role in its constructor:
+  `UIButton` → Button, `UICheckbox` → Checkbox, `UISlider` → Slider,
+  `UIDropdown` → Dropdown, `UIKeybindRow` → KeybindRow,
+  `UILabel` → Label, `UIPanel` → Panel, `UIImage` → Image,
+  `UIProgressBar` → ProgressBar, `UICrosshair` → Crosshair.
+  Context-specific strings (label / value / hint) stay caller-side:
+  menus set `btn->accessible().label = "Play Game"` where the
+  widget is wired up.
+- `tests/test_ui_accessible.cpp` — 13 new tests covering: role-label
+  lookup, per-widget default role, default-empty strings, mutable
+  label / description / hint, Unknown-with-empty-label omission,
+  role-alone-is-enough, label-alone-is-enough, hidden-subtree
+  exclusion, interactive-flag carry-over, child-order walk,
+  unlabelled container passthrough, canvas enumeration, empty
+  canvas returns empty vector.
+
+Scope note: ImGui editor widgets are a separate surface. They need
+per-call-site label attachment rather than per-type constructor-
+set roles, so they are deliberately out of scope for this slice.
+
 ### 2026-04-20 Phase 10 — Subtitle / closed-caption queue + size presets
 
 Fourth Phase 10 accessibility slice. Addresses the roadmap bullet

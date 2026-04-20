@@ -5,6 +5,7 @@
 /// @brief Base class for all in-game UI elements.
 #pragma once
 
+#include "ui/ui_accessible.h"
 #include "ui/ui_signal.h"
 
 #include <glm/glm.hpp>
@@ -81,6 +82,29 @@ public:
     /// @brief Gets the number of children.
     size_t getChildCount() const { return m_children.size(); }
 
+    /// @brief Mutable accessor for the element's accessibility metadata
+    ///        (role + label + description + hint + value).
+    ///
+    /// Widgets set `role` in their constructor; callers set context-
+    /// specific strings when wiring the widget into a menu. Kept as
+    /// `public` rather than a separate getter/setter pair because the
+    /// struct itself is small and stringly-typed, so a callsite like
+    /// `btn->accessible.label = "Play Game"` is clearer than
+    /// `btn->setAccessibleLabel("Play Game")`.
+    UIAccessibleInfo& accessible() { return m_accessible; }
+    const UIAccessibleInfo& accessible() const { return m_accessible; }
+
+    /// @brief Appends this element (and its children) to @a out, skipping
+    ///        the entire subtree if `visible` is false and skipping self
+    ///        if the element has neither a role nor a label.
+    ///
+    /// Used by a future TTS bridge / accessibility inspector to walk the
+    /// element tree. The default implementation is role-agnostic;
+    /// widgets can override it to compute `value` (e.g. a slider's
+    /// current percent) lazily rather than maintaining a mirror of
+    /// their own state.
+    virtual void collectAccessible(std::vector<UIAccessibilitySnapshot>& out) const;
+
     // -- Properties --
     glm::vec2 position = {0.0f, 0.0f};  ///< Position relative to anchor
     glm::vec2 size = {100.0f, 30.0f};   ///< Width and height in pixels
@@ -94,6 +118,7 @@ public:
 
 protected:
     std::vector<std::unique_ptr<UIElement>> m_children;
+    UIAccessibleInfo m_accessible;
 };
 
 } // namespace Vestige

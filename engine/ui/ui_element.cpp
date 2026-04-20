@@ -55,4 +55,35 @@ void UIElement::clearChildren()
     m_children.clear();
 }
 
+void UIElement::collectAccessible(std::vector<UIAccessibilitySnapshot>& out) const
+{
+    // Hidden subtrees are entirely skipped — a screen reader should
+    // not announce UI the sighted user cannot see either.
+    if (!visible)
+    {
+        return;
+    }
+
+    // Elements with neither a role nor a label are purely decorative
+    // spacers / containers: include nothing for self, but still
+    // recurse so labelled descendants are discovered.
+    const bool hasRole  = m_accessible.role != UIAccessibleRole::Unknown;
+    const bool hasLabel = !m_accessible.label.empty();
+    if (hasRole || hasLabel)
+    {
+        UIAccessibilitySnapshot snap;
+        snap.info        = m_accessible;
+        snap.interactive = interactive;
+        out.push_back(std::move(snap));
+    }
+
+    for (const auto& child : m_children)
+    {
+        if (child)
+        {
+            child->collectAccessible(out);
+        }
+    }
+}
+
 } // namespace Vestige

@@ -21,7 +21,12 @@ namespace Vestige
 class UIProgressBar : public UIElement
 {
 public:
-    UIProgressBar() { interactive = false; size = {120.0f, 18.0f}; }
+    UIProgressBar()
+    {
+        interactive = false;
+        size = {120.0f, 18.0f};
+        m_accessible.role = UIAccessibleRole::ProgressBar;
+    }
 
     void render(SpriteBatchRenderer& batch, const glm::vec2& parentOffset,
                 int screenWidth, int screenHeight) override;

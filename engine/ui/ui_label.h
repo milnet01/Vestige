@@ -15,7 +15,11 @@ namespace Vestige
 class UILabel : public UIElement
 {
 public:
-    UILabel() { interactive = false; }
+    UILabel()
+    {
+        interactive = false;
+        m_accessible.role = UIAccessibleRole::Label;
+    }
 
     void render(SpriteBatchRenderer& batch, const glm::vec2& parentOffset,
                 int screenWidth, int screenHeight) override;

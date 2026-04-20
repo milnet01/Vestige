@@ -56,4 +56,17 @@ const UIElement* UICanvas::getElementAt(size_t index) const
     return m_elements[index].get();
 }
 
+std::vector<UIAccessibilitySnapshot> UICanvas::collectAccessible() const
+{
+    std::vector<UIAccessibilitySnapshot> out;
+    for (const auto& elem : m_elements)
+    {
+        if (elem)
+        {
+            elem->collectAccessible(out);
+        }
+    }
+    return out;
+}
+
 } // namespace Vestige

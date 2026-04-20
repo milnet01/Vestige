@@ -16,7 +16,7 @@ namespace Vestige
 class UIImage : public UIElement
 {
 public:
-    UIImage() = default;
+    UIImage() { m_accessible.role = UIAccessibleRole::Image; }
 
     void render(SpriteBatchRenderer& batch, const glm::vec2& parentOffset,
                 int screenWidth, int screenHeight) override;

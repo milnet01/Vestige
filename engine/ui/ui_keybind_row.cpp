@@ -12,6 +12,7 @@ UIKeybindRow::UIKeybindRow()
 {
     interactive = true;
     size = {520.0f, 48.0f};
+    m_accessible.role = UIAccessibleRole::KeybindRow;
 }
 
 namespace

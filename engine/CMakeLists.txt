@@ -60,6 +60,7 @@ set(ENGINE_SOURCES
     renderer/color_vision_filter.cpp
     accessibility/photosensitive_safety.cpp
     ui/subtitle.cpp
+    ui/ui_accessible.cpp
     renderer/instance_buffer.cpp
     renderer/environment_map.cpp
     renderer/light_probe.cpp

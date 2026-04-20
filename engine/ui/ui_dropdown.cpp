@@ -14,6 +14,7 @@ UIDropdown::UIDropdown()
 {
     interactive = true;
     size = {220.0f, 40.0f};
+    m_accessible.role = UIAccessibleRole::Dropdown;
 }
 
 namespace

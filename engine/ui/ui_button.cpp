@@ -12,6 +12,7 @@ UIButton::UIButton()
 {
     interactive = true;
     size = {220.0f, 56.0f};
+    m_accessible.role = UIAccessibleRole::Button;
 }
 
 float UIButton::effectiveHeight() const

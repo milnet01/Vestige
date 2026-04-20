@@ -53,6 +53,12 @@ public:
     UIElement*       getElementAt(size_t index);
     const UIElement* getElementAt(size_t index) const;
 
+    /// @brief Walks the canvas and returns a flat list of every
+    ///        role-tagged or labelled element. Hidden subtrees are
+    ///        skipped. Intended for a future screen-reader / TTS
+    ///        bridge and for the accessibility inspector panel.
+    std::vector<UIAccessibilitySnapshot> collectAccessible() const;
+
 private:
     std::vector<std::unique_ptr<UIElement>> m_elements;
 };

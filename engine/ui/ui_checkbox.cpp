@@ -12,6 +12,7 @@ UICheckbox::UICheckbox()
 {
     interactive = true;
     size = {180.0f, 20.0f};
+    m_accessible.role = UIAccessibleRole::Checkbox;
 }
 
 namespace

@@ -20,7 +20,11 @@ namespace Vestige
 class UICrosshair : public UIElement
 {
 public:
-    UICrosshair() { interactive = false; }
+    UICrosshair()
+    {
+        interactive = false;
+        m_accessible.role = UIAccessibleRole::Crosshair;
+    }
 
     void render(SpriteBatchRenderer& batch, const glm::vec2& parentOffset,
                 int screenWidth, int screenHeight) override;

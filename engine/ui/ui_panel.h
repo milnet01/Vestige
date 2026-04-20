@@ -14,7 +14,7 @@ namespace Vestige
 class UIPanel : public UIElement
 {
 public:
-    UIPanel() = default;
+    UIPanel() { m_accessible.role = UIAccessibleRole::Panel; }
 
     void render(SpriteBatchRenderer& batch, const glm::vec2& parentOffset,
                 int screenWidth, int screenHeight) override;

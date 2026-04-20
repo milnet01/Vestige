@@ -15,6 +15,7 @@ UISlider::UISlider()
 {
     interactive = true;
     size = {280.0f, 44.0f};
+    m_accessible.role = UIAccessibleRole::Slider;
 }
 
 float UISlider::ratio() const
