@@ -92,6 +92,8 @@ set(ENGINE_SOURCES
     editor/panels/import_dialog.cpp
     editor/panels/inspector_panel.cpp
     editor/panels/asset_browser_panel.cpp
+    editor/panels/sprite_panel.cpp
+    editor/panels/tilemap_panel.cpp
     editor/prefab_system.cpp
     editor/command_history.cpp
     editor/file_menu.cpp

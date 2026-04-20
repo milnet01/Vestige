@@ -29,7 +29,12 @@ enum class GameTemplateType
     TWO_POINT_FIVE_D,
     ISOMETRIC,
     TOP_DOWN,
-    POINT_AND_CLICK
+    POINT_AND_CLICK,
+    // Phase 9F-6 — true-2D templates that route through
+    // createSideScrollerTemplate / createShmupTemplate instead of the
+    // 3D-oriented applyTemplate() flow.
+    SIDE_SCROLLER_2D,
+    SHMUP_2D
 };
 
 /// @brief Configuration for a game type template.

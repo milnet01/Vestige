@@ -13,6 +13,7 @@
 #include "scene/scene.h"
 #include "scene/entity.h"
 #include "scene/camera_component.h"
+#include "scene/game_templates_2d.h"
 
 #include <imgui.h>
 
@@ -144,6 +145,49 @@ std::vector<GameTemplateConfig> TemplateDialog::getTemplates()
         t.createDirectionalLight = true;
         t.createSkybox = true;
         t.inputProfile = "pointclick";
+        templates.push_back(t);
+    }
+
+    // 2D Side-Scroller (Phase 9F-6)
+    {
+        GameTemplateConfig t;
+        t.type = GameTemplateType::SIDE_SCROLLER_2D;
+        t.displayName = "2D Side-Scroller";
+        t.description = "Pure 2D platformer: sprite-based player with "
+                        "character controller, static floor, platforms, "
+                        "and a follow camera. No 3D geometry — physics "
+                        "uses Jolt's Plane2D DOF lock.";
+        // 2D templates ignore the 3D-oriented fields below; they're
+        // kept with safe defaults so getTemplates()' consumers don't
+        // have to special-case.
+        t.projectionType = ProjectionType::ORTHOGRAPHIC;
+        t.orthoSize = 5.0f;
+        t.enableGravity = true;
+        t.createGround = false;  // handled by the 2D template path
+        t.createPlayerEntity = false;
+        t.createDirectionalLight = false;
+        t.createSkybox = false;
+        t.inputProfile = "2d_platformer";
+        templates.push_back(t);
+    }
+
+    // 2D Shmup (Phase 9F-6)
+    {
+        GameTemplateConfig t;
+        t.type = GameTemplateType::SHMUP_2D;
+        t.displayName = "2D Shmup";
+        t.description = "Vertical-scroll shoot-'em-up: kinematic player, "
+                        "scrolling-background tilemap, locked ortho "
+                        "camera. Bullet spawning hooks into the Phase "
+                        "9E SpawnEntity node.";
+        t.projectionType = ProjectionType::ORTHOGRAPHIC;
+        t.orthoSize = 8.0f;
+        t.enableGravity = false;
+        t.createGround = false;
+        t.createPlayerEntity = false;
+        t.createDirectionalLight = false;
+        t.createSkybox = false;
+        t.inputProfile = "2d_shmup";
         templates.push_back(t);
     }
 
@@ -295,6 +339,19 @@ void TemplateDialog::applyTemplate(const GameTemplateConfig& config,
 
     // Clear existing scene
     scene->clearEntities();
+
+    // 2D template dispatch — route to createSideScrollerTemplate /
+    // createShmupTemplate instead of the 3D-oriented flow below.
+    if (config.type == GameTemplateType::SIDE_SCROLLER_2D)
+    {
+        createSideScrollerTemplate(*scene);
+        return;
+    }
+    if (config.type == GameTemplateType::SHMUP_2D)
+    {
+        createShmupTemplate(*scene);
+        return;
+    }
 
     // Create ground plane
     if (config.createGround)

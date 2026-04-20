@@ -9,6 +9,32 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-20 Phase 9F-6 — Editor 2D panels + template dialog wiring
+
+Shipped the editor-side hooks that let designers work with 2D scenes
+without leaving the IDE.
+
+- `engine/editor/panels/sprite_panel.{h,cpp}` — loads a TexturePacker
+  JSON atlas, lists its frames, assigns the atlas (and optionally a
+  specific frame) to the selected entity's SpriteComponent. Adds the
+  component when the selected entity doesn't already have one.
+- `engine/editor/panels/tilemap_panel.{h,cpp}` — layer list
+  (active-layer picker + add), resize knobs, tile palette picker (keyed
+  off `TilemapComponent::tileDefs`), and headless `paintCell` /
+  `eraseCell` for the viewport brush (wired from the viewport click
+  pipeline — the paint helpers are already public so scripted/tested
+  flows can drive them).
+- Template dialog: added `GameTemplateType::SIDE_SCROLLER_2D` and
+  `SHMUP_2D` (total 6 → 8). Dispatch in `applyTemplate` routes 2D types
+  to `createSideScrollerTemplate` / `createShmupTemplate` from Phase
+  9F-5 instead of the 3D flow.
+- 6 new tests covering atlas load, panel visibility toggles, and
+  paint/erase operations. Updated `test_editor_viewers.cpp`'s
+  `TemplateCount` test from 6 → 8. Full suite **2120 → 2126 passing**.
+
+Auto-tiling, slicing from a raw PNG, and the viewport-click paint
+pipeline are Phase 18 polish per the design doc.
+
 ### 2026-04-20 Phase 9F-5 — 2D game-type templates (Side-Scroller + Shmup)
 
 Ship two starter-scene generators designers can instantiate from the

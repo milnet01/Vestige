@@ -177,7 +177,8 @@ class GameTemplateTest : public ::testing::Test {};
 TEST_F(GameTemplateTest, TemplateCount)
 {
     auto templates = TemplateDialog::getTemplates();
-    EXPECT_EQ(templates.size(), 6u);
+    // 6 3D templates + 2 2D templates (Phase 9F-6).
+    EXPECT_EQ(templates.size(), 8u);
 }
 
 TEST_F(GameTemplateTest, AllTemplatesHaveNames)
