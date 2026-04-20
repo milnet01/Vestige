@@ -9,6 +9,48 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-20 Phase 10 — DoF + motion-blur accessibility toggles
+
+Final Phase 10 accessibility slice. Closes the last two accessibility
+items on the roadmap: *"Depth-of-field toggle (off by default in
+accessibility preset)"* and *"Motion-blur toggle (off by default in
+accessibility preset)"*.
+
+- `engine/accessibility/post_process_accessibility.{h,cpp}` — new
+  `PostProcessAccessibilitySettings` struct with
+  `depthOfFieldEnabled` + `motionBlurEnabled` bool fields, both
+  defaulting to `true` (normal visual quality). `safeDefaults()`
+  factory returns the struct with both flags flipped to `false` —
+  the one-click "Accessibility preset" the settings screen applies
+  when the user opts for the safest motion configuration.
+- `tests/test_post_process_accessibility.cpp` — 5 new tests:
+  both-effects-default-on (guards against a silent regression in
+  shipped defaults), safeDefaults-disables-both, safeDefaults-
+  distinct-from-zero-init (proves the one-click preset is not a
+  no-op), equality matches all fields, per-field toggles are
+  independent (migraine-from-DoF-only users can disable just one).
+
+*Why ship the toggles before the effects?*  The DoF and motion-blur
+effects themselves land in the Phase 10 Post-Processing Effects
+Suite. Shipping the canonical toggle home now means (a) the settings
+UI + persistence layer can wire the full accessibility preset today,
+(b) user preferences survive the moment the effects appear — on
+merge day each effect reads a single boolean from a settled location,
+and (c) the "Accessibility preset" concept has a real type to hang
+off rather than being a loose collection of individual toggles
+invented on the fly.
+
+References: WCAG 2.2 SC 2.3.3 ("Animation from Interactions"); Game
+Accessibility Guidelines ("Avoid motion blur; allow it to be turned
+off"); Xbox / Ubisoft accessibility guidelines (camera-blur
+effects should be opt-out).
+
+**Phase 10 accessibility complete** — all eight roadmap items shipped:
+UI scale presets, high-contrast mode, colour-vision-deficiency
+simulation, photosensitivity safe mode, subtitles, screen-reader
+labels, remappable controls, DoF + motion-blur toggles. Suite:
+2226 passing + 1 pre-existing GL-context skip.
+
 ### 2026-04-20 Phase 10 — Remappable controls (action map)
 
 Sixth Phase 10 accessibility slice. Addresses the roadmap bullet

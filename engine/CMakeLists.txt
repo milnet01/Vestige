@@ -59,6 +59,7 @@ set(ENGINE_SOURCES
     renderer/color_grading_lut.cpp
     renderer/color_vision_filter.cpp
     accessibility/photosensitive_safety.cpp
+    accessibility/post_process_accessibility.cpp
     ui/subtitle.cpp
     ui/ui_accessible.cpp
     input/input_bindings.cpp
