@@ -133,6 +133,7 @@ private:
     bool m_terrainEnabled = true;         ///< Set false for indoor scenes
     UISystem* m_uiSystem = nullptr;       ///< Cached pointer for render loop
     class SpriteSystem* m_spriteSystem = nullptr;  ///< Phase 9F 2D sprite pass
+    class Physics2DSystem* m_physics2DSystem = nullptr;  ///< Phase 9F 2D physics
 
     SystemRegistry m_systemRegistry;
 

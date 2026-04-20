@@ -9,6 +9,36 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-20 Phase 9F-2 — 2D physics via Jolt Plane2D DOF lock
+
+Shipped the 2D physics subsystem on top of the existing Jolt 5.2.0 build.
+No new third-party dependency — per-body `EAllowedDOFs::Plane2D` locks Z
+translation and X/Y rotation, so 2D bodies share the same broadphase,
+narrowphase, and contact solver as the 3D world. A mixed 2D+3D scene now
+works out of the box.
+
+- `engine/scene/rigid_body_2d_component.{h,cpp}` — BodyType2D (Static /
+  Kinematic / Dynamic), mass, friction, restitution, damping, gravity
+  scale, fixedRotation, collision bits; runtime fields (bodyId,
+  linearVelocity, angularVelocity) cached from Jolt each step.
+- `engine/scene/collider_2d_component.{h,cpp}` — shape descriptor
+  (Box / Circle / Capsule / Polygon / EdgeChain), trigger-mode sensor
+  flag, zThickness + zOffset for the extruded-slab representation.
+- `engine/systems/physics2d_system.{h,cpp}` — ISystem registered after
+  SpriteSystem. Shares the Engine's PhysicsWorld via
+  `getPhysicsWorld()`; `ensureBody` / `removeBody` / `applyImpulse` /
+  `setLinearVelocity` / `setTransform` expose a 2D-native API that
+  hides JPH::Vec3 plumbing. Dedicated `setPhysicsWorldForTesting` test
+  seam lets the test suite spin up a standalone PhysicsWorld without
+  Engine bootstrap.
+- Jolt `cDefaultConvexRadius = 0.05f` collision: authored zThickness
+  smaller than 0.12 is silently widened in `makeShape` so designers
+  don't have to think about Jolt's internal margin.
+- **15 new unit tests** — DOF lock, gravity fall, static-floor rest,
+  impulse/velocity, shape coverage (box, circle, capsule, polygon,
+  edge chain), degenerate-shape rejection, sensor pass-through,
+  fixed-rotation lock. Full suite now **2074 tests**.
+
 ### 2026-04-20 Phase 9F-1 — sprite foundation (atlas, animation, instance-rate renderer)
 
 Shipped the 2D-sprite rendering foundation. Sprites now have atlas-backed

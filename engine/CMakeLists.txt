@@ -33,6 +33,8 @@ set(ENGINE_SOURCES
     scene/gpu_particle_emitter.cpp
     scene/particle_presets.cpp
     scene/sprite_component.cpp
+    scene/rigid_body_2d_component.cpp
+    scene/collider_2d_component.cpp
     resource/resource_manager.cpp
     resource/async_texture_loader.cpp
     renderer/shader.cpp
@@ -234,6 +236,7 @@ set(ENGINE_SOURCES
     systems/ui_system.cpp
     # Phase 9F: 2D game support
     systems/sprite_system.cpp
+    systems/physics2d_system.cpp
     # Navigation system
     navigation/nav_mesh_builder.cpp
     physics/cloth_backend_factory.cpp

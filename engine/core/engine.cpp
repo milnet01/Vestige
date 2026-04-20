@@ -19,6 +19,7 @@
 #include "systems/ui_system.h"
 #include "systems/navigation_system.h"
 #include "systems/sprite_system.h"
+#include "systems/physics2d_system.h"
 #include "renderer/particle_renderer.h"
 #include "renderer/water_renderer.h"
 #include "renderer/water_fbo.h"
@@ -162,8 +163,10 @@ bool Engine::initialize(const EngineConfig& config)
     auto* uiSys = m_systemRegistry.registerSystem<UISystem>();
     m_systemRegistry.registerSystem<NavigationSystem>();
     auto* spriteSys = m_systemRegistry.registerSystem<SpriteSystem>();
+    auto* physics2DSys = m_systemRegistry.registerSystem<Physics2DSystem>();
     m_uiSystem = uiSys;
     m_spriteSystem = spriteSys;
+    m_physics2DSystem = physics2DSys;
 
     // Cache raw pointers for hot-path render loop access
     m_environmentForces    = &atmoSys->getEnvironmentForces();
