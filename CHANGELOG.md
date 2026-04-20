@@ -9,6 +9,199 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-20 Phase 9F-1 — sprite foundation (atlas, animation, instance-rate renderer)
+
+Shipped the 2D-sprite rendering foundation. Sprites now have atlas-backed
+frame lookup, Aseprite-compatible per-frame animation, and an instance-rate
+batched renderer separate from the UI's `SpriteBatchRenderer`. Game sprites
+pack one affine transform + UV rect + tint + depth per instance (80 bytes)
+and draw in a single `glDrawArraysInstanced` per (atlas, pass). The
+`SpriteSystem` collects, sorts, and batches — all three steps are headless
+so tests validate the CPU pipeline without a GL context.
+
+- `engine/renderer/sprite_atlas.{h,cpp}` — TexturePacker JSON loader
+  (array + hash forms), pre-normalised UVs, optional per-frame pivots.
+- `engine/animation/sprite_animation.{h,cpp}` — per-frame-duration clips,
+  forward / reverse / ping-pong direction, loop control.
+- `engine/scene/sprite_component.{h,cpp}` — attachable component with
+  atlas + frameName + tint + pivot + flips + pixelsPerUnit + sorting
+  layer/order + sortByY + isTransparent.
+- `engine/renderer/sprite_renderer.{h,cpp}` — instance-rate VBO with a
+  static 4-vertex corner quad; depth / blend state restored on `end()` so
+  the sprite pass doesn't disturb the 3D pipeline.
+- `engine/systems/sprite_system.{h,cpp}` — `ISystem`, registered in
+  `Engine::initialize` after `NavigationSystem`. Render path not yet
+  wired into the frame loop (waits for Phase 9F-4's 2D camera for a
+  proper view-projection).
+- `assets/shaders/sprite.vert.glsl` / `sprite.frag.glsl` — shared shader
+  pair; vertex shader reconstructs the 2D affine from two packed rows to
+  avoid wasted floats per instance.
+- **27 new unit tests** across atlas, animation, sort/batch, instance
+  packing, depth monotonicity, and component cloning. Full suite now at
+  **2059 tests** (was 2032).
+- Fixed a move-before-read bug in `SpriteAnimation::addClip` surfaced by
+  the replace-clip test: cache the key before `std::move(clip)`.
+- Design doc: `docs/PHASE9F_DESIGN.md`.
+
+### 2026-04-20 Post-Phase-9E audit — formula-workbench dangling-temp fix + audit 2.14.1
+
+Ran the full audit stack (cppcheck, semgrep p/security-audit, gitleaks,
+custom `tools/audit/audit.py` tiers 2-3) against the post-Phase-9E
+working tree. Baseline clean: build 0 warnings / 0 errors, 2032 tests
+passing, 0 HIGH/CRITICAL from any tool. Findings breakdown:
+
+- **Fixed — dangling const-ref to ternary temporary**
+  (`tools/formula_workbench/formula_node_editor_panel.cpp:196`).
+  `const std::string& sweepLabel = cond ? std::string("<auto>") :
+  m_preview.sweepVariable;` technically works (the common-type
+  materialised temporary gets lifetime-extended through the const ref)
+  but is brittle and cppcheck flags it `danglingTemporaryLifetime`.
+  Dropped the `&` — now stores by value, same cost under NRVO/elision,
+  no lifetime question.
+- **Audit-tool 2.14.1 — `c_style_cast` FP filter.** All 19 tier-2
+  Memory-Safety matches were FPs (parameter decls with `/*comment*/`
+  names that `skip_comments` preprocessed into `(float )`, plus
+  function-pointer type syntax like `float (*)(float)` where the
+  trailing `(float)` matched the cast regex). Tightened the regex to
+  require an operand after the close paren — tier-2 finding total
+  dropped 231 → 212 with zero lost signal. See
+  `tools/audit/CHANGELOG.md` [2.14.1].
+- **Ignored (false positives).** 83 gitleaks hits in
+  `build/_deps/imgui-src/` (third-party). 2 cppcheck
+  `returnDanglingLifetime` in `engine/scene/entity.cpp` — already have
+  inline suppressions, manual cppcheck invocation was missing
+  `--inline-suppr` (audit.py passes it correctly). 2
+  `duplicateAssignExpression` on Ark-of-the-Covenant dimensions
+  (1.5 cubits = 1.5 cubits per Exodus 25:10) and cube-face mip dims.
+  3 semgrep hits in `tools/audit/lib/` (dedicated `run_shell_cmd`
+  wrapper with explicit contract; NVD API URL uses fixed domain + url-
+  encoded query + 16 MB body cap per AUDIT.md §L7).
+
+### 2026-04-20 Phase 9E-3 runtime verification closed — node layout survives restart
+
+Runtime-verified the Script Editor's imgui-node-editor integration end-to-end
+(clean shutdown + layout restore), closing the last unchecked box under
+Phase 9E-3. The shutdown SEGV fix from the earlier commit already worked,
+but dragged node positions reset to the template defaults on every relaunch
+because the template-load code force-called `ed::SetNodePosition` for every
+node — stomping the positions the library had just restored from
+`~/.config/vestige/NodeEditor.json`.
+
+- `NodeEditorWidget` now parses `NodeEditor.json` at init and exposes
+  `hasPersistedPosition(nodeId)`. The parse handles the library's
+  `"node:<id>"` key format (see `Serialization::GenerateObjectName` in
+  `imgui_node_editor.cpp`) and the older bare-integer form. nlohmann/json
+  is already a dep; no new externals.
+- `ScriptEditorPanel::renderGraph` skips the template-default seed for
+  nodes that already have a saved position, so the library's
+  `CreateNode` → `UpdateNodeState` path wins and the user's drags
+  survive. Nodes that aren't in the settings file (fresh template on a
+  clean profile) still get seeded from `ScriptNodeDef::posX/posY`, so
+  multi-node templates no longer stack at the origin on first launch.
+- The save-callback path merges new ids into the persisted set instead
+  of replacing it, because the library serializes only nodes that have
+  already been referenced via `BeginNode` / `SetNodePosition`. A save
+  fired at end-of-frame before the panel has rendered any nodes would
+  otherwise write an empty `"nodes"` object and clear the set we just
+  populated from disk.
+- Manual test (Door Opens template, node:2 dragged from (220,0) to
+  (223,-153), editor closed, relaunched, template re-picked): node
+  reappears at the dragged position, all links reroute correctly, no
+  crash on shutdown.
+
+### 2026-04-20 Phase 9E-5 — ScriptGraphCompiler (graph → validated IR)
+
+Closes the "Graph compilation to executable logic (beyond expression trees)"
+item under Phase 9E. Visual scripting graphs now go through a dedicated
+validation + lowering pass at load time, so broken graphs (unknown node
+types, dangling connections, pin-type mismatches, pure-data cycles)
+surface as a single clear error before any chain runs — instead of a
+partial trace mid-dispatch.
+
+- `engine/scripting/script_compiler.h/.cpp` add `ScriptGraphCompiler`,
+  `CompiledScriptGraph`, `CompiledNode`, `CompiledInputPin`,
+  `CompiledOutputPin`, `CompilationResult`, and `CompileDiagnostic`. The
+  compiler is stateless and never throws — even a null-registry / empty
+  graph input returns a usable result with an "empty graph" warning.
+- Validation passes: node type resolution against the registry, unique
+  node ids, connection endpoint resolution (source + target node and pin
+  names by string lookup), pin kind match (exec↔exec, data↔data), pin
+  data-type compatibility (ANY wildcard, same-type, and whitelisted
+  widenings — INT→FLOAT, BOOL→INT/FLOAT, ENTITY→INT, COLOR↔VEC4, and
+  all types → STRING, mirroring `ScriptValue` runtime coercions so the
+  compile-time check never rejects a connection the interpreter would
+  accept), input fan-in ≤ 1, pure-data cycle detection via iterative
+  DFS (execution cycles and execution-output fan-out are intentionally
+  permitted — loops, re-triggers, and `DoOnce.Then → Anim + Sound`
+  templates depend on both), entry-point discovery (event nodes, OnStart,
+  OnUpdate, and anything in the `Events` category so stub events like
+  OnTriggerEnter / OnCollisionEnter still register as roots), and
+  reachability classification that warns on orphaned impure nodes while
+  ignoring pure library helpers.
+- `ScriptingSystem::registerInstance` runs the compiler and refuses to
+  activate instances that produce fatal errors, logging each diagnostic
+  against the graph name. Warnings still activate so library-style
+  graphs with no entry points don't get silently dropped.
+- `CompiledScriptGraph` stores flat index-based wiring
+  (`sourceNodeIndex` / `sourceOutputPinIndex` / `targetNodeIndices`) and
+  `indexForNodeId()` so future codegen or bytecode back-ends can consume
+  the IR without hashing node ids or pin names.
+- Tests: 16 new cases in `tests/test_script_compiler.cpp` —
+  every shipped gameplay template compiles clean, every error class
+  exercised (unknown type, dangling connection, duplicate node id,
+  duplicate input connection forged past `addConnection`'s editor-side
+  dedupe, pin kind mismatch, pin data-type mismatch, pure-data cycle),
+  entry-point discovery (OnUpdate), unreachable impure node warning,
+  exec fan-out accepted, exec cycle accepted, full type-compatibility
+  matrix, and resolved-wiring round-trip. Full suite: 2032 / 2032 pass.
+
+### 2026-04-20 Phase 9E — Formula Node Editor panel (visual composition, drag-drop, live preview)
+
+Closes the three remaining `Formula Node Editor` roadmap items under
+Phase 9E in one panel inside the FormulaWorkbench:
+
+- Visual formula composition UI (ImGui node editor canvas over
+  `NodeGraph`, rendering every node's pins / links from the graph's
+  own port layout — same `NodeEditorWidget` used by
+  `ScriptEditorPanel`, separate `ed::EditorContext` so state cannot
+  leak between the two canvases).
+- Drag-and-drop from the `PhysicsTemplates` catalog into the graph
+  (ImGui `BeginDragDropSource` → `FORMULA_TEMPLATE` payload →
+  `AcceptDragDropPayload` on the canvas child). Click-to-load is the
+  keyboard-friendly fallback.
+- Output-node curve preview rendered via ImPlot under the canvas;
+  samples the graph across a user-configurable sweep variable + range
+  + sample count and plots the result every frame.
+
+**Files.** `tools/formula_workbench/formula_node_editor_panel.{h,cpp}`
+(panel + ImGui / ImPlot rendering) and `formula_node_editor_core.cpp`
+(headless state: constructor, `initialize` / `shutdown`, `loadTemplate`,
+`recomputePreview`, and the `sampleFormulaCurve()` / `findOutputNodeId()`
+free helpers). Split is deliberate — tests link only `core.cpp` +
+`vestige_engine` and exercise the full state machine without pulling
+in ImGui / ImPlot / imgui-node-editor. `Workbench` owns one instance;
+`View → Node Editor` toggles visibility; lifecycle hooked through new
+`Workbench::initializeGui()` / `shutdownGui()` so `ed::DestroyEditor`
+runs before `ImGui::DestroyContext` (same pattern as `ScriptEditorPanel`).
+
+**Sampler guarantees.** `sampleFormulaCurve()` never throws — all
+`ExpressionEvaluator` exceptions funnel into
+`FormulaCurveSample::error`. Behaviours: empty graph / missing output
+node / broken tree each set a descriptive error string; constant-only
+graphs fan out to a flat line instead of a single point; auto-pick
+selects the first variable referenced by the tree; unknown explicit
+sweep variable silently falls back to auto-pick (so stale UI selection
+from a previous template doesn't flash errors); unbound variables
+default to 0.0f; `sampleCount` is clamped to `[2, 4096]`.
+
+**Tests.** 13 new tests in `tests/test_formula_node_editor_panel.cpp`
+covering the sampler behaviour matrix above plus the panel's state
+transitions (load / unload / sweep-range update). Monotonicity check
+on `ease_in_sine`, analytical-linearity check on `aerodynamic_drag`
+swept on `vDotN`. Test-suite total: 2016 / 2016 (1 pre-existing skip).
+
+`WORKBENCH_VERSION` bumped to `1.16.0`.
+
 ### 2026-04-20 Phase 9E-4 — gameplay templates menu in ScriptEditorPanel
 
 Wires the 5 shipped gameplay templates into the Script Editor menu bar

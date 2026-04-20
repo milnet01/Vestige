@@ -18,6 +18,7 @@
 #include "systems/audio_system.h"
 #include "systems/ui_system.h"
 #include "systems/navigation_system.h"
+#include "systems/sprite_system.h"
 #include "renderer/particle_renderer.h"
 #include "renderer/water_renderer.h"
 #include "renderer/water_fbo.h"
@@ -160,7 +161,9 @@ bool Engine::initialize(const EngineConfig& config)
     m_systemRegistry.registerSystem<AudioSystem>();
     auto* uiSys = m_systemRegistry.registerSystem<UISystem>();
     m_systemRegistry.registerSystem<NavigationSystem>();
+    auto* spriteSys = m_systemRegistry.registerSystem<SpriteSystem>();
     m_uiSystem = uiSys;
+    m_spriteSystem = spriteSys;
 
     // Cache raw pointers for hot-path render loop access
     m_environmentForces    = &atmoSys->getEnvironmentForces();

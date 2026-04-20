@@ -155,6 +155,7 @@ void ScriptEditorPanel::drawMenuBar()
                 m_graph = buildGameplayTemplate(t);
                 m_currentPath.clear();
                 m_dirty = true;
+                m_needsLayout = true;
             }
             if (tooltip[0] != '\0' && ImGui::IsItemHovered())
             {
@@ -181,16 +182,58 @@ void ScriptEditorPanel::drawCanvas()
         ImGui::TextDisabled("Node editor not initialised.");
         return;
     }
-    if (!m_widget.beginCanvas("ScriptEditorCanvas"))
+
+    // Wrap the canvas in a child window sized to the remaining content area.
+    // imgui-node-editor latches its screen origin from whatever ImGui region
+    // is active at ed::Begin() — without an explicit child, the origin can
+    // drift out of sync with the host window when it's docked, resized, or
+    // moved, and nodes end up rendering over empty space while the dialog
+    // itself looks blank. The FormulaNodeEditorPanel uses the same pattern
+    // and behaves correctly; mirror it here.
+    ImGui::BeginChild("##script-canvas", ImVec2(0, 0), /*border*/ true);
+    if (m_widget.beginCanvas("ScriptEditorCanvas"))
     {
-        return;
+        renderGraph();
+        m_widget.endCanvas();
     }
-    renderGraph();
-    m_widget.endCanvas();
+    ImGui::EndChild();
 }
 
 void ScriptEditorPanel::renderGraph()
 {
+    // First frame after a graph replacement (New / Open / Templates) — seed
+    // each node's canvas position from its stored posX/posY. imgui-node-
+    // editor otherwise auto-places new nodes at its own default spawn, which
+    // stacks every template node on top of each other. The latch is cleared
+    // immediately so subsequent frames don't override user drags, and the
+    // persisted NodeEditor.json takes over from there.
+    if (m_needsLayout)
+    {
+        for (const auto& node : m_graph.nodes)
+        {
+            // Persistence wins over template defaults. If the user dragged
+            // this node in a previous session and the position is already
+            // serialized in NodeEditor.json, the library's LoadSettings
+            // path restores it via CreateNode → UpdateNodeState before
+            // we ever BeginNode — force-setting here would stomp it.
+            if (m_widget.hasPersistedPosition(node.id))
+            {
+                continue;
+            }
+            m_widget.setNodePosition(node.id, node.posX, node.posY);
+        }
+        m_needsLayout = false;
+        // Can't fit-to-view on the same frame — imgui-node-editor uses the
+        // previous frame's measured bounds, which are zero for fresh nodes.
+        // Defer so the next frame has real bounds to work with.
+        m_needsFitView = true;
+    }
+    else if (m_needsFitView)
+    {
+        m_widget.navigateToContent();
+        m_needsFitView = false;
+    }
+
     // Render every node in the graph. Pins use the descriptor's pin defs
     // for labels and ordering. Steps 5+ will add palette-driven creation,
     // properties editing, connection drag, and breakpoints.
@@ -292,6 +335,7 @@ void ScriptEditorPanel::newGraph()
     m_graph = ScriptGraph{};
     m_currentPath.clear();
     m_dirty = false;
+    m_needsLayout = true;
 }
 
 bool ScriptEditorPanel::open(const std::string& path)
@@ -319,6 +363,7 @@ bool ScriptEditorPanel::open(const std::string& path)
     m_graph = std::move(loaded);
     m_currentPath = path;
     m_dirty = false;
+    m_needsLayout = true;
     return true;
 }
 

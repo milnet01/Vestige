@@ -19,6 +19,7 @@
 #include "editor/panels/import_dialog.h"
 #include "editor/panels/inspector_panel.h"
 #include "editor/panels/script_editor_panel.h"
+#include "scripting/node_type_registry.h"
 #include "editor/panels/validation_panel.h"
 #include "editor/panels/welcome_panel.h"
 #include "editor/panels/texture_viewer_panel.h"
@@ -290,6 +291,12 @@ private:
     ValidationPanel m_validationPanel;
     WelcomePanel m_welcomePanel;
     ScriptEditorPanel m_scriptEditorPanel;
+    // Editor-owned node registry that feeds the ScriptEditorPanel. The engine
+    // runtime doesn't currently spin up a ScriptingSystem (scripts are
+    // exercised only via unit tests), so the editor owns its own registry
+    // populated from the same register* entry points. Lives next to the
+    // panel so the pointer handed via setRegistry() outlives every draw.
+    NodeTypeRegistry m_nodeTypeRegistry;
     TextureViewerPanel m_textureViewerPanel;
     HdriViewerPanel m_hdriViewerPanel;
     ModelViewerPanel m_modelViewerPanel;

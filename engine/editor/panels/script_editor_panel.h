@@ -86,6 +86,20 @@ private:
 
     bool m_open = false;
     bool m_dirty = false;
+    /// @brief Set every time the in-memory graph is replaced (New, Open,
+    /// Templates). The next renderGraph() applies each node's posX/posY via
+    /// NodeEditorWidget::setNodePosition, then clears the flag so user
+    /// drags + the persisted settings file take over. Without this step
+    /// imgui-node-editor piles every newly-loaded node at its default
+    /// spawn point, making multi-node templates appear as a single stacked
+    /// box.
+    bool m_needsLayout = false;
+    /// @brief Set one frame after m_needsLayout, consumed on the frame after
+    /// that to call ed::NavigateToContent and zoom-to-fit. Fresh graphs
+    /// default to a view that's so zoomed in a single pin fills the canvas;
+    /// fitting only works on the frame after the nodes were first measured,
+    /// so we defer by one frame.
+    bool m_needsFitView = false;
     NodeEditorWidget m_widget;
     ScriptGraph m_graph;
     std::string m_currentPath;

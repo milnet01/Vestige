@@ -132,6 +132,7 @@ private:
     bool m_usePhysicsController = false;  ///< Toggle between AABB and physics controller
     bool m_terrainEnabled = true;         ///< Set false for indoor scenes
     UISystem* m_uiSystem = nullptr;       ///< Cached pointer for render loop
+    class SpriteSystem* m_spriteSystem = nullptr;  ///< Phase 9F 2D sprite pass
 
     SystemRegistry m_systemRegistry;
 

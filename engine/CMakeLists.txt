@@ -32,6 +32,7 @@ set(ENGINE_SOURCES
     scene/particle_emitter.cpp
     scene/gpu_particle_emitter.cpp
     scene/particle_presets.cpp
+    scene/sprite_component.cpp
     resource/resource_manager.cpp
     resource/async_texture_loader.cpp
     renderer/shader.cpp
@@ -64,6 +65,8 @@ set(ENGINE_SOURCES
     renderer/gpu_culler.cpp
     renderer/particle_renderer.cpp
     renderer/gpu_particle_system.cpp
+    renderer/sprite_atlas.cpp
+    renderer/sprite_renderer.cpp
     resource/model.cpp
     utils/obj_loader.cpp
     utils/gltf_loader.cpp
@@ -151,6 +154,7 @@ set(ENGINE_SOURCES
     animation/motion_matcher.cpp
     animation/motion_preprocessor.cpp
     animation/mirror_generator.cpp
+    animation/sprite_animation.cpp
     physics/physics_world.cpp
     physics/rigid_body.cpp
     physics/physics_character_controller.cpp
@@ -228,6 +232,8 @@ set(ENGINE_SOURCES
     ui/ui_keybind_row.cpp
     ui/menu_prefabs.cpp
     systems/ui_system.cpp
+    # Phase 9F: 2D game support
+    systems/sprite_system.cpp
     # Navigation system
     navigation/nav_mesh_builder.cpp
     physics/cloth_backend_factory.cpp
@@ -253,6 +259,7 @@ set(ENGINE_SOURCES
     scripting/flow_nodes.cpp
     scripting/latent_nodes.cpp
     scripting/script_templates.cpp
+    scripting/script_compiler.cpp
     # glad OpenGL loader
     ${CMAKE_SOURCE_DIR}/external/glad/src/gl.c
     # stb_image implementation

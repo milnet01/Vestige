@@ -77,6 +77,7 @@ void Workbench::render()
     renderPresetBrowser();
     renderSuggestionsPanel();
     renderPySRPanel();
+    renderNodeEditor();
 
     // Status bar
     if (m_statusTimer > 0.0f)
@@ -126,6 +127,16 @@ void Workbench::renderMenuBar()
                 undo();
             if (ImGui::MenuItem("Redo", "Ctrl+Y", false, !m_redoStack.empty()))
                 redo();
+            ImGui::EndMenu();
+        }
+        if (ImGui::BeginMenu("View"))
+        {
+            bool nodeEditorOpen = m_nodeEditorPanel.isOpen();
+            if (ImGui::MenuItem("Node Editor", nullptr, &nodeEditorOpen))
+            {
+                if (nodeEditorOpen) m_nodeEditorPanel.open();
+                else                m_nodeEditorPanel.close();
+            }
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("Help"))
@@ -2878,6 +2889,31 @@ void Workbench::renderPySRPanel()
     }
 
     ImGui::End();
+}
+
+// ---------------------------------------------------------------------------
+// Phase 9E — Node editor panel lifecycle + render delegation.
+// ---------------------------------------------------------------------------
+
+void Workbench::initializeGui()
+{
+    // Persist node-editor layout alongside ImGui.ini so designers keep
+    // their canvas pan/zoom between sessions. Workbench writes to CWD by
+    // convention; users running outside the tool directory fall back to
+    // the library default (no persistence).
+    m_nodeEditorPanel.initialize("formula_node_editor.json");
+}
+
+void Workbench::shutdownGui()
+{
+    // MUST run before ImGui::DestroyContext so ed::DestroyEditor doesn't
+    // dereference torn-down ImGui state — see NodeEditorWidget::shutdown.
+    m_nodeEditorPanel.shutdown();
+}
+
+void Workbench::renderNodeEditor()
+{
+    m_nodeEditorPanel.draw();
 }
 
 } // namespace Vestige

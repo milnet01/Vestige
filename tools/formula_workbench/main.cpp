@@ -107,6 +107,7 @@ int main(int argc, char** argv)
 
     // Create workbench
     Vestige::Workbench workbench;
+    workbench.initializeGui();
 
     // Main loop
     while (!glfwWindowShouldClose(window))
@@ -131,7 +132,9 @@ int main(int argc, char** argv)
         glfwSwapBuffers(window);
     }
 
-    // Cleanup
+    // Cleanup — tear down node-editor contexts before ImGui goes away.
+    workbench.shutdownGui();
+
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImPlot::DestroyContext();

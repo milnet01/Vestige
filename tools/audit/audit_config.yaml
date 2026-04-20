@@ -116,8 +116,22 @@ patterns:
       severity: "medium"
       description: "using namespace in header — namespace pollution"
       skip_comments: true
+    # audit 2.14.1: the cast must be *applied* to something — require the
+    # closing `)` to be followed by an identifier, nested `(`, unary
+    # operator, or signed-number prefix. Without this, two large
+    # false-positive classes land in the report:
+    #   1. Parameter decls with commented-out names, e.g.
+    #      `void update(float /*deltaTime*/)` — `skip_comments` strips
+    #      the comment first, leaving `(float )` which the old pattern
+    #      matched as a cast.
+    #   2. Function-pointer type syntax, e.g.
+    #      `using EasingFunc = float (*)(float);` — the trailing
+    #      `(float)` matched as a cast.
+    # Real casts are always followed by the operand, so keying the
+    # pattern on operand-start kills both FP classes without losing
+    # genuine `(int)x` / `(float)-1` / `(int)(expr)` signal.
     - name: "c_style_cast"
-      pattern: "\\(\\s*(int|float|double|char|unsigned|long|short|size_t|uint\\d+_t|int\\d+_t)\\s*\\*?\\s*\\)"
+      pattern: "\\(\\s*(int|float|double|char|unsigned|long|short|size_t|uint\\d+_t|int\\d+_t)\\s*\\*?\\s*\\)\\s*[A-Za-z_(+\\-!~]"
       file_glob: "*.cpp,*.h"
       severity: "medium"
       description: "C-style cast — use static_cast/reinterpret_cast"

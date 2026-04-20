@@ -7,6 +7,7 @@
 #include "core/logger.h"
 
 #include <imgui_node_editor.h>
+#include <nlohmann/json.hpp>
 
 #include <cstring>
 #include <fstream>
@@ -16,6 +17,64 @@ namespace Vestige
 {
 
 namespace ed = ax::NodeEditor;
+
+namespace
+{
+
+/// @brief Parse NodeEditor.json and collect every node id that has a saved
+/// location. Keys of the top-level "nodes" object are stringified node ids
+/// prefixed with the object-type tag the library emits — e.g. "node:1".
+/// Strip the prefix before converting. Malformed or missing files are
+/// treated as "no persisted nodes" rather than an error — the caller falls
+/// back to seeding from template defaults.
+std::unordered_set<uintptr_t> parsePersistedNodeIds(const std::string& data)
+{
+    std::unordered_set<uintptr_t> ids;
+    if (data.empty())
+    {
+        return ids;
+    }
+    try
+    {
+        const auto j = nlohmann::json::parse(data);
+        const auto nodesIt = j.find("nodes");
+        if (nodesIt == j.end() || !nodesIt->is_object())
+        {
+            return ids;
+        }
+        for (const auto& entry : nodesIt->items())
+        {
+            const std::string& key = entry.key();
+            // The library tags ids as "node:<int>" (see
+            // Serialization::GenerateObjectName in imgui_node_editor.cpp);
+            // older files may use the bare integer form.
+            constexpr const char* kPrefix = "node:";
+            constexpr size_t kPrefixLen = 5;
+            std::string numStr = key;
+            if (numStr.rfind(kPrefix, 0) == 0)
+            {
+                numStr = numStr.substr(kPrefixLen);
+            }
+            try
+            {
+                ids.insert(std::stoull(numStr));
+            }
+            catch (...)
+            {
+                // Unexpected key format — skip it.
+            }
+        }
+    }
+    catch (const std::exception& e)
+    {
+        Logger::warning(std::string("[NodeEditor] Failed to parse settings "
+                                    "JSON (persisted ids set will be "
+                                    "empty): ") + e.what());
+    }
+    return ids;
+}
+
+} // namespace
 
 NodeEditorWidget::~NodeEditorWidget()
 {
@@ -64,7 +123,25 @@ bool nodeEditorWidget_saveSettings(const char* data, size_t size,
         return false;
     }
     f.write(data, static_cast<std::streamsize>(size));
-    return static_cast<bool>(f);
+    if (!f)
+    {
+        return false;
+    }
+    // Merge — don't replace — the persisted-ids set with any new ids in the
+    // payload we just wrote. Replacing would wipe the set on the first
+    // pre-BeginNode save: the library serializes only nodes that are
+    // present in m_Nodes (i.e. already referenced by BeginNode /
+    // SetNodePosition), while m_Settings still holds the loaded layout.
+    // A save fired at end-of-frame before the panel has rendered any
+    // nodes would therefore write an empty "nodes" object and clear the
+    // set we just populated from disk at initialize() time.
+    const auto newlySeen =
+        parsePersistedNodeIds(std::string(data, size));
+    for (auto id : newlySeen)
+    {
+        self->m_persistedNodeIds.insert(id);
+    }
+    return true;
 }
 
 size_t nodeEditorWidget_loadSettings(char* data, void* userPointer)
@@ -92,6 +169,24 @@ void NodeEditorWidget::initialize(const std::string& settingsFile)
         return;
     }
     m_settingsFile = settingsFile;
+
+    // Pre-populate the persisted-ids set from the settings file if it
+    // exists. Used by hasPersistedPosition() so callers that seed fresh
+    // graph layouts (ScriptEditorPanel's template loader) can skip nodes
+    // whose positions were already restored by the library's LoadSettings
+    // path — without this, force-applying template defaults would stomp
+    // every user-dragged position on the next launch.
+    m_persistedNodeIds.clear();
+    if (!m_settingsFile.empty())
+    {
+        std::ifstream f(m_settingsFile, std::ios::binary);
+        if (f)
+        {
+            std::ostringstream buf;
+            buf << f.rdbuf();
+            m_persistedNodeIds = parsePersistedNodeIds(buf.str());
+        }
+    }
 
     ed::Config cfg;
     // Route all persistence through our callbacks so we can suppress
@@ -168,6 +263,21 @@ void NodeEditorWidget::link(uintptr_t linkId, uintptr_t fromPin, uintptr_t toPin
     ed::Link(static_cast<ed::LinkId>(linkId),
              static_cast<ed::PinId>(fromPin),
              static_cast<ed::PinId>(toPin));
+}
+
+void NodeEditorWidget::setNodePosition(uintptr_t nodeId, float x, float y)
+{
+    ed::SetNodePosition(static_cast<ed::NodeId>(nodeId), ImVec2(x, y));
+}
+
+void NodeEditorWidget::navigateToContent(float duration)
+{
+    ed::NavigateToContent(duration);
+}
+
+bool NodeEditorWidget::hasPersistedPosition(uintptr_t nodeId) const
+{
+    return m_persistedNodeIds.count(nodeId) != 0;
 }
 
 } // namespace Vestige

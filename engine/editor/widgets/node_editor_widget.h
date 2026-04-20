@@ -17,6 +17,7 @@
 
 #include <cstdint>
 #include <string>
+#include <unordered_set>
 
 namespace ax::NodeEditor
 {
@@ -85,6 +86,34 @@ public:
     /// @brief Draw a connection between two pins.
     void link(uintptr_t linkId, uintptr_t fromPin, uintptr_t toPin);
 
+    /// @brief Set a node's canvas position unconditionally.
+    ///
+    /// Used by callers that load a graph with explicit layout (e.g.
+    /// gameplay templates store per-node posX/posY) — applied once after
+    /// load so the persisted node-editor settings file can still take over
+    /// user drags afterwards. Calling this every frame would override the
+    /// user's moves, so pair it with a "needs layout" latch in the owner.
+    void setNodePosition(uintptr_t nodeId, float x, float y);
+
+    /// @brief Pan + zoom the canvas so every node is visible.
+    ///
+    /// Should be called the frame *after* nodes are first placed, because
+    /// imgui-node-editor fits against last-frame measured bounds — fresh
+    /// nodes have zero-size bounds on the frame they're placed. A duration
+    /// of 0 snaps instantly (default is animated). Must be called inside a
+    /// beginCanvas()/endCanvas() pair.
+    void navigateToContent(float duration = 0.0f);
+
+    /// @brief True if the settings file already contains a saved position
+    /// for this node id.
+    ///
+    /// Owners that seed fresh-graph layouts (e.g. ScriptEditorPanel applying
+    /// per-template posX/posY) should consult this before calling
+    /// setNodePosition: if the user previously dragged the node and we saved
+    /// it to NodeEditor.json, the library's LoadSettings path will restore
+    /// that position on next launch, and a naive force-set would stomp it.
+    bool hasPersistedPosition(uintptr_t nodeId) const;
+
 private:
     // AUDIT.md §H16 / FIXPLAN H1: the SaveSettings / LoadSettings callbacks
     // that override the library's default file-based persistence live in
@@ -96,6 +125,11 @@ private:
     ax::NodeEditor::EditorContext* m_context = nullptr;
     std::string m_settingsFile;
     bool m_isShuttingDown = false;  ///< Set for the duration of shutdown().
+
+    /// @brief Node ids that currently have a persisted location in the
+    /// settings file. Rebuilt on initialize() and on every successful
+    /// SaveSettings flush so in-session drags stay reflected.
+    std::unordered_set<uintptr_t> m_persistedNodeIds;
 
     // Grant the free-function callbacks in node_editor_widget.cpp access
     // to the private members above.

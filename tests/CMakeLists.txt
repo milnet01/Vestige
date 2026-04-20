@@ -105,6 +105,10 @@ add_executable(vestige_tests
     test_node_graph.cpp
     test_scripting.cpp
     test_script_templates.cpp
+    test_script_compiler.cpp
+    test_sprite_atlas.cpp
+    test_sprite_animation.cpp
+    test_sprite_renderer.cpp
     # FormulaWorkbench tool-side unit tests. The .cpp lives under
     # tools/formula_workbench/ and isn't part of vestige_engine, so
     # the test target compiles it directly.
@@ -114,12 +118,17 @@ add_executable(vestige_tests
     test_async_driver.cpp
     test_pysr_parser.cpp
     test_markdown_render.cpp
+    test_formula_node_editor_panel.cpp
     ${CMAKE_SOURCE_DIR}/tools/formula_workbench/fit_history.cpp
     ${CMAKE_SOURCE_DIR}/tools/formula_workbench/benchmark.cpp
     ${CMAKE_SOURCE_DIR}/tools/formula_workbench/reference_harness.cpp
     ${CMAKE_SOURCE_DIR}/tools/formula_workbench/async_driver.cpp
     ${CMAKE_SOURCE_DIR}/tools/formula_workbench/pysr_parser.cpp
     ${CMAKE_SOURCE_DIR}/tools/formula_workbench/markdown_render.cpp
+    # Headless core of the FormulaNodeEditorPanel (sampler + state-only
+    # methods). Split from formula_node_editor_panel.cpp so tests don't
+    # need ImGui / ImPlot / imgui-node-editor linkage.
+    ${CMAKE_SOURCE_DIR}/tools/formula_workbench/formula_node_editor_core.cpp
 )
 
 target_include_directories(vestige_tests

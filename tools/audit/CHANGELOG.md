@@ -2,6 +2,33 @@
 
 All notable changes to the Audit Tool are documented in this file.
 
+## [2.14.1] - 2026-04-20
+
+### Fixed — `c_style_cast` false positives (parameter decls, function-pointer types)
+
+The tier-2 `c_style_cast` regex was firing on two patterns that look
+like `(type)` but aren't casts. During the 2026-04-20 audit all 19
+Memory-Safety matches were FPs of these shapes:
+
+1. **Parameter decls with commented-out names.**
+   `void RigidBody::update(float /*deltaTime*/)` — the `skip_comments`
+   preprocessor strips `/*deltaTime*/` first, leaving `(float )`,
+   which matched `\(\s*float\s*\*?\s*\)`. 7 hits across `rigid_body`,
+   `camera_component`, `first_person_controller`, `model_viewer_panel`, etc.
+2. **Function-pointer type syntax.**
+   `using EasingFunc = float (*)(float);` — the trailing `(float)` in
+   the signature matched the same pattern. 1 hit in `easing.cpp`,
+   plus similar shapes elsewhere.
+
+**Fix:** require the closing `)` to be followed by an operand-start —
+identifier, nested `(`, unary operator, or signed-number prefix —
+using the suffix `\s*[A-Za-z_(+\-!~]`. Real casts are *always* applied
+to something, so keying on operand-start eliminates both FP classes
+without losing `(int)x` / `(float)-1` / `(int)(expr)` signal. Verified
+6/6 real-cast samples still match and 5/5 parameter/function-pointer
+samples now miss. Tier-2 total for Vestige dropped 231 → 212 with zero
+lost signal.
+
 ## [2.14.0] - 2026-04-19
 
 ### Added (Batch 7 detector rules — final close-out from 2.12.0/2.13.0 queue)

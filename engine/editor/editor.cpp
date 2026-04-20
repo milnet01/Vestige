@@ -20,6 +20,20 @@
 #include "scene/scene.h"
 #include "systems/navigation_system.h"
 
+// Visual-scripting node palette registrations — free functions defined in
+// the scripting/*_nodes.cpp translation units. Forward-declared here rather
+// than via a dedicated header so the editor doesn't pull every scripting
+// header transitively; the registry type itself is needed and included by
+// editor.h.
+namespace Vestige {
+void registerCoreNodeTypes(NodeTypeRegistry& registry);
+void registerEventNodeTypes(NodeTypeRegistry& registry);
+void registerActionNodeTypes(NodeTypeRegistry& registry);
+void registerPureNodeTypes(NodeTypeRegistry& registry);
+void registerFlowNodeTypes(NodeTypeRegistry& registry);
+void registerLatentNodeTypes(NodeTypeRegistry& registry);
+}
+
 #include <functional>
 
 #include <imgui.h>
@@ -132,6 +146,17 @@ bool Editor::initialize(GLFWwindow* window, const std::string& assetPath)
     // source. Runtime edits persist to this file; shutdown suppresses
     // the final save.
     const std::string nodeEditorSettingsPath = configDir + "/NodeEditor.json";
+    // Populate the editor-owned registry with the same node palette the
+    // runtime ScriptingSystem would, and hand it to the panel so pin
+    // rendering + connection resolution works (without it, renderGraph
+    // silently skips every pin and templates appear to do nothing).
+    registerCoreNodeTypes(m_nodeTypeRegistry);
+    registerEventNodeTypes(m_nodeTypeRegistry);
+    registerActionNodeTypes(m_nodeTypeRegistry);
+    registerPureNodeTypes(m_nodeTypeRegistry);
+    registerFlowNodeTypes(m_nodeTypeRegistry);
+    registerLatentNodeTypes(m_nodeTypeRegistry);
+    m_scriptEditorPanel.setRegistry(&m_nodeTypeRegistry);
     m_scriptEditorPanel.initialize(nodeEditorSettingsPath);
 
     m_isInitialized = true;

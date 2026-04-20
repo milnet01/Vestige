@@ -15,6 +15,7 @@
 #pragma once
 
 #include "async_driver.h"
+#include "formula_node_editor_panel.h"
 #include "markdown_render.h"
 #include "formula/curve_fitter.h"
 #include "formula/formula_library.h"
@@ -28,7 +29,7 @@ namespace Vestige
 {
 
 /// @brief Version string for the FormulaWorkbench.
-inline constexpr const char* WORKBENCH_VERSION = "1.15.0";
+inline constexpr const char* WORKBENCH_VERSION = "1.16.0";
 
 /// @brief Interactive formula workbench application.
 class Workbench
@@ -38,6 +39,15 @@ public:
 
     /// @brief Renders all workbench panels. Call each frame.
     void render();
+
+    /// @brief One-shot setup that requires a live ImGui context (e.g.
+    /// creating the imgui-node-editor context inside the Node Editor
+    /// panel). Call exactly once, after `ImGui::CreateContext()`.
+    void initializeGui();
+
+    /// @brief Tear down GUI resources that must die before
+    /// `ImGui::DestroyContext()`.
+    void shutdownGui();
 
     /// @brief One row of the PySR symbolic-regression leaderboard.
     ///        Public so the free-function JSON parser in
@@ -62,6 +72,7 @@ private:
     void renderPresetBrowser();
     void renderSuggestionsPanel();   ///< §3.6 GUI — LLM-ranked formula shortlist.
     void renderPySRPanel();          ///< §3.5 GUI — PySR symbolic regression discovery.
+    void renderNodeEditor();         ///< Phase 9E — visual formula composition panel.
 
     // -- Actions --------------------------------------------------------------
     void selectFormula(const std::string& name);
@@ -265,6 +276,17 @@ private:
     ///        writes a human-readable message to ``m_pysrError`` and
     ///        returns false.
     bool importPySREquationAsLibrary(const PySREquation& eq);
+
+    // -- Phase 9E — visual formula composition ---------------------------------
+    //
+    // Closes the "Formula Node Editor" roadmap items: drag-and-drop from
+    // the PhysicsTemplates catalog, visual composition canvas over the
+    // NodeGraph data model, and an ImPlot curve preview on the output
+    // node. Initialized lazily in ``initializeGui`` so the node-editor
+    // context is created with a live ImGui context, and torn down in
+    // ``shutdownGui`` so ``ed::DestroyEditor`` runs before
+    // ``ImGui::DestroyContext``.
+    FormulaNodeEditorPanel m_nodeEditorPanel;
 };
 
 } // namespace Vestige

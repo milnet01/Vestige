@@ -4,6 +4,7 @@
 /// @file scripting_system.cpp
 /// @brief ScriptingSystem implementation — visual script lifecycle and execution.
 #include "scripting/scripting_system.h"
+#include "scripting/script_compiler.h"
 #include "scripting/script_context.h"
 #include "scripting/script_events.h"
 #include "core/engine.h"
@@ -227,6 +228,41 @@ void ScriptingSystem::registerInstance(ScriptInstance& instance)
                         &instance);
     if (it != m_activeInstances.end())
     {
+        return;
+    }
+
+    // Validate the graph against the current node registry. Errors (unknown
+    // types, dangling connections, pin-type mismatches, pure-data cycles)
+    // would otherwise surface inside ScriptContext with a partial trace —
+    // at registration we still have the full graph in scope, so log it all
+    // and refuse to activate. Warnings are recorded but don't block.
+    const CompilationResult compileResult =
+        ScriptGraphCompiler::compile(instance.graph(), m_nodeRegistry);
+    for (const auto& diag : compileResult.diagnostics)
+    {
+        const std::string prefix =
+            "[ScriptingSystem] graph '" + instance.graph().name + "': ";
+        switch (diag.severity)
+        {
+        case CompileSeverity::ERROR:
+            Logger::error(prefix + diag.message);
+            break;
+        case CompileSeverity::WARNING:
+            Logger::warning(prefix + diag.message);
+            break;
+        case CompileSeverity::INFO:
+            Logger::info(prefix + diag.message);
+            break;
+        }
+    }
+    if (!compileResult.success)
+    {
+        Logger::error("[ScriptingSystem] Refusing to activate graph '" +
+                      instance.graph().name +
+                      "' — compile produced " +
+                      std::to_string(
+                          compileResult.countAt(CompileSeverity::ERROR)) +
+                      " error(s)");
         return;
     }
 
