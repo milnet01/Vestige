@@ -35,6 +35,7 @@ set(ENGINE_SOURCES
     scene/sprite_component.cpp
     scene/rigid_body_2d_component.cpp
     scene/collider_2d_component.cpp
+    scene/tilemap_component.cpp
     resource/resource_manager.cpp
     resource/async_texture_loader.cpp
     renderer/shader.cpp
@@ -69,6 +70,7 @@ set(ENGINE_SOURCES
     renderer/gpu_particle_system.cpp
     renderer/sprite_atlas.cpp
     renderer/sprite_renderer.cpp
+    renderer/tilemap_renderer.cpp
     resource/model.cpp
     utils/obj_loader.cpp
     utils/gltf_loader.cpp

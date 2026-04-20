@@ -9,6 +9,29 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-20 Phase 9F-3 — Tilemap component + renderer helper
+
+Shipped multi-layer tilemaps with animated tiles. The tilemap is just
+another consumer of the sprite atlas — tilemap cells convert into
+SpriteInstance records that feed the existing SpriteRenderer, so there
+is no dedicated tilemap shader or draw path. This keeps sprites and
+tilemaps in a single z-ordered pass.
+
+- `engine/scene/tilemap_component.{h,cpp}` — TilemapLayer (dense grid,
+  row-major bottom-first), TileId (uint16, 0 = empty), TilemapTileDef
+  (maps an ID to an atlas frame or an animated sequence),
+  TilemapAnimatedTile (frame list + framePeriodSec + ping-pong flag).
+  Animation time wraps at 1 hour to keep float precision tight in long
+  gameplay sessions.
+- `engine/renderer/tilemap_renderer.{h,cpp}` — pure helper
+  `buildTilemapInstances(tilemap, worldMatrix, depth, outInstances)` —
+  no GL, no state. Called by the sprite pass to emit one instance per
+  visible cell. Tilemap origin = entity position; column 0 / row 0 at
+  the origin.
+- 12 new unit tests covering layer resize overlap, out-of-bounds set/get,
+  animated-tile time-based resolution, forEachVisibleTile short-circuit,
+  clone semantics, and instance-vector construction.
+
 ### 2026-04-20 Phase 9F-2 — 2D physics via Jolt Plane2D DOF lock
 
 Shipped the 2D physics subsystem on top of the existing Jolt 5.2.0 build.

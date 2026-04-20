@@ -871,7 +871,7 @@ Prioritize basic event-to-action chains first. The formula node editor builds on
 - [x] **Phase 9F-2:** 2D physics integration — Jolt 2D constraint mode via per-body `EAllowedDOFs::Plane2D`. No second physics engine; shared broadphase/narrowphase with the 3D world. `engine/systems/physics2d_system.{h,cpp}` registers an ISystem, wraps the Engine's PhysicsWorld, exposes a 2D-native API (applyImpulse, setLinearVelocity, setTransform all in `glm::vec2`).
 - [x] **Phase 9F-2:** 2D collision shapes — `engine/scene/collider_2d_component.{h,cpp}` ships Box, Circle, Capsule, Polygon (convex), and EdgeChain (static-only chain mesh). Thin extruded-Z-slab representation makes them collide against the shared 3D world. 15 new tests covering gravity, DOF lock, shape coverage, sensor mode, fixed-rotation lock.
 - [ ] 2D character controller (platformer movement, wall slide, coyote time)
-- [ ] Tilemap system (grid of tile IDs, multi-layer, auto-tiling, animated tiles)
+- [x] **Phase 9F-3:** Tilemap system — `engine/scene/tilemap_component.{h,cpp}` ships multi-layer grids (TileId uint16, 0 = empty), named layers with sort order, animated tiles via frame-sequence definitions, global animation time wrapping at 1 hour. `engine/renderer/tilemap_renderer.{h,cpp}` converts a tilemap into SpriteInstance records for the shared sprite pass — no dedicated shader. Auto-tiling defers to Phase 18 per the design doc; authoring + rendering + animation are live. 12 new unit tests.
 - [ ] 2D camera (orthographic with smooth follow, deadzone, bounds)
 - [ ] 2D game type templates (Side-Scroller, Shmup)
 - [ ] Editor: 2D/3D mode toggle, sprite import/slicing, tilemap painting
