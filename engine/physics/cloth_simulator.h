@@ -114,58 +114,58 @@ public:
     /// @param index Particle index (must be < getParticleCount()).
     /// @param worldPos World-space position to pin the particle at.
     /// @return true if the particle was pinned, false if index is out of bounds.
-    bool pinParticle(uint32_t index, const glm::vec3& worldPos);
+    bool pinParticle(uint32_t index, const glm::vec3& worldPos) override;
 
     /// @brief Unpins a particle, restoring its original mass.
-    void unpinParticle(uint32_t index);
+    void unpinParticle(uint32_t index) override;
 
     /// @brief Moves a pinned particle to a new position.
-    void setPinPosition(uint32_t index, const glm::vec3& worldPos);
+    void setPinPosition(uint32_t index, const glm::vec3& worldPos) override;
 
     /// @brief Returns true if the given particle is pinned.
-    bool isParticlePinned(uint32_t index) const;
+    bool isParticlePinned(uint32_t index) const override;
 
     // --- Collision ---
 
     /// @brief Adds a sphere collider for the cloth to collide against.
     /// @param center World-space position of the sphere center.
     /// @param radius Radius of the sphere. Must be > 0.
-    void addSphereCollider(const glm::vec3& center, float radius);
+    void addSphereCollider(const glm::vec3& center, float radius) override;
 
     /// @brief Removes all sphere colliders.
-    void clearSphereColliders();
+    void clearSphereColliders() override;
 
     /// @brief Sets the ground plane height (particles are pushed above this Y).
-    void setGroundPlane(float height);
+    void setGroundPlane(float height) override;
 
     /// @brief Returns the current ground plane height.
-    float getGroundPlane() const;
+    float getGroundPlane() const override;
 
     /// @brief Adds a plane collider (particles stay on the positive-normal side).
     /// @param normal Unit normal pointing toward the allowed half-space (auto-normalized).
     /// @param offset Signed distance from origin along the normal.
     /// @return true if added, false if normal is zero-length.
-    bool addPlaneCollider(const glm::vec3& normal, float offset);
+    bool addPlaneCollider(const glm::vec3& normal, float offset) override;
 
     /// @brief Adds a vertical cylinder collider (Y-axis aligned).
     /// @param base World-space position of the bottom center of the cylinder (Y-axis aligned).
     /// @param radius Radius of the cylinder cross-section. Must be > 0.
     /// @param height Height of the cylinder extending upward from base.y. Must be > 0.
-    void addCylinderCollider(const glm::vec3& base, float radius, float height);
+    void addCylinderCollider(const glm::vec3& base, float radius, float height) override;
 
     /// @brief Removes all plane colliders.
-    void clearPlaneColliders();
+    void clearPlaneColliders() override;
 
     /// @brief Removes all cylinder colliders.
-    void clearCylinderColliders();
+    void clearCylinderColliders() override;
 
     /// @brief Adds an axis-aligned box collider.
     /// @param min Minimum corner of the AABB in world space. Auto-swapped with max if inverted.
     /// @param max Maximum corner of the AABB in world space. Auto-swapped with min if inverted.
-    void addBoxCollider(const glm::vec3& min, const glm::vec3& max);
+    void addBoxCollider(const glm::vec3& min, const glm::vec3& max) override;
 
     /// @brief Removes all box colliders.
-    void clearBoxColliders();
+    void clearBoxColliders() override;
 
     /// @brief Adds a triangle mesh collider (non-owning pointer, caller manages lifetime).
     void addMeshCollider(ClothMeshCollider* collider);
@@ -192,39 +192,44 @@ public:
     /// Full:        Per-particle noise perturbation + per-triangle aerodynamic drag (expensive).
     /// Approximate: Uniform wind (no per-particle noise) + per-triangle drag (moderate).
     /// Simple:      No wind force applied (cheapest).
-    enum class WindQuality { FULL = 0, APPROXIMATE = 1, SIMPLE = 2 };
+    ///
+    /// **Note:** the canonical name is now `ClothWindQuality` (declared in
+    /// `cloth_solver_backend.h` so the polymorphic interface can reference it
+    /// without including the full CPU implementation header). `WindQuality`
+    /// stays as a backwards-compat alias.
+    using WindQuality = ClothWindQuality;
 
     /// @brief Sets the wind simulation quality tier.
-    void setWindQuality(WindQuality quality);
+    void setWindQuality(ClothWindQuality quality) override;
 
     /// @brief Returns the current wind quality tier.
-    WindQuality getWindQuality() const;
+    ClothWindQuality getWindQuality() const override;
 
     /// @brief Sets the wind direction and strength.
-    void setWind(const glm::vec3& direction, float strength);
+    void setWind(const glm::vec3& direction, float strength) override;
 
     /// @brief Sets the aerodynamic drag coefficient (default 1.0).
-    void setDragCoefficient(float drag);
+    void setDragCoefficient(float drag) override;
 
     /// @brief Returns the current wind velocity (direction * strength).
-    glm::vec3 getWindVelocity() const;
+    glm::vec3 getWindVelocity() const override;
 
     /// @brief Returns the wind direction (unit vector).
-    glm::vec3 getWindDirection() const;
+    glm::vec3 getWindDirection() const override;
 
     /// @brief Returns the wind strength scalar.
-    float getWindStrength() const;
+    float getWindStrength() const override;
 
     /// @brief Returns the aerodynamic drag coefficient.
-    float getDragCoefficient() const;
+    float getDragCoefficient() const override;
 
     // --- Config ---
 
     /// @brief Updates the substep count.
-    void setSubsteps(int substeps);
+    void setSubsteps(int substeps) override;
 
     /// @brief Returns the current configuration.
-    const ClothConfig& getConfig() const;
+    const ClothConfig& getConfig() const override;
 
     /// @brief Returns true if initialize() has been called.
     bool isInitialized() const override;
@@ -236,32 +241,32 @@ public:
 
     /// @brief Captures the current particle positions as the rest/initial state.
     /// Call after repositioning particles (e.g., via pin-all/unpin for XZ→XY conversion).
-    void captureRestPositions();
+    void captureRestPositions() override;
 
     /// @brief Builds Long Range Attachment constraints from current pin/particle positions.
     /// Call after all pins are finalized and captureRestPositions() has been called.
-    void rebuildLRA();
+    void rebuildLRA() override;
 
     /// @brief Updates particle mass for all non-pinned particles.
-    void setParticleMass(float mass);
+    void setParticleMass(float mass) override;
 
     /// @brief Updates damping coefficient.
-    void setDamping(float damping);
+    void setDamping(float damping) override;
 
     /// @brief Updates stretch compliance on all stretch constraints.
-    void setStretchCompliance(float compliance);
+    void setStretchCompliance(float compliance) override;
 
     /// @brief Updates shear compliance on all shear constraints.
-    void setShearCompliance(float compliance);
+    void setShearCompliance(float compliance) override;
 
     /// @brief Updates bend compliance on all bend constraints.
-    void setBendCompliance(float compliance);
+    void setBendCompliance(float compliance) override;
 
     /// @brief Returns the number of pinned particles.
-    uint32_t getPinnedCount() const;
+    uint32_t getPinnedCount() const override;
 
     /// @brief Returns the total number of constraints (stretch + shear + bend + dihedral).
-    uint32_t getConstraintCount() const;
+    uint32_t getConstraintCount() const override;
 
     /// @brief Returns the number of dihedral bending constraints.
     uint32_t getDihedralConstraintCount() const;

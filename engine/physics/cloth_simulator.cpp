@@ -596,12 +596,12 @@ void ClothSimulator::setWind(const glm::vec3& direction, float strength)
     m_windStrength = strength;
 }
 
-void ClothSimulator::setWindQuality(WindQuality quality)
+void ClothSimulator::setWindQuality(ClothWindQuality quality)
 {
     m_windQuality = quality;
 }
 
-ClothSimulator::WindQuality ClothSimulator::getWindQuality() const
+ClothWindQuality ClothSimulator::getWindQuality() const
 {
     return m_windQuality;
 }

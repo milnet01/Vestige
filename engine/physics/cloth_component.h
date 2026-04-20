@@ -5,13 +5,16 @@
 /// @brief Entity component that owns a ClothSimulator and DynamicMesh for rendering.
 #pragma once
 
+#include "physics/cloth_backend_factory.h"
 #include "physics/cloth_presets.h"
 #include "physics/cloth_simulator.h"
+#include "physics/cloth_solver_backend.h"
 #include "renderer/dynamic_mesh.h"
 #include "renderer/material.h"
 #include "scene/component.h"
 
 #include <memory>
+#include <string>
 #include <vector>
 
 namespace Vestige
@@ -33,9 +36,32 @@ public:
     /// @brief Per-frame update: simulate physics, update mesh vertices.
     void update(float deltaTime) override;
 
-    /// @brief Access the underlying simulator for pinning, wind, colliders, etc.
-    ClothSimulator& getSimulator();
-    const ClothSimulator& getSimulator() const;
+    /// @brief Access the underlying solver backend (CPU XPBD or GPU compute).
+    ///
+    /// Returns the `IClothSolverBackend` interface so callers see the same
+    /// surface regardless of which backend was auto-selected at `initialize()`.
+    /// The concrete backend is chosen by `ClothBackendFactory` — the GPU path
+    /// engages above `GPU_AUTO_SELECT_THRESHOLD` particles when compute is
+    /// available. The overloads keep the old call-site `getSimulator()` name
+    /// so existing code (`inspector_panel`, `engine.cpp`) needs no rename.
+    IClothSolverBackend& getSimulator();
+    const IClothSolverBackend& getSimulator() const;
+
+    /// @brief Selects the backend policy used at the **next** `initialize()`.
+    ///
+    /// Defaults to `AUTO`. Game code can pin to `FORCE_CPU` for
+    /// deterministic-regression tests, or `FORCE_GPU` to exercise the GPU
+    /// path on a small cloth (threshold check is bypassed).
+    void setBackendPolicy(ClothBackendPolicy policy) { m_backendPolicy = policy; }
+
+    /// @brief Returns the policy currently in effect for the next initialize().
+    ClothBackendPolicy getBackendPolicy() const { return m_backendPolicy; }
+
+    /// @brief Optional shader path passed to the GPU backend (needed by the
+    /// factory when the GPU policy is chosen). Default: empty string; if the
+    /// factory needs a shader path and none is set, it falls back to CPU with
+    /// a one-line warning.
+    void setShaderPath(const std::string& path) { m_shaderPath = path; }
 
     /// @brief Access the dynamic mesh for rendering.
     DynamicMesh& getMesh();
@@ -64,7 +90,9 @@ public:
     void applyPreset(ClothPresetType type);
 
 private:
-    ClothSimulator m_simulator;
+    std::unique_ptr<IClothSolverBackend> m_simulator;  ///< CPU XPBD or GPU compute.
+    ClothBackendPolicy m_backendPolicy = ClothBackendPolicy::AUTO;
+    std::string m_shaderPath;            ///< Passed to GPU backend via the factory.
     DynamicMesh m_mesh;
     std::shared_ptr<Material> m_material;
     std::vector<Vertex> m_vertexBuffer;  ///< CPU-side vertex data for mesh updates

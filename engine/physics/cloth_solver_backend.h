@@ -4,16 +4,15 @@
 /// @file cloth_solver_backend.h
 /// @brief Abstract backend interface for cloth simulators (CPU XPBD or GPU compute).
 ///
-/// Phase 9B GPU compute cloth pipeline introduces a second backend
-/// (`GpuClothSimulator`) alongside the existing CPU `ClothSimulator`. Both
-/// implement this interface so the per-frame simulation loop is interchangeable.
+/// Phase 9B GPU compute cloth pipeline. Both `ClothSimulator` (CPU XPBD) and
+/// `GpuClothSimulator` (GPU compute) implement this contract so callers
+/// (`ClothComponent`, the inspector panel, engine bookkeeping) can drive
+/// either backend through a single pointer.
 ///
-/// **Scope:** Only the per-frame simulation loop and the data-readback surface
-/// (positions / normals / indices / UVs) are virtual. Configuration mutators
-/// (`setWind`, `addSphereCollider`, `pinParticle`, etc.) remain on the concrete
-/// `ClothSimulator` type during this transitional phase. Once the GPU backend
-/// implements its own configuration API, the interface will widen — see
-/// `docs/PHASE9B_GPU_CLOTH_DESIGN.md` § 4 (`IClothSolverBackend interface`).
+/// Phase 9B Step 12 widened the interface from "lifecycle only" to cover the
+/// full mutator + accessor surface used by call sites — pin / collider /
+/// wind / live-tuning setters, plus the auxiliary getters the inspector panel
+/// reads each frame for diagnostics.
 #pragma once
 
 #include <glm/glm.hpp>
@@ -25,6 +24,18 @@ namespace Vestige
 {
 
 struct ClothConfig;  // Forward declaration — full definition in cloth_simulator.h.
+
+/// @brief Wind simulation quality tier.
+///
+/// Pulled out of `ClothSimulator` (where it used to be a nested enum) so the
+/// `IClothSolverBackend` mutator surface can reference it without including
+/// the full CPU implementation header.
+enum class ClothWindQuality
+{
+    FULL        = 0,   ///< Per-particle noise + per-triangle aerodynamic drag.
+    APPROXIMATE = 1,   ///< Uniform wind (no per-particle noise) + per-triangle drag.
+    SIMPLE      = 2,   ///< No wind force applied.
+};
 
 /// @brief Per-frame simulation contract shared by every cloth-solver backend.
 ///
@@ -80,6 +91,74 @@ public:
 
     /// @brief Particles along the Z axis.
     virtual uint32_t getGridHeight() const = 0;
+
+    /// @brief Live configuration snapshot (read-only). Backends keep their
+    /// own internal config copy; this returns a stable reference into it.
+    virtual const ClothConfig& getConfig() const = 0;
+
+    // -- Live tuning (no reinit required) --
+
+    virtual void setSubsteps(int substeps) = 0;
+    virtual void setParticleMass(float mass) = 0;
+    virtual void setDamping(float damping) = 0;
+    virtual void setStretchCompliance(float compliance) = 0;
+    virtual void setShearCompliance(float compliance) = 0;
+    virtual void setBendCompliance(float compliance) = 0;
+
+    // -- Wind --
+
+    virtual void setWind(const glm::vec3& direction, float strength) = 0;
+    virtual void setDragCoefficient(float drag) = 0;
+    virtual void setWindQuality(ClothWindQuality quality) = 0;
+    virtual glm::vec3       getWindVelocity() const = 0;
+    virtual glm::vec3       getWindDirection() const = 0;
+    virtual float           getWindStrength() const = 0;
+    virtual float           getDragCoefficient() const = 0;
+    virtual ClothWindQuality getWindQuality() const = 0;
+
+    // -- Pins / LRA --
+
+    /// @brief Pin a particle to a fixed world-space position. Returns false if
+    /// `index` is out of bounds.
+    virtual bool pinParticle(uint32_t index, const glm::vec3& worldPos) = 0;
+    virtual void unpinParticle(uint32_t index) = 0;
+    virtual void setPinPosition(uint32_t index, const glm::vec3& worldPos) = 0;
+    virtual bool isParticlePinned(uint32_t index) const = 0;
+    virtual uint32_t getPinnedCount() const = 0;
+
+    /// @brief Snapshot current positions as the rest pose (used by `reset()` and
+    /// after pin reconfiguration).
+    virtual void captureRestPositions() = 0;
+
+    /// @brief Rebuild Long-Range Attachment tethers from the current pin set.
+    virtual void rebuildLRA() = 0;
+
+    // -- Constraint diagnostics (inspector panel) --
+
+    /// @brief Total distance constraint count (stretch + shear + bend).
+    virtual uint32_t getConstraintCount() const = 0;
+
+    // -- Collider mutators --
+    //
+    // Sphere / plane / ground are supported on both backends. Cylinder / box /
+    // mesh are CPU-only today (GPU support is deferred per the design doc);
+    // GPU backends implement them as a one-line log-and-drop so callers can
+    // still drive a single code path across both backends.
+
+    virtual void addSphereCollider(const glm::vec3& center, float radius) = 0;
+    virtual void clearSphereColliders() = 0;
+
+    virtual bool addPlaneCollider(const glm::vec3& normal, float offset) = 0;
+    virtual void clearPlaneColliders() = 0;
+
+    virtual void setGroundPlane(float worldY) = 0;
+    virtual float getGroundPlane() const = 0;
+
+    virtual void addCylinderCollider(const glm::vec3& base, float radius, float height) = 0;
+    virtual void clearCylinderColliders() = 0;
+
+    virtual void addBoxCollider(const glm::vec3& min, const glm::vec3& max) = 0;
+    virtual void clearBoxColliders() = 0;
 };
 
 } // namespace Vestige

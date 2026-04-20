@@ -1838,7 +1838,7 @@ void InspectorPanel::drawClothComponent(Entity& entity)
         int windQuality = static_cast<int>(sim.getWindQuality());
         if (ImGui::Combo("Wind Quality", &windQuality, windQualityItems, 3))
         {
-            sim.setWindQuality(static_cast<ClothSimulator::WindQuality>(windQuality));
+            sim.setWindQuality(static_cast<ClothWindQuality>(windQuality));
         }
         if (ImGui::IsItemHovered())
         {

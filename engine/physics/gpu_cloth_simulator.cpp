@@ -46,6 +46,53 @@ void GpuClothSimulator::setSubsteps(int substeps)
 {
     if (substeps < 1) substeps = 1;
     m_substeps = substeps;
+    m_config.substeps = substeps;
+}
+
+void GpuClothSimulator::setParticleMass(float mass)
+{
+    if (mass <= 0.0f) return;
+    m_config.particleMass = mass;
+    // On GPU, particle mass translates to positions[i].w (inverse mass). The
+    // pin buffer upload will re-pack w on next simulate via uploadPinsIfDirty.
+    m_pinsDirty = true;
+}
+
+void GpuClothSimulator::setStretchCompliance(float compliance)
+{
+    m_config.stretchCompliance = compliance;
+    m_compliancesDirty = true;
+}
+
+void GpuClothSimulator::setShearCompliance(float compliance)
+{
+    m_config.shearCompliance = compliance;
+    m_compliancesDirty = true;
+}
+
+void GpuClothSimulator::setBendCompliance(float compliance)
+{
+    m_config.bendCompliance = compliance;
+    m_compliancesDirty = true;
+}
+
+void GpuClothSimulator::setWind(const glm::vec3& direction, float strength)
+{
+    const float len = glm::length(direction);
+    const glm::vec3 unit = (len > 0.0f) ? (direction / len) : glm::vec3(0.0f);
+    m_windVelocity = unit * strength;
+}
+
+glm::vec3 GpuClothSimulator::getWindDirection() const
+{
+    const float len = glm::length(m_windVelocity);
+    if (len <= 1e-7f) return glm::vec3(0.0f);
+    return m_windVelocity / len;
+}
+
+float GpuClothSimulator::getWindStrength() const
+{
+    return glm::length(m_windVelocity);
 }
 
 void GpuClothSimulator::addSphereCollider(const glm::vec3& center, float radius)
@@ -106,6 +153,36 @@ void GpuClothSimulator::setCollisionMargin(float margin)
     m_collisionMargin = margin;
     m_collidersDirty = true;
 }
+
+// Cylinder / box colliders — GPU backend doesn't implement these yet. Logged
+// once per backend instance so a call site driving both CPU and GPU doesn't
+// flood the log. See `docs/PHASE9B_GPU_CLOTH_DESIGN.md` § 9.
+void GpuClothSimulator::addCylinderCollider(const glm::vec3& /*base*/,
+                                             float /*radius*/, float /*height*/)
+{
+    static bool warned = false;
+    if (!warned)
+    {
+        Logger::warning("[GpuClothSimulator] cylinder colliders are CPU-only; "
+                        "GPU backend will ignore them");
+        warned = true;
+    }
+}
+
+void GpuClothSimulator::clearCylinderColliders() {}
+
+void GpuClothSimulator::addBoxCollider(const glm::vec3& /*mn*/, const glm::vec3& /*mx*/)
+{
+    static bool warned = false;
+    if (!warned)
+    {
+        Logger::warning("[GpuClothSimulator] box colliders are CPU-only; "
+                        "GPU backend will ignore them");
+        warned = true;
+    }
+}
+
+void GpuClothSimulator::clearBoxColliders() {}
 
 bool GpuClothSimulator::pinParticle(uint32_t index, const glm::vec3& worldPos)
 {
@@ -206,6 +283,7 @@ void GpuClothSimulator::initialize(const ClothConfig& config, uint32_t /*seed*/)
 {
     if (m_initialized) destroyBuffers();
 
+    m_config        = config;  // Cached for live-tuning mutators + getConfig().
     m_gridW = config.width;
     m_gridH = config.height;
     m_particleCount = m_gridW * m_gridH;

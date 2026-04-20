@@ -9,6 +9,64 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-20 Phase 9B Step 12 — ClothComponent cutover to `unique_ptr<IClothSolverBackend>`
+
+The last deferred item from the Phase 9B GPU compute cloth pipeline.
+`ClothComponent` now owns its solver polymorphically — either
+`ClothSimulator` (CPU XPBD) or `GpuClothSimulator` (GPU compute) —
+selected at `initialize()` by `createClothSolverBackend()` per
+`GPU_AUTO_SELECT_THRESHOLD` + `GpuClothSimulator::isSupported()`.
+
+**Interface widening.** `IClothSolverBackend` now covers the full
+mutator + accessor surface needed by `ClothComponent`,
+`inspector_panel.cpp`, and `engine.cpp`:
+
+- Live tuning: `setSubsteps`, `setParticleMass`, `setDamping`,
+  `setStretchCompliance`, `setShearCompliance`, `setBendCompliance`.
+- Wind: `setWind`, `setDragCoefficient`, `setWindQuality`,
+  `getWindVelocity` / `getWindDirection` / `getWindStrength` /
+  `getDragCoefficient` / `getWindQuality`.
+- Pins / LRA: `pinParticle`, `unpinParticle`, `setPinPosition`,
+  `isParticlePinned`, `getPinnedCount`, `captureRestPositions`,
+  `rebuildLRA`.
+- Diagnostics: `getConstraintCount`, `getConfig`.
+- Colliders: `addSphereCollider` / `clearSphereColliders`,
+  `addPlaneCollider` / `clearPlaneColliders`, `setGroundPlane` /
+  `getGroundPlane`, `addCylinderCollider` / `clearCylinderColliders`,
+  `addBoxCollider` / `clearBoxColliders`.
+
+The nested `ClothSimulator::WindQuality` enum was promoted to a
+top-level `ClothWindQuality` (declared in `cloth_solver_backend.h`)
+so the interface can reference it without dragging in the full CPU
+implementation. `ClothSimulator::WindQuality` stays as a
+backwards-compat `using` alias.
+
+**Backend coverage:**
+- CPU (`ClothSimulator`): implements the full surface — no behaviour
+  change; every method now carries `override`.
+- GPU (`GpuClothSimulator`): supports sphere/plane/ground colliders
+  and the full live-tuning surface. Cylinder/box/mesh colliders are
+  CPU-only per the design doc; GPU backend logs a one-time warning
+  and drops them so call sites can drive a single code path.
+  `captureRestPositions` is a no-op on GPU (rest pose is implicit
+  in the CPU position mirror).
+
+**`ClothComponent` changes:**
+- `m_simulator` is now `std::unique_ptr<IClothSolverBackend>`.
+- `getSimulator()` returns `IClothSolverBackend&` — call sites using
+  the old `ClothSimulator&` return type get the polymorphic view
+  transparently (every method they called is now on the interface).
+- New `setBackendPolicy(AUTO|FORCE_CPU|FORCE_GPU)` and
+  `setShaderPath(const std::string&)` setters invoked before
+  `initialize()` to override the auto-select or pin GPU for tests.
+
+**Inspector panel** updated to use the new top-level
+`ClothWindQuality` enum (was `ClothSimulator::WindQuality`).
+
+Suite: 1986/1986 still passing — the interface widening preserves
+every caller's semantics. Phase 9B GPU compute cloth pipeline is
+now fully end-to-end.
+
 ### 2026-04-20 Phase 9C font swap — Inter Tight / Cormorant Garamond / JetBrains Mono
 
 Asset-side change to back the typography pairing specified in the

@@ -57,6 +57,29 @@ public:
     const std::vector<glm::vec2>& getTexCoords() const override { return m_texCoords; }
     uint32_t getGridWidth() const override { return m_gridW; }
     uint32_t getGridHeight() const override { return m_gridH; }
+    const ClothConfig& getConfig() const override { return m_config; }
+
+    // Live-tuning setters (IClothSolverBackend).
+    void setParticleMass(float mass) override;
+    void setStretchCompliance(float compliance) override;
+    void setShearCompliance(float compliance) override;
+    void setBendCompliance(float compliance) override;
+
+    // Wind (IClothSolverBackend).
+    void setWind(const glm::vec3& direction, float strength) override;
+    void setWindQuality(ClothWindQuality quality) override { m_windQuality = quality; }
+    glm::vec3       getWindVelocity()  const override { return m_windVelocity; }
+    glm::vec3       getWindDirection() const override;
+    float           getWindStrength()  const override;
+    float           getDragCoefficient() const override { return m_dragCoeff; }
+    ClothWindQuality getWindQuality()  const override { return m_windQuality; }
+
+    // Rest-pose snapshot. The GPU backend tracks rest pose implicitly via the
+    // mirror built at initialize() time; after pin reconfiguration the
+    // position mirror already reflects the new rest. Stubbed as a no-op —
+    // a future Phase 9B extension could force a GPU→CPU readback into a
+    // dedicated m_restPose array, but nothing calls that today.
+    void captureRestPositions() override {}
 
     // -- GPU backend extras --
 
@@ -73,13 +96,13 @@ public:
     bool hasShaders() const { return m_shadersLoaded; }
 
     /// @brief Sets per-frame wind drag coefficient (matches CPU path).
-    void setDragCoefficient(float drag) { m_dragCoeff = drag; }
+    void setDragCoefficient(float drag) override { m_dragCoeff = drag; }
 
     /// @brief Sets uniform wind velocity (direction × strength).
     void setWindVelocity(const glm::vec3& v) { m_windVelocity = v; }
 
     /// @brief Sets per-step velocity damping (0 = none, 0.99 = heavy).
-    void setDamping(float damping) { m_damping = damping; }
+    void setDamping(float damping) override { m_damping = damping; }
 
     /// @brief Probes the current GL context for compute-shader support.
     /// @return true if GL ≥ 4.3 with compute + SSBO; false otherwise (or no context).
@@ -103,23 +126,23 @@ public:
 
     /// @brief Pins a particle to a fixed world-space position.
     /// @return true if pinned, false if @a index is out of bounds.
-    bool pinParticle(uint32_t index, const glm::vec3& worldPos);
+    bool pinParticle(uint32_t index, const glm::vec3& worldPos) override;
 
     /// @brief Unpins a particle (restores inverse mass).
-    void unpinParticle(uint32_t index);
+    void unpinParticle(uint32_t index) override;
 
     /// @brief Moves an already-pinned particle to a new world-space position.
-    void setPinPosition(uint32_t index, const glm::vec3& worldPos);
+    void setPinPosition(uint32_t index, const glm::vec3& worldPos) override;
 
     /// @brief Returns true if the given particle is currently pinned.
-    bool isParticlePinned(uint32_t index) const;
+    bool isParticlePinned(uint32_t index) const override;
 
     /// @brief Number of pinned particles.
-    uint32_t getPinnedCount() const { return static_cast<uint32_t>(m_pinIndices.size()); }
+    uint32_t getPinnedCount() const override { return static_cast<uint32_t>(m_pinIndices.size()); }
 
     /// @brief Rebuilds the LRA tether set from the current pin set + positions.
     /// Call after all pins are finalised. No-op if there are no pins.
-    void rebuildLRA();
+    void rebuildLRA() override;
 
     /// @brief Number of LRA constraints currently active.
     uint32_t getLraCount() const { return m_lraCount; }
@@ -127,23 +150,31 @@ public:
     // -- Collider mutators (Step 7) --
 
     /// @brief Adds a sphere collider. World-space center + positive radius.
-    void addSphereCollider(const glm::vec3& center, float radius);
+    void addSphereCollider(const glm::vec3& center, float radius) override;
 
     /// @brief Removes all sphere colliders.
-    void clearSphereColliders();
+    void clearSphereColliders() override;
 
     /// @brief Adds a half-space plane collider. Normal auto-normalised; offset is along normal.
     /// @return true if added, false if normal was zero-length.
-    bool addPlaneCollider(const glm::vec3& normal, float offset);
+    bool addPlaneCollider(const glm::vec3& normal, float offset) override;
 
     /// @brief Removes all plane colliders.
-    void clearPlaneColliders();
+    void clearPlaneColliders() override;
 
     /// @brief Sets the world-space Y of the ground plane. Particles stay at or above.
-    void setGroundPlane(float worldY);
+    void setGroundPlane(float worldY) override;
 
     /// @brief Returns the current ground plane Y.
-    float getGroundPlane() const { return m_groundY; }
+    float getGroundPlane() const override { return m_groundY; }
+
+    // Cylinder / box / mesh colliders are CPU-only (Phase 9B design doc § 9).
+    // GPU backend logs a one-time warning and drops them so callers driving
+    // the same code path don't have to special-case which backend is active.
+    void addCylinderCollider(const glm::vec3& base, float radius, float height) override;
+    void clearCylinderColliders() override;
+    void addBoxCollider(const glm::vec3& min, const glm::vec3& max) override;
+    void clearBoxColliders() override;
 
     /// @brief Sets the collision margin (default 0.015 m). Pushes particles `surface + margin`.
     void setCollisionMargin(float margin);
@@ -166,7 +197,7 @@ public:
     GLuint getIndicesSSBO() const { return m_indicesSSBO; }
 
     /// @brief Number of distance constraints (stretch + shear + bend) generated by initialize().
-    uint32_t getConstraintCount() const { return m_constraintCount; }
+    uint32_t getConstraintCount() const override { return m_constraintCount; }
 
     /// @brief Number of dihedral bending constraints generated by initialize().
     uint32_t getDihedralCount() const { return m_dihedralCount; }
@@ -178,7 +209,7 @@ public:
     uint32_t getDihedralColourCount() const { return static_cast<uint32_t>(m_dihedralColourRanges.size()); }
 
     /// @brief Number of XPBD substeps per simulate() call (default 10).
-    void setSubsteps(int substeps);
+    void setSubsteps(int substeps) override;
     int  getSubsteps() const { return m_substeps; }
 
 private:
@@ -266,6 +297,17 @@ private:
     float     m_dragCoeff    = 1.0f;
     float     m_damping      = 0.01f;
     int       m_substeps     = 10;        ///< XPBD substeps per simulate(); matches CPU default.
+    ClothWindQuality m_windQuality = ClothWindQuality::FULL;
+
+    // Cached ClothConfig returned by getConfig(); updated when live-tuning
+    // setters mutate the canonical values. Lives here so `getConfig()` can
+    // return a stable reference without reconstructing.
+    ClothConfig m_config;
+
+    // When any live compliance setter moves, set this true so the next
+    // `simulate()` call re-uploads the constraints SSBO. Keeps live tuning
+    // cheap for the 95% case (values don't change) while correct for the 5%.
+    bool m_compliancesDirty = false;
 };
 
 } // namespace Vestige
