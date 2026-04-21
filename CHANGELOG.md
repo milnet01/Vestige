@@ -9,6 +9,58 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-21 Phase 10 audio — Dynamic music system primitives
+
+Seventh Phase 10 audio slice. Three pure-function / pure-data
+primitives that the engine-side MusicSystem composes into an
+adaptive soundtrack.
+
+- `engine/audio/audio_music.{h,cpp}`:
+  * `MusicLayer` enum (Ambient / Tension / Exploration / Combat
+    / Discovery / Danger) + `MusicLayerState` (currentGain,
+    targetGain, fadeSpeedPerSecond) + `advanceMusicLayer(state,
+    dt)` — per-layer slew toward `targetGain` at the fade-speed
+    limit, clamped to [0, 1], no overshoot. Callers can write
+    `targetGain` every frame; the slew absorbs the twitchiness.
+  * `intensityToLayerWeights(intensity, silence)` — maps a
+    single [0, 1] gameplay signal to the per-layer mix via
+    triangle envelopes with peaks at 0.00 (Ambient) / 0.25
+    (Exploration) / 0.50 (Tension + Discovery as subtler bed) /
+    0.75 (Combat) / 1.00 (Danger). Adjacent layers meet at
+    0.5/0.5 at every midpoint so intermediate intensities are a
+    genuine blend rather than one layer winning hard. The
+    `silence` parameter multiplicatively scales every layer so
+    scripted quiet beats drop the full mix without disturbing
+    the intensity routing.
+  * `MusicStingerQueue` — FIFO queue with fixed capacity
+    (DEFAULT_CAPACITY=8); push-newest / drop-oldest eviction so
+    the latest event always wins. `advance(dt)` decrements
+    every entry's delay and returns the fired stingers in FIFO
+    order. `setCapacity(n)` trims in place; `clear()` discards
+    pending; negative delta is a no-op so framerate stalls can't
+    mass-fire.
+- `tests/test_audio_music.cpp` — 21 new tests:
+  * Layer labels stable.
+  * Slew: reaches target after sufficient time, no overshoot
+    under large fadeSpeed, fades down as well, clamps
+    currentGain to [0, 1] defensively, zero delta keeps current.
+  * Intensity routing: 0.00 → Ambient only, 1.00 → Danger only,
+    0.25 → Exploration peak with zero Ambient (zero crossover),
+    0.125 → Ambient+Exploration blend at 0.5/0.5 (mid-envelope),
+    Tension peaks at 0.5, Combat peaks at 0.75, clamps at both
+    ends.
+  * Silence: scales every layer down uniformly, silence=1
+    collapses to zero, ratios between layers preserved under
+    partial silence.
+  * Stinger queue: enqueue + fire after delay, FIFO multi-fire,
+    capacity-based eviction of oldest, setCapacity trims in
+    place, zero capacity rejects enqueue, clear drops pending,
+    negative delta does not cause fire.
+
+Per CLAUDE.md Rule 11: triangle envelope + linear slew +
+multiplicative scaling are canonical forms with no coefficients
+to fit — Formula Workbench doesn't apply.
+
 ### 2026-04-21 Phase 10 audio — Environmental ambient audio primitives
 
 Sixth Phase 10 audio slice. Ships three independent pure-function
