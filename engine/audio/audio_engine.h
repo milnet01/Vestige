@@ -8,6 +8,7 @@
 #include "audio/audio_attenuation.h"
 #include "audio/audio_clip.h"
 #include "audio/audio_doppler.h"
+#include "audio/audio_hrtf.h"
 
 #include <glm/glm.hpp>
 
@@ -145,6 +146,39 @@ public:
     /// @brief Returns the current Doppler-shift parameters.
     const DopplerParams& getDopplerParams() const { return m_doppler; }
 
+    /// @brief Sets the HRTF activation policy.
+    ///
+    /// Calls `alcResetDeviceSOFT` to apply the change mid-session
+    /// when the ALC_SOFT_HRTF extension is present. Safe to call
+    /// before `initialize()` — the value is stored and applied once
+    /// the context is live.
+    void setHrtfMode(HrtfMode mode);
+
+    /// @brief Sets the preferred HRTF dataset by name.
+    ///
+    /// Empty string means "driver default" (typically index 0).
+    /// The value is validated against `getAvailableHrtfDatasets()`
+    /// when applied; an unknown name is stored but ignored at
+    /// reset time.
+    void setHrtfDataset(const std::string& name);
+
+    /// @brief Returns the current HRTF configuration.
+    const HrtfSettings& getHrtfSettings() const { return m_hrtf; }
+
+    /// @brief Queries the driver's current HRTF state.
+    ///
+    /// Reports what the driver actually decided after the last
+    /// device reset. A `Forced` mode may still end up `Denied` if
+    /// the output format doesn't support HRTF.
+    HrtfStatus getHrtfStatus() const;
+
+    /// @brief Enumerates the HRTF datasets the driver can offer.
+    ///
+    /// Empty if the extension is unavailable or the driver ships no
+    /// datasets. Order is driver-defined; index 0 is the default
+    /// `preferredDataset` target when the user hasn't picked one.
+    std::vector<std::string> getAvailableHrtfDatasets() const;
+
     /// @brief Stops all playing sources.
     void stopAll();
 
@@ -158,6 +192,18 @@ private:
     AttenuationModel m_distanceModel = AttenuationModel::InverseDistance;
     DopplerParams m_doppler{};
     glm::vec3 m_listenerVelocity{0.0f};
+    HrtfSettings m_hrtf{};
+
+    // ALC_SOFT_HRTF extension function pointers, loaded via
+    // alcGetProcAddress after the device is open. Null when the
+    // extension is unavailable — every HRTF call short-circuits.
+    void* m_alcResetDeviceSOFT = nullptr;
+    void* m_alcGetStringiSOFT  = nullptr;
+
+    /// @brief Applies `m_hrtf` to the device via `alcResetDeviceSOFT`.
+    ///        Called from `initialize()` and whenever the settings
+    ///        change. Silent no-op if the extension is unavailable.
+    void applyHrtfSettings();
 
     // Source pool. Using uint8_t rather than bool because std::vector<bool>
     // is a specialized proxy-reference container (not a true std::vector)

@@ -9,6 +9,60 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-21 Phase 10 audio — HRTF selection closes Spatial audio parent
+
+Third Phase 10 spatial-audio slice. Completes the "Spatial audio"
+parent in ROADMAP.md (distance attenuation + Doppler + HRTF all
+shipped) and lets players opt into head-tracked stereo-headphone
+rendering via the OpenAL Soft `ALC_SOFT_HRTF` extension.
+
+- `engine/audio/audio_hrtf.{h,cpp}` — new `HrtfMode` enum
+  (`Disabled` / `Auto` / `Forced`), `HrtfStatus` enum mirroring
+  `ALC_HRTF_STATUS_SOFT` values (`Disabled` / `Enabled` / `Denied` /
+  `Required` / `HeadphonesDetected` / `UnsupportedFormat` /
+  `Unknown`), `HrtfSettings` struct (mode + preferredDataset name),
+  and the pure-function `resolveHrtfDatasetIndex(available,
+  preferred)` that maps a user-chosen dataset name onto the
+  driver-reported list (case-sensitive; empty preferred picks index
+  0; unknown name returns -1). Headless — no OpenAL linkage so the
+  tests run without an audio device.
+- `AudioEngine::setHrtfMode(mode)` / `setHrtfDataset(name)` store
+  the desired configuration and call `applyHrtfSettings()` which
+  runs `alcResetDeviceSOFT` with the appropriate attribute list
+  (`ALC_HRTF_SOFT=false` for `Disabled`, unset for `Auto`,
+  `ALC_HRTF_SOFT=true` for `Forced`, plus `ALC_HRTF_ID_SOFT` when a
+  valid dataset is named). Extension function pointers are loaded
+  via `alcGetProcAddress` after `alcIsExtensionPresent` confirms
+  availability — drivers without `ALC_SOFT_HRTF` leave the pointers
+  null and every HRTF method becomes a no-op.
+- `AudioEngine::getHrtfStatus()` queries `ALC_HRTF_STATUS_SOFT` and
+  maps it to the portable `HrtfStatus` enum so settings UI / debug
+  overlays can report what the driver actually decided (e.g.
+  `Forced` → `Denied` on surround output).
+- `AudioEngine::getAvailableHrtfDatasets()` enumerates the driver's
+  `ALC_NUM_HRTF_SPECIFIERS_SOFT` + `ALC_HRTF_SPECIFIER_SOFT` pair
+  and returns a `std::vector<std::string>` — empty if the extension
+  is absent or the driver ships no datasets. Index order is
+  driver-defined; index 0 is the default target when the user
+  hasn't picked a dataset.
+- `tests/test_audio_hrtf.cpp` — 10 new headless tests: mode labels
+  stable, status labels stable, default settings (`Auto`, empty
+  dataset), equality considers both fields, resolver handles empty
+  available list / empty preferred / exact match / unknown name /
+  case-sensitivity + trailing whitespace.
+
+Rationale for the policy layer: HRTF is markedly worse than plain
+panning on speakers (the listener's own ears double-convolve the
+signal), so the engine ships with `Auto` as the default — the
+driver's own headphone-detection heuristic flips HRTF on when a
+stereo headset is present and leaves it off otherwise. `Forced`
+exists for users whose driver doesn't auto-detect headphones
+reliably; `Disabled` is the escape hatch for output configurations
+where HRTF would degrade rather than improve positioning.
+
+Reference: OpenAL Soft `ALC_SOFT_HRTF` extension specification and
+the accompanying `alhrtf.c` example.
+
 ### 2026-04-21 Phase 10 audio — Doppler shift for fast-moving sources
 
 Second Phase 10 spatial-audio slice, landing the Doppler sub-bullet

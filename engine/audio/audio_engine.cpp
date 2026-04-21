@@ -8,6 +8,7 @@
 
 #include <AL/al.h>
 #include <AL/alc.h>
+#include <AL/alext.h>
 
 namespace Vestige
 {
@@ -71,6 +72,21 @@ bool AudioEngine::initialize()
     // engine's CPU-side computeDopplerPitchRatio from the first frame.
     alDopplerFactor(m_doppler.dopplerFactor);
     alSpeedOfSound(m_doppler.speedOfSound);
+
+    // Load ALC_SOFT_HRTF extension entry points. `alcIsExtensionPresent`
+    // gates the lookup so drivers without the extension simply leave
+    // the pointers null and every HRTF method short-circuits.
+    if (alcIsExtensionPresent(m_device, "ALC_SOFT_HRTF") == ALC_TRUE)
+    {
+        m_alcResetDeviceSOFT = reinterpret_cast<void*>(
+            alcGetProcAddress(m_device, "alcResetDeviceSOFT"));
+        m_alcGetStringiSOFT = reinterpret_cast<void*>(
+            alcGetProcAddress(m_device, "alcGetStringiSOFT"));
+    }
+
+    // Apply the stored HRTF settings so callers that configured the
+    // engine before initialize() see their preference honoured.
+    applyHrtfSettings();
 
     m_available = true;
     Logger::info("[AudioEngine] Initialized (" +
@@ -396,6 +412,122 @@ void AudioEngine::stopAll()
             alSourcei(m_sourcePool[i], AL_BUFFER, 0);
             m_sourceInUse[i] = false;
         }
+    }
+}
+
+void AudioEngine::setHrtfMode(HrtfMode mode)
+{
+    if (m_hrtf.mode == mode)
+    {
+        return;
+    }
+    m_hrtf.mode = mode;
+    applyHrtfSettings();
+}
+
+void AudioEngine::setHrtfDataset(const std::string& name)
+{
+    if (m_hrtf.preferredDataset == name)
+    {
+        return;
+    }
+    m_hrtf.preferredDataset = name;
+    applyHrtfSettings();
+}
+
+HrtfStatus AudioEngine::getHrtfStatus() const
+{
+    if (!m_available || m_alcResetDeviceSOFT == nullptr)
+    {
+        return HrtfStatus::Unknown;
+    }
+    ALCint status = ALC_HRTF_DISABLED_SOFT;
+    alcGetIntegerv(m_device, ALC_HRTF_STATUS_SOFT, 1, &status);
+    switch (status)
+    {
+        case ALC_HRTF_DISABLED_SOFT:            return HrtfStatus::Disabled;
+        case ALC_HRTF_ENABLED_SOFT:             return HrtfStatus::Enabled;
+        case ALC_HRTF_DENIED_SOFT:              return HrtfStatus::Denied;
+        case ALC_HRTF_REQUIRED_SOFT:            return HrtfStatus::Required;
+        case ALC_HRTF_HEADPHONES_DETECTED_SOFT: return HrtfStatus::HeadphonesDetected;
+        case ALC_HRTF_UNSUPPORTED_FORMAT_SOFT:  return HrtfStatus::UnsupportedFormat;
+        default:                                return HrtfStatus::Unknown;
+    }
+}
+
+std::vector<std::string> AudioEngine::getAvailableHrtfDatasets() const
+{
+    std::vector<std::string> names;
+    if (!m_available || m_alcGetStringiSOFT == nullptr)
+    {
+        return names;
+    }
+    ALCint count = 0;
+    alcGetIntegerv(m_device, ALC_NUM_HRTF_SPECIFIERS_SOFT, 1, &count);
+    if (count <= 0)
+    {
+        return names;
+    }
+    auto getStringi =
+        reinterpret_cast<LPALCGETSTRINGISOFT>(m_alcGetStringiSOFT);
+    names.reserve(static_cast<size_t>(count));
+    for (ALCint i = 0; i < count; ++i)
+    {
+        const ALCchar* name =
+            getStringi(m_device, ALC_HRTF_SPECIFIER_SOFT, i);
+        names.emplace_back(name ? name : "");
+    }
+    return names;
+}
+
+void AudioEngine::applyHrtfSettings()
+{
+    if (!m_available || m_alcResetDeviceSOFT == nullptr)
+    {
+        return;
+    }
+
+    // Build an ALC attribute list that instructs the driver how to
+    // treat HRTF on the next context reset. Auto mode omits the
+    // attribute entirely — the driver's own heuristics (headphone
+    // detection, output-format check) then apply.
+    ALCint attrs[5] = {0, 0, 0, 0, 0};
+    int n = 0;
+    switch (m_hrtf.mode)
+    {
+        case HrtfMode::Disabled:
+            attrs[n++] = ALC_HRTF_SOFT;
+            attrs[n++] = ALC_FALSE;
+            break;
+        case HrtfMode::Forced:
+            attrs[n++] = ALC_HRTF_SOFT;
+            attrs[n++] = ALC_TRUE;
+            break;
+        case HrtfMode::Auto:
+            // Leave ALC_HRTF_SOFT unset so the driver's own auto
+            // detection path runs. An explicit dataset may still
+            // follow below.
+            break;
+    }
+
+    if (!m_hrtf.preferredDataset.empty())
+    {
+        const auto available = getAvailableHrtfDatasets();
+        const int idx = resolveHrtfDatasetIndex(available, m_hrtf.preferredDataset);
+        if (idx >= 0)
+        {
+            attrs[n++] = ALC_HRTF_ID_SOFT;
+            attrs[n++] = idx;
+        }
+    }
+
+    attrs[n] = 0;  // ALC attribute list terminator
+
+    auto resetDevice =
+        reinterpret_cast<LPALCRESETDEVICESOFT>(m_alcResetDeviceSOFT);
+    if (resetDevice(m_device, attrs) != ALC_TRUE)
+    {
+        Logger::warning("[AudioEngine] alcResetDeviceSOFT failed — HRTF settings may not be applied");
     }
 }
 
