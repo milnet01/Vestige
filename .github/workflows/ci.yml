@@ -320,21 +320,15 @@ jobs:
           # the log output so the CI log itself never exposes the
           # leaked value. --exit-code 1 makes the step (and the job)
           # fail when any finding is reported; the committed
-          # .gitleaks.toml allowlists known-benign matches.
+          # .gitleaks.toml allowlists known-benign matches. A failing
+          # job turns CI red — that's the signal the committer needs.
+          # We deliberately do NOT upload SARIF to the Security tab:
+          # the old gitleaks-action didn't either, and doing so would
+          # require `security-events: write` on the workflow token
+          # plus pull in an upload-sarif action (which is itself
+          # Node-20-deprecated). Keep the job minimal.
           gitleaks detect \
             --source . \
             --config .gitleaks.toml \
             --redact \
-            --exit-code 1 \
-            --report-format sarif \
-            --report-path "$RUNNER_TEMP/gitleaks-results.sarif"
-
-      - name: Upload SARIF results
-        # Runs even on failure so the finding shows up in the
-        # Security tab for triage. `if: always()` is the documented
-        # pattern for SARIF uploads on scanner jobs.
-        if: always()
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: ${{ runner.temp }}/gitleaks-results.sarif
-          category: gitleaks
+            --exit-code 1
