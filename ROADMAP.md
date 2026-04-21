@@ -1074,6 +1074,10 @@ Phases 5A–9D have built an extensive editor (entity inspector, scene viewport,
 - [ ] Video / GIF embeds in panel tooltips for complex operations (one-shot 3-5 second MP4s).
 - [ ] Troubleshooting decision tree — "my scene doesn't render" → click-through diagnostic ending in a fix or a GitHub-issue prefill.
 
+### Code-hygiene tooling — stop the clang-tidy whack-a-mole
+- [ ] **Principled clang-tidy baseline.** Replace the current `bugprone-*,performance-*,modernize-*,readability-*,cppcoreguidelines-*` wildcard (with its ~8 excludes accumulated across audit tool 2.15.0 → 2.17.0) with an explicit enumeration of the ~30 checks the project actually wants active. Commit as a project-level `.clang-tidy` file so IDE / editor integrations pick it up too. Ends the "suppress the top rule, next layer appears" pattern documented in audit tool 2.15–2.17 CHANGELOG entries.
+- [ ] **Bulk clang-format sweep.** Whole-codebase `clang-format -i` pass against the existing `.clang-format` config (which has been deliberately deferred per the file's own header comment). Land in a single dedicated commit so git blame damage is contained to one reviewable unit. Re-enables `readability-braces-around-statements` once the unbraced sites are cleaned up by this pass or by the hybrid-adoption path (CODING_STANDARDS.md §3).
+
 ### Milestone
 A person who has never opened Vestige can open it, follow the first-run tour, create a scene, place a few entities, bake a navmesh, export a build — all without reading source code, watching a tutorial, or asking anyone. AI-assisted users get the same surface plus an optional chat panel. Keyboard-only users can drive every action without a mouse. The editor feels responsive even with 10k-entity scenes.
 
