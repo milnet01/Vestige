@@ -9,6 +9,60 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-21 Phase 10 audio — Mixer buses, ducking, voice eviction
+
+Eighth Phase 10 audio slice. Ships the three primitives the
+engine-side AudioSystem needs to route sources into mixer buses,
+duck ambient while dialogue plays, and pick which voice to drop
+when the OpenAL source pool is full.
+
+- `engine/audio/audio_mixer.{h,cpp}`:
+  * `SoundPriority` enum (Low / Normal / High / Critical) +
+    `soundPriorityRank(p)` returning 0..3. Used as the dominant
+    axis of the eviction score.
+  * `AudioBus` enum (Master / Music / Voice / Sfx / Ambient /
+    Ui) + `AudioMixer` struct (per-bus gain table defaulting to
+    1.0) + `effectiveBusGain(mixer, bus)` returning `master * bus`
+    clamped to [0, 1]. Querying the Master bus returns just the
+    Master gain (no Master*Master double-apply). Settings UI
+    writes bus gains; the AudioSystem reads `effectiveBusGain`
+    when setting `AL_GAIN` on each source.
+  * `DuckingState` (currentGain + triggered) + `DuckingParams`
+    (attackSeconds + releaseSeconds + duckFactor) +
+    `updateDucking(state, params, dt)` — slew `currentGain`
+    toward `duckFactor` (triggered) or 1.0 (released) at a rate
+    that travels the full swing `(1 − floor)` in the configured
+    time. Clamped to [duckFactor, 1]. Zero-duration attack /
+    release uses an epsilon so the slew is fast rather than
+    inf/nan. Negative dt is a no-op.
+  * `VoiceCandidate` (priority + effectiveGain + ageSeconds) +
+    `voiceKeepScore(v) = rank·1000 + gain·10 − age` +
+    `chooseVoiceToEvict(voices)` returning the index of the
+    lowest-score entry (or sentinel `-1` when empty). The 1000×
+    priority weight guarantees priority dominates realistic
+    gain+age combinations; gain breaks ties within a tier;
+    age breaks ties within gain.
+- `tests/test_audio_mixer.cpp` — 19 new tests:
+  * Labels: priority labels, bus labels, priority ranks
+    monotonically increasing.
+  * Bus gains: default unity per bus, Master multiplies with
+    each bus, Master bus ignores self-double, clamps to
+    [0, 1] on both sides.
+  * Ducking: attacks toward floor over the configured duration,
+    releases toward unity over its own duration, clamps at
+    floor (no below-floor overshoot under huge dt), clamps at
+    unity, negative dt is a no-op, zero-duration falls back to
+    an epsilon-guard that still lands in the valid range.
+  * Eviction: empty list returns the sentinel, lower priority
+    evicts before higher, within a tier the quieter voice goes
+    first, within tier+gain the oldest voice goes first,
+    Critical survives against a loud-fresh Low, keep-score
+    ordering matches priority rank.
+
+Per CLAUDE.md Rule 11: linear slew + product-of-bus-gains +
+integer-weighted score are canonical forms with no coefficients
+to fit — Formula Workbench doesn't apply.
+
 ### 2026-04-21 Phase 10 audio — Dynamic music system primitives
 
 Seventh Phase 10 audio slice. Three pure-function / pure-data
