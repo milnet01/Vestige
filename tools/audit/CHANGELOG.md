@@ -20,17 +20,20 @@ best-practice analysis as 2.15.0:
   adjacent same-type parameters as a caller-swap risk. Extremely
   high FP rate — signal hides in the noise. Re-evaluate when LLVM
   upstream improves the heuristic.
-- **`readability-braces-around-statements`** disabled (for now).
-  The *policy* is braces-always (CODING_STANDARDS.md §3 Brace Style
-  documents the goto-fail rationale) but enforcement is gated on
-  the planned `clang-format` sweep. Attempted bulk fix via
-  `clang-tidy --fix`: applied fixes to 130+ files producing ugly
-  `if (x) { stmt;\n}` single-line braces that the project's Allman
-  style forbids. Running `clang-format` after to restore Allman
-  produced a ~20k-line diff across 133 files — exactly the full
-  reformat sweep that `.clang-format` deliberately defers. Reverted
-  both passes. Re-enable this check in a future commit that pairs
-  with the planned bulk clang-format sweep.
+- **`readability-braces-around-statements`** disabled (hybrid
+  adoption). The *policy* is braces-always (CODING_STANDARDS.md §3
+  Brace Style documents the goto-fail rationale), but enforcement
+  follows the same hybrid model as 2.15.0's trailing-return rule:
+  suppress the blanket check, adopt the pattern in new code and
+  opportunistically during edits, never force a codebase-wide
+  rewrite. Attempted bulk `clang-tidy --fix` produced ugly
+  `if (x) { stmt;\n}` single-line braces violating Allman style;
+  running `clang-format` to repair it triggered a ~20k-line diff
+  across 133 files (the full sweep that `.clang-format` deliberately
+  defers). Reverted both passes. Re-enable the clang-tidy check
+  once the unbraced sites have been cleaned up through the hybrid
+  adoption path or a future dedicated clang-format sweep — not
+  blocking on either.
 
 Updated the same three config sites:
 - `tools/audit/lib/config.py`

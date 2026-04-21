@@ -205,13 +205,34 @@ if (base + 2 >= values.size())
     return glm::vec3(0.0f);
 ```
 
-**Status:** the `readability-braces-around-statements` clang-tidy
-check is currently *off* in the audit tool. A project-wide mechanical
-cleanup would need to couple with a full `clang-format` sweep (see
-`.clang-format`), and that sweep is deliberately deferred. Until it
-runs, treat braces-always as style guidance for new code you write
-or review, not as a gate. Re-enable the check after the bulk sweep
-lands and every existing unbraced site is cleaned up.
+**Status — hybrid adoption:** the `readability-braces-around-statements`
+clang-tidy check is currently *off* in the audit tool. The rule is
+good, but a one-shot mechanical fix produces `if (x) { stmt;\n}`
+single-line braces that violate Allman style, and running
+`clang-format` to repair it triggers the full ~20k-line reformat
+sweep that `.clang-format` deliberately defers.
+
+**The adoption strategy is gradual, not all-at-once:**
+
+1. **New code** (anything you write from today forward): always use
+   braces. This is a style requirement at code review.
+2. **Editing an existing file** with unbraced sites: fix any
+   unbraced statements you touch as part of the edit. Don't go out
+   of your way to fix sites in code you're not modifying — that's
+   churn.
+3. **Out-of-band cleanup** is allowed (any contributor can land a
+   focused "braces: <path>" commit for a specific file or subsystem)
+   but never required.
+4. **Re-enable the clang-tidy check** only after every site is
+   cleaned up by the three paths above — or after a future
+   dedicated `clang-format` sweep lands alongside it. Until then
+   the check stays off in the audit tool so CI doesn't flood with
+   warnings.
+
+This is the same hybrid model used for `modernize-use-trailing-return-
+type` (§2 "Return Type Style"): suppress the blanket rule, adopt
+the pattern where it genuinely helps, never force a one-shot
+codebase-wide rewrite.
 
 ### Line Length
 - **Soft limit: 120 characters**

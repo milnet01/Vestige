@@ -97,12 +97,15 @@ _DEFAULTS_STATIC_ANALYSIS: dict[str, Any] = {
         #     heuristic.
         #   - readability-braces-around-statements : the *policy* is
         #     braces-around-everything (CODING_STANDARDS.md §3), but
-        #     enforcement is gated on the planned clang-format sweep
-        #     documented in .clang-format. Running clang-tidy --fix
-        #     without the format sweep produces `if (x) { stmt;\n}`
-        #     noise, and running clang-format without explicit sweep
-        #     planning produces a ~20k-line reformat touching 130+
-        #     files. Flagged for a dedicated cleanup commit.
+        #     the rule follows the same hybrid-adoption model as
+        #     trailing-return-type above — suppress the blanket check,
+        #     apply the pattern in new code and during natural edits,
+        #     never force a codebase-wide rewrite. clang-tidy --fix
+        #     produces ugly `if (x) { stmt;\n}` single-line braces,
+        #     and clang-format to repair it triggers the ~20k-line
+        #     sweep that .clang-format deliberately defers. Re-enable
+        #     the check once unbraced sites are cleaned up by the
+        #     hybrid path — not blocking on a big-bang sweep.
         # Every other modernize-*, bugprone-*, performance-*, and
         # readability-* check stays active.
         "checks": (
