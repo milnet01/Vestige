@@ -40,6 +40,44 @@ glm::vec3 getPosition() const;
 bool isVisible() const;
 ```
 
+### Return Type Style — classical by default, trailing where it helps
+
+**Default:** classical return types. The return type goes before the
+function name, as in every example above. This matches the project's
+existing ~2000 function declarations and the convention in LLVM,
+Chromium, Unreal, Godot, Folly, and most major C++ game engines.
+
+**Trailing-return-type** (`auto name(args) -> ReturnType`) is
+**permitted and encouraged only where it actually helps:**
+
+1. **Templates with dependent return types** — when the return type
+   depends on the argument types:
+   ```cpp
+   template <class T, class U>
+   auto add(T a, U b) -> decltype(a + b);   // ✓ trailing needed
+   ```
+
+2. **Lambdas with complex or deduced return types** — already the
+   only syntax available:
+   ```cpp
+   auto projectToScreen = [](const glm::vec3& p) -> glm::vec2 { ... };
+   ```
+
+3. **Nested types scoped by the enclosing class** — when the return
+   type is a nested type of the class, trailing-return lets you
+   omit the class-name qualifier:
+   ```cpp
+   auto Scene::findEntity(EntityId id) const -> const Entity&;  // ✓
+   // Classical form requires `const Scene::Entity&` or a using-alias.
+   ```
+
+**Do NOT** convert simple declarations like `float getDuration() const`
+to `auto getDuration() const -> float` — it's a pure style change that
+lengthens the declaration and hides the return type behind the function
+name without benefit. Clang-tidy's `modernize-use-trailing-return-type`
+rule is explicitly disabled in the audit tool for this reason (see
+`tools/audit/audit_config.yaml` and `tools/audit/lib/config.py`).
+
 ### Variables
 ```cpp
 // Local variables: camelCase

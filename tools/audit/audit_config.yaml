@@ -61,7 +61,12 @@ static_analysis:
     enabled: true
     binary: null  # Auto-detected
     compile_commands: "build/compile_commands.json"
-    checks: "bugprone-*,performance-*,modernize-*,readability-*,cppcoreguidelines-*"
+    # `-modernize-use-trailing-return-type` deliberately excluded:
+    # CODING_STANDARDS.md mandates classical return types except
+    # where trailing-return genuinely helps (templates with
+    # dependent returns, lambdas, nested-type scoping). See
+    # lib/config.py for the full rationale.
+    checks: "bugprone-*,performance-*,modernize-*,-modernize-use-trailing-return-type,readability-*,cppcoreguidelines-*"
     fallback_flags: "-std=c++17 -I engine/ -I external/"
     max_files: 50
     # 1200 s (was 600) — legitimate bump per CLAUDE.md rule #10.

@@ -77,7 +77,15 @@ _DEFAULTS_STATIC_ANALYSIS: dict[str, Any] = {
         "enabled": False,
         "binary": None,
         "compile_commands": None,
-        "checks": "bugprone-*,performance-*,modernize-*",
+        # `-modernize-use-trailing-return-type` is deliberately excluded:
+        # the rule is the most controversial in `modernize-*` (LLVM,
+        # Chromium, Unreal, Godot, Folly all leave it off), and CODING_
+        # STANDARDS.md mandates classical return types except where
+        # trailing-return genuinely helps (templates with dependent
+        # returns, lambdas, nested-type scoping). Keeping the rest of
+        # `modernize-*` active so `use-nullptr`, `use-override`,
+        # `use-auto` etc. still fire.
+        "checks": "bugprone-*,performance-*,modernize-*,-modernize-use-trailing-return-type",
         "fallback_flags": "-std=c++17",
         "max_files": 50,
         "timeout": 600,

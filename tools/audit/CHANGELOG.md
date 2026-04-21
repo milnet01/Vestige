@@ -2,6 +2,45 @@
 
 All notable changes to the Audit Tool are documented in this file.
 
+## [2.15.0] - 2026-04-21
+
+### Changed — disable `modernize-use-trailing-return-type` in clang-tidy configs
+
+The 664 findings that `modernize-use-trailing-return-type` produces
+against the engine are noise against Vestige's established convention
+(classical return types everywhere except templates / lambdas / nested-
+type scoping — see `CODING_STANDARDS.md` §2). The rule is also the
+most controversial in `modernize-*`: LLVM, Chromium, Unreal, Godot,
+and Folly all leave it off. Enforcing it would rewrite every function
+declaration in the engine for zero benefit, lock the project into
+trailing-return as mandatory, and break git blame on a massive diff.
+
+Updated three config sites:
+
+- `tools/audit/lib/config.py` — default clang-tidy checks now
+  `"bugprone-*,performance-*,modernize-*,-modernize-use-trailing-return-type"`.
+- `tools/audit/lib/auto_config.py` — same exclusion in the C++
+  language profile used by `audit init`.
+- `tools/audit/audit_config.yaml` — same exclusion in the shipped
+  default config (which also had `readability-*` +
+  `cppcoreguidelines-*`).
+
+The rest of `modernize-*` stays active — `use-nullptr`,
+`use-override`, `use-auto`, `use-emplace`, `deprecated-headers`,
+`loop-convert`, etc. all continue to fire.
+
+`CODING_STANDARDS.md` §2 now documents the project convention
+("classical by default, trailing where it helps") with the three
+cases where trailing-return is legitimately useful: templates with
+dependent returns, lambdas, nested-type scoping.
+
+### Meta — CI annotation reduction
+
+Resolves the one `clang-tidy` annotation surfacing in every recent CI
+run (`modernize-use-trailing-return-type` fired against
+`engine/animation/animation_clip.cpp:13` and 663 other locations but
+only one surfaced in the CI annotation list at a time).
+
 ## [2.14.1] - 2026-04-20
 
 ### Fixed — `c_style_cast` false positives (parameter decls, function-pointer types)
