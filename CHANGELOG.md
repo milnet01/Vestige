@@ -9,6 +9,108 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-21 Phase 10 fog — Non-volumetric foundation (distance, height, sun inscatter)
+
+First Phase 10 fog slice. Ships the pure-function primitives for the
+three canonical distance-fog modes, the Quílez analytic exponential
+height-fog integral, and the UE-style directional sun-inscatter lobe —
+plus accessibility toggles so users with motion / contrast sensitivity
+can tune the look without losing it entirely.
+
+Follows the Phase 10 audio cadence: ship pure-function primitives
+first (exhaustively tested, editor + tests can exercise the math),
+wire into the GPU composite in a follow-up slice.
+
+- `docs/PHASE10_FOG_RESEARCH.md` — 2,400-word research report with 20
+  citations across UE5 Exponential Height Fog, Unity HDRP, Godot 4,
+  Wronski 2014 and Hillaire 2015 (volumetric), Mitchell 2008 (god
+  rays), Quílez 2010 (height-fog integral), D3D9 fog-formula spec,
+  and accessibility standards (WCAG 2.2 SC 2.3.1 / 2.3.3, Xbox AG
+  117/118, Game Accessibility Guidelines).
+- `docs/PHASE10_FOG_DESIGN.md` — 10-slice rollout plan, HDR
+  composition order, performance budgets per slice, Workbench
+  applicability analysis, and three proposed Workbench improvements
+  (2D input grids, max-abs-error metric, weighted-LM support).
+
+- `engine/renderer/fog.{h,cpp}` — pure-function primitives:
+  * `FogMode` enum (`None` / `Linear` / `Exponential` /
+    `ExponentialSquared`) + `FogParams` (colour, start, end,
+    density).
+  * `computeFogFactor(mode, params, distance)` — canonical
+    Linear / GL_EXP / GL_EXP2 formulas (OpenGL Red Book §9; D3D9
+    fog-formulas). Returns surface *visibility* in `[0, 1]`. Guards
+    degenerate params (start==end, negative density, negative
+    distance) with sensible pass-through behaviour.
+  * `HeightFogParams` + `computeHeightFogTransmittance` — closed-form
+    Quílez integral of `d(y) = a·exp(-b·(y - fogHeight))` along a
+    view ray. Uses `expm1` for numerical stability near
+    `density·rayDirY·rayLength ≈ 0`. Separate horizontal-ray branch
+    collapses to Beer-Lambert when `|rd.y| < 1e-5` so the shader
+    doesn't spike at the horizon line. `maxOpacity` clamp matches UE
+    `FogMaxOpacity` so the sky doesn't fully vanish on long
+    sightlines.
+  * `SunInscatterParams` + `computeSunInscatterLobe` — cosine-lobe
+    directional scattering (UE "DirectionalInscatteringColor"
+    pattern). Zero below `startDistance`, zero on backlit rays.
+  * `applyFog(surface, fog, factor)` — CPU mirror of GLSL
+    `mix(fog, surface, factor)` with `[0, 1]` clamp.
+  * `fogModeLabel(mode)` — stable strings for the editor + tests.
+
+- `tests/test_fog.cpp` — 29 headless unit tests covering:
+  * Label stability across every enum value.
+  * `None` mode pass-through at any distance.
+  * Zero/negative distance pass-through for every mode.
+  * Linear knees: unity below `start`, zero at `end`, 0.5 at
+    midpoint, zero-span returns unity, clamped past `end`.
+  * Exponential: factor = 0.5 when `density·d = ln 2`,
+    zero-density returns unity, negative-density clamps to zero,
+    monotonic decay across 200 samples.
+  * Exponential-squared: factor = `exp(-1)` at `density·d = 1`,
+    softer onset than GL_EXP at matching density (the defining
+    property of the squared form), monotonic decay.
+  * `applyFog` byte-for-byte parity with GLSL `mix()` at
+    factor ∈ {0, 0.5, 1} and out-of-range clamp.
+  * Height fog: zero-length / zero-density pass-through, monotonic
+    decay across distance, horizontal-ray ↔ Beer-Lambert equivalence,
+    thinner at altitude, maxOpacity floor, small-angle ↔
+    horizontal-branch agreement.
+  * Sun inscatter: zero inside start distance, unity when looking
+    into sun, zero on backlit, tighter lobe at larger exponent,
+    negative exponent defensive clamp.
+
+- `engine/accessibility/post_process_accessibility.{h,cpp}` —
+  three new fields: `fogEnabled` (default `true`),
+  `fogIntensityScale` (default `1.0`), `reduceMotionFog` (default
+  `false`). Rationale documented in the header — disabling fog
+  entirely creates a harsh fog-horizon cutoff that's *worse* for
+  low-contrast-sensitivity users than keeping fog on at half
+  density. `safeDefaults()` therefore keeps fog on, halves density
+  (`fogIntensityScale = 0.5`), and enables reduced-motion mode so
+  the (future) volumetric temporal reprojection and sun-inscatter
+  lobe can't flash on rapid camera pans.
+
+- `tests/test_post_process_accessibility.cpp` — 4 new tests:
+  defaults for the three new fields, safe-preset keeps fog on at
+  half intensity, per-field equality coverage, per-field
+  independence.
+
+**Follow-up slices, explicitly deferred:**
+- Shader integration (`screen_quad.frag.glsl` uniforms, depth
+  reconstruction, mix-before-bloom HDR composition) — renderer
+  surgery, own commit.
+- God rays (Mitchell screen-space radial blur).
+- Volumetric fog — froxel grid, compute-shader injection,
+  Beer-Lambert accumulation, Halton-jitter temporal reprojection.
+- Volumetric phase function — Schlick approximation to
+  Henyey-Greenstein, **fit via Formula Workbench** per CLAUDE.md
+  Rule 11. The Workbench improvements (below) land before this.
+- Editor FogPanel (mirror of AudioPanel four-tab pattern).
+
+All formulas in this slice are closed-form / textbook — no
+coefficients to fit, Formula Workbench not applicable (the
+Workbench-fit slice is the Schlick-to-HG approximation in
+volumetric-fog).
+
 ### 2026-04-21 Phase 10 audio — Editor AudioPanel closes Phase 10 audio
 
 Tenth Phase 10 audio slice. Ships the last remaining bullet

@@ -102,6 +102,7 @@ add_executable(vestige_tests
     test_ui_design_widgets.cpp
     test_ui_theme_accessibility.cpp
     test_color_vision_filter.cpp
+    test_fog.cpp
     test_photosensitive_safety.cpp
     test_subtitle.cpp
     test_ui_accessible.cpp

@@ -53,11 +53,33 @@ struct PostProcessAccessibilitySettings
     /// on for visual quality, leaving the toggle to users.
     bool motionBlurEnabled    = true;
 
+    /// Distance / height fog master toggle. Fog stays on by default
+    /// because disabling it produces a harsh "fog horizon" cutoff on
+    /// long sightlines (visually worse than having fog for most
+    /// users). Exposed so users with extreme low-contrast sensitivity
+    /// can opt out entirely.
+    bool fogEnabled = true;
+
+    /// Density-scale multiplier applied to distance + height fog so
+    /// low-vision users can see at distance without losing the look
+    /// entirely. 1.0 = full authored density; 0.0 = no fog.
+    float fogIntensityScale = 1.0f;
+
+    /// Reduced-motion mode for fog-related effects: disables temporal
+    /// reprojection in volumetric fog (when that feature ships) and
+    /// caps the sun-inscatter lobe intensity so rapid camera pans
+    /// past the sun don't flash. Distance + height fog remain
+    /// unaffected (they're static per frame).
+    bool reduceMotionFog = false;
+
     /// Value equality — two configs match iff every flag matches.
     bool operator==(const PostProcessAccessibilitySettings& o) const
     {
         return depthOfFieldEnabled == o.depthOfFieldEnabled
-            && motionBlurEnabled    == o.motionBlurEnabled;
+            && motionBlurEnabled    == o.motionBlurEnabled
+            && fogEnabled           == o.fogEnabled
+            && fogIntensityScale    == o.fogIntensityScale
+            && reduceMotionFog      == o.reduceMotionFog;
     }
     bool operator!=(const PostProcessAccessibilitySettings& o) const { return !(*this == o); }
 };

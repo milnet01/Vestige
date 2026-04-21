@@ -14,6 +14,13 @@ PostProcessAccessibilitySettings safeDefaults()
     PostProcessAccessibilitySettings s;
     s.depthOfFieldEnabled = false;
     s.motionBlurEnabled   = false;
+    // Fog stays on under the safe preset — turning it off makes a
+    // harsh far-plane horizon cutoff which is worse for users with
+    // low contrast sensitivity than having fog. Density scales to
+    // half so overall visibility improves without losing the look.
+    s.fogEnabled          = true;
+    s.fogIntensityScale   = 0.5f;
+    s.reduceMotionFog     = true;
     return s;
 }
 

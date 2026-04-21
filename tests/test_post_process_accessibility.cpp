@@ -24,6 +24,17 @@ TEST(PostProcessAccessibility, BothEffectsDefaultOn)
     EXPECT_TRUE(s.motionBlurEnabled);
 }
 
+TEST(PostProcessAccessibility, FogDefaultsOnFullIntensityNoReducedMotion)
+{
+    // Fog is normal visual polish — default on, full authored density,
+    // reduced-motion off. Users opt out via explicit toggle or
+    // safeDefaults.
+    PostProcessAccessibilitySettings s;
+    EXPECT_TRUE(s.fogEnabled);
+    EXPECT_FLOAT_EQ(s.fogIntensityScale, 1.0f);
+    EXPECT_FALSE(s.reduceMotionFog);
+}
+
 // -- Accessibility preset --
 
 TEST(PostProcessAccessibility, SafeDefaultsDisablesEveryMotionSensitiveEffect)
@@ -31,6 +42,20 @@ TEST(PostProcessAccessibility, SafeDefaultsDisablesEveryMotionSensitiveEffect)
     PostProcessAccessibilitySettings s = safeDefaults();
     EXPECT_FALSE(s.depthOfFieldEnabled);
     EXPECT_FALSE(s.motionBlurEnabled);
+}
+
+TEST(PostProcessAccessibility, SafeDefaultsKeepsFogOnAtHalfIntensityWithReducedMotion)
+{
+    // Turning distance fog off entirely creates a harsh horizon cutoff
+    // that's visually worse for low-contrast-sensitivity users than
+    // having fog at all. The safe preset therefore keeps fogEnabled
+    // on but halves intensity + enables reduced-motion mode so the
+    // sun-inscatter lobe and (future) volumetric temporal reprojection
+    // can't cause photosensitivity flashes.
+    PostProcessAccessibilitySettings s = safeDefaults();
+    EXPECT_TRUE(s.fogEnabled);
+    EXPECT_FLOAT_EQ(s.fogIntensityScale, 0.5f);
+    EXPECT_TRUE(s.reduceMotionFog);
 }
 
 TEST(PostProcessAccessibility, SafeDefaultsIsDistinctFromZeroInitDefault)
@@ -59,6 +84,24 @@ TEST(PostProcessAccessibility, EqualityMatchesAllFields)
 
     b.motionBlurEnabled = false;
     EXPECT_NE(a, b);
+
+    a.motionBlurEnabled = false;
+    EXPECT_EQ(a, b);
+
+    b.fogEnabled = false;
+    EXPECT_NE(a, b);
+
+    a.fogEnabled = false;
+    EXPECT_EQ(a, b);
+
+    b.fogIntensityScale = 0.25f;
+    EXPECT_NE(a, b);
+
+    a.fogIntensityScale = 0.25f;
+    EXPECT_EQ(a, b);
+
+    b.reduceMotionFog = true;
+    EXPECT_NE(a, b);
 }
 
 // -- Per-field toggle --
@@ -76,4 +119,28 @@ TEST(PostProcessAccessibility, IndividualTogglesAreIndependent)
     s.motionBlurEnabled = false;
     EXPECT_TRUE(s.depthOfFieldEnabled);
     EXPECT_FALSE(s.motionBlurEnabled);
+}
+
+TEST(PostProcessAccessibility, FogTogglesAreIndependent)
+{
+    // A user might want fog overall but reduced motion only, or full
+    // intensity distance fog without sun-lobe flashing. Verify each
+    // flag mutates in isolation.
+    PostProcessAccessibilitySettings s;
+    s.fogEnabled = false;
+    EXPECT_FALSE(s.fogEnabled);
+    EXPECT_FLOAT_EQ(s.fogIntensityScale, 1.0f);
+    EXPECT_FALSE(s.reduceMotionFog);
+
+    s = {};
+    s.fogIntensityScale = 0.3f;
+    EXPECT_TRUE(s.fogEnabled);
+    EXPECT_FLOAT_EQ(s.fogIntensityScale, 0.3f);
+    EXPECT_FALSE(s.reduceMotionFog);
+
+    s = {};
+    s.reduceMotionFog = true;
+    EXPECT_TRUE(s.fogEnabled);
+    EXPECT_FLOAT_EQ(s.fogIntensityScale, 1.0f);
+    EXPECT_TRUE(s.reduceMotionFog);
 }

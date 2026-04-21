@@ -58,6 +58,7 @@ set(ENGINE_SOURCES
     renderer/text_renderer.cpp
     renderer/color_grading_lut.cpp
     renderer/color_vision_filter.cpp
+    renderer/fog.cpp
     accessibility/photosensitive_safety.cpp
     accessibility/post_process_accessibility.cpp
     ui/subtitle.cpp
