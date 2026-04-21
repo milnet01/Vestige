@@ -9,6 +9,52 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-21 Phase 10 audio — Material-based occlusion + obstruction
+
+Fourth Phase 10 audio slice. Gives the engine a canonical gain /
+low-pass model for sound passing through solid geometry — walls,
+doors, windows, water — so the AudioSystem can set final per-source
+gain and EFX filter values once the physics raycaster has measured
+the obstruction.
+
+- `engine/audio/audio_occlusion.{h,cpp}` — new
+  `AudioOcclusionMaterialPreset` enum (Air / Cloth / Wood / Glass /
+  Stone / Concrete / Metal / Water) paired with an
+  `AudioOcclusionMaterial` struct (`transmissionCoefficient`,
+  `lowPassAmount`). Preset values are calibrated for first-person
+  walkthroughs (Concrete transmits 0.05 with 0.90 low-pass, Cloth
+  transmits 0.70 with 0.30 low-pass, etc.) — relative ordering not
+  dB-measured accuracy. `computeObstructionGain(openGain,
+  transmission, fraction)` blends open-path and transmitted-path
+  gain via the canonical `openGain · (1 − f · (1 − t))` form;
+  `computeObstructionLowPass(amount, fraction)` produces the
+  matching EFX low-pass target. Both clamp out-of-range inputs.
+- `AudioSourceComponent` — new `occlusionMaterial` +
+  `occlusionFraction` fields (default `Air` / 0.0 so existing
+  sources stay unaffected); `clone` carries them. The
+  engine-side raycaster writes these each frame; the AudioSystem
+  reads them to compute the final gain + filter values.
+- Diffraction explicitly *not* modelled in this layer. The
+  engine-side raycaster is responsible for picking a secondary
+  source position that hugs the diffraction edge and feeding that
+  into the normal attenuation + obstruction path, keeping the
+  pure-function layer blind to geometry for testability.
+- `tests/test_audio_occlusion.cpp` — 15 new tests: label stability
+  for all presets, Air is fully transparent, Concrete is the
+  least-transmissive solid, Cloth is the least-muffling non-Air,
+  all presets inside [0, 1] on both axes, gain blend math
+  (zero-fraction / full-fraction / half-fraction), out-of-range
+  clamps on both fraction and transmission, and matching coverage
+  for the low-pass path.
+
+Per CLAUDE.md Rule 11: the blend is a canonical linear form with
+no coefficients to fit; the numeric preset values are judgement
+calls calibrated to listening rather than laboratory measurements,
+so the Formula Workbench flow doesn't apply. Values are
+deliberately exaggerated over real transmission-loss tables so
+material differences stay audible without pushing source gains
+into headroom.
+
 ### 2026-04-21 Phase 10 audio — HRTF selection closes Spatial audio parent
 
 Third Phase 10 spatial-audio slice. Completes the "Spatial audio"

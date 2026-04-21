@@ -19,6 +19,8 @@ std::unique_ptr<Component> AudioSourceComponent::clone() const
     copy->rolloffFactor     = rolloffFactor;
     copy->attenuationModel  = attenuationModel;
     copy->velocity          = velocity;
+    copy->occlusionMaterial = occlusionMaterial;
+    copy->occlusionFraction = occlusionFraction;
     copy->loop              = loop;
     copy->autoPlay          = autoPlay;
     copy->spatial           = spatial;

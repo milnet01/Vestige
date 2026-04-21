@@ -6,6 +6,7 @@
 #pragma once
 
 #include "audio/audio_attenuation.h"
+#include "audio/audio_occlusion.h"
 #include "scene/component.h"
 
 #include <glm/glm.hpp>
@@ -61,6 +62,21 @@ public:
     /// NPCs) should update this alongside their transform each frame;
     /// the AudioSystem uploads it to `AL_VELOCITY`.
     glm::vec3 velocity = glm::vec3(0.0f);
+
+    /// @brief Material tag the engine-side raycaster reports when
+    ///        the line-of-sight between this source and the listener
+    ///        hits a solid surface. `Air` means no obstruction.
+    ///
+    /// The AudioSystem feeds this plus `occlusionFraction` into
+    /// `computeObstructionGain` / `computeObstructionLowPass` each
+    /// frame to produce the final gain + filter values for OpenAL.
+    AudioOcclusionMaterialPreset occlusionMaterial =
+        AudioOcclusionMaterialPreset::Air;
+
+    /// @brief Fraction of the source→listener line that passes
+    ///        through the obstructing material, in [0, 1].
+    ///        0 = clear, 1 = entirely through the material.
+    float occlusionFraction = 0.0f;
 
     /// @brief Whether the sound loops.
     bool loop = false;

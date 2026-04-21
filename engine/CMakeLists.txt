@@ -228,6 +228,7 @@ set(ENGINE_SOURCES
     audio/audio_attenuation.cpp
     audio/audio_doppler.cpp
     audio/audio_hrtf.cpp
+    audio/audio_occlusion.cpp
     systems/audio_system.cpp
     # UI/HUD system
     ui/sprite_batch_renderer.cpp
