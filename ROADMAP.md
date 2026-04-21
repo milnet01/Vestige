@@ -1012,6 +1012,73 @@ A complete walkthrough experience with UI, spatial audio with occlusion and dyna
 
 ---
 
+## Phase 10.5: Editor Usability Pass
+**Goal:** Make the editor genuinely usable for people who have never opened it — both solo creators working without AI help and AI-assisted users who need the editor to meet them halfway.
+
+Phases 5A–9D have built an extensive editor (entity inspector, scene viewport, model / texture / HDRI viewers, navigation panel, audio panel, formula workbench, node graph editor). The surface is wide, but discoverability, workflow ergonomics, and first-run experience haven't had a dedicated pass. This phase is where the editor becomes something a new user can open and get useful work done in without reading the source code first.
+
+**Scope principle:** no new major features. Every item is about *making existing functionality findable, obvious, and fast*. If a proposed item would add a feature rather than polish one, it belongs in another phase.
+
+### Discoverability — "where is the thing?"
+- [ ] Command palette (Ctrl+Shift+P / Cmd+Shift+P) — fuzzy search over every menu item, panel, tool, and action with keyboard-only navigation. One surface to find anything without memorising menus.
+- [ ] "What can I do here?" contextual help overlay (F1 over any viewport / panel shows a tooltip of its purpose + the keyboard shortcuts + the 5 most-used actions).
+- [ ] Searchable settings / preferences (the accessibility + input + graphics preferences are scattered; a single Ctrl+, search-over-keys dialog surfaces them).
+- [ ] Panel launcher with pinning — first-run shows a pinnable "Most-used panels" strip so the common Window submenu discovery isn't a memorisation exercise.
+- [ ] In-editor glossary — hover any domain term (e.g. "navmesh", "froxel", "cascade", "IBL") to see a 1-2 sentence definition + link to the relevant docs page.
+
+### Onboarding — "I just installed this; now what?"
+- [ ] First-run welcome dialog — project template picker (empty / 3D first-person / 2.5D / isometric / biblical walkthrough / blank biblical template) with live preview thumbnails. Already partially covered by Phase 9D template system; this adds the first-run wrapper.
+- [ ] Guided tour (dismissable, resumable) — highlights the 6 things a new user needs to know: viewport navigation, panel layout, entity inspector, assets panel, save/load, play mode. ~2 minutes total, spatially anchored callouts.
+- [ ] "Next step" hint pane — surfaces the single most useful next action given the current scene state ("scene has no lighting — add a directional light?", "entity has no collider — add a box collider?"). Dismissable per-project.
+- [ ] Sample scenes shipped with the engine — each template project opens with a minimal scene that shows the system working, not a blank viewport.
+- [ ] Opt-in telemetry (local file only, never uploaded) — tracks which panels the user opens so the first-run tour can adapt.
+
+### Workflow ergonomics — "I know what to do; make it fast"
+- [ ] Keyboard-driven workflow parity — every mouse action in the scene viewport should have a keyboard shortcut (move, rotate, scale, duplicate, delete, parent, frame-selected, toggle-gizmo-space).
+- [ ] Chord shortcuts (Ctrl+K Ctrl+S, Leader-style) for advanced actions — matches VSCode/Emacs user expectations and avoids key-space starvation.
+- [ ] Undo/redo everywhere, not just scene edits — panel layouts, preference changes, asset operations, workbench fits, shader parameters. Phase 9 started this; polish across remaining surfaces.
+- [ ] Unified copy/paste for entities, components, materials, and node-graph subgraphs — same shortcuts, same clipboard.
+- [ ] Drag-and-drop across every panel (model viewer → scene, texture viewer → material slot, HDRI viewer → environment, asset panel → entity component).
+- [ ] Multi-select editing — select N entities, edit one component field, apply to all.
+- [ ] Auto-save + recovery — every N minutes, on window lose-focus, on process crash. File-based, not memory-only.
+- [ ] Project-relative paths — the editor must never bake absolute paths into saved scenes (moving a project directory shouldn't break it).
+
+### Tooltips & contextual help — "what does this do?"
+- [ ] Every widget has a tooltip with a 1-sentence description + the keyboard shortcut if any. Audit every panel.
+- [ ] Status-bar hints — hovering a menu item shows the full description + link to the relevant docs page.
+- [ ] Inline warnings on invalid inputs (red outline + explanation of what's wrong + "fix" button where possible). Already partial in the Formula Workbench; extend to every numeric / enum / path input across the editor.
+- [ ] "Why is this greyed out?" — right-click a disabled control and get the reason ("Bake button disabled: no navmesh geometry tagged in the scene").
+
+### AI assistance integration hooks
+- [ ] Editor-exposed command API — every menu action, panel operation, and entity mutation callable via a stable string-based command ID. Same surface as the command palette. Enables AI assistants to drive the editor without hooking directly into C++ headers.
+- [ ] Scene-state snapshot / diff format — JSON serialisation of the current scene suitable for feeding to an AI assistant as context (entity list, component values, current selection). Already exists partially via scene serialisation; this formalises the contract.
+- [ ] AI chat panel (optional, off-by-default) — hostable via any Claude API / Anthropic SDK key in the user's environment. Does NOT require an AI vendor to use the editor; the editor is fully functional without it. Matches the Rule "editor must be usable without AI".
+- [ ] Prompt templates stored per-project — "add a point light near the selected entity", "generate 5 variations of this material", "create a character controller for this mesh". Users without AI get a "prompt library" of suggested workflows as a discovery aid.
+- [ ] Keyboard-driven agent invocation (Alt+Enter) — text box where the user types a short description, agent interprets → proposes a diff → user accepts / rejects. Deferred until there's a stable command API.
+
+### Performance & responsiveness — "the editor shouldn't feel slow"
+- [ ] Audit every editor panel's per-frame cost; target < 1 ms per panel at idle. The editor overlay should never push the scene-viewport frame time below 60 FPS on target hardware.
+- [ ] Async asset imports — model / texture / HDRI imports must not block the editor UI. Progress shown in a status bar.
+- [ ] Incremental scene saves — a 10,000-entity scene shouldn't take 2 seconds to save. Chunk by dirty regions.
+- [ ] Panel-level collapse to single line — users rarely need all 30 panels visible; aggressive one-line collapse of inactive panels reclaims screen space.
+
+### Accessibility (editor-side, complementing the engine-side Phase 10 work)
+- [ ] Editor UI scaling presets (independent of the game UI scaling shipped in Phase 10) — 1.0× / 1.25× / 1.5× / 2.0×.
+- [ ] Editor high-contrast mode — mirrors the game UI high-contrast toggle but applied to ImGui panels, menu chrome, and the scene viewport gizmos.
+- [ ] Screen-reader labels on every ImGui widget (extends the Phase 10 `UIAccessibleRole` enum to the editor surface — currently only the in-game `UIElement` tree is covered).
+- [ ] Colourblind-safe gizmo / wireframe / selection palettes.
+- [ ] Keyboard-only workflow — verify every panel is navigable with Tab / Shift+Tab / Enter / Space and no mouse. This is the big-ticket item from partially-sighted / motor-impaired users.
+
+### Docs surface — "how do I learn this?"
+- [ ] In-editor documentation browser — renders the project's `docs/` folder markdown inline; searchable; no browser needed.
+- [ ] Video / GIF embeds in panel tooltips for complex operations (one-shot 3-5 second MP4s).
+- [ ] Troubleshooting decision tree — "my scene doesn't render" → click-through diagnostic ending in a fix or a GitHub-issue prefill.
+
+### Milestone
+A person who has never opened Vestige can open it, follow the first-run tour, create a scene, place a few entities, bake a navmesh, export a build — all without reading source code, watching a tutorial, or asking anyone. AI-assisted users get the same surface plus an optional chat panel. Keyboard-only users can drive every action without a mouse. The editor feels responsive even with 10k-entity scenes.
+
+---
+
 ## Phase 11: Gameplay Systems
 **Goal:** Core gameplay mechanics for action, survival, and horror games — combat, inventory, health, saves, and environmental interaction.
 

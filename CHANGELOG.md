@@ -9,6 +9,77 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-21 Roadmap — Add Phase 10.5 Editor Usability Pass
+
+New phase inserted between Phase 10 (Polish and Features) and Phase 11
+(Gameplay Systems). Scope principle: no new major features — every
+item is about making existing editor functionality findable, obvious,
+and fast. Sections:
+
+- Discoverability (command palette, contextual help, searchable
+  settings, panel launcher, in-editor glossary).
+- Onboarding (first-run dialog, guided tour, sample scenes,
+  opt-in local-file telemetry).
+- Workflow ergonomics (keyboard parity, chord shortcuts, universal
+  undo/redo, unified copy/paste, drag-and-drop, multi-select,
+  auto-save, project-relative paths).
+- Tooltips & contextual help (every widget, status-bar hints,
+  inline warnings, "why is this greyed out?").
+- AI assistance integration hooks (editor-exposed command API,
+  scene-state snapshot format, optional chat panel, prompt
+  templates, keyboard agent invocation). Rule: editor must be
+  fully functional without AI.
+- Performance & responsiveness (per-panel ms budgets, async
+  imports, incremental saves, aggressive panel collapse).
+- Editor-side accessibility (scaling presets, high-contrast mode,
+  screen-reader labels on ImGui widgets, colourblind-safe gizmos,
+  keyboard-only workflow).
+- Docs surface (in-editor markdown browser, inline video tooltips,
+  troubleshooting decision tree).
+
+Milestone: a person who has never opened Vestige can follow the
+first-run tour and produce a buildable scene without reading source
+code or external tutorials. Keyboard-only users can drive every
+action without a mouse.
+
+### 2026-04-21 Formula Workbench 1.17.0 — Weighted LM, max-abs metric, step sweeps
+
+Three backwards-compatible extensions surfaced by the Phase 10 fog
+research (`docs/PHASE10_FOG_RESEARCH.md` §8 /
+`docs/PHASE10_FOG_DESIGN.md` §9). All three unlock rendering-formula
+fits (phase functions, tonemap curves, BRDF lobes) that the existing
+fitter could almost — but not quite — handle. Prepares the Workbench
+for the Schlick-to-Henyey-Greenstein phase-function fit in Phase 10's
+volumetric-fog slice.
+
+- **Weighted LM** — `CurveFitter::fitWeighted` new overload in
+  `engine/formula/curve_fitter.{h,cpp}`. Per-sample weight vector
+  parallel to data; minimises `sum(w_i · r_i²)`. Empty / mismatched
+  weights degrade to uniform LM. Negative / non-finite weights clamp
+  to 0. Reported rmse / maxError / rSquared stay unweighted so the
+  numbers remain comparable across fits.
+- **`max_abs_error_max`** — new optional expected-block field in
+  reference-case JSON. Checks `FitResult::maxError` (already
+  computed) and fails when worst-case residual exceeds bound.
+  Rendering fits fail on worst-case error, not mean. Default
+  `+infinity` keeps existing cases unchanged.
+- **Step-based input sweeps** — optional `step` field on
+  `InputSweep` alongside `min` / `max` / `count` / `values`. Three
+  sweep forms in priority order: explicit values → step → count.
+  Endpoint always included (tail sample appended if range isn't an
+  integer multiple of step).
+- **Documented N-dimensional Cartesian product** — harness already
+  supported multi-axis sweeps via multi-key `input_sweep`; now has
+  unit-test coverage.
+- **Tests** — 5 new curve-fitter tests (weighted path, empty-weights
+  parity, mismatch-falls-back-to-uniform, zero-weight-drops-row,
+  negative-weights-clamp-to-zero, skewed-data weighted optimum); 7
+  new harness tests (step endpoint, non-divisible tail, step=0
+  fallback, 2-axis cardinality, max-abs JSON parse, max-abs default
+  infinity, weights mismatch failure, uniform weights pass-through).
+
+WORKBENCH_VERSION: 1.16.0 → 1.17.0.
+
 ### 2026-04-21 Phase 10 fog — Non-volumetric foundation (distance, height, sun inscatter)
 
 First Phase 10 fog slice. Ships the pure-function primitives for the
