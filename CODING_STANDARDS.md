@@ -96,6 +96,47 @@ static Renderer* s_instance;
 int g_windowWidth;
 ```
 
+**Short identifiers are permitted in the usual C++ idioms:**
+- Loop counters: `i`, `j`, `k`
+- Math locals: `x`, `y`, `z`, `s`, `t`, `a`, `b`, `n`
+- Standard abbreviations at their scope: `Hz`, `ts`, `it`, `rgb`
+- Iterator variables: `it`, `end`
+
+Long names hurt readability more than they help when the scope is
+local and the meaning is obvious from context. The `readability-
+identifier-length` clang-tidy check (which wants every identifier
+≥3 chars) is disabled in the audit tool for this reason.
+
+### Magic Numbers — Named Constants for Business Logic
+
+Numeric literals tied to **business-logic or tuning semantics** must
+be named constants, not inline numbers. This is the hybrid-adoption
+model (same as §3 Brace Style and §2 Return Type Style): apply in
+new code and during natural edits, never a codebase-wide rewrite.
+
+```cpp
+// ✓ Preferred — semantic value is named
+constexpr float SAFE_PRESET_FOG_INTENSITY = 0.5f;
+s.fogIntensityScale = SAFE_PRESET_FOG_INTENSITY;
+
+// ✗ Avoid — "why 0.5?" requires reading surrounding comments
+s.fogIntensityScale = 0.5f;
+```
+
+**Exceptions where inline literals are fine:**
+- **Obvious-context math / graphics values** — matrix strides (9 for
+  3×3, 12 for 3×4), dimension counts, common ratios (0.5, 0.25, 2.0
+  in geometry), colour-space constants in LUT code, etc.
+- **Small loop bounds** — `for (int i = 0; i < 3; ++i)` for vec3
+  components, not `constexpr int VEC3_COMPONENT_COUNT = 3`.
+- **Throwaway test data** — unit tests can use literals directly;
+  the "magic" is precisely the point.
+
+The `cppcoreguidelines-avoid-magic-numbers` / `readability-magic-
+numbers` clang-tidy checks are disabled in the audit tool because
+they flag every literal (including the exceptions above) and drown
+the genuine cases in noise. Apply judgment per-site.
+
 ### Constants and Macros
 ```cpp
 // Constants: UPPER_SNAKE_CASE

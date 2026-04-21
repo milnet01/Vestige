@@ -120,7 +120,7 @@ def _get_language_defaults(lang: str) -> dict:
                     "enabled": True,
                     # See lib/config.py for per-exclusion rationale.
                     # Short version: project style rules override the
-                    # blanket checks for five specific cases; every
+                    # blanket checks for 8 specific cases; every
                     # other check stays active.
                     "checks": (
                         "bugprone-*,performance-*,modernize-*,"
@@ -128,7 +128,10 @@ def _get_language_defaults(lang: str) -> dict:
                         "-modernize-return-braced-init-list,"
                         "-readability-uppercase-literal-suffix,"
                         "-bugprone-easily-swappable-parameters,"
-                        "-readability-braces-around-statements"
+                        "-readability-braces-around-statements,"
+                        "-readability-identifier-length,"
+                        "-cppcoreguidelines-avoid-magic-numbers,"
+                        "-readability-magic-numbers"
                     ),
                 },
             },

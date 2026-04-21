@@ -106,6 +106,19 @@ _DEFAULTS_STATIC_ANALYSIS: dict[str, Any] = {
         #     sweep that .clang-format deliberately defers. Re-enable
         #     the check once unbraced sites are cleaned up by the
         #     hybrid path — not blocking on a big-bang sweep.
+        #   - readability-identifier-length : wants every variable
+        #     name >=3 chars. Flags universal idioms like `i` / `j`
+        #     loop counters, `x` / `y` / `z` / `s` / `t` math vars,
+        #     and standard abbreviations (`Hz`, `ts`, `it`). No major
+        #     C++ style guide enforces this — permanent suppression.
+        #   - cppcoreguidelines-avoid-magic-numbers,
+        #     readability-magic-numbers : hybrid adoption (same
+        #     model as braces). Named constants are preferred for
+        #     business-logic values (safe-preset multipliers, game-
+        #     tuning scalars) but acceptable for obvious-context math
+        #     / graphics values (matrix strides, common ratios,
+        #     dimension counts). Apply in new code and during natural
+        #     edits; don't force a codebase-wide rewrite.
         # Every other modernize-*, bugprone-*, performance-*, and
         # readability-* check stays active.
         "checks": (
@@ -114,7 +127,10 @@ _DEFAULTS_STATIC_ANALYSIS: dict[str, Any] = {
             "-modernize-return-braced-init-list,"
             "-readability-uppercase-literal-suffix,"
             "-bugprone-easily-swappable-parameters,"
-            "-readability-braces-around-statements"
+            "-readability-braces-around-statements,"
+            "-readability-identifier-length,"
+            "-cppcoreguidelines-avoid-magic-numbers,"
+            "-readability-magic-numbers"
         ),
         "fallback_flags": "-std=c++17",
         "max_files": 50,

@@ -2,6 +2,60 @@
 
 All notable changes to the Audit Tool are documented in this file.
 
+## [2.17.0] - 2026-04-21
+
+### Changed — three more clang-tidy checks disabled (identifier-length + magic-numbers)
+
+Follow-up to 2.16.0. Once braces-around-statements was suppressed, a
+new wave of annotations surfaced. Two categories:
+
+**Permanent suppression (pure style noise):**
+
+- **`readability-identifier-length`** — wants every identifier ≥3
+  chars. Flags universal C++ idioms: loop counters (`i`/`j`/`k`),
+  math locals (`x`/`y`/`z`/`s`/`t`), standard abbreviations
+  (`Hz`/`ts`/`it`), iterators. No major C++ style guide enforces
+  this blanket rule. CODING_STANDARDS.md §2 Variables now documents
+  the permitted short-identifier idioms.
+
+**Hybrid adoption (same model as braces / trailing-return):**
+
+- **`cppcoreguidelines-avoid-magic-numbers`** and
+- **`readability-magic-numbers`** — genuinely useful for business-
+  logic values but flag every numeric literal including legitimate
+  math / graphics constants (matrix strides 9 / 12, obvious ratios
+  0.5 / 0.25, small dimension counts). Default ignore list is too
+  narrow. Apply named constants for **business-logic** values
+  (safe-preset multipliers, game-tuning scalars) but accept inline
+  literals for **obvious-context math / graphics** values. The
+  check fires both, so the blanket version drowns the genuine
+  cases. Applied in new code, gradually during edits, never forced
+  codebase-wide.
+  
+  Fresh site fixed in this same commit:
+  `post_process_accessibility.cpp` — the `0.5f` I introduced in
+  2026-04-21's fog-foundation commit (54e6a05) is now named
+  `SAFE_PRESET_FOG_INTENSITY` in a file-local anonymous namespace.
+  This is the template for how future edits should treat
+  business-logic literals.
+
+CODING_STANDARDS.md gains a new §2 "Magic Numbers — Named Constants
+for Business Logic" section with ✓/✗ examples and explicit
+exceptions.
+
+Updated the same three config sites:
+- `tools/audit/lib/config.py`
+- `tools/audit/lib/auto_config.py`
+- `tools/audit/audit_config.yaml`
+
+Each exclusion is annotated at the call site with the reason.
+
+### Meta
+
+Cleans up every clang-tidy annotation that surfaced in CI run
+24711430010. The next run should be annotation-free for the audit
+Tier 1 job.
+
 ## [2.16.0] - 2026-04-21
 
 ### Changed — four more clang-tidy checks disabled
