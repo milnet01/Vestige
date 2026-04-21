@@ -9,6 +9,65 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-21 Phase 10 audio — Streaming-music decode state machine
+
+Ninth Phase 10 audio slice. Closes the "Audio engine integration"
+parent bullet in ROADMAP.md by landing the last missing sub-item
+(streaming playback for music — the one-shot path and the
+`AudioSourceComponent` were already in place).
+
+- `engine/audio/audio_music_stream.{h,cpp}` — `MusicStreamState`
+  models the decoder-side pipeline independent of OpenAL. Tracks
+  `totalFramesDecoded`, `totalFramesConsumed`, `sampleRate`,
+  `loopCount`, `maxLoops` (−1 = infinite, 0 = one-shot),
+  `minSecondsBuffered` / `maxSecondsBuffered` targets,
+  `framesPerChunk`, and an explicit `finished` flag set when the
+  consumer has drained everything after EOF.
+- `notifyStreamFramesConsumed(state, n)` advances the consumer
+  cursor and flips `finished` once `trackFullyDecodedOnce &&
+  consumed >= decoded`. `notifyStreamFramesDecoded(state, n,
+  eofReached)` advances the decoder cursor and increments
+  `loopCount` each time the decoder reports EOF.
+- `computeStreamBufferedSeconds(state)` returns
+  `(decoded − consumed) / sampleRate`, guarded against zero
+  sample rate and consumer overrun (defensive floor at 0 rather
+  than negative).
+- `planStreamTick(state, decoderAtEof)` is the pure-function
+  policy brain that the engine-side MusicPlayer calls once per
+  update. Decision tree:
+    1. Stream already `finished` → return `trackFinished`.
+    2. Buffered seconds ≥ `maxSecondsBuffered` → back-pressure,
+       no decode work.
+    3. `decoderAtEof` + loops exhausted → mark `finished`.
+    4. `decoderAtEof` + loops remaining → `rewindForLoop` +
+       request a chunk after the seek.
+    5. Otherwise → request one chunk (rounded up to
+       `framesPerChunk`) to move toward `minSecondsBuffered`.
+  One chunk per tick so a slow frame doesn't avalanche decoder
+  work.
+- `tests/test_audio_music_stream.cpp` — 16 new tests: buffered
+  seconds at start / mid-stream / zero-sample-rate /
+  consumer-overrun, notify counters (consumed advance, decoded
+  advance + loopCount on EOF, finished after full drain,
+  not-finished until full drain, not-finished if EOF not seen),
+  plan back-pressure at cap, plan chunk-refill below min, plan
+  refill after consumer drain, plan rewinds on EOF under
+  infinite policy, plan finishes on EOF when loops exhausted,
+  finite-loop policy allows exact N playthroughs, finished
+  stream keeps reporting finished.
+
+Also closes the ROADMAP bullet "Audio engine integration":
+OpenAL Soft (zlib license) chosen over FMOD for MIT-open-source
+compatibility; no runtime licensing concerns for the Steam
+launch path. One-shot playback already shipped in Phase 9C via
+`AudioEngine::playSound` + `AudioClip::loadFromFile`; streaming
+playback lands now via the primitives above; the
+`AudioSourceComponent` has been accreting fields across the
+Phase 10 audio slices (attenuation / velocity / occlusion).
+
+Per CLAUDE.md Rule 11: ratio / threshold / integer counters —
+no coefficients to fit.
+
 ### 2026-04-21 Phase 10 audio — Mixer buses, ducking, voice eviction
 
 Eighth Phase 10 audio slice. Ships the three primitives the
