@@ -9,6 +9,50 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-21 Phase 10 audio — Reverb zones with smooth crossfade
+
+Fifth Phase 10 audio slice. Ships the preset / zone-weight / blend
+primitives needed to drive EFX reverb across a scene with
+continuous transitions as the listener moves between rooms.
+
+- `engine/audio/audio_reverb.{h,cpp}` — new `ReverbPreset` enum
+  (`Generic` / `SmallRoom` / `LargeHall` / `Cave` / `Outdoor` /
+  `Underwater`) paired with a `ReverbParams` struct that mirrors
+  the non-EAX subset of the OpenAL EFX reverb model (`decayTime`,
+  `density`, `diffusion`, `gain`, `gainHf`, `reflectionsDelay`,
+  `lateReverbDelay`). `reverbPresetParams(preset)` returns values
+  adapted from Creative Labs `efx-presets.h` (`EFX_REVERB_PRESET_*`
+  entries) — kept to the subset that round-trips through
+  `AL_REVERB_*` properties so the engine stays compatible with
+  drivers that don't ship EAX reverb.
+- `computeReverbZoneWeight(coreRadius, falloffBand, distance)` —
+  sphere-with-linear-falloff weight function. Inside `coreRadius`
+  returns 1.0; between `coreRadius` and `coreRadius + falloffBand`
+  decays linearly to 0.0; outside returns 0.0. `falloffBand == 0`
+  gives a hard step at the radius. Negative inputs clamp.
+- `blendReverbParams(a, b, t)` — component-wise linear blend across
+  every field with `t` clamped to [0, 1]. The engine-side
+  ReverbSystem picks the highest-weighted zone and the next-highest
+  neighbour, then passes their relative weights to this function so
+  the crossfade through doorways / cave mouths is continuous rather
+  than stepped.
+- Auto-detection of room geometry → decay time is *not* in this
+  slice — that step needs physics AABBs / mesh volumes and belongs
+  one layer up in the engine-side ReverbSystem. The pure-function
+  layer intentionally carries no geometry awareness so tests run
+  headless.
+- `tests/test_audio_reverb.cpp` — 13 new tests: label stability,
+  every preset stays inside sensible EFX ranges (decay [0.1, 20],
+  all ratios [0, 1]), ordering invariants (SmallRoom shortest
+  decay, Cave longest, Underwater strongest HF damping), weight
+  falloff cases (inside core, band=0 hard step, linear mid-band,
+  negative clamps), and blend math (t=0/0.5/1 + out-of-range
+  clamp, plus exact equality at boundaries).
+
+Per CLAUDE.md Rule 11: the blend is a canonical linear lerp; the
+preset values come from an established industry table — no
+coefficients to fit, so the Formula Workbench flow doesn't apply.
+
 ### 2026-04-21 Phase 10 audio — Material-based occlusion + obstruction
 
 Fourth Phase 10 audio slice. Gives the engine a canonical gain /
