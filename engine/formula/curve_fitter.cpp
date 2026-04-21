@@ -161,7 +161,26 @@ FitResult CurveFitter::fit(const FormulaDefinition& formula,
                            QualityTier tier,
                            const FitConfig& config)
 {
+    // Uniform-weight path — delegates to the weighted implementation
+    // with an empty weight vector so there's a single LM loop to
+    // maintain. Kept as a separate entry point for callers that
+    // don't care about weighting.
+    return fitWeighted(formula, data, {}, initialCoeffs, tier, config);
+}
+
+FitResult CurveFitter::fitWeighted(const FormulaDefinition& formula,
+                                   const std::vector<DataPoint>& data,
+                                   const std::vector<float>& weights,
+                                   const std::map<std::string, float>& initialCoeffs,
+                                   QualityTier tier,
+                                   const FitConfig& config)
+{
     FitResult result;
+
+    // Weights vector must either be empty (uniform) or match data
+    // length. A size mismatch is almost always a caller bug — fall
+    // back to uniform rather than silently discarding samples.
+    const bool weighted = !weights.empty() && weights.size() == data.size();
 
     // Validate inputs
     const ExprNode* expr = formula.getExpression(tier);
@@ -230,10 +249,16 @@ FitResult CurveFitter::fit(const FormulaDefinition& formula,
 
     // Accumulate error in double precision — matches workbench v1.3.0 fix.
     // Single-precision sums over thousands of squared residuals lose bits
-    // in the low end (AUDIT.md §L3).
+    // in the low end (AUDIT.md §L3). In weighted mode the sum of squares
+    // is weighted: sum_i (w_i · r_i²).
     double currentError = 0.0;
-    for (float r : residuals)
-        currentError += static_cast<double>(r) * static_cast<double>(r);
+    for (size_t i = 0; i < residuals.size(); ++i)
+    {
+        const double r = static_cast<double>(residuals[i]);
+        const double w = weighted ? static_cast<double>(std::max(0.0f, weights[i]))
+                                  : 1.0;
+        currentError += w * r * r;
+    }
 
     float lambda = config.initialLambda;
 
@@ -246,19 +271,25 @@ FitResult CurveFitter::fit(const FormulaDefinition& formula,
         computeJacobian(*expr, data, coeffNames, coeffValues,
                         config.finiteDiffStep, J);
 
-        // Compute J^T * J (N × N) and J^T * r (N × 1)
+        // Compute J^T W J (N × N) and J^T W r (N × 1).
+        // Weighted normal equations: scaling row i of [J | r] by
+        // sqrt(w_i) is algebraically identical to multiplying J^T*J
+        // and J^T*r by diag(w). We fold the weight directly into the
+        // accumulation so we don't materialise the scaled Jacobian.
         std::vector<float> JtJ(N * N, 0.0f);
         std::vector<float> JtR(N, 0.0f);
 
         for (size_t i = 0; i < M; ++i)
         {
+            const float w = weighted ? std::max(0.0f, weights[i]) : 1.0f;
+            if (w == 0.0f) continue;
             for (size_t j = 0; j < N; ++j)
             {
                 float Jij = J[i * N + j];
-                JtR[j] += Jij * residuals[i];
+                JtR[j] += w * Jij * residuals[i];
                 for (size_t k = j; k < N; ++k)
                 {
-                    float val = Jij * J[i * N + k];
+                    float val = w * Jij * J[i * N + k];
                     JtJ[j * N + k] += val;
                     if (k != j)
                         JtJ[k * N + j] += val;
@@ -332,8 +363,13 @@ FitResult CurveFitter::fit(const FormulaDefinition& formula,
         }
 
         double trialError = 0.0;
-        for (float r : trialResiduals)
-            trialError += static_cast<double>(r) * static_cast<double>(r);
+        for (size_t i = 0; i < trialResiduals.size(); ++i)
+        {
+            const double r = static_cast<double>(trialResiduals[i]);
+            const double w = weighted ? static_cast<double>(std::max(0.0f, weights[i]))
+                                      : 1.0;
+            trialError += w * r * r;
+        }
 
         if (trialError < currentError)
         {

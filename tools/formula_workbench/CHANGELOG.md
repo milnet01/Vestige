@@ -2,6 +2,68 @@
 
 All notable changes to the Formula Workbench are documented in this file.
 
+## [1.17.0] - 2026-04-21
+
+### Added — three improvements surfaced by the Phase 10 fog research
+
+Three backwards-compatible extensions identified during
+`docs/PHASE10_FOG_RESEARCH.md` §8 and
+`docs/PHASE10_FOG_DESIGN.md` §9. All three unlock rendering-formula
+fits (phase functions, tonemap curves, BRDF lobes) that the existing
+fitter could almost — but not quite — handle. Together they prepare
+the Workbench for the Schlick-to-Henyey-Greenstein phase-function
+fit in Phase 10's volumetric-fog slice.
+
+- **Weighted Levenberg-Marquardt fit.** New `CurveFitter::fitWeighted`
+  overload in `engine/formula/curve_fitter.{h,cpp}` accepts a
+  per-sample weight vector parallel to the data; minimises
+  `sum(w_i · r_i²)`. Empty / mismatched weights degrade to the
+  uniform-weight path so existing callers are untouched. Non-finite /
+  negative weights clamp to zero (an effective row drop). Final
+  reported `rmse` / `maxError` / `rSquared` stay *unweighted* so
+  numbers remain comparable to unweighted fits on the same data.
+  Use cases: Schlick-to-HG phase-function fits want forward-scatter
+  (`cosθ > 0.5`) weighted ~4×; tonemap curve fits want the highlight
+  region weighted higher; BRDF fits want grazing angles weighted
+  higher.
+
+- **`max_abs_error_max` metric in reference cases.** New optional
+  expected-block field (alongside `r_squared_min` / `rmse_max`) in
+  `tools/formula_workbench/reference_cases/*.json`. Checks
+  `FitResult::maxError` (already computed — no new fitter work) and
+  fails the case if the worst-case absolute residual breaches the
+  bound. Rendering-formula regressions fail on worst-case error, not
+  mean — an approximation with RMSE 0.005 but max-abs 0.15 looks
+  broken at the sun direction even though it passes RMSE. Default
+  is `+infinity` so existing cases are unchanged.
+
+- **Step-based input sweeps.** New optional `step` field in
+  `InputSweep` (alongside `min` / `max` / `count` / `values`). When
+  present and positive, sweep points are generated at a fixed
+  step across `[min, max]` with both endpoints included — more
+  natural than `count` when you want a specific resolution (e.g.
+  `g ∈ [0.1, 0.95]` step 0.01) rather than a fixed point count.
+  Three sweep forms in priority order: explicit `values` → `step`
+  → `count`. Existing cases (all `count`-based) continue to run
+  unchanged.
+
+- **Documented multi-input Cartesian product.** The harness already
+  supported N-dimensional sweeps via multi-key `input_sweep` (the
+  `sweepRecurse` helper does Cartesian expansion), but no unit test
+  exercised the N ≥ 2 path and the schema docs were single-axis.
+  Header rewrites and new unit tests close the gap — future
+  reference cases for `p(g, cosθ)` phase functions or similar 2D
+  fits now have covered ground to stand on.
+
+### Meta
+
+The 1.15.0 → 1.16.0 CHANGELOG gap in the prior history is a
+pre-existing drift, not fixed in this commit. `WORKBENCH_VERSION` in
+`workbench.h` said `1.16.0` before this commit while the CHANGELOG
+topped out at `1.15.0`; the 1.16.0 work is unlabelled in this file.
+Surface the drift in a later commit that can attribute the missing
+entry properly.
+
 ## [1.15.0] - 2026-04-19
 
 ### Added — W6: confidence-weighted meta-feature matching for seeding

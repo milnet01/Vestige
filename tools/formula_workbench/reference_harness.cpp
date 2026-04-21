@@ -29,6 +29,7 @@ InputSweep parseInputSweep(const nlohmann::json& j)
     }
     if (j.contains("min"))   s.min   = j["min"].get<float>();
     if (j.contains("max"))   s.max   = j["max"].get<float>();
+    if (j.contains("step"))  s.step  = j["step"].get<float>();
     if (j.contains("count")) s.count = j["count"].get<int>();
     return s;
 }
@@ -96,14 +97,21 @@ loadReferenceCase(const std::string& path, std::string& errorOut)
     if (j.contains("expected") && j["expected"].is_object())
     {
         const auto& e = j["expected"];
-        c.r_squared_min = e.value("r_squared_min", 0.0f);
-        c.rmse_max      = e.value("rmse_max",      std::numeric_limits<float>::infinity());
-        c.must_converge = e.value("must_converge", false);
+        c.r_squared_min     = e.value("r_squared_min",     0.0f);
+        c.rmse_max          = e.value("rmse_max",          std::numeric_limits<float>::infinity());
+        c.max_abs_error_max = e.value("max_abs_error_max", std::numeric_limits<float>::infinity());
+        c.must_converge     = e.value("must_converge",     false);
         if (e.contains("coefficients") && e["coefficients"].is_object())
         {
             for (const auto& it : e["coefficients"].items())
                 c.coefficient_bounds[it.key()] = parseCoefficientBound(it.value());
         }
+    }
+
+    if (j.contains("weights") && j["weights"].is_array())
+    {
+        for (const auto& v : j["weights"])
+            c.weights.push_back(v.get<float>());
     }
     return c;
 }
@@ -132,14 +140,43 @@ void sweepRecurse(
     const auto& [name, sweep] = sweeps[idx];
     if (!sweep.values.empty())
     {
+        // Form 1: explicit value list.
         for (float v : sweep.values)
         {
             current[name] = v;
             sweepRecurse(sweeps, idx + 1, current, out);
         }
     }
+    else if (sweep.step > 0.0f && sweep.max > sweep.min)
+    {
+        // Form 2: step-based sweep across [min, max]. Both endpoints
+        // included; uses integer step count to avoid float drift so
+        // the final sample lands exactly on `max` when the range is
+        // an integer multiple of `step`.
+        const double span = static_cast<double>(sweep.max)
+                          - static_cast<double>(sweep.min);
+        const int n = static_cast<int>(std::floor(span
+                       / static_cast<double>(sweep.step))) + 1;
+        for (int i = 0; i < n; ++i)
+        {
+            current[name] = static_cast<float>(
+                static_cast<double>(sweep.min) + static_cast<double>(sweep.step) * i);
+            sweepRecurse(sweeps, idx + 1, current, out);
+        }
+        // Include max explicitly if the last generated point fell
+        // short (e.g. range 0.1 step 0.03 → samples at 0.0, 0.03, 0.06, 0.09
+        // and we want to also hit 0.1 as the tail sample).
+        const float lastSampled = static_cast<float>(
+            static_cast<double>(sweep.min) + static_cast<double>(sweep.step) * (n - 1));
+        if (lastSampled < sweep.max - 1e-6f * std::max(1.0f, std::fabs(sweep.max)))
+        {
+            current[name] = sweep.max;
+            sweepRecurse(sweeps, idx + 1, current, out);
+        }
+    }
     else if (sweep.count >= 2 && sweep.max > sweep.min)
     {
+        // Form 3: count-based equally-spaced sweep across [min, max].
         const float step = (sweep.max - sweep.min)
                            / static_cast<float>(sweep.count - 1);
         for (int i = 0; i < sweep.count; ++i)
@@ -223,13 +260,35 @@ executeReferenceCase(const ReferenceCase& c, const FormulaLibrary& library)
         return r;
     }
 
+    // If explicit weights were declared but don't line up with the
+    // synthesized dataset, it's a spec bug — surface the mismatch as
+    // a failure rather than silently dropping the weights.
+    std::vector<float> weights;
+    if (!c.weights.empty())
+    {
+        if (c.weights.size() != data.size())
+        {
+            std::ostringstream oss;
+            oss << "weights vector length " << c.weights.size()
+                << " does not match synthesized dataset length "
+                << data.size();
+            r.failures.push_back(oss.str());
+            return r;
+        }
+        weights = c.weights;
+    }
+
     // Start the fit from the formula library's default coefficients
     // (NOT from the canonical ones — that would be tautological).
     // The fitter's job is to recover the canonical values from
     // cold initial guesses; starting from the answer would pass
     // even if LM were completely broken.
-    const auto fit = CurveFitter::fit(
-        *formula, data, formula->coefficients, QualityTier::FULL, {});
+    const auto fit = weights.empty()
+        ? CurveFitter::fit(*formula, data, formula->coefficients,
+                           QualityTier::FULL, {})
+        : CurveFitter::fitWeighted(*formula, data, weights,
+                                   formula->coefficients,
+                                   QualityTier::FULL, {});
     r.fit = fit;
 
     if (c.must_converge && !fit.converged)
@@ -249,6 +308,14 @@ executeReferenceCase(const ReferenceCase& c, const FormulaLibrary& library)
     {
         std::ostringstream oss;
         oss << "rmse " << fit.rmse << " > " << c.rmse_max << " (maximum)";
+        r.failures.push_back(oss.str());
+    }
+
+    if (fit.maxError > c.max_abs_error_max)
+    {
+        std::ostringstream oss;
+        oss << "max_abs_error " << fit.maxError << " > "
+            << c.max_abs_error_max << " (maximum)";
         r.failures.push_back(oss.str());
     }
 

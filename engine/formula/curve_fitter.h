@@ -78,6 +78,25 @@ public:
                          QualityTier tier = QualityTier::FULL,
                          const FitConfig& config = {});
 
+    /// @brief Weighted-least-squares fit — minimises `sum(w_i · r_i²)`.
+    ///
+    /// Takes the same arguments as the unweighted overload plus a parallel
+    /// vector of non-negative per-sample weights. Empty `weights` (or any
+    /// other size mismatch) falls through to the uniform-weight fit for
+    /// backwards compatibility. Reported `rmse` / `maxError` / `rSquared`
+    /// are computed on the *unweighted* residuals so the numbers stay
+    /// comparable to unweighted fits on the same data.
+    ///
+    /// Use when certain input regions matter more than others (forward
+    /// scatter in phase functions, highlight region in tonemap curves,
+    /// grazing angles in BRDFs). Negative weights are clamped to 0.
+    static FitResult fitWeighted(const FormulaDefinition& formula,
+                                 const std::vector<DataPoint>& data,
+                                 const std::vector<float>& weights,
+                                 const std::map<std::string, float>& initialCoeffs,
+                                 QualityTier tier = QualityTier::FULL,
+                                 const FitConfig& config = {});
+
 private:
     /// @brief Evaluates residuals (predicted - observed) for all data points.
     static void computeResiduals(const ExprNode& expr,

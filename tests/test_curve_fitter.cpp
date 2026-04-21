@@ -487,3 +487,142 @@ TEST(CurveFitter, NormalFitStillConvergesWithDoubleAccumulator)
     EXPECT_NEAR(result.coefficients["a"], 3.0f, 0.01f);
     EXPECT_TRUE(std::isfinite(result.finalError));
 }
+
+// ---------------------------------------------------------------------------
+// Weighted-LM fit coverage (Workbench 1.17.0)
+// ---------------------------------------------------------------------------
+
+// Fixture — linear `y = a * x` with an inconsistent dataset: 10 points
+// agree that `a = 3` and 10 points claim `a = 10`. Unweighted fit lands
+// in the middle; weighted fit that heavily favours the first 10 points
+// recovers `a ≈ 3`.
+static FormulaDefinition makeLinear()
+{
+    auto expr = binOp("*", var("a"), var("x"));
+    return makeFormula("linear_weighted",
+                       {{"x", FormulaValueType::FLOAT, "m", 1.0f}},
+                       {{"a", 1.0f}},
+                       std::move(expr));
+}
+
+static std::vector<DataPoint> makeSkewedData()
+{
+    std::vector<DataPoint> data;
+    for (int i = 1; i <= 10; ++i)
+        data.push_back({{{"x", static_cast<float>(i)}},
+                        3.0f * static_cast<float>(i)});
+    for (int i = 1; i <= 10; ++i)
+        data.push_back({{{"x", static_cast<float>(i)}},
+                        10.0f * static_cast<float>(i)});
+    return data;
+}
+
+TEST(CurveFitter, WeightedFitWithEmptyWeightsMatchesUnweighted)
+{
+    auto def  = makeLinear();
+    auto data = makeSkewedData();
+
+    auto uniform  = CurveFitter::fit(def, data, {{"a", 1.0f}});
+    auto weighted = CurveFitter::fitWeighted(def, data, {},
+                                             {{"a", 1.0f}});
+
+    EXPECT_NEAR(uniform.coefficients["a"],
+                weighted.coefficients["a"], 1e-4f);
+    EXPECT_NEAR(uniform.rmse, weighted.rmse, 1e-4f);
+}
+
+TEST(CurveFitter, WeightedFitWithMismatchedSizeFallsBackToUniform)
+{
+    // Caller bug — 20 points of data but only 5 weights. The
+    // documented contract is "fall back to uniform" rather than
+    // silently drop samples.
+    auto def  = makeLinear();
+    auto data = makeSkewedData();
+
+    std::vector<float> badWeights(5, 1.0f);
+    auto weighted = CurveFitter::fitWeighted(def, data, badWeights,
+                                             {{"a", 1.0f}});
+    auto uniform  = CurveFitter::fit(def, data, {{"a", 1.0f}});
+    EXPECT_NEAR(weighted.coefficients["a"],
+                uniform.coefficients["a"], 1e-4f);
+}
+
+TEST(CurveFitter, WeightedFitConvergesToWeightedOptimumOnSkewedData)
+{
+    auto def  = makeLinear();
+    auto data = makeSkewedData();
+
+    // Unweighted: midpoint between a=3 and a=10 → about 6.5.
+    auto uniform = CurveFitter::fit(def, data, {{"a", 1.0f}});
+    EXPECT_TRUE(uniform.converged) << uniform.statusMessage;
+    EXPECT_NEAR(uniform.coefficients["a"], 6.5f, 0.2f);
+
+    // Weighted: first 10 points (a=3) get 100×, last 10 get 1×.
+    // Weighted LS minimises sum(w_i * r_i²), so the first cluster
+    // dominates and `a` should land near 3.
+    std::vector<float> weights(20, 1.0f);
+    for (int i = 0; i < 10; ++i) weights[i] = 100.0f;
+    auto weighted = CurveFitter::fitWeighted(def, data, weights,
+                                             {{"a", 1.0f}});
+    EXPECT_TRUE(weighted.converged) << weighted.statusMessage;
+    EXPECT_NEAR(weighted.coefficients["a"], 3.0f, 0.1f);
+
+    // Reversed emphasis — cluster at a=10 wins.
+    std::vector<float> reverseWeights(20, 1.0f);
+    for (int i = 10; i < 20; ++i) reverseWeights[i] = 100.0f;
+    auto reversed = CurveFitter::fitWeighted(def, data, reverseWeights,
+                                             {{"a", 1.0f}});
+    EXPECT_TRUE(reversed.converged) << reversed.statusMessage;
+    EXPECT_NEAR(reversed.coefficients["a"], 10.0f, 0.1f);
+}
+
+TEST(CurveFitter, WeightedFitZeroWeightEffectivelyDropsRow)
+{
+    // 10 consistent points + 10 garbage points. Zero-weight the
+    // garbage rows → fit recovers the true coefficient as cleanly
+    // as if the garbage had never been provided.
+    auto def = makeLinear();
+    std::vector<DataPoint> data;
+    for (int i = 1; i <= 10; ++i)
+        data.push_back({{{"x", static_cast<float>(i)}},
+                        3.0f * static_cast<float>(i)});
+    for (int i = 1; i <= 10; ++i)
+        data.push_back({{{"x", static_cast<float>(i)}},
+                        999.0f});
+
+    std::vector<float> weights(20, 1.0f);
+    for (int i = 10; i < 20; ++i) weights[i] = 0.0f;
+
+    auto result = CurveFitter::fitWeighted(def, data, weights,
+                                           {{"a", 1.0f}});
+    EXPECT_TRUE(result.converged) << result.statusMessage;
+    EXPECT_NEAR(result.coefficients["a"], 3.0f, 1e-3f);
+}
+
+TEST(CurveFitter, WeightedFitNegativeWeightsClampToZero)
+{
+    // Defensive: negative weights shouldn't flip the sign of the
+    // contribution (that would drive the fit *away* from those
+    // points). Clamp-to-zero matches the documented contract.
+    auto def = makeLinear();
+    std::vector<DataPoint> data;
+    for (int i = 1; i <= 10; ++i)
+        data.push_back({{{"x", static_cast<float>(i)}},
+                        3.0f * static_cast<float>(i)});
+    for (int i = 1; i <= 10; ++i)
+        data.push_back({{{"x", static_cast<float>(i)}},
+                        999.0f});
+
+    std::vector<float> weights(20, 1.0f);
+    for (int i = 10; i < 20; ++i) weights[i] = -5.0f;  // clamp → 0
+    auto negative = CurveFitter::fitWeighted(def, data, weights,
+                                             {{"a", 1.0f}});
+
+    std::vector<float> zeros(20, 1.0f);
+    for (int i = 10; i < 20; ++i) zeros[i] = 0.0f;
+    auto zero = CurveFitter::fitWeighted(def, data, zeros,
+                                         {{"a", 1.0f}});
+
+    EXPECT_NEAR(negative.coefficients["a"],
+                zero.coefficients["a"], 1e-4f);
+}

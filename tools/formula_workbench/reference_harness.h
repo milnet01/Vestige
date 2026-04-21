@@ -56,15 +56,22 @@ struct CoefficientBound
 
 /// @brief Sweep specification for one input variable.
 ///
-/// ``values`` takes precedence if non-empty (fixed list). Otherwise
-/// a closed-interval sweep ``[min, max]`` is generated with ``count``
-/// points (count >= 2 for the interval, count >= 1 for the value list).
+/// Three generation forms, checked in priority order:
+///   1. ``values`` — explicit list, used as-is.
+///   2. ``step``  — closed-interval ``[min, max]`` with a specific
+///                  step size (inclusive of both endpoints; last step
+///                  may be shortened to land exactly on ``max``).
+///   3. ``count`` — closed-interval ``[min, max]`` divided into
+///                  ``count`` equally-spaced points.
+/// Multi-axis sweeps (N keys under ``input_sweep``) produce a
+/// Cartesian product across all axes.
 struct InputSweep
 {
     std::vector<float> values;
-    float min = 0.0f;
-    float max = 0.0f;
-    int count = 0;
+    float min   = 0.0f;
+    float max   = 0.0f;
+    float step  = 0.0f;  ///< Step size for step-based generation; 0 = use `count`.
+    int   count = 0;
 };
 
 /// @brief Full parsed contents of a ``reference_cases/*.json`` file.
@@ -75,8 +82,20 @@ struct ReferenceCase
     std::map<std::string, InputSweep> input_sweep;
     float r_squared_min = 0.0f;
     float rmse_max = 0.0f;
+    /// Maximum absolute residual across the synthetic dataset. Strictly
+    /// tighter than ``rmse_max`` for rendering-formula fits where the
+    /// user-visible artefact is the worst-case error, not the mean
+    /// (e.g. a tonemap or BRDF approximation with good RMSE but a
+    /// visible seam at one region of input). Defaults to ``+infinity``
+    /// — the field is optional and backwards-compatible.
+    float max_abs_error_max = 0.0f;
     bool must_converge = false;
     std::map<std::string, CoefficientBound> coefficient_bounds;
+    /// Optional per-sample weights — parallel to the synthesized
+    /// dataset. Empty means uniform (unweighted). Populated from the
+    /// ``weights`` array in the JSON; if its length doesn't match the
+    /// synthesized dataset it's dropped with a failure.
+    std::vector<float> weights;
     std::string notes;
 };
 
