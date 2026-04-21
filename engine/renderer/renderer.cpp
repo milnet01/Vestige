@@ -1236,24 +1236,40 @@ void Renderer::endFrame(float deltaTime)
     // Phase 10 fog uniforms — distance / height / sun inscatter.
     // Composed in linear HDR between contact shadows and bloom; see
     // docs/PHASE10_FOG_DESIGN.md §4 for the composition order rationale.
+    //
+    // Accessibility transform runs here (slice 11.9): authored state
+    // stays on Renderer; the effective state goes to the GPU. The
+    // pure function in fog.cpp lets tests pin every flag's behaviour
+    // without a GL context.
     {
-        m_screenShader.setInt("u_fogMode", static_cast<int>(m_fogMode));
-        m_screenShader.setVec3("u_fogColour", m_fogParams.colour);
-        m_screenShader.setFloat("u_fogStart",   m_fogParams.start);
-        m_screenShader.setFloat("u_fogEnd",     m_fogParams.end);
-        m_screenShader.setFloat("u_fogDensity", m_fogParams.density);
+        const FogState authoredFog{
+            m_fogMode,
+            m_fogParams,
+            m_heightFogEnabled,
+            m_heightFogParams,
+            m_sunInscatterEnabled,
+            m_sunInscatterParams,
+        };
+        const FogState effective =
+            applyFogAccessibilitySettings(authoredFog, m_postProcessAccessibility);
 
-        m_screenShader.setBool("u_heightFogEnabled", m_heightFogEnabled);
-        m_screenShader.setVec3("u_heightFogColour",  m_heightFogParams.colour);
-        m_screenShader.setFloat("u_heightFogY",        m_heightFogParams.fogHeight);
-        m_screenShader.setFloat("u_heightFogDensity",  m_heightFogParams.groundDensity);
-        m_screenShader.setFloat("u_heightFogFalloff",  m_heightFogParams.heightFalloff);
-        m_screenShader.setFloat("u_heightFogMaxOpacity", m_heightFogParams.maxOpacity);
+        m_screenShader.setInt("u_fogMode", static_cast<int>(effective.fogMode));
+        m_screenShader.setVec3("u_fogColour", effective.fogParams.colour);
+        m_screenShader.setFloat("u_fogStart",   effective.fogParams.start);
+        m_screenShader.setFloat("u_fogEnd",     effective.fogParams.end);
+        m_screenShader.setFloat("u_fogDensity", effective.fogParams.density);
 
-        m_screenShader.setBool("u_sunInscatterEnabled", m_sunInscatterEnabled);
-        m_screenShader.setVec3("u_sunInscatterColour",  m_sunInscatterParams.colour);
-        m_screenShader.setFloat("u_sunInscatterExponent", m_sunInscatterParams.exponent);
-        m_screenShader.setFloat("u_sunInscatterStart",    m_sunInscatterParams.startDistance);
+        m_screenShader.setBool("u_heightFogEnabled", effective.heightFogEnabled);
+        m_screenShader.setVec3("u_heightFogColour",  effective.heightFogParams.colour);
+        m_screenShader.setFloat("u_heightFogY",        effective.heightFogParams.fogHeight);
+        m_screenShader.setFloat("u_heightFogDensity",  effective.heightFogParams.groundDensity);
+        m_screenShader.setFloat("u_heightFogFalloff",  effective.heightFogParams.heightFalloff);
+        m_screenShader.setFloat("u_heightFogMaxOpacity", effective.heightFogParams.maxOpacity);
+
+        m_screenShader.setBool("u_sunInscatterEnabled", effective.sunInscatterEnabled);
+        m_screenShader.setVec3("u_sunInscatterColour",  effective.sunInscatterParams.colour);
+        m_screenShader.setFloat("u_sunInscatterExponent", effective.sunInscatterParams.exponent);
+        m_screenShader.setFloat("u_sunInscatterStart",    effective.sunInscatterParams.startDistance);
         m_screenShader.setVec3("u_sunDirection", m_directionalLight.direction);
 
         // Depth texture — ALWAYS bind (Mesa declared-sampler safety).
@@ -1701,6 +1717,16 @@ void Renderer::setSunInscatterParams(const SunInscatterParams& params)
 const SunInscatterParams& Renderer::getSunInscatterParams() const
 {
     return m_sunInscatterParams;
+}
+
+void Renderer::setPostProcessAccessibility(const PostProcessAccessibilitySettings& settings)
+{
+    m_postProcessAccessibility = settings;
+}
+
+const PostProcessAccessibilitySettings& Renderer::getPostProcessAccessibility() const
+{
+    return m_postProcessAccessibility;
 }
 
 void Renderer::setPomEnabled(bool isEnabled)

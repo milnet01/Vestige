@@ -62,6 +62,8 @@
 /// this by reproducing the GLSL `mix()` composite via `applyFog`.
 #pragma once
 
+#include "accessibility/post_process_accessibility.h"
+
 #include <glm/vec3.hpp>
 
 namespace Vestige
@@ -241,5 +243,64 @@ struct FogCompositeInputs
 glm::vec3 composeFog(const glm::vec3& surfaceColour,
                      const FogCompositeInputs& inputs,
                      const glm::vec3& worldPos);
+
+// -----------------------------------------------------------------------
+// Accessibility transform (slice 11.9)
+// -----------------------------------------------------------------------
+
+/// @brief Snapshot of every authorable fog parameter. Used as both the
+///        input ("authored") and output ("effective") of the
+///        accessibility transform so callers can pass the same struct
+///        through and diff the result.
+///
+/// Runtime-only fields that are *not* accessibility-controlled
+/// (`sunDirection`, `cameraWorldPos`, depth texture bindings) live on
+/// `FogCompositeInputs` instead. Splitting the concerns lets the
+/// transform stay a pure function of scene-authored data + user
+/// preferences.
+struct FogState
+{
+    FogMode             fogMode             = FogMode::None;
+    FogParams           fogParams;
+
+    bool                heightFogEnabled    = false;
+    HeightFogParams     heightFogParams;
+
+    bool                sunInscatterEnabled = false;
+    SunInscatterParams  sunInscatterParams;
+};
+
+/// @brief Applies `PostProcessAccessibilitySettings` to author-set fog
+///        parameters and returns the effective state the shader should
+///        consume this frame.
+///
+/// Transform rules:
+///   - `fogEnabled == false` → every layer off, intensity scale and
+///     reduce-motion ignored. Master disable beats everything else so
+///     the one-click accessibility toggle is unambiguous.
+///   - `fogIntensityScale`  — applied per-layer:
+///       * Linear distance fog: `end` is pushed outward by
+///         `start + span / scale` so scale = 0.5 halves the perceived
+///         density, scale = 1 is identity. Scale ≤ 0.001 collapses to
+///         `FogMode::None` (avoids a divide-by-zero and yields the
+///         expected "no fog" experience).
+///       * Exponential / Exponential² distance fog: density is
+///         multiplied by scale. Scale = 0 → density 0 (no fog).
+///       * Height fog: `groundDensity` and `maxOpacity` are both
+///         multiplied so scale = 0 fully disables the layer.
+///       * Sun inscatter: colour is multiplied so the lobe dims
+///         proportionally (the shape / exponent stays authored).
+///   - `reduceMotionFog == true` — the sun-inscatter lobe colour is
+///     further halved so rapid camera pans past the sun can't produce
+///     a hard flash (matches the Xbox / WCAG 2.2 SC 2.3.3 guidance for
+///     photosensitivity-safe modes). Distance + height fog are
+///     frame-static so the flag is a no-op for them today; volumetric
+///     fog will consult it when slice 11.6 ships.
+///
+/// The function is total — any degenerate scale / missing layer is
+/// handled with pass-through behaviour rather than throwing.
+FogState applyFogAccessibilitySettings(
+    const FogState& authored,
+    const PostProcessAccessibilitySettings& settings);
 
 } // namespace Vestige

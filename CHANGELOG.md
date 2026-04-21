@@ -9,6 +9,73 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-21 Phase 10 fog — Accessibility transform (slice 11.9)
+
+Third Phase 10 fog slice. The accessibility-settings struct shipped
+ahead of the fog feature (`PostProcessAccessibilitySettings`) already
+carried `fogEnabled`, `fogIntensityScale`, and `reduceMotionFog`
+fields with unit-tested defaults, but nothing *applied* those flags —
+the GPU simply uploaded whatever was authored. This slice closes the
+gap so a user who opens Settings → Accessibility and toggles the fog
+sliders actually sees the render change.
+
+- `engine/renderer/fog.{h,cpp}` — new `FogState` struct (a snapshot of
+  every authorable fog parameter: mode + distance params + height-fog
+  enable/params + sun-inscatter enable/params) plus the pure-function
+  `applyFogAccessibilitySettings(authored, settings) → effective`
+  transform. Rules:
+  - `fogEnabled = false` is the **master switch** — every layer goes
+    off, ignoring intensity + reduce-motion. The one-click
+    accessibility toggle is unambiguous regardless of flag order.
+  - `fogIntensityScale` scales per-layer:
+    - **Linear distance fog** — `end` is pushed outward by
+      `start + (end - start) / scale` (scale 0.5 → roughly half the
+      perceived density, scale 1 → identity). `scale ≤ 1e-3`
+      collapses to `FogMode::None` (avoids a divide-by-zero and
+      gives the expected "no fog" experience at the floor).
+    - **Exponential / Exponential² distance fog** — density is
+      multiplied by scale. scale = 0 produces density 0 which is
+      pass-through in `computeFogFactor`.
+    - **Height fog** — both `groundDensity` and `maxOpacity` scale
+      so the transmittance floor can't pin a ghost layer at scale 0.
+    - **Sun inscatter lobe** — colour (not exponent) scales so the
+      lobe *shape* stays authored but peak brightness dims.
+  - `reduceMotionFog = true` further halves the sun-inscatter colour
+    (on top of intensity scale), matching WCAG 2.2 SC 2.3.3 / Xbox
+    AG 117 photosensitivity guidance that restricts rapid-onset
+    flashing. Distance + height fog are frame-static so the flag is
+    a no-op for them today; volumetric fog (slice 11.6+) will
+    consult the same flag for temporal reprojection disable.
+
+- `engine/renderer/renderer.{h,cpp}` — adds
+  `setPostProcessAccessibility(settings)` / `getPostProcessAccessibility()`
+  plus the `m_postProcessAccessibility` member. The composite-pass
+  upload now builds a `FogState` from the authored members, runs the
+  transform, and uploads the effective values. Authored state is
+  **never mutated** — users can toggle accessibility without losing
+  their scene-authored look.
+
+- `tests/test_fog.cpp` — 12 new `FogAccessibility` cases:
+  `DefaultsArePassThrough`, `MasterDisableCollapsesEveryLayer`,
+  `IntensityHalfScalesExponentialDensity`,
+  `IntensityZeroTurnsExponentialDensityOff`,
+  `IntensityHalfPushesLinearEndOutward`,
+  `IntensityZeroCollapsesLinearToNone`,
+  `IntensityHalfScalesHeightFogGroundDensityAndMaxOpacity`,
+  `IntensityScalesSunInscatterColourNotExponent`,
+  `ReduceMotionFogHalvesSunInscatterColour`,
+  `ReduceMotionFogDoesNotAffectDistanceOrHeightFog`,
+  `SafePresetProducesHalfIntensityReducedMotionFog` (end-to-end via
+  `safeDefaults()`), `MasterDisableBeatsIntensityOneAndReduceMotion`
+  (flag-precedence guard). All 48 fog-related tests pass.
+
+Corresponds to slice 11.9 in `docs/PHASE10_FOG_DESIGN.md`. Remaining
+non-volumetric fog slices: 11.5 (screen-space god rays) and 11.10
+(editor FogPanel). Volumetric slices 11.6 – 11.8 are the heavy-lift
+remainder of Phase 10 fog.
+
+VESTIGE_VERSION: 0.1.7 → 0.1.8
+
 ### 2026-04-21 Phase 10 fog — Shader integration (distance + height + sun inscatter)
 
 Second Phase 10 fog slice. The CPU-side primitives shipped in the

@@ -222,4 +222,95 @@ glm::vec3 composeFog(const glm::vec3& surfaceColour,
                     heightT);
 }
 
+// -----------------------------------------------------------------------
+// Accessibility transform (slice 11.9)
+// -----------------------------------------------------------------------
+
+namespace
+{
+// Linear-mode `fogIntensityScale` below this threshold collapses the
+// layer to `FogMode::None` — the effective `end` would otherwise
+// explode toward infinity (division by a near-zero scale factor).
+constexpr float kIntensityScaleEpsilon = 1e-3f;
+
+// Reduce-motion attenuation for the sun-inscatter lobe colour. Halving
+// the colour halves the peak-brightness delta during a rapid camera
+// pan past the sun, staying inside WCAG 2.2 SC 2.3.3 / Xbox AG
+// photosensitivity-safety headroom without collapsing the lobe
+// entirely (users who opt in still get the "haze glow" read).
+constexpr float kReduceMotionFogLobeScale = 0.5f;
+}
+
+FogState applyFogAccessibilitySettings(
+    const FogState& authored,
+    const PostProcessAccessibilitySettings& settings)
+{
+    // Master switch — `fogEnabled = false` beats every other flag so
+    // the one-click "Accessibility preset" or the individual toggle
+    // produces a deterministic "no fog" result regardless of what was
+    // authored in the scene or what other flags are set.
+    if (!settings.fogEnabled)
+    {
+        return FogState{};
+    }
+
+    FogState effective = authored;
+
+    const float scale = std::max(0.0f, settings.fogIntensityScale);
+
+    // Distance fog — formula depends on mode.
+    switch (authored.fogMode)
+    {
+        case FogMode::None:
+            break;
+        case FogMode::Linear:
+        {
+            if (scale <= kIntensityScaleEpsilon)
+            {
+                // Avoid divide-by-zero and deliver the expected "no
+                // fog" experience at zero intensity.
+                effective.fogMode = FogMode::None;
+            }
+            else
+            {
+                const float span = authored.fogParams.end - authored.fogParams.start;
+                effective.fogParams.end = authored.fogParams.start + span / scale;
+            }
+            break;
+        }
+        case FogMode::Exponential:
+        case FogMode::ExponentialSquared:
+            // exp(-density·d) — scaling density is the canonical way
+            // to reduce EXP/EXP2 fog. Scale = 0 collapses to density 0
+            // (pass-through), which computeFogFactor handles as-is.
+            effective.fogParams.density = authored.fogParams.density * scale;
+            break;
+    }
+
+    // Height fog — scale both groundDensity and maxOpacity so scale=0
+    // fully removes the layer (transmittance floor goes to 1.0).
+    if (effective.heightFogEnabled)
+    {
+        effective.heightFogParams.groundDensity =
+            authored.heightFogParams.groundDensity * scale;
+        effective.heightFogParams.maxOpacity =
+            authored.heightFogParams.maxOpacity * scale;
+    }
+
+    // Sun inscatter — dim the lobe colour. Exponent stays authored so
+    // the lobe *shape* (width around the sun) doesn't change; only the
+    // peak brightness scales.
+    if (effective.sunInscatterEnabled)
+    {
+        effective.sunInscatterParams.colour =
+            authored.sunInscatterParams.colour * scale;
+        if (settings.reduceMotionFog)
+        {
+            effective.sunInscatterParams.colour *= kReduceMotionFogLobeScale;
+        }
+    }
+
+    return effective;
+}
+
 } // namespace Vestige

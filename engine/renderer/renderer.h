@@ -310,6 +310,18 @@ public:
     void setSunInscatterParams(const SunInscatterParams& params);
     const SunInscatterParams& getSunInscatterParams() const;
 
+    /// @brief Sets the post-process accessibility settings that gate
+    ///        fog visibility (master toggle, intensity scale, and
+    ///        reduce-motion for the sun-inscatter lobe).
+    ///
+    /// The authored fog parameters above stay untouched; the transform
+    /// in `fog.cpp` (`applyFogAccessibilitySettings`) runs each frame
+    /// between the stored state and the GPU uniform upload so users
+    /// can toggle accessibility without losing their scene-authored
+    /// look. See `docs/PHASE10_FOG_DESIGN.md` §6.
+    void setPostProcessAccessibility(const PostProcessAccessibilitySettings& settings);
+    const PostProcessAccessibilitySettings& getPostProcessAccessibility() const;
+
     /// @brief Enables or disables SDSM (Sample Distribution Shadow Maps).
     void setSdsmEnabled(bool enabled);
 
@@ -602,6 +614,12 @@ private:
     bool                m_sunInscatterEnabled = false;
     SunInscatterParams  m_sunInscatterParams;
     glm::vec3           m_cameraWorldPosition = glm::vec3(0.0f);
+
+    // Accessibility settings applied to fog before GPU upload. The
+    // transform lives in fog.cpp (pure function); the renderer just
+    // stores the settings and calls `applyFogAccessibilitySettings`
+    // each frame.
+    PostProcessAccessibilitySettings m_postProcessAccessibility;
 
     // Anti-aliasing mode
     AntiAliasMode m_antiAliasMode = AntiAliasMode::MSAA_4X;

@@ -563,3 +563,248 @@ TEST(FogComposite, CameraAtSurfaceIsIdentityEvenWithFogActive)
     EXPECT_NEAR(out.g, surface.g, kEps);
     EXPECT_NEAR(out.b, surface.b, kEps);
 }
+
+// -----------------------------------------------------------------------
+// Accessibility transform (slice 11.9)
+// -----------------------------------------------------------------------
+//
+// The transform is a pure function — these tests pin every flag to its
+// expected effect on authored fog parameters. The Renderer calls it
+// each frame between authored state and the GPU uniform upload.
+
+namespace
+{
+FogState authoredDistanceExp()
+{
+    FogState s;
+    s.fogMode = FogMode::Exponential;
+    s.fogParams.density = 0.1f;
+    return s;
+}
+
+FogState authoredDistanceLinear()
+{
+    FogState s;
+    s.fogMode = FogMode::Linear;
+    s.fogParams.start = 20.0f;
+    s.fogParams.end   = 200.0f;
+    return s;
+}
+
+FogState authoredFullStack()
+{
+    FogState s;
+    s.fogMode = FogMode::Exponential;
+    s.fogParams.density = 0.1f;
+    s.fogParams.colour  = glm::vec3(0.5f, 0.6f, 0.7f);
+    s.heightFogEnabled  = true;
+    s.heightFogParams.colour        = glm::vec3(0.3f, 0.3f, 0.3f);
+    s.heightFogParams.groundDensity = 0.2f;
+    s.heightFogParams.maxOpacity    = 0.9f;
+    s.sunInscatterEnabled = true;
+    s.sunInscatterParams.colour   = glm::vec3(1.0f, 0.85f, 0.55f);
+    s.sunInscatterParams.exponent = 6.0f;
+    return s;
+}
+}
+
+TEST(FogAccessibility, DefaultsArePassThrough)
+{
+    // Default PostProcessAccessibilitySettings = fogEnabled true,
+    // intensity 1.0, reduceMotion false → transform is identity.
+    const FogState authored = authoredFullStack();
+    PostProcessAccessibilitySettings settings;  // defaults
+    const FogState effective = applyFogAccessibilitySettings(authored, settings);
+
+    EXPECT_EQ(effective.fogMode, authored.fogMode);
+    EXPECT_FLOAT_EQ(effective.fogParams.density, authored.fogParams.density);
+    EXPECT_EQ(effective.heightFogEnabled, true);
+    EXPECT_FLOAT_EQ(effective.heightFogParams.groundDensity,
+                    authored.heightFogParams.groundDensity);
+    EXPECT_FLOAT_EQ(effective.heightFogParams.maxOpacity,
+                    authored.heightFogParams.maxOpacity);
+    EXPECT_EQ(effective.sunInscatterEnabled, true);
+    EXPECT_NEAR(effective.sunInscatterParams.colour.r,
+                authored.sunInscatterParams.colour.r, kEps);
+    EXPECT_FLOAT_EQ(effective.sunInscatterParams.exponent,
+                    authored.sunInscatterParams.exponent);
+}
+
+TEST(FogAccessibility, MasterDisableCollapsesEveryLayer)
+{
+    // fogEnabled=false is the master switch — every layer must go off,
+    // regardless of what else was authored or what other flags are set.
+    PostProcessAccessibilitySettings settings;
+    settings.fogEnabled        = false;
+    settings.fogIntensityScale = 1.0f;       // ignored
+    settings.reduceMotionFog   = false;      // ignored
+
+    const FogState effective =
+        applyFogAccessibilitySettings(authoredFullStack(), settings);
+
+    EXPECT_EQ(effective.fogMode, FogMode::None);
+    EXPECT_FALSE(effective.heightFogEnabled);
+    EXPECT_FALSE(effective.sunInscatterEnabled);
+}
+
+TEST(FogAccessibility, IntensityHalfScalesExponentialDensity)
+{
+    // EXP: density scales linearly with intensity. scale=0.5 halves
+    // the authored density (0.1 → 0.05).
+    PostProcessAccessibilitySettings settings;
+    settings.fogIntensityScale = 0.5f;
+
+    const FogState effective =
+        applyFogAccessibilitySettings(authoredDistanceExp(), settings);
+
+    EXPECT_EQ(effective.fogMode, FogMode::Exponential);
+    EXPECT_NEAR(effective.fogParams.density, 0.05f, kEps);
+}
+
+TEST(FogAccessibility, IntensityZeroTurnsExponentialDensityOff)
+{
+    // scale=0 → density 0 → exp(0)=1 → surface fully visible.
+    PostProcessAccessibilitySettings settings;
+    settings.fogIntensityScale = 0.0f;
+
+    const FogState effective =
+        applyFogAccessibilitySettings(authoredDistanceExp(), settings);
+
+    // Mode stays Exponential but density is zero — computeFogFactor
+    // returns 1.0, i.e. no fog. Both are acceptable signals for "off".
+    EXPECT_EQ(effective.fogMode, FogMode::Exponential);
+    EXPECT_NEAR(effective.fogParams.density, 0.0f, kEps);
+}
+
+TEST(FogAccessibility, IntensityHalfPushesLinearEndOutward)
+{
+    // Linear: end' = start + (end - start) / scale. scale=0.5 doubles
+    // the range so the same distance registers half the density.
+    PostProcessAccessibilitySettings settings;
+    settings.fogIntensityScale = 0.5f;
+
+    const FogState effective =
+        applyFogAccessibilitySettings(authoredDistanceLinear(), settings);
+
+    EXPECT_EQ(effective.fogMode, FogMode::Linear);
+    EXPECT_FLOAT_EQ(effective.fogParams.start, 20.0f);      // unchanged
+    EXPECT_FLOAT_EQ(effective.fogParams.end,   20.0f + 180.0f / 0.5f);  // 380
+}
+
+TEST(FogAccessibility, IntensityZeroCollapsesLinearToNone)
+{
+    // Scale ≤ epsilon would divide by zero; transform guards by
+    // collapsing to FogMode::None. Verifies the edge case isn't NaN.
+    PostProcessAccessibilitySettings settings;
+    settings.fogIntensityScale = 0.0f;
+
+    const FogState effective =
+        applyFogAccessibilitySettings(authoredDistanceLinear(), settings);
+
+    EXPECT_EQ(effective.fogMode, FogMode::None);
+}
+
+TEST(FogAccessibility, IntensityHalfScalesHeightFogGroundDensityAndMaxOpacity)
+{
+    // Height fog gets both knobs scaled so scale=0 can't leave a
+    // stale maxOpacity pinning a ghost floor in the transmittance.
+    PostProcessAccessibilitySettings settings;
+    settings.fogIntensityScale = 0.5f;
+
+    const FogState effective =
+        applyFogAccessibilitySettings(authoredFullStack(), settings);
+
+    EXPECT_NEAR(effective.heightFogParams.groundDensity, 0.1f, kEps);
+    EXPECT_NEAR(effective.heightFogParams.maxOpacity,    0.45f, kEps);
+}
+
+TEST(FogAccessibility, IntensityScalesSunInscatterColourNotExponent)
+{
+    // The lobe *shape* (exponent) is an authored aesthetic parameter
+    // and must not change — we dim by scaling colour instead so the
+    // "where is the sun" cue still reads at low intensity.
+    PostProcessAccessibilitySettings settings;
+    settings.fogIntensityScale = 0.5f;
+
+    const FogState effective =
+        applyFogAccessibilitySettings(authoredFullStack(), settings);
+
+    EXPECT_NEAR(effective.sunInscatterParams.colour.r, 0.5f,  kEps);
+    EXPECT_NEAR(effective.sunInscatterParams.colour.g, 0.425f, kEps);
+    EXPECT_NEAR(effective.sunInscatterParams.colour.b, 0.275f, kEps);
+    EXPECT_FLOAT_EQ(effective.sunInscatterParams.exponent, 6.0f);
+}
+
+TEST(FogAccessibility, ReduceMotionFogHalvesSunInscatterColour)
+{
+    // Reduce-motion attenuates the lobe by an extra 0.5× on top of
+    // intensity scale. At intensity 1.0, reduceMotion alone halves.
+    PostProcessAccessibilitySettings settings;
+    settings.reduceMotionFog = true;
+
+    const FogState effective =
+        applyFogAccessibilitySettings(authoredFullStack(), settings);
+
+    EXPECT_NEAR(effective.sunInscatterParams.colour.r, 0.5f,   kEps);
+    EXPECT_NEAR(effective.sunInscatterParams.colour.g, 0.425f, kEps);
+    EXPECT_NEAR(effective.sunInscatterParams.colour.b, 0.275f, kEps);
+}
+
+TEST(FogAccessibility, ReduceMotionFogDoesNotAffectDistanceOrHeightFog)
+{
+    // Distance + height fog are frame-static so reduceMotion is a
+    // no-op for them today. (Volumetric fog in slice 11.6+ will
+    // consult the flag for temporal reprojection.)
+    PostProcessAccessibilitySettings settings;
+    settings.reduceMotionFog = true;
+
+    const FogState authored  = authoredFullStack();
+    const FogState effective = applyFogAccessibilitySettings(authored, settings);
+
+    EXPECT_FLOAT_EQ(effective.fogParams.density,
+                    authored.fogParams.density);
+    EXPECT_FLOAT_EQ(effective.heightFogParams.groundDensity,
+                    authored.heightFogParams.groundDensity);
+    EXPECT_FLOAT_EQ(effective.heightFogParams.maxOpacity,
+                    authored.heightFogParams.maxOpacity);
+}
+
+TEST(FogAccessibility, SafePresetProducesHalfIntensityReducedMotionFog)
+{
+    // End-to-end: the user clicks "Accessibility preset" → safeDefaults()
+    // → the transform yields half-intensity fog with a dimmed lobe.
+    const PostProcessAccessibilitySettings safe = safeDefaults();
+    const FogState effective =
+        applyFogAccessibilitySettings(authoredFullStack(), safe);
+
+    // Fog stays on (horizon-cutoff rationale in the accessibility
+    // module's safeDefaults comment).
+    EXPECT_EQ(effective.fogMode, FogMode::Exponential);
+    EXPECT_NEAR(effective.fogParams.density, 0.05f, kEps);
+
+    EXPECT_TRUE(effective.heightFogEnabled);
+    EXPECT_NEAR(effective.heightFogParams.groundDensity, 0.1f, kEps);
+
+    // Sun lobe: intensity 0.5 × reduceMotion 0.5 = 0.25 × authored colour.
+    EXPECT_TRUE(effective.sunInscatterEnabled);
+    EXPECT_NEAR(effective.sunInscatterParams.colour.r,
+                authoredFullStack().sunInscatterParams.colour.r * 0.25f, kEps);
+}
+
+TEST(FogAccessibility, MasterDisableBeatsIntensityOneAndReduceMotion)
+{
+    // Every combination where fogEnabled=false must produce the same
+    // "no fog" output — guards against an accidental flag precedence
+    // bug where a later flag sneaks past the master switch.
+    PostProcessAccessibilitySettings settings;
+    settings.fogEnabled        = false;
+    settings.fogIntensityScale = 1.0f;
+    settings.reduceMotionFog   = true;
+
+    const FogState effective =
+        applyFogAccessibilitySettings(authoredFullStack(), settings);
+
+    EXPECT_EQ(effective.fogMode, FogMode::None);
+    EXPECT_FALSE(effective.heightFogEnabled);
+    EXPECT_FALSE(effective.sunInscatterEnabled);
+}
