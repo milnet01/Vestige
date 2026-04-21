@@ -168,4 +168,58 @@ glm::vec3 applyFog(const glm::vec3& surfaceColour,
     return fogColour * (1.0f - t) + surfaceColour * t;
 }
 
+glm::vec3 composeFog(const glm::vec3& surfaceColour,
+                     const FogCompositeInputs& inputs,
+                     const glm::vec3& worldPos)
+{
+    // Early-out when every layer is off — keeps the "fog disabled"
+    // path a literal identity, which the shader also does via
+    // `fogActive` gating.
+    if (inputs.fogMode == FogMode::None
+        && !inputs.heightFogEnabled
+        && !inputs.sunInscatterEnabled)
+    {
+        return surfaceColour;
+    }
+
+    const glm::vec3 viewVec = worldPos - inputs.cameraWorldPos;
+    const float viewDistance = glm::length(viewVec);
+    const glm::vec3 viewDir = (viewDistance > 0.0f)
+                               ? viewVec / viewDistance
+                               : glm::vec3(0.0f, 0.0f, -1.0f);
+
+    const float surfaceVisibility =
+        computeFogFactor(inputs.fogMode, inputs.fogParams, viewDistance);
+
+    float heightT = 1.0f;
+    if (inputs.heightFogEnabled && viewDistance > 0.0f)
+    {
+        heightT = computeHeightFogTransmittance(inputs.heightFogParams,
+                                                inputs.cameraWorldPos.y,
+                                                viewDir.y,
+                                                viewDistance);
+    }
+
+    glm::vec3 distanceFogColour = inputs.fogParams.colour;
+    if (inputs.sunInscatterEnabled)
+    {
+        const float lobe = computeSunInscatterLobe(inputs.sunInscatterParams,
+                                                   viewDir,
+                                                   inputs.sunDirection,
+                                                   viewDistance);
+        // GLSL: mix(fogColour, sunColour, lobe)
+        //       = fogColour*(1-lobe) + sunColour*lobe
+        const float t = std::clamp(lobe, 0.0f, 1.0f);
+        distanceFogColour = inputs.fogParams.colour * (1.0f - t)
+                          + inputs.sunInscatterParams.colour * t;
+    }
+
+    const glm::vec3 fogged = applyFog(surfaceColour,
+                                      distanceFogColour,
+                                      surfaceVisibility);
+    return applyFog(fogged,
+                    inputs.heightFogParams.colour,
+                    heightT);
+}
+
 } // namespace Vestige

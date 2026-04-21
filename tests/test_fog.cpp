@@ -401,3 +401,165 @@ TEST(Fog, SunInscatterNegativeExponentTreatedAsZero)
     const float lobe = computeSunInscatterLobe(s, view, sunDir, 100.0f);
     EXPECT_NEAR(lobe, 1.0f, kEps);
 }
+
+// -----------------------------------------------------------------------
+// Full composite — CPU spec for the GLSL screen_quad.frag.glsl path
+// -----------------------------------------------------------------------
+//
+// These tests pin the composition order that the GPU shader implements.
+// If the shader drifts from this spec, screenshots will disagree and
+// the renderer integration is broken — so either the shader or these
+// tests must follow, never in silence.
+
+TEST(FogComposite, AllDisabledIsIdentity)
+{
+    // No layer active → surface passes through unchanged.
+    FogCompositeInputs inputs;
+    const glm::vec3 surface(0.3f, 0.6f, 0.9f);
+    const glm::vec3 worldPos(10.0f, 0.0f, 0.0f);
+    const glm::vec3 out = composeFog(surface, inputs, worldPos);
+    EXPECT_NEAR(out.r, surface.r, kEps);
+    EXPECT_NEAR(out.g, surface.g, kEps);
+    EXPECT_NEAR(out.b, surface.b, kEps);
+}
+
+TEST(FogComposite, DistanceFogAtFarEndGivesFogColour)
+{
+    // Linear mode at end distance → factor 0 → pure fog colour.
+    FogCompositeInputs inputs;
+    inputs.fogMode = FogMode::Linear;
+    inputs.fogParams.start  = 10.0f;
+    inputs.fogParams.end    = 100.0f;
+    inputs.fogParams.colour = glm::vec3(0.1f, 0.2f, 0.8f);
+
+    const glm::vec3 surface(1.0f, 1.0f, 1.0f);
+    const glm::vec3 worldPos(0.0f, 0.0f, -100.0f);  // 100m away from camera at origin
+    const glm::vec3 out = composeFog(surface, inputs, worldPos);
+
+    EXPECT_NEAR(out.r, inputs.fogParams.colour.r, kEps);
+    EXPECT_NEAR(out.g, inputs.fogParams.colour.g, kEps);
+    EXPECT_NEAR(out.b, inputs.fogParams.colour.b, kEps);
+}
+
+TEST(FogComposite, DistanceFogNearCameraIsSurface)
+{
+    // Below start distance → factor 1 → pure surface (no fog yet).
+    FogCompositeInputs inputs;
+    inputs.fogMode = FogMode::Linear;
+    inputs.fogParams.start = 10.0f;
+    inputs.fogParams.end   = 100.0f;
+
+    const glm::vec3 surface(0.7f, 0.3f, 0.1f);
+    const glm::vec3 worldPos(0.0f, 0.0f, -5.0f);  // Inside start
+    const glm::vec3 out = composeFog(surface, inputs, worldPos);
+
+    EXPECT_NEAR(out.r, surface.r, kEps);
+    EXPECT_NEAR(out.g, surface.g, kEps);
+    EXPECT_NEAR(out.b, surface.b, kEps);
+}
+
+TEST(FogComposite, SunInscatterWarmsDistanceFogColour)
+{
+    // Looking directly into the sun at full distance, the distance-fog
+    // colour should be replaced by the sun-inscatter colour (lobe=1).
+    FogCompositeInputs inputs;
+    inputs.fogMode = FogMode::Linear;
+    inputs.fogParams.start  = 5.0f;
+    inputs.fogParams.end    = 50.0f;
+    inputs.fogParams.colour = glm::vec3(0.5f, 0.5f, 0.5f);
+
+    inputs.sunInscatterEnabled       = true;
+    inputs.sunInscatterParams.colour = glm::vec3(1.0f, 0.5f, 0.1f);
+    inputs.sunInscatterParams.startDistance = 1.0f;
+    // Sun directly behind the surface — view ray (cam→surface) aligns
+    // with -sunDirection, so the lobe is maxed at 1.0.
+    inputs.sunDirection      = glm::vec3(0.0f, 0.0f, 1.0f);
+    inputs.cameraWorldPos    = glm::vec3(0.0f);
+
+    const glm::vec3 surface(1.0f, 1.0f, 1.0f);
+    const glm::vec3 worldPos(0.0f, 0.0f, -50.0f);  // At end → factor 0 → pure fog colour
+    const glm::vec3 out = composeFog(surface, inputs, worldPos);
+
+    EXPECT_NEAR(out.r, inputs.sunInscatterParams.colour.r, kEps);
+    EXPECT_NEAR(out.g, inputs.sunInscatterParams.colour.g, kEps);
+    EXPECT_NEAR(out.b, inputs.sunInscatterParams.colour.b, kEps);
+}
+
+TEST(FogComposite, HeightFogAppliedAfterDistance)
+{
+    // Surface fully visible through distance fog (None mode) but
+    // height fog dense enough to fully obscure → pure height-fog
+    // colour survives.
+    FogCompositeInputs inputs;
+    inputs.heightFogEnabled = true;
+    inputs.heightFogParams.colour        = glm::vec3(0.9f, 0.1f, 0.1f);
+    inputs.heightFogParams.groundDensity = 100.0f;  // Opaque
+    inputs.heightFogParams.heightFalloff = 0.0f;
+    inputs.heightFogParams.maxOpacity    = 1.0f;
+    inputs.heightFogParams.fogHeight     = 0.0f;
+    inputs.cameraWorldPos = glm::vec3(0.0f, 0.0f, 0.0f);
+
+    const glm::vec3 surface(0.0f, 0.5f, 0.8f);
+    const glm::vec3 worldPos(0.0f, 0.0f, -50.0f);  // Horizontal ray
+    const glm::vec3 out = composeFog(surface, inputs, worldPos);
+
+    EXPECT_NEAR(out.r, inputs.heightFogParams.colour.r, 1e-3f);
+    EXPECT_NEAR(out.g, inputs.heightFogParams.colour.g, 1e-3f);
+    EXPECT_NEAR(out.b, inputs.heightFogParams.colour.b, 1e-3f);
+}
+
+TEST(FogComposite, OrderDistanceThenHeight)
+{
+    // Both layers active with 50/50 weight. The composition order
+    // matters: distance fog mixes first, then height fog mixes the
+    // result with its colour. The test pins the exact algebra that
+    // the GLSL shader performs.
+    FogCompositeInputs inputs;
+    inputs.fogMode = FogMode::Linear;
+    inputs.fogParams.start  = 0.0f;
+    inputs.fogParams.end    = 100.0f;
+    inputs.fogParams.colour = glm::vec3(1.0f, 0.0f, 0.0f);  // Red distance fog
+
+    // Height fog at ground-level ray with controlled density so
+    // transmittance lands at 0.5 exactly.
+    // exp(-d * t) = 0.5 → d*t = ln(2). With t = 50m, d = ln(2)/50.
+    inputs.heightFogEnabled = true;
+    inputs.heightFogParams.colour        = glm::vec3(0.0f, 0.0f, 1.0f);  // Blue height fog
+    inputs.heightFogParams.groundDensity = std::log(2.0f) / 50.0f;
+    inputs.heightFogParams.heightFalloff = 0.0f;  // Beer-Lambert branch
+    inputs.heightFogParams.maxOpacity    = 1.0f;
+    inputs.heightFogParams.fogHeight     = 0.0f;
+    inputs.cameraWorldPos = glm::vec3(0.0f);
+
+    const glm::vec3 surface(0.0f, 1.0f, 0.0f);  // Green surface
+    const glm::vec3 worldPos(0.0f, 0.0f, -50.0f);  // 50m horizontal
+    // Distance visibility at 50m on [0,100] linear span = 0.5 exactly.
+    // Height transmittance at 50m = 0.5 exactly (constructed above).
+    // Expected:
+    //   fogged = mix(red, green, 0.5) = (0.5, 0.5, 0)
+    //   out    = mix(blue, fogged, 0.5) = (0.25, 0.25, 0.5)
+    const glm::vec3 out = composeFog(surface, inputs, worldPos);
+
+    EXPECT_NEAR(out.r, 0.25f, 1e-3f);
+    EXPECT_NEAR(out.g, 0.25f, 1e-3f);
+    EXPECT_NEAR(out.b, 0.5f,  1e-3f);
+}
+
+TEST(FogComposite, CameraAtSurfaceIsIdentityEvenWithFogActive)
+{
+    // Zero view distance → distance fog is pass-through (factor=1)
+    // and height fog transmittance is 1 (zero-length-ray guard).
+    FogCompositeInputs inputs;
+    inputs.fogMode = FogMode::Exponential;
+    inputs.fogParams.density = 0.1f;
+    inputs.heightFogEnabled  = true;
+    inputs.heightFogParams.groundDensity = 0.5f;
+
+    const glm::vec3 surface(0.2f, 0.4f, 0.6f);
+    const glm::vec3 worldPos(0.0f, 0.0f, 0.0f);  // Same as camera
+    const glm::vec3 out = composeFog(surface, inputs, worldPos);
+
+    EXPECT_NEAR(out.r, surface.r, kEps);
+    EXPECT_NEAR(out.g, surface.g, kEps);
+    EXPECT_NEAR(out.b, surface.b, kEps);
+}

@@ -20,6 +20,7 @@
 #include "renderer/text_renderer.h"
 #include "renderer/color_grading_lut.h"
 #include "renderer/color_vision_filter.h"
+#include "renderer/fog.h"
 #include "renderer/instance_buffer.h"
 #include "renderer/light_probe_manager.h"
 #include "renderer/sh_probe_grid.h"
@@ -277,6 +278,37 @@ public:
 
     /// @brief Checks if cascade debug visualization is active.
     bool isCascadeDebug() const;
+
+    /// @brief Sets the distance-fog curve. Pass `FogMode::None` to disable.
+    ///        Applied in linear HDR between contact shadows and bloom.
+    void setFogMode(FogMode mode);
+
+    /// @brief Gets the current distance-fog curve.
+    FogMode getFogMode() const;
+
+    /// @brief Sets distance-fog parameters (colour, start/end, density).
+    void setFogParams(const FogParams& params);
+
+    /// @brief Gets the current distance-fog parameters.
+    const FogParams& getFogParams() const;
+
+    /// @brief Enables or disables the exponential height-fog layer
+    ///        (Quílez analytic integral). Composes multiplicatively
+    ///        with distance fog.
+    void setHeightFogEnabled(bool enabled);
+    bool isHeightFogEnabled() const;
+
+    /// @brief Sets height-fog parameters (ground density, falloff, etc.).
+    void setHeightFogParams(const HeightFogParams& params);
+    const HeightFogParams& getHeightFogParams() const;
+
+    /// @brief Enables or disables the sun-direction inscatter lobe.
+    void setSunInscatterEnabled(bool enabled);
+    bool isSunInscatterEnabled() const;
+
+    /// @brief Sets sun-inscatter parameters (colour, exponent, start distance).
+    void setSunInscatterParams(const SunInscatterParams& params);
+    const SunInscatterParams& getSunInscatterParams() const;
 
     /// @brief Enables or disables SDSM (Sample Distribution Shadow Maps).
     void setSdsmEnabled(bool enabled);
@@ -558,6 +590,18 @@ private:
     int m_tonemapMode = 1;    // Default to ACES Filmic
     int m_debugMode = 0;      // 0 = off
     ColorVisionMode m_colorVisionMode = ColorVisionMode::Normal;
+
+    // Phase 10 fog — CPU-side source of truth for the composite pass.
+    // Uniforms are pushed in endFrame() between contact-shadow and bloom
+    // setup, matching the composition order in
+    // docs/PHASE10_FOG_DESIGN.md §4.
+    FogMode             m_fogMode = FogMode::None;
+    FogParams           m_fogParams;
+    bool                m_heightFogEnabled = false;
+    HeightFogParams     m_heightFogParams;
+    bool                m_sunInscatterEnabled = false;
+    SunInscatterParams  m_sunInscatterParams;
+    glm::vec3           m_cameraWorldPosition = glm::vec3(0.0f);
 
     // Anti-aliasing mode
     AntiAliasMode m_antiAliasMode = AntiAliasMode::MSAA_4X;

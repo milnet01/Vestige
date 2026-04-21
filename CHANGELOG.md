@@ -9,6 +9,64 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-21 Phase 10 fog — Shader integration (distance + height + sun inscatter)
+
+Second Phase 10 fog slice. The CPU-side primitives shipped in the
+previous slice (`Vestige::computeFogFactor`,
+`computeHeightFogTransmittance`, `computeSunInscatterLobe`) are now
+evaluated by the final composite shader and produce a visible
+contribution on screen. Only the non-volumetric fog stack — volumetric
+froxels and god-rays remain deferred per the
+`docs/PHASE10_FOG_DESIGN.md` 10-slice rollout plan.
+
+- `assets/shaders/screen_quad.frag.glsl` — adds `u_fogMode`,
+  `u_fogColour`, `u_fogStart`, `u_fogEnd`, `u_fogDensity`,
+  `u_heightFogEnabled` (+ colour / Y / density / falloff / maxOpacity),
+  `u_sunInscatterEnabled` (+ colour / exponent / startDistance),
+  `u_sunDirection`, `u_fogDepthTexture` (unit 12, shared with SSAO /
+  contact shadows and re-bound in the composite for Mesa declared-
+  sampler safety), `u_fogInvViewProj`, `u_fogCameraWorldPos`. GPU
+  formula ports `fog.cpp` byte-for-byte. Composition order matches
+  `docs/PHASE10_FOG_DESIGN.md` §4: SSAO → contact shadows → **fog
+  mix** → bloom add → exposure → tonemap → LUT → colour vision →
+  gamma. Bloom therefore samples fogged radiance in linear HDR, which
+  is the UE / HDRP convention.
+
+- Reverse-Z world-space reconstruction — `u_fogInvViewProj` takes the
+  per-pixel NDC + depth back to world space, so the height-fog ray
+  integral uses real world-Y rather than a view-space proxy. Sky
+  pixels (reverse-Z depth == 0) skip fog so the skybox colour passes
+  through untouched.
+
+- `engine/renderer/fog.{h,cpp}` — new `FogCompositeInputs` struct and
+  `composeFog(surfaceColour, inputs, worldPos)` helper that mirror the
+  GLSL composite byte-for-byte. Acts as the shared CPU / GPU spec —
+  `test_fog.cpp` pins the CPU form, the shader pins the GPU form, and
+  the unit tests catch drift between the two.
+
+- `engine/renderer/renderer.{h,cpp}` — new `FogMode` / `FogParams` /
+  `HeightFogParams` / `SunInscatterParams` state plus `setFogMode` /
+  `setFogParams` / `setHeightFogEnabled` / `setHeightFogParams` /
+  `setSunInscatterEnabled` / `setSunInscatterParams` setters (and
+  matching getters). Composite uniforms are pushed each frame between
+  the contact-shadow and LUT uniform blocks. `m_cameraWorldPosition`
+  is cached inside `renderScene()` when not on an override view
+  (cubemap-face captures skip fog — the state only matters for the
+  main composite).
+
+- 7 new `FogComposite` unit tests — all-disabled identity; distance
+  fog at far-end gives pure fog colour; distance fog near camera
+  gives pure surface; sun-inscatter warps distance-fog colour to the
+  sun tint at `cosθ=1`; height-fog fully obscures surface when
+  ground-density is saturated; exact 50/50 two-layer composition
+  algebra (0.25, 0.25, 0.5 expected from 0.5·(red,green) mixed with
+  0.5·blue); zero-view-distance is a pass-through even when every
+  layer is enabled.
+
+All 2436 unit tests pass (2437 total, 1 pre-existing GPU-only skip).
+
+VESTIGE_VERSION: 0.1.6 → 0.1.7.
+
 ### 2026-04-21 Roadmap — Add Phase 10.5 Editor Usability Pass
 
 New phase inserted between Phase 10 (Polish and Features) and Phase 11

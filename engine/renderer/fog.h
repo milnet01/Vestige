@@ -206,4 +206,40 @@ glm::vec3 applyFog(const glm::vec3& surfaceColour,
                    const glm::vec3& fogColour,
                    float factor);
 
+/// @brief Full fog composite — distance + height + sun-inscatter in one
+///        call. Mirrors the GLSL composition order in
+///        `assets/shaders/screen_quad.frag.glsl` so the CPU and GPU
+///        paths cannot drift.
+///
+/// Composition rules (see docs/PHASE10_FOG_DESIGN.md §4):
+///   1. Distance fog colour is warped toward the sun tint by the
+///      cosine lobe when `sunInscatterEnabled`. Height fog keeps its
+///      own colour so ground mist doesn't inherit the sun glow.
+///   2. Surface is first mixed with the warped distance-fog colour by
+///      the distance-fog visibility factor.
+///   3. Result is then mixed with the height-fog colour by the
+///      height-fog transmittance.
+///
+/// `cameraWorldPos` and `worldPos` must be in world space. Returns a
+/// colour in linear HDR (no tonemap / gamma applied — that happens
+/// downstream).
+struct FogCompositeInputs
+{
+    FogMode                   fogMode            = FogMode::None;
+    FogParams                 fogParams;
+
+    bool                      heightFogEnabled   = false;
+    HeightFogParams           heightFogParams;
+
+    bool                      sunInscatterEnabled = false;
+    SunInscatterParams        sunInscatterParams;
+    glm::vec3                 sunDirection        = glm::vec3(0.0f, -1.0f, 0.0f);
+
+    glm::vec3                 cameraWorldPos      = glm::vec3(0.0f);
+};
+
+glm::vec3 composeFog(const glm::vec3& surfaceColour,
+                     const FogCompositeInputs& inputs,
+                     const glm::vec3& worldPos);
+
 } // namespace Vestige

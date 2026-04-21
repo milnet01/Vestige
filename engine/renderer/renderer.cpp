@@ -1233,6 +1233,47 @@ void Renderer::endFrame(float deltaTime)
         m_screenShader.setInt("u_contactShadowTexture", 11);
     }
 
+    // Phase 10 fog uniforms — distance / height / sun inscatter.
+    // Composed in linear HDR between contact shadows and bloom; see
+    // docs/PHASE10_FOG_DESIGN.md §4 for the composition order rationale.
+    {
+        m_screenShader.setInt("u_fogMode", static_cast<int>(m_fogMode));
+        m_screenShader.setVec3("u_fogColour", m_fogParams.colour);
+        m_screenShader.setFloat("u_fogStart",   m_fogParams.start);
+        m_screenShader.setFloat("u_fogEnd",     m_fogParams.end);
+        m_screenShader.setFloat("u_fogDensity", m_fogParams.density);
+
+        m_screenShader.setBool("u_heightFogEnabled", m_heightFogEnabled);
+        m_screenShader.setVec3("u_heightFogColour",  m_heightFogParams.colour);
+        m_screenShader.setFloat("u_heightFogY",        m_heightFogParams.fogHeight);
+        m_screenShader.setFloat("u_heightFogDensity",  m_heightFogParams.groundDensity);
+        m_screenShader.setFloat("u_heightFogFalloff",  m_heightFogParams.heightFalloff);
+        m_screenShader.setFloat("u_heightFogMaxOpacity", m_heightFogParams.maxOpacity);
+
+        m_screenShader.setBool("u_sunInscatterEnabled", m_sunInscatterEnabled);
+        m_screenShader.setVec3("u_sunInscatterColour",  m_sunInscatterParams.colour);
+        m_screenShader.setFloat("u_sunInscatterExponent", m_sunInscatterParams.exponent);
+        m_screenShader.setFloat("u_sunInscatterStart",    m_sunInscatterParams.startDistance);
+        m_screenShader.setVec3("u_sunDirection", m_directionalLight.direction);
+
+        // Depth texture — ALWAYS bind (Mesa declared-sampler safety).
+        // Unit 12 is shared with SSAO / contact-shadow passes, which
+        // have already run by this point; re-bind to guarantee it's
+        // still live for the composite pass.
+        if (m_resolveDepthFbo)
+        {
+            m_resolveDepthFbo->bindDepthTexture(12);
+        }
+        else
+        {
+            glBindTextureUnit(12, m_fallbackTexture);
+        }
+        m_screenShader.setInt("u_fogDepthTexture", 12);
+        m_screenShader.setMat4("u_fogInvViewProj",
+                               glm::inverse(m_lastViewProjection));
+        m_screenShader.setVec3("u_fogCameraWorldPos", m_cameraWorldPosition);
+    }
+
     // Color grading LUT uniforms — ALWAYS bind texture
     bool lutActive = (m_colorGradingLut && m_colorGradingLut->isEnabled());
     m_screenShader.setBool("u_lutEnabled", lutActive);
@@ -1627,6 +1668,39 @@ void Renderer::setColorVisionMode(ColorVisionMode mode)
 ColorVisionMode Renderer::getColorVisionMode() const
 {
     return m_colorVisionMode;
+}
+
+// Phase 10 fog setters — CPU state only. Uniforms are pushed in
+// endFrame() every frame (no dirty tracking; the cost is < 20 setInt calls).
+
+void Renderer::setFogMode(FogMode mode)              { m_fogMode = mode; }
+FogMode Renderer::getFogMode() const                 { return m_fogMode; }
+
+void Renderer::setFogParams(const FogParams& params) { m_fogParams = params; }
+const FogParams& Renderer::getFogParams() const      { return m_fogParams; }
+
+void Renderer::setHeightFogEnabled(bool enabled)     { m_heightFogEnabled = enabled; }
+bool Renderer::isHeightFogEnabled() const            { return m_heightFogEnabled; }
+
+void Renderer::setHeightFogParams(const HeightFogParams& params)
+{
+    m_heightFogParams = params;
+}
+const HeightFogParams& Renderer::getHeightFogParams() const
+{
+    return m_heightFogParams;
+}
+
+void Renderer::setSunInscatterEnabled(bool enabled)  { m_sunInscatterEnabled = enabled; }
+bool Renderer::isSunInscatterEnabled() const         { return m_sunInscatterEnabled; }
+
+void Renderer::setSunInscatterParams(const SunInscatterParams& params)
+{
+    m_sunInscatterParams = params;
+}
+const SunInscatterParams& Renderer::getSunInscatterParams() const
+{
+    return m_sunInscatterParams;
 }
 
 void Renderer::setPomEnabled(bool isEnabled)
@@ -2780,6 +2854,16 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
     m_lastProjection = projection;
     m_lastView = hasOverrides ? viewOverride : camera.getViewMatrix();
     m_lastViewProjection = projection * m_lastView;
+
+    // Cache camera world position for the fog composite pass in endFrame().
+    // When an override view is in use (e.g. cubemap-face capture) we
+    // still want the pre-override camera, because fog is never run
+    // during those offline captures — the state only matters for the
+    // main composite and gets refreshed on the next real renderScene().
+    if (!hasOverrides)
+    {
+        m_cameraWorldPosition = camera.getPosition();
+    }
 
     // Upload light uniforms once per frame (not per batch)
     uploadLightUniforms(camera);
