@@ -118,11 +118,18 @@ def _get_language_defaults(lang: str) -> dict:
                 },
                 "clang_tidy": {
                     "enabled": True,
-                    # See lib/config.py for the rationale on excluding
-                    # `modernize-use-trailing-return-type`. Short version:
-                    # CODING_STANDARDS.md mandates classical return types
-                    # except where trailing-return genuinely helps.
-                    "checks": "bugprone-*,performance-*,modernize-*,-modernize-use-trailing-return-type",
+                    # See lib/config.py for per-exclusion rationale.
+                    # Short version: project style rules override the
+                    # blanket checks for five specific cases; every
+                    # other check stays active.
+                    "checks": (
+                        "bugprone-*,performance-*,modernize-*,"
+                        "-modernize-use-trailing-return-type,"
+                        "-modernize-return-braced-init-list,"
+                        "-readability-uppercase-literal-suffix,"
+                        "-bugprone-easily-swappable-parameters,"
+                        "-readability-braces-around-statements"
+                    ),
                 },
             },
             "patterns": _cpp_patterns(),

@@ -187,6 +187,32 @@ private:
 };
 ```
 
+**Braces should wrap every control-flow body, even single statements.**
+Rationale: prevents the "goto fail" class of bugs (Apple SSL CVE-2014-
+1266 / iOS 7.0.6) where an unbraced `if (x) goto stmt;` was mis-read
+by a later contributor as covering more than the one statement it
+actually did.
+
+```cpp
+// ✓ Preferred — write new code this way
+if (base + 2 >= values.size())
+{
+    return glm::vec3(0.0f);
+}
+
+// ✗ Avoid in new code — ~800 existing sites grandfathered in
+if (base + 2 >= values.size())
+    return glm::vec3(0.0f);
+```
+
+**Status:** the `readability-braces-around-statements` clang-tidy
+check is currently *off* in the audit tool. A project-wide mechanical
+cleanup would need to couple with a full `clang-format` sweep (see
+`.clang-format`), and that sweep is deliberately deferred. Until it
+runs, treat braces-always as style guidance for new code you write
+or review, not as a gate. Re-enable the check after the bulk sweep
+lands and every existing unbraced site is cleaned up.
+
 ### Line Length
 - **Soft limit: 120 characters**
 - Break long lines at logical points (after commas, before operators)

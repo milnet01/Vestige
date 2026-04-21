@@ -2,6 +2,56 @@
 
 All notable changes to the Audit Tool are documented in this file.
 
+## [2.16.0] - 2026-04-21
+
+### Changed — four more clang-tidy checks disabled
+
+Follow-up to 2.15.0. Post-`modernize-use-trailing-return-type`, the
+audit run surfaced four more checks that were previously hidden
+behind the 664-finding flood. After the same community-consensus /
+best-practice analysis as 2.15.0:
+
+- **`modernize-return-braced-init-list`** disabled. Stylistic
+  preference for `return {x, y, z}` over `return Type(x, y, z)`;
+  community is split, the project keeps explicit types.
+- **`readability-uppercase-literal-suffix`** disabled. Wants `1.0F`
+  over `1.0f`. Pure noise — lowercase `f` is universal in real C++.
+- **`bugprone-easily-swappable-parameters`** disabled. Flags any two
+  adjacent same-type parameters as a caller-swap risk. Extremely
+  high FP rate — signal hides in the noise. Re-evaluate when LLVM
+  upstream improves the heuristic.
+- **`readability-braces-around-statements`** disabled (for now).
+  The *policy* is braces-always (CODING_STANDARDS.md §3 Brace Style
+  documents the goto-fail rationale) but enforcement is gated on
+  the planned `clang-format` sweep. Attempted bulk fix via
+  `clang-tidy --fix`: applied fixes to 130+ files producing ugly
+  `if (x) { stmt;\n}` single-line braces that the project's Allman
+  style forbids. Running `clang-format` after to restore Allman
+  produced a ~20k-line diff across 133 files — exactly the full
+  reformat sweep that `.clang-format` deliberately defers. Reverted
+  both passes. Re-enable this check in a future commit that pairs
+  with the planned bulk clang-format sweep.
+
+Updated the same three config sites:
+- `tools/audit/lib/config.py`
+- `tools/audit/lib/auto_config.py`
+- `tools/audit/audit_config.yaml`
+
+Each exclusion is annotated at the call site with a one-line reason
+and a pointer to `CODING_STANDARDS.md` for the project convention.
+
+`CODING_STANDARDS.md` §3 "Brace Style" documents braces-always as
+style guidance for new code with an explicit "gated on bulk sweep"
+note so reviewers know enforcement isn't automatic today.
+
+### Meta
+
+Cleans up every remaining clang-tidy annotation that surfaced in CI
+run 24709674848 after 2.15.0 suppressed the trailing-return flood.
+Three are genuinely noise (suppressed permanently); one
+(braces-around-statements) is a deferred bulk cleanup that needs to
+happen alongside a full clang-format pass.
+
 ## [2.15.0] - 2026-04-21
 
 ### Changed — disable `modernize-use-trailing-return-type` in clang-tidy configs
