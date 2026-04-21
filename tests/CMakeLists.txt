@@ -112,6 +112,7 @@ add_executable(vestige_tests
     test_audio_hrtf.cpp
     test_audio_occlusion.cpp
     test_audio_reverb.cpp
+    test_audio_ambient.cpp
     test_menu_prefabs.cpp
     test_ui_layout_panel.cpp
     test_node_graph.cpp

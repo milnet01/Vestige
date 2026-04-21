@@ -9,6 +9,62 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-21 Phase 10 audio — Environmental ambient audio primitives
+
+Sixth Phase 10 audio slice. Ships three independent pure-function
+primitives that the engine-side AmbientSystem composes into the
+full ambient pipeline (no coupling between them, so each is
+unit-testable in isolation).
+
+- `engine/audio/audio_ambient.{h,cpp}`:
+  * `AmbientZone` struct (clipPath + coreRadius + falloffBand +
+    maxVolume + priority) with `computeAmbientZoneVolume(zone,
+    distance)` reusing the reverb-zone falloff profile so both
+    subsystems share a single sphere-with-linear-falloff curve.
+    Priority orders overlapping zones (cave ambience overrides
+    outdoor wind in the falloff band).
+  * `TimeOfDayWindow` enum (Dawn / Day / Dusk / Night) +
+    `TimeOfDayWeights` struct (dawn, day, dusk, night) +
+    `computeTimeOfDayWeights(hourOfDay)` — triangle-envelope
+    mapping of a 24-hour clock to the four windows with peaks at
+    06 / 13 / 20 / 01. Weights are normalised so they sum to 1.0
+    at every hour — ensures `clip.volume * weight` budgets stay
+    predictable under future peak retuning. Wraps around the 24h
+    clock (hour=25 ≡ hour=1, hour=-2 ≡ hour=22).
+  * `RandomOneShotScheduler` (minIntervalSeconds,
+    maxIntervalSeconds, timeUntilNextFire) +
+    `tickRandomOneShot(scheduler, dt, sampleFn)` — cooldown
+    scheduler that draws a fresh interval from [min, max] each
+    time it fires, using a caller-injected uniform-sample
+    function in [0, 1] so tests stay deterministic and the
+    engine plugs in `std::uniform_real_distribution`. Fires at
+    most once per tick so a framerate stall can't avalanche
+    one-shots. Null sampler falls back to the midpoint; negative
+    delta treated as zero.
+- Weather-driven modulation (rain intensity, thunder, wind howl)
+  deliberately *not* wired here — once the Phase 15 weather
+  controller publishes its rain/wind intensity outputs, the
+  engine-side AmbientSystem applies them as a thin multiplier on
+  top of these primitives. Keeping the pure-function layer free
+  of Phase-15 dependencies preserves headless testability.
+- `tests/test_audio_ambient.cpp` — 17 new tests:
+  * AmbientZone volume: inside core returns maxVolume, outside
+    falloff returns 0, mid-falloff is linear, maxVolume>1 clamps.
+  * TimeOfDay: window labels stable, weights always sum to 1
+    (sampled every 15 min across the full day), each peak makes
+    its window dominant over all others, wrap-around symmetry on
+    both sides of [0, 24], midnight makes night dominate.
+  * RandomOneShot: fires when cooldown expires, does not fire
+    when cooldown remains, only fires once per tick even under a
+    huge delta, uses sampler value to pick interval, clamps
+    sampler to [0, 1], null sampler falls back to midpoint,
+    negative delta is zero, draws fresh interval per fire from a
+    deterministic sampler sequence.
+
+Per CLAUDE.md Rule 11: triangle envelope + linear interpolation
+are canonical forms with no coefficients to fit — Formula
+Workbench doesn't apply.
+
 ### 2026-04-21 Phase 10 audio — Reverb zones with smooth crossfade
 
 Fifth Phase 10 audio slice. Ships the preset / zone-weight / blend
