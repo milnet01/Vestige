@@ -7,6 +7,7 @@
 
 #include "audio/audio_attenuation.h"
 #include "audio/audio_clip.h"
+#include "audio/audio_doppler.h"
 
 #include <glm/glm.hpp>
 
@@ -47,11 +48,25 @@ public:
     void shutdown();
 
     /// @brief Updates the listener position and orientation (call once per frame).
+    ///
+    /// The listener's velocity is read from `getListenerVelocity()`
+    /// and uploaded as `AL_VELOCITY` so OpenAL's native Doppler
+    /// calculation matches the engine's. Update the velocity via
+    /// `setListenerVelocity` before calling this.
+    ///
     /// @param position Listener world position (typically camera position).
     /// @param forward Listener forward direction.
     /// @param up Listener up direction.
     void updateListener(const glm::vec3& position, const glm::vec3& forward,
                         const glm::vec3& up);
+
+    /// @brief Sets the listener velocity (m/s) for Doppler-shift
+    ///        calculations. The stored value is uploaded to OpenAL
+    ///        on the next `updateListener` call.
+    void setListenerVelocity(const glm::vec3& velocity) { m_listenerVelocity = velocity; }
+
+    /// @brief Returns the most recently set listener velocity.
+    const glm::vec3& getListenerVelocity() const { return m_listenerVelocity; }
 
     /// @brief Loads an audio file into an OpenAL buffer (cached by path).
     /// @param filePath Path to the audio file.
@@ -85,6 +100,21 @@ public:
                           float volume = 1.0f,
                           bool loop = false);
 
+    /// @brief Plays a spatial sound with attenuation + per-source
+    ///        velocity for Doppler shift.
+    ///
+    /// Velocity is in engine meters per second. Combined with the
+    /// listener velocity (`setListenerVelocity`) and the engine-wide
+    /// Doppler parameters (`setDopplerFactor`, `setSpeedOfSound`),
+    /// OpenAL will apply the pitch shift from the formula in
+    /// `audio_doppler.h`.
+    void playSoundSpatial(const std::string& filePath,
+                          const glm::vec3& position,
+                          const glm::vec3& velocity,
+                          const AttenuationParams& params,
+                          float volume = 1.0f,
+                          bool loop = false);
+
     /// @brief Plays a non-spatial (2D) sound (fire-and-forget).
     /// @param filePath Path to the audio file.
     /// @param volume Volume (0.0 to 1.0).
@@ -101,6 +131,20 @@ public:
     /// @brief Returns the engine-wide distance-attenuation model.
     AttenuationModel getDistanceModel() const { return m_distanceModel; }
 
+    /// @brief Sets the Doppler-factor multiplier (`AL_DOPPLER_FACTOR`).
+    ///
+    /// 0.0 disables Doppler shift; 1.0 matches the canonical formula;
+    /// >1.0 exaggerates. Stored in `DopplerParams` for CPU-side
+    /// `computeDopplerPitchRatio` and pushed to OpenAL.
+    void setDopplerFactor(float factor);
+
+    /// @brief Sets the speed of sound (`AL_SPEED_OF_SOUND`, m/s).
+    /// Defaults to 343.3 (dry air, 20 °C).
+    void setSpeedOfSound(float speed);
+
+    /// @brief Returns the current Doppler-shift parameters.
+    const DopplerParams& getDopplerParams() const { return m_doppler; }
+
     /// @brief Stops all playing sources.
     void stopAll();
 
@@ -112,6 +156,8 @@ private:
     ALCcontext* m_context = nullptr;
     bool m_available = false;
     AttenuationModel m_distanceModel = AttenuationModel::InverseDistance;
+    DopplerParams m_doppler{};
+    glm::vec3 m_listenerVelocity{0.0f};
 
     // Source pool. Using uint8_t rather than bool because std::vector<bool>
     // is a specialized proxy-reference container (not a true std::vector)

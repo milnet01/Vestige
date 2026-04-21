@@ -8,6 +8,8 @@
 #include "audio/audio_attenuation.h"
 #include "scene/component.h"
 
+#include <glm/glm.hpp>
+
 #include <string>
 
 namespace Vestige
@@ -50,6 +52,15 @@ public:
     /// 9C behaviour, so existing scenes sound identical until they
     /// explicitly opt into a different curve.
     AttenuationModel attenuationModel = AttenuationModel::InverseDistance;
+
+    /// @brief Velocity in engine meters per second for Doppler shift.
+    ///
+    /// Zero (the default) disables the per-source Doppler contribution
+    /// — stationary torches, UI blips, and ambient loops can ignore
+    /// this field. Moving emitters (projectiles, vehicles, patrolling
+    /// NPCs) should update this alongside their transform each frame;
+    /// the AudioSystem uploads it to `AL_VELOCITY`.
+    glm::vec3 velocity = glm::vec3(0.0f);
 
     /// @brief Whether the sound loops.
     bool loop = false;

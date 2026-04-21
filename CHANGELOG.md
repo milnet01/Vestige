@@ -9,6 +9,54 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-21 Phase 10 audio — Doppler shift for fast-moving sources
+
+Second Phase 10 spatial-audio slice, landing the Doppler sub-bullet
+under "Spatial audio" in ROADMAP.md. Gives the engine a canonical
+pitch-shift formula that matches what OpenAL evaluates natively, so
+CPU-side priority / preview code and GPU-side playback agree.
+
+- `engine/audio/audio_doppler.{h,cpp}` — new `DopplerParams`
+  (`speedOfSound` defaults 343.3 m/s for dry air at 20 °C,
+  `dopplerFactor` defaults 1.0 matching OpenAL 1.1 defaults) and
+  pure-function `computeDopplerPitchRatio(params, srcPos, srcVel,
+  listenerPos, listenerVel)`. Implements the OpenAL 1.1 §3.5.2
+  formula `f' = f · (SS − DF·vLs) / (SS − DF·vSs)` with velocity
+  projections clamped to [−SS/DF, SS/DF]; co-located source and
+  listener return unity (no well-defined axis) and `dopplerFactor
+  <= 0` disables the effect entirely.
+- `AudioEngine::setDopplerFactor(factor)` / `setSpeedOfSound(speed)`
+  push the values to `alDopplerFactor` / `alSpeedOfSound` and keep
+  the engine's `DopplerParams` in sync with OpenAL's native state.
+  `getDopplerParams()` exposes the current settings for CPU-side
+  uses (virtual-voice priority, editor preview).
+- `AudioEngine::setListenerVelocity(vec3)` — stores listener
+  velocity; the next `updateListener` call uploads it as
+  `AL_VELOCITY` (previously always hard-zero, which suppressed
+  Doppler entirely).
+- `AudioEngine::playSoundSpatial(path, position, velocity, params,
+  volume, loop)` — new overload that sets per-source `AL_VELOCITY`
+  in addition to the existing attenuation parameters. The
+  velocity-less overload still zeroes `AL_VELOCITY` so stationary
+  one-shots stay unaffected.
+- `AudioSourceComponent` — new `glm::vec3 velocity` field (zero
+  default so stationary emitters cost nothing to ship). `clone`
+  carries it.
+- `tests/test_audio_doppler.cpp` — 14 new tests: defaults match
+  OpenAL spec, zero-velocity / co-located / disabled-factor /
+  non-positive-speed pass-throughs, source-approach and
+  source-recede sign conventions, listener-approach and
+  listener-recede sign conventions, perpendicular motion producing
+  no shift, both-approaching amplifies more than either alone,
+  `dopplerFactor` scaling, and the [−SS/DF, SS/DF] velocity clamp
+  for supersonic inputs staying finite and sign-correct.
+
+Per CLAUDE.md Rule 11: the Doppler formula is canonical textbook
+with no coefficients to fit, so the Formula Workbench flow (author
+via fit + export) doesn't apply — the module ships as hand-written
+math, matching the same treatment given to the distance-attenuation
+curves in the previous slice.
+
 ### 2026-04-20 Phase 10 audio — Distance attenuation curves
 
 First Phase 10 audio slice. Adds selectable distance-attenuation

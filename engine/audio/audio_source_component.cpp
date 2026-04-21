@@ -18,6 +18,7 @@ std::unique_ptr<Component> AudioSourceComponent::clone() const
     copy->maxDistance       = maxDistance;
     copy->rolloffFactor     = rolloffFactor;
     copy->attenuationModel  = attenuationModel;
+    copy->velocity          = velocity;
     copy->loop              = loop;
     copy->autoPlay          = autoPlay;
     copy->spatial           = spatial;

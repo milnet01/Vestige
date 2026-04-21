@@ -67,6 +67,11 @@ bool AudioEngine::initialize()
     // caller never explicitly set it.
     alDistanceModel(static_cast<ALenum>(alDistanceModelFor(m_distanceModel)));
 
+    // Push Doppler defaults so OpenAL's native shift matches the
+    // engine's CPU-side computeDopplerPitchRatio from the first frame.
+    alDopplerFactor(m_doppler.dopplerFactor);
+    alSpeedOfSound(m_doppler.speedOfSound);
+
     m_available = true;
     Logger::info("[AudioEngine] Initialized (" +
                  std::string(alcGetString(m_device, ALC_DEVICE_SPECIFIER)) +
@@ -128,7 +133,10 @@ void AudioEngine::updateListener(const glm::vec3& position,
     }
 
     alListener3f(AL_POSITION, position.x, position.y, position.z);
-    alListener3f(AL_VELOCITY, 0.0f, 0.0f, 0.0f);
+    alListener3f(AL_VELOCITY,
+                 m_listenerVelocity.x,
+                 m_listenerVelocity.y,
+                 m_listenerVelocity.z);
 
     // OpenAL orientation: forward (at) + up as 6 floats
     float orientation[6] = {
@@ -275,6 +283,34 @@ void AudioEngine::playSoundSpatial(const std::string& filePath,
 
     alSourcei(source, AL_BUFFER, static_cast<ALint>(buffer));
     alSource3f(source, AL_POSITION, position.x, position.y, position.z);
+    alSource3f(source, AL_VELOCITY, 0.0f, 0.0f, 0.0f);
+    alSourcef(source, AL_GAIN, volume);
+    alSourcei(source, AL_LOOPING, loop ? AL_TRUE : AL_FALSE);
+    alSourcef(source, AL_REFERENCE_DISTANCE, params.referenceDistance);
+    alSourcef(source, AL_MAX_DISTANCE,       params.maxDistance);
+    alSourcef(source, AL_ROLLOFF_FACTOR,     params.rolloffFactor);
+    alSourcei(source, AL_SOURCE_RELATIVE, AL_FALSE);
+    alSourcePlay(source);
+}
+
+void AudioEngine::playSoundSpatial(const std::string& filePath,
+                                   const glm::vec3& position,
+                                   const glm::vec3& velocity,
+                                   const AttenuationParams& params,
+                                   float volume,
+                                   bool loop)
+{
+    if (!m_available) return;
+
+    ALuint buffer = loadBuffer(filePath);
+    if (buffer == 0) return;
+
+    ALuint source = acquireSource();
+    if (source == 0) return;
+
+    alSourcei(source, AL_BUFFER, static_cast<ALint>(buffer));
+    alSource3f(source, AL_POSITION, position.x, position.y, position.z);
+    alSource3f(source, AL_VELOCITY, velocity.x, velocity.y, velocity.z);
     alSourcef(source, AL_GAIN, volume);
     alSourcei(source, AL_LOOPING, loop ? AL_TRUE : AL_FALSE);
     alSourcef(source, AL_REFERENCE_DISTANCE, params.referenceDistance);
@@ -317,6 +353,31 @@ void AudioEngine::setDistanceModel(AttenuationModel model)
     if (m_available)
     {
         alDistanceModel(static_cast<ALenum>(alDistanceModelFor(model)));
+    }
+}
+
+void AudioEngine::setDopplerFactor(float factor)
+{
+    // Clamp negatives — OpenAL rejects them with AL_INVALID_VALUE
+    // and our own pure-function math returns unity for factor <= 0
+    // anyway, so normalise to 0.0 (Doppler disabled) at the boundary.
+    m_doppler.dopplerFactor = (factor < 0.0f) ? 0.0f : factor;
+    if (m_available)
+    {
+        alDopplerFactor(m_doppler.dopplerFactor);
+    }
+}
+
+void AudioEngine::setSpeedOfSound(float speed)
+{
+    // Speed must be strictly positive; clamp to a small epsilon so
+    // OpenAL doesn't throw AL_INVALID_VALUE and our formula stays
+    // well-defined. Values <= 0 would also trip the pure-function
+    // guard in computeDopplerPitchRatio.
+    m_doppler.speedOfSound = (speed > 0.0f) ? speed : 1e-3f;
+    if (m_available)
+    {
+        alSpeedOfSound(m_doppler.speedOfSound);
     }
 }
 
