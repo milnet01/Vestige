@@ -9,6 +9,64 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-21 Phase 10 audio — Editor AudioPanel closes Phase 10 audio
+
+Tenth Phase 10 audio slice. Ships the last remaining bullet
+("Editor integration") and with it, all of Phase 10 audio.
+
+- `engine/editor/panels/audio_panel.{h,cpp}` — new `AudioPanel`
+  class following the `NavigationPanel` pattern: non-GL state
+  (mixer, ducking, zone lists, mute/solo sets, overlay toggle)
+  is exposed through getters so unit tests exercise every
+  mutator without an ImGui context.
+- Four tabs:
+  * **Mixer** — per-bus sliders (Master / Music / Voice / Sfx /
+    Ambient / UI), dialogue-duck trigger checkbox, attack /
+    release / floor sliders, live current-gain readout.
+  * **Sources** — iterates the active scene via
+    `Scene::forEachEntity`, displays each `AudioSourceComponent`
+    with per-entity Mute + Solo checkboxes, volume / pitch /
+    min-max-distance sliders, and the attenuation-model label.
+  * **Zones** — editor-draft reverb zones (name + center +
+    core-radius + falloff-band + preset combo) and ambient zones
+    (name + center + clip path + radii + max volume + priority);
+    add / remove / select with selection-shift-on-remove so the
+    selected index stays on the intended zone when an earlier
+    entry is removed.
+  * **Debug** — audio-availability indicator, distance model,
+    Doppler factor, speed of sound, HRTF mode + status +
+    dataset + available-dataset enumeration, viewport overlay
+    toggle for the zone falloff spheres.
+- `computeEffectiveSourceGain(entityId, bus)` — panel exposes
+  the routing math so the AudioSystem can consult it for
+  live playback gain decisions. Rules (matching every DAW's
+  convention): mute beats solo (hard kill), solo-exclusive
+  routing when any source is soloed, otherwise
+  `master · bus · duckGain` clamped to [0, 1].
+- Engine wiring: `Editor::setAudioSystem(AudioSystem*)` mirrors
+  `setNavigationSystem`. `Engine::initialize` calls
+  `setAudioSystem(m_systemRegistry.getSystem<AudioSystem>())`.
+  Editor's main draw loop calls `m_audioPanel.draw(m_audioSystem,
+  scene)` right after the NavigationPanel.
+- `tests/test_audio_panel.cpp` — 18 headless tests: defaults
+  (closed / empty zone lists / −1 selections / mixer unity /
+  duck untriggered at 1.0), open/close + toggle, reverb zone
+  add-returns-index + remove-shifts-selection-down +
+  remove-selected-clears-selection + out-of-range no-op, ambient
+  zone mirror of same invariants, mute/solo set state
+  operations + `hasAnySoloedSource` flag, effective-gain routing
+  (muted = 0, solo-exclusive, mute-beats-solo convention, bus ×
+  ducking product, [0, 1] clamp), and overlay toggle.
+
+This closes Phase 10 audio. The final audio suite covers:
+distance attenuation curves (Phase 10.1), Doppler shift
+(10.2), HRTF selection (10.3), material-based occlusion /
+obstruction (10.4), reverb zones (10.5), environmental ambient
+(10.6), dynamic music (10.7), mixer buses + ducking + voice
+eviction (10.8), streaming-music decode state machine (10.9),
+and now the editor surface (10.10). Ten slices, 173 new unit
+tests, 2384 tests passing overall.
+
 ### 2026-04-21 Phase 10 audio — Streaming-music decode state machine
 
 Ninth Phase 10 audio slice. Closes the "Audio engine integration"

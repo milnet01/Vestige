@@ -26,6 +26,7 @@
 #include "editor/panels/hdri_viewer_panel.h"
 #include "editor/panels/model_viewer_panel.h"
 #include "editor/panels/navigation_panel.h"
+#include "editor/panels/audio_panel.h"
 #include "editor/panels/ui_layout_panel.h"
 #include "editor/panels/template_dialog.h"
 #include "editor/prefab_system.h"
@@ -57,6 +58,7 @@ namespace Vestige
 
 class Camera;
 class EventBus;
+class AudioSystem;
 class FoliageManager;
 class NavigationSystem;
 class PerformanceProfiler;
@@ -202,6 +204,9 @@ public:
     /// @brief Stores a pointer to the NavigationSystem (for the Navigation panel).
     void setNavigationSystem(NavigationSystem* navSystem);
 
+    /// @brief Stores a pointer to the AudioSystem (for the Audio panel).
+    void setAudioSystem(AudioSystem* audioSystem);
+
     /// @brief Gets the terrain brush tool.
     TerrainBrush& getTerrainBrush();
 
@@ -239,6 +244,10 @@ public:
     /// @brief Gets the navigation (navmesh) panel.
     NavigationPanel& getNavigationPanel() { return m_navigationPanel; }
     const NavigationPanel& getNavigationPanel() const { return m_navigationPanel; }
+
+    /// @brief Gets the audio (mixer / zones / debug) panel.
+    AudioPanel& getAudioPanel() { return m_audioPanel; }
+    const AudioPanel& getAudioPanel() const { return m_audioPanel; }
 
     /// @brief Gets the UI layout / theme editor panel.
     UILayoutPanel& getUILayoutPanel() { return m_uiLayoutPanel; }
@@ -301,6 +310,7 @@ private:
     HdriViewerPanel m_hdriViewerPanel;
     ModelViewerPanel m_modelViewerPanel;
     NavigationPanel m_navigationPanel;
+    AudioPanel m_audioPanel;
     UILayoutPanel m_uiLayoutPanel;
     TemplateDialog m_templateDialog;
     BrushTool m_brushTool;
@@ -319,6 +329,7 @@ private:
     Terrain* m_terrain = nullptr;
     PerformanceProfiler* m_profiler = nullptr;
     NavigationSystem* m_navigationSystem = nullptr;
+    AudioSystem* m_audioSystem = nullptr;
     std::string m_assetPath;
 
     // Viewport bounds (stored from drawPanels, used next frame for click detection)

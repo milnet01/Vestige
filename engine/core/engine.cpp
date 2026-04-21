@@ -237,6 +237,7 @@ bool Engine::initialize(const EngineConfig& config)
         m_editor->setTerrain(m_terrain);
         m_editor->setProfiler(&m_profiler);
         m_editor->setNavigationSystem(m_systemRegistry.getSystem<NavigationSystem>());
+        m_editor->setAudioSystem(m_systemRegistry.getSystem<AudioSystem>());
         m_editor->getBrushPreview().init(config.assetPath);
     }
 

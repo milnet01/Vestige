@@ -1243,6 +1243,9 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
         // --- Navigation panel ---
         m_navigationPanel.draw(m_navigationSystem, scene);
 
+        // --- Audio panel ---
+        m_audioPanel.draw(m_audioSystem, scene);
+
         // --- UI Layout panel ---
         // Engine doesn't own a single "the" canvas — game projects attach
         // their own. The panel is still useful for inspecting an empty state
@@ -1771,6 +1774,11 @@ void Editor::setProfiler(PerformanceProfiler* profiler)
 void Editor::setNavigationSystem(NavigationSystem* navSystem)
 {
     m_navigationSystem = navSystem;
+}
+
+void Editor::setAudioSystem(AudioSystem* audioSystem)
+{
+    m_audioSystem = audioSystem;
 }
 
 PerformancePanel& Editor::getPerformancePanel()
