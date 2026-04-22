@@ -520,7 +520,15 @@ protected:
 
     void SetUp() override
     {
-        tmpPath = std::filesystem::temp_directory_path().string() + "/test_lut.vlut";
+        // Embed the per-test name so parallel ctest invocations (each
+        // running a different filter as its own process against the same
+        // build) do not clobber each other's /tmp/test_lut.vlut. CI's
+        // faster runners expose the race that single-threaded local runs
+        // happen to order benignly.
+        const auto* info = ::testing::UnitTest::GetInstance()->current_test_info();
+        const std::string name = std::string(info->test_suite_name()) + "_" + info->name();
+        tmpPath = (std::filesystem::temp_directory_path()
+                   / ("vestige_lut_" + name + ".vlut")).string();
     }
 
     void TearDown() override
