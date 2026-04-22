@@ -58,7 +58,7 @@ public:
     std::size_t clipCount() const { return m_clips.size(); }
 
     /// @brief Returns the names of all registered clips (declaration order).
-    std::vector<std::string> clipNames() const;
+    const std::vector<std::string>& clipNames() const;
 
     /// @brief Looks up a clip by name; returns nullptr if not found.
     const SpriteAnimationClip* findClip(const std::string& name) const;

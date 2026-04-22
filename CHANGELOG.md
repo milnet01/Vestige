@@ -9,6 +9,57 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-22 Post-Phase-10 audit fixes
+
+Mandatory post-phase audit (CLAUDE.md Rule 9) triggered by Phase 10 +
+Phase 10.5 completion. Scans: `tools/audit/audit.py -t 1 2 3`, cppcheck,
+clang-tidy, semgrep (`p/security-audit` + `p/c`), gitleaks (re-scoped
+to source only — `build/` artifacts excluded). 0 critical / 0 high /
+~15 actionable out of 1503 raw findings (~99% noise floor as expected
+for a mature codebase).
+
+**Real bug fix:**
+- `engine/audio/audio_music_stream.cpp` — `bugprone-branch-clone`:
+  `if (framesNeeded >= chunk)` and its else-arm both set
+  `frames32 = chunk`. Dead branching collapsed to a single assignment.
+  Behaviour unchanged; the vestigial branch was cleanup debt.
+
+**Integer-overflow hardening** — feature-index math in motion matching
+was computed as `int * int` before widening to `size_t`. Safe for
+current motion-DB sizes but fragile for future large DBs. Widened each
+operand to `size_t` before the multiply so pointer arithmetic no
+longer goes through int32:
+- `engine/animation/kd_tree.cpp` — 6 call sites (`reserve`,
+  `nth_element` lambda × 2, `splitValue` lookup, `searchRecursive`,
+  `bruteForceSearch`).
+- `engine/animation/motion_database.cpp` — 7 call sites across
+  `build`, `extractFeatures`, `search`'s linear-scan fallback, and
+  the mirrored-rebuild path.
+
+**Audit-surfaced perf / style:**
+- `engine/animation/sprite_animation.{h,cpp}` — `clipNames()` now
+  returns `const std::vector<std::string>&` instead of by-value
+  (avoids copy on every call; no callers outside the definition).
+- `engine/core/settings_editor.{h,cpp}` — `ApplyTargets` constructor
+  arg taken by const reference (was pass-by-value).
+- `engine/audio/audio_clip.cpp` — `MAX_AUDIO_FRAMES` constant uses
+  `48000ULL * 60 * 30` so the multiplication widens explicitly
+  instead of happening in int first.
+- `tests/test_first_run_wizard.cpp` — `FilterTmpDir::m_root` moved
+  to the constructor initializer list.
+
+**False positives documented in triage (no action):**
+`safe_math.h` ternary guard on `std::log`, `system_registry.h` cppcheck
+misparse of a function template as a member, `audio_clip.cpp`'s
+intentional `stb_vorbis.c` header-only include, 14 × clang-tidy
+`init-variables` on C-decoder output params, 100 × `shared_ptr` pattern
+hits on motion-matching owned clips, 88 × OpenGL-state unbind calls,
+576 × clang-tidy style (readability-math-missing-parentheses etc.
+per `feedback_clang_tidy_stop_chasing.md` — advisory, not gates),
+and 83 × gitleaks hits in `build/` CMake artifacts.
+
+All 2661 tests pass after fixes (build clean, 0 new warnings).
+
 ### 2026-04-22 Phase 10 — Live-apply sink wiring (slice 13.5d)
 
 Closes out Phase 10 settings. Wires the concrete production sinks

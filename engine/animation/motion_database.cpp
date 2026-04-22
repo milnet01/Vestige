@@ -57,7 +57,7 @@ void MotionDatabase::build(const FeatureSchema& schema,
     // Normalize the feature matrix in-place
     for (int f = 0; f < numFrames; ++f)
     {
-        m_normalizer.normalize(&m_features[static_cast<size_t>(f * m_numFeatures)],
+        m_normalizer.normalize(&m_features[static_cast<size_t>(f) * static_cast<size_t>(m_numFeatures)],
                                m_numFeatures);
     }
 
@@ -73,7 +73,8 @@ void MotionDatabase::build(const FeatureSchema& schema,
     {
         for (int d = 0; d < m_numFeatures; ++d)
         {
-            m_features[static_cast<size_t>(f * m_numFeatures + d)] *=
+            m_features[static_cast<size_t>(f) * static_cast<size_t>(m_numFeatures)
+                       + static_cast<size_t>(d)] *=
                 sqrtWeights[static_cast<size_t>(d)];
         }
     }
@@ -204,7 +205,7 @@ void MotionDatabase::sampleClip(int clipIdx, const AnimClipEntry& entry,
 void MotionDatabase::extractFeatures()
 {
     int numFrames = static_cast<int>(m_poses.size());
-    m_features.resize(static_cast<size_t>(numFrames * m_numFeatures), 0.0f);
+    m_features.resize(static_cast<size_t>(numFrames) * static_cast<size_t>(m_numFeatures), 0.0f);
 
     const auto& trajSamples = m_schema.getTrajectorySamples();
     int numTrajSamples = static_cast<int>(trajSamples.size());
@@ -271,7 +272,7 @@ void MotionDatabase::extractFeatures()
 
         FeatureExtractor::extract(m_schema, pose, rootPos, rootRotY,
                                   trajPositions.data(), trajDirections.data(),
-                                  &m_features[static_cast<size_t>(f * m_numFeatures)]);
+                                  &m_features[static_cast<size_t>(f) * static_cast<size_t>(m_numFeatures)]);
     }
 }
 
@@ -345,7 +346,8 @@ MotionSearchResult MotionDatabase::search(const float* query, uint32_t tagMask,
             for (int d = 0; d < m_numFeatures; ++d)
             {
                 float diff = normalizedQuery[static_cast<size_t>(d)]
-                           - m_features[static_cast<size_t>(i * m_numFeatures + d)];
+                           - m_features[static_cast<size_t>(i) * static_cast<size_t>(m_numFeatures)
+                                        + static_cast<size_t>(d)];
                 dist += diff * diff;
             }
 
@@ -485,7 +487,7 @@ void MotionDatabase::addMirroredFrames(
 
     for (int f = 0; f < numFrames; ++f)
     {
-        m_normalizer.normalize(&m_features[static_cast<size_t>(f * m_numFeatures)],
+        m_normalizer.normalize(&m_features[static_cast<size_t>(f) * static_cast<size_t>(m_numFeatures)],
                                m_numFeatures);
     }
 
@@ -494,7 +496,8 @@ void MotionDatabase::addMirroredFrames(
     {
         for (int d = 0; d < m_numFeatures; ++d)
         {
-            m_features[static_cast<size_t>(f * m_numFeatures + d)] *=
+            m_features[static_cast<size_t>(f) * static_cast<size_t>(m_numFeatures)
+                       + static_cast<size_t>(d)] *=
                 std::sqrt(weights[static_cast<size_t>(d)]);
         }
     }

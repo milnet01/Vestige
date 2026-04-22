@@ -213,9 +213,9 @@ class FilterTmpDir
 {
 public:
     FilterTmpDir()
+        : m_root(fs::temp_directory_path()
+                 / ("vestige_wizard_filter_" + std::to_string(::getpid())))
     {
-        m_root = fs::temp_directory_path()
-                 / ("vestige_wizard_filter_" + std::to_string(::getpid()));
         std::error_code ec;
         fs::remove_all(m_root, ec);
         fs::create_directories(m_root, ec);

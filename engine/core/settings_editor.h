@@ -75,7 +75,7 @@ public:
     /// Settings + applies them at bootstrap, then hands the same
     /// Settings to this editor). If the caller wants the sinks
     /// re-pushed on construction, call `forceLiveApply()` after.
-    SettingsEditor(Settings initial, ApplyTargets targets);
+    SettingsEditor(Settings initial, const ApplyTargets& targets);
 
     const Settings& pending() const { return m_pending; }
     const Settings& applied() const { return m_applied; }

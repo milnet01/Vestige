@@ -10,7 +10,7 @@
 namespace Vestige
 {
 
-SettingsEditor::SettingsEditor(Settings initial, ApplyTargets targets)
+SettingsEditor::SettingsEditor(Settings initial, const ApplyTargets& targets)
     : m_applied(initial)
     , m_pending(std::move(initial))
     , m_targets(targets)

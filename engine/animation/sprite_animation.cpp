@@ -22,7 +22,7 @@ void SpriteAnimation::addClip(SpriteAnimationClip clip)
     }
 }
 
-std::vector<std::string> SpriteAnimation::clipNames() const
+const std::vector<std::string>& SpriteAnimation::clipNames() const
 {
     return m_clipOrder;
 }

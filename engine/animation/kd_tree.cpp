@@ -28,7 +28,7 @@ void KDTree::build(const float* features, int numFrames, int numFeatures)
 
     // Pre-allocate nodes (upper bound: 2*numFrames for a complete binary tree)
     m_nodes.clear();
-    m_nodes.reserve(static_cast<size_t>(numFrames * 2));
+    m_nodes.reserve(static_cast<size_t>(numFrames) * 2);
 
     // Create root node
     m_nodes.push_back({});
@@ -54,18 +54,20 @@ void KDTree::buildRecursive(int nodeIndex, int start, int count, int depth)
 
     // Sort indices by the split dimension value and find the median
     int mid = count / 2;
+    const size_t numFeat = static_cast<size_t>(m_numFeatures);
+    const size_t splitDimZ = static_cast<size_t>(splitDim);
     std::nth_element(
         m_indices.begin() + start,
         m_indices.begin() + start + mid,
         m_indices.begin() + start + count,
-        [this, splitDim](int a, int b)
+        [this, numFeat, splitDimZ](int a, int b)
         {
-            return m_features[a * m_numFeatures + splitDim]
-                 < m_features[b * m_numFeatures + splitDim];
+            return m_features[static_cast<size_t>(a) * numFeat + splitDimZ]
+                 < m_features[static_cast<size_t>(b) * numFeat + splitDimZ];
         });
 
     int medianFrame = m_indices[static_cast<size_t>(start + mid)];
-    float splitValue = m_features[medianFrame * m_numFeatures + splitDim];
+    float splitValue = m_features[static_cast<size_t>(medianFrame) * numFeat + splitDimZ];
 
     // Create child nodes — push_back may reallocate m_nodes, so we must NOT
     // hold a reference to m_nodes[nodeIndex] across these calls.
@@ -156,7 +158,7 @@ void KDTree::searchRecursive(int nodeIndex, const float* query,
             }
 
             float dist = computeDistance(query,
-                &m_features[frameIdx * m_numFeatures]);
+                &m_features[static_cast<size_t>(frameIdx) * static_cast<size_t>(m_numFeatures)]);
 
             if (dist < best.cost)
             {
@@ -198,7 +200,7 @@ KDSearchResult KDTree::bruteForceSearch(const float* query, uint32_t tagMask,
                 continue;
         }
 
-        float dist = computeDistance(query, &m_features[i * m_numFeatures]);
+        float dist = computeDistance(query, &m_features[static_cast<size_t>(i) * static_cast<size_t>(m_numFeatures)]);
 
         if (dist < best.cost)
         {

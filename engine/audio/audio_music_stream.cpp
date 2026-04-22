@@ -104,17 +104,7 @@ StreamTickPlan planStreamTick(MusicStreamState& state, bool decoderAtEof)
     // natural unit. Clamp to a single chunk per tick so one slow
     // frame doesn't avalanche decoder work.
     const std::uint32_t chunk = std::max<std::uint32_t>(1, state.framesPerChunk);
-    std::uint32_t frames32;
-    if (framesNeeded >= chunk)
-    {
-        frames32 = chunk;
-    }
-    else
-    {
-        frames32 = chunk;  // round up to a full chunk
-    }
-
-    plan.framesToDecode = frames32;
+    plan.framesToDecode = chunk;
     return plan;
 }
 

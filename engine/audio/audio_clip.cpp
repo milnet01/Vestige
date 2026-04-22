@@ -24,7 +24,7 @@ namespace Vestige
 
 /// @brief Maximum audio duration in frames to prevent excessive memory allocation
 /// from malicious or corrupted audio files (CVE-2025-14369).
-static constexpr uint64_t MAX_AUDIO_FRAMES = 48000 * 60 * 30;  // ~30 minutes at 48kHz
+static constexpr uint64_t MAX_AUDIO_FRAMES = 48000ULL * 60 * 30;  // ~30 minutes at 48kHz
 static constexpr uint32_t MAX_AUDIO_CHANNELS = 8;
 static constexpr uint32_t MIN_SAMPLE_RATE = 8000;
 static constexpr uint32_t MAX_SAMPLE_RATE = 192000;
