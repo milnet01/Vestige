@@ -9,6 +9,63 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-22 Phase 10 — Settings editor panel (slice 13.5b)
+
+ImGui editor panel wrapping the `SettingsEditor` orchestrator.
+User-facing Settings UI now lives in the editor — reachable via
+`Help → Settings...`. Slice 13.5c adds click-to-rebind capture;
+slice 13.5d wires the live-apply sinks to the real subsystems.
+
+- `engine/editor/panels/settings_editor_panel.{h,cpp}` — five-tab
+  panel (Display / Audio / Controls / Gameplay / Accessibility)
+  + footer with per-category Restore + Restore All + Revert +
+  Apply buttons and a live dirty indicator.
+- Widgets per tab:
+  - **Display**: resolution inputs, fullscreen / vsync checkboxes,
+    quality preset combo, render-scale slider, Restore button.
+  - **Audio**: six bus-gain sliders (Master / Music / Voice / SFX
+    / Ambient / UI), HRTF toggle, Restore button.
+  - **Controls**: mouse sensitivity, invert Y, gamepad left +
+    right deadzone sliders. Three-column keybinding **table**
+    (Action / Primary / Secondary / Gamepad) with `(Rebind capture
+    lands in slice 13.5c)` placeholder note. Restore button.
+  - **Gameplay**: doc-stub; game projects mutate
+    `SettingsEditor::pending().gameplay` directly for their own UI.
+    Restore button.
+  - **Accessibility**: UI scale combo, high-contrast + reduced-motion
+    + subtitles-enabled checkboxes, subtitle-size combo, color-vision
+    filter combo, post-process accessibility toggles (DoF / motion
+    blur / fog + intensity slider), photosensitive safe-mode
+    section (shown when enabled: max flash alpha, shake scale,
+    max strobe Hz). Restore button.
+- Footer: dirty indicator (`All changes saved.` vs `Unsaved changes.`),
+  `Restore All Defaults`, `Revert` (disabled when clean), `Apply`
+  (disabled when clean, saves via `SettingsEditor::apply`).
+- Every widget mutation routes through `SettingsEditor::mutate`
+  so the live-apply contract holds once sinks are wired (13.5d).
+- `Editor::wireSettingsEditorPanel(editor*, inputMap*, path)` +
+  member `m_settingsEditorPanel`. `Help → Settings...` entry opens
+  it. `Help → First-Run Wizard` also added so users can rerun
+  onboarding without digging through settings.
+- `Engine` owns the `SettingsEditor` (std::unique_ptr). Constructs
+  it after loading `Settings` from disk; passes to the editor
+  panel via `wireSettingsEditorPanel`. Apply targets are null in
+  this slice (panel still works end-to-end for persistence, restore,
+  revert, apply; live-apply plumbing is the next slice).
+
+No new tests — the orchestrator tests from 13.5a cover the mutation
+surface, and ImGui panels are hard to unit-test cleanly without
+an ImGui context (the panel is a thin wrapper that forwards widget
+events into `SettingsEditor::mutate` calls, which are already
+exhaustively tested). Visual verification on the editor's
+`Help → Settings...` menu entry is the acceptance gate.
+
+Full suite 2661 passing (1 pre-existing skip).
+
+Next: slice 13.5c — click-to-rebind modal in the Controls tab, +
+slice 13.5d — live-apply sink wiring for audio / ui / renderer
+subsystems.
+
 ### 2026-04-22 Phase 10 — SettingsEditor orchestrator (slice 13.5a)
 
 Final slice of the Phase 10 settings chain begins. Ships the

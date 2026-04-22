@@ -11,6 +11,7 @@
 #include "core/input_manager.h"
 #include "core/first_person_controller.h"
 #include "core/settings.h"
+#include "core/settings_editor.h"
 #include "renderer/renderer.h"
 #include "renderer/camera.h"
 #include "scene/scene_manager.h"
@@ -144,6 +145,11 @@ private:
     ///        first-run wizard closes with completion flipped
     ///        (slice 14.4) or on explicit user Apply (later slices).
     Settings m_settings;
+
+    /// @brief Orchestrator behind the Settings UI panel (slice
+    ///        13.5a). Owned here so its lifetime matches the engine;
+    ///        the Editor receives a non-owning pointer for its panel.
+    std::unique_ptr<SettingsEditor> m_settingsEditor;
 
     // Cached pointers to domain system-owned subsystems (set during registration)
     EnvironmentForces* m_environmentForces = nullptr;

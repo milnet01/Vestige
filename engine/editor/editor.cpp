@@ -210,6 +210,13 @@ bool Editor::consumeWizardJustClosed()
     return v;
 }
 
+void Editor::wireSettingsEditorPanel(SettingsEditor* editor,
+                                      InputActionMap* inputMap,
+                                      std::filesystem::path settingsPath)
+{
+    m_settingsEditorPanel.initialize(editor, inputMap, std::move(settingsPath));
+}
+
 void Editor::prepareFrame()
 {
     if (!m_isInitialized)
@@ -1049,6 +1056,14 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
                 {
                     m_welcomePanel.open();
                 }
+                if (ImGui::MenuItem("Settings..."))
+                {
+                    m_settingsEditorPanel.open();
+                }
+                if (ImGui::MenuItem("First-Run Wizard"))
+                {
+                    m_firstRunWizard.openFromHelpMenu();
+                }
                 ImGui::EndMenu();
             }
 
@@ -1405,6 +1420,9 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
 
         // --- Welcome panel ---
         m_welcomePanel.draw();
+
+        // --- Settings editor panel (Phase 10 slice 13.5b) ---
+        m_settingsEditorPanel.draw();
 
         // --- Script editor panel (Phase 9E-3) ---
         m_scriptEditorPanel.draw();

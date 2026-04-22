@@ -290,6 +290,24 @@ bool Engine::initialize(const EngineConfig& config)
                 config.assetPath,
                 [this]() { this->setupDemoScene(); });
         }
+
+        // Construct the Settings orchestrator from the loaded state.
+        // Apply targets are null for now — the panel ships with
+        // persistence + per-category restore + Apply/Revert wired
+        // end-to-end, but live-apply-to-subsystems plumbing lands
+        // in a focused follow-on (sinks need live refs to the
+        // renderer / mixer / ui system / input map, some of which
+        // finish construction later in this function).
+        m_settingsEditor = std::make_unique<SettingsEditor>(
+            m_settings, SettingsEditor::ApplyTargets{});
+
+        if (m_editor)
+        {
+            m_editor->wireSettingsEditorPanel(
+                m_settingsEditor.get(),
+                /*inputMap=*/nullptr,    // input map wiring in 13.5c
+                Settings::defaultPath());
+        }
     }
 
     // Startup mode — editor (default) or play (CLI `--play`).

@@ -22,6 +22,7 @@
 #include "scripting/node_type_registry.h"
 #include "editor/panels/validation_panel.h"
 #include "editor/panels/first_run_wizard.h"
+#include "editor/panels/settings_editor_panel.h"
 #include "editor/panels/welcome_panel.h"
 #include "editor/panels/texture_viewer_panel.h"
 #include "editor/panels/hdri_viewer_panel.h"
@@ -255,6 +256,16 @@ public:
     ///        `Settings::saveAtomic`.
     bool consumeWizardJustClosed();
 
+    /// @brief Gets the Settings editor panel (Phase 10 slice 13.5b).
+    SettingsEditorPanel& getSettingsEditorPanel() { return m_settingsEditorPanel; }
+
+    /// @brief Wire the settings panel to the engine's
+    ///        `SettingsEditor` + input map + on-disk path. Called
+    ///        from `Engine::initialize` once all those exist.
+    void wireSettingsEditorPanel(SettingsEditor* editor,
+                                  InputActionMap* inputMap,
+                                  std::filesystem::path settingsPath);
+
     /// @brief Gets the visual script editor panel (Phase 9E-3).
     ScriptEditorPanel& getScriptEditorPanel() { return m_scriptEditorPanel; }
 
@@ -338,6 +349,7 @@ private:
     ValidationPanel m_validationPanel;
     WelcomePanel m_welcomePanel;
     FirstRunWizard m_firstRunWizard;
+    SettingsEditorPanel m_settingsEditorPanel;
     std::function<void()> m_applyDemoCallback;
     bool m_wizardWasOpenLastFrame = false;
     bool m_wizardJustClosedThisFrame = false;
