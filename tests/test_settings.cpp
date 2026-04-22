@@ -12,6 +12,7 @@
 
 #include "core/settings.h"
 #include "core/settings_apply.h"
+#include "core/settings_editor.h"
 #include "core/settings_migration.h"
 #include "input/input_bindings.h"
 #include "utils/atomic_write.h"
@@ -1462,4 +1463,290 @@ TEST(SettingsApplyInputBindings, ApplyFromSettingsControlsBlockIntegration)
     ASSERT_NE(p, nullptr);
     EXPECT_EQ(p->primary.device, InputDevice::Keyboard);
     EXPECT_EQ(p->primary.code,   256);
+}
+
+// ===== Slice 13.5 — SettingsEditor orchestrator =============================
+
+namespace
+{
+
+/// Shared recording sinks for every SettingsEditor test. Kept
+/// local to this TU so the wizard / apply tests don't see them.
+class Record13_5Display final : public DisplayApplySink
+{
+public:
+    int calls = 0;
+    int w = 0, h = 0; bool fs = false, vs = false;
+    void setVideoMode(int ww, int hh, bool ffs, bool vvs) override
+    {
+        w = ww; h = hh; fs = ffs; vs = vvs; ++calls;
+    }
+};
+
+class Record13_5Audio final : public AudioApplySink
+{
+public:
+    int calls = 0;
+    std::array<float, AudioBusCount> lastGains{};
+    void setBusGain(AudioBus bus, float gain) override
+    {
+        lastGains[static_cast<std::size_t>(bus)] = gain;
+        ++calls;
+    }
+};
+
+class Record13_5UIAccess final : public UIAccessibilityApplySink
+{
+public:
+    int calls = 0;
+    UIScalePreset scale = UIScalePreset::X1_0;
+    bool hc = false, rm = false;
+    void applyScaleContrastMotion(UIScalePreset s, bool h, bool r) override
+    {
+        scale = s; hc = h; rm = r; ++calls;
+    }
+};
+
+} // namespace
+
+TEST(SettingsEditor, InitialStateMatchesAppliedAndIsNotDirty)
+{
+    Settings s;
+    s.display.windowWidth = 1600;
+    s.audio.busGains[1]   = 0.42f;
+
+    SettingsEditor editor(s, {});
+    EXPECT_EQ(editor.applied(), s);
+    EXPECT_EQ(editor.pending(), s);
+    EXPECT_FALSE(editor.isDirty());
+}
+
+TEST(SettingsEditor, MutateDivergesPendingFromAppliedAndMarksDirty)
+{
+    Settings s;
+    SettingsEditor editor(s, {});
+
+    editor.mutate([](Settings& p) { p.display.renderScale = 0.75f; });
+    EXPECT_TRUE(editor.isDirty());
+    EXPECT_FLOAT_EQ(editor.pending().display.renderScale, 0.75f);
+    EXPECT_FLOAT_EQ(editor.applied().display.renderScale, 1.0f);
+}
+
+TEST(SettingsEditor, MutatePushesLiveThroughEveryConfiguredSink)
+{
+    Record13_5Display display;
+    Record13_5Audio   audio;
+    Record13_5UIAccess ui;
+
+    SettingsEditor::ApplyTargets t{};
+    t.display         = &display;
+    t.audio           = &audio;
+    t.uiAccessibility = &ui;
+
+    SettingsEditor editor(Settings{}, t);
+    editor.mutate([](Settings& p)
+    {
+        p.display.windowWidth        = 2560;
+        p.audio.busGains[3]          = 0.33f;
+        p.accessibility.highContrast = true;
+    });
+
+    // Every sink should see exactly one call (one mutation cycle).
+    EXPECT_EQ(display.calls, 1);
+    EXPECT_EQ(audio.calls,   static_cast<int>(AudioBusCount));
+    EXPECT_EQ(ui.calls,      1);
+    EXPECT_EQ(display.w,              2560);
+    EXPECT_FLOAT_EQ(audio.lastGains[3], 0.33f);
+    EXPECT_TRUE(ui.hc);
+}
+
+TEST(SettingsEditor, ApplyCommitsPendingToAppliedAndPersists)
+{
+    TmpDir tmp;
+    fs::path path = tmp.path() / "settings.json";
+
+    Settings initial;
+    SettingsEditor editor(initial, {});
+    editor.mutate([](Settings& p) { p.display.renderScale = 1.5f; });
+    ASSERT_TRUE(editor.isDirty());
+
+    SaveStatus s = editor.apply(path);
+    EXPECT_EQ(s, SaveStatus::Ok);
+    EXPECT_FALSE(editor.isDirty());
+    EXPECT_EQ(editor.applied(), editor.pending());
+
+    auto [reloaded, status] = Settings::loadFromDisk(path);
+    EXPECT_EQ(status, LoadStatus::Ok);
+    EXPECT_FLOAT_EQ(reloaded.display.renderScale, 1.5f);
+}
+
+TEST(SettingsEditor, ApplyWithFailedWriteKeepsEditorDirty)
+{
+    // Writing to a path whose parent does not exist succeeds today
+    // (AtomicWrite::writeFile creates parents). Simulate failure by
+    // passing a path that is itself an existing directory, which
+    // AtomicWrite can't overwrite as a file.
+    TmpDir tmp;
+    fs::path badDirPath = tmp.path() / "is_a_dir";
+    fs::create_directories(badDirPath);
+
+    SettingsEditor editor(Settings{}, {});
+    editor.mutate([](Settings& p) { p.display.renderScale = 2.0f; });
+    ASSERT_TRUE(editor.isDirty());
+
+    SaveStatus s = editor.apply(badDirPath);
+    EXPECT_NE(s, SaveStatus::Ok);
+    // A failed save leaves the editor still dirty — the user can
+    // retry or revert. Live state stays as it is (the subsystems
+    // already reflect pending from the mutate() call).
+    EXPECT_TRUE(editor.isDirty());
+}
+
+TEST(SettingsEditor, RevertRestoresPendingFromAppliedAndRepushes)
+{
+    Record13_5Display display;
+    SettingsEditor::ApplyTargets t{};
+    t.display = &display;
+
+    Settings initial;   // defaults
+    SettingsEditor editor(initial, t);
+    editor.mutate([](Settings& p) { p.display.windowWidth = 2560; });
+    ASSERT_TRUE(editor.isDirty());
+    EXPECT_EQ(display.w, 2560);   // live-applied
+
+    editor.revert();
+    EXPECT_FALSE(editor.isDirty());
+    EXPECT_EQ(editor.pending(), initial);
+    // Revert re-pushes through the sinks so subsystems roll back.
+    EXPECT_EQ(display.w, initial.display.windowWidth);
+}
+
+TEST(SettingsEditor, RestoreDisplayDefaultsResetsOnlyDisplay)
+{
+    Settings initial;
+    initial.display.renderScale = 0.5f;
+    initial.audio.busGains[1]   = 0.33f;
+    initial.accessibility.highContrast = true;
+
+    SettingsEditor editor(initial, {});
+    editor.restoreDisplayDefaults();
+
+    EXPECT_EQ(editor.pending().display, DisplaySettings{});
+    // Other categories untouched.
+    EXPECT_FLOAT_EQ(editor.pending().audio.busGains[1], 0.33f);
+    EXPECT_TRUE(editor.pending().accessibility.highContrast);
+}
+
+TEST(SettingsEditor, RestoreAudioDefaultsResetsOnlyAudio)
+{
+    Settings initial;
+    initial.display.renderScale = 0.5f;
+    initial.audio.busGains[1]   = 0.33f;
+
+    SettingsEditor editor(initial, {});
+    editor.restoreAudioDefaults();
+
+    EXPECT_EQ(editor.pending().audio, AudioSettings{});
+    EXPECT_FLOAT_EQ(editor.pending().display.renderScale, 0.5f);
+}
+
+TEST(SettingsEditor, RestoreAccessibilityDefaultsResetsOnlyAccessibility)
+{
+    Settings initial;
+    initial.display.renderScale        = 0.5f;
+    initial.accessibility.highContrast = true;
+    initial.accessibility.uiScalePreset = "2.0x";
+
+    SettingsEditor editor(initial, {});
+    editor.restoreAccessibilityDefaults();
+
+    EXPECT_EQ(editor.pending().accessibility, AccessibilitySettings{});
+    EXPECT_FLOAT_EQ(editor.pending().display.renderScale, 0.5f);
+}
+
+TEST(SettingsEditor, RestoreAllDefaultsResetsEverythingExceptOnboardingAndSchema)
+{
+    Settings initial;
+    initial.schemaVersion              = kCurrentSchemaVersion;
+    initial.display.renderScale        = 0.5f;
+    initial.audio.busGains[1]          = 0.33f;
+    initial.accessibility.highContrast = true;
+    initial.onboarding.hasCompletedFirstRun = true;
+    initial.onboarding.completedAt          = "2026-04-22T10:00:00Z";
+
+    SettingsEditor editor(initial, {});
+    editor.restoreAllDefaults();
+
+    EXPECT_EQ(editor.pending().display,       DisplaySettings{});
+    EXPECT_EQ(editor.pending().audio,         AudioSettings{});
+    EXPECT_EQ(editor.pending().accessibility, AccessibilitySettings{});
+    // Onboarding must survive — a full-reset shouldn't re-open the
+    // first-run wizard.
+    EXPECT_TRUE(editor.pending().onboarding.hasCompletedFirstRun);
+    EXPECT_EQ(editor.pending().onboarding.completedAt,
+              "2026-04-22T10:00:00Z");
+    // schemaVersion must also survive — resetting it to 0 would
+    // break the next load's migration path.
+    EXPECT_EQ(editor.pending().schemaVersion, kCurrentSchemaVersion);
+}
+
+TEST(SettingsEditor, PerCategoryRestoreIsLiveAppliedThroughSinks)
+{
+    Record13_5Display display;
+    SettingsEditor::ApplyTargets t{};
+    t.display = &display;
+
+    Settings initial;
+    initial.display.windowWidth = 2560;
+    SettingsEditor editor(initial, t);
+
+    int callsBefore = display.calls;
+    editor.restoreDisplayDefaults();
+
+    EXPECT_GT(display.calls, callsBefore);
+    // Sink must have received the default window width, not the 2560
+    // value the editor started with.
+    EXPECT_EQ(display.w, DisplaySettings{}.windowWidth);
+}
+
+TEST(SettingsEditor, DirtyTrackingAcrossMutateApplyRevertCycle)
+{
+    SettingsEditor editor(Settings{}, {});
+    EXPECT_FALSE(editor.isDirty());
+
+    editor.mutate([](Settings& p) { p.display.renderScale = 0.8f; });
+    EXPECT_TRUE(editor.isDirty());
+
+    TmpDir tmp;
+    editor.apply(tmp.path() / "settings.json");
+    EXPECT_FALSE(editor.isDirty());
+
+    editor.mutate([](Settings& p) { p.audio.busGains[0] = 0.5f; });
+    EXPECT_TRUE(editor.isDirty());
+
+    editor.revert();
+    EXPECT_FALSE(editor.isDirty());
+}
+
+TEST(SettingsEditor, RestoreControlsResetsInputMapWhenAttached)
+{
+    InputActionMap map;
+    {
+        InputAction a;
+        a.id        = "Jump";
+        a.primary   = InputBinding::key(32);
+        map.addAction(a);
+    }
+    // User remapped the action.
+    map.setPrimary("Jump", InputBinding::key(87));
+    ASSERT_EQ(map.findAction("Jump")->primary.code, 87);
+
+    SettingsEditor::ApplyTargets t{};
+    t.inputMap = &map;
+    SettingsEditor editor(Settings{}, t);
+    editor.restoreControlsDefaults();
+
+    // The action-registered default was key(32); after restore the
+    // map's primary should be back to 32 via resetToDefaults().
+    EXPECT_EQ(map.findAction("Jump")->primary.code, 32);
 }

@@ -9,6 +9,63 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-22 Phase 10 — SettingsEditor orchestrator (slice 13.5a)
+
+Final slice of the Phase 10 settings chain begins. Ships the
+`SettingsEditor` state machine that sits behind every UI — the
+load-bearing piece — and is fully headless-testable.
+
+- `engine/core/settings_editor.{h,cpp}` — `SettingsEditor`:
+  - Owns `m_applied` (last-committed, matches disk + subsystems)
+    and `m_pending` (user's in-progress edits).
+  - **Live-apply semantics**: every `mutate()` pushes the modified
+    `m_pending` through every configured sink so users see the
+    change immediately. `apply()` performs only the persistence
+    step (save to disk + advance `m_applied`); a failed write
+    leaves the editor still dirty so the user can retry / revert
+    without silent data loss.
+  - **Per-category restore granularity**: five dedicated reset
+    methods (`restoreDisplayDefaults`, `restoreAudioDefaults`,
+    `restoreControlsDefaults`, `restoreGameplayDefaults`,
+    `restoreAccessibilityDefaults`) plus `restoreAllDefaults`.
+    Granular so a user's `2.0×` scale + `high-contrast` survives
+    a single-category reset.
+  - **Onboarding + schemaVersion preservation across Restore All**:
+    a full reset does NOT clear `onboarding.hasCompletedFirstRun`
+    or revert `schemaVersion`, so clicking "Restore All Defaults"
+    cannot accidentally re-trigger the first-run wizard or break
+    the next load's migration path.
+  - `ApplyTargets` struct holds raw pointers to every apply sink
+    (display / audio / hrtf / ui-accessibility / renderer / subtitle
+    / photosensitive / input map). Any target may be null — caller
+    wires only what they want driven by this editor. Non-owning.
+  - `revert()` re-pushes `m_applied` through every sink so live
+    preview rolls back. `forceLiveApply()` is an escape hatch for
+    callers that want the editor to drive subsystems from scratch.
+  - `restoreControlsDefaults` / `restoreAllDefaults` also call
+    `InputActionMap::resetToDefaults()` when one is attached, so
+    the live rebind state follows the struct reset.
+
+Tests: 13 new in `tests/test_settings.cpp`:
+- Initial state matches applied, not dirty.
+- Mutate diverges pending, marks dirty.
+- Mutate pushes through every configured sink once per call.
+- Apply commits + persists + clears dirty; reloading from disk
+  round-trips the values.
+- Apply with failed write keeps editor dirty (retry path).
+- Revert restores from applied + re-pushes through sinks.
+- Per-category restores are isolated (only their section resets).
+- Restore All preserves onboarding + schemaVersion.
+- Per-category restore is live-applied through sinks.
+- Dirty tracking is correct across mutate/apply/revert cycles.
+- RestoreControls resets the attached InputActionMap's bindings.
+
+Full suite 2661 passing (1 pre-existing skip).
+
+Next (slice 13.5b): ImGui `SettingsEditorPanel` wiring the orchestrator
+to per-category widgets. Slice 13.5c adds the 3-column keybinding
+rebind dialog.
+
 ### 2026-04-22 Phase 10 — Input bindings extract + apply (slice 13.4)
 
 Bridges `Settings::controls.bindings` (the on-disk
