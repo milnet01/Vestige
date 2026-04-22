@@ -5,6 +5,11 @@
 /// @brief Phase 10.5 slice 14.2 — first-run onboarding wizard.
 #include "editor/panels/first_run_wizard.h"
 
+#include "editor/entity_factory.h"
+#include "scene/camera_component.h"
+#include "scene/entity.h"
+#include "scene/scene.h"
+
 #include <imgui.h>
 
 #include <algorithm>
@@ -76,6 +81,37 @@ std::vector<GameTemplateConfig> allWizardTemplates()
     auto more     = moreTemplates();
     featured.insert(featured.end(), more.begin(), more.end());
     return featured;
+}
+
+void applyEmptyScene(Scene& scene, ResourceManager& resources)
+{
+    scene.clearEntities();
+
+    // One ground plane, scaled up for a reasonable play area (matches
+    // the default TemplateDialog::applyTemplate ground sizing).
+    if (auto* ground = EntityFactory::createPlane(
+            scene, resources, glm::vec3(0.0f)))
+    {
+        ground->setName("Ground");
+        ground->transform.scale = glm::vec3(10.0f, 1.0f, 10.0f);
+    }
+
+    // One directional light.
+    if (auto* light = EntityFactory::createDirectionalLight(
+            scene, glm::vec3(5.0f, 10.0f, 5.0f)))
+    {
+        light->setName("Sun");
+    }
+
+    // One camera at eye height looking down -Z.
+    if (auto* cameraEntity = EntityFactory::createEmptyEntity(
+            scene, glm::vec3(0.0f, 1.7f, 5.0f)))
+    {
+        cameraEntity->setName("Camera");
+        auto* cam = cameraEntity->addComponent<CameraComponent>();
+        cam->projectionType = ProjectionType::PERSPECTIVE;
+        cam->fov            = 60.0f;
+    }
 }
 
 std::vector<GameTemplateConfig> filterByAvailability(

@@ -21,6 +21,7 @@
 #include "editor/panels/script_editor_panel.h"
 #include "scripting/node_type_registry.h"
 #include "editor/panels/validation_panel.h"
+#include "editor/panels/first_run_wizard.h"
 #include "editor/panels/welcome_panel.h"
 #include "editor/panels/texture_viewer_panel.h"
 #include "editor/panels/hdri_viewer_panel.h"
@@ -49,6 +50,8 @@
 #include <glad/gl.h>
 #include <glm/glm.hpp>
 
+#include <filesystem>
+#include <functional>
 #include <memory>
 #include <string>
 
@@ -227,6 +230,31 @@ public:
     /// @brief Gets the welcome panel.
     WelcomePanel& getWelcomePanel() { return m_welcomePanel; }
 
+    /// @brief Gets the first-run wizard (Phase 10.5 slice 14.2 / 14.4).
+    FirstRunWizard& getFirstRunWizard() { return m_firstRunWizard; }
+
+    /// @brief Wires the onboarding settings + asset root into the
+    ///        first-run wizard, and supplies a callback for the
+    ///        "Show me the Demo" button (dispatches to
+    ///        `Engine::setupDemoScene` in production).
+    ///
+    /// Slice 14.4 engine-wiring entry point. Editor does NOT own
+    /// `Settings`; `engine/core/engine.cpp` loads the struct and
+    /// passes the `onboarding` sub-struct pointer in here so the
+    /// wizard reads + writes in place. The caller is responsible
+    /// for saving `Settings` after the wizard closes with
+    /// `hasCompletedFirstRun == true` — Editor emits a
+    /// `m_wizardJustClosed` flag each frame that the engine layer
+    /// polls via `consumeWizardJustClosed()`.
+    void wireFirstRunWizard(OnboardingSettings* onboarding,
+                            std::filesystem::path assetRoot,
+                            std::function<void()> applyDemoCallback);
+
+    /// @brief Edge-triggered: true on the first frame after the
+    ///        wizard closed. Engine polls this to trigger a
+    ///        `Settings::saveAtomic`.
+    bool consumeWizardJustClosed();
+
     /// @brief Gets the visual script editor panel (Phase 9E-3).
     ScriptEditorPanel& getScriptEditorPanel() { return m_scriptEditorPanel; }
 
@@ -309,6 +337,10 @@ private:
     PerformancePanel m_performancePanel;
     ValidationPanel m_validationPanel;
     WelcomePanel m_welcomePanel;
+    FirstRunWizard m_firstRunWizard;
+    std::function<void()> m_applyDemoCallback;
+    bool m_wizardWasOpenLastFrame = false;
+    bool m_wizardJustClosedThisFrame = false;
     ScriptEditorPanel m_scriptEditorPanel;
     // Editor-owned node registry that feeds the ScriptEditorPanel. The engine
     // runtime doesn't currently spin up a ScriptingSystem (scripts are

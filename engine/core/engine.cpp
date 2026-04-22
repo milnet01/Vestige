@@ -263,6 +263,35 @@ bool Engine::initialize(const EngineConfig& config)
         m_editor->getBrushPreview().init(config.assetPath);
     }
 
+    // Phase 10.5 slice 14.4: load persistent Settings + wire the
+    // first-run wizard into the editor. The wizard auto-opens when
+    // `onboarding.hasCompletedFirstRun` is false (i.e. a fresh
+    // user); upgraders from pre-v2 builds get the legacy
+    // `welcome_shown` flag promoted by Settings::loadFromDisk so
+    // they are treated as already-onboarded.
+    {
+        auto [loaded, status] = Settings::loadFromDisk(Settings::defaultPath());
+        if (status == Vestige::LoadStatus::Ok ||
+            status == Vestige::LoadStatus::FileMissing)
+        {
+            m_settings = std::move(loaded);
+        }
+        else
+        {
+            Logger::warning("Settings: falling back to defaults after "
+                            "load failure (ParseError or MigrationError).");
+            m_settings = Settings{};
+        }
+
+        if (m_editor)
+        {
+            m_editor->wireFirstRunWizard(
+                &m_settings.onboarding,
+                config.assetPath,
+                [this]() { this->setupDemoScene(); });
+        }
+    }
+
     // Startup mode — editor (default) or play (CLI `--play`).
     if (m_editor && !config.startInPlayMode)
     {
@@ -1419,6 +1448,20 @@ void Engine::run()
                 FrameDiagnostics::capture(*m_renderer, *m_camera,
                     m_window->getWidth(), m_window->getHeight(),
                     m_timer->getFps(), m_timer->getDeltaTime());
+            }
+
+            // Slice 14.4: persist settings on the frame the first-run
+            // wizard closes (edge-triggered). Saves only when the
+            // onboarding state actually changed from opened → closed,
+            // so the frame cost is zero in steady state.
+            if (m_editor->consumeWizardJustClosed())
+            {
+                SaveStatus ss = m_settings.saveAtomic(Settings::defaultPath());
+                if (ss != SaveStatus::Ok)
+                {
+                    Logger::warning(
+                        "Settings: save after first-run wizard close failed.");
+                }
             }
 
             m_editor->endFrame();

@@ -165,6 +165,21 @@ std::vector<GameTemplateConfig> filterByAvailability(
     const std::filesystem::path& assetRoot);
 
 // --------------------------------------------------------------
+// Scene-op helpers used by slice 14.4 engine wiring
+// --------------------------------------------------------------
+
+class Scene;
+class ResourceManager;
+
+/// @brief Build a *literally empty* starting scene — one camera,
+///        one directional light, one ground plane. Q2 resolution
+///        in the design doc.
+///
+/// The wizard's "Start Empty" button emits `SceneOp::ApplyEmpty`;
+/// the UI layer calls this function to realise it.
+void applyEmptyScene(Scene& scene, ResourceManager& resources);
+
+// --------------------------------------------------------------
 // ImGui-binding panel
 // --------------------------------------------------------------
 

@@ -10,6 +10,7 @@
 #include "core/timer.h"
 #include "core/input_manager.h"
 #include "core/first_person_controller.h"
+#include "core/settings.h"
 #include "renderer/renderer.h"
 #include "renderer/camera.h"
 #include "scene/scene_manager.h"
@@ -136,6 +137,13 @@ private:
     VisualTestRunner m_visualTestRunner;
     bool m_visualTestMode = false;
     std::string m_assetPath;
+
+    /// @brief Persistent user settings loaded from
+    ///        `ConfigPath::getConfigFile("settings.json")` during
+    ///        `initialize()`. Saved atomically whenever the
+    ///        first-run wizard closes with completion flipped
+    ///        (slice 14.4) or on explicit user Apply (later slices).
+    Settings m_settings;
 
     // Cached pointers to domain system-owned subsystems (set during registration)
     EnvironmentForces* m_environmentForces = nullptr;

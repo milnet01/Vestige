@@ -18,13 +18,17 @@ void WelcomePanel::initialize(const std::string& configDir)
     m_configDir = configDir;
     m_flagPath = configDir + "/welcome_shown";
 
-    // Check if we've shown the welcome screen before
+    // Phase 10.5 slice 14.4: auto-open removed. First-run onboarding
+    // is now owned by FirstRunWizard; WelcomePanel remains as a
+    // keyboard-shortcut reference reachable via Help → Welcome Screen
+    // (Q3 resolution in PHASE10_5_FIRST_RUN_WIZARD_DESIGN.md).
+    //
+    // The legacy flag file is no longer read here — its role moved
+    // to Settings::loadFromDisk, which promotes its presence into
+    // `onboarding.hasCompletedFirstRun` and deletes it (slice 14.1).
+    // Retained as state so the Help → Welcome Screen action stays
+    // idempotent across re-opens.
     m_shownBefore = std::filesystem::exists(m_flagPath);
-
-    if (!m_shownBefore)
-    {
-        m_open = true;
-    }
 }
 
 void WelcomePanel::draw()

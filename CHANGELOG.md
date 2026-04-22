@@ -9,6 +9,50 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-22 Phase 10.5 — First-run wizard engine wiring (slice 14.4)
+
+Fourth and final slice of the first-run wizard work. Wires the
+wizard into the live engine and editor loops; Phase 10.5 onboarding
+flow is now end-to-end.
+
+- `Settings` now loads from `Settings::defaultPath()` during
+  `Engine::initialize`. ParseError / MigrationError falls back to
+  in-memory defaults + logs a warning; Ok and FileMissing both
+  honour the legacy-flag promotion shipped in 14.1.
+- `Engine` owns a `Settings m_settings` member, wires the
+  `onboarding` sub-struct into the editor's wizard via
+  `Editor::wireFirstRunWizard(onboarding*, assetRoot, applyDemoFn)`.
+  `applyDemoFn` is a `std::function` that captures `this` and calls
+  the private `setupDemoScene()`, so the wizard's "Show me the Demo"
+  option works without promoting the method to public.
+- `Editor::drawPanels` dispatches the wizard's returned `SceneOp`:
+  `ApplyEmpty` → new `applyEmptyScene(scene, resources)` helper
+  (one camera, one directional light, one ground plane — Q2
+  resolution); `ApplyDemo` → `m_applyDemoCallback()`; `ApplyTemplate`
+  → `TemplateDialog::applyTemplate` with the wizard's selected index
+  against `allWizardTemplates()`. Each op clears selection + marks
+  the file dirty.
+- Edge-triggered persistence: `Editor::consumeWizardJustClosed()`
+  returns true on the single frame the wizard transitioned from
+  open → closed. The engine's frame loop polls it and calls
+  `Settings::saveAtomic(Settings::defaultPath())` exactly once,
+  so the frame cost in steady state is zero.
+- `WelcomePanel::initialize` no longer auto-opens on first launch
+  (Q3 resolution). The keyboard-shortcuts reference is retained
+  as `Help → Welcome Screen`.
+
+Tests: 4 new in `tests/test_first_run_wizard.cpp` (design-doc target: 3):
+wizard auto-opens when onboarding is incomplete, stays closed when
+complete, re-opens via `openFromHelpMenu()` after completion with
+Step reset to Welcome, and `WelcomePanel::initialize` no longer
+auto-opens on a fresh config dir. Full suite 2617 passing (1
+pre-existing skip).
+
+Phase 10.5 onboarding is now feature-complete. Remaining Phase 10.5
+items (command palette, contextual help, guided tour, preview
+thumbnails, etc.) live in the larger Editor Usability Pass; this
+closes out the "first-run welcome dialog" roadmap bullet.
+
 ### 2026-04-22 Phase 10.5 — Template visibility filter (slice 14.3)
 
 Third slice of the first-run wizard. Adds the template availability

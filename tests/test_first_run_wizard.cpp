@@ -305,3 +305,68 @@ TEST(FirstRunWizardFilter, NonWizardMenuListsAllUnconditionally)
     const auto full = TemplateDialog::getTemplates();
     EXPECT_EQ(full.size(), 8u);
 }
+
+// ===== Slice 14.4 — Engine wiring behaviour (headless) ======================
+
+#include "editor/panels/welcome_panel.h"
+
+TEST(FirstRunWizardWiring, AutoOpensWhenOnboardingIncomplete)
+{
+    // Fresh user: defaults say !hasCompletedFirstRun → wizard should
+    // be open immediately after initialize().
+    OnboardingSettings ob;  // defaults
+    ASSERT_FALSE(ob.hasCompletedFirstRun);
+
+    FirstRunWizard w;
+    w.initialize(&ob);
+    EXPECT_TRUE(w.isOpen());
+    EXPECT_EQ(w.currentStep(), FirstRunWizardStep::Welcome);
+}
+
+TEST(FirstRunWizardWiring, DoesNotAutoOpenAfterCompletion)
+{
+    OnboardingSettings ob;
+    ob.hasCompletedFirstRun = true;
+    ob.completedAt = "2026-04-22T10:00:00Z";
+
+    FirstRunWizard w;
+    w.initialize(&ob);
+    EXPECT_FALSE(w.isOpen());
+}
+
+TEST(FirstRunWizardWiring, OpenFromHelpMenuReopensAfterCompletion)
+{
+    OnboardingSettings ob;
+    ob.hasCompletedFirstRun = true;
+
+    FirstRunWizard w;
+    w.initialize(&ob);
+    ASSERT_FALSE(w.isOpen());
+
+    w.openFromHelpMenu();
+    EXPECT_TRUE(w.isOpen());
+    // Help-menu re-open should always start at Welcome regardless
+    // of where the user left off previously.
+    EXPECT_EQ(w.currentStep(), FirstRunWizardStep::Welcome);
+}
+
+TEST(WelcomePanelSlice14_4, NoLongerAutoOpensOnFirstLaunch)
+{
+    // Slice 14.4 strips WelcomePanel's auto-open behaviour — first-run
+    // onboarding is now owned by FirstRunWizard, and WelcomePanel
+    // is a Help-menu-invoked keyboard-shortcut reference. Construct
+    // a panel with a config dir that does NOT contain welcome_shown
+    // and confirm isOpen() stays false after initialize().
+    FilterTmpDir tmp;  // reuses the RAII scratch dir from 14.3 tests
+    ASSERT_FALSE(fs::exists(tmp.root() / "welcome_shown"));
+
+    WelcomePanel p;
+    p.initialize(tmp.root().string());
+    EXPECT_FALSE(p.isOpen())
+        << "WelcomePanel should no longer auto-open on first launch "
+           "(the first-run wizard owns that duty now).";
+
+    // Explicit open via Help menu still works.
+    p.open();
+    EXPECT_TRUE(p.isOpen());
+}

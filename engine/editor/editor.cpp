@@ -193,6 +193,23 @@ void Editor::shutdown()
     Logger::info("Editor shut down");
 }
 
+void Editor::wireFirstRunWizard(OnboardingSettings* onboarding,
+                                 std::filesystem::path assetRoot,
+                                 std::function<void()> applyDemoCallback)
+{
+    m_firstRunWizard.initialize(onboarding, std::move(assetRoot));
+    m_applyDemoCallback = std::move(applyDemoCallback);
+    m_wizardWasOpenLastFrame = m_firstRunWizard.isOpen();
+    m_wizardJustClosedThisFrame = false;
+}
+
+bool Editor::consumeWizardJustClosed()
+{
+    const bool v = m_wizardJustClosedThisFrame;
+    m_wizardJustClosedThisFrame = false;
+    return v;
+}
+
 void Editor::prepareFrame()
 {
     if (!m_isInitialized)
@@ -1282,6 +1299,59 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
         // --- Template dialog ---
         m_templateDialog.draw(scene, m_resourceManager, renderer,
                                m_selection, m_fileMenu);
+
+        // --- First-run wizard (Phase 10.5 slice 14.4) ---
+        // Runs after the TemplateDialog draw so the two modals don't
+        // fight for popup ID. The wizard only renders when opened
+        // (auto on first launch, or on-demand from Help → First-Run
+        // Wizard). Dispatches the chosen SceneOp here since Editor
+        // owns scene + resources + renderer + the applyDemo callback.
+        if (scene && m_resourceManager)
+        {
+            const bool wasOpen = m_firstRunWizard.isOpen();
+            FirstRunWizardSceneOp op = m_firstRunWizard.draw();
+            switch (op)
+            {
+                case FirstRunWizardSceneOp::None:
+                    break;
+                case FirstRunWizardSceneOp::ApplyEmpty:
+                    applyEmptyScene(*scene, *m_resourceManager);
+                    m_fileMenu.markDirty();
+                    m_selection.clearSelection();
+                    break;
+                case FirstRunWizardSceneOp::ApplyDemo:
+                    if (m_applyDemoCallback)
+                    {
+                        m_applyDemoCallback();
+                        m_fileMenu.markDirty();
+                        m_selection.clearSelection();
+                    }
+                    break;
+                case FirstRunWizardSceneOp::ApplyTemplate:
+                {
+                    const auto all = allWizardTemplates();
+                    const int idx  = m_firstRunWizard.selectedTemplateIndex();
+                    if (idx >= 0 && idx < static_cast<int>(all.size()))
+                    {
+                        TemplateDialog::applyTemplate(
+                            all[static_cast<size_t>(idx)], scene,
+                            m_resourceManager, renderer);
+                        m_fileMenu.markDirty();
+                        m_selection.clearSelection();
+                    }
+                    break;
+                }
+            }
+
+            // Edge-trigger the "wizard just closed" flag so the engine
+            // layer can save Settings on the next poll.
+            const bool isOpen = m_firstRunWizard.isOpen();
+            if (wasOpen && !isOpen)
+            {
+                m_wizardJustClosedThisFrame = true;
+            }
+            m_wizardWasOpenLastFrame = isOpen;
+        }
 
         // --- Asset browser double-click routing ---
         if (m_assetBrowserPanel.hasPendingOpen())
