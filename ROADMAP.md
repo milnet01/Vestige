@@ -925,6 +925,7 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
 - [ ] Camera mode system (switchable projection and control schemes per scene/game)
 - [ ] First-person camera (existing — WASD + mouse look, perspective projection)
 - [ ] Third-person camera (follow entity with orbit controls, perspective projection)
+- [ ] **Runtime first-person ↔ third-person toggle** — single input binding (default `V`, matching Skyrim / GTA / Minecraft convention) that swaps the active CameraComponent between the player entity's first-person rig and the third-person follow rig without teardown. Shared entity / input / HUD state; only the camera source changes. Configurable: which input action triggers it, whether the toggle is allowed during combat / dialogue / vehicle mode, and per-scene opt-out for first-person-locked walkthroughs (e.g. biblical content). Smooth transition optional (lerp over 150 ms) or instant; respects `AccessibilitySettings.reducedMotion`. Edge case: third-person interior cameras clip walls — mitigate with a physics sphere-cast on the boom arm (standard third-person pattern) before hitting this phase's implementation.
 - [ ] Isometric camera (fixed-angle orthographic projection, click-to-move input, Diablo-style)
 - [ ] Top-down camera (overhead orthographic, suitable for strategy or map views)
 - [ ] Cinematic camera (spline-based flythrough for guided tours and cutscenes)
@@ -1187,8 +1188,42 @@ These systems transform Vestige from an exploration/walkthrough engine into a fu
   - Steam vents (periodic burst, push force on entities)
   - Collapsing floor/ceiling (trigger-based destruction + damage)
 
+### Replay System
+Recorded playbacks of gameplay for post-match review, sharing, and cinematic capture. Racing games are the canonical use case (ghost laps, leaderboard proofs, instant replay from a second angle), but the same infrastructure serves speed-running, sports, action games, and streamer highlights.
+
+- [ ] Input-recording replay (baseline)
+  - Record per-frame / per-tick input state (keyboard, mouse, gamepad axes + buttons) keyed to the fixed-timestep game tick so replay is bit-identical given deterministic physics
+  - Compact serialisation — delta-encode input frames (most ticks nothing changes), compress with zstd; target < 1 MB per minute for a racing game
+  - Replay file format versioned (`.vreplay`), carries engine version, scene ID, entity seed state at tick 0
+- [ ] State-snapshot replay (fallback when determinism is not guaranteed)
+  - Periodic full-state snapshots (every N seconds) + interpolation between snapshots for playback
+  - Used when non-deterministic subsystems (AI with thread pools, third-party physics tweaks) are active
+  - Larger files than input-recording but robust against determinism drift
+- [ ] Deterministic-physics contract for input-recording mode
+  - Fixed-timestep physics stepping (already present via Jolt integration); document which engine subsystems are deterministic and which are not
+  - Per-scene flag for whether the scene is replay-safe via input-recording (off by default until audited)
+  - CI check: record a short gameplay sample in debug builds, replay in release, assert position/orientation match within epsilon
+- [ ] Replay playback controls
+  - Play / pause / step / scrub along the timeline, 0.25× – 4× speed, reverse playback for input-recording mode (cached snapshots make this feasible)
+  - Free-flying "replay camera" independent of the player entity — orbit, dolly, spline-follow; respects the Camera Modes system (first-person / third-person / cinematic)
+  - Multi-angle replay — record from any camera and let the viewer swap between them post-race (broadcast TV pattern)
+- [ ] Ghost / split-time overlays (racing-specific)
+  - Overlay the fastest-lap replay as a translucent ghost car
+  - Per-sector split times shown in HUD against the ghost's time
+  - Support for importing ghost replays from other users (leaderboard integration)
+- [ ] Replay editor integration
+  - Editor panel to load / trim / export a replay
+  - Export to MP4 via ffmpeg pipeline (offline render pass — not real-time; renders the replay frame-by-frame at target resolution / frame rate with post-processing at full quality)
+  - Waypoint markers for interesting moments, exportable as replay "chapters"
+- [ ] Privacy & opt-in
+  - Replays record inputs + entity state — never phone home, only written locally
+  - Per-game opt-in: a game built with Vestige decides whether to enable recording at all (engine primitive is off by default)
+- [ ] Testing surface
+  - `ReplayRecorder` / `ReplayPlayer` unit tests with a headless scene
+  - Determinism harness: N-step input-recording replay against scripted inputs, bit-exact state assertion
+
 ### Milestone
-A complete gameplay loop: explore, fight enemies with upgradeable weapons, take damage and heal, collect items, and save progress. Environmental hazards add tension and puzzle elements. All systems configurable in the editor.
+A complete gameplay loop: explore, fight enemies with upgradeable weapons, take damage and heal, collect items, save progress, and review any match as a replay. Environmental hazards add tension and puzzle elements. All systems configurable in the editor.
 
 ---
 
