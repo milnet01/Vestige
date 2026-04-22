@@ -12,6 +12,7 @@
 #include "core/first_person_controller.h"
 #include "core/settings.h"
 #include "core/settings_editor.h"
+#include "input/input_bindings.h"
 #include "renderer/renderer.h"
 #include "renderer/camera.h"
 #include "scene/scene_manager.h"
@@ -150,6 +151,16 @@ private:
     ///        13.5a). Owned here so its lifetime matches the engine;
     ///        the Editor receives a non-owning pointer for its panel.
     std::unique_ptr<SettingsEditor> m_settingsEditor;
+
+    /// @brief Engine-owned input action map. Game code pushes its
+    ///        action definitions here before `initialize()` returns
+    ///        so the Settings editor's Controls tab can present the
+    ///        three-column rebind UI. Engine pre-registers a small
+    ///        demo set of actions (wireframe / tonemap / screenshot
+    ///        / fullscreen) that mirror the hardcoded F-key
+    ///        shortcuts — useful for exercising the rebind UI
+    ///        without a game project.
+    InputActionMap m_inputActionMap;
 
     // Cached pointers to domain system-owned subsystems (set during registration)
     EnvironmentForces* m_environmentForces = nullptr;

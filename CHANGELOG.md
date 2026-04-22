@@ -9,6 +9,46 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-22 Phase 10 — Click-to-rebind capture (slice 13.5c)
+
+Completes the interactive keybinding surface in the Settings editor.
+The Controls tab's three-column binding table now captures real
+keyboard / mouse input when a slot is clicked.
+
+- `settings_editor_panel.{h,cpp}` — rebind modal:
+  - Each cell in the Action / Primary / Secondary / Gamepad table
+    is now a button showing the current binding label. Clicking
+    enters capture mode for that action + slot.
+  - A modal popup prompts `Press any key or mouse button…` +
+    Esc-cancels + Delete-clears.
+  - Capture polls `ImGui::IsKeyPressed` for a curated set of
+    supported keys (A-Z, 0-9, F1-F12, Space, Enter, Tab, Backspace,
+    arrows, Shift/Ctrl/Alt) + `IsMouseClicked` for LMB/RMB/MMB.
+  - ImGuiKey → GLFW_KEY_* mapping table keeps the on-disk format
+    (GLFW keycodes carried in `InputBinding::code`) consistent
+    with the rest of the engine.
+  - Conflict detection: the modal shows a warning colour + message
+    if the captured binding already fires other actions. Does NOT
+    block assignment — intentional double-bindings are rare but valid.
+  - Capture is non-blocking for the Settings editor — the modal
+    runs as ImGui popup and the rest of the panel stays interactive.
+- `Engine` now owns an `InputActionMap m_inputActionMap` with four
+  demo actions pre-registered (`ToggleWireframe` → F1,
+  `CycleTonemap` → F2, `Screenshot` → F11, `ToggleFullscreen` →
+  F12) so the rebind UI has something to exercise out of the box.
+  Persisted keybindings from `Settings.controls.bindings` are
+  applied on top via `applyInputBindings` right after registration.
+- `Editor::wireSettingsEditorPanel` now receives the input map
+  pointer, so the Controls tab shows a populated table. Game
+  projects that build on Vestige can add / override / clear the
+  default actions before calling `Settings::apply`.
+
+Full suite 2661 passing (1 pre-existing skip). Phase 10 settings
+chain is now **feature complete end-to-end** through slices 13.1 →
+13.5c. Remaining follow-on: slice 13.5d (wiring the live-apply
+sinks to the real Renderer / AudioMixer / UISystem instances so
+mutations in the panel drive subsystems in real-time).
+
 ### 2026-04-22 Phase 10 — Settings editor panel (slice 13.5b)
 
 ImGui editor panel wrapping the `SettingsEditor` orchestrator.

@@ -19,6 +19,7 @@
 #pragma once
 
 #include <filesystem>
+#include <string>
 
 namespace Vestige
 {
@@ -53,11 +54,32 @@ private:
     void drawAccessibilityTab();
     void drawFooter();
 
+    /// @brief Capture-mode rebind modal (Phase 10 slice 13.5c).
+    ///
+    /// When the user clicks a Rebind button in the Controls tab,
+    /// the panel enters capture mode: `m_captureActionId` + the
+    /// three-way slot index are set, and the next frame renders
+    /// a modal that polls ImGui key-down state for the first
+    /// pressed key or mouse button, maps it to the equivalent
+    /// GLFW code, and writes the new binding via the editor.
+    void drawRebindModal();
+
+    enum class SlotIndex : int
+    {
+        Primary   = 0,
+        Secondary = 1,
+        Gamepad   = 2,
+    };
+
     SettingsEditor*         m_editor       = nullptr;
     InputActionMap*         m_inputMap     = nullptr;
     std::filesystem::path   m_settingsPath;
     bool                    m_open         = false;
     int                     m_activeTab    = 0;
+
+    // Rebind capture state — empty id = not capturing.
+    std::string             m_captureActionId;
+    SlotIndex               m_captureSlot  = SlotIndex::Primary;
 };
 
 } // namespace Vestige

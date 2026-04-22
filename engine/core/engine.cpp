@@ -298,6 +298,38 @@ bool Engine::initialize(const EngineConfig& config)
         // in a focused follow-on (sinks need live refs to the
         // renderer / mixer / ui system / input map, some of which
         // finish construction later in this function).
+        // Pre-register a small demo set of input actions that
+        // mirror the engine's hardcoded F-key shortcuts. Gives the
+        // Settings editor's Controls tab something to bind against
+        // without a game project. Projects that build on Vestige
+        // can add, override, or clear these before their first
+        // Settings apply.
+        {
+            auto addAction = [this](const std::string& id,
+                                     const std::string& label,
+                                     InputBinding primary)
+            {
+                InputAction a;
+                a.id       = id;
+                a.label    = label;
+                a.category = "Demo";
+                a.primary  = primary;
+                m_inputActionMap.addAction(a);
+            };
+            addAction("ToggleWireframe", "Toggle wireframe",
+                      InputBinding::key(GLFW_KEY_F1));
+            addAction("CycleTonemap",    "Cycle tonemapper",
+                      InputBinding::key(GLFW_KEY_F2));
+            addAction("Screenshot",      "Screenshot + diagnostics",
+                      InputBinding::key(GLFW_KEY_F11));
+            addAction("ToggleFullscreen","Toggle fullscreen",
+                      InputBinding::key(GLFW_KEY_F12));
+        }
+
+        // Apply persisted keybindings from Settings (if any) on top
+        // of the freshly-registered defaults.
+        applyInputBindings(m_settings.controls.bindings, m_inputActionMap);
+
         m_settingsEditor = std::make_unique<SettingsEditor>(
             m_settings, SettingsEditor::ApplyTargets{});
 
@@ -305,7 +337,7 @@ bool Engine::initialize(const EngineConfig& config)
         {
             m_editor->wireSettingsEditorPanel(
                 m_settingsEditor.get(),
-                /*inputMap=*/nullptr,    // input map wiring in 13.5c
+                &m_inputActionMap,
                 Settings::defaultPath());
         }
     }

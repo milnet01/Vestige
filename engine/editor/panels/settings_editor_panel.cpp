@@ -11,8 +11,15 @@
 
 #include <imgui.h>
 
+// GLFW key codes — matching the wire format used in
+// `InputBinding::code`. We include the GLFW header only for the
+// constant values; we do not call any GLFW functions from this
+// file (capture uses ImGui's backend-agnostic key state).
+#include <GLFW/glfw3.h>
+
 #include <cstddef>
 #include <string>
+#include <utility>
 
 namespace Vestige
 {
@@ -29,6 +36,96 @@ const char* kTabNames[] = {
 };
 
 constexpr std::size_t kNumTabs = sizeof(kTabNames) / sizeof(kTabNames[0]);
+
+/// @brief Minimal ImGuiKey → GLFW_KEY_* mapping for rebind capture.
+///
+/// Covers letters, digits, F-row, arrows, modifiers, and a few
+/// specials. Returns -1 for keys we don't have a GLFW equivalent
+/// for. Extending this table is safe — any new entry just makes
+/// more keys re-bindable.
+int imguiKeyToGlfwKey(ImGuiKey k)
+{
+    switch (k)
+    {
+        case ImGuiKey_A: return GLFW_KEY_A; case ImGuiKey_B: return GLFW_KEY_B;
+        case ImGuiKey_C: return GLFW_KEY_C; case ImGuiKey_D: return GLFW_KEY_D;
+        case ImGuiKey_E: return GLFW_KEY_E; case ImGuiKey_F: return GLFW_KEY_F;
+        case ImGuiKey_G: return GLFW_KEY_G; case ImGuiKey_H: return GLFW_KEY_H;
+        case ImGuiKey_I: return GLFW_KEY_I; case ImGuiKey_J: return GLFW_KEY_J;
+        case ImGuiKey_K: return GLFW_KEY_K; case ImGuiKey_L: return GLFW_KEY_L;
+        case ImGuiKey_M: return GLFW_KEY_M; case ImGuiKey_N: return GLFW_KEY_N;
+        case ImGuiKey_O: return GLFW_KEY_O; case ImGuiKey_P: return GLFW_KEY_P;
+        case ImGuiKey_Q: return GLFW_KEY_Q; case ImGuiKey_R: return GLFW_KEY_R;
+        case ImGuiKey_S: return GLFW_KEY_S; case ImGuiKey_T: return GLFW_KEY_T;
+        case ImGuiKey_U: return GLFW_KEY_U; case ImGuiKey_V: return GLFW_KEY_V;
+        case ImGuiKey_W: return GLFW_KEY_W; case ImGuiKey_X: return GLFW_KEY_X;
+        case ImGuiKey_Y: return GLFW_KEY_Y; case ImGuiKey_Z: return GLFW_KEY_Z;
+
+        case ImGuiKey_0: return GLFW_KEY_0; case ImGuiKey_1: return GLFW_KEY_1;
+        case ImGuiKey_2: return GLFW_KEY_2; case ImGuiKey_3: return GLFW_KEY_3;
+        case ImGuiKey_4: return GLFW_KEY_4; case ImGuiKey_5: return GLFW_KEY_5;
+        case ImGuiKey_6: return GLFW_KEY_6; case ImGuiKey_7: return GLFW_KEY_7;
+        case ImGuiKey_8: return GLFW_KEY_8; case ImGuiKey_9: return GLFW_KEY_9;
+
+        case ImGuiKey_F1:  return GLFW_KEY_F1;  case ImGuiKey_F2:  return GLFW_KEY_F2;
+        case ImGuiKey_F3:  return GLFW_KEY_F3;  case ImGuiKey_F4:  return GLFW_KEY_F4;
+        case ImGuiKey_F5:  return GLFW_KEY_F5;  case ImGuiKey_F6:  return GLFW_KEY_F6;
+        case ImGuiKey_F7:  return GLFW_KEY_F7;  case ImGuiKey_F8:  return GLFW_KEY_F8;
+        case ImGuiKey_F9:  return GLFW_KEY_F9;  case ImGuiKey_F10: return GLFW_KEY_F10;
+        case ImGuiKey_F11: return GLFW_KEY_F11; case ImGuiKey_F12: return GLFW_KEY_F12;
+
+        case ImGuiKey_Space:      return GLFW_KEY_SPACE;
+        case ImGuiKey_Enter:      return GLFW_KEY_ENTER;
+        case ImGuiKey_Tab:        return GLFW_KEY_TAB;
+        case ImGuiKey_Backspace:  return GLFW_KEY_BACKSPACE;
+        case ImGuiKey_Escape:     return GLFW_KEY_ESCAPE;
+        case ImGuiKey_LeftArrow:  return GLFW_KEY_LEFT;
+        case ImGuiKey_RightArrow: return GLFW_KEY_RIGHT;
+        case ImGuiKey_UpArrow:    return GLFW_KEY_UP;
+        case ImGuiKey_DownArrow:  return GLFW_KEY_DOWN;
+        case ImGuiKey_LeftShift:  return GLFW_KEY_LEFT_SHIFT;
+        case ImGuiKey_RightShift: return GLFW_KEY_RIGHT_SHIFT;
+        case ImGuiKey_LeftCtrl:   return GLFW_KEY_LEFT_CONTROL;
+        case ImGuiKey_RightCtrl:  return GLFW_KEY_RIGHT_CONTROL;
+        case ImGuiKey_LeftAlt:    return GLFW_KEY_LEFT_ALT;
+        case ImGuiKey_RightAlt:   return GLFW_KEY_RIGHT_ALT;
+
+        default: return -1;
+    }
+}
+
+/// @brief Iterate the subset of ImGuiKeys we support; return the
+///        first one just-pressed this frame, or `ImGuiKey_None`.
+ImGuiKey firstJustPressedKey()
+{
+    static const ImGuiKey kSupported[] = {
+        ImGuiKey_A, ImGuiKey_B, ImGuiKey_C, ImGuiKey_D, ImGuiKey_E,
+        ImGuiKey_F, ImGuiKey_G, ImGuiKey_H, ImGuiKey_I, ImGuiKey_J,
+        ImGuiKey_K, ImGuiKey_L, ImGuiKey_M, ImGuiKey_N, ImGuiKey_O,
+        ImGuiKey_P, ImGuiKey_Q, ImGuiKey_R, ImGuiKey_S, ImGuiKey_T,
+        ImGuiKey_U, ImGuiKey_V, ImGuiKey_W, ImGuiKey_X, ImGuiKey_Y,
+        ImGuiKey_Z,
+        ImGuiKey_0, ImGuiKey_1, ImGuiKey_2, ImGuiKey_3, ImGuiKey_4,
+        ImGuiKey_5, ImGuiKey_6, ImGuiKey_7, ImGuiKey_8, ImGuiKey_9,
+        ImGuiKey_F1, ImGuiKey_F2, ImGuiKey_F3, ImGuiKey_F4,
+        ImGuiKey_F5, ImGuiKey_F6, ImGuiKey_F7, ImGuiKey_F8,
+        ImGuiKey_F9, ImGuiKey_F10, ImGuiKey_F11, ImGuiKey_F12,
+        ImGuiKey_Space, ImGuiKey_Enter, ImGuiKey_Tab,
+        ImGuiKey_Backspace, ImGuiKey_LeftArrow, ImGuiKey_RightArrow,
+        ImGuiKey_UpArrow, ImGuiKey_DownArrow,
+        ImGuiKey_LeftShift, ImGuiKey_RightShift,
+        ImGuiKey_LeftCtrl, ImGuiKey_RightCtrl,
+        ImGuiKey_LeftAlt, ImGuiKey_RightAlt,
+    };
+    for (ImGuiKey k : kSupported)
+    {
+        if (ImGui::IsKeyPressed(k, /*repeat=*/false))
+        {
+            return k;
+        }
+    }
+    return ImGuiKey_None;
+}
 
 } // namespace
 
@@ -226,8 +323,8 @@ void SettingsEditorPanel::drawControlsTab()
     else
     {
         // Three-column layout (Primary / Secondary / Gamepad) per
-        // action. Rebind capture lands in slice 13.5c; this slice
-        // shows a read-only labelled table so the layout is in place.
+        // action. Click-to-rebind: each cell renders a button whose
+        // label is the current binding; clicking enters capture mode.
         if (ImGui::BeginTable("##keybinds", 4,
                                ImGuiTableFlags_BordersInnerV |
                                ImGuiTableFlags_RowBg))
@@ -238,6 +335,25 @@ void SettingsEditorPanel::drawControlsTab()
             ImGui::TableSetupColumn("Gamepad");
             ImGui::TableHeadersRow();
 
+            const auto slotButton = [&](const InputAction& a,
+                                         const InputBinding& b,
+                                         SlotIndex slot,
+                                         const char* uniqueTag)
+            {
+                std::string lbl = bindingDisplayLabel(b);
+                if (lbl.empty()) lbl = "-";
+                // ImGui needs a unique button id per cell — synthesise
+                // one from action id + slot tag.
+                const std::string id = "##rebind_" + a.id + "_" + uniqueTag;
+                if (ImGui::Button((lbl + id).c_str(),
+                                  ImVec2(ImGui::GetContentRegionAvail().x, 0.0f)))
+                {
+                    m_captureActionId = a.id;
+                    m_captureSlot     = slot;
+                    ImGui::OpenPopup("##rebind_modal");
+                }
+            };
+
             for (const InputAction& a : m_inputMap->actions())
             {
                 ImGui::TableNextRow();
@@ -245,16 +361,23 @@ void SettingsEditorPanel::drawControlsTab()
                 ImGui::TextUnformatted(a.label.empty() ? a.id.c_str()
                                                        : a.label.c_str());
                 ImGui::TableSetColumnIndex(1);
-                ImGui::TextUnformatted(bindingDisplayLabel(a.primary).c_str());
+                slotButton(a, a.primary,   SlotIndex::Primary,   "p");
                 ImGui::TableSetColumnIndex(2);
-                ImGui::TextUnformatted(bindingDisplayLabel(a.secondary).c_str());
+                slotButton(a, a.secondary, SlotIndex::Secondary, "s");
                 ImGui::TableSetColumnIndex(3);
-                ImGui::TextUnformatted(bindingDisplayLabel(a.gamepad).c_str());
+                slotButton(a, a.gamepad,   SlotIndex::Gamepad,   "g");
             }
             ImGui::EndTable();
         }
         ImGui::TextDisabled(
-            "(Rebind capture lands in slice 13.5c — click-to-rebind not yet wired.)");
+            "Click a binding cell to rebind it. Esc cancels; "
+            "any other key overwrites the slot.");
+
+        // Modal renders outside the table so ImGui's popup stack is
+        // happy. The modal runs every frame while capturing; a
+        // successful capture clears m_captureActionId and the modal
+        // closes itself.
+        drawRebindModal();
     }
 
     ImGui::Spacing();
@@ -401,6 +524,117 @@ void SettingsEditorPanel::drawAccessibilityTab()
     {
         m_editor->restoreAccessibilityDefaults();
     }
+}
+
+void SettingsEditorPanel::drawRebindModal()
+{
+    if (!ImGui::BeginPopupModal("##rebind_modal", nullptr,
+                                 ImGuiWindowFlags_AlwaysAutoResize |
+                                 ImGuiWindowFlags_NoTitleBar))
+    {
+        return;
+    }
+
+    ImGui::Text("Rebinding: %s", m_captureActionId.c_str());
+    const char* slotName =
+        (m_captureSlot == SlotIndex::Primary)   ? "Primary"
+      : (m_captureSlot == SlotIndex::Secondary) ? "Secondary"
+                                                : "Gamepad";
+    ImGui::Text("Slot: %s", slotName);
+    ImGui::Separator();
+    ImGui::TextWrapped(
+        "Press any key or mouse button to bind. Esc to cancel. "
+        "Delete to clear the slot.");
+
+    bool finished = false;
+
+    // Esc → cancel (leave binding unchanged).
+    if (ImGui::IsKeyPressed(ImGuiKey_Escape, false))
+    {
+        finished = true;
+    }
+    // Delete → explicit unbind.
+    else if (ImGui::IsKeyPressed(ImGuiKey_Delete, false))
+    {
+        if (m_editor && m_inputMap)
+        {
+            const std::string id   = m_captureActionId;
+            const SlotIndex   slot = m_captureSlot;
+            m_editor->mutate([](Settings&) { /* no Settings field flip — live action map */ });
+            switch (slot)
+            {
+                case SlotIndex::Primary:
+                    m_inputMap->setPrimary(id, InputBinding::none());   break;
+                case SlotIndex::Secondary:
+                    m_inputMap->setSecondary(id, InputBinding::none()); break;
+                case SlotIndex::Gamepad:
+                    m_inputMap->setGamepad(id, InputBinding::none());   break;
+            }
+        }
+        finished = true;
+    }
+    else
+    {
+        // Mouse capture — left / right / middle.
+        InputBinding captured = InputBinding::none();
+        if      (ImGui::IsMouseClicked(0)) captured = InputBinding::mouse(GLFW_MOUSE_BUTTON_LEFT);
+        else if (ImGui::IsMouseClicked(1)) captured = InputBinding::mouse(GLFW_MOUSE_BUTTON_RIGHT);
+        else if (ImGui::IsMouseClicked(2)) captured = InputBinding::mouse(GLFW_MOUSE_BUTTON_MIDDLE);
+
+        if (!captured.isBound())
+        {
+            // Keyboard capture — first supported key just pressed.
+            const ImGuiKey k = firstJustPressedKey();
+            if (k != ImGuiKey_None)
+            {
+                const int glfwCode = imguiKeyToGlfwKey(k);
+                if (glfwCode >= 0)
+                {
+                    captured = InputBinding::key(glfwCode);
+                }
+            }
+        }
+
+        if (captured.isBound() && m_editor && m_inputMap)
+        {
+            const std::string id   = m_captureActionId;
+            const SlotIndex   slot = m_captureSlot;
+            // Conflict display — show names of actions already using
+            // this binding. We don't block assignment; the user can
+            // intentionally double-bind a control (rare but valid).
+            const auto conflicts = m_inputMap->findConflicts(captured, id);
+            if (!conflicts.empty())
+            {
+                ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.0f, 1.0f),
+                    "Note: this binding is also assigned to other actions.");
+            }
+            switch (slot)
+            {
+                case SlotIndex::Primary:
+                    m_inputMap->setPrimary(id, captured);   break;
+                case SlotIndex::Secondary:
+                    m_inputMap->setSecondary(id, captured); break;
+                case SlotIndex::Gamepad:
+                    m_inputMap->setGamepad(id, captured);   break;
+            }
+            // Trigger a mutate so live-apply fires (the editor doesn't
+            // need to know a binding changed, but it will re-apply the
+            // (unchanged) Settings struct and the input map change is
+            // already reflected in the map itself).
+            if (m_editor)
+            {
+                m_editor->mutate([](Settings&) {});
+            }
+            finished = true;
+        }
+    }
+
+    if (finished)
+    {
+        m_captureActionId.clear();
+        ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndPopup();
 }
 
 void SettingsEditorPanel::drawFooter()
