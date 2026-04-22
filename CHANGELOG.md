@@ -9,6 +9,76 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-22 Phase 10 — Settings primitive + atomic-write + config-path (slice 13.1)
+
+First slice of the Settings system. Ships the persistence primitive
+itself — JSON schema v1, load / save / migrate / validate lifecycle,
+durable atomic writes, and the shared per-user config-path resolver.
+No engine wiring yet; slices 13.2 – 13.5 add per-subsystem apply
+paths.
+
+- `engine/utils/config_path.{h,cpp}` — `ConfigPath::getConfigDir()`
+  returns the Vestige per-user directory
+  (`$XDG_CONFIG_HOME/vestige/` → `$HOME/.config/vestige/` → `/tmp/vestige/`
+  on POSIX; `%LOCALAPPDATA%\Vestige\` via `SHGetKnownFolderPath` on
+  Windows). Factored out of `editor/recent_files.cpp` so Settings,
+  save-games, and any future persistence use one resolver.
+  `RecentFiles::getConfigDir` now forwards to the helper.
+- `engine/utils/atomic_write.{h,cpp}` — crash-safe file replacement
+  via tmp → fsync → rename → fsync-dir on POSIX, `MoveFileExW(MOVEFILE_
+  REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)` on Windows. A crash
+  mid-write leaves either the old file or the new one, never a
+  truncated hybrid. Status-code return (`Ok` / `TempWriteFailed` /
+  `FsyncFailed` / `RenameFailed` / `DirFsyncFailed`) so callers own
+  logging policy.
+- `engine/core/settings.{h,cpp}` — root `Settings` struct with five
+  sections (`display`, `audio`, `controls`, `gameplay`,
+  `accessibility`). `loadFromDisk` parses via
+  `JsonSizeCap::loadJsonWithSizeCap` (1 MB cap), runs the migration
+  chain, applies validation clamps, and returns a `LoadStatus`
+  (`Ok` / `FileMissing` / `ParseError` / `MigrationError`). A
+  corrupt file is moved to `<path>.corrupt` so the user can recover
+  it manually. `saveAtomic` serialises to JSON, hands off to
+  `AtomicWrite::writeFile`, and returns a `SaveStatus`.
+  `Settings::defaultPath()` resolves to
+  `$XDG_CONFIG_HOME/vestige/settings.json` on Linux.
+- `engine/core/settings_migration.{h,cpp}` — chained migration
+  scaffolding driven by the root `schemaVersion` integer. v1 is
+  current so the chain is a no-op today; the scaffolding is in
+  place so v1 → v2 slots in cleanly when the schema evolves.
+  Future-version files are refused (we do not downgrade).
+  Migrations must be idempotent.
+- Schema coverage (see `docs/PHASE10_SETTINGS_DESIGN.md` §4.3 for
+  the JSON shape):
+  - `display`: windowWidth/Height, fullscreen, vsync,
+    qualityPreset (low/medium/high/ultra/custom), renderScale.
+  - `audio`: six-bus gain table (master/music/voice/sfx/ambient/ui)
+    + HRTF toggle.
+  - `controls`: mouse sensitivity, invertY, gamepad deadzones,
+    keybinding array (scan-code wire format).
+  - `gameplay`: untyped `string→JsonValue` map — per-game values.
+  - `accessibility`: UI scale preset, high-contrast, reduced-motion,
+    subtitles, color-vision filter, photosensitive-safety caps,
+    post-process motion toggles (DoF / motion-blur / fog).
+- Validation: render scale clamped to [0.25, 2.0]; bus gains to
+  [0, 1]; mouse sensitivity to [0.1, 10.0]; gamepad deadzones to
+  [0, 0.9]; non-positive resolutions snap to 1280×720; unknown
+  uiScalePreset / subtitleSize / colorVisionFilter strings fall
+  back to defaults with a logged warning; malformed keybinding
+  entries (missing or wrongly-typed `id`) dropped silently.
+- Forward/backward compat: unknown JSON fields ignored on load;
+  missing fields get struct-initialiser defaults.
+- Tests: `tests/test_settings.cpp` — 36 tests covering
+  `ConfigPath` env-var policy, `AtomicWrite` success/parent-dir/
+  tmp-cleanup/empty-payload/`describe()`, `Settings` round-trip
+  (including partial JSON + unknown fields + gameplay map),
+  validation clamps for every bounded field, migration chain
+  (no-op / missing-version / future-version), and disk
+  load/save (corrupt-file sidecar, parent-dir creation).
+
+Next: slice 13.2 — `Window::setVideoMode` for runtime resolution /
+vsync / fullscreen changes + wiring the `display` block into Apply.
+
 ### 2026-04-22 Phase 10 — Settings system design approved (slices 13.1–13.5)
 
 Design-review checkpoint. `docs/PHASE10_SETTINGS_DESIGN.md` is

@@ -5,12 +5,12 @@
 /// @brief Recent files manager implementation.
 #include "editor/recent_files.h"
 #include "core/logger.h"
+#include "utils/config_path.h"
 #include "utils/json_size_cap.h"
 
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
-#include <cstdlib>
 #include <fstream>
 
 using json = nlohmann::json;
@@ -138,27 +138,9 @@ void RecentFiles::clear()
 
 fs::path RecentFiles::getConfigDir()
 {
-    const char* xdgConfig = std::getenv("XDG_CONFIG_HOME");
-    fs::path configDir;
-
-    if (xdgConfig && xdgConfig[0] != '\0')
-    {
-        configDir = fs::path(xdgConfig);
-    }
-    else
-    {
-        const char* home = std::getenv("HOME");
-        if (home)
-        {
-            configDir = fs::path(home) / ".config";
-        }
-        else
-        {
-            configDir = fs::path("/tmp");
-        }
-    }
-
-    return configDir / "vestige";
+    // Thin forward to the shared helper (slice 13.1) so Settings,
+    // save-games, and any other per-user persistence use one resolver.
+    return ConfigPath::getConfigDir();
 }
 
 fs::path RecentFiles::getStoragePath()
