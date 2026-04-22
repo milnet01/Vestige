@@ -1099,6 +1099,32 @@ A person who has never opened Vestige can open it, follow the first-run tour, cr
 
 ---
 
+## Phase 10.7: Accessibility + Audio integration
+**Goal:** Retrofit existing audio/accessibility consumers so they read from the engine-owned Settings stores introduced in Phase 10 slice 13.5e. Phase 10 delivered the Settings UI + the store-sink plumbing; this phase closes the loop by making every effect consumer actually consult those stores at runtime.
+
+**Context:** Slice 13.5e added `Engine::m_audioMixer`, `Engine::m_subtitleQueue`, `Engine::m_photosensitiveLimits` + `m_photosensitiveEnabled`. Settings drives these live via sinks, but downstream consumers don't read from them yet — user changes propagate to the store but not to the audio path / effect call sites.
+
+### Audio mixer → playback path
+- [ ] Pipe `Engine::getAudioMixer()` into the OpenAL gain resolution on every `AudioSource` so the user's per-bus gain choice actually affects playback. Currently each source applies its own local gain; bus gains sit in `AudioMixer` but the mixer is a standalone store the audio engine never consults.
+- [ ] Decide bus-gain multiplication order: master × bus × source. Document the chain so authors can reason about what a master=0.5, music=0.8, source=1.0 mix produces.
+- [ ] Editor-side `AudioPanel` currently owns a standalone `AudioMixer`. Either point the panel at `Engine::getAudioMixer()` (single source of truth) or delete the panel's local copy and route its UI through `SettingsEditor`.
+
+### Subtitle rendering
+- [ ] Wire `Engine::getSubtitleQueue().tick(dt)` into the per-frame game loop so enqueued captions actually count down and expire.
+- [ ] Render `queue.activeSubtitles()` through the existing HUD / `GameScreen` pipeline with the configured `SubtitleSizePreset`. Positioning, background-plate opacity, and per-`SubtitleCategory` styling are design questions for the rendering slice.
+- [ ] Wire audio-event triggers (dialogue, spatial sound cues) to enqueue captions automatically — first pass can be manual API calls from game code, follow-on adds a declarative `AudioClip` → caption map.
+
+### Photosensitive caps → consumers
+- [ ] Retrofit camera shake so its amplitude flows through `clampShakeAmplitude(amp, engine.photosensitiveEnabled(), engine.photosensitiveLimits())`. Affects kickback, explosions, earthquake triggers.
+- [ ] Retrofit flash overlays (hit flashes, screen-wipe transitions) through `clampFlashAlpha`.
+- [ ] Retrofit bloom post through `limitBloomIntensity` — the setting should feel like a dial, not a binary.
+- [ ] Retrofit strobe / flicker emitters (particle-system flicker, light-flicker components) through `clampStrobeHz`.
+
+### Milestone
+Toggling any Settings tab option (bus gain, subtitle size, photosensitive safe mode, HRTF) produces an immediately-observable change in running game state — not just in the store. Every effect consumer reads from `Engine` getters rather than hard-coded values or its own parameter struct. No "set in Settings, nothing happens" gap remains.
+
+---
+
 ## Phase 11: Gameplay Systems
 **Goal:** Core gameplay mechanics for action, survival, horror, and racing games — combat, inventory, health, saves, environmental interaction, and vehicle physics.
 

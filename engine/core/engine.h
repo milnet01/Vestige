@@ -5,6 +5,8 @@
 /// @brief Central engine class that owns and orchestrates all subsystems.
 #pragma once
 
+#include "accessibility/photosensitive_safety.h"
+#include "audio/audio_mixer.h"
 #include "core/event_bus.h"
 #include "core/window.h"
 #include "core/timer.h"
@@ -26,6 +28,7 @@
 #include "physics/physics_debug.h"
 #include "testing/visual_test_runner.h"
 #include "core/system_registry.h"
+#include "ui/subtitle.h"
 
 #include <memory>
 #include <string>
@@ -153,23 +156,55 @@ private:
     ///        the Editor receives a non-owning pointer for its panel.
     std::unique_ptr<SettingsEditor> m_settingsEditor;
 
-    /// @brief Concrete apply-sink instances wrapping live engine
-    ///        subsystems (slice 13.5d). Held here so their lifetime
-    ///        matches the subsystems they forward to. Construction
-    ///        order matters — each must be built after its target
-    ///        subsystem is constructed and before the SettingsEditor
-    ///        binds to them.
+    /// @brief Engine-owned stores (slice 13.5e) for subsystems that
+    ///        didn't previously have a central source-of-truth for
+    ///        Settings-driven values:
     ///
-    /// Coverage: display (Window), renderer accessibility (Renderer),
-    /// UI accessibility (UISystem). Audio + subtitle + HRTF +
-    /// photosensitive sinks need engine-owned mixer / queue / store
-    /// instances which don't exist yet (the engine doesn't currently
-    /// centralise audio playback gain or subtitle rendering state);
-    /// those land as part of a follow-on slice once AudioSystem /
-    /// UISystem expose the relevant stores.
+    /// - `m_audioMixer` holds authoritative bus gains. The editor's
+    ///   `AudioPanel` previously owned the only instance; now the
+    ///   engine owns one and the panel can be refitted to consult
+    ///   this copy if desired. Downstream audio playback (AudioSource
+    ///   gain resolution) still reads from per-source values — piping
+    ///   the mixer into the OpenAL gain path is a follow-on audio
+    ///   integration task (Phase 10.7).
+    ///
+    /// - `m_subtitleQueue` is the central caption queue. No consumer
+    ///   ticks or renders it yet; the HUD / game-screen wiring that
+    ///   calls `tick(dt)` and draws `activeSubtitles()` arrives with
+    ///   the subtitle render pass (tracked as a Phase 11 game-screen
+    ///   integration task). Settings routes `enabled` + `sizePreset`
+    ///   to it so the store is authoritative once rendering lands.
+    ///
+    /// - `m_photosensitiveLimits` + `m_photosensitiveEnabled` are the
+    ///   central caps store. Consumers (camera shake, flash overlay,
+    ///   strobe emitters, bloom post) read from these via the
+    ///   `clampFlashAlpha` / `clampShakeAmplitude` / `clampStrobeHz`
+    ///   / `limitBloomIntensity` helpers at their own call sites.
+    ///   Retrofitting each consumer to read from Engine is a Phase
+    ///   10.7 item.
+    AudioMixer              m_audioMixer;
+    SubtitleQueue           m_subtitleQueue;
+    PhotosensitiveLimits    m_photosensitiveLimits;
+    bool                    m_photosensitiveEnabled = false;
+
+    /// @brief Concrete apply-sink instances wrapping live engine
+    ///        subsystems (slices 13.5d and 13.5e). Held here so their
+    ///        lifetime matches the subsystems they forward to.
+    ///        Construction order matters — each must be built after
+    ///        its target subsystem is constructed and before the
+    ///        SettingsEditor binds to them.
+    ///
+    /// Full coverage: display (Window), renderer accessibility
+    /// (Renderer), UI accessibility (UISystem), audio bus gains
+    /// (AudioMixer), subtitles (SubtitleQueue), HRTF (AudioEngine via
+    /// AudioSystem), photosensitive caps (engine-owned store).
     std::unique_ptr<WindowDisplaySink>                   m_displaySink;
     std::unique_ptr<RendererAccessibilityApplySinkImpl>  m_rendererAccessSink;
     std::unique_ptr<UISystemAccessibilityApplySink>      m_uiAccessSink;
+    std::unique_ptr<AudioMixerApplySink>                 m_audioSink;
+    std::unique_ptr<SubtitleQueueApplySink>              m_subtitleSink;
+    std::unique_ptr<AudioEngineHrtfApplySink>            m_hrtfSink;
+    std::unique_ptr<PhotosensitiveStoreApplySink>        m_photosensitiveSink;
 
     /// @brief Engine-owned input action map. Game code pushes its
     ///        action definitions here before `initialize()` returns
@@ -232,6 +267,30 @@ public:
     /// @brief Access domain system-owned subsystems (via cached pointers).
     EnvironmentForces& getEnvironmentForces() { return *m_environmentForces; }
     Terrain& getTerrain() { return *m_terrain; }
+
+    /// @brief Engine-owned audio bus-gain table (slice 13.5e).
+    ///        Settings writes through `m_audioSink`; downstream audio
+    ///        playback will consult this once the OpenAL gain path is
+    ///        refitted (Phase 10.7 follow-on).
+    AudioMixer&         getAudioMixer()        { return m_audioMixer; }
+    const AudioMixer&   getAudioMixer() const  { return m_audioMixer; }
+
+    /// @brief Engine-owned caption queue (slice 13.5e). Game code
+    ///        enqueues captions; the not-yet-wired HUD render pass
+    ///        will tick + draw. Settings controls `enabled` via the
+    ///        subtitle sink and size preset via `setSizePreset`.
+    SubtitleQueue&       getSubtitleQueue()       { return m_subtitleQueue; }
+    const SubtitleQueue& getSubtitleQueue() const { return m_subtitleQueue; }
+
+    /// @brief Engine-owned photosensitive-safety state (slice 13.5e).
+    ///        Consumers read via these accessors and pass to the
+    ///        `clampFlashAlpha` / `clampShakeAmplitude` /
+    ///        `clampStrobeHz` / `limitBloomIntensity` helpers.
+    bool photosensitiveEnabled() const { return m_photosensitiveEnabled; }
+    const PhotosensitiveLimits& photosensitiveLimits() const
+    {
+        return m_photosensitiveLimits;
+    }
 };
 
 } // namespace Vestige

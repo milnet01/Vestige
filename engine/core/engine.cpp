@@ -351,6 +351,31 @@ bool Engine::initialize(const EngineConfig& config)
             m_uiAccessSink = std::make_unique<UISystemAccessibilityApplySink>(*ui);
             targets.uiAccessibility = m_uiAccessSink.get();
         }
+
+        // Slice 13.5e: remaining four sinks — audio bus gains (into
+        // the engine-owned AudioMixer), subtitles (into the
+        // engine-owned SubtitleQueue), HRTF (into AudioEngine via
+        // AudioSystem), and photosensitive caps (into the
+        // engine-owned enabled/limits pair). HRTF is conditional on
+        // AudioSystem being present; the others always exist now
+        // that the engine owns its own stores.
+        m_audioSink = std::make_unique<AudioMixerApplySink>(m_audioMixer);
+        targets.audio = m_audioSink.get();
+
+        m_subtitleSink = std::make_unique<SubtitleQueueApplySink>(m_subtitleQueue);
+        targets.subtitle = m_subtitleSink.get();
+
+        m_photosensitiveSink = std::make_unique<PhotosensitiveStoreApplySink>(
+            &m_photosensitiveEnabled, &m_photosensitiveLimits);
+        targets.photosensitive = m_photosensitiveSink.get();
+
+        if (AudioSystem* audio = m_systemRegistry.getSystem<AudioSystem>())
+        {
+            m_hrtfSink = std::make_unique<AudioEngineHrtfApplySink>(
+                audio->getAudioEngine());
+            targets.audioHrtf = m_hrtfSink.get();
+        }
+
         targets.inputMap = &m_inputActionMap;
 
         m_settingsEditor = std::make_unique<SettingsEditor>(

@@ -5,6 +5,7 @@
 /// @brief Apply layer between Settings and engine subsystems — display.
 #include "core/settings_apply.h"
 
+#include "audio/audio_engine.h"
 #include "core/logger.h"
 #include "core/settings.h"
 #include "core/window.h"
@@ -210,6 +211,16 @@ void applyAudioHrtf(const AudioSettings& audio, AudioHrtfApplySink& sink)
     sink.setHrtfMode(audio.hrtfEnabled ? HrtfMode::Auto : HrtfMode::Disabled);
 }
 
+AudioEngineHrtfApplySink::AudioEngineHrtfApplySink(AudioEngine& engine)
+    : m_engine(engine)
+{
+}
+
+void AudioEngineHrtfApplySink::setHrtfMode(HrtfMode mode)
+{
+    m_engine.setHrtfMode(mode);
+}
+
 // ================================================================
 // Slice 13.3b — Photosensitive safety apply
 // ================================================================
@@ -226,6 +237,30 @@ void applyPhotosensitiveSafety(const AccessibilitySettings& access,
     limits.maxStrobeHz         = w.maxStrobeHz;
     limits.bloomIntensityScale = w.bloomIntensityScale;
     sink.setPhotosensitiveLimits(limits);
+}
+
+PhotosensitiveStoreApplySink::PhotosensitiveStoreApplySink(
+    bool* enabled, PhotosensitiveLimits* limits)
+    : m_enabled(enabled)
+    , m_limits(limits)
+{
+}
+
+void PhotosensitiveStoreApplySink::setPhotosensitiveEnabled(bool enabled)
+{
+    if (m_enabled)
+    {
+        *m_enabled = enabled;
+    }
+}
+
+void PhotosensitiveStoreApplySink::setPhotosensitiveLimits(
+    const PhotosensitiveLimits& limits)
+{
+    if (m_limits)
+    {
+        *m_limits = limits;
+    }
 }
 
 // ================================================================

@@ -9,6 +9,71 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-22 Phase 10 — Slice 13.5e: remaining live-apply sink wiring
+
+Closes every `SettingsEditor::ApplyTargets` slot. Before this slice,
+audio / subtitle / HRTF / photosensitive sinks were abstract-only:
+the design was in place but the engine had no central stores for
+them to write into. This slice adds those stores as `Engine`
+members, introduces the two missing concrete sinks, and routes
+all seven sinks through `SettingsEditor` at construction.
+
+**Engine-owned stores** (`engine/core/engine.{h,cpp}`):
+- `m_audioMixer` — authoritative bus-gain table. Previously only the
+  editor's `AudioPanel` owned an `AudioMixer`; now the engine owns
+  one and exposes it via `getAudioMixer()`.
+- `m_subtitleQueue` — central caption queue. Game code enqueues
+  captions; the not-yet-wired HUD render pass will tick + draw.
+- `m_photosensitiveLimits` + `m_photosensitiveEnabled` — central
+  photosensitive-safety state. Read via `photosensitiveLimits()` +
+  `photosensitiveEnabled()`; consumers pass these to the existing
+  `clampFlashAlpha` / `clampShakeAmplitude` / `clampStrobeHz` /
+  `limitBloomIntensity` helpers.
+
+**New concrete sinks** (`engine/core/settings_apply.{h,cpp}`):
+- `AudioEngineHrtfApplySink` — wraps `AudioEngine::setHrtfMode` so
+  the HRTF toggle actually reaches OpenAL. Safe on non-initialized
+  AudioEngine (the underlying `applyHrtfSettings` guards with
+  `m_available`).
+- `PhotosensitiveStoreApplySink` — writes `enabled` + `limits` to
+  pointers into the engine's stores. Null-pointer tolerant for test
+  cases that only care about orchestration calls.
+
+**Engine wiring** (`Engine::initialize`):
+- Constructs `AudioMixerApplySink`, `SubtitleQueueApplySink`, and
+  `PhotosensitiveStoreApplySink` unconditionally (the stores always
+  exist).
+- Constructs `AudioEngineHrtfApplySink` conditionally on the
+  `AudioSystem` being present in the registry — HRTF requires
+  AudioEngine access.
+- All four sinks land in `ApplyTargets` alongside the existing
+  display / renderer-accessibility / UI-accessibility / input sinks.
+
+**New tests** (`tests/test_settings.cpp`): 5 additions —
+- `PhotosensitiveStoreApplySinkWritesEnabledAndLimits`
+- `PhotosensitiveStoreApplySinkTolerantOfNullPointers`
+- `PhotosensitiveStoreApplySinkRoundTripsFromSettings`
+- `AudioEngineHrtfApplySinkForwardsMode`
+- `AudioHrtfApplyPicksAutoWhenEnabled`
+
+**Follow-on scope (Phase 10.7 on ROADMAP.md).** The stores are
+authoritative but downstream consumers don't read from them yet:
+- AudioSource playback doesn't multiply in `AudioMixer` bus gains
+  — the OpenAL gain resolution needs retrofitting.
+- `SubtitleQueue::tick` isn't called from the per-frame loop,
+  and no HUD render reads `activeSubtitles()`.
+- Photosensitive clamps are called at call sites that pass their
+  own local `PhotosensitiveLimits` (usually default-constructed),
+  not the engine's central store.
+
+These consumer retrofits are a separate phase because each affects
+multiple unrelated files and warrants its own testing surface.
+
+Full suite 2666 passing (up from 2661 with the 5 new sink tests;
+build clean, 0 warnings).
+
+**Phase 10 settings chain — all 7 ApplyTargets slots now live.**
+
 ### 2026-04-22 Post-Phase-10 audit fixes
 
 Mandatory post-phase audit (CLAUDE.md Rule 9) triggered by Phase 10 +

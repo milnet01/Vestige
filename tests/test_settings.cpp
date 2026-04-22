@@ -10,6 +10,7 @@
 
 #include <gtest/gtest.h>
 
+#include "audio/audio_engine.h"
 #include "core/settings.h"
 #include "core/settings_apply.h"
 #include "core/settings_editor.h"
@@ -1221,6 +1222,99 @@ TEST(SettingsApply, SubtitleQueueApplySinkActuallyMutatesQueueState)
 
     sink.setSubtitlesEnabled(false);
     EXPECT_FALSE(sink.subtitlesEnabled());
+}
+
+// ===== Slice 13.5e — Photosensitive store sink + HRTF sink ==================
+
+TEST(SettingsApply, PhotosensitiveStoreApplySinkWritesEnabledAndLimits)
+{
+    bool                 enabled = false;
+    PhotosensitiveLimits limits{};
+    PhotosensitiveStoreApplySink sink(&enabled, &limits);
+
+    PhotosensitiveLimits newLimits;
+    newLimits.maxFlashAlpha       = 0.1f;
+    newLimits.shakeAmplitudeScale = 0.2f;
+    newLimits.maxStrobeHz         = 1.5f;
+    newLimits.bloomIntensityScale = 0.4f;
+
+    sink.setPhotosensitiveEnabled(true);
+    sink.setPhotosensitiveLimits(newLimits);
+
+    EXPECT_TRUE(enabled);
+    EXPECT_FLOAT_EQ(limits.maxFlashAlpha,       0.1f);
+    EXPECT_FLOAT_EQ(limits.shakeAmplitudeScale, 0.2f);
+    EXPECT_FLOAT_EQ(limits.maxStrobeHz,         1.5f);
+    EXPECT_FLOAT_EQ(limits.bloomIntensityScale, 0.4f);
+}
+
+TEST(SettingsApply, PhotosensitiveStoreApplySinkTolerantOfNullPointers)
+{
+    // Defensive: a sink built with null pointers must not crash. Tests
+    // construct this path when they want to verify the orchestrator
+    // calls the sink but don't care about the downstream writes.
+    PhotosensitiveStoreApplySink sink(nullptr, nullptr);
+    sink.setPhotosensitiveEnabled(true);
+
+    PhotosensitiveLimits any;
+    sink.setPhotosensitiveLimits(any);
+    SUCCEED();
+}
+
+TEST(SettingsApply, PhotosensitiveStoreApplySinkRoundTripsFromSettings)
+{
+    // End-to-end: load a Settings, push through the store sink, verify
+    // both flag + all four caps populated the engine-side state.
+    Settings s;
+    s.accessibility.photosensitiveSafety.enabled             = true;
+    s.accessibility.photosensitiveSafety.maxFlashAlpha       = 0.15f;
+    s.accessibility.photosensitiveSafety.shakeAmplitudeScale = 0.30f;
+    s.accessibility.photosensitiveSafety.maxStrobeHz         = 2.5f;
+    s.accessibility.photosensitiveSafety.bloomIntensityScale = 0.55f;
+
+    bool                 enabled = false;
+    PhotosensitiveLimits limits{};
+    PhotosensitiveStoreApplySink sink(&enabled, &limits);
+
+    applyPhotosensitiveSafety(s.accessibility, sink);
+
+    EXPECT_TRUE(enabled);
+    EXPECT_FLOAT_EQ(limits.maxFlashAlpha,       0.15f);
+    EXPECT_FLOAT_EQ(limits.shakeAmplitudeScale, 0.30f);
+    EXPECT_FLOAT_EQ(limits.maxStrobeHz,         2.5f);
+    EXPECT_FLOAT_EQ(limits.bloomIntensityScale, 0.55f);
+}
+
+TEST(SettingsApply, AudioEngineHrtfApplySinkForwardsMode)
+{
+    // AudioEngine default-constructs in a safe not-yet-initialized
+    // state; setHrtfMode updates the stored mode and bails before
+    // touching ALC if !m_available, so this test runs headless.
+    AudioEngine engine;
+    AudioEngineHrtfApplySink sink(engine);
+
+    sink.setHrtfMode(HrtfMode::Forced);
+    EXPECT_EQ(engine.getHrtfSettings().mode, HrtfMode::Forced);
+
+    sink.setHrtfMode(HrtfMode::Disabled);
+    EXPECT_EQ(engine.getHrtfSettings().mode, HrtfMode::Disabled);
+}
+
+TEST(SettingsApply, AudioHrtfApplyPicksAutoWhenEnabled)
+{
+    // applyAudioHrtf translates the bool Settings flag to HrtfMode:
+    // true → Auto (driver heuristic), false → Disabled.
+    AudioEngine engine;
+    AudioEngineHrtfApplySink sink(engine);
+
+    AudioSettings audio;
+    audio.hrtfEnabled = true;
+    applyAudioHrtf(audio, sink);
+    EXPECT_EQ(engine.getHrtfSettings().mode, HrtfMode::Auto);
+
+    audio.hrtfEnabled = false;
+    applyAudioHrtf(audio, sink);
+    EXPECT_EQ(engine.getHrtfSettings().mode, HrtfMode::Disabled);
 }
 
 // ===== Slice 13.4 — Input bindings extract + apply ==========================

@@ -43,6 +43,7 @@ class Window;                    // core/window.h
 class UISystem;                  // systems/ui_system.h
 class Renderer;                  // renderer/renderer.h
 class SubtitleQueue;             // ui/subtitle.h
+class AudioEngine;               // audio/audio_engine.h
 
 /// @brief Minimal interface for anything that can accept a video-mode
 ///        change from the Settings apply path. Implemented by
@@ -273,6 +274,20 @@ public:
 /// @brief Pushes the HRTF toggle onto a sink.
 void applyAudioHrtf(const AudioSettings& audio, AudioHrtfApplySink& sink);
 
+/// @brief Production sink wrapping a live `AudioEngine`. Forwards to
+///        `AudioEngine::setHrtfMode` — the driver may still refuse the
+///        request (e.g. on multichannel output); inspect
+///        `AudioEngine::getHrtfStatus()` afterwards if that matters.
+class AudioEngineHrtfApplySink final : public AudioHrtfApplySink
+{
+public:
+    explicit AudioEngineHrtfApplySink(AudioEngine& engine);
+    void setHrtfMode(HrtfMode mode) override;
+
+private:
+    AudioEngine& m_engine;
+};
+
 // ================================================================
 // Slice 13.3b — Photosensitive safety apply path
 // ================================================================
@@ -295,6 +310,31 @@ public:
 /// `AccessibilitySettings` onto the `PhotosensitiveLimits` struct.
 void applyPhotosensitiveSafety(const AccessibilitySettings& access,
                                 PhotosensitiveApplySink& sink);
+
+/// @brief Production sink writing to an engine-owned `enabled` flag
+///        and `PhotosensitiveLimits` struct (held on `Engine` so every
+///        consumer that needs the caps can read a single source of
+///        truth). The sink does NOT drive effect consumers directly —
+///        consumers (camera shake, flash overlay, bloom post, strobe
+///        emitters) call the `clampFlashAlpha` / `clampShakeAmplitude`
+///        / `clampStrobeHz` / `limitBloomIntensity` helpers with the
+///        stored values at their own call sites.
+class PhotosensitiveStoreApplySink final : public PhotosensitiveApplySink
+{
+public:
+    /// @param enabled  Pointer to the engine's `enabled` flag.
+    /// @param limits   Pointer to the engine's caps struct.
+    ///                 Both pointers must outlive the sink; the engine
+    ///                 owns the storage.
+    PhotosensitiveStoreApplySink(bool* enabled, PhotosensitiveLimits* limits);
+
+    void setPhotosensitiveEnabled(bool enabled) override;
+    void setPhotosensitiveLimits(const PhotosensitiveLimits& limits) override;
+
+private:
+    bool* m_enabled;
+    PhotosensitiveLimits* m_limits;
+};
 
 // ================================================================
 // Slice 13.4 — Input bindings apply + extract
