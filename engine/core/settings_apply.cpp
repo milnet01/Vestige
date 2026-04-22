@@ -5,8 +5,10 @@
 /// @brief Apply layer between Settings and engine subsystems — display.
 #include "core/settings_apply.h"
 
+#include "core/logger.h"
 #include "core/settings.h"
 #include "core/window.h"
+#include "input/input_bindings.h"
 #include "renderer/renderer.h"
 #include "systems/ui_system.h"
 #include "ui/subtitle.h"
@@ -224,6 +226,99 @@ void applyPhotosensitiveSafety(const AccessibilitySettings& access,
     limits.maxStrobeHz         = w.maxStrobeHz;
     limits.bloomIntensityScale = w.bloomIntensityScale;
     sink.setPhotosensitiveLimits(limits);
+}
+
+// ================================================================
+// Slice 13.4 — Input bindings extract + apply
+// ================================================================
+
+namespace
+{
+
+const char* inputDeviceToWireString(InputDevice d)
+{
+    switch (d)
+    {
+        case InputDevice::Keyboard: return "keyboard";
+        case InputDevice::Mouse:    return "mouse";
+        case InputDevice::Gamepad:  return "gamepad";
+        case InputDevice::None:     return "none";
+    }
+    return "none";
+}
+
+InputDevice inputDeviceFromWireString(const std::string& s)
+{
+    if (s == "keyboard") return InputDevice::Keyboard;
+    if (s == "mouse")    return InputDevice::Mouse;
+    if (s == "gamepad")  return InputDevice::Gamepad;
+    return InputDevice::None;   // "none" + unknown strings
+}
+
+InputBindingWire bindingToWire(const InputBinding& b)
+{
+    InputBindingWire w;
+    w.device   = inputDeviceToWireString(b.device);
+    w.scancode = b.code;
+    return w;
+}
+
+InputBinding bindingFromWire(const InputBindingWire& w)
+{
+    InputBinding b;
+    b.device = inputDeviceFromWireString(w.device);
+    b.code   = w.scancode;
+    // Normalise an "unbound" wire entry: if either device or code
+    // says "unbound", force both to their unbound sentinel so the
+    // in-memory `isBound()` check returns false consistently.
+    if (b.device == InputDevice::None || b.code < 0)
+    {
+        b = InputBinding::none();
+    }
+    return b;
+}
+
+} // namespace
+
+std::vector<ActionBindingWire> extractInputBindings(
+    const InputActionMap& map)
+{
+    std::vector<ActionBindingWire> out;
+    out.reserve(map.actions().size());
+    for (const InputAction& action : map.actions())
+    {
+        ActionBindingWire w;
+        w.id        = action.id;
+        w.primary   = bindingToWire(action.primary);
+        w.secondary = bindingToWire(action.secondary);
+        w.gamepad   = bindingToWire(action.gamepad);
+        out.push_back(w);
+    }
+    return out;
+}
+
+void applyInputBindings(const std::vector<ActionBindingWire>& wires,
+                         InputActionMap& map)
+{
+    for (const ActionBindingWire& w : wires)
+    {
+        InputAction* action = map.findAction(w.id);
+        if (!action)
+        {
+            // Phantom id — logged at warning level so hand-edited
+            // settings.json typos surface, but non-fatal. Protects
+            // the map from accumulating ghost entries.
+            Logger::warning(
+                "Settings: input binding for unknown action id '"
+                + w.id + "' dropped. Register the action before "
+                "loading settings, or remove the entry from "
+                "settings.json.");
+            continue;
+        }
+        action->primary   = bindingFromWire(w.primary);
+        action->secondary = bindingFromWire(w.secondary);
+        action->gamepad   = bindingFromWire(w.gamepad);
+    }
 }
 
 } // namespace Vestige

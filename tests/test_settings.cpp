@@ -13,6 +13,7 @@
 #include "core/settings.h"
 #include "core/settings_apply.h"
 #include "core/settings_migration.h"
+#include "input/input_bindings.h"
 #include "utils/atomic_write.h"
 #include "utils/config_path.h"
 
@@ -1219,4 +1220,246 @@ TEST(SettingsApply, SubtitleQueueApplySinkActuallyMutatesQueueState)
 
     sink.setSubtitlesEnabled(false);
     EXPECT_FALSE(sink.subtitlesEnabled());
+}
+
+// ===== Slice 13.4 — Input bindings extract + apply ==========================
+
+namespace
+{
+
+InputAction makeAction(const std::string& id,
+                        InputBinding primary,
+                        InputBinding secondary = InputBinding::none(),
+                        InputBinding gamepad   = InputBinding::none())
+{
+    InputAction a;
+    a.id        = id;
+    a.label     = id;
+    a.category  = "test";
+    a.primary   = primary;
+    a.secondary = secondary;
+    a.gamepad   = gamepad;
+    return a;
+}
+
+} // namespace
+
+TEST(SettingsApplyInputBindings, ExtractEmitsEveryRegisteredActionInOrder)
+{
+    InputActionMap map;
+    map.addAction(makeAction("Jump", InputBinding::key(32)));
+    map.addAction(makeAction("Fire", InputBinding::mouse(0)));
+    map.addAction(makeAction("Pause", InputBinding::key(256)));
+
+    auto wires = extractInputBindings(map);
+    ASSERT_EQ(wires.size(), 3u);
+    EXPECT_EQ(wires[0].id, "Jump");
+    EXPECT_EQ(wires[1].id, "Fire");
+    EXPECT_EQ(wires[2].id, "Pause");
+}
+
+TEST(SettingsApplyInputBindings, ExtractRoundTripsDeviceStrings)
+{
+    InputActionMap map;
+    map.addAction(makeAction("K",  InputBinding::key(65)));
+    map.addAction(makeAction("M",  InputBinding::mouse(1)));
+    map.addAction(makeAction("G",  InputBinding::gamepad(3)));
+    map.addAction(makeAction("Un", InputBinding::none()));
+
+    auto wires = extractInputBindings(map);
+    ASSERT_EQ(wires.size(), 4u);
+    EXPECT_EQ(wires[0].primary.device, "keyboard");
+    EXPECT_EQ(wires[0].primary.scancode, 65);
+    EXPECT_EQ(wires[1].primary.device, "mouse");
+    EXPECT_EQ(wires[1].primary.scancode, 1);
+    EXPECT_EQ(wires[2].primary.device, "gamepad");
+    EXPECT_EQ(wires[2].primary.scancode, 3);
+    EXPECT_EQ(wires[3].primary.device, "none");
+    EXPECT_EQ(wires[3].primary.scancode, -1);
+}
+
+TEST(SettingsApplyInputBindings, ExtractPreservesAllThreeSlots)
+{
+    InputActionMap map;
+    map.addAction(makeAction("Use",
+        InputBinding::key(69),
+        InputBinding::mouse(2),
+        InputBinding::gamepad(0)));
+
+    auto wires = extractInputBindings(map);
+    ASSERT_EQ(wires.size(), 1u);
+    EXPECT_EQ(wires[0].primary.device,   "keyboard");
+    EXPECT_EQ(wires[0].primary.scancode, 69);
+    EXPECT_EQ(wires[0].secondary.device, "mouse");
+    EXPECT_EQ(wires[0].secondary.scancode, 2);
+    EXPECT_EQ(wires[0].gamepad.device,   "gamepad");
+    EXPECT_EQ(wires[0].gamepad.scancode, 0);
+}
+
+TEST(SettingsApplyInputBindings, ApplyUpdatesBindingsOfRegisteredActions)
+{
+    // Init-order contract: register first, then apply wires.
+    InputActionMap map;
+    map.addAction(makeAction("Jump", InputBinding::key(32)));
+
+    std::vector<ActionBindingWire> wires;
+    ActionBindingWire w;
+    w.id = "Jump";
+    w.primary.device   = "keyboard";
+    w.primary.scancode = 87;   // Remapped to 'W'
+    wires.push_back(w);
+
+    applyInputBindings(wires, map);
+
+    const InputAction* a = map.findAction("Jump");
+    ASSERT_NE(a, nullptr);
+    EXPECT_EQ(a->primary.device, InputDevice::Keyboard);
+    EXPECT_EQ(a->primary.code,   87);
+}
+
+TEST(SettingsApplyInputBindings, ApplyDropsPhantomIdsWithoutRegistering)
+{
+    // Phantom id — a typo or stale save shouldn't magically register
+    // new actions. The map stays at the one registered action; the
+    // phantom entry is dropped.
+    InputActionMap map;
+    map.addAction(makeAction("Jump", InputBinding::key(32)));
+
+    std::vector<ActionBindingWire> wires;
+    ActionBindingWire w;
+    w.id = "TotallyNotRegistered";
+    w.primary.device   = "keyboard";
+    w.primary.scancode = 65;
+    wires.push_back(w);
+
+    applyInputBindings(wires, map);
+
+    EXPECT_EQ(map.actions().size(), 1u);
+    EXPECT_NE(map.findAction("Jump"),                 nullptr);
+    EXPECT_EQ(map.findAction("TotallyNotRegistered"), nullptr);
+}
+
+TEST(SettingsApplyInputBindings, ApplyPreservesActionsNotInWires)
+{
+    // An action registered on the map but absent from the wire list
+    // keeps its current bindings — no clobbering to defaults.
+    InputActionMap map;
+    map.addAction(makeAction("Jump", InputBinding::key(32)));
+    map.addAction(makeAction("Fire", InputBinding::mouse(0)));
+
+    std::vector<ActionBindingWire> wires;
+    ActionBindingWire w;
+    w.id = "Jump";
+    w.primary.device   = "keyboard";
+    w.primary.scancode = 87;
+    wires.push_back(w);
+
+    applyInputBindings(wires, map);
+
+    const InputAction* fire = map.findAction("Fire");
+    ASSERT_NE(fire, nullptr);
+    // Fire was absent from wires — its binding must be untouched.
+    EXPECT_EQ(fire->primary.device, InputDevice::Mouse);
+    EXPECT_EQ(fire->primary.code,   0);
+}
+
+TEST(SettingsApplyInputBindings, UnknownDeviceStringFallsBackToNone)
+{
+    InputActionMap map;
+    map.addAction(makeAction("Jump", InputBinding::key(32)));
+
+    std::vector<ActionBindingWire> wires;
+    ActionBindingWire w;
+    w.id = "Jump";
+    w.primary.device   = "chorded-keyboard";   // nonsense
+    w.primary.scancode = 99;
+    wires.push_back(w);
+
+    applyInputBindings(wires, map);
+
+    const InputAction* a = map.findAction("Jump");
+    ASSERT_NE(a, nullptr);
+    // Unknown device string → Unbound on apply. code is also
+    // normalised because the wire was marked "unbound" by device.
+    EXPECT_EQ(a->primary.device, InputDevice::None);
+    EXPECT_FALSE(a->primary.isBound());
+}
+
+TEST(SettingsApplyInputBindings, NegativeScancodeNormalisesToUnboundBinding)
+{
+    // Wire carries device "keyboard" but scancode -1 — that's the
+    // "I was a keyboard binding but the user cleared me" case.
+    // Must normalise to fully Unbound so isBound() returns false.
+    InputActionMap map;
+    map.addAction(makeAction("Jump", InputBinding::key(32)));
+
+    std::vector<ActionBindingWire> wires;
+    ActionBindingWire w;
+    w.id = "Jump";
+    w.primary.device   = "keyboard";
+    w.primary.scancode = -1;
+    wires.push_back(w);
+
+    applyInputBindings(wires, map);
+
+    const InputAction* a = map.findAction("Jump");
+    ASSERT_NE(a, nullptr);
+    EXPECT_FALSE(a->primary.isBound());
+    EXPECT_EQ(a->primary.device, InputDevice::None);
+}
+
+TEST(SettingsApplyInputBindings, ExtractThenApplyRoundTripIsLossless)
+{
+    // Full round-trip: extract to wires, fresh map with same
+    // registered ids, apply wires, compare binding-by-binding.
+    InputActionMap source;
+    source.addAction(makeAction("Jump",
+        InputBinding::key(32),
+        InputBinding::mouse(1),
+        InputBinding::gamepad(0)));
+    source.addAction(makeAction("Fire",
+        InputBinding::mouse(0),
+        InputBinding::none(),
+        InputBinding::gamepad(7)));
+
+    auto wires = extractInputBindings(source);
+
+    InputActionMap target;
+    target.addAction(makeAction("Jump", InputBinding::none()));
+    target.addAction(makeAction("Fire", InputBinding::none()));
+    applyInputBindings(wires, target);
+
+    const InputAction* jump = target.findAction("Jump");
+    ASSERT_NE(jump, nullptr);
+    EXPECT_EQ(jump->primary,   (InputBinding{InputDevice::Keyboard, 32}));
+    EXPECT_EQ(jump->secondary, (InputBinding{InputDevice::Mouse,    1}));
+    EXPECT_EQ(jump->gamepad,   (InputBinding{InputDevice::Gamepad,  0}));
+
+    const InputAction* fire = target.findAction("Fire");
+    ASSERT_NE(fire, nullptr);
+    EXPECT_EQ(fire->primary,   (InputBinding{InputDevice::Mouse, 0}));
+    EXPECT_FALSE(fire->secondary.isBound());
+    EXPECT_EQ(fire->gamepad,   (InputBinding{InputDevice::Gamepad, 7}));
+}
+
+TEST(SettingsApplyInputBindings, ApplyFromSettingsControlsBlockIntegration)
+{
+    // End-to-end: ControlsSettings::bindings populated via JSON load,
+    // applyInputBindings against a registered map, bindings present.
+    Settings s;
+    ActionBindingWire w;
+    w.id = "Pause";
+    w.primary.device   = "keyboard";
+    w.primary.scancode = 256;    // GLFW_KEY_ESCAPE
+    s.controls.bindings.push_back(w);
+
+    InputActionMap map;
+    map.addAction(makeAction("Pause", InputBinding::none()));
+
+    applyInputBindings(s.controls.bindings, map);
+
+    const InputAction* p = map.findAction("Pause");
+    ASSERT_NE(p, nullptr);
+    EXPECT_EQ(p->primary.device, InputDevice::Keyboard);
+    EXPECT_EQ(p->primary.code,   256);
 }

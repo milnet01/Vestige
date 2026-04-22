@@ -9,6 +9,64 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-22 Phase 10 — Input bindings extract + apply (slice 13.4)
+
+Bridges `Settings::controls.bindings` (the on-disk
+`std::vector<ActionBindingWire>`) to the in-memory `InputActionMap`.
+Second-last slice of the Phase 10 settings chain.
+
+- `extractInputBindings(map) → std::vector<ActionBindingWire>` —
+  serialises every registered action in `map.actions()` order.
+  Covers all three slots (primary / secondary / gamepad). Device
+  → wire-string mapping: Keyboard → `"keyboard"`, Mouse → `"mouse"`,
+  Gamepad → `"gamepad"`, None → `"none"`. Empty `map` extracts
+  to an empty vector.
+- `applyInputBindings(wires, map)` — reverse direction. Enforces
+  the init-order contract documented in
+  `PHASE10_SETTINGS_DESIGN.md`: game code registers actions before
+  `Settings::load`; an id in `wires` that doesn't resolve to a
+  registered action is **dropped with a logged warning** (prevents
+  typos in a hand-edited `settings.json` from creating ghost
+  actions, and protects against stale saves referencing actions
+  removed from a newer engine build). Actions registered on the
+  map but absent from `wires` keep their current bindings (no
+  clobbering to defaults).
+- Unbound-binding normalisation: a wire with `device == "none"` or
+  `scancode < 0` (either condition) collapses to the fully-unbound
+  `InputBinding::none()` on apply, so `isBound()` stays consistent.
+
+Wire-format limitation documented inline: `scancode` currently
+carries the in-memory GLFW *key code* rather than a true scancode.
+Layout-preserving scancode translation (WASD stable across AZERTY /
+Dvorak) needs `glfwGetKeyScancode` + a reverse table and lands in
+a follow-on slice. Keep-values-identical means 13.4's round-trip
+is testable without a GLFW context and matches what users see when
+hand-editing `settings.json`.
+
+Tests: 10 new in `tests/test_settings.cpp` (design-doc target: 10):
+- Extract emits every action in insertion order.
+- Extract round-trips device strings across all four device enum
+  values.
+- Extract preserves all three binding slots.
+- Apply updates bindings of registered actions (remap flow).
+- Apply drops phantom ids without auto-registering — map size
+  stays at its registered count.
+- Apply preserves actions that are registered but absent from the
+  wire list (no clobber).
+- Unknown device string falls back to None.
+- Negative scancode on an otherwise-valid wire collapses to fully
+  unbound.
+- Full extract → apply round-trip is lossless across all three
+  device kinds.
+- End-to-end via `Settings::controls.bindings` — a wire populated
+  through the settings struct reaches a registered map's action
+  intact.
+
+Full suite 2648 passing (1 pre-existing skip). Slice 13.4 complete.
+
+Next: slice 13.5 — Settings UI wiring (per-category control widgets
+into `buildSettingsMenu`) + Apply / Revert / Restore Defaults buttons.
+
 ### 2026-04-22 Phase 10 — Renderer + subtitle + HRTF + photosensitive apply (slice 13.3b)
 
 Completes slice 13.3 — adds the four remaining accessibility / audio

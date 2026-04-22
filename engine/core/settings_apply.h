@@ -29,12 +29,16 @@
 #include "ui/subtitle.h"                              // SubtitleSizePreset
 #include "ui/ui_theme.h"                              // UIScalePreset enum
 
+#include <vector>
+
 namespace Vestige
 {
 
 struct DisplaySettings;          // core/settings.h
 struct AudioSettings;            // core/settings.h
 struct AccessibilitySettings;    // core/settings.h
+struct ActionBindingWire;        // core/settings.h
+class InputActionMap;            // input/input_bindings.h
 class Window;                    // core/window.h
 class UISystem;                  // systems/ui_system.h
 class Renderer;                  // renderer/renderer.h
@@ -291,5 +295,39 @@ public:
 /// `AccessibilitySettings` onto the `PhotosensitiveLimits` struct.
 void applyPhotosensitiveSafety(const AccessibilitySettings& access,
                                 PhotosensitiveApplySink& sink);
+
+// ================================================================
+// Slice 13.4 — Input bindings apply + extract
+// ================================================================
+
+/// @brief Convert every registered action in `map` to its wire form
+///        for serialisation. Wire order matches `map.actions()`.
+///
+/// **Wire format note:** the wire `scancode` field currently carries
+/// the GLFW *key code* from `InputBinding::code`, not a true
+/// scan code. Layout-preserving scancode translation (WASD stable
+/// across AZERTY / Dvorak — the design-doc intent) requires GLFW's
+/// `glfwGetKeyScancode` + a reverse lookup, and lands in a follow-on
+/// slice. Stored-value-same-as-in-memory keeps 13.4's round-trip
+/// testable without a GLFW context and matches what the user will
+/// see if they hand-edit `settings.json`.
+std::vector<ActionBindingWire> extractInputBindings(
+    const InputActionMap& map);
+
+/// @brief Apply `wires` to `map`'s already-registered actions.
+///
+/// Init-order contract: game code registers every action on the
+/// map **before** settings load. An id in `wires` that doesn't
+/// resolve to a registered action is dropped with a logged warning
+/// — prevents a typo in a hand-edited `settings.json` from creating
+/// a ghost action, and protects against stale saves referencing
+/// actions removed from a newer engine build. Actions registered
+/// on the map but absent from `wires` keep their current bindings.
+///
+/// Wire `device` strings: `"keyboard"` / `"mouse"` / `"gamepad"`
+/// map to the corresponding `InputDevice`; `"none"` and unknown
+/// strings both map to `InputDevice::None`.
+void applyInputBindings(const std::vector<ActionBindingWire>& wires,
+                         InputActionMap& map);
 
 } // namespace Vestige
