@@ -6,16 +6,24 @@
 #pragma once
 
 #include "core/i_system.h"
+#include "ui/game_screen.h"
 #include "ui/sprite_batch_renderer.h"
 #include "ui/ui_canvas.h"
+#include "ui/ui_notification_toast.h"
+#include "ui/ui_signal.h"
 #include "ui/ui_theme.h"
 
 #include <glm/glm.hpp>
 
+#include <functional>
 #include <string>
+#include <unordered_map>
+#include <vector>
 
 namespace Vestige
 {
+
+class TextRenderer;
 
 /// @brief Manages in-game UI rendering (separate from ImGui editor).
 ///
@@ -120,6 +128,103 @@ public:
     /// @brief True when reduced-motion mode is currently applied.
     bool isReducedMotion() const { return m_reducedMotion; }
 
+    // -- Phase 10 slice 12.2: game-screen state machine + modal stack --
+
+    /// @brief Injects the text renderer used by screen builders.
+    ///
+    /// Builders populate the canvas with labels that need a `TextRenderer`
+    /// to rasterize. Engine wires this to `Renderer::getTextRenderer()`
+    /// during initialize. Tests may leave it null — builders tolerate
+    /// null by skipping glyph rendering.
+    void setTextRenderer(TextRenderer* textRenderer) { m_textRenderer = textRenderer; }
+
+    /// @brief Builder callback type. Receives the target canvas + theme +
+    ///        text renderer + back-reference to this UISystem (so the
+    ///        prefab can wire button onClick signals to `applyIntent`).
+    ///        Ownership of widgets stays with the canvas.
+    using ScreenBuilder = std::function<void(UICanvas&, const UITheme&,
+                                             TextRenderer*, UISystem&)>;
+
+    /// @brief Register a custom builder for a given screen. Overrides the
+    ///        default prefab (e.g. game code can swap `buildPauseMenu` for
+    ///        a studio-branded pause screen without touching engine code).
+    ///        Pass an empty `ScreenBuilder{}` to clear a previous override.
+    void setScreenBuilder(GameScreen screen, ScreenBuilder builder);
+
+    /// @brief Sets the root screen. Clears any stacked modals and rebuilds
+    ///        the canvas via the registered prefab factory. Passing
+    ///        `GameScreen::None` clears the canvas — used by the editor /
+    ///        headless harnesses that drive widgets directly.
+    void setRootScreen(GameScreen screen);
+
+    /// @brief Pushes a modal screen on top of the root (Settings, confirm
+    ///        dialog). The modal canvas is built and rendered on top of
+    ///        the root canvas. Modal capture is enabled automatically.
+    void pushModalScreen(GameScreen screen);
+
+    /// @brief Pops the top modal. If the stack is empty, this is a no-op.
+    ///        When the last modal is popped, modal capture clears.
+    void popModalScreen();
+
+    /// @brief Returns the current root screen. Defaults to `GameScreen::None`.
+    GameScreen getRootScreen() const { return m_rootScreen; }
+
+    /// @brief Returns the top-of-stack modal screen, or `GameScreen::None`
+    ///        if no modal is active.
+    GameScreen getTopModalScreen() const
+    {
+        return m_modalStack.empty() ? GameScreen::None : m_modalStack.back();
+    }
+
+    /// @brief Returns the effective current screen — top modal if any,
+    ///        otherwise the root.
+    GameScreen getCurrentScreen() const
+    {
+        return m_modalStack.empty() ? m_rootScreen : m_modalStack.back();
+    }
+
+    /// @brief Applies an intent via the pure state machine, then reconciles
+    ///        the canvas to match. This is the call site game code should
+    ///        use — buttons, hotkeys, engine events all funnel through it.
+    ///
+    /// Routing:
+    /// - `OpenSettings` from a non-modal screen → pushes `Settings` modal.
+    /// - `CloseSettings` while a modal is on top → pops the modal
+    ///   (preserves the root, matching the design's "return to previous").
+    /// - Any other state change → replaces the root screen.
+    /// - No-op intents (rejected by the pure function) return silently.
+    void applyIntent(GameScreenIntent intent);
+
+    /// @brief Access to the modal canvas, for introspection and tests.
+    UICanvas& getModalCanvas() { return m_modalCanvas; }
+    const UICanvas& getModalCanvas() const { return m_modalCanvas; }
+
+    // -- Phase 10 slice 12.4: notification queue --
+
+    /// @brief Transient notification queue driving the top-right toast
+    ///        stack populated by `buildDefaultHud`. Game events push into
+    ///        this queue (`getNotifications().push(...)`) and `UISystem::update`
+    ///        advances it each frame using the active theme's
+    ///        `transitionDuration` as the fade-in / fade-out ramp.
+    NotificationQueue& getNotifications() { return m_notifications; }
+    const NotificationQueue& getNotifications() const { return m_notifications; }
+
+    // Signals — game code hooks without subclassing.
+    Signal<GameScreen> onRootScreenChanged;
+    Signal<GameScreen> onModalPushed;
+    Signal<GameScreen> onModalPopped;
+
+private:
+    /// @brief Returns the registered builder for @a screen, falling back to
+    ///        the built-in default (menu_prefabs::build*). Returns an empty
+    ///        function if the screen has no default (e.g. `None`, `Exiting`).
+    ScreenBuilder resolveBuilder(GameScreen screen) const;
+
+    /// @brief Dispatches to the built-in `menu_prefabs` default for the
+    ///        given screen. Centralised so `setScreenBuilder(…, empty)`
+    ///        falls back cleanly.
+    static ScreenBuilder defaultBuilderFor(GameScreen screen);
+
 private:
     /// @brief Recomputes `m_theme` from `m_baseTheme` with the current
     ///        scale preset, high-contrast, and reduced-motion flags
@@ -141,6 +246,16 @@ private:
     // the union of m_modalCapture and m_cursorOverInteractive is what
     // wantsCaptureInput() returns.
     bool m_wantsCaptureInput     = false;
+
+    // Phase 10 slice 12.2 — screen state machine + modal stack.
+    TextRenderer*                             m_textRenderer = nullptr;
+    GameScreen                                m_rootScreen   = GameScreen::None;
+    UICanvas                                  m_modalCanvas;
+    std::vector<GameScreen>                   m_modalStack;
+    std::unordered_map<GameScreen, ScreenBuilder> m_screenBuilders;
+
+    // Phase 10 slice 12.4 — transient notification queue (toast stack).
+    NotificationQueue m_notifications;
 };
 
 } // namespace Vestige

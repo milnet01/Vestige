@@ -2,8 +2,12 @@
 // SPDX-License-Identifier: MIT
 
 #include "ui/menu_prefabs.h"
+#include "systems/ui_system.h"
 #include "ui/ui_button.h"
+#include "ui/ui_crosshair.h"
+#include "ui/ui_fps_counter.h"
 #include "ui/ui_label.h"
+#include "ui/ui_notification_toast.h"
 #include "ui/ui_panel.h"
 
 #include <memory>
@@ -59,10 +63,22 @@ std::unique_ptr<UIButton> makeButton(const std::string& label,
     return b;
 }
 
-} // namespace
+// Wiring helper — connects a button's onClick to `uiSystem->applyIntent(...)`
+// iff the caller passed a UISystem. Keeps the 3-arg path free of any UISystem
+// coupling and avoids touching `b->interactive` when no system is available.
+void wireIntent(UIButton* b, UISystem* uiSystem, GameScreenIntent intent)
+{
+    if (!uiSystem || !b)
+    {
+        return;
+    }
+    b->interactive = true;
+    UISystem* ui = uiSystem;
+    b->onClick.connect([ui, intent]() { ui->applyIntent(intent); });
+}
 
-void buildMainMenu(UICanvas& canvas, const UITheme& theme,
-                    TextRenderer* textRenderer)
+void buildMainMenuImpl(UICanvas& canvas, const UITheme& theme,
+                        TextRenderer* textRenderer, UISystem* uiSystem)
 {
     // Background fill — full 1920×1080 base panel.
     canvas.addElement(makePanel({0, 0}, {1920, 1080}, theme.bgBase));
@@ -84,18 +100,21 @@ void buildMainMenu(UICanvas& canvas, const UITheme& theme,
     canvas.addElement(makeLabel("CHAPTER I  THE TABERNACLE",
                                   {96, 420}, 0.22f, glm::vec3(theme.accent), textRenderer));
 
-    // Menu buttons — vertical stack at left:96, top:520.
+    // Menu buttons — vertical stack at left:96, top:520. Each item carries an
+    // optional intent; Templates is intentionally null (per-game concern).
     struct MenuItem
     {
-        const char*    label;
-        UIButtonStyle  style;
+        const char*      label;
+        UIButtonStyle    style;
+        GameScreenIntent intent;
+        bool             hasIntent;
     };
     const MenuItem items[] = {
-        {"New Walkthrough", UIButtonStyle::DEFAULT},
-        {"Continue",        UIButtonStyle::DEFAULT},
-        {"Templates",       UIButtonStyle::DEFAULT},
-        {"Settings",        UIButtonStyle::DEFAULT},
-        {"Quit",            UIButtonStyle::DANGER},
+        {"New Walkthrough", UIButtonStyle::DEFAULT, GameScreenIntent::NewWalkthrough, true},
+        {"Continue",        UIButtonStyle::DEFAULT, GameScreenIntent::Continue,       true},
+        {"Templates",       UIButtonStyle::DEFAULT, GameScreenIntent::OpenMainMenu,   false},
+        {"Settings",        UIButtonStyle::DEFAULT, GameScreenIntent::OpenSettings,   true},
+        {"Quit",            UIButtonStyle::DANGER,  GameScreenIntent::QuitToDesktop,  true},
     };
     constexpr float btnHeight = 68.0f;
     constexpr float btnGap    = 0.0f;          // Adjacent borders share an edge.
@@ -106,6 +125,10 @@ void buildMainMenu(UICanvas& canvas, const UITheme& theme,
     {
         auto b = makeButton(it.label, {btnLeftX, y}, {btnWidth, btnHeight},
                              it.style, theme, textRenderer);
+        if (it.hasIntent)
+        {
+            wireIntent(b.get(), uiSystem, it.intent);
+        }
         canvas.addElement(std::move(b));
         y += btnHeight + btnGap;
     }
@@ -126,8 +149,8 @@ void buildMainMenu(UICanvas& canvas, const UITheme& theme,
                                   {1920 - 96 - 600, 1080 - 56}, 0.20f, theme.textSecondary, textRenderer));
 }
 
-void buildPauseMenu(UICanvas& canvas, const UITheme& theme,
-                     TextRenderer* textRenderer)
+void buildPauseMenuImpl(UICanvas& canvas, const UITheme& theme,
+                         TextRenderer* textRenderer, UISystem* uiSystem)
 {
     constexpr float panelW = 720.0f;
     constexpr float panelH = 760.0f;
@@ -182,18 +205,20 @@ void buildPauseMenu(UICanvas& canvas, const UITheme& theme,
     // Buttons.
     struct PauseItem
     {
-        const char*    label;
-        UIButtonStyle  style;
-        const char*    shortcut;  // nullable
+        const char*      label;
+        UIButtonStyle    style;
+        const char*      shortcut;    // nullable
+        GameScreenIntent intent;
+        bool             hasIntent;   // Save / Save As / Load stay inert.
     };
     const PauseItem items[] = {
-        {"Resume",            UIButtonStyle::PRIMARY, "ESC"},
-        {"Save",              UIButtonStyle::DEFAULT, "F5"},
-        {"Save As...",        UIButtonStyle::DEFAULT, nullptr},
-        {"Load",              UIButtonStyle::DEFAULT, nullptr},
-        {"Settings",          UIButtonStyle::DEFAULT, nullptr},
-        {"Quit to Main Menu", UIButtonStyle::DEFAULT, nullptr},
-        {"Quit to Desktop",   UIButtonStyle::DANGER,  nullptr},
+        {"Resume",            UIButtonStyle::PRIMARY, "ESC", GameScreenIntent::Resume,        true},
+        {"Save",              UIButtonStyle::DEFAULT, "F5",  GameScreenIntent::OpenMainMenu,  false},
+        {"Save As...",        UIButtonStyle::DEFAULT, nullptr, GameScreenIntent::OpenMainMenu, false},
+        {"Load",              UIButtonStyle::DEFAULT, nullptr, GameScreenIntent::OpenMainMenu, false},
+        {"Settings",          UIButtonStyle::DEFAULT, nullptr, GameScreenIntent::OpenSettings, true},
+        {"Quit to Main Menu", UIButtonStyle::DEFAULT, nullptr, GameScreenIntent::QuitToMain,   true},
+        {"Quit to Desktop",   UIButtonStyle::DANGER,  nullptr, GameScreenIntent::QuitToDesktop, true},
     };
     constexpr float btnH = 52.0f;
     constexpr float btnGap = 4.0f;
@@ -209,6 +234,10 @@ void buildPauseMenu(UICanvas& canvas, const UITheme& theme,
             b->shortcut.text    = it.shortcut;
             b->shortcut.present = true;
         }
+        if (it.hasIntent)
+        {
+            wireIntent(b.get(), uiSystem, it.intent);
+        }
         canvas.addElement(std::move(b));
         by += btnH + btnGap;
     }
@@ -222,8 +251,8 @@ void buildPauseMenu(UICanvas& canvas, const UITheme& theme,
                                   0.20f, theme.textSecondary, textRenderer));
 }
 
-void buildSettingsMenu(UICanvas& canvas, const UITheme& theme,
-                        TextRenderer* textRenderer)
+void buildSettingsMenuImpl(UICanvas& canvas, const UITheme& theme,
+                            TextRenderer* textRenderer, UISystem* uiSystem)
 {
     // Darkened backdrop.
     canvas.addElement(makePanel({0, 0}, {1920, 1080},
@@ -248,6 +277,7 @@ void buildSettingsMenu(UICanvas& canvas, const UITheme& theme,
                                 {160.0f, 40.0f},
                                 UIButtonStyle::GHOST, theme, textRenderer);
     closeBtn->small = true;
+    wireIntent(closeBtn.get(), uiSystem, GameScreenIntent::CloseSettings);
     canvas.addElement(std::move(closeBtn));
 
     // Header bottom rule.
@@ -317,6 +347,120 @@ void buildSettingsMenu(UICanvas& canvas, const UITheme& theme,
     applyBtn->small = true;
     applyBtn->disabled = true;
     canvas.addElement(std::move(applyBtn));
+}
+
+} // namespace (anonymous)
+
+// -- Public 3-arg (legacy) overloads ----------------------------------------
+
+void buildMainMenu(UICanvas& canvas, const UITheme& theme,
+                    TextRenderer* textRenderer)
+{
+    buildMainMenuImpl(canvas, theme, textRenderer, nullptr);
+}
+
+void buildPauseMenu(UICanvas& canvas, const UITheme& theme,
+                     TextRenderer* textRenderer)
+{
+    buildPauseMenuImpl(canvas, theme, textRenderer, nullptr);
+}
+
+void buildSettingsMenu(UICanvas& canvas, const UITheme& theme,
+                        TextRenderer* textRenderer)
+{
+    buildSettingsMenuImpl(canvas, theme, textRenderer, nullptr);
+}
+
+// -- Public 4-arg overloads (slice 12.2) — wire signals to UISystem ---------
+
+void buildMainMenu(UICanvas& canvas, const UITheme& theme,
+                    TextRenderer* textRenderer, UISystem& uiSystem)
+{
+    buildMainMenuImpl(canvas, theme, textRenderer, &uiSystem);
+}
+
+void buildPauseMenu(UICanvas& canvas, const UITheme& theme,
+                     TextRenderer* textRenderer, UISystem& uiSystem)
+{
+    buildPauseMenuImpl(canvas, theme, textRenderer, &uiSystem);
+}
+
+void buildSettingsMenu(UICanvas& canvas, const UITheme& theme,
+                        TextRenderer* textRenderer, UISystem& uiSystem)
+{
+    buildSettingsMenuImpl(canvas, theme, textRenderer, &uiSystem);
+}
+
+// -- Phase 10 slice 12.4: default HUD prefab --------------------------------
+
+void buildDefaultHud(UICanvas& canvas, const UITheme& theme,
+                      TextRenderer* textRenderer, UISystem& /*uiSystem*/)
+{
+    // (1) Crosshair — centred, theme-coloured. UICrosshair ignores anchor
+    // internally (always renders at screen centre) but we still tag the
+    // anchor so the accessibility walk and hit-test see a sensible slot.
+    auto crosshair = std::make_unique<UICrosshair>();
+    crosshair->anchor     = Anchor::CENTER;
+    crosshair->armLength  = theme.crosshairLength;
+    crosshair->thickness  = theme.crosshairThickness;
+    crosshair->color      = theme.crosshair;
+    canvas.addElement(std::move(crosshair));
+
+    // (2) FPS counter — hidden by default. A debug flag toggles visibility.
+    // Anchored top-left with a small inset so it doesn't collide with the
+    // screen edge under high-contrast.
+    auto fps = std::make_unique<UIFpsCounter>();
+    fps->anchor       = Anchor::TOP_LEFT;
+    fps->position     = {16.0f, 16.0f};
+    fps->color        = theme.textSecondary;
+    fps->textRenderer = textRenderer;
+    fps->visible      = false;
+    canvas.addElement(std::move(fps));
+
+    // (3) Interaction-prompt anchor — an invisible slot at the bottom-centre
+    // where game code attaches its `UIInteractionPrompt` widgets (the
+    // prompt itself is a `UIWorldLabel` subclass, not a fixed HUD widget,
+    // so we only reserve the layout slot here). 4 body-lines of inset
+    // above the bottom edge matches the design doc.
+    auto promptSlot = std::make_unique<UIPanel>();
+    promptSlot->anchor          = Anchor::BOTTOM_CENTER;
+    promptSlot->size            = {360.0f, theme.typeBody * 2.0f};
+    promptSlot->position        = {0.0f, theme.typeBody * 4.0f};
+    promptSlot->backgroundColor = glm::vec4(0.0f);  // Fully transparent.
+    canvas.addElement(std::move(promptSlot));
+
+    // (4) Notification stack — three pre-created toast slots at TOP_RIGHT,
+    // stacked vertically with a small gap. Each slot starts at alpha 0;
+    // game code pushes notifications into the queue and reconciles them
+    // into these widgets each frame. The container panel itself is an
+    // invisible layout holder (drawn with alpha 0 so hit-tests still pass
+    // through cleanly).
+    const float toastWidth   = 320.0f;
+    const float toastHeight  = 56.0f;
+    const float toastGap     = 8.0f;
+    const float stackHeight  = NotificationQueue::DEFAULT_CAPACITY * toastHeight
+                             + (NotificationQueue::DEFAULT_CAPACITY - 1) * toastGap;
+
+    auto stack = std::make_unique<UIPanel>();
+    stack->anchor          = Anchor::TOP_RIGHT;
+    stack->size            = {toastWidth, stackHeight};
+    // Right-anchored panels use positive-X for "inset from right edge".
+    // A 24 px inset keeps the stack clear of the screen bevel.
+    stack->position        = {toastWidth + 24.0f, 24.0f};
+    stack->backgroundColor = glm::vec4(0.0f);
+
+    for (std::size_t i = 0; i < NotificationQueue::DEFAULT_CAPACITY; ++i)
+    {
+        auto toast = std::make_unique<UINotificationToast>();
+        toast->anchor = Anchor::TOP_LEFT;
+        toast->position = {0.0f, static_cast<float>(i) * (toastHeight + toastGap)};
+        toast->size = {toastWidth, toastHeight};
+        toast->accentWidth = theme.buttonAccentTickWidth;
+        toast->backgroundColor = theme.panelBg;
+        toast->alpha = 0.0f;  // Empty until the queue populates it.
+        stack->addChild(std::move(toast));
+    }
+    canvas.addElement(std::move(stack));
 }
 
 } // namespace Vestige

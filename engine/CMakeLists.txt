@@ -62,6 +62,7 @@ set(ENGINE_SOURCES
     accessibility/photosensitive_safety.cpp
     accessibility/post_process_accessibility.cpp
     ui/subtitle.cpp
+    ui/game_screen.cpp
     ui/ui_accessible.cpp
     input/input_bindings.cpp
     renderer/instance_buffer.cpp
@@ -210,6 +211,7 @@ set(ENGINE_SOURCES
     editor/panels/navigation_panel.cpp
     editor/panels/audio_panel.cpp
     editor/panels/ui_layout_panel.cpp
+    editor/panels/ui_runtime_panel.cpp
     editor/panels/template_dialog.cpp
     editor/tools/ruler_tool.cpp
     editor/tools/wall_tool.cpp
@@ -257,6 +259,7 @@ set(ENGINE_SOURCES
     ui/ui_dropdown.cpp
     ui/ui_keybind_row.cpp
     ui/menu_prefabs.cpp
+    ui/ui_notification_toast.cpp
     systems/ui_system.cpp
     # Phase 9F: 2D game support
     systems/sprite_system.cpp

@@ -517,6 +517,11 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
                 {
                     m_uiLayoutPanel.setOpen(uiLayoutOpen);
                 }
+                bool uiRuntimeOpen = m_uiRuntimePanel.isOpen();
+                if (ImGui::MenuItem("UI Runtime", nullptr, &uiRuntimeOpen))
+                {
+                    m_uiRuntimePanel.setOpen(uiRuntimeOpen);
+                }
                 ImGui::MenuItem("Console", nullptr, &m_showConsole);
                 ImGui::MenuItem("Statistics", nullptr, &m_showStatistics);
                 {
@@ -1253,6 +1258,12 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
         // via uiLayoutPanel.draw(&canvas, &theme) outside the editor loop.
         m_uiLayoutPanel.draw(/*canvas=*/nullptr, /*theme=*/nullptr);
 
+        // --- UI Runtime panel ---
+        // Uses the engine's live UISystem when it has been injected via
+        // `setUISystem`; otherwise the panel renders an empty-state
+        // banner in each tab.
+        m_uiRuntimePanel.draw(m_uiSystem);
+
         // --- Performance panel ---
         if (m_profiler)
         {
@@ -1779,6 +1790,11 @@ void Editor::setNavigationSystem(NavigationSystem* navSystem)
 void Editor::setAudioSystem(AudioSystem* audioSystem)
 {
     m_audioSystem = audioSystem;
+}
+
+void Editor::setUISystem(UISystem* uiSystem)
+{
+    m_uiSystem = uiSystem;
 }
 
 PerformancePanel& Editor::getPerformancePanel()

@@ -9,6 +9,98 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-21 Phase 10 UI — Toasts + HUD + editor panel (slices 12.3–12.5)
+
+Closes the "In-game UI system" roadmap bullet. Slices 12.1 (pure
+`GameScreen` state machine) and 12.2 (`UISystem` screen stack + Engine
+integration + menu-prefab signal wiring) landed earlier in the same
+day; these three close the remaining gaps identified in
+`docs/PHASE10_UI_DESIGN.md` §2 (inventory).
+
+- **Slice 12.3 — Notification toast primitives.** New
+  `engine/ui/ui_notification_toast.{h,cpp}`:
+  - `NotificationSeverity::{Info, Success, Warning, Error}` plus
+    `Notification { title, body, severity, durationSeconds }`.
+  - `NotificationQueue` — FIFO with `DEFAULT_CAPACITY = 3`
+    (mental-model parity with `SubtitleQueue::DEFAULT_MAX_CONCURRENT`),
+    push-newest / drop-oldest eviction, `advance(dt, fadeSeconds)` tick.
+  - Pure `notificationAlphaAt(elapsed, duration, fade)` envelope:
+    fade-in → plateau → fade-out. `fade ≤ 0` collapses to a
+    rectangle (reduced-motion snap); short durations degenerate to
+    a triangle so an in-and-out ramp still happens.
+  - `UINotificationToast` — `UIElement` subclass rendering one
+    `ActiveNotification` as a panel + left-edge severity accent
+    strip + title label + optional body. Alpha multiplies every
+    drawn colour so the envelope fade is one knob. Accessibility
+    role `Label`; `label` carries the title, `description` carries
+    the body so a future TTS bridge announces the whole entry in
+    one utterance.
+  - `UISystem::update` now advances the queue against
+    `UITheme::transitionDuration` each frame.
+
+- **Slice 12.4 — Default HUD prefab.** New
+  `buildDefaultHud(canvas, theme, textRenderer, uiSystem)` in
+  `engine/ui/menu_prefabs.{h,cpp}`:
+  - Crosshair at `CENTER` (theme-coloured, small).
+  - FPS counter at `TOP_LEFT`, **hidden by default** (debug-only).
+  - Interaction-prompt anchor — transparent `UIPanel` at
+    `BOTTOM_CENTER`, 4 body-lines above the bottom edge — reserved
+    slot for game code's `UIInteractionPrompt` widgets.
+  - Notification stack — `UIPanel` container at `TOP_RIGHT` with
+    three pre-created `UINotificationToast` children (matching the
+    queue cap), all at alpha 0 until populated.
+  - `GameScreen::Playing` now has a built-in `ScreenBuilder` default
+    that points at `buildDefaultHud`, so `setRootScreen(Playing)`
+    yields a working HUD without any game-project plumbing.
+
+- **Slice 12.5 — Editor `UIRuntimePanel`.** New
+  `engine/editor/panels/ui_runtime_panel.{h,cpp}`, four tabs
+  mirroring the `AudioPanel` discipline:
+  - **State** — current root / top-modal readout, a button grid
+    firing every `GameScreenIntent`, and a 20-entry scrollback
+    recording every `(from, to, intent)` transition with a Clear
+    button.
+  - **Menus** — combo selector for MainMenu / Paused / Settings
+    preview, "Rebuild" button, live element-count readout. The
+    offscreen composite FBO path is left as an explicit TODO
+    (pending editor-viewport cooperation); the structural readout
+    lands now so prefab changes are visible without a game build.
+  - **HUD** — four checkboxes (crosshair / FPS counter /
+    interaction anchor / notification stack) that write through to
+    the live `UISystem` canvas when the root screen is `Playing`.
+  - **Accessibility** — scale-preset combo + high-contrast and
+    reduced-motion checkboxes that call straight into
+    `UISystem::setScalePreset` / `setHighContrastMode` /
+    `setReducedMotion`, so a user can compose all three transforms
+    and see every menu prefab + the HUD react immediately.
+  - `Editor` gains `setUISystem(UISystem*)` and
+    `m_uiRuntimePanel` is drawn from the main editor loop; the
+    engine wires `setUISystem(m_systemRegistry.getSystem<UISystem>())`
+    next to `setAudioSystem`.
+
+- **Tests (new, ~45 cases).** `tests/test_notification_queue.cpp`
+  covers severity labels, FIFO eviction, capacity changes,
+  negative-duration clamp, the full alpha envelope (ramps /
+  plateau / reduced-motion snap / short-duration triangle /
+  past-expiry zero), severity → theme colour mapping under default
+  and high-contrast palettes, and every `UINotificationToast`
+  update path (title-only, title+body, alpha-only no-rebuild fast
+  path, alpha clamp). `tests/test_default_hud.cpp` pins the four
+  root elements, their expected anchors, the FPS-hidden invariant,
+  the transparent interaction anchor, the three-slot notification
+  stack, and the `Playing`-defaults-to-HUD screen-builder wiring.
+  `tests/test_ui_runtime_panel.cpp` covers panel open/close, the
+  screen-log capacity cap, menu-preview rebuild across all three
+  menus, HUD toggle round-trips, the `applyHudTogglesTo` clamp to
+  `min(canvasCount, HUD_ELEMENT_COUNT)`, and the no-op guard when
+  the root screen is not `Playing`.
+
+- **Roadmap.** Phase 10 Features → "In-game UI system (menus, HUD,
+  information panels/plaques)" is now checked. Remaining
+  unchecked bullets in Phase 10 Features: text rendering,
+  scene/level configuration, settings system, loading screens,
+  information plaques.
+
 ### 2026-04-21 Phase 10 fog — Accessibility transform (slice 11.9)
 
 Third Phase 10 fog slice. The accessibility-settings struct shipped

@@ -64,6 +64,15 @@ struct EngineConfig
     /// editor UI hidden (CLI: --play). Default is EDIT mode with the
     /// editor visible.
     bool startInPlayMode = false;
+
+    /// @brief Phase 10 slice 12.2 — enables the GameScreen state machine.
+    ///
+    /// When true, Engine opens `GameScreen::MainMenu` at cold-start (for
+    /// headless game builds) and routes ESC through `UISystem::applyIntent`
+    /// so buttons, pause, and settings operate on the pure state machine.
+    /// Defaults to false so the editor / `--play` flow is unchanged; game
+    /// projects opt in explicitly.
+    bool enableGameScreens = false;
 };
 
 /// @brief The central engine — owns all subsystems and runs the main loop.
@@ -132,6 +141,7 @@ private:
     bool m_usePhysicsController = false;  ///< Toggle between AABB and physics controller
     bool m_terrainEnabled = true;         ///< Set false for indoor scenes
     UISystem* m_uiSystem = nullptr;       ///< Cached pointer for render loop
+    bool m_enableGameScreens = false;     ///< Slice 12.2 opt-in flag
     class SpriteSystem* m_spriteSystem = nullptr;  ///< Phase 9F 2D sprite pass
     class Physics2DSystem* m_physics2DSystem = nullptr;  ///< Phase 9F 2D physics
 

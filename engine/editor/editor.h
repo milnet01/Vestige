@@ -28,6 +28,7 @@
 #include "editor/panels/navigation_panel.h"
 #include "editor/panels/audio_panel.h"
 #include "editor/panels/ui_layout_panel.h"
+#include "editor/panels/ui_runtime_panel.h"
 #include "editor/panels/template_dialog.h"
 #include "editor/prefab_system.h"
 #include "editor/selection.h"
@@ -59,6 +60,7 @@ namespace Vestige
 class Camera;
 class EventBus;
 class AudioSystem;
+class UISystem;
 class FoliageManager;
 class NavigationSystem;
 class PerformanceProfiler;
@@ -207,6 +209,9 @@ public:
     /// @brief Stores a pointer to the AudioSystem (for the Audio panel).
     void setAudioSystem(AudioSystem* audioSystem);
 
+    /// @brief Stores a pointer to the UISystem (for the UI Runtime panel).
+    void setUISystem(UISystem* uiSystem);
+
     /// @brief Gets the terrain brush tool.
     TerrainBrush& getTerrainBrush();
 
@@ -252,6 +257,11 @@ public:
     /// @brief Gets the UI layout / theme editor panel.
     UILayoutPanel& getUILayoutPanel() { return m_uiLayoutPanel; }
     const UILayoutPanel& getUILayoutPanel() const { return m_uiLayoutPanel; }
+
+    /// @brief Gets the in-game UI runtime panel (screen state / menu
+    ///        preview / HUD toggles / accessibility composition).
+    UIRuntimePanel& getUIRuntimePanel() { return m_uiRuntimePanel; }
+    const UIRuntimePanel& getUIRuntimePanel() const { return m_uiRuntimePanel; }
 
 private:
     static void setupTheme();
@@ -312,6 +322,7 @@ private:
     NavigationPanel m_navigationPanel;
     AudioPanel m_audioPanel;
     UILayoutPanel m_uiLayoutPanel;
+    UIRuntimePanel m_uiRuntimePanel;
     TemplateDialog m_templateDialog;
     BrushTool m_brushTool;
     BrushPreviewRenderer m_brushPreview;
@@ -330,6 +341,7 @@ private:
     PerformanceProfiler* m_profiler = nullptr;
     NavigationSystem* m_navigationSystem = nullptr;
     AudioSystem* m_audioSystem = nullptr;
+    UISystem* m_uiSystem = nullptr;
     std::string m_assetPath;
 
     // Viewport bounds (stored from drawPanels, used next frame for click detection)

@@ -24,6 +24,7 @@ namespace Vestige
 {
 
 class TextRenderer;
+class UISystem;
 
 /// @brief Builds the main-menu canvas (cold-start screen).
 ///
@@ -35,6 +36,18 @@ void buildMainMenu(UICanvas& canvas,
                     const UITheme& theme,
                     TextRenderer* textRenderer);
 
+/// @brief Phase 10 slice 12.2 overload. Builds the layout **and** wires
+///        each menu button's `onClick` signal to the matching
+///        `UISystem::applyIntent(...)` transition so the menu is
+///        interactive as soon as it's constructed:
+///        New Walkthrough → `NewWalkthrough`, Continue → `Continue`,
+///        Settings → `OpenSettings`, Quit → `QuitToDesktop`.
+///        Templates has no intent (per-game concern) and stays inert.
+void buildMainMenu(UICanvas& canvas,
+                    const UITheme& theme,
+                    TextRenderer* textRenderer,
+                    UISystem& uiSystem);
+
 /// @brief Builds the pause-menu canvas (in-game overlay).
 ///
 /// Layout: centred 720-px-wide panel with corner brackets, "PAUSED" caption,
@@ -45,6 +58,16 @@ void buildMainMenu(UICanvas& canvas,
 void buildPauseMenu(UICanvas& canvas,
                      const UITheme& theme,
                      TextRenderer* textRenderer);
+
+/// @brief Phase 10 slice 12.2 overload. Builds the layout **and** wires
+///        each pause button's `onClick` signal to `UISystem::applyIntent`:
+///        Resume → `Resume`, Settings → `OpenSettings`, Quit to Main →
+///        `QuitToMain`, Quit to Desktop → `QuitToDesktop`. Save / Save As /
+///        Load stay inert (per-game save-system concern).
+void buildPauseMenu(UICanvas& canvas,
+                     const UITheme& theme,
+                     TextRenderer* textRenderer,
+                     UISystem& uiSystem);
 
 /// @brief Builds the settings-menu chrome (modal full-bleed panel).
 ///
@@ -60,5 +83,41 @@ void buildPauseMenu(UICanvas& canvas,
 void buildSettingsMenu(UICanvas& canvas,
                         const UITheme& theme,
                         TextRenderer* textRenderer);
+
+/// @brief Phase 10 slice 12.2 overload. Builds the chrome **and** wires
+///        the header `ESC CLOSE` button's `onClick` signal to
+///        `UISystem::applyIntent(CloseSettings)`. Restore Defaults /
+///        Revert / Apply remain inert — per-game concerns.
+void buildSettingsMenu(UICanvas& canvas,
+                        const UITheme& theme,
+                        TextRenderer* textRenderer,
+                        UISystem& uiSystem);
+
+/// @brief Phase 10 slice 12.4 — builds the default HUD composition for
+///        first-person walkthrough gameplay.
+///
+/// The canvas is populated with four root elements, in this order:
+///   -# `UICrosshair` at `CENTER`, sized to `UITheme::crosshairLength` /
+///      `crosshairThickness`, coloured with `theme.crosshair`.
+///   -# `UIFpsCounter` at `TOP_LEFT`, **hidden by default** — game code
+///      toggles `visible` from a debug flag.
+///   -# `UIPanel` at `BOTTOM_CENTER` (4 body-lines above the bottom edge),
+///      a transparent anchor container game code attaches interaction
+///      prompts to. No visual fill — `backgroundColor.a = 0`.
+///   -# `UIPanel` at `TOP_RIGHT` holding three `UINotificationToast`
+///      children, pre-sized and stacked vertically. Toasts start
+///      invisible (`alpha = 0`); the notification queue drives them.
+///
+/// Game-specific overlays (health bar, inventory, minimap) layer on
+/// top — this prefab provides the walkthrough baseline that every
+/// Vestige game shares.
+///
+/// @note Calling this on a non-empty canvas appends elements rather than
+///       replacing them — caller is responsible for `canvas.clear()`
+///       when rebuilding.
+void buildDefaultHud(UICanvas& canvas,
+                      const UITheme& theme,
+                      TextRenderer* textRenderer,
+                      UISystem& uiSystem);
 
 } // namespace Vestige

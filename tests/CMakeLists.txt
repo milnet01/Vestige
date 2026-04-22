@@ -105,6 +105,11 @@ add_executable(vestige_tests
     test_fog.cpp
     test_photosensitive_safety.cpp
     test_subtitle.cpp
+    test_game_screen.cpp
+    test_ui_system_screen_stack.cpp
+    test_notification_queue.cpp
+    test_default_hud.cpp
+    test_ui_runtime_panel.cpp
     test_ui_accessible.cpp
     test_input_bindings.cpp
     test_post_process_accessibility.cpp

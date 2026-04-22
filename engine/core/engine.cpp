@@ -17,6 +17,7 @@
 #include "systems/lighting_system.h"
 #include "systems/audio_system.h"
 #include "systems/ui_system.h"
+#include "ui/game_screen.h"
 #include "systems/navigation_system.h"
 #include "systems/sprite_system.h"
 #include "systems/physics2d_system.h"
@@ -168,6 +169,15 @@ bool Engine::initialize(const EngineConfig& config)
     m_spriteSystem = spriteSys;
     m_physics2DSystem = physics2DSys;
 
+    // Slice 12.2 — surface the GameScreen state machine via UISystem.
+    // Inject the text renderer here so screen-builder prefabs (main menu,
+    // pause, settings) can rasterize labels. Opt-in via config flag.
+    m_enableGameScreens = config.enableGameScreens;
+    if (m_uiSystem && m_renderer)
+    {
+        m_uiSystem->setTextRenderer(m_renderer->getTextRenderer());
+    }
+
     // Cache raw pointers for hot-path render loop access
     m_environmentForces    = &atmoSys->getEnvironmentForces();
     m_particleRenderer     = &particleSys->getParticleRenderer();
@@ -238,6 +248,7 @@ bool Engine::initialize(const EngineConfig& config)
         m_editor->setProfiler(&m_profiler);
         m_editor->setNavigationSystem(m_systemRegistry.getSystem<NavigationSystem>());
         m_editor->setAudioSystem(m_systemRegistry.getSystem<AudioSystem>());
+        m_editor->setUISystem(m_systemRegistry.getSystem<UISystem>());
         m_editor->getBrushPreview().init(config.assetPath);
     }
 
@@ -298,7 +309,37 @@ bool Engine::initialize(const EngineConfig& config)
         switch (event.keyCode)
         {
             case GLFW_KEY_ESCAPE:
-                if (m_editor)
+                // Slice 12.2 — when the game-screen state machine is active,
+                // ESC routes through UISystem::applyIntent. The pure state
+                // machine decides what ESC means in the current screen
+                // (Playing → Pause, Paused → Resume, Settings → CloseSettings,
+                // MainMenu → QuitToDesktop). Editor/--play paths keep the
+                // legacy behaviour when the flag is off.
+                if (m_enableGameScreens && m_uiSystem)
+                {
+                    const GameScreen current = m_uiSystem->getCurrentScreen();
+                    switch (current)
+                    {
+                        case GameScreen::Playing:
+                            m_uiSystem->applyIntent(GameScreenIntent::Pause);
+                            break;
+                        case GameScreen::Paused:
+                            m_uiSystem->applyIntent(GameScreenIntent::Resume);
+                            break;
+                        case GameScreen::Settings:
+                            m_uiSystem->applyIntent(GameScreenIntent::CloseSettings);
+                            break;
+                        case GameScreen::MainMenu:
+                            m_uiSystem->applyIntent(GameScreenIntent::QuitToDesktop);
+                            break;
+                        case GameScreen::None:
+                        case GameScreen::Loading:
+                        case GameScreen::Exiting:
+                            // No ESC meaning for these screens — ignore.
+                            break;
+                    }
+                }
+                else if (m_editor)
                 {
                     // Toggle between editor and play mode
                     m_editor->toggleMode();
@@ -691,6 +732,14 @@ bool Engine::initialize(const EngineConfig& config)
                 "' (expected: motion-overlay, bloom, ssao, ibl, "
                 "ibl-diffuse, ibl-specular, sh-grid)");
         }
+    }
+
+    // Slice 12.2 — cold-start screen for headless game builds. The editor's
+    // own EDIT/PLAY mode is orthogonal; when the editor is present we leave
+    // the root screen at None so the editor-viewport path owns the frame.
+    if (m_enableGameScreens && m_uiSystem && !m_editor)
+    {
+        m_uiSystem->setRootScreen(GameScreen::MainMenu);
     }
 
     m_isRunning = true;
