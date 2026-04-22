@@ -230,6 +230,15 @@ AI-assisted contributions are welcome and must be disclosed in the PR
 description. "The AI wrote it" is never an excuse for an unreviewed
 change — the committer owns the outcome.
 
+## Testing wanted
+
+**You don't need to write C++ to help.** The maintainer develops on
+AMD RDNA2 / Linux, so reports from NVIDIA, Intel, older AMD, Windows,
+and non-openSUSE Linux are especially valuable. Pre-built binaries are
+attached to every [GitHub Release](https://github.com/milnet01/Vestige/releases);
+what to try and how to report lives in
+[`TESTING.md`](TESTING.md).
+
 ## Reporting security issues
 
 Do not open a public issue. See [`SECURITY.md`](SECURITY.md) *§

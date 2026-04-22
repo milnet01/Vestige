@@ -9,6 +9,44 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-22 Public default scene + tester onboarding
+
+Two open-source-release drive-bys landed together.
+
+**Default scene is now the neutral demo, not the Tabernacle.** A fresh
+public clone opens `Engine::setupDemoScene()` (four CC0 textured blocks
+on a grey ground, sky-blue clear colour) instead of
+`setupTabernacleScene()`, which referenced assets under
+`assets/textures/tabernacle/` that live in a separate private repo and
+are gitignored in the public repo. The Tabernacle scene is still
+reachable for the maintainer via a new `--biblical-demo` CLI flag
+(`EngineConfig::biblicalDemo`, default `false`).
+
+- `EngineConfig::biblicalDemo` — maintainer opt-in; default `false` so
+  public clones no longer silently fall back on missing textures.
+- `engine.cpp` — `setupDemoScene()` now owns its renderer baseline
+  (skybox disabled, sky-blue clear, bloom + SSAO with sane defaults,
+  manual exposure 1.0) rather than inheriting Tabernacle-tuned values
+  by accident. The Tabernacle path keeps its own overrides.
+- `app/main.cpp` — `--biblical-demo` flag + `--help` entry.
+- `ASSET_LICENSES.md` — clarifies the default-scene policy.
+
+**Tester onboarding documentation.** The engine is ready for broader
+testing but hadn't published a "how to test without writing C++" path.
+
+- `TESTING.md` — 10-minute smoke-test script, 30-minute deeper pass,
+  hardware gaps the maintainer cannot cover (NVIDIA, Intel, Windows,
+  non-RDNA AMD), and pointers to the release binaries + issue templates.
+- `.github/ISSUE_TEMPLATE/tester_feedback.md` — companion to the
+  existing `bug_report.md`; captures hardware, version, frame-rate
+  observations, and suggestions for "works / rough / would-change" reports.
+- `.github/workflows/release.yml` — first-cut tag-triggered release
+  workflow. `v*` tag push (or manual dispatch) builds Linux x86_64
+  tarball + Windows x86_64 zip, attaches both to a draft GitHub
+  Release. AppImage + code-signing are follow-ons.
+- `README.md` + `CONTRIBUTING.md` — cross-link `TESTING.md` so
+  non-developers arriving at either doc see the tester path.
+
 ### 2026-04-22 Phase 10 — Video-mode runtime apply (slice 13.2)
 
 Unblocks the "Window is immutable after construction" blocker

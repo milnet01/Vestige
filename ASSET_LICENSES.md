@@ -93,15 +93,26 @@ historical default.
 | `everytexture-com-stock-rocks-*` (4 files) | everytexture.com | License permits free personal/commercial use but **forbids redistribution** in other repositories. Per the site's Terms and Conditions: "You will not redistribute any of the content from everytexture.com unless this content is specifically made for redistribution." |
 | `tabernacle/*` (29 files) | Mixed Poly Haven + project-specific | Destined for the separate private biblical-project repo (commercial Steam release) |
 
-The local maintainer keeps these files on disk so the demo scene and
-tabernacle scene render normally during development. They are not
-present in the public repo. The demo scene in `engine.cpp` no longer
-references any Texturelabs or everytexture files: the **Gold** block
-renders as pure PBR (metallic/roughness albedo, no diffuse texture),
-the **Wood** block uses the CC0 Poly Haven `plank_flooring_04` set
-already shipped in the repo, and the **ground** renders untextured
-grey until a CC0 ground material lands via `VestigeAssets` (which
-goes public closer to v1.0.0 — see the status box at the top).
+The local maintainer keeps these files on disk so the Tabernacle scene
+renders normally during development. They are not present in the public
+repo.
+
+**Default-scene policy (as of 2026-04-22):** a fresh public clone opens
+`Engine::setupDemoScene()` — the neutral CC0 demo with four textured
+blocks (Red Brick, Gold, Wood, Rough Brick) on a grey ground and a solid
+sky-blue clear colour. The Tabernacle scene in `Engine::setupTabernacleScene()`
+is gated behind the `--biblical-demo` CLI flag (`EngineConfig::biblicalDemo`)
+and is reachable only when the maintainer's private texture set is on
+disk. Public users who enable the flag will see placeholder fallbacks
+for every tabernacle-prefixed texture.
+
+Neither demo scene now references Texturelabs or everytexture files:
+the **Gold** block renders as pure PBR (metallic/roughness albedo, no
+diffuse texture), the **Wood** block uses the CC0 Poly Haven
+`plank_flooring_04` set already shipped in the repo, and the **ground**
+renders untextured grey until a CC0 ground material lands via
+`VestigeAssets` (which goes public closer to v1.0.0 — see the status
+box at the top).
 
 ---
 

@@ -4,6 +4,11 @@ Thank you for your interest in contributing! Vestige is a solo-maintained,
 open-source 3D engine ([MIT License](LICENSE)). Contributions are welcome,
 and this document explains how to participate effectively.
 
+> **Not a developer?** You can still help — Vestige needs **testers** on
+> GPUs and OSes the maintainer doesn't own. See [`TESTING.md`](TESTING.md)
+> for a 10-minute smoke-test script and how to file reports. No build
+> environment required; pre-built binaries ship on every release.
+
 > **Project status**: Vestige is early-stage. The API is unstable until 1.0.
 > Expect breaking changes between minor versions during the 0.x series.
 > See [ROADMAP.md](ROADMAP.md) for the current direction.

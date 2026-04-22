@@ -46,6 +46,11 @@ void printUsage(const char* argv0)
         << "  --isolate-feature=NAME  Disable one feature for visual-test\n"
         << "                          bisection. NAME ∈ {motion-overlay,\n"
         << "                          bloom, ssao, ibl}.\n"
+        << "  --biblical-demo         Maintainer-only: open the built-in\n"
+        << "                          Tabernacle scene instead of the\n"
+        << "                          neutral demo. Requires the private\n"
+        << "                          assets/textures/tabernacle/ set,\n"
+        << "                          which is not in public clones.\n"
         << "  -h, --help              Print this message and exit.\n"
         << "\n"
         << "Examples:\n"
@@ -109,6 +114,11 @@ bool parseArgs(int argc, char* argv[], Vestige::EngineConfig& config, int& exitC
             config.isolateFeature = arg + 18;
             Vestige::Logger::info("Isolate feature requested: " +
                                   config.isolateFeature);
+        }
+        else if (std::strcmp(arg, "--biblical-demo") == 0)
+        {
+            config.biblicalDemo = true;
+            Vestige::Logger::info("Biblical demo (Tabernacle) scene requested via CLI");
         }
         else
         {

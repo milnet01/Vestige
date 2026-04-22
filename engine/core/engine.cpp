@@ -190,8 +190,19 @@ bool Engine::initialize(const EngineConfig& config)
     m_terrainRenderer      = &terrainSys->getTerrainRenderer();
     m_physicsCharController = &charSys->getPhysicsCharController();
 
-    // Set up the scene (after cached pointers are set — scene setup uses m_environmentForces etc.)
-    setupTabernacleScene();
+    // Set up the scene (after cached pointers are set — scene setup uses
+    // m_environmentForces etc.). Default is the neutral CC0 demo scene
+    // that ships in the public repo; maintainers opt into the Tabernacle
+    // scene with --biblical-demo, which references assets that live in a
+    // separate private repo (see EngineConfig::biblicalDemo doxygen).
+    if (config.biblicalDemo)
+    {
+        setupTabernacleScene();
+    }
+    else
+    {
+        setupDemoScene();
+    }
 
     // Optional CLI-driven scene replacement (`--scene PATH`). Resolves the
     // path against the CWD first, then `<assetPath>/scenes/`. Loading
@@ -1710,6 +1721,21 @@ void Engine::drawLightGizmos(Scene& scene, const Selection& selection,
 void Engine::setupDemoScene()
 {
     Logger::info("Setting up demo scene...");
+
+    // Renderer baseline for the public demo. The Tabernacle scene
+    // overrides these values; keep them in sync when tuning either
+    // scene. No HDRI skybox is loaded because no CC0 HDRI ships in the
+    // public repo yet — a solid sky-blue clear colour is the fallback
+    // and renders the demo blocks cleanly. A follow-on slice can bundle
+    // a CC0 Poly Haven HDRI once license vetting is complete.
+    m_renderer->setSkyboxEnabled(false);
+    m_renderer->setClearColor(glm::vec3(0.53f, 0.68f, 0.86f));
+    m_renderer->setAutoExposure(false);
+    m_renderer->setExposure(1.0f);
+    m_renderer->setBloomEnabled(true);
+    m_renderer->setBloomThreshold(1.0f);
+    m_renderer->setBloomIntensity(0.15f);
+    m_renderer->setSsaoEnabled(true);
 
     Scene* scene = m_sceneManager->createScene("Demo");
 

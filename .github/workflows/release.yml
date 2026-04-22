@@ -1,0 +1,269 @@
+# .github/workflows/release.yml — Vestige release artifact builds.
+#
+# Triggered by pushing a tag matching v* (e.g. v0.1.4-preview, v1.0.0) or
+# by manual workflow_dispatch. Produces:
+#   - Linux:   vestige-<version>-linux-x86_64.tar.gz
+#   - Windows: vestige-<version>-windows-x86_64.zip
+# and attaches both to a GitHub Release for the triggering tag. Testers
+# (see TESTING.md) get a "download, extract, run" path without a build
+# environment.
+#
+# This workflow is deliberately minimal for the first cut:
+#   - x86_64 only. ARM64 (Linux + Windows-on-ARM) is a follow-on.
+#   - No AppImage yet. Follow-on: use linuxdeploy + the existing
+#     packaging/vestige-editor.desktop to produce a single-file AppImage.
+#     The current Linux artifact is a relocatable tarball that assumes
+#     the user has working OpenGL 4.5 drivers + X11/Wayland/ALSA on the
+#     host (which is every modern desktop Linux install).
+#   - Windows binary is unsigned. Code-signing needs a cert; out of
+#     scope for a pre-1.0 tester build. A SmartScreen warning on first
+#     run is expected and documented in TESTING.md.
+#   - VESTIGE_FETCH_ASSETS=OFF matches CI — the shipped demo assets in
+#     assets/ are CC0 and redistributable; VestigeAssets (the larger 4K
+#     pack) stays private until v1.0.0.
+
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version tag to build (e.g. v0.1.4-preview). Must already exist."
+        required: true
+        type: string
+
+concurrency:
+  # Serialise release runs for a given tag. A manual re-run of the same
+  # tag cancels the in-flight one rather than racing for the upload.
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  # Needed for softprops/action-gh-release to create / update releases.
+  # Nothing else. No `security-events`, no `id-token`.
+  contents: write
+
+jobs:
+  # ─────────────────────────────────────────────────────────────────────
+  # Linux x86_64 — tarball.
+  # ─────────────────────────────────────────────────────────────────────
+  linux-release:
+    name: Linux x86_64 tarball
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+          # For workflow_dispatch runs, the checked-out ref is the
+          # branch default (usually main); pin to the requested tag so
+          # the built binary actually carries the tagged source.
+          ref: ${{ github.event.inputs.version || github.ref }}
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            cmake \
+            ninja-build \
+            pkg-config \
+            libgl1-mesa-dev \
+            libglu1-mesa-dev \
+            libx11-dev \
+            libxrandr-dev \
+            libxinerama-dev \
+            libxcursor-dev \
+            libxi-dev \
+            libxxf86vm-dev \
+            libwayland-dev \
+            libxkbcommon-dev \
+            libasound2-dev \
+            patchelf
+
+      - name: Cache CMake FetchContent deps
+        uses: actions/cache@v5
+        with:
+          path: |
+            build/_deps
+          key: release-cmake-deps-linux-${{ hashFiles('**/CMakeLists.txt') }}
+          restore-keys: |
+            release-cmake-deps-linux-
+
+      - name: Configure (Release)
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DVESTIGE_FETCH_ASSETS=OFF
+
+      - name: Build
+        run: cmake --build build -j $(nproc)
+
+      - name: Resolve version string
+        id: version
+        run: |
+          # Strip refs/tags/ prefix; fall back to VERSION file for
+          # manual dispatch that forgot the input.
+          TAG="${GITHUB_REF#refs/tags/}"
+          if [ -z "$TAG" ] || [ "$TAG" = "$GITHUB_REF" ]; then
+            TAG="v$(cat VERSION)"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Stage release tree
+        # Build a relocatable directory:
+        #   vestige-<ver>-linux-x86_64/
+        #     vestige, vestige-editor           (binary + wrapper)
+        #     lib/libopenal.so.1*, ...          (bundled shared libs)
+        #     assets/                           (CC0 demo assets)
+        #     LICENSE, README.md, TESTING.md, THIRD_PARTY_NOTICES.md, ASSET_LICENSES.md
+        # rpath on vestige is set to $ORIGIN/lib so the bundled .so's
+        # are found without the user touching LD_LIBRARY_PATH.
+        run: |
+          set -euo pipefail
+          VER="${{ steps.version.outputs.version }}"
+          STAGE="vestige-${VER}-linux-x86_64"
+          mkdir -p "$STAGE/lib" "$STAGE/assets"
+
+          # Engine binary and editor wrapper. Names come from
+          # engine/CMakeLists.txt and packaging/vestige-editor.sh.
+          cp build/bin/vestige "$STAGE/"
+          cp packaging/vestige-editor.sh "$STAGE/vestige-editor"
+          chmod +x "$STAGE/vestige-editor"
+
+          # Bundle OpenAL Soft (LGPL — must be dynamically linked) and
+          # any other FetchContent-built .so's that end up next to the
+          # binary. GLFW and GLM are static-linked so nothing to copy.
+          if [ -d build/_deps/openal-soft-build ]; then
+            find build/_deps/openal-soft-build -maxdepth 3 -name 'libopenal.so*' -exec cp -av {} "$STAGE/lib/" \;
+          fi
+          # Repoint the binary's RUNPATH so the bundled .so is found.
+          patchelf --set-rpath '$ORIGIN/lib' "$STAGE/vestige"
+
+          # Shipped demo assets + license/notice docs.
+          cp -r assets/. "$STAGE/assets/"
+          cp LICENSE README.md TESTING.md THIRD_PARTY_NOTICES.md ASSET_LICENSES.md "$STAGE/"
+
+          # Tarball it. --sort=name + --mtime for reproducibility.
+          tar --sort=name --mtime='@0' --owner=0 --group=0 --numeric-owner \
+              -czf "${STAGE}.tar.gz" "$STAGE"
+          ls -lh "${STAGE}.tar.gz"
+
+      - name: Upload as workflow artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: vestige-linux-x86_64
+          path: vestige-*-linux-x86_64.tar.gz
+          if-no-files-found: error
+
+      - name: Attach to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: vestige-*-linux-x86_64.tar.gz
+          draft: true
+          fail_on_unmatched_files: true
+          generate_release_notes: true
+
+  # ─────────────────────────────────────────────────────────────────────
+  # Windows x86_64 — ZIP.
+  # ─────────────────────────────────────────────────────────────────────
+  windows-release:
+    name: Windows x86_64 zip
+    runs-on: windows-2022
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+          ref: ${{ github.event.inputs.version || github.ref }}
+
+      - name: Cache CMake FetchContent deps
+        uses: actions/cache@v5
+        with:
+          path: |
+            build/_deps
+          key: release-cmake-deps-windows-${{ hashFiles('**/CMakeLists.txt') }}
+          restore-keys: |
+            release-cmake-deps-windows-
+
+      - name: Configure (Release)
+        # Default MSVC generator on windows-2022 is VS 2022. No Ninja
+        # here — the VS generator is less fussy about the first-time
+        # FetchContent build on MSVC.
+        run: |
+          cmake -S . -B build -A x64 `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DVESTIGE_FETCH_ASSETS=OFF
+
+      - name: Build
+        run: cmake --build build --config Release -j
+
+      - name: Resolve version string
+        id: version
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          if [ -z "$TAG" ] || [ "$TAG" = "$GITHUB_REF" ]; then
+            TAG="v$(cat VERSION)"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Stage release tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          VER="${{ steps.version.outputs.version }}"
+          STAGE="vestige-${VER}-windows-x86_64"
+          mkdir -p "$STAGE/assets"
+
+          # MSVC multi-config generator writes Release output to
+          # build/bin/Release/ (or build/Release/ depending on version);
+          # find the exe and copy it + any sibling DLLs.
+          EXE="$(find build -maxdepth 4 -iname 'vestige.exe' | head -1)"
+          test -n "$EXE"
+          EXE_DIR="$(dirname "$EXE")"
+          cp "$EXE" "$STAGE/"
+          # Copy every DLL that ended up next to the .exe (OpenAL Soft,
+          # anything else that built SHARED). CMake/MSBuild puts them
+          # there when the target lists them as runtime deps.
+          find "$EXE_DIR" -maxdepth 1 -iname '*.dll' -exec cp -v {} "$STAGE/" \;
+
+          # Shipped assets + license docs.
+          cp -r assets/. "$STAGE/assets/"
+          cp LICENSE README.md TESTING.md THIRD_PARTY_NOTICES.md ASSET_LICENSES.md "$STAGE/"
+
+          # Windows testers double-click the .exe, but a tiny .cmd
+          # wrapper helps when they want an obvious "launch" entry.
+          cat > "$STAGE/vestige-editor.cmd" <<'EOF'
+          @echo off
+          "%~dp0vestige.exe" %*
+          EOF
+
+          # Use PowerShell's Compress-Archive via cmd so we get a real
+          # zip with Windows-friendly path separators.
+          powershell -NoProfile -Command "Compress-Archive -Path '$STAGE' -DestinationPath '${STAGE}.zip' -Force"
+          ls -lh "${STAGE}.zip"
+
+      - name: Upload as workflow artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: vestige-windows-x86_64
+          path: vestige-*-windows-x86_64.zip
+          if-no-files-found: error
+
+      - name: Attach to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: vestige-*-windows-x86_64.zip
+          draft: true
+          fail_on_unmatched_files: true
+          generate_release_notes: true

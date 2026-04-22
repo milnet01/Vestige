@@ -73,6 +73,19 @@ struct EngineConfig
     /// Defaults to false so the editor / `--play` flow is unchanged; game
     /// projects opt in explicitly.
     bool enableGameScreens = false;
+
+    /// @brief Opt-in to the Tabernacle built-in demo (CLI: --biblical-demo).
+    ///
+    /// Default `false` — a fresh public clone opens `setupDemoScene()`
+    /// which uses only the CC0 textures shipped in the public repo.
+    /// Setting this to `true` calls `setupTabernacleScene()` instead,
+    /// which references assets under `assets/textures/tabernacle/`. Those
+    /// textures live in a separate private repo (commercial Steam release)
+    /// and are not present in public clones — the flag exists for the
+    /// maintainer's local development environment. Public users who enable
+    /// it will see the tabernacle scene render with missing-texture
+    /// fallbacks.
+    bool biblicalDemo = false;
 };
 
 /// @brief The central engine — owns all subsystems and runs the main loop.
