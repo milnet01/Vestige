@@ -73,6 +73,16 @@ void UISystem::setReducedMotion(bool enabled)
     rebuildTheme();
 }
 
+void UISystem::applyAccessibilityBatch(UIScalePreset scale,
+                                        bool highContrast,
+                                        bool reducedMotion)
+{
+    m_scalePreset   = scale;
+    m_highContrast  = highContrast;
+    m_reducedMotion = reducedMotion;
+    rebuildTheme();
+}
+
 void UISystem::rebuildTheme()
 {
     UITheme t = m_baseTheme.withScale(scaleFactorOf(m_scalePreset));

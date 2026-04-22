@@ -128,6 +128,22 @@ public:
     /// @brief True when reduced-motion mode is currently applied.
     bool isReducedMotion() const { return m_reducedMotion; }
 
+    /// @brief Phase 10 slice 13.3: apply the three accessibility
+    ///        toggles in one rebuild.
+    ///
+    /// `setScalePreset`, `setHighContrastMode`, and `setReducedMotion`
+    /// each call `rebuildTheme()` individually — convenient for the
+    /// editor's live toggles but wasteful when the Settings apply path
+    /// wants to push all three values at once (fresh load, Apply, or
+    /// Restore Defaults). This batch setter updates the three fields
+    /// then runs `rebuildTheme()` exactly once.
+    ///
+    /// Equivalent to calling the three individual setters; use it when
+    /// you have all three values up front.
+    void applyAccessibilityBatch(UIScalePreset scale,
+                                  bool highContrast,
+                                  bool reducedMotion);
+
     // -- Phase 10 slice 12.2: game-screen state machine + modal stack --
 
     /// @brief Injects the text renderer used by screen builders.

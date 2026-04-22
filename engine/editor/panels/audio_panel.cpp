@@ -176,8 +176,16 @@ void AudioPanel::drawMixerTab()
 
     for (const auto& [bus, label] : kBuses)
     {
-        float& g = m_mixer.busGain[static_cast<std::size_t>(bus)];
-        ImGui::SliderFloat(label, &g, 0.0f, 1.0f, "%.2f");
+        // Phase 10 slice 13.3: route through setBusGain so the
+        // [0, 1] clamp policy lives in exactly one place. ImGui's
+        // SliderFloat clamps the UI input to the same range anyway,
+        // but the pass-through is stylistically consistent with the
+        // Settings apply layer.
+        float g = m_mixer.getBusGain(bus);
+        if (ImGui::SliderFloat(label, &g, 0.0f, 1.0f, "%.2f"))
+        {
+            m_mixer.setBusGain(bus, g);
+        }
     }
 
     ImGui::Separator();

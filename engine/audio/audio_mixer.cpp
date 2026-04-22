@@ -49,6 +49,17 @@ const char* audioBusLabel(AudioBus bus)
     return "Unknown";
 }
 
+void AudioMixer::setBusGain(AudioBus bus, float gain)
+{
+    const float clamped = std::max(0.0f, std::min(1.0f, gain));
+    busGain[static_cast<std::size_t>(bus)] = clamped;
+}
+
+float AudioMixer::getBusGain(AudioBus bus) const
+{
+    return busGain[static_cast<std::size_t>(bus)];
+}
+
 float effectiveBusGain(const AudioMixer& mixer, AudioBus bus)
 {
     const float master = mixer.busGain[static_cast<std::size_t>(AudioBus::Master)];

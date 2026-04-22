@@ -9,6 +9,50 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-22 Phase 10 — Audio + UI accessibility apply (slice 13.3a)
+
+Continues the Phase 10 settings chain. Adds runtime apply paths for
+the audio block and the UI-side accessibility triad (scale /
+contrast / motion). Renderer-side accessibility (color-vision
+filter, post-process, photosensitive safety) + HRTF + subtitles are
+deferred to a follow-on slice — keeps this change focused on the
+most-used knobs.
+
+- `AudioMixer::setBusGain(AudioBus, float)` + `getBusGain(AudioBus)`
+  centralise the [0, 1] clamp policy. `audio_panel.cpp` migrated
+  off direct `busGain[i]` array access so the clamp is consistent.
+- `UISystem::applyAccessibilityBatch(scale, contrast, motion)`
+  coalesces the three individual setters (each of which triggers a
+  `rebuildTheme`) into one rebuild. Equivalent outcome; one-third
+  the work per apply.
+- `AudioApplySink` + `AudioMixerApplySink` in `core/settings_apply.{h,cpp}`.
+  `applyAudio(AudioSettings, AudioApplySink&)` pushes all six bus
+  gains in enum order. HRTF stays on `AudioEngine` and is a
+  follow-on; this sink covers only `AudioMixer`.
+- `UIAccessibilityApplySink` + `UISystemAccessibilityApplySink`
+  sibling. `applyUIAccessibility(AccessibilitySettings, sink)`
+  translates the wire-format scale-preset string (`"1.0x"` /
+  `"1.25x"` / `"1.5x"` / `"2.0x"`) to the typed `UIScalePreset`
+  enum — unknown strings fall back to 1.0× consistent with the
+  Settings validation policy.
+
+Tests: 12 new in `tests/test_settings.cpp` (design-doc target: 12):
+- AudioMixer API: clamp policy + getBusGain is raw not master-product.
+- Audio apply: forwards all 6 buses in order, sink actually mutates
+  mixer state, sink clamps out-of-range input, JSON → fromJson →
+  apply round-trip preserves values.
+- UI accessibility apply: string→enum mapping for each preset,
+  unknown-string fallback, contrast/motion pass through verbatim,
+  batch call is one rebuild not three, full preset-string table
+  is pinned, JSON → fromJson → apply round-trip.
+
+Full suite 2629 passing (1 pre-existing skip).
+
+Next: slice 13.3b — renderer accessibility (color vision, post-process,
+photosensitive safety) + HRTF + subtitle size. Or slice 13.4
+(input bindings toJson/fromJson) if the renderer coupling turns
+out to want more design work first.
+
 ### 2026-04-22 Phase 10.5 — First-run wizard engine wiring (slice 14.4)
 
 Fourth and final slice of the first-run wizard work. Wires the

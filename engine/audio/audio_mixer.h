@@ -87,6 +87,20 @@ struct AudioMixer
     {
         busGain.fill(1.0f);
     }
+
+    /// @brief Set the stored gain for `bus`, clamped to [0, 1].
+    ///
+    /// Phase 10 slice 13.3: every non-test consumer should go
+    /// through this setter rather than poking `busGain[i]` directly,
+    /// so the clamp policy lives in exactly one place and the
+    /// Settings apply path (applyAudio) does not silently admit
+    /// out-of-range values written by a hand-edited settings.json.
+    void setBusGain(AudioBus bus, float gain);
+
+    /// @brief Raw stored gain for `bus` (no Master multiplication).
+    ///        Use `effectiveBusGain(mixer, bus)` for the value that
+    ///        actually scales outgoing sound.
+    float getBusGain(AudioBus bus) const;
 };
 
 /// @brief Returns the gain that will be applied to a source routed

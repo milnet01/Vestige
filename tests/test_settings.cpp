@@ -779,3 +779,233 @@ TEST(SettingsOnboarding, PromotionSkippedWhenStructAlreadyComplete)
         << "Legacy flag file should not be deleted when the in-memory "
            "struct is already authoritative.";
 }
+
+// ===== Slice 13.3 — AudioMixer API + audio apply path =======================
+
+namespace
+{
+
+/// Recording mock — captures setBusGain calls so tests can verify
+/// applyAudio pushed all six gains in the right order.
+class RecordingAudioSink final : public AudioApplySink
+{
+public:
+    std::vector<std::pair<AudioBus, float>> calls;
+
+    void setBusGain(AudioBus bus, float gain) override
+    {
+        calls.emplace_back(bus, gain);
+    }
+};
+
+} // namespace
+
+TEST(AudioMixerApi, SetBusGainClampsToUnitRange)
+{
+    AudioMixer m;
+    m.setBusGain(AudioBus::Music, -0.5f);
+    EXPECT_FLOAT_EQ(m.getBusGain(AudioBus::Music), 0.0f);
+
+    m.setBusGain(AudioBus::Music, 1.7f);
+    EXPECT_FLOAT_EQ(m.getBusGain(AudioBus::Music), 1.0f);
+
+    m.setBusGain(AudioBus::Music, 0.6f);
+    EXPECT_FLOAT_EQ(m.getBusGain(AudioBus::Music), 0.6f);
+}
+
+TEST(AudioMixerApi, GetBusGainReturnsRawStoredValueNotMasterProduct)
+{
+    // getBusGain returns the per-bus slot; effectiveBusGain still
+    // composes with Master. A test ensures the two don't drift apart.
+    AudioMixer m;
+    m.setBusGain(AudioBus::Master, 0.5f);
+    m.setBusGain(AudioBus::Sfx,    0.8f);
+
+    EXPECT_FLOAT_EQ(m.getBusGain(AudioBus::Sfx), 0.8f);
+    EXPECT_FLOAT_EQ(effectiveBusGain(m, AudioBus::Sfx), 0.4f);
+}
+
+TEST(SettingsApply, AudioForwardsAllSixBusesInEnumOrder)
+{
+    AudioSettings a;
+    a.busGains[0] = 0.5f;  // Master
+    a.busGains[1] = 0.4f;  // Music
+    a.busGains[2] = 0.6f;  // Voice
+    a.busGains[3] = 0.3f;  // Sfx
+    a.busGains[4] = 0.7f;  // Ambient
+    a.busGains[5] = 0.2f;  // Ui
+
+    RecordingAudioSink sink;
+    applyAudio(a, sink);
+
+    ASSERT_EQ(sink.calls.size(), 6u);
+    EXPECT_EQ(sink.calls[0].first, AudioBus::Master);
+    EXPECT_FLOAT_EQ(sink.calls[0].second, 0.5f);
+    EXPECT_EQ(sink.calls[1].first, AudioBus::Music);
+    EXPECT_FLOAT_EQ(sink.calls[1].second, 0.4f);
+    EXPECT_EQ(sink.calls[5].first, AudioBus::Ui);
+    EXPECT_FLOAT_EQ(sink.calls[5].second, 0.2f);
+}
+
+TEST(SettingsApply, AudioMixerSinkActuallyMutatesMixerState)
+{
+    AudioMixer m;
+    AudioMixerApplySink sink(m);
+    sink.setBusGain(AudioBus::Music, 0.42f);
+
+    EXPECT_FLOAT_EQ(m.getBusGain(AudioBus::Music), 0.42f);
+}
+
+TEST(SettingsApply, AudioMixerSinkClampsOutOfRangeGainsFromDisk)
+{
+    // Simulate a hand-edited settings.json with out-of-range values.
+    // The Settings validation step clamps to [0, 1] already, but
+    // the apply-side sink must also clamp — belt and braces, since
+    // tests (and future callers) can invoke the sink directly.
+    AudioMixer m;
+    AudioMixerApplySink sink(m);
+    sink.setBusGain(AudioBus::Music, 2.5f);
+    EXPECT_FLOAT_EQ(m.getBusGain(AudioBus::Music), 1.0f);
+}
+
+TEST(SettingsApply, AudioFromValidatedLoadRoundTripsThroughApply)
+{
+    // Chain: user-written JSON → Settings::fromJson (validate) → applyAudio.
+    json j = Settings{}.toJson();
+    j["audio"]["busGains"]["music"] = 0.33f;
+    j["audio"]["busGains"]["ui"]    = 0.11f;
+
+    Settings s;
+    ASSERT_TRUE(s.fromJson(j));
+
+    AudioMixer m;
+    AudioMixerApplySink sink(m);
+    applyAudio(s.audio, sink);
+
+    EXPECT_FLOAT_EQ(m.getBusGain(AudioBus::Music), 0.33f);
+    EXPECT_FLOAT_EQ(m.getBusGain(AudioBus::Ui),    0.11f);
+}
+
+// ===== Slice 13.3 — UI accessibility apply path =============================
+
+namespace
+{
+
+/// Recording mock — captures the single batch call so tests can
+/// verify applyUIAccessibility collapsed scale+contrast+motion
+/// into exactly one rebuild.
+class RecordingUIAccessSink final : public UIAccessibilityApplySink
+{
+public:
+    int             callCount     = 0;
+    UIScalePreset   scale         = UIScalePreset::X1_0;
+    bool            highContrast  = false;
+    bool            reducedMotion = false;
+
+    void applyScaleContrastMotion(UIScalePreset s, bool hc, bool rm) override
+    {
+        scale         = s;
+        highContrast  = hc;
+        reducedMotion = rm;
+        ++callCount;
+    }
+};
+
+} // namespace
+
+TEST(SettingsApply, UIAccessibilityMapsScalePresetStringToEnum)
+{
+    AccessibilitySettings a;
+    a.uiScalePreset = "1.5x";
+    a.highContrast  = false;
+    a.reducedMotion = false;
+
+    RecordingUIAccessSink sink;
+    applyUIAccessibility(a, sink);
+
+    EXPECT_EQ(sink.callCount, 1);
+    EXPECT_EQ(sink.scale, UIScalePreset::X1_5);
+}
+
+TEST(SettingsApply, UIAccessibilityUnknownScalePresetFallsBackToUnity)
+{
+    AccessibilitySettings a;
+    a.uiScalePreset = "3.0x";  // nonsense value
+    RecordingUIAccessSink sink;
+    applyUIAccessibility(a, sink);
+
+    // Fallback matches Settings validation policy.
+    EXPECT_EQ(sink.scale, UIScalePreset::X1_0);
+}
+
+TEST(SettingsApply, UIAccessibilityForwardsContrastAndMotionVerbatim)
+{
+    AccessibilitySettings a;
+    a.uiScalePreset = "1.0x";
+    a.highContrast  = true;
+    a.reducedMotion = true;
+
+    RecordingUIAccessSink sink;
+    applyUIAccessibility(a, sink);
+
+    EXPECT_TRUE(sink.highContrast);
+    EXPECT_TRUE(sink.reducedMotion);
+}
+
+TEST(SettingsApply, UIAccessibilityIsSingleBatchCallNotThreeSeparateSetters)
+{
+    // Core behaviour the batch API exists to guarantee: one call,
+    // one theme rebuild. Verified by the recording mock's callCount.
+    AccessibilitySettings a;
+    a.uiScalePreset = "2.0x";
+    a.highContrast  = true;
+    a.reducedMotion = true;
+
+    RecordingUIAccessSink sink;
+    applyUIAccessibility(a, sink);
+
+    EXPECT_EQ(sink.callCount, 1)
+        << "applyUIAccessibility must push all three fields in one batch "
+           "call so UISystem::rebuildTheme runs exactly once per apply.";
+}
+
+TEST(SettingsApply, UIAccessibilityAllPresetStringsMapToDistinctEnums)
+{
+    // Pins the string→enum table — if someone renames a wire value,
+    // this test fires.
+    struct Case { const char* s; UIScalePreset expect; };
+    const Case cases[] = {
+        {"1.0x",  UIScalePreset::X1_0},
+        {"1.25x", UIScalePreset::X1_25},
+        {"1.5x",  UIScalePreset::X1_5},
+        {"2.0x",  UIScalePreset::X2_0},
+    };
+
+    for (const auto& c : cases)
+    {
+        AccessibilitySettings a;
+        a.uiScalePreset = c.s;
+        RecordingUIAccessSink sink;
+        applyUIAccessibility(a, sink);
+        EXPECT_EQ(sink.scale, c.expect) << "Input: " << c.s;
+    }
+}
+
+TEST(SettingsApply, UIAccessibilityFromValidatedLoadRoundTripsThroughApply)
+{
+    // Chain: JSON → Settings::fromJson → applyUIAccessibility.
+    json j = Settings{}.toJson();
+    j["accessibility"]["uiScalePreset"] = "1.5x";
+    j["accessibility"]["highContrast"]  = true;
+    j["accessibility"]["reducedMotion"] = true;
+
+    Settings s;
+    ASSERT_TRUE(s.fromJson(j));
+
+    RecordingUIAccessSink sink;
+    applyUIAccessibility(s.accessibility, sink);
+
+    EXPECT_EQ(sink.scale,         UIScalePreset::X1_5);
+    EXPECT_TRUE(sink.highContrast);
+    EXPECT_TRUE(sink.reducedMotion);
+}
