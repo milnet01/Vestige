@@ -9,6 +9,48 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-22 Phase 10 — Renderer + subtitle + HRTF + photosensitive apply (slice 13.3b)
+
+Completes slice 13.3 — adds the four remaining accessibility / audio
+apply paths that 13.3a deferred. Every `Settings::accessibility`
+field and the `audio.hrtfEnabled` bool now have a typed apply sink
++ production forwarder + pure-function orchestrator.
+
+- `RendererAccessibilityApplySink` — color vision mode +
+  post-process (DoF / motion blur / fog + fog intensity + reduce-motion
+  fog) pushed through `Renderer` in one call per field group.
+  `applyRendererAccessibility` translates the wire-format colour-vision
+  string (`"none"` / `"protanopia"` / `"deuteranopia"` / `"tritanopia"`)
+  to the typed `ColorVisionMode` enum, maps `PostProcessAccessibilityWire`
+  → `PostProcessAccessibilitySettings`.
+- `SubtitleApplySink` + `SubtitleQueueApplySink` — `subtitlesEnabled`
+  bool + `subtitleSize` string (`"small"` / `"medium"` / `"large"` /
+  `"xl"`). The `enabled` flag is held on the sink until slice 14's UI
+  wiring queries it at render time (SubtitleQueue doesn't currently
+  expose an enable toggle; its owner drains it regardless).
+- `AudioHrtfApplySink` — `audio.hrtfEnabled` bool → `HrtfMode`.
+  `true` → `HrtfMode::Auto` (driver decides based on headphones
+  detection), `false` → `HrtfMode::Disabled` (force off).
+- `PhotosensitiveApplySink` — `photosensitiveSafety.enabled` bool +
+  `PhotosensitiveLimits` struct (maxFlashAlpha / shakeAmplitudeScale
+  / maxStrobeHz / bloomIntensityScale). No production-concrete impl
+  yet — the caps are consumed by individual effect-site call sites
+  (`clampFlashAlpha`, `clampShakeAmplitude`, …), so "applying" means
+  writing to a central engine-side store. The abstract sink + pure
+  apply function land now; the engine store lands when the first
+  effect that reads from it needs to.
+
+Tests: 9 new in `tests/test_settings.cpp` — every colour-vision
+string → enum (4 values), unknown fallback, post-process wire-field
+forward, every subtitle size → enum (4 values), subtitle enabled
+forward, HRTF bool → HrtfMode (both polarities), photosensitive
+enabled + limits forward, end-to-end JSON → fromJson → applyRenderer
+round-trip, SubtitleQueue production sink mutates state. Full suite
+2638 passing (1 pre-existing skip).
+
+Slice 13.3 is now complete end-to-end. Next: slice 13.4 — input
+bindings toJson/fromJson with scancode wire format.
+
 ### 2026-04-22 Phase 10 — Audio + UI accessibility apply (slice 13.3a)
 
 Continues the Phase 10 settings chain. Adds runtime apply paths for

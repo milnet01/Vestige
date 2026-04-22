@@ -21,8 +21,13 @@
 /// live `Window`.
 #pragma once
 
-#include "audio/audio_mixer.h"   // AudioBus enum
-#include "ui/ui_theme.h"         // UIScalePreset enum
+#include "accessibility/photosensitive_safety.h"     // PhotosensitiveLimits
+#include "accessibility/post_process_accessibility.h" // PostProcessAccessibilitySettings
+#include "audio/audio_hrtf.h"                         // HrtfMode
+#include "audio/audio_mixer.h"                        // AudioBus enum
+#include "renderer/color_vision_filter.h"             // ColorVisionMode
+#include "ui/subtitle.h"                              // SubtitleSizePreset
+#include "ui/ui_theme.h"                              // UIScalePreset enum
 
 namespace Vestige
 {
@@ -32,6 +37,8 @@ struct AudioSettings;            // core/settings.h
 struct AccessibilitySettings;    // core/settings.h
 class Window;                    // core/window.h
 class UISystem;                  // systems/ui_system.h
+class Renderer;                  // renderer/renderer.h
+class SubtitleQueue;             // ui/subtitle.h
 
 /// @brief Minimal interface for anything that can accept a video-mode
 ///        change from the Settings apply path. Implemented by
@@ -155,5 +162,134 @@ private:
 ///       in a follow-on slice (Renderer + SubtitleQueue sinks).
 void applyUIAccessibility(const AccessibilitySettings& access,
                            UIAccessibilityApplySink& sink);
+
+// ================================================================
+// Slice 13.3b — Renderer accessibility apply path
+//   (color vision + post-process effect toggles + fog scale)
+// ================================================================
+
+/// @brief Sink for the renderer-side accessibility fields: color
+///        vision simulation mode + post-process effect toggles (DoF,
+///        motion blur, fog + fog intensity + reduce-motion fog).
+class RendererAccessibilityApplySink
+{
+public:
+    virtual ~RendererAccessibilityApplySink() = default;
+
+    virtual void setColorVisionMode(ColorVisionMode mode) = 0;
+
+    /// @brief Applies the DoF / motion-blur / fog toggles as a
+    ///        single struct push — matches
+    ///        `Renderer::setPostProcessAccessibility` which stores
+    ///        them collectively.
+    virtual void setPostProcessAccessibility(
+        const PostProcessAccessibilitySettings& pp) = 0;
+};
+
+/// @brief Production sink wrapping a live `Renderer`.
+class RendererAccessibilityApplySinkImpl final
+    : public RendererAccessibilityApplySink
+{
+public:
+    explicit RendererAccessibilityApplySinkImpl(Renderer& renderer);
+    void setColorVisionMode(ColorVisionMode mode) override;
+    void setPostProcessAccessibility(
+        const PostProcessAccessibilitySettings& pp) override;
+
+private:
+    Renderer& m_renderer;
+};
+
+/// @brief Pushes renderer-relevant accessibility fields onto a sink.
+///
+/// Translates the wire-format color-vision string
+/// (`"none"` / `"protanopia"` / `"deuteranopia"` / `"tritanopia"`)
+/// to the typed `ColorVisionMode` enum. Unknown strings fall back
+/// to `Normal` to match the Settings validation policy. Maps the
+/// `PostProcessAccessibilityWire` fields carried by
+/// `AccessibilitySettings` onto the `PostProcessAccessibilitySettings`
+/// struct consumed by the renderer.
+void applyRendererAccessibility(const AccessibilitySettings& access,
+                                 RendererAccessibilityApplySink& sink);
+
+// ================================================================
+// Slice 13.3b — Subtitle apply path
+// ================================================================
+
+/// @brief Sink for subtitle enable toggle + size preset.
+class SubtitleApplySink
+{
+public:
+    virtual ~SubtitleApplySink() = default;
+    virtual void setSubtitlesEnabled(bool enabled) = 0;
+    virtual void setSubtitleSize(SubtitleSizePreset preset) = 0;
+};
+
+/// @brief Production sink wrapping a live `SubtitleQueue`.
+///
+/// The queue doesn't currently expose an "enabled" flag — the engine
+/// layer drains the queue whether or not subtitles are on. This sink
+/// stores the enabled state for the engine layer to query; slice 14
+/// (UI wiring) will route the query at render time.
+class SubtitleQueueApplySink final : public SubtitleApplySink
+{
+public:
+    explicit SubtitleQueueApplySink(SubtitleQueue& queue);
+    void setSubtitlesEnabled(bool enabled) override { m_enabled = enabled; }
+    void setSubtitleSize(SubtitleSizePreset preset) override;
+    bool subtitlesEnabled() const { return m_enabled; }
+
+private:
+    SubtitleQueue& m_queue;
+    bool m_enabled = true;
+};
+
+/// @brief Pushes the subtitle fields onto a sink. Translates the
+///        wire-format size-preset string (`"small"` / `"medium"` /
+///        `"large"` / `"xl"`) to the typed `SubtitleSizePreset`.
+///        Unknown strings fall back to `Medium`.
+void applySubtitleSettings(const AccessibilitySettings& access,
+                            SubtitleApplySink& sink);
+
+// ================================================================
+// Slice 13.3b — HRTF apply path
+// ================================================================
+
+/// @brief Sink for the HRTF mode. `AudioSettings::hrtfEnabled` is a
+///        bool; the apply function translates to `HrtfMode`
+///        (`Disabled` when false, `Auto` when true — `Auto` lets the
+///        driver decide, matching the AudioEngine default).
+class AudioHrtfApplySink
+{
+public:
+    virtual ~AudioHrtfApplySink() = default;
+    virtual void setHrtfMode(HrtfMode mode) = 0;
+};
+
+/// @brief Pushes the HRTF toggle onto a sink.
+void applyAudioHrtf(const AudioSettings& audio, AudioHrtfApplySink& sink);
+
+// ================================================================
+// Slice 13.3b — Photosensitive safety apply path
+// ================================================================
+
+/// @brief Sink for the photosensitive-safety caps. Effects that
+///        consume `PhotosensitiveLimits` (camera shake, flash
+///        overlays, strobes, bloom) read from wherever this sink
+///        writes — typically a central engine-side store.
+class PhotosensitiveApplySink
+{
+public:
+    virtual ~PhotosensitiveApplySink() = default;
+    virtual void setPhotosensitiveEnabled(bool enabled) = 0;
+    virtual void setPhotosensitiveLimits(const PhotosensitiveLimits& limits) = 0;
+};
+
+/// @brief Pushes the photosensitive-safety fields onto a sink.
+///
+/// Maps the `PhotosensitiveSafetyWire` fields carried by
+/// `AccessibilitySettings` onto the `PhotosensitiveLimits` struct.
+void applyPhotosensitiveSafety(const AccessibilitySettings& access,
+                                PhotosensitiveApplySink& sink);
 
 } // namespace Vestige

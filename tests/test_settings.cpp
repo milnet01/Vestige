@@ -1009,3 +1009,214 @@ TEST(SettingsApply, UIAccessibilityFromValidatedLoadRoundTripsThroughApply)
     EXPECT_TRUE(sink.highContrast);
     EXPECT_TRUE(sink.reducedMotion);
 }
+
+// ===== Slice 13.3b — Renderer + Subtitle + HRTF + Photosensitive apply =====
+
+namespace
+{
+
+class RecordingRendererAccessSink final : public RendererAccessibilityApplySink
+{
+public:
+    ColorVisionMode mode = ColorVisionMode::Normal;
+    PostProcessAccessibilitySettings pp;
+    int colorCalls = 0;
+    int postCalls  = 0;
+
+    void setColorVisionMode(ColorVisionMode m) override
+    {
+        mode = m;
+        ++colorCalls;
+    }
+    void setPostProcessAccessibility(
+        const PostProcessAccessibilitySettings& p) override
+    {
+        pp = p;
+        ++postCalls;
+    }
+};
+
+class RecordingSubtitleSink final : public SubtitleApplySink
+{
+public:
+    bool               enabled = false;
+    SubtitleSizePreset size    = SubtitleSizePreset::Medium;
+    int                calls   = 0;
+
+    void setSubtitlesEnabled(bool e) override { enabled = e; ++calls; }
+    void setSubtitleSize(SubtitleSizePreset p) override { size = p; ++calls; }
+};
+
+class RecordingHrtfSink final : public AudioHrtfApplySink
+{
+public:
+    HrtfMode mode = HrtfMode::Auto;
+    int      calls = 0;
+    void setHrtfMode(HrtfMode m) override { mode = m; ++calls; }
+};
+
+class RecordingPhotoSink final : public PhotosensitiveApplySink
+{
+public:
+    bool                  enabled = false;
+    PhotosensitiveLimits  limits;
+    int                   calls   = 0;
+    void setPhotosensitiveEnabled(bool e) override { enabled = e; ++calls; }
+    void setPhotosensitiveLimits(const PhotosensitiveLimits& l) override
+    {
+        limits = l;
+        ++calls;
+    }
+};
+
+} // namespace
+
+TEST(SettingsApply, RendererAccessibilityMapsEveryColorVisionStringToDistinctEnum)
+{
+    struct Case { const char* s; ColorVisionMode expect; };
+    const Case cases[] = {
+        {"none",         ColorVisionMode::Normal},
+        {"protanopia",   ColorVisionMode::Protanopia},
+        {"deuteranopia", ColorVisionMode::Deuteranopia},
+        {"tritanopia",   ColorVisionMode::Tritanopia},
+    };
+
+    for (const auto& c : cases)
+    {
+        AccessibilitySettings a;
+        a.colorVisionFilter = c.s;
+        RecordingRendererAccessSink sink;
+        applyRendererAccessibility(a, sink);
+        EXPECT_EQ(sink.mode, c.expect) << "Input: " << c.s;
+    }
+}
+
+TEST(SettingsApply, RendererAccessibilityUnknownColorVisionFallsBackToNormal)
+{
+    AccessibilitySettings a;
+    a.colorVisionFilter = "megachromy";  // nonsense
+    RecordingRendererAccessSink sink;
+    applyRendererAccessibility(a, sink);
+    EXPECT_EQ(sink.mode, ColorVisionMode::Normal);
+}
+
+TEST(SettingsApply, RendererAccessibilityForwardsPostProcessWireFieldsVerbatim)
+{
+    AccessibilitySettings a;
+    a.postProcess.depthOfFieldEnabled = false;
+    a.postProcess.motionBlurEnabled   = false;
+    a.postProcess.fogEnabled          = true;
+    a.postProcess.fogIntensityScale   = 0.3f;
+    a.postProcess.reduceMotionFog     = true;
+
+    RecordingRendererAccessSink sink;
+    applyRendererAccessibility(a, sink);
+
+    EXPECT_FALSE(sink.pp.depthOfFieldEnabled);
+    EXPECT_FALSE(sink.pp.motionBlurEnabled);
+    EXPECT_TRUE(sink.pp.fogEnabled);
+    EXPECT_FLOAT_EQ(sink.pp.fogIntensityScale, 0.3f);
+    EXPECT_TRUE(sink.pp.reduceMotionFog);
+}
+
+TEST(SettingsApply, SubtitleMapsEverySizeStringToDistinctEnum)
+{
+    struct Case { const char* s; SubtitleSizePreset expect; };
+    const Case cases[] = {
+        {"small",  SubtitleSizePreset::Small},
+        {"medium", SubtitleSizePreset::Medium},
+        {"large",  SubtitleSizePreset::Large},
+        {"xl",     SubtitleSizePreset::XL},
+    };
+
+    for (const auto& c : cases)
+    {
+        AccessibilitySettings a;
+        a.subtitleSize = c.s;
+        RecordingSubtitleSink sink;
+        applySubtitleSettings(a, sink);
+        EXPECT_EQ(sink.size, c.expect) << "Input: " << c.s;
+    }
+}
+
+TEST(SettingsApply, SubtitleForwardsEnabledFlag)
+{
+    AccessibilitySettings a;
+    a.subtitlesEnabled = false;
+    a.subtitleSize     = "medium";
+
+    RecordingSubtitleSink sink;
+    applySubtitleSettings(a, sink);
+    EXPECT_FALSE(sink.enabled);
+    EXPECT_EQ(sink.size, SubtitleSizePreset::Medium);
+}
+
+TEST(SettingsApply, HrtfBoolMapsToAutoOrDisabled)
+{
+    // true → Auto (driver decides), false → Disabled (force off).
+    {
+        AudioSettings a;
+        a.hrtfEnabled = true;
+        RecordingHrtfSink sink;
+        applyAudioHrtf(a, sink);
+        EXPECT_EQ(sink.mode, HrtfMode::Auto);
+    }
+    {
+        AudioSettings a;
+        a.hrtfEnabled = false;
+        RecordingHrtfSink sink;
+        applyAudioHrtf(a, sink);
+        EXPECT_EQ(sink.mode, HrtfMode::Disabled);
+    }
+}
+
+TEST(SettingsApply, PhotosensitiveForwardsEnabledAndLimits)
+{
+    AccessibilitySettings a;
+    a.photosensitiveSafety.enabled             = true;
+    a.photosensitiveSafety.maxFlashAlpha       = 0.10f;
+    a.photosensitiveSafety.shakeAmplitudeScale = 0.5f;
+    a.photosensitiveSafety.maxStrobeHz         = 1.5f;
+    a.photosensitiveSafety.bloomIntensityScale = 0.4f;
+
+    RecordingPhotoSink sink;
+    applyPhotosensitiveSafety(a, sink);
+
+    EXPECT_TRUE(sink.enabled);
+    EXPECT_FLOAT_EQ(sink.limits.maxFlashAlpha,       0.10f);
+    EXPECT_FLOAT_EQ(sink.limits.shakeAmplitudeScale, 0.5f);
+    EXPECT_FLOAT_EQ(sink.limits.maxStrobeHz,         1.5f);
+    EXPECT_FLOAT_EQ(sink.limits.bloomIntensityScale, 0.4f);
+}
+
+TEST(SettingsApply, RendererAccessibilityFullAccessibilityRoundTripThroughJson)
+{
+    // End-to-end: JSON → Settings::fromJson (validate) → apply.
+    json j = Settings{}.toJson();
+    j["accessibility"]["colorVisionFilter"] = "deuteranopia";
+    j["accessibility"]["postProcess"]["depthOfFieldEnabled"] = false;
+    j["accessibility"]["postProcess"]["fogIntensityScale"]   = 0.5f;
+
+    Settings s;
+    ASSERT_TRUE(s.fromJson(j));
+
+    RecordingRendererAccessSink sink;
+    applyRendererAccessibility(s.accessibility, sink);
+
+    EXPECT_EQ(sink.mode, ColorVisionMode::Deuteranopia);
+    EXPECT_FALSE(sink.pp.depthOfFieldEnabled);
+    EXPECT_FLOAT_EQ(sink.pp.fogIntensityScale, 0.5f);
+}
+
+TEST(SettingsApply, SubtitleQueueApplySinkActuallyMutatesQueueState)
+{
+    // Production sink forwards to a live SubtitleQueue.
+    SubtitleQueue q;
+    SubtitleQueueApplySink sink(q);
+
+    sink.setSubtitleSize(SubtitleSizePreset::Large);
+    EXPECT_EQ(q.sizePreset(), SubtitleSizePreset::Large);
+
+    sink.setSubtitlesEnabled(false);
+    EXPECT_FALSE(sink.subtitlesEnabled());
+}

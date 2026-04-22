@@ -7,7 +7,9 @@
 
 #include "core/settings.h"
 #include "core/window.h"
+#include "renderer/renderer.h"
 #include "systems/ui_system.h"
+#include "ui/subtitle.h"
 
 #include <cstddef>
 
@@ -102,6 +104,126 @@ void applyUIAccessibility(const AccessibilitySettings& access,
     sink.applyScaleContrastMotion(scale,
                                    access.highContrast,
                                    access.reducedMotion);
+}
+
+// ================================================================
+// Slice 13.3b — Renderer accessibility apply
+// ================================================================
+
+namespace
+{
+
+ColorVisionMode colorVisionModeFromWireString(const std::string& s)
+{
+    if (s == "protanopia")   return ColorVisionMode::Protanopia;
+    if (s == "deuteranopia") return ColorVisionMode::Deuteranopia;
+    if (s == "tritanopia")   return ColorVisionMode::Tritanopia;
+    return ColorVisionMode::Normal;   // "none" + unknown strings
+}
+
+PostProcessAccessibilitySettings postProcessFromWire(
+    const PostProcessAccessibilityWire& w)
+{
+    PostProcessAccessibilitySettings pp;
+    pp.depthOfFieldEnabled = w.depthOfFieldEnabled;
+    pp.motionBlurEnabled   = w.motionBlurEnabled;
+    pp.fogEnabled          = w.fogEnabled;
+    pp.fogIntensityScale   = w.fogIntensityScale;
+    pp.reduceMotionFog     = w.reduceMotionFog;
+    return pp;
+}
+
+} // namespace
+
+RendererAccessibilityApplySinkImpl::RendererAccessibilityApplySinkImpl(
+    Renderer& renderer)
+    : m_renderer(renderer)
+{
+}
+
+void RendererAccessibilityApplySinkImpl::setColorVisionMode(
+    ColorVisionMode mode)
+{
+    m_renderer.setColorVisionMode(mode);
+}
+
+void RendererAccessibilityApplySinkImpl::setPostProcessAccessibility(
+    const PostProcessAccessibilitySettings& pp)
+{
+    m_renderer.setPostProcessAccessibility(pp);
+}
+
+void applyRendererAccessibility(const AccessibilitySettings& access,
+                                 RendererAccessibilityApplySink& sink)
+{
+    sink.setColorVisionMode(
+        colorVisionModeFromWireString(access.colorVisionFilter));
+    sink.setPostProcessAccessibility(
+        postProcessFromWire(access.postProcess));
+}
+
+// ================================================================
+// Slice 13.3b — Subtitle apply
+// ================================================================
+
+namespace
+{
+
+SubtitleSizePreset subtitleSizeFromWireString(const std::string& s)
+{
+    if (s == "small") return SubtitleSizePreset::Small;
+    if (s == "large") return SubtitleSizePreset::Large;
+    if (s == "xl")    return SubtitleSizePreset::XL;
+    return SubtitleSizePreset::Medium;   // "medium" + unknown strings
+}
+
+} // namespace
+
+SubtitleQueueApplySink::SubtitleQueueApplySink(SubtitleQueue& queue)
+    : m_queue(queue)
+{
+}
+
+void SubtitleQueueApplySink::setSubtitleSize(SubtitleSizePreset preset)
+{
+    m_queue.setSizePreset(preset);
+}
+
+void applySubtitleSettings(const AccessibilitySettings& access,
+                            SubtitleApplySink& sink)
+{
+    sink.setSubtitlesEnabled(access.subtitlesEnabled);
+    sink.setSubtitleSize(subtitleSizeFromWireString(access.subtitleSize));
+}
+
+// ================================================================
+// Slice 13.3b — HRTF apply
+// ================================================================
+
+void applyAudioHrtf(const AudioSettings& audio, AudioHrtfApplySink& sink)
+{
+    // `Auto` defers to the driver's own heuristic (typically enables
+    // when headphones are detected); matches the AudioEngine default
+    // when the user hasn't opted in. `Disabled` forces it off.
+    sink.setHrtfMode(audio.hrtfEnabled ? HrtfMode::Auto : HrtfMode::Disabled);
+}
+
+// ================================================================
+// Slice 13.3b — Photosensitive safety apply
+// ================================================================
+
+void applyPhotosensitiveSafety(const AccessibilitySettings& access,
+                                PhotosensitiveApplySink& sink)
+{
+    const auto& w = access.photosensitiveSafety;
+    sink.setPhotosensitiveEnabled(w.enabled);
+
+    PhotosensitiveLimits limits;
+    limits.maxFlashAlpha       = w.maxFlashAlpha;
+    limits.shakeAmplitudeScale = w.shakeAmplitudeScale;
+    limits.maxStrobeHz         = w.maxStrobeHz;
+    limits.bloomIntensityScale = w.bloomIntensityScale;
+    sink.setPhotosensitiveLimits(limits);
 }
 
 } // namespace Vestige
