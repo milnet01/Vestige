@@ -38,6 +38,7 @@
 #include "core/settings.h"                         // OnboardingSettings
 #include "editor/panels/template_dialog.h"         // GameTemplateConfig
 
+#include <filesystem>
 #include <string>
 #include <vector>
 
@@ -145,6 +146,24 @@ std::vector<GameTemplateConfig> moreTemplates();
 ///        Order matches the visual order in the picker.
 std::vector<GameTemplateConfig> allWizardTemplates();
 
+/// @brief Filter a template list down to entries whose `requiredAssets`
+///        paths all exist under `assetRoot`. Templates with empty
+///        `requiredAssets` are always kept.
+///
+/// Phase 10.5 slice 14.3 (Q4 resolution): the biblical walkthrough
+/// template — when it lands in the private sibling repo — carries
+/// its tabernacle textures + HDRI as `requiredAssets`. Public-engine
+/// clones don't have those files, so the wizard's picker filters
+/// the option out automatically. When the maintainer's private
+/// assets are on disk, the option reappears with no code change.
+///
+/// The `File → New from Template…` menu path does NOT call this —
+/// that surface always lists every template so power users can
+/// discover what exists (per §6 of the design doc).
+std::vector<GameTemplateConfig> filterByAvailability(
+    const std::vector<GameTemplateConfig>& templates,
+    const std::filesystem::path& assetRoot);
+
 // --------------------------------------------------------------
 // ImGui-binding panel
 // --------------------------------------------------------------
@@ -159,7 +178,14 @@ public:
     ///
     /// Auto-opens when `!onboarding->hasCompletedFirstRun`. Does
     /// not re-open within a session after a terminal transition.
-    void initialize(OnboardingSettings* onboarding);
+    ///
+    /// @param assetRoot Root directory for resolving template
+    ///        `requiredAssets` paths. Slice 14.4 passes the engine's
+    ///        configured `assetPath`. Pass an empty path to disable
+    ///        filtering (useful for tests that don't care about
+    ///        availability).
+    void initialize(OnboardingSettings* onboarding,
+                    std::filesystem::path assetRoot = {});
 
     /// @brief Renders the modal and returns any scene op the user
     ///        selected this frame.
@@ -183,11 +209,12 @@ private:
     /// the op for the UI layer to apply.
     FirstRunWizardSceneOp fire(FirstRunIntent intent);
 
-    OnboardingSettings* m_onboarding   = nullptr;
-    FirstRunWizardStep  m_step         = FirstRunWizardStep::Welcome;
-    bool                m_open         = false;
-    int                 m_selectedIndex = 0;   ///< Index into allWizardTemplates().
-    bool                m_showMore     = false;///< "More templates" expander state.
+    OnboardingSettings*   m_onboarding    = nullptr;
+    FirstRunWizardStep    m_step          = FirstRunWizardStep::Welcome;
+    bool                  m_open          = false;
+    int                   m_selectedIndex = 0;   ///< Index into the filtered combined list.
+    bool                  m_showMore      = false;///< "More templates" expander state.
+    std::filesystem::path m_assetRoot;            ///< For requiredAssets filtering (empty = disabled).
 };
 
 } // namespace Vestige

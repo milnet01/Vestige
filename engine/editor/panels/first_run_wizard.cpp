@@ -10,6 +10,9 @@
 #include <algorithm>
 #include <chrono>
 #include <ctime>
+#include <system_error>
+
+namespace fs = std::filesystem;
 
 namespace Vestige
 {
@@ -73,6 +76,46 @@ std::vector<GameTemplateConfig> allWizardTemplates()
     auto more     = moreTemplates();
     featured.insert(featured.end(), more.begin(), more.end());
     return featured;
+}
+
+std::vector<GameTemplateConfig> filterByAvailability(
+    const std::vector<GameTemplateConfig>& templates,
+    const std::filesystem::path& assetRoot)
+{
+    // Empty root disables filtering. Useful for tests that don't
+    // want to stand up fake asset trees and for early engine-init
+    // calls before the asset path has been resolved.
+    if (assetRoot.empty())
+    {
+        return templates;
+    }
+
+    std::vector<GameTemplateConfig> out;
+    out.reserve(templates.size());
+    for (const auto& cfg : templates)
+    {
+        if (cfg.requiredAssets.empty())
+        {
+            out.push_back(cfg);
+            continue;
+        }
+
+        bool allPresent = true;
+        for (const auto& rel : cfg.requiredAssets)
+        {
+            std::error_code ec;
+            if (!fs::exists(assetRoot / rel, ec) || ec)
+            {
+                allPresent = false;
+                break;
+            }
+        }
+        if (allPresent)
+        {
+            out.push_back(cfg);
+        }
+    }
+    return out;
 }
 
 // ============================================================================
@@ -193,12 +236,14 @@ const char* kWindowTitle = "Welcome to Vestige";
 
 } // namespace
 
-void FirstRunWizard::initialize(OnboardingSettings* onboarding)
+void FirstRunWizard::initialize(OnboardingSettings* onboarding,
+                                 std::filesystem::path assetRoot)
 {
-    m_onboarding = onboarding;
-    m_step       = FirstRunWizardStep::Welcome;
+    m_onboarding    = onboarding;
+    m_assetRoot     = std::move(assetRoot);
+    m_step          = FirstRunWizardStep::Welcome;
     m_selectedIndex = 0;
-    m_showMore   = false;
+    m_showMore      = false;
 
     // Auto-open when onboarding hasn't completed. Does not re-open
     // within a session after a terminal transition.
@@ -298,8 +343,13 @@ FirstRunWizardSceneOp FirstRunWizard::draw()
         }
         else if (m_step == FirstRunWizardStep::TemplatePicker)
         {
-            const std::vector<GameTemplateConfig> featured = featuredTemplates();
-            const std::vector<GameTemplateConfig> more     = moreTemplates();
+            // Filter both buckets by availability against the stored
+            // asset root so private-repo-only templates stay hidden
+            // in public clones (Q4 / slice 14.3).
+            const std::vector<GameTemplateConfig> featured =
+                filterByAvailability(featuredTemplates(), m_assetRoot);
+            const std::vector<GameTemplateConfig> more =
+                filterByAvailability(moreTemplates(),     m_assetRoot);
 
             ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f),
                                "Pick a game-type template.");

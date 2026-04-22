@@ -9,6 +9,39 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-22 Phase 10.5 — Template visibility filter (slice 14.3)
+
+Third slice of the first-run wizard. Adds the template availability
+filter so private-repo-only templates stay hidden in public clones.
+
+- `GameTemplateConfig::requiredAssets` — new `std::vector<std::string>`
+  field (default empty = always visible). Paths resolved relative
+  to the engine's `assetPath`.
+- `filterByAvailability(templates, assetRoot)` free function in
+  `first_run_wizard.{h,cpp}`. Kept as a free function so the biblical
+  walkthrough template landing in the private sibling repo (Q4
+  resolution) surfaces on the maintainer's machine without a code
+  change — just file presence on disk. Empty `assetRoot` disables
+  filtering (useful for tests + early init before asset path is known).
+- `FirstRunWizard::initialize(OnboardingSettings*, assetRoot)` — new
+  optional asset-root parameter threaded into the panel state. The
+  picker's draw path filters both featured and more buckets by
+  availability at render time.
+- Design contract pinned by `FirstRunWizardFilter.NonWizardMenuListsAllUnconditionally`:
+  the `File → New from Template…` menu path (served by
+  `TemplateDialog::getTemplates`) does NOT run the filter. Power
+  users always see what exists; wizard users see only what works.
+
+Tests: 4 new in `tests/test_first_run_wizard.cpp` (design-doc target):
+empty-required-assets always visible, missing-asset hides the template,
+present-asset shows it, non-wizard menu lists all 8 unconditionally.
+Full suite 2613 passing (1 pre-existing skip).
+
+Next: slice 14.4 — Engine-level wiring (wizard opens at cold-start
+when onboarding.hasCompletedFirstRun is false, scene ops dispatched
+to applyEmptyScene / setupDemoScene / TemplateDialog::applyTemplate,
+WelcomePanel auto-open stripped, Help menu wiring added).
+
 ### 2026-04-22 Phase 10.5 — First-run wizard state machine + panel (slice 14.2)
 
 Second slice of the first-run wizard. Ships the panel class and

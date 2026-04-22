@@ -62,6 +62,18 @@ struct GameTemplateConfig
 
     // Input profile (metadata for future input system)
     std::string inputProfile;
+
+    /// @brief Asset paths the template depends on, resolved relative
+    ///        to the engine's `assetPath`. Used by Phase 10.5 slice
+    ///        14.3 to hide templates whose assets are absent from
+    ///        the picker (e.g. a private-repo biblical walkthrough
+    ///        template that ships its tabernacle textures alongside
+    ///        the public engine). Empty list = always visible.
+    ///
+    /// Only consulted by the first-run wizard's picker filter. The
+    /// `File → New from Template…` menu path lists every template
+    /// unconditionally so power users can see what exists (slice 14.3).
+    std::vector<std::string> requiredAssets;
 };
 
 /// @brief Modal dialog for creating a new scene from a game type template.

@@ -18,6 +18,11 @@
 
 #include <gtest/gtest.h>
 
+#include <filesystem>
+#include <fstream>
+#include <string>
+
+namespace fs = std::filesystem;
 using namespace Vestige;
 
 namespace
@@ -194,4 +199,109 @@ TEST(FirstRunWizardTemplates, AllTemplatesEqualsFeaturedFollowedByMore)
     {
         EXPECT_EQ(all[featured.size() + i].type, more[i].type);
     }
+}
+
+// ===== Slice 14.3 — requiredAssets availability filter (Q4) =================
+
+namespace
+{
+
+/// RAII scratch dir for the filter tests. Mirrors the TmpDir in
+/// test_settings.cpp but deliberately independent so this test
+/// file stays self-contained.
+class FilterTmpDir
+{
+public:
+    FilterTmpDir()
+    {
+        m_root = fs::temp_directory_path()
+                 / ("vestige_wizard_filter_" + std::to_string(::getpid()));
+        std::error_code ec;
+        fs::remove_all(m_root, ec);
+        fs::create_directories(m_root, ec);
+    }
+    ~FilterTmpDir()
+    {
+        std::error_code ec;
+        fs::remove_all(m_root, ec);
+    }
+    const fs::path& root() const { return m_root; }
+
+    void touch(const std::string& relPath)
+    {
+        fs::path full = m_root / relPath;
+        std::error_code ec;
+        fs::create_directories(full.parent_path(), ec);
+        std::ofstream f(full);
+        f << "stub";
+    }
+
+private:
+    fs::path m_root;
+};
+
+GameTemplateConfig makeDummyTemplate(
+    GameTemplateType type,
+    std::vector<std::string> required = {})
+{
+    GameTemplateConfig c;
+    c.type           = type;
+    c.displayName    = "test";
+    c.requiredAssets = std::move(required);
+    return c;
+}
+
+} // namespace
+
+TEST(FirstRunWizardFilter, EmptyRequiredAssetsAlwaysVisible)
+{
+    FilterTmpDir tmp;
+    std::vector<GameTemplateConfig> input = {
+        makeDummyTemplate(GameTemplateType::FIRST_PERSON_3D, {}),
+        makeDummyTemplate(GameTemplateType::ISOMETRIC,       {}),
+    };
+
+    auto filtered = filterByAvailability(input, tmp.root());
+    EXPECT_EQ(filtered.size(), 2u);
+}
+
+TEST(FirstRunWizardFilter, MissingAssetHidesTemplate)
+{
+    FilterTmpDir tmp;
+    // No file touched — the required path doesn't exist.
+    std::vector<GameTemplateConfig> input = {
+        makeDummyTemplate(GameTemplateType::FIRST_PERSON_3D,
+                          {"textures/biblical/goegap.hdr"}),
+    };
+
+    auto filtered = filterByAvailability(input, tmp.root());
+    EXPECT_TRUE(filtered.empty());
+}
+
+TEST(FirstRunWizardFilter, PresentAssetShowsTemplate)
+{
+    FilterTmpDir tmp;
+    tmp.touch("textures/biblical/goegap.hdr");
+    tmp.touch("textures/biblical/linen_diff.jpg");
+
+    std::vector<GameTemplateConfig> input = {
+        makeDummyTemplate(GameTemplateType::FIRST_PERSON_3D,
+                          {"textures/biblical/goegap.hdr",
+                           "textures/biblical/linen_diff.jpg"}),
+    };
+
+    auto filtered = filterByAvailability(input, tmp.root());
+    ASSERT_EQ(filtered.size(), 1u);
+    EXPECT_EQ(filtered[0].type, GameTemplateType::FIRST_PERSON_3D);
+}
+
+TEST(FirstRunWizardFilter, NonWizardMenuListsAllUnconditionally)
+{
+    // The File → New from Template… path is served by
+    // TemplateDialog::getTemplates() which does NOT run the filter.
+    // Confirming the non-wizard menu is unfiltered means the full
+    // 8-template set always surfaces there regardless of asset
+    // availability. This is the design contract in §6.
+    const auto full = TemplateDialog::getTemplates();
+    EXPECT_EQ(full.size(), 8u);
 }
