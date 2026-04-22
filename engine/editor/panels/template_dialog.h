@@ -86,11 +86,18 @@ public:
     /// @brief Gets the list of available templates (for testing).
     static std::vector<GameTemplateConfig> getTemplates();
 
-private:
-    void applyTemplate(const GameTemplateConfig& config,
-                        Scene* scene, ResourceManager* resources,
-                        Renderer* renderer);
+    /// @brief Applies a template config to the scene.
+    ///
+    /// Promoted to `public static` in Phase 10.5 slice 14.2 so the
+    /// `FirstRunWizard` can share the same scene-construction
+    /// implementation without re-homing or duplicating the 2D
+    /// side-scroller / shmup dispatch and the 3D camera-light-ground
+    /// build-out. Implementation body uses no `this` state.
+    static void applyTemplate(const GameTemplateConfig& config,
+                              Scene* scene, ResourceManager* resources,
+                              Renderer* renderer);
 
+private:
     bool m_open = false;
     int m_selectedTemplate = 0;
     bool m_showUnsavedWarning = false;

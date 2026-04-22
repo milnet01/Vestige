@@ -328,6 +328,7 @@ void TemplateDialog::draw(Scene* scene, ResourceManager* resources,
 // Apply template
 // ============================================================================
 
+/* static */
 void TemplateDialog::applyTemplate(const GameTemplateConfig& config,
                                     Scene* scene, ResourceManager* resources,
                                     Renderer* renderer)

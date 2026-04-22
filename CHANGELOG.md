@@ -9,6 +9,51 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-22 Phase 10.5 — First-run wizard state machine + panel (slice 14.2)
+
+Second slice of the first-run wizard. Ships the panel class and
+its pure-function state machine; engine wiring lands in slice 14.4.
+
+- `engine/editor/panels/first_run_wizard.{h,cpp}` — new panel.
+  - Pure-function `applyFirstRunIntent(step, onboarding, intent, nowIso)`
+    → `FirstRunTransition{step, onboarding, sceneOp, closed}`.
+    Zero ImGui or Scene dependencies; fully headless-testable.
+    Injecting `nowIso` keeps tests deterministic and production
+    uses a `<chrono>` + `gmtime`/`gmtime_s` wall-clock wrapper.
+  - Intents: `PickTemplate`, `StartEmpty`, `ShowDemo`, `SkipForNow`,
+    `Back`, `FinishWithTemplate`, `CloseAtWelcome`, `CloseAtPicker`.
+  - Scene ops: `None`, `ApplyEmpty`, `ApplyDemo`, `ApplyTemplate`.
+    Scene construction is delegated to the UI layer — the pure
+    function only tags the op so slice 14.4 can dispatch to
+    `TemplateDialog::applyTemplate` / `Engine::setupDemoScene` /
+    a minimal empty scene.
+  - Q7 skip semantics: `SkipForNow` + `CloseAtWelcome` increment
+    `skipCount`; on the second skip the wizard auto-completes
+    (hasCompletedFirstRun = true, completedAt stamped). Close-at-picker
+    routes to Back without bumping skipCount.
+  - Q1 template filter: `featuredTemplates()` surfaces the four
+    archetype-coverage picks (First-Person 3D, Third-Person 3D,
+    2.5D Side-Scroller, Isometric); `moreTemplates()` holds the
+    remaining four (Top-Down, Point-and-Click, 2D Side-Scroller,
+    2D Shmup) behind a "More templates" expander.
+  - Q8 reduced-motion: no transition animation yet (the two steps
+    swap instantly), so the question is satisfied vacuously —
+    revisit if 14.4 or a follow-on adds any crossfade.
+- `TemplateDialog::applyTemplate` promoted from `private` instance
+  method to `public static` — it uses no `this` state, and the
+  wizard shares the same scene-construction implementation rather
+  than duplicating it. No behaviour change.
+
+Tests: 11 new in `tests/test_first_run_wizard.cpp` (8 state-machine
+per design-doc target + 3 template-filter invariants the doc
+didn't list but are worth pinning). Full suite 2609 passing
+(1 pre-existing skip).
+
+Next: slice 14.3 — `GameTemplateConfig::requiredAssets` filter so
+the picker can hide templates whose assets are absent (enables
+the private-repo biblical template to surface only when the
+maintainer's assets are on disk).
+
 ### 2026-04-22 Phase 10.5 — First-run wizard foundation (slice 14.1)
 
 First slice of the Phase 10.5 first-run wizard work

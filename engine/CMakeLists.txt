@@ -218,6 +218,7 @@ set(ENGINE_SOURCES
     editor/panels/ui_layout_panel.cpp
     editor/panels/ui_runtime_panel.cpp
     editor/panels/template_dialog.cpp
+    editor/panels/first_run_wizard.cpp
     editor/tools/ruler_tool.cpp
     editor/tools/wall_tool.cpp
     editor/tools/room_tool.cpp
