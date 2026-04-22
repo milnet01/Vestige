@@ -9,6 +9,39 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-22 Phase 10.5 — First-run wizard foundation (slice 14.1)
+
+First slice of the Phase 10.5 first-run wizard work
+(`docs/PHASE10_5_FIRST_RUN_WIZARD_DESIGN.md`, approved 2026-04-22).
+Ships the persistence layer underneath the wizard — no UI yet;
+slices 14.2 – 14.4 add the panel, the template visibility filter,
+and the engine wiring.
+
+- `OnboardingSettings` section on `Settings`: `hasCompletedFirstRun`,
+  `completedAt` (ISO-8601 UTC, empty until completion), `skipCount`
+  (bumped by "Skip for now"; after two, `hasCompletedFirstRun`
+  auto-flips — Q7 resolution in the design doc).
+- Schema version bumped **v1 → v2**. First exercise of the chained
+  migration scaffolding shipped in slice 13.1.
+  `migrate_v1_to_v2(j)` inserts the `onboarding` block with
+  defaults; idempotent on a tree that already carries one.
+- Legacy flag promotion in `Settings::loadFromDisk`. Pre-v2 builds
+  wrote `<configDir>/welcome_shown` from `WelcomePanel::markAsShown`.
+  Upgraders whose first post-upgrade launch predates any Apply
+  click have only that signal; loading now promotes it to
+  `onboarding.hasCompletedFirstRun = true` and deletes the legacy
+  file (best-effort). Lossless: struct mutation happens before
+  file deletion, so a crash between them just re-runs on the
+  next launch. Runs on both the Ok and FileMissing load paths.
+- Tests: 6 new in `tests/test_settings.cpp` — defaults, JSON
+  round-trip, v1→v2 migration inserts block, legacy flag
+  promotion (file-missing path), promotion deletes the flag
+  file, promotion skipped when struct is already complete.
+  Full suite 2598 passing (1 pre-existing skip).
+
+Next: slice 14.2 — `FirstRunWizard` panel class wrapping the
+existing Phase 9D `TemplateDialog`.
+
 ### 2026-04-22 Public default scene + tester onboarding
 
 Two open-source-release drive-bys landed together.

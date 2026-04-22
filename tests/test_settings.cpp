@@ -494,8 +494,8 @@ TEST(SettingsMigration, CurrentVersionIsANoOp)
 
 TEST(SettingsMigration, MissingSchemaVersionDefaultsToV1AndSucceeds)
 {
-    // v1 is the current schema, so a file missing the field
-    // should round-trip cleanly without needing an explicit migration.
+    // No schemaVersion marker defaults to v1 per the migrate() contract.
+    // The chain then migrates forward to kCurrentSchemaVersion.
     json j = Settings{}.toJson();
     j.erase("schemaVersion");
     ASSERT_TRUE(migrate(j));
@@ -673,4 +673,109 @@ TEST(SettingsApply, DisplaySettingsFromValidatedLoadRoundTripsThroughApply)
     EXPECT_EQ(sink.height, 900);
     EXPECT_TRUE(sink.fullscreen);
     EXPECT_FALSE(sink.vsync);
+}
+
+// ===== Slice 14.1 — Onboarding block + v2 migration + legacy promotion ======
+
+TEST(SettingsOnboarding, DefaultsAreFalseEmptyZero)
+{
+    Settings s;
+    EXPECT_FALSE(s.onboarding.hasCompletedFirstRun);
+    EXPECT_EQ(s.onboarding.completedAt, "");
+    EXPECT_EQ(s.onboarding.skipCount, 0);
+}
+
+TEST(SettingsOnboarding, RoundTripsThroughJson)
+{
+    Settings original;
+    original.onboarding.hasCompletedFirstRun = true;
+    original.onboarding.completedAt          = "2026-04-22T14:30:00Z";
+    original.onboarding.skipCount            = 2;
+
+    Settings loaded;
+    ASSERT_TRUE(loaded.fromJson(original.toJson()));
+    EXPECT_EQ(loaded.onboarding, original.onboarding);
+}
+
+TEST(SettingsMigration, V1ToV2AddsOnboardingBlockWithDefaults)
+{
+    // Hand-craft a v1-shaped tree: take the current toJson and strip
+    // the onboarding block + pin schemaVersion back to 1.
+    json j = Settings{}.toJson();
+    j.erase("onboarding");
+    j["schemaVersion"] = 1;
+
+    ASSERT_TRUE(migrate(j));
+    EXPECT_EQ(j["schemaVersion"].get<int>(), 2);
+    ASSERT_TRUE(j.contains("onboarding"));
+    EXPECT_FALSE(j["onboarding"]["hasCompletedFirstRun"].get<bool>());
+    EXPECT_EQ(j["onboarding"]["completedAt"].get<std::string>(), "");
+    EXPECT_EQ(j["onboarding"]["skipCount"].get<int>(), 0);
+}
+
+TEST(SettingsOnboarding, LegacyFlagPromotesWhenFileExistsAndStructIsDefault)
+{
+    // Upgrader scenario: settings.json was never written (WelcomePanel
+    // wrote the legacy flag instead). Loading defaults still honours it.
+    TmpDir tmp;
+    fs::path settingsPath = tmp.path() / "settings.json";
+    fs::path flagPath     = tmp.path() / "welcome_shown";
+    {
+        std::ofstream f(flagPath);
+        f << "1";
+    }
+    ASSERT_TRUE(fs::exists(flagPath));
+
+    auto [s, status] = Settings::loadFromDisk(settingsPath);
+    EXPECT_EQ(status, LoadStatus::FileMissing);
+    EXPECT_TRUE(s.onboarding.hasCompletedFirstRun);
+}
+
+TEST(SettingsOnboarding, LegacyFlagPromotionDeletesFlagFile)
+{
+    // Promotion is lossless: the legacy signal is removed only after
+    // the in-memory struct carries it.
+    TmpDir tmp;
+    fs::path settingsPath = tmp.path() / "settings.json";
+    fs::path flagPath     = tmp.path() / "welcome_shown";
+    {
+        std::ofstream f(flagPath);
+        f << "1";
+    }
+
+    auto [s, status] = Settings::loadFromDisk(settingsPath);
+    EXPECT_EQ(status, LoadStatus::FileMissing);
+    EXPECT_TRUE(s.onboarding.hasCompletedFirstRun);
+    EXPECT_FALSE(fs::exists(flagPath));
+}
+
+TEST(SettingsOnboarding, PromotionSkippedWhenStructAlreadyComplete)
+{
+    // If settings.json already records completion, the legacy file is
+    // left alone — the struct is authoritative and a stale flag file
+    // is harmless until the user next saves. Verified by writing a
+    // completed v2 settings.json + a flag file, and confirming the
+    // flag file is not touched by load.
+    TmpDir tmp;
+    fs::path settingsPath = tmp.path() / "settings.json";
+    fs::path flagPath     = tmp.path() / "welcome_shown";
+
+    Settings pre;
+    pre.onboarding.hasCompletedFirstRun = true;
+    pre.onboarding.completedAt          = "2026-04-22T10:00:00Z";
+    ASSERT_EQ(pre.saveAtomic(settingsPath), SaveStatus::Ok);
+
+    {
+        std::ofstream f(flagPath);
+        f << "1";
+    }
+    ASSERT_TRUE(fs::exists(flagPath));
+
+    auto [s, status] = Settings::loadFromDisk(settingsPath);
+    EXPECT_EQ(status, LoadStatus::Ok);
+    EXPECT_TRUE(s.onboarding.hasCompletedFirstRun);
+    EXPECT_EQ(s.onboarding.completedAt, "2026-04-22T10:00:00Z");
+    EXPECT_TRUE(fs::exists(flagPath))
+        << "Legacy flag file should not be deleted when the in-memory "
+           "struct is already authoritative.";
 }

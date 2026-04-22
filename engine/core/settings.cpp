@@ -163,6 +163,13 @@ bool GameplaySettings::operator==(const GameplaySettings& o) const
     return m_impl->values == o.m_impl->values;
 }
 
+bool OnboardingSettings::operator==(const OnboardingSettings& o) const
+{
+    return hasCompletedFirstRun == o.hasCompletedFirstRun
+        && completedAt          == o.completedAt
+        && skipCount            == o.skipCount;
+}
+
 // ====== Settings root equality ================================
 
 bool Settings::operator==(const Settings& o) const
@@ -172,7 +179,8 @@ bool Settings::operator==(const Settings& o) const
         && audio         == o.audio
         && controls      == o.controls
         && gameplay      == o.gameplay
-        && accessibility == o.accessibility;
+        && accessibility == o.accessibility
+        && onboarding    == o.onboarding;
 }
 
 // ====== JSON serialisation ====================================
@@ -393,6 +401,24 @@ void accessibilityFromJson(const json& j, AccessibilitySettings& a)
     }
 }
 
+// --- Onboarding ---
+
+json onboardingToJson(const OnboardingSettings& o)
+{
+    return json{
+        {"hasCompletedFirstRun", o.hasCompletedFirstRun},
+        {"completedAt",          o.completedAt},
+        {"skipCount",            o.skipCount},
+    };
+}
+
+void onboardingFromJson(const json& j, OnboardingSettings& o)
+{
+    o.hasCompletedFirstRun = j.value("hasCompletedFirstRun", o.hasCompletedFirstRun);
+    o.completedAt          = j.value("completedAt",          o.completedAt);
+    o.skipCount            = j.value("skipCount",            o.skipCount);
+}
+
 // --- Validation ---
 
 float clamp01(float v)          { return std::clamp(v, 0.0f, 1.0f); }
@@ -557,6 +583,7 @@ json Settings::toJson() const
     j["controls"]      = controlsToJson(controls);
     j["gameplay"]      = json{{"values", gameplay.values()}};
     j["accessibility"] = accessibilityToJson(accessibility);
+    j["onboarding"]    = onboardingToJson(onboarding);
     return j;
 }
 
@@ -593,6 +620,10 @@ bool Settings::fromJson(const json& jIn)
     {
         accessibilityFromJson(j["accessibility"], accessibility);
     }
+    if (j.contains("onboarding") && j["onboarding"].is_object())
+    {
+        onboardingFromJson(j["onboarding"], onboarding);
+    }
 
     // Validate always runs — clamps out-of-range values silently.
     validate(*this);
@@ -601,6 +632,69 @@ bool Settings::fromJson(const json& jIn)
 
 // ====== Settings::loadFromDisk / saveAtomic ===================
 
+namespace
+{
+
+/// @brief Detect and promote the pre-v2 `welcome_shown` flag file.
+///
+/// Phase 10.5 slice 14.1 moves the first-run-completion signal from
+/// an ad-hoc flag file (`<configDir>/welcome_shown`, written by
+/// `WelcomePanel::markAsShown`) into `OnboardingSettings` inside
+/// settings.json. Users who upgrade without ever having hit Apply
+/// still have the legacy file sitting next to settings.json; without
+/// promotion they would be ambushed with the wizard on first launch
+/// post-upgrade.
+///
+/// The promotion is:
+///   1. If `onboarding.hasCompletedFirstRun == true`, do nothing —
+///      the struct already says we're done, trust it.
+///   2. If `<path.parent>/welcome_shown` exists, set
+///      `onboarding.hasCompletedFirstRun = true`.
+///   3. Delete the legacy file (best-effort). Failure is logged but
+///      non-fatal; the promoted in-memory flag will survive the
+///      next Settings save and a stale flag file is harmless.
+///
+/// Lossless: the signal is only cleared after the in-memory struct
+/// carries it. A crash between step 2 and step 3 just means the
+/// next launch re-runs the promotion — which is idempotent.
+void promoteLegacyOnboardingFlag(Settings& s, const fs::path& settingsPath)
+{
+    if (s.onboarding.hasCompletedFirstRun)
+    {
+        return;
+    }
+
+    const fs::path flagPath = settingsPath.parent_path() / "welcome_shown";
+    std::error_code ec;
+    if (!fs::exists(flagPath, ec) || ec)
+    {
+        return;
+    }
+
+    s.onboarding.hasCompletedFirstRun = true;
+    // completedAt is left empty on purpose — we genuinely do not know
+    // when the user saw the legacy welcome panel. A future UI can
+    // display "completed previously" when the field is empty but the
+    // flag is true.
+
+    std::error_code rmec;
+    fs::remove(flagPath, rmec);
+    if (rmec)
+    {
+        Logger::warning(
+            "Settings: promoted legacy welcome_shown flag but could not "
+            "delete " + flagPath.string() + ": " + rmec.message()
+            + " (in-memory promotion stands; next launch will retry deletion).");
+    }
+    else
+    {
+        Logger::info("Settings: promoted legacy welcome_shown flag to "
+                     "onboarding.hasCompletedFirstRun.");
+    }
+}
+
+} // namespace
+
 std::pair<Settings, LoadStatus> Settings::loadFromDisk(const fs::path& path)
 {
     Settings result;  // starts at defaults
@@ -608,6 +702,10 @@ std::pair<Settings, LoadStatus> Settings::loadFromDisk(const fs::path& path)
     std::error_code ec;
     if (!fs::exists(path, ec) || ec)
     {
+        // No settings.json yet. Still honour the legacy flag — an
+        // upgrader whose first post-upgrade launch predates any
+        // Apply click has only the legacy signal to go on.
+        promoteLegacyOnboardingFlag(result, path);
         return {result, LoadStatus::FileMissing};
     }
 
@@ -648,6 +746,7 @@ std::pair<Settings, LoadStatus> Settings::loadFromDisk(const fs::path& path)
         return {Settings{}, LoadStatus::MigrationError};
     }
 
+    promoteLegacyOnboardingFlag(result, path);
     return {std::move(result), LoadStatus::Ok};
 }
 

@@ -39,7 +39,7 @@ bool migrate(nlohmann::json& j)
     {
         switch (version)
         {
-            // case 1: migrate_v1_to_v2(j); break;
+            case 1: migrate_v1_to_v2(j); break;
             // case 2: migrate_v2_to_v3(j); break;
             default:
                 Logger::warning(
@@ -65,6 +65,22 @@ bool migrate(nlohmann::json& j)
     // carried a version marker serializes cleanly next time.
     j["schemaVersion"] = kCurrentSchemaVersion;
     return true;
+}
+
+void migrate_v1_to_v2(nlohmann::json& j)
+{
+    // Insert the `onboarding` section if absent. If a v1 file
+    // somehow already carries an `onboarding` key we leave it
+    // alone — fromJson will reconcile via `j.value(key, default)`.
+    if (!j.contains("onboarding") || !j["onboarding"].is_object())
+    {
+        j["onboarding"] = nlohmann::json{
+            {"hasCompletedFirstRun", false},
+            {"completedAt",          ""},
+            {"skipCount",            0},
+        };
+    }
+    j["schemaVersion"] = 2;
 }
 
 } // namespace Vestige

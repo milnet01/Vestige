@@ -1,6 +1,6 @@
 # Phase 10.5 — First-Run Wizard (Design Doc)
 
-**Status:** Draft — awaiting user sign-off on §10 open questions.
+**Status:** Approved 2026-04-22 — all eight §10 questions signed off; implementation proceeds through slices 14.1 – 14.4.
 **Roadmap item:** Phase 10.5 Editor Usability Pass → Onboarding → "First-run welcome dialog — project template picker (…) with live preview thumbnails. Already partially covered by Phase 9D template system; this adds the first-run wrapper."
 **Scope:** A single, skippable, resumable modal flow on first editor launch that (a) greets the user, (b) lets them pick a starting scene from the existing Phase 9D template library, (c) applies the pick, and (d) records completion so it does not reappear. Replaces the current informational `WelcomePanel`.
 
@@ -194,6 +194,17 @@ No visual tests required; the wizard is covered by unit + headless integration. 
 
 ## 12. Sign-off log
 
-Awaiting user response to §10 Q1–Q8.
+**2026-04-22 — all eight §10 questions accepted verbatim.** Implementation proceeds through slices 14.1 – 14.4.
 
-(Pattern matches `PHASE10_SETTINGS_DESIGN.md` — once approved, this section records the eight answers and the implementation proceeds through slices 14.1 – 14.4.)
+| Q | Topic | Resolution |
+|---|---|---|
+| Q1 | Featured templates | Feature `FIRST_PERSON_3D`, `THIRD_PERSON_3D`, `TWO_POINT_FIVE_D`, `ISOMETRIC`. Remaining four (`TOP_DOWN`, `POINT_AND_CLICK`, `SIDE_SCROLLER_2D`, `SHMUP_2D`) live under a **"More templates"** expander. |
+| Q2 | "Start Empty" semantics | **Literally empty** — one camera, one directional light, ground plane. Add a separate **"Show me the Demo"** button for the current `setupDemoScene()` showroom so the two intents are distinct. |
+| Q3 | `WelcomePanel` fate | **Option B** — keep behind `Help → Show Welcome`, strip auto-open on first launch. Keyboard-shortcuts reference stays available. |
+| Q4 | Biblical template home | **Private-repo, file-presence gated.** Same pattern as `VESTIGE_FETCH_ASSETS`. Deferred: proper template plugin mechanism, if ever needed, lands in Phase 11+. |
+| Q5 | Future "project" concept | **YAGNI** — add the field via a migration when the project concept actually lands. |
+| Q6 | Architectural filing | **`engine/editor/panels/first_run_wizard.{h,cpp}`** — beside `welcome_panel.{h,cpp}`. One-class-per-file convention, no subdirectory. |
+| Q7 | "Skip for now" on later launches | **Remind twice, then silently complete.** Third launch sets `hasCompletedFirstRun = true` without a template. Help menu can always re-open. |
+| Q8 | Reduced-motion respect | **Inherit global `AccessibilitySettings.reducedMotion`.** Any transition animation is ≤ 150 ms crossfade; reduced-motion cuts to instant. |
+
+Implementation note: Q7's two-reminder policy adds a tiny bit of state — a `skipCount` counter alongside `hasCompletedFirstRun`. Slice 14.1 adds it to `OnboardingSettings` at the same time as `hasCompletedFirstRun` so there is no migration churn.

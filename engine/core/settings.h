@@ -52,7 +52,14 @@ namespace Vestige
 /// @brief Current on-disk schema version. Bumped whenever the
 ///        shape of `Settings` changes in a way that requires a
 ///        migration function to read old files.
-inline constexpr int kCurrentSchemaVersion = 1;
+///
+/// History:
+///  - v1 (Phase 10 slice 13.1) — initial five sections:
+///    display / audio / controls / gameplay / accessibility.
+///  - v2 (Phase 10.5 slice 14.1) — adds `onboarding` section for
+///    the first-run wizard completion flag + legacy `welcome_shown`
+///    flag-file promotion.
+inline constexpr int kCurrentSchemaVersion = 2;
 
 // --------------------------------------------------------------
 // Display section — resolution, vsync, fullscreen, quality.
@@ -266,6 +273,41 @@ struct AccessibilitySettings
 };
 
 // --------------------------------------------------------------
+// Onboarding section — first-run wizard completion state.
+// --------------------------------------------------------------
+
+/// @brief Persistent state for the Phase 10.5 first-run wizard.
+///
+/// Three fields:
+///  - `hasCompletedFirstRun` — terminal flag. True once the user
+///    has reached Finish or Start Empty, or has Skipped twice.
+///    Once true the wizard no longer auto-opens; re-opening is
+///    always available via `Help → Show Welcome`.
+///  - `completedAt` — ISO-8601 wall-clock timestamp recorded at
+///    the moment `hasCompletedFirstRun` was set. Empty string
+///    means never completed. Useful for "welcome back to Vestige"
+///    messaging at upgrade boundaries.
+///  - `skipCount` — bump every time the user clicks "Skip for now"
+///    without reaching a terminal state. After two, `hasCompletedFirstRun`
+///    flips automatically (Q7 resolution in PHASE10_5_FIRST_RUN_WIZARD_DESIGN.md).
+///
+/// Migration note: users on pre-v2 builds had their first-run
+/// signal in an ad-hoc flag file `<configDir>/welcome_shown`
+/// (written by `WelcomePanel::markAsShown`). The v1 → v2
+/// migration + `Settings::loadFromDisk` post-parse hook together
+/// detect that file and promote it to `hasCompletedFirstRun = true`
+/// so upgraders aren't ambushed with an unexpected wizard.
+struct OnboardingSettings
+{
+    bool        hasCompletedFirstRun = false;
+    std::string completedAt;           ///< ISO-8601 UTC, or empty.
+    int         skipCount             = 0;
+
+    bool operator==(const OnboardingSettings& o) const;
+    bool operator!=(const OnboardingSettings& o) const { return !(*this == o); }
+};
+
+// --------------------------------------------------------------
 // Settings root
 // --------------------------------------------------------------
 
@@ -297,6 +339,7 @@ struct Settings
     ControlsSettings       controls;
     GameplaySettings       gameplay;
     AccessibilitySettings  accessibility;
+    OnboardingSettings     onboarding;
 
     /// @brief Loads settings from `path`. Returns the parsed
     ///        settings (or defaults on failure) plus a status code.
