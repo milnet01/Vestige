@@ -1073,7 +1073,20 @@ Phases 5A–9D have built an extensive editor (entity inspector, scene viewport,
 - [ ] Keyboard-only workflow — verify every panel is navigable with Tab / Shift+Tab / Enter / Space and no mouse. This is the big-ticket item from partially-sighted / motor-impaired users.
 
 ### Docs surface — "how do I learn this?"
-- [ ] In-editor documentation browser — renders the project's `docs/` folder markdown inline; searchable; no browser needed.
+- [ ] **In-editor help browser** — dedicated `Help → Documentation` panel (or `F1` shortcut) that renders the shipped docs inline as a searchable, navigable markdown viewer. No external browser needed. Contents:
+  - Every markdown file under the engine's `docs/` directory (auto-indexed by `.md` filename; shipped alongside the engine binary in a `help/` resource folder so offline users still get the full manual).
+  - Tree-of-contents sidebar grouped by subsystem (rendering / physics / audio / UI / scripting / editor / settings / …).
+  - Full-text search (ripgrep-style fuzzy match over all loaded docs).
+  - Back / forward history + bookmarks, matching browser-style navigation muscle memory.
+  - External-link behaviour: anchor tags with `http(s)://` open in the system browser; internal `docs/foo.md` anchors navigate within the panel.
+- [ ] **Context-sensitive "Help with this" affordance** — every panel, widget group, and major editor feature exposes a small `?` or `Help` button that deep-links into the in-editor help browser at the exact topic for that feature. Examples:
+  - `?` next to the Environment Panel's foliage-brush group → opens `docs/PHASE5G_DESIGN.md` at the `## Foliage brush` anchor.
+  - `?` on the Formula Workbench's Levenberg-Marquardt solver tab → opens `docs/FORMULA_WORKBENCH_SELF_LEARNING_DESIGN.md` at the convergence-criteria section.
+  - `?` on the Settings editor's Photosensitive Safety section → opens the Phase 10 accessibility design doc at that section.
+  - `?` on any menu item in the main menu bar → opens the docs page that documents it.
+  - Shortcut: hovering any widget and pressing `F1` does the same thing as clicking its `?` button.
+- [ ] **Help anchor registry** — a central map (widget id / feature id → `docs/file.md#anchor`) so `Help with this` buttons across the editor always resolve consistently. Source of truth for which docs page owns which feature; rebinding a help anchor is a one-line change rather than hunting through ImGui code. Editor-internal; never exposed to user-facing strings.
+- [ ] **Help authored inline when it lives alongside code** — every new subsystem ships with a matching `docs/<SUBSYSTEM>.md` page following a template (Overview / When to use it / How to use it in the editor / API reference / Gotchas). Post-phase audit checks that every user-facing feature has a help anchor pointing somewhere non-empty.
 - [ ] Video / GIF embeds in panel tooltips for complex operations (one-shot 3-5 second MP4s).
 - [ ] Troubleshooting decision tree — "my scene doesn't render" → click-through diagnostic ending in a fix or a GitHub-issue prefill.
 
