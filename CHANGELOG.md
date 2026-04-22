@@ -9,6 +9,62 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-22 Phase 10 — Settings system design approved (slices 13.1–13.5)
+
+Design-review checkpoint. `docs/PHASE10_SETTINGS_DESIGN.md` is
+approved; all eight §12 open questions signed off as proposed.
+No code ships in this commit — the design doc is the deliverable
+and it unblocks slice 13.1 implementation.
+
+Key decisions recorded in the sign-off log (doc tail):
+
+- **Format/location.** Single JSON at
+  `$XDG_CONFIG_HOME/vestige/settings.json` (Linux) /
+  `%LOCALAPPDATA%\Vestige\settings.json` (Windows), root-level
+  `schemaVersion: 1`, nlohmann_json (engine's existing serialiser).
+- **Schema.** Five top-level sections: `display` (resolution /
+  vsync / fullscreen / quality preset / render scale), `audio`
+  (six-bus gains + HRTF), `controls` (mouse sensitivity, invert-Y,
+  gamepad deadzones, keybindings as GLFW scancodes), `gameplay`
+  (untyped `string→JsonValue` map — per-game), `accessibility`
+  (UI scale preset, high-contrast, reduced-motion, subtitles,
+  color-vision filter, photosensitive safety, post-process toggles).
+- **Lifecycle.** Chained migration functions (not discard-on-error),
+  ignore-unknown + default-missing, `.corrupt` sidecar on parse
+  failure. Atomic writes via tmp→fsync→rename→fsync-dir (POSIX)
+  / `MoveFileExA(MOVEFILE_REPLACE_EXISTING)` (Windows). Apply /
+  Revert / Restore Defaults mapped to `m_applied` / `m_pending`
+  state copies. No Apply-on-close — explicit Apply required.
+- **Accessibility policy.** "Restore All Defaults" spares the
+  Accessibility tab; Accessibility gets its own explicit
+  "Restore accessibility defaults" button so a partially-sighted
+  user doesn't lose their 2.0× UI scale to a reset click.
+- **Blockers inventoried.** `Window` is immutable after
+  construction (fixed in slice 13.2 via `setVideoMode`);
+  `AudioMixer::busGain` has no setter (added in slice 13.3);
+  `UITheme` rebuilds clobber overrides (batched in slice 13.5).
+- **Slice plan.** 13.1 Settings primitive + atomic-write + config-
+  path helper factoring; 13.2 video runtime apply; 13.3 audio +
+  accessibility apply; 13.4 input bindings JSON; 13.5 Settings UI
+  wiring + Restore Defaults. Five slices, each independently
+  testable and commitable. ~68 new tests planned across all five.
+
+### 2026-04-22 Phase 10 — Text rendering bullet (TrueType fonts)
+
+Documentation-only tick. The roadmap's Phase 10 Features →
+"Text rendering (TrueType fonts)" bullet is now checked. The
+underlying implementation (`engine/renderer/font.{h,cpp}` +
+`engine/renderer/text_renderer.{h,cpp}` — FreeType-backed TTF
+loader + 2D/3D text rendering + glyph atlas) shipped earlier as
+part of Phase 9C / 9F / 10 UI work and is exercised by
+`tests/test_text_rendering.cpp` and every menu / HUD / FPS counter
+/ interaction prompt built on top of it. The design doc for the
+slice-12 UI system called this out (§2 inventory: "The next
+roadmap bullet 'Text rendering (TrueType fonts)' is quietly
+already done"); this entry formally retires the bullet so the
+remaining Phase 10 Features list reflects actual outstanding work
+(scene config, settings, loading screens, info plaques).
+
 ### 2026-04-21 Phase 10 UI — Toasts + HUD + editor panel (slices 12.3–12.5)
 
 Closes the "In-game UI system" roadmap bullet. Slices 12.1 (pure
