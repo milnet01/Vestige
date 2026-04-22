@@ -330,8 +330,37 @@ bool Engine::initialize(const EngineConfig& config)
         // of the freshly-registered defaults.
         applyInputBindings(m_settings.controls.bindings, m_inputActionMap);
 
+        // Slice 13.5d: concrete apply-sink instances wrapping live
+        // subsystems. Each forwarder is trivial (no state, just a
+        // reference) so they're cheap to construct. Held on Engine
+        // so their lifetime matches their targets.
+        SettingsEditor::ApplyTargets targets{};
+        if (m_window)
+        {
+            m_displaySink = std::make_unique<WindowDisplaySink>(*m_window);
+            targets.display = m_displaySink.get();
+        }
+        if (m_renderer)
+        {
+            m_rendererAccessSink =
+                std::make_unique<RendererAccessibilityApplySinkImpl>(*m_renderer);
+            targets.rendererAccess = m_rendererAccessSink.get();
+        }
+        if (UISystem* ui = m_systemRegistry.getSystem<UISystem>())
+        {
+            m_uiAccessSink = std::make_unique<UISystemAccessibilityApplySink>(*ui);
+            targets.uiAccessibility = m_uiAccessSink.get();
+        }
+        targets.inputMap = &m_inputActionMap;
+
         m_settingsEditor = std::make_unique<SettingsEditor>(
-            m_settings, SettingsEditor::ApplyTargets{});
+            m_settings, targets);
+
+        // Force an initial live-apply so subsystems pick up any
+        // persisted state (e.g. a user who saved reducedMotion=true
+        // and relaunched — without this, UI would ignore the setting
+        // until the first manual toggle).
+        m_settingsEditor->forceLiveApply();
 
         if (m_editor)
         {

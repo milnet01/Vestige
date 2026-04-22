@@ -9,6 +9,46 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-22 Phase 10 — Live-apply sink wiring (slice 13.5d)
+
+Closes out Phase 10 settings. Wires the concrete production sinks
+to the real engine subsystems so `SettingsEditor::mutate()` calls
+from the panel drive subsystems in real-time.
+
+- `engine/core/engine.{h,cpp}` now owns three concrete sink
+  instances as `std::unique_ptr` members:
+  - `WindowDisplaySink`   — wraps the live `Window`.
+  - `RendererAccessibilityApplySinkImpl` — wraps the live `Renderer`.
+  - `UISystemAccessibilityApplySink`     — wraps the live `UISystem`
+    fetched from the system registry.
+- These are constructed right after Settings load and passed into
+  `SettingsEditor::ApplyTargets` alongside the already-wired
+  `inputMap` pointer. Resolution / fullscreen / vsync / colour
+  vision mode / post-process toggles / UI scale / high-contrast /
+  reduced-motion now live-update as the user drags sliders in the
+  Settings panel.
+- `forceLiveApply()` is called once after construction so any
+  persisted state (e.g. reducedMotion=true from a previous
+  session) is pushed to subsystems immediately on launch, rather
+  than waiting for the user to touch a control.
+- Audio + subtitle + HRTF + photosensitive sinks remain abstract-only
+  — the engine doesn't currently centralise the subsystems they
+  target (AudioSystem has no exposed mixer gain surface,
+  SubtitleQueue isn't engine-owned, the photosensitive caps are
+  consumed at individual call sites rather than from a central
+  store). Wiring those lands once each subsystem exposes an
+  engine-owned store.
+
+No new tests — sinks are unit-tested at construction in slices
+13.3a / 13.3b, the orchestrator is unit-tested with recording mocks
+in 13.5a, and the new code in `Engine::initialize` is straight
+pointer plumbing. The user-visible acceptance gate is opening
+`Help → Settings...` in the editor and observing the live preview.
+
+Full suite 2661 passing.
+
+**Phase 10 settings chain complete end-to-end** (slices 13.1 → 13.5d).
+
 ### 2026-04-22 Phase 10 — Click-to-rebind capture (slice 13.5c)
 
 Completes the interactive keybinding surface in the Settings editor.

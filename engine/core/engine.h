@@ -11,6 +11,7 @@
 #include "core/input_manager.h"
 #include "core/first_person_controller.h"
 #include "core/settings.h"
+#include "core/settings_apply.h"
 #include "core/settings_editor.h"
 #include "input/input_bindings.h"
 #include "renderer/renderer.h"
@@ -151,6 +152,24 @@ private:
     ///        13.5a). Owned here so its lifetime matches the engine;
     ///        the Editor receives a non-owning pointer for its panel.
     std::unique_ptr<SettingsEditor> m_settingsEditor;
+
+    /// @brief Concrete apply-sink instances wrapping live engine
+    ///        subsystems (slice 13.5d). Held here so their lifetime
+    ///        matches the subsystems they forward to. Construction
+    ///        order matters — each must be built after its target
+    ///        subsystem is constructed and before the SettingsEditor
+    ///        binds to them.
+    ///
+    /// Coverage: display (Window), renderer accessibility (Renderer),
+    /// UI accessibility (UISystem). Audio + subtitle + HRTF +
+    /// photosensitive sinks need engine-owned mixer / queue / store
+    /// instances which don't exist yet (the engine doesn't currently
+    /// centralise audio playback gain or subtitle rendering state);
+    /// those land as part of a follow-on slice once AudioSystem /
+    /// UISystem expose the relevant stores.
+    std::unique_ptr<WindowDisplaySink>                   m_displaySink;
+    std::unique_ptr<RendererAccessibilityApplySinkImpl>  m_rendererAccessSink;
+    std::unique_ptr<UISystemAccessibilityApplySink>      m_uiAccessSink;
 
     /// @brief Engine-owned input action map. Game code pushes its
     ///        action definitions here before `initialize()` returns
