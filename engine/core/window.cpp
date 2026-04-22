@@ -288,4 +288,92 @@ bool Window::isVsyncEnabled() const
     return m_vsyncEnabled;
 }
 
+bool Window::isFullscreen() const
+{
+    if (!m_handle)
+    {
+        return false;
+    }
+    return glfwGetWindowMonitor(m_handle) != nullptr;
+}
+
+void Window::setVideoMode(int width, int height, bool fullscreen, bool vsync)
+{
+    if (!m_handle)
+    {
+        Logger::warning("Window::setVideoMode called without a live window");
+        return;
+    }
+    if (width <= 0 || height <= 0)
+    {
+        Logger::warning("Window::setVideoMode: ignoring non-positive size "
+                        + std::to_string(width) + "x" + std::to_string(height));
+        return;
+    }
+
+    // Vsync is orthogonal to the monitor toggle — apply it first so a
+    // failure in the monitor path still leaves swap-interval consistent
+    // with the requested value.
+    setVsync(vsync);
+
+    const bool wasFullscreen = (glfwGetWindowMonitor(m_handle) != nullptr);
+    GLFWmonitor* primary = glfwGetPrimaryMonitor();
+
+    if (fullscreen && primary == nullptr)
+    {
+        // Headless / no connected monitor — fall back to windowed at the
+        // requested size so the caller at least gets the resolution they
+        // asked for.
+        Logger::warning("Window::setVideoMode: no primary monitor; "
+                        "falling back to windowed mode.");
+        fullscreen = false;
+    }
+
+    if (fullscreen && !wasFullscreen)
+    {
+        // Remember current windowed rectangle so the reverse toggle can
+        // restore it. glfwGetWindowPos returns screen coords in
+        // screen-units, not framebuffer pixels — fine for glfwSetWindowMonitor's
+        // xpos/ypos which also take screen-units.
+        int x = 0;
+        int y = 0;
+        glfwGetWindowPos(m_handle, &x, &y);
+        m_savedWindowedX      = x;
+        m_savedWindowedY      = y;
+        m_savedWindowedWidth  = m_width;
+        m_savedWindowedHeight = m_height;
+
+        // Use the monitor's native refresh rate (GLFW_DONT_CARE lets GLFW
+        // pick the closest match to the current mode).
+        glfwSetWindowMonitor(m_handle, primary, 0, 0, width, height, GLFW_DONT_CARE);
+    }
+    else if (!fullscreen && wasFullscreen)
+    {
+        glfwSetWindowMonitor(
+            m_handle,
+            nullptr,
+            m_savedWindowedX,
+            m_savedWindowedY,
+            width,
+            height,
+            // Refresh rate is ignored when monitor is null; GLFW requires
+            // the arg anyway.
+            0);
+    }
+    else if (fullscreen)
+    {
+        // Fullscreen → fullscreen resolution change.
+        glfwSetWindowMonitor(m_handle, primary, 0, 0, width, height, GLFW_DONT_CARE);
+    }
+    else
+    {
+        // Windowed → windowed resolution change.
+        glfwSetWindowSize(m_handle, width, height);
+    }
+
+    // The framebuffer-size callback fires on any of the paths above and
+    // publishes WindowResizeEvent, so renderer framebuffers re-allocate.
+    // Nothing more to do here.
+}
+
 } // namespace Vestige

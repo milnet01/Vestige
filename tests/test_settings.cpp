@@ -11,6 +11,7 @@
 #include <gtest/gtest.h>
 
 #include "core/settings.h"
+#include "core/settings_apply.h"
 #include "core/settings_migration.h"
 #include "utils/atomic_write.h"
 #include "utils/config_path.h"
@@ -574,4 +575,102 @@ TEST(SettingsDisk, SaveCreatesParentDirectoryIfMissing)
     Settings s;
     EXPECT_EQ(s.saveAtomic(path), SaveStatus::Ok);
     EXPECT_TRUE(fs::exists(path));
+}
+
+// ===== Slice 13.2 — apply layer (display) =====================
+
+namespace
+{
+
+// Recording mock — captures the last setVideoMode call so tests
+// can verify the apply path forwarded the settings block verbatim.
+class RecordingDisplaySink final : public DisplayApplySink
+{
+public:
+    int  width      = -1;
+    int  height     = -1;
+    bool fullscreen = false;
+    bool vsync      = false;
+    int  callCount  = 0;
+
+    void setVideoMode(int w, int h, bool fs, bool vs) override
+    {
+        width      = w;
+        height     = h;
+        fullscreen = fs;
+        vsync      = vs;
+        ++callCount;
+    }
+};
+
+} // namespace
+
+TEST(SettingsApply, DisplayForwardsResolutionVsyncAndFullscreen)
+{
+    DisplaySettings d;
+    d.windowWidth  = 2560;
+    d.windowHeight = 1440;
+    d.fullscreen   = true;
+    d.vsync        = false;
+
+    RecordingDisplaySink sink;
+    applyDisplay(d, sink);
+
+    EXPECT_EQ(sink.callCount, 1);
+    EXPECT_EQ(sink.width,      2560);
+    EXPECT_EQ(sink.height,     1440);
+    EXPECT_TRUE(sink.fullscreen);
+    EXPECT_FALSE(sink.vsync);
+}
+
+TEST(SettingsApply, DisplayForwardsWindowedDefaultCase)
+{
+    DisplaySettings d;   // defaults: 1920x1080, windowed, vsync on
+    RecordingDisplaySink sink;
+    applyDisplay(d, sink);
+
+    EXPECT_EQ(sink.callCount, 1);
+    EXPECT_EQ(sink.width,  1920);
+    EXPECT_EQ(sink.height, 1080);
+    EXPECT_FALSE(sink.fullscreen);
+    EXPECT_TRUE(sink.vsync);
+}
+
+TEST(SettingsApply, ApplyDisplayIsIdempotentAcrossRepeatedCalls)
+{
+    DisplaySettings d;
+    d.windowWidth  = 800;
+    d.windowHeight = 600;
+    d.vsync        = true;
+    RecordingDisplaySink sink;
+
+    applyDisplay(d, sink);
+    applyDisplay(d, sink);
+    applyDisplay(d, sink);
+
+    EXPECT_EQ(sink.callCount, 3);
+    EXPECT_EQ(sink.width,  800);
+    EXPECT_EQ(sink.height, 600);
+}
+
+TEST(SettingsApply, DisplaySettingsFromValidatedLoadRoundTripsThroughApply)
+{
+    // Chain: user-written JSON → Settings::fromJson (validate) → applyDisplay.
+    // Proves a value that survives validation reaches the sink intact.
+    json j = Settings{}.toJson();
+    j["display"]["windowWidth"]  = 1600;
+    j["display"]["windowHeight"] = 900;
+    j["display"]["fullscreen"]   = true;
+    j["display"]["vsync"]        = false;
+
+    Settings s;
+    ASSERT_TRUE(s.fromJson(j));
+
+    RecordingDisplaySink sink;
+    applyDisplay(s.display, sink);
+
+    EXPECT_EQ(sink.width,  1600);
+    EXPECT_EQ(sink.height, 900);
+    EXPECT_TRUE(sink.fullscreen);
+    EXPECT_FALSE(sink.vsync);
 }

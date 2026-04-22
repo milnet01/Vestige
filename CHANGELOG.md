@@ -9,6 +9,42 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-22 Phase 10 — Video-mode runtime apply (slice 13.2)
+
+Unblocks the "Window is immutable after construction" blocker
+from the settings design (§5 #1). Adds runtime resolution /
+fullscreen / vsync changes and wires `DisplaySettings` into a
+testable apply layer.
+
+- `Window::setVideoMode(width, height, fullscreen, vsync)` — single
+  entry point for runtime video-mode changes. Uses GLFW's
+  `glfwSetWindowMonitor` for the windowed ↔ fullscreen toggle
+  (preserves the GL context across the transition — no window
+  reconstruction needed, contra the design-doc's conservative
+  "one-frame GL context validity gap" worry), remembers the prior
+  windowed rectangle on entering fullscreen so the reverse toggle
+  restores it, and falls back to windowed mode if no primary monitor
+  is connected. The framebuffer-size callback fires automatically,
+  so renderer framebuffers re-allocate via the existing
+  `WindowResizeEvent` subscription — zero extra wiring.
+- `Window::isFullscreen()` — queries `glfwGetWindowMonitor`.
+- `engine/core/settings_apply.{h,cpp}` — apply layer between
+  `Settings` and subsystems. Introduces `DisplayApplySink`
+  (abstract base) so tests can supply a recording mock, with
+  `WindowDisplaySink` as the production forwarder. `applyDisplay(
+  DisplaySettings, DisplayApplySink&)` pushes width/height/fullscreen
+  /vsync at the sink in a single call. Render scale and quality
+  preset are intentionally deferred — they belong to the Renderer
+  and per-subsystem shader-variant wiring, coming in later slices.
+- Tests: 4 new `SettingsApply` tests in `tests/test_settings.cpp`
+  — forwards all four fields verbatim, handles the default
+  windowed case, is idempotent across repeated calls, and survives
+  a full JSON → fromJson → apply round-trip. Full suite 2591
+  passing (1 pre-existing skip).
+
+Next: slice 13.3 — `AudioMixer::setBusGain` + wiring the `audio`
+and `accessibility` blocks into the apply layer.
+
 ### 2026-04-22 Phase 10 — Settings primitive + atomic-write + config-path (slice 13.1)
 
 First slice of the Settings system. Ships the persistence primitive

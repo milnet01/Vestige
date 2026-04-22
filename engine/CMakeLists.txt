@@ -94,6 +94,7 @@ set(ENGINE_SOURCES
     utils/atomic_write.cpp
     core/settings.cpp
     core/settings_migration.cpp
+    core/settings_apply.cpp
     editor/editor.cpp
     editor/editor_camera.cpp
     editor/entity_actions.cpp

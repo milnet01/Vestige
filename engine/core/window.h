@@ -72,6 +72,25 @@ public:
     /// @brief Returns whether vsync is currently enabled.
     bool isVsyncEnabled() const;
 
+    /// @brief Applies a new video mode (resolution / fullscreen / vsync) at
+    ///        runtime. The GL context survives the transition — GLFW's
+    ///        `glfwSetWindowMonitor` preserves it across a windowed ↔
+    ///        fullscreen toggle.
+    ///
+    /// The framebuffer-resize callback fires once the new mode is live, so
+    /// any subsystem subscribed to `WindowResizeEvent` re-sizes its
+    /// offscreen buffers automatically.
+    ///
+    /// @param width      New framebuffer width in pixels (must be > 0).
+    /// @param height     New framebuffer height in pixels (must be > 0).
+    /// @param fullscreen True = exclusive fullscreen on the primary monitor;
+    ///                   false = windowed.
+    /// @param vsync      True = wait for vblank on swap; false = unlimited.
+    void setVideoMode(int width, int height, bool fullscreen, bool vsync);
+
+    /// @brief Returns whether the window is currently fullscreen.
+    bool isFullscreen() const;
+
 private:
     /// @brief Restores window position and size from the config file.
     /// Called during construction after the window is created.
@@ -87,6 +106,13 @@ private:
     int m_width;
     int m_height;
     bool m_vsyncEnabled = true;
+    // Windowed-mode geometry remembered while fullscreen, so a toggle
+    // back to windowed restores the previous window rectangle instead
+    // of falling back to GLFW's default (top-left 0,0).
+    int m_savedWindowedX = 100;
+    int m_savedWindowedY = 100;
+    int m_savedWindowedWidth  = 1280;
+    int m_savedWindowedHeight = 720;
     EventBus& m_eventBus;
 };
 
