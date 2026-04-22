@@ -1087,9 +1087,14 @@ A person who has never opened Vestige can open it, follow the first-run tour, cr
 ---
 
 ## Phase 11: Gameplay Systems
-**Goal:** Core gameplay mechanics for action, survival, and horror games — combat, inventory, health, saves, and environmental interaction.
+**Goal:** Core gameplay mechanics for action, survival, horror, and racing games — combat, inventory, health, saves, environmental interaction, and vehicle physics.
 
-These systems transform Vestige from an exploration/walkthrough engine into a full game engine capable of action games like Dead Space, survival horror, RPGs, and more.
+These systems transform Vestige from an exploration/walkthrough engine into a full game engine capable of shipping:
+
+- **Third-person survival horror** — the *Dead Space* archetype (1 / 2 / 3 / Remake): strategic dismemberment, stasis, kinesis, zero-G traversal, diegetic holographic UI, RIG health spine, ammo economy, necromorph-style encounter AI.
+- **Action games / RPGs** — combat, inventory, progression, environmental hazards.
+- **Arcade racing** — the *Burnout 3 / Burnout: Revenge* archetype: exaggerated arcade vehicle physics, boost meter, takedowns, traffic, crash cameras, damage model.
+- **Simulation racing** — the *Gran Turismo* archetype: realistic tyre / suspension / aero / drivetrain physics, licence tests, tuning, photo mode, pit stops, driving assists.
 
 ### Combat / Weapon System
 - [ ] Weapon component — attach to entity for ranged or melee combat
@@ -1188,6 +1193,63 @@ These systems transform Vestige from an exploration/walkthrough engine into a fu
   - Steam vents (periodic burst, push force on entities)
   - Collapsing floor/ceiling (trigger-based destruction + damage)
 
+### Vehicle Physics & Racing
+Dual-archetype support: arcade racing (*Burnout 3 / Burnout: Revenge*) and simulation racing (*Gran Turismo*). The underlying vehicle physics model is shared; arcade vs sim is a tuning and assist-enabled-by-default difference, not a code fork. Vehicles are built on the existing Jolt physics world.
+
+#### Vehicle core (shared)
+- [ ] `VehicleComponent` — entity-level wrapper around a Jolt `VehicleConstraint`. Stores chassis body + per-wheel state + drivetrain + engine + aero.
+- [ ] Suspension model per wheel — spring stiffness, damping, travel limits, anti-roll bar coupling front/rear; Jolt `WheeledVehicleController` is the baseline.
+- [ ] Tyre model — for arcade: simplified grip curve + slip-angle factor. For sim: Pacejka "Magic Formula" longitudinal + lateral with load sensitivity. Per-compound (slick / road / wet / off-road) parameters in `FormulaLibrary`. CPU (per-wheel, ~4/frame); Formula Workbench is the authoring tool (Rule 11).
+- [ ] Drivetrain — engine torque curve (RPM → torque), multi-ratio gearbox (manual / automatic / sequential), clutch engagement, centre/front/rear differentials (open / locked / limited-slip / torque-vectoring).
+- [ ] Aerodynamics — frontal drag (`0.5·ρ·v²·Cd·A`), lift / downforce per axle with speed-squared scaling, frame-coherent slipstream zone behind each vehicle (reduces drag for trailing cars — matters for both Burnout drafting-boost and GT overtaking).
+- [ ] Engine audio — RPM-driven sample interpolation (granular synthesis over recorded low/mid/high-rev samples) + on-throttle / off-throttle crossfade + pitch-shift per gear. Leverages existing `audio_music.{h,cpp}` crossfade primitives. Skid-chirp + backfire + turbo-whistle as separate one-shot layers over the ambient engine bed.
+- [ ] Vehicle damage model — two tiers: (a) **cosmetic** (body deformation via vertex displacement + loose parts fracturing off via the existing Phase 8 destruction system) and (b) **functional** (per-component health: engine power loss, steering drift, brake fade, tyre punctures, overheating). Configurable per game for arcade vs sim emphasis.
+- [ ] Crash cameras — slow-motion hold on high-energy impacts with free-orbit camera (Burnout's "heartbeat" moment after a wreck). Respects `AccessibilitySettings.reducedMotion` — on, the slow-mo is instant-cut instead of 0.1× lerp.
+- [ ] Vehicle cameras — Cockpit (interior first-person with dashboard rendering), Chase (third-person behind + slightly above, spring-smoothed), Hood, Bumper, Photo-mode (free-orbit), Cinematic (spline + look-at chase). Composes with the existing Camera Modes system — "vehicle" is a context that provides camera presets, not a new camera class.
+- [ ] Force-feedback / steering-wheel support — `InputDevice::SteeringWheel` enum value alongside Keyboard/Mouse/Gamepad. GLFW doesn't expose FFB directly; plug in SDL2's haptic API or libuinput under a thin shim. Axes: steering, throttle, brake, clutch, handbrake, paddle-shift. Button mapping runs through the existing `InputBindings`. Deferred to a follow-up slice but the binding enum goes in day one.
+
+#### Arcade racing (Burnout 3 / Burnout: Revenge archetype)
+- [ ] Boost meter — fills from risk behaviour: near-miss (oncoming traffic within N metres), drafting (trailing another vehicle in slipstream for T seconds), drifting (slip-angle exceeds threshold for T seconds), airtime (wheels off ground for T seconds), crash (triggers a *Crashbreaker* bonus in Revenge). Tunable weights per game.
+- [ ] Boost activation — throttle multiplier + FOV kick + radial blur + audio filter sweep. Crashbreaker detonates the wrecked vehicle into a directed explosion (leverages Phase 8 destruction).
+- [ ] Takedowns — directed collision mechanic. Raycast + impulse-angle check classifies a collision as a takedown when the initiating vehicle is in boost and the struck vehicle loses control. Registers in a "takedowns" score with a short hitstop + camera cut.
+- [ ] Traffic AI — civilian vehicles scripted on splined routes with lane-change behaviour, speed variance, and reactive braking when the player is ahead of them. High-density (Burnout city) vs low-density (rural roads) modes configurable per scene.
+- [ ] Road Rage / Crash Mode / Burning Lap / Grand Prix game-mode primitives — each is a scoring ruleset + win condition + HUD layout. `GameMode` interface with plug-in rulesets; engine ships the four named modes as starters and games compose their own.
+- [ ] Signature Takedown tracking — per-opponent persistent record of the most spectacular takedown cam; viewable from a garage UI.
+
+#### Simulation racing (Gran Turismo archetype)
+- [ ] Driving assists toggles — ABS, Traction Control (TCS), Stability Control (ESC / ASM), active steering, braking line overlay. Each on its own slider (Off / Weak / Standard / Strong) not just a binary. Pro preset turns everything off.
+- [ ] Tyre wear + thermal model — tyres accumulate wear % per km based on slip energy; grip degrades with wear. Per-compound temperature windows (cold / optimal / overheated) — off-window tyres slide. Feeds strategy (endurance pit-stop timing).
+- [ ] Fuel model — consumption per lap scales with throttle position + gear + lean map. Empty tank = engine stall.
+- [ ] Pit stops — pit-lane volume detection, configurable service menu (tyres / fuel / mechanical repair / aero adjustments), time cost per service.
+- [ ] Vehicle tuning / garage UI — per-car setup: spring rates, damper bump / rebound, anti-roll bar stiffness front/rear, camber, toe, caster, ride height, differential preload / coast / power, gearbox ratios, final drive, wing angles. Each parameter pushes a coefficient into the formula evaluator; the vehicle physics picks it up on next tick. Save setups per-track.
+- [ ] Licence tests — structured gameplay challenge harness. A "licence test" is a scripted sequence with start position + win condition + three-star time target. Reusable for driving schools, time trials, mission objectives in any genre.
+- [ ] Opponent AI — racing line adherence (spline-based ideal path), corner braking points, overtake decision tree (follow / commit / abort), rubber-banding toggle for arcade modes (disabled by default for sim).
+- [ ] Track authoring — spline-based track surface generator with banking, elevation, start/finish + sector markers; surface-material zones (tarmac / kerb / grass / gravel) feeding the tyre model's grip multiplier.
+- [ ] Lap / sector timing + timing HUD — live split against best lap + rival + car-ahead / car-behind.
+- [ ] Photo Mode — pause simulation, free-orbit camera, aperture / focal length / shutter / ISO controls (plumbed into the existing post-process chain), LUT preset picker, 16:9 / 2.39:1 / square / vertical crop grids, export to PNG with optional film-grain overlay. Respects accessibility (no motion in the viewport when reduced-motion is on).
+
+#### Testing surface
+- [ ] Deterministic unit tests for the tyre model against published Pacejka coefficient tables.
+- [ ] Per-wheel suspension step against known rebound curves.
+- [ ] Takedown classifier unit tests (collision angles + speed thresholds).
+- [ ] Opponent AI behaviour harness — scripted scenarios (car ahead braking late, overtaking opportunity on straight) with deterministic PASS/FAIL.
+
+### Horror Action Polish (Dead Space archetype)
+Fills the gaps between the generic Combat / Health / Inventory / Save systems above and the *Dead Space* feature set specifically. Most generic horror-action pieces (dismemberment, stasis, ragdoll, decal gore, ADS, weapon upgrade bench, vacuum zones, checkpoint saves) already live in earlier phases or in Phase 11 above — this section covers what remains.
+
+- [ ] **Kinesis (telekinesis) component** — pick-up-and-throw tied to a dedicated input. Grab any `PhysicsBody` tagged `kinesisTarget`; charge launches it with a force magnitude + direction from the crosshair. Used both for combat (throw spikes / limbs) and puzzles (move heavy crates, align circuits). Leverages the existing `physics/grab_system` primitive.
+- [ ] **Stasis gun + ammo economy** — ties the already-shipped `StasisSystem` to a first-class weapon with a rechargeable ammo pool. Recharge stations in the world top it up; trigger slows one tagged body. Slow-mo factor configurable per weapon tier.
+- [ ] **Zero-G traversal mode** — 6DOF navigation (yaw + pitch + roll + three-axis thrust) plus magnetic-boot floor-walking at low thrust. CharacterController gains a `GravityMode` (`Normal / Magnetic / FreeFall`) enum. `Magnetic` lets the player walk arbitrary up-vectors (walls / ceilings) by snapping orientation to the tagged surface normal. `FreeFall` exposes thruster inputs. Scripted transitions between modes via trigger volumes.
+- [ ] **Diegetic holographic UI** — the Phase 11 UI guidance is that *no HUD is drawn in screen-space for this archetype*. Instead, health / stasis / ammo render as world-space quads projected from the player's spine (RIG) + weapon. `UIElement::worldProjection` pathway (already present in `ui/ui_in_world.{h,cpp}`) gets the additional affordance of binding to a bone socket; the UI follows the rig at all times. Accessibility: a fallback 2D HUD can be toggled in `Settings` for partially-sighted players.
+- [ ] **RIG health spine** — specific prefab that reads `HealthComponent` and renders a 5-segment health bar on the player's spine. Third-person visible; in first person only the peripheral glow is shown. Damage pulses the glow.
+- [ ] **In-world holographic panels** — interactable door locks, lore logs, objective markers, and upgrade bench UIs all render as diegetic world-space holograms rather than screen overlays. Reuse `UIElement::worldProjection`. Animated scan-line shader variant + chromatic-aberration flicker.
+- [ ] **Necromorph-style encounter AI** — behaviour-tree node set for "stalk / ambush / wave-attack / play-dead" patterns. Ambush spawn from vent / ceiling colliders tagged `spawner`; "play dead" nodes use the existing ragdoll system for a faked-death pose and re-animate on trigger. Weak-point targeting — AI prefers to expose limbs to the player so dismemberment is rewarded.
+- [ ] **Audio horror stingers** — scripted jump-scare and tension beats wired through the already-shipped `MusicStingerQueue` and `audio_ambient`. Editor surface: a "Scare Marker" component placed in the scene with a delay / trigger-condition / audio clip triple.
+- [ ] **Chapter system** — narrative-progression scaffold above the save system. A *chapter* is a named subregion with entry/exit triggers, a title-card prefab, and an auto-checkpoint on entry. Saves record `currentChapter` alongside the scene snapshot.
+- [ ] **Weapon alt-fire modes** — most Dead Space weapons have a secondary trigger (Plasma Cutter horizontal ↔ vertical, Line Gun beam ↔ mine). `WeaponComponent` gets a `secondaryFire` sibling to `fire` with its own stats + input binding (default: right-click in ADS-off state, toggle weapon orientation in ADS-on).
+- [ ] **Ammo / health scarcity tuning helpers** — survival-horror economy depends on drops being rare but not *too* rare. Editor tool: simulated playthrough harness that reports expected ammo / health surplus per chapter against a target curve, so designers can retune loot tables without full playthroughs.
+- [ ] **Co-op session support (Dead Space 3 archetype)** — scope note: the generic networking primitives live in **Phase 20**. This bullet just calls out that the horror-specific design — divergent player perspectives, co-op-only encounters, revive mechanic — needs per-scene authoring and a split-inventory flag once Phase 20 lands. Not shippable before Phase 20.
+
 ### Replay System
 Recorded playbacks of gameplay for post-match review, sharing, and cinematic capture. Racing games are the canonical use case (ghost laps, leaderboard proofs, instant replay from a second angle), but the same infrastructure serves speed-running, sports, action games, and streamer highlights.
 
@@ -1223,7 +1285,13 @@ Recorded playbacks of gameplay for post-match review, sharing, and cinematic cap
   - Determinism harness: N-step input-recording replay against scripted inputs, bit-exact state assertion
 
 ### Milestone
-A complete gameplay loop: explore, fight enemies with upgradeable weapons, take damage and heal, collect items, save progress, and review any match as a replay. Environmental hazards add tension and puzzle elements. All systems configurable in the editor.
+A complete gameplay loop for three archetypes:
+
+- **Horror action (Dead Space-shaped)** — explore a RIG-spined character through low-light corridors, dismember necromorphs with upgradeable weapons, use stasis and kinesis for combat and puzzles, traverse zero-G sections, save at checkpoints, and progress through chapters. All HUD is diegetic.
+- **Generic action / RPG** — upgradeable weapons, inventory management, environmental hazards, save / load, NPC interactions.
+- **Racing (arcade or sim)** — drive a fully-tuned vehicle on a splined track, race against AI opponents or traffic, trigger boost via risk play (Burnout) or manage tyre + fuel strategy (GT), take photos in Photo Mode, review the session as a replay.
+
+All systems configurable in the editor.
 
 ---
 
