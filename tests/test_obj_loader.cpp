@@ -363,3 +363,116 @@ TEST(ObjLoaderTest, IgnoresUnknownDirectives)
     EXPECT_EQ(vertices.size(), 3u);
     EXPECT_EQ(indices.size(), 3u);
 }
+
+// =============================================================================
+// Wavefront OBJ spec, Appendix B: "If the value is negative it is an index
+// relative to the last vertex in the vertex list. For example, -1 refers to
+// the most recent vertex." Applies to v, vt, and vn index lists independently.
+// =============================================================================
+
+TEST(ObjLoaderTest, OBJSpec_AppendixB_NegativeIndicesResolveRelativeToCurrentListEnd)
+{
+    // Three positions; f -3 -2 -1 must resolve to positions 1, 2, 3
+    // (i.e. the three most-recently-declared vertices, in order).
+    const std::string objData =
+        "v -1.0 0.0 0.0\n"
+        "v  1.0 0.0 0.0\n"
+        "v  0.0 1.0 0.0\n"
+        "f -3 -2 -1\n";
+
+    TempObjFile file(objData);
+    std::vector<Vertex> vertices;
+    std::vector<uint32_t> indices;
+
+    bool result = ObjLoader::load(file.path(), vertices, indices);
+
+    ASSERT_TRUE(result);
+    ASSERT_EQ(vertices.size(), 3u);
+    ASSERT_EQ(indices.size(), 3u);
+
+    // Indices are listed in face order; with no dedup conflict they should be 0,1,2.
+    EXPECT_FLOAT_EQ(vertices[indices[0]].position.x, -1.0f);
+    EXPECT_FLOAT_EQ(vertices[indices[0]].position.y,  0.0f);
+
+    EXPECT_FLOAT_EQ(vertices[indices[1]].position.x,  1.0f);
+    EXPECT_FLOAT_EQ(vertices[indices[1]].position.y,  0.0f);
+
+    EXPECT_FLOAT_EQ(vertices[indices[2]].position.x,  0.0f);
+    EXPECT_FLOAT_EQ(vertices[indices[2]].position.y,  1.0f);
+}
+
+TEST(ObjLoaderTest, OBJSpec_AppendixB_NegativeIndicesAreRelativeAtParseTime)
+{
+    // Negative indices must resolve against the *current* end of the list at
+    // face-parse time, not the final size. Here we interleave v and f lines:
+    // the second face's -1 must mean v #4, not v #6.
+    const std::string objData =
+        "v 0.0 0.0 0.0\n"   // v #1
+        "v 1.0 0.0 0.0\n"   // v #2
+        "v 0.0 1.0 0.0\n"   // v #3
+        "f -3 -2 -1\n"      // triangle of v#1, v#2, v#3
+        "v 2.0 0.0 0.0\n"   // v #4
+        "v 2.0 1.0 0.0\n"   // v #5
+        "v 1.5 0.5 0.0\n"   // v #6
+        "f -3 -2 -1\n";     // triangle of v#4, v#5, v#6 (must NOT wrap to v#4..v#6 via final size)
+
+    TempObjFile file(objData);
+    std::vector<Vertex> vertices;
+    std::vector<uint32_t> indices;
+
+    bool result = ObjLoader::load(file.path(), vertices, indices);
+
+    ASSERT_TRUE(result);
+    ASSERT_EQ(indices.size(), 6u);
+
+    // First triangle — v#1, v#2, v#3
+    EXPECT_FLOAT_EQ(vertices[indices[0]].position.x, 0.0f);
+    EXPECT_FLOAT_EQ(vertices[indices[1]].position.x, 1.0f);
+    EXPECT_FLOAT_EQ(vertices[indices[2]].position.y, 1.0f);
+
+    // Second triangle — v#4, v#5, v#6
+    EXPECT_FLOAT_EQ(vertices[indices[3]].position.x, 2.0f);
+    EXPECT_FLOAT_EQ(vertices[indices[3]].position.y, 0.0f);
+    EXPECT_FLOAT_EQ(vertices[indices[4]].position.x, 2.0f);
+    EXPECT_FLOAT_EQ(vertices[indices[4]].position.y, 1.0f);
+    EXPECT_FLOAT_EQ(vertices[indices[5]].position.x, 1.5f);
+    EXPECT_FLOAT_EQ(vertices[indices[5]].position.y, 0.5f);
+}
+
+// =============================================================================
+// Resource-exhaustion hardening: per-line read cap (CWE-400 "Uncontrolled
+// Resource Consumption"). Malicious or corrupt OBJ files with pathological
+// single-line lengths must be rejected, not read into unbounded memory.
+// Cap is 1 MiB (= 1048576 bytes); matches the engine's standard parser budget.
+// =============================================================================
+
+TEST(ObjLoaderTest, CWE_400_OverLongSingleLineIsRejected)
+{
+    // Build a file with one line exceeding 1 MiB. Use a comment line so the
+    // test is not checking any specific directive semantics — only the
+    // per-line read limit. 1.5 MiB of 'x' characters after '#'.
+    constexpr size_t kOneMiB = 1024u * 1024u;
+    constexpr size_t kOverSize = kOneMiB + (kOneMiB / 2);
+
+    std::string payload;
+    payload.reserve(kOverSize + 64);
+    payload.push_back('#');
+    payload.append(kOverSize, 'x');
+    payload.push_back('\n');
+    // Append an otherwise-valid triangle; without the cap this OBJ would load.
+    payload.append(
+        "v 0.0 0.0 0.0\n"
+        "v 1.0 0.0 0.0\n"
+        "v 0.0 1.0 0.0\n"
+        "f 1 2 3\n");
+
+    TempObjFile file(payload);
+    std::vector<Vertex> vertices;
+    std::vector<uint32_t> indices;
+
+    bool result = ObjLoader::load(file.path(), vertices, indices);
+
+    EXPECT_FALSE(result);
+    EXPECT_TRUE(vertices.empty());
+    EXPECT_TRUE(indices.empty());
+}
