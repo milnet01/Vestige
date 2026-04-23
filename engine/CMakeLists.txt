@@ -234,6 +234,7 @@ set(ENGINE_SOURCES
     editor/tools/path_tool.cpp
     resource/file_watcher.cpp
     utils/entity_serializer.cpp
+    utils/component_serializer_registry.cpp
     utils/material_library.cpp
     testing/visual_test_runner.cpp
     renderer/radiosity_baker.cpp

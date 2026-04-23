@@ -3,7 +3,15 @@
 
 /// @file entity_serializer.cpp
 /// @brief Entity tree serialization/deserialization implementation.
+///
+/// Per-component JSON read/write is dispatched through
+/// `ComponentSerializerRegistry` (ROADMAP Phase 10.9 Slice 1 F3).
+/// The registry is populated once via `ensureBuiltinsRegistered()`
+/// on first use; callers outside this translation unit can append
+/// their own entries before calling `serializeEntity` /
+/// `deserializeEntity`.
 #include "utils/entity_serializer.h"
+#include "audio/audio_source_component.h"
 #include "scene/entity.h"
 #include "scene/mesh_renderer.h"
 #include "scene/light_component.h"
@@ -13,10 +21,12 @@
 #include "resource/resource_manager.h"
 #include "scene/scene.h"
 #include "core/logger.h"
+#include "utils/component_serializer_registry.h"
 
 #include <nlohmann/json.hpp>
 
 #include <filesystem>
+#include <mutex>
 
 using json = nlohmann::json;
 
@@ -314,7 +324,7 @@ static std::shared_ptr<Material> deserializeMaterial(
 }
 
 // ---------------------------------------------------------------------------
-// Component serialization
+// Mesh renderer (de)serialisation
 // ---------------------------------------------------------------------------
 
 static json serializeMeshRenderer(const MeshRenderer& mr, const ResourceManager& resources)
@@ -339,6 +349,31 @@ static json serializeMeshRenderer(const MeshRenderer& mr, const ResourceManager&
     return j;
 }
 
+static void deserializeMeshRenderer(const json& j, Entity& entity, ResourceManager& resources)
+{
+    std::shared_ptr<Mesh> mesh;
+    if (j.contains("mesh"))
+    {
+        mesh = resources.getMeshByKey(j["mesh"].get<std::string>());
+    }
+
+    std::shared_ptr<Material> material;
+    if (j.contains("material") && j["material"].is_object())
+    {
+        material = deserializeMaterial(j["material"], resources, entity.getId());
+    }
+
+    if (mesh)
+    {
+        auto* mr = entity.addComponent<MeshRenderer>(mesh, material);
+        mr->setCastsShadow(j.value("castsShadow", true));
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Light-component (de)serialisation
+// ---------------------------------------------------------------------------
+
 static json serializeDirectionalLight(const DirectionalLightComponent& comp)
 {
     json j;
@@ -347,6 +382,15 @@ static json serializeDirectionalLight(const DirectionalLightComponent& comp)
     j["diffuse"] = vec3ToJson(comp.light.diffuse);
     j["specular"] = vec3ToJson(comp.light.specular);
     return j;
+}
+
+static void deserializeDirectionalLight(const json& j, Entity& entity, ResourceManager&)
+{
+    auto* comp = entity.addComponent<DirectionalLightComponent>();
+    comp->light.direction = readVec3(j, "direction", glm::vec3(-0.2f, -1.0f, -0.3f));
+    comp->light.ambient = readVec3(j, "ambient", glm::vec3(0.1f));
+    comp->light.diffuse = readVec3(j, "diffuse", glm::vec3(0.8f));
+    comp->light.specular = readVec3(j, "specular", glm::vec3(1.0f));
 }
 
 static json serializePointLight(const PointLightComponent& comp)
@@ -360,6 +404,18 @@ static json serializePointLight(const PointLightComponent& comp)
     j["quadratic"] = comp.light.quadratic;
     j["castsShadow"] = comp.light.castsShadow;
     return j;
+}
+
+static void deserializePointLight(const json& j, Entity& entity, ResourceManager&)
+{
+    auto* comp = entity.addComponent<PointLightComponent>();
+    comp->light.ambient = readVec3(j, "ambient", glm::vec3(0.05f));
+    comp->light.diffuse = readVec3(j, "diffuse", glm::vec3(0.8f));
+    comp->light.specular = readVec3(j, "specular", glm::vec3(1.0f));
+    comp->light.constant = j.value("constant", 1.0f);
+    comp->light.linear = j.value("linear", 0.09f);
+    comp->light.quadratic = j.value("quadratic", 0.032f);
+    comp->light.castsShadow = j.value("castsShadow", false);
 }
 
 static json serializeSpotLight(const SpotLightComponent& comp)
@@ -377,6 +433,20 @@ static json serializeSpotLight(const SpotLightComponent& comp)
     return j;
 }
 
+static void deserializeSpotLight(const json& j, Entity& entity, ResourceManager&)
+{
+    auto* comp = entity.addComponent<SpotLightComponent>();
+    comp->light.direction = readVec3(j, "direction", glm::vec3(0.0f, -1.0f, 0.0f));
+    comp->light.ambient = readVec3(j, "ambient", glm::vec3(0.0f));
+    comp->light.diffuse = readVec3(j, "diffuse", glm::vec3(1.0f));
+    comp->light.specular = readVec3(j, "specular", glm::vec3(1.0f));
+    comp->light.innerCutoff = j.value("innerCutoff", 0.9763f);
+    comp->light.outerCutoff = j.value("outerCutoff", 0.9659f);
+    comp->light.constant = j.value("constant", 1.0f);
+    comp->light.linear = j.value("linear", 0.09f);
+    comp->light.quadratic = j.value("quadratic", 0.032f);
+}
+
 static json serializeEmissiveLight(const EmissiveLightComponent& comp)
 {
     json j;
@@ -386,8 +456,16 @@ static json serializeEmissiveLight(const EmissiveLightComponent& comp)
     return j;
 }
 
+static void deserializeEmissiveLight(const json& j, Entity& entity, ResourceManager&)
+{
+    auto* comp = entity.addComponent<EmissiveLightComponent>();
+    comp->lightRadius = j.value("lightRadius", 5.0f);
+    comp->lightIntensity = j.value("lightIntensity", 1.0f);
+    comp->overrideColor = readVec3(j, "overrideColor", glm::vec3(0.0f));
+}
+
 // ---------------------------------------------------------------------------
-// Particle emitter serialization
+// Particle emitter (de)serialisation
 // ---------------------------------------------------------------------------
 
 static std::string shapeToString(ParticleEmitterConfig::Shape shape)
@@ -475,7 +553,7 @@ static json serializeParticleEmitter(const ParticleEmitterComponent& comp)
     return j;
 }
 
-static void deserializeParticleEmitter(const json& j, ParticleEmitterComponent& comp)
+static void applyParticleEmitter(const json& j, ParticleEmitterComponent& comp)
 {
     auto& cfg = comp.getConfig();
 
@@ -536,8 +614,14 @@ static void deserializeParticleEmitter(const json& j, ParticleEmitterComponent& 
     cfg.flickerSpeed = j.value("flickerSpeed", cfg.flickerSpeed);
 }
 
+static void deserializeParticleEmitter(const json& j, Entity& entity, ResourceManager&)
+{
+    auto* comp = entity.addComponent<ParticleEmitterComponent>();
+    applyParticleEmitter(j, *comp);
+}
+
 // ---------------------------------------------------------------------------
-// Water surface serialization
+// Water surface (de)serialisation
 // ---------------------------------------------------------------------------
 
 static json serializeWaterSurface(const WaterSurfaceComponent& comp)
@@ -579,7 +663,7 @@ static json serializeWaterSurface(const WaterSurfaceComponent& comp)
     return j;
 }
 
-static void deserializeWaterSurface(const json& j, WaterSurfaceComponent& comp)
+static void applyWaterSurface(const json& j, WaterSurfaceComponent& comp)
 {
     auto& cfg = comp.getConfig();
 
@@ -618,12 +702,231 @@ static void deserializeWaterSurface(const json& j, WaterSurfaceComponent& comp)
     cfg.qualityTier = j.value("qualityTier", cfg.qualityTier);
 }
 
+static void deserializeWaterSurface(const json& j, Entity& entity, ResourceManager&)
+{
+    auto* comp = entity.addComponent<WaterSurfaceComponent>();
+    applyWaterSurface(j, *comp);
+}
+
+// ---------------------------------------------------------------------------
+// AudioSource (de)serialisation
+// ---------------------------------------------------------------------------
+//
+// The bus-name mapping matches `enum class AudioBus` order at
+// audio_mixer.h:65-73 and the Phase 10.7 slice A1 design. An absent
+// `bus` field hydrates to `Sfx` — the implicit pre-A1 routing
+// documented at audio_source_component.h:44-48.
+
+static std::string audioBusToString(AudioBus bus)
+{
+    switch (bus)
+    {
+        case AudioBus::Master:  return "Master";
+        case AudioBus::Music:   return "Music";
+        case AudioBus::Voice:   return "Voice";
+        case AudioBus::Sfx:     return "Sfx";
+        case AudioBus::Ambient: return "Ambient";
+        case AudioBus::Ui:      return "Ui";
+    }
+    return "Sfx";
+}
+
+static AudioBus audioBusFromString(const std::string& s)
+{
+    if (s == "Master")  return AudioBus::Master;
+    if (s == "Music")   return AudioBus::Music;
+    if (s == "Voice")   return AudioBus::Voice;
+    if (s == "Ambient") return AudioBus::Ambient;
+    if (s == "Ui")      return AudioBus::Ui;
+    return AudioBus::Sfx;
+}
+
+static std::string attenuationModelToString(AttenuationModel model)
+{
+    switch (model)
+    {
+        case AttenuationModel::None:            return "None";
+        case AttenuationModel::Linear:          return "Linear";
+        case AttenuationModel::InverseDistance: return "InverseDistance";
+        case AttenuationModel::Exponential:     return "Exponential";
+    }
+    return "InverseDistance";
+}
+
+static AttenuationModel attenuationModelFromString(const std::string& s)
+{
+    if (s == "None")        return AttenuationModel::None;
+    if (s == "Linear")      return AttenuationModel::Linear;
+    if (s == "Exponential") return AttenuationModel::Exponential;
+    return AttenuationModel::InverseDistance;
+}
+
+static std::string occlusionMaterialToString(AudioOcclusionMaterialPreset m)
+{
+    switch (m)
+    {
+        case AudioOcclusionMaterialPreset::Air:      return "Air";
+        case AudioOcclusionMaterialPreset::Cloth:    return "Cloth";
+        case AudioOcclusionMaterialPreset::Wood:     return "Wood";
+        case AudioOcclusionMaterialPreset::Glass:    return "Glass";
+        case AudioOcclusionMaterialPreset::Stone:    return "Stone";
+        case AudioOcclusionMaterialPreset::Concrete: return "Concrete";
+        case AudioOcclusionMaterialPreset::Metal:    return "Metal";
+        case AudioOcclusionMaterialPreset::Water:    return "Water";
+    }
+    return "Air";
+}
+
+static AudioOcclusionMaterialPreset occlusionMaterialFromString(const std::string& s)
+{
+    if (s == "Cloth")    return AudioOcclusionMaterialPreset::Cloth;
+    if (s == "Wood")     return AudioOcclusionMaterialPreset::Wood;
+    if (s == "Glass")    return AudioOcclusionMaterialPreset::Glass;
+    if (s == "Stone")    return AudioOcclusionMaterialPreset::Stone;
+    if (s == "Concrete") return AudioOcclusionMaterialPreset::Concrete;
+    if (s == "Metal")    return AudioOcclusionMaterialPreset::Metal;
+    if (s == "Water")    return AudioOcclusionMaterialPreset::Water;
+    return AudioOcclusionMaterialPreset::Air;
+}
+
+static json serializeAudioSource(const AudioSourceComponent& comp)
+{
+    json j;
+    j["clipPath"]          = comp.clipPath;
+    j["volume"]            = comp.volume;
+    j["bus"]               = audioBusToString(comp.bus);
+    j["pitch"]             = comp.pitch;
+    j["minDistance"]       = comp.minDistance;
+    j["maxDistance"]       = comp.maxDistance;
+    j["rolloffFactor"]     = comp.rolloffFactor;
+    j["attenuationModel"]  = attenuationModelToString(comp.attenuationModel);
+    j["velocity"]          = vec3ToJson(comp.velocity);
+    j["occlusionMaterial"] = occlusionMaterialToString(comp.occlusionMaterial);
+    j["occlusionFraction"] = comp.occlusionFraction;
+    j["loop"]              = comp.loop;
+    j["autoPlay"]          = comp.autoPlay;
+    j["spatial"]           = comp.spatial;
+    return j;
+}
+
+static void deserializeAudioSource(const json& j, Entity& entity, ResourceManager&)
+{
+    auto* comp = entity.addComponent<AudioSourceComponent>();
+    comp->clipPath      = j.value("clipPath", std::string(""));
+    comp->volume        = j.value("volume", 1.0f);
+    comp->bus           = audioBusFromString(j.value("bus", std::string("Sfx")));
+    comp->pitch         = j.value("pitch", 1.0f);
+    comp->minDistance   = j.value("minDistance", 1.0f);
+    comp->maxDistance   = j.value("maxDistance", 50.0f);
+    comp->rolloffFactor = j.value("rolloffFactor", 1.0f);
+    comp->attenuationModel = attenuationModelFromString(
+        j.value("attenuationModel", std::string("InverseDistance")));
+    comp->velocity          = readVec3(j, "velocity", glm::vec3(0.0f));
+    comp->occlusionMaterial = occlusionMaterialFromString(
+        j.value("occlusionMaterial", std::string("Air")));
+    comp->occlusionFraction = j.value("occlusionFraction", 0.0f);
+    comp->loop     = j.value("loop", false);
+    comp->autoPlay = j.value("autoPlay", false);
+    comp->spatial  = j.value("spatial", true);
+}
+
+// ---------------------------------------------------------------------------
+// Built-in registry population
+// ---------------------------------------------------------------------------
+//
+// Wraps each concrete component's (de)serialiser in a
+// ComponentSerializerRegistry entry. The registration order also
+// determines the order keys appear in the serialised `components`
+// dict — new types should append rather than insert.
+static void ensureBuiltinsRegistered()
+{
+    static std::once_flag flag;
+    std::call_once(flag, []()
+    {
+        auto& reg = ComponentSerializerRegistry::instance();
+
+        reg.registerEntry({
+            "MeshRenderer",
+            [](const Entity& e, const ResourceManager& r) -> json {
+                auto* c = e.getComponent<MeshRenderer>();
+                return c ? serializeMeshRenderer(*c, r) : json();
+            },
+            deserializeMeshRenderer
+        });
+
+        reg.registerEntry({
+            "DirectionalLight",
+            [](const Entity& e, const ResourceManager&) -> json {
+                auto* c = e.getComponent<DirectionalLightComponent>();
+                return c ? serializeDirectionalLight(*c) : json();
+            },
+            deserializeDirectionalLight
+        });
+
+        reg.registerEntry({
+            "PointLight",
+            [](const Entity& e, const ResourceManager&) -> json {
+                auto* c = e.getComponent<PointLightComponent>();
+                return c ? serializePointLight(*c) : json();
+            },
+            deserializePointLight
+        });
+
+        reg.registerEntry({
+            "SpotLight",
+            [](const Entity& e, const ResourceManager&) -> json {
+                auto* c = e.getComponent<SpotLightComponent>();
+                return c ? serializeSpotLight(*c) : json();
+            },
+            deserializeSpotLight
+        });
+
+        reg.registerEntry({
+            "EmissiveLight",
+            [](const Entity& e, const ResourceManager&) -> json {
+                auto* c = e.getComponent<EmissiveLightComponent>();
+                return c ? serializeEmissiveLight(*c) : json();
+            },
+            deserializeEmissiveLight
+        });
+
+        reg.registerEntry({
+            "ParticleEmitter",
+            [](const Entity& e, const ResourceManager&) -> json {
+                auto* c = e.getComponent<ParticleEmitterComponent>();
+                return c ? serializeParticleEmitter(*c) : json();
+            },
+            deserializeParticleEmitter
+        });
+
+        reg.registerEntry({
+            "WaterSurface",
+            [](const Entity& e, const ResourceManager&) -> json {
+                auto* c = e.getComponent<WaterSurfaceComponent>();
+                return c ? serializeWaterSurface(*c) : json();
+            },
+            deserializeWaterSurface
+        });
+
+        reg.registerEntry({
+            "AudioSource",
+            [](const Entity& e, const ResourceManager&) -> json {
+                auto* c = e.getComponent<AudioSourceComponent>();
+                return c ? serializeAudioSource(*c) : json();
+            },
+            deserializeAudioSource
+        });
+    });
+}
+
 // ---------------------------------------------------------------------------
 // Main serialize
 // ---------------------------------------------------------------------------
 
 json serializeEntity(const Entity& entity, const ResourceManager& resources)
 {
+    ensureBuiltinsRegistered();
+
     json j;
 
     j["name"] = entity.getName();
@@ -639,51 +942,16 @@ json serializeEntity(const Entity& entity, const ResourceManager& resources)
     j["visible"] = entity.isVisible();
     j["locked"] = entity.isLocked();
 
-    // Components
+    // Components — registry-driven dispatch.
     json components = json::object();
-
-    auto* mr = entity.getComponent<MeshRenderer>();
-    if (mr)
+    for (const auto& entry : ComponentSerializerRegistry::instance().entries())
     {
-        components["MeshRenderer"] = serializeMeshRenderer(*mr, resources);
+        json compJson = entry.trySerialize(entity, resources);
+        if (!compJson.is_null())
+        {
+            components[entry.typeName] = std::move(compJson);
+        }
     }
-
-    auto* dirLight = entity.getComponent<DirectionalLightComponent>();
-    if (dirLight)
-    {
-        components["DirectionalLight"] = serializeDirectionalLight(*dirLight);
-    }
-
-    auto* pointLight = entity.getComponent<PointLightComponent>();
-    if (pointLight)
-    {
-        components["PointLight"] = serializePointLight(*pointLight);
-    }
-
-    auto* spotLight = entity.getComponent<SpotLightComponent>();
-    if (spotLight)
-    {
-        components["SpotLight"] = serializeSpotLight(*spotLight);
-    }
-
-    auto* emissive = entity.getComponent<EmissiveLightComponent>();
-    if (emissive)
-    {
-        components["EmissiveLight"] = serializeEmissiveLight(*emissive);
-    }
-
-    auto* particleEmitter = entity.getComponent<ParticleEmitterComponent>();
-    if (particleEmitter)
-    {
-        components["ParticleEmitter"] = serializeParticleEmitter(*particleEmitter);
-    }
-
-    auto* waterSurface = entity.getComponent<WaterSurfaceComponent>();
-    if (waterSurface)
-    {
-        components["WaterSurface"] = serializeWaterSurface(*waterSurface);
-    }
-
     if (!components.empty())
     {
         j["components"] = components;
@@ -744,99 +1012,28 @@ static Entity* deserializeEntityRecursive(
     entity->setVisible(j.value("visible", true));
     entity->setLocked(j.value("locked", false));
 
-    // Components
+    // Components — registry-driven dispatch.
     if (j.contains("components") && j["components"].is_object())
     {
         const auto& comps = j["components"];
-
-        // MeshRenderer
-        if (comps.contains("MeshRenderer") && comps["MeshRenderer"].is_object())
+        const auto& registry = ComponentSerializerRegistry::instance();
+        for (auto it = comps.begin(); it != comps.end(); ++it)
         {
-            const auto& mrJson = comps["MeshRenderer"];
-
-            std::shared_ptr<Mesh> mesh;
-            if (mrJson.contains("mesh"))
+            if (!it.value().is_object())
             {
-                mesh = resources.getMeshByKey(mrJson["mesh"].get<std::string>());
+                continue;
             }
-
-            std::shared_ptr<Material> material;
-            if (mrJson.contains("material") && mrJson["material"].is_object())
+            const auto* entry = registry.findByName(it.key());
+            if (entry)
             {
-                material = deserializeMaterial(
-                    mrJson["material"], resources, entity->getId());
+                entry->deserialize(it.value(), *entity, resources);
             }
-
-            if (mesh)
+            else
             {
-                auto* mr = entity->addComponent<MeshRenderer>(mesh, material);
-                mr->setCastsShadow(mrJson.value("castsShadow", true));
+                Logger::warning(std::string(
+                    "EntitySerializer: no serialiser registered for component type '")
+                    + it.key() + "' — skipped");
             }
-        }
-
-        // Directional Light
-        if (comps.contains("DirectionalLight") && comps["DirectionalLight"].is_object())
-        {
-            const auto& dl = comps["DirectionalLight"];
-            auto* comp = entity->addComponent<DirectionalLightComponent>();
-            comp->light.direction = readVec3(dl, "direction", glm::vec3(-0.2f, -1.0f, -0.3f));
-            comp->light.ambient = readVec3(dl, "ambient", glm::vec3(0.1f));
-            comp->light.diffuse = readVec3(dl, "diffuse", glm::vec3(0.8f));
-            comp->light.specular = readVec3(dl, "specular", glm::vec3(1.0f));
-        }
-
-        // Point Light
-        if (comps.contains("PointLight") && comps["PointLight"].is_object())
-        {
-            const auto& pl = comps["PointLight"];
-            auto* comp = entity->addComponent<PointLightComponent>();
-            comp->light.ambient = readVec3(pl, "ambient", glm::vec3(0.05f));
-            comp->light.diffuse = readVec3(pl, "diffuse", glm::vec3(0.8f));
-            comp->light.specular = readVec3(pl, "specular", glm::vec3(1.0f));
-            comp->light.constant = pl.value("constant", 1.0f);
-            comp->light.linear = pl.value("linear", 0.09f);
-            comp->light.quadratic = pl.value("quadratic", 0.032f);
-            comp->light.castsShadow = pl.value("castsShadow", false);
-        }
-
-        // Spot Light
-        if (comps.contains("SpotLight") && comps["SpotLight"].is_object())
-        {
-            const auto& sl = comps["SpotLight"];
-            auto* comp = entity->addComponent<SpotLightComponent>();
-            comp->light.direction = readVec3(sl, "direction", glm::vec3(0.0f, -1.0f, 0.0f));
-            comp->light.ambient = readVec3(sl, "ambient", glm::vec3(0.0f));
-            comp->light.diffuse = readVec3(sl, "diffuse", glm::vec3(1.0f));
-            comp->light.specular = readVec3(sl, "specular", glm::vec3(1.0f));
-            comp->light.innerCutoff = sl.value("innerCutoff", 0.9763f);
-            comp->light.outerCutoff = sl.value("outerCutoff", 0.9659f);
-            comp->light.constant = sl.value("constant", 1.0f);
-            comp->light.linear = sl.value("linear", 0.09f);
-            comp->light.quadratic = sl.value("quadratic", 0.032f);
-        }
-
-        // Emissive Light
-        if (comps.contains("EmissiveLight") && comps["EmissiveLight"].is_object())
-        {
-            const auto& el = comps["EmissiveLight"];
-            auto* comp = entity->addComponent<EmissiveLightComponent>();
-            comp->lightRadius = el.value("lightRadius", 5.0f);
-            comp->lightIntensity = el.value("lightIntensity", 1.0f);
-            comp->overrideColor = readVec3(el, "overrideColor", glm::vec3(0.0f));
-        }
-
-        // Particle Emitter
-        if (comps.contains("ParticleEmitter") && comps["ParticleEmitter"].is_object())
-        {
-            auto* comp = entity->addComponent<ParticleEmitterComponent>();
-            deserializeParticleEmitter(comps["ParticleEmitter"], *comp);
-        }
-
-        // Water Surface
-        if (comps.contains("WaterSurface") && comps["WaterSurface"].is_object())
-        {
-            auto* comp = entity->addComponent<WaterSurfaceComponent>();
-            deserializeWaterSurface(comps["WaterSurface"], *comp);
         }
     }
 
@@ -854,6 +1051,7 @@ static Entity* deserializeEntityRecursive(
 
 Entity* deserializeEntity(const json& j, Scene& scene, ResourceManager& resources)
 {
+    ensureBuiltinsRegistered();
     return deserializeEntityRecursive(j, scene, resources, nullptr);
 }
 
