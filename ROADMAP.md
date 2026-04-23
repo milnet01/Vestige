@@ -1112,6 +1112,8 @@ Toggling any Settings tab option (bus gain, subtitle size, photosensitive safe m
 
 **Note:** The three sections below — Camera Modes, Decal System, Post-Processing Effects Suite — were previously bullets in Phase 10. They have been lifted into their own phase so the ordering is enforced rather than implicit. Phase 10's remaining bullets (in-game UI, text rendering, audio, localization, accessibility, fog, rendering enhancements) stay in Phase 10; they have either landed or can land in parallel with Phase 11A infrastructure work without blocking it.
 
+**Cross-phase prerequisite note.** Three items originally planned inside Phase 10.8 — `PhysicsWorld::sphereCast` (CM3 / CM4 third-person wall-probe), centripetal Catmull-Rom parameterisation and arc-length spline evaluation (CM7 cinematic camera) — moved to Phase 10.9 Slices 7 + 10. Reason: the 2026-04-23 ultrareview surfaced that the existing uniform-Catmull-Rom implementation contradicts the research doc, and `sphereCast` is a more general primitive than a single-consumer Phase 10.8 slice. They land in Phase 10.9 with their tests, and Phase 10.8 consumes them rather than authoring them. CM1 (base types) already shipped 2026-04-23; CM2 begins after Phase 10.9 Slices 1 + 3 land.
+
 ### Camera Modes
 - [ ] Camera mode system (switchable projection and control schemes per scene/game)
 - [ ] First-person camera (existing — WASD + mouse look, perspective projection)
@@ -1154,6 +1156,142 @@ Cinematic and atmospheric post-processing for horror, drama, and stylized render
 
 ### Milestone
 Every Phase 11B gameplay hook that depends on rendering (hit decals, bullet-hole decals, damage screen effects, death fade, vehicle cameras, camera-mode switching) has a working sink. Phase 11A infrastructure can land in parallel; Phase 11B cannot ship until both 10.8 and 11A are complete.
+
+**Cross-phase prerequisite note.** Phase 10.9 Slice 7 ships `PhysicsWorld::sphereCast`, Slice 10 ships centripetal Catmull-Rom + arc-length-parameterised spline evaluation. Both are consumed by Phase 10.8 CM3 / CM4 / CM7 and were originally scheduled inside this phase; they move to Phase 10.9 so the remediation sweep can land them alongside their test coverage rather than under Phase 10.8's slice count.
+
+---
+
+## Phase 10.9: Post-Ultrareview Remediation
+**Goal:** Close findings from the 2026-04-23 independent multi-agent code review (14 subsystems, 14 independent reviewers, each given the design docs + source but *not* the tests — deliberately breaking the "self-marking homework" loop that let several Phase 10.7 features ship with passing tests but silently-broken behaviour). Slices are ordered by dependency: foundations first, then the Phase 10.7 gaps that foundations unblock, then safety / rendering / parsing / animation / physics / wiring / input / splines / systems / editor / performance. Later slices can be parallel-tracked once their upstream slices land.
+
+**Context.** The review surfaced 14 CRITICAL and ~47 HIGH findings. Five of the CRITICAL findings were Phase 10.7 features that passed every test we wrote but delivered a subset of the design doc — the tests encoded what the code did, not what the design doc said. This phase closes those gaps before Phase 11 builds on top.
+
+**Process discipline for this phase.** Every slice follows the design-doc-first-tests pattern: failing regression tests authored from the design-doc or external-standard clause (cited in the test name — e.g. `TEST(Photosensitive, WCAG_2_3_1_*)`) land as a "red" commit; the fix lands as a "green" commit. Each slice also triggers an independent-reviewer subagent pass before ship.
+
+### Slice 1: Foundations — enable everything else
+Small, isolated fixes with no upstream dependencies. Every downstream slice benefits.
+
+- [ ] **F1.** `engine.cpp:412` — fix `m_assetPath + "/captions.json"` double-concatenation. Regression test loads a fixture caption file and verifies key lookup.
+- [ ] **F2.** `Component::clone()` — make the base pure-virtual; every concrete component explicitly deep-copies. Backfill missing overrides (audit `entity_serializer` allowlist while there).
+- [ ] **F3.** `ComponentSerializerRegistry` — widen `entity_serializer` so components register their own JSON read/write rather than being dropped by a fixed allowlist. Fixes silent-drop of `AudioSourceComponent::bus` (Phase 10.7 A1 latent bug), sets up CameraMode persistence.
+- [ ] **F4.** Clamp helpers (`clampFlashAlpha`, `clampShakeAmplitude`, `clampStrobeHz`, `limitBloomIntensity`) sanitise NaN / ±∞ / negatives in **both** enabled and disabled paths. `std::clamp(std::isfinite(x) ? x : 0.0f, 0.0f, UPPER)`. WCAG-tagged unit test per helper.
+- [ ] **F5.** `clampStrobeHz` hard-caps at WCAG 3 Hz. `std::min(hz, std::min(limits.maxStrobeHz, WCAG_MAX_STROBE_HZ))`. Prevents user-edited `maxStrobeHz = 29.0` from defeating safe mode.
+- [ ] **F6.** OBJ loader — support OBJ-spec-mandated negative indices; add 1 MB per-line read cap.
+
+### Slice 2: Phase 10.7 completion — what actually shipped vs. what was spec'd
+Finish the gain-chain, subtitle, caption, and HRTF features that passed tests but delivered subsets of the design. Depends on Slice 1.
+
+- [ ] **P1.** Subtitle 40-char soft-wrap + 2-line cap + plate sizing from `max(lineWidth)` (PHASE10_7_DESIGN.md §4.2). Unit-test word-boundary wrap, overlong tokens, line-count cap.
+- [ ] **P2.** `AudioSystem` per-frame component-iteration pass: `std::unordered_map<Entity, ALuint> m_activeSources` + per-frame `AL_POSITION` / `AL_VELOCITY` / `AL_PITCH` / `finalGain` push. Brings `pitch`, `velocity`, `attenuationModel`, `minDistance`, `maxDistance`, `rolloffFactor`, `autoPlay`, `occlusionMaterial`, `occlusionFraction` from dead data to live.
+- [ ] **P3.** `DuckingState::currentGain` folded into `resolveSourceGain` — ducking is computed but never applied; P2 is the hook.
+- [ ] **P4.** Caption auto-enqueue on `playSound*` entry (Slice B3 closure). `CaptionMap::enqueueFor(path, queue)` fires once at source-acquire, not every frame. Depends on F1.
+- [ ] **P5.** `SubtitleQueueApplySink::setSubtitlesEnabled` → consumer read path (either `SubtitleQueue::setEnabled(bool)` filtering `activeSubtitles()` output, or `Engine::getSubtitlesEnabled()` proxy). Today the toggle writes a flag nothing reads.
+- [ ] **P6.** Narrator styling decision — italic font atlas + flag through `TextRenderer`, or spec-revised to use a differentiating colour. Blocks §4.2 compliance claim.
+- [ ] **P7.** Voice-eviction wiring — `chooseVoiceToEvict` into `playSound*` retry when pool is exhausted. Adds `SoundPriority` to `AudioSourceComponent`.
+- [ ] **P8.** HRTF init-order fix + `HrtfStatusChanged` device-reset event so the Settings UI can surface "Requested: Forced / Actual: Denied (UnsupportedFormat)".
+
+### Slice 3: Safety surfaces
+Crash vectors + accessibility claims that passed tests but leak to real users.
+
+- [ ] **S1.** `Scene::removeEntity` nulls `m_activeCamera` if the deleted subtree contains it. Regression test: delete camera entity, assert `getActiveCamera() == nullptr`.
+- [ ] **S2.** Component-mutation-inside-`update()` contract — snapshot component pointers before iterating OR ban mid-update add/remove with an explicit assert + deferred-mutation queue. Resolves the scripting-vs-update collision Phase 11B AI will trigger.
+- [ ] **S3.** `UIElement::hitTest` recurses into children; `UICanvas::hitTest` walks nested trees. Unblocks grouped-widget layouts that are silently broken today (only root-level elements are reachable).
+- [ ] **S4.** Keyboard navigation — focus ring + Tab / arrow / Enter + modal-aware focus traversal. Menu footer advertises "UP DOWN NAVIGATE" but no handler exists. XAG 102 conformance.
+- [ ] **S5.** `UIPanel` delegates hit-test to children when non-interactive.
+- [ ] **S6.** `PressurePlateComponent` overlap query uses `getWorldPosition()` not local transform — fails in any parented hierarchy today.
+
+### Slice 4: Rendering correctness
+IBL corruption is load-bearing: every PBR material since day one has been lit with corrupted irradiance / prefilter values. Fix early.
+
+- [ ] **R1.** Wrap IBL capture paths in `ScopedForwardZ` — `EnvironmentMap::generate`, `LightProbe::generateFromCubemap`, prefilter, convolution. Also the init-time first-generation path in `renderer.cpp:683-692` (currently no save/restore at all). Parity test: render a probe with + without the wrap, diff the prefilter output.
+- [ ] **R2.** GPU compute SH projection replacing per-face `glReadPixels` + CPU projection in `captureSHGrid`. Editor "Bake GI" moves from ~1 FPS to full pipeline speed.
+- [ ] **R3.** Shadow-pass state save/restore for `GL_CLIP_DISTANCE0` + `GL_DEPTH_CLAMP`. Extend `ScopedForwardZ` or a sibling RAII.
+- [ ] **R4.** `ScopedBlendState` + `ScopedCullFace` RAII applied to foliage, water, tree, particle renderers. Replaces hand-rolled enable/disable that assumes caller-state.
+- [ ] **R5.** `GpuCuller` — cache `GLint m_planeLocation0` at init, upload via `glUniform4fv(loc, 6, data)`. Eliminates per-frame `std::to_string` allocations.
+
+### Slice 5: Data / asset parsing robustness
+Security + correctness for untrusted or malformed inputs. Gates community-mod / Steam-Workshop futures.
+
+- [ ] **D1.** Path sandbox in `ResourceManager::loadTexture` / `loadMesh` — move the `resolveUri`-style base-dir check to a choke-point inside ResourceManager. Every scene-JSON path flows through it automatically.
+- [ ] **D2.** tinygltf `FsCallbacks` with a custom `ReadWholeFile` that rejects paths outside `gltfDir`. Closes the confused-deputy / TOCTOU race where tinygltf reads bytes before `resolveUri` sees them.
+- [ ] **D3.** `.cube` LUT loader: file-size cap + path sandbox. Same shape as OBJ's `JsonSizeCap`-style reader.
+- [ ] **D4.** OBJ MTL support (or declared "not supported" log). Currently `usemtl` silently drops multi-material imports to one material.
+- [ ] **D5.** `resolveUri` empty-return → substitute default texture explicitly rather than passing `""` through to `loadTexture`.
+- [ ] **D6.** OBJ vertex-key hash: `boost::hash_combine`-style combiner, not `h3 << 32` (UB on 32-bit `size_t`).
+
+### Slice 6: Animation correctness
+Three silent-corruption bugs affecting anyone importing glTF characters.
+
+- [ ] **A1.** Skeleton DFS update order — build `m_updateOrder: std::vector<int>` in DFS pre-order at `Skeleton` construction; iterate that in `computeBoneMatrices`. Debug-build assert parent-idx < child-idx. Remap animation channel joint indices if joints are reordered.
+- [ ] **A2.** CUBICSPLINE quaternion double-cover fix — before Hermite blend, `if dot(vk, vk1) < 0: flip vk1 and ak1`. Unit test with a deliberately-wrapped keyframe pair.
+- [ ] **A3.** Motion-matching query frame-of-reference parity with database — rotate trajectory positions + directions by current character root yaw in `buildQueryVector`.
+- [ ] **A4.** IK pole-vector alignment uses post-solve mid position, not re-rotated pre-solve mid.
+- [ ] **A5.** Inertialisation axis-angle stability — `sqrt(1-w²)` + clamp instead of `acos(w)` + `sin(angle/2)`.
+
+### Slice 7: Physics determinism — gates Phase 11A replay
+Phase 11A's Replay Recording Infrastructure requires deterministic physics. These findings break that contract today.
+
+- [ ] **Ph1.** Move character-controller + breakable-constraint checks inside the fixed-step loop. Divide breakable lambda by `m_fixedTimestep`, not frame dt.
+- [ ] **Ph2.** `PhysicsWorld::rayCast` gains optional `BodyFilter` / `ObjectLayerFilter` — Phase 11B combat + grab system need self-hit exclusion. Fix the `interactRange` double-scaling at `engine.cpp:775-780`.
+- [ ] **Ph3.** `PhysicsWorld::sphereCast` API (originally scheduled as Phase 10.8 CM3 — pulled here so Phase 10.8 consumes it rather than authors it).
+- [ ] **Ph4.** Breakable-constraint force sums rotation lambdas + slider position-limit lambdas — hinge / slider limit breaks feel wrong without them.
+- [ ] **Ph5.** Character-vs-character pair filter — split PLAYER_CHARACTER / NPC_CHARACTER, or change the filter + use collision groups. Otherwise ragdolls in CHARACTER layer pass through the player.
+
+### Slice 8: Subsystem wiring / dead-code cleanup
+Per CLAUDE.md Rule 6 (no over-engineering) + Rule 10 (no workarounds-as-fixes). Finish-or-delete, not cargo-cult.
+
+- [ ] **W1.** `AsyncTextureLoader` — either construct it + guard placeholder texture during upload (`Texture::isReady()` atomic), or delete the header + member + `processAsyncUploads()`.
+- [ ] **W2.** `FileWatcher` — wire callbacks + `ResourceManager::reload(path)` + editor "Reload" action, or delete. Docstring currently claims callbacks the class doesn't have.
+- [ ] **W3.** `PostProcessAccessibilitySettings.depthOfFieldEnabled` / `.motionBlurEnabled` — document as awaiting-consumer or hide the UI toggles until the effects land. No-op toggles mislead users.
+- [ ] **W4.** Screen-reader bridge — wire `UIAccessibility::collectAccessible` to AT-SPI (Linux) / UIA (Windows), or drop the collector + update the roadmap claim as Phase 11+ work.
+- [ ] **W5.** `AudioSystem::isForceActive() = true` — infrastructure systems own global state; "scene has no owned components → deactivate" heuristic is wrong for them. Same audit for UISystem, LightingSystem, TerrainSystem.
+- [ ] **W6.** Listener-sync-after-camera-step — either split `AudioSystem` into `update()` + explicit `syncListener()` called post-camera, or give the ordering mechanism from Slice 11 a late-phase marker for AudioSystem.
+- [ ] **W7.** `AudioEngine::setMixerSnapshot` → `const AudioMixer*` pointer (or seqlock), not per-frame struct copy. Current claim "thread-safe snapshot" doesn't hold.
+- [ ] **W8.** `AudioEngine::m_bufferCache` eviction + per-scene flush + wire streaming music path (`audio_music_stream` has no loader consumer today).
+
+### Slice 9: Input subsystem — spec-vs-code reconciliation
+Spec mandates scancode; code stores keycode. Fix the contradiction and the missing axis-binding path.
+
+- [ ] **I1.** `InputBinding::code` stores scancode. Rename factory to `InputBinding::scancode(int glfwScancode)`; capture `glfwGetKeyScancode(key)` at rebind; translate back via `glfwGetKeyName(key, scancode)` for display. Fixes WASD-on-AZERTY silent-layout-flip.
+- [ ] **I2.** `InputActionMap::toJson` / `fromJson` live in `engine/input/`, not in `engine/core/settings*.cpp`. Per PHASE10_SETTINGS_DESIGN.md slice 13.4.
+- [ ] **I3.** `InputDevice::GamepadAxis` + `float axisValue(...)` query — analog sticks cannot currently be bound to actions at all.
+- [ ] **I4.** `findConflicts` device-scope filter (or document cross-device intent). Keyboard and gamepad bindings can't conflict physically.
+- [ ] **I5.** `addAction` re-registration — assert / warn when called after `Settings::load()` has populated user rebinds; silent nuke today.
+
+### Slice 10: Environment / splines
+Research-doc conformance + Phase 10.8 CM7 cinematic-camera dependencies.
+
+- [ ] **E1.** `SplinePath::catmullRom` → centripetal parameterisation. Per FOLIAGE_VEGETATION + CSM_FOLIAGE research docs. Unit-test against a known cusp case.
+- [ ] **E2.** `SplinePath::evaluateByArcLength(s)` accessor. Phase 10.8 CM7 cinematic camera requires constant-speed playback.
+- [ ] **E3.** GPU foliage culling via the existing `frustum_cull.comp.glsl` (currently unwired). Rule 12 compliance — per-instance scale + pure arithmetic + packable.
+- [ ] **E4.** `FoliageChunk::getBounds` Y-range queried from terrain, not magic `[-100, 200]` ceiling.
+
+### Slice 11: Systems update-order mechanism
+Registration-order is an implicit contract that Phase 11A / 11B AI systems will break.
+
+- [ ] **Sy1.** `ISystem::getUpdateOrder()` or coarse phase tags (`PreUpdate / Update / PostCamera / PostPhysics / Render`). Stable-sort `m_systems` once after `registerSystem` returns. AudioSystem = PostCamera; UI = late; physics-sync = early. Unblocks W6.
+
+### Slice 12: Editor undo / hygiene
+Five inspector types bypass undo entirely today; several write files non-atomically.
+
+- [ ] **Ed1.** Replace `IsItemDeactivatedAfterEdit`-at-end-of-block pattern with per-widget pre-snapshot + any-deactivated bracket (the `drawTransform` pattern). Fixes drag-release events silently dropping undo entries.
+- [ ] **Ed2.** Add undo brackets to water / cloth / rigid-body / emissive-light / material inspector edits. All currently bypass `CommandHistory`.
+- [ ] **Ed3.** Multi-delete — canonicalise selection to roots (filter descendants) before wrapping into `CompositeCommand`.
+- [ ] **Ed4.** Atomic writes for prefab / recent-files / welcome-flag (write-to-temp + rename, matching `scene_serializer`).
+- [ ] **Ed5.** `PanelRegistry` + `IPanel` interface — reduces per-new-panel churn (currently requires editing `editor.h` + `editor.cpp` + menu wiring for each panel).
+
+### Slice 13: Performance hygiene
+Post-10.7, pre-11 performance sweep. Not 60-FPS-critical today but blocks the Phase 11 load.
+
+- [ ] **Pe1.** `TextRenderer` batch across strings per frame — `begin/queue/end` semantics; one draw call for all HUD labels + subtitles + toasts (currently ~18 draws/frame in a normal HUD).
+- [ ] **Pe2.** `SpriteSystem::render` + `Physics2DSystem::update` — member vectors `clear()`ed each frame, not constructed. `Physics2DSystem` iterates `m_bodyByEntity` directly instead of full-tree `forEachEntity`.
+- [ ] **Pe3.** `FoliageRenderer::uploadInstances` — triple-buffered persistent-mapped buffer or 2× grow-in-place. Eliminates mid-frame `glDeleteBuffers` + reallocation for every pass × every foliage type.
+- [ ] **Pe4.** `EventBus::publish` — reentrancy sentinel + deferred-add queue. Removes the per-dispatch listener-vector copy that heap-allocates at 60 Hz per hot event.
+
+### Milestone
+Every Phase 10.7 design-doc promise is verified by a test authored **from the design doc, not from the code**. Every dead-code item is either wired or deleted. Phase 11A's determinism contract is backed by regression tests. Phase 10.8 CM3 / CM4 / CM7 prerequisites (`sphereCast`, centripetal spline, arc-length evaluator) are live. After Slice 13, the next slice of Phase 10.8 can ship without inheriting remediation debt.
+
+**Scope honesty.** This phase is larger than any single prior Phase 10 sub-phase. If Phase 10.8 Camera Modes is time-critical, Slices 1–3 are genuinely blocking (foundations + 10.7 gaps + safety); Slices 4–13 can be interleaved with Phase 10.8 work or deferred into respective original phases' "correctness update" entries. Revisit the ordering at each slice gate rather than treating the whole phase as atomic.
 
 ---
 

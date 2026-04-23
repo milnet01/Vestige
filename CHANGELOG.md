@@ -9,6 +9,90 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-23 ROADMAP: Phase 10.9 post-ultrareview remediation phase
+
+Added Phase 10.9 (Post-Ultrareview Remediation) between Phase 10.8
+and Phase 11A as the single source of truth for all follow-up work
+from the 2026-04-23 independent multi-agent code review.
+
+The review ran fourteen independent reviewer agents in parallel,
+each scoped to one subsystem (`audio`, `accessibility`, `animation`,
+`core`, `editor`, `environment`, `input`, `physics`, `renderer`,
+`resource`, `scene`, `systems`, `ui`, `utils`). Each reviewer saw
+only design docs + source — never the test files. This deliberately
+broke the "self-marking homework" loop where tests encode what the
+code does rather than what the design doc says.
+
+The sweep surfaced 14 CRITICAL and ~47 HIGH findings. Five of the
+CRITICAL findings were Phase 10.7 features that passed every test
+we wrote but shipped a subset of the design doc — the tests
+verified the implementation, not the spec.
+
+Phase 10.9 is organised into 13 slices ordered by dependency:
+
+1. **Foundations** — the cheap, isolated fixes every later slice
+   benefits from (caption-path typo, `Component::clone()` pure-
+   virtual, serializer registry, clamp-helper NaN guards, WCAG
+   hard-cap on strobe Hz, OBJ negative indices).
+2. **Phase 10.7 completion** — finish the gain chain, subtitle
+   wrap, caption auto-enqueue, voice eviction, ducking
+   application, HRTF init order.
+3. **Safety surfaces** — dangling active-camera, component
+   mutation during update, UI hit-test recursion, keyboard nav,
+   pressure-plate world-space query.
+4. **Rendering correctness** — IBL ScopedForwardZ wrap (fixes
+   silent IBL corruption tainting every PBR material since day
+   one), GPU SH projection, shadow-pass state save/restore,
+   blend/cull RAII, `GpuCuller` upload consolidation.
+5. **Data / asset parsing robustness** — path-sandbox choke-point,
+   tinygltf `FsCallbacks`, `.cube` loader hardening, OBJ MTL
+   support, portable vertex-hash.
+6. **Animation correctness** — skeleton DFS ordering, CUBICSPLINE
+   quaternion double-cover, motion-matching frame-of-reference,
+   IK pole-vector, inertialisation axis-angle stability.
+7. **Physics determinism** (gates Phase 11A replay) — fixed-
+   timestep fold for character + breakable, raycast filters,
+   `sphereCast` API, rotation-lambda break force, character pair
+   filter.
+8. **Subsystem wiring / dead-code cleanup** — finish-or-delete
+   for `AsyncTextureLoader`, `FileWatcher`, accessibility no-op
+   toggles, screen-reader bridge, AudioSystem force-active,
+   listener-sync order, mixer-snapshot pointer, buffer-cache
+   eviction.
+9. **Input spec-vs-code reconciliation** — scancode vs keycode
+   (currently contradicts the design doc), serialization
+   ownership, axis-binding device, conflict-filter scope,
+   re-registration assertion.
+10. **Environment / splines** — centripetal Catmull-Rom (research
+    doc mandated but not implemented), arc-length spline
+    evaluator (Phase 10.8 CM7 cinematic cam needs it), GPU
+    foliage culling, chunk-bounds terrain query.
+11. **Systems update-order mechanism** — `ISystem::getUpdateOrder`
+    or coarse phase tags so registration-order stops being the
+    implicit contract.
+12. **Editor undo / hygiene** — fix the `IsItemDeactivatedAfterEdit`
+    pattern that drops drag-release events, add undo brackets to
+    five inspector types that currently bypass `CommandHistory`,
+    atomic prefab writes, panel registry.
+13. **Performance hygiene** — `TextRenderer` batching, sprite /
+    physics-2D per-frame allocations, foliage buffer grow-in-
+    place, event-bus reentrancy sentinel.
+
+Three items originally inside Phase 10.8 — `sphereCast`, centripetal
+Catmull-Rom, arc-length spline — moved to Phase 10.9 Slices 7 + 10
+and cross-referenced from Phase 10.8's header note. Reason: they
+turned out to be more general primitives than a single-consumer
+Phase 10.8 slice, and they need to land with their own test
+coverage before Phase 10.8 CM4 / CM7 consume them.
+
+Process discipline for this phase: every slice ships failing
+design-doc-first regression tests as a "red" commit, then the fix
+as a "green" commit — evidence that the test could have failed.
+Each slice also triggers an independent-reviewer subagent pass
+before ship, matching the pattern the ultrareview established.
+
+No code changed in this commit; ROADMAP.md + CHANGELOG.md only.
+
 ### 2026-04-23 Phase 10.8 — Slice CM1: CameraMode base types
 
 First slice of Phase 10.8 per the approved
