@@ -419,7 +419,7 @@ void onboardingFromJson(const json& j, OnboardingSettings& o)
     o.skipCount            = j.value("skipCount",            o.skipCount);
 }
 
-// --- Validation ---
+// --- Validation helpers ---
 
 float clamp01(float v)          { return std::clamp(v, 0.0f, 1.0f); }
 
@@ -437,6 +437,8 @@ bool isValidColorVisionFilter(const std::string& s)
 {
     return s == "none" || s == "protanopia" || s == "deuteranopia" || s == "tritanopia";
 }
+
+} // namespace  (close anon — validate() is public, declared in settings.h)
 
 // Clamps / normalises any section fields that can come back
 // out-of-range. Returns whether any clamping was applied so
@@ -569,8 +571,6 @@ bool validate(Settings& s)
 
     return !clamped;
 }
-
-} // namespace
 
 // ====== Settings::toJson / fromJson ===========================
 

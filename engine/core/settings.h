@@ -370,4 +370,17 @@ struct Settings
     bool operator!=(const Settings& o) const { return !(*this == o); }
 };
 
+/// @brief Clamp / normalise every Settings field that has a defined
+///        range (render scale, bus gains, deadzones, strobe Hz, etc.)
+///        and fall back to safe presets for enum-style strings.
+///
+/// Called unconditionally by `Settings::fromJson` so every loaded file
+/// is valid before subsystems see it; re-exposed here so the runtime
+/// editor (`SettingsEditor::mutate`) can apply the same policy to
+/// live slider mutations before pushing to the apply sinks.
+///
+/// @return `true` iff no fields needed clamping. Callers who only
+///         want the side-effect can ignore the return value.
+bool validate(Settings& s);
+
 } // namespace Vestige

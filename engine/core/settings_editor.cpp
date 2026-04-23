@@ -20,6 +20,12 @@ SettingsEditor::SettingsEditor(Settings initial, const ApplyTargets& targets)
 void SettingsEditor::mutate(const std::function<void(Settings&)>& mutator)
 {
     mutator(m_pending);
+    // Run the same clamp / validation chain as Settings::fromJson
+    // so live slider input can't drive subsystems past the policy
+    // thresholds (bus gains > 1.0 would clip the mixer, renderScale
+    // > 2.0 would blow the GPU budget, strobe Hz > 30 would dodge
+    // the persistence cap). Phase 10.9 Slice 1 F8.
+    validate(m_pending);
     pushPendingToSinks();
 }
 
