@@ -1,31 +1,19 @@
 # Vestige Engine Architecture
 
-This document describes the overall architecture of the Vestige 3D Engine.
-
-> **How to read this document.** Sections 1–9 describe the original Phase-1 skeleton (core subsystems, engine loop, event bus, scene graph, rendering basics, folder structure) and are still authoritative for those foundations. Sections 10–19 document everything that's been added since: animation, physics, environment, editor, GPU particles, profiling, cloth collision, and the scripting + editor-integration layer. When a subsystem appears in both halves of the document, the later section is the current reality.
+> **How to read this document.** §1–9 describe the Phase-1 skeleton (core subsystems, loop, event bus, scene graph, rendering, folder structure) and remain authoritative. §10–19 document everything added since (animation, physics, environment, editor, GPU particles, profiling, cloth collision, scripting). Where a subsystem appears in both halves, the later section is the current reality.
 
 ---
 
 ## 1. High-Level Overview
 
-Vestige uses a **Subsystem + Event Bus** architecture. The engine is composed of independent subsystems that are orchestrated by a central Engine class. Subsystems communicate through a shared Event Bus, keeping them decoupled from each other. Since Phase 9A the subsystem pattern is formalised via the `ISystem` interface (§19 introduces the variant; see also `engine/core/i_system.h` and `system_registry.h`) — every domain system (rendering, physics, animation, audio, navigation, UI, scripting, …) implements `ISystem` and registers with the central `SystemRegistry`, which drives their `initialize → update → fixedUpdate → submitRenderData → shutdown` lifecycle in order each frame.
+**Subsystem + Event Bus.** Independent subsystems orchestrated by the central `Engine` class, communicating via a shared `EventBus`. Since Phase 9A the pattern is formalised via `ISystem` (`engine/core/i_system.h`, `system_registry.h`): every domain system (rendering, physics, animation, audio, navigation, UI, scripting, …) implements `ISystem` and registers with `SystemRegistry`, which drives `initialize → update → fixedUpdate → submitRenderData → shutdown` in order each frame.
 
 ```
 ┌─────────────────────────────────────────────────────┐
 │                      Engine                         │
-│                                                     │
-│  ┌─────────┐  ┌──────────┐  ┌───────────────────┐  │
-│  │  Timer   │  │  Logger  │  │   ResourceManager │  │
-│  └─────────┘  └──────────┘  └───────────────────┘  │
-│                                                     │
-│  ┌─────────┐  ┌──────────┐  ┌───────────────────┐  │
-│  │ Window  │  │ Renderer │  │   SceneManager    │  │
-│  └─────────┘  └──────────┘  └───────────────────┘  │
-│                                                     │
-│  ┌──────────────┐  ┌────────────────────────────┐   │
-│  │ InputManager │  │         EventBus           │   │
-│  └──────────────┘  └────────────────────────────┘   │
-│                                                     │
+│  Timer · Logger · ResourceManager                   │
+│  Window · Renderer · SceneManager                   │
+│  InputManager · EventBus                            │
 └─────────────────────────────────────────────────────┘
 ```
 
@@ -33,28 +21,14 @@ Vestige uses a **Subsystem + Event Bus** architecture. The engine is composed of
 
 ## 2. Engine Loop
 
-The engine runs a fixed main loop that updates each subsystem in a specific order every frame:
-
 ```
-1. Timer          → Calculate delta time
-2. Window         → Poll OS events (GLFW)
-3. InputManager   → Process input state (keyboard, mouse, gamepad)
-4. EventBus       → Dispatch queued events to listeners
-5. SceneManager   → Update active scene (entities, components, logic)
-6. Renderer       → Render the active scene to the screen
-7. Window         → Swap front/back buffers
-```
-
-### Frame Timing
-```
-while (engine is running)
+while (running)
 {
-    float deltaTime = timer.update();
-
+    float dt = timer.update();
     window.pollEvents();
     inputManager.update();
     eventBus.dispatchAll();
-    sceneManager.update(deltaTime);
+    sceneManager.update(dt);
     renderer.render(sceneManager.getActiveScene());
     window.swapBuffers();
 }
@@ -64,592 +38,335 @@ while (engine is running)
 
 ## 3. Subsystems
 
-Each subsystem is a self-contained module with a clear responsibility. Subsystems do not directly reference each other — they communicate through the Event Bus.
+Self-contained modules; they communicate through the Event Bus, not direct references.
 
-### 3.1 Engine (`core/engine`)
-- **Role:** Owns and orchestrates all subsystems
-- **Responsibilities:** Initialize/shutdown subsystems in order, run the main loop
-- **Owns:** All other subsystem instances
-
-### 3.2 Window (`core/window`)
-- **Role:** Manage the OS window and OpenGL context
-- **Responsibilities:** Create/destroy window, handle resize, poll OS events, swap buffers
-- **Library:** GLFW
-- **Events emitted:** `WindowResize`, `WindowClose`
-
-### 3.3 Timer (`core/timer`)
-- **Role:** Track frame timing
-- **Responsibilities:** Calculate delta time, track FPS, provide elapsed time
-- **Events emitted:** None (queried directly by Engine)
-
-### 3.4 Logger (`core/logger`)
-- **Role:** Centralized logging
-- **Responsibilities:** Log messages at different severity levels (Trace, Debug, Info, Warning, Error, Fatal)
-- **Output:** Console (and optionally file)
-
-### 3.5 InputManager (`core/input_manager`)
-- **Role:** Abstract raw input into a queryable state
-- **Responsibilities:** Track key/button states, mouse position/delta, gamepad axes/buttons
-- **Events emitted:** `KeyPressed`, `KeyReleased`, `MouseMoved`, `MouseButtonPressed`, `GamepadConnected`, `GamepadDisconnected`
-- **Supports:** Keyboard, mouse, Xbox controllers, PlayStation controllers (via GLFW gamepad API)
-
-### 3.6 EventBus (`core/event_bus`)
-- **Role:** Decoupled communication between subsystems
-- **Responsibilities:** Register listeners for event types, queue events, dispatch events to listeners
-- **Design:** Synchronous dispatch — events are processed in order during the dispatch phase
-- **Pattern:** Publish/Subscribe with typed events
-
-### 3.7 Renderer (`renderer/renderer`)
-- **Role:** All OpenGL rendering
-- **Responsibilities:** Initialize OpenGL state, manage render pipeline, draw scenes
-- **Owns:** Shader management, render state
-- **Events listened:** `WindowResize` (to update viewport)
-
-### 3.8 SceneManager (`scene/scene_manager`)
-- **Role:** Manage scenes and the entity hierarchy
-- **Responsibilities:** Load/unload scenes, switch active scene, update entities
-- **Owns:** Scene instances, entity lifecycle
-
-### 3.9 ResourceManager (`resource/resource_manager`)
-- **Role:** Load and cache assets
-- **Responsibilities:** Load meshes, textures, shaders, fonts from disk; cache to avoid reloading; reference counting for cleanup
-- **Supported formats (planned):** OBJ, glTF (models), PNG/JPG (textures), GLSL (shaders), TTF (fonts)
+| Subsystem | Path | Role / Events |
+|-----------|------|---------------|
+| Engine | `core/engine` | Owns + orchestrates all subsystems; runs main loop. |
+| Window | `core/window` | OS window + GL context (GLFW). Emits `WindowResize`, `WindowClose`. |
+| Timer | `core/timer` | Delta time, FPS, elapsed. Queried directly. |
+| Logger | `core/logger` | Trace/Debug/Info/Warning/Error/Fatal → console (+file). |
+| InputManager | `core/input_manager` | Keyboard/mouse/gamepad (Xbox, PS via GLFW). Emits `KeyPressed/Released`, `MouseMoved`, `MouseButtonPressed`, `GamepadConnected/Disconnected`. |
+| EventBus | `core/event_bus` | Synchronous typed pub/sub, one dispatch phase per frame. |
+| Renderer | `renderer/renderer` | All GL rendering. Listens `WindowResize`. |
+| SceneManager | `scene/scene_manager` | Scenes + entity lifecycle. |
+| ResourceManager | `resource/resource_manager` | Load + cache meshes / textures / shaders / fonts (OBJ, glTF, PNG/JPG, GLSL, TTF). |
 
 ---
 
-## 4. Event Bus Design
+## 4. Event Bus
 
-### Event Structure
-Events are lightweight structs that inherit from a base `Event` type:
+Events are lightweight structs inheriting from a base `Event`:
 
 ```cpp
-// Base event
-struct Event
-{
-    virtual ~Event() = default;
-};
+struct WindowResizeEvent : public Event { int width, height; };
+struct KeyPressedEvent : public Event { int keyCode; bool isRepeat; };
 
-// Specific events
-struct WindowResizeEvent : public Event
-{
-    int width;
-    int height;
-};
-
-struct KeyPressedEvent : public Event
-{
-    int keyCode;
-    bool isRepeat;
-};
-```
-
-### Registration and Dispatch
-```cpp
-// Subsystem registers interest in an event type
-eventBus.subscribe<WindowResizeEvent>([this](const WindowResizeEvent& event)
-{
-    updateViewport(event.width, event.height);
+eventBus.subscribe<WindowResizeEvent>([this](const auto& e) {
+    updateViewport(e.width, e.height);
 });
-
-// Another subsystem fires an event
 eventBus.publish(WindowResizeEvent{1920, 1080});
 ```
 
-### Rules
-- Events are dispatched once per frame during the `eventBus.dispatchAll()` phase
-- Listeners must not modify the event
-- Event handlers should be fast — no heavy work in callbacks
+**Rules:** dispatched once per frame in `dispatchAll()`; listeners must not mutate the event; handlers must be fast.
 
 ---
 
 ## 5. Scene Graph
 
-Scenes contain a hierarchy of Entities. Each Entity can have child Entities and Components.
+Scenes contain a hierarchy of Entities; Entities hold Components.
 
 ```
 Scene
-└── Root Entity (Transform)
-    ├── Camera Entity (Transform, Camera)
-    ├── Sun Light (Transform, DirectionalLight)
+└── Root (Transform)
+    ├── Camera (Transform, Camera)
+    ├── Sun (Transform, DirectionalLight)
     ├── Tabernacle (Transform)
     │   ├── Outer Court (Transform, MeshRenderer)
-    │   ├── Holy Place (Transform)
-    │   │   ├── Table of Showbread (Transform, MeshRenderer, Material)
-    │   │   ├── Golden Lampstand (Transform, MeshRenderer, Material, PointLight)
-    │   │   └── Altar of Incense (Transform, MeshRenderer, Material)
-    │   └── Holy of Holies (Transform)
-    │       └── Ark of the Covenant (Transform, MeshRenderer, Material)
+    │   ├── Holy Place → Table of Showbread, Lampstand (+ PointLight), Altar of Incense
+    │   └── Holy of Holies → Ark of the Covenant
     └── Ground Plane (Transform, MeshRenderer, Material)
 ```
 
-### Components
-Entities are containers that hold Components. Components provide behavior and data:
-
-| Component | Purpose |
-|-----------|---------|
-| `Transform` | Position, rotation, scale in 3D space |
-| `MeshRenderer` | References a mesh + material for rendering |
-| `Camera` | View and projection parameters |
-| `DirectionalLight` | Sun-like light with direction |
-| `PointLight` | Positional light with falloff |
-| `SpotLight` | Cone-shaped light (torches, etc.) |
-| `Material` | Surface properties (color, textures, shininess) |
+**Components (core):** `Transform`, `MeshRenderer`, `Camera`, `DirectionalLight`, `PointLight`, `SpotLight`, `Material`.
 
 ---
 
 ## 6. Rendering Pipeline
 
-### Phase 1 (Basic)
-```
-1. Clear color and depth buffers
-2. Calculate view matrix from active Camera
-3. Calculate projection matrix (perspective)
-4. For each renderable entity:
-   a. Calculate model matrix from Transform hierarchy
-   b. Bind shader program
-   c. Set uniforms (MVP matrices, light data, material properties)
-   d. Bind vertex array (VAO)
-   e. Issue draw call
-5. Swap buffers
-```
+**Phase 1 (basic):** clear → view+projection from active Camera → per-entity (model matrix, bind shader, set uniforms, bind VAO, draw) → swap.
 
-### Later additions (status as of 2026-04-19)
-- **Shadow pass:** shipped — directional CSM (4 cascades), point shadows, spot shadows (§ Phase 4 + 5)
-- **Post-processing:** shipped — TAA, bloom, SSAO, tone mapping (Reinhard / ACES), color grading LUT, parallax occlusion mapping
-- **SMAA anti-aliasing:** shipped (`engine/renderer/smaa.{h,cpp}`)
-- **IBL prefilter + BRDF LUT:** shipped via `engine/renderer/environment_map.{h,cpp}` and `light_probe.{h,cpp}`; unified prefilter loop in `ibl_prefilter.h`
-- **GPU-driven instancing / culling:** shipped — frustum-culled MDI via `engine/renderer/gpu_culler.{h,cpp}` and `indirect_buffer.{h,cpp}`
-- **Global illumination:** SH probe grid + radiosity bake shipped (§ see `docs/GI_ROADMAP.md`); SSGI next; hybrid RT / cone tracing remain planned.
-- **Deferred rendering:** not started — forward-plus with GPU culling has been sufficient so far
-- **Vulkan backend:** planned (long-term roadmap)
-- **Ray tracing:** planned (long-term, post-Vulkan)
+**Current (as of 2026-04-19):**
+- **Shadow pass** — directional CSM (4 cascades), point, spot (Phases 4–5).
+- **Post-processing** — TAA, bloom, SSAO, tonemap (Reinhard/ACES), color-grading LUT, parallax occlusion.
+- **SMAA** — `renderer/smaa.{h,cpp}`.
+- **IBL** — prefilter + BRDF LUT via `environment_map.{h,cpp}`, `light_probe.{h,cpp}`; unified in `ibl_prefilter.h`.
+- **GPU-driven culling / instancing** — frustum-culled MDI via `gpu_culler.{h,cpp}` + `indirect_buffer.{h,cpp}`.
+- **GI** — SH probe grid + radiosity bake shipped (see `docs/GI_ROADMAP.md`). SSGI next; hybrid RT / cone tracing planned.
+- **Not started:** deferred rendering (forward-plus + GPU culling has sufficed).
+- **Planned (long-term):** Vulkan backend, ray tracing.
 
 ---
 
 ## 7. Folder Structure
 
-Current layout as of 2026-04-19. File lists below are representative — see each directory for the full contents.
-
 ```
 vestige/
-├── CMakeLists.txt                    # Root CMake build
-├── CLAUDE.md                         # Project context for Claude Code
-├── CODING_STANDARDS.md
-├── ARCHITECTURE.md                   # This file
-├── ROADMAP.md                        # Feature roadmap
-├── CHANGELOG.md                      # Engine changelog
-├── VERSION                           # Engine version string (0.1.5 at time of writing)
-├── README.md  SECURITY.md  CONTRIBUTING.md  CODE_OF_CONDUCT.md
-├── LICENSE  ASSET_LICENSES.md  THIRD_PARTY_NOTICES.md
-├── .gitleaks.toml  .pre-commit-config.yaml  .clang-format
+├── CMakeLists.txt · CLAUDE.md · ROADMAP.md · CHANGELOG.md · VERSION
+├── CODING_STANDARDS.md · ARCHITECTURE.md · SECURITY.md · CONTRIBUTING.md
+├── LICENSE · ASSET_LICENSES.md · THIRD_PARTY_NOTICES.md
+├── .gitleaks.toml · .pre-commit-config.yaml · .clang-format
 │
-├── engine/                           # Engine library (static)
-│   ├── CMakeLists.txt
-│   ├── core/                         # Engine, Window, Timer, Logger, InputManager,
-│   │                                 #   EventBus, ISystem, SystemRegistry,
-│   │                                 #   SystemEvents, FirstPersonController
-│   ├── renderer/                     # Renderer, Shader, Mesh, Texture, Camera,
-│   │                                 #   Material, Framebuffer, ShadowMap (CSM +
-│   │                                 #   point), Skybox, TAA, SMAA, Bloom, SSAO,
-│   │                                 #   TonemapLUT, EnvironmentMap, LightProbe,
-│   │                                 #   SHProbeGrid, RadiosityBaker,
-│   │                                 #   InstanceBuffer, IndirectBuffer, GpuCuller,
-│   │                                 #   ParticleRenderer, GpuParticleSystem,
-│   │                                 #   WaterRenderer, WaterFbo, FoliageRenderer,
-│   │                                 #   TreeRenderer, TerrainRenderer, TextRenderer,
-│   │                                 #   DebugDraw, MeshPool, IblPrefilter,
-│   │                                 #   ScopedForwardZ, FrameDiagnostics
-│   ├── scene/                        # Scene, SceneManager, Entity, Component,
-│   │                                 #   MeshRenderer, CameraComponent,
-│   │                                 #   LightComponent (Directional/Point/Spot),
-│   │                                 #   ParticleEmitter, GpuParticleEmitter,
-│   │                                 #   ParticlePresets, WaterSurface,
-│   │                                 #   InteractableComponent, PressurePlateComponent
-│   ├── resource/                     # ResourceManager, Model, AsyncTextureLoader,
-│   │                                 #   FileWatcher
-│   ├── utils/                        # ObjLoader, GltfLoader, ProceduralMesh,
-│   │                                 #   CatmullRomSpline, CubeLoader,
-│   │                                 #   EntitySerializer, MaterialLibrary,
-│   │                                 #   JsonSizeCap, DeterministicLcgRng
-│   ├── physics/                      # PhysicsWorld, RigidBody, CharacterController,
-│   │                                 #   PhysicsConstraint, ClothSimulator,
-│   │                                 #   ClothComponent, ClothPresets, FabricMaterial,
-│   │                                 #   ClothMeshCollider, Bvh, SpatialHash,
-│   │                                 #   Ragdoll (+ RagdollPreset), GrabSystem,
-│   │                                 #   Fracture, DeformableMesh, BreakableComponent,
-│   │                                 #   Dismemberment, StasisSystem, PhysicsDebug
-│   ├── animation/                    # Skeleton, AnimationClip, AnimationSampler,
-│   │                                 #   AnimationStateMachine, SkeletonAnimator,
-│   │                                 #   Easing, Tween, IkSolver, MorphTarget,
-│   │                                 #   FacialAnimation (+ FacialPresets, EyeController,
-│   │                                 #   VisemeMap, AudioAnalyzer, LipSync),
-│   │                                 #   MotionMatcher (+ FeatureVector, KdTree,
-│   │                                 #   MotionDatabase, TrajectoryPredictor,
-│   │                                 #   Inertialization, MotionPreprocessor,
-│   │                                 #   MirrorGenerator)
-│   ├── environment/                  # Terrain, EnvironmentForces, DensityMap,
-│   │                                 #   FoliageChunk, FoliageManager, SplinePath,
-│   │                                 #   BiomePreset
-│   ├── formula/                      # Expression, ExpressionEval, Formula,
-│   │                                 #   FormulaLibrary, PhysicsTemplates,
-│   │                                 #   CodegenCpp, CodegenGlsl, LutGenerator,
-│   │                                 #   LutLoader, CurveFitter, FormulaPreset,
-│   │                                 #   QualityManager, NodeGraph,
-│   │                                 #   SensitivityAnalysis, FormulaBenchmark,
-│   │                                 #   FormulaDocGenerator
-│   ├── audio/                        # AudioEngine (OpenAL Soft wrapper),
-│   │                                 #   AudioClip, AudioSourceComponent
-│   ├── ui/                           # SpriteBatchRenderer, UIElement hierarchy
-│   │                                 #   (UICanvas / UIImage / UILabel / UIPanel),
-│   │                                 #   UiSignal
-│   ├── navigation/                   # NavMeshBuilder (Recast), NavMeshQuery (Detour),
-│   │                                 #   NavMeshConfig, NavAgentComponent
-│   ├── scripting/                    # ScriptValue, PinId, Blackboard,
-│   │                                 #   NodeTypeRegistry, ScriptGraph,
-│   │                                 #   ScriptInstance, ScriptContext,
-│   │                                 #   ScriptComponent; node categories under
-│   │                                 #   core_nodes/event_nodes/action_nodes/
-│   │                                 #   pure_nodes/flow_nodes/latent_nodes
-│   ├── systems/                      # Domain ISystem implementations:
-│   │                                 #   Atmosphere, Particle, Water, Vegetation,
-│   │                                 #   Terrain, Cloth, Destruction, Character,
-│   │                                 #   Lighting, Audio, UI, Navigation,
-│   │                                 #   Scripting
-│   ├── editor/                       # Dockable ImGui editor
-│   │   ├── editor.cpp / editor_camera.cpp / selection.cpp / entity_factory.cpp /
-│   │   │   entity_actions.cpp / command_history.cpp / file_menu.cpp /
-│   │   │   recent_files.cpp / scene_serializer.cpp / material_preview.cpp /
-│   │   │   prefab_system.cpp
-│   │   ├── panels/                   # Hierarchy, Inspector, AssetBrowser, History,
-│   │   │                             #   ImportDialog, Environment, Terrain,
-│   │   │                             #   Performance, Validation, ScriptEditor,
-│   │   │                             #   TextureViewer, HdriViewer, ModelViewer,
-│   │   │                             #   TemplateDialog, Welcome
-│   │   ├── widgets/                  # AnimationCurve, ColorGradient,
-│   │   │                             #   CurveEditorWidget, GradientEditorWidget,
-│   │   │                             #   NodeEditorWidget
-│   │   ├── tools/                    # Brush/TerrainBrush, Ruler, Wall, Room,
-│   │   │                             #   Cutout, Roof, Stair, Path (+ BrushPreview)
-│   │   └── commands/                 # TerrainSculptCommand + scripting commands
-│   ├── profiler/                     # GpuTimer, CpuProfiler, MemoryTracker,
-│   │                                 #   PerformanceProfiler
-│   └── testing/                      # VisualTestRunner
+├── engine/                           # Engine static library
+│   ├── core/       Engine, Window, Timer, Logger, InputManager, EventBus,
+│   │              ISystem, SystemRegistry, SystemEvents, FirstPersonController
+│   ├── renderer/   Renderer, Shader, Mesh, Texture, Camera, Material,
+│   │              Framebuffer, ShadowMap (CSM + point), Skybox, TAA, SMAA,
+│   │              Bloom, SSAO, TonemapLUT, EnvironmentMap, LightProbe,
+│   │              SHProbeGrid, RadiosityBaker, InstanceBuffer, IndirectBuffer,
+│   │              GpuCuller, ParticleRenderer, GpuParticleSystem, WaterRenderer,
+│   │              WaterFbo, FoliageRenderer, TreeRenderer, TerrainRenderer,
+│   │              TextRenderer, DebugDraw, MeshPool, IblPrefilter,
+│   │              ScopedForwardZ, FrameDiagnostics
+│   ├── scene/      Scene, SceneManager, Entity, Component, MeshRenderer,
+│   │              CameraComponent, LightComponent, ParticleEmitter,
+│   │              GpuParticleEmitter, ParticlePresets, WaterSurface,
+│   │              InteractableComponent, PressurePlateComponent
+│   ├── resource/   ResourceManager, Model, AsyncTextureLoader, FileWatcher
+│   ├── utils/      ObjLoader, GltfLoader, ProceduralMesh, CatmullRomSpline,
+│   │              CubeLoader, EntitySerializer, MaterialLibrary, JsonSizeCap,
+│   │              DeterministicLcgRng
+│   ├── physics/    PhysicsWorld, RigidBody, CharacterController,
+│   │              PhysicsConstraint, ClothSimulator, ClothComponent,
+│   │              ClothPresets, FabricMaterial, ClothMeshCollider, Bvh,
+│   │              SpatialHash, Ragdoll (+Preset), GrabSystem, Fracture,
+│   │              DeformableMesh, BreakableComponent, Dismemberment,
+│   │              StasisSystem, PhysicsDebug
+│   ├── animation/  Skeleton, AnimationClip, AnimationSampler,
+│   │              AnimationStateMachine, SkeletonAnimator, Easing, Tween,
+│   │              IkSolver, MorphTarget, FacialAnimation (+FacialPresets,
+│   │              EyeController, VisemeMap, AudioAnalyzer, LipSync),
+│   │              MotionMatcher (+FeatureVector, KdTree, MotionDatabase,
+│   │              TrajectoryPredictor, Inertialization, MotionPreprocessor,
+│   │              MirrorGenerator)
+│   ├── environment/ Terrain, EnvironmentForces, DensityMap, FoliageChunk,
+│   │              FoliageManager, SplinePath, BiomePreset
+│   ├── formula/    Expression, ExpressionEval, Formula, FormulaLibrary,
+│   │              PhysicsTemplates, CodegenCpp, CodegenGlsl, LutGenerator,
+│   │              LutLoader, CurveFitter, FormulaPreset, QualityManager,
+│   │              NodeGraph, SensitivityAnalysis, FormulaBenchmark,
+│   │              FormulaDocGenerator
+│   ├── audio/      AudioEngine (OpenAL Soft), AudioClip, AudioSourceComponent
+│   ├── ui/         SpriteBatchRenderer, UIElement (UICanvas/UIImage/UILabel/
+│   │              UIPanel), UiSignal
+│   ├── navigation/ NavMeshBuilder (Recast), NavMeshQuery (Detour),
+│   │              NavMeshConfig, NavAgentComponent
+│   ├── scripting/  ScriptValue, PinId, Blackboard, NodeTypeRegistry,
+│   │              ScriptGraph, ScriptInstance, ScriptContext,
+│   │              ScriptComponent; core/event/action/pure/flow/latent nodes
+│   ├── systems/    Domain ISystem impls: Atmosphere, Particle, Water, Vegetation,
+│   │              Terrain, Cloth, Destruction, Character, Lighting, Audio, UI,
+│   │              Navigation, Scripting
+│   ├── editor/     ImGui editor (dockable)
+│   │   ├── editor.cpp, editor_camera, selection, entity_factory,
+│   │   │   entity_actions, command_history, file_menu, recent_files,
+│   │   │   scene_serializer, material_preview, prefab_system
+│   │   ├── panels/   Hierarchy, Inspector, AssetBrowser, History,
+│   │   │             ImportDialog, Environment, Terrain, Performance,
+│   │   │             Validation, ScriptEditor, TextureViewer, HdriViewer,
+│   │   │             ModelViewer, TemplateDialog, Welcome
+│   │   ├── widgets/  AnimationCurve, ColorGradient, CurveEditor, GradientEditor,
+│   │   │             NodeEditor
+│   │   ├── tools/    Brush/TerrainBrush, Ruler, Wall, Room, Cutout, Roof, Stair,
+│   │   │             Path (+BrushPreview)
+│   │   └── commands/ TerrainSculptCommand + scripting commands
+│   ├── profiler/   GpuTimer, CpuProfiler, MemoryTracker, PerformanceProfiler
+│   └── testing/    VisualTestRunner
 │
-├── app/                              # Application executable
-│   ├── CMakeLists.txt
-│   └── main.cpp
-│
-├── assets/                           # Runtime assets (copied to build)
-│   ├── shaders/                      # ~60 GLSL programs (vert/frag/geom/comp)
-│   ├── textures/                     # CC0 Poly Haven 2K PBR sets
-│   ├── models/                       # glTF sample models (CesiumMan, Fox, …)
-│   └── fonts/                        # Arimo (OFL 1.1)
-│
-├── external/                         # Third-party dependencies
-│   ├── CMakeLists.txt                # FetchContent wiring (GLFW, GLM, ImGui,
-│   │                                 #   ImGuizmo, imgui-node-editor, Jolt,
-│   │                                 #   OpenAL Soft, Recast/Detour, FreeType,
-│   │                                 #   nlohmann/json, tinyexr, tinygltf, …)
-│   ├── glad/                         # Vendored GLAD OpenGL loader
-│   ├── stb/                          # Vendored stb single-header libs
-│   └── dr_libs/                      # Vendored dr_wav / dr_mp3 / dr_flac
-│
+├── app/                              # main.cpp executable
+├── assets/                           # runtime assets (copied to build)
+│   ├── shaders/   ~60 GLSL programs
+│   ├── textures/  CC0 Poly Haven 2K PBR
+│   ├── models/    glTF samples (CesiumMan, Fox, …)
+│   └── fonts/     Arimo (OFL 1.1)
+├── external/                         # third-party (FetchContent)
+│   ├── GLFW, GLM, ImGui, ImGuizmo, imgui-node-editor, Jolt, OpenAL Soft,
+│   │   Recast/Detour, FreeType, nlohmann/json, tinyexr, tinygltf
+│   ├── glad/      Vendored GL loader
+│   ├── stb/       Single-header libs
+│   └── dr_libs/   Audio decoders
 ├── tools/
-│   ├── audit/                        # Python audit tool (tier 1-6 static analysis)
-│   └── formula_workbench/            # Interactive formula fitter + codegen UI
-│
-├── tests/                            # Google Test suites (~1880 tests)
-│
-├── docs/                             # Design + research notes + roadmaps
-│   (PHASE*_DESIGN.md, *_RESEARCH.md, GI_ROADMAP.md, PRE_OPEN_SOURCE_AUDIT.md,
-│    TABERNACLE_SPECIFICATIONS.md, SH_PROBE_GRID_DESIGN.md, …)
-│
-├── scripts/                          # pre-commit + launch runbook scripts
-├── packaging/                        # vestige-editor wrapper + .desktop entry
+│   ├── audit/              Python audit tool (tier 1–6 static analysis)
+│   └── formula_workbench/  Interactive formula fitter + codegen
+├── tests/                            # Google Test (~1880 tests)
+├── docs/                             # PHASE*_DESIGN, *_RESEARCH, GI_ROADMAP,
+│                                     #   PRE_OPEN_SOURCE_AUDIT, TABERNACLE_SPECS
+├── scripts/                          # pre-commit + launch
+├── packaging/                        # vestige-editor wrapper + .desktop
 └── .github/
-    ├── workflows/ci.yml              # CI — Debug + Release builds, audit tier 1,
-    │                                 #   gitleaks secret scan, CMake matrix
-    ├── ISSUE_TEMPLATE/
-    ├── PULL_REQUEST_TEMPLATE.md
-    └── dependabot.yml                # Weekly github-actions + pip updates
+    ├── workflows/ci.yml              # Debug+Release, audit tier 1, gitleaks
+    ├── ISSUE_TEMPLATE/ · PULL_REQUEST_TEMPLATE.md
+    └── dependabot.yml                # Weekly github-actions + pip
 ```
 
-### Build output
-```
-build/
-├── lib/libvestige_engine.a         # Static engine library
-├── bin/vestige                      # Main engine binary (editor + runtime)
-├── bin/vestige-editor               # Thin wrapper symlink / script
-├── bin/vestige_tests                # Google Test runner
-├── bin/formula_workbench            # Interactive formula tool
-└── _deps/                           # FetchContent-pulled third-party sources
-```
+**Build output:** `build/lib/libvestige_engine.a`, `build/bin/{vestige,vestige-editor,vestige_tests,formula_workbench}`, `build/_deps/`.
 
 ---
 
 ## 8. Dependency Flow
 
-Dependencies flow downward only — no circular references:
+Downward only — no circular refs.
 
 ```
-    app (executable)
-     │
-     ▼
-    engine (static library)
-     │
-     ├── core/        ← depends on nothing (except EventBus for events)
-     ├── renderer/    ← depends on core/
-     ├── scene/       ← depends on core/, renderer/ (for components)
-     ├── resource/    ← depends on core/
-     └── utils/       ← depends on nothing
+app → engine → { core, renderer, scene, resource, utils }
 ```
 
-### Third-Party Dependencies
-| Library | Purpose | License |
-|---------|---------|---------|
-| GLFW | Window, input, OpenGL context | Zlib (permissive, commercial OK) |
-| GLM | Vector/matrix math | MIT (permissive, commercial OK) |
-| glad | OpenGL function loader | MIT / Public Domain |
-| stb_image | Image loading (PNG, JPG) | MIT / Public Domain |
-| Google Test | Unit testing framework | BSD-3 (permissive, commercial OK) |
-| Assimp | 3D model loading (Phase 2+) | BSD-3 (permissive, commercial OK) |
+**Internal:** `core` depends on nothing (except its own EventBus); `renderer` and `scene` depend on `core`; `scene` also depends on `renderer` (for components); `resource` depends on `core`; `utils` depends on nothing.
 
-All dependencies are compatible with proprietary/commercial use.
+**Third-party licenses:** GLFW (Zlib), GLM/glad/stb_image (MIT / Public Domain), Google Test/Assimp (BSD-3). All permissive / commercial-OK.
 
 ---
 
 ## 9. Platform Abstraction
 
-The engine targets Linux and Windows. Platform-specific code is isolated:
-
-- **GLFW** handles window/input abstraction (already cross-platform)
-- **glad** handles OpenGL function loading (already cross-platform)
-- **CMake** handles build system differences
-- Any remaining platform-specific code goes in `engine/utils/` with `#ifdef` guards:
-  - `VESTIGE_PLATFORM_LINUX`
-  - `VESTIGE_PLATFORM_WINDOWS`
+Targets Linux + Windows. Platform-specific code isolated:
+- **GLFW** — window/input (cross-platform).
+- **glad** — GL function loading (cross-platform).
+- **CMake** — build differences.
+- Remaining platform code in `engine/utils/` guarded with `VESTIGE_PLATFORM_{LINUX,WINDOWS}`.
 
 ---
 
-## 10. Animation Subsystem
+## 10. Animation (`engine/animation/`)
 
-The animation system lives in `engine/animation/` and provides skeletal animation, property tweening, inverse kinematics, and morph targets.
+Skeletal animation, tweening, IK, morph targets.
 
-### Data Flow
-
-```
-glTF file
-  → GltfLoader (extracts skeleton, clips, morph targets)
-    → Skeleton (joint hierarchy + inverse bind matrices)
-    → AnimationClip (channels of keyframes)
-    → MorphTargetData (per-vertex displacement deltas)
-
-Per frame:
-  AnimationSampler (interpolates keyframes)
-    → SkeletonAnimator (drives playback, crossfade, root motion)
-      → bone matrices (uploaded to GPU for skinning)
-  IK solvers (post-process corrections)
-  TweenManager (property animation on entity components)
-```
-
-### Key Classes
+**Data flow:** glTF → `GltfLoader` → `Skeleton` (joint hierarchy + inverse binds), `AnimationClip` (keyframe channels), `MorphTargetData` (per-vertex deltas). Per frame: `AnimationSampler` (interp) → `SkeletonAnimator` (playback, crossfade, root motion) → bone matrices (GPU skinning). IK runs post-process. `TweenManager` animates entity properties.
 
 | Class | File | Purpose |
 |-------|------|---------|
 | `Skeleton` | `skeleton.h/cpp` | Joint hierarchy, inverse bind matrices, bind pose |
-| `AnimationClip` | `animation_clip.h/cpp` | Named collection of animation channels (TRS + weights) |
-| `AnimationSampler` | `animation_sampler.h/cpp` | Keyframe interpolation: STEP, LINEAR, CUBICSPLINE |
-| `SkeletonAnimator` | `skeleton_animator.h/cpp` | Component that plays clips, handles crossfade blending and root motion |
-| `AnimationStateMachine` | `animation_state_machine.h/cpp` | Parameter-driven state graph with transitions |
-| `Tween` | `tween.h/cpp` | Property animation with easing, events, and playback modes |
-| `TweenManager` | `tween.h/cpp` | Component managing multiple tweens per entity |
-| `IK Solvers` | `ik_solver.h/cpp` | Two-bone IK, look-at IK, foot IK |
-| `MorphTargetData` | `morph_target.h/cpp` | Blend shape data and CPU blending |
-| `Easing` | `easing.h/cpp` | 32 Penner easing functions + cubic bezier curves |
+| `AnimationClip` | `animation_clip.h/cpp` | Named TRS + weight channels |
+| `AnimationSampler` | `animation_sampler.h/cpp` | STEP / LINEAR / CUBICSPLINE interp |
+| `SkeletonAnimator` | `skeleton_animator.h/cpp` | Clip playback, crossfade, root motion |
+| `AnimationStateMachine` | `animation_state_machine.h/cpp` | Parameter-driven state graph |
+| `Tween` / `TweenManager` | `tween.h/cpp` | Property animation |
+| IK solvers | `ik_solver.h/cpp` | Two-bone, look-at, foot IK |
+| `MorphTargetData` | `morph_target.h/cpp` | Blend shapes |
+| `Easing` | `easing.h/cpp` | 32 Penner functions + cubic bezier |
 
-### Skeletal Animation Pipeline
+**Skeletal pipeline.** Sampler binary-searches keyframes; animator crossfades via per-bone lerp/slerp; hierarchy walk (`T * R * S` parent → child); final = `globalTransform * inverseBindMatrix`; root motion extracts horizontal delta.
 
-1. **Sampling** — `AnimationSampler` interpolates keyframes per channel using binary search (`findKeyframe`) and the channel's interpolation mode
-2. **Blending** — `SkeletonAnimator` supports crossfade between two clips via per-bone lerp/slerp with a time-based blend factor
-3. **Hierarchy Walk** — Local transforms (T * R * S) are combined parent-to-child to produce global transforms
-4. **Bone Matrices** — Final output = `globalTransform * inverseBindMatrix`, uploaded as a uniform array for GPU skinning
-5. **Root Motion** — Optionally extracts the root bone's horizontal delta and applies it to the entity's transform
+**State machine.** Named states map to clip indices; transitions fire on parameter conditions (float compare, bool/trigger); exit-time prevents mid-animation switch; triggers auto-reset.
 
-### State Machine
-
-The `AnimationStateMachine` associates named states with clip indices. Transitions fire when parameter-based conditions (float comparisons, bool/trigger checks) are satisfied. Exit time constraints prevent transitions mid-animation. Trigger parameters auto-reset after consumption.
-
-### Inverse Kinematics
-
-Three solvers run as post-processes after the animation pipeline:
-- **Two-Bone IK** — Analytic solution using law of cosines with pole vector alignment
-- **Look-At IK** — Single-joint aim constraint with angle clamping
-- **Foot IK** — Composes two-bone leg IK with ankle-to-ground alignment and pelvis offset
-
-All solvers support weight blending via NLerp between identity and correction quaternions.
+**IK.** Two-bone (analytic, law of cosines + pole vector), look-at (single-joint, angle-clamped), foot IK (two-bone leg + ankle ground align + pelvis offset). All support NLerp weight blend.
 
 ---
 
-## 11. Physics Subsystem
+## 11. Physics (`engine/physics/`)
 
-The physics system lives in `engine/physics/` and provides rigid-body dynamics via Jolt Physics, a character controller, cloth simulation, and constraint joints.
+Rigid-body via Jolt, character controller, XPBD cloth, constraints.
 
-### Data Flow
+| Class | Purpose |
+|-------|---------|
+| `PhysicsWorld` | Jolt wrapper. Fixed 60 Hz accumulator. Bodies, constraints, raycasts. One per scene. |
+| `RigidBody` | STATIC / DYNAMIC / KINEMATIC motion; BOX/SPHERE/CAPSULE shapes. Syncs Jolt → entity each frame. |
+| `PhysicsCharacterController` | Jolt `CharacterVirtual` wrapper — walk/fly, stair step, slope limit, ground detect. |
+| `ClothSimulator` | CPU XPBD: rectangular grid, structural/shear/bending constraints, pins, sphere/plane/cylinder/box colliders, wind with gust state machine, sleep, LRA tethers. |
+| `ClothComponent` | Links simulator to `DynamicMesh`. Fixed 60 Hz. Fabric presets (linen, tent, banner, drape, fence). |
+| `PhysicsConstraint` | Hinge, fixed, slider, spring, distance; breakable force thresholds. |
 
-```
-Entity
-  → RigidBody.syncToEntity() copies Jolt transforms → Entity.transform
-  → ClothComponent.update() runs ClothSimulator
-    → copies positions/normals → uploads to DynamicMesh GPU buffer
-```
+**Rigid-body pipeline.** Accumulate dt → step Jolt @ 60 Hz → `RigidBody::syncToEntity()` writes pose to entity.
 
-### Key Classes
+**Cloth pipeline.** Accumulate dt → 60 Hz step: external forces (gravity, wind) → distance constraints → LRA tethers → collisions → pin constraints → copy positions + recomputed normals to GPU via `glBufferSubData`.
 
-| Class | File | Purpose |
-|-------|------|---------|
-| `PhysicsWorld` | `physics_world.h/cpp` | Jolt Physics integration wrapper. Fixed timestep accumulator (60 Hz). Creates/destroys bodies, manages constraints, performs raycasts. Singleton per scene. |
-| `RigidBody` | `rigid_body.h/cpp` | Component attaching physics to entities. Supports STATIC, DYNAMIC, KINEMATIC motion types with BOX, SPHERE, CAPSULE collision shapes. Syncs Jolt body transforms back to entity transforms each frame. |
-| `PhysicsCharacterController` | `physics_character_controller.h/cpp` | Jolt CharacterVirtual wrapper for player movement. Supports walk/fly modes, stair stepping, slope limits, ground detection. |
-| `ClothSimulator` | `cloth_simulator.h/cpp` | Pure CPU XPBD (Extended Position-Based Dynamics) cloth solver. Generates rectangular particle grid with structural, shear, and bending distance constraints. Supports pin constraints, sphere/plane/cylinder/box colliders, wind with gust state machine, sleep detection, LRA (Long Range Attachment) tethers. |
-| `ClothComponent` | `cloth_component.h/cpp` | Links ClothSimulator to the entity/rendering system via DynamicMesh. Fixed 60 Hz timestep accumulator. Fabric presets (linen, tent, banner, drape, fence). |
-| `ClothPresets` | `cloth_presets.h/cpp` | Factory for preset cloth configurations (5 fabric types with calibrated physics parameters). |
-| `PhysicsConstraint` | `physics_constraint.h/cpp` | Jolt constraint wrapper supporting hinge, fixed, slider, spring, and distance joints with breakable force thresholds. |
+**Ragdoll (Phase 8).** `Ragdoll` wraps Jolt native ragdoll + skeleton conversion; `RagdollPreset` defines shapes, masses, `SwingTwistConstraint` limits. Supports full (limp), powered (motors to animation pose), partial (some joints kinematic). Uses `Stabilize()` + `DisableParentChildCollisions()`.
 
-### Rigid-Body Pipeline
+**Grab/carry/throw (Phase 8).** `GrabSystem` + `InteractableComponent` — raycast look-at, invisible kinematic holder, spring distance constraint; configurable mass/throw/hold.
 
-1. **Accumulation** -- `PhysicsWorld` accumulates frame delta time and steps the Jolt simulation at a fixed 60 Hz rate
-2. **Body Sync** -- After each step, `RigidBody.syncToEntity()` reads position and rotation from the Jolt body and writes them to the entity's `Transform` component
-3. **Raycasts** -- `PhysicsWorld` exposes raycast queries against the Jolt broadphase for picking, ground detection, and gameplay logic
+**Destruction (Phase 8).** `Fracture` — Voronoi mesh fracture, seeds biased 60% Gaussian near impact / 40% uniform. `BreakableComponent` supports pre-fracture. `DeformableMesh` — soft impact deformation with spatial falloff.
 
-### Cloth Pipeline
-
-1. **Timestep** -- `ClothComponent` accumulates delta time and steps `ClothSimulator` at a fixed 60 Hz rate
-2. **XPBD Solve** -- Each step runs substeps of: apply external forces (gravity, wind), solve distance constraints (structural/shear/bending), apply LRA tethers, resolve collisions (sphere/plane/cylinder/box), enforce pin constraints
-3. **Upload** -- After simulation, particle positions and recomputed normals are copied into the `DynamicMesh` vertex buffer via `glBufferSubData`
-
-### Character Controller
-
-`PhysicsCharacterController` wraps Jolt's `CharacterVirtual` to provide player movement with:
-- Walk and fly movement modes
-- Automatic stair stepping
-- Configurable slope angle limits
-- Ground contact detection for gravity and jumping
-
-### Ragdoll System (Phase 8)
-
-`Ragdoll` wraps Jolt's native ragdoll with Vestige skeleton conversion. `RagdollPreset` defines per-joint shapes, masses, and `SwingTwistConstraint` limits. Supports full ragdoll (limp), powered ragdoll (motors drive toward animation pose), and partial ragdoll (some joints kinematic, others dynamic). Uses `Stabilize()` and `DisableParentChildCollisions()` for stability.
-
-### Object Interaction (Phase 8)
-
-`GrabSystem` provides first-person grab/carry/throw. Uses raycast look-at detection, an invisible kinematic holder body, and a spring-based distance constraint for smooth carrying. `InteractableComponent` marks entities as grabbable with configurable mass limits, throw force, and hold distance.
-
-### Dynamic Destruction (Phase 8)
-
-`Fracture` implements Voronoi-based mesh fracture. Seed points are biased toward the impact location (60% Gaussian near impact, 40% uniform). `BreakableComponent` supports pre-fracture (compute fragments offline, activate on impact). `DeformableMesh` provides soft impact deformation with smooth spatial falloff.
-
-### Dismemberment (Phase 8)
-
-`DismembermentZones` manages per-bone health zones with damage-driven severing and child cascade. `Dismemberment` performs runtime mesh splitting by classifying vertices via bone weight dominance, splitting boundary triangles, and generating cap geometry.
+**Dismemberment (Phase 8).** `DismembermentZones` — per-bone health + cascade. `Dismemberment` — runtime mesh split via bone-weight dominance, boundary triangle split, cap generation.
 
 ---
 
-## 12. Animation Subsystem (Phases 6-7)
+## 12. Animation Extensions (Phases 6–7)
 
-### Facial Animation
+**Facial.** `FacialAnimator` drives blend shapes via emotion presets (happy, sad, angry, surprised, pain) with crossfade. `EyeController` — look-at tracking, procedural blink, pupil dilation.
 
-`FacialAnimator` drives blend shape weights via emotion presets (happy, sad, angry, surprised, pain) with crossfade transitions. Uses the existing morph target pipeline (`SkeletonAnimator::setMorphWeight()`). `EyeController` handles look-at tracking, procedural blinking, and pupil dilation.
+**Lip sync.** `LipSync` supports pre-processed phoneme tracks (JSON) and real-time amplitude fallback. `VisemeMap` phoneme→viseme. `AudioAnalyzer` — FFT frequency + RMS volume.
 
-### Audio-Driven Lip Sync
-
-`LipSync` supports two modes: pre-processed phoneme tracks (JSON) and real-time amplitude fallback. `VisemeMap` maps phonemes to viseme blend shapes. `AudioAnalyzer` provides FFT-based frequency analysis and RMS volume detection.
-
-### Motion Matching (Phase 7)
-
-`MotionDatabase` stores sampled animation poses with feature vectors (joint positions, velocities, trajectory). `KDTree` provides O(log n) nearest-neighbor search. `MotionMatcher` performs per-frame search at configurable intervals with `Inertialization` for smooth transitions. `TrajectoryPredictor` extrapolates player intent from input.
+**Motion matching (Phase 7).** `MotionDatabase` stores sampled poses with feature vectors (joint pos, vel, trajectory). `KDTree` O(log n) NN search. `MotionMatcher` searches at configurable intervals; `Inertialization` smooths transitions. `TrajectoryPredictor` extrapolates input.
 
 ---
 
-## 13. Environment Subsystem (Phase 5)
+## 13. Environment (Phase 5)
 
-`FoliageManager` handles instanced foliage rendering with LOD and wind animation. `DensityMap` provides a paintable grayscale texture controlling foliage placement density. `Terrain` supports heightmap-based terrain with LOD, splatmap texturing, and sculpting via `TerrainBrush`.
+`FoliageManager` — instanced foliage, LOD, wind animation. `DensityMap` — paintable grayscale density. `Terrain` — heightmap + LOD + splatmap + `TerrainBrush` sculpting.
 
 ---
 
-## 14. Editor Subsystem (Phase 5)
+## 14. Editor (Phase 5)
 
-The editor is an ImGui-based WYSIWYG interface with dockable panels:
+ImGui WYSIWYG, dockable panels.
 
-- **HierarchyPanel** — scene tree with multi-select, drag reparenting, lock/visibility toggles
-- **InspectorPanel** — component property editing with undo/redo
-- **AssetBrowserPanel** — filesystem browser with thumbnail previews
-- **EnvironmentPanel** — foliage painting, terrain sculpting, density map editing
-- **ValidationPanel** — scene validation warnings
-- **ImportDialog** — model import with preview and scale validation
+- **HierarchyPanel** — scene tree, multi-select, drag-reparent, lock/visibility.
+- **InspectorPanel** — component editing + undo/redo.
+- **AssetBrowserPanel** — thumbnails.
+- **EnvironmentPanel** — foliage paint, terrain sculpt, density edit.
+- **ValidationPanel** — scene warnings.
+- **ImportDialog** — model import with preview + scale validation.
 
-`CommandHistory` provides undo/redo via the Command pattern. `EntityActions` provides clipboard operations (copy/paste/duplicate). `RulerTool` provides measurement overlay. `BrushTool` handles environment painting with configurable radius and fallback.
+**Supporting:** `CommandHistory` (Command pattern undo/redo), `EntityActions` (clipboard: copy/paste/duplicate), `RulerTool`, `BrushTool`.
 
 ---
 
 ## 15. GPU Compute Particles (Phase 6)
 
-`GPUParticleSystem` manages a compute shader pipeline: Emit → Simulate → Compact → Sort → IndirectDraw. Uses SSBOs for particle data, atomic counters for allocation, and bitonic sort for back-to-front transparency. `GPUParticleEmitter` provides a composable behavior system (gravity, drag, noise, orbit, vortex, collision). Auto-selects GPU path for emitters with >500 particles.
+`GPUParticleSystem` — compute pipeline Emit → Simulate → Compact → Sort → IndirectDraw. SSBOs for data, atomic counters for alloc, bitonic sort for back-to-front transparency. `GPUParticleEmitter` — composable behaviors (gravity, drag, noise, orbit, vortex, collision). Auto-selects GPU path > 500 particles.
 
 ---
 
-## 16. Profiler Subsystem
+## 16. Profiler
 
-`CpuProfiler` tracks per-frame CPU timing with scoped markers. `GpuTimer` uses OpenGL timer queries for per-pass GPU timing. `MemoryTracker` monitors allocation counts. `PerformanceProfiler` aggregates all metrics for the editor performance panel.
+`CpuProfiler` — scoped per-frame CPU markers. `GpuTimer` — GL timer queries per pass. `MemoryTracker` — allocation counts. `PerformanceProfiler` — aggregates metrics for the editor panel.
 
 ---
 
-## 17. Resource Subsystem Extensions (Phase 5)
+## 17. Resource Extensions (Phase 5)
 
-`FileWatcher` monitors asset directories for changes and triggers reload callbacks. `AsyncTextureLoader` handles background texture loading with GPU upload on the main thread.
+`FileWatcher` — asset-dir change detection + reload callbacks. `AsyncTextureLoader` — background texture load, main-thread GPU upload.
 
 ---
 
 ## 18. Cloth Collision & Solver (Phase 8)
 
-`ClothMeshCollider` provides triangle mesh collision with a `BVH` acceleration structure. `ColliderGenerator` automatically creates simplified collision geometry from scene meshes. `SpatialHash` enables efficient self-collision detection. `FabricMaterial` and `FabricDatabase` provide physically-based material presets (silk, cotton, leather, etc.) with KES-inspired parameters.
+`ClothMeshCollider` — triangle mesh collision with `BVH`. `ColliderGenerator` — auto-create simplified collision from scene meshes. `SpatialHash` — efficient self-collision. `FabricMaterial` + `FabricDatabase` — physically-based presets (silk, cotton, leather, …) with KES-inspired parameters.
 
 ---
 
-## 19. Scripting Subsystem (Phase 9E)
+## 19. Scripting (Phase 9E — `engine/scripting/`)
 
-`ScriptingSystem` is a domain `ISystem` implementing visual graph-based gameplay logic. Live in `engine/scripting/`. See `docs/PHASE9E_DESIGN.md` for the full design rationale and anti-patterns studied.
+Visual graph-based gameplay logic. Domain `ISystem`. See `docs/PHASE9E_DESIGN.md` for full rationale + anti-patterns.
 
-### Data model
+**Data model.**
+- `ScriptGraph` — serialized `.vscript` asset (nodes, connections, variables). Immutable at runtime post-load. Validated on load (dangling refs rejected) and size-capped (`MAX_NODES`, `MAX_CONNECTIONS`, `MAX_VARIABLES`, `MAX_STRING_BYTES`).
+- `ScriptValue` — type-erased variant: bool, int32, float, string, vec2/3/4, quat, entity-ID. Common currency for data pins.
+- `Blackboard` — string-keyed variable store, per-scope cap (`MAX_KEYS`). Six-scope model (Flow/Graph/Entity/Scene/Application/Saved) per Unity's design; currently Flow + Graph fully wired.
+- `NodeTypeDescriptor` + `NodeTypeRegistry` — descriptor-driven registration. Each descriptor: input/output pin defs, optional `eventTypeName` for EventBus binding, `execute` lambda. Populated at `initialize()` from six category files (`{core,event,action,pure,flow,latent}_nodes.cpp`).
 
-- **`ScriptGraph`** — the serialized `.vscript` asset: nodes, connections, variables. Immutable at runtime after load. Validated on load (dangling connection references are rejected); size-capped against crafted inputs (`MAX_NODES`, `MAX_CONNECTIONS`, `MAX_VARIABLES`, `MAX_STRING_BYTES`).
-- **`ScriptValue`** — type-erased variant covering bool, int32, float, string, vec2/3/4, quat, and entity-ID. Acts as the common currency for data pins.
-- **`Blackboard`** — string-keyed variable store with a per-scope cap (`MAX_KEYS`). Six-scope model (Flow/Graph/Entity/Scene/Application/Saved) per Unity's proven design; currently only Flow + Graph are fully wired.
-- **`NodeTypeDescriptor`** + **`NodeTypeRegistry`** — descriptor-driven node registration. Each descriptor carries input/output pin defs, an optional eventTypeName for EventBus binding, and an `execute` lambda. The registry is populated at system `initialize()` from six category files (`core_nodes.cpp`, `event_nodes.cpp`, `action_nodes.cpp`, `pure_nodes.cpp`, `flow_nodes.cpp`, `latent_nodes.cpp`).
+**Runtime.**
+- `ScriptInstance` — per-entity runtime state bound to one graph. Holds per-node `ScriptNodeInstance`, graph-scope blackboard, pending latents, event-subscription IDs. Hot-path caches (`updateNodes`, `outputByNode`, `inputByNode`) built once at init — per-frame lookups O(pins/node).
+- `ScriptContext` — short-lived per-impulse record. Pin-pull / pin-trigger API + call-depth + node-count guards against runaway scripts.
 
-### Runtime
+**EventBus bridge.** `ScriptingSystem::subscribeEventNodes` walks a graph's event nodes and subscribes each via a templated helper. Captures `ScriptingSystem* + ScriptInstance*`; every callback guarded with `isInstanceActive()` (liveness lookup against `m_activeInstances`) — cannot UAF even if instance destroyed without matching `unregisterInstance()`.
 
-- **`ScriptInstance`** — per-entity runtime state bound to one graph. Holds per-node `ScriptNodeInstance` entries, the graph-scope blackboard, pending latent actions, and event-subscription IDs for cleanup. Maintains hot-path caches (`updateNodes`, `outputByNode`, `inputByNode`) built once at `initialize()` time to keep per-frame lookups `O(pins-per-node)` instead of `O(graph-connections)`.
-- **`ScriptContext`** — short-lived execution record for one impulse through the graph. Offers the pin-pull / pin-trigger API that node lambdas use, plus call-depth and node-count guards against runaway scripts.
+**Per-frame.** `update()` runs two passes: `tickUpdateNodes` (cached `OnUpdate` IDs per active instance) and `tickLatentActions` (single-pass partition into completed + pending, fires completed continuations which may schedule more; O(N)).
 
-### EventBus bridge
+**Integration.** Depends only on `core/event_bus`, `core/i_system`, scene/entity lookups. Does not own/mutate engine state directly — publishes back via `EventBus` (`PublishEvent` node) or entity API via `ScriptContext::resolveEntity`. Node categories are extensible without core changes.
 
-`ScriptingSystem::subscribeEventNodes` walks a graph's event nodes and subscribes each to the engine's `EventBus` via a templated helper. Subscriptions capture a `ScriptingSystem*` + `ScriptInstance*` pair and guard every callback with `isInstanceActive()` — a liveness lookup against `m_activeInstances` — so the lambdas cannot use-after-free even if an instance is destroyed without a matching `unregisterInstance()` call.
+**Editor (Phase 9E-3).** `engine/editor/widgets/node_editor_widget.{h,cpp}` (thin wrapper over `imgui-node-editor` by thedmd, pulled via `external/CMakeLists.txt`) + `engine/editor/panels/script_editor_panel.{h,cpp}` (dockable host, New/Open/Save menu). Widget-vs-panel split per §14 convention. Steps 1–3 shipped (lib integration, audit-debt items M9/M10/M11 + L6); Step 4 WIP. Remaining: palette, property editors, type-aware pin-drag popup, variables panel, breakpoint UI, flow animation, close-out audit. See `docs/PHASE9E3_DESIGN.md`.
 
-### Per-frame work
+**Undo/redo.** Editor edits flow through `CommandHistory` (§14) via `Script{AddNode,RemoveNode,AddConnection,RemoveConnection,SetProperty}Command` — consistent with every other editor operation, and automatically undo-complete for future AI-authored changes (Phase 23).
 
-The system's `update()` runs two passes:
-1. **`tickUpdateNodes`** — fires each active instance's cached `OnUpdate` node IDs.
-2. **`tickLatentActions`** — single-pass partition of each instance's pending actions into `completed` and `pending`, then fires completed continuations (which may themselves schedule new latents). `O(N)` per tick.
-
-### Integration
-
-The scripting system depends only on `core/event_bus`, `core/i_system`, and scene/entity lookups. It does not own or mutate engine state directly; it always publishes back through `EventBus` events (`PublishEvent` node) or through the entity API reached via `ScriptContext::resolveEntity`. Node categories can be extended without modifying the core interpreter.
-
-### Editor integration (Phase 9E-3)
-
-The in-editor authoring UI lives in `engine/editor/widgets/node_editor_widget.{h,cpp}` (thin wrapper over `imgui-node-editor` by thedmd, pulled in via `external/CMakeLists.txt`) and `engine/editor/panels/script_editor_panel.{h,cpp}` (dockable panel hosting the canvas). The split follows the engine's standard widget-vs-panel convention (see §14): `NodeEditorWidget` is the reusable graph-canvas primitive; `ScriptEditorPanel` is the visual-scripting-specific host with its New/Open/Save/Save As menu.
-
-The Phase 9E-3 design document (`docs/PHASE9E3_DESIGN.md`) walks the 16-step plan. As of 2026-04-19, Steps 1–3 (library integration + the three audit-debt items: M9 type→IDs cache, M10 pin-name interning, M11 per-execution pure-node memoization, plus L6 `entryPin` field on `ScriptContext`) are shipped; Step 4 (canvas + save/load menu, no palette/properties yet) is WIP. Remaining steps cover the palette, per-type property editors, type-aware pin-drag popup, variables panel, breakpoint UI + pause/step debugger, flow animation, and a phase-closeout audit.
-
-Editor-side edits flow back through the existing `CommandHistory` (§14) via new `ScriptAddNodeCommand` / `ScriptRemoveNodeCommand` / `ScriptAddConnectionCommand` / `ScriptRemoveConnectionCommand` / `ScriptSetPropertyCommand` — so undo/redo is consistent with every other editor operation and every AI-authored change (Phase 23) will automatically be undo-complete.
-
-Hot-reload during play: saving a `.vscript` asset while the scene is live re-parses the graph and rebinds the runtime; variable state persists across reload; pending latent actions are dropped with a log note. No rebuild step.
+**Hot reload.** Saving `.vscript` while scene is live re-parses graph, rebinds runtime; variable state persists; pending latents are dropped with a log note. No rebuild.
