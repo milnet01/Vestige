@@ -10,13 +10,32 @@
 namespace Vestige
 {
 
+namespace
+{
+
+/// Strip a single trailing `/` so `"assets/" + "/captions.json"`
+/// doesn't produce `"assets//captions.json"` (an OS-tolerant quirk
+/// that nonetheless breaks path-equality in any string-keyed
+/// cache).
+std::string stripTrailingSlash(const std::string& path)
+{
+    if (!path.empty() && path.back() == '/')
+    {
+        return path.substr(0, path.size() - 1);
+    }
+    return path;
+}
+
+} // namespace
+
 std::string captionMapPath(const std::string& assetPath)
 {
-    // Extracted verbatim from engine.cpp's pre-refactor call site
-    // so the spec-driven test in tests/test_engine_paths.cpp has a
-    // single choke point to pin. The join logic is under review in
-    // Phase 10.9 Slice 1 F1.
-    return assetPath + "assets/captions.json";
+    const std::string root = stripTrailingSlash(assetPath);
+    if (root.empty())
+    {
+        return "captions.json";
+    }
+    return root + "/captions.json";
 }
 
 } // namespace Vestige
