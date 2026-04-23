@@ -162,4 +162,15 @@ const DynamicMesh& ClothComponent::getMesh() const { return m_mesh; }
 const std::shared_ptr<Material>& ClothComponent::getMaterial() const { return m_material; }
 bool ClothComponent::isReady() const { return m_ready; }
 
+std::unique_ptr<Component> ClothComponent::clone() const
+{
+    auto copy = std::make_unique<ClothComponent>();
+    copy->m_backendPolicy = m_backendPolicy;
+    copy->m_shaderPath    = m_shaderPath;
+    copy->m_material      = m_material;
+    copy->m_presetType    = m_presetType;
+    copy->setEnabled(m_isEnabled);
+    return copy;
+}
+
 } // namespace Vestige

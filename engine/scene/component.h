@@ -52,9 +52,19 @@ public:
     bool isEnabled() const;
 
     /// @brief Creates a deep copy of this component (new instance, same data).
-    /// Override in derived classes to support entity duplication.
-    /// @return Cloned component, or nullptr if cloning is not supported.
-    virtual std::unique_ptr<Component> clone() const;
+    ///
+    /// Pure virtual — every concrete `Component` subclass must supply
+    /// its own deep-copy. The contract exists because `Entity::clone()`
+    /// iterates every owned component and calls this: a subclass that
+    /// forgot to override would have been silently dropped from the
+    /// duplicated entity (ROADMAP Phase 10.9 Slice 1 F2).
+    ///
+    /// GPU-owning subclasses (e.g. WaterSurfaceComponent,
+    /// GPUParticleEmitter, ClothComponent) follow the existing
+    /// convention of cloning configuration + CPU state only; the
+    /// clone re-creates its GPU resources on first use or via an
+    /// explicit `initialize()` call by the caller.
+    virtual std::unique_ptr<Component> clone() const = 0;
 
 protected:
     Entity* m_owner = nullptr;

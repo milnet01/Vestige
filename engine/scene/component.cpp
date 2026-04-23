@@ -35,9 +35,4 @@ bool Component::isEnabled() const
     return m_isEnabled;
 }
 
-std::unique_ptr<Component> Component::clone() const
-{
-    return nullptr;
-}
-
 } // namespace Vestige

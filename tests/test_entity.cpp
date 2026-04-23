@@ -22,6 +22,11 @@ public:
     {
         value += static_cast<int>(deltaTime * 10.0f);
     }
+
+    std::unique_ptr<Component> clone() const override
+    {
+        return std::make_unique<TestComponent>(*this);
+    }
 };
 
 // Another test component to verify distinct type IDs
@@ -29,6 +34,11 @@ class OtherComponent : public Component
 {
 public:
     std::string label = "default";
+
+    std::unique_ptr<Component> clone() const override
+    {
+        return std::make_unique<OtherComponent>(*this);
+    }
 };
 
 TEST(EntityTest, CreateWithName)

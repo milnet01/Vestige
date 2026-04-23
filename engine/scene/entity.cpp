@@ -194,15 +194,13 @@ std::unique_ptr<Entity> Entity::clone() const
     copy->m_isVisible = m_isVisible;
     copy->m_isLocked = m_isLocked;
 
-    // Clone all components
+    // Clone all components — `Component::clone()` is pure virtual, so
+    // every concrete subclass returns a valid deep copy.
     for (const auto& [typeId, comp] : m_components)
     {
         auto cloned = comp->clone();
-        if (cloned)
-        {
-            cloned->setOwner(copy.get());
-            copy->m_components[typeId] = std::move(cloned);
-        }
+        cloned->setOwner(copy.get());
+        copy->m_components[typeId] = std::move(cloned);
     }
 
     // Recursively clone children

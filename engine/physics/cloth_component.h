@@ -36,6 +36,18 @@ public:
     /// @brief Per-frame update: simulate physics, update mesh vertices.
     void update(float deltaTime) override;
 
+    /// @brief Deep-copies configuration + policy; does not carry GPU state.
+    ///
+    /// Follows the same contract as WaterSurfaceComponent and
+    /// GPUParticleEmitter: the clone is expected to have
+    /// `initialize()` called on it (typically by the scene serialiser
+    /// or by the caller of the editor duplicate action) to rebuild
+    /// its solver backend + mesh. Cloning the live simulator state is
+    /// not meaningful — the backend owns either a non-copyable GPU
+    /// buffer (GPU path) or per-particle state that is cheap to
+    /// rebuild from the `ClothConfig` (CPU path).
+    std::unique_ptr<Component> clone() const override;
+
     /// @brief Access the underlying solver backend (CPU XPBD or GPU compute).
     ///
     /// Returns the `IClothSolverBackend` interface so callers see the same
