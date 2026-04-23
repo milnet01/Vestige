@@ -9,6 +9,62 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-23 Phase 10.9 — Slice 1 F5: `clampStrobeHz` hard-caps at WCAG 3 Hz
+
+Fifth Slice 1 item. Same red / green / doc discipline as F1–F4.
+
+**Red commit `559b4bd`** — added four tests to
+`tests/test_photosensitive_safety.cpp` (`PhotosensitiveSafety.WCAG_2_3_1_StrobeHz*`)
+pinning the WCAG 2.2 SC 2.3.1 3 Hz ceiling as a hard cap on top of any
+caller-supplied `PhotosensitiveLimits::maxStrobeHz`. One test failed
+against the pre-F5 implementation:
+
+- `StrobeHzHardCapsEvenWhenLimitsRelaxed` — with a mis-tuned
+  `PhotosensitiveLimits{.maxStrobeHz = 29.0f}`, `clampStrobeHz(10.0f,
+  true)` returned `10.0` (the caller's cap of 29 never pulled it down),
+  and `clampStrobeHz(29.0f, true)` returned `29.0`. A 29 Hz strobe
+  shipping to a user with safe mode *enabled* violates the whole point
+  of photosensitivity safe mode.
+
+The other three tests (`StrobeHzBelowWCAGCeilingStillPassesThrough`,
+`StrobeHzTighterCallerCapStillWins`, `StrobeHzHardCapDoesNotApplyWhenDisabled`)
+passed against the pre-F5 implementation but are load-bearing
+regressions against obvious over-corrections — e.g. implementing the
+hard-cap as a global `clamp(x, 0, 3)` would regress the
+disabled-is-identity contract from F4.
+
+**Green commit `778fb29`** — published
+`WCAG_MAX_STROBE_HZ = 3.0f` as a module-level `inline constexpr` in
+`engine/accessibility/photosensitive_safety.h` and applied it inside the
+enabled-path arm of `clampStrobeHz`:
+
+```cpp
+const float cap = std::min(limits.maxStrobeHz, WCAG_MAX_STROBE_HZ);
+return std::min(safe, cap);
+```
+
+Semantics:
+
+- **Caller tighter than WCAG** (e.g. `maxStrobeHz = 0.5f` for a horror
+  beat) — caller still wins. Safe mode is a one-way tightening; user
+  intent to restrict further must not be overridden by a WCAG *floor*
+  that doesn't exist.
+- **Caller looser than WCAG** (e.g. `maxStrobeHz = 29.0f` from a
+  mis-tuned accessibility config or an untrusted mod) — WCAG wins. The
+  user's safe-mode toggle is not defeated by config drift.
+- **Safe mode disabled** — unchanged. F4's identity contract still
+  dominates; a 60 Hz flicker round-trips unmodified because the user
+  has explicitly opted out.
+
+After green, re-added `StrobeHzConstantIsThreeHz` to pin the exact
+`3.0f` value so a future refactor cannot "round it up to 4 Hz" without
+tripping a test. Header docstring on `clampStrobeHz` now names the
+hard-cap rule alongside the existing cap/scale semantics.
+
+**Full suite:** 2775/2776 pass (1 pre-existing skip —
+`MeshBoundsTest.UploadComputesLocalBounds`). All 31 PhotosensitiveSafety
+tests pass.
+
 ### 2026-04-23 Phase 10.9 — Slice 1 F4: photosensitive clamp helpers sanitise NaN / ±inf / negatives
 
 Fourth Slice 1 item. Same red / green / doc discipline as F1–F3.
