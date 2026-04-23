@@ -1099,27 +1099,29 @@ A person who has never opened Vestige can open it, follow the first-run tour, cr
 
 ---
 
-## Phase 10.7: Accessibility + Audio integration
+## Phase 10.7: Accessibility + Audio integration ✅ **Complete (2026-04-23)**
 **Goal:** Retrofit existing audio/accessibility consumers so they read from the engine-owned Settings stores introduced in Phase 10 slice 13.5e. Phase 10 delivered the Settings UI + the store-sink plumbing; this phase closes the loop by making every effect consumer actually consult those stores at runtime.
+
+**Completed 2026-04-23** across 8 commits (design + 3 subtitle + 1 photosensitive + 3 audio). All approved milestones delivered. Camera shake and flash overlay retrofits remain deferred to Phase 11 per the scope reduction captured below — their originating subsystems do not exist in the codebase today. `docs/PHASE10_7_DESIGN.md` contains the full design + slice breakdown.
 
 **Context:** Slice 13.5e added `Engine::m_audioMixer`, `Engine::m_subtitleQueue`, `Engine::m_photosensitiveLimits` + `m_photosensitiveEnabled`. Settings drives these live via sinks, but downstream consumers don't read from them yet — user changes propagate to the store but not to the audio path / effect call sites.
 
 ### Audio mixer → playback path
-- [ ] Pipe `Engine::getAudioMixer()` into the OpenAL gain resolution on every `AudioSource` so the user's per-bus gain choice actually affects playback. Currently each source applies its own local gain; bus gains sit in `AudioMixer` but the mixer is a standalone store the audio engine never consults.
-- [ ] Decide bus-gain multiplication order: master × bus × source. Document the chain so authors can reason about what a master=0.5, music=0.8, source=1.0 mix produces.
-- [ ] Editor-side `AudioPanel` currently owns a standalone `AudioMixer`. Either point the panel at `Engine::getAudioMixer()` (single source of truth) or delete the panel's local copy and route its UI through `SettingsEditor`.
+- [x] Pipe `Engine::getAudioMixer()` into the OpenAL gain resolution on every `AudioSource` so the user's per-bus gain choice actually affects playback. **A2** — playback registry in `AudioEngine` + per-frame `updateGains()` sweep + `resolveSourceGain(master × bus × source)` pure helper (commit `0bac0e6`).
+- [x] Decide bus-gain multiplication order: master × bus × source. Documented in `docs/PHASE10_7_DESIGN.md` §4.1.
+- [x] Editor-side `AudioPanel` currently owns a standalone `AudioMixer`. **A3** — panel now wires into the engine mixer via `wireEngineMixer`; bus-slider edits route through `SettingsEditor::mutate`; mute / solo / ducking stay panel-local (commit `525c182`).
 
 ### Subtitle rendering
-- [ ] Wire `Engine::getSubtitleQueue().tick(dt)` into the per-frame game loop so enqueued captions actually count down and expire.
-- [ ] Render `queue.activeSubtitles()` through the existing HUD / `GameScreen` pipeline with the configured `SubtitleSizePreset`. Positioning, background-plate opacity, and per-`SubtitleCategory` styling are design questions for the rendering slice.
-- [ ] Wire audio-event triggers (dialogue, spatial sound cues) to enqueue captions automatically — first pass can be manual API calls from game code, follow-on adds a declarative `AudioClip` → caption map.
+- [x] Wire `Engine::getSubtitleQueue().tick(dt)` into the per-frame game loop. **B1** — `AccessibilityTick` profiler scope in `Engine::run` (commit `593fc2f`).
+- [x] Render `queue.activeSubtitles()` through the HUD pipeline with configured size preset + per-category styling. **B2** — pure-function layout + `SpriteBatchRenderer` plates + `TextRenderer` glyph runs, wired through `UISystem::renderUI` as the last overlay pass (commit `738b106`).
+- [x] Wire audio-event triggers to enqueue captions. **B3** — declarative `assets/captions.json` map loaded at engine init; `CaptionMap::enqueueFor(clipPath, queue)` fires a caption when a mapped clip plays (commit `be7cdae`). Auto-trigger on playback arrives in Slice A2's component-driven path when game code adopts the new per-frame gain pass.
 
 ### Photosensitive caps → consumers
 
 **Scope reduction (2026-04-23).** Of the 4 consumers originally listed, only bloom and strobe/flicker have real consumers in the codebase today. Camera shake and flash overlay subsystems do not exist yet — the clamp helpers (`clampShakeAmplitude`, `clampFlashAlpha`) sit unused. Phase 10.7 retrofits the 2 that exist; the other 2 are *deferred retrofits* that Phase 11 (combat / UI transitions) must wire into the originating subsystems as part of their initial implementation. See `docs/PHASE10_7_DESIGN.md` §4.3 for rationale.
 
-- [ ] Retrofit bloom post through `limitBloomIntensity` — the setting should feel like a dial, not a binary.
-- [ ] Retrofit strobe / flicker emitters (particle-system flicker, light-flicker components) through `clampStrobeHz`.
+- [x] Retrofit bloom post through `limitBloomIntensity`. **C1** — `Renderer::setPhotosensitive` setter + clamp at the `u_bloomIntensity` upload site; engine pushes state per-frame in `AccessibilityTick` (commit `4d94cd4`).
+- [x] Retrofit strobe / flicker emitters through `clampStrobeHz`. **C2** — `ParticleEmitterComponent::getCoupledLight` converts `flickerSpeed` to Hz (`/ 2π`), clamps, converts back; `Scene::collectRenderData` threads photosensitive state through (commit `4d94cd4`).
 - [ ] *(Deferred to Phase 11)* Retrofit camera shake through `clampShakeAmplitude` when the shake subsystem ships. Affects kickback, explosions, earthquake triggers.
 - [ ] *(Deferred to Phase 11)* Retrofit flash overlays (hit flashes, screen-wipe transitions) through `clampFlashAlpha` when the overlay subsystem ships.
 
