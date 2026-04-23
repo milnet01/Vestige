@@ -9,6 +9,65 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-23 Phase 10.9 — Slice 1 F2: Component::clone() pure-virtual + ClothComponent backfill
+
+Second Slice 1 item. Follows the same red / green / reviewer
+discipline as F1.
+
+**Red commit `f911aa5`** — added `tests/test_component_clone.cpp`
+enumerating every concrete default-constructible `Component`
+subclass (22 cases) and asserting `clone()` returns a non-null
+instance of the expected dynamic type. The test is authored from
+the `Component::clone()` header docstring + ROADMAP Phase 10.9
+Slice 1 F2, not from the current code. 21 of 22 cases passed
+immediately; `ClothComponent` failed because it inherited the
+base's nullptr-returning `clone()` default, which
+`Entity::clone()` silently dropped — i.e. copying any entity
+carrying a `ClothComponent` (via `Scene::duplicateEntity` or the
+editor duplicate action) lost the cloth with no error path.
+
+**Green commit `75b64a3`** — promoted `Component::clone()` to pure
+virtual so the compiler enforces the deep-copy contract on every
+future subclass. Added `ClothComponent::clone()` following the
+same shape as `WaterSurfaceComponent` / `GPUParticleEmitter`:
+clones config + backend policy + shader path + material + preset
++ enabled flag, and leaves `initialize()` to rebuild the solver
+backend + `DynamicMesh` on the clone (the live solver state owns
+non-copyable GPU buffers on one path and trivially rebuildable
+CPU arrays on the other, so a live-state copy is not meaningful).
+Dropped the now-dead `if (cloned)` guard in `Entity::clone()` per
+CLAUDE.md's "no error paths for scenarios that can't happen".
+Added trivial `clone()` overrides to the `TestComponent` /
+`OtherComponent` stubs in `tests/test_entity.cpp` so they remain
+instantiable under the pure-virtual base. All 22 ComponentClone
+tests pass; full suite: 2754/2754 (1 pre-existing skip).
+
+**Serializer allowlist audit (F2 side task).** While auditing
+`clone()` coverage, surveyed the allowlist in
+`engine/utils/entity_serializer.cpp` — it covers seven component
+types (MeshRenderer, DirectionalLight, PointLight, SpotLight,
+EmissiveLight, ParticleEmitter, WaterSurface). All other
+concrete component subclasses — including AudioSourceComponent,
+CameraComponent, Camera2DComponent, SpriteComponent,
+TilemapComponent, Collider2DComponent, RigidBody2DComponent,
+CharacterController2DComponent, PressurePlateComponent,
+InteractableComponent, GPUParticleEmitter, ClothComponent,
+BreakableComponent, RigidBody, NavAgentComponent, SkeletonAnimator,
+FacialAnimator, LipSyncPlayer, TweenManager, and the forthcoming
+CameraMode subclasses — are silently dropped when an entity
+tree is serialised to a prefab or scene JSON. This is the exact
+latent-data-loss shape Slice 1 F3
+(`ComponentSerializerRegistry`) is slated to fix; captured here
+so F3 lands with a concrete coverage list rather than rediscovering
+the gap.
+
+**Effect on shipping behaviour.** Entity duplication (editor
+"Duplicate", `Scene::duplicateEntity`, and the prefab
+instantiation path that calls `Entity::clone()`) now carries
+`ClothComponent` into the copy. No other behaviour change —
+every other concrete subclass already had a working `clone()`,
+so their entities already duplicated correctly.
+
 ### 2026-04-23 Phase 10.9 — Slice 1 F1: caption-path double-concat fix
 
 First ship of Phase 10.9 (post-ultrareview remediation) per the
