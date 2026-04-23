@@ -1169,11 +1169,14 @@ Every Phase 11B gameplay hook that depends on rendering (hit decals, bullet-hole
 ---
 
 ## Phase 10.9: Post-Ultrareview Remediation
-**Goal:** Close findings from the 2026-04-23 independent multi-agent code review (14 subsystems, 14 independent reviewers, each given the design docs + source but *not* the tests — deliberately breaking the "self-marking homework" loop that let several Phase 10.7 features ship with passing tests but silently-broken behaviour). Slices are ordered by dependency: foundations first, then the Phase 10.7 gaps that foundations unblock, then safety / rendering / parsing / animation / physics / wiring / input / splines / systems / editor / performance. Later slices can be parallel-tracked once their upstream slices land.
+**Goal:** Close findings from the 2026-04-23 independent multi-agent code review (14 subsystems, 14 independent reviewers, each given the design docs + source but *not* the tests — deliberately breaking the "self-marking homework" loop that let several Phase 10.7 features ship with passing tests but silently-broken behaviour). **Second /indie-review on 2026-04-23 (12 reviewers, post-F1–F5)** added Slices 14–17 (scripting/formula safety, audio ergonomics, shader parity relabel, cloth regressions) and Slice 0 (ROADMAP truth-up) — three independent lanes converged on SSR-zombie (W9), Mesa sampler-binding (R6), atomic-write inconsistency (F7), and ~20 other `[x]`-boxes grep proved false. Slices are ordered by dependency: truth-up → foundations → Phase 10.7 gaps → safety / rendering / parsing / animation / physics / wiring / input / splines / systems / editor / performance → scripting → audio → shader parity → cloth regressions. Later slices can be parallel-tracked once their upstream slices land.
 
 **Context.** The review surfaced 14 CRITICAL and ~47 HIGH findings. Five of the CRITICAL findings were Phase 10.7 features that passed every test we wrote but delivered a subset of the design doc — the tests encoded what the code did, not what the design doc said. This phase closes those gaps before Phase 11 builds on top.
 
 **Process discipline for this phase.** Every slice follows the design-doc-first-tests pattern: failing regression tests authored from the design-doc or external-standard clause (cited in the test name — e.g. `TEST(Photosensitive, WCAG_2_3_1_*)`) land as a "red" commit; the fix lands as a "green" commit. Each slice also triggers an independent-reviewer subagent pass before ship.
+
+### Slice 0: ROADMAP truth-up — prerequisite for all downstream zombie-feature remediation
+- [ ] **T0.** Grep-audit every `[x]` DONE claim in this ROADMAP for ≥1 non-declaration, non-test call site of its primary entry-point. Demote falsely-claimed items (expected hits: Ragdoll, Fracture, Dismemberment, `GrabSystem`, `StasisSystem`, `BreakableComponent::fracture`, `MotionMatcher`, `MotionDatabase`, `LipSyncPlayer`, `FacialAnimator`, `EyeController`, `MirrorGenerator`, `Inertialization::apply`, `SpritePanel`, `TilemapPanel`, SSR, contact-shadow, `GpuCuller::cull`) to `[ ]` or relocate to `engine/experimental/` with a note. Subsequent slices (W12–W15) can then trust the baseline. Second /indie-review 2026-04-23 confirmed ≥20 such zombies against `[x]` boxes.
 
 ### Slice 1: Foundations — enable everything else
 Small, isolated fixes with no upstream dependencies. Every downstream slice benefits.
@@ -1184,6 +1187,12 @@ Small, isolated fixes with no upstream dependencies. Every downstream slice bene
 - [x] **F4.** Clamp helpers (`clampFlashAlpha`, `clampShakeAmplitude`, `clampStrobeHz`, `limitBloomIntensity`) sanitise NaN / ±∞ / negatives in **both** enabled and disabled paths. **Shipped 2026-04-23** (red `c7023ae`, green `50aa1bc`). Factored a private `sanitiseNonNegative(x)` helper in `photosensitive_safety.cpp` that returns `0.0f` for non-finite / negative values and the value itself otherwise, then applied it at the top of all four clamp helpers before the enabled/disabled branch. 13 WCAG-2.2-SC-2.3.1-tagged tests (`PhotosensitiveSafety.WCAG_2_3_1_*`) pin both paths, plus `WCAG_2_3_1_DisabledPreservesFinitePositives` pins that finite non-negatives still pass through unmodified when safe mode is off. Header docstring names the sanitisation contract alongside the existing cap/scale semantics.
 - [x] **F5.** `clampStrobeHz` hard-caps at WCAG 3 Hz. `std::min(hz, std::min(limits.maxStrobeHz, WCAG_MAX_STROBE_HZ))`. Prevents user-edited `maxStrobeHz = 29.0` from defeating safe mode. **Shipped 2026-04-23** (red `559b4bd`, green `778fb29`). Published `WCAG_MAX_STROBE_HZ = 3.0f` as a module-level `inline constexpr`; enabled-path cap is now `std::min(limits.maxStrobeHz, WCAG_MAX_STROBE_HZ)`. Tighter caller caps (horror beats at 0.5 Hz) still win; looser caller caps (29 Hz from a mis-tuned config) get clamped back to 3 Hz. Safe-mode-disabled identity contract from F4 preserved. Five new tests (`WCAG_2_3_1_StrobeHzConstantIsThreeHz`, `*HardCapsEvenWhenLimitsRelaxed`, `*BelowWCAGCeilingStillPassesThrough`, `*TighterCallerCapStillWins`, `*HardCapDoesNotApplyWhenDisabled`) pin all four corners of the interaction.
 - [ ] **F6.** OBJ loader — support OBJ-spec-mandated negative indices; add 1 MB per-line read cap.
+- [ ] **F7.** Atomic-write unification: delete duplicate `scene_serializer.cpp::atomicWriteFile`; route `Window::saveState`, `PrefabSystem::savePrefab`, `FileMenu` `.path` sidecar, and terrain heightmap/splatmap writes through `engine/utils/atomic_write.cpp` (the only path with full fsync(file)+rename+fsync(dir) durability). CLAUDE.md Rule 3 (reuse before rewriting).
+- [ ] **F8.** `SettingsEditor::mutate` — one-line `validate(m_pending)` before `pushPendingToSinks()`. Runtime-UI slider path currently bypasses every clamp policy (bus gains >1.0, strobe Hz ignored, etc.).
+- [ ] **F9.** `Logger` thread-safety: `std::mutex` around `s_logFile` / `s_entries` in `logger.cpp::log`. `AsyncTextureLoader` already logs from a worker thread — live race on `std::deque` + `ofstream`.
+- [ ] **F10.** `SystemRegistry::initializeAll` partial-init cleanup: on failure of system N, shutdown the initialized 0..N-1 prefix in reverse before returning false. Prevents GL/AL/Jolt resource leak through destructor-only cleanup.
+- [ ] **F11.** "Max strobe Hz" slider honesty at `settings_editor_panel.cpp:516` — drop slider max to `3.0f` OR render "Capped at WCAG 2.2 SC 2.3.1 ceiling of 3 Hz in safe mode" helper text. Current UI persists 7.00 while F5 enforces 3.0 — partially-sighted user is being lied to.
+- [ ] **F12.** Close `entity_serializer` component-registry gap (~18 unregistered types: `ClothComponent`, `RigidBody`, `BreakableComponent`, `CameraComponent`, `SkeletonAnimator`, `TilemapComponent`, 2D physics/camera/sprite components, `InteractableComponent`, `PressurePlateComponent`, `GPUParticleEmitter`, `FacialAnimator`, `TweenManager`, `LipSyncPlayer`, `NavAgentComponent`, `CameraMode`). Either register via F3's registry OR emit a loud save-time warning for entities owning unregistered components. F3 registered 8; reality has ~26. Silent data-loss round-tripping save→load today.
 
 ### Slice 2: Phase 10.7 completion — what actually shipped vs. what was spec'd
 Finish the gain-chain, subtitle, caption, and HRTF features that passed tests but delivered subsets of the design. Depends on Slice 1.
@@ -1206,6 +1215,9 @@ Crash vectors + accessibility claims that passed tests but leak to real users.
 - [ ] **S4.** Keyboard navigation — focus ring + Tab / arrow / Enter + modal-aware focus traversal. Menu footer advertises "UP DOWN NAVIGATE" but no handler exists. XAG 102 conformance.
 - [ ] **S5.** `UIPanel` delegates hit-test to children when non-interactive.
 - [ ] **S6.** `PressurePlateComponent` overlap query uses `getWorldPosition()` not local transform — fails in any parented hierarchy today.
+- [ ] **S7.** `Scene::removeEntity` / `unregisterEntityRecursive` nulls `m_activeCamera` if the destroyed subtree owned it. Raw `CameraComponent*` currently dangles after camera-entity delete; renderer dereferences.
+- [ ] **S8.** `NavMeshQuery::findPath` surfaces `DT_PARTIAL_RESULT` (tuple return or out-param). Agents currently arrive silently 20m short of unreachable targets; AI has no hook to re-plan or notify.
+- [ ] **S9.** `UITheme` default contrast — bump `textDisabled` and `panelStroke` defaults to satisfy WCAG 1.4.11 (3:1 non-text) and 1.4.3 (4.5:1 text-disabled comfort). Current Vellum `panelStroke` alpha 0.22 yields ≈1.8:1 over base. Load-bearing for partially-sighted primary user.
 
 ### Slice 4: Rendering correctness
 IBL corruption is load-bearing: every PBR material since day one has been lit with corrupted irradiance / prefilter values. Fix early.
@@ -1215,6 +1227,11 @@ IBL corruption is load-bearing: every PBR material since day one has been lit wi
 - [ ] **R3.** Shadow-pass state save/restore for `GL_CLIP_DISTANCE0` + `GL_DEPTH_CLAMP`. Extend `ScopedForwardZ` or a sibling RAII.
 - [ ] **R4.** `ScopedBlendState` + `ScopedCullFace` RAII applied to foliage, water, tree, particle renderers. Replaces hand-rolled enable/disable that assumes caller-state.
 - [ ] **R5.** `GpuCuller` — cache `GLint m_planeLocation0` at init, upload via `glUniform4fv(loc, 6, data)`. Eliminates per-frame `std::to_string` allocations.
+- [ ] **R6.** Mesa sampler-binding fallbacks at foliage-no-shadow (`foliage_renderer.cpp:178-200`, unit 3 `u_cascadeShadowMap` unbound), water-first-frame (units 3/4/5/6 no fallback bind), GPU-particles-no-collision (`gpu_particle_system.cpp:281-289`, compute shader unit 0), procedural-skybox (`renderer.cpp:3143-3158`, samplerCube vs sampler2D at unit 0). Pattern exists at `renderer.cpp:749-768`; apply 4 more times. Systemic Mesa AMD `GL_INVALID_OPERATION` hazard.
+- [ ] **R7.** SH probe grid double cosine-lobe convolution: either drop `SHProbeGrid::convolveRadianceToIrradiance` and store radiance-SH, OR replace shader constants at `scene.frag.glsl:569` with pure Y_ℓm basis constants. Currently multiplies by A_ℓ twice — band-0 ambient ≈π× over-bright. Ramamoorthi 2001 §4.1 / Sloan 2008.
+- [ ] **R8.** SDSM synchronous `glGetNamedBufferSubData` at `depth_reducer.cpp:97` → double-buffered PBO + `glMapNamedBufferRange` (match the bloom luminance pattern at `renderer.cpp:1113-1158`). Main-thread GPU stall today; blocks 60 FPS on Mesa AMD.
+- [ ] **R9.** Bloom `bloom_downsample.frag.glsl` Karis path — restore 0.5 centre + 0.125×4 corner energy weighting (Jimenez 2014 slide 147 / Unreal `BloomDownsample.usf`). Current Karis path drops first-mip centre weight → "softness pop" and energy loss.
+- [ ] **R10.** `m_prevWorldMatrices` unconditional clear at `renderScene` entry (currently cleared only in TAA branch — grows unbounded across MSAA/SMAA/None modes and hands stale mat4s to motion-overlay on mode switches).
 
 ### Slice 5: Data / asset parsing robustness
 Security + correctness for untrusted or malformed inputs. Gates community-mod / Steam-Workshop futures.
@@ -1225,6 +1242,12 @@ Security + correctness for untrusted or malformed inputs. Gates community-mod / 
 - [ ] **D4.** OBJ MTL support (or declared "not supported" log). Currently `usemtl` silently drops multi-material imports to one material.
 - [ ] **D5.** `resolveUri` empty-return → substitute default texture explicitly rather than passing `""` through to `loadTexture`.
 - [ ] **D6.** OBJ vertex-key hash: `boost::hash_combine`-style combiner, not `h3 << 32` (UB on 32-bit `size_t`).
+- [ ] **D7.** Scene-JSON recursion-depth cap: `deserializeEntityRecursive`, `collectRenderDataRecursive`, `countJsonEntities` take a `depth` parameter and reject `> 128`. Lift the `pysr_parser::DepthGuard` RAII. Current path is a classic JSON stack-bomb (256 MB of nested `{"children":[...]}` blows the 8 MB default stack).
+- [ ] **D8.** Terrain config size caps: `Terrain::deserializeSettings` hard-caps `width, depth ≤ 8193`, `gridResolution`, `maxLodLevels ≤ 10`. Current `width * depth * sizeof(float)` on attacker JSON requests ~320 GB of heap — instant OOM kill.
+- [ ] **D9.** Heightmap / splatmap per-file size cap (256 MB) in `Terrain::loadHeightmap`/`loadSplatmap`. Combined with D8, closes the two-stage attack (set width×depth to match a crafted binary, then feed the binary).
+- [ ] **D10.** glTF bounds checks: `gltf_loader.cpp:1041-1044` child-index `< gltfModel.nodes.size()`; `:1051` `sceneIdx`; `:1056-1059` root-node indices. Eliminate primitive-count pre-scan drift by returning `{startIdx, count}` directly from `loadMeshes` (currently a separate pre-scan at `:957-968` can diverge from actual loaded set, shifting every mesh's primitive offsets).
+- [ ] **D11.** Path-traversal guards on `AudioClip::loadFromFile`, `LipSyncPlayer::loadTrack`, `MotionDatabase` load paths. Single shared `validatePath()` helper; reject absolute + `..` segments unless caller opts in via "trusted" flag. MIT-open-source trap.
+- [ ] **D12.** tinygltf `extensionsRequired` allowlist in the loader — fail (don't skip) on unknown required extensions per glTF 2.0 §3.12. Silent fallback today.
 
 ### Slice 6: Animation correctness
 Three silent-corruption bugs affecting anyone importing glTF characters.
@@ -1243,6 +1266,10 @@ Phase 11A's Replay Recording Infrastructure requires deterministic physics. Thes
 - [ ] **Ph3.** `PhysicsWorld::sphereCast` API (originally scheduled as Phase 10.8 CM3 — pulled here so Phase 10.8 consumes it rather than authors it).
 - [ ] **Ph4.** Breakable-constraint force sums rotation lambdas + slider position-limit lambdas — hinge / slider limit breaks feel wrong without them.
 - [ ] **Ph5.** Character-vs-character pair filter — split PLAYER_CHARACTER / NPC_CHARACTER, or change the filter + use collision groups. Otherwise ragdolls in CHARACTER layer pass through the player.
+- [ ] **Ph6.** `std::unordered_map<uint32_t, PhysicsConstraint> m_constraints` → `std::map` (or paired `vector<handle>` iteration index). Same for `StasisSystem::m_stasisMap`. Hash-dependent iteration order breaks deterministic break-order tests and Phase 11A replay. Per-slot generation counter replaces global `++m_constraintGeneration`.
+- [ ] **Ph7.** Slider `normalAxis` deterministic basis at `physics_world.cpp:515-523` — use Hughes-Möller orthonormalize, not world-Y comparison. Two scenes with identical geometry rotated 90° currently solve differently.
+- [ ] **Ph8.** Constraint creation uses `BodyLockMultiWrite` on `{bodyA, bodyB}` — raw `JPH::Body*` currently escapes a single-body `BodyLockWrite` scope at `physics_world.cpp:322-344` and is used at 404/429/467/494/538 outside the lock. UB under concurrent broadphase update.
+- [ ] **Ph9.** `RigidBody::syncTransform` stop round-tripping rotation through Euler (`rigid_body.cpp:174-175`). Gimbal loss past ±90° pitch on tumbling bodies. Store quaternion in `Transform` and write directly.
 
 ### Slice 8: Subsystem wiring / dead-code cleanup
 Per CLAUDE.md Rule 6 (no over-engineering) + Rule 10 (no workarounds-as-fixes). Finish-or-delete, not cargo-cult.
@@ -1255,6 +1282,13 @@ Per CLAUDE.md Rule 6 (no over-engineering) + Rule 10 (no workarounds-as-fixes). 
 - [ ] **W6.** Listener-sync-after-camera-step — either split `AudioSystem` into `update()` + explicit `syncListener()` called post-camera, or give the ordering mechanism from Slice 11 a late-phase marker for AudioSystem.
 - [ ] **W7.** `AudioEngine::setMixerSnapshot` → `const AudioMixer*` pointer (or seqlock), not per-frame struct copy. Current claim "thread-safe snapshot" doesn't hold.
 - [ ] **W8.** `AudioEngine::m_bufferCache` eviction + per-scene flush + wire streaming music path (`audio_music_stream` has no loader consumer today).
+- [ ] **W9.** Delete SSR pipeline (`m_ssrShader`, `m_ssrFbo` 16 MB RGBA16F, `ssr.frag.glsl` with its 8 never-set uniforms) OR gate behind a CMake option. Three independent reviewers converged: zero callers today. Re-add cleanly when Phase 5 G-buffer lands.
+- [ ] **W10.** Delete contact-shadow pipeline (`m_contactShadowFbo`, `renderer.cpp:1162-1185`) OR gate. Same dead-subsystem pattern.
+- [ ] **W11.** Delete `GpuCuller` OR wire `cull()` into the MDI path. Zero callers today despite compiled shader + allocated VBO.
+- [ ] **W12.** Animation zombie cluster (`MotionMatcher`, `MotionDatabase`, `LipSyncPlayer`, `FacialAnimator`, `EyeController`, `MirrorGenerator`, `Inertialization::apply`): wire one end-to-end demo driving motion-matching + lip-sync + facial animation OR relocate to `engine/experimental/animation/` with README note. ~4.4 kLoC currently registered as nothing's consumer. Depends on Slice 0.
+- [ ] **W13.** Physics zombie cluster (`Ragdoll`, `Fracture`, `Dismemberment`, `GrabSystem`, `StasisSystem`, `BreakableComponent::fracture`): wire a real `DestructionSystem::update` that pumps them OR demote ROADMAP claim + relocate. Current 41-line `destruction_system.cpp` is a pass-through stub. Depends on Slice 0.
+- [ ] **W14.** `SpritePanel`, `TilemapPanel` — wire into `Editor::drawPanels` (add members + draw call) OR delete `sprite_panel.cpp`, `tilemap_panel.cpp`, and their tests. Currently compiled + tested, not instantiated. Depends on Slice 0.
+- [ ] **W15.** Inspector per-entity `AudioSource` draw section (mirror `drawParticleEmitter`). Closes F3's round-trip gap visibly; `AudioPanel` is scene-wide, not a per-entity editor.
 
 ### Slice 9: Input subsystem — spec-vs-code reconciliation
 Spec mandates scancode; code stores keycode. Fix the contradiction and the missing axis-binding path.
@@ -1264,6 +1298,7 @@ Spec mandates scancode; code stores keycode. Fix the contradiction and the missi
 - [ ] **I3.** `InputDevice::GamepadAxis` + `float axisValue(...)` query — analog sticks cannot currently be bound to actions at all.
 - [ ] **I4.** `findConflicts` device-scope filter (or document cross-device intent). Keyboard and gamepad bindings can't conflict physically.
 - [ ] **I5.** `addAction` re-registration — assert / warn when called after `Settings::load()` has populated user rebinds; silent nuke today.
+- [ ] **I6.** `keyboardName()` in `input_bindings.cpp:151` completes numpad (`KP_0..KP_9`, `KP_ADD`, `KP_SUBTRACT`, `KP_MULTIPLY`, `KP_DIVIDE`, `KP_ENTER`, `KP_DECIMAL`, `KP_EQUAL`), `Pause`, `PrintScreen`, `ScrollLock`, `NumLock`, `Menu`, `F13..F25`, `WORLD_1/WORLD_2`. Keyboard-primary user currently sees `"Key 320"` in rebind UI for half their keyboard.
 
 ### Slice 10: Environment / splines
 Research-doc conformance + Phase 10.8 CM7 cinematic-camera dependencies.
@@ -1286,6 +1321,12 @@ Five inspector types bypass undo entirely today; several write files non-atomica
 - [ ] **Ed3.** Multi-delete — canonicalise selection to roots (filter descendants) before wrapping into `CompositeCommand`.
 - [ ] **Ed4.** Atomic writes for prefab / recent-files / welcome-flag (write-to-temp + rename, matching `scene_serializer`).
 - [ ] **Ed5.** `PanelRegistry` + `IPanel` interface — reduces per-new-panel churn (currently requires editing `editor.h` + `editor.cpp` + menu wiring for each panel).
+- [ ] **Ed6.** `CreateEntityCommand::execute` on redo — record sibling-index in ctor, re-insert via `insertChild(idx)` (mirror `DeleteEntityCommand`). Currently `addChild` appends, shifting every sibling's position after undo→redo.
+- [ ] **Ed7.** Delete `FileMenu::m_isDirty` dual source-of-truth. Route Ctrl+G group + every menu mutation through `CompositeCommand` / `CommandHistory`. Once removed, undo-to-clean works; today `markDirty()` sticks forever regardless of undo.
+- [ ] **Ed8.** Brush-stroke `endStroke` → one `CompositeCommand` across foliage + scatter + tree sub-edits. Single Ctrl+Z reverts full stroke (currently up to 3 commands = 3 presses).
+- [ ] **Ed9.** Curve + gradient editor widget drag state uses `ImGui::GetStateStorage` slots, not file-static `s_dragIndex` / `s_dragId`. Nested / duplicated widget safety.
+- [ ] **Ed10.** `recent_files.cpp:101` — `fs::absolute` with `error_code` overload. Current throw on invalid-UTF-8 path escapes the ImGui frame.
+- [ ] **Ed11.** Scene-save envelope atomicity: fold `environment` + `terrain` JSON + heightmap + splatmap into a single manifest-backed atomic sequence (no partial-state post-crash). Depends on F7.
 
 ### Slice 13: Performance hygiene
 Post-10.7, pre-11 performance sweep. Not 60-FPS-critical today but blocks the Phase 11 load.
@@ -1294,9 +1335,49 @@ Post-10.7, pre-11 performance sweep. Not 60-FPS-critical today but blocks the Ph
 - [ ] **Pe2.** `SpriteSystem::render` + `Physics2DSystem::update` — member vectors `clear()`ed each frame, not constructed. `Physics2DSystem` iterates `m_bodyByEntity` directly instead of full-tree `forEachEntity`.
 - [ ] **Pe3.** `FoliageRenderer::uploadInstances` — triple-buffered persistent-mapped buffer or 2× grow-in-place. Eliminates mid-frame `glDeleteBuffers` + reallocation for every pass × every foliage type.
 - [ ] **Pe4.** `EventBus::publish` — reentrancy sentinel + deferred-add queue. Removes the per-dispatch listener-vector copy that heap-allocates at 60 Hz per hot event.
+- [ ] **Pe5.** `ResourceManager` unbounded cache → LRU + max-resident VRAM cap. Level-streaming guard.
+- [ ] **Pe6.** Hoist `glm::transpose(glm::inverse(modelMatrix))` out of `drawMesh` / per-cloth hot path (`renderer.cpp:1511`, `:3095`). Precompute at scene-data-assembly OR emit normal matrix from vertex shader for uniform-scale case.
+- [ ] **Pe7.** `FirstPersonController` joystick-probe rate-limit: 60 Hz × 16 slots → `glfwSetJoystickCallback` event-driven, or 1 Hz fallback. ~960 probes/sec for zero benefit on gamepad-less machines.
+- [ ] **Pe8.** Cloth LRA regen `generateLraConstraints` O(P·N) → row-indexed bucket / KD-tree. 16.8M iterations per `rebuildLRA()` at 256² with 256 pins.
+- [ ] **Pe9.** Cloth `applyCollisions` per substep — build spatial hash once, pass to both collision passes (currently 2× rebuild × 10 substeps = 20 hash rebuilds/frame).
+
+### Slice 14: Scripting / formula safety
+Gates Phase 11B AI + any user-authored graph or preset.
+
+- [ ] **Sc1.** Exec fan-out in `script_context.cpp:129` — iterate all matching `PinConnection`s (save/restore `m_entryPin` per callee). Shipped templates `DoOnce.Then → {PlayAnim, PlaySound}` currently half-fire. Delete the "runtime quirk" comment in `script_compiler.cpp:176-179`.
+- [ ] **Sc2.** `evalNode`, `ExprNode::fromJson`, `node_graph::nodeToExpr`, `FromExprHelper::buildNode` depth cap — lift `pysr_parser::DepthGuard` RAII. Unbounded today; 100k-deep unary chain blows the stack on preset load.
+- [ ] **Sc3.** `ExpressionEvaluator::evaluate` — add `dot` op OR reject vector ops at scalar evaluator with clear error. Both codegens emit `dot`; evaluator throws `"Unknown binary op: dot"`. Workbench LM fitter silently cannot fit any formula with `dot` today.
+- [ ] **Sc4.** `ScriptValue::asInt()` clamps float→`int32_t` before cast (`std::clamp(val, INT32_MIN_f, INT32_MAX_f)`). Pre-C++20 UB today for out-of-range values from clock / physics delta nodes.
+- [ ] **Sc5.** Align `MathDiv` (`pure_nodes.cpp:196`, `std::abs(b) < 1e-9f`) with `SafeMath::safeDiv` (`safe_math.h:37`, `right == 0.0f`). One exact-zero policy + `isfinite` gate across evaluator / C++ / GLSL to kill the "R²=0.99 in fitter, NaN at runtime" class.
+- [ ] **Sc6.** `isInstanceActive` (`scripting_system.cpp:293-304`) checks generation tag, not just pointer identity. Generation bumps already exist per AUDIT §H9 — just not verified at the dispatch site. Closes ABA hazard.
+- [ ] **Sc7.** `passDetectDataCycles` — iterative explicit stack (match the existing comment at `script_compiler.cpp:314`) OR fix the comment. Today the lambda is recursive; a 5000-node pure chain recurses 5000 deep.
+- [ ] **Sc8.** `WhileLoop` iteration cap — surface `Clamped` output pin (mirror `ForLoop`) OR document as hard safety rail in tooltip + ROADMAP. Resolves CLAUDE.md Rule 10 workaround-dressed-as-fix.
+
+### Slice 15: Audio ergonomics
+- [ ] **Au1.** `playSound(loop=true)` returns `AudioSourceHandle` OR force looping sounds exclusively through `AudioSourceComponent`. 32 looping calls currently freeze the mixer with no caller-side stop path. Ship-stopper for any ambient (waterfall, wind, torch).
+- [ ] **Au2.** `DopplerParams{}` default `speedOfSound` ≠ 0 sanity — initial `alSpeedOfSound(0)` is rejected by OpenAL and leaves the internal default unchanged. Either fix the default member initialiser or apply the existing clamp before push at `audio_engine.cpp:73-74`.
+- [ ] **Au3.** `audio_engine.cpp:186` — init `ALuint buffer = 0` before `alGenBuffers` and short-circuit on error. Currently an uninitialised name goes into `alDeleteBuffers` on failure.
+
+### Slice 16: Shader parity relabel / fix
+Resolves CPU↔GPU cloth divergences that make CLAUDE.md Rule 12 parity-test impossible today.
+
+- [ ] **Sh1.** `cloth_constraints.comp.glsl` XPBD claim: either accumulate `λ` across iterations (canonical XPBD per Macklin 2016 §3.5) OR rename to `cloth_pbd_constraints.comp.glsl` + update header comment. Current form is PBD-with-compliance, not XPBD.
+- [ ] **Sh2.** GPU cloth `cloth_collision.comp.glsl:80-91` plane margin — drop `collisionMargin` from penetration (`pen = collisionMargin - signedDist`); CPU path at `cloth_simulator.cpp:1134-1138` explicitly says "no margin for planes — injects energy, causes drift". Primary CPU/GPU parity violation.
+- [ ] **Sh3.** GPU cloth friction in `cloth_collision.comp.glsl` — add Coulomb static/kinetic tangential-friction term to match CPU `applyFriction`. Sliding-on-sphere / plane currently behaves completely differently on GPU.
+- [ ] **Sh4.** GPU cloth wind aerodynamic drag in `cloth_wind.comp.glsl` — per-triangle `0.5·dragCoeff·area·(vRel·n)·n` (current GPU wind is isotropic exponential drag only). `setWindQuality()` stored but not used by shader; three tiers produce the same output on GPU today.
+
+### Slice 17: Cloth + renderer regressions — depends on Sh1–Sh4
+- [ ] **Cl1.** CPU↔GPU cloth parity harness: headless test that drives identical `ClothConfig` on both backends for 2s, asserts per-particle position delta < `epsilon`. Depends on Sh1–Sh4. CLAUDE.md Rule 12 parity gate.
+- [ ] **Cl2.** `ClothComponent::syncMesh()` stops calling `simulate(0.0001f)` at `cloth_component.cpp:99` — expose `syncBuffersOnly()` on `IClothSolverBackend`. Refresh should not integrate gravity / wind.
+- [ ] **Cl3.** GPU `uploadPinsIfDirty` (`gpu_cloth_simulator.cpp:270-277`) — delete the full velocity-SSBO readback + zero + re-upload. Integrate shader already short-circuits on `invMass==0`; readback is redundant and stalls the GPU on every editor pin drag.
+- [ ] **Cl4.** GPU `buildAndUploadDihedrals` hard-codes `dihedralCompliance = 0.01f` at `gpu_cloth_simulator.cpp:444` — expose setter (per-constraint uniform override or re-upload) OR document the GPU-backend limitation on `IClothSolverBackend`.
+- [ ] **Cl5.** GPU `reset()` semantics — either capture proper rest snapshot (mirror CPU `m_initialPositions` / `captureRestPositions`) OR document divergent semantics in header. Pinned particles currently snap to last-pinned-position, not initial grid.
+- [ ] **Cl6.** Dihedral-constraint build pre-sorted edge vector replaces `std::unordered_map<uint64_t>` rehashing (390k inserts for a 256² cloth) — editor "apply preset" hitch.
+- [ ] **Cl7.** `ClothSimulator::simulate` / GPU `setSubsteps` unify upper bound — CPU clamps `[1,64]` silently; GPU has no cap. Expose `MAX_SUBSTEPS` constant.
+- [ ] **Cl8.** `ClothConfig` validation rejects NaN / ±inf on `particleMass`, `spacing`, `gravity`, `damping` (not just `<= 0`). NaN currently passes the guard and poisons every inverse mass.
 
 ### Milestone
-Every Phase 10.7 design-doc promise is verified by a test authored **from the design doc, not from the code**. Every dead-code item is either wired or deleted. Phase 11A's determinism contract is backed by regression tests. Phase 10.8 CM3 / CM4 / CM7 prerequisites (`sphereCast`, centripetal spline, arc-length evaluator) are live. After Slice 13, the next slice of Phase 10.8 can ship without inheriting remediation debt.
+Every Phase 10.7 design-doc promise is verified by a test authored **from the design doc, not from the code**. Every dead-code item is either wired or deleted. Phase 11A's determinism contract is backed by regression tests. Phase 10.8 CM3 / CM4 / CM7 prerequisites (`sphereCast`, centripetal spline, arc-length evaluator) are live. Slice 0 ROADMAP claims are grep-true. Slices 14–17 close the second /indie-review's scripting / audio / shader-parity / cloth cross-cutting findings. After Slice 17, the next slice of Phase 10.8 can ship without inheriting remediation debt.
 
 **Scope honesty.** This phase is larger than any single prior Phase 10 sub-phase. If Phase 10.8 Camera Modes is time-critical, Slices 1–3 are genuinely blocking (foundations + 10.7 gaps + safety); Slices 4–13 can be interleaved with Phase 10.8 work or deferred into respective original phases' "correctness update" entries. Revisit the ordering at each slice gate rather than treating the whole phase as atomic.
 
