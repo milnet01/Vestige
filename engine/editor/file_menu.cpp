@@ -10,6 +10,7 @@
 #include "core/logger.h"
 #include "resource/resource_manager.h"
 #include "scene/scene.h"
+#include "utils/atomic_write.h"
 
 #include <imgui.h>
 #include <GLFW/glfw3.h>
@@ -657,61 +658,29 @@ void FileMenu::performAutoSave(const Scene& scene)
 
     fs::path autoSavePath = getAutoSavePath();
 
-    // Ensure parent directory exists
-    std::error_code ec;
-    fs::create_directories(autoSavePath.parent_path(), ec);
-    if (ec)
+    // Durable write via the canonical helper (creates parent dirs,
+    // fsync + rename + fsync-dir). F7 replaces the earlier ad-hoc
+    // tmp+rename dance that omitted fsync.
+    AtomicWrite::Status s = AtomicWrite::writeFile(autoSavePath, content);
+    if (s != AtomicWrite::Status::Ok)
     {
-        Logger::warning("Auto-save: could not create directory "
-                        + autoSavePath.parent_path().string());
-        return;
-    }
-
-    // Write to temp file, then rename (atomic)
-    fs::path tmpPath = autoSavePath;
-    tmpPath += ".tmp";
-
-    {
-        std::ofstream out(tmpPath, std::ios::out | std::ios::trunc);
-        if (!out.is_open())
-        {
-            Logger::warning("Auto-save: could not open temp file " + tmpPath.string());
-            return;
-        }
-
-        out << content;
-        out.flush();
-
-        if (!out.good())
-        {
-            Logger::warning("Auto-save: write error");
-            out.close();
-            fs::remove(tmpPath, ec);
-            return;
-        }
-
-        out.close();
-    }
-
-    fs::rename(tmpPath, autoSavePath, ec);
-    if (ec)
-    {
-        Logger::warning("Auto-save: rename failed — " + ec.message());
-        fs::remove(tmpPath);
+        Logger::warning(std::string("Auto-save: ") + AtomicWrite::describe(s)
+                        + " for " + autoSavePath.string());
         return;
     }
 
     Logger::info("Auto-saved to " + autoSavePath.string());
 
-    // Save the original scene path alongside the autosave so recovery can restore it
+    // Save the original scene path alongside the autosave so recovery
+    // can restore it.
     fs::path pathFile = autoSavePath;
     pathFile.replace_extension(".path");
+    const std::string pathPayload = m_currentScenePath.string();
+    AtomicWrite::Status ps = AtomicWrite::writeFile(pathFile, pathPayload);
+    if (ps != AtomicWrite::Status::Ok)
     {
-        std::ofstream out(pathFile, std::ios::out | std::ios::trunc);
-        if (out.is_open())
-        {
-            out << m_currentScenePath.string();
-        }
+        Logger::warning(std::string("Auto-save: .path sidecar ")
+                        + AtomicWrite::describe(ps) + " for " + pathFile.string());
     }
 }
 

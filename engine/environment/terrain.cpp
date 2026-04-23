@@ -6,12 +6,14 @@
 
 #include "environment/terrain.h"
 #include "core/logger.h"
+#include "utils/atomic_write.h"
 
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
 #include <cmath>
 #include <fstream>
+#include <string_view>
 
 namespace Vestige
 {
@@ -679,18 +681,21 @@ bool Terrain::saveHeightmap(const std::filesystem::path& path) const
         return false;
     }
 
-    std::ofstream file(path, std::ios::binary);
-    if (!file.is_open())
+    // Raw float32 grid — std::string_view is binary-safe (may contain
+    // NUL bytes). Routed through the canonical AtomicWrite helper.
+    const std::string_view payload(
+        reinterpret_cast<const char*>(m_heightData.data()),
+        m_heightData.size() * sizeof(float));
+    AtomicWrite::Status s = AtomicWrite::writeFile(path, payload);
+    if (s != AtomicWrite::Status::Ok)
     {
-        Logger::error("Terrain: failed to open " + path.string() + " for writing");
+        Logger::error(std::string("Terrain: heightmap save ")
+                      + AtomicWrite::describe(s) + " for " + path.string());
         return false;
     }
 
-    file.write(reinterpret_cast<const char*>(m_heightData.data()),
-               static_cast<std::streamsize>(m_heightData.size() * sizeof(float)));
-
     Logger::info("Terrain: saved heightmap to " + path.string()
-                 + " (" + std::to_string(m_heightData.size() * sizeof(float)) + " bytes)");
+                 + " (" + std::to_string(payload.size()) + " bytes)");
     return true;
 }
 
@@ -750,18 +755,19 @@ bool Terrain::saveSplatmap(const std::filesystem::path& path) const
         return false;
     }
 
-    std::ofstream file(path, std::ios::binary);
-    if (!file.is_open())
+    const std::string_view payload(
+        reinterpret_cast<const char*>(m_splatData.data()),
+        m_splatData.size() * sizeof(glm::vec4));
+    AtomicWrite::Status s = AtomicWrite::writeFile(path, payload);
+    if (s != AtomicWrite::Status::Ok)
     {
-        Logger::error("Terrain: failed to open " + path.string() + " for writing");
+        Logger::error(std::string("Terrain: splatmap save ")
+                      + AtomicWrite::describe(s) + " for " + path.string());
         return false;
     }
 
-    file.write(reinterpret_cast<const char*>(m_splatData.data()),
-               static_cast<std::streamsize>(m_splatData.size() * sizeof(glm::vec4)));
-
     Logger::info("Terrain: saved splatmap to " + path.string()
-                 + " (" + std::to_string(m_splatData.size() * sizeof(glm::vec4)) + " bytes)");
+                 + " (" + std::to_string(payload.size()) + " bytes)");
     return true;
 }
 

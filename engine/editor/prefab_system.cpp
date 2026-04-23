@@ -4,6 +4,7 @@
 /// @file prefab_system.cpp
 /// @brief PrefabSystem implementation — save/load entity trees as JSON files.
 #include "editor/prefab_system.h"
+#include "utils/atomic_write.h"
 #include "utils/entity_serializer.h"
 #include "utils/json_size_cap.h"
 #include "scene/entity.h"
@@ -13,7 +14,6 @@
 
 #include <algorithm>
 #include <filesystem>
-#include <fstream>
 
 using json = nlohmann::json;
 namespace fs = std::filesystem;
@@ -71,15 +71,14 @@ bool PrefabSystem::savePrefab(const Entity& entity, const std::string& name,
     }
 
     fs::path filePath = prefabDir / (filename + ".json");
-    std::ofstream file(filePath);
-    if (!file.is_open())
+    const std::string payload = prefab.dump(4);
+    AtomicWrite::Status s = AtomicWrite::writeFile(filePath, payload);
+    if (s != AtomicWrite::Status::Ok)
     {
-        Logger::error("Prefab save: could not open " + filePath.string());
+        Logger::error(std::string("Prefab save: ") + AtomicWrite::describe(s)
+            + " for " + filePath.string());
         return false;
     }
-
-    file << prefab.dump(4);
-    file.close();
 
     Logger::info("Saved prefab '" + name + "' to " + filePath.string());
     return true;

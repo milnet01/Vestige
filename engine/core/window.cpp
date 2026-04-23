@@ -5,6 +5,7 @@
 /// @brief Window implementation using GLFW and OpenGL 4.5.
 #include "core/window.h"
 #include "core/logger.h"
+#include "utils/atomic_write.h"
 
 #include <nlohmann/json.hpp>
 
@@ -208,13 +209,14 @@ void Window::saveWindowState() const
 
     fs::path statePath = getWindowStatePath();
 
-    std::error_code ec;
-    fs::create_directories(statePath.parent_path(), ec);
-
-    std::ofstream file(statePath, std::ios::out | std::ios::trunc);
-    if (file.is_open())
+    // Durable write via the canonical helper. Window state is UX
+    // convenience — log at warning but don't propagate (no return path).
+    const std::string payload = state.dump(2);
+    AtomicWrite::Status s = AtomicWrite::writeFile(statePath, payload);
+    if (s != AtomicWrite::Status::Ok)
     {
-        file << state.dump(2);
+        Logger::warning(std::string("Window: save state ")
+                        + AtomicWrite::describe(s) + " for " + statePath.string());
     }
 }
 

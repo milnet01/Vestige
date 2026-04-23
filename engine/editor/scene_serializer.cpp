@@ -4,6 +4,7 @@
 /// @file scene_serializer.cpp
 /// @brief Scene save/load implementation.
 #include "editor/scene_serializer.h"
+#include "utils/atomic_write.h"
 #include "utils/entity_serializer.h"
 #include "environment/foliage_manager.h"
 #include "environment/terrain.h"
@@ -153,59 +154,6 @@ static json buildSceneJson(const Scene& scene, const ResourceManager& resources,
     return root;
 }
 
-/// @brief Writes a JSON string to file atomically (write to .tmp, then rename).
-static bool atomicWriteFile(const fs::path& path, const std::string& content,
-                            std::string& errorOut)
-{
-    // Ensure parent directory exists
-    std::error_code ec;
-    fs::create_directories(path.parent_path(), ec);
-    if (ec)
-    {
-        errorOut = "Could not create directory " + path.parent_path().string()
-                   + ": " + ec.message();
-        return false;
-    }
-
-    fs::path tmpPath = path;
-    tmpPath += ".tmp";
-
-    // Write to temporary file
-    {
-        std::ofstream out(tmpPath, std::ios::out | std::ios::trunc);
-        if (!out.is_open())
-        {
-            errorOut = "Could not open temp file " + tmpPath.string();
-            return false;
-        }
-
-        out << content;
-        out.flush();
-
-        if (!out.good())
-        {
-            errorOut = "Write error to " + tmpPath.string();
-            out.close();
-            fs::remove(tmpPath, ec);
-            return false;
-        }
-
-        out.close();
-    }
-
-    // Atomic rename (POSIX guarantees atomicity on same filesystem)
-    fs::rename(tmpPath, path, ec);
-    if (ec)
-    {
-        errorOut = "Could not rename " + tmpPath.string() + " to "
-                   + path.string() + ": " + ec.message();
-        fs::remove(tmpPath);
-        return false;
-    }
-
-    return true;
-}
-
 // ---------------------------------------------------------------------------
 // Version migration
 // ---------------------------------------------------------------------------
@@ -256,13 +204,16 @@ SceneSerializerResult SceneSerializer::saveScene(
     // Pretty-print with 4-space indent
     std::string content = sceneJson.dump(4);
 
-    // Atomic write
-    std::string writeError;
-    if (!atomicWriteFile(path, content, writeError))
+    // Durable write via the canonical helper (F7: single implementation
+    // with fsync(file) + rename + fsync(dir)).
+    AtomicWrite::Status status = AtomicWrite::writeFile(path, content);
+    if (status != AtomicWrite::Status::Ok)
     {
         result.success = false;
-        result.errorMessage = writeError;
-        Logger::error("Scene save failed: " + writeError);
+        result.errorMessage = std::string("atomic-write: ")
+                            + AtomicWrite::describe(status);
+        Logger::error("Scene save failed: " + result.errorMessage
+                      + " for " + path.string());
         return result;
     }
 
@@ -450,10 +401,11 @@ SceneSerializerResult SceneSerializer::saveScene(
     }
 
     std::string content = sceneJson.dump(4);
-    std::string writeError;
-    if (!atomicWriteFile(path, content, writeError))
+    AtomicWrite::Status status = AtomicWrite::writeFile(path, content);
+    if (status != AtomicWrite::Status::Ok)
     {
-        Logger::warning("Failed to write environment/terrain data: " + writeError);
+        Logger::warning(std::string("Failed to write environment/terrain data: ")
+                        + AtomicWrite::describe(status) + " for " + path.string());
     }
 
     return result;
