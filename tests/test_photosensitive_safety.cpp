@@ -260,3 +260,67 @@ TEST(PhotosensitiveSafety, WCAG_2_3_1_DisabledPreservesFinitePositives)
     EXPECT_FLOAT_EQ(clampStrobeHz(60.0f, false),       60.0f);
     EXPECT_FLOAT_EQ(limitBloomIntensity(5.0f, false),   5.0f);
 }
+
+// -----------------------------------------------------------------------------
+// Phase 10.9 Slice 1 F5 — `clampStrobeHz` hard-caps at WCAG 3 Hz regardless of
+// a user-edited `limits.maxStrobeHz`.
+//
+// WCAG 2.2 SC 2.3.1 and the Epilepsy Society's photosensitive-epilepsy guidance
+// both flag flicker above ~3 Hz as unsafe on high-contrast / red content. The
+// default `PhotosensitiveLimits::maxStrobeHz` of 2.0 Hz already sits safely
+// under that threshold, but any caller can override the struct at a call site
+// (e.g. `PhotosensitiveLimits{.maxStrobeHz = 29.0f}`) — and Phase 10.9 F5
+// requires that such an override CANNOT defeat the WCAG ceiling when safe mode
+// is enabled. The hard-cap is the union of the per-caller cap and the WCAG
+// ceiling (whichever is tighter wins), published as
+// `WCAG_MAX_STROBE_HZ = 3.0f` so call-sites can assert against it directly.
+//
+// Disabled-path behaviour is UNCHANGED: safe mode off is an explicit user
+// opt-out and F4's identity contract still wins.
+// -----------------------------------------------------------------------------
+
+TEST(PhotosensitiveSafety, WCAG_2_3_1_StrobeHzHardCapsEvenWhenLimitsRelaxed)
+{
+    // A caller (or a mis-tuned config file) that pushes `maxStrobeHz` far past
+    // the WCAG threshold must not be able to deliver a 10 Hz strobe.
+    PhotosensitiveLimits relaxed;
+    relaxed.maxStrobeHz = 29.0f;  // deliberately above the WCAG ceiling
+
+    EXPECT_FLOAT_EQ(clampStrobeHz(10.0f, true, relaxed), 3.0f);
+    EXPECT_FLOAT_EQ(clampStrobeHz(29.0f, true, relaxed), 3.0f);
+    EXPECT_FLOAT_EQ(clampStrobeHz(3.5f,  true, relaxed), 3.0f);
+}
+
+TEST(PhotosensitiveSafety, WCAG_2_3_1_StrobeHzBelowWCAGCeilingStillPassesThrough)
+{
+    // The hard-cap is a ceiling, not a floor — values already below it still
+    // pass through unmodified even when the caller's own cap is relaxed.
+    PhotosensitiveLimits relaxed;
+    relaxed.maxStrobeHz = 29.0f;
+
+    EXPECT_FLOAT_EQ(clampStrobeHz(1.5f, true, relaxed), 1.5f);
+    EXPECT_FLOAT_EQ(clampStrobeHz(2.5f, true, relaxed), 2.5f);
+    EXPECT_FLOAT_EQ(clampStrobeHz(0.0f, true, relaxed), 0.0f);
+}
+
+TEST(PhotosensitiveSafety, WCAG_2_3_1_StrobeHzTighterCallerCapStillWins)
+{
+    // If the caller wants a TIGHTER cap than WCAG (e.g. a horror beat that
+    // wants <1 Hz), their cap still wins — hard-cap is min(caller, WCAG).
+    PhotosensitiveLimits tight;
+    tight.maxStrobeHz = 0.5f;
+
+    EXPECT_FLOAT_EQ(clampStrobeHz(10.0f, true, tight), 0.5f);
+    EXPECT_FLOAT_EQ(clampStrobeHz(0.25f, true, tight), 0.25f);
+}
+
+TEST(PhotosensitiveSafety, WCAG_2_3_1_StrobeHzHardCapDoesNotApplyWhenDisabled)
+{
+    // Safe mode disabled is an explicit opt-out (see F4 DisabledPreserves*).
+    // The hard-cap is a safe-mode tightening, not a universal kill switch.
+    PhotosensitiveLimits relaxed;
+    relaxed.maxStrobeHz = 29.0f;
+
+    EXPECT_FLOAT_EQ(clampStrobeHz(10.0f, false, relaxed), 10.0f);
+    EXPECT_FLOAT_EQ(clampStrobeHz(60.0f, false, relaxed), 60.0f);
+}
