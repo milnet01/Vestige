@@ -9,6 +9,73 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-23 Phase 10.9 — Slice 1 F7: atomic-write unification
+
+Seventh Slice 1 item. Same red / green / doc discipline as F1–F6.
+Direct response to the duplicated-persistence finding from the second
+/indie-review sweep: five save paths existed, only one (`AtomicWrite::
+writeFile`) did the full POSIX-safe dance, and the other four each
+skipped different steps of it.
+
+**Red commit `26e5e62`** — `tests/test_atomic_write_routing.cpp` pins
+the atomic-write-helper routing via the `PrefabSystem::savePrefab`
+surface (the narrowest hole — direct `std::ofstream`-to-target, with no
+`.tmp` step at all):
+
+- `POSIXRename_PrefabSaveClearsStaleTmpSidecar_Rule3` — plants a stale
+  `TestPrefab.json.tmp` next to the target, invokes `savePrefab`, and
+  asserts (a) the target was written and (b) the stale `.tmp` is gone.
+  Pre-F7 the direct write never opens the `.tmp`, so the stale sidecar
+  from a prior crashed save survives indefinitely; post-F7 the helper
+  overwrites the `.tmp` in its write step then renames it away.
+- `POSIXRename_PrefabSaveLeavesNoTmpArtifact` — companion check that a
+  fresh save leaves no `.tmp` residue (rename step completed).
+
+Test names cite POSIX `rename(2)` atomicity and CLAUDE.md Rule 3
+("Reuse before rewriting"). Ran against shipping code: first test
+FAILED (stale `.tmp` survived); second PASSED (no `.tmp` ever
+created). Red behaves exactly as the `ofstream`-direct model predicts.
+
+**Green commit `ea1e133`** — routes every persistence path through
+`engine/utils/atomic_write.cpp`, deleting the duplicates in place:
+
+- `engine/editor/scene_serializer.cpp` — the 50-line
+  `atomicWriteFile` static that ran tmp+rename *without* `fsync(file)`
+  or `fsync(dir)` is deleted. Both scene-save call sites now invoke
+  `AtomicWrite::writeFile`; errors surface the `Status` via
+  `describe()` in the existing error-message string.
+- `engine/editor/prefab_system.cpp` — `savePrefab` goes from a
+  truncate-in-place `std::ofstream` to one `AtomicWrite::writeFile`
+  call. Prefab library is now durable; stale `.tmp` sidecars get
+  reaped on next save.
+- `engine/core/window.cpp` — `saveWindowState` was a best-effort
+  `ofstream` that silently ignored write errors. Still best-effort
+  (window layout is UX convenience), but now logs a warning on failure
+  and the half-write window is closed by `rename(2)` atomicity.
+- `engine/editor/file_menu.cpp` — `performAutoSave`'s manual
+  tmp+rename (50 lines, no `fsync`) collapses to one
+  `AtomicWrite::writeFile`. The `.path` breadcrumb sidecar that records
+  the original scene path also routes through the helper, so recovery
+  state survives the same crash-window as the autosave itself.
+- `engine/environment/terrain.cpp` — `saveHeightmap` and `saveSplatmap`
+  were raw binary `std::ofstream` writes. Converted to `string_view`
+  payloads over the float / vec4 grids (binary-safe — `string_view`
+  may hold NULs) + `AtomicWrite::writeFile`. Scene autosave's terrain
+  sidecars now share the atomicity guarantee of the `.scene` file.
+
+Net: 134 lines deleted, 62 added (-72 net) in `engine/`. Five
+durability bugs closed by removing four copies of a contract the
+codebase already had one correct implementation of. All 2781 unit
+tests pass (1 pre-existing `MeshBoundsTest.UploadComputesLocalBounds`
+skip unchanged).
+
+**Doc commit** — this CHANGELOG entry, ROADMAP F7 tick, VERSION bump
+`0.1.9` → `0.1.10`.
+
+**Next in Slice 1**: F8 — `SettingsEditor::mutate` validate-before-push
+(one-line `validate(m_pending)` before `pushPendingToSinks()` so the
+runtime-UI slider path stops bypassing every clamp policy).
+
 ### 2026-04-23 Phase 10.9 — Slice 1 F6: OBJ negative-index support + 1 MiB per-line cap
 
 Sixth Slice 1 item. Same red / green / doc discipline as F1–F5.
