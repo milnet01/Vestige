@@ -279,6 +279,14 @@ TEST(PhotosensitiveSafety, WCAG_2_3_1_DisabledPreservesFinitePositives)
 // opt-out and F4's identity contract still wins.
 // -----------------------------------------------------------------------------
 
+TEST(PhotosensitiveSafety, WCAG_2_3_1_StrobeHzConstantIsThreeHz)
+{
+    // The exact published WCAG 2.2 SC 2.3.1 flicker ceiling — frozen here so a
+    // future refactor that drops the constant (or "rounds" it up to 4 Hz for
+    // any reason) trips this test, not a user's seizure.
+    EXPECT_FLOAT_EQ(WCAG_MAX_STROBE_HZ, 3.0f);
+}
+
 TEST(PhotosensitiveSafety, WCAG_2_3_1_StrobeHzHardCapsEvenWhenLimitsRelaxed)
 {
     // A caller (or a mis-tuned config file) that pushes `maxStrobeHz` far past

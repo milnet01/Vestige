@@ -54,7 +54,11 @@ float clampStrobeHz(float hz, bool enabled, const PhotosensitiveLimits& limits)
     {
         return safe;
     }
-    return std::min(safe, limits.maxStrobeHz);
+    // Phase 10.9 F5: a caller cap looser than the WCAG 2.2 SC 2.3.1 3 Hz
+    // ceiling must NOT defeat safe mode, so the effective cap is always the
+    // tighter of the two.
+    const float cap = std::min(limits.maxStrobeHz, WCAG_MAX_STROBE_HZ);
+    return std::min(safe, cap);
 }
 
 float limitBloomIntensity(float intensity, bool enabled, const PhotosensitiveLimits& limits)

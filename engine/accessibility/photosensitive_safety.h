@@ -32,6 +32,19 @@
 namespace Vestige
 {
 
+/// @brief Hard ceiling on strobe / flicker frequency in Hz, published by the
+///        W3C WCAG 2.2 Success Criterion 2.3.1 ("Three Flashes or Below
+///        Threshold") and the Epilepsy Society's photosensitive-epilepsy
+///        guidance. Flicker above this threshold on high-contrast / red
+///        content is flagged as unsafe for photosensitive users.
+///
+/// Applied by `clampStrobeHz` as a hard ceiling on top of
+/// `PhotosensitiveLimits::maxStrobeHz`: a caller cap *tighter* than 3 Hz
+/// still wins (safe mode is a one-way tightening), but a caller cap *looser*
+/// than 3 Hz is clamped back down so a mis-tuned config cannot ship a 10 Hz
+/// strobe to a user who has safe mode enabled.
+inline constexpr float WCAG_MAX_STROBE_HZ = 3.0f;
+
 /// @brief Published caps applied when photosensitivity safe mode is on.
 ///
 /// Fields are public + default-initialised so game code can override any
@@ -91,8 +104,12 @@ float clampShakeAmplitude(float amplitude,
 /// @param enabled Current safe-mode state.
 /// @param limits  Caps to apply.
 /// @returns Finite, non-negative `hz` when `enabled` is false; otherwise
-///          `min(sanitised hz, limits.maxStrobeHz)`. NaN / ±inf / negative
-///          inputs return `0.0f` regardless of `enabled`.
+///          `min(sanitised hz, min(limits.maxStrobeHz, WCAG_MAX_STROBE_HZ))`.
+///          The WCAG 3 Hz hard-cap kicks in whenever the caller's own cap is
+///          looser than the published threshold, so a user-edited
+///          `PhotosensitiveLimits{.maxStrobeHz = 29.0f}` cannot defeat safe
+///          mode. NaN / ±inf / negative inputs return `0.0f` regardless of
+///          `enabled`.
 float clampStrobeHz(float hz,
                     bool enabled,
                     const PhotosensitiveLimits& limits = {});
