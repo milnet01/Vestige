@@ -1844,3 +1844,68 @@ TEST(SettingsEditor, RestoreControlsResetsInputMapWhenAttached)
     // map's primary should be back to 32 via resetToDefaults().
     EXPECT_EQ(map.findAction("Jump")->primary.code, 32);
 }
+
+// ===== Phase 10.9 Slice 1 F8 — mutate() validate-before-push ================
+//
+// Contract: SettingsEditor::mutate() must run the same clamp / validation
+// policy as Settings::fromJson() before pushing the pending state through
+// the apply sinks. The runtime-UI slider path (ImGui sliders wrapped in
+// m_editor->mutate(...)) is otherwise a hole that lets out-of-range values
+// reach subsystems — e.g. an AudioMixer bus gain above 1.0 (clipping),
+// a renderScale above 2.0 (unbounded GPU cost), or a strobe Hz above the
+// 30 Hz persistence cap.
+//
+// These red tests plant out-of-range values through mutate() and assert
+// that pending() reflects the clamped value, NOT the raw slider value.
+// Pre-F8 they fail because mutate() writes straight into m_pending and
+// then pushes unchecked.
+
+TEST(SettingsEditor, MutateClampsAudioBusGainBeforePushingToSink_F8)
+{
+    Record13_5Audio sink;
+    SettingsEditor::ApplyTargets t{};
+    t.audio = &sink;
+
+    SettingsEditor editor(Settings{}, t);
+    // Slider-rate mutation writes an out-of-range gain — the
+    // validate() policy clamps busGains to [0.0, 1.0]. Pre-F8
+    // mutate() skips validate() and the 2.5 reaches the mixer.
+    editor.mutate([](Settings& p) { p.audio.busGains[0] = 2.5f; });
+
+    EXPECT_FLOAT_EQ(editor.pending().audio.busGains[0], 1.0f)
+        << "mutate() must clamp out-of-range bus gain before pushing "
+           "to sink (CLAUDE.md Rule 10 — no workarounds, fix the "
+           "validation bypass)";
+    EXPECT_FLOAT_EQ(sink.lastGains[0], 1.0f)
+        << "AudioMixer received raw 2.5 gain — would clip every sample";
+}
+
+TEST(SettingsEditor, MutateClampsRenderScaleBeforePushingToSink_F8)
+{
+    SettingsEditor editor(Settings{}, {});
+    // Slider could in theory drive renderScale above the 2.0 cap
+    // (the live SettingsEditorPanel slider tops out at 2.0 but a
+    // future panel or keybind-bound mutator could overshoot).
+    editor.mutate([](Settings& p) { p.display.renderScale = 3.5f; });
+
+    EXPECT_FLOAT_EQ(editor.pending().display.renderScale, 2.0f)
+        << "mutate() must clamp renderScale to [0.25, 2.0] — validate() "
+           "policy from settings.cpp";
+}
+
+TEST(SettingsEditor, MutateClampsStrobeHzBeforePushingToSink_F8)
+{
+    SettingsEditor editor(Settings{}, {});
+    // A malformed mutator (or future slider bound wider than 30 Hz)
+    // must not reach the photosensitive-safety subsystem as-is.
+    editor.mutate([](Settings& p)
+    {
+        p.accessibility.photosensitiveSafety.maxStrobeHz = 120.0f;
+    });
+
+    EXPECT_FLOAT_EQ(editor.pending().accessibility.photosensitiveSafety.maxStrobeHz,
+                    30.0f)
+        << "mutate() must clamp maxStrobeHz to [0, 30] Hz (validate() "
+           "policy; runtime further caps to 3 Hz via clampStrobeHz when "
+           "photosensitive safety is enabled)";
+}
