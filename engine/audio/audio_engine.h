@@ -9,6 +9,7 @@
 #include "audio/audio_clip.h"
 #include "audio/audio_doppler.h"
 #include "audio/audio_hrtf.h"
+#include "audio/audio_mixer.h"
 
 #include <glm/glm.hpp>
 
@@ -87,8 +88,14 @@ public:
     /// @param position World position of the sound.
     /// @param volume Volume (0.0 to 1.0).
     /// @param loop Whether the sound loops.
+    /// @param bus Mixer bus the source is routed through. The effective
+    ///            uploaded gain is `resolveSourceGain(mixer, bus, volume)`
+    ///            whenever a mixer has been published via
+    ///            `setMixerSnapshot` (defaults to the neutral all-1
+    ///            mixer otherwise).
     void playSound(const std::string& filePath, const glm::vec3& position,
-                   float volume = 1.0f, bool loop = false);
+                   float volume = 1.0f, bool loop = false,
+                   AudioBus bus = AudioBus::Sfx);
 
     /// @brief Plays a spatial sound with explicit attenuation parameters.
     ///
@@ -99,7 +106,8 @@ public:
                           const glm::vec3& position,
                           const AttenuationParams& params,
                           float volume = 1.0f,
-                          bool loop = false);
+                          bool loop = false,
+                          AudioBus bus = AudioBus::Sfx);
 
     /// @brief Plays a spatial sound with attenuation + per-source
     ///        velocity for Doppler shift.
@@ -114,12 +122,33 @@ public:
                           const glm::vec3& velocity,
                           const AttenuationParams& params,
                           float volume = 1.0f,
-                          bool loop = false);
+                          bool loop = false,
+                          AudioBus bus = AudioBus::Sfx);
 
     /// @brief Plays a non-spatial (2D) sound (fire-and-forget).
     /// @param filePath Path to the audio file.
     /// @param volume Volume (0.0 to 1.0).
-    void playSound2D(const std::string& filePath, float volume = 1.0f);
+    /// @param bus Mixer bus (defaults to `Ui` — 2D sounds are most
+    ///            commonly UI clicks / menu accents).
+    void playSound2D(const std::string& filePath, float volume = 1.0f,
+                     AudioBus bus = AudioBus::Ui);
+
+    /// @brief Phase 10.7 slice A2 — publishes a snapshot of the
+    ///        engine-owned mixer into the audio engine. Held by value
+    ///        so the audio engine can read it from any thread without
+    ///        locking; push once per frame from `AudioSystem::update`.
+    void setMixerSnapshot(const AudioMixer& mixer) { m_mixerSnapshot = mixer; }
+
+    /// @brief Per-frame sweep that (a) releases sources whose
+    ///        OpenAL state has drifted to `AL_STOPPED` and (b)
+    ///        re-uploads the composed `master × bus × sourceVolume`
+    ///        gain for every still-playing registered source. Uses
+    ///        the most-recent `setMixerSnapshot` value.
+    ///
+    /// Safe to call when the engine is unavailable — short-circuits
+    /// to a no-op. Safe to call when no sources are live — iterates
+    /// an empty map.
+    void updateGains();
 
     /// @brief Sets the engine-wide distance-attenuation model.
     ///
@@ -211,6 +240,19 @@ private:
     // in libstdc++ stl_bvector.h.
     std::vector<unsigned int> m_sourcePool;
     std::vector<uint8_t> m_sourceInUse;
+
+    // Phase 10.7 slice A2 — per-source mixer metadata. Keyed by
+    // OpenAL source ID, populated by every `playSound*` that
+    // acquires a source and cleared by `releaseSource`. The
+    // per-frame `updateGains()` sweep reads this map + the
+    // published mixer snapshot to re-upload `AL_GAIN`.
+    struct SourceMix
+    {
+        AudioBus bus          = AudioBus::Sfx;
+        float    sourceVolume = 1.0f;
+    };
+    std::unordered_map<unsigned int, SourceMix> m_livePlaybacks;
+    AudioMixer m_mixerSnapshot{};  ///< Latest published mixer (defaults all-1).
 
     // Buffer cache (path -> OpenAL buffer ID)
     std::unordered_map<std::string, unsigned int> m_bufferCache;

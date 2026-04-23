@@ -247,13 +247,14 @@ void AudioEngine::releaseSource(unsigned int source)
             alSourceStop(source);
             alSourcei(source, AL_BUFFER, 0);
             m_sourceInUse[i] = false;
+            m_livePlaybacks.erase(source);
             return;
         }
     }
 }
 
 void AudioEngine::playSound(const std::string& filePath, const glm::vec3& position,
-                             float volume, bool loop)
+                             float volume, bool loop, AudioBus bus)
 {
     if (!m_available)
     {
@@ -272,9 +273,13 @@ void AudioEngine::playSound(const std::string& filePath, const glm::vec3& positi
         return;
     }
 
+    m_livePlaybacks[source] = SourceMix{bus, volume};
+    const float initialGain =
+        resolveSourceGain(m_mixerSnapshot, bus, volume);
+
     alSourcei(source, AL_BUFFER, static_cast<ALint>(buffer));
     alSource3f(source, AL_POSITION, position.x, position.y, position.z);
-    alSourcef(source, AL_GAIN, volume);
+    alSourcef(source, AL_GAIN, initialGain);
     alSourcei(source, AL_LOOPING, loop ? AL_TRUE : AL_FALSE);
     alSourcef(source, AL_REFERENCE_DISTANCE, 1.0f);
     alSourcef(source, AL_MAX_DISTANCE, 50.0f);
@@ -287,7 +292,8 @@ void AudioEngine::playSoundSpatial(const std::string& filePath,
                                    const glm::vec3& position,
                                    const AttenuationParams& params,
                                    float volume,
-                                   bool loop)
+                                   bool loop,
+                                   AudioBus bus)
 {
     if (!m_available) return;
 
@@ -297,10 +303,14 @@ void AudioEngine::playSoundSpatial(const std::string& filePath,
     ALuint source = acquireSource();
     if (source == 0) return;
 
+    m_livePlaybacks[source] = SourceMix{bus, volume};
+    const float initialGain =
+        resolveSourceGain(m_mixerSnapshot, bus, volume);
+
     alSourcei(source, AL_BUFFER, static_cast<ALint>(buffer));
     alSource3f(source, AL_POSITION, position.x, position.y, position.z);
     alSource3f(source, AL_VELOCITY, 0.0f, 0.0f, 0.0f);
-    alSourcef(source, AL_GAIN, volume);
+    alSourcef(source, AL_GAIN, initialGain);
     alSourcei(source, AL_LOOPING, loop ? AL_TRUE : AL_FALSE);
     alSourcef(source, AL_REFERENCE_DISTANCE, params.referenceDistance);
     alSourcef(source, AL_MAX_DISTANCE,       params.maxDistance);
@@ -314,7 +324,8 @@ void AudioEngine::playSoundSpatial(const std::string& filePath,
                                    const glm::vec3& velocity,
                                    const AttenuationParams& params,
                                    float volume,
-                                   bool loop)
+                                   bool loop,
+                                   AudioBus bus)
 {
     if (!m_available) return;
 
@@ -324,10 +335,14 @@ void AudioEngine::playSoundSpatial(const std::string& filePath,
     ALuint source = acquireSource();
     if (source == 0) return;
 
+    m_livePlaybacks[source] = SourceMix{bus, volume};
+    const float initialGain =
+        resolveSourceGain(m_mixerSnapshot, bus, volume);
+
     alSourcei(source, AL_BUFFER, static_cast<ALint>(buffer));
     alSource3f(source, AL_POSITION, position.x, position.y, position.z);
     alSource3f(source, AL_VELOCITY, velocity.x, velocity.y, velocity.z);
-    alSourcef(source, AL_GAIN, volume);
+    alSourcef(source, AL_GAIN, initialGain);
     alSourcei(source, AL_LOOPING, loop ? AL_TRUE : AL_FALSE);
     alSourcef(source, AL_REFERENCE_DISTANCE, params.referenceDistance);
     alSourcef(source, AL_MAX_DISTANCE,       params.maxDistance);
@@ -336,7 +351,8 @@ void AudioEngine::playSoundSpatial(const std::string& filePath,
     alSourcePlay(source);
 }
 
-void AudioEngine::playSound2D(const std::string& filePath, float volume)
+void AudioEngine::playSound2D(const std::string& filePath, float volume,
+                               AudioBus bus)
 {
     if (!m_available)
     {
@@ -355,9 +371,13 @@ void AudioEngine::playSound2D(const std::string& filePath, float volume)
         return;
     }
 
+    m_livePlaybacks[source] = SourceMix{bus, volume};
+    const float initialGain =
+        resolveSourceGain(m_mixerSnapshot, bus, volume);
+
     alSourcei(source, AL_BUFFER, static_cast<ALint>(buffer));
     alSource3f(source, AL_POSITION, 0.0f, 0.0f, 0.0f);
-    alSourcef(source, AL_GAIN, volume);
+    alSourcef(source, AL_GAIN, initialGain);
     alSourcei(source, AL_LOOPING, AL_FALSE);
     alSourcei(source, AL_SOURCE_RELATIVE, AL_TRUE);  // Relative to listener (2D)
     alSourcePlay(source);
@@ -412,6 +432,7 @@ void AudioEngine::stopAll()
             alSourcei(m_sourcePool[i], AL_BUFFER, 0);
             m_sourceInUse[i] = false;
         }
+        m_livePlaybacks.erase(m_sourcePool[i]);
     }
 }
 
@@ -531,6 +552,22 @@ void AudioEngine::applyHrtfSettings()
     }
 }
 
+void AudioEngine::updateGains()
+{
+    if (!m_available) return;
+
+    // Reap stopped sources first so we don't burn an AL_GAIN upload
+    // on a source that is about to drop out of m_livePlaybacks.
+    reclaimFinishedSources();
+
+    for (const auto& [source, mix] : m_livePlaybacks)
+    {
+        const float gain = resolveSourceGain(
+            m_mixerSnapshot, mix.bus, mix.sourceVolume);
+        alSourcef(source, AL_GAIN, gain);
+    }
+}
+
 void AudioEngine::reclaimFinishedSources()
 {
     for (size_t i = 0; i < m_sourcePool.size(); ++i)
@@ -543,6 +580,7 @@ void AudioEngine::reclaimFinishedSources()
             {
                 alSourcei(m_sourcePool[i], AL_BUFFER, 0);
                 m_sourceInUse[i] = false;
+                m_livePlaybacks.erase(m_sourcePool[i]);
             }
         }
     }

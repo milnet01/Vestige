@@ -68,6 +68,20 @@ float effectiveBusGain(const AudioMixer& mixer, AudioBus bus)
     return std::max(0.0f, std::min(1.0f, product));
 }
 
+float resolveSourceGain(const AudioMixer& mixer,
+                        AudioBus bus,
+                        float sourceVolume)
+{
+    // Guard against negative input. Clamp the per-source volume to
+    // [0, 1] before multiplication so an authoring bug (e.g.
+    // `volume = 1.5f`) does not push the composed gain above 1.0,
+    // which the downstream `effectiveBusGain` clamp would *not*
+    // re-clamp (it clamps the bus product, not the final product).
+    const float vol = std::max(0.0f, std::min(1.0f, sourceVolume));
+    const float busGain = effectiveBusGain(mixer, bus);
+    return std::max(0.0f, std::min(1.0f, busGain * vol));
+}
+
 void updateDucking(DuckingState& state,
                     const DuckingParams& params,
                     float deltaSeconds)

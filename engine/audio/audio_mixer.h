@@ -108,6 +108,24 @@ struct AudioMixer
 ///        clamped to [0, 1].
 float effectiveBusGain(const AudioMixer& mixer, AudioBus bus);
 
+/// @brief Phase 10.7 slice A2 — composes the final OpenAL gain for
+///        one playing source as `master × bus × sourceVolume`,
+///        clamped to [0, 1]. Pure function so the gain math is
+///        testable without an AL context.
+///
+/// @param mixer        Engine-owned bus-gain table.
+/// @param bus          The source's assigned bus.
+/// @param sourceVolume Per-source volume (`AudioSourceComponent::volume`
+///                     or the `volume` argument to `playSound*`).
+/// @returns Final gain in [0, 1]. The AudioEngine uploads this via
+///          `alSourcef(id, AL_GAIN, ...)` at play time and every
+///          frame thereafter (in `AudioEngine::updateGains`), so a
+///          mid-play Settings slider move is audible on the next
+///          frame.
+float resolveSourceGain(const AudioMixer& mixer,
+                        AudioBus bus,
+                        float sourceVolume);
+
 // ----- Ducking --------------------------------------------------
 
 /// @brief Ducking parameters — attack pulls the gain down when the

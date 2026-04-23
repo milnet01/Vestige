@@ -47,6 +47,14 @@ void AudioSystem::update(float /*deltaTime*/)
         camera.getPosition(),
         camera.getFront(),
         glm::vec3(0.0f, 1.0f, 0.0f));  // World up
+
+    // Phase 10.7 slice A2 — publish the latest mixer snapshot and
+    // re-compose AL_GAIN for every live source so mid-play slider
+    // moves are heard on the next frame rather than only on newly
+    // acquired sources. Also reaps stopped sources from the
+    // playback registry.
+    m_audioEngine.setMixerSnapshot(m_engine->getAudioMixer());
+    m_audioEngine.updateGains();
 }
 
 std::vector<uint32_t> AudioSystem::getOwnedComponentTypes() const

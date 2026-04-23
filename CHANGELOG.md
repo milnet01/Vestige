@@ -9,6 +9,69 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-23 Phase 10.7 — Slice A2: per-frame gain-chain pass
+
+Mid-play Settings slider moves are now audible. `AudioEngine`
+maintains a playback registry keyed by OpenAL source ID that
+stores each live source's bus + authored volume; a per-frame
+`updateGains()` sweep composes `master × bus × sourceVolume`
+via `resolveSourceGain` and re-uploads `AL_GAIN` for every
+still-playing source. Prior to this slice the initial gain was
+set once at acquisition and never revisited — sliding the Music
+bus to 0 while a cue played had no effect until the next
+acquisition.
+
+**Pure helper** (`engine/audio/audio_mixer.{h,cpp}`). New
+`resolveSourceGain(mixer, bus, sourceVolume)` returns the
+clamped `master × bus × volume` product. Source volume is
+pre-clamped to [0, 1] before the multiply so an authoring bug
+cannot push composed gain above 1.0. Kept pure-function so the
+gain math is unit-testable without an AL context.
+
+**Registry** (`engine/audio/audio_engine.{h,cpp}`). Adds
+`std::unordered_map<ALuint, SourceMix>` where
+`SourceMix = { AudioBus bus, float sourceVolume }`. Every
+`playSound*` / `playSound2D` now:
+- Accepts an optional `AudioBus bus` parameter (Sfx default,
+  Ui for `playSound2D`).
+- Records the pair into the registry at acquisition.
+- Uploads `resolveSourceGain(snapshot, bus, volume)` as the
+  *initial* gain instead of the raw `volume`, so bus-gain
+  moves take effect on the first played frame, not the second.
+- Deregisters on `releaseSource` / `stopAll` /
+  `reclaimFinishedSources`.
+
+**Sweep** (`AudioEngine::updateGains`). Reaps `AL_STOPPED`
+sources first (via the existing `reclaimFinishedSources`),
+then iterates the remaining registry and uploads the
+recomposed gain. No-op when audio is unavailable or the
+registry is empty.
+
+**Wiring** (`engine/systems/audio_system.cpp`).
+`AudioSystem::update` publishes the current engine mixer via
+`setMixerSnapshot(m_engine->getAudioMixer())` and calls
+`updateGains()` each frame, so the audio engine's snapshot
+stays fresh and the registry sweep runs at frame rate.
+
+**Tests.** 7 new `AudioMixerResolve` cases in
+`tests/test_audio_mixer.cpp`:
+- Default mixer + unity volume → unity gain on every bus.
+- `master × bus × volume` composition (0.5 × 0.8 × 0.75 = 0.30).
+- Negative source volume clamps to 0.
+- Above-unity source volume clamps to 1.
+- Master bus does not double-apply its own gain.
+- Zero master silences every bus.
+- Zero bus silences only that bus.
+
+The registry + AL sweep is not directly unit-tested — testing
+it would need a live AL context, which the project policy
+excludes from the CPU-unit test suite (see test_audio_hrtf.cpp
+for the same trade-off). The sweep's gain values come from
+`resolveSourceGain`, which is fully covered.
+
+Full suite: 2713 passing (+7), 1 pre-existing skip. Next:
+A3 — AudioPanel unification.
+
 ### 2026-04-23 Phase 10.7 — Slice A1: AudioBus field on AudioSourceComponent
 
 Adds `AudioBus bus` to `AudioSourceComponent` so every source can

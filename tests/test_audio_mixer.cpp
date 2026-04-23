@@ -83,6 +83,66 @@ TEST(AudioMixer, EffectiveGainClampsToUnitRange)
     EXPECT_NEAR(effectiveBusGain(m, AudioBus::Music), 0.0f, kEps);
 }
 
+// -- Phase 10.7 slice A2: resolveSourceGain -----------------------
+
+TEST(AudioMixerResolve, DefaultMixerWithUnityVolumeYieldsUnity)
+{
+    AudioMixer m;
+    EXPECT_NEAR(resolveSourceGain(m, AudioBus::Sfx, 1.0f), 1.0f, kEps);
+    EXPECT_NEAR(resolveSourceGain(m, AudioBus::Music, 1.0f), 1.0f, kEps);
+    EXPECT_NEAR(resolveSourceGain(m, AudioBus::Master, 1.0f), 1.0f, kEps);
+}
+
+TEST(AudioMixerResolve, ComposesMasterTimesBusTimesSource)
+{
+    AudioMixer m;
+    m.setBusGain(AudioBus::Master, 0.5f);
+    m.setBusGain(AudioBus::Music,  0.8f);
+    // master × bus × vol = 0.5 × 0.8 × 0.75 = 0.30
+    EXPECT_NEAR(resolveSourceGain(m, AudioBus::Music, 0.75f), 0.30f, kEps);
+}
+
+TEST(AudioMixerResolve, ClampsNegativeSourceVolumeToZero)
+{
+    AudioMixer m;
+    EXPECT_NEAR(resolveSourceGain(m, AudioBus::Sfx, -0.5f), 0.0f, kEps);
+}
+
+TEST(AudioMixerResolve, ClampsAboveUnitySourceVolumeToOne)
+{
+    AudioMixer m;
+    // master=1, bus=1, vol=1.5 — the pre-multiplication clamp on
+    // volume means the composed gain stays at 1.0 rather than 1.5.
+    EXPECT_NEAR(resolveSourceGain(m, AudioBus::Sfx, 1.5f), 1.0f, kEps);
+}
+
+TEST(AudioMixerResolve, MasterBusMultipliesOnlyOnce)
+{
+    // A source assigned directly to the Master bus (e.g. a
+    // system-wide notification blast) should not double-apply the
+    // master gain.
+    AudioMixer m;
+    m.setBusGain(AudioBus::Master, 0.4f);
+    EXPECT_NEAR(resolveSourceGain(m, AudioBus::Master, 1.0f), 0.4f, kEps);
+}
+
+TEST(AudioMixerResolve, ZeroMasterSilencesEverything)
+{
+    AudioMixer m;
+    m.setBusGain(AudioBus::Master, 0.0f);
+    m.setBusGain(AudioBus::Music,  1.0f);
+    EXPECT_NEAR(resolveSourceGain(m, AudioBus::Music, 1.0f), 0.0f, kEps);
+}
+
+TEST(AudioMixerResolve, ZeroBusSilencesOnlyThatBus)
+{
+    AudioMixer m;
+    m.setBusGain(AudioBus::Music, 0.0f);
+    EXPECT_NEAR(resolveSourceGain(m, AudioBus::Music, 1.0f), 0.0f, kEps);
+    // Sfx still plays at full gain.
+    EXPECT_NEAR(resolveSourceGain(m, AudioBus::Sfx,   1.0f), 1.0f, kEps);
+}
+
 // -- Ducking -------------------------------------------------------
 
 TEST(AudioDucking, AttacksTowardFloorWhenTriggered)
