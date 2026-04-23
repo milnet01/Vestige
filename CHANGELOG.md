@@ -9,6 +9,30 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-23 Phase 10.7 — design doc approved, scope reduced
+
+`docs/PHASE10_7_DESIGN.md` drafted + approved on the same day. Six
+blocking §6 questions signed off: audio gain chain runs per-frame
+(A1); editor `AudioPanel` unifies via `SettingsEditor` with mute /
+solo / ducking staying panel-local (B3); renderer bloom takes a
+setter (P1) while the subtitle HUD pass takes `Engine&` (P2);
+captions load from a single `assets/captions.json` at engine init;
+photosensitive Slice C reduced to 2-of-4 consumers.
+
+**Scope honesty for Slice C.** Camera shake and flash overlay
+subsystems do not exist in the codebase today — grep finds no
+shake accumulator, no hit-flash, no screen-wipe. Their clamp
+helpers (`clampShakeAmplitude`, `clampFlashAlpha`) sit idle.
+Phase 10.7 does not invent these subsystems just to clamp them
+(CLAUDE.md Rule 6); both retrofits are deferred to Phase 11,
+which must wire the clamp helper into the originating subsystem
+as part of its initial implementation. `ROADMAP.md` Phase 10.7
+amended accordingly.
+
+**Slice order:** B (subtitles) → C (photosensitive) → A (audio).
+B first for smallest blast radius and most visible progress; A
+last as the largest slice.
+
 ### 2026-04-22 Phase 10 — Slice 13.5e: remaining live-apply sink wiring
 
 Closes every `SettingsEditor::ApplyTargets` slot. Before this slice,

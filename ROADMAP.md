@@ -1115,10 +1115,21 @@ A person who has never opened Vestige can open it, follow the first-run tour, cr
 - [ ] Wire audio-event triggers (dialogue, spatial sound cues) to enqueue captions automatically — first pass can be manual API calls from game code, follow-on adds a declarative `AudioClip` → caption map.
 
 ### Photosensitive caps → consumers
-- [ ] Retrofit camera shake so its amplitude flows through `clampShakeAmplitude(amp, engine.photosensitiveEnabled(), engine.photosensitiveLimits())`. Affects kickback, explosions, earthquake triggers.
-- [ ] Retrofit flash overlays (hit flashes, screen-wipe transitions) through `clampFlashAlpha`.
+
+**Scope reduction (2026-04-23).** Of the 4 consumers originally listed, only bloom and strobe/flicker have real consumers in the codebase today. Camera shake and flash overlay subsystems do not exist yet — the clamp helpers (`clampShakeAmplitude`, `clampFlashAlpha`) sit unused. Phase 10.7 retrofits the 2 that exist; the other 2 are *deferred retrofits* that Phase 11 (combat / UI transitions) must wire into the originating subsystems as part of their initial implementation. See `docs/PHASE10_7_DESIGN.md` §4.3 for rationale.
+
 - [ ] Retrofit bloom post through `limitBloomIntensity` — the setting should feel like a dial, not a binary.
 - [ ] Retrofit strobe / flicker emitters (particle-system flicker, light-flicker components) through `clampStrobeHz`.
+- [ ] *(Deferred to Phase 11)* Retrofit camera shake through `clampShakeAmplitude` when the shake subsystem ships. Affects kickback, explosions, earthquake triggers.
+- [ ] *(Deferred to Phase 11)* Retrofit flash overlays (hit flashes, screen-wipe transitions) through `clampFlashAlpha` when the overlay subsystem ships.
+
+### Slice plan (approved 2026-04-23, order B → C → A)
+
+Each slice is a review-sized commit with tests + CHANGELOG entry. B and C are independent; A depends on neither.
+
+- **Slice B — subtitles:** `SubtitleQueue::tick(dt)` in `Engine::update` (B1); 2D HUD render pass for `activeSubtitles()` (B2); declarative `assets/captions.json` map + auto-enqueue on clip playback (B3).
+- **Slice C — photosensitive:** bloom intensity retrofit via `Renderer::setPhotosensitive` setter (C1); particle flicker retrofit via `clampStrobeHz` at emitter tick (C2).
+- **Slice A — audio:** `AudioBus` field on `AudioSourceComponent` + serializer (A1); `AudioSystem` per-frame gain-resolution pass pushing `master × bus × source` to `AL_GAIN` (A2); `AudioPanel` unification — bus sliders route through `SettingsEditor`, mute/solo/ducking stay panel-local (A3).
 
 ### Milestone
 Toggling any Settings tab option (bus gain, subtitle size, photosensitive safe mode, HRTF) produces an immediately-observable change in running game state — not just in the store. Every effect consumer reads from `Engine` getters rather than hard-coded values or its own parameter struct. No "set in Settings, nothing happens" gap remains.
