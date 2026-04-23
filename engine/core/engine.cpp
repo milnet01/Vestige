@@ -396,6 +396,13 @@ bool Engine::initialize(const EngineConfig& config)
         }
     }
 
+    // Phase 10.7 slice B3 — load the declarative caption map so any
+    // clip with a mapped entry fires its caption automatically when
+    // game code calls `CaptionMap::enqueueFor(clipPath, queue)`. The
+    // file is optional; a project that ships no captions simply has
+    // an empty map.
+    m_captionMap.loadFromFile(m_assetPath + "assets/captions.json");
+
     // Startup mode — editor (default) or play (CLI `--play`).
     if (m_editor && !config.startInPlayMode)
     {

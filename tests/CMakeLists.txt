@@ -106,6 +106,7 @@ add_executable(vestige_tests
     test_photosensitive_safety.cpp
     test_subtitle.cpp
     test_subtitle_renderer.cpp
+    test_caption_map.cpp
     test_game_screen.cpp
     test_ui_system_screen_stack.cpp
     test_notification_queue.cpp

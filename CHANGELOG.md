@@ -9,6 +9,70 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-23 Phase 10.7 — Slice B3: declarative caption map
+
+`CaptionMap` is the data layer that lets a project author captions
+in JSON once and have them fire automatically when the matching
+clip plays. It is a pure lookup primitive — load once from
+`assets/captions.json` at engine init, then `enqueueFor(clipPath,
+queue)` pushes a `Subtitle` into the engine-owned queue when the
+clip has a mapped entry, or no-ops silently when it doesn't.
+
+**Schema** (one-per-game, root object keyed by clip path):
+```json
+{
+  "audio/dialogue/moses_01.wav": {
+    "category": "Dialogue",
+    "speaker":  "Moses",
+    "text":     "Draw near the mountain.",
+    "duration": 3.5
+  }
+}
+```
+
+- `category` stringifies to `SubtitleCategory`; unknown values
+  default to `Dialogue` (least surprising for authored content).
+- `speaker` is optional, empty for non-dialogue.
+- `duration` in seconds; ≤ 0 or missing falls back to
+  `DEFAULT_CAPTION_DURATION_SECONDS = 3.0`.
+- Entries with empty `text` are skipped at load (authoring noise).
+
+**Wiring.** `Engine` gains `m_captionMap` + `getCaptionMap()`.
+During `initialize()`, the engine calls `m_captionMap.loadFromFile(
+assetPath + "assets/captions.json")`. Missing file = empty map
+(silent — not every project ships captions). Malformed JSON or
+non-object root logs a warning and leaves the map empty.
+
+**Size-capped load.** Uses the canonical
+`JsonSizeCap::loadJsonWithSizeCap` path so a malicious caption
+file can't OOM the process (AUDIT H4 / M17–M26 discipline).
+
+**Call-site integration.** For this slice game code invokes
+`engine.getCaptionMap().enqueueFor(clipPath, engine.getSubtitleQueue())`
+alongside `playSound(clipPath, …)` manually. Auto-trigger on
+playback lands naturally in Slice A2, where the new per-frame
+AudioSystem pass iterates `AudioSourceComponent`s and can fire the
+caption look-up at the same time. Keeping the two decoupled means
+B3 can ship before the audio rework and the audio rework doesn't
+carry caption-authoring concerns.
+
+**Tests.** `tests/test_caption_map.cpp` — 15 cases covering:
+- Defaults: empty map, null lookup.
+- Parsing: Dialogue / Narrator / SoundCue categories; unknown →
+  Dialogue; missing and non-positive durations → default.
+- Authoring hygiene: entries with empty text are skipped.
+- Malformed inputs: invalid JSON and non-object roots leave the
+  map empty without crashing.
+- `reload` clears previous entries.
+- `enqueueFor` no-ops for unknown clips; pushes onto the queue
+  for mapped clips.
+- `clear()` empties the map.
+- `parseSubtitleCategory` known + unknown strings.
+
+Full suite: 2696 passing (+15), 1 pre-existing skip. Slice B is
+now complete; Phase 10.7 proceeds to Slice C (photosensitive
+consumer retrofits — bloom + flicker).
+
 ### 2026-04-23 Phase 10.7 — Slice B2: subtitle HUD render pass
 
 Captions now appear on screen. `UISystem::renderUI` picks up

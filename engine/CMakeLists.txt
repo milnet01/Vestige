@@ -63,6 +63,7 @@ set(ENGINE_SOURCES
     accessibility/post_process_accessibility.cpp
     ui/subtitle.cpp
     ui/subtitle_renderer.cpp
+    ui/caption_map.cpp
     ui/game_screen.cpp
     ui/ui_accessible.cpp
     input/input_bindings.cpp

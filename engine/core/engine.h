@@ -28,6 +28,7 @@
 #include "physics/physics_debug.h"
 #include "testing/visual_test_runner.h"
 #include "core/system_registry.h"
+#include "ui/caption_map.h"
 #include "ui/subtitle.h"
 
 #include <memory>
@@ -184,6 +185,7 @@ private:
     ///   10.7 item.
     AudioMixer              m_audioMixer;
     SubtitleQueue           m_subtitleQueue;
+    CaptionMap              m_captionMap;
     PhotosensitiveLimits    m_photosensitiveLimits;
     bool                    m_photosensitiveEnabled = false;
 
@@ -281,6 +283,14 @@ public:
     ///        subtitle sink and size preset via `setSizePreset`.
     SubtitleQueue&       getSubtitleQueue()       { return m_subtitleQueue; }
     const SubtitleQueue& getSubtitleQueue() const { return m_subtitleQueue; }
+
+    /// @brief Engine-owned caption map (slice B3). Loaded from
+    ///        `assets/captions.json` at engine init; missing file
+    ///        means the project has no captions (empty map). Game
+    ///        code and subsystems call `enqueueFor(clipPath, queue)`
+    ///        to auto-fire a caption when a mapped clip plays.
+    CaptionMap&       getCaptionMap()       { return m_captionMap; }
+    const CaptionMap& getCaptionMap() const { return m_captionMap; }
 
     /// @brief Engine-owned photosensitive-safety state (slice 13.5e).
     ///        Consumers read via these accessors and pass to the
