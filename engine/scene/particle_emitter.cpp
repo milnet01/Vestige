@@ -333,15 +333,35 @@ glm::vec3 ParticleEmitterComponent::generateSpawnDirection() const
     }
 }
 
-std::optional<PointLight> ParticleEmitterComponent::getCoupledLight(const glm::vec3& worldPos) const
+std::optional<PointLight> ParticleEmitterComponent::getCoupledLight(
+    const glm::vec3& worldPos,
+    bool photosensitiveEnabled,
+    const PhotosensitiveLimits& limits) const
 {
     if (!m_config.emitsLight || m_data.count == 0)
     {
         return std::nullopt;
     }
 
+    // Phase 10.7 slice C2 — photosensitive safe-mode clamp.
+    //
+    // `flickerSpeed` is the angular coefficient of the primary `sin(t)`
+    // term, so the dominant flicker frequency in Hz is
+    //    f_hz = flickerSpeed / (2π).
+    // Convert, clamp through `clampStrobeHz` (which takes Hz), and
+    // convert back before using `flickerSpeed`. The secondary 3.1×
+    // harmonic is a ±10 % amplitude modulation and stays within the
+    // WCAG 10 % luminance-delta band at any reasonable authored base;
+    // clamping the base is sufficient for safe-mode correctness
+    // without chasing each harmonic separately.
+    static constexpr float TWO_PI = 6.28318530717958647692f;
+    const float authoredHz = m_config.flickerSpeed / TWO_PI;
+    const float safeHz     = clampStrobeHz(
+        authoredHz, photosensitiveEnabled, limits);
+    const float effectiveFlickerSpeed = safeHz * TWO_PI;
+
     // Multi-frequency flicker for organic fire light
-    float t = m_elapsedTime * m_config.flickerSpeed;
+    float t = m_elapsedTime * effectiveFlickerSpeed;
     float flicker = 0.8f + 0.2f * std::sin(t) * std::sin(t * 1.7f + 0.3f);
     flicker *= (0.9f + 0.1f * std::sin(t * 3.1f + 1.7f));
 

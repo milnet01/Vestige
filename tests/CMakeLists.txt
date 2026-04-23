@@ -104,6 +104,7 @@ add_executable(vestige_tests
     test_color_vision_filter.cpp
     test_fog.cpp
     test_photosensitive_safety.cpp
+    test_photosensitive_retrofit.cpp
     test_subtitle.cpp
     test_subtitle_renderer.cpp
     test_caption_map.cpp

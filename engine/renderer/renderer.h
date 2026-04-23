@@ -20,6 +20,7 @@
 #include "renderer/text_renderer.h"
 #include "renderer/color_grading_lut.h"
 #include "renderer/color_vision_filter.h"
+#include "accessibility/photosensitive_safety.h"
 #include "renderer/fog.h"
 #include "renderer/instance_buffer.h"
 #include "renderer/light_probe_manager.h"
@@ -322,6 +323,17 @@ public:
     void setPostProcessAccessibility(const PostProcessAccessibilitySettings& settings);
     const PostProcessAccessibilitySettings& getPostProcessAccessibility() const;
 
+    /// @brief Phase 10.7 slice C1 — pushes the engine's photosensitive
+    ///        safe-mode state into the renderer so the bloom composite
+    ///        can clamp its uploaded intensity at draw time.
+    ///
+    /// Called once per frame from `Engine::run()` so a mid-session
+    /// Settings toggle takes effect on the next drawn frame. Passing
+    /// `enabled = false` (default) means "no clamp" — the renderer
+    /// uploads `m_bloomIntensity` unchanged.
+    void setPhotosensitive(bool enabled,
+                           const PhotosensitiveLimits& limits);
+
     /// @brief Enables or disables SDSM (Sample Distribution Shadow Maps).
     void setSdsmEnabled(bool enabled);
 
@@ -620,6 +632,13 @@ private:
     // stores the settings and calls `applyFogAccessibilitySettings`
     // each frame.
     PostProcessAccessibilitySettings m_postProcessAccessibility;
+
+    // Phase 10.7 slice C1 — photosensitive safe-mode state, pushed
+    // from Engine::run() once per frame. The bloom composite reads
+    // these via limitBloomIntensity() at the uniform-upload site so
+    // enabling safe mode mid-session takes effect on the next frame.
+    bool                 m_photosensitiveEnabled = false;
+    PhotosensitiveLimits m_photosensitiveLimits{};
 
     // Anti-aliasing mode
     AntiAliasMode m_antiAliasMode = AntiAliasMode::MSAA_4X;

@@ -1204,9 +1204,18 @@ void Renderer::endFrame(float deltaTime)
     m_screenShader.setInt("u_tonemapMode", m_tonemapMode);
     m_screenShader.setInt("u_debugMode", m_debugMode);
 
-    // Bloom uniforms — ALWAYS bind texture (Mesa requires valid textures for declared samplers)
+    // Bloom uniforms — ALWAYS bind texture (Mesa requires valid textures for declared samplers).
+    // Phase 10.7 slice C1: photosensitive safe mode scales down the
+    // intensity via `limitBloomIntensity` so a user-visible slider
+    // change takes effect immediately without the composite shader
+    // needing to branch on safe-mode state. When disabled the helper
+    // returns the argument unchanged.
     m_screenShader.setBool("u_bloomEnabled", m_bloomEnabled);
-    m_screenShader.setFloat("u_bloomIntensity", m_bloomIntensity);
+    const float bloomIntensityUpload = limitBloomIntensity(
+        m_bloomIntensity,
+        m_photosensitiveEnabled,
+        m_photosensitiveLimits);
+    m_screenShader.setFloat("u_bloomIntensity", bloomIntensityUpload);
     if (m_bloomTexture != 0)
     {
         // Sample from mip 0 (the fully composited bloom result)
@@ -1838,6 +1847,13 @@ void Renderer::setBloomIntensity(float intensity)
 float Renderer::getBloomIntensity() const
 {
     return m_bloomIntensity;
+}
+
+void Renderer::setPhotosensitive(bool enabled,
+                                 const PhotosensitiveLimits& limits)
+{
+    m_photosensitiveEnabled = enabled;
+    m_photosensitiveLimits  = limits;
 }
 
 void Renderer::setSsaoEnabled(bool isEnabled)

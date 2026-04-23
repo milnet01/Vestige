@@ -33,14 +33,19 @@ void Scene::update(float deltaTime)
     m_root->update(deltaTime);
 }
 
-SceneRenderData Scene::collectRenderData() const
+SceneRenderData Scene::collectRenderData(
+    bool photosensitiveEnabled,
+    const PhotosensitiveLimits& limits) const
 {
     SceneRenderData data;
-    collectRenderDataRecursive(*m_root, data);
+    collectRenderDataRecursive(*m_root, data, photosensitiveEnabled, limits);
     return data;
 }
 
-void Scene::collectRenderData(SceneRenderData& data) const
+void Scene::collectRenderData(
+    SceneRenderData& data,
+    bool photosensitiveEnabled,
+    const PhotosensitiveLimits& limits) const
 {
     // Preserve previous capacity hints for first-frame pre-allocation.
     // After the first frame, clear() preserves capacity so no reallocation occurs.
@@ -59,7 +64,7 @@ void Scene::collectRenderData(SceneRenderData& data) const
     data.renderItems.reserve(prevRenderCount);
     data.transparentItems.reserve(prevTransparentCount);
 
-    collectRenderDataRecursive(*m_root, data);
+    collectRenderDataRecursive(*m_root, data, photosensitiveEnabled, limits);
 }
 
 std::vector<AABB> Scene::collectColliders() const
@@ -211,7 +216,11 @@ bool Scene::reparentEntity(uint32_t entityId, uint32_t newParentId)
     return true;
 }
 
-void Scene::collectRenderDataRecursive(const Entity& entity, SceneRenderData& data) const
+void Scene::collectRenderDataRecursive(
+    const Entity& entity,
+    SceneRenderData& data,
+    bool photosensitiveEnabled,
+    const PhotosensitiveLimits& limits) const
 {
     if (!entity.isActive())
     {
@@ -341,9 +350,14 @@ void Scene::collectRenderDataRecursive(const Entity& entity, SceneRenderData& da
     {
         data.particleEmitters.emplace_back(particleEmitter, entity.getWorldMatrix());
 
-        // Collect coupled light from fire emitters
+        // Collect coupled light from fire emitters. Phase 10.7 slice
+        // C2 threads photosensitive state here so the flicker-speed
+        // clamp takes effect at every render-data collection — camera
+        // reflection / refraction / id passes all see the same
+        // clamped value as the primary view.
         glm::vec3 emitterPos = glm::vec3(entity.getWorldMatrix()[3]);
-        auto coupledLight = particleEmitter->getCoupledLight(emitterPos);
+        auto coupledLight = particleEmitter->getCoupledLight(
+            emitterPos, photosensitiveEnabled, limits);
         if (coupledLight.has_value())
         {
             data.pointLights.push_back(coupledLight.value());
@@ -373,7 +387,8 @@ void Scene::collectRenderDataRecursive(const Entity& entity, SceneRenderData& da
     // Recurse into children
     for (const auto& child : entity.getChildren())
     {
-        collectRenderDataRecursive(*child, data);
+        collectRenderDataRecursive(*child, data,
+                                   photosensitiveEnabled, limits);
     }
 }
 

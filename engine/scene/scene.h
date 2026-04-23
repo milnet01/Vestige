@@ -103,11 +103,20 @@ public:
 
     /// @brief Collects all renderable data for the renderer.
     /// @return Render data containing meshes, materials, transforms, and lights.
-    SceneRenderData collectRenderData() const;
+    /// @param photosensitiveEnabled Forwarded to particle emitters that
+    ///        produce flickering coupled lights so safe mode can clamp
+    ///        the flicker frequency. Defaults to `false` (no clamp).
+    /// @param limits Photosensitive caps when `photosensitiveEnabled`.
+    SceneRenderData collectRenderData(
+        bool photosensitiveEnabled = false,
+        const PhotosensitiveLimits& limits = {}) const;
 
     /// @brief Fills existing render data (clears and reuses allocated memory).
     /// @param data Output render data — vectors are cleared but capacity is preserved.
-    void collectRenderData(SceneRenderData& data) const;
+    void collectRenderData(
+        SceneRenderData& data,
+        bool photosensitiveEnabled = false,
+        const PhotosensitiveLimits& limits = {}) const;
 
     /// @brief Collects all world-space AABBs for collision detection.
     /// @return List of world-space bounding boxes.
@@ -177,7 +186,11 @@ public:
     void unregisterEntityRecursive(Entity* entity);
 
 private:
-    void collectRenderDataRecursive(const Entity& entity, SceneRenderData& data) const;
+    void collectRenderDataRecursive(
+        const Entity& entity,
+        SceneRenderData& data,
+        bool photosensitiveEnabled,
+        const PhotosensitiveLimits& limits) const;
     void collectCollidersRecursive(const Entity& entity, std::vector<AABB>& colliders) const;
 
     std::string m_name;

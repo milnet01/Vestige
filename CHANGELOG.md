@@ -9,6 +9,76 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-23 Phase 10.7 — Slice C: photosensitive consumer retrofits
+
+Closes the Settings → runtime gap for photosensitive safe mode
+on the two consumers that actually exist in the codebase today
+(per §4.3 of the design doc). Camera shake and flash overlay
+retrofits remain deferred to Phase 11 when the originating
+subsystems land.
+
+**C1 — bloom intensity clamp.** `Renderer` gains
+`setPhotosensitive(enabled, limits)` and reads the stored state
+at the bloom upload site:
+```cpp
+const float bloomIntensityUpload = limitBloomIntensity(
+    m_bloomIntensity,
+    m_photosensitiveEnabled,
+    m_photosensitiveLimits);
+m_screenShader.setFloat("u_bloomIntensity", bloomIntensityUpload);
+```
+The authored `m_bloomIntensity` is preserved; only the uploaded
+value is clamped. Disabling safe mode returns bloom to its
+authored look without any per-frame cost (the helper is an
+identity pass when `enabled == false`).
+
+`Engine::run()` pushes the engine's current photosensitive state
+into the renderer once per frame in the existing
+`AccessibilityTick` profiler scope so a mid-session Settings
+toggle takes effect on the next drawn frame.
+
+**C2 — particle flicker clamp.** `ParticleEmitterComponent::
+getCoupledLight` gains optional `photosensitiveEnabled` +
+`limits` parameters (defaults preserve existing behaviour for
+any caller that doesn't thread state through). The emitter's
+`flickerSpeed` is an angular coefficient; the retrofit converts
+it to Hz (`speed / 2π`), runs `clampStrobeHz`, and converts back
+— so a `flickerSpeed` of 20 (≈ 3.18 Hz) clamps down to ≈ 12.57
+when safe mode is on (2 Hz × 2π). The harmonic 3.1× modulation
+stays intact; it sits within the WCAG 10 % ΔL band even when the
+base runs at the ceiling.
+
+`Scene::collectRenderData` gains matching optional parameters
+and threads the state through `collectRenderDataRecursive` into
+every `getCoupledLight` call. The main render path in
+`Engine::run` passes the engine's state; offline paths (SH grid
+bake, cubemap probe capture) keep the defaults — bakes capture
+the authored look, not the safe-mode look, which is the right
+call for asset authoring.
+
+**Tests.** `tests/test_photosensitive_retrofit.cpp` — 5 cases:
+- Safe mode off + safe mode on with inert limits produce
+  identical coupled-light diffuse output (identity preservation).
+- Above-ceiling flicker (`flickerSpeed = 20`, ≈ 3.18 Hz) under a
+  2 Hz cap produces a *different* diffuse than the unclamped
+  version — the clamp is actually doing work.
+- Below-ceiling flicker (`flickerSpeed = 10`, ≈ 1.59 Hz) under
+  the default 2 Hz cap is an identity pass.
+- The coupled light is still emitted when safe mode clamps
+  (safe mode slows flicker, never suppresses the light).
+- Sanity on the Hz conversion: 20 → 3.18309886 Hz → clamp to
+  2 Hz → 12.566371 angular coefficient.
+
+The C1 bloom clamp is validated through the existing
+`test_photosensitive_safety.cpp` coverage of `limitBloomIntensity`
+— the uniform-upload retrofit itself is a one-line wrap that
+would need a live GL context to test end-to-end, outside the
+unit-test budget.
+
+Full suite: 2701 passing (+5), 1 pre-existing skip. Slice C
+complete; Phase 10.7 now proceeds to Slice A (audio bus tagging
++ gain chain — the largest remaining slice).
+
 ### 2026-04-23 Phase 10.7 — Slice B3: declarative caption map
 
 `CaptionMap` is the data layer that lets a project author captions

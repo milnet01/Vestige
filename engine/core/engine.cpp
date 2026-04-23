@@ -1170,9 +1170,18 @@ void Engine::run()
         //     count down against real frame dt. The render-side consumer
         //     lands in slice B2; without slice B2 captions expire silently
         //     but the queue stays correct.)
+        //
+        //     Slice C1: push photosensitive safe-mode state into the
+        //     renderer each frame so the bloom composite reads a fresh
+        //     value after any Settings toggle.
         {
             VESTIGE_PROFILE_SCOPE("AccessibilityTick");
             m_subtitleQueue.tick(deltaTime);
+            if (m_renderer)
+            {
+                m_renderer->setPhotosensitive(m_photosensitiveEnabled,
+                                              m_photosensitiveLimits);
+            }
         }
 
         // 5. Controller — process input and update camera
@@ -1218,7 +1227,10 @@ void Engine::run()
 
         if (activeScene)
         {
-            activeScene->collectRenderData(m_renderData);
+            activeScene->collectRenderData(
+                m_renderData,
+                m_photosensitiveEnabled,
+                m_photosensitiveLimits);
 
             // Sync foliage wind time for shadow pass (must match main foliage pass)
             m_renderer->setFoliageShadowTime(static_cast<float>(m_timer->getElapsedTime()));

@@ -5,6 +5,7 @@
 /// @brief Particle emitter component with SoA data container and CPU simulation.
 #pragma once
 
+#include "accessibility/photosensitive_safety.h"
 #include "scene/component.h"
 #include "renderer/light.h"
 #include "editor/widgets/animation_curve.h"
@@ -144,7 +145,19 @@ public:
     /// @brief Returns a coupled point light if emitsLight is enabled, or nullopt.
     /// The light flickers based on elapsed time.
     /// @param worldPos World-space position of the emitter.
-    std::optional<PointLight> getCoupledLight(const glm::vec3& worldPos) const;
+    /// @param photosensitiveEnabled When true, the flicker's dominant
+    ///        frequency is clamped through `clampStrobeHz` so a fire
+    ///        emitter cannot strobe faster than the safe-mode ceiling.
+    ///        The authored `flickerSpeed` in `ParticleEmitterConfig`
+    ///        is preserved — only the effective frequency at draw
+    ///        time is clamped, so disabling safe mode returns the
+    ///        emitter to its authored character.
+    /// @param limits Photosensitive caps to apply when
+    ///        `photosensitiveEnabled` is true.
+    std::optional<PointLight> getCoupledLight(
+        const glm::vec3& worldPos,
+        bool photosensitiveEnabled = false,
+        const PhotosensitiveLimits& limits = {}) const;
 
 private:
     void spawnParticle(const glm::mat4& worldMatrix);
