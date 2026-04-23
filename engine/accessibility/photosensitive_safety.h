@@ -17,7 +17,16 @@
 /// The module is policy-only. Subsystems consult `clampFlashAlpha`,
 /// `clampShakeAmplitude`, `clampStrobeHz`, and `limitBloomIntensity`
 /// before handing their values to the renderer/camera. When safe mode is
-/// disabled every helper is an identity pass-through — zero runtime cost.
+/// disabled every helper passes finite, non-negative inputs through
+/// unmodified — zero runtime cost on the hot path.
+///
+/// **WCAG 2.2 SC 2.3.1 sanitisation contract.** All four helpers sanitise
+/// NaN / ±inf / negative inputs to `0.0f` in *both* enabled and disabled
+/// paths. A buggy upstream producing a non-finite or negative value must
+/// never reach the renderer, because downstream blending would paint an
+/// arbitrary pixel brightness that defeats the safe-flashing guarantee.
+/// The sanitisation is deliberately unconditional — a user toggling safe
+/// mode off does not opt out of NaN-scrubbing.
 #pragma once
 
 namespace Vestige
@@ -58,8 +67,9 @@ struct PhotosensitiveLimits
 /// @param alpha     The alpha the effect wants to apply this frame (0..1).
 /// @param enabled   Current safe-mode state.
 /// @param limits    Caps to apply (defaults to the published limits).
-/// @returns `alpha` unchanged when `enabled` is false; otherwise
-///          `min(alpha, limits.maxFlashAlpha)`.
+/// @returns Finite, non-negative `alpha` when `enabled` is false; otherwise
+///          `min(sanitised alpha, limits.maxFlashAlpha)`. NaN / ±inf /
+///          negative inputs return `0.0f` regardless of `enabled`.
 float clampFlashAlpha(float alpha,
                       bool enabled,
                       const PhotosensitiveLimits& limits = {});
@@ -68,8 +78,10 @@ float clampFlashAlpha(float alpha,
 /// @param amplitude Shake amplitude (unitless; >= 0).
 /// @param enabled   Current safe-mode state.
 /// @param limits    Caps to apply.
-/// @returns `amplitude` unchanged when `enabled` is false; otherwise
-///          `amplitude * limits.shakeAmplitudeScale`.
+/// @returns Finite, non-negative `amplitude` when `enabled` is false;
+///          otherwise `sanitised amplitude * limits.shakeAmplitudeScale`.
+///          NaN / ±inf / negative inputs return `0.0f` regardless of
+///          `enabled`.
 float clampShakeAmplitude(float amplitude,
                           bool enabled,
                           const PhotosensitiveLimits& limits = {});
@@ -78,8 +90,9 @@ float clampShakeAmplitude(float amplitude,
 /// @param hz      Requested strobe frequency (Hz, >= 0).
 /// @param enabled Current safe-mode state.
 /// @param limits  Caps to apply.
-/// @returns `hz` unchanged when `enabled` is false; otherwise
-///          `min(hz, limits.maxStrobeHz)`.
+/// @returns Finite, non-negative `hz` when `enabled` is false; otherwise
+///          `min(sanitised hz, limits.maxStrobeHz)`. NaN / ±inf / negative
+///          inputs return `0.0f` regardless of `enabled`.
 float clampStrobeHz(float hz,
                     bool enabled,
                     const PhotosensitiveLimits& limits = {});
@@ -88,8 +101,10 @@ float clampStrobeHz(float hz,
 /// @param intensity Requested bloom intensity (>= 0).
 /// @param enabled   Current safe-mode state.
 /// @param limits    Caps to apply.
-/// @returns `intensity` unchanged when `enabled` is false; otherwise
-///          `intensity * limits.bloomIntensityScale`.
+/// @returns Finite, non-negative `intensity` when `enabled` is false;
+///          otherwise `sanitised intensity * limits.bloomIntensityScale`.
+///          NaN / ±inf / negative inputs return `0.0f` regardless of
+///          `enabled`.
 float limitBloomIntensity(float intensity,
                           bool enabled,
                           const PhotosensitiveLimits& limits = {});
