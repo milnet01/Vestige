@@ -8,6 +8,8 @@
 
 #include <gtest/gtest.h>
 
+#include <limits>
+
 #include "accessibility/photosensitive_safety.h"
 
 using namespace Vestige;
@@ -132,4 +134,129 @@ TEST(PhotosensitiveSafety, CustomLimitsOverrideDefaults)
     EXPECT_NEAR(clampShakeAmplitude(10.0f, true, tight), 0.0f, kEps);
     EXPECT_NEAR(clampStrobeHz(5.0f, true, tight), 0.5f, kEps);
     EXPECT_NEAR(limitBloomIntensity(1.0f, true, tight), 0.25f, kEps);
+}
+
+// -----------------------------------------------------------------------------
+// Phase 10.9 Slice 1 F4 — NaN / ±∞ / negative sanitisation in BOTH paths.
+//
+// WCAG 2.2 Success Criterion 2.3.1 ("Three Flashes or Below Threshold") requires
+// that content *cannot* exceed the safe-flashing thresholds. A helper that
+// returns NaN, ±∞, or a negative value when fed a bad upstream input silently
+// defeats that guarantee — downstream `std::min` / `x * scale` produces
+// undefined pixel values that may render as arbitrary brightness, and safe
+// mode's presence or absence must not change that sanitisation contract.
+//
+// Test naming follows the Phase 10.9 preamble pattern:
+//     TEST(Photosensitive, WCAG_2_3_1_*)
+// so that a grep for the WCAG clause lands on the enforcing tests.
+// -----------------------------------------------------------------------------
+
+namespace
+{
+constexpr float kQuietNaN = std::numeric_limits<float>::quiet_NaN();
+constexpr float kPosInf   = std::numeric_limits<float>::infinity();
+constexpr float kNegInf   = -std::numeric_limits<float>::infinity();
+} // namespace
+
+// --- Flash alpha ---
+
+TEST(PhotosensitiveSafety, WCAG_2_3_1_FlashAlphaNaNSanitisedInBothPaths)
+{
+    EXPECT_FLOAT_EQ(clampFlashAlpha(kQuietNaN, false), 0.0f);
+    EXPECT_FLOAT_EQ(clampFlashAlpha(kQuietNaN, true),  0.0f);
+}
+
+TEST(PhotosensitiveSafety, WCAG_2_3_1_FlashAlphaInfSanitisedInBothPaths)
+{
+    EXPECT_FLOAT_EQ(clampFlashAlpha(kPosInf, false), 0.0f);
+    EXPECT_FLOAT_EQ(clampFlashAlpha(kPosInf, true),  0.0f);
+    EXPECT_FLOAT_EQ(clampFlashAlpha(kNegInf, false), 0.0f);
+    EXPECT_FLOAT_EQ(clampFlashAlpha(kNegInf, true),  0.0f);
+}
+
+TEST(PhotosensitiveSafety, WCAG_2_3_1_FlashAlphaNegativeClampedToZero)
+{
+    EXPECT_FLOAT_EQ(clampFlashAlpha(-1.0f,  false), 0.0f);
+    EXPECT_FLOAT_EQ(clampFlashAlpha(-0.25f, true),  0.0f);
+}
+
+// --- Shake amplitude ---
+
+TEST(PhotosensitiveSafety, WCAG_2_3_1_ShakeAmplitudeNaNSanitisedInBothPaths)
+{
+    EXPECT_FLOAT_EQ(clampShakeAmplitude(kQuietNaN, false), 0.0f);
+    EXPECT_FLOAT_EQ(clampShakeAmplitude(kQuietNaN, true),  0.0f);
+}
+
+TEST(PhotosensitiveSafety, WCAG_2_3_1_ShakeAmplitudeInfSanitisedInBothPaths)
+{
+    EXPECT_FLOAT_EQ(clampShakeAmplitude(kPosInf, false), 0.0f);
+    EXPECT_FLOAT_EQ(clampShakeAmplitude(kPosInf, true),  0.0f);
+    EXPECT_FLOAT_EQ(clampShakeAmplitude(kNegInf, false), 0.0f);
+    EXPECT_FLOAT_EQ(clampShakeAmplitude(kNegInf, true),  0.0f);
+}
+
+TEST(PhotosensitiveSafety, WCAG_2_3_1_ShakeAmplitudeNegativeClampedToZero)
+{
+    EXPECT_FLOAT_EQ(clampShakeAmplitude(-5.0f, false), 0.0f);
+    EXPECT_FLOAT_EQ(clampShakeAmplitude(-1.0f, true),  0.0f);
+}
+
+// --- Strobe Hz ---
+
+TEST(PhotosensitiveSafety, WCAG_2_3_1_StrobeHzNaNSanitisedInBothPaths)
+{
+    EXPECT_FLOAT_EQ(clampStrobeHz(kQuietNaN, false), 0.0f);
+    EXPECT_FLOAT_EQ(clampStrobeHz(kQuietNaN, true),  0.0f);
+}
+
+TEST(PhotosensitiveSafety, WCAG_2_3_1_StrobeHzInfSanitisedInBothPaths)
+{
+    EXPECT_FLOAT_EQ(clampStrobeHz(kPosInf, false), 0.0f);
+    EXPECT_FLOAT_EQ(clampStrobeHz(kPosInf, true),  0.0f);
+    EXPECT_FLOAT_EQ(clampStrobeHz(kNegInf, false), 0.0f);
+    EXPECT_FLOAT_EQ(clampStrobeHz(kNegInf, true),  0.0f);
+}
+
+TEST(PhotosensitiveSafety, WCAG_2_3_1_StrobeHzNegativeClampedToZero)
+{
+    EXPECT_FLOAT_EQ(clampStrobeHz(-10.0f, false), 0.0f);
+    EXPECT_FLOAT_EQ(clampStrobeHz(-1.0f,  true),  0.0f);
+}
+
+// --- Bloom intensity ---
+
+TEST(PhotosensitiveSafety, WCAG_2_3_1_BloomIntensityNaNSanitisedInBothPaths)
+{
+    EXPECT_FLOAT_EQ(limitBloomIntensity(kQuietNaN, false), 0.0f);
+    EXPECT_FLOAT_EQ(limitBloomIntensity(kQuietNaN, true),  0.0f);
+}
+
+TEST(PhotosensitiveSafety, WCAG_2_3_1_BloomIntensityInfSanitisedInBothPaths)
+{
+    EXPECT_FLOAT_EQ(limitBloomIntensity(kPosInf, false), 0.0f);
+    EXPECT_FLOAT_EQ(limitBloomIntensity(kPosInf, true),  0.0f);
+    EXPECT_FLOAT_EQ(limitBloomIntensity(kNegInf, false), 0.0f);
+    EXPECT_FLOAT_EQ(limitBloomIntensity(kNegInf, true),  0.0f);
+}
+
+TEST(PhotosensitiveSafety, WCAG_2_3_1_BloomIntensityNegativeClampedToZero)
+{
+    EXPECT_FLOAT_EQ(limitBloomIntensity(-2.0f, false), 0.0f);
+    EXPECT_FLOAT_EQ(limitBloomIntensity(-0.5f, true),  0.0f);
+}
+
+// --- Regression: finite, non-negative disabled values still pass through.
+//
+// The existing "DisabledIsIdentityFor*" tests above already pin this for happy
+// values; this block pins it for the exact boundary values (0.0f) that the
+// F4 sanitiser passes through unmodified, so future refactors can't regress
+// the disabled path into a global ceiling.
+
+TEST(PhotosensitiveSafety, WCAG_2_3_1_DisabledPreservesFinitePositives)
+{
+    EXPECT_FLOAT_EQ(clampFlashAlpha(0.99f, false),     0.99f);
+    EXPECT_FLOAT_EQ(clampShakeAmplitude(100.0f, false), 100.0f);
+    EXPECT_FLOAT_EQ(clampStrobeHz(60.0f, false),       60.0f);
+    EXPECT_FLOAT_EQ(limitBloomIntensity(5.0f, false),   5.0f);
 }
