@@ -1157,6 +1157,17 @@ void Engine::run()
             m_systemRegistry.updateAll(deltaTime);
         }
 
+        // 4d. Accessibility stores — tick per-frame timers on engine-owned
+        //     stores so captions expire, ducking slews, etc. (Phase 10.7
+        //     slice B1: SubtitleQueue::tick wired here so enqueued captions
+        //     count down against real frame dt. The render-side consumer
+        //     lands in slice B2; without slice B2 captions expire silently
+        //     but the queue stays correct.)
+        {
+            VESTIGE_PROFILE_SCOPE("AccessibilityTick");
+            m_subtitleQueue.tick(deltaTime);
+        }
+
         // 5. Controller — process input and update camera
         Scene* activeScene = m_sceneManager->getActiveScene();
         if (m_usePhysicsController && m_physicsCharController->isInitialized())

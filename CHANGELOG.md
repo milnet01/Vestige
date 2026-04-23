@@ -9,6 +9,27 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-23 Phase 10.7 — Slice B1: SubtitleQueue tick wired into run loop
+
+`Engine::run()` now calls `m_subtitleQueue.tick(deltaTime)` each
+frame as step 4d (between domain-system update and controller
+update). Previously the engine owned `m_subtitleQueue` but never
+ticked it — any caption `enqueue()` would sit at its full
+duration forever because the countdown was never driven.
+
+Wrapped in a `VESTIGE_PROFILE_SCOPE("AccessibilityTick")` so the
+frame profiler attributes the ~sub-microsecond cost correctly
+and leaves room for adjacent per-frame store ticks (audio
+gain-pass in slice A2, ducking slew when that slice lands).
+
+Render-side consumption arrives in slice B2 — enqueued captions
+now expire at the correct time, but aren't visible until B2
+lands the 2D HUD pass. No new test: 17 existing
+`tests/test_subtitle.cpp` tests already cover `tick(dt)`
+semantics across durations, overshoots, and negative deltas;
+the wire-up itself is a one-line integration that slice B2
+validates visually.
+
 ### 2026-04-23 Phase 10.7 — design doc approved, scope reduced
 
 `docs/PHASE10_7_DESIGN.md` drafted + approved on the same day. Six
