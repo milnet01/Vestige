@@ -9,6 +9,96 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-23 ROADMAP: sync Open-Source Release section with actual launch state
+
+The "Still pending before flipping public" checklist in the
+Open-Source Release section was stale — every item on it was
+completed at the 2026-04-15 launch, but the ROADMAP still read as
+if the repo hadn't gone public yet. Replaced that list with the
+actual launch note + the four items still genuinely open post-
+launch, each with a `docs/PRE_OPEN_SOURCE_AUDIT.md` cross-reference:
+
+- **Pending:** VestigeAssets visibility flip + CI default restore
+  (blocked on `milnet01/VestigeAssets` going public at ~v1.0.0)
+- **Pending:** Third-party clean-clone build validation (maintainer
+  did the 2026-04-15 dry-run; first community PR closes this
+  asynchronously)
+- **Pending:** Biblical content migration to private `Tabernacle`
+  repo (maintainer cross-machine sync; not blocking engine work)
+- **Pending:** Trademark decision on the "Vestige" name (deferred
+  until there's something worth protecting at scale)
+
+Also added two ongoing-discipline bullets to Post-Release
+Commitments (weekly triage, quarterly ROADMAP revisit), both
+referenced from `docs/PRE_OPEN_SOURCE_AUDIT.md` §224-225. The
+quarterly-revisit bullet calls out today's Phase 10/11/16
+restructure as the canonical example of what that revisit should
+catch early.
+
+No code changed.
+
+### 2026-04-23 ROADMAP: resolve consumer-before-system dependency inversions
+
+Audited the ROADMAP for features scheduled before their underlying
+systems and restructured to make every ordering dependency explicit.
+No code changed; this is a planning document rewrite.
+
+**Changes:**
+
+- **New Phase 10.8 — Rendering & Camera Prerequisites.** Pulled
+  Camera Modes, Decal System, and Post-Processing Effects Suite
+  out of Phase 10's tail bullets into their own phase that gates
+  Phase 11B. These three sections were Phase 10 bullets with no
+  stated ordering relationship to Phase 11; Phase 11B combat, damage
+  feedback, hit decals, and vehicle cameras all depend on them.
+  Phase 10 now holds pointers to the moved sections.
+- **Phase 11 split into 11A (infrastructure) + 11B (features).**
+  Phase 11A contains the runtime subsystems every Phase 11B feature
+  consumes: CameraShakeSystem (finally consumes the shipped
+  `clampShakeAmplitude`), ScreenFlashSystem (finally consumes
+  `clampFlashAlpha`), Save File Compression (zstd — shared with
+  Phase 12 asset packaging), Replay Recording Infrastructure
+  (recorder / player / `.vreplay` format / determinism contract,
+  moved out of the original Phase 11 Replay section), Behavior
+  Tree Runtime (moved from Phase 16), and AI Perception System
+  (moved from Phase 16). Phase 11B retains the original gameplay
+  features (combat, health, inventory, save/checkpoint, hazards,
+  vehicle, horror action, replay features) with references updated
+  to cite Phase 10.8 and Phase 11A by name.
+- **Phase 16 — Behavior Trees + AI Perception stubbed to pointers
+  into Phase 11A.** Both sections were load-bearing for Phase 11B
+  enemy / traffic / opponent AI; scheduling them in Phase 16 was
+  the single biggest consumer-before-system inversion in the
+  roadmap.
+- **Phase 12 — added explicit ffmpeg pipeline bullet** under Asset
+  Pipeline. Previously the Phase 11 replay "Export to MP4 via
+  ffmpeg" referenced a pipeline that existed nowhere on the roadmap.
+- **Phase 13 — cross-reference notes on duplicate entries** (SSS,
+  volumetric lighting). Clarifies that Phase 10 ships the basic
+  implementation and Phase 13 is the upgrade path, so readers don't
+  mistake the duplication for two separate origins.
+- **Fixed factual error in Phase 11B Horror Action Polish.** The
+  "Diegetic holographic UI" bullet claimed `UIElement::worldProjection`
+  and `engine/ui/ui_in_world.{h,cpp}` already exist. They don't —
+  `find` across the engine tree returns no matches. Replaced with
+  an explicit "not yet shipped" world-space UI pathway bullet that
+  must land before the diegetic-UI features that consume it.
+- **Phase 11B Damage feedback, status effects, vehicle cameras**
+  updated to cite Phase 10.8 PP / Decal / Camera Modes and Phase 11A
+  shake / flash by name, so readers can see the dependency chain
+  without reconstructing it.
+
+**Why:** the user asked whether systems are in place before features
+that require them. An audit of Phase 10 → Phase 24 surfaced several
+inversions — behavior trees / AI perception scheduled in Phase 16
+but consumed by Phase 11 AI; camera shake / flash clamp consumers
+not scheduled anywhere after Phase 10.7 deferred them; zstd only
+mentioned as a Phase 12 asset bullet but needed by Phase 11 save;
+ffmpeg referenced by Phase 11 replay but scheduled nowhere. Each
+would have surfaced at implementation time as scope creep; the
+split makes them named infrastructure bullets with explicit
+consumers and predecessors.
+
 ### 2026-04-23 Phase 10.7 — Slice A3: AudioPanel unification
 
 Completes Slice A by removing the parallel mixer state in the

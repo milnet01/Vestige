@@ -922,13 +922,7 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
 - [x] Editor integration — `AudioPanel` in `engine/editor/panels/audio_panel.{h,cpp}` ships a four-tab editor surface over the Phase 10 audio pipeline: **Mixer** (per-bus gains for Master/Music/Voice/Sfx/Ambient/Ui + dialogue-duck trigger + attack/release/floor controls + live current-gain readout), **Sources** (iterates scene via `Scene::forEachEntity` picking `AudioSourceComponent`, per-entity mute/solo checkboxes + volume/pitch/min-max-distance sliders + attenuation model readout), **Zones** (reverb-zone add/remove/select with name + center + core radius + falloff band + preset combo; mirror placement surface for ambient zones with clipPath + priority), **Debug** (audio-availability indicator + distance model + Doppler factor + speed-of-sound + HRTF mode/status/dataset + available-dataset enumeration). Panel exposes `computeEffectiveSourceGain(entityId, bus)` — mute beats solo, solo-exclusive routing when any source soloed, otherwise `master · bus · duckGain` clamped to [0, 1]. Registered via `Engine::initialize` → `Editor::setAudioSystem(m_systemRegistry.getSystem<AudioSystem>())` + drawn each editor frame alongside NavigationPanel. 18 headless unit tests cover defaults, open/close toggle, zone add/remove/selection-shift, mute/solo state, effective-gain routing, and overlay toggle.
 
 ### Camera Modes
-- [ ] Camera mode system (switchable projection and control schemes per scene/game)
-- [ ] First-person camera (existing — WASD + mouse look, perspective projection)
-- [ ] Third-person camera (follow entity with orbit controls, perspective projection)
-- [ ] **Runtime first-person ↔ third-person toggle** — single input binding (default `V`, matching Skyrim / GTA / Minecraft convention) that swaps the active CameraComponent between the player entity's first-person rig and the third-person follow rig without teardown. Shared entity / input / HUD state; only the camera source changes. Configurable: which input action triggers it, whether the toggle is allowed during combat / dialogue / vehicle mode, and per-scene opt-out for first-person-locked walkthroughs (e.g. biblical content). Smooth transition optional (lerp over 150 ms) or instant; respects `AccessibilitySettings.reducedMotion`. Edge case: third-person interior cameras clip walls — mitigate with a physics sphere-cast on the boom arm (standard third-person pattern) before hitting this phase's implementation.
-- [ ] Isometric camera (fixed-angle orthographic projection, click-to-move input, Diablo-style)
-- [ ] Top-down camera (overhead orthographic, suitable for strategy or map views)
-- [ ] Cinematic camera (spline-based flythrough for guided tours and cutscenes)
+*Moved to Phase 10.8 — see that phase for the full list. Retained here as a pointer so anyone reading Phase 10 knows where the section went.*
 
 ### Localization
 - [ ] Multi-language text support (UTF-8, language selection)
@@ -948,35 +942,10 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
 - [x] Screen-reader friendly UI labels (ARIA-like semantic tags on ImGui widgets where feasible) — `UIAccessibleRole` enum (Button / Checkbox / Slider / Dropdown / KeybindRow / Label / Panel / Image / ProgressBar / Crosshair / Unknown) + `UIAccessibleInfo` (role + label + description + hint + value) in `engine/ui/ui_accessible.{h,cpp}`. Every `UIElement` carries `m_accessible`; every widget sets its role in its constructor. `UIElement::collectAccessible()` walks the tree, skips hidden subtrees entirely, and emits a flat `UIAccessibilitySnapshot` list for a future TTS bridge. `UICanvas::collectAccessible()` returns the canvas-wide enumeration. 13 new unit tests. Scope note: the in-game `UIElement` tree is covered; ImGui editor widgets are a separate surface and are deferred — they need per-widget label attachment at call sites rather than per-type constructor-set roles.
 
 ### Decal System
-Projected textures for blood splatters, scorch marks, claw scratches, bullet holes, and environmental storytelling.
-- [ ] Deferred decal rendering (project decal texture onto G-buffer geometry)
-  - Box-projected decals (oriented bounding box defines projection volume)
-  - Decals modify albedo, normal, roughness, and/or metallic channels
-  - Depth-tested to prevent projection onto distant surfaces
-- [ ] Persistent decals that accumulate during gameplay
-  - Decal pool with maximum count (oldest decals fade when limit reached)
-  - Configurable lifetime and fade curve per decal type
-- [ ] Animated decals (spreading blood pools, flickering holograms, growing cracks)
-  - UV animation (scrolling, scaling over time)
-  - Sprite sheet frame animation for complex effects
-- [ ] Decal presets: blood splatter, bullet hole, scorch mark, claw scratch, footprint, water stain
-- [ ] Editor integration — place and orient decals in editor, preview projection volume
+*Moved to Phase 10.8 — see that phase for the full list.*
 
 ### Post-Processing Effects Suite
-Cinematic and atmospheric post-processing for horror, drama, and stylized rendering.
-
-**Tonemapping policy:** ACES 1.3 remains the default (matches current `HDR rendering and tone mapping` item from Phase 4). ACES 2.0 is opt-in only — the 2.0 committee prioritised SDR compatibility over HDR gamut usage, which desaturates HDR highlights by design (ref: Tarpini / Gilbert commentary, March 2026 — https://daejeonchronicles.com/2026/03/11/aces-2-0-we-are-in-for-some-further-years-of-bad-hdr/). Author any custom exposure / highlight curves via the Formula Workbench.
-
-- [ ] ACES 2.0 tonemap option (opt-in alternative to the ACES 1.3 default; kept side-by-side for HDR output, user-selectable)
-- [ ] Film grain (noise overlay, configurable intensity and grain size)
-- [ ] Chromatic aberration (RGB channel offset, stronger at screen edges)
-- [ ] Vignette (screen edge darkening, configurable intensity and radius)
-- [ ] Screen distortion (barrel/pincushion, heat haze, damage effects)
-- [ ] Damage/low-health screen effects (red vignette, blur, heartbeat pulse, desaturation)
-- [ ] Death screen effects (slow desaturation, blur ramp, fade to black)
-- [ ] Color grading per-scene (warm golden interiors, cold blue corridors, sickly green toxic areas)
-- [ ] Lens flare (anamorphic streaks and ghost artifacts from bright lights)
-- [ ] Sharpen filter (contrast-adaptive sharpening for post-upscale clarity)
+*Moved to Phase 10.8 — see that phase for the full list, including the tonemapping policy note.*
 
 ### Rendering Enhancements
 - [ ] Subsurface scattering (SSS) — light transmission through thin/translucent materials
@@ -1138,8 +1107,146 @@ Toggling any Settings tab option (bus gain, subtitle size, photosensitive safe m
 
 ---
 
-## Phase 11: Gameplay Systems
-**Goal:** Core gameplay mechanics for action, survival, horror, and racing games — combat, inventory, health, saves, environmental interaction, and vehicle physics.
+## Phase 10.8: Rendering & Camera Prerequisites
+**Goal:** Complete the Phase 10 rendering and camera subsystems that Phase 11B depends on. This phase was split out of Phase 10's tail bullets to make the dependency chain explicit: Phase 11B combat, damage feedback, and vehicle work cannot build without these.
+
+**Note:** The three sections below — Camera Modes, Decal System, Post-Processing Effects Suite — were previously bullets in Phase 10. They have been lifted into their own phase so the ordering is enforced rather than implicit. Phase 10's remaining bullets (in-game UI, text rendering, audio, localization, accessibility, fog, rendering enhancements) stay in Phase 10; they have either landed or can land in parallel with Phase 11A infrastructure work without blocking it.
+
+### Camera Modes
+- [ ] Camera mode system (switchable projection and control schemes per scene/game)
+- [ ] First-person camera (existing — WASD + mouse look, perspective projection)
+- [ ] Third-person camera (follow entity with orbit controls, perspective projection)
+- [ ] **Runtime first-person ↔ third-person toggle** — single input binding (default `V`, matching Skyrim / GTA / Minecraft convention) that swaps the active CameraComponent between the player entity's first-person rig and the third-person follow rig without teardown. Shared entity / input / HUD state; only the camera source changes. Configurable: which input action triggers it, whether the toggle is allowed during combat / dialogue / vehicle mode, and per-scene opt-out for first-person-locked walkthroughs (e.g. biblical content). Smooth transition optional (lerp over 150 ms) or instant; respects `AccessibilitySettings.reducedMotion`. Edge case: third-person interior cameras clip walls — mitigate with a physics sphere-cast on the boom arm (standard third-person pattern) before hitting this phase's implementation.
+- [ ] Isometric camera (fixed-angle orthographic projection, click-to-move input, Diablo-style)
+- [ ] Top-down camera (overhead orthographic, suitable for strategy or map views)
+- [ ] Cinematic camera (spline-based flythrough for guided tours and cutscenes) — splines already shipped (`engine/utils/catmull_rom_spline.{h,cpp}`, `engine/environment/spline_path.{h,cpp}`).
+
+### Decal System
+Projected textures for blood splatters, scorch marks, claw scratches, bullet holes, and environmental storytelling.
+- [ ] Deferred decal rendering (project decal texture onto G-buffer geometry)
+  - Box-projected decals (oriented bounding box defines projection volume)
+  - Decals modify albedo, normal, roughness, and/or metallic channels
+  - Depth-tested to prevent projection onto distant surfaces
+- [ ] Persistent decals that accumulate during gameplay
+  - Decal pool with maximum count (oldest decals fade when limit reached)
+  - Configurable lifetime and fade curve per decal type
+- [ ] Animated decals (spreading blood pools, flickering holograms, growing cracks)
+  - UV animation (scrolling, scaling over time)
+  - Sprite sheet frame animation for complex effects
+- [ ] Decal presets: blood splatter, bullet hole, scorch mark, claw scratch, footprint, water stain
+- [ ] Editor integration — place and orient decals in editor, preview projection volume
+
+### Post-Processing Effects Suite
+Cinematic and atmospheric post-processing for horror, drama, and stylized rendering.
+
+**Tonemapping policy:** ACES 1.3 remains the default (matches current `HDR rendering and tone mapping` item from Phase 4). ACES 2.0 is opt-in only — the 2.0 committee prioritised SDR compatibility over HDR gamut usage, which desaturates HDR highlights by design (ref: Tarpini / Gilbert commentary, March 2026 — https://daejeonchronicles.com/2026/03/11/aces-2-0-we-are-in-for-some-further-years-of-bad-hdr/). Author any custom exposure / highlight curves via the Formula Workbench.
+
+- [ ] ACES 2.0 tonemap option (opt-in alternative to the ACES 1.3 default; kept side-by-side for HDR output, user-selectable)
+- [ ] Film grain (noise overlay, configurable intensity and grain size)
+- [ ] Chromatic aberration (RGB channel offset, stronger at screen edges)
+- [ ] Vignette (screen edge darkening, configurable intensity and radius)
+- [ ] Screen distortion (barrel/pincushion, heat haze, damage effects)
+- [ ] Damage/low-health screen effects (red vignette, blur, heartbeat pulse, desaturation) — consumed by Phase 11B Health & Damage feedback.
+- [ ] Death screen effects (slow desaturation, blur ramp, fade to black) — consumed by Phase 11B Health.
+- [ ] Color grading per-scene (warm golden interiors, cold blue corridors, sickly green toxic areas)
+- [ ] Lens flare (anamorphic streaks and ghost artifacts from bright lights)
+- [ ] Sharpen filter (contrast-adaptive sharpening for post-upscale clarity)
+
+### Milestone
+Every Phase 11B gameplay hook that depends on rendering (hit decals, bullet-hole decals, damage screen effects, death fade, vehicle cameras, camera-mode switching) has a working sink. Phase 11A infrastructure can land in parallel; Phase 11B cannot ship until both 10.8 and 11A are complete.
+
+---
+
+## Phase 11A: Gameplay Infrastructure
+**Goal:** The runtime subsystems every Phase 11B gameplay feature consumes — camera shake, screen flash, save-file compression, replay recording, behavior-tree runtime, and AI perception. Split out of the original single Phase 11 so the consumer-before-system dependencies surface at planning time rather than at implementation time.
+
+**Note:** Behavior Trees and AI Perception were previously in Phase 16 (Scripting & Interactivity). They are load-bearing for every Phase 11B enemy / traffic / opponent AI bullet, so they land here instead. Phase 16 retains the advanced AI features that build on them (AI Director pacing, Cutscene, Dialogue).
+
+### Camera Shake System
+*Phase 10.7 deferred `clampShakeAmplitude` to this subsystem. The clamp helper is already shipped; this section is what finally consumes it.*
+- [ ] `CameraShakeComponent` attached to the camera rig — drives a per-frame offset to the current CameraMode view matrix without disturbing the underlying camera transform.
+- [ ] Shake types: impulse (one-shot peak + decay — weapon kick, footfall), continuous (earthquake, rumble), directional (recoil along a vector), trauma (Dead Space-style gore-cam — amplitude tied to recent damage intake).
+- [ ] Parameters: amplitude, frequency, duration, falloff curve — authored via Formula Workbench per CLAUDE.md Rule 11, not hand-coded magic constants.
+- [ ] Photosensitive safety: amplitude passes through `clampShakeAmplitude(PhotosensitiveLimits)` at the point of application.
+- [ ] Composes with Phase 10.8 Camera Modes — shake is applied post-mode, so first-person / third-person / cinematic / vehicle modes all get shake without per-mode code.
+- [ ] Editor preview — a slider in the camera inspector that triggers each shake type for tuning.
+
+### Screen Flash / Hit Flash System
+*Phase 10.7 deferred `clampFlashAlpha` to this subsystem. The clamp helper is already shipped; this section is what finally consumes it.*
+- [ ] Full-screen overlay pass (post-tonemap, pre-UI) with per-flash colour + alpha + envelope curve.
+- [ ] Flash types: hit flash (red, short — damage taken), pickup flash (green, short — item gained), stasis flash (cyan, short — Dead Space stasis cast), screen-wipe transition (any colour, long — scene/chapter change), death fade (black, slow — player death).
+- [ ] Envelope authored via Formula Workbench (fade-in / plateau / fade-out curve), not hand-coded timing.
+- [ ] Photosensitive safety: peak alpha passes through `clampFlashAlpha(PhotosensitiveLimits)` at upload.
+- [ ] Queueable — multiple simultaneous flashes blend additively with per-flash colour and independent envelopes.
+- [ ] Integrated with Phase 10.8 Post-Processing Effects Suite as the last overlay before UI compositing.
+
+### Save File Compression
+- [ ] zstd integration — vendored via FetchContent (same mechanism as existing deps). **Shared with Phase 12 asset packaging** — both consumers use one integration, not two.
+- [ ] Compressed binary chunk writer/reader primitive — `writeCompressedChunk(ostream, bytes)` / `readCompressedChunk(istream)` with a versioned header so forward compatibility is explicit.
+- [ ] Save-file format header — engine version stamp + scene ID + chunk table + per-chunk zstd payload. Designed so the Phase 11B save/checkpoint system just fills in the chunks.
+
+### Replay Recording Infrastructure
+*Moved from the original Phase 11 Replay System — the recording / determinism primitives are infrastructure; the playback / ghost / MP4-export features stay in Phase 11B.*
+- [ ] Input-recording replay (baseline)
+  - Record per-frame / per-tick input state (keyboard, mouse, gamepad axes + buttons) keyed to the fixed-timestep game tick so replay is bit-identical given deterministic physics
+  - Compact serialisation — delta-encode input frames (most ticks nothing changes), compress via Phase 11A zstd integration; target < 1 MB per minute for a racing game
+  - Replay file format versioned (`.vreplay`), carries engine version, scene ID, entity seed state at tick 0
+- [ ] State-snapshot replay (fallback when determinism is not guaranteed)
+  - Periodic full-state snapshots (every N seconds) + interpolation between snapshots for playback
+  - Used when non-deterministic subsystems (AI with thread pools, third-party physics tweaks) are active
+  - Larger files than input-recording but robust against determinism drift
+- [ ] Deterministic-physics contract for input-recording mode
+  - Fixed-timestep physics stepping (already present via Jolt integration); document which engine subsystems are deterministic and which are not
+  - Per-scene flag for whether the scene is replay-safe via input-recording (off by default until audited)
+  - CI check: record a short gameplay sample in debug builds, replay in release, assert position/orientation match within epsilon
+- [ ] Testing surface
+  - `ReplayRecorder` / `ReplayPlayer` unit tests with a headless scene
+  - Determinism harness: N-step input-recording replay against scripted inputs, bit-exact state assertion
+
+### Behavior Tree Runtime
+*Moved from Phase 16 — load-bearing for every Phase 11B enemy, traffic, and opponent AI bullet.*
+
+Advanced AI decision-making system — far more expressive than state machines for complex enemy behavior.
+- [ ] Behavior tree runtime (tick-based evaluation with running/success/failure states)
+  - Composite nodes: Sequence (AND), Selector (OR), Parallel (concurrent)
+  - Decorator nodes: Inverter, Repeater, Cooldown, Conditional guard, Timeout
+  - Leaf nodes: Actions (move to, attack, patrol, flee) and Conditions (can see player, health low)
+- [ ] Behavior tree editor — visual node graph in the editor
+  - Drag-and-drop node placement and wiring
+  - Live debugging: highlight active node during gameplay
+  - Tree templates: save/load reusable behavior patterns
+- [ ] Utility AI (optional enhancement) — score-based action selection
+  - Each action has a utility function (score based on game state)
+  - Highest-scoring action wins — emergent behavior without explicit tree authoring
+  - Useful for varied NPC behavior (not all enemies act identically)
+
+### AI Perception System
+*Moved from Phase 16 — every Phase 11B enemy / NPC reads from this.*
+
+Sensory system for NPC awareness — sight, sound, and proximity detection.
+- [ ] Vision sense — cone-of-vision with configurable angle and range
+  - Line-of-sight raycast (blocked by walls, objects)
+  - Peripheral vision (wider angle, lower detection speed)
+  - Darkness modifier (reduced detection range in dark areas)
+  - Last-known-position tracking (investigate where player was last seen)
+- [ ] Hearing sense — sound propagation through the environment
+  - Sound events (gunshot, footstep, explosion, door opening) generate detection stimuli
+  - Distance-based detection radius per sound type
+  - Sound occlusion through walls (muffled through closed doors)
+  - Investigation behavior (move to sound source location)
+- [ ] Alert states — multi-level awareness
+  - Unaware → Suspicious → Alert → Combat → Search → Return
+  - Smooth transitions between states (suspicion builds over time)
+  - Alert propagation (alerted enemies alert nearby allies)
+  - Search patterns (systematic area search after losing target)
+
+### Milestone
+Every infrastructure piece that Phase 11B gameplay consumes exists as a tested primitive: camera shake drives view-matrix offsets for any camera mode, screen flashes upload through the photosensitive clamp, save files round-trip through compressed chunks, replays record and play back deterministically, and the behavior-tree runtime can evaluate a three-node `Sequence(Patrol, CheckPlayerVisible, Attack)` on a scripted NPC using perception data.
+
+---
+
+## Phase 11B: Gameplay Features
+**Goal:** Core gameplay mechanics for action, survival, horror, and racing games — combat, inventory, health, saves, environmental interaction, and vehicle physics. Consumes the render prerequisites from Phase 10.8 and the runtime infrastructure from Phase 11A.
 
 These systems transform Vestige from an exploration/walkthrough engine into a full game engine capable of shipping:
 
@@ -1157,7 +1264,7 @@ These systems transform Vestige from an exploration/walkthrough engine into a fu
 - [ ] Hit detection with per-bone damage zones
   - Skeleton-aware damage (headshot multiplier, limb damage for dismemberment)
   - Damage types: kinetic, explosive, fire, electric, plasma (configurable per weapon)
-  - Hit feedback: blood particles, decals, impact sounds, enemy flinch animation
+  - Hit feedback: blood particles, impact decals (Phase 10.8 Decal System — blood splatter / bullet hole / scorch mark presets), impact sounds, enemy flinch animation
 - [ ] Weapon visual effects
   - Muzzle flash (particle + point light burst)
   - Tracer particles for projectiles
@@ -1176,18 +1283,18 @@ These systems transform Vestige from an exploration/walkthrough engine into a fu
   - Maximum health, current health, regeneration rate (optional)
   - Damage resistance per type (armor reduces kinetic, insulation reduces fire)
   - Death trigger — fire event on health reaching zero
-- [ ] Status effects
-  - Bleeding (damage over time, blood trail decals)
+- [ ] Status effects — all screen-effect hooks consume Phase 10.8 PP suite primitives (vignette, distortion, blur) and Phase 10.8 Decal System
+  - Bleeding (damage over time, blood trail decals via Phase 10.8 Decal System)
   - Burning (fire particles, increasing damage, extinguish with action)
-  - Stun (brief incapacitation, screen blur)
-  - Poisoned (screen distortion, damage over time, green vignette)
+  - Stun (brief incapacitation, screen blur — Phase 10.8 PP)
+  - Poisoned (screen distortion + green vignette — Phase 10.8 PP, damage over time)
 - [ ] Damage feedback
   - Directional damage indicator (show which direction damage came from)
-  - Screen effects: red vignette, camera shake, chromatic aberration pulse
-  - Low health warning (heartbeat audio, desaturation, heavier breathing)
+  - Screen effects: red vignette + chromatic aberration pulse (Phase 10.8 PP suite) + camera shake (Phase 11A CameraShakeSystem) + hit flash (Phase 11A ScreenFlashSystem)
+  - Low health warning (heartbeat audio, desaturation, heavier breathing) — desaturation + heartbeat pulse land in Phase 10.8 PP "Damage/low-health screen effects"
 - [ ] Player death and respawn
   - Death animation/ragdoll transition
-  - Death screen overlay with fade
+  - Death screen overlay with fade (Phase 10.8 PP "Death screen effects" + Phase 11A death-fade ScreenFlash type)
   - Respawn at last checkpoint or save point
 
 ### Inventory System
@@ -1226,7 +1333,7 @@ These systems transform Vestige from an exploration/walkthrough engine into a fu
 - [ ] Save file format
   - Binary serialization for speed, JSON debug export option
   - Version stamping for forward compatibility
-  - Compression (zstd) for save file size
+  - Compression (zstd) via Phase 11A Save File Compression integration — the infrastructure is owned by 11A and shared with Phase 12 asset packaging.
 
 ### Environmental Hazards
 - [ ] Hazard zones — volumes that apply damage/effects to entities inside
@@ -1257,7 +1364,7 @@ Dual-archetype support: arcade racing (*Burnout 3 / Burnout: Revenge*) and simul
 - [ ] Engine audio — RPM-driven sample interpolation (granular synthesis over recorded low/mid/high-rev samples) + on-throttle / off-throttle crossfade + pitch-shift per gear. Leverages existing `audio_music.{h,cpp}` crossfade primitives. Skid-chirp + backfire + turbo-whistle as separate one-shot layers over the ambient engine bed.
 - [ ] Vehicle damage model — two tiers: (a) **cosmetic** (body deformation via vertex displacement + loose parts fracturing off via the existing Phase 8 destruction system) and (b) **functional** (per-component health: engine power loss, steering drift, brake fade, tyre punctures, overheating). Configurable per game for arcade vs sim emphasis.
 - [ ] Crash cameras — slow-motion hold on high-energy impacts with free-orbit camera (Burnout's "heartbeat" moment after a wreck). Respects `AccessibilitySettings.reducedMotion` — on, the slow-mo is instant-cut instead of 0.1× lerp.
-- [ ] Vehicle cameras — Cockpit (interior first-person with dashboard rendering), Chase (third-person behind + slightly above, spring-smoothed), Hood, Bumper, Photo-mode (free-orbit), Cinematic (spline + look-at chase). Composes with the existing Camera Modes system — "vehicle" is a context that provides camera presets, not a new camera class.
+- [ ] Vehicle cameras — Cockpit (interior first-person with dashboard rendering), Chase (third-person behind + slightly above, spring-smoothed), Hood, Bumper, Photo-mode (free-orbit), Cinematic (spline + look-at chase). Composes with the Phase 10.8 Camera Modes system — "vehicle" is a context that provides camera presets, not a new camera class.
 - [ ] Force-feedback / steering-wheel support — `InputDevice::SteeringWheel` enum value alongside Keyboard/Mouse/Gamepad. GLFW doesn't expose FFB directly; plug in SDL2's haptic API or libuinput under a thin shim. Axes: steering, throttle, brake, clutch, handbrake, paddle-shift. Button mapping runs through the existing `InputBindings`. Deferred to a follow-up slice but the binding enum goes in day one.
 
 #### Arcade racing (Burnout 3 / Burnout: Revenge archetype)
@@ -1292,9 +1399,10 @@ Fills the gaps between the generic Combat / Health / Inventory / Save systems ab
 - [ ] **Kinesis (telekinesis) component** — pick-up-and-throw tied to a dedicated input. Grab any `PhysicsBody` tagged `kinesisTarget`; charge launches it with a force magnitude + direction from the crosshair. Used both for combat (throw spikes / limbs) and puzzles (move heavy crates, align circuits). Leverages the existing `physics/grab_system` primitive.
 - [ ] **Stasis gun + ammo economy** — ties the already-shipped `StasisSystem` to a first-class weapon with a rechargeable ammo pool. Recharge stations in the world top it up; trigger slows one tagged body. Slow-mo factor configurable per weapon tier.
 - [ ] **Zero-G traversal mode** — 6DOF navigation (yaw + pitch + roll + three-axis thrust) plus magnetic-boot floor-walking at low thrust. CharacterController gains a `GravityMode` (`Normal / Magnetic / FreeFall`) enum. `Magnetic` lets the player walk arbitrary up-vectors (walls / ceilings) by snapping orientation to the tagged surface normal. `FreeFall` exposes thruster inputs. Scripted transitions between modes via trigger volumes.
-- [ ] **Diegetic holographic UI** — the Phase 11 UI guidance is that *no HUD is drawn in screen-space for this archetype*. Instead, health / stasis / ammo render as world-space quads projected from the player's spine (RIG) + weapon. `UIElement::worldProjection` pathway (already present in `ui/ui_in_world.{h,cpp}`) gets the additional affordance of binding to a bone socket; the UI follows the rig at all times. Accessibility: a fallback 2D HUD can be toggled in `Settings` for partially-sighted players.
+- [ ] **World-space UI pathway** — new `UIElement::worldProjection` support in `engine/ui/ui_in_world.{h,cpp}` (not yet shipped — first bullet under this section). World-space quads can bind to a bone socket so the UI follows the rig at all times. Prerequisite for every other diegetic-UI bullet in this section.
+- [ ] **Diegetic holographic UI** — the Phase 11B UI guidance is that *no HUD is drawn in screen-space for this archetype*. Instead, health / stasis / ammo render as world-space quads projected from the player's spine (RIG) + weapon via the world-space UI pathway above. Accessibility: a fallback 2D HUD can be toggled in `Settings` for partially-sighted players.
 - [ ] **RIG health spine** — specific prefab that reads `HealthComponent` and renders a 5-segment health bar on the player's spine. Third-person visible; in first person only the peripheral glow is shown. Damage pulses the glow.
-- [ ] **In-world holographic panels** — interactable door locks, lore logs, objective markers, and upgrade bench UIs all render as diegetic world-space holograms rather than screen overlays. Reuse `UIElement::worldProjection`. Animated scan-line shader variant + chromatic-aberration flicker.
+- [ ] **In-world holographic panels** — interactable door locks, lore logs, objective markers, and upgrade bench UIs all render as diegetic world-space holograms rather than screen overlays. Consumes the world-space UI pathway defined above. Animated scan-line shader variant + chromatic-aberration flicker (Phase 10.8 PP suite chromatic aberration is the source effect).
 - [ ] **Necromorph-style encounter AI** — behaviour-tree node set for "stalk / ambush / wave-attack / play-dead" patterns. Ambush spawn from vent / ceiling colliders tagged `spawner`; "play dead" nodes use the existing ragdoll system for a faked-death pose and re-animate on trigger. Weak-point targeting — AI prefers to expose limbs to the player so dismemberment is rewarded.
 - [ ] **Audio horror stingers** — scripted jump-scare and tension beats wired through the already-shipped `MusicStingerQueue` and `audio_ambient`. Editor surface: a "Scare Marker" component placed in the scene with a delay / trigger-condition / audio clip triple.
 - [ ] **Chapter system** — narrative-progression scaffold above the save system. A *chapter* is a named subregion with entry/exit triggers, a title-card prefab, and an auto-checkpoint on entry. Saves record `currentChapter` alongside the scene snapshot.
@@ -1302,24 +1410,12 @@ Fills the gaps between the generic Combat / Health / Inventory / Save systems ab
 - [ ] **Ammo / health scarcity tuning helpers** — survival-horror economy depends on drops being rare but not *too* rare. Editor tool: simulated playthrough harness that reports expected ammo / health surplus per chapter against a target curve, so designers can retune loot tables without full playthroughs.
 - [ ] **Co-op session support (Dead Space 3 archetype)** — scope note: the generic networking primitives live in **Phase 20**. This bullet just calls out that the horror-specific design — divergent player perspectives, co-op-only encounters, revive mechanic — needs per-scene authoring and a split-inventory flag once Phase 20 lands. Not shippable before Phase 20.
 
-### Replay System
-Recorded playbacks of gameplay for post-match review, sharing, and cinematic capture. Racing games are the canonical use case (ghost laps, leaderboard proofs, instant replay from a second angle), but the same infrastructure serves speed-running, sports, action games, and streamer highlights.
+### Replay Features
+*Infrastructure (recording, state snapshots, determinism contract, recorder/player tests) lives in Phase 11A. This section covers the user-facing replay features built on top of that infrastructure.*
 
-- [ ] Input-recording replay (baseline)
-  - Record per-frame / per-tick input state (keyboard, mouse, gamepad axes + buttons) keyed to the fixed-timestep game tick so replay is bit-identical given deterministic physics
-  - Compact serialisation — delta-encode input frames (most ticks nothing changes), compress with zstd; target < 1 MB per minute for a racing game
-  - Replay file format versioned (`.vreplay`), carries engine version, scene ID, entity seed state at tick 0
-- [ ] State-snapshot replay (fallback when determinism is not guaranteed)
-  - Periodic full-state snapshots (every N seconds) + interpolation between snapshots for playback
-  - Used when non-deterministic subsystems (AI with thread pools, third-party physics tweaks) are active
-  - Larger files than input-recording but robust against determinism drift
-- [ ] Deterministic-physics contract for input-recording mode
-  - Fixed-timestep physics stepping (already present via Jolt integration); document which engine subsystems are deterministic and which are not
-  - Per-scene flag for whether the scene is replay-safe via input-recording (off by default until audited)
-  - CI check: record a short gameplay sample in debug builds, replay in release, assert position/orientation match within epsilon
 - [ ] Replay playback controls
   - Play / pause / step / scrub along the timeline, 0.25× – 4× speed, reverse playback for input-recording mode (cached snapshots make this feasible)
-  - Free-flying "replay camera" independent of the player entity — orbit, dolly, spline-follow; respects the Camera Modes system (first-person / third-person / cinematic)
+  - Free-flying "replay camera" independent of the player entity — orbit, dolly, spline-follow; respects the Phase 10.8 Camera Modes system (first-person / third-person / cinematic)
   - Multi-angle replay — record from any camera and let the viewer swap between them post-race (broadcast TV pattern)
 - [ ] Ghost / split-time overlays (racing-specific)
   - Overlay the fastest-lap replay as a translucent ghost car
@@ -1327,14 +1423,11 @@ Recorded playbacks of gameplay for post-match review, sharing, and cinematic cap
   - Support for importing ghost replays from other users (leaderboard integration)
 - [ ] Replay editor integration
   - Editor panel to load / trim / export a replay
-  - Export to MP4 via ffmpeg pipeline (offline render pass — not real-time; renders the replay frame-by-frame at target resolution / frame rate with post-processing at full quality)
+  - Export to MP4 via the Phase 12 ffmpeg pipeline (offline render pass — not real-time; renders the replay frame-by-frame at target resolution / frame rate with post-processing at full quality). The ffmpeg integration is owned by Phase 12; this bullet is its primary consumer.
   - Waypoint markers for interesting moments, exportable as replay "chapters"
 - [ ] Privacy & opt-in
   - Replays record inputs + entity state — never phone home, only written locally
   - Per-game opt-in: a game built with Vestige decides whether to enable recording at all (engine primitive is off by default)
-- [ ] Testing surface
-  - `ReplayRecorder` / `ReplayPlayer` unit tests with a headless scene
-  - Determinism harness: N-step input-recording replay against scripted inputs, bit-exact state assertion
 
 ### Milestone
 A complete gameplay loop for three archetypes:
@@ -1387,6 +1480,7 @@ The engine targets Linux and Windows from the start (CLAUDE.md). The codebase is
 - [ ] Asset cooking / baking (preprocess models, textures, shaders into optimized binary format)
 - [ ] Asset manifest and dependency tracking (know exactly what each scene needs)
 - [ ] Hot-reload during development (detect changed assets, reload without restarting)
+- [ ] Offline video rendering pipeline (ffmpeg) — frame-by-frame render to MP4 / WebM / image sequence. Primary consumer is the Phase 11B replay editor's MP4 export; secondary consumers are future cutscene rendering and editor screenshot-burst capture. Integration is a thin `ffmpeg` invocation layer, not a library link, so the tool stays optional at runtime and only required for export.
 
 ### Compression and Size Optimization
 - [ ] GPU texture compression pipeline (BC7/BC1 via KTX2 — ~4x VRAM reduction, faster loads)
@@ -1425,7 +1519,7 @@ Application published on Steam. Scenes can be packaged and shared between users.
 - [ ] Motion blur (per-object and camera-based)
 
 ### Advanced Materials
-- [ ] Subsurface scattering / SSS (light bleeding through thin materials — linen curtains, wax candles, marble, skin; hybrid screen-space diffusion approach or ReSTIR-path-tracing diffusion when RT available; ref: NVIDIA SIGGRAPH 2025)
+- [ ] Subsurface scattering / SSS (light bleeding through thin materials — linen curtains, wax candles, marble, skin; hybrid screen-space diffusion approach or ReSTIR-path-tracing diffusion when RT available; ref: NVIDIA SIGGRAPH 2025). *Basic per-material SSS (thickness + transmission + scattering distance + wrap lighting) lands in Phase 10 "Rendering Enhancements"; this Phase 13 item is the hybrid-screen-space / ReSTIR upgrade.*
 - [ ] Anisotropic reflections (brushed metal, hair, silk fabrics)
 - [ ] Strand-based hair and fur rendering (physically-based hair model with proper light scattering — relevant for animal fur, priestly garment fringes; ref: MachineGames/Indiana Jones, SIGGRAPH 2025)
 - [ ] Neural texture compression (2-4x memory reduction via trained neural decompression in shaders — forward-looking, requires cooperative vector hardware support)
@@ -1488,7 +1582,7 @@ Application published on Steam. Scenes can be packaged and shared between users.
 
 ### Performance
 - [x] Frustum culling (skip objects outside camera view)
-- [ ] Volumetric lighting (god rays, fog)
+- [ ] Volumetric lighting (god rays, fog) — *Basic god rays and volumetric fog land in Phase 10 "Fog, Mist, and Volumetric Lighting"; this Phase 13 item covers the froxel-volume + temporal-reprojection rendering upgrade. Phase 15 weather modulates the Phase 10 primitives; Phase 13 upgrades what those primitives render.*
 
 ### VR / Immersive Rendering
 - [ ] OpenXR integration (cross-platform VR/AR runtime)
@@ -1738,37 +1832,10 @@ A living sky with dynamic clouds, day/night transitions, weather effects (rain, 
 - [ ] Line-of-sight checks (NPCs react to player visibility)
 
 ### Behavior Trees
-Advanced AI decision-making system — far more expressive than state machines for complex enemy behavior.
-- [ ] Behavior tree runtime (tick-based evaluation with running/success/failure states)
-  - Composite nodes: Sequence (AND), Selector (OR), Parallel (concurrent)
-  - Decorator nodes: Inverter, Repeater, Cooldown, Conditional guard, Timeout
-  - Leaf nodes: Actions (move to, attack, patrol, flee) and Conditions (can see player, health low)
-- [ ] Behavior tree editor — visual node graph in the editor
-  - Drag-and-drop node placement and wiring
-  - Live debugging: highlight active node during gameplay
-  - Tree templates: save/load reusable behavior patterns
-- [ ] Utility AI (optional enhancement) — score-based action selection
-  - Each action has a utility function (score based on game state)
-  - Highest-scoring action wins — emergent behavior without explicit tree authoring
-  - Useful for varied NPC behavior (not all enemies act identically)
+*Moved to Phase 11A — see "Behavior Tree Runtime" there. The BT runtime, editor, and utility-AI bullets live in Phase 11A because every Phase 11B enemy / traffic / opponent AI bullet consumes them; scheduling them here would be a consumer-before-system inversion.*
 
 ### AI Perception System
-Sensory system for NPC awareness — sight, sound, and proximity detection.
-- [ ] Vision sense — cone-of-vision with configurable angle and range
-  - Line-of-sight raycast (blocked by walls, objects)
-  - Peripheral vision (wider angle, lower detection speed)
-  - Darkness modifier (reduced detection range in dark areas)
-  - Last-known-position tracking (investigate where player was last seen)
-- [ ] Hearing sense — sound propagation through the environment
-  - Sound events (gunshot, footstep, explosion, door opening) generate detection stimuli
-  - Distance-based detection radius per sound type
-  - Sound occlusion through walls (muffled through closed doors)
-  - Investigation behavior (move to sound source location)
-- [ ] Alert states — multi-level awareness
-  - Unaware → Suspicious → Alert → Combat → Search → Return
-  - Smooth transitions between states (suspicion builds over time)
-  - Alert propagation (alerted enemies alert nearby allies)
-  - Search patterns (systematic area search after losing target)
+*Moved to Phase 11A — see "AI Perception System" there. Same rationale: Phase 11B NPCs and encounter AI depend on perception, so perception ships before them.*
 
 ### AI Director / Encounter Pacing
 Dynamic system that controls encounter intensity and pacing — inspired by Left 4 Dead and Dead Space.
@@ -2292,14 +2359,13 @@ Already done (2026-04-14 / 2026-04-15):
 - [x] `SECURITY.md` prefaced with a public vulnerability-disclosure section (scope, reporting address, timelines, safe-harbour)
 - [x] Stable editor (Phase 5 complete) and reliable scene save/load
 
-Still pending before flipping public:
-- [ ] **CI hardening pass** — verify `.github/workflows/` runs on a public fork: no private runners, no required secrets, `NVD_API_KEY` is optional, fresh-clone build works under the default `VESTIGE_FETCH_ASSETS=OFF`. The flag is an explicit opt-out while the sibling assets repo is still private; it stays in CI until the assets-repo visibility flip (scheduled for ~v1.0.0).
-- [ ] **Decide on public communication channel** — GitHub Discussions is the zero-cost default; Discord / Matrix are alternatives.
-- [ ] **Decide whether to migrate biblical content to a separate private `Tabernacle` repo now or later.** Currently the `assets/textures/tabernacle/` files and tabernacle-loading scene code are local-only (gitignored). The cleaner long-term home is a private GitHub repo so the maintainer can sync development across machines. Not blocking for engine open-source release.
-- [ ] **Re-run the full pre-launch checklist end-to-end** with a fresh `gitleaks detect --log-opts=--all`, asset license re-verification, dry-run clone+build on a clean directory.
-- [ ] **Tag a pre-release** (`v0.1.3-preview` — matches the engine VERSION at launch) as the first public release entry.
-- [ ] **Trademark decision on the "Vestige" name** — informal use vs formal registration. Likely defer until there's something worth protecting at scale.
-- [ ] **Flip `Vestige` from private to public** in GitHub repo settings. The sibling `VestigeAssets` repo stays private until ~v1.0.0 while its contents are re-audited for full redistributability; the engine's default `VESTIGE_FETCH_ASSETS=OFF` means fresh public clones build cleanly without it. When VestigeAssets later goes public, flip the engine default back to ON in lockstep with the visibility change.
+**Launched 2026-04-15.** `v0.1.3-preview` tagged, `milnet01/Vestige` flipped public, GitHub Discussions enabled, pre-release announced. Full launch log in `docs/PRE_OPEN_SOURCE_AUDIT.md` §10-11. The six items that were previously in this "Still pending" list at launch time (CI hardening pass, communication-channel decision, pre-launch checklist re-run, pre-release tag, visibility flip, CMake-matrix CI) are all complete — see that checklist for per-item evidence.
+
+Still pending post-launch (none blocking engine development):
+- [ ] **VestigeAssets visibility flip + CI default restore.** Blocked on `milnet01/VestigeAssets` going public (~v1.0.0, pending its final redistributability audit of every shipped asset). When VestigeAssets flips public, flip `-DVESTIGE_FETCH_ASSETS=OFF` → `ON` in `.github/workflows/ci.yml` and reset the engine default back to `ON` in `external/CMakeLists.txt` in the same commit so CI exercises the full asset pipeline again. Ref: `docs/PRE_OPEN_SOURCE_AUDIT.md` §8.
+- [ ] **Third-party clean-clone build validation.** The 2026-04-15 dry-run was maintainer-performed; an external "first contact with the README" path is still unexercised. First community PR or Discussions thread that reports a successful build closes this item; no active work required. Ref: `docs/PRE_OPEN_SOURCE_AUDIT.md` §10.
+- [ ] **Biblical content migration to private `Tabernacle` repo.** `assets/textures/tabernacle/` and the tabernacle-loading scene code are currently local-only (gitignored). Cleaner long-term home is a private GitHub repo so the maintainer can sync development across machines. Not blocking engine work.
+- [ ] **Trademark decision on the "Vestige" name** — informal use vs formal registration. Deferred until there's something worth protecting at scale.
 
 ### Milestone
 Vestige is public on GitHub under the MIT License, builds cleanly from a fresh clone on Linux and Windows, passes CI on every PR, and has at least one showcase project (Tabernacle walkthrough — separate commercial repo) linked from the README as a production-quality example of what the engine can do.
@@ -2309,7 +2375,9 @@ Vestige is public on GitHub under the MIT License, builds cleanly from a fresh c
 - Public changelog for every release
 - Security disclosures handled through `SECURITY.md`
 - Bus-factor note in README: if solo maintenance stops, the project will be archived with a clear pointer in the README rather than silently abandoned
-- **CMake version matrix in CI.** The engine's `external/CMakeLists.txt` uses a SOURCE_SUBDIR trick to populate dependencies without invoking their upstream `add_subdirectory`. The trick is stable today but depends on FetchContent semantics that CMake periodically tightens. CI should run the build on multiple CMake versions (e.g. project min `3.20`, current LTS-distro `3.28`, and `latest`) so silent FetchContent regressions surface in a PR check rather than a downstream report. See the `IF THIS BREAKS` block in `external/CMakeLists.txt` for the migration paths if the SOURCE_SUBDIR pattern is ever deprecated.
+- **CMake version matrix in CI.** The engine's `external/CMakeLists.txt` uses a SOURCE_SUBDIR trick to populate dependencies without invoking their upstream `add_subdirectory`. The trick is stable today but depends on FetchContent semantics that CMake periodically tightens. CI runs the build on multiple CMake versions (project min `3.20.6`, current LTS-distro, and latest upstream) so silent FetchContent regressions surface in a PR check rather than a downstream report. See the `IF THIS BREAKS` block in `external/CMakeLists.txt` for the migration paths if the SOURCE_SUBDIR pattern is ever deprecated. Shipped via the `cmake-compat` CI job (2026-04-19).
+- **Weekly issue / PR triage.** Minimum sustainable cadence for a solo maintainer — one pass per week. Tracked as a calendar commitment, not a closeable checklist item. Ref: `docs/PRE_OPEN_SOURCE_AUDIT.md` §224.
+- **Quarterly ROADMAP revisit.** Update with "shipped in v0.x" as items land, audit for stale dependency assumptions, and check that in-flight phases still dependency-order correctly. The 2026-04-23 restructure (Phase 10 → 10.8 split + Phase 11 → 11A/11B split + behavior-trees/perception moved to 11A) is the canonical example of what this revisit should catch early. Ref: `docs/PRE_OPEN_SOURCE_AUDIT.md` §225.
 
 ---
 
