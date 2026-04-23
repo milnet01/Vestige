@@ -6,7 +6,10 @@
 #include "systems/ui_system.h"
 #include "core/engine.h"
 #include "core/logger.h"
+#include "renderer/renderer.h"
+#include "renderer/text_renderer.h"
 #include "ui/menu_prefabs.h"
+#include "ui/subtitle_renderer.h"
 
 #include <glad/gl.h>
 
@@ -99,9 +102,17 @@ void UISystem::rebuildTheme()
 
 void UISystem::renderUI(int screenWidth, int screenHeight)
 {
+    // Phase 10.7 slice B2 — subtitles share the overlay pass. They
+    // always run when the engine has captions active, even if the
+    // canvas is empty (accessibility baseline must not depend on
+    // game code populating a UICanvas first).
     const bool rootHasElements  = m_canvas.getElementCount() > 0;
     const bool modalHasElements = m_modalCanvas.getElementCount() > 0;
-    if (!m_spriteBatch.isInitialized() || (!rootHasElements && !modalHasElements))
+    const bool hasSubtitles =
+        m_engine != nullptr &&
+        !m_engine->getSubtitleQueue().activeSubtitles().empty();
+    if (!m_spriteBatch.isInitialized() ||
+        (!rootHasElements && !modalHasElements && !hasSubtitles))
     {
         return;
     }
@@ -128,7 +139,31 @@ void UISystem::renderUI(int screenWidth, int screenHeight)
     {
         m_modalCanvas.render(m_spriteBatch, screenWidth, screenHeight);
     }
-    m_spriteBatch.end();
+
+    // Subtitles last so they sit on top of modal UI. Layout is computed
+    // against the text renderer's actual font pixel size so plate
+    // width matches rendered glyph width byte-for-byte.
+    TextRenderer* textPtr = hasSubtitles
+        ? m_engine->getRenderer().getTextRenderer()
+        : nullptr;
+    if (hasSubtitles && textPtr != nullptr && textPtr->isInitialized())
+    {
+        TextRenderer& text = *textPtr;
+        SubtitleLayoutParams params;
+        params.screenWidth   = screenWidth;
+        params.screenHeight  = screenHeight;
+        params.fontPixelSize = text.getFont().getPixelSize();
+        auto lines = computeSubtitleLayout(
+            m_engine->getSubtitleQueue(),
+            params,
+            [&text](const std::string& s) { return text.measureTextWidth(s); });
+        renderSubtitles(lines, m_spriteBatch, text,
+                        screenWidth, screenHeight);
+    }
+    else
+    {
+        m_spriteBatch.end();
+    }
 
     // Restore GL state
     if (depthWasEnabled) glEnable(GL_DEPTH_TEST); else glDisable(GL_DEPTH_TEST);

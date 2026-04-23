@@ -9,6 +9,59 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-23 Phase 10.7 — Slice B2: subtitle HUD render pass
+
+Captions now appear on screen. `UISystem::renderUI` picks up
+`Engine::getSubtitleQueue().activeSubtitles()` once per frame and
+draws them through a new `SubtitleRenderer` as the last pass of
+the 2D overlay — on top of both the root canvas and the modal
+canvas so system-critical captions are never occluded by gameplay
+UI.
+
+**Pure-function layout** (`engine/ui/subtitle_renderer.{h,cpp}`).
+`computeSubtitleLayout(queue, params, measure)` emits one
+`SubtitleLineLayout` per active caption with every pixel pre-
+computed. The measure callable takes the production
+`TextRenderer::measureTextWidth`; tests pass a deterministic stub
+so the 12 layout tests run without GL. The separation is the same
+shape the engine uses for fog + photosensitive safety — pure spec
+layer + thin GL dispatch.
+
+**Layout recipe.**
+- `basePx = 46 × (viewport_h / 1080) × subtitleScaleFactorOf(preset)`
+  — Game Accessibility Guidelines baseline, scaled linearly with
+  resolution so a 4K display renders at 92 px before preset scaling.
+- Plate: black @ 50 % alpha, 8 px horizontal / 4 px vertical padding.
+- Stack: newest caption at bottom, older captions above, 4 px gap.
+- Per-category styling: Dialogue (yellow speaker label + white body,
+  TLOU2 convention); Narrator (plain white); SoundCue (bracketed,
+  cyan-grey — Sea of Thieves convention).
+
+**Draw pass.** Plates go through the existing
+`SpriteBatchRenderer`; the batch is flushed; text goes through
+`TextRenderer::renderText2D`. Two draw calls per frame at typical
+caption volumes (1–3 active). Depth test off, standard alpha
+blending, nestled between root-canvas and end-of-overlay cleanup
+so subtitles inherit `UISystem`'s GL state save/restore.
+
+**Tests.** `tests/test_subtitle_renderer.cpp` — 16 cases:
+- `styleFor` returns expected category colours.
+- Empty queue → empty layout.
+- Dialogue composes speaker prefix; SoundCue wraps in brackets;
+  Narrator is plain body.
+- Base pixel scales linearly with viewport height (1080p → 2160p).
+- Size preset (Small 1.0× → XL 2.0×) multiplies base exactly.
+- Plate width equals measured text width + 2× padding.
+- Plate is horizontally centred.
+- Newest caption sits at the bottom; gaps are constant.
+- Plate bottom edge aligns with `screenHeight × (1 - bottomMarginFrac)`.
+- Text baseline sits inside plate padding.
+- Null measure callable degrades to padding-only plate.
+
+**Pending** — Slice B3 is the declarative `assets/captions.json`
+→ auto-enqueue wiring. Until it lands, captions must be enqueued
+through `Engine::getSubtitleQueue().enqueue(...)` by game code.
+
 ### 2026-04-23 Phase 10.7 — Slice B1: SubtitleQueue tick wired into run loop
 
 `Engine::run()` now calls `m_subtitleQueue.tick(deltaTime)` each
