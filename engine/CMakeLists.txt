@@ -22,6 +22,7 @@ set(ENGINE_SOURCES
     core/window.cpp
     core/input_manager.cpp
     core/engine.cpp
+    core/engine_paths.cpp
     core/first_person_controller.cpp
     scene/component.cpp
     scene/entity.cpp

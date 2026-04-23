@@ -4,6 +4,7 @@
 /// @file engine.cpp
 /// @brief Engine implementation — main loop and subsystem orchestration.
 #include "core/engine.h"
+#include "core/engine_paths.h"
 #include "core/logger.h"
 #include "physics/cloth_component.h"
 #include "systems/atmosphere_system.h"
@@ -409,7 +410,7 @@ bool Engine::initialize(const EngineConfig& config)
     // game code calls `CaptionMap::enqueueFor(clipPath, queue)`. The
     // file is optional; a project that ships no captions simply has
     // an empty map.
-    m_captionMap.loadFromFile(m_assetPath + "assets/captions.json");
+    m_captionMap.loadFromFile(captionMapPath(m_assetPath));
 
     // Startup mode — editor (default) or play (CLI `--play`).
     if (m_editor && !config.startInPlayMode)
