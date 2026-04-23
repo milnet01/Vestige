@@ -663,6 +663,13 @@ Unified physics/lighting formula storage, evaluation, and code generation. Every
 - [x] Water formula optimization — quality-tiered caustics (Full: 6 reads + chromatic aberration, Approximate: 2 reads, Simple: 1 read), quality-tiered water FBM noise (3/2/0 octaves), APPROXIMATE expressions for Fresnel and Beer-Lambert, new caustic_depth_fade and water_absorption templates
 - [x] FormulaQualityManager — global + per-category quality tier selection with JSON persistence, per-water-surface quality dropdown in inspector, wired into scene/terrain/water renderers
 
+### Outstanding tool-loop follow-ups (low priority, tracked here for visibility)
+Source of truth: [`docs/SELF_LEARNING_ROADMAP.md`](docs/SELF_LEARNING_ROADMAP.md). Surfaced in the main roadmap so these don't stay invisible; the design/test context lives in the sibling doc.
+
+- [ ] **FW W5 (cont.)** — add a reference-regression spec per library formula (~17 more JSON specs) for broader regression coverage as the formula library grows. Ten shipped so far; each new spec is auto-discovered by `tests/test_reference_harness.cpp`.
+- [ ] **Audit X1** — Phase 3 of the audit self-learning loop: a "propose-fix" layer that, after N runs, emits a markdown file flagging rules whose FP set has an exclude-pattern signature the user hasn't applied yet. Mirrors the Workbench's §3.6 suggestion engine for rule tuning.
+- [ ] **Audit/FW X2** — write a unified-pattern doc ("how we built self-learning into two tools with the same observe → act structure"). Useful as blog-post material for the open-source repo and as a template for future self-learning subsystems (e.g. renderer perf autotuning).
+
 ---
 
 ## Phase 9: Domain-Driven System Architecture
