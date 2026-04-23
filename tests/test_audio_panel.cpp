@@ -9,6 +9,8 @@
 
 #include <gtest/gtest.h>
 
+#include "core/settings.h"
+#include "core/settings_editor.h"
 #include "editor/panels/audio_panel.h"
 
 using namespace Vestige;
@@ -215,4 +217,72 @@ TEST(AudioPanel, ZoneOverlayToggle)
     EXPECT_FALSE(p.isZoneOverlayEnabled());
     p.setZoneOverlayEnabled(true);
     EXPECT_TRUE(p.isZoneOverlayEnabled());
+}
+
+// -- Phase 10.7 slice A3: engine-mixer wire-up --------------------
+
+TEST(AudioPanelWire, UnwiredPanelUsesLocalMixer)
+{
+    AudioPanel p;
+    // The default panel has no engine mixer; mixer() returns the
+    // internal fallback and edits stay local.
+    p.mixer().setBusGain(AudioBus::Music, 0.25f);
+    EXPECT_NEAR(p.mixer().getBusGain(AudioBus::Music), 0.25f, kEps);
+}
+
+TEST(AudioPanelWire, WiringEngineMixerRedirectsReads)
+{
+    AudioPanel p;
+    AudioMixer engineMixer;
+    engineMixer.setBusGain(AudioBus::Music, 0.33f);
+    p.wireEngineMixer(&engineMixer, nullptr);
+    // Reading through mixer() now shows the engine mixer's value,
+    // not whatever the panel's local fallback last held.
+    EXPECT_NEAR(p.mixer().getBusGain(AudioBus::Music), 0.33f, kEps);
+}
+
+TEST(AudioPanelWire, WiringWithNullEngineMixerFallsBackToLocal)
+{
+    AudioPanel p;
+    p.mixer().setBusGain(AudioBus::Sfx, 0.6f);
+    // Null engine mixer → local fallback still authoritative.
+    p.wireEngineMixer(nullptr, nullptr);
+    EXPECT_NEAR(p.mixer().getBusGain(AudioBus::Sfx), 0.6f, kEps);
+}
+
+TEST(AudioPanelWire, EffectiveGainFollowsEngineMixerWhenWired)
+{
+    AudioPanel p;
+    AudioMixer engineMixer;
+    engineMixer.setBusGain(AudioBus::Master, 0.5f);
+    engineMixer.setBusGain(AudioBus::Music,  0.8f);
+    p.wireEngineMixer(&engineMixer, nullptr);
+
+    // computeEffectiveSourceGain reads through the engine mixer:
+    // master × music = 0.5 × 0.8 = 0.40.
+    EXPECT_NEAR(p.computeEffectiveSourceGain(1, AudioBus::Music),
+                0.5f * 0.8f, kEps);
+
+    // Mutating the engine mixer externally — e.g. through the
+    // AudioMixerApplySink wired to SettingsEditor — is visible to
+    // the panel on the very next read.
+    engineMixer.setBusGain(AudioBus::Music, 0.2f);
+    EXPECT_NEAR(p.computeEffectiveSourceGain(1, AudioBus::Music),
+                0.5f * 0.2f, kEps);
+}
+
+TEST(AudioPanelWire, SettingsEditorPointerStoredWithoutMixer)
+{
+    // Wiring a SettingsEditor without a mixer is tolerated — the
+    // slider path only routes through Settings when *both* pointers
+    // are non-null, so unintended-but-tolerated combinations stay
+    // consistent rather than crashing.
+    AudioPanel p;
+    Settings s;
+    SettingsEditor::ApplyTargets targets; // all null sinks
+    SettingsEditor editor(s, targets);
+    p.wireEngineMixer(nullptr, &editor);
+    // Panel's local mixer still takes edits.
+    p.mixer().setBusGain(AudioBus::Voice, 0.4f);
+    EXPECT_NEAR(p.mixer().getBusGain(AudioBus::Voice), 0.4f, kEps);
 }

@@ -9,6 +9,8 @@
 #include "audio/audio_engine.h"
 #include "audio/audio_hrtf.h"
 #include "audio/audio_source_component.h"
+#include "core/settings.h"
+#include "core/settings_editor.h"
 #include "scene/entity.h"
 #include "scene/scene.h"
 #include "systems/audio_system.h"
@@ -115,7 +117,9 @@ float AudioPanel::computeEffectiveSourceGain(std::uint32_t entityId, AudioBus bu
     {
         return 0.0f;
     }
-    const float bus_ = effectiveBusGain(m_mixer, bus);
+    // Read through mixer() so the effective gain follows the engine
+    // mixer when wired, or the local fallback otherwise.
+    const float bus_ = effectiveBusGain(mixer(), bus);
     const float duck = std::max(0.0f, std::min(1.0f, m_duckingState.currentGain));
     return std::max(0.0f, std::min(1.0f, bus_ * duck));
 }
@@ -174,6 +178,14 @@ void AudioPanel::drawMixerTab()
         {AudioBus::Ui,      "UI"},
     };
 
+    // Phase 10.7 slice A3: when wired to SettingsEditor + engine
+    // mixer, bus-gain edits flow through the Settings persistence
+    // layer. SettingsEditor::mutate triggers AudioMixerApplySink,
+    // which writes the engine-owned mixer; the panel's next frame
+    // reads the updated value straight from the engine. In the
+    // pre-wire fallback path (tests, standalone usage) the panel
+    // mutates its own local mixer directly.
+    AudioMixer& activeMixer = mixer();
     for (const auto& [bus, label] : kBuses)
     {
         // Phase 10 slice 13.3: route through setBusGain so the
@@ -181,10 +193,21 @@ void AudioPanel::drawMixerTab()
         // SliderFloat clamps the UI input to the same range anyway,
         // but the pass-through is stylistically consistent with the
         // Settings apply layer.
-        float g = m_mixer.getBusGain(bus);
+        float g = activeMixer.getBusGain(bus);
         if (ImGui::SliderFloat(label, &g, 0.0f, 1.0f, "%.2f"))
         {
-            m_mixer.setBusGain(bus, g);
+            if (m_settingsEditor != nullptr && m_engineMixer != nullptr)
+            {
+                const std::size_t idx = static_cast<std::size_t>(bus);
+                m_settingsEditor->mutate([idx, g](Settings& s)
+                {
+                    s.audio.busGains[idx] = g;
+                });
+            }
+            else
+            {
+                activeMixer.setBusGain(bus, g);
+            }
         }
     }
 

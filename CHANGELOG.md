@@ -9,6 +9,69 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-23 Phase 10.7 — Slice A3: AudioPanel unification
+
+Completes Slice A by removing the parallel mixer state in the
+editor AudioPanel. Bus-gain sliders now route through
+`SettingsEditor::mutate` so edits flow through the Settings
+persistence layer and land in the engine-owned mixer via the
+existing `AudioMixerApplySink`. Mute / solo / ducking stay
+panel-local — they're editor-only affordances, not user
+preferences.
+
+**Panel wiring** (`engine/editor/panels/audio_panel.{h,cpp}`).
+New `wireEngineMixer(AudioMixer* engine, SettingsEditor* editor)`
+hook. Once wired:
+- `mixer()` returns the engine mixer instead of the local
+  fallback — reads always reflect the authoritative state.
+- Bus-gain slider edits call `editor->mutate([idx, g](Settings& s)
+  { s.audio.busGains[idx] = g; })` which triggers the existing
+  audio apply-sink path.
+- `computeEffectiveSourceGain` follows the engine mixer, so the
+  panel's meter / mute / solo logic always sees live state.
+- Passing nullptr for either pointer keeps the panel on its
+  local fallback — tests and standalone usage stay supported
+  without a live engine.
+
+**Engine wiring** (`engine/core/engine.cpp`). Right after
+`wireSettingsEditorPanel`, the engine calls
+`m_editor->getAudioPanel().wireEngineMixer(&m_audioMixer,
+m_settingsEditor.get())` so the panel sees the authoritative
+state from the first frame the editor is available.
+
+**What stays panel-local** (per design decision B3):
+- Mute / solo sets (per-entity editor-only affordances).
+- Ducking state + params (authoring knobs, not user prefs).
+- Reverb / ambient zone draft lists (editor staging for a
+  future scene-owned runtime component).
+- Zone overlay toggle.
+
+**Tests.** 5 new `AudioPanelWire` cases in
+`tests/test_audio_panel.cpp`:
+- Unwired panel uses its local fallback mixer.
+- Wiring an engine mixer redirects reads through the pointer.
+- Wiring a null engine mixer keeps the local fallback.
+- `computeEffectiveSourceGain` tracks the engine mixer's live
+  state — external mutation shows up on the next read.
+- `SettingsEditor` pointer alone (no engine mixer) is tolerated
+  and stays on the local fallback (the slider path requires
+  both pointers before it re-routes through Settings).
+
+Full suite: 2718 passing (+5), 1 pre-existing skip. Slice A is
+complete; Phase 10.7 now delivers every milestone in the
+approved design:
+- Subtitles: tick + render + declarative caption map (B1–B3).
+- Photosensitive: bloom + flicker retrofits (C1–C2); shake +
+  flash deferred to Phase 11 per scope reduction.
+- Audio: bus tagging + per-frame gain-chain pass + panel
+  unification (A1–A3).
+
+Camera shake and flash overlay are the only deferred items —
+and they remain deferred because their *originating subsystems*
+don't exist in the codebase yet. When Phase 11 builds them, the
+clamp helpers (`clampShakeAmplitude`, `clampFlashAlpha`) are
+unit-tested and ready for wiring.
+
 ### 2026-04-23 Phase 10.7 — Slice A2: per-frame gain-chain pass
 
 Mid-play Settings slider moves are now audible. `AudioEngine`

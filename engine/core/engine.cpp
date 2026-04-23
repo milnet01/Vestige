@@ -393,6 +393,14 @@ bool Engine::initialize(const EngineConfig& config)
                 m_settingsEditor.get(),
                 &m_inputActionMap,
                 Settings::defaultPath());
+
+            // Phase 10.7 slice A3 — point the AudioPanel at the
+            // engine-owned mixer so it displays the authoritative
+            // bus gains, and give it a SettingsEditor handle so
+            // bus-slider edits route through Settings persistence
+            // instead of mutating a panel-local mixer.
+            m_editor->getAudioPanel().wireEngineMixer(
+                &m_audioMixer, m_settingsEditor.get());
         }
     }
 

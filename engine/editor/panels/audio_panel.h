@@ -23,6 +23,7 @@ namespace Vestige
 
 class AudioSystem;
 class Scene;
+class SettingsEditor;
 
 /// @brief Editor panel for audio placement, mixing, and debugging.
 ///
@@ -81,8 +82,38 @@ public:
 
     // -- Mixer + ducking -------------------------------------------
 
-    AudioMixer&          mixer()                { return m_mixer; }
-    const AudioMixer&    mixer() const          { return m_mixer; }
+    /// @brief Wires the panel to the engine's authoritative mixer +
+    ///        SettingsEditor (Phase 10.7 slice A3). Once wired, bus-
+    ///        gain sliders route through `SettingsEditor::mutate` so
+    ///        the panel no longer owns a parallel copy of the mixer
+    ///        state — edits flow through the Settings persistence
+    ///        layer and land in the engine mixer via the existing
+    ///        `AudioMixerApplySink`. Mute / solo / ducking remain
+    ///        panel-local (they are editor-only affordances, not
+    ///        user preferences).
+    ///
+    /// Passing nullptr for either argument keeps the panel on its
+    /// local fallback mixer — used by tests and any standalone
+    /// usage outside the engine.
+    void wireEngineMixer(AudioMixer* engineMixer, SettingsEditor* editor)
+    {
+        m_engineMixer = engineMixer;
+        m_settingsEditor = editor;
+    }
+
+    /// @brief Returns the active mixer — engine-owned when wired,
+    ///        panel-local otherwise. Most callers should read gains
+    ///        through this; live edits should go through
+    ///        `SettingsEditor::mutate` when `m_settingsEditor` is
+    ///        non-null.
+    AudioMixer& mixer()
+    {
+        return m_engineMixer ? *m_engineMixer : m_mixer;
+    }
+    const AudioMixer& mixer() const
+    {
+        return m_engineMixer ? *m_engineMixer : m_mixer;
+    }
     DuckingState&        duckingState()         { return m_duckingState; }
     const DuckingState&  duckingState() const   { return m_duckingState; }
     DuckingParams&       duckingParams()        { return m_duckingParams; }
@@ -146,7 +177,13 @@ private:
 
     bool m_open = false;
 
+    // Local fallback mixer — used when no engine mixer is wired in.
+    // Once `wireEngineMixer` is called with a non-null pointer the
+    // panel reads/writes through that pointer and leaves this one
+    // untouched. Kept for tests and pre-wire display.
     AudioMixer    m_mixer{};
+    AudioMixer*   m_engineMixer = nullptr;   ///< Engine-owned authoritative mixer.
+    SettingsEditor* m_settingsEditor = nullptr; ///< Routes bus edits into Settings.
     DuckingState  m_duckingState{};
     DuckingParams m_duckingParams{};
 
