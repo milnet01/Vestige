@@ -132,6 +132,7 @@ add_executable(vestige_tests
     test_camera_mode.cpp
     test_engine_paths.cpp
     test_component_clone.cpp
+    test_entity_serializer_registry.cpp
     test_menu_prefabs.cpp
     test_ui_layout_panel.cpp
     test_node_graph.cpp
