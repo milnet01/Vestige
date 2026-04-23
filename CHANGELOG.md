@@ -9,6 +9,47 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-23 Phase 10.9 — Slice 1 F1: caption-path double-concat fix
+
+First ship of Phase 10.9 (post-ultrareview remediation) per the
+red/green + independent-reviewer process discipline established
+at phase open.
+
+**Red commit `7b9f116`** — extracted the pre-fix join at
+`engine.cpp:412` (`m_assetPath + "assets/captions.json"`) verbatim
+into a new `engine/core/engine_paths.{h,cpp}` choke-point so the
+pre-fix behaviour could be unit-tested in isolation. Added four
+spec-driven tests in `tests/test_engine_paths.cpp` authored from
+`PHASE10_7_DESIGN.md` §4.2 ("the caption map lives at
+`<assetPath>/captions.json`") and the existing engine convention
+of `<assetPath>/<sub>` used throughout engine.cpp for fonts,
+scenes, shaders. All four tests failed against the extracted
+verbatim bug — evidence the tests were capable of failing.
+
+**Green commit `5572aa5`** — fixed the helper to
+`stripTrailingSlash(assetPath) + "/captions.json"`, with a
+bare-filename short-circuit for empty asset roots. All four tests
+pass. Full suite: 2731/2732 (1 pre-existing skip).
+
+**Reviewer pass** — independent subagent given only the two diffs
++ the design-doc clause, no session context. Returned "Accept
+with nit": judged the fix correct, judged the red commit
+genuinely failing (not a fake red/green), judged the tests
+spec-anchored rather than code-mirroring, and judged the helper
+extraction justified for its unit-test surface. Nit: document
+that `stripTrailingSlash` is POSIX-separator-only because the
+fragments we append are also `/`-rooted; addressed in a follow-up
+nit commit.
+
+**Effect on shipping behaviour.** `Engine::initialize` now loads
+`<assetPath>/captions.json` as PHASE10_7_DESIGN.md §4.2 specified,
+rather than `<assetPath>assets/captions.json`. Projects that ship
+caption maps will see their captions fire when clips play (once
+Slice 2 P4 wires the auto-enqueue call path — today no
+`playSound*` overload invokes `CaptionMap::enqueueFor`). Projects
+shipping no captions are unchanged — the file is optional; the
+loader treats absent as empty.
+
 ### 2026-04-23 ROADMAP: Phase 10.9 post-ultrareview remediation phase
 
 Added Phase 10.9 (Post-Ultrareview Remediation) between Phase 10.8

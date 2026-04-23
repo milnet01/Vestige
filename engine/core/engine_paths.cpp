@@ -17,6 +17,13 @@ namespace
 /// doesn't produce `"assets//captions.json"` (an OS-tolerant quirk
 /// that nonetheless breaks path-equality in any string-keyed
 /// cache).
+///
+/// Intentionally POSIX-separator-only: the filename fragments we
+/// append here (`/captions.json` and any future siblings) use `/`
+/// exclusively, so a Windows asset root ending in `\\` would
+/// produce `"C:\\Game\\assets\\/captions.json"` — ugly but
+/// Windows-tolerated. If we ever append platform-native fragments,
+/// revisit.
 std::string stripTrailingSlash(const std::string& path)
 {
     if (!path.empty() && path.back() == '/')
