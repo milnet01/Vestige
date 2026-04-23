@@ -9,6 +9,67 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-23 Phase 10.9 — Slice 1 F3: ComponentSerializerRegistry
+
+Third Slice 1 item. Follows the same red / green / doc discipline
+as F1 and F2.
+
+**Red commit `4056ce0`** — added `tests/test_entity_serializer_registry.cpp`
+with four spec tests authored from ROADMAP Phase 10.9 Slice 1 F3
+and the `AudioSourceComponent::bus` docstring at
+`audio_source_component.h:35-49` (which references the Phase 10.7
+slice A1 mixer-bus design). The focused test —
+`AudioSourceBusRoundTrips_Phase10_7_A1` — exercises the latent
+bug: a Music-bus scene entity saved to JSON deserialises as a
+Sfx-bus default because the entity serializer's fixed 7-entry
+allowlist (MeshRenderer, DirectionalLight, PointLight, SpotLight,
+EmissiveLight, ParticleEmitter, WaterSurface) silently drops every
+other component type on save. All four tests failed against the
+pre-fix serializer.
+
+**Green commit `f640d1c`** — introduced
+`engine/utils/component_serializer_registry.{h,cpp}`. The registry
+holds `{typeName, trySerialize, deserialize}` tuples; each
+concrete type registers itself via `ensureBuiltinsRegistered()` on
+first use. `serializeEntity` now walks the registry once and
+serialises every component the entity owns; `deserializeEntity`
+dispatches each JSON key to the matching entry (unknown keys log a
+warning rather than silently dropping).
+
+Registered built-ins (8 types):
+- MeshRenderer, DirectionalLight, PointLight, SpotLight,
+  EmissiveLight, ParticleEmitter, WaterSurface (pre-F3 allowlist,
+  behaviour-preserved)
+- AudioSource (NEW) — every user-editable field now round-trips:
+  clipPath, volume, bus (enum ↔ string), pitch, minDistance,
+  maxDistance, rolloffFactor, attenuationModel (enum ↔ string),
+  velocity, occlusionMaterial (enum ↔ string), occlusionFraction,
+  loop, autoPlay, spatial. Absent fields hydrate to the
+  Phase 10.7-documented defaults (e.g. `bus` → `Sfx`, matching the
+  pre-A1 implicit routing per `audio_source_component.h:44-48`).
+
+All four Red-commit tests now pass. Full suite: 2757/2758 (1
+pre-existing skip, unrelated).
+
+**Effect on shipping behaviour.** Scene save / load and prefab
+instantiation now preserve `AudioSourceComponent` fields across
+JSON round-trips; previously every AudioSource on a saved scene
+was dropped and re-instantiated from defaults when the scene
+loaded. No other serialised behaviour changes — the seven pre-F3
+types serialise identically.
+
+**CameraMode persistence hook.** The registry is also the Phase 10.8
+CM* / Slice 10 hook for `CameraComponent` / `CameraMode` serialisation:
+adding one more registration call adds camera persistence with no
+core-file edits. Deferred to the slice that introduces the
+serialisable fields.
+
+**F1 checkbox housekeeping.** Ticked the Phase 10.9 Slice 1 F1
+checkbox in ROADMAP.md — F1 actually shipped under commits
+`7b9f116` (red) / `5572aa5` (green) / `4641124` (nit) on 2026-04-23,
+but the checkbox was never flipped. Retroactive correction so the
+ROADMAP matches the git history.
+
 ### 2026-04-23 Phase 10.9 — Slice 1 F2: Component::clone() pure-virtual + ClothComponent backfill
 
 Second Slice 1 item. Follows the same red / green / reviewer
