@@ -6,6 +6,7 @@
 #pragma once
 
 #include "audio/audio_attenuation.h"
+#include "audio/audio_mixer.h"
 #include "audio/audio_occlusion.h"
 #include "scene/component.h"
 
@@ -30,6 +31,22 @@ public:
 
     /// @brief Volume (0.0 = silent, 1.0 = full volume).
     float volume = 1.0f;
+
+    /// @brief Mixer bus this source is routed through.
+    ///
+    /// Phase 10.7 slice A1 — every source now belongs to exactly one
+    /// non-Master bus. The per-frame gain resolution in `AudioSystem`
+    /// composes the effective gain as
+    ///   `master × bus × volume × occlusion × ducking`,
+    /// so a user changing Music gain in Settings attenuates every
+    /// source tagged `AudioBus::Music` without touching Sfx /
+    /// Ambient / Voice / Ui playback.
+    ///
+    /// Defaults to `AudioBus::Sfx` because it matches the implicit
+    /// "everything is a sound effect" routing the engine used before
+    /// the mixer landed; existing scene files deserialize into this
+    /// default when the JSON field is absent.
+    AudioBus bus = AudioBus::Sfx;
 
     /// @brief Pitch multiplier (1.0 = normal).
     float pitch = 1.0f;

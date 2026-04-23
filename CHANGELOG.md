@@ -9,6 +9,35 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-23 Phase 10.7 — Slice A1: AudioBus field on AudioSourceComponent
+
+Adds `AudioBus bus` to `AudioSourceComponent` so every source can
+be routed through one of the 6 mixer buses (Master / Music /
+Voice / Sfx / Ambient / Ui). Defaults to `AudioBus::Sfx` — the
+implicit routing the engine used before the mixer landed, so
+existing scenes sound identical until authors explicitly re-tag
+a source.
+
+Component `clone()` preserves the bus. No serializer work
+(`entity_serializer.cpp` does not yet handle
+`AudioSourceComponent` — that's existing scope, not introduced
+by this slice).
+
+Sets up the per-frame gain-chain pass in Slice A2, which will
+iterate owned components and compose
+`master × bus × volume × occlusion × ducking → AL_GAIN` each
+frame so Settings slider moves are heard mid-play rather than
+only on the next clip acquisition.
+
+Tests: `tests/test_audio_source_component.cpp` — 5 cases:
+- Default bus is Sfx.
+- Bus is assignable.
+- `clone()` preserves bus and other fields.
+- Cloned component has independent bus state (no shared state).
+- Every bus in `AudioBusCount` is round-trippable.
+
+Full suite: 2706 passing (+5), 1 pre-existing skip.
+
 ### 2026-04-23 Phase 10.7 — Slice C: photosensitive consumer retrofits
 
 Closes the Settings → runtime gap for photosensitive safe mode

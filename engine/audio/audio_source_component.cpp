@@ -13,6 +13,7 @@ std::unique_ptr<Component> AudioSourceComponent::clone() const
     auto copy = std::make_unique<AudioSourceComponent>();
     copy->clipPath          = clipPath;
     copy->volume            = volume;
+    copy->bus               = bus;
     copy->pitch             = pitch;
     copy->minDistance       = minDistance;
     copy->maxDistance       = maxDistance;
