@@ -29,6 +29,7 @@ set(ENGINE_SOURCES
     scene/scene.cpp
     scene/scene_manager.cpp
     scene/camera_component.cpp
+    scene/camera_mode.cpp
     scene/particle_emitter.cpp
     scene/gpu_particle_emitter.cpp
     scene/particle_presets.cpp

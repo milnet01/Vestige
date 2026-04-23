@@ -9,6 +9,47 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-23 Phase 10.8 — Slice CM1: CameraMode base types
+
+First slice of Phase 10.8 per the approved
+`docs/PHASE10_8_CAMERA_MODES_DESIGN.md` — pure interface, no
+concrete modes yet (those are CM2–CM7).
+
+Added:
+
+- `engine/scene/camera_mode.h` — `CameraModeType` enum,
+  `CameraViewOutput` POD, `CameraInputs` per-frame context,
+  abstract `CameraMode : public Component` base class.
+- `engine/scene/camera_mode.cpp` — `blendCameraView(from, to, t)`
+  transition-lerp primitive (linear mix on position / FOV / ortho
+  / near / far, slerp on orientation, discrete snap at `t = 0.5`
+  for projection type; `t` clamped to [0, 1]). Drives the 1st↔3rd
+  toggle lerp per design §4.5.
+- `tests/test_camera_mode.cpp` — 9 tests covering
+  `CameraViewOutput` equality, `blendCameraView` endpoints /
+  midpoint interpolation / orientation slerp / projection snap /
+  `t` clamping, and a minimal `StubCameraMode` subclass proving
+  the base-class clone contract compiles.
+
+Design decisions landed in code:
+
+- **Architecture M3** (ECS activation + blend utility) — `CameraMode`
+  inherits `Component`, attaches per-entity. No priority queue; the
+  scene's existing `setActiveCamera` pointer stays the single
+  selector.
+- **FOV authority F1** — `CameraViewOutput.fov` is the authoritative
+  field each mode writes; `CameraComponent.fov` becomes display-only
+  once CM2 ships.
+- **Shake-composition contract (§4.6)** — pre-wired. `computeOutput`
+  is a pure function; Phase 11A's shake offset will be stored
+  separately on `CameraComponent` and applied at render-matrix
+  assembly, never mutating the authoritative state.
+
+Tests: 2727 pass / 0 fail / 1 skip (pre-existing); build clean.
+No behaviour change in the shipping engine — the new types have no
+call sites yet. CM2 lights up the first consumer by extracting the
+existing first-person driving code into `FirstPersonCameraMode`.
+
 ### 2026-04-23 ROADMAP: sync Open-Source Release section with actual launch state
 
 The "Still pending before flipping public" checklist in the
