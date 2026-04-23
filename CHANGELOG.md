@@ -9,6 +9,58 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-23 Phase 10.9 — Slice 1 F4: photosensitive clamp helpers sanitise NaN / ±inf / negatives
+
+Fourth Slice 1 item. Same red / green / doc discipline as F1–F3.
+
+**Red commit `c7023ae`** — added 13 WCAG-tagged tests to
+`tests/test_photosensitive_safety.cpp` (`PhotosensitiveSafety.WCAG_2_3_1_*`)
+asserting all four helpers (`clampFlashAlpha`, `clampShakeAmplitude`,
+`clampStrobeHz`, `limitBloomIntensity`) sanitise NaN / +inf / -inf /
+negative inputs to `0.0f` in *both* enabled and disabled paths. Tests
+authored from WCAG 2.2 SC 2.3.1 ("Three Flashes or Below Threshold") and
+ROADMAP Phase 10.9 Slice 1 F4 — the photosensitive guarantee must not
+depend on whether the user has toggled safe mode. 12 of 13 failed
+against the pre-F4 implementation:
+
+- Disabled path was a bare `return x;` — all four helpers leaked NaN /
+  ±inf / negative values straight through.
+- Enabled min-style helpers (flash, strobe): libstdc++ propagates
+  `std::min(NaN, cap) = NaN`; `-inf` passes through as `min(-inf, cap) =
+  -inf`; `inf` collapses to the cap (`0.25` / `2.0` Hz) and silently
+  hides the upstream bug rather than reporting it.
+- Enabled scale-style helpers (shake, bloom): `NaN * scale = NaN`,
+  `inf * scale = inf`, `-5 * 0.25 = -1.25` — the renderer would have
+  received a negative / infinite / NaN brightness multiplier.
+
+The 13th test (`WCAG_2_3_1_DisabledPreservesFinitePositives`) passed at
+red and pins the disabled-path pass-through for finite non-negatives, so
+a future refactor cannot regress the disabled path into a global ceiling
+while "fixing" sanitisation.
+
+**Green commit `50aa1bc`** — factored a private
+`sanitiseNonNegative(x)` helper in `photosensitive_safety.cpp`
+(non-finite → 0, negative → 0, else x) and applied it at the top of all
+four clamp helpers before the enabled/disabled branch runs. Header
+docstrings updated to name the sanitisation contract alongside the
+existing cap/scale semantics. All 26 `PhotosensitiveSafety.*` tests now
+pass; full suite **2771/2771** (1 pre-existing skip, unrelated).
+
+**Effect on shipping behaviour.** A buggy upstream producing NaN / ±inf
+/ negative values — e.g. a physics subsystem integrating a divide-by-
+zero into shake amplitude, or a custom post-process supplying
+`intensity = -1.0f` by mistake — can no longer paint an uncontrolled
+brightness on the framebuffer. Well-formed finite non-negative upstream
+code is unchanged in both enabled and disabled paths. No ABI change
+(pure policy refinement inside the existing free functions).
+
+**Why WCAG 2.3.1 requires sanitisation on both paths.** The safe-mode
+toggle is a user preference for *additional* restriction, not an opt-in
+to sanitisation. SC 2.3.1 is a conformance gate on the content itself,
+and the renderer cannot reason about what a NaN pixel will decode to
+after blending/tonemap — so a non-finite value must never reach it,
+regardless of the user's safe-mode state.
+
 ### 2026-04-23 Phase 10.9 — Slice 1 F3: ComponentSerializerRegistry
 
 Third Slice 1 item. Follows the same red / green / doc discipline
