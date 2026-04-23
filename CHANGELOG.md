@@ -9,6 +9,71 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-23 Phase 10.9 — Slice 1 F8: `SettingsEditor::mutate` validate-before-push
+
+Eighth Slice 1 item. Same red / green / doc discipline as F1–F7. Direct
+response to the runtime-UI-bypasses-persistence-policy finding: every
+ImGui slider wrapped in `m_editor->mutate(...)` was writing raw values
+straight into `m_pending` and pushing through the apply sinks without
+running the same `validate()` chain that `Settings::fromJson` uses on
+load. Live previews could therefore drive subsystems into states the
+persistence layer would have rejected.
+
+**Red commit `357f8a9`** — three tests in `tests/test_settings.cpp`
+pin the clamp contract on `SettingsEditor::mutate`:
+
+- `MutateClampsAudioBusGainBeforePushingToSink_F8` — sets
+  `busGains[0] = 2.5f` through `mutate()` with an audio sink attached;
+  asserts both `editor.pending().audio.busGains[0]` and the sink
+  received `1.0f` (the `[0.0, 1.0]` policy). Pre-F8 the `AudioMixer`
+  saw raw `2.5` — clipping every sample.
+- `MutateClampsRenderScaleBeforePushingToSink_F8` — sets
+  `renderScale = 3.5f`; asserts pending reflects `2.0f` (the
+  `[0.25, 2.0]` GPU-budget cap).
+- `MutateClampsStrobeHzBeforePushingToSink_F8` — sets
+  `maxStrobeHz = 120.0f`; asserts pending reflects `30.0f` (the
+  persisted ceiling; runtime further clamps to `3 Hz` via
+  `clampStrobeHz` when photosensitive safety is enabled — F5 of
+  this slice).
+
+All three FAILED against shipping code: raw slider values survived
+`mutate()` and reached the sinks unchanged.
+
+**Green commit `92af103`** — two changes, one contract:
+
+1. `validate(Settings&)` lifted from the anonymous namespace in
+   `engine/core/settings.cpp` into the `Vestige` namespace, with a
+   new declaration in `engine/core/settings.h`. Validation helpers
+   (`clamp01`, `isValidScalePreset`, `isValidSubtitleSize`,
+   `isValidColorVisionFilter`) stay in the anonymous namespace —
+   they're `validate()`'s implementation detail, not part of the
+   contract.
+2. `SettingsEditor::mutate` now calls `validate(m_pending)` between
+   the mutator invocation and `pushPendingToSinks()`. `Settings::fromJson`'s
+   existing call to `validate()` on load is unchanged; F8 is the
+   symmetric wire-up on the runtime side so live and persisted
+   state can never disagree about what the policy is.
+
+All three red tests go green. `pending()` now reflects the clamped
+value in every case, and the sinks receive the clamped value.
+
+**Test suite: 2783 / 2783 passing** (1 pre-existing skip
+`MeshBoundsTest.UploadComputesLocalBounds`, unchanged).
+
+**Files changed (green):** `engine/core/settings.h` (+13 lines — public
+declaration + doc block); `engine/core/settings.cpp` (+/- 3 lines —
+move the anon-namespace closer up so `validate()` is at namespace
+scope); `engine/core/settings_editor.cpp` (+6 lines — the
+`validate(m_pending)` call plus explanatory comment citing the three
+clamp classes it covers).
+
+**Net: +22 / -3 lines across three files. One bypass closed.**
+
+**Next in Slice 1:** **F9** — `Logger` thread-safety (`std::mutex`
+around `s_logFile` / `s_entries`; `AsyncTextureLoader` already logs
+from a worker thread → live race on the log file `ofstream` and the
+in-memory entry deque).
+
 ### 2026-04-23 Phase 10.9 — Slice 1 F7: atomic-write unification
 
 Seventh Slice 1 item. Same red / green / doc discipline as F1–F6.
