@@ -40,52 +40,87 @@ struct VertexKeyHash
     }
 };
 
-/// @brief Safely converts a string to int, returning -1 on failure.
-static int safeStoi(const std::string& s)
+// Per-line read cap — rejects malformed / adversarial OBJs that would otherwise
+// grow a single std::string unboundedly. CWE-400 Uncontrolled Resource Consumption.
+static constexpr size_t kMaxLineBytes = 1024u * 1024u;  // 1 MiB
+
+enum class LineStatus { Ok, Eof, TooLong };
+
+static LineStatus readBoundedLine(std::istream& in, std::string& line, size_t maxBytes)
 {
+    line.clear();
+    int ch = in.get();
+    if (ch == std::char_traits<char>::eof())
+    {
+        return LineStatus::Eof;
+    }
+    do
+    {
+        if (ch == '\n')
+        {
+            return LineStatus::Ok;
+        }
+        if (line.size() >= maxBytes)
+        {
+            return LineStatus::TooLong;
+        }
+        line.push_back(static_cast<char>(ch));
+    } while ((ch = in.get()) != std::char_traits<char>::eof());
+    return LineStatus::Ok;  // final line without trailing newline
+}
+
+/// @brief Resolves an OBJ index string to a 0-based array index.
+/// Per Wavefront OBJ spec Appendix B: positive values are 1-based; negative
+/// values are relative to the current end of the list at face-parse time
+/// (e.g. -1 is the most recent vertex). Zero and malformed input → -1 (invalid).
+static int resolveObjIndex(const std::string& s, size_t listSize)
+{
+    if (s.empty())
+    {
+        return -1;
+    }
+    int raw = 0;
     try
     {
-        return std::stoi(s);
+        raw = std::stoi(s);
     }
     catch (const std::exception&)
     {
-        return 0;
+        return -1;
     }
+    if (raw > 0)
+    {
+        return raw - 1;
+    }
+    if (raw < 0)
+    {
+        return static_cast<int>(listSize) + raw;
+    }
+    return -1;
 }
 
-/// @brief Parses a face vertex token like "1/2/3", "1//3", or "1".
-static VertexKey parseFaceVertex(const std::string& token)
+/// @brief Parses a face vertex token like "1/2/3", "1//3", "1", or "-3/-2/-1".
+static VertexKey parseFaceVertex(const std::string& token,
+                                 size_t numPositions,
+                                 size_t numTexCoords,
+                                 size_t numNormals)
 {
     VertexKey key = {-1, -1, -1};
 
     std::istringstream stream(token);
     std::string part;
 
-    // Position index (always present)
     if (std::getline(stream, part, '/'))
     {
-        if (!part.empty())
-        {
-            key.posIndex = safeStoi(part) - 1;  // OBJ is 1-indexed
-        }
+        key.posIndex = resolveObjIndex(part, numPositions);
     }
-
-    // Texture coordinate index (optional)
     if (std::getline(stream, part, '/'))
     {
-        if (!part.empty())
-        {
-            key.texIndex = safeStoi(part) - 1;
-        }
+        key.texIndex = resolveObjIndex(part, numTexCoords);
     }
-
-    // Normal index (optional)
     if (std::getline(stream, part, '/'))
     {
-        if (!part.empty())
-        {
-            key.normIndex = safeStoi(part) - 1;
-        }
+        key.normIndex = resolveObjIndex(part, numNormals);
     }
 
     return key;
@@ -127,9 +162,23 @@ bool ObjLoader::load(const std::string& filePath,
     std::string line;
     int lineNumber = 0;
 
-    while (std::getline(file, line))
+    for (;;)
     {
+        LineStatus status = readBoundedLine(file, line, kMaxLineBytes);
+        if (status == LineStatus::Eof)
+        {
+            break;
+        }
         lineNumber++;
+        if (status == LineStatus::TooLong)
+        {
+            Logger::error("OBJ line " + std::to_string(lineNumber)
+                + " exceeds " + std::to_string(kMaxLineBytes)
+                + "-byte cap: " + filePath);
+            outVertices.clear();
+            outIndices.clear();
+            return false;
+        }
 
         // Skip empty lines and comments
         if (line.empty() || line[0] == '#')
@@ -183,9 +232,9 @@ bool ObjLoader::load(const std::string& filePath,
             for (size_t i = 1; i + 1 < tokens.size(); i++)
             {
                 VertexKey keys[3] = {
-                    parseFaceVertex(tokens[0]),
-                    parseFaceVertex(tokens[i]),
-                    parseFaceVertex(tokens[i + 1])
+                    parseFaceVertex(tokens[0],     positions.size(), texCoords.size(), normals.size()),
+                    parseFaceVertex(tokens[i],     positions.size(), texCoords.size(), normals.size()),
+                    parseFaceVertex(tokens[i + 1], positions.size(), texCoords.size(), normals.size())
                 };
 
                 for (const auto& key : keys)
