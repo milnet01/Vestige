@@ -9,6 +9,48 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-23 Phase 10.9 — Slice 1 F6: OBJ negative-index support + 1 MiB per-line cap
+
+Sixth Slice 1 item. Same red / green / doc discipline as F1–F5.
+
+**Red commit `371c8bc`** — added three spec-tagged tests to
+`tests/test_obj_loader.cpp` pinning the Wavefront OBJ spec Appendix B
+negative-index rule ("-1 refers to the most recent vertex") and a
+CWE-400 per-line read cap:
+
+- `OBJSpec_AppendixB_NegativeIndicesResolveRelativeToCurrentListEnd` —
+  `f -3 -2 -1` after three `v` lines must resolve to v#1 / v#2 / v#3.
+  The pre-F6 parser ran `stoi("-1") - 1 = -2`, tripped the
+  `key.posIndex >= 0` guard, and silently emitted three vertices at the
+  origin — a valid-looking triangle with all corners collapsed.
+- `OBJSpec_AppendixB_NegativeIndicesAreRelativeAtParseTime` — negative
+  indices must resolve against the list size at the face's parse point,
+  not the file's final size. Interleaved `v` + `f` blocks would be
+  mis-resolved otherwise.
+- `CWE_400_OverLongSingleLineIsRejected` — a file whose first line is a
+  1.5 MiB comment must be rejected, not read into an unbounded
+  `std::string`. Pre-F6 `std::getline` happily allocated whatever the
+  line was.
+
+**Green commit `f6c2375`** — two targeted changes in
+`engine/utils/obj_loader.cpp`:
+
+- `resolveObjIndex(const std::string& s, size_t listSize)` replaces the
+  old `safeStoi`. Positive → `raw - 1`; negative → `listSize + raw`
+  (e.g. -1 → last, -2 → second-last); zero/malformed → -1 (invalid).
+  `parseFaceVertex` now takes the three list sizes so each slot
+  (position / texcoord / normal) is resolved against its own list.
+- `readBoundedLine` replaces `std::getline` with a per-char reader
+  capped at `kMaxLineBytes = 1 MiB` (= 1048576 bytes). Over-limit
+  returns `LineStatus::TooLong`; the parser logs `"OBJ line N exceeds
+  1048576-byte cap"`, clears the output buffers, and returns false.
+  The cap bounds worst-case memory growth without touching the legal
+  256 MiB overall file-size guard.
+
+**Full suite:** 2778/2779 pass (1 pre-existing skip —
+`MeshBoundsTest.UploadComputesLocalBounds`). All 15 ObjLoaderTest cases
+pass (12 pre-existing + 3 new).
+
 ### 2026-04-23 Phase 10.9 — Slice 1 F5: `clampStrobeHz` hard-caps at WCAG 3 Hz
 
 Fifth Slice 1 item. Same red / green / doc discipline as F1–F4.
