@@ -18,7 +18,24 @@
 namespace Vestige
 {
 
+class Entity;
 class PhysicsWorld;
+
+/// @brief Phase 10.9 Slice 3 S6 — pure helper returning the
+///        world-space centre of a PressurePlate's overlap-query
+///        sphere.
+///
+/// The centre sits `detectionHeight` metres along the entity's
+/// world-space +Y axis above the entity's world position. The
+/// previous implementation used `owner.transform.position` directly,
+/// which breaks for any plate parented under another entity — the
+/// local-space position placed the sphere at the wrong world
+/// coordinates, and the puzzle trigger fired at the parent's origin
+/// instead of at the plate's actual rendered location. Kept as a
+/// free function so the fix is unit-testable without a live Jolt
+/// PhysicsWorld.
+glm::vec3 computePressurePlateCenter(const Entity& owner,
+                                     float detectionHeight);
 
 /// @brief A trigger volume that detects when physics objects overlap it.
 ///

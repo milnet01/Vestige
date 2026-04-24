@@ -5,6 +5,7 @@
 /// @brief Unit tests for PressurePlateComponent configuration and state.
 /// @note Physics overlap queries require a full Jolt setup and are not tested here.
 
+#include "scene/entity.h"
 #include "scene/pressure_plate_component.h"
 
 #include <gtest/gtest.h>
@@ -200,4 +201,75 @@ TEST(PressurePlateTest, SetPhysicsWorldToNull)
     PressurePlateComponent plate;
     plate.setPhysicsWorld(nullptr);
     EXPECT_NO_THROW(plate.update(0.016f));
+}
+
+// =============================================================================
+// Phase 10.9 Slice 3 S6 — computePressurePlateCenter uses the entity's
+// world position, not its local transform. A plate parented under
+// another entity must fire the trigger at its rendered location,
+// not at the parent's origin.
+// =============================================================================
+
+TEST(PressurePlateCenter, UnparentedEntityPlacesCenterAboveLocalPosition_S6)
+{
+    Entity plateEntity("Plate");
+    plateEntity.transform.position = glm::vec3(2.0f, 3.0f, 4.0f);
+
+    const glm::vec3 c = computePressurePlateCenter(plateEntity, 0.5f);
+
+    EXPECT_FLOAT_EQ(c.x, 2.0f);
+    EXPECT_FLOAT_EQ(c.y, 3.5f);  // 3.0 + 0.5 detectionHeight
+    EXPECT_FLOAT_EQ(c.z, 4.0f);
+}
+
+TEST(PressurePlateCenter, ChildOfTranslatedParentUsesWorldPosition_S6)
+{
+    // Parent at (10, 0, 0). Child at local (2, 3, 4). World = (12, 3, 4).
+    // With detectionHeight = 0.5, centre must be (12, 3.5, 4).
+    Entity parent("Parent");
+    parent.transform.position = glm::vec3(10.0f, 0.0f, 0.0f);
+    Entity* child =
+        parent.addChild(std::make_unique<Entity>("PlateChild"));
+    child->transform.position = glm::vec3(2.0f, 3.0f, 4.0f);
+
+    const glm::vec3 c = computePressurePlateCenter(*child, 0.5f);
+
+    EXPECT_FLOAT_EQ(c.x, 12.0f)
+        << "parent translation must cascade into the plate's overlap-query "
+           "centre — a plate parented under a moving rig was firing its "
+           "trigger at the rig's origin";
+    EXPECT_FLOAT_EQ(c.y, 3.5f);
+    EXPECT_FLOAT_EQ(c.z, 4.0f);
+}
+
+TEST(PressurePlateCenter, GrandchildCascadesThroughFullHierarchy_S6)
+{
+    // Grandparent (100, 0, 0) → parent (local 10, 0, 0) → plate (local 2, 3, 4).
+    // Plate world = (112, 3, 4). Centre with height 0.5 = (112, 3.5, 4).
+    Entity grandparent("GP");
+    grandparent.transform.position = glm::vec3(100.0f, 0.0f, 0.0f);
+    Entity* parent =
+        grandparent.addChild(std::make_unique<Entity>("Parent"));
+    parent->transform.position = glm::vec3(10.0f, 0.0f, 0.0f);
+    Entity* plate =
+        parent->addChild(std::make_unique<Entity>("Plate"));
+    plate->transform.position = glm::vec3(2.0f, 3.0f, 4.0f);
+
+    const glm::vec3 c = computePressurePlateCenter(*plate, 0.5f);
+
+    EXPECT_FLOAT_EQ(c.x, 112.0f);
+    EXPECT_FLOAT_EQ(c.y, 3.5f);
+    EXPECT_FLOAT_EQ(c.z, 4.0f);
+}
+
+TEST(PressurePlateCenter, ZeroDetectionHeightPutsCenterAtWorldPosition_S6)
+{
+    Entity plateEntity("Flat");
+    plateEntity.transform.position = glm::vec3(5.0f, 0.0f, -2.0f);
+
+    const glm::vec3 c = computePressurePlateCenter(plateEntity, 0.0f);
+
+    EXPECT_FLOAT_EQ(c.x, 5.0f);
+    EXPECT_FLOAT_EQ(c.y, 0.0f);
+    EXPECT_FLOAT_EQ(c.z, -2.0f);
 }

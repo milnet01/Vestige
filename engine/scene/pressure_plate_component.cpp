@@ -15,6 +15,14 @@
 namespace Vestige
 {
 
+glm::vec3 computePressurePlateCenter(const Entity& /*owner*/,
+                                     float /*detectionHeight*/)
+{
+    // Phase 10.9 Slice 3 S6 RED stub — deliberately ignores inputs.
+    // Tests fail on the returned zero vector.
+    return glm::vec3(0.0f);
+}
+
 void PressurePlateComponent::update(float deltaTime)
 {
     if (!m_isEnabled)
