@@ -962,7 +962,7 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
   - The Tabernacle's dyed linen curtains should glow softly when sunlight hits the exterior
   - Fast approximation: pre-integrated skin/fabric BRDF lookup (no ray marching needed)
 - [ ] Screen-space global illumination (SSGI) — real-time dynamic indirect light
-- [ ] **Motion vectors from geometry pass via MRT.** Today the renderer uses a per-object overlay pass that re-renders opaque geometry after the full-screen camera-motion pass with per-draw `u_model` / `u_prevModel` matrices (`assets/shaders/motion_vectors_object.{vert,frag}.glsl`). This fixes rigid-body TAA ghosting but re-draws every opaque item. Cleaner: emit motion vectors directly from the main scene pass via an MRT attachment (RG16F motion buffer alongside the HDR color target) and drop the overlay pass. Must also handle skinned and morph-target meshes — currently those fall through to rigid-body motion only, which undershoots by the animation delta. Prerequisite for correct TAA + FSR 2.x on any content with animated characters.
+- [ ] **Motion vectors from geometry pass via MRT.** Today the renderer uses a per-object overlay pass that re-renders opaque geometry after the full-screen camera-motion pass with per-draw `u_model` / `u_prevModel` matrices (`assets/shaders/motion_vectors_object.{vert,frag}.glsl`). This fixes rigid-body TAA ghosting but re-draws every opaque item. Cleaner: emit motion vectors directly from the main scene pass via an MRT attachment (RG16F motion buffer alongside the HDR color target) and drop the overlay pass. Must also handle skinned and morph-target meshes — currently those fall through to rigid-body motion only, which undershoots by the animation delta. Prerequisite for correct TAA + FSR 2.x on any content with animated characters. Once the previous-frame normal buffer is retained alongside motion vectors, `V_mask = α(1 − n_cur · n_prev)` (nVidia GDC 2024 "rain puddles" technique) is a cheap complementary rejection signal — catches animated surfaces where motion vectors agree but the surface is different (undulating water, foliage, animated decals). See Phase 10.8 Decal System for the decal-side consumer.
 
 ### Fog, Mist, and Volumetric Lighting
 - [x] Distance fog (linear, exponential, exponential-squared) — pure-function primitives shipped in `engine/renderer/fog.{h,cpp}`. `FogMode` enum (`None` / `Linear` / `Exponential` / `ExponentialSquared`) + `FogParams` (linear-RGB colour, start, end, density). `computeFogFactor(mode, params, distance)` implements the three canonical forms: Linear `(end-d)/(end-start)`, GL_EXP `exp(-density·d)`, GL_EXP2 `exp(-(density·d)²)` — returns *surface visibility* in [0,1], matches OpenGL Red Book §9 / D3D9 fog-formulas. Guards every degenerate param (zero span, negative density, sub-camera distance) with pass-through behaviour. 15 unit tests cover knees, monotonicity, and edge cases.
@@ -1144,6 +1144,13 @@ Projected textures for blood splatters, scorch marks, claw scratches, bullet hol
   - Sprite sheet frame animation for complex effects
 - [ ] Decal presets: blood splatter, bullet hole, scorch mark, claw scratch, footprint, water stain
 - [ ] Editor integration — place and orient decals in editor, preview projection volume
+- [ ] **Normal-disocclusion mask for decals** (nVidia GDC 2024, rain puddles). Compute `V_mask = α(1 − n_current · n_previous)` (previous-frame normal fetched via motion vectors) and modulate decal contribution by `V_mask` so animated decals don't streak across disocclusion boundaries. Useful beyond rain puddles — any animated surface detail (flowing water on stone, blood spread over time, cracks propagating). Depends on the MRT motion-vector work in Phase 10 "Rendering enhancements" / the previous-frame normal-buffer retention we'd want anyway for TAA. Reference pattern:
+
+  ```
+  prev_n  = sampleNormal(prev_normal_buf, uv - motion_uv);
+  v_mask  = clamp01(alpha * (1.0 - dot(n_current, prev_n)));
+  decal  *= (1.0 - v_mask);  // or use as blend weight for decal history
+  ```
 
 ### Post-Processing Effects Suite
 Cinematic and atmospheric post-processing for horror, drama, and stylized rendering.
