@@ -9,6 +9,96 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-24 Phase 10.9 — Slice 1 F12: save-time warning for unregistered components
+
+Twelfth and final Slice 1 item. F3 (2026-04-23) introduced the
+`ComponentSerializerRegistry` and migrated 7 built-in component
+types (plus AudioSource) off the old fixed allowlist — but the
+engine ships ~26 component types. The other ~18 (ClothComponent,
+RigidBody, BreakableComponent, CameraComponent, SkeletonAnimator,
+TilemapComponent, 2D physics / camera / sprite components,
+InteractableComponent, PressurePlateComponent, GPUParticleEmitter,
+FacialAnimator, TweenManager, LipSyncPlayer, NavAgentComponent,
+CameraMode, etc.) had no registry entry, so every `serializeEntity`
+call silently dropped them. A user saving a scene with a ClothComponent
+got a JSON file with no `ClothComponent` block, and the next load
+rebuilt the entity without it.
+
+**The F12 design choice** — two options were on the table:
+
+1. **Register all 18 types properly.** Correct, but forces 18 new
+   round-trip implementations in one slice — each one a new bug
+   surface, several depending on subsystems whose own remediation
+   is scheduled in later Phase 10.9 slices.
+2. **Loud save-time warning.** Make the silent-drop visible without
+   adding 18 schemas. Individual types migrate into the registry
+   in their own slices as their owning subsystems land.
+
+**Chose option 2.** The drop path already exists — the registry just
+needs to know when an entity owned more components than it managed
+to serialise, and tell someone about it.
+
+**Red commit** — 4 tests pin the warning contract in
+`test_entity_serializer_registry.cpp`:
+
+- Two test-local component subclasses
+  (`UnregisteredTestComponent`, `OtherUnregisteredTestComponent`)
+  stand in for the 18 real unregistered types.
+- `WarnsWhenComponentTypeIsUnregistered` — single unregistered
+  component → warning naming the entity.
+- `SilentWhenAllComponentsAreRegistered` — entity with only
+  registered AudioSource → no warning (false-positive guard).
+- `ReportsDropCountForMultipleUnregistered` — two unregistered
+  components → warning mentions "2".
+- `WarnsForEachAffectedEntityIndependently` — two `serializeEntity`
+  calls → two distinct warnings.
+
+3 of 4 fail on shipping code; the negative case passes vacuously
+because nothing warned to begin with.
+
+**Green commit** — 16 lines added to `serializeEntity` in
+`engine/utils/entity_serializer.cpp`:
+
+- Added a `std::size_t registeredHits` counter, incremented every
+  time `entry.trySerialize(entity, resources)` returned non-null
+  inside the existing registry-dispatch loop.
+- After the loop, compared `entity.getComponentTypeIds().size()`
+  against `registeredHits`. When the entity's count is higher, the
+  difference is the drop count and a `Logger::warning` fires
+  naming the entity, the count, and the remediation path
+  ("Register via `ComponentSerializerRegistry::instance().registerEntry(...)`
+  or relocate to `engine/experimental/`").
+- Child entities are checked via the existing recursion, so a
+  parent with zero unregistered components doesn't mask a child
+  that has some.
+
+**Doc commit** (this entry) — VERSION 0.1.21 → 0.1.22.
+
+**Tests**: 2866/2867 pass (+4 vs P8's 2862, 1 pre-existing skip
+unchanged).
+
+**Scope boundary**:
+- The warning names the entity but not the component *types* —
+  detection is count-based, not name-based. `Component` has no
+  `getTypeName()` virtual today; adding one would force a 26-
+  subclass override patch for marginal warning-text improvement.
+  The entity name + drop count is sufficient for an operator to
+  locate the scene and identify the missing types in a debugger
+  via `getComponentTypeIds()`.
+- The warning fires *per `serializeEntity` call*. Saving a scene
+  with 100 affected entities produces 100 log lines. The F9 ring
+  buffer caps at ~1000 entries, so any scene-save batching path
+  that holds more than ~10 warnings per entity (none today)
+  should consolidate.
+- Load-side is unchanged — an unknown `components` key in JSON
+  already produces a registry-miss warning in the deserialise
+  path (from F3). F12 is symmetric: save now warns as loudly as
+  load already did.
+
+**Slice 1 complete** — F1…F12 all shipped.
+
+---
+
 ### 2026-04-24 Phase 10.9 — Slice 2 P8: HRTF init-order fix + `HrtfStatusEvent` listener
 
 Eighth and final Slice 2 item. Two latent issues in the HRTF layer
