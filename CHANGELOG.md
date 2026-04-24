@@ -93,7 +93,9 @@ skip unchanged).
   the device opens. The `Unknown` actualStatus during that window
   is the honest answer — the driver hasn't had a say yet.
 
-**Slice 2 complete** — P1…P8 all shipped.
+**Slice 2 status post-P8: 7 of 8 shipped.** P6 (narrator styling —
+italic atlas vs. colour differentiation) remains open, blocked on
+an asset-source decision.
 
 ---
 
