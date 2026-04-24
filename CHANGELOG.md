@@ -9,6 +9,85 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-24 Phase 10.9 — Slice 1 F10: `SystemRegistry` partial-init cleanup
+
+Tenth Slice 1 item. Same red / green / doc discipline as F1–F9. Direct
+response to the partial-init-leak finding: `SystemRegistry::initializeAll`
+returned false on the first `system->initialize()` failure but left every
+already-initialized system still holding its engine-owned resources (GL
+handles, OpenAL sources, Jolt bodies, etc.). `~SystemRegistry` does not
+call `shutdown()`, and `shutdownAll()` early-returns on `!m_initialized`
+(which stays false after a failed init) — so the 0..N-1 prefix was
+orphaned until process exit, with its destructor-only cleanup running
+during `~Engine` after the Renderer / Window / GL context were already
+gone (AUDIT.md §H17 territory).
+
+**Red commit `bd6ebe8`** — five new tests in
+`tests/test_system_registry.cpp`:
+
+- `InitializeAllShutsDownPrefixInReverseOnFailure_F10` — A, B, C
+  registered; B's `initialize()` returns false. Asserts the call log is
+  `A::init, B::init, A::shutdown`. Pre-F10 the log stops after
+  `B::init` — A never gets its `shutdown()`.
+- `InitializeAllShutsDownEveryPrecedingOnFailure_F10` — five-system
+  fixture (A, B, C, D, E) with D failing. Asserts all three of C, B, A
+  get `shutdown()` in reverse, and E is never touched.
+- `InitializeAllFailureOnFirstSystemShutsDownNothing_F10` — edge case:
+  the very first system fails. There is no prefix to clean up; call log
+  is just `A::init`. Passes on shipping code (nothing to break) and
+  pins the invariant for F10.
+- `InitializeAllFailureDeactivatesPrefix_F10` — after rollback the
+  previously-initialized systems must not still report `isActive()`.
+  Without the fix a later `updateAll()` would tick subsystems whose
+  resources have been released.
+- `InitializeAllFailureLeavesRegistryReInitable_F10` — `m_initialized`
+  stays false (so `shutdownAll()` is a no-op), and `clear()` runs
+  destructors exactly once. No double-destruction.
+
+Three of the five tests fail on shipping code (the prefix-rollback
+invariants). The other two — first-system-failure and re-initable —
+pass as-is and serve as regression pins.
+
+**Green commit `840c651`** — 19 lines in
+`engine/core/system_registry.cpp`, no header change:
+
+- `initializeAll()` tracks a local `initializedCount` of systems that
+  cleanly returned true from `initialize()`.
+- On failure, a reverse loop walks
+  `[0, initializedCount)` and calls `shutdown()` + `setActive(false)`
+  on each before returning false.
+- System N itself gets no `shutdown()` — its `initialize()` returned
+  false, meaning the resource contract was never established. This
+  matches the existing single-system convention (initialize-failed ⇒
+  no paired shutdown) so individual subsystems don't need to be
+  defensive against shutdown-without-successful-init.
+- Each rollback step logs `SystemRegistry: rolling back 'Name'` so
+  boot-time failures produce a legible audit trail rather than a
+  silent false return.
+
+`m_initialized` stays false on the failure path, so a subsequent
+`shutdownAll()` remains a clean no-op (idempotency preserved) and
+`clear()` continues to run destructors exactly once.
+
+**Test suite: 2791 / 2791 passing** (1 pre-existing skip
+`MeshBoundsTest.UploadComputesLocalBounds`, unchanged; 5 new tests
+vs. F9's baseline of 2786).
+
+**Files changed (green):** `engine/core/system_registry.cpp`
+(+19 / -0 — `initializedCount` counter + reverse rollback loop +
+comments pinning the F10 contract and the "system N gets no shutdown"
+boundary). Header unchanged; the fix is internal to the existing
+`bool initializeAll(Engine&)` signature.
+
+**Net: +19 / -0 lines in one file. One resource leak closed,
+destructor-only cleanup converted into explicit rollback.**
+
+**Next in Slice 1:** **F11** — "Max strobe Hz" slider honesty at
+`settings_editor_panel.cpp:516`: drop slider max to WCAG 2.2 SC 2.3.1's
+3 Hz ceiling (or render a helper text exposing the cap). The current
+0..10 Hz slider persists values the F5 runtime clamp silently discards,
+lying to the partially-sighted user it is supposed to serve.
+
 ### 2026-04-24 Phase 10.9 — Slice 1 F9: `Logger` thread-safety
 
 Ninth Slice 1 item. Same red / green / doc discipline as F1–F8. Direct
