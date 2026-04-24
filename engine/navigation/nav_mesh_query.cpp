@@ -12,6 +12,21 @@
 namespace Vestige
 {
 
+namespace detail
+{
+
+bool isPartialPathStatus(unsigned int status)
+{
+    // Only a successful query can have a "partial path". A failed
+    // status never produces waypoints, so reporting it as partial
+    // would be misleading — callers distinguish failure (empty
+    // waypoints) from partial (non-empty but short) and passing the
+    // partial bit through on failure would poison that contract.
+    return dtStatusSucceed(status) && dtStatusDetail(status, DT_PARTIAL_RESULT);
+}
+
+} // namespace detail
+
 NavMeshQuery::NavMeshQuery() = default;
 
 NavMeshQuery::~NavMeshQuery()
@@ -56,11 +71,13 @@ void NavMeshQuery::shutdown()
     }
 }
 
-std::vector<glm::vec3> NavMeshQuery::findPath(const glm::vec3& start, const glm::vec3& end)
+PathResult NavMeshQuery::findPathWithStatus(const glm::vec3& start, const glm::vec3& end)
 {
+    PathResult out;
+
     if (!m_query)
     {
-        return {};
+        return out;
     }
 
     // Search extents (half-size of the search box around the query point)
@@ -81,7 +98,7 @@ std::vector<glm::vec3> NavMeshQuery::findPath(const glm::vec3& start, const glm:
 
     if (startRef == 0 || endRef == 0)
     {
-        return {};
+        return out;
     }
 
     // Find polygon path
@@ -92,8 +109,14 @@ std::vector<glm::vec3> NavMeshQuery::findPath(const glm::vec3& start, const glm:
                                          &filter, pathPolys, &pathCount, MAX_PATH_POLYS);
     if (dtStatusFailed(status) || pathCount == 0)
     {
-        return {};
+        return out;
     }
+
+    // S8: surface Detour's partial-result flag so AI consumers can
+    // notice when the path stops short of the requested target
+    // (e.g. target inside a disconnected island, or behind an
+    // obstacle Detour cannot route around).
+    out.partial = detail::isPartialPathStatus(status);
 
     // Convert polygon path to waypoints using string pulling
     float straightPath[MAX_PATH_POLYS * 3];
@@ -104,16 +127,22 @@ std::vector<glm::vec3> NavMeshQuery::findPath(const glm::vec3& start, const glm:
                                straightPath, nullptr, nullptr,
                                &straightPathCount, MAX_PATH_POLYS, 0);
 
-    // Convert to glm::vec3
-    std::vector<glm::vec3> result;
-    result.reserve(static_cast<size_t>(straightPathCount));
+    out.waypoints.reserve(static_cast<size_t>(straightPathCount));
     for (int i = 0; i < straightPathCount; ++i)
     {
         int idx = i * 3;
-        result.emplace_back(straightPath[idx], straightPath[idx + 1], straightPath[idx + 2]);
+        out.waypoints.emplace_back(straightPath[idx], straightPath[idx + 1], straightPath[idx + 2]);
     }
 
-    return result;
+    return out;
+}
+
+std::vector<glm::vec3> NavMeshQuery::findPath(const glm::vec3& start, const glm::vec3& end)
+{
+    // Forward to the status-surfacing overload and drop the flag.
+    // Call sites that need the partial flag should migrate to
+    // `findPathWithStatus`.
+    return findPathWithStatus(start, end).waypoints;
 }
 
 glm::vec3 NavMeshQuery::findNearestPoint(const glm::vec3& point)
