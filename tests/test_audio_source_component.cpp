@@ -67,3 +67,38 @@ TEST(AudioSourceComponent, AllBusesAssignable)
         EXPECT_EQ(source.bus, bus) << "bus index " << i;
     }
 }
+
+// Phase 10.9 P7 — SoundPriority field for pool-eviction tiering.
+
+TEST(AudioSourceComponent, DefaultPriorityIsNormal)
+{
+    // Generic gameplay SFX default — raise per-component for attack
+    // cues (High) or dialogue / stingers (Critical).
+    AudioSourceComponent source;
+    EXPECT_EQ(source.priority, SoundPriority::Normal);
+}
+
+TEST(AudioSourceComponent, PriorityIsAssignable)
+{
+    AudioSourceComponent source;
+    source.priority = SoundPriority::Critical;
+    EXPECT_EQ(source.priority, SoundPriority::Critical);
+    source.priority = SoundPriority::Low;
+    EXPECT_EQ(source.priority, SoundPriority::Low);
+}
+
+TEST(AudioSourceComponent, ClonePreservesPriority)
+{
+    AudioSourceComponent original;
+    original.priority = SoundPriority::Critical;
+
+    auto cloned = original.clone();
+    auto* typedClone = dynamic_cast<AudioSourceComponent*>(cloned.get());
+    ASSERT_NE(typedClone, nullptr);
+    EXPECT_EQ(typedClone->priority, SoundPriority::Critical);
+
+    // Mutate the clone — the original must be unaffected.
+    typedClone->priority = SoundPriority::Low;
+    EXPECT_EQ(original.priority,   SoundPriority::Critical);
+    EXPECT_EQ(typedClone->priority, SoundPriority::Low);
+}

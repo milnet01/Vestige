@@ -406,3 +406,95 @@ TEST(AudioEviction, KeepScoreOrdering)
     VoiceCandidate critical; critical.priority = SoundPriority::Critical;
     EXPECT_LT(voiceKeepScore(low), voiceKeepScore(critical));
 }
+
+// -- Phase 10.9 P7 admission-controlled eviction ------------------
+
+TEST(AudioEvictionAdmission, EmptyListReturnsSentinelForAnyIncomingPriority)
+{
+    // Nothing to evict — regardless of incoming priority, the pool
+    // stays empty and the new voice either fits directly (caller
+    // concern) or drops silently.
+    const std::vector<VoiceCandidate> none;
+    EXPECT_EQ(chooseVoiceToEvictForIncoming(none, SoundPriority::Low),
+              static_cast<std::size_t>(-1));
+    EXPECT_EQ(chooseVoiceToEvictForIncoming(none, SoundPriority::Critical),
+              static_cast<std::size_t>(-1));
+}
+
+TEST(AudioEvictionAdmission, LowerIncomingPriorityLosesToExisting)
+{
+    std::vector<VoiceCandidate> voices;
+    voices.push_back({SoundPriority::Normal, 1.0f, 0.0f});
+    // Incoming Low < existing Normal → incoming drops, no eviction.
+    EXPECT_EQ(chooseVoiceToEvictForIncoming(voices, SoundPriority::Low),
+              static_cast<std::size_t>(-1));
+}
+
+TEST(AudioEvictionAdmission, EqualIncomingPriorityLosesToIncumbent)
+{
+    std::vector<VoiceCandidate> voices;
+    voices.push_back({SoundPriority::Normal, 1.0f, 0.0f});
+    // Equal tier — incumbent wins. Prevents rapid same-priority bursts
+    // from churning the pool (e.g. a Normal footstep cluster).
+    EXPECT_EQ(chooseVoiceToEvictForIncoming(voices, SoundPriority::Normal),
+              static_cast<std::size_t>(-1));
+}
+
+TEST(AudioEvictionAdmission, StrictlyHigherIncomingWinsSingleVictim)
+{
+    std::vector<VoiceCandidate> voices;
+    voices.push_back({SoundPriority::Normal, 1.0f, 0.0f});
+    // High > Normal → evict index 0.
+    EXPECT_EQ(chooseVoiceToEvictForIncoming(voices, SoundPriority::High),
+              static_cast<std::size_t>(0));
+}
+
+TEST(AudioEvictionAdmission, IncomingPicksLowestKeepScoreAmongEligible)
+{
+    // Admission gate approved (incoming High > some existing tier);
+    // within the eligible pool the lowest-keep-score voice is the
+    // victim. Here index 1 is Low — lowest tier + quiet — so it wins
+    // the race to be evicted.
+    std::vector<VoiceCandidate> voices;
+    voices.push_back({SoundPriority::Normal, 1.0f, 0.0f});
+    voices.push_back({SoundPriority::Low,    0.1f, 5.0f});  // victim
+    voices.push_back({SoundPriority::Normal, 0.5f, 1.0f});
+    EXPECT_EQ(chooseVoiceToEvictForIncoming(voices, SoundPriority::High),
+              static_cast<std::size_t>(1));
+}
+
+TEST(AudioEvictionAdmission, CriticalIncomingEvictsEvenIfAllElseCritical)
+{
+    // Edge case: admission rule is strict-greater, not strict-greater-or-equal.
+    // Incoming Critical against all-Critical voices still loses (tie-to-incumbent
+    // rule), so the new Critical drops rather than thrashing an equal-tier slot.
+    std::vector<VoiceCandidate> voices;
+    voices.push_back({SoundPriority::Critical, 1.0f, 0.0f});
+    voices.push_back({SoundPriority::Critical, 0.5f, 2.0f});
+    EXPECT_EQ(chooseVoiceToEvictForIncoming(voices, SoundPriority::Critical),
+              static_cast<std::size_t>(-1));
+}
+
+TEST(AudioEvictionAdmission, LowestScoreVictimIneligibleFallsThrough)
+{
+    // Lowest-score voice is High (rank 2). Incoming is also High.
+    // Admission gate fails (equal, not strictly greater) even though
+    // the lowest-score voice is "worst" — tie goes to incumbent.
+    std::vector<VoiceCandidate> voices;
+    voices.push_back({SoundPriority::Critical, 1.0f,  0.0f});
+    voices.push_back({SoundPriority::High,     0.1f, 10.0f});  // lowest score, still High
+    EXPECT_EQ(chooseVoiceToEvictForIncoming(voices, SoundPriority::High),
+              static_cast<std::size_t>(-1));
+}
+
+TEST(AudioEvictionAdmission, MixedTiersHighIncomingEvictsLowestTier)
+{
+    // Classic mixed pool: Critical, Low, High. Incoming High.
+    // Low is both lowest-tier and lowest-score → victim.
+    std::vector<VoiceCandidate> voices;
+    voices.push_back({SoundPriority::Critical, 1.0f, 0.0f});
+    voices.push_back({SoundPriority::Low,      1.0f, 0.0f});  // victim
+    voices.push_back({SoundPriority::High,     1.0f, 0.0f});
+    EXPECT_EQ(chooseVoiceToEvictForIncoming(voices, SoundPriority::High),
+              static_cast<std::size_t>(1));
+}

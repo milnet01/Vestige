@@ -196,4 +196,25 @@ float voiceKeepScore(const VoiceCandidate& v);
 ///        new voice in its slot.
 std::size_t chooseVoiceToEvict(const std::vector<VoiceCandidate>& voices);
 
+/// @brief Phase 10.9 P7 — admission-controlled eviction: picks the
+///        lowest keep-score voice iff its priority tier is strictly
+///        lower than `incomingPriority`. Returns `std::size_t{-1}`
+///        when no voice qualifies (incoming sound has equal or lower
+///        priority than every existing voice and therefore drops).
+///
+/// Rationale: a Normal incoming sound should not be able to evict a
+/// Normal-tier voice — equal-priority ties go to the incumbent, so a
+/// rapid burst of same-priority sounds doesn't churn the pool. Only a
+/// strictly higher incoming priority earns the right to kick someone
+/// out. Within that rule the victim is still chosen by keep-score so
+/// the quietest / oldest low-priority voice goes first.
+///
+/// The engine's pool-exhaustion retry in `AudioEngine::acquireSource`
+/// calls this with the `SoundPriority` passed to the `playSound*`
+/// overload; on a non-sentinel result it releases that source and
+/// retries acquisition (guaranteed to succeed once a slot is freed).
+std::size_t chooseVoiceToEvictForIncoming(
+    const std::vector<VoiceCandidate>& voices,
+    SoundPriority incomingPriority);
+
 } // namespace Vestige

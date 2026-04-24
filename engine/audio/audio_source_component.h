@@ -104,6 +104,19 @@ public:
     /// @brief Whether the sound is spatially positioned (3D). False = 2D/ambient.
     bool spatial = true;
 
+    /// @brief Phase 10.9 P7 — eviction priority when the AL source pool is full.
+    ///
+    /// When `AudioEngine::acquireSource` cannot find a free slot, the engine
+    /// builds a `VoiceCandidate` list from its live playbacks and calls
+    /// `chooseVoiceToEvictForIncoming(voices, priority)`. A source can only
+    /// push out an existing voice whose priority tier is *strictly lower*
+    /// than its own — equal or lower incoming priority drops silently.
+    ///
+    /// Defaults to `Normal`, matching generic gameplay SFX. Raise to `High`
+    /// for attack cues / pickup confirms and to `Critical` for dialogue,
+    /// stingers, or objective audio that must never be dropped.
+    SoundPriority priority = SoundPriority::High;  // RED: default wrong, green restores Normal
+
     /// @brief Creates a deep copy of this component.
     std::unique_ptr<Component> clone() const override;
 };

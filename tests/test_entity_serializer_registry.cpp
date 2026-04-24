@@ -65,6 +65,7 @@ void populateDistinctive(AudioSourceComponent& asc)
     asc.loop              = true;
     asc.autoPlay          = true;
     asc.spatial           = false;
+    asc.priority          = SoundPriority::Critical;  // Phase 10.9 P7
 }
 
 } // namespace
@@ -157,6 +158,7 @@ TEST(EntitySerializerRegistry, AudioSourceAllFieldsRoundTrip)
     EXPECT_TRUE(ascIn->loop);
     EXPECT_TRUE(ascIn->autoPlay);
     EXPECT_FALSE(ascIn->spatial);
+    EXPECT_EQ(ascIn->priority, SoundPriority::Critical);
 }
 
 // ---------------------------------------------------------------------------

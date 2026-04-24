@@ -158,4 +158,14 @@ std::size_t chooseVoiceToEvict(const std::vector<VoiceCandidate>& voices)
     return worstIdx;
 }
 
+std::size_t chooseVoiceToEvictForIncoming(
+    const std::vector<VoiceCandidate>& /*voices*/,
+    SoundPriority /*incomingPriority*/)
+{
+    // Phase 10.9 P7 RED: deliberately always refuses eviction so the
+    // "incoming High wins over Normal" test fails. Green replaces with
+    // `chooseVoiceToEvict` + strict priority-tier admission gate.
+    return static_cast<std::size_t>(-1);
+}
+
 } // namespace Vestige
