@@ -21,7 +21,12 @@ namespace
 
 std::shared_ptr<SpriteAtlas> makeTileAtlas()
 {
-    auto dir = std::filesystem::temp_directory_path() / "vestige_tilemap_test";
+    // ctest runs tests in parallel as separate processes; suffix by test name
+    // so each process writes to its own tiles.json instead of racing on a
+    // shared path (intermittent Debug CI failure observed 2026-04-24).
+    const auto* info = ::testing::UnitTest::GetInstance()->current_test_info();
+    const std::string key = info ? info->name() : "unknown";
+    auto dir = std::filesystem::temp_directory_path() / ("vestige_tilemap_test_" + key);
     std::filesystem::create_directories(dir);
     const auto path = dir / "tiles.json";
     std::ofstream out(path);

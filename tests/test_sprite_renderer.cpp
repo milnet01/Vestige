@@ -26,7 +26,10 @@ namespace
 
 std::shared_ptr<SpriteAtlas> makeAtlas(const std::string& tag)
 {
-    auto dir = std::filesystem::temp_directory_path() / "vestige_sprite_renderer_test";
+    // Per-test scratch dir so parallel ctest processes don't collide.
+    const auto* info = ::testing::UnitTest::GetInstance()->current_test_info();
+    const std::string key = info ? info->name() : "unknown";
+    auto dir = std::filesystem::temp_directory_path() / ("vestige_sprite_renderer_test_" + key);
     std::filesystem::create_directories(dir);
     const auto path = dir / (std::string("atlas_") + tag + ".json");
     std::ofstream out(path);

@@ -21,7 +21,10 @@ namespace
 /// count here. GoogleTest doesn't require cleanup.
 std::string writeTempFile(const std::string& suffix, const std::string& content)
 {
-    auto dir = std::filesystem::temp_directory_path() / "vestige_sprite_atlas_test";
+    // Per-test scratch dir so parallel ctest processes don't collide.
+    const auto* info = ::testing::UnitTest::GetInstance()->current_test_info();
+    const std::string key = info ? info->name() : "unknown";
+    auto dir = std::filesystem::temp_directory_path() / ("vestige_sprite_atlas_test_" + key);
     std::filesystem::create_directories(dir);
     static int counter = 0;
     auto path = dir / (std::string("atlas_") + std::to_string(counter++) + "_" + suffix);
