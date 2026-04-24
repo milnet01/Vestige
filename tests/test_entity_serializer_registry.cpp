@@ -33,7 +33,9 @@
 #include <gtest/gtest.h>
 
 #include "audio/audio_source_component.h"
+#include "core/logger.h"
 #include "resource/resource_manager.h"
+#include "scene/component.h"
 #include "scene/entity.h"
 #include "scene/scene.h"
 #include "utils/entity_serializer.h"
@@ -192,4 +194,147 @@ TEST(EntitySerializerRegistry, AudioSourceAbsentBusDefaultsToSfx)
         << "pre-A1 scene without a `bus` field must default to Sfx "
            "(the implicit routing used before the mixer-bus design)";
     EXPECT_EQ(asc->clipPath, "audio/sfx/click.wav");
+}
+
+// ---------------------------------------------------------------------------
+// Phase 10.9 Slice 1 F12 — loud save-time warning for components whose
+// type is not registered with ComponentSerializerRegistry.
+//
+// F3 introduced the registry and migrated 7 built-in component types
+// (plus AudioSource) off the old fixed allowlist. Reality ships ~26
+// component types — ClothComponent, RigidBody, BreakableComponent,
+// CameraComponent, TilemapComponent, 2D physics/sprite components,
+// InteractableComponent, PressurePlateComponent, GPUParticleEmitter,
+// FacialAnimator, LipSyncPlayer, NavAgentComponent, CameraMode, etc.
+// — all still silently dropped on scene save because no one
+// registered them.
+//
+// F12 closes the loop without forcing 18 new round-trip
+// implementations in one slice: detect the drop and emit a warning
+// so a user / developer sees the data loss instead of shipping
+// saves that silently lost state. Individual component types then
+// migrate into the registry in their own slice.
+// ---------------------------------------------------------------------------
+
+namespace
+{
+
+// Test-only component the registry will never know about. Nothing
+// else in the engine ever uses it — its sole job is to be
+// "unregistered" from the serialiser's point of view.
+class UnregisteredTestComponent : public Component
+{
+public:
+    std::unique_ptr<Component> clone() const override
+    {
+        return std::make_unique<UnregisteredTestComponent>();
+    }
+};
+
+// A second unregistered type so we can test the "multiple dropped"
+// reporting path without depending on two real-world components
+// having been added together.
+class OtherUnregisteredTestComponent : public Component
+{
+public:
+    std::unique_ptr<Component> clone() const override
+    {
+        return std::make_unique<OtherUnregisteredTestComponent>();
+    }
+};
+
+// Scans the Logger's entry snapshot (F9 API returns a copy) for any
+// warning whose message contains the given substring. Returns the
+// first match, or empty string if none.
+std::string firstWarningContaining(const std::string& needle)
+{
+    const auto entries = Logger::getEntries();
+    for (const auto& e : entries)
+    {
+        if (e.level == LogLevel::Warning &&
+            e.message.find(needle) != std::string::npos)
+        {
+            return e.message;
+        }
+    }
+    return {};
+}
+
+} // namespace
+
+TEST(EntitySerializerUnregisteredComponentWarning, WarnsWhenComponentTypeIsUnregistered_F12)
+{
+    Logger::clearEntries();
+
+    Scene scene("UnregisteredTest");
+    Entity* host = scene.createEntity("HostEntity");
+    host->addComponent<UnregisteredTestComponent>();
+
+    ResourceManager resources;
+    const auto j = EntitySerializer::serializeEntity(*host, resources);
+
+    // The JSON itself has no `components` entry (nothing registered
+    // matched), which is the silent-drop. The warning is the loud
+    // half of F12 — an operator reviewing saves immediately sees
+    // which entity lost data.
+    const std::string msg = firstWarningContaining("HostEntity");
+    EXPECT_FALSE(msg.empty())
+        << "expected a save-time warning mentioning the owning entity name; "
+           "Logger::getEntries() produced none";
+}
+
+TEST(EntitySerializerUnregisteredComponentWarning, SilentWhenAllComponentsAreRegistered_F12)
+{
+    Logger::clearEntries();
+
+    Scene scene("SilentTest");
+    Entity* host = scene.createEntity("AllRegistered");
+    // AudioSource is registered (F3); nothing else on the entity.
+    auto* asc = host->addComponent<AudioSourceComponent>();
+    asc->clipPath = "audio/sfx/blip.wav";
+
+    ResourceManager resources;
+    (void)EntitySerializer::serializeEntity(*host, resources);
+
+    EXPECT_TRUE(firstWarningContaining("AllRegistered").empty())
+        << "entity with only registered components must not trigger "
+           "the F12 drop warning — false positives devalue the signal";
+}
+
+TEST(EntitySerializerUnregisteredComponentWarning, ReportsDropCountForMultipleUnregistered_F12)
+{
+    Logger::clearEntries();
+
+    Scene scene("MultiDropTest");
+    Entity* host = scene.createEntity("TwoUnregistered");
+    host->addComponent<UnregisteredTestComponent>();
+    host->addComponent<OtherUnregisteredTestComponent>();
+
+    ResourceManager resources;
+    (void)EntitySerializer::serializeEntity(*host, resources);
+
+    const std::string msg = firstWarningContaining("TwoUnregistered");
+    ASSERT_FALSE(msg.empty());
+    // The warning message must include the count so an operator can
+    // tell "1 dropped" from "17 dropped" at a glance.
+    EXPECT_NE(msg.find("2"), std::string::npos)
+        << "expected the warning to mention the drop count (2); got: " << msg;
+}
+
+TEST(EntitySerializerUnregisteredComponentWarning, WarnsForEachAffectedEntityIndependently_F12)
+{
+    Logger::clearEntries();
+
+    Scene scene("IndependentEntities");
+    Entity* a = scene.createEntity("EntityAlpha");
+    Entity* b = scene.createEntity("EntityBravo");
+    a->addComponent<UnregisteredTestComponent>();
+    b->addComponent<UnregisteredTestComponent>();
+
+    ResourceManager resources;
+    (void)EntitySerializer::serializeEntity(*a, resources);
+    (void)EntitySerializer::serializeEntity(*b, resources);
+
+    EXPECT_FALSE(firstWarningContaining("EntityAlpha").empty());
+    EXPECT_FALSE(firstWarningContaining("EntityBravo").empty());
 }
