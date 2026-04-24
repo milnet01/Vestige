@@ -52,12 +52,16 @@ TEST(SubtitleRenderer, DialogueStyleUsesYellowSpeakerWhiteBody)
     EXPECT_LT(s.speakerColor.b,       0.5f);
 }
 
-TEST(SubtitleRenderer, NarratorStyleIsWhite)
+TEST(SubtitleRenderer, NarratorStyleDefaultsToWarmAmber)
 {
+    // Phase 10.9 P6: the narrator default changed from white-italic
+    // (§4.2 original) to warm-amber-upright (accessibility-first).
+    // The Italic path stays white and is covered in
+    // `test_subtitle_narrator_style.cpp::ItalicPathIsWhiteAndItalic_P6`.
     const SubtitleStyle s = styleFor(SubtitleCategory::Narrator);
-    EXPECT_FLOAT_EQ(s.textColor.r,    1.0f);
-    EXPECT_FLOAT_EQ(s.textColor.g,    1.0f);
-    EXPECT_FLOAT_EQ(s.textColor.b,    1.0f);
+    EXPECT_GT(s.textColor.r, s.textColor.b);  // Red > Blue (warm).
+    EXPECT_GT(s.textColor.r, 0.6f);
+    EXPECT_LT(s.textColor.b, 0.4f);
 }
 
 TEST(SubtitleRenderer, SoundCueStyleIsCyanGrey)

@@ -33,14 +33,29 @@ struct SubtitleStyle
     glm::vec3 textColor   = glm::vec3(1.0f); ///< Body text (RGB).
     glm::vec3 speakerColor= glm::vec3(1.0f); ///< Speaker-label colour (dialogue only).
     glm::vec4 plateColor  = glm::vec4(0.0f, 0.0f, 0.0f, 0.5f); ///< 50 % black plate.
+
+    /// @brief Render with italic-oblique shear (Phase 10.9 P6).
+    ///
+    /// Only Narrator with `SubtitleNarratorStyle::Italic` sets this
+    /// true in the shipped style table; consumers branch between
+    /// `TextRenderer::renderText2D` and `renderText2DOblique` on it.
+    bool italic = false;
 };
 
 /// @brief Returns the default style for a category.
 ///
-/// Dialogue — yellow speaker label, white body text.
-/// Narrator — plain white body text (no speaker label drawn).
-/// SoundCue — cyan-grey body, text pre-bracketed by the layout pass.
-SubtitleStyle styleFor(SubtitleCategory category);
+/// * `Dialogue` — yellow speaker label, white body text, upright.
+/// * `Narrator` — depends on `narratorStyle`:
+///     - `Italic` → white body, italic flag set (oblique render).
+///     - `Colour` → warm-amber body, upright.
+/// * `SoundCue` — cyan-grey body, upright, text pre-bracketed by
+///   the layout pass.
+///
+/// `narratorStyle` defaults to `Colour` to match the queue default,
+/// so existing call sites that don't care about the new preference
+/// continue to compile unchanged.
+SubtitleStyle styleFor(SubtitleCategory category,
+                       SubtitleNarratorStyle narratorStyle = SubtitleNarratorStyle::Colour);
 
 /// @brief Pure layout parameters — everything the layout pass needs.
 ///
@@ -77,6 +92,11 @@ struct SubtitleLineLayout
     float       textScale = 1.0f;  ///< Multiplier on font atlas pixel size.
     glm::vec3   textColor{1.0f};   ///< Body text colour.
     SubtitleCategory category = SubtitleCategory::Dialogue;
+
+    /// @brief Render italic (Phase 10.9 P6). Only narrator entries
+    ///        with `SubtitleNarratorStyle::Italic` set it true;
+    ///        `renderSubtitles` branches to the oblique path.
+    bool italic = false;
 };
 
 /// @brief Pure layout pass. Produces one `SubtitleLineLayout` per

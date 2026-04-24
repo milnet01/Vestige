@@ -13,7 +13,8 @@
 namespace Vestige
 {
 
-SubtitleStyle styleFor(SubtitleCategory category)
+SubtitleStyle styleFor(SubtitleCategory category,
+                       SubtitleNarratorStyle narratorStyle)
 {
     SubtitleStyle style;
     style.plateColor = glm::vec4(0.0f, 0.0f, 0.0f, 0.5f);
@@ -27,7 +28,27 @@ SubtitleStyle styleFor(SubtitleCategory category)
             style.speakerColor = glm::vec3(1.0f, 0.87f, 0.32f);
             break;
         case SubtitleCategory::Narrator:
-            style.textColor    = glm::vec3(1.0f, 1.0f, 1.0f);
+            // Phase 10.9 P6 — two paths; the queue's narrator-style
+            // selector picks at runtime. Italic is the §4.2 original
+            // (renders via the oblique-shear path — no second font
+            // atlas shipped); Colour is the accessibility-first
+            // default (warm-amber, upright; easier reading for low-
+            // vision users than italic typography).
+            if (narratorStyle == SubtitleNarratorStyle::Italic)
+            {
+                style.textColor = glm::vec3(1.0f, 1.0f, 1.0f);
+                style.italic    = true;
+            }
+            else
+            {
+                // Warm-amber tone (theme `accent` family; same
+                // hue as `UITheme::accent = {0.784, 0.604, 0.243}`
+                // but rendered at its authored value here because
+                // SubtitleStyle is theme-agnostic — the subtitle
+                // renderer doesn't consult UITheme today).
+                style.textColor = glm::vec3(0.784f, 0.604f, 0.243f);
+                style.italic    = false;
+            }
             style.speakerColor = style.textColor;
             break;
         case SubtitleCategory::SoundCue:
@@ -111,7 +132,10 @@ std::vector<SubtitleLineLayout> computeSubtitleLayout(
         // higher.
         const std::size_t rowFromBottom = (count - 1) - i;
         const Subtitle& sub = active[i].subtitle;
-        const SubtitleStyle style = styleFor(sub.category);
+        // P6: the queue owns the narrator-style preference; forward
+        // it so styleFor's Narrator branch picks italic vs colour.
+        // Dialogue / SoundCue ignore the selector.
+        const SubtitleStyle style = styleFor(sub.category, queue.narratorStyle());
 
         SubtitleLineLayout line;
         line.fullText      = composeText(sub);
@@ -120,6 +144,7 @@ std::vector<SubtitleLineLayout> computeSubtitleLayout(
         line.textColor     = style.textColor;
         line.plateColor    = style.plateColor;
         line.textScale     = textScale;
+        line.italic        = style.italic;
 
         // Plate width uses the LONGEST wrapped row, not the
         // pre-wrap total — Phase 10.9 P1 / design doc §4.2.
@@ -205,30 +230,42 @@ void renderSubtitles(const std::vector<SubtitleLineLayout>& lines,
     // `fullText` if `wrappedLines` is empty (defensive — every live
     // caller populates it, but keeps the renderer robust if a future
     // caller forgets).
+    // P6: narrator italic path branches per-line. Upright captions
+    // (dialogue, soundcue, narrator-in-Colour-mode) go through
+    // renderText2D; italic ones route through renderText2DOblique so
+    // the glyph quads are sheared at emit time.
+    auto drawRow = [&](const std::string& row, float baselineX, float baselineY,
+                       float textScale, const glm::vec3& color, bool italic)
+    {
+        if (italic)
+        {
+            textRenderer.renderText2DOblique(
+                row, baselineX, baselineY, textScale, color,
+                screenWidth, screenHeight);
+        }
+        else
+        {
+            textRenderer.renderText2D(
+                row, baselineX, baselineY, textScale, color,
+                screenWidth, screenHeight);
+        }
+    };
+
     for (const auto& line : lines)
     {
         if (line.wrappedLines.empty())
         {
-            textRenderer.renderText2D(
-                line.fullText,
-                line.textBaseline.x,
-                line.textBaseline.y,
-                line.textScale,
-                line.textColor,
-                screenWidth,
-                screenHeight);
+            drawRow(line.fullText,
+                    line.textBaseline.x, line.textBaseline.y,
+                    line.textScale, line.textColor, line.italic);
             continue;
         }
         for (std::size_t r = 0; r < line.wrappedLines.size(); ++r)
         {
-            textRenderer.renderText2D(
-                line.wrappedLines[r],
-                line.textBaseline.x,
-                line.textBaseline.y + static_cast<float>(r) * line.lineStepPx,
-                line.textScale,
-                line.textColor,
-                screenWidth,
-                screenHeight);
+            drawRow(line.wrappedLines[r],
+                    line.textBaseline.x,
+                    line.textBaseline.y + static_cast<float>(r) * line.lineStepPx,
+                    line.textScale, line.textColor, line.italic);
         }
     }
 }

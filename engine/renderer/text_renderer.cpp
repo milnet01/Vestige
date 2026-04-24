@@ -74,8 +74,36 @@ void TextRenderer::setupQuadBuffers()
     glVertexArrayAttribBinding(m_vao, 0, 0);
 }
 
+namespace text_oblique
+{
+
+float applyShear(float x, float y, float baselineY, float factor)
+{
+    // Top-left-origin: smaller Y is higher on screen. A vertex above
+    // the baseline (baselineY > y) gains a positive shift (leans
+    // right); a descender below (baselineY < y) gets a negative
+    // shift (leans back, matching italic descenders).
+    return x + (baselineY - y) * factor;
+}
+
+} // namespace text_oblique
+
 void TextRenderer::renderText2D(const std::string& text, float x, float y, float scale,
                                   const glm::vec3& color, int screenWidth, int screenHeight)
+{
+    renderText2DImpl(text, x, y, scale, color, screenWidth, screenHeight, 0.0f);
+}
+
+void TextRenderer::renderText2DOblique(const std::string& text, float x, float y, float scale,
+                                         const glm::vec3& color, int screenWidth, int screenHeight,
+                                         float shearFactor)
+{
+    renderText2DImpl(text, x, y, scale, color, screenWidth, screenHeight, shearFactor);
+}
+
+void TextRenderer::renderText2DImpl(const std::string& text, float x, float y, float scale,
+                                      const glm::vec3& color, int screenWidth, int screenHeight,
+                                      float shearFactor)
 {
     if (!m_initialized || text.empty())
     {
@@ -136,13 +164,23 @@ void TextRenderer::renderText2D(const std::string& text, float x, float y, float
         float u1 = u0 + glyph.atlasSize.x;
         float v1 = v0 + glyph.atlasSize.y;
 
+        // P6: per-vertex italic shear. Upright (shearFactor == 0)
+        // path is byte-for-byte identical to the pre-P6 emit —
+        // `applyShear` returns x unchanged when factor is zero.
+        const float topY    = ypos;
+        const float bottomY = ypos + h;
+        const float xTopL    = text_oblique::applyShear(xpos,     topY,    cursorY, shearFactor);
+        const float xTopR    = text_oblique::applyShear(xpos + w, topY,    cursorY, shearFactor);
+        const float xBottomL = text_oblique::applyShear(xpos,     bottomY, cursorY, shearFactor);
+        const float xBottomR = text_oblique::applyShear(xpos + w, bottomY, cursorY, shearFactor);
+
         verts.insert(verts.end(), {
-            xpos,     ypos,     u0, v0,
-            xpos + w, ypos,     u1, v0,
-            xpos,     ypos + h, u0, v1,
-            xpos + w, ypos,     u1, v0,
-            xpos + w, ypos + h, u1, v1,
-            xpos,     ypos + h, u0, v1,
+            xTopL,    topY,    u0, v0,
+            xTopR,    topY,    u1, v0,
+            xBottomL, bottomY, u0, v1,
+            xTopR,    topY,    u1, v0,
+            xBottomR, bottomY, u1, v1,
+            xBottomL, bottomY, u0, v1,
         });
         ++emitted;
 

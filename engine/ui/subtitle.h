@@ -60,6 +60,32 @@ enum class SubtitleSizePreset
 /// preset, since the two compose).
 float subtitleScaleFactorOf(SubtitleSizePreset preset);
 
+/// @brief Narrator rendering style (Phase 10.9 Slice 2 P6).
+///
+/// `PHASE10_7_DESIGN.md §4.2` originally specified "Narrator — italic
+/// white". Shipping that requires an italic font file (licensed) +
+/// atlas support that the project does not have. P6 resolves the
+/// block by shipping both styles as runtime alternatives:
+///
+///   * `Italic` — the original spec. White text rendered with an
+///     oblique horizontal shear (~11°) at vertex-emit time; no
+///     second font atlas needed. The cost is a slight legibility
+///     penalty at small sizes.
+///   * `Colour` — warm-amber body text (accent-family tone,
+///     distinct from dialogue white and sound-cue cyan-grey).
+///     Upright, so low-vision readers don't pay the italic
+///     legibility penalty. This is the default.
+///
+/// The selector lives on `SubtitleQueue` because subtitle styling
+/// crosses the renderer/theme/caption axes — keeping it with the
+/// queue (alongside `SubtitleSizePreset`) matches the existing
+/// "subtitle-specific preset" pattern.
+enum class SubtitleNarratorStyle
+{
+    Italic,  ///< White text, oblique-sheared — original §4.2 spec.
+    Colour,  ///< Warm-amber, upright — accessibility-first default.
+};
+
 /// @brief Soft-wrap width for captions (Phase 10.7 §4.2 / P1).
 ///
 /// Matches FCC / Game Accessibility Guidelines recommendations for
@@ -206,11 +232,21 @@ public:
     ///        and `subtitleScaleFactorOf()` for pixel sizing.
     void setSizePreset(SubtitleSizePreset preset) { m_size = preset; }
 
+    /// @brief Current narrator-styling preference (Phase 10.9 P6).
+    ///        Defaults to `Colour` (accessibility-first).
+    SubtitleNarratorStyle narratorStyle() const { return m_narratorStyle; }
+
+    /// @brief Selects the narrator style. `styleFor` and
+    ///        `computeSubtitleLayout` both consult this to decide
+    ///        whether narrator captions render italic or amber.
+    void setNarratorStyle(SubtitleNarratorStyle style) { m_narratorStyle = style; }
+
 private:
     std::vector<ActiveSubtitle> m_active;
     int m_maxConcurrent = DEFAULT_MAX_CONCURRENT;
     SubtitleSizePreset m_size = SubtitleSizePreset::Medium;
     bool m_enabled = true;
+    SubtitleNarratorStyle m_narratorStyle = SubtitleNarratorStyle::Colour;
 };
 
 } // namespace Vestige
