@@ -9,6 +9,113 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-24 Phase 10.9 — Slice 2 P2: AudioSourceComponent per-frame pass
+
+Fifth Slice 2 item and the biggest one — turns nine dead fields on
+`AudioSourceComponent` into live AL state. Before P2, the audio path
+only applied mixer × bus × duck × volume to sources acquired via
+direct `AudioEngine::playSound*` calls; authored
+`AudioSourceComponent` instances in the scene never had their
+`pitch` / `velocity` / `attenuationModel` / `minDistance` /
+`maxDistance` / `rolloffFactor` / `autoPlay` / `occlusionMaterial` /
+`occlusionFraction` fields read, never had AL state pushed, never
+even auto-acquired a source when marked `autoPlay=true`. Editor
+users who placed a positional sound source in a scene heard nothing
+until game code manually called `playSound*` for that clip path.
+
+**Red commit `4c2f1c3`** — pure-compose contract first:
+
+- New `engine/audio/audio_source_state.h`: `AudioSourceAlState`
+  struct mirroring the per-frame `alSource*f` set + prototype
+  `composeAudioSourceAlState(comp, entityPosition, mixer,
+  duckingGain)`.
+- New `engine/audio/audio_source_state.cpp`: deliberately-wrong
+  stub returning `AudioSourceAlState{}` with position only.
+- New `tests/test_audio_source_state.cpp`: 12 spec tests covering
+  position / velocity / pitch / attenuation params / spatial flag /
+  gain composition / occlusion (Air pass-through, Stone attenuation,
+  fraction-zero clear-through) / full-chain regression.
+- Wired into `engine/CMakeLists.txt` + `tests/CMakeLists.txt`.
+
+Ten of twelve red tests fail at runtime on the stub; two pass
+(position copy that the stub does do, and Air-material transmission
+which equals the stub's default gain of 1.0).
+
+**Green commit `a96cccd`** — four layers of green:
+
+- **Pure compose**: full composition now runs through the occlusion
+  / mixer / duck pipeline. Occlusion derives from
+  `computeObstructionGain(openGain=1, material.transmissionCoefficient,
+  fractionBlocked)` and folds into the `volume` input of
+  `resolveSourceGain` (P3's 4-arg overload) so the existing
+  mixer × bus × duck × clamp pipeline applies uniformly — no new
+  clamp site.
+- **AL state push**: `AudioEngine::applySourceState(source, state)`
+  issues AL_POSITION / AL_VELOCITY / AL_PITCH / AL_GAIN /
+  AL_REFERENCE_DISTANCE / AL_MAX_DISTANCE / AL_ROLLOFF_FACTOR /
+  AL_SOURCE_RELATIVE. Same call shape as `playSoundSpatial`'s
+  initial upload but callable every frame so runtime edits
+  (pitch slider moved in editor, moving projectile updates
+  velocity, door opens and flips occlusion material) are heard
+  live rather than only on the next acquire.
+- **Source-alive probe**: `AudioEngine::isSourcePlaying(source)`
+  wraps `alGetSourcei(source, AL_SOURCE_STATE, ...)` so the reap
+  pass doesn't reach into AudioEngine internals.
+- **Per-frame iteration** in `AudioSystem::update`:
+  `std::unordered_map<std::uint32_t, unsigned int> m_activeSources`
+  + a `scene->forEachEntity` pass that (1) auto-acquires an AL
+  source for any `AudioSourceComponent` with `autoPlay=true` and
+  non-empty `clipPath` that isn't tracked yet, (2) pushes the
+  composed state every frame for tracked entries via
+  `applySourceState`, (3) reaps entries whose source has stopped
+  or whose entity has disappeared from the scene. Exposed via
+  `activeSources()` const accessor for test observation.
+
+**Debt fixes folded into this commit (per "no debt whatsoever"):**
+
+- **playSound* signatures**: every overload (playSound,
+  playSoundSpatial×2, playSound2D) now returns `unsigned int`
+  (the acquired AL source ID, or 0 on failure). The previous
+  void return forced AudioSystem to guess or use a sentinel
+  workaround. Fire-and-forget callers discard the return; per-frame
+  trackers store it.
+- **Latent duck-on-initial-upload bug**: the three `playSound*`
+  implementations' initial AL_GAIN compose used the 3-arg
+  `resolveSourceGain` and therefore did NOT apply the P3 duck
+  snapshot on their first frame — only subsequent `updateGains`
+  passes did. All three now pass `m_duckingSnapshot` so a sound
+  acquired *during* a duck is audible at the ducked level from
+  frame 1 rather than jumping to full gain for one frame before
+  the duck catches up.
+
+**Test coverage:**
+
+- 12 pure-compose tests cover the full component → AL state
+  mapping.
+- 1 source-alive-probe test covers the reap-helper contract.
+- 13 new tests total this cycle (2844 / 2844 pass, was 2831).
+
+**Test suite: 2844 / 2844 passing** (1 pre-existing skip unchanged;
++13 new tests vs. P3's baseline of 2831).
+
+**Files changed (green):** new `engine/audio/audio_source_state.{h,cpp}`
+(+78 / -3 in green + red), modified `engine/audio/audio_engine.{h,cpp}`
+(+61 / -28 — applySourceState, isSourcePlaying, playSound* return
+types, duck-on-initial-upload), modified
+`engine/systems/audio_system.{h,cpp}` (+110 / -2 — m_activeSources +
+per-frame loop), new `tests/test_audio_source_state.cpp` (+248 / -0)
++ modified `tests/test_audio_mixer.cpp` (+14 / -0 for the probe test),
++ CMake wiring in two files.
+
+**Net: +540 / -68 lines across ten files. Every field on
+AudioSourceComponent now reaches AL.**
+
+**Next in Slice 2:** **P7** (voice-eviction wiring —
+`chooseVoiceToEvict` into `playSound*` retry when the source pool
+is exhausted; adds `SoundPriority` to `AudioSourceComponent`),
+then **P8** (HRTF init-order fix + `HrtfStatusChanged` device-reset
+event). **P6 (narrator styling) is held for your decision.**
+
 ### 2026-04-24 Phase 10.9 — Slice 2 P3: ducking fold into `resolveSourceGain`
 
 Fourth Slice 2 item. Closes the "feature ships but never actually
