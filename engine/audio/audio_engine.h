@@ -84,31 +84,37 @@ public:
     /// @param source The OpenAL source ID to release.
     void releaseSource(unsigned int source);
 
-    /// @brief Plays a sound at a 3D position (fire-and-forget).
+    /// @brief Plays a sound at a 3D position.
     /// @param filePath Path to the audio file.
     /// @param position World position of the sound.
     /// @param volume Volume (0.0 to 1.0).
     /// @param loop Whether the sound loops.
     /// @param bus Mixer bus the source is routed through. The effective
-    ///            uploaded gain is `resolveSourceGain(mixer, bus, volume)`
-    ///            whenever a mixer has been published via
-    ///            `setMixerSnapshot` (defaults to the neutral all-1
+    ///            uploaded gain is `resolveSourceGain(mixer, bus, volume,
+    ///            duckingSnapshot)` whenever a mixer has been published
+    ///            via `setMixerSnapshot` (defaults to the neutral all-1
     ///            mixer otherwise).
-    void playSound(const std::string& filePath, const glm::vec3& position,
-                   float volume = 1.0f, bool loop = false,
-                   AudioBus bus = AudioBus::Sfx);
+    /// @returns The acquired OpenAL source ID, or 0 on failure (no
+    ///          audio hardware, buffer load failure, pool exhausted).
+    ///          Fire-and-forget callers can discard the return;
+    ///          per-frame trackers (Phase 10.9 P2 AudioSystem) store it
+    ///          to keep pushing state each frame via `applySourceState`.
+    unsigned int playSound(const std::string& filePath, const glm::vec3& position,
+                           float volume = 1.0f, bool loop = false,
+                           AudioBus bus = AudioBus::Sfx);
 
     /// @brief Plays a spatial sound with explicit attenuation parameters.
     ///
     /// The engine-wide distance model (`setDistanceModel`) determines
     /// which curve OpenAL evaluates; per-source `referenceDistance`
     /// / `maxDistance` / `rolloffFactor` tune that curve.
-    void playSoundSpatial(const std::string& filePath,
-                          const glm::vec3& position,
-                          const AttenuationParams& params,
-                          float volume = 1.0f,
-                          bool loop = false,
-                          AudioBus bus = AudioBus::Sfx);
+    /// @returns Acquired OpenAL source ID, or 0 on failure.
+    unsigned int playSoundSpatial(const std::string& filePath,
+                                  const glm::vec3& position,
+                                  const AttenuationParams& params,
+                                  float volume = 1.0f,
+                                  bool loop = false,
+                                  AudioBus bus = AudioBus::Sfx);
 
     /// @brief Plays a spatial sound with attenuation + per-source
     ///        velocity for Doppler shift.
@@ -118,21 +124,30 @@ public:
     /// Doppler parameters (`setDopplerFactor`, `setSpeedOfSound`),
     /// OpenAL will apply the pitch shift from the formula in
     /// `audio_doppler.h`.
-    void playSoundSpatial(const std::string& filePath,
-                          const glm::vec3& position,
-                          const glm::vec3& velocity,
-                          const AttenuationParams& params,
-                          float volume = 1.0f,
-                          bool loop = false,
-                          AudioBus bus = AudioBus::Sfx);
+    /// @returns Acquired OpenAL source ID, or 0 on failure.
+    unsigned int playSoundSpatial(const std::string& filePath,
+                                  const glm::vec3& position,
+                                  const glm::vec3& velocity,
+                                  const AttenuationParams& params,
+                                  float volume = 1.0f,
+                                  bool loop = false,
+                                  AudioBus bus = AudioBus::Sfx);
 
-    /// @brief Plays a non-spatial (2D) sound (fire-and-forget).
+    /// @brief Plays a non-spatial (2D) sound.
     /// @param filePath Path to the audio file.
     /// @param volume Volume (0.0 to 1.0).
     /// @param bus Mixer bus (defaults to `Ui` — 2D sounds are most
     ///            commonly UI clicks / menu accents).
-    void playSound2D(const std::string& filePath, float volume = 1.0f,
-                     AudioBus bus = AudioBus::Ui);
+    /// @returns Acquired OpenAL source ID, or 0 on failure.
+    unsigned int playSound2D(const std::string& filePath, float volume = 1.0f,
+                             AudioBus bus = AudioBus::Ui);
+
+    /// @brief Phase 10.9 P2 — polls the OpenAL state of `source` and
+    ///        returns true iff it is currently in `AL_PLAYING`.
+    ///        Used by AudioSystem to reap stopped entries from its
+    ///        per-entity tracking map. Returns false when the engine
+    ///        is unavailable or the source ID is 0.
+    bool isSourcePlaying(unsigned int source) const;
 
     /// @brief Caption-routing callback (Phase 10.9 P4).
     ///
@@ -208,6 +223,15 @@ public:
 
     /// @brief Returns the current Doppler-shift parameters.
     const DopplerParams& getDopplerParams() const { return m_doppler; }
+
+    /// @brief Phase 10.9 P2 — pushes a pre-composed
+    ///        `AudioSourceAlState` into the given OpenAL source ID.
+    ///        Issues the full set of `alSource*` calls for
+    ///        position / velocity / pitch / gain / attenuation /
+    ///        spatial routing. Safe no-op when the engine is
+    ///        unavailable or the source ID is 0.
+    void applySourceState(unsigned int source,
+                          const struct AudioSourceAlState& state);
 
     /// @brief Sets the HRTF activation policy.
     ///

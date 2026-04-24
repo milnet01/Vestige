@@ -4,6 +4,7 @@
 /// @file audio_engine.cpp
 /// @brief AudioEngine implementation — OpenAL device, source pool, buffer cache.
 #include "audio/audio_engine.h"
+#include "audio/audio_source_state.h"
 #include "core/logger.h"
 
 #include <AL/al.h>
@@ -253,8 +254,8 @@ void AudioEngine::releaseSource(unsigned int source)
     }
 }
 
-void AudioEngine::playSound(const std::string& filePath, const glm::vec3& position,
-                             float volume, bool loop, AudioBus bus)
+unsigned int AudioEngine::playSound(const std::string& filePath, const glm::vec3& position,
+                                     float volume, bool loop, AudioBus bus)
 {
     // Phase 10.9 P4: fire the caption announcer BEFORE the availability
     // check — a user with broken audio hardware / deafness still needs
@@ -265,24 +266,24 @@ void AudioEngine::playSound(const std::string& filePath, const glm::vec3& positi
     }
     if (!m_available)
     {
-        return;
+        return 0;
     }
 
     ALuint buffer = loadBuffer(filePath);
     if (buffer == 0)
     {
-        return;
+        return 0;
     }
 
     ALuint source = acquireSource();
     if (source == 0)
     {
-        return;
+        return 0;
     }
 
     m_livePlaybacks[source] = SourceMix{bus, volume};
     const float initialGain =
-        resolveSourceGain(m_mixerSnapshot, bus, volume);
+        resolveSourceGain(m_mixerSnapshot, bus, volume, m_duckingSnapshot);
 
     alSourcei(source, AL_BUFFER, static_cast<ALint>(buffer));
     alSource3f(source, AL_POSITION, position.x, position.y, position.z);
@@ -293,31 +294,32 @@ void AudioEngine::playSound(const std::string& filePath, const glm::vec3& positi
     alSourcef(source, AL_ROLLOFF_FACTOR, 1.0f);
     alSourcei(source, AL_SOURCE_RELATIVE, AL_FALSE);  // 3D positioned
     alSourcePlay(source);
+    return source;
 }
 
-void AudioEngine::playSoundSpatial(const std::string& filePath,
-                                   const glm::vec3& position,
-                                   const AttenuationParams& params,
-                                   float volume,
-                                   bool loop,
-                                   AudioBus bus)
+unsigned int AudioEngine::playSoundSpatial(const std::string& filePath,
+                                           const glm::vec3& position,
+                                           const AttenuationParams& params,
+                                           float volume,
+                                           bool loop,
+                                           AudioBus bus)
 {
     // Phase 10.9 P4 — see playSound() above for rationale.
     if (m_captionAnnouncer)
     {
         m_captionAnnouncer(filePath);
     }
-    if (!m_available) return;
+    if (!m_available) return 0;
 
     ALuint buffer = loadBuffer(filePath);
-    if (buffer == 0) return;
+    if (buffer == 0) return 0;
 
     ALuint source = acquireSource();
-    if (source == 0) return;
+    if (source == 0) return 0;
 
     m_livePlaybacks[source] = SourceMix{bus, volume};
     const float initialGain =
-        resolveSourceGain(m_mixerSnapshot, bus, volume);
+        resolveSourceGain(m_mixerSnapshot, bus, volume, m_duckingSnapshot);
 
     alSourcei(source, AL_BUFFER, static_cast<ALint>(buffer));
     alSource3f(source, AL_POSITION, position.x, position.y, position.z);
@@ -329,32 +331,33 @@ void AudioEngine::playSoundSpatial(const std::string& filePath,
     alSourcef(source, AL_ROLLOFF_FACTOR,     params.rolloffFactor);
     alSourcei(source, AL_SOURCE_RELATIVE, AL_FALSE);
     alSourcePlay(source);
+    return source;
 }
 
-void AudioEngine::playSoundSpatial(const std::string& filePath,
-                                   const glm::vec3& position,
-                                   const glm::vec3& velocity,
-                                   const AttenuationParams& params,
-                                   float volume,
-                                   bool loop,
-                                   AudioBus bus)
+unsigned int AudioEngine::playSoundSpatial(const std::string& filePath,
+                                           const glm::vec3& position,
+                                           const glm::vec3& velocity,
+                                           const AttenuationParams& params,
+                                           float volume,
+                                           bool loop,
+                                           AudioBus bus)
 {
     // Phase 10.9 P4 — see playSound() above for rationale.
     if (m_captionAnnouncer)
     {
         m_captionAnnouncer(filePath);
     }
-    if (!m_available) return;
+    if (!m_available) return 0;
 
     ALuint buffer = loadBuffer(filePath);
-    if (buffer == 0) return;
+    if (buffer == 0) return 0;
 
     ALuint source = acquireSource();
-    if (source == 0) return;
+    if (source == 0) return 0;
 
     m_livePlaybacks[source] = SourceMix{bus, volume};
     const float initialGain =
-        resolveSourceGain(m_mixerSnapshot, bus, volume);
+        resolveSourceGain(m_mixerSnapshot, bus, volume, m_duckingSnapshot);
 
     alSourcei(source, AL_BUFFER, static_cast<ALint>(buffer));
     alSource3f(source, AL_POSITION, position.x, position.y, position.z);
@@ -366,10 +369,11 @@ void AudioEngine::playSoundSpatial(const std::string& filePath,
     alSourcef(source, AL_ROLLOFF_FACTOR,     params.rolloffFactor);
     alSourcei(source, AL_SOURCE_RELATIVE, AL_FALSE);
     alSourcePlay(source);
+    return source;
 }
 
-void AudioEngine::playSound2D(const std::string& filePath, float volume,
-                               AudioBus bus)
+unsigned int AudioEngine::playSound2D(const std::string& filePath, float volume,
+                                       AudioBus bus)
 {
     // Phase 10.9 P4 — see playSound() above for rationale.
     if (m_captionAnnouncer)
@@ -378,24 +382,24 @@ void AudioEngine::playSound2D(const std::string& filePath, float volume,
     }
     if (!m_available)
     {
-        return;
+        return 0;
     }
 
     ALuint buffer = loadBuffer(filePath);
     if (buffer == 0)
     {
-        return;
+        return 0;
     }
 
     ALuint source = acquireSource();
     if (source == 0)
     {
-        return;
+        return 0;
     }
 
     m_livePlaybacks[source] = SourceMix{bus, volume};
     const float initialGain =
-        resolveSourceGain(m_mixerSnapshot, bus, volume);
+        resolveSourceGain(m_mixerSnapshot, bus, volume, m_duckingSnapshot);
 
     alSourcei(source, AL_BUFFER, static_cast<ALint>(buffer));
     alSource3f(source, AL_POSITION, 0.0f, 0.0f, 0.0f);
@@ -403,6 +407,7 @@ void AudioEngine::playSound2D(const std::string& filePath, float volume,
     alSourcei(source, AL_LOOPING, AL_FALSE);
     alSourcei(source, AL_SOURCE_RELATIVE, AL_TRUE);  // Relative to listener (2D)
     alSourcePlay(source);
+    return source;
 }
 
 void AudioEngine::setDistanceModel(AttenuationModel model)
@@ -579,6 +584,42 @@ void AudioEngine::setDuckingSnapshot(float duckingGain)
     // Phase 10.9 P3: clamp on ingest so every downstream reader sees
     // a canonical [0, 1] value and doesn't need to re-clamp.
     m_duckingSnapshot = std::max(0.0f, std::min(1.0f, duckingGain));
+}
+
+bool AudioEngine::isSourcePlaying(unsigned int source) const
+{
+    if (!m_available || source == 0)
+    {
+        return false;
+    }
+    ALint state = AL_INITIAL;
+    alGetSourcei(source, AL_SOURCE_STATE, &state);
+    return state == AL_PLAYING;
+}
+
+void AudioEngine::applySourceState(unsigned int source,
+                                   const AudioSourceAlState& state)
+{
+    // Phase 10.9 P2: per-frame AL state push for component-driven
+    // sources. Same call shape as playSoundSpatial's initial
+    // upload but issued every frame so edits to the component
+    // (pitch slider, moving velocity, changing material) are heard
+    // immediately rather than only on next playback.
+    if (!m_available || source == 0)
+    {
+        return;
+    }
+    alSource3f(source, AL_POSITION,
+               state.position.x, state.position.y, state.position.z);
+    alSource3f(source, AL_VELOCITY,
+               state.velocity.x, state.velocity.y, state.velocity.z);
+    alSourcef(source, AL_PITCH,               state.pitch);
+    alSourcef(source, AL_GAIN,                state.gain);
+    alSourcef(source, AL_REFERENCE_DISTANCE,  state.referenceDistance);
+    alSourcef(source, AL_MAX_DISTANCE,        state.maxDistance);
+    alSourcef(source, AL_ROLLOFF_FACTOR,      state.rolloffFactor);
+    alSourcei(source, AL_SOURCE_RELATIVE,
+              state.spatial ? AL_FALSE : AL_TRUE);
 }
 
 void AudioEngine::updateGains()

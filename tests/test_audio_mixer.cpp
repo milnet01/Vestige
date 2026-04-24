@@ -235,6 +235,21 @@ TEST(AudioEngineDuckSnapshot, SetStoresClamped_P3)
            "the authored source gain.";
 }
 
+// ---- Phase 10.9 P2 — source-alive probe ---------------------------
+
+TEST(AudioEngineSourceProbe, IsSourcePlayingFalseWhenUnavailable_P2)
+{
+    // Without initialize() the AudioEngine is m_available=false.
+    // isSourcePlaying must short-circuit to false rather than call
+    // into OpenAL with a garbage source ID.
+    AudioEngine engine;
+    EXPECT_FALSE(engine.isSourcePlaying(0));
+    EXPECT_FALSE(engine.isSourcePlaying(12345))
+        << "Unavailable engine must report every source as not playing "
+           "so AudioSystem's reap loop purges its entire map rather "
+           "than indefinitely retaining stale entries.";
+}
+
 // -- Ducking -------------------------------------------------------
 
 TEST(AudioDucking, AttacksTowardFloorWhenTriggered)
