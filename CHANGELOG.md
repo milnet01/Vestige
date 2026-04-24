@@ -9,6 +9,77 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-24 Phase 10.9 — Slice 3 S2 (Scene deferred-mutation queue)
+
+An `OnUpdate` script-graph node that calls `SpawnEntity` or
+`DestroyEntity` runs *inside* the per-frame scene walk — the node's
+entity is reached by `Entity::update`, which calls the script
+component, which calls `scene->createEntity` / `scene->removeEntity`.
+Both methods used to mutate the walked hierarchy immediately:
+`removeEntity` erased from the parent's `m_children` vector while the
+outer `forEachEntity` iterator was advancing through it (classic
+iterator invalidation = UB); `createEntity` `push_back`-ed into the
+root's children vector which could reallocate and invalidate the same
+iterator. This hadn't crashed yet only because no Phase 11 AI had
+actually run scripts that do this yet — the first frame Phase 11B
+enemy AI destroyed an enemy entity or spawned a projectile from a
+script, it would.
+
+**Fix.** `Scene` now tracks an update-depth counter (`m_updateDepth`).
+`Scene::update` and `Scene::forEachEntity` wrap their traversals in a
+new RAII helper `Scene::ScopedUpdate` which increments the counter on
+entry and decrements on exit. While the counter is greater than zero,
+the three mutation entry points (`createEntity`, `removeEntity`,
+`duplicateEntity`) queue their work instead of applying it:
+
+- Adds push a `{std::unique_ptr<Entity> owner, Entity* parent}` pair
+  onto `m_pendingAdds`; the entity is indexed eagerly in
+  `m_entityIndex` so a subsequent `findEntityById` in the same frame
+  resolves (matches the SpawnEntity-writes-output, LaterNode-reads-
+  input script-graph shape).
+- Removes push the id onto `m_pendingRemovals`; the entity stays
+  reachable to the in-flight traversal (the visit does not skip it —
+  removal semantics are "apply after the current walk completes", not
+  "drop from the walk").
+
+When the outermost `ScopedUpdate` releases (depth → 0),
+`drainPendingMutations` applies queued adds first (so a spawned-then-
+destroyed entity flows through the normal `unregisterEntityRecursive`
++ `removeChild` path at drain — re-using the S1 active-camera null-out
+for free), then coalesced removes (duplicate ids are deduped via a
+local `std::unordered_set<uint32_t>` so two handlers destroying the
+same target don't double-destroy).
+
+**Immediate path unchanged.** `removeEntity` / `createEntity` called
+outside any update pass (editor timeline, deserialiser, unit tests
+using the Scene API directly) go down byte-for-byte the same code
+path as before — no behavioural change for those callers.
+
+**Tests.** 12 new tests in `tests/test_scene_deferred_mutation.cpp`:
+- 3 plumbing: `isUpdating()` default-false, `forEachEntity` auto-
+  wraps it true, `ScopedUpdate` nests safely (inner release doesn't
+  drop depth to zero).
+- 3 removal-during-traversal: self-destroy keeps the rest of the walk
+  alive, unvisited-sibling removal is deferred-not-skipped, remove-
+  outside-update stays immediate.
+- 3 creation-during-traversal: spawn-mid-walk doesn't crash and the
+  spawn is NOT seen by the current pass (no infinite loops), the
+  spawn is reachable via `findEntityById` immediately, the next pass
+  walks it.
+- 1 interleaved spawn + destroy: both queue kinds drain on release.
+- 1 idempotency: two `removeEntity(sameId)` calls mid-walk drain
+  safely (only one destroy).
+- 1 hierarchy: destroying a deep child during its own visit is
+  deferred-not-immediate.
+
+**Bump.** VERSION 0.1.26 → 0.1.27. Full suite: 2918 / 2919 (+12 vs
+S9's 2906; the pre-existing `MeshBoundsTest.UploadComputesLocalBounds`
+skip is unchanged).
+
+**Next.** Remaining Slice 3: S4 (keyboard nav + focus ring for XAG
+102 conformance). P6 (narrator styling) still blocked on asset-source
+decision.
+
 ### 2026-04-24 Phase 10.9 — Slice 3 S9 (UITheme WCAG contrast)
 
 The Vellum and Plumbline default palettes shipped in Phase 9C both
