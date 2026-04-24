@@ -114,22 +114,38 @@ std::vector<SubtitleLineLayout> computeSubtitleLayout(
         const SubtitleStyle style = styleFor(sub.category);
 
         SubtitleLineLayout line;
-        line.fullText   = composeText(sub);
-        line.category   = sub.category;
-        line.textColor  = style.textColor;
-        line.plateColor = style.plateColor;
-        line.textScale  = textScale;
+        line.fullText      = composeText(sub);
+        line.wrappedLines  = wrapSubtitleText(line.fullText);
+        line.category      = sub.category;
+        line.textColor     = style.textColor;
+        line.plateColor    = style.plateColor;
+        line.textScale     = textScale;
 
-        // Measure text at base scale (scale=1 → fontPixelSize). Scale
-        // with the same factor applied at draw time so plate width
-        // matches rendered width.
-        const float rawWidthPx  = measureTextWidthPx
-            ? measureTextWidthPx(line.fullText)
-            : 0.0f;
-        const float textWidthPx = rawWidthPx * textScale;
-
+        // Plate width uses the LONGEST wrapped row, not the
+        // pre-wrap total — Phase 10.9 P1 / design doc §4.2.
+        float maxRawWidthPx = 0.0f;
+        for (const std::string& row : line.wrappedLines)
+        {
+            const float rowWidthPx = measureTextWidthPx
+                ? measureTextWidthPx(row)
+                : 0.0f;
+            if (rowWidthPx > maxRawWidthPx)
+            {
+                maxRawWidthPx = rowWidthPx;
+            }
+        }
+        const float textWidthPx = maxRawWidthPx * textScale;
         line.plateSize.x = textWidthPx + 2.0f * params.platePaddingX;
-        line.plateSize.y = lineHeightPx;
+
+        // Plate height grows with wrapped-row count: one lineHeight
+        // per row plus the top / bottom padding (already folded into
+        // lineHeightPx). Per-row step for text draws is basePx.
+        const std::size_t rowCount = std::max<std::size_t>(
+            1u, line.wrappedLines.size());
+        const float perRowAdvance = basePx + params.lineSpacingPx;
+        line.lineStepPx = perRowAdvance;
+        line.plateSize.y = lineHeightPx
+            + static_cast<float>(rowCount - 1) * perRowAdvance;
 
         // Center horizontally.
         line.platePos.x = 0.5f * (static_cast<float>(params.screenWidth)
@@ -137,16 +153,16 @@ std::vector<SubtitleLineLayout> computeSubtitleLayout(
 
         // Y: distance from top (renderText2D uses top-left origin).
         // bottomY = screenHeight × (1 - bottomMarginFrac) = the bottom
-        // edge of the bottom-most plate. The bottom-most plate's
-        // top-left is therefore bottomY - lineHeightPx; each row above
-        // adds one (lineHeightPx + lineSpacingPx) step.
+        // edge of the bottom-most plate. Taller plates (multi-line
+        // wraps) grow upward from that anchor — the bottom edge stays
+        // pinned, only the top rises.
         const float bottomY =
             static_cast<float>(params.screenHeight) *
             (1.0f - params.bottomMarginFrac);
         line.platePos.y = bottomY
-            - lineHeightPx
+            - line.plateSize.y
             - static_cast<float>(rowFromBottom) *
-              (lineHeightPx + params.lineSpacingPx);
+              (line.plateSize.y + params.lineSpacingPx);
 
         // Text baseline: inside the plate, offset by padding.
         line.textBaseline.x = line.platePos.x + params.platePaddingX;
@@ -184,17 +200,36 @@ void renderSubtitles(const std::vector<SubtitleLineLayout>& lines,
     batch.end();
 
     // Then text, which uses its own shader + VAO and manages its own
-    // blend state internally.
+    // blend state internally. Multi-line captions (P1) emit one call
+    // per wrapped row, offset by `lineStepPx` per row. Falls back to
+    // `fullText` if `wrappedLines` is empty (defensive — every live
+    // caller populates it, but keeps the renderer robust if a future
+    // caller forgets).
     for (const auto& line : lines)
     {
-        textRenderer.renderText2D(
-            line.fullText,
-            line.textBaseline.x,
-            line.textBaseline.y,
-            line.textScale,
-            line.textColor,
-            screenWidth,
-            screenHeight);
+        if (line.wrappedLines.empty())
+        {
+            textRenderer.renderText2D(
+                line.fullText,
+                line.textBaseline.x,
+                line.textBaseline.y,
+                line.textScale,
+                line.textColor,
+                screenWidth,
+                screenHeight);
+            continue;
+        }
+        for (std::size_t r = 0; r < line.wrappedLines.size(); ++r)
+        {
+            textRenderer.renderText2D(
+                line.wrappedLines[r],
+                line.textBaseline.x,
+                line.textBaseline.y + static_cast<float>(r) * line.lineStepPx,
+                line.textScale,
+                line.textColor,
+                screenWidth,
+                screenHeight);
+        }
     }
 }
 
