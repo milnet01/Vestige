@@ -9,6 +9,94 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-24 Phase 10.9 — Slice 2 P8: HRTF init-order fix + `HrtfStatusEvent` listener
+
+Eighth and final Slice 2 item. Two latent issues in the HRTF layer
+that Slice 1's audit flagged:
+
+1. **Init-order bug**: `AudioEngine::initialize()` called
+   `applyHrtfSettings()` *before* setting `m_available = true`.
+   `applyHrtfSettings` guards on `!m_available` at the top, so the
+   first pass silently short-circuited. A user who called
+   `engine.setHrtfMode(Forced)` *before* `initialize()` had their
+   preference stored in `m_hrtf` but never applied — the driver
+   stayed in its default state until some later mid-session
+   `setHrtfMode` call re-triggered the apply.
+
+2. **No way to notice driver downgrades**: the Settings UI could
+   display what the user *asked for* (from `getHrtfSettings()`) and
+   what the driver *actually did* (from `getHrtfStatus()`), but only
+   by polling both every frame. There was no event that said "the
+   driver just reset, here's what it decided". A `Forced` request
+   silently becoming `UnsupportedFormat` looked identical to a user
+   who had never set a preference.
+
+**Red commit** — listener contract pinned by tests:
+
+- Declared `HrtfStatusEvent { HrtfMode requestedMode;
+  std::string requestedDataset; HrtfStatus actualStatus; }` and
+  `composeHrtfStatusEvent(settings, actualStatus)` in `audio_hrtf.h`.
+  Red stub ignores inputs and returns a default `{}`, so the
+  composition tests fail on field comparison.
+- Declared `AudioEngine::setHrtfStatusListener(HrtfStatusListener)`
+  in `audio_engine.h` with `m_hrtfStatusListener` storage, but
+  deliberately did **not** wire `applyHrtfSettings()` to call it.
+  Setter stores the listener, nothing fires.
+- Added 8 tests across `test_audio_hrtf.cpp`:
+  - 3x `AudioHrtfStatusEvent.*` — composer forwards mode / dataset
+    / status (`Forced+KEMAR+Enabled`, `Forced+UnsupportedFormat`
+    downgrade, `Auto+Unknown` for the uninit case).
+  - 5x `AudioEngineHrtfStatusListener.*` — fires on set-mode from
+    an uninit engine (status reads as Unknown), fires on set-dataset,
+    no-fire on unchanged-value early-return, fires-once-per-change
+    over a 3-change sequence, no-crash when no listener registered.
+
+5 of 8 fail at runtime (the other 3 pass vacuously — the default
+`HrtfStatusEvent{}` already has `actualStatus = Unknown`, and the
+"unchanged" + "no listener" tests pass regardless of wiring).
+
+**Green commit** — three changes, two files:
+
+1. `composeHrtfStatusEvent` (audio_hrtf.cpp): now forwards
+   `settings.mode → requestedMode`, `settings.preferredDataset →
+   requestedDataset`, `actualStatus → actualStatus`. Four lines.
+2. `applyHrtfSettings` (audio_engine.cpp): the ALC device-reset
+   block stays gated on `m_available + m_alcResetDeviceSOFT`, but
+   the listener call is moved *outside* the guard. Pre-init
+   set-mode / set-dataset calls fire the listener with
+   `actualStatus = Unknown` (from `getHrtfStatus()`'s own
+   `!m_available` short-circuit), post-init calls carry the driver's
+   real decision.
+3. `initialize()` (audio_engine.cpp): `m_available = true` now runs
+   *before* `applyHrtfSettings()`. The apply's own guard still
+   protects against the extension being absent, but the `m_available`
+   short-circuit no longer swallows the first pass.
+
+**Doc commit** (this entry) — VERSION 0.1.20 → 0.1.21.
+
+**Tests**: 2862/2863 pass; +8 vs P7's 2855 total (1 pre-existing
+skip unchanged).
+
+**Scope boundary**:
+- The listener is a point-in-time notification. Registering *after*
+  an `applyHrtfSettings()` call does not see prior events — callers
+  subscribe once at panel construction.
+- The event does not include the driver's dataset name. The
+  Settings UI already reads that from `getHrtfSettings()`; no need
+  to duplicate on every call.
+- `alcResetDeviceSOFT` failure still emits a `Logger::warning` as
+  before. The event still fires; `actualStatus` reflects whatever
+  the driver reports after the failed reset (typically unchanged
+  from before the attempt).
+- Pre-init listener firing is deliberate: the Settings UI surfaces
+  a user's requested mode as soon as they change it, even before
+  the device opens. The `Unknown` actualStatus during that window
+  is the honest answer — the driver hasn't had a say yet.
+
+**Slice 2 complete** — P1…P8 all shipped.
+
+---
+
 ### 2026-04-24 Phase 10.9 — Slice 2 P7: Voice-eviction wiring + priority on `AudioSourceComponent`
 
 Sixth Slice 2 item. The Phase 10.4 `chooseVoiceToEvict` primitive
