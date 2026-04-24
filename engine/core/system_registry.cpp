@@ -22,6 +22,11 @@ bool SystemRegistry::initializeAll(Engine& engine)
         return false;
     }
 
+    // Track how many systems initialized cleanly so failure-path cleanup
+    // (Phase 10.9 Slice 1 F10) can tear down exactly that prefix in reverse.
+    // System N itself gets no shutdown() — its initialize() returned false,
+    // meaning resources were not acquired.
+    size_t initializedCount = 0;
     for (auto& system : m_systems)
     {
         Logger::info("SystemRegistry: initializing '" + system->getSystemName() + "'");
@@ -30,8 +35,22 @@ bool SystemRegistry::initializeAll(Engine& engine)
         {
             Logger::error("SystemRegistry: failed to initialize '"
                           + system->getSystemName() + "'");
+
+            // F10: shutdown the 0..initializedCount-1 prefix in reverse so
+            // GL/AL/Jolt resources those systems acquired are released
+            // synchronously, not leaked until process exit. shutdownAll()
+            // early-returns on !m_initialized (which stays false here), so
+            // without this rollback the prefix would be orphaned.
+            for (size_t i = initializedCount; i-- > 0;)
+            {
+                Logger::info("SystemRegistry: rolling back '"
+                             + m_systems[i]->getSystemName() + "'");
+                m_systems[i]->shutdown();
+                m_systems[i]->setActive(false);
+            }
             return false;
         }
+        ++initializedCount;
     }
 
     m_initialized = true;
