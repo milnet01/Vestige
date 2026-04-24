@@ -399,10 +399,18 @@ These engine features are prerequisites for the editor's effects tools (Phase 5E
 
 ---
 
-## Phase 7: Animation (COMPLETE)
+## Phase 7: Animation (COMPLETE — foundation; animation zombie cluster tracked in Phase 10.9 Slice 8 W12)
 **Goal:** Bring the world to life with skeletal animation and motion.
 
 Animated objects and characters are essential for doors, swinging censers, priestly processions, and any living scene. glTF already carries skeletal animation data — this phase makes the engine able to play it.
+
+> **T0 audit 2026-04-24 (Phase 10.9 Slice 0):** The following items below shipped as class + unit tests but have **no production caller / instantiation** in `engine/` / `app/` / `tools/` (outside `tests/`). They compile and pass their unit tests, but nothing runs them at engine runtime. Remediation is tracked by **Phase 10.9 Slice 8 W12** (wire an end-to-end demo OR relocate to `engine/experimental/animation/`).
+> - `LipSyncPlayer` → line "Audio-driven lip sync" (439) is primitives-only — no caller drives phoneme extraction.
+> - `EyeController` → line "Eye animation" (443) is primitives-only — no caller attaches an EyeController to any skeleton.
+> - `FacialAnimator` → facial blend-shape emotion path is primitives-only (morph-target SSBO upload + vertex shader IS live; the FacialAnimator orchestrator class is not).
+> - `MotionMatcher`, `MotionDatabase`, `MirrorGenerator`, `Inertialization::apply` → entire "Motion Matching" subsection (448–475) is primitives-only — no character rig or game loop queries the matcher.
+>
+> `[x]` boxes are retained below to honour the "class shipped + tests pass" claim they originally made; W12 will either wire them into a consuming feature or relocate them to `engine/experimental/` and demote the boxes then. Phase 7 header retains (COMPLETE) because glTF skeletal playback, IK, skeletal state machines, and morph targets (without the FacialAnimator orchestrator) **are** live.
 
 ### Skeletal Animation System
 - [x] Bone/joint hierarchy (skeleton loaded from glTF) — Phase 7A
@@ -484,8 +492,19 @@ Data-driven animation selection that replaces hand-authored state machines with 
 
 ---
 
-## Phase 8: Physics (COMPLETE)
+## Phase 8: Physics (COMPLETE — foundation; destruction/ragdoll/grab cluster tracked in Phase 10.9 Slice 8 W13)
 **Goal:** Physical simulation for realistic object interaction, cloth, and world dynamics.
+
+> **T0 audit 2026-04-24 (Phase 10.9 Slice 0):** The following items below shipped as class + unit tests but have **no production caller / instantiation**. `DestructionSystem::update` is a 41-line empty pump (AMBIGUOUS, but the subsystems it claims to own are never driven). Remediation is tracked by **Phase 10.9 Slice 8 W13** (either wire a real `DestructionSystem::update` that pumps them OR relocate to `engine/experimental/physics/` and demote the claims).
+> - `Ragdoll` class + presets + powered-ragdoll → "Ragdoll Physics" subsection (578–587) is primitives-only. Skeleton-to-ragdoll switch never fires because nothing creates a `Ragdoll` instance.
+> - `GrabSystem` → "Object Interaction System" grab/hold/carry/throw (591–597) is primitives-only — no `m_grabSystem` member in `Engine` or any system; the class compiles and has tests, but no game loop raycasts from camera to grab.
+> - `StasisSystem` → "Stasis/slow-motion on individual objects" (line 600) is primitives-only.
+> - `Fracture`, `BreakableComponent::fracture` → "Dynamic Destruction" subsection (602–616): the `Fracture::fractureConvex` call chain terminates inside `BreakableComponent::fracture`, which itself has zero callers. Break thresholds never fire at runtime.
+> - `Dismemberment` → entire "Dismemberment System" subsection (618–633) is primitives-only.
+>
+> Rigid-body dynamics, character controller, constraints/joints, and cloth simulation **are** live — they have real callers in the physics-driven scenes. Only the destruction/ragdoll/grab/stasis/dismemberment cluster is affected.
+>
+> `[x]` boxes are retained below to honour the "class shipped + tests pass" claim they originally made; W13 will wire or relocate + demote.
 
 Physics enables curtains blowing in the wind, objects responding to gravity, doors with realistic hinges, and the linen fabrics of the Tabernacle draping naturally.
 
@@ -708,6 +727,11 @@ Shipped via commit `dfbb96b` — "Phase 9A: Domain system infrastructure — ISy
 **Goal:** Wrap each existing subsystem into a formal domain system class. Each step: create the system class, have it own the existing subsystem instances, register with shared infrastructure. Tests must pass after each step.
 
 #### Domain Systems to Wrap
+
+> **T0 audit 2026-04-24 (Phase 10.9 Slice 0):** Two entries below claim ownership of subsystems that include Phase-7/Phase-8 zombies — the wrapping ISystem was registered but the wrapped primitives (MotionMatcher, LipSyncPlayer, FacialAnimator, EyeController, Ragdoll, Fracture, GrabSystem, Dismemberment) have no production caller. The wrap itself is live (the system pumps its `update`), but the advertised behaviour is reduced by the zombies it claims to own. Specifically:
+> - `Destruction & Physics System` wrap ← W13 affects (Fracture, Ragdoll, GrabSystem, Dismemberment zombies — rigid bodies / joints are live).
+> - `Character & Animation System` wrap ← W12 affects (MotionMatcher / LipSyncPlayer / FacialAnimator / EyeController zombies — skeletal playback, IK, morph targets are live).
+
 - [x] **Terrain System** — wrap `environment/terrain`, `renderer/terrain_renderer`, brush tools. Owns: heightfield editing, splatmap texturing, collision mesh, LOD, terrain-vegetation integration, road/path system
 - [x] **Vegetation System** — wrap `environment/foliage_manager`, `environment/density_map`, `renderer/foliage_renderer`, `environment/biome_preset`. Owns: all tree/grass/shrub entities, procedural placement, wind animation (queries EnvironmentForces), LOD, species presets
 - [x] **Water & Fluid System** — wrap `renderer/water_renderer`, `renderer/water_fbo`, `scene/water_surface`. Owns: ocean/lake/river/puddle entities, surface simulation, rendering (reflections, refractions, caustics), buoyancy (queries EnvironmentForces), shore blending
@@ -880,7 +904,7 @@ Prioritize basic event-to-action chains first. The formula node editor builds on
 - [x] **Phase 9F-3:** Tilemap system — `engine/scene/tilemap_component.{h,cpp}` ships multi-layer grids (TileId uint16, 0 = empty), named layers with sort order, animated tiles via frame-sequence definitions, global animation time wrapping at 1 hour. `engine/renderer/tilemap_renderer.{h,cpp}` converts a tilemap into SpriteInstance records for the shared sprite pass — no dedicated shader. Auto-tiling defers to Phase 18 per the design doc; authoring + rendering + animation are live. 12 new unit tests.
 - [x] **Phase 9F-4:** 2D camera (orthographic with smooth follow, deadzone, bounds) — `engine/scene/camera_2d_component.{h,cpp}` ships orthoHalfHeight + follow offset + deadzone + Unity-style SmoothDamp spring + optional world-bounds clamp. `updateCamera2DFollow(camera, target, dt)` is the step helper.
 - [x] **Phase 9F-5:** 2D game type templates (Side-Scroller, Shmup) — `engine/scene/game_templates_2d.{h,cpp}` ships `createSideScrollerTemplate` (player + ground + platforms + Camera2D follow) and `createShmupTemplate` (kinematic player + scrolling tilemap + locked ortho camera). Optional atlas binding via `GameTemplate2DConfig`; templates ship without sprites when designers want to plug in their own art later.
-- [x] **Phase 9F-6:** Editor panels — `engine/editor/panels/sprite_panel.{h,cpp}` (load TexturePacker JSON, list frames, assign to selection), `engine/editor/panels/tilemap_panel.{h,cpp}` (layer list + resize knobs + palette picker + headless paint/erase helpers). Template dialog now exposes Side-Scroller 2D and Shmup 2D; `applyTemplate` dispatches 2D types to the Phase-9F-5 template generators. Viewport-click paint pipeline and slicing-from-PNG defer to Phase 18.
+- [x] **Phase 9F-6:** Editor panels — `engine/editor/panels/sprite_panel.{h,cpp}` (load TexturePacker JSON, list frames, assign to selection), `engine/editor/panels/tilemap_panel.{h,cpp}` (layer list + resize knobs + palette picker + headless paint/erase helpers). Template dialog now exposes Side-Scroller 2D and Shmup 2D; `applyTemplate` dispatches 2D types to the Phase-9F-5 template generators. Viewport-click paint pipeline and slicing-from-PNG defer to Phase 18. **T0 audit 2026-04-24:** `SpritePanel` + `TilemapPanel` are compiled, tested, and unreachable from the editor — neither is a member of `Editor` (no `m_spritePanel` / `m_tilemapPanel` in `editor.h`) and `Editor::drawPanels` never invokes their `draw()`. The classes exist as islands. Remediation tracked by Phase 10.9 Slice 8 **W14** (wire into `drawPanels` OR delete the panel files + their tests). Template dialog dispatch and panel *authoring* classes (the non-panel 9F-1…9F-5 work) are live; only the editor-panel wiring is zombie.
 
 **Note:** Full 2D specs are in Phase 18 (2D Game and Scene Support). This phase implements the core; Phase 18 has the complete feature set.
 
@@ -1183,7 +1207,7 @@ Every Phase 11B gameplay hook that depends on rendering (hit decals, bullet-hole
 **Process discipline for this phase.** Every slice follows the design-doc-first-tests pattern: failing regression tests authored from the design-doc or external-standard clause (cited in the test name — e.g. `TEST(Photosensitive, WCAG_2_3_1_*)`) land as a "red" commit; the fix lands as a "green" commit. Each slice also triggers an independent-reviewer subagent pass before ship.
 
 ### Slice 0: ROADMAP truth-up — prerequisite for all downstream zombie-feature remediation
-- [ ] **T0.** Grep-audit every `[x]` DONE claim in this ROADMAP for ≥1 non-declaration, non-test call site of its primary entry-point. Demote falsely-claimed items (expected hits: Ragdoll, Fracture, Dismemberment, `GrabSystem`, `StasisSystem`, `BreakableComponent::fracture`, `MotionMatcher`, `MotionDatabase`, `LipSyncPlayer`, `FacialAnimator`, `EyeController`, `MirrorGenerator`, `Inertialization::apply`, `SpritePanel`, `TilemapPanel`, SSR, contact-shadow, `GpuCuller::cull`) to `[ ]` or relocate to `engine/experimental/` with a note. Subsequent slices (W12–W15) can then trust the baseline. Second /indie-review 2026-04-23 confirmed ≥20 such zombies against `[x]` boxes.
+- [x] **T0.** Grep-audit every `[x]` DONE claim in this ROADMAP for ≥1 non-declaration, non-test call site of its primary entry-point. Demote falsely-claimed items (expected hits: Ragdoll, Fracture, Dismemberment, `GrabSystem`, `StasisSystem`, `BreakableComponent::fracture`, `MotionMatcher`, `MotionDatabase`, `LipSyncPlayer`, `FacialAnimator`, `EyeController`, `MirrorGenerator`, `Inertialization::apply`, `SpritePanel`, `TilemapPanel`, SSR, contact-shadow, `GpuCuller::cull`) to `[ ]` or relocate to `engine/experimental/` with a note. Subsequent slices (W12–W15) can then trust the baseline. Second /indie-review 2026-04-23 confirmed ≥20 such zombies against `[x]` boxes. **Shipped 2026-04-24.** Grep audit run against the full list. **Confirmed zombies (17):** `Ragdoll`, `Fracture`, `BreakableComponent::fracture`, `Dismemberment`, `GrabSystem`, `StasisSystem`, `MotionMatcher`, `MotionDatabase`, `LipSyncPlayer`, `FacialAnimator`, `EyeController`, `MirrorGenerator`, `Inertialization::apply`, `SpritePanel`, `TilemapPanel`, SSR pipeline, `GpuCuller::cull` — all have implementation + unit tests but zero non-test instantiation in `engine/` / `app/` / `tools/`. **Confirmed false positive (1):** contact-shadow pipeline is LIVE at `renderer.cpp:1162-1185` (stage 5c of render loop); W10 amended to closed-wrong-premise rather than deleted-or-gated. **Ambiguous (1):** `DestructionSystem::update` is a 41-line empty pump — the ISystem is registered but the `update()` body is a no-op, so W13's "wire or relocate" choice still stands. **Documentation actions taken:** T0 audit block notes added at (a) Phase 7 header (line 402) listing the animation-cluster zombies → W12, (b) Phase 8 header (line 487) listing the destruction/ragdoll/grab/dismemberment-cluster zombies → W13, (c) Phase 9B "Domain Systems to Wrap" header (line 710) noting the wrap ISystem is live but the wrapped primitives include W12/W13 zombies, (d) Phase 9F-6 Editor panels line (883) noting SpritePanel + TilemapPanel never reach `Editor::drawPanels` → W14. Phase-section `[x]` boxes retained because the original "class shipped + tests pass" half of the claim holds; the demotion-to-`[ ]` per-line is deferred until W12/W13/W14 either wire or relocate — demoting now would understate work that does exist at the primitive layer. SSR and `GpuCuller::cull` have no false `[x]` in any Phase section (only in W9 / W11 which already correctly mark them as open); no demotion needed. W12–W14 can now trust this baseline: every zombie they're asked to resolve has been grep-verified, and the list will not grow underneath them.
 
 ### Slice 1: Foundations — enable everything else
 Small, isolated fixes with no upstream dependencies. Every downstream slice benefits.
@@ -1290,7 +1314,7 @@ Per CLAUDE.md Rule 6 (no over-engineering) + Rule 10 (no workarounds-as-fixes). 
 - [ ] **W7.** `AudioEngine::setMixerSnapshot` → `const AudioMixer*` pointer (or seqlock), not per-frame struct copy. Current claim "thread-safe snapshot" doesn't hold.
 - [ ] **W8.** `AudioEngine::m_bufferCache` eviction + per-scene flush + wire streaming music path (`audio_music_stream` has no loader consumer today).
 - [ ] **W9.** Delete SSR pipeline (`m_ssrShader`, `m_ssrFbo` 16 MB RGBA16F, `ssr.frag.glsl` with its 8 never-set uniforms) OR gate behind a CMake option. Three independent reviewers converged: zero callers today. Re-add cleanly when Phase 5 G-buffer lands.
-- [ ] **W10.** Delete contact-shadow pipeline (`m_contactShadowFbo`, `renderer.cpp:1162-1185`) OR gate. Same dead-subsystem pattern.
+- [x] **W10.** ~~Delete contact-shadow pipeline (`m_contactShadowFbo`, `renderer.cpp:1162-1185`) OR gate. Same dead-subsystem pattern.~~ **T0 audit 2026-04-24 (Phase 10.9 Slice 0): false positive — contact shadows are live.** `m_contactShadowFbo` is bound and `m_contactShadowShader.use()` is invoked in the render loop at `renderer.cpp:1162-1185` (stage 5c), gated by `m_contactShadowsEnabled && m_contactShadowFbo && m_resolveDepthFbo && m_hasDirectionalLight`. The original /indie-review finding conflated the Mesa-sampler-binding gap at this stage (tracked separately as R6) with subsystem deadness; they are different bugs. No action — this item is closed because the premise was wrong, not because work was done. Also noted: the Phase 10.9 intro paragraph at line 1179 lists "contact-shadow" alongside SSR as a "converged zombie" from the review, which this audit partially retracts — SSR is genuinely dead (see W9), contact-shadow is not.
 - [ ] **W11.** Delete `GpuCuller` OR wire `cull()` into the MDI path. Zero callers today despite compiled shader + allocated VBO.
 - [ ] **W12.** Animation zombie cluster (`MotionMatcher`, `MotionDatabase`, `LipSyncPlayer`, `FacialAnimator`, `EyeController`, `MirrorGenerator`, `Inertialization::apply`): wire one end-to-end demo driving motion-matching + lip-sync + facial animation OR relocate to `engine/experimental/animation/` with README note. ~4.4 kLoC currently registered as nothing's consumer. Depends on Slice 0.
 - [ ] **W13.** Physics zombie cluster (`Ragdoll`, `Fracture`, `Dismemberment`, `GrabSystem`, `StasisSystem`, `BreakableComponent::fracture`): wire a real `DestructionSystem::update` that pumps them OR demote ROADMAP claim + relocate. Current 41-line `destruction_system.cpp` is a pass-through stub. Depends on Slice 0.

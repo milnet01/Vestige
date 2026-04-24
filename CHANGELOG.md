@@ -9,6 +9,85 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-24 Phase 10.9 — Slice 0 T0: ROADMAP truth-up (zombie-feature audit)
+
+Documentation-only slice. Phase 10.9's premise — "Phase 10.7 features
+passed tests but delivered subsets of the design" — applies recursively
+to the ROADMAP itself: ~17 `[x]` DONE claims in Phases 7 / 8 / 9B / 9F-6
+point at classes that compile, have tests, and have zero non-test call
+sites. W12, W13, and W14 in Slice 8 are the remediation slices for those
+zombies; they needed a grep-verified baseline to trust what they were
+being asked to wire or relocate.
+
+**Grep audit result:**
+
+*Confirmed zombies (17):*
+- Animation: `LipSyncPlayer`, `FacialAnimator` (orchestrator class —
+  morph targets are live independently), `EyeController`, `MotionMatcher`,
+  `MotionDatabase`, `MirrorGenerator`, `Inertialization::apply` → W12.
+- Physics: `Ragdoll` class + presets + powered-ragdoll, `GrabSystem`,
+  `StasisSystem`, `Fracture` / `BreakableComponent::fracture`,
+  `Dismemberment` → W13.
+- Editor panels: `SpritePanel`, `TilemapPanel` (neither is a member of
+  `Editor`; their `draw()` is never invoked) → W14.
+- Renderer: SSR pipeline (`m_ssrShader`, `m_ssrFbo`, `ssr.frag.glsl`) → W9,
+  `GpuCuller::cull` → W11.
+
+*False positive (1):*
+- **Contact shadows** — W10 claimed "same dead-subsystem pattern as SSR"
+  but is actually LIVE at `renderer.cpp:1162-1185` (stage 5c of the
+  render loop), gated by `m_contactShadowsEnabled && m_contactShadowFbo
+  && m_resolveDepthFbo && m_hasDirectionalLight`. W10 amended to
+  closed-wrong-premise. The Phase 10.9 intro paragraph's claim of
+  "SSR + contact-shadow converged" is half right — SSR is genuinely
+  dead (W9), contact-shadow is not.
+
+*Ambiguous (1):*
+- `DestructionSystem::update` is a 41-line empty pump. The ISystem is
+  registered, so it's not strictly a zombie class, but the subsystems
+  it claims to own (Ragdoll, Fracture, GrabSystem, Dismemberment) are
+  zombies. W13 still needs to drive them from a non-empty `update()`
+  OR relocate the primitives.
+
+**Documentation actions:**
+
+1. Phase 7 header (line 402) — added T0 audit block note listing the
+   animation-cluster zombies with a pointer to W12. Phase header
+   retained as "(COMPLETE — foundation; animation zombie cluster tracked
+   in Phase 10.9 Slice 8 W12)" because glTF skeletal playback, IK,
+   skeletal state machines, and morph targets *are* live.
+2. Phase 8 header (line 487) — added T0 block note listing the
+   destruction/ragdoll/grab/stasis/dismemberment zombies → W13.
+3. Phase 9B "Domain Systems to Wrap" header (line 710) — added T0 block
+   note noting the wrapping ISystem is live but the wrapped primitives
+   include W12/W13 zombies. `Destruction & Physics System` and
+   `Character & Animation System` wraps affected.
+4. Phase 9F-6 editor-panel bullet (line 883) — appended T0 note stating
+   `SpritePanel` + `TilemapPanel` never reach `Editor::drawPanels` → W14.
+5. W10 — reframed from "delete contact-shadow" to "closed — premise was
+   wrong". No renderer code change.
+6. T0 checkbox itself (line 1186) — ticked `[x]` with the full audit
+   summary inline.
+
+**Per-line `[x]` → `[ ]` demotion NOT performed.** The original
+"class shipped + tests pass" half of each `[x]` claim *is* true; only
+the implicit "and it runs at engine runtime" half is false. Demoting
+per line would understate the primitive-level work that exists, and
+W12/W13/W14 will be the honest resolution point — wire or relocate +
+demote together.
+
+**Doc commit** (this entry) — VERSION 0.1.22 → 0.1.23.
+
+**Tests:** none added (documentation-only). Full suite unchanged at
+2866/2867 pass, 1 pre-existing skip.
+
+**Slice 0 complete.** Downstream slices (W12, W13, W14) now have a
+grep-verified zombie list they can trust; the list will not grow under
+them. Slice 1 (F1–F12) and Slice 2 (P1–P5, P7, P8 = 7/8) remain as
+already-documented.
+
+---
+
 ### 2026-04-24 Phase 10.9 — Slice 1 F12: save-time warning for unregistered components
 
 Twelfth and final Slice 1 item. F3 (2026-04-23) introduced the
