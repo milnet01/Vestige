@@ -13,6 +13,7 @@
 
 #include <glm/glm.hpp>
 
+#include <functional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -132,6 +133,27 @@ public:
     ///            commonly UI clicks / menu accents).
     void playSound2D(const std::string& filePath, float volume = 1.0f,
                      AudioBus bus = AudioBus::Ui);
+
+    /// @brief Caption-routing callback (Phase 10.9 P4).
+    ///
+    /// Every `playSound*` overload invokes this at the top of the
+    /// function — before the `!m_available` early-return — with the
+    /// clip path the caller requested. The engine wires it to
+    /// `CaptionMap::enqueueFor(clip, SubtitleQueue&)` at startup, so
+    /// captions are announced at source-acquire rather than polled
+    /// every frame from somewhere else.
+    ///
+    /// Firing BEFORE the availability check is deliberate: users with
+    /// broken audio hardware, zero-volume output, or deafness /
+    /// hearing loss still need the caption when game code *intends*
+    /// to play a sound. Captions are the accessibility substitute for
+    /// the audio itself, not a side-effect of audio actually reaching
+    /// the speakers.
+    using CaptionAnnouncer = std::function<void(const std::string& clipPath)>;
+    void setCaptionAnnouncer(CaptionAnnouncer announcer)
+    {
+        m_captionAnnouncer = std::move(announcer);
+    }
 
     /// @brief Phase 10.7 slice A2 — publishes a snapshot of the
     ///        engine-owned mixer into the audio engine. Held by value
@@ -253,6 +275,8 @@ private:
     };
     std::unordered_map<unsigned int, SourceMix> m_livePlaybacks;
     AudioMixer m_mixerSnapshot{};  ///< Latest published mixer (defaults all-1).
+
+    CaptionAnnouncer m_captionAnnouncer;  ///< Phase 10.9 P4 caption hook (may be empty).
 
     // Buffer cache (path -> OpenAL buffer ID)
     std::unordered_map<std::string, unsigned int> m_bufferCache;

@@ -6,8 +6,14 @@
 
 #include <gtest/gtest.h>
 
+#include "audio/audio_engine.h"
 #include "ui/caption_map.h"
 #include "ui/subtitle.h"
+
+#include <glm/glm.hpp>
+
+#include <string>
+#include <vector>
 
 using namespace Vestige;
 
@@ -176,4 +182,160 @@ TEST(CaptionMapCategory, ParseUnknownDefaultsToDialogue)
 {
     EXPECT_EQ(parseSubtitleCategory(""),       SubtitleCategory::Dialogue);
     EXPECT_EQ(parseSubtitleCategory("other"),  SubtitleCategory::Dialogue);
+}
+
+// =============================================================================
+// Phase 10.9 Slice 2 P4 — Caption auto-enqueue announcer on playSound*
+// =============================================================================
+//
+// Captions don't self-enqueue. Phase 10.7 slice B3 added CaptionMap::enqueueFor
+// but nothing called it at clip-play time — the design doc's "When an
+// AudioSourceComponent plays a clip with a matching key, the audio system
+// auto-enqueues a caption" promise had no wire. These tests pin the
+// callback contract on AudioEngine so every playSound* overload announces
+// the clip path at entry, before the availability check — users with no
+// audio hardware / deafness still see the caption when game code intends
+// to play a sound.
+
+TEST(AudioEngineCaptionAnnouncer, FiresOnPlaySound_P4)
+{
+    AudioEngine engine;  // default-constructed, no initialize() — m_available stays false
+    std::vector<std::string> captured;
+    engine.setCaptionAnnouncer([&](const std::string& clip)
+    {
+        captured.push_back(clip);
+    });
+
+    engine.playSound("audio/dialogue/moses_01.wav", glm::vec3(0.0f));
+
+    ASSERT_EQ(captured.size(), 1u);
+    EXPECT_EQ(captured[0], "audio/dialogue/moses_01.wav");
+}
+
+TEST(AudioEngineCaptionAnnouncer, FiresOnPlaySoundSpatialAttenParams_P4)
+{
+    AudioEngine engine;
+    std::vector<std::string> captured;
+    engine.setCaptionAnnouncer([&](const std::string& clip)
+    {
+        captured.push_back(clip);
+    });
+
+    AttenuationParams params;
+    engine.playSoundSpatial(
+        "audio/fx/footstep.wav", glm::vec3(0.0f), params);
+
+    ASSERT_EQ(captured.size(), 1u);
+    EXPECT_EQ(captured[0], "audio/fx/footstep.wav");
+}
+
+TEST(AudioEngineCaptionAnnouncer, FiresOnPlaySoundSpatialWithVelocity_P4)
+{
+    AudioEngine engine;
+    std::vector<std::string> captured;
+    engine.setCaptionAnnouncer([&](const std::string& clip)
+    {
+        captured.push_back(clip);
+    });
+
+    AttenuationParams params;
+    engine.playSoundSpatial(
+        "audio/fx/arrow_whoosh.wav",
+        glm::vec3(0.0f),
+        glm::vec3(10.0f, 0.0f, 0.0f),
+        params);
+
+    ASSERT_EQ(captured.size(), 1u);
+    EXPECT_EQ(captured[0], "audio/fx/arrow_whoosh.wav");
+}
+
+TEST(AudioEngineCaptionAnnouncer, FiresOnPlaySound2D_P4)
+{
+    AudioEngine engine;
+    std::vector<std::string> captured;
+    engine.setCaptionAnnouncer([&](const std::string& clip)
+    {
+        captured.push_back(clip);
+    });
+
+    engine.playSound2D("audio/ui/menu_accept.wav");
+
+    ASSERT_EQ(captured.size(), 1u);
+    EXPECT_EQ(captured[0], "audio/ui/menu_accept.wav");
+}
+
+TEST(AudioEngineCaptionAnnouncer, FiresOncePerPlayCall_P4)
+{
+    // Exactly one announcement per playSound call — the roadmap
+    // specifies "fires once at source-acquire, not every frame".
+    AudioEngine engine;
+    std::vector<std::string> captured;
+    engine.setCaptionAnnouncer([&](const std::string& clip)
+    {
+        captured.push_back(clip);
+    });
+
+    engine.playSound("clip_a.wav", glm::vec3(0.0f));
+    engine.playSound("clip_b.wav", glm::vec3(0.0f));
+    engine.playSound("clip_a.wav", glm::vec3(0.0f));
+
+    ASSERT_EQ(captured.size(), 3u);
+    EXPECT_EQ(captured[0], "clip_a.wav");
+    EXPECT_EQ(captured[1], "clip_b.wav");
+    EXPECT_EQ(captured[2], "clip_a.wav");
+}
+
+TEST(AudioEngineCaptionAnnouncer, NoAnnouncerIsSafe_P4)
+{
+    // Defensive: an engine that never had an announcer installed must
+    // not crash when playSound* is called. The announcer is a
+    // purely-optional hook.
+    AudioEngine engine;
+    EXPECT_NO_THROW(engine.playSound("anything.wav", glm::vec3(0.0f)));
+    EXPECT_NO_THROW(engine.playSound2D("anything.wav"));
+}
+
+TEST(AudioEngineCaptionAnnouncer, CaptionMapIntegrationEnqueuesMappedClip_P4)
+{
+    // End-to-end: production wiring is
+    // engine.setCaptionAnnouncer([map, queue](clip){ map.enqueueFor(clip, queue); }).
+    // Assert that playing a mapped clip path produces a caption in the queue.
+    CaptionMap map;
+    const std::string json = R"({
+        "audio/dialogue/moses_01.wav": {
+            "category": "Dialogue",
+            "speaker":  "Moses",
+            "text":     "Draw near.",
+            "duration": 2.5
+        }
+    })";
+    ASSERT_TRUE(map.loadFromString(json));
+
+    SubtitleQueue queue;
+    AudioEngine engine;
+    engine.setCaptionAnnouncer([&](const std::string& clip)
+    {
+        map.enqueueFor(clip, queue);
+    });
+
+    engine.playSound("audio/dialogue/moses_01.wav", glm::vec3(0.0f));
+    ASSERT_EQ(queue.size(), 1u);
+    EXPECT_EQ(queue.activeSubtitles()[0].subtitle.speaker, "Moses");
+    EXPECT_EQ(queue.activeSubtitles()[0].subtitle.text,    "Draw near.");
+}
+
+TEST(AudioEngineCaptionAnnouncer, UnmappedClipEnqueuesNothing_P4)
+{
+    // Negative: clips without a map entry produce no caption — the
+    // CaptionMap::enqueueFor no-op passes through the announcer.
+    CaptionMap map;
+    SubtitleQueue queue;
+    AudioEngine engine;
+    engine.setCaptionAnnouncer([&](const std::string& clip)
+    {
+        map.enqueueFor(clip, queue);
+    });
+
+    engine.playSound("audio/fx/unmapped.wav", glm::vec3(0.0f));
+    EXPECT_EQ(queue.size(), 0u);
 }
