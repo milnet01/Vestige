@@ -965,19 +965,41 @@ json serializeEntity(const Entity& entity, const ResourceManager& resources)
     j["visible"] = entity.isVisible();
     j["locked"] = entity.isLocked();
 
-    // Components — registry-driven dispatch.
+    // Components — registry-driven dispatch. We also count the hits
+    // so we can detect the Phase 10.9 F12 "entity owns a component
+    // type no one registered with the ComponentSerializerRegistry"
+    // case. Those components are dropped from the serialised output;
+    // a loud warning here is the difference between a scene file
+    // that quietly loses ClothComponent / RigidBody / CameraComponent
+    // on save and one whose operator can see the data loss happening.
     json components = json::object();
+    std::size_t registeredHits = 0;
     for (const auto& entry : ComponentSerializerRegistry::instance().entries())
     {
         json compJson = entry.trySerialize(entity, resources);
         if (!compJson.is_null())
         {
             components[entry.typeName] = std::move(compJson);
+            ++registeredHits;
         }
     }
     if (!components.empty())
     {
         j["components"] = components;
+    }
+
+    const std::size_t totalComponents = entity.getComponentTypeIds().size();
+    if (totalComponents > registeredHits)
+    {
+        const std::size_t droppedCount = totalComponents - registeredHits;
+        Logger::warning(
+            "EntitySerializer: entity '" + entity.getName() + "' has " +
+            std::to_string(droppedCount) +
+            " component(s) whose type is not registered with "
+            "ComponentSerializerRegistry — silently dropped from the "
+            "serialised output. Register via "
+            "ComponentSerializerRegistry::instance().registerEntry(...) "
+            "or relocate to engine/experimental/.");
     }
 
     // Children (recursive)
