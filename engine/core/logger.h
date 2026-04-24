@@ -66,8 +66,10 @@ public:
     /// @param message The message to log.
     static void fatal(const std::string& message);
 
-    /// @brief Returns the ring buffer of recent log entries (up to MAX_ENTRIES).
-    static const std::deque<LogEntry>& getEntries();
+    /// @brief Returns a snapshot of recent log entries (up to MAX_ENTRIES).
+    /// Returned by value so callers iterate a stable copy while worker threads
+    /// may still be writing — see F9 (Logger thread-safety).
+    static std::deque<LogEntry> getEntries();
 
     /// @brief Clears all buffered log entries.
     static void clearEntries();

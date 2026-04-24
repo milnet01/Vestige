@@ -11,6 +11,7 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <mutex>
 #include <sstream>
 
 namespace Vestige
@@ -25,6 +26,11 @@ LogLevel Logger::s_level = LogLevel::Info;
 std::deque<LogEntry> Logger::s_entries;
 
 static std::ofstream s_logFile;
+
+// F9: serialises s_entries (deque), s_logFile (ofstream), and console stream
+// writes across all log() callers. AsyncTextureLoader logs from a worker
+// thread, so log() races with itself today without this mutex.
+static std::mutex s_logMutex;
 
 void Logger::setLevel(LogLevel level)
 {
@@ -66,13 +72,15 @@ void Logger::fatal(const std::string& message)
     log(LogLevel::Fatal, message);
 }
 
-const std::deque<LogEntry>& Logger::getEntries()
+std::deque<LogEntry> Logger::getEntries()
 {
+    std::lock_guard<std::mutex> lock(s_logMutex);
     return s_entries;
 }
 
 void Logger::clearEntries()
 {
+    std::lock_guard<std::mutex> lock(s_logMutex);
     s_entries.clear();
 }
 
@@ -138,6 +146,12 @@ void Logger::log(LogLevel level, const std::string& message)
 
     // Format the line
     std::string line = std::string("[Vestige][") + levelToString(level) + "] " + message;
+
+    // F9: one lock covers the three pieces of shared state touched below —
+    // the chosen console stream, s_logFile, and s_entries. AsyncTextureLoader
+    // logs from a worker, so log() can race with itself; without this lock
+    // concurrent deque::push_back is UB and stream writes can tear mid-line.
+    std::lock_guard<std::mutex> lock(s_logMutex);
 
     // Console output
     std::ostream& stream = (level >= LogLevel::Error) ? std::cerr : std::cout;
