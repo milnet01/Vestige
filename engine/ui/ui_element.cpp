@@ -35,12 +35,40 @@ glm::vec2 UIElement::computeAbsolutePosition(const glm::vec2& parentOffset,
 bool UIElement::hitTest(const glm::vec2& point, const glm::vec2& parentOffset,
                          int screenWidth, int screenHeight) const
 {
-    if (!visible || !interactive)
+    // Phase 10.9 Slice 3 S3 — hidden subtrees are skipped wholesale:
+    // a child must not catch input that the sighted user cannot see
+    // a parent for. This matches collectAccessible's subtree-skip
+    // policy in the same file.
+    if (!visible)
     {
         return false;
     }
 
-    glm::vec2 absPos = computeAbsolutePosition(parentOffset, screenWidth, screenHeight);
+    const glm::vec2 absPos =
+        computeAbsolutePosition(parentOffset, screenWidth, screenHeight);
+
+    // Children are checked first: they render on top of the parent,
+    // so logical z-order dictates they catch the hit before the
+    // parent's own bounds do. Also closes Slice 3 S5 (UIPanel
+    // delegation) as a side effect — a non-interactive container
+    // still lets its interactive children catch input.
+    for (const auto& child : m_children)
+    {
+        if (child && child->hitTest(point, absPos, screenWidth, screenHeight))
+        {
+            return true;
+        }
+    }
+
+    // Self-hit requires `interactive`. A non-interactive container
+    // whose children did not catch the hit returns false — the hit
+    // passes through, which is the expected dispatch behaviour for
+    // a purely decorative panel.
+    if (!interactive)
+    {
+        return false;
+    }
+
     return point.x >= absPos.x && point.x <= absPos.x + size.x &&
            point.y >= absPos.y && point.y <= absPos.y + size.y;
 }
