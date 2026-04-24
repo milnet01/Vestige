@@ -9,6 +9,93 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-24 Phase 10.9 — Slice 2 P7: Voice-eviction wiring + priority on `AudioSourceComponent`
+
+Sixth Slice 2 item. The Phase 10.4 `chooseVoiceToEvict` primitive
+has existed as a tested pure function since the mixer shipped, but
+the `AudioEngine` source-pool exhaustion path never called it.
+Until P7, when all 32 slots were in use, every new `playSound*`
+returned 0 and the caller got silence — no matter how important
+the incoming sound was. Dialogue, boss stingers, and objective
+audio (the Critical tier the priority enum was designed for) were
+indistinguishable from a background footstep.
+
+**Red commit** — admission-gate primitive + component field:
+
+- Declared `chooseVoiceToEvictForIncoming(voices, incomingPriority)`
+  in `audio_mixer.h` with a deliberately-wrong always-return-`-1`
+  stub in the cpp. Added 8 spec tests to `test_audio_mixer.cpp`:
+  empty-list sentinel across priorities, lower-incoming-loses,
+  equal-incoming-loses-to-incumbent, strict-higher-incoming-wins,
+  picks-lowest-keep-score-among-eligible, all-Critical-Critical
+  ties-to-incumbent, lowest-score-victim-still-ineligible-falls-through,
+  mixed-tier-High-evicts-Low.
+- Added `SoundPriority priority = SoundPriority::High` (wrong
+  default) to `AudioSourceComponent` + 3 tests in
+  `test_audio_source_component.cpp` (default-is-Normal,
+  assignable, clone-preserves). Clone intentionally not wired so
+  the clone-preserves test fails too.
+- Extended `test_entity_serializer_registry.cpp` `populateDistinctive`
+  + `AudioSourceAllFieldsRoundTrip` with
+  `asc.priority = SoundPriority::Critical` — serializer doesn't
+  handle priority yet, so the round-trip fails.
+
+6/12 red tests fail at runtime for the right reasons (stubs always
+say "no eviction", default is High, clone drops priority,
+serializer drops priority). 6 pass incidentally because the stub's
+-1 matches the "incoming loses" cases.
+
+**Green commit** — three layers of wiring:
+
+- **Pure admission gate**: `chooseVoiceToEvictForIncoming` delegates
+  to `chooseVoiceToEvict` for victim selection, then applies a
+  strict-greater priority-tier check. Ties go to the incumbent so
+  rapid same-priority bursts (e.g. a Normal footstep cluster)
+  don't churn the pool.
+- **Component + round-trip**: default restored to `Normal`;
+  `AudioSourceComponent::clone()` copies priority;
+  `entity_serializer.cpp` adds `soundPriorityToString` /
+  `soundPriorityFromString` helpers and round-trips the field as a
+  JSON string (`"Low"` / `"Normal"` / `"High"` / `"Critical"`). An
+  absent field deserialises as `Normal` — pre-P7 scenes stay
+  identical.
+- **Engine wiring**: `AudioEngine::SourceMix` grows `priority` +
+  `startTime` (std::chrono::steady_clock). `acquireSource` takes a
+  `SoundPriority` parameter (default Normal for fire-and-forget
+  callers) and on pool exhaustion walks `m_livePlaybacks` into a
+  `VoiceCandidate` list (effective gain = `resolveSourceGain(mixer,
+  bus, volume, duck)`, age = now − startTime), asks
+  `chooseVoiceToEvictForIncoming` for a victim, releases that
+  source, and retries the free-slot scan. If no voice qualifies
+  (incoming tier ≤ every existing voice), returns 0 with a
+  `Logger::warning` explaining why. All four `playSound*` overloads
+  gained a trailing `SoundPriority priority = SoundPriority::Normal`
+  parameter and pass it through to `acquireSource`; they also
+  populate the expanded `SourceMix` with the priority + start
+  timestamp. `AudioSystem` passes `comp->priority` when
+  auto-acquiring component-driven sources.
+
+12/12 new tests pass. Full suite 2855/2855.
+
+**Scope boundary**: the eviction retry is one-shot — if the first
+victim's releaseSource somehow fails to free a slot (pool state
+desync), a defensive warning fires and 0 is returned rather than
+looping. Retry-on-desync would hide a real bug; the one-shot + log
+surfaces it. The victim's current playback state is not saved for
+resume; an evicted voice is lost, which matches FMOD / Wwise
+eviction semantics — the caller chose priority tiers to say "this
+moment is more important than whatever that Low voice was doing".
+Pre-P7 scene JSON without the `priority` field deserialises as
+`Normal`, preserving existing authoring. No behavioural change for
+callers that don't opt into `SoundPriority` — the default Normal +
+equal-ties-to-incumbent admission rule means the only observable
+difference for shipping code is that an incoming Normal sound no
+longer silently drops when the pool happens to be full of a
+smaller-tier voice; today that's a near-impossible scenario
+because every shipping sound is Normal.
+
+Version bumped 0.1.19 → 0.1.20.
+
 ### 2026-04-24 Phase 10.9 — Slice 2 P2: AudioSourceComponent per-frame pass
 
 Fifth Slice 2 item and the biggest one — turns nine dead fields on
