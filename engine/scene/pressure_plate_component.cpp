@@ -15,12 +15,21 @@
 namespace Vestige
 {
 
-glm::vec3 computePressurePlateCenter(const Entity& /*owner*/,
-                                     float /*detectionHeight*/)
+glm::vec3 computePressurePlateCenter(const Entity& owner,
+                                     float detectionHeight)
 {
-    // Phase 10.9 Slice 3 S6 RED stub — deliberately ignores inputs.
-    // Tests fail on the returned zero vector.
-    return glm::vec3(0.0f);
+    // Walk the parent chain composing each level's local matrix so
+    // the world position is correct even when Entity::update() has
+    // not run yet this frame. Relying on `getWorldPosition()` alone
+    // would tie the overlap-query centre to update-call timing —
+    // brittle inside physics steps, editor preview, and unit tests.
+    glm::mat4 world(1.0f);
+    for (const Entity* e = &owner; e != nullptr; e = e->getParent())
+    {
+        world = e->transform.getLocalMatrix() * world;
+    }
+    const glm::vec3 worldPos(world[3]);
+    return worldPos + glm::vec3(0.0f, detectionHeight, 0.0f);
 }
 
 void PressurePlateComponent::update(float deltaTime)
@@ -48,9 +57,11 @@ void PressurePlateComponent::update(float deltaTime)
         return;
     }
 
-    // Build a sphere overlap query centered above the entity
-    glm::vec3 ownerPos = getOwner()->transform.position;
-    glm::vec3 center = ownerPos + glm::vec3(0.0f, detectionHeight, 0.0f);
+    // Phase 10.9 Slice 3 S6 — world-space centre (was local position
+    // pre-S6, which put the sphere at the wrong world coordinates
+    // whenever the plate entity was parented under another entity).
+    const glm::vec3 center =
+        computePressurePlateCenter(*getOwner(), detectionHeight);
 
     JPH::SphereShape queryShape(detectionRadius);
     JPH::CollideShapeSettings settings;
