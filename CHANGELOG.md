@@ -9,6 +9,98 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-24 Phase 10.9 — Slice 2 P3: ducking fold into `resolveSourceGain`
+
+Fourth Slice 2 item. Closes the "feature ships but never actually
+applies" gap for ducking: Phase 10.7's `DuckingState` /
+`DuckingParams` / `updateDucking` shipped with full unit-test
+coverage, but `resolveSourceGain` never accepted the ducking gain,
+`AudioEngine::updateGains` never read a duck snapshot, and the
+editor AudioPanel kept a *local* copy of the state that applied only
+to its own preview. A user who enabled the Debug-tab "Ducked"
+trigger saw the slew animate in the editor — and heard zero dip in
+the actual mix. The state machine was a toy. P3 wires it to AL.
+
+**Red commit `389af46` + amend `5fdf618`** — the math contract +
+full wiring contract pinned before any green line:
+
+- `resolveSourceGain(mixer, bus, volume, duckingGain)` 4-arg
+  overload declared; cpp stub ignores the new parameter so the math
+  tests fail at runtime (F10 / F11 / P1 discipline).
+- `AudioEngine::setDuckingSnapshot(float)` /
+  `::getDuckingSnapshot()` declared; cpp stub silently discards on
+  set so `SetStoresClamped_P3` fails.
+- `Engine::getDuckingState()` / `::getDuckingParams()` declared with
+  `m_duckingState` / `m_duckingParams` members (defaults match
+  `DuckingState{1.0f, false}` and `DuckingParams{0.08s, 0.30s, 0.35}`).
+
+Five math tests + two snapshot tests + three panel-wire tests in
+three test files: 5 of 10 fail at runtime on the stubs, 5 pass
+(unity-defaults, no-op 3-arg compat, and the panel-local fallback
+pin that holds with or without the fix).
+
+**Green commit `2eda0ff`** — three-layer wire-up:
+
+- **Math** (`audio_mixer.cpp`): 4-arg overload multiplies
+  `clamp01(duckingGain)` after the existing
+  `master × bus × volume`, then clamps the product to [0, 1].
+- **Storage** (`audio_engine.cpp`): `setDuckingSnapshot` clamps on
+  ingest (canonical [0, 1] downstream); `updateGains` threads
+  `m_duckingSnapshot` through every `resolveSourceGain` call so
+  every live source's `AL_GAIN` upload includes the duck.
+- **Publish** (`audio_system.cpp`): `AudioSystem::update` advances
+  `updateDucking(m_engine->getDuckingState(), ...)` by the frame
+  delta, then publishes `currentGain` to
+  `m_audioEngine.setDuckingSnapshot`. Lives in the same pass that
+  publishes the mixer snapshot — one paired write per frame.
+- **Single source of truth** (`audio_panel.{h,cpp}` +
+  `engine.cpp`): `AudioPanel::wireEngineDucking(state*, params*)`
+  mirrors the existing `wireEngineMixer` pattern. When wired, the
+  panel's `duckingState()` / `duckingParams()` accessors read and
+  write through the engine pointers; the Debug tab's trigger
+  checkbox + attack/release/floor sliders mutate the authoritative
+  state AudioSystem advances. `Engine::initialize` calls the wire
+  alongside the mixer wire. The panel keeps a local fallback
+  (panel-local `m_duckingState` + `m_duckingParams`) for standalone
+  and test usage; `nullptr` wire args select the fallback.
+
+**No debt left standing:**
+
+- No stub cpp implementations remain (`resolveSourceGain` 4-arg
+  body does the real math; `setDuckingSnapshot` stores the clamped
+  value; Engine accessors return the real members).
+- No duplicate state: Engine owns the DuckingState, AudioPanel
+  reads through a pointer when wired. The `m_duckingState` on the
+  panel is the fallback path explicitly documented as
+  "standalone / test only", not a rival store.
+- No TODO / FIXME / "wire later" comments added.
+- Every new public symbol (`setDuckingSnapshot`,
+  `getDuckingSnapshot`, `getDuckingState`, `getDuckingParams`,
+  `wireEngineDucking`, 4-arg `resolveSourceGain`) has a doxygen
+  comment pinning the contract.
+
+**Test suite: 2831 / 2831 passing** (1 pre-existing skip unchanged;
++10 new tests vs. P4's baseline of 2821).
+
+**Files changed (green):** `engine/audio/audio_mixer.cpp` (+8 / -1),
+`engine/audio/audio_engine.cpp` (+9 / -1), `engine/audio/audio_engine.h`
+(+22 / -0), `engine/systems/audio_system.cpp` (+13 / -1),
+`engine/editor/panels/audio_panel.h` (+32 / -4),
+`engine/editor/panels/audio_panel.cpp` (+5 / -5),
+`engine/core/engine.h` (+12 / -0), `engine/core/engine.cpp` (+9 / -0),
+`tests/test_audio_mixer.cpp` (+60 / -0),
+`tests/test_audio_panel.cpp` (+52 / -0).
+
+**Net: +222 / -12 lines across ten files. Phase 10.7's ducking
+feature now actually applies to what the user hears.**
+
+**Next in Slice 2:** **P2** — `AudioSystem` per-frame
+`AudioSourceComponent` iteration pass (per-entity `m_activeSources`
+map, per-frame `AL_POSITION` / `AL_VELOCITY` / `AL_PITCH` /
+`finalGain` push). Brings the 11 dead fields on
+`AudioSourceComponent` live. P3's duck snapshot is the gain hook
+for P2's per-source compose.
+
 ### 2026-04-24 Phase 10.9 — Slice 2 P4: caption auto-enqueue on playSound*
 
 Third Slice 2 item. Closes the Phase 10.7 slice B3 promise that the
