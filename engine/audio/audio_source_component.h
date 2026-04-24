@@ -115,7 +115,7 @@ public:
     /// Defaults to `Normal`, matching generic gameplay SFX. Raise to `High`
     /// for attack cues / pickup confirms and to `Critical` for dialogue,
     /// stingers, or objective audio that must never be dropped.
-    SoundPriority priority = SoundPriority::High;  // RED: default wrong, green restores Normal
+    SoundPriority priority = SoundPriority::Normal;
 
     /// @brief Creates a deep copy of this component.
     std::unique_ptr<Component> clone() const override;

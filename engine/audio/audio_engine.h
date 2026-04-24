@@ -13,6 +13,7 @@
 
 #include <glm/glm.hpp>
 
+#include <chrono>
 #include <functional>
 #include <string>
 #include <unordered_map>
@@ -77,8 +78,25 @@ public:
     unsigned int loadBuffer(const std::string& filePath);
 
     /// @brief Acquires a source from the pool.
-    /// @return OpenAL source ID, or 0 if pool is exhausted.
-    unsigned int acquireSource();
+    ///
+    /// Lookup order:
+    ///  1. First unused slot.
+    ///  2. Reclaim finished sources, then re-scan.
+    ///  3. Phase 10.9 P7 — priority-gated eviction: build the live
+    ///     playbacks into `VoiceCandidate`s and ask
+    ///     `chooseVoiceToEvictForIncoming` for a victim. If one
+    ///     qualifies (strictly lower priority than `incomingPriority`),
+    ///     release it and return that slot. If not, the incoming
+    ///     drops — return 0.
+    ///
+    /// @param incomingPriority Priority of the sound about to start —
+    ///        drives the eviction admission gate. Defaults to Normal
+    ///        so fire-and-forget `playSound` calls from the editor /
+    ///        script graph pick the same tier as generic gameplay SFX.
+    /// @return OpenAL source ID, or 0 when the pool is full and no
+    ///         existing voice is low-enough-priority to evict.
+    unsigned int acquireSource(
+        SoundPriority incomingPriority = SoundPriority::Normal);
 
     /// @brief Returns a source to the pool (stops it first).
     /// @param source The OpenAL source ID to release.
@@ -94,27 +112,35 @@ public:
     ///            duckingSnapshot)` whenever a mixer has been published
     ///            via `setMixerSnapshot` (defaults to the neutral all-1
     ///            mixer otherwise).
+    /// @param priority Phase 10.9 P7 — tier used by the pool-exhaustion
+    ///            eviction gate. When the 32-source pool is full, a
+    ///            strictly-higher-priority incoming sound can kick out
+    ///            an existing lower-tier voice; equal or lower drops.
     /// @returns The acquired OpenAL source ID, or 0 on failure (no
-    ///          audio hardware, buffer load failure, pool exhausted).
+    ///          audio hardware, buffer load failure, pool exhausted
+    ///          with no evictable voice).
     ///          Fire-and-forget callers can discard the return;
     ///          per-frame trackers (Phase 10.9 P2 AudioSystem) store it
     ///          to keep pushing state each frame via `applySourceState`.
     unsigned int playSound(const std::string& filePath, const glm::vec3& position,
                            float volume = 1.0f, bool loop = false,
-                           AudioBus bus = AudioBus::Sfx);
+                           AudioBus bus = AudioBus::Sfx,
+                           SoundPriority priority = SoundPriority::Normal);
 
     /// @brief Plays a spatial sound with explicit attenuation parameters.
     ///
     /// The engine-wide distance model (`setDistanceModel`) determines
     /// which curve OpenAL evaluates; per-source `referenceDistance`
     /// / `maxDistance` / `rolloffFactor` tune that curve.
+    /// @param priority Phase 10.9 P7 eviction tier — see `playSound`.
     /// @returns Acquired OpenAL source ID, or 0 on failure.
     unsigned int playSoundSpatial(const std::string& filePath,
                                   const glm::vec3& position,
                                   const AttenuationParams& params,
                                   float volume = 1.0f,
                                   bool loop = false,
-                                  AudioBus bus = AudioBus::Sfx);
+                                  AudioBus bus = AudioBus::Sfx,
+                                  SoundPriority priority = SoundPriority::Normal);
 
     /// @brief Plays a spatial sound with attenuation + per-source
     ///        velocity for Doppler shift.
@@ -124,6 +150,7 @@ public:
     /// Doppler parameters (`setDopplerFactor`, `setSpeedOfSound`),
     /// OpenAL will apply the pitch shift from the formula in
     /// `audio_doppler.h`.
+    /// @param priority Phase 10.9 P7 eviction tier — see `playSound`.
     /// @returns Acquired OpenAL source ID, or 0 on failure.
     unsigned int playSoundSpatial(const std::string& filePath,
                                   const glm::vec3& position,
@@ -131,16 +158,19 @@ public:
                                   const AttenuationParams& params,
                                   float volume = 1.0f,
                                   bool loop = false,
-                                  AudioBus bus = AudioBus::Sfx);
+                                  AudioBus bus = AudioBus::Sfx,
+                                  SoundPriority priority = SoundPriority::Normal);
 
     /// @brief Plays a non-spatial (2D) sound.
     /// @param filePath Path to the audio file.
     /// @param volume Volume (0.0 to 1.0).
     /// @param bus Mixer bus (defaults to `Ui` — 2D sounds are most
     ///            commonly UI clicks / menu accents).
+    /// @param priority Phase 10.9 P7 eviction tier — see `playSound`.
     /// @returns Acquired OpenAL source ID, or 0 on failure.
     unsigned int playSound2D(const std::string& filePath, float volume = 1.0f,
-                             AudioBus bus = AudioBus::Ui);
+                             AudioBus bus = AudioBus::Ui,
+                             SoundPriority priority = SoundPriority::Normal);
 
     /// @brief Phase 10.9 P2 — polls the OpenAL state of `source` and
     ///        returns true iff it is currently in `AL_PLAYING`.
@@ -299,15 +329,19 @@ private:
     std::vector<unsigned int> m_sourcePool;
     std::vector<uint8_t> m_sourceInUse;
 
-    // Phase 10.7 slice A2 — per-source mixer metadata. Keyed by
-    // OpenAL source ID, populated by every `playSound*` that
+    // Phase 10.7 slice A2 / Phase 10.9 P7 — per-source mixer metadata.
+    // Keyed by OpenAL source ID, populated by every `playSound*` that
     // acquires a source and cleared by `releaseSource`. The
     // per-frame `updateGains()` sweep reads this map + the
-    // published mixer snapshot to re-upload `AL_GAIN`.
+    // published mixer snapshot to re-upload `AL_GAIN`. Priority +
+    // startTime drive the voice-eviction scoring when the pool is
+    // exhausted.
     struct SourceMix
     {
-        AudioBus bus          = AudioBus::Sfx;
-        float    sourceVolume = 1.0f;
+        AudioBus      bus          = AudioBus::Sfx;
+        float         sourceVolume = 1.0f;
+        SoundPriority priority     = SoundPriority::Normal;
+        std::chrono::steady_clock::time_point startTime{};
     };
     std::unordered_map<unsigned int, SourceMix> m_livePlaybacks;
     AudioMixer m_mixerSnapshot{};  ///< Latest published mixer (defaults all-1).

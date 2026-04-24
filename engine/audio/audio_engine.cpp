@@ -208,7 +208,7 @@ unsigned int AudioEngine::loadBuffer(const std::string& filePath)
     return buffer;
 }
 
-unsigned int AudioEngine::acquireSource()
+unsigned int AudioEngine::acquireSource(SoundPriority incomingPriority)
 {
     if (!m_available)
     {
@@ -235,7 +235,47 @@ unsigned int AudioEngine::acquireSource()
         }
     }
 
-    Logger::warning("[AudioEngine] Source pool exhausted");
+    // Phase 10.9 P7 — still no slot. Build VoiceCandidates from live
+    // playbacks and ask the admission-controlled evictor. A victim is
+    // returned only if its priority tier is strictly lower than the
+    // incoming; otherwise the incoming drops.
+    const auto now = std::chrono::steady_clock::now();
+    std::vector<VoiceCandidate> candidates;
+    std::vector<unsigned int>   candidateSources;
+    candidates.reserve(m_livePlaybacks.size());
+    candidateSources.reserve(m_livePlaybacks.size());
+    for (const auto& [source, mix] : m_livePlaybacks)
+    {
+        VoiceCandidate c;
+        c.priority      = mix.priority;
+        c.effectiveGain = resolveSourceGain(
+            m_mixerSnapshot, mix.bus, mix.sourceVolume, m_duckingSnapshot);
+        c.ageSeconds = std::chrono::duration<float>(now - mix.startTime).count();
+        candidates.push_back(c);
+        candidateSources.push_back(source);
+    }
+
+    const std::size_t victimIdx =
+        chooseVoiceToEvictForIncoming(candidates, incomingPriority);
+    if (victimIdx != static_cast<std::size_t>(-1))
+    {
+        const unsigned int victimSource = candidateSources[victimIdx];
+        releaseSource(victimSource);  // stops the voice, frees pool slot
+        for (size_t i = 0; i < m_sourcePool.size(); ++i)
+        {
+            if (!m_sourceInUse[i])
+            {
+                m_sourceInUse[i] = true;
+                return m_sourcePool[i];
+            }
+        }
+        // Defensive: releaseSource must have freed a slot, so reaching
+        // here means the pool vector and m_sourceInUse got out of sync.
+        Logger::warning("[AudioEngine] Eviction freed no slot (pool state desynchronised)");
+        return 0;
+    }
+
+    Logger::warning("[AudioEngine] Source pool exhausted — incoming priority too low to evict");
     return 0;
 }
 
@@ -255,7 +295,8 @@ void AudioEngine::releaseSource(unsigned int source)
 }
 
 unsigned int AudioEngine::playSound(const std::string& filePath, const glm::vec3& position,
-                                     float volume, bool loop, AudioBus bus)
+                                     float volume, bool loop, AudioBus bus,
+                                     SoundPriority priority)
 {
     // Phase 10.9 P4: fire the caption announcer BEFORE the availability
     // check — a user with broken audio hardware / deafness still needs
@@ -275,13 +316,14 @@ unsigned int AudioEngine::playSound(const std::string& filePath, const glm::vec3
         return 0;
     }
 
-    ALuint source = acquireSource();
+    ALuint source = acquireSource(priority);
     if (source == 0)
     {
         return 0;
     }
 
-    m_livePlaybacks[source] = SourceMix{bus, volume};
+    m_livePlaybacks[source] = SourceMix{
+        bus, volume, priority, std::chrono::steady_clock::now()};
     const float initialGain =
         resolveSourceGain(m_mixerSnapshot, bus, volume, m_duckingSnapshot);
 
@@ -302,7 +344,8 @@ unsigned int AudioEngine::playSoundSpatial(const std::string& filePath,
                                            const AttenuationParams& params,
                                            float volume,
                                            bool loop,
-                                           AudioBus bus)
+                                           AudioBus bus,
+                                           SoundPriority priority)
 {
     // Phase 10.9 P4 — see playSound() above for rationale.
     if (m_captionAnnouncer)
@@ -314,10 +357,11 @@ unsigned int AudioEngine::playSoundSpatial(const std::string& filePath,
     ALuint buffer = loadBuffer(filePath);
     if (buffer == 0) return 0;
 
-    ALuint source = acquireSource();
+    ALuint source = acquireSource(priority);
     if (source == 0) return 0;
 
-    m_livePlaybacks[source] = SourceMix{bus, volume};
+    m_livePlaybacks[source] = SourceMix{
+        bus, volume, priority, std::chrono::steady_clock::now()};
     const float initialGain =
         resolveSourceGain(m_mixerSnapshot, bus, volume, m_duckingSnapshot);
 
@@ -340,7 +384,8 @@ unsigned int AudioEngine::playSoundSpatial(const std::string& filePath,
                                            const AttenuationParams& params,
                                            float volume,
                                            bool loop,
-                                           AudioBus bus)
+                                           AudioBus bus,
+                                           SoundPriority priority)
 {
     // Phase 10.9 P4 — see playSound() above for rationale.
     if (m_captionAnnouncer)
@@ -352,10 +397,11 @@ unsigned int AudioEngine::playSoundSpatial(const std::string& filePath,
     ALuint buffer = loadBuffer(filePath);
     if (buffer == 0) return 0;
 
-    ALuint source = acquireSource();
+    ALuint source = acquireSource(priority);
     if (source == 0) return 0;
 
-    m_livePlaybacks[source] = SourceMix{bus, volume};
+    m_livePlaybacks[source] = SourceMix{
+        bus, volume, priority, std::chrono::steady_clock::now()};
     const float initialGain =
         resolveSourceGain(m_mixerSnapshot, bus, volume, m_duckingSnapshot);
 
@@ -373,7 +419,8 @@ unsigned int AudioEngine::playSoundSpatial(const std::string& filePath,
 }
 
 unsigned int AudioEngine::playSound2D(const std::string& filePath, float volume,
-                                       AudioBus bus)
+                                       AudioBus bus,
+                                       SoundPriority priority)
 {
     // Phase 10.9 P4 — see playSound() above for rationale.
     if (m_captionAnnouncer)
@@ -391,13 +438,14 @@ unsigned int AudioEngine::playSound2D(const std::string& filePath, float volume,
         return 0;
     }
 
-    ALuint source = acquireSource();
+    ALuint source = acquireSource(priority);
     if (source == 0)
     {
         return 0;
     }
 
-    m_livePlaybacks[source] = SourceMix{bus, volume};
+    m_livePlaybacks[source] = SourceMix{
+        bus, volume, priority, std::chrono::steady_clock::now()};
     const float initialGain =
         resolveSourceGain(m_mixerSnapshot, bus, volume, m_duckingSnapshot);
 

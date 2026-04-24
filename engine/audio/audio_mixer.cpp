@@ -159,12 +159,21 @@ std::size_t chooseVoiceToEvict(const std::vector<VoiceCandidate>& voices)
 }
 
 std::size_t chooseVoiceToEvictForIncoming(
-    const std::vector<VoiceCandidate>& /*voices*/,
-    SoundPriority /*incomingPriority*/)
+    const std::vector<VoiceCandidate>& voices,
+    SoundPriority incomingPriority)
 {
-    // Phase 10.9 P7 RED: deliberately always refuses eviction so the
-    // "incoming High wins over Normal" test fails. Green replaces with
-    // `chooseVoiceToEvict` + strict priority-tier admission gate.
+    const std::size_t victim = chooseVoiceToEvict(voices);
+    if (victim == static_cast<std::size_t>(-1))
+    {
+        return victim;
+    }
+    // Admission rule: strict-greater. Ties go to the incumbent so
+    // rapid same-priority bursts don't churn the pool.
+    if (soundPriorityRank(voices[victim].priority) <
+        soundPriorityRank(incomingPriority))
+    {
+        return victim;
+    }
     return static_cast<std::size_t>(-1);
 }
 

@@ -121,12 +121,12 @@ void AudioSystem::update(float deltaTime)
                 params.rolloffFactor     = comp->rolloffFactor;
                 source = m_audioEngine.playSoundSpatial(
                     comp->clipPath, position, comp->velocity, params,
-                    comp->volume, comp->loop, comp->bus);
+                    comp->volume, comp->loop, comp->bus, comp->priority);
             }
             else
             {
                 source = m_audioEngine.playSound2D(
-                    comp->clipPath, comp->volume, comp->bus);
+                    comp->clipPath, comp->volume, comp->bus, comp->priority);
             }
             // Record even a 0 source ID — it marks "we've attempted
             // autoplay for this entity so don't retry every frame".

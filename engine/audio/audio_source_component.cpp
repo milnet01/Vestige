@@ -25,6 +25,7 @@ std::unique_ptr<Component> AudioSourceComponent::clone() const
     copy->loop              = loop;
     copy->autoPlay          = autoPlay;
     copy->spatial           = spatial;
+    copy->priority          = priority;
     return copy;
 }
 

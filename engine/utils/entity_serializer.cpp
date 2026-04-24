@@ -789,6 +789,26 @@ static AudioOcclusionMaterialPreset occlusionMaterialFromString(const std::strin
     return AudioOcclusionMaterialPreset::Air;
 }
 
+static std::string soundPriorityToString(SoundPriority p)
+{
+    switch (p)
+    {
+        case SoundPriority::Low:      return "Low";
+        case SoundPriority::Normal:   return "Normal";
+        case SoundPriority::High:     return "High";
+        case SoundPriority::Critical: return "Critical";
+    }
+    return "Normal";
+}
+
+static SoundPriority soundPriorityFromString(const std::string& s)
+{
+    if (s == "Low")      return SoundPriority::Low;
+    if (s == "High")     return SoundPriority::High;
+    if (s == "Critical") return SoundPriority::Critical;
+    return SoundPriority::Normal;
+}
+
 static json serializeAudioSource(const AudioSourceComponent& comp)
 {
     json j;
@@ -806,6 +826,7 @@ static json serializeAudioSource(const AudioSourceComponent& comp)
     j["loop"]              = comp.loop;
     j["autoPlay"]          = comp.autoPlay;
     j["spatial"]           = comp.spatial;
+    j["priority"]          = soundPriorityToString(comp.priority);
     return j;
 }
 
@@ -828,6 +849,8 @@ static void deserializeAudioSource(const json& j, Entity& entity, ResourceManage
     comp->loop     = j.value("loop", false);
     comp->autoPlay = j.value("autoPlay", false);
     comp->spatial  = j.value("spatial", true);
+    comp->priority = soundPriorityFromString(
+        j.value("priority", std::string("Normal")));
 }
 
 // ---------------------------------------------------------------------------
