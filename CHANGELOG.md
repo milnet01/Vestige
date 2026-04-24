@@ -9,6 +9,85 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-24 Phase 10.9 — Slice 2 P1: subtitle soft-wrap + multi-line plates
+
+First Slice 2 item. Slice 1 closed the 11 Foundation findings; Slice 2
+("Phase 10.7 completion") closes the accessibility / audio / subtitle
+gaps where a feature passed its unit tests but delivered a subset of
+the design doc. P1 is the subtitle-wrap gap:
+`PHASE10_7_DESIGN.md` §4.2 specifies **"soft-wrap at 40 characters;
+hard max 2 lines per entry"**, but shipping code did not wrap at all —
+any narrator caption or bracketed SoundCue longer than ~35 chars at
+1080p quietly overflowed the background plate. Unit tests passed
+because they only checked composition ("Moses: Draw near.") and plate
+sizing relative to `fullText`; nothing verified the design's readability
+ceiling.
+
+**Red commit `23f845a`** — three new header contracts in
+`engine/ui/subtitle.h` plus eight wrap / five layout spec-tests:
+
+- `SUBTITLE_SOFT_WRAP_CHARS = 40` (FCC 2024 caption-display rule / GAG).
+- `SUBTITLE_MAX_LINES = 2` (BBC caption guidelines; Romero-Fresco 2019).
+- `wrapSubtitleText(text, maxChars, maxLines) -> vector<string>` —
+  word-boundary-preserving wrap with ellipsis-truncate tail.
+- `SubtitleLineLayout::wrappedLines` + `::lineStepPx` fields (added to
+  the existing struct — `fullText` preserved for back-compat so
+  existing composition tests keep passing unchanged).
+- A deliberately-wrong stub in `subtitle.cpp` returns the whole input
+  on one line, so the new tests fail at runtime (not link/compile) —
+  same F10 / F11 red discipline.
+
+Eight of thirteen new tests fail on the stub as predicted. The five
+that pass on the stub are degenerate short-string cases + the
+bottom-margin anchor invariant (which holds trivially for any
+one-row plate).
+
+**Green commit `3248476`** — `wrapSubtitleText()` implementation
+(greedy word packing, hard-break on overlong tokens, ellipsis cap)
+and `computeSubtitleLayout()` rewrite to drive plate sizing from
+wrapped rows:
+
+- Plate **width** = `max(measureText(row)) × textScale + 2 × padX`.
+  Matches the longest rendered row, not pre-wrap total — two-line
+  captions get the right-sized plate (no "wide enough for both lines
+  end-to-end" dead space).
+- Plate **height** = `lineHeightPx + (rows - 1) × (basePx + lineSpacingPx)`.
+  Single-row captions keep the existing one-line height exactly so no
+  existing test budges; N-row captions grow taller.
+- **Y anchor** stays pinned at `screenHeight × (1 - bottomMarginFrac)`
+  so taller plates rise UPWARD from that baseline rather than slide
+  off the bottom of the viewport.
+- `renderSubtitles()` emits one `TextRenderer::renderText2D` call per
+  wrapped row, stepped by `lineStepPx`. Falls back to `fullText` when
+  `wrappedLines` is empty (defensive — no live caller hits this path
+  but it keeps the renderer robust against a future caller that forgets).
+
+**Wrap policy summary:**
+
+| Input | Output |
+|-------|-------|
+| `""` | `[]` (empty vector, no plate) |
+| short text | `[text]` |
+| two words that fit | `[joined]` |
+| 45 chars natural wrap | `[first-40, rest]` |
+| 55-char single token | `[XXXX…XXXX (40), rest (15)]` |
+| 3-line input | `[line1, line2 + "…"]` (U+2026 marker) |
+
+**Test suite: 2806 / 2806 passing** (1 pre-existing skip unchanged;
++13 new tests vs. F11's baseline of 2793).
+
+**Files changed:** `engine/ui/subtitle.{h,cpp}` (+138 / -2 — wrap
+helper + constants), `engine/ui/subtitle_renderer.{h,cpp}`
+(+55 / -35 — wrappedLines field, multi-line plate sizing, per-row
+text draw).
+
+**Net: +193 / -37 lines across four files. One design-doc promise
+now matched by behaviour.**
+
+**Next in Slice 2:** **P5** — `SubtitleQueueApplySink::setSubtitlesEnabled`
+→ consumer read path (the toggle currently writes a flag nothing
+reads). Smaller plumbing item; P4 + P2/P3 + P7 follow.
+
 ### 2026-04-24 Phase 10.9 — Slice 1 F11: strobe-slider WCAG honesty
 
 Eleventh Slice 1 item. Closes the Accessibility tab's "Max strobe Hz"
