@@ -3,6 +3,7 @@
 
 /// @file test_scene.cpp
 /// @brief Unit tests for the Scene and SceneManager systems.
+#include "scene/camera_component.h"
 #include "scene/scene.h"
 #include "scene/scene_manager.h"
 
@@ -164,4 +165,84 @@ TEST(SceneTest, ForEachEntityConst)
     });
 
     EXPECT_EQ(count, 2);
+}
+
+// ---------------------------------------------------------------------------
+// Phase 10.9 Slice 3 S1 (also closes S7): Scene::removeEntity must null
+// m_activeCamera when the removed subtree owns it. The active-camera
+// field is a raw CameraComponent* with no ownership — if the entity
+// carrying that component is deleted, the pointer dangles. Renderer
+// code dereferences m_activeCamera every frame, so the fix prevents a
+// use-after-free crash after "delete camera entity" from the editor.
+// ---------------------------------------------------------------------------
+
+TEST(SceneEntityLifecycle, RemoveActiveCameraEntityNullsActiveCamera_S1)
+{
+    Scene scene("RemoveActiveCamera");
+    Entity* cam = scene.createEntity("Camera");
+    auto* camComp = cam->addComponent<CameraComponent>();
+    scene.setActiveCamera(camComp);
+
+    ASSERT_EQ(scene.getActiveCamera(), camComp)
+        << "precondition: active camera must be set before removal";
+
+    const bool removed = scene.removeEntity(cam->getId());
+
+    EXPECT_TRUE(removed);
+    EXPECT_EQ(scene.getActiveCamera(), nullptr)
+        << "after removing the entity that owns the active camera, the "
+           "active-camera pointer must be nulled to avoid dangling — "
+           "renderer dereferences this every frame";
+}
+
+TEST(SceneEntityLifecycle, RemoveDescendantCameraEntityNullsActiveCamera_S1)
+{
+    // The active-camera entity is nested under a parent. Removing the
+    // parent deletes the subtree including the camera; the recursion
+    // has to spot the active camera inside that subtree, not just at
+    // the top-level entity being removed.
+    Scene scene("RemoveParent");
+    Entity* rig = scene.createEntity("CameraRig");
+    Entity* cam = rig->addChild(std::make_unique<Entity>("NestedCamera"));
+    auto* camComp = cam->addComponent<CameraComponent>();
+    scene.setActiveCamera(camComp);
+
+    const bool removed = scene.removeEntity(rig->getId());
+
+    EXPECT_TRUE(removed);
+    EXPECT_EQ(scene.getActiveCamera(), nullptr)
+        << "removing a parent whose descendant owns the active camera "
+           "must still null the active-camera pointer";
+}
+
+TEST(SceneEntityLifecycle, RemoveUnrelatedEntityDoesNotAffectActiveCamera_S1)
+{
+    // False-positive guard: removing an entity that has no bearing on
+    // the active camera must leave the active-camera pointer alone.
+    Scene scene("KeepActiveCamera");
+    Entity* cam = scene.createEntity("Camera");
+    auto* camComp = cam->addComponent<CameraComponent>();
+    scene.setActiveCamera(camComp);
+
+    Entity* prop = scene.createEntity("UnrelatedProp");
+    scene.removeEntity(prop->getId());
+
+    EXPECT_EQ(scene.getActiveCamera(), camComp)
+        << "removing an entity without the active camera must leave the "
+           "pointer intact";
+}
+
+TEST(SceneEntityLifecycle, ClearEntitiesNullsActiveCamera_S1)
+{
+    // clearEntities already nulls m_activeCamera (scene.cpp:125). This
+    // test pins that invariant so a future refactor doesn't lose it
+    // while the fix lives nearby.
+    Scene scene("ClearScene");
+    Entity* cam = scene.createEntity("Camera");
+    auto* camComp = cam->addComponent<CameraComponent>();
+    scene.setActiveCamera(camComp);
+
+    scene.clearEntities();
+
+    EXPECT_EQ(scene.getActiveCamera(), nullptr);
 }
