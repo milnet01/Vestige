@@ -22,6 +22,7 @@
 #include <string>
 
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace Vestige
@@ -185,7 +186,75 @@ public:
     /// @brief Unregisters an entity (and all descendants) from the lookup index.
     void unregisterEntityRecursive(Entity* entity);
 
+    // ------------------------------------------------------------------
+    // Phase 10.9 Slice 3 S2 — mid-update mutation contract.
+    //
+    // An `OnUpdate` script node that calls `SpawnEntity` or
+    // `DestroyEntity` runs inside the per-frame walk. Without the
+    // machinery below, `createEntity` / `removeEntity` mutate the
+    // walked hierarchy under the iterator's feet (iterator
+    // invalidation on `std::vector::erase`, rehash on
+    // `std::unordered_map::insert`). The contract:
+    //
+    //   * `beginUpdate()` / `endUpdate()` maintain a nesting counter.
+    //     `forEachEntity` and `Scene::update` auto-wrap their
+    //     traversals in `ScopedUpdate`, so the typical script-graph
+    //     call path is already covered.
+    //   * While `isUpdating()` is true, `createEntity` / `removeEntity`
+    //     / `duplicateEntity` do not touch the tree — they enqueue a
+    //     pending mutation and return the still-live pointer. Lookups
+    //     via `findEntityById` continue to resolve so a spawn-then-
+    //     wire-output sequence works within one frame.
+    //   * When the outermost `ScopedUpdate` releases (depth → 0), the
+    //     queued mutations apply in order: pending adds first, then
+    //     pending removals. Duplicate remove-ids are coalesced so two
+    //     handlers destroying the same target don't double-destroy.
+    //
+    // The contract preserves direct / editor-time mutation (called
+    // outside any update pass): those go down the immediate path
+    // exactly as before.
+    // ------------------------------------------------------------------
+
+    /// @brief Increments the update-depth counter.
+    ///
+    /// While depth > 0, `createEntity` / `removeEntity` /
+    /// `duplicateEntity` queue their work. Callers who spin their own
+    /// custom iteration over the entity hierarchy should wrap it in
+    /// `ScopedUpdate` so script-triggered mutations during that walk
+    /// don't invalidate their iterators.
+    void beginUpdate();
+
+    /// @brief Decrements the update-depth counter. When the counter
+    ///        returns to 0, drains any mutations queued during the
+    ///        window.
+    void endUpdate();
+
+    /// @brief Returns true iff an update / traversal is currently
+    ///        active and mutations are being queued.
+    bool isUpdating() const { return m_updateDepth > 0; }
+
+    /// @brief RAII helper around `beginUpdate` / `endUpdate`.
+    ///
+    /// The `Scene::update` and `forEachEntity` paths wrap their
+    /// traversal in a `ScopedUpdate` so any nested `createEntity` /
+    /// `removeEntity` call is automatically deferred. Callers who
+    /// walk the tree with their own iteration should do the same.
+    class ScopedUpdate
+    {
+    public:
+        explicit ScopedUpdate(Scene& scene) : m_scene(scene) { m_scene.beginUpdate(); }
+        ~ScopedUpdate() { m_scene.endUpdate(); }
+        ScopedUpdate(const ScopedUpdate&) = delete;
+        ScopedUpdate& operator=(const ScopedUpdate&) = delete;
+
+    private:
+        Scene& m_scene;
+    };
+
 private:
+    /// @brief Applies every queued add / remove in FIFO order. Called
+    ///        from `endUpdate` when the depth counter hits zero.
+    void drainPendingMutations();
     void collectRenderDataRecursive(
         const Entity& entity,
         SceneRenderData& data,
@@ -197,6 +266,15 @@ private:
     std::unique_ptr<Entity> m_root;
     std::unordered_map<uint32_t, Entity*> m_entityIndex;
     CameraComponent* m_activeCamera = nullptr;
+
+    /// @brief Nesting counter. Greater than zero means mutations are queued.
+    int m_updateDepth = 0;
+
+    /// @brief Queued entity additions (owner + target parent). Drained on depth → 0.
+    std::vector<std::pair<std::unique_ptr<Entity>, Entity*>> m_pendingAdds;
+
+    /// @brief Queued entity removals by id. Drained on depth → 0; duplicates coalesce.
+    std::vector<uint32_t> m_pendingRemovals;
 };
 
 } // namespace Vestige

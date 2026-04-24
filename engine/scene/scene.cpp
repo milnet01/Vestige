@@ -8,6 +8,9 @@
 #include "scene/camera_component.h"
 
 #include <algorithm>
+#include <cassert>
+#include <unordered_set>
+#include <utility>
 
 namespace Vestige
 {
@@ -24,14 +27,97 @@ Scene::~Scene() = default;
 Entity* Scene::createEntity(const std::string& name)
 {
     auto entity = std::make_unique<Entity>(name);
-    Entity* ptr = m_root->addChild(std::move(entity));
+    Entity* ptr = entity.get();
+
+    // S2: index the spawn eagerly so a subsequent `findEntityById` (e.g.
+    // a SpawnEntity node writing the new id onto its "entity" output
+    // pin, then another node reading it back in the same frame) resolves
+    // while the attach-to-tree step is still queued.
     m_entityIndex[ptr->getId()] = ptr;
+
+    if (m_updateDepth > 0)
+    {
+        m_pendingAdds.emplace_back(std::move(entity), m_root.get());
+    }
+    else
+    {
+        m_root->addChild(std::move(entity));
+    }
     return ptr;
 }
 
 void Scene::update(float deltaTime)
 {
+    // S2: wrap the traversal so a component's update (typically a script
+    // node) that calls `createEntity` / `removeEntity` gets deferred-
+    // until-drain semantics instead of invalidating the walk.
+    ScopedUpdate guard(*this);
     m_root->update(deltaTime);
+}
+
+void Scene::beginUpdate()
+{
+    ++m_updateDepth;
+}
+
+void Scene::endUpdate()
+{
+    assert(m_updateDepth > 0 && "endUpdate without matching beginUpdate");
+    --m_updateDepth;
+    if (m_updateDepth == 0)
+    {
+        drainPendingMutations();
+    }
+}
+
+void Scene::drainPendingMutations()
+{
+    // Adds first: a spawned-then-removed entity in the same frame must
+    // be materialised into the tree so the subsequent removal pass can
+    // use the normal `unregisterEntityRecursive` + `removeChild` path
+    // (which also handles the S1 active-camera null-out and recurses
+    // into descendants).
+    //
+    // We move out of `m_pendingAdds` into a local and clear the member
+    // up-front: `addChild` re-entering the scene (e.g. via a
+    // component's onAttach that spawns another entity) would otherwise
+    // mutate the vector we're iterating.
+    auto adds = std::move(m_pendingAdds);
+    m_pendingAdds.clear();
+    for (auto& pa : adds)
+    {
+        if (pa.first && pa.second)
+        {
+            pa.second->addChild(std::move(pa.first));
+        }
+    }
+
+    // Removals: dedupe ids so two handlers destroying the same target
+    // don't double-destroy (second lookup would return nullptr anyway,
+    // but the set makes the intent explicit).
+    auto removals = std::move(m_pendingRemovals);
+    m_pendingRemovals.clear();
+    std::unordered_set<uint32_t> seen;
+    seen.reserve(removals.size());
+    for (uint32_t id : removals)
+    {
+        if (!seen.insert(id).second)
+        {
+            continue;
+        }
+        Entity* entity = findEntityById(id);
+        if (!entity || entity == m_root.get())
+        {
+            continue;
+        }
+        Entity* parent = entity->getParent();
+        if (!parent)
+        {
+            continue;
+        }
+        unregisterEntityRecursive(entity);
+        parent->removeChild(entity);
+    }
 }
 
 SceneRenderData Scene::collectRenderData(
@@ -143,6 +229,17 @@ bool Scene::removeEntity(uint32_t id)
         return false;
     }
 
+    if (m_updateDepth > 0)
+    {
+        // S2: defer. The entity stays alive and reachable (in the tree,
+        // in m_entityIndex) until the outermost `ScopedUpdate` releases.
+        // The walk in flight above us still sees this entity — removal
+        // semantics are "apply after the current traversal", not "skip
+        // during it".
+        m_pendingRemovals.push_back(id);
+        return true;
+    }
+
     unregisterEntityRecursive(entity);
     parent->removeChild(entity);
     return true;
@@ -165,8 +262,23 @@ Entity* Scene::duplicateEntity(uint32_t entityId)
         parent = m_root.get();
     }
 
-    Entity* result = parent->addChild(std::move(clone));
+    Entity* result = clone.get();
+
+    // Index the clone eagerly so findEntityById resolves from the
+    // instant duplicateEntity returns, whether we attach now or defer.
     registerEntityRecursive(result);
+
+    if (m_updateDepth > 0)
+    {
+        // S2: defer attachment (iterator invalidation hazard on the
+        // parent's m_children otherwise) — owner stays alive in the
+        // pending-adds list until drain.
+        m_pendingAdds.emplace_back(std::move(clone), parent);
+    }
+    else
+    {
+        parent->addChild(std::move(clone));
+    }
     return result;
 }
 
@@ -396,6 +508,12 @@ void Scene::collectRenderDataRecursive(
 void Scene::forEachEntity(const std::function<void(Entity&)>& fn)
 {
     if (!m_root) return;
+    // S2: wrap the traversal so `fn` can safely call `createEntity` /
+    // `removeEntity` — those mutations are queued and drained when the
+    // guard releases. The `visit` recursion still uses a bare range-for
+    // because the underlying `m_children` vectors do not shrink during
+    // the walk (all removes are deferred).
+    ScopedUpdate guard(*this);
     std::function<void(Entity&)> visit = [&](Entity& entity)
     {
         fn(entity);
