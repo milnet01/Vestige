@@ -9,6 +9,85 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-24 Phase 10.9 — Slice 2 P4: caption auto-enqueue on playSound*
+
+Third Slice 2 item. Closes the Phase 10.7 slice B3 promise that the
+design doc made and the unit tests never actually verified: *"When
+an AudioSourceComponent plays a clip with a matching key, the audio
+system auto-enqueues a caption."* `CaptionMap::enqueueFor()` was
+implemented and tested in isolation, but nothing called it at
+clip-play time — the B3 wiring was never built. Captions shipped
+as a feature that only worked when game code manually called
+`captionMap.enqueueFor(clip, queue)` alongside its `playSound` —
+and no game code did.
+
+**Red commit `e8c2308`** — new `CaptionAnnouncer` callback API on
+AudioEngine + eight RED tests in `tests/test_caption_map.cpp` (the
+natural home — the end-to-end integration test instantiates both a
+CaptionMap and a SubtitleQueue there already):
+
+- `using CaptionAnnouncer = std::function<void(const std::string&)>;`
+- `AudioEngine::setCaptionAnnouncer(CaptionAnnouncer)` setter +
+  private `m_captionAnnouncer` member (may be empty — purely
+  optional hook, no engine-level dependency on the caption
+  subsystem).
+- Contract pinned by tests: every `playSound*` overload
+  (`playSound`, two `playSoundSpatial`, `playSound2D`) must
+  invoke the announcer exactly once per call, with the clip path,
+  **before** the `!m_available` availability check.
+
+Six of eight tests fail at runtime on the unwired cpp. The two
+passing (NoAnnouncerIsSafe_P4, UnmappedClipEnqueuesNothing_P4)
+verify safety invariants that hold by default and stay pinned.
+
+**Green commit `5986736`** — caller sites + engine wiring:
+
+- `audio_engine.cpp`: all four `playSound*` overloads gain a
+  three-line `if (m_captionAnnouncer) { m_captionAnnouncer(filePath); }`
+  at the top, before the `!m_available` short-circuit. Firing
+  before the availability check is the accessibility contract:
+  a user with broken audio hardware, zero-volume output, or
+  deafness / hearing loss still sees the caption when game code
+  *intends* to play a sound. Captions are the accessibility
+  substitute for the audio itself, not a side-effect of audio
+  actually reaching the speakers.
+- `engine.cpp`: `Engine::initialize()` installs the announcer
+  immediately after `m_captionMap.loadFromFile(...)`:
+  ```
+  audio->getAudioEngine().setCaptionAnnouncer(
+      [this](const std::string& clipPath) {
+          m_captionMap.enqueueFor(clipPath, m_subtitleQueue);
+      });
+  ```
+  The captured `this` is stable for the engine lifetime
+  (AudioSystem is owned by m_systemRegistry, outlives the wiring).
+
+**No new wire-up needed at individual call sites.** Every existing
+`playSound*` call site in the engine and game code now routes
+captions as a side-effect — script-graph `PlaySound` nodes,
+`AudioSourceComponent` autoplay, ambient emitters, UI clicks,
+dialogue triggers — they all go through AudioEngine, which now
+all go through the announcer.
+
+**Test suite: 2821 / 2821 passing** (1 pre-existing skip unchanged;
++8 new tests vs. P5's baseline of 2813).
+
+**Files changed:** `engine/audio/audio_engine.h` (+24 / -0 — API
++ member), `engine/audio/audio_engine.cpp` (+20 / -0 — four
+three-line fire-before-check blocks), `engine/core/engine.cpp`
+(+14 / -0 — startup wiring), `tests/test_caption_map.cpp`
+(+162 / -3 — eight spec tests + include block).
+
+**Net: +220 / -3 lines across four files. One design-doc promise
+now has an actual wire.**
+
+**Next in Slice 2:** **P2 + P3** (bundled). P2 adds the
+`AudioSystem` per-frame `AudioSourceComponent` iteration pass
+(+ `m_activeSources` map, per-frame `AL_POSITION` / `AL_VELOCITY`
+/ `AL_PITCH` / `finalGain` push) to bring the 11 dead fields on
+`AudioSourceComponent` live. P3 folds `DuckingState::currentGain`
+into `resolveSourceGain` — P2 is the hook, so they ship together.
+
 ### 2026-04-24 Phase 10.9 — Slice 2 P5: subtitles-enabled consumer read path
 
 Second Slice 2 item. Closes the "settings toggle writes a flag nothing
