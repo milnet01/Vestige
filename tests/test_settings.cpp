@@ -15,6 +15,8 @@
 #include "core/settings_apply.h"
 #include "core/settings_editor.h"
 #include "core/settings_migration.h"
+#include "accessibility/photosensitive_safety.h"
+#include "editor/panels/settings_editor_panel.h"
 #include "input/input_bindings.h"
 #include "utils/atomic_write.h"
 #include "utils/config_path.h"
@@ -1908,4 +1910,45 @@ TEST(SettingsEditor, MutateClampsStrobeHzBeforePushingToSink_F8)
         << "mutate() must clamp maxStrobeHz to [0, 30] Hz (validate() "
            "policy; runtime further caps to 3 Hz via clampStrobeHz when "
            "photosensitive safety is enabled)";
+}
+
+// =============================================================================
+// Phase 10.9 Slice 1 F11 — "Max strobe Hz" slider honesty
+// =============================================================================
+//
+// Context: the Accessibility tab's "Max strobe Hz" slider is only shown when
+// photosensitiveSafety.enabled is true (settings_editor_panel.cpp:503).
+// In that mode, PhotosensitiveSafety::clampStrobeHz() runtime-caps any
+// effective output at min(limits.maxStrobeHz, WCAG_MAX_STROBE_HZ == 3.0).
+// Shipping code sets the slider range to [0, 10] Hz, so a partially-sighted
+// user can authoritatively drag the slider to 7.0, watch the settings file
+// persist 7.0, and never realise the subsystem silently discarded
+// everything above 3.0. The UI lies.
+//
+// F11 contract: the slider max for the in-safe-mode strobe control must
+// equal the WCAG 2.2 SC 2.3.1 ceiling, so the slider can never promise
+// a value the runtime does not honour. The constant lives on
+// `SettingsEditorPanel::SAFE_MODE_STROBE_HZ_SLIDER_MAX` so the .cpp
+// slider bound and this test share one source of truth.
+
+TEST(SettingsEditorPanel, SafeModeStrobeSliderMaxEqualsWcagCeiling_F11)
+{
+    EXPECT_FLOAT_EQ(SettingsEditorPanel::SAFE_MODE_STROBE_HZ_SLIDER_MAX,
+                    WCAG_MAX_STROBE_HZ)
+        << "Safe-mode strobe slider max must track WCAG_MAX_STROBE_HZ — "
+           "anything higher lets the slider persist values that "
+           "PhotosensitiveSafety::clampStrobeHz silently discards.";
+}
+
+TEST(SettingsEditorPanel, SafeModeStrobeSliderMaxIs3Hz_F11)
+{
+    // Belt-and-braces pin: a future refactor that re-bases
+    // WCAG_MAX_STROBE_HZ to something other than 3.0 should surface
+    // in this test so the UI contract is re-reviewed, not silently
+    // re-aligned.
+    EXPECT_FLOAT_EQ(SettingsEditorPanel::SAFE_MODE_STROBE_HZ_SLIDER_MAX, 3.0f)
+        << "WCAG 2.2 SC 2.3.1 ('Three Flashes or Below Threshold') caps "
+           "general-flash frequency at 3 Hz. If the slider bound no longer "
+           "matches this, re-check both PhotosensitiveSafety::clampStrobeHz "
+           "and the spec.";
 }

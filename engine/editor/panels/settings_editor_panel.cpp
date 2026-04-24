@@ -513,7 +513,8 @@ void SettingsEditorPanel::drawAccessibilityTab()
             m_editor->mutate([shake](Settings& s) { s.accessibility.photosensitiveSafety.shakeAmplitudeScale = shake; });
         }
         float strobe = p.accessibility.photosensitiveSafety.maxStrobeHz;
-        if (ImGui::SliderFloat("Max strobe Hz", &strobe, 0.0f, 10.0f, "%.2f"))
+        if (ImGui::SliderFloat("Max strobe Hz", &strobe, 0.0f,
+                               SAFE_MODE_STROBE_HZ_SLIDER_MAX, "%.2f"))
         {
             m_editor->mutate([strobe](Settings& s) { s.accessibility.photosensitiveSafety.maxStrobeHz = strobe; });
         }

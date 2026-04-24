@@ -30,6 +30,25 @@ class InputActionMap;
 class SettingsEditorPanel
 {
 public:
+    /// @brief Upper bound (Hz) of the "Max strobe Hz" slider rendered on
+    ///        the Accessibility tab while `photosensitiveSafety.enabled`
+    ///        is true.
+    ///
+    /// The slider is only drawn inside the safe-mode branch, where
+    /// `PhotosensitiveSafety::clampStrobeHz()` runtime-caps effective
+    /// output at `min(limits.maxStrobeHz, WCAG_MAX_STROBE_HZ)`. Any
+    /// slider value above `WCAG_MAX_STROBE_HZ` is therefore written to
+    /// the settings file but silently discarded at use time — a
+    /// WCAG 2.2 SC 2.3.1 ("Three Flashes or Below Threshold") lie the
+    /// user has no way to detect.
+    ///
+    /// F11 pins this slider bound to the WCAG ceiling so the UI cannot
+    /// promise values the runtime does not honour. If you widen this
+    /// later, widen the clamp too (or drop the slider in favour of a
+    /// numeric input with an explicit "capped at X Hz in safe mode"
+    /// label) — do not let them drift.
+    static constexpr float SAFE_MODE_STROBE_HZ_SLIDER_MAX = 10.0f;
+
     /// @brief Attach to a live `SettingsEditor`. Caller keeps
     ///        ownership. Optional `inputMap` enables the Controls
     ///        tab's rebind table; if null, Controls renders a
