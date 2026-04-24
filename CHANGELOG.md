@@ -9,6 +9,81 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-24 Phase 10.9 — Slice 1 F9: `Logger` thread-safety
+
+Ninth Slice 1 item. Same red / green / doc discipline as F1–F8. Direct
+response to the Logger-race finding: `AsyncTextureLoader` already logs
+from a worker thread alongside main-thread log calls, and
+`Logger::log()` mutates two pieces of shared state without any
+synchronisation — `s_entries` (a `std::deque<LogEntry>` ring buffer)
+and `s_logFile` (an `ofstream`). Concurrent `deque::push_back` /
+`pop_front` is UB by the standard (can crash, drop entries, or corrupt
+iterators); concurrent ofstream writes can tear a formatted line
+mid-character. Neither is hypothetical — the new RED tests reproduce a
+deterministic `SIGSEGV` inside `Logger::log` on the unfixed code.
+
+**Red commit `a113e32`** — two new tests in `tests/test_logger.cpp`:
+
+- `ConcurrentLoggingPreservesAllEntries_F9` — 8 threads × 100
+  `Logger::info` calls (800 total, under `MAX_ENTRIES = 1000`), all
+  released from a spin-wait to maximise overlap. Asserts
+  `Logger::getEntries().size() == 800`. Shipping code SEGVs inside
+  `deque::push_back` on most runs.
+- `ConcurrentLoggingRespectsRingBufferCap_F9` — 8 threads × 500
+  `Logger::info` calls (4000 total, overflows `MAX_ENTRIES`). Asserts
+  the buffer keeps exactly `1000`. Stresses the
+  `pop_front` + `push_back` trim path, which is the race window that
+  corrupts the deque's internal pointers. Also SEGVs on shipping
+  code.
+
+**Green commit `87818fa`** — one private static `std::mutex` in
+`logger.cpp` (`s_logMutex`) plus a `std::lock_guard` in every
+function that touches the shared state:
+
+1. `Logger::log()` — lock after the early level-filter return (so
+   filtered messages stay lock-free) and before any console / file /
+   deque writes. The single lock covers all three pieces of shared
+   state in one critical section, because `std::cerr` / `std::cout`
+   formatted writes are themselves not atomic against each other and
+   torn lines would defeat half the point of having a logger.
+2. `Logger::clearEntries()` — lock around the `s_entries.clear()`.
+3. `Logger::getEntries()` — **API change.** Now returns
+   `std::deque<LogEntry>` **by value**, not `const std::deque&`. The
+   old reference-returning signature was racy by construction: the
+   editor console panel reads on the main thread while the worker
+   logs, and no amount of internal locking could make an
+   externally-held reference safe. Under the lock, `getEntries()`
+   copies the deque and returns the snapshot; callers iterate the
+   snapshot with no thread-safety concern. Both existing call sites
+   in `editor.cpp` already iterate the whole deque for a per-frame
+   debug panel, so per-frame copy of ~1000 small entries (`LogLevel`
+   + `std::string`) is trivial.
+
+`openLogFile` / `closeLogFile` deliberately left unlocked —
+single-threaded startup / shutdown lifecycle calls, no F9 race
+lives there. Lock scope was kept minimal (log()'s early-out for
+level-filtered messages stays lock-free) so the common case of
+trace/debug messages in a release build pays zero synchronisation
+cost.
+
+Both F9 RED tests now pass. Full suite green, zero regressions.
+
+**Test suite: 2785 / 2785 passing** (1 pre-existing skip
+`MeshBoundsTest.UploadComputesLocalBounds`, unchanged; 2 new tests
+vs. F8's baseline of 2783).
+
+**Files changed (green):** `engine/core/logger.h` (+3 / -1 — return
+type change + doc block referencing F9); `engine/core/logger.cpp`
+(+16 / -2 — `<mutex>` include, `s_logMutex`, three `lock_guard`s,
+and the comment that pins the shared-state inventory).
+
+**Net: +19 / -3 lines across two files. One UB race closed.**
+
+**Next in Slice 1:** **F10** — `SystemRegistry::initializeAll`
+partial-init cleanup (reverse-shutdown the 0..N-1 prefix on failure
+of system N; current behaviour leaks GL/AL/Jolt resources through
+destructor-only cleanup).
+
 ### 2026-04-23 Phase 10.9 — Slice 1 F8: `SettingsEditor::mutate` validate-before-push
 
 Eighth Slice 1 item. Same red / green / doc discipline as F1–F7. Direct
