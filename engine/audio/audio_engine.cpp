@@ -85,11 +85,18 @@ bool AudioEngine::initialize()
             alcGetProcAddress(m_device, "alcGetStringiSOFT"));
     }
 
+    // Phase 10.9 Slice 2 P8 — flip to available *before* applying HRTF.
+    // `applyHrtfSettings()` guards on `m_available` and on the
+    // extension pointer, so setting the flag first lets pre-init
+    // `setHrtfMode` / `setHrtfDataset` calls actually reach the driver
+    // on startup. The previous order silently short-circuited the
+    // first pass.
+    m_available = true;
+
     // Apply the stored HRTF settings so callers that configured the
     // engine before initialize() see their preference honoured.
     applyHrtfSettings();
 
-    m_available = true;
     Logger::info("[AudioEngine] Initialized (" +
                  std::string(alcGetString(m_device, ALC_DEVICE_SPECIFIER)) +
                  ", " + std::to_string(m_sourcePool.size()) + " sources)");
@@ -578,52 +585,59 @@ std::vector<std::string> AudioEngine::getAvailableHrtfDatasets() const
 
 void AudioEngine::applyHrtfSettings()
 {
-    if (!m_available || m_alcResetDeviceSOFT == nullptr)
+    // Phase 10.9 Slice 2 P8 — device-reset path is gated on a live
+    // device + the ALC_SOFT_HRTF extension, but the event listener
+    // fires unconditionally so the Settings UI can reflect pre-init
+    // user choices too (in which case `actualStatus` is Unknown).
+    if (m_available && m_alcResetDeviceSOFT != nullptr)
     {
-        return;
-    }
-
-    // Build an ALC attribute list that instructs the driver how to
-    // treat HRTF on the next context reset. Auto mode omits the
-    // attribute entirely — the driver's own heuristics (headphone
-    // detection, output-format check) then apply.
-    ALCint attrs[5] = {0, 0, 0, 0, 0};
-    int n = 0;
-    switch (m_hrtf.mode)
-    {
-        case HrtfMode::Disabled:
-            attrs[n++] = ALC_HRTF_SOFT;
-            attrs[n++] = ALC_FALSE;
-            break;
-        case HrtfMode::Forced:
-            attrs[n++] = ALC_HRTF_SOFT;
-            attrs[n++] = ALC_TRUE;
-            break;
-        case HrtfMode::Auto:
-            // Leave ALC_HRTF_SOFT unset so the driver's own auto
-            // detection path runs. An explicit dataset may still
-            // follow below.
-            break;
-    }
-
-    if (!m_hrtf.preferredDataset.empty())
-    {
-        const auto available = getAvailableHrtfDatasets();
-        const int idx = resolveHrtfDatasetIndex(available, m_hrtf.preferredDataset);
-        if (idx >= 0)
+        // Build an ALC attribute list that instructs the driver how to
+        // treat HRTF on the next context reset. Auto mode omits the
+        // attribute entirely — the driver's own heuristics (headphone
+        // detection, output-format check) then apply.
+        ALCint attrs[5] = {0, 0, 0, 0, 0};
+        int n = 0;
+        switch (m_hrtf.mode)
         {
-            attrs[n++] = ALC_HRTF_ID_SOFT;
-            attrs[n++] = idx;
+            case HrtfMode::Disabled:
+                attrs[n++] = ALC_HRTF_SOFT;
+                attrs[n++] = ALC_FALSE;
+                break;
+            case HrtfMode::Forced:
+                attrs[n++] = ALC_HRTF_SOFT;
+                attrs[n++] = ALC_TRUE;
+                break;
+            case HrtfMode::Auto:
+                // Leave ALC_HRTF_SOFT unset so the driver's own auto
+                // detection path runs. An explicit dataset may still
+                // follow below.
+                break;
+        }
+
+        if (!m_hrtf.preferredDataset.empty())
+        {
+            const auto available = getAvailableHrtfDatasets();
+            const int idx = resolveHrtfDatasetIndex(available, m_hrtf.preferredDataset);
+            if (idx >= 0)
+            {
+                attrs[n++] = ALC_HRTF_ID_SOFT;
+                attrs[n++] = idx;
+            }
+        }
+
+        attrs[n] = 0;  // ALC attribute list terminator
+
+        auto resetDevice =
+            reinterpret_cast<LPALCRESETDEVICESOFT>(m_alcResetDeviceSOFT);
+        if (resetDevice(m_device, attrs) != ALC_TRUE)
+        {
+            Logger::warning("[AudioEngine] alcResetDeviceSOFT failed — HRTF settings may not be applied");
         }
     }
 
-    attrs[n] = 0;  // ALC attribute list terminator
-
-    auto resetDevice =
-        reinterpret_cast<LPALCRESETDEVICESOFT>(m_alcResetDeviceSOFT);
-    if (resetDevice(m_device, attrs) != ALC_TRUE)
+    if (m_hrtfStatusListener)
     {
-        Logger::warning("[AudioEngine] alcResetDeviceSOFT failed — HRTF settings may not be applied");
+        m_hrtfStatusListener(composeHrtfStatusEvent(m_hrtf, getHrtfStatus()));
     }
 }
 
