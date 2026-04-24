@@ -9,6 +9,80 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-24 Phase 10.9 — Slice 1 F11: strobe-slider WCAG honesty
+
+Eleventh Slice 1 item. Closes the Accessibility tab's "Max strobe Hz"
+slider lie that the partially-sighted user is the direct victim of:
+the slider was drawn only when `photosensitiveSafety.enabled` is true,
+but was bounded at `[0, 10] Hz` even though
+`PhotosensitiveSafety::clampStrobeHz()` runtime-caps effective output
+at `min(limits.maxStrobeHz, WCAG_MAX_STROBE_HZ)` — `WCAG_MAX_STROBE_HZ
+= 3.0f` per WCAG 2.2 SC 2.3.1 ("Three Flashes or Below Threshold").
+So a user could drag the slider to 7.0, watch the settings file
+persist 7.0, and never realise every value above 3 Hz was silently
+discarded. Accessibility UI that lies to its audience is strictly
+worse than no accessibility UI.
+
+**Red commit `c6db868`** — two new tests in `tests/test_settings.cpp`
+plus a bridge constant that deliberately encodes the shipping lie:
+
+- `SettingsEditorPanel::SAFE_MODE_STROBE_HZ_SLIDER_MAX` added to
+  `engine/editor/panels/settings_editor_panel.h` with value `10.0f`
+  (matches shipping slider, so the failure is at RUNTIME not at
+  compile time — F10-style proper red). The slider call in
+  `settings_editor_panel.cpp:516` refactored to consume the constant
+  so the fix has one home.
+- `SafeModeStrobeSliderMaxEqualsWcagCeiling_F11` — asserts the
+  constant equals `WCAG_MAX_STROBE_HZ`. Red output: "10 vs 3".
+- `SafeModeStrobeSliderMaxIs3Hz_F11` — belt-and-braces assertion that
+  the constant equals `3.0f` literal. Red output: "10 vs 3". This
+  second pin guards against a hypothetical future refactor that
+  re-bases `WCAG_MAX_STROBE_HZ` away from 3.0 — if that ever happens
+  the test surfaces and both pins get re-reviewed together rather
+  than silently realigned.
+
+**Green commit `5d52006`** — one-line change in
+`settings_editor_panel.h`:
+
+```
+- static constexpr float SAFE_MODE_STROBE_HZ_SLIDER_MAX = 10.0f;
++ static constexpr float SAFE_MODE_STROBE_HZ_SLIDER_MAX = WCAG_MAX_STROBE_HZ;
+```
+
+Plus a `#include "accessibility/photosensitive_safety.h"` in the
+panel header so the constexpr can reference the WCAG constant
+directly. One source of truth for the WCAG ceiling across the panel
+and the runtime clamp — no way for the two to drift.
+
+**No Settings schema change.** `validate()` still clamps persisted
+`maxStrobeHz` to `[0, 30]` (F8) — that's the reasonable-value fence
+for the underlying data structure. F11 closes the narrower
+"what can the safe-mode-enabled user move the slider to" gap, which
+is strictly tighter. If a caller really wants to author a strobe at
+4 Hz (e.g. an editor-time test fixture), they still can via the
+JSON path; the F11 contract is that the safe-mode UI does not offer
+them the loaded gun.
+
+**Test suite: 2793 / 2793 passing** (1 pre-existing skip
+`MeshBoundsTest.UploadComputesLocalBounds`, unchanged; 2 new tests
+vs. F10's baseline of 2791).
+
+**Files changed (green):** `engine/editor/panels/settings_editor_panel.h`
+(+3 / -1 — include the photosensitive-safety header and swap the
+constant's initialiser to `WCAG_MAX_STROBE_HZ`).
+
+**Net: +3 / -1 lines in one header. One accessibility lie closed —
+the UI now shows only values the runtime honours.**
+
+**Slice 1 complete.** F1–F11 all shipped. Foundations are in place:
+F1–F3 (component / serializer plumbing), F4–F6 (input-validation
+perimeter), F7–F8 (settings clamp policy), F9 (Logger
+thread-safety), F10 (SystemRegistry partial-init rollback), F11
+(accessibility UI honesty). **Next in Phase 10.9: Slice 2 — P1…P10
+"Phase 10.7 completion"** (gain-chain ducking application, subtitle
+caption wiring, HRTF dataset surface). Begin when Slice 1 has
+settled.
+
 ### 2026-04-24 Phase 10.9 — Slice 1 F10: `SystemRegistry` partial-init cleanup
 
 Tenth Slice 1 item. Same red / green / doc discipline as F1–F9. Direct
