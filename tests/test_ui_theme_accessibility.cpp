@@ -263,3 +263,184 @@ TEST(UISystemTheme, TogglingReducedMotionOffRestoresTransitionDuration)
     EXPECT_FALSE(ui.isReducedMotion());
     EXPECT_FLOAT_EQ(ui.getTheme().transitionDuration, baseTransition);
 }
+
+// =============================================================================
+// Phase 10.9 Slice 3 S9 — WCAG default contrast.
+//
+// Vellum `panelStroke` at alpha 0.22 composites to ~1.6:1 against the deep
+// walnut-ink background — below WCAG 1.4.11's 3:1 bar for non-text UI
+// components. `textDisabled` at #5C5447 gives ~2.4:1 against the same
+// background — below the 4.5:1 threshold the ROADMAP targets for
+// comfort on the partially-sighted primary user. Plumbline has the same
+// shape with different numerics. High-contrast mode must clear WCAG 2.2
+// AAA (>= 7:1) since it exists specifically to serve the strongest
+// accessibility tier.
+//
+// The `ui_contrast` free functions exist so the WCAG bit-math is
+// independently testable — palette changes can be verified arithmetically
+// in CI instead of only by eye.
+// =============================================================================
+
+// -- ui_contrast helpers --
+
+TEST(UIContrast, RelativeLuminanceBlackIsZero_S9)
+{
+    EXPECT_NEAR(ui_contrast::relativeLuminance(glm::vec3(0.0f)), 0.0f, 1e-6f);
+}
+
+TEST(UIContrast, RelativeLuminanceWhiteIsOne_S9)
+{
+    EXPECT_NEAR(ui_contrast::relativeLuminance(glm::vec3(1.0f)), 1.0f, 1e-6f);
+}
+
+TEST(UIContrast, ContrastBlackOnWhiteIs21_S9)
+{
+    // Canonical WCAG reference: (1 + 0.05) / (0 + 0.05) = 21.0.
+    EXPECT_NEAR(
+        ui_contrast::contrastRatio(glm::vec3(0.0f), glm::vec3(1.0f)),
+        21.0f, 0.01f);
+}
+
+TEST(UIContrast, ContrastIdenticalColoursIsOne_S9)
+{
+    EXPECT_NEAR(
+        ui_contrast::contrastRatio(glm::vec3(0.5f), glm::vec3(0.5f)),
+        1.0f, 1e-5f);
+}
+
+TEST(UIContrast, ContrastIsOrderIndependent_S9)
+{
+    const glm::vec3 a(0.1f, 0.2f, 0.3f);
+    const glm::vec3 b(0.8f, 0.7f, 0.9f);
+    EXPECT_FLOAT_EQ(ui_contrast::contrastRatio(a, b),
+                    ui_contrast::contrastRatio(b, a))
+        << "WCAG contrast is symmetric — the formula divides brighter by "
+           "darker regardless of which argument came first.";
+}
+
+TEST(UIContrast, CompositeOverAlphaZeroReturnsBackground_S9)
+{
+    const glm::vec4 fg(0.8f, 0.2f, 0.1f, 0.0f);
+    const glm::vec3 bg(0.1f, 0.2f, 0.3f);
+    const glm::vec3 out = ui_contrast::compositeOver(fg, bg);
+    EXPECT_FLOAT_EQ(out.r, bg.r);
+    EXPECT_FLOAT_EQ(out.g, bg.g);
+    EXPECT_FLOAT_EQ(out.b, bg.b);
+}
+
+TEST(UIContrast, CompositeOverAlphaOneReturnsForeground_S9)
+{
+    const glm::vec4 fg(0.8f, 0.2f, 0.1f, 1.0f);
+    const glm::vec3 bg(0.1f, 0.2f, 0.3f);
+    const glm::vec3 out = ui_contrast::compositeOver(fg, bg);
+    EXPECT_FLOAT_EQ(out.r, fg.r);
+    EXPECT_FLOAT_EQ(out.g, fg.g);
+    EXPECT_FLOAT_EQ(out.b, fg.b);
+}
+
+TEST(UIContrast, CompositeOverHalfAlphaIsMidpoint_S9)
+{
+    // Straight-alpha blend: out = a * fg + (1 - a) * bg.
+    const glm::vec4 fg(1.0f, 1.0f, 1.0f, 0.5f);
+    const glm::vec3 bg(0.0f, 0.0f, 0.0f);
+    const glm::vec3 out = ui_contrast::compositeOver(fg, bg);
+    EXPECT_NEAR(out.r, 0.5f, 1e-6f);
+    EXPECT_NEAR(out.g, 0.5f, 1e-6f);
+    EXPECT_NEAR(out.b, 0.5f, 1e-6f);
+}
+
+// -- Vellum (default) register --
+
+TEST(UIThemeContrast, VellumTextDisabledMeetsWcag_1_4_3_Comfort_S9)
+{
+    // WCAG 1.4.3 Contrast (Minimum) targets 4.5:1 for body text.
+    // ROADMAP S9 applies the same bar to `textDisabled` so dimmed
+    // labels remain legible — disabled is not "invisible" to a
+    // partially-sighted user.
+    const UITheme t = UITheme::defaultTheme();
+    const float ratio =
+        ui_contrast::contrastRatio(t.textDisabled, glm::vec3(t.bgBase));
+    EXPECT_GE(ratio, 4.5f)
+        << "Vellum textDisabled / bgBase contrast = " << ratio
+        << " — must be >= 4.5:1 per ROADMAP S9 (WCAG 1.4.3 comfort bar).";
+}
+
+TEST(UIThemeContrast, VellumPanelStrokeMeetsWcag_1_4_11_S9)
+{
+    // WCAG 1.4.11 Non-text Contrast — 3:1 for UI-component
+    // boundaries. `panelStroke` is alpha-blended, so composite the
+    // stroke over the panel background before computing.
+    const UITheme t = UITheme::defaultTheme();
+    const glm::vec3 composite =
+        ui_contrast::compositeOver(t.panelStroke, glm::vec3(t.bgBase));
+    const float ratio =
+        ui_contrast::contrastRatio(composite, glm::vec3(t.bgBase));
+    EXPECT_GE(ratio, 3.0f)
+        << "Vellum panelStroke (composited) / bgBase contrast = " << ratio
+        << " — must be >= 3:1 per WCAG 1.4.11.";
+}
+
+TEST(UIThemeContrast, VellumStrokeStrongStillBrighterThanStroke_S9)
+{
+    // The hover/active stroke must visually read as emphasised
+    // relative to the at-rest stroke — preserve the design
+    // invariant under S9's alpha bump.
+    const UITheme t = UITheme::defaultTheme();
+    EXPECT_GT(t.panelStrokeStrong.a, t.panelStroke.a)
+        << "panelStrokeStrong must remain a louder version of panelStroke "
+           "so hover/active state is discernable post-S9.";
+}
+
+// -- Plumbline register --
+
+TEST(UIThemeContrast, PlumblineTextDisabledMeetsWcag_1_4_3_Comfort_S9)
+{
+    const UITheme t = UITheme::plumbline();
+    const float ratio =
+        ui_contrast::contrastRatio(t.textDisabled, glm::vec3(t.bgBase));
+    EXPECT_GE(ratio, 4.5f)
+        << "Plumbline textDisabled / bgBase contrast = " << ratio
+        << " — must be >= 4.5:1 per ROADMAP S9.";
+}
+
+TEST(UIThemeContrast, PlumblinePanelStrokeMeetsWcag_1_4_11_S9)
+{
+    const UITheme t = UITheme::plumbline();
+    const glm::vec3 composite =
+        ui_contrast::compositeOver(t.panelStroke, glm::vec3(t.bgBase));
+    const float ratio =
+        ui_contrast::contrastRatio(composite, glm::vec3(t.bgBase));
+    EXPECT_GE(ratio, 3.0f)
+        << "Plumbline panelStroke (composited) / bgBase contrast = " << ratio
+        << " — must be >= 3:1 per WCAG 1.4.11.";
+}
+
+TEST(UIThemeContrast, PlumblineStrokeStrongStillBrighterThanStroke_S9)
+{
+    const UITheme t = UITheme::plumbline();
+    EXPECT_GT(t.panelStrokeStrong.a, t.panelStroke.a);
+}
+
+// -- High-contrast mode (WCAG 2.2 AAA tier) --
+
+TEST(UIThemeContrast, HighContrastTextPrimaryMeetsWcag_1_4_6_AAA_S9)
+{
+    // 1.4.6 Enhanced Contrast — 7:1 for body text. High-contrast
+    // mode exists to serve the AAA tier explicitly.
+    const UITheme t = UITheme::defaultTheme().withHighContrast();
+    const float ratio =
+        ui_contrast::contrastRatio(t.textPrimary, glm::vec3(t.bgBase));
+    EXPECT_GE(ratio, 7.0f)
+        << "High-contrast textPrimary / bgBase contrast = " << ratio
+        << " — high-contrast mode must satisfy WCAG 2.2 AAA (>= 7:1).";
+}
+
+TEST(UIThemeContrast, HighContrastTextDisabledStillMeets_1_4_3_S9)
+{
+    // Disabled text in HC mode must still clear the 4.5:1 bar —
+    // otherwise HC regresses below Vellum for disabled labels.
+    const UITheme t = UITheme::defaultTheme().withHighContrast();
+    const float ratio =
+        ui_contrast::contrastRatio(t.textDisabled, glm::vec3(t.bgBase));
+    EXPECT_GE(ratio, 4.5f);
+}
