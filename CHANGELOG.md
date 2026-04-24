@@ -9,6 +9,83 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-24 Phase 10.9 — Slice 2 P6 (narrator styling — both paths)
+
+The last open Phase 10.9 Slice 2 item. `PHASE10_7_DESIGN.md §4.2`
+originally called for "Narrator — italic white" but the project has
+never shipped an italic font file, so the §4.2 compliance claim was
+open (neither the spec nor an alternative was actually rendered).
+P6 resolves the block by shipping both paths and handing the choice
+to the game developer at the integration seam.
+
+**Fix.** `SubtitleNarratorStyle { Italic, Colour }` exposed as a
+setter on `SubtitleQueue` alongside `SubtitleSizePreset`:
+
+1. `Italic` — the §4.2 original. White text rendered via the new
+   `TextRenderer::renderText2DOblique`, which shears each glyph
+   quad's vertices at emit time using a pure helper
+   `text_oblique::applyShear(x, y, baselineY, factor)` — no second
+   font atlas needed. Standard ~11° typographic oblique
+   (`DEFAULT_SHEAR_FACTOR = 0.2f`). The upright path (`factor = 0`)
+   stays byte-for-byte identical to the pre-P6 emit. Works on every
+   font already loaded by the project.
+
+2. `Colour` — warm-amber body (`{0.784, 0.604, 0.243}`, the theme-
+   accent family), upright. The new default — accessibility-first.
+   Italic typography is harder to read at low vision than colour
+   differentiation; Vestige's primary user is partially sighted, so
+   amber-upright is the correct default. Developers who prefer the
+   original §4.2 aesthetic opt in via
+   `queue.setNarratorStyle(SubtitleNarratorStyle::Italic)`.
+
+**Rendering path.** `styleFor(category, narratorStyle)` gained the
+second parameter (defaults to `Colour` to match the queue default —
+existing call sites compile unchanged). `SubtitleStyle` and
+`SubtitleLineLayout` gained a `bool italic = false` flag;
+`computeSubtitleLayout` reads `queue.narratorStyle()` and
+propagates the flag. `renderSubtitles` branches per-row between
+`renderText2D` (upright) and `renderText2DOblique` (italic). The
+branch is closed over as a lambda so the wrapped-row and
+fullText-fallback paths share a single call site.
+
+**Shared impl.** `renderText2D` now delegates to private
+`renderText2DImpl(..., shearFactor=0.0f)`;
+`renderText2DOblique(..., shearFactor)` delegates to the same impl
+with a non-zero factor. No duplication, and the fast path (upright,
+the overwhelming majority of callers) is unchanged.
+
+**Regression pins.** Dialogue's yellow speaker label and SoundCue's
+cyan-grey body are unaffected by the narrator selector — only the
+`SubtitleCategory::Narrator` branch of `styleFor` reads
+`narratorStyle`. Three dedicated tests pin this. The pre-P6 test
+`SubtitleRenderer.NarratorStyleIsWhite` described the old default
+and has been updated to `NarratorStyleDefaultsToWarmAmber`; the
+italic path's white colour is separately pinned in the new file.
+
+**Updates `PHASE10_7_DESIGN.md` §4.2** to document both paths as
+runtime alternatives (not spec vs revision) so future readers see
+the shipping shape, not the historical block.
+
+**Tests.** 14 new tests in `tests/test_subtitle_narrator_style.cpp`:
+- 10 `SubtitleNarratorStyle.*` — default `Colour`, setter round-
+  trip, colour path warm-amber-not-italic, italic path white-and-
+  italic, two paths visually distinct, Dialogue unchanged by
+  selector, SoundCue unchanged by selector, layout propagates
+  italic when selected, colour layout not italic, dialogue never
+  italic regardless of selector.
+- 4 `TextOblique.*` — pure shear helper: at-baseline identity,
+  above-baseline shifts right, below-baseline shifts left, zero
+  factor identity.
+
+**Bump.** VERSION 0.1.28 → 0.1.29. Full suite: 2947 / 2948 (+14 vs
+S4's 2933; the pre-existing `MeshBoundsTest.UploadComputesLocalBounds`
+skip is unchanged).
+
+**Slice 2 status post-P6: 8 of 8 shipped. Slice 3 status: 9 of 9
+shipped.** Phase 10.9 Slices 1–3 are now fully complete; next
+slice is Slice 4 (Rendering correctness — IBL `ScopedForwardZ`
+wrap, GPU SH projection, shadow-pass state save/restore, etc.).
+
 ### 2026-04-24 Phase 10.9 — Slice 3 S4 (UI keyboard navigation + focus ring)
 
 The main-menu and pause-menu footer labels in `menu_prefabs.cpp` have

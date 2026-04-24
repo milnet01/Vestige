@@ -153,9 +153,22 @@ Two options:
 - **Line budget:** soft-wrap at 40 characters; hard max 2 lines per entry (3 only if speaker label overflows — rare).
 - **Background plate:** solid black at 50 % alpha, 8-px horizontal padding per line. Opacity becomes a user-tunable in a future phase (out of scope here).
 - **Position:** bottom-center, 12 % from bottom edge. Configurable later.
-- **Per-category styling** (Phase 10.7 MVP):
+- **Per-category styling** (Phase 10.7 MVP; narrator refined in Phase 10.9 P6):
   - `Dialogue` — speaker label in yellow, dialogue in white.
-  - `Narrator` — italic white.
+  - `Narrator` — two runtime-selectable styles (`SubtitleNarratorStyle` on
+    `SubtitleQueue`; defaults to `Colour`):
+      - `Italic` — white text rendered with an ~11° oblique horizontal
+        shear at glyph-emit time. Matches the original §4.2 spec; no
+        separate italic font atlas needed (`renderText2DOblique` +
+        `text_oblique::applyShear` on the existing upright atlas).
+      - `Colour` — warm-amber (accent-family `{0.784, 0.604, 0.243}`),
+        upright. Default — matches the partially-sighted primary
+        user priority: italic typography is harder for low-vision
+        reading than colour differentiation, so upright + amber is
+        more accessible while still visually distinct from dialogue
+        white and sound-cue cyan-grey. Developers who prefer the
+        original §4.2 italic aesthetic opt in via
+        `queue.setNarratorStyle(SubtitleNarratorStyle::Italic)`.
   - `SoundCue` — `[bracketed]` cyan-grey.
 
 **AudioClip → caption map.**
