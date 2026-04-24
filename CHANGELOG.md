@@ -9,6 +9,49 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-24 Phase 10.9 — Slice 3 S8 (NavMeshQuery partial-result surface)
+
+`NavMeshQuery::findPath` used to collapse Detour's `DT_PARTIAL_RESULT`
+flag into the returned vector's emptiness — success-but-partial looked
+identical to success-but-complete, so an agent routed to a target
+inside a disconnected nav-island silently arrived ~20m short with no
+hook for AI to notice or re-plan.
+
+**Fix:** `PathResult { waypoints, partial }` struct + new overload
+`findPathWithStatus(start, end)` that propagates the partial flag.
+Existing `findPath` now forwards to the new overload and drops the
+flag, so `NavigationSystem::findPath` and any other legacy call
+site compiles unchanged. Phase 11A behaviour trees and Phase 11B
+enemy AI can migrate to `findPathWithStatus` and branch on
+`result.partial` to re-plan, notify, or give up.
+
+**Testability.** The Detour-status-to-bool translation is extracted
+into `detail::isPartialPathStatus(dtStatus)` and exposed so bit
+arithmetic is unit-testable without building a live Recast/Detour
+nav mesh. The helper treats `DT_FAILURE` as dominant: a failed
+query never reports partial even if the partial bit is incidentally
+set, because failure means no waypoints and "partial path"
+semantically requires a valid-but-short path.
+
+**Tests.** 8 new tests in `tests/test_nav_mesh_query.cpp`:
+- 5 `NavMeshPartialStatus.*` pin the helper: success-without-partial
+  (false), success-with-partial (true), failure-with-partial
+  (false — failure dominates), success-with-unrelated-detail-bit
+  `DT_OUT_OF_NODES` (false — not confused with partial),
+  bare-partial-bit-without-DT_SUCCESS (false — requires success).
+- 3 `NavMeshQueryWithStatus.*` pin the uninitialised-query
+  contract (empty waypoints, partial=false) and the legacy
+  `findPath` overload backward-compat.
+
+**Bump.** VERSION 0.1.24 → 0.1.25. Full suite: 2890 / 2891 (+8 vs
+S6's 2883; the pre-existing
+`MeshBoundsTest.UploadComputesLocalBounds` skip is unchanged).
+
+**Next.** Remaining Slice 3 items: S2 (component-mutation-inside-
+update contract), S4 (keyboard nav + focus ring), S9 (UITheme
+default contrast per WCAG 1.4.3 / 1.4.11). P6 (narrator styling)
+remains blocked on asset-source decision.
+
 ### 2026-04-24 Phase 10.9 — Slice 3 S1 + S3 + S6 (+ S5, S7 closed as duplicates)
 
 Five Slice 3 safety items shipped together — three TDD red/green
