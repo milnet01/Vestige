@@ -161,6 +161,18 @@ public:
     ///        locking; push once per frame from `AudioSystem::update`.
     void setMixerSnapshot(const AudioMixer& mixer) { m_mixerSnapshot = mixer; }
 
+    /// @brief Phase 10.9 P3 — publishes the engine-owned
+    ///        `DuckingState::currentGain` snapshot so `updateGains`
+    ///        folds it into every `AL_GAIN` push alongside the mixer.
+    ///        Clamped to [0, 1] on ingest so `updateGains` can treat
+    ///        the value as canonical.
+    void setDuckingSnapshot(float duckingGain);
+
+    /// @brief Most recently published duck snapshot (defaults 1.0).
+    ///        Exposed so the editor's AudioPanel preview can mirror
+    ///        what the engine is actually pushing to AL.
+    float getDuckingSnapshot() const { return m_duckingSnapshot; }
+
     /// @brief Per-frame sweep that (a) releases sources whose
     ///        OpenAL state has drifted to `AL_STOPPED` and (b)
     ///        re-uploads the composed `master × bus × sourceVolume`
@@ -275,6 +287,7 @@ private:
     };
     std::unordered_map<unsigned int, SourceMix> m_livePlaybacks;
     AudioMixer m_mixerSnapshot{};  ///< Latest published mixer (defaults all-1).
+    float      m_duckingSnapshot = 1.0f;  ///< Phase 10.9 P3 duck gain (1.0 = no duck).
 
     CaptionAnnouncer m_captionAnnouncer;  ///< Phase 10.9 P4 caption hook (may be empty).
 

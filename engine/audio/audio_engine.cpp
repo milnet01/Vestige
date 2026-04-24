@@ -574,6 +574,14 @@ void AudioEngine::applyHrtfSettings()
     }
 }
 
+void AudioEngine::setDuckingSnapshot(float duckingGain)
+{
+    // Phase 10.9 P3 (red): stub silently discards the input so every
+    // updateGains call still composes without ducking. Green sets
+    // m_duckingSnapshot = clamp01(duckingGain).
+    (void)duckingGain;
+}
+
 void AudioEngine::updateGains()
 {
     if (!m_available) return;

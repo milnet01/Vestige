@@ -184,6 +184,8 @@ private:
     ///   Retrofitting each consumer to read from Engine is a Phase
     ///   10.7 item.
     AudioMixer              m_audioMixer;
+    DuckingState            m_duckingState;      ///< Phase 10.9 P3
+    DuckingParams           m_duckingParams;     ///< Phase 10.9 P3
     SubtitleQueue           m_subtitleQueue;
     CaptionMap              m_captionMap;
     PhotosensitiveLimits    m_photosensitiveLimits;
@@ -276,6 +278,17 @@ public:
     ///        refitted (Phase 10.7 follow-on).
     AudioMixer&         getAudioMixer()        { return m_audioMixer; }
     const AudioMixer&   getAudioMixer() const  { return m_audioMixer; }
+
+    /// @brief Engine-owned ducking state (Phase 10.9 P3). Authoritative
+    ///        source of truth for the ducking slew: `AudioSystem::update`
+    ///        calls `updateDucking` on it each frame and publishes the
+    ///        resulting `currentGain` to `AudioEngine::setDuckingSnapshot`
+    ///        so every live source's `AL_GAIN` composition includes the
+    ///        duck.
+    DuckingState&        getDuckingState()        { return m_duckingState; }
+    const DuckingState&  getDuckingState() const  { return m_duckingState; }
+    DuckingParams&       getDuckingParams()       { return m_duckingParams; }
+    const DuckingParams& getDuckingParams() const { return m_duckingParams; }
 
     /// @brief Engine-owned caption queue (slice 13.5e). Game code
     ///        enqueues captions; the not-yet-wired HUD render pass

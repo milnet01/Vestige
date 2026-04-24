@@ -7,6 +7,7 @@
 
 #include <gtest/gtest.h>
 
+#include "audio/audio_engine.h"
 #include "audio/audio_mixer.h"
 
 using namespace Vestige;
@@ -205,6 +206,33 @@ TEST(AudioMixerResolve, ZeroDuckSilencesEveryBus_P3)
                 0.0f, kEps);
     EXPECT_NEAR(resolveSourceGain(m, AudioBus::Ambient, 1.0f, 0.0f),
                 0.0f, kEps);
+}
+
+// ---- P3 wiring: AudioEngine snapshot + Engine ownership -----------
+
+TEST(AudioEngineDuckSnapshot, DefaultsToUnity_P3)
+{
+    AudioEngine engine;
+    EXPECT_NEAR(engine.getDuckingSnapshot(), 1.0f, kEps)
+        << "Fresh AudioEngine must compose AL_GAIN without ducking.";
+}
+
+TEST(AudioEngineDuckSnapshot, SetStoresClamped_P3)
+{
+    AudioEngine engine;
+
+    engine.setDuckingSnapshot(0.5f);
+    EXPECT_NEAR(engine.getDuckingSnapshot(), 0.5f, kEps);
+
+    engine.setDuckingSnapshot(-0.25f);
+    EXPECT_NEAR(engine.getDuckingSnapshot(), 0.0f, kEps)
+        << "Negative input must clamp so updateGains sees a canonical "
+           "[0,1] value.";
+
+    engine.setDuckingSnapshot(3.0f);
+    EXPECT_NEAR(engine.getDuckingSnapshot(), 1.0f, kEps)
+        << "Values above 1.0 must clamp so ducking can't boost above "
+           "the authored source gain.";
 }
 
 // -- Ducking -------------------------------------------------------
