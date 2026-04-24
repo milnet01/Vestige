@@ -143,6 +143,70 @@ TEST(AudioMixerResolve, ZeroBusSilencesOnlyThatBus)
     EXPECT_NEAR(resolveSourceGain(m, AudioBus::Sfx,   1.0f), 1.0f, kEps);
 }
 
+// =============================================================================
+// Phase 10.9 Slice 2 P3 — fold DuckingState::currentGain into resolveSourceGain
+// =============================================================================
+//
+// Ducking was computed (updateDucking slews currentGain toward duckFactor)
+// but never applied: resolveSourceGain only accepted mixer × bus × volume,
+// and the AudioPanel's computeEffectiveSourceGain applied the duck locally
+// in the editor preview only. These tests pin the 4-arg overload that
+// passes the ducking gain through to the final AL_GAIN.
+
+TEST(AudioMixerResolve, FourArgOverloadWithUnityDuckMatchesThreeArg_P3)
+{
+    // Duck = 1.0 must be a no-op: the 4-arg overload equals the 3-arg one
+    // so existing call sites that don't care about ducking stay identical.
+    AudioMixer m;
+    m.setBusGain(AudioBus::Music, 0.6f);
+    EXPECT_NEAR(resolveSourceGain(m, AudioBus::Music, 0.5f, 1.0f),
+                resolveSourceGain(m, AudioBus::Music, 0.5f),
+                kEps);
+}
+
+TEST(AudioMixerResolve, DuckingMultipliesFinalGain_P3)
+{
+    // Duck = 0.35 (the DuckingParams default duckFactor) applied to a
+    // 1.0-gain Music source should yield exactly 0.35.
+    AudioMixer m;  // defaults to all-1
+    EXPECT_NEAR(resolveSourceGain(m, AudioBus::Music, 1.0f, 0.35f),
+                0.35f, kEps);
+}
+
+TEST(AudioMixerResolve, DuckingComposesWithBusAndSource_P3)
+{
+    // master(1) × bus(0.6) × volume(0.75) × duck(0.5) = 0.225
+    AudioMixer m;
+    m.setBusGain(AudioBus::Music, 0.6f);
+    EXPECT_NEAR(resolveSourceGain(m, AudioBus::Music, 0.75f, 0.5f),
+                0.225f, kEps);
+}
+
+TEST(AudioMixerResolve, DuckingClampsBelowZeroAndAboveOne_P3)
+{
+    // Negative duckingGain clamps to 0 (fully ducked, silent).
+    // Duck > 1.0 clamps to 1.0 (no boost beyond authored level).
+    AudioMixer m;
+    EXPECT_NEAR(resolveSourceGain(m, AudioBus::Music, 1.0f, -0.5f),
+                0.0f, kEps);
+    EXPECT_NEAR(resolveSourceGain(m, AudioBus::Music, 1.0f,  2.5f),
+                1.0f, kEps);
+}
+
+TEST(AudioMixerResolve, ZeroDuckSilencesEveryBus_P3)
+{
+    // A fully-ducked mixer snapshot silences every bus — matches the
+    // "dialogue kills everything else" fantasy the Phase 10.7 ducking
+    // feature promised. Every Music / Sfx / Ambient source drops.
+    AudioMixer m;
+    EXPECT_NEAR(resolveSourceGain(m, AudioBus::Music,   1.0f, 0.0f),
+                0.0f, kEps);
+    EXPECT_NEAR(resolveSourceGain(m, AudioBus::Sfx,     1.0f, 0.0f),
+                0.0f, kEps);
+    EXPECT_NEAR(resolveSourceGain(m, AudioBus::Ambient, 1.0f, 0.0f),
+                0.0f, kEps);
+}
+
 // -- Ducking -------------------------------------------------------
 
 TEST(AudioDucking, AttacksTowardFloorWhenTriggered)

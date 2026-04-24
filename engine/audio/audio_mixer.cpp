@@ -82,6 +82,16 @@ float resolveSourceGain(const AudioMixer& mixer,
     return std::max(0.0f, std::min(1.0f, busGain * vol));
 }
 
+float resolveSourceGain(const AudioMixer& mixer,
+                        AudioBus bus,
+                        float sourceVolume,
+                        float /*duckingGain*/)
+{
+    // Phase 10.9 P3 (red): stub ignores duckingGain, so the new tests
+    // fail at runtime until green multiplies it in.
+    return resolveSourceGain(mixer, bus, sourceVolume);
+}
+
 void updateDucking(DuckingState& state,
                     const DuckingParams& params,
                     float deltaSeconds)

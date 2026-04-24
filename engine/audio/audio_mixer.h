@@ -126,6 +126,20 @@ float resolveSourceGain(const AudioMixer& mixer,
                         AudioBus bus,
                         float sourceVolume);
 
+/// @brief Phase 10.9 P3 — 4-arg overload folding `DuckingState::currentGain`
+///        into the composed gain so the Phase 10.7 ducking state machine
+///        actually reaches `AL_GAIN`.
+///
+/// Final gain = `master × bus × sourceVolume × clamp01(duckingGain)`,
+/// clamped to [0, 1]. `duckingGain` clamps to [0, 1] before the multiply
+/// so a DuckingState that overshoots its floor (during attack / release
+/// slew) can't push the composed gain outside unit range. Pass 1.0 when
+/// ducking is not a concern — equivalent to the 3-arg overload.
+float resolveSourceGain(const AudioMixer& mixer,
+                        AudioBus bus,
+                        float sourceVolume,
+                        float duckingGain);
+
 // ----- Ducking --------------------------------------------------
 
 /// @brief Ducking parameters — attack pulls the gain down when the
