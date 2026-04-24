@@ -110,6 +110,7 @@ add_executable(vestige_tests
     test_photosensitive_retrofit.cpp
     test_subtitle.cpp
     test_subtitle_renderer.cpp
+    test_subtitle_narrator_style.cpp
     test_caption_map.cpp
     test_game_screen.cpp
     test_ui_system_screen_stack.cpp
