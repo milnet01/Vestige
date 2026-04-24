@@ -472,6 +472,28 @@ bool Engine::initialize(const EngineConfig& config)
     // Subscribe to key events for engine controls
     m_eventBus.subscribe<KeyPressedEvent>([this](const KeyPressedEvent& event)
     {
+        // Phase 10.9 Slice 3 S4 — route keyboard nav to the menu UI
+        // first. When the root screen is a menu (MainMenu / Paused) or
+        // a modal is on top (Settings, dialogs), Tab / arrow / Enter /
+        // Space should drive focus traversal + activation, NOT fall
+        // through to game bindings. `handleKey` returns true iff it
+        // consumed the key; unhandled keys (letters, F-keys, etc.)
+        // continue to the switch below as before. Repeats are allowed
+        // here so a held arrow auto-scrolls the focused row.
+        if (m_enableGameScreens && m_uiSystem)
+        {
+            const GameScreen current = m_uiSystem->getCurrentScreen();
+            const bool inMenu =
+                current == GameScreen::MainMenu ||
+                current == GameScreen::Paused   ||
+                current == GameScreen::Settings ||
+                m_uiSystem->getTopModalScreen() != GameScreen::None;
+            if (inMenu && m_uiSystem->handleKey(event.keyCode, event.mods))
+            {
+                return;
+            }
+        }
+
         if (event.isRepeat)
         {
             return;

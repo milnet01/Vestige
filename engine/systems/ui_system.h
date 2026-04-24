@@ -215,6 +215,47 @@ public:
     UICanvas& getModalCanvas() { return m_modalCanvas; }
     const UICanvas& getModalCanvas() const { return m_modalCanvas; }
 
+    // -- Phase 10.9 Slice 3 S4: keyboard navigation + focus ring --
+
+    /// @brief Returns the currently keyboard-focused element, or nullptr.
+    ///
+    /// The pointer lifetime matches the element's lifetime in the
+    /// canvas; callers should not dereference after clearing the
+    /// canvas or popping a modal that owned the element. Typical
+    /// consumers read this in the render or input pass and do not
+    /// retain it.
+    UIElement* getFocusedElement() const { return m_focusedElement; }
+
+    /// @brief Sets keyboard focus explicitly.
+    ///
+    /// Clears the previous focused element's `focused` flag and sets
+    /// the new one's. Passing `nullptr` clears focus. The caller is
+    /// responsible for ensuring @a el belongs to either `getCanvas()`
+    /// or `getModalCanvas()` — no reachability check is performed.
+    void setFocusedElement(UIElement* el);
+
+    /// @brief Consumes a GLFW key event for keyboard UI navigation.
+    ///
+    /// Routing (desktop convention):
+    ///   * `GLFW_KEY_TAB`                    → next element (wraps).
+    ///   * `GLFW_KEY_TAB` + `GLFW_MOD_SHIFT` → previous (wraps).
+    ///   * `GLFW_KEY_DOWN`, `GLFW_KEY_RIGHT` → next.
+    ///   * `GLFW_KEY_UP`,   `GLFW_KEY_LEFT`  → previous.
+    ///   * `GLFW_KEY_ENTER`, `GLFW_KEY_KP_ENTER`, `GLFW_KEY_SPACE`
+    ///     → fires the focused element's `onClick` (if any).
+    ///
+    /// Tab order is built by walking the active canvas (modal if any
+    /// interactive element sits in the modal canvas, else the root)
+    /// in insertion order, descending into children, skipping
+    /// invisible subtrees and non-interactive elements. Modal-active
+    /// traversal is trapped to the modal canvas — root elements are
+    /// unreachable until the modal closes.
+    ///
+    /// Returns true iff the key was consumed by the UI (so the game
+    /// input handler skips its own binding for that key). Keys the
+    /// UI doesn't care about (letters, F-keys, etc.) return false.
+    bool handleKey(int key, int mods);
+
     // -- Phase 10 slice 12.4: notification queue --
 
     /// @brief Transient notification queue driving the top-right toast
@@ -272,6 +313,10 @@ private:
 
     // Phase 10 slice 12.4 — transient notification queue (toast stack).
     NotificationQueue m_notifications;
+
+    // Phase 10.9 Slice 3 S4 — currently keyboard-focused element.
+    // Non-owning; points into m_canvas / m_modalCanvas.
+    UIElement* m_focusedElement = nullptr;
 };
 
 } // namespace Vestige

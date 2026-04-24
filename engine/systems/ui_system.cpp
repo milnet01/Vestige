@@ -11,12 +11,50 @@
 #include "ui/menu_prefabs.h"
 #include "ui/subtitle_renderer.h"
 
+#include <GLFW/glfw3.h>
 #include <glad/gl.h>
 
+#include <algorithm>
 #include <utility>
+#include <vector>
 
 namespace Vestige
 {
+
+namespace
+{
+
+// S4: depth-first walk; a child's tab position follows the parent's.
+// Invisible subtrees are skipped wholesale — a screen reader wouldn't
+// announce them either (`collectAccessible` uses the same rule).
+void collectTabOrderRecursive(const UIElement* el,
+                               std::vector<UIElement*>& out)
+{
+    if (el == nullptr || !el->visible)
+    {
+        return;
+    }
+    if (el->interactive)
+    {
+        out.push_back(const_cast<UIElement*>(el));
+    }
+    for (size_t i = 0; i < el->getChildCount(); ++i)
+    {
+        collectTabOrderRecursive(el->getChildAt(i), out);
+    }
+}
+
+std::vector<UIElement*> collectTabOrderFromCanvas(const UICanvas& canvas)
+{
+    std::vector<UIElement*> out;
+    for (size_t i = 0; i < canvas.getElementCount(); ++i)
+    {
+        collectTabOrderRecursive(canvas.getElementAt(i), out);
+    }
+    return out;
+}
+
+} // namespace
 
 bool UISystem::initialize(Engine& engine)
 {
@@ -331,6 +369,98 @@ void UISystem::applyIntent(GameScreenIntent intent)
 
     // Everything else is a root-screen change.
     setRootScreen(next);
+}
+
+// ---------------------------------------------------------------------------
+// Phase 10.9 Slice 3 S4: keyboard navigation.
+// ---------------------------------------------------------------------------
+
+void UISystem::setFocusedElement(UIElement* el)
+{
+    if (m_focusedElement == el)
+    {
+        return;
+    }
+    if (m_focusedElement != nullptr)
+    {
+        m_focusedElement->focused = false;
+    }
+    m_focusedElement = el;
+    if (m_focusedElement != nullptr)
+    {
+        m_focusedElement->focused = true;
+    }
+}
+
+bool UISystem::handleKey(int key, int mods)
+{
+    // Tab order: modal takes precedence iff it has at least one
+    // interactive element (an empty modal canvas — rare, programmatic
+    // — must not black-hole keyboard navigation).
+    auto order = collectTabOrderFromCanvas(m_modalCanvas);
+    if (order.empty())
+    {
+        order = collectTabOrderFromCanvas(m_canvas);
+    }
+
+    auto advance = [&](int step)
+    {
+        if (order.empty())
+        {
+            return;
+        }
+        auto it = std::find(order.begin(), order.end(), m_focusedElement);
+        size_t next;
+        if (it == order.end())
+        {
+            // No existing focus: a forward step seeds at 0, a backward
+            // step seeds at the end.
+            next = (step >= 0) ? 0u : order.size() - 1u;
+        }
+        else
+        {
+            const auto cur = static_cast<size_t>(it - order.begin());
+            if (step >= 0)
+            {
+                next = (cur + 1u) % order.size();
+            }
+            else
+            {
+                next = (cur == 0u) ? order.size() - 1u : cur - 1u;
+            }
+        }
+        setFocusedElement(order[next]);
+    };
+
+    const bool shift = (mods & GLFW_MOD_SHIFT) != 0;
+
+    switch (key)
+    {
+        case GLFW_KEY_TAB:
+            advance(shift ? -1 : +1);
+            return true;
+        case GLFW_KEY_DOWN:
+        case GLFW_KEY_RIGHT:
+            advance(+1);
+            return true;
+        case GLFW_KEY_UP:
+        case GLFW_KEY_LEFT:
+            advance(-1);
+            return true;
+        case GLFW_KEY_ENTER:
+        case GLFW_KEY_KP_ENTER:
+        case GLFW_KEY_SPACE:
+            if (m_focusedElement != nullptr)
+            {
+                m_focusedElement->onClick.emit();
+                return true;
+            }
+            // No focused element: the key was not consumed — lets game
+            // code still react to Enter / Space for non-UI bindings.
+            return false;
+        default:
+            return false;
+    }
 }
 
 } // namespace Vestige

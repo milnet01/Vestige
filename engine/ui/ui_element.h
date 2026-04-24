@@ -82,6 +82,14 @@ public:
     /// @brief Gets the number of children.
     size_t getChildCount() const { return m_children.size(); }
 
+    /// @brief Returns the child at the given index, or nullptr if out of range.
+    ///
+    /// Phase 10.9 S4 introduced this accessor so `UISystem` can walk
+    /// arbitrary element subtrees for keyboard-focus tab-order
+    /// collection without needing friend access to `m_children`.
+    UIElement*       getChildAt(size_t index);
+    const UIElement* getChildAt(size_t index) const;
+
     /// @brief Mutable accessor for the element's accessibility metadata
     ///        (role + label + description + hint + value).
     ///
@@ -111,6 +119,16 @@ public:
     Anchor anchor = Anchor::TOP_LEFT;    ///< Anchor point on screen/parent
     bool visible = true;                 ///< Whether this element is rendered
     bool interactive = false;            ///< Whether this element receives input
+
+    /// @brief Keyboard-focus flag (Phase 10.9 S4).
+    ///
+    /// Driven by `UISystem::handleKey` as the user Tab / arrow-walks
+    /// the interactive elements. Widgets consult it at render time to
+    /// draw the focus ring outlined by `UITheme::focusRingThickness` /
+    /// `focusRingOffset`. Parallel to `interactive` / `visible` — not a
+    /// getter/setter pair because widgets may also set it directly
+    /// (e.g. a modal that wants to seed focus on its primary action).
+    bool focused = false;
 
     // -- Signals --
     Signal<> onClick;   ///< Fired when clicked

@@ -124,6 +124,23 @@ void UIButton::render(SpriteBatchRenderer& batch,
     drawBorder(batch, absPos, size, borderColor(style, renderState, *theme),
                 theme->panelBorderWidth);
 
+    // Phase 10.9 S4 — keyboard focus ring: drawn OUTSIDE the button
+    // bounds, offset by `theme->focusRingOffset`, stroked at
+    // `theme->focusRingThickness` in the theme accent. Disabled
+    // buttons are never routable via Tab (the focus walker could
+    // still land on one if the caller seeds focus manually, so skip
+    // the ring rather than painting it at a half-dimmed tick).
+    if (focused && !disabled)
+    {
+        const float ringOffset = theme->focusRingOffset;
+        const float ringThick  = theme->focusRingThickness;
+        drawBorder(batch,
+                   absPos - glm::vec2(ringOffset),
+                   size + glm::vec2(2.0f * ringOffset),
+                   theme->accent,
+                   ringThick);
+    }
+
     // 3. Hover accent tick (4 px brass strip on the left edge) — DEFAULT + DANGER only.
     if ((style == UIButtonStyle::DEFAULT || style == UIButtonStyle::DANGER)
         && renderState == UIButtonState::HOVERED)

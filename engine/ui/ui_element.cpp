@@ -78,6 +78,16 @@ void UIElement::addChild(std::unique_ptr<UIElement> child)
     m_children.push_back(std::move(child));
 }
 
+UIElement* UIElement::getChildAt(size_t index)
+{
+    return index < m_children.size() ? m_children[index].get() : nullptr;
+}
+
+const UIElement* UIElement::getChildAt(size_t index) const
+{
+    return index < m_children.size() ? m_children[index].get() : nullptr;
+}
+
 void UIElement::clearChildren()
 {
     m_children.clear();

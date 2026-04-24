@@ -29,12 +29,23 @@ struct WindowCloseEvent : public Event
 };
 
 /// @brief Fired when a keyboard key is pressed.
+///
+/// `mods` carries the GLFW modifier bitmask at press time (`GLFW_MOD_SHIFT`,
+/// `GLFW_MOD_CONTROL`, `GLFW_MOD_ALT`, `GLFW_MOD_SUPER`, etc.). Phase
+/// 10.9 Slice 3 S4 added the field so keyboard-focus handlers can
+/// distinguish `Tab` from `Shift+Tab` without reaching into
+/// `glfwGetKey`. Defaults to 0 so older call sites compile
+/// unchanged.
 struct KeyPressedEvent : public Event
 {
     int keyCode;
     bool isRepeat;
+    int mods;
 
-    KeyPressedEvent(int key, bool repeat) : keyCode(key), isRepeat(repeat) {}
+    KeyPressedEvent(int key, bool repeat, int modsMask = 0)
+        : keyCode(key), isRepeat(repeat), mods(modsMask)
+    {
+    }
 };
 
 /// @brief Fired when a keyboard key is released.

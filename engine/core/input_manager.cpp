@@ -108,7 +108,7 @@ bool InputManager::isActionDown(const InputActionMap& map,
         [this](const InputBinding& b) { return isBindingDown(b); });
 }
 
-void InputManager::keyCallback(GLFWwindow* window, int key, int /*scancode*/, int action, int /*mods*/)
+void InputManager::keyCallback(GLFWwindow* window, int key, int /*scancode*/, int action, int mods)
 {
     auto* self = static_cast<InputManager*>(glfwGetWindowUserPointer(window));
     if (!self || key == GLFW_KEY_UNKNOWN)
@@ -116,13 +116,15 @@ void InputManager::keyCallback(GLFWwindow* window, int key, int /*scancode*/, in
         return;
     }
 
+    // S4: `mods` forwarded so subscribers can tell `Tab` from `Shift+Tab`
+    // without re-querying GLFW (which would race against auto-repeat).
     if (action == GLFW_PRESS)
     {
-        self->m_eventBus.publish(KeyPressedEvent(key, false));
+        self->m_eventBus.publish(KeyPressedEvent(key, false, mods));
     }
     else if (action == GLFW_REPEAT)
     {
-        self->m_eventBus.publish(KeyPressedEvent(key, true));
+        self->m_eventBus.publish(KeyPressedEvent(key, true, mods));
     }
     else if (action == GLFW_RELEASE)
     {
