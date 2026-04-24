@@ -256,6 +256,13 @@ void AudioEngine::releaseSource(unsigned int source)
 void AudioEngine::playSound(const std::string& filePath, const glm::vec3& position,
                              float volume, bool loop, AudioBus bus)
 {
+    // Phase 10.9 P4: fire the caption announcer BEFORE the availability
+    // check — a user with broken audio hardware / deafness still needs
+    // the caption when game code intends to play a sound.
+    if (m_captionAnnouncer)
+    {
+        m_captionAnnouncer(filePath);
+    }
     if (!m_available)
     {
         return;
@@ -295,6 +302,11 @@ void AudioEngine::playSoundSpatial(const std::string& filePath,
                                    bool loop,
                                    AudioBus bus)
 {
+    // Phase 10.9 P4 — see playSound() above for rationale.
+    if (m_captionAnnouncer)
+    {
+        m_captionAnnouncer(filePath);
+    }
     if (!m_available) return;
 
     ALuint buffer = loadBuffer(filePath);
@@ -327,6 +339,11 @@ void AudioEngine::playSoundSpatial(const std::string& filePath,
                                    bool loop,
                                    AudioBus bus)
 {
+    // Phase 10.9 P4 — see playSound() above for rationale.
+    if (m_captionAnnouncer)
+    {
+        m_captionAnnouncer(filePath);
+    }
     if (!m_available) return;
 
     ALuint buffer = loadBuffer(filePath);
@@ -354,6 +371,11 @@ void AudioEngine::playSoundSpatial(const std::string& filePath,
 void AudioEngine::playSound2D(const std::string& filePath, float volume,
                                AudioBus bus)
 {
+    // Phase 10.9 P4 — see playSound() above for rationale.
+    if (m_captionAnnouncer)
+    {
+        m_captionAnnouncer(filePath);
+    }
     if (!m_available)
     {
         return;

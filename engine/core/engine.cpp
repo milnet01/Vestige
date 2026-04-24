@@ -412,6 +412,21 @@ bool Engine::initialize(const EngineConfig& config)
     // an empty map.
     m_captionMap.loadFromFile(captionMapPath(m_assetPath));
 
+    // Phase 10.9 Slice 2 P4 — wire the caption announcer on the
+    // AudioEngine so every playSound* call routes through the
+    // CaptionMap into the SubtitleQueue. Fires at source-acquire,
+    // not every frame. The captured `this` is stable for the engine
+    // lifetime (AudioSystem is owned by m_systemRegistry, which
+    // outlives this wiring).
+    if (AudioSystem* audio = m_systemRegistry.getSystem<AudioSystem>())
+    {
+        audio->getAudioEngine().setCaptionAnnouncer(
+            [this](const std::string& clipPath)
+            {
+                m_captionMap.enqueueFor(clipPath, m_subtitleQueue);
+            });
+    }
+
     // Startup mode — editor (default) or play (CLI `--play`).
     if (m_editor && !config.startInPlayMode)
     {
