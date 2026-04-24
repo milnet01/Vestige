@@ -9,6 +9,88 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-24 Phase 10.9 — Slice 3 S1 + S3 + S6 (+ S5, S7 closed as duplicates)
+
+Five Slice 3 safety items shipped together — three TDD red/green
+cycles plus two ROADMAP checkboxes that fell out as duplicates or
+side effects.
+
+**S1: `Scene::removeEntity` nulls `m_activeCamera` on subtree removal.**
+`m_activeCamera` is a raw `CameraComponent*`. Deleting the entity
+that owned it left the pointer dangling; the renderer dereferences
+it every frame, so "delete camera entity" from the editor was a
+guaranteed crash on the next frame. Fix: `unregisterEntityRecursive`
+checks `entity->getComponent<CameraComponent>() == m_activeCamera`
+and nulls the pointer before destroying the entity. The recursion
+handles both direct ownership and subtree ownership in one place.
+4 tests: direct removal, descendant removal, unrelated-entity
+guard, clearEntities invariant.
+
+**S7 closed — duplicate of S1.** The ROADMAP listed the same
+fix twice under different IDs. S1's recursion covers both.
+
+**S3: `UIElement::hitTest` recurses into children.** Pre-fix,
+UIElement::hitTest checked only self-bounds and returned — m_children
+was never visited, so any widget placed as a child of another was
+silently unreachable to mouse input. UICanvas::hitTest walked only
+top-level elements and relied on their hitTest to descend (which it
+didn't). Fix: restructured hitTest to (1) short-circuit on !visible,
+(2) walk m_children first with parent-absolute-position cascading
+as each child's parentOffset, (3) gate the self-bounds test on
+interactive. Side effects:
+- Children render on top of parents, so child-first hit order
+  matches visual stacking.
+- A non-interactive container (UIPanel's typical use case) whose
+  children caught no hit returns false, letting input pass through.
+8 tests in new `tests/test_ui_hit_test.cpp`: baseline hit/miss,
+three nested cases (overflow parent, non-interactive parent, hidden
+subtree), three-level deep cascade, canvas walks nested, canvas
+outside all elements.
+
+**S5 closed — shipped as S3 side effect.** UIPanel inherits the
+interactive-gated self-bounds logic; no UIPanel-specific override
+needed. Pinned by `UIHitTest.NestedInteractiveChildIsReachable-
+ThroughNonInteractiveParent_S3`.
+
+**S6: `PressurePlateComponent` overlap query uses world position.**
+Pre-fix, the sphere overlap-query centre was computed from
+`owner.transform.position` (local-space). Any plate parented under
+another entity fired its trigger at the parent's origin, not the
+plate's rendered location — elevators, vehicles, and rotating
+platforms with pressure-plate triggers silently misbehaved.
+
+Implementation choice: extracted a pure helper
+`computePressurePlateCenter(owner, detectionHeight)` that composes
+its own world matrix by walking the parent chain
+(`for (const Entity* e = &owner; e; e = e->getParent()) world =
+e->transform.getLocalMatrix() * world`). Calling
+`Entity::getWorldPosition()` directly would have been simpler but
+ties the centre to `Entity::update()` call timing — brittle inside
+physics steps, editor preview, and unit tests where
+`m_worldMatrix` may not be populated yet. Walking the parent chain
+is timing-independent.
+
+4 tests: unparented entity, child of translated parent, grandchild
+cascading through full hierarchy, zero detectionHeight.
+
+**Totals**
+
+- 16 new tests across `test_scene.cpp`, `test_ui_hit_test.cpp`,
+  `test_pressure_plate.cpp`.
+- 2882 / 2883 pass (+16 vs T0's 2866; 1 pre-existing skip unchanged).
+- Net +82 / -10 lines across 6 source files.
+
+**Doc commit** (this entry) — VERSION 0.1.23 → 0.1.24. ROADMAP
+S1, S3, S5, S6, S7 ticked; S5 and S7 entries explicitly flagged
+as shipped-by-sibling rather than standalone work.
+
+**Slice 3 status post-S1+S3+S5+S6+S7: 5 of 9 shipped.** Remaining
+Slice 3 items: S2 (component-mutation-inside-update contract), S4
+(keyboard nav + focus ring), S8 (NavMesh partial-result surfacing),
+S9 (UITheme default contrast).
+
+---
+
 ### 2026-04-24 Phase 10.9 — Slice 0 T0: ROADMAP truth-up (zombie-feature audit)
 
 Documentation-only slice. Phase 10.9's premise — "Phase 10.7 features
