@@ -62,11 +62,18 @@ struct SubtitleLayoutParams
 ///        the GL pass only needs to issue draw calls.
 struct SubtitleLineLayout
 {
-    std::string fullText;          ///< Composed string passed to `renderText2D`.
+    std::string fullText;          ///< Composed string (pre-wrap) for back-compat.
+    /// Wrapped caption rows (Phase 10.9 P1). `wrappedLines[0]` is the
+    /// topmost row; `wrappedLines.back()` is the bottommost. `fullText`
+    /// is preserved as the pre-wrap composition so existing callers
+    /// (and tests) that check composition can keep doing so without
+    /// touching wrap-specific concerns.
+    std::vector<std::string> wrappedLines;
     glm::vec2   platePos{0.0f};    ///< Top-left of the background plate (px).
     glm::vec2   plateSize{0.0f};   ///< Width × height of the background plate (px).
     glm::vec4   plateColor{0.0f};  ///< RGBA of the plate.
-    glm::vec2   textBaseline{0.0f};///< (x, y) passed to `renderText2D`.
+    glm::vec2   textBaseline{0.0f};///< (x, y) passed to `renderText2D` for line 0.
+    float       lineStepPx = 0.0f; ///< Y increment between wrapped rows (px).
     float       textScale = 1.0f;  ///< Multiplier on font atlas pixel size.
     glm::vec3   textColor{1.0f};   ///< Body text colour.
     SubtitleCategory category = SubtitleCategory::Dialogue;

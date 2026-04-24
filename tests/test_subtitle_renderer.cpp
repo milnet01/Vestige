@@ -284,3 +284,118 @@ TEST(SubtitleRendererLayout, NullMeasureCallableProducesPaddingOnlyPlate)
     ASSERT_EQ(lines.size(), 1u);
     EXPECT_NEAR(lines[0].plateSize.x, 2.0f * params.platePaddingX, 1e-3f);
 }
+
+// =============================================================================
+// Phase 10.9 Slice 2 P1 — multi-line plate sizing from wrapped text
+// =============================================================================
+//
+// Captions that wrap to 2 lines must produce a plate that is:
+//   - wide enough for the LONGEST rendered line (not the total length)
+//   - tall enough for N rows × line-height + padding
+// and must expose both lines in `wrappedLines` so the renderer can
+// draw one `renderText2D` call per row.
+
+TEST(SubtitleRendererLayout, ShortCaptionPopulatesSingleWrappedLine_P1)
+{
+    SubtitleQueue queue;
+    queue.enqueue(makeLine("Draw near.", 1.0f, SubtitleCategory::Narrator));
+
+    SubtitleLayoutParams params;
+    const auto lines = computeSubtitleLayout(queue, params, fixedWidth);
+    ASSERT_EQ(lines.size(), 1u);
+    ASSERT_EQ(lines[0].wrappedLines.size(), 1u);
+    EXPECT_EQ(lines[0].wrappedLines[0], "Draw near.");
+}
+
+TEST(SubtitleRendererLayout, LongCaptionWrapsToTwoLines_P1)
+{
+    // 45-char narrator caption ("Moses climbed Sinai under thunder clouds now")
+    // wraps to {"Moses climbed Sinai under thunder clouds", "now"}.
+    SubtitleQueue queue;
+    queue.enqueue(makeLine(
+        "Moses climbed Sinai under thunder clouds now",
+        1.0f, SubtitleCategory::Narrator));
+
+    SubtitleLayoutParams params;
+    const auto lines = computeSubtitleLayout(queue, params, fixedWidth);
+    ASSERT_EQ(lines.size(), 1u);
+    ASSERT_EQ(lines[0].wrappedLines.size(), 2u);
+    EXPECT_EQ(lines[0].wrappedLines[0],
+              "Moses climbed Sinai under thunder clouds");
+    EXPECT_EQ(lines[0].wrappedLines[1], "now");
+}
+
+TEST(SubtitleRendererLayout, PlateWidthUsesLongestWrappedLine_P1)
+{
+    // Wrapped output is {"40-char line", "3-char line"}. Plate width
+    // must match the 40-char row, not the 43-char total of both.
+    SubtitleQueue queue;
+    queue.setSizePreset(SubtitleSizePreset::Medium);
+    queue.enqueue(makeLine(
+        "Moses climbed Sinai under thunder clouds now",
+        1.0f, SubtitleCategory::Narrator));
+
+    SubtitleLayoutParams params;
+    params.screenWidth   = 1920;
+    params.screenHeight  = 1080;
+    params.fontPixelSize = 48;
+    params.platePaddingX = 8.0f;
+
+    const auto lines = computeSubtitleLayout(queue, params, fixedWidth);
+    ASSERT_EQ(lines.size(), 1u);
+    ASSERT_GE(lines[0].wrappedLines.size(), 2u);
+
+    const float textScale   = lines[0].textScale;
+    const float longestChars = 40.0f; // "Moses climbed Sinai under thunder clouds"
+    const float expectedW   = longestChars * 10.0f * textScale
+                              + 2.0f * params.platePaddingX;
+    EXPECT_NEAR(lines[0].plateSize.x, expectedW, 1e-2f);
+}
+
+TEST(SubtitleRendererLayout, PlateHeightScalesWithLineCount_P1)
+{
+    SubtitleQueue queueOne;
+    queueOne.enqueue(makeLine("short", 1.0f, SubtitleCategory::Narrator));
+
+    SubtitleQueue queueTwo;
+    queueTwo.enqueue(makeLine(
+        "Moses climbed Sinai under thunder clouds now",
+        1.0f, SubtitleCategory::Narrator));
+
+    SubtitleLayoutParams params;
+    const auto oneLine = computeSubtitleLayout(queueOne, params, fixedWidth);
+    const auto twoLine = computeSubtitleLayout(queueTwo, params, fixedWidth);
+    ASSERT_EQ(oneLine.size(), 1u);
+    ASSERT_EQ(twoLine.size(), 1u);
+    ASSERT_EQ(oneLine[0].wrappedLines.size(), 1u);
+    ASSERT_EQ(twoLine[0].wrappedLines.size(), 2u);
+
+    // Two-line plate must be taller than the one-line plate by at
+    // least one line-height increment.
+    EXPECT_GT(twoLine[0].plateSize.y, oneLine[0].plateSize.y)
+        << "Two-line plate height must exceed one-line plate height.";
+}
+
+TEST(SubtitleRendererLayout, TwoLinePlateBottomEdgeStillRespectsMargin_P1)
+{
+    // With multi-line plates, the bottom edge of the bottom-most row
+    // must still sit at screenHeight × (1 - bottomMarginFrac) — i.e.
+    // plates grow UPWARD as they get taller, not downward off-screen.
+    SubtitleQueue queue;
+    queue.enqueue(makeLine(
+        "Moses climbed Sinai under thunder clouds now",
+        1.0f, SubtitleCategory::Narrator));
+
+    SubtitleLayoutParams params;
+    params.screenWidth      = 1920;
+    params.screenHeight     = 1080;
+    params.bottomMarginFrac = 0.12f;
+
+    const auto lines = computeSubtitleLayout(queue, params, fixedWidth);
+    ASSERT_EQ(lines.size(), 1u);
+    const float plateBottom = lines[0].platePos.y + lines[0].plateSize.y;
+    EXPECT_NEAR(plateBottom,
+                static_cast<float>(params.screenHeight) *
+                (1.0f - params.bottomMarginFrac),
+                1e-2f);
+}

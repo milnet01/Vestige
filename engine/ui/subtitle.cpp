@@ -11,6 +11,19 @@
 namespace Vestige
 {
 
+std::vector<std::string> wrapSubtitleText(const std::string& text,
+                                          std::size_t /*maxCharsPerLine*/,
+                                          std::size_t /*maxLines*/)
+{
+    // Phase 10.9 P1 (red): stub returns the whole string on one line.
+    // Green will replace with word-boundary packing + ellipsis-truncate.
+    if (text.empty())
+    {
+        return {};
+    }
+    return { text };
+}
+
 float subtitleScaleFactorOf(SubtitleSizePreset preset)
 {
     switch (preset)

@@ -60,6 +60,41 @@ enum class SubtitleSizePreset
 /// preset, since the two compose).
 float subtitleScaleFactorOf(SubtitleSizePreset preset);
 
+/// @brief Soft-wrap width for captions (Phase 10.7 §4.2 / P1).
+///
+/// Matches FCC / Game Accessibility Guidelines recommendations for
+/// screen-comfortable line lengths (32–40 chars). 40 keeps short
+/// dialogue lines on one row while capping longer lines at the
+/// readability boundary.
+inline constexpr std::size_t SUBTITLE_SOFT_WRAP_CHARS = 40;
+
+/// @brief Hard line-count cap per caption (Phase 10.7 §4.2 / P1).
+///
+/// Research cites 2 on-screen lines as the readable ceiling (BBC
+/// caption guidelines, Romero-Fresco 2019). Overflowing captions get
+/// the last line truncated with an ellipsis so the user knows a
+/// tail was cut rather than silently dropped.
+inline constexpr std::size_t SUBTITLE_MAX_LINES = 2;
+
+/// @brief Word-boundary soft-wrap with a line-count hard cap.
+///
+/// Greedy packing: each line accumulates words until appending the
+/// next word (with a leading space, after the first word) would exceed
+/// `maxCharsPerLine`; at that point a new line is started. Overlong
+/// tokens — a single word longer than `maxCharsPerLine` — are
+/// hard-broken at the limit rather than pushed whole onto a new line,
+/// which would otherwise guarantee plate overflow.
+///
+/// `maxLines` caps the output vector length. If the full input would
+/// produce more than `maxLines` lines, the last emitted line is
+/// truncated and suffixed with a UTF-8 ellipsis ("…", `U+2026`) so
+/// the user sees that content was trimmed, not silently lost. Empty
+/// input returns an empty vector.
+std::vector<std::string> wrapSubtitleText(
+    const std::string& text,
+    std::size_t maxCharsPerLine = SUBTITLE_SOFT_WRAP_CHARS,
+    std::size_t maxLines = SUBTITLE_MAX_LINES);
+
 /// @brief Authored caption entry passed to `SubtitleQueue::enqueue`.
 struct Subtitle
 {
