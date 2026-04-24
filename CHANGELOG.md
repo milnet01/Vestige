@@ -9,6 +9,80 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-24 Phase 10.9 — Slice 3 S4 (UI keyboard navigation + focus ring)
+
+The main-menu and pause-menu footer labels in `menu_prefabs.cpp` have
+been advertising "UP DOWN NAVIGATE / ENTER SELECT / ESC QUIT" for a
+phase, but no handler existed — a keyboard-only user (partially
+sighted, trackpad-less, switch-access) could not actually traverse
+or activate the menu. Only ESC was wired (through `applyIntent`);
+Tab, arrows, Enter, Space all fell through to game bindings. This
+is the missing XAG 102 (WCAG 2.1.1 Keyboard + 2.4.7 Focus Visible)
+conformance on the menu path.
+
+**Fix.** Four layers:
+
+1. `UIElement::focused` — a public bool parallel to `interactive` /
+   `visible`. Widgets read it at render time.
+
+2. `UISystem` gained focus state + key routing:
+   - `getFocusedElement()` / `setFocusedElement()` expose /
+     manipulate the currently-focused element.
+   - `handleKey(key, mods)` consumes GLFW key events:
+     - `Tab` / `Down` / `Right`                     → next (wraps)
+     - `Shift+Tab` / `Up` / `Left`                  → previous (wraps)
+     - `Enter` / `KP_Enter` / `Space`               → fires focused onClick
+   - Tab order is computed each keypress by walking the active
+     canvas in insertion order, descending into children,
+     skipping invisible subtrees and non-interactive elements.
+     Modal traversal is trapped to the modal canvas — root
+     elements are unreachable while a modal has any interactive
+     child.
+   - Returns `true` iff the key was consumed (caller swallows).
+     Letter keys, F-keys, etc. return `false` so game bindings
+     still receive them.
+
+3. `UIButton::render` draws a focus ring outside the button bounds
+   when `focused && !disabled`. Theme fields `focusRingOffset` and
+   `focusRingThickness` were already defined (Phase 9C) and scaled
+   by the accessibility preset; only the render-time opt-in was
+   missing. Colour: `theme.accent`.
+
+4. Live wire: `InputManager::keyCallback` now forwards the GLFW
+   `mods` bitmask through `KeyPressedEvent` (new `int mods = 0`
+   field with a default so existing scripting / subscriber code
+   compiles unchanged). `Engine`'s `KeyPressedEvent` subscriber
+   routes to `UISystem::handleKey` first when `getCurrentScreen()`
+   is a menu screen (MainMenu / Paused / Settings) or any modal
+   is on top; if `handleKey` returns true, the event is swallowed
+   before game bindings see it. Repeats are allowed through the
+   UI path so a held arrow auto-scrolls.
+
+**Scope boundary.** Arrow keys step through tab order (one step
+forward / backward) rather than spatial 2D-adjacency. Current menu
+layouts are vertical columns where "Down = next below" is
+semantically correct; a 2D-adjacency table is a Phase 10.9+
+follow-up if side-by-side horizontal button rows come back.
+
+**Tests.** 15 new tests in `tests/test_ui_focus_navigation.cpp`:
+- 2 `UIElementFocus.*` — field default + mutability.
+- 13 `UISystemFocus.*` — default-null focus, Tab advances / wraps /
+  reverses with Shift, Tab skips non-interactive panels, arrow
+  keys mirror Tab forward / back, Enter + Space fire focused
+  onClick, Enter-without-focus returns false (lets game code
+  receive it), advancing focus flips the previous element's flag
+  off and the new one's on, modal canvas traps focus, unhandled
+  keys (letters, F-keys) return false.
+
+**Bump.** VERSION 0.1.27 → 0.1.28. Full suite: 2933 / 2934 (+15 vs
+S2's 2918; the pre-existing `MeshBoundsTest.UploadComputesLocalBounds`
+skip is unchanged).
+
+**Slice 3 status post-S4: 7 of 9 shipped.** Remaining: **P6**
+(narrator styling — italic atlas vs colour, blocked on asset-source
+decision). **S2** (component mutation) and **S4** (keyboard nav)
+complete.
+
 ### 2026-04-24 Phase 10.9 — Slice 3 S2 (Scene deferred-mutation queue)
 
 An `OnUpdate` script-graph node that calls `SpawnEntity` or
