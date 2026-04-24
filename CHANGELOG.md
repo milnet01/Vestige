@@ -9,6 +9,71 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-24 Phase 10.9 — Slice 2 P5: subtitles-enabled consumer read path
+
+Second Slice 2 item. Closes the "settings toggle writes a flag nothing
+reads" gap for the Accessibility tab's **Subtitles: on / off** switch:
+`SubtitleQueueApplySink::setSubtitlesEnabled` stored a local
+`m_enabled` bool, but every consumer polled
+`Engine::getSubtitleQueue().activeSubtitles()` directly — so when the
+user toggled subtitles off, captions kept rendering. The sink test
+passed because it only checked `sink.subtitlesEnabled()`; nothing
+observed the queue, which is what the renderer actually consults.
+
+**Red commit `2e91605`** — adds the consumer-view API to
+`SubtitleQueue` plus seven RED tests, shipping a deliberately-wrong
+stub so the new tests fail at runtime (F10 / F11 / P1 discipline):
+
+- `SubtitleQueue::setEnabled(bool)` / `::isEnabled()` public API
+  (header declares it, stub returns `m_active` unfiltered).
+- `SubtitleQueue::activeSubtitles()`, `::size()`, `::empty()` change
+  from inline to out-of-line so they can branch on `m_enabled` in
+  green (red stub still returns the raw view).
+- Seven tests: three fail at runtime on the stub, four pass because
+  they verify the intact tick / enqueue side-effect path rather
+  than the hidden-view contract itself.
+
+**Green commit `cd16aa5`** — two minimal changes:
+
+- `subtitle.cpp`: `activeSubtitles()` returns a static empty vector
+  when disabled; `size()` returns 0; `empty()` returns true. Internal
+  `m_active` keeps ticking so captions still expire in the
+  background — re-enabling shows only captions that would still be
+  on screen, not stale ones.
+- `settings_apply.h`: `SubtitleQueueApplySink::setSubtitlesEnabled`
+  forwards to `m_queue.setEnabled(enabled)`. Dropped the local flag
+  so there is one source of truth (the queue). `subtitlesEnabled()`
+  queries the queue directly.
+
+**Semantics the tests pin:**
+
+| Action | activeSubtitles() | internal m_active |
+|--------|-------------------|-------------------|
+| `setEnabled(false)` with 2 captions | empty | 2 (still ticking) |
+| `tick(1.0)` while disabled | empty | countdowns decrement |
+| `setEnabled(true)` after 1 s | 2 (unexpired) | 2 (remaining -1 s) |
+| Expire during disabled window | empty on re-enable | dropped at tick |
+
+**No renderer change required** — `UISystem::renderUI` already
+early-returns when `activeSubtitles().empty()` is true, so the empty
+view is sufficient to stop the overlay pass.
+
+**Test suite: 2813 / 2813 passing** (1 pre-existing skip unchanged;
++7 new tests vs. P1's baseline of 2806).
+
+**Files changed:** `engine/ui/subtitle.{h,cpp}` (+34 / -11 — API doc +
+filtering logic), `engine/core/settings_apply.h` (+6 / -3 — sink
+delegation + doc), `tests/test_subtitle.cpp` + `tests/test_settings.cpp`
+(+98 / -2 — seven new spec tests).
+
+**Net: +138 / -16 lines across four files. One dead settings wire
+brought live.**
+
+**Next in Slice 2:** **P4** — Caption auto-enqueue on `playSound*`
+entry (closes the Phase 10.7 B3 design doc's declarative caption
+routing). Depends on F1's ComponentSerializer registry — F1 shipped,
+so P4 is unblocked.
+
 ### 2026-04-24 Phase 10.9 — Slice 2 P1: subtitle soft-wrap + multi-line plates
 
 First Slice 2 item. Slice 1 closed the 11 Foundation findings; Slice 2
