@@ -161,20 +161,22 @@ float subtitleScaleFactorOf(SubtitleSizePreset preset)
 
 const std::vector<ActiveSubtitle>& SubtitleQueue::activeSubtitles() const
 {
-    // Phase 10.9 P5 (red): stub returns the real storage ignoring
-    // m_enabled, so the new tests fail at runtime until green wires
-    // the filter.
-    return m_active;
+    // Phase 10.9 P5: disabling the queue hides every caption from the
+    // consumer's view without clearing internal state, so captions
+    // enqueued during a disabled window keep their countdown and
+    // re-enabling shows only what would still be on screen.
+    static const std::vector<ActiveSubtitle> kEmpty;
+    return m_enabled ? m_active : kEmpty;
 }
 
 std::size_t SubtitleQueue::size() const
 {
-    return m_active.size();
+    return m_enabled ? m_active.size() : 0u;
 }
 
 bool SubtitleQueue::empty() const
 {
-    return m_active.empty();
+    return !m_enabled || m_active.empty();
 }
 
 void SubtitleQueue::enqueue(const Subtitle& subtitle)

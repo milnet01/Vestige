@@ -240,13 +240,16 @@ class SubtitleQueueApplySink final : public SubtitleApplySink
 {
 public:
     explicit SubtitleQueueApplySink(SubtitleQueue& queue);
-    void setSubtitlesEnabled(bool enabled) override { m_enabled = enabled; }
+    /// Phase 10.9 P5: forwards to the live queue so the accessibility
+    /// toggle reaches every consumer through
+    /// `SubtitleQueue::activeSubtitles()`. Prior shipping code stored
+    /// a local `m_enabled` flag that nothing read.
+    void setSubtitlesEnabled(bool enabled) override { m_queue.setEnabled(enabled); }
     void setSubtitleSize(SubtitleSizePreset preset) override;
-    bool subtitlesEnabled() const { return m_enabled; }
+    bool subtitlesEnabled() const { return m_queue.isEnabled(); }
 
 private:
     SubtitleQueue& m_queue;
-    bool m_enabled = true;
 };
 
 /// @brief Pushes the subtitle fields onto a sink. Translates the
