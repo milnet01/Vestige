@@ -11,6 +11,7 @@ add_executable(vestige_tests
     test_aabb.cpp
     test_entity.cpp
     test_scene.cpp
+    test_scene_deferred_mutation.cpp
     test_framebuffer.cpp
     test_shadow_map.cpp
     test_tangent_calc.cpp
