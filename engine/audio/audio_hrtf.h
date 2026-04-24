@@ -91,6 +91,31 @@ const char* hrtfModeLabel(HrtfMode mode);
 /// @brief Stable label for an `HrtfStatus` value.
 const char* hrtfStatusLabel(HrtfStatus status);
 
+/// @brief Phase 10.9 Slice 2 P8 — payload delivered to the
+///        AudioEngine HRTF status listener every time the engine
+///        applies its HRTF settings.
+///
+/// Pairs the engine-stored request (`HrtfSettings`) with the
+/// driver's resolved state (`HrtfStatus`). A downgrade — e.g.
+/// `requestedMode = Forced` but `actualStatus = UnsupportedFormat`
+/// — surfaces as different values in the same event, so the
+/// Settings UI can show "Requested: Forced / Actual: Denied
+/// (UnsupportedFormat)" from a single callback invocation.
+struct HrtfStatusEvent
+{
+    HrtfMode    requestedMode    = HrtfMode::Auto;
+    std::string requestedDataset;
+    HrtfStatus  actualStatus     = HrtfStatus::Unknown;
+};
+
+/// @brief Pure composition: build an `HrtfStatusEvent` from the
+///        engine's current `HrtfSettings` plus the driver's
+///        resolved `HrtfStatus`. Kept free-function so the
+///        headless test suite can exercise every combination
+///        without opening an audio device.
+HrtfStatusEvent composeHrtfStatusEvent(const HrtfSettings& settings,
+                                       HrtfStatus actualStatus);
+
 /// @brief Resolves the `preferredDataset` name against the list of
 ///        datasets the audio driver reports.
 ///

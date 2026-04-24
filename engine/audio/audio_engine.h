@@ -296,6 +296,26 @@ public:
     /// `preferredDataset` target when the user hasn't picked one.
     std::vector<std::string> getAvailableHrtfDatasets() const;
 
+    /// @brief Phase 10.9 Slice 2 P8 — hook invoked every time the
+    ///        engine applies HRTF settings to the driver, i.e. from
+    ///        `setHrtfMode`, `setHrtfDataset`, and from `initialize()`
+    ///        once the context is live.
+    ///
+    /// The payload carries the engine's stored request alongside the
+    /// driver's resolved status, so a listener can render
+    /// "Requested: Forced / Actual: Denied (UnsupportedFormat)" from
+    /// a single call — no extra `getHrtfStatus()` round-trip needed.
+    ///
+    /// Mirrors the `CaptionAnnouncer` pattern: fires even on an
+    /// uninitialized engine (`actualStatus = Unknown`) so the
+    /// Settings UI can reflect a user's pre-init mode choice the
+    /// same way as a post-init device-reset outcome.
+    using HrtfStatusListener = std::function<void(const HrtfStatusEvent&)>;
+    void setHrtfStatusListener(HrtfStatusListener listener)
+    {
+        m_hrtfStatusListener = std::move(listener);
+    }
+
     /// @brief Stops all playing sources.
     void stopAll();
 
@@ -348,6 +368,11 @@ private:
     float      m_duckingSnapshot = 1.0f;  ///< Phase 10.9 P3 duck gain (1.0 = no duck).
 
     CaptionAnnouncer m_captionAnnouncer;  ///< Phase 10.9 P4 caption hook (may be empty).
+
+    /// @brief Phase 10.9 Slice 2 P8 — HRTF status-change listener.
+    ///        Fired from `applyHrtfSettings()` once per invocation;
+    ///        may be null (no-op) when no UI is attached.
+    HrtfStatusListener m_hrtfStatusListener;
 
     // Buffer cache (path -> OpenAL buffer ID)
     std::unordered_map<std::string, unsigned int> m_bufferCache;

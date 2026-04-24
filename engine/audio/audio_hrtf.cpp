@@ -34,6 +34,14 @@ const char* hrtfStatusLabel(HrtfStatus status)
     return "Unknown";
 }
 
+HrtfStatusEvent composeHrtfStatusEvent(const HrtfSettings& /*settings*/,
+                                       HrtfStatus /*actualStatus*/)
+{
+    // Phase 10.9 Slice 2 P8 RED stub — deliberately ignores inputs so
+    // the composition tests fail on field comparison.
+    return HrtfStatusEvent{};
+}
+
 int resolveHrtfDatasetIndex(const std::vector<std::string>& available,
                             const std::string& preferred)
 {

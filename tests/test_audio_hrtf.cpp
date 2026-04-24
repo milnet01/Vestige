@@ -9,6 +9,7 @@
 
 #include <gtest/gtest.h>
 
+#include "audio/audio_engine.h"
 #include "audio/audio_hrtf.h"
 
 using namespace Vestige;
@@ -100,4 +101,141 @@ TEST(AudioHrtf, ResolveIsCaseSensitive)
     EXPECT_EQ(resolveHrtfDatasetIndex(available, "KEMAR"), 0);
     EXPECT_EQ(resolveHrtfDatasetIndex(available, "Kemar"), -1);
     EXPECT_EQ(resolveHrtfDatasetIndex(available, "kemar"), -1);
+}
+
+// -- Phase 10.9 Slice 2 P8: HrtfStatusEvent + composeHrtfStatusEvent
+//
+// The Settings UI needs to surface "Requested: Forced / Actual:
+// Denied (UnsupportedFormat)" whenever the driver downgrades an
+// HRTF request. The event payload pairs the engine-stored
+// `HrtfSettings` (what we asked for) with the driver's resolved
+// `HrtfStatus` (what we got) so a single listener call is enough
+// for the panel to render both sides without reading back through
+// AudioEngine.
+
+TEST(AudioHrtfStatusEvent, ComposeCarriesRequestedModeAndDataset)
+{
+    HrtfSettings settings;
+    settings.mode = HrtfMode::Forced;
+    settings.preferredDataset = "KEMAR";
+
+    const auto event = composeHrtfStatusEvent(settings, HrtfStatus::Enabled);
+
+    EXPECT_EQ(event.requestedMode,    HrtfMode::Forced);
+    EXPECT_EQ(event.requestedDataset, "KEMAR");
+    EXPECT_EQ(event.actualStatus,     HrtfStatus::Enabled);
+}
+
+TEST(AudioHrtfStatusEvent, ComposeCapturesDriverDowngrade)
+{
+    // Forced + UnsupportedFormat is the exact case the roadmap calls
+    // out — the user asked for HRTF, the driver refused because the
+    // output format can't do it. The listener must see both halves.
+    HrtfSettings settings;
+    settings.mode = HrtfMode::Forced;
+
+    const auto event =
+        composeHrtfStatusEvent(settings, HrtfStatus::UnsupportedFormat);
+
+    EXPECT_EQ(event.requestedMode, HrtfMode::Forced);
+    EXPECT_EQ(event.actualStatus,  HrtfStatus::UnsupportedFormat);
+    EXPECT_TRUE(event.requestedDataset.empty());
+}
+
+TEST(AudioHrtfStatusEvent, ComposeCarriesUnknownForUninitializedEngine)
+{
+    // Pre-initialize setHrtfMode calls must still notify the UI so a
+    // user can see their requested mode before any device is open.
+    // The resolved status is Unknown on an uninitialized engine.
+    HrtfSettings settings;
+    settings.mode = HrtfMode::Auto;
+
+    const auto event = composeHrtfStatusEvent(settings, HrtfStatus::Unknown);
+
+    EXPECT_EQ(event.requestedMode, HrtfMode::Auto);
+    EXPECT_EQ(event.actualStatus,  HrtfStatus::Unknown);
+}
+
+// -- AudioEngine HrtfStatusListener wiring --------------------------
+//
+// The listener fires from applyHrtfSettings() every time — mid-session
+// setHrtfMode / setHrtfDataset changes AND the first pass during
+// initialize(). On an uninitialized engine (no device open), the
+// status field reads as Unknown but the event still fires so the
+// Settings UI can reflect pre-init user choices.
+
+TEST(AudioEngineHrtfStatusListener, FiresOnSetHrtfMode_UninitializedEngine_P8)
+{
+    AudioEngine engine;  // no initialize()
+    std::vector<HrtfStatusEvent> events;
+    engine.setHrtfStatusListener([&](const HrtfStatusEvent& e)
+    {
+        events.push_back(e);
+    });
+
+    engine.setHrtfMode(HrtfMode::Forced);
+
+    ASSERT_EQ(events.size(), 1u);
+    EXPECT_EQ(events[0].requestedMode, HrtfMode::Forced);
+    EXPECT_EQ(events[0].actualStatus,  HrtfStatus::Unknown);
+}
+
+TEST(AudioEngineHrtfStatusListener, FiresOnSetHrtfDataset_UninitializedEngine_P8)
+{
+    AudioEngine engine;
+    std::vector<HrtfStatusEvent> events;
+    engine.setHrtfStatusListener([&](const HrtfStatusEvent& e)
+    {
+        events.push_back(e);
+    });
+
+    engine.setHrtfDataset("KEMAR");
+
+    ASSERT_EQ(events.size(), 1u);
+    EXPECT_EQ(events[0].requestedDataset, "KEMAR");
+    EXPECT_EQ(events[0].actualStatus,     HrtfStatus::Unknown);
+}
+
+TEST(AudioEngineHrtfStatusListener, DoesNotFireWhenModeUnchanged_P8)
+{
+    // setHrtfMode(currentMode) early-returns before applyHrtfSettings
+    // runs. No spurious event — the Settings UI only wants to know
+    // about *changes*.
+    AudioEngine engine;
+    std::vector<HrtfStatusEvent> events;
+    engine.setHrtfStatusListener([&](const HrtfStatusEvent& e)
+    {
+        events.push_back(e);
+    });
+
+    engine.setHrtfMode(HrtfMode::Auto);  // default is Auto — no change
+
+    EXPECT_TRUE(events.empty());
+}
+
+TEST(AudioEngineHrtfStatusListener, FiresOncePerChange_P8)
+{
+    AudioEngine engine;
+    std::vector<HrtfStatusEvent> events;
+    engine.setHrtfStatusListener([&](const HrtfStatusEvent& e)
+    {
+        events.push_back(e);
+    });
+
+    engine.setHrtfMode(HrtfMode::Forced);
+    engine.setHrtfMode(HrtfMode::Disabled);
+    engine.setHrtfDataset("KEMAR");
+
+    ASSERT_EQ(events.size(), 3u);
+    EXPECT_EQ(events[0].requestedMode, HrtfMode::Forced);
+    EXPECT_EQ(events[1].requestedMode, HrtfMode::Disabled);
+    EXPECT_EQ(events[2].requestedDataset, "KEMAR");
+}
+
+TEST(AudioEngineHrtfStatusListener, NoCrashWithoutListener_P8)
+{
+    // Defensive: the engine must not assume a listener is registered.
+    AudioEngine engine;
+    engine.setHrtfMode(HrtfMode::Forced);  // no listener — must not crash
+    SUCCEED();
 }
