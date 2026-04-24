@@ -34,7 +34,7 @@ void AudioSystem::shutdown()
     Logger::info("[AudioSystem] Shut down");
 }
 
-void AudioSystem::update(float /*deltaTime*/)
+void AudioSystem::update(float deltaTime)
 {
     if (!m_audioEngine.isAvailable() || !m_engine)
     {
@@ -47,6 +47,18 @@ void AudioSystem::update(float /*deltaTime*/)
         camera.getPosition(),
         camera.getFront(),
         glm::vec3(0.0f, 1.0f, 0.0f));  // World up
+
+    // Phase 10.9 P3 — advance the engine-owned DuckingState by the
+    // frame delta and publish the resulting currentGain to the audio
+    // engine so updateGains folds it into every AL_GAIN push. The
+    // state lives on Engine (authoritative single source of truth);
+    // editor / gameplay code mutates `.triggered` via
+    // `engine.getDuckingState()`.
+    updateDucking(m_engine->getDuckingState(),
+                  m_engine->getDuckingParams(),
+                  deltaTime);
+    m_audioEngine.setDuckingSnapshot(
+        m_engine->getDuckingState().currentGain);
 
     // Phase 10.7 slice A2 — publish the latest mixer snapshot and
     // re-compose AL_GAIN for every live source so mid-play slider

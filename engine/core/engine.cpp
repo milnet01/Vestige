@@ -402,6 +402,15 @@ bool Engine::initialize(const EngineConfig& config)
             // instead of mutating a panel-local mixer.
             m_editor->getAudioPanel().wireEngineMixer(
                 &m_audioMixer, m_settingsEditor.get());
+
+            // Phase 10.9 P3 — point the AudioPanel at the engine-owned
+            // DuckingState / DuckingParams so the Debug-tab preview,
+            // the trigger checkbox, and the attack/release/floor
+            // sliders mutate the same state AudioSystem advances each
+            // frame. Previously the panel owned a local copy that
+            // never reached AL_GAIN.
+            m_editor->getAudioPanel().wireEngineDucking(
+                &m_duckingState, &m_duckingParams);
         }
     }
 

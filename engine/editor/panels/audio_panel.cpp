@@ -120,7 +120,7 @@ float AudioPanel::computeEffectiveSourceGain(std::uint32_t entityId, AudioBus bu
     // Read through mixer() so the effective gain follows the engine
     // mixer when wired, or the local fallback otherwise.
     const float bus_ = effectiveBusGain(mixer(), bus);
-    const float duck = std::max(0.0f, std::min(1.0f, m_duckingState.currentGain));
+    const float duck = std::max(0.0f, std::min(1.0f, duckingState().currentGain));
     return std::max(0.0f, std::min(1.0f, bus_ * duck));
 }
 
@@ -213,11 +213,11 @@ void AudioPanel::drawMixerTab()
 
     ImGui::Separator();
     ImGui::TextUnformatted("Dialogue ducking");
-    ImGui::Checkbox("Ducked (trigger)", &m_duckingState.triggered);
-    ImGui::SliderFloat("Attack (s)",    &m_duckingParams.attackSeconds,  0.0f, 1.0f, "%.2f");
-    ImGui::SliderFloat("Release (s)",   &m_duckingParams.releaseSeconds, 0.0f, 1.0f, "%.2f");
-    ImGui::SliderFloat("Duck floor",    &m_duckingParams.duckFactor,     0.0f, 1.0f, "%.2f");
-    ImGui::Text("Current gain: %.2f", static_cast<double>(m_duckingState.currentGain));
+    ImGui::Checkbox("Ducked (trigger)", &duckingState().triggered);
+    ImGui::SliderFloat("Attack (s)",    &duckingParams().attackSeconds,  0.0f, 1.0f, "%.2f");
+    ImGui::SliderFloat("Release (s)",   &duckingParams().releaseSeconds, 0.0f, 1.0f, "%.2f");
+    ImGui::SliderFloat("Duck floor",    &duckingParams().duckFactor,     0.0f, 1.0f, "%.2f");
+    ImGui::Text("Current gain: %.2f", static_cast<double>(duckingState().currentGain));
 }
 
 void AudioPanel::drawSourcesTab(Scene* scene)

@@ -101,6 +101,19 @@ public:
         m_settingsEditor = editor;
     }
 
+    /// @brief Phase 10.9 P3 — wires the panel to the engine-owned
+    ///        authoritative DuckingState / DuckingParams so the Debug
+    ///        tab's slew preview matches what AudioSystem is actually
+    ///        publishing to AL_GAIN. Passing nullptr for either keeps
+    ///        the panel on its local fallback (used by tests and
+    ///        standalone editor usage).
+    void wireEngineDucking(DuckingState* engineState,
+                           DuckingParams* engineParams)
+    {
+        m_engineDuckingState  = engineState;
+        m_engineDuckingParams = engineParams;
+    }
+
     /// @brief Returns the active mixer — engine-owned when wired,
     ///        panel-local otherwise. Most callers should read gains
     ///        through this; live edits should go through
@@ -114,10 +127,24 @@ public:
     {
         return m_engineMixer ? *m_engineMixer : m_mixer;
     }
-    DuckingState&        duckingState()         { return m_duckingState; }
-    const DuckingState&  duckingState() const   { return m_duckingState; }
-    DuckingParams&       duckingParams()        { return m_duckingParams; }
-    const DuckingParams& duckingParams() const  { return m_duckingParams; }
+    /// @brief Returns the active DuckingState — engine-owned when wired
+    ///        (Phase 10.9 P3), panel-local otherwise.
+    DuckingState& duckingState()
+    {
+        return m_engineDuckingState ? *m_engineDuckingState : m_duckingState;
+    }
+    const DuckingState& duckingState() const
+    {
+        return m_engineDuckingState ? *m_engineDuckingState : m_duckingState;
+    }
+    DuckingParams& duckingParams()
+    {
+        return m_engineDuckingParams ? *m_engineDuckingParams : m_duckingParams;
+    }
+    const DuckingParams& duckingParams() const
+    {
+        return m_engineDuckingParams ? *m_engineDuckingParams : m_duckingParams;
+    }
 
     // -- Reverb zones (editor draft) -------------------------------
 
@@ -186,6 +213,8 @@ private:
     SettingsEditor* m_settingsEditor = nullptr; ///< Routes bus edits into Settings.
     DuckingState  m_duckingState{};
     DuckingParams m_duckingParams{};
+    DuckingState*  m_engineDuckingState  = nullptr; ///< Phase 10.9 P3 authoritative state.
+    DuckingParams* m_engineDuckingParams = nullptr; ///< Phase 10.9 P3 authoritative params.
 
     std::vector<ReverbZoneInstance>  m_reverbZones;
     std::vector<AmbientZoneInstance> m_ambientZones;

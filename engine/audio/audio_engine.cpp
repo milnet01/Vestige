@@ -576,10 +576,9 @@ void AudioEngine::applyHrtfSettings()
 
 void AudioEngine::setDuckingSnapshot(float duckingGain)
 {
-    // Phase 10.9 P3 (red): stub silently discards the input so every
-    // updateGains call still composes without ducking. Green sets
-    // m_duckingSnapshot = clamp01(duckingGain).
-    (void)duckingGain;
+    // Phase 10.9 P3: clamp on ingest so every downstream reader sees
+    // a canonical [0, 1] value and doesn't need to re-clamp.
+    m_duckingSnapshot = std::max(0.0f, std::min(1.0f, duckingGain));
 }
 
 void AudioEngine::updateGains()
@@ -592,8 +591,10 @@ void AudioEngine::updateGains()
 
     for (const auto& [source, mix] : m_livePlaybacks)
     {
+        // Phase 10.9 P3: fold the ducking snapshot into every AL_GAIN
+        // upload so the engine-wide duck reaches every live source.
         const float gain = resolveSourceGain(
-            m_mixerSnapshot, mix.bus, mix.sourceVolume);
+            m_mixerSnapshot, mix.bus, mix.sourceVolume, m_duckingSnapshot);
         alSourcef(source, AL_GAIN, gain);
     }
 }

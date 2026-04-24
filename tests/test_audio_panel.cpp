@@ -286,3 +286,55 @@ TEST(AudioPanelWire, SettingsEditorPointerStoredWithoutMixer)
     p.mixer().setBusGain(AudioBus::Voice, 0.4f);
     EXPECT_NEAR(p.mixer().getBusGain(AudioBus::Voice), 0.4f, kEps);
 }
+
+// ---- Phase 10.9 P3 — engine ducking wire ---------------------------
+
+TEST(AudioPanelWire, DuckingStateReadsThroughEnginePointer_P3)
+{
+    // Wiring a non-null DuckingState pointer makes the panel read
+    // and write through the engine-owned authoritative state so the
+    // Debug-tab preview matches what AudioSystem actually publishes
+    // to AL_GAIN.
+    AudioPanel p;
+    DuckingState  engineState;
+    DuckingParams engineParams;
+    p.wireEngineDucking(&engineState, &engineParams);
+
+    // Mutating through the panel accessor must reach the engine state.
+    p.duckingState().triggered = true;
+    EXPECT_TRUE(engineState.triggered);
+
+    // Mutating the engine state directly must be visible through the panel.
+    engineState.currentGain = 0.42f;
+    EXPECT_NEAR(p.duckingState().currentGain, 0.42f, kEps);
+}
+
+TEST(AudioPanelWire, EffectiveGainUsesEngineDuckingWhenWired_P3)
+{
+    // computeEffectiveSourceGain pulls the duck from duckingState(),
+    // which now prefers the engine pointer when wired. Setting the
+    // engine state to 0.5 must dim the effective gain by 0.5.
+    AudioPanel p;
+    AudioMixer engineMixer;  // all-1 defaults
+    DuckingState engineState;
+    DuckingParams engineParams;
+    Settings s;
+    SettingsEditor::ApplyTargets targets;
+    SettingsEditor editor(s, targets);
+    p.wireEngineMixer(&engineMixer, &editor);
+    p.wireEngineDucking(&engineState, &engineParams);
+
+    engineState.currentGain = 0.5f;
+    EXPECT_NEAR(p.computeEffectiveSourceGain(1, AudioBus::Music),
+                0.5f, kEps);
+}
+
+TEST(AudioPanelWire, NullDuckingWireKeepsLocalFallback_P3)
+{
+    // Passing nullptrs keeps the panel on its local DuckingState —
+    // standalone editor / test usage path.
+    AudioPanel p;
+    p.wireEngineDucking(nullptr, nullptr);
+    p.duckingState().currentGain = 0.7f;
+    EXPECT_NEAR(p.duckingState().currentGain, 0.7f, kEps);
+}

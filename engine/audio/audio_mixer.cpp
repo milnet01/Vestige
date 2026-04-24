@@ -85,11 +85,15 @@ float resolveSourceGain(const AudioMixer& mixer,
 float resolveSourceGain(const AudioMixer& mixer,
                         AudioBus bus,
                         float sourceVolume,
-                        float /*duckingGain*/)
+                        float duckingGain)
 {
-    // Phase 10.9 P3 (red): stub ignores duckingGain, so the new tests
-    // fail at runtime until green multiplies it in.
-    return resolveSourceGain(mixer, bus, sourceVolume);
+    // Phase 10.9 P3: fold the DuckingState::currentGain snapshot into
+    // the composed gain. clamp01(duckingGain) before multiplying so
+    // a state that overshoots its floor / ceiling during attack or
+    // release slew can't push AL_GAIN outside unit range.
+    const float duck = std::max(0.0f, std::min(1.0f, duckingGain));
+    const float base = resolveSourceGain(mixer, bus, sourceVolume);
+    return std::max(0.0f, std::min(1.0f, base * duck));
 }
 
 void updateDucking(DuckingState& state,
