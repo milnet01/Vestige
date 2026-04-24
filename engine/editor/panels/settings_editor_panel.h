@@ -18,6 +18,8 @@
 /// button per slot that opens a follow-on modal.
 #pragma once
 
+#include "accessibility/photosensitive_safety.h"
+
 #include <filesystem>
 #include <string>
 
@@ -47,7 +49,7 @@ public:
     /// later, widen the clamp too (or drop the slider in favour of a
     /// numeric input with an explicit "capped at X Hz in safe mode"
     /// label) — do not let them drift.
-    static constexpr float SAFE_MODE_STROBE_HZ_SLIDER_MAX = 10.0f;
+    static constexpr float SAFE_MODE_STROBE_HZ_SLIDER_MAX = WCAG_MAX_STROBE_HZ;
 
     /// @brief Attach to a live `SettingsEditor`. Caller keeps
     ///        ownership. Optional `inputMap` enables the Controls
