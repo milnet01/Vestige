@@ -208,6 +208,118 @@ TEST_F(SystemRegistryTest, DoubleInitializeReturnsFalse)
 }
 
 // =============================================================================
+// Phase 10.9 Slice 1 F10 — partial-init cleanup on failure
+// =============================================================================
+//
+// Context: shipping initializeAll() returns false on the first initialize()
+// failure but leaves every already-initialized system still holding its
+// resources (GL handles, OpenAL sources, Jolt bodies, etc.). The registry
+// destructor does NOT call shutdown() — shutdownAll() is the only call site
+// that does, and it early-returns on `!m_initialized`, which stays false
+// after a failed init. Result: every 0..N-1 system leaks its engine-owned
+// resources until process exit.
+//
+// F10 contract: on failure of system N, shutdown the successfully-initialized
+// 0..N-1 prefix in reverse (mirroring shutdownAll's order) and mark each
+// inactive, BEFORE returning false. System N itself gets no shutdown() —
+// its initialize() returned false, meaning resources were not acquired.
+
+TEST_F(SystemRegistryTest, InitializeAllShutsDownPrefixInReverseOnFailure_F10)
+{
+    registry.registerSystem<MockSystem>("A");
+    auto* b = registry.registerSystem<MockSystem>("B");
+    registry.registerSystem<MockSystem>("C");
+    b->setShouldInitSucceed(false);
+
+    EXPECT_FALSE(registry.initializeAll(dummyEngine()));
+
+    // A initialized successfully. B's initialize() ran and returned false.
+    // C should never have been touched (we aborted). A must get shutdown()
+    // to release any resources it acquired. No other shutdowns fire.
+    ASSERT_EQ(MockSystem::s_callLog.size(), 3u);
+    EXPECT_EQ(MockSystem::s_callLog[0], "A::initialize");
+    EXPECT_EQ(MockSystem::s_callLog[1], "B::initialize");
+    EXPECT_EQ(MockSystem::s_callLog[2], "A::shutdown");
+}
+
+TEST_F(SystemRegistryTest, InitializeAllShutsDownEveryPrecedingOnFailure_F10)
+{
+    // Three succeed, fourth fails — all three must shutdown in reverse.
+    registry.registerSystem<MockSystem>("A");
+    registry.registerSystem<MockSystem>("B");
+    registry.registerSystem<MockSystem>("C");
+    auto* d = registry.registerSystem<MockSystem>("D");
+    registry.registerSystem<MockSystem>("E");
+    d->setShouldInitSucceed(false);
+
+    EXPECT_FALSE(registry.initializeAll(dummyEngine()));
+
+    // Expected: A::init, B::init, C::init, D::init (fail),
+    //           C::shutdown, B::shutdown, A::shutdown. E untouched.
+    ASSERT_EQ(MockSystem::s_callLog.size(), 7u);
+    EXPECT_EQ(MockSystem::s_callLog[0], "A::initialize");
+    EXPECT_EQ(MockSystem::s_callLog[1], "B::initialize");
+    EXPECT_EQ(MockSystem::s_callLog[2], "C::initialize");
+    EXPECT_EQ(MockSystem::s_callLog[3], "D::initialize");
+    EXPECT_EQ(MockSystem::s_callLog[4], "C::shutdown");
+    EXPECT_EQ(MockSystem::s_callLog[5], "B::shutdown");
+    EXPECT_EQ(MockSystem::s_callLog[6], "A::shutdown");
+}
+
+TEST_F(SystemRegistryTest, InitializeAllFailureOnFirstSystemShutsDownNothing_F10)
+{
+    // Edge case: the very first system fails. There is no prefix to clean up.
+    auto* a = registry.registerSystem<MockSystem>("A");
+    registry.registerSystem<MockSystem>("B");
+    a->setShouldInitSucceed(false);
+
+    EXPECT_FALSE(registry.initializeAll(dummyEngine()));
+
+    // Only A's initialize() appears. No shutdown — nothing was initialized.
+    ASSERT_EQ(MockSystem::s_callLog.size(), 1u);
+    EXPECT_EQ(MockSystem::s_callLog[0], "A::initialize");
+}
+
+TEST_F(SystemRegistryTest, InitializeAllFailureDeactivatesPrefix_F10)
+{
+    // After cleanup, the previously-initialized systems must not be
+    // reported as active — subsequent updateAll() calls would otherwise
+    // tick subsystems whose resources have been released.
+    auto* a = registry.registerSystem<MockSystem>("A");
+    auto* b = registry.registerSystem<MockSystem>("B");
+    a->setActive(true);
+    b->setShouldInitSucceed(false);
+
+    EXPECT_FALSE(registry.initializeAll(dummyEngine()));
+
+    EXPECT_FALSE(a->isActive());
+    EXPECT_FALSE(b->isActive());
+}
+
+TEST_F(SystemRegistryTest, InitializeAllFailureLeavesRegistryReInitable_F10)
+{
+    // After cleanup, m_initialized must be false so a subsequent successful
+    // init path works. clear() must also still tear the registry down
+    // without double-destructing.
+    registry.registerSystem<MockSystem>("A");
+    auto* b = registry.registerSystem<MockSystem>("B");
+    b->setShouldInitSucceed(false);
+
+    EXPECT_FALSE(registry.initializeAll(dummyEngine()));
+    MockSystem::s_callLog.clear();
+
+    // shutdownAll() after a failed init is a no-op (nothing still "initialized").
+    registry.shutdownAll();
+    EXPECT_TRUE(MockSystem::s_callLog.empty());
+
+    // clear() still runs destructors exactly once.
+    registry.clear();
+    ASSERT_EQ(MockSystem::s_callLog.size(), 2u);
+    EXPECT_EQ(MockSystem::s_callLog[0], "B::destructor");
+    EXPECT_EQ(MockSystem::s_callLog[1], "A::destructor");
+}
+
+// =============================================================================
 // Lifecycle -- shutdown
 // =============================================================================
 
