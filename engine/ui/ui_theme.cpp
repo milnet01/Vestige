@@ -6,8 +6,58 @@
 
 #include "ui/ui_theme.h"
 
+#include <algorithm>
+#include <cmath>
+
 namespace Vestige
 {
+
+namespace ui_contrast
+{
+
+namespace
+{
+
+// WCAG 2.2 sRGB-to-linear transfer for a single channel.
+float srgbChannelToLinear(float c)
+{
+    // Channels outside [0, 1] can arise from caller arithmetic
+    // (composited colours may over/underflow); clamp so the
+    // piecewise formula stays in its defined domain.
+    c = std::clamp(c, 0.0f, 1.0f);
+    if (c <= 0.03928f)
+    {
+        return c / 12.92f;
+    }
+    return std::pow((c + 0.055f) / 1.055f, 2.4f);
+}
+
+} // namespace
+
+float relativeLuminance(const glm::vec3& srgb)
+{
+    const float r = srgbChannelToLinear(srgb.r);
+    const float g = srgbChannelToLinear(srgb.g);
+    const float b = srgbChannelToLinear(srgb.b);
+    return 0.2126f * r + 0.7152f * g + 0.0722f * b;
+}
+
+float contrastRatio(const glm::vec3& a, const glm::vec3& b)
+{
+    const float la = relativeLuminance(a);
+    const float lb = relativeLuminance(b);
+    const float lighter = std::max(la, lb);
+    const float darker  = std::min(la, lb);
+    return (lighter + 0.05f) / (darker + 0.05f);
+}
+
+glm::vec3 compositeOver(const glm::vec4& fg, const glm::vec3& bg)
+{
+    const float a = std::clamp(fg.a, 0.0f, 1.0f);
+    return a * glm::vec3(fg) + (1.0f - a) * bg;
+}
+
+} // namespace ui_contrast
 
 UITheme UITheme::plumbline()
 {
@@ -20,16 +70,21 @@ UITheme UITheme::plumbline()
     t.panelBgHover     = {0.110f, 0.110f, 0.122f, 0.96f};
     t.panelBgPressed   = {0.047f, 0.047f, 0.055f, 0.98f};
 
-    // Strokes — cool bone, lower alpha.
-    t.panelStroke       = {0.941f, 0.933f, 0.918f, 0.12f};
-    t.panelStrokeStrong = {0.941f, 0.933f, 0.918f, 0.36f};
+    // Strokes — cool bone. Phase 10.9 S9 bumped the base alpha
+    // 0.12 -> 0.45 so the composited stroke clears WCAG 1.4.11
+    // (>= 3:1 against Plumbline's near-black bgBase). Strong
+    // bumped 0.36 -> 0.68 to preserve the hover-vs-rest distinction.
+    t.panelStroke       = {0.941f, 0.933f, 0.918f, 0.45f};
+    t.panelStrokeStrong = {0.941f, 0.933f, 0.918f, 0.68f};
     t.rule              = {0.941f, 0.933f, 0.918f, 0.10f};
     t.ruleStrong        = {0.941f, 0.933f, 0.918f, 0.28f};
 
-    // Text — neutral bone with slightly cooler bias.
+    // Text — neutral bone with slightly cooler bias. Phase 10.9 S9
+    // bumped `textDisabled` #4A4845 -> ~#918E87 so dimmed labels
+    // clear WCAG 1.4.3 (>= 4.5:1) against Plumbline's near-black.
     t.textPrimary      = {0.941f, 0.933f, 0.918f};         // #F0EEEA
     t.textSecondary    = {0.553f, 0.541f, 0.518f};         // #8D8A84
-    t.textDisabled     = {0.290f, 0.282f, 0.271f};         // #4A4845
+    t.textDisabled     = {0.570f, 0.550f, 0.520f};         // ~#918E87 (S9).
     t.textWarning      = {0.851f, 0.627f, 0.290f};         // #D9A04A
     t.textError        = {0.800f, 0.353f, 0.243f};         // #CC5A3E
 

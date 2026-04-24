@@ -38,15 +38,21 @@ struct UITheme
     glm::vec4 panelBgPressed   = {0.086f, 0.075f, 0.063f, 0.96f};  ///< rgba(22,19,16,0.96).
 
     // -- Strokes / rules (warm bone, alpha-modulated) --
-    glm::vec4 panelStroke       = {0.839f, 0.769f, 0.635f, 0.22f}; ///< Hairline border.
-    glm::vec4 panelStrokeStrong = {0.839f, 0.769f, 0.635f, 0.48f}; ///< Hover / active border.
+    // Phase 10.9 S9: `panelStroke` alpha bumped 0.22 -> 0.48 so the
+    // composited stroke clears WCAG 1.4.11 (>= 3:1 against bgBase).
+    // `panelStrokeStrong` bumped 0.48 -> 0.72 to keep hover/active
+    // visibly louder than at-rest after the base bump.
+    glm::vec4 panelStroke       = {0.839f, 0.769f, 0.635f, 0.48f}; ///< Hairline border (S9: WCAG 1.4.11).
+    glm::vec4 panelStrokeStrong = {0.839f, 0.769f, 0.635f, 0.72f}; ///< Hover / active border.
     glm::vec4 rule              = {0.839f, 0.769f, 0.635f, 0.18f}; ///< Hair separator.
     glm::vec4 ruleStrong        = {0.839f, 0.769f, 0.635f, 0.42f}; ///< Strong separator.
 
     // -- Text --
+    // Phase 10.9 S9: `textDisabled` bumped #5C5447 -> ~#8E8570 so
+    // dimmed labels clear WCAG 1.4.3 (>= 4.5:1 against bgBase).
     glm::vec3 textPrimary      = {0.918f, 0.875f, 0.780f};         ///< #EADFC7 — warm bone.
     glm::vec3 textSecondary    = {0.659f, 0.604f, 0.494f};         ///< #A89A7E.
-    glm::vec3 textDisabled     = {0.361f, 0.329f, 0.278f};         ///< #5C5447.
+    glm::vec3 textDisabled     = {0.560f, 0.520f, 0.440f};         ///< ~#8E8570 (S9: WCAG 1.4.3).
     glm::vec3 textWarning      = {0.878f, 0.659f, 0.353f};         ///< #E0A85A.
     glm::vec3 textError        = {0.839f, 0.416f, 0.310f};         ///< #D66A4F.
 
@@ -150,5 +156,45 @@ enum class UIScalePreset
 
 /// @brief Returns the numeric multiplier for a `UIScalePreset`.
 float scaleFactorOf(UIScalePreset preset);
+
+/// @brief WCAG 2.2 contrast-ratio helpers.
+///
+/// Exposed as free functions so palette-correctness tests don't need
+/// to build a full UI stack — the math runs directly on `glm::vec3`
+/// / `glm::vec4` inputs and returns a float. Phase 10.9 Slice 3 S9
+/// introduced these alongside the Vellum / Plumbline panel-stroke
+/// and `textDisabled` bumps so future palette edits can be verified
+/// arithmetically in CI instead of only by eye.
+namespace ui_contrast
+{
+
+/// @brief WCAG relative luminance of an sRGB colour.
+///
+/// Implements the piecewise sRGB-to-linear transfer from WCAG 2.2
+/// Understanding §1.4.3 (the standard formula shared by all
+/// contrast-ratio checks). Input channels are in [0, 1]; values
+/// outside that range are clamped implicitly by the caller's colour
+/// source (theme values are authored in [0, 1]).
+/// @param srgb Colour in sRGB space, channels in [0, 1].
+/// @return Relative luminance in [0, 1].
+float relativeLuminance(const glm::vec3& srgb);
+
+/// @brief WCAG contrast ratio between two sRGB colours.
+///
+/// Returns `(L_light + 0.05) / (L_dark + 0.05)` per WCAG 2.2. The
+/// calculation is symmetric — argument order is irrelevant. Result
+/// is in the range [1, 21] (1 = identical colours, 21 = pure black
+/// on pure white).
+float contrastRatio(const glm::vec3& a, const glm::vec3& b);
+
+/// @brief Straight-alpha composite of `fg` over `bg`.
+///
+/// `out = fg.a * fg.rgb + (1 - fg.a) * bg`. Used when a palette
+/// field is alpha-blended (e.g. `panelStroke` rendered over
+/// `bgBase`) — WCAG contrast must be measured against the actual
+/// rendered pixel, not the raw premultiplied source colour.
+glm::vec3 compositeOver(const glm::vec4& fg, const glm::vec3& bg);
+
+} // namespace ui_contrast
 
 } // namespace Vestige
