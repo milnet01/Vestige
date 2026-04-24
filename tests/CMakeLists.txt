@@ -127,6 +127,7 @@ add_executable(vestige_tests
     test_audio_music.cpp
     test_audio_mixer.cpp
     test_audio_source_component.cpp
+    test_audio_source_state.cpp
     test_audio_music_stream.cpp
     test_audio_panel.cpp
     test_camera_mode.cpp

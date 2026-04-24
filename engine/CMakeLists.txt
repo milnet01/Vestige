@@ -251,6 +251,7 @@ set(ENGINE_SOURCES
     audio/audio_music.cpp
     audio/audio_mixer.cpp
     audio/audio_music_stream.cpp
+    audio/audio_source_state.cpp
     systems/audio_system.cpp
     # UI/HUD system
     ui/sprite_batch_renderer.cpp
