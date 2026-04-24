@@ -1226,6 +1226,26 @@ TEST(SettingsApply, SubtitleQueueApplySinkActuallyMutatesQueueState)
     EXPECT_FALSE(sink.subtitlesEnabled());
 }
 
+// Phase 10.9 Slice 2 P5 — sink must forward to the queue, not only
+// its own m_enabled. Shipping code stored a local flag that nothing
+// read; this test pins the fix so the toggle reaches the renderer
+// through the queue's consumer-visible view.
+TEST(SettingsApply, SubtitleQueueApplySinkForwardsEnabledToQueue_P5)
+{
+    SubtitleQueue q;
+    SubtitleQueueApplySink sink(q);
+    EXPECT_TRUE(q.isEnabled());
+
+    sink.setSubtitlesEnabled(false);
+    EXPECT_FALSE(q.isEnabled())
+        << "sink.setSubtitlesEnabled(false) must reach the live queue — "
+           "otherwise activeSubtitles() stays non-empty and the renderer "
+           "keeps drawing captions the user toggled off.";
+
+    sink.setSubtitlesEnabled(true);
+    EXPECT_TRUE(q.isEnabled());
+}
+
 // ===== Slice 13.5e — Photosensitive store sink + HRTF sink ==================
 
 TEST(SettingsApply, PhotosensitiveStoreApplySinkWritesEnabledAndLimits)

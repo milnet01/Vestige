@@ -159,6 +159,24 @@ float subtitleScaleFactorOf(SubtitleSizePreset preset)
     return 1.0f;
 }
 
+const std::vector<ActiveSubtitle>& SubtitleQueue::activeSubtitles() const
+{
+    // Phase 10.9 P5 (red): stub returns the real storage ignoring
+    // m_enabled, so the new tests fail at runtime until green wires
+    // the filter.
+    return m_active;
+}
+
+std::size_t SubtitleQueue::size() const
+{
+    return m_active.size();
+}
+
+bool SubtitleQueue::empty() const
+{
+    return m_active.empty();
+}
+
 void SubtitleQueue::enqueue(const Subtitle& subtitle)
 {
     // Push newest; if at capacity evict the oldest entry so the

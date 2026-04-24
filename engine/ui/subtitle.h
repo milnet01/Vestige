@@ -160,13 +160,32 @@ public:
 
     /// @brief Returns the current set of active captions, oldest
     ///        first. The UI renderer iterates this list.
-    const std::vector<ActiveSubtitle>& activeSubtitles() const { return m_active; }
+    ///
+    /// When the queue is disabled (`setEnabled(false)`) this returns
+    /// an empty vector so consumers present zero captions without
+    /// needing to branch on the flag themselves. Internal storage
+    /// continues to tick — captions enqueued during a disabled
+    /// window keep their countdown, so re-enabling shows only what
+    /// would have still been on screen.
+    const std::vector<ActiveSubtitle>& activeSubtitles() const;
 
-    /// @brief Number of active captions right now.
-    std::size_t size() const { return m_active.size(); }
+    /// @brief Number of active captions right now (0 when disabled).
+    std::size_t size() const;
 
-    /// @brief True when nothing is showing.
-    bool empty() const { return m_active.empty(); }
+    /// @brief True when nothing is showing (true when disabled).
+    bool empty() const;
+
+    /// @brief Enables or disables the consumer-visible view. Disabling
+    ///        hides every active caption from `activeSubtitles()`,
+    ///        `size()`, and `empty()` without clearing the internal
+    ///        queue — so re-enabling restores any unexpired lines.
+    ///        Phase 10.9 P5: closes the gap where
+    ///        `SubtitleQueueApplySink::setSubtitlesEnabled` wrote a
+    ///        flag nothing read.
+    void setEnabled(bool enabled) { m_enabled = enabled; }
+
+    /// @brief Current enabled state (defaults to true).
+    bool isEnabled() const { return m_enabled; }
 
     /// @brief Drops every active caption — use on scene transitions so
     ///        lines from the previous scene don't bleed into the next.
@@ -191,6 +210,7 @@ private:
     std::vector<ActiveSubtitle> m_active;
     int m_maxConcurrent = DEFAULT_MAX_CONCURRENT;
     SubtitleSizePreset m_size = SubtitleSizePreset::Medium;
+    bool m_enabled = true;
 };
 
 } // namespace Vestige

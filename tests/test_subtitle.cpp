@@ -322,3 +322,84 @@ TEST(SubtitleWrap, SingleWordUnderLimitIsPreserved_P1)
     ASSERT_EQ(lines.size(), 1u);
     EXPECT_EQ(lines[0], "Hallelujah");
 }
+
+// =============================================================================
+// Phase 10.9 Slice 2 P5 — subtitles-enabled consumer read path
+// =============================================================================
+//
+// SubtitleQueueApplySink::setSubtitlesEnabled stored a flag that nothing
+// read: the queue kept draining, the UI kept rendering. Users toggling
+// "Subtitles: off" in the settings menu saw captions continue to appear
+// on screen. These tests pin the fix — a `setEnabled(false)` on the
+// queue hides every consumer view (activeSubtitles/size/empty) while
+// the internal tick/enqueue machinery stays intact.
+
+TEST(SubtitleQueue, DefaultIsEnabled_P5)
+{
+    SubtitleQueue q;
+    EXPECT_TRUE(q.isEnabled());
+}
+
+TEST(SubtitleQueue, SetEnabledFalseHidesActiveSubtitles_P5)
+{
+    SubtitleQueue q;
+    q.enqueue(makeLine("visible-when-on", 5.0f));
+    ASSERT_EQ(q.activeSubtitles().size(), 1u);
+
+    q.setEnabled(false);
+    EXPECT_TRUE(q.activeSubtitles().empty())
+        << "Disabled queue must not expose captions to the renderer.";
+}
+
+TEST(SubtitleQueue, SetEnabledFalseMakesSizeReportZero_P5)
+{
+    SubtitleQueue q;
+    q.enqueue(makeLine("a", 5.0f));
+    q.enqueue(makeLine("b", 5.0f));
+    q.setEnabled(false);
+    EXPECT_EQ(q.size(), 0u);
+    EXPECT_TRUE(q.empty());
+}
+
+TEST(SubtitleQueue, ReEnablingRestoresUnexpiredCaptions_P5)
+{
+    SubtitleQueue q;
+    q.enqueue(makeLine("still-valid", 10.0f));
+    q.setEnabled(false);
+    q.tick(1.0f);               // time advances while disabled
+    q.setEnabled(true);
+    ASSERT_EQ(q.activeSubtitles().size(), 1u);
+    EXPECT_NEAR(q.activeSubtitles()[0].remainingSeconds, 9.0f, 1e-3f)
+        << "Caption remaining-time must keep counting down while disabled "
+           "so the user doesn't see stale captions on re-enable.";
+}
+
+TEST(SubtitleQueue, TickExpiresCaptionsWhileDisabled_P5)
+{
+    SubtitleQueue q;
+    q.enqueue(makeLine("short", 0.5f));
+    q.setEnabled(false);
+    q.tick(1.0f);   // long enough to expire
+    q.setEnabled(true);
+    EXPECT_TRUE(q.empty())
+        << "Caption that expired during the disabled window must stay "
+           "expired after re-enable.";
+}
+
+TEST(SubtitleQueue, EnqueueWhileDisabledStillCapsAtMaxConcurrent_P5)
+{
+    // Disabled-visibility doesn't suspend the internal eviction rules.
+    // Enqueueing four while disabled still leaves three on the queue
+    // (DEFAULT_MAX_CONCURRENT); re-enable and the user sees the three
+    // newest.
+    SubtitleQueue q;
+    q.setEnabled(false);
+    q.enqueue(makeLine("a", 10.0f));
+    q.enqueue(makeLine("b", 10.0f));
+    q.enqueue(makeLine("c", 10.0f));
+    q.enqueue(makeLine("d", 10.0f));
+    q.setEnabled(true);
+    ASSERT_EQ(q.activeSubtitles().size(), 3u);
+    EXPECT_EQ(q.activeSubtitles()[0].subtitle.text, "b");
+    EXPECT_EQ(q.activeSubtitles()[2].subtitle.text, "d");
+}
