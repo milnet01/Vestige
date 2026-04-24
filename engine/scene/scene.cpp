@@ -5,6 +5,7 @@
 /// @brief Scene implementation.
 #include "scene/scene.h"
 #include "physics/cloth_component.h"
+#include "scene/camera_component.h"
 
 #include <algorithm>
 
@@ -445,6 +446,20 @@ void Scene::registerEntityRecursive(Entity* entity)
 void Scene::unregisterEntityRecursive(Entity* entity)
 {
     if (!entity) return;
+
+    // Phase 10.9 Slice 3 S1 — null the active-camera pointer if this
+    // entity owns it. m_activeCamera is a raw CameraComponent* with
+    // no ownership; destroying the owning entity without nulling the
+    // pointer would leave renderer code dereferencing freed memory
+    // every frame.
+    if (auto* cam = entity->getComponent<CameraComponent>())
+    {
+        if (cam == m_activeCamera)
+        {
+            m_activeCamera = nullptr;
+        }
+    }
+
     m_entityIndex.erase(entity->getId());
     for (const auto& child : entity->getChildren())
     {
