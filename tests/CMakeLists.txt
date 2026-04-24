@@ -137,6 +137,7 @@ add_executable(vestige_tests
     test_atomic_write_routing.cpp
     test_menu_prefabs.cpp
     test_ui_layout_panel.cpp
+    test_ui_hit_test.cpp
     test_node_graph.cpp
     test_scripting.cpp
     test_script_templates.cpp
