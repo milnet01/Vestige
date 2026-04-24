@@ -9,6 +9,60 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-24 Phase 10.9 — Slice 3 S9 (UITheme WCAG contrast)
+
+The Vellum and Plumbline default palettes shipped in Phase 9C both
+fell below WCAG 2.2's contrast floor for two specific fields —
+`panelStroke` at ~1.6:1 composited (needs 3:1 per 1.4.11) and
+`textDisabled` at ~2.4:1 (needs 4.5:1 per 1.4.3 comfort). The
+shortfall had gone uncaught because there was no arithmetic check
+on palette correctness — only visual review.
+
+**Fix.** Two parts:
+
+1. New `Vestige::ui_contrast::` free-function namespace with three
+   WCAG 2.2 primitives — `relativeLuminance(srgb)`,
+   `contrastRatio(a, b)` (symmetric), and `compositeOver(fg, bg)`
+   (straight-alpha blend so alpha-modulated fields are measured
+   against the rendered pixel rather than the raw source).
+
+2. Palette bumps on both registers:
+   - Vellum `textDisabled` (0.361, 0.329, 0.278) → (0.560, 0.520,
+     0.440): 2.4 → 4.84:1 against `bgBase`.
+   - Vellum `panelStroke.a` 0.22 → 0.48: composited 1.6 → 3.23:1.
+   - Vellum `panelStrokeStrong.a` 0.48 → 0.72 to keep
+     hover/active visibly louder than at-rest.
+   - Plumbline `textDisabled` → (0.570, 0.550, 0.520): 2.1 → 5.82:1.
+   - Plumbline `panelStroke.a` 0.12 → 0.45: 1.3 → 3.96:1.
+   - Plumbline `panelStrokeStrong.a` 0.36 → 0.68.
+
+The high-contrast register already cleared WCAG 2.2 AAA (7:1 body
+text); tests now pin that so future edits can't regress it.
+
+**Visible design shift.** Panel borders are now plainly visible
+rather than decorative hairlines. Intentional per ROADMAP S9 —
+"load-bearing for partially-sighted primary user". The
+hover-louder-than-rest invariant is preserved and pinned by test
+on both registers so any future palette tuning keeps the visual
+convention.
+
+**Tests.** 16 new tests in `tests/test_ui_theme_accessibility.cpp`:
+- 8 `UIContrast.*` helper-math: luminance endpoints (black = 0,
+  white = 1), canonical black-on-white = 21, self-contrast = 1,
+  order independence, composite alpha-zero / alpha-one /
+  half-alpha identities.
+- 8 `UIThemeContrast.*` palette-WCAG: textDisabled ≥ 4.5:1 and
+  panelStroke ≥ 3:1 on Vellum + Plumbline + HighContrast, plus
+  the hover-louder invariant on both non-HC registers.
+
+**Bump.** VERSION 0.1.25 → 0.1.26. Full suite: 2906 / 2907 (+16
+vs S8's 2890; the pre-existing
+`MeshBoundsTest.UploadComputesLocalBounds` skip is unchanged).
+
+**Next.** Remaining Slice 3 items: S2 (component-mutation-inside-
+update contract), S4 (keyboard nav + focus ring). P6 (narrator
+styling) remains blocked on asset-source decision.
+
 ### 2026-04-24 Phase 10.9 — Slice 3 S8 (NavMeshQuery partial-result surface)
 
 `NavMeshQuery::findPath` used to collapse Detour's `DT_PARTIAL_RESULT`
