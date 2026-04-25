@@ -9,6 +9,35 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-25 Phase 10.9 — Slice 5 D8 (terrain config size caps)
+
+`Terrain::deserializeSettings` now hard-caps the dimension fields
+that drive memory allocation. Before D8, attacker-controlled
+scene JSON could set `width = depth = 100000`, asking for
+`100000 * 100000 * sizeof(float) ≈ 37 GB` of heap on the very
+first allocation inside `initialize()` — instant OOM kill.
+
+Caps added immediately after the JSON-parsing try-catch:
+
+- `width`, `depth` ∈ `[3, 8193]` (3 = 2×2 grid + 1, the smallest
+  valid heightmap; 8193 = 2¹³+1, the practical upper bound for
+  power-of-two-plus-one heightmaps).
+- `gridResolution` ∈ `[3, 257]` (257 = 2⁸+1).
+- `maxLodLevels` ∈ `[1, 10]`.
+
+Out-of-range inputs log `Logger::error` with the offending value
+and the allowed range, then short-circuit-return `false` without
+calling `initialize()`. The validator runs without GL context.
+
+7 new tests in `tests/test_terrain_size_caps.cpp` pin every
+rejection case (excessive width, excessive depth, negative width,
+zero dimension, excessive gridResolution, excessive maxLodLevels,
+zero maxLodLevels). The happy-path success case is intentionally
+not tested here — it would call `initialize()` which needs GL;
+a GL-context test harness (R2 follow-up) covers it.
+
+3017 / 3018 pass (one pre-existing skip; +7 vs D1's 3010).
+
 ### 2026-04-25 Phase 10.9 — Slice 5 D1 (path sandbox)
 
 Lifts the `resolveUri` path-traversal guard out of `gltf_loader.cpp`
