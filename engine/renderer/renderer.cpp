@@ -2200,9 +2200,24 @@ void Renderer::captureSHGrid(const SceneRenderData& renderData,
     };
     glm::mat4 captureProj = glm::perspective(glm::radians(90.0f), 1.0f, 0.1f, 100.0f);
 
-    // Buffer to read back cubemap face data
-    std::vector<float> cubemapData(6 * static_cast<size_t>(faceSize)
-                                   * static_cast<size_t>(faceSize) * 3);
+    // R2 (Phase 10.9 Slice 4 — stepping-stone fix): replace the
+    // per-face synchronous `glReadPixels` (one full GPU stall per
+    // face × 6 faces × N probes) with a single batched async PBO
+    // readback per probe. After all 6 faces of a probe's cubemap
+    // are rendered, we issue 6 `glGetTextureSubImage` calls into
+    // a single Pixel Pack Buffer (async DMA), then `glMapNamedBufferRange`
+    // once to read all 6 faces' data on the CPU side. Net: 6 stalls
+    // -> 1 stall per probe. The full GPU compute SH projection
+    // (the original R2 ROADMAP intent) is deferred to a follow-up
+    // session where a GL test harness can support its CPU-vs-GPU
+    // parity test.
+    const size_t cubemapByteCount = 6 * static_cast<size_t>(faceSize)
+                                       * static_cast<size_t>(faceSize)
+                                       * 3 * sizeof(float);
+    GLuint readbackPbo = 0;
+    glCreateBuffers(1, &readbackPbo);
+    glNamedBufferStorage(readbackPbo, static_cast<GLsizeiptr>(cubemapByteCount),
+                         nullptr, GL_MAP_READ_BIT | GL_DYNAMIC_STORAGE_BIT);
 
     // Save GL state
     GLint viewport[4];
@@ -2235,10 +2250,38 @@ void Renderer::captureSHGrid(const SceneRenderData& renderData,
 
                         renderScene(renderData, camera, 1.0f, glm::vec4(0.0f),
                                     true, faceView, captureProj);
+                    }
 
-                        // Read back this face
-                        glReadPixels(0, 0, faceSize, faceSize, GL_RGB, GL_FLOAT,
-                                     cubemapData.data() + face * faceSize * faceSize * 3);
+                    // R2: batch all 6 face readbacks into one PBO via
+                    // `glGetTextureSubImage` (async DMA, no stall per
+                    // call). The single subsequent map call forces one
+                    // sync — versus 6 syncs from per-face `glReadPixels`.
+                    const size_t bytesPerFace = static_cast<size_t>(faceSize)
+                                              * static_cast<size_t>(faceSize)
+                                              * 3 * sizeof(float);
+                    glBindBuffer(GL_PIXEL_PACK_BUFFER, readbackPbo);
+                    for (size_t face = 0; face < 6; face++)
+                    {
+                        const GLintptr byteOffset = static_cast<GLintptr>(face * bytesPerFace);
+                        glGetTextureSubImage(captureCubemap, /*level=*/0,
+                                             /*xoff=*/0, /*yoff=*/0, /*zoff=*/static_cast<GLint>(face),
+                                             faceSize, faceSize, /*depth=*/1,
+                                             GL_RGB, GL_FLOAT,
+                                             static_cast<GLsizei>(bytesPerFace),
+                                             reinterpret_cast<void*>(byteOffset));
+                    }
+                    glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+
+                    auto* mappedData = static_cast<const float*>(
+                        glMapNamedBufferRange(readbackPbo, 0,
+                                              static_cast<GLsizeiptr>(cubemapByteCount),
+                                              GL_MAP_READ_BIT));
+                    if (!mappedData)
+                    {
+                        Logger::warning("captureSHGrid: PBO map failed at probe ("
+                            + std::to_string(x) + "," + std::to_string(y) + ","
+                            + std::to_string(z) + "); skipping");
+                        continue;
                     }
 
                     // Project cubemap to SH (and apply CPU pipeline). The
@@ -2247,9 +2290,11 @@ void Renderer::captureSHGrid(const SceneRenderData& renderData,
                     // CPU side + RH Eq. 13 in the shader) stays
                     // pinned regression-wise.
                     glm::vec3 shCoeffs[9];
-                    SHProbeGrid::computeProbeShFromCubemap(cubemapData.data(),
+                    SHProbeGrid::computeProbeShFromCubemap(mappedData,
                                                             faceSize, shCoeffs);
                     m_shProbeGrid->setProbeIrradiance(x, y, z, shCoeffs);
+
+                    glUnmapNamedBuffer(readbackPbo);
 
                     captured++;
                 }
@@ -2262,6 +2307,7 @@ void Renderer::captureSHGrid(const SceneRenderData& renderData,
     glViewport(viewport[0], viewport[1], viewport[2], viewport[3]);
 
     // Clean up temporary resources
+    glDeleteBuffers(1, &readbackPbo);
     glDeleteTextures(1, &captureCubemap);
     glDeleteFramebuffers(1, &captureFbo);
     glDeleteRenderbuffers(1, &captureRbo);
