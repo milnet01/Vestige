@@ -9,6 +9,41 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-25 Phase 10.9 — Slice 4 R8 (SDSM async readback)
+
+The eighth Slice 4 item shipped today. Replaces the synchronous
+`glGetNamedBufferSubData` at `DepthReducer::readBounds` (line 97
+of `depth_reducer.cpp`) with `glMapNamedBufferRange` +
+`glUnmapNamedBuffer`. Pre-fix readback blocked the main thread
+until every pending GPU op affecting the SSBO had flushed — a
+hard stall that blocked 60 FPS on Mesa AMD.
+
+**Why this works.** The double-buffering is already in place
+(`m_writeIndex` swapped after each `dispatch()` call); the read
+target's last write happened ≥1 frame ago and the GPU has
+flushed. Map returns the data without sync. The bloom luminance
+readback at `renderer.cpp:1113-1158` has shipped this technique
+since Phase 4 and works on Mesa AMD without stalling.
+
+**Map failure handling.** If `glMapNamedBufferRange` returns null
+(driver pressure, buffer in unexpected state), `readBounds`
+returns false without producing bounds; next frame retries. Safe
+degradation, no crash.
+
+**No new tests.** The behaviour contract (returns valid bounds
+when GPU has produced them, returns false otherwise) is unchanged
+and exercised by the existing `frame_diagnostics` + SDSM visual-
+test paths. The performance contract ("no main-thread stall") is
+not unit-testable without a GPU profiler.
+
+**Bump.** VERSION 0.1.37 → 0.1.38. Full suite: 2994 / 2995 pass
+(no test-count delta).
+
+**Slice 4 status post-R8: R1, R3, R4 (full), R6, R7, R8, R9, R10
+shipped — 8 of 10 items advanced today.** Remaining open: R2
+(GPU compute SH projection — the only large item left). R5 still
+gated on Slice 8 W11.
+
 ### 2026-04-25 Phase 10.9 — Slice 4 R6 (Mesa sampler-binding fallbacks at 4 sites)
 
 The seventh Slice 4 item shipped today. Closes the systemic Mesa
