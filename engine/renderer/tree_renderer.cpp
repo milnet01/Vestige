@@ -4,6 +4,8 @@
 /// @file tree_renderer.cpp
 /// @brief TreeRenderer implementation — placeholder trees with LOD and billboard crossfade.
 #include "renderer/tree_renderer.h"
+#include "renderer/scoped_blend_state.h"
+#include "renderer/scoped_cull_face.h"
 #include "core/logger.h"
 
 #include <glm/gtc/constants.hpp>
@@ -146,14 +148,15 @@ void TreeRenderer::render(
         m_meshShader.setFloat("u_time", time);
         m_meshShader.setVec4("u_clipPlane", clipPlane);
 
-        glEnable(GL_BLEND);
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-        glBindVertexArray(m_treeVao);
-        glDrawElementsInstanced(GL_TRIANGLES, m_treeIndexCount, GL_UNSIGNED_INT,
-                                nullptr, count);
-
-        glDisable(GL_BLEND);
+        // R4: bracket blend state so the LOD0 path composes with any
+        // caller state. Inner block scopes the RAII to this LOD only —
+        // the LOD1 path below has its own scope with its own guards.
+        {
+            ScopedBlendState blendGuard{true, GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA};
+            glBindVertexArray(m_treeVao);
+            glDrawElementsInstanced(GL_TRIANGLES, m_treeIndexCount, GL_UNSIGNED_INT,
+                                    nullptr, count);
+        }
     }
 
     // --- Render LOD1 (billboard) ---
@@ -186,15 +189,15 @@ void TreeRenderer::render(
         glBindTextureUnit(0, m_billboardTexture);
         m_billboardShader.setInt("u_texture", 0);
 
-        glEnable(GL_BLEND);
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-        glDisable(GL_CULL_FACE);
-
-        glBindVertexArray(m_billboardVao);
-        glDrawArraysInstanced(GL_TRIANGLES, 0, 6, count);
-
-        glEnable(GL_CULL_FACE);
-        glDisable(GL_BLEND);
+        // R4: bracket blend + cull state for LOD1 billboards. Cull
+        // disabled because billboards are two-sided quads viewed from
+        // the camera ray; both faces must rasterise.
+        {
+            ScopedBlendState blendGuard{true, GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA};
+            ScopedCullFace cullGuard{false};
+            glBindVertexArray(m_billboardVao);
+            glDrawArraysInstanced(GL_TRIANGLES, 0, 6, count);
+        }
     }
 }
 
