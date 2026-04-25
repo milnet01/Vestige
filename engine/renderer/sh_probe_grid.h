@@ -48,12 +48,15 @@ public:
     /// @brief Initializes the grid with the given configuration.
     bool initialize(const SHGridConfig& config);
 
-    /// @brief Sets the irradiance SH coefficients for a specific probe.
+    /// @brief Sets the SH coefficients for a specific probe.
     /// @param x, y, z Grid indices.
-    /// @param coeffs Array of 9 vec3 (pre-convolved irradiance SH).
+    /// @param coeffs Array of 9 vec3 — radiance-SH after R7 (the
+    ///   shader's Ramamoorthi-Hanrahan Eq. 13 evaluator folds in the
+    ///   cosine-lobe weights A_ℓ at evaluation time). Method name
+    ///   retained for API stability.
     void setProbeIrradiance(int x, int y, int z, const glm::vec3 coeffs[9]);
 
-    /// @brief Gets the irradiance SH coefficients for a specific probe.
+    /// @brief Gets the SH coefficients for a specific probe (radiance-SH after R7).
     void getProbeIrradiance(int x, int y, int z, glm::vec3 coeffs[9]) const;
 
     /// @brief Projects a cubemap into L2 SH coefficients (radiance).

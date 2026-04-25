@@ -188,14 +188,13 @@ void SHProbeGrid::convolveRadianceToIrradiance(glm::vec3 coeffs[9])
 void SHProbeGrid::computeProbeShFromCubemap(const float* cubemapData, int faceSize,
                                               glm::vec3 outCoeffs[9])
 {
+    // R7 fix (Option 1 — store radiance-SH and let the shader's
+    // Ramamoorthi-Hanrahan Eq. 13 evaluator fold in the cosine-lobe
+    // weights A_ℓ at evaluation time). The previous CPU-side
+    // `convolveRadianceToIrradiance` step double-applied A_ℓ on top of
+    // the shader's `c1..c5` (which are A_ℓ × Y_ℓm by construction),
+    // leaving band-0 ambient ≈ π× over-bright since day one.
     projectCubemapToSH(cubemapData, faceSize, outCoeffs);
-
-    // RED stub — production captureSHGrid currently double-applies A_ℓ
-    // by convolving on the CPU and then evaluating with shader Eq. 13
-    // (whose c1..c5 already include A_ℓ). The R7 green commit removes
-    // this call so the shader's evaluator gets radiance-SH and produces
-    // physically-correct irradiance.
-    convolveRadianceToIrradiance(outCoeffs);
 }
 
 glm::vec3 SHProbeGrid::evaluateIrradianceCpu(const glm::vec3 coeffs[9],
