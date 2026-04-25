@@ -5,6 +5,8 @@
 /// @brief FoliageRenderer implementation — instanced star-mesh grass with wind.
 #include "renderer/foliage_renderer.h"
 #include "renderer/cascaded_shadow_map.h"
+#include "renderer/scoped_blend_state.h"
+#include "renderer/scoped_cull_face.h"
 #include "core/logger.h"
 
 #include <cmath>
@@ -201,9 +203,14 @@ void FoliageRenderer::render(
 
     m_shader.setInt("u_texture", 0);
 
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    glDisable(GL_CULL_FACE);
+    // R4: bracket blend + cull state via RAII so the foliage pass
+    // composes safely with any caller state (the previous bare
+    // `glEnable(GL_BLEND)` / `glDisable(GL_CULL_FACE)` + manual
+    // re-restore at end-of-function assumed the caller had blend
+    // off / cull on, which doesn't hold under e.g. an editor debug-
+    // draw mode that runs with cull off).
+    ScopedBlendState blendGuard{true, GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA};
+    ScopedCullFace cullGuard{false};
     glBindVertexArray(m_starVao);
 
     // Draw each foliage type with its own texture
@@ -230,8 +237,10 @@ void FoliageRenderer::render(
                               static_cast<GLsizei>(instances.size()));
     }
 
-    glEnable(GL_CULL_FACE);
-    glDisable(GL_BLEND);
+    // R4: blend + cull state restored by RAII on function exit (was
+    // a manual `glEnable(GL_CULL_FACE)` + `glDisable(GL_BLEND)` pair
+    // that assumed caller's prior state — see ScopedBlendState /
+    // ScopedCullFace constructions above).
 }
 
 void FoliageRenderer::renderShadow(
@@ -293,7 +302,10 @@ void FoliageRenderer::renderShadow(
     m_shadowShader.setFloat("u_windFrequency", windFrequency);
     m_shadowShader.setInt("u_texture", 0);
 
-    glDisable(GL_CULL_FACE);
+    // R4: bracket cull state — shadow pass disables culling so two-
+    // sided star-mesh foliage shadows correctly, RAII restores the
+    // caller's prior enable bit on function exit.
+    ScopedCullFace cullGuard{false};
     glBindVertexArray(m_starVao);
 
     for (const auto& [typeId, instances] : m_visibleByType)
@@ -317,8 +329,6 @@ void FoliageRenderer::renderShadow(
         glDrawArraysInstanced(GL_TRIANGLES, 0, 18,
                               static_cast<GLsizei>(instances.size()));
     }
-
-    glEnable(GL_CULL_FACE);
 }
 
 void FoliageRenderer::createStarMesh()

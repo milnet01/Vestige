@@ -74,6 +74,8 @@ set(ENGINE_SOURCES
     renderer/ibl_capture_sequence.cpp
     renderer/light_probe.cpp
     renderer/light_probe_manager.cpp
+    renderer/scoped_blend_state.cpp
+    renderer/scoped_cull_face.cpp
     renderer/scoped_shadow_depth_state.cpp
     renderer/sh_probe_grid.cpp
     renderer/frame_diagnostics.cpp
