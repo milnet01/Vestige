@@ -670,6 +670,46 @@ bool Terrain::deserializeSettings(const nlohmann::json& j)
         return false;
     }
 
+    // Phase 10.9 Slice 5 D8: hard caps on attacker-controllable JSON inputs.
+    // `width * depth * sizeof(float)` on uncapped JSON requests up to ~320 GB
+    // of heap when paired with width=depth=2^17 — instant OOM kill. The caps
+    // align with the heightmap power-of-two-plus-one convention (8193 = 2^13+1)
+    // and the CDLOD quadtree's practical depth.
+    constexpr int kMaxDimension = 8193;
+    constexpr int kMinDimension = 3;          // 2x2 grid + 1 (smallest valid heightmap)
+    constexpr int kMaxGridResolution = 257;   // 2^8 + 1
+    constexpr int kMinGridResolution = 3;
+    constexpr int kMaxLodLevels = 10;         // 1024x reduction at deepest LOD
+    constexpr int kMinLodLevels = 1;
+
+    if (config.width < kMinDimension || config.width > kMaxDimension
+        || config.depth < kMinDimension || config.depth > kMaxDimension)
+    {
+        Logger::error("Terrain: width/depth out of range ["
+            + std::to_string(kMinDimension) + ", "
+            + std::to_string(kMaxDimension) + "]: width="
+            + std::to_string(config.width) + " depth="
+            + std::to_string(config.depth));
+        return false;
+    }
+    if (config.gridResolution < kMinGridResolution
+        || config.gridResolution > kMaxGridResolution)
+    {
+        Logger::error("Terrain: gridResolution out of range ["
+            + std::to_string(kMinGridResolution) + ", "
+            + std::to_string(kMaxGridResolution) + "]: "
+            + std::to_string(config.gridResolution));
+        return false;
+    }
+    if (config.maxLodLevels < kMinLodLevels || config.maxLodLevels > kMaxLodLevels)
+    {
+        Logger::error("Terrain: maxLodLevels out of range ["
+            + std::to_string(kMinLodLevels) + ", "
+            + std::to_string(kMaxLodLevels) + "]: "
+            + std::to_string(config.maxLodLevels));
+        return false;
+    }
+
     return initialize(config);
 }
 
