@@ -9,6 +9,80 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-25 Phase 10.9 — Slice 4 R10 (motion-overlay prev-world cache — unconditional clear)
+
+The third item of Slice 4. The 2026-04-23 ultrareview flagged that
+`Renderer::renderScene` updates the per-entity prev-frame world
+matrix cache (`m_prevWorldMatrices`) only inside the
+`if (isTaa)` end-of-frame block. Non-TAA modes (MSAA / SMAA /
+None) therefore never touch the cache: a previously-populated
+cache from a TAA session stays in memory across mode switches,
+and a future toggle-back to TAA reads those stale matrices on
+the per-object motion overlay path for entityIds that may have
+been freed and reused by unrelated meshes in between.
+
+**Fix.** Lifted the cache update into a templated free helper:
+
+```cpp
+template <typename ItemRange>
+void updateMotionOverlayPrevWorld(
+    std::unordered_map<uint32_t, glm::mat4>& cache,
+    bool isTaa,
+    const ItemRange& renderItems,
+    const ItemRange& transparentItems);
+```
+
+Body: `cache.clear()` runs unconditionally; the per-entity
+populate from `renderItems` + `transparentItems` runs only when
+`isTaa` is true. Templated on `ItemRange` so production passes
+`std::vector<SceneRenderData::RenderItem>` and tests pass a duck-
+typed `std::vector<MockRenderItem>` without pulling
+`scene/scene.h` into the test target. `Renderer::renderScene`
+refactored to call the helper between the existing TAA
+`swapBuffers` / `nextFrame` block and the `m_currentRenderData =
+nullptr` clear; the original outer `if (isTaa)` was split into
+two halves so the helper sits in the middle.
+
+**Why TAA-gated populate, not unconditional populate.** The
+cache is read by the per-object motion overlay only on the TAA
+path (`renderer.cpp:980` — gated by the same `else if (isTaa)`
+branch as line 980's enclosing block). Populating it in non-TAA
+modes would be useless work. The clear, however, must be
+unconditional — that's the only way to close the cross-mode-
+switch staleness window.
+
+**Tests.** 8 new `MotionOverlayPrevWorld.*_R10` cases in
+`tests/test_motion_overlay_prev_world.cpp`:
+
+- `NonTaaModeClearsCache_R10` — the headline R10 invariant.
+- `NonTaaModeWithItemsStillClears_R10` — non-TAA never populates
+  even when current frame has items to track.
+- `TaaModeClearsAndPopulatesFromCurrent_R10` — TAA mode clears
+  stale entries and brings in current ones.
+- `TaaModeIncludesTransparentItems_R10` — both vectors traversed.
+- `EntityIdZeroIsSkipped_R10` — preserves the existing sentinel
+  behaviour.
+- `EmptyRenderDataIsTaaClearsCache_R10` — even TAA with no items
+  must clear (the previous frame's entries are no longer current).
+- `RepeatedCallsConvergeOnLatestFrame_R10` — subsequent populate
+  overwrites prior entries.
+- `ModeSwitchTaaToNonTaaWipesCache_R10` — explicit reproduction
+  of the cross-mode-switch staleness scenario.
+
+The RED commit (`cea1d96`) shipped an empty stub body; all 8
+tests failed. The GREEN commit (`b7d7858`) replaced the body with
+`cache.clear()` + the TAA-gated populate; all 8 pass.
+
+**Bump.** VERSION 0.1.31 → 0.1.32. Full suite: 2965 / 2966 pass
+(+8 vs R7's 2957; the pre-existing
+`MeshBoundsTest.UploadComputesLocalBounds` skip is unchanged).
+
+**Slice 4 status post-R10: R1, R7, R10 shipped; R2, R3, R4, R5,
+R6, R8, R9 open.** Next likely candidates: R3 (shadow-pass state
+save/restore — same RAII shape as R1), R9 (Bloom Karis weights
+math fix — pure-CPU testable like R7), or R6 (Mesa sampler-
+binding fallbacks at four sites).
+
 ### 2026-04-25 Phase 10.9 — Slice 4 R7 (SH probe grid double cosine-lobe — fix is real)
 
 The second item of Slice 4. The 2026-04-23 ultrareview flagged that
