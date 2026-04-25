@@ -4,6 +4,7 @@
 /// @file water_renderer.cpp
 /// @brief Water surface rendering implementation.
 #include "renderer/water_renderer.h"
+#include "renderer/scoped_blend_state.h"
 #include "core/logger.h"
 
 #include <glm/gtc/constants.hpp>
@@ -93,9 +94,14 @@ void WaterRenderer::render(const std::vector<WaterRenderItem>& waterItems,
         return;
     }
 
-    // Enable alpha blending for water transparency
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    // R4: bracket alpha blend state via RAII so water composes safely
+    // with any caller state (the previous bare glEnable(GL_BLEND) +
+    // manual glDisable(GL_BLEND) at end-of-function assumed the caller
+    // had blend off, which doesn't hold once any other transparent
+    // renderer is active in the same frame). Depth-mask save/restore
+    // is a separate concern — leave the bare glDepthMask calls in
+    // place; depth-mask RAII is a follow-up if needed.
+    ScopedBlendState blendGuard{true, GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA};
     glDepthMask(GL_FALSE);  // Don't write depth (water is transparent)
 
     m_waterShader.use();
@@ -219,9 +225,9 @@ void WaterRenderer::render(const std::vector<WaterRenderItem>& waterItems,
         glDrawElements(GL_TRIANGLES, water->getIndexCount(), GL_UNSIGNED_INT, nullptr);
     }
 
-    // Restore state
+    // Depth-mask manually restored; blend state restored by
+    // ScopedBlendState on function exit (R4).
     glDepthMask(GL_TRUE);
-    glDisable(GL_BLEND);
 }
 
 // --- Tileable value noise for procedural water textures ---
