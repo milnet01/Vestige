@@ -100,6 +100,7 @@ set(ENGINE_SOURCES
     utils/json_size_cap.cpp
     utils/config_path.cpp
     utils/atomic_write.cpp
+    utils/path_sandbox.cpp
     core/settings.cpp
     core/settings_migration.cpp
     core/settings_apply.cpp

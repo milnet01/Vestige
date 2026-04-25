@@ -8,6 +8,7 @@
 #include "animation/animation_clip.h"
 #include "animation/morph_target.h"
 #include "core/logger.h"
+#include "utils/path_sandbox.h"
 
 // Must match defines in gltf_loader_impl.cpp to avoid stb_image conflicts
 #define TINYGLTF_NO_STB_IMAGE
@@ -26,49 +27,23 @@
 namespace Vestige
 {
 
-/// @brief Resolves a relative URI against the directory of the glTF file.
-/// Validates the resolved path stays within the base directory to prevent path traversal.
+/// @brief Resolves a relative glTF URI against the gltf-file directory.
+///
+/// Forwards to `Vestige::PathSandbox::resolveUriIntoBase` (single source
+/// of truth per Phase 10.9 Slice 5 D1). The local wrapper retains
+/// glTF-specific Logger::warning messages on rejection.
 static std::string resolveUri(const std::string& gltfDir, const std::string& uri)
 {
     if (uri.empty())
-    {
         return {};
-    }
 
-    std::filesystem::path base(gltfDir);
-    std::filesystem::path resolved = base / uri;
-
-    // Canonicalize to collapse ".." and symlinks
-    std::error_code ec;
-    auto canonical = std::filesystem::weakly_canonical(resolved, ec);
-    if (ec)
+    auto resolved = Vestige::PathSandbox::resolveUriIntoBase(
+        std::filesystem::path(gltfDir), uri);
+    if (resolved.empty())
     {
-        Logger::warning("glTF: cannot resolve URI: " + uri);
-        return {};
+        Logger::warning("glTF: URI escapes asset directory or cannot be resolved: " + uri);
     }
-
-    auto canonicalBase = std::filesystem::weakly_canonical(base, ec);
-    std::string canonStr = canonical.string();
-    std::string baseStr = canonicalBase.string();
-    // AUDIT M16: append the preferred separator so a prefix match doesn't
-    // accept sibling directories that share the base's leading characters
-    // (e.g. base=/assets/foo, canon=/assets/foo_evil/x.png). Normalise both
-    // ends to the same trailing-slash form before comparing.
-    if (!baseStr.empty()
-        && baseStr.back() != static_cast<char>(std::filesystem::path::preferred_separator))
-    {
-        baseStr.push_back(static_cast<char>(std::filesystem::path::preferred_separator));
-    }
-    // Allow equality (e.g. base itself) AND strict descendants (canon
-    // starts with base + separator).
-    if (canonStr != canonicalBase.string()
-        && canonStr.compare(0, baseStr.size(), baseStr) != 0)
-    {
-        Logger::warning("glTF: URI escapes asset directory: " + uri);
-        return {};
-    }
-
-    return canonStr;
+    return resolved;
 }
 
 /// @brief Reads a vec3 from a byte buffer using memcpy (avoids strict aliasing violation).

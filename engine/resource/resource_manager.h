@@ -10,9 +10,11 @@
 #include "renderer/material.h"
 #include "resource/async_texture_loader.h"
 
+#include <filesystem>
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 namespace Vestige { class Model; }  // Forward declaration
 
@@ -107,13 +109,36 @@ public:
     /// @brief Gets the number of cached meshes.
     size_t getMeshCount() const;
 
+    // --- Path sandboxing (Phase 10.9 Slice 5 D1) ---
+
+    /// @brief Sets the allowed root directories for asset loads.
+    ///
+    /// Every `loadTexture` / `loadMesh` / `loadModel` call canonicalises
+    /// its path argument and rejects (returns default / nullptr + logs a
+    /// warning) any path that does not lie inside one of these roots.
+    ///
+    /// Empty roots = sandbox disabled (the default). Production code wires
+    /// `[install_root, project_root, asset_library_root]` once at startup.
+    /// Tests typically leave it empty so the existing fixture paths keep
+    /// working.
+    void setSandboxRoots(std::vector<std::filesystem::path> roots);
+
+    /// @brief Returns the configured sandbox roots (for diagnostics).
+    const std::vector<std::filesystem::path>& getSandboxRoots() const { return m_sandboxRoots; }
+
 private:
+    /// @brief Validates @a filePath against @a m_sandboxRoots; returns the
+    ///        canonical path on success, empty string on rejection. Empty
+    ///        roots → returns the input unchanged for backwards compat.
+    std::string validatePath(const std::string& filePath) const;
+
     std::unordered_map<std::string, std::shared_ptr<Texture>> m_textures;
     std::unordered_map<std::string, std::shared_ptr<Mesh>> m_meshes;
     std::unordered_map<std::string, std::shared_ptr<Material>> m_materials;
     std::unordered_map<std::string, std::shared_ptr<Model>> m_models;
     std::shared_ptr<Texture> m_defaultTexture;
     std::unique_ptr<AsyncTextureLoader> m_asyncLoader;
+    std::vector<std::filesystem::path> m_sandboxRoots;
 };
 
 } // namespace Vestige

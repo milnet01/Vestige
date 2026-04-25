@@ -139,6 +139,8 @@ add_executable(vestige_tests
     test_component_clone.cpp
     test_entity_serializer_registry.cpp
     test_atomic_write_routing.cpp
+    test_path_sandbox.cpp
+    test_resource_manager_sandbox.cpp
     test_ibl_capture_sequence.cpp
     test_motion_overlay_prev_world.cpp
     test_scoped_shadow_depth_state.cpp
