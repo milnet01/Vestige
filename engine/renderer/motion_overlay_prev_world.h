@@ -49,15 +49,31 @@ namespace Vestige
 /// - Items with `entityId == 0` are skipped (sentinel for "no entity").
 template <typename ItemRange>
 void updateMotionOverlayPrevWorld(
-    std::unordered_map<uint32_t, glm::mat4>& /*cache*/,
-    bool /*isTaa*/,
-    const ItemRange& /*renderItems*/,
-    const ItemRange& /*transparentItems*/)
+    std::unordered_map<uint32_t, glm::mat4>& cache,
+    bool isTaa,
+    const ItemRange& renderItems,
+    const ItemRange& transparentItems)
 {
-    // RED stub — body intentionally absent. Production callers compile
-    // + link, but the cache stays as the caller passed it in. Replaced
-    // in the green commit by the unconditional `cache.clear()` + TAA-
-    // gated population per the R10 fix.
+    cache.clear();
+    if (!isTaa)
+    {
+        return;
+    }
+
+    for (const auto& item : renderItems)
+    {
+        if (item.entityId != 0)
+        {
+            cache[item.entityId] = item.worldMatrix;
+        }
+    }
+    for (const auto& item : transparentItems)
+    {
+        if (item.entityId != 0)
+        {
+            cache[item.entityId] = item.worldMatrix;
+        }
+    }
 }
 
 } // namespace Vestige
