@@ -755,6 +755,21 @@ bool Terrain::loadHeightmap(const std::filesystem::path& path)
     }
 
     auto fileSize = file.tellg();
+
+    // Phase 10.9 Slice 5 D9: defense-in-depth absolute file-size cap.
+    // D8 already caps width × depth ≤ 8193² so a legitimate heightmap is
+    // bounded at 8193 × 8193 × 4 ≈ 268 MB. We round up to 1 GB to leave
+    // headroom for future format extensions but still reject pathologically
+    // large files (e.g. the two-stage attack: corrupt config so expectedSize
+    // is huge, then feed a multi-GB binary).
+    constexpr std::streamoff kMaxHeightmapBytes = 1LL * 1024 * 1024 * 1024;
+    if (fileSize > kMaxHeightmapBytes)
+    {
+        Logger::error("Terrain: heightmap file exceeds 1 GB cap: "
+                     + std::to_string(fileSize) + " bytes — rejecting");
+        return false;
+    }
+
     auto expectedSize = static_cast<std::streamoff>(m_heightData.size() * sizeof(float));
     if (fileSize != expectedSize)
     {
@@ -827,6 +842,19 @@ bool Terrain::loadSplatmap(const std::filesystem::path& path)
     }
 
     auto fileSize = file.tellg();
+
+    // Phase 10.9 Slice 5 D9: defense-in-depth absolute file-size cap
+    // (mirrors loadHeightmap above). Splatmap is 4× heightmap (vec4 vs
+    // float per texel), so the cap is 4 GB — the realistic ceiling is
+    // 8193 × 8193 × 16 ≈ 1.07 GB.
+    constexpr std::streamoff kMaxSplatmapBytes = 4LL * 1024 * 1024 * 1024;
+    if (fileSize > kMaxSplatmapBytes)
+    {
+        Logger::error("Terrain: splatmap file exceeds 4 GB cap: "
+                     + std::to_string(fileSize) + " bytes — rejecting");
+        return false;
+    }
+
     auto expectedSize = static_cast<std::streamoff>(m_splatData.size() * sizeof(glm::vec4));
     if (fileSize != expectedSize)
     {

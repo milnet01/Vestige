@@ -199,10 +199,22 @@ static void loadTextures(const tinygltf::Model& gltfModel,
 
         if (!image.uri.empty() && image.bufferView < 0)
         {
-            // External image file — load via ResourceManager (cached)
+            // External image file — load via ResourceManager (cached).
+            // Phase 10.9 Slice 5 D5: if resolveUri rejected the path
+            // (returns empty), substitute the default texture explicitly
+            // instead of passing "" through to loadTexture (which would
+            // also default but log a redundant "Failed to load texture: "
+            // warning with no path information).
             std::string fullPath = resolveUri(gltfDir, image.uri);
-            auto texture = resourceManager.loadTexture(fullPath, linear);
-            outModel.m_textures.push_back(texture);
+            if (fullPath.empty())
+            {
+                outModel.m_textures.push_back(resourceManager.getDefaultTexture());
+            }
+            else
+            {
+                auto texture = resourceManager.loadTexture(fullPath, linear);
+                outModel.m_textures.push_back(texture);
+            }
         }
         else if (image.bufferView >= 0)
         {
