@@ -8,6 +8,7 @@
 #include "renderer/foliage_renderer.h"
 #include "renderer/motion_overlay_prev_world.h"
 #include "renderer/scoped_forward_z.h"
+#include "renderer/scoped_shadow_depth_state.h"
 #include "environment/foliage_manager.h"
 #include "scene/scene.h"
 #include "core/logger.h"
@@ -3218,15 +3219,14 @@ void Renderer::renderShadowPass(const std::vector<SceneRenderData::RenderItem>& 
     // [-1,1] range. This was the root cause of disappearing shadows at distance.
     ScopedForwardZ forwardZ;  // reverse-Z state is restored on function exit
 
-    // Ensure clip distance is disabled — water reflection/refraction passes from
-    // the previous frame may have left it enabled. Shaders that don't write
-    // gl_ClipDistance[0] produce undefined clip values when this is on.
-    glDisable(GL_CLIP_DISTANCE0);
-
-    // Enable depth clamping so shadow casters in front of the near plane are
-    // clamped to depth 0 instead of clipped. This avoids "shadow pancaking"
-    // artifacts without requiring vertex shader modifications.
-    glEnable(GL_DEPTH_CLAMP);
+    // Phase 10.9 R3: bracket GL_CLIP_DISTANCE0 (off — water passes may
+    // have left it on; shaders that don't write gl_ClipDistance[0]
+    // produce undefined clip values when enabled) and GL_DEPTH_CLAMP
+    // (on — clamps shadow casters in front of the near plane to
+    // depth 0 instead of clipping them, avoiding shadow pancaking).
+    // The RAII restores both on function exit so the caller's prior
+    // state is preserved.
+    ScopedShadowDepthState shadowDepthState;
 
     // Update all cascade light-space matrices from the camera frustum
     m_cascadedShadowMap->update(m_directionalLight, camera, aspectRatio);
@@ -3343,8 +3343,10 @@ void Renderer::renderShadowPass(const std::vector<SceneRenderData::RenderItem>& 
     m_cullingStats.shadowCastersCulled = (cascadeCount > 0)
         ? totalCascadeCulled / cascadeCount : 0;
 
-    // Disable shadow-pass-only settings (reverse-Z restored by ScopedForwardZ)
-    glDisable(GL_DEPTH_CLAMP);
+    // GL state restored by ScopedShadowDepthState + ScopedForwardZ on
+    // function exit (R3 + R1 — was previously a manual `glDisable(GL_DEPTH_CLAMP)`
+    // call that assumed the caller's prior state was "off" and left
+    // `GL_CLIP_DISTANCE0` permanently disabled).
 }
 
 void Renderer::selectShadowCastingPointLights()
