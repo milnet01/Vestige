@@ -5,7 +5,7 @@
 /// @brief Ragdoll system — wraps Jolt's native ragdoll with Vestige skeleton conversion.
 #pragma once
 
-#include "physics/ragdoll_preset.h"
+#include "experimental/physics/ragdoll_preset.h"
 #include "physics/physics_world.h"
 #include "animation/skeleton.h"
 

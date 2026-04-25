@@ -5,7 +5,7 @@
 /// @brief Unit tests for StasisSystem state management.
 /// @note Actual physics freeze/restore requires a full Jolt setup and is not tested here.
 
-#include "physics/stasis_system.h"
+#include "experimental/physics/stasis_system.h"
 
 #include <gtest/gtest.h>
 

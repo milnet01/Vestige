@@ -4,7 +4,7 @@
 /// @file dismemberment_zones.cpp
 /// @brief Dismemberment zone management implementation.
 
-#include "physics/dismemberment_zones.h"
+#include "experimental/physics/dismemberment_zones.h"
 #include "animation/skeleton.h"
 #include "core/logger.h"
 

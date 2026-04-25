@@ -4,7 +4,7 @@
 /// @file fracture.cpp
 /// @brief Voronoi fracture algorithm implementation.
 
-#include "physics/fracture.h"
+#include "experimental/physics/fracture.h"
 
 #include <algorithm>
 #include <cmath>

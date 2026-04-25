@@ -3,7 +3,7 @@
 
 /// @file stasis_system.cpp
 /// @brief StasisSystem implementation -- per-body freeze and slow-motion effects.
-#include "physics/stasis_system.h"
+#include "experimental/physics/stasis_system.h"
 #include "physics/physics_world.h"
 #include "core/logger.h"
 

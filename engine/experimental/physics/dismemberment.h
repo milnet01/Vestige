@@ -5,7 +5,7 @@
 /// @brief Runtime mesh splitting and dismemberment system.
 #pragma once
 
-#include "physics/dismemberment_zones.h"
+#include "experimental/physics/dismemberment_zones.h"
 #include "renderer/mesh.h"
 
 #include <glm/glm.hpp>

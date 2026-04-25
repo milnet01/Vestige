@@ -6,14 +6,14 @@
 
 #include <gtest/gtest.h>
 
-#include "physics/ragdoll_preset.h"
-#include "physics/ragdoll.h"
-#include "physics/grab_system.h"
-#include "physics/fracture.h"
+#include "experimental/physics/ragdoll_preset.h"
+#include "experimental/physics/ragdoll.h"
+#include "experimental/physics/grab_system.h"
+#include "experimental/physics/fracture.h"
 #include "physics/deformable_mesh.h"
-#include "physics/breakable_component.h"
-#include "physics/dismemberment_zones.h"
-#include "physics/dismemberment.h"
+#include "experimental/physics/breakable_component.h"
+#include "experimental/physics/dismemberment_zones.h"
+#include "experimental/physics/dismemberment.h"
 #include "scene/interactable_component.h"
 #include "animation/skeleton.h"
 #include "renderer/mesh.h"

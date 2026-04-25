@@ -231,11 +231,17 @@ TEST_F(DomainSystemTest, DestructionSystemNotForceActive)
     EXPECT_FALSE(sys.isForceActive());
 }
 
-TEST_F(DomainSystemTest, DestructionSystemOwnsComponents)
+TEST_F(DomainSystemTest, DestructionSystemOwnsNoComponents_W13)
 {
+    // Phase 10.9 Slice 8 W13: the cluster (BreakableComponent +
+    // ragdoll / fracture / dismemberment / grab / stasis) was
+    // relocated to engine/experimental/physics/. DestructionSystem
+    // stays as a registered ISystem stub for invariant testing but
+    // can't reference experimental/ types from production code, so
+    // `getOwnedComponentTypes()` now returns empty.
     DestructionSystem sys;
     auto types = sys.getOwnedComponentTypes();
-    EXPECT_EQ(types.size(), 2u);
+    EXPECT_EQ(types.size(), 0u);
 }
 
 // ==========================================================================

@@ -207,15 +207,22 @@ set(ENGINE_SOURCES
     physics/cloth_mesh_collider.cpp
     physics/collider_generator.cpp
     physics/spatial_hash.cpp
-    physics/ragdoll_preset.cpp
-    physics/ragdoll.cpp
-    physics/grab_system.cpp
-    physics/fracture.cpp
     physics/deformable_mesh.cpp
-    physics/breakable_component.cpp
-    physics/dismemberment_zones.cpp
-    physics/dismemberment.cpp
-    physics/stasis_system.cpp
+    # Phase 10.9 Slice 8 W13: physics zombie cluster relocated to
+    # engine/experimental/physics/ — same vestige_engine library, new
+    # path carries the "no production caller" semantic. To activate,
+    # plumb a real DestructionSystem::update + game-side / character
+    # consumers (ragdoll-on-death, grab-and-throw, stasis-cast) and
+    # move the consumed files back to physics/. See
+    # engine/experimental/physics/README.md.
+    experimental/physics/ragdoll_preset.cpp
+    experimental/physics/ragdoll.cpp
+    experimental/physics/grab_system.cpp
+    experimental/physics/fracture.cpp
+    experimental/physics/breakable_component.cpp
+    experimental/physics/dismemberment_zones.cpp
+    experimental/physics/dismemberment.cpp
+    experimental/physics/stasis_system.cpp
     scene/interactable_component.cpp
     scene/pressure_plate_component.cpp
     renderer/dynamic_mesh.cpp

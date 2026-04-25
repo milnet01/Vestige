@@ -4,7 +4,7 @@
 /// @file grab_system.cpp
 /// @brief Object grab/carry/throw system implementation.
 
-#include "physics/grab_system.h"
+#include "experimental/physics/grab_system.h"
 #include "physics/rigid_body.h"
 #include "scene/interactable_component.h"
 #include "scene/scene.h"

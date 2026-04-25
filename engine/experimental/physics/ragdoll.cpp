@@ -4,7 +4,7 @@
 /// @file ragdoll.cpp
 /// @brief Ragdoll system implementation.
 
-#include "physics/ragdoll.h"
+#include "experimental/physics/ragdoll.h"
 #include "physics/jolt_helpers.h"
 #include "physics/physics_layers.h"
 #include "core/logger.h"

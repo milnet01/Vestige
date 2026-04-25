@@ -4,7 +4,7 @@
 /// @file breakable_component.cpp
 /// @brief BreakableComponent implementation.
 
-#include "physics/breakable_component.h"
+#include "experimental/physics/breakable_component.h"
 #include "core/logger.h"
 
 #include <functional>

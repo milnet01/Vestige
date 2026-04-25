@@ -4,7 +4,7 @@
 /// @file ragdoll_preset.cpp
 /// @brief Ragdoll preset definitions implementation.
 
-#include "physics/ragdoll_preset.h"
+#include "experimental/physics/ragdoll_preset.h"
 #include "animation/skeleton.h"
 
 namespace Vestige

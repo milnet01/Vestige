@@ -6,7 +6,7 @@
 #pragma once
 
 #include "scene/component.h"
-#include "physics/fracture.h"
+#include "experimental/physics/fracture.h"
 
 #include <glm/glm.hpp>
 

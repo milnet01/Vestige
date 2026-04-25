@@ -4,7 +4,7 @@
 /// @file dismemberment.cpp
 /// @brief Runtime mesh splitting implementation.
 
-#include "physics/dismemberment.h"
+#include "experimental/physics/dismemberment.h"
 #include "animation/skeleton.h"
 
 #include <algorithm>
