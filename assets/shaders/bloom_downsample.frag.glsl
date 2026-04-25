@@ -83,13 +83,20 @@ void main()
 
     if (u_useKarisAverage)
     {
-        // First downsample: apply Karis average to suppress fireflies.
-        // Weight each of the 5 sample groups by inverse luminance.
-        vec3 g0 = (a + b + d + e) * 0.25;
-        vec3 g1 = (b + c + e + f) * 0.25;
-        vec3 g2 = (d + e + g + h) * 0.25;
-        vec3 g3 = (e + f + h + i) * 0.25;
-        vec3 g4 = (j + k + l + m) * 0.25;
+        // First downsample: apply Karis fireflies suppression composed
+        // with the canonical Jimenez 2014 group weights (slide 147 —
+        // 0.5 centre + 0.125 × 4 corners = 1.0, energy preserving).
+        // Pre-R9 this dropped the fixed weights and treated all 5
+        // groups equally weighted by Karis luminance only, undervaluing
+        // the inner-4-sample group's high-frequency contribution and
+        // producing "softness pop" between mip 0 and mip 1.
+        // Mirrored byte-for-byte by combineBloomKarisGroups in
+        // engine/renderer/bloom_downsample_karis.h (Rule 12).
+        vec3 g0 = (a + b + d + e) * 0.25;  // top-left corner group
+        vec3 g1 = (b + c + e + f) * 0.25;  // top-right corner group
+        vec3 g2 = (d + e + g + h) * 0.25;  // bottom-left corner group
+        vec3 g3 = (e + f + h + i) * 0.25;  // bottom-right corner group
+        vec3 g4 = (j + k + l + m) * 0.25;  // inner / centre group
 
         float w0 = karisWeight(g0);
         float w1 = karisWeight(g1);
@@ -97,8 +104,18 @@ void main()
         float w3 = karisWeight(g3);
         float w4 = karisWeight(g4);
 
-        float wSum = w0 + w1 + w2 + w3 + w4;
-        result = (g0 * w0 + g1 * w1 + g2 * w2 + g3 * w3 + g4 * w4) / wSum;
+        const float CENTRE_WEIGHT = 0.5;
+        const float CORNER_WEIGHT = 0.125;
+
+        vec3 numerator =
+            CENTRE_WEIGHT * (g4 * w4)
+          + CORNER_WEIGHT * (g0 * w0 + g1 * w1 + g2 * w2 + g3 * w3);
+
+        float denominator =
+            CENTRE_WEIGHT * w4
+          + CORNER_WEIGHT * (w0 + w1 + w2 + w3);
+
+        result = numerator / denominator;
     }
     else
     {

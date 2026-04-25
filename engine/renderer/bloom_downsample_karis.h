@@ -58,12 +58,9 @@ inline glm::vec3 combineBloomKarisGroups(const glm::vec3& centre,
                                            const glm::vec3& cornerBL,
                                            const glm::vec3& cornerBR)
 {
-    // RED stub — mirrors the pre-R9 GLSL bug: all 5 groups treated
-    // equally weighted by Karis luminance only, dropping the
-    // Jimenez 0.5 (centre) + 0.125×4 (corners) group weights.
-    // Result: first-mip centre is undervalued, "softness pop" and
-    // energy loss for luminance-asymmetric input. The green commit
-    // restores the fixed group weights composed with Karis.
+    constexpr float CENTRE_WEIGHT = 0.5f;
+    constexpr float CORNER_WEIGHT = 0.125f;
+
     const float wC  = bloomKarisWeight(centre);
     const float wTL = bloomKarisWeight(cornerTL);
     const float wTR = bloomKarisWeight(cornerTR);
@@ -71,13 +68,16 @@ inline glm::vec3 combineBloomKarisGroups(const glm::vec3& centre,
     const float wBR = bloomKarisWeight(cornerBR);
 
     const glm::vec3 numerator =
-        centre * wC
-      + cornerTL * wTL
-      + cornerTR * wTR
-      + cornerBL * wBL
-      + cornerBR * wBR;
+        CENTRE_WEIGHT * (centre   * wC)
+      + CORNER_WEIGHT * (cornerTL * wTL
+                       + cornerTR * wTR
+                       + cornerBL * wBL
+                       + cornerBR * wBR);
 
-    const float denominator = wC + wTL + wTR + wBL + wBR;
+    const float denominator =
+        CENTRE_WEIGHT * wC
+      + CORNER_WEIGHT * (wTL + wTR + wBL + wBR);
+
     return numerator / denominator;
 }
 
