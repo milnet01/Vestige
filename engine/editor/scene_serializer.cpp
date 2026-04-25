@@ -100,15 +100,27 @@ static int countEntities(const Entity& entity)
 }
 
 /// @brief Counts entities in a JSON children array.
-static int countJsonEntities(const json& entities)
+///
+/// Phase 10.9 Slice 5 D7: depth-capped at 128 to prevent a JSON
+/// stack-bomb (`{"children":[{"children":[...]}]}` with 10⁵ levels
+/// blows the default 8 MB stack). Mirrors the depth cap in
+/// `entity_serializer.cpp::deserializeEntityRecursive`. Beyond the
+/// cap, returns the partial count instead of recursing — this is
+/// only a count, so under-counting is acceptable; the deserialiser
+/// will reject the document on the same boundary.
+static int countJsonEntities(const json& entities, int depth = 0)
 {
+    constexpr int kMaxEntityRecursionDepth = 128;
+    if (depth > kMaxEntityRecursionDepth)
+        return 0;
+
     int count = 0;
     for (const auto& e : entities)
     {
         count++;
         if (e.contains("children") && e["children"].is_array())
         {
-            count += countJsonEntities(e["children"]);
+            count += countJsonEntities(e["children"], depth + 1);
         }
     }
     return count;

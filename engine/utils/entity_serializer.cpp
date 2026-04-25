@@ -1021,9 +1021,26 @@ json serializeEntity(const Entity& entity, const ResourceManager& resources)
 // Main deserialize
 // ---------------------------------------------------------------------------
 
+/// @brief Maximum nesting depth for the entity tree on deserialise.
+///
+/// Phase 10.9 Slice 5 D7: a JSON document of nested
+/// `{"children":[{"children":[...]}]}` blocks can blow the default 8 MB
+/// stack at depths around a few hundred entries — stack-bomb DoS. 128
+/// is well above any realistic scene-graph depth (Sponza is ~5,
+/// CesiumMan ~15) yet far below the stack-frame budget.
+static constexpr int kMaxEntityRecursionDepth = 128;
+
 static Entity* deserializeEntityRecursive(
-    const json& j, Scene& scene, ResourceManager& resources, Entity* parent)
+    const json& j, Scene& scene, ResourceManager& resources, Entity* parent,
+    int depth)
 {
+    if (depth > kMaxEntityRecursionDepth)
+    {
+        Logger::error("EntitySerializer: nesting depth exceeds "
+            + std::to_string(kMaxEntityRecursionDepth) + " — rejecting");
+        return nullptr;
+    }
+
     if (!j.is_object())
     {
         Logger::error("EntitySerializer: expected JSON object");
@@ -1087,7 +1104,7 @@ static Entity* deserializeEntityRecursive(
     {
         for (const auto& childJson : j["children"])
         {
-            deserializeEntityRecursive(childJson, scene, resources, entity);
+            deserializeEntityRecursive(childJson, scene, resources, entity, depth + 1);
         }
     }
 
@@ -1097,7 +1114,7 @@ static Entity* deserializeEntityRecursive(
 Entity* deserializeEntity(const json& j, Scene& scene, ResourceManager& resources)
 {
     ensureBuiltinsRegistered();
-    return deserializeEntityRecursive(j, scene, resources, nullptr);
+    return deserializeEntityRecursive(j, scene, resources, nullptr, /*depth=*/0);
 }
 
 } // namespace EntitySerializer
