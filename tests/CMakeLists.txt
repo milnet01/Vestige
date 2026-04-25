@@ -142,6 +142,7 @@ add_executable(vestige_tests
     test_ibl_capture_sequence.cpp
     test_motion_overlay_prev_world.cpp
     test_scoped_shadow_depth_state.cpp
+    test_bloom_downsample_karis.cpp
     test_menu_prefabs.cpp
     test_ui_layout_panel.cpp
     test_ui_hit_test.cpp
