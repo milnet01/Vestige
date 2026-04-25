@@ -143,6 +143,7 @@ add_executable(vestige_tests
     test_motion_overlay_prev_world.cpp
     test_scoped_shadow_depth_state.cpp
     test_bloom_downsample_karis.cpp
+    test_sampler_fallback.cpp
     test_scoped_blend_state.cpp
     test_scoped_cull_face.cpp
     test_menu_prefabs.cpp

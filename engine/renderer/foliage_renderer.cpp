@@ -5,6 +5,7 @@
 /// @brief FoliageRenderer implementation — instanced star-mesh grass with wind.
 #include "renderer/foliage_renderer.h"
 #include "renderer/cascaded_shadow_map.h"
+#include "renderer/sampler_fallback.h"
 #include "renderer/scoped_blend_state.h"
 #include "renderer/scoped_cull_face.h"
 #include "core/logger.h"
@@ -199,6 +200,16 @@ void FoliageRenderer::render(
             m_shader.setMat4(cascadeMatNames[i],
                              csm->getLightSpaceMatrix(i));
         }
+    }
+    else
+    {
+        // R6 Mesa fallback: u_cascadeShadowMap is a sampler2DArray; if
+        // we don't bind a sampler2DArray to its unit, the sampler
+        // defaults to unit 0 (which has the foliage texture, a
+        // sampler2D) and Mesa fails GL_INVALID_OPERATION on draw.
+        glBindTextureUnit(3, sharedSamplerFallback().getSampler2DArray());
+        m_shader.setInt("u_cascadeShadowMap", 3);
+        m_shader.setInt("u_cascadeCount", 0);
     }
 
     m_shader.setInt("u_texture", 0);

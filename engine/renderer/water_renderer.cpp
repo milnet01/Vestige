@@ -4,6 +4,7 @@
 /// @file water_renderer.cpp
 /// @brief Water surface rendering implementation.
 #include "renderer/water_renderer.h"
+#include "renderer/sampler_fallback.h"
 #include "renderer/scoped_blend_state.h"
 #include "core/logger.h"
 
@@ -148,32 +149,32 @@ void WaterRenderer::render(const std::vector<WaterRenderItem>& waterItems,
     }
     m_waterShader.setInt("u_environmentMap", 2);
 
+    // R6 Mesa fallback: water_renderer's sampler2D uniforms at units
+    // 3/4/5/6 (u_reflectionTex / u_refractionTex / u_refractionDepthTex
+    // / u_foamTex) all need a sampler2D bound at draw time, even when
+    // their conditional source isn't available (first frame, before
+    // reflection / refraction FBOs are populated; or no foam texture
+    // loaded). Binding a 1×1 white fallback satisfies Mesa's
+    // declared-sampler check.
+    GLuint fallback2D = sharedSamplerFallback().getSampler2D();
+
     // Bind reflection texture (texture unit 3)
     bool hasReflection = (reflectionTex != 0);
-    if (hasReflection)
-    {
-        glBindTextureUnit(3, reflectionTex);
-    }
+    glBindTextureUnit(3, hasReflection ? reflectionTex : fallback2D);
     m_waterShader.setInt("u_reflectionTex", 3);
     m_waterShader.setBool("u_hasReflectionTex", hasReflection);
 
     // Bind refraction texture + depth (texture units 4, 5)
     bool hasRefraction = (refractionTex != 0 && refractionDepthTex != 0);
-    if (hasRefraction)
-    {
-        glBindTextureUnit(4, refractionTex);
-        glBindTextureUnit(5, refractionDepthTex);
-    }
+    glBindTextureUnit(4, hasRefraction ? refractionTex      : fallback2D);
+    glBindTextureUnit(5, hasRefraction ? refractionDepthTex : fallback2D);
     m_waterShader.setInt("u_refractionTex", 4);
     m_waterShader.setInt("u_refractionDepthTex", 5);
     m_waterShader.setBool("u_hasRefractionTex", hasRefraction);
 
     // Bind foam texture (texture unit 6)
     bool hasFoam = (m_defaultFoamTexture != 0);
-    if (hasFoam)
-    {
-        glBindTextureUnit(6, m_defaultFoamTexture);
-    }
+    glBindTextureUnit(6, hasFoam ? m_defaultFoamTexture : fallback2D);
     m_waterShader.setInt("u_foamTex", 6);
     m_waterShader.setBool("u_hasFoamTex", hasFoam);
     m_waterShader.setFloat("u_foamDistance", 0.5f);

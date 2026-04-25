@@ -7,6 +7,7 @@
 #include "renderer/dynamic_mesh.h"
 #include "renderer/foliage_renderer.h"
 #include "renderer/motion_overlay_prev_world.h"
+#include "renderer/sampler_fallback.h"
 #include "renderer/scoped_forward_z.h"
 #include "renderer/scoped_shadow_depth_state.h"
 #include "environment/foliage_manager.h"
@@ -3159,6 +3160,17 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
 
         if (m_skybox->hasTexture())
         {
+            m_skyboxShader.setInt("u_skyboxTexture", 0);
+        }
+        else
+        {
+            // R6 Mesa fallback: u_skyboxTexture is samplerCube. The
+            // procedural-skybox path doesn't bind a real cubemap, so
+            // unit 0 may carry a sampler2D from a prior pass. Bind a
+            // fallback samplerCube to satisfy Mesa's declared-sampler
+            // check; the shader's procedural branch (`u_hasCubemap=false`)
+            // never samples it.
+            glBindTextureUnit(0, sharedSamplerFallback().getSamplerCube());
             m_skyboxShader.setInt("u_skyboxTexture", 0);
         }
 

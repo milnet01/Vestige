@@ -5,6 +5,7 @@
 /// @brief GPU compute shader particle pipeline implementation.
 
 #include "renderer/gpu_particle_system.h"
+#include "renderer/sampler_fallback.h"
 #include "core/logger.h"
 
 #include <algorithm>
@@ -286,6 +287,16 @@ void GPUParticleSystem::simulate(float deltaTime, const BehaviorBlock& behaviors
         m_simulateShader.setMat4("u_viewProjection", m_depthVP);
         m_simulateShader.setVec2("u_screenSize", m_screenSize);
         m_simulateShader.setFloat("u_cameraNear", m_cameraNear);
+    }
+    else
+    {
+        // R6 Mesa fallback: the compute shader's `u_depthTexture`
+        // sampler2D is declared regardless of u_depthCollision.
+        // Without a sampler2D bound at unit 0 the dispatch fails
+        // GL_INVALID_OPERATION on Mesa AMD even when the shader's
+        // uniform branch never samples it.
+        glBindTextureUnit(0, sharedSamplerFallback().getSampler2D());
+        m_simulateShader.setInt("u_depthTexture", 0);
     }
 
     uint32_t groups = (m_maxParticles + 255) / 256;
