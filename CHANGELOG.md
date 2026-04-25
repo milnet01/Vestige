@@ -9,6 +9,129 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-25 Phase 10.9 — Slice 4 R7 (SH probe grid double cosine-lobe — fix is real)
+
+The second item of Slice 4. The 2026-04-23 ultrareview flagged that
+`Renderer::captureSHGrid` runs `projectCubemapToSH` then
+`convolveRadianceToIrradiance` on the CPU before upload, and the
+shader at `scene.frag.glsl::evaluateSHGridIrradiance` evaluates SH
+using Ramamoorthi-Hanrahan 2001 Eq. 13 with constants `c1..c5` that
+have the per-band cosine-lobe weights `A_ℓ` already folded in
+(`c4 = √π/2 = A_0 × Y_00`). The CPU and shader paths were therefore
+each multiplying by `A_ℓ` independently — band-0 ambient came out
+exactly π× too bright. Every PBR material since Phase 4 has been
+lit through this corrupted ambient.
+
+A preliminary research read flagged R7 as a possible closed-wrong-
+premise item (mirror of W10 contact-shadows). That read was wrong.
+The RED test exhibited the bug at exactly the predicted magnitude:
+input radiance `0.5` produced shader output `1.5707986`, which is
+`0.5 × π` to seven significant figures.
+
+**Fix.** Took Option 1 of the two roadmap-recommended patches: drop
+the CPU-side `convolveRadianceToIrradiance` call; store radiance-SH;
+let the shader's Eq. 13 (already designed for radiance-SH input by
+the choice of `c1..c5`) produce irradiance.
+
+**Code shape.**
+
+  * `SHProbeGrid::computeProbeShFromCubemap(cubemap, faceSize, out)`
+    — new public static helper that captures the entire CPU
+    pipeline. Body is just `projectCubemapToSH`. Replaces the two-
+    line inline sequence inside `Renderer::captureSHGrid`, so test
+    and production share one code path.
+
+  * `SHProbeGrid::evaluateIrradianceCpu(coeffs, normal)` — new
+    public static helper that mirrors `evaluateSHGridIrradiance` in
+    `scene.frag.glsl` byte-for-byte. CPU spec + GPU runtime
+    (CLAUDE.md Rule 12) pinned by parity tests. Lives in production
+    code (not test-only) so any future shader change has to update
+    it.
+
+  * `Renderer::captureSHGrid` now calls
+    `SHProbeGrid::computeProbeShFromCubemap` instead of inlining
+    `projectCubemapToSH` + `convolveRadianceToIrradiance`. No GL
+    state changes; pure refactor.
+
+  * `SHProbeGrid::convolveRadianceToIrradiance` stays declared.
+    Docstring updated to flag the "legacy / unused" status. The
+    helper has no production caller after R7 but its unit tests
+    (`ConvolveAppliesRamamoorthiCoefficients`, `ConvolveZeroInputStaysZero`)
+    pin the per-band `A_ℓ` constants which remain canonical
+    reference material. Removing the helper would lose those tests
+    for ~zero gain.
+
+  * `setProbeIrradiance` / `getProbeIrradiance` docstrings now say
+    "radiance-SH after R7"; the C++ signatures stay the same for
+    API stability. The historical method name is retained because
+    the storage-class change is a quiet semantic shift, not an
+    interface change.
+
+**Why Option 1 over Option 2.** Option 2 (replace shader `c1..c5`
+with pure `Y_ℓm` basis and keep the CPU convolution) is also
+mathematically valid — it just inverts which side of the pipeline
+folds in `A_ℓ`. The reasons to prefer Option 1:
+
+  1. Ramamoorthi-Hanrahan Eq. 13 is the canonical optimised
+     evaluator for cosine-lobe-convolved diffuse SH. Replacing it
+     with the unconvolved basis evaluator means we can no longer
+     use the famous `c4 = √π/2` shortcut.
+
+  2. The CPU side already runs the cubemap face capture and the SH
+     projection per probe; adding a per-probe convolution multiply
+     is wasted work when the shader is going to do equivalent work
+     anyway. Option 1 deletes work, not moves it.
+
+  3. The R2 follow-on (GPU compute SH projection — also under
+     Slice 4) has a cleaner shape if the CPU pipeline is just
+     "project," since the GPU compute path can mirror that
+     directly without a second `A_ℓ` multiply pass.
+
+**Tests.** 4 new `ShProbeGridTest.*_R7` cases in
+`tests/test_sh_probe_grid.cpp`:
+
+  - `UniformCubemapEndToEndEqualsRadiance_R7` (the headline) —
+    asserts that for a uniform-radiance cubemap, the production
+    CPU pipeline + shader-equivalent evaluator returns the input
+    radiance for any normal. Failed RED with `e_x.r = 1.5707986`
+    vs expected `0.5` (bug factor exactly π). Passes GREEN with
+    `e_x.r ≈ 0.5`.
+
+  - `UniformCubemapShaderEvalDirectionIndependent_R7` — direction
+    independence for a uniform input. Passed RED too because π is
+    a uniform multiplicative factor, but is now a regression pin
+    against any future asymmetry bug.
+
+  - `UniformCubemapEvaluatorIsLinearInRadiance_R7` — doubling the
+    input radiance must exactly double the output irradiance. Same
+    "passed RED, regression pin GREEN" status as the directional-
+    independence test.
+
+  - `ZeroCubemapEndToEndEqualsZero_R7` — zero in produces zero out
+    (NaN guard).
+
+**Visual impact.** Every PBR material since Phase 4 has been lit
+with band-0 ambient that is π× too bright. Post-fix, the diffuse-
+IBL contribution drops to one π-th of its previous value. Auto-
+exposure and tone mapping may mask the change in some scenes; the
+post-fix value is the scientifically correct one. Expect:
+
+  - Indoor / overcast scenes: visibly darker, more contrasty.
+  - Outdoor sunlit scenes: less visible difference because direct
+    lighting dominates over the corrupted ambient term.
+  - Pre-Phase 6 emissive-only test scenes: roughly the same
+    because the SH grid is unused there.
+
+**Bump.** VERSION 0.1.30 → 0.1.31. Full suite: 2957 / 2958 pass
+(+4 vs R1's 2953; the pre-existing
+`MeshBoundsTest.UploadComputesLocalBounds` skip is unchanged).
+
+**Next.** Slice 4 R3 (shadow-pass state save/restore for
+`GL_CLIP_DISTANCE0` + `GL_DEPTH_CLAMP`, extending `ScopedForwardZ`
+or a sibling RAII), or R2 (GPU compute SH projection — would now
+build on the cleaner radiance-SH CPU pipeline shipped here), or
+R6 (Mesa sampler-binding fallbacks at four sites).
+
 ### 2026-04-25 Phase 10.9 — Slice 4 R1 (IBL capture paths wrapped in ScopedForwardZ)
 
 The first item of Slice 4 (Rendering correctness). The 2026-04-23
