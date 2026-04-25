@@ -15,6 +15,7 @@
 #include "scene/camera_component.h"
 #include "scene/particle_emitter.h"
 #include "scene/water_surface.h"
+#include "audio/audio_source_component.h"
 #include "physics/cloth_component.h"
 #include "scene/pressure_plate_component.h"
 #include "physics/rigid_body.h"
@@ -266,6 +267,12 @@ void InspectorPanel::draw(Scene* scene, Selection& selection)
     if (entity->hasComponent<ParticleEmitterComponent>())
     {
         drawParticleEmitter(*entity);
+    }
+
+    // --- Audio Source (Phase 10.9 W15 — closes F3's round-trip gap visibly) ---
+    if (entity->hasComponent<AudioSourceComponent>())
+    {
+        drawAudioSource(*entity);
     }
 
     // --- Water Surface ---
@@ -1397,6 +1404,113 @@ void InspectorPanel::drawParticleEmitter(Entity& entity)
     }
 
     ImGui::Spacing();
+}
+
+// ---------------------------------------------------------------------------
+// Audio Source (Phase 10.9 W15 — closes F3's round-trip gap visibly)
+// ---------------------------------------------------------------------------
+
+void InspectorPanel::drawAudioSource(Entity& entity)
+{
+    auto* comp = entity.getComponent<AudioSourceComponent>();
+    if (!comp)
+    {
+        return;
+    }
+
+    if (!drawComponentHeader("Audio Source"))
+    {
+        return;
+    }
+
+    // --- Clip + playback ---
+    {
+        char buf[512];
+        std::snprintf(buf, sizeof(buf), "%s", comp->clipPath.c_str());
+        if (ImGui::InputText("Clip Path", buf, sizeof(buf)))
+        {
+            comp->clipPath = buf;
+        }
+        ImGui::Checkbox("Auto Play", &comp->autoPlay);
+        ImGui::SameLine();
+        ImGui::Checkbox("Loop", &comp->loop);
+        ImGui::Checkbox("Spatial", &comp->spatial);
+    }
+
+    ImGui::Spacing();
+
+    // --- Bus / volume / pitch ---
+    {
+        static const char* busLabels[] = {
+            "Master", "Music", "Voice", "Sfx", "Ambient", "Ui"
+        };
+        int busIdx = static_cast<int>(comp->bus);
+        if (busIdx < 0 || busIdx >= IM_ARRAYSIZE(busLabels)) busIdx = 3; // Sfx default
+        if (ImGui::Combo("Bus", &busIdx, busLabels, IM_ARRAYSIZE(busLabels)))
+        {
+            comp->bus = static_cast<AudioBus>(busIdx);
+        }
+        ImGui::SliderFloat("Volume", &comp->volume, 0.0f, 1.0f, "%.2f");
+        ImGui::SliderFloat("Pitch", &comp->pitch, 0.5f, 2.0f, "%.2f");
+    }
+
+    ImGui::Spacing();
+
+    // --- Spatialisation (only meaningful when `spatial` is on) ---
+    if (comp->spatial && ImGui::TreeNodeEx("Spatial",
+                                            ImGuiTreeNodeFlags_DefaultOpen))
+    {
+        ImGui::DragFloat("Min Distance", &comp->minDistance, 0.1f, 0.0f, 1000.0f, "%.2f m");
+        ImGui::DragFloat("Max Distance", &comp->maxDistance, 0.1f, 0.0f, 5000.0f, "%.2f m");
+        ImGui::DragFloat("Rolloff Factor", &comp->rolloffFactor, 0.05f, 0.0f, 10.0f, "%.2f");
+
+        static const char* attenuationLabels[] = {
+            "None", "Linear", "InverseDistance", "Exponential"
+        };
+        int attIdx = static_cast<int>(comp->attenuationModel);
+        if (attIdx < 0 || attIdx >= IM_ARRAYSIZE(attenuationLabels)) attIdx = 2;
+        if (ImGui::Combo("Attenuation", &attIdx, attenuationLabels,
+                         IM_ARRAYSIZE(attenuationLabels)))
+        {
+            comp->attenuationModel = static_cast<AttenuationModel>(attIdx);
+        }
+
+        ImGui::DragFloat3("Velocity (Doppler)", &comp->velocity.x, 0.05f, -100.0f, 100.0f);
+        ImGui::TreePop();
+    }
+
+    // --- Occlusion ---
+    if (ImGui::TreeNodeEx("Occlusion"))
+    {
+        static const char* occLabels[] = {
+            "Air", "Cloth", "Wood", "Glass", "Stone", "Concrete", "Metal", "Water"
+        };
+        int occIdx = static_cast<int>(comp->occlusionMaterial);
+        if (occIdx < 0 || occIdx >= IM_ARRAYSIZE(occLabels)) occIdx = 0;
+        if (ImGui::Combo("Material", &occIdx, occLabels, IM_ARRAYSIZE(occLabels)))
+        {
+            comp->occlusionMaterial = static_cast<AudioOcclusionMaterialPreset>(occIdx);
+        }
+        ImGui::SliderFloat("Fraction", &comp->occlusionFraction, 0.0f, 1.0f, "%.2f");
+        ImGui::TreePop();
+    }
+
+    // --- Priority ---
+    {
+        static const char* priorityLabels[] = { "Low", "Normal", "High", "Critical" };
+        int prIdx = static_cast<int>(comp->priority);
+        if (prIdx < 0 || prIdx >= IM_ARRAYSIZE(priorityLabels)) prIdx = 1;
+        if (ImGui::Combo("Priority", &prIdx, priorityLabels,
+                         IM_ARRAYSIZE(priorityLabels)))
+        {
+            comp->priority = static_cast<SoundPriority>(prIdx);
+        }
+    }
+
+    // Note: this panel does not currently push undo entries — the
+    // Phase 10.5 editor-undo polish (Slice 12 Ed1 / Ed2) covers the
+    // shared undo retrofit across multiple inspector surfaces; the
+    // AudioSource path joins that batch when it lands.
 }
 
 // ---------------------------------------------------------------------------

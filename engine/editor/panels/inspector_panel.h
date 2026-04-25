@@ -54,6 +54,7 @@ private:
     void drawSpotLight(Entity& entity);
     void drawEmissiveLight(Entity& entity);
     void drawParticleEmitter(Entity& entity);
+    void drawAudioSource(Entity& entity);
     void drawWaterSurface(Entity& entity);
     void drawRigidBody(Entity& entity);
     void drawClothComponent(Entity& entity);
