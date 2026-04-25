@@ -9,6 +9,39 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-25 Phase 10.9 — Slice 5 D5 + D9 (small hardening)
+
+Two small follow-up hardenings on top of D1 / D7 / D8.
+
+**D5: `resolveUri` empty-return → default texture explicitly.**
+
+In `engine/utils/gltf_loader.cpp` external-image branch: when
+`resolveUri(gltfDir, image.uri)` returns empty (path-sandbox
+rejection per D1), the code now pushes
+`resourceManager.getDefaultTexture()` directly instead of calling
+`loadTexture("")` and relying on the loader's internal default-
+fallback. This eliminates the redundant `"Failed to load texture: "`
+warning log with no path information that previously appeared on
+every rejection. Behaviour-preserving for the texture output
+(still defaults), but the log story is cleaner.
+
+**D9: heightmap / splatmap per-file size cap.**
+
+Defense-in-depth absolute file-size caps before the existing
+`expectedSize == fileSize` match in both `loadHeightmap` (1 GB cap;
+the realistic ceiling under D8 is `8193² × 4 ≈ 268 MB`) and
+`loadSplatmap` (4 GB cap; ceiling `8193² × 16 ≈ 1.07 GB`). The
+original ROADMAP figure of 256 MB was authored before D8's
+`width ≤ 8193` cap landed; with D8 in place, legitimate maxima have
+shifted. The two-stage attack (corrupt config so `expectedSize` is
+enormous, then feed a matching binary) now hits the absolute-byte
+cap before allocating, instead of relying on the size-match which
+the attack is specifically constructed to satisfy.
+
+3020 / 3021 pass (no test-count delta — both changes are guards
+against pathological inputs that aren't easy to fixture in a
+unit test without writing 1+ GB to disk).
+
 ### 2026-04-25 Phase 10.9 — Slice 5 D7 (scene-JSON depth cap)
 
 Closes a JSON-stack-bomb DoS in scene-JSON deserialisation.
