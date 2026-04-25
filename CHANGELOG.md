@@ -9,6 +9,70 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-25 Phase 10.9 — Slice 5 D1 (path sandbox)
+
+Lifts the `resolveUri` path-traversal guard out of `gltf_loader.cpp`
+into a shared `engine/utils/path_sandbox.{h,cpp}` and wires
+`ResourceManager` to gate every `loadTexture` / `loadMesh` /
+`loadModel` call against a configurable list of allowed root
+directories.
+
+The original guard (Phase 5 / AUDIT M16) lived as a static helper
+inside `gltf_loader.cpp` and only protected glTF asset URIs. Scene-
+JSON paths, OBJ mesh paths, and editor file-picker paths all reached
+the file layer through `ResourceManager::loadTexture` / `loadMesh` /
+`loadModel` without traversal validation. D1 closes that gap.
+
+**`engine/utils/path_sandbox.h`** exposes two public functions:
+
+- `resolveUriIntoBase(base, uri)` — for relative URIs; replaces the
+  static helper inside `gltf_loader.cpp` (now a thin forwarder that
+  retains the glTF-specific Logger warning on rejection).
+- `validateInsideRoots(absPath, roots)` — for already-absolute paths
+  coming from trusted callers (file pickers, hard-coded install-asset
+  references). Returns canonical path on success, empty string on
+  escape / canonicalisation failure.
+
+The AUDIT M16 separator-suffix rule (preventing
+`base=/assets/foo` from accepting `/assets/foo_evil/x.png`) is
+centralised in one private `insideOrEqual` helper that both public
+functions share — adding a new asset loader can never re-introduce
+the bug because there's only one place to copy from.
+
+**`ResourceManager`** gained `setSandboxRoots(std::vector<fs::path>)`
+and a private `validatePath(filePath)` choke-point. `loadTexture`,
+`loadMesh`, `loadModel` each canonicalise their input through
+`validatePath` before opening the file. Empty roots = sandbox
+disabled (default), preserving backwards compatibility for tests
+and the legacy single-process editor build. Production wires
+`[install_root, project_root, asset_library_root]` once at startup
+(separate slice — D1 ships the mechanism, the wiring follows when
+the editor's project-root concept lands in Phase 10.5).
+
+**`gltf_loader.cpp::resolveUri`** now forwards to
+`PathSandbox::resolveUriIntoBase`. Same external contract, same
+warning message, but the duplicated traversal-guard math is gone.
+
+15 new tests across `tests/test_path_sandbox.cpp` (10) +
+`tests/test_resource_manager_sandbox.cpp` (5) pin:
+- relative URI accepted inside base
+- parent-traversal (`../sibling/x`) rejected
+- sibling-prefix-collision rejected (the AUDIT M16 case)
+- empty URI returns empty (caller decides default-substitute per D5)
+- base-itself accepted (`uri = "."`)
+- absolute path accepted inside root
+- absolute path rejected outside root
+- multiple-roots accepts any matching root
+- empty-roots returns canon unchanged (backwards-compat path)
+- absolute-path sibling-prefix-collision rejected
+- `getSandboxRoots()` starts empty
+- `setSandboxRoots()` records the supplied roots
+- `loadMesh` outside root returns `nullptr`
+- `loadModel` outside root returns `nullptr`
+- no-sandbox-configured doesn't additionally reject
+
+3010 / 3011 pass (one pre-existing skip; +15 vs Slice 8 W11's 2995).
+
 ### 2026-04-25 Phase 10.9 — Slice 8 W11 (GpuCuller delete)
 
 Closes the last open zombie of Slice 8 — and R5 by extension.
