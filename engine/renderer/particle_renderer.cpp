@@ -4,6 +4,7 @@
 /// @file particle_renderer.cpp
 /// @brief Instanced billboard renderer for particle systems.
 #include "renderer/particle_renderer.h"
+#include "renderer/scoped_blend_state.h"
 #include "scene/gpu_particle_emitter.h"
 #include "core/logger.h"
 
@@ -267,6 +268,15 @@ void ParticleRenderer::render(
 
     glBindVertexArray(m_quadVao);
 
+    // R4: bracket blend state across the entire emitter loop. Per-
+    // emitter glBlendFunc calls inside the loop override the
+    // construction-time factors as each emitter's BlendMode dictates;
+    // the RAII restores the caller's prior blend state on function
+    // exit. Depth-mask save/restore stays bare (depth-mask RAII is a
+    // separate follow-up).
+    ScopedBlendState blendGuard{true, GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA};
+    glDepthMask(GL_FALSE);
+
     // Render each emitter
     for (const auto& [emitter, worldMatrix] : emitters)
     {
@@ -278,10 +288,9 @@ void ParticleRenderer::render(
 
         const ParticleEmitterConfig& config = emitter->getConfig();
 
-        // Set blend mode
-        glEnable(GL_BLEND);
-        glDepthMask(GL_FALSE);
-
+        // Per-emitter blend factors (overrides ScopedBlendState's
+        // construction-time factors; restore on function exit returns
+        // to caller's prior state, not these).
         if (config.blendMode == ParticleEmitterConfig::BlendMode::ADDITIVE)
         {
             glBlendFunc(GL_SRC_ALPHA, GL_ONE);
@@ -333,9 +342,9 @@ void ParticleRenderer::render(
         glDrawArraysInstanced(GL_TRIANGLES, 0, 6, count);
     }
 
-    // Restore state
+    // Depth-mask manually restored; blend state restored by
+    // ScopedBlendState on function exit (R4).
     glDepthMask(GL_TRUE);
-    glDisable(GL_BLEND);
 }
 
 void ParticleRenderer::renderGPU(
@@ -360,6 +369,11 @@ void ParticleRenderer::renderGPU(
 
     glBindVertexArray(m_gpuVao);
 
+    // R4: bracket blend state across the GPU emitter loop. Same
+    // pattern as the CPU render() above.
+    ScopedBlendState blendGuard{true, GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA};
+    glDepthMask(GL_FALSE);
+
     for (const auto* emitter : emitters)
     {
         if (!emitter || !emitter->isGPUPath())
@@ -377,10 +391,9 @@ void ParticleRenderer::renderGPU(
 
         const ParticleEmitterConfig& config = emitter->getConfig();
 
-        // Set blend mode
-        glEnable(GL_BLEND);
-        glDepthMask(GL_FALSE);
-
+        // Per-emitter blend factors (overrides ScopedBlendState's
+        // construction-time factors; restore on function exit returns
+        // to caller's prior state, not these).
         if (config.blendMode == ParticleEmitterConfig::BlendMode::ADDITIVE)
             glBlendFunc(GL_SRC_ALPHA, GL_ONE);
         else
@@ -425,9 +438,9 @@ void ParticleRenderer::renderGPU(
         gpuSys->drawIndirect();
     }
 
-    // Restore state
+    // Depth-mask manually restored; blend state restored by
+    // ScopedBlendState on function exit (R4).
     glDepthMask(GL_TRUE);
-    glDisable(GL_BLEND);
     glBindVertexArray(0);
 }
 
