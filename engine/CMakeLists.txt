@@ -71,6 +71,7 @@ set(ENGINE_SOURCES
     input/input_bindings.cpp
     renderer/instance_buffer.cpp
     renderer/environment_map.cpp
+    renderer/ibl_capture_sequence.cpp
     renderer/light_probe.cpp
     renderer/light_probe_manager.cpp
     renderer/sh_probe_grid.cpp

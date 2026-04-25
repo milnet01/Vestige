@@ -139,6 +139,7 @@ add_executable(vestige_tests
     test_component_clone.cpp
     test_entity_serializer_registry.cpp
     test_atomic_write_routing.cpp
+    test_ibl_capture_sequence.cpp
     test_menu_prefabs.cpp
     test_ui_layout_panel.cpp
     test_ui_hit_test.cpp
