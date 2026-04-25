@@ -9,6 +9,55 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-25 Phase 10.9 — Slice 5 D7 (scene-JSON depth cap)
+
+Closes a JSON-stack-bomb DoS in scene-JSON deserialisation.
+
+A maliciously-crafted scene file with deeply-nested
+`{"children":[{"children":[...]}]}` blocks could blow the default
+8 MB stack at depths around a few hundred entries. ROADMAP D7
+cited 256 MB of nested children as the upper bound for a
+practical attacker payload.
+
+`deserializeEntityRecursive` (`engine/utils/entity_serializer.cpp`)
+and `countJsonEntities` (`engine/editor/scene_serializer.cpp`)
+gained a `depth` parameter (default 0) checked at function entry
+against `kMaxEntityRecursionDepth = 128`:
+
+- Deserialiser: `depth > 128` returns `nullptr` and logs
+  `Logger::error`. Caller (`deserializeEntity`) starts at 0;
+  recursive children call with `depth + 1`.
+- Count function: `depth > 128` returns the partial count.
+  Under-counting on an attacker-controlled input is acceptable
+  since the deserialiser will reject the same document on the
+  same boundary.
+
+128 is well above realistic scene-graph depths (Sponza ≈ 5,
+CesiumMan ≈ 15) yet far below the stack-frame budget.
+
+The third function listed in the original ROADMAP entry —
+`Scene::collectRenderDataRecursive` — operates on an
+already-built `Entity*` tree, not on JSON, so the JSON
+stack-bomb attack doesn't apply: the only way to populate that
+tree from untrusted input is `deserializeEntity`, which is now
+depth-capped, so the in-memory tree can never exceed 128 levels.
+No depth parameter added to `collectRenderDataRecursive` to keep
+the renderer hot path branch-free.
+
+The proposed `pysr_parser::DepthGuard` RAII (which doesn't
+currently exist in the tree) is overkill for two recursion
+sites that already cleanly thread `depth` through their
+signatures — the integer parameter approach is shorter and
+equivalent.
+
+3 new tests in `tests/test_entity_serializer_depth_cap.cpp`
+pin: depth-128 chain accepted (the boundary), depth-200 chain
+doesn't crash (the headline — pre-fix this would stack-overflow),
+wide-and-shallow tree with 5000 children at depth 1 still accepted
+(the cap is on depth, not breadth).
+
+3020 / 3021 pass (one pre-existing skip; +3 vs D8's 3017).
+
 ### 2026-04-25 Phase 10.9 — Slice 5 D8 (terrain config size caps)
 
 `Terrain::deserializeSettings` now hard-caps the dimension fields
