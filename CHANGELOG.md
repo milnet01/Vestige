@@ -9,6 +9,53 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-25 Phase 10.9 — Slice 4 R2 (stepping-stone — batched async PBO readback)
+
+The ninth Slice 4 item shipped today, in stepping-stone form.
+The original R2 ROADMAP intent is "GPU compute SH projection
+replacing per-face glReadPixels + CPU projection in
+captureSHGrid." Full GPU compute is a multi-session item: the
+project has no GL test harness today (all current tests are
+CPU-only), and shipping a 200-300-line compute shader without
+the CPU↔GPU SH parity test CLAUDE.md Rule 12 calls for would
+court the exact silent-divergence pattern R7 just exposed
+(π-magnitude SH error undetected for years).
+
+**Stepping-stone scope.** Replace the per-face synchronous
+`glReadPixels` (6 GPU stalls per probe) with a single batched
+async PBO readback per probe. Render all 6 cubemap faces, issue
+6 `glGetTextureSubImage` calls into a single Pixel Pack Buffer
+at per-face offsets (async DMA), then `glMapNamedBufferRange`
+once to read all 6 faces' data on the CPU side. Net: 6 stalls
+→ 1 stall per probe.
+
+**SH math unchanged.** The CPU projection path
+(`SHProbeGrid::computeProbeShFromCubemap`) is the same one R7
+fixed; existing R7 test fixtures pin the math and continue to
+pass. Only the readback shape changed.
+
+**Map-failure handling**: log a warning and skip the probe; next
+bake retries. Safe degradation, no crash.
+
+**No new tests.** The behaviour contract is unchanged (same SH
+coefficients written to the probe grid); the existing R7
+ShProbeGridTest cases pin the math. The performance contract
+("fewer GPU stalls") is not unit-testable without a GPU profiler.
+
+**ROADMAP entry**: R2 ticked `[~]` (partial — stepping-stone
+shipped). A new `R2 follow-up: full GPU compute SH projection`
+bullet captures the deferred work and its prerequisites (GL test
+harness for parity testing, ~200-300 lines of compute-shader
+code).
+
+**Bump.** VERSION 0.1.38 → 0.1.39. Full suite: 2994 / 2995 pass
+(no test-count delta — pure refactor with same SH math output).
+
+**Slice 4 status post-R2 stepping-stone: R1, R3, R4 (full), R6,
+R7, R8, R9, R10 fully shipped + R2 stepping-stone shipped =
+9 of 10 advanced items today; R5 still gated on Slice 8 W11 +
+R2 follow-up (full GPU compute path) deferred.**
+
 ### 2026-04-25 Phase 10.9 — Slice 4 R8 (SDSM async readback)
 
 The eighth Slice 4 item shipped today. Replaces the synchronous
