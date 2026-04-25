@@ -1283,6 +1283,12 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
         // --- Audio panel ---
         m_audioPanel.draw(m_audioSystem, scene);
 
+        // --- Sprite + Tilemap panels (Phase 9F-6 — wired by Phase 10.9 W14) ---
+        // Both classes shipped + tested in Phase 9F-6 but were never reachable
+        // from the editor; W14 closes that gap.
+        m_spritePanel.draw(scene, &m_selection);
+        m_tilemapPanel.draw(scene, &m_selection);
+
         // --- UI Layout panel ---
         // Engine doesn't own a single "the" canvas — game projects attach
         // their own. The panel is still useful for inspecting an empty state

@@ -29,6 +29,8 @@
 #include "editor/panels/model_viewer_panel.h"
 #include "editor/panels/navigation_panel.h"
 #include "editor/panels/audio_panel.h"
+#include "editor/panels/sprite_panel.h"
+#include "editor/panels/tilemap_panel.h"
 #include "editor/panels/ui_layout_panel.h"
 #include "editor/panels/ui_runtime_panel.h"
 #include "editor/panels/template_dialog.h"
@@ -293,6 +295,14 @@ public:
     AudioPanel& getAudioPanel() { return m_audioPanel; }
     const AudioPanel& getAudioPanel() const { return m_audioPanel; }
 
+    /// @brief Gets the sprite atlas panel (Phase 9F-6 — wired by W14).
+    SpritePanel& getSpritePanel() { return m_spritePanel; }
+    const SpritePanel& getSpritePanel() const { return m_spritePanel; }
+
+    /// @brief Gets the tilemap layer / palette panel (Phase 9F-6 — wired by W14).
+    TilemapPanel& getTilemapPanel() { return m_tilemapPanel; }
+    const TilemapPanel& getTilemapPanel() const { return m_tilemapPanel; }
+
     /// @brief Gets the UI layout / theme editor panel.
     UILayoutPanel& getUILayoutPanel() { return m_uiLayoutPanel; }
     const UILayoutPanel& getUILayoutPanel() const { return m_uiLayoutPanel; }
@@ -365,6 +375,8 @@ private:
     ModelViewerPanel m_modelViewerPanel;
     NavigationPanel m_navigationPanel;
     AudioPanel m_audioPanel;
+    SpritePanel m_spritePanel;
+    TilemapPanel m_tilemapPanel;
     UILayoutPanel m_uiLayoutPanel;
     UIRuntimePanel m_uiRuntimePanel;
     TemplateDialog m_templateDialog;
