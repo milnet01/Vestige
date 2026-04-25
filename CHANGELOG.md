@@ -9,6 +9,35 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-25 Phase 10.9 — Slice 5 D12 (glTF extensionsRequired allowlist)
+
+`GltfLoader::load` now enforces the glTF 2.0 §3.12 contract: files
+declaring `extensionsRequired` that the loader doesn't implement
+must be REJECTED, not silently rendered with missing geometry /
+materials.
+
+The Vestige glTF loader does not explicitly handle any glTF
+extension (tinygltf transparently handles a few on the parse
+side, but our material / mesh paths ignore extension data
+entirely), so the allowlist
+(`kSupportedRequiredExtensions`) is deliberately empty. Every
+required extension is unknown to us; every required-extension-
+declaring file is rejected.
+
+```
+glTF: unsupported required extensions: KHR_materials_unlit, KHR_lights_punctual
+in /path/to/model.gltf — refusing to load (per glTF 2.0 §3.12)
+```
+
+Files using `extensionsUsed` (optional extensions) continue to
+load normally; only `extensionsRequired` triggers the rejection.
+
+Add entries to `kSupportedRequiredExtensions` as specific
+extension support lands. The set lives next to the check site
+in `engine/utils/gltf_loader.cpp::GltfLoader::load`.
+
+3020 / 3021 pass.
+
 ### 2026-04-25 Phase 10.9 — Slice 5 D6 (OBJ hash combiner)
 
 `engine/utils/obj_loader.cpp::VertexKeyHash::operator()` was

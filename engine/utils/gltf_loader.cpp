@@ -1463,6 +1463,39 @@ std::unique_ptr<Model> GltfLoader::load(const std::string& filePath,
         return nullptr;
     }
 
+    // Phase 10.9 Slice 5 D12: enforce extensionsRequired allowlist per
+    // glTF 2.0 §3.12. Files declaring required extensions our loader
+    // doesn't implement must be REJECTED, not silently rendered with
+    // missing geometry / materials. The current Vestige loader does not
+    // explicitly handle any glTF extension (tinygltf transparently
+    // handles a few on the parse side, but our material / mesh paths
+    // ignore extension data entirely), so the allowlist is deliberately
+    // empty — every required extension is unknown to us. Add entries
+    // here as specific extension support lands (KHR_materials_unlit,
+    // KHR_lights_punctual, etc.).
+    static const std::set<std::string> kSupportedRequiredExtensions = {
+        // (intentionally empty — see comment above)
+    };
+    if (!gltfModel.extensionsRequired.empty())
+    {
+        std::string unsupported;
+        for (const auto& ext : gltfModel.extensionsRequired)
+        {
+            if (kSupportedRequiredExtensions.count(ext) == 0)
+            {
+                if (!unsupported.empty()) unsupported += ", ";
+                unsupported += ext;
+            }
+        }
+        if (!unsupported.empty())
+        {
+            Logger::error("glTF: unsupported required extensions: "
+                + unsupported + " in " + filePath
+                + " — refusing to load (per glTF 2.0 §3.12)");
+            return nullptr;
+        }
+    }
+
     auto model = std::make_unique<Model>();
 
     // Extract filename for model name
