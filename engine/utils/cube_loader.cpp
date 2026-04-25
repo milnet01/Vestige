@@ -5,26 +5,75 @@
 /// @brief Parser for .cube LUT files.
 #include "utils/cube_loader.h"
 #include "core/logger.h"
+#include "utils/json_size_cap.h"
+#include "utils/path_sandbox.h"
 
 #include <glm/glm.hpp>
 
 #include <algorithm>
-#include <fstream>
 #include <sstream>
 
 namespace Vestige
 {
 
+namespace
+{
+/// Function-local static so initialisation order across translation
+/// units is well-defined (mirrors LipSyncPlayer's pattern).
+std::vector<std::filesystem::path>& cubeSandboxRoots()
+{
+    static std::vector<std::filesystem::path> roots;
+    return roots;
+}
+
+/// 128 MB cap. A 128³ LUT (the largest LUT_3D_SIZE we accept) is
+/// ~2.1 M floating-point entries; even at ~30 chars per data line that's
+/// only ~63 MB of text. The cap leaves room for verbose comments while
+/// rejecting multi-GB OOM-style inputs.
+constexpr std::uintmax_t kCubeMaxBytes = 128ULL * 1024ULL * 1024ULL;
+}  // namespace
+
+void CubeLoader::setSandboxRoots(std::vector<std::filesystem::path> roots)
+{
+    cubeSandboxRoots() = std::move(roots);
+}
+
+const std::vector<std::filesystem::path>& CubeLoader::getSandboxRoots()
+{
+    return cubeSandboxRoots();
+}
+
 CubeData CubeLoader::load(const std::string& filePath)
 {
     CubeData result;
 
-    std::ifstream file(filePath);
-    if (!file.is_open())
+    // D3: path sandbox. Empty roots = sandbox disabled.
+    const auto& roots = cubeSandboxRoots();
+    if (!roots.empty())
     {
-        Logger::error("CubeLoader: failed to open " + filePath);
+        auto canon = PathSandbox::validateInsideRoots(
+            std::filesystem::path(filePath), roots);
+        if (canon.empty())
+        {
+            Logger::warning("CubeLoader: path rejected (escapes sandbox): " + filePath);
+            return result;
+        }
+    }
+
+    // D3: read the entire file under a 128 MB cap. The text is then
+    // parsed line-by-line via std::istringstream — same parse logic as
+    // before, just sourced from a memory buffer instead of a stream
+    // tied to the disk file.
+    auto contents = JsonSizeCap::loadTextFileWithSizeCap(
+        filePath, "CubeLoader", kCubeMaxBytes);
+    if (!contents.has_value())
+    {
+        // loadTextFileWithSizeCap already logged the specific reason
+        // (missing / over-cap / read failure).
         return result;
     }
+
+    std::istringstream file(*contents);
 
     int lutSize = 0;
     std::vector<glm::vec3> entries;

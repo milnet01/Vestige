@@ -9,6 +9,42 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-25 Phase 10.9 — Slice 5 D3 + D4 (cube LUT hardening + OBJ MTL declared not-supported)
+
+**D3 — `.cube` LUT loader hardening.** `engine/utils/cube_loader.cpp`
+gains the same shape of choke-point as D1 (ResourceManager) and D11
+(AudioEngine / LipSyncPlayer): a 128 MB file-size cap before parse,
+plus an optional path sandbox configured via static
+`setSandboxRoots` / `getSandboxRoots`.
+
+The size cap routes through the existing
+`JsonSizeCap::loadTextFileWithSizeCap` helper rather than reading the
+`std::ifstream` directly — the file is buffered into memory first and
+the parser reads from a `std::istringstream`. 128 MB leaves headroom
+for a 128³ LUT (the max we accept; ~63 MB of float text) plus verbose
+metadata while rejecting multi-GB OOM-style inputs.
+
+The sandbox is process-wide static (CubeLoader exposes no instance
+state); the roots vector lives in an anonymous-namespace function-local
+static for well-defined initialisation order — same pattern as
+LipSyncPlayer. Empty roots (the default) disable the sandbox,
+preserving backwards compatibility.
+
+**D4 — OBJ MTL declared not supported.** Vestige's OBJ loader does not
+parse `.mtl` companion files and does not split a mesh by `usemtl`
+boundaries — every triangle lands in one buffer regardless of the
+active material name. The previous behaviour silently dropped the
+material grouping, misleading importers of multi-material OBJs into
+thinking the file had loaded faithfully. `obj_loader.cpp` now tracks
+`sawUsemtl` / `sawMtllib` flags during parse and emits a single
+end-of-load `Logger::warning`: *"OBJ MTL not supported — multi-material
+file '<path>' loads as a single material."* One warning per load (not
+one per directive) so a 50-material OBJ doesn't drown the console.
+
+8 new tests across `tests/test_obj_mtl_warning.cpp` (3) +
+`tests/test_cube_loader_hardening.cpp` (5). 3044 / 3045 pass (+8 vs
+D10's 3036, 1 pre-existing skip unchanged).
+
 ### 2026-04-25 Phase 10.9 — Slice 5 D10 (glTF bounds checks + primitive-range drift fix)
 
 `engine/utils/gltf_loader.cpp` `buildNodeHierarchy` now bounds-checks two

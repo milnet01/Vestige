@@ -5,6 +5,7 @@
 /// @brief Parser for .cube LUT files (industry standard color grading format).
 #pragma once
 
+#include <filesystem>
 #include <string>
 #include <vector>
 
@@ -26,7 +27,24 @@ public:
     /// @brief Loads and parses a .cube LUT file.
     /// @param filePath Path to the .cube file.
     /// @return Parsed data, or empty CubeData (size==0) on failure.
+    ///
+    /// Phase 10.9 Slice 5 D3: a 128 MB file-size cap runs before parse
+    /// (a 128³ LUT in floating-point text is ~63 MB; the cap leaves
+    /// headroom without admitting multi-GB OOM-style attacks). If
+    /// `setSandboxRoots` has installed a non-empty roots list, the path
+    /// is canonicalised and verified inside one of those roots before
+    /// being opened — empty roots (the default) leave the sandbox
+    /// disabled, preserving backwards compatibility.
     static CubeData load(const std::string& filePath);
+
+    /// @brief Configure the path sandbox for `load()` calls.
+    ///
+    /// Process-wide static (CubeLoader exposes no instance state). Empty
+    /// roots disable the sandbox.
+    static void setSandboxRoots(std::vector<std::filesystem::path> roots);
+
+    /// @brief Read-back accessor for the configured sandbox roots.
+    static const std::vector<std::filesystem::path>& getSandboxRoots();
 };
 
 } // namespace Vestige

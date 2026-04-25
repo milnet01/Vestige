@@ -174,6 +174,15 @@ bool ObjLoader::load(const std::string& filePath,
     outVertices.clear();
     outIndices.clear();
 
+    // Phase 10.9 Slice 5 D4: track multi-material directives so we can emit
+    // a single end-of-load warning. Vestige's OBJ loader does not split a
+    // mesh by `usemtl` boundaries — every triangle lands in one buffer
+    // regardless of the active material name. Silently dropping the
+    // material grouping (the prior behaviour) misled importers of
+    // multi-material OBJs into thinking the file had loaded faithfully.
+    bool sawUsemtl = false;
+    bool sawMtllib = false;
+
     std::string line;
     int lineNumber = 0;
 
@@ -287,13 +296,30 @@ bool ObjLoader::load(const std::string& filePath,
                 }
             }
         }
-        // Ignore: mtllib, usemtl, o, g, s (will handle in later phases)
+        else if (prefix == "usemtl")
+        {
+            sawUsemtl = true;
+        }
+        else if (prefix == "mtllib")
+        {
+            sawMtllib = true;
+        }
+        // Ignore: o, g, s (object/group/smoothing-group — purely informational)
     }
 
     if (outVertices.empty())
     {
         Logger::error("OBJ file contained no geometry: " + filePath);
         return false;
+    }
+
+    // D4: declare MTL non-support explicitly. One log per load — not per
+    // line — so a 50-material OBJ doesn't drown the console.
+    if (sawUsemtl || sawMtllib)
+    {
+        Logger::warning("OBJ MTL not supported — multi-material file '"
+            + filePath + "' loads as a single material. "
+            "(MTL parser is not yet implemented; see ROADMAP Phase 10.9 D4.)");
     }
 
     // Compute tangent/bitangent vectors for normal mapping

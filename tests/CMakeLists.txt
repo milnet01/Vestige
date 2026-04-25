@@ -144,6 +144,8 @@ add_executable(vestige_tests
     test_audio_engine_sandbox.cpp
     test_lip_sync_sandbox.cpp
     test_gltf_bounds_checks.cpp
+    test_obj_mtl_warning.cpp
+    test_cube_loader_hardening.cpp
     test_terrain_size_caps.cpp
     test_entity_serializer_depth_cap.cpp
     test_ibl_capture_sequence.cpp
