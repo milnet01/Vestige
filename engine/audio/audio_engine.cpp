@@ -6,6 +6,7 @@
 #include "audio/audio_engine.h"
 #include "audio/audio_source_state.h"
 #include "core/logger.h"
+#include "utils/path_sandbox.h"
 
 #include <AL/al.h>
 #include <AL/alc.h>
@@ -173,8 +174,36 @@ void AudioEngine::updateListener(const glm::vec3& position,
     reclaimFinishedSources();
 }
 
+void AudioEngine::setSandboxRoots(std::vector<std::filesystem::path> roots)
+{
+    m_sandboxRoots = std::move(roots);
+}
+
+std::string AudioEngine::validatePath(const std::string& filePath) const
+{
+    if (m_sandboxRoots.empty())
+        return filePath;  // Sandbox disabled.
+
+    auto canon = PathSandbox::validateInsideRoots(
+        std::filesystem::path(filePath), m_sandboxRoots);
+    if (canon.empty())
+    {
+        Logger::warning("[AudioEngine] path rejected (escapes sandbox): " + filePath);
+    }
+    return canon;
+}
+
 unsigned int AudioEngine::loadBuffer(const std::string& filePath)
 {
+    // Path sandbox (Slice 5 D11): reject before opening file. Run before
+    // the m_available short-circuit so callers can't probe paths via the
+    // audio API on machines without a device.
+    std::string safePath = validatePath(filePath);
+    if (safePath.empty())
+    {
+        return 0;
+    }
+
     if (!m_available)
     {
         return 0;
@@ -188,7 +217,7 @@ unsigned int AudioEngine::loadBuffer(const std::string& filePath)
     }
 
     // Load and decode the audio file
-    auto clip = AudioClip::loadFromFile(filePath);
+    auto clip = AudioClip::loadFromFile(safePath);
     if (!clip)
     {
         return 0;

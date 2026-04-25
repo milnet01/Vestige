@@ -9,6 +9,7 @@
 #include "experimental/animation/viseme_map.h"
 #include "scene/component.h"
 
+#include <filesystem>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -86,8 +87,28 @@ public:
     // --- Track mode ---
 
     /// @brief Loads a Rhubarb lip sync track from a JSON file.
+    /// @param jsonPath Path to a Rhubarb-format `.json` (or `.tsv`) file.
+    ///                 Subject to the process-wide path-sandbox configured
+    ///                 via `setSandboxRoots` (Phase 10.9 Slice 5 D11);
+    ///                 paths outside every configured root are rejected
+    ///                 before the file is opened.
     /// @return true on success.
     bool loadTrack(const std::string& jsonPath);
+
+    /// @brief Phase 10.9 Slice 5 D11 — installs the process-wide sandbox
+    ///        roots used by `loadTrack`. Mirrors `AudioEngine` /
+    ///        `ResourceManager`, but stored as a static so callers
+    ///        configure it once per process rather than per-component
+    ///        instance (LipSyncPlayer is a `Component` and is constructed
+    ///        many times per scene).
+    ///
+    /// Empty roots (the default) means "no sandbox active" — any path
+    /// the caller supplies is forwarded to the file reader, preserving
+    /// backwards compatibility with the existing test fixtures.
+    static void setSandboxRoots(std::vector<std::filesystem::path> roots);
+
+    /// @brief Returns the currently configured sandbox roots.
+    static const std::vector<std::filesystem::path>& getSandboxRoots();
 
     /// @brief Loads a Rhubarb lip sync track from a JSON string (for testing).
     /// @return true on success.

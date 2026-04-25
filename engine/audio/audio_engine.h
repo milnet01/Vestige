@@ -14,6 +14,7 @@
 #include <glm/glm.hpp>
 
 #include <chrono>
+#include <filesystem>
 #include <functional>
 #include <string>
 #include <unordered_map>
@@ -73,9 +74,27 @@ public:
     const glm::vec3& getListenerVelocity() const { return m_listenerVelocity; }
 
     /// @brief Loads an audio file into an OpenAL buffer (cached by path).
-    /// @param filePath Path to the audio file.
+    /// @param filePath Path to the audio file. Subject to the
+    ///                 path-sandbox set by `setSandboxRoots` (Phase 10.9
+    ///                 Slice 5 D11) — paths that escape every configured
+    ///                 root are rejected before any decoder reads them.
     /// @return OpenAL buffer ID, or 0 on failure.
     unsigned int loadBuffer(const std::string& filePath);
+
+    /// @brief Phase 10.9 Slice 5 D11 — installs the path-sandbox roots
+    ///        used by `loadBuffer`. Mirrors `ResourceManager::setSandboxRoots`.
+    ///
+    /// Empty `roots` (the default) means "no sandbox active" — any
+    /// path the caller supplies is forwarded to the decoder. Production
+    /// wires the install + project + asset-library roots once at startup;
+    /// tests typically leave it empty so fixture paths work as-is.
+    void setSandboxRoots(std::vector<std::filesystem::path> roots);
+
+    /// @brief Returns the currently configured sandbox roots.
+    const std::vector<std::filesystem::path>& getSandboxRoots() const
+    {
+        return m_sandboxRoots;
+    }
 
     /// @brief Acquires a source from the pool.
     ///
@@ -376,6 +395,16 @@ private:
 
     // Buffer cache (path -> OpenAL buffer ID)
     std::unordered_map<std::string, unsigned int> m_bufferCache;
+
+    /// @brief Phase 10.9 Slice 5 D11 — sandbox roots; populated paths
+    ///        force `loadBuffer` to reject paths that don't lie inside
+    ///        any of them. Empty = sandbox disabled.
+    std::vector<std::filesystem::path> m_sandboxRoots;
+
+    /// @brief Validates @a filePath against `m_sandboxRoots`; returns
+    ///        the canonical path (or @a filePath unchanged when the
+    ///        sandbox is disabled), or empty string on rejection.
+    std::string validatePath(const std::string& filePath) const;
 
     /// @brief Reclaims finished sources back to the pool.
     void reclaimFinishedSources();

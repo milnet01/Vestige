@@ -141,6 +141,8 @@ add_executable(vestige_tests
     test_atomic_write_routing.cpp
     test_path_sandbox.cpp
     test_resource_manager_sandbox.cpp
+    test_audio_engine_sandbox.cpp
+    test_lip_sync_sandbox.cpp
     test_terrain_size_caps.cpp
     test_entity_serializer_depth_cap.cpp
     test_ibl_capture_sequence.cpp

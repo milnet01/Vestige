@@ -14,6 +14,7 @@
 
 #include "experimental/animation/facial_animation.h"
 #include "core/logger.h"
+#include "utils/path_sandbox.h"
 
 #include <nlohmann/json.hpp>
 
@@ -25,6 +26,26 @@
 
 namespace Vestige
 {
+
+namespace
+{
+// Process-wide sandbox roots for LipSyncPlayer::loadTrack (Slice 5 D11).
+std::vector<std::filesystem::path>& lipSyncSandboxRoots()
+{
+    static std::vector<std::filesystem::path> roots;
+    return roots;
+}
+}  // namespace
+
+void LipSyncPlayer::setSandboxRoots(std::vector<std::filesystem::path> roots)
+{
+    lipSyncSandboxRoots() = std::move(roots);
+}
+
+const std::vector<std::filesystem::path>& LipSyncPlayer::getSandboxRoots()
+{
+    return lipSyncSandboxRoots();
+}
 
 LipSyncPlayer::LipSyncPlayer() = default;
 LipSyncPlayer::~LipSyncPlayer() = default;
@@ -100,11 +121,28 @@ void LipSyncPlayer::setFacialAnimator(FacialAnimator* animator)
 
 bool LipSyncPlayer::loadTrack(const std::string& jsonPath)
 {
+    // Path sandbox (Slice 5 D11): reject paths outside the configured
+    // roots before opening the file. Empty roots = sandbox disabled
+    // (default), preserving backwards compatibility with existing tests.
+    const auto& roots = lipSyncSandboxRoots();
+    std::string safePath = jsonPath;
+    if (!roots.empty())
+    {
+        safePath = PathSandbox::validateInsideRoots(
+            std::filesystem::path(jsonPath), roots);
+        if (safePath.empty())
+        {
+            Logger::error("LipSyncPlayer: path rejected (escapes sandbox): "
+                + jsonPath);
+            return false;
+        }
+    }
+
     // Rhubarb tracks are small (seconds of audio → KB of JSON); cap at 16 MB
     // to reject pathological inputs without eliminating legitimate tracks.
     namespace fs = std::filesystem;
     std::error_code ec;
-    const std::uintmax_t sz = fs::file_size(jsonPath, ec);
+    const std::uintmax_t sz = fs::file_size(safePath, ec);
     if (ec)
     {
         Logger::error("LipSyncPlayer: Failed to stat track file: " + jsonPath);
@@ -119,7 +157,7 @@ bool LipSyncPlayer::loadTrack(const std::string& jsonPath)
         return false;
     }
 
-    std::ifstream file(jsonPath);
+    std::ifstream file(safePath);
     if (!file.is_open())
     {
         Logger::error("LipSyncPlayer: Failed to open track file: " + jsonPath);

@@ -9,6 +9,56 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-25 Phase 10.9 — Slice 5 D11 (path-traversal guards on audio loaders)
+
+Closes the audio-side analogue of D1's path sandbox. `AudioEngine`
+gains `setSandboxRoots` / `getSandboxRoots` / private `validatePath`
+mirroring `ResourceManager`; `loadBuffer` calls `validatePath` *before*
+the `m_available` short-circuit so callers can't probe paths via the
+audio API on machines without a device. Empty roots (the default)
+disable the sandbox, preserving backwards compatibility with existing
+test fixtures.
+
+`LipSyncPlayer` (relocated to `engine/experimental/animation/` by W12)
+gains static `setSandboxRoots` / `getSandboxRoots`. Per-instance state
+would have been awkward — `LipSyncPlayer` is a `Component` constructed
+many times per scene — so the sandbox config is process-wide. `loadTrack`
+calls the static validator before opening the JSON file. Both empty-
+roots backwards-compatibility and explicit rejection log paths are
+covered. The static lives in an anonymous-namespace function-local
+`std::vector` so initialisation order across translation units is well-
+defined.
+
+`MotionDatabase` (also experimental) was listed in the original D11
+ROADMAP entry but does not have a file load path — it builds in
+memory from clip data passed by `MotionPreprocessor`. No change here;
+when serialisation lands, that loader inherits the same pattern.
+
+10 new tests across `tests/test_audio_engine_sandbox.cpp` (5) +
+`tests/test_lip_sync_sandbox.cpp` (5) pin the round-trip + rejection
+contract. 3030 / 3031 pass (1 pre-existing skip; +10 vs D12's 3020).
+
+**Parallel-test race fix (path-sandbox tests).** While verifying
+D11, CI Linux Release surfaced a pre-existing race in
+`test_path_sandbox.cpp` and `test_resource_manager_sandbox.cpp`:
+both used a shared `/tmp/vestige_*_sandbox_test` dir, but CMake's
+`gtest_discover_tests` spawns each TEST_F in its own process, so
+`ctest -j $(nproc)` ran SetUp / TearDown concurrently across
+processes. The CI failure was
+
+```
+filesystem error: cannot remove: Directory not empty
+[/tmp/vestige_path_sandbox_test]
+```
+
+thrown when a SetUp's `remove_all` collided with a parallel
+TearDown's writes. Local CI happened to win the race; the slower
+runner disk lost. Fixed by appending `getpid()` + the gtest test
+name to the temp-dir path (the same pattern
+`test_atomic_write_routing.cpp` and `test_file_menu.cpp` already
+use). Two new D11 tests inherit the pattern from the start so they
+don't reintroduce the race.
+
 ### 2026-04-25 Phase 10.9 — Slice 5 D12 (glTF extensionsRequired allowlist)
 
 `GltfLoader::load` now enforces the glTF 2.0 §3.12 contract: files

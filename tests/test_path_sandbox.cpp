@@ -9,6 +9,15 @@
 
 #include <filesystem>
 #include <fstream>
+#include <string>
+
+#ifdef _WIN32
+#include <process.h>
+#define VESTIGE_GETPID() _getpid()
+#else
+#include <unistd.h>
+#define VESTIGE_GETPID() getpid()
+#endif
 
 namespace fs = std::filesystem;
 
@@ -22,8 +31,18 @@ protected:
 
     void SetUp() override
     {
-        m_root = fs::temp_directory_path() / fs::path{"vestige_path_sandbox_test"};
-        fs::remove_all(m_root);
+        // Unique per-process + per-test so `ctest -j` doesn't race on
+        // a shared temp dir. CMake's `gtest_discover_tests` spawns one
+        // process per TEST_F, so each PID is unique; appending the
+        // gtest test name guards against the same process reusing the
+        // dir across cases.
+        const auto* info = ::testing::UnitTest::GetInstance()->current_test_info();
+        const std::string testName = info ? info->name() : "unknown";
+        m_root = fs::temp_directory_path()
+               / ("vestige_path_sandbox_test_"
+                  + std::to_string(VESTIGE_GETPID()) + "_" + testName);
+        std::error_code ec;
+        fs::remove_all(m_root, ec);
         fs::create_directories(m_root / "assets" / "ok");
         fs::create_directories(m_root / "sibling");
         std::ofstream{m_root / "assets" / "ok" / "in.png"} << "ok";
