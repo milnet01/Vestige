@@ -5,9 +5,9 @@
 /// @brief Runtime motion matching driver component.
 #pragma once
 
-#include "animation/motion_database.h"
-#include "animation/trajectory_predictor.h"
-#include "animation/inertialization.h"
+#include "experimental/animation/motion_database.h"
+#include "experimental/animation/trajectory_predictor.h"
+#include "experimental/animation/inertialization.h"
 
 #include <memory>
 

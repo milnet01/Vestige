@@ -27,8 +27,8 @@
 
 #include <gtest/gtest.h>
 
-#include "animation/facial_animation.h"
-#include "animation/lip_sync.h"
+#include "experimental/animation/facial_animation.h"
+#include "experimental/animation/lip_sync.h"
 #include "animation/tween.h"
 #include "audio/audio_source_component.h"
 #include "physics/cloth_component.h"

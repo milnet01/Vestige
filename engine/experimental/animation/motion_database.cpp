@@ -4,7 +4,7 @@
 /// @file motion_database.cpp
 /// @brief Motion matching database implementation.
 
-#include "animation/motion_database.h"
+#include "experimental/animation/motion_database.h"
 #include "animation/animation_sampler.h"
 #include "core/logger.h"
 

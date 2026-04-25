@@ -4,7 +4,7 @@
 /// @file motion_preprocessor.cpp
 /// @brief Offline motion database building pipeline implementation.
 
-#include "animation/motion_preprocessor.h"
+#include "experimental/animation/motion_preprocessor.h"
 #include "core/logger.h"
 
 namespace Vestige

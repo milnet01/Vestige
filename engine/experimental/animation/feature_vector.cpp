@@ -4,7 +4,7 @@
 /// @file feature_vector.cpp
 /// @brief Motion matching feature schema and extraction implementation.
 
-#include "animation/feature_vector.h"
+#include "experimental/animation/feature_vector.h"
 
 #include <cmath>
 

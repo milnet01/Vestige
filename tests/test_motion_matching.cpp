@@ -4,14 +4,14 @@
 /// @file test_motion_matching.cpp
 /// @brief Unit tests for the motion matching system.
 
-#include "animation/feature_vector.h"
-#include "animation/kd_tree.h"
-#include "animation/motion_database.h"
-#include "animation/trajectory_predictor.h"
-#include "animation/inertialization.h"
-#include "animation/motion_matcher.h"
-#include "animation/motion_preprocessor.h"
-#include "animation/mirror_generator.h"
+#include "experimental/animation/feature_vector.h"
+#include "experimental/animation/kd_tree.h"
+#include "experimental/animation/motion_database.h"
+#include "experimental/animation/trajectory_predictor.h"
+#include "experimental/animation/inertialization.h"
+#include "experimental/animation/motion_matcher.h"
+#include "experimental/animation/motion_preprocessor.h"
+#include "experimental/animation/mirror_generator.h"
 #include "animation/skeleton.h"
 #include "animation/animation_clip.h"
 

@@ -4,12 +4,12 @@
 /// @file test_lip_sync.cpp
 /// @brief Unit tests for viseme mapping, audio analysis, and lip sync playback.
 
-#include "animation/audio_analyzer.h"
-#include "animation/facial_animation.h"
-#include "animation/facial_presets.h"
-#include "animation/lip_sync.h"
+#include "experimental/animation/audio_analyzer.h"
+#include "experimental/animation/facial_animation.h"
+#include "experimental/animation/facial_presets.h"
+#include "experimental/animation/lip_sync.h"
 #include "animation/skeleton_animator.h"
-#include "animation/viseme_map.h"
+#include "experimental/animation/viseme_map.h"
 
 #include <gtest/gtest.h>
 

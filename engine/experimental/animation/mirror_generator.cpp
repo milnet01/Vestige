@@ -4,7 +4,7 @@
 /// @file mirror_generator.cpp
 /// @brief Animation mirroring utilities implementation.
 
-#include "animation/mirror_generator.h"
+#include "experimental/animation/mirror_generator.h"
 
 #include <cctype>
 

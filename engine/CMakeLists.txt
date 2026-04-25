@@ -171,21 +171,29 @@ set(ENGINE_SOURCES
     animation/tween.cpp
     animation/ik_solver.cpp
     animation/morph_target.cpp
-    animation/facial_presets.cpp
-    animation/eye_controller.cpp
-    animation/facial_animation.cpp
-    animation/viseme_map.cpp
-    animation/audio_analyzer.cpp
-    animation/lip_sync.cpp
-    animation/feature_vector.cpp
-    animation/kd_tree.cpp
-    animation/motion_database.cpp
-    animation/trajectory_predictor.cpp
-    animation/inertialization.cpp
-    animation/motion_matcher.cpp
-    animation/motion_preprocessor.cpp
-    animation/mirror_generator.cpp
     animation/sprite_animation.cpp
+    # Phase 10.9 Slice 8 W12: animation zombie cluster relocated to
+    # engine/experimental/animation/ — these compile into the same
+    # vestige_engine library so existing tests link, but the new path
+    # carries the "no production caller" semantic. To activate, plumb
+    # one or more entry points (skeleton-driving demo, lip-sync-on-
+    # audio-clip, motion-matched character controller) into the
+    # game-side or editor surface and move the consumed files back to
+    # animation/. See engine/experimental/animation/README.md.
+    experimental/animation/facial_presets.cpp
+    experimental/animation/eye_controller.cpp
+    experimental/animation/facial_animation.cpp
+    experimental/animation/viseme_map.cpp
+    experimental/animation/audio_analyzer.cpp
+    experimental/animation/lip_sync.cpp
+    experimental/animation/feature_vector.cpp
+    experimental/animation/kd_tree.cpp
+    experimental/animation/motion_database.cpp
+    experimental/animation/trajectory_predictor.cpp
+    experimental/animation/inertialization.cpp
+    experimental/animation/motion_matcher.cpp
+    experimental/animation/motion_preprocessor.cpp
+    experimental/animation/mirror_generator.cpp
     physics/physics_world.cpp
     physics/rigid_body.cpp
     physics/physics_character_controller.cpp

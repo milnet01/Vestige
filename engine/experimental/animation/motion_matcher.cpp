@@ -4,7 +4,7 @@
 /// @file motion_matcher.cpp
 /// @brief Runtime motion matching driver implementation.
 
-#include "animation/motion_matcher.h"
+#include "experimental/animation/motion_matcher.h"
 #include "animation/skeleton_animator.h"
 
 #include <chrono>

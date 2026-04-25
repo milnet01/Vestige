@@ -4,7 +4,7 @@
 /// @file trajectory_predictor.cpp
 /// @brief Spring-damper trajectory prediction implementation.
 
-#include "animation/trajectory_predictor.h"
+#include "experimental/animation/trajectory_predictor.h"
 
 #include <cmath>
 

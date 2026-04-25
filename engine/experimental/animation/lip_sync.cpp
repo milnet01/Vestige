@@ -10,9 +10,9 @@
 ///
 /// Output is fed to FacialAnimator::setLipSyncWeight() which handles the
 /// emotion/lip-sync merge in mergeAndApply().
-#include "animation/lip_sync.h"
+#include "experimental/animation/lip_sync.h"
 
-#include "animation/facial_animation.h"
+#include "experimental/animation/facial_animation.h"
 #include "core/logger.h"
 
 #include <nlohmann/json.hpp>

@@ -4,7 +4,7 @@
 /// @file kd_tree.cpp
 /// @brief KD-tree nearest-neighbor search implementation.
 
-#include "animation/kd_tree.h"
+#include "experimental/animation/kd_tree.h"
 
 #include <algorithm>
 #include <numeric>

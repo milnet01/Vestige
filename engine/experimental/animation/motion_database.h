@@ -5,8 +5,8 @@
 /// @brief Motion matching database — stores feature vectors and supports search.
 #pragma once
 
-#include "animation/feature_vector.h"
-#include "animation/kd_tree.h"
+#include "experimental/animation/feature_vector.h"
+#include "experimental/animation/kd_tree.h"
 #include "animation/animation_clip.h"
 #include "animation/skeleton.h"
 

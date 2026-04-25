@@ -5,8 +5,8 @@
 /// @brief Offline motion database building pipeline.
 #pragma once
 
-#include "animation/motion_database.h"
-#include "animation/feature_vector.h"
+#include "experimental/animation/motion_database.h"
+#include "experimental/animation/feature_vector.h"
 
 #include <memory>
 #include <string>

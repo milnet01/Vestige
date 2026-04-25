@@ -4,9 +4,9 @@
 /// @file test_facial_animation.cpp
 /// @brief Unit tests for facial animation: presets, eye controller, facial animator.
 
-#include "animation/facial_animation.h"
-#include "animation/facial_presets.h"
-#include "animation/eye_controller.h"
+#include "experimental/animation/facial_animation.h"
+#include "experimental/animation/facial_presets.h"
+#include "experimental/animation/eye_controller.h"
 #include "animation/skeleton_animator.h"
 #include "animation/morph_target.h"
 

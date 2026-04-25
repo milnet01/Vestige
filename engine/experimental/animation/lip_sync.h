@@ -5,8 +5,8 @@
 /// @brief Lip sync player: pre-baked track playback and real-time amplitude fallback.
 #pragma once
 
-#include "animation/audio_analyzer.h"
-#include "animation/viseme_map.h"
+#include "experimental/animation/audio_analyzer.h"
+#include "experimental/animation/viseme_map.h"
 #include "scene/component.h"
 
 #include <string>

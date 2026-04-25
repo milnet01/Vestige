@@ -4,7 +4,7 @@
 /// @file facial_presets.cpp
 /// @brief Built-in emotion preset data based on FACS Action Unit research.
 
-#include "animation/facial_presets.h"
+#include "experimental/animation/facial_presets.h"
 
 namespace Vestige
 {

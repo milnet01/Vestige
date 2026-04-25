@@ -7,9 +7,9 @@
 /// Maps Rhubarb Lip Sync shapes (A-H, X) to ARKit 52 blend shape weights.
 /// Mappings calibrated against Preston Blair reference charts and
 /// OVR Lipsync viseme documentation.
-#include "animation/viseme_map.h"
+#include "experimental/animation/viseme_map.h"
 
-#include "animation/facial_presets.h"
+#include "experimental/animation/facial_presets.h"
 
 #include <algorithm>
 #include <array>

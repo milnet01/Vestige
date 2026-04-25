@@ -4,8 +4,8 @@
 /// @file eye_controller.cpp
 /// @brief Procedural eye animation implementation.
 
-#include "animation/eye_controller.h"
-#include "animation/facial_presets.h"
+#include "experimental/animation/eye_controller.h"
+#include "experimental/animation/facial_presets.h"
 
 #include <algorithm>
 

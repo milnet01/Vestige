@@ -5,7 +5,7 @@
 /// @brief Real-time audio analysis for amplitude-based lip sync fallback.
 #pragma once
 
-#include "animation/viseme_map.h"
+#include "experimental/animation/viseme_map.h"
 
 #include <cstddef>
 #include <vector>

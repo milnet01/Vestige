@@ -4,7 +4,7 @@
 /// @file facial_animation.cpp
 /// @brief FacialAnimator implementation: emotion transitions, layer merging.
 
-#include "animation/facial_animation.h"
+#include "experimental/animation/facial_animation.h"
 #include "animation/skeleton_animator.h"
 #include "core/logger.h"
 

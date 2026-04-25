@@ -5,8 +5,8 @@
 /// @brief FacialAnimator component: emotion presets, eye animation, and lip sync layering.
 #pragma once
 
-#include "animation/eye_controller.h"
-#include "animation/facial_presets.h"
+#include "experimental/animation/eye_controller.h"
+#include "experimental/animation/facial_presets.h"
 #include "animation/morph_target.h"
 #include "scene/component.h"
 

@@ -4,7 +4,7 @@
 /// @file inertialization.cpp
 /// @brief Inertialization blending implementation.
 
-#include "animation/inertialization.h"
+#include "experimental/animation/inertialization.h"
 
 #include <cmath>
 

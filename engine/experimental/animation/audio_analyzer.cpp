@@ -6,7 +6,7 @@
 ///
 /// Uses RMS energy and a radix-2 Cooley-Tukey FFT for spectral analysis.
 /// No external dependencies — pure C++17 implementation.
-#include "animation/audio_analyzer.h"
+#include "experimental/animation/audio_analyzer.h"
 
 #include <algorithm>
 #include <cmath>
