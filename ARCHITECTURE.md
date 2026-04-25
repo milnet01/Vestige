@@ -124,10 +124,11 @@ vestige/
 │   │              Framebuffer, ShadowMap (CSM + point), Skybox, TAA, SMAA,
 │   │              Bloom, SSAO, TonemapLUT, EnvironmentMap, LightProbe,
 │   │              SHProbeGrid, RadiosityBaker, InstanceBuffer, IndirectBuffer,
-│   │              GpuCuller, ParticleRenderer, GpuParticleSystem, WaterRenderer,
+│   │              ParticleRenderer, GpuParticleSystem, WaterRenderer,
 │   │              WaterFbo, FoliageRenderer, TreeRenderer, TerrainRenderer,
 │   │              TextRenderer, DebugDraw, MeshPool, IblPrefilter,
-│   │              ScopedForwardZ, FrameDiagnostics
+│   │              ScopedForwardZ, ScopedBlendState, ScopedCullFace,
+│   │              ScopedShadowDepthState, FrameDiagnostics
 │   ├── scene/      Scene, SceneManager, Entity, Component, MeshRenderer,
 │   │              CameraComponent, LightComponent, ParticleEmitter,
 │   │              GpuParticleEmitter, ParticlePresets, WaterSurface,
@@ -139,16 +140,21 @@ vestige/
 │   ├── physics/    PhysicsWorld, RigidBody, CharacterController,
 │   │              PhysicsConstraint, ClothSimulator, ClothComponent,
 │   │              ClothPresets, FabricMaterial, ClothMeshCollider, Bvh,
-│   │              SpatialHash, Ragdoll (+Preset), GrabSystem, Fracture,
-│   │              DeformableMesh, BreakableComponent, Dismemberment,
-│   │              StasisSystem, PhysicsDebug
+│   │              ColliderGenerator, SpatialHash, DeformableMesh, PhysicsDebug
 │   ├── animation/  Skeleton, AnimationClip, AnimationSampler,
 │   │              AnimationStateMachine, SkeletonAnimator, Easing, Tween,
-│   │              IkSolver, MorphTarget, FacialAnimation (+FacialPresets,
-│   │              EyeController, VisemeMap, AudioAnalyzer, LipSync),
-│   │              MotionMatcher (+FeatureVector, KdTree, MotionDatabase,
-│   │              TrajectoryPredictor, Inertialization, MotionPreprocessor,
-│   │              MirrorGenerator)
+│   │              IkSolver, MorphTarget, SpriteAnimation
+│   ├── experimental/  Off-roadmap subsystems with passing tests but no
+│   │   │              production consumer (Phase 10.9 W12/W13). Production
+│   │   │              code MUST NOT include from here; tests + future
+│   │   │              demos may. See engine/experimental/animation/README.md.
+│   │   ├── animation/ MotionMatcher, MotionDatabase, MotionPreprocessor,
+│   │   │              TrajectoryPredictor, FeatureVector, KdTree,
+│   │   │              MirrorGenerator, Inertialization, LipSync,
+│   │   │              AudioAnalyzer, VisemeMap, FacialAnimation,
+│   │   │              FacialPresets, EyeController
+│   │   └── physics/   Ragdoll (+Preset), Fracture, BreakableComponent,
+│   │                  Dismemberment (+Zones), GrabSystem, StasisSystem
 │   ├── environment/ Terrain, EnvironmentForces, DensityMap, FoliageChunk,
 │   │              FoliageManager, SplinePath, BiomePreset
 │   ├── formula/    Expression, ExpressionEval, Formula, FormulaLibrary,
