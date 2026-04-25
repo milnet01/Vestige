@@ -9,6 +9,87 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-25 Phase 10.9 — Slice 4 R4 (foliage: ScopedBlendState + ScopedCullFace RAII)
+
+The sixth Slice 4 item shipped today. R4 in the ROADMAP requested
+the new RAII rolled across foliage / water / tree / particle
+renderers; this commit ships the RAII machinery + the foliage
+rollout. Water / tree / particle subsystem rollouts deferred to
+follow-up items so this trio stays focused.
+
+**Why R4.** `FoliageRenderer::render` toggled `GL_BLEND` +
+`GL_CULL_FACE` with bare `glEnable` / `glDisable` calls and
+inverse manual restores at end-of-function. The restores assumed
+the caller had blend off / cull on — fragile under cross-pass
+composition. The editor's debug-draw mode runs with cull off, so
+any foliage call from inside that mode incorrectly re-enabled
+cull on the way out, corrupting subsequent draws.
+
+**Code.** Two new headers/cpps:
+
+  * `engine/renderer/scoped_blend_state.{h,cpp}` —
+    `ScopedBlendStateImpl<Io>` template + `BlendStateGlIo` GL
+    backend. Saves enable bit + per-channel factors via
+    `glGetIntegerv(GL_BLEND_SRC_RGB / DST_RGB / SRC_ALPHA /
+    DST_ALPHA)`; restores via `glBlendFuncSeparate`. Constructor
+    accepts `(bool enable, GLenum src, GLenum dst)` for the
+    inside-scope state.
+
+  * `engine/renderer/scoped_cull_face.{h,cpp}` —
+    `ScopedCullFaceImpl<Io>` template + `CullFaceGlIo` GL backend.
+    Saves/applies/restores just the enable bit. Constructor
+    accepts `(bool enable)`.
+
+Both follow the R3 `ScopedShadowDepthState` template-injectable
+IO pattern. Production callers use the typedefs without specifying
+`Io`; tests inject a `RecordingBlendIo` / `RecordingCullIo` to
+verify the bracket contract without a GL context.
+
+`FoliageRenderer::render` now opens with `ScopedBlendState{true,
+GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA}` + `ScopedCullFace{false}`;
+the manual `glEnable(GL_CULL_FACE)` + `glDisable(GL_BLEND)` pair
+at end-of-function deleted.
+
+`FoliageRenderer::renderShadow` now opens with
+`ScopedCullFace{false}`; the manual `glEnable(GL_CULL_FACE)`
+restore at end-of-function deleted.
+
+**Tests.** 9 new cases:
+
+`tests/test_scoped_blend_state.cpp` (4):
+- `ConstructionCallsSaveThenApply_R4` — ctor order pinned.
+- `ApplyForwardsConstructorParameters_R4` — enable / src / dst
+  flow through to the IO's apply call.
+- `DestructionRestoresSnapshottedState_R4` — dtor restores via
+  `Io::restore(saved)`.
+- `RestorePreservesCallerHadBlendOnState_R4` — caller-was-on
+  case (the false-positive case where caller-was-off would pass
+  the empty-dtor stub via default-init match).
+
+`tests/test_scoped_cull_face.cpp` (5):
+- `ConstructionCallsSaveThenApply_R4` — ctor order pinned.
+- `ApplyForwardsConstructorBool_R4` — enable bit flows through.
+- `RestorePreservesCallerEnabledState_R4` — caller-was-on case.
+- `RestorePreservesCallerDisabledState_R4` — caller-was-off case
+  (passes the empty-dtor stub vacuously, kept as regression pin).
+- `NestedGuardsRestoreInLifo_R4` — bracket order under nesting
+  with `ASSERT_GE` bounds checks before `m_trace[N]` indexing,
+  same SEGV-guard pattern as R3.
+
+**ROADMAP entry marked `[~]` (partial).** Foliage shipped; water
+/ tree / particle subsystem rollouts pending. The RAII
+infrastructure is reusable across all three.
+
+**Bump.** VERSION 0.1.34 → 0.1.35. Full suite: 2987 / 2988 pass
+(+9 vs R9's 2978; the pre-existing skip unchanged).
+
+**Slice 4 status post-R4: R1, R3, R4 (foliage), R7, R9, R10
+shipped — 6 of 10 items advanced today.** Remaining open: R2
+(GPU compute SH — large), R6 (Mesa sampler-binding fallbacks at
+4 sites — multi-site), R8 (SDSM async readback — perf). R5 is
+gated on Slice 8 W11 (GpuCuller zombie). R4's water / tree /
+particle subsystem rollouts are tracked as follow-up items.
+
 ### 2026-04-25 Phase 10.9 — Slice 4 R9 (bloom Karis Jimenez weighting)
 
 The fifth Slice 4 item shipped today (after R1, R3, R7, R10). The
