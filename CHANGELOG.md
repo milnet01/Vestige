@@ -9,6 +9,52 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-25 Phase 10.9 — Slice 4 R4 (water + tree + particle rollouts)
+
+Completes the R4 RAII rollout begun by the foliage trio earlier
+today. Three small per-renderer commits applying the existing
+`ScopedBlendState` and (for the tree LOD1 path) `ScopedCullFace`
+guards at the remaining three subsystems.
+
+- **Water rollout** (`40c98ee`): `WaterRenderer::render` now opens
+  the alpha-blend pass with `ScopedBlendState{true, GL_SRC_ALPHA,
+  GL_ONE_MINUS_SRC_ALPHA}`; the manual `glDisable(GL_BLEND)` at
+  end-of-function deleted. Depth-mask save/restore stays bare
+  (separate follow-up).
+- **Tree rollout** (`377947b`): both LOD paths in
+  `TreeRenderer::render` wrapped in inner `{}` scopes — LOD0
+  mesh path with just `ScopedBlendState`, LOD1 billboard path
+  with `ScopedBlendState` + `ScopedCullFace{false}` because
+  billboards are two-sided quads. Each LOD's RAII fires its
+  destructor before the next LOD's guards construct, keeping the
+  per-LOD ordering intact.
+- **Particle rollout** (`23304be`): both `ParticleRenderer::render`
+  (CPU path) and `ParticleRenderer::renderGPU` bracket their
+  per-emitter draw loops with `ScopedBlendState`. Per-emitter
+  `glBlendFunc` calls inside each loop override the construction-
+  time factors as each emitter's `BlendMode` dictates (additive
+  vs alpha-blend); the RAII restores the caller's prior blend
+  state on function exit.
+
+**Bug closed across all four sites**: the pre-R4 manual restore
+re-enabled cull-face / disabled blend on the way out regardless
+of the caller's prior state, which broke any caller that ran
+with cull off (editor debug-draw mode) or with blend on (an
+outer compositor pass).
+
+**No new tests** for the three rollouts. The RAII contract is
+already pinned by `tests/test_scoped_blend_state.cpp` (4 tests)
+and `tests/test_scoped_cull_face.cpp` (5 tests) from the foliage
+trio; this batch applies the existing RAII at new sites.
+
+**Bump.** VERSION 0.1.35 → 0.1.36. Full suite: 2987 / 2988 pass
+(no test-count delta — pure refactor).
+
+**Slice 4 status post-rollout: R1, R3, R4 (full), R7, R9, R10
+shipped (6 of 10 items + R4 fully complete).** Remaining open:
+R2 (GPU compute SH), R6 (Mesa sampler bindings), R8 (SDSM async
+readback). R5 still gated on Slice 8 W11.
+
 ### 2026-04-25 Phase 10.9 — Slice 4 R4 (foliage: ScopedBlendState + ScopedCullFace RAII)
 
 The sixth Slice 4 item shipped today. R4 in the ROADMAP requested
