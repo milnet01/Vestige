@@ -6,6 +6,7 @@
 #include "renderer/renderer.h"
 #include "renderer/dynamic_mesh.h"
 #include "renderer/foliage_renderer.h"
+#include "renderer/motion_overlay_prev_world.h"
 #include "renderer/scoped_forward_z.h"
 #include "environment/foliage_manager.h"
 #include "scene/scene.h"
@@ -1324,30 +1325,29 @@ void Renderer::endFrame(float deltaTime)
         m_taa->swapBuffers();
         m_taa->nextFrame();
         m_prevViewProjection = m_lastViewProjection;
+    }
 
-        // AUDIT.md §H15 / FIXPLAN G1: snapshot this frame's world
-        // matrices so the per-object motion vector overlay next frame
-        // can compute prev→curr per entity. Only scene items are
-        // tracked; transients (particle quads, debug lines) do not
-        // participate in TAA reprojection anyway.
-        if (m_currentRenderData)
-        {
-            m_prevWorldMatrices.clear();
-            for (const auto& item : m_currentRenderData->renderItems)
-            {
-                if (item.entityId != 0)
-                {
-                    m_prevWorldMatrices[item.entityId] = item.worldMatrix;
-                }
-            }
-            for (const auto& item : m_currentRenderData->transparentItems)
-            {
-                if (item.entityId != 0)
-                {
-                    m_prevWorldMatrices[item.entityId] = item.worldMatrix;
-                }
-            }
-        }
+    // AUDIT.md §H15 / FIXPLAN G1: snapshot this frame's world
+    // matrices so the per-object motion vector overlay next frame
+    // can compute prev→curr per entity. Only scene items are
+    // tracked; transients (particle quads, debug lines) do not
+    // participate in TAA reprojection anyway.
+    //
+    // R10 (Phase 10.9 Slice 4): the clear is unconditional — non-TAA
+    // modes (MSAA / SMAA / None) also wipe the cache so a subsequent
+    // toggle-back to TAA doesn't read stale matrices that may belong
+    // to entities destroyed (and their entityIds reused) in between.
+    // Population stays gated on `isTAA` because only TAA's overlay
+    // reads the cache.
+    if (m_currentRenderData)
+    {
+        updateMotionOverlayPrevWorld(m_prevWorldMatrices, isTAA,
+                                       m_currentRenderData->renderItems,
+                                       m_currentRenderData->transparentItems);
+    }
+
+    if (isTAA)
+    {
         // Clear the cached pointer — it must not be dereferenced after
         // endFrame returns since the scene may be mutated before the
         // next renderScene call.
