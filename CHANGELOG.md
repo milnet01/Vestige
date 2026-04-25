@@ -9,6 +9,97 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-25 Phase 10.9 — Slice 4 R3 (shadow-pass GL state RAII)
+
+The fourth Slice 4 item shipped today (after R1, R7, R10). The
+2026-04-23 ultrareview flagged that `Renderer::renderShadowPass`
+toggled `GL_CLIP_DISTANCE0` and `GL_DEPTH_CLAMP` with bare
+`glDisable` / `glEnable` calls and a stray `glDisable` at the end
+— no snapshot of the caller's prior state. The water reflection
+/ refraction passes set `GL_CLIP_DISTANCE0` for the underwater-
+scene clip plane, so the first shadow render after a water pass
+permanently disabled it; `GL_DEPTH_CLAMP` was restored to "off"
+by assumption, not by snapshot.
+
+**Fix.** Took the **sibling-RAII** path of the two roadmap
+options. `ScopedForwardZ` semantically covers clip-mode +
+depth-function flips; the shadow-pass-specific enable bits get
+their own guard so the two shapes stay semantically separate
+(rather than ballooning `ScopedForwardZ` into a "shadow + IBL +
+cubemap-capture" omnibus).
+
+**Code.** `engine/renderer/scoped_shadow_depth_state.{h,cpp}`:
+
+```cpp
+struct ShadowDepthGlIo {
+    struct SavedState { bool clipDistance0; bool depthClamp; };
+    static SavedState save();          // glIsEnabled snapshot
+    static void applyShadowState();    // disable CLIP, enable CLAMP
+    static void restore(const SavedState&);
+};
+
+template <typename Io = ShadowDepthGlIo>
+class ScopedShadowDepthStateImpl {
+public:
+    ScopedShadowDepthStateImpl() : m_saved(Io::save()) { Io::applyShadowState(); }
+    ~ScopedShadowDepthStateImpl() { Io::restore(m_saved); }
+    /* non-copyable, non-movable */
+private:
+    typename Io::SavedState m_saved;
+};
+
+using ScopedShadowDepthState = ScopedShadowDepthStateImpl<ShadowDepthGlIo>;
+```
+
+`Renderer::renderShadowPass` now constructs the guard
+immediately after `ScopedForwardZ`. The three manual GL state
+toggles (lines 3224, 3229, 3347 pre-R3) are deleted; the RAII
+handles all three on construction + destruction.
+
+**Why a template-injected IO.** The bracket contract is GL state
+behaviour. Without a GL test harness this project doesn't yet
+have, the only way to unit-test the contract is to inject a
+mock IO type that records save / applyShadowState / restore
+calls. Same shape as Phase 10.9 R1's
+`runIblCaptureSequenceWith<Guard>`.
+
+**Tests.** 6 new `ScopedShadowDepthStateTest.*_R3` cases in
+`tests/test_scoped_shadow_depth_state.cpp`:
+
+- `ConstructionCallsSaveThenApply_R3` — ctor order pinned.
+- `DestructionCallsRestoreWithSavedState_R3` — dtor restores
+  the snapshotted state (the headline R3 invariant; fails
+  against the empty-dtor RED stub).
+- `RestoreFiresEvenOnEarlyScopeExit_R3` — RAII contract pin.
+- `RestorePreservesClipDistance0OffState_R3` — preserves
+  off → off with a trace-check guard against the false-positive
+  where default-init `restored` matches "no restore called."
+- `RestorePreservesBothOnState_R3` — preserves both bits = on
+  rather than collapsing to off.
+- `NestedGuardsRestoreInLifo_R3` — bracket order under nesting.
+
+**SEGV caught and fixed.** The `NestedGuardsRestoreInLifo_R3`
+test originally indexed `m_trace[4]` and `m_trace[5]` directly
+after `EXPECT_EQ` size checks. Against the RED stub (no
+restores), the size assertions fail but the subsequent index
+operations dereference past `end()`, and gtest's failure-message
+formatter SEGVs trying to print the resulting garbage as a
+string. The systemd coredump hook caught the crash; added
+`ASSERT_GE(m_trace.size(), N)` bounds-check before each
+`m_trace[N]` access so the size-check failure halts the test
+cleanly instead.
+
+**Bump.** VERSION 0.1.32 → 0.1.33. Full suite: 2971 / 2972 pass
+(+6 vs R10's 2965; the pre-existing
+`MeshBoundsTest.UploadComputesLocalBounds` skip is unchanged).
+
+**Slice 4 status post-R3: R1, R3, R7, R10 shipped; R2, R4, R5,
+R6, R8, R9 open.** Next likely candidates: R4 (`ScopedBlendState`
++ `ScopedCullFace` RAII rolled out across foliage / water / tree
+/ particle renderers — broader RAII rollout, same shape as R3),
+R9 (Bloom Karis weights — pure GLSL math fix), or R6 (Mesa
+sampler-binding fallbacks at four sites).
+
 ### 2026-04-25 Phase 10.9 — Slice 4 R10 (motion-overlay prev-world cache — unconditional clear)
 
 The third item of Slice 4. The 2026-04-23 ultrareview flagged that
