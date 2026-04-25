@@ -50,9 +50,7 @@ public:
 
     ~ScopedCullFaceImpl()
     {
-        // RED stub — restore intentionally absent. The pass therefore
-        // leaks GL_CULL_FACE state across the function boundary, exactly
-        // the bug R4 closes. Green commit replaces with `Io::restore(m_saved);`.
+        Io::restore(m_saved);
     }
 
     ScopedCullFaceImpl(const ScopedCullFaceImpl&) = delete;
