@@ -9,6 +9,58 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-25 Phase 10.9 — Slice 4 R6 (Mesa sampler-binding fallbacks at 4 sites)
+
+The seventh Slice 4 item shipped today. Closes the systemic Mesa
+AMD `GL_INVALID_OPERATION` hazard at four conditional-bind paths:
+foliage no-shadow, water first-frame, GPU-particles no-collision,
+procedural skybox. Mesa requires every declared sampler uniform
+to have a valid texture of the matching type bound at its unit
+at draw time, even if the shader path never samples from it.
+
+**Helper.** `engine/renderer/sampler_fallback.{h,cpp}` ships
+`SamplerFallbackImpl<Creator>` template + `GlTextureCreator`
+production backend + `sharedSamplerFallback()` process-wide
+singleton. Lazy-inits four 1×1 fallback textures (sampler2D
+white, samplerCube black, sampler2DArray black, sampler3D black)
+on first use; cached statically. `shutdown()` releases via the
+same Creator interface; idempotent.
+
+**Sites refactored.** Each was a missed conditional-bind in a
+shader path that's only used in some frames or some scenes:
+
+- `FoliageRenderer::render` no-shadow path: binds
+  `getSampler2DArray()` to unit 3 + sets `u_cascadeShadowMap=3`.
+- `WaterRenderer::render`: u_reflectionTex / u_refractionTex /
+  u_refractionDepthTex / u_foamTex at units 3/4/5/6 now
+  unconditionally bind either the real texture or
+  `getSampler2D()`.
+- `GPUParticleSystem::simulate` no-collision branch: binds
+  `getSampler2D()` to unit 0 + sets `u_depthTexture=0`.
+- Procedural skybox in `renderer.cpp`: binds `getSamplerCube()`
+  to unit 0 + sets `u_skyboxTexture=0` when no real cubemap is
+  loaded.
+
+**Tests.** 7 new `SamplerFallbackTest.*_R6` cases via
+`MockTextureCreator` recording create/delete calls. Pin: lazy-
+init creates exactly once, repeated calls return cached handle,
+each type cached independently, `shutdown()` releases all + is
+idempotent + no-op without prior `get`, `get` after `shutdown`
+re-creates.
+
+The per-site bindings are not unit-tested — contract is "shader
+has a valid sampler at its unit at draw time," not testable
+without GL. Same precedent as the existing renderer.cpp:749-768
+pattern. Mesa AMD visual confirmation is the validation step.
+
+**Bump.** VERSION 0.1.36 → 0.1.37. Full suite: 2994 / 2995 pass
+(+7 vs R4 rollouts' 2987; pre-existing skip unchanged).
+
+**Slice 4 status post-R6: R1, R3, R4 (full), R6, R7, R9, R10
+shipped — 7 of 10 items advanced today.** Remaining open: R2
+(GPU compute SH), R8 (SDSM async readback). R5 still gated on
+Slice 8 W11.
+
 ### 2026-04-25 Phase 10.9 — Slice 4 R4 (water + tree + particle rollouts)
 
 Completes the R4 RAII rollout begun by the foliage trio earlier
