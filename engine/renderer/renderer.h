@@ -30,7 +30,6 @@
 #include "renderer/smaa.h"
 #include "renderer/mesh_pool.h"
 #include "renderer/indirect_buffer.h"
-#include "renderer/gpu_culler.h"
 #include "core/event_bus.h"
 #include "scene/scene.h"
 
@@ -689,10 +688,12 @@ private:
     std::unique_ptr<InstanceBuffer> m_instanceBuffer;
     static constexpr int MIN_INSTANCE_BATCH_SIZE = 2;
 
-    // Multi-Draw Indirect (MDI) + GPU frustum culling
+    // Multi-Draw Indirect (MDI). CPU-side frustum culling happens in scene
+    // gather; per-instance GPU culling is future work (see ROADMAP E3, which
+    // plans to reuse assets/shaders/frustum_cull.comp.glsl from the foliage
+    // system).
     std::unique_ptr<MeshPool> m_meshPool;
     std::unique_ptr<IndirectBuffer> m_indirectBuffer;
-    std::unique_ptr<GpuCuller> m_gpuCuller;
     bool m_mdiEnabled = false;  // Disabled until mesh pool is populated
 
     // Color grading LUT

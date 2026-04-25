@@ -674,15 +674,6 @@ void Renderer::initFramebuffers(int width, int height, int msaaSamples)
     m_meshPool = std::make_unique<MeshPool>();
     m_indirectBuffer = std::make_unique<IndirectBuffer>();
 
-    // Initialize GPU frustum culler
-    m_gpuCuller = std::make_unique<GpuCuller>();
-    std::string frustumCullPath = m_assetPath + "/shaders/frustum_cull.comp.glsl";
-    if (!m_gpuCuller->init(frustumCullPath))
-    {
-        Logger::warning("GPU frustum culler failed to initialize");
-        m_gpuCuller.reset();
-    }
-
     // IBL environment map (irradiance, prefilter, BRDF LUT)
     m_environmentMap = std::make_unique<EnvironmentMap>();
     if (m_environmentMap->initialize(m_assetPath))

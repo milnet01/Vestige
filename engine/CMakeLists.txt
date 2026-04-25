@@ -85,7 +85,6 @@ set(ENGINE_SOURCES
     renderer/smaa.cpp
     renderer/mesh_pool.cpp
     renderer/indirect_buffer.cpp
-    renderer/gpu_culler.cpp
     renderer/particle_renderer.cpp
     renderer/gpu_particle_system.cpp
     renderer/sprite_atlas.cpp
