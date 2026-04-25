@@ -9,6 +9,121 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-25 Phase 10.9 — Slice 4 R1 (IBL capture paths wrapped in ScopedForwardZ)
+
+The first item of Slice 4 (Rendering correctness). The 2026-04-23
+ultrareview flagged that `EnvironmentMap::generate` and
+`LightProbe::generateFromCubemap` run cubemap-face render passes
+without a `ScopedForwardZ` bracket, plus the init-time first-
+generation call at `renderer.cpp:683-692` has no save/restore at
+all. `glClipControl` is global state — without an outer guard,
+either the IBL passes render against a reverse-Z depth buffer
+(corrupting the captured cubemap's depth-tested geometry) or the
+engine is left in forward-Z afterward (corrupting every subsequent
+scene draw, since the engine's main scene path runs reverse-Z with
+`GL_GEQUAL` + clearDepth 0.0). Every PBR material rendered since
+Phase 4 has therefore been lit with potentially-corrupted
+irradiance / prefilter values when the init-time generate ran
+between any prior scene draw and the next.
+
+**Fix.** Lifted the bracket pattern into a shared helper
+`engine/renderer/ibl_capture_sequence.{h,cpp}`:
+
+```cpp
+template <typename Guard, typename StepsList>
+void runIblCaptureSequenceWith(const StepsList& steps)
+{
+    Guard guard;
+    for (const auto& step : steps)
+        if (step) step();
+}
+
+void runIblCaptureSequence(std::initializer_list<std::function<void()>> steps);
+```
+
+The template form is testable without a GL context — tests inject
+a `RecordingGuard` whose ctor pushes "BEGIN" and dtor pushes "END"
+to a per-test trace. The non-template overload fixes
+`Guard = ScopedForwardZ` and is what production callers use. Both
+live in the same translation unit so the production caller pulls
+in the GL header transitively only when it instantiates the
+non-template form.
+
+**Call sites.**
+
+* `EnvironmentMap::generate` — the four sub-passes (capture,
+  irradiance convolution, GGX prefilter, BRDF LUT) are now lambdas
+  inside one `runIblCaptureSequence({...})` call. Per-pass
+  `glGetError()` drains move into each lambda so the existing
+  diagnostic path is byte-for-byte preserved. Texture-delete
+  cleanup at the top of `generate` runs outside the guard (no GL
+  state churn that needs forward-Z; matches how the prior code
+  structured the early reset).
+
+* `LightProbe::generateFromCubemap` — irradiance + prefilter
+  sub-passes wrapped in the same helper.
+
+* `renderer.cpp:683-692` (init-time first-generation) — no
+  caller-side change required. The guard now lives inside
+  `EnvironmentMap::generate`, so the init-time call inherits the
+  bracket. Closes the ROADMAP R1 note "currently no save/restore
+  at all" at that line range.
+
+**Why a helper, not inline `ScopedForwardZ`.** Both IBL entry
+points run a sequence of 2-4 sub-calls under one bracket. A bare
+inline `ScopedForwardZ guard;` would work but the identical
+pattern at two call sites is the textbook case for CLAUDE.md
+Rule 3 "Reuse before rewriting". The helper also makes the
+bracket contract testable in isolation — the template form
+accepts any `Guard` type, so a test can verify "guard opens
+before any step, closes after every step has returned" without
+needing a real GL context.
+
+**Tests.** 6 new `IblCaptureSequenceTest.*_R1` cases in
+`tests/test_ibl_capture_sequence.cpp`:
+
+- `EmptyStepsListStillBracketsGuard_R1` — guard's ctor + dtor run
+  even with zero steps (so a `generate()` that early-outs on a
+  missing input still restores GL state correctly).
+- `GuardOpensBeforeFirstStep_R1` — BEGIN appears before the first
+  step in the trace.
+- `StepsRunInOrderBetweenBeginAndEnd_R1` — capture / irradiance /
+  prefilter / BRDF-LUT order is preserved.
+- `GuardDestructsAfterLastStep_R1` — END appears after the last
+  step (the load-bearing half: the post-generate scene draw
+  needs reverse-Z to be already restored).
+- `NullStepIsSkippedWithoutThrowing_R1` — null `std::function`
+  entries are skipped without disturbing the bracket.
+- `GuardLifetimeContainsEverySingleStep_R1` — strong-form
+  invariant: every "STEP_*" entry's index in the trace lies
+  strictly between BEGIN's and END's.
+
+The RED commit (`e27e53e`) shipped a stub body that ran the steps
+without constructing the guard; all 6 tests failed (no BEGIN, no
+END). The GREEN commit (`c570101`) replaced the stub with the
+real `Guard guard;` line and refactored the two IBL entry points
+to call the helper; all 6 pass.
+
+**Scope boundary.** Production-side parity (rendering a probe
+with + without the wrap and diffing the prefilter output, as the
+ROADMAP described) requires a GL test harness this project
+doesn't yet have. The helper's bracket contract is unit-tested in
+isolation; the production call sites inherit the contract by
+virtue of using the same template, and the IBL capture itself
+(face render loop, mip-chain prefilter, etc.) is unchanged from
+its pre-R1 shipped form. Visual verification of the demo scene
+post-R1 is the manual confirmation step.
+
+**Bump.** VERSION 0.1.29 → 0.1.30. Full suite: 2953 / 2954 pass
+(+6 vs P6's 2947; the pre-existing
+`MeshBoundsTest.UploadComputesLocalBounds` skip is unchanged).
+
+**Next.** Slice 4 R2 (GPU compute SH projection replacing per-face
+`glReadPixels` + CPU projection in `captureSHGrid` — Editor "Bake
+GI" moves from ~1 FPS to full pipeline speed) or R3 (shadow-pass
+state save/restore for `GL_CLIP_DISTANCE0` + `GL_DEPTH_CLAMP`,
+extending `ScopedForwardZ` or a sibling RAII).
+
 ### 2026-04-24 Phase 10.9 — Slice 2 P6 (narrator styling — both paths)
 
 The last open Phase 10.9 Slice 2 item. `PHASE10_7_DESIGN.md §4.2`
