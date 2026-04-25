@@ -68,11 +68,7 @@ public:
 
     ~ScopedShadowDepthStateImpl()
     {
-        // RED stub — restore intentionally absent. The shadow pass
-        // therefore leaks GL_CLIP_DISTANCE0 / GL_DEPTH_CLAMP state
-        // across the function boundary, the exact bug R3 is supposed
-        // to close. The green commit replaces this with the correct
-        // `Io::restore(m_saved);` call.
+        Io::restore(m_saved);
     }
 
     ScopedShadowDepthStateImpl(const ScopedShadowDepthStateImpl&) = delete;
