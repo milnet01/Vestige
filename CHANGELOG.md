@@ -9,6 +9,48 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-25 Phase 10.9 — Slice 5 D10 (glTF bounds checks + primitive-range drift fix)
+
+`engine/utils/gltf_loader.cpp` `buildNodeHierarchy` now bounds-checks two
+sites that previously stored attacker-controlled indices verbatim and
+let downstream traversal walk off the end of `m_nodes`:
+
+- `gltfNode.children` entries — out-of-range or negative indices are
+  dropped with `Logger::warning("glTF: out-of-range child index N in
+  node M (skipping)")`. Previously stored as-is.
+- `scene.nodes` entries (the scene's root-node list) — same treatment;
+  `Logger::warning("glTF: out-of-range root-node index N in scene S
+  (skipping)")`.
+
+The defaultScene → scene-array bounds clamp at `gltf_loader.cpp:1037`
+already existed (clamps to 0) and is preserved.
+
+The same commit eliminates a separate latent drift bug. `loadMeshes`
+flattens each `gltfMesh.primitives[]` into `outModel.m_primitives`,
+skipping non-triangle primitives, primitives without POSITION, and any
+primitive whose accessor validation fails. `buildNodeHierarchy` then
+needs the per-mesh `{startIdx, count}` mapping in `m_primitives` to wire
+node-→-primitive references. The previous implementation rebuilt this
+mapping with an independent pre-scan whose skip predicate (`mode !=
+TRIANGLES && mode != -1` plus POSITION presence) had to stay in
+lockstep with every `continue` inside the real loader. Any divergence
+— for example, an accessor-validation failure deep in the loader that
+the pre-scan didn't model — would shift every downstream mesh's
+primitive offsets by one. The fix: `loadMeshes` now returns
+`std::vector<MeshPrimRange> { int startIdx; int count; }` populated
+from the actual `outModel.m_primitives` vector size before/after each
+mesh's iteration, and `buildNodeHierarchy` consumes it directly. One
+authoritative source, no lockstep predicate.
+
+6 new tests in `tests/test_gltf_bounds_checks.cpp` drive minimal glTF
+JSON files (asset + scenes + nodes only — no meshes or images, so the
+test runs without an OpenGL context) through `GltfLoader::load` and
+pin: valid graph loads cleanly, out-of-range child index dropped,
+negative child index dropped, out-of-range root-node index dropped,
+negative root-node index dropped, out-of-range default scene falls back
+to scene 0. 3036 / 3037 pass (1 pre-existing skip unchanged; +6 vs
+D11's 3030).
+
 ### 2026-04-25 Phase 10.9 — Slice 5 D11 (path-traversal guards on audio loaders)
 
 Closes the audio-side analogue of D1's path sandbox. `AudioEngine`

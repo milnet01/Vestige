@@ -443,13 +443,31 @@ static void generateFlatNormals(std::vector<Vertex>& vertices,
     }
 }
 
-/// @brief Loads all mesh primitives from a glTF model.
-static void loadMeshes(const tinygltf::Model& gltfModel, Model& outModel)
+/// @brief Per-glTF-mesh primitive range in `outModel.m_primitives`.
+///
+/// Slice 5 D10: returned from `loadMeshes` so `buildNodeHierarchy` can
+/// map mesh→primitive offsets without rerunning a separate pre-scan.
+/// The pre-scan was a drift hazard — its skip predicate (`mode != TRIANGLES
+/// && mode != -1` plus POSITION presence) had to stay in lockstep with
+/// every `continue` inside the real loader, which it didn't.
+struct MeshPrimRange
 {
-    // Track the starting primitive index for each glTF mesh
-    // (used later when building node hierarchy)
+    int startIdx;
+    int count;
+};
+
+/// @brief Loads all mesh primitives from a glTF model.
+/// @return Per-glTF-mesh `{startIdx, count}` ranges into `outModel.m_primitives`.
+static std::vector<MeshPrimRange> loadMeshes(const tinygltf::Model& gltfModel,
+                                             Model& outModel)
+{
+    std::vector<MeshPrimRange> ranges;
+    ranges.reserve(gltfModel.meshes.size());
+
     for (const auto& gltfMesh : gltfModel.meshes)
     {
+        const int rangeStart = static_cast<int>(outModel.m_primitives.size());
+
         for (const auto& primitive : gltfMesh.primitives)
         {
             // Only support triangles
@@ -922,40 +940,24 @@ static void loadMeshes(const tinygltf::Model& gltfModel, Model& outModel)
             modelPrim.morphTargets = std::move(morphData);
             outModel.m_primitives.push_back(std::move(modelPrim));
         }
+
+        const int rangeCount = static_cast<int>(outModel.m_primitives.size())
+                             - rangeStart;
+        ranges.push_back({rangeStart, rangeCount});
     }
+
+    return ranges;
 }
 
 /// @brief Builds the node hierarchy from glTF nodes.
-static void buildNodeHierarchy(const tinygltf::Model& gltfModel, Model& outModel)
+///
+/// `meshRanges` is `loadMeshes`'s authoritative `{startIdx, count}` per
+/// `gltfModel.meshes[i]` — Slice 5 D10 removed the previous local pre-scan
+/// that could drift from the actual loaded set.
+static void buildNodeHierarchy(const tinygltf::Model& gltfModel,
+                                const std::vector<MeshPrimRange>& meshRanges,
+                                Model& outModel)
 {
-    // First, compute the starting primitive index for each glTF mesh.
-    // glTF meshes can have multiple primitives, and we've flattened them
-    // into outModel.m_primitives. We need to map mesh index → primitive range.
-    std::vector<int> meshPrimitiveStart(gltfModel.meshes.size(), 0);
-    std::vector<int> meshPrimitiveCount(gltfModel.meshes.size(), 0);
-
-    int primOffset = 0;
-    for (size_t meshIdx = 0; meshIdx < gltfModel.meshes.size(); meshIdx++)
-    {
-        meshPrimitiveStart[meshIdx] = primOffset;
-        // Count how many primitives from this mesh were actually loaded
-        // (non-triangle primitives may have been skipped)
-        int count = 0;
-        for (const auto& prim : gltfModel.meshes[meshIdx].primitives)
-        {
-            if (prim.mode == TINYGLTF_MODE_TRIANGLES || prim.mode == -1)
-            {
-                // Check it has POSITION
-                if (prim.attributes.find("POSITION") != prim.attributes.end())
-                {
-                    count++;
-                }
-            }
-        }
-        meshPrimitiveCount[meshIdx] = count;
-        primOffset += count;
-    }
-
     // Build ModelNode for each glTF node
     outModel.m_nodes.resize(gltfModel.nodes.size());
 
@@ -1014,20 +1016,30 @@ static void buildNodeHierarchy(const tinygltf::Model& gltfModel, Model& outModel
 
         // Map mesh → primitives
         if (gltfNode.mesh >= 0
-            && gltfNode.mesh < static_cast<int>(gltfModel.meshes.size()))
+            && static_cast<size_t>(gltfNode.mesh) < meshRanges.size())
         {
-            int start = meshPrimitiveStart[static_cast<size_t>(gltfNode.mesh)];
-            int count = meshPrimitiveCount[static_cast<size_t>(gltfNode.mesh)];
-            for (int p = start; p < start + count; p++)
+            const MeshPrimRange& r = meshRanges[static_cast<size_t>(gltfNode.mesh)];
+            for (int p = r.startIdx; p < r.startIdx + r.count; p++)
             {
                 node.primitiveIndices.push_back(p);
             }
         }
 
-        // Children
+        // Children — D10 bounds-check: skip and warn on out-of-range indices
+        // rather than storing them and letting downstream traversal blow up.
         for (int childIdx : gltfNode.children)
         {
-            node.childIndices.push_back(childIdx);
+            if (childIdx >= 0
+                && childIdx < static_cast<int>(gltfModel.nodes.size()))
+            {
+                node.childIndices.push_back(childIdx);
+            }
+            else
+            {
+                Logger::warning("glTF: out-of-range child index "
+                    + std::to_string(childIdx) + " in node "
+                    + std::to_string(i) + " (skipping)");
+            }
         }
     }
 
@@ -1040,9 +1052,20 @@ static void buildNodeHierarchy(const tinygltf::Model& gltfModel, Model& outModel
             sceneIdx = 0;
         }
         const auto& scene = gltfModel.scenes[static_cast<size_t>(sceneIdx)];
+        // D10 bounds-check: skip and warn on out-of-range root-node indices.
         for (int nodeIdx : scene.nodes)
         {
-            outModel.m_rootNodes.push_back(nodeIdx);
+            if (nodeIdx >= 0
+                && nodeIdx < static_cast<int>(gltfModel.nodes.size()))
+            {
+                outModel.m_rootNodes.push_back(nodeIdx);
+            }
+            else
+            {
+                Logger::warning("glTF: out-of-range root-node index "
+                    + std::to_string(nodeIdx) + " in scene "
+                    + std::to_string(sceneIdx) + " (skipping)");
+            }
         }
     }
     else
@@ -1510,10 +1533,10 @@ std::unique_ptr<Model> GltfLoader::load(const std::string& filePath,
     // Load in dependency order: textures → materials → meshes → skins → animations → nodes
     loadTextures(gltfModel, gltfDir, resourceManager, *model, srgbImages);
     loadMaterials(gltfModel, *model);
-    loadMeshes(gltfModel, *model);
+    auto meshRanges = loadMeshes(gltfModel, *model);
     loadSkin(gltfModel, *model);
     loadAnimations(gltfModel, *model);
-    buildNodeHierarchy(gltfModel, *model);
+    buildNodeHierarchy(gltfModel, meshRanges, *model);
 
     Logger::info("glTF loaded: " + filePath + " ("
         + std::to_string(model->getMeshCount()) + " primitives, "
