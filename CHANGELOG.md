@@ -9,6 +9,82 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-25 Phase 10.9 — Slice 4 R9 (bloom Karis Jimenez weighting)
+
+The fifth Slice 4 item shipped today (after R1, R3, R7, R10). The
+2026-04-23 ultrareview flagged that `bloom_downsample.frag.glsl`'s
+Karis path treated all 5 sample groups equally weighted by inverse
+luminance only, dropping the canonical Jimenez 2014 slide 147
+group weights (`0.5` centre + `0.125 × 4` corners). The result:
+the inner-4-sample group's high-frequency content was reduced from
+`4/5` to `1/5` of the first-mip output, producing a visible
+"softness pop" between mip 0 (Karis path) and mip 1+ (standard
+path which always used Jimenez weights).
+
+**Fix.** Compose Karis luminance modulation with the fixed Jimenez
+group weights:
+
+```glsl
+const float CENTRE_WEIGHT = 0.5;
+const float CORNER_WEIGHT = 0.125;
+
+vec3 numerator =
+    CENTRE_WEIGHT * (g4 * w4)                            // inner group
+  + CORNER_WEIGHT * (g0*w0 + g1*w1 + g2*w2 + g3*w3);     // corners
+
+float denominator =
+    CENTRE_WEIGHT * w4
+  + CORNER_WEIGHT * (w0 + w1 + w2 + w3);
+
+result = numerator / denominator;
+```
+
+For uniform input (all `w_i` equal) the denominator collapses to
+`1.0` and the result is the Jimenez weighted average of the 5
+groups. For luminance-asymmetric input the per-group `w_i` modulate
+each group's contribution independently — bright fireflies still
+get small `w_i` and are suppressed.
+
+**CPU mirror.** New `engine/renderer/bloom_downsample_karis.h`
+ships `bloomLuminance(c)`, `bloomKarisWeight(c)`, and
+`combineBloomKarisGroups(centre, TL, TR, BL, BR)`. Pinned by
+parity to the GLSL implementation per CLAUDE.md Rule 12 (CPU spec
++ GPU runtime). Header-only inline helpers — no separate `.cpp`
+needed; the math is small enough that compile-time inlining and
+the parity contract are both clearer when colocated.
+
+**Tests.** 7 new `BloomDownsampleKaris.*_R9` cases in
+`tests/test_bloom_downsample_karis.cpp`:
+
+- `UniformInputProducesUniformOutput_R9` — sanity / regression
+  pin (passes both pre-R9 bug and post-R9 fix).
+- `CentreGroupHasFourTimesWeightOfCornerGroup_R9` — the headline.
+  Inputs: centre = `(0.5, 0.5, 0.5)`, all 4 corners zero. Pre-R9
+  result.r ≈ 0.0714; post-R9 result.r ≈ 0.2.
+- `ZeroInputProducesZeroOutput_R9` — NaN guard.
+- `CornersAreSymmetric_R9` — rotation invariance (passes both).
+- `CornerFireflyIsSuppressedRelativeToCentre_R9` — Karis
+  suppression unchanged by the fix.
+- `CentreFireflyIsSuppressed_R9` — same for the centre group.
+- `EnergyPreservedForUniformLuma_R9` — the second distinguishing
+  case. Feeds 5 isolume colours (different chroma, same BT.709
+  luminance) and asserts the result equals
+  `0.5 × centre + 0.125 × Σ corners`. Pre-R9 failed because the
+  bug averaged by 5 instead of by Jimenez weights.
+
+**Bump.** VERSION 0.1.33 → 0.1.34. Full suite: 2978 / 2979 pass
+(+7 vs R3's 2971; the pre-existing
+`MeshBoundsTest.UploadComputesLocalBounds` skip is unchanged).
+
+**Slice 4 status post-R9: R1, R3, R7, R9, R10 shipped (5 of 10);
+R2, R4, R5, R6, R8 open.** R5 is gated on Slice 8 W11 (GpuCuller
+zombie — must wire or delete before perf-tuning makes sense).
+Next likely candidates: R6 (Mesa sampler-binding fallbacks at
+four sites — multi-site refactor), R4 (`ScopedBlendState` +
+`ScopedCullFace` RAII rolled across foliage / water / tree /
+particle renderers — broader RAII rollout), or R8 (SDSM async
+readback — the largest remaining perf item).
+
 ### 2026-04-25 Phase 10.9 — Slice 4 R3 (shadow-pass GL state RAII)
 
 The fourth Slice 4 item shipped today (after R1, R7, R10). The
