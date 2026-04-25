@@ -5,487 +5,57 @@ This document outlines the phased development plan for the Vestige 3D Engine.
 ---
 
 ## Phase 1: Foundation (COMPLETE)
-**Goal:** Open a window, render a 3D shape, move a camera around it.
-
-This phase establishes the project skeleton, build system, and core engine loop.
-
-### Features
-- [x] Project setup (CMake, dependency fetching, .gitignore)
-- [x] GLFW window creation and OpenGL 4.5 context
-- [x] glad OpenGL function loader
-- [x] Basic engine loop (init → loop → shutdown)
-- [x] Timer (delta time, FPS tracking)
-- [x] Logger (console output with severity levels)
-- [x] Shader loading and compilation (vertex + fragment)
-- [x] Render a colored triangle (hello world of 3D graphics)
-- [x] Render a 3D cube with perspective projection
-- [x] Basic camera (position, look direction, perspective)
-- [x] Keyboard input (WASD movement, mouse look)
-- [x] Event Bus (basic publish/subscribe)
-- [x] Window resize handling
-- [x] Basic unit test infrastructure (Google Test)
-
-### Milestone
-~~A window showing a colored 3D cube that the user can fly around using keyboard and mouse.~~ DONE
-
----
+Window + GL 4.5 context (GLFW + glad), engine loop, timer, logger, shader compilation, primitive rendering (triangle / cube), perspective camera with WASD + mouse look, event bus, GTest infrastructure.
 
 ## Phase 2: 3D World (COMPLETE)
-**Goal:** Load 3D models, apply textures, and light the scene.
-
-### Features
-- [x] Mesh class (vertex buffer, index buffer, vertex array)
-- [x] ~~OBJ model loading~~ Superseded by glTF loading (Phase 4) — glTF is the modern standard
-- [x] Texture loading (PNG/JPG via stb_image)
-- [x] UV mapping and texture coordinates
-- [x] Basic materials (diffuse color, specular, shininess)
-- [x] Blinn-Phong lighting model
-- [x] Directional light (sun)
-- [x] Point lights (lamps, candles)
-- [x] Spot lights (focused beams)
-- [x] Multiple objects in a scene
-- [x] Depth testing and face culling
-- [x] Wireframe debug rendering mode
-
-### Milestone
-~~A lit scene with multiple textured 3D models (e.g., a simple room with objects).~~ DONE
-
----
+Mesh + texture loading (stb_image), UV mapping, basic materials, Blinn-Phong lighting (directional / point / spot), depth test + face culling, wireframe debug mode. OBJ loading superseded by glTF in Phase 4.
 
 ## Phase 3: Scene Management (COMPLETE)
-**Goal:** Organize the world into a scene graph with entities and components.
-
-### Features
-- [x] Entity class with component system
-- [x] Transform component (position, rotation, scale, parent-child hierarchy)
-- [x] MeshRenderer component
-- [x] Camera component (CameraComponent — entity-based, supports perspective/orthographic, scene tracks active camera)
-- [x] Light components (Directional, Point, Spot)
-- [x] Scene class (holds entity hierarchy)
-- [x] SceneManager (load, unload, switch scenes)
-- [x] Resource manager (caching loaded assets)
-- [x] Gamepad/controller input (Xbox, PlayStation via GLFW)
-- [x] First-person character controller (walking, looking, collision with ground)
-- [x] Basic bounding-box collision detection (prevent walking through walls)
-
-### Milestone
-~~Walk through a multi-room environment in first person with controller support.~~ DONE
-
----
+ECS (Entity + Transform / MeshRenderer / Camera / Light components), Scene + SceneManager, ResourceManager (asset caching), GLFW gamepad support (Xbox / PS), first-person character controller, AABB collision.
 
 ## Phase 4: Visual Quality (COMPLETE)
-**Goal:** Make it look good — shadows, better materials, post-processing.
-
-### Features
-- [x] Shadow mapping (directional light shadows)
-- [x] Point light shadows (omnidirectional shadow maps)
-- [x] Normal mapping (surface detail without extra geometry)
-- [x] Parallax occlusion mapping (depth illusion via height map ray-marching)
-- [x] PBR materials (Physically Based Rendering — metallic/roughness workflow)
-- [x] Environment mapping / skybox (procedural gradient)
-- [x] Image-Based Lighting / IBL (HDRI environment maps for realistic ambient lighting — diffuse irradiance convolution, prefiltered specular mip chain, BRDF integration LUT; completes PBR pipeline with environment-driven reflections and ambient light)
-- [x] HDR rendering and tone mapping (Reinhard + ACES Filmic)
-- [x] 3D text rendering (FreeType glyph atlas, text-on-surface decals, embossed/engraved inscriptions)
-- [x] Emissive lighting (materials that emit light into the scene — fire glow, neon signs, lava, glowing runes; emissive surfaces contribute to scene illumination via bloom and indirect light propagation; scalable from simple bloom-coupled emissives to many-light systems for scenes with hundreds of emissive sources)
-- [x] Bloom post-processing effect
-- [x] MSAA anti-aliasing (4x)
-- [x] TAA (Temporal Anti-Aliasing — motion vectors, history buffer, jittered projection)
-- [x] glTF model loading (modern, full-featured format)
-- [x] Ambient occlusion (SSAO)
-- [x] Transparency / alpha blending (glass, coloured glass, frosted glass, linen curtains)
-- [x] Transparent object sorting (back-to-front draw order)
-- [x] Asynchronous texture loading (background thread loading with GPU upload on main thread)
-- [x] Instanced rendering (draw thousands of identical objects — pillars, columns, courtyard stones — in a single draw call)
-- [x] Cascaded shadow maps (multi-split directional shadows for large outdoor scenes like Temple courtyards)
-- [x] Color grading / LUT (look-up table color transformation for artistic control — warm golden interiors, cool blue night exteriors)
-
-### Milestone
-A visually polished scene with realistic lighting, shadows, materials, and transparency.
+Shadow mapping (directional + point omnidirectional + cascaded for large outdoor scenes), normal + POM, full PBR (metallic/roughness) + IBL (irradiance convolution, prefiltered specular, BRDF LUT), HDR with Reinhard + ACES tone mapping, FreeType 3D text + embossed/engraved decals, emissive materials (bloom-coupled + many-light scaling), bloom, MSAA 4x + TAA (motion vectors, history, jitter), glTF model loading, SSAO, transparency + back-to-front sort, async texture upload, instanced rendering, color grading via 3D LUTs.
 
 ---
 
 ## Phase 5: Scene Editor — The Creator's Toolkit (COMPLETE)
-**Goal:** Build a full graphical editor so scenes, materials, effects, and gameplay can be created entirely without writing code. This is the primary tool the user will use day-to-day.
-
-The editor is not just a debug tool — it IS the way scenes get built. Every engine feature must ultimately be accessible through the editor. This phase is broken into sub-phases that can be developed incrementally.
-
----
+Full graphical editor; the primary day-to-day tool. Every engine feature is accessible through it. Shipped in seven sub-phases (5A–5G) summarised below.
 
 ### Phase 5A: Editor Foundation (COMPLETE)
-**Goal:** Get the basic editor shell running — panels, viewport, and the ability to interact with the scene visually.
-
-#### GUI Framework
-- [x] Dear ImGui integration (immediate-mode GUI, renders on top of the 3D viewport)
-- [x] ImGui GLFW + OpenGL backend setup
-- [x] Docking system (drag panels to arrange your workspace — imgui docking branch)
-- [x] Editor theme (dark theme, readable fonts, consistent styling)
-- [x] Editor/Play mode toggle (Escape or a toolbar button switches between editing and first-person walkthrough)
-
-#### Metric Scale System
-- [x] Define 1 engine unit = 1 meter (enforce everywhere)
-- [x] 3D grid overlay on the ground plane (1m lines, 10m bold lines)
-- [x] Grid snapping — objects snap to 0.25m / 0.5m / 1m increments (configurable)
-- [x] Ruler/measurement tool — click two points to see distance in meters
-- [x] Dimension display — selected objects show their width/height/depth in meters
-- [x] Room dimension input — type "10m x 20m x 2.5m" to create a room of that size
-
-#### Editor Camera
-- [x] Orbit camera (Alt+drag to orbit around a point, scroll to zoom)
-- [x] Pan camera (middle-mouse drag to pan)
-- [x] Focus on selection (F key snaps camera to look at the selected entity)
-- [x] Top/Front/Side orthographic views (numpad shortcuts)
-- [x] Smooth camera transitions between views
-
-#### Selection System
-- [x] Mouse picking — click on an object in the viewport to select it
-- [x] Selection highlighting (outline or tint on selected object)
-- [x] Multi-selection (Shift+click to add, Ctrl+click to toggle)
-- [x] Selection rectangle (drag to box-select multiple objects)
-
-#### Transform Gizmos
-- [x] Translate gizmo (RGB arrows for X/Y/Z, click-drag to move)
-- [x] Rotate gizmo (rings around the object, drag to rotate)
-- [x] Scale gizmo (cubes on axes, drag to scale)
-- [x] W/E/R hotkeys to switch between translate/rotate/scale
-- [x] Local vs World space toggle for gizmos
-- [x] Snap-to-grid for gizmos (hold Ctrl to snap while dragging)
-
----
+ImGui (docking branch) + GLFW/GL backend with dark theme + Edit/Play mode toggle. Metric scale (1u = 1m) with 3D grid + snapping (0.25 / 0.5 / 1 m), ruler, dimension display, "10m x 20m x 2.5m"-style room input. Editor camera (orbit, pan, focus-on-selection F, ortho top/front/side, smooth transitions). Mouse picking + selection highlight + multi-select + box select. Translate / rotate / scale gizmos with W/E/R hotkeys, local-vs-world toggle, Ctrl snap.
 
 ### Phase 5B: Scene Construction (COMPLETE)
-**Goal:** Place and arrange objects to build rooms, walls, floors, and architectural structures.
-
-#### Primitive Placement
-- [x] Toolbar palette for placing basic shapes: cube, plane, cylinder, sphere, wedge/ramp
-- [x] Click-to-place — click in the viewport or grid to drop a shape at that position
-- [x] Shapes spawn at metric sizes (e.g., cube = 1m x 1m x 1m by default)
-- [x] Dimension handles — drag edges/faces of a placed shape to resize it
-
-#### Room/Wall Builder
-- [x] Wall tool — click two points on the grid to draw a wall segment (specify height + thickness)
-- [x] Room tool — click four corners (or specify dimensions) to generate a room with walls, floor, and ceiling
-- [x] Wall thickness setting (default 0.2m for interior, 0.3m for exterior)
-- [x] Door cutout tool — click on a wall to cut a door-sized opening
-- [x] Window cutout tool — click on a wall to cut a window opening
-- [x] Roof tool — select walls and choose roof type (flat, gabled, shed)
-- [x] Stair/ramp tool — specify start height, end height, and width
-
-#### Model Import
-- [x] glTF / OBJ import dialog — browse and import 3D models into the asset library
-- [x] Import preview — see the model before committing to import
-- [x] Automatic material/texture extraction from imported models
-- [x] Place imported models into the scene from the asset browser
-- [x] Scale-on-import — ensure imported models match metric scale (1 unit = 1 meter)
-
-#### Object Management
-- [x] Duplicate objects (Ctrl+D)
-- [x] Delete objects (Delete key)
-- [x] Group objects (select multiple, group into a named parent entity)
-- [x] Lock objects (prevent accidental selection/modification)
-- [x] Hide/show objects (eye icon in hierarchy — hidden objects don't render)
-- [x] Copy/Paste transforms between objects
-- [x] Align tools (align selected objects by edge, center, or distribute evenly)
-
-#### Prefab System
-- [x] Save any entity (or group) as a reusable prefab asset (e.g., "Golden Lampstand")
-- [x] Place prefab instances in any scene — drag from the asset browser
-- [x] Edit the master prefab and have all instances update automatically
-- [x] Override individual instance properties (e.g., different scale on one copy)
-- [x] Prefab library browser in the asset panel
-
-#### Scene Hierarchy Panel
-- [x] Tree view of all entities in the scene
-- [x] Drag to reparent entities (make one a child of another)
-- [x] Right-click context menu (rename, duplicate, delete, add child)
-- [x] Search/filter entities by name
-- [x] Icons to distinguish entity types (mesh, light, camera, empty)
-
----
+Primitive palette (cube / plane / cylinder / sphere / wedge) with click-to-place at metric defaults + drag-to-resize. Wall + room + door / window cutout + roof + stair / ramp tools (default 0.2 m interior / 0.3 m exterior thickness). glTF / OBJ import with preview + auto material extraction + scale normalization. Object management (Ctrl+D, Delete, group / lock / hide, copy-paste transforms, align + distribute). Prefab system (master / instance with overrides, asset-browser library). Scene hierarchy panel (tree, drag-reparent, context menu, search, type icons).
 
 ### Phase 5C: Materials, Textures, and Lighting (COMPLETE)
-**Goal:** Assign and tweak the look of every surface, and place lights, all through the editor.
-
-#### Material Editor Panel
-- [x] Visual material editor — sliders for diffuse color, specular color, shininess
-- [x] Texture slot assignment — drag a texture from the asset browser onto a material slot
-- [x] Live preview — changes update in the viewport immediately
-- [x] Material library — save/load reusable materials (e.g., "Gold", "Acacia Wood", "Linen")
-- [x] UV tiling controls — adjust how many times a texture repeats per meter
-- [x] POM height scale slider (when height maps are assigned)
-- [x] PBR material slots (when PBR is implemented): albedo, normal, roughness, metallic, AO, emissive
-
-#### Texture Management
-- [x] Asset browser panel — shows all textures in `assets/textures/` with thumbnail previews
-- [x] Drag-and-drop textures onto objects in the viewport to assign them
-- [x] Texture import — drag external image files into the asset browser to import
-- [x] Texture preview — click a texture to see it full-size with metadata (resolution, format, size)
-- [x] Texture filtering options (nearest, linear, anisotropic) per texture
-
-#### Entity Inspector Panel
-- [x] Shows all components on the selected entity
-- [x] Edit any property — transform, material, light settings, etc.
-- [x] "Add Component" button — attach new components to an entity
-- [x] "Remove Component" button
-- [x] Component-specific sub-panels (material expands to show all material properties, etc.)
-
-#### Light Placement and Editing
-- [x] Place lights from the toolbar (directional, point, spot)
-- [x] Visual light indicators in the viewport (icons, range spheres, cone wireframes)
-- [x] Light property editing in the inspector (color picker, intensity, range, shadow toggle)
-- [x] Directional light visualized as an arrow showing direction
-- [x] Point light visualized as a sphere showing range
-- [x] Spot light visualized as a cone showing angle and range
-
----
+Material editor with PBR slots (albedo / normal / roughness / metallic / AO / emissive) + drag-drop assignment + UV tiling + POM height + live preview + saved material library. Texture asset browser with thumbnails, drag-import, full-size preview, per-texture filtering. Entity inspector with Add/Remove component + per-component sub-panels. Light placement (directional / point / spot) with viewport gizmos (arrow / range sphere / cone) and inspector controls (color / intensity / range / shadow toggle).
 
 ### Phase 5D: Scene Persistence (COMPLETE)
-**Goal:** Save and load scenes so work persists between sessions. This is essential — without it, every scene is lost when the editor closes.
-
-#### Scene Serialization
-- [x] Save scene to JSON file (human-readable, version-controlled)
-- [x] Load scene from JSON file
-- [x] Auto-save (periodic backup while editing)
-- [x] Scene metadata (name, author, description, creation date)
-- [x] All entity data serialized: transforms, components, material references, light settings
-- [x] Asset references by path (textures, meshes — not embedded in scene file)
-
-#### Undo/Redo System
-- [x] Command pattern — every editor action is a reversible command
-- [x] Ctrl+Z to undo, Ctrl+Shift+Z (or Ctrl+Y) to redo
-- [x] Undo history panel showing recent actions
-- [x] Essential for a non-destructive workflow — mistakes can be reverted
-
-#### Project Management
-- [x] Project file that tracks all scenes, assets, and settings
-- [x] "New Scene" / "Open Scene" / "Save Scene" / "Save As" from the File menu
-- [x] Recent files list
-- [x] Asset directory monitoring — detect when new textures/models are added to `assets/`
-
----
+JSON save/load with auto-save + scene metadata + asset-by-path references. Undo/redo via command pattern (Ctrl+Z / Ctrl+Shift+Z) with history panel. Project file tracks scenes/assets/settings; File-menu New/Open/Save/Save-As + recent files; asset-directory file watcher.
 
 ### Phase 5E: Effects Editors (COMPLETE)
-**Goal:** Configure particle effects (fire, smoke, water) through the editor, not code.
-
-#### Particle System Editor
-- [x] Place particle emitter entities in the scene
-- [x] Visual particle editor — adjust emission rate, lifetime, velocity, size, color over time
-- [x] Presets for common effects: torch fire, candle flame, smoke, dust, sparks, embers
-- [x] Real-time preview in the viewport while editing parameters
-- [x] Save/load particle presets as reusable assets
-
-#### Water Body Editor
-- [x] Place water surface entities (rectangular water plane)
-- [x] Set water dimensions and elevation in meters
-- [x] Water property editor: color tint, opacity, reflection strength, wave speed/amplitude
-- [x] Presets: still bath, gentle pool, flowing stream
-
----
+Particle emitter editor (emission rate, lifetime, velocity, size, color-over-time) with presets (torch fire, candle, smoke, dust, sparks, embers) + saved presets + live preview. Water-body editor (rectangular surface with metric dimensions/elevation, tint/opacity/reflection/wave controls) with still-bath / pool / stream presets.
 
 ### Phase 5F: Editor Utilities (COMPLETE)
-**Goal:** Quality-of-life tools that make the editor efficient and informative.
-
-#### Performance Overlay
-- [x] FPS counter (always visible in corner)
-- [x] Frame time graph (rolling chart of frame times)
-- [x] Draw call count, triangle count, texture memory usage
-- [x] Per-object stats (vertex count on selected object)
-
-#### Console / Log Panel
-- [x] In-editor log viewer (scrollable, filterable by severity)
-- [x] Color-coded messages (info=white, warning=yellow, error=red)
-- [x] Search/filter log messages
-
-#### Additional Tools
-- [x] Screenshot capture (F12 or menu — saves to a screenshots folder)
-- [x] Fullscreen viewport toggle (hide all panels for a clean view)
-- [x] Keyboard shortcut reference panel (searchable list of all hotkeys)
-- [x] Welcome screen / getting started tutorial on first launch
-- [x] Scene statistics panel (total entities, meshes, textures, lights, memory usage)
-- [x] Validation warnings (e.g., "Light has no shadow map", "Texture missing", "Object outside scene bounds")
-
----
+Performance overlay (FPS, frame-time graph, draw calls / tris / texture memory, per-object stats). In-editor log viewer (scrollable, severity filter, color-coded, search). Screenshot (F12), fullscreen viewport toggle, hotkey reference panel, welcome screen, scene statistics, validation warnings.
 
 ### Phase 5G: Environment Painting (COMPLETE)
-**Goal:** Paint natural environments directly onto surfaces — grass, gravel, trees, paths, streams — using an intuitive brush-based system. This is the primary tool for building outdoor scenes around the Temple complex.
-
-#### Foliage Brush
-- [x] Grass rendering system (instanced billboards or geometry shader, leveraging existing instanced rendering)
-- [x] Foliage brush tool — paint grass/flowers/low plants onto any surface with adjustable radius and density
-- [x] Density falloff (full density at brush center, tapering at edges for natural blending)
-- [x] Random rotation, scale, and tint variation per instance (configurable ranges)
-- [x] Wind animation (vertex shader sway — amplitude, frequency, direction as brush parameters)
-- [x] Foliage presets: short grass, tall grass, wildflowers, reeds, desert scrub
-- [x] Density map layer — a per-surface texture controlling where foliage can grow (paintable in-editor)
-
-#### Scatter Brush
-- [x] Scatter brush tool — paint rocks, gravel, debris, fallen leaves onto surfaces
-- [x] Object palette — select which meshes to scatter (small rocks, pebbles, pottery shards)
-- [x] Random placement within brush radius with configurable spacing and overlap rules
-- [x] Surface alignment — scattered objects orient to the surface normal (rocks sit flat on slopes)
-- [x] Scale/rotation randomization ranges per object type
-- [x] Eraser mode — remove scattered objects within brush radius
-
-#### Tree and Large Object Placement
-- [x] Tree brush — paint clusters of trees with species selection and spacing rules
-- [x] Single-place mode — click to place one tree precisely, then adjust with transform gizmos
-- [x] Minimum spacing enforcement (trees don't overlap trunks)
-- [x] Tree species presets: olive, cedar, palm, acacia (with placeholder meshes until real models are imported)
-- [x] LOD system for trees (full mesh up close, billboard at distance — leverages instanced rendering)
-
-#### Path and Road Tool
-- [x] Spline-based path drawing — click waypoints, engine generates a smooth path between them
-- [x] Path width and material selection (gravel, dirt, stone pavers, sand)
-- [x] Terrain texture blending along path edges (smooth transition from path to surrounding ground)
-- [x] Automatic foliage clearing — foliage within the path footprint is removed
-- [x] Path presets: narrow footpath, wide road, stone walkway
-
-#### Water Painting
-- [x] Stream/river spline tool — draw a path, engine generates a flowing water surface mesh
-- [x] Stream width and depth controls per waypoint (narrow creek to wide river)
-- [x] Flow direction and speed (derived from spline direction)
-- [x] Pool/pond tool — draw a closed shape to create a still water body
-- [x] Water material integration (reflective/refractive shader from Phase 6, or basic placeholder)
-- [x] Automatic bank blending — terrain textures transition to wet sand/mud near water edges
-
-#### Biome Presets
-- [x] Biome system — named combinations of ground texture + foliage + scatter + trees
-- [x] Built-in presets: "Garden" (green grass, flowers, olive trees), "Desert" (sand, scrub, rocks), "Temple Courtyard" (stone pavers, sparse grass at edges), "Cedar Forest" (forest floor, ferns, cedar trees)
-- [x] Paint entire areas with a biome brush — applies all layers at once
-- [x] Per-layer override — paint a biome then selectively adjust individual layers
-- [x] Save/load custom biome presets
-
-#### Performance
-- [x] Frustum culling for foliage instances (don't submit off-screen grass to the GPU)
-- [x] Distance-based density fade (reduce foliage density at distance, fade out beyond a threshold)
-- [x] Chunk-based spatial partitioning (group nearby foliage into spatial cells for efficient culling)
-- [x] Target: 60 FPS with dense grass fields covering the Temple courtyard (~100k instances visible)
-
----
+Foliage brush (instanced grass with density falloff, rotation/scale/tint variation, vertex-shader wind, presets, paintable density map). Scatter brush (rocks/debris with surface-normal alignment, palettes, eraser). Tree brush (cluster + single-place modes, min-spacing, species presets, LOD billboard fallback). Spline path/road tool (waypoint drawing, width + material, edge blending, auto foliage clear, presets). Water painting (river spline + closed-shape pool with flow + bank blending). Biome presets (Garden / Desert / Temple Courtyard / Cedar Forest) with biome brush + per-layer override + custom save/load. Performance: frustum culling, distance fade, chunked spatial partitioning, 60 FPS target met at ~100k visible instances.
 
 ### Phase 5 Milestone
-~~**A complete scene editor where architectural environments can be designed, textured, lit, and saved entirely through the GUI.** The Tabernacle and Solomon's Temple can be built in-editor by a non-programmer. Outdoor areas around the Temple can be painted with grass, trees, paths, and water using the environment painting tools.~~ DONE
+~~Complete editor for designing/texturing/lighting/saving architectural environments without code; biblical projects buildable in-editor; outdoor scenes paintable with foliage / paths / water / biomes.~~ DONE
 
 ---
 
 ## Phase 6: Particle and Effects System (COMPLETE)
-**Goal:** Fire, smoke, water, and other real-time visual effects.
-
-These engine features are prerequisites for the editor's effects tools (Phase 5E) but can be developed alongside the early editor phases.
-
-### Fire and Flame
-- [x] GPU particle system (compute shader driven for thousands of particles at 60 FPS)
-- [x] Billboard particle rendering (camera-facing quads with alpha blending)
-- [x] Fire shader (animated color gradient: white core → yellow → orange → red → smoke)
-- [x] Torch fire preset (upward emission with flickering, ember sparks)
-- [x] Candle flame preset (small, gentle, mostly yellow)
-- [x] Campfire preset (larger, with smoke and floating embers)
-- [x] Light coupling — fire emitters automatically create a flickering point light
-
-### Smoke and Atmosphere
-- [x] Smoke particles (grey, slow-rising, expanding, fading)
-- [x] Dust motes (tiny, slow, ambient particles in indoor spaces)
-- [x] Incense smoke (thin, wispy, rising column — perfect for the Tabernacle)
-
-### Water
-- [x] Water surface shader (reflective/refractive with Fresnel effect)
-- [x] Animated water normals (scrolling normal maps for wave appearance)
-- [x] Water bath/pool (contained rectangular body — no terrain needed)
-- [x] Depth-based color (water darkens with depth)
-- [x] Water caustics (animated light patterns projected onto surfaces below water — scrolling noise texture modulates light intensity, simulating refraction through waves)
-- [x] Optional: simple wave vertex displacement
-
-### Milestone
-~~Torches with flickering fire illuminate a room, smoke rises from an altar of incense, and a bronze laver contains reflective water.~~ DONE
+GPU particles (compute-shader driven, billboard rendering with alpha blend) for fire / candle / campfire / smoke / dust / incense presets. Fire emitters auto-spawn flickering coupled point lights. Water surface shader (Fresnel reflect / refract, scrolling normal maps, depth-based color, animated caustics, optional wave vertex displacement) — supports rectangular pools without terrain.
 
 ---
 
 ## Phase 7: Animation (COMPLETE — foundation; animation zombie cluster tracked in Phase 10.9 Slice 8 W12)
-**Goal:** Bring the world to life with skeletal animation and motion.
+glTF skeletal playback (bone hierarchy, vertex skinning, keyframe interpolation, cross-fade blend, state machine, root motion). Property animation (curves: linear / ease / cubic-bezier; loop / ping-pong / one-shot; keyframe-event callbacks). IK suite: two-bone, foot (slopes / stairs), hand, look-at / head, weighted IK-on-animation blend. GPU morph-target pipeline (SSBO binding 3, up to 8 targets, WEIGHTS animation channel sampling, procedural `setMorphWeight` API, Mesa-safe dummy SSBO). glTF import covers skeletal clips, morph clips, and multi-clip-per-model.
 
-Animated objects and characters are essential for doors, swinging censers, priestly processions, and any living scene. glTF already carries skeletal animation data — this phase makes the engine able to play it.
-
-> **T0 audit 2026-04-24 (Phase 10.9 Slice 0):** The following items below shipped as class + unit tests but have **no production caller / instantiation** in `engine/` / `app/` / `tools/` (outside `tests/`). They compile and pass their unit tests, but nothing runs them at engine runtime. Remediation is tracked by **Phase 10.9 Slice 8 W12** (wire an end-to-end demo OR relocate to `engine/experimental/animation/`).
-> - `LipSyncPlayer` → line "Audio-driven lip sync" (439) is primitives-only — no caller drives phoneme extraction.
-> - `EyeController` → line "Eye animation" (443) is primitives-only — no caller attaches an EyeController to any skeleton.
-> - `FacialAnimator` → facial blend-shape emotion path is primitives-only (morph-target SSBO upload + vertex shader IS live; the FacialAnimator orchestrator class is not).
-> - `MotionMatcher`, `MotionDatabase`, `MirrorGenerator`, `Inertialization::apply` → entire "Motion Matching" subsection (448–475) is primitives-only — no character rig or game loop queries the matcher.
->
-> `[x]` boxes are retained below to honour the "class shipped + tests pass" claim they originally made; W12 will either wire them into a consuming feature or relocate them to `engine/experimental/` and demote the boxes then. Phase 7 header retains (COMPLETE) because glTF skeletal playback, IK, skeletal state machines, and morph targets (without the FacialAnimator orchestrator) **are** live.
-
-### Skeletal Animation System
-- [x] Bone/joint hierarchy (skeleton loaded from glTF) — Phase 7A
-- [x] Skinned mesh rendering (vertex skinning with bone weights in the vertex shader) — Phase 7A
-- [x] Animation clip playback (keyframe interpolation — position, rotation, scale) — Phase 7A
-- [x] Animation blending (cross-fade between clips, layered blending) — Phase 7B
-- [x] Animation state machine (idle → walk → run transitions with conditions) — Phase 7B
-- [x] Root motion support (animation drives entity movement, not just visual) — Phase 7B
-
-### Object Animation
-- [x] Property animation system (animate any numeric property over time — position, rotation, color, intensity) — Phase 7C
-- [x] Animation curves (linear, ease-in/out, cubic bezier) — Phase 7C
-- [x] Looping, ping-pong, and one-shot playback modes — Phase 7C
-- [x] Animation events (trigger callbacks at specific keyframes — play sound, spawn particles) — Phase 7C
-
-### Inverse Kinematics (IK)
-- [x] Two-bone IK solver (arms, legs — reach for a target position) — Phase 7D
-- [x] Foot IK (plant feet correctly on slopes, stairs, and uneven terrain) — Phase 7D
-- [x] Hand IK (reach for door handles, grab objects, brace against walls) — Phase 7D (uses two-bone IK)
-- [x] Look-at / head IK (characters turn head toward points of interest) — Phase 7D
-- [x] IK blending with animation clips (IK layer on top of baked animations) — Phase 7D (weight parameter)
-
-### Facial Animation and Lip Sync
-- [x] GPU morph target deformation pipeline — Phase 7F
-  - Morph target deltas uploaded to SSBO (binding 3) at model load time
-  - Vertex shader applies weighted position+normal deltas before bone skinning (up to 8 targets)
-  - WEIGHTS animation channel sampling in SkeletonAnimator (linear + step interpolation)
-  - Procedural morph weight API: setMorphWeight(index, value) for game-driven expressions
-  - glTF loader updated: WEIGHTS channels no longer skipped for non-joint nodes
-  - Mesa-safe dummy SSBO binding for morph target buffer
-- [x] Facial blend shape system (emotion presets — happy, sad, angry, surprised, pain)
-  - Layer facial animation on top of body animation
-  - Smooth blending between expressions with configurable transition speed
-- [x] Audio-driven lip sync
-  - Phoneme extraction from audio files (viseme mapping)
-  - Real-time blend shape weights from phoneme stream
-  - Fallback: simple jaw open/close from audio amplitude
-- [x] Eye animation
-  - Look-at targets (eyes track points of interest, player, or other NPCs)
-  - Blink animation (random blink interval, blink on startle)
-  - Pupil dilation (optional — fear, darkness adaptation)
-
-### Motion Matching
-Data-driven animation selection that replaces hand-authored state machines with continuous pose searching. Used by The Last of Us Part II, For Honor, UE5 (built-in), and modern AAA games for fluid locomotion.
-- [x] Motion database — import and index a large set of animation clips with per-frame feature vectors
-  - Feature vector: joint positions, joint velocities, trajectory (future path positions + facing)
-  - KD-tree or brute-force search over feature vectors for nearest match
-  - Clip annotation: tag clips with locomotion type (walk, run, strafe, turn, stop)
-- [x] Runtime pose matching — each frame, search the database for the best next pose
-  - Current pose features: extract from current skeleton state
-  - Desired trajectory: from player input (gamepad stick → desired velocity + facing)
-  - Cost function: weighted sum of pose distance + trajectory distance + transition cost
-  - Inertialization blending: smooth transition to matched pose without visible pops (Bollo, GDC 2018)
-- [x] Motion database preprocessing
-  - Offline feature extraction and normalization
-  - Clip segmentation: split long mocap takes into indexed segments
-  - Mirror generation: auto-generate left/right mirrored clips to double database size
-  - Velocity and acceleration caching for fast runtime queries
-- [x] Spring-based trajectory prediction
-  - Critically damped spring model for desired velocity/facing (responsive to input changes)
-  - Predict future trajectory 0.5-1.0s ahead for matching
-- [x] Editor integration
-  - Motion database browser — view clips, features, and annotations
-  - Pose search debugger — visualize matched poses and cost breakdown in real-time
-  - Weight tuning UI for cost function parameters
-- [x] Performance optimization
-  - KD-tree acceleration for large databases (1000+ clips)
-  - Feature normalization for balanced distance metrics
-  - Budget-based search (limit candidates per frame)
-  - Thread-safe: search on worker thread, apply result on main thread
-
-### glTF Animation Import
-- [x] Import skeletal animations from glTF files — Phase 7A
-- [x] Import morph target / blend shape animations — Phase 7E
-- [x] Multiple animation clips per model (walk, idle, gesture) — Phase 7A
+> **T0 audit 2026-04-24 (Phase 10.9 Slice 0):** Several items shipped as class + unit tests but have **no production caller** outside `tests/`. They compile and pass tests but nothing runs them at runtime. Remediation tracked by **Phase 10.9 Slice 8 W12** (wire an end-to-end demo OR relocate to `engine/experimental/animation/`). Affected: `LipSyncPlayer` (audio-driven lip sync — no phoneme caller), `EyeController` (no skeleton attaches one), `FacialAnimator` (orchestrator class — morph SSBO upload + vertex shader ARE live, the orchestrator is not), `MotionMatcher` / `MotionDatabase` / `MirrorGenerator` / `Inertialization::apply` (entire motion-matching subsystem — no rig queries it). Phase 7 header keeps (COMPLETE) because glTF skeletal playback, IK, skeletal state machines, and morph targets (sans FacialAnimator orchestrator) **are** live.
 
 ### Milestone
 ~~Animated characters walk through the Temple courts, doors swing open on approach, and a golden censer swings rhythmically over the altar of incense.~~ DONE
@@ -493,194 +63,22 @@ Data-driven animation selection that replaces hand-authored state machines with 
 ---
 
 ## Phase 8: Physics (COMPLETE — foundation; destruction/ragdoll/grab cluster tracked in Phase 10.9 Slice 8 W13)
-**Goal:** Physical simulation for realistic object interaction, cloth, and world dynamics.
+Jolt Physics v5.2.0 integration. Rigid bodies (mass / friction / restitution) with box / sphere / capsule / convex-hull / triangle-mesh shapes, gravity + force API, collision response (bounce / slide / rest), kinematic bodies (doors / platforms), physics-based character controller (CharacterVirtual: stair climb, floor stick), raycasting. Joint suite: hinge with motor + angle limits, spring/damper, fixed weld, rope/chain (distance + point), breakable (force threshold), slider, physics debug viz.
 
-> **T0 audit 2026-04-24 (Phase 10.9 Slice 0):** The following items below shipped as class + unit tests but have **no production caller / instantiation**. `DestructionSystem::update` is a 41-line empty pump (AMBIGUOUS, but the subsystems it claims to own are never driven). Remediation is tracked by **Phase 10.9 Slice 8 W13** (either wire a real `DestructionSystem::update` that pumps them OR relocate to `engine/experimental/physics/` and demote the claims).
-> - `Ragdoll` class + presets + powered-ragdoll → "Ragdoll Physics" subsection (578–587) is primitives-only. Skeleton-to-ragdoll switch never fires because nothing creates a `Ragdoll` instance.
-> - `GrabSystem` → "Object Interaction System" grab/hold/carry/throw (591–597) is primitives-only — no `m_grabSystem` member in `Engine` or any system; the class compiles and has tests, but no game loop raycasts from camera to grab.
-> - `StasisSystem` → "Stasis/slow-motion on individual objects" (line 600) is primitives-only.
-> - `Fracture`, `BreakableComponent::fracture` → "Dynamic Destruction" subsection (602–616): the `Fracture::fractureConvex` call chain terminates inside `BreakableComponent::fracture`, which itself has zero callers. Break thresholds never fire at runtime.
-> - `Dismemberment` → entire "Dismemberment System" subsection (618–633) is primitives-only.
->
-> Rigid-body dynamics, character controller, constraints/joints, and cloth simulation **are** live — they have real callers in the physics-driven scenes. Only the destruction/ragdoll/grab/stasis/dismemberment cluster is affected.
->
-> `[x]` boxes are retained below to honour the "class shipped + tests pass" claim they originally made; W13 will wire or relocate + demote.
+XPBD cloth (Phase 8D/E) with wind + gust state machine, pin constraints, presets (linen / tent / banner / heavy drape / stiff fence), primitive colliders (sphere / plane / cylinder / box), editor UI. Solver improvements: dihedral bending constraints (Müller 2007 angle-based), top-to-bottom constraint ordering, adaptive damping (0.02 wind → 0.12 calm), static + kinetic friction on colliders, thick-particle marble model (collision radius 0.6–0.8× rest length).
 
-Physics enables curtains blowing in the wind, objects responding to gravity, doors with realistic hinges, and the linen fabrics of the Tabernacle draping naturally.
+PBR-style FabricMaterial (areal density GSM, tensile / shear / bending stiffness, internal friction, air permeability, thickness) with KES-to-XPBD mapping and built-in database (linen / cotton / silk / goat hair / leather / velvet). Hybrid cloth collision: triangle-mesh colliders with BVH, auto-collider generation per entity (None / Primitive / Mesh / Custom), Jolt MeshShape integration, edge/triangle CCD against tunneling, spatial-hash self-collision.
 
-### Rigid Body Dynamics
-- [x] Physics engine integration (Jolt Physics v5.2.0) — Phase 8A
-- [x] Rigid body component (mass, friction, restitution) — Phase 8A
-- [x] Collision shapes: box, sphere, capsule — Phase 8A
-- [x] Collision shapes: convex hull, triangle mesh
-- [x] Gravity and force application — Phase 8A
-- [x] Collision detection and response (bouncing, sliding, resting) — Phase 8A
-- [x] Kinematic bodies (scripted movement that still collides — doors, platforms) — Phase 8A
-- [x] Physics-based character controller (CharacterVirtual with stair climbing, floor sticking) — Phase 8B
-
-### Constraints and Joints
-- [x] Hinge joints (doors, gates, lids — with motor + angle limits) — Phase 8C
-- [x] Spring/damper constraints (distance constraint with spring params) — Phase 8C
-- [x] Fixed joints (weld objects together) — Phase 8C
-- [x] Rope/chain constraints (distance + point constraints) — Phase 8C
-- [x] Breakable constraints (force threshold triggers break) — Phase 8C
-- [x] Slider constraints (linear movement along axis) — Phase 8C
-- [x] Physics debug visualization (wireframe bodies + constraint lines) — Phase 8C
-- [x] Raycasting (physics world ray queries) — Phase 8B
-
-### Cloth Simulation
-- [x] Cloth component (XPBD position-based dynamics) — Phase 8D
-- [x] Wind interaction (cloth responds to wind direction and strength, gust state machine) — Phase 8D
-- [x] Pin constraints (attach cloth corners to fixed points — hanging curtains) — Phase 8D
-- [x] Presets: linen curtain, tent fabric, banner/flag, heavy drape, stiff fence — Phase 8E
-- [x] Primitive colliders: sphere, plane, cylinder, box — Phase 8E
-- [x] Editor UI for cloth parameters — Phase 8E
-- [x] Collision with rigid bodies (cloth drapes over objects) — see Cloth Collision below
-
-### Cloth Physics Improvements
-Improvements to the XPBD cloth solver identified through research and testing.
-- [x] Dihedral bending constraints — replace skip-one distance constraints with true angle-based bending
-  - Dihedral constraints measure the angle between adjacent triangle pairs and enforce a rest angle
-  - Provides genuine "flattening" force that actively straightens cloth (Müller 2007, Jolt Physics)
-- [x] Constraint ordering optimization — solve top-to-bottom (from pins downward)
-  - Propagates corrections from fixed boundary in a single pass instead of requiring multiple iterations
-  - Dramatically improves convergence for hanging cloth topologies (sweep ordering)
-- [x] Adaptive damping — increase damping during calm periods for faster settling
-  - Ramp damping from 0.02 (wind) to 0.12 (calm) based on gust intensity
-  - Prevents oscillation during the return-to-rest phase
-- [x] Friction on collider surfaces — static and kinetic friction for stable folds
-  - Decompose velocity into normal + tangential after collision correction
-  - Static friction zeroes tangential velocity below a threshold (stable folds on surfaces)
-  - Kinetic friction reduces tangential velocity proportional to normal impulse
-- [x] Thick particle model (marble model) — inflate particle collision radius to cover mesh edges
-  - Each particle's collision radius = 0.6-0.8× rest length so adjacent spheres overlap
-  - Filter collisions between connected particles
-
-### Physically-Based Fabric Material System
-A material-driven cloth system analogous to PBR for rendering — define real-world fabric properties and the simulator derives correct behavior automatically.
-- [x] `FabricMaterial` struct with real-world textile properties
-  - Areal density (GSM — grams per square meter) → maps to particle mass
-  - Tensile stiffness (N/m) → maps to stretch compliance
-  - Shear stiffness (N/m) → maps to shear compliance
-  - Bending rigidity (N·m) → maps to bend compliance
-  - Internal friction (dimensionless) → maps to velocity damping
-  - Air permeability (L/m²/s) → maps to drag coefficient
-  - Thickness (mm) → maps to collision margin
-- [x] KES-to-XPBD mapping function — convert Kawabata Evaluation System measurements to simulation parameters
-  - Mapping function converts physical units to compliance values
-- [x] Built-in fabric database — ship common fabric types with correct physical properties
-  - Linen (ancient hand-woven, 200-350 GSM), cotton (80-150 GSM), silk (20-60 GSM)
-  - Goat hair (300-600 GSM), leather (500-1200 GSM), velvet (300-500 GSM)
-- [x] Editor integration — select fabric type from dropdown, all parameters auto-filled
-  - Override individual properties for custom materials
-
-### Cloth Collision (Hybrid Approach)
-A hybrid collision system: fast primitive colliders for simple geometry (walls, pillars, floors) and triangle mesh colliders for complex/irregular geometry (carved decorations, imported models).
-- [x] Triangle mesh collider — use actual model triangles as collision surfaces
-  - Extract triangle data from loaded meshes at scene build time
-  - BVH (Bounding Volume Hierarchy) acceleration structure for fast spatial queries
-  - Per-particle: query BVH for nearby triangles, test penetration, push outside
-- [x] Automatic collider generation from scene geometry
-  - Simple shapes auto-detected: axis-aligned boxes, cylinders, spheres fitted to mesh bounds
-  - Complex shapes: auto-build triangle mesh collider from model data
-  - Editor toggle per-entity: "None", "Primitive (auto)", "Mesh (exact)", "Custom"
-- [x] Jolt Physics integration for mesh collision (optional path)
-  - Use Jolt's `MeshShape` for static scene geometry already registered with the physics world
-  - Query Jolt's collision system for cloth particle penetration tests
-- [x] Edge/triangle collision for cloth mesh (not just particles)
-  - Test cloth mesh edges against collider surfaces to prevent pass-through between particles
-  - Continuous collision detection (CCD) for fast-moving cloth to prevent tunneling
-- [x] Self-collision detection
-  - Spatial hashing to find nearby cloth particles on the same mesh
-  - Prevent cloth from passing through itself when folding
-
-### Ragdoll Physics
-Skeleton-driven ragdoll for realistic death animations, zero-G corpses, and physics-based stumbling.
-- [x] Skeleton-to-ragdoll transition (on death or trigger, switch from animation to physics-driven bones)
-  - Map skeleton bones to rigid body chain with joint limits per bone
-  - Blend from animation to ragdoll (active ragdoll — partial physics influence for stumbling, hit reactions)
-  - Preserve final animation pose as ragdoll initial state (no snapping)
-- [x] Joint limit configuration per bone (hinge for knees/elbows, cone-twist for shoulders/hips)
-- [x] Ragdoll presets (humanoid, quadruped, custom — auto-generate from skeleton)
-- [x] Powered ragdoll (muscles — ragdoll tries to maintain a pose while physics acts on it)
-  - Use case: enemies stumbling, characters bracing against walls, partial dismemberment
-
-### Object Interaction System
-Pick up, hold, throw, and manipulate physics objects in the world.
-- [x] Grab system — raycast from camera/hand to select nearby physics objects
-  - Distance-limited (2-3m range), weight-limited (can't grab massive objects)
-  - Visual indicator (highlight, cursor change) when looking at grabbable objects
-- [x] Hold and carry — grabbed object follows a target point with spring constraint
-  - Object rotates to face camera or maintains grabbed orientation
-  - Collision with world while held (object pushes player away if stuck)
-- [x] Throw — release grabbed object with velocity from mouse/stick movement
-  - Configurable throw force, arc prediction line (optional)
-- [x] Physics puzzles — pressure plate component with overlap detection and activation callbacks
-- [x] Stasis/slow-motion on individual objects (per-body freeze/slow-motion via StasisSystem)
-
-### Dynamic Destruction
-Breakable objects, pre-fractured meshes, and runtime deformation.
-- [x] Pre-fractured mesh system — artist defines fracture pieces at import time
-  - Voronoi fracture tool (split mesh into N pieces along Voronoi cell boundaries)
-  - Fracture pieces stored as child meshes, invisible until break triggers
-  - Break threshold: force/impulse exceeds configurable limit
-- [x] Runtime break response — on threshold exceeded:
-  - Hide original mesh, spawn fracture pieces as dynamic rigid bodies
-  - Apply radial impulse from impact point
-  - Debris particle spawning (dust, sparks, splinters)
-- [x] Deformable meshes — vertex displacement from impact (dents in metal, cracks in stone)
-  - Damage decals at deformation point (crack textures, scorch marks)
-- [x] Breakable constraints — glass panes, wooden boards, weak walls
-  - Fixed joints that break when force exceeds threshold (already in Jolt constraint system)
-- [x] Chain destruction — breaking one object can trigger adjacent breaks (domino, collapse)
-
-### Dismemberment System
-Runtime limb separation for combat and horror games (Dead Space-style strategic dismemberment).
-- [x] Dismemberment zones — define severable joints in skeleton (neck, shoulders, elbows, wrists, hips, knees)
-  - Per-joint health/damage threshold for separation
-  - Damage accumulation per zone (not just single hits)
-- [x] Runtime mesh splitting at dismemberment joints
-  - Generate cap geometry at cut point (procedural disc mesh with wound texture)
-  - Detached limb becomes ragdoll rigid body
-  - Stump gets gore/wound decal
-- [x] Behavior modification after dismemberment
-  - AI adjusts movement/attack patterns based on remaining limbs
-  - Crawling enemy (both legs removed), one-armed attacks, headless stumbling
-- [x] Gore system (optional, toggle in settings)
-  - Blood particle spray at cut point
-  - Blood decals on nearby surfaces
-  - Dismembered limbs persist for configurable duration
+> **T0 audit 2026-04-24 (Phase 10.9 Slice 0):** The destruction / ragdoll / grab / stasis / dismemberment cluster shipped as class + unit tests but has **no production caller**. `DestructionSystem::update` is a 41-line empty pump. Remediation tracked by **Phase 10.9 Slice 8 W13** (wire a real pump OR relocate to `engine/experimental/physics/` and demote claims). Affected: `Ragdoll` + presets + powered-ragdoll (skeleton-to-ragdoll switch never fires), `GrabSystem` (no `m_grabSystem` in Engine; no game loop raycasts from camera to grab), `StasisSystem` (per-body freeze unused), `Fracture` + `BreakableComponent::fracture` (call chain has zero callers, break thresholds never fire), `Dismemberment` system. Rigid-body dynamics, character controller, constraints/joints, and cloth simulation **are** live.
 
 ### Milestone
-~~The Tabernacle's linen curtains sway gently, the entrance veil drapes realistically from its poles, and doors throughout Solomon's Temple swing on hinged joints. Cloth correctly drapes over any scene geometry without manual collider placement. Objects can be grabbed and thrown, enemies ragdoll on death with dismemberable limbs, and destructible objects shatter realistically.~~ DONE
+~~Tabernacle linen curtains sway, the entrance veil drapes from its poles, doors throughout Solomon's Temple swing on hinged joints, cloth drapes over any geometry without manual colliders. Objects grab/throw, enemies ragdoll with dismemberable limbs, destructibles shatter.~~ DONE
 
 ---
 
 ## Formula Pipeline (Cross-Cutting Infrastructure) — COMPLETE
 
-Unified physics/lighting formula storage, evaluation, and code generation. Every physics and rendering system (cloth, water, foliage, particles, lighting) currently implements its own formulas independently. The Formula Pipeline provides a shared system for discovering, storing, compiling, and using mathematical formulas across the entire engine.
-
-### Completed
-- [x] EnvironmentForces system — centralized environmental query API (wind, weather, buoyancy, temperature, humidity, wetness)
-- [x] Expression tree AST — 5 node types (literal, variable, binary op, unary op, conditional) with JSON round-trip
-- [x] FormulaLibrary — named formula registry with categories, typed inputs/outputs, coefficients, quality tiers
-- [x] Expression evaluator — scalar tree-walking interpreter for tool-time use
-- [x] Physics templates — 15 built-in formulas (aerodynamic drag, Stokes drag, Fresnel-Schlick, Beer-Lambert, Gerstner wave, buoyancy, caustic depth fade, water absorption, inverse-square falloff, exponential fog, Hooke spring, Coulomb friction, terminal velocity, wet darkening, wind deformation)
-
-### Completed (cont.)
-- [x] FormulaCompiler — C++ code generator (expression tree → inline C++ functions with coefficient inlining)
-- [x] FormulaCompiler — GLSL code generator (expression tree → GLSL function snippets, no std:: prefix)
-- [x] LUT generator — sample formulas over input ranges into binary lookup tables (VLUT format with FNV-1a axis hashing)
-- [x] LUT loader — load VLUT files with 1D/2D/3D linear/bilinear/trilinear interpolation, O(1) lookup
-
-### Completed (cont.)
-- [x] CurveFitter — custom Levenberg-Marquardt optimizer (zero external deps, Gaussian elimination, R²/RMSE/max error)
-- [x] FormulaPreset system — named bundles of coefficient overrides for visual styles (9 built-in: Realistic Desert, Tropical Forest, Arctic Tundra, Underwater, Anime/Cel-Shaded, Painterly, Stormy Weather, Calm Interior, Biblical Tabernacle)
-- [x] FormulaWorkbench — standalone ImGui/ImPlot tool with template browser, data editor (CSV import), LM fitter, curve visualizer, residual plots, train/test validation, preset browser, JSON export
-
-### Completed (cont.)
-- [x] Water formula optimization — quality-tiered caustics (Full: 6 reads + chromatic aberration, Approximate: 2 reads, Simple: 1 read), quality-tiered water FBM noise (3/2/0 octaves), APPROXIMATE expressions for Fresnel and Beer-Lambert, new caustic_depth_fade and water_absorption templates
-- [x] FormulaQualityManager — global + per-category quality tier selection with JSON persistence, per-water-surface quality dropdown in inspector, wired into scene/terrain/water renderers
+Unified physics/lighting formula storage, evaluation, and code generation shared across cloth / water / foliage / particles / lighting. Shipped: EnvironmentForces query API (wind / weather / buoyancy / temp / humidity / wetness); expression-tree AST (5 node types, JSON round-trip); FormulaLibrary (named registry, categories, coefficients, quality tiers); tree-walking evaluator; FormulaCompiler (C++ + GLSL codegen); LUT generator + loader (VLUT format with 1D/2D/3D interpolation, FNV-1a axis hashing); CurveFitter (Levenberg-Marquardt with R²/RMSE); FormulaWorkbench (standalone ImGui/ImPlot tool: template browser, CSV import, LM fitter, residual plots, train/test split, JSON export); FormulaPreset system (9 built-in styles: Realistic Desert, Tropical Forest, Arctic Tundra, Underwater, Anime/Cel-Shaded, Painterly, Stormy Weather, Calm Interior, Biblical Tabernacle); 15 physics templates (aerodynamic drag, Stokes drag, Fresnel-Schlick, Beer-Lambert, Gerstner wave, buoyancy, caustic depth fade, water absorption, inverse-square falloff, exponential fog, Hooke spring, Coulomb friction, terminal velocity, wet darkening, wind deformation); water-formula quality tiers (caustics 6/2/1 reads, FBM 3/2/0 octaves) wired through FormulaQualityManager (global + per-category JSON persistence, per-water-surface inspector dropdown).
 
 ### Outstanding tool-loop follow-ups (low priority, tracked here for visibility)
 Source of truth: [`docs/SELF_LEARNING_ROADMAP.md`](docs/SELF_LEARNING_ROADMAP.md). Surfaced in the main roadmap so these don't stay invisible; the design/test context lives in the sibling doc.
@@ -701,25 +99,7 @@ Reference: `Vestige Overhaul.md` contains the full architecture document.
 ---
 
 ### Phase 9A: System Infrastructure (COMPLETE)
-**Goal:** Create the formal system abstraction and registry without breaking any existing code.
-
-Shipped via commit `dfbb96b` — "Phase 9A: Domain system infrastructure — ISystem, SystemRegistry, cross-system events".
-
-#### ISystem Interface
-- [x] `ISystem` base class with 4 pure virtuals (`getSystemName`, `initialize`, `shutdown`, `update`) and opt-in virtual no-ops (`fixedUpdate`, `submitRenderData`, `onSceneLoad`, `onSceneUnload`, `drawDebug`, `reportMetrics`) — `engine/core/i_system.h`. The original brainstorm listed `syncPhysics` / `registerEditorUI` / `serialize` / `deserialize` as opt-ins; those did not ship on the interface and are handled elsewhere (physics owns its own sync, serializer is a free function, editor UI is its own layer).
-- [x] Performance budget API (`getFrameBudgetMs` / `setFrameBudgetMs`) — `i_system.h:119`
-- [x] `getOwnedComponentTypes()` — each system declares which component types it manages (minor rename from design: `getOwnedComponents` → `getOwnedComponentTypes`)
-
-#### SystemRegistry
-- [x] Registry that manages all domain system instances (`registerSystem`, `getSystem<T>`, `initializeAll`, `updateAll`, `shutdownAll`) — `engine/core/system_registry.h`
-- [x] Auto-activation: scan scene entities for component types, match against each system's `getOwnedComponentTypes()`, activate only systems with matching components present (`system_registry.cpp:209` "auto-activated")
-- [x] `isForceActive()` for always-on systems (Atmosphere, Lighting) regardless of scene contents (minor rename: `forceActivate()` → `isForceActive()` — `system_registry.cpp:181`)
-- [x] Integrate into Engine update loop (`updateAll`, `fixedUpdateAll`, `submitRenderDataAll` — `engine.cpp:956`)
-
-#### Cross-System Interaction
-- [x] Typed event structs for discrete occurrences on `engine/core/system_events.h` — `SceneLoadedEvent`, `SceneUnloadedEvent`, `WeatherChangedEvent`, `EntityDestroyedEvent`, `TerrainModifiedEvent`, `AudioPlayEvent`, `NavMeshBakedEvent`. Additional concept-level events (`ObjectEnteredWaterEvent`, `LightningStrikeEvent`) can be added lazily as domains need them — the pattern and EventBus plumbing are in place.
-- [x] Query model for continuous position-dependent data — systems query `EnvironmentForces` / `Terrain` directly via shared infrastructure (see `AtmosphereSystem`, `WaterSystem`)
-- [x] Rule: events for discrete occurrences, queries for continuous data. Systems never `#include` each other.
+Shipped via commit `dfbb96b`. `ISystem` base class (`engine/core/i_system.h`) — 4 pure virtuals (`getSystemName`, `initialize`, `shutdown`, `update`) + opt-in `fixedUpdate` / `submitRenderData` / `onSceneLoad` / `onSceneUnload` / `drawDebug` / `reportMetrics` no-ops + per-system frame-budget API + `getOwnedComponentTypes()`. `SystemRegistry` (`system_registry.{h,cpp}`) auto-activates systems whose owned component types appear in the scene; `isForceActive()` for always-on (Atmosphere, Lighting); integrated into `Engine::run` (`updateAll` / `fixedUpdateAll` / `submitRenderDataAll`). Cross-system interaction: typed event structs (`engine/core/system_events.h` — SceneLoaded / SceneUnloaded / WeatherChanged / EntityDestroyed / TerrainModified / AudioPlay / NavMeshBaked); query model for continuous data via shared infrastructure (`EnvironmentForces`, `Terrain`); rule — events for discrete occurrences, queries for continuous data, systems never `#include` each other.
 
 ---
 
@@ -792,48 +172,7 @@ Foundations shipped via commit `fa0b100` — "Phase 9C: New domain systems — A
 ---
 
 ### Phase 9D: Editor Enhancements (COMPLETE)
-**Goal:** Asset viewers and game type templates that make the editor a complete creation tool.
-
-Shipped via commit `6a40da4` — "Phase 9D: Editor enhancements — asset viewers and game type templates".
-
-#### Model Viewer Panel
-Implementation: `engine/editor/panels/model_viewer_panel.{h,cpp}`
-- [x] Orbiting camera around the model
-- [x] Material/texture display
-- [x] Animation playback (if model has animations)
-- [x] Skeleton visualization
-- [x] Bounding box and vertex/triangle count display
-- [x] Drag from model viewer into scene viewport to place
-
-#### Texture Viewer Panel
-Implementation: `engine/editor/panels/texture_viewer_panel.{h,cpp}`
-- [x] Full-resolution display with zoom/pan
-- [x] Channel isolation (R, G, B, A, RGB)
-- [x] Mipmap level visualization
-- [x] Tiling preview (repeat texture to see how it tiles)
-- [x] Texture metadata (resolution, format, memory size)
-- [x] PBR texture set grouping (albedo + normal + roughness shown together)
-
-#### HDRI Viewer Panel
-Implementation: `engine/editor/panels/hdri_viewer_panel.{h,cpp}`
-- [x] Spherical/equirectangular preview
-- [x] Exposure adjustment
-- [x] Preview as skybox in mini-viewport
-- [x] Show irradiance and specular prefiltered versions
-- [x] One-click set as scene environment map
-
-#### Game Type Templates
-Implementation: `engine/editor/panels/template_dialog.{h,cpp}` — `GameTemplateType` enum with all 6 variants.
-- [x] **3D First Person** — perspective camera, full 3D physics, FPS controller (`FIRST_PERSON_3D`)
-- [x] **3D Third Person** — perspective camera with follow/orbit cam, character system (`THIRD_PERSON_3D`)
-- [x] **2.5D** — 3D rendering with gameplay constrained to a plane (`TWO_POINT_FIVE_D`)
-- [x] **Isometric** — fixed-angle orthographic camera, grid-based or free movement (`ISOMETRIC`)
-- [x] **Top-Down** — orthographic overhead camera, free movement (`TOP_DOWN`)
-- [x] **Point-and-Click** — fixed or panning camera, click-to-move navigation (`POINT_AND_CLICK`)
-
-Each template configures: camera type/constraints, physics dimensionality, default input mapping, required systems, starter scene layout.
-
-**Note:** 2D templates (Side-Scroller, Shmup) require Phase 9F's sprite renderer and 2D physics.
+Shipped via commit `6a40da4`. Three asset-viewer panels in `engine/editor/panels/`: ModelViewer (orbit camera, material display, animation playback, skeleton viz, bounding box + vertex/tri count, drag-to-place into viewport); TextureViewer (full-res zoom/pan, channel isolation, mipmap levels, tiling preview, metadata, PBR-set grouping); HDRIViewer (spherical preview, exposure, mini-viewport skybox, irradiance + prefilter previews, one-click as scene env map). Game-type templates via `template_dialog.{h,cpp}` — `GameTemplateType` enum: FIRST_PERSON_3D, THIRD_PERSON_3D, TWO_POINT_FIVE_D, ISOMETRIC, TOP_DOWN, POINT_AND_CLICK; each configures camera + physics dimensionality + default input + required systems + starter scene. 2D templates (Side-Scroller, Shmup) require Phase 9F.
 
 ---
 
@@ -1119,41 +458,7 @@ A person who has never opened Vestige can open it, follow the first-run tour, cr
 ---
 
 ## Phase 10.7: Accessibility + Audio integration ✅ **Complete (2026-04-23)**
-**Goal:** Retrofit existing audio/accessibility consumers so they read from the engine-owned Settings stores introduced in Phase 10 slice 13.5e. Phase 10 delivered the Settings UI + the store-sink plumbing; this phase closes the loop by making every effect consumer actually consult those stores at runtime.
-
-**Completed 2026-04-23** across 8 commits (design + 3 subtitle + 1 photosensitive + 3 audio). All approved milestones delivered. Camera shake and flash overlay retrofits remain deferred to Phase 11 per the scope reduction captured below — their originating subsystems do not exist in the codebase today. `docs/PHASE10_7_DESIGN.md` contains the full design + slice breakdown.
-
-**Context:** Slice 13.5e added `Engine::m_audioMixer`, `Engine::m_subtitleQueue`, `Engine::m_photosensitiveLimits` + `m_photosensitiveEnabled`. Settings drives these live via sinks, but downstream consumers don't read from them yet — user changes propagate to the store but not to the audio path / effect call sites.
-
-### Audio mixer → playback path
-- [x] Pipe `Engine::getAudioMixer()` into the OpenAL gain resolution on every `AudioSource` so the user's per-bus gain choice actually affects playback. **A2** — playback registry in `AudioEngine` + per-frame `updateGains()` sweep + `resolveSourceGain(master × bus × source)` pure helper (commit `0bac0e6`).
-- [x] Decide bus-gain multiplication order: master × bus × source. Documented in `docs/PHASE10_7_DESIGN.md` §4.1.
-- [x] Editor-side `AudioPanel` currently owns a standalone `AudioMixer`. **A3** — panel now wires into the engine mixer via `wireEngineMixer`; bus-slider edits route through `SettingsEditor::mutate`; mute / solo / ducking stay panel-local (commit `525c182`).
-
-### Subtitle rendering
-- [x] Wire `Engine::getSubtitleQueue().tick(dt)` into the per-frame game loop. **B1** — `AccessibilityTick` profiler scope in `Engine::run` (commit `593fc2f`).
-- [x] Render `queue.activeSubtitles()` through the HUD pipeline with configured size preset + per-category styling. **B2** — pure-function layout + `SpriteBatchRenderer` plates + `TextRenderer` glyph runs, wired through `UISystem::renderUI` as the last overlay pass (commit `738b106`).
-- [x] Wire audio-event triggers to enqueue captions. **B3** — declarative `assets/captions.json` map loaded at engine init; `CaptionMap::enqueueFor(clipPath, queue)` fires a caption when a mapped clip plays (commit `be7cdae`). Auto-trigger on playback arrives in Slice A2's component-driven path when game code adopts the new per-frame gain pass.
-
-### Photosensitive caps → consumers
-
-**Scope reduction (2026-04-23).** Of the 4 consumers originally listed, only bloom and strobe/flicker have real consumers in the codebase today. Camera shake and flash overlay subsystems do not exist yet — the clamp helpers (`clampShakeAmplitude`, `clampFlashAlpha`) sit unused. Phase 10.7 retrofits the 2 that exist; the other 2 are *deferred retrofits* that Phase 11 (combat / UI transitions) must wire into the originating subsystems as part of their initial implementation. See `docs/PHASE10_7_DESIGN.md` §4.3 for rationale.
-
-- [x] Retrofit bloom post through `limitBloomIntensity`. **C1** — `Renderer::setPhotosensitive` setter + clamp at the `u_bloomIntensity` upload site; engine pushes state per-frame in `AccessibilityTick` (commit `4d94cd4`).
-- [x] Retrofit strobe / flicker emitters through `clampStrobeHz`. **C2** — `ParticleEmitterComponent::getCoupledLight` converts `flickerSpeed` to Hz (`/ 2π`), clamps, converts back; `Scene::collectRenderData` threads photosensitive state through (commit `4d94cd4`).
-- [ ] *(Deferred to Phase 11)* Retrofit camera shake through `clampShakeAmplitude` when the shake subsystem ships. Affects kickback, explosions, earthquake triggers.
-- [ ] *(Deferred to Phase 11)* Retrofit flash overlays (hit flashes, screen-wipe transitions) through `clampFlashAlpha` when the overlay subsystem ships.
-
-### Slice plan (approved 2026-04-23, order B → C → A)
-
-Each slice is a review-sized commit with tests + CHANGELOG entry. B and C are independent; A depends on neither.
-
-- **Slice B — subtitles:** `SubtitleQueue::tick(dt)` in `Engine::update` (B1); 2D HUD render pass for `activeSubtitles()` (B2); declarative `assets/captions.json` map + auto-enqueue on clip playback (B3).
-- **Slice C — photosensitive:** bloom intensity retrofit via `Renderer::setPhotosensitive` setter (C1); particle flicker retrofit via `clampStrobeHz` at emitter tick (C2).
-- **Slice A — audio:** `AudioBus` field on `AudioSourceComponent` + serializer (A1); `AudioSystem` per-frame gain-resolution pass pushing `master × bus × source` to `AL_GAIN` (A2); `AudioPanel` unification — bus sliders route through `SettingsEditor`, mute/solo/ducking stay panel-local (A3).
-
-### Milestone
-Toggling any Settings tab option (bus gain, subtitle size, photosensitive safe mode, HRTF) produces an immediately-observable change in running game state — not just in the store. Every effect consumer reads from `Engine` getters rather than hard-coded values or its own parameter struct. No "set in Settings, nothing happens" gap remains.
+Retrofit completed across 8 commits — every Phase-10 Settings-store consumer now reads at runtime, closing the "set in Settings, nothing happens" gap. **Audio mixer → playback** (A1–A3): `AudioBus` field on `AudioSourceComponent`, `AudioEngine` playback registry + per-frame `updateGains()` resolving `master × bus × source`, `AudioPanel` bus sliders route through `SettingsEditor::mutate` (mute/solo/ducking stay panel-local). **Subtitles** (B1–B3): `SubtitleQueue::tick(dt)` in `Engine::run`, `activeSubtitles()` rendered via `SpriteBatchRenderer` + `TextRenderer` as last overlay pass, declarative `assets/captions.json` auto-enqueue on clip playback. **Photosensitive caps** (C1–C2): bloom via `Renderer::setPhotosensitive` clamping `u_bloomIntensity`, strobe/flicker via `ParticleEmitterComponent::getCoupledLight` Hz conversion + clamp. Camera-shake (`clampShakeAmplitude`) and flash-overlay (`clampFlashAlpha`) retrofits deferred to Phase 11 — those subsystems do not exist in the codebase yet. Full design + slice breakdown in `docs/PHASE10_7_DESIGN.md`.
 
 ---
 
@@ -2619,25 +1924,7 @@ Vestige is developed with heavy use of AI coding assistance — specifically Ant
 
 #### Prerequisites (before public release)
 
-Already done (2026-04-14 / 2026-04-15):
-- [x] Add `LICENSE` (MIT, © 2026 Anthony Schemel) at repo root
-- [x] Add `CONTRIBUTING.md` (DCO sign-off, AI-disclosure policy, build instructions)
-- [x] Add `CODE_OF_CONDUCT.md` (Contributor Covenant 2.1, by reference)
-- [x] Add `THIRD_PARTY_NOTICES.md` covering 15 FetchContent deps + 3 vendored sources + asset attributions
-- [x] Add `ASSET_LICENSES.md` documenting every shipped asset
-- [x] Apply SPDX-License-Identifier headers to all 703 owned source files
-- [x] Verify engine builds from a fresh clone (in-engine CC0 assets + pure-PBR materials render the demo scene correctly; no external asset download required)
-- [x] Asset license boundary: Texturelabs / everytexture / tabernacle untracked from public repo
-- [x] Large CC0 assets (~390 MB) split into the separate `milnet01/VestigeAssets` repo (stays private until ~v1.0.0 pending a final redistributability audit of every file)
-- [x] Pre-launch checklist drafted at [`docs/PRE_OPEN_SOURCE_AUDIT.md`](docs/PRE_OPEN_SOURCE_AUDIT.md) (11 sections, scrubbed for completed items)
-- [x] Personal-path scrub across all docs, code, and changelogs
-- [x] Gitleaks config + secret-history rewrite (rotated NVD key scrubbed from history; `.git` shrunk 552 MB → 21 MB)
-- [x] Initial public-facing `README.md` at repo root (status disclosure, feature-by-phase matrix, quick-start, repo layout, documentation index)
-- [x] Issue + PR templates under `.github/` (bug-report, feature-request, `config.yml` redirecting security to SECURITY.md and questions to Discussions; PR template with DCO + coding-standards + tests + audit-tool + CHANGELOG + Formula-Workbench + AI-disclosure checklist)
-- [x] `SECURITY.md` prefaced with a public vulnerability-disclosure section (scope, reporting address, timelines, safe-harbour)
-- [x] Stable editor (Phase 5 complete) and reliable scene save/load
-
-**Launched 2026-04-15.** `v0.1.3-preview` tagged, `milnet01/Vestige` flipped public, GitHub Discussions enabled, pre-release announced. Full launch log in `docs/PRE_OPEN_SOURCE_AUDIT.md` §10-11. The six items that were previously in this "Still pending" list at launch time (CI hardening pass, communication-channel decision, pre-launch checklist re-run, pre-release tag, visibility flip, CMake-matrix CI) are all complete — see that checklist for per-item evidence.
+**Launched 2026-04-15.** `v0.1.3-preview` tagged, `milnet01/Vestige` flipped public, GitHub Discussions enabled. Pre-launch checklist (LICENSE / CONTRIBUTING / CODE_OF_CONDUCT / THIRD_PARTY_NOTICES / ASSET_LICENSES / SPDX headers across 703 files / fresh-clone build / asset-licence boundary / VestigeAssets repo split / personal-path scrub / gitleaks + secret-history rewrite / public README / GitHub issue+PR templates / SECURITY.md disclosure section / CI hardening / CMake-matrix CI) all complete. Full launch log + per-item evidence in `docs/PRE_OPEN_SOURCE_AUDIT.md` §10-11.
 
 Still pending post-launch (none blocking engine development):
 - [ ] **VestigeAssets visibility flip + CI default restore.** Blocked on `milnet01/VestigeAssets` going public (~v1.0.0, pending its final redistributability audit of every shipped asset). When VestigeAssets flips public, flip `-DVESTIGE_FETCH_ASSETS=OFF` → `ON` in `.github/workflows/ci.yml` and reset the engine default back to `ON` in `external/CMakeLists.txt` in the same commit so CI exercises the full asset pipeline again. Ref: `docs/PRE_OPEN_SOURCE_AUDIT.md` §8.
