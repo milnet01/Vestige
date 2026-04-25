@@ -9,6 +9,33 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-25 Phase 10.9 — Slice 5 D6 (OBJ hash combiner)
+
+`engine/utils/obj_loader.cpp::VertexKeyHash::operator()` was
+`h1 ^ (h2 << 16) ^ (h3 << 32)`. The `<< 32` shift is undefined
+behaviour on a 32-bit `size_t` (shift exceeds the type's bit
+width). On 64-bit it wasn't UB, but it wasted entropy by
+overlapping the three component hashes only in the top bits.
+
+Replaced with the canonical Boost combiner:
+
+```cpp
+seed ^= h + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+```
+
+applied iteratively across `posIndex` / `texIndex` / `normIndex`.
+The constant `0x9e3779b9` is the fractional part of the golden
+ratio scaled to 32 bits — the standard distributing constant
+used because it spreads input entropy across all output bits.
+
+The existing OBJ tests (15) continue to pass:
+`SharedVerticesAreDeduplicatedViaIndices` is the practical
+regression pin, since vertex-deduplication correctness depends
+on the hash routing equal `VertexKey` values to the same
+bucket — the new hash routes them identically.
+
+3020 / 3021 pass.
+
 ### 2026-04-25 Phase 10.9 — Slice 5 D5 + D9 (small hardening)
 
 Two small follow-up hardenings on top of D1 / D7 / D8.

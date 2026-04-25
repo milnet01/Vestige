@@ -33,10 +33,25 @@ struct VertexKeyHash
 {
     size_t operator()(const VertexKey& key) const
     {
-        size_t h1 = std::hash<int>()(key.posIndex);
-        size_t h2 = std::hash<int>()(key.texIndex);
-        size_t h3 = std::hash<int>()(key.normIndex);
-        return h1 ^ (h2 << 16) ^ (h3 << 32);
+        // Phase 10.9 Slice 5 D6: boost::hash_combine-style combiner.
+        // The previous `h1 ^ (h2 << 16) ^ (h3 << 32)` was undefined
+        // behaviour on 32-bit `size_t` (the `<< 32` shift exceeds the
+        // type's bit width), and even on 64-bit it wasted entropy by
+        // overlapping the three hash bits in only the top 16 / 32 bits.
+        // The combiner below is the canonical Boost formula:
+        //
+        //   seed ^= h + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+        //
+        // 0x9e3779b9 is the fractional part of the golden ratio scaled
+        // to 32 bits — the standard mixing constant used because it
+        // distributes input entropy across all output bits.
+        auto combine = [](size_t seed, size_t h) {
+            return seed ^ (h + 0x9e3779b9u + (seed << 6) + (seed >> 2));
+        };
+        size_t seed = std::hash<int>()(key.posIndex);
+        seed = combine(seed, std::hash<int>()(key.texIndex));
+        seed = combine(seed, std::hash<int>()(key.normIndex));
+        return seed;
     }
 };
 
