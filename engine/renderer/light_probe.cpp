@@ -4,6 +4,7 @@
 /// @file light_probe.cpp
 /// @brief Light probe implementation — IBL capture and convolution.
 #include "renderer/light_probe.h"
+#include "renderer/ibl_capture_sequence.h"
 #include "renderer/ibl_prefilter.h"
 #include "core/logger.h"
 
@@ -161,8 +162,13 @@ void LightProbe::generateFromCubemap(GLuint capturedCubemap)
     if (m_irradianceMap != 0) { glDeleteTextures(1, &m_irradianceMap); m_irradianceMap = 0; }
     if (m_prefilterMap != 0)  { glDeleteTextures(1, &m_prefilterMap);  m_prefilterMap = 0; }
 
-    generateIrradiance(capturedCubemap);
-    generatePrefilter(capturedCubemap);
+    // Wrap the irradiance + prefilter passes in a forward-Z guard; the
+    // engine's scene draw runs reverse-Z and `glClipControl` is global
+    // state (Phase 10.9 Slice 4 R1).
+    runIblCaptureSequence({
+        [&]() { generateIrradiance(capturedCubemap); },
+        [&]() { generatePrefilter(capturedCubemap); },
+    });
 
     m_ready = true;
     Logger::info("Light probe IBL generated (irradiance "

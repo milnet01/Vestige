@@ -39,10 +39,7 @@ namespace Vestige
 template <typename Guard, typename StepsList>
 void runIblCaptureSequenceWith(const StepsList& steps)
 {
-    // RED stub — Guard not yet established. Steps still run so the
-    // production sequence executes, but the bracket contract this
-    // helper exists to enforce is absent. Replaced in the green
-    // commit by the real `Guard guard;` line.
+    Guard guard;
     for (const auto& step : steps)
     {
         if (step) step();

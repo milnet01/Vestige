@@ -5,6 +5,7 @@
 /// @brief IBL environment map generation implementation.
 #include "renderer/environment_map.h"
 #include "renderer/fullscreen_quad.h"
+#include "renderer/ibl_capture_sequence.h"
 #include "renderer/ibl_prefilter.h"
 #include "core/logger.h"
 
@@ -149,37 +150,38 @@ void EnvironmentMap::generate(GLuint skyboxCubemap, bool hasCubemap,
     if (m_prefilterMap != 0) { glDeleteTextures(1, &m_prefilterMap);  m_prefilterMap = 0; }
     if (m_brdfLut != 0)      { glDeleteTextures(1, &m_brdfLut);       m_brdfLut = 0; }
 
-    // Step 1: Capture the environment to an HDR cubemap
-    captureEnvironment(skyboxCubemap, hasCubemap, m_captureShader);
-    {
-        GLenum err = glGetError();
-        if (err != GL_NO_ERROR)
-            Logger::error("GL error after captureEnvironment: " + std::to_string(err));
-    }
-
-    // Step 2: Convolve environment into irradiance cubemap
-    generateIrradiance();
-    {
-        GLenum err = glGetError();
-        if (err != GL_NO_ERROR)
-            Logger::error("GL error after generateIrradiance: " + std::to_string(err));
-    }
-
-    // Step 3: Prefilter environment for specular reflections
-    generatePrefilter();
-    {
-        GLenum err = glGetError();
-        if (err != GL_NO_ERROR)
-            Logger::error("GL error after generatePrefilter: " + std::to_string(err));
-    }
-
-    // Step 4: Generate BRDF integration LUT
-    generateBrdfLut(quad);
-    {
-        GLenum err = glGetError();
-        if (err != GL_NO_ERROR)
-            Logger::error("GL error after generateBrdfLut: " + std::to_string(err));
-    }
+    // The four IBL passes need standard NDC depth (`GL_NEGATIVE_ONE_TO_ONE`
+    // + `GL_LESS` + clearDepth 1.0); the engine's scene draw runs reverse-Z.
+    // `runIblCaptureSequence` wraps a `ScopedForwardZ` around the whole
+    // sequence so the cubemap captures see forward-Z and the caller's
+    // reverse-Z state is restored before the next scene draw. (Phase 10.9
+    // Slice 4 R1.)
+    runIblCaptureSequence({
+        [&]() {
+            captureEnvironment(skyboxCubemap, hasCubemap, m_captureShader);
+            GLenum err = glGetError();
+            if (err != GL_NO_ERROR)
+                Logger::error("GL error after captureEnvironment: " + std::to_string(err));
+        },
+        [&]() {
+            generateIrradiance();
+            GLenum err = glGetError();
+            if (err != GL_NO_ERROR)
+                Logger::error("GL error after generateIrradiance: " + std::to_string(err));
+        },
+        [&]() {
+            generatePrefilter();
+            GLenum err = glGetError();
+            if (err != GL_NO_ERROR)
+                Logger::error("GL error after generatePrefilter: " + std::to_string(err));
+        },
+        [&]() {
+            generateBrdfLut(quad);
+            GLenum err = glGetError();
+            if (err != GL_NO_ERROR)
+                Logger::error("GL error after generateBrdfLut: " + std::to_string(err));
+        },
+    });
 
     m_ready = true;
     Logger::info("IBL environment maps generated (irradiance "
