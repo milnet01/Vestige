@@ -196,3 +196,115 @@ TEST(ShProbeGridTest, UniformCubemapFullPipelineDiffuse)
     const float irradianceAtAnyDirection = coeffs[0].r * 0.282095f;
     EXPECT_NEAR(irradianceAtAnyDirection, kPi, 0.05f);
 }
+
+
+// ============================================================================
+// R7 — full path: CPU pipeline → shader-equivalent evaluator.
+//
+// The shader at scene.frag.glsl:537-602 evaluates SH using
+// Ramamoorthi-Hanrahan 2001 Eq. 13. The c1..c5 constants in that
+// formulation already fold in the per-band cosine-lobe weights A_ℓ
+// (c4 = A_0 × Y_00 = √π / 2, c1 = A_2 × Y_2,±2 / 2, etc.). The shader
+// therefore expects RADIANCE-SH on input and returns irradiance / π
+// (the LearnOpenGL diffuse-IBL convention).
+//
+// Before R7, `Renderer::captureSHGrid` ran `projectCubemapToSH` then
+// `convolveRadianceToIrradiance` on the CPU before upload — a second
+// application of A_ℓ on top of the shader's. For a uniform-radiance
+// cubemap the shader output is therefore π × radiance instead of
+// radiance — band-0 ambient was ≈π× over-bright since day one, and
+// every PBR material has been lit through this corrupted value.
+//
+// The R7 fix removes the CPU-side convolution; the test below pins
+// the corrected end-to-end magnitude. Because the test runs the
+// whole production CPU pipeline (`computeProbeShFromCubemap`, which
+// `Renderer::captureSHGrid` also calls), it would fail against a
+// regression that re-introduced the convolution.
+// ============================================================================
+
+/// Pin the headline R7 invariant: a uniform-radiance ambient
+/// environment, when round-tripped through the CPU pipeline + shader-
+/// equivalent evaluator, should return the input radiance for any
+/// surface normal.
+TEST(ShProbeGridTest, UniformCubemapEndToEndEqualsRadiance_R7)
+{
+    const int faceSize = 16;
+    const glm::vec3 radiance(0.5f, 0.5f, 0.5f);
+    auto cubemap = makeUniformCubemap(faceSize, radiance);
+
+    glm::vec3 coeffs[9];
+    Vestige::SHProbeGrid::computeProbeShFromCubemap(cubemap.data(), faceSize, coeffs);
+
+    // For a uniform-radiance environment irradiance is direction-
+    // independent. Sample three orthogonal normals as cross-checks.
+    glm::vec3 e_y = Vestige::SHProbeGrid::evaluateIrradianceCpu(coeffs, glm::vec3(0, 1, 0));
+    glm::vec3 e_x = Vestige::SHProbeGrid::evaluateIrradianceCpu(coeffs, glm::vec3(1, 0, 0));
+    glm::vec3 e_z = Vestige::SHProbeGrid::evaluateIrradianceCpu(coeffs, glm::vec3(0, 0, 1));
+
+    // 0.02 absolute tolerance — covers both the cubemap's
+    // discretisation residue (faceSize=16) and small float rounding
+    // in c1..c5. Catching the π× over-bright bug needs ~3.0 of
+    // headroom, so the tolerance is 100× tighter than the bug
+    // signature.
+    EXPECT_NEAR(e_y.r, radiance.r, 0.02f);
+    EXPECT_NEAR(e_y.g, radiance.g, 0.02f);
+    EXPECT_NEAR(e_y.b, radiance.b, 0.02f);
+    EXPECT_NEAR(e_x.r, radiance.r, 0.02f);
+    EXPECT_NEAR(e_z.r, radiance.r, 0.02f);
+}
+
+/// Direction independence for a uniform input. Sampling along any
+/// two normals should give the same irradiance regardless of the
+/// underlying SH evaluator constants.
+TEST(ShProbeGridTest, UniformCubemapShaderEvalDirectionIndependent_R7)
+{
+    const int faceSize = 16;
+    auto cubemap = makeUniformCubemap(faceSize, glm::vec3(0.5f));
+
+    glm::vec3 coeffs[9];
+    Vestige::SHProbeGrid::computeProbeShFromCubemap(cubemap.data(), faceSize, coeffs);
+
+    glm::vec3 e_y = Vestige::SHProbeGrid::evaluateIrradianceCpu(coeffs, glm::vec3(0, 1, 0));
+    glm::vec3 e_x = Vestige::SHProbeGrid::evaluateIrradianceCpu(coeffs, glm::vec3(1, 0, 0));
+    glm::vec3 e_neg_y = Vestige::SHProbeGrid::evaluateIrradianceCpu(coeffs, glm::vec3(0, -1, 0));
+
+    EXPECT_NEAR(e_x.r, e_y.r, 0.02f);
+    EXPECT_NEAR(e_neg_y.r, e_y.r, 0.02f);
+}
+
+/// Linear scaling of the evaluator. Doubling the input radiance must
+/// exactly double the output irradiance — pin it so a future fix to
+/// the evaluator can't accidentally introduce a non-linearity.
+TEST(ShProbeGridTest, UniformCubemapEvaluatorIsLinearInRadiance_R7)
+{
+    const int faceSize = 16;
+    auto cubemapHalf = makeUniformCubemap(faceSize, glm::vec3(0.25f));
+    auto cubemapWhole = makeUniformCubemap(faceSize, glm::vec3(0.50f));
+
+    glm::vec3 coeffsHalf[9];
+    glm::vec3 coeffsWhole[9];
+    Vestige::SHProbeGrid::computeProbeShFromCubemap(cubemapHalf.data(), faceSize, coeffsHalf);
+    Vestige::SHProbeGrid::computeProbeShFromCubemap(cubemapWhole.data(), faceSize, coeffsWhole);
+
+    glm::vec3 e_half = Vestige::SHProbeGrid::evaluateIrradianceCpu(coeffsHalf,
+                                                                    glm::vec3(0, 1, 0));
+    glm::vec3 e_whole = Vestige::SHProbeGrid::evaluateIrradianceCpu(coeffsWhole,
+                                                                     glm::vec3(0, 1, 0));
+
+    EXPECT_NEAR(e_whole.r, 2.0f * e_half.r, 0.02f);
+}
+
+/// Zero radiance produces zero irradiance — sanity / NaN guard.
+TEST(ShProbeGridTest, ZeroCubemapEndToEndEqualsZero_R7)
+{
+    const int faceSize = 8;
+    auto cubemap = makeUniformCubemap(faceSize, glm::vec3(0.0f));
+
+    glm::vec3 coeffs[9];
+    Vestige::SHProbeGrid::computeProbeShFromCubemap(cubemap.data(), faceSize, coeffs);
+
+    glm::vec3 e = Vestige::SHProbeGrid::evaluateIrradianceCpu(coeffs, glm::vec3(0, 1, 0));
+    EXPECT_EQ(e.r, 0.0f);
+    EXPECT_EQ(e.g, 0.0f);
+    EXPECT_EQ(e.b, 0.0f);
+}

@@ -2239,10 +2239,14 @@ void Renderer::captureSHGrid(const SceneRenderData& renderData,
                                      cubemapData.data() + face * faceSize * faceSize * 3);
                     }
 
-                    // Project cubemap to SH
+                    // Project cubemap to SH (and apply CPU pipeline). The
+                    // helper shape is shared with the unit tests so the
+                    // bug-surface that R7 closed (double-A_ℓ on the
+                    // CPU side + RH Eq. 13 in the shader) stays
+                    // pinned regression-wise.
                     glm::vec3 shCoeffs[9];
-                    SHProbeGrid::projectCubemapToSH(cubemapData.data(), faceSize, shCoeffs);
-                    SHProbeGrid::convolveRadianceToIrradiance(shCoeffs);
+                    SHProbeGrid::computeProbeShFromCubemap(cubemapData.data(),
+                                                            faceSize, shCoeffs);
                     m_shProbeGrid->setProbeIrradiance(x, y, z, shCoeffs);
 
                     captured++;

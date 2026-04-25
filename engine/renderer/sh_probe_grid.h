@@ -64,7 +64,42 @@ public:
                                     glm::vec3 outCoeffs[9]);
 
     /// @brief Applies cosine convolution to convert radiance SH → irradiance SH (in-place).
+    ///
+    /// **Legacy / unused after Phase 10.9 Slice 4 R7.** The shader's
+    /// `evaluateSHGridIrradiance` in `scene.frag.glsl` uses the
+    /// Ramamoorthi-Hanrahan Eq. 13 form, whose `c1..c5` constants
+    /// already fold in the per-band cosine-lobe weights `A_ℓ`.
+    /// Calling this function on the CPU before upload double-applies
+    /// `A_ℓ`, leaving band-0 ambient ≈ π× over-bright. Production
+    /// no longer calls it; kept declared for unit-test coverage of
+    /// the helper's math.
     static void convolveRadianceToIrradiance(glm::vec3 coeffs[9]);
+
+    /// @brief CPU pipeline that turns a captured cubemap into the SH
+    /// coefficients ready to upload via `setProbeIrradiance`.
+    ///
+    /// This is the function `Renderer::captureSHGrid` calls per probe;
+    /// extracted from the renderer so the contract is unit-testable
+    /// without a GL context (and so the bug surface from R7 is
+    /// pinned). The output is **radiance**-SH — the shader's
+    /// Ramamoorthi-Hanrahan Eq. 13 evaluator folds in the cosine lobe
+    /// `A_ℓ` weights at evaluation time.
+    static void computeProbeShFromCubemap(const float* cubemapData,
+                                           int faceSize,
+                                           glm::vec3 outCoeffs[9]);
+
+    /// @brief CPU mirror of `evaluateSHGridIrradiance` in
+    /// `scene.frag.glsl`. Must stay byte-for-byte equivalent to the
+    /// GLSL implementation; pinned by parity tests.
+    ///
+    /// Inputs: `coeffs` are radiance-SH (output of
+    /// `computeProbeShFromCubemap`); `normal` is the surface normal
+    /// in world space. Returns the diffuse-IBL convention value
+    /// `irradiance / π`, matching what the shader returns and what
+    /// the downstream `diffuseIBL = albedo × irradiance × ao` term
+    /// expects.
+    static glm::vec3 evaluateIrradianceCpu(const glm::vec3 coeffs[9],
+                                            const glm::vec3& normal);
 
     /// @brief Uploads all probe data to GPU (7 RGBA16F 3D textures).
     void upload();

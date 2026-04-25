@@ -185,6 +185,47 @@ void SHProbeGrid::convolveRadianceToIrradiance(glm::vec3 coeffs[9])
     coeffs[8] *= COSINE_A2;
 }
 
+void SHProbeGrid::computeProbeShFromCubemap(const float* cubemapData, int faceSize,
+                                              glm::vec3 outCoeffs[9])
+{
+    projectCubemapToSH(cubemapData, faceSize, outCoeffs);
+
+    // RED stub — production captureSHGrid currently double-applies A_ℓ
+    // by convolving on the CPU and then evaluating with shader Eq. 13
+    // (whose c1..c5 already include A_ℓ). The R7 green commit removes
+    // this call so the shader's evaluator gets radiance-SH and produces
+    // physically-correct irradiance.
+    convolveRadianceToIrradiance(outCoeffs);
+}
+
+glm::vec3 SHProbeGrid::evaluateIrradianceCpu(const glm::vec3 coeffs[9],
+                                              const glm::vec3& normal)
+{
+    // Mirror of evaluateSHGridIrradiance in scene.frag.glsl.
+    // Ramamoorthi-Hanrahan 2001 Eq. 13: c1..c5 fold in A_ℓ × Y_ℓm so
+    // the input is RADIANCE-SH and the output is irradiance E.
+    constexpr float c1 = 0.429043f;  // A_2 × Y_2,±2 / 2  (and A_2 × Y_2,±1 / 2)
+    constexpr float c2 = 0.511664f;  // A_1 × Y_1,m  / 2
+    constexpr float c4 = 0.886227f;  // A_0 × Y_00       = √π / 2
+    constexpr float c5 = 0.247708f;  // A_2 × (3·Y_20 / 2 − Y_20 / 2 fudge)
+
+    glm::vec3 n = normal;
+    glm::vec3 E = c4 * coeffs[0]
+                + 2.0f * c2 * (coeffs[1] * n.y + coeffs[2] * n.z + coeffs[3] * n.x)
+                + 2.0f * c1 * (coeffs[4] * n.x * n.y
+                             + coeffs[5] * n.y * n.z
+                             + coeffs[7] * n.x * n.z)
+                + c1 * coeffs[8] * (n.x * n.x - n.y * n.y)
+                + c5 * coeffs[6] * (3.0f * n.z * n.z - 1.0f);
+
+    E = glm::max(E, glm::vec3(0.0f));
+
+    // Shader's INV_PI division — converts RH Eq. 13's E back to the
+    // E/π convention the diffuseIBL term expects (LearnOpenGL).
+    constexpr float INV_PI = 0.31830988618379067f;
+    return E * INV_PI;
+}
+
 void SHProbeGrid::upload()
 {
     // Delete old textures
