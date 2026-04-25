@@ -1874,6 +1874,107 @@ The rendering research update (Phase 13 "2026-04 Research Update") makes pixels 
 
 ---
 
+## Phase 25: Open-World Game Systems
+**Goal:** Subsystems specific to large persistent-world games — the genre family that includes GTA IV / V, Saints Row, The Elder Scrolls V: Skyrim, Red Dead Redemption 2, Cyberpunk 2077. The biblical-walkthrough projects don't need open-world infrastructure; this phase exists for downstream users (the engine is going MIT-open-source, and "engine that supports open-world games" significantly broadens the audience).
+
+Each item is the *minimum-viable* version of the system; full-fidelity AAA implementations are out of scope for the engine itself but the bullets below give a foundation that downstream projects can extend.
+
+### World streaming and persistence
+- [ ] **Tile / chunked level streaming** — divide the world into spatial tiles loaded / unloaded based on player proximity. Tiles include geometry, navmesh region, NPC populations, prop instances. Async load on a worker thread; safe-distance preload to avoid pop-in. Uses the existing `ResourceManager` cache + new tile-manifest format. Reference: GTA V's "session" + ranged-streaming approach.
+- [ ] **Persistent world state** — actor positions, item placements, faction states, quest progress, killed-NPCs-by-name, looted-containers all serialise into the save file and re-hydrate per-tile on load. Save format builds on the existing scene serialiser + a per-entity "world-state" overlay.
+- [ ] **Time-of-day cycle with propagation** — global game-clock advances at a configurable rate (1 in-game hour ≈ 1-3 real-world minutes is the genre standard). Sun position drives directional-light pose; sky / fog / ambient adapt; NPCs run schedule changes (work / sleep / commute). Integrates with Phase 15's atmosphere system.
+- [ ] **Weather system with regional zones** — a weather state machine (clear / overcast / rain / storm / snow) that propagates across a regional grid with smooth transitions. Per-region weather can differ (one part of the map is raining, another is clear). Affects rendering (fog density, particle weather effects), audio (ambient layer), gameplay (vehicle handling, NPC behaviour).
+- [ ] **Save anywhere + autosave + multiple save slots** — quicksave hotkey, autosave on chapter / region transition / mission complete, ring buffer of N most-recent autosaves. Save thumbnails (downscaled framebuffer capture). Save corruption detection + recovery from autosave.
+
+### NPC simulation and density management
+- [ ] **Crowd / pedestrian system** — per-region NPC density target; spawn / despawn outside visible cone but inside player-relevance radius. NPC archetypes (resident / shopkeeper / civilian / specialist). Uses the existing Phase 9C navmesh + Phase 11A behaviour-tree runtime.
+- [ ] **NPC daily schedules** — Skyrim-style "this NPC is at the inn at 6 PM, at the market at 10 AM, at home at midnight." Schedule is a sequence of (location, activity, time-of-day) entries; NPCs interrupt their schedule to respond to immediate stimuli (combat, dialogue, injury).
+- [ ] **Faction / reputation system** — named factions (e.g. `imperial_legion`, `thieves_guild`); each has a relationship matrix to other factions and to the player. Player actions modify reputation (stealing from a faction → hostility; completing faction quests → favour). NPC perception uses faction relationship to decide hostile / friendly / neutral on detection.
+- [ ] **Crime / law enforcement** — GTA-style wanted-level system or Skyrim-style bounty system. NPC witnesses report crimes; law-enforcement NPCs respond with escalating force; player can pay off, hide, fight, or flee. Wanted state decays over time. Crime is a tagged event (theft / assault / murder / trespassing) with per-faction weighting.
+
+### Traffic and vehicles in the open world (couples to Phase 26)
+- [ ] **Pedestrian + vehicle traffic AI** — autonomous traffic on a road network (spline-based). Vehicles obey lane rules, traffic lights, speed limits; pedestrians cross at crossings. Density scales with player-relevance radius. Despawn behind player; spawn ahead. Uses Phase 11A behaviour trees + the racing-game vehicle physics from Phase 26.
+- [ ] **Vehicle commandeering** — player can enter / exit / hijack vehicles. Driver / passenger seats. Persistent damage state on commandeered vehicles. Stolen-vehicle marker for the law-enforcement system.
+
+### Quests, dialogue, narrative
+- [ ] **Quest / mission system** — quest as a state machine of stages with per-stage objectives (kill X, fetch Y, talk to Z, reach location). Stage transitions trigger script-graph nodes (Phase 9E) or C++ callbacks. Quest log UI; map markers; objective text.
+- [ ] **Dialogue system** — node-graph dialogue with branching choices, NPC voice-line playback, conditional branches based on quest / faction / inventory state. Choice consequences propagate to quest state. Lip-sync on NPC speech (lands when the W12 lip-sync cluster is brought back from `engine/experimental/animation/`).
+- [ ] **Branching narrative state** — quest outcomes mutate global flags (`mission_x_completed`, `npc_y_killed`, `faction_z_destroyed`) that downstream quests query. Flag system survives save / load.
+- [ ] **Codex / journal / lore system** — collectible text entries (books / documents / radio broadcasts / overheard conversations) tagged by faction / region / topic. Discoverable via interaction; readable from a journal UI.
+
+### World interaction
+- [ ] **Inventory system** — typed items (weapon / consumable / misc / quest) with stack semantics, weight / encumbrance (Skyrim) or slot-count (GTA-lite). Container UI (chests, shop trade, body looting). Item stats (damage / weight / value / durability).
+- [ ] **Economy** — shop NPCs with buy / sell / barter UI; per-shop inventory restock cycle; faction-specific price modifiers; haggling / speech-skill modifier hook. Player money is just an inventory count of a designated "currency" item.
+- [ ] **Crafting / cooking / alchemy** — recipe-based item creation from input items + a station (forge / kitchen / alchemy table). Recipes discoverable via books, dialogue, or experimentation. Skill-modifier hook for crafting quality.
+- [ ] **Looting / corpse interaction** — interactable corpse / container. Player inventory transfer UI. Body persistence (corpses remain until despawned by the streaming / persistence layer).
+- [ ] **Stealth / detection** — NPC vision cone + hearing radius (Phase 11A AI perception, already partially shipped); player sneak skill / crouched silhouette modifier; light-level detection for shadow stealth. Integrates with crime + faction systems.
+
+### UX / polish
+- [ ] **Photo mode** — pause game, free-fly camera, FOV / depth-of-field / colour-grading sliders, hide HUD, screenshot capture. Genre standard since GTA V.
+- [ ] **Fast travel / waypoint system** — discoverable map markers; player-set waypoints; fast-travel cost / time-passage on use. Per-game tunable (Skyrim-style discovery-only vs GTA-style anywhere-on-map).
+- [ ] **Map / minimap** — top-down / overhead-perspective regional map with marker layers (quest / discovered-location / player / NPC-of-interest). Minimap variant in HUD with directional indicator. Render uses existing UI system + a new map-tile asset format.
+- [ ] **Random encounters / dynamic events** — region-tagged event templates (ambush / merchant-meeting / animal-attack / faction-conflict / weather-rare-event) seeded by player traversal. Uses the seeded-RNG infrastructure (currently exists in Formula Workbench's curve fitter).
+
+### Reference projects
+GTA IV / V, Saints Row 2 / III / IV, The Elder Scrolls V: Skyrim, Red Dead Redemption 2, Cyberpunk 2077, Mafia, Sleeping Dogs.
+
+### Milestone
+A medium-scope open-world demo project ships on Vestige: walk a city / wilderness map ≥ 4 km², encounter NPC schedules + traffic + dynamic weather, accept a quest from a dialogue node, complete it, see persistent world state across save / load. None of the bullets above are required for the biblical-walkthrough projects, but the engine becomes a credible foundation for downstream open-world games.
+
+---
+
+## Phase 26: Racing Game Systems
+**Goal:** Subsystems specific to vehicle-driving games, both arcade-physics (Need For Speed, Burnout, Forza Horizon's accessible mode) and simulation (Assetto Corsa, iRacing, rFactor 2, Forza Motorsport's pro mode). Like Phase 25, this isn't required for the biblical-walkthrough projects; it exists to broaden the engine's downstream utility.
+
+Like Phase 25, items below are the minimum-viable versions; full AAA-fidelity simulation (per-cylinder thermodynamics, deformable tire carcass FEM, 1024-Hz physics) is out of engine scope but downstream projects can extend.
+
+### Vehicle physics — tiered fidelity
+The same vehicle entity supports two physics tiers selectable per-vehicle in the editor + per-game-mode at runtime. Switching tiers is config, not code rewrite.
+
+- [ ] **Vehicle physics core** — rigid body with 4 (or N) suspended wheels via Jolt's existing constraint system. Wheel state: angular velocity, slip ratio, slip angle, contact normal, contact patch friction coefficient. Per-wheel forces produce body torque + linear force.
+- [ ] **Arcade tire model** — simplified curve fit: longitudinal force = `k_long × slip_ratio` (clamped), lateral force = `k_lat × slip_angle` (clamped). Drift-friendly, forgiving on inputs, auto-correcting steering. Authored via Formula Workbench (CLAUDE.md Rule 11).
+- [ ] **Simulation tire model** — Pacejka "Magic Formula" v2002 (or 2012) for longitudinal + lateral forces with combined-slip handling. Per-tire wear (heat / mechanical / chemical), tire pressure → patch geometry → grip. Reference: rFactor 2's Real Road, Assetto Corsa Competizione's tire model. Authored via Formula Workbench.
+- [ ] **Suspension models** — double-wishbone, MacPherson strut, multi-link, solid axle. Spring rate + damper compression / rebound curves authored per-corner. Anti-roll-bar coupling between left / right wheels. Ride-height / camber / toe / caster as authored vehicle attributes.
+- [ ] **Drivetrain** — engine torque curve (RPM → Nm) + gearbox (manual / automatic / sequential / dual-clutch with shift time + clutch slip) + differential (open / LSD-with-preload / clutch-pack / electronic / locked) + axle (FWD / RWD / AWD with per-axle torque split + viscous coupling).
+- [ ] **Engine simulation** — torque curve from authored / measured data, RPM-limited, fuel-consumption rate as f(throttle, RPM, gear), turbocharger boost lag (sim only), engine braking, redline cutoff, stall behaviour (sim only).
+- [ ] **Aerodynamics** — downforce coefficient × velocity² + drag coefficient × velocity² + slipstream (when behind another car within drag-cone, drag reduced + downforce reduced). Per-axle downforce split for handling balance. Reference: F1-style aero (sim) vs simplified arcade boost-drag (arcade).
+- [ ] **Damage model** — visual mesh swap on collision (panels / bumpers / glass) + mechanical degradation (alignment drift, suspension deflection, tire puncture, engine RPM-limit reduction, oil-pressure loss). Two tiers: arcade (visual only, mechanical optional toggle) / sim (full mechanical, repair stations).
+- [ ] **Driver aids** — ABS, traction control, electronic stability control, launch control, automatic-blip downshift. Per-aid intensity slider. All toggleable; arcade defaults all on, sim defaults all off.
+
+### Track authoring + race infrastructure
+- [ ] **Spline-based track authoring** — centreline spline (Catmull-Rom, already shipped via `SplinePath`) + width-per-segment + banking-per-segment + surface-type-per-segment (asphalt / concrete / gravel / dirt / grass / kerb). Mesh generation along spline. Pit-lane-as-secondary-spline.
+- [ ] **Lap timing + sector splits** — sector trigger volumes along the track; per-lap times, per-sector splits, personal best, session best, all-time-best. Validates lap (corner-cut detection via track-bounds polygon).
+- [ ] **Ghost replay** — record player's best lap as input + position / orientation timeline; play back as a translucent ghost car. Multi-ghost overlay (player best vs world record).
+- [ ] **AI driver behaviour** — racing line spline (authored or auto-generated from Bezier + optimization). AI follows the line at a per-skill-level speed, brakes at brake markers, takes overtakes when faster than the car ahead, defends when slower than the car behind. Per-AI difficulty / aggression sliders.
+- [ ] **Race rules + grid + flag system** — practice / qualifying / race session structure. Grid placement from qualifying times. Yellow / blue / black / chequered flag handling. Penalty system (drive-through / time / disqualification) on rules infraction.
+- [ ] **Pit-stop pipeline (sim)** — pit-lane speed limiter, mechanic AI for tire change / refuel / damage repair, stop time as f(work performed). Pit strategy: tires-only / fuel-only / full-service.
+- [ ] **Multi-class racing** — multiple vehicle-class definitions on the same track simultaneously (LMP1 + GT3 + GT4-style), with per-class lap times + standings.
+
+### Driving experience
+- [ ] **Steering wheel input + force feedback** — Logitech G29 / G923 / Thrustmaster T300 / Fanatec wheel support via SDL2's gamecontroller API or direct hidraw. Force-feedback channels: damping (steering rack), centring spring, road texture, rumble (locked tire / kerb hit), wheel-slip jitter. Configurable per-wheel-model FFB profile.
+- [ ] **Telemetry overlay** — speed / RPM / gear / throttle / brake / steering / lateral-G / longitudinal-G / tire temps / tire wear (sim) / fuel (sim) / lap delta. Configurable HUD layout. Export channel (CSV / Motec) for post-session analysis.
+- [ ] **Replay system** — full-session replay with cinematic camera options (chase / cockpit / TV-style overhead / on-board / drone). Replay scrubbing. Pairs with the Phase 11A replay-recording infrastructure (input-recording mode is exact for sim physics under deterministic stepping).
+- [ ] **Multiple camera modes** — cockpit / chase-near / chase-far / hood / bumper / overhead-orbit. Per-vehicle camera tuning.
+- [ ] **Motion-platform output (optional)** — 6DOF / 2DOF telemetry feed for Sim Racing motion rigs (D-Box / SimXperience / PT Actuator / 6Sigma). UDP / shared-memory protocol selectable per project.
+
+### Track + vehicle content
+- [ ] **Vehicle authoring format** — JSON-defined vehicle with engine curve / suspension / aero / tire / drivetrain / mass / dimensions / liveries-list / damage-mesh-swaps. Editor preview + tuning UI.
+- [ ] **Tuning / setup UI (sim)** — pre-race vehicle tuning: tire pressures, ride heights, toe / camber / caster, anti-roll-bar stiffness, spring rates, damper bump / rebound curves, brake bias, gear ratios, differential preload. Saveable presets.
+- [ ] **Livery system** — UV-painted vehicle skin with multi-layer compositor (paint → decals → text → number). Editor preview with paint brush + decal placement.
+
+### Photo mode + share
+- [ ] **Photo mode** — same shape as Phase 25's open-world photo mode but with vehicle-focused camera presets (low chase, hood, drift-perspective).
+- [ ] **Replay export** — render replay to MP4 via offline-rendering pass at user-chosen quality. Pairs with Phase 11A.
+
+### Reference projects
+**Arcade:** Need for Speed series, Burnout series, Forza Horizon, The Crew, Asphalt 9, Mario Kart, Crash Team Racing.
+**Simulation:** Assetto Corsa, Assetto Corsa Competizione, iRacing, rFactor 2, Project CARS 2, Forza Motorsport (pro mode), Gran Turismo 7, BeamNG.drive (the soft-body extreme).
+
+### Milestone
+A racing-game demo project ships on Vestige: a single track + 8-vehicle field, lap-timing UI, AI competitors with adjustable difficulty, force-feedback steering wheel input, photo mode + replay export. Demo includes one arcade-tier vehicle and one sim-tier vehicle to demonstrate the tier system. None of these bullets are required for the biblical-walkthrough projects, but the engine becomes a credible foundation for both arcade and simulation racing games.
+
+---
+
 ## Open-Source Release
 
 ### License and Release Model
