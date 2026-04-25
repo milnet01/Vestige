@@ -93,11 +93,28 @@ bool DepthReducer::readBounds(float cameraNear, float& outNear, float& outFar)
     // (which was the write target last frame, and is now the read target).
     int readIndex = m_writeIndex;  // This was swapped after last dispatch
 
-    uint32_t data[2] = {0, 0};
-    glGetNamedBufferSubData(m_ssbo[readIndex], 0, SSBO_SIZE, data);
+    // R8 (Phase 10.9 Slice 4): use `glMapNamedBufferRange` instead of
+    // `glGetNamedBufferSubData`. The latter blocks the main thread
+    // until every pending GPU op affecting the buffer has flushed —
+    // a hard stall that blocked 60 FPS on Mesa AMD. With the
+    // existing double-buffering (m_writeIndex swapped after each
+    // dispatch), the read target's last write happened ≥ 1 frame
+    // ago and the GPU has flushed; map then returns the data
+    // without sync. Same pattern as the bloom luminance readback
+    // at renderer.cpp:1113-1158.
+    auto* mapped = static_cast<const uint32_t*>(
+        glMapNamedBufferRange(m_ssbo[readIndex], 0, SSBO_SIZE, GL_MAP_READ_BIT));
+    if (!mapped)
+    {
+        // Map failed (driver pressure or buffer in unexpected state).
+        // Bail without returning bounds; next frame retries.
+        return false;
+    }
 
-    uint32_t minDepthBits = data[0];
-    uint32_t maxDepthBits = data[1];
+    uint32_t minDepthBits = mapped[0];
+    uint32_t maxDepthBits = mapped[1];
+
+    glUnmapNamedBuffer(m_ssbo[readIndex]);
 
     // Check for sentinel values (no geometry was found)
     if (minDepthBits == 0xFFFFFFFFu || maxDepthBits == 0x00000000u)
