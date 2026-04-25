@@ -9,6 +9,90 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-25 Phase 10.9 — Slice 8 W12–W15 (zombie-cleanup cluster)
+
+Closes four of the five "wire-or-delete" decisions from Slice 8.
+W11 (GpuCuller) deferred separately — it's gated by R5 which is
+itself a separate ROADMAP item.
+
+**W14 + W15 — wire path** (small, additive):
+
+- `Editor` now instantiates `SpritePanel` + `TilemapPanel` and
+  draws them in `Editor::drawPanels` alongside Audio /
+  Navigation / UI panels (commit `c91c5ed`). Both classes
+  shipped in Phase 9F-6 (~380 LoC + tests) but were never
+  reachable from the editor; W14 closes that gap.
+- `InspectorPanel::drawAudioSource()` (commit `e429b95`) gives
+  every entity with an `AudioSourceComponent` a per-entity
+  inspector view — clip path / playback / bus / volume /
+  pitch / spatial / occlusion / priority. Mirrors
+  `drawParticleEmitter`'s pattern. Closes F3's round-trip-gap
+  visibility (the AudioPanel was scene-wide, not per-entity).
+
+**W12 + W13 — relocate path** (large, code-movement):
+
+- W12 (commit `e98f147`): 14 animation files (motion-matching
+  cluster + lip-sync + facial-animation orchestrator,
+  ~2,400 LoC) moved from `engine/animation/` to
+  `engine/experimental/animation/`. Same `vestige_engine`
+  library; the new path is the semantic. README at the new
+  location documents the activation procedure.
+- W13 (commit `b8a69b0`): 16 physics files (ragdoll /
+  fracture / breakable / dismemberment / grab / stasis,
+  ~3,000 LoC) moved from `engine/physics/` to
+  `engine/experimental/physics/`. `DestructionSystem` (the
+  empty pump at `engine/systems/destruction_system.cpp`) was
+  rewritten as an explicit no-op stub returning empty
+  `getOwnedComponentTypes()` because the prior
+  `BreakableComponent` registration would require including
+  from `experimental/` — which would re-establish the very
+  zombie status W13 just removed.
+
+**Production-to-experimental dependency rule** documented in
+both READMEs and enforced at the implementation level:
+production code must not `#include "experimental/..."`.
+DestructionSystem's rewrite is the canonical example of how
+this rule is preserved when a relocation removes the last
+production caller.
+
+**What stays live in the original directories:**
+
+- `engine/animation/`: skeleton + skeleton_animator + animation
+  clip / sampler / state-machine + easing + tween + IK solver +
+  morph target + sprite animation. Production renderer / scene
+  paths consume these.
+- `engine/physics/`: physics_world (Jolt) + rigid_body +
+  character_controller + constraints + cloth (entire pipeline
+  including GPU compute) + fabric_material + BVH + collider
+  generator + spatial_hash + deformable_mesh. The Jolt
+  dynamics, character controller, and cloth simulation are all
+  fully live.
+
+**The morph-target SSBO upload + vertex-shader skinning that
+FacialAnimator was supposed to drive remain live** at the
+renderer / mesh layer; only the orchestrator class was dead.
+Same for the rigid-body dynamics that DestructionSystem
+nominally pumped — those run through PhysicsWorld in the
+Engine main loop, not through DestructionSystem.
+
+**Activation procedure** (per the READMEs): build a real
+caller (character demo / death-trigger / grab interaction /
+fracture spawn), `git mv` the consumed files back from
+`experimental/` to their original directory, update
+`engine/CMakeLists.txt` paths, update `#include` paths in
+cluster + tests + (for physics) DestructionSystem, restore
+DestructionSystem's `getOwnedComponentTypes()` registrations,
+write at least one integration test at the production layer.
+
+**Bump.** VERSION 0.1.39 → 0.1.40. Full suite: 2994 / 2995
+pass (no test-count delta — pure path relocation +
+additive UI surfaces).
+
+**Slice 8 status post-W12–W15**: W14, W15 wired; W12, W13
+relocated to experimental/. W11 (GpuCuller) deferred (gated
+by R5, currently W11 is the only Slice 4 R item still open
+because of GpuCuller's zombie status).
+
 ### 2026-04-25 Phase 10.9 — Slice 4 R2 (stepping-stone — batched async PBO readback)
 
 The ninth Slice 4 item shipped today, in stepping-stone form.
