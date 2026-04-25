@@ -9,6 +9,48 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-25 Phase 10.9 — Slice 8 W11 (GpuCuller delete)
+
+Closes the last open zombie of Slice 8 — and R5 by extension.
+
+`GpuCuller` had zero callers since it landed: the class was
+constructed and `init()`-ed in `Renderer::initialize`, but
+`cull()` was never invoked. The MDI render path already
+CPU-frustum-culls before batching (scene gather populates
+`m_instanceBatches` only with visible items), so by the time
+`m_indirectBuffer->draw()` runs, every command in flight is
+expected to draw. Inserting a GPU-side per-batch cull between
+`upload()` and `draw()` would either re-cull already-culled
+batches (no-op) or require a full per-instance compaction
+redesign (per-instance AABB SSBO, atomic-counter compaction,
+GPU command-build) — multi-slice work that gates nothing.
+
+Deleted: `engine/renderer/gpu_culler.{h,cpp}` (148 LoC), the
+`m_gpuCuller` member + 7-line init block in `Renderer`, the
+`renderer/gpu_culler.cpp` line in `engine/CMakeLists.txt`, the
+`#include "renderer/gpu_culler.h"` in `renderer.h`. Kept:
+`assets/shaders/frustum_cull.comp.glsl` — the shader's
+`commands[]` + `objects[]` SSBO contract is exactly what
+ROADMAP E3 (foliage GPU culling) plans to consume; deleting
+the GLSL would force E3 to re-author it from scratch. The
+renderer.h comment block above the MDI member declarations
+points at E3 as the future caller so the orphaned shader
+isn't a mystery to readers.
+
+R5 ("`GpuCuller` — cache `GLint m_planeLocation0` at init,
+upload via `glUniform4fv`") closes-by-deletion in the same
+slice: the `std::to_string` allocations R5 sought to remove
+are no longer reachable. If E3 later authors a foliage
+caller for `frustum_cull.comp.glsl`, that consumer will use
+`glUniform4fv` from the start — no need to retain the C++
+class for that future work.
+
+No new tests; the deletion is a straight remove and the
+existing CPU-side `FrustumCuller` tests
+(`test_frustum_culling.cpp`) continue to pin scene-gather
+culling. 2995 / 2995 pass (one pre-existing skip, no
+test-count delta — `GpuCuller` had no tests of its own).
+
 ### 2026-04-25 Phase 10.9 — Slice 8 W12–W15 (zombie-cleanup cluster)
 
 Closes four of the five "wire-or-delete" decisions from Slice 8.
