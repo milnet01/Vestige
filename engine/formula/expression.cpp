@@ -256,12 +256,28 @@ nlohmann::json ExprNode::toJson() const
     return nullptr;
 }
 
-std::unique_ptr<ExprNode> ExprNode::fromJson(const nlohmann::json& j)
+namespace
 {
+
+/// Phase 10.9 Sc2 — recursion-depth cap for JSON-to-tree builds. 256
+/// levels matches `expression_eval.cpp::kMaxFormulaDepth` and rejects
+/// hostile preset payloads (the file already validates op/identifier
+/// strings at this gate per AUDIT §H11).
+constexpr int kMaxFromJsonDepth = 256;
+
+std::unique_ptr<ExprNode> fromJsonImpl(const nlohmann::json& j, int depth)
+{
+    if (depth > kMaxFromJsonDepth)
+    {
+        throw std::runtime_error(
+            "ExprNode::fromJson: recursion depth exceeded "
+            + std::to_string(kMaxFromJsonDepth));
+    }
+
     // Bare number → LITERAL
     if (j.is_number())
     {
-        return literal(j.get<float>());
+        return ExprNode::literal(j.get<float>());
     }
 
     // Must be an object from here
@@ -273,39 +289,46 @@ std::unique_ptr<ExprNode> ExprNode::fromJson(const nlohmann::json& j)
     // {"var": "name"} → VARIABLE
     if (j.contains("var"))
     {
-        return variable(j["var"].get<std::string>());
+        return ExprNode::variable(j["var"].get<std::string>());
     }
 
     // {"op": ..., "left": ..., "right": ...} → BINARY_OP
     if (j.contains("op") && j.contains("left") && j.contains("right"))
     {
-        return binaryOp(
+        return ExprNode::binaryOp(
             j["op"].get<std::string>(),
-            fromJson(j["left"]),
-            fromJson(j["right"])
+            fromJsonImpl(j["left"],  depth + 1),
+            fromJsonImpl(j["right"], depth + 1)
         );
     }
 
     // {"fn": ..., "arg": ...} → UNARY_OP
     if (j.contains("fn") && j.contains("arg"))
     {
-        return unaryOp(
+        return ExprNode::unaryOp(
             j["fn"].get<std::string>(),
-            fromJson(j["arg"])
+            fromJsonImpl(j["arg"], depth + 1)
         );
     }
 
     // {"if": ..., "then": ..., "else": ...} → CONDITIONAL
     if (j.contains("if") && j.contains("then") && j.contains("else"))
     {
-        return conditional(
-            fromJson(j["if"]),
-            fromJson(j["then"]),
-            fromJson(j["else"])
+        return ExprNode::conditional(
+            fromJsonImpl(j["if"],   depth + 1),
+            fromJsonImpl(j["then"], depth + 1),
+            fromJsonImpl(j["else"], depth + 1)
         );
     }
 
     throw std::runtime_error("ExprNode::fromJson: unrecognized node format");
+}
+
+} // namespace
+
+std::unique_ptr<ExprNode> ExprNode::fromJson(const nlohmann::json& j)
+{
+    return fromJsonImpl(j, 0);
 }
 
 } // namespace Vestige

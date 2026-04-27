@@ -41,15 +41,17 @@ SubscriptionId subscribeOneEventNode(
     std::string triggerPin,
     std::function<void(const EventT&, ScriptNodeInstance&)> populate)
 {
+    const uint32_t subscribeGen = instance ? instance->generation() : 0u;
     return sys->engine()->getEventBus().subscribe<EventT>(
-        [sys, instance, nodeId, triggerPin = std::move(triggerPin),
+        [sys, instance, subscribeGen, nodeId,
+         triggerPin = std::move(triggerPin),
          populate = std::move(populate)]
         (const EventT& event)
         {
-            // Liveness guard: only dereference if the system still has this
-            // instance registered. An unregistered (or destroyed) instance
-            // drops the event silently.
-            if (!sys || !sys->isInstanceActive(instance))
+            // Liveness guard (Sc6): drop if instance is gone OR has been
+            // re-initialised since this subscription was captured. The
+            // generation gate closes the ABA hazard noted in AUDIT §H9.
+            if (!sys || !sys->isInstanceActive(instance, subscribeGen))
             {
                 return;
             }
@@ -92,12 +94,14 @@ SubscriptionId subscribeFilteredEventNode(
     std::string triggerPin,
     std::function<bool(const EventT&, ScriptNodeInstance&)> populate)
 {
+    const uint32_t subscribeGen = instance ? instance->generation() : 0u;
     return sys->engine()->getEventBus().subscribe<EventT>(
-        [sys, instance, nodeId, triggerPin = std::move(triggerPin),
+        [sys, instance, subscribeGen, nodeId,
+         triggerPin = std::move(triggerPin),
          populate = std::move(populate)]
         (const EventT& event)
         {
-            if (!sys || !sys->isInstanceActive(instance))
+            if (!sys || !sys->isInstanceActive(instance, subscribeGen))
             {
                 return;
             }
@@ -303,6 +307,19 @@ bool ScriptingSystem::isInstanceActive(const ScriptInstance* instance) const
                      instance) != m_activeInstances.end();
 }
 
+bool ScriptingSystem::isInstanceActive(const ScriptInstance* instance,
+                                       uint32_t expectedGeneration) const
+{
+    if (!isInstanceActive(instance))
+    {
+        return false;
+    }
+    // Generation gate: a captured subscription whose underlying instance has
+    // since been re-initialized (bumping `m_generation`) is stale — drop it
+    // rather than dispatch into a graph that may have changed shape.
+    return instance->generation() == expectedGeneration;
+}
+
 // ---------------------------------------------------------------------------
 // Event node bridge — subscribe graph event nodes to EventBus
 // ---------------------------------------------------------------------------
@@ -416,11 +433,14 @@ void ScriptingSystem::subscribeEventNodes(ScriptInstance& instance)
             uint32_t ownerEntity = instance.entityId();
             ScriptInstance* instancePtr = &instance;
             ScriptingSystem* sys = this;
+            const uint32_t subscribeGen = instance.generation();
             subId = m_engine->getEventBus().subscribe<EntityDestroyedEvent>(
-                [sys, instancePtr, nodeId = nodeDef.id, ownerEntity]
+                [sys, instancePtr, subscribeGen, nodeId = nodeDef.id,
+                 ownerEntity]
                 (const EntityDestroyedEvent& e)
                 {
-                    if (!sys || !sys->isInstanceActive(instancePtr)) return;
+                    if (!sys || !sys->isInstanceActive(instancePtr, subscribeGen))
+                        return;
                     if (ownerEntity != 0 && e.entityId != ownerEntity) return;
                     ScriptNodeInstance* ni = instancePtr->getNodeInstance(nodeId);
                     if (!ni) return;

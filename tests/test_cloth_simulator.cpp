@@ -561,6 +561,53 @@ TEST(ClothSimulator, SubstepsSetter)
     EXPECT_GE(sim.getConfig().substeps, 1);
 }
 
+// Phase 10.9 Cl2: syncBuffersOnly() must refresh normals without
+// integrating physics. Positions must be unchanged after the call.
+TEST(ClothSimulator, SyncBuffersOnlyDoesNotIntegrate_Cl2)
+{
+    ClothSimulator sim;
+    sim.initialize(smallConfig());
+    // Run one tick to populate normals + warm caches.
+    sim.simulate(1.0f / 60.0f);
+
+    const uint32_t count = sim.getParticleCount();
+    ASSERT_GT(count, 0u);
+    std::vector<glm::vec3> beforePos(count);
+    const glm::vec3* p0 = sim.getPositions();
+    ASSERT_NE(p0, nullptr);
+    std::copy(p0, p0 + count, beforePos.begin());
+
+    sim.syncBuffersOnly();
+
+    const glm::vec3* p1 = sim.getPositions();
+    ASSERT_NE(p1, nullptr);
+    for (uint32_t i = 0; i < count; ++i)
+    {
+        EXPECT_FLOAT_EQ(p1[i].x, beforePos[i].x);
+        EXPECT_FLOAT_EQ(p1[i].y, beforePos[i].y);
+        EXPECT_FLOAT_EQ(p1[i].z, beforePos[i].z);
+    }
+}
+
+// Phase 10.9 Cl7: setSubsteps must clamp to MAX_SUBSTEPS so a stray
+// inspector/preset value can't burn a frame stepping the cloth. The CPU
+// simulate() loop has always silently clamped at 64; setSubsteps used to
+// only clamp the lower bound.
+TEST(ClothSimulator, SubstepsClampedToMaxSubsteps_Cl7)
+{
+    ClothSimulator sim;
+    sim.initialize(smallConfig());
+
+    sim.setSubsteps(MAX_SUBSTEPS + 100);
+    EXPECT_EQ(sim.getConfig().substeps, MAX_SUBSTEPS);
+
+    sim.setSubsteps(-5);
+    EXPECT_EQ(sim.getConfig().substeps, 1);
+
+    sim.setSubsteps(MAX_SUBSTEPS);
+    EXPECT_EQ(sim.getConfig().substeps, MAX_SUBSTEPS);
+}
+
 TEST(ClothSimulator, NotInitializedBeforeInit)
 {
     ClothSimulator sim;

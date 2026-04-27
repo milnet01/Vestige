@@ -18,10 +18,24 @@ namespace Vestige
 // Internal evaluation with merged variable/coefficient lookup
 // ---------------------------------------------------------------------------
 
+/// Phase 10.9 Sc2 — recursion-depth cap for tree-walked formulas.
+/// 256 levels covers every shipped formula (depth ≤ 24 in current
+/// templates) while still fitting safely inside a 1 MB main-thread
+/// stack. A pathological 100k-deep unary chain blew the stack pre-Sc2.
+constexpr int kMaxFormulaDepth = 256;
+
 static float evalNode(const ExprNode& node,
                       const ExpressionEvaluator::VariableMap& vars,
-                      const std::unordered_map<std::string, float>& coeffs)
+                      const std::unordered_map<std::string, float>& coeffs,
+                      int depth = 0)
 {
+    if (depth > kMaxFormulaDepth)
+    {
+        throw std::runtime_error(
+            "ExpressionEvaluator: recursion depth exceeded "
+            + std::to_string(kMaxFormulaDepth));
+    }
+
     switch (node.type)
     {
     case ExprNodeType::LITERAL:
@@ -49,8 +63,8 @@ static float evalNode(const ExprNode& node,
         {
             throw std::runtime_error("BINARY_OP requires 2 children");
         }
-        float left = evalNode(*node.children[0], vars, coeffs);
-        float right = evalNode(*node.children[1], vars, coeffs);
+        float left = evalNode(*node.children[0], vars, coeffs, depth + 1);
+        float right = evalNode(*node.children[1], vars, coeffs, depth + 1);
 
         if (node.op == "+")   return left + right;
         if (node.op == "-")   return left - right;
@@ -86,7 +100,7 @@ static float evalNode(const ExprNode& node,
         {
             throw std::runtime_error("UNARY_OP requires 1 child");
         }
-        float arg = evalNode(*node.children[0], vars, coeffs);
+        float arg = evalNode(*node.children[0], vars, coeffs, depth + 1);
 
         if (node.op == "sin")      return std::sin(arg);
         if (node.op == "cos")      return std::cos(arg);
@@ -115,13 +129,13 @@ static float evalNode(const ExprNode& node,
         {
             throw std::runtime_error("CONDITIONAL requires 3 children");
         }
-        float cond = evalNode(*node.children[0], vars, coeffs);
+        float cond = evalNode(*node.children[0], vars, coeffs, depth + 1);
         // Non-zero = true (like C)
         if (cond != 0.0f)
         {
-            return evalNode(*node.children[1], vars, coeffs);
+            return evalNode(*node.children[1], vars, coeffs, depth + 1);
         }
-        return evalNode(*node.children[2], vars, coeffs);
+        return evalNode(*node.children[2], vars, coeffs, depth + 1);
     }
     }
 

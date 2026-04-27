@@ -102,6 +102,44 @@ TEST(FoliageChunkTest, NegativeGridCoords)
     EXPECT_FLOAT_EQ(bounds.max.z, -16.0f);
 }
 
+// Phase 10.9 E4: Y range is now derived from instance positions instead
+// of the old magic [-100, 200] ceiling. A populated chunk's bounds must
+// hug the instances (with a tree-height ceiling margin) rather than
+// span 300m vertically.
+TEST(FoliageChunkTest, BoundsTrackInstanceYRange_E4)
+{
+    FoliageChunk chunk(0, 0);
+
+    FoliageInstance grass;
+    grass.position = glm::vec3(2.0f, 5.0f, 3.0f);
+    chunk.addFoliage(0, grass);
+
+    TreeInstance tree;
+    tree.position = glm::vec3(8.0f, 7.0f, 9.0f);
+    chunk.addTree(tree);
+
+    const AABB bounds = chunk.getBounds();
+    // Min Y must be at or below the lowest instance (5.0); max Y must be
+    // above the highest instance (7.0) by at most a sane tree-height
+    // margin. Crucially, the old [-100, 200] range must be gone.
+    EXPECT_LE(bounds.min.y, 5.0f);
+    EXPECT_GT(bounds.min.y, -10.0f) << "lower bound must be tight, not -100";
+    EXPECT_GE(bounds.max.y, 7.0f);
+    EXPECT_LT(bounds.max.y, 100.0f) << "upper bound must be tight, not 200";
+}
+
+TEST(FoliageChunkTest, EmptyChunkBoundsAreCompact_E4)
+{
+    // Empty chunks are filtered out upstream by FoliageManager + renderer,
+    // but the fallback bounds should still be sane (small range around 0)
+    // rather than the old magic [-100, 200].
+    FoliageChunk chunk(0, 0);
+    const AABB bounds = chunk.getBounds();
+
+    EXPECT_GT(bounds.min.y, -10.0f);
+    EXPECT_LT(bounds.max.y,  10.0f);
+}
+
 TEST(FoliageChunkTest, ScatterAddRemove)
 {
     FoliageChunk chunk(0, 0);

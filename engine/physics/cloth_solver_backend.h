@@ -37,6 +37,15 @@ enum class ClothWindQuality
     SIMPLE      = 2,   ///< No wind force applied.
 };
 
+/// @brief Hard upper bound on substeps per frame for every cloth backend.
+///
+/// CPU `ClothSimulator::simulate` historically clamped to `[1, 64]` silently
+/// inside the per-frame loop while `setSubsteps` only clamped the lower bound;
+/// the GPU backend had no upper cap at all. Phase 10.9 Cl7 unifies both
+/// backends on this single constant so a stray `setSubsteps(10000)` call from
+/// the inspector / a preset can't burn a whole frame stepping the cloth.
+inline constexpr int MAX_SUBSTEPS = 64;
+
 /// @brief Per-frame simulation contract shared by every cloth-solver backend.
 ///
 /// Implementations must:
@@ -58,6 +67,16 @@ public:
 
     /// @brief Advances the simulation by `deltaTime` seconds.
     virtual void simulate(float deltaTime) = 0;
+
+    /// @brief Refresh the renderer-facing buffers (normals, GPU mirror)
+    /// from the *current* particle positions without integrating gravity,
+    /// wind, or collisions. Phase 10.9 Cl2 — `ClothComponent::syncMesh`
+    /// previously called `simulate(0.0001f)` to force a normal-recompute
+    /// after a pin drag or scene-load reset, which silently injected a
+    /// 100 µs gravity tick into a refresh that should have been pure
+    /// readback. CPU backend recomputes normals in-place; GPU backend
+    /// re-runs only the normals shader + flags the mirror dirty.
+    virtual void syncBuffersOnly() = 0;
 
     /// @brief Returns the cloth to its post-`initialize()` rest state.
     virtual void reset() = 0;

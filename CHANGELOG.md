@@ -9,6 +9,162 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-27 Phase 10.9 — Wave 4 (audit fast-wins, 13 items)
+
+Closes the next 13 items from the Phase 10.9 audit triage in numerical
+order: A3, Cl2, Cl3, Cl7, E4, Ph9, Sc1, Sc2, Sc6, Sc7, W1, W7, W9.
+
+**Animation (Slice 6).**
+
+- **A3.** `MotionMatcher::buildQueryVector` now rotates the predictor's
+  trajectory positions + directions by the inverse of the character's
+  root yaw before handing them to `FeatureExtractor::extract`, so the
+  query frame-of-reference matches the database (which pre-rotates at
+  bake time in `MotionDatabase::extractFeatures`). Without this, the
+  KD-tree search systematically biased toward "facing world-Z"
+  matches. Rotation logic extracted into the public-static helper
+  `MotionMatcher::rotateTrajectoryToRootSpace` so the math is testable
+  without standing up a SkeletonAnimator. 4 new tests in
+  `tests/test_motion_matching.cpp` cover identity, +π/2 yaw, round-trip,
+  and nullable-side semantics.
+
+**Physics (Slice 7).**
+
+- **Ph9.** `RigidBody::syncTransform` writes the quaternion-derived
+  local matrix into the Transform's matrix override on the dynamic-body
+  branch, so a tumbling body's orientation is preserved exactly past
+  ±90° pitch. The previous code path round-tripped through
+  `glm::eulerAngles`, which has a singularity at ±π/2. The Euler
+  `Transform.rotation` field is still updated as a best-effort approx
+  for legacy readers (editor inspector display, scripting), but the
+  rendered orientation now goes through the override matrix. New
+  `RigidBody.DynamicSyncSetsMatrixOverrideQuaternionExact_Ph9` test
+  pins the quaternion-exact invariant at the gimbal-lock pitch.
+
+**Subsystem wiring (Slice 8).**
+
+- **W1.** Deleted `AsyncTextureLoader` (`engine/resource/async_texture_loader.{h,cpp}`)
+  and the `processAsyncUploads` plumbing in `ResourceManager` +
+  `Engine::run`. The class was only ever instantiated by its standalone
+  test fixture; `ResourceManager::m_asyncLoader` was never constructed
+  in any production path, so `processAsyncUploads()` was a permanent
+  no-op. CMakeLists entries (engine + tests) updated. Per the audit's
+  wire-or-delete framing, taking the delete path is consistent with
+  CLAUDE.md Rule 6 (no half-finished implementations).
+- **W7.** `AudioEngine::setMixerSnapshot(const AudioMixer*)` replaces
+  the previous `setMixerSnapshot(const AudioMixer&)` per-frame
+  full-struct value-copy. The mixer is read on the same thread that
+  publishes it (the `AudioSystem::update` path), so the pointer
+  suffices and the "snapshot copy keeps it thread-safe" justification
+  for the value-copy was never actually true — single-threaded today,
+  and a value-copy of `std::array<float, 6>` was not atomic anyway.
+  New private `AudioEngine::currentMixer()` helper falls back to a
+  default-all-1 mixer when no snapshot has been published yet.
+  `audio_system.cpp` updated to pass `&getAudioMixer()`. 3 new
+  `AudioEngineMixerSnapshot.*_W7` tests pin: defaults to nullptr,
+  stores pointer not copy, nullptr reverts.
+- **W9.** Deleted the SSR pipeline. Three independent reviewers had
+  converged on it: `m_ssrShader`, the 16-MB `m_ssrFbo` RGBA16F target,
+  and `assets/shaders/ssr.frag.glsl` (with its 8 never-set uniforms)
+  had zero call sites. The roadmap entry will reappear cleanly when
+  the Phase-5 G-buffer lands and per-pixel roughness is available.
+  Removed the load + FBO allocation from `renderer.cpp`; removed the
+  6 SSR fields from `renderer.h`; deleted the shader file.
+
+**Environment (Slice 10).**
+
+- **E4.** `FoliageChunk::getBounds` now derives the Y range from the
+  chunk's own foliage / scatter / tree instance positions (with a
+  +50 m tree-height ceiling margin and a –1 m floor margin) rather
+  than the previous magic `[-100, 200]` range — a 300 m vertical
+  span shrinks to ~50 m for typical scenes, tightening the frustum
+  culler at `foliage_manager::getVisibleChunks`. Empty chunks fall
+  back to a ±1 m default (callers filter `isEmpty()` upstream, so the
+  fallback is purely defensive). 2 new tests in
+  `tests/test_foliage_chunk.cpp` pin populated-chunk-tracks-instances
+  and empty-chunk-compact-bounds.
+
+**Editor — none in this wave.**
+
+**Performance — none in this wave.**
+
+**Scripting (Slice 14).**
+
+- **Sc1.** `ScriptContext::triggerOutput` now fires every connection
+  fanning out from a single execution-output pin via the new
+  `ScriptInstance::forEachOutputConnection<F>` accessor, not just the
+  first match. Templates like `DoOnce.Then → {PlayAnim, PlaySound}`
+  rely on this; the prior `findOutputConnection` (first-match)
+  silently dropped the second target. The compiler's "runtime quirk"
+  comment in `script_compiler.cpp` (formerly lines 176–179) is gone —
+  exec fan-out is no longer a quirk. 2 new
+  `NodeLibraryTest.ExecOutput*_Sc1` tests cover both-targets-fire and
+  per-callee `m_entryPin` save/restore.
+- **Sc2.** Recursion-depth caps on the four formula-tree builders /
+  evaluators: `evalNode` (`expression_eval.cpp`), `ExprNode::fromJson`
+  (`expression.cpp`), `NodeGraph::nodeToExpr` (`node_graph.cpp`), and
+  `FromExprHelper::buildNode` (`node_graph.cpp`). `kMaxFormulaDepth =
+  256` covers every shipped formula (max depth ≤ 24 in current
+  templates) while rejecting hostile 100k-deep unary chains that
+  blew the stack pre-Sc2. 3 new
+  `FormulaDepthCap.*_Sc2` tests cover deep-chain rejection on the
+  evaluator + JSON loader and shallow-chain acceptance.
+- **Sc6.** `ScriptingSystem::isInstanceActive` gained a generation-aware
+  overload: `isInstanceActive(instance, expectedGeneration)` returns
+  true only when the instance is registered AND its current generation
+  matches the captured one. Closes the ABA hazard at the EventBus
+  dispatch sites — a re-initialised instance bumps `m_generation` in
+  `ScriptInstance::initialize`, so a captured subscription whose
+  underlying instance has been reset is now gated out before the
+  trigger fires. The three subscribe sites
+  (`subscribeOneEventNode`, `subscribeFilteredEventNode`, the
+  `EntityDestroyedEvent` branch) capture generation at subscribe
+  time. New `ScriptingSystemBridge.IsInstanceActiveGenerationGate_Sc6`
+  test pins the gate.
+- **Sc7.** `passDetectDataCycles` rewritten as a true iterative DFS
+  with an explicit stack — the previous code claimed "explicit stack"
+  in its comment but actually used a recursive `std::function` lambda
+  that blew the C++ call stack on a 5000-node pure chain. New stack
+  frames carry `(node_index, next-input cursor)` so a frame can resume
+  scanning inputs after a child descent returns. New
+  `ScriptCompiler.DeepPureChainNoStackOverflow_Sc7` test compiles a
+  10k-node acyclic pure chain.
+
+**Audio — none in this wave.**
+
+**Cloth (Slice 17).**
+
+- **Cl2.** `ClothComponent::syncMesh` calls the new
+  `IClothSolverBackend::syncBuffersOnly()` method instead of
+  `simulate(0.0001f)`. The previous call silently injected a 100 µs
+  gravity tick into a refresh that should have been pure passthrough.
+  CPU backend implements `syncBuffersOnly` as a `recomputeNormals()`
+  call; GPU backend re-runs only the cloth_normals shader (factored
+  out of `simulate()` into a new private `dispatchNormalsShader`
+  helper) and flags the CPU mirror dirty. New
+  `ClothSimulator.SyncBuffersOnlyDoesNotIntegrate_Cl2` test pins
+  position-invariance across the call.
+- **Cl3.** `GpuClothSimulator::uploadPinsIfDirty` no longer reads back
+  the entire velocities SSBO, modifies it on the CPU, and re-uploads.
+  The integrate shader short-circuits on `invMass==0` (so non-pinned
+  velocity values can stay whatever they are), and the CPU-side
+  zero-velocity-on-pin semantic is achieved via a per-pin
+  `glNamedBufferSubData` of one `vec4(0)` — `O(numPins)` 16-byte
+  writes instead of one full-buffer GPU stall on every editor pin
+  drag.
+- **Cl7.** `MAX_SUBSTEPS = 64` lifted into `cloth_solver_backend.h` as
+  the shared upper bound. Both backends now clamp `setSubsteps` to
+  `[1, MAX_SUBSTEPS]` — pre-Cl7, CPU's `setSubsteps` only clamped the
+  lower bound and `simulate()` silently re-clamped to `[1, 64]` per
+  frame; the GPU backend had no upper cap at all. 2 new
+  `*Cloth*Substeps*_Cl7` tests pin both backends.
+
+Test count: 3124/3125 pass (1 pre-existing GL skip unchanged); +13
+versus Wave 3's 3111/3112 (after deleting 7 AsyncTextureLoader tests
+via W1 and adding 20 new regression tests across the wave).
+
+VERSION 0.1.56 → 0.1.57.
+
 ### 2026-04-27 Audit tool 2.18.0 — gtest-macro CI red-status fix
 
 `tools/audit/audit_config.yaml` cppcheck args now define the gtest

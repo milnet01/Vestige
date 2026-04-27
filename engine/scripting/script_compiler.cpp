@@ -10,7 +10,6 @@
 
 #include <algorithm>
 #include <cstddef>
-#include <functional>
 #include <limits>
 #include <string>
 #include <unordered_map>
@@ -170,13 +169,9 @@ void passResolveConnections(
     // Tracks which input pins have already been connected — each input pin
     // may be the target of at most one connection (pass 6 rule).
     //
-    // Note on execution output fan-out: the shipped gameplay templates
-    // intentionally connect a single exec output to multiple targets (e.g.
-    // DoOnce.Then → PlayAnimation + PlaySound), and the underlying data
-    // model (ScriptInstance::m_outputByNode) stores a vector per pin. The
-    // runtime's triggerOutput() currently fires only the first match —
-    // that's a runtime quirk to fix separately, not a graph validity
-    // issue, so the compiler accepts exec fan-out.
+    // Execution outputs MAY fan out (one source pin → many target nodes);
+    // the shipped templates rely on that and the runtime's
+    // ScriptContext::triggerOutput now fires every match (Phase 10.9 Sc1).
     std::unordered_set<uint64_t> inputPinsConnected;
 
     auto packKey = [](std::size_t nodeIndex, std::size_t pinIndex) {
@@ -311,66 +306,100 @@ void passDetectDataCycles(CompilationResult& result)
     enum class Mark : uint8_t { UNVISITED = 0, IN_PROGRESS, DONE };
     std::vector<Mark> marks(nodes.size(), Mark::UNVISITED);
 
-    // Iterative DFS with an explicit stack — avoids runaway recursion on
-    // pathological graphs even if cycles exist, since marks force progress.
+    // Iterative DFS with an explicit stack — Phase 10.9 Sc7. The previous
+    // implementation was a `std::function` recursive lambda whose comment
+    // promised explicit stacking. A 5000-node pure chain blew the C++ call
+    // stack; the explicit stack here handles arbitrary depths bounded only
+    // by available heap. Each frame stores (node_index, next-input cursor)
+    // so a frame can resume scanning inputs after a child descent returns.
+    struct Frame { std::size_t idx; std::size_t cursor; };
+    std::vector<Frame> stack;
     std::vector<std::size_t> cycleStart;
 
-    std::function<bool(std::size_t)> visit = [&](std::size_t idx) -> bool {
-        if (marks[idx] == Mark::DONE)
-        {
-            return false;
-        }
-        if (marks[idx] == Mark::IN_PROGRESS)
-        {
-            cycleStart.push_back(idx);
-            return true;
-        }
-        marks[idx] = Mark::IN_PROGRESS;
-
-        const CompiledNode& n = nodes[idx];
-        if (n.descriptor && n.descriptor->isPure)
-        {
-            // Only pure nodes contribute to the data-cycle check — impure
-            // nodes break the cycle because their outputs are cached and read
-            // lazily, not recomputed on each pull.
-            for (std::size_t i = 0; i < n.inputs.size(); ++i)
-            {
-                if (!n.inputs[i].connected)
-                {
-                    continue;
-                }
-                const PinDef& inDef = n.descriptor->inputDefs[i];
-                if (inDef.kind != PinKind::DATA)
-                {
-                    continue;
-                }
-                if (visit(n.inputs[i].sourceNodeIndex))
-                {
-                    return true;
-                }
-            }
-        }
-
-        marks[idx] = Mark::DONE;
-        return false;
-    };
-
-    for (std::size_t i = 0; i < nodes.size(); ++i)
+    for (std::size_t root = 0; root < nodes.size(); ++root)
     {
-        if (marks[i] == Mark::UNVISITED)
+        if (marks[root] != Mark::UNVISITED)
         {
-            if (visit(i))
+            continue;
+        }
+
+        marks[root] = Mark::IN_PROGRESS;
+        stack.push_back({root, 0});
+        bool cycleFound = false;
+
+        while (!stack.empty())
+        {
+            // Read the back frame's fields by index — never hold a reference
+            // across `stack.push_back` since the vector may reallocate.
+            const std::size_t idx    = stack.back().idx;
+            std::size_t       cursor = stack.back().cursor;
+
+            const CompiledNode& n = nodes[idx];
+            bool descended = false;
+
+            // Only pure nodes contribute to the data-cycle check — impure
+            // nodes break the cycle because their outputs are cached and
+            // read lazily, not recomputed on each pull.
+            if (n.descriptor && n.descriptor->isPure)
             {
-                addDiag(result, CompileSeverity::ERROR,
-                        "Cycle detected in pure-data flow involving node " +
-                            std::to_string(nodes[cycleStart.back()].nodeId),
-                        nodes[cycleStart.back()].nodeId);
-                // Reset so we surface at most one cycle per connected component
-                // instead of spamming the same cycle from every entry.
-                cycleStart.clear();
-                std::fill(marks.begin(), marks.end(), Mark::DONE);
-                return;
+                while (cursor < n.inputs.size())
+                {
+                    const std::size_t inputIdx = cursor++;
+                    if (!n.inputs[inputIdx].connected)
+                    {
+                        continue;
+                    }
+                    const PinDef& inDef = n.descriptor->inputDefs[inputIdx];
+                    if (inDef.kind != PinKind::DATA)
+                    {
+                        continue;
+                    }
+                    const std::size_t tgt = n.inputs[inputIdx].sourceNodeIndex;
+                    if (marks[tgt] == Mark::DONE)
+                    {
+                        continue;
+                    }
+                    if (marks[tgt] == Mark::IN_PROGRESS)
+                    {
+                        cycleStart.push_back(tgt);
+                        cycleFound = true;
+                        break;
+                    }
+                    // Descend: persist the advanced cursor on the parent
+                    // frame so the resume point is correct, then push the
+                    // child.
+                    stack.back().cursor = cursor;
+                    marks[tgt] = Mark::IN_PROGRESS;
+                    stack.push_back({tgt, 0});
+                    descended = true;
+                    break;
+                }
             }
+
+            if (cycleFound)
+            {
+                break;
+            }
+            if (!descended)
+            {
+                // All inputs exhausted (or non-pure node) — finalise and pop.
+                marks[idx] = Mark::DONE;
+                stack.pop_back();
+            }
+        }
+
+        if (cycleFound)
+        {
+            addDiag(result, CompileSeverity::ERROR,
+                    "Cycle detected in pure-data flow involving node " +
+                        std::to_string(nodes[cycleStart.back()].nodeId),
+                    nodes[cycleStart.back()].nodeId);
+            // Reset so we surface at most one cycle per connected component
+            // instead of spamming the same cycle from every entry.
+            cycleStart.clear();
+            stack.clear();
+            std::fill(marks.begin(), marks.end(), Mark::DONE);
+            return;
         }
     }
 }

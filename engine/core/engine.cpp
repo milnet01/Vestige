@@ -1007,10 +1007,7 @@ void Engine::run()
         // 3. Update input state (reset per-frame deltas)
         m_inputManager->update();
 
-        // 3b. Process async texture uploads (GPU upload on main thread)
-        m_resourceManager->processAsyncUploads();
-
-        // 3c. Start ImGui frame early (so editor camera can read ImGui IO state)
+        // Start ImGui frame early (so editor camera can read ImGui IO state)
         if (m_editor)
         {
             m_editor->prepareFrame();

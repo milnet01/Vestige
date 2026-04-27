@@ -69,7 +69,10 @@ void AudioSystem::update(float deltaTime)
     // moves are heard on the next frame rather than only on newly
     // acquired sources. Also reaps stopped sources from the
     // playback registry.
-    m_audioEngine.setMixerSnapshot(m_engine->getAudioMixer());
+    // Phase 10.9 W7: pass the engine-owned mixer by pointer rather than
+    // copying the whole struct each frame. Lifetime is fine — the Engine
+    // outlives the AudioEngine in the destruction order.
+    m_audioEngine.setMixerSnapshot(&m_engine->getAudioMixer());
     m_audioEngine.updateGains();
 
     // Phase 10.9 P2 — iterate every AudioSourceComponent in the active

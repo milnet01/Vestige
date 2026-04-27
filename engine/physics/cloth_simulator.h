@@ -87,6 +87,11 @@ public:
     /// @brief Advances the simulation by deltaTime seconds.
     void simulate(float deltaTime) override;
 
+    /// @brief Phase 10.9 Cl2 — refresh normals from current positions
+    /// without integrating physics. Used by `ClothComponent::syncMesh`
+    /// after a pin drag or scene-load reset.
+    void syncBuffersOnly() override;
+
     /// @brief Returns the total number of particles.
     uint32_t getParticleCount() const override;
 

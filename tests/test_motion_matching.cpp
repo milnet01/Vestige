@@ -838,6 +838,84 @@ TEST(MotionMatcherTest, TrajectoryPredictorAccessible)
     EXPECT_FLOAT_EQ(vel.x, 0.0f);
 }
 
+// Phase 10.9 A3: query trajectory must be rotated into root-relative space
+// before being handed to FeatureExtractor::extract, matching the
+// MotionDatabase bake-time convention. Without this rotation, character
+// heading would shift the KD-tree search systematically.
+TEST(MotionMatcherTest, RotateTrajectoryToRootSpace_A3_ZeroYawIsIdentity)
+{
+    glm::vec2 positions[2] = {glm::vec2(1.0f, 0.0f), glm::vec2(0.0f, 1.0f)};
+    glm::vec2 directions[2] = {glm::vec2(0.5f, -0.5f), glm::vec2(-1.0f, 0.0f)};
+
+    MotionMatcher::rotateTrajectoryToRootSpace(positions, directions, 2, 0.0f);
+
+    EXPECT_FLOAT_EQ(positions[0].x, 1.0f);
+    EXPECT_FLOAT_EQ(positions[0].y, 0.0f);
+    EXPECT_FLOAT_EQ(positions[1].x, 0.0f);
+    EXPECT_FLOAT_EQ(positions[1].y, 1.0f);
+    EXPECT_FLOAT_EQ(directions[0].x, 0.5f);
+    EXPECT_FLOAT_EQ(directions[0].y, -0.5f);
+    EXPECT_FLOAT_EQ(directions[1].x, -1.0f);
+    EXPECT_FLOAT_EQ(directions[1].y, 0.0f);
+}
+
+TEST(MotionMatcherTest, RotateTrajectoryToRootSpace_A3_NonZeroYaw)
+{
+    // Character facing +X (rootRotY = -π/2 in this engine's convention,
+    // since forward is initially -Z). Rotation by -rootRotY = +π/2 maps
+    // world (1, 0) → model (0, -1) and world (0, 1) → model (1, 0).
+    constexpr float halfPi = 1.5707963267948966f;
+
+    glm::vec2 positions[2] = {glm::vec2(1.0f, 0.0f), glm::vec2(0.0f, 1.0f)};
+    glm::vec2 directions[2] = {glm::vec2(1.0f, 0.0f), glm::vec2(0.0f, 1.0f)};
+
+    MotionMatcher::rotateTrajectoryToRootSpace(positions, directions, 2, -halfPi);
+
+    EXPECT_NEAR(positions[0].x,  0.0f, 1e-6f);
+    EXPECT_NEAR(positions[0].y, -1.0f, 1e-6f);
+    EXPECT_NEAR(positions[1].x,  1.0f, 1e-6f);
+    EXPECT_NEAR(positions[1].y,  0.0f, 1e-6f);
+    EXPECT_NEAR(directions[0].x,  0.0f, 1e-6f);
+    EXPECT_NEAR(directions[0].y, -1.0f, 1e-6f);
+    EXPECT_NEAR(directions[1].x,  1.0f, 1e-6f);
+    EXPECT_NEAR(directions[1].y,  0.0f, 1e-6f);
+}
+
+TEST(MotionMatcherTest, RotateTrajectoryToRootSpace_A3_RoundTripIdentity)
+{
+    // Rotating by +yaw then -yaw must round-trip to the original.
+    constexpr float yaw = 0.7f;
+    glm::vec2 positions[1] = {glm::vec2(0.3f, -1.2f)};
+    glm::vec2 directions[1] = {glm::vec2(-0.6f, 0.8f)};
+    const glm::vec2 origPos = positions[0];
+    const glm::vec2 origDir = directions[0];
+
+    MotionMatcher::rotateTrajectoryToRootSpace(positions, directions, 1,  yaw);
+    MotionMatcher::rotateTrajectoryToRootSpace(positions, directions, 1, -yaw);
+
+    EXPECT_NEAR(positions[0].x, origPos.x, 1e-5f);
+    EXPECT_NEAR(positions[0].y, origPos.y, 1e-5f);
+    EXPECT_NEAR(directions[0].x, origDir.x, 1e-5f);
+    EXPECT_NEAR(directions[0].y, origDir.y, 1e-5f);
+}
+
+TEST(MotionMatcherTest, RotateTrajectoryToRootSpace_A3_NullArgsTolerated)
+{
+    // rootRotY = +π/2 → rotation by -π/2 maps (1,0)→(0,1) and (0,1)→(-1,0).
+    glm::vec2 positions[1] = {glm::vec2(1.0f, 0.0f)};
+    glm::vec2 directions[1] = {glm::vec2(0.0f, 1.0f)};
+
+    // Either nullable side may be omitted (e.g. if a schema has only
+    // position weights); the other must still be processed.
+    MotionMatcher::rotateTrajectoryToRootSpace(positions, nullptr, 1, 1.5707963f);
+    EXPECT_NEAR(positions[0].x, 0.0f, 1e-5f);
+    EXPECT_NEAR(positions[0].y, 1.0f, 1e-5f);
+
+    MotionMatcher::rotateTrajectoryToRootSpace(nullptr, directions, 1, 1.5707963f);
+    EXPECT_NEAR(directions[0].x, -1.0f, 1e-5f);
+    EXPECT_NEAR(directions[0].y,  0.0f, 1e-5f);
+}
+
 // ---------------------------------------------------------------------------
 // MotionTags Tests
 // ---------------------------------------------------------------------------

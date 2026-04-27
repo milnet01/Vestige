@@ -8,7 +8,6 @@
 #include "renderer/mesh.h"
 #include "renderer/texture.h"
 #include "renderer/material.h"
-#include "resource/async_texture_loader.h"
 
 #include <filesystem>
 #include <memory>
@@ -35,9 +34,6 @@ public:
     /// @param linear If true, load as linear data (normal/height maps). If false (default), load as sRGB.
     /// @return Shared pointer to the texture, or nullptr on failure.
     std::shared_ptr<Texture> loadTexture(const std::string& filePath, bool linear = false);
-
-    /// @brief Processes completed async texture uploads (call once per frame).
-    void processAsyncUploads();
 
     /// @brief Gets a solid-color fallback texture.
     std::shared_ptr<Texture> getDefaultTexture();
@@ -137,7 +133,6 @@ private:
     std::unordered_map<std::string, std::shared_ptr<Material>> m_materials;
     std::unordered_map<std::string, std::shared_ptr<Model>> m_models;
     std::shared_ptr<Texture> m_defaultTexture;
-    std::unique_ptr<AsyncTextureLoader> m_asyncLoader;
     std::vector<std::filesystem::path> m_sandboxRoots;
 };
 

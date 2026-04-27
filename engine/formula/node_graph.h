@@ -183,7 +183,8 @@ private:
     bool hasCycleDFS(NodeId current, NodeId target,
                      std::vector<bool>& visited) const;
     std::unique_ptr<ExprNode> nodeToExpr(NodeId nodeId,
-                                          std::vector<bool>& visited) const;
+                                          std::vector<bool>& visited,
+                                          int depth = 0) const;
 };
 
 // -- Enum string conversions --

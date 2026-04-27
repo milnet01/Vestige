@@ -13,6 +13,9 @@
 #include <Jolt/Physics/Collision/Shape/ConvexHullShape.h>
 #include <Jolt/Physics/Collision/Shape/MeshShape.h>
 
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/quaternion.hpp>
+
 namespace Vestige
 {
 
@@ -168,11 +171,25 @@ void RigidBody::syncTransform()
 
     if (motionType == BodyMotionType::DYNAMIC)
     {
-        // Physics -> entity
-        glm::vec3 pos = m_world->getBodyPosition(m_bodyId);
-        glm::quat rot = m_world->getBodyRotation(m_bodyId);
+        // Physics -> entity. Phase 10.9 Ph9: write the quaternion-derived
+        // local matrix directly into the Transform's matrix override
+        // instead of round-tripping through Euler. Past ±90° pitch
+        // `glm::eulerAngles` loses information (gimbal lock), so a
+        // tumbling body's orientation drifts within a frame; the matrix
+        // path bypasses that conversion entirely. The Euler `rotation`
+        // field is still updated as a best-effort approximation so any
+        // legacy reader (editor inspector display, scripting) sees a
+        // sensible — if lossy at ±90° — value.
+        const glm::vec3 pos = m_world->getBodyPosition(m_bodyId);
+        const glm::quat rot = m_world->getBodyRotation(m_bodyId);
         owner->transform.position = pos;
         owner->transform.rotation = glm::eulerAngles(rot);
+
+        const glm::mat4 trs =
+            glm::translate(glm::mat4(1.0f), pos)
+            * glm::mat4_cast(rot)
+            * glm::scale(glm::mat4(1.0f), owner->transform.scale);
+        owner->transform.setLocalMatrix(trs);
     }
     else if (motionType == BodyMotionType::KINEMATIC)
     {

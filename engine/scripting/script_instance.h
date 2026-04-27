@@ -183,6 +183,31 @@ public:
     const ScriptConnection* findOutputConnection(
         uint32_t nodeId, const std::string& pinName) const;
 
+    /// @brief Visit every connection that fans out from the given node/pin.
+    /// Phase 10.9 Sc1 — replaces the "first match wins" semantics of
+    /// `findOutputConnection` for execution fan-out. Templates like
+    /// `DoOnce.Then → PlayAnim` *and* `DoOnce.Then → PlaySound` are valid
+    /// graph constructs (the compiler accepts them; pass 6 only forbids
+    /// duplicate *input* pins). The callback is invoked once per matching
+    /// `ScriptConnection`. Order matches `m_outputByNode[nodeId]` insertion
+    /// order, which mirrors the source `ScriptGraph::connections` vector.
+    template <typename F>
+    void forEachOutputConnection(uint32_t nodeId, PinId pinId, F&& fn) const
+    {
+        auto it = m_outputByNode.find(nodeId);
+        if (it == m_outputByNode.end())
+        {
+            return;
+        }
+        for (const auto& pc : it->second)
+        {
+            if (pc.pin == pinId)
+            {
+                fn(*pc.conn);
+            }
+        }
+    }
+
     /// @brief Find the connection whose target is the given node/pin. Returns
     /// nullptr if the pin has no incoming connection.
     const ScriptConnection* findInputConnection(

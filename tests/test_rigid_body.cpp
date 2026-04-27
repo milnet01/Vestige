@@ -138,6 +138,54 @@ TEST(RigidBody, DynamicBodySyncsToTransform)
     world.shutdown();
 }
 
+// Phase 10.9 Ph9: dynamic-body sync must preserve orientation past
+// ±90° pitch. The previous code path round-tripped through
+// `glm::eulerAngles`, which has a singularity at ±π/2 pitch — a
+// tumbling body's quaternion would lose information frame-over-frame.
+// The new code writes the quaternion-derived matrix into the Transform's
+// matrix override, so the rendered orientation matches the physics
+// orientation exactly even at the gimbal-lock pitch.
+TEST(RigidBody, DynamicSyncSetsMatrixOverrideQuaternionExact_Ph9)
+{
+    PhysicsWorld world;
+    ASSERT_TRUE(world.initialize());
+
+    Entity entity("Tumbler");
+    entity.transform.position = glm::vec3(0, 5, 0);
+    // Pitch the body to exactly +90° (the Euler singularity).
+    const glm::quat targetRot = glm::angleAxis(
+        glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+    entity.transform.rotation = glm::eulerAngles(targetRot);
+    entity.update(0.0f);
+
+    auto* rb = entity.addComponent<RigidBody>();
+    rb->motionType = BodyMotionType::DYNAMIC;
+    rb->shapeType = CollisionShapeType::BOX;
+    rb->shapeSize = glm::vec3(0.25f);
+    rb->mass = 1.0f;
+    rb->createBody(world);
+
+    // Push the body to the target orientation directly via the world.
+    world.setBodyTransform(rb->getBodyId(), glm::vec3(0, 5, 0), targetRot);
+
+    rb->syncTransform();
+
+    // After Ph9, the local matrix carries the exact quaternion — the
+    // override is set, and decomposing it should recover targetRot
+    // within tight float tolerance, regardless of the Euler singularity.
+    ASSERT_TRUE(entity.transform.hasMatrixOverride())
+        << "Ph9: dynamic-body sync must populate the matrix override";
+    const glm::mat4 m = entity.transform.getLocalMatrix();
+    const glm::quat decoded = glm::quat_cast(m);
+    // Quaternions q and -q represent the same rotation. Compare via dot.
+    const float d = std::abs(glm::dot(decoded, targetRot));
+    EXPECT_NEAR(d, 1.0f, 1e-4f)
+        << "matrix-override must encode the physics quaternion exactly "
+           "(no Euler round-trip)";
+
+    world.shutdown();
+}
+
 // ---------------------------------------------------------------------------
 // Kinematic body sync
 // ---------------------------------------------------------------------------

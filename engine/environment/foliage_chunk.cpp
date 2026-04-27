@@ -6,6 +6,7 @@
 #include "environment/foliage_chunk.h"
 
 #include <algorithm>
+#include <limits>
 
 namespace Vestige
 {
@@ -165,13 +166,47 @@ const std::vector<TreeInstance>& FoliageChunk::getTrees() const
 
 AABB FoliageChunk::getBounds() const
 {
-    float worldX = static_cast<float>(m_gridX) * CHUNK_SIZE;
-    float worldZ = static_cast<float>(m_gridZ) * CHUNK_SIZE;
+    const float worldX = static_cast<float>(m_gridX) * CHUNK_SIZE;
+    const float worldZ = static_cast<float>(m_gridZ) * CHUNK_SIZE;
 
-    // Y range: generous bounds to capture foliage at any height
+    // Phase 10.9 E4: Y range derived from the chunk's own instance
+    // positions (which were placed against the terrain at scatter time)
+    // rather than the previous magic [-100, 200] ceiling. Empty chunks
+    // get a small ±1 m default so the AABB is still valid — callers
+    // (foliage_manager::getVisibleChunks, foliage_renderer) skip empty
+    // chunks before invoking this anyway, so the fallback is purely
+    // defensive.
+    constexpr float kEmptyHalfRange = 1.0f;       // empty-chunk fallback
+    constexpr float kCeilingMargin  = 50.0f;      // top-of-tree headroom
+    constexpr float kFloorMargin    = 1.0f;       // pivot-below-ground margin
+
+    float minY = std::numeric_limits<float>::max();
+    float maxY = std::numeric_limits<float>::lowest();
+    auto extend = [&](float y) { if (y < minY) minY = y; if (y > maxY) maxY = y; };
+
+    for (const auto& [typeId, instances] : m_foliage)
+    {
+        (void)typeId;
+        for (const auto& inst : instances) { extend(inst.position.y); }
+    }
+    for (const auto& inst : m_scatter) { extend(inst.position.y); }
+    for (const auto& inst : m_trees)   { extend(inst.position.y); }
+
+    if (minY > maxY)
+    {
+        // No instances — emit a minimal valid AABB at y=0.
+        minY = -kEmptyHalfRange;
+        maxY =  kEmptyHalfRange;
+    }
+    else
+    {
+        minY -= kFloorMargin;
+        maxY += kCeilingMargin;
+    }
+
     return AABB{
-        glm::vec3(worldX, -100.0f, worldZ),
-        glm::vec3(worldX + CHUNK_SIZE, 200.0f, worldZ + CHUNK_SIZE)
+        glm::vec3(worldX,             minY, worldZ),
+        glm::vec3(worldX + CHUNK_SIZE, maxY, worldZ + CHUNK_SIZE)
     };
 }
 

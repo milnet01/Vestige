@@ -115,6 +115,19 @@ TEST(GpuClothSimulator, SetSubstepsClampsToOne)
     EXPECT_EQ(sim.getSubsteps(), 20);
 }
 
+// Phase 10.9 Cl7: GPU backend must share the CPU simulate() upper bound.
+// Pre-Cl7, GPU had no upper cap (only a `if (substeps < 1) substeps = 1`
+// lower clamp); CPU silently clamped to 64 inside the per-frame loop.
+TEST(GpuClothSimulator, SetSubstepsClampsToMaxSubsteps_Cl7)
+{
+    GpuClothSimulator sim;
+    sim.setSubsteps(MAX_SUBSTEPS + 1000);
+    EXPECT_EQ(sim.getSubsteps(), MAX_SUBSTEPS)
+        << "GPU substep count must be clamped to MAX_SUBSTEPS to match CPU simulate()";
+    sim.setSubsteps(MAX_SUBSTEPS);
+    EXPECT_EQ(sim.getSubsteps(), MAX_SUBSTEPS);
+}
+
 TEST(GpuClothSimulator, BindConstraintsEnumPinned)
 {
     // Constraints SSBO binding 4 is the contract with the cloth_constraints

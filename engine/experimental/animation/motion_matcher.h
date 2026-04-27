@@ -90,6 +90,20 @@ public:
     /// @brief Whether the matcher is active and has a valid database.
     bool isActive() const;
 
+    /// @brief Rotates an array of XZ trajectory vectors from world-aligned
+    /// space into root-relative model space (multiplies each by the inverse
+    /// of the character's root-yaw rotation matrix).
+    ///
+    /// Phase 10.9 A3 invariant: `MotionDatabase::extractFeatures` stores
+    /// trajectory in root-relative space, so the matcher must pre-rotate
+    /// the predictor's world-space output before handing it to
+    /// `FeatureExtractor::extract`. Exposed publicly so the rotation math
+    /// can be tested without needing to instantiate a SkeletonAnimator.
+    static void rotateTrajectoryToRootSpace(glm::vec2* positions,
+                                            glm::vec2* directions,
+                                            int count,
+                                            float rootRotY);
+
 private:
     void performSearch();
     void buildQueryVector(float* query) const;

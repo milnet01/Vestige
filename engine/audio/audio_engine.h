@@ -236,11 +236,28 @@ public:
         m_captionAnnouncer = std::move(announcer);
     }
 
-    /// @brief Phase 10.7 slice A2 — publishes a snapshot of the
-    ///        engine-owned mixer into the audio engine. Held by value
-    ///        so the audio engine can read it from any thread without
-    ///        locking; push once per frame from `AudioSystem::update`.
-    void setMixerSnapshot(const AudioMixer& mixer) { m_mixerSnapshot = mixer; }
+    /// @brief Phase 10.7 slice A2 / Phase 10.9 W7 — publishes the
+    ///        engine-owned mixer into the audio engine.
+    ///
+    /// **Lifetime contract**: the pointer must remain valid for the
+    /// AudioEngine's lifetime — typically `&Engine::m_audioMixer`, which
+    /// outlives the AudioEngine in the destruction order. Pass `nullptr`
+    /// to revert to the default all-1 mixer (e.g. in test fixtures or on
+    /// teardown).
+    ///
+    /// W7 replaced the previous per-frame full-struct value-copy: the
+    /// mixer is read on the same thread that publishes it (the
+    /// `AudioSystem::update` path), so the pointer suffices and the
+    /// "snapshot copy keeps it thread-safe" comment that justified the
+    /// copy was never actually true — single-threaded today, and a value
+    /// copy of `std::array<float, 6>` was not atomic anyway.
+    void setMixerSnapshot(const AudioMixer* mixer) { m_mixerSnapshot = mixer; }
+
+    /// @brief Accessor for the published mixer (Phase 10.9 W7).
+    /// Returns the snapshot pointer; `nullptr` if the AudioSystem hasn't
+    /// pushed one yet. Reads inside `AudioEngine` use the private
+    /// `currentMixer()` helper that falls back to a default all-1 mixer.
+    const AudioMixer* getMixerSnapshot() const { return m_mixerSnapshot; }
 
     /// @brief Phase 10.9 P3 — publishes the engine-owned
     ///        `DuckingState::currentGain` snapshot so `updateGains`
@@ -400,7 +417,19 @@ private:
         std::chrono::steady_clock::time_point startTime{};
     };
     std::unordered_map<unsigned int, SourceMix> m_livePlaybacks;
-    AudioMixer m_mixerSnapshot{};  ///< Latest published mixer (defaults all-1).
+    /// Phase 10.9 W7 — pointer to the engine-owned mixer, not a per-frame
+    /// value copy. `nullptr` means "no snapshot published yet" and the
+    /// reader uses a function-local default-constructed `AudioMixer`.
+    const AudioMixer* m_mixerSnapshot = nullptr;
+
+    /// @brief Returns the current mixer (the snapshot pointer if set, or
+    /// a default all-1 mixer if `setMixerSnapshot(nullptr)` was the most
+    /// recent call). Phase 10.9 W7 helper.
+    const AudioMixer& currentMixer() const
+    {
+        static const AudioMixer kDefault{};
+        return m_mixerSnapshot ? *m_mixerSnapshot : kDefault;
+    }
     float      m_duckingSnapshot = 1.0f;  ///< Phase 10.9 P3 duck gain (1.0 = no duck).
 
     CaptionAnnouncer m_captionAnnouncer;  ///< Phase 10.9 P4 caption hook (may be empty).

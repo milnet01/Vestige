@@ -96,7 +96,12 @@ void ClothComponent::syncMesh()
 {
     if (!m_ready || !m_simulator) return;
 
-    m_simulator->simulate(0.0001f);
+    // Phase 10.9 Cl2: refresh renderer-facing buffers from the current
+    // particle positions without integrating physics. The previous
+    // `simulate(0.0001f)` call silently ticked gravity and wind on
+    // every mesh refresh — wrong for pin-drag and scene-load reset
+    // paths where the user expects a pure passthrough.
+    m_simulator->syncBuffersOnly();
 
     uint32_t count = m_simulator->getParticleCount();
     const glm::vec3* positions = m_simulator->getPositions();

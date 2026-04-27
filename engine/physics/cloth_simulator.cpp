@@ -257,7 +257,7 @@ void ClothSimulator::simulate(float deltaTime)
         sortConstraintsByDepth();
     }
 
-    int substeps = std::clamp(m_config.substeps, 1, 64);
+    int substeps = std::clamp(m_config.substeps, 1, MAX_SUBSTEPS);
 
     float dtSub = deltaTime / static_cast<float>(substeps);
 
@@ -654,7 +654,17 @@ float ClothSimulator::getDragCoefficient() const
 
 void ClothSimulator::setSubsteps(int substeps)
 {
-    m_config.substeps = std::max(1, substeps);
+    m_config.substeps = std::clamp(substeps, 1, MAX_SUBSTEPS);
+}
+
+void ClothSimulator::syncBuffersOnly()
+{
+    // Phase 10.9 Cl2: refresh per-vertex normals from the current
+    // positions without integrating gravity / wind / collisions. CPU
+    // positions are always up-to-date (no mirror staleness on this
+    // backend), so a normals recompute is the only work needed.
+    if (m_positions.empty()) return;
+    recomputeNormals();
 }
 
 const ClothConfig& ClothSimulator::getConfig() const

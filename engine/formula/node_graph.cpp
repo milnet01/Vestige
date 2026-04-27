@@ -492,9 +492,21 @@ bool NodeGraph::validate(std::string& errorOut) const
 // NodeGraph — Expression tree conversion
 // ---------------------------------------------------------------------------
 
+/// Phase 10.9 Sc2 — recursion-depth cap for graph→expression-tree
+/// conversion. Matches `expression_eval.cpp::kMaxFormulaDepth` and
+/// rejects pathological 100k-deep graphs that would blow the stack.
+static constexpr int kMaxNodeToExprDepth = 256;
+
 std::unique_ptr<ExprNode> NodeGraph::nodeToExpr(NodeId nodeId,
-                                                 std::vector<bool>& visited) const
+                                                 std::vector<bool>& visited,
+                                                 int depth) const
 {
+    if (depth > kMaxNodeToExprDepth)
+    {
+        return nullptr;  // depth-cap reached — same nullptr semantics as
+                         // cycle detection so toExpressionTree() bails out.
+    }
+
     // Ensure visited is large enough first, so all subsequent accesses are
     // unconditionally in-bounds. The previous form
     // (`if (nodeId < visited.size() && visited[nodeId])`) relied on &&
@@ -547,7 +559,7 @@ std::unique_ptr<ExprNode> NodeGraph::nodeToExpr(NodeId nodeId,
         {
             if (c.targetNode == nodeId && c.targetPort == inputPort.id)
             {
-                return nodeToExpr(c.sourceNode, visited);
+                return nodeToExpr(c.sourceNode, visited, depth + 1);
             }
         }
         // Unconnected: use default
@@ -555,14 +567,14 @@ std::unique_ptr<ExprNode> NodeGraph::nodeToExpr(NodeId nodeId,
     }
 
     // Helper lambda: resolve an input port to an expression
-    auto resolveInput = [this, nodeId, &visited](const Port& port)
+    auto resolveInput = [this, nodeId, &visited, depth](const Port& port)
         -> std::unique_ptr<ExprNode>
     {
         for (const auto& c : m_connections)
         {
             if (c.targetNode == nodeId && c.targetPort == port.id)
             {
-                return nodeToExpr(c.sourceNode, visited);
+                return nodeToExpr(c.sourceNode, visited, depth + 1);
             }
         }
         return ExprNode::literal(port.defaultValue);
@@ -612,7 +624,7 @@ std::unique_ptr<ExprNode> NodeGraph::toExpressionTree(NodeId outputNodeId) const
     }
 
     std::vector<bool> visited;
-    return nodeToExpr(outputNodeId, visited);
+    return nodeToExpr(outputNodeId, visited, 0);
 }
 
 /// @brief Internal helper to recursively build nodes from an expression tree.
@@ -624,6 +636,14 @@ struct FromExprHelper
 
     NodeId buildNode(const ExprNode& expr, int depth)
     {
+        // Phase 10.9 Sc2: cap depth so a hostile preset (100k-deep
+        // unary chain) can't blow the stack on import. Returns 0 (the
+        // "unreachable" fallback) which gets serialised as a no-op.
+        if (depth > kMaxNodeToExprDepth)
+        {
+            return 0;
+        }
+
         switch (expr.type)
         {
         case ExprNodeType::LITERAL:

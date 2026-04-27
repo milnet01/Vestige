@@ -42,7 +42,6 @@ set(ENGINE_SOURCES
     scene/character_controller_2d_component.cpp
     scene/game_templates_2d.cpp
     resource/resource_manager.cpp
-    resource/async_texture_loader.cpp
     renderer/shader.cpp
     renderer/mesh.cpp
     renderer/camera.cpp

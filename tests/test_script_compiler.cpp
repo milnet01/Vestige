@@ -379,6 +379,51 @@ TEST(ScriptCompiler, PureDataCycleIsError)
                                    "Cycle detected in pure-data flow"));
 }
 
+// Phase 10.9 Sc7: passDetectDataCycles must use an explicit-stack DFS
+// (matching the in-code comment) instead of recursive lambda invocation.
+// A 10k-node pure-chain graph would have blown the C++ stack on the
+// previous std::function-based recursion; the iterative version handles
+// it bounded only by heap.
+TEST(ScriptCompiler, DeepPureChainNoStackOverflow_Sc7)
+{
+    NodeTypeRegistry registry;
+    NodeTypeDescriptor node;
+    node.typeName = "PassThrough";
+    node.isPure = true;
+    PinDef inDef;
+    inDef.name = "In";
+    inDef.kind = PinKind::DATA;
+    inDef.dataType = ScriptDataType::FLOAT;
+    PinDef outDef;
+    outDef.name = "Out";
+    outDef.kind = PinKind::DATA;
+    outDef.dataType = ScriptDataType::FLOAT;
+    node.inputDefs = { inDef };
+    node.outputDefs = { outDef };
+    registry.registerNode(node);
+
+    ScriptGraph graph;
+    constexpr int kChainLength = 10000;
+    std::vector<uint32_t> ids;
+    ids.reserve(kChainLength);
+    for (int i = 0; i < kChainLength; ++i)
+    {
+        ids.push_back(graph.addNode("PassThrough"));
+    }
+    for (int i = 1; i < kChainLength; ++i)
+    {
+        // Each node's input is fed by its predecessor's output — a long
+        // acyclic pure chain. Compilation must succeed without recursing.
+        graph.addConnection(ids[i - 1], "Out", ids[i], "In");
+    }
+
+    const CompilationResult result =
+        ScriptGraphCompiler::compile(graph, registry);
+    EXPECT_FALSE(hasErrorContaining(result.diagnostics,
+                                    "Cycle detected in pure-data flow"))
+        << "10k-node acyclic pure chain misclassified as a cycle";
+}
+
 TEST(ScriptCompiler, ExecutionCycleIsAllowed)
 {
     // Execution cycles are intentional — loops, re-triggers, retries. The

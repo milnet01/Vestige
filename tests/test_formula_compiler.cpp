@@ -768,3 +768,54 @@ TEST(CodegenSmoke, AllTemplatesGenerateLut1D)
             << result.errorMessage;
     }
 }
+
+// ---------------------------------------------------------------------------
+// Phase 10.9 Sc2 — recursion-depth caps on tree builders + evaluator
+// ---------------------------------------------------------------------------
+
+namespace {
+
+/// Build a chain of `depth` nested unary `negate` ops around a literal.
+/// Each level adds one stack frame to evalNode / fromJsonImpl, so a chain
+/// past kMaxFormulaDepth (256) must be rejected before the cap fires.
+std::unique_ptr<ExprNode> buildNegateChain(int depth)
+{
+    std::unique_ptr<ExprNode> node = ExprNode::literal(1.0f);
+    for (int i = 0; i < depth; ++i)
+    {
+        node = ExprNode::unaryOp("negate", std::move(node));
+    }
+    return node;
+}
+
+}  // namespace
+
+TEST(FormulaDepthCap, EvalNodeRejectsDeepUnaryChain_Sc2)
+{
+    auto deep = buildNegateChain(1024);  // > kMaxFormulaDepth = 256
+    ExpressionEvaluator eval;
+    EXPECT_THROW(eval.evaluate(*deep, {}), std::runtime_error);
+}
+
+TEST(FormulaDepthCap, EvalNodeAcceptsShallowChain_Sc2)
+{
+    auto ok = buildNegateChain(128);  // well under cap
+    ExpressionEvaluator eval;
+    float result = eval.evaluate(*ok, {});
+    // 128 negate ops on literal(1.0) → 1.0 (even count)
+    EXPECT_FLOAT_EQ(result, 1.0f);
+}
+
+TEST(FormulaDepthCap, FromJsonRejectsDeepNesting_Sc2)
+{
+    // Build a JSON object representing 1024 nested unary {fn:negate}
+    nlohmann::json node = 1.0f;  // bare number → LITERAL
+    for (int i = 0; i < 1024; ++i)
+    {
+        nlohmann::json wrap;
+        wrap["fn"]  = "negate";
+        wrap["arg"] = std::move(node);
+        node = std::move(wrap);
+    }
+    EXPECT_THROW(ExprNode::fromJson(node), std::runtime_error);
+}

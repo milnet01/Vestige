@@ -300,7 +300,7 @@ unsigned int AudioEngine::acquireSource(SoundPriority incomingPriority)
         VoiceCandidate c;
         c.priority      = mix.priority;
         c.effectiveGain = resolveSourceGain(
-            m_mixerSnapshot, mix.bus, mix.sourceVolume, m_duckingSnapshot);
+            currentMixer(), mix.bus, mix.sourceVolume, m_duckingSnapshot);
         c.ageSeconds = std::chrono::duration<float>(now - mix.startTime).count();
         candidates.push_back(c);
         candidateSources.push_back(source);
@@ -376,7 +376,8 @@ unsigned int AudioEngine::playSound(const std::string& filePath, const glm::vec3
     m_livePlaybacks[source] = SourceMix{
         bus, volume, priority, std::chrono::steady_clock::now()};
     const float initialGain =
-        resolveSourceGain(m_mixerSnapshot, bus, volume, m_duckingSnapshot);
+        resolveSourceGain(
+            currentMixer(), bus, volume, m_duckingSnapshot);
 
     alSourcei(source, AL_BUFFER, static_cast<ALint>(buffer));
     alSource3f(source, AL_POSITION, position.x, position.y, position.z);
@@ -414,7 +415,8 @@ unsigned int AudioEngine::playSoundSpatial(const std::string& filePath,
     m_livePlaybacks[source] = SourceMix{
         bus, volume, priority, std::chrono::steady_clock::now()};
     const float initialGain =
-        resolveSourceGain(m_mixerSnapshot, bus, volume, m_duckingSnapshot);
+        resolveSourceGain(
+            currentMixer(), bus, volume, m_duckingSnapshot);
 
     alSourcei(source, AL_BUFFER, static_cast<ALint>(buffer));
     alSource3f(source, AL_POSITION, position.x, position.y, position.z);
@@ -454,7 +456,8 @@ unsigned int AudioEngine::playSoundSpatial(const std::string& filePath,
     m_livePlaybacks[source] = SourceMix{
         bus, volume, priority, std::chrono::steady_clock::now()};
     const float initialGain =
-        resolveSourceGain(m_mixerSnapshot, bus, volume, m_duckingSnapshot);
+        resolveSourceGain(
+            currentMixer(), bus, volume, m_duckingSnapshot);
 
     alSourcei(source, AL_BUFFER, static_cast<ALint>(buffer));
     alSource3f(source, AL_POSITION, position.x, position.y, position.z);
@@ -498,7 +501,8 @@ unsigned int AudioEngine::playSound2D(const std::string& filePath, float volume,
     m_livePlaybacks[source] = SourceMix{
         bus, volume, priority, std::chrono::steady_clock::now()};
     const float initialGain =
-        resolveSourceGain(m_mixerSnapshot, bus, volume, m_duckingSnapshot);
+        resolveSourceGain(
+            currentMixer(), bus, volume, m_duckingSnapshot);
 
     alSourcei(source, AL_BUFFER, static_cast<ALint>(buffer));
     alSource3f(source, AL_POSITION, 0.0f, 0.0f, 0.0f);
@@ -741,7 +745,7 @@ void AudioEngine::updateGains()
         // Phase 10.9 P3: fold the ducking snapshot into every AL_GAIN
         // upload so the engine-wide duck reaches every live source.
         const float gain = resolveSourceGain(
-            m_mixerSnapshot, mix.bus, mix.sourceVolume, m_duckingSnapshot);
+            currentMixer(), mix.bus, mix.sourceVolume, m_duckingSnapshot);
         alSourcef(source, AL_GAIN, gain);
     }
 }

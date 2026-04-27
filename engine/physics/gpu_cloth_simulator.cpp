@@ -44,7 +44,7 @@ void GpuClothSimulator::setShaderPath(const std::string& path)
 
 void GpuClothSimulator::setSubsteps(int substeps)
 {
-    if (substeps < 1) substeps = 1;
+    substeps = std::clamp(substeps, 1, MAX_SUBSTEPS);
     m_substeps = substeps;
     m_config.substeps = substeps;
 }
@@ -265,15 +265,22 @@ void GpuClothSimulator::uploadPinsIfDirty()
     glNamedBufferSubData(m_positionsSSBO,     0, bytes, packed.data());
     glNamedBufferSubData(m_prevPositionsSSBO, 0, bytes, packed.data());
 
-    // Zero velocities for currently-pinned particles to prevent residual
-    // motion before the integrate shader skips them.
-    if (!m_pinIndices.empty())
+    // Phase 10.9 Cl3: zero velocities for currently-pinned particles via
+    // tiny per-slot writes rather than the previous full-buffer readback +
+    // CPU-merge + re-upload. The integrate shader short-circuits on
+    // `invMass==0`, so non-pinned slots can keep whatever velocity they
+    // had — there's no need to fetch and rewrite them. The wind shader
+    // (which doesn't gate on invMass) would otherwise let gravity drift
+    // accumulate on pinned slots; zeroing here keeps that bounded so a
+    // later unpin doesn't snap the particle off with months of cruft.
+    constexpr glm::vec4 kZero(0.0f);
+    for (uint32_t p : m_pinIndices)
     {
-        std::vector<glm::vec4> velPacked(m_particleCount);
-        glGetNamedBufferSubData(
-            m_velocitiesSSBO, 0, bytes, velPacked.data());
-        for (uint32_t p : m_pinIndices) velPacked[p] = glm::vec4(0.0f);
-        glNamedBufferSubData(m_velocitiesSSBO, 0, bytes, velPacked.data());
+        const GLintptr off =
+            static_cast<GLintptr>(static_cast<size_t>(p) * sizeof(glm::vec4));
+        glNamedBufferSubData(m_velocitiesSSBO, off,
+                             static_cast<GLsizeiptr>(sizeof(glm::vec4)),
+                             &kZero);
     }
 
     m_pinsDirty = false;
@@ -580,20 +587,38 @@ void GpuClothSimulator::simulate(float deltaTime)
     // 6. Normal recomputation — runs once per frame (not per substep) since
     //    normals are for rendering, not physics. One thread per particle walks
     //    the (up to) 6 grid-adjacent triangles via the cloth_normals shader.
-    {
-        m_normalsShader.use();
-        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, BIND_POSITIONS, m_positionsSSBO);
-        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, BIND_NORMALS,   m_normalsSSBO);
-        m_normalsShader.setUInt("u_particleCount", m_particleCount);
-        m_normalsShader.setUInt("u_gridW",         m_gridW);
-        m_normalsShader.setUInt("u_gridH",         m_gridH);
-        glDispatchCompute(particleGroups, 1, 1);
-        glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
-    }
+    dispatchNormalsShader(particleGroups);
 
     // CPU mirror is now stale — refreshed lazily on getPositions() / getNormals().
     m_positionsDirty = true;
     m_normalsDirty   = true;
+}
+
+void GpuClothSimulator::dispatchNormalsShader(GLuint particleGroups)
+{
+    m_normalsShader.use();
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, BIND_POSITIONS, m_positionsSSBO);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, BIND_NORMALS,   m_normalsSSBO);
+    m_normalsShader.setUInt("u_particleCount", m_particleCount);
+    m_normalsShader.setUInt("u_gridW",         m_gridW);
+    m_normalsShader.setUInt("u_gridH",         m_gridH);
+    glDispatchCompute(particleGroups, 1, 1);
+    glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+}
+
+void GpuClothSimulator::syncBuffersOnly()
+{
+    // Phase 10.9 Cl2: re-run only the normals shader (positions are
+    // assumed already current) and flag the CPU normal mirror dirty so
+    // the next getNormals() picks up the refreshed data. Avoids the
+    // 100 µs gravity tick that ClothComponent::syncMesh used to inject
+    // by calling simulate(0.0001f) just to trigger this dispatch.
+    if (!m_initialized || !m_shadersLoaded) return;
+    if (m_particleCount == 0) return;
+
+    const GLuint particleGroups = (m_particleCount + 63u) / 64u;
+    dispatchNormalsShader(particleGroups);
+    m_normalsDirty = true;
 }
 
 void GpuClothSimulator::reset()

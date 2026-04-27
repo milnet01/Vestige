@@ -745,14 +745,6 @@ private:
     glm::mat4 m_lastProjection = glm::mat4(1.0f);
     glm::mat4 m_lastView = glm::mat4(1.0f);
 
-    // Screen-space reflections (disabled until G-buffer in Phase 5)
-    Shader m_ssrShader;
-    std::unique_ptr<Framebuffer> m_ssrFbo;
-    bool m_ssrEnabled = false;  // Disabled: needs G-buffer for per-pixel roughness
-    float m_ssrMaxDistance = 5.0f;
-    float m_ssrThickness = 0.3f;
-    int m_ssrMaxSteps = 32;
-
     // Screen-space contact shadows
     Shader m_contactShadowShader;
     std::unique_ptr<Framebuffer> m_contactShadowFbo;

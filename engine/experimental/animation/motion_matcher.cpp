@@ -233,9 +233,42 @@ void MotionMatcher::buildQueryVector(float* query) const
         rootRotY = std::atan2(forward.x, -forward.z);
     }
 
+    // Phase 10.9 A3: rotate trajectory features into root-relative model
+    // space so the query frame-of-reference matches the database. The
+    // predictor returns world-aligned XZ deltas + world facing direction;
+    // MotionDatabase::extractFeatures pre-rotates by inverse root yaw at
+    // bake time.
+    rotateTrajectoryToRootSpace(trajPositions.data(), trajDirections.data(),
+                                numTraj, rootRotY);
+
     FeatureExtractor::extract(schema, currentPose, rootPos, rootRotY,
                               trajPositions.data(), trajDirections.data(),
                               query);
+}
+
+void MotionMatcher::rotateTrajectoryToRootSpace(glm::vec2* positions,
+                                                glm::vec2* directions,
+                                                int count,
+                                                float rootRotY)
+{
+    const float cosY = std::cos(-rootRotY);
+    const float sinY = std::sin(-rootRotY);
+    for (int i = 0; i < count; ++i)
+    {
+        const size_t si = static_cast<size_t>(i);
+        if (positions)
+        {
+            const glm::vec2 p = positions[si];
+            positions[si] = glm::vec2(cosY * p.x + sinY * p.y,
+                                      -sinY * p.x + cosY * p.y);
+        }
+        if (directions)
+        {
+            const glm::vec2 d = directions[si];
+            directions[si] = glm::vec2(cosY * d.x + sinY * d.y,
+                                       -sinY * d.x + cosY * d.y);
+        }
+    }
 }
 
 TrajectoryPredictor& MotionMatcher::getTrajectoryPredictor()

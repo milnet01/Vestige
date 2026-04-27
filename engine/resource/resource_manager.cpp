@@ -70,14 +70,6 @@ std::shared_ptr<Texture> ResourceManager::loadTexture(const std::string& filePat
     return texture;
 }
 
-void ResourceManager::processAsyncUploads()
-{
-    if (m_asyncLoader)
-    {
-        m_asyncLoader->processUploads(2);
-    }
-}
-
 std::shared_ptr<Texture> ResourceManager::getDefaultTexture()
 {
     if (!m_defaultTexture)

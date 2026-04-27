@@ -128,19 +128,24 @@ void ScriptContext::setOutput(const ScriptNodeInstance& node,
 
 void ScriptContext::triggerOutput(const ScriptNodeInstance& node, PinId pinId)
 {
-    const ScriptConnection* conn = findOutputConnection(node.nodeId, pinId);
-    if (!conn)
-    {
-        return; // No connection from this output — chain ends here
-    }
-
+    // Phase 10.9 Sc1: fire every connection fanning out from this output
+    // pin, not just the first. Templates like `DoOnce.Then → PlayAnim` AND
+    // `DoOnce.Then → PlaySound` are intentional and used by shipped
+    // gameplay templates; the previous `findOutputConnection` (first-match)
+    // call left the second target silently un-triggered.
+    //
     // Stash the target's input pin so the callee's execute lambda can read
     // it via ctx.entryPin() (audit L6 — Gate and other multi-input nodes).
-    // Save/restore around the call so back-to-back triggerOutput calls in
-    // the caller observe their own m_entryPin, not the last callee's.
+    // Save/restore around each call so back-to-back triggerOutput calls
+    // observe their own m_entryPin, not the last callee's.
     const PinId savedEntry = m_entryPin;
-    m_entryPin = internPin(conn->targetPin);
-    executeNode(conn->targetNode);
+    m_instance.forEachOutputConnection(
+        node.nodeId, pinId,
+        [this](const ScriptConnection& conn)
+        {
+            m_entryPin = internPin(conn.targetPin);
+            executeNode(conn.targetNode);
+        });
     m_entryPin = savedEntry;
 }
 

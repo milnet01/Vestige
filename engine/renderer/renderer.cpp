@@ -397,14 +397,6 @@ bool Renderer::loadShaders(const std::string& assetPath)
         m_depthReducer.reset();
     }
 
-    // Load screen-space reflections shader (disabled until G-buffer in Phase 5)
-    std::string ssrFragPath = assetPath + "/shaders/ssr.frag.glsl";
-    if (!m_ssrShader.loadFromFiles(screenVertPath, ssrFragPath))
-    {
-        Logger::error("Failed to load SSR shader");
-        return false;
-    }
-
     // Load screen-space contact shadow shader
     std::string contactShadowFragPath = assetPath + "/shaders/contact_shadows.frag.glsl";
     if (!m_contactShadowShader.loadFromFiles(screenVertPath, contactShadowFragPath))
@@ -632,9 +624,6 @@ void Renderer::initFramebuffers(int width, int height, int msaaSamples)
 
     // Contact shadow FBO (same config as SSAO — RGBA16F)
     m_contactShadowFbo = std::make_unique<Framebuffer>(ssaoConfig);
-
-    // SSR FBO (RGBA16F — stores reflected color + confidence in alpha)
-    m_ssrFbo = std::make_unique<Framebuffer>(ssaoConfig);
 
     // TAA FBOs (created regardless, used when mode is TAA)
     // Non-MSAA scene FBO for TAA (scene rendered here instead of MSAA FBO)

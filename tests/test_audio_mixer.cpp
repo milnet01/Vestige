@@ -210,6 +210,44 @@ TEST(AudioMixerResolve, ZeroDuckSilencesEveryBus_P3)
 
 // ---- P3 wiring: AudioEngine snapshot + Engine ownership -----------
 
+// ---- Phase 10.9 W7: pointer snapshot, not value copy --------------
+
+TEST(AudioEngineMixerSnapshot, DefaultsToNullPointer_W7)
+{
+    AudioEngine engine;
+    EXPECT_EQ(engine.getMixerSnapshot(), nullptr)
+        << "Fresh AudioEngine must not synthesise its own AudioMixer; the "
+           "AudioSystem publishes the engine-owned one.";
+}
+
+TEST(AudioEngineMixerSnapshot, StoresPointerNotCopy_W7)
+{
+    AudioEngine engine;
+    AudioMixer mixer;
+
+    engine.setMixerSnapshot(&mixer);
+    EXPECT_EQ(engine.getMixerSnapshot(), &mixer)
+        << "W7 contract: AudioEngine stores the mixer pointer rather than "
+           "copying the struct each frame. A fresh value-copy would change "
+           "address.";
+
+    // Mutating the publisher-owned mixer must be reflected in the AudioEngine
+    // — confirms it isn't a stale copy.
+    mixer.setBusGain(AudioBus::Sfx, 0.25f);
+    ASSERT_NE(engine.getMixerSnapshot(), nullptr);
+    EXPECT_NEAR(engine.getMixerSnapshot()->getBusGain(AudioBus::Sfx),
+                0.25f, kEps);
+}
+
+TEST(AudioEngineMixerSnapshot, NullptrRevertsToNoSnapshot_W7)
+{
+    AudioEngine engine;
+    AudioMixer mixer;
+    engine.setMixerSnapshot(&mixer);
+    engine.setMixerSnapshot(nullptr);
+    EXPECT_EQ(engine.getMixerSnapshot(), nullptr);
+}
+
 TEST(AudioEngineDuckSnapshot, DefaultsToUnity_P3)
 {
     AudioEngine engine;

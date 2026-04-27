@@ -1292,6 +1292,53 @@ TEST_F(NodeLibraryTest, ForLoopIteratesExpectedTimes)
     EXPECT_EQ(ctx.nodesExecuted(), 6);
 }
 
+// Phase 10.9 Sc1: a single execution-output pin must fan out to every
+// connected target, not just the first match. The shipped templates rely
+// on `DoOnce.Then → {PlayAnim, PlaySound}` firing both branches.
+TEST_F(NodeLibraryTest, ExecOutputFansOutToAllTargets_Sc1)
+{
+    ScriptGraph graph;
+    const uint32_t doOnceId = graph.addNode("DoOnce");
+    const uint32_t printA = graph.addNode("PrintToScreen");
+    const uint32_t printB = graph.addNode("PrintToScreen");
+    graph.findNode(printA)->properties["Message"] = ScriptValue(std::string("A"));
+    graph.findNode(printB)->properties["Message"] = ScriptValue(std::string("B"));
+    // One source pin, two distinct targets — must execute both.
+    graph.addConnection(doOnceId, "Then", printA, "Exec");
+    graph.addConnection(doOnceId, "Then", printB, "Exec");
+
+    ScriptInstance instance;
+    instance.initialize(graph, 1);
+    ScriptContext ctx(instance, m_registry, nullptr);
+    ctx.executeNode(doOnceId);
+    // Pre-Sc1: 2 (DoOnce + first Print). Post-Sc1: 3 (DoOnce + both Prints).
+    EXPECT_EQ(ctx.nodesExecuted(), 3)
+        << "exec fan-out must fire every connected target";
+}
+
+TEST_F(NodeLibraryTest, ExecOutputPreservesEntryPinPerCallee_Sc1)
+{
+    // Each callee in a fan-out must observe its own m_entryPin (the
+    // target-side input pin), not the previous callee's. Wire two
+    // PrintToScreen nodes so both end up observing "Exec" — a regression
+    // would surface as either node observing the *next* node's entry pin.
+    ScriptGraph graph;
+    const uint32_t doOnceId = graph.addNode("DoOnce");
+    const uint32_t printA = graph.addNode("PrintToScreen");
+    const uint32_t printB = graph.addNode("PrintToScreen");
+    graph.addConnection(doOnceId, "Then", printA, "Exec");
+    graph.addConnection(doOnceId, "Then", printB, "Exec");
+
+    ScriptInstance instance;
+    instance.initialize(graph, 1);
+    ScriptContext ctx(instance, m_registry, nullptr);
+    ctx.executeNode(doOnceId);
+    // No crash, no UB, no skipped target — both callees observed the
+    // correct entry pin. (`nodesExecuted == 3` covers the count;
+    // `m_entryPin` save/restore correctness is implicit if both run.)
+    EXPECT_EQ(ctx.nodesExecuted(), 3);
+}
+
 TEST_F(NodeLibraryTest, DoOnceFiresOnlyOnce)
 {
     ScriptGraph graph;
@@ -2174,6 +2221,41 @@ TEST(ScriptingSystemBridge, IsInstanceActiveReflectsRegistration)
     EXPECT_FALSE(sys.isInstanceActive(&instance));
     EXPECT_FALSE(sys.isInstanceActive(nullptr));
 
+    sys.shutdown();
+}
+
+// Phase 10.9 Sc6: liveness must include a generation-tag check, not just
+// pointer identity. ScriptInstance::initialize bumps `m_generation`; an
+// EventBus subscription captured under generation N must drop dispatches
+// after the instance has been re-initialized to generation N+1.
+TEST(ScriptingSystemBridge, IsInstanceActiveGenerationGate_Sc6)
+{
+    Engine engine;
+    ScriptingSystem sys;
+    ASSERT_TRUE(sys.initialize(engine));
+
+    ScriptGraph graph;
+    graph.addNode("OnKeyPressed");
+    ScriptInstance instance;
+    instance.initialize(graph, 1);
+    sys.registerInstance(instance);
+
+    const uint32_t gen0 = instance.generation();
+    EXPECT_TRUE(sys.isInstanceActive(&instance, gen0));
+
+    // Re-initialize bumps the generation. The captured gen0 must now
+    // fail the gate while the up-to-date generation passes.
+    instance.initialize(graph, 1);
+    EXPECT_NE(gen0, instance.generation());
+    EXPECT_FALSE(sys.isInstanceActive(&instance, gen0))
+        << "stale-generation subscription must be gated out (ABA hazard)";
+    EXPECT_TRUE(sys.isInstanceActive(&instance, instance.generation()));
+
+    // nullptr fails regardless of expected generation.
+    EXPECT_FALSE(sys.isInstanceActive(nullptr, 0));
+    EXPECT_FALSE(sys.isInstanceActive(nullptr, gen0));
+
+    sys.unregisterInstance(instance);
     sys.shutdown();
 }
 

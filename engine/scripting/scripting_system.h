@@ -88,6 +88,15 @@ public:
     /// instance that has already been unregistered or destroyed.
     bool isInstanceActive(const ScriptInstance* instance) const;
 
+    /// @brief Generation-aware liveness check (Phase 10.9 Sc6 / AUDIT §H9).
+    /// Returns true only when the pointer is registered AND the instance's
+    /// current generation matches the one captured at subscribe time. Closes
+    /// the ABA hazard where a re-initialised instance (which bumps its
+    /// generation in `ScriptInstance::initialize`) would otherwise dispatch
+    /// events captured under the previous graph state.
+    bool isInstanceActive(const ScriptInstance* instance,
+                          uint32_t expectedGeneration) const;
+
 private:
     /// @brief Register all built-in node types.
     void registerCoreNodes();

@@ -48,6 +48,9 @@ public:
 
     void initialize(const ClothConfig& config, uint32_t seed = 0) override;
     void simulate(float deltaTime) override;
+    /// Phase 10.9 Cl2 — re-runs only the normals shader and flags the
+    /// CPU mirror dirty. No integrate / wind / collide.
+    void syncBuffersOnly() override;
     void reset() override;
     bool isInitialized() const override { return m_initialized; }
     uint32_t getParticleCount() const override { return m_particleCount; }
@@ -223,6 +226,9 @@ private:
     void loadShadersIfNeeded();
     void readbackPositionsIfDirty() const;
     void readbackNormalsIfDirty() const;
+    /// Phase 10.9 Cl2 — dispatch only the cloth_normals compute shader.
+    /// Shared by `simulate()` and `syncBuffersOnly()`.
+    void dispatchNormalsShader(GLuint particleGroups);
 
     bool m_initialized = false;
     uint32_t m_particleCount = 0;

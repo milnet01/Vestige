@@ -26,7 +26,6 @@ add_executable(vestige_tests
     test_ssao.cpp
     test_transparency.cpp
     test_emissive_lighting.cpp
-    test_async_texture_loader.cpp
     test_taa.cpp
     test_text_rendering.cpp
     test_color_grading.cpp
