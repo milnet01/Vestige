@@ -8,7 +8,7 @@
 #include <glm/glm.hpp>
 
 #include <cstdint>
-#include <unordered_map>
+#include <map>
 
 namespace JPH { class BodyID; }
 
@@ -71,7 +71,10 @@ public:
 
 private:
     PhysicsWorld* m_physicsWorld = nullptr;
-    std::unordered_map<uint32_t, StasisState> m_stasisMap;
+    // std::map gives deterministic (sorted-by-bodyId) iteration so the
+    // per-frame slow-mo velocity-clamp pass and timed-expiry order are
+    // reproducible across runs — a hash-dependent order would not be.
+    std::map<uint32_t, StasisState> m_stasisMap;
 };
 
 } // namespace Vestige

@@ -349,7 +349,10 @@ ConstraintHandle PhysicsWorld::registerConstraint(JPH::TwoBodyConstraint* constr
 {
     ConstraintHandle handle;
     handle.index = m_nextConstraintIndex++;
-    handle.generation = ++m_constraintGeneration;
+    // Per-slot generation: a fresh slot starts at 1. Indices grow
+    // monotonically (no reuse), so the index alone disambiguates handles;
+    // generation is reserved for future slot recycling.
+    handle.generation = 1;
 
     PhysicsConstraint pc;
     pc.m_constraint = constraint;

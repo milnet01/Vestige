@@ -9,6 +9,28 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-27 Phase 10.9 — Ph6 (deterministic constraint storage)
+
+- **Ph6.** `PhysicsWorld::m_constraints` and `StasisSystem::m_stasisMap`
+  switch from `std::unordered_map` to `std::map`. Hash-dependent
+  iteration order would let break-order tests and Phase 11A replay
+  diverge between runs (or across stdlib versions); `std::map` orders
+  by index, which today matches insertion order because indices grow
+  monotonically. The global `m_constraintGeneration` counter is gone —
+  every fresh constraint slot starts at `generation = 1` (per-slot,
+  not global). Indices are not reused, so the index alone disambiguates
+  stale handles; the per-slot generation is in place for future slot
+  recycling. 2 new tests in `tests/test_physics_constraint.cpp` pin
+  the determinism contract: `Ph6_DeterministicAcrossWorlds` runs the
+  same allocation script on two independent worlds and asserts the
+  reported handle list is identical and ascending; `Ph6_NoIndexReuseAfterRemove`
+  pins that remove-then-add yields a fresh index with `generation = 1`,
+  not a recycled-with-bumped-generation slot.
+
+Also cleaned three pre-existing `unused-includes` clangd diagnostics
+in `tests/test_physics_constraint.cpp` (`jolt_helpers.h`, `<cmath>`,
+`SphereShape.h`).
+
 ### 2026-04-27 Phase 10.9 — Wave 4 (audit fast-wins, 13 items)
 
 Closes the next 13 items from the Phase 10.9 audit triage in numerical

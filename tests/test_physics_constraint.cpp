@@ -5,14 +5,10 @@
 /// @brief Unit tests for the PhysicsConstraint system.
 #include "physics/physics_world.h"
 #include "physics/physics_constraint.h"
-#include "physics/jolt_helpers.h"
 
 #include <Jolt/Physics/Collision/Shape/BoxShape.h>
-#include <Jolt/Physics/Collision/Shape/SphereShape.h>
 
 #include <gtest/gtest.h>
-
-#include <cmath>
 
 using namespace Vestige;
 
@@ -481,4 +477,75 @@ TEST_F(PhysicsConstraintTest, GetConstraintHandles)
     world.removeConstraint(h2);
     handles = world.getConstraintHandles();
     EXPECT_TRUE(handles.empty());
+}
+
+// ---------------------------------------------------------------------------
+// Phase 10.9 Ph6: Deterministic iteration order
+// ---------------------------------------------------------------------------
+// Hash-dependent iteration order over m_constraints would let
+// break-order tests and Phase 11A replay diverge between runs (or
+// across stdlib versions). std::map orders by index, which matches
+// insertion order because indices grow monotonically. Pin that the
+// reported handles are sorted by index across two independent worlds
+// built from the same script.
+TEST(PhysicsConstraintIterationOrder, Ph6_DeterministicAcrossWorlds)
+{
+    auto buildAndCollect = []() {
+        PhysicsWorld w;
+        EXPECT_TRUE(w.initialize());
+        JPH::BoxShape* box = new JPH::BoxShape(JPH::Vec3(0.5f, 0.5f, 0.5f));
+        JPH::BodyID a = w.createDynamicBody(box, glm::vec3(0, 2, 0));
+        JPH::BodyID b = w.createDynamicBody(box, glm::vec3(2, 2, 0));
+        JPH::BodyID c = w.createDynamicBody(box, glm::vec3(4, 2, 0));
+        // Insert in a fixed sequence — the resulting handle list must
+        // come back in the same order every time.
+        w.addFixedConstraint(a, b);
+        w.addPointConstraint(b, c, glm::vec3(3, 2, 0));
+        w.addFixedConstraint(a, c);
+        std::vector<uint32_t> indices;
+        for (const auto& h : w.getConstraintHandles())
+        {
+            indices.push_back(h.index);
+        }
+        w.shutdown();
+        return indices;
+    };
+
+    const auto run1 = buildAndCollect();
+    const auto run2 = buildAndCollect();
+    ASSERT_EQ(run1.size(), 3u);
+    EXPECT_EQ(run1, run2);
+    // Indices must be sorted ascending — that is the determinism contract.
+    for (size_t i = 1; i < run1.size(); ++i)
+    {
+        EXPECT_LT(run1[i - 1], run1[i])
+            << "Ph6: constraint iteration must be ordered by index, "
+               "not hash bucket";
+    }
+}
+
+// Ph6 follow-on: removing then adding does not collapse generations
+// onto a stale index. Today indices grow monotonically (no reuse), so
+// a fresh handle gets a *new* index — confirm the contract.
+TEST(PhysicsConstraintIterationOrder, Ph6_NoIndexReuseAfterRemove)
+{
+    PhysicsWorld w;
+    ASSERT_TRUE(w.initialize());
+    JPH::BoxShape* box = new JPH::BoxShape(JPH::Vec3(0.5f, 0.5f, 0.5f));
+    JPH::BodyID a = w.createDynamicBody(box, glm::vec3(0, 2, 0));
+    JPH::BodyID b = w.createDynamicBody(box, glm::vec3(2, 2, 0));
+
+    ConstraintHandle h1 = w.addFixedConstraint(a, b);
+    w.removeConstraint(h1);
+    ConstraintHandle h2 = w.addFixedConstraint(a, b);
+
+    EXPECT_NE(h1.index, h2.index)
+        << "Ph6: indices should grow monotonically — recycling them "
+           "without bumping a per-slot generation would let a stale "
+           "handle silently resolve to the new constraint";
+    // Per-slot generation: every fresh slot starts at 1 (no global
+    // counter incrementing across allocations).
+    EXPECT_EQ(h2.generation, 1u);
+
+    w.shutdown();
 }

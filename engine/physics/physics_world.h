@@ -18,8 +18,8 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 
+#include <map>
 #include <memory>
-#include <unordered_map>
 #include <vector>
 
 namespace Vestige
@@ -205,10 +205,14 @@ private:
     float m_accumulator = 0.0f;
     bool m_initialized = false;
 
-    // Constraint storage
-    std::unordered_map<uint32_t, PhysicsConstraint> m_constraints;
+    // Constraint storage. std::map gives deterministic (sorted-by-index)
+    // iteration so break-order tests and Phase 11A replay are reproducible
+    // — a hash-dependent order would not be. Per-slot generation lives on
+    // each PhysicsConstraint::m_handle (initialised to 1 on insert), not
+    // a global counter; indices are not reused today, so no global state
+    // is needed to disambiguate stale handles.
+    std::map<uint32_t, PhysicsConstraint> m_constraints;
     uint32_t m_nextConstraintIndex = 0;
-    uint32_t m_constraintGeneration = 0;
 
     /// @brief Resolves bodyA for constraint creation. Invalid ID = Body::sFixedToWorld.
     JPH::Body* resolveBodyA(JPH::BodyID bodyA);
