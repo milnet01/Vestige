@@ -809,21 +809,26 @@ bool Engine::initialize(const EngineConfig& config)
 
             case GLFW_KEY_E:
             {
-                // Interact with physics objects — raycast + impulse
+                // Interact with physics objects — raycast + impulse.
+                // Phase 10.9 Ph2: use the (dir, maxDistance) overload so
+                // `interactRange` only appears once on the input side
+                // and `hitDistance` comes back in world units —
+                // eliminating the `dir * range` then `fraction * range`
+                // double-scaling pattern.
                 if (m_physicsWorld.isInitialized() && m_isCursorCaptured)
                 {
-                    glm::vec3 origin = m_camera->getPosition();
-                    glm::vec3 dir = m_camera->getFront();
-                    float interactRange = 3.0f;
-                    float interactForce = 5.0f;
+                    const glm::vec3 origin = m_camera->getPosition();
+                    const glm::vec3 dir = m_camera->getFront();
+                    const float interactRange = 3.0f;
+                    const float interactForce = 5.0f;
 
                     JPH::BodyID hitBody;
-                    float fraction = 0.0f;
-                    if (m_physicsWorld.rayCast(origin, dir * interactRange, hitBody, fraction))
+                    float hitDistance = 0.0f;
+                    if (m_physicsWorld.rayCast(origin, dir, interactRange, hitBody, hitDistance))
                     {
                         if (m_physicsWorld.getBodyMotionType(hitBody) == JPH::EMotionType::Dynamic)
                         {
-                            glm::vec3 hitPoint = origin + dir * fraction * interactRange;
+                            const glm::vec3 hitPoint = origin + dir * hitDistance;
                             m_physicsWorld.applyImpulseAtPoint(hitBody, dir * interactForce, hitPoint);
                         }
                     }

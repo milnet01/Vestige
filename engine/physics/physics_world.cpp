@@ -11,6 +11,7 @@
 #include <Jolt/Core/Factory.h>
 #include <Jolt/Physics/Body/BodyCreationSettings.h>
 #include <Jolt/Physics/Body/BodyActivationListener.h>
+#include <Jolt/Physics/Body/BodyFilter.h>
 #include <Jolt/Physics/Collision/RayCast.h>
 #include <Jolt/Physics/Collision/CastResult.h>
 #include <Jolt/Physics/Constraints/HingeConstraint.h>
@@ -746,6 +747,41 @@ bool PhysicsWorld::rayCast(const glm::vec3& origin, const glm::vec3& direction,
     {
         outBodyId = result.mBodyID;
         outFraction = result.mFraction;
+    }
+
+    return hit;
+}
+
+bool PhysicsWorld::rayCast(const glm::vec3& origin, const glm::vec3& direction,
+                            float maxDistance,
+                            JPH::BodyID& outBodyId, float& outHitDistance,
+                            JPH::BodyID ignoreBodyId) const
+{
+    if (!m_initialized || maxDistance <= 0.0f)
+    {
+        return false;
+    }
+
+    // Phase 10.9 Ph2: Construct the Jolt ray with `direction * maxDistance`
+    // exactly once — caller hands us the unit direction and the range
+    // separately, and we compute the world-unit hit distance from the
+    // returned fraction here. Removes the `dir * range` then
+    // `fraction * range` double-scaling pattern from the call site.
+    const JPH::RRayCast ray(toJolt(origin), toJolt(direction * maxDistance));
+    JPH::RayCastResult result;
+
+    const JPH::NarrowPhaseQuery& query = m_physicsSystem->GetNarrowPhaseQuery();
+    const bool hit = ignoreBodyId.IsInvalid()
+        ? query.CastRay(ray, result)
+        : query.CastRay(ray, result,
+                        JPH::BroadPhaseLayerFilter{},
+                        JPH::ObjectLayerFilter{},
+                        JPH::IgnoreSingleBodyFilter{ignoreBodyId});
+
+    if (hit)
+    {
+        outBodyId = result.mBodyID;
+        outHitDistance = result.mFraction * maxDistance;
     }
 
     return hit;

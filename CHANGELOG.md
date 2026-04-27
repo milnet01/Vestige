@@ -9,6 +9,25 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-27 Phase 10.9 — Ph2 (rayCast self-exclude + double-scaling fix)
+
+- **Ph2.** New `PhysicsWorld::rayCast` overload separates direction
+  from range and writes the hit distance in world units:
+  `bool rayCast(origin, direction, maxDistance, &outBodyId, &outHitDistance, ignoreBodyId = {})`.
+  The older `(origin, direction, &outBodyId, &outFraction)` overload
+  is kept for backward compat but the new shape is preferred for new
+  code — it eliminates the `dir * range` then `fraction * range`
+  double-scaling pattern (range had to appear at two call-sites in
+  lockstep, which was easy to drift). `engine.cpp::handleKey(GLFW_KEY_E)`
+  (the player interact-impulse path) is migrated to the new overload.
+  The optional `ignoreBodyId` parameter wires `JPH::IgnoreSingleBodyFilter`
+  for self-hit exclusion (Phase 11B combat + grab system prerequisite —
+  the player's own collider must not block their own raycast).
+  3 new tests in `tests/test_physics_world.cpp`:
+  `Ph2_HitDistanceIsWorldUnits` (hit distance is in world units, not
+  a fraction), `Ph2_IgnoreBodyExcludesSelfHit` (ignoring the closer
+  body lets the cast land on a farther one), `Ph2_ZeroOrNegativeRangeMisses`.
+
 ### 2026-04-27 Phase 10.9 — Ph7 (Hughes-Möller slider basis)
 
 - **Ph7.** `PhysicsWorld::addSliderConstraint` builds the

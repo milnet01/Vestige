@@ -210,6 +210,82 @@ TEST(PhysicsWorld, DestroyInvalidBodyIsSafe)
 }
 
 // ---------------------------------------------------------------------------
+// Phase 10.9 Ph2: rayCast (dir, maxDistance, ignoreBody) overload
+// ---------------------------------------------------------------------------
+// The newer overload separates direction from maxDistance and writes
+// the hit distance in world units, removing the `dir * range` then
+// `fraction * range` double-scaling pattern at the call site. It also
+// takes an optional ignoreBodyId for self-hit exclusion (Phase 11B
+// combat / grab need this to skip the player's own collider).
+
+TEST(PhysicsWorldRayCast, Ph2_HitDistanceIsWorldUnits)
+{
+    PhysicsWorld world;
+    ASSERT_TRUE(world.initialize());
+
+    // Static box centred at (5, 0, 0), half-extents (1, 1, 1) — front
+    // face at x = 4. Cast from origin along +X, range 10.
+    JPH::BoxShape* box = new JPH::BoxShape(JPH::Vec3(1, 1, 1));
+    JPH::BodyID b = world.createStaticBody(box, glm::vec3(5, 0, 0));
+
+    JPH::BodyID hitBody;
+    float hitDistance = -1.0f;
+    const bool hit = world.rayCast(glm::vec3(0, 0, 0), glm::vec3(1, 0, 0),
+                                   10.0f, hitBody, hitDistance);
+    EXPECT_TRUE(hit);
+    EXPECT_EQ(hitBody, b);
+    // Front face is at x = 4; hit distance is in world units, not a
+    // fraction. Old API would have set outFraction = 0.4 (= 4 / 10).
+    EXPECT_NEAR(hitDistance, 4.0f, 1e-3f);
+
+    world.shutdown();
+}
+
+TEST(PhysicsWorldRayCast, Ph2_IgnoreBodyExcludesSelfHit)
+{
+    PhysicsWorld world;
+    ASSERT_TRUE(world.initialize());
+
+    JPH::BoxShape* nearBox = new JPH::BoxShape(JPH::Vec3(0.5f, 0.5f, 0.5f));
+    JPH::BoxShape* farBox = new JPH::BoxShape(JPH::Vec3(0.5f, 0.5f, 0.5f));
+    JPH::BodyID near_ = world.createStaticBody(nearBox, glm::vec3(2, 0, 0));
+    JPH::BodyID far_ = world.createStaticBody(farBox, glm::vec3(8, 0, 0));
+
+    // Without filter, the closer body wins.
+    JPH::BodyID hit;
+    float distance = 0.0f;
+    EXPECT_TRUE(world.rayCast(glm::vec3(0, 0, 0), glm::vec3(1, 0, 0),
+                              20.0f, hit, distance));
+    EXPECT_EQ(hit, near_);
+
+    // With ignoreBody = near_, the cast skips it and lands on far_.
+    EXPECT_TRUE(world.rayCast(glm::vec3(0, 0, 0), glm::vec3(1, 0, 0),
+                              20.0f, hit, distance, near_));
+    EXPECT_EQ(hit, far_);
+    EXPECT_GT(distance, 5.0f);  // Front face of far_ at x = 7.5
+
+    world.shutdown();
+}
+
+TEST(PhysicsWorldRayCast, Ph2_ZeroOrNegativeRangeMisses)
+{
+    PhysicsWorld world;
+    ASSERT_TRUE(world.initialize());
+
+    JPH::BoxShape* box = new JPH::BoxShape(JPH::Vec3(1, 1, 1));
+    world.createStaticBody(box, glm::vec3(2, 0, 0));
+
+    JPH::BodyID hit;
+    float distance = 0.0f;
+    EXPECT_FALSE(world.rayCast(glm::vec3(0, 0, 0), glm::vec3(1, 0, 0),
+                               0.0f, hit, distance));
+    EXPECT_FALSE(world.rayCast(glm::vec3(0, 0, 0), glm::vec3(1, 0, 0),
+                               -1.0f, hit, distance));
+
+    world.shutdown();
+}
+
+// ---------------------------------------------------------------------------
 // Coordinate conversion helpers
 // ---------------------------------------------------------------------------
 

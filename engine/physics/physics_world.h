@@ -180,8 +180,34 @@ public:
     /// @param outBodyId Set to the hit body ID if hit occurred.
     /// @param outFraction Set to the fraction along the ray [0,1] where the hit occurred.
     /// @return True if a body was hit.
+    /// @note The newer overload that takes a `maxDistance` and writes
+    ///       a world-unit `outHitDistance` is preferred for new code —
+    ///       it avoids the `dir * range` then `fraction * range`
+    ///       double-scaling pattern at the call site.
     bool rayCast(const glm::vec3& origin, const glm::vec3& direction,
                  JPH::BodyID& outBodyId, float& outFraction) const;
+
+    /// @brief Casts a ray with an optional ignore-self filter.
+    ///
+    /// Direction is treated as a unit vector and `maxDistance` carries
+    /// the range — separating them removes the
+    ///     dir = unit * range; outFraction; hitPoint = origin + unit * outFraction * range
+    /// pattern that the older overload encourages, where `range` has
+    /// to appear at two call-sites in lockstep.
+    ///
+    /// @param origin Ray origin in world space.
+    /// @param direction Unit-length ray direction.
+    /// @param maxDistance Maximum cast distance in world units.
+    /// @param outBodyId Set to the hit body ID if hit occurred.
+    /// @param outHitDistance Set to the world-unit distance from origin to hit.
+    /// @param ignoreBodyId Optional body to exclude (e.g. the player's
+    ///        own collider for combat / grab raycasts). Pass an
+    ///        invalid `JPH::BodyID` (the default) to disable.
+    /// @return True if a body was hit.
+    bool rayCast(const glm::vec3& origin, const glm::vec3& direction,
+                 float maxDistance,
+                 JPH::BodyID& outBodyId, float& outHitDistance,
+                 JPH::BodyID ignoreBodyId = JPH::BodyID()) const;
 
     /// @brief Applies an impulse at a specific world-space point on a body.
     void applyImpulseAtPoint(JPH::BodyID bodyId,
