@@ -1043,6 +1043,53 @@ TEST_F(NodeLibraryTest, MathDivGuardsAgainstZero)
     EXPECT_FLOAT_EQ(f.instance.getNodeInstance(id)->outputValues[internPin("Result")].asFloat(), 0.0f);
 }
 
+TEST_F(NodeLibraryTest, MathDivExactZeroPolicyMatchesSafeDiv_Sc5)
+{
+    // Phase 10.9 Slice 14 Sc5 — divisors below 1e-9 but not exactly zero
+    // used to be classified as div-by-zero by MathDiv (returning 0)
+    // while ExpressionEvaluator + codegen_cpp + codegen_glsl all
+    // computed `a / b`. The policy is now exact-zero only across the
+    // four sites, so a tiny finite divisor goes through the real
+    // division path.
+    PureNodeFixture f;
+    uint32_t id = f.addNode("MathDiv");
+    f.setProp(id, "A", ScriptValue(1.0f));
+    // 1e-12 is well below the old 1e-9 cliff but is a perfectly valid
+    // finite divisor — the result is 1e12, which is finite.
+    f.setProp(id, "B", ScriptValue(1e-12f));
+    f.initialize();
+
+    ScriptContext ctx(f.instance, m_registry, nullptr);
+    ctx.executeNode(id);
+
+    const float r = f.instance.getNodeInstance(id)
+                        ->outputValues[internPin("Result")].asFloat();
+    EXPECT_GT(r, 1e11f) << "tiny finite divisor must take the real "
+                           "division path, not the zero short-circuit";
+}
+
+TEST_F(NodeLibraryTest, MathDivProjectsInfiniteResultsToZero_Sc5)
+{
+    // The non-finite isfinite() guard added alongside the exact-zero
+    // policy is the belt-and-braces. If `a / b` were ever to overflow
+    // to inf (denormalised inputs in principle), Sc5 contracts that
+    // the result is projected to 0 in keeping with SafeMath's
+    // "degenerate math goes to 0" convention.
+    PureNodeFixture f;
+    uint32_t id = f.addNode("MathDiv");
+    f.setProp(id, "A", ScriptValue(std::numeric_limits<float>::max()));
+    f.setProp(id, "B", ScriptValue(std::numeric_limits<float>::min()));
+    f.initialize();
+
+    ScriptContext ctx(f.instance, m_registry, nullptr);
+    ctx.executeNode(id);
+
+    const float r = f.instance.getNodeInstance(id)
+                        ->outputValues[internPin("Result")].asFloat();
+    EXPECT_TRUE(std::isfinite(r))
+        << "MathDiv must keep the graph in finite-value space";
+}
+
 TEST_F(NodeLibraryTest, MathClampClampsToRange)
 {
     PureNodeFixture f;

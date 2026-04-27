@@ -249,37 +249,19 @@ void audioFromJson(const json& j, AudioSettings& a)
 
 // --- Controls ---
 
-json bindingToJson(const InputBindingWire& b)
-{
-    return json{
-        {"device",   b.device},
-        {"scancode", b.scancode},
-    };
-}
-
-InputBindingWire bindingFromJson(const json& j)
-{
-    InputBindingWire b;
-    b.device   = j.value("device", std::string("none"));
-    b.scancode = j.value("scancode", -1);
-    if (b.device == "none")
-    {
-        b.scancode = -1;
-    }
-    return b;
-}
+// Per-binding JSON helpers (`bindingToJson`, `bindingFromJson`,
+// `actionBindingToJson`, `actionBindingFromJson`) live in
+// `engine/input/input_bindings_wire.cpp` since Phase 10.9 Slice 9 I2.
+// `controlsToJson` / `controlsFromJson` below stay here as the
+// settings-domain orchestrator that wraps action bindings in the
+// surrounding mouse-sensitivity / deadzone fields.
 
 json controlsToJson(const ControlsSettings& c)
 {
     json bindings = json::array();
     for (const auto& ab : c.bindings)
     {
-        bindings.push_back(json{
-            {"id",        ab.id},
-            {"primary",   bindingToJson(ab.primary)},
-            {"secondary", bindingToJson(ab.secondary)},
-            {"gamepad",   bindingToJson(ab.gamepad)},
-        });
+        bindings.push_back(actionBindingToJson(ab));
     }
     return json{
         {"mouseSensitivity",     c.mouseSensitivity},
@@ -307,21 +289,7 @@ void controlsFromJson(const json& j, ControlsSettings& c)
             {
                 continue;
             }
-            ActionBindingWire ab;
-            ab.id = entry["id"].get<std::string>();
-            if (entry.contains("primary")   && entry["primary"].is_object())
-            {
-                ab.primary = bindingFromJson(entry["primary"]);
-            }
-            if (entry.contains("secondary") && entry["secondary"].is_object())
-            {
-                ab.secondary = bindingFromJson(entry["secondary"]);
-            }
-            if (entry.contains("gamepad")   && entry["gamepad"].is_object())
-            {
-                ab.gamepad = bindingFromJson(entry["gamepad"]);
-            }
-            c.bindings.push_back(std::move(ab));
+            c.bindings.push_back(actionBindingFromJson(entry));
         }
     }
 }

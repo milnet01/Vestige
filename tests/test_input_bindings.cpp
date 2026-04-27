@@ -9,6 +9,9 @@
 
 #include "core/logger.h"
 #include "input/input_bindings.h"
+#include "input/input_bindings_wire.h"
+
+#include <nlohmann/json.hpp>
 
 #include <GLFW/glfw3.h>
 
@@ -448,3 +451,133 @@ TEST(InputActionMap, KeyboardDisplayCoversNumpadAndSystemKeys_I6)
     EXPECT_EQ(bindingDisplayLabel(InputBinding::key(GLFW_KEY_WORLD_1)), "World 1");
     EXPECT_EQ(bindingDisplayLabel(InputBinding::key(GLFW_KEY_WORLD_2)), "World 2");
 }
+
+// ---------------------------------------------------------------------------
+// Phase 10.9 Slice 9 I2 — wire-format helpers relocated to engine/input/.
+// These tests pin the round-trip in the new home so a future move back to
+// settings.cpp would have to update both files.
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Phase 10.9 Slice 9 I4 — findConflicts only returns same-device collisions.
+// ---------------------------------------------------------------------------
+
+TEST(InputActionMap, FindConflictsSameKeycodeDifferentDevicesNoConflict_I4)
+{
+    // Jump.gamepad bound to gamepad button 0; querying keyboard scan-code
+    // 0 must not surface Jump as a conflict — the two are on different
+    // hardware and physically can't collide.
+    InputActionMap m;
+    InputAction jump;
+    jump.id      = "Jump";
+    jump.gamepad = InputBinding::gamepad(0);
+    m.addAction(jump);
+
+    auto cs = m.findConflicts(InputBinding::key(0));
+    EXPECT_TRUE(cs.empty());
+}
+
+TEST(InputActionMap, FindConflictsKeyboardConflictsOnlyWithKeyboardSlot_I4)
+{
+    // Crouch.primary on keyboard:C; Fire.gamepad on gamepad:C-equivalent
+    // (deliberately same code value, different device). Querying
+    // keyboard:C should surface only Crouch.
+    InputActionMap m;
+    InputAction crouch;
+    crouch.id      = "Crouch";
+    crouch.primary = InputBinding::key(67);  // arbitrary scan code
+    m.addAction(crouch);
+
+    InputAction fire;
+    fire.id      = "Fire";
+    fire.gamepad = InputBinding::gamepad(67);  // same code, different device
+    m.addAction(fire);
+
+    auto cs = m.findConflicts(InputBinding::key(67));
+    ASSERT_EQ(cs.size(), 1u);
+    EXPECT_EQ(cs[0], "Crouch");
+}
+
+TEST(InputActionMap, FindConflictsGamepadIgnoresKeyboardAndMouseSlots_I4)
+{
+    // Mirror of the prior test: querying gamepad:0 must skip a keyboard
+    // slot bound at the same code value.
+    InputActionMap m;
+    InputAction crouch;
+    crouch.id      = "Crouch";
+    crouch.primary = InputBinding::key(0);  // keyboard scan code 0
+    m.addAction(crouch);
+
+    InputAction fire;
+    fire.id      = "Fire";
+    fire.gamepad = InputBinding::gamepad(0);
+    m.addAction(fire);
+
+    auto cs = m.findConflicts(InputBinding::gamepad(0));
+    ASSERT_EQ(cs.size(), 1u);
+    EXPECT_EQ(cs[0], "Fire");
+}
+
+TEST(InputBindingsWire, BindingRoundTripIsSymmetric_I2)
+{
+    InputBindingWire b;
+    b.device   = "keyboard";
+    b.scancode = 38;  // some scan code
+
+    const nlohmann::json j = bindingToJson(b);
+    EXPECT_EQ(j["device"],   "keyboard");
+    EXPECT_EQ(j["scancode"], 38);
+
+    const InputBindingWire b2 = bindingFromJson(j);
+    EXPECT_EQ(b2, b);
+}
+
+TEST(InputBindingsWire, BindingFromJsonNoneClearsScancode_I2)
+{
+    // When device is "none", scancode collapses to -1 even if the
+    // input JSON tries to record one. Pinned because the contract is
+    // load-bearing: a deserialised "none" binding must compare equal
+    // to InputBinding::none() regardless of which scancode the file
+    // happened to carry.
+    nlohmann::json j;
+    j["device"]   = "none";
+    j["scancode"] = 99;
+
+    const InputBindingWire b = bindingFromJson(j);
+    EXPECT_EQ(b.device, "none");
+    EXPECT_EQ(b.scancode, -1);
+}
+
+TEST(InputBindingsWire, ActionBindingRoundTripIsSymmetric_I2)
+{
+    ActionBindingWire ab;
+    ab.id              = "Jump";
+    ab.primary.device  = "keyboard";
+    ab.primary.scancode = 65;
+    ab.secondary.device = "none";
+    ab.gamepad.device   = "gamepad";
+    ab.gamepad.scancode = 0;
+
+    const nlohmann::json j = actionBindingToJson(ab);
+    EXPECT_EQ(j["id"], "Jump");
+
+    const ActionBindingWire ab2 = actionBindingFromJson(j);
+    EXPECT_EQ(ab2, ab);
+}
+
+TEST(InputBindingsWire, ActionBindingFromJsonMissingFieldsTakeDefaults_I2)
+{
+    // An older settings file might lack the secondary or gamepad slot
+    // entirely. The from-JSON helper must default-construct them rather
+    // than throw or silently leave the slot in an undefined state.
+    nlohmann::json j;
+    j["id"]      = "Fire";
+    j["primary"] = nlohmann::json{{"device", "mouse"}, {"scancode", 0}};
+
+    const ActionBindingWire ab = actionBindingFromJson(j);
+    EXPECT_EQ(ab.id, "Fire");
+    EXPECT_EQ(ab.primary.device, "mouse");
+    EXPECT_EQ(ab.secondary, InputBindingWire{});
+    EXPECT_EQ(ab.gamepad, InputBindingWire{});
+}
+

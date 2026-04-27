@@ -74,12 +74,18 @@ bool drawGradientEditor(const char* label, ColorGradient& gradient, float width,
                       ImVec2(barPos.x + barWidth, barPos.y + height),
                       IM_COL32(80, 80, 80, 255));
 
-    // Track selected stop for color editing
-    static int s_selectedStop = -1;
-    static ImGuiID s_selectedGradientId = 0;
-    static int s_dragStop = -1;
-    static ImGuiID s_dragGradientId = 0;
-    ImGuiID gradientId = ImGui::GetID("##GradientBar");
+    // Phase 10.9 Slice 12 Ed9 — selected-stop and drag-stop state moved
+    // out of file-static variables into per-widget storage via
+    // `ImGui::GetStateStorage()`. Two gradient editors in the same panel
+    // (e.g. emission gradient + tint gradient on a particle preset) used
+    // to share the static slots through their gradientId qualifier; per-
+    // widget storage scoped under the `PushID(label)` block keeps each
+    // instance's selection and drag independent.
+    ImGuiStorage* storage = ImGui::GetStateStorage();
+    const ImGuiID selectedKey = ImGui::GetID("##selectedStop");
+    const ImGuiID dragKey     = ImGui::GetID("##dragStop");
+    int selectedStop = storage->GetInt(selectedKey, -1);
+    int dragStop     = storage->GetInt(dragKey, -1);
 
     // Draw stop markers and handle interaction
     ImVec2 mousePos = ImGui::GetMousePos();
@@ -106,7 +112,7 @@ bool drawGradientEditor(const char* label, ColorGradient& gradient, float width,
         drawList->AddTriangleFilled(tri[0], tri[1], tri[2], fillCol);
 
         // Border (highlight if selected)
-        bool isSelected = (s_selectedStop == i && s_selectedGradientId == gradientId);
+        bool isSelected = (selectedStop == i);
         ImU32 borderCol = isSelected ? IM_COL32(255, 200, 50, 255) : IM_COL32(200, 200, 200, 255);
         drawList->AddTriangle(tri[0], tri[1], tri[2], borderCol, 2.0f);
 
@@ -118,14 +124,14 @@ bool drawGradientEditor(const char* label, ColorGradient& gradient, float width,
         // Click to select
         if (isHovered && overMarker && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
         {
-            s_selectedStop = i;
-            s_selectedGradientId = gradientId;
-            s_dragStop = i;
-            s_dragGradientId = gradientId;
+            selectedStop = i;
+            dragStop = i;
+            storage->SetInt(selectedKey, selectedStop);
+            storage->SetInt(dragKey,     dragStop);
         }
 
         // Drag to reposition
-        bool isDragging = (s_dragStop == i && s_dragGradientId == gradientId);
+        bool isDragging = (dragStop == i);
         if (isDragging && ImGui::IsMouseDown(ImGuiMouseButton_Left))
         {
             float newPos = std::clamp((mousePos.x - barPos.x) / barWidth, 0.0f, 1.0f);
@@ -135,8 +141,8 @@ bool drawGradientEditor(const char* label, ColorGradient& gradient, float width,
 
         if (isDragging && ImGui::IsMouseReleased(ImGuiMouseButton_Left))
         {
-            s_dragStop = -1;
-            s_dragGradientId = 0;
+            dragStop = -1;
+            storage->SetInt(dragKey, dragStop);
             gradient.sort();
             modified = true;
         }
@@ -147,9 +153,10 @@ bool drawGradientEditor(const char* label, ColorGradient& gradient, float width,
             if (gradient.stops.size() > 2)
             {
                 gradient.removeStop(i);
-                if (s_selectedStop >= static_cast<int>(gradient.stops.size()))
+                if (selectedStop >= static_cast<int>(gradient.stops.size()))
                 {
-                    s_selectedStop = static_cast<int>(gradient.stops.size()) - 1;
+                    selectedStop = static_cast<int>(gradient.stops.size()) - 1;
+                    storage->SetInt(selectedKey, selectedStop);
                 }
                 modified = true;
                 --i;
@@ -160,25 +167,24 @@ bool drawGradientEditor(const char* label, ColorGradient& gradient, float width,
 
     // Double-click on bar to add new stop
     if (isHovered && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)
-        && s_dragStop == -1
+        && dragStop == -1
         && mousePos.y >= barPos.y && mousePos.y <= barPos.y + height)
     {
         float newPos = std::clamp((mousePos.x - barPos.x) / barWidth, 0.0f, 1.0f);
         glm::vec4 newColor = gradient.evaluate(newPos);
         gradient.addStop(newPos, newColor);
-        s_selectedStop = -1;  // Will be found on next frame
-        s_selectedGradientId = gradientId;
+        selectedStop = -1;  // Will be found on next frame
+        storage->SetInt(selectedKey, selectedStop);
         modified = true;
     }
 
     // Color picker for selected stop
-    if (s_selectedGradientId == gradientId
-        && s_selectedStop >= 0
-        && s_selectedStop < static_cast<int>(gradient.stops.size()))
+    if (selectedStop >= 0
+        && selectedStop < static_cast<int>(gradient.stops.size()))
     {
-        auto& stop = gradient.stops[static_cast<size_t>(s_selectedStop)];
+        auto& stop = gradient.stops[static_cast<size_t>(selectedStop)];
         ImGui::Spacing();
-        ImGui::Text("Stop %d (pos: %.2f)", s_selectedStop,
+        ImGui::Text("Stop %d (pos: %.2f)", selectedStop,
                     static_cast<double>(stop.position));
         if (ImGui::ColorEdit4("##StopColor", &stop.color.x,
                               ImGuiColorEditFlags_AlphaBar | ImGuiColorEditFlags_AlphaPreviewHalf))

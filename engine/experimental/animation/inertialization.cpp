@@ -79,12 +79,15 @@ void Inertialization::start(const std::vector<glm::vec3>& srcPositions,
             if (diff.w < 0.0f)
                 diff = -diff;
 
-            // Convert to axis-angle
-            float angle = 2.0f * std::acos(glm::clamp(diff.w, -1.0f, 1.0f));
-            float sinHalf = std::sin(angle / 2.0f);
-            if (angle > 1e-6f && sinHalf > 1e-6f)
+            // Axis-angle via sqrt(1-w²) (AUDIT A5): acos(w) loses precision near
+            // w≈±1 and sin(angle/2) recomputes what we already have. atan2 is
+            // monotone and well-defined across the full domain.
+            const float w = glm::clamp(diff.w, -1.0f, 1.0f);
+            const float sinHalf = std::sqrt(std::max(0.0f, 1.0f - w * w));
+            if (sinHalf > 1e-6f)
             {
                 glm::vec3 axis(diff.x / sinHalf, diff.y / sinHalf, diff.z / sinHalf);
+                const float angle = 2.0f * std::atan2(sinHalf, w);
                 state.rotationOffset = axis * angle;
             }
             else

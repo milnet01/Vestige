@@ -49,6 +49,14 @@ public:
     ///        (Phase 10.9 Slice 11 Sy1).
     UpdatePhase getUpdatePhase() const override { return UpdatePhase::Render; }
 
+    /// @brief Phase 10.9 Slice 8 W5 — UISystem owns the screen-stack,
+    ///        notification queue, theme, and modal state as global
+    ///        infrastructure, not as per-entity components. The system
+    ///        must keep ticking with zero scene entities (HUD, pause
+    ///        menus, settings dialogs, toast queue), so it forces
+    ///        itself active.
+    bool isForceActive() const override { return true; }
+
     // -- Accessors --
     SpriteBatchRenderer& getSpriteBatchRenderer() { return m_spriteBatch; }
     const SpriteBatchRenderer& getSpriteBatchRenderer() const { return m_spriteBatch; }

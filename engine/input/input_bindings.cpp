@@ -105,10 +105,27 @@ std::vector<std::string> InputActionMap::findConflicts(const InputBinding& bindi
 {
     std::vector<std::string> conflicts;
     if (!binding.isBound()) return conflicts;
+    // Phase 10.9 Slice 9 I4 — only slots of the same physical device can
+    // physically conflict. A keyboard binding can never collide with a
+    // gamepad-bound slot (different hardware), so the device gate runs
+    // before the per-slot equality check. `InputBinding::operator==`
+    // already includes the device field, so the explicit gate is also a
+    // defence against future `==` changes that drop the device field.
     for (const auto& action : m_actions)
     {
         if (action.id == excludeActionId) continue;
-        if (action.matches(binding)) conflicts.push_back(action.id);
+        const InputBinding* slots[] = {
+            &action.primary, &action.secondary, &action.gamepad
+        };
+        for (const InputBinding* slot : slots)
+        {
+            if (slot->device != binding.device) continue;
+            if (*slot == binding)
+            {
+                conflicts.push_back(action.id);
+                break;
+            }
+        }
     }
     return conflicts;
 }

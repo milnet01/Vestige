@@ -7,6 +7,7 @@
 #include "renderer/dynamic_mesh.h"
 #include "renderer/foliage_renderer.h"
 #include "renderer/motion_overlay_prev_world.h"
+#include "renderer/normal_matrix.h"
 #include "renderer/sampler_fallback.h"
 #include "renderer/scoped_forward_z.h"
 #include "renderer/scoped_shadow_depth_state.h"
@@ -1500,8 +1501,7 @@ void Renderer::drawMesh(const Mesh& mesh, const glm::mat4& modelMatrix,
     m_sceneShader.setBool("u_useInstancing", false);
     m_sceneShader.setBool("u_useMDI", false);
     m_sceneShader.setMat4("u_model", modelMatrix);
-    m_sceneShader.setMat3("u_normalMatrix",
-        glm::mat3(glm::transpose(glm::inverse(modelMatrix))));
+    m_sceneShader.setMat3("u_normalMatrix", computeNormalMatrix(modelMatrix));
     m_sceneShader.setMat4("u_view", camera.getViewMatrix());
     m_sceneShader.setMat4("u_projection", m_lastProjection);
 
@@ -3136,7 +3136,7 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
         m_sceneShader.setBool("u_useMDI", false);
         m_sceneShader.setMat4("u_model", clothItem.worldMatrix);
         m_sceneShader.setMat3("u_normalMatrix",
-            glm::mat3(glm::transpose(glm::inverse(clothItem.worldMatrix))));
+                              computeNormalMatrix(clothItem.worldMatrix));
         m_sceneShader.setMat4("u_view", camera.getViewMatrix());
         m_sceneShader.setMat4("u_projection", m_lastProjection);
         m_sceneShader.setBool("u_hasBones", false);

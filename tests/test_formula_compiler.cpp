@@ -347,6 +347,48 @@ TEST(SafeMathParity, EvaluatorAndHelpersAgreeOnDegenerateInputs)
     EXPECT_FLOAT_EQ(eval.evaluate(*lgz, {}), 0.0f);
 }
 
+// ---------------------------------------------------------------------------
+// Phase 10.9 Slice 14 Sc3 — scalar evaluator must reject vector ops with
+// a clear error that names the codegen split. Pre-Sc3 the generic
+// "Unknown binary op: dot" left Workbench LM fits to silently fail; the
+// new message points at the design boundary.
+// ---------------------------------------------------------------------------
+
+TEST(ExpressionEvalVectorOps, DotThrowsWithDescriptiveMessage_Sc3)
+{
+    ExpressionEvaluator eval;
+    auto dot = ExprNode::binaryOp("dot",
+        ExprNode::literal(1.0f), ExprNode::literal(2.0f));
+
+    try
+    {
+        eval.evaluate(*dot, {});
+        FAIL() << "expected std::runtime_error for vector op";
+    }
+    catch (const std::runtime_error& e)
+    {
+        const std::string what = e.what();
+        EXPECT_NE(what.find("dot"), std::string::npos)
+            << "error message should name the offending op: " << what;
+        EXPECT_NE(what.find("scalar"), std::string::npos)
+            << "error message should explain the scalar/vector split: " << what;
+    }
+}
+
+TEST(ExpressionEvalVectorOps, ScalarBinaryOpsStillEvaluate_Sc3)
+{
+    // Sc3 must NOT regress the scalar ops — make sure adding the dot
+    // special case didn't accidentally short-circuit the +/-/*/% path.
+    ExpressionEvaluator eval;
+    auto sum = ExprNode::binaryOp("+",
+        ExprNode::literal(2.0f), ExprNode::literal(3.0f));
+    EXPECT_FLOAT_EQ(eval.evaluate(*sum, {}), 5.0f);
+
+    auto prod = ExprNode::binaryOp("*",
+        ExprNode::literal(4.0f), ExprNode::literal(0.5f));
+    EXPECT_FLOAT_EQ(eval.evaluate(*prod, {}), 2.0f);
+}
+
 TEST(SafeMathParity, HelpersMatchEvaluatorPrecisely)
 {
     // Direct call into the helper namespace — the point is the *same

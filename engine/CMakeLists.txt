@@ -69,6 +69,7 @@ set(ENGINE_SOURCES
     ui/game_screen.cpp
     ui/ui_accessible.cpp
     input/input_bindings.cpp
+    input/input_bindings_wire.cpp
     renderer/instance_buffer.cpp
     renderer/environment_map.cpp
     renderer/ibl_capture_sequence.cpp
@@ -252,7 +253,6 @@ set(ENGINE_SOURCES
     editor/tools/roof_tool.cpp
     editor/tools/stair_tool.cpp
     editor/tools/path_tool.cpp
-    resource/file_watcher.cpp
     utils/entity_serializer.cpp
     utils/component_serializer_registry.cpp
     utils/material_library.cpp

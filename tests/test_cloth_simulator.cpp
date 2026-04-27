@@ -8,6 +8,7 @@
 #include <gtest/gtest.h>
 
 #include <cmath>
+#include <limits>
 
 using namespace Vestige;
 
@@ -432,6 +433,99 @@ TEST(ClothSimulator, NegativeMassRejectsInitialization)
     ClothSimulator sim;
     sim.initialize(cfg);
     EXPECT_FALSE(sim.isInitialized());
+}
+
+// ---------------------------------------------------------------------------
+// Phase 10.9 Slice 17 Cl8 — NaN / ±Inf rejection on every numeric field
+// that touches per-particle physics. Pre-Cl8 only `<=0` was checked, so
+// NaN squeaked through and poisoned every inverse mass via 1/NaN = NaN.
+// ---------------------------------------------------------------------------
+
+namespace
+{
+
+ClothConfig makeBaselineConfig_Cl8()
+{
+    ClothConfig cfg;
+    cfg.width = 4;
+    cfg.height = 4;
+    cfg.spacing = 1.0f;
+    cfg.particleMass = 0.1f;
+    cfg.substeps = 5;
+    return cfg;
+}
+
+} // namespace
+
+TEST(ClothSimulator, NaNMassRejectsInitialization_Cl8)
+{
+    auto cfg = makeBaselineConfig_Cl8();
+    cfg.particleMass = std::numeric_limits<float>::quiet_NaN();
+
+    ClothSimulator sim;
+    sim.initialize(cfg);
+    EXPECT_FALSE(sim.isInitialized());
+}
+
+TEST(ClothSimulator, InfMassRejectsInitialization_Cl8)
+{
+    auto cfg = makeBaselineConfig_Cl8();
+    cfg.particleMass = std::numeric_limits<float>::infinity();
+
+    ClothSimulator sim;
+    sim.initialize(cfg);
+    EXPECT_FALSE(sim.isInitialized());
+}
+
+TEST(ClothSimulator, NaNSpacingRejectsInitialization_Cl8)
+{
+    auto cfg = makeBaselineConfig_Cl8();
+    cfg.spacing = std::numeric_limits<float>::quiet_NaN();
+
+    ClothSimulator sim;
+    sim.initialize(cfg);
+    EXPECT_FALSE(sim.isInitialized());
+}
+
+TEST(ClothSimulator, ZeroSpacingRejectsInitialization_Cl8)
+{
+    // Zero spacing collapses every particle onto the same point —
+    // zero-area triangles, undefined normals, useless physics.
+    auto cfg = makeBaselineConfig_Cl8();
+    cfg.spacing = 0.0f;
+
+    ClothSimulator sim;
+    sim.initialize(cfg);
+    EXPECT_FALSE(sim.isInitialized());
+}
+
+TEST(ClothSimulator, NaNDampingRejectsInitialization_Cl8)
+{
+    auto cfg = makeBaselineConfig_Cl8();
+    cfg.damping = std::numeric_limits<float>::quiet_NaN();
+
+    ClothSimulator sim;
+    sim.initialize(cfg);
+    EXPECT_FALSE(sim.isInitialized());
+}
+
+TEST(ClothSimulator, NaNGravityComponentRejectsInitialization_Cl8)
+{
+    // Any of x/y/z being NaN poisons velocity. Test the most likely
+    // case (Y, the gravity-down axis) plus a sanity check on X.
+    auto cfgY = makeBaselineConfig_Cl8();
+    cfgY.gravity.y = std::numeric_limits<float>::quiet_NaN();
+
+    ClothSimulator sim1;
+    sim1.initialize(cfgY);
+    EXPECT_FALSE(sim1.isInitialized());
+
+    auto cfgX = makeBaselineConfig_Cl8();
+    cfgX.gravity.x = std::numeric_limits<float>::infinity();
+
+    ClothSimulator sim2;
+    sim2.initialize(cfgX);
+    EXPECT_FALSE(sim2.isInitialized());
 }
 
 TEST(ClothSimulator, TooSmallGridRejectsInitialization)

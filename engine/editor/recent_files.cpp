@@ -5,6 +5,7 @@
 /// @brief Recent files manager implementation.
 #include "editor/recent_files.h"
 #include "core/logger.h"
+#include "utils/atomic_write.h"
 #include "utils/config_path.h"
 #include "utils/json_size_cap.h"
 
@@ -86,14 +87,19 @@ void RecentFiles::save() const
     }
     data["recent_files"] = paths;
 
-    std::ofstream file(storagePath, std::ios::out | std::ios::trunc);
-    if (!file.is_open())
+    // Phase 10.9 Slice 12 Ed4 — route through the project's atomic-write
+    // helper (write-tmp + fsync + rename + fsync-dir). Prevents a torn
+    // recent-files list if the editor is killed mid-flush; the previous
+    // truncate+stream pattern could leave an empty or half-written JSON
+    // that the next load() would reject.
+    const AtomicWrite::Status s =
+        AtomicWrite::writeFile(storagePath, data.dump(2));
+    if (s != AtomicWrite::Status::Ok)
     {
-        Logger::warning("RecentFiles: could not write " + storagePath.string());
-        return;
+        Logger::warning(std::string("RecentFiles: ")
+                        + AtomicWrite::describe(s)
+                        + " for " + storagePath.string());
     }
-
-    file << data.dump(2);
 }
 
 void RecentFiles::addPath(const std::filesystem::path& path)

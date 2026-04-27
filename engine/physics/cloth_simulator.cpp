@@ -60,6 +60,25 @@ void ClothSimulator::initialize(const ClothConfig& config, uint32_t seed)
         return;
     }
 
+    // Phase 10.9 Slice 17 Cl8 — reject NaN / ±inf on any field that
+    // touches per-particle physics. NaN passed the `<= 0.0f` guard above
+    // (any comparison with NaN is false) and would poison every inverse
+    // mass via `1.0f / NaN = NaN`, propagating to velocity, position,
+    // and the mesh upload — a single corrupted ClothConfig field would
+    // hide the entire cloth panel as unrenderable. Same applies to inf
+    // spacing (zero-area triangles), inf gravity (all positions explode
+    // in one substep), and non-finite damping.
+    if (!std::isfinite(config.particleMass) ||
+        !std::isfinite(config.spacing)      || config.spacing <= 0.0f ||
+        !std::isfinite(config.damping)      ||
+        !std::isfinite(config.gravity.x)    ||
+        !std::isfinite(config.gravity.y)    ||
+        !std::isfinite(config.gravity.z))
+    {
+        m_initialized = false;
+        return;
+    }
+
     // Unique RNG seed so each cloth panel has different wind timing
     m_rng.seed((seed != 0) ? seed : 12345u);
 

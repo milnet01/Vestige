@@ -9,6 +9,172 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-27 Phase 10.9 — Wave 3 (audit fast-wins, 13 items)
+
+**Build hygiene.**
+
+- **ImGuizmo pinned** to commit `a15acd8` (LightRig Editor, 2025-12-27)
+  in `external/CMakeLists.txt`. Upstream `master` introduced
+  `vec_t(float, float, float)` uses on this date without adding the
+  matching constructor; the build refused to compile under GCC 14.
+  Re-evaluate the pin when upstream lands a fix.
+
+**Animation correctness (Slice 6).**
+
+- **A5.** `Inertialization::start` now derives axis-angle via
+  `sqrt(1-w²) + atan2(sinHalf, w)` rather than `2·acos(w) + sin(angle/2)`.
+  `acos(w)` loses precision near `w≈±1` (small rotations) and
+  `sin(angle/2)` recomputes the same thing the new path obtains
+  directly. The result is bit-identical for the well-conditioned cases
+  and stable across the small-rotation cliff that the old form lost.
+  3 new tests in `tests/test_motion_matching.cpp` cover the π-rotation
+  identity, the near-identity stability case (the headline), and the
+  zero-offset path.
+
+**Subsystem wiring (Slice 8).**
+
+- **W2.** Deleted `engine/resource/file_watcher.{h,cpp}` and removed it
+  from `engine/CMakeLists.txt`. Zero callers anywhere in `engine/`,
+  `app/`, `tools/`, or `tests/`; the docstring claimed callbacks the
+  class did not have. Per CLAUDE.md Rule 6 (no over-engineering for
+  hypothetical futures) and the audit's wire-or-delete framing, the
+  delete is the right call. No test churn — there were none.
+- **W5.** `AudioSystem`, `UISystem`, and `TerrainSystem` now override
+  `isForceActive()` to return `true`. Each owns global state (OpenAL
+  device + listener + caption queue; screen stack + theme + modal
+  state; heightfield + splatmap + GPU buffers) rather than per-entity
+  components, so the "scene has no owned components → deactivate"
+  heuristic was the wrong policy for them. `LightingSystem` and
+  `AtmosphereSystem` already had this override. Existing
+  `*NotForceActive` tests rewrote to `*IsForceActive_W5` (3 tests
+  changed) plus the `ForceActiveSystemsCorrectlyIdentified` invariant
+  updated to expect the new force-active set.
+
+**Input subsystem (Slice 9).**
+
+- **I2.** `InputBindingWire`, `ActionBindingWire`, and the
+  `bindingToJson` / `bindingFromJson` / `actionBindingToJson` /
+  `actionBindingFromJson` helpers moved from `engine/core/settings.{h,cpp}`
+  to `engine/input/input_bindings_wire.{h,cpp}`. Input-domain types
+  belong in the input subsystem; `ControlsSettings` stays in
+  `engine/core/settings` as the surrounding orchestrator and delegates
+  per-binding work to the new home. PHASE10_SETTINGS_DESIGN.md slice
+  13.4 had specified the goal state. 4 new tests in
+  `tests/test_input_bindings.cpp` pin the round-trip in the new home.
+- **I4.** `InputActionMap::findConflicts` now gates on physical device
+  before the per-slot equality check. A keyboard binding can't
+  collide with a gamepad-bound slot regardless of code value;
+  `InputBinding::operator==` already covered the same case via the
+  device field, but the explicit gate is defence against future `==`
+  changes that drop device. 3 new tests in
+  `tests/test_input_bindings.cpp`.
+
+**Editor undo / hygiene (Slice 12).**
+
+- **Ed4.** `RecentFiles::save()` and `WelcomePanel::markAsShown()` now
+  route through `AtomicWrite::writeFile`. F7 in Wave 1 covered the
+  prefab / scene / window / autosave paths; this closes the recent-
+  files and welcome-flag corners. The pre-Ed4 truncate-and-stream
+  pattern in `RecentFiles` could leave an empty or half-written JSON
+  on a mid-flush kill that the next `load()` would reject, and the
+  welcome flag could be left as a zero-byte file that still satisfies
+  the `exists()` check on next launch. 2 new
+  `RecentFilesAtomicWriteTest.*_Ed4` tests in
+  `tests/test_atomic_write_routing.cpp` (sandboxed via
+  `XDG_CONFIG_HOME`, per-process+per-test temp dir to keep
+  `ctest -j` runs from racing) pin the routing.
+- **Ed9.** Curve and gradient editor widget drag state migrated from
+  file-static `s_dragIndex` / `s_dragId` / `s_dragStop` /
+  `s_dragGradientId` / `s_selectedStop` / `s_selectedGradientId` to
+  per-widget storage via `ImGui::GetStateStorage()`. Two simultaneously-
+  rendered widgets (e.g. emission gradient + tint gradient on the
+  same particle preset) used to share the static slots through their
+  own ID qualifier; per-widget storage scoped under the `PushID(label)`
+  block keeps each instance's selection and drag independent. No new
+  tests — the failure mode requires a running ImGui frame which the
+  headless CI build cannot stand up; the change is a structural
+  refactor that does not alter the per-instance behaviour.
+
+**Performance hygiene (Slice 13).**
+
+- **Pe2.** `SpriteSystem` gained `m_entriesScratch` and `m_batchesScratch`
+  member vectors that `render()` clears each frame instead of
+  constructing fresh ones; `Physics2DSystem::update` walks
+  `m_bodyByEntity` directly instead of `forEachEntity`. The audit's
+  exact two complaints: per-frame heap allocation in member-state
+  vectors, and O(scene-size) traversal where O(physics-body-count)
+  was sufficient. Headless `buildBatches(entries, outBatches)`
+  out-parameter overload added so the by-value form's tests still
+  work and the new render-side path can reuse capacity. 3 new
+  `SpriteSystem.BuildBatchesOutParam*_Pe2` tests pin matches-by-value,
+  clear-before-refilling, and outer-capacity-preserved.
+- **Pe6.** `glm::mat3(glm::transpose(glm::inverse(modelMatrix)))` lifted
+  from `Renderer::drawMesh` and the per-cloth path into a single
+  helper `engine/renderer/normal_matrix.h::computeNormalMatrix`.
+  Detects uniform-scale model matrices (squared column lengths
+  approximately equal) and returns `glm::mat3(model)` directly,
+  saving the 4×4 inverse + 3×3 transpose for the common case. After
+  the vertex shader's `normalize(N * normal)` step the result is
+  bit-identical to the inverse-transpose path for uniform scale; non-
+  uniform scale falls through to the full inverse-transpose. CLAUDE.md
+  Rule 3 (reuse before rewriting). 5 new tests in
+  `tests/test_normal_matrix.cpp` pin identity, uniform scale via
+  direction equivalence, rotation-only exact match, non-uniform scale
+  taking the inverse-transpose path, and translation not affecting
+  normals.
+
+**Scripting / formula safety (Slice 14).**
+
+- **Sc3.** `ExpressionEvaluator::evaluate` now throws a descriptive
+  error on `dot` (and any future vector op) that names the codegen
+  split. Pre-Sc3 the generic "Unknown binary op: dot" left Workbench
+  LM fits to silently fail when the formula contained `dot` (both
+  `codegen_cpp` and `codegen_glsl` emit it; the scalar evaluator
+  never could). The new message points the developer at the design
+  boundary: scalar evaluator vs vector codegens. 2 new tests in
+  `tests/test_formula_compiler.cpp`.
+- **Sc5.** `MathDiv` script node aligned with `SafeMath::safeDiv` —
+  exact-zero policy (`b == 0.0f`) instead of `std::abs(b) < 1e-9f`,
+  plus an `isfinite` projection-to-0 belt-and-braces. Pre-Sc5 a
+  Workbench-fit formula and the shipped runtime disagreed at the
+  `[1e-12, 1e-9]` cliff edge: fitter would compute `a / b ≈ 1e12`
+  and find an R²=0.99 fit; runtime would short-circuit to 0 and the
+  scene would behave nothing like the fit. One policy across
+  evaluator / codegen_cpp / codegen_glsl / script-node now. 2 new
+  `NodeLibraryTest.MathDiv*_Sc5` tests pin the cliff-edge case
+  (1e-12 divisor takes the real division path) and the
+  isfinite-projection.
+
+**Audio ergonomics (Slice 15).**
+
+- **Au1.** Public `AudioEngine::stopSound(unsigned int handle)` API
+  added. P7 already returned the OpenAL source ID from every
+  `playSound*` overload, but the existing `releaseSource` was the only
+  caller-side stop path and read like a generic resource-management
+  op rather than the symmetric pair `playSound` deserved. The new
+  alias makes the looping-caller's responsibility explicit (hold the
+  handle, call `stopSound` to terminate); the docstring spells out
+  that 32 looping `playSound` calls without the matching stops freeze
+  the mixer for the OpenAL context's lifetime. 4 new
+  `AudioEngineStopSound.*_Au1` tests in `tests/test_audio_stop_sound.cpp`
+  pin the zero-handle no-op, stale-handle no-op, and the
+  return-value-is-still-the-handle invariant.
+
+**Cloth + renderer regressions (Slice 17).**
+
+- **Cl8.** `ClothSimulator::initialize` rejects NaN / ±Inf on
+  `particleMass`, `spacing`, `damping`, and any component of
+  `gravity`, plus `spacing <= 0`. Pre-Cl8 only `particleMass <= 0`
+  was checked; NaN passed every comparison silently and poisoned
+  every inverse mass via `1.0f / NaN = NaN`, propagating through
+  velocity, position, and the mesh upload until the cloth panel
+  rendered as a single floating-point garbage pile or disappeared
+  entirely. 6 new `ClothSimulator.*_Cl8` tests cover NaN/Inf mass,
+  NaN/zero spacing, NaN damping, NaN/Inf gravity components.
+
+**Test count.** 3111 / 3112 pass post-Wave-3 (1 pre-existing GL skip
+unchanged); +34 vs Wave 2's 3077.
+
 ### 2026-04-27 Phase 10.9 — Wave 2 (audit fast-wins, 13 items)
 
 **Animation correctness (Slice 6).**

@@ -46,6 +46,8 @@
 
 #include <nlohmann/json_fwd.hpp>
 
+#include "input/input_bindings_wire.h"
+
 namespace Vestige
 {
 
@@ -124,48 +126,12 @@ struct AudioSettings
 // --------------------------------------------------------------
 // Controls section — mouse sensitivity, deadzones, bindings.
 // --------------------------------------------------------------
-
-/// @brief A single physical-input binding in the wire format.
-///
-/// `device` is one of `"keyboard"`, `"mouse"`, `"gamepad"`,
-/// `"none"`. `scancode` is a GLFW scan code for keyboards (Godot's
-/// `physical_keycode` convention — preserves WASD across AZERTY /
-/// Dvorak), a GLFW mouse-button index for Mouse, a GLFW
-/// gamepad-button index for Gamepad, and ignored for None.
-///
-/// Slice 13.1 ships the pure round-trip; slice 13.4 hooks this to
-/// `InputActionMap::{toJson, fromJson}` and the keybinding UI.
-struct InputBindingWire
-{
-    std::string device   = "none";
-    int         scancode = -1;
-
-    bool operator==(const InputBindingWire& o) const
-    {
-        return device == o.device && scancode == o.scancode;
-    }
-    bool operator!=(const InputBindingWire& o) const { return !(*this == o); }
-};
-
-/// @brief One action + its three binding slots. `id` matches a
-///        registered `InputAction::id`; unknown ids are dropped on
-///        load with a logged warning.
-struct ActionBindingWire
-{
-    std::string        id;
-    InputBindingWire   primary;
-    InputBindingWire   secondary;
-    InputBindingWire   gamepad;
-
-    bool operator==(const ActionBindingWire& o) const
-    {
-        return id == o.id
-            && primary   == o.primary
-            && secondary == o.secondary
-            && gamepad   == o.gamepad;
-    }
-    bool operator!=(const ActionBindingWire& o) const { return !(*this == o); }
-};
+//
+// `InputBindingWire` and `ActionBindingWire` (the per-binding wire types)
+// plus their `bindingToJson` / `bindingFromJson` / `actionBindingToJson` /
+// `actionBindingFromJson` helpers moved to `engine/input/input_bindings_wire.h`
+// in Phase 10.9 Slice 9 I2 — input-domain types belong in the input subsystem;
+// `ControlsSettings` is the only settings-layer wrapper that stays here.
 
 struct ControlsSettings
 {

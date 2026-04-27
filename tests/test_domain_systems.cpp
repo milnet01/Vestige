@@ -173,10 +173,13 @@ TEST_F(DomainSystemTest, TerrainSystemName)
     EXPECT_EQ(sys.getSystemName(), "Terrain");
 }
 
-TEST_F(DomainSystemTest, TerrainSystemNotForceActive)
+TEST_F(DomainSystemTest, TerrainSystemIsForceActive_W5)
 {
+    // Terrain is global state (heightfield, splatmap, GPU buffers), not a
+    // per-entity component, so the no-owned-components heuristic must not
+    // deactivate it.
     TerrainSystem sys;
-    EXPECT_FALSE(sys.isForceActive());
+    EXPECT_TRUE(sys.isForceActive());
 }
 
 TEST_F(DomainSystemTest, TerrainSystemNoOwnedComponents)
@@ -304,10 +307,13 @@ TEST_F(DomainSystemTest, AudioSystemName)
     EXPECT_EQ(sys.getSystemName(), "Audio");
 }
 
-TEST_F(DomainSystemTest, AudioSystemNotForceActive)
+TEST_F(DomainSystemTest, AudioSystemIsForceActive_W5)
 {
+    // OpenAL device + listener + buffer cache are global state owned by the
+    // system; ducking decay, listener sync, and caption queue must keep
+    // ticking even with zero AudioSourceComponents in the scene.
     AudioSystem sys;
-    EXPECT_FALSE(sys.isForceActive());
+    EXPECT_TRUE(sys.isForceActive());
 }
 
 TEST_F(DomainSystemTest, AudioSystemOwnsComponents)
@@ -345,10 +351,13 @@ TEST_F(DomainSystemTest, UISystemName)
     EXPECT_EQ(sys.getSystemName(), "UI");
 }
 
-TEST_F(DomainSystemTest, UISystemNotForceActive)
+TEST_F(DomainSystemTest, UISystemIsForceActive_W5)
 {
+    // Screen stack, theme, notifications, and modal state are global
+    // infrastructure; the system must keep ticking even with zero scene
+    // entities (HUD, pause menus, settings dialogs, toast queue).
     UISystem sys;
-    EXPECT_FALSE(sys.isForceActive());
+    EXPECT_TRUE(sys.isForceActive());
 }
 
 TEST_F(DomainSystemTest, UISystemNoOwnedComponents)
@@ -537,18 +546,20 @@ TEST_F(DomainSystemTest, ForceActiveSystemsCorrectlyIdentified)
     UISystem ui;
     NavigationSystem navigation;
 
-    // Only Atmosphere and Lighting are force-active
+    // Force-active set after Phase 10.9 Slice 8 W5: Atmosphere + Lighting
+    // (already shipped) plus Terrain + Audio + UI (W5 — global state, no
+    // owned per-entity components but needs to keep ticking).
     EXPECT_TRUE(atmo.isForceActive());
     EXPECT_TRUE(lighting.isForceActive());
+    EXPECT_TRUE(terrain.isForceActive());
+    EXPECT_TRUE(audio.isForceActive());
+    EXPECT_TRUE(ui.isForceActive());
 
     EXPECT_FALSE(particle.isForceActive());
     EXPECT_FALSE(water.isForceActive());
     EXPECT_FALSE(veg.isForceActive());
-    EXPECT_FALSE(terrain.isForceActive());
     EXPECT_FALSE(cloth.isForceActive());
     EXPECT_FALSE(destruction.isForceActive());
     EXPECT_FALSE(character.isForceActive());
-    EXPECT_FALSE(audio.isForceActive());
-    EXPECT_FALSE(ui.isForceActive());
     EXPECT_FALSE(navigation.isForceActive());
 }

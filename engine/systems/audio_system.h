@@ -38,6 +38,14 @@ public:
     ///        — closes the W6 listener-after-camera dependency).
     UpdatePhase getUpdatePhase() const override { return UpdatePhase::PostCamera; }
 
+    /// @brief Phase 10.9 Slice 8 W5 — AudioSystem owns OpenAL device + listener
+    ///        + buffer cache as global state, not as per-entity components,
+    ///        so the "scene has no owned components → deactivate" heuristic
+    ///        is the wrong policy. The system must keep ticking even with
+    ///        no AudioSourceComponents in the scene (ducking decay, listener
+    ///        sync, caption queue), so it forces itself active.
+    bool isForceActive() const override { return true; }
+
     // -- Accessors --
     AudioEngine& getAudioEngine() { return m_audioEngine; }
     const AudioEngine& getAudioEngine() const { return m_audioEngine; }

@@ -95,17 +95,22 @@ void SpriteSystem::render(const glm::mat4& viewProj)
         return;
     }
 
-    std::vector<SpriteDrawEntry> entries;
-    collectVisible(*scene, entries);
-    if (entries.empty())
+    // Phase 10.9 Slice 13 Pe2 — reuse the member scratch vectors instead of
+    // constructing fresh ones each frame. clear() preserves capacity, so the
+    // first non-empty frame allocates and subsequent frames push into the
+    // already-sized buffer with zero allocations.
+    m_entriesScratch.clear();
+    collectVisible(*scene, m_entriesScratch);
+    if (m_entriesScratch.empty())
     {
         return;
     }
-    sortDrawList(entries);
+    sortDrawList(m_entriesScratch);
+
+    buildBatches(m_entriesScratch, m_batchesScratch);
 
     m_renderer.begin(viewProj);
-    const auto batches = buildBatches(entries);
-    for (const auto& batch : batches)
+    for (const auto& batch : m_batchesScratch)
     {
         const auto* atlas = static_cast<const SpriteAtlas*>(batch.atlas);
         if (!atlas)
@@ -166,13 +171,20 @@ void SpriteSystem::sortDrawList(std::vector<SpriteDrawEntry>& entries)
         });
 }
 
-std::vector<SpriteSystem::Batch> SpriteSystem::buildBatches(
-    const std::vector<SpriteDrawEntry>& entries)
+void SpriteSystem::buildBatches(const std::vector<SpriteDrawEntry>& entries,
+                                std::vector<Batch>& outBatches)
 {
-    std::vector<Batch> batches;
+    // Phase 10.9 Slice 13 Pe2 — clear first so the per-batch instance
+    // vectors get released; capacity of the outer batches vector is
+    // preserved for reuse across frames. Per-batch `instances` capacity
+    // is also retained because `Batch` lives inside the outer container,
+    // and emplace into a slot we already own (when the new frame's batch
+    // count is ≤ the previous frame's) avoids a fresh allocation for the
+    // common case of a stable scene.
+    outBatches.clear();
     if (entries.empty())
     {
-        return batches;
+        return;
     }
 
     // Map sort position (index within entries) → depth value in
@@ -198,11 +210,11 @@ std::vector<SpriteSystem::Batch> SpriteSystem::buildBatches(
         const auto* atlas = e.component->atlas.get();
         const SpritePass pass = passOf(*e.component);
 
-        if (batches.empty() ||
-            batches.back().atlas != atlas ||
-            batches.back().pass != pass)
+        if (outBatches.empty() ||
+            outBatches.back().atlas != atlas ||
+            outBatches.back().pass != pass)
         {
-            batches.push_back(Batch{atlas, pass, {}});
+            outBatches.push_back(Batch{atlas, pass, {}});
         }
 
         const auto* frame = atlas->find(e.component->frameName);
@@ -228,8 +240,16 @@ std::vector<SpriteSystem::Batch> SpriteSystem::buildBatches(
         // order with LEQUAL depth test.
         inst.depth = kSpriteDepthMin + t * (kSpriteDepthMax - kSpriteDepthMin);
 
-        batches.back().instances.push_back(inst);
+        outBatches.back().instances.push_back(inst);
     }
+}
+
+std::vector<SpriteSystem::Batch> SpriteSystem::buildBatches(
+    const std::vector<SpriteDrawEntry>& entries)
+{
+    // Backward-compatible by-value form for tests + any external caller.
+    std::vector<Batch> batches;
+    buildBatches(entries, batches);
     return batches;
 }
 

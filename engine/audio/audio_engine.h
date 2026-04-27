@@ -191,6 +191,23 @@ public:
                              AudioBus bus = AudioBus::Ui,
                              SoundPriority priority = SoundPriority::Normal);
 
+    /// @brief Phase 10.9 Slice 15 Au1 — stops a previously-acquired source
+    ///        and returns it to the pool.
+    ///
+    /// **Looping callers must hold the source ID returned from any
+    /// `playSound*` overload and call `stopSound(handle)` to terminate
+    /// playback.** A looping sound played without storing the handle
+    /// holds a pool slot for the lifetime of the OpenAL context — call
+    /// 32 of those and the pool is exhausted, the mixer effectively
+    /// frozen until shutdown. The fire-and-forget shape is appropriate
+    /// for one-shots; `loop = true` is not a one-shot.
+    ///
+    /// Passing 0 (the failure return from `playSound*`) is a no-op so
+    /// the call is safe even if the caller did not check the return.
+    /// Passing a stale or already-released handle is a no-op (`alIsSource`
+    /// gate inside the implementation drops it silently).
+    void stopSound(unsigned int source) { releaseSource(source); }
+
     /// @brief Phase 10.9 P2 — polls the OpenAL state of `source` and
     ///        returns true iff it is currently in `AL_PLAYING`.
     ///        Used by AudioSystem to reap stopped entries from its

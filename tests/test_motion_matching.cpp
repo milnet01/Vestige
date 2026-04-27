@@ -501,6 +501,84 @@ TEST(InertializationTest, ResetClearsState)
     EXPECT_FALSE(inert.isActive());
 }
 
+TEST(InertializationTest, AxisAnglePreservesPiRotation_A5)
+{
+    // 180° rotation around X — w == 0, sinHalf == 1; angle should be π and axis (1,0,0).
+    Inertialization inert;
+    const glm::quat piRotX = glm::angleAxis(glm::pi<float>(), glm::vec3(1, 0, 0));
+
+    std::vector<glm::vec3> srcPos = {glm::vec3(0)};
+    std::vector<glm::quat> srcRot = {piRotX};
+    std::vector<glm::vec3> srcVel = {glm::vec3(0)};
+    std::vector<glm::vec3> dstPos = {glm::vec3(0)};
+    std::vector<glm::quat> dstRot = {glm::quat(1, 0, 0, 0)};
+    std::vector<glm::vec3> dstVel = {glm::vec3(0)};
+
+    inert.start(srcPos, srcRot, srcVel, dstPos, dstRot, dstVel, 0.1f);
+
+    std::vector<glm::vec3> pos = {glm::vec3(0)};
+    std::vector<glm::quat> rot = {glm::quat(1, 0, 0, 0)};
+    inert.apply(pos, rot);
+
+    // At t=0 the offset is full; applying it to dst (identity) should give piRotX.
+    EXPECT_NEAR(std::abs(rot[0].x), 1.0f, 1e-3f);
+    EXPECT_NEAR(rot[0].w, 0.0f, 1e-3f);
+}
+
+TEST(InertializationTest, AxisAngleStableNearIdentity_A5)
+{
+    // 0.001 rad rotation — w very close to 1, the case where 2*acos(w) loses
+    // precision because acos's slope diverges at ±1. With sqrt(1-w²)+atan2 the
+    // small angle survives.
+    Inertialization inert;
+    const float tinyAngle = 0.001f;
+    const glm::quat tinyRot = glm::angleAxis(tinyAngle, glm::vec3(0, 1, 0));
+
+    std::vector<glm::vec3> srcPos = {glm::vec3(0)};
+    std::vector<glm::quat> srcRot = {tinyRot};
+    std::vector<glm::vec3> srcVel = {glm::vec3(0)};
+    std::vector<glm::vec3> dstPos = {glm::vec3(0)};
+    std::vector<glm::quat> dstRot = {glm::quat(1, 0, 0, 0)};
+    std::vector<glm::vec3> dstVel = {glm::vec3(0)};
+
+    inert.start(srcPos, srcRot, srcVel, dstPos, dstRot, dstVel, 0.1f);
+
+    std::vector<glm::vec3> pos = {glm::vec3(0)};
+    std::vector<glm::quat> rot = {glm::quat(1, 0, 0, 0)};
+    inert.apply(pos, rot);
+
+    // Recovered rotation must match input within float epsilon scaled by the angle.
+    const glm::quat recovered = rot[0];
+    EXPECT_NEAR(recovered.y, tinyRot.y, 1e-5f);
+    EXPECT_NEAR(recovered.w, tinyRot.w, 1e-5f);
+}
+
+TEST(InertializationTest, AxisAngleZeroForIdenticalRotations_A5)
+{
+    // Identical src and dst — diff is identity, no rotation offset should accumulate.
+    Inertialization inert;
+    const glm::quat r = glm::angleAxis(0.7f, glm::normalize(glm::vec3(1, 1, 0)));
+
+    std::vector<glm::vec3> srcPos = {glm::vec3(0)};
+    std::vector<glm::quat> srcRot = {r};
+    std::vector<glm::vec3> srcVel = {glm::vec3(0)};
+    std::vector<glm::vec3> dstPos = {glm::vec3(0)};
+    std::vector<glm::quat> dstRot = {r};
+    std::vector<glm::vec3> dstVel = {glm::vec3(0)};
+
+    inert.start(srcPos, srcRot, srcVel, dstPos, dstRot, dstVel, 0.1f);
+
+    std::vector<glm::vec3> pos = {glm::vec3(0)};
+    std::vector<glm::quat> rot = {r};
+    inert.apply(pos, rot);
+
+    // No offset → output is dst unchanged.
+    EXPECT_NEAR(rot[0].x, r.x, 1e-6f);
+    EXPECT_NEAR(rot[0].y, r.y, 1e-6f);
+    EXPECT_NEAR(rot[0].z, r.z, 1e-6f);
+    EXPECT_NEAR(rot[0].w, r.w, 1e-6f);
+}
+
 // ---------------------------------------------------------------------------
 // MotionDatabase Tests
 // ---------------------------------------------------------------------------

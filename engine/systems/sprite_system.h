@@ -103,10 +103,25 @@ public:
     };
     static std::vector<Batch> buildBatches(const std::vector<SpriteDrawEntry>& entries);
 
+    /// @brief Phase 10.9 Slice 13 Pe2 — out-parameter overload that writes
+    /// into a caller-provided vector so the per-frame `render()` path can
+    /// reuse a member vector instead of returning by value (heap allocation
+    /// per frame). `outBatches.clear()` runs first; previous capacity is
+    /// preserved.
+    static void buildBatches(const std::vector<SpriteDrawEntry>& entries,
+                             std::vector<Batch>& outBatches);
+
 private:
     static inline const std::string m_name = "Sprite";
     Engine* m_engine = nullptr;
     SpriteRenderer m_renderer;
+
+    // Phase 10.9 Slice 13 Pe2 — per-frame scratch vectors. Constructed
+    // once with the system; `render()` clears them in place each frame so
+    // the underlying capacity grows monotonically rather than allocating
+    // a fresh `std::vector` every frame at 60 Hz.
+    std::vector<SpriteDrawEntry> m_entriesScratch;
+    std::vector<Batch>           m_batchesScratch;
 };
 
 } // namespace Vestige

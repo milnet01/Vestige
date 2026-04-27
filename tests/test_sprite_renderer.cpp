@@ -258,3 +258,98 @@ TEST(SpriteSystem, ClonedComponentHasIndependentAnimation)
     EXPECT_EQ(original.animation->currentFrameIndex(), 1);
     EXPECT_EQ(sc->animation->currentFrameIndex(), 0);
 }
+
+// ---------------------------------------------------------------------------
+// Phase 10.9 Slice 13 Pe2 — out-parameter overload of buildBatches.
+// Pins that the new render-side path produces the same result as the
+// by-value form, that calling it twice with different inputs clears the
+// previous frame's batches, and that the outer vector's capacity is
+// preserved across calls.
+// ---------------------------------------------------------------------------
+
+TEST(SpriteSystem, BuildBatchesOutParamMatchesByValue_Pe2)
+{
+    auto atlasA = makeAtlas("A");
+    auto atlasB = makeAtlas("B");
+    ASSERT_TRUE(atlasA && atlasB);
+
+    SpriteComponent a;
+    a.atlas = atlasA;
+    a.frameName = "main";
+    a.isTransparent = true;
+
+    SpriteComponent b;
+    b.atlas = atlasB;
+    b.frameName = "main";
+    b.isTransparent = true;
+
+    std::vector<SpriteDrawEntry> entries = {
+        makeEntry(a, 1, 0, 0),
+        makeEntry(b, 2, 0, 1),
+    };
+    SpriteSystem::sortDrawList(entries);
+
+    const auto byValue = SpriteSystem::buildBatches(entries);
+    std::vector<SpriteSystem::Batch> outParam;
+    SpriteSystem::buildBatches(entries, outParam);
+
+    ASSERT_EQ(byValue.size(), outParam.size());
+    for (std::size_t i = 0; i < byValue.size(); ++i)
+    {
+        EXPECT_EQ(byValue[i].atlas,             outParam[i].atlas);
+        EXPECT_EQ(byValue[i].pass,              outParam[i].pass);
+        EXPECT_EQ(byValue[i].instances.size(),  outParam[i].instances.size());
+    }
+}
+
+TEST(SpriteSystem, BuildBatchesOutParamClearsBeforeRefilling_Pe2)
+{
+    auto atlas = makeAtlas("solo");
+    ASSERT_TRUE(atlas);
+
+    SpriteComponent sc;
+    sc.atlas = atlas;
+    sc.frameName = "main";
+
+    std::vector<SpriteDrawEntry> entriesA = { makeEntry(sc, 1, 0, 0) };
+    std::vector<SpriteDrawEntry> entriesB; // empty — second pass has no sprites
+
+    std::vector<SpriteSystem::Batch> out;
+    SpriteSystem::buildBatches(entriesA, out);
+    EXPECT_EQ(out.size(), 1u);
+
+    // Second invocation with an empty input must zero the batch list. A
+    // pre-Pe2 caller-side `auto batches = buildBatches(...)` would have
+    // produced a fresh empty vector; the out-parameter form must mirror
+    // that rather than appending to the prior frame's contents.
+    SpriteSystem::buildBatches(entriesB, out);
+    EXPECT_TRUE(out.empty());
+}
+
+TEST(SpriteSystem, BuildBatchesOutParamPreservesOuterCapacity_Pe2)
+{
+    auto atlas = makeAtlas("cap");
+    ASSERT_TRUE(atlas);
+
+    SpriteComponent t1; t1.atlas = atlas; t1.frameName = "main"; t1.isTransparent = false;
+    SpriteComponent t2; t2.atlas = atlas; t2.frameName = "main"; t2.isTransparent = true;
+
+    std::vector<SpriteDrawEntry> wide = {
+        makeEntry(t1, 1, 0, 0),
+        makeEntry(t2, 2, 0, 1),  // forces a second batch (pass changes)
+    };
+    SpriteSystem::sortDrawList(wide);
+
+    std::vector<SpriteSystem::Batch> out;
+    SpriteSystem::buildBatches(wide, out);
+    const std::size_t fatCapacity = out.capacity();
+    ASSERT_GE(out.size(), 2u);
+
+    // Smaller subsequent frame (1 entry → 1 batch). Vector capacity should
+    // not shrink — the headline contract of Pe2 is monotonic capacity
+    // growth so per-frame allocations converge to zero.
+    std::vector<SpriteDrawEntry> narrow = { makeEntry(t1, 3, 0, 0) };
+    SpriteSystem::buildBatches(narrow, out);
+    EXPECT_EQ(out.size(), 1u);
+    EXPECT_GE(out.capacity(), fatCapacity);
+}

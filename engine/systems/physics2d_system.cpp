@@ -180,26 +180,43 @@ void Physics2DSystem::update(float /*deltaTime*/)
         return;
     }
 
-    // Write cached velocities back onto components so gameplay code /
-    // script nodes can read them without touching Jolt directly.
+    // Phase 10.9 Slice 13 Pe2 — write cached velocities back onto components
+    // so gameplay code / script nodes can read them without touching Jolt
+    // directly. Walking `m_bodyByEntity` directly skips the O(N) entity-tree
+    // visit per frame: only entities that own a tracked body are queried, and
+    // every one of them already has a known body id, so the prior
+    // `forEachEntity` + `getComponent + IsInvalid` filter chain was redundant
+    // work proportional to scene size rather than 2D-physics-body count.
     auto& bodyInterface = m_physicsWorld->getBodyInterface();
-    if (m_engine)
+    if (!m_engine)
     {
-        if (Scene* scene = m_engine->getSceneManager().getActiveScene())
+        return;
+    }
+    Scene* scene = m_engine->getSceneManager().getActiveScene();
+    if (!scene)
+    {
+        return;
+    }
+    for (const auto& [entityId, bodyId] : m_bodyByEntity)
+    {
+        if (bodyId.IsInvalid())
         {
-            scene->forEachEntity([&bodyInterface](Entity& e) {
-                if (auto* rb = e.getComponent<RigidBody2DComponent>())
-                {
-                    if (!rb->bodyId.IsInvalid())
-                    {
-                        const auto vLinear = bodyInterface.GetLinearVelocity(rb->bodyId);
-                        const auto vAngular = bodyInterface.GetAngularVelocity(rb->bodyId);
-                        rb->linearVelocity = glm::vec2(vLinear.GetX(), vLinear.GetY());
-                        rb->angularVelocity = vAngular.GetZ();
-                    }
-                }
-            });
+            continue;
         }
+        Entity* entity = scene->findEntityById(entityId);
+        if (!entity)
+        {
+            continue;
+        }
+        auto* rb = entity->getComponent<RigidBody2DComponent>();
+        if (!rb)
+        {
+            continue;
+        }
+        const auto vLinear  = bodyInterface.GetLinearVelocity(bodyId);
+        const auto vAngular = bodyInterface.GetAngularVelocity(bodyId);
+        rb->linearVelocity  = glm::vec2(vLinear.GetX(), vLinear.GetY());
+        rb->angularVelocity = vAngular.GetZ();
     }
 }
 

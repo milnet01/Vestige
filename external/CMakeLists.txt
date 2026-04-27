@@ -182,11 +182,15 @@ target_compile_options(imgui_lib PRIVATE -w)
 set(imgui_SOURCE_DIR ${imgui_SOURCE_DIR} PARENT_SCOPE)
 
 # ImGuizmo — 3D transform gizmos for the editor
+# Pinned to a15acd8 (LightRig Editor, 2025-12-27) — the next upstream commit
+# 1e5371c "Add option to DrawAxes" introduced uses of vec_t(float, float, float)
+# without adding the matching constructor, so master refuses to compile under
+# the GCC 14 toolchain we ship. Re-evaluate the pin when upstream lands a fix
+# (track via the open issues on CedricGuillemet/ImGuizmo).
 FetchContent_Declare(
     imguizmo
     GIT_REPOSITORY https://github.com/CedricGuillemet/ImGuizmo.git
-    GIT_TAG        master
-    GIT_SHALLOW    TRUE
+    GIT_TAG        a15acd87a3f3241a29ea1363ceafc680dca3a96b
     # Engine defines `imguizmo_lib` STATIC target below — SOURCE_SUBDIR skip.
     SOURCE_SUBDIR  __engine_defines_target__
 )

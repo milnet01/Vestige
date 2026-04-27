@@ -5,10 +5,12 @@
 /// @brief Welcome panel implementation.
 #include "editor/panels/welcome_panel.h"
 
+#include "core/logger.h"
+#include "utils/atomic_write.h"
+
 #include <imgui.h>
 
 #include <filesystem>
-#include <fstream>
 
 namespace Vestige
 {
@@ -153,15 +155,18 @@ void WelcomePanel::markAsShown()
 {
     m_shownBefore = true;
 
-    // Create config directory if needed
-    std::error_code ec;
-    std::filesystem::create_directories(m_configDir, ec);
-
-    // Write flag file
-    std::ofstream file(m_flagPath);
-    if (file.is_open())
+    // Phase 10.9 Slice 12 Ed4 — atomic write so the flag is either
+    // entirely written or not present (the legacy ofstream path could
+    // leave an empty file if the editor was killed mid-flush, which
+    // would still trigger the "exists()" check on next launch and
+    // suppress the welcome panel for a user who never actually saw
+    // it). AtomicWrite creates parent directories itself.
+    const AtomicWrite::Status s = AtomicWrite::writeFile(m_flagPath, "1");
+    if (s != AtomicWrite::Status::Ok)
     {
-        file << "1";
+        Logger::warning(std::string("WelcomePanel: ")
+                        + AtomicWrite::describe(s)
+                        + " for " + m_flagPath);
     }
 }
 

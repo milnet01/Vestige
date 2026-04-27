@@ -90,10 +90,17 @@ bool drawCurveEditor(const char* label, AnimationCurve& curve, float width, floa
         drawList->AddLine(p0, p1, lineColor, 2.0f);
     }
 
-    // Track dragging state via static variables (per ImGui ID)
-    static int s_dragIndex = -1;
-    static ImGuiID s_dragId = 0;
-    ImGuiID widgetId = ImGui::GetID("##CurveCanvas");
+    // Phase 10.9 Slice 12 Ed9 — drag state moved out of file-static
+    // variables and into per-widget storage via `ImGui::GetStateStorage()`.
+    // The previous static + widgetId qualifier worked when the curve
+    // editor only ever rendered one instance per frame, but a nested or
+    // duplicated invocation (two curve widgets in the same panel) would
+    // share the static slots and conflict on drag start. Per-widget
+    // storage is keyed by IDs derived inside this PushID(label) block
+    // so each instance gets its own state.
+    ImGuiStorage* storage = ImGui::GetStateStorage();
+    const ImGuiID dragIndexKey = ImGui::GetID("##dragIndex");
+    int dragIndex = storage->GetInt(dragIndexKey, -1);
 
     // Draw handles and handle interaction
     ImVec2 mousePos = ImGui::GetMousePos();
@@ -106,13 +113,13 @@ bool drawCurveEditor(const char* label, AnimationCurve& curve, float width, floa
         float dy = mousePos.y - handlePos.y;
         bool overHandle = (dx * dx + dy * dy) <= (HANDLE_RADIUS + 3.0f) * (HANDLE_RADIUS + 3.0f);
 
-        bool isDragging = (s_dragIndex == i && s_dragId == widgetId);
+        bool isDragging = (dragIndex == i);
 
         // Start drag
         if (isHovered && overHandle && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
         {
-            s_dragIndex = i;
-            s_dragId = widgetId;
+            dragIndex = i;
+            storage->SetInt(dragIndexKey, dragIndex);
         }
 
         // Continue drag
@@ -140,8 +147,8 @@ bool drawCurveEditor(const char* label, AnimationCurve& curve, float width, floa
         // End drag
         if (isDragging && ImGui::IsMouseReleased(ImGuiMouseButton_Left))
         {
-            s_dragIndex = -1;
-            s_dragId = 0;
+            dragIndex = -1;
+            storage->SetInt(dragIndexKey, dragIndex);
             curve.sort();
             modified = true;
         }
@@ -165,7 +172,7 @@ bool drawCurveEditor(const char* label, AnimationCurve& curve, float width, floa
     }
 
     // Double-click to add new keyframe
-    if (isHovered && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && s_dragIndex == -1)
+    if (isHovered && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && dragIndex == -1)
     {
         float newT = 0.0f;
         float newV = 0.0f;
@@ -175,7 +182,7 @@ bool drawCurveEditor(const char* label, AnimationCurve& curve, float width, floa
     }
 
     // Tooltip showing value at cursor position
-    if (isHovered && s_dragIndex == -1)
+    if (isHovered && dragIndex == -1)
     {
         float hoverT = 0.0f;
         float hoverV = 0.0f;

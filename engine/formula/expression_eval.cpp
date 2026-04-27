@@ -61,6 +61,22 @@ static float evalNode(const ExprNode& node,
         if (node.op == "max") return std::fmax(left, right);
         if (node.op == "mod") return std::fmod(left, right);
 
+        // Phase 10.9 Slice 14 Sc3 — `dot` (and any future vector op) is
+        // emitted by the C++ / GLSL codegens but cannot be evaluated by
+        // this scalar runtime. Pre-Sc3 the generic "Unknown binary op"
+        // error left Workbench users wondering why a formula that
+        // codegen accepted couldn't be fit; the explicit message points
+        // at the design split so the right tool gets reached for.
+        if (node.op == "dot")
+        {
+            throw std::runtime_error(
+                "ExpressionEvaluator: '" + node.op
+                + "' is a vector op emitted by codegen_cpp / codegen_glsl, "
+                  "but this evaluator is scalar-only. Use the codegen path "
+                  "(or the formula via its compiled C++/GLSL form) for "
+                  "vector ops. The Workbench LM fitter cannot fit formulas "
+                  "containing vector ops via the scalar evaluator.");
+        }
         throw std::runtime_error("Unknown binary op: " + node.op);
     }
 

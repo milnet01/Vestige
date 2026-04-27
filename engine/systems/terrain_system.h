@@ -29,6 +29,14 @@ public:
     void shutdown() override;
     void update(float deltaTime) override;
 
+    /// @brief Phase 10.9 Slice 8 W5 — TerrainSystem owns one global
+    ///        heightfield, splatmap, and renderer rather than per-entity
+    ///        components. With no owned component types, the
+    ///        scene-has-no-owned-components heuristic would deactivate
+    ///        a system that the scene very much needs (terrain LOD
+    ///        update, GPU upload, brush sculpt commit). Force active.
+    bool isForceActive() const override { return true; }
+
     // -- Accessors --
     Terrain& getTerrain() { return m_terrain; }
     const Terrain& getTerrain() const { return m_terrain; }

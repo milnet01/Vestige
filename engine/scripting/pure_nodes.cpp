@@ -14,6 +14,7 @@
 #include "scripting/script_context.h"
 #include "core/engine.h"
 #include "core/logger.h"
+#include "formula/safe_math.h"
 #include "scene/entity.h"
 #include "scene/scene.h"
 #include "physics/physics_world.h"
@@ -192,24 +193,34 @@ void registerPureNodeTypes(NodeTypeRegistry& registry)
         {
             float a = sanitize(ctx.readInputAs<float>(node, "A"));
             float b = sanitize(ctx.readInputAs<float>(node, "B"));
-            float r;
-            if (std::abs(b) < 1e-9f)
+
+            // Phase 10.9 Slice 14 Sc5 — route through `SafeMath::safeDiv`
+            // so the exact-zero policy matches `ExpressionEvaluator`,
+            // `codegen_cpp`, and `codegen_glsl`. Pre-Sc5 used `std::abs(b)
+            // < 1e-9f` which classified small-but-finite divisors as
+            // zero, producing the "R²=0.99 in fitter, NaN at runtime"
+            // class of bugs whenever a Workbench-fit formula and the
+            // shipped runtime disagreed at the cliff edge.
+            float r = SafeMath::safeDiv(a, b);
+            if (!std::isfinite(r))
             {
-                // Silent 0 on div-by-zero can mask logic bugs (audit L1).
-                // Rate-limit to first occurrence per nodeId so a 60 Hz node
-                // graph doesn't flood logs with identical warnings.
+                // Belt-and-braces: a denormal `a / b` could in principle
+                // overflow to inf, which we project to 0 to keep the
+                // graph in finite-value space (matches the project-wide
+                // SafeMath convention documented in safe_math.h).
+                r = 0.0f;
+            }
+            if (b == 0.0f)
+            {
+                // Rate-limit to first occurrence per nodeId so a 60 Hz
+                // node graph doesn't flood logs with identical warnings.
                 if (shouldLogOnceForNode(node.nodeId))
                 {
                     Logger::warning(
-                        "[MathDiv] division by ~0 (B=" + std::to_string(b) +
-                        ") in node " + std::to_string(node.nodeId) +
-                        " — returning 0 (further occurrences suppressed)");
+                        "[MathDiv] division by zero in node "
+                        + std::to_string(node.nodeId)
+                        + " — returning 0 (further occurrences suppressed)");
                 }
-                r = 0.0f;
-            }
-            else
-            {
-                r = a / b;
             }
             ctx.setOutput(node, "Result", ScriptValue(sanitize(r)));
         }

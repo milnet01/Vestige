@@ -36,10 +36,12 @@
 #include <gtest/gtest.h>
 
 #include "editor/prefab_system.h"
+#include "editor/recent_files.h"
 #include "resource/resource_manager.h"
 #include "scene/entity.h"
 #include "scene/scene.h"
 
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -156,4 +158,102 @@ TEST_F(AtomicWriteRoutingTest,
     EXPECT_FALSE(fs::exists(tmpPath))
         << "savePrefab left a .tmp sidecar — rename step did not "
            "complete (engine/utils/atomic_write.h contract).";
+}
+
+// ---------------------------------------------------------------------------
+// Phase 10.9 Slice 12 Ed4 — RecentFiles::save() must route through
+// AtomicWrite::writeFile, not a direct truncate-and-stream. Same shape
+// as the prefab-routing test above: plant a stale `.tmp` sidecar, save,
+// and assert it is replaced by the helper's write-tmp + rename cycle.
+// ---------------------------------------------------------------------------
+
+namespace
+{
+
+class RecentFilesAtomicWriteTest : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        // Sandbox via $XDG_CONFIG_HOME so we don't perturb the user's
+        // real recent_files.json. Per-process + per-test name stamping
+        // prevents `ctest -j` runs of this fixture from racing each other.
+        m_xdgRoot = fs::temp_directory_path()
+                  / ("vestige_ed4_recent_"
+                      + std::to_string(VESTIGE_GETPID()) + "_"
+                      + ::testing::UnitTest::GetInstance()
+                          ->current_test_info()->name());
+        std::error_code ec;
+        fs::remove_all(m_xdgRoot, ec);
+        fs::create_directories(m_xdgRoot);
+
+        const char* prev = std::getenv("XDG_CONFIG_HOME");
+        m_prevXdg = prev ? prev : "";
+        setenv("XDG_CONFIG_HOME", m_xdgRoot.c_str(), 1);
+    }
+
+    void TearDown() override
+    {
+        if (m_prevXdg.empty())
+        {
+            unsetenv("XDG_CONFIG_HOME");
+        }
+        else
+        {
+            setenv("XDG_CONFIG_HOME", m_prevXdg.c_str(), 1);
+        }
+        std::error_code ec;
+        fs::remove_all(m_xdgRoot, ec);
+    }
+
+    fs::path storagePath() const
+    {
+        return m_xdgRoot / "vestige" / "recent_files.json";
+    }
+
+    fs::path m_xdgRoot;
+    std::string m_prevXdg;
+};
+
+} // namespace
+
+TEST_F(RecentFilesAtomicWriteTest,
+       SaveClearsStaleTmpSidecar_Ed4)
+{
+    // Plant the stale .tmp before the save runs.
+    const fs::path target = storagePath();
+    fs::create_directories(target.parent_path());
+    fs::path stale = target;
+    stale += ".tmp";
+    {
+        std::ofstream out(stale);
+        out << "stale garbage from a crashed save";
+    }
+    ASSERT_TRUE(fs::exists(stale));
+
+    RecentFiles rf;
+    rf.addPath(fs::path("/tmp/scene_one.json"));
+    rf.save();
+
+    EXPECT_TRUE(fs::exists(target))
+        << "RecentFiles::save did not produce " << target;
+    EXPECT_FALSE(fs::exists(stale))
+        << "stale .tmp sidecar survived RecentFiles::save — atomic-write "
+           "helper was not invoked (Phase 10.9 Slice 12 Ed4).";
+}
+
+TEST_F(RecentFilesAtomicWriteTest, SaveLeavesNoTmpArtifact_Ed4)
+{
+    RecentFiles rf;
+    rf.addPath(fs::path("/tmp/scene_one.json"));
+    rf.save();
+
+    const fs::path target = storagePath();
+    fs::path tmp = target;
+    tmp += ".tmp";
+
+    EXPECT_TRUE(fs::exists(target));
+    EXPECT_FALSE(fs::exists(tmp))
+        << "RecentFiles::save left a .tmp sidecar — rename step did "
+           "not complete.";
 }
