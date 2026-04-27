@@ -1456,6 +1456,96 @@ std::unique_ptr<Model> GltfLoader::load(const std::string& filePath,
         },
         nullptr);
 
+    // Phase 10.9 Slice 5 D2: install sandboxed FsCallbacks so tinygltf
+    // cannot read external buffers / images from outside the .gltf
+    // file's parent directory. Closes the confused-deputy / TOCTOU
+    // window where the default callbacks would open() bytes off disk
+    // before our resolveUri saw the URI. Wraps tinygltf's default
+    // implementations with a PathSandbox::validateInsideRoots check
+    // against the gltfDir.
+    std::filesystem::path gltfFilePath(filePath);
+    std::filesystem::path gltfDirPath = gltfFilePath.parent_path();
+    if (gltfDirPath.empty())
+    {
+        // Bare filename — resolve relative to CWD (matches tinygltf's
+        // own default base-dir behaviour).
+        std::error_code cwdEc;
+        gltfDirPath = std::filesystem::current_path(cwdEc);
+        if (cwdEc)
+        {
+            gltfDirPath = ".";
+        }
+    }
+
+    const std::vector<std::filesystem::path> kFsRoots { gltfDirPath };
+    tinygltf::FsCallbacks fsCallbacks {
+        // FileExists — tinygltf calls this first when probing where an
+        // external URI lives. Returning false on sandbox-escape causes
+        // the search to fall through to "File not found" without ever
+        // calling ReadWholeFile, so this is where we log the rejection.
+        // (A genuinely missing file inside the sandbox returns false
+        // here too, but quietly — that path is a normal lookup miss,
+        // not an attack.)
+        [kFsRoots](const std::string& abs, void*) -> bool
+        {
+            if (PathSandbox::validateInsideRoots(abs, kFsRoots).empty())
+            {
+                Logger::warning("glTF FsCallbacks: rejected read outside "
+                    "gltfDir: " + abs);
+                return false;
+            }
+            return tinygltf::FileExists(abs, nullptr);
+        },
+        // ExpandFilePath — pass through (tinygltf's default is a no-op
+        // for security; we keep that and let our validate step handle
+        // the rest).
+        &tinygltf::ExpandFilePath,
+        // ReadWholeFile
+        [kFsRoots](std::vector<unsigned char>* out, std::string* readErr,
+                   const std::string& path, void*) -> bool
+        {
+            if (PathSandbox::validateInsideRoots(path, kFsRoots).empty())
+            {
+                if (readErr)
+                {
+                    *readErr = "Vestige sandbox: path outside gltf directory: "
+                        + path;
+                }
+                Logger::warning("glTF FsCallbacks: rejected read outside "
+                    "gltfDir: " + path);
+                return false;
+            }
+            return tinygltf::ReadWholeFile(out, readErr, path, nullptr);
+        },
+        // WriteWholeFile — not used during load, but SetFsCallbacks
+        // requires every slot non-null. Pass through.
+        &tinygltf::WriteWholeFile,
+        // GetFileSizeInBytes
+        [kFsRoots](size_t* sz, std::string* sizeErr,
+                   const std::string& path, void*) -> bool
+        {
+            if (PathSandbox::validateInsideRoots(path, kFsRoots).empty())
+            {
+                if (sizeErr)
+                {
+                    *sizeErr = "Vestige sandbox: path outside gltf directory: "
+                        + path;
+                }
+                return false;
+            }
+            return tinygltf::GetFileSizeInBytes(sz, sizeErr, path, nullptr);
+        },
+        nullptr,
+    };
+    {
+        std::string fsErr;
+        if (!loader.SetFsCallbacks(fsCallbacks, &fsErr))
+        {
+            Logger::error("glTF: SetFsCallbacks failed: " + fsErr);
+            return nullptr;
+        }
+    }
+
     std::string err;
     std::string warn;
 
@@ -1521,11 +1611,14 @@ std::unique_ptr<Model> GltfLoader::load(const std::string& filePath,
 
     auto model = std::make_unique<Model>();
 
-    // Extract filename for model name
-    std::filesystem::path path(filePath);
-    model->m_name = path.stem().string();
+    // Extract filename for model name (gltfFilePath is already canonicalised
+    // for the FsCallbacks sandbox; reuse it here).
+    model->m_name = gltfFilePath.stem().string();
 
-    std::string gltfDir = path.parent_path().string();
+    // Use the same directory the FsCallbacks sandbox was rooted at — this
+    // way `loadTextures`'s resolveUri check and tinygltf's read-time
+    // sandbox agree on what counts as "inside" the asset directory.
+    std::string gltfDir = gltfDirPath.string();
 
     // Pre-scan materials to determine sRGB vs linear images
     std::set<int> srgbImages = determineSrgbImages(gltfModel);

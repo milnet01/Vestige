@@ -9,6 +9,60 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-27 Phase 10.9 — Slice 5 D2 (tinygltf FsCallbacks sandbox)
+
+**D2 — closes the confused-deputy / TOCTOU window in glTF loading.**
+Before this change, tinygltf's default `FsCallbacks` would `open()` and
+read every external buffer / image file referenced by a `.gltf`'s
+`buffers[].uri` / `images[].uri` *before* our `resolveUri` saw the path.
+A malicious `.gltf` with a URI like `../../etc/passwd` therefore caused
+real disk reads off the engine's host even when our subsequent
+`resolveUri` rejection would have prevented those bytes from ever
+becoming a renderable asset — the bytes had already been read into
+RAM by the time the rejection happened.
+
+The fix installs a sandboxed `FsCallbacks` block on the `tinygltf::TinyGLTF`
+loader before either `LoadASCIIFromFile` or `LoadBinaryFromFile` is
+called. The wrapper computes `gltfDir = parent_path(filePath)` (falling
+back to the current working directory for a bare filename, matching
+tinygltf's own default base-dir behaviour) and runs every `FileExists` /
+`ReadWholeFile` / `GetFileSizeInBytes` request through
+`Vestige::PathSandbox::validateInsideRoots(path, [gltfDir])` — the same
+canonicalising helper that backs D1's `ResourceManager` sandbox and
+D11's `AudioEngine` sandbox. Paths outside the gltf directory are
+rejected before the underlying default tinygltf implementation is even
+consulted, so `open()` is never called on attacker-chosen paths.
+
+`ExpandFilePath` and `WriteWholeFile` (the latter is unused during
+load but `SetFsCallbacks` requires every slot non-null) pass through
+to the default tinygltf implementations unchanged. `ExpandFilePath` is
+already a no-op in upstream tinygltf for security reasons (no `~` or
+`%ENV%` expansion since 2018, per their issue #368), so there is
+nothing to wrap there.
+
+The warning fires from `FileExists` rather than `ReadWholeFile` because
+tinygltf calls `FileExists` first when probing where an external URI
+lives — a sandbox-rejected `FileExists` short-circuits the search and
+`ReadWholeFile` is never reached. Logging at the `FileExists` step
+catches the attack the moment it's first probed (one warning per
+attack, not zero). Genuinely-missing files inside the sandbox return
+`false` quietly the same way they always have, so the warning is
+attack-specific not noise.
+
+The pre-existing `loadTextures` `resolveUri` check is now belt-and-braces
+defence-in-depth: anything that reaches `loadTextures` has already
+passed the FsCallbacks sandbox, but a future regression in either layer
+is still caught by the other.
+
+5 new tests in `tests/test_gltf_fs_sandbox.cpp` pin: same-dir buffer URI
+accepted (positive control), `../escape/...` traversal URI rejected
+before any disk read with a sandbox warning logged, absolute-path URI
+rejected the same way, nested-subdir URI accepted (canonicalises inside
+`gltfDir`), and embedded `data:` URIs accepted without the FS callback
+ever firing (proves the sandbox only fires for on-disk reads, not
+embedded payloads). 3049 / 3050 pass (+5 vs D12's 3044, 1 pre-existing
+skip unchanged).
+
 ### 2026-04-25 Phase 10.9 — Slice 5 D3 + D4 (cube LUT hardening + OBJ MTL declared not-supported)
 
 **D3 — `.cube` LUT loader hardening.** `engine/utils/cube_loader.cpp`
