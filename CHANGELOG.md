@@ -9,6 +9,19 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-27 Audit tool 2.18.0 — gtest-macro CI red-status fix
+
+`tools/audit/audit_config.yaml` cppcheck args now define the gtest
+test macros (`TEST_F`, `TEST`, `TEST_P`, `TYPED_TEST`) so cppcheck can
+parse fixture-style test files. The Tier 1 audit step had been red on
+every push since those files landed because cppcheck's parser bailed
+on the unknown macro and emitted 9 spurious `[syntaxError]` findings;
+the audit's exit-code-by-severity logic took those as HIGH-severity
+gating errors. Plus an inline `cppcheck-suppress nullPointer` comment
+in `tests/test_system_registry.cpp:843` for the deliberate-UB
+fixture-engine pattern (real Engine construction needs GL + audio +
+physics contexts the CI runner can't stand up). Audit now exits 0.
+
 ### 2026-04-27 Phase 10.9 — Wave 3 (audit fast-wins, 13 items)
 
 **Build hygiene.**

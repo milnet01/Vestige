@@ -54,6 +54,10 @@ static_analysis:
       --suppress=missingIncludeSystem
       --suppress=unusedFunction
       -I engine/ -I external/
+      -DTEST_F(a,b)=void\ a##b()
+      -DTEST(a,b)=void\ a##b()
+      -DTEST_P(a,b)=void\ a##b()
+      -DTYPED_TEST(a,b)=void\ a##b()
     output_format: "xml"
     targets: ["engine/", "app/", "tests/"]
     timeout: 600

@@ -2,6 +2,45 @@
 
 All notable changes to the Audit Tool are documented in this file.
 
+## [2.18.0] - 2026-04-27
+
+### Fixed — gtest-macro syntax errors gating CI on test files
+
+The Tier 1 audit step failed with exit code 1 on every push since the
+fixture-style test files landed (`test_audio_engine_sandbox.cpp`,
+`test_path_sandbox.cpp`, `test_resource_manager_sandbox.cpp`,
+`test_cube_loader_hardening.cpp`, `test_entity_serializer_depth_cap.cpp`,
+`test_gltf_bounds_checks.cpp`, `test_gltf_fs_sandbox.cpp`,
+`test_lip_sync_sandbox.cpp`, `test_obj_mtl_warning.cpp`, plus a
+deliberate-UB test in `test_system_registry.cpp`). 9 of the 10 gating
+findings were spurious cppcheck `[syntaxError]` reports caused by
+cppcheck's parser being unable to understand `TEST_F(...)` /
+`TEST(...)` / `TEST_P(...)` / `TYPED_TEST(...)` macros without seeing
+their definitions. Adding the gtest headers made the situation worse
+(cppcheck struggles with gtest internals too).
+
+**Root-cause fix:** four `-D` flags in `audit_config.yaml`'s cppcheck
+arg list teach cppcheck what the macros expand to:
+
+```yaml
+-DTEST_F(a,b)=void\ a##b()
+-DTEST(a,b)=void\ a##b()
+-DTEST_P(a,b)=void\ a##b()
+-DTYPED_TEST(a,b)=void\ a##b()
+```
+
+cppcheck now successfully parses test bodies (and *would* find a real
+issue if one existed there), instead of bailing on the macro line.
+The remaining `[nullPointer]` finding at
+`test_system_registry.cpp:843` is a deliberate UB pattern in a
+fixture (`Engine* fakeEngine = nullptr; registry.initializeAll(*fakeEngine);`)
+that MockSystem stores but never dereferences; suppressed inline with
+a sentinel comment naming the constraint and the refactor that would
+remove the suppression (real Engine instantiation requires GL +
+audio + physics contexts that the headless CI runner cannot stand
+up). Local Tier 1 audit now exits 0; previous run exited 1 with 10
+gating findings.
+
 ## [2.17.0] - 2026-04-21
 
 ### Changed — three more clang-tidy checks disabled (identifier-length + magic-numbers)
