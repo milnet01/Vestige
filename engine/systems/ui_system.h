@@ -41,6 +41,14 @@ public:
     void shutdown() override;
     void update(float deltaTime) override;
 
+    /// @brief UI runs in the Render phase so screen-stack / canvas /
+    ///        ImGui-frame state is prepared after every domain-system
+    ///        update has settled — anything else trying to read or
+    ///        mutate UI state during its own update sees a stable view
+    ///        from the previous frame, not a half-applied one
+    ///        (Phase 10.9 Slice 11 Sy1).
+    UpdatePhase getUpdatePhase() const override { return UpdatePhase::Render; }
+
     // -- Accessors --
     SpriteBatchRenderer& getSpriteBatchRenderer() { return m_spriteBatch; }
     const SpriteBatchRenderer& getSpriteBatchRenderer() const { return m_spriteBatch; }

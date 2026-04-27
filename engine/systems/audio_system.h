@@ -32,6 +32,12 @@ public:
     void update(float deltaTime) override;
     std::vector<uint32_t> getOwnedComponentTypes() const override;
 
+    /// @brief Audio runs in the PostCamera phase so the listener-sync at
+    ///        the top of `update()` reads the camera transform after the
+    ///        camera has been stepped this frame (Phase 10.9 Slice 11 Sy1
+    ///        — closes the W6 listener-after-camera dependency).
+    UpdatePhase getUpdatePhase() const override { return UpdatePhase::PostCamera; }
+
     // -- Accessors --
     AudioEngine& getAudioEngine() { return m_audioEngine; }
     const AudioEngine& getAudioEngine() const { return m_audioEngine; }

@@ -9,6 +9,59 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-27 Phase 10.9 — Slice 11 Sy1 (ISystem update-phase ordering)
+
+**Sy1 — deterministic per-frame system ordering.** Before this change,
+`SystemRegistry::updateAll` walked `m_systems` in registration order. Any
+system whose update had a hard ordering dependency (AudioSystem reads the
+camera transform to update the OpenAL listener; UISystem prepares
+render-time ImGui state) relied on the registration-order accident
+keeping it in the right slot — adding or reordering anything earlier
+in the registration list would silently break the contract.
+
+`engine/core/i_system.h` introduces `enum class UpdatePhase { PreUpdate
+= -100, Update = 0, PostCamera = 100, PostPhysics = 200, Render = 300 }`
+and a default-virtual `ISystem::getUpdatePhase()` returning
+`UpdatePhase::Update`. `SystemRegistry::sortByUpdatePhase()` runs a
+`std::stable_sort` over `m_systems` by phase tag — within-phase order
+is preserved as registration order, so the bulk of systems that don't
+override the default keep their existing relative ordering. The sort
+runs automatically at the start of `initializeAll()`, before any
+per-system `initialize()` fires, so per-frame dispatch is deterministic
+without callers needing to know about the mechanism.
+
+Two production overrides land with the foundation: `AudioSystem` →
+`UpdatePhase::PostCamera` (closes the W6 listener-after-camera
+dependency the next slice closes by leaning on this work);
+`UISystem` → `UpdatePhase::Render` (UI prepares render-time state, so
+any other system reading or mutating UI state during *its* update sees
+a stable view from the previous frame, not a half-applied one).
+
+The integer phase values exist only to make the comparator trivial;
+production code should not depend on the specific numbers, only their
+relative ordering. Slot semantics are documented on the enum in
+`i_system.h` (PreUpdate = transform-sync; Update = default;
+PostCamera = camera-state consumers; PostPhysics = post-step physics
+consumers, reserved for Phase 11A; Render = render-time state
+preparation).
+
+`SystemRegistry` also gains `getSystemsForTest()` so phase-ordering
+tests can read the live `m_systems` layout without going through full
+engine initialisation. Production code should not call this — the
+concrete vector layout is an implementation detail.
+
+7 new tests in `tests/test_system_registry.cpp`'s `*_Sy1` suite pin:
+default phase is `Update`, sort orders across all five slots, stable
+sort preserves within-phase order, stable sort preserves order across
+interleaved phases, sort is idempotent, `initializeAll` runs the sort
+before per-system init, `updateAll` calls systems in phase order. The
+existing `MockSystem` gained a `setUpdatePhase` helper + a private
+`m_phase` member so existing 42 SystemRegistryTest tests stay
+untouched.
+
+3056 / 3057 pass (+7 vs Slice 5 D2's 3049; 1 pre-existing skip
+unchanged).
+
 ### 2026-04-27 Phase 10.9 — Slice 5 D2 (tinygltf FsCallbacks sandbox)
 
 **D2 — closes the confused-deputy / TOCTOU window in glTF loading.**

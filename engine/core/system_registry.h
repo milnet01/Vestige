@@ -113,6 +113,30 @@ public:
     /// @brief Returns the number of registered systems.
     size_t getSystemCount() const { return m_systems.size(); }
 
+    /// @brief Stable-sorts `m_systems` by `ISystem::getUpdatePhase()`.
+    ///
+    /// Phase 10.9 Slice 11 Sy1. Called automatically at the start of
+    /// `initializeAll()` so per-frame dispatch is deterministic. Exposed
+    /// publicly so tests can register dummy systems and verify the
+    /// resulting order without going through full engine initialisation.
+    /// Idempotent — calling twice on an already-sorted list is a no-op.
+    /// Stable sort guarantees within-phase order is registration order.
+    ///
+    /// Must NOT be called between `initializeAll()` and `shutdownAll()`:
+    /// re-ordering live systems mid-frame would change which `m_systems[i]`
+    /// each metric / activation flag was measured against. The registry's
+    /// own callsite gates this by running the sort before any per-system
+    /// `initialize()` has fired.
+    void sortByUpdatePhase();
+
+    /// @brief Returns the registered systems in current iteration order.
+    ///        Test-only accessor — production code should not depend on
+    ///        the concrete vector layout.
+    const std::vector<std::unique_ptr<ISystem>>& getSystemsForTest() const
+    {
+        return m_systems;
+    }
+
     // -----------------------------------------------------------------------
     // Lifecycle
     // -----------------------------------------------------------------------

@@ -17,6 +17,45 @@ class Scene;
 struct SceneRenderData;
 class PerformanceProfiler;
 
+/// @brief Coarse update-phase tag controlling per-frame dispatch order.
+///
+/// Phase 10.9 Slice 11 Sy1. SystemRegistry stable-sorts `m_systems` by this
+/// tag at initialise time so callers (Engine::update + the per-frame
+/// `updateAll()` it drives) see a deterministic phase ordering regardless of
+/// registration order. Within the same phase, registration order is
+/// preserved (the sort is stable), keeping legacy "register in update order"
+/// semantics intact for the bulk of systems that don't override the default.
+///
+/// The integer values exist only to make the sort comparator trivial; do
+/// not rely on the specific numbers — only their relative ordering.
+///
+/// Slot meanings:
+///
+/// - `PreUpdate`   — runs first. Use for transform-sync (e.g. pushing Jolt
+///                   body world-transforms back into ECS `Transform`
+///                   components) and any other "prime the frame" work the
+///                   default-Update systems will read.
+/// - `Update`      — default phase. Most domain systems sit here.
+/// - `PostCamera`  — runs after the camera has been stepped. Use for
+///                   systems that consume camera world transform / view
+///                   matrix in their update — `AudioSystem` reads camera
+///                   pos+forward+up to update the OpenAL listener (Slice
+///                   11 W6 closes the dependency).
+/// - `PostPhysics` — runs after physics-driven systems have written their
+///                   post-step state. Reserved for Phase 11A consumers
+///                   that need post-integration body data (replay record /
+///                   playback, telemetry).
+/// - `Render`      — runs last. Use for systems that prepare or submit
+///                   render-time state (`UISystem`'s ImGui frame state).
+enum class UpdatePhase : int
+{
+    PreUpdate    = -100,
+    Update       =    0,
+    PostCamera   =  100,
+    PostPhysics  =  200,
+    Render       =  300,
+};
+
 /// @brief Abstract base class for domain systems.
 ///
 /// Each domain system (Terrain, Vegetation, Water, Cloth, etc.) inherits from
@@ -59,6 +98,17 @@ public:
     /// @brief Per-frame variable-rate update.
     /// @param deltaTime Time elapsed since last frame in seconds.
     virtual void update(float deltaTime) = 0;
+
+    /// @brief Returns the update-phase tag controlling dispatch ordering.
+    ///
+    /// SystemRegistry stable-sorts by this tag at `initializeAll()` time so
+    /// per-frame `updateAll` / `submitRenderDataAll` / `drawDebugAll` walk
+    /// the systems in phase order regardless of registration order. Default
+    /// is `UpdatePhase::Update`. Override only when the system has a hard
+    /// ordering dependency (e.g. AudioSystem reads camera state →
+    /// `PostCamera`; UISystem prepares render-time ImGui state →
+    /// `Render`). See `UpdatePhase` for slot meanings.
+    virtual UpdatePhase getUpdatePhase() const { return UpdatePhase::Update; }
 
     // -----------------------------------------------------------------------
     // Opt-in virtual no-ops -- override only when needed

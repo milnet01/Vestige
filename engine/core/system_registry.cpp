@@ -8,11 +8,25 @@
 #include "scene/scene.h"
 #include "scene/entity.h"
 
+#include <algorithm>
 #include <chrono>
 #include <unordered_set>
 
 namespace Vestige
 {
+
+void SystemRegistry::sortByUpdatePhase()
+{
+    // Stable-sort: within-phase order is preserved as registration order, so
+    // legacy "register in update order" semantics still hold for the bulk of
+    // systems that use the default `UpdatePhase::Update` tag.
+    std::stable_sort(m_systems.begin(), m_systems.end(),
+        [](const std::unique_ptr<ISystem>& a, const std::unique_ptr<ISystem>& b)
+        {
+            return static_cast<int>(a->getUpdatePhase())
+                 < static_cast<int>(b->getUpdatePhase());
+        });
+}
 
 bool SystemRegistry::initializeAll(Engine& engine)
 {
@@ -21,6 +35,11 @@ bool SystemRegistry::initializeAll(Engine& engine)
         Logger::warning("SystemRegistry: already initialized");
         return false;
     }
+
+    // Phase 10.9 Slice 11 Sy1 — establish phase ordering before any
+    // per-system `initialize()` runs, so per-frame dispatch is deterministic
+    // regardless of the order callers happened to register systems in.
+    sortByUpdatePhase();
 
     // Track how many systems initialized cleanly so failure-path cleanup
     // (Phase 10.9 Slice 1 F10) can tear down exactly that prefix in reverse.

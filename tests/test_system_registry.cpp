@@ -13,6 +13,7 @@
 #include "scene/component.h"
 
 #include <gtest/gtest.h>
+#include <algorithm>
 #include <string>
 #include <vector>
 
@@ -85,12 +86,15 @@ public:
         return m_ownedTypes;
     }
 
+    UpdatePhase getUpdatePhase() const override { return m_phase; }
+
     // Test helpers
     void setShouldInitSucceed(bool succeed) { m_shouldInitSucceed = succeed; }
     void setOwnedComponentTypes(std::vector<uint32_t> types)
     {
         m_ownedTypes = std::move(types);
     }
+    void setUpdatePhase(UpdatePhase phase) { m_phase = phase; }
 
     bool wasInitialized() const { return m_initialized; }
     int getUpdateCount() const { return m_updateCount; }
@@ -110,6 +114,7 @@ private:
     float m_lastDeltaTime = 0.0f;
     float m_lastFixedDt = 0.0f;
     std::vector<uint32_t> m_ownedTypes;
+    UpdatePhase m_phase = UpdatePhase::Update;
 };
 
 std::vector<std::string> MockSystem::s_callLog;
@@ -719,4 +724,163 @@ TEST_F(SystemRegistryTest, MetricsOnEmptyRegistry)
 {
     auto metrics = registry.getSystemMetrics();
     EXPECT_TRUE(metrics.empty());
+}
+
+// =============================================================================
+// Phase 10.9 Slice 11 Sy1 — UpdatePhase ordering
+// =============================================================================
+//
+// Pin contract: SystemRegistry::sortByUpdatePhase() reorders m_systems so
+// PreUpdate < Update < PostCamera < PostPhysics < Render, and the sort is
+// stable (within-phase order is preserved as registration order).
+//
+// Direct verification uses getSystemsForTest() to read the live order
+// without going through initializeAll() — that lets the assertions compare
+// pointer identity, which is more precise than re-driving update() and
+// inspecting MockSystem::s_callLog.
+
+namespace
+{
+
+/// @brief Returns the ordered names of the registry's current m_systems
+///        layout. Helper for the Sy1 phase-ordering tests.
+std::vector<std::string> registryNamesInOrder(const SystemRegistry& reg)
+{
+    std::vector<std::string> names;
+    for (const auto& sys : reg.getSystemsForTest())
+    {
+        names.push_back(sys->getSystemName());
+    }
+    return names;
+}
+
+}  // namespace
+
+TEST_F(SystemRegistryTest, GetUpdatePhaseDefaultsToUpdate_Sy1)
+{
+    MockSystem* sys = registry.registerSystem<MockSystem>("Default");
+    EXPECT_EQ(sys->getUpdatePhase(), UpdatePhase::Update);
+}
+
+TEST_F(SystemRegistryTest, SortByUpdatePhaseOrdersAcrossSlots_Sy1)
+{
+    // Register out-of-phase-order on purpose: Render, PreUpdate, PostCamera,
+    // Update, PostPhysics. Sort should reorder them PreUpdate → Update →
+    // PostCamera → PostPhysics → Render.
+    auto* render     = registry.registerSystem<MockSystem>("Render");
+    render->setUpdatePhase(UpdatePhase::Render);
+    auto* preUpdate  = registry.registerSystem<MockSystem>("Pre");
+    preUpdate->setUpdatePhase(UpdatePhase::PreUpdate);
+    auto* postCamera = registry.registerSystem<MockSystem>("PostCam");
+    postCamera->setUpdatePhase(UpdatePhase::PostCamera);
+    auto* update     = registry.registerSystem<MockSystem>("Upd");
+    update->setUpdatePhase(UpdatePhase::Update);
+    auto* postPhys   = registry.registerSystem<MockSystem>("PostPhys");
+    postPhys->setUpdatePhase(UpdatePhase::PostPhysics);
+
+    registry.sortByUpdatePhase();
+
+    EXPECT_EQ(registryNamesInOrder(registry),
+        (std::vector<std::string>{"Pre", "Upd", "PostCam", "PostPhys", "Render"}));
+}
+
+TEST_F(SystemRegistryTest, SortByUpdatePhasePreservesWithinPhaseOrder_Sy1)
+{
+    // Three default-phase systems registered in order. Stable sort must
+    // leave them in that order; an unstable sort could swap A↔C.
+    registry.registerSystem<MockSystem>("A");
+    registry.registerSystem<MockSystem>("B");
+    registry.registerSystem<MockSystem>("C");
+
+    registry.sortByUpdatePhase();
+
+    EXPECT_EQ(registryNamesInOrder(registry),
+        (std::vector<std::string>{"A", "B", "C"}));
+}
+
+TEST_F(SystemRegistryTest, SortByUpdatePhaseStableAcrossInterleavedPhases_Sy1)
+{
+    // Two Update-phase + two PostCamera-phase, interleaved at registration:
+    // U1, PC1, U2, PC2. Sort should produce U1, U2, PC1, PC2 (within-phase
+    // registration order preserved).
+    registry.registerSystem<MockSystem>("U1");
+    auto* pc1 = registry.registerSystem<MockSystem>("PC1");
+    pc1->setUpdatePhase(UpdatePhase::PostCamera);
+    registry.registerSystem<MockSystem>("U2");
+    auto* pc2 = registry.registerSystem<MockSystem>("PC2");
+    pc2->setUpdatePhase(UpdatePhase::PostCamera);
+
+    registry.sortByUpdatePhase();
+
+    EXPECT_EQ(registryNamesInOrder(registry),
+        (std::vector<std::string>{"U1", "U2", "PC1", "PC2"}));
+}
+
+TEST_F(SystemRegistryTest, SortByUpdatePhaseIsIdempotent_Sy1)
+{
+    auto* a = registry.registerSystem<MockSystem>("A");
+    a->setUpdatePhase(UpdatePhase::PostCamera);
+    registry.registerSystem<MockSystem>("B");
+
+    registry.sortByUpdatePhase();
+    auto firstPass = registryNamesInOrder(registry);
+    registry.sortByUpdatePhase();
+    auto secondPass = registryNamesInOrder(registry);
+
+    EXPECT_EQ(firstPass, secondPass);
+}
+
+TEST_F(SystemRegistryTest, InitializeAllSortsBeforeInit_Sy1)
+{
+    // Register Render-phase first, Update-phase second. After initializeAll
+    // the call log should show "Update::initialize" before "Render::initialize"
+    // because the sort runs before the per-system init loop.
+    auto* render = registry.registerSystem<MockSystem>("Render");
+    render->setUpdatePhase(UpdatePhase::Render);
+    registry.registerSystem<MockSystem>("Update");
+
+    Engine* fakeEngine = nullptr;
+    registry.initializeAll(*fakeEngine);  // MockSystem doesn't deref engine
+
+    auto& log = MockSystem::s_callLog;
+    auto updateInit = std::find(log.begin(), log.end(),
+                                std::string("Update::initialize"));
+    auto renderInit = std::find(log.begin(), log.end(),
+                                std::string("Render::initialize"));
+    ASSERT_NE(updateInit, log.end());
+    ASSERT_NE(renderInit, log.end());
+    EXPECT_LT(updateInit, renderInit);
+}
+
+TEST_F(SystemRegistryTest, UpdateAllRunsInPhaseOrder_Sy1)
+{
+    // Register out-of-order; activate everything; updateAll should call
+    // them PreUpdate → Update → PostCamera → Render.
+    auto* render = registry.registerSystem<MockSystem>("R");
+    render->setUpdatePhase(UpdatePhase::Render);
+    render->setActive(true);
+    auto* upd = registry.registerSystem<MockSystem>("U");
+    upd->setActive(true);  // default phase = Update
+    auto* pre = registry.registerSystem<MockSystem>("Pre");
+    pre->setUpdatePhase(UpdatePhase::PreUpdate);
+    pre->setActive(true);
+    auto* pc = registry.registerSystem<MockSystem>("PC");
+    pc->setUpdatePhase(UpdatePhase::PostCamera);
+    pc->setActive(true);
+
+    registry.sortByUpdatePhase();
+    registry.updateAll(0.016f);
+
+    auto& log = MockSystem::s_callLog;
+    auto preIt    = std::find(log.begin(), log.end(), std::string("Pre::update"));
+    auto updIt    = std::find(log.begin(), log.end(), std::string("U::update"));
+    auto pcIt     = std::find(log.begin(), log.end(), std::string("PC::update"));
+    auto renderIt = std::find(log.begin(), log.end(), std::string("R::update"));
+    ASSERT_NE(preIt, log.end());
+    ASSERT_NE(updIt, log.end());
+    ASSERT_NE(pcIt, log.end());
+    ASSERT_NE(renderIt, log.end());
+    EXPECT_LT(preIt, updIt);
+    EXPECT_LT(updIt, pcIt);
+    EXPECT_LT(pcIt, renderIt);
 }
