@@ -319,6 +319,34 @@ const JPH::BodyInterface& PhysicsWorld::getBodyInterface() const
 // Constraint helpers
 // ---------------------------------------------------------------------------
 
+glm::vec3 PhysicsWorld::computeSliderNormalAxis(const glm::vec3& slideAxis)
+{
+    // Hughes-Möller (1999): pick the smallest-magnitude component of
+    // the unit axis and build an orthogonal vector by zeroing that
+    // component and swap-negating the other two. The choice of branch
+    // depends purely on the axis vector, never on a world axis, so the
+    // basis is reproducible across scene rotations rather than snapping
+    // at a world-Y dot-product threshold (the prior implementation).
+    const glm::vec3 a = glm::normalize(slideAxis);
+    const float ax = std::abs(a.x);
+    const float ay = std::abs(a.y);
+    const float az = std::abs(a.z);
+    glm::vec3 ortho;
+    if (ax <= ay && ax <= az)
+    {
+        ortho = glm::vec3(0.0f, -a.z, a.y);
+    }
+    else if (ay <= ax && ay <= az)
+    {
+        ortho = glm::vec3(-a.z, 0.0f, a.x);
+    }
+    else
+    {
+        ortho = glm::vec3(-a.y, a.x, 0.0f);
+    }
+    return glm::normalize(ortho);
+}
+
 JPH::Body* PhysicsWorld::resolveBodyA(JPH::BodyID bodyA)
 {
     if (bodyA.IsInvalid())
@@ -515,14 +543,12 @@ ConstraintHandle PhysicsWorld::addSliderConstraint(
     settings.mSliderAxis1 = toJolt(slideAxis);
     settings.mSliderAxis2 = toJolt(slideAxis);
 
-    // Compute a valid normal axis perpendicular to the slide axis
-    JPH::Vec3 axis = toJolt(slideAxis).Normalized();
-    JPH::Vec3 up = JPH::Vec3::sAxisY();
-    if (std::abs(axis.Dot(up)) > 0.99f)
-    {
-        up = JPH::Vec3::sAxisX();
-    }
-    JPH::Vec3 normal = axis.Cross(up).Normalized();
+    // Phase 10.9 Ph7: Hughes-Möller orthonormalize. See the static
+    // helper for the rationale; in short, the basis depends only on
+    // `slideAxis`, never on a world axis, so two scenes with identical
+    // geometry rotated 90° produce a rotation-consistent basis instead
+    // of crossing a world-Y dot-product threshold.
+    const JPH::Vec3 normal = toJolt(computeSliderNormalAxis(slideAxis));
     settings.mNormalAxis1 = normal;
     settings.mNormalAxis2 = normal;
 

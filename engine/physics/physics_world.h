@@ -191,6 +191,12 @@ public:
     /// @brief Returns the motion type of a body.
     JPH::EMotionType getBodyMotionType(JPH::BodyID bodyId) const;
 
+    /// @brief Hughes-Möller orthonormalize: produce a unit vector
+    /// perpendicular to `slideAxis` whose value depends only on
+    /// `slideAxis` (no world-axis bias). Used for slider-constraint
+    /// `normalAxis`. See Phase 10.9 Ph7 in ROADMAP.md.
+    static glm::vec3 computeSliderNormalAxis(const glm::vec3& slideAxis);
+
 private:
     std::unique_ptr<JPH::PhysicsSystem> m_physicsSystem;
     std::unique_ptr<JPH::TempAllocatorImpl> m_tempAllocator;

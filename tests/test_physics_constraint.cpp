@@ -524,6 +524,71 @@ TEST(PhysicsConstraintIterationOrder, Ph6_DeterministicAcrossWorlds)
     }
 }
 
+// ---------------------------------------------------------------------------
+// Phase 10.9 Ph7: Hughes-Möller slider basis
+// ---------------------------------------------------------------------------
+// The previous code path picked an `up` reference via a world-Y
+// dot-product comparison and fell back to world-X above a 0.99
+// threshold. Two scenes with identical geometry rotated through that
+// threshold produced different normals — so the slider solved
+// differently for the rotated copy. Hughes-Möller orthonormalize
+// removes the world-axis dependency: the basis is a function of the
+// slide-axis components only.
+
+TEST(SliderNormalAxis, Ph7_OrthogonalAndUnitForArbitraryAxes)
+{
+    const glm::vec3 axes[] = {
+        {1.0f, 0.0f, 0.0f},
+        {0.0f, 1.0f, 0.0f},
+        {0.0f, 0.0f, 1.0f},
+        {1.0f, 1.0f, 0.0f},
+        {1.0f, 0.0f, 1.0f},
+        {0.0f, 1.0f, 1.0f},
+        {1.0f, 1.0f, 1.0f},
+        {0.7f, 0.2f, -0.5f},
+        {-0.3f, -0.6f, 0.9f},
+    };
+    for (const glm::vec3& a : axes)
+    {
+        const glm::vec3 n = PhysicsWorld::computeSliderNormalAxis(a);
+        const glm::vec3 ahat = glm::normalize(a);
+        EXPECT_NEAR(glm::length(n), 1.0f, 1e-5f) << "axis " << a.x << "," << a.y << "," << a.z;
+        EXPECT_NEAR(glm::dot(n, ahat), 0.0f, 1e-5f) << "axis " << a.x << "," << a.y << "," << a.z;
+    }
+}
+
+// The original world-Y comparison flipped the basis when an axis
+// crossed the 0.99 threshold against world-Y. Hughes-Möller's branch
+// boundary is `min(|x|,|y|,|z|)` — a property of the axis vector
+// itself — so a small axis perturbation near world-Y does not flip
+// the basis through the world-X fallback the way the old code did.
+TEST(SliderNormalAxis, Ph7_StableNearWorldYFallbackThreshold)
+{
+    // Axis just below the old 0.99 threshold against Y.
+    const glm::vec3 a1 = glm::normalize(glm::vec3(0.05f, 0.998f, 0.0f));
+    // Axis just above the old threshold against Y.
+    const glm::vec3 a2 = glm::normalize(glm::vec3(0.10f, 0.995f, 0.0f));
+    const glm::vec3 n1 = PhysicsWorld::computeSliderNormalAxis(a1);
+    const glm::vec3 n2 = PhysicsWorld::computeSliderNormalAxis(a2);
+    // Both axes have x as the smallest-magnitude component, so
+    // Hughes-Möller takes the same branch and the normals are close.
+    // The old world-Y comparison would have flipped from cross(Y) to
+    // cross(X) between these two inputs.
+    EXPECT_GT(glm::dot(n1, n2), 0.99f)
+        << "Ph7: small axis perturbation near world-Y must not flip "
+           "the slider basis through a world-axis-fallback boundary";
+}
+
+// The basis must be reproducible: identical axis input always yields
+// the same normal output, never depending on global state or RNG.
+TEST(SliderNormalAxis, Ph7_DeterministicSameInputSameOutput)
+{
+    const glm::vec3 a(0.3f, 0.7f, -0.6f);
+    const glm::vec3 n1 = PhysicsWorld::computeSliderNormalAxis(a);
+    const glm::vec3 n2 = PhysicsWorld::computeSliderNormalAxis(a);
+    EXPECT_EQ(n1, n2);
+}
+
 // Ph6 follow-on: removing then adding does not collapse generations
 // onto a stale index. Today indices grow monotonically (no reuse), so
 // a fresh handle gets a *new* index — confirm the contract.

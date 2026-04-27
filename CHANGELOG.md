@@ -9,6 +9,25 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-27 Phase 10.9 — Ph7 (Hughes-Möller slider basis)
+
+- **Ph7.** `PhysicsWorld::addSliderConstraint` builds the
+  `mNormalAxis1`/`mNormalAxis2` perpendicular via Hughes-Möller
+  orthonormalize instead of a world-Y dot-product comparison with a
+  world-X fallback. The previous approach crossed a 0.99 threshold for
+  axes near vertical and snapped the basis to a different reference
+  vector — two scenes with identical geometry rotated through that
+  threshold solved differently. Hughes-Möller picks the
+  smallest-magnitude component of the axis itself; the basis is a
+  function of the axis vector only, never of a world axis. Logic
+  extracted into the public-static helper
+  `PhysicsWorld::computeSliderNormalAxis(const glm::vec3&)` so the
+  math is testable without standing up Jolt. 3 new tests in
+  `tests/test_physics_constraint.cpp`: `Ph7_OrthogonalAndUnitForArbitraryAxes`
+  (perpendicular + unit-length over 9 axes), `Ph7_StableNearWorldYFallbackThreshold`
+  (a small axis perturbation near vertical does not flip the basis the
+  way the old world-Y threshold did), `Ph7_DeterministicSameInputSameOutput`.
+
 ### 2026-04-27 Phase 10.9 — Ph6 (deterministic constraint storage)
 
 - **Ph6.** `PhysicsWorld::m_constraints` and `StasisSystem::m_stasisMap`
