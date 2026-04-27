@@ -43,6 +43,14 @@ struct PostProcessAccessibilitySettings
     /// blurred). Can induce nausea in motion-sensitive users —
     /// surfaced as a dedicated Settings toggle per the Phase 10
     /// accessibility roadmap.
+    ///
+    /// AUDIT W3 — **awaiting consumer.** The DoF effect itself ships in
+    /// the Phase 10 Post-Processing Effects Suite. Until the effect
+    /// lands the toggle is forward-compat scaffolding so user
+    /// preferences persist across the boundary. The settings UI shows
+    /// the toggle today; do not remove it (settings.json round-trip
+    /// must remain stable). When the effect lands, route its enable
+    /// path through this flag and delete this comment.
     bool depthOfFieldEnabled = true;
 
     /// Full-screen motion blur (per-pixel / per-object velocity
@@ -51,6 +59,12 @@ struct PostProcessAccessibilitySettings
     /// decade — off-by-default is recommended by the Game
     /// Accessibility Guidelines working group but Vestige defaults
     /// on for visual quality, leaving the toggle to users.
+    ///
+    /// AUDIT W3 — **awaiting consumer.** Same status as the DoF flag
+    /// above: forward-compat scaffolding for a Phase 10 effect that
+    /// hasn't shipped yet. Toggle is wired through Settings, but
+    /// flipping it has no visible effect in the renderer until the
+    /// effect lands.
     bool motionBlurEnabled    = true;
 
     /// Distance / height fog master toggle. Fog stays on by default

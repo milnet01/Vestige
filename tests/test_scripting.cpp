@@ -22,6 +22,8 @@
 
 #include <gtest/gtest.h>
 
+#include <limits>
+
 using namespace Vestige;
 
 // ===========================================================================
@@ -61,6 +63,46 @@ TEST(ScriptValue, FloatType)
     EXPECT_FLOAT_EQ(v.asFloat(), 3.14f);
     EXPECT_EQ(v.asInt(), 3);
     EXPECT_TRUE(v.asBool());
+}
+
+// ---------------------------------------------------------------------------
+// AUDIT Sc4 — asInt() must clamp out-of-range floats and map NaN to 0
+// instead of UB-casting.
+// ---------------------------------------------------------------------------
+TEST(ScriptValue, FloatToIntClampSaturatesAtMax_Sc4)
+{
+    ScriptValue v(1e30f);
+    EXPECT_EQ(v.asInt(), std::numeric_limits<int32_t>::max());
+}
+
+TEST(ScriptValue, FloatToIntClampSaturatesAtMin_Sc4)
+{
+    ScriptValue v(-1e30f);
+    EXPECT_EQ(v.asInt(), std::numeric_limits<int32_t>::min());
+}
+
+TEST(ScriptValue, FloatToIntPositiveInfinitySaturates_Sc4)
+{
+    ScriptValue v(std::numeric_limits<float>::infinity());
+    EXPECT_EQ(v.asInt(), std::numeric_limits<int32_t>::max());
+}
+
+TEST(ScriptValue, FloatToIntNegativeInfinitySaturates_Sc4)
+{
+    ScriptValue v(-std::numeric_limits<float>::infinity());
+    EXPECT_EQ(v.asInt(), std::numeric_limits<int32_t>::min());
+}
+
+TEST(ScriptValue, FloatToIntNaNReturnsZero_Sc4)
+{
+    ScriptValue v(std::numeric_limits<float>::quiet_NaN());
+    EXPECT_EQ(v.asInt(), 0);
+}
+
+TEST(ScriptValue, UintAboveIntMaxClamps_Sc4)
+{
+    auto v = ScriptValue::entityId(0xFFFFFFFFu);
+    EXPECT_EQ(v.asInt(), std::numeric_limits<int32_t>::max());
 }
 
 TEST(ScriptValue, StringType)

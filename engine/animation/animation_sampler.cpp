@@ -191,6 +191,18 @@ glm::quat sampleQuat(const AnimationChannel& channel, float time)
         glm::quat vk1 = readQuatCubic(vals, i + 1, 1);   // value at k+1
         glm::quat ak1 = readQuatCubic(vals, i + 1, 0);   // in-tangent at k+1
 
+        // AUDIT A2 — quaternion double-cover fix. q and -q represent the same
+        // rotation; component-wise Hermite blending across an antipodal
+        // keyframe pair traces the long way around the unit sphere and snaps
+        // through the origin. Flip vk1 and its in-tangent ak1 into the same
+        // hemisphere as vk before blending. (The LINEAR path uses glm::slerp
+        // which handles this internally, so no fix needed there.)
+        if (glm::dot(vk, vk1) < 0.0f)
+        {
+            vk1 = -vk1;
+            ak1 = -ak1;
+        }
+
         // Hermite spline for quaternions (component-wise, then normalize)
         glm::quat result;
         for (int c = 0; c < 4; ++c)

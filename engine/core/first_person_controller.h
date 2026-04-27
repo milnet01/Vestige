@@ -96,6 +96,19 @@ private:
     int m_gamepadId;
     float m_smoothedTerrainY = 0.0f; // Smoothed terrain height for damping
     float m_cosMaxSlope = 0.0f;      // Pre-computed cos(maxSlopeAngle)
+
+    // AUDIT Pe7 — joystick-presence probe rate-limit. Pre-Pe7 we ran
+    // glfwJoystickIsGamepad over all 16 slots every frame (~960 probes/sec
+    // at 60 FPS) to detect hot-plug, even on machines without a gamepad.
+    // Now we only re-scan once per second when no gamepad is connected;
+    // the connected-gamepad poll is unaffected because that's a single
+    // glfwJoystickPresent() call per frame.
+    float m_secondsUntilNextJoystickScan = 0.0f;
+    static constexpr float kJoystickScanInterval = 1.0f;
+    /// @brief Returns true if it's time to re-scan for hot-plugged gamepads,
+    /// resetting the timer. Stays at most one branch in the hot path when
+    /// a gamepad is already connected.
+    bool tickJoystickScanTimer(float deltaTime);
 };
 
 } // namespace Vestige

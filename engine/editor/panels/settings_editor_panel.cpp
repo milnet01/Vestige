@@ -475,11 +475,15 @@ void SettingsEditorPanel::drawAccessibilityTab()
     {
         m_editor->mutate([dof](Settings& s) { s.accessibility.postProcess.depthOfFieldEnabled = dof; });
     }
+    // AUDIT W3 — surface the "awaiting consumer" status so users don't
+    // expect the toggle to do something today.
+    ImGui::TextDisabled("    (effect not yet shipped — preference is saved)");
     bool mb = p.accessibility.postProcess.motionBlurEnabled;
     if (ImGui::Checkbox("Motion blur", &mb))
     {
         m_editor->mutate([mb](Settings& s) { s.accessibility.postProcess.motionBlurEnabled = mb; });
     }
+    ImGui::TextDisabled("    (effect not yet shipped — preference is saved)");
     bool fog = p.accessibility.postProcess.fogEnabled;
     if (ImGui::Checkbox("Fog", &fog))
     {

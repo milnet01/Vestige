@@ -204,13 +204,24 @@ void registerFlowNodeTypes(NodeTypeRegistry& registry)
     // -----------------------------------------------------------------------
     // WhileLoop — repeats Body while Condition is true. Condition is
     // re-evaluated each iteration (pulled from a connected pure node).
-    // Bounded by MAX_WHILE_ITERATIONS as a safety valve.
+    // Bounded by MAX_WHILE_ITERATIONS as a hard safety rail.
+    //
+    // AUDIT Sc8 — surface a "Clamped" boolean output when the cap fires so
+    // graph authors can react in-graph (mirror ForLoop). The cap exists
+    // because BlueprintVM-style graphs can't statically prove termination,
+    // and a runaway script in editor mode hangs the UI thread. The
+    // "Completed" exec pin still fires on cap-hit so chained logic
+    // continues; "Clamped" tells the author whether the loop terminated
+    // because Condition went false (clean) or because the rail engaged.
     // -----------------------------------------------------------------------
     registry.registerNode({
         "WhileLoop",
         "While Loop",
         "Flow Control",
-        "Repeats Body while Condition is true (safety cap: 10000 iterations)",
+        "Repeats Body while Condition is true. Hard safety rail at 10000 "
+        "iterations — when hit, Clamped fires true and Completed still "
+        "runs. Long loops should be paged across frames via WaitForSeconds "
+        "or driven by event nodes.",
         {
             {PinKind::EXECUTION, "Exec", ScriptDataType::BOOL, {}},
             {PinKind::DATA, "Condition", ScriptDataType::BOOL, ScriptValue(false)},
@@ -218,11 +229,20 @@ void registerFlowNodeTypes(NodeTypeRegistry& registry)
         {
             {PinKind::EXECUTION, "Body", ScriptDataType::BOOL, {}},
             {PinKind::EXECUTION, "Completed", ScriptDataType::BOOL, {}},
+            // AUDIT Sc8 — branch on Clamped to detect cap-hit termination.
+            {PinKind::DATA, "Clamped", ScriptDataType::BOOL, ScriptValue(false)},
         },
         "",
         false, false,
         [](ScriptContext& ctx, const ScriptNodeInstance& node)
         {
+            static const PinId pinClamped = internPin("Clamped");
+            ScriptNodeInstance* mutNode = ctx.instance().getNodeInstance(node.nodeId);
+            if (mutNode)
+            {
+                mutNode->outputValues[pinClamped] = ScriptValue(false);
+            }
+
             int32_t iterations = 0;
             while (iterations < MAX_WHILE_ITERATIONS)
             {
@@ -237,7 +257,14 @@ void registerFlowNodeTypes(NodeTypeRegistry& registry)
             if (iterations >= MAX_WHILE_ITERATIONS)
             {
                 Logger::warning(
-                    "[WhileLoop] Hit iteration cap — possible runaway loop");
+                    "[WhileLoop] Hit iteration cap (" +
+                    std::to_string(MAX_WHILE_ITERATIONS) + ") — possible "
+                    "runaway loop. Clamped output set true; consider paging "
+                    "via WaitForSeconds or restructuring with event nodes.");
+                if (mutNode)
+                {
+                    mutNode->outputValues[pinClamped] = ScriptValue(true);
+                }
             }
             ctx.triggerOutput(node, "Completed");
         }

@@ -139,14 +139,32 @@ TwoBoneIKResult solveTwoBoneIK(const TwoBoneIKRequest& req)
     glm::quat newMidLocal = req.midLocalRot * r1;
 
     // --- Pole vector alignment ---
-    // After solving, rotate the chain around the start-to-target axis
-    // so the mid joint points toward the pole vector
-    // Recompute mid position after IK solve
-    glm::quat newStartGlobal = req.startGlobalRot * glm::inverse(req.startLocalRot) * newStartLocal;
-    glm::vec3 newMidDir = newStartGlobal * (glm::inverse(req.startGlobalRot) * (req.midPos - req.startPos));
-    glm::vec3 projMidOnTarget = at * glm::dot(newMidDir, at); // Project mid onto start-to-target
-    glm::vec3 midPerp = safeNormalize(newMidDir - projMidOnTarget);
-    glm::vec3 polePerp = safeNormalize(req.poleVector - at * glm::dot(req.poleVector, at));
+    // Rotate the chain around the start→target axis so the mid joint sits in
+    // the pole-vector half-plane.
+    //
+    // AUDIT A4 — two fixes:
+    //   (1) midPerp is derived from the post-solve mid offset via forward
+    //       kinematics on newStartGlobal, not by re-rotating the pre-solve
+    //       world bone vector ad-hoc; the FK form makes the pose explicit.
+    //   (2) poleRot must be pre-multiplied in start's PARENT frame, not
+    //       post-multiplied in start's local frame. Post-multiplying in the
+    //       local frame applies the rotation BEFORE r0/r2 in the FK chain,
+    //       so r0/r2 then unwind the pole alignment. The rotation we want
+    //       is "rotate the world chain by poleAngle around at"; expressed
+    //       as a delta to newStartLocal that's
+    //           newStartLocal' = (parentGlobal⁻¹ · poleRotWorld · parentGlobal) · newStartLocal
+    //       which we implement compactly by rotating around at expressed in
+    //       the parent frame.
+    const glm::quat parentGlobal = req.startGlobalRot * glm::inverse(req.startLocalRot);
+    const glm::quat invParentGlobal = glm::inverse(parentGlobal);
+    const glm::quat newStartGlobal = parentGlobal * newStartLocal;
+    const glm::vec3 boneVecLocal =
+        glm::inverse(req.startGlobalRot) * (req.midPos - req.startPos);
+    const glm::vec3 postSolveMidOffset = newStartGlobal * boneVecLocal;
+
+    const glm::vec3 projMidOnTarget = at * glm::dot(postSolveMidOffset, at);
+    const glm::vec3 midPerp = safeNormalize(postSolveMidOffset - projMidOnTarget);
+    const glm::vec3 polePerp = safeNormalize(req.poleVector - at * glm::dot(req.poleVector, at));
 
     if (glm::length(midPerp) > IK_EPSILON && glm::length(polePerp) > IK_EPSILON)
     {
@@ -154,8 +172,8 @@ TwoBoneIKResult solveTwoBoneIK(const TwoBoneIKRequest& req)
         glm::vec3 poleCross = glm::cross(midPerp, polePerp);
         if (glm::dot(poleCross, at) < 0.0f) poleAngle = -poleAngle;
 
-        glm::quat poleRot = glm::angleAxis(poleAngle, invStartGlobal * at);
-        newStartLocal = newStartLocal * poleRot;
+        glm::quat poleRot = glm::angleAxis(poleAngle, invParentGlobal * at);
+        newStartLocal = poleRot * newStartLocal;
     }
 
     // Blend with weight

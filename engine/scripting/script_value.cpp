@@ -6,6 +6,8 @@
 #include "scripting/script_value.h"
 
 #include <array>
+#include <cmath>
+#include <limits>
 
 namespace Vestige
 {
@@ -114,13 +116,38 @@ bool ScriptValue::asBool() const
 
 int32_t ScriptValue::asInt() const
 {
+    // AUDIT Sc4 — clamp the float→int conversion to int32_t's range and map
+    // NaN to 0. C++ rules make `static_cast<int32_t>(f)` UB when `f` is
+    // outside [INT32_MIN, INT32_MAX] or NaN. Same hazard exists for uint32_t
+    // values above INT32_MAX. The script runtime must never UB on hostile
+    // input, so saturate at the boundaries instead.
     return std::visit([](const auto& val) -> int32_t
     {
         using T = std::decay_t<decltype(val)>;
         if constexpr (std::is_same_v<T, bool>)        return val ? 1 : 0;
         if constexpr (std::is_same_v<T, int32_t>)     return val;
-        if constexpr (std::is_same_v<T, float>)       return static_cast<int32_t>(val);
-        if constexpr (std::is_same_v<T, uint32_t>)    return static_cast<int32_t>(val);
+        if constexpr (std::is_same_v<T, float>)
+        {
+            if (std::isnan(val))
+            {
+                return 0;
+            }
+            constexpr float kMin = static_cast<float>(std::numeric_limits<int32_t>::min());
+            // INT32_MAX is 2^31 - 1 = 2147483647. The nearest float is
+            // 2147483648.0f (2^31), which would itself be out of range, so
+            // explicitly use that as the clamp ceiling and saturate to
+            // INT32_MAX once we know the value is below it.
+            constexpr float kMax = 2147483648.0f;
+            if (val >= kMax)  return std::numeric_limits<int32_t>::max();
+            if (val <= kMin)  return std::numeric_limits<int32_t>::min();
+            return static_cast<int32_t>(val);
+        }
+        if constexpr (std::is_same_v<T, uint32_t>)
+        {
+            constexpr uint32_t kMax =
+                static_cast<uint32_t>(std::numeric_limits<int32_t>::max());
+            return static_cast<int32_t>(val > kMax ? kMax : val);
+        }
         return 0;
     }, m_value);
 }

@@ -72,6 +72,17 @@ bool AudioEngine::initialize()
 
     // Push Doppler defaults so OpenAL's native shift matches the
     // engine's CPU-side computeDopplerPitchRatio from the first frame.
+    //
+    // AUDIT Au2 — clamp speedOfSound > 0 at the init push. OpenAL rejects
+    // `alSpeedOfSound(0)` and silently keeps its internal default (343.3),
+    // which would leave OpenAL and our CPU-side `computeDopplerPitchRatio`
+    // disagreeing on the first frame if a caller default-constructed a
+    // zero `DopplerParams` and assigned it via `setDopplerParams`. Mirror
+    // the existing setter clamp here.
+    if (m_doppler.speedOfSound <= 0.0f)
+    {
+        m_doppler.speedOfSound = 1e-3f;
+    }
     alDopplerFactor(m_doppler.dopplerFactor);
     alSpeedOfSound(m_doppler.speedOfSound);
 
@@ -223,8 +234,12 @@ unsigned int AudioEngine::loadBuffer(const std::string& filePath)
         return 0;
     }
 
-    // Create OpenAL buffer and upload PCM data
-    ALuint buffer;
+    // Create OpenAL buffer and upload PCM data.
+    // AUDIT Au3 — initialise to 0 before alGenBuffers. If gen fails (very
+    // rare, but possible under context loss / OOM), `buffer` would otherwise
+    // hold an indeterminate ID and the alDeleteBuffers cleanup path below
+    // could ask the driver to delete a garbage handle.
+    ALuint buffer = 0;
     alGenBuffers(1, &buffer);
     alBufferData(buffer,
                  static_cast<ALenum>(clip->getALFormat()),

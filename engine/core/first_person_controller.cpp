@@ -47,17 +47,20 @@ void FirstPersonController::update(float deltaTime, const std::vector<AABB>& col
         return;
     }
 
-    // Check for gamepad connection changes
+    // Check for gamepad connection changes — rate-limited per Pe7.
     if (m_gamepadId < 0)
     {
-        for (int i = GLFW_JOYSTICK_1; i <= GLFW_JOYSTICK_LAST; i++)
+        if (tickJoystickScanTimer(deltaTime))
         {
-            if (glfwJoystickIsGamepad(i))
+            for (int i = GLFW_JOYSTICK_1; i <= GLFW_JOYSTICK_LAST; i++)
             {
-                m_gamepadId = i;
-                const char* name = glfwGetGamepadName(i);
-                Logger::info("Gamepad connected: " + std::string(name ? name : "Unknown"));
-                break;
+                if (glfwJoystickIsGamepad(i))
+                {
+                    m_gamepadId = i;
+                    const char* name = glfwGetGamepadName(i);
+                    Logger::info("Gamepad connected: " + std::string(name ? name : "Unknown"));
+                    break;
+                }
             }
         }
     }
@@ -347,17 +350,21 @@ void FirstPersonController::processLookOnly(float deltaTime)
         return;
     }
 
-    // Check for gamepad connection changes (same as in update())
+    // Check for gamepad connection changes (same as in update()) —
+    // rate-limited per Pe7.
     if (m_gamepadId < 0)
     {
-        for (int i = GLFW_JOYSTICK_1; i <= GLFW_JOYSTICK_LAST; i++)
+        if (tickJoystickScanTimer(deltaTime))
         {
-            if (glfwJoystickIsGamepad(i))
+            for (int i = GLFW_JOYSTICK_1; i <= GLFW_JOYSTICK_LAST; i++)
             {
-                m_gamepadId = i;
-                const char* name = glfwGetGamepadName(i);
-                Logger::info("Gamepad connected: " + std::string(name ? name : "Unknown"));
-                break;
+                if (glfwJoystickIsGamepad(i))
+                {
+                    m_gamepadId = i;
+                    const char* name = glfwGetGamepadName(i);
+                    Logger::info("Gamepad connected: " + std::string(name ? name : "Unknown"));
+                    break;
+                }
             }
         }
     }
@@ -451,6 +458,17 @@ glm::vec3 FirstPersonController::computeDesiredVelocity(float /*deltaTime*/)
                        + glm::vec3(0.0f, moveDir.y * speed, 0.0f);
 
     return velocity;
+}
+
+bool FirstPersonController::tickJoystickScanTimer(float deltaTime)
+{
+    m_secondsUntilNextJoystickScan -= deltaTime;
+    if (m_secondsUntilNextJoystickScan > 0.0f)
+    {
+        return false;
+    }
+    m_secondsUntilNextJoystickScan = kJoystickScanInterval;
+    return true;
 }
 
 } // namespace Vestige

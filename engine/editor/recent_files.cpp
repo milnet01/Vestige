@@ -98,7 +98,20 @@ void RecentFiles::save() const
 
 void RecentFiles::addPath(const std::filesystem::path& path)
 {
-    fs::path absPath = fs::absolute(path);
+    // AUDIT Ed10 — `fs::absolute(path)` throws on invalid-UTF-8 input on
+    // Windows and on a small handful of POSIX failures (e.g. retrieving
+    // CWD when it has been deleted). The throw escapes the ImGui frame
+    // and crashes the editor. Use the error_code overload and fall back
+    // to the caller-supplied path.
+    std::error_code ec;
+    fs::path absPath = fs::absolute(path, ec);
+    if (ec)
+    {
+        Logger::warning("RecentFiles: could not canonicalise path '"
+            + path.string() + "': " + ec.message()
+            + " — recording the path as-is");
+        absPath = path;
+    }
 
     // Remove existing duplicate
     m_paths.erase(

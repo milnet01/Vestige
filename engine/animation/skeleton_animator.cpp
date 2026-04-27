@@ -291,14 +291,23 @@ void SkeletonAnimator::initializeBuffers()
 
 // ---------------------------------------------------------------------------
 // computeBoneMatrices
+//
+// AUDIT A1 — iterate Skeleton::m_updateOrder (DFS pre-order) so a parent's
+// global transform is always written before any child reads it. Falls back
+// to storage order when m_updateOrder is empty (skeleton constructed by
+// hand without buildUpdateOrder() — debug assert flags it).
 // ---------------------------------------------------------------------------
 void SkeletonAnimator::computeBoneMatrices()
 {
-    int jointCount = m_skeleton->getJointCount();
+    const int jointCount = m_skeleton->getJointCount();
+    const auto& updateOrder = m_skeleton->m_updateOrder;
+    const bool useOrder = static_cast<int>(updateOrder.size()) == jointCount;
+    assert(useOrder || updateOrder.empty());
 
-    for (int i = 0; i < jointCount; ++i)
+    for (int step = 0; step < jointCount; ++step)
     {
-        size_t idx = static_cast<size_t>(i);
+        const int i = useOrder ? updateOrder[static_cast<size_t>(step)] : step;
+        const size_t idx = static_cast<size_t>(i);
 
         // Build local transform from T * R * S
         glm::mat4 local = glm::translate(glm::mat4(1.0f), m_localTranslations[idx])

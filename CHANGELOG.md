@@ -9,6 +9,108 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-27 Phase 10.9 — Wave 2 (audit fast-wins, 13 items)
+
+**Animation correctness (Slice 6).**
+
+- **A1.** `Skeleton::buildUpdateOrder()` builds a DFS pre-order index list at
+  glTF skin load. `SkeletonAnimator::computeBoneMatrices` iterates that
+  list so a parent's global transform is always written before any child
+  reads it. Pre-A1 the runtime assumed `parentIndex < jointIndex` — a
+  glTF spec gap that some exporters violate. Debug-build assert in
+  `buildUpdateOrder` pins the parent-position-precedes-child invariant.
+  6 new tests in `tests/test_skeleton.cpp` + 1 in
+  `tests/test_skeleton_animator.cpp` (shuffled-vs-sorted bone-matrix
+  equivalence).
+- **A2.** CUBICSPLINE quaternion sampler aligns hemispheres before the
+  Hermite blend. Pre-A2 antipodal keyframes (`q` and `-q` represent the
+  same rotation) would interpolate through the zero quaternion, snapping
+  through identity. `if dot(vk, vk1) < 0: flip vk1 and ak1`. 2 new
+  tests in `tests/test_animation_sampler.cpp`.
+- **A4.** Two-bone IK pole-vector alignment now (a) derives the
+  post-solve mid offset via forward kinematics on `newStartGlobal`
+  rather than re-rotating a stale pre-solve world bone vector, and (b)
+  applies the pole rotation in start's *parent* frame (pre-multiplied)
+  instead of in start's *local* frame (post-multiplied). The
+  post-multiplied form let `r0`/`r2` unwind the pole alignment in the
+  FK chain, so the mid joint ended up perpendicular to the pole hint
+  for vertical-chain inputs. 2 new tests in `tests/test_ik_solver.cpp`
+  pin that the mid joint lands on the pole-vector side of the
+  start→target axis (and on the opposite side when the pole flips).
+
+**Audio (Slice 6 / Phase 10).**
+
+- **Au2.** Defence-in-depth clamp at `AudioEngine::initialize` — if a
+  caller stamps a non-positive `speedOfSound` into `DopplerParams`
+  before init, the clamp pushes a small positive value to OpenAL
+  instead of silently leaving OpenAL on its 343.3 default while the
+  engine's CPU-side math runs with 0 (divide-by-zero in the formula).
+  Documented the strict-positive invariant on the field.
+- **Au3.** `audio_engine.cpp::loadBuffer` initialises `ALuint buffer = 0`
+  before `alGenBuffers`. If gen fails, the cleanup `alDeleteBuffers`
+  no longer asks the driver to delete an indeterminate handle.
+
+**Input (Slice 9).**
+
+- **I5.** `InputActionMap::addAction` warns when re-registering an action
+  whose live bindings differ from the new defaults. This catches the
+  "addAction called after Settings::load() clobbers user rebinds"
+  silent-nuke flow. 3 new tests in `tests/test_input_bindings.cpp`
+  (divergent → warns, identical → silent, first-time → silent).
+- **I6.** `keyboardName()` covers numpad (`KP_0..KP_9`, `KP_ADD`,
+  `KP_SUBTRACT`, `KP_MULTIPLY`, `KP_DIVIDE`, `KP_ENTER`, `KP_DECIMAL`,
+  `KP_EQUAL`), `Pause`, `PrintScreen`, `ScrollLock`, `NumLock`, `Menu`,
+  `F13..F25`, `WORLD_1` / `WORLD_2`. Pre-I6 keyboard-primary users saw
+  `"Key 320…"` for the entire numpad in the rebind UI. 1 new test.
+
+**Editor (Slice 12).**
+
+- **Ed6.** `CreateEntityCommand` records its sibling index in the
+  constructor and again in `undo()`, then re-inserts via
+  `Entity::insertChild(idx)` on redo. Pre-Ed6 redo appended via
+  `addChild`, which silently bumped every later sibling's position
+  after an undo→redo round-trip. Mirrors the existing
+  `DeleteEntityCommand` pattern. 1 new test.
+- **Ed10.** `RecentFiles::addPath` uses `fs::absolute(path, error_code)`
+  — the throwing overload could escape the ImGui frame on invalid-UTF-8
+  paths. Falls back to the as-supplied path with a warning when
+  canonicalisation fails.
+
+**Subsystem hygiene (Slice 8).**
+
+- **W3.** `PostProcessAccessibilitySettings::depthOfFieldEnabled` and
+  `motionBlurEnabled` documented as "awaiting consumer" — the toggles
+  are forward-compat scaffolding for Phase 10 effects that haven't
+  shipped. Settings UI now shows an italic "(effect not yet shipped —
+  preference is saved)" hint under each checkbox so users don't expect
+  immediate visual feedback.
+
+**Performance (Slice 13).**
+
+- **Pe7.** `FirstPersonController` joystick-presence rescan rate-limited
+  to 1 Hz when no gamepad is connected. Pre-Pe7 the controller ran
+  `glfwJoystickIsGamepad` over all 16 slots every frame (~960 probes/sec
+  at 60 FPS) on machines without any gamepad attached. The
+  connected-gamepad polling is unchanged — that's a single
+  `glfwJoystickPresent()` per frame.
+
+**Scripting (Slice 14 / Phase 9E).**
+
+- **Sc4.** `ScriptValue::asInt` clamps the float→int conversion to
+  `[INT32_MIN, INT32_MAX]`, maps NaN to 0, and clamps `uint32_t`
+  values above `INT32_MAX`. Pre-Sc4 a hostile script could trigger UB
+  via `static_cast<int32_t>` on NaN / out-of-range floats. 6 new tests
+  pin the saturation behaviour at every boundary.
+- **Sc8.** `WhileLoop` flow node surfaces a `Clamped` boolean output
+  that fires `true` when the 10000-iteration safety rail terminates
+  the loop (mirrors `ForLoop`'s existing `Clamped` pin). The `Completed`
+  exec pin still fires after a clamp so chained logic continues. The
+  cap is now an in-graph branchable signal, not a silent termination.
+  Tooltip + log message updated to point at `WaitForSeconds` / event
+  nodes as the override path for legitimate long loops.
+
+3077 / 3078 pass (+21 vs Sy1's 3056, 1 pre-existing skip).
+
 ### 2026-04-27 Phase 10.9 — Slice 11 Sy1 (ISystem update-phase ordering)
 
 **Sy1 — deterministic per-frame system ordering.** Before this change,

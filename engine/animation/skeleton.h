@@ -32,11 +32,20 @@ public:
     /// @brief Finds a joint index by name. Returns -1 if not found.
     int findJoint(const std::string& name) const;
 
+    /// @brief Builds m_updateOrder as a DFS pre-order traversal of the joint
+    /// forest rooted at m_rootJoints. Each joint index appears exactly once,
+    /// with every parent listed before its children — the invariant
+    /// computeBoneMatrices relies on so a parent's global transform is ready
+    /// before its children consume it. Call after m_joints + m_rootJoints
+    /// are populated. Idempotent: safe to call again after edits.
+    void buildUpdateOrder();
+
     /// @brief Maximum number of joints supported per skeleton.
     static constexpr int MAX_JOINTS = 128;
 
     std::vector<Joint> m_joints;
     std::vector<int> m_rootJoints;  ///< Indices of joints with parentIndex == -1
+    std::vector<int> m_updateOrder; ///< DFS pre-order; parent visited before children. Built by buildUpdateOrder().
 };
 
 } // namespace Vestige

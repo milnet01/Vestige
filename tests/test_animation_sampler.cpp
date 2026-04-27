@@ -202,3 +202,78 @@ TEST(AnimSamplerTest, ThreeKeyframeLinear)
     EXPECT_NEAR(r2.x, 10.0f, 0.001f);
     EXPECT_NEAR(r2.y, 5.0f, 0.001f);
 }
+
+// ---------------------------------------------------------------------------
+// AUDIT A2 — CUBICSPLINE quaternion double-cover fix.
+// Two adjacent keyframes whose quaternions are antipodal (q and -q) must
+// not blend through the origin: the sampler must flip vk1 (and ak1) into
+// vk's hemisphere before the Hermite blend. With zero tangents the blend
+// degenerates to component-wise lerp, which makes the bug observable —
+// pre-A2 the midpoint was the zero quaternion (length 0).
+// ---------------------------------------------------------------------------
+TEST(AnimSamplerTest, CubicSplineQuatHandlesAntipodalKeyframes_A2)
+{
+    AnimationChannel ch;
+    ch.jointIndex = 0;
+    ch.targetPath = AnimTargetPath::ROTATION;
+    ch.interpolation = AnimInterpolation::CUBICSPLINE;
+    ch.timestamps = {0.0f, 1.0f};
+
+    glm::quat q0 = glm::angleAxis(glm::half_pi<float>(), glm::vec3(0, 1, 0));
+    glm::quat q1 = -q0;  // Antipodal — same rotation, opposite hemisphere.
+
+    // CUBICSPLINE layout per glTF: 3 vec4s per keyframe = [in-tangent, value, out-tangent].
+    // Zero tangents on both ends so the result is a pure component-wise lerp.
+    ch.values = {
+        // Keyframe 0
+        0, 0, 0, 0,                  // in-tangent
+        q0.x, q0.y, q0.z, q0.w,      // value
+        0, 0, 0, 0,                  // out-tangent
+        // Keyframe 1
+        0, 0, 0, 0,                  // in-tangent
+        q1.x, q1.y, q1.z, q1.w,      // value
+        0, 0, 0, 0,                  // out-tangent
+    };
+
+    glm::quat midpoint = sampleQuat(ch, 0.5f);
+
+    // After hemisphere alignment the midpoint is q0 (or its normalised
+    // equivalent) — not the zero quaternion.
+    EXPECT_NEAR(std::fabs(midpoint.w), std::fabs(q0.w), 1e-4f);
+    EXPECT_NEAR(std::fabs(midpoint.x), std::fabs(q0.x), 1e-4f);
+    EXPECT_NEAR(std::fabs(midpoint.y), std::fabs(q0.y), 1e-4f);
+    EXPECT_NEAR(std::fabs(midpoint.z), std::fabs(q0.z), 1e-4f);
+
+    const float len = std::sqrt(midpoint.w * midpoint.w + midpoint.x * midpoint.x
+                              + midpoint.y * midpoint.y + midpoint.z * midpoint.z);
+    EXPECT_NEAR(len, 1.0f, 1e-4f);
+}
+
+TEST(AnimSamplerTest, CubicSplineQuatSameHemisphereStillSmooth_A2)
+{
+    // Control: same setup but with q1 already in q0's hemisphere. The fix
+    // must be a no-op here — output is q0-ish at the midpoint.
+    AnimationChannel ch;
+    ch.jointIndex = 0;
+    ch.targetPath = AnimTargetPath::ROTATION;
+    ch.interpolation = AnimInterpolation::CUBICSPLINE;
+    ch.timestamps = {0.0f, 1.0f};
+
+    glm::quat q0 = glm::angleAxis(glm::half_pi<float>(), glm::vec3(0, 1, 0));
+    glm::quat q1 = q0;  // Same hemisphere.
+
+    ch.values = {
+        0, 0, 0, 0,
+        q0.x, q0.y, q0.z, q0.w,
+        0, 0, 0, 0,
+        0, 0, 0, 0,
+        q1.x, q1.y, q1.z, q1.w,
+        0, 0, 0, 0,
+    };
+
+    glm::quat midpoint = sampleQuat(ch, 0.5f);
+    EXPECT_NEAR(midpoint.w, q0.w, 1e-4f);
+    EXPECT_NEAR(midpoint.x, q0.x, 1e-4f);
+    EXPECT_NEAR(midpoint.y, q0.y, 1e-4f);
+    EXPECT_NEAR(midpoint.z, q0.z, 1e-4f);
+}

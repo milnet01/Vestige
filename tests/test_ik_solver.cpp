@@ -144,6 +144,82 @@ TEST(TwoBoneIKTest, ResultQuaternionsNormalized)
 }
 
 // ---------------------------------------------------------------------------
+// AUDIT A4 — pole-vector alignment uses post-solve mid offset.
+// After IK, the mid joint must sit on the same side of the start→target
+// axis as the pole vector. This test pins the user-visible behaviour and
+// would fail if the pole-alignment logic reverted to using a stale mid
+// offset that pre-dates the start-joint correction.
+// ---------------------------------------------------------------------------
+TEST(TwoBoneIKTest, PoleVectorPlacesMidOnPoleSidePostSolve_A4)
+{
+    TwoBoneIKRequest req;
+    req.startPos = glm::vec3(0.0f, 0.0f, 0.0f);
+    req.midPos   = glm::vec3(0.0f, 1.0f, 0.0f);  // Vertical chain, identity rest pose.
+    req.endPos   = glm::vec3(0.0f, 2.0f, 0.0f);
+    req.startGlobalRot = glm::quat(1, 0, 0, 0);
+    req.midGlobalRot   = glm::quat(1, 0, 0, 0);
+    req.startLocalRot  = glm::quat(1, 0, 0, 0);
+    req.midLocalRot    = glm::quat(1, 0, 0, 0);
+    req.target = glm::vec3(0.0f, 1.5f, 0.0f);  // Reachable, requires bend.
+    req.poleVector = glm::vec3(1.0f, 0.0f, 0.0f);  // Mid should bend toward +X.
+    req.weight = 1.0f;
+
+    TwoBoneIKResult result = solveTwoBoneIK(req);
+
+    // Forward kinematics on the post-solve start to recover the mid offset.
+    // The upper bone vector in start's local frame is (midPos - startPos)
+    // expressed via inverse(startGlobalRot); start-parent global is identity
+    // because startGlobalRot was identity and startLocalRot was identity.
+    glm::quat newStartGlobal = req.startGlobalRot
+                             * glm::inverse(req.startLocalRot)
+                             * result.startLocalRot;
+    glm::vec3 boneVecLocal = glm::inverse(req.startGlobalRot)
+                           * (req.midPos - req.startPos);
+    glm::vec3 postSolveMid = req.startPos + newStartGlobal * boneVecLocal;
+
+    // at = unit start→target. Decompose post-solve mid offset into
+    // along-at + perpendicular components; the perpendicular component must
+    // align with poleVector (positive dot product, well above noise).
+    glm::vec3 at = glm::normalize(req.target - req.startPos);
+    glm::vec3 midOffset = postSolveMid - req.startPos;
+    glm::vec3 perp = midOffset - at * glm::dot(midOffset, at);
+    EXPECT_GT(glm::length(perp), 0.05f) << "mid must bend off the start→target axis";
+    EXPECT_GT(glm::dot(perp, req.poleVector), 0.05f)
+        << "mid must sit on the +X (pole-vector) side of the start→target axis";
+}
+
+TEST(TwoBoneIKTest, PoleVectorFlipsToOppositeSide_A4)
+{
+    // Same chain, opposite pole vector — mid must land on -X side.
+    TwoBoneIKRequest req;
+    req.startPos = glm::vec3(0.0f);
+    req.midPos   = glm::vec3(0.0f, 1.0f, 0.0f);
+    req.endPos   = glm::vec3(0.0f, 2.0f, 0.0f);
+    req.startGlobalRot = glm::quat(1, 0, 0, 0);
+    req.midGlobalRot   = glm::quat(1, 0, 0, 0);
+    req.startLocalRot  = glm::quat(1, 0, 0, 0);
+    req.midLocalRot    = glm::quat(1, 0, 0, 0);
+    req.target = glm::vec3(0.0f, 1.5f, 0.0f);
+    req.poleVector = glm::vec3(-1.0f, 0.0f, 0.0f);
+    req.weight = 1.0f;
+
+    TwoBoneIKResult result = solveTwoBoneIK(req);
+
+    glm::quat newStartGlobal = req.startGlobalRot
+                             * glm::inverse(req.startLocalRot)
+                             * result.startLocalRot;
+    glm::vec3 boneVecLocal = glm::inverse(req.startGlobalRot)
+                           * (req.midPos - req.startPos);
+    glm::vec3 postSolveMid = req.startPos + newStartGlobal * boneVecLocal;
+
+    glm::vec3 at = glm::normalize(req.target - req.startPos);
+    glm::vec3 midOffset = postSolveMid - req.startPos;
+    glm::vec3 perp = midOffset - at * glm::dot(midOffset, at);
+    EXPECT_GT(glm::dot(perp, req.poleVector), 0.05f)
+        << "mid must follow the pole vector when it flips to -X";
+}
+
+// ---------------------------------------------------------------------------
 // Look-At IK Tests
 // ---------------------------------------------------------------------------
 

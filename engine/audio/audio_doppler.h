@@ -58,6 +58,11 @@ struct DopplerParams
     /// Speed of sound, in engine units (meters) per second. Air at
     /// 20 °C ≈ 343.3 m/s; water ≈ 1480; underwater scenes may lower
     /// this to make the effect more pronounced at slow speeds.
+    ///
+    /// AUDIT Au2 — must be strictly positive. `AudioEngine::initialize`
+    /// and `setSpeedOfSound` clamp to 1e-3 if a non-positive value
+    /// reaches them, because `alSpeedOfSound(0)` is silently rejected
+    /// by OpenAL and the formula divides by `(SS − DF·vSs)`.
     float speedOfSound = 343.3f;
 
     /// Global scale on the Doppler effect. 0.0 disables; 1.0 matches

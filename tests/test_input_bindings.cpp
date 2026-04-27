@@ -7,6 +7,7 @@
 
 #include <gtest/gtest.h>
 
+#include "core/logger.h"
 #include "input/input_bindings.h"
 
 #include <GLFW/glfw3.h>
@@ -337,4 +338,113 @@ TEST(IsActionDown, HandlesNullBindingCheckerGracefully)
     InputActionMap m = sampleMap();
     std::function<bool(const InputBinding&)> nullChecker;
     EXPECT_FALSE(isActionDown(m, "Jump", nullChecker));
+}
+
+// ---------------------------------------------------------------------------
+// AUDIT I5 — re-registering an action whose live bindings differ from the
+// new defaults must surface a warning. This catches the silent-nuke flow
+// where an addAction() call after Settings::load() clobbers user rebinds.
+// ---------------------------------------------------------------------------
+
+namespace
+{
+size_t countWarningsContaining(const std::string& needle)
+{
+    size_t n = 0;
+    for (const auto& entry : Logger::getEntries())
+    {
+        if (entry.message.find(needle) != std::string::npos)
+        {
+            ++n;
+        }
+    }
+    return n;
+}
+}
+
+TEST(InputActionMap, ReRegisterDivergentBindingsWarns_I5)
+{
+    Logger::clearEntries();
+
+    InputActionMap m;
+    InputAction original;
+    original.id      = "Jump";
+    original.primary = InputBinding::key(GLFW_KEY_SPACE);
+    m.addAction(original);
+
+    // Simulate Settings::load — user rebound Jump to F.
+    m.setPrimary("Jump", InputBinding::key(GLFW_KEY_F));
+
+    // Game code re-registers Jump (silent-nuke path pre-I5).
+    Logger::clearEntries();
+    m.addAction(original);
+
+    EXPECT_GE(countWarningsContaining("InputActionMap::addAction"), 1u);
+    EXPECT_GE(countWarningsContaining("\"Jump\""), 1u);
+    EXPECT_GE(countWarningsContaining("user rebinds"), 1u);
+
+    // Live binding is whatever addAction supplied (this is the documented
+    // behaviour) — the warning surfaces the regression so callers can fix
+    // the registration order.
+    const InputAction* live = m.findAction("Jump");
+    ASSERT_NE(live, nullptr);
+    EXPECT_EQ(live->primary, InputBinding::key(GLFW_KEY_SPACE));
+}
+
+TEST(InputActionMap, ReRegisterIdenticalBindingsIsSilent_I5)
+{
+    Logger::clearEntries();
+
+    InputActionMap m;
+    InputAction original;
+    original.id      = "Pause";
+    original.primary = InputBinding::key(GLFW_KEY_ESCAPE);
+    m.addAction(original);
+
+    // No user rebind — re-registering with the same defaults is a hot-reload
+    // no-op that must NOT warn.
+    Logger::clearEntries();
+    m.addAction(original);
+
+    EXPECT_EQ(countWarningsContaining("InputActionMap::addAction"), 0u);
+}
+
+TEST(InputActionMap, FirstRegistrationIsSilent_I5)
+{
+    Logger::clearEntries();
+
+    InputActionMap m;
+    InputAction action;
+    action.id      = "Crouch";
+    action.primary = InputBinding::key(GLFW_KEY_LEFT_CONTROL);
+    m.addAction(action);
+
+    EXPECT_EQ(countWarningsContaining("InputActionMap::addAction"), 0u);
+}
+
+// ---------------------------------------------------------------------------
+// AUDIT I6 — bindingDisplayLabel covers numpad / Pause / ScrollLock / NumLock
+// / extended-F / world / menu keys. Pre-I6 these all fell through to the
+// "Key 320…" debug fallback in the rebind UI.
+// ---------------------------------------------------------------------------
+
+TEST(InputActionMap, KeyboardDisplayCoversNumpadAndSystemKeys_I6)
+{
+    EXPECT_EQ(bindingDisplayLabel(InputBinding::key(GLFW_KEY_KP_0)),    "Numpad 0");
+    EXPECT_EQ(bindingDisplayLabel(InputBinding::key(GLFW_KEY_KP_9)),    "Numpad 9");
+    EXPECT_EQ(bindingDisplayLabel(InputBinding::key(GLFW_KEY_KP_ADD)),  "Numpad +");
+    EXPECT_EQ(bindingDisplayLabel(InputBinding::key(GLFW_KEY_KP_ENTER)),"Numpad Enter");
+    EXPECT_EQ(bindingDisplayLabel(InputBinding::key(GLFW_KEY_KP_DECIMAL)),"Numpad .");
+
+    EXPECT_EQ(bindingDisplayLabel(InputBinding::key(GLFW_KEY_PAUSE)),       "Pause");
+    EXPECT_EQ(bindingDisplayLabel(InputBinding::key(GLFW_KEY_PRINT_SCREEN)),"Print Screen");
+    EXPECT_EQ(bindingDisplayLabel(InputBinding::key(GLFW_KEY_SCROLL_LOCK)), "Scroll Lock");
+    EXPECT_EQ(bindingDisplayLabel(InputBinding::key(GLFW_KEY_NUM_LOCK)),    "Num Lock");
+    EXPECT_EQ(bindingDisplayLabel(InputBinding::key(GLFW_KEY_MENU)),        "Menu");
+
+    EXPECT_EQ(bindingDisplayLabel(InputBinding::key(GLFW_KEY_F13)), "F13");
+    EXPECT_EQ(bindingDisplayLabel(InputBinding::key(GLFW_KEY_F25)), "F25");
+
+    EXPECT_EQ(bindingDisplayLabel(InputBinding::key(GLFW_KEY_WORLD_1)), "World 1");
+    EXPECT_EQ(bindingDisplayLabel(InputBinding::key(GLFW_KEY_WORLD_2)), "World 2");
 }

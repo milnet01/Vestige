@@ -1224,6 +1224,11 @@ static void loadSkin(const tinygltf::Model& gltfModel, Model& outModel)
         }
     }
 
+    // AUDIT A1 — DFS pre-order index list so SkeletonAnimator can walk the
+    // joints parent-before-child regardless of the storage order produced
+    // by the exporter.
+    skeleton->buildUpdateOrder();
+
     outModel.m_skeleton = skeleton;
 
     Logger::info("glTF skin loaded: " + std::to_string(jointCount) + " joints");

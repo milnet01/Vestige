@@ -357,6 +357,50 @@ TEST(CommandHistoryTest, CreateEntityCommandUndoRemovesEntity)
 }
 
 // ---------------------------------------------------------------------------
+// AUDIT Ed6 — Create-undo-redo preserves the original sibling index. Pre-Ed6
+// redo appended via addChild and bumped every later sibling's position.
+// ---------------------------------------------------------------------------
+TEST(CommandHistoryTest, CreateEntityCommandRedoPreservesSiblingIndex_Ed6)
+{
+    Scene scene("Test");
+    scene.createEntity("A");
+    Entity* b = scene.createEntity("B");
+    scene.createEntity("C");
+    scene.createEntity("D");
+
+    // Insert "X" between B and C — sibling index 2.
+    Entity* x = scene.createEntity("X");
+    Entity* root = scene.getRoot();
+    auto extracted = root->removeChild(x);
+    Entity* xReinserted = root->insertChild(std::move(extracted), 2);
+    uint32_t xId = xReinserted->getId();
+    (void)b;
+
+    ASSERT_EQ(root->getChildren().size(), 5u);
+    EXPECT_EQ(root->getChildren()[2]->getName(), "X");
+
+    CommandHistory history;
+    history.execute(std::make_unique<CreateEntityCommand>(scene, xId));
+
+    // Undo: X removed, original 4 siblings remain.
+    history.undo();
+    ASSERT_EQ(root->getChildren().size(), 4u);
+    EXPECT_EQ(root->getChildren()[0]->getName(), "A");
+    EXPECT_EQ(root->getChildren()[1]->getName(), "B");
+    EXPECT_EQ(root->getChildren()[2]->getName(), "C");
+    EXPECT_EQ(root->getChildren()[3]->getName(), "D");
+
+    // Redo: X reinserted at index 2, between B and C.
+    history.redo();
+    ASSERT_EQ(root->getChildren().size(), 5u);
+    EXPECT_EQ(root->getChildren()[0]->getName(), "A");
+    EXPECT_EQ(root->getChildren()[1]->getName(), "B");
+    EXPECT_EQ(root->getChildren()[2]->getName(), "X");
+    EXPECT_EQ(root->getChildren()[3]->getName(), "C");
+    EXPECT_EQ(root->getChildren()[4]->getName(), "D");
+}
+
+// ---------------------------------------------------------------------------
 // DeleteEntityCommand
 // ---------------------------------------------------------------------------
 

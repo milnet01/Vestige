@@ -6,6 +6,8 @@
 
 #include "input/input_bindings.h"
 
+#include "core/logger.h"
+
 #include <GLFW/glfw3.h>
 
 #include <algorithm>
@@ -35,6 +37,24 @@ InputAction& InputActionMap::addAction(const InputAction& action)
     auto it = findById(m_actions);
     if (it != m_actions.end())
     {
+        // AUDIT I5 — warn when re-registering an action whose live bindings
+        // differ from the new defaults. This is the silent-nuke signature:
+        // user rebinds loaded into m_actions get clobbered by a late
+        // addAction() call (e.g., a code path running after Settings::load).
+        // Hot-reload from the editor still works, but the warning surfaces
+        // accidental re-registration.
+        const InputAction& existing = *it;
+        if (existing.primary   != action.primary
+         || existing.secondary != action.secondary
+         || existing.gamepad   != action.gamepad)
+        {
+            Logger::warning(
+                "InputActionMap::addAction(\"" + action.id + "\"): "
+                "overwriting live bindings — any user rebinds for this "
+                "action are being discarded. Call addAction() before "
+                "Settings::load(), or treat this re-registration as a "
+                "deliberate hot-reload.");
+        }
         *it = action;
     }
     else
@@ -215,6 +235,48 @@ const char* keyboardName(int code)
         case GLFW_KEY_F7:  return "F7";  case GLFW_KEY_F8:  return "F8";
         case GLFW_KEY_F9:  return "F9";  case GLFW_KEY_F10: return "F10";
         case GLFW_KEY_F11: return "F11"; case GLFW_KEY_F12: return "F12";
+        // AUDIT I6 — extended function row (F13–F25 exist on full-size
+        // keyboards and stream-deck mappings; rebind UI was showing
+        // raw "Key 302" for these).
+        case GLFW_KEY_F13: return "F13"; case GLFW_KEY_F14: return "F14";
+        case GLFW_KEY_F15: return "F15"; case GLFW_KEY_F16: return "F16";
+        case GLFW_KEY_F17: return "F17"; case GLFW_KEY_F18: return "F18";
+        case GLFW_KEY_F19: return "F19"; case GLFW_KEY_F20: return "F20";
+        case GLFW_KEY_F21: return "F21"; case GLFW_KEY_F22: return "F22";
+        case GLFW_KEY_F23: return "F23"; case GLFW_KEY_F24: return "F24";
+        case GLFW_KEY_F25: return "F25";
+
+        // AUDIT I6 — system / lock keys.
+        case GLFW_KEY_PAUSE:        return "Pause";
+        case GLFW_KEY_PRINT_SCREEN: return "Print Screen";
+        case GLFW_KEY_SCROLL_LOCK:  return "Scroll Lock";
+        case GLFW_KEY_NUM_LOCK:     return "Num Lock";
+        case GLFW_KEY_MENU:         return "Menu";
+
+        // AUDIT I6 — keypad block. Keyboard-primary users were seeing
+        // raw "Key 320…329" for the entire numpad in the rebind UI.
+        case GLFW_KEY_KP_0:        return "Numpad 0";
+        case GLFW_KEY_KP_1:        return "Numpad 1";
+        case GLFW_KEY_KP_2:        return "Numpad 2";
+        case GLFW_KEY_KP_3:        return "Numpad 3";
+        case GLFW_KEY_KP_4:        return "Numpad 4";
+        case GLFW_KEY_KP_5:        return "Numpad 5";
+        case GLFW_KEY_KP_6:        return "Numpad 6";
+        case GLFW_KEY_KP_7:        return "Numpad 7";
+        case GLFW_KEY_KP_8:        return "Numpad 8";
+        case GLFW_KEY_KP_9:        return "Numpad 9";
+        case GLFW_KEY_KP_DECIMAL:  return "Numpad .";
+        case GLFW_KEY_KP_DIVIDE:   return "Numpad /";
+        case GLFW_KEY_KP_MULTIPLY: return "Numpad *";
+        case GLFW_KEY_KP_SUBTRACT: return "Numpad -";
+        case GLFW_KEY_KP_ADD:      return "Numpad +";
+        case GLFW_KEY_KP_ENTER:    return "Numpad Enter";
+        case GLFW_KEY_KP_EQUAL:    return "Numpad =";
+
+        // AUDIT I6 — locale-specific keys. WORLD_1 / WORLD_2 cover the
+        // ISO 105-key (non-US) and Japanese (yen / underscore) extras.
+        case GLFW_KEY_WORLD_1: return "World 1";
+        case GLFW_KEY_WORLD_2: return "World 2";
 
         default: return nullptr;
     }
