@@ -21,7 +21,7 @@
 
 | In scope | Out of scope |
 |----------|--------------|
-| `AudioEngine` — OpenAL Soft device, context, source pool (32 slots), buffer cache | OpenAL Soft itself (vendored via FetchContent at `external/CMakeLists.txt:359`) |
+| `AudioEngine` — OpenAL Soft device, context, source pool (32 slots), buffer cache | OpenAL Soft itself (vendored via FetchContent; `GIT_TAG` line at `external/CMakeLists.txt:362`) |
 | `AudioMixer` — six-bus gain table (Master / Music / Voice / SFX / Ambient / UI) | Settings UI panel — `engine/editor/settings_panel/audio_panel.cpp` |
 | `DuckingState` + `updateDucking` — sidechain dip with attack / release / floor | Policy of *which* events trigger ducking — `engine/systems/audio_system.cpp` |
 | `SoundPriority` + `chooseVoiceToEvictForIncoming` — admission-controlled eviction | Game-side priority assignment — author-set on `AudioSourceComponent::priority` |
@@ -81,15 +81,15 @@ Key abstractions:
 | `AudioMixer` | struct | 6-slot bus gain table (Master / Music / Voice / SFX / Ambient / UI). `engine/audio/audio_mixer.h:82` |
 | `AudioBus` | enum class | Bus identifier — referenced by `AudioSourceComponent::bus` and the mixer. `engine/audio/audio_mixer.h:65` |
 | `SoundPriority` | enum class | 4 tiers (Low / Normal / High / Critical) for eviction admission. `engine/audio/audio_mixer.h:47` |
-| `DuckingState` / `DuckingParams` | struct + struct | Sidechain dip state machine (attack / release / floor). `engine/audio/audio_mixer.h:148, 159` |
+| `DuckingParams` / `DuckingState` | struct + struct | Sidechain dip configuration + state machine (attack / release / floor). `engine/audio/audio_mixer.h:148, 159` (Params first at 148, State second at 159). |
 | `VoiceCandidate` + `chooseVoiceToEvictForIncoming` | struct + free fn | Admission-controlled pool-pressure eviction. `engine/audio/audio_mixer.h:180, 216` |
-| `AudioClip` | class | PCM container; static `loadFromFile` decodes WAV / MP3 / FLAC / OGG. `engine/audio/audio_clip.h:20` |
+| `AudioClip` | class | Pulse-Code Modulation (PCM) container; static `loadFromFile` decodes WAV / MP3 / FLAC / OGG. `engine/audio/audio_clip.h:20` |
 | `AttenuationModel` + `AttenuationParams` + `computeAttenuation` | enum + struct + free fn | Distance-attenuation curves matching OpenAL `_CLAMPED` variants. `engine/audio/audio_attenuation.h:47, 59, 82` |
 | `DopplerParams` + `computeDopplerPitchRatio` | struct + free fn | OpenAL §3.5 Doppler-shift formula, CPU-side. `engine/audio/audio_doppler.h:56, 87` |
 | `AudioOcclusionMaterial*` + obstruction free fns | enum + struct + fns | 8 material presets + transmission / low-pass blend math. `engine/audio/audio_occlusion.h:44, 63, 95, 103` |
 | `ReverbPreset` + `ReverbParams` + `blendReverbParams` | enum + struct + free fn | 6 EFX presets + per-zone weight falloff + linear blend. `engine/audio/audio_reverb.h:36, 49, 104` |
 | `AmbientZone` + `TimeOfDayWeights` + `RandomOneShotScheduler` | structs + free fns | Sphere-falloff loops, 4-window ToD weighting, stateless cooldown one-shots. `engine/audio/audio_ambient.h:47, 78, 110` |
-| `MusicLayer*` + `MusicStingerQueue` + `MusicStreamState` + `planStreamTick` | enum + classes + struct + free fn | Layer slew, intensity → weights mapping, capped FIFO stinger queue, streaming-decode planner. `engine/audio/audio_music.h:59, 144`, `audio_music_stream.h:45, 64, 119` |
+| `MusicLayer*` + `MusicStingerQueue` + `MusicStreamState` + `planStreamTick` | enum + classes + struct + free fn | Layer slew, intensity → weights mapping, capped first-in-first-out (FIFO) stinger queue, streaming-decode planner. `engine/audio/audio_music.h:59, 144`, `audio_music_stream.h:45, 64, 119` |
 | `HrtfMode` + `HrtfStatus` + `HrtfSettings` + `HrtfStatusEvent` + `resolveHrtfDatasetIndex` | enums + structs + free fn | HRTF policy + driver-status reporting + dataset index resolution. `engine/audio/audio_hrtf.h:40, 51, 64, 104, 132` |
 | `AudioSourceAlState` + `composeAudioSourceAlState` | struct + free fn | Per-frame compose of every `alSource*f` value. `engine/audio/audio_source_state.h:33, 75` |
 | `AudioSourceComponent` | `Component` | Per-entity authoring of clip path + bus + attenuation + occlusion + priority. `engine/audio/audio_source_component.h:24` |
@@ -107,7 +107,7 @@ void                   AudioEngine::updateListener(pos, fwd, up);
 unsigned int           AudioEngine::loadBuffer(const std::string& path);
 unsigned int           AudioEngine::playSound      (path, pos, vol, loop, bus, priority);
 unsigned int           AudioEngine::playSoundSpatial(path, pos, params, vol, loop, bus, prio);
-unsigned int           AudioEngine::playSoundSpatial(path, pos, vel, params, vol, loop, bus, prio);
+unsigned int           AudioEngine::playSoundSpatial(path, pos, vel, params, vol, loop, bus, prio);  // velocity-aware overload (Doppler-bearing sources)
 unsigned int           AudioEngine::playSound2D    (path, vol, bus, priority);
 void                   AudioEngine::stopSound(unsigned int source);
 void                   AudioEngine::stopAll();
@@ -234,7 +234,7 @@ class AudioSourceComponent : public Component {
 - `composeAudioSourceAlState` folds occlusion into the `volume` input of `resolveSourceGain` (rather than as a separate clamp site) so the mixer / bus / duck / clamp pipeline applies uniformly.
 - `loadBuffer` is **case-sensitive** and **path-keyed** — the cache stores by exact path string. Two different relative paths to the same file will decode twice and cache twice. Acceptable trade-off; canonicalisation deferred (§15).
 
-**Stability:** facade is semver-frozen for `v0.x`. Known evolution points: (a) Phase 10.9 W7 lifetime-pointer mixer publish replaced the earlier value-copy API; older callers passing a `const AudioMixer&` no longer compile. (b) The 4-arg `resolveSourceGain` is the canonical form — 3-arg overload kept for fire-and-forget gain previews where ducking is irrelevant.
+**Stability:** facade is **semver-respecting from v1.0** (the engine is pre-1.0 today, so anything-goes per the SemVer spec — but new public-API breaks are still flagged here so consumers can plan migrations). Known evolution points: (a) the 4-arg `resolveSourceGain` is the canonical form — 3-arg overload kept for fire-and-forget gain previews where ducking is irrelevant. (b) See the spec change log (§16) for landed pre-1.0 breaks (e.g. Phase 10.9 W7's lifetime-pointer mixer-publish change).
 
 ## 5. Data Flow
 
@@ -473,7 +473,7 @@ Internal cross-references:
 | 6 | Multi-channel (5.1 / 7.1) source files — `AudioClip::getALFormat` only returns mono / stereo. Authoring guidance is "submix to stereo offline"; if multi-channel sources land, decide whether to expand support or keep the mono/stereo contract. | milnet01 | triage |
 | 7 | EFX reverb integration end-to-end — the `audio_reverb` math is pure-function tested; the engine-side `AudioReverbAdapter` that issues `alEffectf` calls is not yet present (Phase 10 deferred to Phase 12). Either land the adapter or remove the orphan headers. | milnet01 | Phase 12 |
 | 8 | Performance budgets in §8 are placeholders. Need a Tracy capture of `AudioSystem::update` + `updateGains` under load to fill in measured numbers. | milnet01 | Phase 11 audit |
-| 9 | `Result<T, E>` / `std::expected` adoption — `loadBuffer` / `playSound*` use `0`-as-sentinel; migration to typed errors covers the engine-wide debt thread. | milnet01 | post-MIT release (Phase 12) |
+| 9 | `Result<T, E>` / `std::expected` adoption — `loadBuffer` / `playSound*` use `0`-as-sentinel; migration to typed errors covers the engine-wide debt thread. | milnet01 | Phase 12 (post-MIT release) |
 | 10 | Ambisonics output / scene encoding for outdoor scenes. OpenAL Soft already renders internally via ambisonics; explicit ambisonics input bed + scene-graph routing would benefit large outdoor walkthroughs. Research-only at this stage. | milnet01 | triage |
 
 ## 16. Spec change log
