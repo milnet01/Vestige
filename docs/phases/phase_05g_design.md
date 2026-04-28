@@ -30,7 +30,7 @@ The editor has:
 
 ## Research Summary
 
-See `docs/PHASE5G_RESEARCH.md` for full research findings. Key design decisions:
+See `docs/phases/phase_05g_research.md` for full research findings. Key design decisions:
 
 | Decision | Choice | Rationale |
 |----------|--------|-----------|

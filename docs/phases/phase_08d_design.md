@@ -334,7 +334,7 @@ Visual testing: run the engine, verify cloth drapes correctly, reacts to wind, d
 - `engine/physics/cloth_component.h`
 - `engine/physics/cloth_component.cpp`
 - `tests/test_cloth_simulator.cpp`
-- `docs/PHASE8D_DESIGN.md` (this file)
+- `docs/phases/phase_08d_design.md` (this file)
 
 **Modified files:**
 - `engine/renderer/material.h` — add `doubleSided` flag

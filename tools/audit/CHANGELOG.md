@@ -437,7 +437,7 @@ Full suite: 754 passing (+21 from 733).
 Nothing from the 2026-04-16 triage is now outstanding — the
 original list is fully addressed across audit 2.9.0 / 2.10.0 /
 2.11.0 and the Ants 2026-04-17 rule fixes. See
-`docs/SELF_LEARNING_ROADMAP.md` for items in adjacent areas
+`docs/research/self_learning_roadmap.md` for items in adjacent areas
 (Phase 3 "propose-fix" suggestion layer, unified pattern
 write-up).
 
@@ -501,7 +501,7 @@ numbers call out.
 ### Added (self-learning Phase 1 — per-rule statistics + self-triage)
 
 First half of the self-learning loop sketched in
-`docs/FORMULA_WORKBENCH_SELF_LEARNING_DESIGN.md` §6. The audit tool
+`docs/research/formula_workbench_self_learning_design.md` §6. The audit tool
 now persists per-rule `hits / verified / suppressed` counters into
 `.audit_stats.json` after every run, and a new `--self-triage`
 subcommand emits a ranked markdown report — the automated equivalent

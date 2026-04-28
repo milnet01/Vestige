@@ -1,7 +1,7 @@
 # Physics-Based Character Controller Research
 
 **Date:** 2026-03-31
-**Purpose:** Research physics-based character controller approaches to upgrade Vestige's current AABB-based first-person controller. Jolt Physics has already been selected as the physics engine (see `PHYSICS_ENGINE_RESEARCH.md`).
+**Purpose:** Research physics-based character controller approaches to upgrade Vestige's current AABB-based first-person controller. Jolt Physics has already been selected as the physics engine (see `physics_engine_research.md`).
 
 ---
 
@@ -488,7 +488,7 @@ Godot uses `move_and_slide()`:
 
 ### Phase 1: Foundation (Non-breaking)
 
-1. **Add Jolt to CMake** via FetchContent (already planned in `PHYSICS_ENGINE_RESEARCH.md`).
+1. **Add Jolt to CMake** via FetchContent (already planned in `physics_engine_research.md`).
 2. **Create `PhysicsWorld` subsystem** wrapping `JPH::PhysicsSystem`, `JobSystemThreadPool`, `BroadPhaseLayerInterface`, `ObjectLayerPairFilter`.
 3. **Create `PhysicsCharacterController` class** wrapping `JPH::CharacterVirtual`.
 4. **Keep `FirstPersonController` as the input/camera controller** -- it still handles WASD, mouse look, gamepad. It now outputs a desired velocity vector instead of directly modifying position.

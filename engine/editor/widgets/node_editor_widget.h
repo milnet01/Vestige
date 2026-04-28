@@ -7,7 +7,7 @@
 /// All `ax::NodeEditor::` (alias `ed::`) calls are isolated here so the rest
 /// of the editor doesn't pull in the library headers or care about its
 /// internal types. If we ever swap to a different node-editor library
-/// (pthom fork, ImNodeFlow, etc. — see docs/PHASE9E3_RESEARCH.md §3.4 for
+/// (pthom fork, ImNodeFlow, etc. — see docs/phases/phase_09e3_research.md §3.4 for
 /// the fallback ranking), only this file changes.
 ///
 /// The widget owns one `ed::EditorContext` per instance, so multiple

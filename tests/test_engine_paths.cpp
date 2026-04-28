@@ -5,7 +5,7 @@
 /// @brief Phase 10.9 Slice 1 F1 — spec-driven tests for engine
 ///        path-composition helpers.
 ///
-/// These tests are authored from `PHASE10_7_DESIGN.md` §4.2 and the
+/// These tests are authored from `docs/phases/phase_10_7_design.md` §4.2 and the
 /// existing engine convention of `<assetPath>/<sub>` (used
 /// throughout `engine.cpp` for fonts, scenes, shaders, brush
 /// preview, debug-draw). They must fail against the pre-fix helper
@@ -19,7 +19,7 @@
 
 using namespace Vestige;
 
-// --- PHASE10_7_DESIGN.md §4.2: caption map lives at
+// --- docs/phases/phase_10_7_design.md §4.2: caption map lives at
 //     `<assetPath>/captions.json`.
 
 TEST(EnginePaths, CaptionMapPath_DefaultAssetRoot_JoinsWithSingleSlash)

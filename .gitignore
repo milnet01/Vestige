@@ -77,6 +77,15 @@ perf.data*
 
 # Audit tool cache and generated reports
 .audit_cache/
+# New canonical location after the Phase G docs/ restructure (April 2026):
+# audit reports and result JSON now land in docs/archive/audits/.
+docs/archive/audits/AUTOMATED_AUDIT_REPORT*.md
+docs/archive/audits/AUTOMATED_AUDIT_REPORT*_results.json
+docs/archive/audits/trend_snapshot_*.json
+# Legacy fallback patterns — kept temporarily so any in-flight reports
+# generated before tools were updated still get ignored. Safe to drop in
+# a follow-up cleanup once no developer has stale reports lying at the
+# old path.
 docs/AUTOMATED_AUDIT_REPORT*.md
 docs/AUTOMATED_AUDIT_REPORT*_results.json
 # Trend snapshots are per-run diagnostic state (AUDIT.md §L9 / FIXPLAN I5).
@@ -152,6 +161,14 @@ id_ed25519
 /DISCOVERY.md
 /FIXPLAN.md
 /audit_rule_quality.json
+# Audit artefacts — new canonical home after Phase G docs/ restructure.
+docs/archive/audits/AUDIT_[0-9]*.md
+docs/archive/audits/CODE_AUDIT_REPORT.md
+docs/archive/audits/PHASE*_AUDIT*.md
+docs/archive/audits/AUTOMATED_AUDIT_REPORT*.md
+docs/archive/audits/AUTOMATED_AUDIT_REPORT*.json
+# Legacy fallback (pre-Phase-G location). Kept so in-flight or local
+# reports at the old path stay ignored during the transition.
 docs/AUDIT_[0-9]*.md
 docs/CODE_AUDIT_REPORT.md
 docs/PHASE*_AUDIT*.md

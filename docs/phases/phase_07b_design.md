@@ -2,7 +2,7 @@
 
 **Date:** 2026-03-30
 **Prerequisite:** Phase 7A (skeletal animation) — complete
-**Research:** docs/PHASE7B_RESEARCH.md
+**Research:** docs/phases/phase_07b_research.md
 
 ---
 

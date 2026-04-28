@@ -218,7 +218,7 @@ target_include_directories(imgui_filebrowser INTERFACE ${imgui_filebrowser_SOURC
 target_link_libraries(imgui_filebrowser INTERFACE imgui_lib)
 
 # imgui-node-editor — node graph editor widget for visual scripting (MIT, Phase 9E-3)
-# See docs/PHASE9E3_RESEARCH.md for the library survey + fallback strategy.
+# See docs/phases/phase_09e3_research.md for the library survey + fallback strategy.
 #
 # Step 1 spike (2026-04-13):
 # - Upstream v0.9.3 uses a few ImGui APIs that have since been removed or

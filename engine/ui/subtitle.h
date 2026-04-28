@@ -62,7 +62,7 @@ float subtitleScaleFactorOf(SubtitleSizePreset preset);
 
 /// @brief Narrator rendering style (Phase 10.9 Slice 2 P6).
 ///
-/// `PHASE10_7_DESIGN.md §4.2` originally specified "Narrator — italic
+/// `docs/phases/phase_10_7_design.md §4.2` originally specified "Narrator — italic
 /// white". Shipping that requires an italic font file (licensed) +
 /// atlas support that the project does not have. P6 resolves the
 /// block by shipping both styles as runtime alternatives:

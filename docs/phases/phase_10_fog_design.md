@@ -1,7 +1,7 @@
 # Phase 10 — Fog, Mist & Volumetric Lighting (Design Doc)
 
 **Status:** Draft — awaiting user sign-off before implementation.
-**Research:** See `docs/PHASE10_FOG_RESEARCH.md` for citations and derivations.
+**Research:** See `docs/phases/phase_10_fog_research.md` for citations and derivations.
 **Scope:** Deferred-pipeline fog for the Vestige engine — distance fog, exponential height fog, volumetric fog (froxel-based), and god rays. Delivered as a series of small slices that match the Phase 10 audio cadence.
 
 ---

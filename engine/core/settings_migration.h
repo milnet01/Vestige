@@ -48,7 +48,7 @@ bool migrate(nlohmann::json& j);
 /// @brief v1 → v2: add the `onboarding` section with defaults.
 ///
 /// v2 introduces the first-run-wizard completion state for
-/// Phase 10.5 (see `PHASE10_5_FIRST_RUN_WIZARD_DESIGN.md`). A v1
+/// Phase 10.5 (see `docs/phases/phase_10_5_first_run_wizard_design.md`). A v1
 /// file has no `onboarding` block; this migration inserts one
 /// with `hasCompletedFirstRun = false`, an empty `completedAt`,
 /// and `skipCount = 0`.

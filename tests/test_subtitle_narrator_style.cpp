@@ -5,7 +5,7 @@
 /// @brief Phase 10.9 Slice 2 P6 — narrator styling (both paths).
 ///
 /// P6 was blocked on an asset-source decision between the original
-/// `PHASE10_7_DESIGN.md §4.2` spec ("Narrator — italic white") — which
+/// `docs/phases/phase_10_7_design.md §4.2` spec ("Narrator — italic white") — which
 /// requires an italic font file the project does not ship — and a
 /// spec-revised accessibility-best alternative (warm-amber colour
 /// differentiation). The chosen resolution ships BOTH paths and

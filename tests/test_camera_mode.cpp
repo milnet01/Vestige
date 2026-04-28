@@ -18,7 +18,7 @@
 ///     subclass, so the base `CameraMode` contract is
 ///     verified without waiting for CM2.
 ///
-/// Design reference: docs/PHASE10_8_CAMERA_MODES_DESIGN.md §4.2
+/// Design reference: docs/phases/phase_10_8_camera_modes_design.md §4.2
 /// and §4.5.
 
 #include <gtest/gtest.h>

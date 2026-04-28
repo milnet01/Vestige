@@ -318,7 +318,7 @@ public:
     /// in `fog.cpp` (`applyFogAccessibilitySettings`) runs each frame
     /// between the stored state and the GPU uniform upload so users
     /// can toggle accessibility without losing their scene-authored
-    /// look. See `docs/PHASE10_FOG_DESIGN.md` §6.
+    /// look. See `docs/phases/phase_10_fog_design.md` §6.
     void setPostProcessAccessibility(const PostProcessAccessibilitySettings& settings);
     const PostProcessAccessibilitySettings& getPostProcessAccessibility() const;
 
@@ -617,7 +617,7 @@ private:
     // Phase 10 fog — CPU-side source of truth for the composite pass.
     // Uniforms are pushed in endFrame() between contact-shadow and bloom
     // setup, matching the composition order in
-    // docs/PHASE10_FOG_DESIGN.md §4.
+    // docs/phases/phase_10_fog_design.md §4.
     FogMode             m_fogMode = FogMode::None;
     FogParams           m_fogParams;
     bool                m_heightFogEnabled = false;

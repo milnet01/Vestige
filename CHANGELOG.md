@@ -3765,7 +3765,7 @@ No code changed in this commit; ROADMAP.md + CHANGELOG.md only.
 ### 2026-04-23 Phase 10.8 — Slice CM1: CameraMode base types
 
 First slice of Phase 10.8 per the approved
-`docs/PHASE10_8_CAMERA_MODES_DESIGN.md` — pure interface, no
+`docs/phases/phase_10_8_camera_modes_design.md` — pure interface, no
 concrete modes yet (those are CM2–CM7).
 
 Added:
@@ -4258,7 +4258,7 @@ validates visually.
 
 ### 2026-04-23 Phase 10.7 — design doc approved, scope reduced
 
-`docs/PHASE10_7_DESIGN.md` drafted + approved on the same day. Six
+`docs/phases/phase_10_7_design.md` drafted + approved on the same day. Six
 blocking §6 questions signed off: audio gain chain runs per-frame
 (A1); editor `AudioPanel` unifies via `SettingsEditor` with mute /
 solo / ducking staying panel-local (B3); renderer bloom takes a
@@ -4859,7 +4859,7 @@ maintainer's assets are on disk).
 ### 2026-04-22 Phase 10.5 — First-run wizard foundation (slice 14.1)
 
 First slice of the Phase 10.5 first-run wizard work
-(`docs/PHASE10_5_FIRST_RUN_WIZARD_DESIGN.md`, approved 2026-04-22).
+(`docs/phases/phase_10_5_first_run_wizard_design.md`, approved 2026-04-22).
 Ships the persistence layer underneath the wizard — no UI yet;
 slices 14.2 – 14.4 add the panel, the template visibility filter,
 and the engine wiring.
@@ -5002,7 +5002,7 @@ paths.
   place so v1 → v2 slots in cleanly when the schema evolves.
   Future-version files are refused (we do not downgrade).
   Migrations must be idempotent.
-- Schema coverage (see `docs/PHASE10_SETTINGS_DESIGN.md` §4.3 for
+- Schema coverage (see `docs/phases/phase_10_settings_design.md` §4.3 for
   the JSON shape):
   - `display`: windowWidth/Height, fullscreen, vsync,
     qualityPreset (low/medium/high/ultra/custom), renderScale.
@@ -5035,7 +5035,7 @@ vsync / fullscreen changes + wiring the `display` block into Apply.
 
 ### 2026-04-22 Phase 10 — Settings system design approved (slices 13.1–13.5)
 
-Design-review checkpoint. `docs/PHASE10_SETTINGS_DESIGN.md` is
+Design-review checkpoint. `docs/phases/phase_10_settings_design.md` is
 approved; all eight §12 open questions signed off as proposed.
 No code ships in this commit — the design doc is the deliverable
 and it unblocks slice 13.1 implementation.
@@ -5095,7 +5095,7 @@ Closes the "In-game UI system" roadmap bullet. Slices 12.1 (pure
 `GameScreen` state machine) and 12.2 (`UISystem` screen stack + Engine
 integration + menu-prefab signal wiring) landed earlier in the same
 day; these three close the remaining gaps identified in
-`docs/PHASE10_UI_DESIGN.md` §2 (inventory).
+`docs/phases/phase_10_ui_design.md` §2 (inventory).
 
 - **Slice 12.3 — Notification toast primitives.** New
   `engine/ui/ui_notification_toast.{h,cpp}`:
@@ -5241,7 +5241,7 @@ sliders actually sees the render change.
   `safeDefaults()`), `MasterDisableBeatsIntensityOneAndReduceMotion`
   (flag-precedence guard). All 48 fog-related tests pass.
 
-Corresponds to slice 11.9 in `docs/PHASE10_FOG_DESIGN.md`. Remaining
+Corresponds to slice 11.9 in `docs/phases/phase_10_fog_design.md`. Remaining
 non-volumetric fog slices: 11.5 (screen-space god rays) and 11.10
 (editor FogPanel). Volumetric slices 11.6 – 11.8 are the heavy-lift
 remainder of Phase 10 fog.
@@ -5256,7 +5256,7 @@ previous slice (`Vestige::computeFogFactor`,
 evaluated by the final composite shader and produce a visible
 contribution on screen. Only the non-volumetric fog stack — volumetric
 froxels and god-rays remain deferred per the
-`docs/PHASE10_FOG_DESIGN.md` 10-slice rollout plan.
+`docs/phases/phase_10_fog_design.md` 10-slice rollout plan.
 
 - `assets/shaders/screen_quad.frag.glsl` — adds `u_fogMode`,
   `u_fogColour`, `u_fogStart`, `u_fogEnd`, `u_fogDensity`,
@@ -5266,7 +5266,7 @@ froxels and god-rays remain deferred per the
   contact shadows and re-bound in the composite for Mesa declared-
   sampler safety), `u_fogInvViewProj`, `u_fogCameraWorldPos`. GPU
   formula ports `fog.cpp` byte-for-byte. Composition order matches
-  `docs/PHASE10_FOG_DESIGN.md` §4: SSAO → contact shadows → **fog
+  `docs/phases/phase_10_fog_design.md` §4: SSAO → contact shadows → **fog
   mix** → bloom add → exposure → tonemap → LUT → colour vision →
   gamma. Bloom therefore samples fogged radiance in linear HDR, which
   is the UE / HDRP convention.
@@ -5342,8 +5342,8 @@ action without a mouse.
 ### 2026-04-21 Formula Workbench 1.17.0 — Weighted LM, max-abs metric, step sweeps
 
 Three backwards-compatible extensions surfaced by the Phase 10 fog
-research (`docs/PHASE10_FOG_RESEARCH.md` §8 /
-`docs/PHASE10_FOG_DESIGN.md` §9). All three unlock rendering-formula
+research (`docs/phases/phase_10_fog_research.md` §8 /
+`docs/phases/phase_10_fog_design.md` §9). All three unlock rendering-formula
 fits (phase functions, tonemap curves, BRDF lobes) that the existing
 fitter could almost — but not quite — handle. Prepares the Workbench
 for the Schlick-to-Henyey-Greenstein phase-function fit in Phase 10's
@@ -5389,13 +5389,13 @@ Follows the Phase 10 audio cadence: ship pure-function primitives
 first (exhaustively tested, editor + tests can exercise the math),
 wire into the GPU composite in a follow-up slice.
 
-- `docs/PHASE10_FOG_RESEARCH.md` — 2,400-word research report with 20
+- `docs/phases/phase_10_fog_research.md` — 2,400-word research report with 20
   citations across UE5 Exponential Height Fog, Unity HDRP, Godot 4,
   Wronski 2014 and Hillaire 2015 (volumetric), Mitchell 2008 (god
   rays), Quílez 2010 (height-fog integral), D3D9 fog-formula spec,
   and accessibility standards (WCAG 2.2 SC 2.3.1 / 2.3.3, Xbox AG
   117/118, Game Accessibility Guidelines).
-- `docs/PHASE10_FOG_DESIGN.md` — 10-slice rollout plan, HDR
+- `docs/phases/phase_10_fog_design.md` — 10-slice rollout plan, HDR
   composition order, performance budgets per slice, Workbench
   applicability analysis, and three proposed Workbench improvements
   (2D input grids, max-abs-error metric, weighted-LM support).
@@ -6499,7 +6499,7 @@ so tests validate the CPU pipeline without a GL context.
   **2059 tests** (was 2032).
 - Fixed a move-before-read bug in `SpriteAnimation::addClip` surfaced by
   the replace-clip test: cache the key before `std::move(clip)`.
-- Design doc: `docs/PHASE9F_DESIGN.md`.
+- Design doc: `docs/phases/phase_09f_design.md`.
 
 ### 2026-04-20 Post-Phase-9E audit — formula-workbench dangling-temp fix + audit 2.14.1
 
@@ -7138,7 +7138,7 @@ The factory exists; the call-site swap and the broader
 `IClothSolverBackend` interface widening are a follow-up because
 they touch every `getSimulator()` caller (especially
 `inspector_panel.cpp`). When that lands, the
-`docs/PHASE9B_GPU_CLOTH_DESIGN.md` § 7 perf-acceptance gates
+`docs/phases/phase_09b_gpu_cloth_design.md` § 7 perf-acceptance gates
 (100×100 ≥ 120 FPS on RX 6600, etc.) become the merge criteria.
 
 ### 2026-04-19 Phase 9B Step 6: cloth_dihedral.comp.glsl + dihedral constraints
@@ -7351,7 +7351,7 @@ are virtual (`initialize`, `simulate`, `reset`, `isInitialized`,
 (`setWind`, `addSphereCollider`, `pinParticle`, etc.) remain on
 the concrete `ClothSimulator` type during the transitional phase
 and will widen as the GPU backend matures — see
-`docs/PHASE9B_GPU_CLOTH_DESIGN.md` § 4.
+`docs/phases/phase_09b_gpu_cloth_design.md` § 4.
 
 `ClothSimulator` now inherits from `IClothSolverBackend` and
 marks the 11 methods `override`. No behavioural change.
@@ -7400,7 +7400,7 @@ path placement remains deferred to Phase 16 (AI behaviour trees).
 
 ### 2026-04-19 Phase 9B GPU compute cloth — design doc
 
-New design document `docs/PHASE9B_GPU_CLOTH_DESIGN.md` for the
+New design document `docs/phases/phase_09b_gpu_cloth_design.md` for the
 last-remaining Phase 9B sub-item: migrating the XPBD cloth solver
 to a GPU compute pipeline (SSBO storage + 4 compute shaders +
 red-black graph colouring + auto CPU↔GPU select). Implementation
@@ -7478,7 +7478,7 @@ checklist hadn't reflected what actually landed in commits `cffd755`
   SHIPPED (3 items ticked, 15 annotated "deferred to Phase 10" or
   "not yet"); Phase 9D marked COMPLETE (all 4 sub-sections ticked,
   game-template enum confirmed covering all 6 variants).
-- **docs/PHASE9E3_DESIGN.md** §13 — 5 acceptance-criteria items
+- **docs/phases/phase_09e3_design.md** §13 — 5 acceptance-criteria items
   ticked with commit refs (library integration, M9 / M10 / M11,
   L6); progress header added noting Steps 1–3 shipped, Step 4 WIP,
   12 remaining.
@@ -7501,13 +7501,13 @@ at the call site — never a global flag removal.
 
 ### 2026-04-19 GI roadmap sync + SH-probe-grid unit tests
 
-Reconciles `docs/GI_ROADMAP.md` with the actual engine state — SH
+Reconciles `docs/research/gi_roadmap.md` with the actual engine state — SH
 probe grid (2026-03-29) and radiosity baker (2026-03-30) landed
 months ago but were still marked "Planned" in the roadmap. Next GI
 step is now **SSGI** (Screen-Space Global Illumination), promoted
 from MEDIUM to HIGH priority.
 
-- `docs/GI_ROADMAP.md` — items 2 (SH grid) and 3 (radiosity) marked
+- `docs/research/gi_roadmap.md` — items 2 (SH grid) and 3 (radiosity) marked
   IMPLEMENTED with file pointers and dates; implementation-order
   list struck out the shipped items; item 4 (SSGI) flagged as the
   next priority.
@@ -7723,7 +7723,7 @@ radiance cascades). Cites primary sources for each.
 #### Phase 24 — Structural / Architectural Physics (design doc)
 
 Draft design document for the attachment-physics phase:
-``docs/PHASE24_STRUCTURAL_PHYSICS_DESIGN.md``. Cross-referenced from
+``docs/phases/phase_24_structural_physics_design.md``. Cross-referenced from
 ``ROADMAP.md``. Covers:
 
 - XPBD cloth particle ↔ Jolt rigid body kinematic attachment (pattern

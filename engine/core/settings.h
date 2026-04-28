@@ -33,7 +33,7 @@
 ///    leaves either the previous file or the new one, never a
 ///    truncated hybrid.
 ///
-/// See `docs/PHASE10_SETTINGS_DESIGN.md` for the full rationale
+/// See `docs/phases/phase_10_settings_design.md` for the full rationale
 /// and the sign-off log.
 #pragma once
 
@@ -255,7 +255,7 @@ struct AccessibilitySettings
 ///    messaging at upgrade boundaries.
 ///  - `skipCount` — bump every time the user clicks "Skip for now"
 ///    without reaching a terminal state. After two, `hasCompletedFirstRun`
-///    flips automatically (Q7 resolution in PHASE10_5_FIRST_RUN_WIZARD_DESIGN.md).
+///    flips automatically (Q7 resolution in docs/phases/phase_10_5_first_run_wizard_design.md).
 ///
 /// Migration note: users on pre-v2 builds had their first-run
 /// signal in an ad-hoc flag file `<configDir>/welcome_shown`

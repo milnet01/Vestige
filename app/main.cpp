@@ -58,7 +58,7 @@ void printUsage(const char* argv0)
         << "  " << argv0 << " --play            # first-person walkthrough\n"
         << "  " << argv0 << " --scene my.scene  # open a saved scene\n"
         << "\n"
-        << "Full docs: docs/ARCHITECTURE.md, README.md\n";
+        << "Full docs: ARCHITECTURE.md, README.md\n";
 }
 
 /// @brief Returns true on success, false if parsing failed and main should exit.

@@ -156,7 +156,7 @@ void GpuClothSimulator::setCollisionMargin(float margin)
 
 // Cylinder / box colliders — GPU backend doesn't implement these yet. Logged
 // once per backend instance so a call site driving both CPU and GPU doesn't
-// flood the log. See `docs/PHASE9B_GPU_CLOTH_DESIGN.md` § 9.
+// flood the log. See `docs/phases/phase_09b_gpu_cloth_design.md` § 9.
 void GpuClothSimulator::addCylinderCollider(const glm::vec3& /*base*/,
                                              float /*radius*/, float /*height*/)
 {

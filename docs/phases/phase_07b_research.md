@@ -435,4 +435,4 @@ Each step produces a testable, visually verifiable result.
 - [LinkedIn — How to implement animation blending](https://www.linkedin.com/advice/3/how-do-you-implement-animation-blending-transitions-game)
 - [LearnOpenGL — Skeletal Animation](https://learnopengl.com/Guest-Articles/2020/Skeletal-Animation)
 - [vlad.website — Game Engine Skeletal Animation](https://vlad.website/game-engine-skeletal-animation/)
-- Phase 7 Research document (docs/PHASE7_RESEARCH.md) §5–§7
+- Phase 7 Research document (docs/phases/phase_07_research.md) §5–§7

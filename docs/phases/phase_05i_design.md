@@ -1,7 +1,7 @@
 # Phase 5I Design: Terrain System
 
 **Date:** 2026-03-23
-**Based on:** PHASE5I_RESEARCH.md
+**Based on:** phase_05i_research.md
 **Engine:** Vestige (C++17, OpenGL 4.5, ImGui docking)
 
 ---

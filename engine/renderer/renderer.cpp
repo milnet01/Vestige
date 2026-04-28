@@ -1228,7 +1228,7 @@ void Renderer::endFrame(float deltaTime)
 
     // Phase 10 fog uniforms — distance / height / sun inscatter.
     // Composed in linear HDR between contact shadows and bloom; see
-    // docs/PHASE10_FOG_DESIGN.md §4 for the composition order rationale.
+    // docs/phases/phase_10_fog_design.md §4 for the composition order rationale.
     //
     // Accessibility transform runs here (slice 11.9): authored state
     // stays on Renderer; the effective state goes to the GPU. The

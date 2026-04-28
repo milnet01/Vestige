@@ -11,7 +11,7 @@
 /// where they belong; `engine/core/settings.{h,cpp}` keeps `ControlsSettings`
 /// as the surrounding orchestrator and delegates the per-binding work here.
 ///
-/// PHASE10_SETTINGS_DESIGN.md slice 13.4 originally specified the goal state
+/// docs/phases/phase_10_settings_design.md slice 13.4 originally specified the goal state
 /// (`InputActionMap::toJson` / `fromJson` living under `engine/input/`); this
 /// is the data-shape half of that move. The runtime `InputActionMap` ↔
 /// `ActionBindingWire` translation lives in `settings_apply.cpp` and is not

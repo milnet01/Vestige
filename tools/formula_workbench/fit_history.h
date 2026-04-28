@@ -5,7 +5,7 @@
 /// @brief Persistence layer for past Formula Workbench fits.
 ///
 /// Phase 1 §3.1 of the Workbench self-learning design
-/// (docs/FORMULA_WORKBENCH_SELF_LEARNING_DESIGN.md). Writes one
+/// (docs/research/formula_workbench_self_learning_design.md). Writes one
 /// JSON record per exported fit into ``.fit_history.json`` at the
 /// project root. Downstream mechanisms read from this file:
 ///   - §3.2 learned initial guesses — seed LM from the most recent
@@ -160,7 +160,7 @@ public:
     /// user has loaded data: it prevents the case where fitting
     /// two very different datasets on the same formula causes the
     /// newer fit to seed the older one badly. See
-    /// ``docs/FORMULA_WORKBENCH_SELF_LEARNING_DESIGN.md`` §3.1
+    /// ``docs/research/formula_workbench_self_learning_design.md`` §3.1
     /// advanced.
     SeedMatch bestSeedFor(const std::string& name,
                           const FitHistoryMeta& currentMeta,

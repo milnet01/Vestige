@@ -213,7 +213,7 @@ glm::vec3 applyFog(const glm::vec3& surfaceColour,
 ///        `assets/shaders/screen_quad.frag.glsl` so the CPU and GPU
 ///        paths cannot drift.
 ///
-/// Composition rules (see docs/PHASE10_FOG_DESIGN.md §4):
+/// Composition rules (see docs/phases/phase_10_fog_design.md §4):
 ///   1. Distance fog colour is warped toward the sun tint by the
 ///      cosine lobe when `sunInscatterEnabled`. Height fog keeps its
 ///      own colour so ground mist doesn't inherit the sun glow.

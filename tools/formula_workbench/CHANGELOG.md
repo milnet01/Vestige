@@ -7,8 +7,8 @@ All notable changes to the Formula Workbench are documented in this file.
 ### Added — three improvements surfaced by the Phase 10 fog research
 
 Three backwards-compatible extensions identified during
-`docs/PHASE10_FOG_RESEARCH.md` §8 and
-`docs/PHASE10_FOG_DESIGN.md` §9. All three unlock rendering-formula
+`docs/phases/phase_10_fog_research.md` §8 and
+`docs/phases/phase_10_fog_design.md` §9. All three unlock rendering-formula
 fits (phase functions, tonemap curves, BRDF lobes) that the existing
 fitter could almost — but not quite — handle. Together they prepare
 the Workbench for the Schlick-to-Henyey-Greenstein phase-function
@@ -68,7 +68,7 @@ entry properly.
 
 ### Added — W6: confidence-weighted meta-feature matching for seeding
 
-Closes W6 from `docs/SELF_LEARNING_ROADMAP.md`. The §3.2 seed-from-
+Closes W6 from `docs/research/self_learning_roadmap.md`. The §3.2 seed-from-
 history path used to pick the newest exported fit for the selected
 formula regardless of data similarity — which misbehaves when the
 user fits two very different datasets on the same formula (the newer
@@ -136,7 +136,7 @@ All 1878 tests green (1864 prior + 14 new).
 - `tools/formula_workbench/workbench.cpp` (reseed method + wire-up
   from data-load paths + badge text)
 - `tests/test_fit_history.cpp` (14 new cases)
-- `docs/SELF_LEARNING_ROADMAP.md` (shipped row, W6 removed from
+- `docs/research/self_learning_roadmap.md` (shipped row, W6 removed from
   Outstanding)
 
 ## [1.14.0] - 2026-04-19
@@ -183,13 +183,13 @@ LM implementation — no loosening required). Total test count is
 - `tools/formula_workbench/reference_cases/wet_darkening.json` (new)
 - `tools/formula_workbench/workbench.h` (version bump to 1.14.0)
 - `tools/formula_workbench/CHANGELOG.md` (this entry)
-- `docs/SELF_LEARNING_ROADMAP.md` (shipped row, updated W5 cont. count)
+- `docs/research/self_learning_roadmap.md` (shipped row, updated W5 cont. count)
 
 ## [1.13.0] - 2026-04-18
 
 ### Added — W3: markdown rendering in the Suggestions panel
 
-Closes W3 from `docs/SELF_LEARNING_ROADMAP.md`. The LLM-ranked
+Closes W3 from `docs/research/self_learning_roadmap.md`. The LLM-ranked
 shortlist that `scripts/llm_rank.py` emits is markdown — until now the
 panel showed it as raw text in a read-only multiline box, which is
 legible but not pleasant. The panel now renders headings, pipe tables,
@@ -262,7 +262,7 @@ ImGui widgets.
 - `tools/CMakeLists.txt` (add markdown_render.cpp)
 - `tests/CMakeLists.txt` (add test + source)
 - `tests/test_markdown_render.cpp` (new)
-- `docs/SELF_LEARNING_ROADMAP.md` (shipped row, W3 removed from
+- `docs/research/self_learning_roadmap.md` (shipped row, W3 removed from
   Outstanding table)
 
 All 1859 tests green (1842 prior + 17 new).
@@ -271,7 +271,7 @@ All 1859 tests green (1842 prior + 17 new).
 
 ### Added — W2c: PySR expression → ExprNode parser, "Import as library" wired
 
-Closes W2c from `docs/SELF_LEARNING_ROADMAP.md` — the last outstanding
+Closes W2c from `docs/research/self_learning_roadmap.md` — the last outstanding
 piece of the W2 "Discover via PySR" feature. The placeholder in the
 leaderboard is replaced with real Import buttons.
 
@@ -344,7 +344,7 @@ All 1839 tests green.
 
 ### Added — W2: "Discover via PySR" panel + async primitives for streaming & cancel
 
-Closes W2a and W2b from `docs/SELF_LEARNING_ROADMAP.md`. W2c
+Closes W2a and W2b from `docs/research/self_learning_roadmap.md`. W2c
 (library-import from PySR expression strings) remains outstanding —
 it needs a mini-parser for PySR expression syntax and is tracked
 separately.
@@ -425,13 +425,13 @@ separately.
   `renderPySRPanel` + `runPySR` + `PySREquation` row struct,
   `WORKBENCH_VERSION` → 1.11.0)
 - `tests/test_async_driver.cpp` (+4 GTest cases)
-- `docs/SELF_LEARNING_ROADMAP.md` (W2 rows updated)
+- `docs/research/self_learning_roadmap.md` (W2 rows updated)
 
 ## [1.10.0] - 2026-04-18
 
 ### Added — W1: async-worker pattern for Python driver calls
 
-Closes W1 from `docs/SELF_LEARNING_ROADMAP.md`. Replaces the
+Closes W1 from `docs/research/self_learning_roadmap.md`. Replaces the
 blocking `runDriverCaptured` call path with a render-loop-friendly
 tri-state job object. Prereq for W2 (§3.5 "Discover via PySR" GUI
 — PySR runs take minutes and would freeze the UI entirely under
@@ -494,13 +494,13 @@ the old blocking model).
 - `tools/CMakeLists.txt` + `tests/CMakeLists.txt` (register new
   sources)
 - `tests/test_async_driver.cpp` (new, 7 GTest cases)
-- `docs/SELF_LEARNING_ROADMAP.md` (W1 moved to Shipped)
+- `docs/research/self_learning_roadmap.md` (W1 moved to Shipped)
 
 ## [1.9.0] - 2026-04-18
 
 ### Added — small-scope roadmap items (W4, W5, W7, W8)
 
-Four close-outs from `docs/SELF_LEARNING_ROADMAP.md`, grouped into
+Four close-outs from `docs/research/self_learning_roadmap.md`, grouped into
 one release because they touch disjoint surfaces and each is small
 on its own. W1 (async-worker pattern), W2 (§3.5 GUI), W3 (markdown
 rendering), and W6 (confidence-weighted meta-features) remain
@@ -647,7 +647,7 @@ is worth building once and reusing for the §3.5 GUI too.
 ## [1.7.0] - 2026-04-17
 
 **Completes Phase 2–3 of the self-learning design**
-(`docs/FORMULA_WORKBENCH_SELF_LEARNING_DESIGN.md`). Three new CLI
+(`docs/research/formula_workbench_self_learning_design.md`). Three new CLI
 tiers land together: reference-case regression harness (§3.4), PySR
 symbolic regression shell-out (§3.5), and LLM-guided formula ranking
 (§3.6). Phases 1 and 2 of the design are now entirely live; Phase 3's
@@ -815,7 +815,7 @@ formulas couldn't even be attempted.
 
 **Closes Phase 1** of the design. Phase 2 (§3.4 regression harness)
 and Phase 3 (§3.5 PySR tier) remain tracked in
-`docs/FORMULA_WORKBENCH_SELF_LEARNING_DESIGN.md`.
+`docs/research/formula_workbench_self_learning_design.md`.
 
 ## [1.5.0] - 2026-04-17
 
@@ -873,7 +873,7 @@ hookup is straightforward wiring.
 ### Added (self-learning Phase 1 §3.1 — fit history persistence)
 
 First mechanism of the self-learning loop sketched in
-`docs/FORMULA_WORKBENCH_SELF_LEARNING_DESIGN.md`. Every exported fit
+`docs/research/formula_workbench_self_learning_design.md`. Every exported fit
 now lands in `.fit_history.json` at the working directory, so future
 sessions have cross-session memory of what fit what. Phase 1 §3.2
 (learned initial guesses — seed LM from the most recent exported

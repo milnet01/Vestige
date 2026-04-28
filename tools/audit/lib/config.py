@@ -250,7 +250,7 @@ _DEFAULTS_TIER6: dict[str, Any] = {
 }
 
 _DEFAULTS_REPORT: dict[str, Any] = {
-    "output_path": "docs/AUTOMATED_AUDIT_REPORT.md",
+    "output_path": "docs/archive/audits/AUTOMATED_AUDIT_REPORT.md",
     "max_findings_per_category": 100,
     "include_json_blocks": True,
     "include_token_estimate": True,
@@ -324,7 +324,7 @@ class Config:
     @property
     def report_path(self) -> Path:
         return self.root / self.get("report", "output_path",
-                                     default="docs/AUTOMATED_AUDIT_REPORT.md")
+                                     default="docs/archive/audits/AUTOMATED_AUDIT_REPORT.md")
 
 
 def load_config(path: str | Path | None, project_root: str | Path | None = None) -> Config:

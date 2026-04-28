@@ -2,8 +2,8 @@
 
 **Date:** 2026-04-13 (original); 2026-04-19 (status update)
 **Status:** In progress — Steps 1–3 shipped (`cffd755` lib integration + M10 pin interning, `e0c56c2` M9 type cache + M11 pure memo + L6 entry pin). Step 4 (canvas + menu) WIP on `8feeffe`. Steps 5–16 remaining. See §13 Acceptance Criteria for the detailed checklist.
-**Parent:** `docs/PHASE9E_DESIGN.md`
-**Research:** `docs/PHASE9E3_RESEARCH.md`
+**Parent:** `docs/phases/phase_09e_design.md`
+**Research:** `docs/phases/phase_09e3_research.md`
 **Audit baseline:** `docs/PHASE9E_AUDIT_REPORT.md`
 
 ---
@@ -133,7 +133,7 @@ public:
 
 ## 4. Library Integration
 
-Per `PHASE9E3_RESEARCH.md`: vendor `thedmd/imgui-node-editor` v0.9.3 via CMake FetchContent, build as a static lib, link from `imgui_lib`. Spike during Step 1 (below) to confirm compatibility with our ImGui v1.92.8 docking branch. Fallbacks ranked: pthom/imgui-node-editor `imgui_bundle` branch → ImGui downgrade to 1.84-docking → ImNodeFlow.
+Per `phase_09e3_research.md`: vendor `thedmd/imgui-node-editor` v0.9.3 via CMake FetchContent, build as a static lib, link from `imgui_lib`. Spike during Step 1 (below) to confirm compatibility with our ImGui v1.92.8 docking branch. Fallbacks ranked: pthom/imgui-node-editor `imgui_bundle` branch → ImGui downgrade to 1.84-docking → ImNodeFlow.
 
 ### 4.1 CMake addition
 
@@ -542,8 +542,8 @@ A binding checklist. **All items required** for 9E-3 to be considered complete a
 
 ## 14. Sources
 
-- `docs/PHASE9E_DESIGN.md` — parent design (10 sections covering ScriptValue, Blackboard, NodeTypeRegistry, interpreter, EventBus bridge, node library)
-- `docs/PHASE9E3_RESEARCH.md` — library survey, fallback paths, source links
+- `docs/phases/phase_09e_design.md` — parent design (10 sections covering ScriptValue, Blackboard, NodeTypeRegistry, interpreter, EventBus bridge, node library)
+- `docs/phases/phase_09e3_research.md` — library survey, fallback paths, source links
 - `docs/PHASE9E_AUDIT_REPORT.md` — Mediums committed to this phase (M9, M10, M11), Lows already resolved
 - `CODING_STANDARDS.md` — naming, formatting, structure rules
 - `SECURITY.md` — input validation & path safety (existing graph caps continue to apply)

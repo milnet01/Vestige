@@ -17,7 +17,7 @@ namespace Vestige
 
 /// @brief Build the path to the declarative caption-map JSON file.
 ///
-/// Per `PHASE10_7_DESIGN.md` §4.2 the caption map lives at
+/// Per `docs/phases/phase_10_7_design.md` §4.2 the caption map lives at
 /// `<assetPath>/captions.json`. A project that ships no captions
 /// simply has no file at this path (the loader treats "absent" as
 /// "empty map", which is intentional).

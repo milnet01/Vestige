@@ -161,7 +161,7 @@ research:
     - query: "CVE MyDep 1.2.3 vulnerability"
 
 report:
-  output_path: "docs/AUTOMATED_AUDIT_REPORT.md"
+  output_path: "docs/archive/audits/AUTOMATED_AUDIT_REPORT.md"
 
 tiers: [1, 2, 3, 4, 5]
 ```
@@ -445,10 +445,10 @@ lib/runner.py  <-- progress_callback --> web/audit_bridge.py
 Pipeline (post-tiers): dedup → corroborate → overrides → verified → suppress
     |
     v
-lib/report.py --> docs/AUTOMATED_AUDIT_REPORT_{timestamp}.md
-                  docs/AUTOMATED_AUDIT_REPORT_{timestamp}_results.json
-                  docs/AUTOMATED_AUDIT_REPORT.md (latest copy)
-                  docs/trend_snapshot_{timestamp}.json
+lib/report.py --> docs/archive/audits/AUTOMATED_AUDIT_REPORT_{timestamp}.md
+                  docs/archive/audits/AUTOMATED_AUDIT_REPORT_{timestamp}_results.json
+                  docs/archive/audits/AUTOMATED_AUDIT_REPORT.md (latest copy)
+                  docs/archive/audits/trend_snapshot_{timestamp}.json
 ```
 
 **Parallel execution**: Tiers 2, 3, 4, and 6 run concurrently via `ThreadPoolExecutor`. Tier 1 runs first (build must complete). Tier 5 runs last (needs findings for context).

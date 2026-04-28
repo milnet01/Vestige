@@ -12,7 +12,7 @@ Ryzen 5 5600 · RX 6600 (RDNA2, GL 4.6, Vulkan 1.3) · 32 GB · Linux.
 **60 FPS minimum — hard requirement.** Profile before optimizing. Prefer GPU-efficient paths (batching, instancing, culling).
 
 ## Key Rules
-1. **Research → design → review → code.** New features/phases start with web research, then a `docs/PHASE*_DESIGN.md` (architecture, API, steps, performance, accessibility) with cited sources, then user review (blocking, not a formality), then implementation.
+1. **Research → design → review → code.** New features/phases start with web research, then a `docs/phases/phase_NN_design.md` (architecture, API, steps, performance, accessibility) with cited sources, then user review (blocking, not a formality), then implementation.
 2. **Explain clearly.** User is learning — no assumed graphics/C++ knowledge.
 3. **Modular and minimal.** Subsystems independent and extensible. Start simple; don't over-engineer for hypothetical futures.
 4. **Mandatory post-phase audit.** After every phase, run the AUDIT_STANDARDS.md 5-tier process and get a fix plan approved before the next phase. Also research experimental features.

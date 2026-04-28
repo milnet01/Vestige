@@ -47,11 +47,11 @@ Phase 8 adds physical simulation to the Vestige engine: rigid body dynamics via 
 
 Three research documents were produced before this design:
 
-1. **`docs/PHYSICS_ENGINE_RESEARCH.md`** — Bullet vs Jolt comparison across 8 criteria. Jolt wins in every category that matters: C++17 API, performance (doubled sim frequency at Guerrilla Games), active maintenance, XPBD soft bodies, CharacterVirtual controller, MIT license.
+1. **`docs/research/physics_engine_research.md`** — Bullet vs Jolt comparison across 8 criteria. Jolt wins in every category that matters: C++17 API, performance (doubled sim frequency at Guerrilla Games), active maintenance, XPBD soft bodies, CharacterVirtual controller, MIT license.
 
-2. **`docs/CLOTH_SIMULATION_RESEARCH.md`** — Covers mass-spring vs PBD vs XPBD, GPU vs CPU tradeoffs, wind models, collision approaches, pin constraints, self-collision costs. Recommends CPU XPBD with per-triangle wind drag.
+2. **`docs/research/cloth_simulation_research.md`** — Covers mass-spring vs PBD vs XPBD, GPU vs CPU tradeoffs, wind models, collision approaches, pin constraints, self-collision costs. Recommends CPU XPBD with per-triangle wind drag.
 
-3. **`docs/CHARACTER_CONTROLLER_RESEARCH.md`** — Analyzes current AABB controller limitations, compares kinematic vs dynamic approaches, details Jolt's CharacterVirtual API, documents slope/stair/ground handling from PhysX/Unreal/Unity/Godot.
+3. **`docs/research/character_controller_research.md`** — Analyzes current AABB controller limitations, compares kinematic vs dynamic approaches, details Jolt's CharacterVirtual API, documents slope/stair/ground handling from PhysX/Unreal/Unity/Godot.
 
 ---
 
@@ -900,6 +900,6 @@ After each sub-phase:
 
 ## Appendix: Research Documents
 
-- `docs/PHYSICS_ENGINE_RESEARCH.md` — Bullet vs Jolt comparison (30+ sources)
-- `docs/CLOTH_SIMULATION_RESEARCH.md` — Cloth algorithms, GPU/CPU, wind, collision (40+ sources)
-- `docs/CHARACTER_CONTROLLER_RESEARCH.md` — Character controller approaches (30+ sources)
+- `docs/research/physics_engine_research.md` — Bullet vs Jolt comparison (30+ sources)
+- `docs/research/cloth_simulation_research.md` — Cloth algorithms, GPU/CPU, wind, collision (40+ sources)
+- `docs/research/character_controller_research.md` — Character controller approaches (30+ sources)

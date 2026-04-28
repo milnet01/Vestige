@@ -228,7 +228,7 @@ TEST(SubtitleQueue, NegativeDurationIsClampedToZero)
 // Phase 10.9 Slice 2 P1 — wrapSubtitleText: 40-char soft-wrap + 2-line cap
 // =============================================================================
 //
-// PHASE10_7_DESIGN.md §4.2: "Line budget: soft-wrap at 40 characters; hard
+// docs/phases/phase_10_7_design.md §4.2: "Line budget: soft-wrap at 40 characters; hard
 // max 2 lines per entry." Captions that exceed this quietly overflowed the
 // plate in shipping code; these tests pin the word-boundary packing and
 // the ellipsis-truncate behaviour.

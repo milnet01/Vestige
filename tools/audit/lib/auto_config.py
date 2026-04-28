@@ -935,7 +935,7 @@ def detect_project(root: Path) -> dict:
             "custom_queries": [],
         },
         "report": {
-            "output_path": "docs/AUTOMATED_AUDIT_REPORT.md",
+            "output_path": "docs/archive/audits/AUTOMATED_AUDIT_REPORT.md",
             "max_findings_per_category": 100,
             "include_json_blocks": True,
             "include_token_estimate": True,

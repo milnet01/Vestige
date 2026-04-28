@@ -2,7 +2,7 @@
 
 **Date:** 2026-03-30
 **Status:** Implemented. `engine/renderer/radiosity_baker.{h,cpp}` ships the iterative gathering bake described here (2–3 bounce convergence, ~12 s on RX 6600). This document is retained as the original design record.
-**Based on:** GI_ROADMAP.md, SH_PROBE_GRID_DESIGN.md, web research
+**Based on:** gi_roadmap.md, sh_probe_grid_design.md, web research
 **Engine:** Vestige (C++17, OpenGL 4.5)
 
 ---

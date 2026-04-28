@@ -2,7 +2,7 @@
 
 **Date:** 2026-04-13
 **Goal:** Pick a node-editor library for the visual scripting editor UI. Selection must serve both Phase 9E-3 (ScriptGraph editor) and the future Formula Workbench NodeGraph editor.
-**Scope:** Library evaluation, integration risk assessment, reuse opportunities. Implementation details belong in `PHASE9E3_DESIGN.md`.
+**Scope:** Library evaluation, integration risk assessment, reuse opportunities. Implementation details belong in `phase_09e3_design.md`.
 
 ---
 
@@ -43,7 +43,7 @@ Three credible options. All MIT-licensed. None dependency-heavy.
 | Required ImGui | "Vanilla ImGui 1.72+" |
 | C++ standard | C++14 |
 | Production reference | Spark CE engine (commercial blueprint editor) |
-| Visual style | UE4 Blueprints clone (matches our PHASE9E_DESIGN.md anti-pattern study) |
+| Visual style | UE4 Blueprints clone (matches our phase_09e_design.md anti-pattern study) |
 | Build | CMake, examples for Win/macOS/Linux |
 | Open issues | ~97 (active triage; recent activity 2025-2026) |
 

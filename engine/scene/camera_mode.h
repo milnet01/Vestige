@@ -6,7 +6,7 @@
 ///        for Phase 10.8 camera modes (first-person, third-person,
 ///        isometric, top-down, cinematic).
 ///
-/// See docs/PHASE10_8_CAMERA_MODES_DESIGN.md §4.1–§4.2 for the
+/// See docs/phases/phase_10_8_camera_modes_design.md §4.1–§4.2 for the
 /// architecture rationale (ECS activation + CameraBlender utility;
 /// rejected Cinemachine priority-queue and UE5 modifier-stack models).
 ///

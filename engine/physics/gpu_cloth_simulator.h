@@ -7,7 +7,7 @@
 /// Implements `IClothSolverBackend` using SSBOs for particle state. The
 /// per-substep work (force accumulation, integration, constraint solving,
 /// collision, normal recomputation) lands incrementally over Steps 3–9 of
-/// the Phase 9B GPU cloth pipeline — see `docs/PHASE9B_GPU_CLOTH_DESIGN.md`.
+/// the Phase 9B GPU cloth pipeline — see `docs/phases/phase_09b_gpu_cloth_design.md`.
 ///
 /// **Step 2 scope:** SSBO allocation + teardown only. `simulate()` is a no-op.
 /// `getPositions()` / `getNormals()` return a CPU mirror that holds the

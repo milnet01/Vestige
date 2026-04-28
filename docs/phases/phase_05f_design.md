@@ -37,8 +37,8 @@ The editor has (assuming 5E is complete):
 ## Research Summary
 
 Two research documents were produced (see `docs/` folder):
-- `PERFORMANCE_OVERLAY_RESEARCH.md` — GPU timer queries, engine profiler designs, ImGui widgets, CPU profiling, memory tracking, pipeline statistics
-- `PHASE5F_RESEARCH.md` — Console panel implementations, ring buffer storage, command systems, logger sinks, screenshot enhancements, shortcuts panels
+- `../research/performance_overlay_research.md` — GPU timer queries, engine profiler designs, ImGui widgets, CPU profiling, memory tracking, pipeline statistics
+- `phase_05f_research.md` — Console panel implementations, ring buffer storage, command systems, logger sinks, screenshot enhancements, shortcuts panels
 
 ### Key Design Decisions from Research
 
@@ -647,4 +647,4 @@ Sub-phases 5F-3/5F-5/5F-6 are independent of each other and could be reordered.
 ### Keyboard Shortcuts
 - [Godot Default Key Mapping](https://docs.godotengine.org/en/stable/tutorials/editor/default_key_mapping.html)
 
-See also: `docs/PERFORMANCE_OVERLAY_RESEARCH.md` and `docs/PHASE5F_RESEARCH.md` for full research documents with all sources.
+See also: `docs/research/performance_overlay_research.md` and `docs/phases/phase_05f_research.md` for full research documents with all sources.

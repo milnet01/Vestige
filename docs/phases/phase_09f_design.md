@@ -82,7 +82,7 @@ tests/
   test_camera_2d.cpp              NEW
   test_game_templates_2d.cpp      NEW
 docs/
-  PHASE9F_DESIGN.md               THIS FILE
+  phase_09f_design.md               THIS FILE
 ```
 
 ### 3.2 Data flow per frame

@@ -76,7 +76,7 @@ struct ClothBoxCollider
 /// future `GpuClothSimulator` (Phase 9B GPU compute pipeline) can slot into
 /// the same code paths. Configuration mutators below remain on the concrete
 /// type during the transitional phase — see
-/// `docs/PHASE9B_GPU_CLOTH_DESIGN.md` § 4.
+/// `docs/phases/phase_09b_gpu_cloth_design.md` § 4.
 class ClothSimulator : public IClothSolverBackend
 {
 public:

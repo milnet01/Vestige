@@ -28,7 +28,7 @@ The editor now has:
 ## Research Summary
 
 Two research documents were produced (see `docs/` folder):
-- `PARTICLE_SYSTEM_RESEARCH.md` — Engine comparisons (Unity/Unreal/Godot/O3DE), GPU vs CPU particles, billboard rendering, SoA data layout, undo integration, serialization
+- `../research/particle_system_research.md` — Engine comparisons (Unity/Unreal/Godot/O3DE), GPU vs CPU particles, billboard rendering, SoA data layout, undo integration, serialization
 - Water surface research (inline in this document) — Planar reflections, Fresnel, wave models, water shaders, engine editor UIs, FBO setup
 
 ### Key Design Decisions from Research
@@ -657,4 +657,4 @@ Each sub-phase is self-contained and can be tested independently. The curve/grad
 - [Unreal Engine Water System](https://dev.epicgames.com/documentation/en-us/unreal-engine/water-system-in-unreal-engine)
 - [CryEngine Water Shader](https://docs.cryengine.com/display/CEMANUAL/Water+Shader)
 
-See also: `docs/PARTICLE_SYSTEM_RESEARCH.md` for the full 800+ line research document with all sources.
+See also: `docs/research/particle_system_research.md` for the full 800+ line research document with all sources.

@@ -31,9 +31,9 @@ The editor now has:
 ## Research Summary
 
 Three research documents were produced (see `docs/` folder):
-- `SCENE_SERIALIZATION_RESEARCH.md` — JSON format, asset references, versioning, component serialization, auto-save
-- `UNDO_REDO_RESEARCH.md` — Command pattern, major engine approaches (Unreal, Godot, Blender, Wicked Engine), gizmo integration, memory management
-- `PROJECT_MANAGEMENT_RESEARCH.md` — Project files, file dialogs, recent files, file watching, dirty flag, cross-platform paths
+- `../research/scene_serialization_research.md` — JSON format, asset references, versioning, component serialization, auto-save
+- `../research/undo_redo_research.md` — Command pattern, major engine approaches (Unreal, Godot, Blender, Wicked Engine), gizmo integration, memory management
+- `../research/project_management_research.md` — Project files, file dialogs, recent files, file watching, dirty flag, cross-platform paths
 
 ### Key Design Decisions from Research
 
@@ -517,9 +517,9 @@ Implement:
 ## Sources
 
 Full citations in the research documents:
-- `docs/SCENE_SERIALIZATION_RESEARCH.md` — 25+ sources on format design, JSON libraries, versioning, auto-save
-- `docs/UNDO_REDO_RESEARCH.md` — 25+ sources on command pattern, engine implementations, memory management
-- `docs/PROJECT_MANAGEMENT_RESEARCH.md` — 40+ sources on project structure, file dialogs, file watching, dirty flags
+- `docs/research/scene_serialization_research.md` — 25+ sources on format design, JSON libraries, versioning, auto-save
+- `docs/research/undo_redo_research.md` — 25+ sources on command pattern, engine implementations, memory management
+- `docs/research/project_management_research.md` — 40+ sources on project structure, file dialogs, file watching, dirty flags
 
 Key references:
 - Unity YAML scene format — flat object list with fileID references

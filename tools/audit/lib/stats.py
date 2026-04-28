@@ -15,7 +15,7 @@ sorted descending, so noisy rules surface automatically instead of
 needing a human to hand-triage a run.
 
 This is Phase 1 of the self-learning loop sketched in
-``docs/FORMULA_WORKBENCH_SELF_LEARNING_DESIGN.md`` §6 (audit analog).
+``docs/research/formula_workbench_self_learning_design.md`` §6 (audit analog).
 Phase 2 (auto-demotion based on noise ratio) reads from the same
 stats file; keeping the collector independent means it works on its
 own even without the demotion layer wired up.

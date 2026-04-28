@@ -15,7 +15,7 @@ This document outlines all global illumination (GI) techniques planned for the V
 ### 2. SH Probe Grid — IMPLEMENTED (2026-03-29)
 **Status:** IMPLEMENTED
 **Files:** `engine/renderer/sh_probe_grid.h/cpp`; shader integration in `assets/shaders/scene.frag.glsl`; captured via `Renderer::captureSHGrid()`.
-**How it works:** 3D grid of Spherical Harmonic probes (L2, 9 coefficients × 3 channels = 27 floats per probe). Stored in 7× RGBA16F 3D textures bound at units 17–23 with hardware trilinear interpolation for smooth spatial blending. ~81 KB for a 10×5×15 grid. Design notes in `docs/SH_PROBE_GRID_DESIGN.md`.
+**How it works:** 3D grid of Spherical Harmonic probes (L2, 9 coefficients × 3 channels = 27 floats per probe). Stored in 7× RGBA16F 3D textures bound at units 17–23 with hardware trilinear interpolation for smooth spatial blending. ~81 KB for a 10×5×15 grid. Design notes in `docs/research/sh_probe_grid_design.md`.
 **Replaces:** Per-entity cubemap probe assignment for diffuse ambient.
 
 ### 3. Radiosity — IMPLEMENTED (2026-03-30)
@@ -33,7 +33,7 @@ This document outlines all global illumination (GI) techniques planned for the V
 **Complements:** SH probe grid (provides fallback for off-screen content).
 
 ### 5. Voxel Cone Tracing (VXGI) — PRIORITY: LOW
-**Status:** Research phase (see CUTTING_EDGE_FEATURES_RESEARCH.md)
+**Status:** Research phase (see cutting_edge_features_research.md)
 **How it works:** Voxelizes scene into 3D grid, traces cones through voxels to gather indirect light. Multi-bounce capable.
 **Advantages:** Dynamic, handles specular + diffuse indirect, no baking.
 **Limitations:** High VRAM usage, complex implementation, requires sparse voxel octree for large scenes.

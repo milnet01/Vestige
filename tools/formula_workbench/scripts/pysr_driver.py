@@ -75,7 +75,7 @@ def main() -> int:
         default=20,
         help="Upper bound on expression complexity. Guards against the "
              "7-term-nested-sin(log(x²)) mutants PySR sometimes evolves; see "
-             "docs/FORMULA_WORKBENCH_SELF_LEARNING_DESIGN.md §3.5.",
+             "docs/research/formula_workbench_self_learning_design.md §3.5.",
     )
     args = ap.parse_args()
 

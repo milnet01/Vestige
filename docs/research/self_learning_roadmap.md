@@ -3,7 +3,7 @@
 Consolidated handoff doc as of 2026-04-19 (rev 5). Lists everything that's
 shipped and everything that's tracked-but-not-started for the
 self-learning loops in both tools. Pairs with
-`docs/FORMULA_WORKBENCH_SELF_LEARNING_DESIGN.md` (the design that
+`docs/research/formula_workbench_self_learning_design.md` (the design that
 scoped this work).
 
 ## Shipped
@@ -38,7 +38,7 @@ header_guards, binary_in_repo, dup_files).
 | 1.14.0 | 2026-04-19 | W5 (cont.) — five more reference cases: `aerodynamic_drag` (3-input product sweep), `buoyancy` (simplest 3-factor linear), `inverse_square_falloff` (first 3-coefficient fit), `vignette` (first fully-nonlinear coefficient inside pow()), `wet_darkening` (2D input grid). Doubles harness coverage from 5 to 10 specs; total test count 1864. |
 | 1.15.0 | 2026-04-19 | W6 — confidence-weighted meta-feature matching for §3.2 seeding. New `FitHistory::similarity(a,b)` (60 % domain IoU + 20 % n_points + 20 % variance log-ratios) and `bestSeedFor(name, currentMeta, threshold=0.5)`; Workbench re-seeds coefficients from the most-similar exported fit once data is loaded (importCsv / generateSyntheticData), and reverts to library defaults when no fit clears the similarity threshold. Badge shows the score. 14 new tests; 1878 total. |
 
-Related: `docs/FORMULA_WORKBENCH_SELF_LEARNING_DESIGN.md` is the
+Related: `docs/research/formula_workbench_self_learning_design.md` is the
 original six-mechanism plan.
 
 ## Outstanding
@@ -64,7 +64,7 @@ left on the audit-tool side from the 2026-04-16 report.
 ## How to pick something up
 
 1. Pick a row from the tables above.
-2. Read `docs/FORMULA_WORKBENCH_SELF_LEARNING_DESIGN.md` §3.x (for
+2. Read `docs/research/formula_workbench_self_learning_design.md` §3.x (for
    W-numbered items) or `tools/audit/lib/stats.py` + 
    `tools/audit/CHANGELOG.md` (for A-numbered items) for the
    surrounding context.

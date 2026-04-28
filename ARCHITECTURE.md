@@ -102,7 +102,7 @@ Scene
 - **SMAA** — `renderer/smaa.{h,cpp}`.
 - **IBL** — prefilter + BRDF LUT via `environment_map.{h,cpp}`, `light_probe.{h,cpp}`; unified in `ibl_prefilter.h`.
 - **GPU-driven culling / instancing** — frustum-culled MDI via `gpu_culler.{h,cpp}` + `indirect_buffer.{h,cpp}`.
-- **GI** — SH probe grid + radiosity bake shipped (see `docs/GI_ROADMAP.md`). SSGI next; hybrid RT / cone tracing planned.
+- **GI** — SH probe grid + radiosity bake shipped (see `docs/research/gi_roadmap.md`). SSGI next; hybrid RT / cone tracing planned.
 - **Not started:** deferred rendering (forward-plus + GPU culling has sufficed).
 - **Planned (long-term):** Vulkan backend, ray tracing.
 
@@ -353,7 +353,7 @@ ImGui WYSIWYG, dockable panels.
 
 ## 19. Scripting (Phase 9E — `engine/scripting/`)
 
-Visual graph-based gameplay logic. Domain `ISystem`. See `docs/PHASE9E_DESIGN.md` for full rationale + anti-patterns.
+Visual graph-based gameplay logic. Domain `ISystem`. See `docs/phases/phase_09e_design.md` for full rationale + anti-patterns.
 
 **Data model.**
 - `ScriptGraph` — serialized `.vscript` asset (nodes, connections, variables). Immutable at runtime post-load. Validated on load (dangling refs rejected) and size-capped (`MAX_NODES`, `MAX_CONNECTIONS`, `MAX_VARIABLES`, `MAX_STRING_BYTES`).
@@ -371,7 +371,7 @@ Visual graph-based gameplay logic. Domain `ISystem`. See `docs/PHASE9E_DESIGN.md
 
 **Integration.** Depends only on `core/event_bus`, `core/i_system`, scene/entity lookups. Does not own/mutate engine state directly — publishes back via `EventBus` (`PublishEvent` node) or entity API via `ScriptContext::resolveEntity`. Node categories are extensible without core changes.
 
-**Editor (Phase 9E-3).** `engine/editor/widgets/node_editor_widget.{h,cpp}` (thin wrapper over `imgui-node-editor` by thedmd, pulled via `external/CMakeLists.txt`) + `engine/editor/panels/script_editor_panel.{h,cpp}` (dockable host, New/Open/Save menu). Widget-vs-panel split per §14 convention. Steps 1–3 shipped (lib integration, audit-debt items M9/M10/M11 + L6); Step 4 WIP. Remaining: palette, property editors, type-aware pin-drag popup, variables panel, breakpoint UI, flow animation, close-out audit. See `docs/PHASE9E3_DESIGN.md`.
+**Editor (Phase 9E-3).** `engine/editor/widgets/node_editor_widget.{h,cpp}` (thin wrapper over `imgui-node-editor` by thedmd, pulled via `external/CMakeLists.txt`) + `engine/editor/panels/script_editor_panel.{h,cpp}` (dockable host, New/Open/Save menu). Widget-vs-panel split per §14 convention. Steps 1–3 shipped (lib integration, audit-debt items M9/M10/M11 + L6); Step 4 WIP. Remaining: palette, property editors, type-aware pin-drag popup, variables panel, breakpoint UI, flow animation, close-out audit. See `docs/phases/phase_09e3_design.md`.
 
 **Undo/redo.** Editor edits flow through `CommandHistory` (§14) via `Script{AddNode,RemoveNode,AddConnection,RemoveConnection,SetProperty}Command` — consistent with every other editor operation, and automatically undo-complete for future AI-authored changes (Phase 23).
 

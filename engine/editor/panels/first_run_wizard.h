@@ -12,7 +12,7 @@
 /// featured archetypes surfaced + the remaining four under a
 /// "More templates" expander.
 ///
-/// See `docs/PHASE10_5_FIRST_RUN_WIZARD_DESIGN.md` for the full
+/// See `docs/phases/phase_10_5_first_run_wizard_design.md` for the full
 /// design, the eight sign-off questions, and the 14.x slice plan.
 ///
 /// Design split — pure state machine + ImGui-binding panel:

@@ -23,7 +23,7 @@ void WelcomePanel::initialize(const std::string& configDir)
     // Phase 10.5 slice 14.4: auto-open removed. First-run onboarding
     // is now owned by FirstRunWizard; WelcomePanel remains as a
     // keyboard-shortcut reference reachable via Help → Welcome Screen
-    // (Q3 resolution in PHASE10_5_FIRST_RUN_WIZARD_DESIGN.md).
+    // (Q3 resolution in docs/phases/phase_10_5_first_run_wizard_design.md).
     //
     // The legacy flag file is no longer read here — its role moved
     // to Settings::loadFromDisk, which promotes its presence into

@@ -1,7 +1,7 @@
 # Phase 6: Particle and Effects System — Design Document
 
 Design document for the Vestige 3D Engine, Phase 6.
-Created 2026-03-24. Based on research in `docs/PHASE6_RESEARCH.md`.
+Created 2026-03-24. Based on research in `docs/phases/phase_06_research.md`.
 
 ---
 

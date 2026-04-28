@@ -8,7 +8,7 @@
 ///        dispatch so the layout math is unit-testable without a GL
 ///        context.
 ///
-/// Design references: `docs/PHASE10_7_DESIGN.md` §4.2, Game
+/// Design references: `docs/phases/phase_10_7_design.md` §4.2, Game
 /// Accessibility Guidelines, FCC 2024 caption-display rule.
 #pragma once
 

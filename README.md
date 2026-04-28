@@ -60,7 +60,7 @@ detailed phase plan.
 | Scene graph / ECS        | Complete      | Entity + component system, parent-child transforms                    |
 | Rendering (forward + PBR)| Complete      | PBR materials, IBL, POM, SSAO, bloom, tone mapping                    |
 | Shadows                  | Complete      | Cascaded shadow maps + point / spot shadows                           |
-| Global illumination      | Partial       | SH probe grid + radiosity shipped; SSGI next (`docs/GI_ROADMAP.md`)   |
+| Global illumination      | Partial       | SH probe grid + radiosity shipped; SSGI next (`docs/research/gi_roadmap.md`)   |
 | Editor (Phase 5)         | Complete      | Dockable ImGui editor, gizmos, undo/redo, console                     |
 | Particles / effects      | Complete      | GPU-instanced particle system                                         |
 | Animation                | Complete      | Skeletal animation, motion matching, facial, lip sync                 |

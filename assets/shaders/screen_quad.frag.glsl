@@ -38,7 +38,7 @@ uniform mat3 u_colorVisionMatrix;
 // Phase 10 fog: distance + height + sun inscatter.
 // Applied after contact shadows, before bloom add — radiance contribution
 // in linear HDR so bloom samples the fogged result (UE / HDRP convention).
-// See docs/PHASE10_FOG_DESIGN.md §4 for composition order.
+// See docs/phases/phase_10_fog_design.md §4 for composition order.
 uniform int       u_fogMode;               // 0=None, 1=Linear, 2=Exp, 3=Exp2
 uniform vec3      u_fogColour;             // Linear-RGB distance-fog inscatter colour
 uniform float     u_fogStart;              // Linear mode
@@ -205,7 +205,7 @@ void main()
 
     // 2c. Phase 10 fog: distance + height + sun inscatter.
     //     Composed in linear HDR so bloom samples the fogged radiance
-    //     (UE / HDRP convention, docs/PHASE10_FOG_DESIGN.md §4).
+    //     (UE / HDRP convention, docs/phases/phase_10_fog_design.md §4).
     //
     //     Reverse-Z encoding: sky is at depth == 0.0 → skipped (fog
     //     on the background goes through the clear colour, which is
