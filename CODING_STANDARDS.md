@@ -4,6 +4,14 @@ Mandatory rules. All new code must conform.
 
 ---
 
+## 0. Language Standard
+
+**C++17 baseline.** All translation units must compile with `-std=c++17` (matches `CMakeLists.txt` `CMAKE_CXX_STANDARD 17`). C++20 features adopted selectively when uniformly available across GCC 13+ / Clang 16+ / MSVC 19.36+: designated initializers, `std::span`, `[[likely]]` / `[[unlikely]]`, concepts where they reduce SFINAE noise. C++23 features (`std::expected`, `std::print`) on a case-by-case basis with a documented fallback — see section 11.
+
+**GLSL: 450 core**, matching the engine's OpenGL 4.5 target. Compute shaders use `#version 450 core` with explicit `layout(local_size_x = ...)`.
+
+---
+
 ## 1. File Naming
 
 | Type | Convention | Example |
@@ -40,9 +48,13 @@ Short identifiers are fine in usual idioms: loop counters `i/j/k`, math locals `
 
 **Magic numbers.** Numeric literals tied to business-logic or tuning semantics must be named constants — apply in new code and during natural edits (hybrid adoption; no codebase-wide rewrite). Inline literals are fine for obvious-context math (matrix strides, vec3 loop bounds, 0.5/0.25/2.0 in geometry), small loop bounds, and test data. `cppcoreguidelines-avoid-magic-numbers` is disabled because it drowns real cases in noise — apply judgment per-site.
 
+**Numerical-design constants belong in the Formula Workbench.** Per CLAUDE.md Rule 6, tuning coefficients (drag, friction, attenuation, fog density, wave amplitude, fitting curves, …) are authored / fit / validated in `tools/formula_workbench/` and exported to JSON / generated code, not hand-typed into headers. Hand-coded constants only when no reference data exists — leave a `// TODO(YYYY-MM-DD): revisit via Formula Workbench` per section 20.
+
 ---
 
 ## 3. Code Formatting
+
+**Formatting source of truth: `.clang-format` at the repo root.** `clang-format -i path/to/file.cpp` formats any file into compliance. The rules below describe the format; the tool enforces it.
 
 - **Indentation:** 4 spaces, no tabs.
 - **Line length:** soft 120 chars; break after commas / before operators.
@@ -80,7 +92,7 @@ Prefer forward declarations over includes in headers when pointers/references su
 - `//` single-line, `/* ... */` multi-line with aligned asterisks.
 - Inline comment: two spaces before `//`.
 - Doxygen `///` with `@brief` / `@param` / `@return` on public APIs.
-- File header: `/// @file foo.h` + `/// @brief ...` on every source/header.
+- File header: `/// @file foo.h` + `/// @brief ...` on every public source/header (see section 18 for what counts as public). Internal helpers (under `internal/`, in `.cpp`-only files) need only a one-line `///`.
 - **Why, not what.** The code shows what happens. Don't comment obvious code.
 
 ---
@@ -101,7 +113,18 @@ private:    same order, members last
 
 **Must not:** `using namespace` in headers, raw `new`/`delete`, C-style casts, unresolved warnings (`-Wall -Wextra -Wpedantic`).
 
-**Prefer:** `auto` only when the type is obvious; range-based `for`; `std::string_view` for read-only string params; structured bindings where they improve clarity.
+**Prefer:** `auto` only when the type is obvious; range-based `for`; structured bindings where they improve clarity. `std::string_view` for read-only string params (canonical rule in section 23). `std::span<T>` for non-owning array views — no more `(ptr, len)` pairs in new code.
+
+**Modern C++ idioms.** Use the current syntax for the version actually in use, not the syntax from three years ago even if it still compiles. Specifics:
+
+| Topic | Rule |
+|-------|------|
+| `[[nodiscard]]` | every non-void public-API return where ignoring is a likely bug (loaders, builders, results) |
+| `[[maybe_unused]]` | parameters / vars whose use is conditional on `if constexpr` or platform |
+| `[[likely]]` / `[[unlikely]]` (C++20) | only on hot-path branches with measured benefit; not for "I think this is rare" |
+| `noexcept` | mark functions that genuinely cannot throw — destructors, swap, move ops, pure-math helpers. Exposes optimisations and contractually documents intent. |
+| Fixed-width integers | `int32_t` / `uint32_t` / `size_t` for ABI / serialisation / bit-twiddling; `int` / `size_t` for plain counters |
+| Move semantics | Rule of Zero is the default — let the compiler generate. Define `= default` or `= delete` explicitly only when the compiler can't, or when you need to suppress copy. Rule of Five only for resource-managing classes (see section 24). |
 
 ---
 
@@ -165,13 +188,15 @@ Placed objects must respect spatial constraints. Violations cause clipping, z-fi
 | Situation | Use | Example |
 |-----------|-----|---------|
 | Value may be absent (no error semantics) | `std::optional<T>` | `std::optional<MeshHandle> findMesh(StringView)` |
-| Operation succeeds with `T` or fails with `E` | `Result<T, E>` (custom) or `std::expected<T, E>` once GCC 13 / Clang 16 are baseline | `Result<Texture, IoError> loadTexture(...)` |
+| Operation succeeds with `T` or fails with `E` | `Result<T, E>` (engine alias, see below) or `std::expected<T, E>` directly | `Result<Texture, IoError> loadTexture(...)` |
 | System boundary (file I/O, OS, syscalls) | error code / `errno`-style return | wrap into `Result` at the next layer up |
 | Programmer error / invariant breach | `VESTIGE_ASSERT` | not for user input |
 
-No exceptions in 60-FPS hot paths (render loop, physics step, audio mix). Throws are acceptable in tools, loaders, and editor-only code where the budget is loose. `std::expected<T, E>` is the C++23 idiom but the engine's baseline still has to support older toolchains — track adoption via a single `engine/utils/result.h` alias so the migration is one find-and-replace.
+`std::expected<T, E>` is C++23 and is supported on the engine's GCC 13+ / Clang 16+ / MSVC 19.36+ baseline (each ≥ 3 years stable as of 2026). When `engine/utils/result.h` lands it will define `template <class T, class E> using Result = std::expected<T, E>;` plus a `Result<void, E>` alias — until that file exists, use the standard name directly and file an issue for the alias.
 
-Why: zero-cost happy path, errors are values not control flow, no `try/catch` clutter at every call-site.
+**No exceptions in 60-FPS hot paths** (render loop, physics step, audio mix). Throws are acceptable in tools, loaders, and editor-only code where the frame budget is loose.
+
+Why: a `throw` is unbounded — stack unwinding, allocation for the exception object, destructor chain across N frames of stack. Errors-as-values keep the *error* path as predictable as the happy path; the 16.6 ms / frame budget can absorb a missing texture but not a 200 µs allocator hit on a freed-fence-not-found error. (The "zero-cost happy path" of itanium-ABI exceptions is a defence *of* exceptions for code that almost never throws — but the moment `throw` fires inside the render loop, you blow the budget.)
 
 Refs: [ISOCpp Guidelines E.1–E.6](https://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines#S-errors) · [Sy Brand on functional error handling with C++23 optional/expected](https://devblogs.microsoft.com/cppblog/cpp23s-optional-and-expected/) · [cppreference std::expected](https://en.cppreference.com/cpp/utility/expected).
 
@@ -199,15 +224,16 @@ Ref: [ISOCpp Guidelines R.20–R.23](https://isocpp.github.io/CppCoreGuidelines/
 | Need | Use |
 |------|-----|
 | Cross-thread flag / counter | `std::atomic<T>` with explicit memory order when not seq-cst |
-| Single mutex, scoped | `std::scoped_lock` (preferred over `std::lock_guard` since C++17 — same cost, deadlock-safe across multiple mutexes) |
+| Single mutex, scoped | `std::lock_guard<std::mutex>` (clear single-mutex intent; compile error if you forget the mutex argument) |
+| Multiple mutexes, scoped | `std::scoped_lock(m1, m2, ...)` (C++17, deadlock-safe — but only when you actually hold 2+ mutexes) |
 | Wait / notify | `std::condition_variable` + `std::unique_lock` |
 | Worker pool | subsystem-owned (job system, asset loader); no naked `std::thread` spawned from feature code |
 
 Each subsystem's spec must answer: *which threads enter this code, and which locks do they hold*. If you cannot answer, the subsystem is not thread-safe; document it as main-thread-only.
 
-`std::scoped_lock` accepts zero args and silently locks nothing — pass at least one mutex.
+`std::scoped_lock` with zero args silently locks nothing — that footgun is exactly why single-mutex sites prefer `lock_guard` (the latter is a compile error without a mutex argument). Reach for `scoped_lock` only when there really are 2+ mutexes to take atomically.
 
-Refs: [ISOCpp Guidelines CP.20–CP.43](https://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines#S-concurrency) · [cppreference std::scoped_lock](https://en.cppreference.com/w/cpp/thread/scoped_lock).
+Refs: [ISOCpp Guidelines CP.20–CP.43](https://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines#S-concurrency) · [cppreference std::scoped_lock](https://en.cppreference.com/w/cpp/thread/scoped_lock) · [LLVM #107839: clang-tidy prefer-scoped-lock-over-lock-guard pushback](https://github.com/llvm/llvm-project/issues/107839).
 
 ---
 
@@ -232,8 +258,9 @@ Prefer structured fields when sensible: `logger.info("draw_call", {{"mesh", id},
 
 ## 15. Static Analysis & Warnings
 
-- `.clang-tidy` at repo root is the source of truth.
-- CI builds with `-Wall -Wextra -Wpedantic -Werror`.
+- `.clang-format` at repo root enforces formatting (section 3).
+- A `.clang-tidy` at repo root is **planned but not yet present** (one of the spec-backfill follow-ups). Until it lands, clang-tidy invocation is per-developer; the disabled-checks list in this doc (sections 2, 3) is the de facto policy.
+- CI builds with `-Wall -Wextra -Wpedantic -Werror` — warnings *are* gates.
 - Suppress narrowly: `// NOLINT(check-name): reason`. Never blanket `// NOLINTBEGIN ... NOLINTEND` regions.
 - CI-green clang-tidy warnings are advisory (project memory). Do not restart whack-a-mole suppression sweeps; fix on touch instead.
 
@@ -248,10 +275,12 @@ Macros set in `CMakeLists.txt`: `VESTIGE_PLATFORM_LINUX`, `VESTIGE_PLATFORM_WIND
 | Pattern | Use |
 |---------|-----|
 | Platform-specific impl, same API | separate `.cpp` files, gated in CMake (e.g. `file_dialog_linux.cpp` / `file_dialog_windows.cpp`) |
-| Tiny branch inside a function | `if constexpr (VESTIGE_PLATFORM_LINUX) { ... }` (C++17) |
+| Tiny branch inside a function | `#if defined(VESTIGE_PLATFORM_LINUX)` ... `#endif`, or convert the macro to a `constexpr bool` constant in a shared `engine/utils/platform.h` and use `if constexpr (kPlatformLinux)` |
 | `#ifdef` in headers | avoid — it forces every consumer to know the platform; push to `.cpp` |
 
 Why: header `#ifdef`s metastasize; consumers compile twice the surface area for half the targets.
+
+**Caveat:** `VESTIGE_PLATFORM_LINUX` / `VESTIGE_PLATFORM_WINDOWS` are CMake `add_compile_definitions` macros — they are **not** `constexpr bool` constants, so plain `if constexpr (VESTIGE_PLATFORM_LINUX)` does *not* compile. Use `#if`-gating, or define mirrored `inline constexpr bool kPlatformLinux = ...;` constants in a shared header and use those in `if constexpr`.
 
 Ref: [cppreference if constexpr](https://en.cppreference.com/w/cpp/language/if).
 
@@ -259,7 +288,7 @@ Ref: [cppreference if constexpr](https://en.cppreference.com/w/cpp/language/if).
 
 ## 17. CPU / GPU Placement
 
-Mirrors CLAUDE.md Rule 7. Decide at design-time, document the call in the subsystem spec under a "CPU / GPU placement" heading.
+CLAUDE.md Rule 7 is the canonical policy ("decide at design-time, document in spec"). This section provides the engineering detail; if the two diverge, **CLAUDE.md wins** — file an issue on this section.
 
 Default heuristic:
 
@@ -291,7 +320,7 @@ Why: a clear public-vs-internal split is what lets the engine ship semver and le
 
 ## 19. Test Discipline
 
-Every feature and every bug fix gets a test (project rule, locked in feedback memory). TDD per the `superpowers:test-driven-development` skill is the default workflow.
+Every feature and every bug fix gets a test (project rule, locked in feedback memory). TDD via the `superpowers:test-driven-development` skill is the default for: regression tests for bug fixes, invariants, parsers, formula evaluators, and any code with a clear input → output contract. For one-shot glue (a single editor-button hookup), throwaway exploration, or rendering-output features that need visual confirmation, write the test *after* the code passes the eye-check — but still write one. The "shortest correct implementation" rule (global rule 2) does not exempt tests; it just means don't over-build *production* code for hypotheticals.
 
 | Rule | |
 |------|---|
@@ -333,6 +362,8 @@ Builds on section 8.
 
 **Sampler binding (Mesa AMD-specific, locked-in project knowledge):** ALL declared samplers must have a valid texture bound at draw time, even if the shader doesn't read them — otherwise `GL_INVALID_OPERATION`. Different sampler types (`sampler2D` vs `samplerCube`) at the same texture unit also error. Do not undo this; bind a 1×1 white fallback to every declared but unused sampler.
 
+**Enforcement:** when a new uniform sampler is declared in GLSL but no host-side bind is wired, the shader-compile / link step warns at startup. If you hit a `GL_INVALID_OPERATION` on a draw call, the first thing to check is "did I add a sampler to the shader and forget to bind a fallback?" — see `engine/renderer/` for the existing fallback texture handles (white, black, normal-up).
+
 ---
 
 ## 22. Dependency Injection & Globals
@@ -352,7 +383,7 @@ Why: testability and parallel subsystem evolution. A class that names what it ne
 ## 23. Strings & Encoding
 
 - UTF-8 throughout: source files (BOM-less), runtime strings, file paths, log output.
-- `std::string_view` for read-only string params (formalizes section 7).
+- `std::string_view` for read-only string params (the canonical home for the rule — section 7 mentions it; this is the binding statement).
 - `std::filesystem::path` for filesystem paths in new code — never raw `std::string` for paths.
 - Comparison / hashing of file paths goes through `std::filesystem::path`'s comparison operators on Windows (case-insensitive there) — don't roll your own.
 
@@ -373,7 +404,15 @@ public:
     GlTexture(const GlTexture&)            = delete;
     GlTexture& operator=(const GlTexture&) = delete;
     GlTexture(GlTexture&& o) noexcept      : m_handle(std::exchange(o.m_handle, 0)) {}
-    GlTexture& operator=(GlTexture&&) noexcept;
+    GlTexture& operator=(GlTexture&& o) noexcept
+    {
+        if (this != &o)
+        {
+            if (m_handle) glDeleteTextures(1, &m_handle);
+            m_handle = std::exchange(o.m_handle, 0);
+        }
+        return *this;
+    }
     GLuint id() const                      { return m_handle; }
 private:
     GLuint m_handle = 0;
@@ -417,3 +456,51 @@ Result<MeshHandle, IoError> loadMesh(const std::filesystem::path& path, MeshLoad
 | `@throws` | only if the function actually throws (rare per section 11) |
 
 File header `/// @file foo.h` + `/// @brief ...` on every public source/header (formalizes section 5). Internal helpers a one-line `///` suffices.
+
+---
+
+## 27. Units & Coordinate Conventions
+
+| Convention | Value |
+|------------|-------|
+| World units | metres (1.0f = 1 m), Y-up, right-handed |
+| Time | seconds (`float dt`), monotonic from engine start |
+| Angles | radians at the API boundary; degrees only in UI / serialised configs (convert at the boundary) |
+| Mass | kilograms |
+| Force | newtons (kg·m/s²); impulses in N·s |
+| Spatial integrity tolerances | section 9 — placement clearances in centimetres; do not change without an explicit reason |
+| Coordinate system | right-handed, Y up, +Z toward camera (matches GLM's default LH/RH choice — `GLM_FORCE_LEFT_HANDED` is **not** set) |
+
+These are physical-world units, not pixels or arbitrary "engine units." Pinning them avoids the integration-bug class where two subsystems agree on the *number* but disagree on what the number means.
+
+Why: every subsystem can integrate against a single mental model. A wind force in N reads identically whether it lands on cloth, particles, or a rigid body.
+
+---
+
+## 28. License Headers (SPDX)
+
+Every source file (C++, GLSL, CMake, Python tools) gets a two-line header:
+
+```cpp
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+```
+
+For shaders:
+```glsl
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+#version 450 core
+```
+
+For CMake / Python:
+```cmake
+# Copyright (c) 2026 Anthony Schemel
+# SPDX-License-Identifier: MIT
+```
+
+The SPDX line is machine-readable per [SPDX 2.3](https://spdx.dev/use/specifications/) — it lets license-scanning tools (REUSE, FOSSology, GitHub's License API) classify the file without parsing prose.
+
+Hybrid adoption: every new file gets the header; existing files gain it on natural edits. The open-source release (engine going MIT, biblical projects stay private) needs every public-repo file SPDX-tagged before tagging — see `docs/PRE_OPEN_SOURCE_AUDIT.md`.
+
+Year: **the year the file is created**, not the current year. Edits do not bump the year. Multi-year ranges (`2024-2026`) only when there is a real per-year contribution history to assert.
