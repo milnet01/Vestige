@@ -54,6 +54,8 @@
                                         ▼                       JSON disk   └─┬──────┘
                                   every subsystem                              │
                                   subscribes / publishes                       ▼
+                                  (typed events in
+                                   system_events.h)
                                                                        per-frame
                                                                        updateAll()
 ```
@@ -323,7 +325,7 @@ Per CODING_STANDARDS §11 — no exceptions in steady-state hot paths.
 `engine/core` itself produces no user-facing pixels or sound. **However**, it is the *route* every accessibility surface flows through:
 
 - `Settings::accessibility` carries the persisted state (UI scale, high contrast, reduced motion, subtitles, color-vision filter, post-process toggles, photosensitive caps).
-- The eight apply-sinks in `settings_apply.h` are the sole writeable path from "user toggled a checkbox" to "subsystem behaves differently" — UI scale → `UIAccessibilityApplySink`, color-vision filter + DoF/motion-blur/fog → `RendererAccessibilityApplySink`, captions → `SubtitleQueueApplySink`, photosensitive caps → `PhotosensitiveStoreApplySink`.
+- The seven apply-sinks in `settings_apply.h` (display / audio / HRTF / UI a11y / renderer a11y / subtitle / photosensitive — same count as §3) are the sole writeable path from "user toggled a checkbox" to "subsystem behaves differently" — UI scale → `UIAccessibilityApplySink`, color-vision filter + DoF/motion-blur/fog → `RendererAccessibilityApplySink`, captions → `SubtitleQueueApplySink`, photosensitive caps → `PhotosensitiveStoreApplySink`. Input bindings are routed through `applyInputBindings` (free function, not a sink).
 - `EventBus` carries `KeyPressedEvent::mods` (added Phase 10.9 Slice 3) so keyboard-focus handlers can distinguish `Tab` from `Shift+Tab` without re-querying GLFW (`engine/core/event.h:39`).
 - `FirstPersonController` exposes `mouseSensitivity`, `gamepadDeadzone`, `gamepadLookSensitivity`, sprint-multiplier — all rebindable via `Settings::controls`. No motion-blur or screen-shake originates here; `reducedMotion` flows through the renderer / camera-shake consumers via the photosensitive sinks.
 - `Logger` ring buffer feeds the editor's console panel — the `LogLevel` enum is the only colour-conveyed signal, and the panel must back colour with text labels (`TRACE` / `INFO` / `WARN` / …) per the partially-sighted-user constraint (project memory).

@@ -50,7 +50,7 @@ The subsystem's facade — the headers that downstream code is allowed to `#incl
 
 Two patterns:
 
-1. **Small surface (≤ 7 public headers, ~ ≤ 30 functions)** — list public functions / classes inline:
+1. **Small surface (≤ 7 public headers)** — list public functions / classes inline. Header count is the primary axis; function count is illustrative. When in doubt at the boundary, lean toward grouping (clarity > exhaustiveness).
 
    ```cpp
    /// brief signature
