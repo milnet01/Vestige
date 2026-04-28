@@ -53,6 +53,8 @@ ReturnType functionName(ParamType param);
 
 Plus a one-line behavioural contract. Don't reproduce Doxygen — link to it. Do call out the *non-obvious* contract details: ownership transfer, threading constraints, ordering requirements, idempotence.
 
+**Facade subsystems with many headers** (≥ 8 public headers, e.g. `engine/core`, `engine/renderer`): group the API by header rather than function-by-function. One subheading per public header, list its types + headline functions, deep details linked back to source. The point is to give a reader the shape of the surface area, not to reproduce every signature.
+
 **Stability:** state explicitly which APIs are semver-frozen vs which may evolve. Per CODING_STANDARDS section 18 the facade is semver-respecting; if any function in this list isn't, flag it.
 
 ## 5. Data Flow **(required)**
@@ -73,7 +75,7 @@ Per CLAUDE.md Rule 7. State the placement choice and the reason. If dual-impleme
 |----------|-----------|--------|
 | ... | CPU / GPU | per the heuristic in CODING_STANDARDS section 17 |
 
-Subsystems with no GPU interaction write *"Not applicable — pure CPU subsystem."*
+Subsystems with no GPU interaction write *"Not applicable — pure CPU subsystem."* **Infrastructure subsystems whose only GPU touch is context plumbing** (e.g. window/swap-chain creation, no per-frame compute / rasterization workload of its own) — fill in the section with a single row noting the plumbing role; the placement decision still applies (the plumbing itself is a CPU-side responsibility), but it's a one-line answer.
 
 ## 7. Threading model **(required)**
 
@@ -136,6 +138,8 @@ Per the project rule (every feature + bug fix gets a test), no untested public f
 ## 12. Accessibility **(required)**
 
 The user is partially sighted (per memory). Subsystems that produce user-facing output (UI, audio cues, captions, focus rings, color choices) must list accessibility constraints here. Subsystems with no user-facing output write *"Not applicable — no user-facing output"* and the spec is good.
+
+**Infrastructure subsystems whose role is to *route* accessibility settings** (e.g. core, settings, input, event-bus) — list every downstream surface that consumes the routing here, even though the subsystem itself produces no UX. The rule is "if a regression in this subsystem could break accessibility downstream, document the routing."
 
 For UI / rendering / audio subsystems specifically:
 - Color: contrast ratio targets, never color-only encoding
