@@ -6,7 +6,7 @@ Mandatory rules. All new code must conform.
 
 ## 0. Language Standard
 
-**C++17 baseline.** All translation units must compile with `-std=c++17` (matches `CMakeLists.txt` `CMAKE_CXX_STANDARD 17`). C++20 features adopted selectively when uniformly available across GCC 13+ / Clang 16+ / MSVC 19.36+: designated initializers, `std::span`, `[[likely]]` / `[[unlikely]]`, concepts where they reduce SFINAE noise. C++23 features (`std::expected`, `std::print`) on a case-by-case basis with a documented fallback — see section 11.
+**C++17 baseline.** All translation units must compile with `-std=c++17` (matches `CMakeLists.txt` `CMAKE_CXX_STANDARD 17`). C++20 features adopted selectively when uniformly available across GCC 13+ / Clang 18+ / MSVC 19.36+: designated initializers, concepts where they reduce SFINAE noise. `[[likely]]` / `[[unlikely]]` only on hot-path branches with measured benefit (compiler honour-rate varies). `std::span` is canonical for new code (see section 7) — that is no longer "selective." C++23 features (`std::expected`, `std::print`) on a case-by-case basis with a documented fallback — see section 11 for `std::expected` portability.
 
 **GLSL: 450 core**, matching the engine's OpenGL 4.5 target. Compute shaders use `#version 450 core` with explicit `layout(local_size_x = ...)`.
 
@@ -111,7 +111,7 @@ private:    same order, members last
 
 **Must do:** `nullptr` (not `NULL`/`0`), `enum class`, `const`/`constexpr` wherever possible, `explicit` on single-arg ctors, RAII, Rule of Five when managing resources.
 
-**Must not:** `using namespace` in headers, raw `new`/`delete`, C-style casts, unresolved warnings (`-Wall -Wextra -Wpedantic`).
+**Must not:** `using namespace` in headers, raw `new`/`delete`, C-style casts, unresolved warnings (`-Wall -Wextra -Wpedantic`), `throw` inside the render / physics / audio-mix loops (see section 11 for the policy and the rationale — exceptions are allowed only outside the steady-state hot paths).
 
 **Prefer:** `auto` only when the type is obvious; range-based `for`; structured bindings where they improve clarity. `std::string_view` for read-only string params (canonical rule in section 23). `std::span<T>` for non-owning array views — no more `(ptr, len)` pairs in new code.
 
@@ -192,7 +192,7 @@ Placed objects must respect spatial constraints. Violations cause clipping, z-fi
 | System boundary (file I/O, OS, syscalls) | error code / `errno`-style return | wrap into `Result` at the next layer up |
 | Programmer error / invariant breach | `VESTIGE_ASSERT` | not for user input |
 
-`std::expected<T, E>` is C++23 and is supported on the engine's GCC 13+ / Clang 16+ / MSVC 19.36+ baseline (each ≥ 3 years stable as of 2026). When `engine/utils/result.h` lands it will define `template <class T, class E> using Result = std::expected<T, E>;` plus a `Result<void, E>` alias — until that file exists, use the standard name directly and file an issue for the alias.
+`std::expected<T, E>` is C++23 and supported on the engine's GCC 13+ / **Clang 18+** / MSVC 19.36+ baseline. (Clang 16's libc++ shipped `<expected>` but had a broken `__cpp_lib_expected` feature-test macro and missing monadic ops until Clang 18 — see [LLVM #108011](https://github.com/llvm/llvm-project/issues/108011). Do not rely on `__cpp_lib_expected` to gate the codepath; gate on `__clang_major__ >= 18` for libc++ builds.) When `engine/utils/result.h` lands it will define `template <class T, class E> using Result = std::expected<T, E>;` plus a `Result<void, E>` alias — until that file exists, use the standard name directly and file an issue for the alias.
 
 **No exceptions in 60-FPS hot paths** (render loop, physics step, audio mix). Throws are acceptable in tools, loaders, and editor-only code where the frame budget is loose.
 
@@ -259,7 +259,7 @@ Prefer structured fields when sensible: `logger.info("draw_call", {{"mesh", id},
 ## 15. Static Analysis & Warnings
 
 - `.clang-format` at repo root enforces formatting (section 3).
-- A `.clang-tidy` at repo root is **planned but not yet present** (one of the spec-backfill follow-ups). Until it lands, clang-tidy invocation is per-developer; the disabled-checks list in this doc (sections 2, 3) is the de facto policy.
+- A `.clang-tidy` at repo root is **planned but not yet present**. Until it lands, this doc is the policy: the disabled-checks called out inline (sections 2 magic numbers, 3 braces, 7 trailing-return) are the de facto suppression list. Treat clang-tidy invocation as per-developer; CI does not currently fail on clang-tidy findings (only on compiler warnings, which *are* `-Werror`).
 - CI builds with `-Wall -Wextra -Wpedantic -Werror` — warnings *are* gates.
 - Suppress narrowly: `// NOLINT(check-name): reason`. Never blanket `// NOLINTBEGIN ... NOLINTEND` regions.
 - CI-green clang-tidy warnings are advisory (project memory). Do not restart whack-a-mole suppression sweeps; fix on touch instead.
@@ -288,7 +288,7 @@ Ref: [cppreference if constexpr](https://en.cppreference.com/w/cpp/language/if).
 
 ## 17. CPU / GPU Placement
 
-CLAUDE.md Rule 7 is the canonical policy ("decide at design-time, document in spec"). This section provides the engineering detail; if the two diverge, **CLAUDE.md wins** — file an issue on this section.
+**This section is canonical.** CLAUDE.md Rule 7 states the high-level policy ("decide at design-time, document in spec"); the engineering detail lives here. When CLAUDE.md and this section appear to disagree, the discrepancy is a bug — fix this section first, then update CLAUDE.md's pointer.
 
 Default heuristic:
 
@@ -330,6 +330,8 @@ Every feature and every bug fix gets a test (project rule, locked in feedback me
 | Assertions | one logical concern per `EXPECT_*` (Google Test) |
 | Shared setup | `TEST_F` fixtures, not file-static globals |
 | Naming | `TEST(Subject, BehaviourUnderCondition)` — reads as a sentence |
+| Wiring | CMake `gtest_discover_tests(target)` auto-registers every `TEST` in a target — no manual `add_test` per test |
+| Layout | `tests/` mirrors `engine/` one-to-one: `engine/foo/bar.cpp` ↔ `tests/test_foo_bar.cpp` |
 
 Bug-fix tests reproduce the failure first, then go green with the fix.
 
@@ -421,6 +423,8 @@ private:
 
 Move-only. Naked `GLuint` allowed only for one-frame ephemeral use; long-lived state never. Reference: existing `engine/renderer/gl_*.h` wrappers.
 
+**Sentinel caveat:** OpenGL uses `0` as "no object," so the `if (m_handle)` guards above are correct *for OpenGL only*. **Do not copy this pattern to Vulkan** (where `VK_NULL_HANDLE` is the sentinel and may be a valid `0` on 64-bit but is `(uint64_t)-1` on some platforms) **or to Jolt** (where `JPH::BodyID()` is the sentinel and zero is a valid body index). Each backend gets its own sentinel comparison.
+
 Why: leaks of GPU resources don't show up under valgrind — they show up as a 60-second freeze when the driver runs out of VRAM during a long session.
 
 ---
@@ -503,4 +507,86 @@ The SPDX line is machine-readable per [SPDX 2.3](https://spdx.dev/use/specificat
 
 Hybrid adoption: every new file gets the header; existing files gain it on natural edits. The open-source release (engine going MIT, biblical projects stay private) needs every public-repo file SPDX-tagged before tagging — see `docs/PRE_OPEN_SOURCE_AUDIT.md`.
 
-Year: **the year the file is created**, not the current year. Edits do not bump the year. Multi-year ranges (`2024-2026`) only when there is a real per-year contribution history to assert.
+Year: per [REUSE 3.0](https://reuse.software/spec-3.0/), the year of first publication is the canonical entry; multi-year ranges (`2024-2026`) only when there is a real per-year contribution history to assert. Bump on substantive contribution if the contributor wants copyright protection on those changes; trivial edits (typo fixes) do not bump.
+
+---
+
+## 29. GPU Debug Markers
+
+For the 60 FPS budget to stay observable, every render pass and major subsystem must emit GPU debug labels for RenderDoc / apitrace / Nsight captures.
+
+| API | Use |
+|-----|-----|
+| Object naming | `glObjectLabel(GL_TEXTURE, id, -1, "albedo_tabernacle_wall")` after every resource creation |
+| Pass scoping | `glPushDebugGroup(...)` at pass entry, `glPopDebugGroup()` at exit — RAII helper preferred |
+| Annotated submits | one debug-group per "thing on screen" so a captured frame reads as a list of named operations, not anonymous draw calls |
+
+Debug markers are **free in release builds** when the debug-output extension is not active (`KHR_debug` is a no-op when the context wasn't created with `GL_CONTEXT_FLAG_DEBUG_BIT`). Always emit them.
+
+Why: when frametime regresses, the first question is "which pass regressed?" Without markers the answer is "we have to instrument it first." With markers it's a 10-second RenderDoc capture.
+
+---
+
+## 30. Jolt Physics Conventions
+
+Jolt is the engine's physics backend (`engine/physics/`). Jolt-touching code follows these rules in addition to the generic ones above.
+
+| Topic | Rule |
+|-------|------|
+| Body creation | through `PhysicsWorld::createStaticBody` / `createDynamicBody` / `createKinematicBody`; never `BodyInterface::CreateBody` directly from feature code |
+| Body IDs | `JPH::BodyID()` is the sentinel — use `id.IsInvalid()`, never `id == 0` |
+| Layers | `BroadPhaseLayer` and `ObjectLayer` constants live in `engine/physics/jolt_layers.h` — feature code references named constants, never raw integers |
+| Step | fixed timestep at 60 Hz (`PhysicsWorldConfig::fixedTimestep`); never call `Update` with a variable `dt` from the render loop |
+| Coordinate convention | matches the engine: metres, Y-up, right-handed (CODING_STANDARDS section 27); Jolt is configured in `JoltHelpers::initialize` to match |
+| Allocator | Jolt's `TempAllocatorImpl` is shared per `PhysicsWorld`; do not create per-call `TempAllocator` instances |
+
+Float-determinism: physics translation units must **not** compile with `-ffast-math` (or `/fp:fast`). Replay / save-game parity depends on bit-identical IEEE-754 behaviour; fast-math reorders FMAs and breaks NaN propagation.
+
+---
+
+## 31. GL State Discipline
+
+OpenGL is a giant pile of global state. Project knowledge has accumulated several locked-in rules.
+
+| State | Rule |
+|-------|------|
+| `glClipControl` | shadow passes that switch to `GL_NEGATIVE_ONE_TO_ONE` **must** restore `GL_ZERO_TO_ONE` before the next pass — clip control is global, leakage causes silent NDC-space bugs (project memory) |
+| Sampler binding | every declared GLSL sampler needs a bound texture at draw time, even if unused — Mesa AMD specific (CODING_STANDARDS section 21) |
+| Viewport / scissor | render passes set their own viewport + scissor at entry; never assume the previous pass left them sane |
+| Blend / depth / stencil state | restore to the engine's "neutral" pipeline state at pass exit when a subsystem-specific override was applied |
+| Bound FBO | render passes target their own FBO, restore to default (`0`) only at the end of the frame |
+| Bound program | invalid after any `glDelete*` of a referenced resource — re-bind on the next draw |
+
+A "render-pass-as-RAII" wrapper that snapshots and restores state is the long-term cleanup; until then, treat every `glXxx` state setter as a contract you must unwind.
+
+---
+
+## 32. Asset Paths
+
+All asset paths are relative to the engine's asset root (`Vestige::EnginePaths::assetRoot()`); never raw filesystem strings or absolute paths in code. The asset root is determined at runtime from CMake-provided install layout vs. dev-tree detection — feature code does not need to know which.
+
+```cpp
+// good
+auto path = EnginePaths::assetRoot() / "models" / "ark_of_covenant.glb";
+
+// bad — fails when the user runs from a different CWD or after install
+auto path = std::filesystem::path("models/ark_of_covenant.glb");
+```
+
+This becomes load-bearing post-MIT release (Phase 12 distribution): downstream users will run binaries from arbitrary CWDs, and any code that assumes "relative paths work because we always launch from the repo root" silently breaks.
+
+Path comparison and hashing: through `std::filesystem::path` operators (case-insensitive on Windows). Asset IDs that key into a registry use the canonical `path::lexically_normal()` form so `models/foo.glb` and `models/./foo.glb` resolve to the same asset.
+
+---
+
+## 33. Editor-Runtime Boundary
+
+The editor (`engine/editor/`) is real-time WYSIWYG (project memory `feedback_editor_realtime.md`). Editor-driven changes apply within one frame; there is **no bake step on the runtime side**.
+
+Implications for code in either subsystem:
+- Runtime data structures support live mutation (no "rebuild on save" assumptions).
+- Editor commands write to the runtime through the EventBus or domain-system APIs — never by reaching into private state via friendship.
+- "Save" is a serialisation event, not a recompute trigger. Loading a saved scene is identical to live-editing the same scene to the same shape.
+- Editor-only code (panels, gizmos, undo stack) is gated by `#ifdef VESTIGE_EDITOR` or lives in `engine/editor/` and is excluded from runtime-only builds.
+
+Why: the project's primary use case (architectural walkthroughs) is iterated against — "place a column, look at it, adjust" must be a sub-second loop, not a save/reload cycle.
