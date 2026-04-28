@@ -1138,6 +1138,19 @@ Application published on Steam. Scenes can be packaged and shared between users.
 - [ ] Tessellated water surfaces (wave simulation via height maps)
 - [ ] Tessellated terrain (adaptive detail for landscapes)
 
+### 3D Gaussian Splatting (Captured-Asset Rendering)
+**Why this is in core-renderer territory for Vestige:** the primary use case (architectural walkthroughs of real biblical sites — Tabernacle, Solomon's Temple references, excavation digs, museum artefacts) is the canonical 3DGS application. Capturing a real excavation as a Gaussian splat scene and rendering it natively beats any photogrammetry-to-mesh pipeline for fidelity. As of 2026-04 the technique is production-mature: Khronos finalised `KHR_gaussian_splatting` glTF (Feb 2026), `UnrealSplat` renders 2 M splats at 60 FPS via Niagara, and < 1 M splats at 60 FPS on RX 6600-class hardware is documented (matches the dev box).
+
+- [ ] **3DGS forward rasterizer** — compute-shader pre-sort by view-depth, then alpha-blended quad rasterization of anisotropic 3D Gaussians, depth-tested against the engine's existing Z-buffer so splat scenes composite cleanly with rasterized triangle geometry (no separate render pass required). Target: 60 FPS at ≤ 1 M splats on RX 6600. Ref: Kerbl et al. SIGGRAPH 2023 — https://repo-sam.inria.fr/fungraph/3d-gaussian-splatting/ ; UnrealSplat reference UE5 plugin — https://github.com/JI20/unreal-splat
+- [ ] **KHR_gaussian_splatting glTF importer** — load splat scenes via the Khronos-standardised glTF 2.0 extension (Feb 2026). Splats become a primitive type the existing glTF loader extends to handle, not a separate asset format. Ref: https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Khronos/KHR_gaussian_splatting
+- [ ] **Splat cluster culling** — partition splats into spatial clusters (~64-256 splats / cluster), frustum + Hi-Z cull at cluster granularity in the GPU-driven culling compute pass. Reuses the GPU-driven MDI infrastructure (highest-ROI Phase 13 item above), no parallel culling pipeline needed.
+- [ ] **Splat LOD** — distant clusters render at reduced splat count via per-cluster importance sampling. Screen-coverage threshold curve authored through the Formula Workbench (per CLAUDE.md Rule 6 — no hand-coded magic constants for numerical design).
+- [ ] **Motion vectors + TAA / FSR 2.x compatibility** — emit screen-space motion vectors during the splat pass so the engine's existing TAA + FSR 2.x temporal upscaler stays effective on splat content (covers static-camera + moving-camera + moving-splat cases).
+- [ ] **`GaussianSplatComponent` + scene-graph integration** — scene-graph component for splat assets (path, transform, render order, opacity multiplier). Phase 5 editor inspector section so splat scenes drop into the scene like any other renderable. Persistence via the scene serializer's standard JSON path.
+- [ ] **Asset-pipeline tooling** — convert third-party `.ply` / `.splat` captures to the engine's KHR_gaussian_splatting glTF representation. Lives in `tools/asset_import/`. Scope is intentionally small; Khronos's standard removes the need for a custom format.
+
+**Suggested ordering:** rasterizer → importer → cluster culling → motion vectors → editor / asset tooling. The first two together produce a usable end-to-end demo (load a `.glb` splat scene, render it). LOD + motion vectors are performance refinements landed once a real captured scene is in hand.
+
 ### Shadow Techniques
 - [ ] Virtual shadow maps (massive virtual texture shadow map — only allocate tiles visible to camera, consistent detail at all distances, eliminates cascade seams; data-structure portion feasible on OpenGL 4.5 via `ARB_sparse_texture`, mesh-shader-optimal version deferred to the Vulkan backend)
 - [ ] Percentage-closer soft shadows / PCSS (contact-hardening shadows — sharp near caster, soft further away; author the filter-radius curve via the Formula Workbench)
@@ -1251,8 +1264,15 @@ already listed above are cross-referenced so we don't duplicate work.
       risk on Mesa AMD; verify exposure before investing.
 - **Mesh shaders via `GL_NV_mesh_shader`** — NV-only today; wait for the
       Vulkan backend (Phase 13 "Vulkan rendering backend") before pursuing.
-- **3D Gaussian splatting** — asset-pipeline feature, not a core-renderer
-      feature; revisit as part of the open-source examples.
+- **3D Gaussian splatting** — **promoted out of "deferred" 2026-04-28** to a
+      dedicated Phase 13 sub-section ("3D Gaussian Splatting (Captured-Asset
+      Rendering)" above). The 2026-04-19 dismissal as "asset-pipeline only,
+      not a core-renderer feature" was wrong: the rasterizer is the gating
+      piece, the asset pipeline is downstream of the renderer not a
+      substitute for it. KHR_gaussian_splatting glTF (finalised Feb 2026) +
+      UnrealSplat 2 M-splat-at-60-FPS reference + the biblical-walkthrough
+      use case (capture real excavated sites and render natively) flipped
+      the priority. See the new sub-section for the concrete item list.
 - **Neural radiance cache** — GL4.5 lacks the cooperative-matrix ops that
       make ML-in-shader practical; defer until Vulkan + matrix extensions.
 
@@ -1385,6 +1405,25 @@ A system that lets artists import film-quality assets and the engine automatical
 
 ### Milestone
 A living sky with dynamic clouds, day/night transitions, weather effects (rain, snow, hail, dust storms), and atmospheric lighting that transforms the scene mood.
+
+### 2026-04 Research Update — Dynamic weather state-of-the-art
+
+Sourced from a 2026-04-28 sweep of UE5 Ultra Dynamic Sky / Weather, CryEngine community weather, and Unity UniStorm. The Phase 15 design above is already aligned with current best practice; this note pins specific technique choices and a recommended ship order.
+
+- **Cloud rendering** — Worley + Perlin 3D noise with detail-noise edge erosion, quarter-resolution ray march + 16-frame temporal reprojection is the cross-engine standard. Already captured in "Volumetric Clouds" above.
+- **Precipitation** — GPU particle streaks (rain, stretched along velocity) + slower tumbling particles (snow), with surface-impact splash spawning and shelter-raycast / shadow-map-test for roof/overhang occlusion. Already captured in "Rain" / "Snow" above.
+- **Wet-surface response** — roughness up + albedo darkening + specular boost + animated puddle accumulation on flat upward-facing geometry — the standard 2026 stack. Already captured in "Rain" above.
+- **State-machine transitions** — linear interpolation of cloud density / precipitation rate / wind / fog over a 30-90 s blend window is the genre-standard transition feel. Adopt for the Weather Controller; expose blend-duration as a per-state parameter in the editor.
+- **Audio integration** — Phase 10.7's `AmbientSystem` already exposes `AmbientZone` + cross-fade primitives; weather-driven layers (rain loop, wind howl, thunder one-shots) plug in as additional zones modulated by the Weather Controller's state, no new audio infrastructure needed.
+- **Recommended ship order** (each independently shippable):
+  1. Procedural sky pass (Phase 9B Atmosphere & Weather System — already wraps `EnvironmentForces`).
+  2. Ray-marched volumetric clouds (cumulus + stratus presets; storm cloud is a coverage / density variation).
+  3. GPU particle rain + wet-surface material modification.
+  4. Snow particles + accumulation depth map.
+  5. Lightning (storm-state-only flash + procedural bolt + Phase 10.7 thunder one-shot with distance delay).
+  6. Dust storms (desert-scene preset, reuses snow accumulation pipeline with sand albedo).
+
+Refs: UE5 Ultra Dynamic Sky https://www.unrealengine.com/marketplace/en-US/product/ultra-dynamic-sky · CryEngine community weather spotlight https://www.cryengine.com/news/view/community-spotlight-dynamic-weather-system · Unity UniStorm https://unityunreal.com/unity-assets-free-download-2/tools/1371-unistorm-volumetric-clouds-sky-modular-weather-and-cloud-shadows.html
 
 ---
 
