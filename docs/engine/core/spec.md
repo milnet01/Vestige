@@ -70,6 +70,7 @@ Key abstractions:
 | `FirstPersonController` | class | WASD / mouse / gamepad camera controller with AABB + terrain collision. `engine/core/first_person_controller.h:37` |
 | `EventBus` | class | Type-indexed `std::function`-based pub/sub. `engine/core/event_bus.h:27` |
 | `Event` | struct (base) | Polymorphic base for every typed event. `engine/core/event.h:12` |
+| `system_events.h` | header | Catalogue of canonical typed events (`SceneLoadedEvent`, `WeatherChangedEvent`, `KeyPressedEvent`, …) — the public type vocabulary for `EventBus::publish<T>`. `engine/core/system_events.h` |
 | `ISystem` | interface | 4 pure virtuals + opt-in hooks for every domain system. `engine/core/i_system.h:78` |
 | `UpdatePhase` | enum | `PreUpdate` / `Update` / `PostCamera` / `PostPhysics` / `Render` ordering tag. `engine/core/i_system.h:50` |
 | `SystemRegistry` | class | Lifecycle + per-frame dispatch + auto-activation + per-system metrics. `engine/core/system_registry.h:56` |
@@ -77,7 +78,7 @@ Key abstractions:
 | `Settings` | struct | Persisted user settings root (display / audio / controls / gameplay / accessibility / onboarding). `engine/core/settings.h:300` |
 | `validate(Settings&)` | free function | Clamp every field to its declared range; called by `fromJson`. `engine/core/settings.h:350` |
 | `migrate()` | free function | Walks the v1→v2→… migration chain on a json tree. `engine/core/settings_migration.h:46` |
-| `DisplayApplySink` etc. | abstract bases | Eight sink interfaces (display / audio / HRTF / UI a11y / renderer a11y / subtitle / photosensitive / input bindings). `engine/core/settings_apply.h:51..340` |
+| `DisplayApplySink` etc. | abstract bases | **Seven** sink interfaces (display / audio / HRTF / UI a11y / renderer a11y / subtitle / photosensitive) — abstract-base declarations at `engine/core/settings_apply.h:51, 97, 134, 179, 225, 270, 302`. Input bindings use a different shape (`extractInputBindings` / `applyInputBindings` free functions, no sink) at `engine/core/settings_apply.h:357, 373`. |
 | `SettingsEditor` | class | Two-copy (`m_applied` / `m_pending`) dirty-tracker with live-apply and per-category restore. `engine/core/settings_editor.h:44` |
 | `captionMapPath()` | free function | Compose `<assetPath>/captions.json`. `engine/core/engine_paths.h:29` |
 
@@ -124,6 +125,15 @@ template<typename T> SubscriptionId EventBus::subscribe(std::function<void(const
 bool          EventBus::unsubscribe(SubscriptionId id);
 template<typename T> void EventBus::publish(const T& event);
 void          EventBus::clearAll();
+
+/// Canonical event vocabulary — engine/core/system_events.h.
+/// Downstream subsystems include this header to publish / subscribe.
+struct SceneLoadedEvent      { /* scene name, entity count */ };
+struct SceneUnloadedEvent    { /* ... */ };
+struct WeatherChangedEvent   { /* old / new state */ };
+struct KeyPressedEvent       { int glfwKey; int mods; /* ... */ };
+struct AudioPlayEvent        { /* clip path, volume, bus */ };
+// etc — see header for the full list.
 ```
 
 ```cpp
@@ -281,11 +291,11 @@ Per CODING_STANDARDS §11 — no exceptions in steady-state hot paths.
 |--------------|-------------|-------------------|
 | Shader load failed in `Engine::initialize` | `Logger::fatal` + `return false` | App aborts; no recovery — engine cannot run without shaders. |
 | Editor / DebugDraw / PhysicsWorld init failed | `Logger::warning` + soft-disable that subsystem | Engine continues; affected feature unavailable. |
-| One `ISystem::initialize` returned false | `SystemRegistry::initializeAll` rolls back the init prefix in reverse, returns false. | Caller (Engine) decides to abort — currently logs and continues without the failing system; planned to abort cold-start (Phase 11 follow-on). |
+| One `ISystem::initialize` returned false | `SystemRegistry::initializeAll` rolls back the already-init'd prefix in reverse and returns `false`. **Engine then logs the failure and continues running without the failing system** (current behaviour; flagged as Open Q1 below — Phase 11 will likely change this to abort cold-start). | The two layers are deliberately split so test code can exercise the rollback in isolation. |
 | `Settings` JSON malformed | `LoadStatus::ParseError`, defaults returned, original moved to `<path>.corrupt` | Engine logs, continues with defaults. User can hand-edit recovery. |
 | `Settings` save failed (disk full, permission) | `SaveStatus::WriteError` (atomic-write didn't commit; old file intact) | Editor surfaces "save failed" to user; `m_applied` does not advance, `isDirty()` stays true. |
 | Migration unknown future version | `migrate()` returns false → `Settings` defaults | Logger warning; engine continues. |
-| Subscriber callback throws | Propagates to publisher | **Bug** — callbacks must not throw inside `EventBus::publish` (the bus has no try/catch wrapper). Treat as programmer error, fix the callback. |
+| Subscriber callback throws | Propagates to publisher | **Policy: callbacks must not throw** inside `EventBus::publish` (the bus has no try/catch wrapper, by design — exception-safety belongs in the callback, not the bus). Treat as programmer error, fix the callback. |
 | Programmer error (null pointer, index OOB) | `assert` (debug) / UB (release) | Fix the caller. |
 | Out of memory | `std::bad_alloc` propagates | App aborts (matches CODING_STANDARDS §11 — OOM is treated as fatal during init; steady-state allocations are bounded). |
 
@@ -339,6 +349,7 @@ Constraint summary for downstream UIs that consume `engine/core`:
 | `engine/ui/ui_theme.h`, `subtitle.h`, `caption_map.h` | engine subsystem | Apply-sink targets. |
 | `engine/scene/scene.h`, `entity.h` | engine subsystem | `SystemRegistry::activateSystemsForScene` walks scene component types. |
 | `engine/profiler/performance_profiler.h` | engine subsystem | `ISystem::reportMetrics` + per-frame timing. |
+| `engine/core/system_events.h` | this subsystem (re-export) | Public event-type vocabulary; downstream code includes this rather than re-declaring event structs. (Same subsystem; listed here because it's a load-bearing public include target.) |
 | `<glm/glm.hpp>` | external | Math primitives (`vec2`, `vec3`). |
 | `<GLFW/glfw3.h>` | external | Window + input + GL context. |
 | `<nlohmann/json.hpp>` (+ `json_fwd.hpp`) | external | Settings persistence. |
@@ -372,12 +383,12 @@ Internal cross-references:
 
 | # | Question | Owner | Target |
 |---|----------|-------|--------|
-| 1 | Should `Engine::initialize` abort cold-start when an `ISystem::initialize` returns false (current behaviour: log + continue)? | unassigned | Phase 11 |
-| 2 | `applyDisplay` does not yet propagate `qualityPreset` / `renderScale` (flagged in `settings_apply.h:84`). Pending Renderer-side hook. | unassigned | Phase 11 |
-| 3 | Wire-format `scancode` field stores GLFW key codes, not true scancodes — layout-preserving rebind (WASD on AZERTY) requires `glfwGetKeyScancode` + reverse lookup (flagged in `settings_apply.h:351`). | unassigned | Phase 11 |
-| 4 | No `Result<T, E>` / `std::expected` adoption yet — `LoadStatus` / `SaveStatus` enums + bool returns predate the codebase-wide policy. Migration on the broader debt list. | unassigned | post-MIT release |
-| 5 | `EventBus::publish` has no exception-safety wrapper — a throwing callback escapes the publisher. Defer until a real use case demands it; current policy is "callbacks must not throw." | unassigned | unscheduled |
-| 6 | Performance budgets in §8 are placeholders. Need a one-shot Tracy / RenderDoc capture to fill in measured numbers. | unassigned | Phase 11 audit |
+| 1 | Should `Engine::initialize` abort cold-start when an `ISystem::initialize` returns false (current behaviour: log + continue)? | milnet01 | Phase 11 entry |
+| 2 | `applyDisplay` does not yet propagate `qualityPreset` / `renderScale` (flagged in `settings_apply.h:84`). Pending Renderer-side hook. | milnet01 | Phase 11 entry |
+| 3 | Wire-format `scancode` field stores GLFW key codes, not true scancodes — layout-preserving rebind (WASD on AZERTY) requires `glfwGetKeyScancode` + reverse lookup (flagged in `settings_apply.h:351`). | milnet01 | Phase 11 entry |
+| 4 | No `Result<T, E>` / `std::expected` adoption yet — `LoadStatus` / `SaveStatus` enums + bool returns predate the codebase-wide policy. Migration on the broader debt list. | milnet01 | post-MIT release (Phase 12) |
+| 5 | `EventBus::publish` has no exception-safety wrapper — a throwing callback escapes the publisher. Current policy is "callbacks must not throw" (now stated normatively in §10). Defer wrapper until a real use case demands it. | milnet01 | triage (no scheduled phase) |
+| 6 | Performance budgets in §8 are placeholders. Need a one-shot Tracy / RenderDoc capture to fill in measured numbers. | milnet01 | Phase 11 audit (concrete: end of Phase 10.9) |
 
 ## 16. Spec change log
 
