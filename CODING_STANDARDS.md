@@ -122,7 +122,8 @@ private:    same order, members last
 | `[[nodiscard]]` | every non-void public-API return where ignoring is a likely bug (loaders, builders, results) |
 | `[[maybe_unused]]` | parameters / vars whose use is conditional on `if constexpr` or platform |
 | `[[likely]]` / `[[unlikely]]` (C++20) | only on hot-path branches with measured benefit; not for "I think this is rare" |
-| `noexcept` | mark functions that genuinely cannot throw — destructors, swap, move ops, pure-math helpers. Exposes optimisations and contractually documents intent. |
+| `noexcept` | mark functions that genuinely cannot throw — destructors, swap, move ops, pure-math helpers. Exposes optimisations and contractually documents intent. **Render-loop / physics-step / audio-mix functions** should be `noexcept` end-to-end (see section 11): the policy bans `throw` there, so the noexcept hint is free, makes container moves cheaper, and turns a future stray `throw` into a `std::terminate` rather than a silent budget bomb. |
+| Trailing return | classical `T name()` is the default per section 2 (`modernize-use-trailing-return-type` is disabled). Use `auto name(...) -> T` only for templates with dependent return types, lambdas, and nested-types scoped by the enclosing class. |
 | Fixed-width integers | `int32_t` / `uint32_t` / `size_t` for ABI / serialisation / bit-twiddling; `int` / `size_t` for plain counters |
 | Move semantics | Rule of Zero is the default — let the compiler generate. Define `= default` or `= delete` explicitly only when the compiler can't, or when you need to suppress copy. Rule of Five only for resource-managing classes (see section 24). |
 
@@ -259,7 +260,14 @@ Prefer structured fields when sensible: `logger.info("draw_call", {{"mesh", id},
 ## 15. Static Analysis & Warnings
 
 - `.clang-format` at repo root enforces formatting (section 3).
-- A `.clang-tidy` at repo root is **planned but not yet present**. Until it lands, this doc is the policy: the disabled-checks called out inline (sections 2 magic numbers, 3 braces, 7 trailing-return) are the de facto suppression list. Treat clang-tidy invocation as per-developer; CI does not currently fail on clang-tidy findings (only on compiler warnings, which *are* `-Werror`).
+- A `.clang-tidy` at repo root is **planned but not yet present**. Until it lands, this doc is the policy and the table below is the canonical disabled-checks list. Treat clang-tidy invocation as per-developer; CI does not currently fail on clang-tidy findings (only on compiler warnings, which *are* `-Werror`).
+
+| Disabled check | Rationale | Defined in |
+|----------------|-----------|------------|
+| `cppcoreguidelines-avoid-magic-numbers` | drowns real cases in noise; per-site judgment with named constants for business logic | §2 Magic numbers |
+| `readability-identifier-length` | math/loop locals (`i`, `x`, `dt`) are idiomatic | §2 Naming Conventions |
+| `modernize-use-trailing-return-type` | classical return-type style matches ~2000 existing declarations; trailing-return only for templates / lambdas / nested types | §2 Return-type style + §7 modern-idioms table |
+| `readability-braces-around-statements` | hybrid adoption — fix on touch, no codebase-wide rewrite | §3 Code Formatting |
 - CI builds with `-Wall -Wextra -Wpedantic -Werror` — warnings *are* gates.
 - Suppress narrowly: `// NOLINT(check-name): reason`. Never blanket `// NOLINTBEGIN ... NOLINTEND` regions.
 - CI-green clang-tidy warnings are advisory (project memory). Do not restart whack-a-mole suppression sweeps; fix on touch instead.
@@ -270,7 +278,15 @@ Why: a single inline suppression with a reason is greppable and survives re-scan
 
 ## 16. Platform & Preprocessor
 
-Macros set in `CMakeLists.txt`: `VESTIGE_PLATFORM_LINUX`, `VESTIGE_PLATFORM_WINDOWS`. Use these — never `#ifdef __linux__` ad-hoc.
+Macros set in `CMakeLists.txt`:
+
+| Macro | Set when | Used by |
+|-------|----------|---------|
+| `VESTIGE_PLATFORM_LINUX` | `CMAKE_SYSTEM_NAME` is `Linux` | platform-gated `.cpp`s, runtime branches |
+| `VESTIGE_PLATFORM_WINDOWS` | `CMAKE_SYSTEM_NAME` is `Windows` | platform-gated `.cpp`s, runtime branches |
+| `VESTIGE_EDITOR` | editor builds (default in dev, off in shipped runtimes) | editor-only code per §33 |
+
+Use these — never `#ifdef __linux__` ad-hoc.
 
 | Pattern | Use |
 |---------|-----|
@@ -401,7 +417,7 @@ Every OpenGL handle (texture, buffer, FBO, VAO, RBO, shader, program, sync objec
 class GlTexture
 {
 public:
-    GlTexture()                            { glGenTextures(1, &m_handle); }
+    GlTexture()                            { glGenTextures(1, &m_handle); }      // single-stmt inline body — §3 Allman exception
     ~GlTexture()                           { if (m_handle) glDeleteTextures(1, &m_handle); }
     GlTexture(const GlTexture&)            = delete;
     GlTexture& operator=(const GlTexture&) = delete;
@@ -483,10 +499,10 @@ Why: every subsystem can integrate against a single mental model. A wind force i
 
 ## 28. License Headers (SPDX)
 
-Every source file (C++, GLSL, CMake, Python tools) gets a two-line header:
+Every source file (C++, GLSL, CMake, Python tools) gets a two-line header. Use **the year the file is created** — the example below shows `<YYYY>` for that reason; a real file written today has the literal year:
 
 ```cpp
-// Copyright (c) 2026 Anthony Schemel
+// Copyright (c) <YYYY> Anthony Schemel
 // SPDX-License-Identifier: MIT
 ```
 
@@ -536,7 +552,7 @@ Jolt is the engine's physics backend (`engine/physics/`). Jolt-touching code fol
 | Body creation | through `PhysicsWorld::createStaticBody` / `createDynamicBody` / `createKinematicBody`; never `BodyInterface::CreateBody` directly from feature code |
 | Body IDs | `JPH::BodyID()` is the sentinel — use `id.IsInvalid()`, never `id == 0` |
 | Layers | `BroadPhaseLayer` and `ObjectLayer` constants live in `engine/physics/jolt_layers.h` — feature code references named constants, never raw integers |
-| Step | fixed timestep at 60 Hz (`PhysicsWorldConfig::fixedTimestep`); never call `Update` with a variable `dt` from the render loop |
+| Step | the engine's configured fixed timestep (`PhysicsWorldConfig::fixedTimestep`, set at world-init time); never call `Update` with a variable `dt` from the render loop |
 | Coordinate convention | matches the engine: metres, Y-up, right-handed (CODING_STANDARDS section 27); Jolt is configured in `JoltHelpers::initialize` to match |
 | Allocator | Jolt's `TempAllocatorImpl` is shared per `PhysicsWorld`; do not create per-call `TempAllocator` instances |
 
@@ -551,7 +567,7 @@ OpenGL is a giant pile of global state. Project knowledge has accumulated severa
 | State | Rule |
 |-------|------|
 | `glClipControl` | shadow passes that switch to `GL_NEGATIVE_ONE_TO_ONE` **must** restore `GL_ZERO_TO_ONE` before the next pass — clip control is global, leakage causes silent NDC-space bugs (project memory) |
-| Sampler binding | every declared GLSL sampler needs a bound texture at draw time, even if unused — Mesa AMD specific (CODING_STANDARDS section 21) |
+| Sampler binding | see section 21 — single source of truth for the rule and the 1×1-white-fallback enforcement pattern |
 | Viewport / scissor | render passes set their own viewport + scissor at entry; never assume the previous pass left them sane |
 | Blend / depth / stencil state | restore to the engine's "neutral" pipeline state at pass exit when a subsystem-specific override was applied |
 | Bound FBO | render passes target their own FBO, restore to default (`0`) only at the end of the frame |
@@ -563,11 +579,14 @@ A "render-pass-as-RAII" wrapper that snapshots and restores state is the long-te
 
 ## 32. Asset Paths
 
-All asset paths are relative to the engine's asset root (`Vestige::EnginePaths::assetRoot()`); never raw filesystem strings or absolute paths in code. The asset root is determined at runtime from CMake-provided install layout vs. dev-tree detection — feature code does not need to know which.
+All asset paths are relative to a configured asset root; never raw filesystem strings or absolute paths in code. Today the engine passes the asset path explicitly (e.g. `Vestige::captionMapPath(assetPath)` in `engine/core/engine_paths.h`); a future `EnginePaths::assetRoot()` accessor will land alongside the install-layout work and unify dev-tree vs install-tree resolution.
 
 ```cpp
-// good
-auto path = EnginePaths::assetRoot() / "models" / "ark_of_covenant.glb";
+// good — path joins live in engine_paths helpers, callers pass the configured root
+auto path = Vestige::captionMapPath(m_assetPath);
+
+// good (once EnginePaths::assetRoot() exists)
+auto path = Vestige::EnginePaths::assetRoot() / "models" / "ark_of_covenant.glb";
 
 // bad — fails when the user runs from a different CWD or after install
 auto path = std::filesystem::path("models/ark_of_covenant.glb");
