@@ -237,7 +237,7 @@ The 60 frames-per-second (FPS) hard requirement (CLAUDE.md) gives a 16.6 ms / fr
 | Save-state serialize (one-shot, manual save) | < 80 ms (one-shot, off the per-frame budget) | budgeted as a stutter the player asked for; auto-save runs on a worker thread to keep the frame clean |
 | Hazard-volume tick | < 0.10 ms | broadphase overlap + per-entity DoT |
 | Vehicle physics step (1 player car + ≤7 AI / traffic) | < 1.0 ms | Jolt is the cost; scalar Pacejka per wheel adds ~0.05 ms × 32 wheels |
-| Vehicle physics step (32-vehicle Burnout city scene) | < 2.5 ms | upper bound for the demo target — exceeding triggers a vehicle-LOD strategy spike |
+| Vehicle physics step (Burnout city scene) | **conditional on Q5 (vehicle count ceiling):** < 2.5 ms at 32 vehicles, < 1.25 ms at 16 vehicles. Pick the right cell once Q5 is decided. Upper bound for the demo target — exceeding triggers a vehicle-LOD strategy spike. |
 | Boost / takedown / traffic AI tick (arcade) | < 0.30 ms | event-driven + spline walks |
 | Tyre thermal + fuel + lap timer (sim) | < 0.10 ms | scalar |
 | Opponent AI tick (sim, ≤7 cars) | < 0.20 ms | racing-line walk + decision tree |
@@ -425,8 +425,9 @@ Web research sources, all dated within the last twelve months. Acronyms first-us
 
 ### 10.3 Sim racing — *Gran Turismo*
 
-- Polyphony Digital — *Gran Turismo 7* tyre-model dev diary (English subtitled GT World Series broadcast 2024 Q4 segment, archived on the official GT YouTube channel): https://www.youtube.com/@gran_turismo_official
-- Polygon — *Gran Turismo 7* update notes archive (covers tyre / fuel / penalty model tweaks 2024–2025): https://www.polygon.com/gran-turismo-7
+- Hans B. Pacejka — *Tyre and Vehicle Dynamics* (3rd ed., Butterworth-Heinemann) — canonical engineering reference for the Magic Formula. The §8.2 parity test loads against the published coefficient ranges from this book, not against any single dev-diary citation.
+- TNO Automotive — *MF-Tyre / MF-Swift* documentation (commercial implementation of the Pacejka model, public spec PDFs): https://www.tno.nl/en/sustainable/safe-clean-mobility/road-vehicle-engineering/road-vehicle-modelling/mf-tyre-mf-swift/
+- Polygon — *Gran Turismo 7* update notes archive (tyre / fuel / penalty model tweaks 2024–2025): https://www.polygon.com/gran-turismo-7 — used as a pop-press cross-check for "what the user community feels," not as an engineering source.
 
 ### 10.4 Survival horror — Dead Space archetype
 
@@ -445,13 +446,12 @@ Web research sources, all dated within the last twelve months. Acronyms first-us
 
 ### 10.7 Replay
 
-- Forza Motorsport replay design blog (Turn 10, 2024): https://forza.net/news
-- Polyphony Digital replay-export article (GT Sport / GT 7 — official site press archive): https://www.gran-turismo.com/world/news/
+- Forza Motorsport blog index (Turn 10) — *index, not an archival anchor*; cite the specific post URL once a replay-design article from 2024+ is identified during slice E1 implementation: https://forza.net/news
+- Polyphony Digital news index (GT Sport / GT 7 official press archive) — *index, not an archival anchor*; same caveat as Forza: pin a specific article URL during slice E1: https://www.gran-turismo.com/world/news/
 
 ### 10.8 Behaviour trees and AI perception (consumed from Phase 11A)
 
-- Bobby Anguelov — *Behaviour Trees Breakdown* (2024 talk slides, hosted on his GitHub): https://github.com/BobbyAnguelov/AI
-- Game AI Pro 4 — open-access chapters, AAA Game AI Workshop 2024 proceedings: http://www.gameaipro.com/
+- Phase 11A primary references stand. Citations to specific Bobby Anguelov / Game AI Pro talks are deliberately not duplicated here — see `phase_11a_design.md` §10 for the BT + perception canonical references.
 
 ### 10.9 Force-feedback / steering wheels
 
@@ -473,7 +473,7 @@ Numbered for review-comment reference. Each maps back to a ROADMAP §11B item th
 
 2. **Kinesis / stasis — promote `engine/experimental/physics/grab_system` and `stasis_system` to non-experimental as part of slice F1, or keep them in `experimental/` and have horror code consume them across the boundary?** Doc recommends *promote* — a shipping Phase 11B feature shouldn't reach into `experimental/`. Promotion has its own (small) audit pass. Confirm.
 
-3. **World-space UI surface (`UIElement::worldProjection`) — extend existing `engine/ui/ui_world_projection.{h,cpp}` in place, or add a sibling `ui_in_world.{h,cpp}`?** Doc currently sketches a sibling (per ROADMAP line 984). Alternative: extend in place to avoid two world-space-UI files. Confirm.
+3. ~~**World-space UI surface (`UIElement::worldProjection`) — extend existing or sibling?**~~ **DECIDED — sibling `ui_in_world.{h,cpp}`** (committed in §3.1 + §2.3). Rationale: `ui_world_projection` and `ui_world_label` are pure projection helpers; `ui_in_world` adds bone-socket binding + world-anchored composition logic, a different concern. Two-file split keeps each header narrow.
 
 4. **Diegetic UI default — for the horror archetype, ship with diegetic-only HUD ON by default and the screen-space fallback as the accessibility opt-in, or the inverse?** ROADMAP says "no HUD is drawn in screen-space for this archetype". Accessibility says the opt-in must be friction-free for partially-sighted users. Doc recommends *diegetic on by default, fallback in `Settings.accessibility.diegeticUiOnly = false`*. Confirm.
 

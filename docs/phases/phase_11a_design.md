@@ -42,16 +42,16 @@ Six new subsystems, three new top-level engine directories, two new public heade
 
 | Subsystem               | New directory               | Touches existing                                                                                          |
 |-------------------------|-----------------------------|-----------------------------------------------------------------------------------------------------------|
-| Camera Shake            | `engine/scene/` (component) | `engine/scene/camera_component.h` (already has `m_shakeOffset` slot per Phase 10.8 §4.6); reads `engine/accessibility/photosensitive_safety.h::clampShakeAmplitude` |
+| Camera Shake            | `engine/scene/` (component) | `engine/scene/camera_component.h` — **the `m_shakeOffset` slot does NOT yet exist**; slice CS-prereq adds it as the very first sub-step. Phase 10.8 §4.6 specified the contract but the field hasn't landed. Reads `engine/accessibility/photosensitive_safety.h::clampShakeAmplitude` (shipped). |
 | Screen Flash            | `engine/renderer/`          | `engine/renderer/renderer.cpp` composite pass (overlay between tonemap + UI); reads `clampFlashAlpha`     |
 | Save-file compression   | `engine/utils/compression/` (new) | `CMakeLists.txt` (`FetchContent` block); `engine/io/` for chunk-format header (new file `chunk_io.h`) |
 | Replay recording        | `engine/replay/` (new)      | `engine/input/input_bindings.h` (per-tick input snapshot); `engine/physics/physics_world.h` (fixed tick) |
-| Behavior tree runtime   | `engine/ai/behavior_tree/` (new under existing `engine/ai/` skeleton) | `engine/scripting/blackboard.h` reuse (existing scripting blackboard fits BT keys cleanly) |
-| AI perception           | `engine/ai/perception/` (new under `engine/ai/`) | `engine/physics/physics_world.h::rayCast` for LOS + Phase 10.8's `sphereCast` for hearing-radius queries |
+| Behavior tree runtime   | `engine/ai/behavior_tree/` (**new top-level `engine/ai/` directory — does not yet exist**; slice BT1 creates it) | `engine/scripting/blackboard.h` reuse — verify the `std::variant<...>` payload shape fits BT key requirements during slice BT1 |
+| AI perception           | `engine/ai/perception/` (under the same new `engine/ai/`) | `engine/physics/physics_world.h::rayCast` (shipped) for line-of-sight; **`PhysicsWorld::sphereCast` does NOT yet exist** (was the Phase 10.8 CM3 promise, pulled into Phase 10.9 Ph3 — see physics spec §15) — slice AP-prereq lands it before AP1 can hearing-query |
 
 ### 3.1 Camera Shake — composition contract
 
-Phase 10.8 already specified the contract for shake (`docs/phases/phase_10_8_camera_modes_design.md` §4.6): mode produces a pristine `CameraViewOutput`; `CameraComponent` stores `m_baseView + m_shakeOffset` separately; render reads the sum; offset is reset to zero each frame *before* the shake system writes the next frame's offset. Phase 11A is the system that finally writes that offset.
+Phase 10.8 already specified the contract for shake (`docs/phases/phase_10_8_camera_modes_design.md` §4.6): mode produces a pristine `CameraViewOutput`; `CameraComponent` stores `m_baseView + m_shakeOffset` separately; render reads the sum; offset is reset to zero each frame *before* the shake system writes the next frame's offset. **The contract was specified; the fields were not added** — `m_shakeOffset` and `m_baseView` are absent from `engine/scene/camera_component.h` today. Phase 11A slice CS-prereq adds the two members and the reset/compose plumbing as the gate before CS1 can ship.
 
 Per Eiserloh's GDC 2016 *trauma* model (§11 ref), shake amplitude derives from a scalar `trauma ∈ [0, 1]` that decays linearly toward zero; rendered shake is `trauma² × baseAmplitude × noise(t)`. Multiple impulses *add* into trauma (capped at 1.0). One trauma scalar per shake type so a continuous earthquake can co-exist with a one-shot weapon kick.
 
@@ -221,7 +221,8 @@ Each slice lands as a review-sized commit with tests + CHANGELOG entry. Slices a
 
 | Slice  | Scope                                                                                                            | Rough LOC | Depends on             |
 |--------|------------------------------------------------------------------------------------------------------------------|-----------|------------------------|
-| CS1    | `CameraShakeComponent` data model + `ShakeType` enum + Formula-Workbench-exported envelope JSON                  | 180       | —                      |
+| CS-prereq | Add `m_baseView` + `m_shakeOffset` fields + reset/compose plumbing to `engine/scene/camera_component.h` (Phase 10.8 §4.6 contract that didn't land). Render reads sum; shake system resets+writes per frame. | 60 | — |
+| CS1    | `CameraShakeComponent` data model + `ShakeType` enum + Formula-Workbench-exported envelope JSON                  | 180       | CS-prereq              |
 | CS2    | Per-frame integrator: composes trauma → offset; writes `CameraComponent::m_shakeOffset`; clamp at write          | 220       | CS1                    |
 | CS3    | Hookups: weapon-kick listener, footfall listener, damage→trauma listener (default propagator)                    | 140       | CS2                    |
 | CS4    | Editor preview slider in camera inspector (one slider per shake type — debug-tune button)                        | 120       | CS2                    |
@@ -233,14 +234,15 @@ Each slice lands as a review-sized commit with tests + CHANGELOG entry. Slices a
 | RP1    | `.vreplay` envelope writer/reader (header + chunk table)                                                         | 180       | ZS2                    |
 | RP2    | `ReplayRecorder` (InputRecord mode) — per-tick input snapshot, delta encoding                                    | 240       | RP1                    |
 | RP3    | `ReplayPlayer` (InputRecord mode) — re-simulate with stored inputs                                               | 200       | RP2                    |
-| RP4    | StateSnapshot mode (recorder + player; periodic transform dumps + interpolation)                                 | 260       | RP1                    |
+| RP4    | StateSnapshot mode (recorder + player; periodic transform dumps + interpolation)                                 | 260       | RP1 + ZS2              |
 | RP5    | Determinism harness CI test (record N=600 ticks, replay, position-epsilon assert)                                | 160       | RP3                    |
 | BT1    | `BehaviorTreeNode` base + `Status` enum + tick contract                                                          | 120       | —                      |
 | BT2    | Composites: `Sequence`, `Selector`, `Parallel`                                                                   | 200       | BT1                    |
 | BT3    | Decorators: `Inverter`, `Repeater`, `Cooldown`, `Conditional`, `Timeout`                                         | 220       | BT1                    |
 | BT4    | Leaf actions / conditions API + JSON loader + fluent C++ builder                                                 | 280       | BT2, BT3               |
 | BT5    | Blackboard reuse glue (BT keys → existing scripting Blackboard) + concrete demo tree                             | 160       | BT4                    |
-| AP1    | `AiPerceiverComponent` + sight cone + LOS raycast                                                                | 200       | —                      |
+| AP-prereq | Add `PhysicsWorld::sphereCast(origin, dir, radius, maxDistance, ignoreBodyId)` (per physics spec §15 Q2 — was Phase 10.8 CM3, pulled into Phase 10.9 Ph3). Mirror existing `rayCast` overload signature. | 80 | — |
+| AP1    | `AiPerceiverComponent` + sight cone + LOS raycast                                                                | 200       | AP-prereq              |
 | AP2    | Hearing stimulus bus (EventBus `AiSoundEvent`) + occlusion raycast + per-type radius table                       | 220       | AP1                    |
 | AP3    | `AwarenessAccumulator` + Alert FSM + propagation event                                                           | 240       | AP1, AP2               |
 | AP4    | BT integration — `CanSeePlayer`, `LastKnownPosition`, `IsAlertLevel(...)` condition leaves                       | 140       | AP3, BT5               |
@@ -355,22 +357,22 @@ Determinism harness (RP5) runs in CI per ROADMAP. Linux runner only — Windows-
 
 | Dependency                                                  | Why                                                                                                |
 |-------------------------------------------------------------|----------------------------------------------------------------------------------------------------|
-| `engine/scene/camera_component.h`                           | `m_shakeOffset` write-target (slot reserved by Phase 10.8 §4.6).                                   |
+| `engine/scene/camera_component.h`                           | `m_shakeOffset` write-target. **Slot does NOT yet exist** — slice CS-prereq adds it (Phase 10.8 §4.6 specified the contract but didn't land the fields). |
 | `engine/scene/camera_mode.h`                                | Composition contract — shake applies post-mode (Phase 10.8 §4.6).                                  |
 | `engine/accessibility/photosensitive_safety.h`              | Clamp helpers (`clampShakeAmplitude`, `clampFlashAlpha`, `clampStrobeHz`) — shipped Phase 10.7.    |
 | `engine/core/engine.h::photosensitiveEnabled / Limits`      | Authoritative reader — Phase 10.7 wiring.                                                           |
 | `engine/core/settings.h::accessibility.reducedMotion`       | Reduced-motion gate (Phase 10.7 wiring) — applies independently of photosensitive flag.             |
 | `engine/renderer/renderer.cpp` post-process pipeline        | Flash-overlay slot between tonemap + UI compositing.                                                |
 | `engine/utils/atomic_write.h`                               | Save-file atomicity — write-temp + rename.                                                          |
-| `engine/utils/result.h` (or `std::expected` direct, per §11 of Coding Standards) | Error returns from chunk IO + replay load.                                       |
-| `engine/physics/physics_world.h::rayCast`                   | Sight LOS raycast.                                                                                  |
-| `engine/physics/physics_world.h::sphereCast`                | Hearing-radius queries (Phase 10.8 shipped this API per §4.7 of that doc).                          |
+| `std::expected<T, E>` (C++23) per CODING_STANDARDS §11      | Error returns from chunk IO + replay load. **`engine/utils/result.h` does not yet exist**; use the standard name directly until the alias lands (CODING_STANDARDS §11 Open Q). |
+| `engine/physics/physics_world.h::rayCast`                   | Sight LOS raycast (shipped).                                                                        |
+| `PhysicsWorld::sphereCast`                                  | Hearing-radius queries. **Does NOT yet exist** — was Phase 10.8 CM3, pulled into Phase 10.9 Ph3 (see physics spec §15 Q2). Slice AP-prereq lands it. |
 | `engine/physics/physics_world.h::fixedTimestep`             | Replay-mode determinism contract (header field stored in `.vreplay`).                               |
-| `engine/scripting/blackboard.h`                             | BT key-value state store reuse.                                                                     |
+| `engine/scripting/blackboard.h`                             | BT key-value state store — variant payload shape verified during slice BT1.                         |
 | `engine/input/input_bindings.h`                             | Replay input snapshot — record from the action map, not raw GLFW state.                             |
 | `engine/core/event_bus.h`                                   | `AiSoundEvent` / `AiAlertEvent` propagation; flash-trigger events; damage→trauma listener.          |
-| `engine/audio/subtitle_queue.h`                             | Caption fallback for sound-only AI cues (a11y).                                                     |
-| `engine/utils/logger.h`                                     | Replay format-version mismatch logs; chunk CRC failures.                                            |
+| `engine/ui/subtitle.h` + `subtitle_renderer.h`              | Caption fallback for sound-only AI cues (a11y) — actual paths under `engine/ui/`, not a separate `subtitle_queue.h`. |
+| `engine/core/logger.h`                                      | Replay format-version mismatch logs; chunk CRC failures. (Logger lives in `engine/core/`, not `engine/utils/`.) |
 
 ### External libraries
 
@@ -428,13 +430,13 @@ Web research, ≤ 1 year old where the technique has continuing-relevance docs a
 |----|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------|
 | Q1 | **Trauma decay curve — linear vs. exponential?** Eiserloh ships linear; some derivatives use `0.5 ^ (dt / halfLife)` for smoother end-of-shake. Linear is simpler + matches the reference. | Linear, per the canonical Eiserloh paper. Re-evaluate if visual review finds the linear-end pop objectionable.  |
 | Q2 | **Replay default mode — `InputRecord` or `StateSnapshot` per-scene default?** `InputRecord` is smaller + bit-exact but requires the determinism audit. `StateSnapshot` works always but is larger and visually-interpolated. | `StateSnapshot` default; flip individual scenes to `InputRecord` once they pass the determinism harness.        |
-| Q3 | **AI perception thread-pooling — same thread as physics, or worker-pool dispatch?** Worker-pool gives parallel perceiver evaluation but breaks input-mode replay determinism unless results are gathered in a deterministic order. | Same thread as physics for Phase 11A — keeps determinism trivially. Promote to pool in Phase 11B *if* a profile shows perception is the per-frame hotspot. |
+| Q3 | ~~AI perception thread-pooling~~ **DECIDED — same thread as physics** (see §5 CPU/GPU table). Keeps input-mode replay determinism trivial. Promote to a worker pool in Phase 11B only if a profile shows perception is the per-frame hotspot; revisit at that point. |
 | Q4 | **BT 3-status (`Running/Success/Failure`) vs. 4-status (+ `Aborted`)?** 4-status is needed when a Parallel composite preempts a child mid-tick and the child needs to clean up. None of our Phase 11B consumers documented as needing this. | Ship 3-status. Add `Aborted` only if a Phase 11B feature demonstrably needs it. (YAGNI per `CLAUDE.md` Rule 3.) |
 | Q5 | **BT visual editor — Phase 11A or Phase 11B?** ROADMAP §Phase 11A lists it; runtime ticking is the load-bearing piece. The editor is convenience. | Defer to Phase 11B (or a 11A tail-slice) — JSON + fluent C++ builder is enough to author trees and ship the milestone. Visual editor lights up when the first BT-heavy 11B feature lands and asks for it. |
 | Q6 | **Camera-shake clamp interaction with `reducedMotion`** — clamp only when `photosensitiveEnabled`, only when `reducedMotion`, or when *either* is set? They cover overlapping but distinct user populations. | Clamp on either — `reducedMotion` halves; `photosensitiveEnabled` then applies its scale on top. Two independent paths, multiplicative. |
 | Q7 | **Flash blend mode — additive vs. screen-blend?** Additive is what Phase 10.7's clamp helpers assume; screen-blend (`1 - (1-a)(1-b)`) caps at 1.0 naturally. | Additive in linear space, then the existing tonemap clamps highlights — matches the photosensitive clamp's mental model (peak α is what we cap). |
 | Q8 | **`.vreplay` versioning policy** — bump on every additive change, or only on incompatible? Header has both major + minor. | Major on incompatible, minor on additive. Phase 11A ships v1.0. Phase 11B replay-UI add-ons must ship v1.x, never v2.0.                          |
-| Q9 | **Slice order — recommended order in §4 (ZS1/CS1/FL1/BT1/AP1 in parallel) or front-load CS+FL (camera shake + flash visible immediately)?** | Doc-recommended parallel start; CS + FL ship as a paired demo at slice CS3 + FL3 land. Front-loading sacrifices the ZS path, which gates RP1–RP5. |
+| ~~Q9~~ | ~~Slice order question — already answered by §4's recommended order; closed as not-a-blocker.~~ |
 
 ---
 
