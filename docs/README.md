@@ -13,21 +13,17 @@ docs/
 ├── README.md                   ← this file
 ├── PRE_OPEN_SOURCE_AUDIT.md    ← active open-source launch checklist
 ├── RECOMMENDED_ROUTINES.md     ← maintainer's process / routine reference
-├── engine/                     ← per-subsystem specs (placeholder — Phase B)
-├── phases/                     ← all phase design + research docs
+├── engine/                     ← per-subsystem specs (Phase B shipped 2026-04-28 → 04-30; 15 specs + SPEC_TEMPLATE.md)
+├── phases/                     ← all phase design + research docs (Phase 11A/11B + 12-26 stubs index + Phase 8 / 9 indexes shipped)
 ├── research/                   ← cross-cutting research and topic-level designs
-├── architecture/               ← deep-dive architecture docs (placeholder)
+├── architecture/               ← deep-dive architecture docs (placeholder — content lands as Phase 13 / Vulkan-backend design docs queue up)
 ├── superpowers/                ← superpowers skill plans + specs (auto-managed)
 └── archive/
     ├── audits/                 ← gitignored audit reports & trend snapshots
-    └── superseded/             ← old docs retained for history
+    └── superseded/             ← old docs retained for history (placeholder until Phase D consolidation moves any docs in)
 ```
 
-The four directories with `.gitkeep` markers (`engine/`, `architecture/`,
-`archive/audits/`, `archive/superseded/`) are intentional placeholders — they
-will receive content as Phase B (per-subsystem specs), follow-on
-architecture deep-dives, automated audit runs, and the Phase D
-consolidation pass land respectively.
+`engine/` is now populated with 15 subsystem specs (animation, audio, core, editor, environment, formula, input, navigation, physics, renderer, resource, scene, scripting, systems, ui — one per shipped engine subsystem); `phases/` carries the active phase design docs plus indexes for the multi-doc Phase 8 / Phase 9 sub-phase clusters. `architecture/` and `archive/superseded/` remain placeholders — they receive content as future architecture deep-dives and any consolidated-out historical docs accrue.
 
 ## Where new docs go
 

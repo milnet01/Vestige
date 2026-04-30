@@ -4,7 +4,7 @@
 |---|---|
 | Phase | 11B — Gameplay Features |
 | Status | `planned` |
-| Owners | unassigned |
+| Owners | milnet01 |
 | Start (target) | after Phase 11A milestone landed and Phase 10.8 Camera Modes / Decal System / Post-Processing (PP) suite shipped |
 | Target completion | TBD — sized post-review (rough guess from §5: 4 archetype slices, see slice plan) |
 | Roadmap source | `ROADMAP.md` lines 830–1021 |

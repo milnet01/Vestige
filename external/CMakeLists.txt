@@ -326,7 +326,7 @@ FetchContent_MakeAvailable(json)
 FetchContent_Declare(
     JoltPhysics
     GIT_REPOSITORY https://github.com/jrouwe/JoltPhysics.git
-    GIT_TAG        v5.2.0
+    GIT_TAG        v5.3.0
     GIT_SHALLOW    TRUE
     SOURCE_SUBDIR  Build
 )
@@ -359,7 +359,7 @@ target_compile_options(implot_lib PRIVATE -w)
 FetchContent_Declare(
     openal-soft
     GIT_REPOSITORY https://github.com/kcat/openal-soft.git
-    GIT_TAG        1.24.1
+    GIT_TAG        1.25.1
     GIT_SHALLOW    TRUE
 )
 set(ALSOFT_UTILS OFF CACHE BOOL "" FORCE)

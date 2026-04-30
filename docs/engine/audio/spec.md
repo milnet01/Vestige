@@ -428,7 +428,7 @@ Audio doesn't trigger seizures, so `PhotosensitiveLimits` doesn't constrain `eng
 | `engine/ui/caption_map.h`, `engine/ui/subtitle.h` | engine subsystem | Caption-routing target — wired via `setCaptionAnnouncer`. |
 | `engine/physics/raycast.h` | engine subsystem | Source→listener raycast feeds `occlusionFraction`. |
 | `engine/utils/path_sandbox.h` | engine subsystem | Mirror of `ResourceManager::setSandboxRoots` (Phase 10.9 D11). |
-| `OpenAL Soft 1.24.1` (`<AL/al.h>`, `<AL/alc.h>`, `<AL/alext.h>`) | external | Audio device, mixer, source playback, HRTF (`ALC_SOFT_HRTF`), EFX. Pinned at `external/CMakeLists.txt:362` — 1.25.1 upgrade flagged in §15. |
+| `OpenAL Soft 1.25.1` (`<AL/al.h>`, `<AL/alc.h>`, `<AL/alext.h>`) | external | Audio device, mixer, source playback, HRTF (`ALC_SOFT_HRTF`), EFX. Pinned at `external/CMakeLists.txt:362`. Upgraded 2026-04-30 from 1.24.1 (was Open Q1 in §15 — closed). |
 | `dr_libs` (vendored) | external | WAV / MP3 / FLAC decoders (single-header, public domain). |
 | `stb_vorbis` (vendored) | external | OGG Vorbis decoder. |
 | `<glm/glm.hpp>` | external | `vec3` for positions / velocities. |
@@ -465,7 +465,7 @@ Internal cross-references:
 
 | # | Question | Owner | Target |
 |---|----------|-------|--------|
-| 1 | OpenAL Soft pinned at 1.24.1 in `external/CMakeLists.txt:362`. Upstream 1.25.1 (2025) ships polyphase-resampler hardening, fmtlib integration fix, WASAPI dynamic device enumeration, JACK / CoreAudio capture fixes, Tetraphonic Surround Matrix Encoding. CLAUDE.md Rule 8 says "use the latest external-library version with current idioms." Bump + rerun parity tests. | milnet01 | Phase 11 entry |
+| ~~1~~ | ~~OpenAL Soft 1.24.1 → 1.25.1 upgrade — **closed 2026-04-30**: pin bumped in `external/CMakeLists.txt:362`, configure + build + tests green. 1.25.1 ships polyphase-resampler hardening, fmtlib integration fix, WASAPI dynamic device enumeration, JACK / CoreAudio capture fixes, Tetraphonic Surround Matrix Encoding. (Closed items live here in struck-out form for one revision before being moved to §16; subsequent unrelated revisions remove this row.)~~ | milnet01 | resolved |
 | 2 | Buffer-cache eviction on scene unload. Currently `m_bufferCache` lives engine-lifetime; long sessions accumulate decoded PCM across scene changes. Design a per-scene reference-count or LRU eviction. | milnet01 | Phase 11 entry |
 | 3 | Path canonicalisation for `loadBuffer` — case-sensitive exact-string keys mean two relative paths to the same file decode + cache twice. Canonicalise via `std::filesystem::weakly_canonical` before hashing. | milnet01 | Phase 11 entry |
 | 4 | Device-disconnected hot-recovery (USB headset unplugged mid-session). `ALC_CONNECTED` polling exists; the UI / `AudioEngine` reset cycle does not. Decide: auto-reopen default device, or surface a UI prompt. | milnet01 | Phase 11 entry |
