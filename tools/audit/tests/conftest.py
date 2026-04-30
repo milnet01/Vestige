@@ -5,6 +5,14 @@
 
 from __future__ import annotations
 
+# Force Qt's offscreen QPA platform before anything imports QApplication.
+# The audit tool tests don't use Qt today, but if a future test grows a
+# Qt dependency this protects against pytest-qt fixtures briefly
+# compositing a real window. `setdefault` lets a CI override
+# (e.g. QT_QPA_PLATFORM=minimal) still win.
+import os
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
 import sys
 from pathlib import Path
 
