@@ -81,40 +81,40 @@ Key abstractions:
 | Abstraction | Type | Purpose |
 |-------------|------|---------|
 | `Renderer` | class | Pipeline orchestrator; owns every OpenGL handle below, runs `beginFrame → renderScene → endFrame`. `engine/renderer/renderer.h:49` |
-| `Camera` | class | First-person camera; reverse-Z infinite-far projection (`getProjectionMatrix`) plus a finite-far variant for frustum culling (`getCullingProjectionMatrix`). `engine/renderer/camera.h:22` |
-| `Shader` | class (RAII) | Vertex+fragment or compute program; load, link, bind, uniform setters. `engine/renderer/shader.h:15` |
-| `Mesh` / `DynamicMesh` | class (RAII) | Static / streamed VAO+VBO+IBO with `Vertex` (pos/normal/color/uv/tangent/bitangent/4 bones+weights). `engine/renderer/mesh.h:30`, `engine/renderer/dynamic_mesh.h:18` |
-| `Texture` | class (RAII) | Loadable 2D texture with mipmap + filter mode (NEAREST → ANISOTROPIC_16X). `engine/renderer/texture.h:20` |
-| `Material` | class | Blinn-Phong or PBR surface; albedo + normal + metallic-roughness + emissive textures + alpha mode (OPAQUE/MASK/BLEND) + IBL multiplier. `engine/renderer/material.h:30` |
-| `Framebuffer` | class (RAII) | Configurable FBO (color + depth, optional MSAA, optional float HDR, optional sampleable depth). `engine/renderer/framebuffer.h:18` |
+| `Camera` | class | First-person camera; reverse-Z infinite-far projection (`getProjectionMatrix`) plus a finite-far variant for frustum culling (`getCullingProjectionMatrix`). `engine/renderer/camera.h:21` |
+| `Shader` | class (RAII) | Vertex+fragment or compute program; load, link, bind, uniform setters. `engine/renderer/shader.h:19` |
+| `Mesh` / `DynamicMesh` | class (RAII) | Static / streamed VAO+VBO+IBO with `Vertex` (pos/normal/color/uv/tangent/bitangent/4 bones+weights). `engine/renderer/mesh.h:39`, `engine/renderer/dynamic_mesh.h:22` |
+| `Texture` | class (RAII) | Loadable 2D texture with mipmap + filter mode (NEAREST → ANISOTROPIC_16X). `engine/renderer/texture.h:28` |
+| `Material` | class | Blinn-Phong or PBR surface; albedo + normal + metallic-roughness + emissive textures + alpha mode (OPAQUE/MASK/BLEND) + IBL multiplier. `engine/renderer/material.h:34` |
+| `Framebuffer` | class (RAII) | Configurable FBO (color + depth, optional MSAA, optional float HDR, optional sampleable depth). `engine/renderer/framebuffer.h:26` |
 | `FullscreenQuad` | class | Reusable 2-triangle screen quad VAO for post-process passes. `engine/renderer/fullscreen_quad.h` |
-| `CascadedShadowMap` | class | 4-cascade directional shadow with frustum-fitted ortho projections, SDSM near/far refinement, staggered per-cascade updates, foliage shadow-caster hook. `engine/renderer/cascaded_shadow_map.h:25` |
-| `ShadowMap` | class | Single-cascade directional shadow primitive (kept as a smaller building block + spot-light fallback). `engine/renderer/shadow_map.h:18` |
-| `PointShadowMap` | class (RAII) | Depth-cubemap shadow for one point light × 6 faces; max `MAX_POINT_SHADOW_LIGHTS = 2` simultaneous. `engine/renderer/point_shadow_map.h:18` |
-| `EnvironmentMap` | class | Split-sum IBL: 32×32 irradiance cubemap (diffuse) + 128² roughness-mip prefilter cubemap (5 mips, GGX importance-sampled per Karis 2013) + 512² BRDF integration LUT. `engine/renderer/environment_map.h:18` |
-| `LightProbe` / `LightProbeManager` | class | Local IBL cubemap probes with AABB-influence + fade-distance blend. `engine/renderer/light_probe.h:18`, `engine/renderer/light_probe_manager.h:24` |
-| `SHProbeGrid` | class | 3D L2 SH probe grid (9 coefficients × 3 channels = 27 floats per probe), stored in 7 RGBA16F 3D textures with hardware trilinear interpolation. `engine/renderer/sh_probe_grid.h:23` |
-| `RadiosityBaker` | class | Iterative multi-bounce gathering — re-captures the SH grid with the previous bounce visible until energy delta < threshold. `engine/renderer/radiosity_baker.h:30` |
-| `Taa` | class | Halton-sequence sub-pixel jitter, history FBO, neighborhood AABB clamp, per-object motion vectors. `engine/renderer/taa.h:25` |
-| `Smaa` | class | SMAA 1× HIGH: luma edge detect → blend-weight (area + search LUT) → neighborhood blend. `engine/renderer/smaa.h:18` |
-| `ColorGradingLut` | class | 3D LUT preset registry; loads `.cube` files, blends to neutral by intensity. `engine/renderer/color_grading_lut.h:22` |
-| `colorVisionMatrix` | free function | Returns the 3×3 RGB simulation matrix for protanopia / deuteranopia / tritanopia (Viénot 1999). `engine/renderer/color_vision_filter.h:25` |
+| `CascadedShadowMap` | class | 4-cascade directional shadow with frustum-fitted ortho projections, SDSM near/far refinement, staggered per-cascade updates, foliage shadow-caster hook. `engine/renderer/cascaded_shadow_map.h:30` |
+| `ShadowMap` | class | Single-cascade directional shadow primitive (kept as a smaller building block + spot-light fallback). `engine/renderer/shadow_map.h:28` |
+| `PointShadowMap` | class (RAII) | Depth-cubemap shadow for one point light × 6 faces; max `MAX_POINT_SHADOW_LIGHTS = 2` simultaneous. `engine/renderer/point_shadow_map.h:26` |
+| `EnvironmentMap` | class | Split-sum IBL: 32×32 irradiance cubemap (diffuse) + 128² roughness-mip prefilter cubemap (5 mips, GGX importance-sampled per Karis 2013) + 512² BRDF integration LUT. `engine/renderer/environment_map.h:25` |
+| `LightProbe` / `LightProbeManager` | class | Local IBL cubemap probes with AABB-influence + fade-distance blend. `engine/renderer/light_probe.h:24`, `engine/renderer/light_probe_manager.h:31` |
+| `SHProbeGrid` | class | 3D L2 SH probe grid (9 coefficients × 3 channels = 27 floats per probe), stored in 7 RGBA16F 3D textures with hardware trilinear interpolation. `engine/renderer/sh_probe_grid.h:38` |
+| `RadiosityBaker` | class | Iterative multi-bounce gathering — re-captures the SH grid with the previous bounce visible until energy delta < threshold. `engine/renderer/radiosity_baker.h:34` |
+| `Taa` | class | Halton-sequence sub-pixel jitter, history FBO, neighborhood AABB clamp, per-object motion vectors. `engine/renderer/taa.h:28` |
+| `Smaa` | class | SMAA 1× HIGH: luma edge detect → blend-weight (area + search LUT) → neighborhood blend. `engine/renderer/smaa.h:25` |
+| `ColorGradingLut` | class | 3D LUT preset registry; loads `.cube` files, blends to neutral by intensity. `engine/renderer/color_grading_lut.h:27` |
+| `colorVisionMatrix` | free function | Returns the 3×3 RGB simulation matrix for protanopia / deuteranopia / tritanopia (Viénot 1999). `engine/renderer/color_vision_filter.h:43` |
 | `Fog` types | structs + free functions | `FogMode` (Linear / Exp / Exp²), `FogParams`, `HeightFogParams`, `SunInscatterParams`, `applyFogAccessibilitySettings()`. `engine/renderer/fog.h` |
-| `MeshPool` / `IndirectBuffer` / `InstanceBuffer` | classes | Mega-VBO/IBO + `glMultiDrawElementsIndirect` command buffer + per-instance mat4 VBO. `engine/renderer/mesh_pool.h:20`, `engine/renderer/indirect_buffer.h:18`, `engine/renderer/instance_buffer.h:14` |
-| `DepthReducer` | class | Double-buffered SSBO compute reduction; produces the SDSM near/far bounds with one frame of latency. `engine/renderer/depth_reducer.h:14` |
-| `SamplerFallback` | template + free function | Lazy 1×1 white / black-cube / 1-layer / 1-voxel textures bound to every declared-but-unused sampler unit (Mesa AMD draw-time binding rule, CODING_STANDARDS §21). `engine/renderer/sampler_fallback.h:42` |
+| `MeshPool` / `IndirectBuffer` / `InstanceBuffer` | classes | Mega-VBO/IBO + `glMultiDrawElementsIndirect` command buffer + per-instance mat4 VBO. `engine/renderer/mesh_pool.h:31`, `engine/renderer/indirect_buffer.h:33`, `engine/renderer/instance_buffer.h:17` |
+| `DepthReducer` | class | Double-buffered SSBO compute reduction; produces the SDSM near/far bounds with one frame of latency. `engine/renderer/depth_reducer.h:19` |
+| `SamplerFallback` | template + free function | Lazy 1×1 white / black-cube / 1-layer / 1-voxel textures bound to every declared-but-unused sampler unit (Mesa AMD draw-time binding rule, CODING_STANDARDS §21). `engine/renderer/sampler_fallback.h:63` |
 | `ScopedForwardZ` / `ScopedBlendState` / `ScopedCullFace` / `ScopedShadowDepthState` | RAII classes (template-IO) | Snapshot + restore one slice of GL state per scope; injectable IO so the contract is unit-testable headlessly. `engine/renderer/scoped_*.h` |
-| `runIblCaptureSequence` | template free function | Wraps a list of IBL capture passes in `ScopedForwardZ`; tests inject a recording mock guard. `engine/renderer/ibl_capture_sequence.h:32` |
-| `combineBloomKarisGroups` | free function (constexpr-friendly) | CPU mirror of the Jimenez 13-tap downsample + Karis luminance weight (parity test against the GLSL). `engine/renderer/bloom_downsample_karis.h:50` |
-| `computeNormalMatrix` | free function | Uniform-scale fast path for the per-draw normal matrix (skips `glm::inverse` for translate+rotate+uniform-scale). `engine/renderer/normal_matrix.h:33` |
-| `updateMotionOverlayPrevWorld` | template free function | Refreshes the prev-world-matrix cache for the per-object motion-vector overlay; clears unconditionally even in non-TAA modes (R10 fix). `engine/renderer/motion_overlay_prev_world.h:42` |
-| `FrameDiagnostics::capture` | static function | Saves a PNG screenshot + a text diagnostic report (camera state, culling stats, lighting, brightness analysis) — built for the partially-sighted user constraint (see project memory). `engine/renderer/frame_diagnostics.h:18` |
+| `runIblCaptureSequence` | template free function | Wraps a list of IBL capture passes in `ScopedForwardZ`; tests inject a recording mock guard. `engine/renderer/ibl_capture_sequence.h:53` |
+| `combineBloomKarisGroups` | free function (constexpr-friendly) | CPU mirror of the Jimenez 13-tap downsample + Karis luminance weight (parity test against the GLSL). `engine/renderer/bloom_downsample_karis.h:55` |
+| `computeNormalMatrix` | free function | Uniform-scale fast path for the per-draw normal matrix (skips `glm::inverse` for translate+rotate+uniform-scale). `engine/renderer/normal_matrix.h:35` |
+| `updateMotionOverlayPrevWorld` | template free function | Refreshes the prev-world-matrix cache for the per-object motion-vector overlay; clears unconditionally even in non-TAA modes (R10 fix). `engine/renderer/motion_overlay_prev_world.h:51` |
+| `FrameDiagnostics::capture` | static function | Saves a PNG screenshot + a text diagnostic report (camera state, culling stats, lighting, brightness analysis) — built for the partially-sighted user constraint (see project memory). `engine/renderer/frame_diagnostics.h:22` |
 | `TerrainRenderer` / `FoliageRenderer` / `TreeRenderer` | class | CDLOD-grid terrain, instanced 3-quad-star foliage, mesh-LOD + billboard-crossfade trees. `engine/renderer/terrain_renderer.h`, `engine/renderer/foliage_renderer.h`, `engine/renderer/tree_renderer.h` |
 | `WaterRenderer` + `WaterFbo` | class | Planar reflection + refraction half-resolution FBOs + Gerstner / FFT wave shader. `engine/renderer/water_renderer.h`, `engine/renderer/water_fbo.h` |
 | `GPUParticleSystem` / `ParticleRenderer` | class | Compute-pipeline GPU particles (Emit → Simulate → Compact → Sort → IndirectDraw) and CPU instanced-billboard renderer. `engine/renderer/gpu_particle_system.h`, `engine/renderer/particle_renderer.h` |
-| `SpriteRenderer` + `SpriteAtlas` + `TilemapRenderer` | class + free function | Instanced 2D sprite pass, TexturePacker JSON-Array atlas loader, tilemap → sprite-instance converter. `engine/renderer/sprite_renderer.h`, `engine/renderer/sprite_atlas.h`, `engine/renderer/tilemap_renderer.h:48` |
+| `SpriteRenderer` + `SpriteAtlas` + `TilemapRenderer` | class + free function | Instanced 2D sprite pass, TexturePacker JSON-Array atlas loader, tilemap → sprite-instance converter. `engine/renderer/sprite_renderer.h`, `engine/renderer/sprite_atlas.h`, `engine/renderer/tilemap_renderer.h:50` |
 | `TextRenderer` + `Font` | class | FreeType glyph-atlas, 2D + 3D text, oblique (italic) shear free function. `engine/renderer/text_renderer.h`, `engine/renderer/font.h` |
-| `DebugDraw` | class (static) | GL_LINES queue for editor gizmos: line, circle, wireSphere, cone, arrow. `engine/renderer/debug_draw.h:22` |
+| `DebugDraw` | class (static) | GL_LINES queue for editor gizmos: line, circle, wireSphere, cone, arrow. `engine/renderer/debug_draw.h:24` |
 
 ## 4. Public API
 
@@ -187,7 +187,7 @@ public:
     glm::vec3 getPosition() const; glm::vec3 getFront() const; glm::vec3 getUp() const;
     void      setFov(float); float getFov() const;
 };
-// see renderer/camera.h:22 for full surface.
+// see renderer/camera.h:21 for full surface.
 ```
 
 ```cpp
@@ -203,7 +203,7 @@ public:
     GLuint getId() const;
     void   setBool/Int/Float/Vec2/Vec3/Vec4/Mat3/Mat4(std::string_view name, T val);
 };
-// see renderer/shader.h:15 for full surface.
+// see renderer/shader.h:19 for full surface.
 ```
 
 ```cpp
@@ -213,7 +213,7 @@ struct Vertex { glm::vec3 position, normal, color; glm::vec2 texCoord;
 void calculateTangents(std::vector<Vertex>&, const std::vector<uint32_t>& indices);
 class Mesh         { /* static  GL_STATIC_DRAW VBO/IBO + VAO */ };
 class DynamicMesh  { /* GL_DYNAMIC_STORAGE_BIT VBO; updateVertices() per frame */ };
-// see renderer/mesh.h:30, renderer/dynamic_mesh.h:18 for full surface.
+// see renderer/mesh.h:39, renderer/dynamic_mesh.h:22 for full surface.
 ```
 
 ```cpp
@@ -237,7 +237,7 @@ struct FramebufferConfig { int width, height, samples; bool hasColor, hasDepth, 
 class  Framebuffer  { void bind(); static void unbind(); void resolve(Framebuffer& dst);
                       void resize(int w, int h); GLuint getColorTexture() const; ... };
 class  FullscreenQuad { void draw() const; };
-// see renderer/framebuffer.h:18 for full surface.
+// see renderer/framebuffer.h:26 for full surface.
 ```
 
 ```cpp
@@ -254,7 +254,7 @@ constexpr int MAX_POINT_SHADOW_LIGHTS = 2;
 class  PointShadowMap     { void update(const glm::vec3& lightPos);
                             void beginFace(int face); void endFace();
                             GLuint getCubemapTexture() const; };
-// see renderer/cascaded_shadow_map.h:25 for full surface.
+// see renderer/cascaded_shadow_map.h:30 for full surface.
 ```
 
 ```cpp
@@ -517,7 +517,7 @@ Not yet measured — will be filled by the next instrumented capture (target: en
 | One-shot `RadiosityBaker::bake` (4 bounces, 4³ grid) | < 5000 ms | TBD — Phase 10.9 audit |
 | `pickEntityAt` (single click, sync `glReadPixels`) | < 5 ms | TBD — Phase 10.9 audit |
 
-**Profiler markers / capture points.** GPU debug markers via `glPushDebugGroup` are not yet emitted by the renderer — see CODING_STANDARDS §29 (mandatory) and Open Q2. RenderDoc / apitrace captures currently distinguish passes by FBO-bind boundaries plus shader-program names, which is recoverable but slow to read. Once the markers land they will use these labels (CPU-side strings already standardised across the code paths):
+**Profiler markers / capture points.** GPU debug markers via `glPushDebugGroup` / `glObjectLabel` are **not** currently emitted anywhere in `engine/renderer/` — see §15 Open Q2 (the honest disclosure of this gap) and CODING_STANDARDS §29 (which makes them normative). RenderDoc / apitrace captures currently distinguish passes by FBO-bind boundaries plus shader-program names, which is recoverable but slow to read. The labels below are the proposed naming scheme to use **once the markers are wired**; they are not yet shipped as CPU-side strings, so a grep for these names in the renderer source will return nothing today:
 
 - `"Renderer/Shadow/Cascade <0|1|2|3>"` — per-cascade CSM pass.
 - `"Renderer/Shadow/Point <i>/Face <0..5>"` — point shadow per face.
