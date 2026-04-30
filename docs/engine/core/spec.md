@@ -248,13 +248,13 @@ Per CODING_STANDARDS §13 — every subsystem must answer "which threads enter t
 | Caller thread | Allowed APIs | Locks held |
 |---------------|--------------|------------|
 | **Main thread** (the only thread that runs `Engine::run`) | All of `Engine`, `Window`, `Timer`, `InputManager`, `FirstPersonController`, `EventBus`, `SystemRegistry`, `Settings*`. GL context affinity lives here. | None — main thread is single-threaded by contract. |
-| **Worker threads** (job system, audio thread, `AsyncTextureLoader`) | `Logger::trace/debug/info/warning/error/fatal`, `Logger::getEntries`, `Logger::clearEntries`. | `s_logMutex` (internal — `engine/core/logger.cpp:33`). |
+| **Worker threads** (audio thread today; future job system / async loaders) | `Logger::trace/debug/info/warning/error/fatal`, `Logger::getEntries`, `Logger::clearEntries`. | `s_logMutex` (internal — `engine/core/logger.cpp:33`). |
 
 **Main-thread-only:** `Engine`, `Window`, `Timer`, `InputManager`, `FirstPersonController`, `EventBus`, `SystemRegistry`, `Settings*`. Calling these from a worker is undefined — `EventBus::publish` is not synchronised; GLFW input/window APIs require the main thread per the GLFW manual.
 
 **Lock-free / atomic:** none required. The sole shared state in `engine/core` between threads is `Logger`'s console + ring buffer + file stream, all guarded by a single `std::mutex` (`engine/core/logger.cpp:33`). `Logger::getEntries()` returns the deque **by value** so callers iterate a stable snapshot while workers may still be writing (`engine/core/logger.h:70`).
 
-**Worker pool ownership:** `engine/core` does **not** own any worker pool. `AsyncTextureLoader` (in `engine/resource/`) and the audio thread (`engine/audio/`) bring their own; they only call into `engine/core` via `Logger`.
+**Worker pool ownership:** `engine/core` does **not** own any worker pool. The audio thread (`engine/audio/`, owned by OpenAL Soft) is the only worker thread that touches `engine/core` today (via `Logger`). The `logger.cpp` comments mention an `AsyncTextureLoader` as a future worker-thread caller — **that class does not yet exist** in `engine/resource/` (per the resource spec's §15 Q1 — async loader is a planned addition, not shipped).
 
 ## 8. Performance budget
 
