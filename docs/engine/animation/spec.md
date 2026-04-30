@@ -15,7 +15,11 @@
 
 ## 1. Purpose
 
-`engine/animation` is the CPU side of the engine's animation pipeline: it owns the data types and runtime that turn a glTF skin + clips into per-bone matrices ready for the renderer's GPU skinning, plus the orthogonal helpers (sprite-sheet animation for 2D, property tweens, easing curves, morph-target weight blending, inverse-kinematics solvers). It exists as its own subsystem because every one of those primitives is consumed by code in `engine/scene` (component-driven runtime), `engine/renderer` (skinning + morph deformation in shaders), `engine/utils/gltf_loader` (asset-side construction), and the `CharacterSystem` / `SpriteSystem` domain wrappers — pulling the math into any one of those subsystems would force the others to depend on it sideways. For the engine's primary use case — first-person walkthroughs of biblical structures — animation is the path that makes the High Priest's vestments swing, the Tabernacle's veil draw, and any future NPC walk; it is not the primary load-bearing subsystem of an architectural walkthrough, but the engine targets broader games as a secondary use case (per CLAUDE.md), and `engine/animation` is the foundation those games stand on.
+`engine/animation` is the CPU side of the engine's animation pipeline: it owns the data types and runtime that turn a glTF skin + clips into per-bone matrices ready for the renderer's GPU skinning, plus the orthogonal helpers — sprite-sheet animation for 2D, property tweens, easing curves, morph-target weight blending, and Inverse Kinematics (IK) solvers (analytic two-bone, look-at, foot — no Forward And Backward Reaching IK (FABRIK) or Cyclic Coordinate Descent (CCD) chains today; see §14 / §15).
+
+It exists as its own subsystem because every one of those primitives is consumed by code in `engine/scene` (component-driven runtime), `engine/renderer` (skinning + morph deformation in shaders), `engine/utils/gltf_loader` (asset-side construction), and the `CharacterSystem` / `SpriteSystem` domain wrappers — pulling the math into any one of those subsystems would force the others to depend on it sideways.
+
+For the engine's primary use case — first-person walkthroughs of biblical structures — animation is the path that makes the High Priest's vestments swing, the Tabernacle's veil draw, and any future non-player character (NPC) walk. It is not the primary load-bearing subsystem of an architectural walkthrough, but the engine targets broader games as a secondary use case (per CLAUDE.md), and `engine/animation` is the foundation those games stand on.
 
 The directory was larger before the Phase 10.9 Slice 8 W12 audit relocated the unwired motion-matching, lip-sync, and facial-animation cluster to `engine/experimental/animation/` (see §15). What remains here is the production-live subset.
 
@@ -23,7 +27,7 @@ The directory was larger before the Phase 10.9 Slice 8 W12 audit relocated the u
 
 | In scope | Out of scope |
 |----------|--------------|
-| `Skeleton`, `Joint` — joint hierarchy + inverse bind matrices + DFS update order | glTF parsing into these types — `engine/utils/gltf_loader` |
+| `Skeleton`, `Joint` — joint hierarchy + inverse bind matrices + Depth-First Search (DFS) update order | glTF parsing into these types — `engine/utils/gltf_loader` |
 | `AnimationClip`, `AnimationChannel` — keyframe data; STEP / LINEAR / CUBICSPLINE interpolation | Asset I/O / disk loading — `engine/utils/gltf_loader` constructs them |
 | `AnimationSampler` (free functions) — interpolate one channel at one time | Long-running clip authoring tools — N/A |
 | `SkeletonAnimator` (`Component`) — playback, crossfade blend, root motion, morph weight sampling | Skin deformation in vertex shader — `assets/shaders/scene.vert` + `engine/renderer` |
@@ -87,7 +91,7 @@ Key abstractions:
 
 | Abstraction | Type | Purpose |
 |-------------|------|---------|
-| `Joint` | struct | Name, parent index, inverse bind matrix, local bind transform. `engine/animation/skeleton.h:18` |
+| `Joint` | struct | Name, parent index, inverse bind matrix, local bind transform. `engine/animation/skeleton.h:17` |
 | `Skeleton` | class | Joint forest + DFS pre-order `m_updateOrder` (audit A1). `engine/animation/skeleton.h:26` |
 | `AnimationChannel` | struct | One channel: joint index, target path (T/R/S/W), interpolation, timestamps, packed values. `engine/animation/animation_clip.h:32` |
 | `AnimInterpolation` | enum | `STEP` / `LINEAR` / `CUBICSPLINE`. `engine/animation/animation_clip.h:15` |
@@ -111,7 +115,7 @@ Key abstractions:
 
 ## 4. Public API
 
-10 public headers; each one is small and has a clear purpose, so this section follows the **small-surface inline pattern** of the template, grouped by header.
+10 public headers — past the template's 7-header threshold, so this section follows the **facade-by-header pattern**: one code block per public header showing types + headline functions, with `// see <header> for full surface` pointers where the public surface is wider than the snippet shows.
 
 ```cpp
 // animation/skeleton.h
@@ -153,7 +157,7 @@ public:
 ```cpp
 // animation/animation_sampler.h  — stateless
 glm::vec3 sampleVec3(const AnimationChannel&, float time);   // STEP / LINEAR / CUBICSPLINE
-glm::quat sampleQuat(const AnimationChannel&, float time);   // SLERP for LINEAR; double-cover fix for CUBICSPLINE (audit A2)
+glm::quat sampleQuat(const AnimationChannel&, float time);   // Spherical Linear Interpolation (SLERP) for LINEAR; double-cover fix for CUBICSPLINE (audit A2)
 ```
 
 ```cpp
@@ -169,7 +173,7 @@ public:
     void setSkeleton(std::shared_ptr<Skeleton>);
     void addClip   (std::shared_ptr<AnimationClip>);
     int  getClipCount() const;
-    const std::shared_ptr<AnimationClip>& getClip(int) const;     // returns null sp if OOR
+    const std::shared_ptr<AnimationClip>& getClip(int) const;     // returns null sp if Out Of Range (OOR)
 
     // Playback
     void  play       (const std::string& clipName);                // restart from 0
@@ -343,7 +347,7 @@ public:
 3. **Crossfade path:** `advanceAndSample` the source clip into source buffers, then the target clip into primary buffers, then per-bone blend `mix(src, tgt, blendFactor)` for T/S and `slerp` for R. When `blendFactor >= 1` the crossfade ends.
 4. Non-looping clip past its end → `m_playing = false`.
 5. `extractRootMotion()` — store delta from prev → current root pose; zero root X/Z translation + rotation in the local pose so the mesh stays centred.
-6. `computeBoneMatrices()` — iterate `m_skeleton->m_updateOrder` (DFS pre-order, audit A1); each joint's global = parent's global × local TRS; bone matrix = global × inverse-bind.
+6. `computeBoneMatrices()` — iterate `m_skeleton->m_updateOrder` (DFS pre-order, audit A1); each joint's global = parent's global × local Translation/Rotation/Scale (TRS); bone matrix = global × inverse-bind.
 
 **State machine driving an animator (`update(animator, dt)`):**
 
@@ -352,7 +356,7 @@ public:
 3. On fire: `animator.setSpeed/setLooping`, `animator.crossfadeToIndex(targetState.clipIndex, transition.crossfadeDuration)`, consume any triggers referenced by the conditions.
 4. Only one transition per frame.
 
-**Renderer consumption:** `engine/renderer` reads `SkeletonAnimator::getBoneMatrices()` (max 128, `Skeleton::MAX_JOINTS`) and uploads to a bone-matrix SSBO; reads `getMorphWeights()` and uploads via uniform array (`u_morphWeights[i]`) plus binds the morph SSBO at binding 3. On Mesa, an always-bound dummy SSBO at binding 3 satisfies driver validation when the mesh has no morphs (per project memory `feedback_mesa_sampler_binding`).
+**Renderer consumption:** `engine/renderer` reads `SkeletonAnimator::getBoneMatrices()` (max 128, `Skeleton::MAX_JOINTS`) and uploads to a bone-matrix Shader Storage Buffer Object (SSBO); reads `getMorphWeights()` and uploads via uniform array (`u_morphWeights[i]`) plus binds the morph SSBO at binding 3. On Mesa, an always-bound dummy SSBO at binding 3 satisfies driver validation when the mesh has no morphs (per project memory `feedback_mesa_sampler_binding`).
 
 **Sprite animation drive:** `SpriteComponent::update(dt)` → `animation->tick(dt)` → renderer reads `currentFrameName()` to look up the atlas entry. No SSBO involved.
 
@@ -393,7 +397,7 @@ Per CLAUDE.md Rule 7. Animation is a CPU/GPU split: pose evaluation and bone-mat
 
 60 FPS hard requirement → 16.6 ms/frame. `engine/animation` is per-character work; the budget scales with the number of animated entities in scene. Architectural-walkthrough scenes (the engine's primary use case) typically have 0–4 animated characters; broader-game scenes may have dozens.
 
-Not yet measured — will be filled by the next Phase 11 audit / 2026-05; tracked as Open Q5 in §15.
+Not yet measured — will be filled by the Phase 11 audit (concretely, end of Phase 10.9 cycle); tracked as Open Q5 in §15.
 
 Tentative target shape (will replace once measured):
 
@@ -404,7 +408,7 @@ Tentative target shape (will replace once measured):
 - `SpriteAnimation::tick`: target < 0.005 ms each.
 - IK solver call (one of two-bone / look-at / foot): target < 0.01 ms each.
 
-**Profiler markers / capture points:** `engine/animation` does not currently emit `glPushDebugGroup` markers (no GPU work). The renderer's bone-matrix-upload pass is a downstream marker (`scene_pass_skinned_upload`, `engine/renderer/renderer.cpp:1500-1510`). For CPU-side capture under Tracy / `PerformanceProfiler`, the registry-level `SystemMetrics` table catches the time spent inside each system's `update` — animation work currently rolls up under `Scene` (component-tree update) rather than a dedicated system, which is part of why §15-Q4 calls for a wrapper system.
+**Profiler markers / capture points:** `engine/animation` does not currently emit `glPushDebugGroup` markers (no GPU work in this subsystem). The relevant downstream site is the renderer's bone-matrix-upload pass at `engine/renderer/renderer.cpp:1500-1510`, but **no `glPushDebugGroup` is emitted there today** — this matches the renderer spec's §15 Q2 "GPU debug markers not yet wired" debt. When that debt closes, the proposed marker name for this site is `scene_pass_skinned_upload`. For CPU-side capture under Tracy / `PerformanceProfiler`, the registry-level `SystemMetrics` table catches the time spent inside each system's `update` — animation work currently rolls up under `Scene` (component-tree update) rather than a dedicated system, which is part of why §15-Q4 calls for a wrapper system.
 
 ## 9. Memory
 
@@ -479,7 +483,7 @@ Per CODING_STANDARDS §11. No exceptions in steady-state.
 |------------|------|-----|
 | `engine/scene/component.h` | engine subsystem | `SkeletonAnimator` and `TweenManager` are `Component` subclasses. |
 | `<glm/glm.hpp>`, `<glm/gtc/quaternion.hpp>` | external | Math primitives — `vec3`, `mat4`, `quat`, `slerp`, `mix`. |
-| `<cmath>`, `<algorithm>`, `<vector>`, `<unordered_map>`, `<memory>`, `<string>`, `<functional>`, `<cstdint>`, `<cstring>`, `<cassert>` | std | Standard library. |
+| `<cmath>`, `<algorithm>`, `<vector>`, `<unordered_map>`, `<memory>`, `<string>`, `<functional>`, `<cstdint>` | std | Standard library — public-header includes (the `<cstring>` / `<cassert>` uses are `.cpp`-only and not part of the public API surface). |
 
 **Direction:** `engine/animation` is depended on by `engine/scene` (component update tree), `engine/renderer/mesh` (morph data + bone matrices), `engine/utils/gltf_loader` (asset construction), `engine/resource/model` (asset bundle), `engine/editor/panels/model_viewer_panel` (preview UI), and the `engine/experimental/animation/*` cluster (which `#include`s production headers — the *forbidden* direction is `engine/animation` → `engine/experimental/animation`, not the other way around). `engine/animation` does **not** depend on `engine/renderer`, `engine/audio`, `engine/physics`, or `engine/core` — keeping the include graph one-way is what makes the subsystem unit-testable headlessly without an `Engine` instance.
 
