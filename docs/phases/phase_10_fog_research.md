@@ -1,5 +1,7 @@
 # Phase 10 — Fog & Atmospheric Scattering Research
 
+> **Pairs with `phase_10_fog_design.md`.** This document is the research that informed the design choices; the design doc is the actual implementation plan. Read both together when working on fog, or read just the design doc if you only need the chosen approach. Phase 15 atmospheric rendering is the future-rendering home for the volumetric / weather upgrades; this Phase 10 work is the production fog primitives the engine ships today.
+
 **Scope:** Inform Phase 10 design decisions for distance fog, exponential height fog, froxel-based volumetric fog, and god-ray / crepuscular-ray techniques in the Vestige engine (C++17, OpenGL 4.5, deferred pipeline, 60 FPS floor on an AMD RX 6600 / RDNA2-class GPU).
 
 **Method:** Primary-source review. Where a primary source could not be retrieved verbatim (binary PDFs the fetch tool rejected, paywalled docs), the citation is still anchored to the primary artefact and only supplemented with a secondary explanatory source.
