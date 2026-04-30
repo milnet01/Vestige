@@ -275,7 +275,9 @@ public:
     void push(const Notification&);
     void advance(float dt, float fadeSeconds = DEFAULT_FADE_SECONDS);
     const std::vector<ActiveNotification>& active() const;
-    std::size_t size() const, capacity() const; void setCapacity(std::size_t);
+    std::size_t size() const;
+    std::size_t capacity() const;
+    void        setCapacity(std::size_t);
 };
 float     notificationAlphaAt(float elapsed, float duration, float fade);  // pure
 glm::vec4 notificationSeverityColor(NotificationSeverity, const UITheme&);
@@ -290,22 +292,23 @@ WorldToScreenResult projectWorldToScreen(const glm::vec3& worldPos,
                                          int screenWidth, int screenHeight);
 ```
 
-```cpp
-// Widget headers — each is a UIElement subclass with public data members; see headers for fields.
-ui_label.h       // text label — TextRenderer driven.
-ui_panel.h       // solid-colour rectangle.
-ui_image.h       // textured quad.
-ui_button.h      // .btn — DEFAULT/PRIMARY/GHOST/DANGER + small + shortcut keycap.
-ui_slider.h      // track + fill + thumb + value readout; external drag handling.
-ui_checkbox.h    // 20×20 with stroke + checkmark + inline label.
-ui_dropdown.h    // 40-px combo with popup; selectedIndex external mutation.
-ui_keybind_row.h // label + keycap + CLEAR; "PRESS ANY KEY…" listening state.
-ui_progress_bar.h// horizontal value/maxValue fill — clamps at render time.
-ui_crosshair.h   // centred reticle (length / thickness / centreGap).
-ui_fps_counter.h // smoothed-FPS readout via tick(dt).
-ui_world_label.h     // floating world-anchored text via projectWorldToScreen.
-ui_interaction_prompt.h // UIWorldLabel subclass: "Press [keyLabel] to actionVerb" with distance fade.
-```
+**Widget headers** — each is a `UIElement` subclass with public data members; see headers for fields.
+
+| Header | Role |
+|--------|------|
+| `ui_label.h` | text label — TextRenderer driven |
+| `ui_panel.h` | solid-colour rectangle |
+| `ui_image.h` | textured quad |
+| `ui_button.h` | `.btn` — DEFAULT / PRIMARY / GHOST / DANGER + small + shortcut keycap |
+| `ui_slider.h` | track + fill + thumb + value readout; external drag handling |
+| `ui_checkbox.h` | 20 × 20 with stroke + checkmark + inline label |
+| `ui_dropdown.h` | 40-px combo with popup; selectedIndex external mutation |
+| `ui_keybind_row.h` | label + keycap + CLEAR; "PRESS ANY KEY…" listening state |
+| `ui_progress_bar.h` | horizontal value / maxValue fill — clamps at render time |
+| `ui_crosshair.h` | centred reticle (length / thickness / centreGap) |
+| `ui_fps_counter.h` | smoothed-FPS readout via `tick(dt)` |
+| `ui_world_label.h` | floating world-anchored text via `projectWorldToScreen` |
+| `ui_interaction_prompt.h` | `UIWorldLabel` subclass: "Press [keyLabel] to actionVerb" with distance fade |
 
 **Non-obvious contract details:**
 
@@ -408,7 +411,7 @@ Per CODING_STANDARDS §13. UI is **main-thread-only**. There is no worker entry 
 
 ## 8. Performance budget
 
-60 FPS hard requirement → 16.6 ms per frame. UI is overhead-only — it shares the budget with the renderer, physics, audio, and every domain system.
+60 FPS hard requirement → 16.6 ms per frame. UI is overhead-only — it shares the budget with the renderer, physics, audio, and every domain system. **The Budget column states the engineering targets** (validated qualitatively by visual + smoke testing); the Measured column is uniformly TBD pending the Phase 11 audit (Open Q6) — no fabricated numbers, no capture run yet.
 
 | Path | Budget | Measured (RX 6600, 1080p) |
 |------|--------|----------------------------|

@@ -510,12 +510,11 @@ Internal cross-references:
 | 6 | `Result<T, E>` / `std::expected` adoption — `SceneSerializerResult`, `PrefabSystem` `bool` returns, `FileMenu` `bool` flags all predate the codebase-wide policy. Migration on the broader engine-wide debt list. | `milnet01` | post-MIT release (Phase 12) |
 | 7 | Prefab variants / overrides not yet built (Unity-style override stack on instantiated prefabs). Current `PrefabSystem` is round-trip-only. | `milnet01` | triage (no scheduled phase) |
 | 8 | Custom ImGui allocator not wired (`ImGui::SetAllocatorFunctions` defaults to libc). Wiring it through the engine's allocator improves leak attribution and respects future arena policies. | `milnet01` | post-MIT release (Phase 12) |
-| 9 | Phase 10.9 W14 SpritePanel/TilemapPanel zombies — **closed 2026-04-25** (CHANGELOG: panels are now `Editor` members and `draw()` is invoked from `Editor::drawPanels`). No outstanding work; tracked here for traceability. | — | resolved |
-
-Each row above also corresponds to a `// TODO(YYYY-MM-DD milnet01)` comment near the affected code (CODING_STANDARDS §20).
+Each row above also corresponds to a `// TODO(YYYY-MM-DD milnet01)` comment near the affected code (CODING_STANDARDS §20). Closed items live in §16 (Spec change log), not here — §15 is for **open** questions.
 
 ## 16. Spec change log
 
 | Date | Spec version | Author | Change |
 |------|--------------|--------|--------|
 | 2026-04-28 | 1.0 | milnet01 | Initial spec — Phase 5 Scene Editor + Phase 10.5 First-Run Wizard, formalised post-Phase 10.9 audit. Phase 10.9 W14 SpritePanel/TilemapPanel zombies confirmed closed 2026-04-25 in CHANGELOG. |
+| 2026-04-30 | 1.0.1 | milnet01 | Cold-eyes review fix-up: §4 facade-coverage boundary clarified (semver-frozen API blocks vs not-semver-stable panel/tool/widget headers). §15 closed Q9 (W14) moved into this change log per template — §15 is for open questions only. |
