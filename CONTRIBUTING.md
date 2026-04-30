@@ -39,7 +39,7 @@ and this document explains how to participate effectively.
 ### Requirements
 
 - **C++17** compiler (GCC 9+, Clang 10+, MSVC 2019+)
-- **CMake** 3.20 or newer
+- **CMake** 3.21 or newer
 - **OpenGL 4.5** capable GPU and driver
 - **Linux**: `libgl1-mesa-dev`, `xorg-dev`, ALSA dev headers (for OpenAL Soft)
 - **Windows**: Visual Studio 2019+ with C++ workload

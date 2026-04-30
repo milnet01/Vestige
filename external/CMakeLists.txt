@@ -46,7 +46,7 @@ endmacro()
 #     under policy CMP0169. The Populate function is scheduled for
 #     eventual removal in some future CMake.
 #   - SOURCE_SUBDIR has been stable since CMake 3.18; project min is
-#     3.20. The trick is widely used for header-only / asset-only deps
+#     3.21. The trick is widely used for header-only / asset-only deps
 #     and CMake has no announced deprecation for it.
 #
 # IF a future CMake breaks this pattern (e.g. by failing when
@@ -105,7 +105,7 @@ _vestige_silence_upstream_dep_warnings()
 FetchContent_MakeAvailable(glm)
 _vestige_restore_dep_warnings()
 # GLM's include dirs are promoted to SYSTEM in engine/CMakeLists.txt via the
-# explicit Detour-style pattern (works on CMake 3.20.6 and later) — keep the
+# explicit Detour-style pattern (works on CMake 3.21.0 and later) — keep the
 # fix in one place rather than fragmenting it across both files.
 
 # tinyexr — EXR image loading (single-header, like stb_image)
@@ -128,7 +128,7 @@ FetchContent_Declare(
     # Skip add_subdirectory — the engine defines its own INTERFACE
     # target below using the populated source tree. SOURCE_SUBDIR
     # pointing at a non-existent path silences the CMP0169-deprecated
-    # FetchContent_Populate path (CMake 3.18+; project min is 3.20).
+    # FetchContent_Populate path (CMake 3.18+; project min is 3.21).
     SOURCE_SUBDIR  __engine_defines_target__
 )
 FetchContent_MakeAvailable(tinygltf)
@@ -434,7 +434,7 @@ if(VESTIGE_FETCH_ASSETS)
         # without trying to add_subdirectory, and avoids the
         # CMP0169-deprecated direct call to FetchContent_Populate.
         # SOURCE_SUBDIR has been available since CMake 3.18; project
-        # min is 3.20 so no bump needed.
+        # min is 3.21 so no bump needed.
         SOURCE_SUBDIR  __no_cmakelists_in_assets_repo__
     )
     FetchContent_MakeAvailable(vestige_assets)

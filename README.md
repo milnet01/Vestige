@@ -83,7 +83,7 @@ detailed phase plan.
 ### Requirements
 
 - **Compiler:** GCC 9+, Clang 10+, or MSVC 2019+ (C++17)
-- **CMake:** 3.20 or newer
+- **CMake:** 3.21 or newer
 - **GPU:** OpenGL 4.5-capable driver
 - **Linux system packages:** `libgl1-mesa-dev`, `xorg-dev`, ALSA dev
   headers (for OpenAL Soft). On Debian/Ubuntu:

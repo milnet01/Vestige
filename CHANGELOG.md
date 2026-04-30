@@ -9,6 +9,20 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-04-30 CMake floor 3.20 → 3.21 (OpenAL Soft 1.25.1 requirement)
+
+- **Build.** `cmake_minimum_required` raised from 3.20 to 3.21. OpenAL
+  Soft 1.25.1 (bumped in cb2e8fa) sets `C_STANDARD 17` on its own
+  targets, which CMake added support for in 3.21 — the cmake-compat
+  matrix runner pinned to 3.20.6 failed Configure with
+  `C_STANDARD is set to invalid value '17'`. Fix is to bump the floor,
+  not work around it: CMake 3.21 has been out since July 2021 and is
+  available on every supported distro / CI runner. The cmake-compat
+  matrix lower bound moves in lockstep to `3.21.0`. README,
+  CONTRIBUTING, ROADMAP, and physics-research docs updated; comments
+  in `external/CMakeLists.txt` and `engine/CMakeLists.txt` referencing
+  the old floor refreshed.
+
 ### 2026-04-27 Phase 10.9 — Ph2 (rayCast self-exclude + double-scaling fix)
 
 - **Ph2.** New `PhysicsWorld::rayCast` overload separates direction

@@ -368,7 +368,7 @@ endif()
 # GLM vendored headers trigger -Wsign-conversion in qualifier.hpp (packed_highp
 # array indexing on int literal). The CMake 3.25+ shorthand
 # `set_target_properties(glm-header-only PROPERTIES SYSTEM TRUE)` is silently
-# ignored on the 3.20.6 cmake-compat CI matrix runner — replicate the explicit
+# ignored on the 3.21.0 cmake-compat CI matrix runner — replicate the explicit
 # Detour pattern instead: pull GLM's interface include dirs and re-add them
 # to vestige_engine as SYSTEM PUBLIC so consumers see -isystem rather than -I.
 foreach(_glm_target glm-header-only glm::glm glm)

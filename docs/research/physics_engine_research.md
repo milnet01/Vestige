@@ -145,7 +145,7 @@ Either engine handles this. Jolt's XPBD approach is more modern and its skinning
 
 ### Jolt Physics
 
-- **Build system:** CMake 3.20+
+- **Build system:** CMake 3.21+
 - **C++ standard:** C++17 (set in CMakeLists.txt)
 - **Integration method:** CMake FetchContent (recommended), or add as subdirectory. Official `JoltPhysicsHelloWorld` repo demonstrates CMake integration.
 - **Header-only:** No -- compiles as a static/shared library, then linked.

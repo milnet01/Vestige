@@ -203,7 +203,7 @@ jobs:
 
   # CMake compatibility matrix. The main linux-build-test job runs against
   # whatever cmake ships with ubuntu-24.04 (currently 3.28.x). This separate
-  # compat job exercises the engine's declared minimum (3.20) and the latest
+  # compat job exercises the engine's declared minimum (3.21) and the latest
   # upstream release on each push/PR, so downstream users on either edge see
   # regressions surface in a PR check rather than a bug report. Release-only,
   # build-and-test (no audit), to keep the cost bounded. PRE_OPEN_SOURCE_AUDIT.md
@@ -216,7 +216,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        cmake: ["3.20.6", "latest"]
+        cmake: ["3.21.0", "latest"]
     steps:
       - name: Checkout
         uses: actions/checkout@v6
