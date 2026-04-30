@@ -17,6 +17,8 @@
 
 `engine/physics` owns every body that *moves under simulated forces* in the engine: rigid bodies (Jolt), the player / NPC capsule character controller (Jolt `CharacterVirtual`), constraints / joints (hinge / fixed / distance / point / slider, breakable), and cloth (Extended Position-Based Dynamics — XPBD — on the CPU, with a Phase 9B compute-shader backend on the GPU). It exists as its own subsystem because Jolt's worldview (`PhysicsSystem`, `BodyInterface`, `JobSystem`, broadphase + object-layer filters, fixed-step `Update`) does not compose cleanly with the rest of the engine's per-frame variable-rate loop, and because the cloth solver is a fundamentally different integration scheme (XPBD position-projection) that nevertheless needs to interoperate with rigid colliders. The engine's primary use case — first-person walkthroughs of biblical structures (Tabernacle, Solomon's Temple) — drives every choice here: walls and pillars are static rigid bodies that never wake, the player is a `CharacterVirtual` that climbs the bronze altar steps, the temple veil and tent coverings are cloth simulated to drape under their own weight, and a future replay pass (Phase 11A) will re-run the same fixed-timestep stream and reproduce the same drape — bit-for-bit on a single platform.
 
+**Units & coordinate convention** (per CODING_STANDARDS §27): metres, Y-up, right-handed; time in seconds; angles in radians at the API boundary; mass in kilograms; force in newtons. Jolt operates in these same conventions natively when configured with the engine's default settings — no axis-flip or unit-scale fixup is required, and `jolt_helpers.h` is straight component-wise vec3/quat/mat4 conversion.
+
 ## 2. Scope
 
 | In scope | Out of scope |
@@ -439,11 +441,11 @@ Per CLAUDE.md Rule 7. Physics core is **CPU**; cloth runs on **CPU XPBD by defau
 | Cloth XPBD particle integration / constraint solve / collision (large grids > 1024 particles) | GPU compute (`GpuClothSimulator`, GLSL `cloth_*.comp.glsl`) | Per-particle / per-constraint / per-triangle are exactly the per-element data-parallel shapes the §17 heuristic puts on the GPU. Greedy graph colouring lets distance + dihedral constraints solve atomic-free. |
 | Cloth normal recomputation | Same backend as the simulation | Per-vertex; runs in `cloth_normals.comp` on GPU, plain loop on CPU. |
 | Cloth-mesh BVH build + refit | CPU | Build is one-shot, branching; refit is O(N) bottom-up. |
-| Cloth self-collision broad-phase (spatial hash) | CPU | Counting-sort on the host side; cheap rebuild per substep. (GPU spatial hash deferred — Open Q5.) |
+| Cloth self-collision broad-phase (spatial hash) | CPU | Counting-sort on the host side; cheap rebuild per substep. (GPU spatial hash deferred.) |
 | Backend auto-selection (`chooseClothBackend`) | CPU | One-shot decision at `ClothComponent::initialize()`. |
 | Debug wireframe (`PhysicsDebugDraw`) | CPU vertex generation, GPU rasterisation | Branching collider iteration on CPU; rendering goes through `engine/renderer/debug_draw.h`. |
 
-**Dual implementation:** `ClothSimulator` (CPU, the spec) and `GpuClothSimulator` (GPU, the runtime above 1024 particles) implement the same `IClothSolverBackend` contract. Both run XPBD with identical mathematical structure (same compliance-formulation, same Jacobi-style position correction per colour group). The **Phase 10.9 Cl1 parity test** at `tests/test_cloth_simulator_parity.cpp` (planned — see §15 Open Q5) drives identical `ClothConfig` on both backends for 2 s of simulated time and asserts per-particle position delta < ε. Until that test ships, parity is held by visual inspection plus the per-component tests (`test_cloth_simulator.cpp`, `test_gpu_cloth_simulator.cpp`) that exercise each backend's behaviour against a deterministic CPU reference computation.
+**Dual implementation:** `ClothSimulator` (CPU, the spec) and `GpuClothSimulator` (GPU, the runtime above 1024 particles) implement the same `IClothSolverBackend` contract. Both run XPBD with identical mathematical structure (same compliance-formulation, same Jacobi-style position correction per colour group). **The Phase 10.9 Cl1 parity test does not yet exist on disk** — it will land at `tests/test_cloth_simulator_parity.cpp` and drive identical `ClothConfig` on both backends for 2 s of simulated time and assert per-particle position delta < ε. Tracked as §15 Open Q6 (Cl1). Until that test ships, parity is held by visual inspection plus the per-component tests (`test_cloth_simulator.cpp`, `test_gpu_cloth_simulator.cpp`) that exercise each backend's behaviour against a deterministic CPU reference computation.
 
 ## 7. Threading model
 
@@ -556,7 +558,7 @@ Per CODING_STANDARDS §11 — no exceptions on the steady-state path.
 
 **Adding a test for `engine/physics`:** drop a new `tests/test_<thing>.cpp` next to its peers; link against `vestige_engine` + `gtest_main` in `tests/CMakeLists.txt` (auto-discovered via `gtest_discover_tests`). Use `PhysicsWorld` directly without an `Engine` instance — every primitive in this subsystem **except `GpuClothSimulator`** is unit-testable headlessly. GPU cloth tests use `engine/testing/visual_test_runner.h` to obtain a current GL 4.5 context and skip cleanly when none is available. Deterministic seeding uses `engine/utils/deterministic_lcg_rng.h` (cloth wind seed; same seed → bit-identical wind force on both CPU and GPU backends).
 
-**Coverage gap:** the **CPU↔GPU cloth parity harness** (Phase 10.9 Cl1, Open Q5) is not yet shipped — the §6 dual-implementation rule cites it as the parity test, and until it lands we rely on per-backend tests + visual inspection. `PhysicsWorld::initialize` failure modes other than OOM are not exercised (Jolt's failure surface is small and assertion-driven, not return-code-driven). The full `Engine::run` loop is exercised through every other `tests/test_*` that links the engine library plus the visual-test harness.
+**Coverage gap:** the **CPU↔GPU cloth parity harness** (Phase 10.9 Cl1, Open Q6) is not yet shipped — the §6 dual-implementation rule cites it as the parity test, and until it lands we rely on per-backend tests + visual inspection. `PhysicsWorld::initialize` failure modes other than OOM are not exercised (Jolt's failure surface is small and assertion-driven, not return-code-driven). The full `Engine::run` loop is exercised through every other `tests/test_*` that links the engine library plus the visual-test harness.
 
 ## 12. Accessibility
 
@@ -580,7 +582,7 @@ Constraint summary for downstream UIs / gameplay code:
 | `engine/utils/aabb.h` | engine subsystem (transitive via core / scene) | Box collider math. |
 | `engine/core/logger.h` | engine subsystem | Error / warn / info routing; Jolt `Trace` + `AssertFailed` shimmed through `Logger`. |
 | `engine/renderer/dynamic_mesh.h`, `renderer/material.h`, `renderer/shader.h`, `renderer/debug_draw.h`, `renderer/camera.h`, `renderer/mesh.h` | engine subsystem | Cloth mesh upload, debug overlay, fabric material, GPU cloth shader load. **Dependency direction is one-way: physics depends on renderer for asset / draw plumbing; renderer does not depend on physics.** |
-| `Jolt/Jolt.h` + `Jolt/Physics/...` (Jolt 5.x) | external (third-party) | Rigid-body simulation, constraints, character controller. Determinism guaranteed Windows / Linux / macOS within a single CPU architecture (jrouwe/JoltPhysics 5.3.0 release notes). |
+| `Jolt/Jolt.h` + `Jolt/Physics/...` — **pinned at v5.2.0** (`external/CMakeLists.txt:329`) | external (third-party) | Rigid-body simulation, constraints, character controller. Cross-platform character determinism (Windows / Linux / macOS within a single CPU architecture) was introduced in upstream Jolt 5.3.0 — **the engine has not yet bumped to 5.3.0**, so character-replay parity across hosts is not yet a guarantee here. Tracked in §15 (Jolt-version posture). |
 | `<glm/glm.hpp>`, `<glm/gtc/quaternion.hpp>` | external | Engine-side math (vec3 / quat / mat4) — bridged to Jolt via `jolt_helpers.h`. |
 | `<glad/gl.h>` | external | OpenGL 4.5 entry points (GPU cloth SSBOs / compute dispatch). |
 | `<map>`, `<memory>`, `<vector>`, `<cstdint>`, `<thread>`, `<cmath>`, `<cstdarg>`, `<cstdio>`, `<string>` | std | Constraint storage, RAII, particle SoA, type widths, Jolt thread-count probe, Jolt trace formatting. |
@@ -591,8 +593,8 @@ Constraint summary for downstream UIs / gameplay code:
 
 External cited sources (≤ 1 year old where possible):
 
-- jrouwe / Jolt Physics 5.x **Release Notes**, 5.1.0 / 5.2.0 / 5.3.0 — cross-platform determinism across Windows / Linux / macOS / WASM, removal of legacy integration sub-steps, `CharacterID` for replay determinism. <https://jrouwe.github.io/JoltPhysicsDocs/5.1.0/md__docs__release_notes.html> · <https://github.com/jrouwe/JoltPhysics/blob/master/Docs/ReleaseNotes.md>
-- Jorrit Rouwe. *Jolt Physics 5.3.0 release announcement (2025-03-15)* — cross-platform character determinism validation. <https://x.com/jrouwe/status/1901025550983946259>
+- jrouwe / Jolt Physics 5.x **Release Notes** — engine pin is **v5.2.0**. The 5.3.0 / 5.4.0+ items below describe upstream features the engine has *not* yet adopted; they're cited here as the upgrade target, not as shipped behaviour. <https://jrouwe.github.io/JoltPhysicsDocs/5.1.0/md__docs__release_notes.html> · <https://github.com/jrouwe/JoltPhysics/blob/master/Docs/ReleaseNotes.md>
+- Jorrit Rouwe. *Jolt Physics 5.3.0 release announcement (2025-03-15)* — cross-platform character determinism validation; **upstream-available, not yet in the engine pin**. <https://x.com/jrouwe/status/1901025550983946259>
 - Miles Macklin, Matthias Müller, Nuttapong Chentanez. *XPBD: Position-Based Simulation of Compliant Constrained Dynamics* (MIG 2016) — the iteration-count and timestep-independent compliance formulation underpinning `ClothSimulator`. <https://matthias-research.github.io/pages/publications/XPBD.pdf>
 - *MGPBD: A Multigrid Accelerated Global XPBD Solver* (arXiv 2025-05) — current-research benchmark; informs why the engine sticks with greedy-colour Jacobi for now (multigrid not justified at the cloth sizes shipped). <https://arxiv.org/html/2505.13390v1>
 - *DiffXPBD: Differentiable Position-Based Simulation of Compliant Constraint Dynamics* (ACM 2023, ongoing line of work) — confirms XPBD remains the dominant cloth approach in 2025-era research. <https://dl.acm.org/doi/10.1145/3606923>
@@ -634,6 +636,8 @@ Internal cross-references:
 | 12 | Performance budgets in §8 are placeholders — needs a one-shot Tracy / RenderDoc capture against the demo scene + a 64×64 GPU cloth panel to fill in measured numbers. | milnet01 | Phase 11 audit |
 | 13 | Replay determinism (Phase 11A): no per-tick state hash exists yet. Once added, mismatch detection during replay catches `-ffast-math` regressions, NaN propagation, and worker-count drift. | milnet01 | Phase 11A entry |
 | 14 | Cloth wind seed currently lives on `ClothSimulator` only — `GpuClothSimulator` does not yet thread the seed through to its wind compute shader. Will surface as a parity-test failure once Cl1 lands. | milnet01 | Phase 10.9 Slice 17 close (with Cl1) |
+| 15 | **Jolt-version posture** (CLAUDE.md Rule 8). Engine pin = v5.2.0; upstream master / 5.3.0+ has cross-platform character determinism, sensor-static detection, constraint priority, RISC-V SIMD, additional perf optimisations. Bump + rerun parity tests (no-op on engine-side code is the goal; Jolt API churn at minor versions is small). | milnet01 | Phase 11 entry |
+| 16 | **CODING_STANDARDS §30 drift.** §30 names `engine/physics/jolt_layers.h` and `JoltHelpers::initialize` — the actual files are `engine/physics/physics_layers.h` and `jolt_helpers.h` (with free-function vec3/quat/mat4 conversions, no `initialize`). §30 needs the references corrected. | milnet01 | next CODING_STANDARDS pass |
 
 ## 16. Spec change log
 

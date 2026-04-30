@@ -37,7 +37,7 @@
 | `RigidBody2DComponent`, `Collider2DComponent`, `CharacterController2DComponent` + `stepCharacterController2D` | Jolt body lifecycle, contact listener — `engine/systems/physics2d_system.h`, `engine/physics/` |
 | `Camera2DComponent` + `updateCamera2DFollow` deadzone / spring helper | The 3D-camera follow code — `engine/core/first_person_controller.h` |
 | `game_templates_2d.h` — `createSideScrollerTemplate` / `createShmupTemplate` (build-a-starter-scene helpers) | Real art binding — `engine/editor/` |
-| `SceneRenderData` — POD bundle the renderer reads (render items, lights, particle / water emitters, cloth items) | Render-item submission to GPU — `engine/renderer/` |
+| `SceneRenderData` — Plain Old Data (POD) bundle the renderer reads (render items, lights, particle / water emitters, cloth items) | Render-item submission to Open Graphics Library (OpenGL) — `engine/renderer/` |
 | Mid-update mutation contract — `Scene::beginUpdate / endUpdate / ScopedUpdate`, deferred add / remove queues | Script node implementations that depend on this contract — `engine/scripting/` |
 | Photosensitive-safe forwarding — `Scene::collectRenderData` propagates `photosensitiveEnabled` + `PhotosensitiveLimits` to `getCoupledLight` | Photosensitive-cap definitions / sliders — `engine/accessibility/` |
 
@@ -86,7 +86,7 @@ Key abstractions:
 | `SceneManager` | class | Named-scene registry + active-scene pointer; per-frame `update(dt)` dispatch. `engine/scene/scene_manager.h:18` |
 | `Scene` | class | Entity tree + id index + active camera + mid-update mutation queue. `engine/scene/scene.h:89` |
 | `SceneRenderData` | struct (POD) | What the renderer pulls per frame: opaque + transparent items, lights, particle emitters, water surfaces, cloth. `engine/scene/scene.h:36` |
-| `Scene::ScopedUpdate` | nested RAII class | Marks a scene as "currently iterating" so `createEntity` / `removeEntity` queue rather than mutate the tree. `engine/scene/scene.h:242` |
+| `Scene::ScopedUpdate` | nested Resource Acquisition Is Initialization (RAII) class | Marks a scene as "currently iterating" so `createEntity` / `removeEntity` queue rather than mutate the tree. `engine/scene/scene.h:242` |
 | `Entity` | class | Tree node — transform, parent, children, component map, world matrix cache. `engine/scene/entity.h:72` |
 | `Transform` | struct | Position / Euler / scale + matrix-override escape hatch (skeletal authors set the matrix directly). `engine/scene/entity.h:23` |
 | `Component` | abstract base | Per-type attached behaviour; pure-virtual `clone()` so `Entity::clone` deep-copies every subclass. `engine/scene/component.h:33` |
@@ -565,13 +565,13 @@ Profiler markers / capture points: `engine/scene` does not emit `glPushDebugGrou
 
 | Aspect | Value |
 |--------|-------|
-| Allocation pattern | Heap (`std::unique_ptr<Entity>` + `std::unique_ptr<Component>` everywhere). No arena, no per-frame transient allocator. `SceneRenderData` and the collider list are reused — capacity is preserved across frames per the capacity-preserving overload contract (`engine/scene/scene.h:117,127`). |
+| Allocation pattern | Heap (`std::unique_ptr<Entity>` + `std::unique_ptr<Component>` everywhere). No arena, no per-frame transient allocator. `SceneRenderData` and the collider list are reused — capacity is preserved across frames per the capacity-preserving overload contract documented in the doc-comments immediately above `Scene::collectRenderData` and `Scene::collectColliders` declarations in `engine/scene/scene.h`. |
 | Reusable per-frame buffers | The renderer / engine owns a `SceneRenderData` and `std::vector<AABB>` it passes to `collect*` so per-frame heap traffic is zero in steady state. |
 | Peak working set | Demo scenes: low single-digit MiB total (a Tabernacle scene with ~200 entities, each ≤ 4 components, plus typical tilemap layers, fits comfortably). Particle SoA is `maxParticles × ~80 bytes` per emitter (CPU path); the GPU path lives in shader-storage buffers in `engine/renderer/`. Tilemap layers are `width × height × 2 bytes` (Tile Identifier (TileID) is 16-bit). Architectural-walkthrough scenes scale to tens of thousands of entities; this is the dominant memory consumer in practice. |
 | Ownership | `SceneManager` owns scenes via `std::unique_ptr<Scene>`. `Scene` owns the root `Entity`. Each `Entity` owns its children + components. `MeshRenderer` holds `std::shared_ptr<Mesh>` / `Material` (mesh / material are renderer-owned, scene-shared). |
 | Lifetimes | Scene-load duration. Components live until their entity is removed. The mutation queue is per-frame transient — non-empty only between `beginUpdate` and `drainPendingMutations`. |
 
-No `new` / `delete` in feature code (CODING_STANDARDS §12); the GPU-owning components allocate Open Graphics Library (OpenGL) handles in their constructor / `init` and release in their destructor (Resource Acquisition Is Initialization (RAII)).
+No `new` / `delete` in feature code (CODING_STANDARDS §12); the GPU-owning components allocate OpenGL handles in their constructor / `init` and release in their destructor (RAII).
 
 ## 10. Error handling
 

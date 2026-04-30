@@ -551,9 +551,9 @@ Jolt is the engine's physics backend (`engine/physics/`). Jolt-touching code fol
 |-------|------|
 | Body creation | through `PhysicsWorld::createStaticBody` / `createDynamicBody` / `createKinematicBody`; never `BodyInterface::CreateBody` directly from feature code |
 | Body IDs | `JPH::BodyID()` is the sentinel — use `id.IsInvalid()`, never `id == 0` |
-| Layers | `BroadPhaseLayer` and `ObjectLayer` constants live in `engine/physics/jolt_layers.h` — feature code references named constants, never raw integers |
+| Layers | `BroadPhaseLayer` and `ObjectLayer` constants live in `engine/physics/physics_layers.h` — feature code references named constants, never raw integers |
 | Step | the engine's configured fixed timestep (`PhysicsWorldConfig::fixedTimestep`, set at world-init time); never call `Update` with a variable `dt` from the render loop |
-| Coordinate convention | matches the engine: metres, Y-up, right-handed (CODING_STANDARDS section 27); Jolt is configured in `JoltHelpers::initialize` to match |
+| Coordinate convention | matches the engine: metres, Y-up, right-handed (CODING_STANDARDS section 27). Jolt operates natively in these conventions; `engine/physics/jolt_helpers.h` provides component-wise `glm::vec3 ↔ JPH::Vec3`, `glm::quat ↔ JPH::Quat`, `glm::mat4 ↔ JPH::Mat44` conversions (no axis-flip, no unit-scale fixup) |
 | Allocator | Jolt's `TempAllocatorImpl` is shared per `PhysicsWorld`; do not create per-call `TempAllocator` instances |
 
 Float-determinism: physics translation units must **not** compile with `-ffast-math` (or `/fp:fast`). Replay / save-game parity depends on bit-identical IEEE-754 behaviour; fast-math reorders FMAs and breaks NaN propagation.
