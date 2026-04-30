@@ -107,7 +107,9 @@ Key abstractions:
 
 ## 4. Public API
 
-The subsystem exposes a deliberately small facade. Per the project convention (CODING_STANDARDS §18) downstream code only `#include`s the headers below; everything else under `engine/scripting/` is implementation detail.
+The subsystem exposes a deliberately small facade. Per CODING_STANDARDS §18 downstream code only `#include`s the headers below; everything else under `engine/scripting/` is implementation detail.
+
+**Header inventory:** `engine/scripting/` has 19 headers. The 9 grouped below are **public**: `scripting_system`, `script_graph`, `script_compiler`, `script_instance`, `script_context`, `script_value`, `blackboard`, `node_type_registry`, `script_templates`. The other 10 (`script_events`, `script_component`, `pin_id`, `script_common`, plus the six node-pack registration headers `core_nodes` / `event_nodes` / `flow_nodes` / `action_nodes` / `latent_nodes` / `pure_nodes`) are **support / internal**: they are referenced by §3 abstractions but are either consumed only by `ScriptingSystem` itself (the node packs) or are small leaf types (`pin_id`, `script_common`) that don't need their own §4 entry. There is no `engine/scripting/internal/` subdirectory yet — this is the convention adopted in §18 spirit; a future cleanup pass may move the support headers there.
 
 ```cpp
 /// scripting_system.h — system owner, registered with SystemRegistry.
@@ -283,7 +285,7 @@ The `pin_id.h` head comment makes the contract explicit: the intern table is sin
 
 ## 8. Performance budget
 
-60 frames-per-second hard requirement (CLAUDE.md) → 16.6 millisecond (ms) per-frame budget. Phase 9E §1 set the design target at **< 0.5 ms per frame for 50 active scripts**.
+60 frames-per-second hard requirement (CLAUDE.md) → 16.6 millisecond (ms) per-frame budget. Phase 9E §1 set the design target at **< 0.5 ms per frame for 50 active scripts**. **The Budget column states the engineering targets** (validated qualitatively by the test harness running ~50-instance synthetic scenes); the Measured column is uniformly TBD pending the Phase 11 audit (Open Q5) — no fabricated numbers, no capture run yet.
 
 | Path | Budget | Measured (RX 6600, 1080p) |
 |------|--------|----------------------------|

@@ -66,7 +66,7 @@ Key abstractions:
 
 | Abstraction | Type | Purpose |
 |-------------|------|---------|
-| `NavMeshBuilder` | class (RAII; non-copyable) | Bakes a Detour navmesh from scene geometry via the 10-step Recast pipeline. `engine/navigation/nav_mesh_builder.h:28` |
+| `NavMeshBuilder` | class (RAII; non-copyable) | Bakes a Detour navmesh from scene geometry via the standard Recast pipeline (rasterise → filter → compact → erode → distance-field → regions → contours → poly mesh → detail mesh). `engine/navigation/nav_mesh_builder.h:28` |
 | `NavMeshBuildConfig` | struct (POD) | All knobs for a bake (cell size, agent dims, region thresholds, simplification). `engine/navigation/nav_mesh_config.h:15` |
 | `NavMeshQuery` | class (RAII; non-copyable) | A\* path search + snap + on-mesh test against a built navmesh. `engine/navigation/nav_mesh_query.h:60` |
 | `PathResult` | struct | `waypoints` + `partial` flag — distinguishes "arrived" from "best-guess stop short of unreachable target." `engine/navigation/nav_mesh_query.h:26` |
@@ -162,9 +162,9 @@ class NavigationSystem : public ISystem
 
 **Non-obvious contract details:**
 
-- `NavMeshBuilder::buildFromScene` is **synchronous and main-thread-only** today — it issues `glGetBufferSubData` against every `MeshRenderer`'s VAO/VBO/EBO. The OpenGL (GL) context is single-thread-affine, so the bake cannot move to a worker without first decoupling geometry collection from the GL readback (see §7 + Open Q6). The bake *can* be expensive on large architectural scenes; budgets are §8.
+- `NavMeshBuilder::buildFromScene` is **synchronous and main-thread-only** today — it issues `glGetBufferSubData` against every static `MeshRenderer`'s VAO/VBO/EBO. (Per `nav_mesh_builder.h:23` the bake walks **static** mesh entities only; dynamic / animated meshes don't contribute to the navmesh.) The OpenGL (GL) context is single-thread-affine, so the bake cannot move to a worker without first decoupling geometry collection from the GL readback (see §7 + Open Q6). The bake *can* be expensive on large architectural scenes; budgets are §8.
 - `NavMeshBuilder::getNavMesh()` returns a **borrowed** `dtNavMesh*`. Lifetime is tied to the builder; `clear()` frees it. Callers (`NavMeshQuery::initialize`) must not call `dtFreeNavMesh` on it.
-- `NavMeshQuery::initialize` borrows the navmesh — it does not extend lifetime. If the builder is cleared, the query goes invalid; `NavigationSystem::clearNavMesh` correctly shuts the query down before clearing the builder (`navigation_system.cpp:67`).
+- `NavMeshQuery::initialize` borrows the navmesh — it does not extend lifetime. If the builder is cleared, the query goes invalid; `NavigationSystem::clearNavMesh` correctly shuts the query down before clearing the builder (`navigation_system.cpp:68` — `m_query.shutdown()` precedes `m_builder.clear()` on line 69).
 - `NavMeshQuery::findPath` is the **legacy** overload — it discards the partial-result flag for back-compat with pre-Slice-3-S8 call sites. New code calls `findPathWithStatus` and branches on `PathResult::partial`.
 - `findNearestPoint` returns the **input point unchanged** when the point is not within the search extents (`{2.0, 4.0, 2.0}` m half-extents). Callers that need to distinguish "snapped" from "off-mesh" must call `isPointOnNavMesh` first.
 - `extractPolygonEdges` skips off-mesh connections (`DT_POLYTYPE_OFFMESH_CONNECTION`) — those are 2-vertex links between disjoint patches and would draw misleading line segments in a polygon-outline overlay.
