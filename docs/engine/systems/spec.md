@@ -88,7 +88,7 @@ Status by system (shipping behaviour as of Phase 10.9):
 | `NavigationSystem` | `navigation_system.{h,cpp}` | active (editor-driven bake; runtime queries) | `NavMeshBuilder`, `NavMeshQuery` | `Update` | no | `NavAgentComponent` |
 | `ParticleVfxSystem` | `particle_system.{h,cpp}` | empty-pump (component-driven) | `ParticleRenderer` | `Update` | no | `ParticleEmitterComponent`, `GPUParticleEmitter` |
 | `Physics2DSystem` | `physics2d_system.{h,cpp}` | active | shares `PhysicsWorld` (3D Jolt) | `Update` | no | (uses scene-load hook; bodies tracked by entity id) |
-| `SpriteSystem` | `sprite_system.{h,cpp}` | active | `SpriteRenderer` | `Update` | no | `SpriteComponent` (driven by scene traversal) |
+| `SpriteSystem` | `sprite_system.{h,cpp}` | active | `SpriteRenderer` | `Update` | no | inherits empty default — `SpriteComponent` ticking happens via scene traversal, not via `getOwnedComponentTypes()` registration |
 | `TerrainSystem` | `terrain_system.{h,cpp}` | active | `Terrain`, `TerrainRenderer` | `Update` | yes | none (global heightfield) |
 | `UISystem` | `ui_system.{h,cpp}` | active | `SpriteBatchRenderer`, `UICanvas`, `UITheme`, `NotificationQueue` | `Render` | yes | none (HUD / menus are global) |
 | `VegetationSystem` | `vegetation_system.{h,cpp}` | active | `FoliageManager`, `FoliageRenderer`, `TreeRenderer` | `Update` | no | none (environment-based) |

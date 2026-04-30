@@ -15,7 +15,7 @@
 
 ## 1. Purpose
 
-`engine/environment` owns the **world-state primitives** that the rest of the engine queries to know "what does the air do here, what does the ground look like here, what grows here." It bundles four otherwise-orphan concerns under one roof: (a) `EnvironmentForces` — the canonical source of wind / weather / buoyancy / temperature / humidity / wetness / air-density queries that cloth, foliage, particles, water, and (future) audio reverb consume so they all see the **same** gust at the **same** instant; (b) `Terrain` — the heightmap-backed CDLOD (Continuous Distance-Dependent Level of Detail) ground surface with splatmap, normal map, raycast, and partial-region GPU upload; (c) `FoliageManager` + `FoliageChunk` — a 16 m × 16 m chunk grid storing grass / scatter / tree instances for paint-erase-cull workflows, plus the `BiomePreset` library and `DensityMap` for spatial modulation; (d) `SplinePath` — Catmull-Rom paths for roads / streams / clear-along-path operations. It exists as a separate subsystem because the renderer, physics, scene serialiser, and editor each touch a different subset of these primitives and pushing them inward (e.g. into renderer) would force unrelated subsystems to depend on each other through an unrelated path. For the engine's primary use case — first-person walkthroughs of biblical structures — `engine/environment` is what gets the user from "the Tabernacle is sitting on a flat green plane" to "the Tabernacle is on a sand-and-rock wadi with palms swaying in a gust that the cloth tent walls also feel."
+`engine/environment` owns the **world-state primitives** that the rest of the engine queries to know "what does the air do here, what does the ground look like here, what grows here." It bundles four otherwise-orphan concerns under one roof: (a) `EnvironmentForces` — the **planned** canonical source of wind / weather / buoyancy / temperature / humidity / wetness / air-density queries. **The data structure ships and the API is stable; today no live consumer has been wired in yet** — every subsystem that ought to read it (cloth / foliage / particles / water / audio reverb) currently uses its own internal wind / weather state. Reconciling those readers onto the shared source is tracked across §15 (per-consumer rows) and the Phase 9B Atmosphere & Weather rollout. (b) `Terrain` — the heightmap-backed CDLOD (Continuous Distance-Dependent Level of Detail) ground surface with splatmap, normal map, raycast, and partial-region GPU upload; (c) `FoliageManager` + `FoliageChunk` — a 16 m × 16 m chunk grid storing grass / scatter / tree instances for paint-erase-cull workflows, plus the `BiomePreset` library and `DensityMap` for spatial modulation; (d) `SplinePath` — Catmull-Rom paths for roads / streams / clear-along-path operations. It exists as a separate subsystem because the renderer, physics, scene serialiser, and editor each touch a different subset of these primitives and pushing them inward (e.g. into renderer) would force unrelated subsystems to depend on each other through an unrelated path. For the engine's primary use case — first-person walkthroughs of biblical structures — `engine/environment` is the foundation that gets the user from "the Tabernacle is sitting on a flat green plane" to "the Tabernacle is on a sand-and-rock wadi with palms swaying in a gust that the cloth tent walls *will also* feel once §15 wiring lands."
 
 ## 2. Scope
 
@@ -51,7 +51,7 @@ If a reader can't tell which side of the line a feature falls on, the row needs 
                  │  wind / weather / buoyancy queries │    Engine::m_environmentForces
                  │  gust state machine + RNG          │    (engine/core/engine.h:224)
                  └─────────────┬──────────────────────┘
-                               │ queried (read-only) by
+                               │ queried (read-only) by — *planned*
    ┌──────────────────┬────────┼────────┬───────────────────┬──────────────┐
    ▼                  ▼        ▼        ▼                   ▼              ▼
 ClothSimulator   FoliageRenderer  WaterRenderer  ParticleSystem   (future) AudioReverb
@@ -118,7 +118,7 @@ Key abstractions:
 
 ## 4. Public API
 
-`engine/environment` exposes seven public headers — past the seven-header cutoff for the inline-listing pattern (CODING_STANDARDS section 18), so this section uses the **per-header grouped form**. Each block summarises the public surface; the headers are the canonical reference.
+`engine/environment` exposes eight public headers — past the seven-header cutoff for the inline-listing pattern (CODING_STANDARDS section 18), so this section uses the **per-header grouped form**. Each block summarises the public surface; the headers are the canonical reference.
 
 ```cpp
 // engine/environment/environment_forces.h — central wind / weather / buoyancy queries.
@@ -394,7 +394,7 @@ public:
    3. `m_cachedFlutter` is recomputed from `m_elapsed` (two-sine combination).
    4. `m_weather.wetness` integrates: precipitation > 0 saturates in ~30 s; otherwise dries in ~120 s.
 2. Read-side, in any later phase / system / shader-uniform pack: `getWindVelocity(pos)` / `getWindForce(pos, A, n)` / `getWetness(pos)` / `getBuoyancy(pos, V, ρ)` — all `const`, cheap.
-3. Cloth simulator pulls per-frame `windVel = environmentForces.getWindVelocity(centroid)` (`engine/physics/cloth_simulator.cpp:633`).
+3. **Planned (not yet wired):** cloth / foliage / particle / water consumers will pull per-frame `windVel = environmentForces.getWindVelocity(centroid)`. Today none of them do — `ClothSimulator::getWindVelocity` (`engine/physics/cloth_simulator.cpp:633`) returns its **own** internal `m_windDirection * m_windStrength` rather than calling into `EnvironmentForces`. Phase 9B Atmosphere & Weather rollout reconciles each consumer; until then the readers in this step are aspirational.
 4. Foliage / water / particle renderers similarly query per draw / per frame; the cached flutter ensures consistency.
 
 **Terrain hot path (per-frame render):**
@@ -497,7 +497,7 @@ Per CODING_STANDARDS section 11 — no exceptions in steady state.
 | `Terrain::raycast` no intersection within `maxDist` | `return false`; `outHit` unchanged | Caller treats as a miss. |
 | `Terrain` query out-of-bounds (`getHeight(worldX, worldZ)` outside heightmap) | Returns clamped-edge height (no error); same for `getNormal` (clamped). | Caller may pre-check `getWorldWidth()` / `getWorldDepth()` if it wants to detect off-map queries. |
 | `EnvironmentForces` query at any position | Always defined (no OOB concept — wind is global); positions far from origin yield large hash inputs but still finite floats. | n/a — no failure path. |
-| `EnvironmentForces::setWindDirection({0,0,0})` (degenerate) | Silently ignored (length check ≤ 1e-4 in `environment_forces.cpp:316`); previous direction retained. | Caller passes a non-zero vector. |
+| `EnvironmentForces::setWindDirection({0,0,0})` (degenerate) | Silently ignored (length check `< 0.0001f` in `environment_forces.cpp:314`); previous direction retained. | Caller passes a non-zero vector. |
 | `EnvironmentForces::getWeather()` when never set | Returns `WeatherState{}` defaults (20 °C, 0.5 humidity, no precipitation, 0 wetness, 30% cloud cover, 1.225 kg/m³). | None — defaults are by design. |
 | `FoliageManager::placeTree` too close to existing tree | Returns empty undo-record vector; no `Logger` noise (paint-rate operation). | Caller treats empty as "rejected, try elsewhere." |
 | `FoliageManager::getChunk(gx, gz)` no such chunk | Returns `nullptr`. | Caller null-checks. |
