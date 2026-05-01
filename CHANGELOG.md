@@ -9,6 +9,33 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-05-02 Phase 10.9 — E3 closed by finding (mirrors W11 closure)
+
+- **E3.** GPU foliage culling via `frustum_cull.comp.glsl` was *not* implemented;
+  closed by pre-implementation audit finding. `FoliageManager::getVisibleChunks`
+  (`engine/environment/foliage_manager.cpp:528`) already runs CPU per-chunk
+  frustum culling via `isAabbInFrustum` (`engine/utils/frustum.h:62`) before
+  the chunk list reaches `FoliageRenderer::render` — same p-vertex test the
+  compute shader performs, just on the CPU. Wiring the compute shader at
+  per-(chunk×type) MDI granularity would re-test AABBs the CPU already
+  accepted, with dispatch + buffer-upload overhead exceeding the few-µs CPU
+  loop on a typical few-thousand-chunk world. The compute shader only pays
+  rent at per-instance scale (~millions of grass blades), and that requires
+  the same per-instance compaction redesign W11 already named (per-instance
+  AABB SSBO, atomic-counter compaction, MDI command-build on GPU) — multi-slice
+  work that is a phase, not a slice item. Same closure shape as W11 (which
+  deleted `GpuCuller` for the parallel reason in the renderer's MDI path).
+  Kept: `assets/shaders/frustum_cull.comp.glsl` — its `commands[]`-SSBO +
+  `objects[]`-SSBO contract still matches what a future per-instance
+  compaction phase will consume. Retargeted `engine/renderer/renderer.h`'s
+  future-caller comment block from "ROADMAP E3" to "future per-instance
+  compaction phase" so the architectural pointer survives. No production
+  code touched, no tests added or removed. Recorded as a finding because
+  the right answer was "don't add code"; a future per-instance compaction
+  phase should re-open under a new ticket scoped explicitly at that
+  granularity rather than inherit E3's framing. Slice 10 closes with E1+E2
+  shipped, E3 closed-by-finding, E4 already shipped.
+
 ### 2026-05-02 Phase 10.9 — E2 (`SplinePath::evaluateByArcLength` constant-speed accessor)
 
 - **E2.** New `SplinePath::evaluateByArcLength(float s)` returns the

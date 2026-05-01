@@ -689,9 +689,13 @@ private:
     static constexpr int MIN_INSTANCE_BATCH_SIZE = 2;
 
     // Multi-Draw Indirect (MDI). CPU-side frustum culling happens in scene
-    // gather; per-instance GPU culling is future work (see ROADMAP E3, which
-    // plans to reuse assets/shaders/frustum_cull.comp.glsl from the foliage
-    // system).
+    // gather; per-instance GPU culling is future work for a later
+    // per-instance-compaction phase (per-instance AABB SSBO, atomic-counter
+    // compaction, MDI command-build on GPU) that would reuse
+    // assets/shaders/frustum_cull.comp.glsl. Note: ROADMAP E3 was closed by
+    // finding 2026-05-02 — wiring the compute shader at per-chunk granularity
+    // is redundant with FoliageManager::getVisibleChunks's CPU isAabbInFrustum
+    // pass, so the future caller is the per-instance compaction work, not E3.
     std::unique_ptr<MeshPool> m_meshPool;
     std::unique_ptr<IndirectBuffer> m_indirectBuffer;
     bool m_mdiEnabled = false;  // Disabled until mesh pool is populated
