@@ -11,6 +11,7 @@
 #include <glm/glm.hpp>
 
 #include <string>
+#include <unordered_map>
 
 struct GLFWwindow;
 
@@ -80,6 +81,13 @@ private:
     glm::vec2 m_mouseDelta;
     glm::vec2 m_scrollDelta;
     bool m_isFirstMouse;
+
+    // Phase 10.9 Slice 9 I1 — scancode-indexed key state, fed by
+    // keyCallback. Replaces the prior `glfwGetKey(window, keycode)`
+    // poll so keyboard bindings store the layout-independent physical
+    // position.  Sparse map: only scancodes the user has actually
+    // pressed appear; absent → released.
+    std::unordered_map<int, bool> m_keyDownByScancode;
 };
 
 } // namespace Vestige

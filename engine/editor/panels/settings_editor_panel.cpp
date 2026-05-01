@@ -589,13 +589,22 @@ void SettingsEditorPanel::drawRebindModal()
         if (!captured.isBound())
         {
             // Keyboard capture — first supported key just pressed.
+            // I1: convert the ImGui-derived keycode to a platform scancode
+            // so the saved binding is layout-independent. If GLFW has no
+            // scancode for this keycode (rare; e.g. device-disconnected
+            // edge case), drop the capture rather than persisting an
+            // unbound entry.
             const ImGuiKey k = firstJustPressedKey();
             if (k != ImGuiKey_None)
             {
                 const int glfwCode = imguiKeyToGlfwKey(k);
                 if (glfwCode >= 0)
                 {
-                    captured = InputBinding::key(glfwCode);
+                    const int sc = glfwGetKeyScancode(glfwCode);
+                    if (sc >= 0)
+                    {
+                        captured = InputBinding::scancode(sc);
+                    }
                 }
             }
         }

@@ -317,14 +317,17 @@ bool Engine::initialize(const EngineConfig& config)
                 a.primary  = primary;
                 m_inputActionMap.addAction(a);
             };
-            addAction("ToggleWireframe", "Toggle wireframe",
-                      InputBinding::key(GLFW_KEY_F1));
-            addAction("CycleTonemap",    "Cycle tonemapper",
-                      InputBinding::key(GLFW_KEY_F2));
-            addAction("Screenshot",      "Screenshot + diagnostics",
-                      InputBinding::key(GLFW_KEY_F11));
-            addAction("ToggleFullscreen","Toggle fullscreen",
-                      InputBinding::key(GLFW_KEY_F12));
+            // I1 — default bindings stored as scancodes so they survive
+            // a layout switch (QWERTY → AZERTY etc.). glfwGetKeyScancode
+            // is safe here because the engine is past glfwInit + window
+            // creation by the time this runs.
+            auto kbScan = [](int glfwKey) {
+                return InputBinding::scancode(glfwGetKeyScancode(glfwKey));
+            };
+            addAction("ToggleWireframe", "Toggle wireframe",  kbScan(GLFW_KEY_F1));
+            addAction("CycleTonemap",    "Cycle tonemapper", kbScan(GLFW_KEY_F2));
+            addAction("Screenshot",      "Screenshot + diagnostics", kbScan(GLFW_KEY_F11));
+            addAction("ToggleFullscreen","Toggle fullscreen", kbScan(GLFW_KEY_F12));
         }
 
         // Apply persisted keybindings from Settings (if any) on top

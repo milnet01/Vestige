@@ -45,10 +45,14 @@ enum class InputDevice
 
 /// @brief A single physical input.
 ///
-/// `code` is interpreted in the context of `device` — a GLFW key
-/// code for Keyboard, a GLFW mouse-button index for Mouse, a GLFW
-/// gamepad-button index for Gamepad. `None` / `code == -1` means
-/// "not bound".
+/// `code` is interpreted in the context of `device`:
+///  - Keyboard: GLFW **scancode** (physical key position, layout-independent).
+///    Phase 10.9 Slice 9 I1 moved keyboards from keycode to scancode so a
+///    settings.json authored on QWERTY keeps the correct physical keys when
+///    loaded on AZERTY / Dvorak. Capture path: `glfwGetKeyScancode(key)`.
+///  - Mouse: GLFW mouse-button index (e.g. `GLFW_MOUSE_BUTTON_LEFT`).
+///  - Gamepad: GLFW gamepad-button index (e.g. `GLFW_GAMEPAD_BUTTON_A`).
+/// `None` / `code == -1` means "not bound".
 struct InputBinding
 {
     InputDevice device = InputDevice::None;
@@ -64,10 +68,11 @@ struct InputBinding
     bool operator!=(const InputBinding& other) const { return !(*this == other); }
 
     /// @brief Factory helpers — keep call sites self-documenting.
-    static InputBinding key(int glfwKey)         { return {InputDevice::Keyboard, glfwKey}; }
-    static InputBinding mouse(int glfwButton)    { return {InputDevice::Mouse,    glfwButton}; }
-    static InputBinding gamepad(int glfwButton)  { return {InputDevice::Gamepad,  glfwButton}; }
-    static InputBinding none()                   { return {InputDevice::None,     -1}; }
+    /// @param glfwScancode Platform scancode from `glfwGetKeyScancode(key)`.
+    static InputBinding scancode(int glfwScancode){ return {InputDevice::Keyboard, glfwScancode}; }
+    static InputBinding mouse(int glfwButton)     { return {InputDevice::Mouse,    glfwButton}; }
+    static InputBinding gamepad(int glfwButton)   { return {InputDevice::Gamepad,  glfwButton}; }
+    static InputBinding none()                    { return {InputDevice::None,     -1}; }
 };
 
 /// @brief A named game verb with up to three physical bindings.

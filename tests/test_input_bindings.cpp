@@ -29,7 +29,7 @@ InputActionMap sampleMap()
     jump.id       = "Jump";
     jump.label    = "Jump";
     jump.category = "Gameplay";
-    jump.primary  = InputBinding::key(GLFW_KEY_SPACE);
+    jump.primary  = InputBinding::scancode(GLFW_KEY_SPACE);
     jump.gamepad  = InputBinding::gamepad(GLFW_GAMEPAD_BUTTON_A);
     m.addAction(jump);
 
@@ -38,7 +38,7 @@ InputActionMap sampleMap()
     fire.label     = "Fire Weapon";
     fire.category  = "Gameplay";
     fire.primary   = InputBinding::mouse(GLFW_MOUSE_BUTTON_LEFT);
-    fire.secondary = InputBinding::key(GLFW_KEY_ENTER);
+    fire.secondary = InputBinding::scancode(GLFW_KEY_ENTER);
     fire.gamepad   = InputBinding::gamepad(GLFW_GAMEPAD_BUTTON_RIGHT_BUMPER);
     m.addAction(fire);
 
@@ -46,7 +46,7 @@ InputActionMap sampleMap()
     moveFwd.id       = "MoveForward";
     moveFwd.label    = "Move Forward";
     moveFwd.category = "Gameplay";
-    moveFwd.primary  = InputBinding::key(GLFW_KEY_W);
+    moveFwd.primary  = InputBinding::scancode(GLFW_KEY_W);
     m.addAction(moveFwd);
 
     return m;
@@ -63,7 +63,7 @@ TEST(InputBinding, IsBoundFalseForDefault)
 
 TEST(InputBinding, FactoryHelpersProduceBoundInstances)
 {
-    EXPECT_TRUE(InputBinding::key(GLFW_KEY_W).isBound());
+    EXPECT_TRUE(InputBinding::scancode(GLFW_KEY_W).isBound());
     EXPECT_TRUE(InputBinding::mouse(GLFW_MOUSE_BUTTON_LEFT).isBound());
     EXPECT_TRUE(InputBinding::gamepad(GLFW_GAMEPAD_BUTTON_A).isBound());
 }
@@ -75,8 +75,8 @@ TEST(InputBinding, NoneFactoryIsUnbound)
 
 TEST(InputBinding, EqualityMatchesDeviceAndCode)
 {
-    EXPECT_EQ(InputBinding::key(GLFW_KEY_W), InputBinding::key(GLFW_KEY_W));
-    EXPECT_NE(InputBinding::key(GLFW_KEY_W), InputBinding::key(GLFW_KEY_A));
+    EXPECT_EQ(InputBinding::scancode(GLFW_KEY_W), InputBinding::scancode(GLFW_KEY_W));
+    EXPECT_NE(InputBinding::scancode(GLFW_KEY_W), InputBinding::scancode(GLFW_KEY_A));
     // Same code, different device is NOT equal.
     InputBinding kb{InputDevice::Keyboard, 32};
     InputBinding mb{InputDevice::Mouse,    32};
@@ -88,14 +88,14 @@ TEST(InputBinding, EqualityMatchesDeviceAndCode)
 TEST(InputAction, MatchesAnyOfTheThreeSlots)
 {
     InputAction a;
-    a.primary   = InputBinding::key(GLFW_KEY_SPACE);
+    a.primary   = InputBinding::scancode(GLFW_KEY_SPACE);
     a.secondary = InputBinding::mouse(GLFW_MOUSE_BUTTON_MIDDLE);
     a.gamepad   = InputBinding::gamepad(GLFW_GAMEPAD_BUTTON_A);
 
-    EXPECT_TRUE(a.matches(InputBinding::key(GLFW_KEY_SPACE)));
+    EXPECT_TRUE(a.matches(InputBinding::scancode(GLFW_KEY_SPACE)));
     EXPECT_TRUE(a.matches(InputBinding::mouse(GLFW_MOUSE_BUTTON_MIDDLE)));
     EXPECT_TRUE(a.matches(InputBinding::gamepad(GLFW_GAMEPAD_BUTTON_A)));
-    EXPECT_FALSE(a.matches(InputBinding::key(GLFW_KEY_W)));
+    EXPECT_FALSE(a.matches(InputBinding::scancode(GLFW_KEY_W)));
     EXPECT_FALSE(a.matches(InputBinding::none()));
 }
 
@@ -125,18 +125,18 @@ TEST(InputActionMap, ReaddingSameIdReplacesTheAction)
     InputActionMap m;
     InputAction v1;
     v1.id = "Jump";
-    v1.primary = InputBinding::key(GLFW_KEY_SPACE);
+    v1.primary = InputBinding::scancode(GLFW_KEY_SPACE);
     m.addAction(v1);
 
     InputAction v2;
     v2.id = "Jump";
     v2.label = "Hop";
-    v2.primary = InputBinding::key(GLFW_KEY_J);
+    v2.primary = InputBinding::scancode(GLFW_KEY_J);
     m.addAction(v2);
 
     ASSERT_EQ(m.actions().size(), 1u);
     EXPECT_EQ(m.findAction("Jump")->label, "Hop");
-    EXPECT_EQ(m.findAction("Jump")->primary, InputBinding::key(GLFW_KEY_J));
+    EXPECT_EQ(m.findAction("Jump")->primary, InputBinding::scancode(GLFW_KEY_J));
 }
 
 // -- Reverse lookup / conflict detection --
@@ -144,11 +144,11 @@ TEST(InputActionMap, ReaddingSameIdReplacesTheAction)
 TEST(InputActionMap, FindActionBoundToReturnsFirstMatch)
 {
     InputActionMap m = sampleMap();
-    const InputAction* a = m.findActionBoundTo(InputBinding::key(GLFW_KEY_SPACE));
+    const InputAction* a = m.findActionBoundTo(InputBinding::scancode(GLFW_KEY_SPACE));
     ASSERT_NE(a, nullptr);
     EXPECT_EQ(a->id, "Jump");
 
-    EXPECT_EQ(m.findActionBoundTo(InputBinding::key(GLFW_KEY_Q)), nullptr);
+    EXPECT_EQ(m.findActionBoundTo(InputBinding::scancode(GLFW_KEY_Q)), nullptr);
     EXPECT_EQ(m.findActionBoundTo(InputBinding::none()), nullptr);
 }
 
@@ -157,7 +157,7 @@ TEST(InputActionMap, ConflictDetectionReportsColliders)
     InputActionMap m = sampleMap();
 
     // Rebinding Fire.primary to Space would conflict with Jump.primary.
-    auto cs = m.findConflicts(InputBinding::key(GLFW_KEY_SPACE), "Fire");
+    auto cs = m.findConflicts(InputBinding::scancode(GLFW_KEY_SPACE), "Fire");
     ASSERT_EQ(cs.size(), 1u);
     EXPECT_EQ(cs[0], "Jump");
 }
@@ -168,7 +168,7 @@ TEST(InputActionMap, ConflictDetectionExcludesSelf)
     // surface, otherwise the UI would light up every time the user
     // opens the rebind dialog.
     InputActionMap m = sampleMap();
-    auto cs = m.findConflicts(InputBinding::key(GLFW_KEY_SPACE), "Jump");
+    auto cs = m.findConflicts(InputBinding::scancode(GLFW_KEY_SPACE), "Jump");
     EXPECT_TRUE(cs.empty());
 }
 
@@ -184,8 +184,8 @@ TEST(InputActionMap, UnboundBindingProducesNoConflicts)
 TEST(InputActionMap, SetPrimaryUpdatesInPlace)
 {
     InputActionMap m = sampleMap();
-    EXPECT_TRUE(m.setPrimary("Jump", InputBinding::key(GLFW_KEY_J)));
-    EXPECT_EQ(m.findAction("Jump")->primary, InputBinding::key(GLFW_KEY_J));
+    EXPECT_TRUE(m.setPrimary("Jump", InputBinding::scancode(GLFW_KEY_J)));
+    EXPECT_EQ(m.findAction("Jump")->primary, InputBinding::scancode(GLFW_KEY_J));
 }
 
 TEST(InputActionMap, SetSecondaryUpdatesInPlace)
@@ -205,8 +205,8 @@ TEST(InputActionMap, SetGamepadUpdatesInPlace)
 TEST(InputActionMap, SettersReturnFalseForUnknownAction)
 {
     InputActionMap m;
-    EXPECT_FALSE(m.setPrimary("Unknown",   InputBinding::key(GLFW_KEY_W)));
-    EXPECT_FALSE(m.setSecondary("Unknown", InputBinding::key(GLFW_KEY_W)));
+    EXPECT_FALSE(m.setPrimary("Unknown",   InputBinding::scancode(GLFW_KEY_W)));
+    EXPECT_FALSE(m.setSecondary("Unknown", InputBinding::scancode(GLFW_KEY_W)));
     EXPECT_FALSE(m.setGamepad("Unknown",   InputBinding::gamepad(GLFW_GAMEPAD_BUTTON_A)));
 }
 
@@ -232,25 +232,25 @@ TEST(InputActionMap, ClearSlotRejectsInvalidSlotIndex)
 TEST(InputActionMap, ResetToDefaultsRestoresEntireMap)
 {
     InputActionMap m = sampleMap();
-    m.setPrimary("Jump", InputBinding::key(GLFW_KEY_J));
-    m.setPrimary("Fire", InputBinding::key(GLFW_KEY_F));
+    m.setPrimary("Jump", InputBinding::scancode(GLFW_KEY_J));
+    m.setPrimary("Fire", InputBinding::scancode(GLFW_KEY_F));
 
     m.resetToDefaults();
 
-    EXPECT_EQ(m.findAction("Jump")->primary, InputBinding::key(GLFW_KEY_SPACE));
+    EXPECT_EQ(m.findAction("Jump")->primary, InputBinding::scancode(GLFW_KEY_SPACE));
     EXPECT_EQ(m.findAction("Fire")->primary, InputBinding::mouse(GLFW_MOUSE_BUTTON_LEFT));
 }
 
 TEST(InputActionMap, ResetSingleActionLeavesOthersAlone)
 {
     InputActionMap m = sampleMap();
-    m.setPrimary("Jump", InputBinding::key(GLFW_KEY_J));
-    m.setPrimary("Fire", InputBinding::key(GLFW_KEY_F));
+    m.setPrimary("Jump", InputBinding::scancode(GLFW_KEY_J));
+    m.setPrimary("Fire", InputBinding::scancode(GLFW_KEY_F));
 
     EXPECT_TRUE(m.resetActionToDefaults("Jump"));
 
-    EXPECT_EQ(m.findAction("Jump")->primary, InputBinding::key(GLFW_KEY_SPACE));  // restored
-    EXPECT_EQ(m.findAction("Fire")->primary, InputBinding::key(GLFW_KEY_F));      // user rebind kept
+    EXPECT_EQ(m.findAction("Jump")->primary, InputBinding::scancode(GLFW_KEY_SPACE));  // restored
+    EXPECT_EQ(m.findAction("Fire")->primary, InputBinding::scancode(GLFW_KEY_F));      // user rebind kept
 }
 
 TEST(InputActionMap, ResetSingleActionUnknownIdReturnsFalse)
@@ -260,15 +260,12 @@ TEST(InputActionMap, ResetSingleActionUnknownIdReturnsFalse)
 }
 
 // -- Display labels --
-
-TEST(BindingDisplayLabel, KeyboardNamesAreReadable)
-{
-    EXPECT_EQ(bindingDisplayLabel(InputBinding::key(GLFW_KEY_W)),           "W");
-    EXPECT_EQ(bindingDisplayLabel(InputBinding::key(GLFW_KEY_SPACE)),       "Space");
-    EXPECT_EQ(bindingDisplayLabel(InputBinding::key(GLFW_KEY_LEFT_SHIFT)),  "Left Shift");
-    EXPECT_EQ(bindingDisplayLabel(InputBinding::key(GLFW_KEY_ESCAPE)),      "Escape");
-    EXPECT_EQ(bindingDisplayLabel(InputBinding::key(GLFW_KEY_F1)),          "F1");
-}
+//
+// Phase 10.9 Slice 9 I1 moved keyboard display from a static keycode→name
+// table to a glfwGetKeyName + lazy-scancode-fallback path that requires
+// live GLFW state. Headless tests below pin only the device-static labels
+// (mouse + gamepad + em-dash); the GLFW-init-fenced keyboard display
+// coverage lives in the I1 block at the end of this file.
 
 TEST(BindingDisplayLabel, MouseNamesAreReadable)
 {
@@ -298,7 +295,7 @@ TEST(IsActionDown, TrueWhenAnySlotIsDown)
 
     // Simulate: only Space (Jump primary) is down.
     auto isDown = [](const InputBinding& b) {
-        return b == InputBinding::key(GLFW_KEY_SPACE);
+        return b == InputBinding::scancode(GLFW_KEY_SPACE);
     };
 
     EXPECT_TRUE(isActionDown(m, "Jump", isDown));
@@ -372,11 +369,11 @@ TEST(InputActionMap, ReRegisterDivergentBindingsWarns_I5)
     InputActionMap m;
     InputAction original;
     original.id      = "Jump";
-    original.primary = InputBinding::key(GLFW_KEY_SPACE);
+    original.primary = InputBinding::scancode(GLFW_KEY_SPACE);
     m.addAction(original);
 
     // Simulate Settings::load — user rebound Jump to F.
-    m.setPrimary("Jump", InputBinding::key(GLFW_KEY_F));
+    m.setPrimary("Jump", InputBinding::scancode(GLFW_KEY_F));
 
     // Game code re-registers Jump (silent-nuke path pre-I5).
     Logger::clearEntries();
@@ -391,7 +388,7 @@ TEST(InputActionMap, ReRegisterDivergentBindingsWarns_I5)
     // the registration order.
     const InputAction* live = m.findAction("Jump");
     ASSERT_NE(live, nullptr);
-    EXPECT_EQ(live->primary, InputBinding::key(GLFW_KEY_SPACE));
+    EXPECT_EQ(live->primary, InputBinding::scancode(GLFW_KEY_SPACE));
 }
 
 TEST(InputActionMap, ReRegisterIdenticalBindingsIsSilent_I5)
@@ -401,7 +398,7 @@ TEST(InputActionMap, ReRegisterIdenticalBindingsIsSilent_I5)
     InputActionMap m;
     InputAction original;
     original.id      = "Pause";
-    original.primary = InputBinding::key(GLFW_KEY_ESCAPE);
+    original.primary = InputBinding::scancode(GLFW_KEY_ESCAPE);
     m.addAction(original);
 
     // No user rebind — re-registering with the same defaults is a hot-reload
@@ -419,7 +416,7 @@ TEST(InputActionMap, FirstRegistrationIsSilent_I5)
     InputActionMap m;
     InputAction action;
     action.id      = "Crouch";
-    action.primary = InputBinding::key(GLFW_KEY_LEFT_CONTROL);
+    action.primary = InputBinding::scancode(GLFW_KEY_LEFT_CONTROL);
     m.addAction(action);
 
     EXPECT_EQ(countWarningsContaining("InputActionMap::addAction"), 0u);
@@ -428,28 +425,46 @@ TEST(InputActionMap, FirstRegistrationIsSilent_I5)
 // ---------------------------------------------------------------------------
 // AUDIT I6 — bindingDisplayLabel covers numpad / Pause / ScrollLock / NumLock
 // / extended-F / world / menu keys. Pre-I6 these all fell through to the
-// "Key 320…" debug fallback in the rebind UI.
+// "Key 320…" debug fallback in the rebind UI. Phase 10.9 Slice 9 I1 moved
+// keyboard codes from keycodes to scancodes; the same coverage now requires
+// live GLFW state because the lazy scancode→name table is populated via
+// glfwGetKeyScancode. The fenced test below preserves the I6 surface.
 // ---------------------------------------------------------------------------
 
 TEST(InputActionMap, KeyboardDisplayCoversNumpadAndSystemKeys_I6)
 {
-    EXPECT_EQ(bindingDisplayLabel(InputBinding::key(GLFW_KEY_KP_0)),    "Numpad 0");
-    EXPECT_EQ(bindingDisplayLabel(InputBinding::key(GLFW_KEY_KP_9)),    "Numpad 9");
-    EXPECT_EQ(bindingDisplayLabel(InputBinding::key(GLFW_KEY_KP_ADD)),  "Numpad +");
-    EXPECT_EQ(bindingDisplayLabel(InputBinding::key(GLFW_KEY_KP_ENTER)),"Numpad Enter");
-    EXPECT_EQ(bindingDisplayLabel(InputBinding::key(GLFW_KEY_KP_DECIMAL)),"Numpad .");
+    if (glfwInit() == GLFW_FALSE)
+    {
+        GTEST_SKIP() << "GLFW init failed — display-label coverage runs at engine launch.";
+    }
+    auto labelOf = [](int kc) {
+        const int sc = glfwGetKeyScancode(kc);
+        return std::pair<int, std::string>(
+            sc, sc < 0 ? std::string{} : bindingDisplayLabel(InputBinding::scancode(sc)));
+    };
+    auto expectLabel = [&](int kc, const char* expected) {
+        const auto [sc, label] = labelOf(kc);
+        if (sc < 0) return;  // Some keys are platform-absent — silent skip.
+        EXPECT_EQ(label, expected) << "keycode=" << kc << " scancode=" << sc;
+    };
+    expectLabel(GLFW_KEY_KP_0, "Numpad 0");
+    expectLabel(GLFW_KEY_KP_9, "Numpad 9");
+    expectLabel(GLFW_KEY_KP_ADD, "Numpad +");
+    expectLabel(GLFW_KEY_KP_ENTER, "Numpad Enter");
+    expectLabel(GLFW_KEY_KP_DECIMAL, "Numpad .");
 
-    EXPECT_EQ(bindingDisplayLabel(InputBinding::key(GLFW_KEY_PAUSE)),       "Pause");
-    EXPECT_EQ(bindingDisplayLabel(InputBinding::key(GLFW_KEY_PRINT_SCREEN)),"Print Screen");
-    EXPECT_EQ(bindingDisplayLabel(InputBinding::key(GLFW_KEY_SCROLL_LOCK)), "Scroll Lock");
-    EXPECT_EQ(bindingDisplayLabel(InputBinding::key(GLFW_KEY_NUM_LOCK)),    "Num Lock");
-    EXPECT_EQ(bindingDisplayLabel(InputBinding::key(GLFW_KEY_MENU)),        "Menu");
+    expectLabel(GLFW_KEY_PAUSE, "Pause");
+    expectLabel(GLFW_KEY_PRINT_SCREEN, "Print Screen");
+    expectLabel(GLFW_KEY_SCROLL_LOCK, "Scroll Lock");
+    expectLabel(GLFW_KEY_NUM_LOCK, "Num Lock");
+    expectLabel(GLFW_KEY_MENU, "Menu");
 
-    EXPECT_EQ(bindingDisplayLabel(InputBinding::key(GLFW_KEY_F13)), "F13");
-    EXPECT_EQ(bindingDisplayLabel(InputBinding::key(GLFW_KEY_F25)), "F25");
+    expectLabel(GLFW_KEY_F13, "F13");
+    expectLabel(GLFW_KEY_F25, "F25");
 
-    EXPECT_EQ(bindingDisplayLabel(InputBinding::key(GLFW_KEY_WORLD_1)), "World 1");
-    EXPECT_EQ(bindingDisplayLabel(InputBinding::key(GLFW_KEY_WORLD_2)), "World 2");
+    expectLabel(GLFW_KEY_WORLD_1, "World 1");
+    expectLabel(GLFW_KEY_WORLD_2, "World 2");
+    glfwTerminate();
 }
 
 // ---------------------------------------------------------------------------
@@ -473,7 +488,7 @@ TEST(InputActionMap, FindConflictsSameKeycodeDifferentDevicesNoConflict_I4)
     jump.gamepad = InputBinding::gamepad(0);
     m.addAction(jump);
 
-    auto cs = m.findConflicts(InputBinding::key(0));
+    auto cs = m.findConflicts(InputBinding::scancode(0));
     EXPECT_TRUE(cs.empty());
 }
 
@@ -485,7 +500,7 @@ TEST(InputActionMap, FindConflictsKeyboardConflictsOnlyWithKeyboardSlot_I4)
     InputActionMap m;
     InputAction crouch;
     crouch.id      = "Crouch";
-    crouch.primary = InputBinding::key(67);  // arbitrary scan code
+    crouch.primary = InputBinding::scancode(67);  // arbitrary scan code
     m.addAction(crouch);
 
     InputAction fire;
@@ -493,7 +508,7 @@ TEST(InputActionMap, FindConflictsKeyboardConflictsOnlyWithKeyboardSlot_I4)
     fire.gamepad = InputBinding::gamepad(67);  // same code, different device
     m.addAction(fire);
 
-    auto cs = m.findConflicts(InputBinding::key(67));
+    auto cs = m.findConflicts(InputBinding::scancode(67));
     ASSERT_EQ(cs.size(), 1u);
     EXPECT_EQ(cs[0], "Crouch");
 }
@@ -505,7 +520,7 @@ TEST(InputActionMap, FindConflictsGamepadIgnoresKeyboardAndMouseSlots_I4)
     InputActionMap m;
     InputAction crouch;
     crouch.id      = "Crouch";
-    crouch.primary = InputBinding::key(0);  // keyboard scan code 0
+    crouch.primary = InputBinding::scancode(0);  // keyboard scan code 0
     m.addAction(crouch);
 
     InputAction fire;
@@ -579,5 +594,124 @@ TEST(InputBindingsWire, ActionBindingFromJsonMissingFieldsTakeDefaults_I2)
     EXPECT_EQ(ab.primary.device, "mouse");
     EXPECT_EQ(ab.secondary, InputBindingWire{});
     EXPECT_EQ(ab.gamepad, InputBindingWire{});
+}
+
+// ---------------------------------------------------------------------------
+// Phase 10.9 Slice 9 I1 — `InputBinding::code` stores a GLFW scancode (physical
+// key position) for keyboard bindings, not a GLFW keycode (layout-mapped).
+// Pre-I1 a QWERTY user's saved settings.json had `code = GLFW_KEY_W = 87`;
+// loaded on AZERTY, glfwGetKey polled "the key that produces 'W' on AZERTY"
+// (physically the QWERTY-Z position) and WASD silently flipped. After I1 the
+// binding is an OS-level physical-position id that survives layout swaps.
+// ---------------------------------------------------------------------------
+
+TEST(InputBinding, ScancodeFactoryProducesBoundKeyboardBinding_I1)
+{
+    InputBinding b = InputBinding::scancode(42);
+    EXPECT_TRUE(b.isBound());
+    EXPECT_EQ(b.device, InputDevice::Keyboard);
+    EXPECT_EQ(b.code, 42);
+}
+
+TEST(InputBinding, ScancodeFactoryEqualityIsValueBased_I1)
+{
+    EXPECT_EQ(InputBinding::scancode(17), InputBinding::scancode(17));
+    EXPECT_NE(InputBinding::scancode(17), InputBinding::scancode(31));
+    // A keyboard scancode never collides with a mouse / gamepad button at
+    // the same numeric value — device gate is the I4 contract, retained.
+    EXPECT_NE(InputBinding::scancode(0), InputBinding::mouse(0));
+    EXPECT_NE(InputBinding::scancode(0), InputBinding::gamepad(0));
+}
+
+TEST(InputBinding, ScancodeFactoryRejectsNegativeAsUnbound_I1)
+{
+    // A capture path that calls glfwGetKeyScancode on an unknown key gets
+    // -1 back. The factory still returns a Keyboard-device binding but the
+    // isBound() guard catches it so it never enters the action map.
+    InputBinding b = InputBinding::scancode(-1);
+    EXPECT_FALSE(b.isBound());
+}
+
+TEST(InputBindingsWire, ScancodeRoundTripPreservesPhysicalIdentity_I1)
+{
+    // The headline regression: a QWERTY-authored binding stores its
+    // platform scancode (e.g. 17 for the W-position key on Linux X11);
+    // the wire round-trip must preserve the integer exactly so an AZERTY
+    // load reads the same physical-position id.
+    InputBindingWire w;
+    w.device   = "keyboard";
+    w.scancode = 17;
+
+    const nlohmann::json j = bindingToJson(w);
+    const InputBindingWire w2 = bindingFromJson(j);
+
+    EXPECT_EQ(w2.device, "keyboard");
+    EXPECT_EQ(w2.scancode, 17);
+    // The contract is a layout-independent integer round-trip — there is
+    // no place in the wire path where a layout-aware translation could
+    // sneak in.
+    EXPECT_EQ(w2, w);
+}
+
+// glfwInit-dependent display tests: glfwGetKeyName / glfwGetKeyScancode
+// require live GLFW state. Local dev (and CI hosts with a display) get
+// the coverage; headless runners skip cleanly per project precedent for
+// runtime-only verification (test_gpu_cloth_simulator.cpp doc).
+
+TEST(BindingDisplayLabel, KeyboardScancodePrintableUsesGlfwKeyName_I1)
+{
+    if (glfwInit() == GLFW_FALSE)
+    {
+        GTEST_SKIP() << "GLFW init failed — display-label coverage runs at engine launch.";
+    }
+    const int wScan = glfwGetKeyScancode(GLFW_KEY_W);
+    if (wScan < 0)
+    {
+        glfwTerminate();
+        GTEST_SKIP() << "GLFW_KEY_W has no scancode in this environment.";
+    }
+    const std::string label = bindingDisplayLabel(InputBinding::scancode(wScan));
+    // Layout-aware: on QWERTY this is "W"; on AZERTY it'd be "Z" for the
+    // same physical key. Either way the label is non-empty and not the
+    // debug fallback, which is the contract that matters here.
+    EXPECT_FALSE(label.empty());
+    EXPECT_EQ(label.find("Key "), std::string::npos)
+        << "Printable key should not fall through to the debug 'Key NN' label.";
+    glfwTerminate();
+}
+
+TEST(BindingDisplayLabel, KeyboardScancodeNonPrintableUsesFallbackTable_I1)
+{
+    if (glfwInit() == GLFW_FALSE)
+    {
+        GTEST_SKIP() << "GLFW init failed — display-label coverage runs at engine launch.";
+    }
+    // Non-printable keys (Space, Shift, F1, numpad, ...) — glfwGetKeyName
+    // returns nullptr for these, so the lazy scancode→fallback table
+    // must catch them. F1 is the canonical non-printable hotkey used by
+    // the engine's default bindings (engine.cpp:321).
+    const int f1Scan = glfwGetKeyScancode(GLFW_KEY_F1);
+    if (f1Scan < 0)
+    {
+        glfwTerminate();
+        GTEST_SKIP() << "GLFW_KEY_F1 has no scancode in this environment.";
+    }
+    EXPECT_EQ(bindingDisplayLabel(InputBinding::scancode(f1Scan)), "F1");
+
+    const int spcScan = glfwGetKeyScancode(GLFW_KEY_SPACE);
+    if (spcScan >= 0)
+    {
+        EXPECT_EQ(bindingDisplayLabel(InputBinding::scancode(spcScan)), "Space");
+    }
+    glfwTerminate();
+}
+
+TEST(BindingDisplayLabel, MouseGamepadEmDashUnaffectedByScancodeMove_I1)
+{
+    // Regression guard: only the keyboard display path changes under I1.
+    // Mouse + gamepad + unbound labels stay byte-identical to pre-I1.
+    EXPECT_EQ(bindingDisplayLabel(InputBinding::mouse(GLFW_MOUSE_BUTTON_LEFT)), "Left Mouse");
+    EXPECT_EQ(bindingDisplayLabel(InputBinding::gamepad(GLFW_GAMEPAD_BUTTON_A)), "A");
+    EXPECT_EQ(bindingDisplayLabel(InputBinding::none()), "—");
 }
 

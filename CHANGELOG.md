@@ -9,6 +9,56 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-05-02 Phase 10.9 — I1 (scancode-vs-keycode reconciliation)
+
+- **I1.** Keyboard `InputBinding`s now store a GLFW **scancode** (physical key
+  position, layout-independent) instead of a GLFW keycode (layout-mapped). Pre-I1
+  a QWERTY user's `settings.json` had `code = GLFW_KEY_W = 87`; loaded on AZERTY,
+  `glfwGetKey(window, 87)` polled "the key the OS currently maps to W" — physically
+  the QWERTY-Z position — and WASD silently flipped. After I1 the binding is an
+  OS-level physical-position id that survives any layout swap.
+- **Factory rename**: `InputBinding::key(int glfwKey)` retired in favour of
+  `InputBinding::scancode(int glfwScancode)`. Mouse + gamepad factories unchanged.
+- **Capture path** (`engine/editor/panels/settings_editor_panel.cpp:598`): rebind
+  capture now runs `glfwGetKeyScancode(glfwCode)` on the ImGui-derived keycode
+  and drops the binding if the platform reports `-1` rather than persisting an
+  unbound entry.
+- **Default hotkeys** (`engine/core/engine.cpp:321-327`): F1/F2/F11/F12 defaults
+  re-resolve through `glfwGetKeyScancode(GLFW_KEY_*)` at registration time.
+- **Poll path** (`engine/core/input_manager.cpp::isBindingDown`): replaced
+  `glfwGetKey(window, code)` (keycode-based) with a sparse
+  `std::unordered_map<int, bool> m_keyDownByScancode` driven by the existing
+  `keyCallback` — the `int scancode` parameter that was previously `/*unused*/`.
+  Side benefit: input is event-driven instead of poll-based, removing the
+  per-frame race against GLFW auto-repeat.
+- **Display path** (`engine/input/input_bindings.cpp::bindingDisplayLabel`):
+  two-stage lookup. A lazy scancode→name fallback table built once at first
+  call by walking `GLFW_KEY_*` through `glfwGetKeyScancode` catches non-printable
+  keys (Space, Shift, F-row, numpad, system keys) — preserving the I6 surface.
+  `glfwGetKeyName(GLFW_KEY_UNKNOWN, code)` is the second-stage layout-aware path
+  for printable letters/digits/punctuation that *should* change under a layout
+  swap (`"W"` on QWERTY, `"Z"` on AZERTY for the same physical key). The
+  fallback table runs first because GLFW returns a literal `" "` for Space and
+  printable strings for some locale keys (WORLD_1/2 on certain layouts) which
+  would clobber the rebind UI if `glfwGetKeyName` ran first.
+- **Test surface**: 7 new I1 tests (factory contracts, wire round-trip,
+  GLFW-fenced display) plus the I6 numpad/system-key test reframed under a
+  `glfwInit`-fenced helper that gracefully skips on display-less CI. The
+  pre-I1 `InputActionMap.KeyboardNamesAreReadable` headless display unit test
+  was deleted — it was testing the prior keycode→name table directly, not a
+  contract; coverage for printable display now lives in the GLFW-fenced I1
+  tests + runtime engine launch, matching the project's
+  `test_gpu_cloth_simulator.cpp` precedent for runtime-only verification.
+- **Migration**: no `settings.json` migration shim. The data format already
+  named the field `scancode` in the wire layer (since I2); the integer values
+  were just keycodes mislabeled as scancodes. No shipped binaries with persisted
+  bindings predate I1, so the clean break is safe.
+- **Roadmap addition** (Slice 18): user requested a cold-eyes review of the
+  test-suite surface itself (does each test test what it claims; missing/
+  duplicate/redundant tests). Added as a new non-blocking Phase 10.9 slice.
+- **Tests**: 3146 / 3147 pass (+6 vs Slice 10 E2 baseline; 1 pre-existing skip
+  unchanged).
+
 ### 2026-05-02 Phase 10.9 — E3 closed by finding (mirrors W11 closure)
 
 - **E3.** GPU foliage culling via `frustum_cull.comp.glsl` was *not* implemented;

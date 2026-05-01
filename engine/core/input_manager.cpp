@@ -68,7 +68,14 @@ bool InputManager::isBindingDown(const InputBinding& binding) const
     switch (binding.device)
     {
         case InputDevice::Keyboard:
-            return glfwGetKey(m_window, binding.code) == GLFW_PRESS;
+        {
+            // Phase 10.9 Slice 9 I1 — keyboard bindings store scancodes
+            // (physical key position). `glfwGetKey` polls by keycode
+            // (layout-mapped), so we drive a scancode-indexed table from
+            // the keyCallback's `scancode` param instead.
+            auto it = m_keyDownByScancode.find(binding.code);
+            return it != m_keyDownByScancode.end() && it->second;
+        }
 
         case InputDevice::Mouse:
             return glfwGetMouseButton(m_window, binding.code) == GLFW_PRESS;
@@ -108,10 +115,31 @@ bool InputManager::isActionDown(const InputActionMap& map,
         [this](const InputBinding& b) { return isBindingDown(b); });
 }
 
-void InputManager::keyCallback(GLFWwindow* window, int key, int /*scancode*/, int action, int mods)
+void InputManager::keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods)
 {
     auto* self = static_cast<InputManager*>(glfwGetWindowUserPointer(window));
-    if (!self || key == GLFW_KEY_UNKNOWN)
+    if (!self)
+    {
+        return;
+    }
+
+    // I1 — keep the scancode-indexed state table current regardless of
+    // whether GLFW could resolve the keycode (some platform-specific
+    // keys arrive as GLFW_KEY_UNKNOWN but still carry a valid scancode).
+    if (scancode >= 0)
+    {
+        if (action == GLFW_PRESS)
+        {
+            self->m_keyDownByScancode[scancode] = true;
+        }
+        else if (action == GLFW_RELEASE)
+        {
+            self->m_keyDownByScancode[scancode] = false;
+        }
+        // GLFW_REPEAT leaves the down-flag as-is (already true).
+    }
+
+    if (key == GLFW_KEY_UNKNOWN)
     {
         return;
     }

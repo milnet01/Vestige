@@ -1364,9 +1364,9 @@ InputAction makeAction(const std::string& id,
 TEST(SettingsApplyInputBindings, ExtractEmitsEveryRegisteredActionInOrder)
 {
     InputActionMap map;
-    map.addAction(makeAction("Jump", InputBinding::key(32)));
+    map.addAction(makeAction("Jump", InputBinding::scancode(32)));
     map.addAction(makeAction("Fire", InputBinding::mouse(0)));
-    map.addAction(makeAction("Pause", InputBinding::key(256)));
+    map.addAction(makeAction("Pause", InputBinding::scancode(256)));
 
     auto wires = extractInputBindings(map);
     ASSERT_EQ(wires.size(), 3u);
@@ -1378,7 +1378,7 @@ TEST(SettingsApplyInputBindings, ExtractEmitsEveryRegisteredActionInOrder)
 TEST(SettingsApplyInputBindings, ExtractRoundTripsDeviceStrings)
 {
     InputActionMap map;
-    map.addAction(makeAction("K",  InputBinding::key(65)));
+    map.addAction(makeAction("K",  InputBinding::scancode(65)));
     map.addAction(makeAction("M",  InputBinding::mouse(1)));
     map.addAction(makeAction("G",  InputBinding::gamepad(3)));
     map.addAction(makeAction("Un", InputBinding::none()));
@@ -1399,7 +1399,7 @@ TEST(SettingsApplyInputBindings, ExtractPreservesAllThreeSlots)
 {
     InputActionMap map;
     map.addAction(makeAction("Use",
-        InputBinding::key(69),
+        InputBinding::scancode(69),
         InputBinding::mouse(2),
         InputBinding::gamepad(0)));
 
@@ -1417,7 +1417,7 @@ TEST(SettingsApplyInputBindings, ApplyUpdatesBindingsOfRegisteredActions)
 {
     // Init-order contract: register first, then apply wires.
     InputActionMap map;
-    map.addAction(makeAction("Jump", InputBinding::key(32)));
+    map.addAction(makeAction("Jump", InputBinding::scancode(32)));
 
     std::vector<ActionBindingWire> wires;
     ActionBindingWire w;
@@ -1440,7 +1440,7 @@ TEST(SettingsApplyInputBindings, ApplyDropsPhantomIdsWithoutRegistering)
     // new actions. The map stays at the one registered action; the
     // phantom entry is dropped.
     InputActionMap map;
-    map.addAction(makeAction("Jump", InputBinding::key(32)));
+    map.addAction(makeAction("Jump", InputBinding::scancode(32)));
 
     std::vector<ActionBindingWire> wires;
     ActionBindingWire w;
@@ -1461,7 +1461,7 @@ TEST(SettingsApplyInputBindings, ApplyPreservesActionsNotInWires)
     // An action registered on the map but absent from the wire list
     // keeps its current bindings — no clobbering to defaults.
     InputActionMap map;
-    map.addAction(makeAction("Jump", InputBinding::key(32)));
+    map.addAction(makeAction("Jump", InputBinding::scancode(32)));
     map.addAction(makeAction("Fire", InputBinding::mouse(0)));
 
     std::vector<ActionBindingWire> wires;
@@ -1483,7 +1483,7 @@ TEST(SettingsApplyInputBindings, ApplyPreservesActionsNotInWires)
 TEST(SettingsApplyInputBindings, UnknownDeviceStringFallsBackToNone)
 {
     InputActionMap map;
-    map.addAction(makeAction("Jump", InputBinding::key(32)));
+    map.addAction(makeAction("Jump", InputBinding::scancode(32)));
 
     std::vector<ActionBindingWire> wires;
     ActionBindingWire w;
@@ -1508,7 +1508,7 @@ TEST(SettingsApplyInputBindings, NegativeScancodeNormalisesToUnboundBinding)
     // "I was a keyboard binding but the user cleared me" case.
     // Must normalise to fully Unbound so isBound() returns false.
     InputActionMap map;
-    map.addAction(makeAction("Jump", InputBinding::key(32)));
+    map.addAction(makeAction("Jump", InputBinding::scancode(32)));
 
     std::vector<ActionBindingWire> wires;
     ActionBindingWire w;
@@ -1531,7 +1531,7 @@ TEST(SettingsApplyInputBindings, ExtractThenApplyRoundTripIsLossless)
     // registered ids, apply wires, compare binding-by-binding.
     InputActionMap source;
     source.addAction(makeAction("Jump",
-        InputBinding::key(32),
+        InputBinding::scancode(32),
         InputBinding::mouse(1),
         InputBinding::gamepad(0)));
     source.addAction(makeAction("Fire",
@@ -1850,11 +1850,11 @@ TEST(SettingsEditor, RestoreControlsResetsInputMapWhenAttached)
     {
         InputAction a;
         a.id        = "Jump";
-        a.primary   = InputBinding::key(32);
+        a.primary   = InputBinding::scancode(32);
         map.addAction(a);
     }
     // User remapped the action.
-    map.setPrimary("Jump", InputBinding::key(87));
+    map.setPrimary("Jump", InputBinding::scancode(87));
     ASSERT_EQ(map.findAction("Jump")->primary.code, 87);
 
     SettingsEditor::ApplyTargets t{};

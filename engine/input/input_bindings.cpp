@@ -11,6 +11,8 @@
 #include <GLFW/glfw3.h>
 
 #include <algorithm>
+#include <mutex>
+#include <unordered_map>
 
 namespace Vestige
 {
@@ -181,11 +183,21 @@ bool InputActionMap::resetActionToDefaults(const std::string& id)
 
 namespace
 {
-// Names for keys that GLFW exposes by their printable character; this
-// covers the letters/digits glfwGetKeyName can't translate without a
-// layout (on a headless build). Anything not in the table falls back
-// to a short hex/GLFW token.
-const char* keyboardName(int code)
+// AUDIT I1 — keyboard display path is two-stage:
+//  1. `glfwGetKeyName(GLFW_KEY_UNKNOWN, scancode)` returns the layout-aware
+//     printable-character name ("W" on QWERTY, "Z" on AZERTY for the same
+//     physical key). This is what we want for letters / digits / punctuation.
+//  2. For non-printable keys (Space, Shift, F-row, numpad, system keys)
+//     `glfwGetKeyName` returns nullptr. We fall back to a scancode-keyed
+//     table built once by walking GLFW_KEY_* through `glfwGetKeyScancode`.
+//
+// `keyboardKeycodeToName` keeps the keycode→string mapping that the I6 work
+// established (numpad, F13–F25, world keys, etc.). The lazy fallback table
+// at first call inverts it via `glfwGetKeyScancode` so the same coverage
+// reaches scancode-indexed callers. Without GLFW init the table stays empty
+// and the debug fallback fires — display correctness is exercised at engine
+// launch per the project's runtime-verification precedent.
+const char* keyboardKeycodeToName(int code)
 {
     switch (code)
     {
@@ -299,6 +311,69 @@ const char* keyboardName(int code)
     }
 }
 
+// Lazy scancode → display-name table. Built once on first call from the
+// keycode-keyed table above, mapping each known GLFW_KEY_* to its platform
+// scancode. Empty if GLFW isn't initialised — display falls through to
+// `glfwGetKeyName` (which itself returns nullptr without init), then to
+// the debug `"Key NN"` token.
+const std::unordered_map<int, const char*>& scancodeToNameMap()
+{
+    static std::unordered_map<int, const char*> map;
+    static std::once_flag flag;
+    std::call_once(flag, []() {
+        // Iterate every keycode the I6 table covers; resolve each to a
+        // scancode via GLFW. Out-of-range scancodes (-1) just don't get
+        // recorded — the debug fallback handles them at display time.
+        constexpr int kKeycodes[] = {
+            GLFW_KEY_A, GLFW_KEY_B, GLFW_KEY_C, GLFW_KEY_D, GLFW_KEY_E,
+            GLFW_KEY_F, GLFW_KEY_G, GLFW_KEY_H, GLFW_KEY_I, GLFW_KEY_J,
+            GLFW_KEY_K, GLFW_KEY_L, GLFW_KEY_M, GLFW_KEY_N, GLFW_KEY_O,
+            GLFW_KEY_P, GLFW_KEY_Q, GLFW_KEY_R, GLFW_KEY_S, GLFW_KEY_T,
+            GLFW_KEY_U, GLFW_KEY_V, GLFW_KEY_W, GLFW_KEY_X, GLFW_KEY_Y,
+            GLFW_KEY_Z,
+            GLFW_KEY_0, GLFW_KEY_1, GLFW_KEY_2, GLFW_KEY_3, GLFW_KEY_4,
+            GLFW_KEY_5, GLFW_KEY_6, GLFW_KEY_7, GLFW_KEY_8, GLFW_KEY_9,
+            GLFW_KEY_SPACE, GLFW_KEY_ENTER, GLFW_KEY_TAB, GLFW_KEY_ESCAPE,
+            GLFW_KEY_BACKSPACE, GLFW_KEY_INSERT, GLFW_KEY_DELETE,
+            GLFW_KEY_HOME, GLFW_KEY_END, GLFW_KEY_PAGE_UP, GLFW_KEY_PAGE_DOWN,
+            GLFW_KEY_LEFT, GLFW_KEY_RIGHT, GLFW_KEY_UP, GLFW_KEY_DOWN,
+            GLFW_KEY_LEFT_SHIFT, GLFW_KEY_RIGHT_SHIFT,
+            GLFW_KEY_LEFT_CONTROL, GLFW_KEY_RIGHT_CONTROL,
+            GLFW_KEY_LEFT_ALT, GLFW_KEY_RIGHT_ALT,
+            GLFW_KEY_LEFT_SUPER, GLFW_KEY_RIGHT_SUPER, GLFW_KEY_CAPS_LOCK,
+            GLFW_KEY_MINUS, GLFW_KEY_EQUAL, GLFW_KEY_LEFT_BRACKET,
+            GLFW_KEY_RIGHT_BRACKET, GLFW_KEY_SEMICOLON, GLFW_KEY_APOSTROPHE,
+            GLFW_KEY_GRAVE_ACCENT, GLFW_KEY_COMMA, GLFW_KEY_PERIOD,
+            GLFW_KEY_SLASH, GLFW_KEY_BACKSLASH,
+            GLFW_KEY_F1,  GLFW_KEY_F2,  GLFW_KEY_F3,  GLFW_KEY_F4,
+            GLFW_KEY_F5,  GLFW_KEY_F6,  GLFW_KEY_F7,  GLFW_KEY_F8,
+            GLFW_KEY_F9,  GLFW_KEY_F10, GLFW_KEY_F11, GLFW_KEY_F12,
+            GLFW_KEY_F13, GLFW_KEY_F14, GLFW_KEY_F15, GLFW_KEY_F16,
+            GLFW_KEY_F17, GLFW_KEY_F18, GLFW_KEY_F19, GLFW_KEY_F20,
+            GLFW_KEY_F21, GLFW_KEY_F22, GLFW_KEY_F23, GLFW_KEY_F24,
+            GLFW_KEY_F25,
+            GLFW_KEY_PAUSE, GLFW_KEY_PRINT_SCREEN, GLFW_KEY_SCROLL_LOCK,
+            GLFW_KEY_NUM_LOCK, GLFW_KEY_MENU,
+            GLFW_KEY_KP_0, GLFW_KEY_KP_1, GLFW_KEY_KP_2, GLFW_KEY_KP_3,
+            GLFW_KEY_KP_4, GLFW_KEY_KP_5, GLFW_KEY_KP_6, GLFW_KEY_KP_7,
+            GLFW_KEY_KP_8, GLFW_KEY_KP_9, GLFW_KEY_KP_DECIMAL,
+            GLFW_KEY_KP_DIVIDE, GLFW_KEY_KP_MULTIPLY, GLFW_KEY_KP_SUBTRACT,
+            GLFW_KEY_KP_ADD, GLFW_KEY_KP_ENTER, GLFW_KEY_KP_EQUAL,
+            GLFW_KEY_WORLD_1, GLFW_KEY_WORLD_2,
+        };
+        for (int kc : kKeycodes)
+        {
+            const int sc = glfwGetKeyScancode(kc);
+            if (sc < 0) continue;
+            if (const char* n = keyboardKeycodeToName(kc))
+            {
+                map.emplace(sc, n);
+            }
+        }
+    });
+    return map;
+}
+
 const char* mouseName(int code)
 {
     switch (code)
@@ -349,8 +424,25 @@ std::string bindingDisplayLabel(const InputBinding& binding)
     switch (binding.device)
     {
         case InputDevice::Keyboard:
-            if (const char* n = keyboardName(binding.code)) return n;
+        {
+            // I1 — keyboard codes are scancodes. Prefer our curated
+            // scancode→name fallback table FIRST: GLFW's `glfwGetKeyName`
+            // returns a useless literal " " for Space and printable
+            // glyphs for some locale keys (WORLD_1/2 on certain layouts),
+            // which would clobber the rebind UI. The fallback table
+            // covers every non-printable key the I6 work named. Fall
+            // through to `glfwGetKeyName` for the printable letters /
+            // digits / punctuation that NEED to be layout-aware
+            // ("W" on QWERTY, "Z" on AZERTY for the same physical key).
+            const auto& fallback = scancodeToNameMap();
+            auto it = fallback.find(binding.code);
+            if (it != fallback.end()) return it->second;
+            if (const char* n = glfwGetKeyName(GLFW_KEY_UNKNOWN, binding.code))
+            {
+                return n;
+            }
             break;
+        }
         case InputDevice::Mouse:
             if (const char* n = mouseName(binding.code)) return n;
             break;
