@@ -103,6 +103,39 @@ glm::vec3 SplinePath::evaluateTangent(float t) const
     return deriv / len;
 }
 
+glm::vec3 SplinePath::evaluateByArcLength(float s) const
+{
+    const int n = static_cast<int>(m_waypoints.size());
+    if (n == 0) return glm::vec3(0.0f);
+    if (n == 1) return m_waypoints[0];
+    if (s <= 0.0f) return evaluate(0.0f);
+
+    // Walk a uniform-t sampling and accumulate chord lengths until we
+    // reach s. Within the bracketing slice, interpolate t linearly —
+    // close enough at this sample density to give constant-speed
+    // playback within ~10% per-step error (pinned by
+    // SplinePathTest.EvaluateByArcLengthConstantSpeed).
+    constexpr int kSamples = 256;
+    glm::vec3 prev = evaluate(0.0f);
+    float accumulated = 0.0f;
+    for (int i = 1; i <= kSamples; ++i)
+    {
+        const float tCurr = static_cast<float>(i) / static_cast<float>(kSamples);
+        const glm::vec3 curr = evaluate(tCurr);
+        const float segLen = glm::distance(prev, curr);
+        if (accumulated + segLen >= s)
+        {
+            const float frac = (segLen > 1e-6f) ? (s - accumulated) / segLen : 0.0f;
+            const float tPrev = static_cast<float>(i - 1) / static_cast<float>(kSamples);
+            return evaluate(glm::mix(tPrev, tCurr, glm::clamp(frac, 0.0f, 1.0f)));
+        }
+        accumulated += segLen;
+        prev = curr;
+    }
+    // s exceeds total length — clamp to the endpoint.
+    return evaluate(1.0f);
+}
+
 float SplinePath::getLength(int samples) const
 {
     if (m_waypoints.size() < 2) return 0.0f;

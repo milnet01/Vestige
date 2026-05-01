@@ -9,6 +9,27 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-05-02 Phase 10.9 — E2 (`SplinePath::evaluateByArcLength` constant-speed accessor)
+
+- **E2.** New `SplinePath::evaluateByArcLength(float s)` returns the
+  point at arc length `s` from the start (in metres). Provides the
+  constant-speed parameterisation required by Phase 10.8 CM7 cinematic
+  camera — advancing `s` by a fixed amount per frame moves a fixed
+  distance along the curve regardless of local curvature, so playback
+  speed stays constant through curves. Implementation walks 256
+  uniform-t samples chord-summing as it goes, brackets `s` between two
+  adjacent samples, then linearly interpolates the local `t` and
+  re-evaluates on the actual curve. Out-of-range `s` clamps to the
+  endpoints. E1 (centripetal Catmull-Rom) is the hard prerequisite —
+  uniform CR's t-vs-arc misalignment from cusps would defeat
+  arc-length parameterisation. 6 new `SplinePathTest.EvaluateByArcLength*`
+  tests: empty, single-point, linear-midpoint, past-end clamp,
+  negative-s clamp, and a differential constant-speed contract test
+  (asserts arc-length step spread is at least 2x tighter than
+  uniform-t spread on the same curve — avoids the chord-vs-arc
+  pitfall a literal "equal step distance" test would hit on curvy
+  splines). 3139/3140 pass (1 pre-existing skip; +6 vs E1's 3133/3134).
+
 ### 2026-05-02 Phase 10.9 — E1 (centripetal Catmull-Rom in SplinePath)
 
 - **E1.** `SplinePath::catmullRom` switched from uniform to centripetal

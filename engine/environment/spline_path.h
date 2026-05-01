@@ -58,6 +58,16 @@ public:
     /// @return Normalized tangent vector.
     glm::vec3 evaluateTangent(float t) const;
 
+    /// @brief Evaluates the spline at arc length s from the start (in meters).
+    ///
+    /// Provides constant-speed parameterisation: advancing s by a fixed
+    /// amount moves a fixed distance along the curve, regardless of local
+    /// curvature. Required by the Phase 10.8 cinematic camera (CM7) so
+    /// playback speed stays constant through curved sections.
+    ///
+    /// Out-of-range s clamps to the spline endpoints.
+    glm::vec3 evaluateByArcLength(float s) const;
+
     /// @brief Approximates the total arc length by sampling.
     /// @param samples Number of segments to sample. Higher = more accurate.
     float getLength(int samples = 100) const;
