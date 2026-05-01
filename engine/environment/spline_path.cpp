@@ -284,32 +284,66 @@ void SplinePath::deserialize(const nlohmann::json& j)
 }
 
 // --- Catmull-Rom math ---
+//
+// Centripetal Catmull-Rom (Yuksel et al. 2011, "Parameterization and
+// Applications of Catmull-Rom Curves", Computer-Aided Design 43.7).
+// Knots are spaced by chord^alpha with alpha = 0.5 — guaranteed no
+// self-intersection or cusps for any non-degenerate control points,
+// regardless of inter-point spacing. Uniform CR (alpha = 0) overshoots
+// when adjacent spacings are uneven; the test SplinePathTest.
+// CentripetalAvoidsCusp pins the canonical Yuksel failure case.
+//
+// Implemented via the Barry-Goldman recursive form because it stays
+// trivially correct for any alpha and reads top-to-bottom. The derivative
+// uses a centred finite difference — callers normalise the result, so
+// the small numerical error is irrelevant for tangent direction.
+
+namespace
+{
+    constexpr float kCentripetalAlpha = 0.5f;
+    constexpr float kMinKnotDelta = 1e-6f;  // Guards coincident control points.
+
+    float knotDelta(const glm::vec3& a, const glm::vec3& b)
+    {
+        const float d = glm::distance(a, b);
+        return std::max(std::pow(d, kCentripetalAlpha), kMinKnotDelta);
+    }
+}
 
 glm::vec3 SplinePath::catmullRom(const glm::vec3& p0, const glm::vec3& p1,
                                   const glm::vec3& p2, const glm::vec3& p3, float t)
 {
-    float t2 = t * t;
-    float t3 = t2 * t;
+    // Knot times t0 < t1 < t2 < t3 spaced by chord^alpha.
+    const float t0 = 0.0f;
+    const float t1 = t0 + knotDelta(p0, p1);
+    const float t2 = t1 + knotDelta(p1, p2);
+    const float t3 = t2 + knotDelta(p2, p3);
 
-    // Catmull-Rom matrix multiplication
-    return 0.5f * (
-        (2.0f * p1) +
-        (-p0 + p2) * t +
-        (2.0f * p0 - 5.0f * p1 + 4.0f * p2 - p3) * t2 +
-        (-p0 + 3.0f * p1 - 3.0f * p2 + p3) * t3
-    );
+    // Map local u in [0,1] to global parameter in [t1, t2].
+    const float u = std::clamp(t, 0.0f, 1.0f);
+    const float tt = t1 + u * (t2 - t1);
+
+    // Barry-Goldman pyramid (three levels of weighted lerps).
+    const glm::vec3 A1 = ((t1 - tt) / (t1 - t0)) * p0 + ((tt - t0) / (t1 - t0)) * p1;
+    const glm::vec3 A2 = ((t2 - tt) / (t2 - t1)) * p1 + ((tt - t1) / (t2 - t1)) * p2;
+    const glm::vec3 A3 = ((t3 - tt) / (t3 - t2)) * p2 + ((tt - t2) / (t3 - t2)) * p3;
+    const glm::vec3 B1 = ((t2 - tt) / (t2 - t0)) * A1 + ((tt - t0) / (t2 - t0)) * A2;
+    const glm::vec3 B2 = ((t3 - tt) / (t3 - t1)) * A2 + ((tt - t1) / (t3 - t1)) * A3;
+    return         ((t2 - tt) / (t2 - t1)) * B1 + ((tt - t1) / (t2 - t1)) * B2;
 }
 
 glm::vec3 SplinePath::catmullRomDerivative(const glm::vec3& p0, const glm::vec3& p1,
                                              const glm::vec3& p2, const glm::vec3& p3, float t)
 {
-    float t2 = t * t;
-
-    return 0.5f * (
-        (-p0 + p2) +
-        (2.0f * (2.0f * p0 - 5.0f * p1 + 4.0f * p2 - p3)) * t +
-        (3.0f * (-p0 + 3.0f * p1 - 3.0f * p2 + p3)) * t2
-    );
+    // Centred finite difference in local u-space. Endpoint-clamp avoids
+    // sampling outside the segment; callers normalise so the magnitude
+    // skew at the clamp point is harmless.
+    constexpr float kEps = 1e-3f;
+    const float uLo = std::max(0.0f, t - kEps);
+    const float uHi = std::min(1.0f, t + kEps);
+    const glm::vec3 lo = catmullRom(p0, p1, p2, p3, uLo);
+    const glm::vec3 hi = catmullRom(p0, p1, p2, p3, uHi);
+    return (hi - lo) / (uHi - uLo);
 }
 
 } // namespace Vestige

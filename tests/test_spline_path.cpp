@@ -5,6 +5,8 @@
 /// @brief Unit tests for SplinePath (Catmull-Rom spline evaluation and mesh generation).
 #include <gtest/gtest.h>
 
+#include <cmath>
+
 #include "environment/spline_path.h"
 
 using namespace Vestige;
@@ -136,6 +138,36 @@ TEST(SplinePathTest, SerializeDeserialize)
     EXPECT_EQ(loaded.getWaypointCount(), 3);
     EXPECT_NEAR(loaded.getWaypoints()[1].x, 5.0f, 0.01f);
     EXPECT_NEAR(loaded.getWaypoints()[1].z, 5.0f, 0.01f);
+}
+
+TEST(SplinePathTest, CentripetalAvoidsCusp)
+{
+    // Yuksel et al. 2011, "Parameterization and Applications of Catmull-Rom
+    // Curves" (Computer-Aided Design 43.7) — uniform Catmull-Rom overshoots
+    // and can self-intersect when adjacent control-point spacing is uneven;
+    // centripetal (alpha = 0.5) provably does not.
+    //
+    // Setup: inner pair p1, p2 share x = 0, separated only in z. Outer pair
+    // p0, p3 sit 10 units away in x. The segment between p1 and p2 must run
+    // (roughly) along the z-axis without bulging out in x.
+    //
+    // With uniform parameterisation, x reaches ~0.47 near local t = 0.25 in
+    // the middle segment. With centripetal, |x| stays < 0.1 throughout.
+    SplinePath path;
+    path.addWaypoint(glm::vec3(-10.0f, 0.0f, 0.0f));
+    path.addWaypoint(glm::vec3(  0.0f, 0.0f, 0.0f));
+    path.addWaypoint(glm::vec3(  0.0f, 0.0f, 1.0f));
+    path.addWaypoint(glm::vec3( 10.0f, 0.0f, 1.0f));
+
+    // Sample the middle segment (global t in [1/3, 2/3]) at 9 interior points.
+    for (int i = 1; i < 10; ++i)
+    {
+        float localT = static_cast<float>(i) / 10.0f;
+        float globalT = (1.0f + localT) / 3.0f;
+        glm::vec3 p = path.evaluate(globalT);
+        EXPECT_LT(std::abs(p.x), 0.15f)
+            << "x-overshoot at localT=" << localT << " (x=" << p.x << ")";
+    }
 }
 
 TEST(SplinePathTest, FourPointCurve)

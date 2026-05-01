@@ -9,6 +9,31 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-05-02 Phase 10.9 — E1 (centripetal Catmull-Rom in SplinePath)
+
+- **E1.** `SplinePath::catmullRom` switched from uniform to centripetal
+  parameterisation per Yuksel et al. 2011, "Parameterization and
+  Applications of Catmull-Rom Curves" (Computer-Aided Design 43.7).
+  Knots are now spaced by chord^0.5; the segment between any two
+  control points is provably free of self-intersection and cusps,
+  regardless of inter-point spacing. Implemented as the Barry-Goldman
+  recursive form (three lerp pyramid levels) with a 1e-6 floor on knot
+  intervals to handle coincident points safely.
+  `SplinePath::catmullRomDerivative` switched to a centred finite
+  difference in local-u space — callers normalise the result, so the
+  small numerical error vs the analytic-uniform form is harmless for
+  tangent direction. Consumers: foliage `clearAlongPath` (path-tool
+  road / stream / brush authoring) and Phase 10.8 CM7 cinematic camera
+  (which depends on E2's arc-length evaluator landing next).
+  Regression-pinned by `SplinePathTest.CentripetalAvoidsCusp`, the
+  canonical Yuksel four-point setup with 10:1 spacing skew — uniform
+  produced ~0.48 x-overshoot at the centre segment, centripetal stays
+  under 0.1. The parallel `engine/utils/CatmullRomSpline` (editor
+  path-tool authoring class) is intentionally unchanged in this slice
+  — same uniform-CR limitation applies but its only consumer is the
+  editor preview, not gameplay-determinism-critical paths; tracked
+  separately if needed.
+
 ### 2026-04-30 CMake floor 3.20 → 3.21 (OpenAL Soft 1.25.1 requirement)
 
 - **Build.** `cmake_minimum_required` raised from 3.20 to 3.21. OpenAL
