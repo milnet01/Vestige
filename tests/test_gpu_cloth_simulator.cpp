@@ -128,6 +128,34 @@ TEST(GpuClothSimulator, SetSubstepsClampsToMaxSubsteps_Cl7)
     EXPECT_EQ(sim.getSubsteps(), MAX_SUBSTEPS);
 }
 
+// Phase 10.9 Cl4 — dihedral compliance is now a live runtime knob on the
+// GPU backend (mirrors the CPU surface). The SSBO re-upload requires GL
+// context; the C++ getter / clamp / mirror-update paths are testable
+// headlessly. Visual GPU parity is verified at engine launch.
+TEST(GpuClothSimulator, DefaultDihedralComplianceMatchesCpuDefault_Cl4)
+{
+    GpuClothSimulator sim;
+    EXPECT_FLOAT_EQ(sim.getDihedralBendCompliance(), 0.01f);
+}
+
+TEST(GpuClothSimulator, SetDihedralComplianceUpdatesGetter_Cl4)
+{
+    GpuClothSimulator sim;
+    sim.setDihedralBendCompliance(0.05f);
+    EXPECT_FLOAT_EQ(sim.getDihedralBendCompliance(), 0.05f);
+    sim.setDihedralBendCompliance(0.0f);
+    EXPECT_FLOAT_EQ(sim.getDihedralBendCompliance(), 0.0f);
+}
+
+TEST(GpuClothSimulator, SetDihedralComplianceClampsNegativeToZero_Cl4)
+{
+    // Mirrors ClothSimulator::setDihedralBendCompliance — negative input
+    // would flip the sign of the XPBD restoring force; clamp instead.
+    GpuClothSimulator sim;
+    sim.setDihedralBendCompliance(-0.5f);
+    EXPECT_FLOAT_EQ(sim.getDihedralBendCompliance(), 0.0f);
+}
+
 TEST(GpuClothSimulator, BindConstraintsEnumPinned)
 {
     // Constraints SSBO binding 4 is the contract with the cloth_constraints

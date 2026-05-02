@@ -76,6 +76,31 @@ void GpuClothSimulator::setBendCompliance(float compliance)
     m_compliancesDirty = true;
 }
 
+void GpuClothSimulator::setDihedralBendCompliance(float compliance)
+{
+    // Phase 10.9 Cl4 — match the CPU's clamp-to-non-negative semantics so
+    // a misconfigured preset can't flip the sign of the XPBD restoring force.
+    const float c = std::max(0.0f, compliance);
+    m_dihedralCompliance = c;
+
+    // Walk the CPU mirror of the dihedral SSBO updating each constraint's
+    // compliance field in place, then re-upload the whole vector. The CPU
+    // mirror stays authoritative so a future `reset()` or rebuild path
+    // picks up the latest value automatically.
+    for (auto& d : m_dihedrals)
+    {
+        d.compliance = c;
+    }
+
+    if (m_dihedralsSSBO != 0 && m_dihedralCount > 0)
+    {
+        glNamedBufferSubData(
+            m_dihedralsSSBO, 0,
+            static_cast<GLsizeiptr>(m_dihedralCount * sizeof(GpuDihedralConstraint)),
+            m_dihedrals.data());
+    }
+}
+
 void GpuClothSimulator::setWind(const glm::vec3& direction, float strength)
 {
     const float len = glm::length(direction);
@@ -444,15 +469,15 @@ void GpuClothSimulator::buildAndUploadDihedrals(const ClothConfig& config)
     m_dihedralColourRanges.clear();
     m_dihedralCount = 0;
 
-    // Use the same compliance the CPU dihedral solver defaults to
-    // (`m_dihedralCompliance = 0.01f`). The runtime accessor `setDihedralBendCompliance`
-    // on the CPU type covers tuning; the GPU backend will mirror that surface in
-    // a later step. For Step 6 we lock to the CPU default so visual parity holds.
-    constexpr float dihedralCompliance = 0.01f;
+    // Phase 10.9 Cl4 — runtime dihedral compliance is now exposed via
+    // `setDihedralBendCompliance` (mirrors the CPU surface). Initial build
+    // uses the current m_dihedralCompliance value, which defaults to 0.01f
+    // matching the CPU default. Subsequent setter calls re-upload the SSBO
+    // in place rather than re-running this builder.
     (void)config;  // bend distance compliance is separate (config.bendCompliance is for Step 5).
 
     generateDihedralConstraints(m_indices, m_positionMirror,
-                                 dihedralCompliance, m_dihedrals);
+                                 m_dihedralCompliance, m_dihedrals);
     if (m_dihedrals.empty()) return;
 
     m_dihedralColourRanges = colourDihedralConstraints(m_dihedrals, m_particleCount);

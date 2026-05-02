@@ -2,13 +2,14 @@
 // SPDX-License-Identifier: MIT
 
 /// @file text.frag.glsl
-/// @brief Text rendering fragment shader — samples glyph atlas alpha and applies text color.
+/// @brief Text rendering fragment shader — samples glyph atlas alpha and
+///        applies the per-vertex RGB color (Phase 10.9 Pe1 batched path).
 #version 450 core
 
 in vec2 v_texCoord;
+in vec3 v_color;
 
 uniform sampler2D u_glyphAtlas;
-uniform vec3 u_textColor;
 
 out vec4 fragColor;
 
@@ -19,5 +20,5 @@ void main()
     {
         discard;
     }
-    fragColor = vec4(u_textColor, alpha);
+    fragColor = vec4(v_color, alpha);
 }

@@ -59,19 +59,23 @@ void TextRenderer::setupQuadBuffers()
     glCreateVertexArrays(1, &m_vao);
     glCreateBuffers(1, &m_vbo);
 
-    // AUDIT M29: batch the whole string into one upload + one draw. Size the
-    // VBO up-front to the per-call glyph ceiling. Strings longer than this
-    // are truncated (see MAX_GLYPHS_PER_CALL); HUD lines in practice are
-    // well under 256 chars.
+    // AUDIT M29: batch the whole string into one upload + one draw. Pe1
+    // grew the VBO to hold a frame's worth of HUD strings (8192 glyphs)
+    // and the per-vertex layout to xy + uv + rgb (7 floats per vert).
     glNamedBufferStorage(m_vbo, VBO_BYTES, nullptr, GL_DYNAMIC_STORAGE_BIT);
 
-    // Bind VBO to VAO binding point 0
-    glVertexArrayVertexBuffer(m_vao, 0, m_vbo, 0, 4 * sizeof(float));
+    constexpr GLsizei kStride = FLOATS_PER_VERT * sizeof(float);
+    glVertexArrayVertexBuffer(m_vao, 0, m_vbo, 0, kStride);
 
     // Attribute 0: vec4 (x, y, u, v) at binding 0
     glEnableVertexArrayAttrib(m_vao, 0);
     glVertexArrayAttribFormat(m_vao, 0, 4, GL_FLOAT, GL_FALSE, 0);
     glVertexArrayAttribBinding(m_vao, 0, 0);
+
+    // Attribute 1: vec3 (r, g, b) at offset 16 (Pe1).
+    glEnableVertexArrayAttrib(m_vao, 1);
+    glVertexArrayAttribFormat(m_vao, 1, 3, GL_FLOAT, GL_FALSE, 4 * sizeof(float));
+    glVertexArrayAttribBinding(m_vao, 1, 0);
 }
 
 namespace text_oblique
@@ -101,27 +105,86 @@ void TextRenderer::renderText2DOblique(const std::string& text, float x, float y
     renderText2DImpl(text, x, y, scale, color, screenWidth, screenHeight, shearFactor);
 }
 
-void TextRenderer::renderText2DImpl(const std::string& text, float x, float y, float scale,
-                                      const glm::vec3& color, int screenWidth, int screenHeight,
-                                      float shearFactor)
+namespace
 {
-    if (!m_initialized || text.empty())
+// Helper: append the vertex data for one glyph quad into `verts` with
+// position + UV + rgb (7 floats per vert × 6 verts). Pulled out so the
+// batched and immediate paths share one source of truth (CLAUDE.md Rule 3).
+void appendGlyphVerts(std::vector<float>& verts,
+                      float xpos, float ypos, float w, float h,
+                      float u0, float v0, float u1, float v1,
+                      float baselineY, float shearFactor,
+                      const glm::vec3& color)
+{
+    const float topY    = ypos;
+    const float bottomY = ypos + h;
+    const float xTopL    = text_oblique::applyShear(xpos,     topY,    baselineY, shearFactor);
+    const float xTopR    = text_oblique::applyShear(xpos + w, topY,    baselineY, shearFactor);
+    const float xBottomL = text_oblique::applyShear(xpos,     bottomY, baselineY, shearFactor);
+    const float xBottomR = text_oblique::applyShear(xpos + w, bottomY, baselineY, shearFactor);
+
+    verts.insert(verts.end(), {
+        xTopL,    topY,    u0, v0, color.r, color.g, color.b,
+        xTopR,    topY,    u1, v0, color.r, color.g, color.b,
+        xBottomL, bottomY, u0, v1, color.r, color.g, color.b,
+        xTopR,    topY,    u1, v0, color.r, color.g, color.b,
+        xBottomR, bottomY, u1, v1, color.r, color.g, color.b,
+        xBottomL, bottomY, u0, v1, color.r, color.g, color.b,
+    });
+}
+} // namespace
+
+void TextRenderer::beginBatch2D(int screenWidth, int screenHeight)
+{
+    if (!m_initialized) return;
+
+    if (m_batchActive)
+    {
+        // Re-entry. If dimensions match, treat as no-op (caller's begin
+        // pairs with their own end). If they differ, flush the existing
+        // batch then open a fresh one — the screen resized mid-frame.
+        if (screenWidth == m_batchScreenWidth && screenHeight == m_batchScreenHeight)
+        {
+            return;
+        }
+        Logger::warning("TextRenderer: beginBatch2D called with new dims while batch open; flushing.");
+        endBatch2D();
+    }
+
+    m_batchActive       = true;
+    m_batchScreenWidth  = screenWidth;
+    m_batchScreenHeight = screenHeight;
+    m_batchVerts.clear();
+    m_batchGlyphCount   = 0;
+}
+
+void TextRenderer::endBatch2D()
+{
+    if (!m_initialized || !m_batchActive)
     {
         return;
     }
 
-    glm::mat4 ortho = glm::ortho(0.0f, static_cast<float>(screenWidth),
-                                   static_cast<float>(screenHeight), 0.0f);  // Top-left origin
+    // Empty batch — nothing to draw.
+    if (m_batchGlyphCount <= 0 || m_batchVerts.empty())
+    {
+        m_batchActive = false;
+        m_batchVerts.clear();
+        m_batchGlyphCount = 0;
+        return;
+    }
+
+    glm::mat4 ortho = glm::ortho(0.0f, static_cast<float>(m_batchScreenWidth),
+                                   static_cast<float>(m_batchScreenHeight), 0.0f);
 
     m_textShader.use();
     m_textShader.setMat4("u_projection", ortho);
     m_textShader.setMat4("u_model", glm::mat4(1.0f));
-    m_textShader.setVec3("u_textColor", color);
     m_textShader.setInt("u_glyphAtlas", 0);
 
     glBindTextureUnit(0, m_font.getAtlasTextureId());
 
-    // Save GL state that text rendering modifies
+    // Save GL state
     GLboolean prevBlend = glIsEnabled(GL_BLEND);
     GLboolean prevDepth = glIsEnabled(GL_DEPTH_TEST);
     GLint prevBlendSrc, prevBlendDst;
@@ -133,22 +196,59 @@ void TextRenderer::renderText2DImpl(const std::string& text, float x, float y, f
     glDisable(GL_DEPTH_TEST);
 
     glBindVertexArray(m_vao);
+    glNamedBufferSubData(m_vbo, 0,
+        static_cast<GLsizeiptr>(m_batchVerts.size() * sizeof(float)),
+        m_batchVerts.data());
+    glDrawArrays(GL_TRIANGLES, 0,
+        static_cast<GLsizei>(m_batchGlyphCount * VERTS_PER_GLYPH));
+
+    // Restore GL state
+    if (prevDepth) glEnable(GL_DEPTH_TEST); else glDisable(GL_DEPTH_TEST);
+    if (prevBlend) glEnable(GL_BLEND); else glDisable(GL_BLEND);
+    glBlendFunc(static_cast<GLenum>(prevBlendSrc), static_cast<GLenum>(prevBlendDst));
+
+    m_batchActive = false;
+    m_batchVerts.clear();
+    m_batchGlyphCount = 0;
+}
+
+void TextRenderer::renderText2DImpl(const std::string& text, float x, float y, float scale,
+                                      const glm::vec3& color, int screenWidth, int screenHeight,
+                                      float shearFactor)
+{
+    if (!m_initialized || text.empty())
+    {
+        return;
+    }
+
+    // Pe1 — when a frame batch is open, accumulate into the shared buffer
+    // and skip the per-call upload + draw. Caller is `UISystem::renderUI`
+    // which wraps the HUD pass in begin/endBatch2D.
+    const bool batched = m_batchActive
+                      && screenWidth  == m_batchScreenWidth
+                      && screenHeight == m_batchScreenHeight;
 
     float cursorX = x;
     float cursorY = y + m_font.getAscender() * scale;
 
-    // AUDIT M29: build one vertex array for the whole string, upload + draw
-    // once. Previously this loop did one glNamedBufferSubData + glDrawArrays
-    // per glyph, causing dozens of calls per HUD line.
-    std::vector<float> verts;
-    const std::size_t glyphCap =
-        std::min<std::size_t>(text.size(), MAX_GLYPHS_PER_CALL);
-    verts.reserve(glyphCap * VERTS_PER_GLYPH * FLOATS_PER_VERT);
+    std::vector<float>* target = batched ? &m_batchVerts : nullptr;
+    std::vector<float> localVerts;
+    if (!target)
+    {
+        const std::size_t glyphCap =
+            std::min<std::size_t>(text.size(), MAX_GLYPHS_PER_CALL);
+        localVerts.reserve(glyphCap * VERTS_PER_GLYPH * FLOATS_PER_VERT);
+        target = &localVerts;
+    }
+
+    const int perCallCap = batched
+        ? std::max(0, MAX_GLYPHS_PER_BATCH - m_batchGlyphCount)
+        : MAX_GLYPHS_PER_CALL;
 
     int emitted = 0;
     for (char c : text)
     {
-        if (emitted >= MAX_GLYPHS_PER_CALL)
+        if (emitted >= perCallCap)
         {
             break;
         }
@@ -164,39 +264,51 @@ void TextRenderer::renderText2DImpl(const std::string& text, float x, float y, f
         float u1 = u0 + glyph.atlasSize.x;
         float v1 = v0 + glyph.atlasSize.y;
 
-        // P6: per-vertex italic shear. Upright (shearFactor == 0)
-        // path is byte-for-byte identical to the pre-P6 emit —
-        // `applyShear` returns x unchanged when factor is zero.
-        const float topY    = ypos;
-        const float bottomY = ypos + h;
-        const float xTopL    = text_oblique::applyShear(xpos,     topY,    cursorY, shearFactor);
-        const float xTopR    = text_oblique::applyShear(xpos + w, topY,    cursorY, shearFactor);
-        const float xBottomL = text_oblique::applyShear(xpos,     bottomY, cursorY, shearFactor);
-        const float xBottomR = text_oblique::applyShear(xpos + w, bottomY, cursorY, shearFactor);
-
-        verts.insert(verts.end(), {
-            xTopL,    topY,    u0, v0,
-            xTopR,    topY,    u1, v0,
-            xBottomL, bottomY, u0, v1,
-            xTopR,    topY,    u1, v0,
-            xBottomR, bottomY, u1, v1,
-            xBottomL, bottomY, u0, v1,
-        });
+        appendGlyphVerts(*target, xpos, ypos, w, h, u0, v0, u1, v1,
+                         cursorY, shearFactor, color);
         ++emitted;
-
         cursorX += static_cast<float>(glyph.advance) / 64.0f * scale;
     }
 
-    if (emitted > 0)
+    if (batched)
     {
-        glNamedBufferSubData(m_vbo, 0,
-            static_cast<GLsizeiptr>(verts.size() * sizeof(float)),
-            verts.data());
-        glDrawArrays(GL_TRIANGLES, 0,
-            static_cast<GLsizei>(emitted * VERTS_PER_GLYPH));
+        m_batchGlyphCount += emitted;
+        return;
     }
 
-    // Restore GL state
+    // Immediate (non-batched) path — single string, single draw.
+    if (emitted == 0)
+    {
+        return;
+    }
+
+    glm::mat4 ortho = glm::ortho(0.0f, static_cast<float>(screenWidth),
+                                   static_cast<float>(screenHeight), 0.0f);
+
+    m_textShader.use();
+    m_textShader.setMat4("u_projection", ortho);
+    m_textShader.setMat4("u_model", glm::mat4(1.0f));
+    m_textShader.setInt("u_glyphAtlas", 0);
+
+    glBindTextureUnit(0, m_font.getAtlasTextureId());
+
+    GLboolean prevBlend = glIsEnabled(GL_BLEND);
+    GLboolean prevDepth = glIsEnabled(GL_DEPTH_TEST);
+    GLint prevBlendSrc, prevBlendDst;
+    glGetIntegerv(GL_BLEND_SRC_RGB, &prevBlendSrc);
+    glGetIntegerv(GL_BLEND_DST_RGB, &prevBlendDst);
+
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glDisable(GL_DEPTH_TEST);
+
+    glBindVertexArray(m_vao);
+    glNamedBufferSubData(m_vbo, 0,
+        static_cast<GLsizeiptr>(localVerts.size() * sizeof(float)),
+        localVerts.data());
+    glDrawArrays(GL_TRIANGLES, 0,
+        static_cast<GLsizei>(emitted * VERTS_PER_GLYPH));
+
     if (prevDepth) glEnable(GL_DEPTH_TEST); else glDisable(GL_DEPTH_TEST);
     if (prevBlend) glEnable(GL_BLEND); else glDisable(GL_BLEND);
     glBlendFunc(static_cast<GLenum>(prevBlendSrc), static_cast<GLenum>(prevBlendDst));
@@ -219,7 +331,6 @@ void TextRenderer::renderText3D(const std::string& text, const glm::mat4& modelM
     m_textShader.use();
     m_textShader.setMat4("u_projection", projection * view);
     m_textShader.setMat4("u_model", modelMatrix);
-    m_textShader.setVec3("u_textColor", color);
     m_textShader.setInt("u_glyphAtlas", 0);
 
     glBindTextureUnit(0, m_font.getAtlasTextureId());
@@ -233,7 +344,7 @@ void TextRenderer::renderText3D(const std::string& text, const glm::mat4& modelM
     float cursorX = 0.0f;
     float pixelScale = scale / static_cast<float>(m_font.getPixelSize());
 
-    // AUDIT M29: batched upload — see renderText2D for rationale.
+    // AUDIT M29: batched upload — one upload + draw per string.
     std::vector<float> verts;
     const std::size_t glyphCap =
         std::min<std::size_t>(text.size(), MAX_GLYPHS_PER_CALL);
@@ -258,14 +369,9 @@ void TextRenderer::renderText3D(const std::string& text, const glm::mat4& modelM
         float u1 = u0 + glyph.atlasSize.x;
         float v1 = v0 + glyph.atlasSize.y;
 
-        verts.insert(verts.end(), {
-            xpos,     ypos,     u0, v0,
-            xpos + w, ypos,     u1, v0,
-            xpos,     ypos + h, u0, v1,
-            xpos + w, ypos,     u1, v0,
-            xpos + w, ypos + h, u1, v1,
-            xpos,     ypos + h, u0, v1,
-        });
+        // 3D path — no italic shear, baseline = ypos so applyShear is identity.
+        appendGlyphVerts(verts, xpos, ypos, w, h, u0, v0, u1, v1,
+                         ypos, 0.0f, color);
         ++emitted;
 
         cursorX += static_cast<float>(glyph.advance) / 64.0f * pixelScale;
@@ -351,7 +457,6 @@ std::shared_ptr<Texture> TextRenderer::generateTextHeightMap(const std::string& 
     m_textShader.use();
     m_textShader.setMat4("u_projection", ortho);
     m_textShader.setMat4("u_model", glm::mat4(1.0f));
-    m_textShader.setVec3("u_textColor", textColor);
     m_textShader.setInt("u_glyphAtlas", 0);
 
     glBindTextureUnit(0, m_font.getAtlasTextureId());
@@ -364,6 +469,11 @@ std::shared_ptr<Texture> TextRenderer::generateTextHeightMap(const std::string& 
 
     float cursorX = margin;
     float cursorY = yOffset + m_font.getAscender() * scale;
+
+    // Pe1 — one upload + draw for the whole string. Same per-vertex
+    // colour layout as the 2D / 3D paths so the shader matches.
+    std::vector<float> verts;
+    verts.reserve(text.size() * VERTS_PER_GLYPH * FLOATS_PER_VERT);
 
     for (char c : text)
     {
@@ -379,22 +489,19 @@ std::shared_ptr<Texture> TextRenderer::generateTextHeightMap(const std::string& 
         float u1 = u0 + glyph.atlasSize.x;
         float v1 = v0 + glyph.atlasSize.y;
 
-        float vertices[6][4] =
-        {
-            { xpos,     ypos,     u0, v0 },
-            { xpos + w, ypos,     u1, v0 },
-            { xpos,     ypos + h, u0, v1 },
-
-            { xpos + w, ypos,     u1, v0 },
-            { xpos + w, ypos + h, u1, v1 },
-            { xpos,     ypos + h, u0, v1 },
-        };
-
-        glNamedBufferSubData(m_vbo, 0, sizeof(vertices), vertices);
-
-        glDrawArrays(GL_TRIANGLES, 0, 6);
+        appendGlyphVerts(verts, xpos, ypos, w, h, u0, v0, u1, v1,
+                         cursorY, 0.0f, textColor);
 
         cursorX += static_cast<float>(glyph.advance) / 64.0f * scale;
+    }
+
+    if (!verts.empty())
+    {
+        glNamedBufferSubData(m_vbo, 0,
+            static_cast<GLsizeiptr>(verts.size() * sizeof(float)),
+            verts.data());
+        glDrawArrays(GL_TRIANGLES, 0,
+            static_cast<GLsizei>(verts.size() / FLOATS_PER_VERT));
     }
 
     glEnable(GL_DEPTH_TEST);

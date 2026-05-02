@@ -279,10 +279,10 @@ public:
     // --- Dihedral bending ---
 
     /// @brief Sets the compliance for dihedral bending constraints (0 = rigid, higher = softer).
-    void setDihedralBendCompliance(float compliance);
+    void setDihedralBendCompliance(float compliance) override;
 
     /// @brief Returns the current dihedral bend compliance.
-    float getDihedralBendCompliance() const;
+    float getDihedralBendCompliance() const override;
 
     // --- Adaptive damping ---
 

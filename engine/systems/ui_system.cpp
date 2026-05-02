@@ -168,6 +168,20 @@ void UISystem::renderUI(int screenWidth, int screenHeight)
 
     // Render root canvas first, then modal overlay on top. Both share the
     // same sprite-batch pass so draw order is strictly back-to-front.
+    //
+    // Phase 10.9 Pe1 — open a frame-scoped TextRenderer batch so every
+    // widget's `renderText2D` call accumulates into one upload + draw
+    // at `endBatch2D`. Pre-Pe1 a typical HUD frame issued ~18 separate
+    // text draws (FPS counter + each menu label + each keybind row +
+    // subtitles + toasts).
+    TextRenderer* textPtrForBatch = (m_engine != nullptr)
+        ? m_engine->getRenderer().getTextRenderer()
+        : nullptr;
+    if (textPtrForBatch != nullptr && textPtrForBatch->isInitialized())
+    {
+        textPtrForBatch->beginBatch2D(screenWidth, screenHeight);
+    }
+
     m_spriteBatch.begin(screenWidth, screenHeight);
     if (rootHasElements)
     {
@@ -181,9 +195,7 @@ void UISystem::renderUI(int screenWidth, int screenHeight)
     // Subtitles last so they sit on top of modal UI. Layout is computed
     // against the text renderer's actual font pixel size so plate
     // width matches rendered glyph width byte-for-byte.
-    TextRenderer* textPtr = hasSubtitles
-        ? m_engine->getRenderer().getTextRenderer()
-        : nullptr;
+    TextRenderer* textPtr = hasSubtitles ? textPtrForBatch : nullptr;
     if (hasSubtitles && textPtr != nullptr && textPtr->isInitialized())
     {
         TextRenderer& text = *textPtr;
@@ -201,6 +213,12 @@ void UISystem::renderUI(int screenWidth, int screenHeight)
     else
     {
         m_spriteBatch.end();
+    }
+
+    // Pe1 — flush every queued text draw in one upload + draw.
+    if (textPtrForBatch != nullptr && textPtrForBatch->isBatching())
+    {
+        textPtrForBatch->endBatch2D();
     }
 
     // Restore GL state

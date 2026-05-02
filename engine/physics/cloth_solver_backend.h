@@ -124,6 +124,15 @@ public:
     virtual void setShearCompliance(float compliance) = 0;
     virtual void setBendCompliance(float compliance) = 0;
 
+    /// @brief Phase 10.9 Cl4 — XPBD compliance for the dihedral bending
+    ///        solver (separate from the distance-bend constraint exposed
+    ///        by `setBendCompliance`). 0 = perfectly stiff, larger values
+    ///        let creases form more readily. Both backends now expose
+    ///        the live tuning surface (CPU updates each constraint in
+    ///        place; GPU re-uploads the dihedral SSBO).
+    virtual void setDihedralBendCompliance(float compliance) = 0;
+    virtual float getDihedralBendCompliance() const = 0;
+
     // -- Wind --
 
     virtual void setWind(const glm::vec3& direction, float strength) = 0;

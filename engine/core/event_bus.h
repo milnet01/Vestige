@@ -24,6 +24,19 @@ using SubscriptionId = uint32_t;
 /// @details Subsystems subscribe to specific event types. When an event is
 ///          published, all subscribers for that type are notified synchronously.
 ///          Subscriptions can be removed via unsubscribe() using the returned ID.
+///
+///          Phase 10.9 Pe4 — re-entrancy is supported (a callback may
+///          publish further events, subscribe new listeners, or unsubscribe
+///          itself or others). The per-publish vector copy that the
+///          previous implementation used has been replaced by a depth
+///          counter + pending-adds queue + tombstone-and-compact: the
+///          dispatch loop holds a `const std::vector<ListenerEntry>&`
+///          reference to the live storage and walks `[0, startSize)`
+///          captured at entry. New subscribers added mid-dispatch land
+///          in `m_pendingAdds` and are drained when the outermost
+///          publish unwinds; unsubscribed entries are tombstoned (marked
+///          `!valid`) and compacted at the same drain. No heap copy on
+///          the per-event hot path.
 class EventBus
 {
 public:
@@ -39,7 +52,18 @@ public:
         {
             callback(static_cast<const T&>(event));
         };
-        m_listeners[std::type_index(typeid(T))].push_back({id, wrapper});
+        const auto key = std::type_index(typeid(T));
+        if (m_dispatchDepth > 0)
+        {
+            // Pe4 — appending to the live vector mid-dispatch could
+            // reallocate and invalidate the by-ref iteration window;
+            // queue instead and drain when dispatch unwinds.
+            m_pendingAdds[key].push_back({id, std::move(wrapper), true});
+        }
+        else
+        {
+            m_listeners[key].push_back({id, std::move(wrapper), true});
+        }
         return id;
     }
 
@@ -55,15 +79,27 @@ public:
     void publish(const T& event)
     {
         auto it = m_listeners.find(std::type_index(typeid(T)));
-        if (it != m_listeners.end())
+        if (it == m_listeners.end()) return;
+
+        // Pe4 — by-ref iteration. Snapshot the size at entry so a callback
+        // that subscribes more listeners (which land in m_pendingAdds, not
+        // here) doesn't extend the loop. Tombstoned entries (unsubscribed
+        // mid-dispatch) skip via the `valid` flag.
+        const std::vector<ListenerEntry>& listeners = it->second;
+        const size_t snapshot = listeners.size();
+        ++m_dispatchDepth;
+        for (size_t i = 0; i < snapshot; ++i)
         {
-            // Copy to avoid iterator invalidation if a callback subscribes/unsubscribes.
-            // Typical listener lists are small (1–5 entries), so copy cost is negligible.
-            auto listeners = it->second;
-            for (const auto& entry : listeners)
+            const ListenerEntry& entry = listeners[i];
+            if (entry.valid)
             {
                 entry.callback(event);
             }
+        }
+        --m_dispatchDepth;
+        if (m_dispatchDepth == 0)
+        {
+            drainPending();
         }
     }
 
@@ -81,10 +117,16 @@ private:
     {
         SubscriptionId id;
         EventCallback callback;
+        bool valid = true;  ///< Pe4 tombstone — unsubscribed mid-dispatch.
     };
 
+    /// @brief Pe4 — drain queued adds and remove tombstones.
+    void drainPending();
+
     std::unordered_map<std::type_index, std::vector<ListenerEntry>> m_listeners;
+    std::unordered_map<std::type_index, std::vector<ListenerEntry>> m_pendingAdds;
     SubscriptionId m_nextId = 1;
+    int m_dispatchDepth = 0;
 };
 
 } // namespace Vestige

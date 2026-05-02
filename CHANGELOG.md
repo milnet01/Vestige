@@ -9,6 +9,78 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-05-02 Phase 10.9 — Pe1 (text batch) + Pe4 (EventBus reentrancy) + Cl4 (dihedral compliance setter) + W6 (closed-by-Sy1)
+
+Four more outstanding-fix closures bundled together — three substantive
+implementations + one documentation-only mark for the W6 case that Sy1
+already closed in code. Pinned by 12 new tests + 5 closures of latent perf
+hotspots.
+
+- **W6 — Listener-sync-after-camera (closed by Sy1).** The Phase 10.9 Slice 11
+  Sy1 mechanism shipped with `AudioSystem::getUpdatePhase() override → UpdatePhase::PostCamera`,
+  and `AudioSystem::update` calls `m_audioEngine.updateListener(...)` at the
+  top of every tick. By the time the listener push runs, the camera has
+  already advanced via the default-`Update`-phase systems that ran earlier
+  in the dispatch loop. The original W6 alternative — splitting `AudioSystem`
+  into `update()` + an explicit `syncListener()` post-camera hook — is
+  unnecessary because the phase-tag mechanism subsumes the same ordering
+  guarantee. No code change needed at W6 close time; this is a documentation-
+  only mark.
+
+- **Pe1 — TextRenderer batch across strings.** Pre-Pe1 a typical HUD frame
+  issued ~18 separate text draws (FPS counter, each menu label, each keybind
+  row, subtitles, toasts — every `renderText2D` call triggered its own
+  upload + draw). Pe1 replaces the `u_textColor` uniform with a per-vertex
+  `vec3 a_color` attribute (so a single batch can mix HUD colours), bumps
+  the vertex layout from 4 floats to 7, grows the VBO to 8192 glyphs (~1.34
+  MB), and adds opt-in batch API: `beginBatch2D(w, h)` / `endBatch2D()` /
+  `isBatching()`. While a batch is open every `renderText2D` call appends
+  glyphs to `m_batchVerts` instead of issuing its own draw; `endBatch2D`
+  flushes the whole queue in one upload + draw. `appendGlyphVerts` extracted
+  as a free helper so the immediate / batched / `generateTextHeightMap`
+  paths share one source of truth (CLAUDE.md Rule 3). `UISystem::renderUI`
+  wraps the entire HUD pass in `beginBatch2D` ↔ `endBatch2D` so all 21
+  call sites keep their existing API and batch automatically. Engine
+  launches clean with the new shader + vertex format on Mesa AMD. +4 tests
+  pin the begin/end state machine headlessly.
+
+- **Pe4 — EventBus reentrancy + deferred-add.** Pre-Pe4 every `publish<T>`
+  copied the listener vector — `auto listeners = it->second;` — to defend
+  against iterator invalidation when a callback subscribed/unsubscribed
+  mid-dispatch. At 60 Hz across ~10 hot event types this burned ~600 heap
+  allocs/sec for a contract the by-ref + tombstone pattern handles for free.
+  Replaced with three coordinated mechanisms: (1) `m_dispatchDepth` counter
+  + by-ref iteration over `[0, snapshot)` size captured at entry; (2)
+  `subscribe` during dispatch routes to `m_pendingAdds[T]` instead of the
+  live vector (avoids reallocation invalidating the iteration window); (3)
+  `unsubscribe` during dispatch marks `valid = false` (tombstone) which the
+  loop's `if (entry.valid)` check skips. `drainPending()` runs at the
+  outermost publish unwind, compacting tombstones and folding queued adds.
+  `subscribe-then-unsubscribe` entirely within dispatch nets to zero.
+  Nested publishes don't prematurely drain — pending work waits for the
+  outermost publish, not the innermost. +5 tests pin the contracts that
+  the previous copy was implicitly enforcing; all 33 pre-existing EventBus
+  tests still green.
+
+- **Cl4 — Dihedral compliance setter.** Pre-Cl4 the GPU cloth backend
+  hard-coded `dihedralCompliance = 0.01f` at SSBO build time, leaving no
+  way to tune it at runtime — the inspector / preset path could change
+  the CPU backend's value but not the GPU's, breaking parity. New
+  `IClothSolverBackend::setDihedralBendCompliance(float)` + `getDihedralBendCompliance()`
+  virtual surface. CPU `ClothSimulator` already had matching members; just
+  retagged with `override`. GPU `GpuClothSimulator` gains `m_dihedralCompliance`
+  member (default 0.01f matching CPU), `buildAndUploadDihedrals` reads from
+  the member instead of a `constexpr` literal, and `setDihedralBendCompliance`
+  clamps negative input to zero (mirrors CPU semantics — negative would flip
+  the sign of the XPBD restoring force), walks `m_dihedrals.compliance`,
+  and re-uploads the whole SSBO via one `glNamedBufferSubData`. Cheap O(N)
+  in-place update — no rebuild of the colour-grouped dihedral graph. +3
+  tests pin default = CPU default, setter / getter round-trip, negative
+  clamp.
+
+- **Tests**: 3179 / 3180 pass (+12 vs prior 3167; 1 pre-existing skip
+  unchanged). +4 Pe1 + 5 Pe4 + 3 Cl4 + W6 doc-only.
+
 ### 2026-05-02 Phase 10.9 — I3 (gamepad axis bindings) + Ph3 (sphereCast) + Ed3 (multi-delete root canon)
 
 Three focused outstanding-fix closures landing together — all small, mechanical,

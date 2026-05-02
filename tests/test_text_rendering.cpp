@@ -137,3 +137,49 @@ TEST(TextRendering, ASCIIRangeIs95Printable)
     }
     EXPECT_EQ(count, 95);
 }
+
+// =============================================================================
+// Phase 10.9 Pe1 — TextRenderer batch state machine
+//
+// The batched-draw path collapses ~18 per-string HUD draws into one upload +
+// draw at `endBatch2D`. The full upload + draw needs a GL context (so it's
+// runtime-verified at engine launch per the project's `test_gpu_cloth_simulator.cpp`
+// precedent), but the begin / end state machine is testable headlessly.
+// =============================================================================
+
+TEST(TextRendering, BatchStartsClosed_Pe1)
+{
+    TextRenderer renderer;
+    EXPECT_FALSE(renderer.isBatching());
+}
+
+TEST(TextRendering, BeginBatchOnUninitializedIsNoOp_Pe1)
+{
+    TextRenderer renderer;
+    // Renderer is uninitialised — beginBatch2D must not flip to batching
+    // because the underlying VBO doesn't exist.
+    renderer.beginBatch2D(800, 600);
+    EXPECT_FALSE(renderer.isBatching());
+}
+
+TEST(TextRendering, EndBatchOnUninitializedIsNoOp_Pe1)
+{
+    TextRenderer renderer;
+    // Closing a batch that was never opened (or that the uninitialised
+    // beginBatch2D rejected) must not crash.
+    renderer.endBatch2D();
+    EXPECT_FALSE(renderer.isBatching());
+}
+
+TEST(TextRendering, RenderText2DInBatchIsSafeWhenUninitialised_Pe1)
+{
+    TextRenderer renderer;
+    renderer.beginBatch2D(800, 600);
+    // Both immediate and oblique paths should no-op safely.
+    renderer.renderText2D("HP: 100", 10.0f, 10.0f, 1.0f,
+                          glm::vec3(1.0f), 800, 600);
+    renderer.renderText2DOblique("Quote", 20.0f, 20.0f, 1.0f,
+                                  glm::vec3(0.5f), 800, 600);
+    renderer.endBatch2D();
+    EXPECT_FALSE(renderer.isBatching());
+}

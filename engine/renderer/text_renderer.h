@@ -13,6 +13,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace Vestige
 {
@@ -77,6 +78,12 @@ public:
     /// @param color Text color.
     /// @param screenWidth Viewport width for ortho projection.
     /// @param screenHeight Viewport height for ortho projection.
+    ///
+    /// Phase 10.9 Pe1 — when a frame batch is open
+    /// (`beginBatch2D` ↔ `endBatch2D`), this call accumulates glyphs into the
+    /// shared batch buffer instead of issuing its own upload + draw, so the
+    /// HUD pass collapses ~18 per-string draws into one. Outside of a batch
+    /// the call retains pre-Pe1 single-string behaviour.
     void renderText2D(const std::string& text, float x, float y, float scale,
                       const glm::vec3& color, int screenWidth, int screenHeight);
 
@@ -122,6 +129,25 @@ public:
     /// @brief Measures the width of a text string in pixels (at scale 1.0).
     float measureTextWidth(const std::string& text) const;
 
+    /// @brief Phase 10.9 Pe1 — open a frame-scoped batch. While a batch
+    ///        is open, every `renderText2D` / `renderText2DOblique` call
+    ///        merely appends glyphs to the shared batch buffer; nothing
+    ///        is drawn until `endBatch2D` flushes the whole queue in one
+    ///        upload + draw. Nested begin calls are ignored (same screen
+    ///        dims) or logged + treated as start-fresh (different dims).
+    /// @param screenWidth  Viewport width (must match every queued call).
+    /// @param screenHeight Viewport height (must match every queued call).
+    void beginBatch2D(int screenWidth, int screenHeight);
+
+    /// @brief Phase 10.9 Pe1 — close the batch and flush every glyph
+    ///        queued since `beginBatch2D` in a single upload + draw.
+    ///        No-op when no batch is open or the batch is empty.
+    void endBatch2D();
+
+    /// @brief True iff a batch is currently open. Tests + the
+    ///        UI render pass use this to assert correct begin/end pairing.
+    bool isBatching() const { return m_batchActive; }
+
 private:
     void setupQuadBuffers();
 
@@ -132,24 +158,36 @@ private:
                           const glm::vec3& color, int screenWidth, int screenHeight,
                           float shearFactor);
 
-    /// @brief Upper bound on glyphs per renderText2D / renderText3D call.
-    ///
-    /// Strings beyond this limit are truncated rather than fall back to
-    /// chunked draws — HUD lines in practice are much shorter, and a bounded
-    /// VBO keeps the batched-upload path simple (one ``glNamedBufferSubData``
-    /// + one ``glDrawArrays`` per string, instead of N of each per glyph).
-    /// 1024 glyphs ≈ 96 KB of vertex data, which is still a cheap upload.
-    static constexpr int  MAX_GLYPHS_PER_CALL = 1024;
-    static constexpr int  VERTS_PER_GLYPH     = 6;
-    static constexpr int  FLOATS_PER_VERT     = 4;
-    static constexpr std::size_t VBO_BYTES    =
-        sizeof(float) * VERTS_PER_GLYPH * FLOATS_PER_VERT * MAX_GLYPHS_PER_CALL;
+    /// @brief Upper bound on glyphs per non-batched renderText2D / renderText3D call.
+    /// HUD lines in practice are much shorter; truncation keeps a single-string
+    /// upload + draw bounded.
+    static constexpr int  MAX_GLYPHS_PER_CALL  = 1024;
+    /// @brief Phase 10.9 Pe1 — upper bound on glyphs in one batched flush.
+    /// 8192 glyphs covers a frame full of HUD labels + subtitles + toasts
+    /// with comfortable headroom (~1.3 MB VBO at 7 floats/vert × 6 verts).
+    static constexpr int  MAX_GLYPHS_PER_BATCH = 8192;
+    static constexpr int  VERTS_PER_GLYPH      = 6;
+    /// @brief Per-vertex layout: xy position, uv texcoord, rgb color.
+    /// Pe1 added the per-vertex color so a single batch can mix HUD
+    /// element colors without splitting the draw.
+    static constexpr int  FLOATS_PER_VERT      = 7;
+    static constexpr std::size_t VBO_BYTES     =
+        sizeof(float) * VERTS_PER_GLYPH * FLOATS_PER_VERT * MAX_GLYPHS_PER_BATCH;
 
     Font m_font;
     Shader m_textShader;
     GLuint m_vao = 0;
     GLuint m_vbo = 0;
     bool m_initialized = false;
+
+    // Phase 10.9 Pe1 — batch state. While `m_batchActive`, every queued
+    // call's vertex data accumulates in `m_batchVerts` instead of going
+    // straight to the GPU; `endBatch2D` flushes the whole queue at once.
+    bool                m_batchActive       = false;
+    int                 m_batchScreenWidth  = 0;
+    int                 m_batchScreenHeight = 0;
+    std::vector<float>  m_batchVerts;
+    int                 m_batchGlyphCount   = 0;
 };
 
 } // namespace Vestige

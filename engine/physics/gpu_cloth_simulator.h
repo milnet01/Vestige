@@ -68,6 +68,16 @@ public:
     void setShearCompliance(float compliance) override;
     void setBendCompliance(float compliance) override;
 
+    /// @brief Phase 10.9 Cl4 — XPBD compliance for the dihedral bending
+    ///        solver. Setter walks `m_dihedrals` updating each constraint's
+    ///        `compliance` field then re-uploads the SSBO via
+    ///        `glNamedBufferSubData`. Cheaper than rebuilding the dihedral
+    ///        graph (which is the colour-grouped construction in
+    ///        `buildAndUploadDihedrals`); compliance is the only field that
+    ///        changes.
+    void setDihedralBendCompliance(float compliance) override;
+    float getDihedralBendCompliance() const override { return m_dihedralCompliance; }
+
     // Wind (IClothSolverBackend).
     void setWind(const glm::vec3& direction, float strength) override;
     void setWindQuality(ClothWindQuality quality) override { m_windQuality = quality; }
@@ -302,6 +312,11 @@ private:
     glm::vec3 m_windVelocity = glm::vec3(0.0f);
     float     m_dragCoeff    = 1.0f;
     float     m_damping      = 0.01f;
+    /// @brief Phase 10.9 Cl4 — current dihedral compliance, mirroring the
+    /// CPU `m_dihedralCompliance` default. Initial value picked at
+    /// `buildAndUploadDihedrals`; runtime changes go through
+    /// `setDihedralBendCompliance` which re-uploads the SSBO.
+    float     m_dihedralCompliance = 0.01f;
     int       m_substeps     = 10;        ///< XPBD substeps per simulate(); matches CPU default.
     ClothWindQuality m_windQuality = ClothWindQuality::FULL;
 
