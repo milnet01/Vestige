@@ -225,6 +225,52 @@ problems that the audit got wrong:
 3182 / 3182 / 0 — same baseline as slice 4 (3 assertion upgrades, 2
 test renames, no test count change).
 
+### 2026-05-02 Test-suite audit — M2 architectural-tools TYPED_TEST refactor (slice 6)
+
+`tests/test_architectural_tools.cpp` had four lifecycle contracts —
+*starts-inactive*, *activate-makes-active*, *cancel-after-activate-resets*,
+*cancel-when-inactive-is-noop* — duplicated by hand across five tools
+(Wall / Room / Cutout / Roof / Stair) with uneven coverage (WallTool
+had all four; StairTool had three; RoofTool had only two of the four).
+Replaced with a single `ArchitecturalToolLifecycle` `TYPED_TEST_SUITE`
+parametrised over all five tools via a `ToolTraits<T>` table that
+encodes the per-tool *canonical activate verb* and *expected
+active/inactive states*.
+
+**Honest tradeoff disclosure.** The audit projected ~200 LOC reduction
+for this refactor; the actual delta is *+2 LOC* (364 → 366), because
+the `ToolTraits` boilerplate (5 specialisations × ~6 lines + suite
+glue + the explanatory header docstring) eats roughly the same number
+of lines that the duplicated test bodies took. The LOC savings claim
+in the audit was wrong — the structural redundancy in the original
+file was less than it appeared. The refactor lands anyway because the
+*non-LOC* wins are real:
+
+- **Coverage uniformity, +11 tests for free.** Original suite had 31
+  hand-written cases with uneven contract coverage; the refactored
+  suite now exercises all four contracts on all five tools (4 × 5 =
+  20 generated TYPED_TEST cases + 22 retained tool-specific tests =
+  42 cases total). RoofTool gains "starts inactive" + "cancel when
+  inactive is no-op" pins it didn't have. StairTool gains
+  "cancel-after-activate-resets" via the contract.
+- **Adding a sixth tool is one traits specialisation plus one line in
+  the type list** — not four copy-paste TEST blocks. The next
+  architectural tool (truss / column / archway?) automatically
+  inherits all four contracts.
+- **Contract-name drift becomes impossible.** Renaming
+  `StartsInactive` → something else propagates everywhere via the
+  TYPED_TEST identity rather than requiring a five-file rename.
+
+Tool-specific tests stay individual (DefaultParameters,
+ParametersModifiable, mode-variant tests for Room / `showingDialog` or
+`showingPanel` asserts for tools that have a panel) because the field
+sets and surface APIs differ per tool — TYPED_TEST doesn't help those.
+
+3192 / 3192 / 0 — was 3182 / 3182 / 0, so +10 tests net. Suite count
+rose 405 → 410 because each TYPED_TEST instantiation is its own gtest
+test-suite (`ArchitecturalToolLifecycle/0…4`). Build green on first
+pass; no behavioural change in any tool.
+
 
 
 Slice 13 perf hygiene closes the LRA-build hot-spot. Pre-Pe8

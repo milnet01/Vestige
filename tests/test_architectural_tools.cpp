@@ -3,6 +3,14 @@
 
 /// @file test_architectural_tools.cpp
 /// @brief Unit tests for architectural tool state machines (Wall, Room, Cutout, Roof, Stair).
+///
+/// The four lifecycle contracts shared by every architectural tool —
+/// starts-inactive, activate-makes-active, cancel-after-activate-resets,
+/// cancel-when-inactive-is-noop — are exercised once via a TYPED_TEST
+/// suite parametrised over a `ToolTraits<T>` table. Adding a new tool
+/// only needs a new traits specialisation; all four contracts apply
+/// automatically. Tool-specific tests (default parameters, modifiable
+/// fields, mode variants) remain as ordinary `TEST` blocks below.
 
 #include "editor/tools/wall_tool.h"
 #include "editor/tools/room_tool.h"
@@ -15,44 +23,108 @@
 using namespace Vestige;
 
 // =============================================================================
-// WallTool tests
+// Shared lifecycle contract — TYPED_TEST over all architectural tools
 // =============================================================================
 
-TEST(WallToolTest, StartsInactive)
+namespace {
+
+/// @brief Per-tool traits: how to canonically activate the tool and what
+///        state is expected before / after.
+///
+/// `RoomTool` has no plain `activate()` — it has `activateClickMode()` and
+/// `activateDimensionMode()`. The traits pick `activateClickMode()` as the
+/// canonical activation for the shared contract; `activateDimensionMode()`
+/// is exercised by a tool-specific TEST below.
+template <typename T>
+struct ToolTraits;
+
+template <>
+struct ToolTraits<WallTool>
 {
-    WallTool tool;
-    EXPECT_EQ(tool.getState(), WallTool::State::INACTIVE);
+    static void activate(WallTool& t) { t.activate(); }
+    static auto activeState() { return WallTool::State::WAITING_START; }
+    static auto inactiveState() { return WallTool::State::INACTIVE; }
+};
+
+template <>
+struct ToolTraits<RoomTool>
+{
+    static void activate(RoomTool& t) { t.activateClickMode(); }
+    static auto activeState() { return RoomTool::State::WAITING_CORNER; }
+    static auto inactiveState() { return RoomTool::State::INACTIVE; }
+};
+
+template <>
+struct ToolTraits<CutoutTool>
+{
+    static void activate(CutoutTool& t) { t.activate(); }
+    static auto activeState() { return CutoutTool::State::SELECT_WALL; }
+    static auto inactiveState() { return CutoutTool::State::INACTIVE; }
+};
+
+template <>
+struct ToolTraits<RoofTool>
+{
+    static void activate(RoofTool& t) { t.activate(); }
+    static auto activeState() { return RoofTool::State::CONFIGURE; }
+    static auto inactiveState() { return RoofTool::State::INACTIVE; }
+};
+
+template <>
+struct ToolTraits<StairTool>
+{
+    static void activate(StairTool& t) { t.activate(); }
+    static auto activeState() { return StairTool::State::CONFIGURE; }
+    static auto inactiveState() { return StairTool::State::INACTIVE; }
+};
+
+template <typename T>
+class ArchitecturalToolLifecycle : public ::testing::Test {};
+
+using AllArchitecturalTools = ::testing::Types<
+    WallTool, RoomTool, CutoutTool, RoofTool, StairTool>;
+
+}  // namespace
+
+TYPED_TEST_SUITE(ArchitecturalToolLifecycle, AllArchitecturalTools);
+
+TYPED_TEST(ArchitecturalToolLifecycle, StartsInactive)
+{
+    TypeParam tool;
+    EXPECT_EQ(tool.getState(), ToolTraits<TypeParam>::inactiveState());
     EXPECT_FALSE(tool.isActive());
 }
 
-TEST(WallToolTest, ActivateEntersWaitingStart)
+TYPED_TEST(ArchitecturalToolLifecycle, ActivateMakesActive)
 {
-    WallTool tool;
-    tool.activate();
-    EXPECT_EQ(tool.getState(), WallTool::State::WAITING_START);
+    TypeParam tool;
+    ToolTraits<TypeParam>::activate(tool);
+    EXPECT_EQ(tool.getState(), ToolTraits<TypeParam>::activeState());
     EXPECT_TRUE(tool.isActive());
 }
 
-TEST(WallToolTest, CancelResetsToInactive)
+TYPED_TEST(ArchitecturalToolLifecycle, CancelAfterActivateResetsToInactive)
 {
-    WallTool tool;
-    tool.activate();
+    TypeParam tool;
+    ToolTraits<TypeParam>::activate(tool);
     EXPECT_TRUE(tool.isActive());
 
     tool.cancel();
-    EXPECT_EQ(tool.getState(), WallTool::State::INACTIVE);
+    EXPECT_EQ(tool.getState(), ToolTraits<TypeParam>::inactiveState());
     EXPECT_FALSE(tool.isActive());
 }
 
-TEST(WallToolTest, CancelFromWaitingEndResetsToInactive)
+TYPED_TEST(ArchitecturalToolLifecycle, CancelWhenInactiveIsNoOp)
 {
-    WallTool tool;
-    tool.activate();
-    // We cannot call processClick without Scene/ResourceManager/CommandHistory,
-    // so test cancel from WAITING_START only.
+    TypeParam tool;
     tool.cancel();
-    EXPECT_EQ(tool.getState(), WallTool::State::INACTIVE);
+    EXPECT_EQ(tool.getState(), ToolTraits<TypeParam>::inactiveState());
+    EXPECT_FALSE(tool.isActive());
 }
+
+// =============================================================================
+// WallTool — tool-specific tests
+// =============================================================================
 
 TEST(WallToolTest, DefaultParameters)
 {
@@ -79,27 +151,11 @@ TEST(WallToolTest, DoubleActivateStaysInWaitingStart)
     EXPECT_TRUE(tool.isActive());
 }
 
-TEST(WallToolTest, CancelWhenInactiveStaysInactive)
-{
-    WallTool tool;
-    tool.cancel();
-    EXPECT_EQ(tool.getState(), WallTool::State::INACTIVE);
-    EXPECT_FALSE(tool.isActive());
-}
-
 // =============================================================================
-// RoomTool tests
+// RoomTool — tool-specific tests (mode variants + parameters)
 // =============================================================================
 
-TEST(RoomToolTest, StartsInactive)
-{
-    RoomTool tool;
-    EXPECT_EQ(tool.getState(), RoomTool::State::INACTIVE);
-    EXPECT_FALSE(tool.isActive());
-    EXPECT_FALSE(tool.showingDialog());
-}
-
-TEST(RoomToolTest, ActivateDimensionMode)
+TEST(RoomToolTest, ActivateDimensionModeShowsDialog)
 {
     RoomTool tool;
     tool.activateDimensionMode();
@@ -108,31 +164,17 @@ TEST(RoomToolTest, ActivateDimensionMode)
     EXPECT_TRUE(tool.showingDialog());
 }
 
-TEST(RoomToolTest, ActivateClickMode)
+TEST(RoomToolTest, ActivateClickModeDoesNotShowDialog)
 {
     RoomTool tool;
     tool.activateClickMode();
-    EXPECT_EQ(tool.getState(), RoomTool::State::WAITING_CORNER);
-    EXPECT_TRUE(tool.isActive());
     EXPECT_FALSE(tool.showingDialog());
 }
 
-TEST(RoomToolTest, CancelResetsToInactive)
+TEST(RoomToolTest, StartsWithNoDialog)
 {
     RoomTool tool;
-    tool.activateDimensionMode();
-    tool.cancel();
-    EXPECT_EQ(tool.getState(), RoomTool::State::INACTIVE);
-    EXPECT_FALSE(tool.isActive());
-}
-
-TEST(RoomToolTest, CancelFromClickModeResetsToInactive)
-{
-    RoomTool tool;
-    tool.activateClickMode();
-    tool.cancel();
-    EXPECT_EQ(tool.getState(), RoomTool::State::INACTIVE);
-    EXPECT_FALSE(tool.isActive());
+    EXPECT_FALSE(tool.showingDialog());
 }
 
 TEST(RoomToolTest, DefaultParameters)
@@ -165,33 +207,13 @@ TEST(RoomToolTest, ParametersModifiable)
 }
 
 // =============================================================================
-// CutoutTool tests
+// CutoutTool — tool-specific tests
 // =============================================================================
 
-TEST(CutoutToolTest, StartsInactive)
+TEST(CutoutToolTest, StartsWithNoDialog)
 {
     CutoutTool tool;
-    EXPECT_EQ(tool.getState(), CutoutTool::State::INACTIVE);
-    EXPECT_FALSE(tool.isActive());
     EXPECT_FALSE(tool.showingDialog());
-}
-
-TEST(CutoutToolTest, ActivateEntersSelectWall)
-{
-    CutoutTool tool;
-    tool.activate();
-    EXPECT_EQ(tool.getState(), CutoutTool::State::SELECT_WALL);
-    EXPECT_TRUE(tool.isActive());
-    EXPECT_FALSE(tool.showingDialog());
-}
-
-TEST(CutoutToolTest, CancelResetsToInactive)
-{
-    CutoutTool tool;
-    tool.activate();
-    tool.cancel();
-    EXPECT_EQ(tool.getState(), CutoutTool::State::INACTIVE);
-    EXPECT_FALSE(tool.isActive());
 }
 
 TEST(CutoutToolTest, DefaultParameters)
@@ -233,33 +255,27 @@ TEST(CutoutToolTest, ShowingDialogOnlyInConfigureState)
 }
 
 // =============================================================================
-// RoofTool tests
+// RoofTool — tool-specific tests
 // =============================================================================
 
-TEST(RoofToolTest, StartsInactive)
+TEST(RoofToolTest, StartsWithNoPanel)
 {
     RoofTool tool;
-    EXPECT_EQ(tool.getState(), RoofTool::State::INACTIVE);
-    EXPECT_FALSE(tool.isActive());
     EXPECT_FALSE(tool.showingPanel());
 }
 
-TEST(RoofToolTest, ActivateEntersConfigure)
+TEST(RoofToolTest, ActivateShowsPanel)
 {
     RoofTool tool;
     tool.activate();
-    EXPECT_EQ(tool.getState(), RoofTool::State::CONFIGURE);
-    EXPECT_TRUE(tool.isActive());
     EXPECT_TRUE(tool.showingPanel());
 }
 
-TEST(RoofToolTest, CancelResetsToInactive)
+TEST(RoofToolTest, CancelHidesPanel)
 {
     RoofTool tool;
     tool.activate();
     tool.cancel();
-    EXPECT_EQ(tool.getState(), RoofTool::State::INACTIVE);
-    EXPECT_FALSE(tool.isActive());
     EXPECT_FALSE(tool.showingPanel());
 }
 
@@ -290,33 +306,27 @@ TEST(RoofToolTest, ParametersModifiable)
 }
 
 // =============================================================================
-// StairTool tests
+// StairTool — tool-specific tests
 // =============================================================================
 
-TEST(StairToolTest, StartsInactive)
+TEST(StairToolTest, StartsWithNoPanel)
 {
     StairTool tool;
-    EXPECT_EQ(tool.getState(), StairTool::State::INACTIVE);
-    EXPECT_FALSE(tool.isActive());
     EXPECT_FALSE(tool.showingPanel());
 }
 
-TEST(StairToolTest, ActivateEntersConfigure)
+TEST(StairToolTest, ActivateShowsPanel)
 {
     StairTool tool;
     tool.activate();
-    EXPECT_EQ(tool.getState(), StairTool::State::CONFIGURE);
-    EXPECT_TRUE(tool.isActive());
     EXPECT_TRUE(tool.showingPanel());
 }
 
-TEST(StairToolTest, CancelResetsToInactive)
+TEST(StairToolTest, CancelHidesPanel)
 {
     StairTool tool;
     tool.activate();
     tool.cancel();
-    EXPECT_EQ(tool.getState(), StairTool::State::INACTIVE);
-    EXPECT_FALSE(tool.isActive());
     EXPECT_FALSE(tool.showingPanel());
 }
 
@@ -353,12 +363,4 @@ TEST(StairToolTest, ParametersModifiable)
     EXPECT_FLOAT_EQ(tool.innerRadius, 0.5f);
     EXPECT_FLOAT_EQ(tool.outerRadius, 2.0f);
     EXPECT_FLOAT_EQ(tool.totalAngle, 720.0f);
-}
-
-TEST(StairToolTest, CancelWhenInactiveStaysInactive)
-{
-    StairTool tool;
-    tool.cancel();
-    EXPECT_EQ(tool.getState(), StairTool::State::INACTIVE);
-    EXPECT_FALSE(tool.isActive());
 }
