@@ -99,11 +99,8 @@ glm::vec3 lutLookup_cpu(const std::vector<unsigned char>& data, int size,
              static_cast<float>(data[idx + 2]) / 255.0f };
 }
 
-const std::string& screenQuadSrc()
-{
-    static const std::string s = readShaderFile("screen_quad.frag.glsl");
-    return s;
-}
+// shader-source caching now lives in `readShaderFile` (basename-keyed) —
+// no need for a per-file static cache here.
 
 }  // namespace
 
@@ -115,7 +112,8 @@ class ColorGradingParityTest : public GLTestFixture {};
 
 TEST_F(ColorGradingParityTest, IdentityLutAtVoxelCentresMatchesCpuLookup)
 {
-    const std::string fnSrc = extractGlslFunction(screenQuadSrc(), "applyColorGradingLut");
+    const std::string fnSrc = extractGlslFunction(
+        readShaderFile("screen_quad.frag.glsl"), "applyColorGradingLut");
     ASSERT_FALSE(fnSrc.empty());
 
     constexpr int LUT_SIZE = 32;
@@ -128,7 +126,7 @@ TEST_F(ColorGradingParityTest, IdentityLutAtVoxelCentresMatchesCpuLookup)
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_3D, lutTex);
 
-    const std::string fs =
+    ShaderProgram prog(
         "#version 450 core\n"
         "layout(location = 0) out vec4 outColor;\n"
         "uniform vec3      u_color;\n"
@@ -138,7 +136,8 @@ TEST_F(ColorGradingParityTest, IdentityLutAtVoxelCentresMatchesCpuLookup)
         "void main() {\n"
         "    vec3 r = applyColorGradingLut(u_color, u_lut, u_intensity);\n"
         "    outColor = vec4(r, 1.0);\n"
-        "}\n";
+        "}\n");
+    ASSERT_TRUE(prog.valid());
 
     // Voxel-centre values: `i/(N-1)` for i in {0, 7, 15, 23, 31}.
     const float c0  = 0.0f / 31.0f;
@@ -157,12 +156,11 @@ TEST_F(ColorGradingParityTest, IdentityLutAtVoxelCentresMatchesCpuLookup)
 
     for (auto in : inputs)
     {
-        UniformTable u{
+        glm::vec4 gpu = prog.run({
             {"u_color",     in},
             {"u_intensity", 1.0f},
             {"u_lut",       1},  // sampler bound to unit 1
-        };
-        glm::vec4 gpu = runShaderForVec4(fs, u);
+        });
         glm::vec3 cpu = lutLookup_cpu(lutData, LUT_SIZE, in);
 
         EXPECT_NEAR(gpu.r, cpu.x, 5e-3f) << "(" << in.x << "," << in.y << "," << in.z << ").r";
@@ -185,7 +183,8 @@ TEST_F(ColorGradingParityTest, IdentityLutAtVoxelCentresMatchesCpuLookup)
 
 TEST_F(ColorGradingParityTest, ZeroIntensityIsExactPassthrough)
 {
-    const std::string fnSrc = extractGlslFunction(screenQuadSrc(), "applyColorGradingLut");
+    const std::string fnSrc = extractGlslFunction(
+        readShaderFile("screen_quad.frag.glsl"), "applyColorGradingLut");
     ASSERT_FALSE(fnSrc.empty());
 
     // Use a LUT that maps everything to 0 (a "kill" LUT) so any
@@ -199,7 +198,7 @@ TEST_F(ColorGradingParityTest, ZeroIntensityIsExactPassthrough)
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_3D, lutTex);
 
-    const std::string fs =
+    ShaderProgram prog(
         "#version 450 core\n"
         "layout(location = 0) out vec4 outColor;\n"
         "uniform vec3      u_color;\n"
@@ -209,15 +208,15 @@ TEST_F(ColorGradingParityTest, ZeroIntensityIsExactPassthrough)
         "void main() {\n"
         "    vec3 r = applyColorGradingLut(u_color, u_lut, u_intensity);\n"
         "    outColor = vec4(r, 1.0);\n"
-        "}\n";
+        "}\n");
+    ASSERT_TRUE(prog.valid());
 
     const glm::vec3 input(0.4f, 0.7f, 0.2f);
-    UniformTable u{
+    glm::vec4 gpu = prog.run({
         {"u_color",     input},
         {"u_intensity", 0.0f},
         {"u_lut",       1},
-    };
-    glm::vec4 gpu = runShaderForVec4(fs, u);
+    });
 
     // mix(input, killed, 0.0) == input exactly (no FP rounding).
     EXPECT_FLOAT_EQ(gpu.r, input.x);
@@ -238,20 +237,20 @@ TEST_F(ColorGradingParityTest, MixBlendMatchesCpuAcrossIntensities)
     // identical (both implement linear interpolation), but the
     // `lutBlend` helper in `tests/test_color_grading.cpp` makes the
     // assumption load-bearing for the whole grading path.
-    const std::string fs = R"(#version 450 core
+    ShaderProgram prog(R"(#version 450 core
 layout(location = 0) out vec4 outColor;
 uniform vec3  u_a;
 uniform vec3  u_b;
 uniform float u_t;
 void main() { outColor = vec4(mix(u_a, u_b, u_t), 1.0); }
-)";
+)");
+    ASSERT_TRUE(prog.valid());
 
     const glm::vec3 a(0.3f, 0.5f, 0.7f);
     const glm::vec3 b(0.8f, 0.2f, 0.1f);
     for (float t : {0.0f, 0.25f, 0.5f, 0.75f, 1.0f})
     {
-        UniformTable u{{"u_a", a}, {"u_b", b}, {"u_t", t}};
-        glm::vec4 gpu = runShaderForVec4(fs, u);
+        glm::vec4 gpu = prog.run({{"u_a", a}, {"u_b", b}, {"u_t", t}});
         glm::vec3 cpu = glm::mix(a, b, t);
         EXPECT_NEAR(gpu.r, cpu.x, 1e-6f) << "t=" << t << ".r";
         EXPECT_NEAR(gpu.g, cpu.y, 1e-6f) << "t=" << t << ".g";

@@ -57,11 +57,8 @@ glm::vec3 softThreshold_cpu(glm::vec3 color, float threshold)
     return color * (contrib / (luma + 0.0001f));
 }
 
-const std::string& bloomDownsampleSrc()
-{
-    static const std::string s = readShaderFile("bloom_downsample.frag.glsl");
-    return s;
-}
+// shader-source caching now lives in `readShaderFile` (basename-keyed) —
+// no need for a per-file static cache here.
 
 }  // namespace
 
@@ -73,15 +70,17 @@ class BloomParityTest : public GLTestFixture {};
 
 TEST_F(BloomParityTest, Bt709LuminanceMatchesCpuAcrossSpectrum)
 {
-    const std::string fnSrc = extractGlslFunction(bloomDownsampleSrc(), "bt709Luminance");
+    const std::string fnSrc = extractGlslFunction(
+        readShaderFile("bloom_downsample.frag.glsl"), "bt709Luminance");
     ASSERT_FALSE(fnSrc.empty());
 
-    const std::string fs =
+    ShaderProgram prog(
         "#version 450 core\n"
         "layout(location = 0) out vec4 outColor;\n"
         "uniform vec3 u_color;\n"
         + fnSrc +
-        "void main() { outColor = vec4(bt709Luminance(u_color), 0.0, 0.0, 1.0); }\n";
+        "void main() { outColor = vec4(bt709Luminance(u_color), 0.0, 0.0, 1.0); }\n");
+    ASSERT_TRUE(prog.valid());
 
     const glm::vec3 cases[] = {
         {1.0f, 1.0f, 1.0f},   // white -> 1.0
@@ -95,8 +94,7 @@ TEST_F(BloomParityTest, Bt709LuminanceMatchesCpuAcrossSpectrum)
 
     for (auto c : cases)
     {
-        UniformTable u{{"u_color", c}};
-        glm::vec4 gpu = runShaderForVec4(fs, u);
+        glm::vec4 gpu = prog.run({{"u_color", c}});
         float cpu = bt709Luminance_cpu(c);
         EXPECT_NEAR(gpu.r, cpu, 1e-6f)
             << "(" << c.x << "," << c.y << "," << c.z << ")";
@@ -109,17 +107,19 @@ TEST_F(BloomParityTest, Bt709LuminanceMatchesCpuAcrossSpectrum)
 
 TEST_F(BloomParityTest, KarisWeightMatchesCpuAcrossSpectrum)
 {
-    const std::string sub   = extractGlslFunction(bloomDownsampleSrc(), "bt709Luminance");
-    const std::string fnSrc = extractGlslFunction(bloomDownsampleSrc(), "karisWeight");
+    const std::string& src  = readShaderFile("bloom_downsample.frag.glsl");
+    const std::string sub   = extractGlslFunction(src, "bt709Luminance");
+    const std::string fnSrc = extractGlslFunction(src, "karisWeight");
     ASSERT_FALSE(sub.empty());
     ASSERT_FALSE(fnSrc.empty());
 
-    const std::string fs =
+    ShaderProgram prog(
         "#version 450 core\n"
         "layout(location = 0) out vec4 outColor;\n"
         "uniform vec3 u_color;\n"
         + sub + fnSrc +
-        "void main() { outColor = vec4(karisWeight(u_color), 0.0, 0.0, 1.0); }\n";
+        "void main() { outColor = vec4(karisWeight(u_color), 0.0, 0.0, 1.0); }\n");
+    ASSERT_TRUE(prog.valid());
 
     const glm::vec3 cases[] = {
         {0.0f, 0.0f, 0.0f},   // luma 0 -> weight 1.0
@@ -131,8 +131,7 @@ TEST_F(BloomParityTest, KarisWeightMatchesCpuAcrossSpectrum)
 
     for (auto c : cases)
     {
-        UniformTable u{{"u_color", c}};
-        glm::vec4 gpu = runShaderForVec4(fs, u);
+        glm::vec4 gpu = prog.run({{"u_color", c}});
         float cpu = karisWeight_cpu(c);
         EXPECT_NEAR(gpu.r, cpu, 1e-6f)
             << "(" << c.x << "," << c.y << "," << c.z << ")";
@@ -145,12 +144,13 @@ TEST_F(BloomParityTest, KarisWeightMatchesCpuAcrossSpectrum)
 
 TEST_F(BloomParityTest, SoftThresholdMatchesCpuAcrossLumaBands)
 {
-    const std::string sub   = extractGlslFunction(bloomDownsampleSrc(), "bt709Luminance");
-    const std::string fnSrc = extractGlslFunction(bloomDownsampleSrc(), "softThreshold");
+    const std::string& src  = readShaderFile("bloom_downsample.frag.glsl");
+    const std::string sub   = extractGlslFunction(src, "bt709Luminance");
+    const std::string fnSrc = extractGlslFunction(src, "softThreshold");
     ASSERT_FALSE(sub.empty());
     ASSERT_FALSE(fnSrc.empty());
 
-    const std::string fs =
+    ShaderProgram prog(
         "#version 450 core\n"
         "layout(location = 0) out vec4 outColor;\n"
         "uniform vec3  u_color;\n"
@@ -159,7 +159,8 @@ TEST_F(BloomParityTest, SoftThresholdMatchesCpuAcrossLumaBands)
         "void main() {\n"
         "    vec3 r = softThreshold(u_color, u_threshold);\n"
         "    outColor = vec4(r, 1.0);\n"
-        "}\n";
+        "}\n");
+    ASSERT_TRUE(prog.valid());
 
     struct Case { glm::vec3 color; float threshold; const char* name; };
     const Case cases[] = {
@@ -171,8 +172,7 @@ TEST_F(BloomParityTest, SoftThresholdMatchesCpuAcrossLumaBands)
 
     for (const auto& c : cases)
     {
-        UniformTable u{{"u_color", c.color}, {"u_threshold", c.threshold}};
-        glm::vec4 gpu = runShaderForVec4(fs, u);
+        glm::vec4 gpu = prog.run({{"u_color", c.color}, {"u_threshold", c.threshold}});
         glm::vec3 cpu = softThreshold_cpu(c.color, c.threshold);
 
         EXPECT_NEAR(gpu.r, cpu.x, 1e-5f) << c.name << ".r";

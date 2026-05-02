@@ -10,7 +10,9 @@
 #include <filesystem>
 #include <fstream>
 #include <limits>
+#include <map>
 #include <sstream>
+#include <utility>
 #include <vector>
 
 namespace Vestige::Test
@@ -19,8 +21,6 @@ namespace Vestige::Test
 namespace
 {
 
-/// Pass-through vertex shader: a single fullscreen triangle generated
-/// from gl_VertexID, no VBO needed.
 constexpr const char* kVertexSrc = R"(#version 450 core
 void main()
 {
@@ -79,8 +79,10 @@ void setUniform(GLuint prog, const std::string& name, const UniformValue& v)
     GLint loc = glGetUniformLocation(prog, name.c_str());
     if (loc < 0)
     {
-        // Allowed: shader optimised the uniform out. Silent — the test
-        // is responsible for naming uniforms its shader actually reads.
+        // Allowed: shader optimised the uniform out, or the test passed a
+        // sampler-binding-as-int while the actual uniform is referenced
+        // through a different path. Silent — the test is responsible for
+        // naming uniforms its shader actually reads.
         return;
     }
     std::visit([loc](auto&& x) {
@@ -94,25 +96,29 @@ void setUniform(GLuint prog, const std::string& name, const UniformValue& v)
     }, v);
 }
 
+constexpr glm::vec4 kFailVec4(std::numeric_limits<float>::quiet_NaN());
+
 }  // namespace
 
-glm::vec4 runShaderForVec4(const std::string& fragSrc, const UniformTable& uniforms)
-{
-    constexpr glm::vec4 kFail(std::numeric_limits<float>::quiet_NaN());
+// =============================================================================
+// ShaderProgram
+// =============================================================================
 
+ShaderProgram::ShaderProgram(const std::string& fragSrc)
+{
     GLuint vs = compileShader(GL_VERTEX_SHADER,   kVertexSrc, "vertex");
     GLuint fs = compileShader(GL_FRAGMENT_SHADER, fragSrc,    "fragment");
     if (!vs || !fs)
     {
         if (vs) glDeleteShader(vs);
         if (fs) glDeleteShader(fs);
-        return kFail;
+        return;  // m_prog stays 0 → valid() returns false
     }
 
     GLuint prog = linkProgram(vs, fs);
     glDeleteShader(vs);
     glDeleteShader(fs);
-    if (!prog) return kFail;
+    if (!prog) return;
 
     GLuint fbo = 0;
     glGenFramebuffers(1, &fbo);
@@ -124,8 +130,7 @@ glm::vec4 runShaderForVec4(const std::string& fragSrc, const UniformTable& unifo
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, 1, 1, 0, GL_RGBA, GL_FLOAT, nullptr);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-                           GL_TEXTURE_2D, tex, 0);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex, 0);
 
     if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
     {
@@ -133,32 +138,86 @@ glm::vec4 runShaderForVec4(const std::string& fragSrc, const UniformTable& unifo
         glDeleteFramebuffers(1, &fbo);
         glDeleteTextures(1, &tex);
         glDeleteProgram(prog);
-        return kFail;
-    }
-
-    glViewport(0, 0, 1, 1);
-    glUseProgram(prog);
-    for (const auto& [name, value] : uniforms)
-    {
-        setUniform(prog, name, value);
+        return;
     }
 
     GLuint vao = 0;
     glGenVertexArrays(1, &vao);
-    glBindVertexArray(vao);
+
+    m_prog = prog;
+    m_fbo  = fbo;
+    m_tex  = tex;
+    m_vao  = vao;
+}
+
+ShaderProgram::~ShaderProgram() { freeAll(); }
+
+ShaderProgram::ShaderProgram(ShaderProgram&& other) noexcept
+    : m_prog(std::exchange(other.m_prog, 0))
+    , m_fbo (std::exchange(other.m_fbo,  0))
+    , m_tex (std::exchange(other.m_tex,  0))
+    , m_vao (std::exchange(other.m_vao,  0))
+{}
+
+ShaderProgram& ShaderProgram::operator=(ShaderProgram&& other) noexcept
+{
+    if (this != &other)
+    {
+        freeAll();
+        m_prog = std::exchange(other.m_prog, 0);
+        m_fbo  = std::exchange(other.m_fbo,  0);
+        m_tex  = std::exchange(other.m_tex,  0);
+        m_vao  = std::exchange(other.m_vao,  0);
+    }
+    return *this;
+}
+
+bool ShaderProgram::valid() const noexcept { return m_prog != 0; }
+
+glm::vec4 ShaderProgram::run(const UniformTable& uniforms)
+{
+    if (!valid()) return kFailVec4;
+
+    glBindFramebuffer(GL_FRAMEBUFFER, m_fbo);
+    glViewport(0, 0, 1, 1);
+    glUseProgram(m_prog);
+
+    for (const auto& [name, value] : uniforms)
+    {
+        setUniform(m_prog, name, value);
+    }
+
+    glBindVertexArray(m_vao);
     glDrawArrays(GL_TRIANGLES, 0, 3);
     glBindVertexArray(0);
 
     glm::vec4 pixel(std::numeric_limits<float>::quiet_NaN());
     glReadPixels(0, 0, 1, 1, GL_RGBA, GL_FLOAT, &pixel);
-
-    glDeleteVertexArrays(1, &vao);
-    glDeleteFramebuffers(1, &fbo);
-    glDeleteTextures(1, &tex);
-    glDeleteProgram(prog);
-
     return pixel;
 }
+
+void ShaderProgram::freeAll() noexcept
+{
+    if (m_vao)  { glDeleteVertexArrays(1, &m_vao); m_vao = 0; }
+    if (m_fbo)  { glDeleteFramebuffers(1, &m_fbo); m_fbo = 0; }
+    if (m_tex)  { glDeleteTextures(1, &m_tex);     m_tex = 0; }
+    if (m_prog) { glDeleteProgram(m_prog);         m_prog = 0; }
+}
+
+// =============================================================================
+// One-shot convenience wrapper
+// =============================================================================
+
+glm::vec4 runShaderForVec4(const std::string& fragSrc, const UniformTable& uniforms)
+{
+    ShaderProgram p(fragSrc);
+    if (!p.valid()) return kFailVec4;
+    return p.run(uniforms);
+}
+
+// =============================================================================
+// Shader source / function caches
+// =============================================================================
 
 std::string readShaderFile(const std::string& basename)
 {
@@ -167,6 +226,11 @@ std::string readShaderFile(const std::string& basename)
                      "check tests/CMakeLists.txt";
     return {};
 #else
+    // Cache by basename — same file requested by 2 parity tests reads disk once.
+    static std::map<std::string, std::string> cache;
+    auto it = cache.find(basename);
+    if (it != cache.end()) return it->second;
+
     std::filesystem::path p = std::filesystem::path(VESTIGE_SHADER_DIR) / basename;
     std::ifstream in(p);
     if (!in.good())
@@ -176,38 +240,27 @@ std::string readShaderFile(const std::string& basename)
     }
     std::stringstream ss;
     ss << in.rdbuf();
-    return ss.str();
+    auto [ins, _] = cache.emplace(basename, ss.str());
+    return ins->second;
 #endif
 }
 
 std::string extractGlslFunction(const std::string& src,
                                  const std::string& fnName)
 {
-    // Find a `<word> <word> ... <fnName>(` site that's at file scope (not
-    // a call site inside another function). Heuristic: scan for the name
-    // followed by `(`, then walk backwards across whitespace + identifier
-    // chars to find the start of the return type.
     const std::string needle = fnName + "(";
     size_t pos = 0;
     while ((pos = src.find(needle, pos)) != std::string::npos)
     {
-        // Backtrack to find the start of the line containing this name.
         size_t lineStart = src.rfind('\n', pos);
         lineStart = (lineStart == std::string::npos) ? 0 : lineStart + 1;
 
-        // A definition line has the form `<returnType> <fnName>(...)` —
-        // a call site has either `<fnName>(...)` (assignment / expression)
-        // or starts with whitespace followed by `<fnName>(...)` AND lives
-        // inside a brace block. Cheap discriminator: scan forward from `(`
-        // to `)` then check if the next non-space char is `{` (definition)
-        // or `;` / something else (declaration / call).
         size_t openParen  = pos + fnName.size();
         size_t closeParen = src.find(')', openParen);
         if (closeParen == std::string::npos) { ++pos; continue; }
         size_t after = src.find_first_not_of(" \t\r\n", closeParen + 1);
         if (after == std::string::npos || src[after] != '{') { ++pos; continue; }
 
-        // Walk forward from `{` matching braces to find the body's `}`.
         int depth = 0;
         size_t end = after;
         for (; end < src.size(); ++end)

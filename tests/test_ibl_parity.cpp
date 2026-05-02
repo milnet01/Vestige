@@ -98,22 +98,8 @@ glm::vec3 fresnelSchlickRoughness_cpu(float cosTheta, glm::vec3 F0, float roughn
     return F0 + (glm::max(glm::vec3(1.0f - roughness), F0) - F0) * (x2 * x2 * x);
 }
 
-// -----------------------------------------------------------------------
-// Cached shader sources (read once per process; constructed lazily so a
-// missing file fails inside the test, not at static-init time).
-// -----------------------------------------------------------------------
-
-const std::string& brdfLutSrc()
-{
-    static const std::string s = readShaderFile("brdf_lut.frag.glsl");
-    return s;
-}
-
-const std::string& sceneFragSrc()
-{
-    static const std::string s = readShaderFile("scene.frag.glsl");
-    return s;
-}
+// shader-source caching now lives in `readShaderFile` (basename-keyed) —
+// no need for per-file static caches here.
 
 }  // namespace
 
@@ -125,20 +111,21 @@ class IBLParityTest : public GLTestFixture {};
 
 TEST_F(IBLParityTest, RadicalInverseVdCMatchesCpuAcrossSampleIndices)
 {
-    const std::string fnSrc = extractGlslFunction(brdfLutSrc(), "radicalInverse_VdC");
+    const std::string fnSrc = extractGlslFunction(
+        readShaderFile("brdf_lut.frag.glsl"), "radicalInverse_VdC");
     ASSERT_FALSE(fnSrc.empty());
 
-    const std::string fs =
+    ShaderProgram prog(
         "#version 450 core\n"
         "layout(location = 0) out vec4 outColor;\n"
         "uniform uint u_i;\n"
         + fnSrc +
-        "void main() { outColor = vec4(radicalInverse_VdC(u_i), 0.0, 0.0, 1.0); }\n";
+        "void main() { outColor = vec4(radicalInverse_VdC(u_i), 0.0, 0.0, 1.0); }\n");
+    ASSERT_TRUE(prog.valid());
 
     for (uint32_t i : {0u, 1u, 2u, 7u, 64u, 511u, 1023u})
     {
-        UniformTable u{{ "u_i", i }};
-        glm::vec4 gpu = runShaderForVec4(fs, u);
+        glm::vec4 gpu = prog.run({{ "u_i", i }});
         float cpu = radicalInverse_VdC_cpu(i);
         EXPECT_NEAR(gpu.r, cpu, 1e-7f) << "radicalInverse_VdC(" << i << ")";
     }
@@ -150,12 +137,13 @@ TEST_F(IBLParityTest, RadicalInverseVdCMatchesCpuAcrossSampleIndices)
 
 TEST_F(IBLParityTest, HammersleyMatchesCpuAcrossSamplePoints)
 {
-    const std::string vdc  = extractGlslFunction(brdfLutSrc(), "radicalInverse_VdC");
-    const std::string hamm = extractGlslFunction(brdfLutSrc(), "hammersley");
+    const std::string& src = readShaderFile("brdf_lut.frag.glsl");
+    const std::string vdc  = extractGlslFunction(src, "radicalInverse_VdC");
+    const std::string hamm = extractGlslFunction(src, "hammersley");
     ASSERT_FALSE(vdc.empty());
     ASSERT_FALSE(hamm.empty());
 
-    const std::string fs =
+    ShaderProgram prog(
         "#version 450 core\n"
         "layout(location = 0) out vec4 outColor;\n"
         "uniform uint u_i;\n"
@@ -164,13 +152,13 @@ TEST_F(IBLParityTest, HammersleyMatchesCpuAcrossSamplePoints)
         "void main() {\n"
         "    vec2 r = hammersley(u_i, u_N);\n"
         "    outColor = vec4(r.x, r.y, 0.0, 1.0);\n"
-        "}\n";
+        "}\n");
+    ASSERT_TRUE(prog.valid());
 
     const uint32_t N = 1024u;
     for (uint32_t i : {0u, 1u, 100u, 511u, 1023u})
     {
-        UniformTable u{{ "u_i", i }, { "u_N", N }};
-        glm::vec4 gpu = runShaderForVec4(fs, u);
+        glm::vec4 gpu = prog.run({{ "u_i", i }, { "u_N", N }});
         glm::vec2 cpu = hammersley_cpu(i, N);
         EXPECT_NEAR(gpu.r, cpu.x, 1e-7f) << "hammersley(" << i << ").x";
         EXPECT_NEAR(gpu.g, cpu.y, 1e-7f) << "hammersley(" << i << ").y";
@@ -183,13 +171,14 @@ TEST_F(IBLParityTest, HammersleyMatchesCpuAcrossSamplePoints)
 
 TEST_F(IBLParityTest, ImportanceSampleGGXMatchesCpuAtRepresentativeInputs)
 {
-    const std::string fnSrc = extractGlslFunction(brdfLutSrc(), "importanceSampleGGX");
+    const std::string fnSrc = extractGlslFunction(
+        readShaderFile("brdf_lut.frag.glsl"), "importanceSampleGGX");
     ASSERT_FALSE(fnSrc.empty());
 
     // brdf_lut.frag.glsl declares `const float PI = ...` at file scope;
     // the function body references it. Re-declare here so the extracted
     // body has the same lookup environment when isolated.
-    const std::string fs =
+    ShaderProgram prog(
         "#version 450 core\n"
         "const float PI = 3.14159265359;\n"
         "layout(location = 0) out vec4 outColor;\n"
@@ -200,7 +189,8 @@ TEST_F(IBLParityTest, ImportanceSampleGGXMatchesCpuAtRepresentativeInputs)
         "void main() {\n"
         "    vec3 H = importanceSampleGGX(u_Xi, u_N, u_roughness);\n"
         "    outColor = vec4(H, 1.0);\n"
-        "}\n";
+        "}\n");
+    ASSERT_TRUE(prog.valid());
 
     struct Case { glm::vec2 Xi; glm::vec3 N; float roughness; const char* name; };
     const Case cases[] = {
@@ -212,12 +202,11 @@ TEST_F(IBLParityTest, ImportanceSampleGGXMatchesCpuAtRepresentativeInputs)
 
     for (const auto& c : cases)
     {
-        UniformTable u{
+        glm::vec4 gpu = prog.run({
             {"u_Xi",        c.Xi},
             {"u_N",         c.N},
             {"u_roughness", c.roughness},
-        };
-        glm::vec4 gpu = runShaderForVec4(fs, u);
+        });
         glm::vec3 cpu = importanceSampleGGX_cpu(c.Xi, c.N, c.roughness);
 
         EXPECT_NEAR(gpu.r, cpu.x, 1e-5f) << c.name << ".x";
@@ -232,10 +221,11 @@ TEST_F(IBLParityTest, ImportanceSampleGGXMatchesCpuAtRepresentativeInputs)
 
 TEST_F(IBLParityTest, GeometrySchlickGGXMatchesCpu)
 {
-    const std::string fnSrc = extractGlslFunction(brdfLutSrc(), "geometrySchlickGGX");
+    const std::string fnSrc = extractGlslFunction(
+        readShaderFile("brdf_lut.frag.glsl"), "geometrySchlickGGX");
     ASSERT_FALSE(fnSrc.empty());
 
-    const std::string fs =
+    ShaderProgram prog(
         "#version 450 core\n"
         "layout(location = 0) out vec4 outColor;\n"
         "uniform float u_NdotV;\n"
@@ -243,7 +233,8 @@ TEST_F(IBLParityTest, GeometrySchlickGGXMatchesCpu)
         + fnSrc +
         "void main() {\n"
         "    outColor = vec4(geometrySchlickGGX(u_NdotV, u_roughness), 0.0, 0.0, 1.0);\n"
-        "}\n";
+        "}\n");
+    ASSERT_TRUE(prog.valid());
 
     struct Case { float NdotV; float roughness; const char* name; };
     const Case cases[] = {
@@ -255,8 +246,7 @@ TEST_F(IBLParityTest, GeometrySchlickGGXMatchesCpu)
 
     for (const auto& c : cases)
     {
-        UniformTable u{{"u_NdotV", c.NdotV}, {"u_roughness", c.roughness}};
-        glm::vec4 gpu = runShaderForVec4(fs, u);
+        glm::vec4 gpu = prog.run({{"u_NdotV", c.NdotV}, {"u_roughness", c.roughness}});
         float cpu = geometrySchlickGGX_cpu(c.NdotV, c.roughness);
         EXPECT_NEAR(gpu.r, cpu, 1e-6f) << c.name;
     }
@@ -264,12 +254,13 @@ TEST_F(IBLParityTest, GeometrySchlickGGXMatchesCpu)
 
 TEST_F(IBLParityTest, GeometrySmithMatchesCpu)
 {
-    const std::string sub  = extractGlslFunction(brdfLutSrc(), "geometrySchlickGGX");
-    const std::string fnSrc = extractGlslFunction(brdfLutSrc(), "geometrySmith");
+    const std::string& src = readShaderFile("brdf_lut.frag.glsl");
+    const std::string sub  = extractGlslFunction(src, "geometrySchlickGGX");
+    const std::string fnSrc = extractGlslFunction(src, "geometrySmith");
     ASSERT_FALSE(sub.empty());
     ASSERT_FALSE(fnSrc.empty());
 
-    const std::string fs =
+    ShaderProgram prog(
         "#version 450 core\n"
         "layout(location = 0) out vec4 outColor;\n"
         "uniform float u_NdotV;\n"
@@ -278,7 +269,8 @@ TEST_F(IBLParityTest, GeometrySmithMatchesCpu)
         + sub + fnSrc +
         "void main() {\n"
         "    outColor = vec4(geometrySmith(u_NdotV, u_NdotL, u_roughness), 0.0, 0.0, 1.0);\n"
-        "}\n";
+        "}\n");
+    ASSERT_TRUE(prog.valid());
 
     struct Case { float NdotV; float NdotL; float roughness; const char* name; };
     const Case cases[] = {
@@ -290,10 +282,9 @@ TEST_F(IBLParityTest, GeometrySmithMatchesCpu)
 
     for (const auto& c : cases)
     {
-        UniformTable u{{"u_NdotV", c.NdotV},
-                       {"u_NdotL", c.NdotL},
-                       {"u_roughness", c.roughness}};
-        glm::vec4 gpu = runShaderForVec4(fs, u);
+        glm::vec4 gpu = prog.run({{"u_NdotV", c.NdotV},
+                                  {"u_NdotL", c.NdotL},
+                                  {"u_roughness", c.roughness}});
         float cpu = geometrySmith_cpu(c.NdotV, c.NdotL, c.roughness);
         EXPECT_NEAR(gpu.r, cpu, 1e-6f) << c.name;
     }
@@ -305,10 +296,11 @@ TEST_F(IBLParityTest, GeometrySmithMatchesCpu)
 
 TEST_F(IBLParityTest, FresnelSchlickRoughnessMatchesCpu)
 {
-    const std::string fnSrc = extractGlslFunction(sceneFragSrc(), "fresnelSchlickRoughness");
+    const std::string fnSrc = extractGlslFunction(
+        readShaderFile("scene.frag.glsl"), "fresnelSchlickRoughness");
     ASSERT_FALSE(fnSrc.empty());
 
-    const std::string fs =
+    ShaderProgram prog(
         "#version 450 core\n"
         "layout(location = 0) out vec4 outColor;\n"
         "uniform float u_cosTheta;\n"
@@ -318,7 +310,8 @@ TEST_F(IBLParityTest, FresnelSchlickRoughnessMatchesCpu)
         "void main() {\n"
         "    vec3 F = fresnelSchlickRoughness(u_cosTheta, u_F0, u_roughness);\n"
         "    outColor = vec4(F, 1.0);\n"
-        "}\n";
+        "}\n");
+    ASSERT_TRUE(prog.valid());
 
     struct Case { float cosTheta; glm::vec3 F0; float roughness; const char* name; };
     const Case cases[] = {
@@ -330,10 +323,9 @@ TEST_F(IBLParityTest, FresnelSchlickRoughnessMatchesCpu)
 
     for (const auto& c : cases)
     {
-        UniformTable u{{"u_cosTheta", c.cosTheta},
-                       {"u_F0",       c.F0},
-                       {"u_roughness", c.roughness}};
-        glm::vec4 gpu = runShaderForVec4(fs, u);
+        glm::vec4 gpu = prog.run({{"u_cosTheta",  c.cosTheta},
+                                  {"u_F0",        c.F0},
+                                  {"u_roughness", c.roughness}});
         glm::vec3 cpu = fresnelSchlickRoughness_cpu(c.cosTheta, c.F0, c.roughness);
 
         EXPECT_NEAR(gpu.r, cpu.x, 1e-6f) << c.name << ".r";

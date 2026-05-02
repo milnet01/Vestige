@@ -435,6 +435,67 @@ tests net. Engine builds green; screen-quad shader output
 bit-identical for all inputs (named-helper extraction is a
 mechanical refactor of a 3-line block).
 
+### 2026-05-02 Shader-parity slice 4 — streamline parity tests (compile-once + central source cache)
+
+Follow-up to slices 1-3. The original parity tests called
+`runShaderForVec4(fragSrc, uniforms)` once per case, which compiles +
+links the GLSL fragment shader from scratch every iteration. With
+4-7 cases per test and 12 parity tests across IBL / bloom /
+colour-grading, that meant ~60 GLSL compile-link cycles for what
+should be 12. This slice replaces the per-case compile path with a
+`ShaderProgram` RAII class — compile once in the test body, call
+`prog.run(uniforms)` per case.
+
+**Two streamlining wins**:
+
+- **`ShaderProgram` (move-only RAII) in `shader_parity_helpers.{h,cpp}`**.
+  Compiles vertex + fragment shaders, links the program, allocates a
+  1×1 RGBA32F FBO + texture + VAO; `run(uniforms)` binds the FBO,
+  sets uniforms, draws one pixel, reads back. `runShaderForVec4` is
+  retained as a one-shot wrapper for the smoke tests. The IBL parity
+  measurement showed `ColorGradingParityTest` going from 11 ms total
+  → 2 ms (5× speed-up); the IBL and bloom suites had similar
+  improvements but were already <10 ms so the relative win is
+  smaller. Total suite still ~4.8 s end-to-end (parity tests are
+  <1% of the budget either way) — the win is more about clarity of
+  the per-case loop than wall-clock saved.
+- **`readShaderFile` is now basename-cached** (one disk read per
+  basename per process). Pre-streamline each parity-test file kept
+  its own static `cachedSubsystemSrc()` that read the same file the
+  next test also wanted. Now `readShaderFile("brdf_lut.frag.glsl")`
+  is fast on the second call regardless of which test file is
+  asking. The per-file static helpers (`brdfLutSrc`, `bloomDownsampleSrc`,
+  `screenQuadSrc`) were removed; tests inline `readShaderFile(name)`
+  at the call site.
+
+**Dropped on second thought**: `extractGlslFunction` memoisation.
+Initial design keyed the cache by `(src.data() pointer, fnName)` —
+which is a real bug for callers passing temporary strings (the
+pointer is only valid for the call, and a future temporary at the
+same address would collide). Brace-counting is microseconds per call
+anyway. Removed before commit; the diff stays a net improvement
+without the broken cache.
+
+**Refactors that were considered but rejected** (per CLAUDE.md
+global rule 9 — push back when simpler path exists):
+
+- TYPED_TEST / TEST_P parametrisation across the IBL helpers.
+  `radicalInverse_VdC`, `hammersley`, `importanceSampleGGX`,
+  `geometrySmith`, `fresnelSchlickRoughness` all have *different*
+  signatures (uint vs vec2/vec3/float vs float/vec3/float) — a
+  uniform fixture would need either per-row fragment-shader strings
+  + function pointers (uglier than the current 6 TEST_F blocks) or
+  type-erased uniform packs (premature abstraction for 6 cases). Six
+  similar but distinct tests is below the Rule of Three threshold
+  for parametrisation pain.
+- A single shared FBO across the entire test environment. Saves
+  microseconds, adds GL-state lifecycle entanglement across tests.
+  Not worth it for a sub-1% test-suite slice.
+
+3207 / 3207 / 0 — same baseline as slice 3 (no test count change,
+internal API refactor only). Build green; full suite 4819 ms end-to-end
+(was 4826 ms pre-streamline; within noise).
+
 
 
 Slice 13 perf hygiene closes the LRA-build hot-spot. Pre-Pe8

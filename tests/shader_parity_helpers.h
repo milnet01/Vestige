@@ -34,14 +34,44 @@ using UniformValue = std::variant<
 
 using UniformTable = std::unordered_map<std::string, UniformValue>;
 
-/// @brief Compile @a fragSrc against a fixed pass-through vertex shader,
-///        bind @a uniforms, render one pixel into an RGBA32F FBO, return
-///        the four float channels.
+/// @brief Compiled fragment shader + 1×1 RGBA32F FBO, ready to render.
 ///
-/// On compile / link failure the function calls `ADD_FAILURE` and returns
-/// `vec4(NAN)` so the test fails with the GLSL infolog visible.
+/// Construct once per TEST so a TEST with N cases compiles GLSL once
+/// (not N times). `run(uniforms)` binds the uniforms, draws a single
+/// pixel, and reads back the four channels. Move-only.
 ///
-/// Caller must hold an active GL context (use `GLTestFixture`).
+/// On compile / link failure the constructor calls `ADD_FAILURE` and
+/// leaves the program in an invalid state — `valid()` returns false
+/// and `run()` returns `vec4(NaN)`. Caller should `ASSERT_TRUE(prog
+/// .valid())` after construction.
+class ShaderProgram
+{
+public:
+    explicit ShaderProgram(const std::string& fragSrc);
+    ~ShaderProgram();
+    ShaderProgram(ShaderProgram&&) noexcept;
+    ShaderProgram& operator=(ShaderProgram&&) noexcept;
+    ShaderProgram(const ShaderProgram&)            = delete;
+    ShaderProgram& operator=(const ShaderProgram&) = delete;
+
+    bool valid() const noexcept;
+    glm::vec4 run(const UniformTable& uniforms);
+
+private:
+    void freeAll() noexcept;
+
+    unsigned int m_prog = 0;  // GLuint without dragging glad into the header
+    unsigned int m_fbo  = 0;
+    unsigned int m_tex  = 0;
+    unsigned int m_vao  = 0;
+};
+
+/// @brief One-shot convenience wrapper. Equivalent to
+///        `ShaderProgram(fragSrc).run(uniforms)`. Use when a single
+///        case is all that's needed (smoke tests, one-off checks).
+///        For TEST blocks with multiple cases prefer `ShaderProgram`
+///        directly — re-using a compiled program across cases avoids
+///        a full GLSL compile+link per assertion.
 glm::vec4 runShaderForVec4(
     const std::string& fragSrc,
     const UniformTable& uniforms = {});
@@ -60,7 +90,10 @@ std::string readShaderFile(const std::string& basename);
 ///
 /// Returns the substring starting at the function's return type and
 /// ending at the closing `}` (inclusive). Empty string + `ADD_FAILURE`
-/// if the function isn't found.
+/// if the function isn't found. Brace-counting cost is microseconds
+/// per call — not memoised because keying by `src.data()` is fragile
+/// for callers passing temporaries, and keying by full source string
+/// is more expensive than just re-parsing.
 std::string extractGlslFunction(const std::string& src,
                                  const std::string& fnName);
 
