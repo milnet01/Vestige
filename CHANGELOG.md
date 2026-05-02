@@ -9,6 +9,100 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-05-02 Phase 10.9 — Sh1 + Sh2 + Sh3 (cloth shader CPU/GPU parity)
+
+Slice 16 closes three of four shader-parity items that gate Slice 17 Cl1
+(the CPU↔GPU cloth parity harness mandated by CLAUDE.md Rule 12). All
+three changes target documented CPU behaviour as the parity contract; no
+GL test context is established by the unit-test binary, so a new
+`VESTIGE_SHADER_DIR` compile-definition lets test files read the GLSL
+source directly to pin parity intent against future regression. Shader
+compile is verified via `glslangValidator -S comp` on every modified
+file. Sh4 (per-triangle aerodynamic drag — `setWindQuality()` value
+stored but unused on GPU today) defers to a later slice that needs a
+small design doc for the per-triangle scatter strategy (atomicAdd vs
+colour-grouped triangle pass vs vertex-gather over incident triangles).
+
+- **Sh1 — `cloth_constraints.comp.glsl` XPBD label.** Shader header
+  previously claimed "XPBD per Macklin 2016 §3.5" but does not accumulate
+  λ across iterations; an /indie-review reviewer flagged this as
+  "PBD-with-compliance, not XPBD". Investigation showed the underlying
+  math is the small-steps XPBD variant from Macklin "Small Steps in
+  Physics Simulation" (2018) where λ resets per substep and the substep
+  count compensates for the missing accumulator. The CPU side
+  (`cloth_simulator.cpp:961`) explicitly cites the same approach. Sh1
+  takes the doc-only path (cite Macklin 2018 small-steps + cross-reference
+  the CPU comment) rather than retrofitting the multi-iteration
+  accumulator and rebuilding the entire constraint dispatch — the
+  small-steps form is mathematically equivalent under the project's
+  default `MAX_SUBSTEPS = 64` and matches the CPU canon. Renaming the
+  shader file would have desynchronised it from a CPU file that's already
+  correctly named. Pure header-comment change; no behavioural delta.
+
+- **Sh2 — `cloth_collision.comp.glsl` plane-collider parity.** CPU
+  `ClothSimulator::applyCollisions` at `cloth_simulator.cpp:1163-1190`
+  pushes plane penetration with `dist < 0` and corrects by `-n * dist`
+  (no margin), with the explicit comment "no margin for planes — injects
+  energy, causes drift". Pre-Sh2 the GPU shader added `collisionMargin`
+  to plane penetration (`pen = collisionMargin - signedDist`), which made
+  panels drift on flat plane colliders. The shader plane block is now
+  rewritten as `if (signedDist < 0.0) p -= n * signedDist;` matching the
+  CPU branch exactly. Sphere + ground branches keep their margin (CPU
+  side does too — only planes are abstract boundaries). New
+  `ClothCollisionShader.PlaneBlockHasNoMarginInPenetration_Sh2` test
+  parses the shader file and rejects any reference to `collisionMargin`
+  inside the plane-collider for-loop body, so a future regression that
+  re-introduces margin under any variable name fails CI.
+
+- **Sh3 — Coulomb friction across both backends.** CPU
+  `ClothSimulator::applyFriction` (`cloth_simulator.cpp:990-1016`)
+  implements two-tier static/kinetic friction: static-stick if
+  `|vTangent| < staticFriction · |vNormal|`, else kinetic reduction by
+  `kineticFriction · |vNormal| / |vTangent|`. Pre-Sh3 the GPU shader had
+  zero friction term. Sliding particles behaved completely differently
+  across backends — the CPU stuck on a tilted plane at default 0.4 / 0.3
+  coefficients, the GPU slid indefinitely. Five-part change:
+  - `IClothSolverBackend` gains `setFriction(float, float)` +
+    `getStaticFriction() / getKineticFriction()` as pure virtuals so
+    callers (the inspector panel, prefab loaders) can drive both backends
+    through `IClothSolverBackend*`. Pre-Sh3 the setter only existed on
+    the concrete CPU class, so any code that swapped to the GPU backend
+    silently lost friction control at compile time.
+  - CPU `ClothSimulator` retags its existing `setFriction` /
+    `get{Static,Kinetic}Friction` methods with `override`. No behaviour
+    change.
+  - GPU `GpuClothSimulator` gains `m_staticFriction = 0.4f` /
+    `m_kineticFriction = 0.3f` members (defaults match CPU exactly),
+    `setFriction` clamps negatives to zero (mirrors CPU at
+    `cloth_simulator.cpp:888-889` — negative would invert the friction
+    direction and drive the particle along its tangent), and marks the
+    Colliders UBO dirty so the next `simulate()` re-uploads.
+  - `gpu_cloth_simulator.cpp::uploadCollidersIfDirty` extends
+    `ColliderBlock`'s trailing scalar slot from 4 floats (`groundY`,
+    `collisionMargin`, +2 implicit pad) to 4 floats (`groundY`,
+    `collisionMargin`, `staticFriction`, `kineticFriction`), keeping the
+    std140 16-byte alignment exactly the same — the existing
+    `static_assert(sizeof(ColliderBlock) % 16 == 0)` continues to hold.
+    Two trailing `_pad0` / `_pad1` fields preserve alignment for any
+    future fields.
+  - `cloth_collision.comp.glsl` adds a top-of-file `applyFriction(inout
+    vec3 v, vec3 n)` GLSL helper that mirrors the CPU implementation
+    line-by-line. Helper is called in the ground / sphere / plane
+    branches after the inward velocity component is zeroed, matching the
+    CPU call order. Cylinder / box / mesh colliders remain CPU-only per
+    the design doc; their friction stays CPU-only too.
+  - 4 new `GpuClothSimulator.*Friction*_Sh3` tests pin the C++ surface
+    (defaults / setter round-trip / negative-clamp / interface-pointer
+    contract). 2 new `ClothCollisionShader.*_Sh3` shader-source tests
+    pin the helper's existence + 3 call sites + UBO field names — these
+    catch a future refactor that drops a call site or renames a UBO
+    field at the parser level rather than waiting for a parity-harness
+    failure under GL.
+
+  92 cloth tests green; full 3187-test suite green (pre-existing single
+  GL-context-required mesh test still skipped); all three modified
+  shaders pass `glslangValidator -S comp`.
+
 ### 2026-05-02 Phase 10.9 — Pe1 (text batch) + Pe4 (EventBus reentrancy) + Cl4 (dihedral compliance setter) + W6 (closed-by-Sy1)
 
 Four more outstanding-fix closures bundled together — three substantive

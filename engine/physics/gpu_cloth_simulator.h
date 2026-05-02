@@ -195,6 +195,14 @@ public:
     /// @brief Returns the current collision margin.
     float getCollisionMargin() const { return m_collisionMargin; }
 
+    /// @brief Phase 10.9 Sh3 — Coulomb friction coefficients uploaded to the
+    /// Colliders UBO so `cloth_collision.comp.glsl` can apply tangential
+    /// friction at every contact (ground / sphere / plane). Negative inputs
+    /// clamp to zero. Defaults match the CPU `ClothSimulator` (0.4 / 0.3).
+    void setFriction(float staticCoeff, float kineticCoeff) override;
+    float getStaticFriction() const override { return m_staticFriction; }
+    float getKineticFriction() const override { return m_kineticFriction; }
+
     /// @brief Number of sphere colliders currently active.
     uint32_t getSphereColliderCount() const { return static_cast<uint32_t>(m_sphereColliders.size()); }
 
@@ -296,6 +304,8 @@ private:
     std::vector<glm::vec4> m_planeColliders;    // xyz=normal, w=offset
     float m_groundY         = -1000.0f;
     float m_collisionMargin = 0.015f;
+    float m_staticFriction  = 0.4f;   ///< Phase 10.9 Sh3 — matches CPU default.
+    float m_kineticFriction = 0.3f;   ///< Phase 10.9 Sh3 — matches CPU default.
     bool  m_collidersDirty  = true;
 
     // Pin + LRA state (Step 9). Pin set is tracked as a sorted unique vector

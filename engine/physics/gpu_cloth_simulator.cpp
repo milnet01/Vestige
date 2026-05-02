@@ -179,6 +179,17 @@ void GpuClothSimulator::setCollisionMargin(float margin)
     m_collidersDirty = true;
 }
 
+void GpuClothSimulator::setFriction(float staticCoeff, float kineticCoeff)
+{
+    // Match CPU `ClothSimulator::setFriction` semantics: clamp negatives to 0.
+    const float s = std::max(0.0f, staticCoeff);
+    const float k = std::max(0.0f, kineticCoeff);
+    if (s == m_staticFriction && k == m_kineticFriction) return;
+    m_staticFriction  = s;
+    m_kineticFriction = k;
+    m_collidersDirty  = true;  // Re-upload Colliders UBO on next simulate().
+}
+
 // Cylinder / box colliders — GPU backend doesn't implement these yet. Logged
 // once per backend instance so a call site driving both CPU and GPU doesn't
 // flood the log. See `docs/phases/phase_09b_gpu_cloth_design.md` § 9.
@@ -400,6 +411,10 @@ void GpuClothSimulator::uploadCollidersIfDirty()
     // std140 layout — array stride for vec4 is 16, so the C++ side just needs
     // contiguous glm::vec4 arrays. Pad unused slots to zero so the shader's
     // bounded loop is harmless when sphereCount/planeCount < MAX_*.
+    // std140 packs the trailing scalar block into a single 16-byte slot;
+    // groundY + collisionMargin + staticFriction + kineticFriction = 4 floats
+    // = exactly one slot. Adding the friction pair in-line keeps the block
+    // alignment unchanged from the pre-Sh3 layout.
     struct ColliderBlock
     {
         glm::vec4 spheres[MAX_GPU_SPHERE_COLLIDERS];
@@ -408,6 +423,10 @@ void GpuClothSimulator::uploadCollidersIfDirty()
         int   planeCount;
         float groundY;
         float collisionMargin;
+        float staticFriction;   ///< Phase 10.9 Sh3 — Coulomb static coeff.
+        float kineticFriction;  ///< Phase 10.9 Sh3 — Coulomb kinetic coeff.
+        float _pad0;            ///< std140 pad — keep block 16-byte aligned.
+        float _pad1;
     };
     static_assert(sizeof(ColliderBlock) % 16 == 0,
                   "ColliderBlock must be 16-byte aligned for std140 UBO upload");
@@ -430,6 +449,8 @@ void GpuClothSimulator::uploadCollidersIfDirty()
     block.planeCount      = static_cast<int>(planeN);
     block.groundY         = m_groundY;
     block.collisionMargin = m_collisionMargin;
+    block.staticFriction  = m_staticFriction;
+    block.kineticFriction = m_kineticFriction;
 
     glNamedBufferSubData(m_collidersUBO, 0, sizeof(ColliderBlock), &block);
     m_collidersDirty = false;

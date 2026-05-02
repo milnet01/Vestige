@@ -205,6 +205,10 @@ target_include_directories(vestige_tests
 target_compile_definitions(vestige_tests
     PRIVATE
         VESTIGE_REFERENCE_CASES_DIR="${CMAKE_SOURCE_DIR}/tools/formula_workbench/reference_cases"
+        # Phase 10.9 Sh2/Sh3 — cloth shader-source parity tests read the GLSL
+        # files to pin CPU/GPU intent (no GL context in the test binary, so
+        # the shaders themselves are the spec for the parity contract).
+        VESTIGE_SHADER_DIR="${CMAKE_SOURCE_DIR}/assets/shaders"
 )
 
 target_link_libraries(vestige_tests

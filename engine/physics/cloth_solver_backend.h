@@ -187,6 +187,22 @@ public:
 
     virtual void addBoxCollider(const glm::vec3& min, const glm::vec3& max) = 0;
     virtual void clearBoxColliders() = 0;
+
+    // -- Friction --
+    //
+    // Phase 10.9 Sh3 — Coulomb static + kinetic friction at every collider
+    // contact (ground / sphere / plane on both backends; cylinder / box / mesh
+    // on CPU only since those colliders are CPU-only). Negative inputs clamp
+    // to zero. CPU defaults are 0.4 / 0.3; GPU defaults match.
+
+    /// @brief Sets static and kinetic friction coefficients for collider surfaces.
+    virtual void setFriction(float staticCoeff, float kineticCoeff) = 0;
+
+    /// @brief Returns the static friction coefficient.
+    virtual float getStaticFriction() const = 0;
+
+    /// @brief Returns the kinetic friction coefficient.
+    virtual float getKineticFriction() const = 0;
 };
 
 } // namespace Vestige

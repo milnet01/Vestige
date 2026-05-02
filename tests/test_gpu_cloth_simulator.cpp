@@ -16,9 +16,44 @@
 #include "physics/cloth_solver_backend.h"
 #include "physics/gpu_cloth_simulator.h"
 
+#include <filesystem>
+#include <fstream>
 #include <memory>
+#include <sstream>
+#include <string>
 
 using namespace Vestige;
+
+namespace
+{
+
+/// Phase 10.9 Sh2/Sh3 — read a cloth shader file from the source tree.
+/// `VESTIGE_SHADER_DIR` is wired by tests/CMakeLists.txt to
+/// `${CMAKE_SOURCE_DIR}/assets/shaders` so the test runs from any cwd.
+std::string readShaderSource(const char* basename)
+{
+    std::filesystem::path p = std::filesystem::path(VESTIGE_SHADER_DIR) / basename;
+    std::ifstream in(p);
+    EXPECT_TRUE(in.good()) << "Could not open shader file: " << p.string();
+    std::stringstream ss;
+    ss << in.rdbuf();
+    return ss.str();
+}
+
+/// Slice the plane-collider for-loop body out of `cloth_collision.comp.glsl`
+/// so the Sh2 parity assertion only inspects that block (the sphere /
+/// ground branches legitimately use `collisionMargin`).
+std::string collisionShaderPlaneBlock()
+{
+    const std::string src = readShaderSource("cloth_collision.comp.glsl");
+    const auto begin = src.find("// Plane colliders");
+    const auto end   = src.find("positions[id].xyz", begin);
+    EXPECT_NE(begin, std::string::npos) << "plane-collider block marker missing";
+    EXPECT_NE(end,   std::string::npos);
+    return src.substr(begin, end - begin);
+}
+
+} // namespace
 
 TEST(GpuClothSimulator, DefaultStateMatchesUninitialised)
 {
@@ -232,6 +267,54 @@ TEST(GpuClothSimulator, BindCollidersUboEnumPinned)
 
 // -- Step 9 surface (pins + LRA, CPU-side state only) --
 
+// -- Phase 10.9 Sh3: Coulomb friction --
+//
+// CPU `ClothSimulator` exposes static + kinetic friction; pre-Sh3 the GPU
+// backend ignored both (no friction in cloth_collision.comp.glsl, no setter
+// in IClothSolverBackend, no fields in the Colliders UBO). Sliding particles
+// behaved completely differently across backends. These tests pin the C++
+// surface — the shader + UBO upload paths are verified at engine launch.
+
+TEST(GpuClothSimulator, FrictionDefaultsMatchCpuBackend_Sh3)
+{
+    // Default 0.4 / 0.3 picked at the GpuClothSimulator member declaration
+    // mirrors `ClothSimulator::m_staticFriction` / `m_kineticFriction`.
+    GpuClothSimulator sim;
+    EXPECT_FLOAT_EQ(sim.getStaticFriction(),  0.4f);
+    EXPECT_FLOAT_EQ(sim.getKineticFriction(), 0.3f);
+}
+
+TEST(GpuClothSimulator, SetFrictionUpdatesGetters_Sh3)
+{
+    GpuClothSimulator sim;
+    sim.setFriction(0.6f, 0.5f);
+    EXPECT_FLOAT_EQ(sim.getStaticFriction(),  0.6f);
+    EXPECT_FLOAT_EQ(sim.getKineticFriction(), 0.5f);
+}
+
+TEST(GpuClothSimulator, SetFrictionClampsNegativesToZero_Sh3)
+{
+    // Negative coefficient would invert the friction direction. Match the
+    // CPU clamp at `cloth_simulator.cpp:888-889` so backends agree.
+    GpuClothSimulator sim;
+    sim.setFriction(-0.1f, -0.2f);
+    EXPECT_FLOAT_EQ(sim.getStaticFriction(),  0.0f);
+    EXPECT_FLOAT_EQ(sim.getKineticFriction(), 0.0f);
+}
+
+TEST(GpuClothSimulator, FrictionSetterIsBackendInterfaceMember_Sh3)
+{
+    // The interface gets the setter so callers can drive both backends with
+    // a single `IClothSolverBackend*`. Pre-Sh3 the GPU backend type-checked
+    // because the setter only existed on the concrete CPU class — the
+    // ClothComponent inspector silently lost friction control on the GPU
+    // backend. Compile-time interface check + value-equality through pointer.
+    std::unique_ptr<IClothSolverBackend> backend = std::make_unique<GpuClothSimulator>();
+    backend->setFriction(0.7f, 0.6f);
+    EXPECT_FLOAT_EQ(backend->getStaticFriction(),  0.7f);
+    EXPECT_FLOAT_EQ(backend->getKineticFriction(), 0.6f);
+}
+
 TEST(GpuClothSimulator, PinDefaultsAreZero)
 {
     GpuClothSimulator sim;
@@ -273,4 +356,70 @@ TEST(ClothConstraintGraph, GenerateLraTethersEveryFreeParticle)
     EXPECT_FLOAT_EQ(lras[0].maxDistance, 1.0f);
     EXPECT_FLOAT_EQ(lras[1].maxDistance, 2.0f);
     EXPECT_FLOAT_EQ(lras[2].maxDistance, 3.0f);
+}
+
+// -- Phase 10.9 Sh2: cloth_collision plane-collider parity --
+//
+// CPU `ClothSimulator::applyCollisions` at `cloth_simulator.cpp:1163-1190`
+// pushes plane penetration with `dist < 0` and corrects by `-n * dist` (no
+// margin). The CPU comment explicitly says "no margin for planes — injects
+// energy, causes drift". Pre-Sh2 the GPU shader added `collisionMargin` to
+// the plane penetration (`pen = collisionMargin - signedDist`) which made
+// panels drift on flat tabletops. There is no GL test context, so the
+// shader source IS the spec for the parity contract — we read the file.
+
+TEST(ClothCollisionShader, PlaneBlockHasNoMarginInPenetration_Sh2)
+{
+    const std::string planeBlock = collisionShaderPlaneBlock();
+
+    // The classic pre-Sh2 form is `pen = collisionMargin - signedDist`.
+    // Reject any reference to `collisionMargin` inside the plane block —
+    // sphere + ground branches still use it; planes do not.
+    EXPECT_EQ(planeBlock.find("collisionMargin"), std::string::npos)
+        << "plane-collider block must not reference collisionMargin "
+           "(parity with cloth_simulator.cpp:1163-1166: no margin for planes)";
+
+    // Confirm the canonical post-Sh2 form is present (pin against accidental
+    // re-introduction of margin under a different variable name).
+    EXPECT_NE(planeBlock.find("signedDist < 0.0"), std::string::npos);
+}
+
+// -- Phase 10.9 Sh3: cloth_collision Coulomb friction parity --
+//
+// CPU `ClothSimulator::applyCollisions` calls `applyFriction(velocity, n)`
+// at every contact (ground / sphere / box / cylinder / plane). Pre-Sh3 the
+// GPU shader had no friction term, so sliding particles behaved differently
+// across backends. Each contact branch must call the helper.
+
+TEST(ClothCollisionShader, AppliesFrictionAtGroundSphereAndPlane_Sh3)
+{
+    const std::string src = readShaderSource("cloth_collision.comp.glsl");
+
+    EXPECT_NE(src.find("void applyFriction"), std::string::npos)
+        << "cloth_collision.comp.glsl must define applyFriction(v, n)";
+
+    // Count how many sites call the helper. Three legitimate branches on
+    // the GPU side: ground, sphere loop, plane loop. (Cylinder / box are
+    // CPU-only — see `GpuClothSimulator::addCylinderCollider` log-and-drop.)
+    size_t callSites = 0;
+    size_t pos = 0;
+    while ((pos = src.find("applyFriction(v,", pos)) != std::string::npos)
+    {
+        ++callSites;
+        pos += 1;
+    }
+    EXPECT_EQ(callSites, 3u)
+        << "expected applyFriction(v, …) at ground + sphere + plane sites; "
+           "found " << callSites;
+}
+
+TEST(ClothCollisionShader, CollidersUboExposesFrictionCoefficients_Sh3)
+{
+    // The std140 UBO contract is shared across the C++ packing in
+    // `gpu_cloth_simulator.cpp::uploadCollidersIfDirty` and the shader
+    // `Colliders` block. Pin the field names so a packing reorder doesn't
+    // silently shift the layout.
+    const std::string src = readShaderSource("cloth_collision.comp.glsl");
+    EXPECT_NE(src.find("float staticFriction"),  std::string::npos);
+    EXPECT_NE(src.find("float kineticFriction"), std::string::npos);
 }

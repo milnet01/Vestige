@@ -298,13 +298,13 @@ public:
     /// @brief Sets static and kinetic friction coefficients for collider surfaces.
     /// @param staticCoeff Coulomb static friction (default 0.4).
     /// @param kineticCoeff Coulomb kinetic friction (default 0.3).
-    void setFriction(float staticCoeff, float kineticCoeff);
+    void setFriction(float staticCoeff, float kineticCoeff) override;
 
     /// @brief Returns the static friction coefficient.
-    float getStaticFriction() const;
+    float getStaticFriction() const override;
 
     /// @brief Returns the kinetic friction coefficient.
-    float getKineticFriction() const;
+    float getKineticFriction() const override;
 
     // --- Thick particle model ---
 

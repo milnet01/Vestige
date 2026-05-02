@@ -11,6 +11,20 @@
 /// constraints share a particle (CPU-side greedy graph colouring guarantees
 /// this), so the writes are race-free without atomics.
 ///
+/// **Small-steps XPBD.** This shader implements the Macklin "Small Steps in
+/// Physics Simulation" 2018 variant: the Lagrange multiplier λ is recomputed
+/// from `C` each substep with no across-iteration accumulator. The canonical
+/// XPBD formulation (Macklin et al. 2016 §3.5) accumulates Σλ across the
+/// inner Gauss-Seidel iterations within a single substep; the small-steps
+/// variant trades that accumulator for a higher substep count and is
+/// equivalent under the convergence regime cloth runs in (≥ 10 substeps —
+/// see `IClothSolverBackend::setSubsteps`, default 10). The CPU path makes
+/// the same trade explicitly at `cloth_simulator.cpp:961` ("λ = 0
+/// per-substep (reset each substep in XPBD small-steps approach)") so
+/// CPU/GPU stay parameter-equivalent. Phase 10.9 Sh1 — header tightened
+/// after a /indie-review reviewer flagged the shader as "PBD-with-compliance,
+/// not XPBD"; the underlying math is small-steps XPBD, not classical PBD.
+///
 /// Pinned particles are encoded with `positions[i].w == 0` (inverse mass).
 /// `wSum == 0` (both pinned) short-circuits to avoid div-by-zero when
 /// compliance is also zero.
