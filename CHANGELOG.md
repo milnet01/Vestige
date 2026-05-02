@@ -96,6 +96,33 @@ pre-existing skip, -200 LOC, no coverage loss.
 
 3182 / 3182 / 0 — was 3192 / 3191 / 1, so -10 tests / -1 skip net.
 
+### 2026-05-02 Test-suite audit — rename cloth-solver smoke tests to honest names (slice 3 of audit triage)
+
+Five tests in `tests/test_cloth_solver_improvements.cpp` had names that
+claimed behavioral comparisons their bodies could not back up. Each
+admitted in-comment that the property they wanted to verify (sort
+order, per-particle velocity, slide distance) is not exposed by the
+public `ClothSimulator` API. The bodies all reduced to `EXPECT_FALSE
+(std::isnan(...))` plus, for some, an `EXPECT_TRUE(sim.isInitialized())`
+— which is a real survival contract worth pinning, but the names were
+lying. Renamed to honest "…RemainsFinite" / "…SurvivesSortPath…"
+forms and updated the comments to point at where the functional
+behavior is exercised (integration replays, not unit tests). No
+behavior change; smoke value preserved.
+
+- `ConstraintOrdering.SortHappensAfterPinning` →
+  `ConstraintOrdering.SimulationSurvivesSortPathWithPinnedRow`
+- `AdaptiveDamping.FastMotionDampsMore` →
+  `AdaptiveDamping.BothBackendsRemainFiniteWithAndWithoutAdaptive`
+- `ClothFriction.ZeroFrictionAllowsSliding` →
+  `ClothFriction.ZeroFrictionSimulationRemainsFinite`
+- `ClothFriction.HighFrictionSlowsSliding` →
+  `ClothFriction.BothFrictionLevelsSimulationRemainsFinite`
+- `ClothFriction.FrictionWithSphereCollider` →
+  `ClothFriction.FrictionWithSphereColliderSimulationRemainsFinite`
+
+3182 / 3182 / 0 — same as slice 2; only test names + comments changed.
+
 
 
 Slice 13 perf hygiene closes the LRA-build hot-spot. Pre-Pe8
