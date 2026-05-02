@@ -416,7 +416,9 @@ Per CODING_STANDARDS §11 — no exceptions in steady-state hot paths.
 |---------|-----------|----------|
 | `Selection` add / toggle / clear / primary | `tests/test_selection.cpp` | Public API contract |
 | `CommandHistory` execute / undo / redo / merge / version-counter dirty / saved-version-evicted invariant | `tests/test_command_history.cpp` | Public API contract + dirty tracking |
-| `SceneSerializer` round-trip + metadata + format-version + atomic-write semantics | `tests/test_scene_serializer.cpp` | Save / load + missing-asset warnings |
+| `SceneSerializer` metadata + format-version (parse path) | `tests/test_scene_serializer.cpp` | Header read + clearEntities + envelope shape |
+| `SceneSerializer` atomic-write semantics | `tests/test_atomic_write_routing.cpp` | Production save → .tmp → rename path |
+| `SceneSerializer` full save / load round-trip | (integration tests; needs `ResourceManager` + GL context) | Save / load + missing-asset warnings |
 | `PrefabSystem` save / load / list / drag-drop integration | `tests/test_menu_prefabs.cpp` | Prefab JSON round-trip |
 | `FileMenu` Save / Save As / Recent / unsaved guard / autosave / recovery | `tests/test_file_menu.cpp` | Menu actions + dirty tracking |
 | `FirstRunWizard` step machine + Settings flag promotion + Skip-for-now non-persistence | `tests/test_first_run_wizard.cpp` | Phase 10.5 onboarding flow |

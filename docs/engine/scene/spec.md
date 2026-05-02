@@ -603,7 +603,9 @@ Per CODING_STANDARDS §11 — no exceptions in steady-state hot paths.
 | `Entity` deep-clone fidelity per component | `tests/test_component_clone.cpp` | Phase 10.9 Slice 1 F2 contract |
 | `EntitySerializer` round-trip | `tests/test_entity_serializer_registry.cpp` | Component-name dispatch (forward-compat) |
 | `EntitySerializer` JSON depth cap | `tests/test_entity_serializer_depth_cap.cpp` | Stack-bomb defence (Phase 10.9 Slice 5 D7) |
-| `SceneSerializer` save / load round-trip + atomic-write | `tests/test_scene_serializer.cpp` | Schema, version migration, missing-component warning |
+| `SceneSerializer` metadata read + JSON envelope structure | `tests/test_scene_serializer.cpp` | Header / format-version / clearEntities / setName |
+| `SceneSerializer` atomic-write (save → .tmp → rename) | `tests/test_atomic_write_routing.cpp` | Production atomic-write path (the prior `tests/test_scene_serializer.cpp` `AtomicWrite*` tests stand-in tests via `std::ofstream` were removed 2026-05-02 — they didn't invoke the SceneSerializer save path) |
+| `SceneSerializer` full save / load round-trip | (integration tests; full round-trip needs `ResourceManager` + GL context) | Schema, version migration, missing-component warning |
 | `CameraComponent` view / projection / sync | `tests/test_camera_component.cpp` | Public API |
 | `Camera2DComponent` follow / spring / deadzone / bounds clamp | `tests/test_camera_2d.cpp` | Authored tuning |
 | `CharacterController2DComponent` coyote / buffer / wall-slide | `tests/test_character_controller_2d.cpp` | Phase 9F-4 contract |

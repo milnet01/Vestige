@@ -204,7 +204,7 @@ vestige/
 ├── tools/
 │   ├── audit/              Python audit tool (tier 1–6 static analysis)
 │   └── formula_workbench/  Interactive formula fitter + codegen
-├── tests/                            # Google Test (~1880 tests)
+├── tests/                            # Google Test (~3180 tests)
 ├── docs/                             # PHASE*_DESIGN, *_RESEARCH, GI_ROADMAP,
 │                                     #   PRE_OPEN_SOURCE_AUDIT, TABERNACLE_SPECS
 ├── scripts/                          # pre-commit + launch

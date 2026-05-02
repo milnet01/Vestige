@@ -574,13 +574,13 @@ Test files relevant to `engine/renderer/`:
 |---------|-----------|----------|
 | Camera projection (reverse-Z, culling-projection finite far) | `tests/test_camera.cpp`, `tests/test_camera_mode.cpp`, `tests/test_camera_2d.cpp`, `tests/test_camera_component.cpp` | Public API contract |
 | Shadow-map (`ShadowMap` + CSM lifecycle) | `tests/test_shadow_map.cpp` | Public API contract |
-| TAA jitter sequence + projection jitter | `tests/test_taa.cpp` | Halton sequence determinism |
+| TAA jitter sequence (Halton) + motion-vector math + AntiAliasMode enum | `tests/test_taa.cpp` | Halton sequence determinism, motion-vector math, enum stability (jitterProjection / setFeedbackFactor instance methods covered by integration tests; they need a `Framebuffer` and therefore a GL context) |
 | Bloom (Karis combine, 13-tap downsample energy) | `tests/test_bloom_downsample_karis.cpp`, `tests/test_bloom.cpp` | CPU-mirror parity + smoke |
 | SSAO kernel determinism | `tests/test_ssao.cpp` | Deterministic kernel + noise tile |
 | IBL split-sum (`EnvironmentMap` capture sequence + prefilter loop) | `tests/test_ibl.cpp`, `tests/test_ibl_capture_sequence.cpp` | Bracket contract (mock guard) + smoke |
 | SH probe grid (`SHProbeGrid` configuration + projection) | `tests/test_sh_probe_grid.cpp` | Coefficient layout + binding |
 | Instanced rendering (`buildInstanceBatches` → `(mesh, material)` grouping) | `tests/test_instanced_rendering.cpp` | Static-mode batch-build contract |
-| Skybox (procedural + cubemap load) | `tests/test_skybox.cpp` | Public API contract |
+| Skybox (procedural + cubemap load) | (integration tests; unit tests required GL context and were removed 2026-05-02) | Public API contract |
 | Color grading (`ColorGradingLut::loadCubeFile` + neutral LUT) | `tests/test_color_grading.cpp` | `.cube` round-trip |
 | Color-vision matrix (Viénot 1999) | `tests/test_color_vision_filter.cpp` | Identity for Normal, dichromacy projections |
 | Fog (linear / exp / exp² + height + sun-inscatter, accessibility transform) | `tests/test_fog.cpp` | Closed-form math + Quílez integral |
