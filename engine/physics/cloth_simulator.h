@@ -315,6 +315,20 @@ public:
     /// @brief Returns the particle radius.
     float getParticleRadius() const;
 
+    // --- LRA inspection (Phase 10.9 Pe8 — bucketed nearest-pin contract) ---
+
+    /// @brief A Long Range Attachment tether: free particle → its nearest pin.
+    /// Public so tests can pin the bucketed-nearest-pin contract directly.
+    struct LRAConstraint
+    {
+        uint32_t particleIndex;   ///< The free particle
+        uint32_t pinIndex;        ///< The nearest pinned particle
+        float maxDistance;        ///< Distance in rest pose
+    };
+
+    /// @brief Returns the current LRA constraint set (post-`rebuildLRA()`).
+    const std::vector<LRAConstraint>& getLraConstraints() const { return m_lraConstraints; }
+
 private:
     ClothConfig m_config;
     bool m_initialized = false;
@@ -370,12 +384,7 @@ private:
     // distance equal to the rest-pose distance. Unilateral: only activates when the
     // particle drifts too far, so it doesn't fight wind or natural draping.
     // Used by NvCloth, PhysX, Jolt, Obi Cloth. (Kim, Chentanez, Müller, SCA 2012)
-    struct LRAConstraint
-    {
-        uint32_t particleIndex;   ///< The free particle
-        uint32_t pinIndex;        ///< The nearest pinned particle
-        float maxDistance;         ///< Distance in rest pose
-    };
+    // Struct definition lives in the public section so tests can inspect.
     std::vector<LRAConstraint> m_lraConstraints;
     void buildLRAConstraints();    ///< Called after pins are finalized
     void solveLRAConstraints();    ///< Called after distance constraints each substep

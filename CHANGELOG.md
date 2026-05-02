@@ -9,6 +9,82 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-05-02 Phase 10.9 — Pe8 (cloth LRA build O(P·N) → bucketed nearest-pin)
+
+Slice 13 perf hygiene closes the LRA-build hot-spot. Pre-Pe8
+`ClothSimulator::buildLRAConstraints` did O(P·N) work per call: scan every
+pin for every non-pinned particle and pick the nearest. At a 256² cloth
+with 256 pins (~production-scale clothing or banner that the editor preset
+system can stamp out), one `rebuildLRA()` did 16.8M iterations. The
+operation runs on every pin-set change in the editor — pin-drag, preset
+apply, scene reload — so the cost shows up as visible UI hitch each time
+the user touches a pin. This commit replaces the brute-force loop with a
+uniform 3D spatial bucket of pin positions queried by concentric Chebyshev
+rings around each particle's cell. Output is bit-identical to the old
+loop (same nearest pin, same maxDistance) — pinned by a brute-force
+agreement test on a 16×16 grid with scattered pins.
+
+- **Pe8 — `ClothSimulator::buildLRAConstraints` bucketed nearest-pin.**
+  `engine/physics/cloth_simulator.cpp` rewrites the build loop to (a)
+  bucket-hash pin positions into `std::unordered_map<int64_t,
+  std::vector<uint32_t>>` keyed on `(cellX, cellY, cellZ)` packed into a
+  single int64 (21 bits / axis biased on 0 — comfortable for any sane
+  cloth size), (b) for each non-pinned particle, walk concentric
+  Chebyshev rings around its cell (ring 0 = own cell, ring 1 = the 26
+  neighbours, etc.), (c) after each ring use `r * cellSize` as a lower
+  bound on any pin in further rings — exit early when that bound exceeds
+  the current best squared distance. Cell size = `4 × m_config.spacing`
+  so a typical bucket spans 16 grid cells in 2D and most lookups
+  terminate within ring 1. A defensive brute-force fallback is retained
+  for the unreachable case where ring expansion hits the safety cap
+  without finding any pin (shouldn't happen — `pinCount > 0` is checked
+  up front and ring expansion is unbounded by problem size — but per
+  CLAUDE.md Rule 1 it's there as belt-and-braces so the constraint is
+  always correct rather than missing if the precondition somehow fails).
+- **Why hand-rolled rather than reusing `SpatialHash`.** The cloth's
+  existing `SpatialHash` (`engine/physics/spatial_hash.h`) hashes *all
+  particle positions* per substep on a fixed-radius rolling-window
+  query — different shape from what the LRA build needs. The LRA build
+  only ever indexes pins (~256 entries, dwarfed by particles), only ever
+  runs once per `rebuildLRA()` call (not per substep), and queries with
+  an unknown radius (the nearest-pin distance is what we're computing).
+  Reusing `SpatialHash` would have meant either (a) iteratively expanding
+  the query radius until a pin is found, repeating the whole hash
+  rebuild — high constant cost — or (b) calling it with a worst-case
+  upper-bound radius that defeats the purpose. The 80-line bucketed
+  loop is the natural shape for this query.
+- **Why uniform-bucket rather than KD-tree.** A KD-tree of 256 pins is
+  ~3 levels deep; a flat hash visit-touched ~27 cells per particle. Both
+  hundreds of ops per query — no asymptotic edge for a tree at this
+  scale. The hash has no tree-rebuild, allocation-free queries (the
+  bucket map is built once before the per-particle loop), and matches
+  the cloth's existing spatial-hashing patterns. KD-tree wins on
+  unstructured 2D/3D point clouds at 10⁵+ scale; LRA build is a
+  256-pin lookup per cloth.
+- **API surface change.** `ClothSimulator::LRAConstraint` (the per-tether
+  struct) moves from a private nested type to a public nested type.
+  New public method `getLraConstraints() const` returns the post-build
+  constraint set. Both serve test inspection; production callers
+  (`engine/core/engine.cpp` × 3 + `cloth_component.cpp`) only call
+  `rebuildLRA()` and never look at the constraints, so the visibility
+  bump has no production blast radius. The struct definition itself is
+  unchanged (`{particleIndex, pinIndex, maxDistance}`).
+- **Tests.** 5 new `ClothSimulator.BuildLRA*_Pe8` tests in
+  `tests/test_cloth_simulator.cpp`. Each-particle-gets-one-tether covers
+  the coverage invariant; nearest-pin-and-exact-distance pins the contract
+  on an 8×8 corner-pinned grid; matches-brute-force on a 16×16 grid with
+  scattered pins (every 11th index — relatively prime to width=16, so
+  pins land in interior cells, edge cells, and bucket-boundary cells)
+  is the headline correctness pin (any algorithm change that returns
+  the wrong pin or wrong distance fails here); single-pin tethers
+  everything to the centre with correct radial distance; rebuild is
+  idempotent (same constraint vector, no drift). 3192 / 3191 (+5 vs
+  Pe1 baseline; 1 pre-existing GL-context skip unchanged).
+- **Slice 13 status post-Pe8: 6 of 9 shipped (Pe1 ✅ Pe2 ✅ Pe4 ✅ Pe6 ✅
+  Pe7 ✅ Pe8 ✅).** Pe3 (foliage triple-buffered persistent-mapped
+  buffer), Pe5 (ResourceManager LRU + max-VRAM cap), and Pe9 (cloth
+  per-substep spatial-hash sharing) remain open.
+
 ### 2026-05-02 Phase 10.9 — Sh1 + Sh2 + Sh3 (cloth shader CPU/GPU parity)
 
 Slice 16 closes three of four shader-parity items that gate Slice 17 Cl1

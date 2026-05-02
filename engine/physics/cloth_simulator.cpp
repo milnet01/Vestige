@@ -736,7 +736,54 @@ void ClothSimulator::buildLRAConstraints()
         return;
     }
 
-    uint32_t count = static_cast<uint32_t>(m_positions.size());
+    // Phase 10.9 Pe8 — uniform 3D-grid bucket of pin positions, queried per
+    // free particle with concentric Chebyshev-ring expansion. The previous
+    // O(P·N) loop did 16.8M iterations per `rebuildLRA()` at 256² grid with
+    // 256 pins (editor "apply preset" hitch); this lookup is O(P · cellsToPin)
+    // with `cellsToPin ≈ 27` for typical pin scatter patterns.
+    //
+    // Correctness invariant: the algorithm produces the *same* nearest-pin
+    // assignment as brute force (same pinIndex, same maxDistance) for every
+    // non-pinned particle. Tested by `BuildLRAMatchesBruteForceOnDenseScatteredPins_Pe8`.
+
+    const uint32_t pinCount = static_cast<uint32_t>(m_pinConstraints.size());
+
+    // Cell size: 4× particle spacing means a typical bucket spans 16 grid
+    // cells in 2D, so most queries find a pin in ring 0 or 1. Floor at a
+    // small positive value to guard pathological zero-spacing configs (the
+    // initialise validator already rejects spacing == 0; defence in depth).
+    const float cellSize = std::max(m_config.spacing * 4.0f, 1e-4f);
+    const float invCellSize = 1.0f / cellSize;
+
+    auto cellOf = [&](const glm::vec3& p) -> glm::ivec3
+    {
+        return glm::ivec3(static_cast<int>(std::floor(p.x * invCellSize)),
+                          static_cast<int>(std::floor(p.y * invCellSize)),
+                          static_cast<int>(std::floor(p.z * invCellSize)));
+    };
+
+    // Pack 3 ints into one int64 key. Cloth grids are well under ±2M cells
+    // per axis at any reasonable size, so 21 bits per axis is comfortable.
+    auto cellKey = [](const glm::ivec3& c) -> int64_t
+    {
+        constexpr int64_t mask  = (int64_t(1) << 21) - 1;
+        constexpr int64_t bias  = int64_t(1) << 20;  // Centre on 0
+        const int64_t cx = (int64_t(c.x) + bias) & mask;
+        const int64_t cy = (int64_t(c.y) + bias) & mask;
+        const int64_t cz = (int64_t(c.z) + bias) & mask;
+        return (cx << 42) | (cy << 21) | cz;
+    };
+
+    std::unordered_map<int64_t, std::vector<uint32_t>> buckets;
+    buckets.reserve(pinCount);
+    for (const auto& pin : m_pinConstraints)
+    {
+        buckets[cellKey(cellOf(m_positions[pin.index]))].push_back(pin.index);
+    }
+
+    const uint32_t count = static_cast<uint32_t>(m_positions.size());
+    m_lraConstraints.reserve(count - pinCount);
+
     for (uint32_t i = 0; i < count; ++i)
     {
         if (m_inverseMasses[i] <= 0.0f)
@@ -744,22 +791,89 @@ void ClothSimulator::buildLRAConstraints()
             continue;  // Skip pinned particles — they don't need tethers
         }
 
-        // Find the nearest pinned particle
-        float bestDist2 = std::numeric_limits<float>::max();
-        uint32_t bestPin = 0;
-        for (const auto& pin : m_pinConstraints)
+        const glm::vec3 queryPos  = m_positions[i];
+        const glm::ivec3 queryCell = cellOf(queryPos);
+
+        float    bestDist2 = std::numeric_limits<float>::max();
+        uint32_t bestPin   = 0;
+        bool     foundAny  = false;
+
+        // Concentric Chebyshev-ring expansion. After processing ring r, any
+        // pin in ring (r+1) or beyond is at least `r * cellSize` away from
+        // the query (the closest possible point in a cell at Chebyshev
+        // distance r+1 is `r * cellSize` away when the query sits at the
+        // boundary of its own cell). Stop once that lower bound exceeds the
+        // current best.
+        //
+        // The hard cap on ring index defends against pathological inputs
+        // (huge cell spread); the early-exit triggers within a few rings on
+        // any realistic cloth.
+        constexpr int kMaxRing = 4096;
+        for (int r = 0; r < kMaxRing; ++r)
         {
-            glm::vec3 diff = m_positions[i] - m_positions[pin.index];
-            float d2 = glm::dot(diff, diff);
-            if (d2 < bestDist2)
+            // Iterate the shell of cells at Chebyshev distance == r.
+            for (int dz = -r; dz <= r; ++dz)
             {
-                bestDist2 = d2;
-                bestPin = pin.index;
+                for (int dy = -r; dy <= r; ++dy)
+                {
+                    for (int dx = -r; dx <= r; ++dx)
+                    {
+                        // Skip interior — those cells were processed in an earlier ring.
+                        const int ax = std::abs(dx);
+                        const int ay = std::abs(dy);
+                        const int az = std::abs(dz);
+                        if (std::max({ax, ay, az}) != r) continue;
+
+                        const auto it = buckets.find(cellKey({queryCell.x + dx,
+                                                              queryCell.y + dy,
+                                                              queryCell.z + dz}));
+                        if (it == buckets.end()) continue;
+
+                        for (uint32_t pinIdx : it->second)
+                        {
+                            const glm::vec3 diff = queryPos - m_positions[pinIdx];
+                            const float    d2   = glm::dot(diff, diff);
+                            if (d2 < bestDist2)
+                            {
+                                bestDist2 = d2;
+                                bestPin   = pinIdx;
+                                foundAny  = true;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (foundAny)
+            {
+                // Lower bound on any pin in ring (r+1) or further.
+                const float outerLower = static_cast<float>(r) * cellSize;
+                if (outerLower * outerLower >= bestDist2)
+                {
+                    break;
+                }
             }
         }
 
-        float maxDist = std::sqrt(bestDist2);
-        m_lraConstraints.push_back({i, bestPin, maxDist});
+        if (!foundAny)
+        {
+            // Defensive fallback — should be unreachable because pinCount > 0
+            // at this point and ring-expansion is unbounded by problem size.
+            // If hit, fall back to brute force so the constraint is correct
+            // rather than missing.
+            for (const auto& pin : m_pinConstraints)
+            {
+                const glm::vec3 diff = queryPos - m_positions[pin.index];
+                const float    d2   = glm::dot(diff, diff);
+                if (d2 < bestDist2)
+                {
+                    bestDist2 = d2;
+                    bestPin   = pin.index;
+                }
+            }
+        }
+
+        m_lraConstraints.push_back({i, bestPin, std::sqrt(bestDist2)});
     }
 }
 

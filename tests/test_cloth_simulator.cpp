@@ -831,6 +831,192 @@ TEST(ClothSimulator, RebuildLRAWithNoPinsDoesNothing)
 }
 
 // ---------------------------------------------------------------------------
+// Phase 10.9 Pe8 — bucketed nearest-pin contract
+//
+// `buildLRAConstraints` previously did O(P·N) work per call (scan every pin
+// for every non-pinned particle). The Pe8 refactor switches to a uniform
+// spatial-bucket lookup. These tests pin the contract that must survive the
+// algorithm change: same pin choice, same maxDistance, same coverage.
+// ---------------------------------------------------------------------------
+
+TEST(ClothSimulator, BuildLRAEachNonPinnedParticleGetsExactlyOneTether_Pe8)
+{
+    ClothSimulator sim;
+    auto cfg = smallConfig(8, 8);
+    sim.initialize(cfg);
+
+    // Pin two opposite corners.
+    const glm::vec3* pos0 = sim.getPositions();
+    const uint32_t topLeft     = 0;
+    const uint32_t bottomRight = cfg.width * cfg.height - 1;
+    sim.pinParticle(topLeft,     pos0[topLeft]);
+    sim.pinParticle(bottomRight, pos0[bottomRight]);
+
+    sim.captureRestPositions();
+    sim.rebuildLRA();
+
+    const auto& lra = sim.getLraConstraints();
+    EXPECT_EQ(lra.size(), cfg.width * cfg.height - 2u)
+        << "Every non-pinned particle should get exactly one LRA tether.";
+
+    // Each constraint targets one of the two pinned particles.
+    for (const auto& c : lra)
+    {
+        EXPECT_TRUE(c.pinIndex == topLeft || c.pinIndex == bottomRight);
+        EXPECT_NE(c.particleIndex, topLeft);
+        EXPECT_NE(c.particleIndex, bottomRight);
+    }
+}
+
+TEST(ClothSimulator, BuildLRAPicksNearestPinAndExactDistance_Pe8)
+{
+    ClothSimulator sim;
+    auto cfg = smallConfig(8, 8);
+    sim.initialize(cfg);
+
+    const glm::vec3* pos = sim.getPositions();
+    const uint32_t topLeft     = 0;
+    const uint32_t bottomRight = cfg.width * cfg.height - 1;
+    sim.pinParticle(topLeft,     pos[topLeft]);
+    sim.pinParticle(bottomRight, pos[bottomRight]);
+
+    sim.captureRestPositions();
+    sim.rebuildLRA();
+
+    // Index → constraint, for fast lookup.
+    const auto& lra = sim.getLraConstraints();
+    std::vector<const ClothSimulator::LRAConstraint*> byIndex(cfg.width * cfg.height, nullptr);
+    for (const auto& c : lra)
+    {
+        byIndex[c.particleIndex] = &c;
+    }
+
+    // Brute-force the same query and compare.
+    for (uint32_t i = 0; i < cfg.width * cfg.height; ++i)
+    {
+        if (i == topLeft || i == bottomRight)
+        {
+            EXPECT_EQ(byIndex[i], nullptr) << "Pinned particle " << i << " should have no tether.";
+            continue;
+        }
+
+        const glm::vec3 dToTL = pos[i] - pos[topLeft];
+        const glm::vec3 dToBR = pos[i] - pos[bottomRight];
+        const float    d2TL  = glm::dot(dToTL, dToTL);
+        const float    d2BR  = glm::dot(dToBR, dToBR);
+        const uint32_t expectedPin = (d2TL <= d2BR) ? topLeft : bottomRight;
+        const float    expectedDist = std::sqrt(std::min(d2TL, d2BR));
+
+        ASSERT_NE(byIndex[i], nullptr) << "Particle " << i << " missing LRA constraint.";
+        EXPECT_EQ(byIndex[i]->pinIndex, expectedPin)
+            << "Particle " << i << " should tether to nearest pin.";
+        EXPECT_NEAR(byIndex[i]->maxDistance, expectedDist, 1e-4f)
+            << "Particle " << i << " maxDistance should equal nearest-pin Euclidean distance.";
+    }
+}
+
+TEST(ClothSimulator, BuildLRAMatchesBruteForceOnDenseScatteredPins_Pe8)
+{
+    // Larger grid + scattered pin pattern stresses the bucket boundary cases:
+    // pins at corners, edges, and interior cells; particles whose nearest pin
+    // is across multiple bucket cells away.
+    ClothSimulator sim;
+    auto cfg = smallConfig(16, 16);
+    cfg.spacing = 0.5f;  // Mix spacing scales so the bucket sizing isn't trivial.
+    sim.initialize(cfg);
+
+    const glm::vec3* pos = sim.getPositions();
+    const uint32_t total = cfg.width * cfg.height;
+
+    // Deterministic pin scatter: every 11th particle (relatively prime to width=16).
+    std::vector<uint32_t> pinIndices;
+    for (uint32_t i = 0; i < total; i += 11)
+    {
+        sim.pinParticle(i, pos[i]);
+        pinIndices.push_back(i);
+    }
+
+    sim.captureRestPositions();
+    sim.rebuildLRA();
+
+    const auto& lra = sim.getLraConstraints();
+    EXPECT_EQ(lra.size(), total - pinIndices.size())
+        << "Coverage: every non-pinned particle should be tethered.";
+
+    // For every constraint, brute-force the nearest pin and compare.
+    for (const auto& c : lra)
+    {
+        float    bestD2  = std::numeric_limits<float>::max();
+        uint32_t bestPin = 0;
+        for (uint32_t p : pinIndices)
+        {
+            const glm::vec3 d  = pos[c.particleIndex] - pos[p];
+            const float    d2 = glm::dot(d, d);
+            if (d2 < bestD2)
+            {
+                bestD2  = d2;
+                bestPin = p;
+            }
+        }
+        EXPECT_EQ(c.pinIndex, bestPin)
+            << "Particle " << c.particleIndex << " should tether to brute-force-nearest pin "
+            << bestPin << ", got " << c.pinIndex << ".";
+        EXPECT_NEAR(c.maxDistance, std::sqrt(bestD2), 1e-4f);
+    }
+}
+
+TEST(ClothSimulator, BuildLRASinglePinTethersEverythingToIt_Pe8)
+{
+    ClothSimulator sim;
+    auto cfg = smallConfig(8, 8);
+    sim.initialize(cfg);
+
+    const glm::vec3* pos = sim.getPositions();
+    const uint32_t pinIdx = (cfg.width * cfg.height) / 2;  // Centre particle.
+    sim.pinParticle(pinIdx, pos[pinIdx]);
+
+    sim.captureRestPositions();
+    sim.rebuildLRA();
+
+    const auto& lra = sim.getLraConstraints();
+    EXPECT_EQ(lra.size(), cfg.width * cfg.height - 1u);
+
+    for (const auto& c : lra)
+    {
+        EXPECT_EQ(c.pinIndex, pinIdx);
+        const glm::vec3 d = pos[c.particleIndex] - pos[pinIdx];
+        EXPECT_NEAR(c.maxDistance, glm::length(d), 1e-4f);
+    }
+}
+
+TEST(ClothSimulator, BuildLRARebuildIsIdempotent_Pe8)
+{
+    // Calling rebuildLRA() twice with no pin changes should produce the same
+    // constraint set — no duplicates, no drift.
+    ClothSimulator sim;
+    auto cfg = smallConfig(8, 8);
+    sim.initialize(cfg);
+
+    const glm::vec3* pos = sim.getPositions();
+    sim.pinParticle(0, pos[0]);
+    sim.pinParticle(cfg.width * cfg.height - 1, pos[cfg.width * cfg.height - 1]);
+    sim.captureRestPositions();
+    sim.rebuildLRA();
+
+    const auto firstSnapshot = sim.getLraConstraints();
+    sim.rebuildLRA();
+    const auto& secondSnapshot = sim.getLraConstraints();
+
+    ASSERT_EQ(firstSnapshot.size(), secondSnapshot.size());
+    for (size_t i = 0; i < firstSnapshot.size(); ++i)
+    {
+        EXPECT_EQ(firstSnapshot[i].particleIndex, secondSnapshot[i].particleIndex);
+        EXPECT_EQ(firstSnapshot[i].pinIndex,      secondSnapshot[i].pinIndex);
+        EXPECT_FLOAT_EQ(firstSnapshot[i].maxDistance, secondSnapshot[i].maxDistance);
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Edge cases
 // ---------------------------------------------------------------------------
 
