@@ -9,7 +9,46 @@ may change any interface without notice.
 
 ## [Unreleased]
 
-### 2026-05-02 Phase 10.9 — Pe8 (cloth LRA build O(P·N) → bucketed nearest-pin)
+### 2026-05-02 Test-suite audit — critical assertion fixes (slice 1 of audit triage)
+
+Cold-eyes audit of all 175 test files / 3192 test cases (8 parallel
+auditors covering audio, cloth/physics, rendering, animation,
+scene/loaders, editor/UI, formula/scripting, and cross-file duplicate
+detection). Full triaged finding list lives in the conversation summary;
+this commit lands the three mechanical assertion-quality fixes whose
+verdict was unambiguous after author-side verification. Larger
+deletions and the `cloth_solver_improvements` "rename vs delete"
+tests are surfaced for explicit user direction rather than acted on
+autonomously, per CLAUDE.md global rules 9 and 11.
+
+- **`tests/test_cloth_simulator.cpp::ClothSimulator.WindAppliesForce`.**
+  Replaced `EXPECT_TRUE(true)` (which discarded the 30-frame `avgX`
+  drift the test had already computed) with the assertion the test
+  always meant to make: `EXPECT_GT(avgX, x0)`. With +X wind and a
+  symmetric initial cloth, the mean-X must shift positive; per-particle
+  drift can have either sign because wind force depends on triangle
+  orientation, so the *mean* is the right oracle. Identified by
+  cold-eyes audit C1.
+- **`tests/test_audio_mixer.cpp::AudioEvictionAdmission`.** Renamed
+  `CriticalIncomingEvictsEvenIfAllElseCritical` →
+  `CriticalIncomingDoesNotEvictWhenAllElseCritical_TieToIncumbent`.
+  The body asserts the eviction sentinel `-1` (no eviction); the old
+  name claimed the opposite. Body was correct, name was a lie.
+  Identified by cold-eyes audit C11.
+- **`tests/test_system_registry.cpp::SystemRegistryTest.InitializeAllSortsBeforeInit_Sy1`.**
+  Replaced `Engine* fakeEngine = nullptr; registry.initializeAll(*fakeEngine);`
+  (technical UB even though `MockSystem` ignores the reference — UBSan
+  and future optimizers may trap; the in-test `cppcheck-suppress` +
+  10-line comment treated the workaround as deliberate but the right
+  fix was sitting at line 179 of the same file) with
+  `registry.initializeAll(dummyEngine())`, the helper every other
+  initialize test in the file already uses. Closes a CLAUDE.md global
+  rule 1 violation. Identified by cold-eyes audit C13.
+
+3192 / 3191 / 1 (1 pre-existing GL skip) — same baseline as before this
+commit, verified locally.
+
+
 
 Slice 13 perf hygiene closes the LRA-build hot-spot. Pre-Pe8
 `ClothSimulator::buildLRAConstraints` did O(P·N) work per call: scan every

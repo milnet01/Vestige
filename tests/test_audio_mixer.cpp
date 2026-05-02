@@ -501,7 +501,7 @@ TEST(AudioEvictionAdmission, IncomingPicksLowestKeepScoreAmongEligible)
               static_cast<std::size_t>(1));
 }
 
-TEST(AudioEvictionAdmission, CriticalIncomingEvictsEvenIfAllElseCritical)
+TEST(AudioEvictionAdmission, CriticalIncomingDoesNotEvictWhenAllElseCritical_TieToIncumbent)
 {
     // Edge case: admission rule is strict-greater, not strict-greater-or-equal.
     // Incoming Critical against all-Critical voices still loses (tie-to-incumbent

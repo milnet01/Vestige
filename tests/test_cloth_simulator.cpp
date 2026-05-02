@@ -313,20 +313,17 @@ TEST(ClothSimulator, WindAppliesForce)
         sim.simulate(1.0f / 60.0f);
     }
 
-    // Particles should have moved in the wind direction (positive X)
-    // Wind effect depends on triangle orientation — just check some movement
-    float xNow = sim.getPositions()[0].x;
-    // At minimum, the average X should have shifted
+    // Particles should have moved in the wind direction (positive X).
+    // Wind force depends on triangle orientation, so per-particle drift
+    // can have either sign — but the *mean* X must shift in +X because
+    // the cloth starts symmetric and the wind has no opposing component.
     float avgX = 0.0f;
     for (uint32_t i = 0; i < sim.getParticleCount(); ++i)
     {
         avgX += sim.getPositions()[i].x;
     }
     avgX /= static_cast<float>(sim.getParticleCount());
-
-    // Wind blows in +X, cloth starts centered at 0 — avg should shift
-    // (Wind affects cloth based on face normal orientation, so effect may vary)
-    EXPECT_TRUE(true);  // Structural test — no crash from wind processing
+    EXPECT_GT(avgX, x0);
 }
 
 TEST(ClothSimulator, WindVelocityAccessor)

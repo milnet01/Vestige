@@ -839,18 +839,10 @@ TEST_F(SystemRegistryTest, InitializeAllSortsBeforeInit_Sy1)
     render->setUpdatePhase(UpdatePhase::Render);
     registry.registerSystem<MockSystem>("Update");
 
-    Engine* fakeEngine = nullptr;
-    // cppcheck-suppress nullPointer
-    // Forming `*fakeEngine` is technically UB but MockSystem stores the
-    // reference and never dereferences it (verified by reading the
-    // MockSystem definition above). Constructing a real Engine here
-    // would require a GL / audio / physics context that the headless
-    // CI runner cannot stand up, and this test only cares about the
-    // sort order of `initialize` calls. Sentinel: if MockSystem ever
-    // grows a body that touches the engine reference, this test will
-    // segfault and the suppression needs to be removed alongside the
-    // refactor that gives MockSystem a real engine.
-    registry.initializeAll(*fakeEngine);  // MockSystem doesn't deref engine
+    // Use the dummyEngine() helper at line 179 — same pattern every other
+    // initialize test in this file uses. Avoids `*nullptr` UB; MockSystem
+    // ignores the reference but UBSan / future optimizers may still trap.
+    registry.initializeAll(dummyEngine());
 
     auto& log = MockSystem::s_callLog;
     auto updateInit = std::find(log.begin(), log.end(),
