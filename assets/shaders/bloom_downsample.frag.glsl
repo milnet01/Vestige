@@ -14,12 +14,32 @@ uniform float u_threshold;      // Brightness threshold (only on first downsampl
 
 out vec4 fragColor;
 
+/// BT.709 perceptual luminance of a linear-RGB colour. Constants from
+/// ITU-R Recommendation BT.709 §3.2 (HDTV primaries with D65 white).
+/// Mirrored byte-for-byte by `bt709Luminance` in `tests/test_bloom.cpp`.
+float bt709Luminance(vec3 color)
+{
+    return dot(color, vec3(0.2126, 0.7152, 0.0722));
+}
+
 /// Karis average weight — suppresses firefly artifacts on the first downsample
 /// by weighting each quadrant inversely proportional to its luminance.
 float karisWeight(vec3 color)
 {
-    float luma = dot(color, vec3(0.2126, 0.7152, 0.0722));
-    return 1.0 / (1.0 + luma);
+    return 1.0 / (1.0 + bt709Luminance(color));
+}
+
+/// Soft luminance-keyed bright pass. Pre-R# was an inline SOFT_THRESHOLD
+/// macro; promoted to a function so CPU↔GPU parity tests can extract the
+/// formula from this file without preprocessor games. `contrib / (luma +
+/// epsilon)` rescales each component by the soft-knee factor while
+/// preserving the colour ratio (per-component thresholding shifts hue).
+vec3 softThreshold(vec3 color, float threshold)
+{
+    float luma    = bt709Luminance(color);
+    float contrib = max(0.0, luma - threshold);
+    contrib       = contrib / (contrib + 1.0);
+    return color * (contrib / (luma + 0.0001));
 }
 
 void main()
@@ -66,17 +86,19 @@ void main()
     // (per-component threshold would shift colors, e.g. orange → red).
     if (u_useKarisAverage && u_threshold > 0.0)
     {
-        #define SOFT_THRESHOLD(s) { \
-            float luma = dot(s, vec3(0.2126, 0.7152, 0.0722)); \
-            float contrib = max(0.0, luma - u_threshold); \
-            contrib = contrib / (contrib + 1.0); \
-            s *= contrib / (luma + 0.0001); \
-        }
-        SOFT_THRESHOLD(a) SOFT_THRESHOLD(b) SOFT_THRESHOLD(c)
-        SOFT_THRESHOLD(d) SOFT_THRESHOLD(e) SOFT_THRESHOLD(f)
-        SOFT_THRESHOLD(g) SOFT_THRESHOLD(h) SOFT_THRESHOLD(i)
-        SOFT_THRESHOLD(j) SOFT_THRESHOLD(k) SOFT_THRESHOLD(l) SOFT_THRESHOLD(m)
-        #undef SOFT_THRESHOLD
+        a = softThreshold(a, u_threshold);
+        b = softThreshold(b, u_threshold);
+        c = softThreshold(c, u_threshold);
+        d = softThreshold(d, u_threshold);
+        e = softThreshold(e, u_threshold);
+        f = softThreshold(f, u_threshold);
+        g = softThreshold(g, u_threshold);
+        h = softThreshold(h, u_threshold);
+        i = softThreshold(i, u_threshold);
+        j = softThreshold(j, u_threshold);
+        k = softThreshold(k, u_threshold);
+        l = softThreshold(l, u_threshold);
+        m = softThreshold(m, u_threshold);
     }
 
     vec3 result;

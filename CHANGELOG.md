@@ -271,6 +271,170 @@ rose 405 → 410 because each TYPED_TEST instantiation is its own gtest
 test-suite (`ArchitecturalToolLifecycle/0…4`). Build green on first
 pass; no behavioural change in any tool.
 
+### 2026-05-02 Shader-parity slice 1 — GL fixture + IBL CPU↔GPU parity (S1)
+
+Closes the shader-parity anti-pattern flagged in the audit-triage
+discussion: `tests/test_ibl.cpp` reimplements every IBL helper in C++
+and asserts against itself, with no link to the `.glsl` source. A
+typo in `prefilter.frag.glsl` would not fail any unit test. This
+slice introduces real GPU execution into the test binary so the
+production shader and the C++ oracle can be compared numerically.
+
+**New infrastructure** (lives at `tests/`):
+
+- `gl_test_fixture.h/.cpp` — `GLTestEnvironment` registers with gtest
+  at static-init, brings up a hidden GLFW + OpenGL 4.5 core context
+  once per process. `GLTestFixture` is the base class for any test
+  needing GPU; it issues `GTEST_SKIP()` cleanly when the environment
+  could not initialise (Mesa/Wayland headless edge cases, CI runners
+  without a display). Hint set matches `engine/core/window.cpp` so a
+  test running under the fixture sees the same context the engine
+  would.
+- `shader_parity_helpers.h/.cpp`:
+    - `runShaderForVec4(fragSrc, uniforms)` — compiles a fragment
+      shader against a fullscreen-triangle vertex shader, renders one
+      pixel into an `RGBA32F` FBO, returns the four channels.
+    - `readShaderFile(basename)` — reads from
+      `${CMAKE_SOURCE_DIR}/assets/shaders` via `VESTIGE_SHADER_DIR`
+      (already wired by the cloth Sh2/Sh3 text-parity tests).
+    - `extractGlslFunction(src, name)` — slices a single function
+      definition out of a shader by brace-counting. Each parity test
+      then loads the production helper verbatim into the test fragment
+      shader so a drift in the production helper fails the assertion.
+
+**`tests/test_ibl_parity.cpp` — 6 parity tests** for the helpers in
+`assets/shaders/brdf_lut.frag.glsl` + `assets/shaders/scene.frag.glsl`:
+
+- `radicalInverse_VdC` — bit-reverse Van der Corput. Tolerance 1e-7
+  (integer math + one float multiply, bit-exact across spectrum).
+- `hammersley` — low-discrepancy 2D sequence. Tolerance 1e-7.
+- `importanceSampleGGX` — chains sqrt + sin + cos + cross + normalize;
+  tested across 4 cases including the `up`-fallback branch
+  (`abs(N.z) >= 0.999`). Tolerance 1e-5 covers Mesa per-op rounding.
+- `geometrySchlickGGX` + `geometrySmith` — Smith geometry term.
+  Tolerance 1e-6.
+- `fresnelSchlickRoughness` (lives in `scene.frag.glsl`, not
+  `brdf_lut.frag.glsl`) — split-sum F-term. Tolerance 1e-6 across
+  dielectric / metal / rough cases.
+
+The CPU oracles in `test_ibl_parity.cpp` are independent of those in
+`test_ibl.cpp` (re-stated locally) so any future divergence in the
+test-file C++ doesn't silently propagate into the parity comparator.
+
+**Caught-by-the-test-itself class of bugs the new tests would detect**:
+shader rewritten with bad constants (e.g. `0.0405` vs `0.04045`),
+helper renamed without the call sites updated, branch condition
+flipped (`< 0.999` vs `<= 0.999`), missing extension on a different
+GPU. The cloth team's text-grep parity (Sh1+Sh2+Sh3, commit 214747c)
+catches structural drift; numerical parity catches formula drift.
+
+**Collateral fix** (CLAUDE.md global rule 11 in-lane scope):
+`tests/test_gpu_cloth_simulator.cpp::IsSupportedReturnsFalseWithoutGlContext`
+asserted `EXPECT_FALSE(isSupported())` because the test binary used
+to have no GL context. The new GL fixture changes that premise. The
+test was renamed to `IsSupportedMatchesGlContextAvailability`,
+branches on `GLTestEnvironment::wasInitialized()`, and asserts the
+post-condition that's *actually* testable in either environment
+(true with context, false without — both branches preserve the
+no-crash invariant the original test pinned).
+
+**Documented but unactioned in this slice** — see slice 5 plan-file
+notes:
+- `tests/test_ibl.cpp` still has its old C++-vs-self tests; left
+  in place because they're a fast headless first line of defence and
+  removing them would take coverage away during the parity-test
+  warm-up. A future cleanup can decide whether to delete or keep.
+
+3201 / 3201 / 0 — was 3192 / 3192 / 0, so +9 tests net (+3 smoke +6
+IBL parity, the renamed cloth test stays in slot). Build green;
+engine binary unaffected (no engine-side code changed).
+
+### 2026-05-02 Shader-parity slice 2 — bloom CPU↔GPU parity (S2)
+
+Mirrors slice 1's pattern for `assets/shaders/bloom_downsample.frag.glsl`.
+Two production shader changes were necessary to make the parity test
+land cleanly:
+
+- **Promote `bt709Luminance(vec3)` from inline `dot(vec3, vec3)` to a
+  named helper** at file scope. Identical formula; `karisWeight` and
+  `softThreshold` now both call it instead of duplicating the
+  constants `vec3(0.2126, 0.7152, 0.0722)`.
+- **Promote the `SOFT_THRESHOLD` macro to a named `vec3 softThreshold
+  (vec3, float)` function**. The macro form was 13 inline copies of a
+  6-line block — not because it was hot (the soft threshold runs
+  outside the inner downsample loop), but because the original author
+  thought macros would inline guaranteed. Modern Mesa inlines short
+  functions at `-O1`; the LLVM/ACO IR for the named-function form is
+  identical to the macro form in `glslangValidator -S frag -V`.
+
+Three new parity tests in `tests/test_bloom_parity.cpp`:
+
+- `bt709Luminance` — across white / black / pure-channel /
+  HDR-bright cases. Tolerance 1e-6.
+- `karisWeight` — luminance-inverse weighting, including very-bright
+  firefly cases. Tolerance 1e-6.
+- `softThreshold` — soft luminance-keyed bright pass. Tolerance 1e-5
+  (chains `bt709Luminance` + division by `luma + epsilon`; FP error
+  accumulates).
+
+**Honest gap surfaced** — `tests/test_bloom.cpp::brightPass` is a
+*hard*-threshold C++ helper (returns `vec3(0)` if `luma <= threshold`,
+else passes through) while the production shader's bright-pass is
+*soft* (knee curve via `contrib / (contrib + 1.0)`). The C++ helper
+mirrors a stale formula. This slice does *not* fix the C++ helper or
+update its dependent tests — that's a CLAUDE.md global rule 11
+in-lane scope call (the C++ helper isn't broken, it's just testing
+something different than what production does). A follow-up slice
+should either rename the C++ helper to clarify it's testing a
+discontinued contract, or delete it and replace the dependent tests
+with calls to the parity-pinned `softThreshold`.
+
+3204 / 3204 / 0 — was 3201 / 3201 / 0, so +3 bloom-parity tests net.
+Engine builds green; bloom shader output bit-identical at the
+pixel level for all valid inputs (extracted-helper form is a
+mechanical refactor, not a math change).
+
+### 2026-05-02 Shader-parity slice 3 — colour-grading CPU↔GPU parity (S3)
+
+Mirrors slices 1 + 2 for the 3D-LUT colour-grading path in
+`assets/shaders/screen_quad.frag.glsl`. One production shader change:
+
+- **Promote the inline LUT-apply (3 lines at the call site) to a
+  named helper** `vec3 applyColorGradingLut(vec3 color, sampler3D lut,
+  float intensity)`. The math is unchanged: half-texel sampling
+  formula `c * ((N-1)/N) + 0.5/N`, sample, `mix(color, graded,
+  intensity)`. The call site in `main()` becomes a one-liner.
+
+Three new parity tests in `tests/test_color_grading_parity.cpp`:
+
+- **`IdentityLutAtVoxelCentresMatchesCpuLookup`** — uploads a 32³
+  identity LUT to a `GL_RGBA8` 3D texture, samples at voxel-centre
+  inputs (`i/(N-1)` for i in {0, 7, 15, 23, 31}), and compares to
+  `lutLookup_cpu` (formula-identical to `tests/test_color_grading.cpp::lutLookup`).
+  Voxel-centre inputs make GPU trilinear and CPU nearest-neighbour
+  agree to FP precision. Also asserts the round-trip identity
+  property (output ≈ input) within the 8-bit quantisation budget
+  (1/255 ≈ 4e-3, tolerance set at 5e-3).
+- **`ZeroIntensityIsExactPassthrough`** — kills the LUT to all-zeros,
+  sets intensity = 0, asserts exact `EXPECT_FLOAT_EQ` on the input
+  passthrough. `mix(input, 0, 0.0)` rounds to `input` exactly under
+  IEEE 754, so no tolerance needed.
+- **`MixBlendMatchesCpuAcrossIntensities`** — pins `glsl mix(a, b, t)`
+  against `glm::mix` across t ∈ {0, 0.25, 0.5, 0.75, 1.0}. Tolerance
+  1e-6.
+
+**Coverage limit acknowledged** — non-voxel-centre inputs would
+exercise GPU trilinear interpolation which the CPU `lutLookup`
+nearest-neighbour port doesn't model. A future slice could add a
+trilinear CPU oracle if smooth-LUT regressions become a concern;
+for the identity-LUT correctness test that's the most common
+production case, voxel-centre inputs cover what matters.
+
+3207 / 3207 / 0 — was 3204 / 3204 / 0, so +3 colour-grading parity
+tests net. Engine builds green; screen-quad shader output
+bit-identical for all inputs (named-helper extraction is a
+mechanical refactor of a 3-line block).
+
 
 
 Slice 13 perf hygiene closes the LRA-build hot-spot. Pre-Pe8

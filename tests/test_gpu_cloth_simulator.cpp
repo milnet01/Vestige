@@ -4,15 +4,24 @@
 /// @file test_gpu_cloth_simulator.cpp
 /// @brief CPU-side tests for the Phase 9B GpuClothSimulator skeleton.
 ///
-/// These tests exercise the no-GL-context path: default state, polymorphic
-/// construction, isSupported() probe behaviour. The GL-resident behaviour
-/// (SSBO allocation, GL error checks, no-op simulate) is verified by
-/// running the engine itself — no test in this suite establishes a GL
-/// context (`grep glfwInit tests/`), and adding one purely for cloth tests
-/// would duplicate the manual-launch verification path.
+/// Most tests here exercise no-GL-context paths: default state, polymorphic
+/// construction, member setters / getters that don't touch GL. The
+/// GL-resident behaviour (SSBO allocation, GL error checks, no-op simulate)
+/// is verified by running the engine itself.
+///
+/// Note: as of the C-full shader-parity work
+/// (`tests/gl_test_fixture.h`), the test binary now establishes a hidden
+/// GLFW + OpenGL 4.5 core context at process start. Tests that previously
+/// asserted "no GL = no crash" semantics for `isSupported()` were rewritten
+/// to assert the contract that's actually testable now (`isSupported()`
+/// returns true under a live 4.5-core context). The graceful no-context
+/// path is exercised by GpuClothSimulator construction in builds where
+/// the GL environment fails to initialise — `wasInitialized()` is false
+/// in those runs and the assertion flips accordingly.
 
 #include <gtest/gtest.h>
 
+#include "gl_test_fixture.h"
 #include "physics/cloth_solver_backend.h"
 #include "physics/gpu_cloth_simulator.h"
 
@@ -68,11 +77,26 @@ TEST(GpuClothSimulator, DefaultStateMatchesUninitialised)
     EXPECT_TRUE(sim.getTexCoords().empty());
 }
 
-TEST(GpuClothSimulator, IsSupportedReturnsFalseWithoutGlContext)
+TEST(GpuClothSimulator, IsSupportedMatchesGlContextAvailability)
 {
-    // The unit-test binary doesn't establish a GL context. The probe must
-    // gracefully report "not supported" rather than crash on glGetIntegerv.
-    EXPECT_FALSE(GpuClothSimulator::isSupported());
+    // Updated for the C-full shader-parity work (gl_test_fixture.h): the
+    // test binary now creates an OpenGL 4.5 core context at process start
+    // when the host display permits it. The contract the original test
+    // pinned ("no-crash on isSupported() probe without a context") flips
+    // depending on whether GLTestEnvironment succeeded — both branches
+    // remain non-crashing, which is the underlying invariant.
+    if (Vestige::Test::GLTestEnvironment::wasInitialized())
+    {
+        EXPECT_TRUE(GpuClothSimulator::isSupported())
+            << "GL 4.5 core context is live; the SSBO/compute extensions "
+               "cloth needs are part of core 4.3+ so this must be true";
+    }
+    else
+    {
+        EXPECT_FALSE(GpuClothSimulator::isSupported())
+            << "no GL context: probe must gracefully return false, not "
+               "crash on glGetIntegerv";
+    }
 }
 
 TEST(GpuClothSimulator, IsAnIClothSolverBackend)

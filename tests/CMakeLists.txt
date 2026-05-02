@@ -5,6 +5,12 @@
 ## @brief Build configuration for Vestige unit tests.
 
 add_executable(vestige_tests
+    gl_test_fixture.cpp
+    shader_parity_helpers.cpp
+    test_shader_parity_smoke.cpp
+    test_ibl_parity.cpp
+    test_bloom_parity.cpp
+    test_color_grading_parity.cpp
     test_event_bus.cpp
     test_timer.cpp
     test_logger.cpp

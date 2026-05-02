@@ -165,6 +165,20 @@ vec3 tonemapACES(vec3 color)
     return (color * (2.51 * color + 0.03)) / (color * (2.43 * color + 0.59) + 0.14);
 }
 
+/// 3D LUT colour grading. Applies the half-texel-offset sampling formula
+/// (so the LUT's first/last voxels land cleanly at colour 0/1 without
+/// hardware-clamp ringing) and blends against the original by `intensity`.
+/// Mirrored byte-for-byte by `lutLookup` + `lutBlend` in
+/// `tests/test_color_grading.cpp` (CPU side does nearest-neighbour, which
+/// agrees with GPU trilinear at voxel-centre sample points).
+vec3 applyColorGradingLut(vec3 color, sampler3D lut, float intensity)
+{
+    float lutSize = float(textureSize(lut, 0).x);
+    vec3 lutCoord = clamp(color, 0.0, 1.0) * ((lutSize - 1.0) / lutSize) + vec3(0.5 / lutSize);
+    vec3 graded = texture(lut, lutCoord).rgb;
+    return mix(color, graded, intensity);
+}
+
 /// False-color luminance visualization for HDR debugging.
 vec3 falseColorLuminance(float luminance)
 {
@@ -284,10 +298,7 @@ void main()
     // 7. Color grading LUT
     if (u_lutEnabled)
     {
-        float lutSize = float(textureSize(u_lutTexture, 0).x);
-        vec3 lutCoord = clamp(color, 0.0, 1.0) * ((lutSize - 1.0) / lutSize) + vec3(0.5 / lutSize);
-        vec3 graded = texture(u_lutTexture, lutCoord).rgb;
-        color = mix(color, graded, u_lutIntensity);
+        color = applyColorGradingLut(color, u_lutTexture, u_lutIntensity);
     }
 
     // 7b. Color-vision-deficiency simulation (post-grade, pre-gamma).
