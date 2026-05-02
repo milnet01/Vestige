@@ -123,6 +123,36 @@ behavior change; smoke value preserved.
 
 3182 / 3182 / 0 — same as slice 2; only test names + comments changed.
 
+### 2026-05-02 Test-suite audit — M1 photosensitive sanitisation TEST_P refactor (slice 4)
+
+Twelve `WCAG_2_3_1_*Sanitised*` / `*NegativeClamped*` tests in
+`tests/test_photosensitive_safety.cpp` shared identical structure (4
+clamp helpers × 3 sanitisation categories: NaN, ±Inf, negative) and
+identical assertion shape (`EXPECT_FLOAT_EQ(fn(badInput, safeMode), 0.0f)`).
+Replaced with three `TEST_P(PhotoSanitisationP, …)` bodies parameterised
+over a `PhotoSafetyFn { name; fn_ptr; }` table, instantiated via
+`INSTANTIATE_TEST_SUITE_P(AllClampHelpers, …)` over the 4 helpers. All
+12 case instances retained at the gtest level (cases generated as
+`AllClampHelpers/PhotoSanitisationP.WCAG_2_3_1_NaNSanitisedInBothPaths/clampFlashAlpha`
+etc.) — no coverage change.
+
+**Why this matters operationally.** Adding a new clamp helper (e.g.
+`clampSaturation`, `limitContrast`) used to require copy-pasting three
+new TEST blocks. Now it requires one line in the `INSTANTIATE_TEST_SUITE_P`
+table; the helper automatically inherits all three sanitisation
+contracts. Caught one author-error class (forgetting the new helper in
+one of the three categories) at the type system instead of in code
+review.
+
+Source LOC dropped ~80 → ~30 in the F4 block. Other PhotoSafety tests
+(DisabledIsIdentityFor*, F5 hard-cap, F4 DisabledPreservesFinitePositives)
+were left as-is — they have per-fn-distinct sample values or are
+helper-specific (StrobeHz only) so parametrisation buys nothing there.
+
+3182 / 3182 / 0 — same as slice 3 (12 TEST cases → 12 TEST_P instances).
+Suite count rose to 405 (was 404) because the parameterised suite is
+its own gtest test-suite.
+
 
 
 Slice 13 perf hygiene closes the LRA-build hot-spot. Pre-Pe8

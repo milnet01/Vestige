@@ -158,92 +158,59 @@ constexpr float kPosInf   = std::numeric_limits<float>::infinity();
 constexpr float kNegInf   = -std::numeric_limits<float>::infinity();
 } // namespace
 
-// --- Flash alpha ---
+// All four photosensitive clamp helpers share the same signature
+// `float fn(float, bool, const PhotosensitiveLimits&)` and the same
+// "NaN / ±Inf / negative input → 0.0f regardless of safe-mode" contract,
+// so the F4 sanitisation matrix is parameterised over the fn. When a new
+// clamp helper is added (e.g. `clampSaturation`), append it once to the
+// INSTANTIATE_TEST_SUITE_P below and it automatically inherits the three
+// sanitisation contracts.
 
-TEST(PhotosensitiveSafety, WCAG_2_3_1_FlashAlphaNaNSanitisedInBothPaths)
+namespace
 {
-    EXPECT_FLOAT_EQ(clampFlashAlpha(kQuietNaN, false), 0.0f);
-    EXPECT_FLOAT_EQ(clampFlashAlpha(kQuietNaN, true),  0.0f);
+struct PhotoSafetyFn
+{
+    const char* name;
+    float (*fn)(float, bool, const PhotosensitiveLimits&);
+};
+
+class PhotoSanitisationP : public ::testing::TestWithParam<PhotoSafetyFn>
+{
+};
+} // namespace
+
+INSTANTIATE_TEST_SUITE_P(
+    AllClampHelpers,
+    PhotoSanitisationP,
+    ::testing::Values(
+        PhotoSafetyFn{"clampFlashAlpha",     &clampFlashAlpha},
+        PhotoSafetyFn{"clampShakeAmplitude", &clampShakeAmplitude},
+        PhotoSafetyFn{"clampStrobeHz",       &clampStrobeHz},
+        PhotoSafetyFn{"limitBloomIntensity", &limitBloomIntensity}),
+    [](const ::testing::TestParamInfo<PhotoSafetyFn>& info)
+    { return std::string(info.param.name); });
+
+TEST_P(PhotoSanitisationP, WCAG_2_3_1_NaNSanitisedInBothPaths)
+{
+    const auto& fn = GetParam().fn;
+    EXPECT_FLOAT_EQ(fn(kQuietNaN, false, {}), 0.0f);
+    EXPECT_FLOAT_EQ(fn(kQuietNaN, true,  {}), 0.0f);
 }
 
-TEST(PhotosensitiveSafety, WCAG_2_3_1_FlashAlphaInfSanitisedInBothPaths)
+TEST_P(PhotoSanitisationP, WCAG_2_3_1_InfSanitisedInBothPaths)
 {
-    EXPECT_FLOAT_EQ(clampFlashAlpha(kPosInf, false), 0.0f);
-    EXPECT_FLOAT_EQ(clampFlashAlpha(kPosInf, true),  0.0f);
-    EXPECT_FLOAT_EQ(clampFlashAlpha(kNegInf, false), 0.0f);
-    EXPECT_FLOAT_EQ(clampFlashAlpha(kNegInf, true),  0.0f);
+    const auto& fn = GetParam().fn;
+    EXPECT_FLOAT_EQ(fn(kPosInf, false, {}), 0.0f);
+    EXPECT_FLOAT_EQ(fn(kPosInf, true,  {}), 0.0f);
+    EXPECT_FLOAT_EQ(fn(kNegInf, false, {}), 0.0f);
+    EXPECT_FLOAT_EQ(fn(kNegInf, true,  {}), 0.0f);
 }
 
-TEST(PhotosensitiveSafety, WCAG_2_3_1_FlashAlphaNegativeClampedToZero)
+TEST_P(PhotoSanitisationP, WCAG_2_3_1_NegativeClampedToZero)
 {
-    EXPECT_FLOAT_EQ(clampFlashAlpha(-1.0f,  false), 0.0f);
-    EXPECT_FLOAT_EQ(clampFlashAlpha(-0.25f, true),  0.0f);
-}
-
-// --- Shake amplitude ---
-
-TEST(PhotosensitiveSafety, WCAG_2_3_1_ShakeAmplitudeNaNSanitisedInBothPaths)
-{
-    EXPECT_FLOAT_EQ(clampShakeAmplitude(kQuietNaN, false), 0.0f);
-    EXPECT_FLOAT_EQ(clampShakeAmplitude(kQuietNaN, true),  0.0f);
-}
-
-TEST(PhotosensitiveSafety, WCAG_2_3_1_ShakeAmplitudeInfSanitisedInBothPaths)
-{
-    EXPECT_FLOAT_EQ(clampShakeAmplitude(kPosInf, false), 0.0f);
-    EXPECT_FLOAT_EQ(clampShakeAmplitude(kPosInf, true),  0.0f);
-    EXPECT_FLOAT_EQ(clampShakeAmplitude(kNegInf, false), 0.0f);
-    EXPECT_FLOAT_EQ(clampShakeAmplitude(kNegInf, true),  0.0f);
-}
-
-TEST(PhotosensitiveSafety, WCAG_2_3_1_ShakeAmplitudeNegativeClampedToZero)
-{
-    EXPECT_FLOAT_EQ(clampShakeAmplitude(-5.0f, false), 0.0f);
-    EXPECT_FLOAT_EQ(clampShakeAmplitude(-1.0f, true),  0.0f);
-}
-
-// --- Strobe Hz ---
-
-TEST(PhotosensitiveSafety, WCAG_2_3_1_StrobeHzNaNSanitisedInBothPaths)
-{
-    EXPECT_FLOAT_EQ(clampStrobeHz(kQuietNaN, false), 0.0f);
-    EXPECT_FLOAT_EQ(clampStrobeHz(kQuietNaN, true),  0.0f);
-}
-
-TEST(PhotosensitiveSafety, WCAG_2_3_1_StrobeHzInfSanitisedInBothPaths)
-{
-    EXPECT_FLOAT_EQ(clampStrobeHz(kPosInf, false), 0.0f);
-    EXPECT_FLOAT_EQ(clampStrobeHz(kPosInf, true),  0.0f);
-    EXPECT_FLOAT_EQ(clampStrobeHz(kNegInf, false), 0.0f);
-    EXPECT_FLOAT_EQ(clampStrobeHz(kNegInf, true),  0.0f);
-}
-
-TEST(PhotosensitiveSafety, WCAG_2_3_1_StrobeHzNegativeClampedToZero)
-{
-    EXPECT_FLOAT_EQ(clampStrobeHz(-10.0f, false), 0.0f);
-    EXPECT_FLOAT_EQ(clampStrobeHz(-1.0f,  true),  0.0f);
-}
-
-// --- Bloom intensity ---
-
-TEST(PhotosensitiveSafety, WCAG_2_3_1_BloomIntensityNaNSanitisedInBothPaths)
-{
-    EXPECT_FLOAT_EQ(limitBloomIntensity(kQuietNaN, false), 0.0f);
-    EXPECT_FLOAT_EQ(limitBloomIntensity(kQuietNaN, true),  0.0f);
-}
-
-TEST(PhotosensitiveSafety, WCAG_2_3_1_BloomIntensityInfSanitisedInBothPaths)
-{
-    EXPECT_FLOAT_EQ(limitBloomIntensity(kPosInf, false), 0.0f);
-    EXPECT_FLOAT_EQ(limitBloomIntensity(kPosInf, true),  0.0f);
-    EXPECT_FLOAT_EQ(limitBloomIntensity(kNegInf, false), 0.0f);
-    EXPECT_FLOAT_EQ(limitBloomIntensity(kNegInf, true),  0.0f);
-}
-
-TEST(PhotosensitiveSafety, WCAG_2_3_1_BloomIntensityNegativeClampedToZero)
-{
-    EXPECT_FLOAT_EQ(limitBloomIntensity(-2.0f, false), 0.0f);
-    EXPECT_FLOAT_EQ(limitBloomIntensity(-0.5f, true),  0.0f);
+    const auto& fn = GetParam().fn;
+    EXPECT_FLOAT_EQ(fn(-1.0f,  false, {}), 0.0f);
+    EXPECT_FLOAT_EQ(fn(-0.25f, true,  {}), 0.0f);
 }
 
 // --- Regression: finite, non-negative disabled values still pass through.
