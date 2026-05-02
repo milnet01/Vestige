@@ -9,6 +9,66 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-05-02 CI fix — LSan suppressions for GL parity tests
+
+The shader-parity slices (commit `0547944`, `23e26d9`) were the first to
+spin up a real GL context inside `vestige_tests`, surfacing two distinct
+LSan failure modes on the Linux Debug runner:
+
+1. **Mesa llvmpipe internal allocations.** CI's software rasterizer
+   lazily allocates pipe-state and pixel-buffer structures on the first
+   `glReadPixels` call. Frames originate in a separately-loaded DSO that
+   LSan cannot symbolize (`<unknown module>`), but the next named frame
+   up is always our `Vestige::Test::ShaderProgram::run`. 14 GL parity
+   tests (smoke + IBL + bloom + colour-grading) were leaking 56–112 B
+   each.
+2. **GLFW partial-init leak.** Test #1278 (`EnvironmentForces.WindVelocityDependsOnPosition`,
+   non-GL) tripped on a 12 KB leak coming from `_glfwConnectX11` when
+   `glfwInit()` reached partial X11 setup before failing for that
+   subprocess (likely `xvfb-run` race when ctest forks `-j $(nproc)`
+   workers). The existing `_glfwInitGLX` and `extensionSupportedGLX`
+   suppressions covered sibling code paths but missed this one.
+
+Both are third-party-library lifetime issues (driver / GLFW), the same
+class as the pre-existing `extensionSupportedGLX` suppression — not
+Vestige bugs. Fix is two new entries in `asan_suppressions.txt`:
+
+- `leak:glfwInit` — single suppression at the public entry point covers
+  every GLFW backend (X11, GLX, EGL, Wayland), supersedes the narrower
+  `_glfwInitGLX` and `extensionSupportedGLX` (consolidated into one).
+- `leak:Vestige::Test::ShaderProgram` — scope-limited to test-only
+  helper, so production code can never accidentally hide a real leak
+  here.
+
+Verified locally on Mesa 26.0.5 / RX 6600: 15 / 15 GL parity tests
+green under `LSAN_OPTIONS=suppressions=...`. Net zero behaviour change
+on real-hardware paths; CI red→green expected.
+
+### 2026-05-02 Test-suite cleanup — prune obsolete bloom CPU helpers
+
+`tests/test_bloom_parity.cpp` (slice 4 of the shader-parity work) now
+covers `bt709Luminance`, `karisWeight`, and `softThreshold` against the
+real GLSL via 1×1 FBO readback. That obsoletes two stale helpers in
+`tests/test_bloom.cpp`:
+
+- **`brightPass` + 3 `BrightPass*` tests deleted.** The CPU helper
+  asserted a *hard*-threshold contract (`luma > t ? color : 0`); the
+  production shader does *soft* threshold with a `contrib / (contrib + 1.0)`
+  knee. Tests passed because they were checking the (wrong) helper
+  against itself, not against the shader. Real coverage now lives in
+  `BloomParityTest.SoftThresholdMatchesCpuAcrossLumaBands`.
+- **`GAUSSIAN_WEIGHTS` + 2 `Gaussian*` tests deleted.** The 5-tap weight
+  array doesn't appear in any current bloom shader. Downsample is a
+  13-tap Karis-weighted box; upsample is a 3×3 tent. Tests were
+  asserting invariants of a function the engine doesn't use.
+
+What stays in `test_bloom.cpp`: 3 luminance ratio tests + 3 composite
+tests, all matching the actual shader contract (`color += bloom * intensity`
+in `screen_quad.frag.glsl:270`). Headless / no-GL-context cost is
+preserved as a first-line check.
+
+Net: 11 → 6 BloomTest cases. Test count: 3207 → 3202 (− 5).
+
 ### 2026-05-02 Test-suite audit — critical assertion fixes (slice 1 of audit triage)
 
 Cold-eyes audit of all 175 test files / 3192 test cases (8 parallel
