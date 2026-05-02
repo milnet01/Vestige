@@ -447,3 +447,121 @@ TEST(ClothCollisionShader, CollidersUboExposesFrictionCoefficients_Sh3)
     EXPECT_NE(src.find("float staticFriction"),  std::string::npos);
     EXPECT_NE(src.find("float kineticFriction"), std::string::npos);
 }
+
+// -- Phase 10.9 Cl5: reset() / captureRestPositions() rest-snapshot semantics --
+//
+// Pre-Cl5 the GPU `reset()` re-uploaded the *current* `m_positionMirror`
+// instead of an immutable rest snapshot. Two paths mutate the mirror:
+// (1) `setPinPosition(i, p)` writes `p` into `m_positionMirror[i]` directly,
+// (2) `getPositions()` triggers a SSBO readback that overwrites the mirror
+// with the post-simulate state. Either makes `reset()` snap to the latest
+// mutation rather than the original grid — exactly the bug the ROADMAP entry
+// pins ("Pinned particles currently snap to last-pinned-position, not initial
+// grid"). Mirrors the CPU contract at `cloth_simulator.cpp:206 / 720 / 689`:
+// `m_initialPositions` is the rest snapshot, captured at init and refreshable
+// via `captureRestPositions()`. The GPU stub `captureRestPositions() = {}`
+// (header line 95) silently drops the call.
+
+namespace
+{
+
+ClothConfig clothCl5Config(uint32_t w = 4, uint32_t h = 4)
+{
+    ClothConfig cfg;
+    cfg.width            = w;
+    cfg.height           = h;
+    cfg.spacing          = 1.0f;
+    cfg.particleMass     = 1.0f;
+    cfg.substeps         = 5;
+    cfg.stretchCompliance = 0.0f;
+    cfg.shearCompliance   = 0.0001f;
+    cfg.bendCompliance    = 0.01f;
+    cfg.damping           = 0.01f;
+    return cfg;
+}
+
+}  // namespace
+
+class GpuClothResetSemantics : public ::Vestige::Test::GLTestFixture {};
+
+TEST_F(GpuClothResetSemantics, ResetRestoresInitialGridIgnoringSetPinPosition_Cl5)
+{
+    // Reproduce the headline ROADMAP bug: pin a particle, move it via
+    // setPinPosition, reset → expect the particle back at its original grid
+    // location. Pre-Cl5 reset() reads from the mirror that setPinPosition
+    // mutated, so the particle stays at the moved-to coordinate.
+    GpuClothSimulator sim;
+    sim.initialize(clothCl5Config());
+    ASSERT_TRUE(sim.isInitialized());
+
+    const glm::vec3* posBefore = sim.getPositions();
+    ASSERT_NE(posBefore, nullptr);
+    const glm::vec3 originalGridPos = posBefore[0];
+    // Sanity: 4x4 grid centred at origin, spacing 1 → particle 0 at (-1.5,0,-1.5).
+    ASSERT_FLOAT_EQ(originalGridPos.x, -1.5f);
+    ASSERT_FLOAT_EQ(originalGridPos.y,  0.0f);
+    ASSERT_FLOAT_EQ(originalGridPos.z, -1.5f);
+
+    ASSERT_TRUE(sim.pinParticle(0, originalGridPos));
+    sim.setPinPosition(0, glm::vec3(0.0f, 5.0f, 0.0f));
+
+    sim.reset();
+
+    const glm::vec3* posAfter = sim.getPositions();
+    ASSERT_NE(posAfter, nullptr);
+    EXPECT_FLOAT_EQ(posAfter[0].x, originalGridPos.x);
+    EXPECT_FLOAT_EQ(posAfter[0].y, originalGridPos.y);
+    EXPECT_FLOAT_EQ(posAfter[0].z, originalGridPos.z);
+}
+
+TEST_F(GpuClothResetSemantics, CaptureRestPositionsRefreshesSnapshotForReset_Cl5)
+{
+    // After captureRestPositions(), reset() must restore to the captured
+    // pose, not the originally-built grid. Pre-Cl5 the override is `{}` so
+    // captureRestPositions has no effect: reset still reads from whatever
+    // the mirror happens to hold, which is the most recent setPinPosition.
+    GpuClothSimulator sim;
+    sim.initialize(clothCl5Config());
+    ASSERT_TRUE(sim.isInitialized());
+
+    const glm::vec3 capturedPin(2.0f, 1.0f, 3.0f);
+    const glm::vec3 laterPin  (9.0f, 9.0f, 9.0f);
+
+    ASSERT_TRUE(sim.pinParticle(0, capturedPin));
+    sim.captureRestPositions();   // Pre-Cl5: no-op stub.
+    sim.setPinPosition(0, laterPin);
+
+    sim.reset();
+
+    const glm::vec3* posAfter = sim.getPositions();
+    ASSERT_NE(posAfter, nullptr);
+    EXPECT_FLOAT_EQ(posAfter[0].x, capturedPin.x);
+    EXPECT_FLOAT_EQ(posAfter[0].y, capturedPin.y);
+    EXPECT_FLOAT_EQ(posAfter[0].z, capturedPin.z);
+}
+
+TEST_F(GpuClothResetSemantics, ResetThroughBackendInterface_Cl5)
+{
+    // Same contract as the headline test, exercised through the
+    // `IClothSolverBackend*` polymorphic surface — the inspector / cloth
+    // component drives backends through this interface, so the rest-pose
+    // semantics must hold there too.
+    std::unique_ptr<IClothSolverBackend> backend = std::make_unique<GpuClothSimulator>();
+    backend->initialize(clothCl5Config());
+    ASSERT_TRUE(backend->isInitialized());
+
+    const glm::vec3* posBefore = backend->getPositions();
+    ASSERT_NE(posBefore, nullptr);
+    const glm::vec3 originalGridPos = posBefore[0];
+
+    ASSERT_TRUE(backend->pinParticle(0, originalGridPos));
+    backend->setPinPosition(0, glm::vec3(7.0f, 7.0f, 7.0f));
+
+    backend->reset();
+
+    const glm::vec3* posAfter = backend->getPositions();
+    ASSERT_NE(posAfter, nullptr);
+    EXPECT_FLOAT_EQ(posAfter[0].x, originalGridPos.x);
+    EXPECT_FLOAT_EQ(posAfter[0].y, originalGridPos.y);
+    EXPECT_FLOAT_EQ(posAfter[0].z, originalGridPos.z);
+}
