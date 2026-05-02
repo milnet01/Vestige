@@ -16,7 +16,6 @@ add_executable(vestige_tests
     test_framebuffer.cpp
     test_shadow_map.cpp
     test_tangent_calc.cpp
-    test_skybox.cpp
     test_point_shadow_map.cpp
     test_hdr_pipeline.cpp
     test_pom.cpp

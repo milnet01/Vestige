@@ -173,14 +173,7 @@ TEST(FrustumTest, OrthoShadowCascadeCullsOutsideCasters)
     EXPECT_FALSE(isAabbInFrustum(outsideBox, planes));
 }
 
-// --- Mesh auto-AABB computation test ---
-
-TEST(MeshBoundsTest, UploadComputesLocalBounds)
-{
-    // This test uses Mesh without GPU context, so we can only test the
-    // bounds are correctly set. The actual GPU upload will fail without
-    // OpenGL context, but the bounds computation happens on the CPU.
-    // Skipping this test since Mesh::upload requires an OpenGL context.
-    // The AABB computation is tested implicitly via the full engine.
-    GTEST_SKIP() << "Mesh::upload() requires OpenGL context";
-}
+// Note: Mesh::upload() bounds computation is tested implicitly via
+// integration tests (the engine startup path constructs a Mesh and
+// queries getLocalBounds()). A unit test here would need an OpenGL
+// context, which the headless test runner does not provide.

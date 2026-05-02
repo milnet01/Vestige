@@ -87,32 +87,9 @@ TEST_F(SceneSerializerTest, ReadMetadataFromValidFile)
     EXPECT_EQ(meta.created, "2026-03-20T00:00:00Z");
 }
 
-// ---------------------------------------------------------------------------
-// Serialize to string
-// ---------------------------------------------------------------------------
-
-TEST_F(SceneSerializerTest, SerializeEmptySceneToString)
-{
-    Scene scene("Empty");
-    // ResourceManager requires GPU context, but serializeToString only needs
-    // const ResourceManager& for texture/mesh lookup. For an empty scene with
-    // no MeshRenderers, we never call those lookups. We construct a minimal
-    // stand-in by just passing through — the serializer won't dereference for
-    // entities that have no components.
-
-    // We can't create a real ResourceManager without OpenGL, so we test the
-    // JSON structure by parsing the output from buildSceneJson indirectly.
-    // Instead, verify the metadata read path works with a manually-crafted file.
-
-    nlohmann::json j;
-    j["vestige_scene"]["format_version"] = SceneSerializer::CURRENT_FORMAT_VERSION;
-    j["vestige_scene"]["name"] = "Empty";
-    j["vestige_scene"]["engine_version"] = SceneSerializer::ENGINE_VERSION;
-    j["entities"] = nlohmann::json::array();
-
-    EXPECT_EQ(j["vestige_scene"]["format_version"], 1);
-    EXPECT_EQ(j["entities"].size(), 0u);
-}
+// Note: serializeToString and the full save/load round-trip require a
+// ResourceManager (GL context) and are exercised by integration tests
+// rather than this unit-test file.
 
 // ---------------------------------------------------------------------------
 // File structure validation
@@ -136,8 +113,11 @@ TEST_F(SceneSerializerTest, LoadRejectsMissingHeader)
     EXPECT_EQ(meta.formatVersion, 0);  // Missing header → version 0
 }
 
-TEST_F(SceneSerializerTest, LoadRejectsFutureVersion)
+TEST_F(SceneSerializerTest, ReadMetadataEchoesRawFormatVersion)
 {
+    // readMetadata() is a thin parser; it does not gate on format version.
+    // The actual rejection of a future format happens later in loadScene
+    // (which requires a GL context and is covered by integration tests).
     nlohmann::json j;
     j["vestige_scene"]["format_version"] = 999;
     j["vestige_scene"]["name"] = "Future";
@@ -150,7 +130,6 @@ TEST_F(SceneSerializerTest, LoadRejectsFutureVersion)
 
     SceneMetadata meta = SceneSerializer::readMetadata(path);
     EXPECT_EQ(meta.formatVersion, 999);
-    // The actual load would reject this, but we can't call loadScene without GPU.
 }
 
 TEST_F(SceneSerializerTest, LoadRejectsNonexistentFile)
@@ -196,52 +175,11 @@ TEST_F(SceneSerializerTest, SetNameWorks)
     EXPECT_EQ(scene.getName(), "Renamed");
 }
 
-// ---------------------------------------------------------------------------
-// Atomic write
-// ---------------------------------------------------------------------------
-
-TEST_F(SceneSerializerTest, AtomicWriteCreatesFile)
-{
-    // Indirectly test via writeMetadata: create a valid scene JSON and write it
-    nlohmann::json j;
-    j["vestige_scene"]["format_version"] = 1;
-    j["vestige_scene"]["name"] = "Atomic Test";
-    j["entities"] = nlohmann::json::array();
-
-    fs::path path = m_testDir / "subdir" / "atomic.scene";
-    // Write directly (simulating what saveScene does internally)
-    fs::create_directories(path.parent_path());
-    std::ofstream out(path);
-    out << j.dump(4);
-    out.close();
-
-    EXPECT_TRUE(fs::exists(path));
-
-    // Verify content
-    SceneMetadata meta = SceneSerializer::readMetadata(path);
-    EXPECT_EQ(meta.name, "Atomic Test");
-    EXPECT_EQ(meta.formatVersion, 1);
-}
-
-TEST_F(SceneSerializerTest, NoTmpFileLeftBehind)
-{
-    // After a successful write, no .tmp file should remain
-    nlohmann::json j;
-    j["vestige_scene"]["format_version"] = 1;
-    j["vestige_scene"]["name"] = "Tmp Test";
-    j["entities"] = nlohmann::json::array();
-
-    fs::path path = m_testDir / "tmp_test.scene";
-    fs::path tmpPath = path;
-    tmpPath += ".tmp";
-
-    std::ofstream out(path);
-    out << j.dump(4);
-    out.close();
-
-    EXPECT_TRUE(fs::exists(path));
-    EXPECT_FALSE(fs::exists(tmpPath));
-}
+// Note: the engine's atomic-write path (write to .tmp + rename) is
+// exercised in tests/test_atomic_write_routing.cpp against the real
+// SceneSerializer save path. Tests that wrote via std::ofstream and
+// asserted fs::exists() proved nothing about the production code path
+// and have been removed.
 
 // ---------------------------------------------------------------------------
 // JSON structure of serialized entity data

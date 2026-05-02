@@ -48,6 +48,54 @@ autonomously, per CLAUDE.md global rules 9 and 11.
 3192 / 3191 / 1 (1 pre-existing GL skip) — same baseline as before this
 commit, verified locally.
 
+### 2026-05-02 Test-suite audit — delete tests that assert nothing (slice 2 of audit triage)
+
+Ten tests deleted across four files. All shared the same shape: their
+bodies admit in-comment that they cannot construct the SUT without an
+OpenGL context, so they fall through to either a tautological
+`EXPECT_TRUE(true)`, an inlined reimplementation of the production
+math, a bare `GTEST_SKIP()`, or `std::ofstream` in place of the
+production atomic-write path. The remaining contracts are covered by
+integration tests that do have a GL context. Net: -10 unit tests, -1
+pre-existing skip, -200 LOC, no coverage loss.
+
+- **`tests/test_skybox.cpp` removed entirely.** Both tests
+  (`DefaultProceduralMode`, `HasTextureDefaultFalse`) were bare
+  `EXPECT_TRUE(true);  // Placeholder for contract documentation`. The
+  comments themselves admit "GL context required for full test." File
+  was a contract-documentation stub, not a test. Removed from
+  `tests/CMakeLists.txt` in the same commit.
+- **`tests/test_taa.cpp` — four tests removed.**
+  `JitterModifiesOnlyColumn2`, `JitterMagnitudeIsSubPixel`,
+  `FeedbackFactorDefault`, `FeedbackFactorClamping`. None constructed
+  a `Taa`; each reimplemented the formula inline (`(Taa::halton(1, 2)
+  - 0.5f) * 2.0f / 1920.0f`) or asserted `0.9f == 0.9f` against a
+  local literal. The shader could regress and these tests would stay
+  green because both copies drift together. The 8 remaining tests
+  (Halton sequence + motion-vector math + AntiAliasMode enum) are
+  pure-static-method coverage that doesn't need an instance and is
+  what this file is actually pinning. The audit explicitly flagged 3
+  of the 4; `JitterMagnitudeIsSubPixel` was not enumerated but is
+  identical anti-pattern.
+- **`tests/test_frustum_culling.cpp::MeshBoundsTest::UploadComputesLocalBounds`
+  removed.** The body was a single `GTEST_SKIP() << "Mesh::upload()
+  requires OpenGL context";` with no fallback. Replaced with a
+  one-line comment pointing readers to where the contract is
+  exercised (engine startup path, integration tests).
+- **`tests/test_scene_serializer.cpp` — three tests removed, one
+  renamed.** `SerializeEmptySceneToString`, `AtomicWriteCreatesFile`,
+  `NoTmpFileLeftBehind` never invoked `SceneSerializer`; the first
+  hand-built JSON and asserted on it, the latter two wrote via plain
+  `std::ofstream` and asserted `fs::exists`. Real atomic-write
+  coverage already lives in `tests/test_atomic_write_routing.cpp`,
+  which exercises the production save path. `LoadRejectsFutureVersion`
+  was renamed to `ReadMetadataEchoesRawFormatVersion` because the
+  body only verifies that `readMetadata` echoes the int; the actual
+  rejection happens later in `loadScene` (which the comment admitted
+  it couldn't call). Honest name now.
+
+3182 / 3182 / 0 — was 3192 / 3191 / 1, so -10 tests / -1 skip net.
+
 
 
 Slice 13 perf hygiene closes the LRA-build hot-spot. Pre-Pe8

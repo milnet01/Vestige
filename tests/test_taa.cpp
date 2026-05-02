@@ -9,7 +9,6 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
-#include <cmath>
 #include <set>
 
 using namespace Vestige;
@@ -58,70 +57,9 @@ TEST(TAA, HaltonDoesNotRepeatFor16Samples)
     }
 }
 
-// =============================================================================
-// Jitter projection
-// =============================================================================
-
-TEST(TAA, JitterModifiesOnlyColumn2)
-{
-    glm::mat4 proj = glm::perspective(glm::radians(60.0f), 16.0f / 9.0f, 0.1f, 100.0f);
-    // Create a temporary Taa just to test the static halton and jitterProjection logic
-    // Use a direct calculation instead
-    glm::mat4 jittered = proj;
-    float jitterX = (Taa::halton(1, 2) - 0.5f) * 2.0f / 1920.0f;
-    float jitterY = (Taa::halton(1, 3) - 0.5f) * 2.0f / 1080.0f;
-    jittered[2][0] += jitterX;
-    jittered[2][1] += jitterY;
-
-    // Only [2][0] and [2][1] should differ
-    for (int col = 0; col < 4; col++)
-    {
-        for (int row = 0; row < 4; row++)
-        {
-            if (col == 2 && (row == 0 || row == 1))
-            {
-                continue;  // These are expected to change
-            }
-            EXPECT_FLOAT_EQ(proj[col][row], jittered[col][row])
-                << "Unexpected change at [" << col << "][" << row << "]";
-        }
-    }
-}
-
-TEST(TAA, JitterMagnitudeIsSubPixel)
-{
-    // At 1920x1080, jitter should be much less than 1 pixel in NDC
-    float jx = (Taa::halton(1, 2) - 0.5f) * 2.0f / 1920.0f;
-    float jy = (Taa::halton(1, 3) - 0.5f) * 2.0f / 1080.0f;
-    EXPECT_LT(std::abs(jx), 1.0f / 1920.0f * 2.0f);
-    EXPECT_LT(std::abs(jy), 1.0f / 1080.0f * 2.0f);
-}
-
-// =============================================================================
-// Feedback factor
-// =============================================================================
-
-TEST(TAA, FeedbackFactorDefault)
-{
-    // Default should be 0.9
-    // Can't construct Taa without GL context, so test the class design expectations
-    float defaultFeedback = 0.9f;
-    EXPECT_FLOAT_EQ(defaultFeedback, 0.9f);
-}
-
-TEST(TAA, FeedbackFactorClamping)
-{
-    // Test clamping logic manually
-    float factor = -0.5f;
-    if (factor < 0.0f) factor = 0.0f;
-    if (factor > 1.0f) factor = 1.0f;
-    EXPECT_FLOAT_EQ(factor, 0.0f);
-
-    factor = 1.5f;
-    if (factor < 0.0f) factor = 0.0f;
-    if (factor > 1.0f) factor = 1.0f;
-    EXPECT_FLOAT_EQ(factor, 1.0f);
-}
+// Note: jitterProjection / setFeedbackFactor / getFeedbackFactor tests
+// require an instance of Taa, which depends on Framebuffer (GL context).
+// They are exercised by integration tests rather than this header-only suite.
 
 // =============================================================================
 // Motion vectors (mathematical correctness)
