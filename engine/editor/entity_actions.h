@@ -6,6 +6,7 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -15,6 +16,7 @@ namespace Vestige
 {
 
 class CommandHistory;
+class EditorCommand;
 class Entity;
 class Scene;
 class Selection;
@@ -36,6 +38,28 @@ Entity* duplicateEntity(Scene& scene, Selection& selection, uint32_t entityId);
 /// @param scene The active scene.
 /// @param selection Editor selection (cleared after delete).
 void deleteSelectedEntities(Scene& scene, Selection& selection);
+
+/// @brief Filter @a ids down to the entities that have no selected ancestor.
+///
+/// Phase 10.9 Slice 12 Ed3 — when the user multi-selects a parent and one
+/// of its descendants and presses Delete, the descendant's `DeleteEntityCommand`
+/// would run *after* its parent's removal recursively wiped it; the second
+/// command then operates on a freed entity (ID lookup fails silently, undo
+/// can't restore the original parent-child topology). Drop descendants from
+/// the operation list before composing the command.
+///
+/// Returned ids preserve their relative order in @a ids, so the rebuild on
+/// undo runs in a stable order.
+std::vector<uint32_t> filterToRootEntities(Scene& scene,
+                                           const std::vector<uint32_t>& ids);
+
+/// @brief Build the delete-command for a multi-selection. Filters to roots
+///        per `filterToRootEntities`; returns a single `DeleteEntityCommand`
+///        when one root remains, a `CompositeCommand` when many remain, or
+///        nullptr when the filtered list is empty (e.g. only the scene root
+///        was selected). Caller hands the result to `CommandHistory::execute`.
+std::unique_ptr<EditorCommand> buildDeleteCommand(
+    Scene& scene, const std::vector<uint32_t>& ids);
 
 /// @brief Generates a Unity-style duplicate name by scanning siblings.
 /// "Cube" becomes "Cube (1)", "Cube (1)" becomes "Cube (2)", etc.

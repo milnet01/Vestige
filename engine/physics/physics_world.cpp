@@ -13,7 +13,10 @@
 #include <Jolt/Physics/Body/BodyActivationListener.h>
 #include <Jolt/Physics/Body/BodyFilter.h>
 #include <Jolt/Physics/Collision/RayCast.h>
+#include <Jolt/Physics/Collision/ShapeCast.h>
 #include <Jolt/Physics/Collision/CastResult.h>
+#include <Jolt/Physics/Collision/CollisionCollectorImpl.h>
+#include <Jolt/Physics/Collision/Shape/SphereShape.h>
 #include <Jolt/Physics/Constraints/HingeConstraint.h>
 #include <Jolt/Physics/Constraints/FixedConstraint.h>
 #include <Jolt/Physics/Constraints/DistanceConstraint.h>
@@ -785,6 +788,55 @@ bool PhysicsWorld::rayCast(const glm::vec3& origin, const glm::vec3& direction,
     }
 
     return hit;
+}
+
+bool PhysicsWorld::sphereCast(const glm::vec3& origin,
+                               const glm::vec3& direction,
+                               float radius, float maxDistance,
+                               JPH::BodyID& outBodyId, float& outHitDistance,
+                               JPH::BodyID ignoreBodyId) const
+{
+    if (!m_initialized || maxDistance <= 0.0f || radius <= 0.0f)
+    {
+        return false;
+    }
+
+    // Phase 10.9 Slice 7 Ph3 — sweep a sphere of `radius` from `origin`
+    // along `direction * maxDistance`. Mirrors the rayCast(maxDistance,
+    // ignoreBody) shape so consumers don't have to translate fractions
+    // back to world units. Jolt's RShapeCast::sFromWorldTransform takes
+    // the direction as a translation vector, so we pre-multiply by the
+    // range here (same convention as the rayCast overload above).
+    JPH::Ref<JPH::Shape> sphere = new JPH::SphereShape(radius);
+    const JPH::RShapeCast cast = JPH::RShapeCast::sFromWorldTransform(
+        sphere,
+        JPH::Vec3::sReplicate(1.0f),
+        JPH::RMat44::sTranslation(JPH::RVec3(origin.x, origin.y, origin.z)),
+        toJolt(direction * maxDistance));
+
+    JPH::ShapeCastSettings settings;
+    JPH::ClosestHitCollisionCollector<JPH::CastShapeCollector> collector;
+
+    const JPH::NarrowPhaseQuery& query = m_physicsSystem->GetNarrowPhaseQuery();
+    if (ignoreBodyId.IsInvalid())
+    {
+        query.CastShape(cast, settings, JPH::RVec3::sZero(), collector);
+    }
+    else
+    {
+        query.CastShape(cast, settings, JPH::RVec3::sZero(), collector,
+                        JPH::BroadPhaseLayerFilter{},
+                        JPH::ObjectLayerFilter{},
+                        JPH::IgnoreSingleBodyFilter{ignoreBodyId});
+    }
+
+    if (!collector.HadHit())
+    {
+        return false;
+    }
+    outBodyId = collector.mHit.mBodyID2;
+    outHitDistance = collector.mHit.mFraction * maxDistance;
+    return true;
 }
 
 void PhysicsWorld::applyImpulseAtPoint(JPH::BodyID bodyId,

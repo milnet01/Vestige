@@ -6,6 +6,8 @@
 #include "editor/entity_actions.h"
 #include "editor/command_history.h"
 #include "editor/commands/align_distribute_command.h"
+#include "editor/commands/composite_command.h"
+#include "editor/commands/delete_entity_command.h"
 #include "editor/selection.h"
 #include "scene/entity.h"
 #include "scene/scene.h"
@@ -14,6 +16,7 @@
 #include <algorithm>
 #include <cctype>
 #include <string>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -136,6 +139,58 @@ void deleteSelectedEntities(Scene& scene, Selection& selection)
     {
         Logger::info("Deleted " + std::to_string(deleted) + " entity(s)");
     }
+}
+
+std::vector<uint32_t> filterToRootEntities(Scene& scene,
+                                            const std::vector<uint32_t>& ids)
+{
+    // Phase 10.9 Slice 12 Ed3 — drop any id whose parent chain contains
+    // another id from the same selection. Walks the parent chain via
+    // `Entity::getParent` for each candidate; O(N × depth), where depth is
+    // typically <10 in real scenes. Preserves relative order so undo replays
+    // in the same sequence.
+    std::unordered_set<uint32_t> idSet(ids.begin(), ids.end());
+    std::vector<uint32_t> roots;
+    roots.reserve(ids.size());
+    for (uint32_t id : ids)
+    {
+        Entity* e = scene.findEntityById(id);
+        if (!e) continue;  // Stale id — skip silently; was already gone.
+        bool covered = false;
+        for (Entity* p = e->getParent(); p; p = p->getParent())
+        {
+            if (idSet.count(p->getId()) > 0)
+            {
+                covered = true;
+                break;
+            }
+        }
+        if (!covered)
+        {
+            roots.push_back(id);
+        }
+    }
+    return roots;
+}
+
+std::unique_ptr<EditorCommand> buildDeleteCommand(
+    Scene& scene, const std::vector<uint32_t>& ids)
+{
+    std::vector<uint32_t> roots = filterToRootEntities(scene, ids);
+    if (roots.empty()) return nullptr;
+    if (roots.size() == 1)
+    {
+        return std::make_unique<DeleteEntityCommand>(scene, roots[0]);
+    }
+    std::vector<std::unique_ptr<EditorCommand>> cmds;
+    cmds.reserve(roots.size());
+    for (uint32_t id : roots)
+    {
+        cmds.push_back(std::make_unique<DeleteEntityCommand>(scene, id));
+    }
+    return std::make_unique<CompositeCommand>(
+        "Delete " + std::to_string(roots.size()) + " entities",
+        std::move(cmds));
 }
 
 void copyTransform(Scene& scene, uint32_t entityId, TransformClipboard& clipboard)

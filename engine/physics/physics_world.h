@@ -209,6 +209,30 @@ public:
                  JPH::BodyID& outBodyId, float& outHitDistance,
                  JPH::BodyID ignoreBodyId = JPH::BodyID()) const;
 
+    /// @brief Sweeps a sphere along a direction and returns the closest hit.
+    ///
+    /// Phase 10.9 Slice 7 Ph3 — pulled forward from Phase 10.8 CM3 (third-
+    /// person camera boom-arm wall sweep). Mirrors the preferred `rayCast`
+    /// shape: unit direction + range separated, world-unit hit distance,
+    /// optional self-exclude filter for grab / boom cameras that own a
+    /// collider in the swept volume.
+    ///
+    /// @param origin World-space sphere centre at start of sweep.
+    /// @param direction Unit-length sweep direction.
+    /// @param radius Sphere radius (world units, must be > 0).
+    /// @param maxDistance Maximum sweep distance in world units (must be > 0).
+    /// @param outBodyId Set to the hit body ID if a hit occurred.
+    /// @param outHitDistance Set to world-unit distance from origin to first
+    ///        contact along the sweep.
+    /// @param ignoreBodyId Optional body to exclude (e.g. the camera rig's
+    ///        own collider). Pass an invalid `JPH::BodyID` (the default)
+    ///        to disable.
+    /// @return True if the sphere hit something during the sweep.
+    bool sphereCast(const glm::vec3& origin, const glm::vec3& direction,
+                    float radius, float maxDistance,
+                    JPH::BodyID& outBodyId, float& outHitDistance,
+                    JPH::BodyID ignoreBodyId = JPH::BodyID()) const;
+
     /// @brief Applies an impulse at a specific world-space point on a body.
     void applyImpulseAtPoint(JPH::BodyID bodyId,
                               const glm::vec3& impulse,

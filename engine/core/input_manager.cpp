@@ -8,6 +8,8 @@
 
 #include <GLFW/glfw3.h>
 
+#include <algorithm>
+
 namespace Vestige
 {
 
@@ -102,10 +104,56 @@ bool InputManager::isBindingDown(const InputBinding& binding) const
             return false;
         }
 
+        case InputDevice::GamepadAxis:
+            // Slice 9 I3 — axis half is "down" when its signed deflection
+            // crosses the digital threshold. `bindingAxisValue` already
+            // does the joystick scan + sign fold + trigger normalisation.
+            return bindingAxisValue(binding) >= AXIS_DIGITAL_THRESHOLD;
+
         case InputDevice::None:
             return false;
     }
     return false;
+}
+
+float InputManager::bindingAxisValue(const InputBinding& binding) const
+{
+    if (!binding.isBound() || m_window == nullptr) return 0.0f;
+
+    if (binding.device == InputDevice::GamepadAxis)
+    {
+        const int axis = unpackGamepadAxisIndex(binding.code);
+        const int sign = unpackGamepadAxisSign(binding.code);
+        const bool isTrigger = (axis == GLFW_GAMEPAD_AXIS_LEFT_TRIGGER
+                             || axis == GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER);
+
+        float best = 0.0f;
+        for (int jid = GLFW_JOYSTICK_1; jid <= GLFW_JOYSTICK_LAST; ++jid)
+        {
+            if (glfwJoystickPresent(jid) == GLFW_FALSE) continue;
+            if (glfwJoystickIsGamepad(jid) == GLFW_FALSE) continue;
+            GLFWgamepadstate state;
+            if (glfwGetGamepadState(jid, &state) == GLFW_FALSE) continue;
+            if (axis < 0
+                || axis >= static_cast<int>(sizeof(state.axes) / sizeof(state.axes[0])))
+            {
+                continue;
+            }
+            float raw = state.axes[axis];
+            if (isTrigger)
+            {
+                // GLFW reports triggers as [-1, 1] with -1 = released.
+                // Map to [0, 1].
+                raw = (raw + 1.0f) * 0.5f;
+            }
+            const float signed_v = static_cast<float>(sign) * raw;
+            if (signed_v > best) best = signed_v;
+        }
+        return std::clamp(best, 0.0f, 1.0f);
+    }
+
+    // Digital slots — promote the on/off poll to 0.0 / 1.0.
+    return isBindingDown(binding) ? 1.0f : 0.0f;
 }
 
 bool InputManager::isActionDown(const InputActionMap& map,
@@ -113,6 +161,13 @@ bool InputManager::isActionDown(const InputActionMap& map,
 {
     return Vestige::isActionDown(map, actionId,
         [this](const InputBinding& b) { return isBindingDown(b); });
+}
+
+float InputManager::actionAxisValue(const InputActionMap& map,
+                                    const std::string& actionId) const
+{
+    return Vestige::axisValue(map, actionId,
+        [this](const InputBinding& b) { return bindingAxisValue(b); });
 }
 
 void InputManager::keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods)

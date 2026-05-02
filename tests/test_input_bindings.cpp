@@ -715,3 +715,165 @@ TEST(BindingDisplayLabel, MouseGamepadEmDashUnaffectedByScancodeMove_I1)
     EXPECT_EQ(bindingDisplayLabel(InputBinding::none()), "—");
 }
 
+// =================================================================
+// Phase 10.9 Slice 9 I3 — GamepadAxis device + axisValue query
+//
+// Pre-I3 analog sticks couldn't be bound to actions at all; the only
+// gamepad slot was a digital button. I3 adds `InputDevice::GamepadAxis`,
+// a packed axis-index + sign in `code`, an axis-aware display label, the
+// digital `isBindingDown` promotion at AXIS_DIGITAL_THRESHOLD, and the
+// pure analog `axisValue` query. The tests below stay headless: they
+// drive the pure-function paths (factory, pack/unpack, display, wire)
+// and the axisValue probe-injected path so no GLFW joystick state is
+// required.
+// =================================================================
+
+TEST(InputBinding, GamepadAxisFactoryProducesBoundBinding_I3)
+{
+    InputBinding b = InputBinding::gamepadAxis(GLFW_GAMEPAD_AXIS_LEFT_Y, -1);
+    EXPECT_TRUE(b.isBound());
+    EXPECT_EQ(b.device, InputDevice::GamepadAxis);
+}
+
+TEST(InputBinding, GamepadAxisPackUnpackRoundTrip_I3)
+{
+    // Positive half stores axis as-is; negative half sets bit 8.
+    EXPECT_EQ(packGamepadAxis(GLFW_GAMEPAD_AXIS_LEFT_Y, +1), GLFW_GAMEPAD_AXIS_LEFT_Y);
+    EXPECT_EQ(packGamepadAxis(GLFW_GAMEPAD_AXIS_LEFT_Y, -1), GLFW_GAMEPAD_AXIS_LEFT_Y | 0x100);
+
+    // Round-trip via accessors.
+    InputBinding pos = InputBinding::gamepadAxis(GLFW_GAMEPAD_AXIS_RIGHT_X, +1);
+    EXPECT_EQ(unpackGamepadAxisIndex(pos.code), GLFW_GAMEPAD_AXIS_RIGHT_X);
+    EXPECT_EQ(unpackGamepadAxisSign(pos.code), +1);
+
+    InputBinding neg = InputBinding::gamepadAxis(GLFW_GAMEPAD_AXIS_RIGHT_X, -1);
+    EXPECT_EQ(unpackGamepadAxisIndex(neg.code), GLFW_GAMEPAD_AXIS_RIGHT_X);
+    EXPECT_EQ(unpackGamepadAxisSign(neg.code), -1);
+}
+
+TEST(InputBinding, GamepadAxisPositiveAndNegativeHalvesAreDistinctBindings_I3)
+{
+    // Two halves of the same physical axis are not the same binding —
+    // the rebind UI must let a user assign "stick up" and "stick down"
+    // to different actions.
+    InputBinding up   = InputBinding::gamepadAxis(GLFW_GAMEPAD_AXIS_LEFT_Y, -1);
+    InputBinding down = InputBinding::gamepadAxis(GLFW_GAMEPAD_AXIS_LEFT_Y, +1);
+    EXPECT_NE(up, down);
+    // ...and they're equally not equal to a same-numeric-code button.
+    InputBinding btn{InputDevice::Gamepad, up.code};
+    EXPECT_NE(up, btn);
+}
+
+TEST(BindingDisplayLabel, GamepadAxisStickShowsSignSuffix_I3)
+{
+    EXPECT_EQ(bindingDisplayLabel(InputBinding::gamepadAxis(GLFW_GAMEPAD_AXIS_LEFT_Y, -1)),
+              "Left Stick Y -");
+    EXPECT_EQ(bindingDisplayLabel(InputBinding::gamepadAxis(GLFW_GAMEPAD_AXIS_LEFT_Y, +1)),
+              "Left Stick Y +");
+    EXPECT_EQ(bindingDisplayLabel(InputBinding::gamepadAxis(GLFW_GAMEPAD_AXIS_RIGHT_X, +1)),
+              "Right Stick X +");
+}
+
+TEST(BindingDisplayLabel, GamepadAxisTriggerSuppressesSignSuffix_I3)
+{
+    // Triggers are unidirectional — showing "+" or "-" would mislead the
+    // user. The sign suffix is suppressed for trigger axes only.
+    EXPECT_EQ(bindingDisplayLabel(InputBinding::gamepadAxis(GLFW_GAMEPAD_AXIS_LEFT_TRIGGER)),
+              "Left Trigger");
+    EXPECT_EQ(bindingDisplayLabel(InputBinding::gamepadAxis(GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER)),
+              "Right Trigger");
+}
+
+TEST(InputBindingsWire, GamepadAxisRoundTripsAsGamepadAxisWireDevice_I3)
+{
+    // Slice 9 I3 wire-format gap closure — `"gamepadaxis"` is the device
+    // string. Round-trip via the settings_apply translation surface; the
+    // canonical conversion lives there but the contract is exercised via
+    // a literal JSON snippet here so the wire string can't drift silently.
+    nlohmann::json j = {
+        {"device", "gamepadaxis"},
+        {"scancode", packGamepadAxis(GLFW_GAMEPAD_AXIS_LEFT_Y, -1)},
+    };
+    InputBindingWire w = bindingFromJson(j);
+    EXPECT_EQ(w.device, "gamepadaxis");
+    EXPECT_EQ(w.scancode, packGamepadAxis(GLFW_GAMEPAD_AXIS_LEFT_Y, -1));
+
+    nlohmann::json out = bindingToJson(w);
+    EXPECT_EQ(out["device"].get<std::string>(), "gamepadaxis");
+    EXPECT_EQ(out["scancode"].get<int>(), w.scancode);
+}
+
+TEST(AxisValue, ReturnsZeroWhenActionMissing_I3)
+{
+    InputActionMap m;
+    auto probe = [](const InputBinding&) { return 1.0f; };
+    EXPECT_FLOAT_EQ(axisValue(m, "Nope", probe), 0.0f);
+}
+
+TEST(AxisValue, ReturnsProbeMagnitudeAcrossSlots_I3)
+{
+    InputAction moveFwd;
+    moveFwd.id      = "MoveForward";
+    moveFwd.primary = InputBinding::scancode(123);
+    moveFwd.gamepad = InputBinding::gamepadAxis(GLFW_GAMEPAD_AXIS_LEFT_Y, -1);
+
+    InputActionMap m;
+    m.addAction(moveFwd);
+
+    // Stick deflected halfway up — keyboard idle. Action value = 0.5.
+    auto probe = [](const InputBinding& b) {
+        if (b.device == InputDevice::GamepadAxis) return 0.5f;
+        return 0.0f;
+    };
+    EXPECT_FLOAT_EQ(axisValue(m, "MoveForward", probe), 0.5f);
+
+    // Keyboard down + stick deflected — max(1.0, 0.5) = 1.0.
+    auto probeBoth = [](const InputBinding& b) {
+        if (b.device == InputDevice::GamepadAxis) return 0.5f;
+        if (b.device == InputDevice::Keyboard)    return 1.0f;
+        return 0.0f;
+    };
+    EXPECT_FLOAT_EQ(axisValue(m, "MoveForward", probeBoth), 1.0f);
+}
+
+TEST(AxisValue, ClampsToZeroOneRange_I3)
+{
+    InputAction a;
+    a.id      = "X";
+    a.primary = InputBinding::scancode(1);
+
+    InputActionMap m;
+    m.addAction(a);
+
+    // Misbehaving probe returns >1.0 — the public contract still clamps.
+    auto probeOver = [](const InputBinding&) { return 5.0f; };
+    EXPECT_FLOAT_EQ(axisValue(m, "X", probeOver), 1.0f);
+
+    // Negative probe (shouldn't happen — sign already folded — but pin it).
+    auto probeNeg = [](const InputBinding&) { return -0.5f; };
+    EXPECT_FLOAT_EQ(axisValue(m, "X", probeNeg), 0.0f);
+}
+
+TEST(InputActionMap, FindConflictsAxisHalvesAreIndependentBindings_I3)
+{
+    // Slice 9 I4's same-device gate already covers cross-device. I3 adds
+    // the sub-case: same axis index but opposite sign should NOT conflict.
+    InputAction a;
+    a.id        = "A";
+    a.primary   = InputBinding::scancode(1);   // unrelated
+    a.gamepad   = InputBinding::gamepadAxis(GLFW_GAMEPAD_AXIS_LEFT_Y, -1);
+
+    InputActionMap m;
+    m.addAction(a);
+
+    // Negative half is taken by A. Probing the *positive* half on a fresh
+    // candidate must not flag a conflict.
+    auto conflicts = m.findConflicts(InputBinding::gamepadAxis(GLFW_GAMEPAD_AXIS_LEFT_Y, +1));
+    EXPECT_TRUE(conflicts.empty());
+
+    // Probing the same negative half DOES conflict.
+    auto same = m.findConflicts(InputBinding::gamepadAxis(GLFW_GAMEPAD_AXIS_LEFT_Y, -1));
+    ASSERT_EQ(same.size(), 1u);
+    EXPECT_EQ(same.front(), "A");
+}
+

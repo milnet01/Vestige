@@ -7,7 +7,6 @@
 #include "editor/command_history.h"
 #include "editor/commands/create_entity_command.h"
 #include "editor/commands/delete_entity_command.h"
-#include "editor/commands/composite_command.h"
 #include "editor/commands/entity_property_command.h"
 #include "editor/commands/reparent_command.h"
 #include "editor/entity_actions.h"
@@ -274,31 +273,19 @@ void HierarchyPanel::draw(Scene* scene, Selection& selection)
 
     // --- Process deferred actions (after tree iteration is complete) ---
 
-    // Multi-select delete (Delete key)
+    // Multi-select delete (Delete key).
+    // Phase 10.9 Slice 12 Ed3 — selection is canonicalised to roots inside
+    // `EntityActions::buildDeleteCommand` so a parent + descendant
+    // multi-select doesn't double-delete.
     if (m_pendingDeleteSelected)
     {
         if (m_commandHistory)
         {
             auto ids = selection.getSelectedIds();
             selection.clearSelection();
-
-            if (ids.size() == 1)
+            if (auto cmd = EntityActions::buildDeleteCommand(*scene, ids))
             {
-                m_commandHistory->execute(
-                    std::make_unique<DeleteEntityCommand>(*scene, ids[0]));
-            }
-            else if (ids.size() > 1)
-            {
-                std::vector<std::unique_ptr<EditorCommand>> cmds;
-                for (uint32_t id : ids)
-                {
-                    cmds.push_back(
-                        std::make_unique<DeleteEntityCommand>(*scene, id));
-                }
-                m_commandHistory->execute(
-                    std::make_unique<CompositeCommand>(
-                        "Delete " + std::to_string(ids.size()) + " entities",
-                        std::move(cmds)));
+                m_commandHistory->execute(std::move(cmd));
             }
         }
         else

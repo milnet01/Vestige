@@ -6,8 +6,6 @@
 #include "editor/editor.h"
 #include "editor/commands/transform_command.h"
 #include "editor/commands/create_entity_command.h"
-#include "editor/commands/delete_entity_command.h"
-#include "editor/commands/composite_command.h"
 #include "editor/commands/entity_property_command.h"
 #include "core/logger.h"
 #include "core/timer.h"
@@ -351,22 +349,9 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
                 {
                     std::vector<uint32_t> ids = m_selection.getSelectedIds();
                     m_selection.clearSelection();
-                    if (ids.size() == 1)
+                    if (auto cmd = EntityActions::buildDeleteCommand(*scene, ids))
                     {
-                        m_commandHistory.execute(
-                            std::make_unique<DeleteEntityCommand>(*scene, ids[0]));
-                    }
-                    else if (ids.size() > 1)
-                    {
-                        std::vector<std::unique_ptr<EditorCommand>> cmds;
-                        for (uint32_t id : ids)
-                        {
-                            cmds.push_back(std::make_unique<DeleteEntityCommand>(*scene, id));
-                        }
-                        m_commandHistory.execute(
-                            std::make_unique<CompositeCommand>(
-                                "Delete " + std::to_string(ids.size()) + " entities",
-                                std::move(cmds)));
+                        m_commandHistory.execute(std::move(cmd));
                     }
                 }
                 if (ImGui::MenuItem("Group", "Ctrl+G", false, hasSel && scene))
@@ -2238,29 +2223,17 @@ void Editor::processEntityShortcuts(Scene* scene)
 
     const ImGuiIO& io = ImGui::GetIO();
 
-    // Delete key — delete all selected entities (via commands for undo)
+    // Delete key — delete all selected entities (via commands for undo).
+    // Phase 10.9 Slice 12 Ed3 — selection is canonicalised to roots inside
+    // `EntityActions::buildDeleteCommand` so a parent + descendant
+    // multi-select doesn't double-delete.
     if (ImGui::IsKeyPressed(ImGuiKey_Delete) && m_selection.hasSelection())
     {
         std::vector<uint32_t> ids = m_selection.getSelectedIds();
         m_selection.clearSelection();
-
-        if (ids.size() == 1)
+        if (auto cmd = EntityActions::buildDeleteCommand(*scene, ids))
         {
-            auto cmd = std::make_unique<DeleteEntityCommand>(*scene, ids[0]);
             m_commandHistory.execute(std::move(cmd));
-        }
-        else if (ids.size() > 1)
-        {
-            // Multi-delete: wrap in CompositeCommand
-            std::vector<std::unique_ptr<EditorCommand>> cmds;
-            for (uint32_t id : ids)
-            {
-                cmds.push_back(std::make_unique<DeleteEntityCommand>(*scene, id));
-            }
-            m_commandHistory.execute(
-                std::make_unique<CompositeCommand>(
-                    "Delete " + std::to_string(ids.size()) + " entities",
-                    std::move(cmds)));
         }
     }
 

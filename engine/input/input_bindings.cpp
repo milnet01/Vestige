@@ -390,6 +390,22 @@ const char* mouseName(int code)
     }
 }
 
+const char* gamepadAxisName(int axis)
+{
+    // Slice 9 I3 — axis index → human label. Unsigned by convention
+    // because the +/- half is rendered separately in `bindingDisplayLabel`.
+    switch (axis)
+    {
+        case GLFW_GAMEPAD_AXIS_LEFT_X:        return "Left Stick X";
+        case GLFW_GAMEPAD_AXIS_LEFT_Y:        return "Left Stick Y";
+        case GLFW_GAMEPAD_AXIS_RIGHT_X:       return "Right Stick X";
+        case GLFW_GAMEPAD_AXIS_RIGHT_Y:       return "Right Stick Y";
+        case GLFW_GAMEPAD_AXIS_LEFT_TRIGGER:  return "Left Trigger";
+        case GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER: return "Right Trigger";
+        default:                              return nullptr;
+    }
+}
+
 const char* gamepadName(int code)
 {
     // GLFW's gamepad button enum follows the Xbox layout; PlayStation
@@ -449,6 +465,21 @@ std::string bindingDisplayLabel(const InputBinding& binding)
         case InputDevice::Gamepad:
             if (const char* n = gamepadName(binding.code)) return n;
             break;
+        case InputDevice::GamepadAxis:
+        {
+            // Slice 9 I3 — render axis half as "Left Stick Y -" (up half)
+            // or "Right Trigger +" (always positive). Triggers are
+            // unidirectional so we suppress the sign suffix for them so
+            // the rebind UI doesn't mislead the user.
+            const int axis = unpackGamepadAxisIndex(binding.code);
+            const int sign = unpackGamepadAxisSign(binding.code);
+            const char* axisLabel = gamepadAxisName(axis);
+            if (!axisLabel) break;
+            const bool isTrigger = (axis == GLFW_GAMEPAD_AXIS_LEFT_TRIGGER
+                                 || axis == GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER);
+            if (isTrigger) return axisLabel;
+            return std::string(axisLabel) + (sign < 0 ? " -" : " +");
+        }
         case InputDevice::None:
             break;
     }
@@ -470,6 +501,26 @@ bool isActionDown(const InputActionMap& map,
     if (action->secondary.isBound() && isBindingDown(action->secondary)) return true;
     if (action->gamepad.isBound()   && isBindingDown(action->gamepad))   return true;
     return false;
+}
+
+float axisValue(const InputActionMap& map,
+                const std::string& actionId,
+                const std::function<float(const InputBinding&)>& probe)
+{
+    const InputAction* action = map.findAction(actionId);
+    if (!action || !probe) return 0.0f;
+
+    float best = 0.0f;
+    const InputBinding* slots[] = {
+        &action->primary, &action->secondary, &action->gamepad
+    };
+    for (const InputBinding* slot : slots)
+    {
+        if (!slot->isBound()) continue;
+        const float v = probe(*slot);
+        if (v > best) best = v;
+    }
+    return std::clamp(best, 0.0f, 1.0f);
 }
 
 } // namespace Vestige

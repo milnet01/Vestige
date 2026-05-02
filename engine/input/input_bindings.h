@@ -37,11 +37,29 @@ namespace Vestige
 /// @brief The physical device a binding targets.
 enum class InputDevice
 {
-    None,       ///< Unbound placeholder — matches nothing.
-    Keyboard,   ///< GLFW key code (e.g. `GLFW_KEY_W`).
-    Mouse,      ///< GLFW mouse button (e.g. `GLFW_MOUSE_BUTTON_LEFT`).
-    Gamepad,    ///< GLFW gamepad button (e.g. `GLFW_GAMEPAD_BUTTON_A`).
+    None,        ///< Unbound placeholder — matches nothing.
+    Keyboard,    ///< GLFW key code (e.g. `GLFW_KEY_W`).
+    Mouse,       ///< GLFW mouse button (e.g. `GLFW_MOUSE_BUTTON_LEFT`).
+    Gamepad,     ///< GLFW gamepad button (e.g. `GLFW_GAMEPAD_BUTTON_A`).
+    GamepadAxis, ///< GLFW gamepad axis half (e.g. `LEFT_Y` negative-half).
 };
+
+/// @brief Digital activation threshold for axis bindings — `signedValue >= 0.5`
+///        registers as "pressed" for the binary `isBindingDown` query.
+///        Matches XInput / Steam Input convention for analog-to-digital
+///        promotion of stick deflection.
+inline constexpr float AXIS_DIGITAL_THRESHOLD = 0.5f;
+
+/// @brief Pack a (gamepad axis index, sign) pair into a single int. Axes
+///        0..255 fit; sign = +1 stores axis as-is, sign = -1 sets bit 8.
+///        Used by `InputBinding::gamepadAxis` so the binding's `code` field
+///        keeps a single-int storage shape.
+inline int packGamepadAxis(int axis, int sign)
+{
+    return (axis & 0xFF) | (sign < 0 ? 0x100 : 0);
+}
+inline int unpackGamepadAxisIndex(int code) { return code & 0xFF; }
+inline int unpackGamepadAxisSign(int code)  { return (code & 0x100) ? -1 : +1; }
 
 /// @brief A single physical input.
 ///
@@ -52,6 +70,11 @@ enum class InputDevice
 ///    loaded on AZERTY / Dvorak. Capture path: `glfwGetKeyScancode(key)`.
 ///  - Mouse: GLFW mouse-button index (e.g. `GLFW_MOUSE_BUTTON_LEFT`).
 ///  - Gamepad: GLFW gamepad-button index (e.g. `GLFW_GAMEPAD_BUTTON_A`).
+///  - GamepadAxis: packed axis-index + sign via `packGamepadAxis(axis, sign)`.
+///    Slice 9 I3 — analog stick / trigger half (e.g. left-stick-up,
+///    right-trigger). Use `gamepadAxis(GLFW_GAMEPAD_AXIS_LEFT_Y, -1)` for
+///    "push left stick up". The sign disambiguates the two halves of a
+///    bidirectional axis; triggers (always positive) use sign = +1.
 /// `None` / `code == -1` means "not bound".
 struct InputBinding
 {
@@ -72,6 +95,15 @@ struct InputBinding
     static InputBinding scancode(int glfwScancode){ return {InputDevice::Keyboard, glfwScancode}; }
     static InputBinding mouse(int glfwButton)     { return {InputDevice::Mouse,    glfwButton}; }
     static InputBinding gamepad(int glfwButton)   { return {InputDevice::Gamepad,  glfwButton}; }
+    /// @brief Bind one signed half of a gamepad axis to an action.
+    /// @param glfwAxis GLFW axis index (`GLFW_GAMEPAD_AXIS_LEFT_X`, etc.).
+    /// @param sign +1 for the positive half (right / down / pulled), -1 for
+    ///        the negative half (left / up / released). Triggers are
+    ///        unidirectional: always use sign = +1.
+    static InputBinding gamepadAxis(int glfwAxis, int sign = +1)
+    {
+        return {InputDevice::GamepadAxis, packGamepadAxis(glfwAxis, sign)};
+    }
     static InputBinding none()                    { return {InputDevice::None,     -1}; }
 };
 
@@ -179,5 +211,21 @@ std::string bindingDisplayLabel(const InputBinding& binding);
 bool isActionDown(const InputActionMap& map,
                   const std::string& actionId,
                   const std::function<bool(const InputBinding&)>& isBindingDown);
+
+/// @brief Pure-function query: how active is an action right now? [0, 1].
+///
+/// Slice 9 I3 — for a `GamepadAxis` slot, returns `max(0, sign * raw)`
+/// (scale 0..1 along the bound half). For digital slots (keyboard / mouse /
+/// button) returns 1.0 when down, else 0. The action's value is the max
+/// across slots so a keyboard-or-stick player gets full activation either
+/// way. @a probe is dependency-injected so tests run without GLFW.
+///
+/// @param probe Function that returns the *signed* raw value for a binding:
+///        an axis slot returns the GLFW axis sample multiplied by the
+///        bound sign (so the caller doesn't redo the unpack); a digital
+///        slot returns 1.0 if down else 0.0.
+float axisValue(const InputActionMap& map,
+                const std::string& actionId,
+                const std::function<float(const InputBinding&)>& probe);
 
 } // namespace Vestige

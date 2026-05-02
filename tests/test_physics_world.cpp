@@ -286,6 +286,99 @@ TEST(PhysicsWorldRayCast, Ph2_ZeroOrNegativeRangeMisses)
 }
 
 // ---------------------------------------------------------------------------
+// Phase 10.9 Slice 7 Ph3: sphereCast (dir, radius, maxDistance, ignoreBody)
+// ---------------------------------------------------------------------------
+// Mirrors the preferred rayCast shape: direction + range separated, world-
+// unit hit distance, optional self-exclude. Pulled forward from Phase 10.8
+// CM3 (third-person camera boom-arm wall sweep).
+
+TEST(PhysicsWorldSphereCast, Ph3_HitDistanceIsWorldUnits)
+{
+    PhysicsWorld world;
+    ASSERT_TRUE(world.initialize());
+
+    // Static box centred at (5, 0, 0), half-extents (1, 1, 1) — front
+    // face at x = 4. Sweep a unit sphere from origin along +X, range 10.
+    // Sphere centre first contacts the front face at x = 4 - 1 = 3 (the
+    // sphere's leading edge touches at x = 4).
+    JPH::BoxShape* box = new JPH::BoxShape(JPH::Vec3(1, 1, 1));
+    JPH::BodyID b = world.createStaticBody(box, glm::vec3(5, 0, 0));
+
+    JPH::BodyID hitBody;
+    float hitDistance = -1.0f;
+    const bool hit = world.sphereCast(glm::vec3(0, 0, 0), glm::vec3(1, 0, 0),
+                                      1.0f, 10.0f, hitBody, hitDistance);
+    EXPECT_TRUE(hit);
+    EXPECT_EQ(hitBody, b);
+    // Hit distance is the sphere-centre travel: front face at x = 4,
+    // sphere radius 1, so centre-to-contact is 3.0 world units.
+    EXPECT_NEAR(hitDistance, 3.0f, 1e-2f);
+
+    world.shutdown();
+}
+
+TEST(PhysicsWorldSphereCast, Ph3_IgnoreBodyExcludesSelfHit)
+{
+    PhysicsWorld world;
+    ASSERT_TRUE(world.initialize());
+
+    JPH::BoxShape* nearBox = new JPH::BoxShape(JPH::Vec3(0.5f, 0.5f, 0.5f));
+    JPH::BoxShape* farBox = new JPH::BoxShape(JPH::Vec3(0.5f, 0.5f, 0.5f));
+    JPH::BodyID near_ = world.createStaticBody(nearBox, glm::vec3(2, 0, 0));
+    JPH::BodyID far_  = world.createStaticBody(farBox, glm::vec3(8, 0, 0));
+
+    // Without filter, the closer body wins.
+    JPH::BodyID hit;
+    float distance = 0.0f;
+    EXPECT_TRUE(world.sphereCast(glm::vec3(0, 0, 0), glm::vec3(1, 0, 0),
+                                 0.25f, 20.0f, hit, distance));
+    EXPECT_EQ(hit, near_);
+
+    // With ignoreBody = near_, the cast skips it and lands on far_.
+    EXPECT_TRUE(world.sphereCast(glm::vec3(0, 0, 0), glm::vec3(1, 0, 0),
+                                 0.25f, 20.0f, hit, distance, near_));
+    EXPECT_EQ(hit, far_);
+
+    world.shutdown();
+}
+
+TEST(PhysicsWorldSphereCast, Ph3_ZeroOrNegativeRangeOrRadiusMisses)
+{
+    PhysicsWorld world;
+    ASSERT_TRUE(world.initialize());
+
+    JPH::BoxShape* box = new JPH::BoxShape(JPH::Vec3(1, 1, 1));
+    world.createStaticBody(box, glm::vec3(2, 0, 0));
+
+    JPH::BodyID hit;
+    float distance = 0.0f;
+    EXPECT_FALSE(world.sphereCast(glm::vec3(0, 0, 0), glm::vec3(1, 0, 0),
+                                  0.5f, 0.0f, hit, distance));
+    EXPECT_FALSE(world.sphereCast(glm::vec3(0, 0, 0), glm::vec3(1, 0, 0),
+                                  0.5f, -1.0f, hit, distance));
+    EXPECT_FALSE(world.sphereCast(glm::vec3(0, 0, 0), glm::vec3(1, 0, 0),
+                                  0.0f, 5.0f, hit, distance));
+    EXPECT_FALSE(world.sphereCast(glm::vec3(0, 0, 0), glm::vec3(1, 0, 0),
+                                  -0.5f, 5.0f, hit, distance));
+
+    world.shutdown();
+}
+
+TEST(PhysicsWorldSphereCast, Ph3_NoHitReturnsFalse)
+{
+    PhysicsWorld world;
+    ASSERT_TRUE(world.initialize());
+    // No bodies at all — sweep into empty space.
+
+    JPH::BodyID hit;
+    float distance = 99.0f;
+    EXPECT_FALSE(world.sphereCast(glm::vec3(0, 0, 0), glm::vec3(1, 0, 0),
+                                  1.0f, 10.0f, hit, distance));
+
+    world.shutdown();
+}
+
+// ---------------------------------------------------------------------------
 // Coordinate conversion helpers
 // ---------------------------------------------------------------------------
 

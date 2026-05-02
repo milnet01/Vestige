@@ -274,19 +274,21 @@ const char* inputDeviceToWireString(InputDevice d)
 {
     switch (d)
     {
-        case InputDevice::Keyboard: return "keyboard";
-        case InputDevice::Mouse:    return "mouse";
-        case InputDevice::Gamepad:  return "gamepad";
-        case InputDevice::None:     return "none";
+        case InputDevice::Keyboard:    return "keyboard";
+        case InputDevice::Mouse:       return "mouse";
+        case InputDevice::Gamepad:     return "gamepad";
+        case InputDevice::GamepadAxis: return "gamepadaxis";
+        case InputDevice::None:        return "none";
     }
     return "none";
 }
 
 InputDevice inputDeviceFromWireString(const std::string& s)
 {
-    if (s == "keyboard") return InputDevice::Keyboard;
-    if (s == "mouse")    return InputDevice::Mouse;
-    if (s == "gamepad")  return InputDevice::Gamepad;
+    if (s == "keyboard")    return InputDevice::Keyboard;
+    if (s == "mouse")       return InputDevice::Mouse;
+    if (s == "gamepad")     return InputDevice::Gamepad;
+    if (s == "gamepadaxis") return InputDevice::GamepadAxis;
     return InputDevice::None;   // "none" + unknown strings
 }
 

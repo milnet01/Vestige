@@ -58,14 +58,28 @@ public:
     ///        state. Keyboard + mouse bindings are answered directly;
     ///        gamepad bindings check every connected joystick slot
     ///        (GLFW_JOYSTICK_1..LAST) so the user doesn't have to pick
-    ///        which controller they plugged in.
+    ///        which controller they plugged in. Axis bindings (Slice 9 I3)
+    ///        report digital "down" when `signed_value >= AXIS_DIGITAL_THRESHOLD`.
     /// @returns true if the physical input is currently held.
     bool isBindingDown(const InputBinding& binding) const;
+
+    /// @brief Polls a single `InputBinding` for its analog activation
+    ///        value in [0, 1]. Slice 9 I3. Digital slots return 1.0 if
+    ///        held else 0.0; axis slots return the signed deflection
+    ///        clamped to [0, 1] (sign already folded in).
+    float bindingAxisValue(const InputBinding& binding) const;
 
     /// @brief Convenience wrapper — true iff any slot of @a actionId
     ///        in @a map is currently down.
     bool isActionDown(const InputActionMap& map,
                       const std::string& actionId) const;
+
+    /// @brief Slice 9 I3 — analog activation of @a actionId in [0, 1].
+    ///        Useful for "MoveForward" and similar actions that take an
+    ///        analog magnitude when bound to an axis half. Falls back to
+    ///        digital 0/1 when the active slot is keyboard / mouse / button.
+    float actionAxisValue(const InputActionMap& map,
+                          const std::string& actionId) const;
 
 private:
     static void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods);

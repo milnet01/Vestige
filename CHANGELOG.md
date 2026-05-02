@@ -9,6 +9,88 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-05-02 Phase 10.9 — I3 (gamepad axis bindings) + Ph3 (sphereCast) + Ed3 (multi-delete root canon)
+
+Three focused outstanding-fix closures landing together — all small, mechanical,
+each pinned by RED-then-GREEN tests. None depended on the others; bundled because
+the user's session-end review explicitly named "outstanding fixes from the roadmap."
+
+- **I3 — `InputDevice::GamepadAxis` + `axisValue` query.** Closes Slice 9.
+  Pre-I3, analog sticks couldn't be bound to actions at all — the only gamepad
+  slot was a digital button, so "MoveForward" on a gamepad meant binding to a
+  D-pad button, not the left stick. New enum `InputDevice::GamepadAxis` plus
+  `InputBinding::gamepadAxis(int glfwAxis, int sign = +1)` factory; `code`
+  packs axis index (0-5) in the low byte and the sign bit at 0x100 via
+  `packGamepadAxis(axis, sign)` / `unpackGamepadAxisIndex(code)` /
+  `unpackGamepadAxisSign(code)` helpers — keeps the `InputBinding` storage
+  shape (single int) so wire format and equality semantics need no changes.
+  Display path renders sticks as `"Left Stick Y -"` / `"Right Stick X +"`;
+  triggers (always positive 0..1) suppress the sign suffix and render bare
+  `"Left Trigger"` so the rebind UI doesn't lie about the unidirectional
+  nature. Wire string `"gamepadaxis"` added to `settings_apply.cpp`. Three new
+  query APIs: pure free function `axisValue(map, actionId, probe)` returns
+  `[0, 1]` magnitude across the action's slots (max-of-slots — keyboard-or-stick
+  player gets full activation either way); `InputManager::bindingAxisValue`
+  polls live GLFW gamepad state with sign already folded and trigger range
+  remapped from `[-1, 1]` → `[0, 1]`; `InputManager::actionAxisValue` is the
+  game-code wrapper. Digital `isBindingDown` for an axis slot delegates to
+  `bindingAxisValue >= AXIS_DIGITAL_THRESHOLD` (0.5, the XInput / Steam-Input
+  convention) so existing button-driven game code transparently sees stick
+  deflection as "pressed". `findConflicts` device-gate from I4 already handled
+  the new device correctly via the packed-code distinct sign halves; new
+  `FindConflictsAxisHalvesAreIndependentBindings_I3` test pins the contract.
+  10 new tests cover factory + accessors, pack/unpack round-trip, half-vs-half
+  distinct-binding, stick display sign suffix, trigger sign suppression, wire
+  device-string round-trip, missing-action zero, multi-slot probe magnitude,
+  [0,1] clamp invariants. Slice 9 status post-I3: 6 of 6 (all green).
+
+- **Ph3 — `PhysicsWorld::sphereCast` API.** Pulled forward from Phase 10.8 CM3
+  so the camera-mode work consumes rather than authors the API. New overload
+  `sphereCast(origin, direction, radius, maxDistance, &outBodyId,
+  &outHitDistance, ignoreBodyId = {})` mirrors the Ph2 `rayCast` shape: unit
+  direction + range separated, world-unit hit distance written, optional
+  self-exclude filter via `JPH::IgnoreSingleBodyFilter`. Implementation is a
+  Jolt `JPH::RShapeCast::sFromWorldTransform` over a `JPH::SphereShape` with
+  a `ClosestHitCollisionCollector<CastShapeCollector>`; the no-ignore-body
+  fast path skips the filter args, the with-ignore path uses the same
+  three-default-then-IgnoreBody pattern as Ph2's rayCast for symmetry. Guards
+  against zero/negative `radius` and `maxDistance` return false up front.
+  Phase 10.8 CM3 (third-person camera boom-arm wall sweep — Skyrim / GTA
+  convention to keep the camera from clipping into walls) and Phase 11B grab
+  system (sphere-sweep test) are the named consumers. 4 new tests pin
+  world-unit hit distance (sphere centre stops at x=3 against unit-sphere /
+  unit-box geometry with front face at x=4), self-exclude semantics,
+  zero/negative range or radius rejection, and empty-scene no-crash.
+
+- **Ed3 — Multi-delete root canonicalisation.** Pre-Ed3 the editor's three
+  multi-delete entry points (Edit menu, Delete-key in viewport, Delete-key in
+  hierarchy panel) each issued one `DeleteEntityCommand` per selected id.
+  When the user multi-selected `Parent + Child + Grandchild`, the parent's
+  recursive removal in `Scene::removeEntity` wiped the descendants before
+  their own commands ran; the second and third commands then operated on
+  freed ids (silent-fail), and undo couldn't restore the original parent-
+  child topology because per-id `DeleteEntityCommand` snapshots had captured
+  nothing useful for descendants whose parent was already going. Two new
+  helpers in `EntityActions` close it at the source:
+  `filterToRootEntities(scene, ids)` walks each id's parent chain via
+  `Entity::getParent` and drops any id whose ancestor is also in the same
+  id-set (preserves relative order so undo replays the original sequence);
+  `buildDeleteCommand(scene, ids)` wraps the filter + composes either a bare
+  `DeleteEntityCommand` (one root) or `CompositeCommand` (multi-root). Per
+  CLAUDE.md Rule 3 (reuse before rewriting) — collapsed three near-identical
+  13-line build-the-composite blocks into one helper call across `editor.cpp`
+  (×2) and `hierarchy_panel.cpp` (×1); now-unused includes of
+  `delete_entity_command.h` and `composite_command.h` removed alongside the
+  migration. 8 new tests cover: keeps disjoint siblings, drops descendants
+  of selected parent, keeps child when parent not selected, mixed tree
+  (sibling A keeps + AChild drops + BChild keeps), empty selection returns
+  nullptr, single-root collapse to bare command (not 1-item Composite),
+  the headline multi-delete-undo-restores-full-tree round-trip, and
+  two-disjoint-trees produce a Composite with the expected description.
+
+- **Tests**: 3167 / 3168 pass (+22 vs prior 3146; 1 pre-existing skip unchanged).
+  +10 I3 + 4 Ph3 + 8 Ed3.
+
 ### 2026-05-02 Phase 10.9 — I1 (scancode-vs-keycode reconciliation)
 
 - **I1.** Keyboard `InputBinding`s now store a GLFW **scancode** (physical key
