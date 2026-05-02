@@ -18,6 +18,9 @@
 
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
+#include <functional>
+
 using json = nlohmann::json;
 
 namespace Vestige::EntitySerializerDepthCap::Test
@@ -56,20 +59,34 @@ TEST(EntitySerializerDepthCap, AcceptsDepthAtBoundary_D7)
 
 TEST(EntitySerializerDepthCap, RejectsDepthAboveBoundary_D7)
 {
-    // 200 levels > the 128 cap. Should return nullptr.
+    // 200 levels > the 128 cap. The root entity is created (depth 0)
+    // but recursion bails out at the 129th nesting level — the
+    // returned tree has at most 128 levels of nested children even
+    // though the input had 200.
     Scene scene;
     ResourceManager rm;
     auto j = buildNestedChain(200);
     auto* e = EntitySerializer::deserializeEntity(j, scene, rm);
-    // The root entity is created (depth 0), but at the 129th nesting
-    // level the recursion bails out. The root pointer is non-null but
-    // some deep children are missing — this is the partial-import
-    // behaviour. The contract pinned here is: the deserializer never
-    // crashes / never overflows the stack on a malicious-depth input.
-    // (We can't easily assert "exactly 128 levels of children present"
-    // without a tree-walk helper; the headline test is "no crash".)
-    SUCCEED() << "deserializer survived a >128-deep input without stack overflow";
-    (void)e;
+    ASSERT_NE(e, nullptr);
+
+    // Walk the deserialised tree and measure the deepest chain.
+    auto measureDepth = [](const Entity* root) {
+        int maxDepth = 0;
+        std::function<void(const Entity*, int)> walk =
+            [&](const Entity* node, int d) {
+                maxDepth = std::max(maxDepth, d);
+                for (const auto& child : node->getChildren())
+                {
+                    walk(child.get(), d + 1);
+                }
+            };
+        walk(root, 0);
+        return maxDepth;
+    };
+
+    const int actualDepth = measureDepth(e);
+    EXPECT_LE(actualDepth, 128) << "depth cap not enforced — deserialised "
+                                << actualDepth << " levels from a 200-level input";
 }
 
 TEST(EntitySerializerDepthCap, FlatTreeWithManyChildrenIsAccepted_D7)

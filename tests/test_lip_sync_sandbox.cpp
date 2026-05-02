@@ -89,34 +89,26 @@ TEST_F(LipSyncSandboxTest, LoadTrackOutsideRootReturnsFalse_D11)
     EXPECT_FALSE(player.loadTrack(m_outsidePath.string()));
 }
 
-TEST_F(LipSyncSandboxTest, LoadTrackInsideRootPassesSandboxCheck_D11)
+TEST_F(LipSyncSandboxTest, LoadTrackInsideRootDoesNotCrash_D11)
 {
-    // Inside the sandbox: passes the path check, then the JSON parser
-    // rejects "{}" as a valid Rhubarb track (no `mouthCues`). We pin
-    // that the failure mode is JSON-parse, not sandbox-reject — the
-    // sandbox would have returned `false` *before* the file open.
-    // Without finer-grained observation (separate parse-failure vs
-    // sandbox-failure return codes), we accept the looser pin: just
-    // confirm the round-trip matches the expectation.
+    // Smoke: with sandbox configured to the assets dir, loadTrack on a
+    // file inside that dir bypasses the path-rejection branch and runs
+    // the JSON-parse path. We can't differentiate parse-failure vs
+    // sandbox-failure return codes without finer-grained observability,
+    // so the pin here is "did not crash, did not mutate sandbox state".
     LipSyncPlayer::setSandboxRoots({m_root / "assets"});
     LipSyncPlayer player;
-    // Either parse-fails (returns false but sandbox passed) or the
-    // simple {} stub happens to load as an empty track (returns true).
-    // The implementation today rejects `{}` via the JSON contract; the
-    // test pins the *rejection-source*, not the boolean.
     [[maybe_unused]] bool result = player.loadTrack(m_insidePath.string());
-    // The pin: getSandboxRoots still reflects the configured root,
-    // confirming loadTrack didn't mutate global state on rejection.
     EXPECT_EQ(LipSyncPlayer::getSandboxRoots().size(), 1u);
 }
 
-TEST_F(LipSyncSandboxTest, NoSandboxConfiguredAcceptsAnyPath_D11)
+TEST_F(LipSyncSandboxTest, LoadTrackWithoutSandboxConfigDoesNotCrash_D11)
 {
+    // Smoke: with no sandbox configured, loadTrack on any path is
+    // forwarded to the file-size + JSON parsers. Pin is "did not crash,
+    // did not retro-configure sandbox state".
     LipSyncPlayer::setSandboxRoots({});
     LipSyncPlayer player;
-    // Sandbox disabled — outside path is forwarded to the file-size
-    // check. The file exists (we created it in SetUp), so the size
-    // cap passes; the JSON parser then handles "{}".
     [[maybe_unused]] bool result = player.loadTrack(m_outsidePath.string());
     EXPECT_TRUE(LipSyncPlayer::getSandboxRoots().empty());
 }

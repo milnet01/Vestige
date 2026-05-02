@@ -2065,8 +2065,15 @@ TEST_F(NodeLibraryTest, WhileLoopTerminatesAtSafetyCap)
     ScriptContext ctx(f.instance, m_registry,
                       nullptr);
     ctx.executeNode(id);
-    // If this didn't terminate we would never reach here.
-    SUCCEED();
+    // The safety cap is the sole reason an always-true WhileLoop
+    // terminates. WhileLoop publishes a `Clamped` output that fires
+    // true on cap-hit (AUDIT Sc8); pin that here instead of a bare
+    // SUCCEED.
+    auto* nodeInst = f.instance.getNodeInstance(id);
+    ASSERT_NE(nodeInst, nullptr);
+    EXPECT_TRUE(nodeInst->outputValues[internPin("Clamped")].asBool())
+        << "WhileLoop terminated without firing Clamped — safety cap may "
+           "not have engaged";
 }
 
 // -- Core interpreter: Blackboard scope routing (audit F) ------------------
@@ -2412,9 +2419,10 @@ TEST_F(NodeLibraryTest, GateOpenInputOpensTheGate)
     // Now fire Enter directly. Without entry-pin dispatch, this would have
     // been the only way to interact with the gate.
     ctx2.executeNode(gateId);
-    // No assertion on side effects — the test asserts no crash and that the
-    // gate-open path didn't infinitely recurse.
-    SUCCEED();
+    // Pin "didn't infinitely recurse" by checking the per-chain safety
+    // cap was not hit. > 0 also confirms execution actually progressed.
+    EXPECT_GT(ctx2.nodesExecuted(), 0);
+    EXPECT_LT(ctx2.nodesExecuted(), ScriptContext::MAX_NODES_PER_CHAIN);
 }
 
 TEST_F(NodeLibraryTest, GateCloseInputClosesTheGate)

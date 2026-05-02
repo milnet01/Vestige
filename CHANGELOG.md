@@ -153,6 +153,78 @@ helper-specific (StrobeHz only) so parametrisation buys nothing there.
 Suite count rose to 405 (was 404) because the parameterised suite is
 its own gtest test-suite.
 
+### 2026-05-02 Test-suite audit — outstanding Critical assertion fixes (slice 5 of audit triage)
+
+Three tests upgraded from non-assertions to real pins; two findings
+demoted as audit false positives after author-side verification of the
+flagged code paths.
+
+- **`tests/test_lip_sync_sandbox.cpp` — two tests renamed to honest
+  `…DoesNotCrash_D11` form** (slice 3 pattern).
+  `LoadTrackInsideRootPassesSandboxCheck_D11` was asserting
+  `getSandboxRoots().size() == 1u` after calling `loadTrack`, which
+  only echoes the `setSandboxRoots` call from setup — it doesn't pin
+  anything `loadTrack` did. Same shape for
+  `NoSandboxConfiguredAcceptsAnyPath_D11` (asserted `getSandboxRoots
+  ().empty()` after `setSandboxRoots({})`). Renamed to
+  `LoadTrackInsideRootDoesNotCrash_D11` and
+  `LoadTrackWithoutSandboxConfigDoesNotCrash_D11` so the test names
+  match the smoke-only contract their bodies actually pin. The
+  meaningful sandbox-rejection contract is already covered by
+  `LoadTrackOutsideRootReturnsFalse_D11`. Identified by audit C12.
+- **`tests/test_entity_serializer_depth_cap.cpp::RejectsDepthAboveBoundary_D7`.**
+  Replaced `SUCCEED() << "deserializer survived a >128-deep input"` (a
+  non-assertion that the comment admitted was the best the test could
+  do "without a tree-walk helper") with an inline `Entity::getChildren
+  ()` walk that measures the deepest chain in the returned tree and
+  asserts `EXPECT_LE(actualDepth, 128)`. The depth-walk lambda is
+  five lines; the dependency was already there. Pin upgrade — fed a
+  200-level chain, the test now confirms the deserialiser actually
+  enforces the cap (would catch a regression that returned the full
+  200-level tree). Identified by audit C14.
+- **`tests/test_scripting.cpp::WhileLoopTerminatesAtSafetyCap`.**
+  Replaced `SUCCEED()` with `EXPECT_TRUE(node->outputValues[internPin
+  ("Clamped")].asBool())`. WhileLoop publishes a `Clamped` output pin
+  (AUDIT Sc8) that fires `true` when the iteration cap engages — the
+  perfect oracle for "the cap actually fired" rather than "the test
+  reached this line". Now distinguishes "always-true condition was
+  rejected by the cap" from "always-true condition somehow returned
+  false on iteration 1". Identified by audit C16 (1/2).
+- **`tests/test_scripting.cpp::GateOpenInputOpensTheGate`.**
+  Replaced `SUCCEED()` with `EXPECT_GT(ctx2.nodesExecuted(), 0)` plus
+  `EXPECT_LT(ctx2.nodesExecuted(), MAX_NODES_PER_CHAIN)`. Pins both
+  "execution actually progressed" and "the gate-open path didn't hit
+  the per-chain safety cap" (i.e. didn't infinitely recurse). Doesn't
+  pin the gate's open/closed semantics — that's covered by
+  `GateBlocksWhenClosed` and `GateCloseInputClosesTheGate` next door,
+  which already use proper output-value reads. Identified by audit
+  C16 (2/2).
+
+Two findings demoted after verification — both flagged plausible
+problems that the audit got wrong:
+
+- **C10 — `tests/test_root_motion.cpp::SetModeResetsInitialization`**:
+  audit called this a tautology (sets `APPLY_TO_TRANSFORM` twice). But
+  `SkeletonAnimator::setRootMotionMode` unconditionally writes
+  `m_rootMotionInitialized = false` regardless of whether the mode
+  value changed (`engine/animation/skeleton_animator.cpp:567-571`), so
+  the test does pin the reset behaviour: without it, the second
+  `update()` would continue accumulated state and the asserted
+  `delta.x ≈ 0` would fail. Surprising same-value reuse, but not a
+  tautology. No fix.
+- **C15 — `tests/test_settings.cpp::PhotosensitiveStoreApplySinkTolerantOfNullPointers`**:
+  audit called `PhotosensitiveLimits any;` an "uninit struct UB risk".
+  But `PhotosensitiveLimits` declares in-class default member
+  initialisers for every field (`maxFlashAlpha = 0.25f`,
+  `shakeAmplitudeScale = 0.25f`, `maxStrobeHz = 2.0f`,
+  `bloomIntensityScale = 0.6f` per `engine/accessibility/photosensitive_safety.h:53-`).
+  `PhotosensitiveLimits any;` is therefore default-initialised, not
+  indeterminate; no UB. The trailing `SUCCEED()` is the legitimate
+  "did not crash on null sinks" pin. No fix.
+
+3182 / 3182 / 0 — same baseline as slice 4 (3 assertion upgrades, 2
+test renames, no test count change).
+
 
 
 Slice 13 perf hygiene closes the LRA-build hot-spot. Pre-Pe8
