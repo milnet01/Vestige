@@ -6,6 +6,36 @@
 ///        `UIElement` so a future screen-reader / TTS bridge can
 ///        enumerate interactive widgets with role + label + value.
 ///
+/// **Status (Phase 10.9 W4):** This file is *infrastructure-only*. The
+/// `UIElement::collectAccessible` / `UICanvas::collectAccessible`
+/// walkers, the `UIAccessibilitySnapshot` flat-list output, and every
+/// widget's role-setting constructor work as designed and are pinned
+/// by 13 unit tests. **What is not wired:** the platform-side bridge
+/// that hands those snapshots to a real screen reader (AT-SPI on
+/// Linux / UIA on Windows). Until that bridge lands — currently
+/// targeted for Phase 11+ once the engine has actual shipping games
+/// with end users running screen readers — the collector has no
+/// consumer outside tests.
+///
+/// **Why we kept the collector instead of relocating to
+/// `engine/experimental/`:** the collector is platform-agnostic data
+/// extraction (~50 lines of pure tree walking). Only the *consumer*
+/// is platform-specific. Keeping it in `engine/ui/` lets game / editor
+/// code add accessibility metadata to their custom widgets today, so
+/// the work isn't lost when the bridge eventually arrives. Compare
+/// with the W12 / W13 zombies — those are full subsystems whose
+/// experimental relocation made sense; `UIAccessibility` is an API
+/// surface, not a runtime, and demoting it would create more churn
+/// than it would prevent.
+///
+/// **What the bridge will need:** an event-stream consumer that calls
+/// `UICanvas::collectAccessible()` on every announce-relevant
+/// transition (focus change, value change, modal open / close), maps
+/// `UIAccessibleRole` → AT-SPI `Atspi.Role` / UIA
+/// `ControlTypeIdentifiers`, and pushes the role + label + value over
+/// the OS-IPC bus. That's the chunk of work explicitly deferred to
+/// Phase 11+.
+///
 /// The design mirrors the WAI-ARIA 1.2 vocabulary (role, name /
 /// `aria-label`, description / `aria-describedby`, value /
 /// `aria-valuetext`, keyboard-hint / `aria-keyshortcuts`) collapsed
