@@ -7,6 +7,7 @@
 #include "editor/commands/paint_foliage_command.h"
 #include "editor/commands/paint_scatter_command.h"
 #include "editor/commands/place_tree_command.h"
+#include "editor/commands/composite_command.h"
 #include "editor/command_history.h"
 #include "renderer/camera.h"
 
@@ -150,43 +151,68 @@ void BrushTool::endStroke(FoliageManager& manager, CommandHistory& history)
 {
     m_painting = false;
 
-    // Create undo commands for the completed stroke
+    // Phase 10.9 Slice 12 Ed8: collect every sub-command produced by the
+    // stroke and push as a single CompositeCommand so one Ctrl+Z reverts
+    // the whole stroke. Pre-Ed8 the eraser mode pushed up to three
+    // separate commands (foliage / scatter / trees), forcing the user
+    // to press undo three times to fully revert one drag — and the
+    // history-panel listing showed three separate steps for what was
+    // logically one user action.
+    std::vector<std::unique_ptr<EditorCommand>> subCommands;
+
     if (mode == Mode::ERASER)
     {
         if (!m_strokeRemoved.empty())
         {
-            history.execute(std::make_unique<PaintFoliageCommand>(
+            subCommands.push_back(std::make_unique<PaintFoliageCommand>(
                 manager, std::vector<FoliageInstanceRef>{}, m_strokeRemoved));
         }
         if (!m_scatterRemoved.empty())
         {
-            history.execute(std::make_unique<PaintScatterCommand>(
+            subCommands.push_back(std::make_unique<PaintScatterCommand>(
                 manager, std::vector<ScatterInstanceRef>{},
                 convertScatterRefs(m_scatterRemoved)));
         }
         if (!m_treesRemoved.empty())
         {
-            history.execute(std::make_unique<PlaceTreeCommand>(
+            subCommands.push_back(std::make_unique<PlaceTreeCommand>(
                 manager, std::vector<TreeInstanceRef>{},
                 convertTreeRefs(m_treesRemoved)));
         }
     }
     else if (mode == Mode::FOLIAGE && !m_strokeAdded.empty())
     {
-        history.execute(std::make_unique<PaintFoliageCommand>(
+        subCommands.push_back(std::make_unique<PaintFoliageCommand>(
             manager, m_strokeAdded, std::vector<FoliageInstanceRef>{}));
     }
     else if (mode == Mode::SCATTER && !m_scatterAdded.empty())
     {
-        history.execute(std::make_unique<PaintScatterCommand>(
+        subCommands.push_back(std::make_unique<PaintScatterCommand>(
             manager, convertScatterRefs(m_scatterAdded),
             std::vector<ScatterInstanceRef>{}));
     }
     else if (mode == Mode::TREE && !m_treesAdded.empty())
     {
-        history.execute(std::make_unique<PlaceTreeCommand>(
+        subCommands.push_back(std::make_unique<PlaceTreeCommand>(
             manager, convertTreeRefs(m_treesAdded),
             std::vector<TreeInstanceRef>{}));
+    }
+
+    // Single sub-command path: skip the wrapper to keep the history
+    // listing unchanged (one stroke → one entry, no nesting overhead).
+    // Multi sub-command path: wrap in CompositeCommand so the whole
+    // stroke is one undo step. Empty strokes (e.g. eraser over nothing)
+    // produce no entry at all.
+    if (subCommands.size() == 1)
+    {
+        history.execute(std::move(subCommands.front()));
+    }
+    else if (subCommands.size() > 1)
+    {
+        const char* desc = (mode == Mode::ERASER) ? "Erase brush stroke"
+                                                  : "Brush stroke";
+        history.execute(std::make_unique<CompositeCommand>(
+            desc, std::move(subCommands)));
     }
 
     m_strokeAdded.clear();
