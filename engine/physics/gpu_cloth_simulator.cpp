@@ -671,16 +671,20 @@ void GpuClothSimulator::reset()
 {
     if (!m_initialized) return;
 
-    // Re-upload the initial grid into all four particle SSBOs so the GPU
-    // state matches the rest pose, then mark the CPU mirror dirty so the
-    // next getPositions() picks the rest pose up too. The CPU mirror was
-    // built in buildInitialGrid() and is preserved across simulate() calls
-    // (only its values are mutated by readback), so we can use it directly
-    // as the rest-pose source.
+    // Phase 10.9 Cl5: source the rest pose from `m_initialPositions`, not
+    // the live `m_positionMirror`. The mirror is mutated by
+    // `setPinPosition` (direct write) and by `readbackPositionsIfDirty`
+    // (post-simulate readback), so reading from it would restore the most
+    // recent pin move / sim drift instead of the original grid. The
+    // snapshot is captured once at `buildInitialGrid()` and refreshed only
+    // when the caller explicitly invokes `captureRestPositions()`.
     std::vector<glm::vec4> rest(m_particleCount);
     for (uint32_t i = 0; i < m_particleCount; ++i)
     {
-        rest[i] = glm::vec4(m_positionMirror[i], 1.0f);
+        // Pack the snapshot with `1.0f` in `w` rather than `m_invMassMirror[i]`
+        // because `reset()` is also restoring inverse-mass: pins re-arm by
+        // calling `pinParticle` after reset, mirroring the CPU contract.
+        rest[i] = glm::vec4(m_initialPositions[i], 1.0f);
     }
     const GLsizeiptr bytes = static_cast<GLsizeiptr>(m_particleCount * sizeof(glm::vec4));
     glNamedBufferSubData(m_positionsSSBO,     0, bytes, rest.data());
@@ -689,9 +693,31 @@ void GpuClothSimulator::reset()
     std::vector<glm::vec4> zeros(m_particleCount, glm::vec4(0.0f));
     glNamedBufferSubData(m_velocitiesSSBO,    0, bytes, zeros.data());
 
-    // Mirror already holds the initial grid; mark clean.
+    // Restore the mirror + invMass to match the reset SSBO so the next
+    // `getPositions()` (no-op readback path, m_positionsDirty == false)
+    // returns the rest pose, and pin state matches "all free until pinned
+    // again" — same contract the CPU backend honours at
+    // `cloth_simulator.cpp:689-693`.
+    m_positionMirror = m_initialPositions;
+    m_invMassMirror.assign(m_particleCount, 1.0f);
+    m_pinIndices.clear();
+    m_pinsDirty      = false;
     m_positionsDirty = false;
     m_normalsDirty   = false;
+}
+
+void GpuClothSimulator::captureRestPositions()
+{
+    // Phase 10.9 Cl5: snapshot the *current* simulated pose for use by
+    // future `reset()` calls. Mirrors `ClothSimulator::captureRestPositions`
+    // at `cloth_simulator.cpp:720-722`. If the GPU has run a substep since
+    // the last `getPositions()`, refresh the mirror first so the snapshot
+    // reflects the on-GPU truth — without this, callers who never queried
+    // positions between simulate() and capture would snapshot a stale
+    // mirror.
+    if (!m_initialized) return;
+    readbackPositionsIfDirty();
+    m_initialPositions = m_positionMirror;
 }
 
 const glm::vec3* GpuClothSimulator::getPositions() const
@@ -787,6 +813,12 @@ void GpuClothSimulator::buildInitialGrid(const ClothConfig& config)
             m_indices.push_back(i1); m_indices.push_back(i2); m_indices.push_back(i3);
         }
     }
+
+    // Phase 10.9 Cl5: snapshot the freshly-built grid as the immutable rest
+    // pose. `reset()` reads from this; mutations to `m_positionMirror`
+    // (setPinPosition, post-simulate readback) leave the snapshot
+    // untouched until `captureRestPositions()` explicitly refreshes it.
+    m_initialPositions = m_positionMirror;
 }
 
 void GpuClothSimulator::createBuffers()

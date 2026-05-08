@@ -87,12 +87,16 @@ public:
     float           getDragCoefficient() const override { return m_dragCoeff; }
     ClothWindQuality getWindQuality()  const override { return m_windQuality; }
 
-    // Rest-pose snapshot. The GPU backend tracks rest pose implicitly via the
-    // mirror built at initialize() time; after pin reconfiguration the
-    // position mirror already reflects the new rest. Stubbed as a no-op —
-    // a future Phase 9B extension could force a GPU→CPU readback into a
-    // dedicated m_restPose array, but nothing calls that today.
-    void captureRestPositions() override {}
+    /// @brief Phase 10.9 Cl5 — refreshes the immutable rest-pose snapshot
+    ///        used by `reset()`. Forces a SSBO→mirror readback first so the
+    ///        snapshot reflects the *current* simulated state, not the
+    ///        previous-frame mirror, then copies the mirror into
+    ///        `m_initialPositions`. Mirrors `ClothSimulator::captureRestPositions`
+    ///        at `cloth_simulator.cpp:720-722`. Pre-Cl5 this was a `{}` stub
+    ///        and `reset()` re-uploaded the mutable mirror, so pinned
+    ///        particles snapped to the last `setPinPosition` value rather
+    ///        than the original grid.
+    void captureRestPositions() override;
 
     // -- GPU backend extras --
 
@@ -264,6 +268,14 @@ private:
     std::vector<uint32_t> m_indices;
     std::vector<glm::vec2> m_texCoords;
     std::vector<float>    m_invMassMirror;  ///< 1 = free, 0 = pinned. Source of truth for pin state.
+
+    /// @brief Phase 10.9 Cl5 — immutable rest-pose snapshot consumed by
+    ///        `reset()`. Captured at the end of `buildInitialGrid()` and
+    ///        refreshable via `captureRestPositions()`. Decouples reset
+    ///        from `m_positionMirror`, which `setPinPosition` and
+    ///        `readbackPositionsIfDirty` both mutate. Mirrors the CPU
+    ///        backend's `m_initialPositions` at `cloth_simulator.h:344`.
+    std::vector<glm::vec3> m_initialPositions;
 
     // SSBOs (named to mirror BufferBinding enum).
     GLuint m_positionsSSBO     = 0;
