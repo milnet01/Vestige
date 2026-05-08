@@ -36,6 +36,8 @@ compile_commands.json
 # OS files
 .DS_Store
 Thumbs.db
+# KDE Dolphin per-folder view-state metadata
+.directory
 
 # Claude Code local data (settings, worktrees, plans). Trailing /* (not /)
 # so the negations below can re-include team-shared config.
