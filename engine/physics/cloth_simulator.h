@@ -448,6 +448,12 @@ private:
     void solveDistanceConstraint(DistanceConstraint& c, float alphaTilde, float dtSub);
     void solvePinConstraints();
     void applyCollisions();
+    /// @brief Phase 10.9 Pe9 — rebuilds the self-collision spatial hash
+    ///        once per substep (no-op if self-collision is disabled or
+    ///        the cloth has fewer than 4 particles). Hoisted out of
+    ///        `applySelfCollision()` so both `applyCollisions()` passes
+    ///        in a single substep share the same broad-phase data.
+    void rebuildSelfCollisionHashIfEnabled();
     void recomputeNormals();
     void precomputeWind();     ///< Cache noise-dependent wind data once per simulate()
     void applyWind(float dt);  ///< Apply cached wind data per substep

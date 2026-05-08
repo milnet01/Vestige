@@ -357,6 +357,18 @@ void ClothSimulator::simulate(float deltaTime)
         // 5. Solve pin constraints
         solvePinConstraints();
 
+        // Phase 10.9 Pe9: rebuild the self-collision spatial hash once
+        // per substep, not once per `applyCollisions` call. The two
+        // `applyCollisions` passes below previously each rebuilt the
+        // hash, doubling the broad-phase cost. Within a single substep
+        // particle motion is bounded by `dtSub × max-velocity`, well
+        // below the hash's cell size (2 × selfCollisionDist), so the
+        // hash from the start of the substep remains a valid broad-phase
+        // candidate set for the second pass — narrow-phase still uses
+        // live positions for the actual distance check, so no false
+        // positives.
+        rebuildSelfCollisionHashIfEnabled();
+
         // 6. Apply collisions (first pass — after constraint solving)
         applyCollisions();
 
@@ -1383,6 +1395,19 @@ float ClothSimulator::getSelfCollisionDistance() const
     return m_selfCollisionDist;
 }
 
+void ClothSimulator::rebuildSelfCollisionHashIfEnabled()
+{
+    // Phase 10.9 Pe9: hoisted out of `applySelfCollision()` so the substep
+    // can rebuild once and let both `applyCollisions()` passes share the
+    // result. The cell size = 2× collision distance is wider than any
+    // realistic single-substep particle motion, so the hash stays valid
+    // as a broad-phase candidate set across the two passes.
+    if (!m_selfCollision || m_positions.size() < 4) return;
+    m_spatialHash.build(m_positions.data(),
+                        static_cast<uint32_t>(m_positions.size()),
+                        m_selfCollisionDist * 2.0f);
+}
+
 void ClothSimulator::applySelfCollision()
 {
     if (!m_selfCollision || m_positions.size() < 4)
@@ -1392,8 +1417,10 @@ void ClothSimulator::applySelfCollision()
 
     uint32_t count = static_cast<uint32_t>(m_positions.size());
 
-    // Build spatial hash with cell size = 2× collision distance
-    m_spatialHash.build(m_positions.data(), count, m_selfCollisionDist * 2.0f);
+    // Spatial hash is built once per substep by
+    // `rebuildSelfCollisionHashIfEnabled()` (called from the substep
+    // loop). No rebuild here — narrow-phase distance check below uses
+    // live positions, so a one-substep-old broad-phase hash is fine.
 
     for (uint32_t i = 0; i < count; ++i)
     {
