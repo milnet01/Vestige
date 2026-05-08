@@ -115,6 +115,15 @@ void CommandHistory::markSaved()
     m_savedVersionLost = false;
 }
 
+void CommandHistory::markUnsavedChange()
+{
+    // Phase 10.9 Slice 12 Ed7. Sticky-dirty flag for non-undoable
+    // scene replacements (wizard apply, template apply). Clears on
+    // the next markSaved() (Save / Save As), same as the existing
+    // saved-version-fell-off-trim-window path.
+    m_savedVersionLost = true;
+}
+
 const std::vector<std::unique_ptr<EditorCommand>>& CommandHistory::getCommands() const
 {
     return m_commands;

@@ -297,12 +297,17 @@ bool FileMenu::shouldQuit() const
 
 void FileMenu::markDirty()
 {
-    m_isDirty = true;
+    // Phase 10.9 Slice 12 Ed7: forward to CommandHistory's sticky-dirty
+    // flag so isDirty() naturally clears on save; pre-Ed7 the
+    // FileMenu::m_isDirty flag stuck forever regardless of undo.
+    if (m_commandHistory)
+    {
+        m_commandHistory->markUnsavedChange();
+    }
 }
 
 void FileMenu::markClean()
 {
-    m_isDirty = false;
     if (m_commandHistory)
     {
         m_commandHistory->markSaved();
@@ -313,12 +318,11 @@ void FileMenu::markClean()
 
 bool FileMenu::isDirty() const
 {
-    // Prefer CommandHistory for dirty tracking when available
-    if (m_commandHistory)
-    {
-        return m_commandHistory->isDirty() || m_isDirty;
-    }
-    return m_isDirty;
+    // Phase 10.9 Slice 12 Ed7: single source of truth. CommandHistory
+    // tracks both "version differs from save" (real mutations) and
+    // "saved version lost" (sticky flag for non-undoable scene loads,
+    // set via markUnsavedChange()).
+    return m_commandHistory && m_commandHistory->isDirty();
 }
 
 // ---------------------------------------------------------------------------
@@ -788,9 +792,12 @@ void FileMenu::drawRecoveryModal(Scene* scene, Selection& selection)
                     if (m_commandHistory)
                     {
                         m_commandHistory->clear();
+                        // Phase 10.9 Slice 12 Ed7: scene was wholesale-
+                        // replaced by an autosave recovery; sticky-
+                        // dirty so user is prompted to save before
+                        // quit. Same path as wizard apply.
+                        m_commandHistory->markUnsavedChange();
                     }
-                    // Mark dirty so user is prompted to save
-                    m_isDirty = true;
                     deleteAutoSave();
                     updateWindowTitle(scene->getName());
                     Logger::info("Recovered auto-save ("

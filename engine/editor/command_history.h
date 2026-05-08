@@ -52,6 +52,21 @@ public:
     /// @brief Records the current version as the saved state.
     void markSaved();
 
+    /// @brief Phase 10.9 Slice 12 Ed7 — flags the current state as
+    ///        differing from disk without pushing an actual command.
+    ///        Used for non-undoable scene loads (wizard apply, template
+    ///        apply) where the scene wholesale-replaced its contents:
+    ///        history is cleared, but `isDirty()` still needs to
+    ///        report true so the user is prompted to save before
+    ///        quitting.
+    ///
+    /// Implemented as `m_savedVersionLost = true`: the dirty flag is
+    /// "sticky" until the next `markSaved()` (typically Save / Save As),
+    /// at which point it clears naturally. Mirrors the same
+    /// `m_savedVersionLost` mechanism that fires when an old saved
+    /// version falls off the trim window.
+    void markUnsavedChange();
+
     /// @brief Gets the command list (for the history panel).
     const std::vector<std::unique_ptr<EditorCommand>>& getCommands() const;
 

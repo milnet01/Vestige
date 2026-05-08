@@ -133,7 +133,11 @@ private:
 
     std::filesystem::path m_currentScenePath;
     std::filesystem::path m_pendingRecentPath;
-    bool m_isDirty = false;
+    // Phase 10.9 Slice 12 Ed7: m_isDirty removed; isDirty() now
+    // delegates entirely to m_commandHistory->isDirty(), eliminating
+    // the dual source-of-truth bug where m_isDirty stuck forever
+    // regardless of undo. The "scene loaded — sticky dirty" path is
+    // now handled via CommandHistory::markUnsavedChange().
     bool m_shouldQuit = false;
 
     // File browser dialogs

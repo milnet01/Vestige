@@ -7,6 +7,7 @@
 #include "editor/commands/transform_command.h"
 #include "editor/commands/create_entity_command.h"
 #include "editor/commands/entity_property_command.h"
+#include "editor/commands/group_entities_command.h"
 #include "core/logger.h"
 #include "core/timer.h"
 #include "renderer/camera.h"
@@ -356,8 +357,16 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
                 }
                 if (ImGui::MenuItem("Group", "Ctrl+G", false, hasSel && scene))
                 {
-                    EntityActions::groupEntities(*scene, m_selection);
-                    m_fileMenu.markDirty();
+                    // Phase 10.9 Slice 12 Ed7: route Ctrl+G through the
+                    // command history so undo reverts the group + the
+                    // dirty flag clears naturally on undo-to-saved.
+                    auto ids = m_selection.getSelectedIds();
+                    auto cmd = std::make_unique<GroupEntitiesCommand>(
+                        *scene, m_selection, std::vector<uint32_t>(ids.begin(), ids.end()));
+                    if (!ids.empty() && ids.size() >= 2)
+                    {
+                        m_commandHistory.execute(std::move(cmd));
+                    }
                 }
                 if (ImGui::MenuItem("Toggle Visibility", "H", false, hasSel && scene))
                 {
@@ -1322,14 +1331,19 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
                     break;
                 case FirstRunWizardSceneOp::ApplyEmpty:
                     applyEmptyScene(*scene, *m_resourceManager);
-                    m_fileMenu.markDirty();
+                    // Phase 10.9 Slice 12 Ed7: scene wholesale-replaced;
+                    // history was cleared by the apply path. Use the
+                    // sticky "unsaved change" signal so the user is
+                    // prompted to save before quitting, without the
+                    // FileMenu::m_isDirty dual SoT.
+                    m_commandHistory.markUnsavedChange();
                     m_selection.clearSelection();
                     break;
                 case FirstRunWizardSceneOp::ApplyDemo:
                     if (m_applyDemoCallback)
                     {
                         m_applyDemoCallback();
-                        m_fileMenu.markDirty();
+                        m_commandHistory.markUnsavedChange();
                         m_selection.clearSelection();
                     }
                     break;
@@ -1342,7 +1356,7 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
                         TemplateDialog::applyTemplate(
                             all[static_cast<size_t>(idx)], scene,
                             m_resourceManager, renderer);
-                        m_fileMenu.markDirty();
+                        m_commandHistory.markUnsavedChange();
                         m_selection.clearSelection();
                     }
                     break;
@@ -2253,10 +2267,16 @@ void Editor::processEntityShortcuts(Scene* scene)
     if (io.KeyCtrl && !io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_G)
         && m_selection.hasSelection())
     {
-        EntityActions::groupEntities(*scene, m_selection);
-        // Group is complex (creates entity + reparents) — mark dirty directly
-        // until we have a dedicated GroupCommand
-        m_fileMenu.markDirty();
+        // Phase 10.9 Slice 12 Ed7: route through CommandHistory so
+        // undo reverts the group + dirty flag clears naturally.
+        // GroupEntitiesCommand handles centroid + reparent + local-pos.
+        auto ids = m_selection.getSelectedIds();
+        if (ids.size() >= 2)
+        {
+            m_commandHistory.execute(std::make_unique<GroupEntitiesCommand>(
+                *scene, m_selection,
+                std::vector<uint32_t>(ids.begin(), ids.end())));
+        }
     }
 
     // H — toggle visibility of primary selected entity

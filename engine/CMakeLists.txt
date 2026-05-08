@@ -128,6 +128,7 @@ set(ENGINE_SOURCES
     editor/panels/environment_panel.cpp
     editor/panels/terrain_panel.cpp
     editor/commands/terrain_sculpt_command.cpp
+    editor/commands/group_entities_command.cpp
     editor/widgets/animation_curve.cpp
     editor/widgets/color_gradient.cpp
     editor/widgets/curve_editor_widget.cpp
