@@ -1478,18 +1478,21 @@ void ClothSimulator::buildDihedralConstraints()
         return;  // Need at least 2 triangles
     }
 
-    // Build edge adjacency: for each edge (sorted vertex pair), store the two
-    // triangles that share it and the wing vertices opposite the edge.
-    // Key: (min(v0,v1), max(v0,v1)) → (wing0, wing1, count)
-    struct EdgeInfo
+    // Phase 10.9 Cl6: sort-based edge adjacency. The previous
+    // unordered_map<uint64_t, EdgeInfo> path paid a hash + bucket-chain +
+    // potential rehash on every insert (390k inserts on a 256² cloth, a
+    // measurable hitch in the editor's "apply preset" path). Pushing one
+    // EdgeRef per directed edge into a contiguous vector + std::sort is
+    // cache-friendly and amortises better. Mirrors the same refactor in
+    // the shared `generateDihedralConstraints` (cloth_constraint_graph.cpp)
+    // so both backends benefit.
+    struct EdgeRef
     {
-        uint32_t wing[2];
-        int count;
+        uint64_t key;
+        uint32_t wing;
     };
-
-    // Use a map keyed by packed edge (two uint32_t → one uint64_t)
-    std::unordered_map<uint64_t, EdgeInfo> edgeMap;
-    edgeMap.reserve(m_indices.size());
+    std::vector<EdgeRef> edges;
+    edges.reserve(m_indices.size());
 
     auto packEdge = [](uint32_t a, uint32_t b) -> uint64_t
     {
@@ -1506,62 +1509,59 @@ void ClothSimulator::buildDihedralConstraints()
             uint32_t e0 = tri[e];
             uint32_t e1 = tri[(e + 1) % 3];
             uint32_t wing = tri[(e + 2) % 3];  // Vertex opposite this edge
-
-            uint64_t key = packEdge(e0, e1);
-            auto it = edgeMap.find(key);
-            if (it == edgeMap.end())
-            {
-                EdgeInfo info{};
-                info.wing[0] = wing;
-                info.count = 1;
-                edgeMap[key] = info;
-            }
-            else if (it->second.count == 1)
-            {
-                it->second.wing[1] = wing;
-                it->second.count = 2;
-            }
-            // count > 2: non-manifold edge, skip
+            edges.push_back({ packEdge(e0, e1), wing });
         }
     }
 
-    // Create dihedral constraints for all interior edges (shared by exactly 2 triangles)
-    for (const auto& [key, info] : edgeMap)
+    std::sort(edges.begin(), edges.end(),
+              [](const EdgeRef& a, const EdgeRef& b) { return a.key < b.key; });
+
+    // Walk runs of equal keys. Manifold interior edge → exactly 2 incident
+    // triangles → emit one constraint. Boundary (run length 1) and
+    // non-manifold (run length > 2) edges are silently skipped, matching
+    // the previous behaviour.
+    for (size_t i = 0; i < edges.size();)
     {
-        if (info.count != 2)
+        size_t j = i + 1;
+        while (j < edges.size() && edges[j].key == edges[i].key) ++j;
+
+        if (j - i == 2)
         {
-            continue;
+            const uint64_t key   = edges[i].key;
+            const uint32_t wing0 = edges[i].wing;
+            const uint32_t wing1 = edges[i + 1].wing;
+            const uint32_t edgeV0 = static_cast<uint32_t>(key >> 32);
+            const uint32_t edgeV1 = static_cast<uint32_t>(key & 0xFFFFFFFFu);
+
+            // p0 = wing of triangle 0, p1 = wing of triangle 1
+            // p2 = edge start, p3 = edge end
+            const glm::vec3& p0 = m_positions[wing0];
+            const glm::vec3& p1 = m_positions[wing1];
+            const glm::vec3& p2 = m_positions[edgeV0];
+            const glm::vec3& p3 = m_positions[edgeV1];
+
+            // Compute rest angle
+            glm::vec3 n1 = glm::cross(p2 - p0, p3 - p0);
+            glm::vec3 n2 = glm::cross(p3 - p1, p2 - p1);
+            float len1 = glm::length(n1);
+            float len2 = glm::length(n2);
+
+            float restAngle = 0.0f;  // Default flat
+            if (len1 > 1e-7f && len2 > 1e-7f)
+            {
+                n1 /= len1;
+                n2 /= len2;
+                float cosAngle = glm::clamp(glm::dot(n1, n2), -1.0f, 1.0f);
+                restAngle = fastAcos(cosAngle);
+            }
+
+            m_dihedralConstraints.push_back({
+                wing0, wing1, edgeV0, edgeV1,
+                restAngle, m_dihedralCompliance
+            });
         }
 
-        uint32_t edgeV0 = static_cast<uint32_t>(key >> 32);
-        uint32_t edgeV1 = static_cast<uint32_t>(key & 0xFFFFFFFF);
-
-        // p0 = wing of triangle 0, p1 = wing of triangle 1
-        // p2 = edge start, p3 = edge end
-        const glm::vec3& p0 = m_positions[info.wing[0]];
-        const glm::vec3& p1 = m_positions[info.wing[1]];
-        const glm::vec3& p2 = m_positions[edgeV0];
-        const glm::vec3& p3 = m_positions[edgeV1];
-
-        // Compute rest angle
-        glm::vec3 n1 = glm::cross(p2 - p0, p3 - p0);
-        glm::vec3 n2 = glm::cross(p3 - p1, p2 - p1);
-        float len1 = glm::length(n1);
-        float len2 = glm::length(n2);
-
-        float restAngle = 0.0f;  // Default flat
-        if (len1 > 1e-7f && len2 > 1e-7f)
-        {
-            n1 /= len1;
-            n2 /= len2;
-            float cosAngle = glm::clamp(glm::dot(n1, n2), -1.0f, 1.0f);
-            restAngle = fastAcos(cosAngle);
-        }
-
-        m_dihedralConstraints.push_back({
-            info.wing[0], info.wing[1], edgeV0, edgeV1,
-            restAngle, m_dihedralCompliance
-        });
+        i = j;
     }
 }
 

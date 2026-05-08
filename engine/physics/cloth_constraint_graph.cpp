@@ -10,7 +10,6 @@
 #include <cassert>
 #include <cmath>
 #include <limits>
-#include <unordered_map>
 
 namespace Vestige
 {
@@ -191,14 +190,24 @@ void generateDihedralConstraints(
 {
     if (indices.size() < 6) return;  // Need at least two triangles.
 
-    struct EdgeInfo
+    // Phase 10.9 Cl6: sort-based edge adjacency. The previous
+    // `unordered_map<uint64_t, EdgeInfo>` paid a hash + bucket-chain +
+    // potential rehash on every insert, with N inserts = 3·triangles
+    // (390k for a 256² cloth — measurable hitch on "apply preset"). The
+    // sort path emits one `EdgeRef` per directed edge, sorts O(N log N)
+    // with cache-friendly contiguous access, then groups by key in a
+    // single linear sweep. Output ordering follows sorted edge keys
+    // rather than hash-bucket walk order, but downstream consumers
+    // (colouring, solver) don't depend on insertion order — colouring
+    // re-permutes anyway and the unordered_map walk order was itself
+    // non-deterministic.
+    struct EdgeRef
     {
-        uint32_t wing[2];
-        int      count;
+        uint64_t key;
+        uint32_t wing;
     };
-
-    std::unordered_map<uint64_t, EdgeInfo> edgeMap;
-    edgeMap.reserve(indices.size());
+    std::vector<EdgeRef> edges;
+    edges.reserve(indices.size());  // 3 edges per triangle.
 
     for (size_t t = 0; t + 2 < indices.size(); t += 3)
     {
@@ -208,61 +217,61 @@ void generateDihedralConstraints(
             const uint32_t e0   = tri[e];
             const uint32_t e1   = tri[(e + 1) % 3];
             const uint32_t wing = tri[(e + 2) % 3];
-            const uint64_t key  = packEdgeKey(e0, e1);
-
-            auto it = edgeMap.find(key);
-            if (it == edgeMap.end())
-            {
-                EdgeInfo info{};
-                info.wing[0] = wing;
-                info.count = 1;
-                edgeMap[key] = info;
-            }
-            else if (it->second.count == 1)
-            {
-                it->second.wing[1] = wing;
-                it->second.count = 2;
-            }
-            // count > 2: non-manifold edge — skip silently.
+            edges.push_back({packEdgeKey(e0, e1), wing});
         }
     }
 
-    for (const auto& [key, info] : edgeMap)
+    std::sort(edges.begin(), edges.end(),
+              [](const EdgeRef& a, const EdgeRef& b) { return a.key < b.key; });
+
+    for (size_t i = 0; i < edges.size();)
     {
-        if (info.count != 2) continue;
+        size_t j = i + 1;
+        while (j < edges.size() && edges[j].key == edges[i].key) ++j;
 
-        const uint32_t edgeV0 = static_cast<uint32_t>(key >> 32);
-        const uint32_t edgeV1 = static_cast<uint32_t>(key & 0xFFFFFFFFu);
-
-        // p0 = wing 0, p1 = wing 1, p2 = edge start, p3 = edge end (matches CPU
-        // ClothSimulator's dihedral solver and the GLSL shader's binding).
-        const glm::vec3& p0 = positions[info.wing[0]];
-        const glm::vec3& p1 = positions[info.wing[1]];
-        const glm::vec3& p2 = positions[edgeV0];
-        const glm::vec3& p3 = positions[edgeV1];
-
-        glm::vec3 n1 = glm::cross(p2 - p0, p3 - p0);
-        glm::vec3 n2 = glm::cross(p3 - p1, p2 - p1);
-        const float len1 = glm::length(n1);
-        const float len2 = glm::length(n2);
-
-        float restAngle = 0.0f;
-        if (len1 > 1e-7f && len2 > 1e-7f)
+        // Manifold edge: exactly two incident triangles. Boundary edges
+        // (j - i == 1) are skipped; non-manifold (j - i > 2) likewise —
+        // matches the previous map-based behaviour.
+        if (j - i == 2)
         {
-            n1 /= len1;
-            n2 /= len2;
-            const float cosAngle = std::clamp(glm::dot(n1, n2), -1.0f, 1.0f);
-            restAngle = std::acos(cosAngle);
+            const uint64_t key   = edges[i].key;
+            const uint32_t wing0 = edges[i].wing;
+            const uint32_t wing1 = edges[i + 1].wing;
+            const uint32_t edgeV0 = static_cast<uint32_t>(key >> 32);
+            const uint32_t edgeV1 = static_cast<uint32_t>(key & 0xFFFFFFFFu);
+
+            // p0 = wing 0, p1 = wing 1, p2 = edge start, p3 = edge end (matches CPU
+            // ClothSimulator's dihedral solver and the GLSL shader's binding).
+            const glm::vec3& p0 = positions[wing0];
+            const glm::vec3& p1 = positions[wing1];
+            const glm::vec3& p2 = positions[edgeV0];
+            const glm::vec3& p3 = positions[edgeV1];
+
+            glm::vec3 n1 = glm::cross(p2 - p0, p3 - p0);
+            glm::vec3 n2 = glm::cross(p3 - p1, p2 - p1);
+            const float len1 = glm::length(n1);
+            const float len2 = glm::length(n2);
+
+            float restAngle = 0.0f;
+            if (len1 > 1e-7f && len2 > 1e-7f)
+            {
+                n1 /= len1;
+                n2 /= len2;
+                const float cosAngle = std::clamp(glm::dot(n1, n2), -1.0f, 1.0f);
+                restAngle = std::acos(cosAngle);
+            }
+
+            GpuDihedralConstraint c{};
+            c.p0         = wing0;
+            c.p1         = wing1;
+            c.p2         = edgeV0;
+            c.p3         = edgeV1;
+            c.restAngle  = restAngle;
+            c.compliance = compliance;
+            outConstraints.push_back(c);
         }
 
-        GpuDihedralConstraint c{};
-        c.p0         = info.wing[0];
-        c.p1         = info.wing[1];
-        c.p2         = edgeV0;
-        c.p3         = edgeV1;
-        c.restAngle  = restAngle;
-        c.compliance = compliance;
-        outConstraints.push_back(c);
+        i = j;
     }
 }
 
