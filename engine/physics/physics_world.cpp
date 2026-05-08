@@ -629,19 +629,37 @@ void PhysicsWorld::checkBreakableConstraints(float deltaTime)
             continue;
         }
 
+        // Phase 10.9 Slice 7 Ph4: sum every lambda the constraint
+        // exposes — position, rotation, position-limit (slider),
+        // rotation-limit (hinge), motor. The pre-Ph4 code only read
+        // the position lambda, so a hinge breaking from torque
+        // (e.g. door slammed past its angle limit) or a slider
+        // breaking from translation-limit force never registered.
+        // Units are fudged: linear impulse (kg·m/s) and angular
+        // impulse (kg·m²/s) are both treated as scalar contributions
+        // to a single "stress" magnitude. That's the same Frobenius-
+        // style aggregation Jolt's own ConstraintTester demos use,
+        // and it lets game projects set a single `breakForce`
+        // threshold without separately tuning torque vs force.
         float impulse = 0.0f;
         switch (constraint.getType())
         {
         case ConstraintType::HINGE:
             if (auto* h = constraint.asHinge())
             {
-                impulse = glm::length(toGlm(h->GetTotalLambdaPosition()));
+                impulse  = glm::length(toGlm(h->GetTotalLambdaPosition()));
+                // Vector<2> rotation: pack with z=0 so glm::length works.
+                JPH::Vector<2> rot = h->GetTotalLambdaRotation();
+                impulse += glm::length(glm::vec2(rot[0], rot[1]));
+                impulse += std::abs(h->GetTotalLambdaRotationLimits());
+                impulse += std::abs(h->GetTotalLambdaMotor());
             }
             break;
         case ConstraintType::FIXED:
             if (auto* f = constraint.asFixed())
             {
-                impulse = glm::length(toGlm(f->GetTotalLambdaPosition()));
+                impulse  = glm::length(toGlm(f->GetTotalLambdaPosition()));
+                impulse += glm::length(toGlm(f->GetTotalLambdaRotation()));
             }
             break;
         case ConstraintType::DISTANCE:
@@ -659,10 +677,12 @@ void PhysicsWorld::checkBreakableConstraints(float deltaTime)
         case ConstraintType::SLIDER:
             if (auto* s = constraint.asSlider())
             {
-                impulse = glm::length(toGlm(JPH::Vec3(
-                    s->GetTotalLambdaPosition()[0],
-                    s->GetTotalLambdaPosition()[1],
-                    0.0f)));
+                // Slider position is Vector<2> (perpendicular to slide).
+                JPH::Vector<2> pos = s->GetTotalLambdaPosition();
+                impulse  = glm::length(glm::vec2(pos[0], pos[1]));
+                impulse += std::abs(s->GetTotalLambdaPositionLimits());
+                impulse += glm::length(toGlm(s->GetTotalLambdaRotation()));
+                impulse += std::abs(s->GetTotalLambdaMotor());
             }
             break;
         }
