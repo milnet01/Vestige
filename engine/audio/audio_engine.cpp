@@ -12,6 +12,8 @@
 #include <AL/alc.h>
 #include <AL/alext.h>
 
+#include <algorithm>
+
 namespace Vestige
 {
 
@@ -135,12 +137,13 @@ void AudioEngine::shutdown()
     m_sourcePool.clear();
     m_sourceInUse.clear();
 
-    // Delete all cached buffers
+    // Delete all cached buffers (W8: also clears the recency list).
     for (auto& [path, buffer] : m_bufferCache)
     {
         alDeleteBuffers(1, &buffer);
     }
     m_bufferCache.clear();
+    m_bufferOrder.clear();
 
     // Destroy context and close device
     alcMakeContextCurrent(nullptr);
@@ -224,6 +227,17 @@ unsigned int AudioEngine::loadBuffer(const std::string& filePath)
     auto it = m_bufferCache.find(filePath);
     if (it != m_bufferCache.end())
     {
+        // Phase 10.9 Slice 8 W8: cache hit — splice key to MRU-front.
+        // Linear scan on a list of ≤ kDefaultBufferCacheLimit (256)
+        // entries is fine; promoting to a `std::list::iterator` cached
+        // alongside the buffer ID would shrink this to O(1) but doubles
+        // the per-entry storage for a cache that's tiny in absolute
+        // terms.
+        auto orderIt = std::find(m_bufferOrder.begin(), m_bufferOrder.end(), filePath);
+        if (orderIt != m_bufferOrder.end())
+        {
+            m_bufferOrder.splice(m_bufferOrder.begin(), m_bufferOrder, orderIt);
+        }
         return it->second;
     }
 
@@ -255,8 +269,62 @@ unsigned int AudioEngine::loadBuffer(const std::string& filePath)
         return 0;
     }
 
+    // Phase 10.9 Slice 8 W8: insert at MRU-front, then evict from the
+    // LRU tail until cache size is at-or-below the configured cap.
+    // Unlike ResourceManager, we don't have a use_count gate because
+    // OpenAL buffer handles are unsigned ints, not shared_ptrs — but
+    // dropping a cache entry while a source is still bound is safe:
+    // alSourcePlay holds a reference to the buffer and the data
+    // survives until the source releases it. Future `loadBuffer`
+    // calls will re-decode and create a fresh OpenAL buffer, which
+    // is the same trade ResourceManager's eviction makes (re-decode
+    // beats unbounded growth).
     m_bufferCache[filePath] = buffer;
+    m_bufferOrder.push_front(filePath);
+    enforceBufferCacheLimit();
     return buffer;
+}
+
+void AudioEngine::enforceBufferCacheLimit()
+{
+    while (m_bufferCache.size() > m_bufferCacheLimit && !m_bufferOrder.empty())
+    {
+        const std::string victim = m_bufferOrder.back();
+        m_bufferOrder.pop_back();
+        auto it = m_bufferCache.find(victim);
+        if (it != m_bufferCache.end())
+        {
+            ALuint buffer = it->second;
+            if (m_available && buffer != 0)
+            {
+                alDeleteBuffers(1, &buffer);
+            }
+            m_bufferCache.erase(it);
+        }
+    }
+}
+
+void AudioEngine::setBufferCacheLimit(size_t maxEntries)
+{
+    m_bufferCacheLimit = maxEntries;
+    enforceBufferCacheLimit();
+}
+
+void AudioEngine::flushBufferCache()
+{
+    // Phase 10.9 Slice 8 W8: per-scene flush — release every cached
+    // buffer's OpenAL handle and clear the recency list. Active voices
+    // keep their bound buffer's data alive until they finish (OpenAL
+    // semantics), so this is safe to call mid-frame between scenes.
+    for (auto& [path, buffer] : m_bufferCache)
+    {
+        if (m_available && buffer != 0)
+        {
+            alDeleteBuffers(1, &buffer);
+        }
+    }
+    m_bufferCache.clear();
+    m_bufferOrder.clear();
 }
 
 unsigned int AudioEngine::acquireSource(SoundPriority incomingPriority)

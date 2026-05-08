@@ -17,6 +17,7 @@
 #include <filesystem>
 #include <functional>
 #include <string>
+#include <list>
 #include <unordered_map>
 #include <vector>
 
@@ -95,6 +96,41 @@ public:
     {
         return m_sandboxRoots;
     }
+
+    // -- Buffer cache management (Phase 10.9 Slice 8 W8) -------------------
+    //
+    // The cache used to be unbounded — every `loadBuffer` insertion lived
+    // in `m_bufferCache` for the lifetime of the AudioEngine. W8 adds an
+    // LRU recency list + soft entry cap so streaming sound libraries
+    // (footstep variants, ambient one-shots) don't grow VRAM/CPU memory
+    // forever. Per-scene flush lets a SceneManager drop everything on
+    // unload without tearing down the engine.
+
+    /// @brief Sets the buffer-cache entry limit. Default
+    ///        `kDefaultBufferCacheLimit`. Tightening retroactively
+    ///        evicts from the LRU tail until size ≤ limit.
+    void setBufferCacheLimit(size_t maxEntries);
+
+    /// @brief Returns the configured buffer-cache entry limit.
+    size_t getBufferCacheLimit() const { return m_bufferCacheLimit; }
+
+    /// @brief Returns the current number of cached buffers.
+    size_t getBufferCacheSize() const { return m_bufferCache.size(); }
+
+    /// @brief Releases every cached buffer (`alDeleteBuffers` per entry)
+    ///        and clears the recency list. Intended for per-scene
+    ///        unload — currently-playing voices keep their already-bound
+    ///        buffer handles, so eviction here does NOT cut them off
+    ///        mid-playback (OpenAL retains the buffer data for active
+    ///        sources). New `loadBuffer` calls re-decode from disk.
+    void flushBufferCache();
+
+    /// @brief Default buffer-cache cap. 256 entries comfortably covers
+    ///        a level's worth of unique sound files (footstep banks +
+    ///        ambient one-shots + UI clips); streaming projects that
+    ///        load thousands of unique clips can raise via
+    ///        `setBufferCacheLimit`.
+    static constexpr size_t kDefaultBufferCacheLimit = 256;
 
     /// @brief Acquires a source from the pool.
     ///
@@ -439,8 +475,13 @@ private:
     ///        may be null (no-op) when no UI is attached.
     HrtfStatusListener m_hrtfStatusListener;
 
-    // Buffer cache (path -> OpenAL buffer ID)
+    // Buffer cache (path -> OpenAL buffer ID).
+    // Phase 10.9 Slice 8 W8: parallel `m_bufferOrder` list maintains
+    // LRU-recency (front = MRU). `loadBuffer` splices on hit and
+    // push_fronts + evicts on insert.
     std::unordered_map<std::string, unsigned int> m_bufferCache;
+    std::list<std::string> m_bufferOrder;
+    size_t m_bufferCacheLimit = kDefaultBufferCacheLimit;
 
     /// @brief Phase 10.9 Slice 5 D11 — sandbox roots; populated paths
     ///        force `loadBuffer` to reject paths that don't lie inside
@@ -454,6 +495,12 @@ private:
 
     /// @brief Reclaims finished sources back to the pool.
     void reclaimFinishedSources();
+
+    /// @brief Phase 10.9 Slice 8 W8 — pops LRU-tail entries from
+    ///        `m_bufferCache` (with `alDeleteBuffers`) until size ≤
+    ///        `m_bufferCacheLimit`. Called automatically after every
+    ///        `loadBuffer` insert and from `setBufferCacheLimit`.
+    void enforceBufferCacheLimit();
 };
 
 } // namespace Vestige
