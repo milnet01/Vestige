@@ -5,6 +5,7 @@
 /// @brief Unit tests for FileMenu, RecentFiles, and auto-save.
 #include "editor/file_menu.h"
 #include "editor/recent_files.h"
+#include "editor/command_history.h"
 #include "scene/scene.h"
 #include "editor/selection.h"
 #include "editor/scene_serializer.h"
@@ -75,9 +76,21 @@ TEST_F(FileMenuTest, StartsClean)
     EXPECT_FALSE(menu.isDirty());
 }
 
+// Phase 10.9 Slice 12 Ed7: FileMenu's dirty signal is now a thin
+// wrapper around CommandHistory's isDirty / markUnsavedChange / markSaved.
+// Tests below wire a CommandHistory the way production does
+// (Editor::initialize calls FileMenu::setCommandHistory at startup),
+// so the dirty contract is exercised end-to-end. Without a wired
+// CommandHistory, FileMenu::isDirty stays false — the production
+// path never hits that branch, but the StartsClean test explicitly
+// pins that fallback behaviour for any caller that constructs a
+// FileMenu without immediately wiring history.
+
 TEST_F(FileMenuTest, MarkDirtySetsFlag)
 {
     FileMenu menu;
+    CommandHistory history;
+    menu.setCommandHistory(&history);
     menu.markDirty();
     EXPECT_TRUE(menu.isDirty());
 }
@@ -85,6 +98,8 @@ TEST_F(FileMenuTest, MarkDirtySetsFlag)
 TEST_F(FileMenuTest, MarkCleanClearsFlag)
 {
     FileMenu menu;
+    CommandHistory history;
+    menu.setCommandHistory(&history);
     menu.markDirty();
     EXPECT_TRUE(menu.isDirty());
 
@@ -95,6 +110,8 @@ TEST_F(FileMenuTest, MarkCleanClearsFlag)
 TEST_F(FileMenuTest, MultipleMarkDirtyIdempotent)
 {
     FileMenu menu;
+    CommandHistory history;
+    menu.setCommandHistory(&history);
     menu.markDirty();
     menu.markDirty();
     menu.markDirty();
@@ -135,6 +152,8 @@ TEST_F(FileMenuTest, RequestQuitWhenClean)
 TEST_F(FileMenuTest, RequestQuitWhenDirtyDoesNotQuit)
 {
     FileMenu menu;
+    CommandHistory history;
+    menu.setCommandHistory(&history);
     menu.markDirty();
 
     // No window set — requestQuit shows modal but doesn't set shouldQuit
@@ -145,6 +164,8 @@ TEST_F(FileMenuTest, RequestQuitWhenDirtyDoesNotQuit)
 TEST_F(FileMenuTest, RequestQuitWhenDirtyIgnoresDuplicate)
 {
     FileMenu menu;
+    CommandHistory history;
+    menu.setCommandHistory(&history);
     menu.markDirty();
 
     menu.requestQuit();
