@@ -14,6 +14,8 @@
 #include <Jolt/Physics/PhysicsSystem.h>
 #include <Jolt/Physics/Body/BodyCreationSettings.h>
 #include <Jolt/Physics/Body/BodyID.h>
+#include <Jolt/Physics/Body/BodyLockMulti.h>
+#include <Jolt/Physics/Body/Body.h>
 
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
@@ -271,12 +273,69 @@ private:
     uint32_t m_nextConstraintIndex = 0;
 
     /// @brief Resolves bodyA for constraint creation. Invalid ID = Body::sFixedToWorld.
+    /// @deprecated Phase 10.9 Ph8 — kept for callers that explicitly want a
+    ///             single-body lookup; constraint creation paths should
+    ///             use `withBodyPair` so the lock spans both bodies for
+    ///             the duration of `settings.Create()`.
     JPH::Body* resolveBodyA(JPH::BodyID bodyA);
+
+    /// @brief Locks @a bodyA and @a bodyB together for write, then invokes
+    ///        @a fn with the resolved `Body&` references. If @a bodyA is
+    ///        invalid (i.e. constraint anchored to the world), only
+    ///        @a bodyB is locked and `JPH::Body::sFixedToWorld` is passed
+    ///        as `bA`. Returns the result of @a fn (a `ConstraintHandle`),
+    ///        or an empty handle if the lock did not succeed.
+    ///
+    ///        Phase 10.9 Slice 7 Ph8: replaces the prior pattern of
+    ///        calling `resolveBodyA` (single-body transient lock) and then
+    ///        a separate `BodyLockWrite` on @a bodyB — that pattern leaked
+    ///        the `Body*` from the bodyA scope and used it after unlock,
+    ///        which is UB under concurrent broadphase update.
+    template <typename Fn>
+    ConstraintHandle withBodyPair(JPH::BodyID bodyA, JPH::BodyID bodyB, Fn&& fn);
 
     /// @brief Registers a newly created constraint and returns its handle.
     ConstraintHandle registerConstraint(JPH::TwoBodyConstraint* constraint,
                                          ConstraintType type,
                                          JPH::BodyID bodyA, JPH::BodyID bodyB);
 };
+
+template <typename Fn>
+inline ConstraintHandle PhysicsWorld::withBodyPair(JPH::BodyID bodyA, JPH::BodyID bodyB, Fn&& fn)
+{
+    if (!m_initialized || bodyB.IsInvalid())
+    {
+        return {};
+    }
+
+    // World-anchored constraint: only bodyB needs to be locked. bA falls
+    // back to the always-valid `sFixedToWorld` singleton so the call to
+    // settings.Create() inside @a fn works without dereferencing a stale
+    // pointer.
+    if (bodyA.IsInvalid())
+    {
+        const JPH::BodyID ids[1] = { bodyB };
+        JPH::BodyLockMultiWrite lock(m_physicsSystem->GetBodyLockInterface(), ids, 1);
+        JPH::Body* bB = lock.GetBody(0);
+        if (bB == nullptr)
+        {
+            return {};
+        }
+        return fn(JPH::Body::sFixedToWorld, *bB);
+    }
+
+    // Both bodies locked together. BodyLockMultiWrite acquires the
+    // mutexes for both bodies under one operation so no UB-prone window
+    // exists between bodyA's lookup and bodyB's lock.
+    const JPH::BodyID ids[2] = { bodyA, bodyB };
+    JPH::BodyLockMultiWrite lock(m_physicsSystem->GetBodyLockInterface(), ids, 2);
+    JPH::Body* bA = lock.GetBody(0);
+    JPH::Body* bB = lock.GetBody(1);
+    if (bA == nullptr || bB == nullptr)
+    {
+        return {};
+    }
+    return fn(*bA, *bB);
+}
 
 } // namespace Vestige

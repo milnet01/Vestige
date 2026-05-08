@@ -411,11 +411,6 @@ ConstraintHandle PhysicsWorld::addHingeConstraint(
     float limitsMinDeg, float limitsMaxDeg,
     float maxFrictionTorque)
 {
-    if (!m_initialized || bodyB.IsInvalid())
-    {
-        return {};
-    }
-
     JPH::HingeConstraintSettings settings;
     settings.mSpace = JPH::EConstraintSpace::WorldSpace;
     settings.mPoint1 = toJolt(pivotPoint);
@@ -428,42 +423,27 @@ ConstraintHandle PhysicsWorld::addHingeConstraint(
     settings.mLimitsMax = JPH::DegreesToRadians(limitsMaxDeg);
     settings.mMaxFrictionTorque = maxFrictionTorque;
 
-    JPH::Body* bA = resolveBodyA(bodyA);
-    JPH::BodyLockWrite lockB(m_physicsSystem->GetBodyLockInterface(), bodyB);
-    if (!lockB.Succeeded())
+    return withBodyPair(bodyA, bodyB, [&](JPH::Body& bA, JPH::Body& bB)
     {
-        return {};
-    }
-
-    auto* constraint = static_cast<JPH::HingeConstraint*>(
-        settings.Create(*bA, lockB.GetBody()));
-
-    return registerConstraint(constraint, ConstraintType::HINGE, bodyA, bodyB);
+        auto* constraint = static_cast<JPH::HingeConstraint*>(
+            settings.Create(bA, bB));
+        return registerConstraint(constraint, ConstraintType::HINGE, bodyA, bodyB);
+    });
 }
 
 ConstraintHandle PhysicsWorld::addFixedConstraint(
     JPH::BodyID bodyA, JPH::BodyID bodyB)
 {
-    if (!m_initialized || bodyB.IsInvalid())
-    {
-        return {};
-    }
-
     JPH::FixedConstraintSettings settings;
     settings.mSpace = JPH::EConstraintSpace::WorldSpace;
     settings.mAutoDetectPoint = true;
 
-    JPH::Body* bA = resolveBodyA(bodyA);
-    JPH::BodyLockWrite lockB(m_physicsSystem->GetBodyLockInterface(), bodyB);
-    if (!lockB.Succeeded())
+    return withBodyPair(bodyA, bodyB, [&](JPH::Body& bA, JPH::Body& bB)
     {
-        return {};
-    }
-
-    auto* constraint = static_cast<JPH::FixedConstraint*>(
-        settings.Create(*bA, lockB.GetBody()));
-
-    return registerConstraint(constraint, ConstraintType::FIXED, bodyA, bodyB);
+        auto* constraint = static_cast<JPH::FixedConstraint*>(
+            settings.Create(bA, bB));
+        return registerConstraint(constraint, ConstraintType::FIXED, bodyA, bodyB);
+    });
 }
 
 ConstraintHandle PhysicsWorld::addDistanceConstraint(
@@ -472,11 +452,6 @@ ConstraintHandle PhysicsWorld::addDistanceConstraint(
     float minDist, float maxDist,
     float springFrequency, float springDamping)
 {
-    if (!m_initialized || bodyB.IsInvalid())
-    {
-        return {};
-    }
-
     JPH::DistanceConstraintSettings settings;
     settings.mSpace = JPH::EConstraintSpace::WorldSpace;
     settings.mPoint1 = toJolt(pointA);
@@ -491,44 +466,29 @@ ConstraintHandle PhysicsWorld::addDistanceConstraint(
         settings.mLimitsSpringSettings.mDamping = springDamping;
     }
 
-    JPH::Body* bA = resolveBodyA(bodyA);
-    JPH::BodyLockWrite lockB(m_physicsSystem->GetBodyLockInterface(), bodyB);
-    if (!lockB.Succeeded())
+    return withBodyPair(bodyA, bodyB, [&](JPH::Body& bA, JPH::Body& bB)
     {
-        return {};
-    }
-
-    auto* constraint = static_cast<JPH::DistanceConstraint*>(
-        settings.Create(*bA, lockB.GetBody()));
-
-    return registerConstraint(constraint, ConstraintType::DISTANCE, bodyA, bodyB);
+        auto* constraint = static_cast<JPH::DistanceConstraint*>(
+            settings.Create(bA, bB));
+        return registerConstraint(constraint, ConstraintType::DISTANCE, bodyA, bodyB);
+    });
 }
 
 ConstraintHandle PhysicsWorld::addPointConstraint(
     JPH::BodyID bodyA, JPH::BodyID bodyB,
     const glm::vec3& pivotPoint)
 {
-    if (!m_initialized || bodyB.IsInvalid())
-    {
-        return {};
-    }
-
     JPH::PointConstraintSettings settings;
     settings.mSpace = JPH::EConstraintSpace::WorldSpace;
     settings.mPoint1 = toJolt(pivotPoint);
     settings.mPoint2 = toJolt(pivotPoint);
 
-    JPH::Body* bA = resolveBodyA(bodyA);
-    JPH::BodyLockWrite lockB(m_physicsSystem->GetBodyLockInterface(), bodyB);
-    if (!lockB.Succeeded())
+    return withBodyPair(bodyA, bodyB, [&](JPH::Body& bA, JPH::Body& bB)
     {
-        return {};
-    }
-
-    auto* constraint = static_cast<JPH::PointConstraint*>(
-        settings.Create(*bA, lockB.GetBody()));
-
-    return registerConstraint(constraint, ConstraintType::POINT, bodyA, bodyB);
+        auto* constraint = static_cast<JPH::PointConstraint*>(
+            settings.Create(bA, bB));
+        return registerConstraint(constraint, ConstraintType::POINT, bodyA, bodyB);
+    });
 }
 
 ConstraintHandle PhysicsWorld::addSliderConstraint(
@@ -537,11 +497,6 @@ ConstraintHandle PhysicsWorld::addSliderConstraint(
     float limitsMin, float limitsMax,
     float maxFrictionForce)
 {
-    if (!m_initialized || bodyB.IsInvalid())
-    {
-        return {};
-    }
-
     JPH::SliderConstraintSettings settings;
     settings.mSpace = JPH::EConstraintSpace::WorldSpace;
     settings.mSliderAxis1 = toJolt(slideAxis);
@@ -560,17 +515,12 @@ ConstraintHandle PhysicsWorld::addSliderConstraint(
     settings.mLimitsMax = limitsMax;
     settings.mMaxFrictionForce = maxFrictionForce;
 
-    JPH::Body* bA = resolveBodyA(bodyA);
-    JPH::BodyLockWrite lockB(m_physicsSystem->GetBodyLockInterface(), bodyB);
-    if (!lockB.Succeeded())
+    return withBodyPair(bodyA, bodyB, [&](JPH::Body& bA, JPH::Body& bB)
     {
-        return {};
-    }
-
-    auto* constraint = static_cast<JPH::SliderConstraint*>(
-        settings.Create(*bA, lockB.GetBody()));
-
-    return registerConstraint(constraint, ConstraintType::SLIDER, bodyA, bodyB);
+        auto* constraint = static_cast<JPH::SliderConstraint*>(
+            settings.Create(bA, bB));
+        return registerConstraint(constraint, ConstraintType::SLIDER, bodyA, bodyB);
+    });
 }
 
 // ---------------------------------------------------------------------------
