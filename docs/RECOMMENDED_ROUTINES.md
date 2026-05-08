@@ -14,7 +14,7 @@ work with routines](https://code.claude.com/docs/en/routines) for the
 full mechanics.
 
 Companion document for the Ants Terminal repo lives at
-`/mnt/Storage/Scripts/Linux/Ants/docs/RECOMMENDED_ROUTINES.md` — both
+`/mnt/Emulators/Scripts/Linux/Ants/docs/RECOMMENDED_ROUTINES.md` — both
 share the same daily quota since routines are account-scoped.
 
 ---

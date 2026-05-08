@@ -29,7 +29,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash /mnt/Storage/Scripts/Linux/3D_Engine/tools/hook-pretool-bash-frugal.sh",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/tools/hook-pretool-bash-frugal.sh\"",
             "statusMessage": "Checking command output cap…",
             "timeout": 5
           }
@@ -42,7 +42,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash /mnt/Storage/Scripts/Linux/3D_Engine/tools/hook-on-version-edit.sh",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/tools/hook-on-version-edit.sh\"",
             "statusMessage": "Checking CMakeLists ↔ CHANGELOG version sync…",
             "timeout": 5
           }

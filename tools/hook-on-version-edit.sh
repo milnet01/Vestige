@@ -21,7 +21,9 @@
 
 set -u
 
-PROJECT_ROOT="/mnt/Storage/Scripts/Linux/3D_Engine"
+PROJECT_ROOT=$(git -C "$(dirname "${BASH_SOURCE[0]}")" \
+    rev-parse --show-toplevel 2>/dev/null)
+[[ -n "$PROJECT_ROOT" ]] || exit 0  # not in a git tree → nothing to check
 
 file=$(jq -r '.tool_input.file_path // .tool_response.filePath // empty' 2>/dev/null)
 case "$file" in
