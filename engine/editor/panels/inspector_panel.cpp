@@ -1148,6 +1148,43 @@ static void pushParticleUndo(CommandHistory* history, Scene* scene, uint32_t ent
             *scene, entityId, oldConfig, newConfig, propertyName));
 }
 
+/// @brief Phase 10.9 Slice 12 Ed1 — per-widget activation tracker.
+///
+/// Pre-Ed1 the inspector blocks used
+///     `if (changed && ImGui::IsItemDeactivatedAfterEdit())`
+/// at the *end* of a multi-widget block. `IsItemDeactivatedAfterEdit()`
+/// only queries the most recently submitted item, so drag-release
+/// events on every widget except the last were silently dropped from
+/// the undo history — releasing a drag on "Rate" recorded nothing,
+/// only the final widget's release fired the push.
+///
+/// This tracker is called immediately after each widget so per-widget
+/// activation/deactivation states are aggregated correctly across the
+/// whole block. `shouldCommit()` then triggers undo on either:
+///   - drag end (anyDeactivated → push at end-of-drag, one entry per drag), or
+///   - instant change with no drag (changed && !anyActivated → checkbox/
+///     combo / slider-tap that doesn't go through an active state).
+struct EditTracker
+{
+    bool anyActivated   = false;
+    bool anyDeactivated = false;
+    bool changed        = false;
+
+    /// Track the just-submitted ImGui item.
+    void track(bool widgetChanged)
+    {
+        changed |= widgetChanged;
+        if (ImGui::IsItemActivated())             anyActivated   = true;
+        if (ImGui::IsItemDeactivatedAfterEdit())  anyDeactivated = true;
+    }
+
+    /// True when the block should record a single undo entry this frame.
+    bool shouldCommit() const
+    {
+        return anyDeactivated || (changed && !anyActivated);
+    }
+};
+
 void InspectorPanel::drawParticleEmitter(Entity& entity)
 {
     auto* comp = entity.getComponent<ParticleEmitterComponent>();
@@ -1195,16 +1232,16 @@ void InspectorPanel::drawParticleEmitter(Entity& entity)
     // --- Emission ---
     if (ImGui::TreeNodeEx("Emission", ImGuiTreeNodeFlags_DefaultOpen))
     {
-        bool changed = false;
-        changed |= ImGui::DragFloat("Rate", &cfg.emissionRate, 1.0f, 0.0f, 10000.0f, "%.0f/s");
-        changed |= ImGui::DragInt("Max Particles", &cfg.maxParticles, 10.0f, 1, 100000);
-        changed |= ImGui::Checkbox("Looping", &cfg.looping);
+        EditTracker tr;
+        tr.track(ImGui::DragFloat("Rate", &cfg.emissionRate, 1.0f, 0.0f, 10000.0f, "%.0f/s"));
+        tr.track(ImGui::DragInt("Max Particles", &cfg.maxParticles, 10.0f, 1, 100000));
+        tr.track(ImGui::Checkbox("Looping", &cfg.looping));
         if (!cfg.looping)
         {
-            changed |= ImGui::DragFloat("Duration", &cfg.duration, 0.1f, 0.1f, 60.0f, "%.1f s");
+            tr.track(ImGui::DragFloat("Duration", &cfg.duration, 0.1f, 0.1f, 60.0f, "%.1f s"));
         }
 
-        if (changed && ImGui::IsItemDeactivatedAfterEdit())
+        if (tr.shouldCommit())
         {
             pushParticleUndo(m_commandHistory, m_currentScene, entity.getId(),
                              before, cfg, "emission");
@@ -1216,16 +1253,16 @@ void InspectorPanel::drawParticleEmitter(Entity& entity)
     // --- Start Properties ---
     if (ImGui::TreeNodeEx("Start Properties", ImGuiTreeNodeFlags_DefaultOpen))
     {
-        bool changed = false;
-        changed |= ImGui::DragFloatRange2("Lifetime", &cfg.startLifetimeMin, &cfg.startLifetimeMax,
-                                           0.05f, 0.01f, 30.0f, "%.2f s", "%.2f s");
-        changed |= ImGui::DragFloatRange2("Speed", &cfg.startSpeedMin, &cfg.startSpeedMax,
-                                           0.1f, 0.0f, 100.0f, "%.1f", "%.1f");
-        changed |= ImGui::DragFloatRange2("Size", &cfg.startSizeMin, &cfg.startSizeMax,
-                                           0.01f, 0.001f, 10.0f, "%.3f", "%.3f");
-        changed |= ImGui::ColorEdit4("Start Color", &cfg.startColor.x);
+        EditTracker tr;
+        tr.track(ImGui::DragFloatRange2("Lifetime", &cfg.startLifetimeMin, &cfg.startLifetimeMax,
+                                         0.05f, 0.01f, 30.0f, "%.2f s", "%.2f s"));
+        tr.track(ImGui::DragFloatRange2("Speed", &cfg.startSpeedMin, &cfg.startSpeedMax,
+                                         0.1f, 0.0f, 100.0f, "%.1f", "%.1f"));
+        tr.track(ImGui::DragFloatRange2("Size", &cfg.startSizeMin, &cfg.startSizeMax,
+                                         0.01f, 0.001f, 10.0f, "%.3f", "%.3f"));
+        tr.track(ImGui::ColorEdit4("Start Color", &cfg.startColor.x));
 
-        if (changed && ImGui::IsItemDeactivatedAfterEdit())
+        if (tr.shouldCommit())
         {
             pushParticleUndo(m_commandHistory, m_currentScene, entity.getId(),
                              before, cfg, "start properties");
@@ -1237,33 +1274,34 @@ void InspectorPanel::drawParticleEmitter(Entity& entity)
     // --- Shape ---
     if (ImGui::TreeNodeEx("Shape", ImGuiTreeNodeFlags_DefaultOpen))
     {
-        bool changed = false;
+        EditTracker tr;
         const char* shapeNames[] = {"Point", "Sphere", "Cone", "Box"};
         int shapeIdx = static_cast<int>(cfg.shape);
-        if (ImGui::Combo("Type", &shapeIdx, shapeNames, 4))
+        bool comboChanged = ImGui::Combo("Type", &shapeIdx, shapeNames, 4);
+        if (comboChanged)
         {
             cfg.shape = static_cast<ParticleEmitterConfig::Shape>(shapeIdx);
-            changed = true;
         }
+        tr.track(comboChanged);
 
         switch (cfg.shape)
         {
             case ParticleEmitterConfig::Shape::SPHERE:
-                changed |= ImGui::DragFloat("Radius", &cfg.shapeRadius, 0.1f, 0.0f, 50.0f);
+                tr.track(ImGui::DragFloat("Radius", &cfg.shapeRadius, 0.1f, 0.0f, 50.0f));
                 break;
             case ParticleEmitterConfig::Shape::CONE:
-                changed |= ImGui::DragFloat("Radius", &cfg.shapeRadius, 0.1f, 0.0f, 50.0f);
-                changed |= ImGui::DragFloat("Cone Angle", &cfg.shapeConeAngle, 1.0f, 1.0f, 89.0f, "%.0f deg");
+                tr.track(ImGui::DragFloat("Radius", &cfg.shapeRadius, 0.1f, 0.0f, 50.0f));
+                tr.track(ImGui::DragFloat("Cone Angle", &cfg.shapeConeAngle, 1.0f, 1.0f, 89.0f, "%.0f deg"));
                 break;
             case ParticleEmitterConfig::Shape::BOX:
-                changed |= ImGui::DragFloat3("Box Size", &cfg.shapeBoxSize.x, 0.1f, 0.0f, 50.0f);
+                tr.track(ImGui::DragFloat3("Box Size", &cfg.shapeBoxSize.x, 0.1f, 0.0f, 50.0f));
                 break;
             case ParticleEmitterConfig::Shape::POINT:
             default:
                 break;
         }
 
-        if (changed && ImGui::IsItemDeactivatedAfterEdit())
+        if (tr.shouldCommit())
         {
             pushParticleUndo(m_commandHistory, m_currentScene, entity.getId(),
                              before, cfg, "shape");
@@ -1275,40 +1313,43 @@ void InspectorPanel::drawParticleEmitter(Entity& entity)
     // --- Over Lifetime ---
     if (ImGui::TreeNodeEx("Over Lifetime", ImGuiTreeNodeFlags_DefaultOpen))
     {
-        bool changed = false;
+        EditTracker tr;
 
-        // Color over lifetime
-        changed |= ImGui::Checkbox("Color Over Lifetime", &cfg.useColorOverLifetime);
+        // Color over lifetime — checkbox + custom gradient widget. The
+        // gradient editor's internal drag-state isn't observable through
+        // IsItemActivated, so we treat its `changed` return as
+        // instant-only (best we can do without rewriting the widget).
+        tr.track(ImGui::Checkbox("Color Over Lifetime", &cfg.useColorOverLifetime));
         if (cfg.useColorOverLifetime)
         {
             ImGui::Indent();
-            changed |= drawGradientEditor("Color Gradient", cfg.colorOverLifetime);
+            tr.changed |= drawGradientEditor("Color Gradient", cfg.colorOverLifetime);
             ImGui::Unindent();
         }
 
         ImGui::Spacing();
 
         // Size over lifetime
-        changed |= ImGui::Checkbox("Size Over Lifetime", &cfg.useSizeOverLifetime);
+        tr.track(ImGui::Checkbox("Size Over Lifetime", &cfg.useSizeOverLifetime));
         if (cfg.useSizeOverLifetime)
         {
             ImGui::Indent();
-            changed |= drawCurveEditor("Size Curve", cfg.sizeOverLifetime);
+            tr.changed |= drawCurveEditor("Size Curve", cfg.sizeOverLifetime);
             ImGui::Unindent();
         }
 
         ImGui::Spacing();
 
         // Speed over lifetime
-        changed |= ImGui::Checkbox("Speed Over Lifetime", &cfg.useSpeedOverLifetime);
+        tr.track(ImGui::Checkbox("Speed Over Lifetime", &cfg.useSpeedOverLifetime));
         if (cfg.useSpeedOverLifetime)
         {
             ImGui::Indent();
-            changed |= drawCurveEditor("Speed Curve", cfg.speedOverLifetime);
+            tr.changed |= drawCurveEditor("Speed Curve", cfg.speedOverLifetime);
             ImGui::Unindent();
         }
 
-        if (changed)
+        if (tr.shouldCommit())
         {
             pushParticleUndo(m_commandHistory, m_currentScene, entity.getId(),
                              before, cfg, "over lifetime");
@@ -1320,9 +1361,10 @@ void InspectorPanel::drawParticleEmitter(Entity& entity)
     // --- Forces ---
     if (ImGui::TreeNodeEx("Forces"))
     {
-        bool changed = ImGui::DragFloat3("Gravity", &cfg.gravity.x, 0.1f, -50.0f, 50.0f);
+        EditTracker tr;
+        tr.track(ImGui::DragFloat3("Gravity", &cfg.gravity.x, 0.1f, -50.0f, 50.0f));
 
-        if (changed && ImGui::IsItemDeactivatedAfterEdit())
+        if (tr.shouldCommit())
         {
             pushParticleUndo(m_commandHistory, m_currentScene, entity.getId(),
                              before, cfg, "gravity");
@@ -1334,14 +1376,15 @@ void InspectorPanel::drawParticleEmitter(Entity& entity)
     // --- Renderer ---
     if (ImGui::TreeNodeEx("Renderer"))
     {
-        bool changed = false;
+        EditTracker tr;
         const char* blendNames[] = {"Additive", "Alpha Blend"};
         int blendIdx = static_cast<int>(cfg.blendMode);
-        if (ImGui::Combo("Blend Mode", &blendIdx, blendNames, 2))
+        bool comboChanged = ImGui::Combo("Blend Mode", &blendIdx, blendNames, 2);
+        if (comboChanged)
         {
             cfg.blendMode = static_cast<ParticleEmitterConfig::BlendMode>(blendIdx);
-            changed = true;
         }
+        tr.track(comboChanged);
 
         // Texture path (read-only display for now, browse in 5E-3)
         if (!cfg.texturePath.empty())
@@ -1353,13 +1396,11 @@ void InspectorPanel::drawParticleEmitter(Entity& entity)
             ImGui::TextDisabled("No texture (using default circle)");
         }
 
-        if (changed)
+        if (tr.shouldCommit())
         {
             pushParticleUndo(m_commandHistory, m_currentScene, entity.getId(),
                              before, cfg, "renderer");
-            // AUDIT L38: `before = cfg;` here was dead — the variable goes
-            // out of scope at TreePop() on the next line, and the subsequent
-            // TreeNode("Light Coupling") block creates its own `lightBefore`.
+            before = cfg;
         }
         ImGui::TreePop();
     }
@@ -1367,38 +1408,22 @@ void InspectorPanel::drawParticleEmitter(Entity& entity)
     // --- Light Coupling ---
     if (ImGui::TreeNodeEx("Light Coupling", ImGuiTreeNodeFlags_DefaultOpen))
     {
-        ParticleEmitterConfig lightBefore = cfg;
-        bool lightChanged = false;
-
-        if (ImGui::Checkbox("Emits Light", &cfg.emitsLight))
-        {
-            lightChanged = true;
-        }
+        EditTracker tr;
+        tr.track(ImGui::Checkbox("Emits Light", &cfg.emitsLight));
 
         if (cfg.emitsLight)
         {
-            if (ImGui::ColorEdit3("Light Color", &cfg.lightColor.x))
-            {
-                lightChanged = true;
-            }
-            if (ImGui::DragFloat("Light Range", &cfg.lightRange, 0.1f, 0.5f, 50.0f, "%.1f m"))
-            {
-                lightChanged = true;
-            }
-            if (ImGui::DragFloat("Light Intensity", &cfg.lightIntensity, 0.05f, 0.0f, 10.0f, "%.2f"))
-            {
-                lightChanged = true;
-            }
-            if (ImGui::DragFloat("Flicker Speed", &cfg.flickerSpeed, 0.5f, 1.0f, 30.0f, "%.1f"))
-            {
-                lightChanged = true;
-            }
+            tr.track(ImGui::ColorEdit3("Light Color", &cfg.lightColor.x));
+            tr.track(ImGui::DragFloat("Light Range", &cfg.lightRange, 0.1f, 0.5f, 50.0f, "%.1f m"));
+            tr.track(ImGui::DragFloat("Light Intensity", &cfg.lightIntensity, 0.05f, 0.0f, 10.0f, "%.2f"));
+            tr.track(ImGui::DragFloat("Flicker Speed", &cfg.flickerSpeed, 0.5f, 1.0f, 30.0f, "%.1f"));
         }
 
-        if (lightChanged)
+        if (tr.shouldCommit())
         {
             pushParticleUndo(m_commandHistory, m_currentScene, entity.getId(),
-                             lightBefore, cfg, "lightCoupling");
+                             before, cfg, "lightCoupling");
+            before = cfg;
         }
         ImGui::TreePop();
     }
