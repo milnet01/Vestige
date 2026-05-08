@@ -17,11 +17,27 @@ namespace Vestige
 // ---------------------------------------------------------------------------
 namespace ObjectLayers
 {
-    static constexpr JPH::ObjectLayer STATIC    = 0;
-    static constexpr JPH::ObjectLayer DYNAMIC   = 1;
-    static constexpr JPH::ObjectLayer CHARACTER = 2;
-    static constexpr JPH::ObjectLayer TRIGGER   = 3;
-    static constexpr JPH::ObjectLayer NUM_LAYERS = 4;
+    static constexpr JPH::ObjectLayer STATIC           = 0;
+    static constexpr JPH::ObjectLayer DYNAMIC          = 1;
+    static constexpr JPH::ObjectLayer PLAYER_CHARACTER = 2;
+    static constexpr JPH::ObjectLayer NPC_CHARACTER    = 3;
+    static constexpr JPH::ObjectLayer TRIGGER          = 4;
+    static constexpr JPH::ObjectLayer NUM_LAYERS       = 5;
+
+    /// @brief Phase 10.9 Slice 7 Ph5: pre-Ph5 there was a single
+    ///        `CHARACTER` layer; "character vs character — never" in
+    ///        the pair filter meant that a player character and any
+    ///        NPC character / NPC-driven ragdoll body assigned to the
+    ///        same layer would never collide. Splitting into separate
+    ///        PLAYER and NPC layers lets player-vs-NPC collide while
+    ///        same-type pairs (player-vs-player is meaningless;
+    ///        NPC-vs-NPC is a deliberate gameplay choice — ragdoll
+    ///        crowds shouldn't push each other) stay non-colliding.
+    ///
+    ///        Source-compat alias retained for callers that want a
+    ///        "the player character" default; new NPC code uses
+    ///        `NPC_CHARACTER` directly.
+    static constexpr JPH::ObjectLayer CHARACTER        = PLAYER_CHARACTER;
 }
 
 // ---------------------------------------------------------------------------
@@ -31,7 +47,7 @@ namespace BroadPhaseLayers
 {
     static constexpr JPH::BroadPhaseLayer STATIC(0);
     static constexpr JPH::BroadPhaseLayer DYNAMIC(1);
-    static constexpr JPH::BroadPhaseLayer CHARACTER(2);
+    static constexpr JPH::BroadPhaseLayer CHARACTER(2);  ///< Both player + NPC characters live here.
     static constexpr unsigned int NUM_LAYERS = 3;
 }
 
@@ -41,10 +57,11 @@ class BroadPhaseLayerMapping final : public JPH::BroadPhaseLayerInterface
 public:
     BroadPhaseLayerMapping()
     {
-        m_map[ObjectLayers::STATIC]    = BroadPhaseLayers::STATIC;
-        m_map[ObjectLayers::DYNAMIC]   = BroadPhaseLayers::DYNAMIC;
-        m_map[ObjectLayers::CHARACTER] = BroadPhaseLayers::CHARACTER;
-        m_map[ObjectLayers::TRIGGER]   = BroadPhaseLayers::DYNAMIC;
+        m_map[ObjectLayers::STATIC]           = BroadPhaseLayers::STATIC;
+        m_map[ObjectLayers::DYNAMIC]          = BroadPhaseLayers::DYNAMIC;
+        m_map[ObjectLayers::PLAYER_CHARACTER] = BroadPhaseLayers::CHARACTER;
+        m_map[ObjectLayers::NPC_CHARACTER]    = BroadPhaseLayers::CHARACTER;
+        m_map[ObjectLayers::TRIGGER]          = BroadPhaseLayers::DYNAMIC;
     }
 
     unsigned int GetNumBroadPhaseLayers() const override
@@ -93,8 +110,16 @@ public:
             return false;
         }
 
-        // Character vs character — never
-        if (a == ObjectLayers::CHARACTER && b == ObjectLayers::CHARACTER)
+        // Phase 10.9 Slice 7 Ph5: same-type character pairs never collide.
+        // PLAYER vs PLAYER is meaningless (only one player); NPC vs NPC is
+        // a deliberate gameplay choice (ragdolls in a crowd shouldn't
+        // push each other). PLAYER vs NPC *does* collide so the player
+        // can shoulder-bump or knock down NPC characters.
+        if (a == ObjectLayers::PLAYER_CHARACTER && b == ObjectLayers::PLAYER_CHARACTER)
+        {
+            return false;
+        }
+        if (a == ObjectLayers::NPC_CHARACTER && b == ObjectLayers::NPC_CHARACTER)
         {
             return false;
         }
