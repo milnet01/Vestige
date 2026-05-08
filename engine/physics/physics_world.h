@@ -17,6 +17,8 @@
 #include <Jolt/Physics/Body/BodyLockMulti.h>
 #include <Jolt/Physics/Body/Body.h>
 
+#include <functional>
+
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 
@@ -58,6 +60,19 @@ public:
 
     /// @brief Steps the physics simulation with fixed-timestep accumulation.
     void update(float deltaTime);
+
+    /// @brief Steps the physics simulation with fixed-timestep accumulation,
+    ///        invoking @a onFixedStep once per substep with the substep
+    ///        duration. Phase 10.9 Slice 7 Ph1: lets callers (engine,
+    ///        character-controller integration) hook in at fixed-step
+    ///        cadence rather than frame cadence, so a frame that runs
+    ///        zero or multiple substeps produces a corresponding number
+    ///        of integrations rather than the once-per-frame approximation
+    ///        the simpler `update(deltaTime)` overload provides.
+    void update(float deltaTime, const std::function<void(float dt)>& onFixedStep);
+
+    /// @brief Returns the configured fixed timestep (seconds).
+    float getFixedTimestep() const { return m_fixedTimestep; }
 
     /// @brief Creates a static body and adds it to the world.
     /// @return The body ID, or invalid if creation failed.

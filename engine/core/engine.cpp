@@ -1211,11 +1211,47 @@ void Engine::run()
         }
 
         // 4b. Physics — step the Jolt simulation
+        //
+        // Phase 10.9 Slice 7 Ph1: the Jolt-physics path moves the
+        // character controller's integration AND the breakable-
+        // constraint check inside the fixed-step loop. Velocity is
+        // computed once per frame from input (FirstPersonController's
+        // computeDesiredVelocity ignores its deltaTime arg — pure input
+        // state, no per-frame smoothing), then applied each substep.
+        // The breakable check now divides each substep's lambda by
+        // `fixedDt` rather than frame dt, so the impulse→force
+        // conversion is exact regardless of how many substeps a frame
+        // happens to run.
         if (m_physicsWorld.isInitialized())
         {
             VESTIGE_PROFILE_SCOPE("JoltPhysics");
-            m_physicsWorld.update(deltaTime);
-            m_physicsWorld.checkBreakableConstraints(deltaTime);
+
+            // Pre-compute look + velocity once per frame for the
+            // physics-controller path. Done before the Jolt step so
+            // input is settled when the callback fires.
+            glm::vec3 desiredVelocity(0.0f);
+            const bool useJoltCharacter =
+                m_usePhysicsController && m_physicsCharController->isInitialized();
+            if (useJoltCharacter)
+            {
+                m_controller->processLookOnly(deltaTime);
+                desiredVelocity = m_controller->computeDesiredVelocity(deltaTime);
+            }
+
+            m_physicsWorld.update(deltaTime,
+                [this, useJoltCharacter, desiredVelocity](float fixedDt)
+                {
+                    if (useJoltCharacter)
+                    {
+                        m_physicsCharController->update(fixedDt, desiredVelocity);
+                    }
+                    m_physicsWorld.checkBreakableConstraints(fixedDt);
+                });
+
+            if (useJoltCharacter)
+            {
+                m_camera->setPosition(m_physicsCharController->getEyePosition());
+            }
         }
 
         // 4c. Domain systems — update all active domain systems
@@ -1244,19 +1280,15 @@ void Engine::run()
             }
         }
 
-        // 5. Controller — process input and update camera
+        // 5. Controller — legacy AABB path (the Jolt-character path runs
+        //    inside the fixed-step physics callback above; see Ph1).
         Scene* activeScene = m_sceneManager->getActiveScene();
-        if (m_usePhysicsController && m_physicsCharController->isInitialized())
+        const bool joltControllerActive =
+            m_usePhysicsController && m_physicsCharController->isInitialized();
+        if (!joltControllerActive)
         {
-            // Physics controller path: input -> velocity -> Jolt -> camera
-            m_controller->processLookOnly(deltaTime);
-            glm::vec3 velocity = m_controller->computeDesiredVelocity(deltaTime);
-            m_physicsCharController->update(deltaTime, velocity);
-            m_camera->setPosition(m_physicsCharController->getEyePosition());
-        }
-        else
-        {
-            // Legacy AABB controller path
+            // Legacy AABB controller path: integrates at frame rate
+            // because it doesn't talk to Jolt.
             if (activeScene)
             {
                 activeScene->collectColliders(m_colliders);

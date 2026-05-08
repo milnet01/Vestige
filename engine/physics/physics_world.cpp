@@ -174,6 +174,11 @@ void PhysicsWorld::shutdown()
 
 void PhysicsWorld::update(float deltaTime)
 {
+    update(deltaTime, /*onFixedStep=*/{});
+}
+
+void PhysicsWorld::update(float deltaTime, const std::function<void(float)>& onFixedStep)
+{
     if (!m_initialized)
     {
         return;
@@ -192,6 +197,14 @@ void PhysicsWorld::update(float deltaTime)
     {
         m_physicsSystem->Update(m_fixedTimestep, m_collisionSteps,
                                  m_tempAllocator.get(), m_jobSystem.get());
+        // Phase 10.9 Slice 7 Ph1: per-substep callback hook so callers
+        // (character controller, breakable-constraint check) integrate
+        // at fixed-step cadence, not frame cadence. The dt passed is
+        // `m_fixedTimestep` so dependents can divide impulses correctly.
+        if (onFixedStep)
+        {
+            onFixedStep(m_fixedTimestep);
+        }
         m_accumulator -= m_fixedTimestep;
     }
 }

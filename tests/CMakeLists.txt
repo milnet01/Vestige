@@ -147,6 +147,7 @@ add_executable(vestige_tests
     test_resource_manager_sandbox.cpp
     test_resource_manager_lru.cpp
     test_physics_layer_filter.cpp
+    test_physics_fixed_step_callback.cpp
     test_audio_engine_sandbox.cpp
     test_lip_sync_sandbox.cpp
     test_gltf_bounds_checks.cpp
