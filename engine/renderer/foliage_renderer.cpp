@@ -408,8 +408,18 @@ void FoliageRenderer::createStarMesh()
                               offsetof(Vertex, texCoord));
     glVertexArrayAttribBinding(m_starVao, 1, 0);
 
-    // Create instance VBO (initially empty, will be created on first upload)
+    // Create instance VBO with a generous initial capacity so the first
+    // `uploadInstances()` call doesn't have to delete + recreate the
+    // buffer mid-frame. Steady-state growth uses 2× expansion (see
+    // `uploadInstances`), so a chunk of typical density (≤ INITIAL_CAPACITY
+    // visible instances, common for grass/rocks/trees in one biome)
+    // never triggers a reallocation. (Phase 10.9 Pe3.)
+    m_instanceCapacity = INITIAL_INSTANCE_CAPACITY;
     glCreateBuffers(1, &m_instanceVbo);
+    glNamedBufferStorage(m_instanceVbo,
+                         m_instanceCapacity * static_cast<GLsizeiptr>(sizeof(FoliageInstance)),
+                         nullptr, GL_DYNAMIC_STORAGE_BIT);
+    glVertexArrayVertexBuffer(m_starVao, 1, m_instanceVbo, 0, sizeof(FoliageInstance));
 
     // Per-instance attributes layout (binding 1):
     // location 3: vec3 i_position  (offset 0)
@@ -590,10 +600,18 @@ void FoliageRenderer::uploadInstances(const std::vector<FoliageInstance>& instan
 
     if (count > m_instanceCapacity)
     {
-        // Grow with headroom to avoid frequent reallocation
-        m_instanceCapacity = count + count / 4 + 256;
+        // Phase 10.9 Pe3: 2× grow-in-place. Previous policy was
+        // `count + count/4 + 256` (~1.25× + small floor), which on a
+        // density spike could trigger 2-3 reallocations as the headroom
+        // was eaten up incrementally. Geometric 2× growth amortises to
+        // O(1) reallocations across a single playthrough; combined with
+        // the generous initial capacity (set in initialize()), most
+        // scenes never reallocate after engine start.
+        const int doubled = m_instanceCapacity * 2;
+        m_instanceCapacity = std::max(count + 256, doubled);
 
-        // Delete old buffer and create new immutable one
+        // Buffer storage is immutable (GL_DYNAMIC_STORAGE_BIT for SubData
+        // updates only). Resizing requires destroy + recreate.
         glDeleteBuffers(1, &m_instanceVbo);
         glCreateBuffers(1, &m_instanceVbo);
         glNamedBufferStorage(m_instanceVbo,

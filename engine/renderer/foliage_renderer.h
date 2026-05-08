@@ -93,6 +93,13 @@ private:
     /// @brief Uploads foliage instances to the GPU instance buffer.
     void uploadInstances(const std::vector<FoliageInstance>& instances);
 
+    /// @brief Pre-allocated instance-buffer capacity. Phase 10.9 Pe3:
+    ///        sized to cover a typical chunk's visible foliage so the
+    ///        first `uploadInstances()` call doesn't have to delete +
+    ///        recreate the buffer mid-frame. 16 384 × 32 B = 512 KB,
+    ///        well within VRAM budget for a single foliage renderer.
+    static constexpr int INITIAL_INSTANCE_CAPACITY = 16384;
+
     Shader m_shader;
     Shader m_shadowShader;
     GLuint m_starVao = 0;
