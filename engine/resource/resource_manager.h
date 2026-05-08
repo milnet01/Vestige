@@ -8,8 +8,10 @@
 #include "renderer/mesh.h"
 #include "renderer/texture.h"
 #include "renderer/material.h"
+#include "resource/lru_cache.h"
 
 #include <filesystem>
+#include <list>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -122,16 +124,62 @@ public:
     /// @brief Returns the configured sandbox roots (for diagnostics).
     const std::vector<std::filesystem::path>& getSandboxRoots() const { return m_sandboxRoots; }
 
+    // --- LRU cache limits (Phase 10.9 Slice 13 Pe5) -----------------------
+    //
+    // Each on-disk cache (textures, meshes, models) tracks recency in a
+    // doubly-linked list of keys, MRU-front. Each cache hit splices the
+    // entry to front; each cache insert pushes to front. After every
+    // insert, the cache evicts from the LRU tail until size ≤ limit,
+    // skipping entries with `use_count() > 1` (still held by callers) so
+    // the shared-instance invariant — "for a given path, at most one
+    // Texture/Mesh/Model lives in the engine" — is preserved across an
+    // eviction-and-reload cycle.
+    //
+    // Defaults are generous (large enough that typical scenes never
+    // evict). Level-streaming projects should call the setters explicitly
+    // with project-appropriate values.
+
+    /// @brief Sets the texture-cache entry limit. Default `kDefaultTextureLimit`.
+    void setTextureCacheLimit(size_t maxEntries);
+    /// @brief Sets the mesh-cache entry limit. Default `kDefaultMeshLimit`.
+    void setMeshCacheLimit(size_t maxEntries);
+    /// @brief Sets the model-cache entry limit. Default `kDefaultModelLimit`.
+    void setModelCacheLimit(size_t maxEntries);
+
+    /// @brief Returns the current texture-cache entry limit.
+    size_t getTextureCacheLimit() const { return m_textureLimit; }
+    /// @brief Returns the current mesh-cache entry limit.
+    size_t getMeshCacheLimit() const { return m_meshLimit; }
+    /// @brief Returns the current model-cache entry limit.
+    size_t getModelCacheLimit() const { return m_modelLimit; }
+
+    /// @brief Default texture entry cap. Sized for a detailed level
+    ///        (~256 unique textures across albedo/normal/roughness/etc).
+    static constexpr size_t kDefaultTextureLimit = 1024;
+    /// @brief Default mesh entry cap. Disk-loaded plus a few dozen builtins.
+    static constexpr size_t kDefaultMeshLimit    = 512;
+    /// @brief Default model entry cap.
+    static constexpr size_t kDefaultModelLimit   = 128;
+
 private:
     /// @brief Validates @a filePath against @a m_sandboxRoots; returns the
     ///        canonical path on success, empty string on rejection. Empty
     ///        roots → returns the input unchanged for backwards compat.
     std::string validatePath(const std::string& filePath) const;
 
-    std::unordered_map<std::string, std::shared_ptr<Texture>> m_textures;
-    std::unordered_map<std::string, std::shared_ptr<Mesh>> m_meshes;
+    // LRU helpers live in `resource/lru_cache.h` so they can be unit-
+    // tested against a non-GL value type.
+    Cache<Texture>  m_textures;
+    Cache<Mesh>     m_meshes;
+    Cache<Model>    m_models;
+    std::list<std::string> m_textureOrder;  ///< MRU at front.
+    std::list<std::string> m_meshOrder;
+    std::list<std::string> m_modelOrder;
+    size_t m_textureLimit = kDefaultTextureLimit;
+    size_t m_meshLimit    = kDefaultMeshLimit;
+    size_t m_modelLimit   = kDefaultModelLimit;
+
     std::unordered_map<std::string, std::shared_ptr<Material>> m_materials;
-    std::unordered_map<std::string, std::shared_ptr<Model>> m_models;
     std::shared_ptr<Texture> m_defaultTexture;
     std::vector<std::filesystem::path> m_sandboxRoots;
 };

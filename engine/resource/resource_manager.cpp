@@ -48,7 +48,8 @@ std::shared_ptr<Texture> ResourceManager::loadTexture(const std::string& filePat
     auto it = m_textures.find(cacheKey);
     if (it != m_textures.end())
     {
-        return it->second;
+        touchCache(m_textures, m_textureOrder, it);  // LRU bump (Pe5).
+        return it->second.value;
     }
 
     // Path sandbox (Slice 5 D1): reject before opening file.
@@ -66,7 +67,7 @@ std::shared_ptr<Texture> ResourceManager::loadTexture(const std::string& filePat
         return getDefaultTexture();
     }
 
-    m_textures[cacheKey] = texture;
+    insertAndEnforceCache(m_textures, m_textureOrder, cacheKey, texture, m_textureLimit);
     return texture;
 }
 
@@ -87,7 +88,8 @@ std::shared_ptr<Mesh> ResourceManager::loadMesh(const std::string& filePath)
     auto it = m_meshes.find(filePath);
     if (it != m_meshes.end())
     {
-        return it->second;
+        touchCache(m_meshes, m_meshOrder, it);
+        return it->second.value;
     }
 
     // Path sandbox (Slice 5 D1).
@@ -105,7 +107,7 @@ std::shared_ptr<Mesh> ResourceManager::loadMesh(const std::string& filePath)
         return nullptr;
     }
 
-    m_meshes[filePath] = mesh;
+    insertAndEnforceCache(m_meshes, m_meshOrder, filePath, mesh, m_meshLimit);
     return mesh;
 }
 
@@ -115,11 +117,12 @@ std::shared_ptr<Mesh> ResourceManager::getCubeMesh()
     auto it = m_meshes.find(key);
     if (it != m_meshes.end())
     {
-        return it->second;
+        touchCache(m_meshes, m_meshOrder, it);
+        return it->second.value;
     }
 
     auto mesh = std::make_shared<Mesh>(Mesh::createCube());
-    m_meshes[key] = mesh;
+    insertAndEnforceCache(m_meshes, m_meshOrder, key, mesh, m_meshLimit);
     return mesh;
 }
 
@@ -129,11 +132,12 @@ std::shared_ptr<Mesh> ResourceManager::getPlaneMesh(float size)
     auto it = m_meshes.find(key);
     if (it != m_meshes.end())
     {
-        return it->second;
+        touchCache(m_meshes, m_meshOrder, it);
+        return it->second.value;
     }
 
     auto mesh = std::make_shared<Mesh>(Mesh::createPlane(size));
-    m_meshes[key] = mesh;
+    insertAndEnforceCache(m_meshes, m_meshOrder, key, mesh, m_meshLimit);
     return mesh;
 }
 
@@ -143,11 +147,12 @@ std::shared_ptr<Mesh> ResourceManager::getSphereMesh(uint32_t sectors, uint32_t 
     auto it = m_meshes.find(key);
     if (it != m_meshes.end())
     {
-        return it->second;
+        touchCache(m_meshes, m_meshOrder, it);
+        return it->second.value;
     }
 
     auto mesh = std::make_shared<Mesh>(Mesh::createSphere(sectors, stacks));
-    m_meshes[key] = mesh;
+    insertAndEnforceCache(m_meshes, m_meshOrder, key, mesh, m_meshLimit);
     return mesh;
 }
 
@@ -157,11 +162,12 @@ std::shared_ptr<Mesh> ResourceManager::getCylinderMesh(uint32_t sectors)
     auto it = m_meshes.find(key);
     if (it != m_meshes.end())
     {
-        return it->second;
+        touchCache(m_meshes, m_meshOrder, it);
+        return it->second.value;
     }
 
     auto mesh = std::make_shared<Mesh>(Mesh::createCylinder(sectors));
-    m_meshes[key] = mesh;
+    insertAndEnforceCache(m_meshes, m_meshOrder, key, mesh, m_meshLimit);
     return mesh;
 }
 
@@ -171,11 +177,12 @@ std::shared_ptr<Mesh> ResourceManager::getConeMesh(uint32_t sectors, uint32_t st
     auto it = m_meshes.find(key);
     if (it != m_meshes.end())
     {
-        return it->second;
+        touchCache(m_meshes, m_meshOrder, it);
+        return it->second.value;
     }
 
     auto mesh = std::make_shared<Mesh>(Mesh::createCone(sectors, stacks));
-    m_meshes[key] = mesh;
+    insertAndEnforceCache(m_meshes, m_meshOrder, key, mesh, m_meshLimit);
     return mesh;
 }
 
@@ -185,11 +192,12 @@ std::shared_ptr<Mesh> ResourceManager::getWedgeMesh()
     auto it = m_meshes.find(key);
     if (it != m_meshes.end())
     {
-        return it->second;
+        touchCache(m_meshes, m_meshOrder, it);
+        return it->second.value;
     }
 
     auto mesh = std::make_shared<Mesh>(Mesh::createWedge());
-    m_meshes[key] = mesh;
+    insertAndEnforceCache(m_meshes, m_meshOrder, key, mesh, m_meshLimit);
     return mesh;
 }
 
@@ -223,7 +231,8 @@ std::shared_ptr<Model> ResourceManager::loadModel(const std::string& filePath)
     auto it = m_models.find(filePath);
     if (it != m_models.end())
     {
-        return it->second;
+        touchCache(m_models, m_modelOrder, it);
+        return it->second.value;
     }
 
     // Path sandbox (Slice 5 D1).
@@ -242,7 +251,7 @@ std::shared_ptr<Model> ResourceManager::loadModel(const std::string& filePath)
     }
 
     auto shared = std::shared_ptr<Model>(std::move(model));
-    m_models[filePath] = shared;
+    insertAndEnforceCache(m_models, m_modelOrder, filePath, shared, m_modelLimit);
     return shared;
 }
 
@@ -250,7 +259,7 @@ std::string ResourceManager::findMeshKey(const std::shared_ptr<Mesh>& mesh) cons
 {
     for (const auto& [key, cached] : m_meshes)
     {
-        if (cached == mesh)
+        if (cached.value == mesh)
         {
             return key;
         }
@@ -264,7 +273,8 @@ std::shared_ptr<Mesh> ResourceManager::getMeshByKey(const std::string& key)
     auto it = m_meshes.find(key);
     if (it != m_meshes.end())
     {
-        return it->second;
+        touchCache(m_meshes, m_meshOrder, it);
+        return it->second.value;
     }
 
     // Create built-in meshes on demand
@@ -357,7 +367,7 @@ std::string ResourceManager::findTexturePath(const std::shared_ptr<Texture>& tex
 {
     for (const auto& [key, cached] : m_textures)
     {
-        if (cached == texture)
+        if (cached.value == texture)
         {
             // Strip ":linear" or ":srgb" cache key suffix
             auto colonPos = key.rfind(':');
@@ -374,9 +384,12 @@ std::string ResourceManager::findTexturePath(const std::shared_ptr<Texture>& tex
 void ResourceManager::clearAll()
 {
     m_textures.clear();
+    m_textureOrder.clear();
     m_meshes.clear();
+    m_meshOrder.clear();
     m_materials.clear();
     m_models.clear();
+    m_modelOrder.clear();
     m_defaultTexture.reset();
     Logger::info("All resources cleared");
 }
@@ -389,6 +402,24 @@ size_t ResourceManager::getTextureCount() const
 size_t ResourceManager::getMeshCount() const
 {
     return m_meshes.size();
+}
+
+void ResourceManager::setTextureCacheLimit(size_t maxEntries)
+{
+    m_textureLimit = maxEntries;
+    enforceCacheLimit(m_textures, m_textureOrder, m_textureLimit);
+}
+
+void ResourceManager::setMeshCacheLimit(size_t maxEntries)
+{
+    m_meshLimit = maxEntries;
+    enforceCacheLimit(m_meshes, m_meshOrder, m_meshLimit);
+}
+
+void ResourceManager::setModelCacheLimit(size_t maxEntries)
+{
+    m_modelLimit = maxEntries;
+    enforceCacheLimit(m_models, m_modelOrder, m_modelLimit);
 }
 
 } // namespace Vestige
