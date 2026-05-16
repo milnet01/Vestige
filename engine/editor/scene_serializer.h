@@ -98,6 +98,26 @@ public:
     /// @param path Input file path.
     /// @return Metadata struct (formatVersion == 0 on failure).
     static SceneMetadata readMetadata(const std::filesystem::path& path);
+
+    /// @brief Removes stale heightmap/splatmap side-files from a scene
+    ///        directory, keeping only the pair named in the current
+    ///        scene.json manifest (Phase 10.9 Slice 12 Ed11).
+    ///
+    /// Patterns swept:
+    ///   - Epoch-suffixed names matching `<stem>.heightmap.*.r32` /
+    ///     `<stem>.splatmap.*.splat` that aren't `keepHeightmap` /
+    ///     `keepSplatmap`.
+    ///   - Legacy unsuffixed names `<stem>.heightmap.r32` and
+    ///     `<stem>.splatmap.splat` (pre-Ed11 layout).
+    ///
+    /// Files with a different stem are left untouched — two scenes can
+    /// share a directory. Failures during removal are logged but never
+    /// throw; a stale file is harmless and the next save's GC will retry.
+    static void garbageCollectEpochFiles(
+        const std::filesystem::path& dir,
+        const std::string& stem,
+        const std::filesystem::path& keepHeightmap,
+        const std::filesystem::path& keepSplatmap);
 };
 
 } // namespace Vestige

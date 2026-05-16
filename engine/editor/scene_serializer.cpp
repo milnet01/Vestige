@@ -15,6 +15,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include <atomic>
 #include <chrono>
 #include <ctime>
 #include <fstream>
@@ -164,6 +165,110 @@ static json buildSceneJson(const Scene& scene, const ResourceManager& resources,
     root["entities"] = entities;
 
     return root;
+}
+
+// ---------------------------------------------------------------------------
+// Phase 10.9 Slice 12 Ed11 — scene-envelope atomicity helpers
+// ---------------------------------------------------------------------------
+//
+// The save sequence used to be: write scene.json, re-read it, inject
+// environment+terrain, write scene.json again, then write heightmap
+// + splatmap as two more atomic operations. Four separate atomic commits
+// across four files — a crash between any pair left an inconsistent
+// hybrid (new heightmap, old scene.json that still pointed at "no
+// terrain", etc.).
+//
+// Ed11 collapses this to one commit. The terrain side-files (heightmap +
+// splatmap) get an epoch token in their filename (e.g.
+// `mySceneStem.heightmap.1747349123456-7.r32`) and are written FIRST.
+// The scene.json itself acts as the manifest: its `terrain.heightmap_file`
+// / `terrain.splatmap_file` keys name the current epoch's files. The
+// scene.json atomic write is the single commit point — a crash before
+// that write leaves the old scene.json intact (still pointing at the old
+// epoch or at no terrain at all), and the orphaned new-epoch side-files
+// get swept on the next successful save.
+//
+// Backwards compatibility: if `heightmap_file` / `splatmap_file` are
+// missing from a loaded scene's terrain section, we fall back to the
+// pre-Ed11 unsuffixed names (`<stem>.heightmap.r32`,
+// `<stem>.splatmap.splat`). Existing scenes on disk keep loading.
+
+/// @brief Generates a monotonic-ish epoch token unique within a save
+///        directory. UTC milliseconds + a process-scoped counter; two
+///        rapid saves in the same millisecond still get distinct tokens.
+static std::string makeEpochToken()
+{
+    using namespace std::chrono;
+    auto now = system_clock::now().time_since_epoch();
+    auto ms = duration_cast<milliseconds>(now).count();
+    static std::atomic<unsigned> counter{0};
+    return std::to_string(ms) + "-"
+         + std::to_string(counter.fetch_add(1, std::memory_order_relaxed));
+}
+
+/// @copydoc SceneSerializer::garbageCollectEpochFiles
+void SceneSerializer::garbageCollectEpochFiles(const fs::path& dir,
+                                                const std::string& stem,
+                                                const fs::path& keepHeightmap,
+                                                const fs::path& keepSplatmap)
+{
+    if (dir.empty() || !fs::exists(dir))
+    {
+        return;
+    }
+
+    const std::string heightmapPrefix = stem + ".heightmap.";
+    const std::string splatmapPrefix  = stem + ".splatmap.";
+    const std::string heightmapSuffix = ".r32";
+    const std::string splatmapSuffix  = ".splat";
+
+    std::error_code ec;
+    for (const auto& entry : fs::directory_iterator(dir, ec))
+    {
+        if (ec) break;
+        if (!entry.is_regular_file()) continue;
+
+        const fs::path& p = entry.path();
+        if (p == keepHeightmap || p == keepSplatmap) continue;
+
+        const std::string name = p.filename().string();
+
+        // Legacy unsuffixed names from pre-Ed11 scene files.
+        if (name == stem + ".heightmap.r32" || name == stem + ".splatmap.splat")
+        {
+            std::error_code remEc;
+            fs::remove(p, remEc);
+            if (remEc)
+            {
+                Logger::warning("Scene GC: could not remove legacy "
+                                + p.string() + ": " + remEc.message());
+            }
+            continue;
+        }
+
+        // Epoch-suffixed names from a previous Ed11 save.
+        const bool isHeightmap =
+            name.size() > heightmapPrefix.size() + heightmapSuffix.size() &&
+            name.compare(0, heightmapPrefix.size(), heightmapPrefix) == 0 &&
+            name.compare(name.size() - heightmapSuffix.size(),
+                         heightmapSuffix.size(), heightmapSuffix) == 0;
+        const bool isSplatmap =
+            name.size() > splatmapPrefix.size() + splatmapSuffix.size() &&
+            name.compare(0, splatmapPrefix.size(), splatmapPrefix) == 0 &&
+            name.compare(name.size() - splatmapSuffix.size(),
+                         splatmapSuffix.size(), splatmapSuffix) == 0;
+
+        if (isHeightmap || isSplatmap)
+        {
+            std::error_code remEc;
+            fs::remove(p, remEc);
+            if (remEc)
+            {
+                Logger::warning("Scene GC: could not remove stale "
+                                + p.string() + ": " + remEc.message());
+            }
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -380,45 +485,118 @@ SceneSerializerResult SceneSerializer::saveScene(
     const FoliageManager* environment,
     const Terrain* terrain)
 {
-    // First do the standard save
-    SceneSerializerResult result = saveScene(scene, path, resources);
-    if (!result.success || (!environment && !terrain))
+    SceneSerializerResult result;
+
+    // Preserve original creation timestamp if the file already exists.
+    std::string existingCreated;
+    if (fs::exists(path))
     {
-        return result;
+        SceneMetadata existing = readMetadata(path);
+        if (!existing.created.empty())
+        {
+            existingCreated = existing.created;
+        }
     }
 
-    // Re-read the saved file, inject environment/terrain data, re-write
-    json sceneJson;
-    if (!openAndParseSceneJson(path, sceneJson).empty())
+    // If terrain is present, mint an epoch token and stage the side-files
+    // BEFORE building the scene.json that references them. The terrain
+    // section embeds the new file names as manifest entries.
+    const bool hasTerrain = (terrain && terrain->isInitialized());
+    fs::path heightmapPath;
+    fs::path splatmapPath;
+    std::string heightmapFileName;
+    std::string splatmapFileName;
+    if (hasTerrain)
     {
-        return result;
+        const std::string epoch = makeEpochToken();
+        const std::string stem  = path.stem().string();
+        heightmapFileName = stem + ".heightmap." + epoch + ".r32";
+        splatmapFileName  = stem + ".splatmap."  + epoch + ".splat";
+        heightmapPath = path.parent_path() / heightmapFileName;
+        splatmapPath  = path.parent_path() / splatmapFileName;
     }
+
+    // Build the full envelope (entities + environment + terrain settings +
+    // manifest entries) in one structure so the scene.json write below is
+    // the single commit point.
+    json sceneJson = buildSceneJson(scene, resources, existingCreated);
 
     if (environment)
     {
         sceneJson["environment"] = environment->serialize();
-        Logger::info("Saved environment data: "
-                     + std::to_string(environment->getTotalFoliageCount()) + " instances");
     }
 
-    if (terrain && terrain->isInitialized())
+    if (hasTerrain)
     {
-        sceneJson["terrain"] = terrain->serializeSettings();
-
-        // Save terrain data files alongside the scene file
-        fs::path dir = path.parent_path();
-        fs::path stem = path.stem();
-        terrain->saveHeightmap(dir / (stem.string() + ".heightmap.r32"));
-        terrain->saveSplatmap(dir / (stem.string() + ".splatmap.splat"));
+        json terrainJson = terrain->serializeSettings();
+        terrainJson["heightmap_file"] = heightmapFileName;
+        terrainJson["splatmap_file"]  = splatmapFileName;
+        sceneJson["terrain"] = terrainJson;
     }
 
-    std::string content = sceneJson.dump(4);
+    // Stage the terrain side-files first. If either fails, return without
+    // touching scene.json — the on-disk scene stays at its previous epoch
+    // and the partially-written side-file is an orphan that the next
+    // successful save will GC.
+    if (hasTerrain)
+    {
+        if (!terrain->saveHeightmap(heightmapPath))
+        {
+            result.success = false;
+            result.errorMessage = "heightmap write failed for "
+                                + heightmapPath.string();
+            return result;
+        }
+        if (!terrain->saveSplatmap(splatmapPath))
+        {
+            result.success = false;
+            result.errorMessage = "splatmap write failed for "
+                                + splatmapPath.string();
+            return result;
+        }
+    }
+
+    // The commit. After this returns Ok, the new epoch is durable and
+    // referenced; before it returns Ok, the old epoch is still authoritative.
+    const std::string content = sceneJson.dump(4);
     AtomicWrite::Status status = AtomicWrite::writeFile(path, content);
     if (status != AtomicWrite::Status::Ok)
     {
-        Logger::warning(std::string("Failed to write environment/terrain data: ")
-                        + AtomicWrite::describe(status) + " for " + path.string());
+        result.success = false;
+        result.errorMessage = std::string("atomic-write: ")
+                            + AtomicWrite::describe(status);
+        Logger::error("Scene save failed: " + result.errorMessage
+                      + " for " + path.string());
+        return result;
     }
+
+    // Post-commit cleanup. The scene.json is now durable and points at the
+    // new epoch; any other epoch-suffixed (or legacy unsuffixed) heightmap
+    // / splatmap files in the directory are stale and can go. Failures
+    // here are logged but never propagated — a leftover stale file is
+    // harmless.
+    if (hasTerrain)
+    {
+        garbageCollectEpochFiles(path.parent_path(), path.stem().string(),
+                                 heightmapPath, splatmapPath);
+    }
+
+    // Count entities for the result.
+    if (sceneJson.contains("entities") && sceneJson["entities"].is_array())
+    {
+        result.entityCount = countJsonEntities(sceneJson["entities"]);
+    }
+
+    if (environment)
+    {
+        Logger::info("Saved environment data: "
+                     + std::to_string(environment->getTotalFoliageCount())
+                     + " instances");
+    }
+
+    result.success = true;
+    Logger::info("Saved scene '" + scene.getName() + "' to " + path.string()
+                 + " (" + std::to_string(result.entityCount) + " entities)");
 
     return result;
 }
@@ -451,13 +629,36 @@ SceneSerializerResult SceneSerializer::loadScene(
 
     if (terrain && sceneJson.contains("terrain") && sceneJson["terrain"].is_object())
     {
-        terrain->deserializeSettings(sceneJson["terrain"]);
+        const auto& terrainJson = sceneJson["terrain"];
+        terrain->deserializeSettings(terrainJson);
 
-        // Load terrain data files
-        fs::path dir = path.parent_path();
-        fs::path stem = path.stem();
-        fs::path heightmapPath = dir / (stem.string() + ".heightmap.r32");
-        fs::path splatmapPath = dir / (stem.string() + ".splatmap.splat");
+        // Ed11: prefer manifest-named side-files (heightmap_file /
+        // splatmap_file keys), fall back to the pre-Ed11 unsuffixed
+        // names so existing scenes on disk still load.
+        const fs::path dir  = path.parent_path();
+        const std::string stem = path.stem().string();
+
+        fs::path heightmapPath;
+        if (terrainJson.contains("heightmap_file")
+            && terrainJson["heightmap_file"].is_string())
+        {
+            heightmapPath = dir / terrainJson["heightmap_file"].get<std::string>();
+        }
+        else
+        {
+            heightmapPath = dir / (stem + ".heightmap.r32");
+        }
+
+        fs::path splatmapPath;
+        if (terrainJson.contains("splatmap_file")
+            && terrainJson["splatmap_file"].is_string())
+        {
+            splatmapPath = dir / terrainJson["splatmap_file"].get<std::string>();
+        }
+        else
+        {
+            splatmapPath = dir / (stem + ".splatmap.splat");
+        }
 
         if (fs::exists(heightmapPath))
         {
