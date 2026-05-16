@@ -674,7 +674,7 @@ Registration-order is an implicit contract that Phase 11A / 11B AI systems will 
 Five inspector types bypass undo entirely today; several write files non-atomically.
 
 - [x] **Ed1.** Replace `IsItemDeactivatedAfterEdit`-at-end-of-block pattern with per-widget pre-snapshot + any-deactivated bracket. **Shipped 2026-05-02 (`0957638`) for the particle-emitter inspector** (7 blocks: emission, start properties, shape, over-lifetime, forces, renderer, light coupling). New `EditTracker` helper (anonymous namespace in `inspector_panel.cpp`) called immediately after each widget aggregates per-widget `IsItemActivated` / `IsItemDeactivatedAfterEdit` correctly across the whole block; `shouldCommit()` triggers one undo per drag (or per click for instant toggles). Side fixes: over-lifetime block previously pushed undo every-frame-changed (no Deactivated guard at all) — now once per drag; renderer block's stray `before = cfg` is now load-bearing as the running snapshot threads through all blocks; light-coupling block dropped its block-local `lightBefore` for the shared `before`. Custom gradient/curve widgets keep instant-push (no observable activation state) — out of scope. 132 inspector+particle+editor+undo+command tests still green. **Pattern now applied to particle emitter only**; Ed2 covers the same fix for water / cloth / rb / light / material inspector blocks.
-- [ ] **Ed2.** Add undo brackets to water / cloth / rigid-body / emissive-light / material inspector edits. All currently bypass `CommandHistory`.
+- [x] **Ed2.** Add undo brackets to water / cloth / rigid-body / emissive-light / material inspector edits. All currently bypass `CommandHistory`. **Shipped 2026-05-16.** Single generic `ComponentPropertyCommand<Snapshot>` template in `engine/editor/commands/component_property_command.h` (snapshot + apply-fn + description) so the five inspectors don't each need a near-identical command class (CLAUDE.md Rule 3 reuse). Per-inspector snapshot types are POD structs co-located with the helper function in `inspector_panel.cpp`: `EmissiveLightSnapshot` (3 fields), `WaterSurfaceConfig` (reused — already a config struct), `RigidBodySnapshot` (6 fields), `ClothInspectorSnapshot` (11 fields routed through simulator setters), and `Material` (snapshot-by-copy → copy-assign restore). The Ed1 `EditTracker` struct hoisted from inside `drawParticleEmitter`'s anonymous-namespace location to the top of the helpers section so all five blocks can share it. Water / RB / emissive / cloth blocks wrap every widget call in `tr.track(...)` and push on `shouldCommit()`; material uses a coarser-grained "snapshot when an edit cycle starts, push when `ImGui::IsAnyItemActive()` transitions from true → false" bracket persisted on InspectorPanel members because threading the tracker through `drawMaterialBlinnPhong` / `drawMaterialPbr` / `drawMaterialTextures` / `drawMaterialTransparency` would touch five method signatures. Cloth `Reset Simulation` button intentionally excluded — particle position+velocity snapshot would be a far bigger lift than the rest of Ed2 and the button is rarely the wrong-press kind of regret. 3242 tests still green (+0 vs Ed8 baseline; no new tests — the command class is structurally identical to the untested-but-shipped `ParticlePropertyCommand`, and existing `CommandHistory` tests pin the execute/undo/redo round-trip contract that all `ComponentPropertyCommand` instances inherit). Drag a Cloth Mass dial then Ctrl+Z now reverts to the pre-drag value (one undo per drag); changing the Water Reflection Mode then Ctrl+Z restores the previous mode; switching Rigid Body shape between Box/Sphere/Capsule then Ctrl+Z restores the original shape + size. Material Diffuse-Colour-and-Roughness drag-release likewise pushes one undo entry covering the whole edit window.
 - [x] **Ed3.** Multi-delete — canonicalise selection to roots (filter descendants) before wrapping into `CompositeCommand`. **Shipped 2026-05-02.** Pre-Ed3 the editor's three multi-delete entry points (Edit menu, Delete-key in viewport, Delete-key in hierarchy panel) each issued one `DeleteEntityCommand` per selected id. When the user selected `Parent + Child + Grandchild` the parent's recursive removal in `Scene::removeEntity` wiped the child + grandchild before their own commands ran; the second and third commands then operated on freed ids (silent-fail), and undo couldn't restore the original parent-child topology because the per-id `DeleteEntityCommand` snapshots had captured nothing useful for the descendants. Two new helpers in `EntityActions` close it at the source: `filterToRootEntities(scene, ids)` walks each id's parent chain via `Entity::getParent` and drops any id whose ancestor is also in the same id-set (preserves relative order so undo replays the original sequence); `buildDeleteCommand(scene, ids)` wraps the filter + composes either a bare `DeleteEntityCommand` (one root) or `CompositeCommand` (multi-root). Per CLAUDE.md Rule 3 (reuse before rewriting) — collapsed the three near-identical 13-line build-the-composite blocks into one helper call across `editor.cpp` (×2) and `hierarchy_panel.cpp` (×1); now-unused includes of `delete_entity_command.h` and `composite_command.h` removed from both files alongside the migration. 8 new `EntityActionsFilterRoots.*_Ed3` / `EntityActionsBuildDeleteCommand.*_Ed3` tests cover: keeps disjoint siblings, drops descendants of selected parent, keeps child when parent not selected, mixed tree (sibling A keeps + AChild drops + BChild keeps), empty selection returns nullptr, single-root collapse to bare command (not 1-item Composite), the headline multi-delete-undo-restores-full-tree round-trip, and two-disjoint-trees produce a Composite with the expected description.
 - [x] **Ed4.** Atomic writes for prefab / recent-files / welcome-flag (write-to-temp + rename, matching `scene_serializer`). **Shipped 2026-04-27 (recent-files + welcome-flag).** Prefab path was already routed by Slice 1 F7; this closes the recent-files and welcome-flag corners. `RecentFiles::save()` (`engine/editor/recent_files.cpp`) now calls `AtomicWrite::writeFile(storagePath, data.dump(2))` instead of the prior truncate-and-stream `std::ofstream`; `WelcomePanel::markAsShown()` (`engine/editor/panels/welcome_panel.cpp`) routes the one-byte flag write through the same helper, which also creates parent directories so the existing `std::filesystem::create_directories` call could be dropped. Pre-Ed4 a kill mid-flush in either path left a torn JSON / zero-byte flag that the next launch's load() / exists() check would silently mishandle. 2 new `RecentFilesAtomicWriteTest.*_Ed4` tests in `tests/test_atomic_write_routing.cpp` (sandboxed via `XDG_CONFIG_HOME`, per-process+per-test temp dir to keep `ctest -j` runs from racing each other) pin the routing — plant a stale `.tmp` sidecar, save, assert the helper's write-tmp + rename cycle replaced it. WelcomePanel itself has no test (the public API is via `draw()` which needs an ImGui frame); the routing change is a four-line refactor that the visual sandbox check covers.
 - [ ] **Ed5.** `PanelRegistry` + `IPanel` interface — reduces per-new-panel churn (currently requires editing `editor.h` + `editor.cpp` + menu wiring for each panel).
@@ -2128,3 +2128,86 @@ Biblical rendition of the Temple as described in 1 Kings 6-7 and 2 Chronicles 3-
 - Interior lined with cedar and gold
 - Cherubim in the Holy of Holies
 - Surrounding courtyards and chambers
+
+### Project 3: Doom (1993) — full-3D remake
+Reimagining of id Software's *Doom* (1993) with **true 3D geometry** in
+place of the original BSP / sector-based 2.5D renderer, ahead of the
+larger Dead Space 2 remake (Project 4). Doom is the simpler target —
+linear-ish corridor levels, hitscan + projectile weapons, sprite-based
+enemies originally — so the lift over the engine's existing Phase 4-8
+foundations is mostly content + gameplay glue, not new rendering.
+
+**What "full 3D" means here** (vs. the 1993 original):
+- Real Z-axis camera (look up / down without pitch fakery)
+- Room-over-room geometry (the original could not stack sectors)
+- Variable ceiling / floor height *within* what would have been a single
+  sector, expressed as actual mesh geometry instead of flat-ceiling +
+  flat-floor sector pairs
+- 3D models for every enemy, weapon, and pickup — no billboard sprites
+- Dynamic lighting on all surfaces, replacing the original's per-sector
+  palette swap (so a fired plasma bolt, a flickering light, or a barrel
+  explosion casts moving real-time light + soft shadows on geometry,
+  not a precomputed palette LUT)
+- Real-time shadow casting (CSM directional + per-light point shadow —
+  already shipped in Phase 4)
+
+**Engine subsystems exercised** (cross-reference, not new work — the
+project is a *use case* for these, not a place to add them):
+- Phase 4 PBR + IBL + bloom + tone mapping → modern visual quality
+- Phase 8 hinges + breakables → doors, exploding barrels, debris
+- Phase 11A Camera Shake + Screen Flash → weapon kick, damage feedback
+- Phase 11B Combat / Weapon System → hitscan + projectile weapons,
+  including the BFG 9000's volumetric arc (depends on the projectile
+  system landing first)
+- Phase 11B Health and Damage System + Inventory System → health, armor,
+  ammo (4 types: bullets, shells, rockets, cells), keycards (red/blue/
+  yellow), backpack
+- Phase 11A Behavior Trees + AI Perception → enemy AI
+  (sight-then-chase + hitscan / projectile firing, no flanking — keep it
+  faithful to the original's simple FSM)
+- Phase 10 Audio System (ambient + music + occlusion — currently
+  deferred from Phase 10 to Phase 10's later passes) → SFX, MIDI-or-OGG
+  music, room reverb
+- Phase 16 Cutscene system → intermission screens between episodes
+- Phase 21 Build Wizard → ship the remake as a standalone Linux + Windows
+  executable
+
+**Scope discipline — what we deliberately *don't* re-create:**
+- Original WAD files, lump format, BSP renderer, palette swapping, or
+  any other engine artefact — this is a *behavioural* remake on the
+  Vestige engine, not a port or source-port fork
+- Original art assets — every model, texture, and sound is
+  newly-authored or sourced under a compatible licence. Levels are
+  re-designed in the editor in the spirit of the originals (E1M1
+  "Hangar," E1M7 "Computer Station," E2M2 "Containment Area," etc.)
+  rather than copied from the WAD. Same applies to weapon and monster
+  designs — *inspired by* the originals' silhouettes and roles, but
+  newly modelled.
+- DOS-era input model — full mouselook is on, WASD movement, no autoaim
+- The 1993 colour palette — output in linear HDR + ACES tonemap, with an
+  optional "1993 palette mode" post-process LUT as a setting for nostalgia
+
+**Why this is a useful project for the engine, not just a fun goal:**
+- Validates the Phase 11A/B gameplay infrastructure end-to-end on a
+  combat-heavy target that's *simpler* than Dead Space 2 (no dismember-
+  ment, no stasis / kinesis, no diegetic UI, no zero-G sections, no
+  weapon upgrade benches)
+- Exercises tight FPS movement at 60 FPS minimum — the engine's
+  performance bar applies to gameplay too, not just rendering
+- The level-author workflow ("place a corridor, drop in lights + enemies
+  + pickups, playtest") is exactly what the editor was built for and
+  is much cheaper to iterate than full architectural walkthroughs
+
+**Milestone:** Episode 1 ("Knee-Deep in the Dead") shippable as a
+9-level standalone executable on Linux + Windows, with all 8 weapons,
+all base enemy archetypes (Zombieman, Shotgun Guy, Imp, Demon, Spectre,
+Cacodemon, Baron of Hell, Lost Soul + the E1M8 boss), and a working
+intermission / save / hub flow. Demonstrates the engine + editor +
+build wizard path from "empty project" to "distributable game"
+before the larger Dead Space 2 remake is attempted.
+
+### Project 4: Dead Space 2 — full remake
+Long-horizon target referenced from the *Dead Space*-archetype work
+woven through Phases 11A / 11B / Horror Action Polish. Not yet
+formally scoped — Project 3 (Doom) is the stepping stone that proves
+the gameplay-infrastructure track before this becomes a focused effort.

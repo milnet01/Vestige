@@ -20,6 +20,7 @@
 #include "scene/pressure_plate_component.h"
 #include "physics/rigid_body.h"
 #include "physics/fabric_material.h"
+#include "editor/commands/component_property_command.h"
 #include "editor/commands/particle_property_command.h"
 #include "editor/widgets/curve_editor_widget.h"
 #include "editor/widgets/gradient_editor_widget.h"
@@ -41,6 +42,48 @@ namespace Vestige
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/// @brief Phase 10.9 Slice 12 Ed1 — per-widget activation tracker.
+///
+/// Pre-Ed1 the inspector blocks used
+///     `if (changed && ImGui::IsItemDeactivatedAfterEdit())`
+/// at the *end* of a multi-widget block. `IsItemDeactivatedAfterEdit()`
+/// only queries the most recently submitted item, so drag-release
+/// events on every widget except the last were silently dropped from
+/// the undo history — releasing a drag on "Rate" recorded nothing,
+/// only the final widget's release fired the push.
+///
+/// This tracker is called immediately after each widget so per-widget
+/// activation/deactivation states are aggregated correctly across the
+/// whole block. `shouldCommit()` then triggers undo on either:
+///   - drag end (anyDeactivated → push at end-of-drag, one entry per drag), or
+///   - instant change with no drag (changed && !anyActivated → checkbox/
+///     combo / slider-tap that doesn't go through an active state).
+///
+/// Ed2 extends the same tracker to the water / cloth / rigid-body /
+/// emissive-light / material inspectors — moved to the top of the file
+/// because those `draw*` methods are defined above the original Ed1
+/// location.
+struct EditTracker
+{
+    bool anyActivated   = false;
+    bool anyDeactivated = false;
+    bool changed        = false;
+
+    /// Track the just-submitted ImGui item.
+    void track(bool widgetChanged)
+    {
+        changed |= widgetChanged;
+        if (ImGui::IsItemActivated())             anyActivated   = true;
+        if (ImGui::IsItemDeactivatedAfterEdit())  anyDeactivated = true;
+    }
+
+    /// True when the block should record a single undo entry this frame.
+    bool shouldCommit() const
+    {
+        return anyDeactivated || (changed && !anyActivated);
+    }
+};
 
 /// @brief Draws a labelled separator for component sections.
 static bool drawComponentHeader(const char* label, bool canRemove = false)
@@ -456,7 +499,53 @@ void InspectorPanel::drawMeshRenderer(Entity& entity)
     if (mr->getMaterial())
     {
         ImGui::Spacing();
-        drawMaterial(*mr->getMaterial());
+
+        // Ed2 — bracket the drawMaterial call for undo. The sub-methods
+        // call setters directly inside drawMaterialBlinnPhong / drawMaterialPbr /
+        // drawMaterialTextures / drawMaterialTransparency; threading an
+        // EditTracker through those signatures would touch five methods.
+        // Instead snapshot before the call and detect "any-item-active just
+        // released" after — coarser than per-widget but correct for the
+        // common case (one drag = one undo entry).
+        auto& mat = *mr->getMaterial();
+        const bool sameEntityAsLast =
+            (m_materialEditingEntity == entity.getId());
+        if (!m_materialEditing || !sameEntityAsLast)
+        {
+            m_materialBefore = mat;
+            m_materialEditingEntity = entity.getId();
+        }
+
+        drawMaterial(mat);
+
+        const bool isAnyActiveNow = ImGui::IsAnyItemActive();
+        const bool wasEditing = m_materialEditing;
+        m_materialEditing = isAnyActiveNow;
+
+        if (wasEditing && !isAnyActiveNow && m_commandHistory && m_currentScene)
+        {
+            const uint32_t editedEntityId = m_materialEditingEntity;
+            Material beforeSnapshot = m_materialBefore;
+            Material afterSnapshot  = mat;
+            m_commandHistory->execute(
+                std::make_unique<ComponentPropertyCommand<Material>>(
+                    std::move(beforeSnapshot), std::move(afterSnapshot),
+                    "Change Material property",
+                    [scene = m_currentScene, editedEntityId](const Material& s)
+                    {
+                        if (auto* e = scene->findEntityById(editedEntityId))
+                        {
+                            if (auto* mrComp = e->getComponent<MeshRenderer>())
+                            {
+                                if (auto matPtr = mrComp->getMaterial())
+                                {
+                                    *matPtr = s;
+                                }
+                            }
+                        }
+                    }));
+            m_materialBefore = mat;  // baseline for the next edit cycle
+        }
     }
     else
     {
@@ -1103,6 +1192,60 @@ void InspectorPanel::drawSpotLight(Entity& entity)
     ImGui::Spacing();
 }
 
+// ---------------------------------------------------------------------------
+// Ed2 — Emissive Light: snapshot + push helper
+// ---------------------------------------------------------------------------
+
+/// @brief Snapshot of the three EmissiveLightComponent fields the inspector edits.
+struct EmissiveLightSnapshot
+{
+    float lightRadius    = 0.0f;
+    float lightIntensity = 0.0f;
+    glm::vec3 overrideColor{0.0f};
+
+    static EmissiveLightSnapshot capture(const EmissiveLightComponent& c)
+    {
+        return {c.lightRadius, c.lightIntensity, c.overrideColor};
+    }
+
+    static void apply(EmissiveLightComponent& c, const EmissiveLightSnapshot& s)
+    {
+        c.lightRadius    = s.lightRadius;
+        c.lightIntensity = s.lightIntensity;
+        c.overrideColor  = s.overrideColor;
+    }
+
+    bool operator==(const EmissiveLightSnapshot& other) const
+    {
+        return lightRadius == other.lightRadius
+            && lightIntensity == other.lightIntensity
+            && overrideColor == other.overrideColor;
+    }
+};
+
+static void pushEmissiveLightUndo(CommandHistory* history, Scene* scene,
+                                  uint32_t entityId,
+                                  const EmissiveLightSnapshot& before,
+                                  const EmissiveLightSnapshot& after)
+{
+    if (!history || !scene || before == after)
+    {
+        return;
+    }
+    history->execute(std::make_unique<ComponentPropertyCommand<EmissiveLightSnapshot>>(
+        before, after, "Change Emissive Light property",
+        [scene, entityId](const EmissiveLightSnapshot& s)
+        {
+            if (auto* entity = scene->findEntityById(entityId))
+            {
+                if (auto* comp = entity->getComponent<EmissiveLightComponent>())
+                {
+                    EmissiveLightSnapshot::apply(*comp, s);
+                }
+            }
+        }));
+}
+
 void InspectorPanel::drawEmissiveLight(Entity& entity)
 {
     auto* comp = entity.getComponent<EmissiveLightComponent>();
@@ -1116,13 +1259,22 @@ void InspectorPanel::drawEmissiveLight(Entity& entity)
         return;
     }
 
-    ImGui::DragFloat("Radius",    &comp->lightRadius,    0.1f, 0.1f, 100.0f);
-    ImGui::DragFloat("Intensity", &comp->lightIntensity, 0.05f, 0.0f, 50.0f,
-                     "%.3f", ImGuiSliderFlags_Logarithmic);
+    EmissiveLightSnapshot before = EmissiveLightSnapshot::capture(*comp);
+    EditTracker tr;
 
-    ImGui::ColorEdit3("Override Color", &comp->overrideColor.x);
+    tr.track(ImGui::DragFloat("Radius", &comp->lightRadius, 0.1f, 0.1f, 100.0f));
+    tr.track(ImGui::DragFloat("Intensity", &comp->lightIntensity, 0.05f, 0.0f, 50.0f,
+                              "%.3f", ImGuiSliderFlags_Logarithmic));
+
+    tr.track(ImGui::ColorEdit3("Override Color", &comp->overrideColor.x));
     ImGui::SameLine();
     ImGui::TextDisabled("(0,0,0 = derive from material)");
+
+    if (tr.shouldCommit())
+    {
+        pushEmissiveLightUndo(m_commandHistory, m_currentScene, entity.getId(),
+                              before, EmissiveLightSnapshot::capture(*comp));
+    }
 
     ImGui::Spacing();
 }
@@ -1147,43 +1299,6 @@ static void pushParticleUndo(CommandHistory* history, Scene* scene, uint32_t ent
         std::make_unique<ParticlePropertyCommand>(
             *scene, entityId, oldConfig, newConfig, propertyName));
 }
-
-/// @brief Phase 10.9 Slice 12 Ed1 — per-widget activation tracker.
-///
-/// Pre-Ed1 the inspector blocks used
-///     `if (changed && ImGui::IsItemDeactivatedAfterEdit())`
-/// at the *end* of a multi-widget block. `IsItemDeactivatedAfterEdit()`
-/// only queries the most recently submitted item, so drag-release
-/// events on every widget except the last were silently dropped from
-/// the undo history — releasing a drag on "Rate" recorded nothing,
-/// only the final widget's release fired the push.
-///
-/// This tracker is called immediately after each widget so per-widget
-/// activation/deactivation states are aggregated correctly across the
-/// whole block. `shouldCommit()` then triggers undo on either:
-///   - drag end (anyDeactivated → push at end-of-drag, one entry per drag), or
-///   - instant change with no drag (changed && !anyActivated → checkbox/
-///     combo / slider-tap that doesn't go through an active state).
-struct EditTracker
-{
-    bool anyActivated   = false;
-    bool anyDeactivated = false;
-    bool changed        = false;
-
-    /// Track the just-submitted ImGui item.
-    void track(bool widgetChanged)
-    {
-        changed |= widgetChanged;
-        if (ImGui::IsItemActivated())             anyActivated   = true;
-        if (ImGui::IsItemDeactivatedAfterEdit())  anyDeactivated = true;
-    }
-
-    /// True when the block should record a single undo entry this frame.
-    bool shouldCommit() const
-    {
-        return anyDeactivated || (changed && !anyActivated);
-    }
-};
 
 void InspectorPanel::drawParticleEmitter(Entity& entity)
 {
@@ -1542,6 +1657,33 @@ void InspectorPanel::drawAudioSource(Entity& entity)
 // Water Surface
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Ed2 — Water Surface: push helper
+// ---------------------------------------------------------------------------
+
+static void pushWaterSurfaceUndo(CommandHistory* history, Scene* scene,
+                                 uint32_t entityId,
+                                 const WaterSurfaceConfig& before,
+                                 const WaterSurfaceConfig& after)
+{
+    if (!history || !scene)
+    {
+        return;
+    }
+    history->execute(std::make_unique<ComponentPropertyCommand<WaterSurfaceConfig>>(
+        before, after, "Change Water Surface property",
+        [scene, entityId](const WaterSurfaceConfig& s)
+        {
+            if (auto* entity = scene->findEntityById(entityId))
+            {
+                if (auto* water = entity->getComponent<WaterSurfaceComponent>())
+                {
+                    water->getConfig() = s;
+                }
+            }
+        }));
+}
+
 void InspectorPanel::drawWaterSurface(Entity& entity)
 {
     auto* water = entity.getComponent<WaterSurfaceComponent>();
@@ -1551,11 +1693,15 @@ void InspectorPanel::drawWaterSurface(Entity& entity)
     if (ImGui::CollapsingHeader("Water Surface", ImGuiTreeNodeFlags_DefaultOpen))
     {
         auto& config = water->getConfig();
+        WaterSurfaceConfig before = config;
+        EditTracker tr;
 
         // --- Presets ---
         const char* presets[] = {"Custom", "Still Bath", "Gentle Pool", "Flowing Stream", "Ocean Swell"};
         static int currentPreset = 0;
-        if (ImGui::Combo("Preset", &currentPreset, presets, 5))
+        bool presetChanged = ImGui::Combo("Preset", &currentPreset, presets, 5);
+        tr.track(presetChanged);
+        if (presetChanged)
         {
             if (currentPreset == 1) // Still Bath
             {
@@ -1614,7 +1760,9 @@ void InspectorPanel::drawWaterSurface(Entity& entity)
         // --- Reflection mode ---
         const char* reflModes[] = {"None", "Planar", "Cubemap"};
         int reflMode = static_cast<int>(config.reflectionMode);
-        if (ImGui::Combo("Reflection Mode", &reflMode, reflModes, 3))
+        bool reflChanged = ImGui::Combo("Reflection Mode", &reflMode, reflModes, 3);
+        tr.track(reflChanged);
+        if (reflChanged)
         {
             config.reflectionMode = static_cast<WaterReflectionMode>(reflMode);
         }
@@ -1625,14 +1773,16 @@ void InspectorPanel::drawWaterSurface(Entity& entity)
         if (config.reflectionMode != WaterReflectionMode::NONE)
         {
             float resScale = config.reflectionResolutionScale;
-            if (ImGui::SliderFloat("Reflection Resolution", &resScale, 0.1f, 1.0f, "%.0f%%"))
+            bool resChanged = ImGui::SliderFloat("Reflection Resolution", &resScale, 0.1f, 1.0f, "%.0f%%");
+            tr.track(resChanged);
+            if (resChanged)
             {
                 config.reflectionResolutionScale = resScale;
             }
         }
 
         // --- Refraction ---
-        ImGui::Checkbox("Refraction (Beer's Law)", &config.refractionEnabled);
+        tr.track(ImGui::Checkbox("Refraction (Beer's Law)", &config.refractionEnabled));
         ImGui::SetItemTooltip("Depth-based underwater coloring.\n"
                               "Disabling saves a full scene render pass.");
 
@@ -1640,32 +1790,32 @@ void InspectorPanel::drawWaterSurface(Entity& entity)
         ImGui::Separator();
 
         // --- Colors ---
-        ImGui::ColorEdit4("Shallow Color", &config.shallowColor.x);
-        ImGui::ColorEdit4("Deep Color", &config.deepColor.x);
+        tr.track(ImGui::ColorEdit4("Shallow Color", &config.shallowColor.x));
+        tr.track(ImGui::ColorEdit4("Deep Color", &config.deepColor.x));
 
         ImGui::Spacing();
         ImGui::Separator();
 
         // --- Surface detail ---
-        ImGui::SliderFloat("Normal Strength", &config.normalStrength, 0.0f, 3.0f);
-        ImGui::SliderFloat("DuDv Strength", &config.dudvStrength, 0.0f, 0.1f, "%.4f");
-        ImGui::SliderFloat("Flow Speed", &config.flowSpeed, 0.0f, 2.0f);
-        ImGui::SliderFloat("Specular Power", &config.specularPower, 1.0f, 512.0f);
+        tr.track(ImGui::SliderFloat("Normal Strength", &config.normalStrength, 0.0f, 3.0f));
+        tr.track(ImGui::SliderFloat("DuDv Strength", &config.dudvStrength, 0.0f, 0.1f, "%.4f"));
+        tr.track(ImGui::SliderFloat("Flow Speed", &config.flowSpeed, 0.0f, 2.0f));
+        tr.track(ImGui::SliderFloat("Specular Power", &config.specularPower, 1.0f, 512.0f));
 
         ImGui::Spacing();
         ImGui::Separator();
 
         // --- Waves ---
-        ImGui::SliderInt("Wave Count", &config.numWaves, 0, WaterSurfaceConfig::MAX_WAVES);
+        tr.track(ImGui::SliderInt("Wave Count", &config.numWaves, 0, WaterSurfaceConfig::MAX_WAVES));
         for (int i = 0; i < config.numWaves; ++i)
         {
             ImGui::PushID(i);
             if (ImGui::TreeNode("Wave", "Wave %d", i + 1))
             {
-                ImGui::SliderFloat("Amplitude", &config.waves[i].amplitude, 0.0f, 0.1f, "%.4f");
-                ImGui::SliderFloat("Wavelength", &config.waves[i].wavelength, 0.1f, 10.0f);
-                ImGui::SliderFloat("Speed", &config.waves[i].speed, 0.0f, 2.0f);
-                ImGui::SliderFloat("Direction", &config.waves[i].direction, 0.0f, 360.0f, "%.0f deg");
+                tr.track(ImGui::SliderFloat("Amplitude", &config.waves[i].amplitude, 0.0f, 0.1f, "%.4f"));
+                tr.track(ImGui::SliderFloat("Wavelength", &config.waves[i].wavelength, 0.1f, 10.0f));
+                tr.track(ImGui::SliderFloat("Speed", &config.waves[i].speed, 0.0f, 2.0f));
+                tr.track(ImGui::SliderFloat("Direction", &config.waves[i].direction, 0.0f, 360.0f, "%.0f deg"));
                 ImGui::TreePop();
             }
             ImGui::PopID();
@@ -1675,11 +1825,11 @@ void InspectorPanel::drawWaterSurface(Entity& entity)
         ImGui::Spacing();
         ImGui::Separator();
         ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Caustics");
-        ImGui::Checkbox("Enable Caustics", &config.causticsEnabled);
+        tr.track(ImGui::Checkbox("Enable Caustics", &config.causticsEnabled));
         if (config.causticsEnabled)
         {
-            ImGui::SliderFloat("Caustics Intensity", &config.causticsIntensity, 0.0f, 1.0f);
-            ImGui::SliderFloat("Caustics Scale", &config.causticsScale, 0.01f, 0.5f);
+            tr.track(ImGui::SliderFloat("Caustics Intensity", &config.causticsIntensity, 0.0f, 1.0f));
+            tr.track(ImGui::SliderFloat("Caustics Scale", &config.causticsScale, 0.01f, 0.5f));
         }
 
         // --- Quality ---
@@ -1687,7 +1837,7 @@ void InspectorPanel::drawWaterSurface(Entity& entity)
         ImGui::Separator();
         ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Quality");
         const char* qualityNames[] = {"Full", "Approximate", "Simple"};
-        ImGui::Combo("Quality Tier", &config.qualityTier, qualityNames, 3);
+        tr.track(ImGui::Combo("Quality Tier", &config.qualityTier, qualityNames, 3));
         if (ImGui::IsItemHovered())
         {
             ImGui::SetTooltip("Full: best visuals (6 caustic samples, 3-octave noise)\n"
@@ -1698,9 +1848,15 @@ void InspectorPanel::drawWaterSurface(Entity& entity)
         // --- Geometry ---
         ImGui::Spacing();
         ImGui::Separator();
-        ImGui::SliderFloat("Width", &config.width, 1.0f, 100.0f);
-        ImGui::SliderFloat("Depth", &config.depth, 1.0f, 100.0f);
-        ImGui::SliderInt("Grid Resolution", &config.gridResolution, 16, 256);
+        tr.track(ImGui::SliderFloat("Width", &config.width, 1.0f, 100.0f));
+        tr.track(ImGui::SliderFloat("Depth", &config.depth, 1.0f, 100.0f));
+        tr.track(ImGui::SliderInt("Grid Resolution", &config.gridResolution, 16, 256));
+
+        if (tr.shouldCommit())
+        {
+            pushWaterSurfaceUndo(m_commandHistory, m_currentScene, entity.getId(),
+                                 before, config);
+        }
     }
     ImGui::PopStyleVar();
     ImGui::Spacing();
@@ -1710,6 +1866,69 @@ void InspectorPanel::drawWaterSurface(Entity& entity)
 // Rigid Body
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Ed2 — Rigid Body: snapshot + push helper
+// ---------------------------------------------------------------------------
+
+struct RigidBodySnapshot
+{
+    CollisionShapeType shapeType = CollisionShapeType::BOX;
+    glm::vec3 shapeSize{1.0f};
+    BodyMotionType motionType = BodyMotionType::STATIC;
+    float mass = 1.0f;
+    float friction = 0.5f;
+    float restitution = 0.0f;
+
+    static RigidBodySnapshot capture(const RigidBody& rb)
+    {
+        return {rb.shapeType, rb.shapeSize, rb.motionType,
+                rb.mass, rb.friction, rb.restitution};
+    }
+
+    static void apply(RigidBody& rb, const RigidBodySnapshot& s)
+    {
+        rb.shapeType   = s.shapeType;
+        rb.shapeSize   = s.shapeSize;
+        rb.motionType  = s.motionType;
+        rb.mass        = s.mass;
+        rb.friction    = s.friction;
+        rb.restitution = s.restitution;
+    }
+
+    bool operator==(const RigidBodySnapshot& o) const
+    {
+        return shapeType == o.shapeType
+            && shapeSize == o.shapeSize
+            && motionType == o.motionType
+            && mass == o.mass
+            && friction == o.friction
+            && restitution == o.restitution;
+    }
+};
+
+static void pushRigidBodyUndo(CommandHistory* history, Scene* scene,
+                              uint32_t entityId,
+                              const RigidBodySnapshot& before,
+                              const RigidBodySnapshot& after)
+{
+    if (!history || !scene || before == after)
+    {
+        return;
+    }
+    history->execute(std::make_unique<ComponentPropertyCommand<RigidBodySnapshot>>(
+        before, after, "Change Rigid Body property",
+        [scene, entityId](const RigidBodySnapshot& s)
+        {
+            if (auto* entity = scene->findEntityById(entityId))
+            {
+                if (auto* rb = entity->getComponent<RigidBody>())
+                {
+                    RigidBodySnapshot::apply(*rb, s);
+                }
+            }
+        }));
+}
+
 void InspectorPanel::drawRigidBody(Entity& entity)
 {
     auto* rb = entity.getComponent<RigidBody>();
@@ -1717,10 +1936,15 @@ void InspectorPanel::drawRigidBody(Entity& entity)
 
     if (!drawComponentHeader("Rigid Body")) return;
 
+    RigidBodySnapshot before = RigidBodySnapshot::capture(*rb);
+    EditTracker tr;
+
     // --- Shape type ---
     const char* shapeNames[] = {"Box", "Sphere", "Capsule", "Convex Hull", "Mesh"};
     int shapeIdx = static_cast<int>(rb->shapeType);
-    if (ImGui::Combo("Shape", &shapeIdx, shapeNames, 5))
+    bool shapeChanged = ImGui::Combo("Shape", &shapeIdx, shapeNames, 5);
+    tr.track(shapeChanged);
+    if (shapeChanged)
     {
         rb->shapeType = static_cast<CollisionShapeType>(shapeIdx);
     }
@@ -1729,14 +1953,14 @@ void InspectorPanel::drawRigidBody(Entity& entity)
     switch (rb->shapeType)
     {
     case CollisionShapeType::BOX:
-        ImGui::DragFloat3("Half Extents", &rb->shapeSize.x, 0.01f, 0.01f, 100.0f, "%.2f");
+        tr.track(ImGui::DragFloat3("Half Extents", &rb->shapeSize.x, 0.01f, 0.01f, 100.0f, "%.2f"));
         break;
     case CollisionShapeType::SPHERE:
-        ImGui::DragFloat("Radius", &rb->shapeSize.x, 0.01f, 0.01f, 100.0f, "%.2f");
+        tr.track(ImGui::DragFloat("Radius", &rb->shapeSize.x, 0.01f, 0.01f, 100.0f, "%.2f"));
         break;
     case CollisionShapeType::CAPSULE:
-        ImGui::DragFloat("Radius##cap", &rb->shapeSize.x, 0.01f, 0.01f, 50.0f, "%.2f");
-        ImGui::DragFloat("Half Height", &rb->shapeSize.y, 0.01f, 0.01f, 50.0f, "%.2f");
+        tr.track(ImGui::DragFloat("Radius##cap", &rb->shapeSize.x, 0.01f, 0.01f, 50.0f, "%.2f"));
+        tr.track(ImGui::DragFloat("Half Height", &rb->shapeSize.y, 0.01f, 0.01f, 50.0f, "%.2f"));
         break;
     case CollisionShapeType::CONVEX_HULL:
         ImGui::Text("Vertices: %zu", rb->collisionVertices.size());
@@ -1750,7 +1974,9 @@ void InspectorPanel::drawRigidBody(Entity& entity)
     // --- Motion type ---
     const char* motionNames[] = {"Static", "Dynamic", "Kinematic"};
     int motionIdx = static_cast<int>(rb->motionType);
-    if (ImGui::Combo("Motion Type", &motionIdx, motionNames, 3))
+    bool motionChanged = ImGui::Combo("Motion Type", &motionIdx, motionNames, 3);
+    tr.track(motionChanged);
+    if (motionChanged)
     {
         rb->motionType = static_cast<BodyMotionType>(motionIdx);
     }
@@ -1763,10 +1989,16 @@ void InspectorPanel::drawRigidBody(Entity& entity)
     // --- Physics properties ---
     if (rb->motionType == BodyMotionType::DYNAMIC)
     {
-        ImGui::DragFloat("Mass", &rb->mass, 0.1f, 0.01f, 10000.0f, "%.2f kg");
+        tr.track(ImGui::DragFloat("Mass", &rb->mass, 0.1f, 0.01f, 10000.0f, "%.2f kg"));
     }
-    ImGui::DragFloat("Friction", &rb->friction, 0.01f, 0.0f, 2.0f, "%.2f");
-    ImGui::DragFloat("Restitution", &rb->restitution, 0.01f, 0.0f, 1.0f, "%.2f");
+    tr.track(ImGui::DragFloat("Friction", &rb->friction, 0.01f, 0.0f, 2.0f, "%.2f"));
+    tr.track(ImGui::DragFloat("Restitution", &rb->restitution, 0.01f, 0.0f, 1.0f, "%.2f"));
+
+    if (tr.shouldCommit())
+    {
+        pushRigidBodyUndo(m_commandHistory, m_currentScene, entity.getId(),
+                          before, RigidBodySnapshot::capture(*rb));
+    }
 
     // --- Status ---
     if (rb->hasBody())
@@ -1785,6 +2017,100 @@ void InspectorPanel::drawRigidBody(Entity& entity)
 // Cloth Simulation
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Ed2 — Cloth: snapshot + push helper
+// ---------------------------------------------------------------------------
+
+struct ClothInspectorSnapshot
+{
+    ClothPresetType presetType = ClothPresetType::CUSTOM;
+    float particleMass    = 0.0f;
+    int substeps          = 1;
+    float damping         = 0.0f;
+    float stretchCompliance = 0.0f;
+    float shearCompliance   = 0.0f;
+    float bendCompliance    = 0.0f;
+    glm::vec3 windDir{0.0f};
+    float windStrength    = 0.0f;
+    float dragCoefficient = 0.0f;
+    ClothWindQuality windQuality = ClothWindQuality::FULL;
+
+    static ClothInspectorSnapshot capture(const ClothComponent& cloth)
+    {
+        const auto& sim = cloth.getSimulator();
+        const auto& cfg = sim.getConfig();
+        ClothInspectorSnapshot s;
+        s.presetType        = cloth.getPresetType();
+        s.particleMass      = cfg.particleMass;
+        s.substeps          = cfg.substeps;
+        s.damping           = cfg.damping;
+        s.stretchCompliance = cfg.stretchCompliance;
+        s.shearCompliance   = cfg.shearCompliance;
+        s.bendCompliance    = cfg.bendCompliance;
+        s.windDir           = sim.getWindDirection();
+        s.windStrength      = sim.getWindStrength();
+        s.dragCoefficient   = sim.getDragCoefficient();
+        s.windQuality       = sim.getWindQuality();
+        return s;
+    }
+
+    static void apply(ClothComponent& cloth, const ClothInspectorSnapshot& s)
+    {
+        auto& sim = cloth.getSimulator();
+        sim.setParticleMass(s.particleMass);
+        sim.setSubsteps(s.substeps);
+        sim.setDamping(s.damping);
+        sim.setStretchCompliance(s.stretchCompliance);
+        sim.setShearCompliance(s.shearCompliance);
+        sim.setBendCompliance(s.bendCompliance);
+        sim.setWind(s.windDir, s.windStrength);
+        sim.setDragCoefficient(s.dragCoefficient);
+        sim.setWindQuality(s.windQuality);
+        cloth.setPresetType(s.presetType);
+    }
+
+    bool operator==(const ClothInspectorSnapshot& o) const
+    {
+        return presetType == o.presetType
+            && particleMass == o.particleMass
+            && substeps == o.substeps
+            && damping == o.damping
+            && stretchCompliance == o.stretchCompliance
+            && shearCompliance == o.shearCompliance
+            && bendCompliance == o.bendCompliance
+            && windDir == o.windDir
+            && windStrength == o.windStrength
+            && dragCoefficient == o.dragCoefficient
+            && windQuality == o.windQuality;
+    }
+};
+
+static void pushClothUndo(CommandHistory* history, Scene* scene,
+                          uint32_t entityId,
+                          const ClothInspectorSnapshot& before,
+                          const ClothInspectorSnapshot& after)
+{
+    if (!history || !scene || before == after)
+    {
+        return;
+    }
+    history->execute(std::make_unique<ComponentPropertyCommand<ClothInspectorSnapshot>>(
+        before, after, "Change Cloth property",
+        [scene, entityId](const ClothInspectorSnapshot& s)
+        {
+            if (auto* entity = scene->findEntityById(entityId))
+            {
+                if (auto* cloth = entity->getComponent<ClothComponent>())
+                {
+                    if (cloth->isReady())
+                    {
+                        ClothInspectorSnapshot::apply(*cloth, s);
+                    }
+                }
+            }
+        }));
+}
+
 void InspectorPanel::drawClothComponent(Entity& entity)
 {
     auto* cloth = entity.getComponent<ClothComponent>();
@@ -1794,6 +2120,9 @@ void InspectorPanel::drawClothComponent(Entity& entity)
 
     auto& sim = cloth->getSimulator();
     const auto& config = sim.getConfig();
+
+    ClothInspectorSnapshot before = ClothInspectorSnapshot::capture(*cloth);
+    EditTracker tr;
 
     // --- Preset selector ---
     ClothPresetType currentPreset = cloth->getPresetType();
@@ -1805,8 +2134,10 @@ void InspectorPanel::drawClothComponent(Entity& entity)
     static_assert(static_cast<int>(ClothPresetType::COUNT) == 6,
                   "Update presetNames if ClothPresetType changes");
 
-    if (ImGui::Combo("Preset", &presetIdx, presetNames,
-                      static_cast<int>(ClothPresetType::COUNT)))
+    bool presetChanged = ImGui::Combo("Preset", &presetIdx, presetNames,
+                                       static_cast<int>(ClothPresetType::COUNT));
+    tr.track(presetChanged);
+    if (presetChanged)
     {
         auto type = static_cast<ClothPresetType>(presetIdx);
         cloth->applyPreset(type);
@@ -1823,7 +2154,9 @@ void InspectorPanel::drawClothComponent(Entity& entity)
         {
             auto ftype = static_cast<FabricType>(i);
             const auto& mat = FabricDatabase::get(ftype);
-            if (ImGui::Selectable(mat.name))
+            bool fabricClicked = ImGui::Selectable(mat.name);
+            tr.track(fabricClicked);
+            if (fabricClicked)
             {
                 auto presetCfg = FabricDatabase::toPresetConfig(ftype);
                 sim.setParticleMass(presetCfg.solver.particleMass);
@@ -1850,7 +2183,9 @@ void InspectorPanel::drawClothComponent(Entity& entity)
         {
             auto ftype = static_cast<FabricType>(i);
             const auto& mat = FabricDatabase::get(ftype);
-            if (ImGui::Selectable(mat.name))
+            bool fabricClicked = ImGui::Selectable(mat.name);
+            tr.track(fabricClicked);
+            if (fabricClicked)
             {
                 auto presetCfg = FabricDatabase::toPresetConfig(ftype);
                 sim.setParticleMass(presetCfg.solver.particleMass);
@@ -1873,6 +2208,10 @@ void InspectorPanel::drawClothComponent(Entity& entity)
     }
 
     // --- Reset button ---
+    // Reset Simulation is a transient action (zeros velocities, repins) — not
+    // a parameter mutation. Excluded from undo on purpose: tracking it would
+    // need to snapshot all particle positions/velocities, which is a far
+    // bigger lift than the rest of Ed2.
     if (ImGui::Button("Reset Simulation"))
     {
         cloth->reset();
@@ -1893,21 +2232,27 @@ void InspectorPanel::drawClothComponent(Entity& entity)
 
         // Editable parameters
         float mass = config.particleMass;
-        if (ImGui::DragFloat("Mass", &mass, 0.001f, 0.001f, 1.0f, "%.3f kg"))
+        bool massChanged = ImGui::DragFloat("Mass", &mass, 0.001f, 0.001f, 1.0f, "%.3f kg");
+        tr.track(massChanged);
+        if (massChanged)
         {
             sim.setParticleMass(mass);
             paramChanged = true;
         }
 
         int substeps = config.substeps;
-        if (ImGui::SliderInt("Substeps", &substeps, 1, 20))
+        bool subChanged = ImGui::SliderInt("Substeps", &substeps, 1, 20);
+        tr.track(subChanged);
+        if (subChanged)
         {
             sim.setSubsteps(substeps);
             paramChanged = true;
         }
 
         float damping = config.damping;
-        if (ImGui::DragFloat("Damping", &damping, 0.001f, 0.0f, 0.5f, "%.3f"))
+        bool dampChanged = ImGui::DragFloat("Damping", &damping, 0.001f, 0.0f, 0.5f, "%.3f");
+        tr.track(dampChanged);
+        if (dampChanged)
         {
             sim.setDamping(damping);
             paramChanged = true;
@@ -1920,21 +2265,27 @@ void InspectorPanel::drawClothComponent(Entity& entity)
     if (ImGui::TreeNodeEx("Compliance", ImGuiTreeNodeFlags_DefaultOpen))
     {
         float stretch = config.stretchCompliance;
-        if (ImGui::DragFloat("Stretch", &stretch, 0.00001f, 0.0f, 0.01f, "%.5f"))
+        bool stretchChanged = ImGui::DragFloat("Stretch", &stretch, 0.00001f, 0.0f, 0.01f, "%.5f");
+        tr.track(stretchChanged);
+        if (stretchChanged)
         {
             sim.setStretchCompliance(stretch);
             paramChanged = true;
         }
 
         float shear = config.shearCompliance;
-        if (ImGui::DragFloat("Shear", &shear, 0.0001f, 0.0f, 0.1f, "%.4f"))
+        bool shearChanged = ImGui::DragFloat("Shear", &shear, 0.0001f, 0.0f, 0.1f, "%.4f");
+        tr.track(shearChanged);
+        if (shearChanged)
         {
             sim.setShearCompliance(shear);
             paramChanged = true;
         }
 
         float bend = config.bendCompliance;
-        if (ImGui::DragFloat("Bend", &bend, 0.01f, 0.0f, 2.0f, "%.3f"))
+        bool bendChanged = ImGui::DragFloat("Bend", &bend, 0.01f, 0.0f, 2.0f, "%.3f");
+        tr.track(bendChanged);
+        if (bendChanged)
         {
             sim.setBendCompliance(bend);
             paramChanged = true;
@@ -1949,7 +2300,9 @@ void InspectorPanel::drawClothComponent(Entity& entity)
         glm::vec3 windDir = sim.getWindDirection();
         float windStrength = sim.getWindStrength();
 
-        if (ImGui::DragFloat3("Direction", &windDir.x, 0.01f, -1.0f, 1.0f, "%.2f"))
+        bool dirChanged = ImGui::DragFloat3("Direction", &windDir.x, 0.01f, -1.0f, 1.0f, "%.2f");
+        tr.track(dirChanged);
+        if (dirChanged)
         {
             float dirLen = glm::length(windDir);
             if (dirLen > 0.001f)
@@ -1960,14 +2313,18 @@ void InspectorPanel::drawClothComponent(Entity& entity)
             paramChanged = true;
         }
 
-        if (ImGui::DragFloat("Strength", &windStrength, 0.1f, 0.0f, 30.0f, "%.1f"))
+        bool strengthChanged = ImGui::DragFloat("Strength", &windStrength, 0.1f, 0.0f, 30.0f, "%.1f");
+        tr.track(strengthChanged);
+        if (strengthChanged)
         {
             sim.setWind(windDir, windStrength);
             paramChanged = true;
         }
 
         float drag = sim.getDragCoefficient();
-        if (ImGui::DragFloat("Drag", &drag, 0.1f, 0.0f, 10.0f, "%.1f"))
+        bool dragChanged = ImGui::DragFloat("Drag", &drag, 0.1f, 0.0f, 10.0f, "%.1f");
+        tr.track(dragChanged);
+        if (dragChanged)
         {
             sim.setDragCoefficient(drag);
             paramChanged = true;
@@ -1975,7 +2332,9 @@ void InspectorPanel::drawClothComponent(Entity& entity)
 
         const char* windQualityItems[] = { "Full", "Approximate", "Simple" };
         int windQuality = static_cast<int>(sim.getWindQuality());
-        if (ImGui::Combo("Wind Quality", &windQuality, windQualityItems, 3))
+        bool wqChanged = ImGui::Combo("Wind Quality", &windQuality, windQualityItems, 3);
+        tr.track(wqChanged);
+        if (wqChanged)
         {
             sim.setWindQuality(static_cast<ClothWindQuality>(windQuality));
         }
@@ -2002,6 +2361,12 @@ void InspectorPanel::drawClothComponent(Entity& entity)
     if (paramChanged && cloth->getPresetType() != ClothPresetType::CUSTOM)
     {
         cloth->setPresetType(ClothPresetType::CUSTOM);
+    }
+
+    if (tr.shouldCommit())
+    {
+        pushClothUndo(m_commandHistory, m_currentScene, entity.getId(),
+                      before, ClothInspectorSnapshot::capture(*cloth));
     }
 
     ImGui::Spacing();

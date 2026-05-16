@@ -6,6 +6,7 @@
 #pragma once
 
 #include "editor/material_preview.h"
+#include "renderer/material.h"
 
 #include <glm/glm.hpp>
 
@@ -75,6 +76,16 @@ private:
     glm::vec3 m_editOldPos = glm::vec3(0.0f);
     glm::vec3 m_editOldRot = glm::vec3(0.0f);
     glm::vec3 m_editOldScale = glm::vec3(1.0f);
+
+    // Ed2 — Material edit bracketing across the drawMaterial call chain.
+    // drawMaterial / drawMaterialPbr / drawMaterialBlinnPhong call setters
+    // directly inside sub-methods, so per-widget tracking would require
+    // threading EditTracker through five signatures. Instead bracket the
+    // whole call: snapshot on first frame any item activates, push undo
+    // on first frame no item is active again.
+    bool m_materialEditing = false;
+    uint32_t m_materialEditingEntity = 0;
+    Material m_materialBefore;
 };
 
 } // namespace Vestige
