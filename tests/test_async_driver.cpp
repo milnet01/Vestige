@@ -200,7 +200,11 @@ TEST(AsyncDriverJob, ElapsedSecondsZeroWhenIdleNonZeroWhenRunning)
         "import time\ntime.sleep(0.1)\n");
     ASSERT_TRUE(job.start(script.string(), {}, {}));
 
-    std::this_thread::sleep_for(std::chrono::milliseconds(30));
+    // start() is synchronous on the main thread — it records the start
+    // timestamp before returning, so elapsedSeconds() should already be
+    // non-zero on the first call. A 5 ms pause is belt-and-braces against
+    // a coarse-grained steady_clock on some legacy platforms.
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
     EXPECT_GT(job.elapsedSeconds(), 0.0f);
 
     ASSERT_EQ(pollUntilDone(job, std::chrono::seconds(5)),
@@ -217,23 +221,27 @@ TEST(AsyncDriverJob, ElapsedSecondsZeroWhenIdleNonZeroWhenRunning)
 
 TEST(AsyncDriverJob, DrainStdoutChunkReturnsIncrementalOutput)
 {
+    // Child flushes a chunk every 200 ms; drain poll runs every 50 ms.
+    // Pre-audit the gap was 100 ms vs 20 ms, which under ASAN/LSAN load
+    // could push three chunks into one poll cycle. The wider window
+    // gives the OS pipe layer plenty of slack between flushes.
     const auto script = writeTempScript("stream",
         "import sys, time\n"
         "for i in range(3):\n"
         "    sys.stdout.write(f'chunk{i}\\n')\n"
         "    sys.stdout.flush()\n"
-        "    time.sleep(0.1)\n");
+        "    time.sleep(0.2)\n");
 
     AsyncDriverJob job;
     ASSERT_TRUE(job.start(script.string(), {}, {}));
 
-    // Poll for ~500ms collecting chunks. We expect at least two
+    // Poll for ~2 s collecting chunks. We expect at least two
     // distinct drain calls to return non-empty data — proving the
     // stream is actually incremental and not just buffered-until-exit.
     std::string combined;
     int nonEmptyDrains = 0;
     using clock = std::chrono::steady_clock;
-    const auto deadline = clock::now() + std::chrono::milliseconds(1500);
+    const auto deadline = clock::now() + std::chrono::milliseconds(2500);
     while (clock::now() < deadline)
     {
         std::string chunk = job.drainStdoutChunk();
@@ -244,7 +252,7 @@ TEST(AsyncDriverJob, DrainStdoutChunkReturnsIncrementalOutput)
         }
         if (job.poll() == AsyncDriverJob::State::Done)
             break;
-        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
     }
 
     // Drain any final chunk that arrived in the same frame as Done.
@@ -323,15 +331,19 @@ TEST(AsyncDriverJob, PollEscalatesToSIGKILLAfterGrace)
         "time.sleep(60)\n");
 
     AsyncDriverJob job;
+    // Shrink the grace window so this test costs ~0.4 s instead of the
+    // ~5 s the production default would impose. The escalation path is
+    // identical — only the wait shortens.
+    job.setCancelSigkillGraceSeconds(0.1f);
     ASSERT_TRUE(job.start(script.string(), {}, {}));
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
     ASSERT_TRUE(job.cancel());
 
-    // Must wait > CANCEL_SIGKILL_GRACE_SECONDS for the escalator to
-    // fire, plus some slack for the child to exit and be reaped.
+    // Wait > graceSeconds for the escalator to fire, plus slack for the
+    // child to exit and be reaped.
     const auto timeout = std::chrono::milliseconds(
         static_cast<int>(
-            (AsyncDriverJob::CANCEL_SIGKILL_GRACE_SECONDS + 2.0f) * 1000.0f));
+            (job.cancelSigkillGraceSeconds() + 2.0f) * 1000.0f));
     ASSERT_EQ(pollUntilDone(job, timeout), AsyncDriverJob::State::Done);
 
     const auto result = job.takeResult();

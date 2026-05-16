@@ -121,6 +121,13 @@ TEST(PanelRegistryEd5, RealPanelsExposeDisplayNames)
     // are what users see in the Window menu, and they're the entry point
     // for the registry-driven menu wiring in editor.cpp. If any of these
     // drift, the menu silently relabels.
+    //
+    // Note: all 11 concrete panel ctors below are headless-safe — none of
+    // them touch GL in the constructor (textures / VAOs are created lazily
+    // in initialize() / draw(), which we don't call here). If a future
+    // panel adds GL-context calls to its ctor, this test will start
+    // crashing rather than skipping; add a `GTEST_SKIP() << "needs GL"`
+    // guard at the top in that case.
     EnvironmentPanel envPanel;
     TerrainPanel terrainPanel;
     NavigationPanel navPanel;

@@ -20,21 +20,16 @@
 /// exercise without a GL context.
 
 #include "editor/scene_serializer.h"
+#include "utils/atomic_write.h"
+#include "test_helpers.h"
 
 #include <nlohmann/json.hpp>
 #include <gtest/gtest.h>
 
 #include <filesystem>
 #include <fstream>
+#include <sstream>
 #include <string>
-
-#ifdef _WIN32
-#include <process.h>
-#define VESTIGE_GETPID() _getpid()
-#else
-#include <unistd.h>
-#define VESTIGE_GETPID() getpid()
-#endif
 
 using namespace Vestige;
 namespace fs = std::filesystem;
@@ -50,10 +45,7 @@ protected:
         // Per-process + per-test stamping so `ctest -j` runs of this
         // fixture don't race each other's TearDown.
         m_dir = fs::temp_directory_path()
-              / ("vestige_ed11_envelope_"
-                  + std::to_string(VESTIGE_GETPID()) + "_"
-                  + ::testing::UnitTest::GetInstance()
-                      ->current_test_info()->name());
+              / ("vestige_ed11_envelope_" + Testing::vestigeTestStamp());
         std::error_code ec;
         fs::remove_all(m_dir, ec);
         fs::create_directories(m_dir);
@@ -223,14 +215,17 @@ TEST_F(SceneEnvelopeAtomicityTest, GcKeepsOnlyTheNamedPair_Ed11)
         m_dir, "worldStem",
         m_dir / keepH, m_dir / keepS);
 
-    // Count surviving heightmap/splatmap files — must be exactly two.
+    // Count surviving heightmap/splatmap files — must be exactly the
+    // keep-pair. Extension-filter the loop so an unrelated artifact
+    // (e.g. a stale `.bak`) can't satisfy the count by accident.
     int heightmapCount = 0;
     int splatmapCount  = 0;
     for (const auto& entry : fs::directory_iterator(m_dir))
     {
         const std::string name = entry.path().filename().string();
-        if (name.find("worldStem.heightmap.") == 0) heightmapCount++;
-        if (name.find("worldStem.splatmap.")  == 0) splatmapCount++;
+        const std::string ext  = entry.path().extension().string();
+        if (name.find("worldStem.heightmap.") == 0 && ext == ".r32")   heightmapCount++;
+        if (name.find("worldStem.splatmap.")  == 0 && ext == ".splat") splatmapCount++;
     }
     EXPECT_EQ(heightmapCount, 1);
     EXPECT_EQ(splatmapCount, 1);
@@ -245,7 +240,14 @@ TEST_F(SceneEnvelopeAtomicityTest, GcKeepsOnlyTheNamedPair_Ed11)
 // is exercised at engine launch.
 // ---------------------------------------------------------------------------
 
-TEST_F(SceneEnvelopeAtomicityTest, ReadMetadataAcceptsManifestKeys_Ed11)
+// SceneMetadata intentionally doesn't surface terrain fields — those
+// live under the loadScene env-aware overload, which needs a GL context.
+// What this test pins is the negative invariant: the metadata reader
+// (used by recent-files / window-title / readMetadata callers that just
+// want the scene name) must tolerate the Ed11 manifest keys without
+// bailing. A regression here would surface as silently-empty metadata
+// after an Ed11 save, which the engine launches over.
+TEST_F(SceneEnvelopeAtomicityTest, ReadMetadataDoesNotRejectManifestKeys_Ed11)
 {
     nlohmann::json j;
     j["vestige_scene"]["format_version"] = 1;
@@ -266,8 +268,113 @@ TEST_F(SceneEnvelopeAtomicityTest, ReadMetadataAcceptsManifestKeys_Ed11)
     SceneMetadata meta = SceneSerializer::readMetadata(p);
     EXPECT_EQ(meta.formatVersion, 1);
     EXPECT_EQ(meta.name, "WithManifest");
-    // The metadata reader doesn't surface terrain fields directly, but
-    // it must not bail out on the new keys either.
+}
+
+// ---------------------------------------------------------------------------
+// AtomicWrite rollback contract — the saveScene commit-point relies on
+// this. Failure of `AtomicWrite::writeFile` must leave the target file
+// (and the directory) byte-identical to its pre-call state. The
+// SaveScene env-aware overload reduces to: "stage side-files; if all
+// staged, atomic-write scene.json; on any failure, scene.json on disk
+// stays at the old epoch because the failed writeFile preserved it."
+// The literal early-return in saveScene needs no test (it's C++
+// short-circuit). What does need testing is that writeFile honours the
+// rollback contract — which the test hooks let us exercise without a
+// real filesystem failure.
+// ---------------------------------------------------------------------------
+
+class AtomicWriteRollbackTest : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        m_dir = fs::temp_directory_path()
+              / ("vestige_ed11_rollback_" + Testing::vestigeTestStamp());
+        std::error_code ec;
+        fs::remove_all(m_dir, ec);
+        fs::create_directories(m_dir);
+        m_target = m_dir / "scene.json";
+    }
+
+    void TearDown() override
+    {
+        AtomicWrite::TestHooks::clearForcedFailure();
+        std::error_code ec;
+        fs::remove_all(m_dir, ec);
+    }
+
+    std::string readAll(const fs::path& p) const
+    {
+        std::ifstream in(p);
+        std::stringstream ss;
+        ss << in.rdbuf();
+        return ss.str();
+    }
+
+    fs::path m_dir;
+    fs::path m_target;
+};
+
+TEST_F(AtomicWriteRollbackTest, ForcedFailureReturnsTheArmedStatus_Ed11)
+{
+    AtomicWrite::TestHooks::forceNextWriteFailure(
+        AtomicWrite::Status::RenameFailed);
+    const auto status = AtomicWrite::writeFile(m_target, "new content");
+    EXPECT_EQ(status, AtomicWrite::Status::RenameFailed);
+}
+
+TEST_F(AtomicWriteRollbackTest, ForcedFailureLeavesExistingTargetUntouched_Ed11)
+{
+    // Plant the old-epoch scene.json equivalent.
+    {
+        std::ofstream out(m_target);
+        out << "OLD-EPOCH-CONTENT";
+    }
+    ASSERT_EQ(readAll(m_target), "OLD-EPOCH-CONTENT");
+
+    AtomicWrite::TestHooks::forceNextWriteFailure(
+        AtomicWrite::Status::TempWriteFailed);
+
+    const auto status = AtomicWrite::writeFile(m_target, "NEW-EPOCH-CONTENT");
+    ASSERT_NE(status, AtomicWrite::Status::Ok)
+        << "hook must not return Ok";
+
+    // The headline Ed11 invariant: on writeFile failure, the target
+    // file is bit-identical to its pre-call state. saveScene's
+    // "scene.json is the commit point" guarantee reduces to this.
+    EXPECT_EQ(readAll(m_target), "OLD-EPOCH-CONTENT")
+        << "forced AtomicWrite failure must not overwrite the target";
+}
+
+TEST_F(AtomicWriteRollbackTest, ForcedFailureLeavesNoTmpArtifact_Ed11)
+{
+    AtomicWrite::TestHooks::forceNextWriteFailure(
+        AtomicWrite::Status::FsyncFailed);
+
+    const auto status = AtomicWrite::writeFile(m_target, "doesn't matter");
+    ASSERT_NE(status, AtomicWrite::Status::Ok);
+
+    fs::path tmp = m_target;
+    tmp += ".tmp";
+    EXPECT_FALSE(fs::exists(m_target))
+        << "forced failure must not create the target";
+    EXPECT_FALSE(fs::exists(tmp))
+        << "forced failure must not leave a .tmp sidecar";
+}
+
+TEST_F(AtomicWriteRollbackTest, FailureIsSingleShotAndAutoClears_Ed11)
+{
+    // Arm one failure, fire one failure, then a normal write succeeds
+    // and the target reaches the new content.
+    AtomicWrite::TestHooks::forceNextWriteFailure(
+        AtomicWrite::Status::RenameFailed);
+    EXPECT_NE(AtomicWrite::writeFile(m_target, "first"),
+              AtomicWrite::Status::Ok);
+
+    // Now writeFile must work normally — the hook is single-shot.
+    EXPECT_EQ(AtomicWrite::writeFile(m_target, "second"),
+              AtomicWrite::Status::Ok);
+    EXPECT_EQ(readAll(m_target), "second");
 }
 
 TEST_F(SceneEnvelopeAtomicityTest, ReadMetadataAcceptsLegacyTerrainShape_Ed11)

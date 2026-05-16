@@ -46,13 +46,7 @@
 #include <fstream>
 #include <string>
 
-#ifdef _WIN32
-#include <process.h>
-#define VESTIGE_GETPID() _getpid()
-#else
-#include <unistd.h>
-#define VESTIGE_GETPID() getpid()
-#endif
+#include "test_helpers.h"
 
 using namespace Vestige;
 namespace fs = std::filesystem;
@@ -65,10 +59,10 @@ class AtomicWriteRoutingTest : public ::testing::Test
 protected:
     void SetUp() override
     {
-        // Unique per-process so `ctest -j` runs don't step on one
-        // another's assets directory.
+        // Per-process + per-test name so `ctest -j` runs don't step
+        // on one another's assets directory.
         m_assetsDir = fs::temp_directory_path()
-                    / ("vestige_f7_prefab_" + std::to_string(VESTIGE_GETPID()));
+                    / ("vestige_f7_prefab_" + Testing::vestigeTestStamp());
         std::error_code ec;
         fs::remove_all(m_assetsDir, ec);
         fs::create_directories(m_assetsDir / "prefabs");
@@ -179,10 +173,7 @@ protected:
         // real recent_files.json. Per-process + per-test name stamping
         // prevents `ctest -j` runs of this fixture from racing each other.
         m_xdgRoot = fs::temp_directory_path()
-                  / ("vestige_ed4_recent_"
-                      + std::to_string(VESTIGE_GETPID()) + "_"
-                      + ::testing::UnitTest::GetInstance()
-                          ->current_test_info()->name());
+                  / ("vestige_ed4_recent_" + Testing::vestigeTestStamp());
         std::error_code ec;
         fs::remove_all(m_xdgRoot, ec);
         fs::create_directories(m_xdgRoot);

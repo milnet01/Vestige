@@ -105,4 +105,38 @@ TEST(CommandHistoryDirty, UndoToSavedClearsDirty_Baseline)
     EXPECT_FALSE(h.isDirty());
 }
 
+// Audit follow-up (2026-05-16): the sticky-flag rule must override the
+// version-arithmetic-undo path. After markSaved → execute → markUnsaved
+// (a wizard/template apply that re-replaces the scene non-undoably),
+// undoing the prior command still returns the version counter to the
+// saved-version checkpoint — but the sticky flag must keep isDirty()
+// true because the non-undoable replacement happened. A naive AND of
+// the two conditions would fail this case.
+TEST(CommandHistoryDirty, StickyFlagOverridesVersionArithmeticUndo_Ed7)
+{
+    CommandHistory h;
+    int v = 0;
+    h.execute(std::make_unique<IncrementCommand>(v));
+    h.markSaved();
+    EXPECT_FALSE(h.isDirty());
+
+    h.execute(std::make_unique<IncrementCommand>(v));
+    EXPECT_TRUE(h.isDirty());
+
+    // Non-undoable replacement happens here (wizard apply / template
+    // load). The sticky flag latches.
+    h.markUnsavedChange();
+    EXPECT_TRUE(h.isDirty());
+
+    // Plain version-counter arithmetic would clear isDirty here — the
+    // undo brings the counter back to the saved version. Sticky must win.
+    h.undo();
+    EXPECT_TRUE(h.isDirty())
+        << "sticky flag must survive a version-arithmetic clear";
+
+    // markSaved() is the only thing that clears the sticky flag.
+    h.markSaved();
+    EXPECT_FALSE(h.isDirty());
+}
+
 }  // namespace Vestige::CommandHistoryDirty::Test

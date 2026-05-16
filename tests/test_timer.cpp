@@ -58,7 +58,11 @@ TEST(TimerTest, ElapsedTimeAdvancesWithWallClock)
     // register the advance, small enough that the test stays fast.
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
     double after = timer.getElapsedTime();
-    EXPECT_GT(after - before, 0.005);  // at least 5 ms elapsed
+    // Threshold deliberately well below the 10 ms sleep — POSIX permits
+    // sleep_for to return slightly early, and under ASAN/LSAN the
+    // instrumentation adds enough jitter that a 5 ms floor would
+    // occasionally bite. 1 ms is a safe POSIX-monotonic floor.
+    EXPECT_GT(after - before, 0.001);
 }
 
 TEST(TimerTest, FrameRateCapRoundTrip)

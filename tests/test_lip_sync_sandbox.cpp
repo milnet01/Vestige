@@ -19,13 +19,7 @@
 #include <fstream>
 #include <string>
 
-#ifdef _WIN32
-#include <process.h>
-#define VESTIGE_GETPID() _getpid()
-#else
-#include <unistd.h>
-#define VESTIGE_GETPID() getpid()
-#endif
+#include "test_helpers.h"
 
 namespace fs = std::filesystem;
 
@@ -43,11 +37,8 @@ protected:
     {
         // Unique per-process + per-test so `ctest -j` doesn't race
         // on a shared temp dir.
-        const auto* info = ::testing::UnitTest::GetInstance()->current_test_info();
-        const std::string testName = info ? info->name() : "unknown";
         m_root = fs::temp_directory_path()
-               / ("vestige_lipsync_sandbox_test_"
-                  + std::to_string(VESTIGE_GETPID()) + "_" + testName);
+               / ("vestige_lipsync_sandbox_test_" + Testing::vestigeTestStamp());
         std::error_code ec;
         fs::remove_all(m_root, ec);
         fs::create_directories(m_root / "assets");

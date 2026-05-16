@@ -169,10 +169,48 @@ bool fsyncDirOf(const fs::path& anyFile)
 
 #endif
 
+#ifdef VESTIGE_TEST_HOOKS
+// Single-shot forced-failure flag. The hook is process-wide because the
+// AtomicWrite helper is stateless; tests guard against cross-test
+// leakage via `clearForcedFailure()` in TearDown. Not thread-safe — the
+// test suite runs sequentially per ctest_discover_tests' default mode.
+static bool g_forceFailureArmed = false;
+static Status g_forceFailureStatus = Status::TempWriteFailed;
+#endif
+
 } // namespace
+
+#ifdef VESTIGE_TEST_HOOKS
+namespace TestHooks
+{
+
+void forceNextWriteFailure(Status status)
+{
+    g_forceFailureArmed  = true;
+    g_forceFailureStatus = status;
+}
+
+void clearForcedFailure()
+{
+    g_forceFailureArmed  = false;
+}
+
+} // namespace TestHooks
+#endif
 
 Status writeFile(const fs::path& targetPath, std::string_view contents)
 {
+#ifdef VESTIGE_TEST_HOOKS
+    if (g_forceFailureArmed)
+    {
+        g_forceFailureArmed = false;
+        Logger::warning("AtomicWrite: forced failure hook returning "
+                        + std::string(describe(g_forceFailureStatus))
+                        + " for " + targetPath.string());
+        return g_forceFailureStatus;
+    }
+#endif
+
     // Ensure parent dir exists — callers are allowed to pass a path
     // whose directory has never been created.
     std::error_code ec;

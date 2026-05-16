@@ -16,13 +16,7 @@
 #include <filesystem>
 #include <fstream>
 
-#ifdef _WIN32
-#include <process.h>
-#define VESTIGE_GETPID() _getpid()
-#else
-#include <unistd.h>
-#define VESTIGE_GETPID() getpid()
-#endif
+#include "test_helpers.h"
 
 using namespace Vestige;
 namespace fs = std::filesystem;
@@ -38,7 +32,7 @@ protected:
     {
         // Unique per-process: see rationale in test_scene_serializer.cpp.
         m_testDir = fs::temp_directory_path()
-                  / ("vestige_test_file_menu_" + std::to_string(VESTIGE_GETPID()));
+                  / ("vestige_test_file_menu_" + Testing::vestigeTestStamp());
         fs::create_directories(m_testDir);
     }
 
@@ -198,7 +192,7 @@ protected:
     {
         // Unique per-process: see rationale in test_scene_serializer.cpp.
         m_testDir = fs::temp_directory_path()
-                  / ("vestige_test_recent_" + std::to_string(VESTIGE_GETPID()));
+                  / ("vestige_test_recent_" + Testing::vestigeTestStamp());
         fs::create_directories(m_testDir);
     }
 

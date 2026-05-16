@@ -58,6 +58,12 @@ endif()
 # Tests
 if(VESTIGE_BUILD_TESTS)
     enable_testing()
+    # When tests are enabled, compile the engine with VESTIGE_TEST_HOOKS so
+    # the test binary can reach the AtomicWrite forced-failure seam (Phase
+    # 10.9 Slice 12 Ed11 — scene-envelope atomicity rollback pin). The
+    # hook is dormant unless armed from a test; production distribution
+    # builds (with -DVESTIGE_BUILD_TESTS=OFF) omit the seam entirely.
+    target_compile_definitions(vestige_engine PUBLIC VESTIGE_TEST_HOOKS)
     add_subdirectory(tests)
 endif()
 

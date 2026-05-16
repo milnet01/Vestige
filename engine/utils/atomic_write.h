@@ -73,5 +73,26 @@ Status writeFile(const std::filesystem::path& targetPath,
 /// @brief Human-readable label for a Status, for logging.
 const char* describe(Status s);
 
+#ifdef VESTIGE_TEST_HOOKS
+/// @brief Test-only hooks. Gated behind `VESTIGE_TEST_HOOKS` so the
+///        symbols are unreachable in production builds. Tests use these
+///        to pin the rollback contract (Phase 10.9 Slice 12 Ed11
+///        scene-envelope atomicity depends on it: a forced write
+///        failure must leave the target file unchanged).
+namespace TestHooks
+{
+
+/// @brief Causes the next call to `writeFile` to return @a status
+///        without touching the filesystem. The flag self-clears after
+///        firing once. Subsequent writes behave normally.
+void forceNextWriteFailure(Status status);
+
+/// @brief Resets any pending forced failure. Call from test TearDown
+///        to avoid leaking state between tests.
+void clearForcedFailure();
+
+} // namespace TestHooks
+#endif
+
 } // namespace AtomicWrite
 } // namespace Vestige

@@ -16,13 +16,7 @@
 #include <filesystem>
 #include <fstream>
 
-#ifdef _WIN32
-#include <process.h>
-#define VESTIGE_GETPID() _getpid()
-#else
-#include <unistd.h>
-#define VESTIGE_GETPID() getpid()
-#endif
+#include "test_helpers.h"
 
 using namespace Vestige;
 namespace fs = std::filesystem;
@@ -40,7 +34,7 @@ protected:
         // process; a shared path let one process's TearDown remove_all
         // another process's in-flight files.
         m_testDir = fs::temp_directory_path()
-                  / ("vestige_test_scenes_" + std::to_string(VESTIGE_GETPID()));
+                  / ("vestige_test_scenes_" + Testing::vestigeTestStamp());
         fs::create_directories(m_testDir);
     }
 
@@ -185,9 +179,15 @@ TEST_F(SceneSerializerTest, SetNameWorks)
 // JSON structure of serialized entity data
 // ---------------------------------------------------------------------------
 
-TEST_F(SceneSerializerTest, EntityJsonHasExpectedFields)
+// Schema-pin reference document: these two tests construct the JSON shape
+// that EntitySerializer / SceneSerializer produce and assert their own
+// fields. They DO NOT exercise the serializers themselves (which need a
+// ResourceManager + GL context); they're a hand-authored description of
+// the on-disk format that lives next to the code it documents. A field
+// rename here without a matching serializer change is a smell — surface
+// it via this test's name when reviewing.
+TEST_F(SceneSerializerTest, EntityJsonShapeReferenceDocument)
 {
-    // Manually build what EntitySerializer produces and verify structure
     nlohmann::json entityJson;
     entityJson["name"] = "TestEntity";
     entityJson["transform"]["position"] = {1.0f, 2.0f, 3.0f};
@@ -205,7 +205,7 @@ TEST_F(SceneSerializerTest, EntityJsonHasExpectedFields)
     EXPECT_FALSE(entityJson["locked"].get<bool>());
 }
 
-TEST_F(SceneSerializerTest, SceneEnvelopeHasCorrectStructure)
+TEST_F(SceneSerializerTest, SceneEnvelopeShapeReferenceDocument)
 {
     nlohmann::json sceneJson;
     sceneJson["vestige_scene"]["format_version"] = SceneSerializer::CURRENT_FORMAT_VERSION;
@@ -226,7 +226,8 @@ TEST_F(SceneSerializerTest, SceneEnvelopeHasCorrectStructure)
 
     EXPECT_TRUE(sceneJson.contains("vestige_scene"));
     EXPECT_TRUE(sceneJson.contains("entities"));
-    EXPECT_EQ(sceneJson["vestige_scene"]["format_version"], 1);
+    EXPECT_EQ(sceneJson["vestige_scene"]["format_version"],
+              SceneSerializer::CURRENT_FORMAT_VERSION);
     EXPECT_EQ(sceneJson["entities"].size(), 1u);
     EXPECT_EQ(sceneJson["entities"][0]["name"], "Cube");
 }

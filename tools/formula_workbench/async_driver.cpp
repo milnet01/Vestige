@@ -197,7 +197,7 @@ AsyncDriverJob::State AsyncDriverJob::poll()
         const auto dt  = now - m_cancelRequestedAt;
         const auto secs = std::chrono::duration_cast<
             std::chrono::duration<float>>(dt).count();
-        if (secs >= CANCEL_SIGKILL_GRACE_SECONDS)
+        if (secs >= m_cancelSigkillGraceSeconds)
         {
             const int pid = m_childPid.load(std::memory_order_acquire);
             if (pid > 0)

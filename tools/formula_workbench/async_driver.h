@@ -83,7 +83,7 @@ public:
     /// when ``Idle`` — returns ``Idle``.
     ///
     /// Also drives the cancellation escalator: if ``cancel()`` was
-    /// called more than ``CANCEL_SIGKILL_GRACE_SECONDS`` ago and the
+    /// called more than ``cancelSigkillGraceSeconds()`` ago and the
     /// worker is still Running, sends SIGKILL once. PySR's embedded
     /// Julia runtime has been observed to ignore SIGTERM mid-sweep,
     /// so the escalation is load-bearing for the "Cancel" button UX.
@@ -136,9 +136,25 @@ public:
     ///        Used by the UI for a "running 2.3s…" label.
     float elapsedSeconds() const noexcept;
 
-    /// @brief Grace window (seconds) between SIGTERM and SIGKILL.
-    ///        Exposed as a constant so tests can reason about it.
-    static constexpr float CANCEL_SIGKILL_GRACE_SECONDS = 3.0f;
+    /// @brief Default grace window (seconds) between SIGTERM and SIGKILL.
+    ///        The wall-clock value reads from `cancelSigkillGraceSeconds()`
+    ///        — overridable per-instance via `setCancelSigkillGraceSeconds`
+    ///        so tests don't have to wait the full production grace.
+    static constexpr float CANCEL_SIGKILL_GRACE_SECONDS_DEFAULT = 3.0f;
+
+    /// @brief Returns the current grace window in seconds.
+    float cancelSigkillGraceSeconds() const noexcept
+    {
+        return m_cancelSigkillGraceSeconds;
+    }
+
+    /// @brief Overrides the grace window. Tests set this to 0.1f to
+    ///        cut the SIGKILL-escalation wall-clock from 3 s to ~0.1 s.
+    ///        Production callers leave the default unchanged.
+    void setCancelSigkillGraceSeconds(float seconds) noexcept
+    {
+        m_cancelSigkillGraceSeconds = seconds;
+    }
 
 private:
     std::atomic<State> m_state{State::Idle};
@@ -171,6 +187,11 @@ private:
     std::chrono::steady_clock::time_point m_cancelRequestedAt{};
     bool m_cancelRequested = false;
     bool m_sigkillSent     = false;
+
+    // Grace window between SIGTERM and SIGKILL. Mutable via the
+    // public setter so tests can shorten it; production leaves the
+    // default 3.0f untouched.
+    float m_cancelSigkillGraceSeconds = CANCEL_SIGKILL_GRACE_SECONDS_DEFAULT;
 
     std::chrono::steady_clock::time_point m_startedAt{};
 

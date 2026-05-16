@@ -29,11 +29,15 @@ TEST(CpuProfilerTest, BeginEndFrameRecordsPositiveTime)
     profiler.beginFrame();
 
     // Burn a small amount of time so the duration is measurably > 0.
-    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    // 5 ms keeps us comfortably above the steady_clock resolution floor
+    // (1 ms is within POSIX minimum-sleep-resolution territory under
+    // ASAN/LSAN and can return early enough that the profiler reads
+    // sub-millisecond values).
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
 
     profiler.endFrame();
 
-    EXPECT_GT(profiler.getTotalCpuTimeMs(), 0.0f);
+    EXPECT_GT(profiler.getTotalCpuTimeMs(), 0.5f);
 }
 
 TEST(CpuProfilerTest, PushPopScopeRecordsOneEntry)
