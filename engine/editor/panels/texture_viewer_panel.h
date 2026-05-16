@@ -6,6 +6,7 @@
 ///        mipmap visualization, tiling preview, and PBR texture set grouping.
 #pragma once
 
+#include "editor/panels/i_panel.h"
 #include "renderer/framebuffer.h"
 #include "renderer/shader.h"
 #include "renderer/texture.h"
@@ -45,9 +46,11 @@ struct PbrTextureGroup
 
 /// @brief Panel for viewing textures with channel isolation, zoom/pan, mip levels,
 ///        tiling preview, metadata, and PBR texture set detection.
-class TextureViewerPanel
+class TextureViewerPanel : public IPanel
 {
 public:
+    const char* displayName() const override { return "Texture Viewer"; }
+
     /// @brief Initializes shaders and FBO for channel rendering.
     /// @param assetPath Base path for shader loading.
     /// @return True if initialization succeeded.
@@ -64,8 +67,8 @@ public:
     /// @brief Releases GPU resources.
     void cleanup();
 
-    bool isOpen() const { return m_open; }
-    void setOpen(bool open) { m_open = open; }
+    bool isOpen() const override { return m_open; }
+    void setOpen(bool open) override { m_open = open; }
 
     // --- Accessors for testing ---
 

@@ -5,6 +5,7 @@
 /// @brief ImGui panel for environment painting — brush settings, palette, biome presets.
 #pragma once
 
+#include "editor/panels/i_panel.h"
 #include "editor/tools/brush_tool.h"
 #include "environment/biome_preset.h"
 #include "environment/density_map.h"
@@ -18,9 +19,11 @@ class FoliageManager;
 class FoliageRenderer;
 
 /// @brief Draws the Environment Painting panel with brush controls and foliage palette.
-class EnvironmentPanel
+class EnvironmentPanel : public IPanel
 {
 public:
+    const char* displayName() const override { return "Environment"; }
+
     /// @brief Draws the panel contents inside the current ImGui window.
     /// @param brushTool The brush tool to configure.
     /// @param manager The foliage manager (for stats display).
@@ -33,10 +36,10 @@ public:
     BiomeLibrary& getBiomeLibrary() { return m_biomeLibrary; }
 
     /// @brief Whether the panel is currently open/visible.
-    bool isOpen() const { return m_open; }
+    bool isOpen() const override { return m_open; }
 
     /// @brief Toggle panel visibility.
-    void setOpen(bool open) { m_open = open; }
+    void setOpen(bool open) override { m_open = open; }
 
     /// @brief Gets the density map (creates on first access if terrain is set).
     DensityMap& getDensityMap() { return m_densityMap; }

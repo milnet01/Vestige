@@ -158,6 +158,20 @@ bool Editor::initialize(GLFWwindow* window, const std::string& assetPath)
     m_scriptEditorPanel.setRegistry(&m_nodeTypeRegistry);
     m_scriptEditorPanel.initialize(nodeEditorSettingsPath);
 
+    // Ed5 — register togglable panels with the registry. Order here matches
+    // the existing Window-menu visual order so users see the same layout.
+    m_panelRegistry.registerPanel(&m_environmentPanel);
+    m_panelRegistry.registerPanel(&m_terrainPanel);
+    m_panelRegistry.registerPanel(&m_navigationPanel);
+    m_panelRegistry.registerPanel(&m_uiLayoutPanel);
+    m_panelRegistry.registerPanel(&m_uiRuntimePanel);
+    m_panelRegistry.registerPanel(&m_scriptEditorPanel);
+    m_panelRegistry.registerPanel(&m_performancePanel);
+    m_panelRegistry.registerPanel(&m_validationPanel);
+    m_panelRegistry.registerPanel(&m_modelViewerPanel);
+    m_panelRegistry.registerPanel(&m_textureViewerPanel);
+    m_panelRegistry.registerPanel(&m_hdriViewerPanel);
+
     m_isInitialized = true;
     Logger::info("Editor initialized (ImGui + docking + editor camera)");
     return true;
@@ -514,42 +528,18 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
 
                 ImGui::Separator();
 
-                // Panel toggles
-                bool envOpen = m_environmentPanel.isOpen();
-                if (ImGui::MenuItem("Environment", nullptr, &envOpen))
-                {
-                    m_environmentPanel.setOpen(envOpen);
-                }
-                bool terrainOpen = m_terrainPanel.isOpen();
-                if (ImGui::MenuItem("Terrain", nullptr, &terrainOpen))
-                {
-                    m_terrainPanel.setOpen(terrainOpen);
-                }
-                bool navOpen = m_navigationPanel.isOpen();
-                if (ImGui::MenuItem("Navigation", nullptr, &navOpen))
-                {
-                    m_navigationPanel.setOpen(navOpen);
-                }
-                bool uiLayoutOpen = m_uiLayoutPanel.isOpen();
-                if (ImGui::MenuItem("UI Layout", nullptr, &uiLayoutOpen))
-                {
-                    m_uiLayoutPanel.setOpen(uiLayoutOpen);
-                }
-                bool uiRuntimeOpen = m_uiRuntimePanel.isOpen();
-                if (ImGui::MenuItem("UI Runtime", nullptr, &uiRuntimeOpen))
-                {
-                    m_uiRuntimePanel.setOpen(uiRuntimeOpen);
-                }
+                // Ed5 — togglable panels routed through PanelRegistry.
+                // Adding a new togglable panel: inherit IPanel, register in
+                // Editor::initialize(), and the Window-menu entry appears for
+                // free.
+                m_panelRegistry.drawMenuToggle(m_environmentPanel);
+                m_panelRegistry.drawMenuToggle(m_terrainPanel);
+                m_panelRegistry.drawMenuToggle(m_navigationPanel);
+                m_panelRegistry.drawMenuToggle(m_uiLayoutPanel);
+                m_panelRegistry.drawMenuToggle(m_uiRuntimePanel);
                 ImGui::MenuItem("Console", nullptr, &m_showConsole);
                 ImGui::MenuItem("Statistics", nullptr, &m_showStatistics);
-                {
-                    bool scriptOpen = m_scriptEditorPanel.isOpen();
-                    if (ImGui::MenuItem("Script Editor", nullptr, &scriptOpen))
-                    {
-                        if (scriptOpen) m_scriptEditorPanel.open();
-                        else            m_scriptEditorPanel.close();
-                    }
-                }
+                m_panelRegistry.drawMenuToggle(m_scriptEditorPanel);
                 ImGui::Separator();
                 if (ImGui::MenuItem("Capture Screenshot", "F11"))
                 {
@@ -559,33 +549,13 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
                 {
                     m_fullscreenViewport = !m_fullscreenViewport;
                 }
-                bool perfOpen = m_performancePanel.isOpen();
-                if (ImGui::MenuItem("Performance", "F12", &perfOpen))
-                {
-                    m_performancePanel.setOpen(perfOpen);
-                }
-                bool valOpen = m_validationPanel.isOpen();
-                if (ImGui::MenuItem("Scene Validation", nullptr, &valOpen))
-                {
-                    m_validationPanel.setOpen(valOpen);
-                }
+                m_panelRegistry.drawMenuToggle(m_performancePanel);
+                m_panelRegistry.drawMenuToggle(m_validationPanel);
                 ImGui::Separator();
                 ImGui::TextDisabled("Asset Viewers");
-                bool modelViewerOpen = m_modelViewerPanel.isOpen();
-                if (ImGui::MenuItem("Model Viewer", nullptr, &modelViewerOpen))
-                {
-                    m_modelViewerPanel.setOpen(modelViewerOpen);
-                }
-                bool texViewerOpen = m_textureViewerPanel.isOpen();
-                if (ImGui::MenuItem("Texture Viewer", nullptr, &texViewerOpen))
-                {
-                    m_textureViewerPanel.setOpen(texViewerOpen);
-                }
-                bool hdriViewerOpen = m_hdriViewerPanel.isOpen();
-                if (ImGui::MenuItem("HDRI Viewer", nullptr, &hdriViewerOpen))
-                {
-                    m_hdriViewerPanel.setOpen(hdriViewerOpen);
-                }
+                m_panelRegistry.drawMenuToggle(m_modelViewerPanel);
+                m_panelRegistry.drawMenuToggle(m_textureViewerPanel);
+                m_panelRegistry.drawMenuToggle(m_hdriViewerPanel);
                 ImGui::Separator();
                 ImGui::MenuItem("Demo Window", nullptr, &m_showDemoWindow);
                 ImGui::EndMenu();

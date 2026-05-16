@@ -42,6 +42,7 @@ add_executable(vestige_tests
     test_scene_serializer.cpp
     test_file_menu.cpp
     test_command_history.cpp
+    test_panel_registry.cpp
     test_particle_data.cpp
     test_animation_curve.cpp
     test_water_surface.cpp

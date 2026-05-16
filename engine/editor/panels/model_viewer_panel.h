@@ -6,6 +6,7 @@
 ///        skeleton visualization, and drag-to-place.
 #pragma once
 
+#include "editor/panels/i_panel.h"
 #include "renderer/framebuffer.h"
 #include "renderer/shader.h"
 #include "renderer/texture.h"
@@ -26,9 +27,11 @@ class Scene;
 
 /// @brief Panel for previewing 3D models with orbiting camera, PBR rendering,
 ///        animation playback, skeleton visualization, and drag-to-place support.
-class ModelViewerPanel
+class ModelViewerPanel : public IPanel
 {
 public:
+    const char* displayName() const override { return "Model Viewer"; }
+
     /// @brief Initializes shaders and FBO for model rendering.
     /// @param assetPath Base path for shader loading.
     /// @return True if initialization succeeded.
@@ -48,8 +51,8 @@ public:
     /// @brief Releases GPU resources.
     void cleanup();
 
-    bool isOpen() const { return m_open; }
-    void setOpen(bool open) { m_open = open; }
+    bool isOpen() const override { return m_open; }
+    void setOpen(bool open) override { m_open = open; }
 
     // --- Accessors for testing ---
 

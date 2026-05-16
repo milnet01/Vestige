@@ -6,6 +6,7 @@
 ///        exposure control, and one-click scene environment setting.
 #pragma once
 
+#include "editor/panels/i_panel.h"
 #include "renderer/framebuffer.h"
 #include "renderer/shader.h"
 #include "renderer/skybox.h"
@@ -25,9 +26,11 @@ class ResourceManager;
 
 /// @brief Panel for previewing HDRI environment maps with exposure control,
 ///        skybox mini-viewport, and one-click scene environment setting.
-class HdriViewerPanel
+class HdriViewerPanel : public IPanel
 {
 public:
+    const char* displayName() const override { return "HDRI Viewer"; }
+
     /// @brief Initializes shaders and FBO for the HDRI viewer.
     /// @param assetPath Base path for shader loading.
     /// @return True if initialization succeeded.
@@ -45,8 +48,8 @@ public:
     /// @brief Releases GPU resources.
     void cleanup();
 
-    bool isOpen() const { return m_open; }
-    void setOpen(bool open) { m_open = open; }
+    bool isOpen() const override { return m_open; }
+    void setOpen(bool open) override { m_open = open; }
 
     // --- Accessors for testing ---
 

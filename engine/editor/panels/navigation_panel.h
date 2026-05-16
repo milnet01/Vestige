@@ -5,6 +5,7 @@
 /// @brief ImGui panel for baking the navmesh and visualizing the result.
 #pragma once
 
+#include "editor/panels/i_panel.h"
 #include "navigation/nav_mesh_config.h"
 
 #include <glm/glm.hpp>
@@ -20,19 +21,21 @@ class Scene;
 /// Drives `NavigationSystem` from the editor: exposes Recast build params,
 /// fires `bakeNavMesh()` on demand, reports last-bake stats, and toggles
 /// a debug overlay drawn by the engine's render pass.
-class NavigationPanel
+class NavigationPanel : public IPanel
 {
 public:
+    const char* displayName() const override { return "Navigation"; }
+
     /// @brief Draws the panel inside its own ImGui window.
     /// @param navSystem Live navigation system. May be null — panel disables in that case.
     /// @param scene    Active scene to bake from. May be null.
     void draw(NavigationSystem* navSystem, Scene* scene);
 
     /// @brief Whether the panel is currently visible.
-    bool isOpen() const { return m_open; }
+    bool isOpen() const override { return m_open; }
 
     /// @brief Toggle panel visibility.
-    void setOpen(bool open) { m_open = open; }
+    void setOpen(bool open) override { m_open = open; }
 
     /// @brief Whether the navmesh polygon overlay should be drawn this frame.
     bool isVisualizationEnabled() const { return m_visualize; }

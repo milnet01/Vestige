@@ -5,6 +5,7 @@
 /// @brief ImGui panel for terrain sculpting, painting, and settings.
 #pragma once
 
+#include "editor/panels/i_panel.h"
 #include "editor/tools/terrain_brush.h"
 
 namespace Vestige
@@ -14,9 +15,11 @@ class CommandHistory;
 class Terrain;
 
 /// @brief Draws the Terrain panel with sculpting/painting controls and settings.
-class TerrainPanel
+class TerrainPanel : public IPanel
 {
 public:
+    const char* displayName() const override { return "Terrain"; }
+
     /// @brief Draws the panel contents inside the current ImGui window.
     /// @param brush The terrain brush tool to configure.
     /// @param terrain The terrain to display info for.
@@ -24,10 +27,10 @@ public:
     void draw(TerrainBrush& brush, Terrain& terrain, CommandHistory& history);
 
     /// @brief Whether the panel is currently open/visible.
-    bool isOpen() const { return m_open; }
+    bool isOpen() const override { return m_open; }
 
     /// @brief Toggle panel visibility.
-    void setOpen(bool open) { m_open = open; }
+    void setOpen(bool open) override { m_open = open; }
 
 private:
     void drawSculptSection(TerrainBrush& brush);

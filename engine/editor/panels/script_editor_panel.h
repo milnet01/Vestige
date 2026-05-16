@@ -9,6 +9,7 @@
 /// menu only — palette, properties, breakpoints land in later steps.
 #pragma once
 
+#include "editor/panels/i_panel.h"
 #include "editor/widgets/node_editor_widget.h"
 #include "scripting/script_graph.h"
 
@@ -25,10 +26,13 @@ class NodeTypeRegistry;
 /// @brief Editor panel that opens, edits, and saves a single ScriptGraph.
 ///
 /// Multiple instances allowed (side-by-side script comparison).
-class ScriptEditorPanel
+class ScriptEditorPanel : public IPanel
 {
 public:
     ScriptEditorPanel();
+
+    const char* displayName() const override { return "Script Editor"; }
+
 
     /// @brief Initialise file dialogs and the underlying NodeEditorWidget.
     /// @param settingsFile Optional path the node-editor uses to persist
@@ -48,8 +52,11 @@ public:
     /// @brief Hide the panel.
     void close() { m_open = false; }
 
+    /// @brief IPanel toggle — bridges to open()/close().
+    void setOpen(bool open) override { m_open = open; }
+
     /// @brief Whether the panel is currently visible (and will render).
-    bool isOpen() const { return m_open; }
+    bool isOpen() const override { return m_open; }
 
     /// @brief Render the panel for one frame. Call from inside the editor's
     /// per-frame ImGui pass.

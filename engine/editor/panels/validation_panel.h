@@ -5,6 +5,8 @@
 /// @brief Scene validation panel — checks for common issues and missing assets.
 #pragma once
 
+#include "editor/panels/i_panel.h"
+
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -35,16 +37,18 @@ struct ValidationEntry
 ///
 /// Checks for: missing textures, lights without shadows, entities far from origin,
 /// mesh renderers with null meshes, and other potential problems.
-class ValidationPanel
+class ValidationPanel : public IPanel
 {
 public:
+    const char* displayName() const override { return "Scene Validation"; }
+
     /// @brief Draws the validation panel.
     /// @param scene Active scene to validate.
     /// @param selection Editor selection (for click-to-select on warnings).
     void draw(Scene* scene, Selection& selection);
 
-    bool isOpen() const { return m_open; }
-    void setOpen(bool open) { m_open = open; }
+    bool isOpen() const override { return m_open; }
+    void setOpen(bool open) override { m_open = open; }
     void toggleOpen() { m_open = !m_open; }
 
     /// @brief Returns the number of issues found in the last validation.

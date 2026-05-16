@@ -17,6 +17,8 @@
 /// `editor.cpp` — currently the main viewport grabs all mouse events.
 #pragma once
 
+#include "editor/panels/i_panel.h"
+
 namespace Vestige
 {
 
@@ -24,9 +26,11 @@ class UICanvas;
 struct UITheme;
 
 /// @brief Editor panel for UI-layout inspection + live theme tweaking.
-class UILayoutPanel
+class UILayoutPanel : public IPanel
 {
 public:
+    const char* displayName() const override { return "UI Layout"; }
+
     /// @brief Draws the panel contents inside its own ImGui window.
     /// @param canvas Target canvas to inspect (may be null — panel shows an
     ///               empty-state message in that case).
@@ -34,10 +38,10 @@ public:
     void draw(UICanvas* canvas, UITheme* theme);
 
     /// @brief Whether the panel is currently visible.
-    bool isOpen() const { return m_open; }
+    bool isOpen() const override { return m_open; }
 
     /// @brief Toggle panel visibility.
-    void setOpen(bool open) { m_open = open; }
+    void setOpen(bool open) override { m_open = open; }
 
 private:
     bool m_open = false;

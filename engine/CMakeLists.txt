@@ -245,6 +245,7 @@ set(ENGINE_SOURCES
     editor/panels/template_dialog.cpp
     editor/panels/first_run_wizard.cpp
     editor/panels/settings_editor_panel.cpp
+    editor/panels/panel_registry.cpp
     core/settings_editor.cpp
     editor/tools/ruler_tool.cpp
     editor/tools/wall_tool.cpp

@@ -18,6 +18,7 @@
 #include "editor/panels/history_panel.h"
 #include "editor/panels/import_dialog.h"
 #include "editor/panels/inspector_panel.h"
+#include "editor/panels/panel_registry.h"
 #include "editor/panels/script_editor_panel.h"
 #include "scripting/node_type_registry.h"
 #include "editor/panels/validation_panel.h"
@@ -380,6 +381,13 @@ private:
     UILayoutPanel m_uiLayoutPanel;
     UIRuntimePanel m_uiRuntimePanel;
     TemplateDialog m_templateDialog;
+
+    // Ed5 — centralised Window-menu toggle wiring. Each togglable panel
+    // registers itself in `initialize()` so the menu code calls
+    // `m_panelRegistry.drawMenuToggle(panel)` once per entry instead of
+    // open the panel's `bool isOpen()` / `void setOpen(bool)` pair inline.
+    PanelRegistry m_panelRegistry;
+
     BrushTool m_brushTool;
     BrushPreviewRenderer m_brushPreview;
     RulerTool m_rulerTool;

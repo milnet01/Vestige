@@ -36,6 +36,7 @@
 /// `AudioPanel` and `NavigationPanel`.
 #pragma once
 
+#include "editor/panels/i_panel.h"
 #include "ui/game_screen.h"
 #include "ui/ui_canvas.h"
 #include "ui/ui_theme.h"
@@ -60,9 +61,11 @@ enum class UIRuntimePanelMenu
 
 /// @brief Editor panel for in-game UI runtime inspection + accessibility
 ///        composition. See file docstring for tab breakdown.
-class UIRuntimePanel
+class UIRuntimePanel : public IPanel
 {
 public:
+    const char* displayName() const override { return "UI Runtime"; }
+
     /// Cap on the screen-push log. 20 entries balances scrollback
     /// usefulness against clutter; matches the conservative end of the
     /// `HistoryPanel` depth.
@@ -89,8 +92,8 @@ public:
 
     // -- Open / close ---------------------------------------------------
 
-    bool isOpen() const { return m_open; }
-    void setOpen(bool open) { m_open = open; }
+    bool isOpen() const override { return m_open; }
+    void setOpen(bool open) override { m_open = open; }
     void toggleOpen() { m_open = !m_open; }
 
     // -- Screen-push log ------------------------------------------------
