@@ -171,7 +171,7 @@ For each phase below:
 
 A handful of ROADMAP items don't belong to one phase but to multiple:
 
-- **Open-Source Release** (`## Open-Source Release` ~line 1978) — pre-release checklist tracked in `docs/PRE_OPEN_SOURCE_AUDIT.md`. Touches Phase 12 (distribution) and Phase 21 (build wizard).
+- **Open-Source Release** (`## Open-Source Release` ~line 1978) — launched 2026-04-15; post-release commitments tracked inline in ROADMAP.md. Touches Phase 12 (distribution) and Phase 21 (build wizard).
 - **Target Projects** (`## Target Projects` ~line 2050) — biblical-walkthrough projects (Tabernacle, Solomon's Temple) that consume the engine. These are not engine phases; they're separate downstream projects.
 
 ---

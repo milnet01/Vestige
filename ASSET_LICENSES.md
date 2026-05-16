@@ -16,8 +16,7 @@ shipped in this repo carry their own licenses, listed below.
 > ~v1.0.0 pending a final redistributability audit of every asset.
 > The engine's `external/CMakeLists.txt` exposes `VESTIGE_FETCH_ASSETS`
 > (default OFF) to opt in when available. Fresh public clones build
-> cleanly without it. See
-> [`docs/PRE_OPEN_SOURCE_AUDIT.md`](docs/PRE_OPEN_SOURCE_AUDIT.md) §4.
+> cleanly without it.
 
 ---
 

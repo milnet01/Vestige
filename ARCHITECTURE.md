@@ -206,7 +206,7 @@ vestige/
 │   └── formula_workbench/  Interactive formula fitter + codegen
 ├── tests/                            # Google Test (~3180 tests)
 ├── docs/                             # PHASE*_DESIGN, *_RESEARCH, GI_ROADMAP,
-│                                     #   PRE_OPEN_SOURCE_AUDIT, TABERNACLE_SPECS
+│                                     #   TABERNACLE_SPECS
 ├── scripts/                          # pre-commit + launch
 ├── packaging/                        # vestige-editor wrapper + .desktop
 └── .github/

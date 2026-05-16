@@ -521,7 +521,7 @@ For CMake / Python:
 
 The SPDX line is machine-readable per [SPDX 2.3](https://spdx.dev/use/specifications/) — it lets license-scanning tools (REUSE, FOSSology, GitHub's License API) classify the file without parsing prose.
 
-Hybrid adoption: every new file gets the header; existing files gain it on natural edits. The open-source release (engine going MIT, biblical projects stay private) needs every public-repo file SPDX-tagged before tagging — see `docs/PRE_OPEN_SOURCE_AUDIT.md`.
+Hybrid adoption: every new file gets the header; existing files gain it on natural edits. The open-source release (engine going MIT, biblical projects stay private) needs every public-repo file SPDX-tagged before tagging.
 
 Year: per [REUSE 3.0](https://reuse.software/spec-3.0/), the year of first publication is the canonical entry; multi-year ranges (`2024-2026`) only when there is a real per-year contribution history to assert. Bump on substantive contribution if the contributor wants copyright protection on those changes; trivial edits (typo fixes) do not bump.
 

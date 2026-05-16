@@ -178,6 +178,13 @@ docs/AUTOMATED_AUDIT_REPORT*.md
 docs/AUTOMATED_AUDIT_REPORT*.json
 tools/audit/*IMPROVEMENTS*.md
 
+# Maintainer-only docs — local runbooks that don't belong in the public
+# repo. Their pre-untrack copies remain in git history (committed prior
+# to v0.1.3-preview); these entries stop *future* edits from leaking
+# personal context (account quotas, machine paths, cross-project refs).
+docs/PRE_OPEN_SOURCE_AUDIT.md
+docs/RECOMMENDED_ROUTINES.md
+
 # Non-redistributable assets — kept locally for the maintainer's use,
 # excluded from the public repo. See docs/PRE_OPEN_SOURCE_AUDIT.md §4.
 #

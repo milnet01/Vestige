@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # scripts/final_launch_sweep.sh
 #
-# One-command final sweep for Vestige's open-source launch, per
-# docs/PRE_OPEN_SOURCE_AUDIT.md §11 "One final pre-launch sweep".
+# One-command final sweep for Vestige's open-source launch.
 #
 # Runs, in order:
 #   1. gitleaks on the full history (source + --log-opts=--all)

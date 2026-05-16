@@ -11,8 +11,6 @@ THIRD_PARTY_NOTICES, CODE_OF_CONDUCT, LICENSE, VERSION). Everything in
 ```
 docs/
 ├── README.md                   ← this file
-├── PRE_OPEN_SOURCE_AUDIT.md    ← active open-source launch checklist
-├── RECOMMENDED_ROUTINES.md     ← maintainer's process / routine reference
 ├── engine/                     ← per-subsystem specs (Phase B shipped 2026-04-28 → 04-30; 15 specs + SPEC_TEMPLATE.md)
 ├── phases/                     ← all phase design + research docs (Phase 11A/11B + 12-26 stubs index + Phase 8 / 9 indexes shipped)
 ├── research/                   ← cross-cutting research and topic-level designs
@@ -115,9 +113,3 @@ first read:
 - [`CODE_OF_CONDUCT.md`](../CODE_OF_CONDUCT.md)
 - [`LICENSE`](../LICENSE), [`VERSION`](../VERSION)
 
-## Active checklists at this level
-
-- [`PRE_OPEN_SOURCE_AUDIT.md`](PRE_OPEN_SOURCE_AUDIT.md) — open-source
-  launch checklist (still tracking post-launch follow-up items).
-- [`RECOMMENDED_ROUTINES.md`](RECOMMENDED_ROUTINES.md) — maintainer's
-  recurring-task reference (tag policy, audit cadence, etc.).

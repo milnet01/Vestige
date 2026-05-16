@@ -76,9 +76,8 @@ endmacro()
 #      the version-pin benefit and adds repo size.
 #
 # Hedge: see the "CMake version matrix" note in ROADMAP.md
-# Post-Release Commitments and docs/PRE_OPEN_SOURCE_AUDIT.md §8 — CI
-# should test against multiple CMake versions to catch silent
-# regressions before they hit production builds.
+# Post-Release Commitments — CI should test against multiple CMake
+# versions to catch silent regressions before they hit production builds.
 # ---------------------------------------------------------------------------
 
 # GLFW — windowing and input
