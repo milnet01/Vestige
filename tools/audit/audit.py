@@ -246,6 +246,16 @@ def main() -> int:
              "when stdout is not a TTY or NO_COLOR is already set. "
              "See https://no-color.org.",
     )
+    parser.add_argument(
+        "--no-tests",
+        action="store_true",
+        dest="no_tests",
+        help="Skip the Tier 1 ctest step. Use in CI when another job has "
+             "already run the same test suite against the same build "
+             "(the GitHub Actions Linux Debug job's ctest pass) so we "
+             "don't double-charge the runner for ~3200 cases that just "
+             "passed. Build / cppcheck / clang-tidy run as normal.",
+    )
 
     args = parser.parse_args()
 
@@ -416,6 +426,12 @@ def main() -> int:
         config.raw["changes"]["base_ref"] = args.base_ref
     if args.no_research:
         config.raw["research"]["enabled"] = False
+    if args.no_tests:
+        # Surface the flag inside the config so tier1_build.run() picks
+        # it up via Config.get('runtime', 'skip_tests'). Keep the flag
+        # scoped to a `runtime` namespace so it's clearly a per-run
+        # decision, not a stored config field.
+        config.raw.setdefault("runtime", {})["skip_tests"] = True
 
     # --patterns preset: override patterns from config
     if args.patterns:

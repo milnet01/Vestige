@@ -110,13 +110,22 @@ jobs:
   audit-tool-tier1:
     name: Audit tool Tier 1 (static)
     runs-on: ubuntu-24.04
-    # 45-min ceiling matches linux-build-test. Rationale: this job does the
-    # full Debug build (~12 min cold on GH free runners) + cppcheck (~1.5 min)
-    # + clang-tidy on 50 files across 5 heavy check categories (bugprone-*,
-    # performance-*, modernize-*, readability-*, cppcoreguidelines-*, ~8-10
-    # min). Cold-start worst case ~22 min; warm runs (build/_deps cached) are
-    # faster. The previous 20-min ceiling was cutting clang-tidy mid-run.
-    # See milnet01/Vestige CI run 24391001628 for the data.
+    # 45-min ceiling matches linux-build-test. Cold-start worst case ~22 min
+    # (Debug build ~12 min cold + cppcheck ~1.5 min + clang-tidy on 50 files
+    # ~8-10 min); warm runs (build/_deps cached) are faster. The previous 20-min
+    # ceiling was cutting clang-tidy mid-run — see milnet01/Vestige CI run
+    # 24391001628 for the data.
+    #
+    # Test-step deduplication (Slice 18 follow-up): the audit no longer
+    # re-runs the ~3236-case ctest pass. `linux-build-test (Debug)` runs
+    # against the same Debug build with the same xvfb-wrapped ctest
+    # invocation; running it twice in one CI pipeline just doubled the
+    # runner cost without adding signal. The Linux Debug job is the
+    # test-runner of record; this job is the static-analysis-of-record.
+    # If you need to gate audit on tests, add `needs: linux-build-test`
+    # — but that serialises the two jobs and pessimises wall time on
+    # PRs where both pass. Today we keep them parallel; a downstream
+    # red signal from linux-build-test already fails the PR check.
     timeout-minutes: 45
     steps:
       - name: Checkout
@@ -178,14 +187,19 @@ jobs:
         # finding severity (0 = clean, 1 = HIGH, 2 = CRITICAL).
         # --no-color: propagate NO_COLOR=1 to cppcheck/clang-tidy/git
         # children so downloaded log artifacts stay free of ANSI escapes.
-        # xvfb-run: GLFW-backed tests (e.g. test_timer.cpp calling
-        # glfwInit in SetUp) need an X display. Without this the Timer
-        # tests fail because glfwGetTime returns uninitialised state.
-        # Matches how linux-build-test wraps its ctest invocation.
-        # Follow-up: Timer should use std::chrono::steady_clock so the
-        # test doesn't need a display at all.
+        # --no-tests: skip the ctest step — `linux-build-test (Debug)`
+        # runs the same suite against the same Debug build in the same
+        # pipeline. Running it twice was wasting ~10-15 min of runner
+        # wall time and was the step that tripped the 600s subprocess
+        # timeout in CI run 25961354427 before tier1_build's timeout
+        # was bumped. Build / cppcheck / clang-tidy still run normally.
+        # If audit's static analysis must be gated by test results,
+        # add `needs: linux-build-test` to this job (see the timeout-
+        # minutes comment above for the wall-time tradeoff).
+        # xvfb-run kept for compatibility with audit.py's other steps
+        # that may incidentally touch GLFW.
         run: |
-          xvfb-run --auto-servernum python3 tools/audit/audit.py -t 1 --ci --no-color || {
+          xvfb-run --auto-servernum python3 tools/audit/audit.py -t 1 --ci --no-color --no-tests || {
             echo "::error::Tier 1 audit failed — see annotations above."
             exit 1
           }

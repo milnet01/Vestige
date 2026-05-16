@@ -140,7 +140,15 @@ def run_tests(config: Config) -> tuple[list[Finding], dict]:
 
 
 def run(config: Config) -> tuple[list[Finding], dict]:
-    """Run all Tier 1 build checks. Returns (findings, summary)."""
+    """Run all Tier 1 build checks. Returns (findings, summary).
+
+    Honours `--no-tests` (audit.py flag, threaded into config as
+    `runtime.skip_tests`): the build pass always runs, but the test
+    pass is skipped when the caller has already verified the suite
+    elsewhere (e.g. the CI Linux Debug job's ctest step — see
+    `.github/workflows/ci.yml`). Skipping avoids running the same
+    ~3200-case suite twice in the same CI pipeline.
+    """
     all_findings: list[Finding] = []
     summary: dict = {}
 
@@ -148,8 +156,12 @@ def run(config: Config) -> tuple[list[Finding], dict]:
     all_findings.extend(build_findings)
     summary["build"] = build_summary
 
-    test_findings, test_summary = run_tests(config)
-    all_findings.extend(test_findings)
-    summary["tests"] = test_summary
+    if config.get("runtime", "skip_tests", default=False):
+        log.info("Skipping test step (--no-tests / runtime.skip_tests=true)")
+        summary["tests"] = {"skipped_by_request": True}
+    else:
+        test_findings, test_summary = run_tests(config)
+        all_findings.extend(test_findings)
+        summary["tests"] = test_summary
 
     return all_findings, summary
