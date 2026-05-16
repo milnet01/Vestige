@@ -30,6 +30,14 @@ build:
   # test_scene_serializer.cpp / test_file_menu.cpp using per-process
   # tmpdirs).
   test_cmd: "cd build && ctest --output-on-failure -j $(nproc) 2>&1"
+  # 1800 s (was hard-coded 600 in tier1_build.py). Test suite grew past
+  # 3200 cases (Phase 10.9 Slice 18) — even with `-j $(nproc)` parallel,
+  # ASan-instrumented runs on GH free runners cross 10+ min when the
+  # parametric Photosensitive / Reference-case suites land on a slow
+  # shard. The 45-min job-level timeout in `.github/workflows/ci.yml`
+  # is the upper bound; 1800 s leaves headroom for build + analysis
+  # passes after tests.
+  test_timeout: 1800
   sanitizer:
     enabled: false
     configure_cmd: >-

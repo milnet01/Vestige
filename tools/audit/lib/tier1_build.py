@@ -95,9 +95,15 @@ def run_tests(config: Config) -> tuple[list[Finding], dict]:
         log.info("No test command configured — skipping tests")
         return findings, summary
 
+    # Configurable via build.test_timeout in audit_config.yaml.
+    # Default 1800 s — Phase 10.9 Slice 18 bump from the prior 600 s
+    # hard-coded value, which started tripping after the test count
+    # crossed 3200 under ASan on GH free runners.
+    test_timeout = config.get("build", "test_timeout", default=1800)
+
     # test_cmd is user-authored (e.g. "cd build && ctest ..."); see build.
-    log.info("Running tests...")
-    rc, stdout, stderr = run_shell_cmd(test_cmd, cwd=config.root, timeout=600)
+    log.info(f"Running tests (timeout {test_timeout}s)...")
+    rc, stdout, stderr = run_shell_cmd(test_cmd, cwd=config.root, timeout=test_timeout)
     output = stdout + "\n" + stderr
 
     # Parse ctest summary line: "X% tests passed, N tests failed out of M"

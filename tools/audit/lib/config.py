@@ -56,6 +56,12 @@ _DEFAULTS_BUILD: dict[str, Any] = {
     "build_cmd": None,
     "warning_regex": r"warning:|error:",
     "test_cmd": None,
+    # Subprocess timeout for the test step (seconds). 1800 s headroom
+    # over the typical ~10-15 min ASan-parallel run on GH free runners;
+    # bounded above by the 45-min job-level timeout-minutes in
+    # `.github/workflows/ci.yml`. Override via audit_config.yaml's
+    # `build.test_timeout`.
+    "test_timeout": 1800,
     "sanitizer": {
         "enabled": False,
         "configure_cmd": None,
