@@ -9,7 +9,6 @@
 #include "core/i_system.h"
 #include "core/system_registry.h"
 #include "core/system_events.h"
-#include "core/event_bus.h"
 #include "scene/component.h"
 
 #include <gtest/gtest.h>
@@ -663,38 +662,12 @@ TEST(SystemEventsTest, TerrainModifiedEventStoresBounds)
     EXPECT_FLOAT_EQ(event.maxZ, 4.0f);
 }
 
-TEST(SystemEventsTest, EventBusPublishAndSubscribe)
-{
-    EventBus bus;
-    bool received = false;
-    uint32_t receivedId = 0;
-
-    bus.subscribe<EntityDestroyedEvent>([&](const EntityDestroyedEvent& e)
-    {
-        received = true;
-        receivedId = e.entityId;
-    });
-
-    bus.publish(EntityDestroyedEvent(99));
-
-    EXPECT_TRUE(received);
-    EXPECT_EQ(receivedId, 99u);
-}
-
-TEST(SystemEventsTest, WeatherEventThroughBus)
-{
-    EventBus bus;
-    float receivedTemp = 0.0f;
-
-    bus.subscribe<WeatherChangedEvent>([&](const WeatherChangedEvent& e)
-    {
-        receivedTemp = e.temperature;
-    });
-
-    bus.publish(WeatherChangedEvent(30.0f, 0.5f, 0.0f, 5.0f));
-
-    EXPECT_FLOAT_EQ(receivedTemp, 30.0f);
-}
+// Slice 18 Ts3: dropped `EventBusPublishAndSubscribe` and
+// `WeatherEventThroughBus` — generic publish/subscribe is canonical in
+// `test_event_bus.cpp` (SubscribeAndPublish, MultipleSubscribers,
+// etc.). The event-struct field round-trips are pinned earlier in
+// this file (`SystemEventsTest.*Event*` fields); only the
+// publish/subscribe wiring through `bus.subscribe<T>` was redundant.
 
 // =============================================================================
 // Edge cases

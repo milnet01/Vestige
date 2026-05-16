@@ -345,3 +345,41 @@ TEST(ClothConstraintGraph, DihedralStructIsThirtyTwoBytes)
     // removes the padding silently breaks GPU upload alignment.
     EXPECT_EQ(sizeof(GpuDihedralConstraint), 32u);
 }
+
+// ---------------------------------------------------------------------------
+// LRA (long-range attachment) constraint generation
+// ---------------------------------------------------------------------------
+//
+// Moved here from `test_gpu_cloth_simulator.cpp` (Slice 18 Ts3) —
+// `generateLraConstraints` lives in `cloth_constraint_graph.h`, not in
+// the GPU sim class.
+
+TEST(ClothConstraintGraph, GenerateLraEmptyForNoPins)
+{
+    std::vector<glm::vec3> positions(16, glm::vec3(0.0f));
+    std::vector<uint32_t>  pins;
+    std::vector<GpuLraConstraint> lras;
+    generateLraConstraints(positions, pins, lras);
+    EXPECT_TRUE(lras.empty());
+}
+
+TEST(ClothConstraintGraph, GenerateLraTethersEveryFreeParticle)
+{
+    // 4 particles in a line; pin index 0; expect 3 LRA tethers all referencing pin 0.
+    std::vector<glm::vec3> positions = {
+        {0,0,0}, {1,0,0}, {2,0,0}, {3,0,0}
+    };
+    std::vector<uint32_t> pins = {0};
+    std::vector<GpuLraConstraint> lras;
+    generateLraConstraints(positions, pins, lras);
+
+    ASSERT_EQ(lras.size(), 3u);
+    for (const auto& l : lras)
+    {
+        EXPECT_EQ(l.pinIndex, 0u);
+        EXPECT_NE(l.particleIndex, 0u);
+    }
+    EXPECT_FLOAT_EQ(lras[0].maxDistance, 1.0f);
+    EXPECT_FLOAT_EQ(lras[1].maxDistance, 2.0f);
+    EXPECT_FLOAT_EQ(lras[2].maxDistance, 3.0f);
+}

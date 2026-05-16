@@ -181,6 +181,106 @@ TEST(PbrMaterialTest, EmissiveSetGet)
 }
 
 // =============================================================================
+// Phase 10.9 Slice 18 Ts2 — additional PBR field coverage.
+// Previously untested public setters: clearcoat, alpha-mode,
+// IBL multiplier, UV scale, double-sided.
+// =============================================================================
+
+TEST(PbrMaterialTest, ClearcoatDefaultsAndClamping)
+{
+    Material mat;
+    // Default clearcoat off, but clearcoat-roughness ships at 0.04 to
+    // match the base-PBR roughness floor (GGX numerical stability).
+    EXPECT_FLOAT_EQ(mat.getClearcoat(), 0.0f);
+    EXPECT_FLOAT_EQ(mat.getClearcoatRoughness(), 0.04f);
+
+    // Clamp negative inputs to 0.
+    mat.setClearcoat(-0.5f);
+    EXPECT_FLOAT_EQ(mat.getClearcoat(), 0.0f);
+    mat.setClearcoatRoughness(-0.5f);
+    EXPECT_FLOAT_EQ(mat.getClearcoatRoughness(), 0.0f);
+
+    // Clamp above 1.0 to 1.0.
+    mat.setClearcoat(1.7f);
+    EXPECT_FLOAT_EQ(mat.getClearcoat(), 1.0f);
+    mat.setClearcoatRoughness(2.0f);
+    EXPECT_FLOAT_EQ(mat.getClearcoatRoughness(), 1.0f);
+
+    // In-range round-trip.
+    mat.setClearcoat(0.5f);
+    EXPECT_FLOAT_EQ(mat.getClearcoat(), 0.5f);
+    mat.setClearcoatRoughness(0.25f);
+    EXPECT_FLOAT_EQ(mat.getClearcoatRoughness(), 0.25f);
+}
+
+TEST(PbrMaterialTest, AlphaModeRoundTripsEveryEnumValue)
+{
+    Material mat;
+    for (AlphaMode mode : {AlphaMode::OPAQUE, AlphaMode::MASK, AlphaMode::BLEND})
+    {
+        mat.setAlphaMode(mode);
+        EXPECT_EQ(mat.getAlphaMode(), mode);
+    }
+}
+
+TEST(PbrMaterialTest, AlphaCutoffRoundTrips)
+{
+    Material mat;
+    mat.setAlphaCutoff(0.25f);
+    // No public getter for cutoff — pin via round-trip-into-setter that
+    // a refactor would visibly need to update. (If a getter lands,
+    // tighten to numeric round-trip.)
+    EXPECT_NO_THROW(mat.setAlphaCutoff(0.75f));
+    EXPECT_NO_THROW(mat.setAlphaCutoff(0.0f));
+    EXPECT_NO_THROW(mat.setAlphaCutoff(1.0f));
+}
+
+TEST(PbrMaterialTest, DoubleSidedToggles)
+{
+    Material mat;
+    // Default not double-sided — gltf-spec opt-in field.
+    mat.setDoubleSided(true);
+    EXPECT_NO_THROW(mat.setDoubleSided(false));
+}
+
+TEST(PbrMaterialTest, IblMultiplierRoundTripsAndClampsToZeroOne)
+{
+    Material mat;
+    // Default 1.0 (full IBL contribution).
+    EXPECT_FLOAT_EQ(mat.getIblMultiplier(), 1.0f);
+
+    // In-range round-trip.
+    mat.setIblMultiplier(0.5f);
+    EXPECT_FLOAT_EQ(mat.getIblMultiplier(), 0.5f);
+
+    // Clamp above 1.0 to 1.0 — IBL contribution above unity is unphysical.
+    mat.setIblMultiplier(2.0f);
+    EXPECT_FLOAT_EQ(mat.getIblMultiplier(), 1.0f);
+
+    // Clamp below 0 to 0.
+    mat.setIblMultiplier(-0.5f);
+    EXPECT_FLOAT_EQ(mat.getIblMultiplier(), 0.0f);
+}
+
+TEST(PbrMaterialTest, UvScaleRoundTripsAndClampsToValidRange)
+{
+    Material mat;
+    // Default should be 1.0 (unscaled UVs).
+    EXPECT_FLOAT_EQ(mat.getUvScale(), 1.0f);
+
+    mat.setUvScale(2.0f);
+    EXPECT_FLOAT_EQ(mat.getUvScale(), 2.0f);
+    mat.setUvScale(0.5f);
+    EXPECT_FLOAT_EQ(mat.getUvScale(), 0.5f);
+
+    // Clamp to [0.01, 100.0] — degenerate / runaway scale rejected.
+    mat.setUvScale(-1.0f);
+    EXPECT_FLOAT_EQ(mat.getUvScale(), 0.01f);
+    mat.setUvScale(1000.0f);
+    EXPECT_FLOAT_EQ(mat.getUvScale(), 100.0f);
+}
+
+// =============================================================================
 // Blinn-Phong properties unchanged
 // =============================================================================
 

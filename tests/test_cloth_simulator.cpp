@@ -4,6 +4,7 @@
 /// @file test_cloth_simulator.cpp
 /// @brief Unit tests for the ClothSimulator XPBD system.
 #include "physics/cloth_simulator.h"
+#include "cloth_test_helpers.h"
 
 #include <gtest/gtest.h>
 
@@ -12,23 +13,13 @@
 
 using namespace Vestige;
 
-// ---------------------------------------------------------------------------
-// Helper: create a small cloth (4x4 by default) for quick tests
-// ---------------------------------------------------------------------------
-
+// Slice 18 Ts3: `smallConfig` was duplicated byte-identical across
+// three cloth test files. Canonical definition now in
+// `cloth_test_helpers.h`; the local alias keeps the existing
+// call-site spelling.
 static ClothConfig smallConfig(uint32_t w = 4, uint32_t h = 4)
 {
-    ClothConfig cfg;
-    cfg.width = w;
-    cfg.height = h;
-    cfg.spacing = 1.0f;
-    cfg.particleMass = 1.0f;
-    cfg.substeps = 5;
-    cfg.stretchCompliance = 0.0f;
-    cfg.shearCompliance = 0.0001f;
-    cfg.bendCompliance = 0.01f;
-    cfg.damping = 0.01f;
-    return cfg;
+    return Testing::clothSmallConfig(w, h);
 }
 
 // ---------------------------------------------------------------------------
@@ -82,7 +73,11 @@ TEST(ClothSimulator, GeneratesTriangleIndices)
     EXPECT_EQ(indices.size(), 24u);
 }
 
-TEST(ClothSimulator, GeneratesTexCoords)
+// Honest scope: this pins only that the four corner UVs land on the
+// unit-square corners. The internal grid layout (UVs at non-corner
+// positions monotonic in row/column) is not asserted because the test
+// only samples indices 0 and 8 of a 3×3 grid.
+TEST(ClothSimulator, GeneratesTexCoordsAtCorners)
 {
     ClothSimulator sim;
     sim.initialize(smallConfig(3, 3));
@@ -1017,22 +1012,10 @@ TEST(ClothSimulator, BuildLRARebuildIsIdempotent_Pe8)
 // Edge cases
 // ---------------------------------------------------------------------------
 
-TEST(ClothSimulator, SubstepsClampedTo64)
-{
-    ClothSimulator sim;
-    auto cfg = smallConfig();
-    cfg.substeps = 100;  // Excessive substeps
-    sim.initialize(cfg);
-
-    // The clamp happens during simulate(), so just verify it does not hang
-    // and completes within a reasonable time
-    sim.simulate(1.0f / 60.0f);
-
-    // Verify the simulation still produced valid results
-    const glm::vec3* pos = sim.getPositions();
-    EXPECT_NE(pos, nullptr);
-    EXPECT_TRUE(sim.isInitialized());
-}
+// Slice 18 Ts3: dropped the literal-`64` `SubstepsClampedTo64` test —
+// `SubstepsClampedToMaxSubsteps_Cl7` below pins the same contract
+// using the named constant `MAX_SUBSTEPS`, which is more robust to
+// future cap changes.
 
 TEST(ClothSimulator, SimulateOnUninitializedDoesNotCrash)
 {

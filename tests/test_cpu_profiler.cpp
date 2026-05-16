@@ -140,8 +140,6 @@ TEST(CpuProfilerTest, ScopeTimingsAreRelativeToFrameStart)
     CpuProfiler profiler;
     profiler.beginFrame();
 
-    // The very first scope's start time should be very close to zero
-    // (i.e., relative to beginFrame, not epoch).
     profiler.pushScope("First");
     profiler.popScope();
     profiler.endFrame();
@@ -149,8 +147,16 @@ TEST(CpuProfilerTest, ScopeTimingsAreRelativeToFrameStart)
     const auto& frame = profiler.getLastFrame();
     ASSERT_EQ(frame.size(), 1u);
 
-    // Start time should be very small (< 100ms even on a slow system)
-    EXPECT_LT(frame[0].startMs, 100.0f);
+    // Slice 18 Ts1 strengthening: pin the start time to be smaller
+    // than the total frame time, not a literal `< 100ms` (a bug
+    // where `startMs` was wall-clock epoch would also satisfy that
+    // on any machine that booted < 100ms ago — never). The frame-
+    // relative ceiling fails the moment startMs leaks an absolute time.
+    const float totalMs = profiler.getTotalCpuTimeMs();
+    EXPECT_LT(frame[0].startMs, totalMs + 1.0f)
+        << "startMs (" << frame[0].startMs << ") must be frame-relative, "
+           "not an absolute wall-clock value";
+    EXPECT_GE(frame[0].startMs, 0.0f);
 }
 
 TEST(CpuProfilerTest, PopScopeOnEmptyStackDoesNotCrash)

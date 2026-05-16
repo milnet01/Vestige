@@ -177,4 +177,47 @@ TEST_F(GltfBoundsChecksTest, OutOfRangeDefaultSceneFallsBackToZero_D10)
     EXPECT_EQ(model->m_rootNodes[0], 0);
 }
 
+// -- Phase 10.9 Slice 18 Ts2 — D12 extensionsRequired allowlist pin.
+//
+// Vestige's loader implements zero glTF extensions (tinygltf parses
+// some on the parse side, but our material/mesh paths ignore extension
+// data entirely). Per glTF 2.0 §3.12, a file declaring a required
+// extension our loader doesn't support must be REJECTED, not silently
+// rendered with missing data. The kSupportedRequiredExtensions
+// allowlist in `engine/utils/gltf_loader.cpp:1594` is deliberately
+// empty, so every required extension is unknown.
+
+TEST_F(GltfBoundsChecksTest, RequiredExtensionUnknownToLoaderIsRejected_D12)
+{
+    writeGltf(R"({
+        "asset": {"version": "2.0"},
+        "extensionsRequired": ["KHR_pretend_unsupported"],
+        "scenes": [{"nodes": [0]}],
+        "nodes": [
+            {"name": "root"}
+        ]
+    })");
+
+    ResourceManager rm;
+    auto model = GltfLoader::load(m_gltfPath.string(), rm);
+    EXPECT_EQ(model, nullptr)
+        << "loader must reject required extensions not on its allowlist";
+}
+
+TEST_F(GltfBoundsChecksTest, FileWithoutRequiredExtensionsLoads_D12)
+{
+    // Positive control: no extensionsRequired → loader proceeds.
+    writeGltf(R"({
+        "asset": {"version": "2.0"},
+        "scenes": [{"nodes": [0]}],
+        "nodes": [
+            {"name": "root"}
+        ]
+    })");
+
+    ResourceManager rm;
+    auto model = GltfLoader::load(m_gltfPath.string(), rm);
+    EXPECT_NE(model, nullptr);
+}
+
 }  // namespace Vestige::GltfBoundsChecks::Test

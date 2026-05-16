@@ -153,19 +153,28 @@ TEST_F(ParticleEmitterTest, SpawnsParticlesOnUpdate)
 
 TEST_F(ParticleEmitterTest, ParticlesExpireAfterLifetime)
 {
-    // Spawn particles
+    // Spawn one batch, then disable spawning (emissionRate = 0) so
+    // existing particles continue ageing without replacements, then
+    // advance past lifetime. The first-batch particles must die.
+    // Slice 18 Ts1: the prior body asserted `count >= 0` on an
+    // unsigned-equivalent counter (always true) because spawning
+    // continued the whole time. `setPaused` is not the right knob
+    // either — it halts `update()` entirely so particles can't age.
+    // Setting `emissionRate = 0` is the correct way to age existing
+    // particles to zero without replacements.
     entity.update(0.1f);
-    int afterSpawn = emitter->getData().count;
-    EXPECT_GT(afterSpawn, 0);
+    const int afterSpawn = emitter->getData().count;
+    ASSERT_GT(afterSpawn, 0);
 
-    // Advance past lifetime (1.0s)
+    // Stop spawning by zeroing emissionRate.
+    emitter->getConfig().emissionRate = 0.0f;
+
     for (int i = 0; i < 20; ++i)
     {
         entity.update(0.1f);
     }
-    // After 2 seconds total, the particles from the first 0.1s should be dead
-    // but new ones are still spawning, so we just check the system is running
-    EXPECT_GE(emitter->getData().count, 0);
+    EXPECT_EQ(emitter->getData().count, 0)
+        << "with emissionRate=0, every particle must have aged past lifetime";
 }
 
 TEST_F(ParticleEmitterTest, PauseStopsSimulation)

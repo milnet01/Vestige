@@ -292,21 +292,11 @@ TEST(CascadedShadowMapTest, VerticalLightDirectionDoesNotDegenerate)
 // Split boundary tests
 // =============================================================================
 
-TEST(CascadedShadowMapTest, SplitsAdjacentCascadesAreContiguous)
-{
-    float near = 0.1f;
-    float far = 100.0f;
-    auto splits = CascadedShadowMap::computeSplitDistances(near, far, 4, 0.5f);
-
-    // First cascade starts at near
-    EXPECT_GT(splits[0], near);
-
-    // Each split is strictly increasing (no gaps, no overlaps)
-    for (size_t i = 0; i + 1 < splits.size(); i++)
-    {
-        EXPECT_LT(splits[i], splits[i + 1]);
-    }
-}
+// Slice 18 Ts4: dropped `SplitsAdjacentCascadesAreContiguous` — strict
+// monotonic increase is already pinned by
+// `SplitDistancesMonotonicallyIncreasing` above, and the range pin
+// (`SplitDistancesWithinRange`) together with monotonic-increase
+// implies "contiguous adjacent splits". All three would flip together.
 
 TEST(CascadedShadowMapTest, LambdaBlendsBetweenLinearAndLog)
 {

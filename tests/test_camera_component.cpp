@@ -91,12 +91,14 @@ TEST(CameraComponent, PerspectiveProjectionNotIdentity)
     entity.update(0.0f);
     auto* cam = entity.addComponent<CameraComponent>();
 
+    // Slice 18 Ts3: dropped the reverse-Z element pins (proj[2][3],
+    // proj[3][2]) — those are the structural responsibility of
+    // `test_camera.cpp::ProjectionMatrixStructure`, which pins the
+    // full reverse-Z layout. The CameraComponent test here only needs
+    // to verify the component returns a non-identity matrix when its
+    // Camera's perspective settings are applied.
     glm::mat4 proj = cam->getProjectionMatrix(16.0f / 9.0f);
     EXPECT_NE(proj, glm::mat4(1.0f));
-    // Check reverse-Z: proj[2][3] should be -1 (w = -z for perspective divide)
-    EXPECT_FLOAT_EQ(proj[2][3], -1.0f);
-    // Near plane maps to depth 1.0 in reverse-Z
-    EXPECT_FLOAT_EQ(proj[3][2], 0.1f);
 }
 
 TEST(CameraComponent, OrthographicProjectionNotIdentity)

@@ -835,18 +835,10 @@ TEST_F(DismembermentTest, SplitEmptyMesh)
 
 class AdvancedPhysicsIntegration : public ::testing::Test {};
 
-TEST_F(AdvancedPhysicsIntegration, RagdollPresetMatchesSkeleton)
-{
-    auto skeleton = createTestSkeleton();
-    RagdollPreset preset = RagdollPreset::createHumanoid();
-
-    // Every preset bone name should exist in the skeleton
-    for (const auto& joint : preset.joints)
-    {
-        EXPECT_GE(skeleton->findJoint(joint.boneName), 0)
-            << "Bone '" << joint.boneName << "' not found in skeleton";
-    }
-}
+// Slice 18 Ts3: dropped `RagdollPresetMatchesSkeleton` — the
+// preset-bone-vs-skeleton contract is canonical at line 218 in
+// `PresetBoneNamesMatchSkeleton` (the unit-level RagdollPreset
+// test). Same loop body, same skeleton fixture.
 
 TEST_F(AdvancedPhysicsIntegration, DismembermentZonesMatchSkeleton)
 {

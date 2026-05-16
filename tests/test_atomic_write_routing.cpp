@@ -126,33 +126,11 @@ TEST_F(AtomicWriteRoutingTest,
            "rewriting; engine/utils/atomic_write.h contract).";
 }
 
-// ---------------------------------------------------------------------------
-// Fresh-directory save (no stale sidecar) must still leave no .tmp
-// artifact. This pins the "post-rename, .tmp is gone" tail of the
-// atomic-write contract.
-// ---------------------------------------------------------------------------
-
-TEST_F(AtomicWriteRoutingTest,
-       POSIXRename_PrefabSaveLeavesNoTmpArtifact)
-{
-    Scene scene("F7");
-    Entity* e = scene.createEntity("Root");
-    ASSERT_NE(e, nullptr);
-
-    ResourceManager resources;
-    PrefabSystem prefabs;
-    ASSERT_TRUE(prefabs.savePrefab(*e, "FreshSave", resources,
-                                   m_assetsDir.string()));
-
-    const fs::path targetPath = m_assetsDir / "prefabs" / "FreshSave.json";
-    fs::path tmpPath = targetPath;
-    tmpPath += ".tmp";
-
-    EXPECT_TRUE(fs::exists(targetPath));
-    EXPECT_FALSE(fs::exists(tmpPath))
-        << "savePrefab left a .tmp sidecar — rename step did not "
-           "complete (engine/utils/atomic_write.h contract).";
-}
+// Slice 18 Ts3: dropped `POSIXRename_PrefabSaveLeavesNoTmpArtifact` —
+// the stronger `POSIXRename_PrefabSaveClearsStaleTmpSidecar_Rule3`
+// above subsumes the "no .tmp post-save" assertion (a save that
+// failed to clear a planted stale would also fail the no-fresh-.tmp
+// invariant).
 
 // ---------------------------------------------------------------------------
 // Phase 10.9 Slice 12 Ed4 — RecentFiles::save() must route through
@@ -233,18 +211,7 @@ TEST_F(RecentFilesAtomicWriteTest,
            "helper was not invoked (Phase 10.9 Slice 12 Ed4).";
 }
 
-TEST_F(RecentFilesAtomicWriteTest, SaveLeavesNoTmpArtifact_Ed4)
-{
-    RecentFiles rf;
-    rf.addPath(fs::path("/tmp/scene_one.json"));
-    rf.save();
-
-    const fs::path target = storagePath();
-    fs::path tmp = target;
-    tmp += ".tmp";
-
-    EXPECT_TRUE(fs::exists(target));
-    EXPECT_FALSE(fs::exists(tmp))
-        << "RecentFiles::save left a .tmp sidecar — rename step did "
-           "not complete.";
-}
+// Slice 18 Ts3: dropped `SaveLeavesNoTmpArtifact_Ed4` — the stronger
+// `SaveClearsStaleTmpSidecar_Ed4` above subsumes the no-fresh-.tmp
+// assertion (a save that failed to clear a planted stale would also
+// fail the no-fresh-.tmp invariant).

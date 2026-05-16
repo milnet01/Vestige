@@ -91,6 +91,13 @@ TEST(ProceduralMeshTest, WallWithNoOpeningsSameAsSolid)
     auto solid = ProceduralMeshBuilder::generateWall(3.0f, 3.0f, 0.3f);
     auto noOpenings = ProceduralMeshBuilder::generateWallWithOpenings(3.0f, 3.0f, 0.3f, {});
     EXPECT_EQ(solid.indices.size(), noOpenings.indices.size());
+    // Slice 18 Ts1 strengthening: index counts can collide with
+    // different topologies — also pin vertex count + bounds.
+    EXPECT_EQ(solid.vertices.size(), noOpenings.vertices.size());
+    const TestBounds solidBounds = computeBounds(solid);
+    const TestBounds openBounds = computeBounds(noOpenings);
+    EXPECT_NEAR(solidBounds.max.y - solidBounds.min.y,
+                openBounds.max.y - openBounds.min.y, 0.001f);
 }
 
 TEST(ProceduralMeshTest, WallWithDoorOpening)
@@ -140,7 +147,12 @@ TEST(ProceduralMeshTest, WallWithMultipleOpenings)
     EXPECT_GT(wall.indices.size(), singleWall.indices.size());
 }
 
-TEST(ProceduralMeshTest, WallOpeningClampedToBounds)
+// Slice 18 Ts1 cleanup: renamed from `WallOpeningClampedToBounds` —
+// the body only asserts `indices.size() > 0`. Whether the opening was
+// clamped vs silently dropped is not observable in the index count
+// alone. The clamp behavior is exercised at editor launch where the
+// resulting wall mesh is rendered.
+TEST(ProceduralMeshTest, WallOpeningPartiallyOutsideStillProducesGeometry)
 {
     std::vector<WallOpening> openings;
     openings.push_back({2.5f, 0.0f, 2.0f, 5.0f});
@@ -265,7 +277,10 @@ TEST(ProceduralMeshTest, SpiralStairsPartialTurn)
     EXPECT_NEAR(bounds.max.y, 1.5f, 0.1f);
 }
 
-TEST(ProceduralMeshTest, AllVerticesHaveNormals)
+// Slice 18 Ts1 cleanup: renamed from `AllVerticesHaveNormals` —
+// the body actually verifies the unit-length invariant, not the
+// "has a normal" invariant.
+TEST(ProceduralMeshTest, AllVertexNormalsAreUnitLength)
 {
     auto data = ProceduralMeshBuilder::generateWall(3.0f, 3.0f, 0.3f);
     for (const auto& v : data.vertices)
@@ -275,15 +290,16 @@ TEST(ProceduralMeshTest, AllVerticesHaveNormals)
     }
 }
 
-TEST(ProceduralMeshTest, AllVerticesHaveTangents)
+// Slice 18 Ts1 strengthening: the previous body short-circuited on the
+// first non-zero tangent and asserted the bool — a wall where every
+// vertex except the first had a zero tangent would have passed.
+TEST(ProceduralMeshTest, EveryVertexHasNonZeroTangent)
 {
     auto data = ProceduralMeshBuilder::generateWall(3.0f, 3.0f, 0.3f);
-    bool hasTangent = false;
     for (const auto& v : data.vertices)
     {
-        if (glm::length(v.tangent) > 0.01f) hasTangent = true;
+        EXPECT_GT(glm::length(v.tangent), 0.01f);
     }
-    EXPECT_TRUE(hasTangent);
 }
 
 // =============================================================================

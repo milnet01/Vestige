@@ -58,35 +58,31 @@ TEST(AudioDoppler, CoLocatedSourceListenerReturnsUnity)
                 1.0f, kEps);
 }
 
-TEST(AudioDoppler, DopplerFactorZeroDisablesEffect)
+// Phase 10.9 Slice 18 Ts4 collapse: the three guard-disable tests
+// (DopplerFactorZeroDisablesEffect, NegativeDopplerFactorTreatedAs
+// Disabled, NonPositiveSpeedOfSoundReturnsUnity) all passed via the
+// same root: `computeDopplerPitchRatio` short-circuits to 1.0 when
+// `dopplerFactor <= 0 || speedOfSound <= 0`. Replaced by a single
+// table-driven test that exercises every boundary.
+TEST(AudioDoppler, NonPositiveDopplerOrSpeedOfSoundReturnsUnity)
 {
-    DopplerParams p = defaultParams();
-    p.dopplerFactor = 0.0f;
-    // Even for supersonic approach the ratio must stay at 1.
-    EXPECT_NEAR(computeDopplerPitchRatio(p,
-                                          {0, 0, 0}, { 200.0f, 0, 0},
-                                          {10, 0, 0}, {-200.0f, 0, 0}),
-                1.0f, kEps);
-}
-
-TEST(AudioDoppler, NegativeDopplerFactorTreatedAsDisabled)
-{
-    DopplerParams p = defaultParams();
-    p.dopplerFactor = -1.0f;
-    EXPECT_NEAR(computeDopplerPitchRatio(p,
-                                          {0, 0, 0}, {30, 0, 0},
-                                          {5, 0, 0}, {0, 0, 0}),
-                1.0f, kEps);
-}
-
-TEST(AudioDoppler, NonPositiveSpeedOfSoundReturnsUnity)
-{
-    DopplerParams p = defaultParams();
-    p.speedOfSound = 0.0f;
-    EXPECT_NEAR(computeDopplerPitchRatio(p,
-                                          {0, 0, 0}, {30, 0, 0},
-                                          {5, 0, 0}, {0, 0, 0}),
-                1.0f, kEps);
+    struct Case { float factor; float speed; const char* name; };
+    const Case cases[] = {
+        {  0.0f, 343.3f, "factor=0" },
+        { -1.0f, 343.3f, "factor=-1" },
+        {  1.0f,   0.0f, "speedOfSound=0" },
+        {  1.0f,  -5.0f, "speedOfSound=-5" },
+    };
+    for (const Case& c : cases)
+    {
+        DopplerParams p = defaultParams();
+        p.dopplerFactor = c.factor;
+        p.speedOfSound  = c.speed;
+        EXPECT_NEAR(computeDopplerPitchRatio(p,
+                                              {0, 0, 0}, {200.0f, 0, 0},
+                                              {10, 0, 0}, {-200.0f, 0, 0}),
+                    1.0f, kEps) << "case: " << c.name;
+    }
 }
 
 // -- Source motion along the source→listener axis ------------------

@@ -21,86 +21,26 @@ TEST(StasisSystemTest, InitialActiveCountIsZero)
     EXPECT_EQ(system.getActiveCount(), 0u);
 }
 
-TEST(StasisSystemTest, IsInStasisReturnsFalseForUnknownBody)
-{
-    StasisSystem system;
-    EXPECT_FALSE(system.isInStasis(0));
-    EXPECT_FALSE(system.isInStasis(42));
-    EXPECT_FALSE(system.isInStasis(9999));
-}
-
-TEST(StasisSystemTest, GetRemainingDurationReturnsZeroForUnknownBody)
-{
-    StasisSystem system;
-    EXPECT_FLOAT_EQ(system.getRemainingDuration(0), 0.0f);
-    EXPECT_FLOAT_EQ(system.getRemainingDuration(42), 0.0f);
-    EXPECT_FLOAT_EQ(system.getRemainingDuration(9999), 0.0f);
-}
-
-// =============================================================================
-// releaseAll on empty system
-// =============================================================================
-
-TEST(StasisSystemTest, ReleaseAllOnEmptyDoesNotCrash)
-{
-    StasisSystem system;
-    EXPECT_NO_THROW(system.releaseAll());
-    EXPECT_EQ(system.getActiveCount(), 0u);
-}
-
-// =============================================================================
-// releaseStasis on non-existent body
-// =============================================================================
-
-TEST(StasisSystemTest, ReleaseNonExistentBodyDoesNotCrash)
-{
-    StasisSystem system;
-    EXPECT_NO_THROW(system.releaseStasis(42));
-    EXPECT_EQ(system.getActiveCount(), 0u);
-}
-
-// =============================================================================
-// applyStasis without physics world (no-op)
-// =============================================================================
+// Phase 10.9 Slice 18 Ts4 collapse: eight "no-op without physics
+// world" tests (IsInStasisReturnsFalseForUnknownBody,
+// GetRemainingDurationReturnsZeroForUnknownBody,
+// ReleaseAllOnEmptyDoesNotCrash, ReleaseNonExistentBodyDoesNotCrash,
+// ApplyStasisWithoutPhysicsWorldIsNoOp, UpdateEmptySystemDoesNotCrash,
+// UpdateWithoutPhysicsWorldDoesNotCrash, SetPhysicsWorldToNull) all
+// passed for the same root reason: `StasisSystem` is a no-op without
+// a physics world. They covered slightly different API surfaces but
+// shared one root invariant — if it broke, all eight flipped together.
+// The compound `MultipleOperationsSequenceDoesNotCrash` below
+// exercises every method the eight covered; the single semantic pin
+// `ApplyStasisWithoutPhysicsWorldIsNoOp` (kept below) retains the
+// behavioural pin distinct from "doesn't crash".
 
 TEST(StasisSystemTest, ApplyStasisWithoutPhysicsWorldIsNoOp)
 {
     StasisSystem system;
-    // No physics world set -- applyStasis should early-return
+    // No physics world set -- applyStasis should early-return.
     system.applyStasis(1, 5.0f, 0.0f);
     EXPECT_FALSE(system.isInStasis(1));
-    EXPECT_EQ(system.getActiveCount(), 0u);
-}
-
-// =============================================================================
-// update on empty system
-// =============================================================================
-
-TEST(StasisSystemTest, UpdateEmptySystemDoesNotCrash)
-{
-    StasisSystem system;
-    EXPECT_NO_THROW(system.update(0.016f));
-    EXPECT_EQ(system.getActiveCount(), 0u);
-}
-
-TEST(StasisSystemTest, UpdateWithoutPhysicsWorldDoesNotCrash)
-{
-    StasisSystem system;
-    // No physics world set, m_stasisMap is empty
-    EXPECT_NO_THROW(system.update(0.016f));
-}
-
-// =============================================================================
-// setPhysicsWorld
-// =============================================================================
-
-TEST(StasisSystemTest, SetPhysicsWorldToNull)
-{
-    StasisSystem system;
-    system.setPhysicsWorld(nullptr);
-    // Should still not crash on operations
-    EXPECT_NO_THROW(system.releaseAll());
-    EXPECT_NO_THROW(system.update(0.016f));
     EXPECT_EQ(system.getActiveCount(), 0u);
 }
 

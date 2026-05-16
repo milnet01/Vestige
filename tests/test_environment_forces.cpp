@@ -362,27 +362,32 @@ TEST(EnvironmentForces, WetnessDriesWithoutRain)
 {
     EnvironmentForces env;
 
-    // Pre-wet the surface
+    // Pre-wet by ticking with rain on, then sample the actual wetness.
+    // Slice 18 Ts1: `WeatherState::wetness` is a *cached output*, not
+    // an input — the `setWeather` field is ignored by the update loop.
+    // The previous test compared against 0.5 (the value stamped into
+    // the input field), masking whether wetting actually happened.
     WeatherState weather;
     weather.precipitation = 1.0f;
-    weather.wetness = 0.5f;
     env.setWeather(weather);
+    for (int i = 0; i < 50; ++i)
+    {
+        env.update(0.1f);
+    }
+    const float preDrying = env.getWetness(glm::vec3(0.0f));
+    EXPECT_GT(preDrying, 0.0f)
+        << "test premise: wetting must register before drying can be observed";
 
-    // Stop rain
+    // Stop rain — drying should reduce wetness from its current value.
     weather.precipitation = 0.0f;
-    weather.wetness = 0.5f;
     env.setWeather(weather);
-
     for (int i = 0; i < 100; ++i)
     {
         env.update(0.1f);
     }
-
-    // After 10 seconds without rain, wetness should decrease
-    // drying rate: wetness - 10/120 = 0.5 - 0.083 ≈ 0.417
-    float wetness = env.getWetness(glm::vec3(0.0f));
-    EXPECT_LT(wetness, 0.5f);
-    EXPECT_GT(wetness, 0.0f);
+    const float postDrying = env.getWetness(glm::vec3(0.0f));
+    EXPECT_LT(postDrying, preDrying);
+    EXPECT_GE(postDrying, 0.0f);
 }
 
 TEST(EnvironmentForces, WetnessClampsAt1)

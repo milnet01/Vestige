@@ -19,3 +19,19 @@ leak:libfontconfig
 # hardware fall under the same suppression with no false negatives, since
 # the scope is test-helper-only (production code never calls in here).
 leak:Vestige::Test::ShaderProgram
+
+# libwayland-client allocates connection state on first wl_display_connect
+# that persists for the process lifetime. Shows up under GLFW backends on
+# Wayland sessions (parametric Photosensitive / Reference-case tests run
+# this code path because GLTestEnvironment initialises GLFW at suite
+# startup). Same lifetime-equals-process pattern as libfontconfig above.
+leak:libwayland-client
+
+# GLTestEnvironment::SetUp creates a hidden GLFW window + GL context at
+# suite startup; the Mesa driver / wayland-egl shared object loaded by
+# glfwCreateWindow allocates state that LSan reports under <unknown
+# module> (DSO loaded after LSan's symbolizer cache). Lifetime equals
+# process — the env's TearDown runs after LSan's check, so the leak is
+# unavoidable. Suppress at the glfwCreateWindow entry point so the
+# scope is bounded to the test environment, not production code.
+leak:glfwCreateWindow

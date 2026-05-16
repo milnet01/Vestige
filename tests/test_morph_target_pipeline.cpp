@@ -162,13 +162,10 @@ TEST(MorphTargetPipeline, RenderDataCarriesMorphWeights)
 }
 
 // --- MorphTargetData basics ---
-
-TEST(MorphTargetPipeline, EmptyMorphTargetData)
-{
-    MorphTargetData data;
-    EXPECT_TRUE(data.empty());
-    EXPECT_EQ(data.targetCount(), 0u);
-}
+//
+// Slice 18 Ts3: `EmptyMorphTargetData` (empty + targetCount() == 0)
+// is pinned canonically in `test_morph_target.cpp::EmptyDataHasNoTargets`;
+// dropped the duplicate here.
 
 TEST(MorphTargetPipeline, MorphTargetDataWithTargets)
 {

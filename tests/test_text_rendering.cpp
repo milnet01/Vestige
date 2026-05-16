@@ -108,37 +108,12 @@ TEST(TextRendering, GenerateHeightMapNullForEmptyString)
 }
 
 // =============================================================================
-// Font metric expectations (documented behavior)
-// =============================================================================
-
-TEST(TextRendering, LineHeightIsPositive)
-{
-    // For any loaded font, line height should be positive
-    // Since we can't load without GL, we verify the design expectation
-    float expectedLineHeight = 48.0f;  // A 48px font should have ~48px line height
-    EXPECT_GT(expectedLineHeight, 0.0f);
-}
-
-TEST(TextRendering, AscenderGreaterThanDescender)
-{
-    // Ascender should be above baseline (positive), descender below (negative)
-    float ascender = 40.0f;
-    float descender = -10.0f;
-    EXPECT_GT(ascender, descender);
-}
-
-TEST(TextRendering, ASCIIRangeIs95Printable)
-{
-    // ASCII printable range: 32 (space) to 126 (~) = 95 characters
-    int count = 0;
-    for (char c = 32; c < 127; c++)
-    {
-        count++;
-    }
-    EXPECT_EQ(count, 95);
-}
-
-// =============================================================================
+// Phase 10.9 Slice 18 Ts1 cleanup: dropped the previous "documented
+// behavior" trio (LineHeightIsPositive, AscenderGreaterThanDescender,
+// ASCIIRangeIs95Printable) — each was a tautology on a local literal,
+// not a SUT assertion. Font-metric properties are pinned at engine
+// launch when a GL context is available.
+//
 // Phase 10.9 Pe1 — TextRenderer batch state machine
 //
 // The batched-draw path collapses ~18 per-string HUD draws into one upload +

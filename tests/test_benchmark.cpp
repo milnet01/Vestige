@@ -171,11 +171,15 @@ TEST(BenchmarkRun, FittableEntriesRankedBeforeSkipped)
 
     // Walk the sorted list: once we see a skipped entry, no
     // fittable entry should appear after it.
+    // Slice 18 Ts1: pin `fit` strictly on the bench's own
+    // "converged" status — the prior `rmse > 0 || r_squared > 0`
+    // disjunction classified a perfect-fit formula (rmse=0,
+    // r²=1.0) as not-fit if its status was non-"converged",
+    // hiding an ordering bug.
     bool seen_skipped = false;
     for (const auto& e : out)
     {
-        const bool fit = e.rmse > 0.0f || e.r_squared > 0.0f
-                      || e.status == "converged";
+        const bool fit = e.status == "converged";
         if (!fit) seen_skipped = true;
         else if (seen_skipped)
             FAIL() << "Fittable entry '" << e.formula_name

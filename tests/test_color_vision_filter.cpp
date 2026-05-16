@@ -114,22 +114,11 @@ TEST(ColorVisionFilter, RowsOfEveryMatrixSumToOne)
     }
 }
 
-TEST(ColorVisionFilter, AchromaticInputPassesThroughUnchanged)
-{
-    // Direct consequence of the row-sum-1 property, but exercise it with
-    // an actual matrix-vector multiply so future regressions that only
-    // permute columns (and preserve row sums) get caught.
-    for (ColorVisionMode mode : {ColorVisionMode::Protanopia,
-                                   ColorVisionMode::Deuteranopia,
-                                   ColorVisionMode::Tritanopia})
-    {
-        glm::mat3 m = colorVisionMatrix(mode);
-        glm::vec3 grey(0.5f, 0.5f, 0.5f);
-        EXPECT_TRUE(approx(m * grey, grey))
-            << "mode " << colorVisionModeLabel(mode)
-            << " does not preserve achromatic input";
-    }
-}
+// Slice 18 Ts4: dropped `AchromaticInputPassesThroughUnchanged` — it's
+// a direct consequence of the row-sum-1 property (see
+// `RowsOfEveryMatrixSumToOne` above), and `WhiteStaysWhiteForEveryMode`
+// below exercises the same invariant with a worked example. Three
+// tests, one root invariant.
 
 // -- Characteristic dichromat projections --
 

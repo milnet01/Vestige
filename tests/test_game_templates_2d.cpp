@@ -150,10 +150,12 @@ TEST(GameTemplates2D, ShmupCameraLockedNoSmoothing)
     EXPECT_TRUE(c2d->clampToBounds);
 }
 
-TEST(GameTemplates2D, FailsSoftOnUnattachedScene)
+// Slice 18 Ts1 cleanup: renamed from `FailsSoftOnUnattachedScene` —
+// the templates take `Scene&`, not `Scene*`, so there is no null-scene
+// path to exercise here. This test pins that the two templates produce
+// distinct roots when applied to the same scene.
+TEST(GameTemplates2D, BothTemplatesProduceDistinctRoots)
 {
-    // A Scene with no managed lifetime still works — createEntity is
-    // always valid.
     Scene scene("Smoke");
     auto* r1 = createSideScrollerTemplate(scene);
     auto* r2 = createShmupTemplate(scene);

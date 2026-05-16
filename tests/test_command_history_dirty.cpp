@@ -38,24 +38,11 @@ private:
 };
 }  // namespace
 
-// On a fresh history, markUnsavedChange flips isDirty true.
-TEST(CommandHistoryDirty, MarkUnsavedChangeFromCleanFlipsDirty_Ed7)
-{
-    CommandHistory h;
-    EXPECT_FALSE(h.isDirty());
-    h.markUnsavedChange();
-    EXPECT_TRUE(h.isDirty());
-}
-
-// markSaved clears the sticky flag (it's the Save / Save As path).
-TEST(CommandHistoryDirty, MarkSavedClearsStickyDirty_Ed7)
-{
-    CommandHistory h;
-    h.markUnsavedChange();
-    ASSERT_TRUE(h.isDirty());
-    h.markSaved();
-    EXPECT_FALSE(h.isDirty());
-}
+// Slice 18 Ts3: the basic clean→dirty and markSaved-clears-dirty
+// contracts are already pinned in `test_command_history.cpp`
+// (`DirtyAfterExecute`, `MarkSavedClearsDirty`). The `_Ed7`-suffixed
+// duplicates were trimmed here; the file now focuses on the
+// sticky-flag behaviour that's genuinely new to Ed7.
 
 // The sticky flag isn't erased by ordinary version arithmetic — it
 // survives an undo+redo of an unrelated command.
@@ -93,17 +80,9 @@ TEST(CommandHistoryDirty, ClearResetsStickyFlag_Ed7)
     EXPECT_FALSE(h.isDirty());
 }
 
-// Pre-Ed7 baseline: pushing a command and undoing it returns isDirty
-// to false (existing behaviour pin).
-TEST(CommandHistoryDirty, UndoToSavedClearsDirty_Baseline)
-{
-    CommandHistory h;
-    int v = 0;
-    h.execute(std::make_unique<IncrementCommand>(v));
-    EXPECT_TRUE(h.isDirty());
-    h.undo();
-    EXPECT_FALSE(h.isDirty());
-}
+// Slice 18 Ts3: dropped `UndoToSavedClearsDirty_Baseline` — the
+// version-arithmetic-undo-clears-dirty contract is canonical in
+// `test_command_history.cpp::UndoBackToSavedIsClean`.
 
 // Audit follow-up (2026-05-16): the sticky-flag rule must override the
 // version-arithmetic-undo path. After markSaved → execute → markUnsaved

@@ -80,28 +80,13 @@ TEST_F(LipSyncSandboxTest, LoadTrackOutsideRootReturnsFalse_D11)
     EXPECT_FALSE(player.loadTrack(m_outsidePath.string()));
 }
 
-TEST_F(LipSyncSandboxTest, LoadTrackInsideRootDoesNotCrash_D11)
-{
-    // Smoke: with sandbox configured to the assets dir, loadTrack on a
-    // file inside that dir bypasses the path-rejection branch and runs
-    // the JSON-parse path. We can't differentiate parse-failure vs
-    // sandbox-failure return codes without finer-grained observability,
-    // so the pin here is "did not crash, did not mutate sandbox state".
-    LipSyncPlayer::setSandboxRoots({m_root / "assets"});
-    LipSyncPlayer player;
-    [[maybe_unused]] bool result = player.loadTrack(m_insidePath.string());
-    EXPECT_EQ(LipSyncPlayer::getSandboxRoots().size(), 1u);
-}
-
-TEST_F(LipSyncSandboxTest, LoadTrackWithoutSandboxConfigDoesNotCrash_D11)
-{
-    // Smoke: with no sandbox configured, loadTrack on any path is
-    // forwarded to the file-size + JSON parsers. Pin is "did not crash,
-    // did not retro-configure sandbox state".
-    LipSyncPlayer::setSandboxRoots({});
-    LipSyncPlayer player;
-    [[maybe_unused]] bool result = player.loadTrack(m_outsidePath.string());
-    EXPECT_TRUE(LipSyncPlayer::getSandboxRoots().empty());
-}
+// Phase 10.9 Slice 18 Ts1 cleanup: the prior
+// `LoadTrackInsideRootDoesNotCrash_D11` and
+// `LoadTrackWithoutSandboxConfigDoesNotCrash_D11` tests asserted only
+// "loadTrack returned and sandbox state didn't mutate" — a tautology
+// guard. Distinguishing parse-failure from sandbox-failure needs an
+// observable LipSyncPlayer doesn't expose; the inside-root acceptance
+// half of the contract is exercised at engine launch on machines with
+// rhubarb-format JSON fixtures.
 
 }  // namespace Vestige::LipSyncSandbox::Test

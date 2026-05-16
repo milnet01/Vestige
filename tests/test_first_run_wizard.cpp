@@ -47,30 +47,36 @@ TEST(FirstRunWizard, WelcomeToPickerTransition)
     EXPECT_EQ(t.onboarding.skipCount, 0);
 }
 
-TEST(FirstRunWizard, StartEmptyMarksCompleteAndEmitsApplyEmpty)
+// Slice 18 Ts4: the three "intent X marks complete + emits sceneOp Y"
+// tests (StartEmpty/ShowDemo/FinishWithTemplate) collapsed into one
+// table-driven test. All three exercise the same wizard-state-machine
+// "terminal intent transitions to Done + sets completedAt" contract.
+TEST(FirstRunWizard, TerminalIntentsMarkCompleteAndEmitMatchingSceneOp)
 {
-    OnboardingSettings pre;
-    auto t = applyFirstRunIntent(FirstRunWizardStep::Welcome, pre,
-                                  FirstRunIntent::StartEmpty, kFixedIso);
-
-    EXPECT_EQ(t.step, FirstRunWizardStep::Done);
-    EXPECT_EQ(t.sceneOp, FirstRunWizardSceneOp::ApplyEmpty);
-    EXPECT_TRUE(t.closed);
-    EXPECT_TRUE(t.onboarding.hasCompletedFirstRun);
-    EXPECT_EQ(t.onboarding.completedAt, kFixedIso);
-}
-
-TEST(FirstRunWizard, ShowDemoMarksCompleteAndEmitsApplyDemo)
-{
-    OnboardingSettings pre;
-    auto t = applyFirstRunIntent(FirstRunWizardStep::Welcome, pre,
-                                  FirstRunIntent::ShowDemo, kFixedIso);
-
-    EXPECT_EQ(t.step, FirstRunWizardStep::Done);
-    EXPECT_EQ(t.sceneOp, FirstRunWizardSceneOp::ApplyDemo);
-    EXPECT_TRUE(t.closed);
-    EXPECT_TRUE(t.onboarding.hasCompletedFirstRun);
-    EXPECT_EQ(t.onboarding.completedAt, kFixedIso);
+    struct Case {
+        FirstRunWizardStep   startStep;
+        FirstRunIntent       intent;
+        FirstRunWizardSceneOp expectedOp;
+        const char* name;
+    };
+    const Case cases[] = {
+        { FirstRunWizardStep::Welcome,        FirstRunIntent::StartEmpty,
+          FirstRunWizardSceneOp::ApplyEmpty,    "StartEmpty"           },
+        { FirstRunWizardStep::Welcome,        FirstRunIntent::ShowDemo,
+          FirstRunWizardSceneOp::ApplyDemo,     "ShowDemo"             },
+        { FirstRunWizardStep::TemplatePicker, FirstRunIntent::FinishWithTemplate,
+          FirstRunWizardSceneOp::ApplyTemplate, "FinishWithTemplate"   },
+    };
+    for (const Case& c : cases)
+    {
+        OnboardingSettings pre;
+        auto t = applyFirstRunIntent(c.startStep, pre, c.intent, kFixedIso);
+        EXPECT_EQ(t.step, FirstRunWizardStep::Done) << c.name;
+        EXPECT_EQ(t.sceneOp, c.expectedOp) << c.name;
+        EXPECT_TRUE(t.closed) << c.name;
+        EXPECT_TRUE(t.onboarding.hasCompletedFirstRun) << c.name;
+        EXPECT_EQ(t.onboarding.completedAt, kFixedIso) << c.name;
+    }
 }
 
 TEST(FirstRunWizard, BackFromPickerReturnsToWelcomeWithoutBumpingSkip)
@@ -87,18 +93,9 @@ TEST(FirstRunWizard, BackFromPickerReturnsToWelcomeWithoutBumpingSkip)
     EXPECT_FALSE(t.onboarding.hasCompletedFirstRun);
 }
 
-TEST(FirstRunWizard, FinishWithTemplateMarksCompleteAndEmitsApplyTemplate)
-{
-    OnboardingSettings pre;
-    auto t = applyFirstRunIntent(FirstRunWizardStep::TemplatePicker, pre,
-                                  FirstRunIntent::FinishWithTemplate, kFixedIso);
-
-    EXPECT_EQ(t.step, FirstRunWizardStep::Done);
-    EXPECT_EQ(t.sceneOp, FirstRunWizardSceneOp::ApplyTemplate);
-    EXPECT_TRUE(t.closed);
-    EXPECT_TRUE(t.onboarding.hasCompletedFirstRun);
-    EXPECT_EQ(t.onboarding.completedAt, kFixedIso);
-}
+// Slice 18 Ts4: `FinishWithTemplateMarksCompleteAndEmitsApplyTemplate`
+// rolled into `TerminalIntentsMarkCompleteAndEmitMatchingSceneOp`
+// above.
 
 TEST(FirstRunWizard, FirstSkipIncrementsCountButDoesNotComplete)
 {

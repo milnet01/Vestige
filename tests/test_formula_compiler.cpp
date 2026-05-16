@@ -12,6 +12,7 @@
 #include "formula/formula_library.h"
 #include "formula/lut_generator.h"
 #include "formula/lut_loader.h"
+#include "formula/node_graph.h"
 #include "formula/physics_templates.h"
 #include "formula/safe_math.h"
 
@@ -818,4 +819,59 @@ TEST(FormulaDepthCap, FromJsonRejectsDeepNesting_Sc2)
         node = std::move(wrap);
     }
     EXPECT_THROW(ExprNode::fromJson(node), std::runtime_error);
+}
+
+// Phase 10.9 Slice 18 Ts2 — Sc2 depth-cap coverage extended to the
+// node-graph ↔ expression-tree converters. Pre-Slice-18 only
+// `ExpressionEvaluator::evalNode` and `ExprNode::fromJson` were pinned;
+// the matching `NodeGraph::toExpressionTree` (depth threaded through
+// `nodeToExpr`) and `NodeGraph::fromExpressionTree` (depth threaded
+// through `FromExprHelper::buildNode`) cap can regress silently.
+
+TEST(FormulaDepthCap, ToExpressionTreeRejectsDeepUnaryChain_Sc2)
+{
+    // Build a node graph: literal -> chain of 1024 negate nodes -> output.
+    NodeGraph g;
+    Node lit = NodeGraph::createLiteralNode(1.0f);
+    NodeId prev = g.addNode(lit);
+    NodeId head = prev;
+
+    for (int i = 0; i < 1024; ++i)
+    {
+        Node neg = NodeGraph::createFunctionNode("negate");
+        const NodeId next = g.addNode(neg);
+        // Connect prev.output → next.input (port 0 of each side).
+        const Node* prevNode = g.getNode(prev);
+        const Node* nextNode = g.getNode(next);
+        ASSERT_NE(prevNode, nullptr);
+        ASSERT_NE(nextNode, nullptr);
+        g.connect(prev, prevNode->outputs[0].id,
+                  next, nextNode->inputs[0].id);
+        head = next;
+        prev = next;
+    }
+
+    // 1024-deep negate chain exceeds kMaxFormulaDepth = 256.
+    // toExpressionTree must return nullptr (the public failure
+    // signal) rather than crash from C++ stack overflow.
+    auto tree = g.toExpressionTree(head);
+    EXPECT_EQ(tree, nullptr)
+        << "NodeGraph::toExpressionTree must reject chains past the "
+           "kMaxFormulaDepth cap (Sc2 invariant)";
+}
+
+TEST(FormulaDepthCap, FromExpressionTreeRejectsDeepUnaryChain_Sc2)
+{
+    // Build a 1024-deep negate chain directly as ExprNode.
+    auto deep = buildNegateChain(1024);
+    // fromExpressionTree must either return an empty graph or one
+    // that doesn't recurse to overflow. The contract is "no crash on
+    // hostile input"; the cap signals via fromExpressionTree's
+    // internal early-exit and may leave the graph partial. Pin
+    // "doesn't crash and stays bounded".
+    EXPECT_NO_THROW({
+        NodeGraph g = NodeGraph::fromExpressionTree(*deep);
+        // Sanity: cap means we cannot have visited 1024 levels.
+        EXPECT_LT(g.nodeCount(), 1024u + 1u);
+    });
 }

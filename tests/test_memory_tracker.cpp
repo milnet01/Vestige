@@ -115,19 +115,21 @@ TEST_F(MemoryTrackerTest, RecordFreeWithoutAllocIsNoop)
     EXPECT_EQ(MemoryTracker::getCpuAllocationCount(), m_baseCount);
 }
 
-TEST_F(MemoryTrackerTest, GpuStatsDefaultToZero)
+// Slice 18 Ts1 clarification: the two tests below operate on a local
+// `MemoryTracker tracker;` instance, not the static recordAlloc state
+// the rest of the suite shares. Moved out of the `MemoryTrackerTest`
+// fixture (which captures static baseline) to a plain `TEST` so the
+// reader can't confuse instance-state and static-state observation.
+TEST(MemoryTrackerGpu, GpuStatsDefaultToZero)
 {
     MemoryTracker tracker;
-
-    // Before any update(), GPU stats should be zero
     EXPECT_EQ(tracker.getGpuUsedMB(), 0u);
     EXPECT_EQ(tracker.getGpuTotalMB(), 0u);
 }
 
-TEST_F(MemoryTrackerTest, UpdateDoesNotCrash)
+TEST(MemoryTrackerGpu, UpdateDoesNotCrash)
 {
     MemoryTracker tracker;
-
     // update() reads from sysfs (may or may not exist). It should never crash.
     for (int i = 0; i < 120; i++)
     {

@@ -56,7 +56,12 @@ TEST_F(AudioBufferCacheTest, FlushOnEmptyCacheIsNoOp)
     EXPECT_EQ(m_engine.getBufferCacheSize(), 0u);
 }
 
-TEST_F(AudioBufferCacheTest, SetLimitToZeroOnEmptyCacheIsSafe)
+// Honest scope: the setter's retroactive-eviction behaviour requires a
+// populated cache, which `loadBuffer` can't produce here without an
+// OpenAL device (see file header). This test pins the *getter
+// round-trip* on an empty cache; the eviction half of the contract is
+// exercised by integration tests on machines with audio.
+TEST_F(AudioBufferCacheTest, SetLimitToZeroOnEmptyCacheRoundTrips)
 {
     m_engine.setBufferCacheLimit(0);
     EXPECT_EQ(m_engine.getBufferCacheLimit(), 0u);

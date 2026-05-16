@@ -154,7 +154,12 @@ TEST(SpriteSystem, BatchesByAtlasAndPass)
     EXPECT_EQ(batches[2].instances.size(), 1u);
 }
 
-TEST(SpriteSystem, InstancePackingWritesUvAndTint)
+// Slice 18 Ts3: renamed from `InstancePackingWritesUvAndTint` —
+// the uv-rect pin lives canonically in `test_sprite_atlas.cpp` (atlas
+// is the SUT that turns pixel rects into normalised UVs). Kept the
+// tint check here because `SpriteSystem::buildBatches` is the SUT
+// that propagates `SpriteComponent.tint` into the packed instance.
+TEST(SpriteSystem, InstancePackingPropagatesTint)
 {
     auto atlas = makeAtlas("pack");
     ASSERT_TRUE(atlas);
@@ -169,12 +174,6 @@ TEST(SpriteSystem, InstancePackingWritesUvAndTint)
     ASSERT_EQ(batches.size(), 1u);
     ASSERT_EQ(batches[0].instances.size(), 1u);
     const auto& inst = batches[0].instances[0];
-
-    // UV rect comes from atlas frame (0..1 range for a 32x32 frame in a 32x32 atlas).
-    EXPECT_FLOAT_EQ(inst.uvRect.x, 0.0f);
-    EXPECT_FLOAT_EQ(inst.uvRect.y, 0.0f);
-    EXPECT_FLOAT_EQ(inst.uvRect.z, 1.0f);
-    EXPECT_FLOAT_EQ(inst.uvRect.w, 1.0f);
 
     EXPECT_FLOAT_EQ(inst.tint.x, 0.5f);
     EXPECT_FLOAT_EQ(inst.tint.y, 0.25f);

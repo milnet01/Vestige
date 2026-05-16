@@ -61,15 +61,11 @@ TEST(SSAOTest, KernelSamplesInHemisphere)
     }
 }
 
-TEST(SSAOTest, KernelSamplesNonZero)
-{
-    auto kernel = generateSsaoKernel(64);
-    for (const auto& sample : kernel)
-    {
-        float len = glm::length(sample);
-        EXPECT_GT(len, 0.0f);
-    }
-}
+// Slice 18 Ts4: dropped `KernelSamplesNonZero` — every kernel-property
+// test in this suite calls `generateSsaoKernel(64)` with a fixed
+// seed, so all four pass for the same root reason. Non-zero length
+// is trivially true by construction. `KernelBiasTowardSurface` below
+// is the load-bearing pin (catches the bias-scaling formula bug).
 
 TEST(SSAOTest, KernelBiasTowardSurface)
 {
@@ -96,11 +92,8 @@ TEST(SSAOTest, KernelBiasTowardSurface)
     EXPECT_LT(earlyAvg, lateAvg);
 }
 
-TEST(SSAOTest, KernelSampleCountCorrect)
-{
-    auto kernel = generateSsaoKernel(64);
-    EXPECT_EQ(static_cast<int>(kernel.size()), 64);
-}
+// Slice 18 Ts4: dropped `KernelSampleCountCorrect` — trivially true
+// by construction (`generateSsaoKernel(64)` pushes 64 entries).
 
 // =============================================================================
 // Depth linearization tests
@@ -133,33 +126,9 @@ TEST(SSAOTest, LinearizeDepthMonotonic)
     }
 }
 
-// =============================================================================
-// Occlusion logic tests
-// =============================================================================
-
-TEST(SSAOTest, FullOcclusionIsZero)
-{
-    // When all samples are occluded, AO factor = 0.0
-    int kernelSize = 64;
-    float occlusion = static_cast<float>(kernelSize);
-    float ao = 1.0f - (occlusion / static_cast<float>(kernelSize));
-    EXPECT_FLOAT_EQ(ao, 0.0f);
-}
-
-TEST(SSAOTest, NoOcclusionIsOne)
-{
-    // When no samples are occluded, AO factor = 1.0
-    float occlusion = 0.0f;
-    int kernelSize = 64;
-    float ao = 1.0f - (occlusion / static_cast<float>(kernelSize));
-    EXPECT_FLOAT_EQ(ao, 1.0f);
-}
-
-TEST(SSAOTest, HalfOcclusionIsHalf)
-{
-    // When half the samples are occluded, AO factor = 0.5
-    int kernelSize = 64;
-    float occlusion = static_cast<float>(kernelSize) / 2.0f;
-    float ao = 1.0f - (occlusion / static_cast<float>(kernelSize));
-    EXPECT_FLOAT_EQ(ao, 0.5f);
-}
+// Phase 10.9 Slice 18 Ts1 cleanup: dropped the previous "occlusion
+// logic" trio (FullOcclusionIsZero, NoOcclusionIsOne, HalfOcclusionIsHalf)
+// — each verified the arithmetic identity `1 - n/n` against a constant
+// it computed in the same line. Pre/post any real SSAO accumulator
+// change would pass identically. The combine step lives in
+// `assets/shaders/ssao.frag.glsl` and is exercised at engine launch.

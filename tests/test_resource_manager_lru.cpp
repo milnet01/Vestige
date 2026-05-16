@@ -22,12 +22,20 @@ namespace Vestige::ResourceManagerLru::Test
 
 // -- Public ResourceManager surface (no GL needed) --------------------------
 
-TEST(ResourceManagerLruTest, DefaultLimitsAreSetFromConstants)
+// Slice 18 Ts4: dropped `DefaultLimitsAreSetFromConstants` — it
+// asserted a thin accessor returned its named-constant initialiser;
+// no failure mode short of someone changing the constant itself.
+// Numeric-value pin (catching drift in the constants) lives in
+// `DefaultLimitsAreReasonable` below.
+
+TEST(ResourceManagerLruTest, DefaultLimitsAreReasonable)
 {
     ResourceManager rm;
-    EXPECT_EQ(rm.getTextureCacheLimit(), ResourceManager::kDefaultTextureLimit);
-    EXPECT_EQ(rm.getMeshCacheLimit(),    ResourceManager::kDefaultMeshLimit);
-    EXPECT_EQ(rm.getModelCacheLimit(),   ResourceManager::kDefaultModelLimit);
+    // Pin the actual numeric defaults so a constant drift is visible
+    // in the test diff, not just deferred to the next observer.
+    EXPECT_EQ(rm.getTextureCacheLimit(), 1024u);
+    EXPECT_EQ(rm.getMeshCacheLimit(),     512u);
+    EXPECT_EQ(rm.getModelCacheLimit(),    128u);
 }
 
 TEST(ResourceManagerLruTest, SetCacheLimitRoundTrips)
@@ -157,18 +165,21 @@ TEST(LruCacheHelpers, ReinsertExistingKeyDoesNotEvict)
 
 // -- ResourceManager setter retroactive eviction (no GL — empty cache) ----
 
-TEST(ResourceManagerLruTest, SetterOnEmptyCacheIsNoOp)
+// Slice 18 Ts1 cleanup: renamed from `*IsNoOp` — without a GL context
+// these tests can't populate the cache, so the *retroactive-eviction*
+// half of the setter contract is exercised at engine launch. Here we
+// pin only that the setters / clearAll don't crash on a fresh manager.
+TEST(ResourceManagerLruTest, SetterOnEmptyCacheDoesNotCrash)
 {
     ResourceManager rm;
-    rm.setTextureCacheLimit(0);  // tighten to nothing.
+    rm.setTextureCacheLimit(0);
     rm.setMeshCacheLimit(0);
     rm.setModelCacheLimit(0);
-    // Nothing was cached, nothing crashes.
     EXPECT_EQ(rm.getTextureCount(), 0u);
     EXPECT_EQ(rm.getMeshCount(), 0u);
 }
 
-TEST(ResourceManagerLruTest, ClearAllOnEmptyCacheIsNoOp)
+TEST(ResourceManagerLruTest, ClearAllOnEmptyCacheDoesNotCrash)
 {
     ResourceManager rm;
     rm.clearAll();

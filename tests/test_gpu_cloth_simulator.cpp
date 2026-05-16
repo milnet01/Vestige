@@ -352,35 +352,11 @@ TEST(GpuClothSimulator, BindLrasEnumPinned)
     EXPECT_EQ(static_cast<GLuint>(GpuClothSimulator::BIND_LRAS), 8u);
 }
 
-TEST(ClothConstraintGraph, GenerateLraEmptyForNoPins)
-{
-    std::vector<glm::vec3> positions(16, glm::vec3(0.0f));
-    std::vector<uint32_t>  pins;
-    std::vector<GpuLraConstraint> lras;
-    generateLraConstraints(positions, pins, lras);
-    EXPECT_TRUE(lras.empty());
-}
-
-TEST(ClothConstraintGraph, GenerateLraTethersEveryFreeParticle)
-{
-    // 4 particles in a line; pin index 0; expect 3 LRA tethers all referencing pin 0.
-    std::vector<glm::vec3> positions = {
-        {0,0,0}, {1,0,0}, {2,0,0}, {3,0,0}
-    };
-    std::vector<uint32_t> pins = {0};
-    std::vector<GpuLraConstraint> lras;
-    generateLraConstraints(positions, pins, lras);
-
-    ASSERT_EQ(lras.size(), 3u);
-    for (const auto& l : lras)
-    {
-        EXPECT_EQ(l.pinIndex, 0u);
-        EXPECT_NE(l.particleIndex, 0u);
-    }
-    EXPECT_FLOAT_EQ(lras[0].maxDistance, 1.0f);
-    EXPECT_FLOAT_EQ(lras[1].maxDistance, 2.0f);
-    EXPECT_FLOAT_EQ(lras[2].maxDistance, 3.0f);
-}
+// Phase 10.9 Slice 18 Ts3: the LRA tests moved to their canonical home
+// at `tests/test_cloth_constraint_graph.cpp` — `generateLraConstraints`
+// is a `cloth_constraint_graph.h` helper, not a `GpuClothSimulator`
+// member. The misplaced suite name `ClothConstraintGraph` inside the
+// GPU sim test file caused readers to grep here for graph tests.
 
 // -- Phase 10.9 Sh2: cloth_collision plane-collider parity --
 //

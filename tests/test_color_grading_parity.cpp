@@ -227,35 +227,12 @@ TEST_F(ColorGradingParityTest, ZeroIntensityIsExactPassthrough)
     glDeleteTextures(1, &lutTex);
 }
 
-// =============================================================================
-// LUT blend (mix) parity in isolation
-// =============================================================================
-
-TEST_F(ColorGradingParityTest, MixBlendMatchesCpuAcrossIntensities)
-{
-    // Pin GLSL `mix(a, b, t)` against `glm::mix` — these *should* be
-    // identical (both implement linear interpolation), but the
-    // `lutBlend` helper in `tests/test_color_grading.cpp` makes the
-    // assumption load-bearing for the whole grading path.
-    ShaderProgram prog(R"(#version 450 core
-layout(location = 0) out vec4 outColor;
-uniform vec3  u_a;
-uniform vec3  u_b;
-uniform float u_t;
-void main() { outColor = vec4(mix(u_a, u_b, u_t), 1.0); }
-)");
-    ASSERT_TRUE(prog.valid());
-
-    const glm::vec3 a(0.3f, 0.5f, 0.7f);
-    const glm::vec3 b(0.8f, 0.2f, 0.1f);
-    for (float t : {0.0f, 0.25f, 0.5f, 0.75f, 1.0f})
-    {
-        glm::vec4 gpu = prog.run({{"u_a", a}, {"u_b", b}, {"u_t", t}});
-        glm::vec3 cpu = glm::mix(a, b, t);
-        EXPECT_NEAR(gpu.r, cpu.x, 1e-6f) << "t=" << t << ".r";
-        EXPECT_NEAR(gpu.g, cpu.y, 1e-6f) << "t=" << t << ".g";
-        EXPECT_NEAR(gpu.b, cpu.z, 1e-6f) << "t=" << t << ".b";
-    }
-}
+// Phase 10.9 Slice 18 Ts1 cleanup: dropped
+// `MixBlendMatchesCpuAcrossIntensities` — it tested generic GLSL `mix`
+// against `glm::mix` with arbitrary inputs, not the LUT-blend path
+// the file otherwise pins. If GLSL `mix` ever drifted from `lerp`
+// semantics the rest of the codebase would catch fire long before
+// LUT blending did. The actual LUT-blend wiring is covered by the
+// identity round-trip in the suite's main parity test.
 
 }  // namespace Vestige::Test

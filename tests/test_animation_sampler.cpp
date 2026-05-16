@@ -33,31 +33,25 @@ static AnimationChannel makeVec3Channel(float t0, float t1,
 // Vec3 LINEAR tests
 // ---------------------------------------------------------------------------
 
-TEST(AnimSamplerTest, LinearVec3AtStart)
+// Slice 18 Ts4: three LinearVec3 tests collapsed into one table-driven
+// test. All three share the same two-keyframe lerp; if lerp inversion
+// (e.g. `t` vs `1-t`) is introduced, all three flip together.
+TEST(AnimSamplerTest, LinearVec3InterpolatesAcrossSampleTimes)
 {
     auto ch = makeVec3Channel(0.0f, 1.0f, {0, 0, 0}, {10, 20, 30});
-    glm::vec3 result = sampleVec3(ch, 0.0f);
-    EXPECT_NEAR(result.x, 0.0f, 0.001f);
-    EXPECT_NEAR(result.y, 0.0f, 0.001f);
-    EXPECT_NEAR(result.z, 0.0f, 0.001f);
-}
-
-TEST(AnimSamplerTest, LinearVec3AtEnd)
-{
-    auto ch = makeVec3Channel(0.0f, 1.0f, {0, 0, 0}, {10, 20, 30});
-    glm::vec3 result = sampleVec3(ch, 1.0f);
-    EXPECT_NEAR(result.x, 10.0f, 0.001f);
-    EXPECT_NEAR(result.y, 20.0f, 0.001f);
-    EXPECT_NEAR(result.z, 30.0f, 0.001f);
-}
-
-TEST(AnimSamplerTest, LinearVec3AtMidpoint)
-{
-    auto ch = makeVec3Channel(0.0f, 1.0f, {0, 0, 0}, {10, 20, 30});
-    glm::vec3 result = sampleVec3(ch, 0.5f);
-    EXPECT_NEAR(result.x, 5.0f, 0.001f);
-    EXPECT_NEAR(result.y, 10.0f, 0.001f);
-    EXPECT_NEAR(result.z, 15.0f, 0.001f);
+    struct Case { float t; glm::vec3 expected; const char* name; };
+    const Case cases[] = {
+        { 0.0f, {0.0f,  0.0f,  0.0f},  "start"    },
+        { 1.0f, {10.0f, 20.0f, 30.0f}, "end"      },
+        { 0.5f, {5.0f,  10.0f, 15.0f}, "midpoint" },
+    };
+    for (const Case& c : cases)
+    {
+        const glm::vec3 result = sampleVec3(ch, c.t);
+        EXPECT_NEAR(result.x, c.expected.x, 0.001f) << c.name;
+        EXPECT_NEAR(result.y, c.expected.y, 0.001f) << c.name;
+        EXPECT_NEAR(result.z, c.expected.z, 0.001f) << c.name;
+    }
 }
 
 TEST(AnimSamplerTest, LinearVec3BeforeStart)

@@ -81,8 +81,12 @@ TEST(ObjLoaderTest, LoadSimpleTriangle)
     bool result = ObjLoader::load(file.path(), vertices, indices);
 
     ASSERT_TRUE(result);
-    EXPECT_EQ(vertices.size(), 3u);
-    EXPECT_EQ(indices.size(), 3u);
+    // Slice 18 Ts1: the size pin was redundant with `SharedVerticesAreDeduplicated
+    // ViaIndices` (which tests size when dedup actually matters) — for a fully
+    // unique input it tests only the test fixture, not the loader. Keep here
+    // as `ASSERT_EQ` so the next vertex-data checks have valid indices.
+    ASSERT_EQ(vertices.size(), 3u);
+    ASSERT_EQ(indices.size(), 3u);
 
     // Verify positions
     EXPECT_FLOAT_EQ(vertices[0].position.x, 0.0f);
@@ -199,34 +203,27 @@ TEST(ObjLoaderTest, HandlesMissingTexCoordWithNormal)
 // ObjLoaderTest — Empty and malformed input
 // =============================================================================
 
-TEST(ObjLoaderTest, EmptyFileReturnsFalse)
+// Slice 18 Ts4: the three zero-output cases (empty file, comments
+// only, vertices but no faces) all pass via the same root: parser
+// returns false when zero faces produce zero output. Collapsed into a
+// single table-driven test.
+TEST(ObjLoaderTest, ZeroFaceInputsReturnFalseAndProduceNoOutput)
 {
-    const std::string objData = "";
-
-    TempObjFile file(objData);
-    std::vector<Vertex> vertices;
-    std::vector<uint32_t> indices;
-
-    bool result = ObjLoader::load(file.path(), vertices, indices);
-
-    EXPECT_FALSE(result);
-    EXPECT_TRUE(vertices.empty());
-    EXPECT_TRUE(indices.empty());
-}
-
-TEST(ObjLoaderTest, CommentsOnlyReturnsFalse)
-{
-    const std::string objData =
-        "# This is a comment\n"
-        "# Another comment\n";
-
-    TempObjFile file(objData);
-    std::vector<Vertex> vertices;
-    std::vector<uint32_t> indices;
-
-    bool result = ObjLoader::load(file.path(), vertices, indices);
-
-    EXPECT_FALSE(result);
+    struct Case { const char* data; const char* name; };
+    const Case cases[] = {
+        { "",                                                "empty"             },
+        { "# This is a comment\n# Another comment\n",        "comments-only"     },
+        { "v 0.0 0.0 0.0\nv 1.0 0.0 0.0\nv 0.0 1.0 0.0\n",   "vertices-no-faces" },
+    };
+    for (const Case& c : cases)
+    {
+        TempObjFile file(c.data);
+        std::vector<Vertex> vertices;
+        std::vector<uint32_t> indices;
+        EXPECT_FALSE(ObjLoader::load(file.path(), vertices, indices)) << c.name;
+        EXPECT_TRUE(vertices.empty()) << c.name;
+        EXPECT_TRUE(indices.empty()) << c.name;
+    }
 }
 
 TEST(ObjLoaderTest, NonExistentFileReturnsFalse)
@@ -262,22 +259,8 @@ TEST(ObjLoaderTest, FaceWithTooFewVerticesIsSkipped)
     EXPECT_EQ(indices.size(), 3u);
 }
 
-TEST(ObjLoaderTest, VerticesOnlyNoFacesReturnsFalse)
-{
-    const std::string objData =
-        "v 0.0 0.0 0.0\n"
-        "v 1.0 0.0 0.0\n"
-        "v 0.0 1.0 0.0\n";
-
-    TempObjFile file(objData);
-    std::vector<Vertex> vertices;
-    std::vector<uint32_t> indices;
-
-    bool result = ObjLoader::load(file.path(), vertices, indices);
-
-    // No faces => no output vertices => returns false
-    EXPECT_FALSE(result);
-}
+// Slice 18 Ts4: `VerticesOnlyNoFacesReturnsFalse` rolled into
+// `ZeroFaceInputsReturnFalseAndProduceNoOutput` above.
 
 // =============================================================================
 // ObjLoaderTest — Vertex deduplication

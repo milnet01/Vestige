@@ -589,6 +589,14 @@ std::unique_ptr<ExprNode> NodeGraph::nodeToExpr(NodeId nodeId,
         auto cond = resolveInput(node->inputs[0]);
         auto thenExpr = resolveInput(node->inputs[1]);
         auto elseExpr = resolveInput(node->inputs[2]);
+        // Phase 10.9 Slice 18 Ts2: propagate nullptr from any
+        // recursive resolveInput up the call stack so the Sc2
+        // depth-cap actually rejects deep chains. Without these
+        // checks, the cap fires deep in the tree but the returned
+        // nullptr was silently wrapped into a conditional / unaryOp /
+        // binaryOp parent — hostile 100k-deep inputs still built a
+        // full tree at the top level.
+        if (!cond || !thenExpr || !elseExpr) return nullptr;
         return ExprNode::conditional(std::move(cond),
                                      std::move(thenExpr),
                                      std::move(elseExpr));
@@ -598,6 +606,7 @@ std::unique_ptr<ExprNode> NodeGraph::nodeToExpr(NodeId nodeId,
     if (node->inputs.size() == 1)
     {
         auto arg = resolveInput(node->inputs[0]);
+        if (!arg) return nullptr;  // Sc2 depth-cap propagation (see above)
         return ExprNode::unaryOp(node->operation, std::move(arg));
     }
 
@@ -606,6 +615,7 @@ std::unique_ptr<ExprNode> NodeGraph::nodeToExpr(NodeId nodeId,
     {
         auto left = resolveInput(node->inputs[0]);
         auto right = resolveInput(node->inputs[1]);
+        if (!left || !right) return nullptr;  // Sc2 depth-cap propagation
         return ExprNode::binaryOp(node->operation, std::move(left), std::move(right));
     }
 

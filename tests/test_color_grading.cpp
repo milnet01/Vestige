@@ -414,19 +414,10 @@ TEST(ColorGradingTest, CubeParserClampsValues)
 // Half-texel offset correctness
 // =============================================================================
 
-TEST(ColorGradingTest, HalfTexelOffsetBlackMapsToOrigin)
-{
-    // For input 0.0, the LUT coordinate should be 0.5/32 = 0.015625
-    // This maps to texel index ~0, which is the black corner of a neutral LUT
-    float lutSize = 32.0f;
-    float coord = 0.0f * ((lutSize - 1.0f) / lutSize) + (0.5f / lutSize);
-    EXPECT_NEAR(coord, 0.5f / 32.0f, 0.0001f);
-}
-
-TEST(ColorGradingTest, HalfTexelOffsetWhiteMapsToEnd)
-{
-    // For input 1.0, the LUT coordinate should be 31.5/32 = 0.984375
-    float lutSize = 32.0f;
-    float coord = 1.0f * ((lutSize - 1.0f) / lutSize) + (0.5f / lutSize);
-    EXPECT_NEAR(coord, 31.5f / 32.0f, 0.0001f);
-}
+// Phase 10.9 Slice 18 Ts1 cleanup: dropped
+// `HalfTexelOffsetBlackMapsToOrigin` and `HalfTexelOffsetWhiteMapsToEnd`
+// — each computed a constant and asserted it equalled the same
+// constant (`0 * 31/32 + 0.5/32 == 0.5/32`, `1 * 31/32 + 0.5/32 ==
+// 31.5/32`). No SUT was exercised. The half-texel offset used by the
+// production sampler is pinned by `test_color_grading_parity.cpp`'s
+// identity-round-trip.

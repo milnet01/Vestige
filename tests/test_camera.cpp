@@ -271,59 +271,50 @@ TEST(CameraTest, CullingProjectionMatchesGlmPerspective)
 // Movement
 // ============================================================
 
-TEST(CameraTest, MoveForwardChangesPosition)
+// Slice 18 Ts4: the previous four MoveX/Y/Z/Backward tests all pass
+// via the same root: `move(fwd, right, up, dt)` advances position by
+// `(fwd*front + right*right + up*worldUp) * speed * dt`. Collapsed
+// into one parametric test over each axis. The scale-with-dt / scale-
+// with-speed contracts are pinned by their own dedicated tests below.
+
+TEST(CameraTest, MoveAdvancesAlongRequestedAxis)
 {
-    Camera cam(glm::vec3(0.0f));
-    cam.setSpeed(1.0f);
-    glm::vec3 frontBefore = cam.getFront();
+    struct Case { float fwd, right, up; const char* name; };
+    const Case cases[] = {
+        { 1.0f, 0.0f, 0.0f, "forward"  },
+        { -1.0f, 0.0f, 0.0f, "backward" },
+        { 0.0f, 1.0f, 0.0f, "right"    },
+        { 0.0f, 0.0f, 1.0f, "up"       },
+    };
+    for (const Case& c : cases)
+    {
+        Camera cam(glm::vec3(0.0f));
+        cam.setSpeed(1.0f);
+        const glm::vec3 frontBefore = cam.getFront();
 
-    cam.move(1.0f, 0.0f, 0.0f, 1.0f);  // forward=1, dt=1
+        cam.move(c.fwd, c.right, c.up, 1.0f);
+        const glm::vec3 pos = cam.getPosition();
 
-    glm::vec3 pos = cam.getPosition();
-    // Position should move along the front vector by speed * forward * dt
-    EXPECT_NEAR(pos.x, frontBefore.x, EPSILON);
-    EXPECT_NEAR(pos.y, frontBefore.y, EPSILON);
-    EXPECT_NEAR(pos.z, frontBefore.z, EPSILON);
-}
-
-TEST(CameraTest, MoveBackwardChangesPosition)
-{
-    Camera cam(glm::vec3(0.0f));
-    cam.setSpeed(1.0f);
-    glm::vec3 frontBefore = cam.getFront();
-
-    cam.move(-1.0f, 0.0f, 0.0f, 1.0f);  // backward
-
-    glm::vec3 pos = cam.getPosition();
-    EXPECT_NEAR(pos.x, -frontBefore.x, EPSILON);
-    EXPECT_NEAR(pos.y, -frontBefore.y, EPSILON);
-    EXPECT_NEAR(pos.z, -frontBefore.z, EPSILON);
-}
-
-TEST(CameraTest, MoveRightChangesPosition)
-{
-    Camera cam(glm::vec3(0.0f));
-    cam.setSpeed(1.0f);
-
-    cam.move(0.0f, 1.0f, 0.0f, 1.0f);  // right=1
-
-    glm::vec3 pos = cam.getPosition();
-    // Default cam faces -Z, so right should be +X
-    EXPECT_GT(pos.x, 0.0f);
-    EXPECT_NEAR(pos.y, 0.0f, EPSILON);
-}
-
-TEST(CameraTest, MoveUpChangesPosition)
-{
-    Camera cam(glm::vec3(0.0f));
-    cam.setSpeed(1.0f);
-
-    cam.move(0.0f, 0.0f, 1.0f, 1.0f);  // up=1
-
-    glm::vec3 pos = cam.getPosition();
-    EXPECT_NEAR(pos.x, 0.0f, EPSILON);
-    EXPECT_GT(pos.y, 0.0f);
-    EXPECT_NEAR(pos.z, 0.0f, EPSILON);
+        // Default cam faces -Z. Forward/backward → ±front; right → +X;
+        // up → +Y.
+        if (c.fwd != 0.0f)
+        {
+            EXPECT_NEAR(pos.x, c.fwd * frontBefore.x, EPSILON) << c.name;
+            EXPECT_NEAR(pos.y, c.fwd * frontBefore.y, EPSILON) << c.name;
+            EXPECT_NEAR(pos.z, c.fwd * frontBefore.z, EPSILON) << c.name;
+        }
+        else if (c.right > 0.0f)
+        {
+            EXPECT_GT(pos.x, 0.0f) << c.name;
+            EXPECT_NEAR(pos.y, 0.0f, EPSILON) << c.name;
+        }
+        else if (c.up > 0.0f)
+        {
+            EXPECT_NEAR(pos.x, 0.0f, EPSILON) << c.name;
+            EXPECT_GT(pos.y, 0.0f) << c.name;
+            EXPECT_NEAR(pos.z, 0.0f, EPSILON) << c.name;
+        }
+    }
 }
 
 TEST(CameraTest, MoveScalesWithDeltaTime)
@@ -428,20 +419,17 @@ TEST(CameraTest, RotateUpdatesFrontVector)
 // FOV adjustment
 // ============================================================
 
-TEST(CameraTest, AdjustFovDecreasesOnPositiveOffset)
+// Slice 18 Ts4: collapsed the two ±-offset tests — both pin
+// `adjustFov(o)` subtracting `o` from current FOV.
+TEST(CameraTest, AdjustFovSubtractsOffsetSigned)
 {
-    Camera cam;
-    float fovBefore = cam.getFov();
-    cam.adjustFov(5.0f);
-    EXPECT_FLOAT_EQ(cam.getFov(), fovBefore - 5.0f);
-}
-
-TEST(CameraTest, AdjustFovIncreasesOnNegativeOffset)
-{
-    Camera cam;
-    float fovBefore = cam.getFov();
-    cam.adjustFov(-5.0f);
-    EXPECT_FLOAT_EQ(cam.getFov(), fovBefore + 5.0f);
+    for (float offset : {5.0f, -5.0f})
+    {
+        Camera cam;
+        const float fovBefore = cam.getFov();
+        cam.adjustFov(offset);
+        EXPECT_FLOAT_EQ(cam.getFov(), fovBefore - offset) << "offset=" << offset;
+    }
 }
 
 TEST(CameraTest, AdjustFovClampedMin)
@@ -515,59 +503,38 @@ TEST(CameraTest, ExtremeFovProjectionStillValid)
     EXPECT_GT(proj120[1][1], 0.0f);
 }
 
-TEST(CameraTest, PitchAtExtremesCameraStillUsable)
+// Slice 18 Ts4: collapsed ±-pitch + aspect-ratio extremes (4 tests → 2
+// parametric).
+TEST(CameraTest, PitchAtSignedExtremesCameraStillUsable)
 {
-    // At pitch=89, camera looks nearly straight up — vectors should still be valid
-    Camera cam(glm::vec3(0.0f), -90.0f, 89.0f);
-    glm::vec3 front = cam.getFront();
-    EXPECT_NEAR(glm::length(front), 1.0f, EPSILON);
-    EXPECT_GT(front.y, 0.9f);  // Mostly pointing up
-
-    // View matrix should not contain NaN
-    glm::mat4 view = cam.getViewMatrix();
-    for (int col = 0; col < 4; ++col)
+    for (float pitch : {89.0f, -89.0f})
     {
-        for (int row = 0; row < 4; ++row)
-        {
-            EXPECT_FALSE(std::isnan(view[col][row]))
-                << "NaN in view matrix at [" << col << "][" << row << "]";
-        }
+        Camera cam(glm::vec3(0.0f), -90.0f, pitch);
+        const glm::vec3 front = cam.getFront();
+        EXPECT_NEAR(glm::length(front), 1.0f, EPSILON) << "pitch=" << pitch;
+        if (pitch > 0.0f) EXPECT_GT(front.y, 0.9f) << "pitch=" << pitch;
+        else              EXPECT_LT(front.y, -0.9f) << "pitch=" << pitch;
+
+        const glm::mat4 view = cam.getViewMatrix();
+        for (int col = 0; col < 4; ++col)
+            for (int row = 0; row < 4; ++row)
+                EXPECT_FALSE(std::isnan(view[col][row]))
+                    << "NaN at [" << col << "][" << row << "] pitch=" << pitch;
     }
 }
 
-TEST(CameraTest, NegativePitchExtremeCameraStillUsable)
-{
-    Camera cam(glm::vec3(0.0f), -90.0f, -89.0f);
-    glm::vec3 front = cam.getFront();
-    EXPECT_NEAR(glm::length(front), 1.0f, EPSILON);
-    EXPECT_LT(front.y, -0.9f);  // Mostly pointing down
-
-    glm::mat4 view = cam.getViewMatrix();
-    for (int col = 0; col < 4; ++col)
-    {
-        for (int row = 0; row < 4; ++row)
-        {
-            EXPECT_FALSE(std::isnan(view[col][row]));
-        }
-    }
-}
-
-TEST(CameraTest, VerySmallAspectRatioProjection)
+TEST(CameraTest, ExtremeAspectRatioProjection)
 {
     Camera cam;
-    glm::mat4 proj = cam.getProjectionMatrix(0.01f);  // Very tall, narrow viewport
+    // Very tall narrow viewport — [0][0] = f/aspect should be large.
+    glm::mat4 proj = cam.getProjectionMatrix(0.01f);
     EXPECT_FALSE(std::isnan(proj[0][0]));
     EXPECT_FALSE(std::isinf(proj[0][0]));
-    // [0][0] = f / aspect should be very large
     EXPECT_GT(proj[0][0], 100.0f);
-}
 
-TEST(CameraTest, LargeAspectRatioProjection)
-{
-    Camera cam;
-    glm::mat4 proj = cam.getProjectionMatrix(100.0f);  // Ultra-wide
+    // Ultra-wide — [0][0] = f/aspect should be small.
+    proj = cam.getProjectionMatrix(100.0f);
     EXPECT_FALSE(std::isnan(proj[0][0]));
     EXPECT_FALSE(std::isinf(proj[0][0]));
-    // [0][0] = f / aspect should be very small
     EXPECT_LT(proj[0][0], 0.1f);
 }

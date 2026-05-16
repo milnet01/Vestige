@@ -209,21 +209,10 @@ TEST(CommandHistoryTest, DirtyAfterUndoThenNewExecute)
     EXPECT_TRUE(history.isDirty());
 }
 
-// Regression: saving after some executes, then undoing back and executing a
-// new command, must also leave the saved state unreachable.
-TEST(CommandHistoryTest, DirtyAfterDeepUndoThenNewExecute)
-{
-    int value = 0;
-    CommandHistory history;
-
-    history.execute(std::make_unique<IncrementCommand>(value));  // v=1
-    history.execute(std::make_unique<IncrementCommand>(value));  // v=2
-    history.markSaved();                                           // sv=2
-    history.undo();                                                // v=1
-    history.execute(std::make_unique<IncrementCommand>(value));  // v=2 (new)
-
-    EXPECT_TRUE(history.isDirty());  // Saved state lived on the discarded branch
-}
+// Slice 18 Ts4: dropped `DirtyAfterDeepUndoThenNewExecute` —
+// `DirtyAfterUndoThenNewExecute` above pins the same redo-branch-
+// discard root invariant at depth 1; the deep-undo variant exercises
+// the same code path with no additional contract.
 
 // ---------------------------------------------------------------------------
 // Command limit

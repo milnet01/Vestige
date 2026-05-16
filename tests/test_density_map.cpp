@@ -314,35 +314,11 @@ TEST(FoliageDensityModulationTest, FullDensityMapNoEffect)
 // Bank blending
 // =============================================================================
 
-TEST(BankBlendTest, BasicBlend)
-{
-    Terrain terrain;
-    TerrainConfig cfg;
-    cfg.width = 33;
-    cfg.depth = 33;
-    cfg.spacingX = 1.0f;
-    cfg.spacingZ = 1.0f;
-    cfg.origin = glm::vec3(0.0f);
-    cfg.gridResolution = 5;
-    cfg.maxLodLevels = 2;
-
-    // Initialize creates GPU textures which won't work in unit tests,
-    // but the splatmap data is CPU-side so we can test the algorithm.
-    // We need to call initialize to set up internal state.
-    // This test will only pass if GL context is NOT required for splatmap math.
-    // Since initialize creates GL textures which fail without context,
-    // we test the logic by directly checking the config struct.
-
-    Terrain::BankBlendConfig blendConfig;
-    blendConfig.blendWidth = 3.0f;
-    blendConfig.bankChannel = 3;  // Sand
-    blendConfig.bankStrength = 0.8f;
-
-    // Just verify the config struct works correctly
-    EXPECT_FLOAT_EQ(blendConfig.blendWidth, 3.0f);
-    EXPECT_EQ(blendConfig.bankChannel, 3);
-    EXPECT_FLOAT_EQ(blendConfig.bankStrength, 0.8f);
-}
+// Phase 10.9 Slice 18 Ts1 cleanup: dropped `BankBlendTest.BasicBlend`
+// — body never invoked any blend operation; it round-tripped a
+// `BankBlendConfig` struct, which is covered by `ConfigDefaults`
+// below. The actual blend math lives behind a GL context and is
+// exercised at engine launch.
 
 TEST(BankBlendTest, ConfigDefaults)
 {

@@ -71,13 +71,22 @@ TEST(WaterSurfaceConfigTest, DefaultSurfaceParameters)
     EXPECT_FLOAT_EQ(config.reflectionResolutionScale, 0.25f);
     EXPECT_EQ(config.reflectionMode, WaterReflectionMode::PLANAR);
     EXPECT_TRUE(config.refractionEnabled);
+
+    // Slice 18 Ts2: previously-untested caustic + qualityTier defaults.
+    EXPECT_TRUE(config.causticsEnabled);
+    EXPECT_FLOAT_EQ(config.causticsIntensity, 0.15f);
+    EXPECT_FLOAT_EQ(config.causticsScale, 0.1f);
+    EXPECT_EQ(config.qualityTier, 0);
 }
 
-TEST(WaterSurfaceConfigTest, WaveCountClamped)
+// Slice 18 Ts1 cleanup: renamed from `WaveCountClamped` — the body
+// never attempts an out-of-range write, so the clamp half of the
+// contract is unpinned. `numWaves` is a plain public int with no
+// runtime clamp; this test verifies only the in-range round-trip.
+TEST(WaterSurfaceConfigTest, WaveCountInRangeRoundTrips)
 {
     WaterSurfaceConfig config;
 
-    // numWaves can be set, MAX_WAVES is the upper limit
     config.numWaves = 4;
     EXPECT_LE(config.numWaves, WaterSurfaceConfig::MAX_WAVES);
 

@@ -117,25 +117,20 @@ TEST(DefaultHudPrefab, NotificationStackAnchorsTopRightWithThreeSlots)
     EXPECT_EQ(stack->getChildCount(), NotificationQueue::DEFAULT_CAPACITY);
 }
 
-// -- Notification slots start hidden (alpha 0) --
+// -- Accessibility walk over an unpopulated notification stack --
 
-TEST(DefaultHudPrefab, NotificationSlotsStartInvisible)
+// Slice 18 Ts1 cleanup: renamed from `NotificationSlotsStartInvisible`
+// — the body never reads slot alpha, just confirms `collectAccessible`
+// doesn't crash on the prefab. Slot-alpha verification needs an
+// observable the panel doesn't currently expose.
+TEST(DefaultHudPrefab, NotificationCanvasWalkDoesNotCrashOnUnpopulatedHud)
 {
     UICanvas canvas;
     UITheme theme = UITheme::defaultTheme();
     UISystem ui;
     populate(canvas, theme, ui);
 
-    // The stack panel's children are the toast slots; validate via
-    // collectAccessible (public) that each child starts at alpha 0 by
-    // checking that no accessibility description has been set (the
-    // toast only sets description when populated with content).
     const std::vector<UIAccessibilitySnapshot> snaps = canvas.collectAccessible();
-    // The only role-tagged elements pre-population are the crosshair
-    // and the empty toast slots (which carry UIAccessibleRole::Label but
-    // with empty label + description). The interaction-anchor and stack
-    // panels have the Panel role via `UIPanel`. Don't pin an exact count
-    // — just verify the walk doesn't crash on an unpopulated HUD.
     (void)snaps;
 }
 

@@ -82,21 +82,17 @@ TEST_F(ResourceManagerSandboxTest, LoadModelOutsideRootReturnsNullptr_D1)
     EXPECT_EQ(model, nullptr);
 }
 
-TEST_F(ResourceManagerSandboxTest, NoSandboxConfiguredAcceptsAnyPath_D1)
+// Slice 18 Ts1 cleanup: renamed from `NoSandboxConfiguredAcceptsAnyPath_D1`
+// — the body cannot distinguish "sandbox accepted then loader rejected"
+// from "sandbox rejected" because both yield nullptr. This test pins
+// only that the no-sandbox state is preserved across a load attempt.
+TEST_F(ResourceManagerSandboxTest, NoSandboxConfiguredPreservesEmptyRoots_D1)
 {
-    // Backwards-compat: empty roots = sandbox disabled. Load attempt
-    // will fail at the file-content layer but the sandbox check passes.
     ResourceManager rm;
     EXPECT_TRUE(rm.getSandboxRoots().empty());
-    // Mesh load fails (file is just "ok" not OBJ) but sandbox check
-    // shouldn't be the cause of the failure.
     auto mesh = rm.loadMesh((m_root / "assets" / "ok.txt").string());
-    // Non-OBJ content → loader returns false → loadMesh returns nullptr.
-    // Distinguishing sandbox-rejection vs load-fail isn't visible at this
-    // API surface; the previous test (with sandbox) verifies the early
-    // path. This test pins that the no-sandbox path doesn't *additionally*
-    // reject.
     EXPECT_EQ(mesh, nullptr);
+    EXPECT_TRUE(rm.getSandboxRoots().empty());
 }
 
 }  // namespace Vestige::ResourceManagerSandbox::Test

@@ -89,7 +89,12 @@ TEST_F(SceneSerializerTest, ReadMetadataFromValidFile)
 // File structure validation
 // ---------------------------------------------------------------------------
 
-TEST_F(SceneSerializerTest, LoadRejectsMissingHeader)
+// Slice 18 Ts1 cleanup: renamed from `LoadRejectsMissingHeader` — the
+// body only exercises `readMetadata`, which is the standalone
+// header-parsing helper. `loadScene` itself needs GL and is exercised
+// at engine launch. Same `*ShapeReferenceDocument`/`*DoesNotReject`
+// naming precedent shipped with the Ed11 metadata pins.
+TEST_F(SceneSerializerTest, ReadMetadataReturnsZeroVersionForMissingHeader)
 {
     // Write a JSON file without the vestige_scene header
     nlohmann::json j;

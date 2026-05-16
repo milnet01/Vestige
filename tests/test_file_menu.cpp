@@ -80,14 +80,9 @@ TEST_F(FileMenuTest, StartsClean)
 // pins that fallback behaviour for any caller that constructs a
 // FileMenu without immediately wiring history.
 
-TEST_F(FileMenuTest, MarkDirtySetsFlag)
-{
-    FileMenu menu;
-    CommandHistory history;
-    menu.setCommandHistory(&history);
-    menu.markDirty();
-    EXPECT_TRUE(menu.isDirty());
-}
+// Slice 18 Ts4: dropped `MarkDirtySetsFlag` — `MarkCleanClearsFlag`
+// below subsumes it (the body markDirty's then asserts isDirty before
+// the clean step).
 
 TEST_F(FileMenuTest, MarkCleanClearsFlag)
 {
@@ -194,11 +189,38 @@ protected:
         m_testDir = fs::temp_directory_path()
                   / ("vestige_test_recent_" + Testing::vestigeTestStamp());
         fs::create_directories(m_testDir);
+
+        // Phase 10.9 Slice 18 follow-up: `RecentFiles::addPath` calls
+        // `save()` automatically (recent_files.cpp:135), so any test
+        // that addPaths persists to disk. Without sandboxing
+        // XDG_CONFIG_HOME, that disk write lands in the user's real
+        // `~/.config/vestige/recent_files.json` and pollutes the
+        // editor's recent-scenes list with test temp paths. Mirror
+        // the pattern from `test_atomic_write_routing.cpp`'s
+        // RecentFilesAtomicWriteTest.
+        m_xdgRoot = fs::temp_directory_path()
+                  / ("vestige_recent_xdg_" + Testing::vestigeTestStamp());
+        std::error_code ec;
+        fs::remove_all(m_xdgRoot, ec);
+        fs::create_directories(m_xdgRoot);
+
+        const char* prev = std::getenv("XDG_CONFIG_HOME");
+        m_prevXdg = prev ? prev : "";
+        setenv("XDG_CONFIG_HOME", m_xdgRoot.c_str(), 1);
     }
 
     void TearDown() override
     {
+        if (m_prevXdg.empty())
+        {
+            unsetenv("XDG_CONFIG_HOME");
+        }
+        else
+        {
+            setenv("XDG_CONFIG_HOME", m_prevXdg.c_str(), 1);
+        }
         std::error_code ec;
+        fs::remove_all(m_xdgRoot, ec);
         fs::remove_all(m_testDir, ec);
     }
 
@@ -210,6 +232,8 @@ protected:
     }
 
     fs::path m_testDir;
+    fs::path m_xdgRoot;
+    std::string m_prevXdg;
 };
 
 TEST_F(RecentFilesTest, StartsEmpty)

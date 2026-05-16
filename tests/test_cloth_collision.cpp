@@ -9,6 +9,7 @@
 #include "physics/collider_generator.h"
 #include "physics/spatial_hash.h"
 #include "physics/cloth_simulator.h"
+#include "cloth_test_helpers.h"
 
 #include <gtest/gtest.h>
 
@@ -59,19 +60,10 @@ static void makeCube(std::vector<glm::vec3>& verts, std::vector<uint32_t>& indic
     };
 }
 
+// Slice 18 Ts3: canonical definition in cloth_test_helpers.h.
 static ClothConfig smallClothConfig(uint32_t w = 4, uint32_t h = 4)
 {
-    ClothConfig cfg;
-    cfg.width = w;
-    cfg.height = h;
-    cfg.spacing = 1.0f;
-    cfg.particleMass = 1.0f;
-    cfg.substeps = 5;
-    cfg.stretchCompliance = 0.0f;
-    cfg.shearCompliance = 0.0001f;
-    cfg.bendCompliance = 0.01f;
-    cfg.damping = 0.01f;
-    return cfg;
+    return Testing::clothSmallConfig(w, h);
 }
 
 // ===========================================================================

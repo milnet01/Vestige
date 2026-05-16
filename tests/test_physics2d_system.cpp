@@ -286,14 +286,13 @@ TEST(Physics2DSystem, SensorDoesNotResolveContact)
     EXPECT_LT(pos.y, -1.0f) << "Sensor did not pass through static floor";
 }
 
-TEST(Physics2DSystem, UpdateCachesVelocityOnComponent)
+TEST(Physics2DSystem, UpdateWithoutSceneIsNoop)
 {
-    // Smoke test for the ISystem::update pass that reads velocities from
-    // Jolt back into RigidBody2DComponent. Without an Engine-driven
-    // Scene, invoke the update path through a minimal stub (no scene →
-    // update is a no-op, so this test just verifies the early-return
-    // branch doesn't crash).
+    // Honest scope: without an Engine-driven Scene, `update()` early-
+    // returns without invoking the velocity-cache pass — this test pins
+    // only the no-scene safe-no-op contract. The actual velocity-cache
+    // write-back is exercised by integration tests with a live Engine.
     PhysicsFixture fx;
-    fx.system.update(0.016f);  // no Engine, no scene — safe no-op
+    fx.system.update(0.016f);
     SUCCEED();
 }

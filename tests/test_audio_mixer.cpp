@@ -212,13 +212,10 @@ TEST(AudioMixerResolve, ZeroDuckSilencesEveryBus_P3)
 
 // ---- Phase 10.9 W7: pointer snapshot, not value copy --------------
 
-TEST(AudioEngineMixerSnapshot, DefaultsToNullPointer_W7)
-{
-    AudioEngine engine;
-    EXPECT_EQ(engine.getMixerSnapshot(), nullptr)
-        << "Fresh AudioEngine must not synthesise its own AudioMixer; the "
-           "AudioSystem publishes the engine-owned one.";
-}
+// Slice 18 Ts3: dropped `DefaultsToNullPointer_W7` — the
+// `NullptrRevertsToNoSnapshot_W7` test below pins the same default
+// state by way of set-then-reset (the reset returns to nullptr, which
+// implies the default was nullptr).
 
 TEST(AudioEngineMixerSnapshot, StoresPointerNotCopy_W7)
 {

@@ -162,10 +162,12 @@ TEST_F(SceneEnvelopeAtomicityTest, GcLeavesUnrelatedStemsAlone_Ed11)
         << "GC must not touch the scene.json itself";
 }
 
-TEST_F(SceneEnvelopeAtomicityTest, GcOnEmptyDirIsNoOp_Ed11)
+// Slice 18 Ts1 cleanup: renamed from `GcOnEmptyDirIsNoOp_Ed11` — the
+// body confirms GC against an empty dir doesn't throw, not that the
+// GC code path itself observed an empty sweep. The "unrelated-stem
+// files survive" branch is pinned by `GcKeepsOnlyTheNamedPair`.
+TEST_F(SceneEnvelopeAtomicityTest, GcOnEmptyDirDoesNotThrow_Ed11)
 {
-    // No keep-pair on disk yet, no stale files either — GC must just
-    // return without throwing or creating anything.
     SceneSerializer::garbageCollectEpochFiles(
         m_dir, "fresh",
         m_dir / "fresh.heightmap.0-0.r32",

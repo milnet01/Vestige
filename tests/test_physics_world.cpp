@@ -90,8 +90,11 @@ TEST(PhysicsWorld, CreateKinematicBody)
     JPH::BodyID id = world.createKinematicBody(box, glm::vec3(5, 0, 0));
     EXPECT_FALSE(id.IsInvalid());
 
-    // Kinematic bodies are active
     EXPECT_GE(world.getActiveBodyCount(), 1u);
+
+    // Slice 18 Ts1: pin the motion type explicitly — without this, a
+    // static body would also pass the active-count check.
+    EXPECT_EQ(world.getBodyMotionType(id), JPH::EMotionType::Kinematic);
 
     world.destroyBody(id);
     world.shutdown();
@@ -181,19 +184,24 @@ TEST(PhysicsWorld, ApplyImpulse)
     PhysicsWorld world;
     ASSERT_TRUE(world.initialize());
 
-    JPH::SphereShape* sphere = new JPH::SphereShape(0.5f);
-    JPH::BodyID id = world.createDynamicBody(sphere, glm::vec3(0, 5, 0));
+    JPH::SphereShape* sphereA = new JPH::SphereShape(0.5f);
+    JPH::SphereShape* sphereB = new JPH::SphereShape(0.5f);
+    JPH::BodyID impulsed = world.createDynamicBody(sphereA, glm::vec3(0, 5, 0));
+    JPH::BodyID control  = world.createDynamicBody(sphereB, glm::vec3(0, 5, 0));
 
-    float xBefore = world.getBodyPosition(id).x;
+    // Apply a strong horizontal impulse to one body only.
+    world.applyImpulse(impulsed, glm::vec3(100, 0, 0));
 
-    // Apply a strong horizontal impulse
-    world.applyImpulse(id, glm::vec3(100, 0, 0));
-
-    // Step once
     world.update(1.0f / 60.0f);
 
-    float xAfter = world.getBodyPosition(id).x;
-    EXPECT_GT(xAfter, xBefore);
+    // Slice 18 Ts1: compare the impulsed body against a control that
+    // received no impulse. Gravity alone (no impulse) would not produce
+    // any horizontal motion, so a body whose X moves significantly past
+    // the control's X confirms the impulse landed in the +X direction.
+    const float impulsedX = world.getBodyPosition(impulsed).x;
+    const float controlX  = world.getBodyPosition(control).x;
+    EXPECT_GT(impulsedX - controlX, 0.5f)
+        << "impulse along +X should produce a >0.5m X-gap vs the control";
 
     world.shutdown();
 }

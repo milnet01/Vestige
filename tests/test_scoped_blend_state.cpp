@@ -108,27 +108,11 @@ TEST_F(ScopedBlendStateTest, ApplyForwardsConstructorParameters_R4)
     }
 }
 
-TEST_F(ScopedBlendStateTest, DestructionRestoresSnapshottedState_R4)
-{
-    // Caller had blend OFF with default factors; foliage enables it
-    // with alpha-blend factors; on exit the OFF state must be restored.
-    RecordingBlendIo::SavedState prior;
-    prior.enabled = false;
-    prior.srcRgb = GL_ONE;
-    prior.dstRgb = GL_ZERO;
-    prior.srcAlpha = GL_ONE;
-    prior.dstAlpha = GL_ZERO;
-    RecordingBlendIo::savedReturn = prior;
-
-    {
-        ScopedBlendStateImpl<RecordingBlendIo> g(true, GL_SRC_ALPHA,
-                                                   GL_ONE_MINUS_SRC_ALPHA);
-    }
-
-    EXPECT_FALSE(RecordingBlendIo::restored.enabled);
-    EXPECT_EQ(RecordingBlendIo::restored.srcRgb, static_cast<GLenum>(GL_ONE));
-    EXPECT_EQ(RecordingBlendIo::restored.dstRgb, static_cast<GLenum>(GL_ZERO));
-}
+// Slice 18 Ts4: dropped `DestructionRestoresSnapshottedState_R4` —
+// `RestorePreservesCallerHadBlendOnState_R4` below subsumes it (both
+// test the same restore-from-snapshot contract; the latter exercises
+// the more informative caller-was-blending case where a bug would
+// silently restore the wrong factors).
 
 TEST_F(ScopedBlendStateTest, RestorePreservesCallerHadBlendOnState_R4)
 {

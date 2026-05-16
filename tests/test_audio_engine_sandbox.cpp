@@ -83,17 +83,19 @@ TEST_F(AudioEngineSandboxTest, LoadBufferOutsideRootReturnsZero_D11)
     EXPECT_EQ(engine.loadBuffer(m_outsidePath.string()), 0u);
 }
 
-TEST_F(AudioEngineSandboxTest, NoSandboxConfiguredAcceptsAnyPath_D11)
+// Honest scope: without a sandbox configured, loadBuffer returns 0 for
+// "engine not initialised", not for "sandbox rejected". The two return
+// 0 for different reasons and the audio engine surface doesn't expose
+// an observable distinguishing them. This test pins the round-trip
+// getter (empty roots → still empty after loadBuffer) — the
+// acceptance half of the contract is exercised at engine launch on
+// machines with audio.
+TEST_F(AudioEngineSandboxTest, NoSandboxConfiguredRoundTrips_D11)
 {
-    // Backwards-compat: empty roots = sandbox disabled. loadBuffer
-    // still returns 0 because the engine isn't initialised, but the
-    // sandbox didn't *additionally* reject. Pinned by inversion against
-    // the LoadBufferOutsideRootReturnsZero_D11 test: with sandbox
-    // enabled + bad path → 0; without sandbox → 0 for a different
-    // reason (no device). Round-trip getter confirms the disabled state.
     AudioEngine engine;
     EXPECT_TRUE(engine.getSandboxRoots().empty());
     EXPECT_EQ(engine.loadBuffer(m_outsidePath.string()), 0u);
+    EXPECT_TRUE(engine.getSandboxRoots().empty());
 }
 
 }  // namespace Vestige::AudioEngineSandbox::Test

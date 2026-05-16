@@ -255,6 +255,39 @@ TEST_F(GPUParticleEmitterTest, AddBehavior)
     EXPECT_EQ(emitter.getBehaviorCount(), 2);
 }
 
+// Phase 10.9 Slice 18 Ts2 — pin the 16-slot behavior cap. The existing
+// `BehaviorBlockTest::MaxBehaviors` only exercises the raw BehaviorBlock
+// struct (populating 16 slots manually). It never tests that the
+// emitter's `addBehavior` REJECTS the 17th add. That cap lives in
+// `gpu_particle_emitter.cpp:113-119` and emits a Logger::warning on
+// over-capacity inputs.
+TEST_F(GPUParticleEmitterTest, AddBehaviorRejects17thAdd_Ts2)
+{
+    BehaviorParams gp;
+    gp.values[0] = 0.0f;
+    gp.values[1] = -9.81f;
+    gp.values[2] = 0.0f;
+
+    // Fill all 16 slots.
+    for (int i = 0; i < 16; ++i)
+    {
+        emitter.addBehavior(ParticleBehaviorType::GRAVITY, gp);
+    }
+    ASSERT_EQ(emitter.getBehaviorCount(), 16);
+
+    // The 17th add must be rejected — count stays at 16.
+    emitter.addBehavior(ParticleBehaviorType::DRAG, gp);
+    EXPECT_EQ(emitter.getBehaviorCount(), 16)
+        << "addBehavior must drop adds past the 16-slot cap";
+
+    // And a 100th add still doesn't break the invariant.
+    for (int i = 0; i < 100; ++i)
+    {
+        emitter.addBehavior(ParticleBehaviorType::DRAG, gp);
+    }
+    EXPECT_EQ(emitter.getBehaviorCount(), 16);
+}
+
 TEST_F(GPUParticleEmitterTest, RemoveBehavior)
 {
     BehaviorParams gp;

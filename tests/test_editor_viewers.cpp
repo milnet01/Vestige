@@ -87,10 +87,12 @@ TEST_F(TextureViewerTest, MipLevelClamp)
     EXPECT_LE(panel.getMipLevel(), panel.getMaxMipLevel());
 }
 
-TEST_F(TextureViewerTest, PbrGroupDetection)
+// Slice 18 Ts1 cleanup: renamed from `PbrGroupDetection` — the body
+// only walks the no-directory branch. A real PBR-group fixture test
+// would need a temp dir with albedo/normal/roughness textures planted
+// in it and is exercised at editor launch.
+TEST_F(TextureViewerTest, PbrGroupDetectionEmptyDirReturnsNoGroups)
 {
-    // Test the static PBR detection method with a temp directory
-    // Just verify it compiles and runs without crash on an empty dir
     auto groups = TextureViewerPanel::detectPbrGroups("/nonexistent/path");
     EXPECT_TRUE(groups.empty());
 }

@@ -18,12 +18,18 @@
 /// and vanishes on duplicate/paste with no error.
 ///
 /// This test pins the invariant: every concrete `Component` subclass
-/// must return a non-null deep copy from `clone()`. Subclasses whose
-/// constructors take no arguments are exercised directly here.
-/// Subclasses with mandatory constructor arguments (e.g. `RigidBody`
-/// taking a PhysicsWorld) already have clone coverage alongside
-/// their owning subsystem tests and are out of scope for the F2
-/// focused regression.
+/// must return a non-null deep copy from `clone()` AND the result's
+/// dynamic type must match the source.
+///
+/// Phase 10.9 Slice 18 Ts4 consolidation: 22 structurally-identical
+/// `TEST(ComponentClone, *ReturnsNonNull)` cases collapsed to one
+/// typed test with 22 instantiations. Adding a 23rd component is now
+/// one line (`AddTypedTestType<T>(...)`) instead of a 6-line block.
+/// The contract under test is unchanged.
+///
+/// The ClothComponent case is the one the F2 roadmap item explicitly
+/// calls out — before the green commit it fails; the other cases act
+/// as a lock against future silent-drop regressions.
 
 #include <gtest/gtest.h>
 
@@ -49,188 +55,39 @@
 
 using namespace Vestige;
 
-// Each TEST case constructs a default instance of a concrete
-// `Component` subclass, calls `clone()`, and asserts the result is
-// both non-null and of the expected derived type. A silently-dropped
-// clone (nullptr-returning base) fails at the ASSERT_NE; a clone that
-// returns the wrong dynamic type fails at the dynamic_cast.
-//
-// The ClothComponent case is the one the F2 roadmap item explicitly
-// calls out — before the green commit it fails; the other cases act
-// as a lock against future silent-drop regressions.
+template <typename T>
+class ComponentCloneTest : public ::testing::Test {};
 
-TEST(ComponentClone, ClothComponentReturnsNonNull)
+using CloneableComponentTypes = ::testing::Types<
+    ClothComponent,
+    MeshRenderer,
+    DirectionalLightComponent,
+    PointLightComponent,
+    SpotLightComponent,
+    EmissiveLightComponent,
+    CameraComponent,
+    Camera2DComponent,
+    SpriteComponent,
+    TilemapComponent,
+    Collider2DComponent,
+    RigidBody2DComponent,
+    CharacterController2DComponent,
+    ParticleEmitterComponent,
+    GPUParticleEmitter,
+    WaterSurfaceComponent,
+    PressurePlateComponent,
+    InteractableComponent,
+    AudioSourceComponent,
+    FacialAnimator,
+    LipSyncPlayer,
+    TweenManager
+>;
+TYPED_TEST_SUITE(ComponentCloneTest, CloneableComponentTypes);
+
+TYPED_TEST(ComponentCloneTest, DefaultInstanceClonesToSameDynamicType)
 {
-    ClothComponent comp;
+    TypeParam comp;
     auto copy = comp.clone();
     ASSERT_NE(copy, nullptr);
-    EXPECT_NE(dynamic_cast<ClothComponent*>(copy.get()), nullptr);
-}
-
-TEST(ComponentClone, MeshRendererReturnsNonNull)
-{
-    MeshRenderer comp;
-    auto copy = comp.clone();
-    ASSERT_NE(copy, nullptr);
-    EXPECT_NE(dynamic_cast<MeshRenderer*>(copy.get()), nullptr);
-}
-
-TEST(ComponentClone, DirectionalLightReturnsNonNull)
-{
-    DirectionalLightComponent comp;
-    auto copy = comp.clone();
-    ASSERT_NE(copy, nullptr);
-    EXPECT_NE(dynamic_cast<DirectionalLightComponent*>(copy.get()), nullptr);
-}
-
-TEST(ComponentClone, PointLightReturnsNonNull)
-{
-    PointLightComponent comp;
-    auto copy = comp.clone();
-    ASSERT_NE(copy, nullptr);
-    EXPECT_NE(dynamic_cast<PointLightComponent*>(copy.get()), nullptr);
-}
-
-TEST(ComponentClone, SpotLightReturnsNonNull)
-{
-    SpotLightComponent comp;
-    auto copy = comp.clone();
-    ASSERT_NE(copy, nullptr);
-    EXPECT_NE(dynamic_cast<SpotLightComponent*>(copy.get()), nullptr);
-}
-
-TEST(ComponentClone, EmissiveLightReturnsNonNull)
-{
-    EmissiveLightComponent comp;
-    auto copy = comp.clone();
-    ASSERT_NE(copy, nullptr);
-    EXPECT_NE(dynamic_cast<EmissiveLightComponent*>(copy.get()), nullptr);
-}
-
-TEST(ComponentClone, CameraComponentReturnsNonNull)
-{
-    CameraComponent comp;
-    auto copy = comp.clone();
-    ASSERT_NE(copy, nullptr);
-    EXPECT_NE(dynamic_cast<CameraComponent*>(copy.get()), nullptr);
-}
-
-TEST(ComponentClone, Camera2DComponentReturnsNonNull)
-{
-    Camera2DComponent comp;
-    auto copy = comp.clone();
-    ASSERT_NE(copy, nullptr);
-    EXPECT_NE(dynamic_cast<Camera2DComponent*>(copy.get()), nullptr);
-}
-
-TEST(ComponentClone, SpriteComponentReturnsNonNull)
-{
-    SpriteComponent comp;
-    auto copy = comp.clone();
-    ASSERT_NE(copy, nullptr);
-    EXPECT_NE(dynamic_cast<SpriteComponent*>(copy.get()), nullptr);
-}
-
-TEST(ComponentClone, TilemapComponentReturnsNonNull)
-{
-    TilemapComponent comp;
-    auto copy = comp.clone();
-    ASSERT_NE(copy, nullptr);
-    EXPECT_NE(dynamic_cast<TilemapComponent*>(copy.get()), nullptr);
-}
-
-TEST(ComponentClone, Collider2DComponentReturnsNonNull)
-{
-    Collider2DComponent comp;
-    auto copy = comp.clone();
-    ASSERT_NE(copy, nullptr);
-    EXPECT_NE(dynamic_cast<Collider2DComponent*>(copy.get()), nullptr);
-}
-
-TEST(ComponentClone, RigidBody2DComponentReturnsNonNull)
-{
-    RigidBody2DComponent comp;
-    auto copy = comp.clone();
-    ASSERT_NE(copy, nullptr);
-    EXPECT_NE(dynamic_cast<RigidBody2DComponent*>(copy.get()), nullptr);
-}
-
-TEST(ComponentClone, CharacterController2DReturnsNonNull)
-{
-    CharacterController2DComponent comp;
-    auto copy = comp.clone();
-    ASSERT_NE(copy, nullptr);
-    EXPECT_NE(dynamic_cast<CharacterController2DComponent*>(copy.get()), nullptr);
-}
-
-TEST(ComponentClone, ParticleEmitterReturnsNonNull)
-{
-    ParticleEmitterComponent comp;
-    auto copy = comp.clone();
-    ASSERT_NE(copy, nullptr);
-    EXPECT_NE(dynamic_cast<ParticleEmitterComponent*>(copy.get()), nullptr);
-}
-
-TEST(ComponentClone, GPUParticleEmitterReturnsNonNull)
-{
-    GPUParticleEmitter comp;
-    auto copy = comp.clone();
-    ASSERT_NE(copy, nullptr);
-    EXPECT_NE(dynamic_cast<GPUParticleEmitter*>(copy.get()), nullptr);
-}
-
-TEST(ComponentClone, WaterSurfaceReturnsNonNull)
-{
-    WaterSurfaceComponent comp;
-    auto copy = comp.clone();
-    ASSERT_NE(copy, nullptr);
-    EXPECT_NE(dynamic_cast<WaterSurfaceComponent*>(copy.get()), nullptr);
-}
-
-TEST(ComponentClone, PressurePlateReturnsNonNull)
-{
-    PressurePlateComponent comp;
-    auto copy = comp.clone();
-    ASSERT_NE(copy, nullptr);
-    EXPECT_NE(dynamic_cast<PressurePlateComponent*>(copy.get()), nullptr);
-}
-
-TEST(ComponentClone, InteractableReturnsNonNull)
-{
-    InteractableComponent comp;
-    auto copy = comp.clone();
-    ASSERT_NE(copy, nullptr);
-    EXPECT_NE(dynamic_cast<InteractableComponent*>(copy.get()), nullptr);
-}
-
-TEST(ComponentClone, AudioSourceReturnsNonNull)
-{
-    AudioSourceComponent comp;
-    auto copy = comp.clone();
-    ASSERT_NE(copy, nullptr);
-    EXPECT_NE(dynamic_cast<AudioSourceComponent*>(copy.get()), nullptr);
-}
-
-TEST(ComponentClone, FacialAnimatorReturnsNonNull)
-{
-    FacialAnimator comp;
-    auto copy = comp.clone();
-    ASSERT_NE(copy, nullptr);
-    EXPECT_NE(dynamic_cast<FacialAnimator*>(copy.get()), nullptr);
-}
-
-TEST(ComponentClone, LipSyncPlayerReturnsNonNull)
-{
-    LipSyncPlayer comp;
-    auto copy = comp.clone();
-    ASSERT_NE(copy, nullptr);
-    EXPECT_NE(dynamic_cast<LipSyncPlayer*>(copy.get()), nullptr);
-}
-
-TEST(ComponentClone, TweenManagerReturnsNonNull)
-{
-    TweenManager comp;
-    auto copy = comp.clone();
-    ASSERT_NE(copy, nullptr);
-    EXPECT_NE(dynamic_cast<TweenManager*>(copy.get()), nullptr);
+    EXPECT_NE(dynamic_cast<TypeParam*>(copy.get()), nullptr);
 }

@@ -104,12 +104,11 @@ TEST(PressurePlateTest, SetEnabled)
 // Clone behavior
 // =============================================================================
 
-TEST(PressurePlateTest, CloneReturnsNonNull)
-{
-    PressurePlateComponent plate;
-    auto cloned = plate.clone();
-    EXPECT_NE(cloned, nullptr);
-}
+// Phase 10.9 Slice 18 Ts1 cleanup: dropped `CloneReturnsNonNull` — a
+// tautological smoke-test of `clone() != nullptr`. `CloneCopiesConfiguration`
+// and `CloneDoesNotCopyRuntimeState` below already exercise the same
+// contract and would fail with a non-null assertion if clone returned
+// nullptr.
 
 TEST(PressurePlateTest, CloneCopiesConfiguration)
 {

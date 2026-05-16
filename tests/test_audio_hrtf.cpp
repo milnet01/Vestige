@@ -91,17 +91,11 @@ TEST(AudioHrtf, ResolveUnknownNameReturnsMinusOne)
     EXPECT_EQ(resolveHrtfDatasetIndex(available, "KEMAR "),   -1);  // trailing space fails
 }
 
-TEST(AudioHrtf, ResolveIsCaseSensitive)
-{
-    // Double-checked as a standalone case because the settings panel
-    // wiring needs to match the driver's strings byte-for-byte — a
-    // case-insensitive match would silently accept typos and pick
-    // the wrong dataset.
-    const std::vector<std::string> available{"KEMAR"};
-    EXPECT_EQ(resolveHrtfDatasetIndex(available, "KEMAR"), 0);
-    EXPECT_EQ(resolveHrtfDatasetIndex(available, "Kemar"), -1);
-    EXPECT_EQ(resolveHrtfDatasetIndex(available, "kemar"), -1);
-}
+// Slice 18 Ts3: dropped `ResolveIsCaseSensitive` —
+// `ResolveUnknownNameReturnsMinusOne` already pins case-sensitivity
+// inline at line 90 (with the same `"kemar"` lower-case probe and
+// an explicit "case-sensitive" comment). Both call the same
+// underlying string comparator.
 
 // -- Phase 10.9 Slice 2 P8: HrtfStatusEvent + composeHrtfStatusEvent
 //

@@ -57,15 +57,11 @@ TEST_F(PathSandboxTest, ResolveUriIntoBaseRejectsParentTraversal_D1)
     EXPECT_EQ(out, "");
 }
 
-TEST_F(PathSandboxTest, ResolveUriIntoBaseRejectsSiblingPrefixCollision_D1)
-{
-    // AUDIT M16: base="/x/foo", canonical="/x/foo_evil/y" must NOT pass.
-    fs::create_directories(m_root / "assets_evil");
-    std::ofstream{m_root / "assets_evil" / "x.png"} << "x";
-
-    auto out = resolveUriIntoBase(m_root / "assets", "../assets_evil/x.png");
-    EXPECT_EQ(out, "");
-}
+// Slice 18 Ts4: dropped `ResolveUriIntoBaseRejectsSiblingPrefixCollision_D1`
+// — `ValidateInsideRootsRejectsSiblingPrefixCollision_D1` below is the
+// canonical pin for the M16 sibling-prefix rule. Both call sites
+// route through the same underlying canonical-path comparison; if
+// one regresses, both do.
 
 TEST_F(PathSandboxTest, ResolveUriIntoBaseEmptyUriReturnsEmpty_D1)
 {
