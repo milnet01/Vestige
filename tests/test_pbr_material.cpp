@@ -226,21 +226,28 @@ TEST(PbrMaterialTest, AlphaModeRoundTripsEveryEnumValue)
 TEST(PbrMaterialTest, AlphaCutoffRoundTrips)
 {
     Material mat;
+    // /test-audit 2026-05-17 Ts19-CG4: the prior body only EXPECT_NO_THROW'd
+    // on the setter — passes even if the setter is a stub. With getAlphaCutoff
+    // present on Material, a numeric round-trip is the real contract.
     mat.setAlphaCutoff(0.25f);
-    // No public getter for cutoff — pin via round-trip-into-setter that
-    // a refactor would visibly need to update. (If a getter lands,
-    // tighten to numeric round-trip.)
-    EXPECT_NO_THROW(mat.setAlphaCutoff(0.75f));
-    EXPECT_NO_THROW(mat.setAlphaCutoff(0.0f));
-    EXPECT_NO_THROW(mat.setAlphaCutoff(1.0f));
+    EXPECT_FLOAT_EQ(mat.getAlphaCutoff(), 0.25f);
+    mat.setAlphaCutoff(0.75f);
+    EXPECT_FLOAT_EQ(mat.getAlphaCutoff(), 0.75f);
+    mat.setAlphaCutoff(0.0f);
+    EXPECT_FLOAT_EQ(mat.getAlphaCutoff(), 0.0f);
+    mat.setAlphaCutoff(1.0f);
+    EXPECT_FLOAT_EQ(mat.getAlphaCutoff(), 1.0f);
 }
 
 TEST(PbrMaterialTest, DoubleSidedToggles)
 {
     Material mat;
     // Default not double-sided — gltf-spec opt-in field.
+    EXPECT_FALSE(mat.isDoubleSided());
     mat.setDoubleSided(true);
-    EXPECT_NO_THROW(mat.setDoubleSided(false));
+    EXPECT_TRUE(mat.isDoubleSided());
+    mat.setDoubleSided(false);
+    EXPECT_FALSE(mat.isDoubleSided());
 }
 
 TEST(PbrMaterialTest, IblMultiplierRoundTripsAndClampsToZeroOne)

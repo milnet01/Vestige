@@ -74,6 +74,38 @@ private:
     fs::path m_path;
 };
 
+#ifndef _WIN32
+/// RAII guard for a POSIX environment variable. /test-audit 2026-05-17
+/// Ts19-I2: the prior ConfigPath tests snapshotted + restored env vars
+/// by hand, so an `EXPECT_EQ` failure (which aborts the test body) would
+/// leak the test value into every later test that read the same var.
+/// EnvGuard restores in its destructor regardless of how scope exits.
+class EnvGuard
+{
+public:
+    explicit EnvGuard(const char* name) : m_name(name)
+    {
+        const char* current = std::getenv(name);
+        m_hadValue = (current != nullptr);
+        if (m_hadValue) m_savedValue = current;
+    }
+
+    ~EnvGuard()
+    {
+        if (m_hadValue) ::setenv(m_name, m_savedValue.c_str(), 1);
+        else            ::unsetenv(m_name);
+    }
+
+    EnvGuard(const EnvGuard&) = delete;
+    EnvGuard& operator=(const EnvGuard&) = delete;
+
+private:
+    const char* m_name;
+    std::string m_savedValue;
+    bool        m_hadValue = false;
+};
+#endif
+
 } // namespace
 
 // ===== ConfigPath =============================================
@@ -81,23 +113,11 @@ private:
 TEST(ConfigPath, LinuxUsesXdgConfigHomeWhenSet)
 {
 #ifndef _WIN32
-    // Save + restore env to keep other tests stable.
-    const char* oldXdg  = std::getenv("XDG_CONFIG_HOME");
-    std::string saved   = oldXdg ? oldXdg : "";
-    bool hadValue       = (oldXdg != nullptr);
+    EnvGuard guardXdg("XDG_CONFIG_HOME");
 
     ::setenv("XDG_CONFIG_HOME", "/tmp/xdg_fake_root", 1);
     fs::path dir = ConfigPath::getConfigDir();
     EXPECT_EQ(dir, fs::path("/tmp/xdg_fake_root/vestige"));
-
-    if (hadValue)
-    {
-        ::setenv("XDG_CONFIG_HOME", saved.c_str(), 1);
-    }
-    else
-    {
-        ::unsetenv("XDG_CONFIG_HOME");
-    }
 #else
     GTEST_SKIP() << "POSIX-only test";
 #endif
@@ -106,22 +126,13 @@ TEST(ConfigPath, LinuxUsesXdgConfigHomeWhenSet)
 TEST(ConfigPath, LinuxFallsBackToHomeDotConfig)
 {
 #ifndef _WIN32
-    const char* oldXdg  = std::getenv("XDG_CONFIG_HOME");
-    std::string savedXdg = oldXdg ? oldXdg : "";
-    bool hadXdg         = (oldXdg != nullptr);
-
-    const char* oldHome = std::getenv("HOME");
-    std::string savedHome = oldHome ? oldHome : "";
-    bool hadHome        = (oldHome != nullptr);
+    EnvGuard guardXdg("XDG_CONFIG_HOME");
+    EnvGuard guardHome("HOME");
 
     ::unsetenv("XDG_CONFIG_HOME");
     ::setenv("HOME", "/tmp/fake_home_root", 1);
     fs::path dir = ConfigPath::getConfigDir();
     EXPECT_EQ(dir, fs::path("/tmp/fake_home_root/.config/vestige"));
-
-    if (hadXdg)  { ::setenv("XDG_CONFIG_HOME", savedXdg.c_str(), 1); }
-    if (hadHome) { ::setenv("HOME",            savedHome.c_str(), 1); }
-    else         { ::unsetenv("HOME"); }
 #else
     GTEST_SKIP() << "POSIX-only test";
 #endif

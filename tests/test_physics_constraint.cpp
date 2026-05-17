@@ -5,6 +5,7 @@
 /// @brief Unit tests for the PhysicsConstraint system.
 #include "physics/physics_world.h"
 #include "physics/physics_constraint.h"
+#include "physics_test_helpers.h"
 
 #include <Jolt/Physics/Collision/Shape/BoxShape.h>
 
@@ -13,29 +14,20 @@
 using namespace Vestige;
 
 // ---------------------------------------------------------------------------
-// Test fixture — PhysicsWorld with a static floor and two dynamic boxes
+// /test-audit 2026-05-17 Ts19-D4: world+floor scaffolding extracted to
+// PhysicsWorldFixture; this fixture adds the two dynamic boxes the
+// constraint tests need.
 // ---------------------------------------------------------------------------
 
-class PhysicsConstraintTest : public ::testing::Test
+class PhysicsConstraintTest : public ::Vestige::Testing::PhysicsWorldFixture
 {
 protected:
     void SetUp() override
     {
-        ASSERT_TRUE(world.initialize());
-
-        // Large static floor: top surface at Y=0
-        JPH::BoxShape* floor = new JPH::BoxShape(JPH::Vec3(100, 0.5f, 100));
-        world.createStaticBody(floor, glm::vec3(0, -0.5f, 0));
-
-        // Two dynamic boxes at known positions
+        PhysicsWorldFixture::SetUp();
         JPH::BoxShape* box = new JPH::BoxShape(JPH::Vec3(0.5f, 0.5f, 0.5f));
         bodyA = world.createDynamicBody(box, glm::vec3(0, 2, 0), glm::quat(1, 0, 0, 0), 1.0f);
         bodyB = world.createDynamicBody(box, glm::vec3(2, 2, 0), glm::quat(1, 0, 0, 0), 1.0f);
-    }
-
-    void TearDown() override
-    {
-        world.shutdown();
     }
 
     void step(int frames = 1)
@@ -46,7 +38,6 @@ protected:
         }
     }
 
-    PhysicsWorld world;
     JPH::BodyID bodyA;
     JPH::BodyID bodyB;
 };

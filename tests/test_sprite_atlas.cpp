@@ -4,11 +4,10 @@
 /// @file test_sprite_atlas.cpp
 /// @brief Unit tests for SpriteAtlas JSON-Array loader (Phase 9F-1).
 #include "renderer/sprite_atlas.h"
+#include "sprite_test_helpers.h"
 
 #include <gtest/gtest.h>
 
-#include <filesystem>
-#include <fstream>
 #include <string>
 
 using namespace Vestige;
@@ -16,21 +15,13 @@ using namespace Vestige;
 namespace
 {
 
-/// @brief Writes @p content to a unique temporary file and returns the path.
-/// The file lives for the lifetime of the test binary — fine for the test
-/// count here. GoogleTest doesn't require cleanup.
+/// Per-call counter so two tests with the same name don't reuse the same
+/// file (paranoia — they already get separate scratch dirs).
 std::string writeTempFile(const std::string& suffix, const std::string& content)
 {
-    // Per-test scratch dir so parallel ctest processes don't collide.
-    const auto* info = ::testing::UnitTest::GetInstance()->current_test_info();
-    const std::string key = info ? info->name() : "unknown";
-    auto dir = std::filesystem::temp_directory_path() / ("vestige_sprite_atlas_test_" + key);
-    std::filesystem::create_directories(dir);
     static int counter = 0;
-    auto path = dir / (std::string("atlas_") + std::to_string(counter++) + "_" + suffix);
-    std::ofstream out(path);
-    out << content;
-    return path.string();
+    const std::string fileName = "atlas_" + std::to_string(counter++) + "_" + suffix;
+    return ::Vestige::Testing::writeAtlasJsonScratch("sprite_atlas", fileName, content);
 }
 
 constexpr const char* kValidAtlas = R"JSON({

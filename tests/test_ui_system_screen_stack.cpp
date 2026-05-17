@@ -16,11 +16,38 @@
 #include "ui/menu_prefabs.h"
 #include "ui/ui_button.h"
 #include "ui/ui_canvas.h"
+#include "ui/ui_theme.h"
 
 #include <string>
 #include <vector>
 
 using namespace Vestige;
+
+// /test-audit 2026-05-17 Ts19-D3: the trio
+// `UISystem sys; UICanvas canvas; UITheme theme = UITheme::defaultTheme();`
+// appeared in 6 of the MenuPrefabs tests below. Centralised here as a
+// fixture so a change to the trio (e.g. a new common configuration
+// option) lands in one place. UITheme inspection tests in
+// test_ui_widgets.cpp / test_ui_theme_accessibility.cpp keep their
+// inline `UITheme::defaultTheme()` calls because they test theme
+// properties themselves — a fixture would obscure intent there.
+//
+// The `UISystemScreenStackTest` fixture above it covers the other set
+// of tests in this file that each spun up a `UISystem sys;` on the
+// stack — same dedup motivation, narrower scope (no canvas/theme).
+class UISystemScreenStackTest : public ::testing::Test
+{
+protected:
+    UISystem sys;
+};
+
+class MenuPrefabsTest : public ::testing::Test
+{
+protected:
+    UISystem sys;
+    UICanvas canvas;
+    UITheme  theme = UITheme::defaultTheme();
+};
 
 namespace
 {
@@ -48,9 +75,8 @@ UIButton* findButtonByLabel(UICanvas& canvas, const std::string& label)
 
 // -- Defaults ---------------------------------------------------------------
 
-TEST(UISystemScreenStack, DefaultRootIsNone)
+TEST_F(UISystemScreenStackTest, DefaultRootIsNone)
 {
-    UISystem sys;
     EXPECT_EQ(sys.getRootScreen(), GameScreen::None);
     EXPECT_EQ(sys.getTopModalScreen(), GameScreen::None);
     EXPECT_EQ(sys.getCurrentScreen(), GameScreen::None);
@@ -59,9 +85,8 @@ TEST(UISystemScreenStack, DefaultRootIsNone)
 
 // -- setRootScreen ----------------------------------------------------------
 
-TEST(UISystemScreenStack, SetRootScreenEmitsSignal)
+TEST_F(UISystemScreenStackTest, SetRootScreenEmitsSignal)
 {
-    UISystem sys;
     std::vector<GameScreen> observed;
     sys.onRootScreenChanged.connect([&](GameScreen s) { observed.push_back(s); });
 
@@ -71,9 +96,8 @@ TEST(UISystemScreenStack, SetRootScreenEmitsSignal)
     EXPECT_EQ(sys.getRootScreen(), GameScreen::MainMenu);
 }
 
-TEST(UISystemScreenStack, SetRootScreenRebuildsCanvas)
+TEST_F(UISystemScreenStackTest, SetRootScreenRebuildsCanvas)
 {
-    UISystem sys;
     EXPECT_EQ(sys.getCanvas().getElementCount(), 0u);
 
     sys.setRootScreen(GameScreen::MainMenu);
@@ -87,9 +111,8 @@ TEST(UISystemScreenStack, SetRootScreenRebuildsCanvas)
     EXPECT_FALSE(sys.isModalCapture());
 }
 
-TEST(UISystemScreenStack, SetRootScreenClearsModalStack)
+TEST_F(UISystemScreenStackTest, SetRootScreenClearsModalStack)
 {
-    UISystem sys;
     sys.setRootScreen(GameScreen::MainMenu);
     sys.pushModalScreen(GameScreen::Settings);
     ASSERT_EQ(sys.getTopModalScreen(), GameScreen::Settings);
@@ -103,9 +126,8 @@ TEST(UISystemScreenStack, SetRootScreenClearsModalStack)
 
 // -- pushModalScreen / popModalScreen ---------------------------------------
 
-TEST(UISystemScreenStack, PushModalEmitsSignalAndSetsCapture)
+TEST_F(UISystemScreenStackTest, PushModalEmitsSignalAndSetsCapture)
 {
-    UISystem sys;
     sys.setRootScreen(GameScreen::MainMenu);
 
     std::vector<GameScreen> pushed;
@@ -120,9 +142,8 @@ TEST(UISystemScreenStack, PushModalEmitsSignalAndSetsCapture)
     EXPECT_GT(sys.getModalCanvas().getElementCount(), 0u);
 }
 
-TEST(UISystemScreenStack, PopModalEmitsSignalAndClearsCapture)
+TEST_F(UISystemScreenStackTest, PopModalEmitsSignalAndClearsCapture)
 {
-    UISystem sys;
     sys.setRootScreen(GameScreen::MainMenu);
     sys.pushModalScreen(GameScreen::Settings);
 
@@ -138,9 +159,8 @@ TEST(UISystemScreenStack, PopModalEmitsSignalAndClearsCapture)
     EXPECT_EQ(sys.getModalCanvas().getElementCount(), 0u);
 }
 
-TEST(UISystemScreenStack, PopOnEmptyStackIsNoop)
+TEST_F(UISystemScreenStackTest, PopOnEmptyStackIsNoop)
 {
-    UISystem sys;
     sys.setRootScreen(GameScreen::MainMenu);
 
     bool fired = false;
@@ -153,25 +173,22 @@ TEST(UISystemScreenStack, PopOnEmptyStackIsNoop)
 
 // -- applyIntent routing ----------------------------------------------------
 
-TEST(UISystemScreenStack, ApplyIntentPlayingPauseGoesToPaused)
+TEST_F(UISystemScreenStackTest, ApplyIntentPlayingPauseGoesToPaused)
 {
-    UISystem sys;
     sys.setRootScreen(GameScreen::Playing);
     sys.applyIntent(GameScreenIntent::Pause);
     EXPECT_EQ(sys.getRootScreen(), GameScreen::Paused);
 }
 
-TEST(UISystemScreenStack, ApplyIntentPausedResumeGoesToPlaying)
+TEST_F(UISystemScreenStackTest, ApplyIntentPausedResumeGoesToPlaying)
 {
-    UISystem sys;
     sys.setRootScreen(GameScreen::Paused);
     sys.applyIntent(GameScreenIntent::Resume);
     EXPECT_EQ(sys.getRootScreen(), GameScreen::Playing);
 }
 
-TEST(UISystemScreenStack, ApplyIntentOpenSettingsPushesModal)
+TEST_F(UISystemScreenStackTest, ApplyIntentOpenSettingsPushesModal)
 {
-    UISystem sys;
     sys.setRootScreen(GameScreen::MainMenu);
 
     bool rootChanged = false;
@@ -186,12 +203,11 @@ TEST(UISystemScreenStack, ApplyIntentOpenSettingsPushesModal)
     EXPECT_TRUE(sys.isModalCapture());
 }
 
-TEST(UISystemScreenStack, ApplyIntentCloseSettingsPopsModalPreservingRoot)
+TEST_F(UISystemScreenStackTest, ApplyIntentCloseSettingsPopsModalPreservingRoot)
 {
     // Opening Settings from Paused, then closing, must land back on Paused
     // — not MainMenu (the pure-function fallback). This is the key
     // reason UISystem owns a modal stack on top of the pure state machine.
-    UISystem sys;
     sys.setRootScreen(GameScreen::Paused);
     sys.applyIntent(GameScreenIntent::OpenSettings);
     ASSERT_EQ(sys.getCurrentScreen(), GameScreen::Settings);
@@ -203,11 +219,10 @@ TEST(UISystemScreenStack, ApplyIntentCloseSettingsPopsModalPreservingRoot)
     EXPECT_FALSE(sys.isModalCapture());
 }
 
-TEST(UISystemScreenStack, ApplyIntentRejectedIntentIsNoop)
+TEST_F(UISystemScreenStackTest, ApplyIntentRejectedIntentIsNoop)
 {
     // Firing Resume while Playing is invalid per the pure state machine.
     // applyIntent must not emit signals or mutate state.
-    UISystem sys;
     sys.setRootScreen(GameScreen::Playing);
 
     int rootSignalCount = 0;
@@ -221,9 +236,8 @@ TEST(UISystemScreenStack, ApplyIntentRejectedIntentIsNoop)
     EXPECT_EQ(modalSignalCount, 0);
 }
 
-TEST(UISystemScreenStack, ApplyIntentPlayingQuitToMainSwapsRoot)
+TEST_F(UISystemScreenStackTest, ApplyIntentPlayingQuitToMainSwapsRoot)
 {
-    UISystem sys;
     sys.setRootScreen(GameScreen::Playing);
     sys.applyIntent(GameScreenIntent::QuitToMain);
     EXPECT_EQ(sys.getRootScreen(), GameScreen::MainMenu);
@@ -231,13 +245,12 @@ TEST(UISystemScreenStack, ApplyIntentPlayingQuitToMainSwapsRoot)
 
 // -- setScreenBuilder override ---------------------------------------------
 
-TEST(UISystemScreenStack, SetScreenBuilderOverridesDefault)
+TEST_F(UISystemScreenStackTest, SetScreenBuilderOverridesDefault)
 {
     // A custom builder for Paused should be invoked instead of the default
     // buildPauseMenu prefab. The canvas it produces must match what the
     // custom builder put there (a single label), not the pause prefab's
     // ~20-element panel.
-    UISystem sys;
     int callCount = 0;
     sys.setScreenBuilder(GameScreen::Paused,
         [&](UICanvas& canvas, const UITheme&, TextRenderer*, UISystem&)
@@ -257,9 +270,8 @@ TEST(UISystemScreenStack, SetScreenBuilderOverridesDefault)
     EXPECT_EQ(sys.getCanvas().getElementCount(), 0u);
 }
 
-TEST(UISystemScreenStack, SetScreenBuilderEmptyClearsOverride)
+TEST_F(UISystemScreenStackTest, SetScreenBuilderEmptyClearsOverride)
 {
-    UISystem sys;
     int customCalls = 0;
     sys.setScreenBuilder(GameScreen::Paused,
         [&](UICanvas&, const UITheme&, TextRenderer*, UISystem&) { ++customCalls; });
@@ -274,11 +286,8 @@ TEST(UISystemScreenStack, SetScreenBuilderEmptyClearsOverride)
 
 // -- menu_prefabs signal wiring --------------------------------------------
 
-TEST(MenuPrefabs, MainMenuButtonsFireIntentsViaUISystem)
+TEST_F(MenuPrefabsTest, MainMenuButtonsFireIntentsViaUISystem)
 {
-    UISystem sys;
-    UICanvas canvas;
-    UITheme  theme = UITheme::defaultTheme();
     buildMainMenu(canvas, theme, /*textRenderer=*/nullptr, sys);
 
     // Sanity: setting the root to None first so we can observe MainMenu →
@@ -294,11 +303,8 @@ TEST(MenuPrefabs, MainMenuButtonsFireIntentsViaUISystem)
     EXPECT_EQ(sys.getRootScreen(), GameScreen::Loading);
 }
 
-TEST(MenuPrefabs, MainMenuSettingsButtonOpensModal)
+TEST_F(MenuPrefabsTest, MainMenuSettingsButtonOpensModal)
 {
-    UISystem sys;
-    UICanvas canvas;
-    UITheme  theme = UITheme::defaultTheme();
     buildMainMenu(canvas, theme, nullptr, sys);
 
     sys.setRootScreen(GameScreen::MainMenu);
@@ -310,11 +316,8 @@ TEST(MenuPrefabs, MainMenuSettingsButtonOpensModal)
     EXPECT_EQ(sys.getTopModalScreen(), GameScreen::Settings);
 }
 
-TEST(MenuPrefabs, PauseMenuResumeButtonFiresResume)
+TEST_F(MenuPrefabsTest, PauseMenuResumeButtonFiresResume)
 {
-    UISystem sys;
-    UICanvas canvas;
-    UITheme  theme = UITheme::defaultTheme();
     buildPauseMenu(canvas, theme, nullptr, sys);
 
     sys.setRootScreen(GameScreen::Paused);
@@ -325,11 +328,8 @@ TEST(MenuPrefabs, PauseMenuResumeButtonFiresResume)
     EXPECT_EQ(sys.getRootScreen(), GameScreen::Playing);
 }
 
-TEST(MenuPrefabs, PauseMenuQuitToMainFiresQuitToMain)
+TEST_F(MenuPrefabsTest, PauseMenuQuitToMainFiresQuitToMain)
 {
-    UISystem sys;
-    UICanvas canvas;
-    UITheme  theme = UITheme::defaultTheme();
     buildPauseMenu(canvas, theme, nullptr, sys);
 
     sys.setRootScreen(GameScreen::Paused);
@@ -340,11 +340,8 @@ TEST(MenuPrefabs, PauseMenuQuitToMainFiresQuitToMain)
     EXPECT_EQ(sys.getRootScreen(), GameScreen::MainMenu);
 }
 
-TEST(MenuPrefabs, SettingsCloseButtonFiresCloseSettings)
+TEST_F(MenuPrefabsTest, SettingsCloseButtonFiresCloseSettings)
 {
-    UISystem sys;
-    UICanvas canvas;
-    UITheme  theme = UITheme::defaultTheme();
     buildSettingsMenu(canvas, theme, nullptr, sys);
 
     // Stage a scenario: Paused → OpenSettings modal. Then fire the close
@@ -361,15 +358,13 @@ TEST(MenuPrefabs, SettingsCloseButtonFiresCloseSettings)
     EXPECT_EQ(sys.getTopModalScreen(), GameScreen::None);
 }
 
-TEST(MenuPrefabs, LegacyOverloadConnectsNoSignals)
+TEST_F(MenuPrefabsTest, LegacyOverloadConnectsNoSignals)
 {
     // The 3-arg buildMainMenu must not connect any `onClick` slots —
     // preserves Phase 9C behaviour for games / tests that wire their own
     // signals. `UIButton::interactive` defaults to true in the widget
     // constructor (drives hit-test + hover visuals), so the guard is on
     // the signal-slot count rather than the interactive flag.
-    UICanvas canvas;
-    UITheme  theme = UITheme::defaultTheme();
     buildMainMenu(canvas, theme, nullptr);
 
     for (size_t i = 0; i < canvas.getElementCount(); ++i)

@@ -17,18 +17,22 @@
 
 using namespace Vestige;
 
-namespace
+// /test-audit 2026-05-17 Ts19-F3: was a plain `struct ControllerFixture`
+// constructed inline in every test. Promoted to a proper
+// `::testing::Test` fixture so any failure in the construction path
+// (PhysicsWorld init, component wiring, ensureBody) is reported with the
+// fixture name attached, and GoogleTest's TestInfo records SetUp time
+// separately from the test body.
+class CharacterController2DTest : public ::testing::Test
 {
-
-struct ControllerFixture
-{
+protected:
     PhysicsWorld world;
     Physics2DSystem system;
     std::unique_ptr<Entity> character;
 
-    ControllerFixture()
+    void SetUp() override
     {
-        world.initialize();
+        ASSERT_TRUE(world.initialize());
         system.setPhysicsWorldForTesting(&world);
 
         character = std::make_unique<Entity>("Hero");
@@ -44,7 +48,11 @@ struct ControllerFixture
         system.ensureBody(*character);
     }
 
-    ~ControllerFixture() { world.shutdown(); }
+    void TearDown() override
+    {
+        character.reset();
+        world.shutdown();
+    }
 
     CharacterController2DComponent& controller()
     {
@@ -52,56 +60,51 @@ struct ControllerFixture
     }
 };
 
-} // namespace
-
-TEST(CharacterController2D, HorizontalInputAcceleratesOnGround)
+TEST_F(CharacterController2DTest, HorizontalInputAcceleratesOnGround)
 {
-    ControllerFixture fx;
-    fx.controller().onGround = true;
+    controller().onGround = true;
     CharacterControl2DInput input;
     input.inputX = 1.0f;
 
     for (int i = 0; i < 30; ++i)
     {
-        stepCharacterController2D(fx.controller(), *fx.character, fx.system,
+        stepCharacterController2D(controller(), *character, system,
                                   input, 1.0f / 60.0f);
-        fx.world.update(1.0f / 60.0f);
-        fx.controller().onGround = true;  // re-assert ground each step
+        world.update(1.0f / 60.0f);
+        controller().onGround = true;  // re-assert ground each step
     }
-    auto v = fx.system.getLinearVelocity(*fx.character);
-    EXPECT_GT(v.x, fx.controller().maxSpeed * 0.9f);
+    auto v = system.getLinearVelocity(*character);
+    EXPECT_GT(v.x, controller().maxSpeed * 0.9f);
 }
 
-TEST(CharacterController2D, JumpRequiresGroundOrCoyoteTime)
+TEST_F(CharacterController2DTest, JumpRequiresGroundOrCoyoteTime)
 {
-    ControllerFixture fx;
-    auto& ctrl = fx.controller();
+    auto& ctrl = controller();
     ctrl.onGround = true;
 
     CharacterControl2DInput input;
     input.wantsJump = true;
     input.jumpHeld = true;
 
-    const bool jumped = stepCharacterController2D(ctrl, *fx.character, fx.system,
+    const bool jumped = stepCharacterController2D(ctrl, *character, system,
                                                   input, 1.0f / 60.0f);
     EXPECT_TRUE(jumped);
-    auto v = fx.system.getLinearVelocity(*fx.character);
+    auto v = system.getLinearVelocity(*character);
     EXPECT_GT(v.y, ctrl.jumpVelocity * 0.9f);
 }
 
-TEST(CharacterController2D, CoyoteTimeAllowsLateJump)
+TEST_F(CharacterController2DTest, CoyoteTimeAllowsLateJump)
 {
-    ControllerFixture fx;
-    auto& ctrl = fx.controller();
+    auto& ctrl = controller();
     ctrl.onGround = true;
     // Advance a frame with ground, then leave ground.
-    stepCharacterController2D(ctrl, *fx.character, fx.system, {}, 0.016f);
+    stepCharacterController2D(ctrl, *character, system, {}, 0.016f);
     ctrl.onGround = false;
 
     // Simulate a few frames of "air" within the coyote window.
     for (int i = 0; i < 3; ++i)
     {
-        stepCharacterController2D(ctrl, *fx.character, fx.system, {}, 0.016f);
+        stepCharacterController2D(ctrl, *character, system, {}, 0.016f);
     }
     ASSERT_LE(ctrl.timeSinceGrounded, ctrl.coyoteTimeSec);
 
@@ -109,106 +112,101 @@ TEST(CharacterController2D, CoyoteTimeAllowsLateJump)
     CharacterControl2DInput input;
     input.wantsJump = true;
     input.jumpHeld = true;
-    const bool jumped = stepCharacterController2D(ctrl, *fx.character, fx.system,
+    const bool jumped = stepCharacterController2D(ctrl, *character, system,
                                                   input, 0.016f);
     EXPECT_TRUE(jumped);
 }
 
-TEST(CharacterController2D, JumpBufferPersistsUntilLanding)
+TEST_F(CharacterController2DTest, JumpBufferPersistsUntilLanding)
 {
-    ControllerFixture fx;
-    auto& ctrl = fx.controller();
+    auto& ctrl = controller();
     ctrl.onGround = false;
 
     // Press jump mid-air — buffered for jumpBufferSec.
     CharacterControl2DInput press;
     press.wantsJump = true;
-    stepCharacterController2D(ctrl, *fx.character, fx.system, press, 0.016f);
+    stepCharacterController2D(ctrl, *character, system, press, 0.016f);
     EXPECT_GT(ctrl.jumpBufferRemaining, 0.0f);
 
     // Touch down within the buffer — next step should auto-jump.
     ctrl.onGround = true;
-    const bool jumped = stepCharacterController2D(ctrl, *fx.character, fx.system,
+    const bool jumped = stepCharacterController2D(ctrl, *character, system,
                                                   {}, 0.016f);
     EXPECT_TRUE(jumped);
     EXPECT_TRUE(ctrl.jumpingFromBuffer);
 }
 
-TEST(CharacterController2D, JumpBufferExpires)
+TEST_F(CharacterController2DTest, JumpBufferExpires)
 {
-    ControllerFixture fx;
-    auto& ctrl = fx.controller();
+    auto& ctrl = controller();
     ctrl.onGround = false;
 
     CharacterControl2DInput press;
     press.wantsJump = true;
-    stepCharacterController2D(ctrl, *fx.character, fx.system, press, 0.016f);
+    stepCharacterController2D(ctrl, *character, system, press, 0.016f);
 
     // Run several frames past the buffer without landing.
     for (int i = 0; i < 20; ++i)
     {
-        stepCharacterController2D(ctrl, *fx.character, fx.system, {}, 0.016f);
+        stepCharacterController2D(ctrl, *character, system, {}, 0.016f);
     }
     EXPECT_FLOAT_EQ(ctrl.jumpBufferRemaining, 0.0f);
 
     ctrl.onGround = true;
-    const bool jumped = stepCharacterController2D(ctrl, *fx.character, fx.system,
+    const bool jumped = stepCharacterController2D(ctrl, *character, system,
                                                   {}, 0.016f);
     EXPECT_FALSE(jumped);
 }
 
-TEST(CharacterController2D, VariableJumpCutReducesUpwardVelocity)
+TEST_F(CharacterController2DTest, VariableJumpCutReducesUpwardVelocity)
 {
-    ControllerFixture fx;
-    auto& ctrl = fx.controller();
+    auto& ctrl = controller();
     ctrl.onGround = true;
     ctrl.variableJumpCut = 0.5f;
 
     CharacterControl2DInput press;
     press.wantsJump = true;
     press.jumpHeld = true;
-    stepCharacterController2D(ctrl, *fx.character, fx.system, press, 0.016f);
+    stepCharacterController2D(ctrl, *character, system, press, 0.016f);
     ctrl.onGround = false;
 
-    auto vBeforeCut = fx.system.getLinearVelocity(*fx.character);
+    auto vBeforeCut = system.getLinearVelocity(*character);
     ASSERT_GT(vBeforeCut.y, 0.0f);
 
     CharacterControl2DInput release;
     release.jumpHeld = false;
-    stepCharacterController2D(ctrl, *fx.character, fx.system, release, 0.016f);
+    stepCharacterController2D(ctrl, *character, system, release, 0.016f);
 
-    auto vAfterCut = fx.system.getLinearVelocity(*fx.character);
+    auto vAfterCut = system.getLinearVelocity(*character);
     EXPECT_LT(vAfterCut.y, vBeforeCut.y * 0.6f);
 }
 
-TEST(CharacterController2D, WallSlideCapsFallSpeed)
+TEST_F(CharacterController2DTest, WallSlideCapsFallSpeed)
 {
-    ControllerFixture fx;
-    auto& ctrl = fx.controller();
+    auto& ctrl = controller();
     ctrl.onWall = true;
     ctrl.onGround = false;
     ctrl.wallSlideMaxSpeed = 2.0f;
 
     // Shove a high downward velocity at the body before the step.
-    fx.system.setLinearVelocity(*fx.character, glm::vec2(0.0f, -20.0f));
-    stepCharacterController2D(ctrl, *fx.character, fx.system, {}, 0.016f);
-    auto v = fx.system.getLinearVelocity(*fx.character);
+    system.setLinearVelocity(*character, glm::vec2(0.0f, -20.0f));
+    stepCharacterController2D(ctrl, *character, system, {}, 0.016f);
+    auto v = system.getLinearVelocity(*character);
     EXPECT_GE(v.y, -2.5f);  // clamped (small slack for intermediate math)
 }
 
-TEST(CharacterController2D, NoInputAppliesGroundFriction)
+TEST_F(CharacterController2DTest, NoInputAppliesGroundFriction)
 {
-    ControllerFixture fx;
-    auto& ctrl = fx.controller();
+    auto& ctrl = controller();
     ctrl.onGround = true;
-    fx.system.setLinearVelocity(*fx.character, glm::vec2(5.0f, 0.0f));
+    system.setLinearVelocity(*character, glm::vec2(5.0f, 0.0f));
 
     // No input — friction should decelerate.
     for (int i = 0; i < 30; ++i)
     {
-        stepCharacterController2D(ctrl, *fx.character, fx.system, {}, 1.0f / 60.0f);
+        stepCharacterController2D(ctrl, *character, system, {}, 1.0f / 60.0f);
     }
-    auto v = fx.system.getLinearVelocity(*fx.character);
+    auto v = system.getLinearVelocity(*character);
     EXPECT_LT(std::abs(v.x), 2.0f);
 }
 

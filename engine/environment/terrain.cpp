@@ -642,7 +642,7 @@ nlohmann::json Terrain::serializeSettings() const
     return j;
 }
 
-bool Terrain::deserializeSettings(const nlohmann::json& j)
+bool Terrain::validateJsonConfig(const nlohmann::json& j)
 {
     TerrainConfig config;
 
@@ -650,19 +650,8 @@ bool Terrain::deserializeSettings(const nlohmann::json& j)
     {
         config.width = j.value("width", config.width);
         config.depth = j.value("depth", config.depth);
-        config.spacingX = j.value("spacingX", config.spacingX);
-        config.spacingZ = j.value("spacingZ", config.spacingZ);
-        config.heightScale = j.value("heightScale", config.heightScale);
         config.gridResolution = j.value("gridResolution", config.gridResolution);
         config.maxLodLevels = j.value("maxLodLevels", config.maxLodLevels);
-        config.baseLodDistance = j.value("baseLodDistance", config.baseLodDistance);
-
-        if (j.contains("origin") && j["origin"].is_array() && j["origin"].size() == 3)
-        {
-            config.origin.x = j["origin"][0].get<float>();
-            config.origin.y = j["origin"][1].get<float>();
-            config.origin.z = j["origin"][2].get<float>();
-        }
     }
     catch (const nlohmann::json::exception& e)
     {
@@ -707,6 +696,41 @@ bool Terrain::deserializeSettings(const nlohmann::json& j)
             + std::to_string(kMinLodLevels) + ", "
             + std::to_string(kMaxLodLevels) + "]: "
             + std::to_string(config.maxLodLevels));
+        return false;
+    }
+
+    return true;
+}
+
+bool Terrain::deserializeSettings(const nlohmann::json& j)
+{
+    if (!validateJsonConfig(j))
+    {
+        return false;
+    }
+
+    TerrainConfig config;
+    try
+    {
+        config.width = j.value("width", config.width);
+        config.depth = j.value("depth", config.depth);
+        config.spacingX = j.value("spacingX", config.spacingX);
+        config.spacingZ = j.value("spacingZ", config.spacingZ);
+        config.heightScale = j.value("heightScale", config.heightScale);
+        config.gridResolution = j.value("gridResolution", config.gridResolution);
+        config.maxLodLevels = j.value("maxLodLevels", config.maxLodLevels);
+        config.baseLodDistance = j.value("baseLodDistance", config.baseLodDistance);
+
+        if (j.contains("origin") && j["origin"].is_array() && j["origin"].size() == 3)
+        {
+            config.origin.x = j["origin"][0].get<float>();
+            config.origin.y = j["origin"][1].get<float>();
+            config.origin.z = j["origin"][2].get<float>();
+        }
+    }
+    catch (const nlohmann::json::exception& e)
+    {
+        Logger::error("Terrain: failed to deserialize settings: " + std::string(e.what()));
         return false;
     }
 

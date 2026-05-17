@@ -70,8 +70,10 @@ TEST_F(DomainSystemTest, AtmosphereSystemStartsInactive)
 TEST_F(DomainSystemTest, AtmosphereSystemHasEnvironmentForces)
 {
     AtmosphereSystem sys;
-    // EnvironmentForces should exist and provide wind queries
-    EXPECT_NE(&sys.getEnvironmentForces(), nullptr);
+    // EnvironmentForces is returned by reference (can't be null) — the
+    // contract under test is that the accessor compiles and the
+    // subsystem returns a usable object. /test-audit 2026-05-17.
+    (void)sys.getEnvironmentForces();
 }
 
 // ==========================================================================
@@ -100,7 +102,7 @@ TEST_F(DomainSystemTest, ParticleSystemOwnsComponents)
 TEST_F(DomainSystemTest, ParticleSystemHasRenderer)
 {
     ParticleVfxSystem sys;
-    EXPECT_NE(&sys.getParticleRenderer(), nullptr);
+    (void)sys.getParticleRenderer();  // reference accessor — see Atmosphere note
 }
 
 // ==========================================================================
@@ -129,8 +131,8 @@ TEST_F(DomainSystemTest, WaterSystemOwnsComponents)
 TEST_F(DomainSystemTest, WaterSystemHasRendererAndFbo)
 {
     WaterSystem sys;
-    EXPECT_NE(&sys.getWaterRenderer(), nullptr);
-    EXPECT_NE(&sys.getWaterFbo(), nullptr);
+    (void)sys.getWaterRenderer();  // reference accessor — see Atmosphere note
+    (void)sys.getWaterFbo();
 }
 
 // ==========================================================================
@@ -158,9 +160,9 @@ TEST_F(DomainSystemTest, VegetationSystemNoOwnedComponents)
 TEST_F(DomainSystemTest, VegetationSystemHasSubsystems)
 {
     VegetationSystem sys;
-    EXPECT_NE(&sys.getFoliageManager(), nullptr);
-    EXPECT_NE(&sys.getFoliageRenderer(), nullptr);
-    EXPECT_NE(&sys.getTreeRenderer(), nullptr);
+    (void)sys.getFoliageManager();  // reference accessor — see Atmosphere note
+    (void)sys.getFoliageRenderer();
+    (void)sys.getTreeRenderer();
 }
 
 // ==========================================================================
@@ -191,8 +193,8 @@ TEST_F(DomainSystemTest, TerrainSystemNoOwnedComponents)
 TEST_F(DomainSystemTest, TerrainSystemHasSubsystems)
 {
     TerrainSystem sys;
-    EXPECT_NE(&sys.getTerrain(), nullptr);
-    EXPECT_NE(&sys.getTerrainRenderer(), nullptr);
+    (void)sys.getTerrain();  // reference accessor — see Atmosphere note
+    (void)sys.getTerrainRenderer();
 }
 
 // ==========================================================================
@@ -272,7 +274,7 @@ TEST_F(DomainSystemTest, CharacterSystemNoOwnedComponents)
 TEST_F(DomainSystemTest, CharacterSystemHasController)
 {
     CharacterSystem sys;
-    EXPECT_NE(&sys.getPhysicsCharController(), nullptr);
+    (void)sys.getPhysicsCharController();  // reference accessor — see Atmosphere note
 }
 
 // ==========================================================================
@@ -326,7 +328,7 @@ TEST_F(DomainSystemTest, AudioSystemOwnsComponents)
 TEST_F(DomainSystemTest, AudioSystemHasAudioEngine)
 {
     AudioSystem sys;
-    EXPECT_NE(&sys.getAudioEngine(), nullptr);
+    (void)sys.getAudioEngine();  // reference accessor — see Atmosphere note
 }
 
 TEST_F(DomainSystemTest, AudioSourceComponentDefaults)

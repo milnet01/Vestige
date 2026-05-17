@@ -78,6 +78,39 @@ TEST(RigidBody, CreateDynamicSphereBody)
     world.shutdown();
 }
 
+// /test-audit 2026-05-17 Ts19-CG1: destroyBody on a *dynamic* body was
+// implicitly assumed to work because the static-box test covered the
+// destroy path. Jolt's BodyInterface treats static and dynamic bodies
+// differently on remove (the active-bodies list only contains dynamic
+// ones), so a Jolt body-remove regression on dynamic bodies would not
+// have been caught. This explicitly destroys a dynamic body and asserts
+// the active-body count returns to zero.
+TEST(RigidBody, DestroyDynamicBodyClearsActiveCount)
+{
+    PhysicsWorld world;
+    ASSERT_TRUE(world.initialize());
+
+    Entity entity("FallingSphere");
+    entity.transform.position = glm::vec3(0, 10, 0);
+    entity.update(0.0f);
+
+    auto* rb = entity.addComponent<RigidBody>();
+    rb->motionType = BodyMotionType::DYNAMIC;
+    rb->shapeType = CollisionShapeType::SPHERE;
+    rb->shapeSize = glm::vec3(0.5f);
+    rb->mass = 2.0f;
+
+    rb->createBody(world);
+    ASSERT_TRUE(rb->hasBody());
+    ASSERT_EQ(world.getActiveBodyCount(), 1u);
+
+    rb->destroyBody();
+    EXPECT_FALSE(rb->hasBody());
+    EXPECT_EQ(world.getActiveBodyCount(), 0u);
+
+    world.shutdown();
+}
+
 TEST(RigidBody, CreateCapsuleBody)
 {
     PhysicsWorld world;

@@ -188,6 +188,14 @@ public:
     /// @return True if deserialization and reinitialization succeeded.
     bool deserializeSettings(const nlohmann::json& j);
 
+    /// @brief Validates a deserialized JSON config against the size caps
+    ///        (Phase 10.9 Slice 5 D8). Returns true iff every dimension
+    ///        falls within bounds. Pure validator — no GL state required;
+    ///        used by `deserializeSettings` before calling `initialize`,
+    ///        and exposed for unit testing the acceptance branch without
+    ///        a GL context. Logs an "out of range" error on rejection.
+    static bool validateJsonConfig(const nlohmann::json& j);
+
     /// @brief Saves the heightmap to a raw R32F binary file.
     /// @param path Output file path (typically .r32 extension).
     /// @return True if the save succeeded.

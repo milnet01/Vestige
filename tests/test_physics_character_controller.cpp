@@ -5,6 +5,7 @@
 /// @brief Unit tests for the PhysicsCharacterController.
 #include "physics/physics_character_controller.h"
 #include "physics/physics_world.h"
+#include "physics_test_helpers.h"
 
 #include <Jolt/Physics/Collision/Shape/BoxShape.h>
 
@@ -15,28 +16,11 @@
 using namespace Vestige;
 
 // ---------------------------------------------------------------------------
-// Test fixture — creates a PhysicsWorld with a static floor at Y=0
+// /test-audit 2026-05-17 Ts19-D4: PhysicsWorld init + 100×100 floor
+// fixture extracted to physics_test_helpers.h::PhysicsWorldFixture.
 // ---------------------------------------------------------------------------
 
-class PhysicsCharControllerTest : public ::testing::Test
-{
-protected:
-    void SetUp() override
-    {
-        ASSERT_TRUE(world.initialize());
-
-        // Large static floor: top surface at Y=0
-        JPH::BoxShape* floor = new JPH::BoxShape(JPH::Vec3(100, 0.5f, 100));
-        world.createStaticBody(floor, glm::vec3(0, -0.5f, 0));
-    }
-
-    void TearDown() override
-    {
-        world.shutdown();
-    }
-
-    PhysicsWorld world;
-};
+class PhysicsCharControllerTest : public ::Vestige::Testing::PhysicsWorldFixture {};
 
 // ---------------------------------------------------------------------------
 // Initialization

@@ -38,7 +38,7 @@ TEST(RulerToolTest, FirstClickSetsPointA)
     EXPECT_EQ(ruler.getPointA(), glm::vec3(1.0f, 0.0f, 0.0f));
 }
 
-TEST(RulerToolTest, SecondClickCompleteMeasurement)
+TEST(RulerToolTest, SecondClickCompletesMeasurement)
 {
     RulerTool ruler;
     ruler.startMeasurement();

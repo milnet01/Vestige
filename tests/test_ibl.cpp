@@ -207,7 +207,7 @@ TEST(IBLTest, SmoothSurfaceConcentratesSamplesNearNormal)
     EXPECT_GT(avgDot, 0.95f);
 }
 
-TEST(IBLTest, RoughSurfaceSpreadssamples)
+TEST(IBLTest, RoughSurfaceSpreadsSamples)
 {
     glm::vec3 N(0.0f, 0.0f, 1.0f);
     float avgDotSmooth = 0.0f;

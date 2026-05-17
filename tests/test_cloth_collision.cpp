@@ -61,10 +61,7 @@ static void makeCube(std::vector<glm::vec3>& verts, std::vector<uint32_t>& indic
 }
 
 // Slice 18 Ts3: canonical definition in cloth_test_helpers.h.
-static ClothConfig smallClothConfig(uint32_t w = 4, uint32_t h = 4)
-{
-    return Testing::clothSmallConfig(w, h);
-}
+using Testing::clothSmallConfig;
 
 // ===========================================================================
 // BVH — Closest Point on Triangle
@@ -493,7 +490,7 @@ TEST(ClothMeshCollision, MeshColliderPreventsPassthrough)
 {
     // Create a cloth that will fall onto a flat triangle mesh at Y=-2
     ClothSimulator sim;
-    auto cfg = smallClothConfig(3, 3);
+    auto cfg = clothSmallConfig(3, 3);
     cfg.spacing = 0.5f;
     cfg.substeps = 10;
     sim.initialize(cfg);
@@ -527,7 +524,7 @@ TEST(ClothMeshCollision, MeshColliderPreventsPassthrough)
 TEST(ClothMeshCollision, ClearMeshColliders)
 {
     ClothSimulator sim;
-    sim.initialize(smallClothConfig(3, 3));
+    sim.initialize(clothSmallConfig(3, 3));
 
     std::vector<glm::vec3> verts;
     std::vector<uint32_t> indices;
@@ -549,7 +546,7 @@ TEST(ClothMeshCollision, ClearMeshColliders)
 TEST(ClothSelfCollision, DefaultDisabled)
 {
     ClothSimulator sim;
-    sim.initialize(smallClothConfig());
+    sim.initialize(clothSmallConfig());
     EXPECT_FALSE(sim.isSelfCollisionEnabled());
     EXPECT_NEAR(sim.getSelfCollisionDistance(), 0.02f, 1e-5f);
 }
@@ -557,7 +554,7 @@ TEST(ClothSelfCollision, DefaultDisabled)
 TEST(ClothSelfCollision, EnableDisable)
 {
     ClothSimulator sim;
-    sim.initialize(smallClothConfig());
+    sim.initialize(clothSmallConfig());
 
     sim.enableSelfCollision(true);
     EXPECT_TRUE(sim.isSelfCollisionEnabled());
@@ -569,7 +566,7 @@ TEST(ClothSelfCollision, EnableDisable)
 TEST(ClothSelfCollision, SetDistance)
 {
     ClothSimulator sim;
-    sim.initialize(smallClothConfig());
+    sim.initialize(clothSmallConfig());
 
     sim.setSelfCollisionDistance(0.05f);
     EXPECT_NEAR(sim.getSelfCollisionDistance(), 0.05f, 1e-5f);
@@ -582,7 +579,7 @@ TEST(ClothSelfCollision, SetDistance)
 TEST(ClothSelfCollision, SimulateWithSelfCollisionEnabled)
 {
     ClothSimulator sim;
-    auto cfg = smallClothConfig(4, 4);
+    auto cfg = clothSmallConfig(4, 4);
     cfg.spacing = 0.5f;
     cfg.substeps = 5;
     sim.initialize(cfg);
@@ -610,7 +607,7 @@ TEST(ClothSelfCollision, FoldedClothMaintainsMinDistance)
 {
     // Create a tall narrow cloth that will fold on itself
     ClothSimulator sim;
-    auto cfg = smallClothConfig(2, 10);
+    auto cfg = clothSmallConfig(2, 10);
     cfg.spacing = 0.2f;
     cfg.substeps = 10;
     sim.initialize(cfg);
@@ -667,7 +664,7 @@ TEST(ClothSelfCollision, FoldedClothMaintainsMinDistance)
 TEST(ClothCollisionCombined, BothCollisionModesSimultaneously)
 {
     ClothSimulator sim;
-    auto cfg = smallClothConfig(3, 3);
+    auto cfg = clothSmallConfig(3, 3);
     cfg.spacing = 0.5f;
     cfg.substeps = 8;
     sim.initialize(cfg);

@@ -18,37 +18,36 @@
 
 using namespace Vestige;
 
-namespace
+// /test-audit 2026-05-17 Ts19-F1: every `DefaultHudPrefab` test below
+// constructed the trio `UICanvas / UITheme / UISystem` and called
+// `populate`. Centralised into a fixture so the build call lives in one
+// `SetUp` instead of being re-invoked at the top of every test body.
+class DefaultHudPrefabTest : public ::testing::Test
 {
-// Builds the default HUD against a fresh canvas and bare UISystem. The
-// `UISystem` is passed for signature parity — the prefab doesn't wire any
-// signals in slice 12.4 (there are no interactive widgets in the HUD),
-// but the call contract expects a reference.
-void populate(UICanvas& canvas, const UITheme& theme, UISystem& uiSystem)
-{
-    buildDefaultHud(canvas, theme, /*textRenderer=*/nullptr, uiSystem);
-}
-}
+protected:
+    UICanvas canvas;
+    UITheme  theme = UITheme::defaultTheme();
+    UISystem ui;
+
+    void SetUp() override
+    {
+        // Matches the original `populate` helper — the `UISystem` ref is
+        // required by the signature; the prefab doesn't currently wire
+        // signals through it.
+        buildDefaultHud(canvas, theme, /*textRenderer=*/nullptr, ui);
+    }
+};
 
 // -- Element count / ordering --
 
-TEST(DefaultHudPrefab, PopulatesFourRootElements)
+TEST_F(DefaultHudPrefabTest, PopulatesFourRootElements)
 {
-    UICanvas canvas;
-    UITheme theme = UITheme::defaultTheme();
-    UISystem ui;
-    populate(canvas, theme, ui);
     EXPECT_EQ(canvas.getElementCount(), 4u)
         << "HUD = crosshair + FPS + interaction anchor + notification stack";
 }
 
-TEST(DefaultHudPrefab, ElementOrderMatchesDesign)
+TEST_F(DefaultHudPrefabTest, ElementOrderMatchesDesign)
 {
-    UICanvas canvas;
-    UITheme theme = UITheme::defaultTheme();
-    UISystem ui;
-    populate(canvas, theme, ui);
-
     ASSERT_EQ(canvas.getElementCount(), 4u);
     EXPECT_NE(dynamic_cast<UICrosshair*>(canvas.getElementAt(0)), nullptr);
     EXPECT_NE(dynamic_cast<UIFpsCounter*>(canvas.getElementAt(1)), nullptr);
@@ -60,13 +59,8 @@ TEST(DefaultHudPrefab, ElementOrderMatchesDesign)
 
 // -- Anchor correctness --
 
-TEST(DefaultHudPrefab, CrosshairAnchorsAtCenter)
+TEST_F(DefaultHudPrefabTest, CrosshairAnchorsAtCenter)
 {
-    UICanvas canvas;
-    UITheme theme = UITheme::defaultTheme();
-    UISystem ui;
-    populate(canvas, theme, ui);
-
     auto* crosshair = dynamic_cast<UICrosshair*>(canvas.getElementAt(0));
     ASSERT_NE(crosshair, nullptr);
     EXPECT_EQ(crosshair->anchor, Anchor::CENTER);
@@ -75,26 +69,16 @@ TEST(DefaultHudPrefab, CrosshairAnchorsAtCenter)
     EXPECT_EQ(crosshair->color, theme.crosshair);
 }
 
-TEST(DefaultHudPrefab, FpsCounterAnchorsTopLeftAndHiddenByDefault)
+TEST_F(DefaultHudPrefabTest, FpsCounterAnchorsTopLeftAndHiddenByDefault)
 {
-    UICanvas canvas;
-    UITheme theme = UITheme::defaultTheme();
-    UISystem ui;
-    populate(canvas, theme, ui);
-
     auto* fps = dynamic_cast<UIFpsCounter*>(canvas.getElementAt(1));
     ASSERT_NE(fps, nullptr);
     EXPECT_EQ(fps->anchor, Anchor::TOP_LEFT);
     EXPECT_FALSE(fps->visible) << "FPS counter is debug-only; hidden by default.";
 }
 
-TEST(DefaultHudPrefab, InteractionPromptAnchorBottomCenter)
+TEST_F(DefaultHudPrefabTest, InteractionPromptAnchorBottomCenter)
 {
-    UICanvas canvas;
-    UITheme theme = UITheme::defaultTheme();
-    UISystem ui;
-    populate(canvas, theme, ui);
-
     auto* slot = dynamic_cast<UIPanel*>(canvas.getElementAt(2));
     ASSERT_NE(slot, nullptr);
     EXPECT_EQ(slot->anchor, Anchor::BOTTOM_CENTER);
@@ -102,13 +86,8 @@ TEST(DefaultHudPrefab, InteractionPromptAnchorBottomCenter)
         << "Anchor slot must be fully transparent — it's a layout holder.";
 }
 
-TEST(DefaultHudPrefab, NotificationStackAnchorsTopRightWithThreeSlots)
+TEST_F(DefaultHudPrefabTest, NotificationStackAnchorsTopRightWithThreeSlots)
 {
-    UICanvas canvas;
-    UITheme theme = UITheme::defaultTheme();
-    UISystem ui;
-    populate(canvas, theme, ui);
-
     auto* stack = dynamic_cast<UIPanel*>(canvas.getElementAt(3));
     ASSERT_NE(stack, nullptr);
     EXPECT_EQ(stack->anchor, Anchor::TOP_RIGHT);
@@ -123,29 +102,21 @@ TEST(DefaultHudPrefab, NotificationStackAnchorsTopRightWithThreeSlots)
 // — the body never reads slot alpha, just confirms `collectAccessible`
 // doesn't crash on the prefab. Slot-alpha verification needs an
 // observable the panel doesn't currently expose.
-TEST(DefaultHudPrefab, NotificationCanvasWalkDoesNotCrashOnUnpopulatedHud)
+TEST_F(DefaultHudPrefabTest, NotificationCanvasWalkDoesNotCrashOnUnpopulatedHud)
 {
-    UICanvas canvas;
-    UITheme theme = UITheme::defaultTheme();
-    UISystem ui;
-    populate(canvas, theme, ui);
-
     const std::vector<UIAccessibilitySnapshot> snaps = canvas.collectAccessible();
     (void)snaps;
 }
 
 // -- Clean canvas semantics --
 
-TEST(DefaultHudPrefab, RebuildOnSameCanvasAppends)
+TEST_F(DefaultHudPrefabTest, RebuildOnSameCanvasAppends)
 {
     // Matches the existing menu_prefabs convention — caller clears the
-    // canvas before rebuilding. Consistency with buildMainMenu.
-    UICanvas canvas;
-    UITheme theme = UITheme::defaultTheme();
-    UISystem ui;
-    populate(canvas, theme, ui);
+    // canvas before rebuilding. Consistency with buildMainMenu. SetUp
+    // already populated once; this rebuilds a second time on top.
     const size_t first = canvas.getElementCount();
-    populate(canvas, theme, ui);
+    buildDefaultHud(canvas, theme, /*textRenderer=*/nullptr, ui);
     EXPECT_EQ(canvas.getElementCount(), first * 2);
 }
 
@@ -153,10 +124,12 @@ TEST(DefaultHudPrefab, RebuildOnSameCanvasAppends)
 
 TEST(DefaultHudPrefab, PicksUpHighContrastThemeColours)
 {
+    // Kept as TEST() rather than TEST_F: this case uses the high-contrast
+    // theme variant instead of the fixture's default theme.
     UICanvas canvas;
     UITheme hcTheme = UITheme::defaultTheme().withHighContrast();
     UISystem ui;
-    populate(canvas, hcTheme, ui);
+    buildDefaultHud(canvas, hcTheme, /*textRenderer=*/nullptr, ui);
 
     auto* crosshair = dynamic_cast<UICrosshair*>(canvas.getElementAt(0));
     ASSERT_NE(crosshair, nullptr);

@@ -39,11 +39,14 @@ TEST(TwoBoneIKTest, ReachableTarget)
     auto req = makeVerticalChain(glm::vec3(1.0f, 1.0f, 0.0f));
     TwoBoneIKResult result = solveTwoBoneIK(req);
 
-    // Should produce changed rotations (not identity)
+    // Reaching (1,1,0) with two unit bones requires BOTH joints to rotate:
+    // start-mid = mid-end = 1, distance to target = √2, so mid angle is 90°
+    // and start angle is 45°. A single-joint regression (one joint locked at
+    // identity) would still satisfy `||` — `&&` makes that hidden failure visible.
     glm::quat identity(1, 0, 0, 0);
     bool startChanged = glm::dot(result.startLocalRot, identity) < 0.999f;
     bool midChanged = glm::dot(result.midLocalRot, identity) < 0.999f;
-    EXPECT_TRUE(startChanged || midChanged);
+    EXPECT_TRUE(startChanged && midChanged);
 }
 
 TEST(TwoBoneIKTest, TargetAtEndEffector)

@@ -145,10 +145,11 @@ TEST_F(ParticleEmitterTest, StartsWithNoParticles)
 
 TEST_F(ParticleEmitterTest, SpawnsParticlesOnUpdate)
 {
-    // At 100/sec, 0.1s should spawn ~10 particles
+    // 100/sec × 0.1s = exactly 10 particles. Emission is deterministic (no
+    // jitter in the count path), so the prior ±50% band hid any drift in
+    // the spawn accounting; an exact match catches a +/- 1 frame leak.
     entity.update(0.1f);
-    EXPECT_GT(emitter->getData().count, 0);
-    EXPECT_LE(emitter->getData().count, 15);  // Some tolerance
+    EXPECT_EQ(emitter->getData().count, 10);
 }
 
 TEST_F(ParticleEmitterTest, ParticlesExpireAfterLifetime)

@@ -130,9 +130,11 @@ TEST(MemoryTrackerGpu, GpuStatsDefaultToZero)
 TEST(MemoryTrackerGpu, UpdateDoesNotCrash)
 {
     MemoryTracker tracker;
-    // update() reads from sysfs (may or may not exist). It should never crash.
-    for (int i = 0; i < 120; i++)
-    {
-        EXPECT_NO_THROW(tracker.update());
-    }
+    // update() reads from sysfs (may or may not exist). The contract under
+    // test is observability — sysfs is read once or not at all on a given
+    // host. Three samples (first read, repeat read, idempotency check) cover
+    // it; 120 reads was just sysfs spam.
+    EXPECT_NO_THROW(tracker.update());
+    EXPECT_NO_THROW(tracker.update());
+    EXPECT_NO_THROW(tracker.update());
 }

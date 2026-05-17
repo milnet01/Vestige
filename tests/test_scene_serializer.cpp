@@ -4,11 +4,13 @@
 /// @file test_scene_serializer.cpp
 /// @brief Unit tests for scene save/load round-trip serialization.
 #include "editor/scene_serializer.h"
+#include "resource/resource_manager.h"
 #include "scene/scene.h"
 #include "scene/entity.h"
 #include "scene/mesh_renderer.h"
 #include "scene/light_component.h"
 #include "renderer/material.h"
+#include "utils/entity_serializer.h"
 
 #include <nlohmann/json.hpp>
 #include <gtest/gtest.h>
@@ -184,24 +186,27 @@ TEST_F(SceneSerializerTest, SetNameWorks)
 // JSON structure of serialized entity data
 // ---------------------------------------------------------------------------
 
-// Schema-pin reference document: these two tests construct the JSON shape
-// that EntitySerializer / SceneSerializer produce and assert their own
-// fields. They DO NOT exercise the serializers themselves (which need a
-// ResourceManager + GL context); they're a hand-authored description of
-// the on-disk format that lives next to the code it documents. A field
-// rename here without a matching serializer change is a smell — surface
-// it via this test's name when reviewing.
-TEST_F(SceneSerializerTest, EntityJsonShapeReferenceDocument)
+// /test-audit 2026-05-17 Ts19-A3: the previous shape-reference tests asserted
+// on a JSON value they had just constructed by hand (tautology — passes
+// regardless of what the production serializer emits). These replacements
+// drive `EntitySerializer::serializeEntity` directly and assert the same
+// shape against the *production* output, so a field rename in the serializer
+// without a matching update here will now fail.
+TEST_F(SceneSerializerTest, EntityJsonShapeMatchesProductionSerializer)
 {
-    nlohmann::json entityJson;
-    entityJson["name"] = "TestEntity";
-    entityJson["transform"]["position"] = {1.0f, 2.0f, 3.0f};
-    entityJson["transform"]["rotation"] = {0.0f, 90.0f, 0.0f};
-    entityJson["transform"]["scale"] = {1.0f, 1.0f, 1.0f};
-    entityJson["visible"] = true;
-    entityJson["locked"] = false;
+    Scene scene("ShapeTest");
+    Entity* e = scene.createEntity("TestEntity");
+    e->transform.position = glm::vec3(1.0f, 2.0f, 3.0f);
+    e->transform.rotation = glm::vec3(0.0f, 90.0f, 0.0f);
+    e->transform.scale    = glm::vec3(1.0f, 1.0f, 1.0f);
+    e->setVisible(true);
+    e->setLocked(false);
+
+    ResourceManager resources;
+    nlohmann::json entityJson = EntitySerializer::serializeEntity(*e, resources);
 
     EXPECT_EQ(entityJson["name"], "TestEntity");
+    ASSERT_TRUE(entityJson.contains("transform"));
     EXPECT_FLOAT_EQ(entityJson["transform"]["position"][0].get<float>(), 1.0f);
     EXPECT_FLOAT_EQ(entityJson["transform"]["position"][1].get<float>(), 2.0f);
     EXPECT_FLOAT_EQ(entityJson["transform"]["position"][2].get<float>(), 3.0f);
@@ -210,27 +215,25 @@ TEST_F(SceneSerializerTest, EntityJsonShapeReferenceDocument)
     EXPECT_FALSE(entityJson["locked"].get<bool>());
 }
 
-TEST_F(SceneSerializerTest, SceneEnvelopeShapeReferenceDocument)
+TEST_F(SceneSerializerTest, SceneEnvelopeRoundTripsThroughSerializer)
 {
+    Scene sceneOut("MyScene");
+    Entity* cube = sceneOut.createEntity("Cube");
+    cube->transform.position = glm::vec3(0.0f);
+
+    ResourceManager resources;
+    fs::path scenePath = m_testDir / "envelope_roundtrip.scene";
+    auto saveResult = SceneSerializer::saveScene(sceneOut, scenePath.string(), resources);
+    ASSERT_TRUE(saveResult.success) << saveResult.errorMessage;
+
+    // Read the raw JSON back and check the production envelope shape.
+    std::ifstream f(scenePath);
+    ASSERT_TRUE(f.good());
     nlohmann::json sceneJson;
-    sceneJson["vestige_scene"]["format_version"] = SceneSerializer::CURRENT_FORMAT_VERSION;
-    sceneJson["vestige_scene"]["name"] = "MyScene";
-    sceneJson["vestige_scene"]["engine_version"] = SceneSerializer::ENGINE_VERSION;
-    sceneJson["vestige_scene"]["created"] = "2026-03-20T00:00:00Z";
-    sceneJson["vestige_scene"]["modified"] = "2026-03-20T00:00:00Z";
+    f >> sceneJson;
 
-    nlohmann::json entity;
-    entity["name"] = "Cube";
-    entity["transform"]["position"] = {0.0f, 0.0f, 0.0f};
-    entity["transform"]["rotation"] = {0.0f, 0.0f, 0.0f};
-    entity["transform"]["scale"] = {1.0f, 1.0f, 1.0f};
-    entity["visible"] = true;
-    entity["locked"] = false;
-
-    sceneJson["entities"] = nlohmann::json::array({entity});
-
-    EXPECT_TRUE(sceneJson.contains("vestige_scene"));
-    EXPECT_TRUE(sceneJson.contains("entities"));
+    ASSERT_TRUE(sceneJson.contains("vestige_scene"));
+    ASSERT_TRUE(sceneJson.contains("entities"));
     EXPECT_EQ(sceneJson["vestige_scene"]["format_version"],
               SceneSerializer::CURRENT_FORMAT_VERSION);
     EXPECT_EQ(sceneJson["entities"].size(), 1u);

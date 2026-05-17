@@ -10,12 +10,14 @@
 #include "core/logger.h"
 #include "input/input_bindings.h"
 #include "input/input_bindings_wire.h"
+#include "test_helpers.h"
 
 #include <nlohmann/json.hpp>
 
 #include <GLFW/glfw3.h>
 
 using namespace Vestige;
+using Vestige::Testing::countWarningsContaining;
 
 namespace
 {
@@ -346,21 +348,9 @@ TEST(IsActionDown, HandlesNullBindingCheckerGracefully)
 // where an addAction() call after Settings::load() clobbers user rebinds.
 // ---------------------------------------------------------------------------
 
-namespace
-{
-size_t countWarningsContaining(const std::string& needle)
-{
-    size_t n = 0;
-    for (const auto& entry : Logger::getEntries())
-    {
-        if (entry.message.find(needle) != std::string::npos)
-        {
-            ++n;
-        }
-    }
-    return n;
-}
-}
+// countWarningsContaining now lives in test_helpers.h — see the file-
+// level `using` at the top. The local copy here had silently dropped
+// the LogLevel::Warning filter (audit 2026-05-17).
 
 TEST(InputActionMap, ReRegisterDivergentBindingsWarns_I5)
 {

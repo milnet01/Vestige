@@ -6,6 +6,7 @@
 #include "animation/skeleton_animator.h"
 #include "animation/skeleton.h"
 #include "animation/animation_clip.h"
+#include "skeleton_test_helpers.h"
 
 #include <gtest/gtest.h>
 #include <glm/glm.hpp>
@@ -17,20 +18,15 @@ using namespace Vestige;
 // Helpers: create a minimal skeleton and animation clips for testing
 // ---------------------------------------------------------------------------
 
+// /test-audit 2026-05-17 Ts19-D2: chain-skeleton builder shared with
+// test_animation_state_machine.cpp + test_root_motion.cpp via
+// skeleton_test_helpers.h. NOTE: the original here used
+// parentIndex = 0 for every child (star, not chain). The chain builder's
+// per-i parent matters for skinning math; for these crossfade tests
+// only joint 0 is animated, so a chain works the same as the star.
 static std::shared_ptr<Skeleton> makeTestSkeleton(int jointCount = 2)
 {
-    auto skel = std::make_shared<Skeleton>();
-    for (int i = 0; i < jointCount; ++i)
-    {
-        Joint j;
-        j.name = "joint_" + std::to_string(i);
-        j.parentIndex = (i == 0) ? -1 : 0;
-        j.inverseBindMatrix = glm::mat4(1.0f);
-        j.localBindTransform = glm::mat4(1.0f);
-        skel->m_joints.push_back(j);
-    }
-    skel->m_rootJoints.push_back(0);
-    return skel;
+    return ::Vestige::Testing::makeJointChainSkeleton(jointCount);
 }
 
 /// @brief Creates a clip that moves joint 0 to a constant position.

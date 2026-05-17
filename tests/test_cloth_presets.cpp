@@ -8,77 +8,91 @@
 #include "physics/cloth_presets.h"
 #include "physics/cloth_simulator.h"
 
+#include <cctype>
 #include <cstring>
+#include <string>
 
 using namespace Vestige;
 
 // ---------------------------------------------------------------------------
 // Preset validation
+//
+// /test-audit 2026-05-17 Ts19-PA1: the four "for each preset" tests below
+// each copy-pasted the same 5-element initializer list. Adding a preset
+// (CUSTOM was already missed in the mass/substeps/compliance checks)
+// previously required four parallel edits; TEST_P over `ValuesIn(...)`
+// makes the preset set the single source of truth.
 // ---------------------------------------------------------------------------
 
-TEST(ClothPresets, AllPresetsHavePositiveMass)
+// All real presets, including CUSTOM (which forwards to LINEN_CURTAIN
+// defaults). The name-list test still iterates COUNT so it catches a
+// new enum value that wasn't named at all.
+static auto allClothPresetTypes()
 {
-    auto types = {ClothPresetType::LINEN_CURTAIN, ClothPresetType::TENT_FABRIC,
-                  ClothPresetType::BANNER, ClothPresetType::HEAVY_DRAPE,
-                  ClothPresetType::STIFF_FENCE};
-
-    for (auto type : types)
-    {
-        auto preset = ClothPresets::getPresetConfig(type);
-        EXPECT_GT(preset.solver.particleMass, 0.0f)
-            << "Preset " << ClothPresets::getPresetName(type) << " has non-positive mass";
-    }
+    return ::testing::Values(
+        ClothPresetType::LINEN_CURTAIN,
+        ClothPresetType::TENT_FABRIC,
+        ClothPresetType::BANNER,
+        ClothPresetType::HEAVY_DRAPE,
+        ClothPresetType::STIFF_FENCE,
+        ClothPresetType::CUSTOM);
 }
 
-TEST(ClothPresets, AllPresetsHavePositiveSubsteps)
-{
-    auto types = {ClothPresetType::LINEN_CURTAIN, ClothPresetType::TENT_FABRIC,
-                  ClothPresetType::BANNER, ClothPresetType::HEAVY_DRAPE,
-                  ClothPresetType::STIFF_FENCE};
+class ClothPresetParam : public ::testing::TestWithParam<ClothPresetType> {};
 
-    for (auto type : types)
-    {
-        auto preset = ClothPresets::getPresetConfig(type);
-        EXPECT_GE(preset.solver.substeps, 1)
-            << "Preset " << ClothPresets::getPresetName(type) << " has invalid substeps";
-    }
+TEST_P(ClothPresetParam, HasPositiveMass)
+{
+    auto preset = ClothPresets::getPresetConfig(GetParam());
+    EXPECT_GT(preset.solver.particleMass, 0.0f)
+        << "Preset " << ClothPresets::getPresetName(GetParam())
+        << " has non-positive mass";
 }
 
-TEST(ClothPresets, AllPresetsHaveNonNegativeCompliance)
+TEST_P(ClothPresetParam, HasPositiveSubsteps)
 {
-    auto types = {ClothPresetType::LINEN_CURTAIN, ClothPresetType::TENT_FABRIC,
-                  ClothPresetType::BANNER, ClothPresetType::HEAVY_DRAPE,
-                  ClothPresetType::STIFF_FENCE};
-
-    for (auto type : types)
-    {
-        auto preset = ClothPresets::getPresetConfig(type);
-        EXPECT_GE(preset.solver.stretchCompliance, 0.0f);
-        EXPECT_GE(preset.solver.shearCompliance, 0.0f);
-        EXPECT_GE(preset.solver.bendCompliance, 0.0f);
-    }
+    auto preset = ClothPresets::getPresetConfig(GetParam());
+    EXPECT_GE(preset.solver.substeps, 1)
+        << "Preset " << ClothPresets::getPresetName(GetParam())
+        << " has invalid substeps";
 }
 
-TEST(ClothPresets, PresetsCanInitializeSimulator)
+TEST_P(ClothPresetParam, HasNonNegativeCompliance)
 {
-    auto types = {ClothPresetType::LINEN_CURTAIN, ClothPresetType::TENT_FABRIC,
-                  ClothPresetType::BANNER, ClothPresetType::HEAVY_DRAPE,
-                  ClothPresetType::STIFF_FENCE};
-
-    for (auto type : types)
-    {
-        auto preset = ClothPresets::getPresetConfig(type);
-        // Set a small grid (don't use preset's default 20x20 — just verify it can init)
-        preset.solver.width = 5;
-        preset.solver.height = 5;
-
-        ClothSimulator sim;
-        sim.initialize(preset.solver);
-        EXPECT_TRUE(sim.isInitialized())
-            << "Preset " << ClothPresets::getPresetName(type) << " failed to initialize";
-        EXPECT_EQ(sim.getParticleCount(), 25u);
-    }
+    auto preset = ClothPresets::getPresetConfig(GetParam());
+    EXPECT_GE(preset.solver.stretchCompliance, 0.0f);
+    EXPECT_GE(preset.solver.shearCompliance, 0.0f);
+    EXPECT_GE(preset.solver.bendCompliance, 0.0f);
 }
+
+TEST_P(ClothPresetParam, CanInitializeSimulator)
+{
+    auto preset = ClothPresets::getPresetConfig(GetParam());
+    // Set a small grid (don't use preset's default 20x20 — just verify it can init)
+    preset.solver.width = 5;
+    preset.solver.height = 5;
+
+    ClothSimulator sim;
+    sim.initialize(preset.solver);
+    EXPECT_TRUE(sim.isInitialized())
+        << "Preset " << ClothPresets::getPresetName(GetParam())
+        << " failed to initialize";
+    EXPECT_EQ(sim.getParticleCount(), 25u);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    AllPresets, ClothPresetParam, allClothPresetTypes(),
+    [](const ::testing::TestParamInfo<ClothPresetType>& info)
+    {
+        // GoogleTest param names must be alphanumeric + underscores;
+        // spaces and dashes in the human-readable preset name are not
+        // allowed, so strip them down to an ASCII identifier.
+        std::string name = ClothPresets::getPresetName(info.param);
+        for (char& c : name)
+        {
+            if (!std::isalnum(static_cast<unsigned char>(c))) c = '_';
+        }
+        return name;
+    });
 
 TEST(ClothPresets, PresetNamesAreNonEmpty)
 {
@@ -332,7 +346,7 @@ TEST(ClothSimulator, GetConstraintCount)
     sim.initialize(cfg);
 
     // 3x3 grid: stretch=12, shear=8, bend=6 = 26 total
-    EXPECT_GT(sim.getConstraintCount(), 0u);
+    EXPECT_GE(sim.getConstraintCount(), 26u);
 }
 
 TEST(ClothSimulator, WindDirectionAndStrengthGetters)

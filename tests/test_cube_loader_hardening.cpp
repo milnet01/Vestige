@@ -58,8 +58,10 @@ protected:
 
     void TearDown() override
     {
-        // Reset process-wide sandbox so subsequent tests aren't affected.
+        // Reset process-wide sandbox + log buffer so subsequent tests
+        // never see this fixture's residual state.
         CubeLoader::setSandboxRoots({});
+        Logger::clearEntries();
         std::error_code ec;
         fs::remove_all(m_root, ec);
     }

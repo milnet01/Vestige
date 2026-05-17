@@ -55,6 +55,15 @@ std::unique_ptr<UIPanel> makePanel()
     return p;
 }
 
+// /test-audit 2026-05-17 Ts19-F2: 12 of the focus-navigation tests
+// below each constructed `UISystem sys;` on the stack with no fixture.
+// Now sharing a single fixture so the construction lives in one place.
+class UISystemFocusTest : public ::testing::Test
+{
+protected:
+    UISystem sys;
+};
+
 } // namespace
 
 // ---------------------------------------------------------------------------
@@ -78,9 +87,8 @@ TEST(UIElementFocus, FocusedFieldIsMutable_S4)
 // UISystem: default focus state.
 // ---------------------------------------------------------------------------
 
-TEST(UISystemFocus, DefaultHasNoFocus_S4)
+TEST_F(UISystemFocusTest, DefaultHasNoFocus_S4)
 {
-    UISystem sys;
     EXPECT_EQ(sys.getFocusedElement(), nullptr);
 }
 
@@ -88,9 +96,8 @@ TEST(UISystemFocus, DefaultHasNoFocus_S4)
 // Tab traversal over the root canvas.
 // ---------------------------------------------------------------------------
 
-TEST(UISystemFocus, TabAdvancesThroughInteractive_S4)
+TEST_F(UISystemFocusTest, TabAdvancesThroughInteractive_S4)
 {
-    UISystem sys;
     auto b1 = makeButton("A", sys.getTheme());
     auto b2 = makeButton("B", sys.getTheme());
     auto b3 = makeButton("C", sys.getTheme());
@@ -111,9 +118,8 @@ TEST(UISystemFocus, TabAdvancesThroughInteractive_S4)
     EXPECT_EQ(sys.getFocusedElement(), p3);
 }
 
-TEST(UISystemFocus, TabWrapsAtEnd_S4)
+TEST_F(UISystemFocusTest, TabWrapsAtEnd_S4)
 {
-    UISystem sys;
     auto b1 = makeButton("A", sys.getTheme());
     auto b2 = makeButton("B", sys.getTheme());
     UIButton* p1 = b1.get();
@@ -128,9 +134,8 @@ TEST(UISystemFocus, TabWrapsAtEnd_S4)
     (void)p2;
 }
 
-TEST(UISystemFocus, ShiftTabGoesBackward_S4)
+TEST_F(UISystemFocusTest, ShiftTabGoesBackward_S4)
 {
-    UISystem sys;
     auto b1 = makeButton("A", sys.getTheme());
     auto b2 = makeButton("B", sys.getTheme());
     UIButton* p1 = b1.get();
@@ -148,9 +153,8 @@ TEST(UISystemFocus, ShiftTabGoesBackward_S4)
     EXPECT_EQ(sys.getFocusedElement(), p2);
 }
 
-TEST(UISystemFocus, TabSkipsNonInteractive_S4)
+TEST_F(UISystemFocusTest, TabSkipsNonInteractive_S4)
 {
-    UISystem sys;
     auto b1 = makeButton("A", sys.getTheme());
     auto panel = makePanel();
     auto b2 = makeButton("B", sys.getTheme());
@@ -171,9 +175,8 @@ TEST(UISystemFocus, TabSkipsNonInteractive_S4)
 // Arrow keys mirror Tab.
 // ---------------------------------------------------------------------------
 
-TEST(UISystemFocus, ArrowDownIsTabForward_S4)
+TEST_F(UISystemFocusTest, ArrowDownIsTabForward_S4)
 {
-    UISystem sys;
     auto b1 = makeButton("A", sys.getTheme());
     auto b2 = makeButton("B", sys.getTheme());
     UIButton* p1 = b1.get();
@@ -187,9 +190,8 @@ TEST(UISystemFocus, ArrowDownIsTabForward_S4)
     EXPECT_EQ(sys.getFocusedElement(), p2);
 }
 
-TEST(UISystemFocus, ArrowUpIsTabBack_S4)
+TEST_F(UISystemFocusTest, ArrowUpIsTabBack_S4)
 {
-    UISystem sys;
     auto b1 = makeButton("A", sys.getTheme());
     auto b2 = makeButton("B", sys.getTheme());
     UIButton* p1 = b1.get();
@@ -208,9 +210,8 @@ TEST(UISystemFocus, ArrowUpIsTabBack_S4)
 // Enter / Space fires onClick on the focused button.
 // ---------------------------------------------------------------------------
 
-TEST(UISystemFocus, EnterFiresFocusedButtonOnClick_S4)
+TEST_F(UISystemFocusTest, EnterFiresFocusedButtonOnClick_S4)
 {
-    UISystem sys;
     auto btn = makeButton("OK", sys.getTheme());
     UIButton* p = btn.get();
     int clickCount = 0;
@@ -224,9 +225,8 @@ TEST(UISystemFocus, EnterFiresFocusedButtonOnClick_S4)
     EXPECT_EQ(clickCount, 1);
 }
 
-TEST(UISystemFocus, SpaceFiresFocusedButtonOnClick_S4)
+TEST_F(UISystemFocusTest, SpaceFiresFocusedButtonOnClick_S4)
 {
-    UISystem sys;
     auto btn = makeButton("Confirm", sys.getTheme());
     UIButton* p = btn.get();
     int clickCount = 0;
@@ -238,9 +238,8 @@ TEST(UISystemFocus, SpaceFiresFocusedButtonOnClick_S4)
     EXPECT_EQ(clickCount, 1);
 }
 
-TEST(UISystemFocus, EnterWithNoFocusDoesNothing_S4)
+TEST_F(UISystemFocusTest, EnterWithNoFocusDoesNothing_S4)
 {
-    UISystem sys;
     auto btn = makeButton("OK", sys.getTheme());
     UIButton* p = btn.get();
     int clickCount = 0;
@@ -257,9 +256,8 @@ TEST(UISystemFocus, EnterWithNoFocusDoesNothing_S4)
 // Setting focus clears the old element's flag and sets the new one's.
 // ---------------------------------------------------------------------------
 
-TEST(UISystemFocus, AdvancingFocusUpdatesFocusedFlag_S4)
+TEST_F(UISystemFocusTest, AdvancingFocusUpdatesFocusedFlag_S4)
 {
-    UISystem sys;
     auto b1 = makeButton("A", sys.getTheme());
     auto b2 = makeButton("B", sys.getTheme());
     UIButton* p1 = b1.get();
@@ -280,9 +278,8 @@ TEST(UISystemFocus, AdvancingFocusUpdatesFocusedFlag_S4)
 // Modal canvas traps focus.
 // ---------------------------------------------------------------------------
 
-TEST(UISystemFocus, ModalCanvasTrapsFocus_S4)
+TEST_F(UISystemFocusTest, ModalCanvasTrapsFocus_S4)
 {
-    UISystem sys;
 
     // Root canvas has two buttons.
     auto rootA = makeButton("RootA", sys.getTheme());
@@ -311,9 +308,8 @@ TEST(UISystemFocus, ModalCanvasTrapsFocus_S4)
 // receives them.
 // ---------------------------------------------------------------------------
 
-TEST(UISystemFocus, HandleKeyReturnsFalseForUnhandledKey_S4)
+TEST_F(UISystemFocusTest, HandleKeyReturnsFalseForUnhandledKey_S4)
 {
-    UISystem sys;
     auto btn = makeButton("A", sys.getTheme());
     sys.getCanvas().addElement(std::move(btn));
 

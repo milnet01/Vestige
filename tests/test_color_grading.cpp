@@ -3,6 +3,9 @@
 
 /// @file test_color_grading.cpp
 /// @brief Unit tests for color grading LUT math (neutral LUT, preset transforms, .cube parsing).
+#include "color_grading_test_helpers.h"
+#include "renderer/color_grading_presets.h"
+
 #include <gtest/gtest.h>
 #include <glm/glm.hpp>
 
@@ -11,30 +14,18 @@
 #include <sstream>
 #include <vector>
 
+using namespace Vestige;
+
 // =============================================================================
 // Neutral LUT generation (mirroring ColorGradingLut::addGeneratedPreset with identity)
 // =============================================================================
 
+// /test-audit 2026-05-17 Ts19-D6: canonical implementation now in
+// color_grading_test_helpers.h; this alias keeps existing call-sites
+// readable.
 static std::vector<unsigned char> generateNeutralLut(int size)
 {
-    std::vector<unsigned char> data(static_cast<size_t>(size * size * size) * 4);
-    float maxIdx = static_cast<float>(size - 1);
-
-    for (int b = 0; b < size; b++)
-    {
-        for (int g = 0; g < size; g++)
-        {
-            for (int r = 0; r < size; r++)
-            {
-                size_t idx = static_cast<size_t>((b * size * size + g * size + r)) * 4;
-                data[idx + 0] = static_cast<unsigned char>(static_cast<float>(r) / maxIdx * 255.0f + 0.5f);
-                data[idx + 1] = static_cast<unsigned char>(static_cast<float>(g) / maxIdx * 255.0f + 0.5f);
-                data[idx + 2] = static_cast<unsigned char>(static_cast<float>(b) / maxIdx * 255.0f + 0.5f);
-                data[idx + 3] = 255;
-            }
-        }
-    }
-    return data;
+    return ::Vestige::Testing::makeNeutralLutBytes(size);
 }
 
 TEST(ColorGradingTest, NeutralLutIdentity)
@@ -78,28 +69,12 @@ TEST(ColorGradingTest, NeutralLutMidpoint)
 // LUT lookup math (mirroring shader with half-texel offset)
 // =============================================================================
 
+// /test-audit 2026-05-17 Ts19-D6: canonical implementation now in
+// color_grading_test_helpers.h.
 static glm::vec3 lutLookup(const std::vector<unsigned char>& data, int size,
                             const glm::vec3& color)
 {
-    glm::vec3 c = glm::clamp(color, 0.0f, 1.0f);
-
-    // Half-texel offset for correct 3D LUT sampling
-    float s = static_cast<float>(size);
-    glm::vec3 coord = c * ((s - 1.0f) / s) + glm::vec3(0.5f / s);
-
-    // Nearest-neighbor lookup (GPU does trilinear, but for testing nearest is fine)
-    int r = static_cast<int>(coord.r * static_cast<float>(size - 1) + 0.5f);
-    int g = static_cast<int>(coord.g * static_cast<float>(size - 1) + 0.5f);
-    int b = static_cast<int>(coord.b * static_cast<float>(size - 1) + 0.5f);
-    r = std::clamp(r, 0, size - 1);
-    g = std::clamp(g, 0, size - 1);
-    b = std::clamp(b, 0, size - 1);
-
-    size_t idx = static_cast<size_t>((b * size * size + g * size + r)) * 4;
-    return glm::vec3(
-        static_cast<float>(data[idx + 0]) / 255.0f,
-        static_cast<float>(data[idx + 1]) / 255.0f,
-        static_cast<float>(data[idx + 2]) / 255.0f);
+    return ::Vestige::Testing::lutLookupNearest(data, size, color);
 }
 
 TEST(ColorGradingTest, LutLookupIdentity)
@@ -177,70 +152,46 @@ TEST(ColorGradingTest, LutIntensityHalfIsBlend)
 // Built-in preset transforms (mirroring ColorGradingLut::initialize)
 // =============================================================================
 
-static glm::vec3 warmTransform(const glm::vec3& c)
-{
-    glm::vec3 out;
-    out.r = std::clamp(c.r * 1.05f + 0.02f, 0.0f, 1.0f);
-    out.g = c.g;
-    out.b = std::clamp(c.b * 0.85f - 0.02f, 0.0f, 1.0f);
-    out = out * out * (3.0f - 2.0f * out);
-    return out;
-}
-
-static glm::vec3 coolTransform(const glm::vec3& c)
-{
-    glm::vec3 out;
-    out.r = std::clamp(c.r * 0.85f, 0.0f, 1.0f);
-    out.g = std::clamp(c.g * 0.95f + 0.02f, 0.0f, 1.0f);
-    out.b = std::clamp(c.b * 1.1f + 0.03f, 0.0f, 1.0f);
-    out += glm::vec3(0.02f);
-    out = glm::clamp(out, 0.0f, 1.0f);
-    return out;
-}
-
-static glm::vec3 contrastTransform(const glm::vec3& c)
-{
-    return c * c * (3.0f - 2.0f * c);
-}
-
-static glm::vec3 desaturateTransform(const glm::vec3& c)
-{
-    float lum = 0.2126f * c.r + 0.7152f * c.g + 0.0722f * c.b;
-    return glm::mix(glm::vec3(lum), c, 0.5f);
-}
+// /test-audit 2026-05-17 Ts19-AC1: these tests previously re-implemented
+// the warm/cool/contrast/desaturate formulas locally — a refactor in the
+// production lambdas in color_grading_lut.cpp would have left the tests
+// silently passing on the old formula. Now they drive
+// `Vestige::ColorGradingPresets::*` directly, the same functions
+// `addGeneratedPreset` uses, so test/production drift is structurally
+// impossible.
 
 TEST(ColorGradingTest, WarmPresetIncreasesRed)
 {
     glm::vec3 gray(0.5f, 0.5f, 0.5f);
-    glm::vec3 result = warmTransform(gray);
+    glm::vec3 result = ColorGradingPresets::warmGolden(gray);
     EXPECT_GT(result.r, result.b);
 }
 
 TEST(ColorGradingTest, CoolPresetIncreasesBlue)
 {
     glm::vec3 gray(0.5f, 0.5f, 0.5f);
-    glm::vec3 result = coolTransform(gray);
+    glm::vec3 result = ColorGradingPresets::coolBlue(gray);
     EXPECT_GT(result.b, result.r);
 }
 
 TEST(ColorGradingTest, HighContrastDarkensShadows)
 {
     glm::vec3 dark(0.2f, 0.2f, 0.2f);
-    glm::vec3 result = contrastTransform(dark);
+    glm::vec3 result = ColorGradingPresets::highContrast(dark);
     EXPECT_LT(result.r, 0.2f);
 }
 
 TEST(ColorGradingTest, HighContrastBrightensHighlights)
 {
     glm::vec3 bright(0.8f, 0.8f, 0.8f);
-    glm::vec3 result = contrastTransform(bright);
+    glm::vec3 result = ColorGradingPresets::highContrast(bright);
     EXPECT_GT(result.r, 0.8f);
 }
 
 TEST(ColorGradingTest, DesaturatedReducesSaturation)
 {
     glm::vec3 red(1.0f, 0.0f, 0.0f);
-    glm::vec3 result = desaturateTransform(red);
+    glm::vec3 result = ColorGradingPresets::desaturated(red);
     EXPECT_LT(result.r, 1.0f);
     EXPECT_GT(result.g, 0.0f);
     EXPECT_GT(result.b, 0.0f);

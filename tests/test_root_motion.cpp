@@ -6,6 +6,7 @@
 #include "animation/skeleton_animator.h"
 #include "animation/skeleton.h"
 #include "animation/animation_clip.h"
+#include "skeleton_test_helpers.h"
 
 #include <gtest/gtest.h>
 #include <glm/glm.hpp>
@@ -17,28 +18,13 @@ using namespace Vestige;
 // Helpers
 // ---------------------------------------------------------------------------
 
+// /test-audit 2026-05-17 Ts19-D2: chain-skeleton builder shared with
+// test_animation_state_machine.cpp + test_crossfade.cpp via
+// skeleton_test_helpers.h. The +Y child offset matters for the
+// root-motion delta math, so it's passed explicitly.
 static std::shared_ptr<Skeleton> makeTestSkeleton()
 {
-    auto skel = std::make_shared<Skeleton>();
-
-    // Joint 0: root (hip) at origin
-    Joint root;
-    root.name = "root";
-    root.parentIndex = -1;
-    root.inverseBindMatrix = glm::mat4(1.0f);
-    root.localBindTransform = glm::mat4(1.0f);
-    skel->m_joints.push_back(root);
-
-    // Joint 1: child
-    Joint child;
-    child.name = "child";
-    child.parentIndex = 0;
-    child.inverseBindMatrix = glm::mat4(1.0f);
-    child.localBindTransform = glm::translate(glm::mat4(1.0f), glm::vec3(0, 1, 0));
-    skel->m_joints.push_back(child);
-
-    skel->m_rootJoints.push_back(0);
-    return skel;
+    return ::Vestige::Testing::makeJointChainSkeleton(2, glm::vec3(0, 1, 0));
 }
 
 /// @brief Creates a clip where joint 0 moves from (0,0,0) to (10,0,0) over duration.
@@ -108,8 +94,11 @@ TEST_F(RootMotionTest, DeltaExtractedWhenEnabled)
     m_animator.update(0.1f);
     glm::vec3 delta = m_animator.getRootMotionDeltaPosition();
 
-    // The clip moves 10 units over 1 second, so 0.1s should give ~1 unit
-    EXPECT_NEAR(delta.x, 1.0f, 0.2f);
+    // The clip linearly interpolates 10 units over 1 second; a 0.1s step is
+    // exactly 1.0 (linear interpolation has zero approximation error). 1e-3
+    // tolerance catches float-quantisation; the old 0.2 band would have
+    // accepted a 20% scale drift in the root-motion extractor.
+    EXPECT_NEAR(delta.x, 1.0f, 1e-3f);
     EXPECT_NEAR(delta.y, 0.0f, 0.001f);
     EXPECT_NEAR(delta.z, 0.0f, 0.001f);
 }
@@ -166,8 +155,9 @@ TEST_F(RootMotionTest, DeltaAccumulatesAcrossFrames)
         totalDelta += m_animator.getRootMotionDeltaPosition();
     }
 
-    // First frame has no delta (baseline init), so 9 frames × 1 unit = 9 units
-    EXPECT_NEAR(totalDelta.x, 9.0f, 0.5f);
+    // First frame has no delta (baseline init), so 9 frames × 1 unit = 9 units.
+    // Linear interpolation is exact; tolerance covers float-summation noise only.
+    EXPECT_NEAR(totalDelta.x, 9.0f, 1e-3f);
 }
 
 TEST_F(RootMotionTest, NoDeltaWhenNotPlaying)

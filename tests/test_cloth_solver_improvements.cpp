@@ -12,12 +12,7 @@
 #include <cmath>
 
 using namespace Vestige;
-
-// Slice 18 Ts3: canonical definition in cloth_test_helpers.h.
-static ClothConfig smallConfig(uint32_t w = 4, uint32_t h = 4)
-{
-    return Testing::clothSmallConfig(w, h);
-}
+using Testing::clothSmallConfig;
 
 // ===========================================================================
 // 11a: Dihedral Bending Constraints
@@ -40,7 +35,7 @@ TEST(DihedralBending, ConstraintCountMatchesGridSize)
     for (const Case& c : cases)
     {
         ClothSimulator sim;
-        sim.initialize(smallConfig(c.w, c.h));
+        sim.initialize(clothSmallConfig(c.w, c.h));
         EXPECT_GE(sim.getDihedralConstraintCount(), c.minCount) << c.name;
         // Total constraint count must include dihedrals.
         EXPECT_GE(sim.getConstraintCount(),
@@ -53,7 +48,7 @@ TEST(DihedralBending, FlatClothStaysFlat)
     // A flat cloth should have zero bending energy — simulation shouldn't
     // distort it if only dihedral bending acts.
     ClothSimulator sim;
-    auto cfg = smallConfig(3, 3);
+    auto cfg = clothSmallConfig(3, 3);
     cfg.gravity = glm::vec3(0.0f);  // No gravity
     cfg.substeps = 10;
     sim.initialize(cfg);
@@ -77,7 +72,7 @@ TEST(DihedralBending, FlatClothStaysFlat)
 TEST(DihedralBending, SetCompliance)
 {
     ClothSimulator sim;
-    sim.initialize(smallConfig(3, 3));
+    sim.initialize(clothSmallConfig(3, 3));
 
     sim.setDihedralBendCompliance(0.5f);
     EXPECT_FLOAT_EQ(sim.getDihedralBendCompliance(), 0.5f);
@@ -103,7 +98,7 @@ TEST(DihedralBending, SetCompliance)
 TEST(DihedralBending, RigidDihedralCenterStaysNearInitialOverOneFrame)
 {
     ClothSimulator sim;
-    auto cfg = smallConfig(3, 3);
+    auto cfg = clothSmallConfig(3, 3);
     cfg.gravity = glm::vec3(0.0f);
     cfg.substeps = 20;
     cfg.damping = 0.05f;
@@ -133,12 +128,15 @@ TEST(DihedralBending, RigidDihedralCenterStaysNearInitialOverOneFrame)
 
 TEST(ConstraintOrdering, SimulateOneFrameDoesNotInvalidateWithPinnedRow)
 {
-    // Honest scope: sort-path ordering itself is not inspectable from the
-    // public API. This test pins the survival contract — sort path
-    // doesn't crash on the pinned-row config. The observable
-    // gravity-drop is pinned by `SimulatesCorrectlyWithSorting` below.
+    // Sort-path ordering itself is not inspectable from the public API.
+    // This test pins the survival contract — sort path doesn't crash and
+    // produces finite particle data on the pinned-row config. The
+    // observable gravity-drop is pinned by `SimulatesCorrectlyWithSorting`
+    // below. /test-audit 2026-05-17: a prior assertion of
+    // `EXPECT_TRUE(sim.isInitialized())` was tautological after a
+    // successful `initialize`; widened to NaN-scan + initialised state.
     ClothSimulator sim;
-    auto cfg = smallConfig(4, 4);
+    auto cfg = clothSmallConfig(4, 4);
     cfg.gravity = glm::vec3(0.0f, -9.81f, 0.0f);
     cfg.substeps = 5;
     sim.initialize(cfg);
@@ -151,13 +149,20 @@ TEST(ConstraintOrdering, SimulateOneFrameDoesNotInvalidateWithPinnedRow)
     sim.simulate(1.0f / 60.0f);
 
     EXPECT_TRUE(sim.isInitialized());
+    const glm::vec3* pos = sim.getPositions();
+    for (uint32_t i = 0; i < sim.getParticleCount(); ++i)
+    {
+        EXPECT_FALSE(std::isnan(pos[i].x));
+        EXPECT_FALSE(std::isnan(pos[i].y));
+        EXPECT_FALSE(std::isnan(pos[i].z));
+    }
 }
 
 TEST(ConstraintOrdering, SimulatesCorrectlyWithSorting)
 {
     // Verify that constraint ordering doesn't break the simulation
     ClothSimulator sim;
-    auto cfg = smallConfig(5, 5);
+    auto cfg = clothSmallConfig(5, 5);
     cfg.substeps = 10;
     sim.initialize(cfg);
 
@@ -190,7 +195,7 @@ TEST(ConstraintOrdering, SimulatesCorrectlyWithSorting)
 TEST(AdaptiveDamping, DefaultDisabled)
 {
     ClothSimulator sim;
-    sim.initialize(smallConfig());
+    sim.initialize(clothSmallConfig());
 
     EXPECT_FLOAT_EQ(sim.getAdaptiveDamping(), 0.0f);
 }
@@ -198,7 +203,7 @@ TEST(AdaptiveDamping, DefaultDisabled)
 TEST(AdaptiveDamping, SetAndGet)
 {
     ClothSimulator sim;
-    sim.initialize(smallConfig());
+    sim.initialize(clothSmallConfig());
 
     sim.setAdaptiveDamping(0.3f);
     EXPECT_FLOAT_EQ(sim.getAdaptiveDamping(), 0.3f);
@@ -218,7 +223,7 @@ TEST(AdaptiveDamping, BothCodePathsRemainFiniteOverSixtyFrames)
     // WithoutAdaptive` but only the CPU backend is instantiated.
     ClothSimulator simNoAdaptive;
     ClothSimulator simAdaptive;
-    auto cfg = smallConfig(4, 4);
+    auto cfg = clothSmallConfig(4, 4);
     cfg.substeps = 10;
     cfg.damping = 0.01f;
 
@@ -246,7 +251,7 @@ TEST(AdaptiveDamping, SimulationStable)
 {
     // High adaptive damping should not cause instability
     ClothSimulator sim;
-    auto cfg = smallConfig(5, 5);
+    auto cfg = clothSmallConfig(5, 5);
     cfg.substeps = 10;
     sim.initialize(cfg);
 
@@ -274,7 +279,7 @@ TEST(AdaptiveDamping, SimulationStable)
 TEST(ClothFriction, DefaultValues)
 {
     ClothSimulator sim;
-    sim.initialize(smallConfig());
+    sim.initialize(clothSmallConfig());
 
     EXPECT_FLOAT_EQ(sim.getStaticFriction(), 0.4f);
     EXPECT_FLOAT_EQ(sim.getKineticFriction(), 0.3f);
@@ -283,7 +288,7 @@ TEST(ClothFriction, DefaultValues)
 TEST(ClothFriction, SetAndGet)
 {
     ClothSimulator sim;
-    sim.initialize(smallConfig());
+    sim.initialize(clothSmallConfig());
 
     sim.setFriction(0.6f, 0.5f);
     EXPECT_FLOAT_EQ(sim.getStaticFriction(), 0.6f);
@@ -303,7 +308,7 @@ TEST(ClothFriction, ZeroFrictionSimulationStaysFinite)
     // This test only pins the survival contract; the friction behavior
     // is exercised at engine launch with interactive cloth.
     ClothSimulator sim;
-    auto cfg = smallConfig(3, 3);
+    auto cfg = clothSmallConfig(3, 3);
     cfg.substeps = 10;
     cfg.gravity = glm::vec3(0.0f, -9.81f, 0.0f);
     sim.initialize(cfg);
@@ -329,7 +334,7 @@ TEST(ClothFriction, BothFrictionLevelsSimulationStaysFinite)
     // friction settings.
     ClothSimulator simLowFric;
     ClothSimulator simHighFric;
-    auto cfg = smallConfig(3, 3);
+    auto cfg = clothSmallConfig(3, 3);
     cfg.substeps = 10;
     cfg.gravity = glm::vec3(0.0f, -9.81f, 0.0f);
 
@@ -361,7 +366,7 @@ TEST(ClothFriction, FrictionWithSphereColliderSimulationStaysFinite)
     // exercised by integration replays, not asserted here — this test
     // pins the survival contract only.
     ClothSimulator sim;
-    auto cfg = smallConfig(4, 4);
+    auto cfg = clothSmallConfig(4, 4);
     cfg.substeps = 10;
     sim.initialize(cfg);
 
@@ -394,7 +399,7 @@ TEST(ClothFriction, FrictionWithSphereColliderSimulationStaysFinite)
 TEST(ThickParticle, DefaultZero)
 {
     ClothSimulator sim;
-    sim.initialize(smallConfig());
+    sim.initialize(clothSmallConfig());
 
     EXPECT_FLOAT_EQ(sim.getParticleRadius(), 0.0f);
 }
@@ -402,7 +407,7 @@ TEST(ThickParticle, DefaultZero)
 TEST(ThickParticle, SetAndGet)
 {
     ClothSimulator sim;
-    sim.initialize(smallConfig());
+    sim.initialize(clothSmallConfig());
 
     sim.setParticleRadius(0.01f);
     EXPECT_FLOAT_EQ(sim.getParticleRadius(), 0.01f);
@@ -417,7 +422,7 @@ TEST(ThickParticle, GroundPlaneOffsetIncludesRadius)
     // With thick particles, cloth should float higher above the ground plane
     ClothSimulator simThin;
     ClothSimulator simThick;
-    auto cfg = smallConfig(3, 3);
+    auto cfg = clothSmallConfig(3, 3);
     cfg.substeps = 10;
     cfg.gravity = glm::vec3(0.0f, -9.81f, 0.0f);
 
@@ -452,7 +457,7 @@ TEST(ThickParticle, SphereCollisionOffsetIncludesRadius)
 {
     ClothSimulator simThin;
     ClothSimulator simThick;
-    auto cfg = smallConfig(3, 3);
+    auto cfg = clothSmallConfig(3, 3);
     cfg.substeps = 10;
 
     simThin.initialize(cfg);
@@ -492,7 +497,7 @@ TEST(ThickParticle, SphereCollisionOffsetIncludesRadius)
 TEST(ThickParticle, SimulationStableWithRadius)
 {
     ClothSimulator sim;
-    auto cfg = smallConfig(5, 5);
+    auto cfg = clothSmallConfig(5, 5);
     cfg.substeps = 10;
     sim.initialize(cfg);
 
@@ -526,7 +531,7 @@ TEST(ThickParticle, SimulationStableWithRadius)
 TEST(ClothSolverImprovements, AllFeaturesSmokeTestStaysFinite)
 {
     ClothSimulator sim;
-    auto cfg = smallConfig(6, 6);
+    auto cfg = clothSmallConfig(6, 6);
     cfg.substeps = 15;
     sim.initialize(cfg);
 

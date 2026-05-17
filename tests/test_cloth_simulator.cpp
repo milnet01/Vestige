@@ -15,12 +15,10 @@ using namespace Vestige;
 
 // Slice 18 Ts3: `smallConfig` was duplicated byte-identical across
 // three cloth test files. Canonical definition now in
-// `cloth_test_helpers.h`; the local alias keeps the existing
-// call-site spelling.
-static ClothConfig smallConfig(uint32_t w = 4, uint32_t h = 4)
-{
-    return Testing::clothSmallConfig(w, h);
-}
+// `cloth_test_helpers.h`. /test-audit 2026-05-17 Ts19-D1: dropped the
+// forwarding-stub alias — call-sites now go directly through
+// `clothSmallConfig`, removing the second name that the audit flagged.
+using Testing::clothSmallConfig;
 
 // ---------------------------------------------------------------------------
 // Initialization
@@ -29,7 +27,7 @@ static ClothConfig smallConfig(uint32_t w = 4, uint32_t h = 4)
 TEST(ClothSimulator, InitializesCorrectParticleCount)
 {
     ClothSimulator sim;
-    sim.initialize(smallConfig(5, 3));
+    sim.initialize(clothSmallConfig(5, 3));
     EXPECT_EQ(sim.getParticleCount(), 15u);
     EXPECT_EQ(sim.getGridWidth(), 5u);
     EXPECT_EQ(sim.getGridHeight(), 3u);
@@ -39,7 +37,7 @@ TEST(ClothSimulator, InitializesCorrectParticleCount)
 TEST(ClothSimulator, InitialPositionsFormGrid)
 {
     ClothSimulator sim;
-    auto cfg = smallConfig(3, 3);
+    auto cfg = clothSmallConfig(3, 3);
     cfg.spacing = 2.0f;
     sim.initialize(cfg);
 
@@ -66,7 +64,7 @@ TEST(ClothSimulator, InitialPositionsFormGrid)
 TEST(ClothSimulator, GeneratesTriangleIndices)
 {
     ClothSimulator sim;
-    sim.initialize(smallConfig(3, 3));
+    sim.initialize(clothSmallConfig(3, 3));
 
     const auto& indices = sim.getIndices();
     // 2x2 cells, 2 triangles each, 3 indices per triangle = 24
@@ -80,7 +78,7 @@ TEST(ClothSimulator, GeneratesTriangleIndices)
 TEST(ClothSimulator, GeneratesTexCoordsAtCorners)
 {
     ClothSimulator sim;
-    sim.initialize(smallConfig(3, 3));
+    sim.initialize(clothSmallConfig(3, 3));
 
     const auto& uvs = sim.getTexCoords();
     EXPECT_EQ(uvs.size(), 9u);
@@ -99,7 +97,7 @@ TEST(ClothSimulator, GeneratesTexCoordsAtCorners)
 TEST(ClothSimulator, GravityPullsUnpinnedClothDown)
 {
     ClothSimulator sim;
-    sim.initialize(smallConfig());
+    sim.initialize(clothSmallConfig());
 
     const glm::vec3* before = sim.getPositions();
     float y0 = before[0].y;
@@ -117,7 +115,7 @@ TEST(ClothSimulator, GravityPullsUnpinnedClothDown)
 TEST(ClothSimulator, MultipleFramesFallFurther)
 {
     ClothSimulator sim;
-    sim.initialize(smallConfig());
+    sim.initialize(clothSmallConfig());
 
     sim.simulate(1.0f / 60.0f);
     float y1 = sim.getPositions()[0].y;
@@ -135,7 +133,7 @@ TEST(ClothSimulator, MultipleFramesFallFurther)
 TEST(ClothSimulator, PinnedParticleStaysInPlace)
 {
     ClothSimulator sim;
-    sim.initialize(smallConfig());
+    sim.initialize(clothSmallConfig());
 
     glm::vec3 pinPos(0.0f, 5.0f, 0.0f);
     sim.pinParticle(0, pinPos);
@@ -157,7 +155,7 @@ TEST(ClothSimulator, PinnedParticleStaysInPlace)
 TEST(ClothSimulator, UnpinRestoresMass)
 {
     ClothSimulator sim;
-    sim.initialize(smallConfig());
+    sim.initialize(clothSmallConfig());
 
     glm::vec3 pinPos(0.0f, 5.0f, 0.0f);
     sim.pinParticle(0, pinPos);
@@ -175,7 +173,7 @@ TEST(ClothSimulator, UnpinRestoresMass)
 TEST(ClothSimulator, SetPinPositionMoves)
 {
     ClothSimulator sim;
-    sim.initialize(smallConfig());
+    sim.initialize(clothSmallConfig());
 
     sim.pinParticle(0, glm::vec3(0, 5, 0));
     sim.setPinPosition(0, glm::vec3(10, 5, 0));
@@ -191,7 +189,7 @@ TEST(ClothSimulator, SetPinPositionMoves)
 TEST(ClothSimulator, StretchConstraintsMaintainLength)
 {
     ClothSimulator sim;
-    auto cfg = smallConfig(2, 2);  // Minimum 2x2 grid (4 particles)
+    auto cfg = clothSmallConfig(2, 2);  // Minimum 2x2 grid (4 particles)
     cfg.substeps = 20;
     cfg.stretchCompliance = 0.0f;  // Rigid
     cfg.gravity = glm::vec3(0.0f); // No gravity — just test constraint
@@ -219,11 +217,13 @@ TEST(ClothSimulator, StretchConstraintsMaintainLength)
 TEST(ClothSimulator, GroundPlaneStopsParticles)
 {
     ClothSimulator sim;
-    sim.initialize(smallConfig());
+    sim.initialize(clothSmallConfig());
     sim.setGroundPlane(-2.0f);
 
-    // Simulate long enough for particles to fall and hit the ground
-    for (int i = 0; i < 300; ++i)
+    // Cloth particles fall y=0 → y=-2 in √(2·2/9.81) ≈ 0.64s (~38 frames at
+    // 60 Hz). 60 frames covers fall + settle without spending 1500 XPBD iters
+    // (5 substeps × 300 frames) on what is a trivial floor-collision check.
+    for (int i = 0; i < 60; ++i)
     {
         sim.simulate(1.0f / 60.0f);
     }
@@ -238,7 +238,7 @@ TEST(ClothSimulator, GroundPlaneStopsParticles)
 TEST(ClothSimulator, DefaultGroundPlaneIsFarBelow)
 {
     ClothSimulator sim;
-    sim.initialize(smallConfig());
+    sim.initialize(clothSmallConfig());
     EXPECT_LT(sim.getGroundPlane(), -100.0f);
 }
 
@@ -249,7 +249,7 @@ TEST(ClothSimulator, DefaultGroundPlaneIsFarBelow)
 TEST(ClothSimulator, SphereCollisionPushesParticlesOut)
 {
     ClothSimulator sim;
-    auto cfg = smallConfig();
+    auto cfg = clothSmallConfig();
     cfg.gravity = glm::vec3(0, -20, 0);  // Strong gravity
     sim.initialize(cfg);
 
@@ -276,7 +276,7 @@ TEST(ClothSimulator, SphereCollisionPushesParticlesOut)
 TEST(ClothSimulator, ClearSphereColliders)
 {
     ClothSimulator sim;
-    sim.initialize(smallConfig());
+    sim.initialize(clothSmallConfig());
 
     sim.addSphereCollider(glm::vec3(0), 1.0f);
     sim.addSphereCollider(glm::vec3(1), 2.0f);
@@ -294,7 +294,7 @@ TEST(ClothSimulator, ClearSphereColliders)
 TEST(ClothSimulator, WindAppliesForce)
 {
     ClothSimulator sim;
-    auto cfg = smallConfig();
+    auto cfg = clothSmallConfig();
     cfg.gravity = glm::vec3(0.0f);  // No gravity to isolate wind effect
     sim.initialize(cfg);
 
@@ -324,7 +324,7 @@ TEST(ClothSimulator, WindAppliesForce)
 TEST(ClothSimulator, WindVelocityAccessor)
 {
     ClothSimulator sim;
-    sim.initialize(smallConfig());
+    sim.initialize(clothSmallConfig());
 
     sim.setWind(glm::vec3(0, 0, 1), 5.0f);
     glm::vec3 wv = sim.getWindVelocity();
@@ -336,7 +336,7 @@ TEST(ClothSimulator, WindVelocityAccessor)
 TEST(ClothSimulator, ZeroWindStrengthHasNoEffect)
 {
     ClothSimulator sim;
-    auto cfg = smallConfig();
+    auto cfg = clothSmallConfig();
     cfg.gravity = glm::vec3(0.0f);
     sim.initialize(cfg);
 
@@ -360,7 +360,7 @@ TEST(ClothSimulator, ZeroWindStrengthHasNoEffect)
 TEST(ClothSimulator, NormalsAreUnitLength)
 {
     ClothSimulator sim;
-    sim.initialize(smallConfig());
+    sim.initialize(clothSmallConfig());
 
     // Simulate a few frames to deform the cloth
     for (int i = 0; i < 10; ++i)
@@ -381,7 +381,7 @@ TEST(ClothSimulator, NormalsAreUnitLength)
 TEST(ClothSimulator, FlatClothHasUpwardNormals)
 {
     ClothSimulator sim;
-    auto cfg = smallConfig();
+    auto cfg = clothSmallConfig();
     cfg.gravity = glm::vec3(0.0f);  // Keep cloth flat
     sim.initialize(cfg);
 
@@ -544,7 +544,7 @@ TEST(ClothSimulator, TooSmallGridRejectsInitialization)
 TEST(ClothSimulator, SubstepsSetter)
 {
     ClothSimulator sim;
-    sim.initialize(smallConfig());
+    sim.initialize(clothSmallConfig());
 
     sim.setSubsteps(20);
     EXPECT_EQ(sim.getConfig().substeps, 20);
@@ -558,7 +558,7 @@ TEST(ClothSimulator, SubstepsSetter)
 TEST(ClothSimulator, SyncBuffersOnlyDoesNotIntegrate_Cl2)
 {
     ClothSimulator sim;
-    sim.initialize(smallConfig());
+    sim.initialize(clothSmallConfig());
     // Run one tick to populate normals + warm caches.
     sim.simulate(1.0f / 60.0f);
 
@@ -588,7 +588,7 @@ TEST(ClothSimulator, SyncBuffersOnlyDoesNotIntegrate_Cl2)
 TEST(ClothSimulator, SubstepsClampedToMaxSubsteps_Cl7)
 {
     ClothSimulator sim;
-    sim.initialize(smallConfig());
+    sim.initialize(clothSmallConfig());
 
     sim.setSubsteps(MAX_SUBSTEPS + 100);
     EXPECT_EQ(sim.getConfig().substeps, MAX_SUBSTEPS);
@@ -615,7 +615,7 @@ TEST(ClothSimulator, NotInitializedBeforeInit)
 TEST(ClothSimulator, ZeroDeltaTimeIsNoop)
 {
     ClothSimulator sim;
-    sim.initialize(smallConfig());
+    sim.initialize(clothSmallConfig());
 
     glm::vec3 p0 = sim.getPositions()[0];
     sim.simulate(0.0f);
@@ -625,7 +625,7 @@ TEST(ClothSimulator, ZeroDeltaTimeIsNoop)
 TEST(ClothSimulator, NegativeDeltaTimeIsNoop)
 {
     ClothSimulator sim;
-    sim.initialize(smallConfig());
+    sim.initialize(clothSmallConfig());
 
     glm::vec3 p0 = sim.getPositions()[0];
     sim.simulate(-1.0f);
@@ -639,7 +639,7 @@ TEST(ClothSimulator, NegativeDeltaTimeIsNoop)
 TEST(ClothSimulator, PinOutOfBoundsIsSafe)
 {
     ClothSimulator sim;
-    sim.initialize(smallConfig());
+    sim.initialize(clothSmallConfig());
 
     // Should not crash
     sim.pinParticle(9999, glm::vec3(0));
@@ -655,7 +655,7 @@ TEST(ClothSimulator, PinOutOfBoundsIsSafe)
 TEST(ClothSimulator, PlaneColliderPushesParticlesAbove)
 {
     ClothSimulator sim;
-    auto cfg = smallConfig();
+    auto cfg = clothSmallConfig();
     cfg.gravity = glm::vec3(0, -20, 0);  // Strong gravity to pull cloth down
     sim.initialize(cfg);
 
@@ -679,7 +679,7 @@ TEST(ClothSimulator, PlaneColliderPushesParticlesAbove)
 TEST(ClothSimulator, PlaneColliderRejectsZeroNormal)
 {
     ClothSimulator sim;
-    sim.initialize(smallConfig());
+    sim.initialize(clothSmallConfig());
 
     // Zero-length normal should be rejected
     bool result = sim.addPlaneCollider(glm::vec3(0, 0, 0), 0.0f);
@@ -693,7 +693,7 @@ TEST(ClothSimulator, PlaneColliderRejectsZeroNormal)
 TEST(ClothSimulator, CylinderColliderPushesParticlesOut)
 {
     ClothSimulator sim;
-    auto cfg = smallConfig();
+    auto cfg = clothSmallConfig();
     cfg.gravity = glm::vec3(0, -9.81f, 0);
     sim.initialize(cfg);
 
@@ -739,7 +739,7 @@ TEST(ClothSimulator, CylinderColliderPushesParticlesOut)
 TEST(ClothSimulator, BoxColliderPushesParticlesOut)
 {
     ClothSimulator sim;
-    auto cfg = smallConfig();
+    auto cfg = clothSmallConfig();
     cfg.gravity = glm::vec3(0, -20, 0);  // Strong gravity
     sim.initialize(cfg);
 
@@ -768,7 +768,7 @@ TEST(ClothSimulator, BoxColliderPushesParticlesOut)
 TEST(ClothSimulator, CaptureRestPositionsAndRebuildLRA)
 {
     ClothSimulator sim;
-    auto cfg = smallConfig();
+    auto cfg = clothSmallConfig();
     sim.initialize(cfg);
 
     // Pin the top row (first 4 particles in a 4x4 grid)
@@ -805,7 +805,7 @@ TEST(ClothSimulator, CaptureRestPositionsAndRebuildLRA)
 TEST(ClothSimulator, RebuildLRAWithNoPinsDoesNothing)
 {
     ClothSimulator sim;
-    sim.initialize(smallConfig());
+    sim.initialize(clothSmallConfig());
 
     // No particles are pinned — rebuildLRA should not crash
     sim.rebuildLRA();
@@ -834,7 +834,7 @@ TEST(ClothSimulator, RebuildLRAWithNoPinsDoesNothing)
 TEST(ClothSimulator, BuildLRAEachNonPinnedParticleGetsExactlyOneTether_Pe8)
 {
     ClothSimulator sim;
-    auto cfg = smallConfig(8, 8);
+    auto cfg = clothSmallConfig(8, 8);
     sim.initialize(cfg);
 
     // Pin two opposite corners.
@@ -863,7 +863,7 @@ TEST(ClothSimulator, BuildLRAEachNonPinnedParticleGetsExactlyOneTether_Pe8)
 TEST(ClothSimulator, BuildLRAPicksNearestPinAndExactDistance_Pe8)
 {
     ClothSimulator sim;
-    auto cfg = smallConfig(8, 8);
+    auto cfg = clothSmallConfig(8, 8);
     sim.initialize(cfg);
 
     const glm::vec3* pos = sim.getPositions();
@@ -913,7 +913,7 @@ TEST(ClothSimulator, BuildLRAMatchesBruteForceOnDenseScatteredPins_Pe8)
     // pins at corners, edges, and interior cells; particles whose nearest pin
     // is across multiple bucket cells away.
     ClothSimulator sim;
-    auto cfg = smallConfig(16, 16);
+    auto cfg = clothSmallConfig(16, 16);
     cfg.spacing = 0.5f;  // Mix spacing scales so the bucket sizing isn't trivial.
     sim.initialize(cfg);
 
@@ -960,7 +960,7 @@ TEST(ClothSimulator, BuildLRAMatchesBruteForceOnDenseScatteredPins_Pe8)
 TEST(ClothSimulator, BuildLRASinglePinTethersEverythingToIt_Pe8)
 {
     ClothSimulator sim;
-    auto cfg = smallConfig(8, 8);
+    auto cfg = clothSmallConfig(8, 8);
     sim.initialize(cfg);
 
     const glm::vec3* pos = sim.getPositions();
@@ -986,7 +986,7 @@ TEST(ClothSimulator, BuildLRARebuildIsIdempotent_Pe8)
     // Calling rebuildLRA() twice with no pin changes should produce the same
     // constraint set — no duplicates, no drift.
     ClothSimulator sim;
-    auto cfg = smallConfig(8, 8);
+    auto cfg = clothSmallConfig(8, 8);
     sim.initialize(cfg);
 
     const glm::vec3* pos = sim.getPositions();

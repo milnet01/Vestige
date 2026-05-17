@@ -872,9 +872,11 @@ TEST_F(AdvancedPhysicsIntegration, FractureAndMeasureFragments)
         totalVolume += frag.volume;
     }
 
-    // Original box volume = 1.0 (unit cube)
-    // Fragments may not perfectly sum due to Voronoi approximation
-    EXPECT_GT(totalVolume, 0.1f);
+    // Original box volume = 1.0 (unit cube). Voronoi-cell clipping loses a
+    // small slice (~2-3% in current implementation); a tight ±5% band still
+    // catches the regressions the old > 0.1f gate would have missed (a 10×
+    // volume loss, double-counted fragments, or fragment-list truncation).
+    EXPECT_NEAR(totalVolume, 1.0f, 0.05f);
 }
 
 // ============================================================

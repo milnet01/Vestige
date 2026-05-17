@@ -24,6 +24,8 @@ namespace fs = std::filesystem;
 namespace Vestige::ObjMtlWarning::Test
 {
 
+using Vestige::Testing::countWarningsContaining;
+
 class ObjMtlWarningTest : public ::testing::Test
 {
 protected:
@@ -52,19 +54,7 @@ protected:
         std::ofstream{m_objPath} << body;
     }
 
-    static int countWarningsContaining(const std::string& needle)
-    {
-        int count = 0;
-        for (const auto& e : Logger::getEntries())
-        {
-            if (e.level == LogLevel::Warning
-                && e.message.find(needle) != std::string::npos)
-            {
-                ++count;
-            }
-        }
-        return count;
-    }
+    // countWarningsContaining is the shared helper in test_helpers.h.
 };
 
 TEST_F(ObjMtlWarningTest, UsemtlEmitsOneWarning_D4)
@@ -86,7 +76,7 @@ TEST_F(ObjMtlWarningTest, UsemtlEmitsOneWarning_D4)
     EXPECT_TRUE(ObjLoader::load(m_objPath.string(), verts, idx));
     EXPECT_FALSE(verts.empty());
     EXPECT_EQ(idx.size(), 6u);  // two triangles
-    EXPECT_EQ(countWarningsContaining("MTL not supported"), 1);
+    EXPECT_EQ(countWarningsContaining("MTL not supported"), 1u);
 }
 
 TEST_F(ObjMtlWarningTest, MtllibEmitsOneWarning_D4)
@@ -101,7 +91,7 @@ TEST_F(ObjMtlWarningTest, MtllibEmitsOneWarning_D4)
     std::vector<Vertex> verts;
     std::vector<uint32_t> idx;
     EXPECT_TRUE(ObjLoader::load(m_objPath.string(), verts, idx));
-    EXPECT_EQ(countWarningsContaining("MTL not supported"), 1);
+    EXPECT_EQ(countWarningsContaining("MTL not supported"), 1u);
 }
 
 TEST_F(ObjMtlWarningTest, NoMtlDirectivesNoWarning_D4)
@@ -117,7 +107,7 @@ TEST_F(ObjMtlWarningTest, NoMtlDirectivesNoWarning_D4)
     std::vector<Vertex> verts;
     std::vector<uint32_t> idx;
     EXPECT_TRUE(ObjLoader::load(m_objPath.string(), verts, idx));
-    EXPECT_EQ(countWarningsContaining("MTL not supported"), 0);
+    EXPECT_EQ(countWarningsContaining("MTL not supported"), 0u);
 }
 
 }  // namespace Vestige::ObjMtlWarning::Test

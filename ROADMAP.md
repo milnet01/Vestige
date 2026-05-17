@@ -745,6 +745,71 @@ The test surface has grown to 3146 tests across 400 suites over Phases 9–10.9 
 
 This slice is **non-blocking** for Phase 11 — it pays down test-suite debt rather than gating new features. Schedule between Phase 10.9 closure and Phase 11A start, or interleave with Phase 11A bring-up if test-suite churn from new gameplay code makes it worth doing in stages.
 
+### 🧪 Test Audit 2026-05-17 — Slice 19 follow-ups
+Framework: GoogleTest via ctest. Files scanned: 188. Dimensions: 18 (performance, flakiness, duplication, isolation, determinism, accuracy, security, verbosity, naming, coverage_gaps, splitting, fixtures, assertions, hardcoded_data, setup_teardown, parametrisation, error_handling, doc_strings). Raw findings: 520. Actionable after triage: 94. **Same-session fixes:** `countWarningsContaining` level-filter bug + 3-file extraction to `test_helpers.h`; `LoggerTest` fixture (snapshot/restore level + entries) + `yield()` in concurrent-logging spin-waits; 11 `EXPECT_NE(&ref, nullptr)` tautologies in `test_domain_systems.cpp` replaced with `(void)`-cast accessors; `Logger::clearEntries()` added to `test_cube_loader_hardening.cpp::TearDown`; `ConstraintOrdering.SimulateOneFrameDoesNotInvalidateWithPinnedRow` widened from `isInitialized()` survival to NaN-scan + initialised. Triaged false positives + verification notes: `docs/private/test-audit/false-positives.md`.
+
+#### Duplication
+- [x] **Ts19-D1.** Remove three forwarding wrappers (`smallConfig` / `smallClothConfig`) in `tests/test_cloth_{simulator,collision,solver_improvements}.cpp` — replace ~50 call-sites with `Testing::clothSmallConfig(...)` and delete the local stubs. (Slice 18 Ts3 extracted the body; the stubs were left behind.)
+- [x] **Ts19-D2.** `makeTestSkeleton` is duplicated across `tests/test_advanced_physics.cpp`, `tests/test_motion_matching.cpp`, `tests/test_crossfade.cpp` (and 1-2 more animation files). Extract to a shared header.
+- [x] **Ts19-D3.** `UITheme::defaultTheme()` is constructed inline at 30+ call sites across `tests/test_ui_theme_accessibility.cpp`, `tests/test_ui_runtime_panel.cpp`, `tests/test_ui_system_screen_stack.cpp`, `tests/test_ui_widgets.cpp`. Extract to a `UIThemeFixture` (or one shared helper).
+- [x] **Ts19-D4.** `PhysicsWorld` init/shutdown boilerplate appears 7+ times across `tests/test_physics_world.cpp`, `tests/test_physics_constraint.cpp`, `tests/test_physics_character_controller.cpp`. Extract a `PhysicsWorldTest` fixture.
+- [x] **Ts19-D5.** Atlas-JSON-to-temp-file helpers duplicated in `tests/test_sprite_atlas.cpp:22`, `tests/test_sprite_panel.cpp:25`, `tests/test_sprite_renderer.cpp:27`. Extract to `sprite_test_helpers.h`.
+- [x] **Ts19-D6.** `makeIdentityLut` / `lutLookup_cpu` in `tests/test_color_grading_parity.cpp` are byte-identical to `generateNeutralLut` / `lutLookup` in `tests/test_color_grading.cpp`. Extract to `color_grading_test_helpers.h`.
+
+#### Fixtures
+- [x] **Ts19-F1.** `DefaultHudPrefab` 9 tests in `tests/test_default_hud.cpp` each reconstruct `UICanvas` + `UITheme` + `UISystem`. Extract a fixture.
+- [x] **Ts19-F2.** `UISystemFocus` 12 tests in `tests/test_ui_focus_navigation.cpp` construct `UISystem` on the stack with no fixture. Convert to `TEST_F`.
+- [x] **Ts19-F3.** `ControllerFixture` in `tests/test_character_controller_2d.cpp:23` is a plain struct used inline. Convert to a proper `::testing::Test` fixture so ctor/`SetUp` failures are reported cleanly.
+
+#### Assertions
+- [x] **Ts19-A1.** `tests/test_advanced_physics.cpp:877` — volume-conservation `EXPECT_GT(totalVolume, 0.1f)` is too loose to detect a real loss. Tighten to the analytical fragment-sum value with ~1% tolerance.
+- [x] **Ts19-A2.** `tests/test_ik_solver.cpp:43` — `ReachableTarget` uses `startChanged || midChanged`; a single-joint regression (one joint locked) still passes. Use `&&` for the unambiguous two-joint reach case.
+- [x] **Ts19-A3.** `tests/test_scene_serializer.cpp:194` — `EntityJsonShapeReferenceDocument` / `SceneEnvelopeShapeReferenceDocument` assert values the test itself just wrote. Replace with a real round-trip or mark explicitly as a documentation snapshot.
+- [x] **Ts19-A4.** `tests/test_cloth_simulator.cpp:335` — `GetConstraintCount` asserts `EXPECT_GT(count, 0u)`; analytical value for a 3×3 stretch+shear+bend grid is 26. Tighten to `EXPECT_GE(count, 26u)`.
+
+#### Flakiness / tolerances
+- [x] **Ts19-FL1.** `tests/test_root_motion.cpp:112,170` — `EXPECT_NEAR` tolerances of 0.2/0.5 on analytically exact linear-interpolated deltas. Tighten to ~1e-3.
+- [x] **Ts19-FL2.** `tests/test_particle_data.cpp:150` — `SpawnsParticlesOnUpdate` accepts ±50% on a deterministic emission. Replace with the exact expected count.
+
+#### Isolation
+- [x] **Ts19-I1.** `tests/test_color_grading_parity.cpp:140` — `ASSERT_TRUE(prog.valid())` aborts after `lutTex` allocation but before `glDeleteTextures` → GL texture leak on failure. Wrap `lutTex` in a `ScopedGLTexture` RAII guard.
+- [x] **Ts19-I2.** `tests/test_settings.cpp:81` — `ConfigPath` tests use manual `setenv`/`unsetenv` save+restore. Extract an `EnvGuard` RAII helper so an early-exit path can't pollute later tests.
+
+#### Coverage gaps
+- [x] **Ts19-CG1.** `tests/test_rigid_body.cpp:59` — `destroyBody()` on a dynamic body is never explicitly tested; a Jolt body-remove leak for dynamic bodies wouldn't be caught.
+- [x] **Ts19-CG2.** `tests/test_gpu_cloth_simulator.cpp:461` — `reset()` before `initialize()` contract is unpinned. Add `ResetBeforeInitIsNoOp`.
+- [x] **Ts19-CG3.** `tests/test_terrain_size_caps.cpp` — no happy-path test; the acceptance branch of the validator is untested. Add `TerrainValidationAcceptsWithinLimits`.
+- [x] **Ts19-CG4.** `tests/test_pbr_material.cpp:232` — `AlphaCutoffRoundTrips` / `DoubleSidedToggles` use `EXPECT_NO_THROW` only; no getter exists. Expose getters or use the serializer round-trip to assert the value.
+
+#### Accuracy
+- [x] **Ts19-AC1.** `tests/test_color_grading.cpp:180` — warm/cool/contrast/desaturate transform tests reimplement the production formula locally. Drive via real `ColorGradingLut` (upload + sample, parity-test style) so production drift is detected.
+
+#### Parametrisation
+- [x] **Ts19-PA1.** `tests/test_cloth_presets.cpp:21,35,49,64` — 5-element preset initializer list copy-pasted across 4 tests; adding a preset requires 4 edits. Convert to `TEST_P` over `ValuesIn(allPresetsExceptCustom)`. Also: `CUSTOM` is in the name-list test but missing from the mass/substeps/compliance property checks.
+
+#### Naming (LOW, opportunistic)
+- [x] **Ts19-N1.** `tests/test_fabric_material.cpp:231` — typo `FineLInenMatchesExistingPreset` → `FineLinenMatchesExistingPreset`.
+- [x] **Ts19-N2.** `tests/test_ibl.cpp:210` — typo `RoughSurfaceSpreadssamples` → `RoughSurfaceSpreadsSamples`.
+- [x] **Ts19-N3.** `tests/test_ruler_tool.cpp:41` — `SecondClickCompleteMeasurement` → `SecondClickCompletesMeasurement`.
+
+#### Performance (LOW)
+- [x] **Ts19-P1.** `tests/test_cloth_simulator.cpp:226` — `GroundPlaneStopsParticles` runs 300 frames at 5 substeps (1500 XPBD iters) for a trivial floor check; cloth reaches the floor in <60 frames at g=-9.81. Reduce to 60 frames.
+- [x] **Ts19-P2.** `tests/test_memory_tracker.cpp` — `MemoryTracker::update()` reads sysfs 120× in a loop. Reduce to 1–3 samples; the contract is observability, not statistical convergence.
+
+**Scope.** All Ts19 items are non-blocking. Either pick up incrementally as adjacent files are touched (recommended) or bundle into one cleanup commit if a quieter cycle opens between Phase 11 slices. Per-finding suppressions and false positives are recorded in `docs/private/test-audit/false-positives.md`.
+
+**Implementation (2026-05-18).** All 28 Ts19 items shipped in a single sweep. Per-dimension highlights:
+- **Duplication (D1–D6):** new shared headers `tests/skeleton_test_helpers.h`, `tests/sprite_test_helpers.h`, `tests/physics_test_helpers.h`, `tests/color_grading_test_helpers.h` (joining the existing `cloth_test_helpers.h`); wrappers removed across ~70 call-sites.
+- **Fixtures (F1–F3):** `DefaultHudPrefabTest`, `UISystemFocusTest`, `UISystemScreenStackTest`, `MenuPrefabsTest`, `CharacterController2DTest` introduced; `ControllerFixture` promoted from struct to `::testing::Test`.
+- **Assertions (A1–A4):** fracture volume tightened to ±5% (was > 0.1f on a unit cube); IK `ReachableTarget` switched `||`→`&&`; scene-serializer tautologies replaced with real `serializeEntity` + `saveScene` round-trip; constraint count expectation tightened from > 0 to ≥ 26.
+- **Flakiness (FL1–FL2):** root-motion tolerances tightened from 0.2/0.5 to 1e-3 (linear interpolation is exact); particle spawn from ±50% to exact (= 10).
+- **Isolation (I1–I2):** `ScopedGLTexture` RAII wraps the LUT texture in `test_color_grading_parity.cpp`; `EnvGuard` RAII for env-var save/restore in `test_settings.cpp` ConfigPath tests.
+- **Coverage (CG1–CG4):** added `RigidBody.DestroyDynamicBodyClearsActiveCount`, `GpuClothResetSemantics.ResetBeforeInitIsNoOp`, `TerrainSizeCapsGL.DeserializeAcceptsWithinLimits_CG3`; PBR `AlphaCutoffRoundTrips` / `DoubleSidedToggles` switched from `EXPECT_NO_THROW` to real getter round-trip.
+- **Accuracy (AC1):** extracted warm/cool/contrast/desaturate transforms into `engine/renderer/color_grading_presets.{h,cpp}`; both production `ColorGradingLut::initialize()` and the unit tests now call the same named functions, so drift is structurally impossible.
+- **Parametrisation (PA1):** four cloth-preset tests collapsed into one `TEST_P` over `ValuesIn(...)` covering all six presets — including CUSTOM, which was missed by three of the four old tests.
+- **Naming (N1–N3):** three typos fixed (`FineLInen`→`FineLinen`, `RoughSurfaceSpreadssamples`→`RoughSurfaceSpreadsSamples`, `SecondClickComplete`→`SecondClickCompletes`).
+- **Performance (P1–P2):** cloth ground-plane test cut from 300 to 60 frames; memory-tracker sysfs polling cut from 120× to 3×.
+
 ### Milestone
 Every Phase 10.7 design-doc promise is verified by a test authored **from the design doc, not from the code**. Every dead-code item is either wired or deleted. Phase 11A's determinism contract is backed by regression tests. Phase 10.8 CM3 / CM4 / CM7 prerequisites (`sphereCast`, centripetal spline, arc-length evaluator) are live. Slice 0 ROADMAP claims are grep-true. Slices 14–17 close the second /indie-review's scripting / audio / shader-parity / cloth cross-cutting findings. Slice 18 reconciles the test-suite surface itself via cold-eyes review. After Slice 17 + 18, the next slice of Phase 10.8 can ship without inheriting remediation debt or load-bearing-test ambiguity.
 

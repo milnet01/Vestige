@@ -14,7 +14,28 @@
 
 using namespace Vestige;
 
-TEST(LoggerTest, SetAndGetLevel)
+// /test-audit 2026-05-17: Logger level + ring buffer are process-global.
+// Snapshot in SetUp and restore in TearDown so a mid-test failure can't
+// leak the level into another test in the binary.
+class LoggerTest : public ::testing::Test
+{
+protected:
+    LogLevel m_savedLevel = LogLevel::Trace;
+
+    void SetUp() override
+    {
+        m_savedLevel = Logger::getLevel();
+        Logger::clearEntries();
+    }
+
+    void TearDown() override
+    {
+        Logger::setLevel(m_savedLevel);
+        Logger::clearEntries();
+    }
+};
+
+TEST_F(LoggerTest, SetAndGetLevel)
 {
     Logger::setLevel(LogLevel::Warning);
     EXPECT_EQ(Logger::getLevel(), LogLevel::Warning);
@@ -23,7 +44,7 @@ TEST(LoggerTest, SetAndGetLevel)
     EXPECT_EQ(Logger::getLevel(), LogLevel::Trace);
 }
 
-TEST(LoggerTest, AllLevelsDoNotCrash)
+TEST_F(LoggerTest, AllLevelsDoNotCrash)
 {
     Logger::setLevel(LogLevel::Trace);
 
@@ -35,9 +56,8 @@ TEST(LoggerTest, AllLevelsDoNotCrash)
     EXPECT_NO_THROW(Logger::fatal("test fatal"));
 }
 
-TEST(LoggerTest, LevelFilteringDoesNotCrash)
+TEST_F(LoggerTest, LevelFilteringDoesNotCrash)
 {
-    // Set level high — trace/debug should be silently skipped
     Logger::setLevel(LogLevel::Error);
 
     EXPECT_NO_THROW(Logger::trace("should be filtered"));
@@ -45,9 +65,6 @@ TEST(LoggerTest, LevelFilteringDoesNotCrash)
     EXPECT_NO_THROW(Logger::info("should be filtered"));
     EXPECT_NO_THROW(Logger::warning("should be filtered"));
     EXPECT_NO_THROW(Logger::error("should appear"));
-
-    // Reset to default
-    Logger::setLevel(LogLevel::Trace);
 }
 
 // F9: Logger thread-safety (Phase 10.9 Slice 1)
@@ -63,9 +80,8 @@ TEST(LoggerTest, LevelFilteringDoesNotCrash)
 // buffer keeps exactly MAX_ENTRIES when the total overflows. Any lock-free
 // deque would fail these counts; the fix is a std::mutex around the mutable
 // state inside Logger::log().
-TEST(LoggerTest, ConcurrentLoggingPreservesAllEntries_F9)
+TEST_F(LoggerTest, ConcurrentLoggingPreservesAllEntries_F9)
 {
-    Logger::clearEntries();
     Logger::setLevel(LogLevel::Trace);
 
     constexpr int NUM_THREADS = 8;
@@ -78,9 +94,11 @@ TEST(LoggerTest, ConcurrentLoggingPreservesAllEntries_F9)
     for (int t = 0; t < NUM_THREADS; ++t)
     {
         threads.emplace_back([t, &start]() {
+            // yield (instead of bare spin) so a single-vCPU CI runner doesn't
+            // starve the main thread between thread creation and start.store.
             while (!start.load(std::memory_order_acquire))
             {
-                // Spin until all threads are ready, to maximise overlap.
+                std::this_thread::yield();
             }
             for (int i = 0; i < MSGS_PER_THREAD; ++i)
             {
@@ -98,9 +116,8 @@ TEST(LoggerTest, ConcurrentLoggingPreservesAllEntries_F9)
               static_cast<size_t>(NUM_THREADS * MSGS_PER_THREAD));
 }
 
-TEST(LoggerTest, ConcurrentLoggingRespectsRingBufferCap_F9)
+TEST_F(LoggerTest, ConcurrentLoggingRespectsRingBufferCap_F9)
 {
-    Logger::clearEntries();
     Logger::setLevel(LogLevel::Trace);
 
     // Force overflow: 8 threads * 500 = 4000 messages, MAX_ENTRIES = 1000.
@@ -118,6 +135,7 @@ TEST(LoggerTest, ConcurrentLoggingRespectsRingBufferCap_F9)
         threads.emplace_back([t, &start]() {
             while (!start.load(std::memory_order_acquire))
             {
+                std::this_thread::yield();
             }
             for (int i = 0; i < MSGS_PER_THREAD; ++i)
             {

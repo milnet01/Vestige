@@ -33,6 +33,8 @@ namespace fs = std::filesystem;
 namespace Vestige::GltfFsSandbox::Test
 {
 
+using Vestige::Testing::countWarningsContaining;
+
 class GltfFsSandboxTest : public ::testing::Test
 {
 protected:
@@ -77,20 +79,7 @@ protected:
         out.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
     }
 
-    /// @brief Counts ring-buffer warnings whose message contains @a needle.
-    static size_t countWarningsContaining(const std::string& needle)
-    {
-        size_t n = 0;
-        for (const auto& e : Logger::getEntries())
-        {
-            if (e.level == LogLevel::Warning
-                && e.message.find(needle) != std::string::npos)
-            {
-                ++n;
-            }
-        }
-        return n;
-    }
+    // countWarningsContaining is the shared helper in test_helpers.h.
 };
 
 TEST_F(GltfFsSandboxTest, SiblingBufferUriIsAccepted_D2)

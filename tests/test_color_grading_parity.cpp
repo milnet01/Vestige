@@ -19,6 +19,7 @@
 /// ~`1/255 ≈ 4e-3` per channel. Tolerance set at `5e-3` covers the
 /// quantise + dequantise round-trip without masking real divergence.
 
+#include "color_grading_test_helpers.h"
 #include "gl_test_fixture.h"
 #include "shader_parity_helpers.h"
 
@@ -36,29 +37,11 @@ namespace Vestige::Test
 namespace
 {
 
-/// Identity LUT: voxel (i,j,k) holds (i/(N-1), j/(N-1), k/(N-1)) as
-/// 8-bit RGBA. Layout matches `tests/test_color_grading.cpp::generateNeutralLut`
-/// (B-major: index = ((b * N + g) * N + r) * 4) so the GL upload sees
-/// the same memory layout the CPU helper indexes against.
+// /test-audit 2026-05-17 Ts19-D6: canonical LUT-bytes builder lives in
+// color_grading_test_helpers.h, shared with the CPU-only test file.
 std::vector<unsigned char> makeIdentityLut(int size)
 {
-    std::vector<unsigned char> data(static_cast<size_t>(size * size * size) * 4);
-    float maxIdx = static_cast<float>(size - 1);
-    for (int b = 0; b < size; ++b)
-    {
-        for (int g = 0; g < size; ++g)
-        {
-            for (int r = 0; r < size; ++r)
-            {
-                size_t idx = static_cast<size_t>((b * size * size + g * size + r)) * 4;
-                data[idx + 0] = static_cast<unsigned char>(static_cast<float>(r) / maxIdx * 255.0f + 0.5f);
-                data[idx + 1] = static_cast<unsigned char>(static_cast<float>(g) / maxIdx * 255.0f + 0.5f);
-                data[idx + 2] = static_cast<unsigned char>(static_cast<float>(b) / maxIdx * 255.0f + 0.5f);
-                data[idx + 3] = 255;
-            }
-        }
-    }
-    return data;
+    return ::Vestige::Testing::makeNeutralLutBytes(size);
 }
 
 /// Upload @a data as a `GL_RGBA8` 3D texture with linear filtering
@@ -79,24 +62,41 @@ GLuint uploadLut3D(const std::vector<unsigned char>& data, int size)
     return tex;
 }
 
-/// CPU oracle — formula-identical to the C++ helper in
-/// `tests/test_color_grading.cpp::lutLookup`. Re-stated here so this
-/// file is self-contained and the comparator is independent.
+/// RAII wrapper for a GL texture name. /test-audit 2026-05-17 Ts19-I1:
+/// the prior tests called `glDeleteTextures` at the end of the function,
+/// so any earlier `ASSERT_TRUE` (e.g. shader-compile failure) would abort
+/// the function and leak the texture into the next test's GL state.
+class ScopedGLTexture
+{
+public:
+    ScopedGLTexture() = default;
+    explicit ScopedGLTexture(GLuint id) : m_id(id) {}
+    ~ScopedGLTexture() { if (m_id) glDeleteTextures(1, &m_id); }
+    ScopedGLTexture(const ScopedGLTexture&) = delete;
+    ScopedGLTexture& operator=(const ScopedGLTexture&) = delete;
+    ScopedGLTexture(ScopedGLTexture&& o) noexcept : m_id(o.m_id) { o.m_id = 0; }
+    ScopedGLTexture& operator=(ScopedGLTexture&& o) noexcept
+    {
+        if (this != &o)
+        {
+            if (m_id) glDeleteTextures(1, &m_id);
+            m_id = o.m_id;
+            o.m_id = 0;
+        }
+        return *this;
+    }
+    GLuint id() const { return m_id; }
+    operator GLuint() const { return m_id; }
+private:
+    GLuint m_id = 0;
+};
+
+// /test-audit 2026-05-17 Ts19-D6: CPU LUT oracle lives in
+// color_grading_test_helpers.h, shared with the CPU-only test file.
 glm::vec3 lutLookup_cpu(const std::vector<unsigned char>& data, int size,
                         glm::vec3 color)
 {
-    glm::vec3 c = glm::clamp(color, 0.0f, 1.0f);
-    float s = static_cast<float>(size);
-    glm::vec3 coord = c * ((s - 1.0f) / s) + glm::vec3(0.5f / s);
-
-    int r = std::clamp(static_cast<int>(coord.r * static_cast<float>(size - 1) + 0.5f), 0, size - 1);
-    int g = std::clamp(static_cast<int>(coord.g * static_cast<float>(size - 1) + 0.5f), 0, size - 1);
-    int b = std::clamp(static_cast<int>(coord.b * static_cast<float>(size - 1) + 0.5f), 0, size - 1);
-
-    size_t idx = static_cast<size_t>((b * size * size + g * size + r)) * 4;
-    return { static_cast<float>(data[idx + 0]) / 255.0f,
-             static_cast<float>(data[idx + 1]) / 255.0f,
-             static_cast<float>(data[idx + 2]) / 255.0f };
+    return ::Vestige::Testing::lutLookupNearest(data, size, color);
 }
 
 // shader-source caching now lives in `readShaderFile` (basename-keyed) —
@@ -118,8 +118,8 @@ TEST_F(ColorGradingParityTest, IdentityLutAtVoxelCentresMatchesCpuLookup)
 
     constexpr int LUT_SIZE = 32;
     const auto lutData = makeIdentityLut(LUT_SIZE);
-    const GLuint lutTex = uploadLut3D(lutData, LUT_SIZE);
-    ASSERT_NE(lutTex, 0u);
+    ScopedGLTexture lutTex{uploadLut3D(lutData, LUT_SIZE)};
+    ASSERT_NE(lutTex.id(), 0u);
 
     // Bind LUT to texture unit 1 (unit 0 is reserved for the FBO target
     // in case the helper ever uses sampler bindings; safer to stay off it).
@@ -174,7 +174,7 @@ TEST_F(ColorGradingParityTest, IdentityLutAtVoxelCentresMatchesCpuLookup)
     }
 
     glBindTexture(GL_TEXTURE_3D, 0);
-    glDeleteTextures(1, &lutTex);
+    // lutTex frees itself when it leaves scope.
 }
 
 // =============================================================================
@@ -193,8 +193,8 @@ TEST_F(ColorGradingParityTest, ZeroIntensityIsExactPassthrough)
     constexpr int LUT_SIZE = 8;
     std::vector<unsigned char> killLut(static_cast<size_t>(LUT_SIZE * LUT_SIZE * LUT_SIZE) * 4, 0);
     for (size_t i = 3; i < killLut.size(); i += 4) killLut[i] = 255;  // alpha
-    const GLuint lutTex = uploadLut3D(killLut, LUT_SIZE);
-    ASSERT_NE(lutTex, 0u);
+    ScopedGLTexture lutTex{uploadLut3D(killLut, LUT_SIZE)};
+    ASSERT_NE(lutTex.id(), 0u);
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_3D, lutTex);
 
@@ -224,7 +224,7 @@ TEST_F(ColorGradingParityTest, ZeroIntensityIsExactPassthrough)
     EXPECT_FLOAT_EQ(gpu.b, input.z);
 
     glBindTexture(GL_TEXTURE_3D, 0);
-    glDeleteTextures(1, &lutTex);
+    // lutTex frees itself when it leaves scope.
 }
 
 // Phase 10.9 Slice 18 Ts1 cleanup: dropped

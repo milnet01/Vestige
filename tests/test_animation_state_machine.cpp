@@ -7,6 +7,7 @@
 #include "animation/skeleton_animator.h"
 #include "animation/skeleton.h"
 #include "animation/animation_clip.h"
+#include "skeleton_test_helpers.h"
 
 #include <gtest/gtest.h>
 #include <glm/glm.hpp>
@@ -17,17 +18,11 @@ using namespace Vestige;
 // Helpers
 // ---------------------------------------------------------------------------
 
+// /test-audit 2026-05-17 Ts19-D2: chain-skeleton builder shared with
+// test_root_motion.cpp + test_crossfade.cpp via skeleton_test_helpers.h.
 static std::shared_ptr<Skeleton> makeTestSkeleton()
 {
-    auto skel = std::make_shared<Skeleton>();
-    Joint j;
-    j.name = "root";
-    j.parentIndex = -1;
-    j.inverseBindMatrix = glm::mat4(1.0f);
-    j.localBindTransform = glm::mat4(1.0f);
-    skel->m_joints.push_back(j);
-    skel->m_rootJoints.push_back(0);
-    return skel;
+    return ::Vestige::Testing::makeJointChainSkeleton(1);
 }
 
 static std::shared_ptr<AnimationClip> makeClip(const std::string& name, float duration)

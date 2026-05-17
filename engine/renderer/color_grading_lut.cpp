@@ -4,6 +4,7 @@
 /// @file color_grading_lut.cpp
 /// @brief 3D LUT management for color grading post-processing.
 #include "renderer/color_grading_lut.h"
+#include "renderer/color_grading_presets.h"
 #include "utils/cube_loader.h"
 #include "core/logger.h"
 
@@ -73,46 +74,13 @@ void ColorGradingLut::initialize()
         return c;
     });
 
-    // Preset 1: Warm Golden (temple interiors)
-    addGeneratedPreset("Warm Golden", LUT_SIZE, [](const glm::vec3& c)
-    {
-        glm::vec3 out;
-        out.r = std::clamp(c.r * 1.05f + 0.02f, 0.0f, 1.0f);
-        out.g = c.g;
-        out.b = std::clamp(c.b * 0.85f - 0.02f, 0.0f, 1.0f);
-        // Gentle contrast S-curve
-        out = out * out * (3.0f - 2.0f * out);
-        return out;
-    });
-
-    // Preset 2: Cool Blue (night/exterior)
-    addGeneratedPreset("Cool Blue", LUT_SIZE, [](const glm::vec3& c)
-    {
-        glm::vec3 out;
-        out.r = std::clamp(c.r * 0.85f, 0.0f, 1.0f);
-        out.g = std::clamp(c.g * 0.95f + 0.02f, 0.0f, 1.0f);
-        out.b = std::clamp(c.b * 1.1f + 0.03f, 0.0f, 1.0f);
-        // Slight shadow lift
-        out += glm::vec3(0.02f);
-        out = glm::clamp(out, 0.0f, 1.0f);
-        return out;
-    });
-
-    // Preset 3: High Contrast (S-curve)
-    addGeneratedPreset("High Contrast", LUT_SIZE, [](const glm::vec3& c)
-    {
-        // Hermite smoothstep S-curve per channel
-        glm::vec3 out = c * c * (3.0f - 2.0f * c);
-        return out;
-    });
-
-    // Preset 4: Desaturated (vintage/muted)
-    addGeneratedPreset("Desaturated", LUT_SIZE, [](const glm::vec3& c)
-    {
-        float lum = 0.2126f * c.r + 0.7152f * c.g + 0.0722f * c.b;
-        glm::vec3 out = glm::mix(glm::vec3(lum), c, 0.5f);
-        return out;
-    });
+    // Presets 1–4: per-pixel transforms live in color_grading_presets.h
+    // so the unit tests in tests/test_color_grading.cpp drive the same
+    // production functions instead of re-implementing the formulas.
+    addGeneratedPreset("Warm Golden",   LUT_SIZE, ColorGradingPresets::warmGolden);
+    addGeneratedPreset("Cool Blue",     LUT_SIZE, ColorGradingPresets::coolBlue);
+    addGeneratedPreset("High Contrast", LUT_SIZE, ColorGradingPresets::highContrast);
+    addGeneratedPreset("Desaturated",   LUT_SIZE, ColorGradingPresets::desaturated);
 
     Logger::info("Color grading: " + std::to_string(m_presets.size()) + " LUT presets loaded");
 }

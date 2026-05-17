@@ -11,11 +11,9 @@
 #include "editor/panels/tilemap_panel.h"
 #include "renderer/sprite_atlas.h"
 #include "scene/tilemap_component.h"
+#include "sprite_test_helpers.h"
 
 #include <gtest/gtest.h>
-
-#include <filesystem>
-#include <fstream>
 
 using namespace Vestige;
 
@@ -24,21 +22,15 @@ namespace
 
 std::string writeAtlas()
 {
-    // Per-test scratch dir so parallel ctest processes don't collide.
-    const auto* info = ::testing::UnitTest::GetInstance()->current_test_info();
-    const std::string key = info ? info->name() : "unknown";
-    auto dir = std::filesystem::temp_directory_path() / ("vestige_sprite_panel_test_" + key);
-    std::filesystem::create_directories(dir);
-    const auto path = dir / "atlas.json";
-    std::ofstream out(path);
-    out << R"JSON({
+    return ::Vestige::Testing::writeAtlasJsonScratch(
+        "sprite_panel", "atlas.json",
+        R"JSON({
       "frames": [
         {"filename":"idle","frame":{"x":0,"y":0,"w":16,"h":16},
          "sourceSize":{"w":16,"h":16}}
       ],
       "meta": {"image":"test.png","size":{"w":16,"h":16}}
-    })JSON";
-    return path.string();
+    })JSON");
 }
 
 } // namespace

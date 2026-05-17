@@ -10,12 +10,11 @@
 /// ordering, batching, and instance packing.
 #include "renderer/sprite_atlas.h"
 #include "scene/sprite_component.h"
+#include "sprite_test_helpers.h"
 #include "systems/sprite_system.h"
 
 #include <gtest/gtest.h>
 
-#include <filesystem>
-#include <fstream>
 #include <memory>
 #include <vector>
 
@@ -26,22 +25,17 @@ namespace
 
 std::shared_ptr<SpriteAtlas> makeAtlas(const std::string& tag)
 {
-    // Per-test scratch dir so parallel ctest processes don't collide.
-    const auto* info = ::testing::UnitTest::GetInstance()->current_test_info();
-    const std::string key = info ? info->name() : "unknown";
-    auto dir = std::filesystem::temp_directory_path() / ("vestige_sprite_renderer_test_" + key);
-    std::filesystem::create_directories(dir);
-    const auto path = dir / (std::string("atlas_") + tag + ".json");
-    std::ofstream out(path);
-    out << R"JSON({
+    const std::string content =
+        std::string(R"JSON({
       "frames": [
         { "filename": "main", "frame": {"x":0,"y":0,"w":32,"h":32},
           "sourceSize": {"w":32,"h":32} }
       ],
-      "meta": { "image": ")JSON" << tag << R"JSON(.png", "size": {"w":32,"h":32} }
+      "meta": { "image": ")JSON") + tag + R"JSON(.png", "size": {"w":32,"h":32} }
     })JSON";
-    out.close();
-    return SpriteAtlas::loadFromJson(path.string());
+    const std::string path = ::Vestige::Testing::writeAtlasJsonScratch(
+        "sprite_renderer", "atlas_" + tag + ".json", content);
+    return SpriteAtlas::loadFromJson(path);
 }
 
 SpriteDrawEntry makeEntry(SpriteComponent& sc, uint32_t id,

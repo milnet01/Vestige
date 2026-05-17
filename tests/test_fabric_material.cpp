@@ -227,7 +227,7 @@ TEST(FabricPresetConversion, LighterFabricsHaveMoreWind)
     EXPECT_GT(chiffon.windStrength, leather.windStrength);
 }
 
-TEST(FabricPresetConversion, FineLInenMatchesExistingPreset)
+TEST(FabricPresetConversion, FineLinenMatchesExistingPreset)
 {
     // Fine Linen should produce values very close to the existing linenCurtain preset
     auto fabricPreset = FabricDatabase::toPresetConfig(FabricType::FINE_LINEN);

@@ -516,6 +516,23 @@ TEST_F(GpuClothResetSemantics, CaptureRestPositionsRefreshesSnapshotForReset_Cl5
     EXPECT_FLOAT_EQ(posAfter[0].z, capturedPin.z);
 }
 
+// /test-audit 2026-05-17 Ts19-CG2: reset() before initialize() is a
+// documented no-op (the implementation guards on `m_initialized`). Pin
+// the contract so a regression that drops the guard (and ends up
+// dispatching compute shaders against unallocated buffers) is caught at
+// test time, not at first user click on a fresh editor scene.
+TEST_F(GpuClothResetSemantics, ResetBeforeInitIsNoOp)
+{
+    GpuClothSimulator sim;
+    ASSERT_FALSE(sim.isInitialized());
+
+    EXPECT_NO_THROW(sim.reset());
+
+    // Still uninitialised — reset() must not have flipped the flag.
+    EXPECT_FALSE(sim.isInitialized());
+    EXPECT_EQ(sim.getPositions(), nullptr);
+}
+
 TEST_F(GpuClothResetSemantics, ResetThroughBackendInterface_Cl5)
 {
     // Same contract as the headline test, exercised through the

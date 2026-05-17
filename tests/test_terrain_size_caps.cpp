@@ -81,12 +81,32 @@ TEST(TerrainSizeCaps, DeserializeRejectsZeroMaxLodLevels_D8)
     EXPECT_FALSE(t.deserializeSettings(j));
 }
 
-// Note: we do NOT test the happy-path success case here because
-// `initialize()` requires a GL context and would crash without one.
-// The validator's job is to short-circuit *before* `initialize()`,
-// which the tests above pin by asserting `false` is returned for
-// every out-of-range case (proving the validator ran and rejected).
-// A combined acceptable-input test that exercises `initialize()`
-// would belong in a GL-context test harness (R2 follow-up).
+// /test-audit 2026-05-17 Ts19-CG3: a complete reject-list is only one
+// half of validator coverage; without a happy-path test the acceptance
+// branch is unexercised and a bug like "validator always returns false
+// for every input" would slip past the existing reject-only tests.
+//
+// `deserializeSettings(...)` tail-calls `initialize(config)`, which
+// needs a GL context to allocate textures + compile shaders — too
+// heavyweight for a validator-only check. The validator was extracted
+// into the static `Terrain::validateJsonConfig()` so the acceptance
+// branch is directly testable here without bringing GL into the suite.
+TEST(TerrainSizeCaps, ValidateJsonConfigAcceptsWithinLimits_CG3)
+{
+    nlohmann::json j;
+    // Smallest valid grid (3×3) with the smallest valid grid resolution
+    // and one LOD level — exercises every cap simultaneously.
+    j["width"]          = 3;
+    j["depth"]          = 3;
+    j["gridResolution"] = 3;
+    j["maxLodLevels"]   = 1;
+    EXPECT_TRUE(Terrain::validateJsonConfig(j));
+
+    // Sanity: the reject-tests above should still see false on these
+    // exact same caps, since validateJsonConfig is the source of truth
+    // the reject-tests reach through `deserializeSettings`.
+    j["width"] = 100000;
+    EXPECT_FALSE(Terrain::validateJsonConfig(j));
+}
 
 }  // namespace Vestige::TerrainSizeCap::Test

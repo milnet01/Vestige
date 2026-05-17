@@ -185,6 +185,12 @@ tools/audit/*IMPROVEMENTS*.md
 docs/PRE_OPEN_SOURCE_AUDIT.md
 docs/RECOMMENDED_ROUTINES.md
 
+# /test-audit internal artefacts — false-positive ledger, triaged
+# finding reports, MCP fold-in counter. Useful at audit time, not
+# engine documentation. Same rationale as the audit reports above.
+docs/private/
+.roadmap-counter
+
 # Non-redistributable assets — kept locally for the maintainer's use,
 # excluded from the public repo. See docs/PRE_OPEN_SOURCE_AUDIT.md §4.
 #
