@@ -43,6 +43,9 @@ protected:
 
     void SetUp() override
     {
+        // Reset process-wide sandbox up-front so a prior test's residual
+        // roots can never leak into this fixture (symmetric with TearDown).
+        CubeLoader::setSandboxRoots({});
         m_root = fs::temp_directory_path()
                / ("vestige_cube_hardening_test_" + Testing::vestigeTestStamp());
         std::error_code ec;

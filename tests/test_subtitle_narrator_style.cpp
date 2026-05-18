@@ -95,9 +95,13 @@ TEST(SubtitleNarratorStyle, NarratorStylesAreVisuallyDistinct_P6)
     const SubtitleStyle colour =
         styleFor(SubtitleCategory::Narrator, SubtitleNarratorStyle::Colour);
 
-    const bool colourDiffers = (italic.textColor != colour.textColor);
-    const bool italicDiffers = (italic.italic != colour.italic);
-    EXPECT_TRUE(colourDiffers || italicDiffers);
+    // Pin both axes separately — the OR collapses two distinct
+    // visual contracts (colour difference, italic toggle) into one
+    // assertion that passes if only one differs. Asserting both
+    // explicitly catches a regression that silently drops the
+    // unused axis.
+    EXPECT_NE(italic.textColor, colour.textColor);
+    EXPECT_NE(italic.italic,    colour.italic);
 }
 
 // ---------------------------------------------------------------------------

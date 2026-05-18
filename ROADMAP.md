@@ -812,6 +812,136 @@ Framework: GoogleTest via ctest. Files scanned: 188. Dimensions: 18 (performance
 - **Naming (N1–N3):** three typos fixed (`FineLInen`→`FineLinen`, `RoughSurfaceSpreadssamples`→`RoughSurfaceSpreadsSamples`, `SecondClickComplete`→`SecondClickCompletes`).
 - **Performance (P1–P2):** cloth ground-plane test cut from 300 to 60 frames; memory-tracker sysfs polling cut from 120× to 3×.
 
+### 🧪 Test Audit 2026-05-18 — Ts20 follow-ups
+
+**Framework:** ctest+GoogleTest · **Files scanned:** 188 · **Raw findings:** 206 · **Actionable after triage:** 81 · **Filtered (FP / mitigated / cross-chunk):** 125
+
+Full triaged report at `/tmp/test-audit-e5e42211/_triaged.md` (ephemeral); false-positives FP-9..FP-12 logged in `docs/private/test-audit/false-positives.md`. **In-session fixes (12 items)** landed below as `[x]`; **deferred follow-ups (~67 items)** below as `[ ]`. Big-bucket items (file splits, SUT-API additions) are intentionally deferred — they need their own design pass, not a sweep.
+
+**Shipped in this audit cycle (12 items, 2026-05-18):**
+- [x] **Ts20-IS1.** `tests/test_cube_loader_hardening.cpp:44` — reset `CubeLoader::setSandboxRoots({})` in `SetUp()` (was in `TearDown()` only); symmetric reset hardens against partial-prior-test failures.
+- [x] **Ts20-IS2.** `tests/test_lip_sync_sandbox.cpp:36` — same pattern, `LipSyncPlayer::setSandboxRoots({})` in `SetUp()`.
+- [x] **Ts20-FL3.** `tests/test_input_bindings.cpp` — added file-local `GlfwScope` RAII guard; replaced the three manual `glfwInit()`/`glfwTerminate()` pairs in the GLFW-dependent display-label tests. Terminate now runs even on ASSERT/skip.
+- [x] **Ts20-AC2.** `tests/test_bloom.cpp` — replaced the local `bt709Luminance` reimplementation with `Vestige::bloomLuminance` from `engine/renderer/bloom_downsample_karis.h`. Coefficient drift in the SUT now fails the test.
+- [x] **Ts20-AC3.** `tests/test_ibl.cpp` — added file-header clarifying SCOPE: this file pins the mathematical formulae (math-spec), not the runtime shader; shader parity is `test_ibl_parity.cpp`. Triage's "remove" suggestion was wrong — the math-spec coverage is valuable.
+- [x] **Ts20-AS11.** `tests/test_particle_data.cpp:346` — `EXPECT_GE(count, 0)` → `EXPECT_GT(count, 0u)`; old assertion was tautological on an unsigned count.
+- [x] **Ts20-AS12.** `tests/test_physics_constraint.cpp:424` — float `!=` replaced with `EXPECT_GT(std::abs(delta), 0.01f)`; old form passed on tiny FP noise.
+- [x] **Ts20-AS14.** `tests/test_subtitle_narrator_style.cpp:88` — OR collapsed into two separate assertions; both colour AND italic must differ between narrator modes.
+- [x] **Ts20-AS6.** `tests/test_cloth_simulator.cpp:783` — added `EXPECT_GT(sim.getLraConstraints().size(), 0u)` after `rebuildLRA()`; the LRA capture test was previously silent on whether constraints were actually built.
+- [x] **Ts20-HA4.** `tests/test_node_graph.cpp:1095` — dropped white-box `EXPECT_EQ(newId, 1u)` after `clear()`; replaced with `EXPECT_GT(newId, 0u)`. The exact reset value is an impl detail.
+- [x] **Ts20-VE1.** `tests/test_gpu_cloth_simulator.cpp:153` — removed redundant `SUCCEED()`; replaced with a comment explaining the compile-only contract being pinned.
+- [x] **Ts20-CV2 + DS3.** `tests/test_biome_preset.cpp:24-31` — `SerializeDeserialize` now verifies all `foliageLayers`/`scatterLayers`/`treeLayers` fields (typeId/speciesId + density); previously only `[0].density` and `[0].density` for trees were checked. Existing `@file` header confirmed (DS3 reclassified as FP).
+- [x] **Ts20-DS6.** `tests/test_physics_fixed_step_callback.cpp:91` — `CallbackDtIsAlwaysFixedTimestep_Ph1` now reports the offending `dt` on failure rather than just `EXPECT_TRUE(allMatch)`.
+
+**Deferred (acted on incrementally as adjacent files are touched, per Ts19 precedent):**
+
+#### Big-bucket items (need their own design pass before fix)
+- [ ] **Ts20-SY1.** `tests/test_system_registry.cpp:178` (CRITICAL, isolation) — `dummyEngine()` `reinterpret_cast<Engine&>(char[1])` is UB under UBSan even though never dereferenced. Fix needs either a minimal `EngineStub` translation-unit or a `SystemRegistry::initializeAll(Engine*)` nullable overload. Production-API decision, not a test-only change.
+- [ ] **Ts20-DE1, Ts20-DE2.** `tests/test_environment_forces.cpp:105,176` (HIGH, determinism) — `WindVelocityAfterGusting` and `GustStateTransitions` rely on unseeded RNG. Fix needs `EnvironmentForces::setGustRngSeed(uint32_t)` SUT API addition.
+- [ ] **Ts20-SP3.** `tests/test_scripting.cpp:1` (HIGH, splitting) — 2485 lines, 12+ test suites. Split into `test_script_value.cpp`, `test_blackboard.cpp`, `test_node_type_registry.cpp`, `test_script_graph.cpp`, `test_script_context.cpp`, `test_node_library.cpp`, `test_scripting_system_bridge.cpp`. Multi-hour refactor with attendant CMakeLists.txt churn.
+
+#### Flakiness (4)
+- [ ] **Ts20-FL1.** `tests/test_async_driver.cpp:287,339` — `sleep_for(50ms/100ms)` before `cancel()` assumes OS spawn timing. Poll until `isRunning()` is true.
+- [ ] **Ts20-FL2.** `tests/test_reference_harness.cpp:134` — temp-file paths unstamped under `ctest -j`. Use `vestigeTestStamp()`.
+- [ ] **Ts20-FL4.** `tests/test_environment_forces.cpp:357` — float accumulation tolerance too tight at 100 ticks. Loosen to `0.05f` or derive expected value from rate.
+- [ ] **Ts20-FL5.** `tests/test_photosensitive_retrofit.cpp:99` — flicker phase not pinned at guaranteed-difference point. Drive emitters to half-clamped-period phase offset.
+
+#### Isolation (3)
+- [ ] **Ts20-IS3.** `tests/test_fit_history.cpp:62` — four tests share `/tmp/fh_*.json` with no PID stamp. Use stamped paths.
+- [ ] **Ts20-IS4.** `tests/test_entity_serializer_registry.cpp:265` — `Logger::clearEntries()` in test bodies, order-dependent. Move into fixture `SetUp()`.
+- [ ] **Ts20-IS5.** `tests/test_reference_harness.cpp:120` — silent fail on missing reference-cases dir. Guard with `GTEST_SKIP()` if dir missing.
+
+#### Accuracy (1)
+- [ ] **Ts20-AC4.** `tests/test_hdr_pipeline.cpp:31` — BT.709 coefficients hardcoded with no shader parity. Extract via source-grep (mirror Ts20-AC2 fix) or remove redundant test.
+
+#### Performance (2)
+- [ ] **Ts20-PE1.** `tests/test_cloth_simulator.cpp:263` — `SphereCollisionPushesParticlesOut` runs 120 frames vs documented 60. Reduce.
+- [ ] **Ts20-PE2.** `tests/test_cloth_solver_improvements.cpp:508` — paired simulators run 120 frames unnecessarily. Reduce to 60.
+
+#### Duplication (10)
+- [ ] **Ts20-DU1.** `tests/test_animation_sampler.cpp:101` — LinearQuat tests share 13 identical lines. Extract `makeQuatChannel(q0, q1)` helper.
+- [ ] **Ts20-DU2.** `tests/test_logger.cpp:83` — thread-spawn barrier duplicated in two tests. Extract `runConcurrent(nThreads, body)` helper.
+- [ ] **Ts20-DU3.** `tests/test_lip_sync.cpp:478` — blend-shapes setup byte-identical in two fixtures. Extract `setupLipSyncPipeline()`.
+- [ ] **Ts20-DU4.** `tests/test_command_history_dirty.cpp:29` — `IncrementCommand` defined twice. Move to shared `editor_command_test_helpers.h`.
+- [ ] **Ts20-DU5.** `tests/test_cloth_collision.cpp:25` — `makeTriangle`/`Quad`/`Cube` helpers not in `cloth_test_helpers.h`. Promote.
+- [ ] **Ts20-DU6.** `tests/test_cloth_presets.cpp:135` — 5×5 grid setup duplicated across 13 tests. Add `clothLiveParamConfig(w, h)` helper.
+- [ ] **Ts20-DU7.** `tests/test_fabric_material.cpp:267` — CollisionShapes group repeats boilerplate across 6 tests. Extract `CollisionShapeTest` fixture.
+- [ ] **Ts20-DU8.** `tests/test_motion_matching.cpp:586` — MotionDatabase build boilerplate in 5 consecutive tests. Extract fixture.
+- [ ] **Ts20-DU9.** `tests/test_subtitle.cpp:16` — `makeLine` helper duplicated across `test_subtitle.cpp` + `test_subtitle_renderer.cpp`. Extract to `subtitle_test_helpers.h`.
+- [ ] **Ts20-DU10.** `tests/test_ui_theme_accessibility.cpp:354` — Vellum/Plumbline contrast tests byte-identical. Use typed/parametrized test.
+
+#### Splitting (4 — excludes SP3 above)
+- [ ] **Ts20-SP1.** `tests/test_cloth_collision.cpp` (698 lines, 6 subsystems) — split into `test_bvh.cpp`, `test_spatial_hash.cpp`, `test_cloth_mesh_collider.cpp`, `test_cloth_simulation_collision.cpp`.
+- [ ] **Ts20-SP2.** `tests/test_command_history.cpp:285` (780+ lines, 8 concerns) — extract `EntityActions` tests to `test_entity_actions.cpp`.
+- [ ] **Ts20-SP4.** `tests/test_formula_library.cpp:313` — `UnaryFunctions` tests 11 operators in one body. Split into named sub-tests or add `SCOPED_TRACE`.
+- [ ] **Ts20-SP5.** `tests/test_lip_sync.cpp` (745 lines, 6 suites) — extract `test_viseme_map.cpp`, `test_audio_analyzer.cpp`, `test_lip_sync_player.cpp`.
+- [ ] **Ts20-SP6.** `tests/test_ui_theme_accessibility.cpp:25` — `WithScaleMultipliesEveryPixelSize` packs 32 EXPECTs into one body. Split into 3-4 logical groups.
+
+#### Assertions (10)
+- [ ] **Ts20-AS2.** `tests/test_animation_state_machine.cpp:247` — `SelfTransitionBlocked` ambiguous guard. Add explicit check or cite mechanism.
+- [ ] **Ts20-AS3.** `tests/test_advanced_physics.cpp:888` — `SeedBiasTowardImpact` threshold 5/20=25% barely above baseline. Tighten to `EXPECT_GE(nearImpact, 8)` or document.
+- [ ] **Ts20-AS4.** `tests/test_cloth_simulator.cpp:276` — `ClearSphereColliders` asserts only fall, not clearance. Add sphere, confirm penetration after clear.
+- [ ] **Ts20-AS5.** `tests/test_cloth_simulator.cpp:102` — stale pointer after `simulate()`. Copy scalar before simulate (match `UnpinRestoresMass` pattern at line 168).
+- [ ] **Ts20-AS7.** `tests/test_cloth_solver_improvements.cpp:456` — `ThickParticle_SphereCollisionOffsetIncludesRadius` only checks `!isnan`. Compute min-distance, assert offset.
+- [ ] **Ts20-AS8.** `tests/test_camera.cpp:156` — `ViewMatrixChanges*` use bool-differs scan. Assert specific elements.
+- [ ] **Ts20-AS9.** `tests/test_domain_systems.cpp:73` — reference-accessor tests void-discard returns. Assert observable properties.
+- [ ] **Ts20-AS10.** `tests/test_entity_serializer_registry.cpp:320` — substring `"2"` too loose. Assert `"dropped 2"` or `"2 component"`.
+- [ ] **Ts20-AS13.** `tests/test_scripting.cpp:153` — `ConvertFloatToString` checks only non-empty. Add `StartsWith("3.14")`.
+- [ ] **Ts20-AS15.** `tests/test_memory_tracker.cpp:100` — `RecordFreeUnderflowClampsAtZero` count-vs-byte underspecified. Add policy comment.
+- [ ] **Ts20-BE1.** `tests/test_emissive_lighting.cpp:45` — `AttenuationFormulaMathReference` derives + self-tests. Expose `EmissiveLightComponent::computeAttenuation()` and call it; or delete.
+
+#### Hardcoded data (6)
+- [ ] **Ts20-HA1.** `tests/test_biome_preset.cpp:40` — `BuiltInPresets` checks names at hard-coded indices. Use set/contains.
+- [ ] **Ts20-HA2.** `tests/test_fit_history.cpp:39` — `makeEntry()` timestamp hard-coded; tie-break tests rely on lexicographic order. Add comment or parameterise.
+- [ ] **Ts20-HA3.** `tests/test_logger.cpp:127` — `MAX_ENTRIES` hard-coded locally. Expose `Logger::MAX_ENTRIES` as public constant.
+- [ ] **Ts20-HA5.** `tests/test_camera.cpp:258` — `near=0.1f`, `far=1000.0f` hard-coded. Expose `DEFAULT_NEAR_PLANE`/`DEFAULT_FAR_PLANE`.
+- [ ] **Ts20-HA6.** `tests/test_curve_fitter.cpp:309` — `FormulaPresetLibrary` hardcodes preset names + coefficients. Query at runtime; assert difference not literal.
+- [ ] **Ts20-HA7.** `tests/test_skeleton.cpp:61` — `MAX_JOINTS == 128` magic number not cross-referenced to shader. Add comment + `static_assert` if possible.
+
+#### Coverage gaps (15)
+- [ ] **Ts20-CV1.** `tests/test_aabb.cpp:14` — no test for inverted min/max. Add `min > max` constructed AABB.
+- [ ] **Ts20-CV3.** `tests/test_benchmark.cpp:74` — `BenchmarkCsv` temp files unstamped. Use `vestigeTestStamp()`.
+- [ ] **Ts20-CV4.** `tests/test_catmull_rom_spline.cpp` — no tangent test at interior segment boundary on 3+ point spline. Add 3-point spline test.
+- [ ] **Ts20-CV5.** `tests/test_cloth_constraint_graph.cpp:246` — `DihedralCount` only tests 4×4. Add 3×2 (M=2, N=1).
+- [ ] **Ts20-CV6.** `tests/test_bloom_downsample_karis.cpp:53` — no centre=0/corner=bright test. Add reversed-intensity case.
+- [ ] **Ts20-CV7.** `tests/test_color_grading_parity.cpp:113` — GPU parity only voxel-centre inputs. Add inter-voxel inputs (0.1/0.5/0.9 fractions).
+- [ ] **Ts20-CV8.** `tests/test_engine_paths.cpp:25` — only `captionMapPath` tested. Add parametric tests for `shaderPath`/`fontPath`/etc.
+- [ ] **Ts20-CV9.** `tests/test_entity_serializer_depth_cap.cpp:50` — `AcceptsDepthAtBoundary` only tests 128, not 127. Add 127 case.
+- [ ] **Ts20-CV10.** `tests/test_event_bus.cpp:152` — `UnsubscribeDuringDispatch` missing self-removal case. Add A-removes-itself test.
+- [ ] **Ts20-CV11.** `tests/test_gltf_fs_sandbox.cpp:107` — no symlink-traversal test. Add `fs::create_symlink` (gate with try/catch).
+- [ ] **Ts20-CV12.** `tests/test_json_size_cap.cpp:59` — no test for caller-tag in logged error. Assert tag string in `Logger::getEntries()` after rejection.
+- [ ] **Ts20-CV13.** `tests/test_lip_sync.cpp:443` — `loadTrackFromTSV` error paths untested. Add tests for blank rows, non-numeric timestamps, negative times.
+- [ ] **Ts20-CV14.** `tests/test_point_shadow_map.cpp:36` — no MAX+1 rejection test. Add shadow-light over-limit case.
+- [ ] **Ts20-CV15.** `tests/test_pbr_material.cpp:294` — `BlinnPhongDefaultsUnchanged` only checks 3 of 5+ fields. Add ambient/opacity.
+- [ ] **Ts20-CV16.** `tests/test_skeleton_animator.cpp` — no ROTATION/SCALE channel tests; only TRANSLATION. Add rotation (90° Y) + scale tests.
+
+#### Fixtures (3)
+- [ ] **Ts20-FX1.** `tests/test_script_templates.cpp:25` — `TemplateRegistry` static initialised once with bool guard, not per-test. Replace with `::testing::Test` fixture.
+- [ ] **Ts20-FX2.** `tests/test_settings.cpp:42` — `TmpDir` local reimplements `vestigeTestStamp()`. Consolidate.
+- [ ] **Ts20-FX3.** `tests/test_editor_viewers.cpp:21` — `TextureViewerTest`/`HdriViewerTest`/`ModelViewerTest` empty fixtures. Convert to `TEST()`.
+
+#### Parametrisation (6)
+- [ ] **Ts20-PA1.** `tests/test_caption_map.cpp:200` — `FiresOnPlaySound*` tests repeat identical setup. Use `PlaySoundInvoker` struct with `TEST_P`.
+- [ ] **Ts20-PA2.** `tests/test_color_vision_filter.cpp:49` — `Protanopia/Deuteranopia/Tritanopia` blocks identical. `INSTANTIATE_TEST_SUITE_P` over `{mode, expected-matrix}`.
+- [ ] **Ts20-PA3.** `tests/test_pbr_material.cpp:87` — `Metallic/Roughness/Ao/Emissive/Clearcoat` clamp pattern identical. Parametrise.
+- [ ] **Ts20-PA4.** `tests/test_editor_viewers.cpp:215` — 6 template-find tests follow same pattern. Extract `findTemplate(GameTemplateType)` helper.
+- [ ] **Ts20-PA5.** `tests/test_instanced_rendering.cpp:131` — `SingleInstanceBelowThreshold`/`TwoInstancesMeetsThreshold` assert counts not path. Expose `batchUsesInstancing` flag or rename.
+- [ ] **Ts20-PA6.** `tests/test_ui_world_projection.cpp:89` — `FadeAlpha` boundary tests separate per distance variant. Table-driven `{distance, expectedAlpha}`.
+
+#### Doc-strings (4)
+- [ ] **Ts20-DS1.** `tests/test_aabb.cpp:63` — `IntersectsTouching` undocumented closed/half-open. Add comment: "touching AABBs treated as intersecting (closed intervals)".
+- [ ] **Ts20-DS2.** `tests/test_audio_ambient.cpp:192` — `deltaSeconds=0.0f` unclear intent. Add comment explaining `>=` semantics.
+- [ ] **Ts20-DS4.** `tests/test_cloth_solver_backend.cpp:38` — seed parameter undocumented. Add comment; use explicit seed on line 60.
+- [ ] **Ts20-DS5.** `tests/test_foliage_chunk.cpp` — original FoliageManager tests have no per-test comments. Add contract notes (density/spacing/jitter).
+- [ ] **Ts20-DS7.** `tests/test_water_surface.cpp:1` — no GL-context precondition in file header. Add to `@brief`: "tests run without GL context (VAO/mesh ops skipped)".
+
+#### Verbosity (3)
+- [ ] **Ts20-VE2.** `tests/test_stasis_system.cpp:54` — `DefaultValues` checks 9 fields individually. Use `EXPECT_EQ(state, StasisState{})` if `operator==` available.
+- [ ] **Ts20-VE3.** `tests/test_scripting.cpp:1029` — `NodeLibraryTest` math tests repeat long accessor chain 10+ times. Extract `getOutputFloat(...)` helper.
+- [ ] **Ts20-VE4.** `tests/test_navigation_panel.cpp:44` — `OverlayColorIsInZeroToOneRange` packs GE/LE per line. Split / add labels.
+
+**Scope.** All Ts20 follow-ups are non-blocking (same posture as Ts19). The 12 in-session fixes were chosen for clear bounded scope (single-line assertion tightening, RAII guard introduction, single-helper consolidation); deferred items either need their own design pass (Ts20-SY1, DE1/DE2, SP3) or are best picked up incrementally as adjacent files are touched. Per-finding suppressions and false positives are recorded in `docs/private/test-audit/false-positives.md` (FP-9 through FP-12 added this round).
+
 ### Milestone
 Every Phase 10.7 design-doc promise is verified by a test authored **from the design doc, not from the code**. Every dead-code item is either wired or deleted. Phase 11A's determinism contract is backed by regression tests. Phase 10.8 CM3 / CM4 / CM7 prerequisites (`sphereCast`, centripetal spline, arc-length evaluator) are live. Slice 0 ROADMAP claims are grep-true. Slices 14–17 close the second /indie-review's scripting / audio / shader-parity / cloth cross-cutting findings. Slice 18 reconciles the test-suite surface itself via cold-eyes review. After Slice 17 + 18, the next slice of Phase 10.8 can ship without inheriting remediation debt or load-bearing-test ambiguity.
 

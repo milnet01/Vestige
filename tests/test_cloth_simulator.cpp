@@ -783,6 +783,11 @@ TEST(ClothSimulator, CaptureRestPositionsAndRebuildLRA)
     sim.captureRestPositions();
     sim.rebuildLRA();
 
+    // Confirm rebuildLRA actually populated the constraint list —
+    // without this assertion the test passes even if rebuildLRA is
+    // a silent no-op.
+    EXPECT_GT(sim.getLraConstraints().size(), 0u);
+
     // Simulate 60 frames — should not crash, and particles should stay
     // reasonably close to their rest positions thanks to LRA
     for (int i = 0; i < 60; ++i)

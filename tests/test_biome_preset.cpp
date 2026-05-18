@@ -24,9 +24,15 @@ TEST(BiomePresetTest, SerializeDeserialize)
     EXPECT_EQ(loaded.name, "Test Biome");
     EXPECT_EQ(loaded.groundMaterialPath, "materials/grass.json");
     EXPECT_EQ(loaded.foliageLayers.size(), 2u);
+    EXPECT_EQ(loaded.foliageLayers[0].typeId, 0);
     EXPECT_FLOAT_EQ(loaded.foliageLayers[0].density, 3.0f);
+    EXPECT_EQ(loaded.foliageLayers[1].typeId, 1);
+    EXPECT_FLOAT_EQ(loaded.foliageLayers[1].density, 1.5f);
     EXPECT_EQ(loaded.scatterLayers.size(), 1u);
+    EXPECT_EQ(loaded.scatterLayers[0].typeId, 0);
+    EXPECT_FLOAT_EQ(loaded.scatterLayers[0].density, 0.5f);
     EXPECT_EQ(loaded.treeLayers.size(), 1u);
+    EXPECT_EQ(loaded.treeLayers[0].speciesId, 0u);
     EXPECT_FLOAT_EQ(loaded.treeLayers[0].density, 0.03f);
 }
 

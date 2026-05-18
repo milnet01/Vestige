@@ -3,6 +3,16 @@
 
 /// @file test_ibl.cpp
 /// @brief Unit tests for IBL math: Hammersley sequence, importance sampling, BRDF integration.
+///
+/// SCOPE: these tests pin the **mathematical formulae** (radical-inverse
+/// bit twiddling, GGX importance-sample distribution, Smith geometry,
+/// Schlick-Fresnel) by exercising a C++ port that mirrors the GLSL.
+/// They do NOT verify that the runtime GLSL shader produces the same
+/// numbers — that parity job belongs to `test_ibl_parity.cpp`, which
+/// uploads the actual shader and compares its outputs against the
+/// same C++ reference. If you suspect shader drift, run the parity
+/// tests; if a numeric assertion here fails, the math definition
+/// itself has changed.
 #include <gtest/gtest.h>
 #include <glm/glm.hpp>
 

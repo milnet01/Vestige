@@ -91,11 +91,17 @@ TEST_F(PhysicsFixedStepTest, SpiralOfDeathClampHoldsAtFour_Ph1)
 TEST_F(PhysicsFixedStepTest, CallbackDtIsAlwaysFixedTimestep_Ph1)
 {
     const float kFixed = m_world.getFixedTimestep();
+    float badDt = 0.0f;
     bool allMatch = true;
     m_world.update(kFixed * 2.5f, [&](float dt) {
-        if (dt != kFixed) allMatch = false;
+        if (dt != kFixed)
+        {
+            allMatch = false;
+            badDt = dt;
+        }
     });
-    EXPECT_TRUE(allMatch);
+    EXPECT_TRUE(allMatch) << "Substep dt diverged from fixed timestep; saw dt="
+                          << badDt << " expected=" << kFixed;
 }
 
 // Backwards-compatible overload: the no-callback `update(dt)` form

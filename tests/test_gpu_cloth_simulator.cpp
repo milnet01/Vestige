@@ -146,11 +146,13 @@ TEST(GpuClothSimulator, ParameterSettersCompileAndAccept)
     // shaders consume these uniforms but the C++ accessors are pure
     // member writes so they're testable without a GL context.
     GpuClothSimulator sim;
+    // The four setters below are pure member writes; reaching this line
+    // is the entire contract being pinned — if any setter were renamed
+    // or removed the test wouldn't compile. No further assertion needed.
     sim.setShaderPath("/dev/null/shaders");   // No load attempted yet
     sim.setDragCoefficient(0.5f);
     sim.setWindVelocity(glm::vec3(1.0f, 0.0f, 0.0f));
     sim.setDamping(0.02f);
-    SUCCEED();
 }
 
 // -- Step 4 surface --

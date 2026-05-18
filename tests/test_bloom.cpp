@@ -4,7 +4,7 @@
 /// @file test_bloom.cpp
 /// @brief Headless CPU oracles for bloom math that doesn't need a GL
 ///        context. Numerical CPU↔GPU parity for the actual shader helpers
-///        (`bt709Luminance`, `karisWeight`, `softThreshold`) lives in
+///        (`bloomLuminance`, `karisWeight`, `softThreshold`) lives in
 ///        `tests/test_bloom_parity.cpp` — this file covers a few cheap
 ///        invariants that are still useful as a first-line headless check
 ///        (luminance ratios, additive composite contract).
@@ -20,12 +20,9 @@
 #include <gtest/gtest.h>
 #include <glm/glm.hpp>
 
-// --- BT.709 luminance (mirroring shader implementation) ---
+#include "renderer/bloom_downsample_karis.h"
 
-static float bt709Luminance(const glm::vec3& color)
-{
-    return glm::dot(color, glm::vec3(0.2126f, 0.7152f, 0.0722f));
-}
+using Vestige::bloomLuminance;
 
 // --- Bloom composite (mirroring screen_quad.frag.glsl: color += bloom * intensity) ---
 
@@ -40,21 +37,21 @@ static glm::vec3 bloomComposite(const glm::vec3& scene, const glm::vec3& bloom, 
 
 TEST(BloomTest, LuminanceWhiteIsOne)
 {
-    float lum = bt709Luminance(glm::vec3(1.0f, 1.0f, 1.0f));
+    float lum = bloomLuminance(glm::vec3(1.0f, 1.0f, 1.0f));
     EXPECT_NEAR(lum, 1.0f, 0.001f);
 }
 
 TEST(BloomTest, LuminanceBlackIsZero)
 {
-    float lum = bt709Luminance(glm::vec3(0.0f, 0.0f, 0.0f));
+    float lum = bloomLuminance(glm::vec3(0.0f, 0.0f, 0.0f));
     EXPECT_FLOAT_EQ(lum, 0.0f);
 }
 
 TEST(BloomTest, LuminanceGreenIsBrightest)
 {
-    float redLum = bt709Luminance(glm::vec3(1.0f, 0.0f, 0.0f));
-    float greenLum = bt709Luminance(glm::vec3(0.0f, 1.0f, 0.0f));
-    float blueLum = bt709Luminance(glm::vec3(0.0f, 0.0f, 1.0f));
+    float redLum = bloomLuminance(glm::vec3(1.0f, 0.0f, 0.0f));
+    float greenLum = bloomLuminance(glm::vec3(0.0f, 1.0f, 0.0f));
+    float blueLum = bloomLuminance(glm::vec3(0.0f, 0.0f, 1.0f));
     EXPECT_GT(greenLum, redLum);
     EXPECT_GT(greenLum, blueLum);
 }

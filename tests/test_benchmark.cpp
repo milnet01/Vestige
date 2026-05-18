@@ -206,6 +206,14 @@ TEST(BenchmarkRun, DeltaAicZeroForWinner)
 
     const auto out = runBenchmark(lib, data);
     // Find the first fittable entry; its delta_aic should be 0.
+    // Distinct from the sibling test `FittableEntriesRankedBeforeSkipped`
+    // — there we walk the sorted list to verify ordering, where
+    // strict "converged" semantics matter for the inversion check.
+    // Here we only need ONE entry with usable metrics so we can pin
+    // delta_aic = 0 for the winner; that is a wider notion of
+    // "fittable" than convergence (an entry can rank with rmse > 0
+    // even if its solver status is non_converged). The wider
+    // disjunction here is intentional.
     for (const auto& e : out)
     {
         const bool fit = e.rmse > 0.0f || e.r_squared > 0.0f

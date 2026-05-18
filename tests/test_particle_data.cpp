@@ -343,7 +343,11 @@ TEST_F(ParticleEmitterTest, AllShapeTypes)
         emitter->getConfig().shape = shape;
         emitter->restart();
         entity.update(0.1f);
-        EXPECT_GE(emitter->getData().count, 0);
+        // Each shape must emit at least one particle in 0.1 s at the
+        // default rate — `>= 0` was previously tautological on a
+        // count, so a shape that silently emitted nothing slipped
+        // through.
+        EXPECT_GT(emitter->getData().count, 0u);
     }
 }
 

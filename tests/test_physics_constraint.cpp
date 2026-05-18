@@ -420,8 +420,9 @@ TEST_F(PhysicsConstraintTest, ImpulseAtPointCreatesTorque)
 
     glm::vec3 posAfter = world.getBodyPosition(bodyB);
 
-    // Body should have moved in Z direction
-    EXPECT_NE(posAfter.z, posBefore.z);
+    // Body should have moved measurably in Z, not just floating-point
+    // noise away from the start position.
+    EXPECT_GT(std::abs(posAfter.z - posBefore.z), 0.01f);
 }
 
 // ---------------------------------------------------------------------------

@@ -21,6 +21,23 @@ using Vestige::Testing::countWarningsContaining;
 
 namespace
 {
+// RAII guard: ensures glfwTerminate() runs even if an EXPECT_* in the
+// middle aborts via ASSERT_* / GTEST_SKIP() / unwinding. Tests that
+// need GLFW state instantiate this at the top of the body; if init
+// fails the guard is constructed with `initOk == false` and the test
+// skips cleanly.
+class GlfwScope
+{
+public:
+    GlfwScope() : m_initOk(glfwInit() == GLFW_TRUE) {}
+    ~GlfwScope() { if (m_initOk) glfwTerminate(); }
+    GlfwScope(const GlfwScope&)            = delete;
+    GlfwScope& operator=(const GlfwScope&) = delete;
+    bool ok() const { return m_initOk; }
+private:
+    bool m_initOk;
+};
+
 // Convenience: construct a small sample map with three actions so
 // tests don't have to rebuild it every case.
 InputActionMap sampleMap()
@@ -423,7 +440,8 @@ TEST(InputActionMap, FirstRegistrationIsSilent_I5)
 
 TEST(InputActionMap, KeyboardDisplayCoversNumpadAndSystemKeys_I6)
 {
-    if (glfwInit() == GLFW_FALSE)
+    GlfwScope glfw;
+    if (!glfw.ok())
     {
         GTEST_SKIP() << "GLFW init failed — display-label coverage runs at engine launch.";
     }
@@ -454,7 +472,6 @@ TEST(InputActionMap, KeyboardDisplayCoversNumpadAndSystemKeys_I6)
 
     expectLabel(GLFW_KEY_WORLD_1, "World 1");
     expectLabel(GLFW_KEY_WORLD_2, "World 2");
-    glfwTerminate();
 }
 
 // ---------------------------------------------------------------------------
@@ -650,14 +667,14 @@ TEST(InputBindingsWire, ScancodeRoundTripPreservesPhysicalIdentity_I1)
 
 TEST(BindingDisplayLabel, KeyboardScancodePrintableUsesGlfwKeyName_I1)
 {
-    if (glfwInit() == GLFW_FALSE)
+    GlfwScope glfw;
+    if (!glfw.ok())
     {
         GTEST_SKIP() << "GLFW init failed — display-label coverage runs at engine launch.";
     }
     const int wScan = glfwGetKeyScancode(GLFW_KEY_W);
     if (wScan < 0)
     {
-        glfwTerminate();
         GTEST_SKIP() << "GLFW_KEY_W has no scancode in this environment.";
     }
     const std::string label = bindingDisplayLabel(InputBinding::scancode(wScan));
@@ -667,12 +684,12 @@ TEST(BindingDisplayLabel, KeyboardScancodePrintableUsesGlfwKeyName_I1)
     EXPECT_FALSE(label.empty());
     EXPECT_EQ(label.find("Key "), std::string::npos)
         << "Printable key should not fall through to the debug 'Key NN' label.";
-    glfwTerminate();
 }
 
 TEST(BindingDisplayLabel, KeyboardScancodeNonPrintableUsesFallbackTable_I1)
 {
-    if (glfwInit() == GLFW_FALSE)
+    GlfwScope glfw;
+    if (!glfw.ok())
     {
         GTEST_SKIP() << "GLFW init failed — display-label coverage runs at engine launch.";
     }
@@ -683,7 +700,6 @@ TEST(BindingDisplayLabel, KeyboardScancodeNonPrintableUsesFallbackTable_I1)
     const int f1Scan = glfwGetKeyScancode(GLFW_KEY_F1);
     if (f1Scan < 0)
     {
-        glfwTerminate();
         GTEST_SKIP() << "GLFW_KEY_F1 has no scancode in this environment.";
     }
     EXPECT_EQ(bindingDisplayLabel(InputBinding::scancode(f1Scan)), "F1");
@@ -693,7 +709,6 @@ TEST(BindingDisplayLabel, KeyboardScancodeNonPrintableUsesFallbackTable_I1)
     {
         EXPECT_EQ(bindingDisplayLabel(InputBinding::scancode(spcScan)), "Space");
     }
-    glfwTerminate();
 }
 
 TEST(BindingDisplayLabel, MouseGamepadEmDashUnaffectedByScancodeMove_I1)
