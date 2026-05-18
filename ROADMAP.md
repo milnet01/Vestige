@@ -295,10 +295,12 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
 *Moved to Phase 10.8 — see that phase for the full list. Retained here as a pointer so anyone reading Phase 10 knows where the section went.*
 
 ### Localization
-- [ ] Multi-language text support (UTF-8, language selection)
-- [ ] Translatable string table system (all UI/plaque text referenced by key, not hardcoded)
-- [ ] Hebrew, Greek, and Latin text rendering (right-to-left support for Hebrew)
-- [ ] Language selection in settings menu
+*All four bullets are covered by one design doc — implementation pending blocking user review of `docs/phases/phase_10_localization_design.md` (rev 2, shipped 2026-05-18, cold-eyes-reviewed 2 loops to convergence). Slices L1–L6 land per § 2 of the doc; the 4 bullets below tick as their owning slices ship. Key revision-2 finding: bundled `arimo.ttf` already covers Latin + Hebrew (87/88 cp) + basic Greek (127/144) + polytonic Greek (233/256) — verified via `fc-query` + `ttx -t cmap` — so no Noto Sans Hebrew bundle is needed.*
+
+- [ ] Multi-language text support (UTF-8, language selection) — covered by slices L1 (UTF-8 decoder + codepoint Font API) + L4 (LocalizationService + language switching) in the design doc.
+- [ ] Translatable string table system (all UI/plaque text referenced by key, not hardcoded) — covered by slice L4 (`StringTable` + `LocalizationService` + `tr()`) + L6 (`tools/localization_audit.py` CI lint).
+- [ ] Hebrew, Greek, and Latin text rendering (right-to-left support for Hebrew) — covered by slices L1 (UTF-8 + uint32 glyph map), L2 (`FontStack` + Hebrew/Greek glyph-range loading), L3 (`rtl::toVisualOrder` per-run reverse — lightweight, not full UAX#9).
+- [ ] Language selection in settings menu — covered by slice L5 (settings schema migration v2→v3 + Accessibility-tab dropdown + `LanguageChangedEvent` live-apply path).
 
 ### Accessibility
 - [x] Colorblind modes (Deuteranopia, Protanopia, Tritanopia LUT modes applied post-tonemap — ref: IGDA GA-SIG GDC 2026 roundtable) — `ColorVisionMode` enum + `colorVisionMatrix()` lookup in `engine/renderer/color_vision_filter.{h,cpp}`. Canonical Viénot/Brettel/Mollon 1999 3×3 RGB simulation matrices. `Renderer::setColorVisionMode` feeds `u_colorVisionEnabled` + `u_colorVisionMatrix` to `screen_quad.frag`, applied between the artistic LUT and the sRGB gamma stage. Identity is a fast path (no multiply when Normal). 12 new unit tests.
