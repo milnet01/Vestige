@@ -34,35 +34,57 @@ jobs:
 
     steps:
       - name: Checkout
+        # No submodules in this repo (verified 2026-05-18); `submodules: recursive`
+        # was wasted IO — left off intentionally.
         uses: actions/checkout@v6
-        with:
-          submodules: recursive
 
       - name: Install build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            build-essential \
-            cmake \
-            ninja-build \
-            pkg-config \
-            libgl1-mesa-dev \
-            libglu1-mesa-dev \
-            libx11-dev \
-            libxrandr-dev \
-            libxinerama-dev \
-            libxcursor-dev \
-            libxi-dev \
-            libxxf86vm-dev \
-            libwayland-dev \
-            libxkbcommon-dev \
-            xvfb \
-            python3 \
-            python3-pip \
-            python3-xmltodict \
-            python3-yaml \
-            python3-flask \
-            cppcheck
+        # Wrapped in retry to absorb transient Ubuntu mirror failures
+        # (apt-get update returns 1xx errors a few times per week on the
+        # GitHub-hosted runners). 5-min budget, up to 3 attempts.
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 5
+          max_attempts: 3
+          command: |
+            sudo apt-get update
+            sudo apt-get install -y --no-install-recommends \
+              build-essential \
+              cmake \
+              ninja-build \
+              pkg-config \
+              libgl1-mesa-dev \
+              libglu1-mesa-dev \
+              libx11-dev \
+              libxrandr-dev \
+              libxinerama-dev \
+              libxcursor-dev \
+              libxi-dev \
+              libxxf86vm-dev \
+              libwayland-dev \
+              libxkbcommon-dev \
+              xvfb \
+              python3 \
+              python3-pip \
+              python3-xmltodict \
+              python3-yaml \
+              python3-flask \
+              cppcheck
+
+      - name: Set up ccache
+        # Shared compiler-output cache. Without this, every job in this
+        # pipeline (Debug + Release + audit Tier 1 + 2× cmake-compat)
+        # recompiles the same 600+ TUs cold. With ccache+restore-keys,
+        # warm runs reuse object files across PRs on the same branch
+        # AND across jobs in the same pipeline (per-config keys keep
+        # Debug/Release separate so optimisation flags don't poison the
+        # other). 500 MB ceiling fits within the per-repo cache quota
+        # with headroom for the cmake-deps cache. Cache key includes
+        # the job name so each job has its own namespace.
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: ${{ github.job }}-${{ matrix.config }}
+          max-size: 500M
 
       - name: Cache CMake FetchContent deps
         uses: actions/cache@v5
@@ -85,6 +107,8 @@ jobs:
         run: |
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=${{ matrix.config }} \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
             -DVESTIGE_FETCH_ASSETS=OFF
 
@@ -130,27 +154,41 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
-        with:
-          submodules: recursive
 
       - name: Install audit tool dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            cppcheck \
-            clang-tidy \
-            python3 \
-            python3-pip \
-            python3-xmltodict \
-            python3-yaml \
-            python3-flask \
-            build-essential \
-            cmake \
-            ninja-build \
-            xvfb \
-            libgl1-mesa-dev libglu1-mesa-dev \
-            libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
-            libxxf86vm-dev libwayland-dev libxkbcommon-dev
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 5
+          max_attempts: 3
+          command: |
+            sudo apt-get update
+            sudo apt-get install -y --no-install-recommends \
+              cppcheck \
+              clang-tidy \
+              python3 \
+              python3-pip \
+              python3-xmltodict \
+              python3-yaml \
+              python3-flask \
+              build-essential \
+              cmake \
+              ninja-build \
+              xvfb \
+              libgl1-mesa-dev libglu1-mesa-dev \
+              libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
+              libxxf86vm-dev libwayland-dev libxkbcommon-dev
+
+      - name: Set up ccache
+        # Same rationale as linux-build-test. This job builds the same
+        # Debug tree the linux-build-test (Debug) job builds; sharing
+        # cache keys would let one job warm the other, but GH Actions
+        # caches are job-scoped to avoid race-on-save. Per-job key is
+        # the safe form; the apt + FetchContent caches already cover
+        # the cross-job sharing where it's safe.
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: ${{ github.job }}-Debug
+          max-size: 500M
 
       - name: Cache CMake FetchContent deps
         uses: actions/cache@v5
@@ -168,6 +206,8 @@ jobs:
         run: |
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
             -DVESTIGE_FETCH_ASSETS=OFF
 
@@ -234,27 +274,29 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
-        with:
-          submodules: recursive
 
       - name: Install build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            build-essential \
-            ninja-build \
-            pkg-config \
-            libgl1-mesa-dev \
-            libglu1-mesa-dev \
-            libx11-dev \
-            libxrandr-dev \
-            libxinerama-dev \
-            libxcursor-dev \
-            libxi-dev \
-            libxxf86vm-dev \
-            libwayland-dev \
-            libxkbcommon-dev \
-            xvfb
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 5
+          max_attempts: 3
+          command: |
+            sudo apt-get update
+            sudo apt-get install -y --no-install-recommends \
+              build-essential \
+              ninja-build \
+              pkg-config \
+              libgl1-mesa-dev \
+              libglu1-mesa-dev \
+              libx11-dev \
+              libxrandr-dev \
+              libxinerama-dev \
+              libxcursor-dev \
+              libxi-dev \
+              libxxf86vm-dev \
+              libwayland-dev \
+              libxkbcommon-dev \
+              xvfb
 
       - name: Install CMake ${{ matrix.cmake }}
         uses: jwlawson/actions-setup-cmake@v2
@@ -263,6 +305,17 @@ jobs:
 
       - name: Verify CMake version
         run: cmake --version
+
+      - name: Set up ccache
+        # cmake-compat is matrix × 2 (3.21 + latest). Per-matrix key
+        # keeps the two versions' caches separate — different cmake
+        # FetchContent semantics can produce subtly different compile
+        # commands (e.g. -isystem vs -I include flags) and we don't
+        # want one to evict the other's hits.
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: ${{ github.job }}-${{ matrix.cmake }}
+          max-size: 500M
 
       - name: Cache CMake FetchContent deps
         uses: actions/cache@v5
@@ -277,6 +330,8 @@ jobs:
         run: |
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
             -DVESTIGE_FETCH_ASSETS=OFF
 
