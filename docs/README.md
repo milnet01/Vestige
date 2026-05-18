@@ -45,12 +45,14 @@ optional.
 
 ## Phase docs (`docs/phases/`)
 
-56 files. Every numbered phase from Phase 3 through Phase 24 has at least
-one design doc here, with paired `_research.md` files where the phase did
+Every numbered phase from Phase 3 through Phase 24 has at least one
+design doc here, with paired `_research.md` files where the phase did
 its own research pass. Look up the phase number you're after in
 `ROADMAP.md` and the file will be `phase_NN[letter][_topic]_design.md`.
+File count drifts as new sub-phases land; `ls docs/phases/ | wc -l` is
+the authoritative current count.
 
-Notable groupings:
+Notable groupings (as of 2026-05-18):
 
 - **Phase 5 (editor):** `phase_05a` … `phase_05i_*` — editor architectural
   tools, scene serialization, undo/redo, gaps consolidation.
@@ -58,10 +60,14 @@ Notable groupings:
   `phase_07a` … `phase_07d`.
 - **Phase 8 (physics):** advanced physics, cloth solver, cloth collision,
   physics foundation across `phase_08` … `phase_08g`.
-- **Phase 9 (GPU + foliage):** GPU cloth, foliage, the four-part
-  `phase_09e3_*` GI pipeline.
-- **Phase 10 (UX):** fog, settings, UI, first-run wizard, camera modes.
-- **Phase 24:** structural physics design.
+- **Phase 9 (GPU + foliage):** GPU cloth, GPU wind, the `phase_09e3_*`
+  visual-scripting editor cluster, the rest of the Phase 9 sub-phase mesh.
+- **Phase 10 (UX polish — active workstream):** fog, settings, UI,
+  first-run wizard, camera modes, localization, streaming music; see
+  ROADMAP §"Phase 10.9 Slice 8" for the current slice cadence.
+- **Phase 11A / 11B:** gameplay infrastructure + features (planned).
+- **Phase 24:** structural physics (cloth ↔ rigid attachment / tethers /
+  ring-on-pole — Tabernacle rigging).
 
 ## Research notes (`docs/research/`)
 
@@ -106,7 +112,7 @@ first read:
 - [`CONTRIBUTING.md`](../CONTRIBUTING.md) — how to contribute
 - [`TESTING.md`](../TESTING.md) — test layout and how to run
 - [`CODING_STANDARDS.md`](../CODING_STANDARDS.md) — style and conventions
-- [`AUDIT_STANDARDS.md`](../AUDIT_STANDARDS.md) — 5-tier audit process
+- [`AUDIT_STANDARDS.md`](../AUDIT_STANDARDS.md) — 6-tier audit process
 - [`SECURITY.md`](../SECURITY.md) — disclosure policy
 - [`ASSET_LICENSES.md`](../ASSET_LICENSES.md) — per-asset license map
 - [`THIRD_PARTY_NOTICES.md`](../THIRD_PARTY_NOTICES.md) — pinned-deps notes

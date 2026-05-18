@@ -39,7 +39,7 @@ Surveyed by an exploration pass on 2026-04-22.
 
 ---
 
-## 3. CPU / GPU placement (CLAUDE.md Rule 12)
+## 3. CPU / GPU placement (CLAUDE.md Rule 7)
 
 Entirely CPU. ImGui modal rendering, file I/O for the persistence flag, scene construction via existing template code. No per-pixel or per-vertex work. Inherits CPU placement from `TemplateDialog` and `WelcomePanel`. The *scene* the wizard builds runs on the usual CPU scene-graph + GPU render path, unchanged.
 

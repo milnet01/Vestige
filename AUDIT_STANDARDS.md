@@ -14,7 +14,7 @@ Mandatory audit process after every completed phase. Comprehensive coverage (ful
 
 ## 2. Workflow
 
-Five tiers. Do not skip. Each feeds the next.
+Six tiers. Do not skip. Each feeds the next.
 
 ```
 Tier 1: Automated Tools         (zero LLM tokens)
@@ -22,6 +22,7 @@ Tier 2: Pattern Grep Scan       (matching lines only)
 Tier 3: Changed-File Review     (proportional to phase)
 Tier 4: Categorical Sweep       (parallel subagents)
 Tier 5: Online Research         (targeted)
+Tier 6: Feature Coverage Sweep  (audit tool — flags subsystems without tests)
   → Findings Report → Plan → User Approval → Implementation
 ```
 
@@ -31,11 +32,11 @@ Tier 5: Online Research         (targeted)
 
 Run + capture output. Catches mechanical issues for free.
 
-**Compiler warnings.** Clean rebuild, grep for `warning:|error:`. `-Werror` has been on since 2026-04-19 L41 — any warning is a build break. Full hardened flag set lives in `engine/CMakeLists.txt` (see SECURITY.md §6).
+**Compiler warnings.** Clean rebuild, grep for `warning:|error:`. `-Werror` has been on since the 2026-04-19 audit (item L41 in `docs/AUDIT_2026-04-19.md`) — any warning is a build break. Full hardened flag set lives in `engine/CMakeLists.txt` (see SECURITY.md §6).
 
 **cppcheck.** `cppcheck --enable=all --std=c++17 --suppress=missingIncludeSystem --suppress=unusedFunction -I engine/ -I external/ engine/ app/ tests/`.
 
-**clang-tidy** (if available). `bugprone-*,performance-*,modernize-*,readability-*,cppcoreguidelines-*`.
+**clang-tidy** (optional — no project `.clang-tidy` is checked in yet; see CODING_STANDARDS §17). Per-developer config with check selectors `bugprone-*,performance-*,modernize-*,readability-*,cppcoreguidelines-*`.
 
 **Sanitizers.** Debug build with `-fsanitize=address,undefined -fno-omit-frame-pointer`; run test suite. ASan catches leaks/overflow/UAF; UBSan catches UB/integer overflow/null deref.
 
@@ -121,6 +122,20 @@ One subagent per category. Each uses grep/glob to find relevant files, then read
 | **F — Docs & Tests** | Test coverage gaps, stale ARCHITECTURE/CODING/SECURITY/AUDIT docs vs code, Doxygen on public APIs, test quality (behavior vs compile-only). |
 | **G — Shaders** | C++/GLSL uniform sync, GLSL best practices, compile-error handling, precision qualifiers, vertex-attribute layout sync. |
 | **H — Scene Spatial Integrity** | Entities not spawning inside colliders; containment; ≥ 5 cm margins; shared dimension constants; no caging; no z-fighting; cloth sizing + collider placement. Cross-ref CODING_STANDARDS §9. |
+
+---
+
+## 6a. Tier 6 — Feature Coverage Sweep
+
+The audit tool's Tier 6 sweep (`python3 tools/audit/audit.py -t 6`, implemented
+in `tools/audit/lib/report.py`) walks every top-level engine subsystem
+(`engine/<name>/`) and flags any subsystem that does not have a corresponding
+test file in `tests/`. Output is a coverage table — subsystems without tests
+become a finding in the report. Useful as a backstop for "this subsystem
+shipped but no test ever exercised it" cases that Tier 4 might miss when the
+sweep brief is feature-focused rather than file-listing.
+
+CI runs Tier 1–3 on every push; Tiers 4–6 run on phase-close per §1.
 
 ---
 

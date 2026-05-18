@@ -641,7 +641,7 @@ new `THIRD_PARTY_NOTICES.md` entry, no new font license to track.
 
 ---
 
-## 8. Verify-step plan (CLAUDE.md Rule 12)
+## 8. Verify-step plan (global `~/.claude/CLAUDE.md` rule 12)
 
 Each slice has explicit pass/fail criteria. Tests live under
 `tests/` alongside their peers and run via the existing ctest

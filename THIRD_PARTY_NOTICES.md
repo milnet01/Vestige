@@ -14,24 +14,43 @@ For asset attributions (textures, models, fonts), see [ASSET_LICENSES.md](ASSET_
 These are pulled in via CMake `FetchContent` and built from source. Each
 `GIT_TAG` / version is pinned in `external/CMakeLists.txt`. Update both
 this file and the audit tool's NVD dependency list when bumping a pin.
+Most rows below pin a tag; three deps (Dear ImGui, imgui-filebrowser,
+ImPlot) currently track an upstream branch — see "Branch-tracking deps"
+below. `nlohmann/json` is fetched via URL tarball, not git tag.
 
-| Dependency       | Version       | License                                           | Source |
-|------------------|---------------|---------------------------------------------------|--------|
-| GLFW             | 3.4           | zlib                                              | <https://github.com/glfw/glfw> |
-| GLM              | 1.0.1         | MIT (modified)                                    | <https://github.com/g-truc/glm> |
-| Dear ImGui       | docking branch| MIT                                               | <https://github.com/ocornut/imgui> |
-| ImGuizmo         | master        | MIT                                               | <https://github.com/CedricGuillemet/ImGuizmo> |
-| imgui-filebrowser| master        | MIT                                               | <https://github.com/AirGuanZ/imgui-filebrowser> |
-| imgui-node-editor| v0.9.3        | MIT                                               | <https://github.com/thedmd/imgui-node-editor> |
-| ImPlot           | master        | MIT                                               | <https://github.com/epezent/implot> |
-| FreeType         | VER-2-13-3    | FreeType Project License (BSD-style) — chosen over GPLv2 | <https://gitlab.freedesktop.org/freetype/freetype> |
-| tinyexr          | v1.0.9        | BSD 3-Clause                                      | <https://github.com/syoyo/tinyexr> |
-| tinygltf         | v2.9.4        | MIT                                               | <https://github.com/syoyo/tinygltf> |
-| nlohmann/json    | v3.12.0       | MIT                                               | <https://github.com/nlohmann/json> |
-| Jolt Physics     | v5.2.0        | MIT                                               | <https://github.com/jrouwe/JoltPhysics> |
-| OpenAL Soft      | 1.24.1        | LGPL v2.1 (dynamic linking)                       | <https://github.com/kcat/openal-soft> |
-| Recast Navigation| v1.6.0        | zlib                                              | <https://github.com/recastnavigation/recastnavigation> |
-| GoogleTest       | v1.15.2       | BSD 3-Clause                                      | <https://github.com/google/googletest> |
+| Dependency       | Version                                         | License                                           | Source |
+|------------------|-------------------------------------------------|---------------------------------------------------|--------|
+| GLFW             | 3.4                                             | zlib                                              | <https://github.com/glfw/glfw> |
+| GLM              | 1.0.1                                           | MIT (modified)                                    | <https://github.com/g-truc/glm> |
+| Dear ImGui       | docking branch (see below)                      | MIT                                               | <https://github.com/ocornut/imgui> |
+| ImGuizmo         | commit `a15acd87` (master snapshot)             | MIT                                               | <https://github.com/CedricGuillemet/ImGuizmo> |
+| imgui-filebrowser| master branch (see below)                       | MIT                                               | <https://github.com/AirGuanZ/imgui-filebrowser> |
+| imgui-node-editor| v0.9.3                                          | MIT                                               | <https://github.com/thedmd/imgui-node-editor> |
+| ImPlot           | master branch (see below)                       | MIT                                               | <https://github.com/epezent/implot> |
+| FreeType         | VER-2-13-3                                      | FreeType Project License (BSD-style) — chosen over GPLv2 | <https://gitlab.freedesktop.org/freetype/freetype> |
+| tinyexr          | v1.0.9                                          | BSD 3-Clause                                      | <https://github.com/syoyo/tinyexr> |
+| tinygltf         | v2.9.4                                          | MIT                                               | <https://github.com/syoyo/tinygltf> |
+| nlohmann/json    | v3.12.0 (URL tarball; see `external/CMakeLists.txt:319`) | MIT                                      | <https://github.com/nlohmann/json> |
+| Jolt Physics     | v5.3.0                                          | MIT                                               | <https://github.com/jrouwe/JoltPhysics> |
+| OpenAL Soft      | 1.25.1                                          | LGPL v2.1 (dynamic linking)                       | <https://github.com/kcat/openal-soft> |
+| Recast Navigation| v1.6.0                                          | zlib                                              | <https://github.com/recastnavigation/recastnavigation> |
+| GoogleTest       | v1.15.2                                         | BSD 3-Clause                                      | <https://github.com/google/googletest> |
+
+### Branch-tracking deps
+
+Three deps track an upstream branch rather than a fixed tag. Per project
+rule 8 (`CLAUDE.md`), each lagging or branch-following pin needs a
+written reason; the reasons below also explain why SECURITY.md §5
+("Pin versions — no latest") tolerates these as documented exceptions:
+
+- **Dear ImGui (`docking`):** the docking branch is the only place
+  multi-viewport docking lives; `master` does not have it yet. Pin will
+  move to a tag once docking lands on `master`.
+- **imgui-filebrowser (`master`):** upstream does not publish tags; the
+  project tracks `master`. Bump cadence is at audit-cycle entry.
+- **ImPlot (`master`):** upstream's last tagged release lags `master`
+  by enough to miss Vestige's plot-API needs; will move to a tag once
+  upstream re-tags.
 
 ### Notes on the LGPL dependency
 

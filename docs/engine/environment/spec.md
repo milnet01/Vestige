@@ -104,8 +104,8 @@ Key abstractions:
 | `TerrainConfig` | struct | Cold-start config — width / depth / spacing / height scale / LOD depth. `engine/environment/terrain.h:23` |
 | `CDLODNode` | struct | One quadtree node — center / half-extent / min-max height / LOD level / 4 children. `engine/environment/terrain.h:37` |
 | `TerrainDrawNode` | struct | One LOD-selected draw entry — world offset + scale + LOD + morph factor. `engine/environment/terrain.h:48` |
-| `Terrain::BankBlendConfig` | struct | Width / channel / strength for blending a bank material near water edges. `engine/environment/terrain.h:212` |
-| `Terrain::AutoTextureConfig` | struct | Slope + altitude thresholds + noise for auto-generated splatmaps. `engine/environment/terrain.h:229` |
+| `Terrain::BankBlendConfig` | struct | Width / channel / strength for blending a bank material near water edges. `engine/environment/terrain.h:220` |
+| `Terrain::AutoTextureConfig` | struct | Slope + altitude thresholds + noise for auto-generated splatmaps. `engine/environment/terrain.h:237` |
 | `FoliageManager` | class | Paint / erase / cull / serialise across the chunk grid. `engine/environment/foliage_manager.h:37` |
 | `FoliageChunk` | class | 16 m × 16 m cell holding foliage / scatter / tree instances. `engine/environment/foliage_chunk.h:22` |
 | `FoliageInstance` / `ScatterInstance` / `TreeInstance` | struct | Per-instance data (position / rotation / scale / type or species id). `engine/environment/foliage_instance.h:18,27,36` |

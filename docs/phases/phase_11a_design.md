@@ -7,7 +7,7 @@
 | Owners          | milnet01                                                                      |
 | Start date      | TBD — pending user review of this doc                                         |
 | Target date     | TBD — set on approval, sized below in §5                                      |
-| Roadmap section | `ROADMAP.md` Phase 11A (lines ~742–830)                                       |
+| Roadmap section | `ROADMAP.md` Phase 11A (lines ~952–1039 as of 2026-05-18)                     |
 | Depends on      | Phase 10.7 (photosensitive clamps shipped) · Phase 10.8 (camera modes shipped)|
 | Feeds into      | Phase 11B (gameplay features) · Phase 12 (asset packaging shares zstd)        |
 
@@ -32,7 +32,7 @@ Phase 11A lands the runtime primitives that every Phase 11B gameplay bullet — 
 | Photosensitive clamps wired into shake + flash at upload sites                                      | Re-tuning `PhotosensitiveLimits` defaults — that's a Phase 10.7 concern                            |
 | Determinism contract documentation + per-scene `replay_safe` flag + CI parity test                  | Network-replicated replays / multiplayer rollback — out of roadmap                                 |
 
-ROADMAP §Phase 11A lists a *Behavior Tree Editor* as a bullet inside the BT runtime block. This doc treats the editor as an open question (§12 Q5) — runtime ticking is load-bearing for Phase 11B; visual editing is convenience that can land in Phase 11B-as-it-needs-it or as a 11A-tail slice based on user review.
+ROADMAP §Phase 11A lists a *Behavior Tree Editor* as a bullet inside the BT runtime block. This doc treats the editor as an open question (§11 Q5) — runtime ticking is load-bearing for Phase 11B; visual editing is convenience that can land in Phase 11B-as-it-needs-it or as a 11A-tail slice based on user review.
 
 ---
 
@@ -47,7 +47,7 @@ Six new subsystems, three new top-level engine directories, two new public heade
 | Save-file compression   | `engine/utils/compression/` (new) | `CMakeLists.txt` (`FetchContent` block); `engine/io/` for chunk-format header (new file `chunk_io.h`) |
 | Replay recording        | `engine/replay/` (new)      | `engine/input/input_bindings.h` (per-tick input snapshot); `engine/physics/physics_world.h` (fixed tick) |
 | Behavior tree runtime   | `engine/ai/behavior_tree/` (**new top-level `engine/ai/` directory — does not yet exist**; slice BT1 creates it) | `engine/scripting/blackboard.h` reuse — verify the `std::variant<...>` payload shape fits BT key requirements during slice BT1 |
-| AI perception           | `engine/ai/perception/` (under the same new `engine/ai/`) | `engine/physics/physics_world.h::rayCast` (shipped) for line-of-sight; **`PhysicsWorld::sphereCast` does NOT yet exist** (was the Phase 10.8 CM3 promise, pulled into Phase 10.9 Ph3 — see physics spec §15) — slice AP-prereq lands it before AP1 can hearing-query |
+| AI perception           | `engine/ai/perception/` (under the same new `engine/ai/`) | `engine/physics/physics_world.h::rayCast` and `::sphereCast` (both shipped — `physics_world.h:248`) — used directly for line-of-sight and hearing queries. (Earlier revisions of this doc proposed a slice AP-prereq to add `sphereCast`; it landed before this phase started, so AP1 has no precursor work.) |
 
 ### 3.1 Camera Shake — composition contract
 
@@ -130,7 +130,7 @@ Atomic write per `engine/utils/atomic_write.h` (existing) — write-to-temp + re
 
 ### 3.4 Replay recording — input mode + state-snapshot fallback
 
-Two modes share a `.vreplay` envelope; the chosen mode is per-scene (header field). The scene authoritatively flags whether it's *replay-safe via input recording* — default off; opt-in once a scene's full subsystem set has been audited deterministic. Subsystems known deterministic on day 1 of Phase 11A: physics (Jolt fixed-timestep, `-fno-fast-math` per `CODING_STANDARDS.md` §30), input bindings, scripting graph evaluation. Subsystems known *non*-deterministic: audio (driver-thread float DSP, irrelevant to replay state), particle GPU rand (irrelevant — visual-only). Subsystems pending audit: AI thread-pool dispatch order (relevant — Phase 11A AI perception ticks must be deterministic; tracked in §12 Q3).
+Two modes share a `.vreplay` envelope; the chosen mode is per-scene (header field). The scene authoritatively flags whether it's *replay-safe via input recording* — default off; opt-in once a scene's full subsystem set has been audited deterministic. Subsystems known deterministic on day 1 of Phase 11A: physics (Jolt fixed-timestep, `-fno-fast-math` per `CODING_STANDARDS.md` §30), input bindings, scripting graph evaluation. Subsystems known *non*-deterministic: audio (driver-thread float DSP, irrelevant to replay state), particle GPU rand (irrelevant — visual-only). Subsystems pending audit: AI thread-pool dispatch order (relevant — Phase 11A AI perception ticks must be deterministic; tracked in §11 Q3).
 
 | Mode            | Stored                                                    | Replay strategy                                                       |
 |-----------------|-----------------------------------------------------------|-----------------------------------------------------------------------|
@@ -154,7 +154,7 @@ A behavior tree (BT) is a directed tree of nodes evaluated each tick from the ro
 
 State storage: a `Blackboard` keyed by string + `std::variant<bool, int, float, glm::vec3, EntityHandle>`. Reuses the existing `engine/scripting/blackboard.h` shape — Phase 11A *does not* fork a separate BT-only blackboard; one blackboard per agent serves both scripting and BT.
 
-Tree authoring for Phase 11A: data-driven from JSON (`assets/ai/<tree>.bt.json`) or programmatic via fluent C++ builder. Visual editor deferred per §12 Q5.
+Tree authoring for Phase 11A: data-driven from JSON (`assets/ai/<tree>.bt.json`) or programmatic via fluent C++ builder. Visual editor deferred per §11 Q5.
 
 `Utility AI` enhancement (ROADMAP optional bullet): a `UtilitySelector` decorator that scores each child via a `std::function<float(Blackboard&)>` and ticks the highest-scoring one. Same node interface as `Selector`; trivial to add in slice BT4.
 
@@ -241,13 +241,12 @@ Each slice lands as a review-sized commit with tests + CHANGELOG entry. Slices a
 | BT3    | Decorators: `Inverter`, `Repeater`, `Cooldown`, `Conditional`, `Timeout`                                         | 220       | BT1                    |
 | BT4    | Leaf actions / conditions API + JSON loader + fluent C++ builder                                                 | 280       | BT2, BT3               |
 | BT5    | Blackboard reuse glue (BT keys → existing scripting Blackboard) + concrete demo tree                             | 160       | BT4                    |
-| AP-prereq | Add `PhysicsWorld::sphereCast(origin, dir, radius, maxDistance, ignoreBodyId)` (per physics spec §15 Q2 — was Phase 10.8 CM3, pulled into Phase 10.9 Ph3). Mirror existing `rayCast` overload signature. | 80 | — |
-| AP1    | `AiPerceiverComponent` + sight cone + LOS raycast                                                                | 200       | AP-prereq              |
+| AP1    | `AiPerceiverComponent` + sight cone + LOS raycast (uses `PhysicsWorld::sphereCast` at `engine/physics/physics_world.h:248`, which shipped before this phase started — no precursor slice needed) | 200       | —                      |
 | AP2    | Hearing stimulus bus (EventBus `AiSoundEvent`) + occlusion raycast + per-type radius table                       | 220       | AP1                    |
 | AP3    | `AwarenessAccumulator` + Alert FSM + propagation event                                                           | 240       | AP1, AP2               |
 | AP4    | BT integration — `CanSeePlayer`, `LastKnownPosition`, `IsAlertLevel(...)` condition leaves                       | 140       | AP3, BT5               |
 
-**Total:** ~24 slices, ~4280 LOC. Critical path: ZS1 → ZS2 → RP1 → RP2 → RP3 → RP5 (replay determinism harness is the gating CI piece). CS / FL / BT / AP families ship in parallel after their respective dependency-zero slice.
+**Total:** ~23 slices (~4460 LOC after the AP-prereq strike-through and slice recount). Critical path: ZS1 → ZS2 → RP1 → RP2 → RP3 → RP5 (replay determinism harness is the gating CI piece). CS / FL / BT / AP families ship in parallel after their respective dependency-zero slice.
 
 Recommended commit order (one path through the DAG): ZS1, CS1, FL1, BT1, AP1 (parallel-trackable) → ZS2, CS2, FL2, BT2, BT3, AP2 → CS3, FL3, BT4, AP3 → BT5, AP4 → RP1 → RP2, RP4 → RP3 → RP5 → CS4. Tail slice CS4 (editor preview) is non-blocking and can land after AP4.
 
@@ -277,7 +276,7 @@ The §9 testing strategy is deliberately structured so the milestone is verifiab
 | AI hearing occlusion raycast                                        | CPU (Jolt physics thread) | Same as above.                                                                                                                                                  |
 | Awareness accumulator + alert FSM                                   | CPU                    | Tens of perceiver-source pairs at most; sparse update.                                                                                                              |
 
-**No new GPU compute dispatches are introduced.** The flash-overlay shader is the only new GPU touch — a single full-screen quad pass that already fits the existing post-process scheduling. Replay determinism *requires* CPU-only execution for any subsystem whose state participates in input-mode replay (see §3.4 — Phase 11A AI perception ticks must be deterministic; tracked in §12 Q3 — *if* AI perception ends up using a thread pool, perception must move out of the input-replay determinism set or the pool must publish ordered results).
+**No new GPU compute dispatches are introduced.** The flash-overlay shader is the only new GPU touch — a single full-screen quad pass that already fits the existing post-process scheduling. Replay determinism *requires* CPU-only execution for any subsystem whose state participates in input-mode replay (see §3.4 — Phase 11A AI perception ticks must be deterministic; tracked in §11 Q3 — *if* AI perception ends up using a thread pool, perception must move out of the input-replay determinism set or the pool must publish ordered results).
 
 No dual CPU+GPU implementations in this phase. No "CPU for now, move later" placeholders.
 
@@ -366,7 +365,7 @@ Determinism harness (RP5) runs in CI per ROADMAP. Linux runner only — Windows-
 | `engine/utils/atomic_write.h`                               | Save-file atomicity — write-temp + rename.                                                          |
 | `std::expected<T, E>` (C++23) per CODING_STANDARDS §11      | Error returns from chunk IO + replay load. **`engine/utils/result.h` does not yet exist**; use the standard name directly until the alias lands (CODING_STANDARDS §11 Open Q). |
 | `engine/physics/physics_world.h::rayCast`                   | Sight LOS raycast (shipped).                                                                        |
-| `PhysicsWorld::sphereCast`                                  | Hearing-radius queries. **Does NOT yet exist** — was Phase 10.8 CM3, pulled into Phase 10.9 Ph3 (see physics spec §15 Q2). Slice AP-prereq lands it. |
+| `PhysicsWorld::sphereCast`                                  | Hearing-radius queries. Shipped — see `engine/physics/physics_world.h:248`. AP1 uses it directly; no precursor slice. |
 | `engine/physics/physics_world.h::fixedTimestep`             | Replay-mode determinism contract (header field stored in `.vreplay`).                               |
 | `engine/scripting/blackboard.h`                             | BT key-value state store — variant payload shape verified during slice BT1.                         |
 | `engine/input/input_bindings.h`                             | Replay input snapshot — record from the action map, not raw GLFW state.                             |

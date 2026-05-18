@@ -47,7 +47,7 @@ If a reader can't tell which side of the line a feature falls on after reading t
                                ┌─────────────────────────────┐
                                │       PhysicsWorld          │
                                │ engine/physics/             │
-                               │  physics_world.h:41         │
+                               │  physics_world.h:45         │
                                └──────────────┬──────────────┘
                                               │ owns (RAII)
        ┌──────────────────────┬───────────────┼──────────────────┬────────────────────┐
@@ -103,8 +103,8 @@ Key abstractions:
 
 | Abstraction | Type | Purpose |
 |-------------|------|---------|
-| `PhysicsWorld` | class (non-copyable, non-movable) | The Jolt facade. Owns `PhysicsSystem`, `TempAllocator`, `JobSystem`, layer filters, constraint map. `engine/physics/physics_world.h:41` |
-| `PhysicsWorldConfig` | struct | Cold-init knobs: `fixedTimestep` (1/60 s), `collisionSteps`, `maxBodies` (4096), `numBodyMutexes`, `maxBodyPairs`, `maxContactConstraints`, `threadCount`. `physics_world.h:29` |
+| `PhysicsWorld` | class (non-copyable, non-movable) | The Jolt facade. Owns `PhysicsSystem`, `TempAllocator`, `JobSystem`, layer filters, constraint map. `engine/physics/physics_world.h:45` |
+| `PhysicsWorldConfig` | struct | Cold-init knobs: `fixedTimestep` (1/60 s), `collisionSteps`, `maxBodies` (4096), `numBodyMutexes`, `maxBodyPairs`, `maxContactConstraints`, `threadCount`. `physics_world.h:33` |
 | `RigidBody` | `Component` | Entity-attached body. Holds `BodyMotionType` (`STATIC` / `DYNAMIC` / `KINEMATIC`) + `CollisionShapeType` (`BOX` / `SPHERE` / `CAPSULE` / `CONVEX_HULL` / `MESH`). `rigid_body.h:44` |
 | `PhysicsCharacterController` | class | `CharacterVirtual` capsule wrapper. Walk, slope-limit, stair-step, floor-stick, fly-mode. `physics_character_controller.h:42` |
 | `PhysicsControllerConfig` | struct | Capsule radius / half-height, eye height, max-slope, mass, max-strength, padding, stair-step, stick-distance, gravity, input-smoothing. `physics_character_controller.h:20` |

@@ -110,4 +110,4 @@ For the Tabernacle: tent interior probe AABB matches the tent walls. Entities at
 - Probe serialization in scene files
 - Multiple overlapping probes with priority/blending
 - Real-time probe updates (for dynamic scenes)
-- Spherical Harmonics encoding (lower memory, faster lookup)
+- ~~Spherical Harmonics encoding (lower memory, faster lookup)~~ — **shipped 2026-03-29** as the SH probe grid; see `docs/research/sh_probe_grid_design.md` and `gi_roadmap.md` §2.

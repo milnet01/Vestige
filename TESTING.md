@@ -16,7 +16,7 @@ of its single maintainer's hardware.
 The maintainer develops on:
 
 - **GPU:** AMD RX 6600 (RDNA2) on Mesa
-- **OS:** openSUSE Tumbleweed (Linux 6.x, Wayland + X11)
+- **OS:** openSUSE Tumbleweed (Linux 6.9+ — see `SECURITY.md` §5 "Linux Support Matrix" for the amdgpu CVE-2026-23213 floor; Wayland + X11)
 - **CPU:** AMD Ryzen 5 5600
 
 Everything else is an open gap. Reports are most valuable when they come

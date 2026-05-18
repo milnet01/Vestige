@@ -97,7 +97,7 @@ Key abstractions:
 | `PinId` / `internPin()` | typedef + free fn | Process-local interned pin name. `engine/scripting/pin_id.h:39` |
 | `ScriptGraphCompiler` | class (stateless) | Validate + emit `CompiledScriptGraph` IR. `engine/scripting/script_compiler.h:154` |
 | `CompiledScriptGraph` | struct | Flat, index-based IR; entry-point + update indices precomputed. `engine/scripting/script_compiler.h:116` |
-| `CompileDiagnostic` / `CompileSeverity` | struct + enum | INFO / WARNING / ERROR with node + connection scope. `engine/scripting/script_compiler.h:38` |
+| `CompileDiagnostic` / `CompileSeverity` | struct + enum | INFO / WARNING / ERROR with node + connection scope. `engine/scripting/script_compiler.h:50` |
 | `Blackboard` | class | String → `ScriptValue` map, capped at `MAX_KEYS = 1024`. `engine/scripting/blackboard.h:48` |
 | `VariableScope` | enum | Flow / Graph / Entity / Scene / Application / Saved (Unity Bolt model). `engine/scripting/blackboard.h:19` |
 | `ScriptComponent` | class (entity component) | Holds graph-asset paths + instances + entity-scope blackboard. `engine/scripting/script_component.h:22` |

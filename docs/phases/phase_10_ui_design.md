@@ -323,7 +323,7 @@ All four elements already exist as widgets; this is a pure composition function.
 
 ---
 
-## 8. CPU / GPU placement (CLAUDE.md Rule 12)
+## 8. CPU / GPU placement (CLAUDE.md Rule 7)
 
 | Work | Placement | Why |
 |---|---|---|

@@ -29,7 +29,7 @@ This doc specifies:
 3. The runtime 1st↔3rd toggle: lerp vs. snap, reducedMotion coupling, per-scene opt-out.
 4. Third-person wall-probe: Jolt sphere-cast vs. ray-cluster approximation.
 5. Cinematic mode's relationship to the existing `SplinePath`.
-6. CPU/GPU placement (Rule 12).
+6. CPU/GPU placement (Rule 7).
 7. The slice plan + tests + approval gate.
 
 ---
@@ -62,9 +62,9 @@ Surveyed 2026-04-23.
 
 ---
 
-## 3. CPU / GPU placement (CLAUDE.md Rule 12)
+## 3. CPU / GPU placement (CLAUDE.md Rule 7)
 
-**All camera-mode work runs on the CPU.** The decision table per Rule 12:
+**All camera-mode work runs on the CPU.** The decision table per Rule 7:
 
 | Work | Scale | Branching | Decision |
 |---|---|---|---|

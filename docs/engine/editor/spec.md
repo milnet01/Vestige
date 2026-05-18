@@ -43,7 +43,7 @@
 ```
                      ┌─────────────────────────────────────┐
                      │             Editor                  │
-                     │  (engine/editor/editor.h:86)        │
+                     │  (engine/editor/editor.h:87)        │
                      │   ImGui frame, EDIT/PLAY mode,      │
                      │   gizmo state, viewport bounds      │
                      └────┬─────────────────┬──────────────┘
@@ -85,8 +85,8 @@ Key abstractions:
 
 | Abstraction | Type | Purpose |
 |-------------|------|---------|
-| `Editor` | class | Owns ImGui frame, panels, gizmo state, EDIT/PLAY mode, viewport bounds. `engine/editor/editor.h:86` |
-| `EditorMode` | enum | `EDIT` vs. `PLAY` toggle. `engine/editor/editor.h:79` |
+| `Editor` | class | Owns ImGui frame, panels, gizmo state, EDIT/PLAY mode, viewport bounds. `engine/editor/editor.h:87` |
+| `EditorMode` | enum | `EDIT` vs. `PLAY` toggle. `engine/editor/editor.h:80` |
 | `EditorCamera` | class | Orbit/pan/zoom turntable camera with view presets and smoothed focus animation. `engine/editor/editor_camera.h:23` |
 | `Selection` | class | Multi-select set + primary-id accessor + modifier-aware add/toggle. `engine/editor/selection.h:18` |
 | `CommandHistory` | class | 200-command ring buffer with version-counter dirty tracking + saved-version invariant. `engine/editor/command_history.h:23` |
@@ -95,7 +95,7 @@ Key abstractions:
 | `SceneSerializer` | class (static) | JSON scene I/O with metadata + format envelope; atomic write via `engine/utils/atomic_write.h`. `engine/editor/scene_serializer.h:44` |
 | `PrefabSystem` | class | Save/load entity trees to `assets/prefabs/*.json`. `engine/editor/prefab_system.h:19` |
 | `EntityFactory` | class (static) | Spawners for primitives, lights, particles, water, walls, rooms, stairs, slabs. `engine/editor/entity_factory.h:23` |
-| `EntityActions` | namespace | duplicate / delete / group / copyTransform / pasteTransform / align / distribute. `engine/editor/entity_actions.h:23` |
+| `EntityActions` | namespace | duplicate / delete / group / copyTransform / pasteTransform / align / distribute. `engine/editor/entity_actions.h:25` |
 | `MaterialPreview` | class | Offscreen FBO sphere preview for Inspector swatches. `engine/editor/material_preview.h:29` |
 | `RecentFiles` | class | XDG-aware persistence at `~/.config/vestige/recent_files.json`. `engine/editor/recent_files.h:19` |
 | Panel classes (~25) | class | Each panel owns its own state; drawn from `Editor::drawPanels`. `engine/editor/panels/*.h` |
@@ -108,7 +108,7 @@ Key abstractions:
 The editor exposes a many-header facade because each panel / tool is an independent unit; downstream code (chiefly `engine/core/engine.cpp`) reaches into individual panels via accessors. The legitimate `#include` targets are:
 
 ```cpp
-// engine/editor/editor.h:86 — facade. Owns every panel + tool by value or unique_ptr.
+// engine/editor/editor.h:87 — facade. Owns every panel + tool by value or unique_ptr.
 class Editor {
     bool initialize(GLFWwindow*, const std::string& assetPath);
     void shutdown();

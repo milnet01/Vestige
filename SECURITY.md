@@ -41,9 +41,9 @@ Engine targets Steam distribution — security matters at every stage.
 
 C++ has no automatic memory safety. Mitigations:
 
-- **No raw `new`/`delete`** — use `std::unique_ptr` / `std::shared_ptr`.
+- **No raw `new`/`delete`** — default to `std::unique_ptr` (`std::shared_ptr` only when ownership is genuinely shared; see CODING_STANDARDS §12).
 - **No raw arrays** — use `std::vector`, `std::array`, `std::span`.
-- **No C string funcs** (`strcpy`, `strcat`, `sprintf`) — use `std::string`, `std::format`/`std::snprintf`.
+- **No C string funcs** (`strcpy`, `strcat`, `sprintf`) — use `std::string` and `std::snprintf` (`std::format` is C++20 — see CODING_STANDARDS §0 for adoption status before reaching for it).
 - **Always initialize** — uninitialized variables are UB.
 - **Validate before dereference**, or use references.
 - **RAII for all resources** — GPU buffers, FDs, GL objects released in destructors.
@@ -92,10 +92,10 @@ Malformed shaders can crash drivers or hang the GPU.
 
 ## 5. Dependency Security
 
-- **Pin versions** in CMake — no "latest".
+- **Pin versions** in CMake — no "latest", with three documented exceptions for ImGui (`docking` branch), imgui-filebrowser (`master`), and ImPlot (`master`); see THIRD_PARTY_NOTICES.md "Branch-tracking deps" for the per-pin reason per CLAUDE.md project rule 8.
 - Only well-maintained, reputable, permissively-licensed libs.
 - Review changelogs on update.
-- Fetch via CMake `FetchContent` with specific commits/tags.
+- Fetch via CMake `FetchContent` with specific commits/tags (tarball URL for `nlohmann/json` per THIRD_PARTY_NOTICES.md).
 - No build-time binary downloads.
 
 ### Approved Dependencies
@@ -108,11 +108,11 @@ Malformed shaders can crash drivers or hang the GPU.
 | OpenAL-Soft | System package | kcat/openal-soft |
 | imgui | Embedded in `external/` | GitHub |
 
-### Known CVEs and Mitigations (Reviewed 2026-04-11)
+### Known CVEs and Mitigations (Reviewed 2026-05-18; next review by 2026-08-18)
 
 | Library | CVE / Issue | Severity | Mitigation |
 |---------|-------------|----------|------------|
-| **FreeType** | CVE-2025-27363 (OOB write, actively exploited) | HIGH | Update to ≥ 2.13.1. Monitor for CVE-2026-23865 (fixed in 2.14.2) |
+| **FreeType** | CVE-2025-27363 (OOB write, actively exploited) | HIGH | Current pin `VER-2-13-3` covers CVE-2025-27363 (fixed in 2.13.1). CVE-2026-23865 fix landed in 2.14.2 — accepted-risk while a Vestige-side bump audit is pending; tracked in ROADMAP |
 | **stb_image** | GHSL-2023-145..151 (7 vulns incl. double-free) | HIGH | Validate dimensions after load (done: 16384×16384 max). Don't load untrusted images on background threads without mutex. Monitor upstream |
 | **dr_libs** | CVE-2025-14369 (integer overflow in dr_flac) | HIGH | Validate audio metadata before decoding (done: sample rate, channels, frames). Update to master post-March 2026 |
 | **dr_libs** | Issue #296 (heap overflow in drwav smpl chunk) | HIGH | Update to master. Fixed post-March 2026 |
@@ -169,7 +169,7 @@ target_link_options(vestige_engine PUBLIC
 
 ## 7. Asset Protection (commercial)
 
-- Steam DRM (Steamworks) as first layer — Phase 6.
+- Steam DRM (Steamworks) as first layer — Phase 12 (Distribution).
 - Pack assets into a custom archive format rather than loose files.
 - No secrets (API keys, encryption keys) in binary or assets.
 - Strip debug symbols from release builds.
@@ -191,7 +191,7 @@ target_link_options(vestige_engine PUBLIC
 - Never silently swallow errors — always log.
 - Fail gracefully: missing texture → pink checkerboard, missing model → wireframe cube.
 - Critical failures (no GPU, no GL context) → clear message, clean exit.
-- Never `std::abort()`/`exit()` in library code — return error or throw.
+- Never `std::abort()`/`exit()` in library code — return error or throw (throw only outside 60-FPS hot paths; see CODING_STANDARDS §11 for the no-throw zones: render, physics, audio-mix loops).
 - `assert()` for programmer invariants only, not runtime conditions.
 
 ---

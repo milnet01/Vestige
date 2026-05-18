@@ -50,9 +50,10 @@ mid-range hardware (reference: AMD RX 6600 / Ryzen 5 5600).
 ## Feature status
 
 Core subsystems are complete through **Phase 9** (domain-driven systems
-+ visual scripting foundations; editor UI for scripts is in progress —
-Phase 9E-3 Steps 1–3 shipped). See [`ROADMAP.md`](ROADMAP.md) for the
-detailed phase plan.
++ visual scripting foundations); Phase 10 polish is the active workstream
+and Phase 9E-3 (editor UI for scripts) is in progress. See
+[`ROADMAP.md`](ROADMAP.md) for the detailed phase plan and the current
+slice numbering.
 
 | Area                     | Status        | Notes                                                                 |
 |--------------------------|---------------|-----------------------------------------------------------------------|
@@ -68,7 +69,7 @@ detailed phase plan.
 | Audio                    | Foundation    | OpenAL Soft + spatial audio; polish in Phase 10                       |
 | UI / HUD                 | Foundation    | Sprite renderer + UIElement primitives; menus/theming in follow-ons   |
 | Navigation / pathfinding | Foundation    | Recast navmesh + Detour A*; AI state / editor tooling in follow-ons   |
-| Visual scripting         | In progress   | Phase 9E-1/9E-2 shipped (60 node types); 9E-3 editor UI 3 of 16 steps |
+| Visual scripting         | In progress   | Phase 9E-1/9E-2 shipped; 9E-3 editor UI ongoing (see `docs/phases/phase_09e3_design.md` and ROADMAP for the live step count + registered node-type total) |
 | Formula Pipeline         | Complete      | Expression trees, workbench, C++/GLSL codegen, quality tiers          |
 | Terrain                  | Core complete | Chunking + streaming pending                                          |
 | AI assistance in editor  | Planned       | Phase 23 — design doc pending                                         |

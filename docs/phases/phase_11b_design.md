@@ -7,7 +7,7 @@
 | Owners | milnet01 |
 | Start (target) | after Phase 11A milestone landed and Phase 10.8 Camera Modes / Decal System / Post-Processing (PP) suite shipped |
 | Target completion | TBD — sized post-review (rough guess from §5: 4 archetype slices, see slice plan) |
-| Roadmap source | `ROADMAP.md` lines 830–1021 |
+| Roadmap source | `ROADMAP.md` Phase 11B (lines ~1040–1234 as of 2026-05-18) |
 | Peer doc | `docs/phases/phase_11a_design.md` (parallel — infrastructure layer this phase consumes) |
 | Render prerequisites | `docs/phases/phase_10_8_camera_modes_design.md` (approved, mid-flight); Phase 10.8 Decal System + PP suite (planned) |
 
@@ -127,7 +127,7 @@ Phase 11B (this doc)
 
 | Existing surface | Used by 11B for | Notes |
 |---|---|---|
-| `engine/physics/physics_world.{h,cpp}` (Jolt) | vehicle base, hitscan raycast, sphereCast (Phase 10.8 W1), kinesis pickup, hazard volume queries | Phase 10.8 adds `sphereCast`; weapon hitscan + grenade arcs reuse it |
+| `engine/physics/physics_world.{h,cpp}` (Jolt) | vehicle base, hitscan raycast, sphereCast (already shipped — `physics_world.h:248`), kinesis pickup, hazard volume queries | `sphereCast` already shipped (used here directly); weapon hitscan + grenade arcs reuse it |
 | `engine/physics/physics_character_controller.{h,cpp}` | zero-G traversal — extend with `GravityMode` enum | not a new controller — extension |
 | `engine/audio/audio_music.h` (`MusicStingerQueue`) | scare-marker, takedown-cam stinger, chapter intro | already shipped (`audio_music.h:144`) |
 | `engine/audio/audio_ambient.{h,cpp}` | hazard ambient beds, pit-lane crowd, engine room hum | shipped |

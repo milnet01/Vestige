@@ -193,7 +193,7 @@ needs to be lifted out of the GUI-specific call site.
 
 ### 3.4 Reference-dataset regression harness
 
-**What.** `tools/formula_workbench/reference_datasets/`:
+**What.** `tools/formula_workbench/reference_cases/` (the doc originally proposed `reference_datasets/`, which now exists as an empty placeholder directory — the shipped path is `reference_cases/`):
 
 ```
 drag_coefficient_sphere.csv
@@ -215,8 +215,8 @@ table. It's the numerical-code equivalent of Ants' existing
 `tests/audit_fixtures/<rule-id>/{good,bad}.*` pattern.
 
 **How.** Extend the existing formula-library test to iterate the
-`reference_datasets/` directory. Each `.csv` + `.expected.json` pair
-is one test case. New assertions: `fit_R² >= expected.r_squared_min`,
+`reference_cases/` directory (shipped name). Each `.json` reference
+spec is one test case. New assertions: `fit_R² >= expected.r_squared_min`,
 `fit_RMSE <= expected.rmse_max`, `coefficients` within ±10% of stored
 values.
 

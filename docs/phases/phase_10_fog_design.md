@@ -12,7 +12,7 @@
 - Stay inside a **2.0 ms / frame** GPU budget on RX 6600 at 1080p for the full fog stack at the default quality preset (section 7 of the research doc).
 - Integrate with the existing HDR composite pipeline (`screen_quad.frag.glsl`) without breaking bloom, tonemap, colour grading, or the accessibility filter.
 - Expose accessibility toggles symmetrical to `depthOfFieldEnabled` / `motionBlurEnabled` (research §6).
-- Route the one fittable formula in the whole fog scope — the **Schlick approximation to the Henyey-Greenstein phase function** — through the Formula Workbench, per CLAUDE.md Rule 11.
+- Route the one fittable formula in the whole fog scope — the **Schlick approximation to the Henyey-Greenstein phase function** — through the Formula Workbench, per CLAUDE.md Rule 6.
 - Take the opportunity, while standing up that fit, to close three Workbench feature gaps identified during the research (section 9 of this doc).
 
 ---

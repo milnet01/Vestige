@@ -261,7 +261,7 @@ void setKinematicTarget(uint32_t particleIdx,
 
 ## Formula Workbench Entries
 
-Per CLAUDE.md Rule 11, every numerical coefficient introduced by this
+Per CLAUDE.md Rule 6, every numerical coefficient introduced by this
 phase gets a Formula Workbench case so tuning is reproducible and
 reviewable.
 
@@ -317,6 +317,20 @@ demo scene should reproduce the following structural hierarchy:
   coordinated pendulum swing across all linen walls, period ≈ 4 s,
   with no rubber-banding or visible attachment pops.
 
+## CPU / GPU placement (CLAUDE.md Rule 7)
+
+| Work | Placement | Reason |
+|------|-----------|--------|
+| Kinematic-attachment update (rigid → cloth particle write-through) | CPU | Per-attachment branch + one matrix multiply + one `setKinematicTarget`; sparse / decisional / O(A) where A is bounded under ~500 — no per-pixel/per-vertex scale signal that would justify GPU dispatch. Lives next to the CPU XPBD cloth solver (`engine/physics/cloth_simulator.{h,cpp}`). |
+| Tether-distance solve (inextensible distance-max constraint) | CPU | Folds directly into the existing CPU XPBD iteration loop. Each tether is one vector-length + one branch + optional correction. Moving the solve to GPU would require shipping the full XPBD state to GPU + back, which costs more than the few hundred FLOPs the solve itself runs. |
+| Slider/prismatic ring-on-pole constraint | CPU | Built on Jolt's `SliderConstraint`, which is already CPU. Adding a parallel GPU path would split the rigid-body authoritative state across two backends. |
+| Scene-level joint (pillar-to-socket, wall-to-peg) authoring + runtime | CPU | Editor-side authoring is CPU; runtime evaluation is in Jolt's CPU solver — same reason as the slider above. |
+
+**No new GPU dispatches in this phase.** The cloth GPU compute path (Phase 9B
+shaders) continues to run on GPU; this phase only adds CPU-side write-through
+points feeding it. Future work that lifts cloth fully to GPU (out of scope —
+see `docs/phases/phase_09b_gpu_cloth_design.md`) would re-evaluate this row.
+
 ## Performance Considerations
 
 - Kinematic attachment update is O(A) per substep where A is the total
@@ -331,7 +345,9 @@ demo scene should reproduce the following structural hierarchy:
   bodies already run in Jolt. This phase only bridges the two.
 - No change to the existing 60 FPS budget. The dominant cost of the
   Tabernacle scene under load is still the cloth XPBD solver itself
-  (profiled at 2.1 ms / frame with all 21 curtains active); adding ~700
+  (profiled at 2.1 ms / frame with all 21 curtains active under the
+  RX 6600 / Ryzen 5 5600 dev profile; pin the source profile run-date
+  in §16 when this phase enters implementation); adding ~700
   attachments + tethers is noise relative to that.
 
 ## Test Plan

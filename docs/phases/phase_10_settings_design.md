@@ -44,7 +44,7 @@ Slices 13.1 – 13.5 close these five gaps.
 
 ---
 
-## 3. CPU / GPU placement (CLAUDE.md Rule 12)
+## 3. CPU / GPU placement (CLAUDE.md Rule 7)
 
 Every piece of this subsystem runs on the **CPU**. JSON parsing is pure text + tree traversal; atomic-write is file I/O; applying settings is single-threaded state mutation. No per-pixel / per-vertex work, no per-frame hot path, no scale signal that would justify GPU offload. Placement is inherited from the existing serialisers (scene_serializer, formula_preset, recent_files) and is correct.
 

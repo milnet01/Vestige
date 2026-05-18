@@ -7,16 +7,16 @@ status. Keep it up to date when adding or removing assets.
 The engine code itself is MIT-licensed (see [LICENSE](LICENSE)). Assets
 shipped in this repo carry their own licenses, listed below.
 
-> **Status as of 2026-04-15**: the non-redistributable Texturelabs
-> textures, the everytexture.com rocks, and the biblical-project
-> tabernacle content have been removed from the public repo (see
-> `.gitignore`). The large CC0 assets (Poly Haven 4K textures,
-> `.blend.zip` files, extracted blend dirs) have been migrated to
-> the **separate `VestigeAssets` repo**, which stays private until
-> ~v1.0.0 pending a final redistributability audit of every asset.
-> The engine's `external/CMakeLists.txt` exposes `VESTIGE_FETCH_ASSETS`
-> (default OFF) to opt in when available. Fresh public clones build
-> cleanly without it.
+> **Status as of 2026-05-18** (re-checked; situation unchanged since 2026-04-15):
+> the non-redistributable Texturelabs textures, the everytexture.com
+> rocks, and the biblical-project tabernacle content remain removed
+> from the public repo (see `.gitignore`). The large CC0 assets
+> (Poly Haven 4K textures, `.blend.zip` files, extracted blend dirs)
+> live in the **separate `VestigeAssets` repo**, which stays private
+> until ~v1.0.0 pending a final redistributability audit of every
+> asset. The engine's `external/CMakeLists.txt` exposes
+> `VESTIGE_FETCH_ASSETS` (default OFF) to opt in when available.
+> Fresh public clones build cleanly without it.
 
 ---
 

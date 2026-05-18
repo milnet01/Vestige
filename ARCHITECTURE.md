@@ -96,9 +96,9 @@ Scene
 
 **Phase 1 (basic):** clear → view+projection from active Camera → per-entity (model matrix, bind shader, set uniforms, bind VAO, draw) → swap.
 
-**Current (as of 2026-04-19):**
+**Current (snapshot dated 2026-04-19 — see CHANGELOG.md for post-date deltas):**
 - **Shadow pass** — directional CSM (4 cascades), point, spot (Phases 4–5).
-- **Post-processing** — TAA, bloom, SSAO, tonemap (Reinhard/ACES), color-grading LUT, parallax occlusion.
+- **Post-processing** — TAA, bloom, SSAO, tonemap (Reinhard/ACES/linear-clamp), color-grading LUT, parallax occlusion.
 - **SMAA** — `renderer/smaa.{h,cpp}`.
 - **IBL** — prefilter + BRDF LUT via `environment_map.{h,cpp}`, `light_probe.{h,cpp}`; unified in `ibl_prefilter.h`.
 - **GPU-driven culling / instancing** — frustum-culled MDI via `gpu_culler.{h,cpp}` + `indirect_buffer.{h,cpp}`.
@@ -111,7 +111,7 @@ Scene
 ## 7. Folder Structure
 
 ```
-vestige/
+3D_Engine/                            # repo root (the Vestige source tree)
 ├── CMakeLists.txt · CLAUDE.md · ROADMAP.md · CHANGELOG.md · VERSION
 ├── CODING_STANDARDS.md · ARCHITECTURE.md · SECURITY.md · CONTRIBUTING.md
 ├── LICENSE · ASSET_LICENSES.md · THIRD_PARTY_NOTICES.md
@@ -133,7 +133,9 @@ vestige/
 │   │              CameraComponent, LightComponent, ParticleEmitter,
 │   │              GpuParticleEmitter, ParticlePresets, WaterSurface,
 │   │              InteractableComponent, PressurePlateComponent
-│   ├── resource/   ResourceManager, Model, AsyncTextureLoader, FileWatcher
+│   ├── resource/   ResourceManager, Model, LruCache
+│   │               (note: `AsyncTextureLoader` and `FileWatcher` are
+│   │               planned per §17 but not yet shipped)
 │   ├── utils/      ObjLoader, GltfLoader, ProceduralMesh, CatmullRomSpline,
 │   │              CubeLoader, EntitySerializer, MaterialLibrary, JsonSizeCap,
 │   │              DeterministicLcgRng
@@ -169,10 +171,13 @@ vestige/
 │   │              NavMeshConfig, NavAgentComponent
 │   ├── scripting/  ScriptValue, PinId, Blackboard, NodeTypeRegistry,
 │   │              ScriptGraph, ScriptInstance, ScriptContext,
-│   │              ScriptComponent; core/event/action/pure/flow/latent nodes
+│   │              ScriptComponent, ScriptingSystem (the ISystem impl lives
+│   │              here, not in engine/systems/); core/event/action/pure/
+│   │              flow/latent nodes
 │   ├── systems/    Domain ISystem impls: Atmosphere, Particle, Water, Vegetation,
 │   │              Terrain, Cloth, Destruction, Character, Lighting, Audio, UI,
-│   │              Navigation, Scripting
+│   │              Navigation
+│   │              (ScriptingSystem lives in engine/scripting/ above)
 │   ├── editor/     ImGui editor (dockable)
 │   │   ├── editor.cpp, editor_camera, selection, entity_factory,
 │   │   │   entity_actions, command_history, file_menu, recent_files,
@@ -180,9 +185,13 @@ vestige/
 │   │   ├── panels/   Hierarchy, Inspector, AssetBrowser, History,
 │   │   │             ImportDialog, Environment, Terrain, Performance,
 │   │   │             Validation, ScriptEditor, TextureViewer, HdriViewer,
-│   │   │             ModelViewer, TemplateDialog, Welcome
-│   │   ├── widgets/  AnimationCurve, ColorGradient, CurveEditor, GradientEditor,
-│   │   │             NodeEditor
+│   │   │             ModelViewer, TemplateDialog, Welcome, Audio,
+│   │   │             FirstRunWizard, Navigation, SettingsEditor, Sprite,
+│   │   │             Tilemap, UiLayout, UiRuntime
+│   │   │             (non-exhaustive; see `engine/editor/panels/`)
+│   │   ├── widgets/  AnimationCurveWidget, ColorGradientWidget,
+│   │   │             CurveEditorWidget, GradientEditorWidget,
+│   │   │             NodeEditorWidget
 │   │   ├── tools/    Brush/TerrainBrush, Ruler, Wall, Room, Cutout, Roof, Stair,
 │   │   │             Path (+BrushPreview)
 │   │   └── commands/ TerrainSculptCommand + scripting commands
@@ -204,9 +213,9 @@ vestige/
 ├── tools/
 │   ├── audit/              Python audit tool (tier 1–6 static analysis)
 │   └── formula_workbench/  Interactive formula fitter + codegen
-├── tests/                            # Google Test (~3180 tests)
-├── docs/                             # PHASE*_DESIGN, *_RESEARCH, GI_ROADMAP,
-│                                     #   TABERNACLE_SPECS
+├── tests/                            # Google Test (3232 tests as of 2026-05-18)
+├── docs/                             # phases/, research/, engine/<sub>/spec.md,
+│                                     #   standards docs, launch + audit reports
 ├── scripts/                          # pre-commit + launch
 ├── packaging/                        # vestige-editor wrapper + .desktop
 └── .github/
@@ -229,7 +238,7 @@ app → engine → { core, renderer, scene, resource, utils }
 
 **Internal:** `core` depends on nothing (except its own EventBus); `renderer` and `scene` depend on `core`; `scene` also depends on `renderer` (for components); `resource` depends on `core`; `utils` depends on nothing.
 
-**Third-party licenses:** GLFW (Zlib), GLM/glad/stb_image (MIT / Public Domain), Google Test/Assimp (BSD-3). All permissive / commercial-OK.
+**Third-party licenses:** GLFW (Zlib), GLM (MIT-modified), glad / stb_image (MIT or Public Domain), GoogleTest (BSD-3), tinygltf / tinyexr / nlohmann_json / ImGui / ImGuizmo / imgui-node-editor / imgui-filebrowser / ImPlot (MIT / BSD-3), Jolt Physics (MIT), Recast/Detour (Zlib), FreeType (BSD-style FreeType Project License), dr_libs / stb_vorbis (Public-Domain or MIT-0), **OpenAL Soft (LGPL v2.1, dynamic linking only)**. Permissive overall; the OpenAL Soft exception means the engine MUST stay dynamically linked against OpenAL to preserve the MIT distribution posture. See `THIRD_PARTY_NOTICES.md` for the full table and version pins.
 
 ---
 
@@ -339,9 +348,11 @@ ImGui WYSIWYG, dockable panels.
 
 ---
 
-## 17. Resource Extensions (Phase 5)
+## 17. Resource Extensions (Phase 5, planned)
 
 `FileWatcher` — asset-dir change detection + reload callbacks. `AsyncTextureLoader` — background texture load, main-thread GPU upload.
+
+**Status (as of 2026-05-18):** neither class has shipped yet. `engine/resource/` currently contains `resource_manager`, `model`, and `lru_cache` only. Both classes remain on the roadmap; this section describes the planned shape, not the current state — see `docs/engine/resource/spec.md` §15 Q1.
 
 ---
 

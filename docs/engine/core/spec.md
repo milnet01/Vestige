@@ -68,9 +68,9 @@ Key abstractions:
 | `EngineConfig` | struct | Cold-start config (window, asset path, scene, demo flags). `engine/core/engine.h:54` |
 | `Window` | class (RAII) | GLFW window + GL 4.5 context; fullscreen / vsync / video-mode toggles. `engine/core/window.h:27` |
 | `Timer` | class | `steady_clock`-driven `dt` + FPS counter + optional frame cap. `engine/core/timer.h:18` |
-| `InputManager` | class | GLFW callbacks → `EventBus` events; per-frame mouse delta; binding query. `engine/core/input_manager.h:21` |
+| `InputManager` | class | GLFW callbacks → `EventBus` events; per-frame mouse delta; binding query. `engine/core/input_manager.h:22` |
 | `FirstPersonController` | class | WASD / mouse / gamepad camera controller with AABB + terrain collision. `engine/core/first_person_controller.h:37` |
-| `EventBus` | class | Type-indexed `std::function`-based pub/sub. `engine/core/event_bus.h:27` |
+| `EventBus` | class | Type-indexed `std::function`-based pub/sub. `engine/core/event_bus.h:40` |
 | `Event` | struct (base) | Polymorphic base for every typed event. `engine/core/event.h:12` |
 | `system_events.h` | header | Catalogue of canonical typed events (`SceneLoadedEvent`, `WeatherChangedEvent`, `KeyPressedEvent`, …) — the public type vocabulary for `EventBus::publish<T>`. `engine/core/system_events.h` |
 | `ISystem` | interface | 4 pure virtuals + opt-in hooks for every domain system. `engine/core/i_system.h:78` |
@@ -182,7 +182,7 @@ void          SettingsEditor::revert();
 - `Engine` is non-copyable, non-movable. Construction is cheap; `initialize()` is heavyweight (creates GLFW + GL + every subsystem). `shutdown()` is idempotent and called by `~Engine`.
 - `EventBus::publish<T>` is **synchronous** — every subscriber runs on the publishing thread before `publish` returns. The dispatch loop copies the listener list so a callback may freely subscribe / unsubscribe without invalidating iteration.
 - `SystemRegistry::registerSystem<T>` must be called **before** `initializeAll()`. After init the registry is sealed (sort + init-prefix-rollback contract — `engine/core/system_registry.cpp:18,42,63`).
-- `Timer::update()` clamps `dt` to **0.25 s** to defend against breakpoint pauses and the "spiral of death" (`engine/core/timer.cpp:50`).
+- `Timer::update()` clamps `dt` to **0.25 s** to defend against breakpoint pauses and the "spiral of death" (`engine/core/timer.cpp` — see the `m_deltaTime` clamp in `Timer::update`; line ~51 today but the function name is the durable anchor).
 - `Window` uses a **static instance pointer** (`s_instance`) for the framebuffer-resize callback because GLFW's per-window user pointer is owned by `InputManager`. Only one `Window` exists per process.
 - `Logger` is intentionally `static` — accessed without an instance, mutex-guarded, safe to call from worker threads (`engine/core/logger.cpp:32`).
 - `Settings::loadFromDisk` returns defaults on every failure mode and writes a `<path>.corrupt` sidecar for `ParseError` so the user can recover by hand.
@@ -192,7 +192,7 @@ void          SettingsEditor::revert();
 
 ## 5. Data Flow
 
-**Steady-state per-frame (`Engine::run` — `engine/core/engine.cpp:964`):**
+**Steady-state per-frame (`Engine::run` — `engine/core/engine.cpp:967`):**
 
 1. `Window::shouldClose()` → if true, route through editor's FileMenu (unsaved-changes guard) before flipping `m_isRunning`.
 2. `Timer::update()` → `dt` (clamped to 0.25 s).
@@ -219,7 +219,7 @@ void          SettingsEditor::revert();
 9. `SystemRegistry::initializeAll(*this)` → stable-sort by `UpdatePhase`, init in order, roll back the prefix in reverse on the first failure (`engine/core/system_registry.cpp:42`).
 10. Load startup scene (built-in demo / Tabernacle / `--scene` CLI override).
 
-**Shutdown (`Engine::shutdown` — `engine/core/engine.cpp:1704`):**
+**Shutdown (`Engine::shutdown` — `engine/core/engine.cpp:1739`):**
 
 1. Save window state (position + size).
 2. `SystemRegistry::shutdownAll()` then `clear()` — explicitly destroys system instances **while** GL / Window / Renderer are still alive (AUDIT §H17 — `engine/core/system_registry.cpp:100`).

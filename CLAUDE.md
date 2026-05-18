@@ -30,4 +30,4 @@ All rules in `~/.claude/CLAUDE.md` are in force here and are not repeated below 
 - Allman braces · 4-space indent · one class per file · `#pragma once`
 
 ## See also
-ARCHITECTURE.md (Subsystem + Event Bus) · CODING_STANDARDS.md · SECURITY.md · AUDIT_STANDARDS.md.
+ARCHITECTURE.md (Subsystem + Event Bus) · CODING_STANDARDS.md · SECURITY.md · AUDIT_STANDARDS.md · TESTING.md · CONTRIBUTING.md · ROADMAP.md · CHANGELOG.md.

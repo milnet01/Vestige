@@ -213,7 +213,7 @@ RX 6600 at 1080p has roughly 5–6× the raw compute throughput of a base PS4 (1
 
 ## 8. Formula Workbench Applicability Summary
 
-Per CLAUDE.md Rule 11, only formulas with fittable coefficients should go through the Workbench. The survey:
+Per CLAUDE.md Rule 6, only formulas with fittable coefficients should go through the Workbench. The survey:
 
 | Technique | Formula | Fittable? | Through Workbench? |
 |---|---|---|---|

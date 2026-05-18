@@ -1,7 +1,7 @@
 # Radiosity Design Document
 
-**Date:** 2026-03-30
-**Status:** Implemented. `engine/renderer/radiosity_baker.{h,cpp}` ships the iterative gathering bake described here (2–3 bounce convergence, ~12 s on RX 6600). This document is retained as the original design record.
+**Date:** 2026-03-30 (original design); **status reconciled 2026-05-18**
+**Status:** Original-design-as-considered. **What shipped diverges from this design.** This document describes a progressive-refinement / hemicube / patch-shooting algorithm (§"Stage 1: Patch Creation" + §"Stage 2: Progressive Refinement Radiosity"). The shipped implementation in `engine/renderer/radiosity_baker.{h,cpp}` uses **iterative gathering** — each iteration re-captures the SH probe grid with the previous bounce's indirect lighting visible (no patch creation, no hemicube FBOs, no `radiosity_*.glsl` shaders). 2–3 bounce convergence, ~12 s on RX 6600. The doc is retained as the original-design record so future readers can see the path not taken; the canonical algorithm description is the header file's docstring and `gi_roadmap.md` §3.
 **Based on:** gi_roadmap.md, sh_probe_grid_design.md, web research
 **Engine:** Vestige (C++17, OpenGL 4.5)
 

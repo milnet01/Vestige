@@ -62,7 +62,7 @@ For each phase below:
 | ROADMAP | `## Phase 16: Scripting and Interactivity` (~line 1391) |
 | Status | partial (Phase 9E shipped the visual-scripting foundation; Phase 16 is the *advanced* features) |
 | Scope summary | Behavior trees, AI perception, AI director, cutscene system, dialogue. |
-| Sibling design docs | Phase 11A landed BT + AI perception runtime; Phase 16 will extend with director-level AI + cutscenes + dialogue. |
+| Sibling design docs | Phase 11A is planned to land the BT + AI perception runtime (see `docs/phases/phase_11a_design.md` — Status: planned as of 2026-05-18); Phase 16 will extend with director-level AI + cutscenes + dialogue once 11A ships. |
 | Notes | When Phase 16 reaches the queue, its design doc cross-references Phase 11A for the BT runtime contract. |
 
 ## Phase 17 — Terrain and Landscape
@@ -141,8 +141,8 @@ For each phase below:
 |-------|-------|
 | ROADMAP | `## Phase 24: Structural / Architectural Physics` (~line 1854) |
 | Status | partial-design — full design doc shipped at `phase_24_structural_physics_design.md` |
-| Scope summary | Load-bearing-aware destruction, mortar / stone / wood material differentiation, real-world architectural failure modes for biblical-structure scenes. |
-| Sibling design docs | `docs/phases/phase_24_structural_physics_design.md` (existing). |
+| Scope summary | Cloth-particle ↔ Jolt rigid-body kinematic attachments, inextensible tethers, slider / prismatic ring-on-pole constraint, scene-level pillar / wall anchor joints — the physical-attachment machinery the Tabernacle scene needs so its linen panels and ram-skin covers hang from poles instead of floating in mid-air. (Earlier drafts of this entry described destruction / mortar / stone material differentiation — that scope was retired before the design doc shipped; see `phase_24_structural_physics_design.md` §"Out of scope".) |
+| Sibling design docs | `docs/phases/phase_24_structural_physics_design.md` (existing — canonical reference). |
 | Notes | The existing design doc is the canonical reference; this stubs entry just confirms it's the active design. |
 
 ## Phase 25 — Open-World Game Systems

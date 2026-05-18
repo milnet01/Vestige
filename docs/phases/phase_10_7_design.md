@@ -19,7 +19,7 @@ But **no downstream code reads from these stores yet.** A user toggling "Music b
 This doc's job is to:
 1. Fix the scope honestly — of the 9 retrofits originally listed in the roadmap, not every downstream consumer exists in the codebase yet. Camera shake and flash overlay subsystems are **not present** today; the clamp helpers are pre-built but sit unused.
 2. Specify how each *existing* consumer consumes its store.
-3. Decide the CPU/GPU placement per CLAUDE.md Rule 12.
+3. Decide the CPU/GPU placement per CLAUDE.md Rule 7.
 4. Slice the work so each commit is review-sized and independently testable.
 5. Get user sign-off before we touch `AudioSystem::update` or the renderer composite pass.
 
@@ -72,11 +72,11 @@ Surveyed by Explore agent + spot-reads 2026-04-22.
 | **Camera shake** | — | **Does not exist in the codebase.** Grep returns no shake accumulator on `Camera`, no shake API, no shake consumers. The clamp helper is ready but there is nothing to clamp. |
 | **Flash overlay** | — | **Does not exist in the codebase.** No hit-flash, no screen-wipe, no transition flash. Clamp helper sits idle. |
 
-**Implication:** The roadmap's 4-consumer list is aspirational. Only **bloom** and **strobe/flicker** retrofits are real work under Phase 10.7. Shake and flash consumers don't exist yet; building them belongs to Phase 11 (combat/gameplay) where the subsystems will actually originate. Slice C must not invent subsystems just to clamp them — that's CLAUDE.md Rule 6 (no over-engineering) territory.
+**Implication:** The roadmap's 4-consumer list is aspirational. Only **bloom** and **strobe/flicker** retrofits are real work under Phase 10.7. Shake and flash consumers don't exist yet; building them belongs to Phase 11 (combat/gameplay) where the subsystems will actually originate. Slice C must not invent subsystems just to clamp them — that's the "shortest correct implementation" rule (global `~/.claude/CLAUDE.md` §2) territory, and would also be a misuse of project Rule 6 (Formula Workbench is for fittable coefficients, not for inventing consumer subsystems).
 
 ---
 
-## 3. CPU / GPU placement (CLAUDE.md Rule 12)
+## 3. CPU / GPU placement (CLAUDE.md Rule 7)
 
 All three slices are **CPU work** and remain so.
 
@@ -117,7 +117,7 @@ The panel owns its own `AudioMixer m_mixer`. Editor users expect mute/solo/ducki
 
 **Implementation shape:**
 
-1. Add `AudioBus bus = AudioBus::Sfx;` to `AudioSourceComponent` (default SFX — matches current implicit routing). Serializer gains a field; missing key defaults to Sfx.
+1. Add `AudioBus bus = AudioBus::Sfx;` to `AudioSourceComponent` (default SFX — matches current implicit routing). Serializer gains a field; missing key defaults to Sfx. **Status as of 2026-05-18:** the `bus` field is already declared at `engine/audio/audio_source_component.h:49`; verify the serializer side before counting this sub-step as work, and treat as done if both sides ship the field.
 2. `AudioSystem` tracks `std::unordered_map<Entity, ALuint> m_activeSources` so a component can find its live OpenAL source.
 3. `AudioSystem::update(dt)` adds a gain-resolution pass: for each owned component with a live source, compute `finalGain = clamp(effectiveBusGain(mixer, comp.bus) * comp.volume * comp.occlusionGain * comp.ducking, 0, 1)` and `alSourcef(src, AL_GAIN, finalGain)`.
 4. `AudioEngine::playSoundSpatial(...)` accepts an optional `AudioBus` + `const AudioMixer*` so the *initial* gain upload already accounts for bus gain, avoiding a one-frame blip at full volume.

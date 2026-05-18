@@ -26,7 +26,7 @@
 | `InputActionMap` — registry + reverse lookup + conflict detection + reset-to-defaults | First-Person Controller (FPC) movement code that *consumes* actions — `engine/core/first_person_controller.h` |
 | `bindingDisplayLabel()` — GLFW-code → human string for the rebind UI | Localisation of those strings (Phase 10 Localization owns the string table) |
 | `isActionDown()` — pure-function query with dependency-injected binding checker | Polling GLFW / GLFW gamepad state — `InputManager::isBindingDown` |
-| `InputBindingWire` / `ActionBindingWire` — JSON Document Object Notation (JSON) wire structs | Settings orchestration around them — `engine/core/settings.h` (`ControlsSettings::bindings`) |
+| `InputBindingWire` / `ActionBindingWire` — JavaScript Object Notation (JSON) wire structs | Settings orchestration around them — `engine/core/settings.h` (`ControlsSettings::bindings`) |
 | Pure binding ↔ JSON helpers (`bindingToJson`, `bindingFromJson`, `actionBindingToJson`, `actionBindingFromJson`) | Wire ↔ in-memory translation (`extractInputBindings` / `applyInputBindings`) — `engine/core/settings_apply.cpp` |
 | Phantom-id validation policy (drop with logged warning) | Schema migration / `Settings` version chain — `engine/core/settings_migration.h` |
 | Same-device-only conflict detection (Phase 10.9 Slice 9 I4) | Editor rebind panel ImGui — `engine/editor/panels/settings_editor_panel.cpp` |
@@ -72,11 +72,11 @@ Key abstractions:
 | Abstraction | Type | Purpose |
 |-------------|------|---------|
 | `InputDevice` | enum class | `None` / `Keyboard` / `Mouse` / `Gamepad`. `engine/input/input_bindings.h:38` |
-| `InputBinding` | struct | `(device, code)` pair + `isBound` + factory helpers (`key`, `mouse`, `gamepad`, `none`). `engine/input/input_bindings.h:52` |
-| `InputAction` | struct | id + label + category + three binding slots + `matches(binding)`. `engine/input/input_bindings.h:80` |
-| `InputActionMap` | class | Live + defaults registry; rebind, reverse lookup, conflict detection, reset. `engine/input/input_bindings.h:99` |
-| `bindingDisplayLabel()` | free function | GLFW code → "W" / "Space" / "Left Mouse" / "LB" / "—". `engine/input/input_bindings.h:166` |
-| `isActionDown()` | free function | Pure query — caller injects the polling predicate. `engine/input/input_bindings.h:174` |
+| `InputBinding` | struct | `(device, code)` pair + `isBound` + factory helpers (`key`, `mouse`, `gamepad`, `none`). `engine/input/input_bindings.h:79` |
+| `InputAction` | struct | id + label + category + three binding slots + `matches(binding)`. `engine/input/input_bindings.h:117` |
+| `InputActionMap` | class | Live + defaults registry; rebind, reverse lookup, conflict detection, reset. `engine/input/input_bindings.h:136` |
+| `bindingDisplayLabel()` | free function | GLFW code → "W" / "Space" / "Left Mouse" / "LB" / "—". `engine/input/input_bindings.h:203` |
+| `isActionDown()` | free function | Pure query — caller injects the polling predicate. `engine/input/input_bindings.h:211` |
 | `InputBindingWire` | struct | JSON-shape `(device:string, scancode:int)`. `engine/input/input_bindings_wire.h:35` |
 | `ActionBindingWire` | struct | JSON-shape `(id, primary, secondary, gamepad)`. `engine/input/input_bindings_wire.h:50` |
 | `bindingToJson` / `bindingFromJson` | free functions | Symmetric round-trip; missing fields take wire defaults. `engine/input/input_bindings_wire.h:69` |

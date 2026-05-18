@@ -1,10 +1,12 @@
 # Self-learning roadmap — audit tool + Formula Workbench
 
-Consolidated handoff doc as of 2026-04-19 (rev 5). Lists everything that's
+Consolidated handoff doc; last reconciled 2026-05-18 (rev 6). Lists everything that's
 shipped and everything that's tracked-but-not-started for the
 self-learning loops in both tools. Pairs with
 `docs/research/formula_workbench_self_learning_design.md` (the design that
-scoped this work).
+scoped this work). Workbench shipped versions since rev 5: 1.16.0 and 1.17.0
+(see Shipped table below); see `tools/formula_workbench/CHANGELOG.md` for the
+canonical per-version notes.
 
 ## Shipped
 
@@ -37,6 +39,7 @@ header_guards, binary_in_repo, dup_files).
 | 1.13.0 | 2026-04-18 | W3 — markdown rendering in the Suggestions panel. New `markdown_render.{h,cpp}` (pure parser + ImGui-only renderer) handles the subset `llm_rank.py` emits: headings 1–3, pipe tables, `---` rules, fenced code, inline backtick code spans, `**bold**` stripped. Suggestions panel renders the LLM shortlist as a real ImGui table instead of raw markdown; a "Show raw markdown" toggle keeps copy-paste available. 17 new parser tests. |
 | 1.14.0 | 2026-04-19 | W5 (cont.) — five more reference cases: `aerodynamic_drag` (3-input product sweep), `buoyancy` (simplest 3-factor linear), `inverse_square_falloff` (first 3-coefficient fit), `vignette` (first fully-nonlinear coefficient inside pow()), `wet_darkening` (2D input grid). Doubles harness coverage from 5 to 10 specs; total test count 1864. |
 | 1.15.0 | 2026-04-19 | W6 — confidence-weighted meta-feature matching for §3.2 seeding. New `FitHistory::similarity(a,b)` (60 % domain IoU + 20 % n_points + 20 % variance log-ratios) and `bestSeedFor(name, currentMeta, threshold=0.5)`; Workbench re-seeds coefficients from the most-similar exported fit once data is loaded (importCsv / generateSyntheticData), and reverts to library defaults when no fit clears the similarity threshold. Badge shows the score. 14 new tests; 1878 total. |
+| 1.16.0 + 1.17.0 | 2026-04-20 → 2026-04-21 | Post-rev-5 deltas reconciled 2026-05-18 — see `tools/formula_workbench/CHANGELOG.md` for the canonical per-version notes (1.16: documented step-based parameter sweeps; 1.17: weighted Levenberg-Marquardt fit + `max_abs_error_max` metric). The 1.15→1.16 numbering gap was an intentional skip noted in that CHANGELOG. |
 
 Related: `docs/research/formula_workbench_self_learning_design.md` is the
 original six-mechanism plan.

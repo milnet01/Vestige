@@ -241,7 +241,7 @@ At tool time (workbench, editor preview), formulas are evaluated via a tree-walk
 - Parses mathematical expressions from strings
 - Supports custom variables and functions
 - Used for tool-time evaluation only (not runtime)
-- Chosen over ExprTk (40K LOC) for simplicity per CLAUDE.md Rule #6
+- Chosen over ExprTk (40K LOC) for simplicity per global `~/.claude/CLAUDE.md` §2 (shortest correct implementation) — project Rule 6 (Formula Workbench) governs *how* formulas are authored, not the choice of expression-parser library.
 
 ### New Files
 

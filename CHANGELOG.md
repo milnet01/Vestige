@@ -635,7 +635,7 @@ agreement test on a 16×16 grid with scattered pins.
 ### 2026-05-02 Phase 10.9 — Sh1 + Sh2 + Sh3 (cloth shader CPU/GPU parity)
 
 Slice 16 closes three of four shader-parity items that gate Slice 17 Cl1
-(the CPU↔GPU cloth parity harness mandated by CLAUDE.md Rule 12). All
+(the CPU↔GPU cloth parity harness mandated by CLAUDE.md Rule 7). All
 three changes target documented CPU behaviour as the parity contract; no
 GL test context is established by the unit-test binary, so a new
 `VESTIGE_SHADER_DIR` compile-definition lets test files read the GLSL
@@ -2114,7 +2114,7 @@ replacing per-face glReadPixels + CPU projection in
 captureSHGrid." Full GPU compute is a multi-session item: the
 project has no GL test harness today (all current tests are
 CPU-only), and shipping a 200-300-line compute shader without
-the CPU↔GPU SH parity test CLAUDE.md Rule 12 calls for would
+the CPU↔GPU SH parity test CLAUDE.md Rule 7 calls for would
 court the exact silent-divergence pattern R7 just exposed
 (π-magnitude SH error undetected for years).
 
@@ -2406,7 +2406,7 @@ get small `w_i` and are suppressed.
 **CPU mirror.** New `engine/renderer/bloom_downsample_karis.h`
 ships `bloomLuminance(c)`, `bloomKarisWeight(c)`, and
 `combineBloomKarisGroups(centre, TL, TR, BL, BR)`. Pinned by
-parity to the GLSL implementation per CLAUDE.md Rule 12 (CPU spec
+parity to the GLSL implementation per CLAUDE.md Rule 7 (CPU spec
 + GPU runtime). Header-only inline helpers — no separate `.cpp`
 needed; the math is small enough that compile-time inlining and
 the parity contract are both clearer when colocated.
@@ -2643,7 +2643,7 @@ the choice of `c1..c5`) produce irradiance.
   * `SHProbeGrid::evaluateIrradianceCpu(coeffs, normal)` — new
     public static helper that mirrors `evaluateSHGridIrradiance` in
     `scene.frag.glsl` byte-for-byte. CPU spec + GPU runtime
-    (CLAUDE.md Rule 12) pinned by parity tests. Lives in production
+    (CLAUDE.md Rule 7) pinned by parity tests. Lives in production
     code (not test-only) so any future shader change has to update
     it.
 
@@ -6601,7 +6601,7 @@ playback lands now via the primitives above; the
 `AudioSourceComponent` has been accreting fields across the
 Phase 10 audio slices (attenuation / velocity / occlusion).
 
-Per CLAUDE.md Rule 11: ratio / threshold / integer counters —
+Per CLAUDE.md Rule 6: ratio / threshold / integer counters —
 no coefficients to fit.
 
 ### 2026-04-21 Phase 10 audio — Mixer buses, ducking, voice eviction
@@ -6654,7 +6654,7 @@ when the OpenAL source pool is full.
     Critical survives against a loud-fresh Low, keep-score
     ordering matches priority rank.
 
-Per CLAUDE.md Rule 11: linear slew + product-of-bus-gains +
+Per CLAUDE.md Rule 6: linear slew + product-of-bus-gains +
 integer-weighted score are canonical forms with no coefficients
 to fit — Formula Workbench doesn't apply.
 
@@ -6706,7 +6706,7 @@ adaptive soundtrack.
     place, zero capacity rejects enqueue, clear drops pending,
     negative delta does not cause fire.
 
-Per CLAUDE.md Rule 11: triangle envelope + linear slew +
+Per CLAUDE.md Rule 6: triangle envelope + linear slew +
 multiplicative scaling are canonical forms with no coefficients
 to fit — Formula Workbench doesn't apply.
 
@@ -6762,7 +6762,7 @@ unit-testable in isolation).
     negative delta is zero, draws fresh interval per fire from a
     deterministic sampler sequence.
 
-Per CLAUDE.md Rule 11: triangle envelope + linear interpolation
+Per CLAUDE.md Rule 6: triangle envelope + linear interpolation
 are canonical forms with no coefficients to fit — Formula
 Workbench doesn't apply.
 
@@ -6806,7 +6806,7 @@ continuous transitions as the listener moves between rooms.
   negative clamps), and blend math (t=0/0.5/1 + out-of-range
   clamp, plus exact equality at boundaries).
 
-Per CLAUDE.md Rule 11: the blend is a canonical linear lerp; the
+Per CLAUDE.md Rule 6: the blend is a canonical linear lerp; the
 preset values come from an established industry table — no
 coefficients to fit, so the Formula Workbench flow doesn't apply.
 
@@ -6848,7 +6848,7 @@ the obstruction.
   clamps on both fraction and transmission, and matching coverage
   for the low-pass path.
 
-Per CLAUDE.md Rule 11: the blend is a canonical linear form with
+Per CLAUDE.md Rule 6: the blend is a canonical linear form with
 no coefficients to fit; the numeric preset values are judgement
 calls calibrated to listening rather than laboratory measurements,
 so the Formula Workbench flow doesn't apply. Values are
@@ -6952,7 +6952,7 @@ CPU-side priority / preview code and GPU-side playback agree.
   `dopplerFactor` scaling, and the [−SS/DF, SS/DF] velocity clamp
   for supersonic inputs staying finite and sign-correct.
 
-Per CLAUDE.md Rule 11: the Doppler formula is canonical textbook
+Per CLAUDE.md Rule 6: the Doppler formula is canonical textbook
 with no coefficients to fit, so the Formula Workbench flow (author
 via fit + export) doesn't apply — the module ships as hand-written
 math, matching the same treatment given to the distance-attenuation
@@ -8890,7 +8890,7 @@ existing cases (``HelpersMatchEvaluatorPrecisely``,
   shared helper so LM-fitter R² / AIC / BIC scores no longer diverge
   from the runtime. 7 new GTest cases; ``CodegenCpp.EmitBinaryOps``
   and ``CodegenGlsl.GenerateFunction`` updated for the new emission.
-  **(AUDIT M11; CLAUDE.md Rule 11.)**
+  **(AUDIT M11; CLAUDE.md Rule 6.)**
 
 #### High severity (1)
 

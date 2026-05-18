@@ -38,11 +38,13 @@ and this document explains how to participate effectively.
 
 ### Requirements
 
-- **C++17** compiler (GCC 9+, Clang 10+, MSVC 2019+)
+- **C++17** compiler with selectively-adopted C++20 features (see CODING_STANDARDS §0):
+  **GCC 13+**, **Clang 18+**, or **MSVC 19.36+** (Visual Studio 2022 17.6+).
+  Older compilers (e.g. GCC 9 / Clang 10) will not build the codebase.
 - **CMake** 3.21 or newer
 - **OpenGL 4.5** capable GPU and driver
 - **Linux**: `libgl1-mesa-dev`, `xorg-dev`, ALSA dev headers (for OpenAL Soft)
-- **Windows**: Visual Studio 2019+ with C++ workload
+- **Windows**: Visual Studio 2022 17.6+ with C++ workload
 
 ### Quick build
 
@@ -60,7 +62,7 @@ several minutes. Subsequent builds are incremental.
 ### Running the demo scene
 
 ```bash
-./build/Vestige
+./build/bin/vestige
 ```
 
 Note: a fresh public clone may render with placeholder materials for two
@@ -109,7 +111,7 @@ Every new feature or bug fix must ship with tests. We use **Google Test**.
 ctest --test-dir build --output-on-failure
 
 # Run a specific test
-./build/tests/Vestige_tests --gtest_filter='YourTestName*'
+./build/bin/vestige_tests --gtest_filter='YourTestName*'
 ```
 
 Test files live in `tests/` and follow `test_<thing>.cpp` naming. Each
@@ -117,9 +119,9 @@ top-level engine subsystem (`engine/<name>/`) should be referenced by at
 least one test file. The audit tool's Tier 6 sweep flags subsystems
 that lack coverage.
 
-For UI/visual changes, run the engine and verify the change in a browser
-or screenshot — automated tests verify code correctness, not visual
-correctness.
+For UI/visual changes, run the engine and verify the change on-screen
+(or capture a screenshot for the PR) — automated tests verify code
+correctness, not visual correctness.
 
 ---
 

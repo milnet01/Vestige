@@ -398,7 +398,7 @@ enum class BufferBinding : GLuint {
 upload). `ParticleWindFbm` and `TriangleTurbulence` re-upload every
 frame in `precomputeWind()`.
 
-## Verify-step plan (CLAUDE.md rule 12)
+## Verify-step plan (global `~/.claude/CLAUDE.md` rule 12)
 
 Each step is a separate commit; verify checks gate the next.
 Tolerances are grounded in FP32 ULP and XPBD substep error rather
