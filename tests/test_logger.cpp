@@ -113,7 +113,9 @@ TEST_F(LoggerTest, ConcurrentLoggingPreservesAllEntries_F9)
     Logger::setLevel(LogLevel::Trace);
 
     constexpr int NUM_THREADS = 8;
-    constexpr int MSGS_PER_THREAD = 100; // total 800, well under MAX_ENTRIES (1000)
+    constexpr int MSGS_PER_THREAD = 100; // total 800, well under Logger::MAX_ENTRIES
+    static_assert(NUM_THREADS * MSGS_PER_THREAD < Logger::MAX_ENTRIES,
+                  "below-cap test must stay below MAX_ENTRIES");
 
     runConcurrent(NUM_THREADS, [](int t) {
         for (int i = 0; i < MSGS_PER_THREAD; ++i)
@@ -130,11 +132,12 @@ TEST_F(LoggerTest, ConcurrentLoggingRespectsRingBufferCap_F9)
 {
     Logger::setLevel(LogLevel::Trace);
 
-    // Force overflow: 8 threads * 500 = 4000 messages, MAX_ENTRIES = 1000.
+    // Force overflow: 8 threads * 500 = 4000 messages, well over Logger::MAX_ENTRIES.
     // Ring-buffer trim (pop_front + push_back) is the hottest race path.
     constexpr int NUM_THREADS = 8;
     constexpr int MSGS_PER_THREAD = 500;
-    constexpr size_t MAX_ENTRIES = 1000;
+    static_assert(NUM_THREADS * MSGS_PER_THREAD > Logger::MAX_ENTRIES,
+                  "overflow test must exceed MAX_ENTRIES");
 
     runConcurrent(NUM_THREADS, [](int t) {
         for (int i = 0; i < MSGS_PER_THREAD; ++i)
@@ -143,5 +146,5 @@ TEST_F(LoggerTest, ConcurrentLoggingRespectsRingBufferCap_F9)
         }
     });
 
-    EXPECT_EQ(Logger::getEntries().size(), MAX_ENTRIES);
+    EXPECT_EQ(Logger::getEntries().size(), Logger::MAX_ENTRIES);
 }

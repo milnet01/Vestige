@@ -56,6 +56,11 @@ TEST(SkeletonTest, DefaultJointValues)
     EXPECT_TRUE(joint.name.empty());
 }
 
+// Skeleton::MAX_JOINTS must equal Renderer::MAX_BONES — the skinning vertex
+// shaders (`id_buffer.vert.glsl`, `shadow_depth.vert.glsl`, etc.) index a
+// pre-sized SSBO without a bounds check. A static_assert in renderer.cpp
+// enforces this at compile time; this test pins the literal so a future
+// change has to come through both sides.
 TEST(SkeletonTest, MaxJointsConstant)
 {
     EXPECT_EQ(Skeleton::MAX_JOINTS, 128);

@@ -31,6 +31,13 @@ DataPoint makePoint(float x, float y)
     return p;
 }
 
+// Builds a canonical FitHistoryEntry with a fixed timestamp. Tests that
+// rely on ordering against this entry must either:
+//   (a) override `e.timestamp` to a chronologically distinct value, or
+//   (b) rely on the lexicographic tie-break across the other ISO-8601-Z
+//       timestamps (later string-compare > earlier when the prefix matches).
+// Don't sort multiple makeEntry() outputs by `e.timestamp` alone — they
+// would all compare equal and the resulting order is implementation-defined.
 FitHistoryEntry makeEntry(const std::string& name,
                           const std::string& action = "exported",
                           float rSquared = 0.99f)

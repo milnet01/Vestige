@@ -891,12 +891,12 @@ Full triaged report at `/tmp/test-audit-e5e42211/_triaged.md` (ephemeral); false
 - [ ] **Ts20-BE1.** `tests/test_emissive_lighting.cpp:45` — `AttenuationFormulaMathReference` derives + self-tests. Expose `EmissiveLightComponent::computeAttenuation()` and call it; or delete.
 
 #### Hardcoded data (6)
-- [ ] **Ts20-HA1.** `tests/test_biome_preset.cpp:40` — `BuiltInPresets` checks names at hard-coded indices. Use set/contains.
-- [ ] **Ts20-HA2.** `tests/test_fit_history.cpp:39` — `makeEntry()` timestamp hard-coded; tie-break tests rely on lexicographic order. Add comment or parameterise.
-- [ ] **Ts20-HA3.** `tests/test_logger.cpp:127` — `MAX_ENTRIES` hard-coded locally. Expose `Logger::MAX_ENTRIES` as public constant.
-- [ ] **Ts20-HA5.** `tests/test_camera.cpp:258` — `near=0.1f`, `far=1000.0f` hard-coded. Expose `DEFAULT_NEAR_PLANE`/`DEFAULT_FAR_PLANE`.
-- [ ] **Ts20-HA6.** `tests/test_curve_fitter.cpp:309` — `FormulaPresetLibrary` hardcodes preset names + coefficients. Query at runtime; assert difference not literal.
-- [ ] **Ts20-HA7.** `tests/test_skeleton.cpp:61` — `MAX_JOINTS == 128` magic number not cross-referenced to shader. Add comment + `static_assert` if possible.
+- [x] **Ts20-HA1.** `tests/test_biome_preset.cpp:40` — `BuiltInPresets` checks names at hard-coded indices. Use set/contains.
+- [x] **Ts20-HA2.** `tests/test_fit_history.cpp:39` — `makeEntry()` timestamp hard-coded; tie-break tests rely on lexicographic order. Add comment or parameterise.
+- [x] **Ts20-HA3.** `tests/test_logger.cpp:127` — `MAX_ENTRIES` hard-coded locally. Expose `Logger::MAX_ENTRIES` as public constant.
+- [x] **Ts20-HA5.** `tests/test_camera.cpp:258` — `near=0.1f`, `far=1000.0f` hard-coded. Expose `DEFAULT_NEAR_PLANE`/`DEFAULT_FAR_PLANE`.
+- [x] **Ts20-HA6.** `tests/test_curve_fitter.cpp:309` — `FormulaPresetLibrary` hardcodes preset names + coefficients. Query at runtime; assert difference not literal.
+- [x] **Ts20-HA7.** `tests/test_skeleton.cpp:61` — `MAX_JOINTS == 128` magic number not cross-referenced to shader. Add comment + `static_assert` if possible.
 
 #### Coverage gaps (15)
 - [ ] **Ts20-CV1.** `tests/test_aabb.cpp:14` — no test for inverted min/max. Add `min > max` constructed AABB.

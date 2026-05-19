@@ -5,6 +5,9 @@
 /// @brief Unit tests for BiomePreset and BiomeLibrary.
 #include <gtest/gtest.h>
 
+#include <set>
+#include <string>
+
 #include "environment/biome_preset.h"
 
 using namespace Vestige;
@@ -42,11 +45,15 @@ TEST(BiomeLibraryTest, BuiltInPresets)
 
     EXPECT_GE(library.getPresetCount(), 4);
 
+    // Treat the preset list as a set — order is an implementation detail of
+    // BiomeLibrary's seeding routine, but the *membership* of these four names
+    // is the contract: a reorder shouldn't break this test.
     auto names = library.getPresetNames();
-    EXPECT_EQ(names[0], "Garden");
-    EXPECT_EQ(names[1], "Desert");
-    EXPECT_EQ(names[2], "Temple Courtyard");
-    EXPECT_EQ(names[3], "Cedar Forest");
+    std::set<std::string> nameSet(names.begin(), names.end());
+    EXPECT_TRUE(nameSet.count("Garden")) << "Garden preset missing";
+    EXPECT_TRUE(nameSet.count("Desert")) << "Desert preset missing";
+    EXPECT_TRUE(nameSet.count("Temple Courtyard")) << "Temple Courtyard preset missing";
+    EXPECT_TRUE(nameSet.count("Cedar Forest")) << "Cedar Forest preset missing";
 }
 
 TEST(BiomeLibraryTest, AddUserPreset)

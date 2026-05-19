@@ -17,6 +17,13 @@ constexpr float DEFAULT_SPEED = 2.5f;
 constexpr float DEFAULT_SENSITIVITY = 0.1f;
 constexpr float DEFAULT_FOV = 45.0f;
 
+/// @brief Default depth-range planes for the culling projection. The render
+/// projection is reverse-Z and infinite-far; these only apply to
+/// `getCullingProjectionMatrix()`. Exposed so tests can mirror the engine
+/// defaults instead of duplicating the literals.
+constexpr float DEFAULT_NEAR_PLANE = 0.1f;
+constexpr float DEFAULT_FAR_PLANE = 1000.0f;
+
 /// @brief First-person fly camera with WASD movement and mouse look.
 class Camera
 {

@@ -11,10 +11,20 @@
 #include "renderer/sampler_fallback.h"
 #include "renderer/scoped_forward_z.h"
 #include "renderer/scoped_shadow_depth_state.h"
+#include "animation/skeleton.h"
 #include "environment/foliage_manager.h"
 #include "scene/scene.h"
 #include "core/logger.h"
 #include "utils/frustum.h"
+
+namespace Vestige
+{
+// Skinning vertex shaders index into `u_boneMatrices[boneIds.*]` without
+// bounds checking, so the GPU SSBO must be at least as large as the largest
+// possible per-skeleton joint count. Pin them at compile time.
+static_assert(static_cast<int>(Renderer::MAX_BONES) == Skeleton::MAX_JOINTS,
+              "Renderer::MAX_BONES must match Skeleton::MAX_JOINTS — see skeleton.h");
+}
 
 #include <glad/gl.h>
 

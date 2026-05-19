@@ -62,7 +62,7 @@ glm::mat4 Camera::getCullingProjectionMatrix(float aspectRatio) const
 {
     // Standard GLM perspective for frustum plane extraction.
     // Uses a large but finite far plane so all 6 frustum planes are well-defined.
-    return glm::perspective(glm::radians(m_fov), aspectRatio, 0.1f, 1000.0f);
+    return glm::perspective(glm::radians(m_fov), aspectRatio, DEFAULT_NEAR_PLANE, DEFAULT_FAR_PLANE);
 }
 
 void Camera::move(float forward, float right, float up, float deltaTime)

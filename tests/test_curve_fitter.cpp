@@ -304,13 +304,22 @@ TEST(FormulaPresetLibrary, RegisterAndFind)
     FormulaPresetLibrary lib;
     lib.registerBuiltinPresets();
 
-    EXPECT_GT(lib.count(), 0);
+    ASSERT_GT(lib.count(), 0u);
 
-    const FormulaPreset* desert = lib.findByName("realistic_desert");
-    ASSERT_NE(desert, nullptr);
-    EXPECT_EQ(desert->displayName, "Realistic Desert");
-    EXPECT_EQ(desert->category, "environment");
-    EXPECT_FALSE(desert->overrides.empty());
+    // Query the first built-in preset at runtime — test the registry's
+    // round-trip contract (findByName returns a registered preset with the
+    // expected name + non-empty displayName + non-empty overrides) without
+    // pinning to a specific preset's literal name. Robust to preset rename.
+    auto all = lib.getAll();
+    ASSERT_FALSE(all.empty());
+    const FormulaPreset& first = *all.front();
+
+    const FormulaPreset* found = lib.findByName(first.name);
+    ASSERT_NE(found, nullptr);
+    EXPECT_EQ(found->name, first.name);
+    EXPECT_FALSE(found->displayName.empty());
+    EXPECT_FALSE(found->category.empty());
+    EXPECT_FALSE(found->overrides.empty());
 }
 
 TEST(FormulaPresetLibrary, FindByCategory)
@@ -342,23 +351,42 @@ TEST(FormulaPresetLibrary, ApplyPreset)
     FormulaPresetLibrary presetLib;
     presetLib.registerBuiltinPresets();
 
-    const FormulaPreset* desert = presetLib.findByName("realistic_desert");
-    ASSERT_NE(desert, nullptr);
-
-    // Check original drag coefficient
+    // Pick the first preset whose override mentions aerodynamic_drag/Cd —
+    // queried at runtime so the test doesn't depend on which presets exist or
+    // what their literal Cd values are. We assert *change* (origDrag != expected
+    // && post-apply == expected), not a hardcoded numeric coefficient.
     const FormulaDefinition* drag = library.findByName("aerodynamic_drag");
     ASSERT_NE(drag, nullptr);
-    float origDrag = drag->coefficients.at("Cd");
-    EXPECT_FLOAT_EQ(origDrag, 0.47f);  // Default
+    const float origDrag = drag->coefficients.at("Cd");
 
-    // Apply desert preset
-    size_t applied = FormulaPresetLibrary::applyPreset(*desert, library);
-    EXPECT_GT(applied, 0);
+    const FormulaPreset* preset = nullptr;
+    float expectedCd = 0.0f;
+    for (const FormulaPreset* p : presetLib.getAll())
+    {
+        for (const auto& ov : p->overrides)
+        {
+            if (ov.formulaName == "aerodynamic_drag")
+            {
+                auto it = ov.coefficients.find("Cd");
+                if (it != ov.coefficients.end() && it->second != origDrag)
+                {
+                    preset = p;
+                    expectedCd = it->second;
+                    break;
+                }
+            }
+        }
+        if (preset) break;
+    }
+    ASSERT_NE(preset, nullptr) << "no built-in preset overrides aerodynamic_drag/Cd to a non-default value";
 
-    // Verify coefficient changed
+    size_t applied = FormulaPresetLibrary::applyPreset(*preset, library);
+    EXPECT_GT(applied, 0u);
+
     drag = library.findByName("aerodynamic_drag");
     ASSERT_NE(drag, nullptr);
-    EXPECT_FLOAT_EQ(drag->coefficients.at("Cd"), 0.55f);
+    EXPECT_FLOAT_EQ(drag->coefficients.at("Cd"), expectedCd);
+    EXPECT_NE(drag->coefficients.at("Cd"), origDrag);
 }
 
 TEST(FormulaPresetLibrary, RemovePreset)

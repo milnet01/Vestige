@@ -255,7 +255,8 @@ TEST(CameraTest, CullingProjectionMatchesGlmPerspective)
     Camera cam;
     float aspect = 16.0f / 9.0f;
     glm::mat4 cull = cam.getCullingProjectionMatrix(aspect);
-    glm::mat4 expected = glm::perspective(glm::radians(DEFAULT_FOV), aspect, 0.1f, 1000.0f);
+    glm::mat4 expected = glm::perspective(glm::radians(DEFAULT_FOV), aspect,
+                                          DEFAULT_NEAR_PLANE, DEFAULT_FAR_PLANE);
 
     for (int col = 0; col < 4; ++col)
     {

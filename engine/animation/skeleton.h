@@ -41,6 +41,11 @@ public:
     void buildUpdateOrder();
 
     /// @brief Maximum number of joints supported per skeleton.
+    /// Must stay in lockstep with `Renderer::MAX_BONES` (renderer.h) — the
+    /// renderer pre-allocates an SSBO of that size and the skinning vertex
+    /// shaders (`id_buffer.vert.glsl`, `shadow_depth.vert.glsl`, etc.)
+    /// dereference `u_boneMatrices[boneIds.*]` blindly. A `static_assert`
+    /// in renderer.cpp pins the two together at compile time.
     static constexpr int MAX_JOINTS = 128;
 
     std::vector<Joint> m_joints;

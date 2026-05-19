@@ -49,6 +49,14 @@ namespace Vestige
 class Renderer
 {
 public:
+    /// @brief GPU-side bone-matrix buffer capacity. Must equal
+    /// `Skeleton::MAX_JOINTS` — the skinning vertex shaders index this
+    /// SSBO with `boneIds.*` straight from the mesh attributes, with no
+    /// bounds check, so the per-skeleton joint cap must not exceed the
+    /// buffer size. Pinned at compile time by a static_assert in
+    /// renderer.cpp.
+    static constexpr int MAX_BONES = 128;
+
     /// @brief Creates the renderer and initializes OpenGL state.
     /// @param eventBus Event bus for subscribing to window events.
     explicit Renderer(EventBus& eventBus);
@@ -771,9 +779,9 @@ private:
     GLuint m_fallbackCubemap = 0;      ///< 1x1 black cubemap
     GLuint m_fallbackTexArray = 0;     ///< 1x1x1 2D array texture
 
-    // Skeletal animation bone matrix SSBO (binding point 2)
+    // Skeletal animation bone matrix SSBO (binding point 2).
+    // Sized by Renderer::MAX_BONES (public, declared above).
     GLuint m_boneMatrixSSBO = 0;
-    static constexpr int MAX_BONES = 128;
 
     // Morph target dummy SSBO (binding point 3) — Mesa safety
     GLuint m_dummyMorphSSBO = 0;

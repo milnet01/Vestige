@@ -84,12 +84,16 @@ public:
     /// @brief Flushes and closes the log file (called at engine shutdown).
     static void closeLogFile();
 
+    /// @brief Hard cap on the in-memory ring buffer. Older entries are
+    /// dropped (`pop_front`) when the buffer is full. Exposed so tests
+    /// can size overflow scenarios from a single source of truth.
+    static constexpr size_t MAX_ENTRIES = 1000;
+
 private:
     static void log(LogLevel level, const std::string& message);
 
     static LogLevel s_level;
     static std::deque<LogEntry> s_entries;
-    static constexpr size_t MAX_ENTRIES = 1000;
 };
 
 } // namespace Vestige
