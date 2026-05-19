@@ -30,6 +30,22 @@ static AnimationChannel makeVec3Channel(float t0, float t1,
 }
 
 // ---------------------------------------------------------------------------
+// Helper to build a simple quat channel (2 keyframes at t=0,1; glTF x,y,z,w)
+// ---------------------------------------------------------------------------
+static AnimationChannel makeQuatChannel(glm::quat q0, glm::quat q1,
+                                         AnimInterpolation interp = AnimInterpolation::LINEAR)
+{
+    AnimationChannel ch;
+    ch.jointIndex = 0;
+    ch.targetPath = AnimTargetPath::ROTATION;
+    ch.interpolation = interp;
+    ch.timestamps = {0.0f, 1.0f};
+    ch.values = {q0.x, q0.y, q0.z, q0.w,
+                 q1.x, q1.y, q1.z, q1.w};
+    return ch;
+}
+
+// ---------------------------------------------------------------------------
 // Vec3 LINEAR tests
 // ---------------------------------------------------------------------------
 
@@ -98,20 +114,9 @@ TEST(AnimSamplerTest, StepVec3AtEnd)
 
 TEST(AnimSamplerTest, LinearQuatIdentityToRotation)
 {
-    AnimationChannel ch;
-    ch.jointIndex = 0;
-    ch.targetPath = AnimTargetPath::ROTATION;
-    ch.interpolation = AnimInterpolation::LINEAR;
-
-    // Identity quaternion (x,y,z,w) in glTF order
     glm::quat q0(1.0f, 0.0f, 0.0f, 0.0f);  // w,x,y,z = identity
-    // 90 degrees around Y axis
     glm::quat q1 = glm::angleAxis(glm::half_pi<float>(), glm::vec3(0, 1, 0));
-
-    ch.timestamps = {0.0f, 1.0f};
-    // glTF stores as x,y,z,w
-    ch.values = {q0.x, q0.y, q0.z, q0.w,
-                 q1.x, q1.y, q1.z, q1.w};
+    auto ch = makeQuatChannel(q0, q1);
 
     glm::quat result = sampleQuat(ch, 0.0f);
     // Should be approximately identity
@@ -123,17 +128,9 @@ TEST(AnimSamplerTest, LinearQuatIdentityToRotation)
 
 TEST(AnimSamplerTest, LinearQuatMidpoint)
 {
-    AnimationChannel ch;
-    ch.jointIndex = 0;
-    ch.targetPath = AnimTargetPath::ROTATION;
-    ch.interpolation = AnimInterpolation::LINEAR;
-
     glm::quat q0(1.0f, 0.0f, 0.0f, 0.0f);
     glm::quat q1 = glm::angleAxis(glm::half_pi<float>(), glm::vec3(0, 1, 0));
-
-    ch.timestamps = {0.0f, 1.0f};
-    ch.values = {q0.x, q0.y, q0.z, q0.w,
-                 q1.x, q1.y, q1.z, q1.w};
+    auto ch = makeQuatChannel(q0, q1);
 
     glm::quat result = sampleQuat(ch, 0.5f);
     // Should be ~45 degrees around Y (SLERP midpoint)

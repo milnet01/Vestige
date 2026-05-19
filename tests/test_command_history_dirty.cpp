@@ -16,7 +16,7 @@
 
 #include <gtest/gtest.h>
 #include "editor/command_history.h"
-#include "editor/commands/editor_command.h"
+#include "editor_command_test_helpers.h"
 
 #include <memory>
 #include <string>
@@ -24,19 +24,7 @@
 namespace Vestige::CommandHistoryDirty::Test
 {
 
-namespace
-{
-class IncrementCommand : public EditorCommand
-{
-public:
-    explicit IncrementCommand(int& value) : m_value(value) {}
-    void execute() override { ++m_value; }
-    void undo()    override { --m_value; }
-    std::string getDescription() const override { return "Increment"; }
-private:
-    int& m_value;
-};
-}  // namespace
+using Vestige::Testing::IncrementCommand;
 
 // Slice 18 Ts3: the basic clean→dirty and markSaved-clears-dirty
 // contracts are already pinned in `test_command_history.cpp`

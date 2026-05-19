@@ -859,16 +859,16 @@ Full triaged report at `/tmp/test-audit-e5e42211/_triaged.md` (ephemeral); false
 - [ ] **Ts20-PE2.** `tests/test_cloth_solver_improvements.cpp:508` — paired simulators run 120 frames unnecessarily. Reduce to 60.
 
 #### Duplication (10)
-- [ ] **Ts20-DU1.** `tests/test_animation_sampler.cpp:101` — LinearQuat tests share 13 identical lines. Extract `makeQuatChannel(q0, q1)` helper.
-- [ ] **Ts20-DU2.** `tests/test_logger.cpp:83` — thread-spawn barrier duplicated in two tests. Extract `runConcurrent(nThreads, body)` helper.
-- [ ] **Ts20-DU3.** `tests/test_lip_sync.cpp:478` — blend-shapes setup byte-identical in two fixtures. Extract `setupLipSyncPipeline()`.
-- [ ] **Ts20-DU4.** `tests/test_command_history_dirty.cpp:29` — `IncrementCommand` defined twice. Move to shared `editor_command_test_helpers.h`.
-- [ ] **Ts20-DU5.** `tests/test_cloth_collision.cpp:25` — `makeTriangle`/`Quad`/`Cube` helpers not in `cloth_test_helpers.h`. Promote.
-- [ ] **Ts20-DU6.** `tests/test_cloth_presets.cpp:135` — 5×5 grid setup duplicated across 13 tests. Add `clothLiveParamConfig(w, h)` helper.
-- [ ] **Ts20-DU7.** `tests/test_fabric_material.cpp:267` — CollisionShapes group repeats boilerplate across 6 tests. Extract `CollisionShapeTest` fixture.
-- [ ] **Ts20-DU8.** `tests/test_motion_matching.cpp:586` — MotionDatabase build boilerplate in 5 consecutive tests. Extract fixture.
-- [ ] **Ts20-DU9.** `tests/test_subtitle.cpp:16` — `makeLine` helper duplicated across `test_subtitle.cpp` + `test_subtitle_renderer.cpp`. Extract to `subtitle_test_helpers.h`.
-- [ ] **Ts20-DU10.** `tests/test_ui_theme_accessibility.cpp:354` — Vellum/Plumbline contrast tests byte-identical. Use typed/parametrized test.
+- [x] **Ts20-DU1.** `tests/test_animation_sampler.cpp:101` — LinearQuat tests share 13 identical lines. Extract `makeQuatChannel(q0, q1)` helper.
+- [x] **Ts20-DU2.** `tests/test_logger.cpp:83` — thread-spawn barrier duplicated in two tests. Extract `runConcurrent(nThreads, body)` helper.
+- [x] **Ts20-DU3.** `tests/test_lip_sync.cpp:478` — blend-shapes setup byte-identical in two fixtures. Extract `setupLipSyncPipeline()`.
+- [x] **Ts20-DU4.** `tests/test_command_history_dirty.cpp:29` — `IncrementCommand` defined twice. Move to shared `editor_command_test_helpers.h`.
+- [x] **Ts20-DU5.** `tests/test_cloth_collision.cpp:25` — `makeTriangle`/`Quad`/`Cube` helpers not in `cloth_test_helpers.h`. Promote.
+- [x] **Ts20-DU6.** `tests/test_cloth_presets.cpp:135` — 5×5 grid setup duplicated across 13 tests. Add `clothLiveParamConfig(w, h)` helper.
+- [x] **Ts20-DU7.** `tests/test_fabric_material.cpp:267` — CollisionShapes group repeats boilerplate across 6 tests. Extract `CollisionShapeTest` fixture.
+- [x] **Ts20-DU8.** `tests/test_motion_matching.cpp:586` — MotionDatabase build boilerplate in 5 consecutive tests. Extract fixture.
+- [x] **Ts20-DU9.** `tests/test_subtitle.cpp:16` — `makeLine` helper duplicated across `test_subtitle.cpp` + `test_subtitle_renderer.cpp`. Extract to `subtitle_test_helpers.h`.
+- [x] **Ts20-DU10.** `tests/test_ui_theme_accessibility.cpp:354` — Vellum/Plumbline contrast tests byte-identical. Use typed/parametrized test.
 
 #### Splitting (4 — excludes SP3 above)
 - [ ] **Ts20-SP1.** `tests/test_cloth_collision.cpp` (698 lines, 6 subsystems) — split into `test_bvh.cpp`, `test_spatial_hash.cpp`, `test_cloth_mesh_collider.cpp`, `test_cloth_simulation_collision.cpp`.

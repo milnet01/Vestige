@@ -5,6 +5,7 @@
 /// @brief Unit tests for CommandHistory undo/redo and dirty tracking.
 #include "editor/command_history.h"
 #include "editor/commands/editor_command.h"
+#include "editor_command_test_helpers.h"
 #include "editor/commands/transform_command.h"
 #include "editor/commands/composite_command.h"
 #include "editor/commands/create_entity_command.h"
@@ -21,24 +22,7 @@
 #include <string>
 
 using namespace Vestige;
-
-// ---------------------------------------------------------------------------
-// Simple test command — increments/decrements an integer
-// ---------------------------------------------------------------------------
-
-class IncrementCommand : public EditorCommand
-{
-public:
-    explicit IncrementCommand(int& value) : m_value(value), m_delta(1) {}
-
-    void execute() override { m_value += m_delta; }
-    void undo() override { m_value -= m_delta; }
-    std::string getDescription() const override { return "Increment"; }
-
-private:
-    int& m_value;
-    int m_delta;
-};
+using Vestige::Testing::IncrementCommand;
 
 // ---------------------------------------------------------------------------
 // CommandHistory basic tests

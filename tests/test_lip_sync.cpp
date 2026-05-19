@@ -20,6 +20,25 @@
 
 using namespace Vestige;
 
+// Wire `animator` + `skelAnimator` for the 13 ARKit shapes used by the
+// LipSyncPlayer / LipSyncAmplitude fixtures. Returns the shape count.
+static int setupLipSyncPipeline(FacialAnimator& animator, SkeletonAnimator& skelAnimator)
+{
+    animator.setAnimator(&skelAnimator);
+
+    std::vector<std::string> shapes = {
+        "jawOpen", "mouthClose", "mouthPressLeft", "mouthPressRight",
+        "mouthStretchLeft", "mouthStretchRight",
+        "mouthLowerDownLeft", "mouthLowerDownRight",
+        "mouthFunnel", "mouthPucker",
+        "mouthUpperUpLeft", "mouthUpperUpRight",
+        "tongueOut"
+    };
+    animator.mapBlendShapes(shapes);
+    skelAnimator.setMorphTargetCount(static_cast<int>(shapes.size()));
+    return static_cast<int>(shapes.size());
+}
+
 // ===========================================================================
 // VisemeMap tests
 // ===========================================================================
@@ -473,20 +492,7 @@ protected:
 
     void SetUp() override
     {
-        // Set up the facial animation pipeline
-        animator.setAnimator(&skelAnimator);
-
-        // Map a subset of ARKit shapes
-        std::vector<std::string> shapes = {
-            "jawOpen", "mouthClose", "mouthPressLeft", "mouthPressRight",
-            "mouthStretchLeft", "mouthStretchRight",
-            "mouthLowerDownLeft", "mouthLowerDownRight",
-            "mouthFunnel", "mouthPucker",
-            "mouthUpperUpLeft", "mouthUpperUpRight",
-            "tongueOut"
-        };
-        animator.mapBlendShapes(shapes);
-        skelAnimator.setMorphTargetCount(static_cast<int>(shapes.size()));
+        setupLipSyncPipeline(animator, skelAnimator);
 
         player.setFacialAnimator(&animator);
 
@@ -641,18 +647,7 @@ protected:
 
     void SetUp() override
     {
-        animator.setAnimator(&skelAnimator);
-
-        std::vector<std::string> shapes = {
-            "jawOpen", "mouthClose", "mouthPressLeft", "mouthPressRight",
-            "mouthStretchLeft", "mouthStretchRight",
-            "mouthLowerDownLeft", "mouthLowerDownRight",
-            "mouthFunnel", "mouthPucker",
-            "mouthUpperUpLeft", "mouthUpperUpRight",
-            "tongueOut"
-        };
-        animator.mapBlendShapes(shapes);
-        skelAnimator.setMorphTargetCount(static_cast<int>(shapes.size()));
+        setupLipSyncPipeline(animator, skelAnimator);
 
         player.setFacialAnimator(&animator);
         player.enableAmplitudeMode();

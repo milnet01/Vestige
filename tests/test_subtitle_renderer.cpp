@@ -9,24 +9,13 @@
 
 #include "ui/subtitle.h"
 #include "ui/subtitle_renderer.h"
+#include "subtitle_test_helpers.h"
 
 using namespace Vestige;
+using Vestige::Testing::makeLine;
 
 namespace
 {
-
-Subtitle makeLine(const std::string& text,
-                  float duration = 3.0f,
-                  SubtitleCategory cat = SubtitleCategory::Dialogue,
-                  const std::string& speaker = "")
-{
-    Subtitle s;
-    s.text = text;
-    s.durationSeconds = duration;
-    s.category = cat;
-    s.speaker = speaker;
-    return s;
-}
 
 // Deterministic measurer used throughout: every character is 10 px wide
 // at scale = 1 (font atlas pixel size). Production passes

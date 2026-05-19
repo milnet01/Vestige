@@ -12,6 +12,7 @@
 #include "scene/entity.h"
 
 #include <cstring>
+#include <memory>
 #include <set>
 #include <string>
 #include <vector>
@@ -263,16 +264,39 @@ TEST(FabricPresetConversion, CanInitializeSimulator)
 // Convex Hull collision shape
 // ===========================================================================
 
-TEST(CollisionShapes, ConvexHullCreation)
+// Slice 20 Ts20-DU7: world init/shutdown + entity setup were repeated
+// verbatim across the 7 PhysicsWorld-backed tests below. Fixture
+// constructs `world` and a positioned `entity` with an attached
+// RigidBody; tests configure rb fields and call createBody.
+class CollisionShapeTest : public ::testing::Test
 {
+protected:
     PhysicsWorld world;
-    ASSERT_TRUE(world.initialize());
+    std::unique_ptr<Entity> entity;
+    RigidBody* rb = nullptr;
 
-    Entity entity("HullBox");
-    entity.transform.position = glm::vec3(0, 5, 0);
-    entity.update(0.0f);
+    void setEntityAt(const glm::vec3& position, const char* name = "CollisionShape")
+    {
+        entity = std::make_unique<Entity>(name);
+        entity->transform.position = position;
+        entity->update(0.0f);
+        rb = entity->addComponent<RigidBody>();
+    }
 
-    auto* rb = entity.addComponent<RigidBody>();
+    void SetUp() override
+    {
+        ASSERT_TRUE(world.initialize());
+    }
+
+    void TearDown() override
+    {
+        world.shutdown();
+    }
+};
+
+TEST_F(CollisionShapeTest, ConvexHullCreation)
+{
+    setEntityAt({0, 5, 0}, "HullBox");
     rb->motionType = BodyMotionType::DYNAMIC;
     rb->shapeType = CollisionShapeType::CONVEX_HULL;
     rb->mass = 1.0f;
@@ -287,20 +311,11 @@ TEST(CollisionShapes, ConvexHullCreation)
 
     rb->createBody(world);
     EXPECT_TRUE(rb->hasBody());
-
-    world.shutdown();
 }
 
-TEST(CollisionShapes, ConvexHullTetrahedron)
+TEST_F(CollisionShapeTest, ConvexHullTetrahedron)
 {
-    PhysicsWorld world;
-    ASSERT_TRUE(world.initialize());
-
-    Entity entity("Tetrahedron");
-    entity.transform.position = glm::vec3(0, 10, 0);
-    entity.update(0.0f);
-
-    auto* rb = entity.addComponent<RigidBody>();
+    setEntityAt({0, 10, 0}, "Tetrahedron");
     rb->motionType = BodyMotionType::DYNAMIC;
     rb->shapeType = CollisionShapeType::CONVEX_HULL;
 
@@ -311,20 +326,11 @@ TEST(CollisionShapes, ConvexHullTetrahedron)
 
     rb->createBody(world);
     EXPECT_TRUE(rb->hasBody());
-
-    world.shutdown();
 }
 
-TEST(CollisionShapes, ConvexHullTooFewVerticesFails)
+TEST_F(CollisionShapeTest, ConvexHullTooFewVerticesFails)
 {
-    PhysicsWorld world;
-    ASSERT_TRUE(world.initialize());
-
-    Entity entity("TooFew");
-    entity.transform.position = glm::vec3(0, 0, 0);
-    entity.update(0.0f);
-
-    auto* rb = entity.addComponent<RigidBody>();
+    setEntityAt({0, 0, 0}, "TooFew");
     rb->shapeType = CollisionShapeType::CONVEX_HULL;
 
     // Only 3 points — not enough for a 3D convex hull
@@ -334,20 +340,11 @@ TEST(CollisionShapes, ConvexHullTooFewVerticesFails)
 
     rb->createBody(world);
     EXPECT_FALSE(rb->hasBody());
-
-    world.shutdown();
 }
 
-TEST(CollisionShapes, ConvexHullWithManyVertices)
+TEST_F(CollisionShapeTest, ConvexHullWithManyVertices)
 {
-    PhysicsWorld world;
-    ASSERT_TRUE(world.initialize());
-
-    Entity entity("Sphere");
-    entity.transform.position = glm::vec3(0, 5, 0);
-    entity.update(0.0f);
-
-    auto* rb = entity.addComponent<RigidBody>();
+    setEntityAt({0, 5, 0}, "Sphere");
     rb->motionType = BodyMotionType::STATIC;
     rb->shapeType = CollisionShapeType::CONVEX_HULL;
 
@@ -367,24 +364,15 @@ TEST(CollisionShapes, ConvexHullWithManyVertices)
 
     rb->createBody(world);
     EXPECT_TRUE(rb->hasBody());
-
-    world.shutdown();
 }
 
 // ===========================================================================
 // Triangle mesh collision shape
 // ===========================================================================
 
-TEST(CollisionShapes, MeshShapeCreation)
+TEST_F(CollisionShapeTest, MeshShapeCreation)
 {
-    PhysicsWorld world;
-    ASSERT_TRUE(world.initialize());
-
-    Entity entity("MeshFloor");
-    entity.transform.position = glm::vec3(0, 0, 0);
-    entity.update(0.0f);
-
-    auto* rb = entity.addComponent<RigidBody>();
+    setEntityAt({0, 0, 0}, "MeshFloor");
     rb->motionType = BodyMotionType::STATIC;
     rb->shapeType = CollisionShapeType::MESH;
 
@@ -396,20 +384,11 @@ TEST(CollisionShapes, MeshShapeCreation)
 
     rb->createBody(world);
     EXPECT_TRUE(rb->hasBody());
-
-    world.shutdown();
 }
 
-TEST(CollisionShapes, MeshShapeForcesStatic)
+TEST_F(CollisionShapeTest, MeshShapeForcesStatic)
 {
-    PhysicsWorld world;
-    ASSERT_TRUE(world.initialize());
-
-    Entity entity("MeshDynamic");
-    entity.transform.position = glm::vec3(0, 5, 0);
-    entity.update(0.0f);
-
-    auto* rb = entity.addComponent<RigidBody>();
+    setEntityAt({0, 5, 0}, "MeshDynamic");
     rb->motionType = BodyMotionType::DYNAMIC;  // Will be forced to STATIC
     rb->shapeType = CollisionShapeType::MESH;
 
@@ -421,27 +400,16 @@ TEST(CollisionShapes, MeshShapeForcesStatic)
     rb->createBody(world);
     EXPECT_TRUE(rb->hasBody());
     EXPECT_EQ(rb->motionType, BodyMotionType::STATIC);
-
-    world.shutdown();
 }
 
-TEST(CollisionShapes, MeshShapeEmptyFails)
+TEST_F(CollisionShapeTest, MeshShapeEmptyFails)
 {
-    PhysicsWorld world;
-    ASSERT_TRUE(world.initialize());
-
-    Entity entity("EmptyMesh");
-    entity.transform.position = glm::vec3(0, 0, 0);
-    entity.update(0.0f);
-
-    auto* rb = entity.addComponent<RigidBody>();
+    setEntityAt({0, 0, 0}, "EmptyMesh");
     rb->shapeType = CollisionShapeType::MESH;
     // No vertices or indices
 
     rb->createBody(world);
     EXPECT_FALSE(rb->hasBody());
-
-    world.shutdown();
 }
 
 // ===========================================================================

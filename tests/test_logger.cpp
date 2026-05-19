@@ -35,6 +35,34 @@ protected:
     }
 };
 
+// Spawn `nThreads` threads that all wait on an atomic start barrier and then
+// run `body(t)` in parallel. Joins before returning. Used by F9 concurrency
+// tests to share the start-barrier scaffolding without duplicating it.
+template <typename Body>
+static void runConcurrent(int nThreads, Body body)
+{
+    std::vector<std::thread> threads;
+    threads.reserve(static_cast<size_t>(nThreads));
+    std::atomic<bool> start{false};
+    for (int t = 0; t < nThreads; ++t)
+    {
+        threads.emplace_back([t, &start, &body]() {
+            // yield (instead of bare spin) so a single-vCPU CI runner doesn't
+            // starve the main thread between thread creation and start.store.
+            while (!start.load(std::memory_order_acquire))
+            {
+                std::this_thread::yield();
+            }
+            body(t);
+        });
+    }
+    start.store(true, std::memory_order_release);
+    for (auto& th : threads)
+    {
+        th.join();
+    }
+}
+
 TEST_F(LoggerTest, SetAndGetLevel)
 {
     Logger::setLevel(LogLevel::Warning);
@@ -87,30 +115,12 @@ TEST_F(LoggerTest, ConcurrentLoggingPreservesAllEntries_F9)
     constexpr int NUM_THREADS = 8;
     constexpr int MSGS_PER_THREAD = 100; // total 800, well under MAX_ENTRIES (1000)
 
-    std::vector<std::thread> threads;
-    threads.reserve(NUM_THREADS);
-
-    std::atomic<bool> start{false};
-    for (int t = 0; t < NUM_THREADS; ++t)
-    {
-        threads.emplace_back([t, &start]() {
-            // yield (instead of bare spin) so a single-vCPU CI runner doesn't
-            // starve the main thread between thread creation and start.store.
-            while (!start.load(std::memory_order_acquire))
-            {
-                std::this_thread::yield();
-            }
-            for (int i = 0; i < MSGS_PER_THREAD; ++i)
-            {
-                Logger::info("t" + std::to_string(t) + "_m" + std::to_string(i));
-            }
-        });
-    }
-    start.store(true, std::memory_order_release);
-    for (auto& th : threads)
-    {
-        th.join();
-    }
+    runConcurrent(NUM_THREADS, [](int t) {
+        for (int i = 0; i < MSGS_PER_THREAD; ++i)
+        {
+            Logger::info("t" + std::to_string(t) + "_m" + std::to_string(i));
+        }
+    });
 
     EXPECT_EQ(Logger::getEntries().size(),
               static_cast<size_t>(NUM_THREADS * MSGS_PER_THREAD));
@@ -126,28 +136,12 @@ TEST_F(LoggerTest, ConcurrentLoggingRespectsRingBufferCap_F9)
     constexpr int MSGS_PER_THREAD = 500;
     constexpr size_t MAX_ENTRIES = 1000;
 
-    std::vector<std::thread> threads;
-    threads.reserve(NUM_THREADS);
-
-    std::atomic<bool> start{false};
-    for (int t = 0; t < NUM_THREADS; ++t)
-    {
-        threads.emplace_back([t, &start]() {
-            while (!start.load(std::memory_order_acquire))
-            {
-                std::this_thread::yield();
-            }
-            for (int i = 0; i < MSGS_PER_THREAD; ++i)
-            {
-                Logger::info("t" + std::to_string(t) + "_m" + std::to_string(i));
-            }
-        });
-    }
-    start.store(true, std::memory_order_release);
-    for (auto& th : threads)
-    {
-        th.join();
-    }
+    runConcurrent(NUM_THREADS, [](int t) {
+        for (int i = 0; i < MSGS_PER_THREAD; ++i)
+        {
+            Logger::info("t" + std::to_string(t) + "_m" + std::to_string(i));
+        }
+    });
 
     EXPECT_EQ(Logger::getEntries().size(), MAX_ENTRIES);
 }

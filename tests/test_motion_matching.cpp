@@ -583,41 +583,46 @@ TEST(InertializationTest, AxisAngleZeroForIdenticalRotations_A5)
 // MotionDatabase Tests
 // ---------------------------------------------------------------------------
 
-TEST(MotionDatabaseTest, BuildFromClip)
+// Slice 20 Ts20-DU8: createTestSkeleton + createWalkClip + 1-entry clips
+// vector + db.build was repeated verbatim across 5 tests. Fixture
+// constructs skeleton once in SetUp and exposes buildDb(duration, tags)
+// to drive a single-clip MotionDatabase build.
+class MotionDatabaseFixtureTest : public ::testing::Test
 {
-    auto skeleton = createTestSkeleton();
-    auto clip = createWalkClip(1.0f);
-
-    FeatureSchema schema = FeatureSchema::createDefault(1, 2, 0);
-
-    std::vector<AnimClipEntry> clips;
-    AnimClipEntry entry;
-    entry.clip = clip;
-    entry.defaultTags = MotionTags::LOCOMOTION;
-    clips.push_back(entry);
-
+protected:
+    std::shared_ptr<Skeleton> skeleton;
     MotionDatabase db;
-    db.build(schema, clips, *skeleton, 30.0f);
+
+    void SetUp() override
+    {
+        skeleton = createTestSkeleton();
+    }
+
+    void buildDb(float clipDuration, uint32_t tags = 0)
+    {
+        auto clip = createWalkClip(clipDuration);
+        FeatureSchema schema = FeatureSchema::createDefault(1, 2, 0);
+        std::vector<AnimClipEntry> clips;
+        AnimClipEntry entry;
+        entry.clip = clip;
+        entry.defaultTags = tags;
+        clips.push_back(entry);
+        db.build(schema, clips, *skeleton, 30.0f);
+    }
+};
+
+TEST_F(MotionDatabaseFixtureTest, BuildFromClip)
+{
+    buildDb(1.0f, MotionTags::LOCOMOTION);
 
     EXPECT_TRUE(db.isBuilt());
     EXPECT_GT(db.getFrameCount(), 0);
     EXPECT_EQ(db.getFeatureCount(), 27);
 }
 
-TEST(MotionDatabaseTest, SearchReturnsValidFrame)
+TEST_F(MotionDatabaseFixtureTest, SearchReturnsValidFrame)
 {
-    auto skeleton = createTestSkeleton();
-    auto clip = createWalkClip(2.0f);
-
-    FeatureSchema schema = FeatureSchema::createDefault(1, 2, 0);
-
-    std::vector<AnimClipEntry> clips;
-    AnimClipEntry entry;
-    entry.clip = clip;
-    clips.push_back(entry);
-
-    MotionDatabase db;
-    db.build(schema, clips, *skeleton, 30.0f);
+    buildDb(2.0f);
 
     // Search with a zero query
     std::vector<float> query(27, 0.0f);
@@ -628,21 +633,9 @@ TEST(MotionDatabaseTest, SearchReturnsValidFrame)
     EXPECT_GE(result.clipTime, 0.0f);
 }
 
-TEST(MotionDatabaseTest, FrameInfoConsistency)
+TEST_F(MotionDatabaseFixtureTest, FrameInfoConsistency)
 {
-    auto skeleton = createTestSkeleton();
-    auto clip = createWalkClip(1.0f);
-
-    FeatureSchema schema = FeatureSchema::createDefault(1, 2, 0);
-
-    std::vector<AnimClipEntry> clips;
-    AnimClipEntry entry;
-    entry.clip = clip;
-    entry.defaultTags = MotionTags::LOCOMOTION;
-    clips.push_back(entry);
-
-    MotionDatabase db;
-    db.build(schema, clips, *skeleton, 30.0f);
+    buildDb(1.0f, MotionTags::LOCOMOTION);
 
     for (int i = 0; i < db.getFrameCount(); ++i)
     {
@@ -653,40 +646,18 @@ TEST(MotionDatabaseTest, FrameInfoConsistency)
     }
 }
 
-TEST(MotionDatabaseTest, PoseDataAvailable)
+TEST_F(MotionDatabaseFixtureTest, PoseDataAvailable)
 {
-    auto skeleton = createTestSkeleton();
-    auto clip = createWalkClip(0.5f);
-
-    FeatureSchema schema = FeatureSchema::createDefault(1, 2, 0);
-
-    std::vector<AnimClipEntry> clips;
-    AnimClipEntry entry;
-    entry.clip = clip;
-    clips.push_back(entry);
-
-    MotionDatabase db;
-    db.build(schema, clips, *skeleton, 30.0f);
+    buildDb(0.5f);
 
     EXPECT_TRUE(db.isBuilt());
     const auto& pose = db.getPose(0);
     EXPECT_EQ(static_cast<int>(pose.positions.size()), 3);
 }
 
-TEST(MotionDatabaseTest, MirroringDoublesFrames)
+TEST_F(MotionDatabaseFixtureTest, MirroringDoublesFrames)
 {
-    auto skeleton = createTestSkeleton();
-    auto clip = createWalkClip(1.0f);
-
-    FeatureSchema schema = FeatureSchema::createDefault(1, 2, 0);
-
-    std::vector<AnimClipEntry> clips;
-    AnimClipEntry entry;
-    entry.clip = clip;
-    clips.push_back(entry);
-
-    MotionDatabase db;
-    db.build(schema, clips, *skeleton, 30.0f);
+    buildDb(1.0f);
 
     int originalCount = db.getFrameCount();
     EXPECT_GT(originalCount, 0);

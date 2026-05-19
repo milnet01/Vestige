@@ -9,6 +9,57 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-05-19 Ts20-DU* — extract test helpers for repeated setup blocks (10 items)
+
+`/test-audit` 2026-05-18 Ts20 flagged 10 duplication findings where the
+same setup boilerplate was copy-pasted across multiple tests. Each is
+now a shared helper / fixture / parametric test:
+
+- **Ts20-DU1.** `tests/test_animation_sampler.cpp` — quaternion 2-keyframe
+  setup duplicated in `LinearQuatIdentityToRotation` and
+  `LinearQuatMidpoint`. New `makeQuatChannel(q0, q1, interp)` helper
+  mirrors the existing `makeVec3Channel`.
+- **Ts20-DU2.** `tests/test_logger.cpp` — thread-spawn + atomic start
+  barrier duplicated across two F9 concurrency tests. Extracted
+  `runConcurrent(nThreads, body)` template helper.
+- **Ts20-DU3.** `tests/test_lip_sync.cpp` — 13-shape ARKit blendshape +
+  morph-target wiring identical in `LipSyncPlayerTest` and
+  `LipSyncAmplitudeTest` fixtures. Extracted `setupLipSyncPipeline()`.
+- **Ts20-DU4.** `tests/test_command_history.cpp` +
+  `tests/test_command_history_dirty.cpp` — `IncrementCommand` test
+  command defined twice. Promoted to new
+  `tests/editor_command_test_helpers.h` with an optional `delta`
+  parameter (defaulted to +1) that covers both prior signatures.
+- **Ts20-DU5.** `tests/test_cloth_collision.cpp` — file-local
+  `makeTriangle` / `makeQuad` / `makeCube` mesh helpers promoted to
+  `tests/cloth_test_helpers.h` for use by other cloth-mesh tests.
+- **Ts20-DU6.** `tests/test_cloth_presets.cpp` — w×h grid + spacing 0.5
+  setup repeated in 13 live-param tests. New
+  `clothLiveParamConfig(w, h)` helper in `cloth_test_helpers.h`;
+  callers tweak one extra field afterwards.
+- **Ts20-DU7.** `tests/test_fabric_material.cpp` — PhysicsWorld
+  init/shutdown + Entity setup boilerplate repeated across 7
+  CollisionShapes tests. Extracted `CollisionShapeTest` fixture with
+  `setEntityAt(position, name)` helper; tests now `TEST_F` and skip
+  the shutdown call (handled by fixture TearDown).
+- **Ts20-DU8.** `tests/test_motion_matching.cpp` — `createTestSkeleton`
+  + `createWalkClip` + 1-entry clips + `db.build` repeated across 5
+  MotionDatabase tests. Extracted `MotionDatabaseFixtureTest` with
+  `buildDb(duration, tags)`.
+- **Ts20-DU9.** `tests/test_subtitle.cpp` +
+  `tests/test_subtitle_renderer.cpp` — `makeLine` Subtitle builder
+  defined twice. Promoted to new
+  `tests/subtitle_test_helpers.h`.
+- **Ts20-DU10.** `tests/test_ui_theme_accessibility.cpp` — Vellum and
+  Plumbline contrast tests byte-identical save for the theme
+  factory. Converted to a `TEST_P` over `ThemeRegister{name, factory}`
+  with `INSTANTIATE_TEST_SUITE_P` covering both registers — adding a
+  third register now means one entry in the `Values(...)`, not three
+  new TEST blocks.
+
+All 3232 tests still pass after the refactor. No functional changes
+to production code; helpers extracted are pure-test machinery.
+
 ### 2026-05-02 CI fix — LSan suppressions for GL parity tests
 
 The shader-parity slices (commit `0547944`, `23e26d9`) were the first to

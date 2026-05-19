@@ -17,51 +17,11 @@
 
 using namespace Vestige;
 
-// ---------------------------------------------------------------------------
-// Helpers: simple meshes for testing
-// ---------------------------------------------------------------------------
-
-/// A single triangle in the XZ plane at Y=0: (0,0,0), (1,0,0), (0,0,1)
-static void makeTriangle(std::vector<glm::vec3>& verts, std::vector<uint32_t>& indices)
-{
-    verts = {{0, 0, 0}, {1, 0, 0}, {0, 0, 1}};
-    indices = {0, 1, 2};
-}
-
-/// A flat quad (two triangles) in the XZ plane at Y=0: (0,0,0) to (1,0,1)
-static void makeQuad(std::vector<glm::vec3>& verts, std::vector<uint32_t>& indices)
-{
-    verts = {{0, 0, 0}, {1, 0, 0}, {1, 0, 1}, {0, 0, 1}};
-    indices = {0, 1, 2, 0, 2, 3};
-}
-
-/// Axis-aligned cube mesh centered at origin, half-extent 0.5
-static void makeCube(std::vector<glm::vec3>& verts, std::vector<uint32_t>& indices)
-{
-    verts = {
-        {-0.5f, -0.5f, -0.5f}, { 0.5f, -0.5f, -0.5f},
-        { 0.5f,  0.5f, -0.5f}, {-0.5f,  0.5f, -0.5f},
-        {-0.5f, -0.5f,  0.5f}, { 0.5f, -0.5f,  0.5f},
-        { 0.5f,  0.5f,  0.5f}, {-0.5f,  0.5f,  0.5f},
-    };
-    indices = {
-        // Front
-        0, 1, 2,  0, 2, 3,
-        // Back
-        5, 4, 7,  5, 7, 6,
-        // Left
-        4, 0, 3,  4, 3, 7,
-        // Right
-        1, 5, 6,  1, 6, 2,
-        // Top
-        3, 2, 6,  3, 6, 7,
-        // Bottom
-        4, 5, 1,  4, 1, 0,
-    };
-}
-
-// Slice 18 Ts3: canonical definition in cloth_test_helpers.h.
+// Canonical definitions in cloth_test_helpers.h (Slice 18 Ts3, Slice 20 Ts20-DU5).
 using Testing::clothSmallConfig;
+using Testing::makeTriangle;
+using Testing::makeQuad;
+using Testing::makeCube;
 
 // ===========================================================================
 // BVH — Closest Point on Triangle

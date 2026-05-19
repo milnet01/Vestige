@@ -8,24 +8,10 @@
 #include <gtest/gtest.h>
 
 #include "ui/subtitle.h"
+#include "subtitle_test_helpers.h"
 
 using namespace Vestige;
-
-namespace
-{
-Subtitle makeLine(const std::string& text,
-                  float duration = 3.0f,
-                  SubtitleCategory cat = SubtitleCategory::Dialogue,
-                  const std::string& speaker = "")
-{
-    Subtitle s;
-    s.text = text;
-    s.durationSeconds = duration;
-    s.category = cat;
-    s.speaker = speaker;
-    return s;
-}
-}
+using Vestige::Testing::makeLine;
 
 // -- Size presets --
 

@@ -10,6 +10,8 @@
 #include "systems/ui_system.h"
 #include "ui/ui_theme.h"
 
+#include <string>
+
 using namespace Vestige;
 
 // -- Scale presets --
@@ -349,77 +351,70 @@ TEST(UIContrast, CompositeOverHalfAlphaIsMidpoint_S9)
     EXPECT_NEAR(out.b, 0.5f, 1e-6f);
 }
 
-// -- Vellum (default) register --
+// -- Vellum + Plumbline registers (parametric) --
+//
+// Slice 20 Ts20-DU10: the three Vellum* tests and the three Plumbline*
+// tests were byte-identical save for `UITheme::defaultTheme()` vs
+// `UITheme::plumbline()`. Parametrise so adding a register adds one
+// `INSTANTIATE_TEST_SUITE_P` entry instead of three parallel TEST
+// blocks.
+struct ThemeRegister
+{
+    const char* name;
+    UITheme (*factory)();
+};
 
-TEST(UIThemeContrast, VellumTextDisabledMeetsWcag_1_4_3_Comfort_S9)
+class UIThemeContrastRegister : public ::testing::TestWithParam<ThemeRegister> {};
+
+TEST_P(UIThemeContrastRegister, TextDisabledMeetsWcag_1_4_3_Comfort_S9)
 {
     // WCAG 1.4.3 Contrast (Minimum) targets 4.5:1 for body text.
     // ROADMAP S9 applies the same bar to `textDisabled` so dimmed
     // labels remain legible — disabled is not "invisible" to a
     // partially-sighted user.
-    const UITheme t = UITheme::defaultTheme();
+    const UITheme t = GetParam().factory();
     const float ratio =
         ui_contrast::contrastRatio(t.textDisabled, glm::vec3(t.bgBase));
     EXPECT_GE(ratio, 4.5f)
-        << "Vellum textDisabled / bgBase contrast = " << ratio
+        << GetParam().name << " textDisabled / bgBase contrast = " << ratio
         << " — must be >= 4.5:1 per ROADMAP S9 (WCAG 1.4.3 comfort bar).";
 }
 
-TEST(UIThemeContrast, VellumPanelStrokeMeetsWcag_1_4_11_S9)
+TEST_P(UIThemeContrastRegister, PanelStrokeMeetsWcag_1_4_11_S9)
 {
     // WCAG 1.4.11 Non-text Contrast — 3:1 for UI-component
     // boundaries. `panelStroke` is alpha-blended, so composite the
     // stroke over the panel background before computing.
-    const UITheme t = UITheme::defaultTheme();
+    const UITheme t = GetParam().factory();
     const glm::vec3 composite =
         ui_contrast::compositeOver(t.panelStroke, glm::vec3(t.bgBase));
     const float ratio =
         ui_contrast::contrastRatio(composite, glm::vec3(t.bgBase));
     EXPECT_GE(ratio, 3.0f)
-        << "Vellum panelStroke (composited) / bgBase contrast = " << ratio
-        << " — must be >= 3:1 per WCAG 1.4.11.";
+        << GetParam().name << " panelStroke (composited) / bgBase contrast = "
+        << ratio << " — must be >= 3:1 per WCAG 1.4.11.";
 }
 
-TEST(UIThemeContrast, VellumStrokeStrongStillBrighterThanStroke_S9)
+TEST_P(UIThemeContrastRegister, StrokeStrongStillBrighterThanStroke_S9)
 {
     // The hover/active stroke must visually read as emphasised
     // relative to the at-rest stroke — preserve the design
     // invariant under S9's alpha bump.
-    const UITheme t = UITheme::defaultTheme();
+    const UITheme t = GetParam().factory();
     EXPECT_GT(t.panelStrokeStrong.a, t.panelStroke.a)
         << "panelStrokeStrong must remain a louder version of panelStroke "
            "so hover/active state is discernable post-S9.";
 }
 
-// -- Plumbline register --
-
-TEST(UIThemeContrast, PlumblineTextDisabledMeetsWcag_1_4_3_Comfort_S9)
-{
-    const UITheme t = UITheme::plumbline();
-    const float ratio =
-        ui_contrast::contrastRatio(t.textDisabled, glm::vec3(t.bgBase));
-    EXPECT_GE(ratio, 4.5f)
-        << "Plumbline textDisabled / bgBase contrast = " << ratio
-        << " — must be >= 4.5:1 per ROADMAP S9.";
-}
-
-TEST(UIThemeContrast, PlumblinePanelStrokeMeetsWcag_1_4_11_S9)
-{
-    const UITheme t = UITheme::plumbline();
-    const glm::vec3 composite =
-        ui_contrast::compositeOver(t.panelStroke, glm::vec3(t.bgBase));
-    const float ratio =
-        ui_contrast::contrastRatio(composite, glm::vec3(t.bgBase));
-    EXPECT_GE(ratio, 3.0f)
-        << "Plumbline panelStroke (composited) / bgBase contrast = " << ratio
-        << " — must be >= 3:1 per WCAG 1.4.11.";
-}
-
-TEST(UIThemeContrast, PlumblineStrokeStrongStillBrighterThanStroke_S9)
-{
-    const UITheme t = UITheme::plumbline();
-    EXPECT_GT(t.panelStrokeStrong.a, t.panelStroke.a);
-}
+INSTANTIATE_TEST_SUITE_P(
+    Registers,
+    UIThemeContrastRegister,
+    ::testing::Values(
+        ThemeRegister{"Vellum",    &UITheme::defaultTheme},
+        ThemeRegister{"Plumbline", &UITheme::plumbline}),
+    [](const ::testing::TestParamInfo<ThemeRegister>& info) {
+        return std::string(info.param.name);
+    });
 
 // -- High-contrast mode (WCAG 2.2 AAA tier) --
 

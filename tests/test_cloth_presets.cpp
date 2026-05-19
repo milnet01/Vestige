@@ -7,12 +7,14 @@
 
 #include "physics/cloth_presets.h"
 #include "physics/cloth_simulator.h"
+#include "cloth_test_helpers.h"
 
 #include <cctype>
 #include <cstring>
 #include <string>
 
 using namespace Vestige;
+using Vestige::Testing::clothLiveParamConfig;
 
 // ---------------------------------------------------------------------------
 // Preset validation
@@ -132,10 +134,7 @@ TEST(ClothPresets, PresetsHaveDifferentParameters)
 
 TEST(ClothSimulator, ResetRestoresPositions)
 {
-    ClothConfig cfg;
-    cfg.width = 5;
-    cfg.height = 5;
-    cfg.spacing = 0.5f;
+    ClothConfig cfg = clothLiveParamConfig(5, 5);
     cfg.particleMass = 0.1f;
     cfg.substeps = 3;
 
@@ -179,10 +178,7 @@ TEST(ClothSimulator, ResetRestoresPositions)
 
 TEST(ClothSimulator, ResetPreservesPinPositions)
 {
-    ClothConfig cfg;
-    cfg.width = 5;
-    cfg.height = 5;
-    cfg.spacing = 0.5f;
+    ClothConfig cfg = clothLiveParamConfig(5, 5);
     cfg.particleMass = 0.1f;
     cfg.substeps = 3;
 
@@ -210,10 +206,7 @@ TEST(ClothSimulator, ResetPreservesPinPositions)
 
 TEST(ClothSimulator, LiveStretchComplianceUpdate)
 {
-    ClothConfig cfg;
-    cfg.width = 5;
-    cfg.height = 5;
-    cfg.spacing = 0.5f;
+    ClothConfig cfg = clothLiveParamConfig(5, 5);
     cfg.stretchCompliance = 0.0f;
 
     ClothSimulator sim;
@@ -226,10 +219,7 @@ TEST(ClothSimulator, LiveStretchComplianceUpdate)
 
 TEST(ClothSimulator, LiveShearComplianceUpdate)
 {
-    ClothConfig cfg;
-    cfg.width = 5;
-    cfg.height = 5;
-    cfg.spacing = 0.5f;
+    ClothConfig cfg = clothLiveParamConfig(5, 5);
 
     ClothSimulator sim;
     sim.initialize(cfg);
@@ -240,10 +230,7 @@ TEST(ClothSimulator, LiveShearComplianceUpdate)
 
 TEST(ClothSimulator, LiveBendComplianceUpdate)
 {
-    ClothConfig cfg;
-    cfg.width = 5;
-    cfg.height = 5;
-    cfg.spacing = 0.5f;
+    ClothConfig cfg = clothLiveParamConfig(5, 5);
 
     ClothSimulator sim;
     sim.initialize(cfg);
@@ -254,10 +241,7 @@ TEST(ClothSimulator, LiveBendComplianceUpdate)
 
 TEST(ClothSimulator, LiveMassUpdate)
 {
-    ClothConfig cfg;
-    cfg.width = 3;
-    cfg.height = 3;
-    cfg.spacing = 0.5f;
+    ClothConfig cfg = clothLiveParamConfig(3, 3);
     cfg.particleMass = 0.1f;
 
     ClothSimulator sim;
@@ -269,10 +253,7 @@ TEST(ClothSimulator, LiveMassUpdate)
 
 TEST(ClothSimulator, LiveDampingUpdate)
 {
-    ClothConfig cfg;
-    cfg.width = 3;
-    cfg.height = 3;
-    cfg.spacing = 0.5f;
+    ClothConfig cfg = clothLiveParamConfig(3, 3);
     cfg.damping = 0.01f;
 
     ClothSimulator sim;
@@ -284,10 +265,7 @@ TEST(ClothSimulator, LiveDampingUpdate)
 
 TEST(ClothSimulator, DampingClampedToValidRange)
 {
-    ClothConfig cfg;
-    cfg.width = 3;
-    cfg.height = 3;
-    cfg.spacing = 0.5f;
+    ClothConfig cfg = clothLiveParamConfig(3, 3);
 
     ClothSimulator sim;
     sim.initialize(cfg);
@@ -301,10 +279,7 @@ TEST(ClothSimulator, DampingClampedToValidRange)
 
 TEST(ClothSimulator, NegativeMassIgnored)
 {
-    ClothConfig cfg;
-    cfg.width = 3;
-    cfg.height = 3;
-    cfg.spacing = 0.5f;
+    ClothConfig cfg = clothLiveParamConfig(3, 3);
     cfg.particleMass = 0.1f;
 
     ClothSimulator sim;
@@ -317,10 +292,7 @@ TEST(ClothSimulator, NegativeMassIgnored)
 
 TEST(ClothSimulator, GetPinnedCount)
 {
-    ClothConfig cfg;
-    cfg.width = 5;
-    cfg.height = 5;
-    cfg.spacing = 0.5f;
+    ClothConfig cfg = clothLiveParamConfig(5, 5);
 
     ClothSimulator sim;
     sim.initialize(cfg);
@@ -337,10 +309,7 @@ TEST(ClothSimulator, GetPinnedCount)
 
 TEST(ClothSimulator, GetConstraintCount)
 {
-    ClothConfig cfg;
-    cfg.width = 3;
-    cfg.height = 3;
-    cfg.spacing = 0.5f;
+    ClothConfig cfg = clothLiveParamConfig(3, 3);
 
     ClothSimulator sim;
     sim.initialize(cfg);
@@ -351,10 +320,7 @@ TEST(ClothSimulator, GetConstraintCount)
 
 TEST(ClothSimulator, WindDirectionAndStrengthGetters)
 {
-    ClothConfig cfg;
-    cfg.width = 3;
-    cfg.height = 3;
-    cfg.spacing = 0.5f;
+    ClothConfig cfg = clothLiveParamConfig(3, 3);
 
     ClothSimulator sim;
     sim.initialize(cfg);
@@ -370,10 +336,7 @@ TEST(ClothSimulator, WindDirectionAndStrengthGetters)
 
 TEST(ClothSimulator, MassUpdatePreservesPinnedParticles)
 {
-    ClothConfig cfg;
-    cfg.width = 3;
-    cfg.height = 3;
-    cfg.spacing = 0.5f;
+    ClothConfig cfg = clothLiveParamConfig(3, 3);
     cfg.particleMass = 0.1f;
 
     ClothSimulator sim;
