@@ -36,40 +36,21 @@ jobs:
       - name: Checkout
         # No submodules in this repo (verified 2026-05-18); `submodules: recursive`
         # was wasted IO — left off intentionally.
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
 
       - name: Install build dependencies
-        # Wrapped in retry to absorb transient Ubuntu mirror failures
-        # (apt-get update returns 1xx errors a few times per week on the
-        # GitHub-hosted runners). 5-min budget, up to 3 attempts.
-        uses: nick-fields/retry@v3
+        # Cached apt install. The action stores /var/cache/apt/archives
+        # keyed by the package list — cache hits skip the apt mirror
+        # entirely (most runs, ~30-60 s saved). On cache miss it
+        # transparently falls back to `apt-get install`. Replaces the
+        # previous nick-fields/retry wrapper around apt-get: cache hits
+        # don't touch the mirror so the transient 4xx/5xx errors the
+        # retry was working around are mostly avoided. Cache miss is
+        # still subject to mirror flakes — a failed run can be re-run.
+        uses: awalsh128/cache-apt-pkgs-action@2c09a5e66da6c8016428a2172bd76e5e4f14bb17  # v1
         with:
-          timeout_minutes: 5
-          max_attempts: 3
-          command: |
-            sudo apt-get update
-            sudo apt-get install -y --no-install-recommends \
-              build-essential \
-              cmake \
-              ninja-build \
-              pkg-config \
-              libgl1-mesa-dev \
-              libglu1-mesa-dev \
-              libx11-dev \
-              libxrandr-dev \
-              libxinerama-dev \
-              libxcursor-dev \
-              libxi-dev \
-              libxxf86vm-dev \
-              libwayland-dev \
-              libxkbcommon-dev \
-              xvfb \
-              python3 \
-              python3-pip \
-              python3-xmltodict \
-              python3-yaml \
-              python3-flask \
-              cppcheck
+          packages: build-essential cmake ninja-build pkg-config libgl1-mesa-dev libglu1-mesa-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxxf86vm-dev libwayland-dev libxkbcommon-dev xvfb python3 python3-pip python3-xmltodict python3-yaml python3-flask cppcheck
+          version: linux-build-test-1
 
       - name: Set up ccache
         # Shared compiler-output cache. Without this, every job in this
@@ -81,13 +62,13 @@ jobs:
         # other). 500 MB ceiling fits within the per-repo cache quota
         # with headroom for the cmake-deps cache. Cache key includes
         # the job name so each job has its own namespace.
-        uses: hendrikmuhs/ccache-action@v1.2
+        uses: hendrikmuhs/ccache-action@5ebbd400eff9e74630f759d94ddd7b6c26299639  # v1.2
         with:
           key: ${{ github.job }}-${{ matrix.config }}
           max-size: 500M
 
       - name: Cache CMake FetchContent deps
-        uses: actions/cache@v5
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae  # v5
         with:
           path: |
             build/_deps
@@ -123,7 +104,7 @@ jobs:
 
       - name: Upload test logs on failure
         if: failure()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
         with:
           name: ctest-logs-${{ matrix.config }}
           path: |
@@ -153,30 +134,15 @@ jobs:
     timeout-minutes: 45
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
 
       - name: Install audit tool dependencies
-        uses: nick-fields/retry@v3
+        # Cached apt install — see the comment on linux-build-test's
+        # "Install build dependencies" step for the rationale.
+        uses: awalsh128/cache-apt-pkgs-action@2c09a5e66da6c8016428a2172bd76e5e4f14bb17  # v1
         with:
-          timeout_minutes: 5
-          max_attempts: 3
-          command: |
-            sudo apt-get update
-            sudo apt-get install -y --no-install-recommends \
-              cppcheck \
-              clang-tidy \
-              python3 \
-              python3-pip \
-              python3-xmltodict \
-              python3-yaml \
-              python3-flask \
-              build-essential \
-              cmake \
-              ninja-build \
-              xvfb \
-              libgl1-mesa-dev libglu1-mesa-dev \
-              libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
-              libxxf86vm-dev libwayland-dev libxkbcommon-dev
+          packages: cppcheck clang-tidy python3 python3-pip python3-xmltodict python3-yaml python3-flask build-essential cmake ninja-build xvfb libgl1-mesa-dev libglu1-mesa-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxxf86vm-dev libwayland-dev libxkbcommon-dev
+          version: audit-tool-tier1-1
 
       - name: Set up ccache
         # Same rationale as linux-build-test. This job builds the same
@@ -185,13 +151,13 @@ jobs:
         # caches are job-scoped to avoid race-on-save. Per-job key is
         # the safe form; the apt + FetchContent caches already cover
         # the cross-job sharing where it's safe.
-        uses: hendrikmuhs/ccache-action@v1.2
+        uses: hendrikmuhs/ccache-action@5ebbd400eff9e74630f759d94ddd7b6c26299639  # v1.2
         with:
           key: ${{ github.job }}-Debug
           max-size: 500M
 
       - name: Cache CMake FetchContent deps
-        uses: actions/cache@v5
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae  # v5
         with:
           path: |
             build/_deps
@@ -246,7 +212,7 @@ jobs:
 
       - name: Upload audit reports
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
         with:
           name: audit-tier1-report
           path: |
@@ -273,33 +239,20 @@ jobs:
         cmake: ["3.21.0", "latest"]
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
 
       - name: Install build dependencies
-        uses: nick-fields/retry@v3
+        # Cached apt install — see the comment on linux-build-test's
+        # "Install build dependencies" step for the rationale. cmake
+        # itself is installed by the next step (matrix-versioned), so
+        # not in this package list.
+        uses: awalsh128/cache-apt-pkgs-action@2c09a5e66da6c8016428a2172bd76e5e4f14bb17  # v1
         with:
-          timeout_minutes: 5
-          max_attempts: 3
-          command: |
-            sudo apt-get update
-            sudo apt-get install -y --no-install-recommends \
-              build-essential \
-              ninja-build \
-              pkg-config \
-              libgl1-mesa-dev \
-              libglu1-mesa-dev \
-              libx11-dev \
-              libxrandr-dev \
-              libxinerama-dev \
-              libxcursor-dev \
-              libxi-dev \
-              libxxf86vm-dev \
-              libwayland-dev \
-              libxkbcommon-dev \
-              xvfb
+          packages: build-essential ninja-build pkg-config libgl1-mesa-dev libglu1-mesa-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxxf86vm-dev libwayland-dev libxkbcommon-dev xvfb
+          version: cmake-compat-1
 
       - name: Install CMake ${{ matrix.cmake }}
-        uses: jwlawson/actions-setup-cmake@v2
+        uses: jwlawson/actions-setup-cmake@0d6a7d60b009d01c9e7523be22153ff8f19460d3  # v2
         with:
           cmake-version: ${{ matrix.cmake }}
 
@@ -312,13 +265,13 @@ jobs:
         # FetchContent semantics can produce subtly different compile
         # commands (e.g. -isystem vs -I include flags) and we don't
         # want one to evict the other's hits.
-        uses: hendrikmuhs/ccache-action@v1.2
+        uses: hendrikmuhs/ccache-action@5ebbd400eff9e74630f759d94ddd7b6c26299639  # v1.2
         with:
           key: ${{ github.job }}-${{ matrix.cmake }}
           max-size: 500M
 
       - name: Cache CMake FetchContent deps
-        uses: actions/cache@v5
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae  # v5
         with:
           path: |
             build/_deps
@@ -366,7 +319,7 @@ jobs:
       GITLEAKS_VERSION: "8.30.1"
     steps:
       - name: Checkout (full history)
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
         with:
           # gitleaks detect walks the full git history; shallow clone
           # would miss older commits that could contain leaked secrets.

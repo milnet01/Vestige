@@ -9,6 +9,39 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-05-19 CI — cache apt packages, SHA-pin every third-party action
+
+Two robustness/speed follow-ups to `c768aff` (ccache + apt retry + drop
+submodules):
+
+1. **apt-get install cached via `awalsh128/cache-apt-pkgs-action`** in
+   the 4 jobs that install build deps (linux-build-test × 2 configs,
+   audit-tool-tier1, cmake-compat × 2 versions, release linux-release).
+   Cache hits skip the Ubuntu mirror entirely (~30-60 s saved per job
+   on warm runs), which also removes the most common transient-mirror
+   failure mode that the `nick-fields/retry@v3` wrapper from c768aff was
+   working around. Retry wrapper removed in the same step since cache
+   hits are no-op against the mirror; cache misses are still subject to
+   mirror flakes and need a manual re-run.
+
+2. **SHA-pin every third-party action.** `actions/checkout`,
+   `actions/cache`, `actions/upload-artifact`, `hendrikmuhs/ccache-action`,
+   `jwlawson/actions-setup-cmake`, `softprops/action-gh-release`,
+   `awalsh128/cache-apt-pkgs-action`. Floating tags (`@v6`, `@v2`)
+   are mutable — a compromised maintainer credential can re-point a
+   tag at a malicious commit and every CI run on the repo pulls it
+   silently. SHA pins close that window. The `# vN` comment beside
+   each SHA keeps the version intent legible. Manual bumps replace
+   the previous "tag auto-tracks upstream" behaviour — accept the
+   cost in exchange for the supply-chain guarantee. See GitHub's
+   security hardening guide for Actions for the canonical
+   justification.
+
+3. **Drop `submodules: recursive` from release.yml** (both linux- and
+   windows-release jobs) for the same reason c768aff dropped it from
+   ci.yml: the repo has no submodules (verified — no `.gitmodules`),
+   so the recursion is wasted IO.
+
 ### 2026-05-19 Ts20-DU* — extract test helpers for repeated setup blocks (10 items)
 
 `/test-audit` 2026-05-18 Ts20 flagged 10 duplication findings where the

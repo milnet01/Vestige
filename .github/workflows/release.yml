@@ -56,37 +56,27 @@ jobs:
     timeout-minutes: 60
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        # No submodules in this repo (verified 2026-05-18); `submodules: recursive`
+        # was wasted IO. Same drop applied to ci.yml in c768aff.
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
         with:
-          submodules: recursive
           # For workflow_dispatch runs, the checked-out ref is the
           # branch default (usually main); pin to the requested tag so
           # the built binary actually carries the tagged source.
           ref: ${{ github.event.inputs.version || github.ref }}
 
       - name: Install build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            build-essential \
-            cmake \
-            ninja-build \
-            pkg-config \
-            libgl1-mesa-dev \
-            libglu1-mesa-dev \
-            libx11-dev \
-            libxrandr-dev \
-            libxinerama-dev \
-            libxcursor-dev \
-            libxi-dev \
-            libxxf86vm-dev \
-            libwayland-dev \
-            libxkbcommon-dev \
-            libasound2-dev \
-            patchelf
+        # Cached apt install — same pattern as ci.yml. Release runs are
+        # rare (tag pushes) so cache benefit is smaller here than on CI,
+        # but consistency + a one-line config keeps both workflows
+        # uniform.
+        uses: awalsh128/cache-apt-pkgs-action@2c09a5e66da6c8016428a2172bd76e5e4f14bb17  # v1
+        with:
+          packages: build-essential cmake ninja-build pkg-config libgl1-mesa-dev libglu1-mesa-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxxf86vm-dev libwayland-dev libxkbcommon-dev libasound2-dev patchelf
+          version: release-linux-1
 
       - name: Cache CMake FetchContent deps
-        uses: actions/cache@v5
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae  # v5
         with:
           path: |
             build/_deps
@@ -155,7 +145,7 @@ jobs:
           ls -lh "${STAGE}.tar.gz"
 
       - name: Upload as workflow artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
         with:
           name: vestige-linux-x86_64
           path: vestige-*-linux-x86_64.tar.gz
@@ -163,7 +153,7 @@ jobs:
 
       - name: Attach to GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65  # v2
         with:
           files: vestige-*-linux-x86_64.tar.gz
           draft: true
@@ -179,13 +169,13 @@ jobs:
     timeout-minutes: 90
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        # No submodules in this repo; same drop applied in c768aff.
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
         with:
-          submodules: recursive
           ref: ${{ github.event.inputs.version || github.ref }}
 
       - name: Cache CMake FetchContent deps
-        uses: actions/cache@v5
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae  # v5
         with:
           path: |
             build/_deps
@@ -253,7 +243,7 @@ jobs:
           ls -lh "${STAGE}.zip"
 
       - name: Upload as workflow artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
         with:
           name: vestige-windows-x86_64
           path: vestige-*-windows-x86_64.zip
@@ -261,7 +251,7 @@ jobs:
 
       - name: Attach to GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65  # v2
         with:
           files: vestige-*-windows-x86_64.zip
           draft: true
