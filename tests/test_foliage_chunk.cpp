@@ -230,6 +230,14 @@ TEST(FoliageChunkTest, SerializeDeserialize)
 
 // --- FoliageManager tests ---
 
+// Contract for paintFoliage(typeId, center, radius, density, falloff, config):
+// density = instances per square metre inside the brush footprint;
+// falloff = edge taper in [0,1] (0 = sharp circle, 1 = full taper to centre);
+// scale range comes from config.{minScale,maxScale} (jitter applied per-instance).
+
+// Painting a 5 m brush at the origin with density 2/m² and 0.3 falloff
+// should populate at least one instance — verifies the painter spawned
+// foliage and the manager's total count tracks it.
 TEST(FoliageManagerTest, PaintCreatesInstances)
 {
     FoliageManager manager;
@@ -243,6 +251,9 @@ TEST(FoliageManagerTest, PaintCreatesInstances)
     EXPECT_GT(manager.getTotalFoliageCount(), 0);
 }
 
+// Erasing a 3 m brush inside a 5 m paint footprint must reduce the count.
+// Paint uses sharp-edge falloff (0.0) so the footprint is fully populated;
+// erase doesn't require falloff because it removes any instance in range.
 TEST(FoliageManagerTest, EraseRemovesInstances)
 {
     FoliageManager manager;
@@ -260,6 +271,9 @@ TEST(FoliageManagerTest, EraseRemovesInstances)
     EXPECT_LT(manager.getTotalFoliageCount(), countBefore);
 }
 
+// Undo/redo contract: removeFoliage(added) takes total to 0,
+// restoreFoliage(added) brings it back to the post-paint count.
+// Uses scale range [1,1] (no jitter) so the inverse is exact.
 TEST(FoliageManagerTest, RestoreAndRemoveForUndo)
 {
     FoliageManager manager;
@@ -280,6 +294,8 @@ TEST(FoliageManagerTest, RestoreAndRemoveForUndo)
     EXPECT_EQ(manager.getTotalFoliageCount(), countAfterPaint);
 }
 
+// packChunkKey/unpackChunkKey must be inverses for negative grid coords.
+// (-5, 42) probes the sign-extension boundary; pure positives wouldn't.
 TEST(FoliageManagerTest, PackUnpackChunkKey)
 {
     int gx = -5;
@@ -292,6 +308,9 @@ TEST(FoliageManagerTest, PackUnpackChunkKey)
     EXPECT_EQ(outZ, gz);
 }
 
+// Two distinct foliage types painted into well-separated chunks survive
+// a JSON round-trip with the same total instance count. Doesn't probe
+// per-instance position/scale parity — just count preservation.
 TEST(FoliageManagerTest, SerializeDeserialize)
 {
     FoliageManager manager;
@@ -312,6 +331,9 @@ TEST(FoliageManagerTest, SerializeDeserialize)
     EXPECT_EQ(loaded.getTotalFoliageCount(), originalCount);
 }
 
+// clear() drops both instances and the chunk lookup — not just instances.
+// Guards against an early implementation that emptied per-chunk vectors
+// but left dead chunk entries behind (would have left getChunkCount() > 0).
 TEST(FoliageManagerTest, ClearRemovesAll)
 {
     FoliageManager manager;

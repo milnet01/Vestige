@@ -189,6 +189,9 @@ TEST(RandomOneShot, UsesSamplerValueForIntervalSelection)
     s.maxIntervalSeconds = 20.0f;
     s.timeUntilNextFire  = 0.0f;
 
+    // deltaSeconds=0.0f still fires because timeUntilNextFire starts at 0
+    // and the scheduler uses `>=` semantics (timeUntilNextFire <= delta),
+    // so 0 <= 0 fires. After firing, the new interval comes from the sampler.
     auto zero = []() { return 0.0f; };
     EXPECT_TRUE(tickRandomOneShot(s, 0.0f, zero));
     EXPECT_NEAR(s.timeUntilNextFire, 10.0f, kEps);

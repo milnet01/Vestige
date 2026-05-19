@@ -35,6 +35,8 @@ TEST(ClothSolverBackend, InitializeThroughInterfaceWorks)
     cfg.height = 4;
     cfg.spacing = 0.1f;
 
+    // `seed` is the per-cloth wind-randomness seed (see IClothSolverBackend::initialize).
+    // Pin it to a non-zero literal so the test is reproducible across runs.
     backend->initialize(cfg, /*seed=*/1);
 
     EXPECT_TRUE(backend->isInitialized());
@@ -57,7 +59,7 @@ TEST(ClothSolverBackend, SimulateAndResetThroughInterface)
     cfg.width = 4;
     cfg.height = 4;
     cfg.spacing = 0.1f;
-    backend->initialize(cfg);
+    backend->initialize(cfg, /*seed=*/1);
 
     // Snapshot the unsimulated bottom-row position.
     const glm::vec3 initialBottom = backend->getPositions()[0];

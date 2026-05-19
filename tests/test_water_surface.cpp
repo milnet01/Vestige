@@ -3,6 +3,11 @@
 
 /// @file test_water_surface.cpp
 /// @brief Unit tests for WaterSurfaceConfig and WaterSurfaceComponent.
+///
+/// @note Tests run without an active GL context — any VAO/buffer/mesh upload
+///       operations on WaterSurfaceComponent are skipped or short-circuit on a
+///       null context. Only CPU-side state (config defaults, animation phase,
+///       displacement math) is exercised here.
 #include "scene/water_surface.h"
 
 #include <gtest/gtest.h>

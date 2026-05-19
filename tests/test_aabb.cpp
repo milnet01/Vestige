@@ -60,6 +60,9 @@ TEST(AABBTest, IntersectsNotOverlapping)
     EXPECT_FALSE(b.intersects(a));
 }
 
+// Pin the contract: touching AABBs are treated as intersecting (closed
+// intervals on each axis: `a.max[i] >= b.min[i] && b.max[i] >= a.min[i]`).
+// Flip to EXPECT_FALSE if the engine ever switches to half-open semantics.
 TEST(AABBTest, IntersectsTouching)
 {
     AABB a = {glm::vec3(0.0f), glm::vec3(1.0f)};

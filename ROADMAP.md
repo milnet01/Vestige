@@ -929,11 +929,11 @@ Full triaged report at `/tmp/test-audit-e5e42211/_triaged.md` (ephemeral); false
 - [ ] **Ts20-PA6.** `tests/test_ui_world_projection.cpp:89` — `FadeAlpha` boundary tests separate per distance variant. Table-driven `{distance, expectedAlpha}`.
 
 #### Doc-strings (4)
-- [ ] **Ts20-DS1.** `tests/test_aabb.cpp:63` — `IntersectsTouching` undocumented closed/half-open. Add comment: "touching AABBs treated as intersecting (closed intervals)".
-- [ ] **Ts20-DS2.** `tests/test_audio_ambient.cpp:192` — `deltaSeconds=0.0f` unclear intent. Add comment explaining `>=` semantics.
-- [ ] **Ts20-DS4.** `tests/test_cloth_solver_backend.cpp:38` — seed parameter undocumented. Add comment; use explicit seed on line 60.
-- [ ] **Ts20-DS5.** `tests/test_foliage_chunk.cpp` — original FoliageManager tests have no per-test comments. Add contract notes (density/spacing/jitter).
-- [ ] **Ts20-DS7.** `tests/test_water_surface.cpp:1` — no GL-context precondition in file header. Add to `@brief`: "tests run without GL context (VAO/mesh ops skipped)".
+- [x] **Ts20-DS1.** `tests/test_aabb.cpp:63` — `IntersectsTouching` undocumented closed/half-open. Add comment: "touching AABBs treated as intersecting (closed intervals)".
+- [x] **Ts20-DS2.** `tests/test_audio_ambient.cpp:192` — `deltaSeconds=0.0f` unclear intent. Add comment explaining `>=` semantics.
+- [x] **Ts20-DS4.** `tests/test_cloth_solver_backend.cpp:38` — seed parameter undocumented. Add comment; use explicit seed on line 60.
+- [x] **Ts20-DS5.** `tests/test_foliage_chunk.cpp` — original FoliageManager tests have no per-test comments. Add contract notes (density/spacing/jitter).
+- [x] **Ts20-DS7.** `tests/test_water_surface.cpp:1` — no GL-context precondition in file header. Add to `@brief`: "tests run without GL context (VAO/mesh ops skipped)".
 
 #### Verbosity (3)
 - [ ] **Ts20-VE2.** `tests/test_stasis_system.cpp:54` — `DefaultValues` checks 9 fields individually. Use `EXPECT_EQ(state, StasisState{})` if `operator==` available.
