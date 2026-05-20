@@ -262,10 +262,17 @@ std::string firstWarningContaining(const std::string& needle)
 
 } // namespace
 
-TEST(EntitySerializerUnregisteredComponentWarning, WarnsWhenComponentTypeIsUnregistered_F12)
+// The F12 drop-warning tests inspect the global Logger ring buffer, so each
+// must start from a clean slate; resetting in SetUp() makes that independent
+// of test execution order rather than relying on a per-body clearEntries().
+class EntitySerializerUnregisteredComponentWarning : public ::testing::Test
 {
-    Logger::clearEntries();
+protected:
+    void SetUp() override { Logger::clearEntries(); }
+};
 
+TEST_F(EntitySerializerUnregisteredComponentWarning, WarnsWhenComponentTypeIsUnregistered_F12)
+{
     Scene scene("UnregisteredTest");
     Entity* host = scene.createEntity("HostEntity");
     host->addComponent<UnregisteredTestComponent>();
@@ -283,10 +290,8 @@ TEST(EntitySerializerUnregisteredComponentWarning, WarnsWhenComponentTypeIsUnreg
            "Logger::getEntries() produced none";
 }
 
-TEST(EntitySerializerUnregisteredComponentWarning, SilentWhenAllComponentsAreRegistered_F12)
+TEST_F(EntitySerializerUnregisteredComponentWarning, SilentWhenAllComponentsAreRegistered_F12)
 {
-    Logger::clearEntries();
-
     Scene scene("SilentTest");
     Entity* host = scene.createEntity("AllRegistered");
     // AudioSource is registered (F3); nothing else on the entity.
@@ -301,10 +306,8 @@ TEST(EntitySerializerUnregisteredComponentWarning, SilentWhenAllComponentsAreReg
            "the F12 drop warning — false positives devalue the signal";
 }
 
-TEST(EntitySerializerUnregisteredComponentWarning, ReportsDropCountForMultipleUnregistered_F12)
+TEST_F(EntitySerializerUnregisteredComponentWarning, ReportsDropCountForMultipleUnregistered_F12)
 {
-    Logger::clearEntries();
-
     Scene scene("MultiDropTest");
     Entity* host = scene.createEntity("TwoUnregistered");
     host->addComponent<UnregisteredTestComponent>();
@@ -321,10 +324,8 @@ TEST(EntitySerializerUnregisteredComponentWarning, ReportsDropCountForMultipleUn
         << "expected the warning to mention the drop count (2); got: " << msg;
 }
 
-TEST(EntitySerializerUnregisteredComponentWarning, WarnsForEachAffectedEntityIndependently_F12)
+TEST_F(EntitySerializerUnregisteredComponentWarning, WarnsForEachAffectedEntityIndependently_F12)
 {
-    Logger::clearEntries();
-
     Scene scene("IndependentEntities");
     Entity* a = scene.createEntity("EntityAlpha");
     Entity* b = scene.createEntity("EntityBravo");

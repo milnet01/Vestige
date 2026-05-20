@@ -119,6 +119,18 @@ INSTANTIATE_TEST_SUITE_P(
 
 TEST(ReferenceCaseDirectory, FindsAtLeastOneCase)
 {
+    // A missing directory is an environment condition (test binary run
+    // without the source tree) — skip rather than report a false
+    // regression. A directory that exists but holds no cases is a real
+    // regression: someone deleted the harness data.
+    std::error_code ec;
+    if (!std::filesystem::exists(kReferenceCasesDir, ec))
+    {
+        GTEST_SKIP() << "Reference-cases directory not present at "
+                     << kReferenceCasesDir
+                     << " — source tree unavailable at runtime.";
+    }
+
     const auto paths = discoverReferenceCases();
     EXPECT_FALSE(paths.empty())
         << "No reference cases discovered under " << kReferenceCasesDir

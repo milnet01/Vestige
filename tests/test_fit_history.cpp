@@ -14,6 +14,7 @@
 #include <gtest/gtest.h>
 
 #include "fit_history.h"
+#include "test_helpers.h"
 
 #include <filesystem>
 #include <fstream>
@@ -66,7 +67,8 @@ FitHistoryEntry makeEntry(const std::string& name,
 
 TEST(FitHistoryLoad, MissingFileReturnsEmpty)
 {
-    const auto path = std::filesystem::temp_directory_path() / "fh_missing.json";
+    const auto path = std::filesystem::temp_directory_path()
+                      / ("fh_missing_" + Testing::vestigeTestStamp() + ".json");
     std::filesystem::remove(path);
     FitHistory h(path.string());
     EXPECT_TRUE(h.load());
@@ -75,7 +77,8 @@ TEST(FitHistoryLoad, MissingFileReturnsEmpty)
 
 TEST(FitHistoryRoundTrip, EntryPersistsAcrossLoadSave)
 {
-    const auto path = std::filesystem::temp_directory_path() / "fh_roundtrip.json";
+    const auto path = std::filesystem::temp_directory_path()
+                      / ("fh_roundtrip_" + Testing::vestigeTestStamp() + ".json");
     std::filesystem::remove(path);
     {
         FitHistory h(path.string());
@@ -96,7 +99,8 @@ TEST(FitHistoryRoundTrip, EntryPersistsAcrossLoadSave)
 
 TEST(FitHistoryLoad, CorruptJsonReturnsFalseAndClears)
 {
-    const auto path = std::filesystem::temp_directory_path() / "fh_corrupt.json";
+    const auto path = std::filesystem::temp_directory_path()
+                      / ("fh_corrupt_" + Testing::vestigeTestStamp() + ".json");
     {
         std::ofstream out(path);
         out << "{not valid json";
@@ -111,7 +115,8 @@ TEST(FitHistoryLoad, CorruptJsonReturnsFalseAndClears)
 
 TEST(FitHistoryLoad, WrongSchemaVersionIsRejected)
 {
-    const auto path = std::filesystem::temp_directory_path() / "fh_wrongver.json";
+    const auto path = std::filesystem::temp_directory_path()
+                      / ("fh_wrongver_" + Testing::vestigeTestStamp() + ".json");
     {
         std::ofstream out(path);
         out << R"({"schema_version": 999, "entries": []})";

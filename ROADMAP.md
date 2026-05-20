@@ -847,9 +847,9 @@ Full triaged report at `/tmp/test-audit-e5e42211/_triaged.md` (ephemeral); false
 - [ ] **Ts20-FL5.** `tests/test_photosensitive_retrofit.cpp:99` — flicker phase not pinned at guaranteed-difference point. Drive emitters to half-clamped-period phase offset.
 
 #### Isolation (3)
-- [ ] **Ts20-IS3.** `tests/test_fit_history.cpp:62` — four tests share `/tmp/fh_*.json` with no PID stamp. Use stamped paths.
-- [ ] **Ts20-IS4.** `tests/test_entity_serializer_registry.cpp:265` — `Logger::clearEntries()` in test bodies, order-dependent. Move into fixture `SetUp()`.
-- [ ] **Ts20-IS5.** `tests/test_reference_harness.cpp:120` — silent fail on missing reference-cases dir. Guard with `GTEST_SKIP()` if dir missing.
+- [x] **Ts20-IS3.** `tests/test_fit_history.cpp:62` — four tests share `/tmp/fh_*.json` with no PID stamp. Use stamped paths.
+- [x] **Ts20-IS4.** `tests/test_entity_serializer_registry.cpp:265` — `Logger::clearEntries()` in test bodies, order-dependent. Move into fixture `SetUp()`.
+- [x] **Ts20-IS5.** `tests/test_reference_harness.cpp:120` — silent fail on missing reference-cases dir. Guard with `GTEST_SKIP()` if dir missing.
 
 #### Accuracy (1)
 - [ ] **Ts20-AC4.** `tests/test_hdr_pipeline.cpp:31` — BT.709 coefficients hardcoded with no shader parity. Extract via source-grep (mirror Ts20-AC2 fix) or remove redundant test.
