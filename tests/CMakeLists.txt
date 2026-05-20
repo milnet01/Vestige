@@ -230,10 +230,12 @@ target_link_libraries(vestige_tests
         GTest::gtest_main
 )
 
-# Precompiled headers — every test TU pulls in the heavy GoogleTest and GLM
-# headers; compiling them once cuts clean/multi-file build time.
+# Precompiled headers — GLM is the heaviest header shared across the test TUs;
+# precompiling it cuts clean/multi-file build time. GoogleTest is deliberately
+# NOT precompiled: it pulls in <string>, which trips a GCC 13 -Warray-bounds
+# false positive in char_traits.h under -O3 + _FORTIFY_SOURCE=3 (Release) that
+# -Werror turns fatal. GLM compiles clean at -O3.
 target_precompile_headers(vestige_tests PRIVATE
-    <gtest/gtest.h>
     <glm/glm.hpp>
 )
 
