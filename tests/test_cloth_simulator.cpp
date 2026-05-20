@@ -258,8 +258,9 @@ TEST(ClothSimulator, SphereCollisionPushesParticlesOut)
     float radius = 1.5f;
     sim.addSphereCollider(center, radius);
 
-    // Simulate
-    for (int i = 0; i < 120; ++i)
+    // Simulate one second (60 frames) — strong gravity settles the cloth
+    // onto the sphere well within that, so the prior 120 was redundant.
+    for (int i = 0; i < 60; ++i)
     {
         sim.simulate(1.0f / 60.0f);
     }

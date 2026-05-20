@@ -506,7 +506,9 @@ TEST(ThickParticle, SimulationStableWithRadius)
     sim.addSphereCollider(glm::vec3(0, -2, 0), 2.0f);
     sim.setGroundPlane(-3.0f);
 
-    for (int i = 0; i < 120; ++i)
+    // 60 frames is enough to surface any radius-related instability;
+    // the prior 120 only doubled the runtime without tightening the pin.
+    for (int i = 0; i < 60; ++i)
     {
         sim.simulate(1.0f / 60.0f);
     }

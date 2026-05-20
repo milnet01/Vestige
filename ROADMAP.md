@@ -855,8 +855,8 @@ Full triaged report at `/tmp/test-audit-e5e42211/_triaged.md` (ephemeral); false
 - [ ] **Ts20-AC4.** `tests/test_hdr_pipeline.cpp:31` — BT.709 coefficients hardcoded with no shader parity. Extract via source-grep (mirror Ts20-AC2 fix) or remove redundant test.
 
 #### Performance (2)
-- [ ] **Ts20-PE1.** `tests/test_cloth_simulator.cpp:263` — `SphereCollisionPushesParticlesOut` runs 120 frames vs documented 60. Reduce.
-- [ ] **Ts20-PE2.** `tests/test_cloth_solver_improvements.cpp:508` — paired simulators run 120 frames unnecessarily. Reduce to 60.
+- [x] **Ts20-PE1.** `tests/test_cloth_simulator.cpp:263` — `SphereCollisionPushesParticlesOut` runs 120 frames vs documented 60. Reduce.
+- [x] **Ts20-PE2.** `tests/test_cloth_solver_improvements.cpp:508` — paired simulators run 120 frames unnecessarily. Reduce to 60.
 
 #### Duplication (10)
 - [x] **Ts20-DU1.** `tests/test_animation_sampler.cpp:101` — LinearQuat tests share 13 identical lines. Extract `makeQuatChannel(q0, q1)` helper.
