@@ -14,6 +14,8 @@
 #include "benchmark.h"
 #include "formula/formula_library.h"
 
+#include "test_helpers.h"
+
 #include <cmath>
 #include <filesystem>
 #include <fstream>
@@ -73,7 +75,11 @@ namespace
 
 std::string writeTempCsv(const std::string& name, const std::string& contents)
 {
-    const auto path = std::filesystem::temp_directory_path() / name;
+    // Ts20-CV3: stamp the temp filename with vestigeTestStamp() so two
+    // BenchmarkCsv tests (or a parallel `ctest -j` run) never collide on a
+    // fixed path like "bench_ok.csv".
+    const auto path = std::filesystem::temp_directory_path()
+                    / (Testing::vestigeTestStamp() + "_" + name);
     std::ofstream out(path);
     out << contents;
     return path.string();

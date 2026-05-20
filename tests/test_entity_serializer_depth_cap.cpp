@@ -47,6 +47,19 @@ json buildNestedChain(int depth)
 }
 }
 
+TEST(EntitySerializerDepthCap, AcceptsDepthJustBelowBoundary_D7_CV9)
+{
+    // Ts20-CV9: the boundary test below pins exactly 128 (the cap). Pin
+    // 127 too — one level under the cap — so an off-by-one that rejected
+    // at `depth >= cap` instead of `depth > cap` would be caught from the
+    // accepting side, not just the rejecting side.
+    Scene scene;
+    ResourceManager rm;
+    auto j = buildNestedChain(127);
+    auto* e = EntitySerializer::deserializeEntity(j, scene, rm);
+    EXPECT_NE(e, nullptr);
+}
+
 TEST(EntitySerializerDepthCap, AcceptsDepthAtBoundary_D7)
 {
     // 128 levels = the cap. Should succeed.

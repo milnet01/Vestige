@@ -109,3 +109,31 @@ TEST(AABBTest, MinPushOutResolvesCollision)
     EXPECT_FLOAT_EQ(push.y, 0.0f);
     EXPECT_FLOAT_EQ(push.z, 0.0f);
 }
+
+// Ts20-CV1: AABB is a passive data struct with no min<=max validation —
+// callers must supply a well-formed box. Pin the defined behaviour for a
+// degenerate inverted box (min > max on every axis): it contains no
+// points, reports negative size, and does not even intersect itself. This
+// documents "garbage in, defined out" so a future refactor that adds
+// normalisation has to revise this contract deliberately.
+TEST(AABBTest, InvertedMinMaxContainsNothingAndHasNegativeSize)
+{
+    AABB inverted = {glm::vec3(1.0f), glm::vec3(-1.0f)};
+
+    // No point can be simultaneously >= 1 and <= -1 on any axis.
+    EXPECT_FALSE(inverted.contains(glm::vec3(0.0f)));
+    EXPECT_FALSE(inverted.contains(glm::vec3(1.0f)));
+    EXPECT_FALSE(inverted.contains(glm::vec3(-1.0f)));
+
+    // Size is max - min → negative on every axis (not auto-normalised).
+    const glm::vec3 size = inverted.getSize();
+    EXPECT_FLOAT_EQ(size.x, -2.0f);
+    EXPECT_FLOAT_EQ(size.y, -2.0f);
+    EXPECT_FLOAT_EQ(size.z, -2.0f);
+
+    // intersects() fails even against itself: min.x <= max.x is false.
+    EXPECT_FALSE(inverted.intersects(inverted));
+
+    // getCenter still returns the arithmetic midpoint of the two corners.
+    EXPECT_FLOAT_EQ(inverted.getCenter().x, 0.0f);
+}

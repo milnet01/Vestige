@@ -129,6 +129,74 @@ TEST(SkeletonAnimatorTest, UpdateComputesBoneMatrices)
     EXPECT_NEAR(matrices[0][3][0], 2.5f, 0.1f);  // x translation
 }
 
+// Ts20-CV16: makeSimpleClip animates only TRANSLATION, so the ROTATION
+// and SCALE sampling + compose paths were untested. The root joint has an
+// identity bind, so bone[0] equals the sampled local transform directly.
+
+TEST(SkeletonAnimatorTest, RotationChannelRotatesBoneMatrix_CV16)
+{
+    SkeletonAnimator animator;
+    animator.setSkeleton(makeSimpleSkeleton());
+
+    auto clip = std::make_shared<AnimationClip>();
+    clip->m_name = "RotY90";
+    AnimationChannel ch;
+    ch.jointIndex = 0;
+    ch.targetPath = AnimTargetPath::ROTATION;
+    ch.interpolation = AnimInterpolation::LINEAR;
+    ch.timestamps = {0.0f, 1.0f};
+    // glTF packs rotation as (x, y, z, w); 90° about +Y → (0, √½, 0, √½).
+    // Both keyframes identical so any sample time yields exactly that quat.
+    const float q = 0.70710678f;  // sin(45°) = cos(45°)
+    ch.values = {0.0f, q, 0.0f, q,  0.0f, q, 0.0f, q};
+    clip->m_channels.push_back(ch);
+    clip->computeDuration();
+
+    animator.addClip(clip);
+    animator.play("RotY90");
+    animator.update(0.5f);
+
+    const glm::mat4& bone = animator.getBoneMatrices()[0];
+    // Right-handed +90° about Y maps +X → −Z and +Z → +X, Y unchanged.
+    const glm::vec3 xAxis = glm::vec3(bone * glm::vec4(1.0f, 0.0f, 0.0f, 1.0f));
+    const glm::vec3 zAxis = glm::vec3(bone * glm::vec4(0.0f, 0.0f, 1.0f, 1.0f));
+
+    EXPECT_NEAR(xAxis.x, 0.0f, 1e-4f);
+    EXPECT_NEAR(xAxis.y, 0.0f, 1e-4f);
+    EXPECT_NEAR(xAxis.z, -1.0f, 1e-4f);
+
+    EXPECT_NEAR(zAxis.x, 1.0f, 1e-4f);
+    EXPECT_NEAR(zAxis.y, 0.0f, 1e-4f);
+    EXPECT_NEAR(zAxis.z, 0.0f, 1e-4f);
+}
+
+TEST(SkeletonAnimatorTest, ScaleChannelScalesBoneMatrix_CV16)
+{
+    SkeletonAnimator animator;
+    animator.setSkeleton(makeSimpleSkeleton());
+
+    auto clip = std::make_shared<AnimationClip>();
+    clip->m_name = "ScaleXYZ";
+    AnimationChannel ch;
+    ch.jointIndex = 0;
+    ch.targetPath = AnimTargetPath::SCALE;
+    ch.interpolation = AnimInterpolation::LINEAR;
+    ch.timestamps = {0.0f, 1.0f};
+    ch.values = {2.0f, 3.0f, 4.0f,  2.0f, 3.0f, 4.0f};
+    clip->m_channels.push_back(ch);
+    clip->computeDuration();
+
+    animator.addClip(clip);
+    animator.play("ScaleXYZ");
+    animator.update(0.5f);
+
+    const glm::mat4& bone = animator.getBoneMatrices()[0];
+    // Identity bind → bone = scale(2,3,4); the factors sit on the diagonal.
+    EXPECT_NEAR(bone[0][0], 2.0f, 1e-4f);
+    EXPECT_NEAR(bone[1][1], 3.0f, 1e-4f);
+    EXPECT_NEAR(bone[2][2], 4.0f, 1e-4f);
+}
+
 TEST(SkeletonAnimatorTest, LoopingWrapsTime)
 {
     SkeletonAnimator animator;

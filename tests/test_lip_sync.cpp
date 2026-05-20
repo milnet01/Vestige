@@ -474,6 +474,47 @@ TEST_F(LipSyncTrackTest, EmptyTSVFails)
     EXPECT_FALSE(player.loadTrackFromTSV(""));
 }
 
+// Ts20-CV13: the prior TSV tests only exercised the happy path
+// (SAMPLE_TSV) and the wholly-empty input. Pin the parser's three
+// malformed-row behaviours so a future rewrite can't silently change
+// them.
+
+TEST_F(LipSyncTrackTest, TSVBlankRowsAreSkipped_CV13)
+{
+    // Blank lines between cues are tolerated (skipped), not treated as
+    // parse errors — the surrounding valid cues still load.
+    ASSERT_TRUE(player.loadTrackFromTSV("0.00\tX\n\n0.50\tD\n\n"));
+    const auto* track = player.getTrack();
+    ASSERT_NE(track, nullptr);
+    EXPECT_EQ(track->cues.size(), 2u);
+}
+
+TEST_F(LipSyncTrackTest, TSVNonNumericTimestampRowsAreSkipped_CV13)
+{
+    // A row whose first column is not a number fails the `>> time`
+    // extraction and is dropped; a bad row between two good rows leaves 2.
+    ASSERT_TRUE(player.loadTrackFromTSV("0.00\tX\nNOT_A_TIME\tD\n0.50\tF\n"));
+    const auto* track = player.getTrack();
+    ASSERT_NE(track, nullptr);
+    EXPECT_EQ(track->cues.size(), 2u);
+
+    // A TSV with no numeric rows at all yields zero cues → load fails.
+    EXPECT_FALSE(player.loadTrackFromTSV("alpha\tX\nbeta\tD\n"));
+}
+
+TEST_F(LipSyncTrackTest, TSVNegativeTimesAreAcceptedPermissively_CV13)
+{
+    // The parser does NOT validate the sign of the timestamp — a negative
+    // start time passes through unchanged. Pins the current (permissive)
+    // behaviour: Rhubarb never emits negatives, but a hand-edited file
+    // could. Flip to EXPECT_FALSE if non-negative validation is ever added.
+    ASSERT_TRUE(player.loadTrackFromTSV("-1.00\tX\n0.50\tD\n"));
+    const auto* track = player.getTrack();
+    ASSERT_NE(track, nullptr);
+    ASSERT_EQ(track->cues.size(), 2u);
+    EXPECT_FLOAT_EQ(track->cues[0].start, -1.0f);
+}
+
 TEST_F(LipSyncTrackTest, NoTrackReturnsNull)
 {
     EXPECT_EQ(player.getTrack(), nullptr);

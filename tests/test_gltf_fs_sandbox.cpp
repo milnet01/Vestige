@@ -154,6 +154,41 @@ TEST_F(GltfFsSandboxTest, AbsolutePathBufferUriIsRejected_D2)
     EXPECT_GE(countWarningsContaining("rejected read outside gltfDir"), 1u);
 }
 
+TEST_F(GltfFsSandboxTest, SymlinkEscapeBufferUriIsRejected_D2_CV11)
+{
+    // Ts20-CV11: a symlink *inside* the sandbox that points *outside* is
+    // the sneakiest traversal — the URI looks local ("link.bin") but
+    // resolves out of the gltfDir. weakly_canonical() resolves the link
+    // before the sandbox compares path prefixes, so the read must be
+    // rejected. Gated with try/catch: filesystems / platforms without
+    // symlink support skip cleanly rather than fail.
+    const std::string secret = "VESTIGE_SECRET_VIA_SYMLINK";  // 26 bytes
+    writeBinary(m_outside / "secret.bin", secret);
+
+    const fs::path link = m_inner / "link.bin";
+    try
+    {
+        fs::create_symlink(m_outside / "secret.bin", link);
+    }
+    catch (const fs::filesystem_error&)
+    {
+        GTEST_SKIP() << "symlinks unsupported on this filesystem";
+    }
+
+    writeGltf(R"({
+        "asset": {"version": "2.0"},
+        "buffers": [{"uri": "link.bin", "byteLength": 26}],
+        "scene": 0,
+        "scenes": [{"nodes": [0]}],
+        "nodes": [{"name": "n"}]
+    })");
+
+    ResourceManager rm;
+    auto model = GltfLoader::load(m_gltfPath.string(), rm);
+    EXPECT_EQ(model, nullptr);
+    EXPECT_GE(countWarningsContaining("rejected read outside gltfDir"), 1u);
+}
+
 TEST_F(GltfFsSandboxTest, NestedSubdirBufferUriIsAccepted_D2)
 {
     // Buffer in a sub-directory below the .gltf. weakly_canonical should

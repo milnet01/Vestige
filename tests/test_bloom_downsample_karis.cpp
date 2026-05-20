@@ -71,6 +71,28 @@ TEST(BloomDownsampleKaris, CentreGroupHasFourTimesWeightOfCornerGroup_R9)
     EXPECT_NEAR(result.b, 0.2f, 0.05f);
 }
 
+// Ts20-CV6: the reversed-intensity companion to the test above. Putting
+// the bright sample in a CORNER (fixed weight 0.125) instead of the
+// centre (0.5) must yield a much smaller result — the 4× asymmetry seen
+// from the other direction. With one bright gray corner = 0.5 (Karis
+// weight 1/(1+0.5) = 0.667) and everything else zero (Karis weight 1):
+//   num   = 0.125·0.667·0.5                       ≈ 0.04167
+//   denom = 0.5·1 + 0.125·0.667 + 3·(0.125·1)     ≈ 0.95833
+//   result ≈ 0.0435  — roughly 1/4 of the centre-bright 0.2 above.
+TEST(BloomDownsampleKaris, CornerGroupHasQuarterWeightOfCentreGroup_R9)
+{
+    const glm::vec3 bright(0.5f, 0.5f, 0.5f);
+    const glm::vec3 zero(0.0f);
+
+    glm::vec3 cornerBright = combineBloomKarisGroups(zero, bright, zero, zero, zero);
+    glm::vec3 centreBright = combineBloomKarisGroups(bright, zero, zero, zero, zero);
+
+    EXPECT_NEAR(cornerBright.r, 0.0435f, 0.01f);
+    // The reversed-direction invariant: a bright corner contributes far
+    // less than the same bright value in the centre.
+    EXPECT_LT(cornerBright.r, centreBright.r);
+}
+
 TEST(BloomDownsampleKaris, ZeroInputProducesZeroOutput_R9)
 {
     // NaN guard: with all groups zero, every Karis weight is 1 (no

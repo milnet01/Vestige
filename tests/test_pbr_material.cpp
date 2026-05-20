@@ -294,3 +294,24 @@ TEST(PbrMaterialTest, BlinnPhongDefaultsUnchanged)
     glm::vec3 specular = mat.getSpecularColor();
     EXPECT_FLOAT_EQ(specular.r, 1.0f);
 }
+
+// Ts20-CV15: the test above checks shininess + the .r channel of two
+// colours only. The finding asked for "ambient/opacity", but Material
+// exposes neither — its Blinn-Phong surface is {type, diffuse, specular,
+// shininess}. Pin the remaining real fields: the default lighting model
+// and the full RGB of both default colours (g/b were unchecked before).
+TEST(PbrMaterialTest, BlinnPhongDefaultColorsAndTypeFullyPinned_CV15)
+{
+    Material mat;
+    EXPECT_EQ(mat.getType(), MaterialType::BLINN_PHONG);
+
+    const glm::vec3 diffuse = mat.getDiffuseColor();
+    EXPECT_FLOAT_EQ(diffuse.r, 0.8f);
+    EXPECT_FLOAT_EQ(diffuse.g, 0.8f);
+    EXPECT_FLOAT_EQ(diffuse.b, 0.8f);
+
+    const glm::vec3 specular = mat.getSpecularColor();
+    EXPECT_FLOAT_EQ(specular.r, 1.0f);
+    EXPECT_FLOAT_EQ(specular.g, 1.0f);
+    EXPECT_FLOAT_EQ(specular.b, 1.0f);
+}

@@ -899,21 +899,21 @@ Full triaged report at `/tmp/test-audit-e5e42211/_triaged.md` (ephemeral); false
 - [x] **Ts20-HA7.** `tests/test_skeleton.cpp:61` — `MAX_JOINTS == 128` magic number not cross-referenced to shader. Add comment + `static_assert` if possible.
 
 #### Coverage gaps (15)
-- [ ] **Ts20-CV1.** `tests/test_aabb.cpp:14` — no test for inverted min/max. Add `min > max` constructed AABB.
-- [ ] **Ts20-CV3.** `tests/test_benchmark.cpp:74` — `BenchmarkCsv` temp files unstamped. Use `vestigeTestStamp()`.
-- [ ] **Ts20-CV4.** `tests/test_catmull_rom_spline.cpp` — no tangent test at interior segment boundary on 3+ point spline. Add 3-point spline test.
-- [ ] **Ts20-CV5.** `tests/test_cloth_constraint_graph.cpp:246` — `DihedralCount` only tests 4×4. Add 3×2 (M=2, N=1).
-- [ ] **Ts20-CV6.** `tests/test_bloom_downsample_karis.cpp:53` — no centre=0/corner=bright test. Add reversed-intensity case.
-- [ ] **Ts20-CV7.** `tests/test_color_grading_parity.cpp:113` — GPU parity only voxel-centre inputs. Add inter-voxel inputs (0.1/0.5/0.9 fractions).
-- [ ] **Ts20-CV8.** `tests/test_engine_paths.cpp:25` — only `captionMapPath` tested. Add parametric tests for `shaderPath`/`fontPath`/etc.
-- [ ] **Ts20-CV9.** `tests/test_entity_serializer_depth_cap.cpp:50` — `AcceptsDepthAtBoundary` only tests 128, not 127. Add 127 case.
-- [ ] **Ts20-CV10.** `tests/test_event_bus.cpp:152` — `UnsubscribeDuringDispatch` missing self-removal case. Add A-removes-itself test.
-- [ ] **Ts20-CV11.** `tests/test_gltf_fs_sandbox.cpp:107` — no symlink-traversal test. Add `fs::create_symlink` (gate with try/catch).
-- [ ] **Ts20-CV12.** `tests/test_json_size_cap.cpp:59` — no test for caller-tag in logged error. Assert tag string in `Logger::getEntries()` after rejection.
-- [ ] **Ts20-CV13.** `tests/test_lip_sync.cpp:443` — `loadTrackFromTSV` error paths untested. Add tests for blank rows, non-numeric timestamps, negative times.
-- [ ] **Ts20-CV14.** `tests/test_point_shadow_map.cpp:36` — no MAX+1 rejection test. Add shadow-light over-limit case.
-- [ ] **Ts20-CV15.** `tests/test_pbr_material.cpp:294` — `BlinnPhongDefaultsUnchanged` only checks 3 of 5+ fields. Add ambient/opacity.
-- [ ] **Ts20-CV16.** `tests/test_skeleton_animator.cpp` — no ROTATION/SCALE channel tests; only TRANSLATION. Add rotation (90° Y) + scale tests.
+- [x] **Ts20-CV1.** `tests/test_aabb.cpp:14` — no test for inverted min/max. Add `min > max` constructed AABB.
+- [x] **Ts20-CV3.** `tests/test_benchmark.cpp:74` — `BenchmarkCsv` temp files unstamped. Use `vestigeTestStamp()`.
+- [x] **Ts20-CV4.** `tests/test_catmull_rom_spline.cpp` — no tangent test at interior segment boundary on 3+ point spline. Add 3-point spline test.
+- [x] **Ts20-CV5.** `tests/test_cloth_constraint_graph.cpp:246` — `DihedralCount` only tests 4×4. Add 3×2 (M=2, N=1).
+- [x] **Ts20-CV6.** `tests/test_bloom_downsample_karis.cpp:53` — no centre=0/corner=bright test. Add reversed-intensity case.
+- [x] **Ts20-CV7.** `tests/test_color_grading_parity.cpp:113` — GPU parity only voxel-centre inputs. Add inter-voxel inputs (0.1/0.5/0.9 fractions).
+- [x] **Ts20-CV8.** `tests/test_engine_paths.cpp:25` — only `captionMapPath` tested. Add parametric tests for `shaderPath`/`fontPath`/etc. **Reclassified FP (2026-05-20):** no `shaderPath`/`fontPath` path helpers exist — they are inline string concatenations in `editor.cpp` / `terrain_renderer.cpp`. `captionMapPath` is the only `engine_paths` helper and already has 4 cases (default / absolute / trailing-slash / empty). No coverage gap.
+- [x] **Ts20-CV9.** `tests/test_entity_serializer_depth_cap.cpp:50` — `AcceptsDepthAtBoundary` only tests 128, not 127. Add 127 case.
+- [x] **Ts20-CV10.** `tests/test_event_bus.cpp:152` — `UnsubscribeDuringDispatch` missing self-removal case. Add A-removes-itself test.
+- [x] **Ts20-CV11.** `tests/test_gltf_fs_sandbox.cpp:107` — no symlink-traversal test. Add `fs::create_symlink` (gate with try/catch).
+- [x] **Ts20-CV12.** `tests/test_json_size_cap.cpp:59` — no test for caller-tag in logged error. Assert tag string in `Logger::getEntries()` after rejection.
+- [x] **Ts20-CV13.** `tests/test_lip_sync.cpp:443` — `loadTrackFromTSV` error paths untested. Add tests for blank rows, non-numeric timestamps, negative times.
+- [ ] **Ts20-CV14.** `tests/test_point_shadow_map.cpp:36` — no MAX+1 rejection test. Add shadow-light over-limit case. **Deferred (2026-05-20):** the MAX cap lives in `Renderer::selectShadowCastingPointLights()` (renderer.cpp), which needs a GL context to instantiate — not headless-testable. A unit test needs a pure `selectShadowCasters(lights, maxCasters)` helper extracted from the renderer (a SUT-API change), deferred per the big-bucket policy at the top of this section rather than refactored inside a test-only sweep.
+- [x] **Ts20-CV15.** `tests/test_pbr_material.cpp:294` — `BlinnPhongDefaultsUnchanged` only checks 3 of 5+ fields. Add ambient/opacity.
+- [x] **Ts20-CV16.** `tests/test_skeleton_animator.cpp` — no ROTATION/SCALE channel tests; only TRANSLATION. Add rotation (90° Y) + scale tests.
 
 #### Fixtures (3)
 - [x] **Ts20-FX1.** `tests/test_script_templates.cpp:25` — `TemplateRegistry` static initialised once with bool guard, not per-test. Replace with `::testing::Test` fixture.

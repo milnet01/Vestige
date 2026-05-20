@@ -177,6 +177,28 @@ TEST(CatmullRomSplineTest, TangentNonZeroMagnitude)
     EXPECT_GT(length, 0.0f);
 }
 
+// Ts20-CV4: the prior tangent tests sample t=0 (segment start) and t=0.5
+// (mid-first-segment). Neither hits the interior knot at t=1.0, where the
+// two segments meet — the point at which a broken C1-continuity tangent
+// would surface. For the symmetric 3-point spline below, the Catmull-Rom
+// tangent at the middle control point P1 is (P2 − P0)/2 = (5,0,0): it
+// points cleanly forward (+X) with zero Y, because P0 and P2 share the
+// same height. A discontinuous or mis-derived knot tangent would tilt Y.
+TEST(CatmullRomSplineTest, TangentAtInteriorSegmentBoundaryPointsForward)
+{
+    CatmullRomSpline spline;
+    spline.addPoint(glm::vec3(0.0f, 0.0f, 0.0f));
+    spline.addPoint(glm::vec3(5.0f, 5.0f, 0.0f));
+    spline.addPoint(glm::vec3(10.0f, 0.0f, 0.0f));
+
+    glm::vec3 tangent = spline.evaluateTangent(1.0f);
+
+    EXPECT_GT(tangent.x, 0.0f) << "knot tangent should advance along +X";
+    EXPECT_NEAR(tangent.y, 0.0f, 1e-3f)
+        << "symmetric endpoints → zero vertical tangent at the knot";
+    EXPECT_GT(glm::length(tangent), 0.0f);
+}
+
 // =============================================================================
 // Sampling
 // =============================================================================

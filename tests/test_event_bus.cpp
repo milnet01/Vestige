@@ -183,6 +183,32 @@ TEST(EventBusPe4, UnsubscribeDuringDispatchTombstonesNotErases_Pe4)
     EXPECT_EQ(bCalls, 0);
 }
 
+// Ts20-CV10: the test above covers A-removes-B (B is at a later index and
+// is tombstoned before its turn). The self-removal case is distinct: a
+// listener that unsubscribes ITSELF is already mid-callback — past the
+// `if (entry.valid)` guard — so it still completes the current turn. The
+// tombstone takes effect only on subsequent publishes, after drainPending
+// compacts it out. Pin both halves: fires this turn, gone next turn.
+TEST(EventBusPe4, SelfUnsubscribeDuringDispatchFiresThisTurnNotNext_Pe4)
+{
+    EventBus bus;
+    int aCalls = 0;
+    SubscriptionId aId = 0;
+
+    aId = bus.subscribe<WindowResizeEvent>([&](const WindowResizeEvent&)
+    {
+        ++aCalls;
+        bus.unsubscribe(aId);  // remove self mid-dispatch
+    });
+
+    bus.publish(WindowResizeEvent(1, 1));
+    EXPECT_EQ(aCalls, 1);                   // already in flight — completes
+    EXPECT_EQ(bus.getListenerCount(), 0u);  // tombstone compacted after unwind
+
+    bus.publish(WindowResizeEvent(2, 2));
+    EXPECT_EQ(aCalls, 1);                   // gone — does not fire again
+}
+
 TEST(EventBusPe4, NestedPublishDoesNotPrematurelyDrain_Pe4)
 {
     EventBus bus;

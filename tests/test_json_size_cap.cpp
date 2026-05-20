@@ -139,4 +139,34 @@ TEST_F(JsonSizeCapTest, LoadJsonReturnsNulloptForMissingFile)
     EXPECT_FALSE(j.has_value());
 }
 
+// Ts20-CV12: every cap helper tags its diagnostics with the caller-
+// supplied context string so an OOM-guard rejection in the log can be
+// traced back to the loader that hit it. Pin that the over-cap Error
+// entry carries that tag verbatim — the size check fires before parse,
+// so the file contents are irrelevant here.
+TEST_F(JsonSizeCapTest, OverCapRejectionLogsCallerTag_CV12)
+{
+    Logger::clearEntries();
+    const char* kTag = "CV12_CallerTag";
+
+    const std::string blob(1024, 'Z');
+    const fs::path p = writeFile("tagged_oversized.json", blob);
+    auto j = JsonSizeCap::loadJsonWithSizeCap(p.string(), kTag, /*maxBytes=*/128);
+    ASSERT_FALSE(j.has_value());
+
+    bool found = false;
+    for (const auto& entry : Logger::getEntries())
+    {
+        if (entry.level == LogLevel::Error
+            && entry.message.find(kTag) != std::string::npos
+            && entry.message.find("cap") != std::string::npos)
+        {
+            found = true;
+            break;
+        }
+    }
+    EXPECT_TRUE(found) << "over-cap rejection did not log an Error tagged '"
+                       << kTag << "'";
+}
+
 }  // namespace Vestige::Test

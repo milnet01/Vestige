@@ -178,6 +178,71 @@ TEST_F(ColorGradingParityTest, IdentityLutAtVoxelCentresMatchesCpuLookup)
 }
 
 // =============================================================================
+// applyColorGradingLut — identity LUT, INTER-voxel inputs (trilinear path)
+// =============================================================================
+
+// Ts20-CV7: the voxel-centre test above lands every input on an exact
+// texel, so a broken trilinear coordinate mapping (e.g. a missing
+// half-texel inset) could still pass it. Drive inputs that fall BETWEEN
+// voxel centres — 0.1 / 0.5 / 0.9 fractions of the [0,1] range — so the
+// GPU must trilinearly interpolate. An identity LUT is a linear ramp, so
+// the interpolated sample must still equal the input within the 8-bit
+// quantisation budget. The CPU nearest-neighbour oracle is intentionally
+// NOT used here (it snaps to a voxel and would diverge by up to half a
+// cell); the identity round-trip is the correct reference for sub-voxel
+// inputs.
+TEST_F(ColorGradingParityTest, IdentityLutInterVoxelInputsRoundTrip)
+{
+    const std::string fnSrc = extractGlslFunction(
+        readShaderFile("screen_quad.frag.glsl"), "applyColorGradingLut");
+    ASSERT_FALSE(fnSrc.empty());
+
+    constexpr int LUT_SIZE = 32;
+    const auto lutData = makeIdentityLut(LUT_SIZE);
+    ScopedGLTexture lutTex{uploadLut3D(lutData, LUT_SIZE)};
+    ASSERT_NE(lutTex.id(), 0u);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_3D, lutTex);
+
+    ShaderProgram prog(
+        "#version 450 core\n"
+        "layout(location = 0) out vec4 outColor;\n"
+        "uniform vec3      u_color;\n"
+        "uniform float     u_intensity;\n"
+        "uniform sampler3D u_lut;\n"
+        + fnSrc +
+        "void main() {\n"
+        "    vec3 r = applyColorGradingLut(u_color, u_lut, u_intensity);\n"
+        "    outColor = vec4(r, 1.0);\n"
+        "}\n");
+    ASSERT_TRUE(prog.valid());
+
+    // None of these coordinates is an i/31 voxel centre — each forces a
+    // genuine trilinear blend between adjacent texels.
+    const glm::vec3 inputs[] = {
+        {0.1f, 0.1f, 0.1f},
+        {0.5f, 0.5f, 0.5f},
+        {0.9f, 0.9f, 0.9f},
+        {0.1f, 0.5f, 0.9f},
+        {0.37f, 0.62f, 0.84f},
+    };
+
+    for (auto in : inputs)
+    {
+        glm::vec4 gpu = prog.run({
+            {"u_color",     in},
+            {"u_intensity", 1.0f},
+            {"u_lut",       1},
+        });
+        EXPECT_NEAR(gpu.r, in.x, 5e-3f) << "inter-voxel round-trip r @ " << in.x;
+        EXPECT_NEAR(gpu.g, in.y, 5e-3f) << "inter-voxel round-trip g @ " << in.y;
+        EXPECT_NEAR(gpu.b, in.z, 5e-3f) << "inter-voxel round-trip b @ " << in.z;
+    }
+
+    glBindTexture(GL_TEXTURE_3D, 0);
+}
+
+// =============================================================================
 // applyColorGradingLut — intensity = 0 must passthrough exactly
 // =============================================================================
 

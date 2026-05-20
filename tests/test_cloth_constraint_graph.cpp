@@ -261,6 +261,26 @@ TEST(ClothConstraintGraph, DihedralCountMatchesAnalyticalFormula)
     EXPECT_EQ(ds.size(), expected);
 }
 
+// Ts20-CV5: the 4×4 case above is square (M==N==3). Pin the smallest
+// asymmetric grid — W=3, H=2 → M=2, N=1 — so the M≠N path of the
+// `3*M*N - M - N` formula is exercised. Expected = 3·2·1 − 2 − 1 = 3
+// (one cell diagonal per cell ×2, plus one shared vertical edge between
+// the two cells; no shared horizontal edge since there is only one row).
+TEST(ClothConstraintGraph, DihedralCountSmallAsymmetricGrid)
+{
+    constexpr uint32_t W = 3, H = 2;
+    auto positions = makeFlatGrid(W, H);
+    auto indices   = makeGridIndices(W, H);
+
+    std::vector<GpuDihedralConstraint> ds;
+    generateDihedralConstraints(indices, positions, /*compliance=*/0.01f, ds);
+
+    constexpr uint32_t M = W - 1;  // 2
+    constexpr uint32_t N = H - 1;  // 1
+    constexpr uint32_t expected = 3 * M * N - M - N;  // 3
+    EXPECT_EQ(ds.size(), expected);
+}
+
 TEST(ClothConstraintGraph, DihedralRestAngleIsZeroForFlatGrid)
 {
     // A flat grid has all triangles coplanar → every dihedral rest angle == 0.
