@@ -230,6 +230,13 @@ target_link_libraries(vestige_tests
         GTest::gtest_main
 )
 
+# Precompiled headers — every test TU pulls in the heavy GoogleTest and GLM
+# headers; compiling them once cuts clean/multi-file build time.
+target_precompile_headers(vestige_tests PRIVATE
+    <gtest/gtest.h>
+    <glm/glm.hpp>
+)
+
 include(GoogleTest)
 gtest_discover_tests(vestige_tests
     PROPERTIES ENVIRONMENT "LSAN_OPTIONS=suppressions=${CMAKE_SOURCE_DIR}/asan_suppressions.txt"

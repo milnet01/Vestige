@@ -22,6 +22,13 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Precompiled headers are only ccache-cacheable with these relaxations: a PCH
+# bakes the active preprocessor defines into the .gch and can capture
+# __DATE__/__TIME__. Without them ccache treats every PCH-using TU as
+# uncacheable and warm CI builds go cold. Applies to all ccache-using jobs.
+env:
+  CCACHE_SLOPPINESS: pch_defines,time_macros
+
 jobs:
   linux-build-test:
     name: Linux ${{ matrix.config }}

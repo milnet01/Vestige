@@ -37,6 +37,42 @@ elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
     add_compile_definitions(VESTIGE_RELEASE)
 endif()
 
+# ---------------------------------------------------------------------------
+# Build-speed accelerators (ccache, fast linker, split DWARF)
+#
+# Mirrors the CI pipeline's ccache setup and adds local wins for the large
+# Debug test binary, which is relinked on every test edit. Each piece degrades
+# gracefully when its tool is missing; opt out with -DVESTIGE_FAST_BUILD=OFF.
+# Must run before the add_subdirectory() calls so the compile/link options
+# reach every target.
+# ---------------------------------------------------------------------------
+option(VESTIGE_FAST_BUILD "Use ccache / mold / split-DWARF when available" ON)
+if(VESTIGE_FAST_BUILD)
+    # Compiler cache — skip recompiling unchanged translation units. CI sets
+    # the launcher explicitly; honour an existing one rather than overriding it.
+    if(NOT CMAKE_CXX_COMPILER_LAUNCHER)
+        find_program(CCACHE_PROGRAM ccache)
+        if(CCACHE_PROGRAM)
+            set(CMAKE_C_COMPILER_LAUNCHER   "${CCACHE_PROGRAM}" CACHE STRING "C compiler launcher" FORCE)
+            set(CMAKE_CXX_COMPILER_LAUNCHER "${CCACHE_PROGRAM}" CACHE STRING "C++ compiler launcher" FORCE)
+            message(STATUS "Build speed: ccache enabled (${CCACHE_PROGRAM})")
+        endif()
+    endif()
+
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        # mold — far faster linking of the ~0.5 GB Debug test binary.
+        find_program(MOLD_PROGRAM mold)
+        if(MOLD_PROGRAM)
+            add_link_options(-fuse-ld=mold)
+            message(STATUS "Build speed: mold linker enabled (${MOLD_PROGRAM})")
+        endif()
+
+        # Split DWARF — keep debug info in .dwo side-files so relinks don't
+        # recopy the huge .debug_* sections. Debug configs only.
+        add_compile_options($<$<CONFIG:Debug>:-gsplit-dwarf>)
+    endif()
+endif()
+
 # Option to build tests
 option(VESTIGE_BUILD_TESTS "Build unit tests" ON)
 

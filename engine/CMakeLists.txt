@@ -339,6 +339,15 @@ set(ENGINE_SOURCES
 # Create static library
 add_library(vestige_engine STATIC ${ENGINE_SOURCES})
 
+# Precompiled headers — GLM and the hot STL containers appear in nearly every
+# engine TU; precompiling them once speeds clean builds. Routed through a
+# header file (not inline <angle> headers, which clash with the genexp's own
+# <> delimiters) and scoped to C++ only — the target also compiles
+# external/glad/src/gl.c, which must not receive a C++ PCH.
+target_precompile_headers(vestige_engine PRIVATE
+    "$<$<COMPILE_LANGUAGE:CXX>:${CMAKE_CURRENT_SOURCE_DIR}/engine_pch.h>"
+)
+
 # Include directories
 target_include_directories(vestige_engine
     PUBLIC
