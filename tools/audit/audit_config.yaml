@@ -88,6 +88,10 @@ static_analysis:
       -readability-magic-numbers
     fallback_flags: "-std=c++17 -I engine/ -I external/"
     max_files: 50
+    # Parallel clang-tidy workers. 0 = auto: min(cpu_count, total_RAM_GB / 2, 6)
+    # — each process re-parses a full TU (~1.5-2 GB), so the cap keeps small CI
+    # runners and loaded dev boxes from OOMing. Set a positive value to override.
+    jobs: 0
     # 1200 s (was 600) — legitimate bump per CLAUDE.md rule #10.
     # 50 files × 5 heavy check categories (bugprone-*, performance-*,
     # modernize-*, readability-*, cppcoreguidelines-*) takes ~3 min

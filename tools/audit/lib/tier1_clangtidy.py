@@ -6,7 +6,9 @@
 from __future__ import annotations
 
 import logging
+import os
 import re
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from .config import Config
@@ -14,6 +16,28 @@ from .findings import Finding, Severity
 from .utils import run_cmd, enumerate_files, relative_path
 
 log = logging.getLogger("audit")
+
+
+def _clangtidy_workers(ct_config: dict) -> int:
+    """Pick a parallelism level for clang-tidy.
+
+    clang-tidy re-parses a full translation unit (all transitive headers), so
+    each process peaks around 1.5-2 GB on this codebase. An explicit ``jobs``
+    config wins; otherwise cap by both CPU count and total RAM (~2 GB/worker)
+    so the step doesn't OOM small CI runners or pile onto a loaded dev box.
+    The hard ceiling of 6 mirrors the build job-pool's memory budget.
+    """
+    configured = ct_config.get("jobs", 0)
+    if configured:
+        return max(1, int(configured))
+    workers = os.cpu_count() or 2
+    try:
+        total_gb = (os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES")
+                    / (1024 ** 3))
+        workers = min(workers, max(1, int(total_gb // 2)))
+    except (ValueError, OSError, AttributeError):
+        pass
+    return max(1, min(workers, 6))
 
 
 def _ensure_compile_commands(config: Config, cc_path: Path | None) -> bool:
@@ -87,7 +111,10 @@ def run(config: Config) -> list[Finding]:
                      "many false positives from missing includes. Consider running: "
                      "cmake -B build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON")
 
-    # Build argv list for shell=False execution (AUDIT.md §C1 / FIXPLAN C1b).
+    # Build the base argv (shell=False per AUDIT.md §C1 / FIXPLAN C1b). Each
+    # file is analysed in its own process so they can run concurrently — a
+    # single clang-tidy invocation processes positional files serially, which
+    # made this step the Tier 1 long pole.
     if has_compile_db:
         if cc_path is not None and cc_path.exists():
             cc_dir = cc_path.parent
@@ -95,32 +122,51 @@ def run(config: Config) -> list[Finding]:
             # Auto-generated — lives in the build directory
             build_dir = config.get("build", "build_dir", default="build")
             cc_dir = config.root / build_dir
-        cmd: list[str] = [binary, "-p", str(cc_dir),
-                          f"--checks={checks}"] + list(source_files)
+        base_cmd: list[str] = [binary, "-p", str(cc_dir), f"--checks={checks}"]
+        cmd_suffix: list[str] = []
     else:
         # Trailing `--` separates clang-tidy options from compiler flags.
         import shlex as _shlex
-        cmd = ([binary, f"--checks={checks}"] + list(source_files) +
-               ["--"] + _shlex.split(fallback_flags))
+        base_cmd = [binary, f"--checks={checks}"]
+        cmd_suffix = ["--"] + _shlex.split(fallback_flags)
 
-    log.info("Running clang-tidy on %d files...", len(source_files))
-    rc, stdout, stderr = run_cmd(cmd, cwd=config.root, timeout=timeout)
+    workers = _clangtidy_workers(ct_config)
+    log.info("Running clang-tidy on %d files (%d parallel workers)...",
+             len(source_files), workers)
 
-    if rc == -1 and "TIMEOUT" in stderr:
+    def _analyze(src: str) -> tuple[str, int, str, str]:
+        rc, stdout, stderr = run_cmd(
+            base_cmd + [src] + cmd_suffix, cwd=config.root, timeout=timeout)
+        return src, rc, stdout, stderr
+
+    outputs: list[str] = []
+    timed_out: list[str] = []
+    with ThreadPoolExecutor(max_workers=workers,
+                            thread_name_prefix="clang-tidy") as executor:
+        for src, rc, stdout, stderr in executor.map(_analyze, source_files):
+            if rc == -1 and "TIMEOUT" in stderr:
+                timed_out.append(src)
+                continue
+            outputs.append(stdout + "\n" + stderr)
+
+    if timed_out:
+        # A per-file timeout is still a real problem worth gating on, but it no
+        # longer aborts analysis of the other files.
         findings.append(Finding(
-            file="",
+            file=timed_out[0],
             line=None,
             severity=Severity.HIGH,
             category="clang_tidy",
             source_tier=1,
-            title=f"clang-tidy timed out after {timeout}s",
+            title=(f"clang-tidy timed out after {timeout}s on "
+                   f"{len(timed_out)} file(s): "
+                   + ", ".join(timed_out[:3])
+                   + (" ..." if len(timed_out) > 3 else "")),
             pattern_name="clangtidy_timeout",
         ))
-        return findings
 
-    # Parse output — clang-tidy writes diagnostics to stdout
-    output = stdout + "\n" + stderr
-    findings.extend(_parse_output(output, config))
+    # Parse merged output — clang-tidy writes diagnostics to stdout
+    findings.extend(_parse_output("\n".join(outputs), config))
 
     log.info("clang-tidy: %d findings", len(findings))
     return findings
