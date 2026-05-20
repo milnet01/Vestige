@@ -936,9 +936,9 @@ Full triaged report at `/tmp/test-audit-e5e42211/_triaged.md` (ephemeral); false
 - [x] **Ts20-DS7.** `tests/test_water_surface.cpp:1` — no GL-context precondition in file header. Add to `@brief`: "tests run without GL context (VAO/mesh ops skipped)".
 
 #### Verbosity (3)
-- [ ] **Ts20-VE2.** `tests/test_stasis_system.cpp:54` — `DefaultValues` checks 9 fields individually. Use `EXPECT_EQ(state, StasisState{})` if `operator==` available.
-- [ ] **Ts20-VE3.** `tests/test_scripting.cpp:1029` — `NodeLibraryTest` math tests repeat long accessor chain 10+ times. Extract `getOutputFloat(...)` helper.
-- [ ] **Ts20-VE4.** `tests/test_navigation_panel.cpp:44` — `OverlayColorIsInZeroToOneRange` packs GE/LE per line. Split / add labels.
+- [x] **Ts20-VE2.** `tests/test_stasis_system.cpp:54` — `DefaultValues` checks 9 fields individually. Use `EXPECT_EQ(state, StasisState{})` if `operator==` available.
+- [x] **Ts20-VE3.** `tests/test_scripting.cpp:1029` — `NodeLibraryTest` math tests repeat long accessor chain 10+ times. Extract `getOutputFloat(...)` helper.
+- [x] **Ts20-VE4.** `tests/test_navigation_panel.cpp:44` — `OverlayColorIsInZeroToOneRange` packs GE/LE per line. Split / add labels.
 
 **Scope.** All Ts20 follow-ups are non-blocking (same posture as Ts19). The 12 in-session fixes were chosen for clear bounded scope (single-line assertion tightening, RAII guard introduction, single-helper consolidation); deferred items either need their own design pass (Ts20-SY1, DE1/DE2, SP3) or are best picked up incrementally as adjacent files are touched. Per-finding suppressions and false positives are recorded in `docs/private/test-audit/false-positives.md` (FP-9 through FP-12 added this round).
 

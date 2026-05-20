@@ -45,9 +45,12 @@ TEST(NavigationPanel, OverlayColorIsInZeroToOneRange)
 {
     NavigationPanel panel;
     const auto& c = panel.getOverlayColor();
-    EXPECT_GE(c.r, 0.0f); EXPECT_LE(c.r, 1.0f);
-    EXPECT_GE(c.g, 0.0f); EXPECT_LE(c.g, 1.0f);
-    EXPECT_GE(c.b, 0.0f); EXPECT_LE(c.b, 1.0f);
+    EXPECT_GE(c.r, 0.0f) << "red below range";
+    EXPECT_LE(c.r, 1.0f) << "red above range";
+    EXPECT_GE(c.g, 0.0f) << "green below range";
+    EXPECT_LE(c.g, 1.0f) << "green above range";
+    EXPECT_GE(c.b, 0.0f) << "blue below range";
+    EXPECT_LE(c.b, 1.0f) << "blue above range";
 }
 
 TEST(NavMeshBuilder, ExtractPolygonEdgesEmptyWhenNoMesh)

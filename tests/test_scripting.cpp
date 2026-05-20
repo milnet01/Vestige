@@ -994,6 +994,15 @@ struct PureNodeFixture
     {
         instance.initialize(graph, 1);
     }
+
+    /// @brief Read a float output pin of an executed node, collapsing the
+    /// getNodeInstance/outputValues/internPin/asFloat chain the math tests
+    /// would otherwise repeat verbatim.
+    float getOutputFloat(uint32_t nodeId, const char* pin = "Result")
+    {
+        return instance.getNodeInstance(nodeId)
+                   ->outputValues[internPin(pin)].asFloat();
+    }
 };
 
 } // namespace
@@ -1026,7 +1035,7 @@ TEST_F(NodeLibraryTest, MathSubComputesDifference)
     ScriptContext ctx(f.instance, m_registry,
                       nullptr);
     ctx.executeNode(id);
-    EXPECT_FLOAT_EQ(f.instance.getNodeInstance(id)->outputValues[internPin("Result")].asFloat(), 6.0f);
+    EXPECT_FLOAT_EQ(f.getOutputFloat(id), 6.0f);
 }
 
 TEST_F(NodeLibraryTest, MathDivGuardsAgainstZero)
@@ -1040,7 +1049,7 @@ TEST_F(NodeLibraryTest, MathDivGuardsAgainstZero)
     ScriptContext ctx(f.instance, m_registry,
                       nullptr);
     ctx.executeNode(id);
-    EXPECT_FLOAT_EQ(f.instance.getNodeInstance(id)->outputValues[internPin("Result")].asFloat(), 0.0f);
+    EXPECT_FLOAT_EQ(f.getOutputFloat(id), 0.0f);
 }
 
 TEST_F(NodeLibraryTest, MathDivExactZeroPolicyMatchesSafeDiv_Sc5)
@@ -1062,8 +1071,7 @@ TEST_F(NodeLibraryTest, MathDivExactZeroPolicyMatchesSafeDiv_Sc5)
     ScriptContext ctx(f.instance, m_registry, nullptr);
     ctx.executeNode(id);
 
-    const float r = f.instance.getNodeInstance(id)
-                        ->outputValues[internPin("Result")].asFloat();
+    const float r = f.getOutputFloat(id);
     EXPECT_GT(r, 1e11f) << "tiny finite divisor must take the real "
                            "division path, not the zero short-circuit";
 }
@@ -1084,8 +1092,7 @@ TEST_F(NodeLibraryTest, MathDivProjectsInfiniteResultsToZero_Sc5)
     ScriptContext ctx(f.instance, m_registry, nullptr);
     ctx.executeNode(id);
 
-    const float r = f.instance.getNodeInstance(id)
-                        ->outputValues[internPin("Result")].asFloat();
+    const float r = f.getOutputFloat(id);
     EXPECT_TRUE(std::isfinite(r))
         << "MathDiv must keep the graph in finite-value space";
 }
@@ -1102,7 +1109,7 @@ TEST_F(NodeLibraryTest, MathClampClampsToRange)
     ScriptContext ctx(f.instance, m_registry,
                       nullptr);
     ctx.executeNode(id);
-    EXPECT_FLOAT_EQ(f.instance.getNodeInstance(id)->outputValues[internPin("Result")].asFloat(), 10.0f);
+    EXPECT_FLOAT_EQ(f.getOutputFloat(id), 10.0f);
 }
 
 TEST_F(NodeLibraryTest, MathLerpInterpolates)
@@ -1117,7 +1124,7 @@ TEST_F(NodeLibraryTest, MathLerpInterpolates)
     ScriptContext ctx(f.instance, m_registry,
                       nullptr);
     ctx.executeNode(id);
-    EXPECT_FLOAT_EQ(f.instance.getNodeInstance(id)->outputValues[internPin("Result")].asFloat(), 25.0f);
+    EXPECT_FLOAT_EQ(f.getOutputFloat(id), 25.0f);
 }
 
 TEST_F(NodeLibraryTest, GetDistanceComputesEuclidean)
@@ -1131,7 +1138,7 @@ TEST_F(NodeLibraryTest, GetDistanceComputesEuclidean)
     ScriptContext ctx(f.instance, m_registry,
                       nullptr);
     ctx.executeNode(id);
-    EXPECT_FLOAT_EQ(f.instance.getNodeInstance(id)->outputValues[internPin("Distance")].asFloat(), 5.0f);
+    EXPECT_FLOAT_EQ(f.getOutputFloat(id, "Distance"), 5.0f);
 }
 
 TEST_F(NodeLibraryTest, VectorNormalizeProducesUnit)
@@ -1915,7 +1922,7 @@ TEST_F(NodeLibraryTest, MathAddSanitizesNaNInput)
                       nullptr);
     ctx.executeNode(id);
     // NaN input sanitized to 0, so result is 0+5 = 5.
-    EXPECT_FLOAT_EQ(f.instance.getNodeInstance(id)->outputValues[internPin("Result")].asFloat(), 5.0f);
+    EXPECT_FLOAT_EQ(f.getOutputFloat(id), 5.0f);
 }
 
 TEST_F(NodeLibraryTest, MathMulSanitizesInfInput)
@@ -1929,7 +1936,7 @@ TEST_F(NodeLibraryTest, MathMulSanitizesInfInput)
     ScriptContext ctx(f.instance, m_registry,
                       nullptr);
     ctx.executeNode(id);
-    EXPECT_FLOAT_EQ(f.instance.getNodeInstance(id)->outputValues[internPin("Result")].asFloat(), 0.0f);
+    EXPECT_FLOAT_EQ(f.getOutputFloat(id), 0.0f);
 }
 
 TEST_F(NodeLibraryTest, VectorNormalizeSanitizesNaNInput)
@@ -1961,7 +1968,7 @@ TEST_F(NodeLibraryTest, MathMulComputesProduct)
     ScriptContext ctx(f.instance, m_registry,
                       nullptr);
     ctx.executeNode(id);
-    EXPECT_FLOAT_EQ(f.instance.getNodeInstance(id)->outputValues[internPin("Result")].asFloat(), 42.0f);
+    EXPECT_FLOAT_EQ(f.getOutputFloat(id), 42.0f);
 }
 
 TEST_F(NodeLibraryTest, DotProductComputesDot)
@@ -1976,7 +1983,7 @@ TEST_F(NodeLibraryTest, DotProductComputesDot)
                       nullptr);
     ctx.executeNode(id);
     // 1*4 + 2*5 + 3*6 = 32
-    EXPECT_FLOAT_EQ(f.instance.getNodeInstance(id)->outputValues[internPin("Result")].asFloat(), 32.0f);
+    EXPECT_FLOAT_EQ(f.getOutputFloat(id), 32.0f);
 }
 
 TEST_F(NodeLibraryTest, CrossProductComputesCross)

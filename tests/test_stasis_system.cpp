@@ -51,12 +51,11 @@ TEST(StasisSystemTest, ApplyStasisWithoutPhysicsWorldIsNoOp)
 TEST(StasisStateTest, DefaultValues)
 {
     StasisState state;
-    EXPECT_FLOAT_EQ(state.linearVelocity.x, 0.0f);
-    EXPECT_FLOAT_EQ(state.linearVelocity.y, 0.0f);
-    EXPECT_FLOAT_EQ(state.linearVelocity.z, 0.0f);
-    EXPECT_FLOAT_EQ(state.angularVelocity.x, 0.0f);
-    EXPECT_FLOAT_EQ(state.angularVelocity.y, 0.0f);
-    EXPECT_FLOAT_EQ(state.angularVelocity.z, 0.0f);
+    // StasisState is a plain C++17 POD with no operator==, so the whole-struct
+    // EXPECT_EQ isn't available; the vec3 members collapse via glm's operator==
+    // (exact compare is fine against zero defaults), leaving the three scalars.
+    EXPECT_EQ(state.linearVelocity, glm::vec3(0.0f));
+    EXPECT_EQ(state.angularVelocity, glm::vec3(0.0f));
     EXPECT_FLOAT_EQ(state.timeScale, 0.0f);
     EXPECT_FLOAT_EQ(state.duration, 0.0f);
     EXPECT_FLOAT_EQ(state.elapsed, 0.0f);
