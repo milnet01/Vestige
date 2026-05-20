@@ -197,8 +197,29 @@ TEST(CaptionMapCategory, ParseUnknownDefaultsToDialogue)
 // audio hardware / deafness still see the caption when game code intends
 // to play a sound.
 
-TEST(AudioEngineCaptionAnnouncer, FiresOnPlaySound_P4)
+// Every playSound* overload must announce its clip path through the
+// announcer hook. The four overloads share identical setup (engine +
+// capturing announcer) and differ only in which overload is invoked, so
+// they collapse into one TEST_P over a table of invokers. A non-capturing
+// lambda per overload converts to the `invoke` function pointer.
+namespace
 {
+struct PlaySoundInvoker
+{
+    const char* name;
+    const char* clip;
+    void (*invoke)(AudioEngine&, const std::string&);
+};
+
+class AudioEngineCaptionAnnouncerFires
+    : public ::testing::TestWithParam<PlaySoundInvoker>
+{
+};
+} // namespace
+
+TEST_P(AudioEngineCaptionAnnouncerFires, AnnouncesClipPath_P4)
+{
+    const PlaySoundInvoker& inv = GetParam();
     AudioEngine engine;  // default-constructed, no initialize() — m_available stays false
     std::vector<std::string> captured;
     engine.setCaptionAnnouncer([&](const std::string& clip)
@@ -206,63 +227,34 @@ TEST(AudioEngineCaptionAnnouncer, FiresOnPlaySound_P4)
         captured.push_back(clip);
     });
 
-    engine.playSound("audio/dialogue/moses_01.wav", glm::vec3(0.0f));
+    inv.invoke(engine, inv.clip);
 
     ASSERT_EQ(captured.size(), 1u);
-    EXPECT_EQ(captured[0], "audio/dialogue/moses_01.wav");
+    EXPECT_EQ(captured[0], inv.clip);
 }
 
-TEST(AudioEngineCaptionAnnouncer, FiresOnPlaySoundSpatialAttenParams_P4)
-{
-    AudioEngine engine;
-    std::vector<std::string> captured;
-    engine.setCaptionAnnouncer([&](const std::string& clip)
-    {
-        captured.push_back(clip);
-    });
-
-    AttenuationParams params;
-    engine.playSoundSpatial(
-        "audio/fx/footstep.wav", glm::vec3(0.0f), params);
-
-    ASSERT_EQ(captured.size(), 1u);
-    EXPECT_EQ(captured[0], "audio/fx/footstep.wav");
-}
-
-TEST(AudioEngineCaptionAnnouncer, FiresOnPlaySoundSpatialWithVelocity_P4)
-{
-    AudioEngine engine;
-    std::vector<std::string> captured;
-    engine.setCaptionAnnouncer([&](const std::string& clip)
-    {
-        captured.push_back(clip);
-    });
-
-    AttenuationParams params;
-    engine.playSoundSpatial(
-        "audio/fx/arrow_whoosh.wav",
-        glm::vec3(0.0f),
-        glm::vec3(10.0f, 0.0f, 0.0f),
-        params);
-
-    ASSERT_EQ(captured.size(), 1u);
-    EXPECT_EQ(captured[0], "audio/fx/arrow_whoosh.wav");
-}
-
-TEST(AudioEngineCaptionAnnouncer, FiresOnPlaySound2D_P4)
-{
-    AudioEngine engine;
-    std::vector<std::string> captured;
-    engine.setCaptionAnnouncer([&](const std::string& clip)
-    {
-        captured.push_back(clip);
-    });
-
-    engine.playSound2D("audio/ui/menu_accept.wav");
-
-    ASSERT_EQ(captured.size(), 1u);
-    EXPECT_EQ(captured[0], "audio/ui/menu_accept.wav");
-}
+INSTANTIATE_TEST_SUITE_P(
+    AllPlaySoundOverloads,
+    AudioEngineCaptionAnnouncerFires,
+    ::testing::Values(
+        PlaySoundInvoker{"PlaySound", "audio/dialogue/moses_01.wav",
+            [](AudioEngine& e, const std::string& c)
+            { e.playSound(c, glm::vec3(0.0f)); }},
+        PlaySoundInvoker{"PlaySoundSpatialAttenParams", "audio/fx/footstep.wav",
+            [](AudioEngine& e, const std::string& c)
+            { AttenuationParams params; e.playSoundSpatial(c, glm::vec3(0.0f), params); }},
+        PlaySoundInvoker{"PlaySoundSpatialWithVelocity", "audio/fx/arrow_whoosh.wav",
+            [](AudioEngine& e, const std::string& c)
+            {
+                AttenuationParams params;
+                e.playSoundSpatial(c, glm::vec3(0.0f),
+                                   glm::vec3(10.0f, 0.0f, 0.0f), params);
+            }},
+        PlaySoundInvoker{"PlaySound2D", "audio/ui/menu_accept.wav",
+            [](AudioEngine& e, const std::string& c)
+            { e.playSound2D(c); }}),
+    [](const ::testing::TestParamInfo<PlaySoundInvoker>& info)
+    { return std::string(info.param.name); });
 
 TEST(AudioEngineCaptionAnnouncer, FiresOncePerPlayCall_P4)
 {

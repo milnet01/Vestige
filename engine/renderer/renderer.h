@@ -514,6 +514,12 @@ public:
     static std::vector<InstanceBatch> buildInstanceBatchesStatic(
         const std::vector<SceneRenderData::RenderItem>& items);
 
+    /// @brief Minimum instances in a batch before the draw loop takes the
+    /// instanced path (`count >= MIN_INSTANCE_BATCH_SIZE`); smaller batches
+    /// fall back to per-item draws. Public so tests can pin a batch size
+    /// against the live threshold rather than a magic literal.
+    static constexpr int MIN_INSTANCE_BATCH_SIZE = 2;
+
 private:
     void uploadLightUniforms(const Camera& camera);
     void uploadMaterialUniforms(const Material& material);
@@ -694,7 +700,6 @@ private:
 
     // Instanced rendering
     std::unique_ptr<InstanceBuffer> m_instanceBuffer;
-    static constexpr int MIN_INSTANCE_BATCH_SIZE = 2;
 
     // Multi-Draw Indirect (MDI). CPU-side frustum culling happens in scene
     // gather; per-instance GPU culling is future work for a later

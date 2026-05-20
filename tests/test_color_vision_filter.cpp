@@ -44,51 +44,63 @@ TEST(ColorVisionFilter, LabelsAreHumanReadable)
 }
 
 // -- Brettel coefficients (known-good values, Table 3 of the 1999 paper) --
-
-TEST(ColorVisionFilter, ProtanopiaCoefficientsMatchBrettel)
+//
+// Each dichromat matrix is pinned against the published coefficients. The
+// three modes share an identical 9-entry comparison and differ only in
+// data, so they collapse into one TEST_P over {mode, expected matrix}.
+// glm::mat3's element constructor is column-major, so the values below are
+// laid out column-by-column (m[col][row]) — the trailing comment on each
+// case shows the same matrix in human-readable rows.
+namespace
 {
-    glm::mat3 m = colorVisionMatrix(ColorVisionMode::Protanopia);
-    // Row 0: 0.56667  0.43333  0.0
-    EXPECT_NEAR(m[0][0], 0.56667f, kEps);
-    EXPECT_NEAR(m[1][0], 0.43333f, kEps);
-    EXPECT_NEAR(m[2][0], 0.00000f, kEps);
-    // Row 1: 0.55833  0.44167  0.0
-    EXPECT_NEAR(m[0][1], 0.55833f, kEps);
-    EXPECT_NEAR(m[1][1], 0.44167f, kEps);
-    EXPECT_NEAR(m[2][1], 0.00000f, kEps);
-    // Row 2: 0.0      0.24167  0.75833
-    EXPECT_NEAR(m[0][2], 0.00000f, kEps);
-    EXPECT_NEAR(m[1][2], 0.24167f, kEps);
-    EXPECT_NEAR(m[2][2], 0.75833f, kEps);
+struct BrettelCase
+{
+    const char* name;
+    ColorVisionMode mode;
+    glm::mat3 expected;
+};
+
+class ColorVisionFilterCoefficients
+    : public ::testing::TestWithParam<BrettelCase>
+{
+};
+} // namespace
+
+TEST_P(ColorVisionFilterCoefficients, MatchBrettelTable3)
+{
+    const BrettelCase& c = GetParam();
+    glm::mat3 m = colorVisionMatrix(c.mode);
+    for (int col = 0; col < 3; ++col)
+    {
+        for (int row = 0; row < 3; ++row)
+        {
+            EXPECT_NEAR(m[col][row], c.expected[col][row], kEps)
+                << c.name << " element m[" << col << "][" << row << "]";
+        }
+    }
 }
 
-TEST(ColorVisionFilter, DeuteranopiaCoefficientsMatchBrettel)
-{
-    glm::mat3 m = colorVisionMatrix(ColorVisionMode::Deuteranopia);
-    EXPECT_NEAR(m[0][0], 0.625f, kEps);
-    EXPECT_NEAR(m[1][0], 0.375f, kEps);
-    EXPECT_NEAR(m[2][0], 0.000f, kEps);
-    EXPECT_NEAR(m[0][1], 0.700f, kEps);
-    EXPECT_NEAR(m[1][1], 0.300f, kEps);
-    EXPECT_NEAR(m[2][1], 0.000f, kEps);
-    EXPECT_NEAR(m[0][2], 0.000f, kEps);
-    EXPECT_NEAR(m[1][2], 0.300f, kEps);
-    EXPECT_NEAR(m[2][2], 0.700f, kEps);
-}
-
-TEST(ColorVisionFilter, TritanopiaCoefficientsMatchBrettel)
-{
-    glm::mat3 m = colorVisionMatrix(ColorVisionMode::Tritanopia);
-    EXPECT_NEAR(m[0][0], 0.950f, kEps);
-    EXPECT_NEAR(m[1][0], 0.050f, kEps);
-    EXPECT_NEAR(m[2][0], 0.000f, kEps);
-    EXPECT_NEAR(m[0][1], 0.00000f, kEps);
-    EXPECT_NEAR(m[1][1], 0.43333f, kEps);
-    EXPECT_NEAR(m[2][1], 0.56667f, kEps);
-    EXPECT_NEAR(m[0][2], 0.00000f, kEps);
-    EXPECT_NEAR(m[1][2], 0.47500f, kEps);
-    EXPECT_NEAR(m[2][2], 0.52500f, kEps);
-}
+INSTANTIATE_TEST_SUITE_P(
+    AllDichromats,
+    ColorVisionFilterCoefficients,
+    ::testing::Values(
+        BrettelCase{"Protanopia", ColorVisionMode::Protanopia,
+            glm::mat3(0.56667f, 0.55833f, 0.00000f,
+                      0.43333f, 0.44167f, 0.24167f,
+                      0.00000f, 0.00000f, 0.75833f)},
+            // rows: {0.56667 0.43333 0} {0.55833 0.44167 0} {0 0.24167 0.75833}
+        BrettelCase{"Deuteranopia", ColorVisionMode::Deuteranopia,
+            glm::mat3(0.625f, 0.700f, 0.000f,
+                      0.375f, 0.300f, 0.300f,
+                      0.000f, 0.000f, 0.700f)},
+            // rows: {0.625 0.375 0} {0.700 0.300 0} {0 0.300 0.700}
+        BrettelCase{"Tritanopia", ColorVisionMode::Tritanopia,
+            glm::mat3(0.950f, 0.00000f, 0.00000f,
+                      0.050f, 0.43333f, 0.47500f,
+                      0.000f, 0.56667f, 0.52500f)}),
+            // rows: {0.950 0.050 0} {0 0.43333 0.56667} {0 0.47500 0.52500}
+    [](const ::testing::TestParamInfo<BrettelCase>& info)
+    { return std::string(info.param.name); });
 
 // -- Structural invariants --
 

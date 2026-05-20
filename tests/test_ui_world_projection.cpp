@@ -86,33 +86,46 @@ TEST(UIInteractionPrompt, ComposedTextFormat)
     EXPECT_EQ(p.composedText(), "Press [F] to open door");
 }
 
-TEST(UIInteractionPrompt, FadeAlphaFullBelowFadeNear)
+// The fade-alpha band has three regimes — full (≤ fadeNear), zero
+// (≥ fadeFar), and a linear ramp between. The per-regime tests shared
+// identical setup and differed only in {fadeNear, fadeFar, distance,
+// expectedAlpha}, so they collapse into one table-driven TEST_P.
+namespace
 {
+struct FadeCase
+{
+    const char* name;
+    float fadeNear;
+    float fadeFar;
+    float distance;
+    float expectedAlpha;
+};
+
+class UIInteractionPromptFade : public ::testing::TestWithParam<FadeCase> {};
+} // namespace
+
+TEST_P(UIInteractionPromptFade, ComputesAlphaAcrossFadeBand)
+{
+    const FadeCase& c = GetParam();
     UIInteractionPrompt p;
-    p.fadeNear = 2.5f;
-    p.fadeFar  = 4.0f;
-    EXPECT_FLOAT_EQ(p.computeFadeAlpha(0.0f), 1.0f);
-    EXPECT_FLOAT_EQ(p.computeFadeAlpha(2.5f), 1.0f);
-    EXPECT_FLOAT_EQ(p.computeFadeAlpha(2.49f), 1.0f);
+    p.fadeNear = c.fadeNear;
+    p.fadeFar  = c.fadeFar;
+    EXPECT_NEAR(p.computeFadeAlpha(c.distance), c.expectedAlpha, 1e-5f)
+        << c.name << " (distance " << c.distance << ")";
 }
 
-TEST(UIInteractionPrompt, FadeAlphaZeroAtAndBeyondFadeFar)
-{
-    UIInteractionPrompt p;
-    p.fadeNear = 2.5f;
-    p.fadeFar  = 4.0f;
-    EXPECT_FLOAT_EQ(p.computeFadeAlpha(4.0f), 0.0f);
-    EXPECT_FLOAT_EQ(p.computeFadeAlpha(10.0f), 0.0f);
-}
-
-TEST(UIInteractionPrompt, FadeAlphaLinearBetween)
-{
-    UIInteractionPrompt p;
-    p.fadeNear = 2.0f;
-    p.fadeFar  = 4.0f;
-    // Midpoint = distance 3.0 → expected alpha 0.5.
-    EXPECT_NEAR(p.computeFadeAlpha(3.0f), 0.5f, 1e-5f);
-}
+INSTANTIATE_TEST_SUITE_P(
+    FadeBand,
+    UIInteractionPromptFade,
+    ::testing::Values(
+        FadeCase{"FullAtZero",            2.5f, 4.0f, 0.0f,  1.0f},
+        FadeCase{"FullAtFadeNear",        2.5f, 4.0f, 2.5f,  1.0f},
+        FadeCase{"FullJustBelowFadeNear", 2.5f, 4.0f, 2.49f, 1.0f},
+        FadeCase{"ZeroAtFadeFar",         2.5f, 4.0f, 4.0f,  0.0f},
+        FadeCase{"ZeroBeyondFadeFar",     2.5f, 4.0f, 10.0f, 0.0f},
+        FadeCase{"HalfAtMidpoint",        2.0f, 4.0f, 3.0f,  0.5f}),
+    [](const ::testing::TestParamInfo<FadeCase>& info)
+    { return std::string(info.param.name); });
 
 TEST(UIInteractionPrompt, NotInteractiveByDefault)
 {

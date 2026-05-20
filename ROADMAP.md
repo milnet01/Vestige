@@ -921,12 +921,12 @@ Full triaged report at `/tmp/test-audit-e5e42211/_triaged.md` (ephemeral); false
 - [ ] **Ts20-FX3.** `tests/test_editor_viewers.cpp:21` — `TextureViewerTest`/`HdriViewerTest`/`ModelViewerTest` empty fixtures. Convert to `TEST()`.
 
 #### Parametrisation (6)
-- [ ] **Ts20-PA1.** `tests/test_caption_map.cpp:200` — `FiresOnPlaySound*` tests repeat identical setup. Use `PlaySoundInvoker` struct with `TEST_P`.
-- [ ] **Ts20-PA2.** `tests/test_color_vision_filter.cpp:49` — `Protanopia/Deuteranopia/Tritanopia` blocks identical. `INSTANTIATE_TEST_SUITE_P` over `{mode, expected-matrix}`.
-- [ ] **Ts20-PA3.** `tests/test_pbr_material.cpp:87` — `Metallic/Roughness/Ao/Emissive/Clearcoat` clamp pattern identical. Parametrise.
-- [ ] **Ts20-PA4.** `tests/test_editor_viewers.cpp:215` — 6 template-find tests follow same pattern. Extract `findTemplate(GameTemplateType)` helper.
-- [ ] **Ts20-PA5.** `tests/test_instanced_rendering.cpp:131` — `SingleInstanceBelowThreshold`/`TwoInstancesMeetsThreshold` assert counts not path. Expose `batchUsesInstancing` flag or rename.
-- [ ] **Ts20-PA6.** `tests/test_ui_world_projection.cpp:89` — `FadeAlpha` boundary tests separate per distance variant. Table-driven `{distance, expectedAlpha}`.
+- [x] **Ts20-PA1.** `tests/test_caption_map.cpp:200` — `FiresOnPlaySound*` tests repeat identical setup. Use `PlaySoundInvoker` struct with `TEST_P`.
+- [x] **Ts20-PA2.** `tests/test_color_vision_filter.cpp:49` — `Protanopia/Deuteranopia/Tritanopia` blocks identical. `INSTANTIATE_TEST_SUITE_P` over `{mode, expected-matrix}`.
+- [x] **Ts20-PA3.** `tests/test_pbr_material.cpp:87` — `Metallic/Roughness/Ao/Emissive/Clearcoat` clamp pattern identical. Parametrise.
+- [x] **Ts20-PA4.** `tests/test_editor_viewers.cpp:215` — 6 template-find tests follow same pattern. Extract `findTemplate(GameTemplateType)` helper.
+- [x] **Ts20-PA5.** `tests/test_instanced_rendering.cpp:131` — `SingleInstanceBelowThreshold`/`TwoInstancesMeetsThreshold` assert counts not path. Expose `batchUsesInstancing` flag or rename.
+- [x] **Ts20-PA6.** `tests/test_ui_world_projection.cpp:89` — `FadeAlpha` boundary tests separate per distance variant. Table-driven `{distance, expectedAlpha}`.
 
 #### Doc-strings (4)
 - [x] **Ts20-DS1.** `tests/test_aabb.cpp:63` — `IntersectsTouching` undocumented closed/half-open. Add comment: "touching AABBs treated as intersecting (closed intervals)".

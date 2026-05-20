@@ -81,65 +81,76 @@ TEST(PbrMaterialTest, DefaultEmissiveStrengthIsOne)
 }
 
 // =============================================================================
-// PBR field clamping
+// PBR scalar field clamping
+//
+// Every clamped scalar setter shares one contract: inputs below the floor
+// clamp up, inputs above the ceiling clamp down, in-range inputs round-trip
+// unchanged. The fields differ only in their bounds and accessor pair, so
+// they collapse into one TEST_P clamp table. Non-capturing lambdas convert
+// to the `set`/`get` function pointers.
 // =============================================================================
-
-TEST(PbrMaterialTest, MetallicClampedToZeroOne)
+namespace
 {
+struct ClampCase
+{
+    const char* name;
+    void  (*set)(Material&, float);
+    float (*get)(const Material&);
+    float belowInput;  float clampedLow;
+    float aboveInput;  float clampedHigh;
+    float midInput;    float midExpect;
+};
+
+class PbrScalarClamp : public ::testing::TestWithParam<ClampCase> {};
+} // namespace
+
+TEST_P(PbrScalarClamp, ClampsBelowFloorAboveCeilingAndRoundTrips)
+{
+    const ClampCase& c = GetParam();
     Material mat;
 
-    mat.setMetallic(-0.5f);
-    EXPECT_FLOAT_EQ(mat.getMetallic(), 0.0f);
+    c.set(mat, c.belowInput);
+    EXPECT_FLOAT_EQ(c.get(mat), c.clampedLow)  << c.name << " below-floor";
 
-    mat.setMetallic(1.5f);
-    EXPECT_FLOAT_EQ(mat.getMetallic(), 1.0f);
+    c.set(mat, c.aboveInput);
+    EXPECT_FLOAT_EQ(c.get(mat), c.clampedHigh) << c.name << " above-ceiling";
 
-    mat.setMetallic(0.7f);
-    EXPECT_FLOAT_EQ(mat.getMetallic(), 0.7f);
+    c.set(mat, c.midInput);
+    EXPECT_FLOAT_EQ(c.get(mat), c.midExpect)   << c.name << " in-range round-trip";
 }
 
-TEST(PbrMaterialTest, RoughnessClampedWithMinimum)
-{
-    Material mat;
-
-    // Minimum roughness is 0.04 to avoid GGX singularity
-    mat.setRoughness(0.0f);
-    EXPECT_FLOAT_EQ(mat.getRoughness(), 0.04f);
-
-    mat.setRoughness(0.01f);
-    EXPECT_FLOAT_EQ(mat.getRoughness(), 0.04f);
-
-    mat.setRoughness(2.0f);
-    EXPECT_FLOAT_EQ(mat.getRoughness(), 1.0f);
-
-    mat.setRoughness(0.5f);
-    EXPECT_FLOAT_EQ(mat.getRoughness(), 0.5f);
-}
-
-TEST(PbrMaterialTest, AoClampedToZeroOne)
-{
-    Material mat;
-
-    mat.setAo(-0.1f);
-    EXPECT_FLOAT_EQ(mat.getAo(), 0.0f);
-
-    mat.setAo(1.5f);
-    EXPECT_FLOAT_EQ(mat.getAo(), 1.0f);
-}
-
-TEST(PbrMaterialTest, EmissiveStrengthClamped)
-{
-    Material mat;
-
-    mat.setEmissiveStrength(-1.0f);
-    EXPECT_FLOAT_EQ(mat.getEmissiveStrength(), 0.0f);
-
-    mat.setEmissiveStrength(200.0f);
-    EXPECT_FLOAT_EQ(mat.getEmissiveStrength(), 100.0f);
-
-    mat.setEmissiveStrength(5.0f);
-    EXPECT_FLOAT_EQ(mat.getEmissiveStrength(), 5.0f);
-}
+INSTANTIATE_TEST_SUITE_P(
+    AllClampedScalars,
+    PbrScalarClamp,
+    ::testing::Values(
+        ClampCase{"Metallic",
+            [](Material& m, float v){ m.setMetallic(v); },
+            [](const Material& m){ return m.getMetallic(); },
+            -0.5f, 0.0f,  1.5f, 1.0f,  0.7f, 0.7f},
+        // Roughness floor is 0.04 (avoids GGX singularity), ceiling 1.0.
+        ClampCase{"Roughness",
+            [](Material& m, float v){ m.setRoughness(v); },
+            [](const Material& m){ return m.getRoughness(); },
+            0.0f, 0.04f,  2.0f, 1.0f,  0.5f, 0.5f},
+        ClampCase{"Ao",
+            [](Material& m, float v){ m.setAo(v); },
+            [](const Material& m){ return m.getAo(); },
+            -0.1f, 0.0f,  1.5f, 1.0f,  0.5f, 0.5f},
+        // Emissive-strength ceiling is 100.0.
+        ClampCase{"EmissiveStrength",
+            [](Material& m, float v){ m.setEmissiveStrength(v); },
+            [](const Material& m){ return m.getEmissiveStrength(); },
+            -1.0f, 0.0f,  200.0f, 100.0f,  5.0f, 5.0f},
+        ClampCase{"Clearcoat",
+            [](Material& m, float v){ m.setClearcoat(v); },
+            [](const Material& m){ return m.getClearcoat(); },
+            -0.5f, 0.0f,  1.7f, 1.0f,  0.5f, 0.5f},
+        ClampCase{"ClearcoatRoughness",
+            [](Material& m, float v){ m.setClearcoatRoughness(v); },
+            [](const Material& m){ return m.getClearcoatRoughness(); },
+            -0.5f, 0.0f,  2.0f, 1.0f,  0.25f, 0.25f}),
+    [](const ::testing::TestParamInfo<ClampCase>& info)
+    { return std::string(info.param.name); });
 
 // =============================================================================
 // PBR texture slots
@@ -186,31 +197,14 @@ TEST(PbrMaterialTest, EmissiveSetGet)
 // IBL multiplier, UV scale, double-sided.
 // =============================================================================
 
-TEST(PbrMaterialTest, ClearcoatDefaultsAndClamping)
+TEST(PbrMaterialTest, ClearcoatDefaults)
 {
     Material mat;
     // Default clearcoat off, but clearcoat-roughness ships at 0.04 to
     // match the base-PBR roughness floor (GGX numerical stability).
+    // Clamp + round-trip behaviour lives in the PbrScalarClamp table above.
     EXPECT_FLOAT_EQ(mat.getClearcoat(), 0.0f);
     EXPECT_FLOAT_EQ(mat.getClearcoatRoughness(), 0.04f);
-
-    // Clamp negative inputs to 0.
-    mat.setClearcoat(-0.5f);
-    EXPECT_FLOAT_EQ(mat.getClearcoat(), 0.0f);
-    mat.setClearcoatRoughness(-0.5f);
-    EXPECT_FLOAT_EQ(mat.getClearcoatRoughness(), 0.0f);
-
-    // Clamp above 1.0 to 1.0.
-    mat.setClearcoat(1.7f);
-    EXPECT_FLOAT_EQ(mat.getClearcoat(), 1.0f);
-    mat.setClearcoatRoughness(2.0f);
-    EXPECT_FLOAT_EQ(mat.getClearcoatRoughness(), 1.0f);
-
-    // In-range round-trip.
-    mat.setClearcoat(0.5f);
-    EXPECT_FLOAT_EQ(mat.getClearcoat(), 0.5f);
-    mat.setClearcoatRoughness(0.25f);
-    EXPECT_FLOAT_EQ(mat.getClearcoatRoughness(), 0.25f);
 }
 
 TEST(PbrMaterialTest, AlphaModeRoundTripsEveryEnumValue)

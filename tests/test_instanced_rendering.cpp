@@ -128,13 +128,20 @@ TEST(InstanceBatchTest, MixedItemsProduceCorrectBatchCount)
 // Threshold tests
 // =============================================================================
 
+// These two tests pin the batch size against MIN_INSTANCE_BATCH_SIZE — the
+// constant the draw loop consults to choose the instanced vs non-instanced
+// path (renderer.cpp: `count >= MIN_INSTANCE_BATCH_SIZE`). The path itself
+// needs a GL context to exercise, so the closest test-only proxy is the
+// size-vs-threshold comparison against the live constant: if either the
+// batch size or the threshold value drifts, these fail. (Asserting against a
+// bare literal `2` would silently pass if the constant changed.)
 TEST(InstanceBatchTest, SingleInstanceBelowThreshold)
 {
     std::vector<SceneRenderData::RenderItem> items = {makeItem(1, 1)};
     auto batches = Renderer::buildInstanceBatchesStatic(items);
     ASSERT_EQ(batches.size(), 1u);
-    // Batch of size 1 should use non-instanced path (< MIN_INSTANCE_BATCH_SIZE)
-    EXPECT_LT(static_cast<int>(batches[0].modelMatrices.size()), 2);
+    const int count = static_cast<int>(batches[0].modelMatrices.size());
+    EXPECT_LT(count, Renderer::MIN_INSTANCE_BATCH_SIZE);
 }
 
 TEST(InstanceBatchTest, TwoInstancesMeetsThreshold)
@@ -145,7 +152,8 @@ TEST(InstanceBatchTest, TwoInstancesMeetsThreshold)
     };
     auto batches = Renderer::buildInstanceBatchesStatic(items);
     ASSERT_EQ(batches.size(), 1u);
-    EXPECT_GE(static_cast<int>(batches[0].modelMatrices.size()), 2);
+    const int count = static_cast<int>(batches[0].modelMatrices.size());
+    EXPECT_GE(count, Renderer::MIN_INSTANCE_BATCH_SIZE);
 }
 
 // =============================================================================

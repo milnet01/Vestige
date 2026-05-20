@@ -10,6 +10,7 @@
 #include "editor/panels/model_viewer_panel.h"
 #include "editor/panels/template_dialog.h"
 
+#include <optional>
 #include <set>
 
 using namespace Vestige;
@@ -174,6 +175,23 @@ TEST_F(ModelViewerTest, PlaybackSpeedClamp)
 // TemplateDialog / GameTemplateConfig tests
 // ==========================================================================
 
+namespace
+{
+// Ts20-PA4: the per-type *Config tests below each walked getTemplates() to
+// find the entry matching a GameTemplateType. That find-loop was the only
+// shared boilerplate (the asserted fields differ per template), so it
+// extracts here. Returns an owned copy — getTemplates() hands back a
+// by-value vector, so a pointer into it would dangle.
+std::optional<GameTemplateConfig> findTemplate(GameTemplateType type)
+{
+    for (const auto& t : TemplateDialog::getTemplates())
+    {
+        if (t.type == type) return t;
+    }
+    return std::nullopt;
+}
+} // namespace
+
 class GameTemplateTest : public ::testing::Test {};
 
 TEST_F(GameTemplateTest, TemplateCount)
@@ -214,17 +232,8 @@ TEST_F(GameTemplateTest, TemplateTypesUnique)
 
 TEST_F(GameTemplateTest, FirstPersonConfig)
 {
-    auto templates = TemplateDialog::getTemplates();
-    const GameTemplateConfig* fps = nullptr;
-    for (const auto& t : templates)
-    {
-        if (t.type == GameTemplateType::FIRST_PERSON_3D)
-        {
-            fps = &t;
-            break;
-        }
-    }
-    ASSERT_NE(fps, nullptr);
+    auto fps = findTemplate(GameTemplateType::FIRST_PERSON_3D);
+    ASSERT_TRUE(fps.has_value());
     EXPECT_EQ(fps->projectionType, ProjectionType::PERSPECTIVE);
     EXPECT_FLOAT_EQ(fps->fov, 90.0f);
     EXPECT_TRUE(fps->enableGravity);
@@ -233,83 +242,38 @@ TEST_F(GameTemplateTest, FirstPersonConfig)
 
 TEST_F(GameTemplateTest, IsometricConfig)
 {
-    auto templates = TemplateDialog::getTemplates();
-    const GameTemplateConfig* iso = nullptr;
-    for (const auto& t : templates)
-    {
-        if (t.type == GameTemplateType::ISOMETRIC)
-        {
-            iso = &t;
-            break;
-        }
-    }
-    ASSERT_NE(iso, nullptr);
+    auto iso = findTemplate(GameTemplateType::ISOMETRIC);
+    ASSERT_TRUE(iso.has_value());
     EXPECT_EQ(iso->projectionType, ProjectionType::ORTHOGRAPHIC);
     EXPECT_GT(iso->orthoSize, 0.0f);
 }
 
 TEST_F(GameTemplateTest, TopDownConfig)
 {
-    auto templates = TemplateDialog::getTemplates();
-    const GameTemplateConfig* td = nullptr;
-    for (const auto& t : templates)
-    {
-        if (t.type == GameTemplateType::TOP_DOWN)
-        {
-            td = &t;
-            break;
-        }
-    }
-    ASSERT_NE(td, nullptr);
+    auto td = findTemplate(GameTemplateType::TOP_DOWN);
+    ASSERT_TRUE(td.has_value());
     EXPECT_EQ(td->projectionType, ProjectionType::ORTHOGRAPHIC);
     EXPECT_GT(td->cameraPosition.y, 10.0f);
 }
 
 TEST_F(GameTemplateTest, ThirdPersonConfig)
 {
-    auto templates = TemplateDialog::getTemplates();
-    const GameTemplateConfig* tps = nullptr;
-    for (const auto& t : templates)
-    {
-        if (t.type == GameTemplateType::THIRD_PERSON_3D)
-        {
-            tps = &t;
-            break;
-        }
-    }
-    ASSERT_NE(tps, nullptr);
+    auto tps = findTemplate(GameTemplateType::THIRD_PERSON_3D);
+    ASSERT_TRUE(tps.has_value());
     EXPECT_EQ(tps->projectionType, ProjectionType::PERSPECTIVE);
     EXPECT_TRUE(tps->createPlayerEntity);
 }
 
 TEST_F(GameTemplateTest, TwoPointFiveDConfig)
 {
-    auto templates = TemplateDialog::getTemplates();
-    const GameTemplateConfig* tpfd = nullptr;
-    for (const auto& t : templates)
-    {
-        if (t.type == GameTemplateType::TWO_POINT_FIVE_D)
-        {
-            tpfd = &t;
-            break;
-        }
-    }
-    ASSERT_NE(tpfd, nullptr);
+    auto tpfd = findTemplate(GameTemplateType::TWO_POINT_FIVE_D);
+    ASSERT_TRUE(tpfd.has_value());
     EXPECT_EQ(tpfd->projectionType, ProjectionType::PERSPECTIVE);
 }
 
 TEST_F(GameTemplateTest, PointAndClickConfig)
 {
-    auto templates = TemplateDialog::getTemplates();
-    const GameTemplateConfig* pac = nullptr;
-    for (const auto& t : templates)
-    {
-        if (t.type == GameTemplateType::POINT_AND_CLICK)
-        {
-            pac = &t;
-            break;
-        }
-    }
-    ASSERT_NE(pac, nullptr);
+    auto pac = findTemplate(GameTemplateType::POINT_AND_CLICK);
+    ASSERT_TRUE(pac.has_value());
     EXPECT_EQ(pac->projectionType, ProjectionType::PERSPECTIVE);
 }

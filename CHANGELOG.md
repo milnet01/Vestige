@@ -9,6 +9,37 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-05-20 Ts20-PA* — parametrise repeated test bodies (6 items)
+
+`/test-audit` 2026-05-18 Ts20 flagged 6 parametrisation findings where
+near-identical test bodies differed only in data. Each collapses into a
+table-driven `TEST_P` (or a shared helper where the assertions differ):
+
+- **Ts20-PA1.** `tests/test_caption_map.cpp` — the four `FiresOnPlaySound*`
+  announcer tests became one `TEST_P` over a `PlaySoundInvoker` table (one
+  non-capturing lambda per `playSound*` overload).
+- **Ts20-PA2.** `tests/test_color_vision_filter.cpp` — the three
+  `*CoefficientsMatchBrettel` tests became one `TEST_P` over
+  `{mode, expected matrix}`, comparing all 9 entries.
+- **Ts20-PA3.** `tests/test_pbr_material.cpp` — the Metallic / Roughness /
+  Ao / EmissiveStrength / Clearcoat / ClearcoatRoughness clamp tests became
+  one `PbrScalarClamp` table (below-floor / above-ceiling / round-trip per
+  field); `ClearcoatDefaultsAndClamping` slimmed to a defaults-only test.
+- **Ts20-PA4.** `tests/test_editor_viewers.cpp` — extracted a
+  `findTemplate(GameTemplateType)` helper returning `std::optional`; the six
+  per-type `*Config` tests now use it instead of re-walking `getTemplates()`.
+- **Ts20-PA5.** `tests/test_instanced_rendering.cpp` — the two threshold
+  tests now assert batch size against the path-deciding constant
+  `Renderer::MIN_INSTANCE_BATCH_SIZE` instead of a bare literal `2`. That
+  constant was moved from `private` to `public` in `renderer.h` so the test
+  tracks the live threshold (no behaviour change; it is the same compile-time
+  value the draw loop already consults).
+- **Ts20-PA6.** `tests/test_ui_world_projection.cpp` — the three `FadeAlpha`
+  regime tests became one `TEST_P` over `{fadeNear, fadeFar, distance,
+  expectedAlpha}`.
+
+Test-only except the `MIN_INSTANCE_BATCH_SIZE` visibility change noted above.
+
 ### 2026-05-19 CI — cache apt packages, SHA-pin every third-party action
 
 Two robustness/speed follow-ups to `c768aff` (ccache + apt retry + drop
