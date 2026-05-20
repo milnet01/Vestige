@@ -1,0 +1,102 @@
+# .github/workflows/audit-full.yml — Vestige full-audit backstop.
+#
+# Per-push CI (ci.yml) runs only Tier 1 (build + cppcheck + clang-tidy). This
+# workflow runs the FULL audit (all tiers) on a nightly schedule and on every
+# release tag, exercising the coverage CI skips per-push:
+#   - Tiers 2-4, 6: pattern / structural scans (never run per-push).
+#   - Tier 5: online CVE / dependency research — time-dependent (new CVEs land
+#     daily regardless of code changes), which is exactly why a nightly cadence
+#     matters. Needs the NVD_API_KEY repo secret; without it Tier 5 degrades to
+#     a no-op and the other tiers still run.
+#
+# Report-only by design: it uploads the full report and writes the run summary
+# but does NOT fail on findings. Tiers 2-6 have never been gated, so failing on
+# pre-existing findings would make this perpetually red and ignored. The
+# deterministic gate stays in ci.yml (Tier 1). Gating this on *new* findings vs
+# a committed baseline is a possible follow-on.
+name: Full Audit (nightly + release)
+
+on:
+  schedule:
+    - cron: "0 6 * * *"   # ~06:00 UTC nightly
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  # PCH compiles are only ccache-cacheable with these relaxations (see ci.yml).
+  CCACHE_SLOPPINESS: pch_defines,time_macros
+
+jobs:
+  full-audit:
+    name: Full audit (all tiers incl. CVE)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
+
+      - name: Install audit tool dependencies
+        # Same package set + pin as ci.yml's audit job.
+        uses: awalsh128/cache-apt-pkgs-action@2c09a5e66da6c8016428a2172bd76e5e4f14bb17  # v1
+        with:
+          packages: cppcheck clang-tidy python3 python3-pip python3-xmltodict python3-yaml python3-flask build-essential cmake ninja-build xvfb libgl1-mesa-dev libglu1-mesa-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxxf86vm-dev libwayland-dev libxkbcommon-dev
+          version: audit-full-1
+
+      - name: Set up ccache
+        uses: hendrikmuhs/ccache-action@5ebbd400eff9e74630f759d94ddd7b6c26299639  # v1.2
+        with:
+          key: audit-full-Debug
+          max-size: 500M
+
+      - name: Cache CMake FetchContent deps
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae  # v5
+        with:
+          path: |
+            build/_deps
+          key: cmake-deps-Debug-${{ hashFiles('**/CMakeLists.txt') }}
+          restore-keys: |
+            cmake-deps-Debug-
+
+      - name: Configure (for compile_commands.json)
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+            -DVESTIGE_FETCH_ASSETS=OFF
+
+      - name: Build
+        # Warm the build so the audit's internal `cmake --build` is a no-op and
+        # compile_commands.json exists for clang-tidy.
+        run: cmake --build build -j $(nproc)
+
+      - name: Run full audit (all tiers)
+        # No -t → every tier runs. --no-tests: the per-push Debug job is the
+        # test-runner of record; this job adds the static/research coverage CI
+        # skips. Report-only — the `|| echo` swallows the severity exit code so
+        # pre-existing Tier 2-6 findings don't fail the run; the step summary
+        # and uploaded report carry the signal.
+        env:
+          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+        run: |
+          xvfb-run --auto-servernum python3 tools/audit/audit.py \
+            --ci --no-color --no-tests || \
+            echo "::warning::Full audit reported findings (report-only) — see the step summary and the full-audit-report artifact."
+
+      - name: Upload full audit report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
+        with:
+          name: full-audit-report
+          path: |
+            docs/archive/audits/
+            docs/AUTOMATED_AUDIT_REPORT*.md
+            docs/AUTOMATED_AUDIT_REPORT*.json
+          if-no-files-found: ignore
