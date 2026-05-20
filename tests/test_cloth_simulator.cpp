@@ -99,8 +99,11 @@ TEST(ClothSimulator, GravityPullsUnpinnedClothDown)
     ClothSimulator sim;
     sim.initialize(clothSmallConfig());
 
-    const glm::vec3* before = sim.getPositions();
-    float y0 = before[0].y;
+    // getPositions() returns a pointer into the live buffer that simulate()
+    // overwrites in place, so capture the starting height as a scalar before
+    // stepping rather than holding the pointer across the call (matches the
+    // UnpinRestoresMass pattern below).
+    float y0 = sim.getPositions()[0].y;
 
     sim.simulate(1.0f / 60.0f);
 
@@ -277,15 +280,40 @@ TEST(ClothSimulator, SphereCollisionPushesParticlesOut)
 TEST(ClothSimulator, ClearSphereColliders)
 {
     ClothSimulator sim;
-    sim.initialize(clothSmallConfig());
+    auto cfg = clothSmallConfig();
+    cfg.gravity = glm::vec3(0, -20, 0);  // strong gravity so the cloth reaches the sphere
+    sim.initialize(cfg);
 
-    sim.addSphereCollider(glm::vec3(0), 1.0f);
+    // A sphere squarely in the fall path would push every particle out to its
+    // surface (see SphereCollisionPushesParticlesOut). After clearing, the
+    // same fall must penetrate the now-removed sphere — proving the collider
+    // list was actually emptied, not merely that gravity still applies (the
+    // prior "fell below 0" check passed with or without the colliders).
+    const glm::vec3 center(0.0f, -1.0f, 0.0f);
+    const float radius = 1.5f;
+    sim.addSphereCollider(center, radius);
     sim.addSphereCollider(glm::vec3(1), 2.0f);
     sim.clearSphereColliders();
 
-    // Should simulate without collision — particles fall through
-    sim.simulate(1.0f / 60.0f);
-    EXPECT_LT(sim.getPositions()[0].y, 0.0f);
+    for (int i = 0; i < 60; ++i)
+    {
+        sim.simulate(1.0f / 60.0f);
+    }
+
+    // A live collider would trap the cloth at or above the sphere's bottom
+    // (center.y - radius); cleared, at least one particle free-falls past it.
+    const glm::vec3* pos = sim.getPositions();
+    bool fellPastSphere = false;
+    for (uint32_t i = 0; i < sim.getParticleCount(); ++i)
+    {
+        if (pos[i].y < center.y - radius)
+        {
+            fellPastSphere = true;
+            break;
+        }
+    }
+    EXPECT_TRUE(fellPastSphere)
+        << "no particle fell below the cleared sphere — colliders not cleared";
 }
 
 // ---------------------------------------------------------------------------

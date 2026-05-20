@@ -903,7 +903,15 @@ TEST(FractureClipping, SeedBiasTowardImpact)
         if (glm::distance(s, impact) < 3.0f)
             ++nearImpact;
     }
-    EXPECT_GE(nearImpact, 5);  // At least 5 of 20 should be near impact (Gaussian bias)
+    // Seed generation biases toward the impact point. With seed 99 this is
+    // deterministic: 6 of the 20 seeds land within 3.0 of impact. A uniform
+    // distribution would place only ~0.6 there — the radius-3 ball around the
+    // near-corner impact (4,4,4) is mostly clipped by the [-5,5] bounds — so
+    // the ≥5 gate sits ~8× above the uniform baseline and genuinely
+    // demonstrates the bias. It is pinned one seed below the observed 6 to
+    // tolerate float-boundary jitter without masking a real loss of bias.
+    // (Audit suggested tightening to ≥8, but the deterministic count is 6.)
+    EXPECT_GE(nearImpact, 5);
 }
 
 TEST(FractureClipping, AllSeedsWithinBounds)

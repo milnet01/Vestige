@@ -70,10 +70,11 @@ TEST_F(DomainSystemTest, AtmosphereSystemStartsInactive)
 TEST_F(DomainSystemTest, AtmosphereSystemHasEnvironmentForces)
 {
     AtmosphereSystem sys;
-    // EnvironmentForces is returned by reference (can't be null) — the
-    // contract under test is that the accessor compiles and the
-    // subsystem returns a usable object. /test-audit 2026-05-17.
-    (void)sys.getEnvironmentForces();
+    // EnvironmentForces is returned by reference (can't be null). Assert an
+    // observable default — a freshly constructed subsystem reports no
+    // precipitation — rather than void-discarding the accessor, so the test
+    // fails if the subsystem ever hands back a mis-initialised object.
+    EXPECT_FLOAT_EQ(sys.getEnvironmentForces().getPrecipitationIntensity(), 0.0f);
 }
 
 // ==========================================================================

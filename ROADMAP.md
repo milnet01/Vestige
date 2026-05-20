@@ -878,16 +878,16 @@ Full triaged report at `/tmp/test-audit-e5e42211/_triaged.md` (ephemeral); false
 - [ ] **Ts20-SP6.** `tests/test_ui_theme_accessibility.cpp:25` — `WithScaleMultipliesEveryPixelSize` packs 32 EXPECTs into one body. Split into 3-4 logical groups.
 
 #### Assertions (10)
-- [ ] **Ts20-AS2.** `tests/test_animation_state_machine.cpp:247` — `SelfTransitionBlocked` ambiguous guard. Add explicit check or cite mechanism.
-- [ ] **Ts20-AS3.** `tests/test_advanced_physics.cpp:888` — `SeedBiasTowardImpact` threshold 5/20=25% barely above baseline. Tighten to `EXPECT_GE(nearImpact, 8)` or document.
-- [ ] **Ts20-AS4.** `tests/test_cloth_simulator.cpp:276` — `ClearSphereColliders` asserts only fall, not clearance. Add sphere, confirm penetration after clear.
-- [ ] **Ts20-AS5.** `tests/test_cloth_simulator.cpp:102` — stale pointer after `simulate()`. Copy scalar before simulate (match `UnpinRestoresMass` pattern at line 168).
-- [ ] **Ts20-AS7.** `tests/test_cloth_solver_improvements.cpp:456` — `ThickParticle_SphereCollisionOffsetIncludesRadius` only checks `!isnan`. Compute min-distance, assert offset.
-- [ ] **Ts20-AS8.** `tests/test_camera.cpp:156` — `ViewMatrixChanges*` use bool-differs scan. Assert specific elements.
-- [ ] **Ts20-AS9.** `tests/test_domain_systems.cpp:73` — reference-accessor tests void-discard returns. Assert observable properties.
-- [ ] **Ts20-AS10.** `tests/test_entity_serializer_registry.cpp:320` — substring `"2"` too loose. Assert `"dropped 2"` or `"2 component"`.
-- [ ] **Ts20-AS13.** `tests/test_scripting.cpp:153` — `ConvertFloatToString` checks only non-empty. Add `StartsWith("3.14")`.
-- [ ] **Ts20-AS15.** `tests/test_memory_tracker.cpp:100` — `RecordFreeUnderflowClampsAtZero` count-vs-byte underspecified. Add policy comment.
+- [x] **Ts20-AS2.** `tests/test_animation_state_machine.cpp:247` — `SelfTransitionBlocked` ambiguous guard. Add explicit check or cite mechanism.
+- [x] **Ts20-AS3.** `tests/test_advanced_physics.cpp:888` — `SeedBiasTowardImpact` threshold 5/20=25% barely above baseline. Tighten to `EXPECT_GE(nearImpact, 8)` or document.
+- [x] **Ts20-AS4.** `tests/test_cloth_simulator.cpp:276` — `ClearSphereColliders` asserts only fall, not clearance. Add sphere, confirm penetration after clear.
+- [x] **Ts20-AS5.** `tests/test_cloth_simulator.cpp:102` — stale pointer after `simulate()`. Copy scalar before simulate (match `UnpinRestoresMass` pattern at line 168).
+- [x] **Ts20-AS7.** `tests/test_cloth_solver_improvements.cpp:456` — `ThickParticle_SphereCollisionOffsetIncludesRadius` only checks `!isnan`. Compute min-distance, assert offset.
+- [x] **Ts20-AS8.** `tests/test_camera.cpp:156` — `ViewMatrixChanges*` use bool-differs scan. Assert specific elements.
+- [x] **Ts20-AS9.** `tests/test_domain_systems.cpp:73` — reference-accessor tests void-discard returns. Assert observable properties.
+- [x] **Ts20-AS10.** `tests/test_entity_serializer_registry.cpp:320` — substring `"2"` too loose. Assert `"dropped 2"` or `"2 component"`.
+- [x] **Ts20-AS13.** `tests/test_scripting.cpp:153` — `ConvertFloatToString` checks only non-empty. Add `StartsWith("3.14")`.
+- [x] **Ts20-AS15.** `tests/test_memory_tracker.cpp:100` — `RecordFreeUnderflowClampsAtZero` count-vs-byte underspecified. Add policy comment.
 - [ ] **Ts20-BE1.** `tests/test_emissive_lighting.cpp:45` — `AttenuationFormulaMathReference` derives + self-tests. Expose `EmissiveLightComponent::computeAttenuation()` and call it; or delete.
 
 #### Hardcoded data (6)

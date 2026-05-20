@@ -318,10 +318,13 @@ TEST_F(EntitySerializerUnregisteredComponentWarning, ReportsDropCountForMultiple
 
     const std::string msg = firstWarningContaining("TwoUnregistered");
     ASSERT_FALSE(msg.empty());
-    // The warning message must include the count so an operator can
-    // tell "1 dropped" from "17 dropped" at a glance.
-    EXPECT_NE(msg.find("2"), std::string::npos)
-        << "expected the warning to mention the drop count (2); got: " << msg;
+    // The warning must include the count so an operator can tell "1 dropped"
+    // from "17 dropped" at a glance. Match the count in context
+    // ("2 component(s)") rather than a bare "2", which could match a digit
+    // anywhere in the entity name or the registry hint text.
+    EXPECT_NE(msg.find("2 component"), std::string::npos)
+        << "expected the warning to mention the drop count in context "
+           "(\"2 component(s)\"); got: " << msg;
 }
 
 TEST_F(EntitySerializerUnregisteredComponentWarning, WarnsForEachAffectedEntityIndependently_F12)

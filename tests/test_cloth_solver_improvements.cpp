@@ -483,15 +483,27 @@ TEST(ThickParticle, SphereCollisionOffsetIncludesRadius)
         simThick.simulate(1.0f / 60.0f);
     }
 
-    // Check a particle near the sphere — thick should be farther out
-    // Both should be stable
+    // Thin cloth rests on the sphere surface (closest particle ≈ sphereRadius
+    // from centre); the thick cloth's collision response adds the particle
+    // radius, so its closest particle must sit measurably farther out. The
+    // prior !isnan-only check would have passed a collision that ignored the
+    // radius entirely.
     const glm::vec3* posThin = simThin.getPositions();
     const glm::vec3* posThick = simThick.getPositions();
+    float minDistThin  = glm::distance(posThin[0],  sphereCenter);
+    float minDistThick = glm::distance(posThick[0], sphereCenter);
     for (uint32_t i = 0; i < simThin.getParticleCount(); ++i)
     {
         EXPECT_FALSE(std::isnan(posThin[i].x));
         EXPECT_FALSE(std::isnan(posThick[i].x));
+        minDistThin  = std::min(minDistThin,  glm::distance(posThin[i],  sphereCenter));
+        minDistThick = std::min(minDistThick, glm::distance(posThick[i], sphereCenter));
     }
+
+    // Thin particles settle on the sphere without penetrating it.
+    EXPECT_GE(minDistThin, sphereRadius - 0.02f);
+    // Thick particles are pushed out farther by ~the particle radius (0.05).
+    EXPECT_GT(minDistThick, minDistThin + 0.02f);
 }
 
 TEST(ThickParticle, SimulationStableWithRadius)

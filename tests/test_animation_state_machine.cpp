@@ -260,8 +260,14 @@ TEST_F(StateMachineTest, SelfTransitionBlocked)
     m_animator.update(0.01f);
     sm.update(m_animator, 0.016f);
 
-    // Should not trigger a crossfade to itself
+    // A 0→0 transition is dropped by the `toState == m_currentState` guard
+    // (animation_state_machine.cpp:110) before crossfadeToIndex is reached.
+    // Only 0.016 s has elapsed against a 0.2 s crossfade, so had the
+    // self-transition fired it would still register as crossfading — its
+    // absence confirms the guard rather than a crossfade that already
+    // completed. The state index staying 0 confirms no other transition fired.
     EXPECT_FALSE(m_animator.isCrossfading());
+    EXPECT_EQ(sm.getCurrentStateIndex(), 0);
 }
 
 TEST_F(StateMachineTest, ParameterDefaults)

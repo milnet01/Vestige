@@ -97,6 +97,13 @@ TEST_F(MemoryTrackerTest, PeakDoesNotDecreaseAfterFree)
 
 // Regression: a free without a matching alloc (or a double-free) must clamp
 // at zero, not wrap the underlying atomic to SIZE_MAX.
+//
+// Policy (recordFree clamps the two counters independently):
+//   * bytes — over-freeing subtracts down to zero, never below; the 1024-byte
+//     free against a 64-byte alloc lands the byte counter back at baseline.
+//   * count — decrements by exactly one per free call (also floored at zero),
+//     regardless of the byte amount; the single matching alloc's count is
+//     undone, returning the count to baseline as well.
 TEST_F(MemoryTrackerTest, RecordFreeUnderflowClampsAtZero)
 {
     MemoryTracker::recordAlloc(64);

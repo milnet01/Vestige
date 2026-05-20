@@ -161,17 +161,22 @@ TEST(CameraTest, ViewMatrixChangesWithPosition)
     cam.setPosition(glm::vec3(5.0f, 5.0f, 5.0f));
     glm::mat4 view2 = cam.getViewMatrix();
 
-    // Translation column (column 3) should differ
-    bool differs = false;
-    for (int row = 0; row < 4; ++row)
+    // Position feeds only the translation column (3); the rotation basis
+    // (columns 0-2) must be untouched. Assert both halves explicitly rather
+    // than scanning for "some element differs" — that passed even if an
+    // unrelated rotation element moved, and gave no diagnostic on failure.
+    for (int col = 0; col < 3; ++col)
     {
-        if (std::abs(view1[3][row] - view2[3][row]) > EPSILON)
+        for (int row = 0; row < 4; ++row)
         {
-            differs = true;
-            break;
+            EXPECT_NEAR(view2[col][row], view1[col][row], EPSILON)
+                << "rotation element [" << col << "][" << row
+                << "] must not change when only the position moves";
         }
     }
-    EXPECT_TRUE(differs);
+    EXPECT_NE(view2[3][0], view1[3][0]);
+    EXPECT_NE(view2[3][1], view1[3][1]);
+    EXPECT_NE(view2[3][2], view1[3][2]);
 }
 
 TEST(CameraTest, ViewMatrixChangesWithYaw)
@@ -182,20 +187,14 @@ TEST(CameraTest, ViewMatrixChangesWithYaw)
     cam.setYaw(45.0f);
     glm::mat4 view2 = cam.getViewMatrix();
 
-    // Rotation part should differ
-    bool differs = false;
-    for (int col = 0; col < 3; ++col)
-    {
-        for (int row = 0; row < 3; ++row)
-        {
-            if (std::abs(view1[col][row] - view2[col][row]) > EPSILON)
-            {
-                differs = true;
-                break;
-            }
-        }
-    }
-    EXPECT_TRUE(differs);
+    // Yaw rotates the basis about world-up: the right and forward axes move
+    // while the up row (row 1) is yaw-invariant at pitch 0. Assert those
+    // specific elements rather than a generic "something differs" scan.
+    EXPECT_NE(view2[0][0], view1[0][0]) << "right.x should rotate with yaw";
+    EXPECT_NE(view2[2][2], view1[2][2]) << "forward.z should rotate with yaw";
+    EXPECT_NEAR(view2[0][1], view1[0][1], EPSILON) << "up row must be yaw-invariant";
+    EXPECT_NEAR(view2[1][1], view1[1][1], EPSILON) << "up row must be yaw-invariant";
+    EXPECT_NEAR(view2[2][1], view1[2][1], EPSILON) << "up row must be yaw-invariant";
 }
 
 // ============================================================

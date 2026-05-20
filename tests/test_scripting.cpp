@@ -150,8 +150,9 @@ TEST(ScriptValue, ConvertFloatToString)
     ScriptValue v(3.14f);
     auto converted = v.convertTo(ScriptDataType::STRING);
     EXPECT_EQ(converted.getType(), ScriptDataType::STRING);
-    // std::to_string(3.14f) produces something like "3.140000"
-    EXPECT_FALSE(converted.asString().empty());
+    // std::to_string(3.14f) produces "3.140000"; assert the value actually
+    // round-trips through the leading digits rather than merely being non-empty.
+    EXPECT_EQ(converted.asString().substr(0, 4), "3.14");
 }
 
 TEST(ScriptValue, Equality)
