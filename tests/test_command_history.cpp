@@ -257,8 +257,16 @@ TEST(CommandHistoryTest, CompositeCommandUndoesInReverse)
 
     // Undo order: -3, -2, -1 (reverse)
     ASSERT_EQ(log.size(), 3u);
+    // undo() runs the composite's children in reverse, re-pushing to log via
+    // the virtual EditorCommand::undo callbacks. cppcheck can't trace through
+    // those, so after the clear() above it treats log as still-empty and
+    // false-flags these reads (containerOutOfBounds); the ASSERT_EQ pins the
+    // real size. See the cppcheck note in tools/audit/audit_config.yaml.
+    // cppcheck-suppress containerOutOfBounds  ; FP: undo() repopulates log via a virtual callback cppcheck can't trace
     EXPECT_EQ(log[0], -3);
+    // cppcheck-suppress containerOutOfBounds  ; FP: undo() repopulates log via a virtual callback cppcheck can't trace
     EXPECT_EQ(log[1], -2);
+    // cppcheck-suppress containerOutOfBounds  ; FP: undo() repopulates log via a virtual callback cppcheck can't trace
     EXPECT_EQ(log[2], -1);
 }
 
