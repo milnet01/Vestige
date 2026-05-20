@@ -60,6 +60,32 @@ AsyncDriverJob::State pollUntilDone(AsyncDriverJob& job,
     return job.poll();
 }
 
+// Poll until the child's streamed stdout contains @a needle, bounded by a
+// timeout. Used as a readiness handshake: the child prints a marker once it
+// has reached the state the test cares about (e.g. installed a signal
+// handler, entered sleep), and we wait for that marker instead of guessing
+// an OS spawn delay. `isRunning()` can't serve here — `start()` flips the
+// state to Running synchronously, so it's true long before the interpreter
+// reaches the line under test. Returns true once the marker is seen.
+bool pollUntilStdoutContains(AsyncDriverJob& job,
+                             const std::string& needle,
+                             std::chrono::milliseconds timeout)
+{
+    using clock = std::chrono::steady_clock;
+    const auto deadline = clock::now() + timeout;
+    std::string seen;
+    while (clock::now() < deadline)
+    {
+        job.poll();
+        seen += job.drainStdoutChunk();
+        if (seen.find(needle) != std::string::npos)
+            return true;
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    seen += job.drainStdoutChunk();
+    return seen.find(needle) != std::string::npos;
+}
+
 } // namespace
 
 // ---------------------------------------------------------------------------
@@ -278,13 +304,16 @@ TEST(AsyncDriverJob, DrainStdoutChunkReturnsIncrementalOutput)
 TEST(AsyncDriverJob, CancelSIGTERMsTheChildProcess)
 {
     const auto script = writeTempScript("longsleep",
-        "import time\ntime.sleep(60)\n");
+        "import sys, time\n"
+        "sys.stdout.write('ready\\n')\nsys.stdout.flush()\n"
+        "time.sleep(60)\n");
 
     AsyncDriverJob job;
     ASSERT_TRUE(job.start(script.string(), {}, {}));
 
-    // Give the child a moment to actually enter sleep().
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    // Wait for the child to actually be up (it prints 'ready' before
+    // sleeping) rather than assuming a fixed spawn delay.
+    ASSERT_TRUE(pollUntilStdoutContains(job, "ready", std::chrono::seconds(2)));
     ASSERT_TRUE(job.isRunning());
 
     const auto t0 = std::chrono::steady_clock::now();
@@ -326,8 +355,9 @@ TEST(AsyncDriverJob, CancelReturnsFalseWhenIdle)
 TEST(AsyncDriverJob, PollEscalatesToSIGKILLAfterGrace)
 {
     const auto script = writeTempScript("sigterm_ignore",
-        "import signal, time\n"
+        "import signal, sys, time\n"
         "signal.signal(signal.SIGTERM, signal.SIG_IGN)\n"
+        "sys.stdout.write('ready\\n')\nsys.stdout.flush()\n"
         "time.sleep(60)\n");
 
     AsyncDriverJob job;
@@ -336,7 +366,12 @@ TEST(AsyncDriverJob, PollEscalatesToSIGKILLAfterGrace)
     // identical — only the wait shortens.
     job.setCancelSigkillGraceSeconds(0.1f);
     ASSERT_TRUE(job.start(script.string(), {}, {}));
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    // The child prints 'ready' only after installing the SIGTERM-ignore
+    // handler. Waiting for it guarantees the polite signal is genuinely
+    // a no-op, so this exercises the SIGKILL escalation rather than
+    // racing the handler install (which a fixed sleep could lose on a
+    // slow box).
+    ASSERT_TRUE(pollUntilStdoutContains(job, "ready", std::chrono::seconds(2)));
     ASSERT_TRUE(job.cancel());
 
     // Wait > graceSeconds for the escalator to fire, plus slack for the

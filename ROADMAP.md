@@ -841,10 +841,10 @@ Full triaged report at `/tmp/test-audit-e5e42211/_triaged.md` (ephemeral); false
 - [ ] **Ts20-SP3.** `tests/test_scripting.cpp:1` (HIGH, splitting) — 2485 lines, 12+ test suites. Split into `test_script_value.cpp`, `test_blackboard.cpp`, `test_node_type_registry.cpp`, `test_script_graph.cpp`, `test_script_context.cpp`, `test_node_library.cpp`, `test_scripting_system_bridge.cpp`. Multi-hour refactor with attendant CMakeLists.txt churn.
 
 #### Flakiness (4)
-- [ ] **Ts20-FL1.** `tests/test_async_driver.cpp:287,339` — `sleep_for(50ms/100ms)` before `cancel()` assumes OS spawn timing. Poll until `isRunning()` is true.
-- [ ] **Ts20-FL2.** `tests/test_reference_harness.cpp:134` — temp-file paths unstamped under `ctest -j`. Use `vestigeTestStamp()`.
-- [ ] **Ts20-FL4.** `tests/test_environment_forces.cpp:357` — float accumulation tolerance too tight at 100 ticks. Loosen to `0.05f` or derive expected value from rate.
-- [ ] **Ts20-FL5.** `tests/test_photosensitive_retrofit.cpp:99` — flicker phase not pinned at guaranteed-difference point. Drive emitters to half-clamped-period phase offset.
+- [x] **Ts20-FL1.** `tests/test_async_driver.cpp:287,339` — `sleep_for(50ms/100ms)` before `cancel()` assumes OS spawn timing. Poll until `isRunning()` is true.
+- [x] **Ts20-FL2.** `tests/test_reference_harness.cpp:134` — temp-file paths unstamped under `ctest -j`. Use `vestigeTestStamp()`.
+- [x] **Ts20-FL4.** `tests/test_environment_forces.cpp:357` — float accumulation tolerance too tight at 100 ticks. Loosen to `0.05f` or derive expected value from rate.
+- [x] **Ts20-FL5.** `tests/test_photosensitive_retrofit.cpp:99` — flicker phase not pinned at guaranteed-difference point. Drive emitters to half-clamped-period phase offset.
 
 #### Isolation (3)
 - [x] **Ts20-IS3.** `tests/test_fit_history.cpp:62` — four tests share `/tmp/fh_*.json` with no PID stamp. Use stamped paths.

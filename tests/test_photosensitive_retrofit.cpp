@@ -82,14 +82,27 @@ TEST(PhotosensitiveFlicker, SafeModeClampsAboveCeilingEmitter)
     // authored dominant frequency at flickerSpeed=20 is
     //   20 / (2π) ≈ 3.18 Hz — above 2.0 Hz cap.
     // Safe mode should therefore clamp the effective base frequency.
-    // We verify the behaviour behaviourally: at the same
-    // m_elapsedTime, the effective-speed-clamped version should
-    // produce a different flicker phase than the unclamped version.
+    // We verify behaviourally: at a pinned phase the clamped flicker
+    // must differ from the unclamped one.
     auto emitterA = makeLivingFireEmitter(20.0f, 2.0f);
     auto emitterB = makeLivingFireEmitter(20.0f, 2.0f);
 
     PhotosensitiveLimits limits;
     limits.maxStrobeHz = 2.0f;
+
+    // Pin the comparison at a guaranteed-difference phase rather than the
+    // incidental m_elapsedTime the setup ticks happen to leave behind (where
+    // the two signals could coincidentally match). Half the clamped period
+    // (0.5 / maxStrobeHz) drives the clamped fundamental sin(t) to π — a zero
+    // crossing — while the faster unclamped term sits mid-swing, so the two
+    // flicker values cannot coincide. restart() clears the setup time so the
+    // single update lands the phase exactly; it also re-spawns particles,
+    // keeping count > 0 for getCoupledLight.
+    const float halfClampedPeriod = 0.5f / limits.maxStrobeHz;  // 0.25 s
+    emitterA.restart();
+    emitterB.restart();
+    emitterA.update(halfClampedPeriod);
+    emitterB.update(halfClampedPeriod);
 
     auto lightOff = emitterA.getCoupledLight(glm::vec3(0.0f), false);
     auto lightOn  = emitterB.getCoupledLight(glm::vec3(0.0f), true, limits);

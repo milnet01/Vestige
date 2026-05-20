@@ -354,8 +354,16 @@ TEST(EnvironmentForces, WetnessAccumulatesDuringRain)
     EXPECT_GT(wetness, 0.0f);
     EXPECT_LE(wetness, 1.0f);
 
-    // After 10 seconds at max precipitation, wetness = 10/30 ≈ 0.333
-    EXPECT_NEAR(wetness, 10.0f / 30.0f, 0.01f);
+    // Wetness accumulates at precipitation·dt / WETNESS_SATURATION_SECONDS
+    // (env source: `wetness += precip * dt / 30`). The loop runs 100 ticks of
+    // 0.1 s at full precipitation — 10 s of rain — so derive the expected
+    // value from the simulated duration and the saturation constant rather
+    // than hard-coding 10/30. The 100 float additions drift only ~1e-6, so
+    // 0.01 stays comfortably non-flaky here; loosening to 0.05 (the audit's
+    // alternative) would instead mask a 5 % wetness regression.
+    constexpr float kWetnessSaturationSeconds = 30.0f;
+    const float simulatedSeconds = 100 * 0.1f;  // tick count × dt
+    EXPECT_NEAR(wetness, simulatedSeconds / kWetnessSaturationSeconds, 0.01f);
 }
 
 TEST(EnvironmentForces, WetnessDriesWithoutRain)

@@ -19,6 +19,8 @@
 
 #include "formula/formula_library.h"
 
+#include "test_helpers.h"
+
 #include <algorithm>
 #include <cctype>
 #include <cmath>
@@ -143,7 +145,8 @@ TEST(ReferenceCaseDirectory, FindsAtLeastOneCase)
 
 TEST(ReferenceCaseLoad, RejectsMissingFormulaName)
 {
-    const auto path = std::filesystem::temp_directory_path() / "bad_case.json";
+    const auto path = std::filesystem::temp_directory_path()
+                    / ("bad_case_" + Testing::vestigeTestStamp() + ".json");
     std::ofstream(path) << R"({"expected": {}})";
     std::string err;
     const auto c = loadReferenceCase(path.string(), err);
@@ -154,7 +157,8 @@ TEST(ReferenceCaseLoad, RejectsMissingFormulaName)
 
 TEST(ReferenceCaseLoad, RejectsMalformedJson)
 {
-    const auto path = std::filesystem::temp_directory_path() / "malformed.json";
+    const auto path = std::filesystem::temp_directory_path()
+                    / ("malformed_" + Testing::vestigeTestStamp() + ".json");
     std::ofstream(path) << "{not valid json";
     std::string err;
     const auto c = loadReferenceCase(path.string(), err);
@@ -320,7 +324,7 @@ TEST(ReferenceCaseLoad, MaxAbsErrorMaxFieldParsesFromJson)
     // refactor could silently drop the parse and every reference
     // case would stop enforcing the new bound.
     const auto path = std::filesystem::temp_directory_path()
-                    / "max_abs_error_case.json";
+                    / ("max_abs_error_case_" + Testing::vestigeTestStamp() + ".json");
     std::ofstream(path) << R"({
         "formula_name": "exponential_fog",
         "canonical_coefficients": { "density": 0.01 },
@@ -351,7 +355,7 @@ TEST(ReferenceCaseLoad, MaxAbsErrorMaxDefaultsToInfinity)
     // reject on max-abs grounds (backwards compat with every
     // existing reference case).
     const auto path = std::filesystem::temp_directory_path()
-                    / "no_max_abs.json";
+                    / ("no_max_abs_" + Testing::vestigeTestStamp() + ".json");
     std::ofstream(path) << R"({
         "formula_name": "exponential_fog",
         "canonical_coefficients": { "density": 0.01 },
