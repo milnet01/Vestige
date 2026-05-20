@@ -916,9 +916,9 @@ Full triaged report at `/tmp/test-audit-e5e42211/_triaged.md` (ephemeral); false
 - [ ] **Ts20-CV16.** `tests/test_skeleton_animator.cpp` — no ROTATION/SCALE channel tests; only TRANSLATION. Add rotation (90° Y) + scale tests.
 
 #### Fixtures (3)
-- [ ] **Ts20-FX1.** `tests/test_script_templates.cpp:25` — `TemplateRegistry` static initialised once with bool guard, not per-test. Replace with `::testing::Test` fixture.
-- [ ] **Ts20-FX2.** `tests/test_settings.cpp:42` — `TmpDir` local reimplements `vestigeTestStamp()`. Consolidate.
-- [ ] **Ts20-FX3.** `tests/test_editor_viewers.cpp:21` — `TextureViewerTest`/`HdriViewerTest`/`ModelViewerTest` empty fixtures. Convert to `TEST()`.
+- [x] **Ts20-FX1.** `tests/test_script_templates.cpp:25` — `TemplateRegistry` static initialised once with bool guard, not per-test. Replace with `::testing::Test` fixture.
+- [x] **Ts20-FX2.** `tests/test_settings.cpp:42` — `TmpDir` local reimplements `vestigeTestStamp()`. Consolidate.
+- [x] **Ts20-FX3.** `tests/test_editor_viewers.cpp:21` — `TextureViewerTest`/`HdriViewerTest`/`ModelViewerTest` empty fixtures. Convert to `TEST()`.
 
 #### Parametrisation (6)
 - [x] **Ts20-PA1.** `tests/test_caption_map.cpp:200` — `FiresOnPlaySound*` tests repeat identical setup. Use `PlaySoundInvoker` struct with `TEST_P`.

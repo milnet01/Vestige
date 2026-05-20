@@ -17,26 +17,22 @@
 
 using namespace Vestige;
 
-// Registry populated once per test suite so we can confirm every template
+// Each test gets its own registry, populated in SetUp() from the core/event/
+// action/flow registration helpers, so we can confirm every template
 // references only node types that were actually registered. Lives at
 // namespace-scope (not an anonymous namespace) so the extern-C-linkage
 // registration helpers declared in the headers resolve correctly.
 struct TemplateRegistry : ::testing::Test
 {
-    static NodeTypeRegistry& registry()
+    void SetUp() override
     {
-        static NodeTypeRegistry reg;
-        static bool initialised = false;
-        if (!initialised)
-        {
-            registerCoreNodeTypes(reg);
-            registerEventNodeTypes(reg);
-            registerActionNodeTypes(reg);
-            registerFlowNodeTypes(reg);
-            initialised = true;
-        }
-        return reg;
+        registerCoreNodeTypes(m_registry);
+        registerEventNodeTypes(m_registry);
+        registerActionNodeTypes(m_registry);
+        registerFlowNodeTypes(m_registry);
     }
+
+    NodeTypeRegistry m_registry;
 };
 
 namespace
@@ -101,35 +97,35 @@ TEST_F(TemplateRegistry, DoorTemplateValidates)
 {
     ScriptGraph g = buildGameplayTemplate(GameplayTemplate::DOOR_OPENS);
     EXPECT_EQ(g.name, "DoorOpens");
-    expectGraphIsExecutable(g, registry());
+    expectGraphIsExecutable(g, m_registry);
 }
 
 TEST_F(TemplateRegistry, CollectibleTemplateValidates)
 {
     ScriptGraph g = buildGameplayTemplate(GameplayTemplate::COLLECTIBLE_ITEM);
     EXPECT_EQ(g.name, "CollectibleItem");
-    expectGraphIsExecutable(g, registry());
+    expectGraphIsExecutable(g, m_registry);
 }
 
 TEST_F(TemplateRegistry, DamageZoneTemplateValidates)
 {
     ScriptGraph g = buildGameplayTemplate(GameplayTemplate::DAMAGE_ZONE);
     EXPECT_EQ(g.name, "DamageZone");
-    expectGraphIsExecutable(g, registry());
+    expectGraphIsExecutable(g, m_registry);
 }
 
 TEST_F(TemplateRegistry, CheckpointTemplateValidates)
 {
     ScriptGraph g = buildGameplayTemplate(GameplayTemplate::CHECKPOINT);
     EXPECT_EQ(g.name, "Checkpoint");
-    expectGraphIsExecutable(g, registry());
+    expectGraphIsExecutable(g, m_registry);
 }
 
 TEST_F(TemplateRegistry, DialogueTemplateValidates)
 {
     ScriptGraph g = buildGameplayTemplate(GameplayTemplate::DIALOGUE_TRIGGER);
     EXPECT_EQ(g.name, "DialogueTrigger");
-    expectGraphIsExecutable(g, registry());
+    expectGraphIsExecutable(g, m_registry);
 }
 
 TEST(GameplayTemplateMetadata, DisplayNamesAndDescriptions)
@@ -157,7 +153,7 @@ TEST_F(TemplateRegistry, JsonRoundTripPreservesGraphShape)
     EXPECT_EQ(restored.name, original.name);
     EXPECT_EQ(restored.nodes.size(), original.nodes.size());
     EXPECT_EQ(restored.connections.size(), original.connections.size());
-    expectGraphIsExecutable(restored, registry());
+    expectGraphIsExecutable(restored, m_registry);
 }
 
 TEST_F(TemplateRegistry, AllTemplatesUseTriggerEntryPoint)

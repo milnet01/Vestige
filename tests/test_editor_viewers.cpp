@@ -19,15 +19,13 @@ using namespace Vestige;
 // TextureViewerPanel tests
 // ==========================================================================
 
-class TextureViewerTest : public ::testing::Test {};
-
-TEST_F(TextureViewerTest, DefaultStateIsClosed)
+TEST(TextureViewerTest, DefaultStateIsClosed)
 {
     TextureViewerPanel panel;
     EXPECT_FALSE(panel.isOpen());
 }
 
-TEST_F(TextureViewerTest, OpenCloseToggle)
+TEST(TextureViewerTest, OpenCloseToggle)
 {
     TextureViewerPanel panel;
     panel.setOpen(true);
@@ -36,7 +34,7 @@ TEST_F(TextureViewerTest, OpenCloseToggle)
     EXPECT_FALSE(panel.isOpen());
 }
 
-TEST_F(TextureViewerTest, ChannelModeCycle)
+TEST(TextureViewerTest, ChannelModeCycle)
 {
     TextureViewerPanel panel;
     EXPECT_EQ(panel.getChannelMode(), ChannelMode::RGB);
@@ -50,7 +48,7 @@ TEST_F(TextureViewerTest, ChannelModeCycle)
     EXPECT_EQ(panel.getChannelMode(), ChannelMode::A);
 }
 
-TEST_F(TextureViewerTest, ZoomClamp)
+TEST(TextureViewerTest, ZoomClamp)
 {
     TextureViewerPanel panel;
     panel.setZoom(0.01f);
@@ -61,7 +59,7 @@ TEST_F(TextureViewerTest, ZoomClamp)
     EXPECT_FLOAT_EQ(panel.getZoom(), 5.0f);
 }
 
-TEST_F(TextureViewerTest, TileCountValues)
+TEST(TextureViewerTest, TileCountValues)
 {
     TextureViewerPanel panel;
     EXPECT_EQ(panel.getTileCount(), 1);
@@ -75,7 +73,7 @@ TEST_F(TextureViewerTest, TileCountValues)
     EXPECT_EQ(panel.getTileCount(), 3);
 }
 
-TEST_F(TextureViewerTest, MipLevelClamp)
+TEST(TextureViewerTest, MipLevelClamp)
 {
     TextureViewerPanel panel;
     EXPECT_EQ(panel.getMipLevel(), -1);  // Default: auto
@@ -92,7 +90,7 @@ TEST_F(TextureViewerTest, MipLevelClamp)
 // only walks the no-directory branch. A real PBR-group fixture test
 // would need a temp dir with albedo/normal/roughness textures planted
 // in it and is exercised at editor launch.
-TEST_F(TextureViewerTest, PbrGroupDetectionEmptyDirReturnsNoGroups)
+TEST(TextureViewerTest, PbrGroupDetectionEmptyDirReturnsNoGroups)
 {
     auto groups = TextureViewerPanel::detectPbrGroups("/nonexistent/path");
     EXPECT_TRUE(groups.empty());
@@ -102,15 +100,13 @@ TEST_F(TextureViewerTest, PbrGroupDetectionEmptyDirReturnsNoGroups)
 // HdriViewerPanel tests
 // ==========================================================================
 
-class HdriViewerTest : public ::testing::Test {};
-
-TEST_F(HdriViewerTest, DefaultStateIsClosed)
+TEST(HdriViewerTest, DefaultStateIsClosed)
 {
     HdriViewerPanel panel;
     EXPECT_FALSE(panel.isOpen());
 }
 
-TEST_F(HdriViewerTest, ExposureClamp)
+TEST(HdriViewerTest, ExposureClamp)
 {
     HdriViewerPanel panel;
     panel.setExposure(-15.0f);
@@ -121,7 +117,7 @@ TEST_F(HdriViewerTest, ExposureClamp)
     EXPECT_FLOAT_EQ(panel.getExposure(), 2.5f);
 }
 
-TEST_F(HdriViewerTest, PreviewOrbitAngles)
+TEST(HdriViewerTest, PreviewOrbitAngles)
 {
     HdriViewerPanel panel;
     panel.setPreviewAngles(0.0f, 0.0f);
@@ -144,15 +140,13 @@ TEST_F(HdriViewerTest, PreviewOrbitAngles)
 // ModelViewerPanel tests
 // ==========================================================================
 
-class ModelViewerTest : public ::testing::Test {};
-
-TEST_F(ModelViewerTest, DefaultStateIsClosed)
+TEST(ModelViewerTest, DefaultStateIsClosed)
 {
     ModelViewerPanel panel;
     EXPECT_FALSE(panel.isOpen());
 }
 
-TEST_F(ModelViewerTest, OrbitCameraDefaults)
+TEST(ModelViewerTest, OrbitCameraDefaults)
 {
     ModelViewerPanel panel;
     EXPECT_GT(panel.getOrbitDistance(), 0.0f);
@@ -160,7 +154,7 @@ TEST_F(ModelViewerTest, OrbitCameraDefaults)
     EXPECT_LE(panel.getOrbitYaw(), 360.0f);
 }
 
-TEST_F(ModelViewerTest, PlaybackSpeedClamp)
+TEST(ModelViewerTest, PlaybackSpeedClamp)
 {
     ModelViewerPanel panel;
     panel.setPlaybackSpeed(-1.0f);

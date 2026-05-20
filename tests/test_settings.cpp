@@ -21,6 +21,8 @@
 #include "utils/atomic_write.h"
 #include "utils/config_path.h"
 
+#include "test_helpers.h"
+
 #include <nlohmann/json.hpp>
 
 #include <cstdlib>
@@ -38,6 +40,9 @@ namespace
 // Creates a unique tmp directory rooted at the system temp path.
 // GoogleTest doesn't provide a built-in scoped tmpdir; this is the
 // smallest pattern that cleans up after itself in the destructor.
+// The per-test uniqueness comes from the shared vestigeTestStamp()
+// (<pid>_<test-name>); the attempt counter only disambiguates multiple
+// TmpDir instances constructed within a single test.
 class TmpDir
 {
 public:
@@ -47,7 +52,7 @@ public:
         for (int attempt = 0; attempt < 100; ++attempt)
         {
             fs::path candidate = base / ("vestige_settings_test_"
-                + std::to_string(::getpid()) + "_"
+                + Testing::vestigeTestStamp() + "_"
                 + std::to_string(attempt));
             std::error_code ec;
             if (fs::create_directories(candidate, ec) && !ec)
