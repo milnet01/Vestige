@@ -73,6 +73,27 @@ if(VESTIGE_FAST_BUILD)
     endif()
 endif()
 
+# ---------------------------------------------------------------------------
+# Memory guard: cap concurrent heavy jobs (Ninja job pools)
+#
+# Each ASAN + PCH compile here peaks ~1.5 GB and the ~0.5 GB test-binary link
+# is heavier still, so an unbounded `-j` (e.g. 12 on a dev box) can drive a
+# parallel build into swap alongside an editor + browser. These pools cap
+# concurrency regardless of the -j passed to the build, bounding peak RAM.
+# Override with -DVESTIGE_COMPILE_JOBS=N / -DVESTIGE_LINK_JOBS=N when RAM is
+# free. Ninja-only — other generators ignore JOB_POOLS.
+# ---------------------------------------------------------------------------
+set(VESTIGE_COMPILE_JOBS "6" CACHE STRING "Max concurrent compile jobs (Ninja job pool)")
+set(VESTIGE_LINK_JOBS    "2" CACHE STRING "Max concurrent link jobs (Ninja job pool)")
+if(CMAKE_GENERATOR MATCHES "Ninja")
+    set_property(GLOBAL PROPERTY JOB_POOLS
+        compile_jobs=${VESTIGE_COMPILE_JOBS}
+        link_jobs=${VESTIGE_LINK_JOBS})
+    set(CMAKE_JOB_POOL_COMPILE compile_jobs)
+    set(CMAKE_JOB_POOL_LINK    link_jobs)
+    message(STATUS "Build memory guard: compile pool=${VESTIGE_COMPILE_JOBS}, link pool=${VESTIGE_LINK_JOBS} (Ninja)")
+endif()
+
 # Option to build tests
 option(VESTIGE_BUILD_TESTS "Build unit tests" ON)
 
