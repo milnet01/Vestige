@@ -70,7 +70,7 @@ jobs:
         # rare (tag pushes) so cache benefit is smaller here than on CI,
         # but consistency + a one-line config keeps both workflows
         # uniform.
-        uses: awalsh128/cache-apt-pkgs-action@2c09a5e66da6c8016428a2172bd76e5e4f14bb17  # v1
+        uses: awalsh128/cache-apt-pkgs-action@acb598e5ddbc6f68a970c5da0688d2f3a9f04d05  # v1.6.0
         with:
           packages: build-essential cmake ninja-build pkg-config libgl1-mesa-dev libglu1-mesa-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxxf86vm-dev libwayland-dev libxkbcommon-dev libasound2-dev patchelf
           version: release-linux-1
