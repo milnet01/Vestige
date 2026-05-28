@@ -310,54 +310,82 @@ TEST(ExprEval, MinMax)
     EXPECT_FLOAT_EQ(eval.evaluate(*maxNode, {}), 7.0f);
 }
 
-TEST(ExprEval, UnaryFunctions)
+TEST(ExprEval, UnarySinAtHalfPi)
 {
     ExpressionEvaluator eval;
-    const float pi = 3.14159265f;
+    constexpr float pi = 3.14159265f;
+    auto node = ExprNode::unaryOp("sin", ExprNode::literal(pi / 2.0f));
+    EXPECT_NEAR(eval.evaluate(*node, {}), 1.0f, 1e-5f);
+}
 
-    // sin(pi/2) = 1
-    auto sinNode = ExprNode::unaryOp("sin", ExprNode::literal(pi / 2.0f));
-    EXPECT_NEAR(eval.evaluate(*sinNode, {}), 1.0f, 1e-5f);
+TEST(ExprEval, UnaryCosAtZero)
+{
+    ExpressionEvaluator eval;
+    auto node = ExprNode::unaryOp("cos", ExprNode::literal(0.0f));
+    EXPECT_FLOAT_EQ(eval.evaluate(*node, {}), 1.0f);
+}
 
-    // cos(0) = 1
-    auto cosNode = ExprNode::unaryOp("cos", ExprNode::literal(0.0f));
-    EXPECT_FLOAT_EQ(eval.evaluate(*cosNode, {}), 1.0f);
+TEST(ExprEval, UnarySqrt)
+{
+    ExpressionEvaluator eval;
+    auto node = ExprNode::unaryOp("sqrt", ExprNode::literal(9.0f));
+    EXPECT_FLOAT_EQ(eval.evaluate(*node, {}), 3.0f);
+}
 
-    // sqrt(9) = 3
-    auto sqrtNode = ExprNode::unaryOp("sqrt", ExprNode::literal(9.0f));
-    EXPECT_FLOAT_EQ(eval.evaluate(*sqrtNode, {}), 3.0f);
+TEST(ExprEval, UnaryAbsOfNegative)
+{
+    ExpressionEvaluator eval;
+    auto node = ExprNode::unaryOp("abs", ExprNode::literal(-5.0f));
+    EXPECT_FLOAT_EQ(eval.evaluate(*node, {}), 5.0f);
+}
 
-    // abs(-5) = 5
-    auto absNode = ExprNode::unaryOp("abs", ExprNode::literal(-5.0f));
-    EXPECT_FLOAT_EQ(eval.evaluate(*absNode, {}), 5.0f);
+TEST(ExprEval, UnaryExpAtZero)
+{
+    ExpressionEvaluator eval;
+    auto node = ExprNode::unaryOp("exp", ExprNode::literal(0.0f));
+    EXPECT_FLOAT_EQ(eval.evaluate(*node, {}), 1.0f);
+}
 
-    // exp(0) = 1
-    auto expNode = ExprNode::unaryOp("exp", ExprNode::literal(0.0f));
-    EXPECT_FLOAT_EQ(eval.evaluate(*expNode, {}), 1.0f);
+TEST(ExprEval, UnaryLogAtOne)
+{
+    ExpressionEvaluator eval;
+    auto node = ExprNode::unaryOp("log", ExprNode::literal(1.0f));
+    EXPECT_FLOAT_EQ(eval.evaluate(*node, {}), 0.0f);
+}
 
-    // log(1) = 0
-    auto logNode = ExprNode::unaryOp("log", ExprNode::literal(1.0f));
-    EXPECT_FLOAT_EQ(eval.evaluate(*logNode, {}), 0.0f);
+TEST(ExprEval, UnaryFloor)
+{
+    ExpressionEvaluator eval;
+    auto node = ExprNode::unaryOp("floor", ExprNode::literal(3.7f));
+    EXPECT_FLOAT_EQ(eval.evaluate(*node, {}), 3.0f);
+}
 
-    // floor(3.7) = 3
-    auto floorNode = ExprNode::unaryOp("floor", ExprNode::literal(3.7f));
-    EXPECT_FLOAT_EQ(eval.evaluate(*floorNode, {}), 3.0f);
+TEST(ExprEval, UnaryCeil)
+{
+    ExpressionEvaluator eval;
+    auto node = ExprNode::unaryOp("ceil", ExprNode::literal(3.2f));
+    EXPECT_FLOAT_EQ(eval.evaluate(*node, {}), 4.0f);
+}
 
-    // ceil(3.2) = 4
-    auto ceilNode = ExprNode::unaryOp("ceil", ExprNode::literal(3.2f));
-    EXPECT_FLOAT_EQ(eval.evaluate(*ceilNode, {}), 4.0f);
+TEST(ExprEval, UnaryNegate)
+{
+    ExpressionEvaluator eval;
+    auto node = ExprNode::unaryOp("negate", ExprNode::literal(5.0f));
+    EXPECT_FLOAT_EQ(eval.evaluate(*node, {}), -5.0f);
+}
 
-    // negate(5) = -5
-    auto negNode = ExprNode::unaryOp("negate", ExprNode::literal(5.0f));
-    EXPECT_FLOAT_EQ(eval.evaluate(*negNode, {}), -5.0f);
+TEST(ExprEval, UnarySaturateClampsAboveOne)
+{
+    ExpressionEvaluator eval;
+    auto node = ExprNode::unaryOp("saturate", ExprNode::literal(1.5f));
+    EXPECT_FLOAT_EQ(eval.evaluate(*node, {}), 1.0f);
+}
 
-    // saturate(1.5) = 1.0
-    auto satNode = ExprNode::unaryOp("saturate", ExprNode::literal(1.5f));
-    EXPECT_FLOAT_EQ(eval.evaluate(*satNode, {}), 1.0f);
-
-    // saturate(-0.5) = 0.0
-    auto satNode2 = ExprNode::unaryOp("saturate", ExprNode::literal(-0.5f));
-    EXPECT_FLOAT_EQ(eval.evaluate(*satNode2, {}), 0.0f);
+TEST(ExprEval, UnarySaturateClampsBelowZero)
+{
+    ExpressionEvaluator eval;
+    auto node = ExprNode::unaryOp("saturate", ExprNode::literal(-0.5f));
+    EXPECT_FLOAT_EQ(eval.evaluate(*node, {}), 0.0f);
 }
 
 TEST(ExprEval, ConditionalTrue)

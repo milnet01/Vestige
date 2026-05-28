@@ -24,7 +24,7 @@ TEST(UITheme_Scale, PresetFactorsAreExpectedValues)
     EXPECT_FLOAT_EQ(scaleFactorOf(UIScalePreset::X2_0), 2.00f);
 }
 
-TEST(UITheme_Scale, WithScaleMultipliesEveryPixelSize)
+TEST(UITheme_Scale, WithScaleMultipliesOverlayMetrics)
 {
     UITheme base = UITheme::defaultTheme();
     UITheme scaled = base.withScale(1.5f);
@@ -34,6 +34,13 @@ TEST(UITheme_Scale, WithScaleMultipliesEveryPixelSize)
     EXPECT_FLOAT_EQ(scaled.crosshairThickness,     base.crosshairThickness     * 1.5f);
     EXPECT_FLOAT_EQ(scaled.progressBarHeight,      base.progressBarHeight      * 1.5f);
     EXPECT_FLOAT_EQ(scaled.panelBorderWidth,       base.panelBorderWidth       * 1.5f);
+}
+
+TEST(UITheme_Scale, WithScaleMultipliesControlSizes)
+{
+    UITheme base = UITheme::defaultTheme();
+    UITheme scaled = base.withScale(1.5f);
+
     EXPECT_FLOAT_EQ(scaled.buttonHeight,           base.buttonHeight           * 1.5f);
     EXPECT_FLOAT_EQ(scaled.buttonHeightSmall,      base.buttonHeightSmall      * 1.5f);
     EXPECT_FLOAT_EQ(scaled.buttonPadX,             base.buttonPadX             * 1.5f);
@@ -51,6 +58,13 @@ TEST(UITheme_Scale, WithScaleMultipliesEveryPixelSize)
     EXPECT_FLOAT_EQ(scaled.keybindKeyMinWidth,     base.keybindKeyMinWidth     * 1.5f);
     EXPECT_FLOAT_EQ(scaled.settingRowControlWidth, base.settingRowControlWidth * 1.5f);
     EXPECT_FLOAT_EQ(scaled.settingRowVerticalPad,  base.settingRowVerticalPad  * 1.5f);
+}
+
+TEST(UITheme_Scale, WithScaleMultipliesTypographySizes)
+{
+    UITheme base = UITheme::defaultTheme();
+    UITheme scaled = base.withScale(1.5f);
+
     EXPECT_FLOAT_EQ(scaled.typeDisplay,            base.typeDisplay            * 1.5f);
     EXPECT_FLOAT_EQ(scaled.typeH1,                 base.typeH1                 * 1.5f);
     EXPECT_FLOAT_EQ(scaled.typeH2,                 base.typeH2                 * 1.5f);
@@ -58,6 +72,13 @@ TEST(UITheme_Scale, WithScaleMultipliesEveryPixelSize)
     EXPECT_FLOAT_EQ(scaled.typeButton,             base.typeButton             * 1.5f);
     EXPECT_FLOAT_EQ(scaled.typeCaption,            base.typeCaption            * 1.5f);
     EXPECT_FLOAT_EQ(scaled.typeMicro,              base.typeMicro              * 1.5f);
+}
+
+TEST(UITheme_Scale, WithScaleMultipliesFocusRing)
+{
+    UITheme base = UITheme::defaultTheme();
+    UITheme scaled = base.withScale(1.5f);
+
     EXPECT_FLOAT_EQ(scaled.focusRingThickness,     base.focusRingThickness     * 1.5f);
     EXPECT_FLOAT_EQ(scaled.focusRingOffset,        base.focusRingOffset        * 1.5f);
 }
