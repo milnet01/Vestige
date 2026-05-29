@@ -8,6 +8,10 @@
 #include <glad/gl.h>
 #include <glm/glm.hpp>
 
+#include "renderer/light.h"
+
+#include <vector>
+
 namespace Vestige
 {
 
@@ -21,6 +25,23 @@ struct PointShadowConfig
 
 /// @brief Maximum number of point lights that can cast shadows simultaneously.
 constexpr int MAX_POINT_SHADOW_LIGHTS = 2;
+
+/// @brief Selects up to maxCasters shadow-casting lights from a list, returning
+///        their indices. Pure function — no GL state, testable headlessly.
+inline std::vector<int> selectShadowCastersFromLights(
+    const std::vector<PointLight>& lights, int maxCasters)
+{
+    std::vector<int> result;
+    for (int i = 0; i < static_cast<int>(lights.size()); ++i)
+    {
+        if (lights[static_cast<size_t>(i)].castsShadow
+            && static_cast<int>(result.size()) < maxCasters)
+        {
+            result.push_back(i);
+        }
+    }
+    return result;
+}
 
 /// @brief Manages an omnidirectional shadow map (depth cubemap FBO) for a point light.
 class PointShadowMap

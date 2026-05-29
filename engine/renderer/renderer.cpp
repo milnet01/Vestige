@@ -3399,15 +3399,7 @@ void Renderer::renderShadowPass(const std::vector<SceneRenderData::RenderItem>& 
 
 void Renderer::selectShadowCastingPointLights()
 {
-    m_shadowCasters.clear();
-    for (int i = 0; i < static_cast<int>(m_pointLights.size()); i++)
-    {
-        if (m_pointLights[static_cast<size_t>(i)].castsShadow
-            && static_cast<int>(m_shadowCasters.size()) < MAX_POINT_SHADOW_LIGHTS)
-        {
-            m_shadowCasters.push_back(i);
-        }
-    }
+    m_shadowCasters = selectShadowCastersFromLights(m_pointLights, MAX_POINT_SHADOW_LIGHTS);
 }
 
 void Renderer::renderPointShadowPass(const std::vector<int>& shadowCasters)

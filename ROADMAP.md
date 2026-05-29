@@ -902,9 +902,9 @@ Full triaged report at `/tmp/test-audit-e5e42211/_triaged.md` (ephemeral); false
 **Deferred (acted on incrementally as adjacent files are touched, per Ts19 precedent):**
 
 #### Big-bucket items (need their own design pass before fix)
-- [ ] **Ts20-SY1.** `tests/test_system_registry.cpp:178` (CRITICAL, isolation) — `dummyEngine()` `reinterpret_cast<Engine&>(char[1])` is UB under UBSan even though never dereferenced. Fix needs either a minimal `EngineStub` translation-unit or a `SystemRegistry::initializeAll(Engine*)` nullable overload. Production-API decision, not a test-only change.
+- [x] **Ts20-SY1.** `tests/test_system_registry.cpp:178` (CRITICAL, isolation) — `dummyEngine()` `reinterpret_cast<Engine&>(char[1])` is UB under UBSan even though never dereferenced. Fix needs either a minimal `EngineStub` translation-unit or a `SystemRegistry::initializeAll(Engine*)` nullable overload. Production-API decision, not a test-only change.
 - [x] **Ts20-DE1, Ts20-DE2.** `tests/test_environment_forces.cpp:105,176` (HIGH, determinism) — `WindVelocityAfterGusting` and `GustStateTransitions` rely on unseeded RNG. Fix needs `EnvironmentForces::setGustRngSeed(uint32_t)` SUT API addition. ^3d_e-0001
-- [ ] **Ts20-SP3.** `tests/test_scripting.cpp:1` (HIGH, splitting) — 2485 lines, 12+ test suites. Split into `test_script_value.cpp`, `test_blackboard.cpp`, `test_node_type_registry.cpp`, `test_script_graph.cpp`, `test_script_context.cpp`, `test_node_library.cpp`, `test_scripting_system_bridge.cpp`. Multi-hour refactor with attendant CMakeLists.txt churn.
+- [x] **Ts20-SP3.** `tests/test_scripting.cpp:1` (HIGH, splitting) — 2485 lines, 12+ test suites. Split into `test_script_value.cpp`, `test_blackboard.cpp`, `test_node_type_registry.cpp`, `test_script_graph.cpp`, `test_script_context.cpp`, `test_node_library.cpp`, `test_scripting_system_bridge.cpp`. Multi-hour refactor with attendant CMakeLists.txt churn.
 
 #### Flakiness (4)
 - [x] **Ts20-FL1.** `tests/test_async_driver.cpp:287,339` — `sleep_for(50ms/100ms)` before `cancel()` assumes OS spawn timing. Poll until `isRunning()` is true.
@@ -937,10 +937,10 @@ Full triaged report at `/tmp/test-audit-e5e42211/_triaged.md` (ephemeral); false
 - [x] **Ts20-DU10.** `tests/test_ui_theme_accessibility.cpp:354` — Vellum/Plumbline contrast tests byte-identical. Use typed/parametrized test.
 
 #### Splitting (4 — excludes SP3 above)
-- [ ] **Ts20-SP1.** `tests/test_cloth_collision.cpp` (698 lines, 6 subsystems) — split into `test_bvh.cpp`, `test_spatial_hash.cpp`, `test_cloth_mesh_collider.cpp`, `test_cloth_simulation_collision.cpp`.
-- [ ] **Ts20-SP2.** `tests/test_command_history.cpp:285` (780+ lines, 8 concerns) — extract `EntityActions` tests to `test_entity_actions.cpp`.
+- [x] **Ts20-SP1.** `tests/test_cloth_collision.cpp` (698 lines, 6 subsystems) — split into `test_bvh.cpp`, `test_spatial_hash.cpp`, `test_cloth_mesh_collider.cpp`, `test_cloth_simulation_collision.cpp`.
+- [x] **Ts20-SP2.** `tests/test_command_history.cpp:285` (780+ lines, 8 concerns) — extract `EntityActions` tests to `test_entity_actions.cpp`.
 - [x] **Ts20-SP4.** `tests/test_formula_library.cpp:313` — `UnaryFunctions` tests 11 operators in one body. Split into named sub-tests or add `SCOPED_TRACE`.
-- [ ] **Ts20-SP5.** `tests/test_lip_sync.cpp` (745 lines, 6 suites) — extract `test_viseme_map.cpp`, `test_audio_analyzer.cpp`, `test_lip_sync_player.cpp`.
+- [x] **Ts20-SP5.** `tests/test_lip_sync.cpp` (745 lines, 6 suites) — extract `test_viseme_map.cpp`, `test_audio_analyzer.cpp`, `test_lip_sync_player.cpp`.
 - [x] **Ts20-SP6.** `tests/test_ui_theme_accessibility.cpp:25` — `WithScaleMultipliesEveryPixelSize` packs 32 EXPECTs into one body. Split into 3-4 logical groups.
 
 #### Assertions (10)
@@ -977,7 +977,7 @@ Full triaged report at `/tmp/test-audit-e5e42211/_triaged.md` (ephemeral); false
 - [x] **Ts20-CV11.** `tests/test_gltf_fs_sandbox.cpp:107` — no symlink-traversal test. Add `fs::create_symlink` (gate with try/catch).
 - [x] **Ts20-CV12.** `tests/test_json_size_cap.cpp:59` — no test for caller-tag in logged error. Assert tag string in `Logger::getEntries()` after rejection.
 - [x] **Ts20-CV13.** `tests/test_lip_sync.cpp:443` — `loadTrackFromTSV` error paths untested. Add tests for blank rows, non-numeric timestamps, negative times.
-- [ ] **Ts20-CV14.** `tests/test_point_shadow_map.cpp:36` — no MAX+1 rejection test. Add shadow-light over-limit case. **Deferred (2026-05-20):** the MAX cap lives in `Renderer::selectShadowCastingPointLights()` (renderer.cpp), which needs a GL context to instantiate — not headless-testable. A unit test needs a pure `selectShadowCasters(lights, maxCasters)` helper extracted from the renderer (a SUT-API change), deferred per the big-bucket policy at the top of this section rather than refactored inside a test-only sweep.
+- [x] **Ts20-CV14.** `tests/test_point_shadow_map.cpp:36` — no MAX+1 rejection test. Add shadow-light over-limit case. **Deferred (2026-05-20):** the MAX cap lives in `Renderer::selectShadowCastingPointLights()` (renderer.cpp), which needs a GL context to instantiate — not headless-testable. A unit test needs a pure `selectShadowCasters(lights, maxCasters)` helper extracted from the renderer (a SUT-API change), deferred per the big-bucket policy at the top of this section rather than refactored inside a test-only sweep.
 - [x] **Ts20-CV15.** `tests/test_pbr_material.cpp:294` — `BlinnPhongDefaultsUnchanged` only checks 3 of 5+ fields. Add ambient/opacity.
 - [x] **Ts20-CV16.** `tests/test_skeleton_animator.cpp` — no ROTATION/SCALE channel tests; only TRANSLATION. Add rotation (90° Y) + scale tests.
 
