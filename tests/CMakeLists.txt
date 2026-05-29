@@ -16,6 +16,7 @@ add_executable(vestige_tests
     test_logger.cpp
     test_aabb.cpp
     test_entity.cpp
+    test_entity_actions.cpp
     test_scene.cpp
     test_scene_deferred_mutation.cpp
     test_ui_focus_navigation.cpp
