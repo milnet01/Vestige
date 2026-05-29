@@ -9208,6 +9208,16 @@ existing cases (``HelpersMatchEvaluatorPrecisely``,
   MCP filesystem read tools) to reduce per-turn prompts during audit
   sessions.
 
+### Changed
+
+- **Ts20 follow-ups: pin gust RNG seed, remove two self-testing test stubs (Ts20-DE1/DE2, AC4, BE1)**
+  Add `EnvironmentForces::setGustRngSeed(uint32_t)` and call it explicitly in
+  `WindVelocityAfterGusting` / `GustStateTransitions`; calm periods validly yield
+  speed=0 so lower bound stays EXPECT_GE. Remove `AttenuationFormulaMathReference`
+  (no SUT call) and `LuminanceWhite` / `LuminancePureGreenIsBrightest` from
+  test_hdr_pipeline.cpp (canonical parity in test_bloom.cpp); file emptied and
+  deleted.
+
 ## [0.1.5] - 2026-04-18
 
 ### Fixed — completes 2026-04-16 strict-aliasing sweep
