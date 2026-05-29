@@ -107,16 +107,16 @@ TEST(EnvironmentForces, WindVelocityAfterGusting)
     EnvironmentForces env;
     env.setWindDirection(glm::vec3(1.0f, 0.0f, 0.0f));
     env.setWindStrength(5.0f);
+    env.setGustRngSeed(54321u);  // pin seed so timer lengths are reproducible
 
-    // Advance enough time for the gust SM to start gusting
+    // Advance enough time for the gust SM to cycle (calm periods give speed=0,
+    // so only bound-check; GustStateTransitions verifies both phases are visited)
     for (int i = 0; i < 100; ++i)
     {
         env.update(0.1f);  // 10 seconds total
     }
 
     glm::vec3 vel = env.getWindVelocity(glm::vec3(0.0f));
-    // Wind should be non-zero (gust SM has had time to cycle)
-    // We can't predict exact value due to RNG, but speed should be bounded
     float speed = glm::length(vel);
     EXPECT_GE(speed, 0.0f);
     EXPECT_LE(speed, 15.0f);  // 5.0 strength * ~1.5 spatial * ~1.23 flutter max
@@ -178,6 +178,7 @@ TEST(EnvironmentForces, GustStateTransitions)
     EnvironmentForces env;
     env.setWindDirection(glm::vec3(1.0f, 0.0f, 0.0f));
     env.setWindStrength(5.0f);
+    env.setGustRngSeed(54321u);  // pin seed so timer lengths are reproducible
 
     // Collect gust intensity samples over 30 seconds
     bool sawLow = false;

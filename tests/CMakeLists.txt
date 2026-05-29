@@ -23,7 +23,6 @@ add_executable(vestige_tests
     test_shadow_map.cpp
     test_tangent_calc.cpp
     test_point_shadow_map.cpp
-    test_hdr_pipeline.cpp
     test_pom.cpp
     test_gltf_loader.cpp
     test_pbr_material.cpp

@@ -903,7 +903,7 @@ Full triaged report at `/tmp/test-audit-e5e42211/_triaged.md` (ephemeral); false
 
 #### Big-bucket items (need their own design pass before fix)
 - [ ] **Ts20-SY1.** `tests/test_system_registry.cpp:178` (CRITICAL, isolation) — `dummyEngine()` `reinterpret_cast<Engine&>(char[1])` is UB under UBSan even though never dereferenced. Fix needs either a minimal `EngineStub` translation-unit or a `SystemRegistry::initializeAll(Engine*)` nullable overload. Production-API decision, not a test-only change.
-- [ ] **Ts20-DE1, Ts20-DE2.** `tests/test_environment_forces.cpp:105,176` (HIGH, determinism) — `WindVelocityAfterGusting` and `GustStateTransitions` rely on unseeded RNG. Fix needs `EnvironmentForces::setGustRngSeed(uint32_t)` SUT API addition.
+- [x] **Ts20-DE1, Ts20-DE2.** `tests/test_environment_forces.cpp:105,176` (HIGH, determinism) — `WindVelocityAfterGusting` and `GustStateTransitions` rely on unseeded RNG. Fix needs `EnvironmentForces::setGustRngSeed(uint32_t)` SUT API addition. ^3d_e-0001
 - [ ] **Ts20-SP3.** `tests/test_scripting.cpp:1` (HIGH, splitting) — 2485 lines, 12+ test suites. Split into `test_script_value.cpp`, `test_blackboard.cpp`, `test_node_type_registry.cpp`, `test_script_graph.cpp`, `test_script_context.cpp`, `test_node_library.cpp`, `test_scripting_system_bridge.cpp`. Multi-hour refactor with attendant CMakeLists.txt churn.
 
 #### Flakiness (4)
@@ -918,7 +918,7 @@ Full triaged report at `/tmp/test-audit-e5e42211/_triaged.md` (ephemeral); false
 - [x] **Ts20-IS5.** `tests/test_reference_harness.cpp:120` — silent fail on missing reference-cases dir. Guard with `GTEST_SKIP()` if dir missing.
 
 #### Accuracy (1)
-- [ ] **Ts20-AC4.** `tests/test_hdr_pipeline.cpp:31` — BT.709 coefficients hardcoded with no shader parity. Extract via source-grep (mirror Ts20-AC2 fix) or remove redundant test.
+- [x] **Ts20-AC4.** `tests/test_hdr_pipeline.cpp:31` — BT.709 coefficients hardcoded with no shader parity. Extract via source-grep (mirror Ts20-AC2 fix) or remove redundant test.
 
 #### Performance (2)
 - [x] **Ts20-PE1.** `tests/test_cloth_simulator.cpp:263` — `SphereCollisionPushesParticlesOut` runs 120 frames vs documented 60. Reduce.
@@ -939,9 +939,9 @@ Full triaged report at `/tmp/test-audit-e5e42211/_triaged.md` (ephemeral); false
 #### Splitting (4 — excludes SP3 above)
 - [ ] **Ts20-SP1.** `tests/test_cloth_collision.cpp` (698 lines, 6 subsystems) — split into `test_bvh.cpp`, `test_spatial_hash.cpp`, `test_cloth_mesh_collider.cpp`, `test_cloth_simulation_collision.cpp`.
 - [ ] **Ts20-SP2.** `tests/test_command_history.cpp:285` (780+ lines, 8 concerns) — extract `EntityActions` tests to `test_entity_actions.cpp`.
-- [ ] **Ts20-SP4.** `tests/test_formula_library.cpp:313` — `UnaryFunctions` tests 11 operators in one body. Split into named sub-tests or add `SCOPED_TRACE`.
+- [x] **Ts20-SP4.** `tests/test_formula_library.cpp:313` — `UnaryFunctions` tests 11 operators in one body. Split into named sub-tests or add `SCOPED_TRACE`.
 - [ ] **Ts20-SP5.** `tests/test_lip_sync.cpp` (745 lines, 6 suites) — extract `test_viseme_map.cpp`, `test_audio_analyzer.cpp`, `test_lip_sync_player.cpp`.
-- [ ] **Ts20-SP6.** `tests/test_ui_theme_accessibility.cpp:25` — `WithScaleMultipliesEveryPixelSize` packs 32 EXPECTs into one body. Split into 3-4 logical groups.
+- [x] **Ts20-SP6.** `tests/test_ui_theme_accessibility.cpp:25` — `WithScaleMultipliesEveryPixelSize` packs 32 EXPECTs into one body. Split into 3-4 logical groups.
 
 #### Assertions (10)
 - [x] **Ts20-AS2.** `tests/test_animation_state_machine.cpp:247` — `SelfTransitionBlocked` ambiguous guard. Add explicit check or cite mechanism.
@@ -954,7 +954,7 @@ Full triaged report at `/tmp/test-audit-e5e42211/_triaged.md` (ephemeral); false
 - [x] **Ts20-AS10.** `tests/test_entity_serializer_registry.cpp:320` — substring `"2"` too loose. Assert `"dropped 2"` or `"2 component"`.
 - [x] **Ts20-AS13.** `tests/test_scripting.cpp:153` — `ConvertFloatToString` checks only non-empty. Add `StartsWith("3.14")`.
 - [x] **Ts20-AS15.** `tests/test_memory_tracker.cpp:100` — `RecordFreeUnderflowClampsAtZero` count-vs-byte underspecified. Add policy comment.
-- [ ] **Ts20-BE1.** `tests/test_emissive_lighting.cpp:45` — `AttenuationFormulaMathReference` derives + self-tests. Expose `EmissiveLightComponent::computeAttenuation()` and call it; or delete.
+- [x] **Ts20-BE1.** `tests/test_emissive_lighting.cpp:45` — `AttenuationFormulaMathReference` derives + self-tests. Expose `EmissiveLightComponent::computeAttenuation()` and call it; or delete.
 
 #### Hardcoded data (6)
 - [x] **Ts20-HA1.** `tests/test_biome_preset.cpp:40` — `BuiltInPresets` checks names at hard-coded indices. Use set/contains.

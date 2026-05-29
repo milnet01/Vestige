@@ -106,6 +106,9 @@ public:
     /// @brief Enables/disables gust state machine.
     void setGustsEnabled(bool enabled);
 
+    /// @brief Seeds the gust RNG — call from tests to pin the sequence.
+    void setGustRngSeed(uint32_t seed);
+
     /// @brief Sets spatial turbulence scale (larger = slower spatial variation).
     /// Default 10.0. Lower values create more localized wind variation.
     void setTurbulenceScale(float scale);

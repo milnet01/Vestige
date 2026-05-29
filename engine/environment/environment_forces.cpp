@@ -330,6 +330,11 @@ void EnvironmentForces::setGustsEnabled(bool enabled)
     m_gustsEnabled = enabled;
 }
 
+void EnvironmentForces::setGustRngSeed(uint32_t seed)
+{
+    m_rng.seed(seed);
+}
+
 void EnvironmentForces::setTurbulenceScale(float scale)
 {
     m_turbulenceScale = std::max(0.1f, scale);

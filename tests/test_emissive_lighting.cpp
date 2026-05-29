@@ -35,23 +35,6 @@ TEST(EmissiveLighting, ComponentOverrideColor)
     EXPECT_EQ(comp.overrideColor, glm::vec3(0.0f, 1.0f, 0.0f));
 }
 
-// Slice 18 Ts1 cleanup: honest scope. This test verifies the
-// attenuation formula `1/(1 + 2/r * d + 1/r² * d²)` produces a
-// dimmed-but-nonzero value at `d == r`. It re-derives the coefficients
-// locally — no SUT call. Kept as a math-reference document with
-// honest naming. The actual coefficient synthesis lives in
-// `engine/scene/scene.cpp` (EmissiveLight → PointLight pass) and is
-// exercised at engine launch.
-TEST(EmissiveLighting, AttenuationFormulaMathReference)
-{
-    float radius = 5.0f;
-    float linear = 2.0f / radius;
-    float quadratic = 1.0f / (radius * radius);
-
-    float attenuation = 1.0f / (1.0f + linear * radius + quadratic * radius * radius);
-    EXPECT_GT(attenuation, 0.0f);
-    EXPECT_LT(attenuation, 0.5f);
-}
 
 // Slice 18 Ts1 cleanup: dropped `PointLightCountRespected` — a
 // tautology on a compile-time constant (`EXPECT_EQ(MAX_POINT_LIGHTS, 8)`).
