@@ -80,7 +80,10 @@ add_executable(vestige_tests
     test_facial_animation.cpp
     test_fabric_material.cpp
     test_lip_sync.cpp
-    test_cloth_collision.cpp
+    test_bvh.cpp
+    test_spatial_hash.cpp
+    test_cloth_mesh_collider.cpp
+    test_cloth_simulation_collision.cpp
     test_cloth_solver_improvements.cpp
     test_gpu_particle_system.cpp
     test_motion_matching.cpp
