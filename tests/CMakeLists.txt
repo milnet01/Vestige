@@ -177,7 +177,13 @@ add_executable(vestige_tests
     test_ui_layout_panel.cpp
     test_ui_hit_test.cpp
     test_node_graph.cpp
-    test_scripting.cpp
+    test_script_value.cpp
+    test_blackboard.cpp
+    test_node_type_registry.cpp
+    test_script_graph.cpp
+    test_script_context.cpp
+    test_node_library.cpp
+    test_scripting_system_bridge.cpp
     test_script_templates.cpp
     test_script_compiler.cpp
     test_sprite_atlas.cpp
