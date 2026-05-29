@@ -80,7 +80,9 @@ add_executable(vestige_tests
     test_procedural_mesh.cpp
     test_facial_animation.cpp
     test_fabric_material.cpp
-    test_lip_sync.cpp
+    test_viseme_map.cpp
+    test_audio_analyzer.cpp
+    test_lip_sync_player.cpp
     test_bvh.cpp
     test_spatial_hash.cpp
     test_cloth_mesh_collider.cpp
