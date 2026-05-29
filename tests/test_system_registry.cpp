@@ -6,6 +6,7 @@
 /// @note These tests don't require a full engine setup -- they use mock systems
 ///       to verify the registry's lifecycle, dispatch, and auto-activation logic.
 
+#include "core/engine.h"
 #include "core/i_system.h"
 #include "core/system_registry.h"
 #include "core/system_events.h"
@@ -13,6 +14,7 @@
 
 #include <gtest/gtest.h>
 #include <algorithm>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -173,11 +175,11 @@ TEST_F(SystemRegistryTest, EmptyRegistryHasZeroSystems)
 // =============================================================================
 
 // NOTE: initializeAll takes Engine& but our mock doesn't use it.
-// We reinterpret_cast a dummy to avoid needing a real Engine.
-// This is safe because MockSystem::initialize ignores the reference.
+// We use std::aligned_storage to provide a properly-sized buffer.
+// This satisfies UBSan while avoiding the need for a real Engine instance.
 static Engine& dummyEngine()
 {
-    static char buf[1] = {};
+    static std::aligned_storage_t<sizeof(Engine), alignof(Engine)> buf;
     // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
     return reinterpret_cast<Engine&>(buf);
 }
