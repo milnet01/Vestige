@@ -35,7 +35,7 @@ Surveyed by Explore agent + spot-reads 2026-04-22.
 |---|---|---|
 | `AudioMixer` — 6-bus linear-gain table | `engine/audio/audio_mixer.h:65–104` | Complete. `setBusGain(bus, gain)` clamps [0,1]; `effectiveBusGain(mixer, bus)` = master × bus. |
 | `Engine::m_audioMixer` (authoritative) | `engine/core/engine.h` (slice 13.5e) | Owned + live-updated by `AudioMixerApplySink`. |
-| `AudioSourceComponent` | `engine/audio/audio_source_component.h:23–92` | **Missing a `bus` field** — every source today is implicitly routed through nothing. |
+| `AudioSourceComponent` | `engine/audio/audio_source_component.h` | Has a `bus` field (`AudioBus bus = AudioBus::Sfx`) — added by Slice A1 (see §"Implementation shape" step 1; shipped, verified 2026-06-01). The pre-A1 baseline was no bus field (every source implicitly unrouted). |
 | `AudioSystem::update` | `engine/systems/audio_system.cpp:37–50` | Only syncs listener to camera. **Does not iterate components; does not drive OpenAL gain from mixer.** |
 | `AudioEngine::playSound*` | `engine/audio/audio_engine.h:85–122` | Fire-and-forget; `volume` parameter is stored on the OpenAL source once and never revisited. |
 | `AL_GAIN` write sites | `engine/audio/audio_engine.cpp:277, 303, 330, 360` | Four — one per `playSound` overload. Each takes a single pre-multiplied gain. |
@@ -117,7 +117,7 @@ The panel owns its own `AudioMixer m_mixer`. Editor users expect mute/solo/ducki
 
 **Implementation shape:**
 
-1. Add `AudioBus bus = AudioBus::Sfx;` to `AudioSourceComponent` (default SFX — matches current implicit routing). Serializer gains a field; missing key defaults to Sfx. **Status as of 2026-05-18:** the `bus` field is already declared at `engine/audio/audio_source_component.h:49`; verify the serializer side before counting this sub-step as work, and treat as done if both sides ship the field.
+1. ~~Add `AudioBus bus = AudioBus::Sfx;` to `AudioSourceComponent` (default SFX — matches current implicit routing). Serializer gains a field; missing key defaults to Sfx.~~ **DONE (verified 2026-06-01):** the `bus` field is declared at `engine/audio/audio_source_component.h:49`, and the serializer ships both sides — `entity_serializer.cpp:817` writes `j["bus"] = audioBusToString(comp.bus)`, `:838` reads `audioBusFromString(j.value("bus", "Sfx"))` (missing key → Sfx). No further work in this sub-step; Slice A1 (field + serializer) is complete. Remaining A-track work is the gain-resolution pass (sub-steps 2–5, Slice A2/A3).
 2. `AudioSystem` tracks `std::unordered_map<Entity, ALuint> m_activeSources` so a component can find its live OpenAL source.
 3. `AudioSystem::update(dt)` adds a gain-resolution pass: for each owned component with a live source, compute `finalGain = clamp(effectiveBusGain(mixer, comp.bus) * comp.volume * comp.occlusionGain * comp.ducking, 0, 1)` and `alSourcef(src, AL_GAIN, finalGain)`.
 4. `AudioEngine::playSoundSpatial(...)` accepts an optional `AudioBus` + `const AudioMixer*` so the *initial* gain upload already accounts for bus gain, avoiding a one-frame blip at full volume.
@@ -225,7 +225,7 @@ Each slice is a review-sized commit with tests + CHANGELOG entry. Slices are ind
 
 | Slice | Rough LOC | Commits | Notes |
 |---|---|---|---|
-| **A1** — `AudioBus` on `AudioSourceComponent` + serializer | ~80 | 1 | Pure data-model extension. No behavior change yet. |
+| **A1** — `AudioBus` on `AudioSourceComponent` + serializer | ~80 | ✅ done | Field + serializer both present (verified 2026-06-01). Pure data-model extension; no behavior change. |
 | **A2** — `AudioSystem` per-frame gain-resolution pass | ~150 | 1 | Adds m_activeSources tracking + tick. Depends on A1. |
 | **A3** — `AudioPanel` unification | ~100 | 1 | Routes panel bus sliders through SettingsEditor. Depends on A2. |
 | **B1** — `SubtitleQueue::tick(dt)` in `Engine::update` | ~20 | 1 | One-line tick call + test. |

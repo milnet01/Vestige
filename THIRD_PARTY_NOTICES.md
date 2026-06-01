@@ -14,43 +14,51 @@ For asset attributions (textures, models, fonts), see [ASSET_LICENSES.md](ASSET_
 These are pulled in via CMake `FetchContent` and built from source. Each
 `GIT_TAG` / version is pinned in `external/CMakeLists.txt`. Update both
 this file and the audit tool's NVD dependency list when bumping a pin.
-Most rows below pin a tag; three deps (Dear ImGui, imgui-filebrowser,
-ImPlot) currently track an upstream branch — see "Branch-tracking deps"
-below. `nlohmann/json` is fetched via URL tarball, not git tag.
+Most rows below pin a release tag; four deps (Dear ImGui, ImGuizmo,
+imgui-filebrowser, ImPlot) pin an exact commit on a branch because upstream
+publishes no suitable release tag — see "Branch-commit pins" below.
+`nlohmann/json` is fetched via URL tarball, not git tag.
 
 | Dependency       | Version                                         | License                                           | Source |
 |------------------|-------------------------------------------------|---------------------------------------------------|--------|
 | GLFW             | 3.4                                             | zlib                                              | <https://github.com/glfw/glfw> |
 | GLM              | 1.0.1                                           | MIT (modified)                                    | <https://github.com/g-truc/glm> |
-| Dear ImGui       | docking branch (see below)                      | MIT                                               | <https://github.com/ocornut/imgui> |
+| Dear ImGui       | commit `4cb21e4a` (docking branch, see below)   | MIT                                               | <https://github.com/ocornut/imgui> |
 | ImGuizmo         | commit `a15acd87` (master snapshot)             | MIT                                               | <https://github.com/CedricGuillemet/ImGuizmo> |
-| imgui-filebrowser| master branch (see below)                       | MIT                                               | <https://github.com/AirGuanZ/imgui-filebrowser> |
+| imgui-filebrowser| commit `47a18845` (master branch, see below)    | MIT                                               | <https://github.com/AirGuanZ/imgui-filebrowser> |
 | imgui-node-editor| v0.9.3                                          | MIT                                               | <https://github.com/thedmd/imgui-node-editor> |
-| ImPlot           | master branch (see below)                       | MIT                                               | <https://github.com/epezent/implot> |
-| FreeType         | VER-2-13-3                                      | FreeType Project License (BSD-style) — chosen over GPLv2 | <https://gitlab.freedesktop.org/freetype/freetype> |
+| ImPlot           | commit `1351ab2c` (master branch, see below)    | MIT                                               | <https://github.com/epezent/implot> |
+| FreeType         | VER-2-13-3                                      | FreeType Project License (BSD-style) — chosen over GPLv2 | <https://github.com/freetype/freetype> (official mirror; build fetches this) |
 | tinyexr          | v1.0.9                                          | BSD 3-Clause                                      | <https://github.com/syoyo/tinyexr> |
 | tinygltf         | v2.9.4                                          | MIT                                               | <https://github.com/syoyo/tinygltf> |
-| nlohmann/json    | v3.12.0 (URL tarball; see `external/CMakeLists.txt:319`) | MIT                                      | <https://github.com/nlohmann/json> |
+| nlohmann/json    | v3.12.0 (URL tarball; see `external/CMakeLists.txt`)     | MIT                                      | <https://github.com/nlohmann/json> |
 | Jolt Physics     | v5.3.0                                          | MIT                                               | <https://github.com/jrouwe/JoltPhysics> |
 | OpenAL Soft      | 1.25.1                                          | LGPL v2.1 (dynamic linking)                       | <https://github.com/kcat/openal-soft> |
 | Recast Navigation| v1.6.0                                          | zlib                                              | <https://github.com/recastnavigation/recastnavigation> |
 | GoogleTest       | v1.15.2                                         | BSD 3-Clause                                      | <https://github.com/google/googletest> |
 
-### Branch-tracking deps
+### Branch-commit pins
 
-Three deps track an upstream branch rather than a fixed tag. Per project
-rule 8 (`CLAUDE.md`), each lagging or branch-following pin needs a
-written reason; the reasons below also explain why SECURITY.md §5
-("Pin versions — no latest") tolerates these as documented exceptions:
+Four deps pin an **exact commit on a branch** rather than a release tag,
+because upstream publishes no suitable tag. These are reproducible pins
+(byte-stable builds), not moving-branch references — the distinction
+SECURITY.md §5 ("Pin versions — no latest") cares about. Per project
+rule 8 (`CLAUDE.md`), each non-tag pin carries a written reason:
 
-- **Dear ImGui (`docking`):** the docking branch is the only place
-  multi-viewport docking lives; `master` does not have it yet. Pin will
-  move to a tag once docking lands on `master`.
-- **imgui-filebrowser (`master`):** upstream does not publish tags; the
-  project tracks `master`. Bump cadence is at audit-cycle entry.
-- **ImPlot (`master`):** upstream's last tagged release lags `master`
-  by enough to miss Vestige's plot-API needs; will move to a tag once
-  upstream re-tags.
+- **Dear ImGui — `4cb21e4a` (docking branch, 2026-05-28):** the docking
+  branch is the only place multi-viewport docking lives; `master` does not
+  have it yet, and the docking branch carries no release tags. Re-pin to a
+  newer docking commit deliberately; move to a tag once docking lands on
+  `master`.
+- **ImGuizmo — `a15acd87` (2025-12-27):** pinned below the latest master to
+  avoid a GCC 14 compile break introduced upstream (see
+  `external/CMakeLists.txt` for the full reason). Re-evaluate when upstream
+  fixes the `vec_t` constructor.
+- **imgui-filebrowser — `47a18845` (master, 2025-09-24):** upstream publishes
+  no tags. Bump deliberately at audit-cycle entry.
+- **ImPlot — `1351ab2c` (master, 2026-05-10):** upstream's last tagged release
+  (v0.16) predates the ImGui 1.92.x API Vestige builds against. Bump
+  deliberately; move to a tag once upstream re-tags above v0.16.
 
 ### Notes on the LGPL dependency
 

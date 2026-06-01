@@ -152,12 +152,16 @@ _vestige_silence_upstream_dep_warnings()
 FetchContent_MakeAvailable(freetype)
 _vestige_restore_dep_warnings()
 
-# Dear ImGui — immediate-mode GUI (docking branch for panel docking)
+# Dear ImGui — immediate-mode GUI.
+# Pinned to 4cb21e4 (docking branch tip, 2026-05-28) for reproducible builds.
+# We need the docking branch (panel docking is not in any tagged release), so
+# the pin is a docking-branch commit rather than a version tag. Bump deliberately
+# — re-pin to a newer docking commit when a feature/fix is needed, not implicitly.
+# No GIT_SHALLOW: shallow fetch of a non-tip SHA is unreliable once upstream moves.
 FetchContent_Declare(
     imgui
     GIT_REPOSITORY https://github.com/ocornut/imgui.git
-    GIT_TAG        docking
-    GIT_SHALLOW    TRUE
+    GIT_TAG        4cb21e4a1e6a1fe19617c5c64ffba051ddd274e7
     # Engine defines `imgui_lib` STATIC target below from the
     # populated tree — SOURCE_SUBDIR skip pattern (CMake 3.18+).
     SOURCE_SUBDIR  __engine_defines_target__
@@ -203,11 +207,12 @@ target_compile_options(imguizmo_lib PRIVATE -w)
 set(imguizmo_SOURCE_DIR ${imguizmo_SOURCE_DIR} PARENT_SCOPE)
 
 # imgui-filebrowser — file browser dialog for ImGui (header-only, C++17 std::filesystem)
+# Pinned to 47a1884 (master tip, 2025-09-24) for reproducible builds. Upstream
+# ships no version tags, so the pin is a master commit. Bump deliberately.
 FetchContent_Declare(
     imgui_filebrowser
     GIT_REPOSITORY https://github.com/AirGuanZ/imgui-filebrowser.git
-    GIT_TAG        master
-    GIT_SHALLOW    TRUE
+    GIT_TAG        47a1884524d6a3df5d99f70ecc82e1ed0ccd26cf
     # Engine defines `imgui_filebrowser` INTERFACE target below — SOURCE_SUBDIR skip.
     SOURCE_SUBDIR  __engine_defines_target__
 )
@@ -339,11 +344,13 @@ set(ENABLE_ALL_WARNINGS OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(JoltPhysics)
 
 # ImPlot — 2D plotting extension for ImGui (MIT)
+# Pinned to 1351ab2 (master tip, 2026-05-10) for reproducible builds. The latest
+# tagged release (v0.16) predates the ImGui 1.92.x API we build against, so we
+# track a master commit rather than the tag. Bump deliberately.
 FetchContent_Declare(
     implot
     GIT_REPOSITORY https://github.com/epezent/implot.git
-    GIT_TAG        master
-    GIT_SHALLOW    TRUE
+    GIT_TAG        1351ab2c46d7a05a60f3533047bfba8a953520a1
 )
 FetchContent_MakeAvailable(implot)
 add_library(implot_lib STATIC

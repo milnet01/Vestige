@@ -305,7 +305,7 @@ Per CODING_STANDARDS §11.
 | `<glad/gl.h>` | external | `glGetBufferSubData` etc. for vertex / index readback during bake. (Pulled in via `nav_mesh_builder.cpp` only.) |
 | `<chrono>`, `<cstring>`, `<vector>` | std | Build-time measurement; aliasing-safe `memcpy` of vertex bytes; flat geometry buffers. |
 
-**Recast/Detour version posture (CLAUDE.md Rule 5):** pinned at `v1.6.0` via `external/CMakeLists.txt:378`. Verified 2026-04-28 against <https://github.com/recastnavigation/recastnavigation/releases> — **v1.6.0 remains the latest stable release** ("includes a number of bug fixes and improvements from the past few years and maintains backwards compatibility with 1.x versions"). No upstream successor as of this spec date; the pin is current.
+**Recast/Detour version posture (CLAUDE.md Rule 5):** pinned at `v1.6.0` via the Recast `FetchContent_Declare` in `external/CMakeLists.txt`. Verified 2026-04-28 against <https://github.com/recastnavigation/recastnavigation/releases> — **v1.6.0 remains the latest stable release** ("includes a number of bug fixes and improvements from the past few years and maintains backwards compatibility with 1.x versions"). No upstream successor as of this spec date; the pin is current.
 
 **Direction:** consumed by `engine/editor/panels/navigation_panel.h`, `engine/systems/navigation_system.h` (host), and downstream AI / scripted callers (none in tree yet — Open Q3). `engine/navigation` itself depends only on `engine/scene/` (read-only) and `engine/core/` (logger / events). It must **not** depend on the editor or any concrete AI consumer.
 

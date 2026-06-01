@@ -393,6 +393,36 @@ Enables (future phases):
 - Multi-user collaborative editing of structural scenes (Phase 22) —
   attachment authoring needs to round-trip through serialization.
 
+## Accessibility
+
+Structural physics produces large-scale, often sudden motion (a collapsing
+wall, a swaying curtain, a tether snapping). That has direct accessibility
+consequences, all of which couple to the engine-side accessibility work
+already shipped in Phase 10.7:
+
+- **Reduced-motion / vestibular safety.** Dramatic structural motion and any
+  camera reaction to it (shake, recoil) must honour the engine's
+  reduced-motion setting. When reduced-motion is on, damp or skip the
+  camera response and prefer settled end-states over drawn-out physics
+  animation. Reuse the Phase 10.7 photosensitive/intensity retrofit path
+  rather than adding a parallel toggle.
+- **Photosensitivity.** Structural failure must not drive rapid
+  light/shadow strobing (e.g. flickering occlusion as debris falls).
+  Any emissive/lighting change triggered by collapse routes through the
+  existing `clampStrobeHz` / photosensitive clamp.
+- **Non-visual cues.** If structural state is gameplay-relevant (a tether
+  about to fail, a walkable beam now unstable), pair the visual cue with an
+  audio cue so the information is not visual-only. Determinism (a design
+  goal in §"CPU / GPU placement") also lets assistive replay and event
+  narration describe structural events reliably.
+- **Authoring tools.** The vertex-set pinning / lasso UI (see Open
+  Questions) inherits the editor-side accessibility requirements from the
+  Phase 10.5 editor-usability pass — keyboard-navigable selection, not
+  mouse-drag-only.
+
+Full enumeration deferred until the phase enters implementation; the points
+above are the design-time commitments.
+
 ## Open Questions
 
 - **Editor ergonomics for vertex-set pinning.** The top edge of a curtain
@@ -409,3 +439,9 @@ Enables (future phases):
   authored manually?** Auto-create from the slider-ring tool makes
   authoring one-click; manual preserves explicit user control over
   mass/collision. Probably offer both, default to auto.
+
+## Change log
+
+| Date | Author | Change |
+|------|--------|--------|
+| 2026-06-01 | milnet01 | Added Accessibility section (reduced-motion / photosensitivity / non-visual cues / authoring) and this Change log (CE12). These mirror the relevant SPEC_TEMPLATE sections; this is a phase-design doc, not a subsystem spec, so it does not carry the spec's required Threading/Memory/§8-budget sections. CPU/GPU placement section was added in the 2026-05-18 cold-eyes sweep. |

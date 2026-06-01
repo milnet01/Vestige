@@ -225,6 +225,8 @@ Known unknowns, deferred decisions, things flagged for future review.
 
 Each row also becomes an issue or a TODO in code with `// TODO(YYYY-MM-DD owner)` per CODING_STANDARDS §20.
 
+**§15 is for OPEN questions only.** When a question is resolved, remove its row from §15 and record a one-line resolution in §16 (Spec change log) — do **not** keep struck-through (`~~…~~`) closed rows in §15. (This is the canonical convention; specs that previously parked closed rows in §15 "for one revision" are migrated on next touch.)
+
 If there are no open questions, omit the section.
 
 ## 16. Spec change log **(required)**

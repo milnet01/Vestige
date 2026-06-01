@@ -36,7 +36,7 @@ Run + capture output. Catches mechanical issues for free.
 
 **cppcheck.** `cppcheck --enable=all --std=c++17 --suppress=missingIncludeSystem --suppress=unusedFunction -I engine/ -I external/ engine/ app/ tests/`.
 
-**clang-tidy** (optional — no project `.clang-tidy` is checked in yet; see CODING_STANDARDS §17). Per-developer config with check selectors `bugprone-*,performance-*,modernize-*,readability-*,cppcoreguidelines-*`.
+**clang-tidy** (optional — per-developer config by deliberate choice; no shared `.clang-tidy` is checked in and none is planned, see CODING_STANDARDS §15). Run with check selectors `bugprone-*,performance-*,modernize-*,readability-*,cppcoreguidelines-*`.
 
 **Sanitizers.** Debug build with `-fsanitize=address,undefined -fno-omit-frame-pointer`; run test suite. ASan catches leaks/overflow/UAF; UBSan catches UB/integer overflow/null deref.
 

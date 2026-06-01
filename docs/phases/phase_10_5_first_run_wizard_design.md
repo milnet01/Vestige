@@ -99,6 +99,15 @@ struct OnboardingSettings
 
 **Schema version bump:** add a migration `v1 → v2` in `settings_migration.cpp` that inserts the default `onboarding` block when absent. This is the first exercise of the chained-migration scaffolding shipped in slice 13.1.
 
+> **Schema-version ownership (locked 2026-06-01, CE4).** This wizard owns the
+> **v1 → v2** bump (onboarding block) — and it has **shipped**:
+> `migrate_v1_to_v2` exists in `settings_migration.cpp`, `kCurrentSchemaVersion`
+> is `2` in `settings.h`, and `OnboardingSettings` is present. The **next**
+> bump, **v2 → v3**, is owned by **Phase 10 Localization slice L5**
+> (`migrate_v2_to_v3`, adds the `Localization { language }` block — currently
+> the commented `// case 2:` placeholder in `settings_migration.cpp`). Do not
+> re-add a v1→v2 migration, and do not claim v2→v3 from this phase.
+
 ---
 
 ## 6. Template visibility gating

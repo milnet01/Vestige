@@ -527,7 +527,7 @@ A binding checklist. **All items required** for 9E-3 to be considered complete a
 **Progress so far (2026-04-19 doc sync):** Steps 1–3 of §11 are shipped (commits `cffd755`, `e0c56c2`); Step 4 is WIP on branch (`8feeffe`). Steps 5–16 remain. The four audit-debt items (M9 / M10 / M11 / L6) and the library-integration spike landed with Step 1–3 ahead of the full panel work.
 
 - [ ] All 16 implementation steps committed; all tests pass. — **Steps 1–3 done, Step 4 WIP, 12 remaining.**
-- [x] Library integration is one of: thedmd master v0.9.3, pthom imgui_bundle branch, or documented downgrade. — `thedmd/imgui-node-editor` master via `external/CMakeLists.txt:227`; engine builds `imgui_node_editor_lib` STATIC.
+- [x] Library integration is one of: thedmd master v0.9.3, pthom imgui_bundle branch, or documented downgrade. — `thedmd/imgui-node-editor` via its `FetchContent_Declare` in `external/CMakeLists.txt`; engine builds `imgui_node_editor_lib` STATIC.
 - [x] **M9** generalised type→IDs cache shipped; `findNodesByType` no longer allocates on the hot path. — commit `e0c56c2`.
 - [x] **M10** pin-name interning shipped; `ScriptNodeInstance::outputValues` uses `PinId`; string overloads remain as compat wrappers. — commit `cffd755`; `engine/scripting/pin_id.{h,cpp}`.
 - [x] **M11** per-execution pure-node memoization shipped; benchmark shows the multiplicative-in-loops behavior eliminated. — commit `e0c56c2`; `ScriptContext::m_executionMemo`, `NodeTypeDescriptor::memoizable`.

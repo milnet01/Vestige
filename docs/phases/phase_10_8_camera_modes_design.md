@@ -177,11 +177,12 @@ public:
 - Output: orthographic projection; camera directly overhead, looking straight down.
 - Parameters: `orthoHalfHeight = 10.0`, `height = 30.0`, optional `headingDeg = 0` for map-aligned North.
 
-**`CinematicCameraMode`**
-- Inputs: `const SplinePath*` (position curve), `const FovTrack*` (separate 1-D scalar track for FOV), `float t` (0..1 parameterised along spline length).
-- Output: `position = spline.evaluate(t)`; `forward = spline.evaluateTangent(t)` (optionally overridden by a `LookAtTarget` on the cinematic data); `fov = fovTrack.sample(t)`.
-- Parameters: `playbackSpeed` (units/sec along arc length), `loopMode` (once / loop / ping-pong).
-- `FovTrack` is a new lightweight struct — just `std::vector<{t, fov}>` with linear interpolation. Piece of work in its own right but ~60 LOC.
+**`CinematicCameraMode`** (input shape: §6 Q6, approved 2026-04-23 per the §9 log — the bundled `CinematicTake`, not loose pointers)
+- Input: a single `const CinematicTake*` — one authored object per shot bundling everything the shot needs: a `SplinePath spline` (position curve), a `FovTrack fov` (1-D scalar track), an optional `LookAtTarget lookAt`, a `float duration` (seconds), and an `ease` curve. Mirrors Unity Timeline / UE5 Sequencer "takes": the caller hands over one take, not a `(SplinePath*, FovTrack*, t)` tuple it has to thread itself.
+- Playback parameter is **mode-owned**, not caller-supplied: the mode advances `float m_elapsed += dt`, and the normalised position along the shot is `t = ease(m_elapsed / take.duration)` (0..1). Nothing external threads a raw `t`.
+- Output: `position = take.spline.evaluate(t)`; `forward = take.spline.evaluateTangent(t)` (overridden by `take.lookAt` when set); `fov = take.fov.sample(t)`.
+- Parameters: `loopMode` (once / loop / ping-pong); the take's `duration` (wall-clock length) replaces the old units/sec `playbackSpeed` — a take is authored to a fixed length.
+- New lightweight structs: `FovTrack` is `std::vector<{t, fov}>` with linear interpolation (~60 LOC); `CinematicTake` is the owning aggregate over (spline, fov, lookAt, duration, ease) (~40 LOC).
 
 ### 4.4 Runtime 1st ↔ 3rd toggle
 
@@ -254,7 +255,7 @@ Each slice is a review-sized commit with tests + CHANGELOG entry. Slices are ord
 | **CM4** — `ThirdPersonCameraMode` + spring-arm wall-probe | ~250 | 1 | CM1 + CM3 | Spring-arm with boom-length smoothing. Tests: orbit at various yaw/pitch, wall retraction on mock `PhysicsWorld`. |
 | **CM5** — 1st↔3rd toggle + `CameraBlender` + `reducedMotion` coupling | ~200 | 1 | CM2 + CM4 | Toggle input action, lerp transition, per-scene opt-out flag. Tests: blend determinism, reducedMotion snap, opt-out gate. |
 | **CM6** — `IsometricCameraMode` + `TopDownCameraMode` | ~200 | 1 | CM1 | Orthographic modes. Tests: fixed elevation/azimuth, ortho projection correctness, smooth-follow deadzone reuse from `Camera2DComponent`. |
-| **CM7** — `FovTrack` + `CinematicCameraMode` | ~220 | 1 | CM1 + existing `SplinePath` | Consumes existing spline. Tests: `t=0`/`t=1` endpoints, FOV interpolation, tangent-follow vs. explicit lookAt. |
+| **CM7** — `CinematicTake` (+ `FovTrack`) + `CinematicCameraMode` | ~260 | 1 | CM1 + existing `SplinePath` | Consumes existing spline via the bundled `CinematicTake` (§4.3, §6 Q6). Tests: `t=0`/`t=1` endpoints (driven by `m_elapsed`/`duration`), FOV interpolation, tangent-follow vs. explicit lookAt. |
 | **CM8** — Editor integration (mode inspector, mode-switch preview) | ~180 | 1 | CM2–CM7 | Per-entity mode picker in Inspector; preview toggle in viewport. Tests: Inspector round-trip serialisation. |
 
 **Total:** 8 slices, ~1450 LOC. Slices CM1 / CM3 / CM6 can ship in parallel if desired. The critical path is **CM1 → CM2 → CM4 → CM5**; CM7/CM8 light up afterwards without blocking 11A.

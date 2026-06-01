@@ -260,7 +260,7 @@ Prefer structured fields when sensible: `logger.info("draw_call", {{"mesh", id},
 ## 15. Static Analysis & Warnings
 
 - `.clang-format` at repo root enforces formatting (section 3).
-- A `.clang-tidy` at repo root is **planned but not yet present**. Until it lands, this doc is the policy and the table below is the canonical disabled-checks list. Treat clang-tidy invocation as per-developer; CI does not currently fail on clang-tidy findings (only on compiler warnings, which *are* `-Werror`).
+- clang-tidy is **per-developer config by deliberate choice** — no shared `.clang-tidy` is checked in at repo root, and none is planned. This doc is the policy and the table below is the canonical disabled-checks list; each developer applies it with their own check selectors (see AUDIT_STANDARDS §3). CI does not fail on clang-tidy findings (only on compiler warnings, which *are* `-Werror`). Revisit only if the team later wants enforced lint parity.
 
 | Disabled check | Rationale | Defined in |
 |----------------|-----------|------------|

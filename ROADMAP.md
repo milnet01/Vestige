@@ -2,6 +2,47 @@
 
 This document outlines the phased development plan for the Vestige 3D Engine.
 
+<details>
+<summary><strong>Table of Contents</strong> (phases)</summary>
+
+- [Phase 1: Foundation (COMPLETE)](#phase-1-foundation-complete)
+- [Phase 2: 3D World (COMPLETE)](#phase-2-3d-world-complete)
+- [Phase 3: Scene Management (COMPLETE)](#phase-3-scene-management-complete)
+- [Phase 4: Visual Quality (COMPLETE)](#phase-4-visual-quality-complete)
+- [Phase 5: Scene Editor — The Creator's Toolkit (COMPLETE)](#phase-5-scene-editor--the-creators-toolkit-complete)
+- [Phase 6: Particle and Effects System (COMPLETE)](#phase-6-particle-and-effects-system-complete)
+- [Phase 7: Animation (COMPLETE — foundation)](#phase-7-animation-complete--foundation-animation-zombie-cluster-tracked-in-phase-109-slice-8-w12)
+- [Phase 8: Physics (COMPLETE — foundation)](#phase-8-physics-complete--foundation-destructionragdollgrab-cluster-tracked-in-phase-109-slice-8-w13)
+- [Formula Pipeline (Cross-Cutting Infrastructure) — COMPLETE](#formula-pipeline-cross-cutting-infrastructure--complete)
+- [Phase 9: Domain-Driven System Architecture](#phase-9-domain-driven-system-architecture)
+- [Phase 10: Polish and Features](#phase-10-polish-and-features)
+- [Phase 10.5: Editor Usability Pass](#phase-105-editor-usability-pass)
+- [Phase 10.6: Multi-Threading & Concurrency Architecture](#phase-106-multi-threading--concurrency-architecture)
+- [Phase 10.7: Accessibility + Audio integration](#phase-107-accessibility--audio-integration--complete-2026-04-23)
+- [Phase 10.8: Rendering & Camera Prerequisites](#phase-108-rendering--camera-prerequisites)
+- [Phase 10.9: Post-Ultrareview Remediation](#phase-109-post-ultrareview-remediation)
+- [Phase 11A: Gameplay Infrastructure](#phase-11a-gameplay-infrastructure)
+- [Phase 11B: Gameplay Features](#phase-11b-gameplay-features)
+- [Phase 12: Distribution](#phase-12-distribution)
+- [Phase 13: Advanced Rendering](#phase-13-advanced-rendering)
+- [Phase 14: Adaptive Geometry System](#phase-14-adaptive-geometry-system)
+- [Phase 15: Atmospheric Rendering](#phase-15-atmospheric-rendering)
+- [Phase 16: Scripting and Interactivity](#phase-16-scripting-and-interactivity)
+- [Phase 17: Terrain and Landscape (CORE COMPLETE)](#phase-17-terrain-and-landscape-core-complete--phase-5i)
+- [Phase 18: 2D Game and Scene Support](#phase-18-2d-game-and-scene-support)
+- [Phase 19: Procedural Generation](#phase-19-procedural-generation)
+- [Phase 20: Networking and Multiplayer](#phase-20-networking-and-multiplayer)
+- [Phase 21: Build Wizard — Project Creation and Export](#phase-21-build-wizard--project-creation-and-export)
+- [Phase 22: Collaborative Editing — Real-Time Multi-User Projects](#phase-22-collaborative-editing--real-time-multi-user-projects)
+- [Phase 23: AI Assistance — Prompt-Driven Engine Integration](#phase-23-ai-assistance--prompt-driven-engine-integration)
+- [Phase 24: Structural / Architectural Physics](#phase-24-structural--architectural-physics)
+- [Phase 25: Open-World Game Systems](#phase-25-open-world-game-systems)
+- [Phase 26: Racing Game Systems](#phase-26-racing-game-systems)
+- [Open-Source Release](#open-source-release)
+- [Target Projects](#target-projects)
+
+</details>
+
 ---
 
 ## Phase 1: Foundation (COMPLETE)
@@ -1019,36 +1060,55 @@ Every Phase 10.7 design-doc promise is verified by a test authored **from the de
 
 **Code-side fixes flagged but not auto-applied (cold-eyes skill rule — do not auto-edit code under a docs-review skill):**
 
-- [ ] **CE1.** Decide whether to commit a project `.clang-tidy` config at repo root, or amend AUDIT_STANDARDS.md §3 to state that clang-tidy is per-developer config only. (Today: no `.clang-tidy` exists; CODING_STANDARDS.md §17 says "planned but not yet present.")
-- [ ] **CE2.** Decide whether to pin Dear ImGui (`docking`), imgui-filebrowser (`master`), ImPlot (`master`) to specific commit SHAs in `external/CMakeLists.txt`, or formally document them as branch-tracking exceptions in SECURITY.md §5. (Currently: THIRD_PARTY_NOTICES.md notes the exceptions under "Branch-tracking deps"; SECURITY.md §5 carries a softened "with three documented exceptions" line. Final disposition is owner's call.)
+- [x] **CE1.** Decide whether to commit a project `.clang-tidy` config at repo root, or amend AUDIT_STANDARDS.md §3 to state that clang-tidy is per-developer config only. (Today: no `.clang-tidy` exists; CODING_STANDARDS.md §17 says "planned but not yet present.")
+- [x] **CE2.** Decide whether to pin Dear ImGui (`docking`), imgui-filebrowser (`master`), ImPlot (`master`) to specific commit SHAs in `external/CMakeLists.txt`, or formally document them as branch-tracking exceptions in SECURITY.md §5. (Currently: THIRD_PARTY_NOTICES.md notes the exceptions under "Branch-tracking deps"; SECURITY.md §5 carries a softened "with three documented exceptions" line. Final disposition is owner's call.)
 - [ ] **CE3.** Land `engine/utils/result.h` with the `Result<T,E> = std::expected<T,E>` alias (CODING_STANDARDS.md §11 and `phase_11a_design.md` §9 both depend on it). Until then, both docs say "use the standard name directly" — a deferred code item.
 
 **Cross-doc / cross-phase decisions that need an owner sign-off:**
 
-- [ ] **CE4.** Settings-schema migration ownership conflict between `phase_10_5_first_run_wizard_design.md` (proposes v1→v2 migration) and `phase_10_localization_design.md` (also proposes v1→v2). `engine/core/settings.h:64` already pins `kCurrentSchemaVersion = 2`, so the active question is who owns v2→v3. Lock the sequence in both docs before either slice lands.
-- [ ] **CE5.** Scene-format-version bump coordination: `phase_10_audio_music_player_design.md` Slice 8 plans `CURRENT_FORMAT_VERSION 1 → 2`. If another phase-10 doc also touches scene-JSON fields, the bump owner needs to be designated and the other doc has to fold its fields into the same v1→v2 migration (or wait for v2→v3).
-- [ ] **CE6.** `phase_10_8_camera_modes_design.md` §4.3 body still describes `CinematicCameraMode` with separate `(SplinePath*, FovTrack*, float t)` inputs, but §9 approval log (Q6) says the approved shape is a `CinematicTake` bundle. Rewrite §4.3 (and the §4.6 / Slice CM7 references) to use the approved bundle before any implementer reads §4.3 as authoritative.
-- [ ] **CE7.** `phase_10_7_design.md` Slice A1 (`AudioBus` field on `AudioSourceComponent`) — the field already exists at `engine/audio/audio_source_component.h:49`. Verify the serializer side too, then re-classify the rest of Slice A1 as "field present, wire serializer + gain-resolution pass" so implementers don't re-add the field.
-- [ ] **CE8.** Add `docs/phases/phase_10_index.md` mirroring `phase_08_index.md` / `phase_09_index.md`. The Phase 10.x sub-phase mesh (10.5 / 10.7 / 10.8 / 10.fog / 10.settings / 10.ui / 10.localization / 10.audio-music / 10.9 W-slices) has no index doc, and readers across both this project and the cold-eyes-2026-05-18 sweep struggled to navigate it.
+- [x] **CE4.** Settings-schema migration ownership conflict between `phase_10_5_first_run_wizard_design.md` (proposes v1→v2 migration) and `phase_10_localization_design.md` (also proposes v1→v2). `engine/core/settings.h:64` already pins `kCurrentSchemaVersion = 2`, so the active question is who owns v2→v3. Lock the sequence in both docs before either slice lands.
+- [x] **CE5.** Scene-format-version bump coordination: `phase_10_audio_music_player_design.md` Slice 8 plans `CURRENT_FORMAT_VERSION 1 → 2`. If another phase-10 doc also touches scene-JSON fields, the bump owner needs to be designated and the other doc has to fold its fields into the same v1→v2 migration (or wait for v2→v3).
+- [x] **CE6.** `phase_10_8_camera_modes_design.md` §4.3 body still describes `CinematicCameraMode` with separate `(SplinePath*, FovTrack*, float t)` inputs, but §9 approval log (Q6) says the approved shape is a `CinematicTake` bundle. Rewrite §4.3 (and the §4.6 / Slice CM7 references) to use the approved bundle before any implementer reads §4.3 as authoritative.
+- [x] **CE7.** `phase_10_7_design.md` Slice A1 (`AudioBus` field on `AudioSourceComponent`) — the field already exists at `engine/audio/audio_source_component.h:49`. Verify the serializer side too, then re-classify the rest of Slice A1 as "field present, wire serializer + gain-resolution pass" so implementers don't re-add the field.
+- [x] **CE8.** Add `docs/phases/phase_10_index.md` mirroring `phase_08_index.md` / `phase_09_index.md`. The Phase 10.x sub-phase mesh (10.5 / 10.7 / 10.8 / 10.fog / 10.settings / 10.ui / 10.localization / 10.audio-music / 10.9 W-slices) has no index doc, and readers across both this project and the cold-eyes-2026-05-18 sweep struggled to navigate it.
 
 **Doc structure / clarity follow-ups (mechanical, low priority — bundle into a sweep when next adjacent):**
 
-- [ ] **CE9.** Apply SPEC_TEMPLATE.md §8 "all-TBD one-liner" form to the eight engine specs whose §8 tables are still full-table-of-TBDs (physics, audio, input, ui, scripting, navigation, formula, editor — environment may already comply, verify). Template line: "if every cell is TBD, replace the table with a single line."
-- [ ] **CE10.** Reconcile audio-spec §15 closed-question convention with editor-spec convention. Audio spec keeps struck-out closed Qs in §15 for one revision; editor spec says §15 is open-only and closed Qs live in §16. Pick one and update the other plus SPEC_TEMPLATE.md to codify.
-- [ ] **CE11.** `phase_10_audio_music_player_design.md` step 7b proposes a `docs/engine/audio/spec.md` amendment. Land the amendment (or close as not-needed) before code-implementation step 9 so the doc-vs-spec drift can't leak into shipped code.
-- [ ] **CE12.** Phase 24 design doc still lacks an Accessibility section and a Change log per SPEC_TEMPLATE shape; add when phase enters implementation. CPU/GPU section was added in this sweep.
-- [ ] **CE13.** Renderer spec §6 / `renderer.cpp:2656` / `:693` / `:756` style line citations are brittle — rewrite to function-name-only (`renderer.cpp::renderScene`) when next touched. Same advice for any spec citing `engine.cpp:NN` exact lines.
-- [ ] **CE14.** ARCHITECTURE.md §19 audit-ID block ("M9/M10/M11 + L6") — confirm against which audit cycle these IDs come from; the v0.1.0 CHANGELOG §M sequence skips M11. Either re-label with the right cycle or scrub the IDs in favour of a commit-SHA pointer.
-- [ ] **CE15.** Spec §15 open-question housekeeping: physics §15 Q16 self-flags CODING_STANDARDS §30 drift (`engine/physics/jolt_layers.h` → `physics_layers.h`); fold the corresponding fix into the standards doc when next touched.
+- [x] **CE9.** Apply SPEC_TEMPLATE.md §8 "all-TBD one-liner" form to the eight engine specs whose §8 tables are still full-table-of-TBDs (physics, audio, input, ui, scripting, navigation, formula, editor — environment may already comply, verify). Template line: "if every cell is TBD, replace the table with a single line."
+- [x] **CE10.** Reconcile audio-spec §15 closed-question convention with editor-spec convention. Audio spec keeps struck-out closed Qs in §15 for one revision; editor spec says §15 is open-only and closed Qs live in §16. Pick one and update the other plus SPEC_TEMPLATE.md to codify.
+- [x] **CE11.** `phase_10_audio_music_player_design.md` step 7b proposes a `docs/engine/audio/spec.md` amendment. Land the amendment (or close as not-needed) before code-implementation step 9 so the doc-vs-spec drift can't leak into shipped code.
+- [x] **CE12.** Phase 24 design doc still lacks an Accessibility section and a Change log per SPEC_TEMPLATE shape; add when phase enters implementation. CPU/GPU section was added in this sweep.
+- [x] **CE13.** Renderer spec §6 / `renderer.cpp:2656` / `:693` / `:756` style line citations are brittle — rewrite to function-name-only (`renderer.cpp::renderScene`) when next touched. Same advice for any spec citing `engine.cpp:NN` exact lines.
+- [x] **CE14.** ARCHITECTURE.md §19 audit-ID block ("M9/M10/M11 + L6") — confirm against which audit cycle these IDs come from; the v0.1.0 CHANGELOG §M sequence skips M11. Either re-label with the right cycle or scrub the IDs in favour of a commit-SHA pointer.
+- [x] **CE15.** Spec §15 open-question housekeeping: physics §15 Q16 self-flags CODING_STANDARDS §30 drift (`engine/physics/jolt_layers.h` → `physics_layers.h`); fold the corresponding fix into the standards doc when next touched.
 
 **Long-deferred (acknowledged-but-not-this-cycle):**
 
-- [ ] **CE16.** Add a Table-of-Contents block at the top of ROADMAP.md (~2410 lines) and CHANGELOG.md (~9400 lines). Both currently rely on search/scroll; a TOC of `## Phase NN` / `## [vX.Y.Z]` anchors would cut implementer scan time at very low maintenance cost. Acknowledged LOW; not done this round.
-- [ ] **CE17.** Re-verify `RECOMMENDED_ROUTINES.md` path claims (`apps/benchmark`, `apps/walkthrough`, `tools/hook-on-version-edit.sh`) and the AUTOMATED_AUDIT_REPORT template reference now that audit reports are gitignored. Re-write the routine to describe the template inline rather than referencing the gitignored file.
+- [x] **CE16.** Add a Table-of-Contents block at the top of ROADMAP.md (~2410 lines) and CHANGELOG.md (~9400 lines). Both currently rely on search/scroll; a TOC of `## Phase NN` / `## [vX.Y.Z]` anchors would cut implementer scan time at very low maintenance cost. Acknowledged LOW; not done this round.
+- [x] **CE17.** Re-verify `RECOMMENDED_ROUTINES.md` path claims (`apps/benchmark`, `apps/walkthrough`, `tools/hook-on-version-edit.sh`) and the AUTOMATED_AUDIT_REPORT template reference now that audit reports are gitignored. Re-write the routine to describe the template inline rather than referencing the gitignored file.
 
 **Source of the findings:** loop-1 reports across the 8 lanes were verified file-by-file against current source (Phase 3 of `/cold-eyes`); the in-session fix list and the deferred bullets above were the partition. Loop-2 returned zero verified findings.
 
 ---
+
+- 📋 [CE18] **Physics spec layer-model drift — §2/§3/§4 + §15 Q4 describe 4 object layers; code ships 5.**
+  Surfaced by the 2026-06-01 cold-eyes pass (loop 4), pre-existing
+  and unrelated to the CE1-CE17 edits. `engine/physics/physics_layers.h`
+  ships 5 object layers (STATIC=0, DYNAMIC=1, PLAYER_CHARACTER=2,
+  NPC_CHARACTER=3, TRIGGER=4; `CHARACTER` is now an alias for
+  PLAYER_CHARACTER) — the Phase 10.9 Slice 7 Ph5 player/NPC split has
+  LANDED. But `docs/engine/physics/spec.md` still describes 4 layers
+  (STATIC/DYNAMIC/CHARACTER/TRIGGER) in §2/§3/§4 and lists Ph5 as an
+  OPEN question at §15 Q4. Needs a coherent reconciliation pass:
+  (1) rewrite §2/§3/§4 to the 5-layer model + TRIGGER=4; (2) close §15
+  Q4 to §16 (it shipped) and renumber §15; (3) fix the §4 broadphase
+  comment (player/NPC chars map to CHARACTER bp, only TRIGGER→DYNAMIC bp);
+  (4) correct the physics_layers.h line citations in §3 (BroadPhaseLayers
+  is ~:46 not :30; filter classes ~:55/:95/:139 not :39/:78/:114) — or
+  de-line-number them per CE13. Best done as one focused pass with the
+  code owner confirming the intended model, not piecemeal.
+  Kind: doc-fix.
+  Source: cold-eyes-2026-06-01 (CE-bundle review loop 4).
 
 ## Phase 11A: Gameplay Infrastructure
 **Goal:** The runtime subsystems every Phase 11B gameplay feature consumes — camera shake, screen flash, save-file compression, replay recording, behavior-tree runtime, and AI perception. Split out of the original single Phase 11 so the consumer-before-system dependencies surface at planning time rather than at implementation time.

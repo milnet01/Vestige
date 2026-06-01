@@ -399,7 +399,7 @@ class FrameDiagnostics   { static std::string capture(const Renderer&, const Cam
 
 ## 5. Data Flow
 
-**Steady-state per-frame (`Engine::run` calls into `Renderer` once per frame; see `engine/renderer/renderer.cpp:2656` for `renderScene`, `:693` for `beginFrame`, `:756` for `endFrame`):**
+**Steady-state per-frame (`Engine::run` calls into `Renderer` once per frame; see `Renderer::renderScene`, `Renderer::beginFrame`, `Renderer::endFrame` in `engine/renderer/renderer.cpp`):**
 
 1. **Scene gather (caller side).** `Engine::run` → `SceneManager::collectRenderData(out, photosensitiveEnabled, limits)` → fills the reusable `SceneRenderData` (opaque + transparent + cloth + particles + water + lights). The renderer never walks the scene graph directly.
 2. **Light upload.** `Engine::run` calls `clearPointLights / clearSpotLights / addPointLight / addSpotLight` once per frame from `m_renderData`; `setDirectionalLight` from the active `DirectionalLightComponent`.
@@ -417,7 +417,7 @@ class FrameDiagnostics   { static std::string capture(const Renderer&, const Cam
 5. **`endFrame(dt)`.** Resolve MSAA → run depth reduction (compute SDSM bounds for next frame) → SSAO + blur (if enabled) → contact shadows (currently disabled) → bloom mip chain (Karis 13-tap downsample, tent upsample, mip 0…BLOOM_MIP_COUNT=6) → auto-exposure luminance pass + double-buffered PBO async readback → composite pass (tonemap + bloom add + fog + sun-inscatter + color-grade LUT + color-vision matrix + dither) into `m_outputFbo` → if TAA, run resolve into history with neighborhood AABB clamp; if SMAA, run edge → blend-weight → neighborhood passes. Update `m_prevWorldMatrices` via `updateMotionOverlayPrevWorld` (clears unconditionally even in non-TAA modes — R10 fix). Null `m_currentRenderData`. Restore default GL state.
 6. **Caller composites.** `Engine::run` chooses: `Renderer::blitToScreen(...)` (play mode) or `getOutputTextureId()` (editor draws into an ImGui viewport).
 
-**Cold start (`Renderer::Renderer(EventBus&)` + `loadShaders` + `initFramebuffers` — `engine/renderer/renderer.cpp:87`, `:253`, `:460`):**
+**Cold start (`Renderer::Renderer(EventBus&)` + `Renderer::loadShaders` + `Renderer::initFramebuffers` in `engine/renderer/renderer.cpp`):**
 
 1. **Constructor** — subscribe to `WindowResizeEvent`. Set initial state defaults (exposure 1.0, ACES tonemap, MSAA 4×, SSAO on, bloom on with intensity 0.04).
 2. **`loadShaders(assetPath)`** — load every shader program (scene / screen / shadow-depth / skybox / point-shadow-depth / bloom-down + up / SSAO + blur / TAA resolve / motion-vector full-screen + per-object / SMAA edge + blend + neighborhood / id-buffer / outline / contact-shadow). Failure on any one: log + return false.
@@ -490,7 +490,7 @@ Per CODING_STANDARDS §13. **OpenGL context affinity is single-thread** — ever
 
 60 FPS hard requirement → 16.6 ms per frame total (CLAUDE.md). The renderer is the single largest slice of that budget. Honest disclosure: most of the per-pass cells are not yet measured — the renderer pre-dates per-pass GPU-timer instrumentation.
 
-Not yet measured — will be filled by the next instrumented capture (target: end of Phase 10.9 audit); tracked as Open Q1 in §15. Provisional pass-budget targets are listed below as a target, not as measurements; cells will gain real numbers as `engine/profiler/gpu_timer.h` is wired into each pass.
+The next instrumented capture (target: end of Phase 10.9 audit) fills these in; tracked as Open Q1 in §15. The pass-budget numbers below are provisional targets, not measurements; cells gain real numbers as `engine/profiler/gpu_timer.h` is wired into each pass.
 
 | Path | Target | Measured (RX 6600, 1080p) |
 |------|--------|----------------------------|

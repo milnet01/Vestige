@@ -7,7 +7,61 @@ live alongside each tool (`tools/audit/CHANGELOG.md`,
 The engine version tracks phase milestones, not SEMVER. Pre-1.0 commits
 may change any interface without notice.
 
+<details>
+<summary><strong>Table of Contents</strong> (versions)</summary>
+
+- [[Unreleased]](#unreleased)
+- [[0.1.5] - 2026-04-18](#015---2026-04-18)
+- [[0.1.4] - 2026-04-17](#014---2026-04-17)
+- [[0.1.3] - 2026-04-15](#013---2026-04-15)
+- [[0.1.2] - 2026-04-13](#012---2026-04-13)
+- [[0.1.1] - 2026-04-13](#011---2026-04-13)
+- [[0.1.0] - 2026-04-13](#010---2026-04-13)
+
+</details>
+
 ## [Unreleased]
+
+### 2026-06-01 CE1–CE17 — Cold-eyes 2026-05-18 documentation follow-ups (16 of 17)
+
+Closed the deferred documentation-review follow-ups (sibling sweep to the
+Ts20 test-audit bundle). CE3 (land `engine/utils/result.h`) stays deferred
+as a code slice; CE18 was opened for a pre-existing physics-spec layer-model
+drift surfaced during the cold-eyes pass on this bundle.
+
+- **CE1** — clang-tidy settled as per-developer config (no shared `.clang-tidy`,
+  none planned); `CODING_STANDARDS.md §15` + `AUDIT_STANDARDS.md §3` de-hedged.
+- **CE2** — pinned Dear ImGui (`4cb21e4a`), imgui-filebrowser (`47a18845`),
+  ImPlot (`1351ab2c`) to exact commit SHAs in `external/CMakeLists.txt`
+  (matching the ImGuizmo precedent; `GIT_SHALLOW` dropped for SHA pins).
+  `THIRD_PARTY_NOTICES.md` "Branch-tracking deps" → "Branch-commit pins";
+  `SECURITY.md §5` reconciled (incl. the stale Approved-Dependencies table).
+- **CE4 / CE5** — locked settings-schema (v1→v2 shipped via Phase 10.5; v2→v3
+  owned by Localization L5) and scene-format-version (1→2 owned by the audio
+  music player doc) ownership in the relevant design docs.
+- **CE6** — camera design §4.3 + CM7 rewritten to the approved `CinematicTake`
+  bundle (§6 Q6).
+- **CE7** — Phase 10.7 Slice A1 marked done (AudioBus field + serializer present).
+- **CE8** — added `docs/phases/phase_10_index.md`.
+- **CE9** — verified §8 budgets (8 specs already correct); fixed a redundant
+  one-liner in `formula/spec.md`.
+- **CE10** — `SPEC_TEMPLATE.md §15` codified open-only; audio spec migrated +
+  renumbered.
+- **CE11** — audio spec §5 streaming wording corrected to `stb_vorbis` for OGG.
+- **CE12** — Phase 24 doc gained Accessibility + Change-log sections.
+- **CE13** — renderer spec brittle line citations → function-name form.
+- **CE14 / CE15** — verified (ARCHITECTURE §19 audit IDs valid; physics Q16
+  drift already fixed in §30 — Q16 closed to §16).
+- **CE16** — Table of Contents added atop `ROADMAP.md` and `CHANGELOG.md`.
+- **CE17** — local maintainer runbook (`docs/RECOMMENDED_ROUTINES.md`,
+  gitignored) refreshed: stale `apps/benchmark`/`apps/walkthrough` paths →
+  `build/bin/vestige`; audit-report template inlined.
+
+Cold-eyes review (4 cold loops) on the edited spec/design docs found and fixed:
+a stale Jolt pin (`v5.2.0` → `v5.3.0`) across physics spec §3/§14/§15, a `§9 Q6`
+→ `§6 Q6` mislabel, an `external/CMakeLists.txt:NNN` citation regression (line
+numbers shifted by the CE2 edit — de-line-numbered in 6 docs), spec
+header-vs-changelog version drift, and several smaller accuracy fixes.
 
 ### 2026-05-20 Ts20-PA* — parametrise repeated test bodies (6 items)
 

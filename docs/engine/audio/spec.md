@@ -6,8 +6,8 @@
 |-------|-------|
 | Subsystem | `engine/audio` |
 | Status | `shipped` |
-| Spec version | `1.0` |
-| Last reviewed | `2026-04-28` (initial draft — pending cold-eyes review) |
+| Spec version | `1.0.2` |
+| Last reviewed | `2026-06-01` (cold-eyes reviewed) |
 | Owners | `milnet01` |
 | Engine version range | `v0.1.0+` (Phase 9 / 10 / 10.7 / 10.9 — bus mixer, captions, HRTF, ducking, voice eviction) |
 
@@ -21,7 +21,7 @@
 
 | In scope | Out of scope |
 |----------|--------------|
-| `AudioEngine` — OpenAL Soft device, context, source pool (32 slots), buffer cache | OpenAL Soft itself (vendored via FetchContent; `GIT_TAG` line at `external/CMakeLists.txt:362`) |
+| `AudioEngine` — OpenAL Soft device, context, source pool (32 slots), buffer cache | OpenAL Soft itself (fetched + built from source via the OpenAL Soft `FetchContent_Declare` in `external/CMakeLists.txt`) |
 | `AudioMixer` — six-bus gain table (Master / Music / Voice / SFX / Ambient / UI) | Settings UI panel — `engine/editor/settings_panel/audio_panel.cpp` |
 | `DuckingState` + `updateDucking` — sidechain dip with attack / release / floor | Policy of *which* events trigger ducking — `engine/systems/audio_system.cpp` |
 | `SoundPriority` + `chooseVoiceToEvictForIncoming` — admission-controlled eviction | Game-side priority assignment — author-set on `AudioSourceComponent::priority` |
@@ -77,7 +77,7 @@ Key abstractions:
 
 | Abstraction | Type | Purpose |
 |-------------|------|---------|
-| `AudioEngine` | class | OpenAL device + context + source pool + buffer cache + listener. `engine/audio/audio_engine.h:35` |
+| `AudioEngine` | class | OpenAL device + context + source pool + buffer cache + listener. `engine/audio/audio_engine.h:36` |
 | `AudioMixer` | struct | 6-slot bus gain table (Master / Music / Voice / SFX / Ambient / UI). `engine/audio/audio_mixer.h:82` |
 | `AudioBus` | enum class | Bus identifier — referenced by `AudioSourceComponent::bus` and the mixer. `engine/audio/audio_mixer.h:65` |
 | `SoundPriority` | enum class | 4 tiers (Low / Normal / High / Critical) for eviction admission. `engine/audio/audio_mixer.h:47` |
@@ -121,7 +121,7 @@ HrtfStatus             AudioEngine::getHrtfStatus() const;
 void                   AudioEngine::setCaptionAnnouncer(CaptionAnnouncer);
 void                   AudioEngine::setHrtfStatusListener(HrtfStatusListener);
 void                   AudioEngine::setSandboxRoots(std::vector<std::filesystem::path>);
-// see audio_engine.h:35 for full surface (32 public methods).
+// see audio_engine.h:36 for full surface (32 public methods).
 ```
 
 ```cpp
@@ -261,7 +261,7 @@ class AudioSourceComponent : public Component {
 1. `intensityToLayerWeights(currentIntensity, currentSilence)` → per-layer target gain.
 2. For each layer: `advanceMusicLayer(state, dt)` slews `currentGain` toward target; the value drives `AL_GAIN` on that layer's streaming voice.
 3. `MusicStingerQueue::advance(dt)` returns ready stingers, started as fire-and-forget `playSound2D` calls on the Music bus.
-4. For each streaming voice: `planStreamTick(state, decoderAtEof)` returns frames-to-decode + rewind / finished flags; the engine-side music streamer dispatches the actual `dr_libs` calls and `alSourceQueueBuffers`.
+4. For each streaming voice: `planStreamTick(state, decoderAtEof)` returns frames-to-decode + rewind / finished flags; `AudioMusicPlayer::update` decodes one chunk via `stb_vorbis` for OGG (the existing `audio_clip.cpp` `STB_VORBIS_HEADER_ONLY` pattern) and queues it via `alSourceQueueBuffers`. A future WAV/MP3 streaming follow-up would add a `dr_libs` path (WAV/MP3/FLAC already decode via `dr_libs` on the one-shot `audio_clip` load path).
 
 **Cold start (`AudioEngine::initialize`):**
 
@@ -428,7 +428,7 @@ Audio doesn't trigger seizures, so `PhotosensitiveLimits` doesn't constrain `eng
 | `engine/ui/caption_map.h`, `engine/ui/subtitle.h` | engine subsystem | Caption-routing target — wired via `setCaptionAnnouncer`. |
 | `engine/physics/raycast.h` | engine subsystem | Source→listener raycast feeds `occlusionFraction`. |
 | `engine/utils/path_sandbox.h` | engine subsystem | Mirror of `ResourceManager::setSandboxRoots` (Phase 10.9 D11). |
-| `OpenAL Soft 1.25.1` (`<AL/al.h>`, `<AL/alc.h>`, `<AL/alext.h>`) | external | Audio device, mixer, source playback, HRTF (`ALC_SOFT_HRTF`), EFX. Pinned at `external/CMakeLists.txt:362`. Upgraded 2026-04-30 from 1.24.1 (was Open Q1 in §15 — closed). |
+| `OpenAL Soft 1.25.1` (`<AL/al.h>`, `<AL/alc.h>`, `<AL/alext.h>`) | external | Audio device, mixer, source playback, HRTF (`ALC_SOFT_HRTF`), EFX. Pinned via `FetchContent` in `external/CMakeLists.txt`. Upgraded 2026-04-30 from 1.24.1 (closed — see §16 change log). |
 | `dr_libs` (vendored) | external | WAV / MP3 / FLAC decoders (single-header, public domain). |
 | `stb_vorbis` (vendored) | external | OGG Vorbis decoder. |
 | `<glm/glm.hpp>` | external | `vec3` for positions / velocities. |
@@ -465,19 +465,20 @@ Internal cross-references:
 
 | # | Question | Owner | Target |
 |---|----------|-------|--------|
-| ~~1~~ | ~~OpenAL Soft 1.24.1 → 1.25.1 upgrade — **closed 2026-04-30**: pin bumped in `external/CMakeLists.txt:362`, configure + build + tests green. 1.25.1 ships polyphase-resampler hardening, fmtlib integration fix, WASAPI dynamic device enumeration, JACK / CoreAudio capture fixes, Tetraphonic Surround Matrix Encoding. (Closed items live here in struck-out form for one revision before being moved to §16; subsequent unrelated revisions remove this row.)~~ | milnet01 | resolved |
-| 2 | Buffer-cache eviction on scene unload. Currently `m_bufferCache` lives engine-lifetime; long sessions accumulate decoded PCM across scene changes. Design a per-scene reference-count or LRU eviction. | milnet01 | Phase 11 entry |
-| 3 | Path canonicalisation for `loadBuffer` — case-sensitive exact-string keys mean two relative paths to the same file decode + cache twice. Canonicalise via `std::filesystem::weakly_canonical` before hashing. | milnet01 | Phase 11 entry |
-| 4 | Device-disconnected hot-recovery (USB headset unplugged mid-session). `ALC_CONNECTED` polling exists; the UI / `AudioEngine` reset cycle does not. Decide: auto-reopen default device, or surface a UI prompt. | milnet01 | Phase 11 entry |
-| 5 | Move per-frame source compose (`composeAudioSourceAlState` × N) to a worker thread. Pure-function helpers are already lock-free; only the `AudioEngine` state-publish would need atomicity. Profile first to confirm the move is worth it. | milnet01 | Phase 12 (post-MIT release) |
-| 6 | Multi-channel (5.1 / 7.1) source files — `AudioClip::getALFormat` only returns mono / stereo. Authoring guidance is "submix to stereo offline"; if multi-channel sources land, decide whether to expand support or keep the mono/stereo contract. | milnet01 | triage |
-| 7 | EFX reverb integration end-to-end — the `audio_reverb` math is pure-function tested; the engine-side `AudioReverbAdapter` that issues `alEffectf` calls is not yet present (Phase 10 deferred to Phase 12). Either land the adapter or remove the orphan headers. | milnet01 | Phase 12 |
-| 8 | Performance budgets in §8 are placeholders. Need a Tracy capture of `AudioSystem::update` + `updateGains` under load to fill in measured numbers. | milnet01 | Phase 11 audit |
-| 9 | `Result<T, E>` / `std::expected` adoption — `loadBuffer` / `playSound*` use `0`-as-sentinel; migration to typed errors covers the engine-wide debt thread. | milnet01 | Phase 12 (post-MIT release) |
-| 10 | Ambisonics output / scene encoding for outdoor scenes. OpenAL Soft already renders internally via ambisonics; explicit ambisonics input bed + scene-graph routing would benefit large outdoor walkthroughs. Research-only at this stage. | milnet01 | triage |
+| 1 | Buffer-cache eviction on scene unload. Currently `m_bufferCache` lives engine-lifetime; long sessions accumulate decoded PCM across scene changes. Design a per-scene reference-count or LRU eviction. | milnet01 | Phase 11 entry |
+| 2 | Path canonicalisation for `loadBuffer` — case-sensitive exact-string keys mean two relative paths to the same file decode + cache twice. Canonicalise via `std::filesystem::weakly_canonical` before hashing. | milnet01 | Phase 11 entry |
+| 3 | Device-disconnected hot-recovery (USB headset unplugged mid-session). `ALC_CONNECTED` polling exists; the UI / `AudioEngine` reset cycle does not. Decide: auto-reopen default device, or surface a UI prompt. | milnet01 | Phase 11 entry |
+| 4 | Move per-frame source compose (`composeAudioSourceAlState` × N) to a worker thread. Pure-function helpers are already lock-free; only the `AudioEngine` state-publish would need atomicity. Profile first to confirm the move is worth it. | milnet01 | Phase 12 (post-MIT release) |
+| 5 | Multi-channel (5.1 / 7.1) source files — `AudioClip::getALFormat` only returns mono / stereo. Authoring guidance is "submix to stereo offline"; if multi-channel sources land, decide whether to expand support or keep the mono/stereo contract. | milnet01 | triage |
+| 6 | EFX reverb integration end-to-end — the `audio_reverb` math is pure-function tested; the engine-side `AudioReverbAdapter` that issues `alEffectf` calls is not yet present (Phase 10 deferred to Phase 12). Either land the adapter or remove the orphan headers. | milnet01 | Phase 12 |
+| 7 | Performance budgets in §8 are placeholders. Need a Tracy capture of `AudioSystem::update` + `updateGains` under load to fill in measured numbers. | milnet01 | Phase 11 audit |
+| 8 | `Result<T, E>` / `std::expected` adoption — `loadBuffer` / `playSound*` use `0`-as-sentinel; migration to typed errors covers the engine-wide debt thread. | milnet01 | Phase 12 (post-MIT release) |
+| 9 | Ambisonics output / scene encoding for outdoor scenes. OpenAL Soft already renders internally via ambisonics; explicit ambisonics input bed + scene-graph routing would benefit large outdoor walkthroughs. Research-only at this stage. | milnet01 | triage |
 
 ## 16. Spec change log
 
 | Date | Spec version | Author | Change |
 |------|--------------|--------|--------|
 | 2026-04-28 | 1.0 | milnet01 | Initial spec — `engine/audio` formalised post-Phase 10.9. Captures the full Phase 9 / 10 / 10.7 / 10.9 surface (mixer, ducking, eviction, HRTF, captions, sandbox, source-state compose). |
+| 2026-06-01 | 1.0.1 | milnet01 | Closed §15 Q1 (OpenAL Soft 1.24.1 → 1.25.1, done 2026-04-30: pin bumped at `external/CMakeLists.txt`, build + tests green; 1.25.1 brings polyphase-resampler hardening, fmtlib fix, WASAPI dynamic device enumeration, JACK / CoreAudio capture fixes). Migrated to §16 + renumbered §15 per SPEC_TEMPLATE convention (§15 is open-only; CE10). |
+| 2026-06-01 | 1.0.2 | milnet01 | §5 streaming-music step 4 amended (CE11): corrected "dispatches the actual `dr_libs` calls" → `stb_vorbis` decode for OGG (matches code — OGG uses `stb_vorbis`, only WAV/MP3/FLAC use `dr_libs`). Resolves the doc-vs-spec drift flagged by `phase_10_audio_music_player_design.md` step 7b. |

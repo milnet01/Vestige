@@ -103,7 +103,7 @@ Entity (Transform + SpriteComponent)
 
 ### 3.3 Why Jolt, not Box2D
 
-Jolt is already vendored at `external/CMakeLists.txt:322-336`, already drives 3D
+Jolt is already vendored via `external/CMakeLists.txt`, already drives 3D
 rigid bodies, cloth, and ragdolls. Adding Box2D would mean:
 
 1. Second `World`-like object with its own step schedule.

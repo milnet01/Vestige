@@ -693,6 +693,15 @@ Extend `SceneSerializerResult` with `MusicSceneSettings music;`
 from 1 → 2 with a backwards-compatible read (missing `music`
 key → empty `MusicSceneSettings`).
 
+> **Scene-format-version ownership (locked 2026-06-01, CE5).** This design
+> doc (Slice 8, step 8) **owns the scene `CURRENT_FORMAT_VERSION` 1 → 2 bump**
+> (`engine/editor/scene_serializer.h`, currently `= 1`). No other Phase 10 doc
+> touches scene-JSON fields — verified 2026-06-01 (phase_11a's "format-version"
+> references are the *replay* format, not the scene format). Any other phase
+> that needs to add scene-JSON fields before this slice lands must fold them
+> into the same v1 → v2 migration here, or wait and own v2 → v3; it must not
+> open a parallel 1 → 2 bump.
+
 Two new overloads parallel to the existing
 environment/terrain pair:
 
@@ -891,7 +900,7 @@ multi-step work):
 | 5. **Write `engine/systems/music_system.{h,cpp}`** + wire into `engine/CMakeLists.txt` | Build green; `MusicSystem::getSystemName()` returns `"MusicSystem"` |
 | 6. **Add `tests/test_audio_music_player.cpp`** covering the 14 test rows + wire into `tests/CMakeLists.txt` | Green on headless CI runner |
 | 7a. **Additive `docs/engine/audio/spec.md` extensions** (design-doc authority — additive only): §3 inventory adds `AudioMusicPlayer` + `MusicSystem` rows; §6 budget table re-pins the `MusicSystem::update` TBD with the step-1-measured amortised number (and adds a cold-cache annotation if the worst-case exceeds 0.2 ms); §11 tests adds `tests/test_audio_music_player.cpp` line; §13 dependencies adds the `MusicSceneSettings` JSON schema | `grep -nE 'AudioMusicPlayer\|MusicSystem' docs/engine/audio/spec.md` shows new rows in §3 + §6 + §11 + §13; spec.md §5 workflow text at l.259-264 unchanged (covered by 7b) |
-| 7b. **Spec-amendment proposal** (NOT design-doc authority — needs spec-owner review): propose replacing spec.md §5 (l.264) wording *"engine-side music streamer dispatches the actual `dr_libs` calls and `alSourceQueueBuffers`"* with *"`AudioMusicPlayer::update` decodes one chunk via `stb_vorbis` for OGG (via the existing `audio_clip.cpp` `STB_VORBIS_HEADER_ONLY` pattern) and queues it via `alSourceQueueBuffers`; a future WAV/MP3 streaming follow-up would add a dr_libs path"*. Flag in the design-doc review (with this design doc) as a separate ask; do not land the wording change without spec-owner sign-off | Spec-owner says yes/no; if yes, edit lands; if no, the doc-vs-spec conflict surfaces as a `📋` ROADMAP item |
+| 7b. ✅ **LANDED (2026-06-01, CE11).** Spec-owner approved the §5 amendment: spec.md §5 step 4 now reads *"`AudioMusicPlayer::update` decodes one chunk via `stb_vorbis` for OGG (the existing `audio_clip.cpp` `STB_VORBIS_HEADER_ONLY` pattern) and queues it via `alSourceQueueBuffers`. A future WAV/MP3 streaming follow-up would add a `dr_libs` path…"*. The amendment is factually correct — code confirms OGG decodes via `stb_vorbis`, only WAV/MP3/FLAC use `dr_libs`. Recorded in audio spec §16 (v1.0.2). | ✅ Done — doc-vs-spec drift resolved before step 9 implementation |
 | 8. **Extend `SceneSerializer`** with `MusicSceneSettings` + the two new overloads. Bump `CURRENT_FORMAT_VERSION` 1 → 2 with backwards-compatible load — add a `migrateV1toV2(json&)` helper (the commented-out template at `scene_serializer.cpp:285` shows where it plugs into the existing `migrateScene` switch) implemented as a no-op for the missing `music` block (v1 has no `music` block; v2 reads the missing-key case as an empty `MusicSceneSettings`). Add a fixture `tests/fixtures/scenes/pre_v2_no_music.scene` with `format_version: 1` and assert it loads green with `music.layers.empty()` and the post-load `format_version` flipped to 2 in memory | Scene round-trip test (load → save → reload) preserves the music block; pre-v2 scene fixture loads green with an empty `MusicSceneSettings` |
 | 9. **Wire the caller-side integration** at all four current `SceneSerializer::loadScene` call sites: `engine/core/engine.cpp:228` (start-up scene), `engine/editor/file_menu.cpp:493, 606, 758` (three editor "open scene" paths). At each site, after the result returns success, call `m_musicPlayer->clearAllLayers()` then loop `loadLayer + playLayer` for every entry in the populated `MusicSceneSettings.layers`. Shipping one site at a time leaves a half-wired feature (start-up loads music but editor "Open" doesn't, or vice versa), so all four land together | A scene with a music block triggers `loadLayer + playLayer` at every entry point; integration test `tests/test_scene_load_audio_integration.cpp` exercises both the start-up path and an editor-open path |
 | 10. **Flip W8 (part 2/2) to shipped** in ROADMAP.md, update the bullet summary to match the as-shipped design | `roadmap_query` shows zero Phase 10.9 Slice 8 active items |

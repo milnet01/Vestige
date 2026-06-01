@@ -6,8 +6,8 @@
 |-------|-------|
 | Subsystem | `engine/physics` |
 | Status | `shipped` |
-| Spec version | `1.0` |
-| Last reviewed | `2026-04-28` (initial draft — pending cold-eyes review) |
+| Spec version | `1.0.1` |
+| Last reviewed | `2026-06-01` (cold-eyes reviewed) |
 | Owners | `milnet01` |
 | Engine version range | `v0.1.0+` (Jolt foundation since Phase 8A; XPBD cloth since Phase 8D; GPU cloth backend since Phase 9B) |
 
@@ -582,7 +582,7 @@ Constraint summary for downstream UIs / gameplay code:
 | `engine/utils/aabb.h` | engine subsystem (transitive via core / scene) | Box collider math. |
 | `engine/core/logger.h` | engine subsystem | Error / warn / info routing; Jolt `Trace` + `AssertFailed` shimmed through `Logger`. |
 | `engine/renderer/dynamic_mesh.h`, `renderer/material.h`, `renderer/shader.h`, `renderer/debug_draw.h`, `renderer/camera.h`, `renderer/mesh.h` | engine subsystem | Cloth mesh upload, debug overlay, fabric material, GPU cloth shader load. **Dependency direction is one-way: physics depends on renderer for asset / draw plumbing; renderer does not depend on physics.** |
-| `Jolt/Jolt.h` + `Jolt/Physics/...` — **pinned at v5.2.0** (`external/CMakeLists.txt:329`) | external (third-party) | Rigid-body simulation, constraints, character controller. Cross-platform character determinism (Windows / Linux / macOS within a single CPU architecture) was introduced in upstream Jolt 5.3.0 — **the engine has not yet bumped to 5.3.0**, so character-replay parity across hosts is not yet a guarantee here. Tracked in §15 (Jolt-version posture). |
+| `Jolt/Jolt.h` + `Jolt/Physics/...` — **pinned at v5.3.0** (`external/CMakeLists.txt`, Jolt `FetchContent_Declare`) | external (third-party) | Rigid-body simulation, constraints, character controller. v5.3.0 introduced cross-platform character determinism (Windows / Linux / macOS within a single CPU architecture); whether character-replay parity across hosts is validated by a passing parity test is tracked in §15 (Jolt-version posture). |
 | `<glm/glm.hpp>`, `<glm/gtc/quaternion.hpp>` | external | Engine-side math (vec3 / quat / mat4) — bridged to Jolt via `jolt_helpers.h`. |
 | `<glad/gl.h>` | external | OpenGL 4.5 entry points (GPU cloth SSBOs / compute dispatch). |
 | `<map>`, `<memory>`, `<vector>`, `<cstdint>`, `<thread>`, `<cmath>`, `<cstdarg>`, `<cstdio>`, `<string>` | std | Constraint storage, RAII, particle SoA, type widths, Jolt thread-count probe, Jolt trace formatting. |
@@ -593,8 +593,8 @@ Constraint summary for downstream UIs / gameplay code:
 
 External cited sources (≤ 1 year old where possible):
 
-- jrouwe / Jolt Physics 5.x **Release Notes** — engine pin is **v5.2.0**. The 5.3.0 / 5.4.0+ items below describe upstream features the engine has *not* yet adopted; they're cited here as the upgrade target, not as shipped behaviour. <https://jrouwe.github.io/JoltPhysicsDocs/5.1.0/md__docs__release_notes.html> · <https://github.com/jrouwe/JoltPhysics/blob/master/Docs/ReleaseNotes.md>
-- Jorrit Rouwe. *Jolt Physics 5.3.0 release announcement (2025-03-15)* — cross-platform character determinism validation; **upstream-available, not yet in the engine pin**. <https://x.com/jrouwe/status/1901025550983946259>
+- jrouwe / Jolt Physics 5.x **Release Notes** — engine pin is **v5.3.0** (cross-platform character determinism, sensor-static detection, constraint priority adopted). The 5.4.0+ / master items below describe upstream features the engine has *not* yet adopted; they're cited here as the upgrade target, not as shipped behaviour. <https://jrouwe.github.io/JoltPhysicsDocs/5.1.0/md__docs__release_notes.html> · <https://github.com/jrouwe/JoltPhysics/blob/master/Docs/ReleaseNotes.md>
+- Jorrit Rouwe. *Jolt Physics 5.3.0 release announcement (2025-03-15)* — cross-platform character determinism validation; **shipped in the engine pin (v5.3.0)**. <https://x.com/jrouwe/status/1901025550983946259>
 - Miles Macklin, Matthias Müller, Nuttapong Chentanez. *XPBD: Position-Based Simulation of Compliant Constrained Dynamics* (MIG 2016) — the iteration-count and timestep-independent compliance formulation underpinning `ClothSimulator`. <https://matthias-research.github.io/pages/publications/XPBD.pdf>
 - *MGPBD: A Multigrid Accelerated Global XPBD Solver* (arXiv 2025-05) — current-research benchmark; informs why the engine sticks with greedy-colour Jacobi for now (multigrid not justified at the cloth sizes shipped). <https://arxiv.org/html/2505.13390v1>
 - *DiffXPBD: Differentiable Position-Based Simulation of Compliant Constraint Dynamics* (ACM 2023, ongoing line of work) — confirms XPBD remains the dominant cloth approach in 2025-era research. <https://dl.acm.org/doi/10.1145/3606923>
@@ -636,11 +636,11 @@ Internal cross-references:
 | 12 | Performance budgets in §8 are placeholders — needs a one-shot Tracy / RenderDoc capture against the demo scene + a 64×64 GPU cloth panel to fill in measured numbers. | milnet01 | Phase 11 audit |
 | 13 | Replay determinism (Phase 11A): no per-tick state hash exists yet. Once added, mismatch detection during replay catches `-ffast-math` regressions, NaN propagation, and worker-count drift. | milnet01 | Phase 11A entry |
 | 14 | Cloth wind seed currently lives on `ClothSimulator` only — `GpuClothSimulator` does not yet thread the seed through to its wind compute shader. Will surface as a parity-test failure once Cl1 lands. | milnet01 | Phase 10.9 Slice 17 close (with Cl1) |
-| 15 | **Jolt-version posture** (CLAUDE.md Rule 8). Engine pin = v5.2.0; upstream master / 5.3.0+ has cross-platform character determinism, sensor-static detection, constraint priority, RISC-V SIMD, additional perf optimisations. Bump + rerun parity tests (no-op on engine-side code is the goal; Jolt API churn at minor versions is small). | milnet01 | Phase 11 entry |
-| 16 | **CODING_STANDARDS §30 drift.** §30 names `engine/physics/jolt_layers.h` and `JoltHelpers::initialize` — the actual files are `engine/physics/physics_layers.h` and `jolt_helpers.h` (with free-function vec3/quat/mat4 conversions, no `initialize`). §30 needs the references corrected. | milnet01 | next CODING_STANDARDS pass |
+| 15 | **Jolt-version posture** (CLAUDE.md Rule 8). Engine pin = v5.3.0 (cross-platform character determinism, sensor-static detection, constraint priority all landed). Open: confirm character-replay parity tests pass at 5.3.0, and weigh upstream master (RISC-V SIMD, further perf optimisations) — bump + rerun parity tests (no-op on engine-side code is the goal; Jolt API churn at minor versions is small). | milnet01 | Phase 11 entry |
 
 ## 16. Spec change log
 
 | Date | Spec version | Author | Change |
 |------|--------------|--------|--------|
 | 2026-04-28 | 1.0 | milnet01 | Initial spec — `engine/physics` formalised post-Phase 10.9 Wave 4 (Ph2 / Ph6 / Ph7 / Ph9 / Cl2 / Cl3 / Cl7 / Cl8 landed). Cloth dual-implementation, constraint determinism story, and Jolt threading model captured for the first time in one document. |
+| 2026-06-01 | 1.0.1 | milnet01 | Closed the former §15 open question on "CODING_STANDARDS §30 drift" (then numbered Q16): verified §30 already names `physics_layers.h` + `jolt_helpers.h` correctly (the rename landed in the 2026-05-18 cold-eyes pass), so the drift no longer exists. Its §15 row was removed on close per the SPEC_TEMPLATE open-only convention — §15 now tops out at Q15 (CE15). |

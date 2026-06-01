@@ -415,7 +415,7 @@ Per CLAUDE.md Rule 7 — this subsystem has both CPU and GPU code paths.
 
 60 frames per second (FPS) hard requirement → 16.6 ms per frame.
 
-Not yet measured — will be filled by the Phase 11 audit; tracked as Open Q6 in §15. The runtime budget breaks into three ranges depending on which tier the renderer picked:
+Budget targets below are set; the *Measured* column is filled by the Phase 11 audit (tracked as Open Q6 in §15). The runtime budget breaks into three ranges depending on which tier the renderer picked:
 
 | Path | Budget (target) | Measured (RX 6600, 1080p) |
 |------|-----------------|----------------------------|
