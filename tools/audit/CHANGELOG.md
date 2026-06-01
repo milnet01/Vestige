@@ -2,6 +2,46 @@
 
 All notable changes to the Audit Tool are documented in this file.
 
+## [2.19.0] - 2026-06-01
+
+### Added — Phase 3 propose-fix layer (audit self-learning loop)
+
+Phase 3 of the three-phase self-learning loop. Where Phase 2 *silences* a
+pure-noise rule by demoting its severity, Phase 3 proposes a *surgical* fix
+for rules that are noisy but still produce real hits: it mines the rule's
+false-positive matched-text set for a common identifier or namespace signature,
+and suggests an `exclude_pattern` addition that would drop the FP class while
+keeping the real findings. Advisory only — output is written to
+`.audit_propose_fixes.md`; the tool never edits config automatically.
+
+- **`lib/stats.py` — `compute_proposals()`** — gates on history (`min_runs`
+  runs, `min_hits` total, `noise_threshold` ≥ 0.5), collects the current run's
+  suppressed tier-2 findings by rule, and mines common signatures via
+  `_mine_signatures()`. A signature is a token or namespace prefix appearing in
+  ≥60 % of the rule's current-run false positives and not already matched by
+  the rule's `exclude_pattern`. Namespace-qualified tokens expand to general
+  prefixes (`tinygltf::Image` → `tinygltf::`) so a suggestion drops the whole
+  FP class, not one case. Redundant specific tokens are pruned when a more
+  general prefix is already in the kept set.
+- **`lib/stats.py` — `render_proposals_markdown()`** — renders the proposal
+  list as a maintainer-facing markdown report with evidence samples and a
+  suggested `exclude_pattern` value ready to paste into `audit_config.yaml`.
+- **`lib/config.py` — `propose_fixes:` config block** — policy configurable
+  with the same shape as `auto_demote:`: `enabled`, `min_runs`, `min_hits`,
+  `noise_threshold`, `min_fp`, `min_support`, `min_support_count`,
+  `max_signatures_per_rule`, `max_rules`, `min_token_len`, `output_file`.
+- **`lib/runner.py` — pipeline wiring** — Phase 3 runs right after stats are
+  persisted and before `filter_suppressed()`, so the FP matched-text is still
+  in hand. Writes `.audit_propose_fixes.md` when proposals are found; tolerates
+  exceptions (stats-layer sidecar pattern) so a bug never breaks the main run.
+- **`audit.py` — `--propose-fixes-show`** — mirrors `--self-triage`: prints
+  the latest `.audit_propose_fixes.md` and exits.
+- **`tests/test_propose_fixes.py`** — 20 tests covering all policy gates,
+  signature-mining heuristics (support fraction, min_support_count, stopwords,
+  existing-exclude skip, min_token_len, namespace-prefix generalisation,
+  redundant-token pruning), output ordering, and markdown rendering. All 870
+  audit tests green.
+
 ## [2.18.0] - 2026-04-27
 
 ### Fixed — gtest-macro syntax errors gating CI on test files

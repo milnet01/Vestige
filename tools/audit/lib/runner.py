@@ -192,6 +192,30 @@ class AuditRunner:
             save_stats(stats, self.config.root)
             log.info("Updated .audit_stats.json — %d rules tracked",
                      len(stats.rules))
+
+            # Phase 3 (propose-fix): with the per-rule history just updated
+            # and the full pre-filter findings still in hand, mine the
+            # false-positive set of noisy tier-2 rules for a common signature
+            # and write an advisory exclude_pattern suggestion file. Runs here
+            # (before filter_suppressed) because it needs the suppressed
+            # findings' matched text, which the filter is about to drop.
+            from .stats import compute_proposals, render_proposals_markdown
+            propose_cfg = self.config.get("propose_fixes", default={}) or {}
+            proposals = compute_proposals(
+                stats=stats,
+                findings=results.findings,
+                suppressed_keys=suppressed,
+                patterns=self.config.patterns,
+                policy=propose_cfg,
+            )
+            if proposals:
+                out_name = propose_cfg.get("output_file", ".audit_propose_fixes.md")
+                out_path = self.config.root / out_name
+                out_path.write_text(render_proposals_markdown(proposals) + "\n")
+                log.info(
+                    "Phase 3: wrote %d exclude_pattern proposal(s) to %s",
+                    len(proposals), out_path,
+                )
         except Exception as e:
             # Stats are a diagnostic sidecar; never break the run on
             # stats-layer failure.

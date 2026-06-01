@@ -219,9 +219,33 @@ Options:
   --verified-show         Print current verified keys from .audit_verified (D3)
   --verified-add KEY      Mark a finding's dedup_key as reviewed-and-real (D3)
   --verified-remove KEY   Revoke a verified-key entry (D3)
+  --self-triage           Emit the per-rule noise-ratio triage report (Phase 1)
+  --stats-show            Print the raw .audit_stats.json counters
+  --stats-reset           Delete .audit_stats.json (restart counters)
+  --propose-fixes-show    Print the latest .audit_propose_fixes.md (Phase 3)
   --nvd-test              Validate NVD API key with a single test query and exit
                           (exit 0 = OK, 1 = no key, 2 = key rejected)
 ```
+
+### Self-learning loop (Phases 1–3)
+
+The tool accumulates per-rule feedback across runs and acts on it, so noisy
+rules surface and get tuned without a human hand-triaging every report.
+
+- **Phase 1 — observe** (2.9.0). Every run updates `.audit_stats.json` with
+  per-rule `hits` / `verified` / `suppressed` counters. `--self-triage` ranks
+  rules by `noise_ratio × hits`; `--stats-show` dumps the raw file.
+- **Phase 2 — demote** (2.10.0). Rules that are ≥90 % noise over ≥10 hits
+  *with no verified hit* are auto-demoted one severity step on the next run
+  (`auto_demote:` config block). A pure-noise rule stops shouting.
+- **Phase 3 — propose** (2.19.0). For rules that are *partially* noisy (≥50 %,
+  but still produce real findings, so demotion would lose signal), the run
+  mines the false-positive set for a common textual signature — usually a
+  namespace prefix (`JPH::`) or library token (`tinygltf`) — and writes
+  `.audit_propose_fixes.md` suggesting an `exclude_pattern` addition that drops
+  the FP class while keeping the real hits. Advisory only: the file is for
+  review, the tool never edits config. `--propose-fixes-show` prints it; the
+  `propose_fixes:` config block tunes the gates.
 
 ### Exit Codes
 

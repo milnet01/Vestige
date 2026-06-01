@@ -244,6 +244,29 @@ _DEFAULTS_AUTO_DEMOTE: dict[str, Any] = {
     "exempt": [],
 }
 
+# Phase 3 of the audit self-learning loop (tool 2.19.0). After at least
+# `min_runs` runs, mines the false-positive set of each noisy tier-2 pattern
+# rule for a common textual signature and writes `.audit_propose_fixes.md`
+# suggesting an `exclude_pattern` addition that would drop the FP class while
+# keeping the rule's real findings. Advisory only — never edits config. Sits
+# below Phase 2's 0.9 demotion threshold (`noise_threshold: 0.5`) because the
+# useful band for a *tightening* suggestion is the partially-noisy rule that
+# still produces real signal. See lib/stats.py `compute_proposals` +
+# `DEFAULT_PROPOSE_POLICY`.
+_DEFAULTS_PROPOSE_FIXES: dict[str, Any] = {
+    "enabled": True,
+    "min_runs": 3,
+    "min_hits": 10,
+    "noise_threshold": 0.5,
+    "min_fp": 3,
+    "min_support": 0.6,
+    "min_support_count": 2,
+    "max_signatures_per_rule": 3,
+    "max_rules": 20,
+    "min_token_len": 4,
+    "output_file": ".audit_propose_fixes.md",
+}
+
 # D4 (2.6.0): Tier 6 — feature coverage sweep. Heuristic check that
 # every engine/<subsystem>/ directory has at least one test file
 # referencing it via #include or filename prefix.
@@ -272,6 +295,7 @@ DEFAULTS: dict[str, Any] = {
     "research": _DEFAULTS_RESEARCH,
     "severity_overrides": [],
     "auto_demote": _DEFAULTS_AUTO_DEMOTE,
+    "propose_fixes": _DEFAULTS_PROPOSE_FIXES,
     "tier6": _DEFAULTS_TIER6,
     "report": _DEFAULTS_REPORT,
     "tiers": [1, 2, 3, 4, 5, 6],

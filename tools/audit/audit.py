@@ -223,6 +223,15 @@ def main() -> int:
              "counters + rolling run history) and exit.",
     )
     parser.add_argument(
+        "--propose-fixes-show",
+        action="store_true",
+        dest="propose_fixes_show",
+        help="Print the most recent .audit_propose_fixes.md (Phase 3 of the "
+             "self-learning loop) and exit. The file is regenerated at the end "
+             "of every run once enough history has accumulated; this flag just "
+             "displays it without re-running the audit.",
+    )
+    parser.add_argument(
         "--stats-reset",
         action="store_true",
         help="Delete .audit_stats.json and exit. Use when a major rule "
@@ -329,6 +338,19 @@ def main() -> int:
         root = Path(args.project_root).resolve() if args.project_root else Path.cwd()
         stats = load_stats(root)
         print(json.dumps(stats.to_dict(), indent=2, sort_keys=True))
+        return 0
+
+    # --propose-fixes-show: print the last Phase 3 report and exit
+    if args.propose_fixes_show:
+        root = Path(args.project_root).resolve() if args.project_root else Path.cwd()
+        path = root / ".audit_propose_fixes.md"
+        if path.exists():
+            print(path.read_text())
+        else:
+            print(f"No propose-fix report at {path}. Run an audit first; the "
+                  "file is generated once enough run history has accumulated.",
+                  file=sys.stderr)
+            return 1
         return 0
 
     # --stats-reset: delete the stats file and exit

@@ -18,13 +18,18 @@ This is Phase 1 of the self-learning loop sketched in
 ``docs/research/formula_workbench_self_learning_design.md`` §6 (audit analog).
 Phase 2 (auto-demotion based on noise ratio) reads from the same
 stats file; keeping the collector independent means it works on its
-own even without the demotion layer wired up.
+own even without the demotion layer wired up. Phase 3 (``compute_proposals`` /
+``render_proposals_markdown``) is the propose-fix layer: it mines the
+false-positive set of partially-noisy tier-2 rules for a common signature and
+suggests an ``exclude_pattern`` addition — a surgical alternative to Phase 2's
+blanket demotion.
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import re
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -416,4 +421,298 @@ def compute_demotions(
             continue
         out[rid] = steps
     return out
+
+
+# ---------------------------------------------------------------------------
+# Phase 3 — propose-fix layer.
+#
+# Where Phase 2 *silences* a pure-noise rule (≥90 % noise, no real signal) by
+# demoting its severity, Phase 3 proposes a *surgical* fix for rules that are
+# noisy but still produce real hits: it mines the rule's false-positive set for
+# a common textual signature and suggests an ``exclude_pattern`` addition that
+# would drop the FP class while keeping the genuine findings. The output is
+# advisory — a markdown file the maintainer reviews, never an automatic config
+# edit (the analog of the LLM-as-prior framing in
+# ``docs/research/formula_workbench_self_learning_design.md`` §3.6: the tool is
+# excellent at *narrowing the search* for a fix, not at applying it blind).
+#
+# Scope: only tier-2 *pattern* rules carry an ``exclude_pattern`` knob, and only
+# their findings put the matched source text in ``Finding.detail`` (see
+# ``tier2_patterns.py`` — ``detail = line_text.strip()[:200]``). Tier-1
+# (cppcheck / clang-tidy) and tier-4 (structural) rules have no exclude-pattern
+# to tune, so they are out of scope here.
+# ---------------------------------------------------------------------------
+
+# Default policy. min_runs gates on accumulated history ("after N runs");
+# noise_threshold sits BELOW Phase 2's 0.9 because the interesting band for a
+# *tightening* suggestion is the partially-noisy rule (still has real signal,
+# so demotion would lose it). A signature must appear in a strong majority of
+# the rule's current-run FPs to be proposed — a token that shows up in one FP
+# is coincidence, not a class.
+DEFAULT_PROPOSE_POLICY: dict[str, Any] = {
+    "enabled": True,
+    "min_runs": 3,              # need some history before proposing
+    "min_hits": 10,             # historical observations across runs
+    "noise_threshold": 0.5,     # propose for ≥50 %-noise rules
+    "min_fp": 3,                # need ≥3 current-run FPs to mine a signature
+    "min_support": 0.6,         # a signature must appear in ≥60 % of those FPs
+    "min_support_count": 2,     # …and in at least this many FPs (small-set guard)
+    "max_signatures_per_rule": 3,
+    "max_rules": 20,
+    "min_token_len": 4,         # shorter tokens are too generic to discriminate
+    "output_file": ".audit_propose_fixes.md",
+}
+
+# Identifier / namespace-qualified token, e.g. ``JPH::Body``, ``make_unique``,
+# ``tinygltf``. These are the substrings a maintainer would add to an
+# ``exclude_pattern`` alternation to drop a false-positive class.
+_TOKEN_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*(?:::[A-Za-z_][A-Za-z0-9_]*)*")
+
+# Ultra-common C/C++ tokens that would dominate a frequency count without
+# discriminating the FP class — never proposed as a signature on their own.
+_TOKEN_STOPWORDS = frozenset({
+    "const", "void", "int", "float", "double", "char", "bool", "auto", "return",
+    "if", "else", "for", "while", "switch", "case", "break", "continue", "this",
+    "true", "false", "null", "nullptr", "static", "inline", "struct", "class",
+    "public", "private", "protected", "namespace", "using", "template", "typename",
+    "size_t", "uint32_t", "int32_t", "std", "new", "delete", "sizeof",
+})
+
+
+@dataclass
+class PatternProposal:
+    """One proposed ``exclude_pattern`` addition for a noisy tier-2 rule."""
+    rule_id: str
+    category: str
+    signatures: list[str]          # tokens to add, highest-support first
+    fp_count: int                  # rule's false positives in the current run
+    support: dict[str, int]        # signature → how many FPs contain it
+    hits: int                      # historical hits (cumulative)
+    noise_ratio: float             # historical noise ratio (cumulative)
+    existing_exclude: str          # current exclude_pattern ("" if none)
+    samples: list[str]             # up to a few example matched lines
+
+    @property
+    def suggested_exclude(self) -> str:
+        """The existing exclude_pattern extended with the new signatures.
+
+        Each signature is regex-escaped so the suggestion is a valid pattern
+        the maintainer can paste verbatim. Alternation order is existing-first
+        so the diff reads as an append.
+        """
+        parts = [self.existing_exclude] if self.existing_exclude else []
+        parts.extend(re.escape(s) for s in self.signatures)
+        return "|".join(parts)
+
+
+def _candidate_signatures(token: str, min_len: int) -> list[str]:
+    """Expand one matched token into the exclude-pattern candidates it implies.
+
+    A bare identifier (``make_unique``, ``tinygltf``) is its own candidate when
+    long enough. A namespace-qualified name (``JPH::Body``) also yields each
+    namespace prefix *with the trailing* ``::`` (``JPH::``) — the idiomatic
+    exclude form a maintainer writes to drop a whole namespace's worth of false
+    positives — plus the full token. Prefixes are kept regardless of length
+    because a namespace identifier is meaningful even when short (e.g. ``JPH``).
+    """
+    if "::" in token:
+        segs = token.split("::")
+        out = ["::".join(segs[:i]) + "::" for i in range(1, len(segs))]
+        out.append(token)
+        return out
+    return [token] if len(token) >= min_len else []
+
+
+def _mine_signatures(
+    details: list[str],
+    existing_exclude: str,
+    policy: dict[str, Any],
+) -> tuple[list[str], dict[str, int]]:
+    """Return (signatures, support) mined from a rule's FP matched-text set.
+
+    A signature is a token (or namespace prefix) appearing in a strong majority
+    of the FP lines that is not already matched by the existing exclude regex
+    and not a generic stopword. ``support[sig]`` is the count of FP lines
+    containing it. Redundant longer candidates are dropped when a more general
+    candidate (a substring of them) is already selected — ``JPH::`` wins over
+    ``JPH::Body`` so the suggestion drops the whole class, not one case.
+    """
+    min_len = int(policy.get("min_token_len", 4))
+    min_support_frac = float(policy.get("min_support", 0.6))
+    min_support_count = int(policy.get("min_support_count", 2))
+    max_sigs = int(policy.get("max_signatures_per_rule", 3))
+
+    existing_re = None
+    if existing_exclude:
+        try:
+            existing_re = re.compile(existing_exclude)
+        except re.error:
+            existing_re = None
+
+    # Count how many distinct FP lines each candidate signature appears in.
+    support: dict[str, int] = {}
+    for text in details:
+        seen: set[str] = set()
+        for m in _TOKEN_RE.finditer(text):
+            for cand in _candidate_signatures(m.group(0), min_len):
+                if cand in seen:
+                    continue
+                # A candidate already caught by the existing exclude regex is,
+                # by definition, not the reason these FPs slipped through.
+                if existing_re is not None and existing_re.search(cand):
+                    continue
+                if cand.lower() in _TOKEN_STOPWORDS:
+                    continue
+                seen.add(cand)
+                support[cand] = support.get(cand, 0) + 1
+
+    fp_count = len(details)
+    threshold = max(min_support_count, int(min_support_frac * fp_count + 0.999))
+    qualified = [(c, n) for c, n in support.items() if n >= threshold]
+    # Deterministic: highest support first, ties broken alphabetically (which
+    # also sorts a general prefix ahead of the full token it prefixes).
+    qualified.sort(key=lambda kv: (-kv[1], kv[0]))
+
+    kept: list[str] = []
+    for cand, _ in qualified:
+        if any(k in cand for k in kept):
+            continue  # a more general signature already covers this one
+        kept.append(cand)
+        if len(kept) >= max_sigs:
+            break
+    return kept, {c: support[c] for c in kept}
+
+
+def compute_proposals(
+    stats: AuditStats,
+    findings: list[Finding],
+    suppressed_keys: set[str],
+    patterns: dict[str, list[dict]],
+    policy: dict[str, Any] | None = None,
+) -> list[PatternProposal]:
+    """Propose ``exclude_pattern`` additions for noisy tier-2 pattern rules.
+
+    Phase 3 of the self-learning loop. Inputs:
+      - ``stats``: cumulative counters (already including the current run) —
+        used to gate on history (``min_runs``) and per-rule noise.
+      - ``findings``: the full pre-suppress-filter finding list of the current
+        run (so the suppressed findings' matched text is still present).
+      - ``suppressed_keys``: dedup_keys from ``.audit_suppress`` — a finding in
+        this set is a confirmed false positive.
+      - ``patterns``: ``config.patterns`` — ``{category: [{name, exclude_pattern,
+        ...}]}``. Only rules present here are in scope (they have the knob).
+
+    Returns a deterministically-ordered list of proposals (empty when the
+    policy is disabled, history is too short, or no rule clears the gates).
+    """
+    merged = dict(DEFAULT_PROPOSE_POLICY)
+    if policy:
+        merged.update({k: v for k, v in policy.items() if v is not None})
+
+    if not merged.get("enabled", True):
+        return []
+    if len(stats.runs) < int(merged.get("min_runs", 3)):
+        return []
+
+    min_hits = int(merged.get("min_hits", 10))
+    noise_threshold = float(merged.get("noise_threshold", 0.5))
+    min_fp = int(merged.get("min_fp", 3))
+    max_rules = int(merged.get("max_rules", 20))
+
+    # Map rule_id (pattern name) → (category, exclude_pattern). Only tier-2
+    # pattern rules carry an exclude_pattern knob and are in scope.
+    rule_category: dict[str, str] = {}
+    rule_exclude: dict[str, str] = {}
+    for category, pats in (patterns or {}).items():
+        for pat in pats or []:
+            name = pat.get("name", "")
+            if not name:
+                continue
+            rule_category[name] = category
+            rule_exclude[name] = pat.get("exclude_pattern", "") or ""
+
+    # Collect this run's false positives per in-scope rule.
+    fp_details: dict[str, list[str]] = {}
+    for f in findings:
+        if f.dedup_key not in suppressed_keys:
+            continue
+        rid = _rule_id(f)
+        if rid not in rule_category:
+            continue
+        fp_details.setdefault(rid, []).append(f.detail or f.title)
+
+    proposals: list[PatternProposal] = []
+    for rid, details in fp_details.items():
+        if len(details) < min_fp:
+            continue
+        rule = stats.rules.get(rid)
+        if rule is None or rule.hits < min_hits:
+            continue
+        if rule.noise_ratio < noise_threshold:
+            continue
+        sigs, support = _mine_signatures(details, rule_exclude.get(rid, ""), merged)
+        if not sigs:
+            continue
+        samples = [d for d in details if any(s in d for s in sigs)][:3]
+        proposals.append(PatternProposal(
+            rule_id=rid,
+            category=rule_category.get(rid, ""),
+            signatures=sigs,
+            fp_count=len(details),
+            support=support,
+            hits=rule.hits,
+            noise_ratio=rule.noise_ratio,
+            existing_exclude=rule_exclude.get(rid, ""),
+            samples=samples,
+        ))
+
+    # Loudest rules first (noise_ratio × hits), ties by rule_id.
+    proposals.sort(key=lambda p: (-(p.noise_ratio * p.hits), p.rule_id))
+    return proposals[:max_rules]
+
+
+def render_proposals_markdown(proposals: list[PatternProposal]) -> str:
+    """Render Phase 3 proposals as a maintainer-facing markdown report."""
+    lines: list[str] = []
+    lines.append("# Audit propose-fix report\n")
+    lines.append(
+        "Phase 3 of the audit self-learning loop. Each section is a tier-2 "
+        "pattern rule whose **false-positive set shares a textual signature** "
+        "not yet in its `exclude_pattern`. Adding the suggested signature to "
+        "`audit_config.yaml` would drop that false-positive class while keeping "
+        "the rule's real findings — a surgical alternative to demoting the rule "
+        "outright (Phase 2). These are **suggestions**: review the samples and "
+        "the proposed pattern before applying.\n"
+    )
+
+    if not proposals:
+        lines.append(
+            "*No proposals — every noisy rule's false positives are too "
+            "varied to share a signature, or no rule cleared the history / "
+            "noise gates.*\n"
+        )
+        return "\n".join(lines)
+
+    for p in proposals:
+        lines.append(f"## `{p.rule_id}` ({p.category})\n")
+        lines.append(
+            f"- **{p.noise_ratio * 100:.0f} % noise** over {p.hits} cumulative "
+            f"hits; {p.fp_count} false positive(s) in the latest run."
+        )
+        sig_list = ", ".join(
+            f"`{s}` (in {p.support.get(s, 0)}/{p.fp_count})" for s in p.signatures
+        )
+        lines.append(f"- **Proposed signature(s):** {sig_list}")
+        if p.existing_exclude:
+            lines.append(f"- **Current `exclude_pattern`:** `{p.existing_exclude}`")
+        else:
+            lines.append("- **Current `exclude_pattern`:** *(none)*")
+        lines.append(f"- **Suggested `exclude_pattern`:** `{p.suggested_exclude}`")
+        if p.samples:
+            lines.append("- **Sample false positives:**")
+            for s in p.samples:
+                lines.append(f"  - `{s}`")
+        lines.append("")
+
+    return "\n".join(lines)
 
