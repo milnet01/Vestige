@@ -1,0 +1,26 @@
+{
+  "$comment": "Reference case for spot_cone_falloff (intensity = saturate((theta-outerCutoff)/(innerCutoff-outerCutoff))). Two coefficients. The saturate() clamps to 0 outside the outer cone and 1 inside the inner cone — those clamped samples carry no gradient — so the sweep is centred on the transition band where both cutoffs are identifiable. Canonical values equal the library defaults (cos 15°/25°); the fit must hold the linear transition slope and offset.",
+
+  "formula_name": "spot_cone_falloff",
+
+  "canonical_coefficients": {
+    "innerCutoff": 0.9659,
+    "outerCutoff": 0.9063
+  },
+
+  "input_sweep": {
+    "theta": { "min": 0.88, "max": 0.98, "count": 40 }
+  },
+
+  "expected": {
+    "r_squared_min": 0.999,
+    "rmse_max":      0.02,
+    "coefficients": {
+      "innerCutoff": { "expected": 0.9659, "tolerance": 0.01 },
+      "outerCutoff": { "expected": 0.9063, "tolerance": 0.01 }
+    },
+    "must_converge": true
+  },
+
+  "notes": "40-point sweep over theta ∈ [0.88, 0.98] (cos of angle to spot axis). ≈24 samples land in the (outer, inner) transition band, which is what fixes the two cutoffs; absolute tolerance 0.01 (~0.6° of cone angle) is realistic given that the clamped tails contribute no gradient."
+}

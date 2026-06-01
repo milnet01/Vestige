@@ -1,0 +1,28 @@
+{
+  "$comment": "Reference case for gerstner_wave (y = amplitude * sin(k*x - omega*t + phase)). Four coefficients, but the three trig parameters (k, omega, phase) are intentionally left unbounded — recovering a sinusoid's frequency and phase from samples is multimodal, so the canonical values double as the fit's start (the library defaults) and the test verifies the fit HOLDS at a good solution. Amplitude is the one linearly-identifiable coefficient and is the bounded assertion.",
+
+  "formula_name": "gerstner_wave",
+
+  "canonical_coefficients": {
+    "amplitude": 0.5,
+    "k":         1.0,
+    "omega":     1.0,
+    "phase":     0.0
+  },
+
+  "input_sweep": {
+    "x": { "min": 0.0, "max": 6.2832, "count": 24 },
+    "t": { "values": [0.0, 0.5, 1.0] }
+  },
+
+  "expected": {
+    "r_squared_min": 0.999,
+    "rmse_max":      0.02,
+    "coefficients": {
+      "amplitude": { "expected": 0.5, "relative_tolerance": 0.02 }
+    },
+    "must_converge": true
+  },
+
+  "notes": "72-point sweep (24 positions × 3 times) spans one spatial period at three time slices. Only `amplitude` is asserted: the sin() argument's (k, omega, phase) are non-convex to fit and the regression of interest here is amplitude recovery + overall fit quality, not sinusoid-frequency search. Canonical values match the water_surface.h Wave defaults."
+}

@@ -1,0 +1,24 @@
+{
+  "$comment": "Reference case for ggx_distribution (D = alpha^2 / (PI*(NdotH^2*(alpha^2-1)+1)^2)), the GGX/Trowbridge-Reitz NDF. Single coefficient alpha (= roughness^2). The NDF is strongly nonlinear in alpha (it appears as alpha^2 inside a squared denominator), so — like aerodynamic_drag — the canonical value equals the library default: LM starts on the answer and the test asserts it HOLDS there across the sweep rather than searching the sharp peak from a cold start.",
+
+  "formula_name": "ggx_distribution",
+
+  "canonical_coefficients": {
+    "alpha": 0.25
+  },
+
+  "input_sweep": {
+    "NdotH": { "min": 0.0, "max": 1.0, "count": 21 }
+  },
+
+  "expected": {
+    "r_squared_min": 0.9999,
+    "rmse_max":      0.01,
+    "coefficients": {
+      "alpha": { "expected": 0.25, "relative_tolerance": 0.03 }
+    },
+    "must_converge": true
+  },
+
+  "notes": "21-point sweep over the half-vector cosine NdotH ∈ [0,1]. D peaks at NdotH=1 (≈5.09 for alpha=0.25, roughness 0.5) and is ≈0.02 at grazing — the sharp peak is what makes alpha identifiable. Canonical alpha=0.25 matches the library default; the strongly-nonlinear denominator makes a cold-start search ill-conditioned, so the case verifies the fit holds the peak shape (a formula-eval or LM-damping regression would break it)."
+}

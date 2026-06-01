@@ -1,0 +1,25 @@
+{
+  "$comment": "Reference case for bloom_threshold (result = max(0, L-threshold) / (L-threshold+knee)), the soft-knee bloom extraction. Two coefficients. `threshold` lives at a max(0,·) kink (non-smooth, weakly identifiable from a gradient fitter), so only `knee` is bounded — above the threshold the output is (L-t)/(L-t+knee), where knee is cleanly identifiable. Canonical values equal the library defaults; the fit must hold the knee curve.",
+
+  "formula_name": "bloom_threshold",
+
+  "canonical_coefficients": {
+    "threshold": 1.0,
+    "knee":      0.5
+  },
+
+  "input_sweep": {
+    "luminance": { "min": 0.5, "max": 5.0, "count": 30 }
+  },
+
+  "expected": {
+    "r_squared_min": 0.999,
+    "rmse_max":      0.01,
+    "coefficients": {
+      "knee": { "expected": 0.5, "relative_tolerance": 0.05 }
+    },
+    "must_converge": true
+  },
+
+  "notes": "30-point sweep over luminance ∈ [0.5, 5.0]. Samples below threshold=1 are clamped to 0; the ≈24 samples above it trace the knee curve toward its asymptote of 1. Only `knee` is asserted because `threshold` is the location of a non-differentiable kink — it is exercised by the overall R²/RMSE rather than a coefficient bound."
+}

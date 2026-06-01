@@ -1,0 +1,27 @@
+{
+  "$comment": "Reference case for thermal_erosion (transfer = erosionRate * max(0, slope-talusAngle) * dt). Two coefficients. `talusAngle` is the location of the max(0,·) kink — left at the library default 0.577 (tan 30°) so the fitter starts on it and the ramp region pins `erosionRate`, which scales the linear ramp above the talus angle. Canonical erosionRate=0.6 differs from the default 0.5 so the fit must recover it.",
+
+  "formula_name": "thermal_erosion",
+
+  "canonical_coefficients": {
+    "erosionRate": 0.6,
+    "talusAngle":  0.577
+  },
+
+  "input_sweep": {
+    "slope": { "min": 0.3, "max": 1.5, "count": 30 },
+    "dt":    { "values": [0.016] }
+  },
+
+  "expected": {
+    "r_squared_min": 0.999,
+    "rmse_max":      0.0005,
+    "coefficients": {
+      "erosionRate": { "expected": 0.6,   "relative_tolerance": 0.05 },
+      "talusAngle":  { "expected": 0.577, "tolerance": 0.02 }
+    },
+    "must_converge": true
+  },
+
+  "notes": "30-point slope sweep ∈ [0.3, 1.5] at a one-frame dt=0.016 s. Slopes below the talus angle 0.577 transfer nothing; above it the transfer ramps linearly, fixing `erosionRate`. Transfer magnitude is small (≤ ≈0.0089), so rmse_max=5e-4 is still strict relative to the signal. `talusAngle` carries a loose absolute tolerance because it sits at a non-differentiable kink."
+}

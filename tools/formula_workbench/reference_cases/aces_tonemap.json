@@ -1,0 +1,26 @@
+{
+  "$comment": "Reference case for aces_tonemap (f(x) = (x*(a*x+b)) / (x*(c*x+d)+e)), the Narkowicz ACES filmic fit. Five coefficients a..e, but the rational form has a global scaling degeneracy — multiplying all five by any constant leaves f(x) unchanged — so the coefficients are individually non-identifiable. This case therefore asserts fit quality plus max_abs_error (the user-visible tonemap artefact is the worst-case error, not the mean), and omits per-coefficient bounds.",
+
+  "formula_name": "aces_tonemap",
+
+  "canonical_coefficients": {
+    "a": 2.51,
+    "b": 0.03,
+    "c": 2.43,
+    "d": 0.59,
+    "e": 0.14
+  },
+
+  "input_sweep": {
+    "x": { "min": 0.0, "max": 8.0, "count": 40 }
+  },
+
+  "expected": {
+    "r_squared_min":     0.9999,
+    "rmse_max":          0.005,
+    "max_abs_error_max": 0.01,
+    "must_converge":     true
+  },
+
+  "notes": "40-point sweep over HDR radiance x ∈ [0,8]. The curve runs from 0 through the mid-grey region to its ≈1.03 asymptote (a/c). max_abs_error_max=0.01 is the headline assertion — a tonemap regression usually shows up as a localised seam (good RMSE, bad worst-case) rather than a global RMSE drift. No coefficient bounds: the 5-parameter rational is scale-degenerate."
+}

@@ -1,0 +1,24 @@
+{
+  "$comment": "Reference case for exposure_ev (result = 1 / (2^ev * calibration)). Single coefficient `calibration` (the middle-grey factor) — it enters as a pure reciprocal scale on 2^-ev, so it is cleanly identifiable. Canonical calibration=1.0 differs from the library default 1.2 so the fitter recovers it from a cold start.",
+
+  "formula_name": "exposure_ev",
+
+  "canonical_coefficients": {
+    "calibration": 1.0
+  },
+
+  "input_sweep": {
+    "ev": { "min": -3.0, "max": 3.0, "count": 25 }
+  },
+
+  "expected": {
+    "r_squared_min": 0.9999,
+    "rmse_max":      0.02,
+    "coefficients": {
+      "calibration": { "expected": 1.0, "relative_tolerance": 0.02 }
+    },
+    "must_converge": true
+  },
+
+  "notes": "25-point sweep over exposure value ev ∈ [-3, 3]. The multiplier runs from ≈8 (ev=-3) down to ≈0.125 (ev=3). `calibration` is a global reciprocal scale, so the fit is well-conditioned and 2 % relative tolerance is tight."
+}

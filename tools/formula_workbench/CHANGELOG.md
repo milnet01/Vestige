@@ -2,6 +2,34 @@
 
 All notable changes to the Formula Workbench are documented in this file.
 
+## [Unreleased]
+
+### 2026-06-01 FW W5 — reference-regression specs for all coefficient-bearing builtins
+
+Completed the reference-case backlog: added 12 `reference_cases/*.json`
+specs so every *fittable* builtin formula (22/22) now has a regression
+case auto-discovered by `tests/test_reference_harness.cpp`. Suite green.
+
+- **Added specs:** `gerstner_wave`, `coulomb_friction`, `terminal_velocity`,
+  `ggx_distribution`, `schlick_geometry`, `aces_tonemap`, `spot_cone_falloff`,
+  `bloom_threshold`, `exposure_ev`, `dof_coc`, `height_blend`, `thermal_erosion`.
+- **Degenerate fits assert quality only (no per-coefficient bounds):**
+  `terminal_velocity` (g and Cd alias through the g/Cd ratio), `aces_tonemap`
+  (the 5-parameter rational has a global numerator/denominator scaling
+  degeneracy), `dof_coc` (the thin-lens coefficients collapse to two effective
+  DOF parameters when only depth varies). `gerstner_wave` bounds only
+  `amplitude` (sinusoid frequency/phase recovery is multimodal).
+- **Nonlinear-rational fits use the start-on-answer convention** (canonical ==
+  library default, as `aerodynamic_drag` documents): `ggx_distribution` and
+  `schlick_geometry` are ill-conditioned for a cold-start LM search
+  ("lambda exceeded maximum"), so the case verifies the fit *holds* the curve
+  rather than searching for it.
+- **Scope note:** 5 builtins (`wind_deformation`, `caustic_depth_fade`,
+  `water_absorption`, `ease_in_sine`, `fast_neg_exp`) have **zero coefficients**;
+  `CurveFitter::fit` early-returns "No coefficients to fit", so they cannot
+  carry a reference-regression spec under the current (coefficient-fitting)
+  harness. A future "0-coefficient evaluation-regression" mode would cover them.
+
 ## [1.17.0] - 2026-04-21
 
 ### Added — three improvements surfaced by the Phase 10 fog research

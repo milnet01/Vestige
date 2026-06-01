@@ -1,0 +1,23 @@
+{
+  "$comment": "Reference case for dof_coc (CoC = abs(aperture*focalLength*(focusDistance-depth) / (depth*(focusDistance-focalLength)))). Three coefficients, but as a function of `depth` alone they collapse to two effective parameters (CoC = A/depth - B), so aperture/focalLength/focusDistance are individually non-identifiable. This case asserts fit quality only. The depth sweep stays on [1,4] m — one side of the abs() kink at depth=focusDistance=5 — so the fitted function is smooth.",
+
+  "formula_name": "dof_coc",
+
+  "canonical_coefficients": {
+    "aperture":      2.8,
+    "focalLength":   0.05,
+    "focusDistance": 5.0
+  },
+
+  "input_sweep": {
+    "depth": { "min": 1.0, "max": 4.0, "count": 25 }
+  },
+
+  "expected": {
+    "r_squared_min": 0.999,
+    "rmse_max":      0.001,
+    "must_converge": true
+  },
+
+  "notes": "25-point depth sweep ∈ [1,4] m, kept below focusDistance=5 so the abs() never folds (the argument stays positive) and the curve is the smooth 1/depth branch. CoC runs ≈0.0071–0.113 (×1e-3 m disk). No coefficient bounds: the thin-lens coefficients alias to two DOF parameters when only depth varies — a real regression surfaces as an R²/RMSE breach."
+}

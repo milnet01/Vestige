@@ -1,0 +1,25 @@
+{
+  "$comment": "Reference case for coulomb_friction (Ft_clamped = min(Ft, mu*Fn)). The min() has two branches: when Ft < mu*Fn the output equals Ft and carries NO information about mu. Ft is pinned high (50 N) so the min() always selects the mu*Fn branch — the output is then exactly mu*Fn, linear in mu and well-conditioned. Canonical mu=0.4 differs from the library default 0.5 so the fitter must actually recover it (not start on the answer).",
+
+  "formula_name": "coulomb_friction",
+
+  "canonical_coefficients": {
+    "mu": 0.4
+  },
+
+  "input_sweep": {
+    "Fn": { "min": 1.0, "max": 10.0, "count": 12 },
+    "Ft": { "values": [50.0] }
+  },
+
+  "expected": {
+    "r_squared_min": 0.9999,
+    "rmse_max":      0.02,
+    "coefficients": {
+      "mu": { "expected": 0.4, "relative_tolerance": 0.02 }
+    },
+    "must_converge": true
+  },
+
+  "notes": "12-point sweep over normal force. With Ft=50 N and mu*Fn ≤ 0.4*10 = 4 N, the clamp never triggers, so output = mu*Fn — a clean linear fit. If a future change made the min() select the wrong branch, this case would break immediately. Friction coefficient mu=0.4 is a typical wood-on-wood value."
+}

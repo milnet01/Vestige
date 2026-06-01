@@ -1,0 +1,24 @@
+{
+  "$comment": "Reference case for terminal_velocity (v_t = sqrt(2*mass*g / (airDensity*area*Cd))). Two coefficients (g, Cd) but they enter ONLY as the ratio g/Cd — they are individually non-identifiable. So this case asserts fit quality (R²/RMSE/convergence) and deliberately omits per-coefficient bounds: the fitter can recover any (g, Cd) pair on the correct ratio and still be correct.",
+
+  "formula_name": "terminal_velocity",
+
+  "canonical_coefficients": {
+    "g":  9.81,
+    "Cd": 0.47
+  },
+
+  "input_sweep": {
+    "mass":       { "min": 1.0, "max": 10.0, "count": 10 },
+    "area":       { "values": [0.5, 1.0, 2.0] },
+    "airDensity": { "values": [1.225] }
+  },
+
+  "expected": {
+    "r_squared_min": 0.999,
+    "rmse_max":      0.05,
+    "must_converge": true
+  },
+
+  "notes": "30-point sweep (10 masses × 3 areas × 1 air density). v_t ranges ≈4–18 m/s across the sweep. No coefficient bounds because g and Cd alias through the g/Cd ratio — a regression that breaks the sqrt or the ratio structure shows up as an R²/RMSE breach instead."
+}

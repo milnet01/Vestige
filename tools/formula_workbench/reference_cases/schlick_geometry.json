@@ -1,0 +1,24 @@
+{
+  "$comment": "Reference case for schlick_geometry (G1 = NdotV / (NdotV*(1-k) + k)), the Schlick-GGX geometry term. Single coefficient k. k appears in the denominator on both a constant and an NdotV-scaled term, which makes a cold-start LM search ill-conditioned (it diverges with 'lambda exceeded maximum'). So — like aerodynamic_drag — the canonical value equals the library default: the fit starts on the answer and the test asserts it holds the knee across the sweep.",
+
+  "formula_name": "schlick_geometry",
+
+  "canonical_coefficients": {
+    "k": 0.125
+  },
+
+  "input_sweep": {
+    "NdotV": { "min": 0.0, "max": 1.0, "count": 21 }
+  },
+
+  "expected": {
+    "r_squared_min": 0.9999,
+    "rmse_max":      0.005,
+    "coefficients": {
+      "k": { "expected": 0.125, "relative_tolerance": 0.05 }
+    },
+    "must_converge": true
+  },
+
+  "notes": "21-point sweep over the view cosine NdotV ∈ [0,1]. G1 rises from 0 (at NdotV=0) toward 1 (at NdotV=1); k controls the knee. Canonical k=0.125 matches the library default (the direct-lighting Smith term at roughness 0.5). 5 % relative tolerance because k sits in the denominator and is less sensitive than a pure scale coefficient."
+}

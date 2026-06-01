@@ -1,0 +1,26 @@
+{
+  "$comment": "Reference case for height_blend (result = saturate((heightA-heightB+blendFactor)/blendSharpness)). Single coefficient blendSharpness. heightB and blendFactor are pinned to 0 so the saturate argument is heightA/blendSharpness — a clean linear ramp whose slope is 1/blendSharpness. Canonical blendSharpness=0.15 differs from the library default 0.1 so the fitter recovers it from a cold start.",
+
+  "formula_name": "height_blend",
+
+  "canonical_coefficients": {
+    "blendSharpness": 0.15
+  },
+
+  "input_sweep": {
+    "heightA":     { "min": -0.05, "max": 0.30, "count": 30 },
+    "heightB":     { "values": [0.0] },
+    "blendFactor": { "values": [0.0] }
+  },
+
+  "expected": {
+    "r_squared_min": 0.999,
+    "rmse_max":      0.02,
+    "coefficients": {
+      "blendSharpness": { "expected": 0.15, "relative_tolerance": 0.1 }
+    },
+    "must_converge": true
+  },
+
+  "notes": "30-point sweep over heightA ∈ [-0.05, 0.30]. With heightB=blendFactor=0, the output is saturate(heightA/0.15): clamped to 0 below heightA=0, a linear ramp through the transition band heightA ∈ [0, 0.15], then clamped to 1. ≈13 samples sit in the ramp and fix the sharpness; 10 % relative tolerance reflects that the clamped tails carry no gradient."
+}
