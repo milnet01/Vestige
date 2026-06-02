@@ -6,11 +6,15 @@
 ///
 /// `engine/utils/result.h` aliases `Result` to `std::expected` on a C++23
 /// toolchain and to the vendored `tl::expected` under the C++17 baseline
-/// (CODING_STANDARDS.md §11). These tests pin the shared public surface both
-/// backends must expose, so a future C++23 standard bump (which flips the
-/// alias) is caught here if the two backends ever diverge in behaviour. The
-/// `static_assert` below also documents which backend the current build
-/// selected.
+/// (CODING_STANDARDS.md §11). These tests pin the shared public surface that
+/// every consumer relies on, and exercise it against whichever backend the
+/// current build selected (the `static_assert` below records which one).
+///
+/// Caveat: a single build only runs ONE backend — at the C++17 pin that is
+/// always `tl::expected`. The std backend was verified manually this session
+/// by compiling this file at `-std=c++23` (g++ 15) and re-running it green;
+/// automating that as a dedicated C++23 CI configuration is a tracked
+/// follow-up, since the engine as a whole is not yet C++23-clean.
 
 #include <gtest/gtest.h>
 

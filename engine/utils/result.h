@@ -23,11 +23,14 @@
 /// vendored dependency.
 ///
 /// Backend detection (CODING_STANDARDS.md §11):
-///   - A C++23 language mode (`__cplusplus >= 202302L`) plus a present
-///     `<expected>` header is the precondition. `<version>` is pulled in
-///     first so the `__cpp_lib_expected` / `_LIBCPP_VERSION` macros the
-///     branches below read are actually defined (a feature-test macro is
-///     undefined until its declaring header is included).
+///   - A C++23 language mode is the precondition. The check keys off
+///     `_MSVC_LANG` when present (MSVC reports `__cplusplus` as 199711L
+///     unless `/Zc:__cplusplus` is passed) and `__cplusplus` otherwise, so an
+///     MSVC C++23 build selects `std::expected` without depending on that
+///     compile flag. `<version>` is pulled in first so the
+///     `__cpp_lib_expected` / `_LIBCPP_VERSION` macros the branches below read
+///     are actually defined (a feature-test macro is undefined until its
+///     declaring header is included).
 ///   - libc++ shipped a *broken* `__cpp_lib_expected` on Clang 16 with
 ///     missing monadic ops until Clang 18 (LLVM #108011), so for libc++ we
 ///     gate on Clang 18+ rather than trusting the feature-test macro.
@@ -36,14 +39,24 @@
 /// baseline is C++17) the `tl::expected` fallback is used.
 #pragma once
 
-#if __cplusplus >= 202302L && defined(__has_include)
+// Effective C++ language version: MSVC reports __cplusplus as 199711L unless
+// /Zc:__cplusplus is passed, signalling the real mode via _MSVC_LANG instead.
+#if defined(_MSVC_LANG)
+#  define VESTIGE_RESULT_CPLUSPLUS _MSVC_LANG
+#else
+#  define VESTIGE_RESULT_CPLUSPLUS __cplusplus
+#endif
+
+#if VESTIGE_RESULT_CPLUSPLUS >= 202302L && defined(__has_include)
 #  if __has_include(<version>)
 #    include <version> // defines __cpp_lib_expected / _LIBCPP_VERSION
 #  endif
 #  if __has_include(<expected>)
 #    if defined(_LIBCPP_VERSION)
 //       libc++: trust only Clang 18+ (the feature-test macro is unreliable on
-//       Clang 16's libc++ — see file header / LLVM #108011).
+//       Clang 16's libc++ — see file header / LLVM #108011). This gate assumes
+//       upstream Clang versioning; AppleClang's major tracks Xcode, not LLVM,
+//       so it would need revisiting if macOS is ever added as a target.
 #      if defined(__clang_major__) && __clang_major__ >= 18
 #        define VESTIGE_RESULT_USE_STD_EXPECTED 1
 #      endif
@@ -54,13 +67,16 @@
 #  endif
 #endif
 
+#undef VESTIGE_RESULT_CPLUSPLUS
+
 #if defined(VESTIGE_RESULT_USE_STD_EXPECTED)
 #  include <expected>
 #else
 #  include <tl/expected.hpp>
 #endif
 
-#include <utility> // std::forward, std::decay_t
+#include <type_traits> // std::decay_t
+#include <utility>     // std::forward
 
 namespace Vestige
 {
