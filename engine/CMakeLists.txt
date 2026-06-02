@@ -361,6 +361,13 @@ target_include_directories(vestige_engine
         ${freetype_SOURCE_DIR}/include
 )
 
+# tl::expected — vendored single-header fallback for engine/utils/result.h
+# on the C++17 baseline (std::expected is C++23-only). SYSTEM so the strict
+# -Werror flag set above does not police the third-party header.
+target_include_directories(vestige_engine SYSTEM PUBLIC
+    ${CMAKE_SOURCE_DIR}/external/tl_expected
+)
+
 # Mark third-party headers as SYSTEM to suppress their warnings
 get_target_property(JOLT_INCLUDE_DIRS Jolt INTERFACE_INCLUDE_DIRECTORIES)
 if(JOLT_INCLUDE_DIRS)

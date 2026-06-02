@@ -193,7 +193,7 @@ Placed objects must respect spatial constraints. Violations cause clipping, z-fi
 | System boundary (file I/O, OS, syscalls) | error code / `errno`-style return | wrap into `Result` at the next layer up |
 | Programmer error / invariant breach | `VESTIGE_ASSERT` | not for user input |
 
-`std::expected<T, E>` is C++23 and supported on the engine's GCC 13+ / **Clang 18+** / MSVC 19.36+ baseline. (Clang 16's libc++ shipped `<expected>` but had a broken `__cpp_lib_expected` feature-test macro and missing monadic ops until Clang 18 — see [LLVM #108011](https://github.com/llvm/llvm-project/issues/108011). Do not rely on `__cpp_lib_expected` to gate the codepath; gate on `__clang_major__ >= 18` for libc++ builds.) When `engine/utils/result.h` lands it will define `template <class T, class E> using Result = std::expected<T, E>;` plus a `Result<void, E>` alias — until that file exists (verified absent as of 2026-05-18), use the standard name directly and file an issue for the alias.
+`engine/utils/result.h` defines `template <class T, class E> using Result = std::expected<T, E>;` (on C++23 toolchains) with a `tl::expected` fallback under the C++17 baseline — both expose the same public surface. Always use `Result<T, E>` via the alias, not `std::expected` directly; the alias insulates call sites from the C++17/C++23 switchover. The portability details and backend-detection logic are documented in `engine/utils/result.h`; the vendored fallback dep is in `THIRD_PARTY_NOTICES.md`.
 
 **No exceptions in 60-FPS hot paths** (render loop, physics step, audio mix). Throws are acceptable in tools, loaders, and editor-only code where the frame budget is loose.
 

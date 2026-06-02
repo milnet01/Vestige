@@ -9262,6 +9262,11 @@ existing cases (``HelpersMatchEvaluatorPrecisely``,
   MCP filesystem read tools) to reduce per-turn prompts during audit
   sessions.
 
+### Added
+
+- **Land engine/utils/result.h — Result<T,E> vocabulary type (CE3)**
+  `Vestige::Result<T,E>` aliases `std::expected` on C++23 toolchains and\n  the vendored `tl::expected` v1.3.1 (CC0) on the C++17 baseline.\n  `makeUnexpected()` and `Unexpected` aliases exposed. 10 tests added.\n  CODING_STANDARDS §11 updated; phase_11a_design §9 updated. CLAUDE.md Rule 8\n  sharpened: latest dependency version is always required; older pin needs a\n  documented breaking-change reason.
+
 ### Changed
 
 - **Ts20 follow-ups: pin gust RNG seed, remove two self-testing test stubs (Ts20-DE1/DE2, AC4, BE1)**

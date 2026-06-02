@@ -363,7 +363,7 @@ Determinism harness (RP5) runs in CI per ROADMAP. Linux runner only — Windows-
 | `engine/core/settings.h::accessibility.reducedMotion`       | Reduced-motion gate (Phase 10.7 wiring) — applies independently of photosensitive flag.             |
 | `engine/renderer/renderer.cpp` post-process pipeline        | Flash-overlay slot between tonemap + UI compositing.                                                |
 | `engine/utils/atomic_write.h`                               | Save-file atomicity — write-temp + rename.                                                          |
-| `std::expected<T, E>` (C++23) per CODING_STANDARDS §11      | Error returns from chunk IO + replay load. **`engine/utils/result.h` does not yet exist**; use the standard name directly until the alias lands (CODING_STANDARDS §11 Open Q). |
+| `Result<T, E>` via `engine/utils/result.h` (CODING_STANDARDS §11) | Error returns from chunk IO + replay load. Use `#include "utils/result.h"` and the `Vestige::Result` alias — the header provides `std::expected` on C++23 and a `tl::expected` fallback on the C++17 baseline. |
 | `engine/physics/physics_world.h::rayCast`                   | Sight LOS raycast (shipped).                                                                        |
 | `PhysicsWorld::sphereCast`                                  | Hearing-radius queries. Shipped — see `engine/physics/physics_world.h:248`. AP1 uses it directly; no precursor slice. |
 | `engine/physics/physics_world.h::fixedTimestep`             | Replay-mode determinism contract (header field stored in `.vreplay`).                               |

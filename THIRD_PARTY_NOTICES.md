@@ -80,9 +80,20 @@ small-payload libraries that don't warrant a `FetchContent` pull).
 | glad (OpenGL loader) | `external/glad/` | MIT (generator) + Public Domain (output) | <https://github.com/Dav1dde/glad> |
 | stb (stb_image, stb_image_write, etc.) | `external/stb/` | MIT or Public Domain (dual) | <https://github.com/nothings/stb> |
 | dr_libs (dr_wav, dr_flac, dr_mp3) | `external/dr_libs/` | MIT-0 or Public Domain (dual) | <https://github.com/mackron/dr_libs> |
+| tl::expected (v1.3.1) | `external/tl_expected/tl/expected.hpp` | CC0 1.0 (public domain) | <https://github.com/TartanLlama/expected> |
 
 Each vendored source carries its own license header in the file. See
 the individual files for the canonical license text.
+
+**Why `tl::expected` is vendored:** the engine compiles at the C++17
+baseline (`CMAKE_CXX_STANDARD 17`), but `std::expected` is a C++23 *library*
+feature — `<expected>` is unreachable under `-std=c++17`. `engine/utils/result.h`
+aliases `Result<T, E>` to `std::expected` when a C++23 toolchain is detected,
+and to this vendored `tl::expected` otherwise. `tl::expected` is the reference
+implementation `std::expected` was standardised from, so the fallback matches
+the standard's semantics; the alias switches to the standard type with no
+caller changes once the project moves to C++23. Pinned to the latest release
+(v1.3.1) per the dependency-currency rule in `CLAUDE.md`.
 
 ---
 

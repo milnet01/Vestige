@@ -1073,7 +1073,8 @@ Every Phase 10.7 design-doc promise is verified by a test authored **from the de
 
 - [x] **CE1.** Decide whether to commit a project `.clang-tidy` config at repo root, or amend AUDIT_STANDARDS.md §3 to state that clang-tidy is per-developer config only. (Today: no `.clang-tidy` exists; CODING_STANDARDS.md §17 says "planned but not yet present.")
 - [x] **CE2.** Decide whether to pin Dear ImGui (`docking`), imgui-filebrowser (`master`), ImPlot (`master`) to specific commit SHAs in `external/CMakeLists.txt`, or formally document them as branch-tracking exceptions in SECURITY.md §5. (Currently: THIRD_PARTY_NOTICES.md notes the exceptions under "Branch-tracking deps"; SECURITY.md §5 carries a softened "with three documented exceptions" line. Final disposition is owner's call.)
-- [ ] **CE3.** Land `engine/utils/result.h` with the `Result<T,E> = std::expected<T,E>` alias (CODING_STANDARDS.md §11 and `phase_11a_design.md` §9 both depend on it). Until then, both docs say "use the standard name directly" — a deferred code item.
+- [x] **CE3.** Land `engine/utils/result.h` with the `Result<T,E> = std::expected<T,E>` alias (CODING_STANDARDS.md §11 and `phase_11a_design.md` §9 both depend on it). Until then, both docs say "use the standard name directly" — a deferred code item.
+  Shipped 2026-06-02: `engine/utils/result.h` — `Result<T,E>` aliases `std::expected` on C++23, `tl::expected` (v1.3.1 CC0) on C++17 baseline. `makeUnexpected()` helper, `Unexpected` alias. CMake SYSTEM include dir in engine target. 10 tests in `tests/test_result.cpp` (all pass). CODING_STANDARDS §11 and phase_11a_design §9 updated to reference the alias. THIRD_PARTY_NOTICES + audit_config.yaml updated. CLAUDE.md Rule 8 sharpened to state latest-version mandate explicitly.
 
 **Cross-doc / cross-phase decisions that need an owner sign-off:**
 
