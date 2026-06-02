@@ -635,6 +635,35 @@ void cpuApplyWindApproximate(const std::vector<uint32_t>& indices,
 
 class WindDragParityTest : public ::Vestige::Test::GLTestFixture {};
 
+// Phase 10.9 Sh4a step 4 — after init, the triangle colouring is built so the
+// substep loop has `1 + getTriangleColourCount()` velocity-force dispatches
+// (one gravity init pass + one per-colour drag pass). A 4x4 grid has 18
+// triangles whose chromatic number is small but non-zero.
+TEST_F(WindDragParityTest, Sh4a_InitBuildsTriangleColoursForDragDispatch)
+{
+    GpuClothSimulator sim;
+    sim.setShaderPath(VESTIGE_SHADER_DIR);
+    ClothConfig cfg;
+    cfg.width = 4; cfg.height = 4; cfg.spacing = 1.0f; cfg.particleMass = 1.0f;
+    cfg.substeps = 1;
+    sim.initialize(cfg);
+    if (!sim.isInitialized())
+    {
+        GTEST_SKIP() << "GPU cloth simulator not available";
+    }
+
+    // (W-1)*(H-1)*2 = 18 triangles for a 4x4 grid → at least one colour.
+    EXPECT_GT(sim.getTriangleColourCount(), 0u);
+    EXPECT_LE(sim.getTriangleColourCount(), 8u);
+
+    // A single simulate() must not crash and must leave the sim usable. This
+    // exercises the gravity + per-colour drag + integrate + constraint path.
+    sim.setWind(glm::vec3(1.0f, 0.0f, 0.0f), 5.0f);
+    sim.simulate(1.0f / 60.0f);
+    EXPECT_TRUE(sim.isInitialized());
+    EXPECT_NE(sim.getPositions(), nullptr);
+}
+
 TEST_F(WindDragParityTest, Sh4a_SingleSubstep_PerpendicularWind_MatchesCpuReference)
 {
     // Vertical 3x3 cloth in the YZ plane (face normal along X); +X wind blows

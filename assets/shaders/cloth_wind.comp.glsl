@@ -2,14 +2,20 @@
 // SPDX-License-Identifier: MIT
 
 /// @file cloth_wind.comp.glsl
-/// @brief Phase 9B Step 3 — applies external forces (gravity + uniform wind)
-///        to per-particle velocities.
+/// @brief Phase 9B Step 3 — applies gravity to per-particle velocities.
+///        The force "init pass" of the substep, mirroring the CPU substep's
+///        step-1 gravity (`cloth_simulator.cpp:293-303`).
 ///
-/// One thread per particle. Reads the velocities SSBO (binding 2),
-/// adds gravity * dt, then adds an aerodynamic-drag term that pushes
-/// velocity toward the wind velocity. Per-particle noise and per-triangle
-/// drag (the FULL quality tier on the CPU path) land in a later step
-/// alongside the rest of the wind-quality tiers.
+/// One thread per particle. Reads the velocities SSBO (binding 2) and adds
+/// gravity * dt.
+///
+/// Phase 10.9 Sh4a: the placeholder per-particle "drag toward wind velocity"
+/// term that previously lived here was a Step-3-era stand-in — the CPU path
+/// has no per-particle drag, only the per-triangle aerodynamic drag in
+/// `applyWind`. That real per-triangle drag is now its own colour-grouped
+/// pass (`cloth_wind_drag.comp.glsl`), dispatched after this shader and before
+/// integration, so this shader is gravity-only. Per-particle FBM wind
+/// perturbation (the FULL quality tier) lands in Sh4b.
 ///
 /// SSBO bindings match `GpuClothSimulator::BufferBinding` in
 /// `engine/physics/gpu_cloth_simulator.h` — keep them in sync if you
@@ -26,8 +32,6 @@ layout(std430, binding = 2) buffer Velocities
 
 uniform uint  u_particleCount;
 uniform vec3  u_gravity;
-uniform vec3  u_windVelocity;
-uniform float u_dragCoeff;
 uniform float u_deltaTime;
 
 void main()
@@ -35,16 +39,5 @@ void main()
     uint id = gl_GlobalInvocationID.x;
     if (id >= u_particleCount) return;
 
-    vec3 v = velocities[id].xyz;
-
-    // Gravity.
-    v += u_gravity * u_deltaTime;
-
-    // Aerodynamic drag toward the wind velocity. Coefficient is the same
-    // dragCoefficient the CPU path's APPROXIMATE wind tier uses, so visual
-    // parity is achievable at fit-time.
-    vec3 relWind = u_windVelocity - v;
-    v += relWind * u_dragCoeff * u_deltaTime;
-
-    velocities[id].xyz = v;
+    velocities[id].xyz += u_gravity * u_deltaTime;
 }

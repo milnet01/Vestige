@@ -573,16 +573,41 @@ void GpuClothSimulator::simulate(float deltaTime)
 
     for (int s = 0; s < m_substeps; ++s)
     {
-        // 1. Wind / external forces → updates velocities only.
+        // 1. Gravity init pass → updates velocities only.
         m_windShader.use();
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, BIND_VELOCITIES, m_velocitiesSSBO);
         m_windShader.setUInt("u_particleCount", m_particleCount);
         m_windShader.setVec3("u_gravity",       m_gravity);
-        m_windShader.setVec3("u_windVelocity",  m_windVelocity);
-        m_windShader.setFloat("u_dragCoeff",    m_dragCoeff);
         m_windShader.setFloat("u_deltaTime",    dtSub);
         glDispatchCompute(particleGroups, 1, 1);
         glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+
+        // 1b. Per-triangle aerodynamic drag (Phase 10.9 Sh4a) → updates
+        //     velocities. One dispatch per colour group; within a colour no
+        //     two triangles share a vertex (colourTriangleConstraints), so the
+        //     direct per-vertex velocity writes are race-free without atomics.
+        //     Mirrors the CPU substep's applyWind, which runs after gravity and
+        //     before position prediction. Tier gating (SIMPLE = no drag) and
+        //     per-triangle turbulence (FULL) land in Sh4b.
+        if (m_triangleCount > 0)
+        {
+            m_windDragShader.use();
+            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, BIND_POSITIONS,  m_positionsSSBO);
+            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, BIND_VELOCITIES, m_velocitiesSSBO);
+            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, BIND_TRIANGLES,  m_trianglesSSBO);
+            m_windDragShader.setVec3 ("u_windVelocity", m_windVelocity);
+            m_windDragShader.setFloat("u_dragCoeff",    m_dragCoeff);
+            m_windDragShader.setFloat("u_deltaTime",    dtSub);
+            for (const auto& range : m_triangleColourRanges)
+            {
+                if (range.count == 0) continue;
+                m_windDragShader.setUInt("u_firstTri", range.offset);
+                m_windDragShader.setUInt("u_triCount", range.count);
+                const GLuint triGroups = (range.count + 63u) / 64u;
+                glDispatchCompute(triGroups, 1, 1);
+                glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+            }
+        }
 
         // 2. Symplectic Euler integration → updates positions + prev positions.
         m_integrateShader.use();
