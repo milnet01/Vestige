@@ -54,6 +54,23 @@ struct GpuDihedralConstraint
     float    pad1;
 };
 
+/// @brief GPU-resident layout for a wind-drag triangle (std430).
+///
+/// Phase 10.9 Sh4a — the three particle indices of a mesh triangle, padded to
+/// 16 bytes so the GLSL `cloth_wind_drag.comp.glsl` shader can read it as a
+/// `uvec4` (the `.w` lane is unused). The per-triangle aerodynamic-drag pass
+/// computes one force per triangle and writes the per-vertex share directly to
+/// the three velocities; colour grouping (see `colourTriangleConstraints`)
+/// guarantees no two triangles in a colour share a vertex, so the writes are
+/// race-free without atomics.
+struct GpuTriangle
+{
+    uint32_t i0;
+    uint32_t i1;
+    uint32_t i2;
+    uint32_t pad;
+};
+
 /// @brief Half-open `[offset, offset+count)` slice into a constraint array.
 struct ColourRange
 {
@@ -119,6 +136,27 @@ void generateDihedralConstraints(
 std::vector<ColourRange> colourDihedralConstraints(
     std::vector<GpuDihedralConstraint>& constraints,
     uint32_t particleCount);
+
+/// @brief Builds per-triangle wind-drag records from a triangle index buffer
+///        and greedy graph-colours them by shared-vertex incidence.
+///
+/// Phase 10.9 Sh4a. Each group of three indices in @a indices becomes one
+/// `GpuTriangle`; the triangles are then coloured so that within a colour no
+/// two triangles share any of their three vertices. @a outTriangles is filled
+/// (cleared first) with the triangles reordered into contiguous colour groups,
+/// matching the layout `colourConstraints` / `colourDihedralConstraints`
+/// produce for their constraint types. The returned ranges describe each
+/// colour's slice into @a outTriangles.
+///
+/// The colour-grouped dispatch is what makes the GPU wind-drag pass both
+/// atomics-free and cross-run deterministic (the property Phase 11A replay
+/// needs): colours are dispatched in fixed order and threads within a colour
+/// write disjoint vertices. A trailing index group of fewer than three entries
+/// (malformed buffer) is ignored.
+std::vector<ColourRange> colourTriangleConstraints(
+    const std::vector<uint32_t>& indices,
+    uint32_t particleCount,
+    std::vector<GpuTriangle>& outTriangles);
 
 /// @brief GPU-resident layout for a Long-Range Attachment constraint.
 ///

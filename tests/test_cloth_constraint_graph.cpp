@@ -403,3 +403,92 @@ TEST(ClothConstraintGraph, GenerateLraTethersEveryFreeParticle)
     EXPECT_FLOAT_EQ(lras[1].maxDistance, 2.0f);
     EXPECT_FLOAT_EQ(lras[2].maxDistance, 3.0f);
 }
+
+// ---------------------------------------------------------------------------
+// Triangle wind-drag colouring (Phase 10.9 Sh4a)
+// ---------------------------------------------------------------------------
+
+TEST(ClothConstraintGraph, TriangleColouringBuildsOneTrianglePerIndexTriple)
+{
+    constexpr uint32_t W = 4, H = 4;
+    auto indices = makeGridIndices(W, H);
+
+    std::vector<GpuTriangle> tris;
+    auto ranges = colourTriangleConstraints(indices, W * H, tris);
+
+    // Each (W-1)*(H-1) quad emits two triangles → 6 indices per quad.
+    EXPECT_EQ(tris.size(), indices.size() / 3);
+    EXPECT_EQ(tris.size(), (W - 1) * (H - 1) * 2);
+    ASSERT_FALSE(ranges.empty());
+}
+
+TEST(ClothConstraintGraph, TriangleColouringHasNoSharedVertexWithinColour)
+{
+    // Load-bearing invariant for the GPU wind-drag pass: within a colour, the
+    // three-vertex sets of any two triangles must be disjoint, so the direct
+    // per-vertex velocity writes are race-free without atomics.
+    constexpr uint32_t W = 6, H = 6;
+    auto indices = makeGridIndices(W, H);
+
+    std::vector<GpuTriangle> tris;
+    auto ranges = colourTriangleConstraints(indices, W * H, tris);
+
+    ASSERT_FALSE(ranges.empty());
+    for (const auto& r : ranges)
+    {
+        std::set<uint32_t> seen;
+        for (uint32_t k = 0; k < r.count; ++k)
+        {
+            const auto& t = tris[r.offset + k];
+            EXPECT_TRUE(seen.insert(t.i0).second);
+            EXPECT_TRUE(seen.insert(t.i1).second);
+            EXPECT_TRUE(seen.insert(t.i2).second);
+        }
+    }
+}
+
+TEST(ClothConstraintGraph, TriangleColouringIsConservativeForRegularGrid)
+{
+    // Each interior vertex touches 6 triangles in the NW-SE diagonal
+    // triangulation, so the chromatic number of the triangle-vs-vertex
+    // incidence graph is 6. Greedy colouring may emit a few more before
+    // subgroup re-bucketing; assert <= 8 (design verify-step 1). TODO: drop
+    // to 6 if dispatch overhead becomes an issue (would need a smarter
+    // ordering than first-fit greedy).
+    constexpr uint32_t W = 16, H = 16;
+    auto indices = makeGridIndices(W, H);
+
+    std::vector<GpuTriangle> tris;
+    auto ranges = colourTriangleConstraints(indices, W * H, tris);
+
+    EXPECT_LE(ranges.size(), 8u);
+}
+
+TEST(ClothConstraintGraph, TriangleRangesPartitionTheTriangleArray)
+{
+    constexpr uint32_t W = 5, H = 5;
+    auto indices = makeGridIndices(W, H);
+
+    std::vector<GpuTriangle> tris;
+    auto ranges = colourTriangleConstraints(indices, W * H, tris);
+
+    uint32_t total = 0;
+    uint32_t expectedOffset = 0;
+    for (const auto& r : ranges)
+    {
+        EXPECT_EQ(r.offset, expectedOffset);
+        expectedOffset += r.count;
+        total += r.count;
+    }
+    EXPECT_EQ(total, tris.size());
+}
+
+TEST(ClothConstraintGraph, TriangleColouringEmptyForTooFewIndices)
+{
+    // A malformed buffer with < 3 indices yields no triangles, no ranges.
+    std::vector<uint32_t> indices = {0, 1};
+    std::vector<GpuTriangle> tris;
+    auto ranges = colourTriangleConstraints(indices, 8, tris);
+    EXPECT_TRUE(tris.empty());
+    EXPECT_TRUE(ranges.empty());
+}

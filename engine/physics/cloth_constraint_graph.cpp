@@ -340,6 +340,92 @@ std::vector<ColourRange> colourDihedralConstraints(
 }
 
 // ---------------------------------------------------------------------------
+// Triangle wind-drag colouring (Phase 10.9 Sh4a)
+// ---------------------------------------------------------------------------
+
+std::vector<ColourRange> colourTriangleConstraints(
+    const std::vector<uint32_t>& indices,
+    uint32_t particleCount,
+    std::vector<GpuTriangle>& outTriangles)
+{
+    outTriangles.clear();
+    if (indices.size() < 3) return {};
+    assert(particleCount > 0);
+
+    const size_t triCount = indices.size() / 3;
+    outTriangles.reserve(triCount);
+    for (size_t t = 0; t + 2 < indices.size(); t += 3)
+    {
+        GpuTriangle tri{};
+        tri.i0 = indices[t];
+        tri.i1 = indices[t + 1];
+        tri.i2 = indices[t + 2];
+        tri.pad = 0;
+        outTriangles.push_back(tri);
+    }
+    if (outTriangles.empty()) return {};
+
+    // Greedy colouring over the {triangle, vertex} incidence graph: two
+    // triangles conflict when they share any vertex. Same per-particle
+    // 64-bit colour-bitmask walk as colourConstraints / colourDihedralConstraints,
+    // generalised to three vertices.
+    std::vector<uint64_t> particleColours(particleCount, 0ULL);
+    std::vector<uint32_t> assignedColour(outTriangles.size(), 0);
+    uint32_t maxColour = 0;
+
+    for (size_t i = 0; i < outTriangles.size(); ++i)
+    {
+        const auto& tri = outTriangles[i];
+        const uint64_t forbidden = particleColours[tri.i0] | particleColours[tri.i1]
+                                  | particleColours[tri.i2];
+
+        uint32_t colour = 0;
+        for (; colour < 64; ++colour)
+        {
+            if ((forbidden & (1ULL << colour)) == 0) break;
+        }
+        assert(colour < 64 && "Triangle graph has a vertex of degree >= 64");
+
+        assignedColour[i] = colour;
+        const uint64_t bit = 1ULL << colour;
+        particleColours[tri.i0] |= bit;
+        particleColours[tri.i1] |= bit;
+        particleColours[tri.i2] |= bit;
+        if (colour + 1 > maxColour) maxColour = colour + 1;
+    }
+
+    std::vector<size_t> idx(outTriangles.size());
+    for (size_t i = 0; i < idx.size(); ++i) idx[i] = i;
+    std::stable_sort(idx.begin(), idx.end(),
+        [&](size_t a, size_t b) {
+            return assignedColour[a] < assignedColour[b];
+        });
+
+    std::vector<GpuTriangle> reordered(outTriangles.size());
+    for (size_t i = 0; i < idx.size(); ++i) reordered[i] = outTriangles[idx[i]];
+    outTriangles = std::move(reordered);
+
+    std::vector<uint32_t> sortedColours(outTriangles.size());
+    for (size_t i = 0; i < idx.size(); ++i)
+        sortedColours[i] = assignedColour[idx[i]];
+
+    std::vector<ColourRange> ranges(maxColour, {0, 0});
+    uint32_t cursor = 0;
+    for (uint32_t colour = 0; colour < maxColour; ++colour)
+    {
+        ranges[colour].offset = cursor;
+        uint32_t count = 0;
+        while (cursor < sortedColours.size() && sortedColours[cursor] == colour)
+        {
+            ++cursor;
+            ++count;
+        }
+        ranges[colour].count = count;
+    }
+    return ranges;
+}
+
+// ---------------------------------------------------------------------------
 // LRA constraints
 // ---------------------------------------------------------------------------
 
