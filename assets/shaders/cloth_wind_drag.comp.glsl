@@ -11,7 +11,18 @@
 ///
 /// Math matches the CPU `ClothSimulator::applyWind` APPROXIMATE path
 /// (`cloth_simulator.cpp:2008-2052`) with `windVel = baseWindVel` (no
-/// per-triangle turbulence; that is the Sh4b FULL tier):
+/// per-triangle turbulence; that is the Sh4b FULL tier).
+///
+/// NOTE — runtime parity caveat: `u_windVelocity` here is the bare
+/// direction*strength vector. The CPU `baseWindVel` additionally folds in
+/// `gustCurrent`, `cachedFlutter`, and `windDirOffset`; folding those into the
+/// uploaded wind velocity is deferred to Sh4b, so when gusts/flutter are
+/// active the two paths diverge until then. The colour ordering also assumes
+/// non-degenerate triangles with three distinct vertex indices (the regular
+/// cloth grid always satisfies this); a triangle with a repeated index would
+/// alias its per-vertex writes within the thread.
+///
+/// Per-particle math:
 ///
 ///   vAvg      = (v[i0] + v[i1] + v[i2]) / 3
 ///   vRel      = windVel - vAvg

@@ -9264,6 +9264,9 @@ existing cases (``HelpersMatchEvaluatorPrecisely``,
 
 ### Added
 
+- **GPU per-triangle cloth wind drag (Sh4a)**
+  The APPROXIMATE wind tier's per-triangle aerodynamic drag now runs on the\n  GPU cloth backend via a colour-grouped compute dispatch (atomics-free,\n  deterministic across runs). New cloth_wind_drag.comp.glsl +\n  colourTriangleConstraints; cloth_wind.comp.glsl is now gravity-only. FULL\n  tier (turbulence/FBM) and per-tier gating land in Sh4b. Full suite green.
+
 - **Land engine/utils/result.h — Result<T,E> vocabulary type (CE3)**
   `Vestige::Result<T,E>` aliases `std::expected` on C++23 toolchains and\n  the vendored `tl::expected` v1.3.1 (CC0) on the C++17 baseline.\n  `makeUnexpected()` and `Unexpected` aliases exposed. 10 tests added.\n  CODING_STANDARDS §11 updated; phase_11a_design §9 updated. CLAUDE.md Rule 8\n  sharpened: latest dependency version is always required; older pin needs a\n  documented breaking-change reason.
 

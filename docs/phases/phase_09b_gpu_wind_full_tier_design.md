@@ -2,8 +2,13 @@
 
 ## Status
 
-Design doc, **awaiting blocking review** (project rule 1: research →
-design → review → code). No code lands until this is reviewed.
+**Sh4a IMPLEMENTED 2026-06-02** (user approved the staged Option-B path).
+Per-triangle aerodynamic drag now runs on the GPU via colour-grouped
+dispatch — see the verify-step plan below; all four Sh4a steps shipped with
+tests, full suite green. **Sh4b still pending** (per-particle FBM +
+per-triangle turbulence for the FULL tier, plus per-tier gating). The
+original "awaiting blocking review" gate is satisfied for Sh4a; Sh4b remains
+open work under this same design.
 
 Closes Phase 10.9 Slice 16 **Sh4** in the ROADMAP. Unblocks Slice 17
 **Cl1** (CPU↔GPU cloth parity harness) once the FULL tier ships, since

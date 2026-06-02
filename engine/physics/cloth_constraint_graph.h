@@ -153,6 +153,18 @@ std::vector<ColourRange> colourDihedralConstraints(
 /// needs): colours are dispatched in fixed order and threads within a colour
 /// write disjoint vertices. A trailing index group of fewer than three entries
 /// (malformed buffer) is ignored.
+///
+/// @note Precondition: no vertex may be incident to 64 or more triangles. The
+///       greedy colourer tracks per-vertex used-colours in a 64-bit mask, so a
+///       vertex of triangle-degree >= 64 would exhaust the mask. That is the
+///       load-bearing GPU-safety invariant — if it were violated, a triangle
+///       could be placed in a colour that already touches one of its vertices,
+///       breaking the race-free direct-write guarantee. A debug `assert`
+///       catches it; in release the precondition is assumed. The regular cloth
+///       grid this is built for has a maximum vertex triangle-degree of 6, so
+///       the bound is never approached in practice. (The sibling
+///       `colourConstraints` / `colourDihedralConstraints` carry the same
+///       64-colour ceiling.)
 std::vector<ColourRange> colourTriangleConstraints(
     const std::vector<uint32_t>& indices,
     uint32_t particleCount,
