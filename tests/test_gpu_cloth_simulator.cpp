@@ -240,6 +240,19 @@ TEST(GpuClothSimulator, DihedralCountAndColoursZeroBeforeInit)
     EXPECT_EQ(sim.getDihedralsSSBO(),       0u);
 }
 
+// Phase 10.9 Sh4a — triangle SSBO + colour-range upload.
+TEST(GpuClothSimulator, BindTrianglesEnumPinned)
+{
+    // Triangle SSBO binding 9 is the contract with cloth_wind_drag.comp.glsl.
+    EXPECT_EQ(static_cast<GLuint>(GpuClothSimulator::BIND_TRIANGLES), 9u);
+}
+
+TEST(GpuClothSimulator, TriangleColourCountZeroBeforeInit)
+{
+    GpuClothSimulator sim;
+    EXPECT_EQ(sim.getTriangleColourCount(), 0u);
+}
+
 // -- Step 7 surface --
 
 TEST(GpuClothSimulator, ColliderDefaults)

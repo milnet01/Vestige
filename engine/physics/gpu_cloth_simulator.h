@@ -137,6 +137,7 @@ public:
         BIND_NORMALS           = 6,
         BIND_INDICES           = 7,
         BIND_LRAS              = 8,
+        BIND_TRIANGLES         = 9,  ///< Phase 10.9 Sh4a — per-triangle wind-drag records.
     };
 
     // -- Pin mutators (Step 9) --
@@ -233,6 +234,10 @@ public:
     /// @brief Number of colours produced by greedy colouring of the dihedral constraint graph.
     uint32_t getDihedralColourCount() const { return static_cast<uint32_t>(m_dihedralColourRanges.size()); }
 
+    /// @brief Phase 10.9 Sh4a — number of colour groups from greedy triangle
+    ///        colouring. Each colour is one dispatch in the per-triangle drag pass.
+    uint32_t getTriangleColourCount() const { return static_cast<uint32_t>(m_triangleColourRanges.size()); }
+
     /// @brief Number of XPBD substeps per simulate() call (default 10).
     void setSubsteps(int substeps) override;
     int  getSubsteps() const { return m_substeps; }
@@ -243,6 +248,7 @@ private:
     void buildInitialGrid(const ClothConfig& config);
     void buildAndUploadConstraints(const ClothConfig& config);
     void buildAndUploadDihedrals(const ClothConfig& config);
+    void buildAndUploadTriangles(); ///< Phase 10.9 Sh4a — triangle colour-groups for wind drag.
     void uploadCollidersIfDirty();
     void uploadPinsIfDirty();
     void loadShadersIfNeeded();
@@ -298,8 +304,15 @@ private:
     std::vector<ColourRange>           m_dihedralColourRanges;
     uint32_t                            m_dihedralCount = 0;
 
+    // Phase 10.9 Sh4a — triangle wind-drag records + colouring.
+    std::vector<GpuTriangle>   m_triangles;
+    std::vector<ColourRange>   m_triangleColourRanges;
+    uint32_t                    m_triangleCount = 0;
+    GLuint                      m_trianglesSSBO = 0;
+
     // Compute shaders.
     Shader m_windShader;
+    Shader m_windDragShader;  ///< Phase 10.9 Sh4a — per-triangle aerodynamic drag.
     Shader m_integrateShader;
     Shader m_constraintsShader;
     Shader m_dihedralShader;

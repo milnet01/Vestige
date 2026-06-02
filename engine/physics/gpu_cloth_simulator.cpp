@@ -344,6 +344,7 @@ void GpuClothSimulator::initialize(const ClothConfig& config, uint32_t /*seed*/)
     createBuffers();
     buildAndUploadConstraints(config);
     buildAndUploadDihedrals(config);
+    buildAndUploadTriangles();
     loadShadersIfNeeded();
 
     m_initialized = true;
@@ -399,6 +400,13 @@ void GpuClothSimulator::loadShadersIfNeeded()
     if (!m_lraShader.loadComputeShader(lraPath))
     {
         Logger::error("[GpuClothSimulator] Failed to load " + lraPath);
+        return;
+    }
+    // Phase 10.9 Sh4a — per-triangle aerodynamic drag (APPROXIMATE quality tier on GPU).
+    const std::string windDragPath = m_shaderPath + "/cloth_wind_drag.comp.glsl";
+    if (!m_windDragShader.loadComputeShader(windDragPath))
+    {
+        Logger::error("[GpuClothSimulator] Failed to load " + windDragPath);
         return;
     }
     m_shadersLoaded = true;
@@ -514,6 +522,34 @@ void GpuClothSimulator::buildAndUploadDihedrals(const ClothConfig& config)
     Logger::info("[GpuClothSimulator] Built " + std::to_string(m_dihedralCount)
                  + " dihedrals in " + std::to_string(m_dihedralColourRanges.size())
                  + " colour groups");
+}
+
+void GpuClothSimulator::buildAndUploadTriangles()
+{
+    m_triangles.clear();
+    m_triangleColourRanges.clear();
+    m_triangleCount = 0;
+    if (m_trianglesSSBO != 0)
+    {
+        glDeleteBuffers(1, &m_trianglesSSBO);
+        m_trianglesSSBO = 0;
+    }
+    if (m_indices.empty()) return;
+
+    m_triangleColourRanges = colourTriangleConstraints(m_indices, m_particleCount, m_triangles);
+    if (m_triangles.empty()) return;
+
+    m_triangleCount = static_cast<uint32_t>(m_triangles.size());
+    glCreateBuffers(1, &m_trianglesSSBO);
+    glNamedBufferStorage(
+        m_trianglesSSBO,
+        static_cast<GLsizeiptr>(m_triangleCount * sizeof(GpuTriangle)),
+        m_triangles.data(),
+        /*flags=*/0);
+
+    Logger::info("[GpuClothSimulator] Built " + std::to_string(m_triangleCount)
+                 + " triangles in " + std::to_string(m_triangleColourRanges.size())
+                 + " colour groups (Sh4a wind-drag)");
 }
 
 void GpuClothSimulator::simulate(float deltaTime)
@@ -874,6 +910,7 @@ void GpuClothSimulator::destroyBuffers()
     if (m_lraSSBO)           { glDeleteBuffers(1, &m_lraSSBO);           m_lraSSBO = 0; }
     if (m_normalsSSBO)       { glDeleteBuffers(1, &m_normalsSSBO);       m_normalsSSBO = 0; }
     if (m_indicesSSBO)       { glDeleteBuffers(1, &m_indicesSSBO);       m_indicesSSBO = 0; }
+    if (m_trianglesSSBO)     { glDeleteBuffers(1, &m_trianglesSSBO);     m_trianglesSSBO = 0; }
     m_initialized = false;
     m_particleCount = 0;
     m_gridW = m_gridH = 0;
@@ -889,6 +926,9 @@ void GpuClothSimulator::destroyBuffers()
     m_dihedrals.clear();
     m_dihedralColourRanges.clear();
     m_dihedralCount = 0;
+    m_triangles.clear();
+    m_triangleColourRanges.clear();
+    m_triangleCount = 0;
     m_sphereColliders.clear();
     m_planeColliders.clear();
     m_collidersDirty = true;
