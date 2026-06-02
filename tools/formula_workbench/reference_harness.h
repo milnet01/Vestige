@@ -4,13 +4,31 @@
 /// @file reference_harness.h
 /// @brief Reference-case regression harness — §3.4 of the self-learning design.
 ///
-/// Each JSON spec under ``tools/formula_workbench/reference_cases/``
-/// names a library formula, a canonical coefficient set, an input
-/// sweep, and a set of output bounds. The harness synthesizes a
-/// dataset at runtime from the canonical coefficients + sweep,
-/// runs the Levenberg-Marquardt fitter against it, and asserts
-/// the fit's R² / RMSE / recovered coefficients fall inside the
-/// expected envelopes.
+/// A reference case runs in one of two modes, decided by the spec:
+///
+///   1. **Fit-regression** (the default). The JSON names a library
+///      formula, a canonical coefficient set, an input sweep, and a
+///      set of output bounds. The harness synthesizes a dataset at
+///      runtime from the canonical coefficients + sweep, runs the
+///      Levenberg-Marquardt fitter against it, and asserts the fit's
+///      R² / RMSE / recovered coefficients fall inside the expected
+///      envelopes. This covers the *fittable* formulas — those that
+///      carry at least one coefficient for the fitter to recover.
+///
+///   2. **Evaluation-regression** (``evaluation_points`` present). Five
+///      builtins (``wind_deformation``, ``caustic_depth_fade``,
+///      ``water_absorption``, ``ease_in_sine``, ``fast_neg_exp``) have
+///      *zero* coefficients, so ``CurveFitter::fit`` early-returns "No
+///      coefficients to fit" and the fit path can't cover them. For
+///      these, the spec instead commits a handful of input → expected
+///      output golden points; the harness evaluates the formula's
+///      FULL-tier expression at each point and asserts the result is
+///      within tolerance of the committed value. The committed values
+///      are derived from each formula's mathematical definition, so a
+///      future edit that breaks the expression (wrong exponent, dropped
+///      term, swapped literal) is caught — it is *not* a tautological
+///      self-comparison. When ``evaluation_points`` is present it wins;
+///      the fit path (input_sweep / canonical_coefficients) is skipped.
 ///
 /// This is the audit-tool's ``tests/audit_fixtures/<rule-id>/``
 /// mechanism ported to numerical code. The fixture is the spec;
@@ -74,12 +92,34 @@ struct InputSweep
     int   count = 0;
 };
 
+/// @brief One evaluation-regression golden point.
+///
+/// Used by zero-coefficient formulas (see mode 2 in the file header).
+/// The formula's FULL-tier expression is evaluated with ``inputs``
+/// substituted and the result asserted within ``tolerance`` (absolute)
+/// of ``expected_output``. ``expected_output`` is the formula's
+/// mathematically-correct value at ``inputs`` — committed as ground
+/// truth, not copied from the current code output.
+struct EvaluationPoint
+{
+    std::map<std::string, float> inputs;
+    float expected_output = 0.0f;
+    /// Absolute tolerance. Defaults to 1e-4 — tight enough to catch a
+    /// broken expression (which shifts the output by O(0.1–1)), loose
+    /// enough to absorb float/libm platform variation (~1e-6).
+    float tolerance = 1e-4f;
+};
+
 /// @brief Full parsed contents of a ``reference_cases/*.json`` file.
 struct ReferenceCase
 {
     std::string formula_name;
     std::map<std::string, float> canonical_coefficients;
     std::map<std::string, InputSweep> input_sweep;
+    /// Evaluation-regression golden points (mode 2). When non-empty,
+    /// ``executeReferenceCase`` runs evaluation-regression and skips
+    /// the fit path entirely.
+    std::vector<EvaluationPoint> evaluation_points;
     float r_squared_min = 0.0f;
     float rmse_max = 0.0f;
     /// Maximum absolute residual across the synthetic dataset. Strictly

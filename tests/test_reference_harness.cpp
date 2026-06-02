@@ -421,3 +421,85 @@ TEST(ReferenceCaseExec, WeightsMatchingSizePassesThroughToWeightedFitter)
     auto r = executeReferenceCase(c, library);
     EXPECT_TRUE(r.passed) << (r.failures.empty() ? "" : r.failures.front());
 }
+
+// ---------------------------------------------------------------------------
+// FW W5 follow-up — evaluation-regression mode (zero-coefficient formulas)
+// ---------------------------------------------------------------------------
+
+TEST(ReferenceCaseEval, EvaluationPointsPassWhenFormulaMatches)
+{
+    // `ease_in_sine` has zero coefficients — the fit path can't cover it.
+    // Evaluation-regression asserts f(0.5) = 1 - cos(0.5 * pi/2) = 0.29289.
+    FormulaLibrary library;
+    library.registerBuiltinTemplates();
+
+    ReferenceCase c;
+    c.formula_name = "ease_in_sine";
+    c.evaluation_points.push_back({{{"t", 0.0f}}, 0.0f, 1e-4f});
+    c.evaluation_points.push_back({{{"t", 0.5f}}, 0.29289322f, 1e-4f});
+    c.evaluation_points.push_back({{{"t", 1.0f}}, 1.0f, 1e-4f});
+
+    const auto r = executeReferenceCase(c, library);
+    EXPECT_TRUE(r.passed) << (r.failures.empty() ? "" : r.failures.front());
+    EXPECT_EQ(r.n_points, 3);
+}
+
+TEST(ReferenceCaseEval, EvaluationPointFailsOnToleranceBreach)
+{
+    // A deliberately-wrong golden value must surface a clear failure
+    // naming the point, the evaluated value, and the bound.
+    FormulaLibrary library;
+    library.registerBuiltinTemplates();
+
+    ReferenceCase c;
+    c.formula_name = "fast_neg_exp";
+    c.evaluation_points.push_back({{{"x", 1.0f}}, 0.9f, 1e-4f});  // truth ≈ 0.3679
+
+    const auto r = executeReferenceCase(c, library);
+    EXPECT_FALSE(r.passed);
+    ASSERT_FALSE(r.failures.empty());
+    EXPECT_NE(r.failures[0].find("evaluated to"), std::string::npos);
+}
+
+TEST(ReferenceCaseEval, EvaluationModeSkipsFitPathSoNoSweepIsNeeded)
+{
+    // Mode-2 cases carry no input_sweep / canonical_coefficients. The
+    // executor must branch on evaluation_points BEFORE the synthesize/fit
+    // path (which would otherwise fail "synthesized dataset is empty").
+    FormulaLibrary library;
+    library.registerBuiltinTemplates();
+
+    ReferenceCase c;
+    c.formula_name = "wind_deformation";
+    c.evaluation_points.push_back(
+        {{{"windSpeed", 2.0f}, {"flexibility", 0.5f}, {"height", 3.0f}}, 9.0f, 1e-4f});
+
+    const auto r = executeReferenceCase(c, library);
+    EXPECT_TRUE(r.passed) << (r.failures.empty() ? "" : r.failures.front());
+}
+
+TEST(ReferenceCaseLoad, EvaluationPointsParseFromJson)
+{
+    // JSON round-trip: inputs map, expected_output, explicit tolerance,
+    // and the 1e-4 default when tolerance is omitted.
+    const auto path = std::filesystem::temp_directory_path()
+                    / ("eval_points_" + Testing::vestigeTestStamp() + ".json");
+    std::ofstream(path) << R"({
+        "formula_name": "fast_neg_exp",
+        "evaluation_points": [
+            { "inputs": { "x": 1.0 }, "expected_output": 0.36787944, "tolerance": 0.001 },
+            { "inputs": { "x": 0.0 }, "expected_output": 1.0 }
+        ]
+    })";
+
+    std::string err;
+    const auto c = loadReferenceCase(path.string(), err);
+    ASSERT_TRUE(c.has_value()) << err;
+    ASSERT_EQ(c->evaluation_points.size(), 2u);
+    EXPECT_FLOAT_EQ(c->evaluation_points[0].inputs.at("x"), 1.0f);
+    EXPECT_FLOAT_EQ(c->evaluation_points[0].expected_output, 0.36787944f);
+    EXPECT_FLOAT_EQ(c->evaluation_points[0].tolerance, 0.001f);
+    // Second point omits tolerance → struct default of 1e-4.
+    EXPECT_FLOAT_EQ(c->evaluation_points[1].tolerance, 1e-4f);
+    std::filesystem::remove(path);
+}

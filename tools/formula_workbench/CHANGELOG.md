@@ -4,6 +4,43 @@ All notable changes to the Formula Workbench are documented in this file.
 
 ## [Unreleased]
 
+## [1.18.0] - 2026-06-02
+
+### 2026-06-02 FW W5 follow-up — 0-coefficient evaluation-regression harness mode
+
+Closes the scope note the FW W5 entry below left open ("A future
+'0-coefficient evaluation-regression' mode would cover them"). The
+reference harness now runs in one of two modes:
+
+- **Fit-regression** (existing). Synthesize a dataset from canonical
+  coefficients + sweep, run the LM fitter, assert R²/RMSE/coefficients.
+  Covers the 22 *fittable* builtins.
+- **Evaluation-regression** (new). When a `reference_cases/*.json` spec
+  carries an `evaluation_points` array, the harness skips the fit path,
+  evaluates the formula's FULL-tier expression at each committed
+  `inputs → expected_output` golden point, and asserts the result is
+  within `tolerance` (absolute, default 1e-4). This covers the 5
+  **zero-coefficient** builtins the fitter structurally cannot —
+  `wind_deformation`, `caustic_depth_fade`, `water_absorption`,
+  `ease_in_sine`, `fast_neg_exp` — taking reference-harness coverage
+  from 22/27 to **27/27** builtins.
+
+The committed golden values are derived from each formula's
+mathematical definition (e.g. `ease_in_sine` from `1 - cos(t·π/2)`),
+not copied from current code output — so an edit that breaks an
+expression (wrong exponent, dropped term, swapped FULL/APPROXIMATE
+tier) is caught rather than rubber-stamped.
+
+- **Harness:** new `EvaluationPoint` struct + `evaluation_points` field
+  on `ReferenceCase`; loader parses the array; `executeReferenceCase`
+  branches to the eval path before synthesize/fit (NaN-safe comparison
+  so a non-finite result fails loudly). `reference_harness.{h,cpp}`.
+- **Specs:** 5 new `reference_cases/*.json`, auto-discovered by the
+  existing parameterized suite.
+- **Tests:** 4 new unit tests in `tests/test_reference_harness.cpp`
+  (match, tolerance-breach message, fit-path-skip, JSON parse + default
+  tolerance). Suite green (44 tests).
+
 ### 2026-06-01 FW W5 — reference-regression specs for all coefficient-bearing builtins
 
 Completed the reference-case backlog: added 12 `reference_cases/*.json`

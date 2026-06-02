@@ -1,0 +1,15 @@
+{
+  "$comment": "Evaluation-regression case (mode 2) for caustic_depth_fade — a ZERO-coefficient formula. Expected values hand-derived from the FULL-tier smoothstep fade f = 1 - t*t*(3 - 2t), t = saturate(depth/maxDepth).",
+
+  "formula_name": "caustic_depth_fade",
+
+  "evaluation_points": [
+    { "inputs": { "depth": 0.0,  "maxDepth": 5.0 }, "expected_output": 1.0 },
+    { "inputs": { "depth": 1.25, "maxDepth": 5.0 }, "expected_output": 0.84375 },
+    { "inputs": { "depth": 2.5,  "maxDepth": 5.0 }, "expected_output": 0.5 },
+    { "inputs": { "depth": 5.0,  "maxDepth": 5.0 }, "expected_output": 0.0 },
+    { "inputs": { "depth": 10.0, "maxDepth": 5.0 }, "expected_output": 0.0 }
+  ],
+
+  "notes": "Smootherstep-shaped fade: 1.0 at the surface, 0.0 at maxDepth, 0.5 at the midpoint. The depth=10 (> maxDepth) point pins the saturate() clamp — without it the over-range input would drive the cubic negative. An edit swapping the FULL smoothstep for the APPROXIMATE linear fade shifts the midpoint from 0.5 (unchanged) but the quarter-point from 0.84375 to 0.75, outside the 1e-4 default tolerance."
+}

@@ -1,0 +1,15 @@
+{
+  "$comment": "Evaluation-regression case (mode 2) for fast_neg_exp — a ZERO-coefficient formula. Expected values hand-derived from the FULL-tier form f = exp(-x).",
+
+  "formula_name": "fast_neg_exp",
+
+  "evaluation_points": [
+    { "inputs": { "x": 0.0 }, "expected_output": 1.0 },
+    { "inputs": { "x": 0.5 }, "expected_output": 0.60653066 },
+    { "inputs": { "x": 1.0 }, "expected_output": 0.36787944 },
+    { "inputs": { "x": 2.0 }, "expected_output": 0.13533528 },
+    { "inputs": { "x": 3.0 }, "expected_output": 0.04978707 }
+  ],
+
+  "notes": "f = exp(-x), the FULL reference for the spring-damper fast-negexp approximation. x=0 pins the unit value; the decay points pin the negate+exp chain. The APPROXIMATE rational 1/(1+x+0.48x^2+0.235x^3) diverges from these (e.g. ~0.36832 vs 0.36787944 at x=1, a ~4.5e-4 gap) — close, but the FULL path must stay exact, so any edit conflating the two trips the 1e-4 tolerance."
+}

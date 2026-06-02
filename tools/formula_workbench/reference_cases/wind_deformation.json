@@ -1,0 +1,15 @@
+{
+  "$comment": "Evaluation-regression case (mode 2) for wind_deformation — a ZERO-coefficient formula, so the LM fitter has nothing to recover and the fit path can't cover it. Instead we commit input -> expected-output golden points and assert the FULL-tier expression reproduces them. Expected values are hand-derived from bend = windSpeed * flexibility * height^2, not copied from current code output.",
+
+  "formula_name": "wind_deformation",
+
+  "evaluation_points": [
+    { "inputs": { "windSpeed": 1.0, "flexibility": 1.0, "height": 1.0 }, "expected_output": 1.0 },
+    { "inputs": { "windSpeed": 2.0, "flexibility": 0.5, "height": 3.0 }, "expected_output": 9.0 },
+    { "inputs": { "windSpeed": 5.0, "flexibility": 0.2, "height": 2.0 }, "expected_output": 4.0 },
+    { "inputs": { "windSpeed": 3.0, "flexibility": 0.4, "height": 1.5 }, "expected_output": 2.7 },
+    { "inputs": { "windSpeed": 0.0, "flexibility": 1.0, "height": 10.0 }, "expected_output": 0.0 }
+  ],
+
+  "notes": "bend = windSpeed * flexibility * height^2 (GPU Gems 3 Ch.6). The height^2 term is the regression target: an edit dropping the square (height^1) makes the 3.0-height point read 6.0 vs 9.0, far outside the default 1e-4 tolerance. The zero-windSpeed point pins the multiplicative-identity edge."
+}

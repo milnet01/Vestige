@@ -1,0 +1,15 @@
+{
+  "$comment": "Evaluation-regression case (mode 2) for water_absorption — a ZERO-coefficient formula (absorptionCoeff is an INPUT, not a fitted coefficient). Expected values hand-derived from the FULL-tier Beer-Lambert form result = exp(-absorptionCoeff * thickness).",
+
+  "formula_name": "water_absorption",
+
+  "evaluation_points": [
+    { "inputs": { "thickness": 0.0, "absorptionCoeff": 0.4 }, "expected_output": 1.0 },
+    { "inputs": { "thickness": 1.0, "absorptionCoeff": 0.4 }, "expected_output": 0.67032005 },
+    { "inputs": { "thickness": 2.5, "absorptionCoeff": 0.4 }, "expected_output": 0.36787944 },
+    { "inputs": { "thickness": 5.0, "absorptionCoeff": 0.2 }, "expected_output": 0.36787944 },
+    { "inputs": { "thickness": 3.0, "absorptionCoeff": 0.1 }, "expected_output": 0.74081822 }
+  ],
+
+  "notes": "result = exp(-absorptionCoeff * thickness). Surface (thickness 0) returns 1.0; the two points whose product absorptionCoeff*thickness = 1.0 both return exp(-1) = 0.36787944, pinning the negate+multiply chain. Red light's 0.4 coefficient matches the engine water shader. An edit dropping the negate (exp(+x)) explodes these well past tolerance."
+}

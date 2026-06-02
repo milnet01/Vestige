@@ -1,0 +1,15 @@
+{
+  "$comment": "Evaluation-regression case (mode 2) for ease_in_sine — a ZERO-coefficient formula. Expected values hand-derived from the Penner FULL-tier form f = 1 - cos(t * PI/2), using the formula's literal 1.5707963.",
+
+  "formula_name": "ease_in_sine",
+
+  "evaluation_points": [
+    { "inputs": { "t": 0.0 },  "expected_output": 0.0 },
+    { "inputs": { "t": 0.25 }, "expected_output": 0.07612047 },
+    { "inputs": { "t": 0.5 },  "expected_output": 0.29289322 },
+    { "inputs": { "t": 0.75 }, "expected_output": 0.61731657 },
+    { "inputs": { "t": 1.0 },  "expected_output": 1.0 }
+  ],
+
+  "notes": "Penner easeInSine. f(0)=0 and f(1)=1 are the easing-curve endpoints (the t=1 point lands at ~0.99999997 because the literal 1.5707963 is a hair below PI/2 — comfortably inside the 1e-4 default tolerance). The interior points pin the cosine: an edit swapping FULL (trig) for APPROXIMATE (1.233 t^2 - 0.233 t^3) shifts t=0.5 from 0.29289322 to ~0.279, outside tolerance."
+}

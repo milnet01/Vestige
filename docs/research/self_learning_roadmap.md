@@ -40,6 +40,7 @@ header_guards, binary_in_repo, dup_files).
 | 1.14.0 | 2026-04-19 | W5 (cont.) — five more reference cases: `aerodynamic_drag` (3-input product sweep), `buoyancy` (simplest 3-factor linear), `inverse_square_falloff` (first 3-coefficient fit), `vignette` (first fully-nonlinear coefficient inside pow()), `wet_darkening` (2D input grid). Doubles harness coverage from 5 to 10 specs; total test count 1864. |
 | 1.15.0 | 2026-04-19 | W6 — confidence-weighted meta-feature matching for §3.2 seeding. New `FitHistory::similarity(a,b)` (60 % domain IoU + 20 % n_points + 20 % variance log-ratios) and `bestSeedFor(name, currentMeta, threshold=0.5)`; Workbench re-seeds coefficients from the most-similar exported fit once data is loaded (importCsv / generateSyntheticData), and reverts to library defaults when no fit clears the similarity threshold. Badge shows the score. 14 new tests; 1878 total. |
 | 1.16.0 + 1.17.0 | 2026-04-20 → 2026-04-21 | Post-rev-5 deltas reconciled 2026-05-18 — see `tools/formula_workbench/CHANGELOG.md` for the canonical per-version notes (1.16: documented step-based parameter sweeps; 1.17: weighted Levenberg-Marquardt fit + `max_abs_error_max` metric). The 1.15→1.16 numbering gap was an intentional skip noted in that CHANGELOG. |
+| 1.18.0 | 2026-06-01 → 2026-06-02 | FW W5 reference-regression backlog closed in two steps. (a) 12 specs for the remaining coefficient-bearing builtins → 22/22 *fittable* formulas covered. (b) **0-coefficient evaluation-regression harness mode** (`evaluation_points` in `reference_cases/*.json`): evaluate the FULL-tier expression at committed `inputs → expected_output` golden points instead of fitting, covering the 5 zero-coefficient builtins (`wind_deformation`, `caustic_depth_fade`, `water_absorption`, `ease_in_sine`, `fast_neg_exp`) the fitter structurally cannot. Harness coverage now **27/27** builtins. |
 
 Related: `docs/research/formula_workbench_self_learning_design.md` is the
 original six-mechanism plan.
@@ -53,9 +54,15 @@ left on the audit-tool side from the 2026-04-16 report.
 
 ### Formula Workbench
 
-| # | Item | Priority | Size | Notes |
-|---|------|---------:|-----:|-------|
-| W5 (cont.) | Keep adding reference cases as the library grows | low | small | Ten specs shipped (`aerodynamic_drag`, `beer_lambert`, `buoyancy`, `exponential_fog`, `fresnel_schlick`, `hooke_spring`, `inverse_square_falloff`, `stokes_drag`, `vignette`, `wet_darkening`). Library has ~27 formulas total; adding a spec per formula over time gives broader regression coverage. Each spec ~25 lines of JSON, auto-discovered by the test. |
+Nothing outstanding. W5 (the reference-case backlog) is fully closed as
+of 1.18.0 — all 27 builtins now carry a regression case (22 fit-mode +
+5 evaluation-mode). New formulas added to the library should land with a
+matching `reference_cases/*.json` spec at author time: a coefficient-
+bearing formula gets a fit-mode case (canonical coefficients + input
+sweep + bounds); a zero-coefficient formula gets an evaluation-mode case
+(`evaluation_points` with golden `inputs → expected_output` pairs
+derived from the formula's math). Both shapes are auto-discovered by
+`tests/test_reference_harness.cpp`.
 
 ### Cross-cutting
 

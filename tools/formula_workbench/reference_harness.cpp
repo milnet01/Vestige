@@ -45,6 +45,20 @@ CoefficientBound parseCoefficientBound(const nlohmann::json& j)
     return b;
 }
 
+EvaluationPoint parseEvaluationPoint(const nlohmann::json& j)
+{
+    EvaluationPoint p;
+    if (j.contains("inputs") && j["inputs"].is_object())
+    {
+        for (const auto& it : j["inputs"].items())
+            p.inputs[it.key()] = it.value().get<float>();
+    }
+    p.expected_output = j.value("expected_output", 0.0f);
+    if (j.contains("tolerance") && j["tolerance"].is_number())
+        p.tolerance = j["tolerance"].get<float>();
+    return p;
+}
+
 } // namespace
 
 // ---------------------------------------------------------------------------
@@ -112,6 +126,12 @@ loadReferenceCase(const std::string& path, std::string& errorOut)
     {
         for (const auto& v : j["weights"])
             c.weights.push_back(v.get<float>());
+    }
+
+    if (j.contains("evaluation_points") && j["evaluation_points"].is_array())
+    {
+        for (const auto& ep : j["evaluation_points"])
+            c.evaluation_points.push_back(parseEvaluationPoint(ep));
     }
     return c;
 }
@@ -248,6 +268,50 @@ executeReferenceCase(const ReferenceCase& c, const FormulaLibrary& library)
     if (!formula)
     {
         r.failures.push_back("formula not found in library: " + c.formula_name);
+        return r;
+    }
+
+    // Mode 2: evaluation-regression. Zero-coefficient formulas have
+    // nothing for the fitter to recover, so the spec commits golden
+    // input → expected output points and we assert the FULL-tier
+    // expression still reproduces them. When evaluation_points is
+    // present it wins; the fit path below is skipped.
+    if (!c.evaluation_points.empty())
+    {
+        const ExprNode* expr = formula->getExpression(QualityTier::FULL);
+        if (!expr)
+        {
+            r.failures.push_back("formula has no FULL-tier expression: "
+                                 + c.formula_name);
+            return r;
+        }
+        r.n_points = static_cast<int>(c.evaluation_points.size());
+        ExpressionEvaluator eval;
+        for (size_t i = 0; i < c.evaluation_points.size(); ++i)
+        {
+            const auto& pt = c.evaluation_points[i];
+            ExpressionEvaluator::VariableMap vars;
+            for (const auto& [k, v] : pt.inputs) vars[k] = v;
+            const float actual = eval.evaluate(*expr, vars);
+            // Written as `!(diff <= tol)` so a NaN result fails rather
+            // than silently passing (NaN compares false to everything).
+            const float diff = std::abs(actual - pt.expected_output);
+            if (!(diff <= pt.tolerance))
+            {
+                std::ostringstream oss;
+                oss << "evaluation point " << i << " {";
+                bool first = true;
+                for (const auto& [k, v] : pt.inputs)
+                {
+                    oss << (first ? "" : ", ") << k << "=" << v;
+                    first = false;
+                }
+                oss << "} evaluated to " << actual << " (expected "
+                    << pt.expected_output << " ± " << pt.tolerance << ")";
+                r.failures.push_back(oss.str());
+            }
+        }
+        r.passed = r.failures.empty();
         return r;
     }
 
