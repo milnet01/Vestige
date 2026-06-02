@@ -573,3 +573,180 @@ TEST_F(GpuClothResetSemantics, ResetThroughBackendInterface_Cl5)
     EXPECT_FLOAT_EQ(posAfter[0].y, originalGridPos.y);
     EXPECT_FLOAT_EQ(posAfter[0].z, originalGridPos.z);
 }
+
+// ---------------------------------------------------------------------------
+// Phase 10.9 Sh4a — per-triangle aerodynamic drag parity test
+// ---------------------------------------------------------------------------
+//
+// Isolates `cloth_wind_drag.comp.glsl`: builds a small vertical-plane cloth,
+// colours its triangles with the same `colourTriangleConstraints` the runtime
+// uses, uploads the three SSBOs the shader reads (positions w/ invMass,
+// velocities, triangles), dispatches the drag shader once per colour, then
+// compares the read-back velocities to a CPU reference that replays the
+// APPROXIMATE `ClothSimulator::applyWind` math in index order.
+//
+// Parity is asserted to 1e-5 m/s — ~10 ULPs of FP32 at velocities of order
+// 1 m/s, which covers the FP-commutativity-only summation-order differences
+// between the CPU's index-order walk and the GPU's colour-bucket-order walk
+// (the design doc's §Caveat: cross-run GPU determinism, NOT bit-equality
+// with the CPU).
+
+namespace
+{
+
+// CPU reference: one APPROXIMATE per-triangle drag pass over `indices`,
+// starting from `vel` (mutated in place). Mirrors cloth_simulator.cpp:2008-2052.
+void cpuApplyWindApproximate(const std::vector<uint32_t>& indices,
+                             const std::vector<glm::vec3>& pos,
+                             const std::vector<float>& invMass,
+                             const glm::vec3& windVel, float drag, float dt,
+                             std::vector<glm::vec3>& vel)
+{
+    const float dtOver3 = dt / 3.0f;
+    const size_t triCount = indices.size() / 3;
+    for (size_t ti = 0; ti < triCount; ++ti)
+    {
+        const uint32_t i0 = indices[ti * 3];
+        const uint32_t i1 = indices[ti * 3 + 1];
+        const uint32_t i2 = indices[ti * 3 + 2];
+
+        const glm::vec3 vAvg = (vel[i0] + vel[i1] + vel[i2]) / 3.0f;
+        const glm::vec3 vRel = windVel - vAvg;
+
+        const glm::vec3 e1 = pos[i1] - pos[i0];
+        const glm::vec3 e2 = pos[i2] - pos[i0];
+        const glm::vec3 cr = glm::cross(e1, e2);
+        const float area2 = glm::length(cr);
+        if (area2 < 1e-7f) continue;
+
+        const glm::vec3 normal = cr / area2;
+        const float area = area2 * 0.5f;
+        const float vDotN = glm::dot(vRel, normal);
+        const glm::vec3 force = normal * (0.5f * drag * area * vDotN);
+        const glm::vec3 pv = force * dtOver3;
+
+        if (invMass[i0] > 0.0f) vel[i0] += pv * invMass[i0];
+        if (invMass[i1] > 0.0f) vel[i1] += pv * invMass[i1];
+        if (invMass[i2] > 0.0f) vel[i2] += pv * invMass[i2];
+    }
+}
+
+}  // namespace
+
+class WindDragParityTest : public ::Vestige::Test::GLTestFixture {};
+
+TEST_F(WindDragParityTest, Sh4a_SingleSubstep_PerpendicularWind_MatchesCpuReference)
+{
+    // Vertical 3x3 cloth in the YZ plane (face normal along X); +X wind blows
+    // perpendicular to the face — the strongest-drag configuration, and the
+    // one whose response shows up in velocity.x (matching the design's
+    // sign(velocity[centre].x) == sign(windDir.x) check). A cloth in the XY
+    // plane would feel zero drag from +X wind (wind parallel to the face,
+    // dot(vRel, normal) == 0).
+    constexpr uint32_t W = 3, H = 3;
+    const glm::vec3 WIND{10.0f, 0.0f, 0.0f};
+    constexpr float DRAG = 1.0f;
+    constexpr float DT   = 0.016f;
+
+    std::vector<glm::vec3> pos(W * H);
+    for (uint32_t z = 0; z < H; ++z)
+        for (uint32_t x = 0; x < W; ++x)
+            pos[z * W + x] = glm::vec3(0.0f, float(z), float(x));
+
+    std::vector<float> invMass(W * H, 1.0f);  // all free
+
+    // NW-SE triangulation, matching the runtime grid index buffer.
+    std::vector<uint32_t> indices;
+    for (uint32_t z = 0; z + 1 < H; ++z)
+        for (uint32_t x = 0; x + 1 < W; ++x)
+        {
+            const uint32_t i0 = z * W + x, i1 = z * W + (x + 1);
+            const uint32_t i2 = (z + 1) * W + x, i3 = (z + 1) * W + (x + 1);
+            indices.push_back(i0); indices.push_back(i2); indices.push_back(i1);
+            indices.push_back(i1); indices.push_back(i2); indices.push_back(i3);
+        }
+
+    // Colour the triangles exactly as the runtime does.
+    std::vector<GpuTriangle> tris;
+    const auto ranges = colourTriangleConstraints(indices, W * H, tris);
+    ASSERT_FALSE(ranges.empty());
+
+    // CPU reference walks the triangles in the SAME colour-bucket order the
+    // GPU dispatches them, so it models the GPU's update ordering rather than
+    // the original ClothSimulator's index-order Gauss-Seidel. This matters
+    // because each triangle's vAvg reads the current vertex velocities: index
+    // order and colour order see different intermediate states (vRel = wind -
+    // vAvg, so even a small vAvg difference scales by |wind|). Within a colour
+    // the triangles are vertex-disjoint, so sequential and parallel give
+    // identical results — making the colour-ordered CPU walk an exact oracle
+    // for the GPU's per-colour dispatch. (GPU-vs-ClothSimulator full-loop
+    // parity, across the differing orders, is Cl1's job at a 1e-3 tolerance.)
+    std::vector<uint32_t> colourOrderedIndices;
+    colourOrderedIndices.reserve(tris.size() * 3);
+    for (const GpuTriangle& t : tris)
+    {
+        colourOrderedIndices.push_back(t.i0);
+        colourOrderedIndices.push_back(t.i1);
+        colourOrderedIndices.push_back(t.i2);
+    }
+    std::vector<glm::vec3> cpuVel(W * H, glm::vec3(0.0f));
+    cpuApplyWindApproximate(colourOrderedIndices, pos, invMass, WIND, DRAG, DT, cpuVel);
+
+    const uint32_t centreIdx = 1 * W + 1;
+    ASSERT_GT(cpuVel[centreIdx].x, 0.0f)
+        << "CPU reference sanity: centre particle must gain +X velocity";
+
+    // Load the shader under test.
+    Shader drag;
+    const std::string dragPath = std::string(VESTIGE_SHADER_DIR) + "/cloth_wind_drag.comp.glsl";
+    ASSERT_TRUE(drag.loadComputeShader(dragPath)) << "Failed to load " << dragPath;
+
+    // Upload SSBOs: positions (xyz + invMass in w), velocities (zero), triangles.
+    std::vector<glm::vec4> posBuf(W * H);
+    std::vector<glm::vec4> velBuf(W * H, glm::vec4(0.0f));
+    for (uint32_t i = 0; i < W * H; ++i)
+        posBuf[i] = glm::vec4(pos[i], invMass[i]);
+
+    GLuint posSSBO = 0, velSSBO = 0, triSSBO = 0;
+    glCreateBuffers(1, &posSSBO);
+    glCreateBuffers(1, &velSSBO);
+    glCreateBuffers(1, &triSSBO);
+    glNamedBufferStorage(posSSBO, GLsizeiptr(posBuf.size() * sizeof(glm::vec4)), posBuf.data(), 0);
+    glNamedBufferStorage(velSSBO, GLsizeiptr(velBuf.size() * sizeof(glm::vec4)), velBuf.data(), GL_DYNAMIC_STORAGE_BIT | GL_MAP_READ_BIT);
+    glNamedBufferStorage(triSSBO, GLsizeiptr(tris.size() * sizeof(GpuTriangle)), tris.data(), 0);
+
+    drag.use();
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, GpuClothSimulator::BIND_POSITIONS,  posSSBO);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, GpuClothSimulator::BIND_VELOCITIES, velSSBO);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, GpuClothSimulator::BIND_TRIANGLES,  triSSBO);
+    drag.setVec3 ("u_windVelocity", WIND);
+    drag.setFloat("u_dragCoeff",    DRAG);
+    drag.setFloat("u_deltaTime",    DT);
+
+    // One dispatch per colour — disjoint vertex writes within a colour.
+    for (const auto& r : ranges)
+    {
+        if (r.count == 0) continue;
+        drag.setUInt("u_firstTri", r.offset);
+        drag.setUInt("u_triCount", r.count);
+        glDispatchCompute((r.count + 63u) / 64u, 1, 1);
+        glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+    }
+
+    std::vector<glm::vec4> gpuVel(W * H, glm::vec4(0.0f));
+    glGetNamedBufferSubData(velSSBO, 0, GLsizeiptr(gpuVel.size() * sizeof(glm::vec4)), gpuVel.data());
+
+    glDeleteBuffers(1, &posSSBO);
+    glDeleteBuffers(1, &velSSBO);
+    glDeleteBuffers(1, &triSSBO);
+
+    constexpr float TOL = 1e-5f;
+    for (uint32_t i = 0; i < W * H; ++i)
+    {
+        EXPECT_NEAR(gpuVel[i].x, cpuVel[i].x, TOL) << "velocity.x mismatch at particle " << i;
+        EXPECT_NEAR(gpuVel[i].y, cpuVel[i].y, TOL) << "velocity.y mismatch at particle " << i;
+        EXPECT_NEAR(gpuVel[i].z, cpuVel[i].z, TOL) << "velocity.z mismatch at particle " << i;
+    }
+    EXPECT_GT(gpuVel[centreIdx].x, 0.0f)
+        << "Centre particle must gain +X velocity from +X wind (sign check)";
+}
