@@ -2,9 +2,25 @@
 
 ## Status
 
-Design doc, **awaiting blocking review** (per project `CLAUDE.md`
-rule 1: research → design → review → code). No code lands until
-this is reviewed.
+**Reviewed and approved 2026-06-03** (user sign-off, milnet01) — per
+project `CLAUDE.md` rule 1 (research → design → review → code). Cleared
+for implementation; the [Step plan](#step-plan) below is the build order.
+
+### Cold-eyes review log (global `CLAUDE.md` rule 14)
+
+Reconstructed from the git audit trail — the loops were run and committed
+at the time, but the per-loop log was not recorded inline (the gap this
+entry closes):
+
+- **Loop 1 — converged** (`3ae6ca4`, 2026-05-18): dedicated `/cold-eyes`
+  pass on this doc; ~1121-line revision (architecture, API surface,
+  per-frame algorithm, and performance budget reworked to a clean pass).
+- **Cross-doc sweep** (`382e48c`, 2026-05-18): CE1–CE17 documentation
+  follow-ups, 4 cold loops across the edited spec/design docs. W8-relevant
+  fix landed: CE11 (audio §5 — stb_vorbis as the OGG decoder) plus a
+  citation de-line-numbering touch. No W8 finding was left open — the one
+  deferred item (CE3, land `engine/utils/result.h`) is an unrelated code
+  slice, and CE18 was a pre-existing physics-spec drift.
 
 Closes Phase 10.9 Slice 8 **W8 (part 2/2)** in `ROADMAP.md` — wires
 the streaming music path. W8 (part 1/2) shipped 2026-05-02
