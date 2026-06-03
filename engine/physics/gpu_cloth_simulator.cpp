@@ -577,12 +577,15 @@ void GpuClothSimulator::simulate(float deltaTime)
     const float  dtSub          = deltaTime / static_cast<float>(m_substeps);
     const float  dtSubSquared   = dtSub * dtSub;
 
-    // Damping is intended as a per-frame coefficient on the CPU path; spread
-    // it across substeps here so behaviour stays comparable as substep count
-    // changes. Cap to [0,1] so a misconfigured damping can't flip the sign.
-    const float dampingPerSub = (m_substeps > 0)
-        ? std::min(1.0f, std::max(0.0f, m_damping / static_cast<float>(m_substeps)))
-        : m_damping;
+    // Phase 10.9 Cl1 — `ClothConfig::damping` is documented and applied by the
+    // CPU `ClothSimulator` as a PER-SUBSTEP velocity coefficient
+    // (`cloth_simulator.h:33`, `cloth_simulator.cpp:393-405`:
+    // `v *= 1 - min(damping, 0.95)` once per substep). The earlier
+    // divide-by-substeps here treated it as a per-frame coefficient, which
+    // made the GPU damp ~`substeps`× less than the CPU and the two backends
+    // diverge by metres in a 2 s free-fall (Cl1 parity harness). Match the
+    // CPU's per-substep convention and clamp exactly as the CPU does.
+    const float dampingPerSub = std::min(0.95f, std::max(0.0f, m_damping));
 
     // --- Per-frame wind precompute (Phase 10.9 Sh4b) ------------------------
     // Advance the gust state machine + recompute the FBM/turbulence caches once

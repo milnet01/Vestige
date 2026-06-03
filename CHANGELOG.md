@@ -9264,6 +9264,9 @@ existing cases (``HelpersMatchEvaluatorPrecisely``,
 
 ### Added
 
+- **CPU↔GPU cloth solver parity test harness (Cl1)** (Cl1)
+  tests/test_cloth_cpu_gpu_parity.cpp drives the pure-CPU ClothSimulator and the GPU-compute GpuClothSimulator from an identical ClothConfig and compares them against the design doc's 5%-of-diagonal Hausdorff bound (CLAUDE.md Rule 7). A free-fall core-solver parity test passes; a stiff-drape test is skip-gated pending the GPU constraint-convergence accelerator (Cl9), asserting the structural invariants that hold today (pins clamped, state finite, cloth sagged) and reporting the measured divergence. CPU-only feature gaps tracked as Cl10.
+
 - **GPU cloth FULL-tier wind: per-particle FBM + per-triangle turbulence with per-tier gating (Sh4b)** (Sh4)
   The GPU cloth backend now matches the CPU's three-tier wind ladder (SIMPLE = no force, APPROXIMATE = gust-folded uniform per-triangle drag, FULL = per-particle FBM perturbation + per-triangle turbulence). Gust state + FBM/turbulence precompute were extracted into a shared ClothWindModel that both backends own, so a given seed produces identical wind on CPU and GPU. New shader cloth_wind_fbm.comp.glsl; cloth_wind_drag.comp.glsl gains turbulence scaling + gust-folded wind velocity. Unblocks the Cl1 cloth parity harness.
 
@@ -9282,6 +9285,11 @@ existing cases (``HelpersMatchEvaluatorPrecisely``,
   (no SUT call) and `LuminanceWhite` / `LuminancePureGreenIsBrightest` from
   test_hdr_pipeline.cpp (canonical parity in test_bloom.cpp); file emptied and
   deleted.
+
+### Fixed
+
+- **GPU cloth damping now matches the CPU per-substep convention (Cl1)** (Cl1)
+  The GPU cloth backend divided ClothConfig::damping by the substep count, treating it as a per-frame coefficient, while the CPU ClothSimulator applies it per substep as documented. The GPU therefore damped roughly `substeps`x less, so an identical cloth diverged by metres between backends in a 2-second free-fall. The GPU now applies damping per substep and clamps it exactly as the CPU does. Found by the new CPU/GPU cloth parity harness.
 
 ## [0.1.5] - 2026-04-18
 

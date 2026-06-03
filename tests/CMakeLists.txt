@@ -111,6 +111,7 @@ add_executable(vestige_tests
     test_cloth_wind_model.cpp
     test_cloth_backend_factory.cpp
     test_gpu_cloth_simulator.cpp
+    test_cloth_cpu_gpu_parity.cpp
     test_ui_widgets.cpp
     test_ui_system_input.cpp
     test_ui_world_projection.cpp
