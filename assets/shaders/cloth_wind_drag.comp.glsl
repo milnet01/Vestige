@@ -2,25 +2,25 @@
 // SPDX-License-Identifier: MIT
 
 /// @file cloth_wind_drag.comp.glsl
-/// @brief Phase 10.9 Sh4a — per-triangle aerodynamic drag (APPROXIMATE tier).
+/// @brief Phase 10.9 Sh4a/Sh4b — per-triangle aerodynamic drag.
 ///
 /// One thread per triangle within a colour group. Within a colour, no two
 /// triangles share any vertex (CPU-side `colourTriangleConstraints` guarantees
 /// this), so each thread writes per-vertex velocity deltas directly without
 /// atomics — and across GPU runs the colour-dispatch order is deterministic.
 ///
-/// Math matches the CPU `ClothSimulator::applyWind` APPROXIMATE path
-/// (`cloth_simulator.cpp:2008-2052`) with `windVel = baseWindVel` (no
-/// per-triangle turbulence; that is the Sh4b FULL tier).
+/// Math matches the CPU `ClothSimulator::applyWind` per-triangle drag loop.
+/// At APPROXIMATE quality `windVel = u_windVelocity`; at FULL quality
+/// (`u_useTurbulence != 0`) the wind is scaled per-triangle by the cached
+/// turbulence factor, `windVel = u_windVelocity * triangleTurbulence[origIndex]`,
+/// mirroring `windVel = baseWindVel * m_cachedTriangleTurb[ti]` on the CPU.
 ///
-/// NOTE — runtime parity caveat: `u_windVelocity` here is the bare
-/// direction*strength vector. The CPU `baseWindVel` additionally folds in
-/// `gustCurrent`, `cachedFlutter`, and `windDirOffset`; folding those into the
-/// uploaded wind velocity is deferred to Sh4b, so when gusts/flutter are
-/// active the two paths diverge until then. The colour ordering also assumes
-/// non-degenerate triangles with three distinct vertex indices (the regular
-/// cloth grid always satisfies this); a triangle with a repeated index would
-/// alias its per-vertex writes within the thread.
+/// Sh4b parity: `u_windVelocity` is now the CPU's gust-folded `baseWindVel`
+/// (`effectiveDir * strength * gustCurrent * flutter`), uploaded each frame —
+/// so gusts / flutter / direction-offset no longer diverge from the CPU path.
+/// The colour ordering assumes non-degenerate triangles with three distinct
+/// vertex indices (the regular cloth grid always satisfies this); a triangle
+/// with a repeated index would alias its per-vertex writes within the thread.
 ///
 /// Per-particle math:
 ///
@@ -37,9 +37,10 @@
 ///   v[iN]    += pv * invMass[iN]     (skipped for pinned particles: invMass==0)
 ///
 /// SSBO bindings match `GpuClothSimulator::BufferBinding`:
-///   binding 0 — Positions (read-only for normal + area; vec4, w = invMass)
-///   binding 2 — Velocities (read+write; vec4, w unused)
-///   binding 9 — Triangles  (read-only; uvec4, xyz = i0/i1/i2, w = pad)
+///   binding  0 — Positions          (read-only for normal + area; vec4, w = invMass)
+///   binding  2 — Velocities         (read+write; vec4, w unused)
+///   binding  9 — Triangles          (read-only; uvec4, xyz = i0/i1/i2, w = origIndex)
+///   binding 11 — TriangleTurbulence (read-only; float per triangle, original order)
 
 #version 450 core
 
@@ -57,7 +58,7 @@ layout(std430, binding = 2) buffer Velocities
 
 struct Triangle
 {
-    uvec4 idx;  // x=i0, y=i1, z=i2, w=pad
+    uvec4 idx;  // x=i0, y=i1, z=i2, w=origIndex
 };
 
 layout(std430, binding = 9) readonly buffer Triangles
@@ -65,11 +66,17 @@ layout(std430, binding = 9) readonly buffer Triangles
     Triangle triangles[];
 };
 
-uniform uint  u_firstTri;     ///< Offset into triangles[] for this colour group.
-uniform uint  u_triCount;     ///< Number of triangles in this colour group.
-uniform vec3  u_windVelocity; ///< Uniform wind vector (direction * strength).
-uniform float u_dragCoeff;    ///< Aerodynamic drag coefficient (matches CPU m_dragCoeff).
-uniform float u_deltaTime;    ///< Substep dt.
+layout(std430, binding = 11) readonly buffer TriangleTurbulence
+{
+    float triangleTurbulence[];  // one per triangle, in ORIGINAL (pre-colour) order
+};
+
+uniform uint  u_firstTri;      ///< Offset into triangles[] for this colour group.
+uniform uint  u_triCount;      ///< Number of triangles in this colour group.
+uniform vec3  u_windVelocity;  ///< Gust-folded wind vector (FULL/APPROXIMATE base).
+uniform float u_dragCoeff;     ///< Aerodynamic drag coefficient (matches CPU m_dragCoeff).
+uniform float u_deltaTime;     ///< Substep dt.
+uniform uint  u_useTurbulence; ///< 1 = scale wind per-triangle by turbulence (FULL); 0 = APPROXIMATE.
 
 void main()
 {
@@ -81,6 +88,15 @@ void main()
     uint i1 = tri.idx.y;
     uint i2 = tri.idx.z;
 
+    // FULL tier scales the wind per-triangle by the cached turbulence factor
+    // (CPU: windVel = baseWindVel * m_cachedTriangleTurb[ti]). The turbulence
+    // SSBO is in original triangle order, so index by origIndex (tri.idx.w).
+    vec3 windVel = u_windVelocity;
+    if (u_useTurbulence != 0u)
+    {
+        windVel *= triangleTurbulence[tri.idx.w];
+    }
+
     vec3 p0 = positions[i0].xyz;
     vec3 p1 = positions[i1].xyz;
     vec3 p2 = positions[i2].xyz;
@@ -91,7 +107,7 @@ void main()
 
     // Per-triangle aerodynamic drag: relative wind vs average triangle velocity.
     vec3 vAvg = (v0 + v1 + v2) / 3.0;
-    vec3 vRel = u_windVelocity - vAvg;
+    vec3 vRel = windVel - vAvg;
 
     vec3 edge1    = p1 - p0;
     vec3 edge2    = p2 - p0;

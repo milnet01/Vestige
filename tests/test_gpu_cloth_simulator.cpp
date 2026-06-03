@@ -779,3 +779,284 @@ TEST_F(WindDragParityTest, Sh4a_SingleSubstep_PerpendicularWind_MatchesCpuRefere
     EXPECT_GT(gpuVel[centreIdx].x, 0.0f)
         << "Centre particle must gain +X velocity from +X wind (sign check)";
 }
+
+// ---------------------------------------------------------------------------
+// Phase 10.9 Sh4b — FULL-tier wind: per-particle FBM + per-triangle turbulence
+// ---------------------------------------------------------------------------
+
+namespace
+{
+
+// CPU reference for the FULL drag pass: walks the colour-ordered triangles (so
+// it models the GPU dispatch order, like the Sh4a oracle) but scales the wind
+// per-triangle by the cached turbulence factor, indexed by origIndex — exactly
+// what cloth_wind_drag.comp.glsl does when u_useTurbulence != 0.
+void cpuApplyWindFullColourOrder(const std::vector<GpuTriangle>& tris,
+                                 const std::vector<glm::vec3>& pos,
+                                 const std::vector<float>& invMass,
+                                 const glm::vec3& baseWind,
+                                 const std::vector<float>& turb,
+                                 float drag, float dt,
+                                 std::vector<glm::vec3>& vel)
+{
+    const float dtOver3 = dt / 3.0f;
+    for (const GpuTriangle& t : tris)
+    {
+        const glm::vec3 windVel = baseWind * turb[t.origIndex];
+        const glm::vec3 vAvg = (vel[t.i0] + vel[t.i1] + vel[t.i2]) / 3.0f;
+        const glm::vec3 vRel = windVel - vAvg;
+
+        const glm::vec3 e1 = pos[t.i1] - pos[t.i0];
+        const glm::vec3 e2 = pos[t.i2] - pos[t.i0];
+        const glm::vec3 cr = glm::cross(e1, e2);
+        const float area2 = glm::length(cr);
+        if (area2 < 1e-7f) continue;
+
+        const glm::vec3 normal = cr / area2;
+        const float area = area2 * 0.5f;
+        const float vDotN = glm::dot(vRel, normal);
+        const glm::vec3 force = normal * (0.5f * drag * area * vDotN);
+        const glm::vec3 pv = force * dtOver3;
+
+        if (invMass[t.i0] > 0.0f) vel[t.i0] += pv * invMass[t.i0];
+        if (invMass[t.i1] > 0.0f) vel[t.i1] += pv * invMass[t.i1];
+        if (invMass[t.i2] > 0.0f) vel[t.i2] += pv * invMass[t.i2];
+    }
+}
+
+}  // namespace
+
+// Step 5 (FBM reaches the shader): cloth_wind_fbm.comp.glsl adds the cached
+// per-particle perturbation × dt to each velocity, and ADDS rather than sets.
+TEST_F(WindDragParityTest, Sh4b_FbmShaderAddsPerParticlePerturbation)
+{
+    constexpr uint32_t N = 12;
+    constexpr float DT = 0.016f;
+
+    std::vector<glm::vec4> fbm(N), vel(N, glm::vec4(0.0f));
+    for (uint32_t i = 0; i < N; ++i)
+        fbm[i] = glm::vec4(float(i) * 0.1f, -float(i) * 0.05f, 0.2f, 0.0f);
+    vel[0] = glm::vec4(1.0f, 2.0f, 3.0f, 0.0f);  // prove it adds onto existing velocity
+
+    Shader fbmSh;
+    const std::string p = std::string(VESTIGE_SHADER_DIR) + "/cloth_wind_fbm.comp.glsl";
+    ASSERT_TRUE(fbmSh.loadComputeShader(p)) << "Failed to load " << p;
+
+    GLuint velSSBO = 0, fbmSSBO = 0;
+    glCreateBuffers(1, &velSSBO);
+    glCreateBuffers(1, &fbmSSBO);
+    glNamedBufferStorage(velSSBO, GLsizeiptr(vel.size() * sizeof(glm::vec4)), vel.data(),
+                         GL_DYNAMIC_STORAGE_BIT | GL_MAP_READ_BIT);
+    glNamedBufferStorage(fbmSSBO, GLsizeiptr(fbm.size() * sizeof(glm::vec4)), fbm.data(), 0);
+
+    fbmSh.use();
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, GpuClothSimulator::BIND_VELOCITIES, velSSBO);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, GpuClothSimulator::BIND_PARTICLE_WIND_FBM, fbmSSBO);
+    fbmSh.setUInt("u_particleCount", N);
+    fbmSh.setFloat("u_deltaTime", DT);
+    glDispatchCompute((N + 63u) / 64u, 1, 1);
+    glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+
+    std::vector<glm::vec4> out(N);
+    glGetNamedBufferSubData(velSSBO, 0, GLsizeiptr(out.size() * sizeof(glm::vec4)), out.data());
+    glDeleteBuffers(1, &velSSBO);
+    glDeleteBuffers(1, &fbmSSBO);
+
+    for (uint32_t i = 0; i < N; ++i)
+    {
+        const glm::vec3 base = (i == 0) ? glm::vec3(1.0f, 2.0f, 3.0f) : glm::vec3(0.0f);
+        const glm::vec3 expected = base + glm::vec3(fbm[i]) * DT;
+        EXPECT_NEAR(out[i].x, expected.x, 1e-6f) << "i=" << i;
+        EXPECT_NEAR(out[i].y, expected.y, 1e-6f) << "i=" << i;
+        EXPECT_NEAR(out[i].z, expected.z, 1e-6f) << "i=" << i;
+    }
+}
+
+// Steps 5+7 (FULL drag path): with u_useTurbulence=1 the drag shader scales the
+// wind per-triangle by triangleTurbulence[origIndex], matching the colour-order
+// CPU oracle within 1e-5, and producing a different result from the uniform
+// (APPROXIMATE) pass — proving the turbulence data reaches the shader.
+TEST_F(WindDragParityTest, Sh4b_FullDragScalesByTurbulence_MatchesOracleAndDiffersFromApprox)
+{
+    constexpr uint32_t W = 3, H = 3;
+    const glm::vec3 WIND{10.0f, 0.0f, 0.0f};
+    constexpr float DRAG = 1.0f;
+    constexpr float DT   = 0.016f;
+
+    // Vertical YZ-plane cloth (face normal along X), perpendicular +X wind.
+    std::vector<glm::vec3> pos(W * H);
+    for (uint32_t z = 0; z < H; ++z)
+        for (uint32_t x = 0; x < W; ++x)
+            pos[z * W + x] = glm::vec3(0.0f, float(z), float(x));
+    std::vector<float> invMass(W * H, 1.0f);
+
+    std::vector<uint32_t> indices;
+    for (uint32_t z = 0; z + 1 < H; ++z)
+        for (uint32_t x = 0; x + 1 < W; ++x)
+        {
+            const uint32_t i0 = z * W + x, i1 = z * W + (x + 1);
+            const uint32_t i2 = (z + 1) * W + x, i3 = (z + 1) * W + (x + 1);
+            indices.push_back(i0); indices.push_back(i2); indices.push_back(i1);
+            indices.push_back(i1); indices.push_back(i2); indices.push_back(i3);
+        }
+
+    std::vector<GpuTriangle> tris;
+    const auto ranges = colourTriangleConstraints(indices, W * H, tris);
+    ASSERT_FALSE(ranges.empty());
+
+    // Non-uniform per-original-triangle turbulence in [0.5, 1.5].
+    const size_t triCount = indices.size() / 3;
+    std::vector<float> turb(triCount);
+    for (size_t ti = 0; ti < triCount; ++ti)
+        turb[ti] = 0.5f + (float(ti) / float(triCount));  // distinct, all != 1 in general
+
+    // Colour-ordered index list for the APPROXIMATE (uniform) oracle.
+    std::vector<uint32_t> colourOrderedIndices;
+    for (const GpuTriangle& t : tris)
+    {
+        colourOrderedIndices.push_back(t.i0);
+        colourOrderedIndices.push_back(t.i1);
+        colourOrderedIndices.push_back(t.i2);
+    }
+
+    std::vector<glm::vec3> cpuFull(W * H, glm::vec3(0.0f));
+    cpuApplyWindFullColourOrder(tris, pos, invMass, WIND, turb, DRAG, DT, cpuFull);
+    std::vector<glm::vec3> cpuApprox(W * H, glm::vec3(0.0f));
+    cpuApplyWindApproximate(colourOrderedIndices, pos, invMass, WIND, DRAG, DT, cpuApprox);
+
+    Shader drag;
+    const std::string dragPath = std::string(VESTIGE_SHADER_DIR) + "/cloth_wind_drag.comp.glsl";
+    ASSERT_TRUE(drag.loadComputeShader(dragPath)) << "Failed to load " << dragPath;
+
+    std::vector<glm::vec4> posBuf(W * H), velBuf(W * H, glm::vec4(0.0f));
+    for (uint32_t i = 0; i < W * H; ++i) posBuf[i] = glm::vec4(pos[i], invMass[i]);
+
+    GLuint posSSBO = 0, velSSBO = 0, triSSBO = 0, turbSSBO = 0;
+    glCreateBuffers(1, &posSSBO);
+    glCreateBuffers(1, &velSSBO);
+    glCreateBuffers(1, &triSSBO);
+    glCreateBuffers(1, &turbSSBO);
+    glNamedBufferStorage(posSSBO, GLsizeiptr(posBuf.size() * sizeof(glm::vec4)), posBuf.data(), 0);
+    glNamedBufferStorage(velSSBO, GLsizeiptr(velBuf.size() * sizeof(glm::vec4)), velBuf.data(),
+                         GL_DYNAMIC_STORAGE_BIT | GL_MAP_READ_BIT);
+    glNamedBufferStorage(triSSBO, GLsizeiptr(tris.size() * sizeof(GpuTriangle)), tris.data(), 0);
+    glNamedBufferStorage(turbSSBO, GLsizeiptr(turb.size() * sizeof(float)), turb.data(), 0);
+
+    drag.use();
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, GpuClothSimulator::BIND_POSITIONS, posSSBO);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, GpuClothSimulator::BIND_VELOCITIES, velSSBO);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, GpuClothSimulator::BIND_TRIANGLES, triSSBO);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, GpuClothSimulator::BIND_TRIANGLE_TURB, turbSSBO);
+    drag.setVec3 ("u_windVelocity", WIND);
+    drag.setFloat("u_dragCoeff", DRAG);
+    drag.setFloat("u_deltaTime", DT);
+    drag.setUInt ("u_useTurbulence", 1u);
+    for (const auto& r : ranges)
+    {
+        if (r.count == 0) continue;
+        drag.setUInt("u_firstTri", r.offset);
+        drag.setUInt("u_triCount", r.count);
+        glDispatchCompute((r.count + 63u) / 64u, 1, 1);
+        glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+    }
+
+    std::vector<glm::vec4> gpuVel(W * H, glm::vec4(0.0f));
+    glGetNamedBufferSubData(velSSBO, 0, GLsizeiptr(gpuVel.size() * sizeof(glm::vec4)), gpuVel.data());
+    glDeleteBuffers(1, &posSSBO);
+    glDeleteBuffers(1, &velSSBO);
+    glDeleteBuffers(1, &triSSBO);
+    glDeleteBuffers(1, &turbSSBO);
+
+    constexpr float TOL = 1e-5f;
+    bool differsFromApprox = false;
+    for (uint32_t i = 0; i < W * H; ++i)
+    {
+        EXPECT_NEAR(gpuVel[i].x, cpuFull[i].x, TOL) << "FULL velocity.x mismatch at " << i;
+        EXPECT_NEAR(gpuVel[i].y, cpuFull[i].y, TOL) << "FULL velocity.y mismatch at " << i;
+        EXPECT_NEAR(gpuVel[i].z, cpuFull[i].z, TOL) << "FULL velocity.z mismatch at " << i;
+        if (std::abs(gpuVel[i].x - cpuApprox[i].x) > 1e-3f) differsFromApprox = true;
+    }
+    EXPECT_TRUE(differsFromApprox)
+        << "FULL turbulence must change the result vs uniform APPROXIMATE wind";
+}
+
+// Step 7 (tier gating, end-to-end through simulate()): three identical GPU
+// cloths (same seed/config) that differ only in wind. Driven through the
+// opening calm period into a gust, this pins two contracts via the *full*
+// substep pipeline (not just the isolated shaders above):
+//   (a) SIMPLE applies no wind — a SIMPLE cloth given strong wind tracks a
+//       zero-strength cloth particle-for-particle (the dispatch is gated off);
+//   (b) FULL applies wind — a FULL cloth diverges from the SIMPLE one once the
+//       gust ramps (FBM perturbs every free particle regardless of orientation).
+TEST_F(WindDragParityTest, Sh4b_TierGating_SimpleIgnoresWind_FullAppliesIt)
+{
+    ClothConfig cfg;
+    cfg.width = 6; cfg.height = 6; cfg.spacing = 0.2f; cfg.particleMass = 0.05f;
+    cfg.substeps = 8;
+
+    auto build = [&](ClothWindQuality q, float strength) -> std::unique_ptr<GpuClothSimulator>
+    {
+        auto sim = std::make_unique<GpuClothSimulator>();
+        sim->setShaderPath(VESTIGE_SHADER_DIR);
+        sim->initialize(cfg, /*seed=*/11);
+        if (!sim->isInitialized() || !sim->hasShaders()) return sim;
+        for (uint32_t x = 0; x < cfg.width; ++x)  // pin the top grid row
+        {
+            const uint32_t top = (cfg.height - 1) * cfg.width + x;
+            sim->pinParticle(top, sim->getPositions()[top]);
+        }
+        sim->setWind(glm::vec3(1.0f, 0.0f, 0.5f), strength);
+        sim->setWindQuality(q);
+        return sim;
+    };
+
+    auto simZero   = build(ClothWindQuality::SIMPLE, 0.0f);  // no wind at all
+    auto simSimple = build(ClothWindQuality::SIMPLE, 8.0f);  // wind set but tier ignores it
+    auto simFull   = build(ClothWindQuality::FULL,   8.0f);  // wind applied
+    if (!simZero->isInitialized() || !simZero->hasShaders())
+        GTEST_SKIP() << "GPU cloth pipeline not available";
+
+    // Sample the mean FULL-vs-SIMPLE divergence periodically and keep the peak:
+    // the gust ramps then subsides over the run, so the final frame may catch a
+    // calm phase. The peak captures the gust moment regardless of phase.
+    // SIMPLE-vs-zero is gust-independent (both apply no wind) so its running max
+    // is meaningful at any sample.
+    const uint32_t pc = simFull->getParticleCount();
+    float maxSimpleVsZero = 0.0f, peakMeanFullVsSimple = 0.0f;
+    auto sampleDivergence = [&]()
+    {
+        const glm::vec3* pz = simZero->getPositions();
+        const glm::vec3* ps = simSimple->getPositions();
+        const glm::vec3* pf = simFull->getPositions();
+        float sumFullVsSimple = 0.0f;
+        uint32_t freeCount = 0;
+        for (uint32_t i = 0; i < pc; ++i)
+        {
+            if (simFull->isParticlePinned(i)) continue;
+            maxSimpleVsZero = std::max(maxSimpleVsZero, glm::length(ps[i] - pz[i]));
+            sumFullVsSimple += glm::length(pf[i] - ps[i]);
+            ++freeCount;
+        }
+        if (freeCount > 0)
+            peakMeanFullVsSimple = std::max(peakMeanFullVsSimple,
+                                            sumFullVsSimple / float(freeCount));
+    };
+
+    for (int f = 0; f < 900; ++f)  // ~15 s — well past the 3-5 s opening calm
+    {
+        simZero->simulate(1.0f / 60.0f);
+        simSimple->simulate(1.0f / 60.0f);
+        simFull->simulate(1.0f / 60.0f);
+        if (f % 20 == 0) sampleDivergence();
+    }
+    sampleDivergence();
+
+    // (a) SIMPLE + wind is identical to no wind (GPU is cross-run deterministic;
+    //     allow a hair of FP tolerance).
+    EXPECT_LT(maxSimpleVsZero, 1e-3f) << "SIMPLE tier must ignore the wind it is given";
+    // (b) FULL diverges from SIMPLE during the gust. The peak mean divergence
+    //     (~0.01 m for this cloth/seed) is an order of magnitude above the
+    //     SIMPLE-vs-zero noise floor (< 1e-3) — a clean "wind applied" signal.
+    EXPECT_GT(peakMeanFullVsSimple, 0.005f)
+        << "FULL tier must move the cloth via wind after a gust";
+}

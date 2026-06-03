@@ -23,6 +23,7 @@
 #include "physics/cloth_constraint_graph.h"
 #include "physics/cloth_solver_backend.h"
 #include "physics/cloth_simulator.h"  // For ClothConfig
+#include "physics/cloth_wind_model.h"  // Shared gust + FBM/turbulence precompute (Sh4b)
 #include "renderer/shader.h"
 
 #include <glad/gl.h>
@@ -78,14 +79,16 @@ public:
     void setDihedralBendCompliance(float compliance) override;
     float getDihedralBendCompliance() const override { return m_dihedralCompliance; }
 
-    // Wind (IClothSolverBackend).
-    void setWind(const glm::vec3& direction, float strength) override;
-    void setWindQuality(ClothWindQuality quality) override { m_windQuality = quality; }
-    glm::vec3       getWindVelocity()  const override { return m_windVelocity; }
-    glm::vec3       getWindDirection() const override;
-    float           getWindStrength()  const override;
-    float           getDragCoefficient() const override { return m_dragCoeff; }
-    ClothWindQuality getWindQuality()  const override { return m_windQuality; }
+    // Wind (IClothSolverBackend). Gust state + FBM/turbulence precompute live in
+    // the shared ClothWindModel (Phase 10.9 Sh4b) so this backend produces the
+    // same wind inputs as the CPU ClothSimulator from the same seed.
+    void setWind(const glm::vec3& direction, float strength) override { m_windModel.setWind(direction, strength); }
+    void setWindQuality(ClothWindQuality quality) override { m_windModel.setWindQuality(quality); }
+    glm::vec3       getWindVelocity()  const override { return m_windModel.windVelocity(); }
+    glm::vec3       getWindDirection() const override { return m_windModel.windDirection(); }
+    float           getWindStrength()  const override { return m_windModel.windStrength(); }
+    float           getDragCoefficient() const override { return m_windModel.dragCoefficient(); }
+    ClothWindQuality getWindQuality()  const override { return m_windModel.windQuality(); }
 
     /// @brief Phase 10.9 Cl5 — refreshes the immutable rest-pose snapshot
     ///        used by `reset()`. Forces a SSBO→mirror readback first so the
@@ -113,10 +116,11 @@ public:
     bool hasShaders() const { return m_shadersLoaded; }
 
     /// @brief Sets per-frame wind drag coefficient (matches CPU path).
-    void setDragCoefficient(float drag) override { m_dragCoeff = drag; }
+    void setDragCoefficient(float drag) override { m_windModel.setDragCoefficient(drag); }
 
-    /// @brief Sets uniform wind velocity (direction × strength).
-    void setWindVelocity(const glm::vec3& v) { m_windVelocity = v; }
+    /// @brief Sets a raw wind velocity vector. Decomposed into the model's
+    ///        direction × strength so `getWindVelocity()` round-trips.
+    void setWindVelocity(const glm::vec3& v) { m_windModel.setWind(v, glm::length(v)); }
 
     /// @brief Sets per-step velocity damping (0 = none, 0.99 = heavy).
     void setDamping(float damping) override { m_damping = damping; }
@@ -138,6 +142,8 @@ public:
         BIND_INDICES           = 7,
         BIND_LRAS              = 8,
         BIND_TRIANGLES         = 9,  ///< Phase 10.9 Sh4a — per-triangle wind-drag records.
+        BIND_PARTICLE_WIND_FBM = 10, ///< Phase 10.9 Sh4b — per-particle FBM perturbation (FULL).
+        BIND_TRIANGLE_TURB     = 11, ///< Phase 10.9 Sh4b — per-triangle turbulence factor (FULL).
     };
 
     // -- Pin mutators (Step 9) --
@@ -311,9 +317,19 @@ private:
     uint32_t                    m_triangleCount = 0;
     GLuint                      m_trianglesSSBO = 0;
 
+    // Phase 10.9 Sh4b — FULL-tier wind: per-particle FBM + per-triangle
+    // turbulence. The shared wind model fills the CPU-side caches each frame;
+    // they upload to these SSBOs (consumed every substep). `m_fbmUploadScratch`
+    // packs the model's vec3 perturbation into std430 vec4 without a per-frame
+    // allocation.
+    GLuint                      m_particleWindFbmSSBO = 0;
+    GLuint                      m_triangleTurbSSBO    = 0;
+    std::vector<glm::vec4>      m_fbmUploadScratch;
+
     // Compute shaders.
     Shader m_windShader;
     Shader m_windDragShader;  ///< Phase 10.9 Sh4a — per-triangle aerodynamic drag.
+    Shader m_windFbmShader;   ///< Phase 10.9 Sh4b — per-particle FBM perturbation (FULL).
     Shader m_integrateShader;
     Shader m_constraintsShader;
     Shader m_dihedralShader;
@@ -345,16 +361,17 @@ private:
 
     // Per-frame parameters (uniforms uploaded inside simulate()).
     glm::vec3 m_gravity      = glm::vec3(0.0f, -9.81f, 0.0f);
-    glm::vec3 m_windVelocity = glm::vec3(0.0f);
-    float     m_dragCoeff    = 1.0f;
     float     m_damping      = 0.01f;
+
+    // Wind state machine + FBM/turbulence precompute, shared with the CPU
+    // backend so both produce identical wind inputs from the same seed (Sh4b).
+    ClothWindModel m_windModel;
     /// @brief Phase 10.9 Cl4 — current dihedral compliance, mirroring the
     /// CPU `m_dihedralCompliance` default. Initial value picked at
     /// `buildAndUploadDihedrals`; runtime changes go through
     /// `setDihedralBendCompliance` which re-uploads the SSBO.
     float     m_dihedralCompliance = 0.01f;
     int       m_substeps     = 10;        ///< XPBD substeps per simulate(); matches CPU default.
-    ClothWindQuality m_windQuality = ClothWindQuality::FULL;
 
     // Cached ClothConfig returned by getConfig(); updated when live-tuning
     // setters mutate the canonical values. Lives here so `getConfig()` can

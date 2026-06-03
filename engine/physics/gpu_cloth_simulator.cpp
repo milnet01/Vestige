@@ -101,24 +101,8 @@ void GpuClothSimulator::setDihedralBendCompliance(float compliance)
     }
 }
 
-void GpuClothSimulator::setWind(const glm::vec3& direction, float strength)
-{
-    const float len = glm::length(direction);
-    const glm::vec3 unit = (len > 0.0f) ? (direction / len) : glm::vec3(0.0f);
-    m_windVelocity = unit * strength;
-}
-
-glm::vec3 GpuClothSimulator::getWindDirection() const
-{
-    const float len = glm::length(m_windVelocity);
-    if (len <= 1e-7f) return glm::vec3(0.0f);
-    return m_windVelocity / len;
-}
-
-float GpuClothSimulator::getWindStrength() const
-{
-    return glm::length(m_windVelocity);
-}
+// setWind / setWindQuality / getWind* / setDragCoefficient / setWindVelocity
+// are inline in the header (Sh4b) — they delegate to the shared ClothWindModel.
 
 void GpuClothSimulator::addSphereCollider(const glm::vec3& center, float radius)
 {
@@ -322,7 +306,7 @@ void GpuClothSimulator::uploadPinsIfDirty()
     m_pinsDirty = false;
 }
 
-void GpuClothSimulator::initialize(const ClothConfig& config, uint32_t /*seed*/)
+void GpuClothSimulator::initialize(const ClothConfig& config, uint32_t seed)
 {
     if (m_initialized) destroyBuffers();
 
@@ -333,6 +317,10 @@ void GpuClothSimulator::initialize(const ClothConfig& config, uint32_t /*seed*/)
     m_gravity       = config.gravity;
     m_damping       = config.damping;
     m_substeps      = (config.substeps < 1) ? 1 : config.substeps;
+
+    // Seed the shared wind model's gust state machine (same RNG order as the
+    // CPU backend, so a given seed yields identical gust timing on both).
+    m_windModel.seedAndInit(seed);
 
     if (m_particleCount == 0)
     {
@@ -402,11 +390,18 @@ void GpuClothSimulator::loadShadersIfNeeded()
         Logger::error("[GpuClothSimulator] Failed to load " + lraPath);
         return;
     }
-    // Phase 10.9 Sh4a — per-triangle aerodynamic drag (APPROXIMATE quality tier on GPU).
+    // Phase 10.9 Sh4a — per-triangle aerodynamic drag (APPROXIMATE + FULL tiers).
     const std::string windDragPath = m_shaderPath + "/cloth_wind_drag.comp.glsl";
     if (!m_windDragShader.loadComputeShader(windDragPath))
     {
         Logger::error("[GpuClothSimulator] Failed to load " + windDragPath);
+        return;
+    }
+    // Phase 10.9 Sh4b — per-particle FBM perturbation (FULL tier only).
+    const std::string windFbmPath = m_shaderPath + "/cloth_wind_fbm.comp.glsl";
+    if (!m_windFbmShader.loadComputeShader(windFbmPath))
+    {
+        Logger::error("[GpuClothSimulator] Failed to load " + windFbmPath);
         return;
     }
     m_shadersLoaded = true;
@@ -534,6 +529,11 @@ void GpuClothSimulator::buildAndUploadTriangles()
         glDeleteBuffers(1, &m_trianglesSSBO);
         m_trianglesSSBO = 0;
     }
+    if (m_triangleTurbSSBO != 0)
+    {
+        glDeleteBuffers(1, &m_triangleTurbSSBO);
+        m_triangleTurbSSBO = 0;
+    }
     if (m_indices.empty()) return;
 
     m_triangleColourRanges = colourTriangleConstraints(m_indices, m_particleCount, m_triangles);
@@ -547,9 +547,22 @@ void GpuClothSimulator::buildAndUploadTriangles()
         m_triangles.data(),
         /*flags=*/0);
 
+    // Phase 10.9 Sh4b — per-triangle turbulence factor (FULL tier), one float
+    // per triangle in ORIGINAL order (the drag shader indexes it via the
+    // GpuTriangle.origIndex lane). Re-uploaded each frame from the wind model;
+    // start at 1.0 (turbulence-neutral) so a FULL dispatch before the first
+    // precompute leaves the wind unscaled.
+    const std::vector<float> oneTurb(m_triangleCount, 1.0f);
+    glCreateBuffers(1, &m_triangleTurbSSBO);
+    glNamedBufferStorage(
+        m_triangleTurbSSBO,
+        static_cast<GLsizeiptr>(m_triangleCount * sizeof(float)),
+        oneTurb.data(),
+        GL_DYNAMIC_STORAGE_BIT);
+
     Logger::info("[GpuClothSimulator] Built " + std::to_string(m_triangleCount)
                  + " triangles in " + std::to_string(m_triangleColourRanges.size())
-                 + " colour groups (Sh4a wind-drag)");
+                 + " colour groups (Sh4a/Sh4b wind-drag)");
 }
 
 void GpuClothSimulator::simulate(float deltaTime)
@@ -571,6 +584,48 @@ void GpuClothSimulator::simulate(float deltaTime)
         ? std::min(1.0f, std::max(0.0f, m_damping / static_cast<float>(m_substeps)))
         : m_damping;
 
+    // --- Per-frame wind precompute (Phase 10.9 Sh4b) ------------------------
+    // Advance the gust state machine + recompute the FBM/turbulence caches once
+    // per frame (constant across substeps), exactly like the CPU backend. The
+    // FULL tier's per-triangle turbulence needs frame-start positions for its
+    // centroids: refresh the CPU mirror first. In the normal render loop the
+    // renderer already read positions back this frame (mirror clean), so this
+    // is usually a no-op; in headless stepping it costs one readback at FULL.
+    m_windModel.advance(deltaTime);
+    const bool windFull = (m_windModel.windQuality() == ClothWindQuality::FULL);
+    if (windFull)
+    {
+        readbackPositionsIfDirty();
+    }
+    m_windModel.precompute(m_gridW, m_gridH, m_positionMirror, m_invMassMirror, m_indices);
+
+    const bool windActive = m_windModel.precomputed();  // false for SIMPLE / zero strength
+    const glm::vec3 baseWindVel = m_windModel.baseWindVelocity();
+
+    // Upload the FULL-tier caches to their SSBOs (consumed every substep below).
+    if (windFull && windActive)
+    {
+        const std::vector<glm::vec3>& fbm = m_windModel.particleWind();
+        if (!fbm.empty() && m_particleWindFbmSSBO != 0)
+        {
+            m_fbmUploadScratch.resize(fbm.size());
+            for (size_t i = 0; i < fbm.size(); ++i)
+            {
+                m_fbmUploadScratch[i] = glm::vec4(fbm[i], 0.0f);
+            }
+            glNamedBufferSubData(m_particleWindFbmSSBO, 0,
+                static_cast<GLsizeiptr>(m_fbmUploadScratch.size() * sizeof(glm::vec4)),
+                m_fbmUploadScratch.data());
+        }
+        const std::vector<float>& turb = m_windModel.triangleTurbulence();
+        if (!turb.empty() && m_triangleTurbSSBO != 0)
+        {
+            glNamedBufferSubData(m_triangleTurbSSBO, 0,
+                static_cast<GLsizeiptr>(turb.size() * sizeof(float)),
+                turb.data());
+        }
+    }
+
     for (int s = 0; s < m_substeps; ++s)
     {
         // 1. Gravity init pass → updates velocities only.
@@ -582,22 +637,39 @@ void GpuClothSimulator::simulate(float deltaTime)
         glDispatchCompute(particleGroups, 1, 1);
         glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 
-        // 1b. Per-triangle aerodynamic drag (Phase 10.9 Sh4a) → updates
+        // 1a. Per-particle FBM perturbation (Phase 10.9 Sh4b, FULL tier only).
+        //     Runs BEFORE the drag pass so the drag's vAvg reads the perturbed
+        //     velocities — matching the CPU applyWind ordering. The cache is
+        //     already invMass-scaled and zero for pinned particles.
+        if (windFull && windActive)
+        {
+            m_windFbmShader.use();
+            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, BIND_VELOCITIES,        m_velocitiesSSBO);
+            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, BIND_PARTICLE_WIND_FBM, m_particleWindFbmSSBO);
+            m_windFbmShader.setUInt("u_particleCount", m_particleCount);
+            m_windFbmShader.setFloat("u_deltaTime",    dtSub);
+            glDispatchCompute(particleGroups, 1, 1);
+            glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+        }
+
+        // 1b. Per-triangle aerodynamic drag (Phase 10.9 Sh4a/Sh4b) → updates
         //     velocities. One dispatch per colour group; within a colour no
         //     two triangles share a vertex (colourTriangleConstraints), so the
         //     direct per-vertex velocity writes are race-free without atomics.
         //     Mirrors the CPU substep's applyWind, which runs after gravity and
-        //     before position prediction. Tier gating (SIMPLE = no drag) and
-        //     per-triangle turbulence (FULL) land in Sh4b.
-        if (m_triangleCount > 0)
+        //     before position prediction. Tier gating: SIMPLE / zero-strength →
+        //     no drag (windActive false); FULL → per-triangle turbulence on.
+        if (m_triangleCount > 0 && windActive)
         {
             m_windDragShader.use();
-            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, BIND_POSITIONS,  m_positionsSSBO);
-            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, BIND_VELOCITIES, m_velocitiesSSBO);
-            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, BIND_TRIANGLES,  m_trianglesSSBO);
-            m_windDragShader.setVec3 ("u_windVelocity", m_windVelocity);
-            m_windDragShader.setFloat("u_dragCoeff",    m_dragCoeff);
-            m_windDragShader.setFloat("u_deltaTime",    dtSub);
+            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, BIND_POSITIONS,      m_positionsSSBO);
+            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, BIND_VELOCITIES,     m_velocitiesSSBO);
+            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, BIND_TRIANGLES,      m_trianglesSSBO);
+            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, BIND_TRIANGLE_TURB,  m_triangleTurbSSBO);
+            m_windDragShader.setVec3 ("u_windVelocity",  baseWindVel);
+            m_windDragShader.setFloat("u_dragCoeff",     m_windModel.dragCoefficient());
+            m_windDragShader.setFloat("u_deltaTime",     dtSub);
+            m_windDragShader.setUInt ("u_useTurbulence", windFull ? 1u : 0u);
             for (const auto& range : m_triangleColourRanges)
             {
                 if (range.count == 0) continue;
@@ -765,6 +837,10 @@ void GpuClothSimulator::reset()
     m_pinsDirty      = false;
     m_positionsDirty = false;
     m_normalsDirty   = false;
+
+    // Reset the gust state machine (mirrors ClothSimulator::reset — zero state,
+    // preserve the RNG seed so post-reset gust timing is reproducible).
+    m_windModel.reset();
 }
 
 void GpuClothSimulator::captureRestPositions()
@@ -922,6 +998,13 @@ void GpuClothSimulator::createBuffers()
     glCreateBuffers(1, &m_indicesSSBO);
     glNamedBufferStorage(m_indicesSSBO, indexBytes, m_indices.data(),
                          /*flags=*/0);  // Immutable.
+
+    // Phase 10.9 Sh4b — per-particle FBM perturbation (FULL tier). Re-uploaded
+    // each frame from the wind model's cache; zero-initialised so a stray FULL
+    // dispatch before the first precompute is a no-op.
+    glCreateBuffers(1, &m_particleWindFbmSSBO);
+    glNamedBufferStorage(m_particleWindFbmSSBO, vec4Bytes, zeroVec4.data(),
+                         GL_DYNAMIC_STORAGE_BIT);
 }
 
 void GpuClothSimulator::destroyBuffers()
@@ -936,6 +1019,8 @@ void GpuClothSimulator::destroyBuffers()
     if (m_normalsSSBO)       { glDeleteBuffers(1, &m_normalsSSBO);       m_normalsSSBO = 0; }
     if (m_indicesSSBO)       { glDeleteBuffers(1, &m_indicesSSBO);       m_indicesSSBO = 0; }
     if (m_trianglesSSBO)     { glDeleteBuffers(1, &m_trianglesSSBO);     m_trianglesSSBO = 0; }
+    if (m_particleWindFbmSSBO) { glDeleteBuffers(1, &m_particleWindFbmSSBO); m_particleWindFbmSSBO = 0; }
+    if (m_triangleTurbSSBO)    { glDeleteBuffers(1, &m_triangleTurbSSBO);    m_triangleTurbSSBO = 0; }
     m_initialized = false;
     m_particleCount = 0;
     m_gridW = m_gridH = 0;

@@ -360,7 +360,7 @@ std::vector<ColourRange> colourTriangleConstraints(
         tri.i0 = indices[t];
         tri.i1 = indices[t + 1];
         tri.i2 = indices[t + 2];
-        tri.pad = 0;
+        tri.origIndex = static_cast<uint32_t>(t / 3);  // Survives the colour reorder (Sh4b).
         outTriangles.push_back(tri);
     }
     if (outTriangles.empty()) return {};

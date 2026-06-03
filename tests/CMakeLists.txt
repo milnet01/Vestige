@@ -108,6 +108,7 @@ add_executable(vestige_tests
     test_nav_mesh_query.cpp
     test_cloth_solver_backend.cpp
     test_cloth_constraint_graph.cpp
+    test_cloth_wind_model.cpp
     test_cloth_backend_factory.cpp
     test_gpu_cloth_simulator.cpp
     test_ui_widgets.cpp

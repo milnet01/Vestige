@@ -58,17 +58,22 @@ struct GpuDihedralConstraint
 ///
 /// Phase 10.9 Sh4a — the three particle indices of a mesh triangle, padded to
 /// 16 bytes so the GLSL `cloth_wind_drag.comp.glsl` shader can read it as a
-/// `uvec4` (the `.w` lane is unused). The per-triangle aerodynamic-drag pass
-/// computes one force per triangle and writes the per-vertex share directly to
-/// the three velocities; colour grouping (see `colourTriangleConstraints`)
-/// guarantees no two triangles in a colour share a vertex, so the writes are
-/// race-free without atomics.
+/// `uvec4`. The per-triangle aerodynamic-drag pass computes one force per
+/// triangle and writes the per-vertex share directly to the three velocities;
+/// colour grouping (see `colourTriangleConstraints`) guarantees no two
+/// triangles in a colour share a vertex, so the writes are race-free without
+/// atomics.
+///
+/// The `.w` lane carries `origIndex` — the triangle's position in the original
+/// (pre-colour-sort) index buffer. Phase 10.9 Sh4b uses it to index the
+/// per-triangle turbulence SSBO (which the CPU wind model fills in original
+/// order) from the colour-reordered drag dispatch.
 struct GpuTriangle
 {
     uint32_t i0;
     uint32_t i1;
     uint32_t i2;
-    uint32_t pad;
+    uint32_t origIndex;  ///< Index into the original triangle order (Sh4b turbulence lookup).
 };
 
 /// @brief Half-open `[offset, offset+count)` slice into a constraint array.
