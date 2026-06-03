@@ -9264,6 +9264,9 @@ existing cases (``HelpersMatchEvaluatorPrecisely``,
 
 ### Added
 
+- **GPU cloth FULL-tier wind: per-particle FBM + per-triangle turbulence with per-tier gating (Sh4b)** (Sh4)
+  The GPU cloth backend now matches the CPU's three-tier wind ladder (SIMPLE = no force, APPROXIMATE = gust-folded uniform per-triangle drag, FULL = per-particle FBM perturbation + per-triangle turbulence). Gust state + FBM/turbulence precompute were extracted into a shared ClothWindModel that both backends own, so a given seed produces identical wind on CPU and GPU. New shader cloth_wind_fbm.comp.glsl; cloth_wind_drag.comp.glsl gains turbulence scaling + gust-folded wind velocity. Unblocks the Cl1 cloth parity harness.
+
 - **GPU per-triangle cloth wind drag (Sh4a)**
   The APPROXIMATE wind tier's per-triangle aerodynamic drag now runs on the\n  GPU cloth backend via a colour-grouped compute dispatch (atomics-free,\n  deterministic across runs). New cloth_wind_drag.comp.glsl +\n  colourTriangleConstraints; cloth_wind.comp.glsl is now gravity-only. FULL\n  tier (turbulence/FBM) and per-tier gating land in Sh4b. Full suite green.
 

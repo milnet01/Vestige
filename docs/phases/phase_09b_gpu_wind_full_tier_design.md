@@ -5,10 +5,25 @@
 **Sh4a IMPLEMENTED 2026-06-02** (user approved the staged Option-B path).
 Per-triangle aerodynamic drag now runs on the GPU via colour-grouped
 dispatch — see the verify-step plan below; all four Sh4a steps shipped with
-tests, full suite green. **Sh4b still pending** (per-particle FBM +
-per-triangle turbulence for the FULL tier, plus per-tier gating). The
-original "awaiting blocking review" gate is satisfied for Sh4a; Sh4b remains
-open work under this same design.
+tests, full suite green.
+
+**Sh4b IMPLEMENTED 2026-06-03.** Per-particle FBM + per-triangle turbulence
+(FULL tier) and per-tier gating now ship on the GPU. One change to the plan
+below: rather than re-implement the gust state machine + FBM/turbulence
+precompute on the GPU side (which would duplicate ~250 lines and risk the two
+copies drifting), the user chose to **extract a shared `ClothWindModel`**
+(`engine/physics/cloth_wind_model.{h,cpp}`) that both `ClothSimulator` (CPU)
+and `GpuClothSimulator` own. Given the same seed + dt sequence both backends
+produce identical wind inputs — the exact property Cl1 parity needs, achieved
+by construction rather than by keeping two hand-written copies in sync. The
+`m_gustCurrent`/`m_windDirOffset`/`m_cachedFlutter` folding into
+`u_windVelocity` (design table rows) is realised as `ClothWindModel::baseWindVelocity()`.
+Bindings landed as `BIND_PARTICLE_WIND_FBM=10` / `BIND_TRIANGLE_TURB=11`
+(0–9 were already taken; the design's draft enum was pre-Sh4a). The
+`GpuTriangle.pad` lane became `origIndex` so the colour-reordered drag dispatch
+can index the original-order turbulence array. Steps 5–7 shipped with 9 new
+tests (model determinism/tier semantics + FBM/turbulence shader parity + an
+end-to-end tier-gating integration test); full suite green (3318 tests).
 
 Closes Phase 10.9 Slice 16 **Sh4** in the ROADMAP. Unblocks Slice 17
 **Cl1** (CPU↔GPU cloth parity harness) once the FULL tier ships, since
