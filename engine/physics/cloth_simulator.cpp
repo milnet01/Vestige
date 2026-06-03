@@ -79,9 +79,6 @@ void ClothSimulator::initialize(const ClothConfig& config, uint32_t seed)
         return;
     }
 
-    // Unique RNG seed so each cloth panel has different wind timing
-    m_rng.seed((seed != 0) ? seed : 12345u);
-
     uint32_t count = m_gridW * m_gridH;
     float invMass = 1.0f / config.particleMass;
 
@@ -209,15 +206,9 @@ void ClothSimulator::initialize(const ClothConfig& config, uint32_t seed)
     m_constraintsSorted = false;
     m_particleDepth.clear();
 
-    // Start in a calm period so the curtain hangs straight before the first gust.
-    // The initial timer gives gravity time to settle the cloth into its natural drape.
-    m_gustCurrent = 0.0f;
-    m_gustTarget = 0.0f;
-    m_gustTimer = m_rng.nextRange(3.0f, 5.0f);  // 3-5 seconds of calm before first gust
-    m_gustRampSpeed = 0.0f;
-    m_windDirOffset = glm::vec3(0.0f);
-    m_windDirTarget = glm::vec3(0.0f);
-    m_dirTimer = m_rng.nextRange(2.0f, 4.0f);
+    // Seed the wind model's gust state machine (calm opening period so the
+    // curtain hangs straight before the first gust).
+    m_windModel.seedAndInit(seed);
     m_sleeping = false;
     m_sleepFrames = 0;
 
@@ -231,15 +222,14 @@ void ClothSimulator::simulate(float deltaTime)
         return;
     }
 
-    m_elapsed += deltaTime;
-
-    // Update gust state even when sleeping — need to detect when wind returns
-    updateGustState(deltaTime);
+    // Advance elapsed time + gust state even when sleeping — need to detect
+    // when wind returns.
+    m_windModel.advance(deltaTime);
 
     // Sleep check: if cloth is sleeping and wind is calm, skip simulation
     if (m_sleeping)
     {
-        if (m_gustCurrent > 0.1f)
+        if (m_windModel.gustCurrent() > 0.1f)
         {
             // Wind returned — wake up
             m_sleeping = false;
@@ -283,7 +273,7 @@ void ClothSimulator::simulate(float deltaTime)
     }
 
     // Pre-compute noise-dependent wind data once (constant across substeps)
-    precomputeWind();
+    m_windModel.precompute(m_gridW, m_gridH, m_positions, m_inverseMasses, m_indices);
 
     for (int s = 0; s < substeps; ++s)
     {
@@ -385,7 +375,7 @@ void ClothSimulator::simulate(float deltaTime)
         // cloth with LRA constraints (hanging curtains/veils) — taut panels like
         // fence walls don't need this and it would fight their natural wind bowing.
         {
-            float restBlend = 1.0f - m_gustCurrent;
+            float restBlend = 1.0f - m_windModel.gustCurrent();
             if (restBlend > 0.01f && !m_lraConstraints.empty())
             {
                 // Blend factor per substep. Keep small so wind can still
@@ -438,7 +428,7 @@ void ClothSimulator::simulate(float deltaTime)
     }
 
     float avgKE = totalKE / static_cast<float>(freeCount);
-    if (avgKE < m_config.sleepThreshold && m_gustCurrent < 0.05f)
+    if (avgKE < m_config.sleepThreshold && m_windModel.gustCurrent() < 0.05f)
     {
         ++m_sleepFrames;
         if (m_sleepFrames >= SLEEP_FRAME_COUNT)
@@ -622,44 +612,42 @@ void ClothSimulator::clearBoxColliders()
 
 void ClothSimulator::setWind(const glm::vec3& direction, float strength)
 {
-    float len = glm::length(direction);
-    m_windDirection = (len > 0.0f) ? direction / len : glm::vec3(0.0f);
-    m_windStrength = strength;
+    m_windModel.setWind(direction, strength);
 }
 
 void ClothSimulator::setWindQuality(ClothWindQuality quality)
 {
-    m_windQuality = quality;
+    m_windModel.setWindQuality(quality);
 }
 
 ClothWindQuality ClothSimulator::getWindQuality() const
 {
-    return m_windQuality;
+    return m_windModel.windQuality();
 }
 
 void ClothSimulator::setDragCoefficient(float drag)
 {
-    m_dragCoeff = std::max(0.0f, drag);
+    m_windModel.setDragCoefficient(drag);
 }
 
 glm::vec3 ClothSimulator::getWindVelocity() const
 {
-    return m_windDirection * m_windStrength;
+    return m_windModel.windVelocity();
 }
 
 glm::vec3 ClothSimulator::getWindDirection() const
 {
-    return m_windDirection;
+    return m_windModel.windDirection();
 }
 
 float ClothSimulator::getWindStrength() const
 {
-    return m_windStrength;
+    return m_windModel.windStrength();
 }
 
 float ClothSimulator::getDragCoefficient() const
 {
-    return m_dragCoeff;
+    return m_windModel.dragCoefficient();
 }
 
 // --- Config ---
@@ -709,15 +697,9 @@ void ClothSimulator::reset()
         m_prevPositions[pin.index] = pin.position;
     }
 
-    // Reset gust state machine
-    m_gustCurrent = 0.0f;
-    m_gustTarget = 0.0f;
-    m_gustTimer = 0.0f;
-    m_gustRampSpeed = 0.0f;
-    m_windDirOffset = glm::vec3(0.0f);
-    m_windDirTarget = glm::vec3(0.0f);
-    m_dirTimer = 0.0f;
-    m_elapsed = 0.0f;
+    // Reset gust state machine (RNG seed is preserved — matches the pre-Sh4b
+    // behaviour where reset() zeroed the state but did not reseed).
+    m_windModel.reset();
 
     // Clear sleep state
     m_sleeping = false;
@@ -1794,218 +1776,33 @@ void ClothSimulator::recomputeNormals()
     }
 }
 
-/// @brief Fast integer-based hash noise — replaces sin-based GPU-style hash.
-/// Produces same quality pseudo-random distribution as sin(x*127.1+y*311.7)*43758.5
-/// but uses integer bit-mixing (~5 cycles) instead of std::sin (~30 cycles).
-static float hashNoise(float x, float y)
+void ClothSimulator::applyWind(float dt)
 {
-    // Reinterpret floats as integers for bit mixing
-    uint32_t ix, iy;
-    std::memcpy(&ix, &x, sizeof(uint32_t));
-    std::memcpy(&iy, &y, sizeof(uint32_t));
-
-    // Combine with golden-ratio-derived constants, then avalanche
-    uint32_t h = ix * 0x45d9f3bu + iy * 0x119de1f3u;
-    h ^= h >> 16;
-    h *= 0x45d9f3bu;
-    h ^= h >> 16;
-
-    return static_cast<float>(h & 0x00FFFFFFu) / 16777216.0f;  // [0, 1)
-}
-
-void ClothSimulator::updateGustState(float dt)
-{
-    // --- Gust strength state machine ---
-    m_gustTimer -= dt;
-    if (m_gustTimer <= 0.0f)
-    {
-        // Pick a new target: either a gust or calm period
-        if (m_gustTarget < 0.3f)
-        {
-            // Was calm → start a gust
-            m_gustTarget = m_rng.nextRange(0.5f, 1.0f);
-            m_gustTimer = m_rng.nextRange(1.5f, 4.0f);   // Blow for 1.5-4 seconds
-            m_gustRampSpeed = m_rng.nextRange(1.5f, 4.0f); // Ramp up speed
-        }
-        else
-        {
-            // Was gusting → go calm (truly still)
-            // Calm periods must be long enough for fabric to swing back to
-            // its natural hanging position. A 4m curtain has a pendulum
-            // period of ~4 seconds, so calm needs 3-7 seconds minimum.
-            m_gustTarget = 0.0f;
-            m_gustTimer = m_rng.nextRange(3.0f, 7.0f);   // Calm for 3-7 seconds
-            m_gustRampSpeed = m_rng.nextRange(3.0f, 6.0f); // Wind dies off quickly
-        }
-    }
-
-    // Smoothly interpolate toward target
-    float diff = m_gustTarget - m_gustCurrent;
-    float step = m_gustRampSpeed * dt;
-    if (std::abs(diff) < step)
-    {
-        m_gustCurrent = m_gustTarget;
-    }
-    else
-    {
-        m_gustCurrent += (diff > 0.0f ? step : -step);
-    }
-
-    // --- Direction shift state machine ---
-    m_dirTimer -= dt;
-    if (m_dirTimer <= 0.0f)
-    {
-        // Pick a new direction offset — occasionally large shifts
-        float shift = m_rng.nextFloat();
-        if (shift < 0.15f)
-        {
-            // Big direction change (15% chance): partially reverse or strong side gust
-            m_windDirTarget = glm::vec3(
-                m_rng.nextRange(-0.8f, 0.8f),
-                m_rng.nextRange(-0.3f, 0.3f),
-                m_rng.nextRange(-0.5f, 0.4f)   // Can partially reverse
-            );
-        }
-        else if (shift < 0.5f)
-        {
-            // Medium shift (35% chance)
-            m_windDirTarget = glm::vec3(
-                m_rng.nextRange(-0.4f, 0.4f),
-                m_rng.nextRange(-0.15f, 0.15f),
-                m_rng.nextRange(-0.1f, 0.2f)
-            );
-        }
-        else
-        {
-            // Small drift or return to base (50% chance)
-            m_windDirTarget = glm::vec3(
-                m_rng.nextRange(-0.15f, 0.15f),
-                m_rng.nextRange(-0.05f, 0.05f),
-                0.0f
-            );
-        }
-        m_dirTimer = m_rng.nextRange(1.0f, 5.0f);
-    }
-
-    // Smoothly interpolate direction offset
-    glm::vec3 dirDiff = m_windDirTarget - m_windDirOffset;
-    float dirLen = glm::length(dirDiff);
-    float dirStep = 0.8f * dt;
-    if (dirLen <= dirStep || dirLen < 1e-6f)
-    {
-        m_windDirOffset = m_windDirTarget;
-    }
-    else
-    {
-        m_windDirOffset += dirDiff * (dirStep / dirLen);
-    }
-}
-
-void ClothSimulator::precomputeWind()
-{
-    m_windPrecomputed = false;
-
-    if (m_windStrength <= 0.0f || m_windQuality == WindQuality::SIMPLE)
+    if (!m_windModel.precomputed() || dt <= 0.0f)
     {
         return;
     }
 
-    float t = m_elapsed;
+    const glm::vec3 baseWindVel = m_windModel.baseWindVelocity();
+    const bool full = (m_windModel.windQuality() == WindQuality::FULL);
+    const float drag = m_windModel.dragCoefficient();
 
-    // Cache flutter (depends only on m_elapsed — constant across substeps)
-    m_cachedFlutter = 1.0f + 0.15f * std::sin(t * 7.3f + 1.1f)
-                          + 0.08f * std::sin(t * 13.7f + 3.2f);
-
-    // --- Per-particle perturbation cache (FULL quality only) ---
-    if (m_windQuality == WindQuality::FULL && m_gridW > 0 && m_gridH > 0)
+    // --- Apply cached per-particle perturbation (FULL quality only) ---
+    if (full)
     {
-        uint32_t count = m_gridW * m_gridH;
-        m_cachedParticleWind.resize(count);
-
-        glm::vec3 effectiveDir = m_windDirection + m_windDirOffset;
-        float gustStrength = m_gustCurrent * m_cachedFlutter;
-
-        for (uint32_t gz = 0; gz < m_gridH; ++gz)
+        const std::vector<glm::vec3>& particleWind = m_windModel.particleWind();
+        if (!particleWind.empty())
         {
-            for (uint32_t gx = 0; gx < m_gridW; ++gx)
+            uint32_t count = m_gridW * m_gridH;
+            for (uint32_t i = 0; i < count; ++i)
             {
-                uint32_t idx = gz * m_gridW + gx;
-                if (m_inverseMasses[idx] <= 0.0f)
-                {
-                    m_cachedParticleWind[idx] = glm::vec3(0.0f);
-                    continue;
-                }
-
-                float rowFrac = static_cast<float>(gz) / static_cast<float>(m_gridH - 1);
-                float colFrac = static_cast<float>(gx) / static_cast<float>(m_gridW - 1);
-                float edgeDist = std::abs(colFrac - 0.5f) * 2.0f;
-
-                float baseFactor = 0.3f + 0.7f * rowFrac;
-                float edgeBoost = edgeDist * edgeDist * 0.8f;
-                float bottomBoost = (gz >= m_gridH - 2) ? 0.5f : 0.0f;
-                float totalFactor = baseFactor + edgeBoost + bottomBoost;
-
-                float px = static_cast<float>(gx);
-                float py = static_cast<float>(gz);
-                float n1 = hashNoise(px * 0.7f + t * 1.3f, py * 1.1f + t * 0.7f) - 0.5f;
-                float n2 = hashNoise(px * 1.9f + t * 2.1f, py * 0.5f + t * 1.9f) - 0.5f;
-                float n3 = hashNoise(px * 0.3f + t * 0.9f, py * 2.3f + t * 2.7f) - 0.5f;
-
-                glm::vec3 perturbation = effectiveDir * (n1 * 2.5f)
-                                       + glm::vec3(n2 * 2.0f, n3 * 1.2f, n1 * 1.0f);
-
-                float strength = m_windStrength * gustStrength * totalFactor * 0.5f;
-
-                // Store pre-multiplied perturbation (caller multiplies by dt per substep)
-                m_cachedParticleWind[idx] = perturbation * (strength * m_inverseMasses[idx]);
+                m_velocities[i] += particleWind[i] * dt;
             }
         }
     }
 
-    // --- Per-triangle spatial turbulence cache (FULL quality only) ---
-    if (m_windQuality == WindQuality::FULL)
-    {
-        size_t triCount = m_indices.size() / 3;
-        m_cachedTriangleTurb.resize(triCount);
-
-        for (size_t ti = 0; ti < triCount; ++ti)
-        {
-            uint32_t i0 = m_indices[ti * 3];
-            uint32_t i1 = m_indices[ti * 3 + 1];
-            uint32_t i2 = m_indices[ti * 3 + 2];
-
-            glm::vec3 centroid = (m_positions[i0] + m_positions[i1] + m_positions[i2]) / 3.0f;
-            float spatialNoise = hashNoise(centroid.x * 3.0f + t * 1.1f,
-                                            centroid.y * 2.0f + t * 0.8f);
-            m_cachedTriangleTurb[ti] = 0.5f + spatialNoise;  // [0.5, 1.5]
-        }
-    }
-
-    m_windPrecomputed = true;
-}
-
-void ClothSimulator::applyWind(float dt)
-{
-    if (!m_windPrecomputed || dt <= 0.0f)
-    {
-        return;
-    }
-
-    float gustStrength = m_gustCurrent * m_cachedFlutter;
-    glm::vec3 effectiveDir = m_windDirection + m_windDirOffset;
-    glm::vec3 baseWindVel = effectiveDir * (m_windStrength * gustStrength);
-
-    // --- Apply cached per-particle perturbation (FULL quality only) ---
-    if (m_windQuality == WindQuality::FULL && !m_cachedParticleWind.empty())
-    {
-        uint32_t count = m_gridW * m_gridH;
-        for (uint32_t i = 0; i < count; ++i)
-        {
-            m_velocities[i] += m_cachedParticleWind[i] * dt;
-        }
-    }
-
     // --- Per-triangle aerodynamic drag (FULL + APPROXIMATE) ---
+    const std::vector<float>& triTurb = m_windModel.triangleTurbulence();
     float dtOver3 = dt / 3.0f;
     size_t triCount = m_indices.size() / 3;
     for (size_t ti = 0; ti < triCount; ++ti)
@@ -2015,15 +1812,7 @@ void ClothSimulator::applyWind(float dt)
         uint32_t i2 = m_indices[ti * 3 + 2];
 
         // Use cached turbulence factor (FULL) or uniform wind (APPROXIMATE)
-        glm::vec3 windVel;
-        if (m_windQuality == WindQuality::FULL)
-        {
-            windVel = baseWindVel * m_cachedTriangleTurb[ti];
-        }
-        else
-        {
-            windVel = baseWindVel;
-        }
+        glm::vec3 windVel = full ? (baseWindVel * triTurb[ti]) : baseWindVel;
 
         glm::vec3 vAvg = (m_velocities[i0] + m_velocities[i1] + m_velocities[i2]) / 3.0f;
         glm::vec3 vRel = windVel - vAvg;
@@ -2042,7 +1831,7 @@ void ClothSimulator::applyWind(float dt)
         float area = area2 * 0.5f;
 
         float vDotN = glm::dot(vRel, normal);
-        glm::vec3 force = normal * (0.5f * m_dragCoeff * area * vDotN);
+        glm::vec3 force = normal * (0.5f * drag * area * vDotN);
         glm::vec3 perVertex = force * dtOver3;
 
         if (m_inverseMasses[i0] > 0.0f) m_velocities[i0] += perVertex * m_inverseMasses[i0];

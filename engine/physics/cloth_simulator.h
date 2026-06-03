@@ -6,8 +6,8 @@
 #pragma once
 
 #include "physics/cloth_solver_backend.h"
+#include "physics/cloth_wind_model.h"
 #include "physics/spatial_hash.h"
-#include "utils/deterministic_lcg_rng.h"
 
 #include <glm/glm.hpp>
 
@@ -415,24 +415,10 @@ private:
     // Thick particle model
     float m_particleRadius = 0.0f;    ///< 0 = point particles (legacy behavior)
 
-    // Wind
-    glm::vec3 m_windDirection = glm::vec3(0.0f);
-    float m_windStrength = 0.0f;
-    float m_dragCoeff = 1.0f;
-    WindQuality m_windQuality = WindQuality::FULL;
-    float m_elapsed = 0.0f;
-
-    // Gust state machine: creates realistic blow/calm cycles
-    float m_gustCurrent = 0.0f;       ///< Current gust intensity [0,1]
-    float m_gustTarget = 0.0f;        ///< Target gust intensity
-    float m_gustTimer = 0.0f;         ///< Time until next target change
-    float m_gustRampSpeed = 0.0f;     ///< How fast to reach target
-    glm::vec3 m_windDirOffset = glm::vec3(0.0f);  ///< Current direction offset
-    glm::vec3 m_windDirTarget = glm::vec3(0.0f);  ///< Target direction offset
-    float m_dirTimer = 0.0f;          ///< Time until next direction change
-    DeterministicLcgRng m_rng{12345u};  ///< Shared LCG for deterministic randomness
-
-    void updateGustState(float dt);
+    // Wind — gust state machine + per-frame FBM/turbulence precompute live in
+    // the shared ClothWindModel (Phase 10.9 Sh4b); the GPU backend owns the
+    // same type so both produce identical wind inputs from the same seed.
+    ClothWindModel m_windModel;
 
     // Grid topology
     uint32_t m_gridW = 0;
@@ -455,14 +441,7 @@ private:
     ///        in a single substep share the same broad-phase data.
     void rebuildSelfCollisionHashIfEnabled();
     void recomputeNormals();
-    void precomputeWind();     ///< Cache noise-dependent wind data once per simulate()
-    void applyWind(float dt);  ///< Apply cached wind data per substep
-
-    // Cached per-frame wind data (computed once in precomputeWind, used N times in applyWind)
-    std::vector<glm::vec3> m_cachedParticleWind;  ///< Per-particle perturbation strength
-    std::vector<float> m_cachedTriangleTurb;       ///< Per-triangle spatial turbulence factor
-    float m_cachedFlutter = 1.0f;                  ///< Cached flutter value for this frame
-    bool m_windPrecomputed = false;                ///< True after precomputeWind() runs
+    void applyWind(float dt);  ///< Apply cached wind data (from m_windModel) per substep
 };
 
 } // namespace Vestige
