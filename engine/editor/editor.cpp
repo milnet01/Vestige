@@ -1830,6 +1830,11 @@ void Editor::setTerrain(Terrain* terrain)
     m_fileMenu.setTerrain(terrain);
 }
 
+void Editor::setMusicPlayer(AudioMusicPlayer* player)
+{
+    m_fileMenu.setMusicPlayer(player);
+}
+
 TerrainBrush& Editor::getTerrainBrush()
 {
     return m_terrainBrush;

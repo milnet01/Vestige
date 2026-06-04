@@ -146,6 +146,8 @@ add_executable(vestige_tests
     test_audio_source_component.cpp
     test_audio_source_state.cpp
     test_audio_music_stream.cpp
+    test_audio_music_player.cpp
+    test_scene_load_audio_integration.cpp
     test_audio_panel.cpp
     test_camera_mode.cpp
     test_engine_paths.cpp
@@ -236,6 +238,12 @@ target_compile_definitions(vestige_tests
         # files to pin CPU/GPU intent (no GL context in the test binary, so
         # the shaders themselves are the spec for the parity contract).
         VESTIGE_SHADER_DIR="${CMAKE_SOURCE_DIR}/assets/shaders"
+        # Phase 10.9 W8 — streaming-music player tests read a committed
+        # 0.5 s OGG fixture (decode/loop coverage runs headless, no device).
+        VESTIGE_AUDIO_FIXTURES_DIR="${CMAKE_SOURCE_DIR}/tests/fixtures/audio"
+        # Phase 10.9 W8 — committed pre-v2 scene fixture for the scene-format
+        # v1→v2 backwards-compatible-load test.
+        VESTIGE_SCENE_FIXTURES_DIR="${CMAKE_SOURCE_DIR}/tests/fixtures/scenes"
 )
 
 target_link_libraries(vestige_tests

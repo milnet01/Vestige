@@ -6,8 +6,8 @@
 |-------|-------|
 | Subsystem | `engine/audio` |
 | Status | `shipped` |
-| Spec version | `1.0.2` |
-| Last reviewed | `2026-06-01` (cold-eyes reviewed) |
+| Spec version | `1.1.0` |
+| Last reviewed | `2026-06-04` (W8 part 2/2 — streaming music player shipped) |
 | Owners | `milnet01` |
 | Engine version range | `v0.1.0+` (Phase 9 / 10 / 10.7 / 10.9 — bus mixer, captions, HRTF, ducking, voice eviction) |
 
@@ -94,6 +94,8 @@ Key abstractions:
 | `AudioSourceAlState` + `composeAudioSourceAlState` | struct + free fn | Per-frame compose of every `alSource*f` value. `engine/audio/audio_source_state.h:33, 75` |
 | `AudioSourceComponent` | `Component` | Per-entity authoring of clip path + bus + attenuation + occlusion + priority. `engine/audio/audio_source_component.h:24` |
 | `AudioSystem` | `ISystem` | `PostCamera`-phase system that drives listener sync, per-source state push, ducking decay, caption queue. `engine/systems/audio_system.h:23` |
+| `AudioMusicPlayer` + `StreamingLayer` | class + struct | Streaming-music player (W8 part 2/2): one stb_vorbis-fed voice per `MusicLayer`, a ring of `kBuffersPerLayer` AL buffers, slewed per-layer `AL_GAIN` folded through the Music bus. Drives `planStreamTick` + the layer slew. `engine/audio/audio_music_player.h:64, 96` |
+| `MusicSystem` | `ISystem` | Default-`Update`-phase wrapper that owns the intensity / silence mix inputs and ticks `AudioMusicPlayer` each frame. `engine/systems/music_system.h:24` |
 
 ## 4. Public API
 
@@ -314,7 +316,8 @@ Audio mixing, DSP (Digital Signal Processing) low-pass filtering, HRTF convoluti
 | `playSound*` hot path (cache hit) | < 0.1 ms | TBD — measure by Phase 11 entry |
 | `AudioEngine::initialize` | < 200 ms | TBD — measure by Phase 11 entry |
 | `loadBuffer` (cached) | < 0.01 ms | TBD — measure by Phase 11 entry |
-| `MusicSystem::update` (4 layers + queue + 1 stream) | < 0.2 ms | TBD — measure by Phase 11 entry |
+| `MusicSystem::update` — amortised (≤ 6 layers, steady state) | < 0.2 ms | **Measured 2026-06-04 (W8):** ~25–110 µs/frame. ~0.12 chunk-decodes/frame amortised across six layers; release decode ≈ 150–300 µs/chunk (≈ 888 µs/chunk under ASan+UBSan, ÷ ~3-5× sanitiser overhead, Ryzen 5 5600). Inside budget. |
+| `MusicSystem::update` — cold-cache worst (6 layers all demand a chunk same frame, e.g. scene-load tick) | < 2 ms | **Measured 2026-06-04 (W8):** ~1–2 ms release (6 × decode+upload). Exceeds the 0.2 ms amortised line but is a one-tick scene-load hitch, well inside the 16.6 ms frame budget. Worker-thread decode is the follow-up if it shows in traces (design §"out of scope"). |
 | `AmbientSystem::update` (≤ 8 zones + ToD + scheduler) | < 0.1 ms | TBD — measure by Phase 11 entry |
 
 Profiler markers / capture points: `AudioSystem::update`, `AudioEngine::updateGains`, `MusicSystem::update`, `AmbientSystem::update`. No `glPushDebugGroup` markers — `engine/audio` issues no GPU work.
@@ -364,6 +367,7 @@ Per CODING_STANDARDS §11 — no exceptions in steady state.
 | Ambient zones + ToD weights + random one-shot scheduler | `tests/test_audio_ambient.cpp` (17 tests) | Pure-function math |
 | Music layer slew + intensity → weights + stinger queue capacity | `tests/test_audio_music.cpp` (21 tests) | State-machine determinism |
 | Streaming-music tick planner state machine | `tests/test_audio_music_stream.cpp` (16 tests) | Decision tree branches |
+| Streaming-music player (load / play / fade / loop / sandbox / stinger / no-op dt) + decode bench | `tests/test_audio_music_player.cpp` (17 tests) | Headless decode/loop state machine; AL queue short-circuits without a device |
 | HRTF mode / status labels + dataset index resolution + status event compose | `tests/test_audio_hrtf.cpp` (17 tests) | Headless — no AL device |
 | Per-frame `AudioSourceAlState` compose | `tests/test_audio_source_state.cpp` (12 tests) | Pure-function compose |
 | `AudioSourceComponent` clone + defaults | `tests/test_audio_source_component.cpp` (8 tests) | Component contract |
@@ -436,6 +440,34 @@ Audio doesn't trigger seizures, so `PhotosensitiveLimits` doesn't constrain `eng
 
 **Direction:** `engine/audio` is depended on by `engine/systems/audio_system.h` (consumer of `AudioEngine`), `engine/core/settings_apply.h` (apply-sinks target the engine), and `engine/editor/settings_panel/audio_panel.cpp` (editor UI). It must **not** depend on `engine/renderer/renderer.h`, `engine/scene/scene_manager.h`, or any concrete `ISystem` other than its own.
 
+**Scene `music` block (W8 part 2/2).** Per-scene music is authored in the scene
+file's optional `music` block (sibling to `terrain`; scene `format_version` 2).
+`SceneSerializer` reads it into `MusicSceneSettings { std::vector<MusicLayerEntry>
+layers; bool loopAll; }` and the scene-load caller drives `AudioMusicPlayer::loadLayer`
+/ `playLayer` per entry. `engine/audio` itself does **not** include the serializer —
+the wiring lives caller-side (`engine/core/engine.cpp`, `engine/editor/file_menu.cpp`).
+
+```json
+{
+  "music": {
+    "layers": [
+      { "layer": "Ambient", "clip": "assets/music/tab_amb.ogg" },
+      { "layer": "Tension", "clip": "assets/music/tab_tns.ogg" }
+    ],
+    "loopAll": true
+  }
+}
+```
+
+- Absent → no music; partial → only listed layers load.
+- `"layer"` matches the `MusicLayer` label exactly (`musicLayerLabel`): Ambient /
+  Tension / Exploration / Combat / Discovery / Danger. Unknown strings warn + skip
+  that layer; others still load.
+- `"clip"` is sandbox-checked (`AudioEngine::resolveSandboxedPath`) before any
+  decoder opens it.
+- `"loopAll"` maps to each layer's loop policy (`setLayerLooping`): true = loop
+  forever (`maxLoops = -1`), false = play once (`maxLoops = 0`).
+
 ## 14. References
 
 Cited research / authoritative external sources:
@@ -482,3 +514,4 @@ Internal cross-references:
 | 2026-04-28 | 1.0 | milnet01 | Initial spec — `engine/audio` formalised post-Phase 10.9. Captures the full Phase 9 / 10 / 10.7 / 10.9 surface (mixer, ducking, eviction, HRTF, captions, sandbox, source-state compose). |
 | 2026-06-01 | 1.0.1 | milnet01 | Closed §15 Q1 (OpenAL Soft 1.24.1 → 1.25.1, done 2026-04-30: pin bumped at `external/CMakeLists.txt`, build + tests green; 1.25.1 brings polyphase-resampler hardening, fmtlib fix, WASAPI dynamic device enumeration, JACK / CoreAudio capture fixes). Migrated to §16 + renumbered §15 per SPEC_TEMPLATE convention (§15 is open-only; CE10). |
 | 2026-06-01 | 1.0.2 | milnet01 | §5 streaming-music step 4 amended (CE11): corrected "dispatches the actual `dr_libs` calls" → `stb_vorbis` decode for OGG (matches code — OGG uses `stb_vorbis`, only WAV/MP3/FLAC use `dr_libs`). Resolves the doc-vs-spec drift flagged by `phase_10_audio_music_player_design.md` step 7b. |
+| 2026-06-04 | 1.1.0 | milnet01 | **W8 part 2/2 shipped — streaming music player.** §3 inventory adds `AudioMusicPlayer` + `MusicSystem` rows. §6 budget re-pins `MusicSystem::update` from "< 0.2 ms TBD" to measured amortised ~25–110 µs/frame + a cold-cache worst-case (~1–2 ms scene-load tick) row. §11 adds `tests/test_audio_music_player.cpp` (17 tests). §13 adds the scene `music`-block JSON schema (`MusicSceneSettings`, scene `format_version` 2). Implementation reconciled three contradictions in the approved design doc (buffer-ring size 3→8, per-tick refill-to-keep-ahead, headless dt-consumption) — see `phase_10_audio_music_player_design.md` ## Status. |

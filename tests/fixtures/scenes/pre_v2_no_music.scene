@@ -1,0 +1,9 @@
+{
+    "vestige_scene": {
+        "format_version": 1,
+        "name": "pre_v2_no_music",
+        "engine_version": "0.5.0",
+        "created": "2026-05-01T00:00:00Z"
+    },
+    "entities": []
+}

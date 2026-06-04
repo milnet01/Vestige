@@ -6,6 +6,40 @@
 project `CLAUDE.md` rule 1 (research → design → review → code). Cleared
 for implementation; the [Step plan](#step-plan) below is the build order.
 
+**Implemented 2026-06-04 (W8 part 2/2 shipped).** Three contradictions in
+this approved doc surfaced at implementation time (the cold-eyes loop
+missed them); the user approved reconciling them in-flight rather than
+re-looping the design. Each is flagged `[design-reconcile 2026-06-04]` in
+`engine/audio/audio_music_player.{h,cpp}` and recorded in `CHANGELOG.md`:
+
+1. **Buffer-ring size 3 → 8.** Three 4096-frame buffers hold only
+   `3 × 4096 / 48000 = 0.256 s` — below the `minSecondsBuffered = 0.30 s`
+   keep-ahead target the planner aims for, and far below the
+   `maxSecondsBuffered = 0.60 s` ceiling (which needs 8 buffers). The
+   ring could never reach the keep-ahead window. `kBuffersPerLayer = 8`
+   (0.683 s) fixes it. The §"Memory footprint" 324 KB figure re-pins to
+   ~768 KB (8 × 4096 × 2 ch × 2 B × 6 layers) — still trivial.
+2. **Per-tick decode policy.** The doc's algorithm decoded exactly one
+   chunk per `update()`, but `planStreamTick` clamps to one chunk/call,
+   so a single post-`playLayer` tick could never reach the 0.30 s
+   keep-ahead (row 2). `update()` (and `playLayer`'s prime) now run a
+   *bounded refill loop* topping the ring up to the keep-ahead target
+   each tick. Row 13's per-tick EOF→rewind choreography is therefore
+   unobservable (the seam is crossed inside one tick); it was reworked to
+   pin the observable post-conditions (loopCount, finished, transient-EOF
+   reset, playback continues) instead.
+3. **Headless consumption.** The doc said "state-machine progress ticks
+   against deltaSeconds" but the algorithm only advanced the consume
+   counter via AL unqueue (a no-op with no device). With no device,
+   `update()` now advances the consume counter by `deltaSeconds ×
+   sampleRate` (capped at in-flight) so the planner's back-pressure +
+   loop logic progress deterministically in headless tests.
+
+One spec gap was also filled: `MusicSceneSettings::loopAll` had no wiring
+to the stream's loop policy — added `AudioMusicPlayer::setLayerLooping`
+(maps to `MusicStreamState::maxLoops`), driven from `loopAll` at the
+scene-load caller.
+
 ### Cold-eyes review log (global `CLAUDE.md` rule 14)
 
 Reconstructed from the git audit trail — the loops were run and committed

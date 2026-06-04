@@ -9264,6 +9264,9 @@ existing cases (``HelpersMatchEvaluatorPrecisely``,
 
 ### Added
 
+- **Streaming music player (W8 part 2/2) — per-scene dynamic music** (W8 (part 2/2))
+  AudioMusicPlayer (engine/audio/audio_music_player.{h,cpp}) streams one stb_vorbis-fed OpenAL voice per MusicLayer with an 8-buffer ring, slewed per-layer gain folded through the Music bus + ducking, and the existing planStreamTick / advanceMusicLayer / MusicStingerQueue primitives — finally giving the dead streaming-music state machines a consumer. MusicSystem (engine/systems/music_system.{h,cpp}) is the ISystem wrapper (default Update phase) gameplay pushes intensity/silence at. Scene files gain an optional `music` block (scene format_version 1 -> 2, backwards-compatible; v1 loads with no music) wired at engine start-up + all three editor open paths. Workaround logged per project rule 5: three numbers/behaviours in the approved design doc were reconciled at implementation time (buffer ring 3 -> 8 since three 4096-frame buffers = 0.256s < the 0.30s keep-ahead target; update() tops the ring up to the keep-ahead target per tick rather than one chunk; headless playback advances the consume counter by dt x sampleRate) — flagged inline as [design-reconcile 2026-06-04] and in the design doc ## Status.
+
 - **CPU↔GPU cloth solver parity test harness (Cl1)** (Cl1)
   tests/test_cloth_cpu_gpu_parity.cpp drives the pure-CPU ClothSimulator and the GPU-compute GpuClothSimulator from an identical ClothConfig and compares them against the design doc's 5%-of-diagonal Hausdorff bound (CLAUDE.md Rule 7). A free-fall core-solver parity test passes; a stiff-drape test is skip-gated pending the GPU constraint-convergence accelerator (Cl9), asserting the structural invariants that hold today (pins clamped, state finite, cloth sagged) and reporting the measured divergence. CPU-only feature gaps tracked as Cl10.
 

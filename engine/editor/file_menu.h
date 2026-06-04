@@ -19,6 +19,7 @@ struct GLFWwindow;
 namespace Vestige
 {
 
+class AudioMusicPlayer;
 class CommandHistory;
 class FoliageManager;
 class ResourceManager;
@@ -51,6 +52,10 @@ public:
 
     /// @brief Sets the Terrain for terrain save/load.
     void setTerrain(Terrain* terrain);
+
+    /// @brief Sets the streaming-music player (W8) so scene Open / Recent /
+    ///        autosave-recover drive per-scene music. Non-owning, nullable.
+    void setMusicPlayer(AudioMusicPlayer* player);
 
     /// @brief Ticks the auto-save timer. Call once per frame.
     /// Writes an autosave file when the scene is dirty and the interval has elapsed.
@@ -130,6 +135,7 @@ private:
     CommandHistory* m_commandHistory = nullptr;
     FoliageManager* m_foliageManager = nullptr;
     Terrain* m_terrain = nullptr;
+    AudioMusicPlayer* m_musicPlayer = nullptr;
 
     std::filesystem::path m_currentScenePath;
     std::filesystem::path m_pendingRecentPath;

@@ -97,6 +97,19 @@ public:
         return m_sandboxRoots;
     }
 
+    /// @brief Phase 10.9 W8 — public sandbox check for streaming
+    ///        consumers (`AudioMusicPlayer`) that open decoders
+    ///        directly instead of going through `loadBuffer`.
+    ///
+    /// Returns the canonical in-sandbox path, or an empty string when
+    /// the path escapes every configured root. With no sandbox active
+    /// (empty roots) the path is returned unchanged. Mirrors the gate
+    /// `loadBuffer` applies internally — reuses the same `validatePath`.
+    std::string resolveSandboxedPath(const std::string& filePath) const
+    {
+        return validatePath(filePath);
+    }
+
     // -- Buffer cache management (Phase 10.9 Slice 8 W8) -------------------
     //
     // The cache used to be unbounded — every `loadBuffer` insertion lived

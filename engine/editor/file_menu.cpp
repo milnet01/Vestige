@@ -69,6 +69,11 @@ void FileMenu::setTerrain(Terrain* terrain)
     m_terrain = terrain;
 }
 
+void FileMenu::setMusicPlayer(AudioMusicPlayer* player)
+{
+    m_musicPlayer = player;
+}
+
 // ---------------------------------------------------------------------------
 // Menu items
 // ---------------------------------------------------------------------------
@@ -490,11 +495,16 @@ void FileMenu::handleOpenResult(Scene* scene, Selection& selection)
         return;
     }
 
+    MusicSceneSettings music;
     SceneSerializerResult result = SceneSerializer::loadScene(
-        *scene, selectedPath, *m_resources, m_foliageManager, m_terrain);
+        *scene, selectedPath, *m_resources, m_foliageManager, m_terrain, &music);
 
     if (result.success)
     {
+        if (m_musicPlayer)
+        {
+            applyMusicSceneSettings(*m_musicPlayer, music);
+        }
         m_currentScenePath = selectedPath;
         selection.clearSelection();
         if (m_commandHistory)
@@ -603,11 +613,17 @@ void FileMenu::openRecentScene(Scene* scene, Selection& selection)
         return;
     }
 
+    MusicSceneSettings music;
     SceneSerializerResult result = SceneSerializer::loadScene(
-        *scene, m_pendingRecentPath, *m_resources, m_foliageManager, m_terrain);
+        *scene, m_pendingRecentPath, *m_resources, m_foliageManager, m_terrain,
+        &music);
 
     if (result.success)
     {
+        if (m_musicPlayer)
+        {
+            applyMusicSceneSettings(*m_musicPlayer, music);
+        }
         m_currentScenePath = m_pendingRecentPath;
         selection.clearSelection();
         if (m_commandHistory)
@@ -755,11 +771,17 @@ void FileMenu::drawRecoveryModal(Scene* scene, Selection& selection)
 
             if (scene && m_resources)
             {
+                MusicSceneSettings music;
                 SceneSerializerResult result = SceneSerializer::loadScene(
-                    *scene, autoSavePath, *m_resources, m_foliageManager, m_terrain);
+                    *scene, autoSavePath, *m_resources, m_foliageManager,
+                    m_terrain, &music);
 
                 if (result.success)
                 {
+                    if (m_musicPlayer)
+                    {
+                        applyMusicSceneSettings(*m_musicPlayer, music);
+                    }
                     // Restore the original scene path from sidecar file
                     m_currentScenePath.clear();
                     fs::path pathFile = autoSavePath;

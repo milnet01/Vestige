@@ -4,6 +4,7 @@
 /// @file scene_serializer.cpp
 /// @brief Scene save/load implementation.
 #include "editor/scene_serializer.h"
+#include "audio/audio_music_player.h"
 #include "utils/atomic_write.h"
 #include "utils/entity_serializer.h"
 #include "environment/foliage_manager.h"
@@ -275,20 +276,102 @@ void SceneSerializer::garbageCollectEpochFiles(const fs::path& dir,
 // Version migration
 // ---------------------------------------------------------------------------
 
+// --- Music block (W8 part 2/2) --------------------------------------------
+
+/// @brief Maps a scene-JSON `"layer"` label to a MusicLayer (case-sensitive
+///        exact match against `musicLayerLabel`). Returns false for unknown
+///        labels so the caller can warn + skip.
+static bool musicLayerFromLabel(const std::string& label, MusicLayer& out)
+{
+    for (std::size_t i = 0; i < MusicLayerCount; ++i)
+    {
+        const auto layer = static_cast<MusicLayer>(i);
+        if (label == musicLayerLabel(layer))
+        {
+            out = layer;
+            return true;
+        }
+    }
+    return false;
+}
+
+/// @brief Serialises a MusicSceneSettings into the scene-JSON `music` block.
+static json musicSettingsToJson(const MusicSceneSettings& music)
+{
+    json m;
+    m["loopAll"] = music.loopAll;
+    json layers = json::array();
+    for (const auto& entry : music.layers)
+    {
+        layers.push_back({{"layer", musicLayerLabel(entry.layer)},
+                          {"clip", entry.clipPath}});
+    }
+    m["layers"] = layers;
+    return m;
+}
+
+/// @brief Reads the scene-JSON `music` block into `out`. Absent block →
+///        empty settings (v1 files). Unknown layer labels warn + skip but
+///        don't fail the load; bumps `warningCount` per skipped layer.
+static void musicSettingsFromJson(const json& sceneJson, MusicSceneSettings& out,
+                                  int& warningCount)
+{
+    out = MusicSceneSettings{};
+    if (!sceneJson.contains("music") || !sceneJson["music"].is_object())
+    {
+        return;
+    }
+    const auto& m = sceneJson["music"];
+    out.loopAll = m.value("loopAll", true);
+    if (m.contains("layers") && m["layers"].is_array())
+    {
+        for (const auto& entry : m["layers"])
+        {
+            if (!entry.is_object() || !entry.contains("layer")
+                || !entry.contains("clip"))
+            {
+                continue;
+            }
+            const std::string label = entry.value("layer", std::string{});
+            const std::string clip = entry.value("clip", std::string{});
+            MusicLayer layer = MusicLayer::Ambient;
+            if (!musicLayerFromLabel(label, layer))
+            {
+                Logger::warning("Scene load: unknown music layer '" + label
+                                + "' — skipping");
+                ++warningCount;
+                continue;
+            }
+            out.layers.push_back({layer, clip});
+        }
+    }
+}
+
+/// @brief v1 → v2 migration (W8): v1 simply has no `music` block, which the
+///        read path already treats as empty `MusicSceneSettings`. No JSON
+///        rewrite needed — this is a documented no-op so the migrateScene
+///        switch reads honestly rather than silently skipping the version.
+static void migrateV1toV2(json& /*sceneJson*/)
+{
+    // No-op: v2 only adds an optional block; absence == empty settings.
+}
+
 /// @brief Migrates scene JSON from an older format version to the current version.
 /// @param sceneJson The parsed scene JSON (modified in place).
 /// @param fromVersion The format_version in the file.
 /// @return True if migration succeeded (or was not needed).
-static bool migrateScene(json& /*sceneJson*/, int fromVersion)
+static bool migrateScene(json& sceneJson, int fromVersion)
 {
-    // Currently only v1 exists. Future migrations go here:
-    // if (fromVersion < 2) { migrateV1toV2(sceneJson); }
-    // if (fromVersion < 3) { migrateV2toV3(sceneJson); }
-
     if (fromVersion > SceneSerializer::CURRENT_FORMAT_VERSION)
     {
         return false;  // Future version — cannot migrate forward
     }
+
+    if (fromVersion < 2)
+    {
+        migrateV1toV2(sceneJson);
+    }
+    // Future: if (fromVersion < 3) { migrateV2toV3(sceneJson); }
 
     return true;
 }
@@ -485,6 +568,17 @@ SceneSerializerResult SceneSerializer::saveScene(
     const FoliageManager* environment,
     const Terrain* terrain)
 {
+    return saveScene(scene, path, resources, environment, terrain, nullptr);
+}
+
+SceneSerializerResult SceneSerializer::saveScene(
+    const Scene& scene,
+    const fs::path& path,
+    const ResourceManager& resources,
+    const FoliageManager* environment,
+    const Terrain* terrain,
+    const MusicSceneSettings* music)
+{
     SceneSerializerResult result;
 
     // Preserve original creation timestamp if the file already exists.
@@ -532,6 +626,13 @@ SceneSerializerResult SceneSerializer::saveScene(
         terrainJson["heightmap_file"] = heightmapFileName;
         terrainJson["splatmap_file"]  = splatmapFileName;
         sceneJson["terrain"] = terrainJson;
+    }
+
+    // W8: per-scene streaming music. Only emit the block when there's at
+    // least one layer — an empty MusicSceneSettings round-trips as "no music".
+    if (music && !music->layers.empty())
+    {
+        sceneJson["music"] = musicSettingsToJson(*music);
     }
 
     // Stage the terrain side-files first. If either fails, return without
@@ -608,6 +709,17 @@ SceneSerializerResult SceneSerializer::loadScene(
     FoliageManager* environment,
     Terrain* terrain)
 {
+    return loadScene(scene, path, resources, environment, terrain, nullptr);
+}
+
+SceneSerializerResult SceneSerializer::loadScene(
+    Scene& scene,
+    const fs::path& path,
+    ResourceManager& resources,
+    FoliageManager* environment,
+    Terrain* terrain,
+    MusicSceneSettings* music)
+{
     // Standard entity load
     SceneSerializerResult result = loadScene(scene, path, resources);
     if (!result.success)
@@ -615,11 +727,16 @@ SceneSerializerResult SceneSerializer::loadScene(
         return result;
     }
 
-    // Load environment/terrain data from the same file (reuse size-capped helper)
+    // Load environment/terrain/music data from the same file (reuse helper)
     json sceneJson;
     if (!openAndParseSceneJson(path, sceneJson).empty())
     {
         return result;
+    }
+
+    if (music)
+    {
+        musicSettingsFromJson(sceneJson, *music, result.warningCount);
     }
 
     if (environment && sceneJson.contains("environment") && sceneJson["environment"].is_object())
@@ -671,6 +788,27 @@ SceneSerializerResult SceneSerializer::loadScene(
     }
 
     return result;
+}
+
+int applyMusicSceneSettings(AudioMusicPlayer& player,
+                            const MusicSceneSettings& music)
+{
+    player.clearAllLayers();  // drop the previous scene's music.
+    int warnings = 0;
+    for (const auto& entry : music.layers)
+    {
+        if (!player.loadLayer(entry.layer, entry.clipPath))
+        {
+            ++warnings;
+            Logger::warning("Failed to load music layer "
+                            + std::string(musicLayerLabel(entry.layer))
+                            + " clip " + entry.clipPath);
+            continue;
+        }
+        player.setLayerLooping(entry.layer, music.loopAll);
+        player.playLayer(entry.layer);
+    }
+    return warnings;
 }
 
 } // namespace Vestige

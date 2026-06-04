@@ -49,6 +49,7 @@ class Terrain;
 class TerrainRenderer;
 class PhysicsCharacterController;
 class UISystem;
+class AudioMusicPlayer;
 
 /// @brief Configuration for the engine.
 struct EngineConfig
@@ -136,6 +137,13 @@ private:
     std::unique_ptr<SceneManager> m_sceneManager;
     std::unique_ptr<ResourceManager> m_resourceManager;
     std::unique_ptr<Editor> m_editor;
+
+    /// @brief Streaming-music player (W8 part 2/2). Owned by the engine;
+    ///        borrows AudioSystem's AudioEngine. MusicSystem (registry-owned)
+    ///        ticks it. Constructed after AudioSystem is registered so the
+    ///        borrowed AudioEngine reference is stable.
+    std::unique_ptr<AudioMusicPlayer> m_musicPlayer;
+
     DebugDraw m_debugDraw;
     FormulaQualityManager m_formulaQuality;
     PerformanceProfiler m_profiler;

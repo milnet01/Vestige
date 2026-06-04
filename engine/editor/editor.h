@@ -67,6 +67,7 @@ namespace Vestige
 class Camera;
 class EventBus;
 class AudioSystem;
+class AudioMusicPlayer;
 class UISystem;
 class FoliageManager;
 class NavigationSystem;
@@ -206,6 +207,12 @@ public:
 
     /// @brief Stores a pointer to the Terrain for sculpting/painting.
     void setTerrain(Terrain* terrain);
+
+    /// @brief Injects the streaming-music player (W8) so scene Open /
+    ///        Recent / autosave-recover can drive per-scene music. Forwarded
+    ///        to FileMenu. Non-owning; may be null in headless/editor-less
+    ///        builds.
+    void setMusicPlayer(AudioMusicPlayer* player);
 
     /// @brief Stores a pointer to the PerformanceProfiler.
     void setProfiler(PerformanceProfiler* profiler);

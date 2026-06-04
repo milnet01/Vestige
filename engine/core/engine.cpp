@@ -17,6 +17,8 @@
 #include "systems/character_system.h"
 #include "systems/lighting_system.h"
 #include "systems/audio_system.h"
+#include "systems/music_system.h"
+#include "audio/audio_music_player.h"
 #include "systems/ui_system.h"
 #include "ui/game_screen.h"
 #include "systems/navigation_system.h"
@@ -161,7 +163,15 @@ bool Engine::initialize(const EngineConfig& config)
     m_systemRegistry.registerSystem<LightingSystem>();
 
     // Phase 9C: new domain systems
-    m_systemRegistry.registerSystem<AudioSystem>();
+    auto* audioSys = m_systemRegistry.registerSystem<AudioSystem>();
+
+    // W8 part 2/2: streaming-music player + its ISystem wrapper. The player
+    // borrows AudioSystem's AudioEngine (a stable member reference — the
+    // device itself comes up later in AudioSystem::initialize; the player
+    // checks isAvailable() lazily). MusicSystem is registered here, before
+    // initializeAll() runs the phase sort, so it ticks each frame.
+    m_musicPlayer = std::make_unique<AudioMusicPlayer>(audioSys->getAudioEngine());
+    m_systemRegistry.registerSystem<MusicSystem>(*m_musicPlayer);
     auto* uiSys = m_systemRegistry.registerSystem<UISystem>();
     m_systemRegistry.registerSystem<NavigationSystem>();
     auto* spriteSys = m_systemRegistry.registerSystem<SpriteSystem>();
@@ -225,11 +235,16 @@ bool Engine::initialize(const EngineConfig& config)
         Scene* activeScene = m_sceneManager->getActiveScene();
         if (activeScene && fs::exists(resolved))
         {
+            MusicSceneSettings music;
             auto result = SceneSerializer::loadScene(
                 *activeScene, resolved, *m_resourceManager,
-                m_foliageManager, m_terrain);
+                m_foliageManager, m_terrain, &music);
             if (result.success)
             {
+                if (m_musicPlayer)
+                {
+                    applyMusicSceneSettings(*m_musicPlayer, music);
+                }
                 Logger::info("Loaded startup scene: " + resolved.string()
                     + " (" + std::to_string(result.entityCount) + " entities)");
             }
@@ -257,6 +272,7 @@ bool Engine::initialize(const EngineConfig& config)
         m_editor->setResourceManager(m_resourceManager.get());
         m_editor->setFoliageManager(m_foliageManager);
         m_editor->setTerrain(m_terrain);
+        m_editor->setMusicPlayer(m_musicPlayer.get());
         m_editor->setProfiler(&m_profiler);
         m_editor->setNavigationSystem(m_systemRegistry.getSystem<NavigationSystem>());
         m_editor->setAudioSystem(m_systemRegistry.getSystem<AudioSystem>());
