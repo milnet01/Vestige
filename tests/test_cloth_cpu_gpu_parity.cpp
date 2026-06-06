@@ -182,21 +182,25 @@ TEST_F(ClothCpuGpuParityTest, Cl1_FreeFallCoreSolverParityWithinHausdorffBound)
 }
 
 // =============================================================================
-// Cl1 — stiff drape parity (SKIP-gated: pending the GPU convergence fix)
+// Cl1 — stiff drape parity (Cl9: closed by the SOR convergence accelerator)
 // =============================================================================
 // A taut four-corner-pinned cloth settling under gravity stresses the
-// distance-constraint solver hard. The CPU's sequential Gauss-Seidel
-// converges to a near-rigid ~0.18 m sag; the GPU's coloured-parallel sweep
-// under-converges and settles ~8× softer (~1.4 m sag). This is a genuine GPU
-// solver-quality gap, not a tolerance choice — see this file's header and the
-// ROADMAP follow-up (GPU constraint convergence accelerator, Chebyshev/SOR).
+// distance-constraint solver hard. The CPU's sequential Gauss-Seidel converges
+// to a near-rigid ~0.18 m sag; the GPU's coloured-parallel sweep under-converged
+// and settled ~8× softer (~0.67 m) at one sweep/substep — a genuine solver-
+// quality gap, not a tolerance choice.
 //
-// The structural invariants that DO hold are asserted first (pins held
-// exactly, state finite, cloth actually moved); the strict positional
-// parity is then GTEST_SKIP-ped with the measured divergence so the gate is
-// visible-but-pending in CI. Flip the skip to an `EXPECT_LT(haus, 0.05*diag)`
-// once the accelerator lands.
-TEST_F(ClothCpuGpuParityTest, Cl1_StiffDrapeParity_PendingConvergenceFix)
+// Cl9 closes it: the GPU runs the distance-constraint solve with SOR
+// over-relaxation (mode `SOR`, ω = 1.8) for `setSolverIterations(16)` outer
+// iterations per substep. Over-relaxation leaves the converged solution
+// (C == 0) unchanged, so the GPU settles to the SAME equilibrium the CPU does —
+// just reached fast enough to be affordable. The drape now matches the CPU
+// reference to ~3% Hausdorff (was ~43%), under the 5%-of-diagonal gate.
+//
+// The CPU stays on its default 1-iteration sequential sweep (it already
+// converges over the 2 s settle); only the GPU opts into the accelerator, so
+// this also exercises the Cl9 API surface.
+TEST_F(ClothCpuGpuParityTest, Cl1_StiffDrapeParity)
 {
     const ClothConfig cfg = parityConfig();
     ClothSimulator cpu;
@@ -205,6 +209,12 @@ TEST_F(ClothCpuGpuParityTest, Cl1_StiffDrapeParity_PendingConvergenceFix)
     buildPair(cfg, cpu, gpu, gpuReady);
     if (!gpuReady)
         GTEST_SKIP() << "GPU cloth compute pipeline not available in this environment";
+
+    // Cl9: opt the GPU into the SOR convergence accelerator.
+    gpu.setConvergenceMode(ClothConvergenceMode::SOR);
+    gpu.setSolverIterations(16);
+    ASSERT_EQ(gpu.getSolverIterations(), 16);
+    ASSERT_EQ(gpu.getConvergenceMode(), ClothConvergenceMode::SOR);
 
     const uint32_t pc = cpu.getParticleCount();
     pinCorners(cpu);
@@ -237,13 +247,13 @@ TEST_F(ClothCpuGpuParityTest, Cl1_StiffDrapeParity_PendingConvergenceFix)
     EXPECT_LT(cMinY, -0.01f) << "CPU cloth did not sag under gravity";
     EXPECT_LT(gMinY, -0.01f) << "GPU cloth did not sag under gravity";
 
+    // (4) Cl9 strict positional parity: the SOR-accelerated GPU drape matches
+    //     the CPU reference within 5% of the cloth diagonal (Hausdorff).
     const float diagonal = clothDiagonal();
     const float haus = hausdorff(c, g, pc);
-    GTEST_SKIP()
-        << "Strict CPU↔GPU drape parity is pending the GPU constraint-"
-           "convergence accelerator (ROADMAP Phase 10.9 Slice 17). Measured "
-           "Hausdorff " << haus << " m = " << (100.0f * haus / diagonal)
-        << "% of the " << diagonal << " m diagonal (CPU sag " << cMinY
-        << " m vs GPU sag " << gMinY << " m). Flip this skip to "
-           "EXPECT_LT(haus, 0.05*diagonal) once the accelerator lands.";
+    EXPECT_LT(haus, 0.05f * diagonal)
+        << "stiff-drape Hausdorff " << haus << " m = " << (100.0f * haus / diagonal)
+        << "% of the " << diagonal << " m diagonal exceeds 5% (CPU sag " << cMinY
+        << " m vs GPU sag " << gMinY << " m) — the SOR convergence accelerator "
+           "(Cl9) has regressed or under-converged.";
 }

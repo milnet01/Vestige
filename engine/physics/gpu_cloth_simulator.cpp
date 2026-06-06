@@ -14,6 +14,19 @@
 namespace Vestige
 {
 
+namespace
+{
+// Cl9 SOR over-relaxation factor for the distance-constraint correction. ω ∈ (1, 2)
+// accelerates coloured Gauss-Seidel. 1.8 was picked empirically against the Cl1
+// stiff-drape parity harness (12×12, 4-corner-pinned): with 16 iterations it
+// brings the GPU drape to ~3% Hausdorff of the CPU reference — comfortably under
+// the 5% gate, with margin to the ω = 2 divergence bound for stiffer configs.
+// Leaves the converged solution (C == 0) unchanged — only the rate moves.
+// TODO: revisit via Formula Workbench — fit ω(gridDim, compliance) from a
+// convergence sweep rather than this single empirical constant.
+constexpr float CLOTH_SOR_OMEGA = 1.8f;
+}  // namespace
+
 GpuClothSimulator::GpuClothSimulator() = default;
 
 GpuClothSimulator::~GpuClothSimulator()
@@ -98,6 +111,26 @@ void GpuClothSimulator::setDihedralBendCompliance(float compliance)
             m_dihedralsSSBO, 0,
             static_cast<GLsizeiptr>(m_dihedralCount * sizeof(GpuDihedralConstraint)),
             m_dihedrals.data());
+    }
+}
+
+void GpuClothSimulator::setSolverIterations(int iterations)
+{
+    // mode == None: floor 1 (today's default). mode != None: floor S+1 so the
+    // accelerator actually engages (Cl9 invariant S < solverIterations).
+    const int floorIters = (m_convergenceMode == ClothConvergenceMode::None)
+                               ? 1
+                               : (CLOTH_CHEBYSHEV_DELAY + 1);
+    m_solverIterations = std::clamp(iterations, floorIters, MAX_SOLVER_ITERS);
+}
+
+void GpuClothSimulator::setConvergenceMode(ClothConvergenceMode mode)
+{
+    m_convergenceMode = mode;
+    if (mode != ClothConvergenceMode::None
+        && m_solverIterations < CLOTH_CHEBYSHEV_DELAY + 1)
+    {
+        m_solverIterations = CLOTH_CHEBYSHEV_DELAY + 1;
     }
 }
 
@@ -695,43 +728,66 @@ void GpuClothSimulator::simulate(float deltaTime)
         glDispatchCompute(particleGroups, 1, 1);
         glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 
-        // 3. Distance-constraint solve — one Gauss-Seidel sweep through every
-        //    colour. Within a colour, no two constraints share a particle, so
-        //    the writes are race-free without atomics.
-        if (m_constraintCount > 0)
-        {
-            m_constraintsShader.use();
-            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, BIND_POSITIONS,   m_positionsSSBO);
-            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, BIND_CONSTRAINTS, m_constraintsSSBO);
-            m_constraintsShader.setFloat("u_dtSubSquared", dtSubSquared);
-            for (const auto& range : m_colourRanges)
-            {
-                if (range.count == 0) continue;
-                m_constraintsShader.setUInt("u_colorOffset", range.offset);
-                m_constraintsShader.setUInt("u_colorCount",  range.count);
-                const GLuint constraintGroups = (range.count + 63u) / 64u;
-                glDispatchCompute(constraintGroups, 1, 1);
-                glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
-            }
-        }
+        // Cl9 convergence accelerator. The coloured-parallel Gauss-Seidel sweep
+        // propagates a pin clamp only a bounded hop per sweep, so a stiff pinned
+        // drape under-converges versus the CPU's sequential sweep. Run the
+        // distance + dihedral solve `m_solverIterations` times per substep
+        // (default 1 = pre-Cl9 behaviour), and over-relax the distance
+        // correction by `solverOmega` for SOR/Chebyshev modes. Over-relaxation
+        // leaves the converged solution (C == 0) unchanged — at the fixed point
+        // the correction is zero — so it only speeds convergence, never shifts
+        // the equilibrium the CPU settles to.
+        //
+        // NOTE (Cl9 follow-up): `Chebyshev` currently routes through the SOR
+        // over-relaxation path. The true Chebyshev semi-iterative combine (the
+        // per-iterate blend, Wang 2015) is a separate pass whose exact form +
+        // history-buffer count must be pinned against Wang Algorithm 1 — see the
+        // implementation-pin warning in
+        // docs/phases/phase_10_9_cloth_gpu_parity_design.md.
+        const float solverOmega =
+            (m_convergenceMode == ClothConvergenceMode::None) ? 1.0f : CLOTH_SOR_OMEGA;
 
-        // 4. Dihedral bending solve — same per-colour structure, smaller
-        //    workgroups (32 vs 64) because the per-thread register footprint is
-        //    larger (4 particles + gradient computations).
-        if (m_dihedralCount > 0)
+        for (int solverIt = 0; solverIt < m_solverIterations; ++solverIt)
         {
-            m_dihedralShader.use();
-            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, BIND_POSITIONS, m_positionsSSBO);
-            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, BIND_DIHEDRALS, m_dihedralsSSBO);
-            m_dihedralShader.setFloat("u_dtSubSquared", dtSubSquared);
-            for (const auto& range : m_dihedralColourRanges)
+            // 3. Distance-constraint solve — one Gauss-Seidel sweep through every
+            //    colour. Within a colour, no two constraints share a particle, so
+            //    the writes are race-free without atomics.
+            if (m_constraintCount > 0)
             {
-                if (range.count == 0) continue;
-                m_dihedralShader.setUInt("u_colorOffset", range.offset);
-                m_dihedralShader.setUInt("u_colorCount",  range.count);
-                const GLuint dihedralGroups = (range.count + 31u) / 32u;
-                glDispatchCompute(dihedralGroups, 1, 1);
-                glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+                m_constraintsShader.use();
+                glBindBufferBase(GL_SHADER_STORAGE_BUFFER, BIND_POSITIONS,   m_positionsSSBO);
+                glBindBufferBase(GL_SHADER_STORAGE_BUFFER, BIND_CONSTRAINTS, m_constraintsSSBO);
+                m_constraintsShader.setFloat("u_dtSubSquared", dtSubSquared);
+                m_constraintsShader.setFloat("u_omega",        solverOmega);
+                for (const auto& range : m_colourRanges)
+                {
+                    if (range.count == 0) continue;
+                    m_constraintsShader.setUInt("u_colorOffset", range.offset);
+                    m_constraintsShader.setUInt("u_colorCount",  range.count);
+                    const GLuint constraintGroups = (range.count + 63u) / 64u;
+                    glDispatchCompute(constraintGroups, 1, 1);
+                    glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+                }
+            }
+
+            // 4. Dihedral bending solve — same per-colour structure, smaller
+            //    workgroups (32 vs 64) because the per-thread register footprint is
+            //    larger (4 particles + gradient computations).
+            if (m_dihedralCount > 0)
+            {
+                m_dihedralShader.use();
+                glBindBufferBase(GL_SHADER_STORAGE_BUFFER, BIND_POSITIONS, m_positionsSSBO);
+                glBindBufferBase(GL_SHADER_STORAGE_BUFFER, BIND_DIHEDRALS, m_dihedralsSSBO);
+                m_dihedralShader.setFloat("u_dtSubSquared", dtSubSquared);
+                for (const auto& range : m_dihedralColourRanges)
+                {
+                    if (range.count == 0) continue;
+                    m_dihedralShader.setUInt("u_colorOffset", range.offset);
+                    m_dihedralShader.setUInt("u_colorCount",  range.count);
+                    const GLuint dihedralGroups = (range.count + 31u) / 32u;
+                    glDispatchCompute(dihedralGroups, 1, 1);
+                    glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+                }
             }
         }
 

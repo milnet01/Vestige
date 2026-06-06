@@ -3,10 +3,25 @@
 ## Status
 
 **APPROVED 2026-06-06** (user sign-off after the cold-eyes loop closed clean).
-Cleared for implementation per project rule 1 (research → design → review →
-code). Implementation order: Cl9 first (offline ρ fit → accelerator → flip
-`Cl1_StiffDrapeParity_PendingConvergenceFix` from SKIP to the strict assertion),
-then Cl10 #2 (rest-pose port) and #3 (sleep port), each with its own parity pin.
+
+**Cl9 IMPLEMENTED 2026-06-06.** Outcome differs from the recommendation in a way
+worth recording: the doc recommended Chebyshev (Option C) with SOR (Option A) as
+a "floor." In practice **SOR alone closed the gap** — the GPU distance-constraint
+solve now runs `setSolverIterations(N)` outer iterations per substep with the
+correction over-relaxed by ω = 1.8 (`ClothConvergenceMode::SOR`). At 16
+iterations the stiff-drape Hausdorff drops to **~3 % of the diagonal** (was
+~43 %), under the 5 % gate, so `Cl1_StiffDrapeParity` is flipped from SKIP to a
+strict `EXPECT_LT`. Because SOR sufficed, the **Chebyshev combine was NOT built**
+— it needs the exact form from Wang Algorithm 1 (the implementation-pin warning
+below) and would only matter if SOR's iteration cost proves too high on a target
+GPU. The `Chebyshev` enum value exists in the API but currently routes through
+the SOR path (documented in `gpu_cloth_simulator.cpp`); the true iterate-blend is
+a future optimisation, not a parity prerequisite. The Formula-Workbench ρ fit
+(verify-step 1) is likewise deferred — ω = 1.8 is a single empirical constant
+with a `TODO: revisit via Formula Workbench` at the call site.
+
+**Cl10 — IN PROGRESS** (next): #2 rest-pose port and #3 sleep port, each with its
+own parity pin; #1 adaptive damping documented CPU-only.
 
 Two coupled ROADMAP items, both surfaced by the **Cl1** CPU↔GPU cloth parity
 harness (shipped 2026-06-03, `tests/test_cloth_cpu_gpu_parity.cpp`):

@@ -85,3 +85,59 @@ TEST(ClothSolverBackend, SimulateAndResetThroughInterface)
 // sanitiser. The virtual-dtor contract is enforced by the `override`
 // keyword on `ClothSimulator::~ClothSimulator()` and by the
 // compile-time `-Wnon-virtual-dtor` warning.
+
+// =============================================================================
+// Phase 10.9 Cl9 — convergence-accelerator API contract (clamp + precedence).
+// Exercised on the CPU backend (no GL needed); the GPU backend shares the
+// identical clamp/precedence logic and is additionally pinned by the
+// SOR-accelerated drape test in test_cloth_cpu_gpu_parity.cpp.
+// =============================================================================
+
+TEST(ClothSolverBackendCl9, DefaultsAreOneIterationNoneMode)
+{
+    ClothSimulator sim;
+    EXPECT_EQ(sim.getSolverIterations(), 1);
+    EXPECT_EQ(sim.getConvergenceMode(), ClothConvergenceMode::None);
+}
+
+TEST(ClothSolverBackendCl9, SolverIterationsClampToRangeWhenModeNone)
+{
+    ClothSimulator sim;
+    sim.setSolverIterations(0);
+    EXPECT_EQ(sim.getSolverIterations(), 1) << "floor is 1 when mode == None";
+    sim.setSolverIterations(9999);
+    EXPECT_EQ(sim.getSolverIterations(), MAX_SOLVER_ITERS) << "capped at MAX_SOLVER_ITERS";
+    sim.setSolverIterations(8);
+    EXPECT_EQ(sim.getSolverIterations(), 8) << "in-range value kept verbatim";
+}
+
+TEST(ClothSolverBackendCl9, EnablingAModeBumpsIterationsToMinimum)
+{
+    ClothSimulator sim;  // default 1 iteration
+    sim.setConvergenceMode(ClothConvergenceMode::SOR);
+    EXPECT_EQ(sim.getSolverIterations(), CLOTH_CHEBYSHEV_DELAY + 1)
+        << "enabling a mode must bump iterations above the delay S so it engages";
+}
+
+TEST(ClothSolverBackendCl9, SolverIterationsClampToSPlusOneWhileModeActive)
+{
+    ClothSimulator sim;
+    sim.setConvergenceMode(ClothConvergenceMode::SOR);
+    sim.setSolverIterations(1);
+    EXPECT_EQ(sim.getSolverIterations(), CLOTH_CHEBYSHEV_DELAY + 1)
+        << "a too-low value is clamped up, never silently disables the accelerator";
+    sim.setSolverIterations(16);
+    EXPECT_EQ(sim.getSolverIterations(), 16);
+}
+
+TEST(ClothSolverBackendCl9, ConvergenceModeRoundTrips)
+{
+    ClothSimulator sim;
+    for (ClothConvergenceMode m : {ClothConvergenceMode::None,
+                                   ClothConvergenceMode::SOR,
+                                   ClothConvergenceMode::Chebyshev})
+    {
+        sim.setConvergenceMode(m);
+        EXPECT_EQ(sim.getConvergenceMode(), m);
+    }
+}

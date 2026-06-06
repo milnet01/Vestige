@@ -323,26 +323,34 @@ void ClothSimulator::simulate(float deltaTime)
         }
 
         // 3. Solve constraints (Gauss-Seidel XPBD with Rayleigh damping)
-        // The dtSub is passed to the solver for XPBD Rayleigh damping (gamma term)
-        for (auto& c : m_stretchConstraints)
+        // The dtSub is passed to the solver for XPBD Rayleigh damping (gamma term).
+        // Cl9: the constraint sweep + LRA run `m_solverIterations` times per
+        // substep (default 1 = pre-Cl9 behaviour). The CPU's sequential
+        // Gauss-Seidel already converges in one sweep, so extra iterations are
+        // plain re-sweeps for API parity with the GPU accelerator — there is no
+        // Chebyshev combine on the CPU path.
+        for (int solverIt = 0; solverIt < m_solverIterations; ++solverIt)
         {
-            solveDistanceConstraint(c, c.compliance, dtSub);
-        }
-        for (auto& c : m_shearConstraints)
-        {
-            solveDistanceConstraint(c, c.compliance, dtSub);
-        }
-        for (auto& c : m_bendConstraints)
-        {
-            solveDistanceConstraint(c, c.compliance, dtSub);
-        }
-        for (auto& c : m_dihedralConstraints)
-        {
-            solveDihedralConstraint(c, dtSub);
-        }
+            for (auto& c : m_stretchConstraints)
+            {
+                solveDistanceConstraint(c, c.compliance, dtSub);
+            }
+            for (auto& c : m_shearConstraints)
+            {
+                solveDistanceConstraint(c, c.compliance, dtSub);
+            }
+            for (auto& c : m_bendConstraints)
+            {
+                solveDistanceConstraint(c, c.compliance, dtSub);
+            }
+            for (auto& c : m_dihedralConstraints)
+            {
+                solveDihedralConstraint(c, dtSub);
+            }
 
-        // 4. Long Range Attachment: prevent cumulative drift from pins
-        solveLRAConstraints();
+            // 4. Long Range Attachment: prevent cumulative drift from pins
+            solveLRAConstraints();
+        }
 
         // 5. Solve pin constraints
         solvePinConstraints();
@@ -978,6 +986,39 @@ float ClothSimulator::getDihedralBendCompliance() const
 }
 
 // --- Adaptive damping ---
+
+void ClothSimulator::setSolverIterations(int iterations)
+{
+    // mode == None: floor 1 (today's default). mode != None: floor S+1 so at
+    // least one Chebyshev-accelerated iteration runs (Cl9 invariant
+    // S < solverIterations). See cloth_solver_backend.h.
+    const int floorIters = (m_convergenceMode == ClothConvergenceMode::None)
+                               ? 1
+                               : (CLOTH_CHEBYSHEV_DELAY + 1);
+    m_solverIterations = std::clamp(iterations, floorIters, MAX_SOLVER_ITERS);
+}
+
+int ClothSimulator::getSolverIterations() const
+{
+    return m_solverIterations;
+}
+
+void ClothSimulator::setConvergenceMode(ClothConvergenceMode mode)
+{
+    m_convergenceMode = mode;
+    // Switching the accelerator on requires solverIterations > S; bump the
+    // default 1 up to S+1 so the accelerator actually engages.
+    if (mode != ClothConvergenceMode::None
+        && m_solverIterations < CLOTH_CHEBYSHEV_DELAY + 1)
+    {
+        m_solverIterations = CLOTH_CHEBYSHEV_DELAY + 1;
+    }
+}
+
+ClothConvergenceMode ClothSimulator::getConvergenceMode() const
+{
+    return m_convergenceMode;
+}
 
 void ClothSimulator::setAdaptiveDamping(float factor)
 {

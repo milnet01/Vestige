@@ -284,7 +284,18 @@ public:
     /// @brief Returns the current dihedral bend compliance.
     float getDihedralBendCompliance() const override;
 
+    // --- Constraint-solver convergence (Phase 10.9 Cl9) ---
+
+    void setSolverIterations(int iterations) override;
+    int getSolverIterations() const override;
+    void setConvergenceMode(ClothConvergenceMode mode) override;
+    ClothConvergenceMode getConvergenceMode() const override;
+
     // --- Adaptive damping ---
+    //
+    // Cl10: CPU-`ClothSimulator`-ONLY feature — opt-in (off by default) and
+    // intentionally NOT promoted to `IClothSolverBackend`; the GPU backend does
+    // not implement it. See the interface header's "CPU-only features" note.
 
     /// @brief Sets the adaptive damping factor (scales damping with average particle speed).
     /// Total damping = baseDamping + adaptiveFactor * avgSpeed. Set to 0 to disable.
@@ -404,6 +415,13 @@ private:
     std::vector<uint32_t> m_selfCollisionNeighbors;  ///< Reused per query
     void applySelfCollision();
     bool areGridAdjacent(uint32_t i, uint32_t j) const;
+
+    // Constraint-solver convergence (Cl9). Default 1 iteration / None =
+    // pre-Cl9 behaviour. The CPU's sequential sweep already converges, so the
+    // mode is honoured for API parity but the extra iterations are plain
+    // re-sweeps (no Chebyshev combine on the CPU path).
+    int m_solverIterations = 1;
+    ClothConvergenceMode m_convergenceMode = ClothConvergenceMode::None;
 
     // Adaptive damping
     float m_adaptiveDampingFactor = 0.0f;  ///< 0 = disabled, typical 0.1-0.5

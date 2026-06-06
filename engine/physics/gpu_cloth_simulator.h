@@ -79,6 +79,12 @@ public:
     void setDihedralBendCompliance(float compliance) override;
     float getDihedralBendCompliance() const override { return m_dihedralCompliance; }
 
+    // Constraint-solver convergence accelerator (Phase 10.9 Cl9).
+    void setSolverIterations(int iterations) override;
+    int getSolverIterations() const override { return m_solverIterations; }
+    void setConvergenceMode(ClothConvergenceMode mode) override;
+    ClothConvergenceMode getConvergenceMode() const override { return m_convergenceMode; }
+
     // Wind (IClothSolverBackend). Gust state + FBM/turbulence precompute live in
     // the shared ClothWindModel (Phase 10.9 Sh4b) so this backend produces the
     // same wind inputs as the CPU ClothSimulator from the same seed.
@@ -300,6 +306,11 @@ private:
     GLuint m_indicesSSBO       = 0;
     GLuint m_collidersUBO      = 0;
     GLuint m_lraSSBO           = 0;
+
+    // Constraint-solver convergence accelerator (Cl9). Default 1 / None =
+    // pre-Cl9 behaviour (one coloured-GS sweep per substep, bit-for-bit).
+    int                  m_solverIterations = 1;
+    ClothConvergenceMode m_convergenceMode  = ClothConvergenceMode::None;
 
     // Distance constraint graph + colouring.
     std::vector<GpuConstraint> m_constraints;

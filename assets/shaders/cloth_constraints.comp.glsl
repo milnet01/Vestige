@@ -58,6 +58,7 @@ layout(std430, binding = 4) readonly buffer Constraints
 uniform uint  u_colorOffset;     // First constraint index for this colour group.
 uniform uint  u_colorCount;      // Constraints in this colour group.
 uniform float u_dtSubSquared;    // dt² of the current substep (for α̃ = α / dt²).
+uniform float u_omega;           // Cl9 SOR over-relaxation factor (1.0 = off / plain GS).
 
 void main()
 {
@@ -84,7 +85,10 @@ void main()
     float alphaTilde = (u_dtSubSquared > 0.0) ? (c.compliance / u_dtSubSquared) : 0.0;
     float lambda    = -C / (wSum + alphaTilde);
 
-    vec3 dp = lambda * n;
+    // Cl9 SOR: over-relax the positional correction (ω ∈ [1, 2)). ω = 1 is plain
+    // Gauss-Seidel (unchanged). The converged state C == 0 makes dp == 0, so ω
+    // never shifts the fixed point — only the convergence rate.
+    vec3 dp = (u_omega * lambda) * n;
 
     positions[c.i0].xyz = p0v.xyz + w0 * dp;
     positions[c.i1].xyz = p1v.xyz - w1 * dp;

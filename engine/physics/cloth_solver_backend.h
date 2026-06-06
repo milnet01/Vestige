@@ -46,6 +46,37 @@ enum class ClothWindQuality
 /// the inspector / a preset can't burn a whole frame stepping the cloth.
 inline constexpr int MAX_SUBSTEPS = 64;
 
+/// @brief Hard upper bound on constraint-solver outer iterations per substep.
+///
+/// Phase 10.9 Cl9. Each outer iteration is one full coloured-Gauss-Seidel sweep
+/// of every constraint colour. Default is 1 (today's behaviour, bit-for-bit
+/// unchanged); the convergence accelerator raises it. Capped so a stray
+/// `setSolverIterations(10000)` can't burn a frame, mirroring `MAX_SUBSTEPS`.
+inline constexpr int MAX_SOLVER_ITERS = 16;
+
+/// @brief Chebyshev acceleration delay `S` (Phase 10.9 Cl9).
+///
+/// The Chebyshev combine is applied only on outer iterations `n > S` — the
+/// first few nonlinear-PBD iterations don't yet behave like the linear system
+/// the recurrence assumes, so combining early oscillates. While a convergence
+/// mode is active the solver-iteration count is clamped to `>= S + 1` so at
+/// least one accelerated iteration runs.
+inline constexpr int CLOTH_CHEBYSHEV_DELAY = 2;
+
+/// @brief Constraint-solver convergence-acceleration mode (Phase 10.9 Cl9).
+///
+/// The GPU's coloured-parallel Gauss-Seidel sweep propagates a pin clamp only a
+/// bounded hop per sweep, so a stiff pinned drape under-converges versus the
+/// CPU's sequential sweep. The accelerator runs several outer iterations per
+/// substep and (for `Chebyshev`) blends successive iterates to converge an order
+/// of magnitude faster per iteration (Wang 2015). `None` keeps one plain sweep.
+enum class ClothConvergenceMode
+{
+    None      = 0,   ///< One coloured-GS sweep per substep (default; unchanged).
+    SOR       = 1,   ///< Fixed over-relaxation of the positional correction.
+    Chebyshev = 2,   ///< Chebyshev semi-iterative acceleration of the outer loop.
+};
+
 /// @brief Per-frame simulation contract shared by every cloth-solver backend.
 ///
 /// Implementations must:
@@ -132,6 +163,31 @@ public:
     ///        place; GPU re-uploads the dihedral SSBO).
     virtual void setDihedralBendCompliance(float compliance) = 0;
     virtual float getDihedralBendCompliance() const = 0;
+
+    // -- Constraint-solver convergence (Phase 10.9 Cl9) --
+    //
+    // Default state — `solverIterations == 1`, `mode == None` — reproduces the
+    // pre-Cl9 behaviour bit-for-bit. `setSolverIterations` clamps to
+    // `[1, MAX_SOLVER_ITERS]` when `mode == None`; while a mode is active it
+    // clamps to `[S+1, MAX_SOLVER_ITERS]` (the Chebyshev delay `S` must be below
+    // the iteration count or the accelerator never engages), and
+    // `setConvergenceMode` bumps the count up to `S+1` if it is still the
+    // default 1. The CPU backend's sequential sweep already converges, so its
+    // accelerator is effectively a no-op; the surface is mirrored for parity.
+
+    virtual void setSolverIterations(int iterations) = 0;
+    virtual int getSolverIterations() const = 0;
+    virtual void setConvergenceMode(ClothConvergenceMode mode) = 0;
+    virtual ClothConvergenceMode getConvergenceMode() const = 0;
+
+    // -- CPU-only features (NOT part of this interface) --
+    //
+    // Cl10: adaptive damping (`ClothSimulator::setAdaptiveDamping`) is an
+    // opt-in, off-by-default stabiliser implemented only on the concrete CPU
+    // `ClothSimulator`. It is intentionally NOT promoted to this backend
+    // interface — the GPU backend does not implement it. Rest-pose blending and
+    // sleep detection, by contrast, ARE ported to both backends (they run
+    // inside `simulate()` and need no extra interface surface).
 
     // -- Wind --
 

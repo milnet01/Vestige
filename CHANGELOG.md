@@ -9264,6 +9264,21 @@ existing cases (``HelpersMatchEvaluatorPrecisely``,
 
 ### Added
 
+- **Cl9: GPU cloth constraint-convergence accelerator (SOR over-relaxation)**
+  The GPU cloth solver gains an opt-in convergence accelerator
+  (IClothSolverBackend::setConvergenceMode / setSolverIterations). The
+  coloured-parallel Gauss-Seidel sweep under-converged a stiff pinned drape
+  (~43% Hausdorff vs the CPU); running N outer iterations per substep with the
+  distance correction over-relaxed by omega=1.8 (mode SOR) brings it to ~3% at
+  16 iterations, closing the CPU<->GPU drape parity gap. Default (1 iteration /
+  mode None) is bit-for-bit unchanged. The previously SKIP-gated
+  Cl1_StiffDrapeParity test is flipped to a strict EXPECT_LT(haus, 0.05*diag).
+  WORKAROUND/DEFERRAL: the ClothConvergenceMode::Chebyshev enum value currently
+  routes through the SOR path — the true Chebyshev iterate-blend (Wang 2015)
+  was not built because SOR sufficed for the parity gate; it needs the exact
+  form from Wang Algorithm 1. omega=1.8 is a single empirical constant with a
+  TODO to fit omega(gridDim, compliance) via the Formula Workbench.
+
 - **Streaming music player (W8 part 2/2) — per-scene dynamic music** (W8 (part 2/2))
   AudioMusicPlayer (engine/audio/audio_music_player.{h,cpp}) streams one stb_vorbis-fed OpenAL voice per MusicLayer with an 8-buffer ring, slewed per-layer gain folded through the Music bus + ducking, and the existing planStreamTick / advanceMusicLayer / MusicStingerQueue primitives — finally giving the dead streaming-music state machines a consumer. MusicSystem (engine/systems/music_system.{h,cpp}) is the ISystem wrapper (default Update phase) gameplay pushes intensity/silence at. Scene files gain an optional `music` block (scene format_version 1 -> 2, backwards-compatible; v1 loads with no music) wired at engine start-up + all three editor open paths. Workaround logged per project rule 5: three numbers/behaviours in the approved design doc were reconciled at implementation time (buffer ring 3 -> 8 since three 4096-frame buffers = 0.256s < the 0.30s keep-ahead target; update() tops the ring up to the keep-ahead target per tick rather than one chunk; headless playback advances the consume counter by dt x sampleRate) — flagged inline as [design-reconcile 2026-06-04] and in the design doc ## Status.
 
