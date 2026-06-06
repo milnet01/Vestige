@@ -20,8 +20,41 @@ a future optimisation, not a parity prerequisite. The Formula-Workbench ρ fit
 (verify-step 1) is likewise deferred — ω = 1.8 is a single empirical constant
 with a `TODO: revisit via Formula Workbench` at the call site.
 
-**Cl10 — IN PROGRESS** (next): #2 rest-pose port and #3 sleep port, each with its
-own parity pin; #1 adaptive damping documented CPU-only.
+**Cl10 — #1 done, #2 + #3 DEFERRED with a finding (2026-06-06).** #1 (adaptive
+damping) is documented CPU-only on `IClothSolverBackend`. #2 (rest-pose) and #3
+(sleep) are **deferred** — implementation uncovered a GPU/CPU **velocity-model
+mismatch** the design doc did not account for (see below).
+
+### Implementation finding: GPU velocity-recovery model (blocks #2, complicates #3)
+
+The CPU `ClothSimulator` recomputes velocity from the net position change each
+substep — `v = (pos − prevPos) / dtSub` (`cloth_simulator.cpp:404`, step 7,
+**after** the constraint solve + rest-pose blend). The GPU does **not**: its
+`cloth_integrate.comp.glsl` carries an explicit gravity-accumulated velocity
+forward (`v *= 1 − damping; pos += v·dt`) and the constraint/LRA passes correct
+**position only** — velocity is never recovered from the solve. This pre-existing
+difference is invisible to the free-fall and stiff-drape parity tests (free-fall:
+constraints don't fire so the two coincide; drape: quasi-static, near-zero
+velocity), but it breaks the Cl10 ports:
+
+- **#2 rest-pose** — on the CPU the rest-pose blend moves position *and* (via the
+  velocity recompute) damps velocity toward rest; on the GPU the same blend moves
+  position but leaves momentum untouched, so a hanging LRA curtain over-shoots. A
+  built-and-tested port measured **11.5 % Hausdorff** (over the 5 % gate) and was
+  reverted rather than shipped under a Rule 7 parity gate.
+- **#3 sleep** — the CPU's sleep criterion is kinetic energy from that recovered
+  velocity; the GPU's explicit velocity doesn't reflect a positionally-settled
+  cloth, so a faithful port must derive KE from `(pos − prevPos)` instead of the
+  velocity SSBO, and then prove its own parity. Tractable, but it inherits the
+  same model question and deserves its own validated pass.
+
+**Recommended next step:** make the GPU adopt PBD-style velocity recovery
+(`v = (pos − prevPos)/dtSub` at substep end) — the textbook XPBD scheme, and very
+likely the *more* correct behaviour — then re-attempt #2 and #3 on that footing.
+That is a core-integration change with regression risk to the now-passing Cl1
+free-fall + drape gates, so it warrants its own design pass + cold-eyes, not a
+tail-end edit. Until then rest-pose + sleep remain **CPU-authoritative** (the CPU
+backend has them; the GPU backend runs without them, as it does today).
 
 Two coupled ROADMAP items, both surfaced by the **Cl1** CPU↔GPU cloth parity
 harness (shipped 2026-06-03, `tests/test_cloth_cpu_gpu_parity.cpp`):
