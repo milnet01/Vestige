@@ -9309,6 +9309,11 @@ existing cases (``HelpersMatchEvaluatorPrecisely``,
 - **GPU cloth damping now matches the CPU per-substep convention (Cl1)** (Cl1)
   The GPU cloth backend divided ClothConfig::damping by the substep count, treating it as a per-frame coefficient, while the CPU ClothSimulator applies it per substep as documented. The GPU therefore damped roughly `substeps`x less, so an identical cloth diverged by metres between backends in a 2-second free-fall. The GPU now applies damping per substep and clamps it exactly as the CPU does. Found by the new CPU/GPU cloth parity harness.
 
+### Security
+
+- **Bump bundled FreeType VER-2-13-3 → VER-2-14-3**
+  Closes the previously accepted-risk CVE-2026-23865 (fixed upstream in 2.14.2); CVE-2025-27363 stays covered. Rule-8 currency sweep surfaced during Phase 10 Localization work. No caller changes — font.cpp's FreeType C-API usage (FT_Init_FreeType / FT_New_Face / FT_Set_Pixel_Sizes / FT_Load_Char) is stable across 2.13→2.14; build + 62 text/font/utf8 tests green. SECURITY.md and tools/audit/audit_config.yaml version pins updated in lockstep.
+
 ## [0.1.5] - 2026-04-18
 
 ### Fixed — completes 2026-04-16 strict-aliasing sweep

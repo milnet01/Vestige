@@ -197,7 +197,7 @@ Surveyed against the current source on 2026-05-18:
 
 | Area | Location | State |
 |---|---|---|
-| **FreeType integration** | `engine/renderer/font.cpp::loadFromFile` lines 85-269 | Complete. `FT_Init_FreeType` / `FT_New_Face` / `FT_Set_Pixel_Sizes`. Pinned via `external/CMakeLists.txt:140-152` (`FetchContent_Declare(freetype GIT_TAG VER-2-13-3)`). |
+| **FreeType integration** | `engine/renderer/font.cpp::loadFromFile` lines 85-269 | Complete. `FT_Init_FreeType` / `FT_New_Face` / `FT_Set_Pixel_Sizes`. Pinned via `external/CMakeLists.txt:140-152` (`FetchContent_Declare(freetype GIT_TAG VER-2-14-3)`). |
 | **Glyph atlas** | `engine/renderer/font.cpp` second pass (line 198) | Complete. Single-channel `GL_R8`, immutable storage via DSA. Atlas-packing is a single-shelf packer with naïve row-wrap at 2048 px (`font.cpp:169-188`) — fine for the ~95 ASCII glyphs but needs a real 2D shelf/skyline packer for the ~485 multi-script glyphs (L2 covers this; see the § 9 memory table). |
 | **Text rendering** | `engine/renderer/text_renderer.cpp` lines 249, 354, 478, 549 | 4 glyph loops, all `for (char c : text)` over `std::string`. Calls `m_font.getGlyph(c)`. L1 must edit all 4 sites to walk UTF-8 codepoints instead. Batched (`beginBatch2D` / `endBatch2D`) — Phase 10.9 Pe1. Italic-oblique shear — Phase 10.9 P6. |
 | **`Font::getGlyph`** | `engine/renderer/font.h:50` | `const GlyphInfo& getGlyph(char codepoint) const;` — `char` overload only; can't address codepoints beyond U+00FF. |
@@ -731,9 +731,11 @@ as Phase 11+ targets so the gap is documented in code.
 
 ### Already pinned (no change)
 
-- **FreeType `VER-2-13-3`** (`external/CMakeLists.txt:140-152`) —
+- **FreeType `VER-2-14-3`** (`external/CMakeLists.txt:140-152`) —
   covers per-codepoint glyph rasterization for the three target
-  scripts. No version change needed.
+  scripts. Bumped from `VER-2-13-3` (rule-8 currency sweep, 2026-06-06);
+  the `FT_Init_FreeType` / `FT_New_Face` / `FT_Set_Pixel_Sizes` /
+  `FT_Load_Char` calls in `font.cpp` are unchanged (stable C API).
 - **nlohmann_json** (transitive via the existing JSON call sites
   in scene / settings / formula serialisers) — loads the
   `<lang>.json` string tables.

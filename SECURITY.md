@@ -113,7 +113,7 @@ Malformed shaders can crash drivers or hang the GPU.
 
 | Library | CVE / Issue | Severity | Mitigation |
 |---------|-------------|----------|------------|
-| **FreeType** | CVE-2025-27363 (OOB write, actively exploited) | HIGH | Current pin `VER-2-13-3` covers CVE-2025-27363 (fixed in 2.13.1). CVE-2026-23865 fix landed in 2.14.2 — accepted-risk while a Vestige-side bump audit is pending; tracked in ROADMAP |
+| **FreeType** | CVE-2025-27363 (OOB write, actively exploited) | HIGH | Current pin `VER-2-14-3` (bumped 2026-06-06) covers CVE-2025-27363 (fixed in 2.13.1) **and** CVE-2026-23865 (fix landed in 2.14.2). No FreeType accepted-risk outstanding |
 | **stb_image** | GHSL-2023-145..151 (7 vulns incl. double-free) | HIGH | Validate dimensions after load (done: 16384×16384 max). Don't load untrusted images on background threads without mutex. Monitor upstream |
 | **dr_libs** | CVE-2025-14369 (integer overflow in dr_flac) | HIGH | Validate audio metadata before decoding (done: sample rate, channels, frames). Update to master post-March 2026 |
 | **dr_libs** | Issue #296 (heap overflow in drwav smpl chunk) | HIGH | Update to master. Fixed post-March 2026 |

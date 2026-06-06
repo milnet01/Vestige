@@ -140,7 +140,7 @@ set(tinygltf_SOURCE_DIR ${tinygltf_SOURCE_DIR} PARENT_SCOPE)
 FetchContent_Declare(
     freetype
     GIT_REPOSITORY https://github.com/freetype/freetype.git
-    GIT_TAG        VER-2-13-3
+    GIT_TAG        VER-2-14-3
     GIT_SHALLOW    TRUE
 )
 set(FT_DISABLE_HARFBUZZ ON CACHE BOOL "" FORCE)
