@@ -95,7 +95,7 @@ public:
     ///        snapshot reflects the *current* simulated state, not the
     ///        previous-frame mirror, then copies the mirror into
     ///        `m_initialPositions`. Mirrors `ClothSimulator::captureRestPositions`
-    ///        at `cloth_simulator.cpp:720-722`. Pre-Cl5 this was a `{}` stub
+    ///        at `cloth_simulator.cpp:714`. Pre-Cl5 this was a `{}` stub
     ///        and `reset()` re-uploaded the mutable mirror, so pinned
     ///        particles snapped to the last `setPinPosition` value rather
     ///        than the original grid.

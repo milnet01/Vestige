@@ -379,8 +379,8 @@ void ClothSimulator::simulate(float deltaTime)
             if (restBlend > 0.01f && !m_lraConstraints.empty())
             {
                 // Blend factor per substep. Keep small so wind can still
-                // displace the cloth noticeably. At 16 substeps/frame,
-                // 0.015 per substep ≈ 21% correction toward rest per frame.
+                // displace the cloth noticeably. At the default 10 substeps/frame,
+                // 0.015 per substep ≈ 14% correction toward rest per frame.
                 float blend = 0.015f * restBlend;
                 for (uint32_t i = 0; i < count; ++i)
                 {

@@ -2,8 +2,11 @@
 
 ## Status
 
-**DRAFT — pending user review (blocking).** No engine code ships until this
-doc is approved per project rule 1 (research → design → review → code).
+**APPROVED 2026-06-06** (user sign-off after the cold-eyes loop closed clean).
+Cleared for implementation per project rule 1 (research → design → review →
+code). Implementation order: Cl9 first (offline ρ fit → accelerator → flip
+`Cl1_StiffDrapeParity_PendingConvergenceFix` from SKIP to the strict assertion),
+then Cl10 #2 (rest-pose port) and #3 (sleep port), each with its own parity pin.
 
 Two coupled ROADMAP items, both surfaced by the **Cl1** CPU↔GPU cloth parity
 harness (shipped 2026-06-03, `tests/test_cloth_cpu_gpu_parity.cpp`):
