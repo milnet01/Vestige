@@ -99,6 +99,7 @@ set(ENGINE_SOURCES
     utils/gltf_loader_impl.cpp
     utils/cube_loader.cpp
     utils/json_size_cap.cpp
+    utils/utf8.cpp
     utils/config_path.cpp
     utils/atomic_write.cpp
     utils/path_sandbox.cpp
