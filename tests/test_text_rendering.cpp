@@ -6,6 +6,12 @@
 #include <gtest/gtest.h>
 #include "renderer/font.h"
 #include "renderer/text_renderer.h"
+#include "utils/utf8.h"
+
+#include "gl_test_fixture.h"
+
+#include <chrono>
+#include <string>
 
 using namespace Vestige;
 
@@ -51,6 +57,62 @@ TEST(TextRendering, FontFallbackGlyphReturned)
     const GlyphInfo& glyph = font.getGlyph('A');
     // Should be the default-constructed fallback
     EXPECT_EQ(glyph.advance, 0);
+}
+
+// =============================================================================
+// Phase 10 Localization L1 — codepoint Font API (headless parts)
+// =============================================================================
+
+TEST(TextRendering, GlyphInfoEqualityIsFieldwise)
+{
+    GlyphInfo a;
+    GlyphInfo b;
+    EXPECT_TRUE(a == b);   // two default glyphs compare equal
+    EXPECT_FALSE(a != b);
+
+    b.advance = 1;
+    EXPECT_FALSE(a == b);  // a single differing field breaks equality
+    EXPECT_TRUE(a != b);
+
+    GlyphInfo c;
+    c.bearing = glm::ivec2(3, -2);
+    EXPECT_NE(a, c);
+}
+
+TEST(TextRendering, HasGlyphFalseOnUnloadedFont)
+{
+    Font font;
+    // No glyphs rasterised yet — hasGlyph is false for everything, including
+    // the char-shim path. getGlyph still returns the fallback (no crash).
+    EXPECT_FALSE(font.hasGlyph(static_cast<uint32_t>('A')));
+    EXPECT_FALSE(font.hasGlyph(0x05D0));  // Hebrew aleph
+}
+
+// Ad-hoc timing probe (design § 1 / § 8: each pre-L6 slice records a
+// lightweight baseline for the work it adds; L6 test 23 supersedes it as the
+// pinned HUD-pass gate). Non-gating — it asserts only correctness of the walk,
+// and records the decode time as a gtest property rather than failing a budget.
+TEST(TextRendering, Utf8DecodeWalkProbe_L1)
+{
+    // ~800-codepoint mixed-script workload, mirroring the § 9 HUD estimate.
+    std::string sample;
+    for (int i = 0; i < 100; ++i)
+    {
+        sample += "Holy ";          // Latin
+        sample += "\xCE\x91\xCF\x81";  // Greek Α ρ
+        sample += "\xD7\xA9\xD7\x9C";  // Hebrew ש ל
+    }
+
+    const auto t0 = std::chrono::steady_clock::now();
+    const std::vector<uint32_t> cps = utf8::decode(sample);
+    const auto t1 = std::chrono::steady_clock::now();
+
+    // 100 reps * (5 ASCII "Holy " + 2 Greek + 2 Hebrew) = 900 codepoints.
+    EXPECT_EQ(cps.size(), 900u);
+
+    const double us =
+        std::chrono::duration<double, std::micro>(t1 - t0).count();
+    RecordProperty("utf8_decode_us_900cp", static_cast<int>(us));
 }
 
 // =============================================================================
@@ -157,4 +219,68 @@ TEST(TextRendering, RenderText2DInBatchIsSafeWhenUninitialised_Pe1)
                                   glm::vec3(0.5f), 800, 600);
     renderer.endBatch2D();
     EXPECT_FALSE(renderer.isBatching());
+}
+
+// =============================================================================
+// Phase 10 Localization L1 — Font codepoint API under a real GL context.
+// Loading a TTF needs a GL context for the atlas texture, so these run under
+// GLTestFixture (skips when no display — see gl_test_fixture.h). Mirrors the
+// design's § 8 test 5 (Font.AsciiBackwardCompat) + the ranges-API exercise.
+// =============================================================================
+
+namespace
+{
+std::string arimoPath()
+{
+    return std::string(VESTIGE_FONT_DIR) + "/arimo.ttf";
+}
+}  // namespace
+
+class FontGLTest : public ::Vestige::Test::GLTestFixture
+{
+};
+
+// Test 5 — the default (two-arg) load is byte-identical to an explicit
+// ASCII_RANGE load, and 'A' is a real glyph. Pins the L1 back-compat claim:
+// the codepoint migration did not change what the ASCII path produces.
+TEST_F(FontGLTest, AsciiBackwardCompat)
+{
+    Font defaultLoad;
+    ASSERT_TRUE(defaultLoad.loadFromFile(arimoPath(), 48));
+    ASSERT_TRUE(defaultLoad.isLoaded());
+
+    Font explicitAscii;
+    ASSERT_TRUE(explicitAscii.loadFromFile(arimoPath(), 48, ASCII_RANGE));
+
+    // Default range == ASCII_RANGE: same glyph count and same 'A' geometry.
+    EXPECT_EQ(defaultLoad.getGlyphCount(), explicitAscii.getGlyphCount());
+    EXPECT_EQ(defaultLoad.getGlyph('A'), explicitAscii.getGlyph('A'));
+
+    // 'A' is a real (non-fallback) glyph with sane metrics.
+    EXPECT_TRUE(defaultLoad.hasGlyph(static_cast<uint32_t>('A')));
+    const GlyphInfo& a = defaultLoad.getGlyph('A');
+    EXPECT_GT(a.advance, 0);
+    EXPECT_GT(a.size.x, 0);
+}
+
+// Range scoping — an ASCII-only load must NOT carry Hebrew/Greek glyphs.
+TEST_F(FontGLTest, AsciiLoadExcludesNonAsciiCodepoints)
+{
+    Font font;
+    ASSERT_TRUE(font.loadFromFile(arimoPath(), 48, ASCII_RANGE));
+    EXPECT_FALSE(font.hasGlyph(0x05D0));  // Hebrew aleph — not requested
+    EXPECT_FALSE(font.hasGlyph(0x0391));  // Greek capital alpha — not requested
+}
+
+// The new `ranges` parameter loads beyond ASCII — Greek from Arimo.
+// (Full per-script coverage counts are pinned by the L2 test 6/7 once the
+// dedicated Hebrew face is in tree; here we only prove the L1 API works.)
+TEST_F(FontGLTest, LoadsGreekRange)
+{
+    Font font;
+    ASSERT_TRUE(font.loadFromFile(arimoPath(), 48, GREEK_RANGES));
+    EXPECT_TRUE(font.hasGlyph(0x0391));   // Greek capital alpha
+    EXPECT_TRUE(font.hasGlyph(0x03C9));   // Greek small omega
+    EXPECT_FALSE(font.hasGlyph(static_cast<uint32_t>('A')));  // ASCII not requested
+    EXPECT_GE(font.getGlyphCount(), 100u);
 }

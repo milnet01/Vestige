@@ -82,7 +82,8 @@ Font& Font::operator=(Font&& other) noexcept
     return *this;
 }
 
-bool Font::loadFromFile(const std::string& filePath, int pixelSize)
+bool Font::loadFromFile(const std::string& filePath, int pixelSize,
+                        const std::vector<CodepointRange>& ranges)
 {
     FT_Library ft;
     if (FT_Init_FreeType(&ft))
@@ -107,14 +108,13 @@ bool Font::loadFromFile(const std::string& filePath, int pixelSize)
     m_descender = static_cast<float>(face->size->metrics.descender) / 64.0f;
     m_lineHeight = static_cast<float>(face->size->metrics.height) / 64.0f;
 
-    // First pass: determine atlas dimensions
-    // Render ASCII 32-126 (printable characters)
+    // First pass: rasterise every requested codepoint and size the atlas.
     int totalWidth = 0;
     int maxHeight = 0;
 
     struct GlyphBitmap
     {
-        char codepoint;
+        uint32_t codepoint;
         int width;
         int height;
         int bearingX;
@@ -125,36 +125,48 @@ bool Font::loadFromFile(const std::string& filePath, int pixelSize)
 
     std::vector<GlyphBitmap> bitmaps;
 
-    for (char c = 32; c < 127; c++)
+    for (const auto& range : ranges)
     {
-        if (FT_Load_Char(face, static_cast<FT_ULong>(c), FT_LOAD_RENDER))
+        for (uint32_t c = range.firstInclusive; c <= range.lastInclusive; ++c)
         {
-            Logger::warning("Failed to load glyph: '" + std::string(1, c) + "'");
-            continue;
+            // Skip codepoints the face has no glyph for, so hasGlyph() means
+            // "real glyph" rather than ".notdef box". FT_Load_Char on a missing
+            // codepoint would otherwise insert the .notdef glyph silently.
+            if (FT_Get_Char_Index(face, static_cast<FT_ULong>(c)) == 0)
+            {
+                continue;
+            }
+
+            if (FT_Load_Char(face, static_cast<FT_ULong>(c), FT_LOAD_RENDER))
+            {
+                Logger::warning("Failed to load glyph U+"
+                                + std::to_string(c));
+                continue;
+            }
+
+            GlyphBitmap bmp;
+            bmp.codepoint = c;
+            bmp.width = static_cast<int>(face->glyph->bitmap.width);
+            bmp.height = static_cast<int>(face->glyph->bitmap.rows);
+            bmp.bearingX = face->glyph->bitmap_left;
+            bmp.bearingY = face->glyph->bitmap_top;
+            bmp.advance = static_cast<int>(face->glyph->advance.x);
+
+            // Copy bitmap data
+            size_t bufSize = static_cast<size_t>(bmp.width) * static_cast<size_t>(bmp.height);
+            bmp.buffer.resize(bufSize);
+            if (bufSize > 0 && face->glyph->bitmap.buffer)
+            {
+                std::copy(face->glyph->bitmap.buffer,
+                          face->glyph->bitmap.buffer + bufSize,
+                          bmp.buffer.begin());
+            }
+
+            totalWidth += bmp.width + 1;  // +1 for padding
+            maxHeight = std::max(maxHeight, bmp.height);
+
+            bitmaps.push_back(std::move(bmp));
         }
-
-        GlyphBitmap bmp;
-        bmp.codepoint = c;
-        bmp.width = static_cast<int>(face->glyph->bitmap.width);
-        bmp.height = static_cast<int>(face->glyph->bitmap.rows);
-        bmp.bearingX = face->glyph->bitmap_left;
-        bmp.bearingY = face->glyph->bitmap_top;
-        bmp.advance = static_cast<int>(face->glyph->advance.x);
-
-        // Copy bitmap data
-        size_t bufSize = static_cast<size_t>(bmp.width) * static_cast<size_t>(bmp.height);
-        bmp.buffer.resize(bufSize);
-        if (bufSize > 0 && face->glyph->bitmap.buffer)
-        {
-            std::copy(face->glyph->bitmap.buffer,
-                      face->glyph->bitmap.buffer + bufSize,
-                      bmp.buffer.begin());
-        }
-
-        totalWidth += bmp.width + 1;  // +1 for padding
-        maxHeight = std::max(maxHeight, bmp.height);
-
-        bitmaps.push_back(std::move(bmp));
     }
 
     FT_Done_Face(face);
@@ -268,7 +280,7 @@ bool Font::loadFromFile(const std::string& filePath, int pixelSize)
     return true;
 }
 
-const GlyphInfo& Font::getGlyph(char codepoint) const
+const GlyphInfo& Font::getGlyph(uint32_t codepoint) const
 {
     auto it = m_glyphs.find(codepoint);
     if (it != m_glyphs.end())
@@ -276,6 +288,11 @@ const GlyphInfo& Font::getGlyph(char codepoint) const
         return it->second;
     }
     return m_fallbackGlyph;
+}
+
+bool Font::hasGlyph(uint32_t codepoint) const
+{
+    return m_glyphs.count(codepoint) != 0;
 }
 
 GLuint Font::getAtlasTextureId() const

@@ -245,6 +245,9 @@ target_compile_definitions(vestige_tests
         # Phase 10.9 W8 — committed pre-v2 scene fixture for the scene-format
         # v1→v2 backwards-compatible-load test.
         VESTIGE_SCENE_FIXTURES_DIR="${CMAKE_SOURCE_DIR}/tests/fixtures/scenes"
+        # Phase 10 Localization L1 — bundled fonts dir for the Font ASCII
+        # back-compat test (loads arimo.ttf under a real GL context).
+        VESTIGE_FONT_DIR="${CMAKE_SOURCE_DIR}/assets/fonts"
 )
 
 target_link_libraries(vestige_tests

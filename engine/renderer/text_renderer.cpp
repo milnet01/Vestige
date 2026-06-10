@@ -5,6 +5,7 @@
 /// @brief TextRenderer implementation.
 #include "renderer/text_renderer.h"
 #include "core/logger.h"
+#include "utils/utf8.h"
 
 #include <glad/gl.h>
 #include <glm/gtc/matrix_transform.hpp>
@@ -246,13 +247,15 @@ void TextRenderer::renderText2DImpl(const std::string& text, float x, float y, f
         : MAX_GLYPHS_PER_CALL;
 
     int emitted = 0;
-    for (char c : text)
+    for (size_t i = 0; i < text.size();)
     {
         if (emitted >= perCallCap)
         {
             break;
         }
-        const GlyphInfo& glyph = m_font.getGlyph(c);
+        const auto [cp, n] = utf8::decodeAt(text, i);
+        i += static_cast<size_t>(n);
+        const GlyphInfo& glyph = m_font.getGlyph(cp);
 
         float xpos = cursorX + static_cast<float>(glyph.bearing.x) * scale;
         float ypos = cursorY - static_cast<float>(glyph.bearing.y) * scale;
@@ -351,13 +354,15 @@ void TextRenderer::renderText3D(const std::string& text, const glm::mat4& modelM
     verts.reserve(glyphCap * VERTS_PER_GLYPH * FLOATS_PER_VERT);
 
     int emitted = 0;
-    for (char c : text)
+    for (size_t i = 0; i < text.size();)
     {
         if (emitted >= MAX_GLYPHS_PER_CALL)
         {
             break;
         }
-        const GlyphInfo& glyph = m_font.getGlyph(c);
+        const auto [cp, n] = utf8::decodeAt(text, i);
+        i += static_cast<size_t>(n);
+        const GlyphInfo& glyph = m_font.getGlyph(cp);
 
         float xpos = cursorX + static_cast<float>(glyph.bearing.x) * pixelScale;
         float ypos = -static_cast<float>(glyph.bearing.y) * pixelScale;
@@ -475,9 +480,11 @@ std::shared_ptr<Texture> TextRenderer::generateTextHeightMap(const std::string& 
     std::vector<float> verts;
     verts.reserve(text.size() * VERTS_PER_GLYPH * FLOATS_PER_VERT);
 
-    for (char c : text)
+    for (size_t i = 0; i < text.size();)
     {
-        const GlyphInfo& glyph = m_font.getGlyph(c);
+        const auto [cp, n] = utf8::decodeAt(text, i);
+        i += static_cast<size_t>(n);
+        const GlyphInfo& glyph = m_font.getGlyph(cp);
 
         float xpos = cursorX + static_cast<float>(glyph.bearing.x) * scale;
         float ypos = cursorY - static_cast<float>(glyph.bearing.y) * scale;
@@ -546,9 +553,11 @@ bool TextRenderer::isInitialized() const
 float TextRenderer::measureTextWidth(const std::string& text) const
 {
     float width = 0.0f;
-    for (char c : text)
+    for (size_t i = 0; i < text.size();)
     {
-        const GlyphInfo& glyph = m_font.getGlyph(c);
+        const auto [cp, n] = utf8::decodeAt(text, i);
+        i += static_cast<size_t>(n);
+        const GlyphInfo& glyph = m_font.getGlyph(cp);
         width += static_cast<float>(glyph.advance) / 64.0f;
     }
     return width;

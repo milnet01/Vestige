@@ -22,6 +22,36 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-06-10 Localization L1 — UTF-8 decoder + codepoint Font API
+
+First shippable slice of the Phase 10 Localization bundle
+(`docs/phases/phase_10_localization_design.md`). Lands the foundation that
+lets the text renderer address any Unicode codepoint instead of truncating
+multi-byte text into garbage. Additive for ASCII call sites — identical
+output; non-ASCII previously rendered as mojibake.
+
+- **utf8 codec** (part 1, committed 2026-06-06) — `engine/utils/utf8.{h,cpp}`:
+  pure-function `decodeAt` / `decode` / `encode` / `isHebrew` / `isGreek`,
+  with 11 conformance tests (invariants UTF8-INV-1..5; U+FFFD-on-invalid per
+  Unicode TR-36).
+- **Font codepoint API** — `Font`'s glyph map key migrates `char` → `uint32_t`;
+  `getGlyph(uint32_t)` plus a temporary `char`-overload shim (L1 only, removed
+  in L2) that zero-extends 0x80..0xFF to avoid sign-extension. New
+  `Font::hasGlyph(uint32_t)` (real-glyph presence query) and
+  `GlyphInfo::operator==` (field-wise). `loadFromFile` gains a
+  `ranges = ASCII_RANGE` parameter (`CodepointRange` + Latin/Greek/Hebrew
+  range constants); the load now skips codepoints the face lacks
+  (`FT_Get_Char_Index == 0`) so `hasGlyph` never reports a `.notdef` box.
+- **Text-renderer migration** — the 4 glyph loops (2D / 3D / height-map /
+  measure) walk UTF-8 codepoints via `utf8::decodeAt`; per-call emission caps
+  preserved.
+- **Tests** — `Font.AsciiBackwardCompat` (real GL load of `arimo.ttf`, proves
+  the 2-arg default == explicit `ASCII_RANGE`), range-scoping + Greek-range
+  load tests, headless `operator==` / `hasGlyph` tests, and an ad-hoc UTF-8
+  decode timing probe (non-gating; superseded by the L6 HUD-pass benchmark).
+  Full suite green (3365 tests). Per-slice cold-eyes review run on the diff —
+  clean (no CRITICAL/HIGH/MEDIUM).
+
 ### 2026-06-01 CE1–CE17 — Cold-eyes 2026-05-18 documentation follow-ups (16 of 17)
 
 Closed the deferred documentation-review follow-ups (sibling sweep to the
