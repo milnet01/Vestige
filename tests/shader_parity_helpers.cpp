@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "shader_parity_helpers.h"
+#include "lsan_guard.h"
 
 #include <gtest/gtest.h>
 
@@ -177,6 +178,12 @@ bool ShaderProgram::valid() const noexcept { return m_prog != 0; }
 glm::vec4 ShaderProgram::run(const UniformTable& uniforms)
 {
     if (!valid()) return kFailVec4;
+
+    // Under the llvmpipe software rasterizer (CI), the first glDrawArrays JITs
+    // the fragment shader and caches process-lifetime pipe-state that llvmpipe
+    // never frees — a third-party allocation, not ours. Keep it off LSan's books
+    // for the GL execution below; our own code here allocates nothing tracked.
+    ScopedLeakCheckDisable noLeakTracking;
 
     glBindFramebuffer(GL_FRAMEBUFFER, m_fbo);
     glViewport(0, 0, 1, 1);

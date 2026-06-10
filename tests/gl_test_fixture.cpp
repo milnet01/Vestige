@@ -4,6 +4,7 @@
 #include "gl_test_fixture.h"
 
 #include "core/logger.h"
+#include "lsan_guard.h"
 
 #include <glad/gl.h>
 #include <GLFW/glfw3.h>
@@ -29,6 +30,20 @@ const auto* g_envHandle = ::testing::AddGlobalTestEnvironment(
 
 void GLTestEnvironment::SetUp()
 {
+    // Every allocation made by glfwInit / glfwCreateWindow / gladLoadGL below
+    // is process-lifetime driver/windowing state; keep it off LSan's books.
+    // The guard spans every early-return path (RAII), re-enabling on exit.
+    ScopedLeakCheckDisable noLeakTracking;
+
+    // The test window is hidden (GLFW_VISIBLE=FALSE) and never decorated, so we
+    // do not need libdecor. On Wayland, GLFW otherwise loads libdecor's GTK
+    // plugin, which pulls in Pango -> GLib -> fontconfig and runs an FcInit
+    // whose caches are process-lifetime (the dominant "leak" LSan reports, and
+    // one we cannot bracket because it fires inside a DSO constructor). Not
+    // loading libdecor at all removes the dependency — and the leak — at root.
+    // Ignored on non-Wayland platforms.
+    glfwInitHint(GLFW_WAYLAND_LIBDECOR, GLFW_WAYLAND_DISABLE_LIBDECOR);
+
     if (!glfwInit())
     {
         Logger::warning("GLTestEnvironment: glfwInit failed — GL parity "
@@ -78,6 +93,10 @@ void GLTestEnvironment::SetUp()
 
 void GLTestEnvironment::TearDown()
 {
+    // glfwTerminate's Wayland backend allocates during teardown too (observed:
+    // _glfwTerminateWayland -> _glfwWaitEventsWayland). Bracket teardown as well.
+    ScopedLeakCheckDisable noLeakTracking;
+
     if (g_window)
     {
         glfwDestroyWindow(g_window);

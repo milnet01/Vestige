@@ -266,6 +266,8 @@ target_precompile_headers(vestige_tests PRIVATE
 )
 
 include(GoogleTest)
-gtest_discover_tests(vestige_tests
-    PROPERTIES ENVIRONMENT "LSAN_OPTIONS=suppressions=${CMAKE_SOURCE_DIR}/asan_suppressions.txt"
-)
+# No LSan suppression file: the only intentional third-party leaks (GLFW/Mesa
+# init/teardown, llvmpipe JIT shader state) are excluded at their exact call
+# sites via ScopedLeakCheckDisable (tests/lsan_guard.h), so the suite is
+# leak-clean under default options with no environment setup.
+gtest_discover_tests(vestige_tests)

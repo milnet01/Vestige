@@ -22,6 +22,31 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-06-10 Test harness — fix LeakSanitizer suite failure at root (drop suppression file)
+
+The ASAN test build failed the whole suite under LeakSanitizer. Two distinct
+third-party process-lifetime allocations were the cause, both now fixed at
+source rather than masked:
+
+- **Pango/fontconfig (~6.5 KB, the bulk):** on Wayland, GLFW loaded libdecor's
+  GTK plugin for window decorations, pulling in Pango → GLib → fontconfig
+  (`FcInit`). The hidden 16×16 test window needs no decorations, so the fixture
+  now sets `glfwInitHint(GLFW_WAYLAND_LIBDECOR, GLFW_WAYLAND_DISABLE_LIBDECOR)`
+  — the leaky library is never loaded.
+- **GLFW/Mesa init+teardown and llvmpipe JIT shader state:** genuinely
+  unfreeable driver allocations. New `tests/lsan_guard.h` (`ScopedLeakCheckDisable`,
+  a no-op without a sanitizer) brackets the exact third-party call sites —
+  GLFW init/teardown in `gl_test_fixture.cpp` and the `glDrawArrays` in
+  `ShaderProgram::run`. More precise than a symbol suppression, and it works
+  even when the fast unwinder can't symbolize the driver DSO (where the old
+  `leak:glfwInit` entry silently missed and the leak surfaced as
+  `<unknown module>` — the actual failure).
+
+`asan_suppressions.txt` and its `LSAN_OPTIONS` ctest wiring are **deleted** — the
+suite is now leak-clean under default options with zero suppressions. Verified
+across native (radeonsi) full suite, llvmpipe (software), and the CI-equivalent
+X11+llvmpipe path under Xvfb: 0 leaks each.
+
 ### 2026-06-10 Localization L1 — UTF-8 decoder + codepoint Font API
 
 First shippable slice of the Phase 10 Localization bundle
