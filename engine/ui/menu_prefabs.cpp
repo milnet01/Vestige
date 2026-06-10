@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "ui/menu_prefabs.h"
+#include "localization/localization_service.h"
 #include "systems/ui_system.h"
 #include "ui/ui_button.h"
 #include "ui/ui_crosshair.h"
@@ -102,19 +103,24 @@ void buildMainMenuImpl(UICanvas& canvas, const UITheme& theme,
 
     // Menu buttons — vertical stack at left:96, top:520. Each item carries an
     // optional intent; Templates is intentionally null (per-game concern).
+    // Labels resolve through tr() (Phase 10 Localization L4) — the first
+    // call-site migration proving the string-table path end-to-end. tr() falls
+    // back to English then to the key itself, so a menu built without a
+    // registered LocalizationService (unit tests, editor preview) still renders
+    // a sensible string.
     struct MenuItem
     {
-        const char*      label;
+        const char*      key;
         UIButtonStyle    style;
         GameScreenIntent intent;
         bool             hasIntent;
     };
     const MenuItem items[] = {
-        {"New Walkthrough", UIButtonStyle::DEFAULT, GameScreenIntent::NewWalkthrough, true},
-        {"Continue",        UIButtonStyle::DEFAULT, GameScreenIntent::Continue,       true},
-        {"Templates",       UIButtonStyle::DEFAULT, GameScreenIntent::OpenMainMenu,   false},
-        {"Settings",        UIButtonStyle::DEFAULT, GameScreenIntent::OpenSettings,   true},
-        {"Quit",            UIButtonStyle::DANGER,  GameScreenIntent::QuitToDesktop,  true},
+        {"ui.menu.new_walkthrough", UIButtonStyle::DEFAULT, GameScreenIntent::NewWalkthrough, true},
+        {"ui.menu.continue",        UIButtonStyle::DEFAULT, GameScreenIntent::Continue,       true},
+        {"ui.menu.templates",       UIButtonStyle::DEFAULT, GameScreenIntent::OpenMainMenu,   false},
+        {"ui.menu.settings",        UIButtonStyle::DEFAULT, GameScreenIntent::OpenSettings,   true},
+        {"ui.menu.quit",            UIButtonStyle::DANGER,  GameScreenIntent::QuitToDesktop,  true},
     };
     constexpr float btnHeight = 68.0f;
     constexpr float btnGap    = 0.0f;          // Adjacent borders share an edge.
@@ -123,7 +129,8 @@ void buildMainMenuImpl(UICanvas& canvas, const UITheme& theme,
     float y = 520.0f;
     for (const auto& it : items)
     {
-        auto b = makeButton(it.label, {btnLeftX, y}, {btnWidth, btnHeight},
+        auto b = makeButton(std::string(Vestige::tr(it.key)), {btnLeftX, y},
+                             {btnWidth, btnHeight},
                              it.style, theme, textRenderer);
         if (it.hasIntent)
         {

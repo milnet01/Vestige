@@ -11,6 +11,8 @@
 
 #include <gtest/gtest.h>
 
+#include "core/engine.h"
+#include "localization/localization_service.h"
 #include "systems/ui_system.h"
 #include "ui/game_screen.h"
 #include "ui/menu_prefabs.h"
@@ -41,9 +43,22 @@ protected:
     UISystem sys;
 };
 
+// Phase 10 Localization L4 — menu_prefabs labels resolve through the free
+// tr(), which needs a LocalizationService registered on an Engine's
+// SystemRegistry to map keys to text. Register + initialize an English service
+// in SetUp so the intent-wiring lookups below find buttons by their English
+// label ("New Walkthrough", "Settings") rather than the raw "ui.menu.*" key.
 class MenuPrefabsTest : public ::testing::Test
 {
 protected:
+    void SetUp() override
+    {
+        auto* loc = m_engine.getSystemRegistry().registerSystem<LocalizationService>();
+        loc->setLocalizationDir(VESTIGE_LOCALIZATION_DIR);
+        ASSERT_TRUE(loc->initialize(m_engine)); // loads en.json, captures tr()'s engine
+    }
+
+    Engine   m_engine; // hosts the LocalizationService the free tr() resolves through
     UISystem sys;
     UICanvas canvas;
     UITheme  theme = UITheme::defaultTheme();

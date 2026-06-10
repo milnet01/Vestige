@@ -170,6 +170,8 @@ add_executable(vestige_tests
     test_json_size_cap.cpp
     test_utf8.cpp
     test_rtl.cpp
+    test_string_table.cpp
+    test_localization_service.cpp
     test_result.cpp
     test_terrain_size_caps.cpp
     test_entity_serializer_depth_cap.cpp
@@ -249,6 +251,9 @@ target_compile_definitions(vestige_tests
         # Phase 10 Localization L1 — bundled fonts dir for the Font ASCII
         # back-compat test (loads arimo.ttf under a real GL context).
         VESTIGE_FONT_DIR="${CMAKE_SOURCE_DIR}/assets/fonts"
+        # Phase 10 Localization L4 — source-tree seed string-table dir so the
+        # LocalizationService tests load {en,he,el,la}.json independent of cwd.
+        VESTIGE_LOCALIZATION_DIR="${CMAKE_SOURCE_DIR}/assets/localization"
 )
 
 target_link_libraries(vestige_tests

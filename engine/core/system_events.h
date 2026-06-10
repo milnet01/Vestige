@@ -36,6 +36,17 @@ struct SceneUnloadedEvent : public Event
     explicit SceneUnloadedEvent(Scene* s) : scene(s) {}
 };
 
+/// @brief Fired when the active UI language changes (Phase 10 Localization L4).
+/// String consumers (UILabel, world labels, plaques, subtitles, toasts) that
+/// cached a tr() result subscribe to this and re-fetch their strings on
+/// receipt. Published synchronously inside LocalizationService::setLanguage().
+struct LanguageChangedEvent : public Event
+{
+    std::string languageCode; ///< BCP 47 short tag now active ("en"/"he"/...).
+
+    explicit LanguageChangedEvent(const std::string& code) : languageCode(code) {}
+};
+
 /// @brief Fired when weather parameters change (e.g. wind direction, precipitation).
 /// Systems that cache weather-dependent data should invalidate on this event.
 struct WeatherChangedEvent : public Event

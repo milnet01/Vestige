@@ -22,6 +22,53 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-06-10 Localization L4 — string table + localization service
+
+Fourth slice of the Phase 10 Localization bundle (follows L3's RTL reorder).
+User-facing strings can now be authored as keys resolved at runtime through a
+per-language table, instead of being hardcoded at the call site — the
+foundation for the language picker (L5) and the CI string-coverage lint (L6).
+
+- **`StringTable`** (`engine/localization/string_table.{h,cpp}`) — a flat
+  key→value table loaded from one JSON file per language via the existing
+  `JsonSizeCap` helper. `get(key)` returns the value on a hit and the key
+  itself on a miss (a missing translation renders the key, never a blank);
+  `contains()` / `size()` round out the surface. A failed load (missing /
+  oversized / malformed) leaves the previously-loaded table intact. In Debug
+  builds (`VESTIGE_LOCALIZATION_WARN_MISSING`) a miss is logged once per key
+  per session for QA; Release keeps the lookup branch-free.
+- **`LocalizationService`** (`engine/localization/localization_service.{h,cpp}`)
+  — an `ISystem` holding the active + reference (English) tables.
+  `setLanguage(code)` loads `<dir>/<code>.json`, swaps the active table, and
+  publishes a `LanguageChangedEvent` on the engine event bus so panels can
+  re-fetch their strings; a failed load keeps the current language and
+  publishes nothing. `tr(key)` resolves in the locked order active → English →
+  key. A free `Vestige::tr(key)` forwards to the registered service via the
+  SystemRegistry (returns the key when none is registered, so unit tests /
+  editor preview stay safe). Registered first among the domain systems.
+- **`LanguageChangedEvent`** — one new event type on the existing bus (no new
+  bus introduced).
+- **Seed string tables** (`assets/localization/{en,he,el,la}.json`) — English
+  is the authoritative reference; Hebrew/Greek/Latin carry initial menu
+  strings (Hebrew is partial on purpose, exercising the English fallback).
+  Secondary-language translations are seed-quality.
+- **Proof of integration** — the main-menu buttons (`engine/ui/menu_prefabs.cpp`)
+  now resolve their labels through `tr()` (`ui.menu.*` keys), the first
+  call-site migration. Editor (ImGui) chrome stays English-only per design § 6.
+- Tests (`tests/test_string_table.cpp`, `tests/test_localization_service.cpp`):
+  lookup hit / miss-returns-key / failed-load-keeps-prior; English fallback,
+  event-published-once, failed-switch-keeps-language-and-is-silent (§ 8 tests
+  13–17). The `MenuPrefabsTest` fixture now registers an English service so the
+  intent-wiring lookups resolve real labels. Full suite green.
+- **CI fix (L2 regression).** `FontGLTest.MruCacheSkipsStackWalk` — added in L2
+  as the first GL test to actually draw text — leaked 112 bytes of llvmpipe
+  JIT shader-state under CI's headless software rasterizer (LeakSanitizer,
+  Debug job only). Wrapped the draw in `ScopedLeakCheckDisable`, the project's
+  documented mechanism for third-party process-lifetime allocations (see
+  `engine/CMakeLists.txt` § "Debug sanitizers"). The leak cannot reproduce on a
+  local hardware GL driver, which is why L2/L3 CI went red while local runs
+  were green.
+
 ### 2026-06-10 Localization L3 — right-to-left (Hebrew) text reordering
 
 Third slice of the Phase 10 Localization bundle. Hebrew text now displays

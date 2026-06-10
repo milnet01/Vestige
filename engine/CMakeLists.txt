@@ -102,6 +102,8 @@ set(ENGINE_SOURCES
     utils/json_size_cap.cpp
     utils/utf8.cpp
     utils/rtl.cpp
+    localization/string_table.cpp
+    localization/localization_service.cpp
     utils/config_path.cpp
     utils/atomic_write.cpp
     utils/path_sandbox.cpp
@@ -501,4 +503,11 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     # No LSan suppression file: intentional third-party leaks (GLFW/Mesa driver
     # init/teardown, llvmpipe JIT shader state) are excluded at their exact call
     # sites via ScopedLeakCheckDisable (tests/lsan_guard.h).
+
+    # Phase 10 Localization L4 — warn (once per session per key) on a missing
+    # string-table lookup so translators/QA see coverage gaps. Debug-only;
+    # Release omits it to keep StringTable::get branch-free (design § 5.5).
+    # PUBLIC so the test binary compiles StringTable with the same member layout
+    # (the macro gates a member — must match across TUs to avoid an ODR clash).
+    target_compile_definitions(vestige_engine PUBLIC VESTIGE_LOCALIZATION_WARN_MISSING)
 endif()

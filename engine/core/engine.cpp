@@ -24,6 +24,7 @@
 #include "systems/navigation_system.h"
 #include "systems/sprite_system.h"
 #include "systems/physics2d_system.h"
+#include "localization/localization_service.h"
 #include "renderer/particle_renderer.h"
 #include "renderer/water_renderer.h"
 #include "renderer/water_fbo.h"
@@ -152,6 +153,10 @@ bool Engine::initialize(const EngineConfig& config)
     m_profiler.init();
 
     // Register domain systems (order = update order)
+    // Localization first — a foundational, no-per-frame-work service that UI /
+    // menu / plaque systems resolve strings through via the free tr() (Phase 10
+    // Localization L4). Its initialize() captures the engine pointer tr() uses.
+    m_systemRegistry.registerSystem<LocalizationService>();
     auto* atmoSys    = m_systemRegistry.registerSystem<AtmosphereSystem>();
     auto* particleSys = m_systemRegistry.registerSystem<ParticleVfxSystem>();
     auto* waterSys   = m_systemRegistry.registerSystem<WaterSystem>();
