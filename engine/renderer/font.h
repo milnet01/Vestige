@@ -82,14 +82,6 @@ public:
     /// @brief Gets glyph information for a Unicode codepoint.
     const GlyphInfo& getGlyph(uint32_t codepoint) const;
 
-    /// @brief char-keyed forwarder — slice L1 only, removed in L2 once the
-    ///        ~10 callers migrate to the uint32_t form. The unsigned-char step
-    ///        prevents sign-extension turning 0x80..0xFF into negative values.
-    const GlyphInfo& getGlyph(char c) const
-    {
-        return getGlyph(static_cast<uint32_t>(static_cast<unsigned char>(c)));
-    }
-
     /// @brief True iff this face rasterised a real glyph for @p codepoint
     ///        (not the fallback). Underpins the L2 FontStack fallback chain.
     bool hasGlyph(uint32_t codepoint) const;

@@ -22,6 +22,43 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-06-10 Localization L2 — multi-script font stack + bundled Hebrew serif
+
+Second slice of the Phase 10 Localization bundle (follows L1's UTF-8 decoder +
+codepoint Font API). The text renderer can now draw Latin, Greek, and Hebrew
+from a single call site, with each script served by its own font atlas.
+
+- **`FontStack`** (`engine/renderer/font_stack.{h,cpp}`) — an ordered font
+  fallback chain. `lookup(codepoint)` returns the first font that has a real
+  glyph; on a miss it returns the first font's `?` fallback (never null), so a
+  pasted CJK/unsupported codepoint degrades to a visible box rather than a
+  crash. Per-script atlases live in separate `Font` instances.
+- **Bundled `assets/fonts/frank_ruhl_libre.ttf`** (SIL OFL 1.1) — a dedicated
+  biblical-Hebrew serif by Yanek Iontef, the open-source revival of the classic
+  Frank Rühl typeface. Chosen over the GPLv2 Culmus "Frank-Ruehl CLM" (which has
+  no font-embedding exception — unsafe to bundle commercially). `ASSET_LICENSES.md`,
+  `THIRD_PARTY_NOTICES.md`, and `assets/fonts/OFL.txt` updated to enumerate five
+  bundled OFL fonts.
+- **TextRenderer default stack** — `initialize()` now builds a 2-font stack: the
+  passed UI face loaded with Latin + Greek ranges, plus Frank Ruhl Libre with the
+  Hebrew range (auto-located in the same fonts dir; a missing Hebrew face is
+  non-fatal — Hebrew degrades to the fallback glyph rather than blocking boot).
+- **Per-font draw split** — all four glyph paths (2D, batched HUD, 3D world,
+  height-map) group glyphs by source font and issue one bind+draw per font. A
+  pure-script string (the HUD case) stays a single bind+draw, identical cost to
+  pre-L2. A one-element MRU cache in the renderer skips the stack walk for
+  consecutive same-font glyphs, so pure-script runs cost the same per glyph as
+  the single-font baseline. The batched HUD buffers are reused across frames
+  (capacity retained) — the steady-state HUD pass remains allocation-free.
+- The temporary `Font::getGlyph(char)` shim from L1 is removed; callers use the
+  `uint32_t` form.
+- Tests: Hebrew/Greek coverage (≥27 Hebrew letters, ≥120 Greek glyphs), 2-font
+  routing to distinct atlases, miss→fallback, MRU-skips-stack-walk, and a
+  pre-init `measureTextWidth` null-safety regression test. Full suite green
+  (3369 tests). Measured combined runtime atlas ≈ 0.8 MB (Latin+Greek 455 +
+  Hebrew 53 glyphs) — well under the design's 4 MB ceiling, so the existing
+  multi-row shelf packer was kept (no skyline-packer rewrite needed).
+
 ### 2026-06-10 Test harness — fix LeakSanitizer suite failure at root (drop suppression file)
 
 The ASAN test build failed the whole suite under LeakSanitizer. Two distinct

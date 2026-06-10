@@ -1,7 +1,7 @@
 Vestige 3D Engine — bundled fonts (SIL Open Font License 1.1)
 ==============================================================
 
-This file accompanies the four font files shipped under
+This file accompanies the five font files shipped under
 `assets/fonts/`. Each font is a separate work, redistributed under
 the SIL Open Font License Version 1.1 (OFL). The OFL body text appears
 once at the bottom; per-font copyright headers (and any Reserved Font
@@ -13,6 +13,7 @@ Reserved Font Names protected by clause 3 of the OFL:
   - "Inter Tight"         — The Inter Project Authors
   - "Cormorant Garamond"  — The Cormorant Project Authors / Catharsis Fonts
   - "JetBrains Mono"      — The JetBrains Mono Project Authors
+  - "Frank Ruhl Libre"    — The Frank Ruhl Libre Project Authors / Yanek Iontef
 
 Engine-modified or derivative versions MUST NOT use the names above.
 Distributing the engine's `assets/fonts/*.ttf` files unmodified preserves
@@ -64,6 +65,21 @@ Mono face. Used for captions, micro labels, key-caps, slider value
 readouts, and tabular numerics. Variable axis: weight.
 
 Source: https://fonts.google.com/specimen/JetBrains+Mono
+
+------------------------------------------------------------------
+frank_ruhl_libre.ttf — Frank Ruhl Libre (variable weight)
+------------------------------------------------------------------
+Copyright 2016 The Frank Ruhl Libre Project Authors
+(https://github.com/google/fonts/tree/main/ofl/frankruhllibre)
+with Reserved Font Name "Frank Ruhl Libre".
+
+Dedicated biblical-Hebrew serif. Used for the Hebrew range
+(U+0590–U+05FF) in the multi-script text stack (Phase 10 Localization
+L2), paired with Arimo for Latin + Greek. The OFL-1.1 open-source
+revival (by Yanek Iontef / Fontef) of the classic Frank Rühl Hebrew
+typeface. Variable axis: weight.
+
+Source: https://fonts.google.com/specimen/Frank+Ruhl+Libre
 
 ==================================================================
 SIL OPEN FONT LICENSE Version 1.1 - 26 February 2007

@@ -50,6 +50,7 @@ scanners.
 | `inter_tight.ttf`        | Inter Tight (variable) by Rasmus Andersson + The Inter Project Authors | **OFL 1.1** | "Copyright 2022 The Inter Project Authors (https://github.com/rsms/inter-tight)" — Reserved Font Name "Inter Tight" |
 | `cormorant_garamond.ttf` | Cormorant Garamond (variable) by Catharsis Fonts / The Cormorant Project Authors | **OFL 1.1** | "Copyright 2015 the Cormorant Project Authors (github.com/CatharsisFonts/Cormorant)" — Reserved Font Name "Cormorant Garamond" |
 | `jetbrains_mono.ttf`     | JetBrains Mono (variable) by The JetBrains Mono Project Authors | **OFL 1.1** | "Copyright 2020 The JetBrains Mono Project Authors (https://github.com/JetBrains/JetBrainsMono)" — Reserved Font Name "JetBrains Mono" |
+| `frank_ruhl_libre.ttf`   | Frank Ruhl Libre (variable) by Yanek Iontef (Fontef) | **OFL 1.1** | "Copyright 2016 The Frank Ruhl Libre Project Authors (https://github.com/google/fonts/tree/main/ofl/frankruhllibre)" — Reserved Font Name "Frank Ruhl Libre" |
 | `OFL.txt`                | Accompanying license text                | OFL preamble + per-font copyright headers + license body | n/a |
 
 The OFL permits free use, modification, bundling, and redistribution,
@@ -68,6 +69,16 @@ FreeType), and **JetBrains Mono** for captions / micro labels /
 key-caps / numeric readouts (mono). Arimo is retained for
 backwards-compatibility with code paths that still reference the
 historical default.
+
+**Why Frank Ruhl Libre?** Added in Phase 10 Localization (slice L2) as a
+dedicated biblical-Hebrew serif for the multi-script `FontStack`. The
+default text stack pairs Arimo (Latin + Greek) with Frank Ruhl Libre
+(Hebrew range U+0590–U+05FF) so Hebrew plaque/UI text renders in a
+proper serif rather than Arimo's workmanlike sans-serif Hebrew. It is
+the OFL-1.1 open-source revival of the classic Frank Rühl typeface —
+chosen over the GPLv2 Culmus "Frank-Ruehl CLM" (no font-embedding
+exception, unsafe for a commercially-bound engine). See
+`docs/phases/phase_10_localization_design.md` § 7.
 
 ---
 

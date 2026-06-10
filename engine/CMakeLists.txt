@@ -56,6 +56,7 @@ set(ENGINE_SOURCES
     renderer/point_shadow_map.cpp
     renderer/taa.cpp
     renderer/font.cpp
+    renderer/font_stack.cpp
     renderer/text_renderer.cpp
     renderer/color_grading_lut.cpp
     renderer/color_grading_presets.cpp

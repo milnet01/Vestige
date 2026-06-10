@@ -122,7 +122,7 @@ Source: <https://github.com/KhronosGroup/glTF-Sample-Assets>
 
 ### Fonts — `assets/fonts/`
 
-All four bundled font files are licensed under the
+All five bundled font files are licensed under the
 **SIL Open Font License 1.1**. Consolidated license text + per-font
 copyright headers in `assets/fonts/OFL.txt`.
 
@@ -140,6 +140,10 @@ copyright headers in `assets/fonts/OFL.txt`.
 - **`jetbrains_mono.ttf`** — JetBrains Mono (variable weight).
   © 2020 The JetBrains Mono Project Authors. Reserved Font Name
   "JetBrains Mono". Mono face for captions / numerics / key-caps.
+- **`frank_ruhl_libre.ttf`** — Frank Ruhl Libre (variable weight) by
+  Yanek Iontef (Fontef). © 2016 The Frank Ruhl Libre Project Authors.
+  Reserved Font Name "Frank Ruhl Libre". Dedicated biblical-Hebrew serif
+  for the multi-script text stack (Phase 10 Localization L2).
 
 ### Textures — `assets/textures/` (in-engine subset)
 

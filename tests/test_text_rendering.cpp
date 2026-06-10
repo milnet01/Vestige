@@ -5,10 +5,13 @@
 /// @brief Tests for text rendering subsystem (Font, GlyphInfo, TextRenderer).
 #include <gtest/gtest.h>
 #include "renderer/font.h"
+#include "renderer/font_stack.h"
 #include "renderer/text_renderer.h"
 #include "utils/utf8.h"
 
 #include "gl_test_fixture.h"
+
+#include <memory>
 
 #include <chrono>
 #include <string>
@@ -54,7 +57,7 @@ TEST(TextRendering, FontFallbackGlyphReturned)
 {
     Font font;
     // Before loading, fallback glyph should be returned for any character
-    const GlyphInfo& glyph = font.getGlyph('A');
+    const GlyphInfo& glyph = font.getGlyph(static_cast<uint32_t>('A'));
     // Should be the default-constructed fallback
     EXPECT_EQ(glyph.advance, 0);
 }
@@ -139,6 +142,9 @@ TEST(TextRendering, MeasureEmptyStringIsZero)
     // Not initialized, but measureTextWidth should handle gracefully
     float width = renderer.measureTextWidth("");
     EXPECT_FLOAT_EQ(width, 0.0f);
+    // L2 — a NON-empty string before init must also be safe (empty font stack
+    // would otherwise deref a null Hit::glyph). Pins the m_initialized guard.
+    EXPECT_FLOAT_EQ(renderer.measureTextWidth("Hello"), 0.0f);
 }
 
 TEST(TextRendering, RenderText2DNoOpWhenNotInitialized)
@@ -234,6 +240,29 @@ std::string arimoPath()
 {
     return std::string(VESTIGE_FONT_DIR) + "/arimo.ttf";
 }
+
+std::string frankRuhlPath()
+{
+    return std::string(VESTIGE_FONT_DIR) + "/frank_ruhl_libre.ttf";
+}
+
+// Asset root = parent of the fonts dir; TextRenderer::initialize appends
+// "/shaders/text.{vert,frag}.glsl" to this.
+std::string assetRoot()
+{
+    return std::string(VESTIGE_FONT_DIR) + "/..";
+}
+
+// Count non-fallback glyphs a font carries within an inclusive codepoint range.
+int countGlyphsInRange(const Font& font, uint32_t first, uint32_t last)
+{
+    int n = 0;
+    for (uint32_t cp = first; cp <= last; ++cp)
+    {
+        if (font.hasGlyph(cp)) ++n;
+    }
+    return n;
+}
 }  // namespace
 
 class FontGLTest : public ::Vestige::Test::GLTestFixture
@@ -254,11 +283,12 @@ TEST_F(FontGLTest, AsciiBackwardCompat)
 
     // Default range == ASCII_RANGE: same glyph count and same 'A' geometry.
     EXPECT_EQ(defaultLoad.getGlyphCount(), explicitAscii.getGlyphCount());
-    EXPECT_EQ(defaultLoad.getGlyph('A'), explicitAscii.getGlyph('A'));
+    EXPECT_EQ(defaultLoad.getGlyph(static_cast<uint32_t>('A')),
+              explicitAscii.getGlyph(static_cast<uint32_t>('A')));
 
     // 'A' is a real (non-fallback) glyph with sane metrics.
     EXPECT_TRUE(defaultLoad.hasGlyph(static_cast<uint32_t>('A')));
-    const GlyphInfo& a = defaultLoad.getGlyph('A');
+    const GlyphInfo& a = defaultLoad.getGlyph(static_cast<uint32_t>('A'));
     EXPECT_GT(a.advance, 0);
     EXPECT_GT(a.size.x, 0);
 }
@@ -283,4 +313,88 @@ TEST_F(FontGLTest, LoadsGreekRange)
     EXPECT_TRUE(font.hasGlyph(0x03C9));   // Greek small omega
     EXPECT_FALSE(font.hasGlyph(static_cast<uint32_t>('A')));  // ASCII not requested
     EXPECT_GE(font.getGlyphCount(), 100u);
+}
+
+// =============================================================================
+// Phase 10 Localization L2 — FontStack + bundled Frank Ruhl Libre Hebrew face
+// =============================================================================
+
+// Test 6 — the bundled Hebrew face carries the full Hebrew alphabet, and Arimo
+// carries the Greek block. Pins the per-script glyph coverage of the default
+// stack's two fonts.
+TEST_F(FontGLTest, LoadsHebrewRangeFromFrankRuhlLibre)
+{
+    Font hebrew;
+    ASSERT_TRUE(hebrew.loadFromFile(frankRuhlPath(), 48, HEBREW_RANGE));
+    // 22 base letters + 5 final forms = 27 floor (forces the finals present).
+    EXPECT_GE(countGlyphsInRange(hebrew, 0x0590, 0x05FF), 27);
+    EXPECT_TRUE(hebrew.hasGlyph(0x05D0));  // aleph
+    EXPECT_TRUE(hebrew.hasGlyph(0x05EA));  // tav
+
+    Font greek;
+    ASSERT_TRUE(greek.loadFromFile(arimoPath(), 48, GREEK_RANGES));
+    EXPECT_GE(countGlyphsInRange(greek, 0x0370, 0x1FFF), 120);
+}
+
+// Test 7 — the default 2-font stack routes each script to its own font, each
+// returning a real (non-fallback) glyph from a distinct Font*.
+TEST_F(FontGLTest, FontStackRoutesLatinAndHebrewToDistinctFonts)
+{
+    auto latinGreek = std::make_shared<Font>();
+    ASSERT_TRUE(latinGreek->loadFromFile(arimoPath(), 48, ASCII_RANGE));
+    auto hebrew = std::make_shared<Font>();
+    ASSERT_TRUE(hebrew->loadFromFile(frankRuhlPath(), 48, HEBREW_RANGE));
+
+    FontStack stack;
+    stack.addFont(latinGreek);
+    stack.addFont(hebrew);
+
+    FontStack::Hit latinHit = stack.lookup(static_cast<uint32_t>('A'));
+    FontStack::Hit hebrewHit = stack.lookup(0x05D0);  // aleph
+
+    EXPECT_EQ(latinHit.font, latinGreek.get());
+    EXPECT_EQ(hebrewHit.font, hebrew.get());
+    EXPECT_NE(latinHit.font, hebrewHit.font);
+    // Both are real glyphs (non-zero advance, not the fallback box).
+    EXPECT_GT(latinHit.glyph->advance, 0);
+    EXPECT_GT(hebrewHit.glyph->advance, 0);
+}
+
+// Test 8 — an unmapped codepoint returns the first font's fallback '?' glyph,
+// with a non-null font, never a crash (pins § 6 deferral 3 + the miss contract).
+TEST_F(FontGLTest, FontStackMissingCodepointReturnsFallback)
+{
+    auto latinGreek = std::make_shared<Font>();
+    ASSERT_TRUE(latinGreek->loadFromFile(arimoPath(), 48, ASCII_RANGE));
+    auto hebrew = std::make_shared<Font>();
+    ASSERT_TRUE(hebrew->loadFromFile(frankRuhlPath(), 48, HEBREW_RANGE));
+
+    FontStack stack;
+    stack.addFont(latinGreek);
+    stack.addFont(hebrew);
+
+    FontStack::Hit miss = stack.lookup(0x4E2D);  // Chinese — covered by neither
+
+    ASSERT_NE(miss.font, nullptr);
+    EXPECT_EQ(miss.font, latinGreek.get());  // first font in the stack
+    ASSERT_NE(miss.glyph, nullptr);
+    // The fallback is a copy of the '?' glyph (font.cpp populates m_fallbackGlyph
+    // from '?'), so getGlyph on a miss equals getGlyph('?').
+    EXPECT_EQ(*miss.glyph, latinGreek->getGlyph(static_cast<uint32_t>('?')));
+}
+
+// Test 9 — the TextRenderer's one-element MRU cache short-circuits the stack
+// walk on a pure-script string: FontStack::lookup is hit exactly once (the
+// first glyph), zero additional times for the remaining same-font glyphs.
+TEST_F(FontGLTest, MruCacheSkipsStackWalk)
+{
+    TextRenderer tr;
+    ASSERT_TRUE(tr.initialize(arimoPath(), assetRoot(), 48));
+
+    const std::string latin(1000, 'A');  // 1000-glyph pure-Latin string
+    tr.getFontStack().resetLookupCalls();
+    tr.renderText2D(latin, 10.0f, 10.0f, 1.0f, glm::vec3(1.0f), 1920, 1080);
+
+    // First glyph warms the MRU (1 lookup); the next 999 reuse the cached font.
+    EXPECT_EQ(tr.getFontStack().lookupCalls(), 1u);
 }

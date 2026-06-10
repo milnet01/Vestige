@@ -6,6 +6,7 @@
 #pragma once
 
 #include "renderer/font.h"
+#include "renderer/font_stack.h"
 #include "renderer/shader.h"
 #include "renderer/texture.h"
 
@@ -120,8 +121,14 @@ public:
                                                      int textureWidth, int textureHeight,
                                                      bool embossed = true);
 
-    /// @brief Gets the underlying font.
+    /// @brief Gets the primary (first) font of the default stack — the
+    ///        Latin/Greek face. Valid only when initialized.
     Font& getFont();
+
+    /// @brief Read-only access to the multi-script font stack (Phase 10
+    ///        Localization L2). Exposed for the MRU-cache test (§ 8 test 9),
+    ///        which counts FontStack::lookup invocations.
+    const FontStack& getFontStack() const { return m_fontStack; }
 
     /// @brief Checks if the text renderer is initialized.
     bool isInitialized() const;
@@ -151,12 +158,51 @@ public:
 private:
     void setupQuadBuffers();
 
+    /// @brief A run of glyph quads that all sample one font's atlas. The
+    ///        per-font draw split (Phase 10 Localization L2): a single
+    ///        string/batch can mix fonts (e.g. Latin + Hebrew), and each
+    ///        font owns its own atlas, so glyphs are grouped by source font
+    ///        and drawn one bind+draw per run. Pure-script strings produce a
+    ///        single run — same cost as the pre-L2 single-atlas path.
+    struct GlyphRun
+    {
+        Font* font = nullptr;
+        std::vector<float> verts;
+    };
+
     /// @brief Shared impl behind `renderText2D` and
     ///        `renderText2DOblique`. `shearFactor == 0.0f` produces
     ///        upright text; non-zero applies the italic shear.
     void renderText2DImpl(const std::string& text, float x, float y, float scale,
                           const glm::vec3& color, int screenWidth, int screenHeight,
                           float shearFactor);
+
+    /// @brief Resolve a codepoint to its (font, glyph) via the stack, with a
+    ///        one-element MRU short-circuit: when the previous glyph's font
+    ///        also covers this codepoint (the pure-script common case), the
+    ///        stack walk is skipped entirely. Resets per top-level render call
+    ///        so the lookup count is deterministic (§ 8 test 9). Const because
+    ///        it only mutates the mutable MRU cache.
+    FontStack::Hit resolveGlyph(uint32_t codepoint) const;
+
+    /// @brief Issue one bind+upload+draw per run. Assumes the caller has set
+    ///        the shader, uniforms, blend state and bound the VAO; only the
+    ///        atlas binding + VBO upload + draw vary per run.
+    void drawRuns(const std::vector<GlyphRun>& runs);
+
+    /// @brief Find-or-append the vertex buffer for @p font within @p runs
+    ///        (grouping glyphs by source atlas for the per-font draw split).
+    ///        A run whose `font` is null is a retired slot and is reclaimed
+    ///        (verts cleared, capacity kept) before a fresh push_back — this
+    ///        is how the batch buffers survive across frames without
+    ///        per-frame heap churn.
+    static std::vector<float>& runVertsFor(std::vector<GlyphRun>& runs, Font* font);
+
+    /// @brief Retire the batch runs for reuse next frame WITHOUT freeing their
+    ///        vertex buffers: each run's verts is `clear()`ed (capacity kept)
+    ///        and its font nulled. Keeps the steady-state HUD batch at zero
+    ///        per-frame allocations (the pre-L2 m_batchVerts.clear() property).
+    void resetBatchRuns();
 
     /// @brief Upper bound on glyphs per non-batched renderText2D / renderText3D call.
     /// HUD lines in practice are much shorter; truncation keeps a single-string
@@ -174,19 +220,25 @@ private:
     static constexpr std::size_t VBO_BYTES     =
         sizeof(float) * VERTS_PER_GLYPH * FLOATS_PER_VERT * MAX_GLYPHS_PER_BATCH;
 
-    Font m_font;
+    FontStack m_fontStack;          // default 2-font stack (Latin/Greek + Hebrew)
     Shader m_textShader;
     GLuint m_vao = 0;
     GLuint m_vbo = 0;
     bool m_initialized = false;
 
+    // Phase 10 Localization L2 — one-element MRU cache wrapping
+    // FontStack::lookup. mutable so the const resolveGlyph() can update it.
+    mutable Font*       m_mruFont           = nullptr;
+
     // Phase 10.9 Pe1 — batch state. While `m_batchActive`, every queued
-    // call's vertex data accumulates in `m_batchVerts` instead of going
-    // straight to the GPU; `endBatch2D` flushes the whole queue at once.
+    // call's vertex data accumulates in `m_batchRuns` (grouped by font, L2)
+    // instead of going straight to the GPU; `endBatch2D` flushes the whole
+    // queue at once. `m_batchGlyphCount` is the running total across runs,
+    // used only to enforce the per-batch glyph cap.
     bool                m_batchActive       = false;
     int                 m_batchScreenWidth  = 0;
     int                 m_batchScreenHeight = 0;
-    std::vector<float>  m_batchVerts;
+    std::vector<GlyphRun> m_batchRuns;
     int                 m_batchGlyphCount   = 0;
 };
 

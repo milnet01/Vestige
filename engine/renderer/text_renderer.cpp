@@ -32,11 +32,42 @@ TextRenderer::~TextRenderer()
 bool TextRenderer::initialize(const std::string& fontPath, const std::string& shaderPath,
                                 int pixelSize)
 {
-    // Load font
-    if (!m_font.loadFromFile(fontPath, pixelSize))
+    // Phase 10 Localization L2 — build the default multi-script font stack.
+    // Primary: the passed UI face, loaded with Latin + Greek ranges. Fallback:
+    // the bundled Frank Ruhl Libre Hebrew serif, loaded with the Hebrew range.
+    // Pure-script strings hit a single font (and atlas), so the common HUD
+    // path keeps its single bind+draw (see drawRuns / the MRU cache).
+    const std::vector<CodepointRange> latinGreek = {
+        {0x0020, 0x007E},  // printable ASCII (Latin)
+        {0x0370, 0x03FF},  // basic Greek
+        {0x1F00, 0x1FFF},  // Greek Extended (polytonic) — loaded if the face has it
+    };
+
+    auto primary = std::make_shared<Font>();
+    if (!primary->loadFromFile(fontPath, pixelSize, latinGreek))
     {
         Logger::error("TextRenderer: failed to load font: " + fontPath);
         return false;
+    }
+    m_fontStack.addFont(std::move(primary));
+
+    // Frank Ruhl Libre lives alongside the primary in the fonts dir. A missing
+    // Hebrew face is non-fatal: the stack still renders Latin/Greek, and Hebrew
+    // codepoints degrade to the primary's '?' fallback rather than failing boot.
+    const auto slash = fontPath.find_last_of("/\\");
+    const std::string fontsDir =
+        (slash == std::string::npos) ? std::string() : fontPath.substr(0, slash + 1);
+    const std::string hebrewPath = fontsDir + "frank_ruhl_libre.ttf";
+
+    auto hebrew = std::make_shared<Font>();
+    if (hebrew->loadFromFile(hebrewPath, pixelSize, HEBREW_RANGE))
+    {
+        m_fontStack.addFont(std::move(hebrew));
+    }
+    else
+    {
+        Logger::warning("TextRenderer: Hebrew face not loaded (" + hebrewPath
+            + "); Hebrew text will render as the fallback glyph.");
     }
 
     // Load text shader
@@ -135,6 +166,86 @@ void appendGlyphVerts(std::vector<float>& verts,
 }
 } // namespace
 
+// Find-or-append the vertex buffer for `font` within `runs`. The default
+// stack is 2 fonts and runs are mostly single-font, so the linear scan is
+// over ≤2 entries — and the MRU back()-match catches the dominant case.
+std::vector<float>& TextRenderer::runVertsFor(std::vector<GlyphRun>& runs, Font* font)
+{
+    if (!runs.empty() && runs.back().font == font)
+    {
+        return runs.back().verts;
+    }
+    for (auto& run : runs)
+    {
+        if (run.font == font)
+        {
+            return run.verts;
+        }
+    }
+    // No active run for this font. Reclaim a retired slot (font == nullptr,
+    // verts already cleared but capacity retained by resetBatchRuns) before
+    // allocating a fresh GlyphRun — this is what keeps the batched path free
+    // of per-frame heap churn.
+    for (auto& run : runs)
+    {
+        if (run.font == nullptr)
+        {
+            run.font = font;
+            return run.verts;
+        }
+    }
+    runs.push_back(GlyphRun{font, {}});
+    return runs.back().verts;
+}
+
+void TextRenderer::resetBatchRuns()
+{
+    for (auto& run : m_batchRuns)
+    {
+        run.font = nullptr;
+        run.verts.clear();  // keeps capacity — no realloc next frame
+    }
+    m_batchGlyphCount = 0;
+}
+
+FontStack::Hit TextRenderer::resolveGlyph(uint32_t codepoint) const
+{
+    if (m_mruFont && m_mruFont->hasGlyph(codepoint))
+    {
+        return FontStack::Hit{m_mruFont, &m_mruFont->getGlyph(codepoint)};
+    }
+    FontStack::Hit hit = m_fontStack.lookup(codepoint);
+    if (hit.font)
+    {
+        m_mruFont = hit.font;
+    }
+    return hit;
+}
+
+void TextRenderer::drawRuns(const std::vector<GlyphRun>& runs)
+{
+    // Each run uploads to VBO offset 0 then draws, sequentially. A pure-script
+    // string (the HUD case) is a single run → one upload + one draw, identical
+    // to the pre-L2 cost. A mixed-script string (≥2 runs) reuses offset 0, so
+    // the driver inserts an implicit sync between runs — acceptable because
+    // mixed-script strings are rare (plaques) and never on the per-frame HUD
+    // path. Switch to distinct per-run offsets only if that ever shows up hot.
+    m_textShader.setInt("u_glyphAtlas", 0);
+    for (const auto& run : runs)
+    {
+        if (run.font == nullptr || run.verts.empty())
+        {
+            continue;
+        }
+        glBindTextureUnit(0, run.font->getAtlasTextureId());
+        glNamedBufferSubData(m_vbo, 0,
+            static_cast<GLsizeiptr>(run.verts.size() * sizeof(float)),
+            run.verts.data());
+        glDrawArrays(GL_TRIANGLES, 0,
+            static_cast<GLsizei>(run.verts.size() / FLOATS_PER_VERT));
+    }
+}
+
 void TextRenderer::beginBatch2D(int screenWidth, int screenHeight)
 {
     if (!m_initialized) return;
@@ -155,8 +266,7 @@ void TextRenderer::beginBatch2D(int screenWidth, int screenHeight)
     m_batchActive       = true;
     m_batchScreenWidth  = screenWidth;
     m_batchScreenHeight = screenHeight;
-    m_batchVerts.clear();
-    m_batchGlyphCount   = 0;
+    resetBatchRuns();  // retire last frame's runs, keep their buffers
 }
 
 void TextRenderer::endBatch2D()
@@ -167,11 +277,10 @@ void TextRenderer::endBatch2D()
     }
 
     // Empty batch — nothing to draw.
-    if (m_batchGlyphCount <= 0 || m_batchVerts.empty())
+    if (m_batchGlyphCount <= 0)
     {
         m_batchActive = false;
-        m_batchVerts.clear();
-        m_batchGlyphCount = 0;
+        resetBatchRuns();
         return;
     }
 
@@ -181,9 +290,6 @@ void TextRenderer::endBatch2D()
     m_textShader.use();
     m_textShader.setMat4("u_projection", ortho);
     m_textShader.setMat4("u_model", glm::mat4(1.0f));
-    m_textShader.setInt("u_glyphAtlas", 0);
-
-    glBindTextureUnit(0, m_font.getAtlasTextureId());
 
     // Save GL state
     GLboolean prevBlend = glIsEnabled(GL_BLEND);
@@ -197,11 +303,7 @@ void TextRenderer::endBatch2D()
     glDisable(GL_DEPTH_TEST);
 
     glBindVertexArray(m_vao);
-    glNamedBufferSubData(m_vbo, 0,
-        static_cast<GLsizeiptr>(m_batchVerts.size() * sizeof(float)),
-        m_batchVerts.data());
-    glDrawArrays(GL_TRIANGLES, 0,
-        static_cast<GLsizei>(m_batchGlyphCount * VERTS_PER_GLYPH));
+    drawRuns(m_batchRuns);  // L2 — one bind+draw per font (≤2 for the default stack)
 
     // Restore GL state
     if (prevDepth) glEnable(GL_DEPTH_TEST); else glDisable(GL_DEPTH_TEST);
@@ -209,8 +311,7 @@ void TextRenderer::endBatch2D()
     glBlendFunc(static_cast<GLenum>(prevBlendSrc), static_cast<GLenum>(prevBlendDst));
 
     m_batchActive = false;
-    m_batchVerts.clear();
-    m_batchGlyphCount = 0;
+    resetBatchRuns();
 }
 
 void TextRenderer::renderText2DImpl(const std::string& text, float x, float y, float scale,
@@ -230,22 +331,18 @@ void TextRenderer::renderText2DImpl(const std::string& text, float x, float y, f
                       && screenHeight == m_batchScreenHeight;
 
     float cursorX = x;
-    float cursorY = y + m_font.getAscender() * scale;
+    float cursorY = y + m_fontStack.fontAt(0)->getAscender() * scale;
 
-    std::vector<float>* target = batched ? &m_batchVerts : nullptr;
-    std::vector<float> localVerts;
-    if (!target)
-    {
-        const std::size_t glyphCap =
-            std::min<std::size_t>(text.size(), MAX_GLYPHS_PER_CALL);
-        localVerts.reserve(glyphCap * VERTS_PER_GLYPH * FLOATS_PER_VERT);
-        target = &localVerts;
-    }
+    // L2 — glyphs are grouped by source font (per-font draw split). Batched
+    // calls append to the shared m_batchRuns; immediate calls use a local set.
+    std::vector<GlyphRun> localRuns;
+    std::vector<GlyphRun>& runs = batched ? m_batchRuns : localRuns;
 
     const int perCallCap = batched
         ? std::max(0, MAX_GLYPHS_PER_BATCH - m_batchGlyphCount)
         : MAX_GLYPHS_PER_CALL;
 
+    m_mruFont = nullptr;  // reset MRU per string for deterministic lookup count
     int emitted = 0;
     for (size_t i = 0; i < text.size();)
     {
@@ -255,7 +352,8 @@ void TextRenderer::renderText2DImpl(const std::string& text, float x, float y, f
         }
         const auto [cp, n] = utf8::decodeAt(text, i);
         i += static_cast<size_t>(n);
-        const GlyphInfo& glyph = m_font.getGlyph(cp);
+        const FontStack::Hit hit = resolveGlyph(cp);
+        const GlyphInfo& glyph = *hit.glyph;
 
         float xpos = cursorX + static_cast<float>(glyph.bearing.x) * scale;
         float ypos = cursorY - static_cast<float>(glyph.bearing.y) * scale;
@@ -267,8 +365,8 @@ void TextRenderer::renderText2DImpl(const std::string& text, float x, float y, f
         float u1 = u0 + glyph.atlasSize.x;
         float v1 = v0 + glyph.atlasSize.y;
 
-        appendGlyphVerts(*target, xpos, ypos, w, h, u0, v0, u1, v1,
-                         cursorY, shearFactor, color);
+        appendGlyphVerts(runVertsFor(runs, hit.font), xpos, ypos, w, h,
+                         u0, v0, u1, v1, cursorY, shearFactor, color);
         ++emitted;
         cursorX += static_cast<float>(glyph.advance) / 64.0f * scale;
     }
@@ -279,7 +377,7 @@ void TextRenderer::renderText2DImpl(const std::string& text, float x, float y, f
         return;
     }
 
-    // Immediate (non-batched) path — single string, single draw.
+    // Immediate (non-batched) path — single string, one draw per font.
     if (emitted == 0)
     {
         return;
@@ -291,9 +389,6 @@ void TextRenderer::renderText2DImpl(const std::string& text, float x, float y, f
     m_textShader.use();
     m_textShader.setMat4("u_projection", ortho);
     m_textShader.setMat4("u_model", glm::mat4(1.0f));
-    m_textShader.setInt("u_glyphAtlas", 0);
-
-    glBindTextureUnit(0, m_font.getAtlasTextureId());
 
     GLboolean prevBlend = glIsEnabled(GL_BLEND);
     GLboolean prevDepth = glIsEnabled(GL_DEPTH_TEST);
@@ -306,11 +401,7 @@ void TextRenderer::renderText2DImpl(const std::string& text, float x, float y, f
     glDisable(GL_DEPTH_TEST);
 
     glBindVertexArray(m_vao);
-    glNamedBufferSubData(m_vbo, 0,
-        static_cast<GLsizeiptr>(localVerts.size() * sizeof(float)),
-        localVerts.data());
-    glDrawArrays(GL_TRIANGLES, 0,
-        static_cast<GLsizei>(emitted * VERTS_PER_GLYPH));
+    drawRuns(localRuns);
 
     if (prevDepth) glEnable(GL_DEPTH_TEST); else glDisable(GL_DEPTH_TEST);
     if (prevBlend) glEnable(GL_BLEND); else glDisable(GL_BLEND);
@@ -334,9 +425,6 @@ void TextRenderer::renderText3D(const std::string& text, const glm::mat4& modelM
     m_textShader.use();
     m_textShader.setMat4("u_projection", projection * view);
     m_textShader.setMat4("u_model", modelMatrix);
-    m_textShader.setInt("u_glyphAtlas", 0);
-
-    glBindTextureUnit(0, m_font.getAtlasTextureId());
 
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -345,14 +433,11 @@ void TextRenderer::renderText3D(const std::string& text, const glm::mat4& modelM
     glBindVertexArray(m_vao);
 
     float cursorX = 0.0f;
-    float pixelScale = scale / static_cast<float>(m_font.getPixelSize());
+    float pixelScale = scale / static_cast<float>(m_fontStack.fontAt(0)->getPixelSize());
 
-    // AUDIT M29: batched upload — one upload + draw per string.
-    std::vector<float> verts;
-    const std::size_t glyphCap =
-        std::min<std::size_t>(text.size(), MAX_GLYPHS_PER_CALL);
-    verts.reserve(glyphCap * VERTS_PER_GLYPH * FLOATS_PER_VERT);
-
+    // AUDIT M29 / L2: glyphs grouped by font, one upload+draw per font.
+    std::vector<GlyphRun> runs;
+    m_mruFont = nullptr;
     int emitted = 0;
     for (size_t i = 0; i < text.size();)
     {
@@ -362,7 +447,8 @@ void TextRenderer::renderText3D(const std::string& text, const glm::mat4& modelM
         }
         const auto [cp, n] = utf8::decodeAt(text, i);
         i += static_cast<size_t>(n);
-        const GlyphInfo& glyph = m_font.getGlyph(cp);
+        const FontStack::Hit hit = resolveGlyph(cp);
+        const GlyphInfo& glyph = *hit.glyph;
 
         float xpos = cursorX + static_cast<float>(glyph.bearing.x) * pixelScale;
         float ypos = -static_cast<float>(glyph.bearing.y) * pixelScale;
@@ -375,21 +461,14 @@ void TextRenderer::renderText3D(const std::string& text, const glm::mat4& modelM
         float v1 = v0 + glyph.atlasSize.y;
 
         // 3D path — no italic shear, baseline = ypos so applyShear is identity.
-        appendGlyphVerts(verts, xpos, ypos, w, h, u0, v0, u1, v1,
-                         ypos, 0.0f, color);
+        appendGlyphVerts(runVertsFor(runs, hit.font), xpos, ypos, w, h,
+                         u0, v0, u1, v1, ypos, 0.0f, color);
         ++emitted;
 
         cursorX += static_cast<float>(glyph.advance) / 64.0f * pixelScale;
     }
 
-    if (emitted > 0)
-    {
-        glNamedBufferSubData(m_vbo, 0,
-            static_cast<GLsizeiptr>(verts.size() * sizeof(float)),
-            verts.data());
-        glDrawArrays(GL_TRIANGLES, 0,
-            static_cast<GLsizei>(emitted * VERTS_PER_GLYPH));
-    }
+    drawRuns(runs);
 
     // Restore GL state
     glDepthMask(prevDepthWrite ? GL_TRUE : GL_FALSE);
@@ -456,15 +535,12 @@ std::shared_ptr<Texture> TextRenderer::generateTextHeightMap(const std::string& 
     float margin = static_cast<float>(textureWidth) * 0.1f;
     float availableWidth = static_cast<float>(textureWidth) - 2.0f * margin;
     float scale = availableWidth / textWidth;
-    float textHeightVal = m_font.getLineHeight() * scale;
+    float textHeightVal = m_fontStack.fontAt(0)->getLineHeight() * scale;
     float yOffset = (static_cast<float>(textureHeight) - textHeightVal) * 0.5f;
 
     m_textShader.use();
     m_textShader.setMat4("u_projection", ortho);
     m_textShader.setMat4("u_model", glm::mat4(1.0f));
-    m_textShader.setInt("u_glyphAtlas", 0);
-
-    glBindTextureUnit(0, m_font.getAtlasTextureId());
 
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -473,18 +549,18 @@ std::shared_ptr<Texture> TextRenderer::generateTextHeightMap(const std::string& 
     glBindVertexArray(m_vao);
 
     float cursorX = margin;
-    float cursorY = yOffset + m_font.getAscender() * scale;
+    float cursorY = yOffset + m_fontStack.fontAt(0)->getAscender() * scale;
 
-    // Pe1 — one upload + draw for the whole string. Same per-vertex
-    // colour layout as the 2D / 3D paths so the shader matches.
-    std::vector<float> verts;
-    verts.reserve(text.size() * VERTS_PER_GLYPH * FLOATS_PER_VERT);
-
+    // Pe1 / L2 — glyphs grouped by font, one upload+draw per font. Same
+    // per-vertex colour layout as the 2D / 3D paths so the shader matches.
+    std::vector<GlyphRun> runs;
+    m_mruFont = nullptr;
     for (size_t i = 0; i < text.size();)
     {
         const auto [cp, n] = utf8::decodeAt(text, i);
         i += static_cast<size_t>(n);
-        const GlyphInfo& glyph = m_font.getGlyph(cp);
+        const FontStack::Hit hit = resolveGlyph(cp);
+        const GlyphInfo& glyph = *hit.glyph;
 
         float xpos = cursorX + static_cast<float>(glyph.bearing.x) * scale;
         float ypos = cursorY - static_cast<float>(glyph.bearing.y) * scale;
@@ -496,20 +572,13 @@ std::shared_ptr<Texture> TextRenderer::generateTextHeightMap(const std::string& 
         float u1 = u0 + glyph.atlasSize.x;
         float v1 = v0 + glyph.atlasSize.y;
 
-        appendGlyphVerts(verts, xpos, ypos, w, h, u0, v0, u1, v1,
-                         cursorY, 0.0f, textColor);
+        appendGlyphVerts(runVertsFor(runs, hit.font), xpos, ypos, w, h,
+                         u0, v0, u1, v1, cursorY, 0.0f, textColor);
 
         cursorX += static_cast<float>(glyph.advance) / 64.0f * scale;
     }
 
-    if (!verts.empty())
-    {
-        glNamedBufferSubData(m_vbo, 0,
-            static_cast<GLsizeiptr>(verts.size() * sizeof(float)),
-            verts.data());
-        glDrawArrays(GL_TRIANGLES, 0,
-            static_cast<GLsizei>(verts.size() / FLOATS_PER_VERT));
-    }
+    drawRuns(runs);
 
     glEnable(GL_DEPTH_TEST);
     glDisable(GL_BLEND);
@@ -542,7 +611,7 @@ std::shared_ptr<Texture> TextRenderer::generateTextHeightMap(const std::string& 
 
 Font& TextRenderer::getFont()
 {
-    return m_font;
+    return *m_fontStack.fontAt(0);
 }
 
 bool TextRenderer::isInitialized() const
@@ -552,13 +621,21 @@ bool TextRenderer::isInitialized() const
 
 float TextRenderer::measureTextWidth(const std::string& text) const
 {
+    // Not initialized → empty stack; resolveGlyph would return a null Hit.
+    // Match the pre-L2 graceful behaviour (zero width) rather than deref null.
+    if (!m_initialized)
+    {
+        return 0.0f;
+    }
+
     float width = 0.0f;
+    m_mruFont = nullptr;
     for (size_t i = 0; i < text.size();)
     {
         const auto [cp, n] = utf8::decodeAt(text, i);
         i += static_cast<size_t>(n);
-        const GlyphInfo& glyph = m_font.getGlyph(cp);
-        width += static_cast<float>(glyph.advance) / 64.0f;
+        const FontStack::Hit hit = resolveGlyph(cp);
+        width += static_cast<float>(hit.glyph->advance) / 64.0f;
     }
     return width;
 }
