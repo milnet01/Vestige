@@ -185,6 +185,18 @@ private:
     ///        it only mutates the mutable MRU cache.
     FontStack::Hit resolveGlyph(uint32_t codepoint) const;
 
+    /// @brief Decode @p text into codepoints and reorder them into visual
+    ///        (left-to-right screen) order for RTL scripts (Phase 10
+    ///        Localization L3). Returns a reference to a REUSED scratch buffer
+    ///        — valid only until the next call. Reuse keeps the hot path free
+    ///        of per-frame allocation; the RTL pass is a no-op for pure-LTR
+    ///        text. Pure-Latin HUD strings pay one extra O(n) scan, no alloc.
+    ///        @p maxGlyphs caps the decode in LOGICAL order BEFORE reordering,
+    ///        so an over-long RTL string clips its logical tail (matching the
+    ///        pre-L3 byte-walk truncation) rather than its visual head.
+    const std::vector<uint32_t>& toVisualCodepoints(const std::string& text,
+                                                    std::size_t maxGlyphs = SIZE_MAX);
+
     /// @brief Issue one bind+upload+draw per run. Assumes the caller has set
     ///        the shader, uniforms, blend state and bound the VAO; only the
     ///        atlas binding + VBO upload + draw vary per run.
@@ -229,6 +241,11 @@ private:
     // Phase 10 Localization L2 — one-element MRU cache wrapping
     // FontStack::lookup. mutable so the const resolveGlyph() can update it.
     mutable Font*       m_mruFont           = nullptr;
+
+    // Phase 10 Localization L3 — reused decode + RTL-reorder scratch. Holds
+    // the visual-order codepoints for the string currently being emitted;
+    // reused across calls so the render path allocates only on first growth.
+    std::vector<uint32_t> m_cpScratch;
 
     // Phase 10.9 Pe1 — batch state. While `m_batchActive`, every queued
     // call's vertex data accumulates in `m_batchRuns` (grouped by font, L2)

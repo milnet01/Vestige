@@ -101,6 +101,7 @@ set(ENGINE_SOURCES
     utils/cube_loader.cpp
     utils/json_size_cap.cpp
     utils/utf8.cpp
+    utils/rtl.cpp
     utils/config_path.cpp
     utils/atomic_write.cpp
     utils/path_sandbox.cpp

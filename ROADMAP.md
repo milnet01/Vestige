@@ -357,8 +357,10 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
 
 - [ ] Multi-language text support (UTF-8, language selection) — covered by slices L1 (UTF-8 decoder + codepoint Font API) + L4 (LocalizationService + language switching) in the design doc.
 - [ ] Translatable string table system (all UI/plaque text referenced by key, not hardcoded) — covered by slice L4 (`StringTable` + `LocalizationService` + `tr()`) + L6 (`tools/localization_audit.py` CI lint).
-- [ ] Hebrew, Greek, and Latin text rendering (right-to-left support for Hebrew) — covered by slices L1 (UTF-8 + uint32 glyph map), L2 (`FontStack` + Hebrew/Greek glyph-range loading), L3 (`rtl::toVisualOrder` per-run reverse — lightweight, not full UAX#9).
+- [x] Hebrew, Greek, and Latin text rendering (right-to-left support for Hebrew) — covered by slices L1 (UTF-8 + uint32 glyph map), L2 (`FontStack` + Hebrew/Greek glyph-range loading), L3 (`rtl::toVisualOrder` per-run reverse — lightweight, not full UAX#9).
   Progress (2026-06-10): slice L2 SHIPPED — FontStack multi-script fallback chain + bundled Frank Ruhl Libre (OFL) Hebrew serif. TextRenderer default stack is now 2-font (Latin+Greek primary + Hebrew), per-font draw split across all glyph paths, MRU cache keeps pure-script runs at single-font cost. Greek+Hebrew now render; RTL visual reorder still pending in L3.
+  Progress (2026-06-10): slice L3 SHIPPED — engine/utils/rtl.{h,cpp} lightweight logical→visual reorder (per-Hebrew-run reverse incl. interior spaces; multi-word phrases reverse as a unit; NOT full UAX#9). Wired into all 3 TextRenderer paths before glyph emit via a reused decode/reorder scratch (HUD stays allocation-free). 8 rtl tests; full suite green (3377). This bullet's L1+L2+L3 coverage is now COMPLETE — Hebrew/Greek/Latin all render with correct RTL; remaining localization work (string table, language picker) is L4/L5. ^3d_e-0002
+  SHIPPED 2026-06-10 — all 3 covering slices landed: L1 (commit 16ad7a4), L2 (73e8804), L3 (this commit). Hebrew/Greek/Latin render with correct RTL for Hebrew. Lightweight reorder, not full UAX#9 (mixed Hebrew+numerals deferred per design § 6).
 - [ ] Language selection in settings menu — covered by slice L5 (settings schema migration v2→v3 + own `Language` settings section dropdown + `LanguageChangedEvent` live-apply path).
 
 ### Accessibility

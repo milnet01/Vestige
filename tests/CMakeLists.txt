@@ -169,6 +169,7 @@ add_executable(vestige_tests
     test_cube_loader_hardening.cpp
     test_json_size_cap.cpp
     test_utf8.cpp
+    test_rtl.cpp
     test_result.cpp
     test_terrain_size_caps.cpp
     test_entity_serializer_depth_cap.cpp

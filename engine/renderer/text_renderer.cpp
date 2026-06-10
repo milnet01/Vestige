@@ -5,6 +5,7 @@
 /// @brief TextRenderer implementation.
 #include "renderer/text_renderer.h"
 #include "core/logger.h"
+#include "utils/rtl.h"
 #include "utils/utf8.h"
 
 #include <glad/gl.h>
@@ -222,6 +223,23 @@ FontStack::Hit TextRenderer::resolveGlyph(uint32_t codepoint) const
     return hit;
 }
 
+const std::vector<uint32_t>& TextRenderer::toVisualCodepoints(const std::string& text,
+                                                              std::size_t maxGlyphs)
+{
+    m_cpScratch.clear();
+    // Cap in LOGICAL order so an over-long RTL string clips its tail, then
+    // reorders the kept prefix — not the post-reversal visual head.
+    for (size_t i = 0; i < text.size() && m_cpScratch.size() < maxGlyphs;)
+    {
+        const auto [cp, n] = utf8::decodeAt(text, i);
+        i += static_cast<size_t>(n);
+        m_cpScratch.push_back(cp);
+    }
+    // No-op for pure-LTR text; reverses each Hebrew run for RTL display.
+    rtl::toVisualOrderInPlace(m_cpScratch);
+    return m_cpScratch;
+}
+
 void TextRenderer::drawRuns(const std::vector<GlyphRun>& runs)
 {
     // Each run uploads to VBO offset 0 then draws, sequentially. A pure-script
@@ -342,16 +360,18 @@ void TextRenderer::renderText2DImpl(const std::string& text, float x, float y, f
         ? std::max(0, MAX_GLYPHS_PER_BATCH - m_batchGlyphCount)
         : MAX_GLYPHS_PER_CALL;
 
+    // L3 — decode + RTL-reorder into visual order before emission. Cap in
+    // logical order (perCallCap) so RTL truncation clips the logical tail.
+    const std::vector<uint32_t>& cps =
+        toVisualCodepoints(text, static_cast<std::size_t>(std::max(0, perCallCap)));
     m_mruFont = nullptr;  // reset MRU per string for deterministic lookup count
     int emitted = 0;
-    for (size_t i = 0; i < text.size();)
+    for (uint32_t cp : cps)
     {
         if (emitted >= perCallCap)
         {
             break;
         }
-        const auto [cp, n] = utf8::decodeAt(text, i);
-        i += static_cast<size_t>(n);
         const FontStack::Hit hit = resolveGlyph(cp);
         const GlyphInfo& glyph = *hit.glyph;
 
@@ -436,17 +456,18 @@ void TextRenderer::renderText3D(const std::string& text, const glm::mat4& modelM
     float pixelScale = scale / static_cast<float>(m_fontStack.fontAt(0)->getPixelSize());
 
     // AUDIT M29 / L2: glyphs grouped by font, one upload+draw per font.
+    // L3: decode + RTL-reorder into visual order before emission (cap in
+    // logical order so RTL truncation clips the logical tail).
+    const std::vector<uint32_t>& cps = toVisualCodepoints(text, MAX_GLYPHS_PER_CALL);
     std::vector<GlyphRun> runs;
     m_mruFont = nullptr;
     int emitted = 0;
-    for (size_t i = 0; i < text.size();)
+    for (uint32_t cp : cps)
     {
         if (emitted >= MAX_GLYPHS_PER_CALL)
         {
             break;
         }
-        const auto [cp, n] = utf8::decodeAt(text, i);
-        i += static_cast<size_t>(n);
         const FontStack::Hit hit = resolveGlyph(cp);
         const GlyphInfo& glyph = *hit.glyph;
 
@@ -553,12 +574,12 @@ std::shared_ptr<Texture> TextRenderer::generateTextHeightMap(const std::string& 
 
     // Pe1 / L2 — glyphs grouped by font, one upload+draw per font. Same
     // per-vertex colour layout as the 2D / 3D paths so the shader matches.
+    // L3 — decode + RTL-reorder into visual order before emission.
+    const std::vector<uint32_t>& cps = toVisualCodepoints(text);
     std::vector<GlyphRun> runs;
     m_mruFont = nullptr;
-    for (size_t i = 0; i < text.size();)
+    for (uint32_t cp : cps)
     {
-        const auto [cp, n] = utf8::decodeAt(text, i);
-        i += static_cast<size_t>(n);
         const FontStack::Hit hit = resolveGlyph(cp);
         const GlyphInfo& glyph = *hit.glyph;
 

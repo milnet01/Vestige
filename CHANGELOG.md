@@ -22,6 +22,34 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-06-10 Localization L3 — right-to-left (Hebrew) text reordering
+
+Third slice of the Phase 10 Localization bundle. Hebrew text now displays
+right-to-left instead of in logical (memory) order, which rendered backwards.
+
+- **`engine/utils/rtl.{h,cpp}`** — a lightweight logical→visual reorder.
+  `toVisualOrder(codepoints)` reverses each maximal run of Hebrew codepoints in
+  place; LTR runs and trailing spaces before LTR text are left untouched. A
+  multi-word Hebrew phrase reverses as one unit (interior spaces join the run),
+  so word order is correct — not just letters flipped within each word.
+  `containsRTL()` reports whether any RTL codepoint is present. This is
+  **deliberately not** the full Unicode Bidirectional Algorithm (UAX#9): mixed
+  Hebrew + embedded numerals have a documented wrong-rendering case (design § 6),
+  out of scope until a use case needs it. RTL = Hebrew today (reuses
+  `utf8::isHebrew`); Arabic etc. fold in later by extending the predicate.
+- **TextRenderer integration** — the three rendering paths (2D, 3D world,
+  height-map) now decode the string and apply the visual reorder before
+  emitting glyphs. Decoding uses a reused scratch buffer so the steady-state
+  HUD pass stays allocation-free; the reorder is a no-op for pure-Latin text
+  (one extra O(n) scan, no heap). `measureTextWidth` is unchanged — width is
+  order-independent. The glyph-cap on over-long strings now clips in logical
+  order before reordering, so a truncated RTL string keeps its logical head.
+- Tests (`tests/test_rtl.cpp`): Latin passthrough, Hebrew reverse, mixed-run
+  reversal, multi-word-phrase-as-unit, trailing-space-stays-LTR, empty input,
+  `containsRTL` detection, and in-place/value-form parity. Full suite green
+  (3377). Per-slice cold-eyes converged clean (one LOW truncation-order finding
+  fixed).
+
 ### 2026-06-10 Localization L2 — multi-script font stack + bundled Hebrew serif
 
 Second slice of the Phase 10 Localization bundle (follows L1's UTF-8 decoder +
