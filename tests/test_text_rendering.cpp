@@ -10,6 +10,7 @@
 #include "utils/utf8.h"
 
 #include "gl_test_fixture.h"
+#include "lsan_guard.h"
 
 #include <memory>
 
@@ -393,7 +394,16 @@ TEST_F(FontGLTest, MruCacheSkipsStackWalk)
 
     const std::string latin(1000, 'A');  // 1000-glyph pure-Latin string
     tr.getFontStack().resetLookupCalls();
-    tr.renderText2D(latin, 10.0f, 10.0f, 1.0f, glm::vec3(1.0f), 1920, 1080);
+    {
+        // The first glDrawArrays makes the llvmpipe software rasterizer (CI's
+        // headless GL) JIT-compile pipe-state it never frees — a known
+        // third-party process-lifetime allocation, not a Vestige leak. Bracket
+        // the draw so LeakSanitizer doesn't flag it (same idiom as
+        // shader_parity_helpers.cpp; see tests/lsan_guard.h + engine
+        // CMakeLists.txt § "Debug sanitizers").
+        Vestige::Test::ScopedLeakCheckDisable noLeakTracking;
+        tr.renderText2D(latin, 10.0f, 10.0f, 1.0f, glm::vec3(1.0f), 1920, 1080);
+    }
 
     // First glyph warms the MRU (1 lookup); the next 999 reuse the cached font.
     EXPECT_EQ(tr.getFontStack().lookupCalls(), 1u);
