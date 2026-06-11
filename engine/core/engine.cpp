@@ -403,6 +403,18 @@ bool Engine::initialize(const EngineConfig& config)
 
         targets.inputMap = &m_inputActionMap;
 
+        // Slice L5: language picker routes through the registered
+        // LocalizationService. forceLiveApply() below then hot-applies
+        // any persisted non-default language at boot (the sink no-ops
+        // when the requested code already matches the active one).
+        if (LocalizationService* loc =
+                m_systemRegistry.getSystem<LocalizationService>())
+        {
+            m_localizationSink =
+                std::make_unique<LocalizationServiceApplySink>(*loc);
+            targets.localization = m_localizationSink.get();
+        }
+
         m_settingsEditor = std::make_unique<SettingsEditor>(
             m_settings, targets);
 

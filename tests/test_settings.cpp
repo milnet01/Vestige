@@ -560,6 +560,22 @@ TEST(SettingsDisk, SaveAndReloadIsEqual)
     EXPECT_EQ(loaded, original);
 }
 
+// L5 verify-step test 19.
+TEST(SettingsDisk, PersistsLanguage)
+{
+    TmpDir tmp;
+    fs::path path = tmp.path() / "settings.json";
+
+    Settings original;
+    original.localization.language = "he";
+
+    ASSERT_EQ(original.saveAtomic(path), SaveStatus::Ok);
+
+    auto [loaded, status] = Settings::loadFromDisk(path);
+    EXPECT_EQ(status, LoadStatus::Ok);
+    EXPECT_EQ(loaded.localization.language, "he");
+}
+
 TEST(SettingsDisk, CorruptFileMovesToSidecarAndReturnsDefaults)
 {
     TmpDir tmp;
@@ -726,12 +742,29 @@ TEST(SettingsMigration, V1ToV2AddsOnboardingBlockWithDefaults)
     j.erase("onboarding");
     j["schemaVersion"] = 1;
 
+    // migrate() runs the full chain to the current schema; the v1 → v2
+    // step's effect (the onboarding block) persists through later steps.
     ASSERT_TRUE(migrate(j));
-    EXPECT_EQ(j["schemaVersion"].get<int>(), 2);
+    EXPECT_EQ(j["schemaVersion"].get<int>(), kCurrentSchemaVersion);
     ASSERT_TRUE(j.contains("onboarding"));
     EXPECT_FALSE(j["onboarding"]["hasCompletedFirstRun"].get<bool>());
     EXPECT_EQ(j["onboarding"]["completedAt"].get<std::string>(), "");
     EXPECT_EQ(j["onboarding"]["skipCount"].get<int>(), 0);
+}
+
+// L5 verify-step test 18.
+TEST(SettingsMigration, V2ToV3PopulatesLanguage)
+{
+    // Hand-craft a v2-shaped tree: take the current toJson, strip the
+    // localization block + pin schemaVersion back to 2.
+    json j = Settings{}.toJson();
+    j.erase("localization");
+    j["schemaVersion"] = 2;
+
+    ASSERT_TRUE(migrate(j));
+    EXPECT_EQ(j["schemaVersion"].get<int>(), 3);
+    ASSERT_TRUE(j.contains("localization"));
+    EXPECT_EQ(j["localization"]["language"].get<std::string>(), "en");
 }
 
 TEST(SettingsOnboarding, LegacyFlagPromotesWhenFileExistsAndStructIsDefault)

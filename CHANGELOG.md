@@ -22,6 +22,37 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-06-11 Localization L5 — settings language picker + schema v2→v3
+
+Fifth slice of the Phase 10 Localization bundle (follows L4's string table +
+service). The active UI language is now a persisted setting with a live-apply
+picker, so a user can switch language at runtime and have the choice survive a
+restart.
+
+- **`LocalizationSettings`** — a new top-level `Settings` group carrying one
+  field, `language` (BCP-47 short tag, default `"en"`). Its own group rather
+  than an accessibility field (reviewer decision 2): language is a primary
+  choice, not an accommodation. `validate()` falls an unrecognised code back
+  to `"en"` so a hand-edited file can't drive the service into a missing
+  table.
+- **Schema migration v2 → v3** (`settings_migration.{h,cpp}`) —
+  `migrate_v2_to_v3` inserts the `localization` block (`language: "en"`) into
+  pre-v3 files; `kCurrentSchemaVersion` bumped 2 → 3.
+- **Live-apply path** — `LocalizationApplySink` + `LocalizationServiceApplySink`
+  (`settings_apply.{h,cpp}`) route a language change through `SettingsEditor`
+  into the registered `LocalizationService`, which hot-swaps the active table
+  and publishes `LanguageChangedEvent`. The sink no-ops when the code is
+  unchanged so unrelated edits (a volume drag) don't reload the table or
+  re-fire the event. Wired in `engine.cpp`; `forceLiveApply()` at boot applies
+  a persisted non-default language.
+- **Picker UI** — a dedicated **Language** tab in the settings editor panel
+  with a four-language dropdown (English / Hebrew / Greek / Latin) + a
+  per-tab restore-default button.
+- **Tests** (§ 8 tests 18-20): v2→v3 migration populates the language;
+  `language` round-trips through save/reload; mutating the setting through the
+  editor hot-swaps `tr()` output; plus a regression test pinning the
+  no-op-when-unchanged sink contract. Full suite 3387 green.
+
 ### 2026-06-10 Localization L4 — string table + localization service
 
 Fourth slice of the Phase 10 Localization bundle (follows L3's RTL reorder).

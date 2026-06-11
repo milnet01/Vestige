@@ -61,7 +61,9 @@ namespace Vestige
 ///  - v2 (Phase 10.5 slice 14.1) — adds `onboarding` section for
 ///    the first-run wizard completion flag + legacy `welcome_shown`
 ///    flag-file promotion.
-inline constexpr int kCurrentSchemaVersion = 2;
+///  - v3 (Phase 10 Localization slice L5) — adds `localization`
+///    section carrying the active UI language code (default "en").
+inline constexpr int kCurrentSchemaVersion = 3;
 
 // --------------------------------------------------------------
 // Display section — resolution, vsync, fullscreen, quality.
@@ -274,6 +276,28 @@ struct OnboardingSettings
 };
 
 // --------------------------------------------------------------
+// Localization section — active UI language (Phase 10 L5).
+// --------------------------------------------------------------
+
+/// @brief Persistent UI-language selection (Phase 10 Localization L5).
+///
+/// One field: `language`, a BCP-47 short tag ("en", "he", "el", "la").
+/// The default is the reference language "en". On load, `validate()`
+/// falls an unrecognised code back to "en" so a hand-edited file can't
+/// drive the LocalizationService into a missing-table state.
+///
+/// This is its own top-level Settings group rather than a field on
+/// AccessibilitySettings (reviewer decision 2, locked 2026-06-06) —
+/// language is a primary user choice, not an accessibility accommodation.
+struct LocalizationSettings
+{
+    std::string language = "en";
+
+    bool operator==(const LocalizationSettings& o) const;
+    bool operator!=(const LocalizationSettings& o) const { return !(*this == o); }
+};
+
+// --------------------------------------------------------------
 // Settings root
 // --------------------------------------------------------------
 
@@ -306,6 +330,7 @@ struct Settings
     GameplaySettings       gameplay;
     AccessibilitySettings  accessibility;
     OnboardingSettings     onboarding;
+    LocalizationSettings   localization;
 
     /// @brief Loads settings from `path`. Returns the parsed
     ///        settings (or defaults on failure) plus a status code.

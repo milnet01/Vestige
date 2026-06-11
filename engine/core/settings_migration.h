@@ -63,4 +63,19 @@ bool migrate(nlohmann::json& j);
 /// Idempotent: running twice on the same tree leaves it unchanged.
 void migrate_v1_to_v2(nlohmann::json& j);
 
+/// @brief v2 → v3: add the `localization` section with defaults.
+///
+/// v3 introduces the active UI-language selection for Phase 10
+/// Localization slice L5 (see
+/// `docs/phases/phase_10_localization_design.md` § 2 L5). A v2 file
+/// has no `localization` block; this migration inserts one with the
+/// reference language `"en"`.
+///
+/// Like every arm in the chain it MUST set `j["schemaVersion"] = 3`
+/// — the `migrate()` loop's non-advancement guard aborts the whole
+/// chain if the version field fails to advance.
+///
+/// Idempotent: running twice on the same tree leaves it unchanged.
+void migrate_v2_to_v3(nlohmann::json& j);
+
 } // namespace Vestige

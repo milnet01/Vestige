@@ -87,6 +87,12 @@ void SettingsEditor::restoreAccessibilityDefaults()
     pushPendingToSinks();
 }
 
+void SettingsEditor::restoreLocalizationDefaults()
+{
+    m_pending.localization = LocalizationSettings{};
+    pushPendingToSinks();
+}
+
 void SettingsEditor::restoreAllDefaults()
 {
     // Preserve schemaVersion + onboarding across a Restore All — a
@@ -148,6 +154,10 @@ void SettingsEditor::pushPendingToSinks()
     {
         applyInputBindings(m_pending.controls.bindings,
                            *m_targets.inputMap);
+    }
+    if (m_targets.localization)
+    {
+        applyLocalization(m_pending.localization, *m_targets.localization);
     }
 }
 

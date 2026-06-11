@@ -33,6 +33,7 @@ const char* kTabNames[] = {
     "Controls",
     "Gameplay",
     "Accessibility",
+    "Language",
 };
 
 constexpr std::size_t kNumTabs = sizeof(kTabNames) / sizeof(kTabNames[0]);
@@ -177,6 +178,7 @@ void SettingsEditorPanel::draw()
         case 2: drawControlsTab();      break;
         case 3: drawGameplayTab();      break;
         case 4: drawAccessibilityTab(); break;
+        case 5: drawLocalizationTab();  break;
         default: break;
     }
     ImGui::EndChild();
@@ -528,6 +530,49 @@ void SettingsEditorPanel::drawAccessibilityTab()
     if (ImGui::Button("Restore accessibility defaults"))
     {
         m_editor->restoreAccessibilityDefaults();
+    }
+}
+
+void SettingsEditorPanel::drawLocalizationTab()
+{
+    const Settings& p = m_editor->pending();
+    ImGui::TextDisabled("Language");
+    ImGui::Separator();
+
+    // The four bundled languages (assets/localization/<code>.json),
+    // labelled with their English name + native endonym. Index order
+    // is the wire-code array below; the two stay in lockstep.
+    const char* codes[]  = {"en", "he", "el", "la"};
+    const char* labels[] = {
+        "English",
+        "Hebrew  \xD7\xA2\xD6\xB4\xD7\x91\xD6\xB0\xD7\xA8\xD6\xB4\xD7\x99\xD7\xAA",  // עִבְרִית
+        "Greek  \xCE\x95\xCE\xBB\xCE\xBB\xCE\xB7\xCE\xBD\xCE\xB9\xCE\xBA\xCE\xAC",   // Ελληνικά
+        "Latin  Latina",
+    };
+    constexpr int kNumLangs = 4;
+
+    int idx = 0;
+    for (int i = 0; i < kNumLangs; ++i)
+    {
+        if (p.localization.language == codes[i]) { idx = i; break; }
+    }
+    if (ImGui::Combo("UI language", &idx, labels, kNumLangs))
+    {
+        const std::string chosen = codes[idx];
+        m_editor->mutate([chosen](Settings& s)
+        {
+            s.localization.language = chosen;
+        });
+    }
+
+    ImGui::TextDisabled(
+        "Switches the runtime UI language immediately. Untranslated "
+        "strings fall back to English.");
+
+    ImGui::Spacing();
+    if (ImGui::Button("Restore language default"))
+    {
+        m_editor->restoreLocalizationDefaults();
     }
 }
 

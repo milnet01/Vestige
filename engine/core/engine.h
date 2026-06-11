@@ -217,6 +217,7 @@ private:
     std::unique_ptr<SubtitleQueueApplySink>              m_subtitleSink;
     std::unique_ptr<AudioEngineHrtfApplySink>            m_hrtfSink;
     std::unique_ptr<PhotosensitiveStoreApplySink>        m_photosensitiveSink;
+    std::unique_ptr<LocalizationServiceApplySink>        m_localizationSink;
 
     /// @brief Engine-owned input action map. Game code pushes its
     ///        action definitions here before `initialize()` returns

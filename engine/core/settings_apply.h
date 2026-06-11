@@ -37,8 +37,10 @@ namespace Vestige
 struct DisplaySettings;          // core/settings.h
 struct AudioSettings;            // core/settings.h
 struct AccessibilitySettings;    // core/settings.h
+struct LocalizationSettings;     // core/settings.h
 struct ActionBindingWire;        // core/settings.h
 class InputActionMap;            // input/input_bindings.h
+class LocalizationService;       // localization/localization_service.h
 class Window;                    // core/window.h
 class UISystem;                  // systems/ui_system.h
 class Renderer;                  // renderer/renderer.h
@@ -372,5 +374,43 @@ std::vector<ActionBindingWire> extractInputBindings(
 /// strings both map to `InputDevice::None`.
 void applyInputBindings(const std::vector<ActionBindingWire>& wires,
                          InputActionMap& map);
+
+// ================================================================
+// Slice L5 — Localization apply path
+// ================================================================
+
+/// @brief Sink for the active UI language. The production sink wraps
+///        the engine's `LocalizationService`; tests can substitute a
+///        recording fake to verify the live-apply path without a
+///        full registry.
+class LocalizationApplySink
+{
+public:
+    virtual ~LocalizationApplySink() = default;
+    virtual void setLanguage(const std::string& code) = 0;
+};
+
+/// @brief Pushes the language code onto a sink.
+void applyLocalization(const LocalizationSettings& localization,
+                        LocalizationApplySink& sink);
+
+/// @brief Production sink wrapping a live `LocalizationService`.
+///
+/// `SettingsEditor` re-pushes every sink on every mutation, but
+/// `LocalizationService::setLanguage` reloads the JSON table and
+/// publishes a `LanguageChangedEvent` on each call. Forwarding
+/// unconditionally would re-fire that event (and trigger panel
+/// rebuilds) on an unrelated slider drag. So this sink no-ops when
+/// the requested code already matches the service's active language —
+/// making it idempotent-cheap like the other setters.
+class LocalizationServiceApplySink final : public LocalizationApplySink
+{
+public:
+    explicit LocalizationServiceApplySink(LocalizationService& service);
+    void setLanguage(const std::string& code) override;
+
+private:
+    LocalizationService& m_service;
+};
 
 } // namespace Vestige

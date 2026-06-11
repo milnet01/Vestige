@@ -5,9 +5,9 @@
 /// @brief Phase 10 slice 13.5b — ImGui editor panel wrapping
 ///        `SettingsEditor`.
 ///
-/// Five category tabs (Display / Audio / Controls / Gameplay /
-/// Accessibility) + a footer with per-category restore buttons,
-/// Restore All, Revert, Apply, and a dirty indicator.
+/// Six category tabs (Display / Audio / Controls / Gameplay /
+/// Accessibility / Language) + a footer with per-category restore
+/// buttons, Restore All, Revert, Apply, and a dirty indicator.
 ///
 /// Live-apply: every widget mutation goes through
 /// `SettingsEditor::mutate()` so subsystems update immediately.
@@ -73,6 +73,7 @@ private:
     void drawControlsTab();
     void drawGameplayTab();
     void drawAccessibilityTab();
+    void drawLocalizationTab();
     void drawFooter();
 
     /// @brief Capture-mode rebind modal (Phase 10 slice 13.5c).

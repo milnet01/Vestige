@@ -10,6 +10,7 @@
 #include "core/settings.h"
 #include "core/window.h"
 #include "input/input_bindings.h"
+#include "localization/localization_service.h"
 #include "renderer/renderer.h"
 #include "systems/ui_system.h"
 #include "ui/subtitle.h"
@@ -355,6 +356,33 @@ void applyInputBindings(const std::vector<ActionBindingWire>& wires,
         action->primary   = bindingFromWire(w.primary);
         action->secondary = bindingFromWire(w.secondary);
         action->gamepad   = bindingFromWire(w.gamepad);
+    }
+}
+
+// ================================================================
+// Slice L5 — Localization apply
+// ================================================================
+
+void applyLocalization(const LocalizationSettings& localization,
+                        LocalizationApplySink& sink)
+{
+    sink.setLanguage(localization.language);
+}
+
+LocalizationServiceApplySink::LocalizationServiceApplySink(
+    LocalizationService& service)
+    : m_service(service)
+{
+}
+
+void LocalizationServiceApplySink::setLanguage(const std::string& code)
+{
+    // No-op when unchanged — setLanguage() reloads the table and
+    // republishes LanguageChangedEvent on every call, and the editor
+    // re-pushes all sinks on every (often unrelated) mutation.
+    if (m_service.languageCode() != code)
+    {
+        m_service.setLanguage(code);
     }
 }
 

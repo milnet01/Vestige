@@ -40,7 +40,7 @@ bool migrate(nlohmann::json& j)
         switch (version)
         {
             case 1: migrate_v1_to_v2(j); break;
-            // case 2: migrate_v2_to_v3(j); break;
+            case 2: migrate_v2_to_v3(j); break;
             default:
                 Logger::warning(
                     "Settings migration: no migration function registered for "
@@ -81,6 +81,20 @@ void migrate_v1_to_v2(nlohmann::json& j)
         };
     }
     j["schemaVersion"] = 2;
+}
+
+void migrate_v2_to_v3(nlohmann::json& j)
+{
+    // Insert the `localization` section if absent. If a v2 file
+    // somehow already carries a `localization` key we leave it
+    // alone — fromJson reconciles via `j.value(key, default)`.
+    if (!j.contains("localization") || !j["localization"].is_object())
+    {
+        j["localization"] = nlohmann::json{
+            {"language", "en"},
+        };
+    }
+    j["schemaVersion"] = 3;
 }
 
 } // namespace Vestige

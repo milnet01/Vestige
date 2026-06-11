@@ -170,6 +170,11 @@ bool OnboardingSettings::operator==(const OnboardingSettings& o) const
         && skipCount            == o.skipCount;
 }
 
+bool LocalizationSettings::operator==(const LocalizationSettings& o) const
+{
+    return language == o.language;
+}
+
 // ====== Settings root equality ================================
 
 bool Settings::operator==(const Settings& o) const
@@ -180,7 +185,8 @@ bool Settings::operator==(const Settings& o) const
         && controls      == o.controls
         && gameplay      == o.gameplay
         && accessibility == o.accessibility
-        && onboarding    == o.onboarding;
+        && onboarding    == o.onboarding
+        && localization  == o.localization;
 }
 
 // ====== JSON serialisation ====================================
@@ -387,6 +393,20 @@ void onboardingFromJson(const json& j, OnboardingSettings& o)
     o.skipCount            = j.value("skipCount",            o.skipCount);
 }
 
+// --- Localization ---
+
+json localizationToJson(const LocalizationSettings& l)
+{
+    return json{
+        {"language", l.language},
+    };
+}
+
+void localizationFromJson(const json& j, LocalizationSettings& l)
+{
+    l.language = j.value("language", l.language);
+}
+
 // --- Validation helpers ---
 
 float clamp01(float v)          { return std::clamp(v, 0.0f, 1.0f); }
@@ -404,6 +424,14 @@ bool isValidSubtitleSize(const std::string& s)
 bool isValidColorVisionFilter(const std::string& s)
 {
     return s == "none" || s == "protanopia" || s == "deuteranopia" || s == "tritanopia";
+}
+
+// The four languages bundled in `assets/localization/` (Phase 10 L5).
+// A hand-edited file naming any other code falls back to the reference
+// "en" so the LocalizationService never opens a missing table.
+bool isValidLanguageCode(const std::string& s)
+{
+    return s == "en" || s == "he" || s == "el" || s == "la";
 }
 
 } // namespace  (close anon — validate() is public, declared in settings.h)
@@ -537,6 +565,16 @@ bool validate(Settings& s)
         clamped = true;
     }
 
+    // --- Localization ---
+
+    if (!isValidLanguageCode(s.localization.language))
+    {
+        Logger::warning("Settings: unknown language '"
+                        + s.localization.language + "' — falling back to en.");
+        s.localization.language = "en";
+        clamped = true;
+    }
+
     return !clamped;
 }
 
@@ -552,6 +590,7 @@ json Settings::toJson() const
     j["gameplay"]      = json{{"values", gameplay.values()}};
     j["accessibility"] = accessibilityToJson(accessibility);
     j["onboarding"]    = onboardingToJson(onboarding);
+    j["localization"]  = localizationToJson(localization);
     return j;
 }
 
@@ -591,6 +630,10 @@ bool Settings::fromJson(const json& jIn)
     if (j.contains("onboarding") && j["onboarding"].is_object())
     {
         onboardingFromJson(j["onboarding"], onboarding);
+    }
+    if (j.contains("localization") && j["localization"].is_object())
+    {
+        localizationFromJson(j["localization"], localization);
     }
 
     // Validate always runs — clamps out-of-range values silently.

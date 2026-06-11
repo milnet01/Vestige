@@ -63,6 +63,7 @@ public:
         SubtitleApplySink*              subtitle        = nullptr;
         PhotosensitiveApplySink*        photosensitive  = nullptr;
         InputActionMap*                 inputMap        = nullptr;
+        LocalizationApplySink*          localization    = nullptr;
     };
 
     /// @brief Constructs with a starting `Settings` value + apply
@@ -118,6 +119,7 @@ public:
     void restoreControlsDefaults();
     void restoreGameplayDefaults();
     void restoreAccessibilityDefaults();
+    void restoreLocalizationDefaults();
 
     /// @brief Reset every category to struct defaults.
     void restoreAllDefaults();

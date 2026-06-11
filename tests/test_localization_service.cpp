@@ -8,6 +8,9 @@
 #include <gtest/gtest.h>
 
 #include "core/engine.h"
+#include "core/settings.h"
+#include "core/settings_apply.h"
+#include "core/settings_editor.h"
 #include "core/system_events.h"
 #include "localization/localization_service.h"
 
@@ -83,4 +86,55 @@ TEST(LocalizationService, FailedSwitchKeepsLanguageAndIsSilent)
     EXPECT_FALSE(svc.setLanguage("zz")); // no zz.json
     EXPECT_EQ(svc.languageCode(), "en"); // default retained
     EXPECT_EQ(count, 0);
+}
+
+// Test 20 — live-apply: mutating the language setting through the editor
+// hot-swaps the active table, so the next tr() (a panel rebuild) reads the
+// new language. Models "user picks 'he' in the menu → next rebuild reads
+// Hebrew" without standing up the ImGui panel.
+TEST(LocalizationService, LiveApplyHotSwapsTable)
+{
+    Engine engine;
+    LocalizationService svc = makeService(engine);
+
+    LocalizationServiceApplySink sink(svc);
+    SettingsEditor::ApplyTargets targets{};
+    targets.localization = &sink;
+    SettingsEditor editor(Settings{}, targets);
+
+    // Pre-switch: a UI label built via tr() reads English.
+    EXPECT_EQ(svc.tr("ui.menu.settings"), "Settings");
+
+    editor.mutate([](Settings& s) { s.localization.language = "he"; });
+
+    EXPECT_EQ(svc.languageCode(), "he");
+    // The next panel rebuild re-fetches and now reads Hebrew.
+    EXPECT_EQ(svc.tr("ui.menu.settings"), "הגדרות");
+}
+
+// The editor re-pushes every sink on every mutation; the localization sink
+// must no-op when the code is unchanged, or an unrelated edit would reload
+// the table and republish LanguageChangedEvent.
+TEST(LocalizationService, ApplySinkNoOpsWhenLanguageUnchanged)
+{
+    Engine engine;
+    LocalizationService svc = makeService(engine);
+    ASSERT_TRUE(svc.setLanguage("he"));
+
+    int events = 0;
+    engine.getEventBus().subscribe<LanguageChangedEvent>(
+        [&](const LanguageChangedEvent&) { ++events; });
+
+    LocalizationServiceApplySink sink(svc);
+    SettingsEditor::ApplyTargets targets{};
+    targets.localization = &sink;
+    Settings start;
+    start.localization.language = "he";
+    SettingsEditor editor(std::move(start), targets);
+
+    // Mutate an unrelated field; language stays "he".
+    editor.mutate([](Settings& s) { s.audio.busGains[0] = 0.5f; });
+
+    EXPECT_EQ(svc.languageCode(), "he");
+    EXPECT_EQ(events, 0); // no republish for an unrelated edit
 }
