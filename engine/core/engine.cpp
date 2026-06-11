@@ -282,6 +282,8 @@ bool Engine::initialize(const EngineConfig& config)
         m_editor->setNavigationSystem(m_systemRegistry.getSystem<NavigationSystem>());
         m_editor->setAudioSystem(m_systemRegistry.getSystem<AudioSystem>());
         m_editor->setUISystem(m_systemRegistry.getSystem<UISystem>());
+        m_editor->setLocalizationService(
+            m_systemRegistry.getSystem<LocalizationService>());
         m_editor->getBrushPreview().init(config.assetPath);
     }
 

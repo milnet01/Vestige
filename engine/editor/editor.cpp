@@ -165,6 +165,7 @@ bool Editor::initialize(GLFWwindow* window, const std::string& assetPath)
     m_panelRegistry.registerPanel(&m_navigationPanel);
     m_panelRegistry.registerPanel(&m_uiLayoutPanel);
     m_panelRegistry.registerPanel(&m_uiRuntimePanel);
+    m_panelRegistry.registerPanel(&m_localizationDebugPanel);
     m_panelRegistry.registerPanel(&m_scriptEditorPanel);
     m_panelRegistry.registerPanel(&m_performancePanel);
     m_panelRegistry.registerPanel(&m_validationPanel);
@@ -551,6 +552,7 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
                 }
                 m_panelRegistry.drawMenuToggle(m_performancePanel);
                 m_panelRegistry.drawMenuToggle(m_validationPanel);
+                m_panelRegistry.drawMenuToggle(m_localizationDebugPanel);
                 ImGui::Separator();
                 ImGui::TextDisabled("Asset Viewers");
                 m_panelRegistry.drawMenuToggle(m_modelViewerPanel);
@@ -1275,6 +1277,9 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
         // --- Validation panel ---
         m_validationPanel.draw(scene, m_selection);
 
+        // --- Localization Keys overlay (L6) ---
+        m_localizationDebugPanel.draw(m_localizationService);
+
         // --- Asset viewer panels ---
         m_textureViewerPanel.draw();
         m_hdriViewerPanel.draw(renderer);
@@ -1863,6 +1868,11 @@ void Editor::setAudioSystem(AudioSystem* audioSystem)
 void Editor::setUISystem(UISystem* uiSystem)
 {
     m_uiSystem = uiSystem;
+}
+
+void Editor::setLocalizationService(LocalizationService* service)
+{
+    m_localizationService = service;
 }
 
 PerformancePanel& Editor::getPerformancePanel()

@@ -22,6 +22,38 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-06-11 Localization L6 — coverage lint + missing-keys overlay + HUD benchmark
+
+Sixth and final slice of the Phase 10 Localization bundle. Adds the tooling
+that keeps the string-table honest and pins the text-pass performance budget.
+
+- **`tools/localization_audit.py`** — a strict-by-default regex line-scan
+  (reviewer decision 4). Fails the build on (1) a user-visible string literal
+  at a known text sink (`renderText2D/3D`, `setText`, `.text =`, `UILabel` /
+  `UIWorldLabel` ctor) not wrapped in `tr()`, and (2) a literal `tr("key")`
+  absent from the reference `en.json`. Secondary-language coverage (he/el/la)
+  is report-only — runtime English-fallback makes an untranslated secondary
+  string a non-bug. `--lint` downgrades 1+2 to warnings; a trailing
+  `// i18n-exempt` suppresses check 1. Wired as the `LocalizationAuditStrict`
+  ctest gate. The one pre-existing hardcoded sink (`"CLEAR"` in the keybind
+  row) was migrated to `tr("ui.keybind.clear")` so the strict gate passes
+  tree-wide from day one.
+- **Editor "missing keys" overlay** — `LocalizationDebugPanel` (Window →
+  Localization Keys) lists keys present in `en.json` but missing from the
+  active language: the translator worklist. Backed by
+  `LocalizationService::missingKeys()` + `StringTable::keys()`. Dev-facing /
+  English-only (editor i18n is out of scope).
+- **HUD-pass benchmark** — `tests/test_text_renderer_perf.cpp` times the CPU
+  text-shaping + quad-emit cost for a 20-label / 800-glyph workload (median of
+  8 frames) against the ≤ 0.30 ms / frame budget (§ 1 / § 9). The GL flush
+  (`endBatch2D`) sits outside the timed span — § 9 pins GPU cost as unchanged.
+  The gate enforces only in optimised builds on real-GPU renderers; under a
+  Debug build or a software rasteriser it runs the path and SKIPs the
+  assertion (the wall-clock isn't comparable to the budget there).
+- **Tests** (§ 8 tests 21-23): the audit catches a fixture hardcoded literal
+  (and honours the exempt comment); the missing-keys list reports exactly the
+  untranslated keys; the HUD benchmark stays within budget. Full suite green.
+
 ### 2026-06-11 Localization L5 — settings language picker + schema v2→v3
 
 Fifth slice of the Phase 10 Localization bundle (follows L4's string table +

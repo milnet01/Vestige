@@ -3,5 +3,6 @@
   "ui.menu.continue": "Συνέχεια",
   "ui.menu.templates": "Πρότυπα",
   "ui.menu.settings": "Ρυθμίσεις",
-  "ui.menu.quit": "Έξοδος"
+  "ui.menu.quit": "Έξοδος",
+  "ui.keybind.clear": "Εκκαθάριση"
 }

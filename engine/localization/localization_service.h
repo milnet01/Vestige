@@ -11,6 +11,7 @@
 
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace Vestige
 {
@@ -54,6 +55,13 @@ public:
     /// or the caller's `key` on a miss — materialise to std::string at the
     /// call site (design § 5.5 / § 5.6).
     std::string_view tr(std::string_view key) const;
+
+    /// @brief Keys present in the reference language ("en") but absent from the
+    /// active language, sorted. Backs the editor "missing keys" overlay (L6,
+    /// design § 5.7): these render the English fallback at runtime, so they are
+    /// the translator's worklist. Empty when the active language is the
+    /// reference itself. Not on any hot path.
+    std::vector<std::string> missingKeys() const;
 
     /// @brief Override the directory localization JSON files load from
     /// (default "assets/localization"). Call before initialize(). Mirrors the

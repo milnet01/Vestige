@@ -15,6 +15,7 @@
 #include "localization/localization_service.h"
 
 #include <string>
+#include <vector>
 
 using namespace Vestige;
 
@@ -110,6 +111,23 @@ TEST(LocalizationService, LiveApplyHotSwapsTable)
     EXPECT_EQ(svc.languageCode(), "he");
     // The next panel rebuild re-fetches and now reads Hebrew.
     EXPECT_EQ(svc.tr("ui.menu.settings"), "הגדרות");
+}
+
+// Test 22 — the editor "missing keys" overlay worklist: en.json carries 5
+// keys, he.json 3, so two keys (templates, quit) render the English fallback
+// and must surface as missing. Sorted output.
+TEST(LocalizationService, MissingKeysReport)
+{
+    Engine engine;
+    LocalizationService svc = makeService(engine);
+
+    // Reference is "en"; active "en" → nothing missing.
+    EXPECT_TRUE(svc.missingKeys().empty());
+
+    ASSERT_TRUE(svc.setLanguage("he"));
+    const std::vector<std::string> missing = svc.missingKeys();
+    EXPECT_EQ(missing,
+              (std::vector<std::string>{"ui.menu.quit", "ui.menu.templates"}));
 }
 
 // The editor re-pushes every sink on every mutation; the localization sink

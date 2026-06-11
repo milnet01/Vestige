@@ -14,6 +14,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <vector>
 #if defined(VESTIGE_LOCALIZATION_WARN_MISSING)
 #include <unordered_set>
 #endif
@@ -49,6 +50,11 @@ public:
 
     /// @brief Number of loaded keys. Used by the editor "missing keys" overlay.
     size_t size() const;
+
+    /// @brief All loaded keys, sorted lexicographically. Backs the editor
+    ///        "missing keys" overlay + the coverage diff (L6). Not on any hot
+    ///        path — called on language change / panel open, not per frame.
+    std::vector<std::string> keys() const;
 
 private:
     std::unordered_map<std::string, std::string> m_map;

@@ -122,6 +122,7 @@ set(ENGINE_SOURCES
     editor/panels/asset_browser_panel.cpp
     editor/panels/sprite_panel.cpp
     editor/panels/tilemap_panel.cpp
+    editor/panels/localization_debug_panel.cpp
     editor/prefab_system.cpp
     editor/command_history.cpp
     editor/file_menu.cpp

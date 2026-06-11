@@ -3,5 +3,6 @@
   "ui.menu.continue": "Continue",
   "ui.menu.templates": "Templates",
   "ui.menu.settings": "Settings",
-  "ui.menu.quit": "Quit"
+  "ui.menu.quit": "Quit",
+  "ui.keybind.clear": "Clear"
 }

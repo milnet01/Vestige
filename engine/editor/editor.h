@@ -34,6 +34,7 @@
 #include "editor/panels/tilemap_panel.h"
 #include "editor/panels/ui_layout_panel.h"
 #include "editor/panels/ui_runtime_panel.h"
+#include "editor/panels/localization_debug_panel.h"
 #include "editor/panels/template_dialog.h"
 #include "editor/prefab_system.h"
 #include "editor/selection.h"
@@ -69,6 +70,7 @@ class EventBus;
 class AudioSystem;
 class AudioMusicPlayer;
 class UISystem;
+class LocalizationService;
 class FoliageManager;
 class NavigationSystem;
 class PerformanceProfiler;
@@ -225,6 +227,10 @@ public:
 
     /// @brief Stores a pointer to the UISystem (for the UI Runtime panel).
     void setUISystem(UISystem* uiSystem);
+
+    /// @brief Stores a pointer to the LocalizationService (for the
+    ///        Localization Keys debug overlay, L6).
+    void setLocalizationService(LocalizationService* service);
 
     /// @brief Gets the terrain brush tool.
     TerrainBrush& getTerrainBrush();
@@ -387,6 +393,7 @@ private:
     TilemapPanel m_tilemapPanel;
     UILayoutPanel m_uiLayoutPanel;
     UIRuntimePanel m_uiRuntimePanel;
+    LocalizationDebugPanel m_localizationDebugPanel;
     TemplateDialog m_templateDialog;
 
     // Ed5 — centralised Window-menu toggle wiring. Each togglable panel
@@ -413,6 +420,7 @@ private:
     NavigationSystem* m_navigationSystem = nullptr;
     AudioSystem* m_audioSystem = nullptr;
     UISystem* m_uiSystem = nullptr;
+    LocalizationService* m_localizationService = nullptr;
     std::string m_assetPath;
 
     // Viewport bounds (stored from drawPanels, used next frame for click detection)

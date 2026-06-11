@@ -33,6 +33,7 @@ add_executable(vestige_tests
     test_emissive_lighting.cpp
     test_taa.cpp
     test_text_rendering.cpp
+    test_text_renderer_perf.cpp
     test_color_grading.cpp
     test_instanced_rendering.cpp
     test_cascaded_shadow_map.cpp
@@ -277,3 +278,34 @@ include(GoogleTest)
 # sites via ScopedLeakCheckDisable (tests/lsan_guard.h), so the suite is
 # leak-clean under default options with no environment setup.
 gtest_discover_tests(vestige_tests)
+
+# --- Phase 10 Localization L6 — string-coverage lint (design § 5.7) ----------
+# The audit is a standalone Python regex line-scan, so it runs as its own ctest
+# entries rather than inside the gtest binary.
+find_package(Python3 COMPONENTS Interpreter QUIET)
+if(Python3_FOUND)
+    # STRICT gate on the real tree — must pass (no hardcoded user-visible
+    # strings, every literal tr() key present in en.json). Reviewer decision 4.
+    add_test(
+        NAME LocalizationAuditStrict
+        COMMAND Python3::Interpreter
+                ${CMAKE_SOURCE_DIR}/tools/localization_audit.py --strict
+    )
+
+    # Test 21 — the audit DETECTS a deliberately hardcoded literal: run it
+    # against a fixture and expect a non-zero exit (WILL_FAIL inverts the pass
+    # condition). Pins that strict mode actually fails on a violation.
+    add_test(
+        NAME LocalizationAuditCatchesHardcoded
+        COMMAND Python3::Interpreter
+                ${CMAKE_SOURCE_DIR}/tools/localization_audit.py --strict
+                --root ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localization_audit
+                --reference ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localization_audit/en.json
+                --secondary ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/localization_audit/en.json
+    )
+    set_tests_properties(LocalizationAuditCatchesHardcoded
+                         PROPERTIES WILL_FAIL TRUE)
+else()
+    message(WARNING
+        "Python3 not found — skipping localization_audit ctest gate (L6).")
+endif()

@@ -2,8 +2,11 @@
 // SPDX-License-Identifier: MIT
 
 #include "ui/ui_keybind_row.h"
+#include "localization/localization_service.h"
 #include "renderer/text_renderer.h"
 #include "ui/sprite_batch_renderer.h"
+
+#include <string>
 
 namespace Vestige
 {
@@ -81,7 +84,8 @@ void UIKeybindRow::render(SpriteBatchRenderer& batch,
     {
         const float cx = absPos.x + size.x - clearW;
         const float cy = absPos.y + size.y * 0.5f + 4.0f;
-        textRenderer->renderText2D("CLEAR", cx, cy, 0.22f,
+        textRenderer->renderText2D(std::string(tr("ui.keybind.clear")),
+                                    cx, cy, 0.22f,
                                     theme->textSecondary,
                                     screenWidth, screenHeight);
     }

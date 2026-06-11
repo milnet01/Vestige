@@ -11,6 +11,8 @@
 
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
+
 namespace Vestige
 {
 
@@ -75,6 +77,19 @@ bool StringTable::contains(std::string_view key) const
 size_t StringTable::size() const
 {
     return m_map.size();
+}
+
+std::vector<std::string> StringTable::keys() const
+{
+    std::vector<std::string> out;
+    out.reserve(m_map.size());
+    for (const auto& [key, value] : m_map)
+    {
+        (void)value;
+        out.push_back(key);
+    }
+    std::sort(out.begin(), out.end());
+    return out;
 }
 
 } // namespace Vestige

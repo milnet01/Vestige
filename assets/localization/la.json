@@ -3,5 +3,6 @@
   "ui.menu.continue": "Perge",
   "ui.menu.templates": "Exempla",
   "ui.menu.settings": "Optiones",
-  "ui.menu.quit": "Exi"
+  "ui.menu.quit": "Exi",
+  "ui.keybind.clear": "Vacua"
 }

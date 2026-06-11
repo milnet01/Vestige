@@ -95,6 +95,20 @@ std::string_view LocalizationService::tr(std::string_view key) const
     return key;
 }
 
+std::vector<std::string> LocalizationService::missingKeys() const
+{
+    // m_reference.keys() is already sorted, so the result stays sorted.
+    std::vector<std::string> missing;
+    for (const std::string& key : m_reference.keys())
+    {
+        if (!m_active.contains(key))
+        {
+            missing.push_back(key);
+        }
+    }
+    return missing;
+}
+
 std::string LocalizationService::filePathFor(const std::string& code) const
 {
     return m_dir + "/" + code + ".json";
