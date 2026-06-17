@@ -130,6 +130,51 @@ Source of truth: [`docs/research/self_learning_roadmap.md`](docs/research/self_l
 
 ---
 
+### Path-tracer formula coverage (DOOM_Ants Workbench requests, 2026-06-16)
+
+Library-coverage and integration-path requests raised by the DOOM_Ants project
+(a GPL-v2 DOOM fork building a Vulkan path tracer) while scoping the Formula
+Workbench as its coefficient-authoring tool. These concern the Workbench /
+`engine/formula/` subsystem only, not the Vestige engine. Source:
+DOOM_Ants_Feedback.md (gathered 2026-06-16, scoping DOOM-0008/0009). Findings
+were doc/source-review only — no Workbench code was run yet; revisit priorities
+once the path tracer's first curves are fitted in anger.
+
+- 📋 [3D_E-0006] **FW (GAP/HIGH): importance-sampling / PDF formula templates.**
+  Library has BRDF *evaluation* terms (D=ggx_distribution, G=schlick_geometry, F=fresnel_schlick) but no *sampling* side. Add as first-class templates: GGX/VNDF sample-direction (u1,u2)->microfacet-normal + its PDF (Heitz 2018 "Sampling the GGX Distribution of Visible Normals"); cosine-weighted hemisphere sample + PDF (diffuse bounce); MIS power/balance-heuristic weight w = pdf_a^B/(pdf_a^B+pdf_b^B), B=2. Closed-form; ship even as 0-coefficient FULL-tier formulas so they export as GLSL with the safe-math prelude and regression-lock in the reference harness.
+  Kind: feature.
+  Source: DOOM_Ants_Feedback.md #1 (2026-06-16).
+
+- 📋 [3D_E-0007] **FW (GAP/MEDIUM): real-time-RT denoiser / temporal-accumulation blend templates.**
+  Small "real-time-RT" formula category for SVGF/A-SVGF tunable curves: temporal blend / EMA alpha as f(history length, disocclusion) (alpha = clamp(1/(n+1), amin, 1) style); edge-stopping weights (depth/normal/luminance, exp(-|d|/sigma) falloffs); variance-driven adaptive sample-count curve. Coefficient-rich + empirically tuned — fits fit-history seeding + weighted LM + reference regression. Consumer feeds captured per-pixel variance/error data and fits rather than guessing sigma.
+  Kind: feature.
+  Source: DOOM_Ants_Feedback.md #2 (2026-06-16).
+
+- 📋 [3D_E-0008] **FW (GAP/MEDIUM): Russian-roulette survival-probability template.**
+  Add an rr_survival template for unbiased path termination: commonly p = clamp(max(throughput.rgb), pmin, pmax), sometimes a fitted function of bounce depth + throughput. Natural Workbench formula.
+  Kind: feature.
+  Source: DOOM_Ants_Feedback.md #3 (2026-06-16).
+
+- 📋 [3D_E-0009] **FW (INTEGRATION/MEDIUM): documented headless GLSL-export path for an external Vulkan project.**
+  Reproducible CI-friendly regeneration of shader includes from committed FormulaLibrary JSON, no GUI. Either (1) a `formula_workbench --export-glsl <library.json> --out <dir>` batch verb writing one .glsl (+ combined formulas.glsl include) per formula with the safe-math prelude, deterministic stable ordering for git; OR (2) a doc section "Consuming Workbench formulas from an external C++/Vulkan project" (pin library.json, run export in consumer build, #include generated .glsl, wire reference harness as pre-commit/CI gate so coefficient drift fails the build). Commit-the-artifacts / no-runtime-dependency model is the target.
+  Kind: feature.
+  Source: DOOM_Ants_Feedback.md #4 (2026-06-16).
+
+- 📋 [3D_E-0010] **FW (GAP/LOW): srgb_to_linear / linear_to_srgb output-transform pair.**
+  Rounds out the output-transform set (exposure_ev already exists) so the whole display chain (albedo decode -> PT -> exposure -> tonemap -> encode) can be Workbench-authored end-to-end. DOOM_Ants decodes 8-bit paletted art (PLAYPAL) to linear RGB for path-traced albedo. Not a fit target — canonical expressions.
+  Kind: feature.
+  Source: DOOM_Ants_Feedback.md #5 (2026-06-16).
+
+- 📋 [3D_E-0011] **FW (workflow/MEDIUM): --self-benchmark over a directory of datasets.**
+  Batch run --self-benchmark over a folder of reference datasets (BRDF lobe, phase function, attenuation captured at once), emitting one combined leaderboard, vs N single-file invocations. Confirm whether single-file is the only current mode before implementing.
+  Kind: enhancement.
+  Source: DOOM_Ants_Feedback.md #A (2026-06-16).
+
+- 📋 [3D_E-0012] **FW (workflow/LOW): emit a provenance comment in generated GLSL.**
+  Prepend a comment to GLSL export with source formula_name, the fit's R2/RMSE/AIC, the library.json hash, and the Workbench version, so a generated shader self-documents which fit produced it — useful for diffing regenerated artifacts and six-months-later context.
+  Kind: enhancement.
+  Source: DOOM_Ants_Feedback.md #B (2026-06-16).
+
 ## Phase 9: Domain-Driven System Architecture
 **Goal:** Evolve the engine toward a domain-driven system model where each natural domain (vegetation, water, cloth, terrain, etc.) is owned by a dedicated system that encapsulates ALL behavior for that domain — rendering, physics, animation, audio, defaults, and editor integration. Scenes compose by pulling in only the systems they need.
 
@@ -313,10 +358,14 @@ All existing subsystems wrapped in formal domain system classes. Audio, UI, and 
 ### Features
 - [x] In-game UI system (menus, HUD, information panels/plaques). `engine/ui/game_screen.{h,cpp}` — pure-function `GameScreen` state machine (MainMenu / Loading / Playing / Paused / Settings / Exiting) with total transition table and `isWorldSimulationSuspended` / `suppressesWorldInput` predicates (slice 12.1). `UISystem::setRootScreen` / `pushModalScreen` / `popModalScreen` / `applyIntent` + per-screen `ScreenBuilder` hook (`setScreenBuilder`) so game projects can override MainMenu / Pause / Settings with studio-branded prefabs without touching engine code; Engine wiring routes ESC through `applyIntent(Pause/Resume/CloseSettings)` (slice 12.2). `engine/ui/ui_notification_toast.{h,cpp}` — headless `NotificationQueue` (FIFO, default cap 3, push-newest/drop-oldest) with `NotificationSeverity::{Info, Success, Warning, Error}` and a pure `notificationAlphaAt(elapsed, duration, fade)` envelope (fade-in / plateau / fade-out, collapses to rectangle under reduced-motion). `UISystem::update` advances the queue against `UITheme::transitionDuration`; `UINotificationToast` renders a severity-accented panel + title + body with full accessibility metadata (slice 12.3). `buildDefaultHud(canvas, theme, textRenderer, uiSystem)` populates the `Playing` canvas with crosshair (CENTER) + FPS counter (TOP_LEFT, hidden by default) + interaction-prompt anchor (BOTTOM_CENTER) + top-right notification stack (three pre-created toast slots); `Playing` now has a built-in default `ScreenBuilder` (slice 12.4). `engine/editor/panels/ui_runtime_panel.{h,cpp}` — four-tab editor surface (State / Menus / HUD / Accessibility): current-screen readout + manual intent firing + scrollback of the last 20 screen transitions; MainMenu / Pause / Settings prefab preview with rebuild button; per-HUD-element visibility toggles that write through to the live `UISystem` canvas; live compose of scale preset + high-contrast + reduced-motion (slice 12.5). ~60 new unit tests across `test_game_screen.cpp`, `test_ui_system_screen_stack.cpp`, `test_notification_queue.cpp`, `test_default_hud.cpp`, `test_ui_runtime_panel.cpp`. See `docs/phases/phase_10_ui_design.md` for the full design, inventory, and sign-off log.
 - [x] Text rendering (TrueType fonts). `engine/renderer/font.{h,cpp}` — FreeType-backed TTF loader with `GlyphInfo` atlas (per-codepoint UV offset + size, pixel bitmap size, baseline bearing, horizontal advance in 1/64-pixel units); atlas uploaded once at load to an `r8` `Texture`. `engine/renderer/text_renderer.{h,cpp}` — screen-space `renderText2D(text, x, y, scale, color, screenWidth, screenHeight)` and world-space 3D `renderText3D` paths over the glyph atlas, with upper-bound-per-call batching and an ortho projection built per draw so callers don't have to juggle matrices. Consumed by the Phase 10 UI widget library (`UILabel`, `UIButton`, `UIFpsCounter`, `UINotificationToast`, `UIInteractionPrompt`, menu prefabs) — the bullet ships the rendering primitive that every in-game UI surface already relies on. Covered by `tests/test_text_rendering.cpp`.
-- [ ] Scene/level configuration files (define scenes in data, not code)
-- [ ] Settings system (resolution, quality presets, keybindings)
-- [ ] Loading screens (for scene transitions)
-- [ ] Information plaques — approach an object to see a text description
+- [x] Scene/level configuration files (define scenes in data, not code)
+  Resolved (2026-06-17): verified shipped — scene serializer (engine/editor/scene_serializer.h, format v2) with SceneSerializer tests green.
+- [x] Settings system (resolution, quality presets, keybindings)
+  Resolved (2026-06-17): verified shipped — Settings slices 13.1–13.5 (engine/core/settings*, schema v3); resolution/quality-presets/keybindings covered; Settings.* tests green.
+- [x] Loading screens (for scene transitions)
+  Resolved (2026-06-17): verified shipped — GameScreen::Loading state machine (engine/ui/game_screen.*, Phase 10 UI design signed off 2026-04-21); GameScreen tests green.
+- [x] Information plaques — approach an object to see a text description
+  Resolved (2026-06-17): verified shipped — composed from UIInteractionPrompt + UIWorldLabel + InteractableComponent (promptText); UIInteractionPrompt/InteractableComponent tests green.
 
 ### Audio System
 Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. The Audio domain system (Phase 9C) provides the system wrapper and basic functionality; the detailed feature specs below define the complete implementation.
