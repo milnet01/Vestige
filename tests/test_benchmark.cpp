@@ -273,3 +273,148 @@ TEST(BenchmarkRender, GroupsFittedSeparatelyFromSkipped)
     EXPECT_NE(md.find("dataset lacks required input variables"),
               std::string::npos);
 }
+
+// ---------------------------------------------------------------------------
+// 3D_E-0009 — runExportGlslCli (headless GLSL export)
+// ---------------------------------------------------------------------------
+
+namespace
+{
+
+// Build an argv from a vector of strings (CLI verbs take int/char**).
+std::optional<int> runExport(std::vector<std::string> args)
+{
+    std::vector<char*> argv;
+    for (auto& s : args) argv.push_back(s.data());
+    return runExportGlslCli(static_cast<int>(argv.size()), argv.data());
+}
+
+std::string slurp(const std::filesystem::path& p)
+{
+    std::ifstream in(p);
+    std::ostringstream ss;
+    ss << in.rdbuf();
+    return ss.str();
+}
+
+} // namespace
+
+TEST(ExportGlsl, RequiresOutDir)
+{
+    // --export-glsl without --out is a usage error, not a GUI fallthrough.
+    std::vector<std::string> args = {"formula_workbench", "--export-glsl"};
+    const auto rc = runExport(args);
+    ASSERT_TRUE(rc.has_value());
+    EXPECT_NE(*rc, 0);
+}
+
+TEST(ExportGlsl, WritesPerFormulaAndCombinedDeterministically)
+{
+    namespace fs = std::filesystem;
+    const auto outDir = fs::temp_directory_path()
+                      / ("vestige_export_" + Testing::vestigeTestStamp());
+
+    const auto rc = runExport(
+        {"formula_workbench", "--export-glsl", "--out", outDir.string()});
+    ASSERT_TRUE(rc.has_value());
+    EXPECT_EQ(*rc, 0);
+
+    // Built-in library count = number of .glsl files (excluding the combined).
+    FormulaLibrary library;
+    library.registerBuiltinTemplates();
+    const size_t n = library.count();
+
+    size_t glslFiles = 0;
+    for (const auto& e : fs::directory_iterator(outDir))
+        if (e.path().extension() == ".glsl") ++glslFiles;
+    EXPECT_EQ(glslFiles, n + 1);   // per-formula + combined formulas.glsl
+
+    const std::string combined = slurp(outDir / "formulas.glsl");
+    // Every function appears exactly once in the combined include.
+    EXPECT_NE(combined.find("cosineHemispherePdf"), std::string::npos);
+    EXPECT_NE(combined.find("ggxVndfPdf"), std::string::npos);
+    EXPECT_NE(combined.find("srgbToLinear"), std::string::npos);
+    // Provenance banner present (tool version + library hash).
+    EXPECT_NE(combined.find("Vestige Formula Workbench v"), std::string::npos);
+    EXPECT_NE(combined.find("library hash:"), std::string::npos);
+    // Safe-math prelude emitted once.
+    EXPECT_NE(combined.find("float safeDiv("), std::string::npos);
+
+    // Determinism: a second run is byte-identical.
+    const std::string firstRun = combined;
+    const auto rc2 = runExport(
+        {"formula_workbench", "--export-glsl", "--out", outDir.string()});
+    ASSERT_TRUE(rc2.has_value());
+    EXPECT_EQ(*rc2, 0);
+    EXPECT_EQ(slurp(outDir / "formulas.glsl"), firstRun);
+
+    fs::remove_all(outDir);
+}
+
+TEST(ExportGlsl, RejectsHostileFormulaNameAndWritesNothingOutside)
+{
+    namespace fs = std::filesystem;
+    const auto stamp = Testing::vestigeTestStamp();
+    const auto libPath = fs::temp_directory_path()
+                       / ("hostile_lib_" + stamp + ".json");
+    const auto outDir = fs::temp_directory_path()
+                      / ("vestige_export_hostile_" + stamp);
+
+    // A path-traversal / injection name must be rejected at load. Use a name
+    // that would escape --out (../) — validation strips it before any file
+    // write, so loadFromFile reports zero formulas and the verb exits non-zero.
+    std::ofstream(libPath) << R"([
+        { "name": "../escape", "category": "color",
+          "inputs": [ { "name": "c", "type": "float" } ],
+          "output": { "type": "float" },
+          "expression": { "var": "c" } }
+    ])";
+
+    const auto rc = runExport({"formula_workbench", "--export-glsl",
+                               libPath.string(), "--out", outDir.string()});
+    ASSERT_TRUE(rc.has_value());
+    EXPECT_NE(*rc, 0);   // nothing loaded → error exit
+
+    // The traversal target must not have been created.
+    EXPECT_FALSE(fs::exists(fs::temp_directory_path() / "escape.glsl"));
+
+    fs::remove(libPath);
+    std::error_code ec;
+    fs::remove_all(outDir, ec);
+}
+
+// ---------------------------------------------------------------------------
+// 3D_E-0011 — --self-benchmark over a directory
+// ---------------------------------------------------------------------------
+
+TEST(SelfBenchmarkBatch, DirectoryYieldsOneSectionPerDataset)
+{
+    namespace fs = std::filesystem;
+    const auto dir = fs::temp_directory_path()
+                   / ("vestige_bench_batch_" + Testing::vestigeTestStamp());
+    fs::create_directories(dir);
+    std::ofstream(dir / "alpha.csv") << "x,y\n0,0\n1,1\n2,2\n3,3\n";
+    std::ofstream(dir / "beta.csv")  << "x,y\n0,0\n1,2\n2,4\n3,6\n";
+
+    const auto outMd = dir / "report.md";
+    std::vector<std::string> args = {
+        "formula_workbench", "--self-benchmark", dir.string(),
+        "--output", outMd.string()};
+    std::vector<char*> argv;
+    for (auto& s : args) argv.push_back(s.data());
+    const auto rc = runBenchmarkCli(static_cast<int>(argv.size()), argv.data());
+    ASSERT_TRUE(rc.has_value());
+    EXPECT_EQ(*rc, 0);
+
+    std::ifstream in(outMd);
+    std::ostringstream ss; ss << in.rdbuf();
+    const std::string md = ss.str();
+    EXPECT_NE(md.find("# Formula Workbench self-benchmark — batch"),
+              std::string::npos);
+    EXPECT_NE(md.find("## alpha.csv"), std::string::npos);
+    EXPECT_NE(md.find("## beta.csv"), std::string::npos);
+    // alpha sorts before beta in the combined doc.
+    EXPECT_LT(md.find("## alpha.csv"), md.find("## beta.csv"));
+
+    fs::remove_all(dir);
+}

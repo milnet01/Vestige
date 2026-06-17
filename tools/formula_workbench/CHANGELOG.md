@@ -4,6 +4,67 @@ All notable changes to the Formula Workbench are documented in this file.
 
 ## [Unreleased]
 
+## [1.19.0] - 2026-06-17
+
+### Path-tracer formula coverage (DOOM_Ants Workbench requests, 3D_E-0006..0012)
+
+Fills the path-tracer-specific gaps the external DOOM_Ants Vulkan path tracer
+hit while scoping the Workbench as its coefficient-authoring tool. Design:
+`docs/research/pathtracer_formula_coverage_design.md` (4 cold-eyes loops).
+
+- **11 new scalar formula templates** (`engine/formula/physics_templates.cpp`),
+  taking the library from 27 → 38 builtins, in four new categories:
+  - `sampling` (3D_E-0006): `cosine_hemisphere_pdf`, `ggx_vndf_pdf`,
+    `mis_power_heuristic` (FULL power heuristic + APPROXIMATE balance).
+  - `denoise` (3D_E-0007): SVGF family — `temporal_alpha`,
+    `edge_stopping_depth`, `edge_stopping_normal`, `edge_stopping_luminance`,
+    plus the `adaptive_sample_count` engine template.
+  - `pathtrace` (3D_E-0008): `rr_survival` (engine variant — max-channel +
+    two-sided clamp; PBRT's luminance form differs, noted in the description).
+  - `color` (3D_E-0010): `srgb_to_linear` / `linear_to_srgb` (exact IEC
+    61966-2-1 piecewise FULL + cheap gamma APPROXIMATE).
+
+  Tunable coefficients stay **named** so the consumer can re-fit them. The
+  vector sample-direction routines (GGX-VNDF basis transform, cosine-hemisphere
+  Malley lift) are deliberately NOT templates — they have no coefficients to
+  fit and need vec3 algebra the scalar AST can't express (design §2).
+
+- **`--export-glsl [<library.json>] --out <dir> [--tier full|approx]`**
+  (3D_E-0009) — headless, CI-friendly GLSL export for an external Vulkan
+  project. Writes one self-contained `.glsl` per formula plus a combined
+  `formulas.glsl`, **name-sorted for deterministic git diffs**, each with the
+  safe-math prelude. With no library path the built-in library is exported;
+  with a path it is loaded strictly (size-capped, parse errors surfaced).
+
+- **`--self-benchmark <dir>`** (3D_E-0011) — batch over every `*.csv` in a
+  directory (sorted), emitting one combined markdown with a section per
+  dataset. A single-file path is byte-identical to the previous behaviour.
+
+- **Provenance comments in generated GLSL** (3D_E-0012, always-on) — each
+  function carries `// <name> — <description>` + `// source: … R²: …`; the
+  `--export-glsl` file banner adds the Workbench version and an FNV-1a-64
+  source-library hash. `fnv1a64`/`toHex64` promoted from file-local to
+  `fit_history.h` for reuse.
+
+### Security (AUDIT §H11, extended to FormulaDefinition metadata)
+
+- `FormulaDefinition::fromJson` now validates the formula `name` and every
+  input `name` against `[A-Za-z_][A-Za-z0-9_]*` (the same gate already on
+  `ExprNode`). This **structurally** prevents GLSL-identifier injection and
+  `--export-glsl` output-path traversal from an untrusted `library.json`.
+- GLSL comment text (`description`/`source`/`name`) is CR/LF-sanitised at the
+  codegen emit site so free-text can't break out of a `//` comment into code.
+- `FormulaLibrary::loadFromFile` gained an opt-in `strict` parameter forwarded
+  to the JSON size-cap loader; `--export-glsl` uses it for untrusted input.
+
+### Reference harness
+
+- Evaluation-regression mode now seeds the evaluator with the formula's
+  library-default coefficients (then golden `inputs` override), so
+  **coefficient-bearing** formulas are testable by golden points — locking
+  each new template at its shipped defaults. 11 new `reference_cases/*.json`
+  (Python-derived float32 golden values), harness coverage 27/27 → 38/38.
+
 ## [1.18.0] - 2026-06-02
 
 ### 2026-06-02 FW W5 follow-up — 0-coefficient evaluation-regression harness mode

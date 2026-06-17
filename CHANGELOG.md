@@ -22,6 +22,27 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-06-17 Formula Pipeline — path-tracer formula coverage (3D_E-0006..0012)
+
+Eleven new scalar formula templates in `engine/formula/physics_templates.cpp`
+(library 27 → 38 builtins): cosine-hemisphere / GGX-VNDF / MIS-power PDFs
+(`sampling`), the SVGF denoiser-weight family + adaptive-sample-count
+(`denoise`), Russian-roulette survival (`pathtrace`), and exact IEC sRGB
+encode/decode (`color`). These are exported as GLSL for the external DOOM_Ants
+Vulkan path tracer; tunable coefficients stay named so the consumer re-fits
+them. The vector sample-direction routines stay hand-written (no coefficients
+to fit; the scalar AST has no vec3 algebra). Design + 4 cold-eyes loops:
+`docs/research/pathtracer_formula_coverage_design.md`.
+
+Security: `FormulaDefinition::fromJson` now validates the formula name and
+input names (`[A-Za-z_][A-Za-z0-9_]*`, the same AUDIT §H11 gate already on
+`ExprNode`), structurally closing a GLSL-identifier-injection and
+output-path-traversal vector that an untrusted `library.json` would otherwise
+reach through the new `--export-glsl` verb; GLSL comment text is CR/LF
+-sanitised at the emit site. Tooling changes live in the Formula Workbench
+(`tools/formula_workbench/CHANGELOG.md`, v1.19.0): `--export-glsl`,
+batch `--self-benchmark <dir>`, and always-on provenance comments.
+
 ### 2026-06-11 Localization L6 — coverage lint + missing-keys overlay + HUD benchmark
 
 Sixth and final slice of the Phase 10 Localization bundle. Adds the tooling

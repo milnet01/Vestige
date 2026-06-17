@@ -77,6 +77,18 @@ std::vector<FormulaDefinition> PhysicsTemplates::createAll()
     // Terrain
     all.push_back(createHeightBlend());
     all.push_back(createThermalErosion());
+    // Path tracing (DOOM_Ants Workbench requests, 3D_E-0006..0010)
+    all.push_back(createCosineHemispherePdf());
+    all.push_back(createGgxVndfPdf());
+    all.push_back(createMisPowerHeuristic());
+    all.push_back(createTemporalAlpha());
+    all.push_back(createEdgeStoppingDepth());
+    all.push_back(createEdgeStoppingNormal());
+    all.push_back(createEdgeStoppingLuminance());
+    all.push_back(createAdaptiveSampleCount());
+    all.push_back(createRrSurvival());
+    all.push_back(createSrgbToLinear());
+    all.push_back(createLinearToSrgb());
     return all;
 }
 
@@ -1102,6 +1114,356 @@ FormulaDefinition PhysicsTemplates::createThermalErosion()
                 var("dt")));
 
     def.source = "Musgrave 1989 thermal erosion model; common in procedural terrain generation";
+    return def;
+}
+
+// ---------------------------------------------------------------------------
+// Path-tracing formulas (DOOM_Ants Workbench requests, 3D_E-0006..0010)
+//
+// Scalar PDFs, denoiser weights, and colour transfer functions for an
+// external Vulkan path tracer. These are reference/canonical math: the
+// tunable coefficients (edge-stopping sigmas, temporal-alpha floor,
+// adaptive-count gain, RR clamps) stay NAMED so the consumer can re-fit
+// them against its own captured per-pixel data. The vector sample-direction
+// routines (GGX-VNDF basis transform, cosine-hemisphere Malley lift) are NOT
+// here — they have no coefficients to fit and need vec3 algebra the scalar
+// AST can't express; the consumer keeps them as hand-written GLSL.
+// See docs/research/pathtracer_formula_coverage_design.md.
+// ---------------------------------------------------------------------------
+
+FormulaDefinition PhysicsTemplates::createCosineHemispherePdf()
+{
+    // Diffuse-bounce solid-angle PDF: pdf = cosTheta / pi.
+    FormulaDefinition def;
+    def.name = "cosine_hemisphere_pdf";
+    def.category = "sampling";
+    def.description = "Cosine-weighted hemisphere sampling PDF for a diffuse "
+                      "bounce: pdf = cosTheta / pi (1/pi encoded as a literal; "
+                      "the AST has no pi constant). Upper hemisphere only — the "
+                      "caller masks cosTheta < 0 (PDF is 0 there).";
+    def.inputs = {
+        {"cosTheta", VT::FLOAT, "", 1.0f}   // N·omega
+    };
+    def.output = {VT::FLOAT, ""};
+
+    // cosTheta * (1/pi)
+    def.expressions[QT::FULL] =
+        binOp("*", var("cosTheta"), lit(0.31830989f));
+
+    def.source = "Pharr, Jakob & Humphreys, Physically Based Rendering 4th ed "
+                 "(2023), App. A.5.3 — pdf = cosTheta/pi.";
+    return def;
+}
+
+FormulaDefinition PhysicsTemplates::createGgxVndfPdf()
+{
+    // PDF of the reflected direction when sampling the GGX visible-normal
+    // distribution (Heitz 2018). The reflection Jacobian 1/(4|V·H|) cancels
+    // the (V·H) term in D_visible, leaving pdf(L) = G1·D / (4·N·V).
+    FormulaDefinition def;
+    def.name = "ggx_vndf_pdf";
+    def.category = "sampling";
+    def.description = "GGX visible-normal (VNDF) sampling PDF of the reflected "
+                      "direction: pdf(L) = G1 * D / (4 * NdotV). Reflection lobe, "
+                      "single-scattering, isotropic. Supply G1 (Smith masking for "
+                      "V) and D (GGX NDF at H) from the shipped schlick_geometry / "
+                      "ggx_distribution templates. Roughness remap alpha = "
+                      "perceptualRoughness^2 is the caller's.";
+    def.inputs = {
+        {"G1",    VT::FLOAT, "", 1.0f},   // Smith monodirectional masking for V
+        {"D",     VT::FLOAT, "", 1.0f},   // GGX NDF value at H
+        {"NdotV", VT::FLOAT, "", 1.0f}    // N·V
+    };
+    def.output = {VT::FLOAT, ""};
+
+    // (G1 * D) / (4 * NdotV)  — '/' codegens to safeDiv (guards NdotV == 0)
+    def.expressions[QT::FULL] =
+        binOp("/",
+            binOp("*", var("G1"), var("D")),
+            binOp("*", lit(4.0f), var("NdotV")));
+
+    def.source = "Heitz, 'Sampling the GGX Distribution of Visible Normals', "
+                 "JCGT 7(4) 2018 (D_visible, Eq. 3); Walter et al., EGSR 2007 "
+                 "(reflection Jacobian 1/(4|V·H|)).";
+    return def;
+}
+
+FormulaDefinition PhysicsTemplates::createMisPowerHeuristic()
+{
+    // Two-strategy, single-sample MIS weight. FULL = power heuristic (beta=2);
+    // APPROXIMATE = balance heuristic (beta=1, proven near-optimal baseline).
+    FormulaDefinition def;
+    def.name = "mis_power_heuristic";
+    def.category = "sampling";
+    def.description = "Multiple-importance-sampling weight for two strategies "
+                      "(single sample each). FULL: power heuristic beta=2, "
+                      "w = pdfA^2 / (pdfA^2 + pdfB^2). APPROXIMATE: balance "
+                      "heuristic, w = pdfA / (pdfA + pdfB). The two strategies' "
+                      "weights sum to 1; vanishes where pdfA is 0.";
+    def.inputs = {
+        {"pdfA", VT::FLOAT, "", 1.0f},
+        {"pdfB", VT::FLOAT, "", 1.0f}
+    };
+    def.output = {VT::FLOAT, ""};
+
+    // pdfA^2 / (pdfA^2 + pdfB^2)  — '/' codegens to safeDiv
+    def.expressions[QT::FULL] =
+        binOp("/",
+            binOp("pow", var("pdfA"), lit(2.0f)),
+            binOp("+",
+                binOp("pow", var("pdfA"), lit(2.0f)),
+                binOp("pow", var("pdfB"), lit(2.0f))));
+
+    // Balance heuristic: pdfA / (pdfA + pdfB)
+    def.expressions[QT::APPROXIMATE] =
+        binOp("/", var("pdfA"), binOp("+", var("pdfA"), var("pdfB")));
+
+    def.source = "Veach & Guibas, 'Optimally Combining Sampling Techniques for "
+                 "Monte Carlo Rendering', SIGGRAPH '95, Eq. 14 (power), "
+                 "§3.3 (balance).";
+    return def;
+}
+
+FormulaDefinition PhysicsTemplates::createTemporalAlpha()
+{
+    // SVGF temporal EMA blend factor with a floor. At n=0 → max(aMin,1)=1
+    // (full reset on a disoccluded/first sample); decays toward aMin as the
+    // history grows. aMin is the consumer's choice (SVGF uses 0.2).
+    FormulaDefinition def;
+    def.name = "temporal_alpha";
+    def.category = "denoise";
+    def.description = "Temporal exponential-moving-average blend factor with a "
+                      "floor: alpha = max(aMin, 1/(n+1)). n is the accumulated "
+                      "history length; at n=0 alpha=1 (full reset on a "
+                      "disocclusion). Re-fit aMin to taste (SVGF uses 0.2).";
+    def.inputs = {
+        {"n", VT::FLOAT, "", 0.0f}   // history length / accumulated frame count
+    };
+    def.output = {VT::FLOAT, ""};
+    def.coefficients = {{"aMin", 0.2f}};
+
+    // max(aMin, 1/(n+1))  — '/' codegens to safeDiv
+    def.expressions[QT::FULL] =
+        binOp("max", var("aMin"),
+            binOp("/", lit(1.0f), binOp("+", var("n"), lit(1.0f))));
+
+    def.source = "Schied et al., 'Spatiotemporal Variance-Guided Filtering', "
+                 "HPG '17, §4.1 (temporal integration; disocclusion → alpha=1).";
+    return def;
+}
+
+FormulaDefinition PhysicsTemplates::createEdgeStoppingDepth()
+{
+    // SVGF depth edge-stopping weight w_z (Eq. 3).
+    FormulaDefinition def;
+    def.name = "edge_stopping_depth";
+    def.category = "denoise";
+    def.description = "SVGF depth edge-stopping weight: "
+                      "w_z = exp(-|dz| / (sigmaZ*gradTerm + eps)). dz = "
+                      "|z_p - z_q|, gradTerm = |grad(z)·(p-q)|. Re-fit sigmaZ.";
+    def.inputs = {
+        {"dz",       VT::FLOAT, "", 0.0f},   // |z_p - z_q|
+        {"gradTerm", VT::FLOAT, "", 1.0f}    // |grad(z)·(p-q)|
+    };
+    def.output = {VT::FLOAT, ""};
+    def.coefficients = {{"sigmaZ", 1.0f}, {"eps", 1e-3f}};
+
+    // exp( -dz / (sigmaZ*gradTerm + eps) )
+    def.expressions[QT::FULL] =
+        fn("exp",
+            fn("negate",
+                binOp("/", var("dz"),
+                    binOp("+",
+                        binOp("*", var("sigmaZ"), var("gradTerm")),
+                        var("eps")))));
+
+    def.source = "Schied et al. 2017, Eq. 3.";
+    return def;
+}
+
+FormulaDefinition PhysicsTemplates::createEdgeStoppingNormal()
+{
+    // SVGF normal edge-stopping weight w_n (Eq. 4).
+    FormulaDefinition def;
+    def.name = "edge_stopping_normal";
+    def.category = "denoise";
+    def.description = "SVGF normal edge-stopping weight: "
+                      "w_n = pow(max(0, n_p·n_q), sigmaN). Re-fit sigmaN "
+                      "(paper uses 128).";
+    def.inputs = {
+        {"ndot", VT::FLOAT, "", 1.0f}   // n_p·n_q
+    };
+    def.output = {VT::FLOAT, ""};
+    def.coefficients = {{"sigmaN", 128.0f}};
+
+    // pow( max(0, ndot), sigmaN )
+    def.expressions[QT::FULL] =
+        binOp("pow",
+            binOp("max", lit(0.0f), var("ndot")),
+            var("sigmaN"));
+
+    def.source = "Schied et al. 2017, Eq. 4.";
+    return def;
+}
+
+FormulaDefinition PhysicsTemplates::createEdgeStoppingLuminance()
+{
+    // SVGF luminance edge-stopping weight w_l (Eq. 5).
+    FormulaDefinition def;
+    def.name = "edge_stopping_luminance";
+    def.category = "denoise";
+    def.description = "SVGF luminance edge-stopping weight: "
+                      "w_l = exp(-|dl| / (sigmaL*sqrt(gVar) + eps)). dl = "
+                      "|l_p - l_q|, gVar = 3x3-Gaussian-prefiltered luminance "
+                      "variance. Re-fit sigmaL (paper uses 4).";
+    def.inputs = {
+        {"dl",   VT::FLOAT, "", 0.0f},   // |l_p - l_q|
+        {"gVar", VT::FLOAT, "", 1.0f}    // prefiltered luminance variance
+    };
+    def.output = {VT::FLOAT, ""};
+    def.coefficients = {{"sigmaL", 4.0f}, {"eps", 1e-3f}};
+
+    // exp( -dl / (sigmaL*sqrt(gVar) + eps) )  — sqrt codegens to safeSqrt
+    def.expressions[QT::FULL] =
+        fn("exp",
+            fn("negate",
+                binOp("/", var("dl"),
+                    binOp("+",
+                        binOp("*", var("sigmaL"), fn("sqrt", var("gVar"))),
+                        var("eps")))));
+
+    def.source = "Schied et al. 2017, Eq. 5.";
+    return def;
+}
+
+FormulaDefinition PhysicsTemplates::createAdaptiveSampleCount()
+{
+    // Variance-driven samples-per-pixel curve. ENGINE TEMPLATE, not a
+    // published formula — a sensible starting curve the consumer fits to its
+    // own variance/error capture.
+    FormulaDefinition def;
+    def.name = "adaptive_sample_count";
+    def.category = "denoise";
+    def.description = "Variance-driven adaptive sample count (spp): "
+                      "n = clamp(floor(k*sqrt(variance) + 0.5), nMin, nMax). "
+                      "Engine template, not a published formula — fit k/nMin/nMax "
+                      "to captured per-pixel variance.";
+    def.inputs = {
+        {"variance", VT::FLOAT, "", 0.0f}
+    };
+    def.output = {VT::FLOAT, ""};
+    def.coefficients = {{"k", 8.0f}, {"nMin", 1.0f}, {"nMax", 16.0f}};
+
+    // min(nMax, max(nMin, floor(k*sqrt(variance) + 0.5)))
+    def.expressions[QT::FULL] =
+        binOp("min", var("nMax"),
+            binOp("max", var("nMin"),
+                fn("floor",
+                    binOp("+",
+                        binOp("*", var("k"), fn("sqrt", var("variance"))),
+                        lit(0.5f)))));
+
+    def.source = "engine template — fit k/nMin/nMax to captured variance";
+    return def;
+}
+
+FormulaDefinition PhysicsTemplates::createRrSurvival()
+{
+    // Russian-roulette survival probability. ENGINE VARIANT (max-channel +
+    // two-sided clamp), explicitly NOT the PBRT luminance form.
+    FormulaDefinition def;
+    def.name = "rr_survival";
+    def.category = "pathtrace";
+    def.description = "Russian-roulette path survival probability: "
+                      "p = clamp(maxThroughput, pMin, pMax). Common engine "
+                      "variant (max-channel + two-sided clamp). PBRT §14.5.4 uses "
+                      "luminance + a single floor q=max(0.05,1-lum). RR stays "
+                      "unbiased but adds variance — apply only after early "
+                      "bounces (e.g. depth > 3). Survivors rescale throughput by "
+                      "1/p (caller's job). maxThroughput = max(throughput.rgb) is "
+                      "a vec3 reduction outside the AST.";
+    def.inputs = {
+        {"maxThroughput", VT::FLOAT, "", 1.0f}   // max(throughput.r,g,b)
+    };
+    def.output = {VT::FLOAT, ""};
+    def.coefficients = {{"pMin", 0.05f}, {"pMax", 0.95f}};
+
+    // min(pMax, max(pMin, maxThroughput))
+    def.expressions[QT::FULL] =
+        binOp("min", var("pMax"),
+            binOp("max", var("pMin"), var("maxThroughput")));
+
+    def.source = "Arvo & Kirk, 'Particle Transport and Image Synthesis', "
+                 "SIGGRAPH '90; PBRT §13.7 / §14.5.4 (PBRT form differs — see "
+                 "description).";
+    return def;
+}
+
+FormulaDefinition PhysicsTemplates::createSrgbToLinear()
+{
+    // Exact IEC 61966-2-1 sRGB decode, per channel (R/G/B, never alpha).
+    FormulaDefinition def;
+    def.name = "srgb_to_linear";
+    def.category = "color";
+    def.description = "sRGB → linear decode (one channel, [0,1]). FULL: "
+                      "c <= 0.04045 ? c/12.92 : pow((c+0.055)/1.055, 2.4). "
+                      "APPROXIMATE: pow(c, 2.2). Predicate max(0, 0.04045-c) is "
+                      "nonzero (true) for c < 0.04045; the equality point lands "
+                      "on the high branch, matching the standard's > boundary.";
+    def.inputs = {
+        {"c", VT::FLOAT, "", 0.0f}   // one channel in [0,1]
+    };
+    def.output = {VT::FLOAT, ""};
+
+    // (c <= 0.04045) ? c/12.92 : pow((c+0.055)/1.055, 2.4)
+    def.expressions[QT::FULL] =
+        E::conditional(
+            binOp("max", lit(0.0f), binOp("-", lit(0.04045f), var("c"))),
+            binOp("/", var("c"), lit(12.92f)),
+            binOp("pow",
+                binOp("/", binOp("+", var("c"), lit(0.055f)), lit(1.055f)),
+                lit(2.4f)));
+
+    // Cheap gamma-2.2 (no linear toe near black).
+    def.expressions[QT::APPROXIMATE] =
+        binOp("pow", var("c"), lit(2.2f));
+
+    def.source = "IEC 61966-2-1:1999; W3C CSS Color 4 reference code. Rounded "
+                 "breakpoint 0.04045 (= 12.92·0.0031308). Not perfectly C1 / not "
+                 "an exact inverse of the encode — use rounded IEC constants.";
+    return def;
+}
+
+FormulaDefinition PhysicsTemplates::createLinearToSrgb()
+{
+    // Exact IEC 61966-2-1 sRGB encode, per channel (R/G/B, never alpha).
+    FormulaDefinition def;
+    def.name = "linear_to_srgb";
+    def.category = "color";
+    def.description = "linear → sRGB encode (one channel, [0,1]). FULL: "
+                      "c <= 0.0031308 ? 12.92*c : 1.055*pow(c, 1/2.4) - 0.055. "
+                      "APPROXIMATE: pow(c, 1/2.2). Predicate max(0, 0.0031308-c) "
+                      "is nonzero (true) for c < 0.0031308.";
+    def.inputs = {
+        {"c", VT::FLOAT, "", 0.0f}   // one channel in [0,1]
+    };
+    def.output = {VT::FLOAT, ""};
+
+    // (c <= 0.0031308) ? 12.92*c : 1.055*pow(c, 1/2.4) - 0.055
+    def.expressions[QT::FULL] =
+        E::conditional(
+            binOp("max", lit(0.0f), binOp("-", lit(0.0031308f), var("c"))),
+            binOp("*", lit(12.92f), var("c")),
+            binOp("-",
+                binOp("*", lit(1.055f),
+                    binOp("pow", var("c"), lit(0.41666667f))),   // 1/2.4
+                lit(0.055f)));
+
+    // Cheap inverse gamma-2.2.
+    def.expressions[QT::APPROXIMATE] =
+        binOp("pow", var("c"), lit(0.45454545f));   // 1/2.2
+
+    def.source = "IEC 61966-2-1:1999; exponent 1/2.4 = 0.41666….";
     return def;
 }
 

@@ -54,9 +54,14 @@ public:
     /// @return Number of formulas loaded.
     size_t loadFromJson(const nlohmann::json& j);
 
-    /// @brief Loads formulas from a JSON file.
+    /// @brief Loads formulas from a JSON file (size-capped via JsonSizeCap).
+    /// @param path   Path to the JSON file.
+    /// @param strict When true, a malformed-JSON / trailing-garbage parse is
+    ///        surfaced with detail (forwarded to JsonSizeCap); when false
+    ///        (default) it is logged as a warning and 0 is returned. Pass
+    ///        `true` for untrusted input (e.g. the `--export-glsl` verb).
     /// @return Number of formulas loaded, or 0 on failure.
-    size_t loadFromFile(const std::string& path);
+    size_t loadFromFile(const std::string& path, bool strict = false);
 
     /// @brief Serializes all formulas to a JSON array.
     nlohmann::json toJson() const;

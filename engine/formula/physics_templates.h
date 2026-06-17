@@ -71,6 +71,27 @@ public:
     // Terrain
     static FormulaDefinition createHeightBlend();
     static FormulaDefinition createThermalErosion();
+
+    // Path tracing (DOOM_Ants Workbench requests, 3D_E-0006..0010).
+    // Scalar PDFs / weights / transfer functions exported as GLSL for an
+    // external Vulkan path tracer; the vector sample-direction routines stay
+    // hand-written (no coefficients to fit) — see
+    // docs/research/pathtracer_formula_coverage_design.md §2.
+    // Sampling PDFs (3D_E-0006)
+    static FormulaDefinition createCosineHemispherePdf();
+    static FormulaDefinition createGgxVndfPdf();
+    static FormulaDefinition createMisPowerHeuristic();
+    // Denoiser / temporal accumulation — SVGF family (3D_E-0007)
+    static FormulaDefinition createTemporalAlpha();
+    static FormulaDefinition createEdgeStoppingDepth();
+    static FormulaDefinition createEdgeStoppingNormal();
+    static FormulaDefinition createEdgeStoppingLuminance();
+    static FormulaDefinition createAdaptiveSampleCount();
+    // Russian roulette (3D_E-0008)
+    static FormulaDefinition createRrSurvival();
+    // sRGB transfer functions (3D_E-0010)
+    static FormulaDefinition createSrgbToLinear();
+    static FormulaDefinition createLinearToSrgb();
 };
 
 } // namespace Vestige

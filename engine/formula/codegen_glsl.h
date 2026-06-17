@@ -35,9 +35,16 @@ public:
     /// @brief Generate a complete GLSL include file with all formulas.
     /// @param formulas Pointers to formula definitions.
     /// @param tier Quality tier to generate.
+    /// @param fileBanner Optional extra banner lines emitted after the
+    ///        "DO NOT EDIT" header (each line must already be a GLSL `//`
+    ///        comment and newline-terminated). The codegen layer cannot know
+    ///        the Workbench tool version or the source-library hash — those are
+    ///        tools-layer facts — so the `--export-glsl` verb composes the
+    ///        provenance banner and passes it in here.
     /// @return Complete GLSL file content.
     static std::string generateFile(const std::vector<const FormulaDefinition*>& formulas,
-                                     QualityTier tier = QualityTier::FULL);
+                                     QualityTier tier = QualityTier::FULL,
+                                     const std::string& fileBanner = "");
 
     /// @brief Emit a GLSL expression string from an expression node.
     /// @param node The expression tree root.

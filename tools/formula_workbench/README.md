@@ -38,6 +38,21 @@ When updating the workbench:
 
 The workbench can run against any Vestige formula library JSON, including ones produced outside the engine's build. There are no plans to distribute it as a separate project — it has no meaningful purpose without the engine's formula schema — but the build target is standalone, so you can ship just `formula_workbench` to data scientists or designers without the full engine.
 
+## Consuming Workbench formulas from an external C++/Vulkan project
+
+The export model is **commit the generated GLSL; no runtime dependency on the tool** (used by the DOOM_Ants Vulkan path tracer — see `docs/research/pathtracer_formula_coverage_design.md`). End to end:
+
+1. **Pin a library.** Author/fit your formulas, then `formula_workbench --dump-library > formulas.library.json` and commit that JSON in your project. (Or pin the built-in library by version — the provenance banner records which.)
+2. **Export in your build.** Run, ideally from a CMake custom command / CI step:
+   ```
+   formula_workbench --export-glsl formulas.library.json --out shaders/generated/ [--tier full|approx]
+   ```
+   This writes one self-contained `<formula_name>.glsl` per formula (safe-math prelude + provenance comment) plus a combined `formulas.glsl`. Output is **name-sorted and deterministic**, so regenerated artifacts diff cleanly — commit them.
+3. **Include + compile.** `#include "shaders/generated/formulas.glsl"` (or a single function file) in your shader and compile with `glslc` to SPIR-V. The functions are plain scalar GLSL with the safe-math guards inlined.
+4. **Gate on drift.** Wire the reference harness (the `reference_cases/*.json` regression) into your pre-commit / CI so a coefficient or expression change that drifts the look fails the build before it ships. The file banner's `library hash:` line lets you spot a regenerated-from-different-library artifact at a glance.
+
+Untrusted `library.json` is safe to export: it is loaded strictly (size-capped, parse errors surfaced) and formula/input names are validated, so a hostile name can neither inject GLSL tokens nor escape `--out`. Note the **scalar** scope — sample-*direction* routines (GGX-VNDF basis transform, cosine-hemisphere Malley lift) are not Workbench formulas; copy them as hand-written GLSL from the design doc.
+
 ## Why it isn't its own repo
 
 Short answer: it's tightly coupled to `engine/formula/*`, has exactly one user (the engine), and splitting now adds cross-repo sync overhead without benefit. If the formula library ever ships as a standalone C++ math library, this tool would be a natural companion and could move with it. Until then: monorepo with a clean seam.

@@ -140,37 +140,37 @@ DOOM_Ants_Feedback.md (gathered 2026-06-16, scoping DOOM-0008/0009). Findings
 were doc/source-review only — no Workbench code was run yet; revisit priorities
 once the path tracer's first curves are fitted in anger.
 
-- 📋 [3D_E-0006] **FW (GAP/HIGH): importance-sampling / PDF formula templates.**
+- ✅ [3D_E-0006] **FW (GAP/HIGH): importance-sampling / PDF formula templates.** (Shipped 2026-06-17, workbench v1.19.0 — `cosine_hemisphere_pdf`, `ggx_vndf_pdf`, `mis_power_heuristic`; scalar PDFs only, sample-direction routines stay hand-written per design §2.)
   Library has BRDF *evaluation* terms (D=ggx_distribution, G=schlick_geometry, F=fresnel_schlick) but no *sampling* side. Add as first-class templates: GGX/VNDF sample-direction (u1,u2)->microfacet-normal + its PDF (Heitz 2018 "Sampling the GGX Distribution of Visible Normals"); cosine-weighted hemisphere sample + PDF (diffuse bounce); MIS power/balance-heuristic weight w = pdf_a^B/(pdf_a^B+pdf_b^B), B=2. Closed-form; ship even as 0-coefficient FULL-tier formulas so they export as GLSL with the safe-math prelude and regression-lock in the reference harness.
   Kind: feature.
   Source: DOOM_Ants_Feedback.md #1 (2026-06-16).
 
-- 📋 [3D_E-0007] **FW (GAP/MEDIUM): real-time-RT denoiser / temporal-accumulation blend templates.**
+- ✅ [3D_E-0007] **FW (GAP/MEDIUM): real-time-RT denoiser / temporal-accumulation blend templates.** (Shipped 2026-06-17 — `denoise` category: `temporal_alpha`, `edge_stopping_depth/normal/luminance`, `adaptive_sample_count`.)
   Small "real-time-RT" formula category for SVGF/A-SVGF tunable curves: temporal blend / EMA alpha as f(history length, disocclusion) (alpha = clamp(1/(n+1), amin, 1) style); edge-stopping weights (depth/normal/luminance, exp(-|d|/sigma) falloffs); variance-driven adaptive sample-count curve. Coefficient-rich + empirically tuned — fits fit-history seeding + weighted LM + reference regression. Consumer feeds captured per-pixel variance/error data and fits rather than guessing sigma.
   Kind: feature.
   Source: DOOM_Ants_Feedback.md #2 (2026-06-16).
 
-- 📋 [3D_E-0008] **FW (GAP/MEDIUM): Russian-roulette survival-probability template.**
+- ✅ [3D_E-0008] **FW (GAP/MEDIUM): Russian-roulette survival-probability template.** (Shipped 2026-06-17 — `rr_survival`, engine variant labelled vs the PBRT luminance form.)
   Add an rr_survival template for unbiased path termination: commonly p = clamp(max(throughput.rgb), pmin, pmax), sometimes a fitted function of bounce depth + throughput. Natural Workbench formula.
   Kind: feature.
   Source: DOOM_Ants_Feedback.md #3 (2026-06-16).
 
-- 📋 [3D_E-0009] **FW (INTEGRATION/MEDIUM): documented headless GLSL-export path for an external Vulkan project.**
+- ✅ [3D_E-0009] **FW (INTEGRATION/MEDIUM): documented headless GLSL-export path for an external Vulkan project.** (Shipped 2026-06-17 — `--export-glsl [<library.json>] --out <dir> [--tier]`, name-sorted/deterministic, strict untrusted-input load.)
   Reproducible CI-friendly regeneration of shader includes from committed FormulaLibrary JSON, no GUI. Either (1) a `formula_workbench --export-glsl <library.json> --out <dir>` batch verb writing one .glsl (+ combined formulas.glsl include) per formula with the safe-math prelude, deterministic stable ordering for git; OR (2) a doc section "Consuming Workbench formulas from an external C++/Vulkan project" (pin library.json, run export in consumer build, #include generated .glsl, wire reference harness as pre-commit/CI gate so coefficient drift fails the build). Commit-the-artifacts / no-runtime-dependency model is the target.
   Kind: feature.
   Source: DOOM_Ants_Feedback.md #4 (2026-06-16).
 
-- 📋 [3D_E-0010] **FW (GAP/LOW): srgb_to_linear / linear_to_srgb output-transform pair.**
+- ✅ [3D_E-0010] **FW (GAP/LOW): srgb_to_linear / linear_to_srgb output-transform pair.** (Shipped 2026-06-17 — `color` category, exact IEC 61966-2-1 FULL + cheap-gamma APPROXIMATE.)
   Rounds out the output-transform set (exposure_ev already exists) so the whole display chain (albedo decode -> PT -> exposure -> tonemap -> encode) can be Workbench-authored end-to-end. DOOM_Ants decodes 8-bit paletted art (PLAYPAL) to linear RGB for path-traced albedo. Not a fit target — canonical expressions.
   Kind: feature.
   Source: DOOM_Ants_Feedback.md #5 (2026-06-16).
 
-- 📋 [3D_E-0011] **FW (workflow/MEDIUM): --self-benchmark over a directory of datasets.**
+- ✅ [3D_E-0011] **FW (workflow/MEDIUM): --self-benchmark over a directory of datasets.** (Shipped 2026-06-17 — directory batch, one section per `*.csv`; single-file path byte-identical.)
   Batch run --self-benchmark over a folder of reference datasets (BRDF lobe, phase function, attenuation captured at once), emitting one combined leaderboard, vs N single-file invocations. Confirm whether single-file is the only current mode before implementing.
   Kind: enhancement.
   Source: DOOM_Ants_Feedback.md #A (2026-06-16).
 
-- 📋 [3D_E-0012] **FW (workflow/LOW): emit a provenance comment in generated GLSL.**
+- ✅ [3D_E-0012] **FW (workflow/LOW): emit a provenance comment in generated GLSL.** (Shipped 2026-06-17 — always-on per-function name/source/R² + file banner with tool version + FNV-1a-64 library hash. RMSE/AIC are benchmark-only outputs, not on the definition, so out of scope for plain codegen.)
   Prepend a comment to GLSL export with source formula_name, the fit's R2/RMSE/AIC, the library.json hash, and the Workbench version, so a generated shader self-documents which fit produced it — useful for diffing regenerated artifacts and six-months-later context.
   Kind: enhancement.
   Source: DOOM_Ants_Feedback.md #B (2026-06-16).

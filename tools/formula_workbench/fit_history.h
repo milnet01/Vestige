@@ -30,6 +30,7 @@
 
 #include "formula/curve_fitter.h"
 
+#include <cstdint>
 #include <map>
 #include <string>
 #include <utility>
@@ -37,6 +38,15 @@
 
 namespace Vestige
 {
+
+/// @brief FNV-1a 64-bit hash of a byte string. Non-cryptographic — used for
+///        dataset fingerprinting (fit history) and the --export-glsl
+///        provenance banner's source-library hash. Never a trust/integrity
+///        decision.
+std::uint64_t fnv1a64(const std::string& s);
+
+/// @brief Lower-case, zero-padded 16-hex-digit rendering of a 64-bit value.
+std::string toHex64(std::uint64_t v);
 
 /// @brief Summary statistics of a fit's input dataset.
 ///

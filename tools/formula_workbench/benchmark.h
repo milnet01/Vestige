@@ -129,6 +129,20 @@ std::optional<int> runSuggestFormulasCli(int argc, char** argv);
 void dumpLibraryJson(const FormulaLibrary& library);
 std::optional<int> runDumpLibraryCli(int argc, char** argv);
 
+/// @brief 3D_E-0009 — headless GLSL export for an external Vulkan project.
+/// Returns the process exit code when ``--export-glsl`` is handled, or
+/// ``std::nullopt`` if the GUI should start normally.
+///
+/// Usage:
+///   formula_workbench --export-glsl [<library.json>] --out <dir> [--tier full|approx]
+///
+/// With no ``<library.json>`` the built-in library is exported; with a path it
+/// is loaded strictly (size-capped, parse errors surfaced, hostile names
+/// rejected — AUDIT §H11). Writes ``<dir>/<formula_name>.glsl`` per formula
+/// (safe-math prelude + provenance banner) plus a combined ``formulas.glsl``,
+/// name-sorted for deterministic git diffs.
+std::optional<int> runExportGlslCli(int argc, char** argv);
+
 /// @brief Serialise a FormulaLibrary to a JSON string (same shape
 /// emitted by ``--dump-library``). Exposed so the GUI's Suggestions
 /// panel (§3.6 GUI) can pipe it through to ``llm_rank.py`` without

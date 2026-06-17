@@ -271,11 +271,21 @@ executeReferenceCase(const ReferenceCase& c, const FormulaLibrary& library)
         return r;
     }
 
-    // Mode 2: evaluation-regression. Zero-coefficient formulas have
-    // nothing for the fitter to recover, so the spec commits golden
+    // Mode 2: evaluation-regression. The spec commits golden
     // input → expected output points and we assert the FULL-tier
     // expression still reproduces them. When evaluation_points is
     // present it wins; the fit path below is skipped.
+    //
+    // Coefficient-bearing formulas are supported here: the var map is
+    // seeded with the formula's library-default coefficients first, then
+    // the golden point's `inputs` are applied on top (inputs win on a
+    // key collision). This locks each formula at its shipped default
+    // coefficients — changing a default makes a golden test fail — while
+    // a golden point may still probe a non-default coefficient by naming
+    // it under `inputs`. This is the same coefficients-as-variables
+    // mechanism synthesizeDataset uses, in the reverse order (mode 1
+    // applies inputs then coefficients so coefficients win; mode 2
+    // applies coefficients then inputs so inputs win).
     if (!c.evaluation_points.empty())
     {
         const ExprNode* expr = formula->getExpression(QualityTier::FULL);
@@ -291,6 +301,7 @@ executeReferenceCase(const ReferenceCase& c, const FormulaLibrary& library)
         {
             const auto& pt = c.evaluation_points[i];
             ExpressionEvaluator::VariableMap vars;
+            for (const auto& [k, v] : formula->coefficients) vars[k] = v;
             for (const auto& [k, v] : pt.inputs) vars[k] = v;
             const float actual = eval.evaluate(*expr, vars);
             // Written as `!(diff <= tol)` so a NaN result fails rather

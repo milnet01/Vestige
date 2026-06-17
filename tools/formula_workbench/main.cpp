@@ -54,6 +54,12 @@ int main(int argc, char** argv)
     // as stdin to llm_rank.py when --suggest-formulas runs.
     if (auto rc = Vestige::runDumpLibraryCli(argc, argv))
         return *rc;
+
+    // 3D_E-0009 — headless GLSL export for an external Vulkan project
+    // (DOOM_Ants). Writes one .glsl per formula + a combined include,
+    // deterministically, then exits. Headless.
+    if (auto rc = Vestige::runExportGlslCli(argc, argv))
+        return *rc;
     // GLFW init
     glfwSetErrorCallback(glfwErrorCallback);
     if (!glfwInit())

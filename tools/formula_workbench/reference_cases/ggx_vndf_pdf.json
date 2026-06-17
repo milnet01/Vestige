@@ -1,0 +1,33 @@
+{
+  "formula_name": "ggx_vndf_pdf",
+  "notes": "Evaluation-regression (mode 2): golden input\u2192output points derived independently in float32 Python at authoring time. Coefficient-bearing formulas are evaluated at their shipped library-default coefficients (the harness seeds those first, then these inputs). See docs/research/pathtracer_formula_coverage_design.md \u00a73.",
+  "evaluation_points": [
+    {
+      "inputs": {
+        "G1": 1.0,
+        "D": 1.0,
+        "NdotV": 0.5
+      },
+      "expected_output": 0.5,
+      "tolerance": 0.0001
+    },
+    {
+      "inputs": {
+        "G1": 0.8,
+        "D": 2.0,
+        "NdotV": 0.25
+      },
+      "expected_output": 1.6,
+      "tolerance": 0.0001
+    },
+    {
+      "inputs": {
+        "G1": 0.5,
+        "D": 0.5,
+        "NdotV": 1.0
+      },
+      "expected_output": 0.0625,
+      "tolerance": 0.0001
+    }
+  ]
+}

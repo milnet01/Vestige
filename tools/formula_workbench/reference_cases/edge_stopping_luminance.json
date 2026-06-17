@@ -1,0 +1,30 @@
+{
+  "formula_name": "edge_stopping_luminance",
+  "notes": "Evaluation-regression (mode 2): golden input\u2192output points derived independently in float32 Python at authoring time. Coefficient-bearing formulas are evaluated at their shipped library-default coefficients (the harness seeds those first, then these inputs). See docs/research/pathtracer_formula_coverage_design.md \u00a73.",
+  "evaluation_points": [
+    {
+      "inputs": {
+        "dl": 0.0,
+        "gVar": 1.0
+      },
+      "expected_output": 1.0,
+      "tolerance": 0.0001
+    },
+    {
+      "inputs": {
+        "dl": 1.0,
+        "gVar": 1.0
+      },
+      "expected_output": 0.7788494,
+      "tolerance": 0.0001
+    },
+    {
+      "inputs": {
+        "dl": 2.0,
+        "gVar": 4.0
+      },
+      "expected_output": 0.7788251,
+      "tolerance": 0.0001
+    }
+  ]
+}

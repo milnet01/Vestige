@@ -1,0 +1,27 @@
+{
+  "formula_name": "rr_survival",
+  "notes": "Evaluation-regression (mode 2): golden input\u2192output points derived independently in float32 Python at authoring time. Coefficient-bearing formulas are evaluated at their shipped library-default coefficients (the harness seeds those first, then these inputs). See docs/research/pathtracer_formula_coverage_design.md \u00a73.",
+  "evaluation_points": [
+    {
+      "inputs": {
+        "maxThroughput": 0.01
+      },
+      "expected_output": 0.05,
+      "tolerance": 0.0001
+    },
+    {
+      "inputs": {
+        "maxThroughput": 0.5
+      },
+      "expected_output": 0.5,
+      "tolerance": 0.0001
+    },
+    {
+      "inputs": {
+        "maxThroughput": 0.99
+      },
+      "expected_output": 0.95,
+      "tolerance": 0.0001
+    }
+  ]
+}

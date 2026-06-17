@@ -1,0 +1,30 @@
+{
+  "formula_name": "edge_stopping_depth",
+  "notes": "Evaluation-regression (mode 2): golden input\u2192output points derived independently in float32 Python at authoring time. Coefficient-bearing formulas are evaluated at their shipped library-default coefficients (the harness seeds those first, then these inputs). See docs/research/pathtracer_formula_coverage_design.md \u00a73.",
+  "evaluation_points": [
+    {
+      "inputs": {
+        "dz": 0.0,
+        "gradTerm": 1.0
+      },
+      "expected_output": 1.0,
+      "tolerance": 0.0001
+    },
+    {
+      "inputs": {
+        "dz": 1.0,
+        "gradTerm": 1.0
+      },
+      "expected_output": 0.36824712,
+      "tolerance": 0.0001
+    },
+    {
+      "inputs": {
+        "dz": 2.0,
+        "gradTerm": 0.5
+      },
+      "expected_output": 0.018462455,
+      "tolerance": 1e-05
+    }
+  ]
+}

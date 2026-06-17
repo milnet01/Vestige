@@ -1,0 +1,30 @@
+{
+  "formula_name": "mis_power_heuristic",
+  "notes": "Evaluation-regression (mode 2): golden input\u2192output points derived independently in float32 Python at authoring time. Coefficient-bearing formulas are evaluated at their shipped library-default coefficients (the harness seeds those first, then these inputs). See docs/research/pathtracer_formula_coverage_design.md \u00a73.",
+  "evaluation_points": [
+    {
+      "inputs": {
+        "pdfA": 1.0,
+        "pdfB": 1.0
+      },
+      "expected_output": 0.5,
+      "tolerance": 0.0001
+    },
+    {
+      "inputs": {
+        "pdfA": 2.0,
+        "pdfB": 1.0
+      },
+      "expected_output": 0.8,
+      "tolerance": 0.0001
+    },
+    {
+      "inputs": {
+        "pdfA": 3.0,
+        "pdfB": 4.0
+      },
+      "expected_output": 0.36,
+      "tolerance": 0.0001
+    }
+  ]
+}

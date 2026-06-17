@@ -1,0 +1,34 @@
+{
+  "formula_name": "srgb_to_linear",
+  "notes": "Evaluation-regression (mode 2): golden input\u2192output points derived independently in float32 Python at authoring time. Coefficient-bearing formulas are evaluated at their shipped library-default coefficients (the harness seeds those first, then these inputs). See docs/research/pathtracer_formula_coverage_design.md \u00a73.",
+  "evaluation_points": [
+    {
+      "inputs": {
+        "c": 0.0
+      },
+      "expected_output": 0.0,
+      "tolerance": 0.0001
+    },
+    {
+      "inputs": {
+        "c": 0.04
+      },
+      "expected_output": 0.0030959751,
+      "tolerance": 1e-05
+    },
+    {
+      "inputs": {
+        "c": 0.5
+      },
+      "expected_output": 0.21404114,
+      "tolerance": 0.0001
+    },
+    {
+      "inputs": {
+        "c": 1.0
+      },
+      "expected_output": 1.0,
+      "tolerance": 0.0001
+    }
+  ]
+}

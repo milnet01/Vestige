@@ -16,8 +16,9 @@
 namespace Vestige
 {
 
-namespace
-{
+// toHex64 / fnv1a64 are exported (declared in fit_history.h) so the
+// --export-glsl provenance banner can hash the source library with the
+// same implementation, rather than re-rolling FNV-1a.
 
 // Deterministic hex-string encoder for a 64-bit value. Avoids locale
 // sensitivity and std::hex stream state leakage.
@@ -45,6 +46,9 @@ std::uint64_t fnv1a64(const std::string& s)
     }
     return h;
 }
+
+namespace
+{
 
 nlohmann::json metaToJson(const FitHistoryMeta& m)
 {

@@ -4,6 +4,8 @@
 #include "benchmark.h"
 
 #include "fit_history.h"
+#include "workbench.h"
+#include "formula/codegen_glsl.h"
 #include "formula/formula.h"
 
 #include <nlohmann/json.hpp>
@@ -444,10 +446,13 @@ std::optional<int> runBenchmarkCli(int argc, char** argv)
         else if (a == "--help" || a == "-h")
         {
             std::fprintf(stderr,
-                "Usage: formula_workbench [--self-benchmark <csv>] "
+                "Usage: formula_workbench [--self-benchmark <csv|dir>] "
                 "[--output <md>]\n"
                 "  --self-benchmark <csv>   Fit every library formula to "
                 "<csv> and emit a markdown leaderboard.\n"
+                "  --self-benchmark <dir>   Batch: fit against every *.csv in "
+                "<dir> (sorted) and emit one combined report, a section "
+                "per dataset.\n"
                 "  --output <md>            Write report to <md> "
                 "(default: stdout).\n"
                 "  No flags                 Start the GUI as usual.\n");
@@ -458,18 +463,78 @@ std::optional<int> runBenchmarkCli(int argc, char** argv)
     if (!requested)
         return std::nullopt;
 
-    std::string err;
-    auto data = loadCsvDataset(csvPath, err);
-    if (!data)
-    {
-        std::fprintf(stderr, "error: %s\n", err.c_str());
-        return 1;
-    }
-
     FormulaLibrary library;
     library.registerBuiltinTemplates();
-    const auto entries = runBenchmark(library, *data);
-    const std::string md = renderBenchmarkMarkdown(entries);
+
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    const bool isDir = fs::is_directory(csvPath, ec);
+
+    std::string md;
+    int exitCode = 0;
+
+    if (isDir)
+    {
+        // 3D_E-0011 — batch over a directory of datasets. One combined
+        // markdown, a section per *.csv (sorted for deterministic output).
+        // Per-file load errors are reported inline and don't abort the
+        // batch; the verb exits non-zero if any dataset failed.
+        std::vector<std::string> csvs;
+        for (const auto& entry : fs::directory_iterator(csvPath, ec))
+        {
+            const auto p = entry.path();
+            if (p.extension() == ".csv")
+                csvs.push_back(p.string());
+        }
+        std::sort(csvs.begin(), csvs.end());
+
+        if (csvs.empty())
+        {
+            std::fprintf(stderr, "error: no .csv files in directory %s\n",
+                         csvPath.c_str());
+            return 1;
+        }
+
+        std::ostringstream out;
+        out << "# Formula Workbench self-benchmark — batch ("
+            << csvs.size() << " dataset" << (csvs.size() == 1 ? "" : "s")
+            << " from " << csvPath << ")\n\n";
+
+        for (const auto& path : csvs)
+        {
+            const std::string name = fs::path(path).filename().string();
+            std::string err;
+            auto data = loadCsvDataset(path, err);
+            if (!data)
+            {
+                out << "## " << name << "\n\n*error: " << err << "*\n\n";
+                exitCode = 1;
+                continue;
+            }
+            const auto entries = runBenchmark(library, *data);
+            // Reuse the single-dataset renderer, demoting its H1 title to an
+            // H2 dataset heading so the combined doc has one top-level title.
+            std::string body = renderBenchmarkMarkdown(entries);
+            const std::string title = "# Formula Workbench self-benchmark";
+            if (body.rfind(title, 0) == 0)
+                body = "## " + name + body.substr(title.size());
+            out << body << "\n";
+        }
+        md = out.str();
+    }
+    else
+    {
+        // Single file — byte-identical to the pre-1.18 behaviour.
+        std::string err;
+        auto data = loadCsvDataset(csvPath, err);
+        if (!data)
+        {
+            std::fprintf(stderr, "error: %s\n", err.c_str());
+            return 1;
+        }
+        const auto entries = runBenchmark(library, *data);
+        md = renderBenchmarkMarkdown(entries);
+    }
 
     if (outputPath.empty())
     {
@@ -486,7 +551,7 @@ std::optional<int> runBenchmarkCli(int argc, char** argv)
         }
         f << md;
     }
-    return 0;
+    return exitCode;
 }
 
 // ---------------------------------------------------------------------------
@@ -659,6 +724,136 @@ std::optional<int> runDumpLibraryCli(int argc, char** argv)
         }
     }
     return std::nullopt;
+}
+
+std::optional<int> runExportGlslCli(int argc, char** argv)
+{
+    std::string libraryPath;   // optional positional after the flag
+    std::string outDir;
+    QualityTier tier = QualityTier::FULL;
+    bool requested = false;
+
+    for (int i = 1; i < argc; ++i)
+    {
+        std::string a = argv[i];
+        if (a == "--export-glsl")
+        {
+            requested = true;
+            // Optional library path: the next token, unless it's another flag.
+            if (i + 1 < argc && argv[i + 1][0] != '-')
+                libraryPath = argv[++i];
+        }
+        else if (a == "--out" && i + 1 < argc)
+        {
+            outDir = argv[++i];
+        }
+        else if (a == "--tier" && i + 1 < argc)
+        {
+            const std::string t = argv[++i];
+            if (t == "approx" || t == "approximate")
+                tier = QualityTier::APPROXIMATE;
+            else if (t == "full")
+                tier = QualityTier::FULL;
+            else
+            {
+                std::fprintf(stderr,
+                    "error: --tier must be 'full' or 'approx'\n");
+                return 1;
+            }
+        }
+    }
+
+    if (!requested)
+        return std::nullopt;
+
+    if (outDir.empty())
+    {
+        std::fprintf(stderr,
+            "error: --export-glsl requires --out <dir>\n"
+            "Usage: formula_workbench --export-glsl [<library.json>] "
+            "--out <dir> [--tier full|approx]\n");
+        return 1;
+    }
+
+    FormulaLibrary library;
+    if (libraryPath.empty())
+    {
+        library.registerBuiltinTemplates();
+    }
+    else
+    {
+        // Untrusted input: strict parse (surfaces trailing garbage / parse
+        // errors) and inherit the JSON size cap. Hostile formula/input names
+        // are rejected at load (FormulaDefinition::fromJson, AUDIT §H11), so a
+        // name can never inject GLSL tokens or escape the --out directory.
+        const size_t n = library.loadFromFile(libraryPath, /*strict=*/true);
+        if (n == 0)
+        {
+            std::fprintf(stderr,
+                "error: no formulas loaded from %s (missing, too large, "
+                "malformed, or all rejected by name validation)\n",
+                libraryPath.c_str());
+            return 1;
+        }
+    }
+
+    // Deterministic, name-sorted ordering so regenerated artifacts diff
+    // cleanly in the consumer's git regardless of map iteration order.
+    std::vector<const FormulaDefinition*> formulas = library.getAll();
+    std::sort(formulas.begin(), formulas.end(),
+              [](const FormulaDefinition* a, const FormulaDefinition* b)
+              { return a->name < b->name; });
+
+    // Provenance banner (3D_E-0012): tool version + source-library hash.
+    // Composed here in the tools layer and passed into the engine codegen,
+    // which cannot know either fact. The hash is FNV-1a over the canonical
+    // dumped-library JSON — provenance/diff only, never a trust decision.
+    const std::string libJson = libraryToJsonString(library);
+    const std::string banner =
+        std::string("// Generated by Vestige Formula Workbench v")
+        + WORKBENCH_VERSION + "\n"
+        + "// library hash: " + toHex64(fnv1a64(libJson)) + "\n";
+
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    fs::create_directories(outDir, ec);
+    if (ec)
+    {
+        std::fprintf(stderr, "error: cannot create output dir %s: %s\n",
+                     outDir.c_str(), ec.message().c_str());
+        return 1;
+    }
+
+    auto writeFile = [](const fs::path& path, const std::string& content) -> bool
+    {
+        std::ofstream f(path);
+        if (!f)
+        {
+            std::fprintf(stderr, "error: cannot write %s\n",
+                         path.string().c_str());
+            return false;
+        }
+        f << content;
+        return f.good();
+    };
+
+    // One self-contained file per formula (banner + prelude + one function),
+    // plus a combined include (banner + one prelude + every function). Both
+    // reuse CodegenGlsl::generateFile — no new codegen logic.
+    for (const auto* f : formulas)
+    {
+        if (!f) continue;
+        const std::string code = CodegenGlsl::generateFile({f}, tier, banner);
+        if (!writeFile(fs::path(outDir) / (f->name + ".glsl"), code))
+            return 1;
+    }
+    const std::string combined = CodegenGlsl::generateFile(formulas, tier, banner);
+    if (!writeFile(fs::path(outDir) / "formulas.glsl", combined))
+        return 1;
+
+    std::fprintf(stderr, "Exported %zu formula file(s) + formulas.glsl to %s\n",
+                 formulas.size(), outDir.c_str());
+    return 0;
 }
 
 std::optional<int> runSymbolicRegressionCli(int argc, char** argv)

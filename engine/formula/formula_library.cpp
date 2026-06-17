@@ -133,9 +133,10 @@ size_t FormulaLibrary::loadFromJson(const nlohmann::json& j)
     return loaded;
 }
 
-size_t FormulaLibrary::loadFromFile(const std::string& path)
+size_t FormulaLibrary::loadFromFile(const std::string& path, bool strict)
 {
-    auto j = JsonSizeCap::loadJsonWithSizeCap(path, "FormulaLibrary");
+    auto j = JsonSizeCap::loadJsonWithSizeCap(
+        path, "FormulaLibrary", JsonSizeCap::DEFAULT_MAX_BYTES, strict);
     if (!j)
     {
         return 0;

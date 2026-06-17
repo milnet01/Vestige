@@ -1,0 +1,27 @@
+{
+  "formula_name": "cosine_hemisphere_pdf",
+  "notes": "Evaluation-regression (mode 2): golden input\u2192output points derived independently in float32 Python at authoring time. Coefficient-bearing formulas are evaluated at their shipped library-default coefficients (the harness seeds those first, then these inputs). See docs/research/pathtracer_formula_coverage_design.md \u00a73.",
+  "evaluation_points": [
+    {
+      "inputs": {
+        "cosTheta": 0.0
+      },
+      "expected_output": 0.0,
+      "tolerance": 0.0001
+    },
+    {
+      "inputs": {
+        "cosTheta": 0.5
+      },
+      "expected_output": 0.15915495,
+      "tolerance": 0.0001
+    },
+    {
+      "inputs": {
+        "cosTheta": 1.0
+      },
+      "expected_output": 0.3183099,
+      "tolerance": 0.0001
+    }
+  ]
+}

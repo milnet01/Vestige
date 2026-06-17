@@ -9,6 +9,7 @@
 #include "formula/formula.h"
 #include "formula/formula_library.h"
 #include "formula/physics_templates.h"
+#include "formula/codegen_glsl.h"
 
 #include <gtest/gtest.h>
 #include <cmath>
@@ -638,6 +639,80 @@ TEST(FormulaDefinition, CloneIsIndependent)
     EXPECT_EQ(copy.name, "original");
 }
 
+// ===========================================================================
+// AUDIT §H11 — FormulaDefinition name / input-name validation in fromJson
+// ===========================================================================
+
+TEST(FormulaDefinition, FromJsonRejectsHostileFormulaName)
+{
+    // A name that would inject GLSL tokens or traverse the export path must
+    // be rejected at load (the natural sibling of the ExprNode hardening).
+    for (const char* bad : {"../escape", "f(){};void evil(", "has space", "a/b"})
+    {
+        nlohmann::json j = {
+            {"name", bad},
+            {"output", {{"type", "float"}}},
+            {"expression", 1.0}
+        };
+        EXPECT_THROW(FormulaDefinition::fromJson(j), std::runtime_error)
+            << "name '" << bad << "' should have been rejected";
+    }
+}
+
+TEST(FormulaDefinition, FromJsonRejectsHostileInputName)
+{
+    nlohmann::json j = {
+        {"name", "ok_formula"},
+        {"inputs", {{{"name", "x){};evil("}, {"type", "float"}}}},
+        {"output", {{"type", "float"}}},
+        {"expression", 1.0}
+    };
+    EXPECT_THROW(FormulaDefinition::fromJson(j), std::runtime_error);
+}
+
+TEST(FormulaDefinition, FromJsonAcceptsValidSnakeCaseName)
+{
+    // Built-in-style names round-trip unchanged (no false positives).
+    nlohmann::json j = {
+        {"name", "srgb_to_linear"},
+        {"inputs", {{{"name", "c"}, {"type", "float"}}}},
+        {"output", {{"type", "float"}}},
+        {"expression", {{"var", "c"}}}
+    };
+    EXPECT_NO_THROW({
+        auto def = FormulaDefinition::fromJson(j);
+        EXPECT_EQ(def.name, "srgb_to_linear");
+    });
+}
+
+// ===========================================================================
+// 3D_E-0006..0010 — path-tracer templates registered + codegen-able
+// ===========================================================================
+
+TEST(PhysicsTemplates, PathTracerTemplatesRegisteredAndCodegen)
+{
+    FormulaLibrary library;
+    library.registerBuiltinTemplates();
+
+    const char* names[] = {
+        "cosine_hemisphere_pdf", "ggx_vndf_pdf", "mis_power_heuristic",
+        "temporal_alpha", "edge_stopping_depth", "edge_stopping_normal",
+        "edge_stopping_luminance", "adaptive_sample_count", "rr_survival",
+        "srgb_to_linear", "linear_to_srgb"
+    };
+    for (const char* name : names)
+    {
+        const FormulaDefinition* f = library.findByName(name);
+        ASSERT_NE(f, nullptr) << name << " not registered";
+        EXPECT_NE(f->getExpression(QualityTier::FULL), nullptr)
+            << name << " has no FULL tier";
+        const std::string glsl = CodegenGlsl::generateFunction(*f);
+        EXPECT_EQ(glsl.find("// No expression"), std::string::npos)
+            << name << " codegen fell back to '// No expression'";
+        EXPECT_NE(glsl.find("return"), std::string::npos);
+    }
+}
+
 TEST(FormulaDefinition, GetExpressionFallback)
 {
     FormulaDefinition def;
@@ -876,7 +951,8 @@ TEST(FormulaLibrary, LoadSingleObjectJson)
 TEST(PhysicsTemplates, CreateAllReturnsExpectedCount)
 {
     auto all = PhysicsTemplates::createAll();
-    EXPECT_EQ(all.size(), 27u);
+    // 27 original + 11 path-tracer templates (3D_E-0006..0010).
+    EXPECT_EQ(all.size(), 38u);
 
     // Each has a name, category, and FULL expression
     for (const auto& def : all)
@@ -892,7 +968,7 @@ TEST(PhysicsTemplates, RegisterBuiltinTemplates)
 {
     FormulaLibrary lib;
     lib.registerBuiltinTemplates();
-    EXPECT_EQ(lib.count(), 27u);
+    EXPECT_EQ(lib.count(), 38u);
 
     // Spot-check original formulas
     EXPECT_NE(lib.findByName("aerodynamic_drag"), nullptr);
@@ -915,9 +991,11 @@ TEST(PhysicsTemplates, CategoriesAreCorrect)
     lib.registerBuiltinTemplates();
 
     auto cats = lib.getCategories();
-    // Should have: animation, camera, lighting, material, physics,
-    //              post_processing, rendering, terrain, water, wind
-    EXPECT_EQ(cats.size(), 10u);
+    // Original 10: animation, camera, lighting, material, physics,
+    //              post_processing, rendering, terrain, water, wind.
+    // Plus 4 path-tracer categories (3D_E-0006..0010): sampling, denoise,
+    //              pathtrace, color.
+    EXPECT_EQ(cats.size(), 14u);
 }
 
 TEST(PhysicsTemplates, AerodynamicDragEvaluates)

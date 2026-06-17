@@ -5,6 +5,8 @@
 /// @brief FormulaDefinition implementation with JSON serialization.
 #include "formula/formula.h"
 
+#include <stdexcept>
+
 namespace Vestige
 {
 
@@ -176,6 +178,21 @@ FormulaDefinition FormulaDefinition::fromJson(const nlohmann::json& j)
     def.category = j.value("category", "");
     def.description = j.value("description", "");
 
+    // AUDIT.md §H11 (codegen-injection hardening), extended to FormulaDefinition
+    // metadata: name and input names splice verbatim into generated GLSL
+    // identifiers (toGlslFunctionName / parameter list) and the name also forms
+    // the --export-glsl output filename. Validate them here — the same layer and
+    // the same rule already applied to ExprNode — so every load path rejects a
+    // hostile name before it can inject tokens or traverse out of the export dir.
+    // Empty formula name is left to the downstream skip in loadFromJson.
+    if (!def.name.empty() && !ExprNode::isValidVariableName(def.name))
+    {
+        throw std::runtime_error(
+            "FormulaDefinition: invalid formula name '" + def.name +
+            "' — must match [A-Za-z_][A-Za-z0-9_]* (AUDIT.md §H11; prevents "
+            "GLSL-identifier injection and export-path traversal)");
+    }
+
     // Inputs
     if (j.contains("inputs") && j["inputs"].is_array())
     {
@@ -183,6 +200,13 @@ FormulaDefinition FormulaDefinition::fromJson(const nlohmann::json& j)
         {
             FormulaInput inp;
             inp.name = ij.value("name", "");
+            if (!ExprNode::isValidVariableName(inp.name))
+            {
+                throw std::runtime_error(
+                    "FormulaDefinition: invalid input name '" + inp.name +
+                    "' in formula '" + def.name + "' — must match "
+                    "[A-Za-z_][A-Za-z0-9_]* (AUDIT.md §H11)");
+            }
             inp.type = formulaValueTypeFromString(ij.value("type", "float"));
             inp.unit = ij.value("unit", "");
             inp.defaultValue = ij.value("default", 0.0f);
