@@ -1505,6 +1505,16 @@ The engine targets Linux and Windows from the start (CLAUDE.md). The codebase is
 - [ ] Automated test run on both platforms (unit tests + visual test runner)
 - [ ] Build artifacts: downloadable binaries for both platforms per commit/tag
 - [ ] Release packaging script (zip/tar with executable + assets)
+- [ ] **Local "pre-push CI" script — run what CI runs, before pushing.** A single
+  entrypoint (e.g. `scripts/ci-local.sh` or a `make ci` target) that mirrors the
+  push-triggered `CI` workflow: configure + build (Debug + Release), full `ctest`,
+  **and the gating `python3 tools/audit/audit.py -t 1 --ci --no-tests`** (the exact
+  command + flags the workflow uses), failing fast with the same exit semantics.
+  Goal: catch a red gate locally (like the 2026-06-10→17 Tier 1 false-positive that
+  sat red for a week) before it reaches GitHub, minimising CI-minute burn and
+  red-main windows. Keep it the single source of truth the `.github/workflows/*.yml`
+  steps also call, so the two can't drift. Optionally wire as an opt-in
+  `pre-push` git hook.
 
 #### Cross-Compilation (Optional)
 - [ ] MinGW-w64 toolchain file for building Windows binaries from Linux
