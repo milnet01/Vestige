@@ -50,8 +50,10 @@ mid-range hardware (reference: AMD RX 6600 / Ryzen 5 5600).
 ## Feature status
 
 Core subsystems are complete through **Phase 9** (domain-driven systems
-+ visual scripting foundations); Phase 10 polish is the active workstream
-and Phase 9E-3 (editor UI for scripts) is in progress. See
++ visual scripting, including the Phase 9E-3 node-graph editor). **Phase 10**
+is in active, multi-track development: localization, accessibility, settings,
+UI/HUD, and audio have shipped, while rendering, multi-threading, and
+editor-usability work proceed across parallel sub-phases (10.5–10.9). See
 [`ROADMAP.md`](ROADMAP.md) for the detailed phase plan and the current
 slice numbering.
 
@@ -64,12 +66,14 @@ slice numbering.
 | Global illumination      | Partial       | SH probe grid + radiosity shipped; SSGI next (`docs/research/gi_roadmap.md`)   |
 | Editor (Phase 5)         | Complete      | Dockable ImGui editor, gizmos, undo/redo, console                     |
 | Particles / effects      | Complete      | GPU-instanced particle system                                         |
-| Animation                | Complete      | Skeletal animation, motion matching, facial, lip sync                 |
-| Physics                  | Complete      | Jolt Physics + cloth (XPBD) + ragdoll + fracture                      |
-| Audio                    | Foundation    | OpenAL Soft + spatial audio; polish in Phase 10                       |
-| UI / HUD                 | Foundation    | Sprite renderer + UIElement primitives; menus/theming in follow-ons   |
+| Animation                | Core complete | Skeletal animation, IK, state machines, morph targets live; motion matching / facial / lip-sync implemented, production wiring tracked in Phase 10.9 |
+| Physics                  | Core complete | Jolt rigid bodies, character controller, joints, XPBD cloth (CPU + GPU) live; ragdoll / fracture / grab implemented, wiring tracked in Phase 10.9 |
+| Audio                    | Complete      | OpenAL Soft spatial audio + streaming music; geometric occlusion / convolution reverb / LOD enhancements in Phase 11 |
+| UI / HUD                 | Complete      | Menus, HUD, notifications, theme tokens, in-game screen state machine, interaction prompts |
 | Navigation / pathfinding | Foundation    | Recast navmesh + Detour A*; AI state / editor tooling in follow-ons   |
-| Visual scripting         | In progress   | Phase 9E-1/9E-2 shipped; 9E-3 editor UI ongoing (see `docs/phases/phase_09e3_design.md` and ROADMAP for the live step count + registered node-type total) |
+| Localization             | Complete      | UTF-8 text, multi-language string table, Hebrew / Greek / Latin with RTL, in-settings language picker |
+| Accessibility            | Complete      | Colour-blind modes, subtitles, remappable input bindings, photosensitive safety, reduce-motion |
+| Visual scripting         | Complete      | Phase 9E-1/9E-2/9E-3 shipped; node-graph editor (imgui-node-editor) with 70 registered node types |
 | Formula Pipeline         | Complete      | Expression trees, workbench, C++/GLSL codegen, quality tiers          |
 | Terrain                  | Core complete | Chunking + streaming pending                                          |
 | AI assistance in editor  | Planned       | Phase 23 — design doc pending                                         |
