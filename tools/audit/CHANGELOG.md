@@ -2,6 +2,20 @@
 
 All notable changes to the Audit Tool are documented in this file.
 
+## [Unreleased]
+
+### Fixed — Tier 1 CI gate false-positive on test build-guard `#error`s (2026-06-17)
+
+The push-triggered CI Tier 1 gate had been red since 2026-06-10: cppcheck
+preprocesses the test sources **without** the fixture-dir macros the CMake test
+target injects (`VESTIGE_LOCALIZATION_DIR`, `VESTIGE_SHADER_DIR`, …), so the
+`#ifndef … #error` build-guards in `test_localization_service.cpp` and
+`shader_parity_helpers.cpp` fired as a HIGH-severity `preprocessorErrorDirective`
+— and `get_exit_code` fails on any HIGH. Defined those six `VESTIGE_*_DIR`
+macros in the cppcheck `args` (as the real build does), so cppcheck analyses the
+code as it actually compiles. Same mechanism already used for the GTest macro
+defines — a config correction, not a suppression.
+
 ## [2.19.0] - 2026-06-01
 
 ### Added — Phase 3 propose-fix layer (audit self-learning loop)

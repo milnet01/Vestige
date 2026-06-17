@@ -57,6 +57,14 @@ static_analysis:
     #   engine/scene/entity.cpp (return ptr after std::move) — returnDanglingLifetime
     #   engine/formula/node_graph.cpp (post-resize access) — containerOutOfBounds
     #   tests/test_command_history.cpp (undo-block log[] reads) — containerOutOfBounds
+    # Test-only fixture-dir macros are injected by the CMake test target
+    # (tests/CMakeLists.txt target_compile_definitions), not the source.
+    # cppcheck preprocesses test files WITHOUT those -D flags, so the
+    # `#ifndef VESTIGE_*_DIR / #error` build-guards in test_localization_service.cpp
+    # and shader_parity_helpers.cpp fire as a HIGH `preprocessorErrorDirective`
+    # — which gated CI red. Define them here (as the build does) so cppcheck
+    # analyses the code as it actually compiles. Same mechanism as the GTest
+    # macro defines below; not a suppression — cppcheck is being told the truth.
     args: >-
       --enable=all --std=c++17 --inline-suppr
       --suppress=missingIncludeSystem
@@ -66,6 +74,12 @@ static_analysis:
       -DTEST(a,b)=void\ a##b()
       -DTEST_P(a,b)=void\ a##b()
       -DTYPED_TEST(a,b)=void\ a##b()
+      -DVESTIGE_LOCALIZATION_DIR=\"assets/localization\"
+      -DVESTIGE_SHADER_DIR=\"assets/shaders\"
+      -DVESTIGE_AUDIO_FIXTURES_DIR=\"tests/fixtures/audio\"
+      -DVESTIGE_SCENE_FIXTURES_DIR=\"tests/fixtures/scenes\"
+      -DVESTIGE_FONT_DIR=\"assets/fonts\"
+      -DVESTIGE_REFERENCE_CASES_DIR=\"tools/formula_workbench/reference_cases\"
     output_format: "xml"
     targets: ["engine/", "app/", "tests/"]
     timeout: 600
