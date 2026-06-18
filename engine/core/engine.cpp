@@ -1792,6 +1792,17 @@ void Engine::shutdown()
         m_renderer->setFoliageShadowCaster(nullptr, nullptr);
     }
 
+    // Tear down the music player BEFORE the system registry. It borrows
+    // AudioSystem's AudioEngine (engine.h m_musicPlayer), and its destructor
+    // (clearAllLayers → unloadLayer) calls AudioEngine::isAvailable() +
+    // alDeleteBuffers to release its AL voices. Resetting it here — while the
+    // AudioEngine is still alive AND available — lets it clean up properly;
+    // deferring to ~Engine, which runs AFTER clear() frees AudioSystem, was a
+    // use-after-free. MusicSystem only borrows the player and never touches it
+    // during shutdown (music_system.h shutdown() is a deliberate no-op), so
+    // dropping it ahead of the registry is safe.
+    m_musicPlayer.reset();
+
     // Shut down domain systems (handles terrain, foliage, water, particles, character controller)
     // Must happen before destroying the window (GL context).
     //
