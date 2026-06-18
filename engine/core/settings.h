@@ -201,6 +201,7 @@ struct PostProcessAccessibilityWire
     bool  fogEnabled          = true;
     float fogIntensityScale   = 1.0f;
     bool  reduceMotionFog     = false;
+    bool  volumetricFogEnabled = true;
 
     bool operator==(const PostProcessAccessibilityWire& o) const;
     bool operator!=(const PostProcessAccessibilityWire& o) const { return !(*this == o); }

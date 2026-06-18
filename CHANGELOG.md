@@ -30,11 +30,7 @@ The GPU half of slice 11.6: a `VolumetricFogPass` subsystem
 `assets/shaders/volumetric_{inject,scatter,integrate}.comp.glsl` (inject the
 participating medium → single-scatter sun inscattering → front-to-back
 Beer-Lambert accumulation). This is the engine's first use of `image3D` /
-`glBindImageTexture`. Slice 11.6 evaluates the **unshadowed** sun lobe with
-the literal Henyey-Greenstein phase; CSM shadow sampling, the composite
-sampling that makes the fog user-visible, and the accessibility
-`volumetricFogEnabled` toggle land in the wiring step (11.6 part B), where the
-60 FPS budget is measured on real hardware.
+`glBindImageTexture`.
 
 Pinned per CLAUDE.md Rule 7 (CPU spec ↔ GPU runtime): added
 `froxelSliceBoundaryViewDepth` and `henyeyGreensteinPhase` references to
@@ -43,8 +39,26 @@ Pinned per CLAUDE.md Rule 7 (CPU spec ↔ GPU runtime): added
 against the closed forms — Beer-Lambert transmittance, the energy-conserving
 first-slab inscatter integral, and the GLSL phase function vs the CPU
 reference — plus 8 new pure-math unit tests (slice-boundary depths; HG phase
-normalisation, including a numerical sphere-integral-to-unity check). Full
-suite green: 3436/3436.
+normalisation, including a numerical sphere-integral-to-unity check).
+
+**Part B1 — per-froxel sun shadowing + accessibility toggle (still internal).**
+The scatter pass now samples the cascaded shadow map per froxel
+(`sunVisibility()` in `volumetric_scatter.comp.glsl`), gated by
+`u_csmCascadeCount` so count 0 stays byte-identical to the unshadowed path the
+parity tests pin — this is the light-shaft / god-ray contribution (design §5).
+The cascade selection + `proj*0.5+0.5` / `z-bias>occluder` compare mirror the
+scene pass exactly so froxel shadows agree with surface shadows; `FrameParams`
+carries the CSM cascade splits / light-space matrices / `invView`, and the
+pass binds a 1×1 "lit" fallback depth array when no map is supplied (Mesa
+declared-sampler completeness). A new headless GPU test
+(`CsmShadowGatesSunInscatter`) drives a synthetic fully-lit vs fully-occluded
+map and asserts the lit case reproduces the unshadowed closed form while the
+occluded case integrates to zero. The accessibility `volumetricFogEnabled`
+toggle now persists end-to-end (struct + wire + JSON + `safeDefaults()→false`),
+and the stale "disables temporal reprojection" note on `reduceMotionFog` is
+corrected (temporal is a Phase 13 upgrade). The toggle is forward-compat
+scaffolding until its consumer — the composite per-pixel froxel sampling — and
+the on-hardware 60 FPS budget land in **part B2**.
 
 ### 2026-06-17 Formula Pipeline — path-tracer formula coverage (3D_E-0006..0012)
 

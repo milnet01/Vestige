@@ -79,12 +79,29 @@ struct PostProcessAccessibilitySettings
     /// entirely. 1.0 = full authored density; 0.0 = no fog.
     float fogIntensityScale = 1.0f;
 
-    /// Reduced-motion mode for fog-related effects: disables temporal
-    /// reprojection in volumetric fog (when that feature ships) and
-    /// caps the sun-inscatter lobe intensity so rapid camera pans
-    /// past the sun don't flash. Distance + height fog remain
-    /// unaffected (they're static per frame).
+    /// Reduced-motion mode for fog-related effects. In Phase 10 this
+    /// caps the sun-inscatter lobe intensity so rapid camera pans past
+    /// the sun don't flash; distance + height fog are static per frame
+    /// and unaffected. The volumetric layer (slice 11.6) ships with no
+    /// temporal reprojection, so there is no inter-frame shimmer to
+    /// suppress here — temporal reprojection is a Phase 13 upgrade, and
+    /// this flag will gain its "disable temporal reprojection" role then.
     bool reduceMotionFog = false;
+
+    /// Volumetric (froxel) fog master toggle, independent of `fogEnabled`
+    /// (which governs the analytic distance/height layers). Defaults on
+    /// for visual quality; `safeDefaults()` turns it off so users who
+    /// find any haze motion uncomfortable lose only the volumetric layer
+    /// while the analytic distance/height fog stays authored-on (disabling
+    /// that produces a harsh fog-horizon cutoff — visually worse).
+    ///
+    /// AUDIT — **awaiting consumer.** Persisted and preset-wired here in
+    /// slice 11.6 part B1; the composite path that reads it (per-pixel
+    /// froxel sampling) lands in part B2. Toggling it has no visible
+    /// effect until then. Do not remove (settings.json round-trip must
+    /// stay stable); route the volumetric dispatch/composite through this
+    /// flag when B2 lands and delete this note.
+    bool volumetricFogEnabled = true;
 
     /// Value equality — two configs match iff every flag matches.
     bool operator==(const PostProcessAccessibilitySettings& o) const
@@ -93,7 +110,8 @@ struct PostProcessAccessibilitySettings
             && motionBlurEnabled    == o.motionBlurEnabled
             && fogEnabled           == o.fogEnabled
             && fogIntensityScale    == o.fogIntensityScale
-            && reduceMotionFog      == o.reduceMotionFog;
+            && reduceMotionFog      == o.reduceMotionFog
+            && volumetricFogEnabled == o.volumetricFogEnabled;
     }
     bool operator!=(const PostProcessAccessibilitySettings& o) const { return !(*this == o); }
 };

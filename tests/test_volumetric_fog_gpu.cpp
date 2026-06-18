@@ -73,6 +73,22 @@ size_t idx(const FroxelGridConfig& g, int x, int y, int z)
     return (static_cast<size_t>((z * g.resY + y) * g.resX + x)) * 4;
 }
 
+// 1×1, single-layer depth array cleared to `depthValue`, sampled as a plain
+// sampler2DArray (.r = raw depth, compare mode NONE). Stands in for the CSM
+// depth map so the froxel shadow compare can be exercised headlessly.
+GLuint makeShadowArray(float depthValue)
+{
+    GLuint tex = 0;
+    glCreateTextures(GL_TEXTURE_2D_ARRAY, 1, &tex);
+    glTextureStorage3D(tex, 1, GL_DEPTH_COMPONENT32F, 1, 1, 1);
+    glClearTexImage(tex, 0, GL_DEPTH_COMPONENT, GL_FLOAT, &depthValue);
+    glTextureParameteri(tex, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTextureParameteri(tex, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTextureParameteri(tex, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTextureParameteri(tex, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    return tex;
+}
+
 } // namespace
 
 class VolumetricFogGpuTest : public GLTestFixture {};
@@ -205,6 +221,73 @@ TEST_F(VolumetricFogGpuTest, GlslPhaseMatchesCpuReference)
                 << "phase mismatch @ cos=" << c << " g=" << gv;
         }
     }
+}
+
+// =============================================================================
+// CSM sun shadowing — fully-lit vs fully-occluded synthetic shadow map
+// =============================================================================
+
+TEST_F(VolumetricFogGpuTest, CsmShadowGatesSunInscatter)
+{
+    const FroxelGridConfig g = smallGrid();
+
+    VolumetricFogPass pass;
+    ASSERT_TRUE(pass.init(VESTIGE_SHADER_DIR, g));
+
+    // A light-space matrix that maps every world point to clip (0,0,0,1):
+    // proj = (0,0,0) → *0.5+0.5 → (0.5,0.5,0.5). Every froxel then samples
+    // the shadow map at its centre with receiver depth 0.5, so the lit/dark
+    // outcome is decided purely by the occluder depth we store — independent
+    // of froxel geometry.
+    glm::mat4 collapse(0.0f);
+    collapse[3][3] = 1.0f;
+
+    VolumetricFogPass::FrameParams p;
+    p.scattering  = glm::vec3(0.5f, 0.4f, 0.3f);
+    p.extinction  = 0.05f;
+    p.anisotropy  = 0.0f;            // isotropic ⇒ phase = 1/(4π)
+    p.sunRadiance = glm::vec3(2.0f);
+    p.ambient     = glm::vec3(0.0f); // shadowed froxels then integrate to 0
+    p.csmCascadeCount        = 1;
+    p.csmCascadeSplits[0]    = 1.0e6f; // every slice falls in cascade 0
+    p.csmLightSpaceMatrices[0] = collapse;
+    p.invView                = glm::mat4(1.0f);
+    p.csmDepthBias           = 0.0015f;
+
+    // Fully lit: occluder depth 1.0 ⇒ 0.5 - bias > 1.0 is false ⇒ visibility 1.
+    const GLuint litMap = makeShadowArray(1.0f);
+    p.csmShadowTexture = litMap;
+    pass.dispatch(p);
+    const auto litPx = readbackRGBA(pass.integratedTexture(), g);
+
+    // Fully occluded: occluder depth 0.0 ⇒ 0.5 - bias > 0.0 is true ⇒ visibility 0.
+    const GLuint darkMap = makeShadowArray(0.0f);
+    p.csmShadowTexture = darkMap;
+    pass.dispatch(p);
+    const auto darkPx = readbackRGBA(pass.integratedTexture(), g);
+
+    // Lit must reproduce the unshadowed first-slab closed form; dark zeroes
+    // the sun term (ambient is 0) so the whole column integrates to nothing.
+    const float d0     = froxelSliceBoundaryViewDepth(g, 1) - g.near;
+    const float gain0  = (1.0f - std::exp(-p.extinction * d0)) / p.extinction;
+    const glm::vec3 expectedLit =
+        p.scattering * (p.sunRadiance / (4.0f * kPi)) * gain0;
+
+    const size_t i0 = idx(g, 2, 1, 0);
+    EXPECT_NEAR(litPx[i0 + 0], expectedLit.r, 3e-3f) << "lit slab-0 r";
+    EXPECT_NEAR(litPx[i0 + 1], expectedLit.g, 3e-3f) << "lit slab-0 g";
+    EXPECT_NEAR(litPx[i0 + 2], expectedLit.b, 3e-3f) << "lit slab-0 b";
+
+    // Occluded: every froxel in the column dark → integrated inscatter ~0.
+    for (int k = 0; k < g.resZ; ++k)
+    {
+        EXPECT_NEAR(darkPx[idx(g, 2, 1, k) + 0], 0.0f, 1e-3f)
+            << "occluded slab " << k << " must carry no sun inscatter";
+    }
+    EXPECT_GT(litPx[i0 + 0], darkPx[i0 + 0] + 1e-3f) << "lit must exceed occluded";
+
+    glDeleteTextures(1, &litMap);
+    glDeleteTextures(1, &darkMap);
 }
 
 } // namespace Vestige::Test

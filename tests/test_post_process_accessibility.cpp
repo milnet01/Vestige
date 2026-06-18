@@ -33,6 +33,7 @@ TEST(PostProcessAccessibility, FogDefaultsOnFullIntensityNoReducedMotion)
     EXPECT_TRUE(s.fogEnabled);
     EXPECT_FLOAT_EQ(s.fogIntensityScale, 1.0f);
     EXPECT_FALSE(s.reduceMotionFog);
+    EXPECT_TRUE(s.volumetricFogEnabled);
 }
 
 // -- Accessibility preset --
@@ -50,12 +51,14 @@ TEST(PostProcessAccessibility, SafeDefaultsKeepsFogOnAtHalfIntensityWithReducedM
     // that's visually worse for low-contrast-sensitivity users than
     // having fog at all. The safe preset therefore keeps fogEnabled
     // on but halves intensity + enables reduced-motion mode so the
-    // sun-inscatter lobe and (future) volumetric temporal reprojection
-    // can't cause photosensitivity flashes.
+    // sun-inscatter lobe can't flash. The moving volumetric layer is
+    // disabled outright (it carries the only genuine fog motion), while
+    // the static analytic distance/height fog stays on.
     PostProcessAccessibilitySettings s = safeDefaults();
     EXPECT_TRUE(s.fogEnabled);
     EXPECT_FLOAT_EQ(s.fogIntensityScale, 0.5f);
     EXPECT_TRUE(s.reduceMotionFog);
+    EXPECT_FALSE(s.volumetricFogEnabled);
 }
 
 TEST(PostProcessAccessibility, SafeDefaultsIsDistinctFromZeroInitDefault)
@@ -101,6 +104,12 @@ TEST(PostProcessAccessibility, EqualityMatchesAllFields)
     EXPECT_EQ(a, b);
 
     b.reduceMotionFog = true;
+    EXPECT_NE(a, b);
+
+    a.reduceMotionFog = true;
+    EXPECT_EQ(a, b);
+
+    b.volumetricFogEnabled = false;
     EXPECT_NE(a, b);
 }
 

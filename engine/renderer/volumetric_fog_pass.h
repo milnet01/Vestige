@@ -24,6 +24,7 @@
 #include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
 
+#include <array>
 #include <string>
 
 namespace Vestige
@@ -35,9 +36,10 @@ class VolumetricFogPass
 public:
     /// @brief Per-frame inputs for the inject + scatter passes.
     ///
-    /// Slice 11.6 evaluates the unshadowed sun lobe; CSM shadowing, density
-    /// noise (11.8) and mist volumes (11.11) extend this later. `scattering`
-    /// (sigma_s) and `extinction` (sigma_t) are the uniform base medium.
+    /// Density noise (11.8) and mist volumes (11.11) extend this later.
+    /// `scattering` (sigma_s) and `extinction` (sigma_t) are the uniform base
+    /// medium. The CSM block drives per-froxel sun shadowing; leave
+    /// `csmCascadeCount` at 0 for the unshadowed sun lobe.
     struct FrameParams
     {
         glm::mat4 invProjection{1.0f};        ///< Clip → view, to place froxels.
@@ -47,6 +49,15 @@ public:
         glm::vec3 scattering{0.02f};          ///< sigma_s per channel, 1/m.
         float     extinction{0.02f};          ///< sigma_t, 1/m.
         float     anisotropy{0.0f};           ///< Henyey-Greenstein g.
+
+        // Cascaded-shadow-map inputs for per-froxel sun shadowing (god rays).
+        int       csmCascadeCount = 0;        ///< 0 = unshadowed sun lobe.
+        std::array<float, 4>     csmCascadeSplits{};      ///< View-space depth splits.
+        std::array<glm::mat4, 4> csmLightSpaceMatrices{}; ///< World → light clip, per cascade.
+        glm::mat4 invView{1.0f};              ///< View → world, for the froxel shadow lookup.
+        GLuint    csmShadowTexture = 0;       ///< Depth sampler2DArray; 0 → fallback (lit).
+        float     csmDepthBias = 0.0015f;     ///< Constant shadow bias (empirical; matches
+                                              ///  the scene pass's 0.0002–0.001 slope-bias floor).
     };
 
     VolumetricFogPass();
@@ -86,6 +97,7 @@ private:
 
     GLuint m_volumeTex     = 0;  ///< Scratch: inject writes, scatter rewrites in place.
     GLuint m_integratedTex = 0;  ///< Final integrated volume the composite samples.
+    GLuint m_fallbackShadowTex = 0;  ///< 1×1 lit depth array — bound when no CSM is supplied.
 
     FroxelGridConfig m_cfg{};
     bool m_initialized = false;

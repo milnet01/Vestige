@@ -1162,6 +1162,7 @@ TEST(SettingsApply, RendererAccessibilityForwardsPostProcessWireFieldsVerbatim)
     a.postProcess.fogEnabled          = true;
     a.postProcess.fogIntensityScale   = 0.3f;
     a.postProcess.reduceMotionFog     = true;
+    a.postProcess.volumetricFogEnabled = false;
 
     RecordingRendererAccessSink sink;
     applyRendererAccessibility(a, sink);
@@ -1171,6 +1172,7 @@ TEST(SettingsApply, RendererAccessibilityForwardsPostProcessWireFieldsVerbatim)
     EXPECT_TRUE(sink.pp.fogEnabled);
     EXPECT_FLOAT_EQ(sink.pp.fogIntensityScale, 0.3f);
     EXPECT_TRUE(sink.pp.reduceMotionFog);
+    EXPECT_FALSE(sink.pp.volumetricFogEnabled);
 }
 
 TEST(SettingsApply, SubtitleMapsEverySizeStringToDistinctEnum)

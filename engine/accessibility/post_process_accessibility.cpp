@@ -31,6 +31,10 @@ PostProcessAccessibilitySettings safeDefaults()
     s.fogEnabled          = true;
     s.fogIntensityScale   = SAFE_PRESET_FOG_INTENSITY;
     s.reduceMotionFog     = true;
+    // Volumetric (froxel) fog carries animated density / light shafts —
+    // the one fog layer with genuine motion — so the safe preset disables
+    // it while leaving the static analytic distance/height fog on.
+    s.volumetricFogEnabled = false;
     return s;
 }
 

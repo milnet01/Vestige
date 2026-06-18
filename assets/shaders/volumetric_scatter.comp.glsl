@@ -33,7 +33,51 @@ uniform vec3  u_sunRadiance;      // linear HDR
 uniform vec3  u_ambient;          // ambient inscatter floor
 uniform float u_anisotropy;       // Henyey-Greenstein g, in (-1, 1)
 
+// Cascaded-shadow-map inputs (slice 11.6B). u_csmCascadeCount == 0 disables
+// shadowing entirely — the unshadowed sun lobe, identical to the pre-11.6B
+// behaviour the GPU parity tests pin. The cascade layout mirrors the scene
+// pass (assets/shaders/scene.frag.glsl): a sampler2DArray of depth, selected
+// by view-space depth, with the same `proj * 0.5 + 0.5` / `z - bias > occluder`
+// compare convention so froxel shadows agree with surface shadows.
+uniform int       u_csmCascadeCount;            // 0 = unshadowed
+uniform float     u_csmCascadeSplits[4];        // view-space depth split per cascade
+uniform mat4      u_csmLightSpaceMatrices[4];   // world -> light clip, per cascade
+uniform mat4      u_invView;                    // view -> world (froxel shadow lookup)
+uniform sampler2DArray u_csmShadowMap;          // texture unit 0 (depth)
+uniform float     u_csmDepthBias;               // constant froxel shadow bias
+
 const float PI = 3.14159265358979323846;
+
+// Sun visibility (1 = lit, 0 = occluded) for a view-space froxel centre.
+// Single hard tap — froxels need far less precision than surface PCSS
+// (Wronski 2014): the volume integral already softens the result. `viewDepth`
+// is the froxel's linear view-space depth, used for cascade selection.
+float sunVisibility(vec3 viewPos, float viewDepth)
+{
+    if (u_csmCascadeCount <= 0)
+    {
+        return 1.0;
+    }
+    int cascade = u_csmCascadeCount - 1;
+    for (int i = 0; i < u_csmCascadeCount; ++i)
+    {
+        if (viewDepth < u_csmCascadeSplits[i])
+        {
+            cascade = i;
+            break;
+        }
+    }
+    vec3 worldPos = (u_invView * vec4(viewPos, 1.0)).xyz;
+    vec4 lightClip = u_csmLightSpaceMatrices[cascade] * vec4(worldPos, 1.0);
+    vec3 proj = lightClip.xyz / lightClip.w;
+    proj = proj * 0.5 + 0.5;
+    if (proj.z > 1.0)
+    {
+        return 1.0;  // beyond the cascade's far plane → unshadowed (matches scene)
+    }
+    float occluder = texture(u_csmShadowMap, vec3(proj.xy, float(cascade))).r;
+    return (proj.z - u_csmDepthBias > occluder) ? 0.0 : 1.0;
+}
 
 // Henyey-Greenstein phase function p(cosTheta; g). Normalised so the
 // integral over the sphere is 1. Matches henyeyGreensteinPhase() in
@@ -78,8 +122,13 @@ void main()
     float cosTheta = dot(normalize(viewPos), u_sunDirViewSpace);
     float phase    = henyeyGreenstein(cosTheta, u_anisotropy);
 
-    // Unshadowed sun lobe + ambient floor (CSM shadow factor lands in 11.6B).
-    vec3 inscatter = sigmaS * (phase * u_sunRadiance + u_ambient);
+    // Shadow-mapped single-scatter sun lobe + (unshadowed) ambient floor.
+    // shadow gates only the directional sun term — the ambient probe is
+    // omnidirectional and not occluded by the sun's shadow map. This is the
+    // light-shaft / god-ray contribution (design §5: free byproduct of the
+    // shadowed froxel scatter).
+    float shadow   = sunVisibility(viewPos, viewDepth);
+    vec3 inscatter = sigmaS * (shadow * phase * u_sunRadiance + u_ambient);
 
     imageStore(u_volumeImage, c, vec4(inscatter, medium.a));
 }
