@@ -1187,6 +1187,55 @@ void Renderer::endFrame(float deltaTime)
         m_screenQuad->draw();
     }
 
+    // Phase 10 volumetric (froxel) fog — run the three compute passes HERE,
+    // before the composite binds its textures. dispatch() binds the CSM shadow
+    // map to texture unit 0; the composite binds the scene colour to unit 0 a
+    // few lines below, so the fog pass must complete first or it would clobber
+    // that binding and the screen-quad draw would sample a sampler2D against a
+    // depth array (GL_INVALID_OPERATION). The integrated volume is sampled in
+    // the composite uniform block further down.
+    const bool volumetricActive = m_postProcessAccessibility.volumetricFogEnabled
+                                  && m_volumetricFogPass.isInitialized();
+    if (volumetricActive)
+    {
+        VolumetricFogPass::FrameParams fp;
+        fp.invProjection   = glm::inverse(m_lastProjection);
+        fp.invView         = glm::inverse(m_lastView);
+        // Toward-sun in view space (matches contact_shadows.frag); the light's
+        // `direction` is the travel direction, so negate before transforming.
+        fp.sunDirViewSpace = glm::normalize(
+            glm::mat3(m_lastView) * (-m_directionalLight.direction));
+        fp.sunRadiance     = m_directionalLight.diffuse;
+        fp.ambient         = m_directionalLight.ambient;
+
+        // Light-atmosphere look defaults — provisional artist constants until
+        // the Fog editor panel (slice 11.10) exposes per-scene density. ~4×
+        // thinner than the FrameParams neutral default so it reads as haze, not
+        // thick fog (≈22 % extinction at 50 m). Slight forward anisotropy gives
+        // the sun-facing god rays a soft bloom.
+        // TODO 11.10: drive these from scene fog settings / Formula Workbench.
+        fp.scattering = glm::vec3(0.005f);
+        fp.extinction = 0.005f;
+        fp.anisotropy = 0.3f;
+
+        // Per-froxel sun shadowing (god rays) when a directional light + its
+        // cascaded shadow map exist this frame. Splits are view-space depths,
+        // matching the scatter shader's cascade-select convention.
+        if (m_hasDirectionalLight && m_cascadedShadowMap)
+        {
+            const int cascades = std::min(m_cascadedShadowMap->getCascadeCount(), 4);
+            fp.csmCascadeCount = cascades;
+            for (int i = 0; i < cascades; ++i)
+            {
+                const auto idx = static_cast<size_t>(i);
+                fp.csmCascadeSplits[idx]      = m_cascadedShadowMap->getCascadeSplit(i);
+                fp.csmLightSpaceMatrices[idx] = m_cascadedShadowMap->getLightSpaceMatrix(i);
+            }
+            fp.csmShadowTexture = m_cascadedShadowMap->depthTextureArray();
+        }
+        m_volumetricFogPass.dispatch(fp);
+    }
+
     // 6. Final screen quad composite (tone mapping + bloom + SSAO + contact shadows)
     //    Render to the output FBO (not the screen) so the editor can display it as a texture.
     if (m_outputFbo)
@@ -1302,54 +1351,15 @@ void Renderer::endFrame(float deltaTime)
         m_screenShader.setVec3("u_fogCameraWorldPos", m_cameraWorldPosition);
     }
 
-    // Phase 10 volumetric (froxel) fog. When enabled, the three compute
-    // passes run here (before the composite samples the result) and the
-    // integrated (inscatter, transmittance) volume REPLACES the analytic
-    // distance/height term above — C_out = T*C_scene + S (design §4.2). When
-    // disabled, u_volumetricEnabled is false and the composite keeps the
-    // analytic path byte-for-byte.
-    const bool volumetricActive = m_postProcessAccessibility.volumetricFogEnabled
-                                  && m_volumetricFogPass.isInitialized();
-    if (volumetricActive)
-    {
-        VolumetricFogPass::FrameParams fp;
-        fp.invProjection   = glm::inverse(m_lastProjection);
-        fp.invView         = glm::inverse(m_lastView);
-        // Toward-sun in view space (matches contact_shadows.frag); the light's
-        // `direction` is the travel direction, so negate before transforming.
-        fp.sunDirViewSpace = glm::normalize(
-            glm::mat3(m_lastView) * (-m_directionalLight.direction));
-        fp.sunRadiance     = m_directionalLight.diffuse;
-        fp.ambient         = m_directionalLight.ambient;
-
-        // Light-atmosphere look defaults — provisional artist constants until
-        // the Fog editor panel (slice 11.10) exposes per-scene density. ~4×
-        // thinner than the FrameParams neutral default so it reads as haze, not
-        // thick fog (≈22 % extinction at 50 m). Slight forward anisotropy gives
-        // the sun-facing god rays a soft bloom.
-        // TODO 11.10: drive these from scene fog settings / Formula Workbench.
-        fp.scattering = glm::vec3(0.005f);
-        fp.extinction = 0.005f;
-        fp.anisotropy = 0.3f;
-
-        // Per-froxel sun shadowing (god rays) when a directional light + its
-        // cascaded shadow map exist this frame. Splits are view-space depths,
-        // matching the scatter shader's cascade-select convention.
-        if (m_hasDirectionalLight && m_cascadedShadowMap)
-        {
-            const int cascades = std::min(m_cascadedShadowMap->getCascadeCount(), 4);
-            fp.csmCascadeCount = cascades;
-            for (int i = 0; i < cascades; ++i)
-            {
-                const auto idx = static_cast<size_t>(i);
-                fp.csmCascadeSplits[idx]      = m_cascadedShadowMap->getCascadeSplit(i);
-                fp.csmLightSpaceMatrices[idx] = m_cascadedShadowMap->getLightSpaceMatrix(i);
-            }
-            fp.csmShadowTexture = m_cascadedShadowMap->depthTextureArray();
-        }
-        m_volumetricFogPass.dispatch(fp);
-    }
-
+    // Phase 10 volumetric (froxel) fog composite. The three compute passes
+    // already ran above (before the composite bound its textures — dispatch()
+    // uses texture unit 0 for the CSM shadow map, so it must not run between
+    // the unit-0 scene-colour bind and the screen-quad draw). Here we only
+    // bind the integrated volume + its uniforms; the composite sampling REPLACES
+    // the analytic distance/height term — C_out = T*C_scene + S (design §4.2).
+    // When disabled, u_volumetricEnabled is false and the analytic path is kept
+    // byte-for-byte.
+    //
     // Composite sampler — ALWAYS bind (Mesa declared-sampler safety). Unit 17
     // is free in the composite (0/9/10/11/12/13 are taken; 14-16 are the
     // scene pass's IBL maps, already consumed by now).
