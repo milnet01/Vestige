@@ -1238,6 +1238,19 @@ void Renderer::endFrame(float deltaTime)
                                      ? glm::vec3(0.0f)
                                      : glm::vec3(0.4f, 0.0f, 0.15f);
 
+        // Placeable mist / ground-fog volumes (slice 11.11). Empty until the
+        // Fog editor panel (11.10) / scene loading populates them. Reduce-motion
+        // freezes their turbulence scroll (same accessibility rule as the noise
+        // drift) — the spatial falloff still renders, it just stops churning.
+        fp.volumes = m_fogVolumes;
+        if (m_postProcessAccessibility.reduceMotionFog)
+        {
+            for (FogVolume& vol : fp.volumes)
+            {
+                vol.animSpeed = 0.0f;
+            }
+        }
+
         // Per-froxel sun shadowing (god rays) when a directional light + its
         // cascaded shadow map exist this frame. Splits are view-space depths,
         // matching the scatter shader's cascade-select convention.

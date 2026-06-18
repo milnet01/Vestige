@@ -7,7 +7,10 @@
 
 #include "core/logger.h"
 
+#include <glm/vec4.hpp>
+
 #include <algorithm>
+#include <array>
 
 namespace Vestige
 {
@@ -24,6 +27,24 @@ void configureFroxelSampling(GLuint tex)
     glTextureParameteri(tex, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTextureParameteri(tex, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glTextureParameteri(tex, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+}
+
+// std430 SSBO element for a mist volume (slice 11.11): 4×vec4 = 64 B, matching
+// the `FogVolumeGpu` struct in volumetric_inject.comp.glsl.
+struct GpuFogVolume
+{
+    glm::vec4 centerShape;        // xyz center, w shape (0 Box, 1 Sphere)
+    glm::vec4 halfExtentsDensity; // xyz halfExtents, w density
+    glm::vec4 colourEdge;         // xyz colour, w edgeSoftness
+    glm::vec4 animMisc;           // x animSpeed, yzw pad
+};
+
+GpuFogVolume packVolume(const FogVolume& v)
+{
+    return {glm::vec4(v.center, static_cast<float>(static_cast<int>(v.shape))),
+            glm::vec4(v.halfExtents, v.density),
+            glm::vec4(v.colour, v.edgeSoftness),
+            glm::vec4(v.animSpeed, 0.0f, 0.0f, 0.0f)};
 }
 
 } // namespace
@@ -79,6 +100,14 @@ void VolumetricFogPass::createTextures()
     glClearTexImage(m_fallbackShadowTex, 0, GL_DEPTH_COMPONENT, GL_FLOAT, &lit);
     glTextureParameteri(m_fallbackShadowTex, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTextureParameteri(m_fallbackShadowTex, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+    // Mist-volume SSBO (slice 11.11): fixed MAX_FOG_VOLUMES capacity, refilled
+    // per frame. Always bound (binding 1) so the declared buffer stays complete
+    // even on frames with zero volumes.
+    glCreateBuffers(1, &m_volumeSsbo);
+    glNamedBufferData(m_volumeSsbo,
+                      static_cast<GLsizeiptr>(MAX_FOG_VOLUMES * sizeof(GpuFogVolume)),
+                      nullptr, GL_DYNAMIC_DRAW);
 }
 
 void VolumetricFogPass::destroy()
@@ -97,6 +126,11 @@ void VolumetricFogPass::destroy()
     {
         glDeleteTextures(1, &m_fallbackShadowTex);
         m_fallbackShadowTex = 0;
+    }
+    if (m_volumeSsbo != 0)
+    {
+        glDeleteBuffers(1, &m_volumeSsbo);
+        m_volumeSsbo = 0;
     }
     m_initialized = false;
 }
@@ -131,6 +165,41 @@ void VolumetricFogPass::dispatch(const FrameParams& params)
     m_inject.setFloat("u_noiseStrength", params.noise.strength);
     m_inject.setInt("u_noiseOctaves", params.noise.octaves);
     m_inject.setVec3("u_noiseWind", params.noise.windVelocity);
+
+    // Mist / ground-fog volumes (slice 11.11). Clamp to capacity; the drop is
+    // logged once when the over-cap count changes (CLAUDE.md "no silent caps")
+    // rather than every frame.
+    const int totalVolumes = static_cast<int>(params.volumes.size());
+    const int volumeCount   = std::min(totalVolumes, MAX_FOG_VOLUMES);
+    if (totalVolumes > MAX_FOG_VOLUMES)
+    {
+        if (m_lastOverCap != totalVolumes)
+        {
+            Logger::warning("VolumetricFogPass: " + std::to_string(totalVolumes)
+                            + " fog volumes exceed cap " + std::to_string(MAX_FOG_VOLUMES)
+                            + "; dropping " + std::to_string(totalVolumes - MAX_FOG_VOLUMES));
+            m_lastOverCap = totalVolumes;
+        }
+    }
+    else
+    {
+        m_lastOverCap = -1;
+    }
+    if (volumeCount > 0)
+    {
+        std::array<GpuFogVolume, MAX_FOG_VOLUMES> packed{};
+        for (int i = 0; i < volumeCount; ++i)
+        {
+            packed[static_cast<size_t>(i)] = packVolume(params.volumes[static_cast<size_t>(i)]);
+        }
+        glNamedBufferSubData(m_volumeSsbo, 0,
+                             static_cast<GLsizeiptr>(static_cast<size_t>(volumeCount)
+                                                     * sizeof(GpuFogVolume)),
+                             packed.data());
+    }
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, m_volumeSsbo);
+    m_inject.setInt("u_volumeCount", volumeCount);
+
     glBindImageTexture(0, m_volumeTex, 0, GL_TRUE, 0, GL_WRITE_ONLY, GL_RGBA16F);
     glDispatchCompute(groupsX, groupsY, groupsZ);
     glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);

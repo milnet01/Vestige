@@ -22,6 +22,34 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-06-18 Phase 10 fog — slice 11.11 mist / ground-fog volumes
+
+**Slice 11.11 — placeable mist / ground-fog volumes.** The volumetric inject
+pass now accepts localized fog volumes (e.g. morning mist around the Bronze
+Laver, dust near the altar). New `FogVolume` / `FogVolumeShape` data model +
+`fogVolumeDensity()` CPU spec (`engine/renderer/volumetric_fog.{h,cpp}`): a box
+or sphere with a soft `edgeSoftness` falloff (1 at the core, smoothly to 0 at
+the extent; hard step when softness is 0) and optional animated turbulence that
+reuses the slice-11.8 value-noise FBM (`animSpeed` scrolls it). Each volume adds
+`density·falloff` extinction and `colour·density·falloff` scattering to the
+froxels it overlaps. Volumes upload as a `std430` SSBO (binding 1) capped at
+`MAX_FOG_VOLUMES = 32`; over-cap volumes are dropped with a throttled warning
+(logged once when the count changes, not per frame — CLAUDE.md "no silent
+caps"). The turbulence FBM is skipped wherever the falloff is already 0 (froxel
+outside the volume), keeping the per-froxel loop cheap. Plumbed through
+`VolumetricFogPass::FrameParams::volumes` and `Renderer::setFogVolumes()`; empty
+by default (the Fog editor panel, slice 11.10, will author them). Reduce-motion
+accessibility freezes each volume's turbulence scroll, matching the noise-drift
+rule. New tests: `VolumetricFogVolume` CPU suite (core/outside/monotonic
+falloff, hard-edge step, sphere radial symmetry, static-vs-animated, unit-
+interval bound), `GlslFogVolumeDensityMatchesCpuReference` GPU parity (extracts
+the GLSL falloff + noise chain, pins it to the CPU spec within `1e-4 +
+1e-3·|cpu|`), plus full-dispatch `FogVolumeIncreasesExtinction` and
+`OverCapVolumesAreDroppedNoCrash`. 60 FPS gate re-verified with a representative
+heavy scene (12 localized volumes, 6 animated, real perspective projection) on
+the RX 6600, inside the 2.0 ms fog-stack budget. See
+`docs/phases/phase_10_fog_design.md` §6.
+
 ### 2026-06-18 Phase 10 fog — slice 11.8 density noise + slice 11.7 dropped
 
 **Slice 11.8 — fog density noise.** The volumetric inject pass

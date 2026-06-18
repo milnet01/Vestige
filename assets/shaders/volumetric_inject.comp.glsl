@@ -6,15 +6,17 @@
 ///
 /// Writes per-froxel (scattering_rgb = sigma_s, extinction_a = sigma_t) into
 /// the froxel volume. Slice 11.6 injected a uniform medium; slice 11.8 adds a
-/// value-noise density field (mist/ground-fog volumes, 11.11, layer in here
-/// later). When `u_noiseEnabled == 0` the pass writes the uniform medium
-/// byte-for-byte (the pre-11.8 behaviour the equivalence tests pin). One
-/// thread per froxel.
+/// value-noise density field; slice 11.11 adds placeable mist/ground-fog
+/// volumes (SSBO at binding 1) that layer tinted extinction/scattering on top.
+/// When `u_noiseEnabled == 0` and `u_volumeCount == 0` the pass writes the
+/// uniform medium byte-for-byte (the pre-11.8 behaviour the equivalence tests
+/// pin). One thread per froxel.
 ///
-/// Froxel coordinate math + the value-noise field mirror
+/// Froxel coordinate math, the value-noise field, and the volume falloff mirror
 /// engine/renderer/volumetric_fog.cpp (CLAUDE.md Rule 7: CPU spec pins GPU
-/// runtime). The noise helpers are standalone so the GPU parity test can
-/// extract them and pin them against the CPU `fogDensityNoise()`.
+/// runtime). The noise + volume helpers are standalone so the GPU parity tests
+/// can extract them and pin them against the CPU `fogDensityNoise()` /
+/// `fogVolumeDensity()`.
 #version 450 core
 
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 8) in;
@@ -35,6 +37,20 @@ uniform float u_noiseFreq;     // cycles per world metre
 uniform float u_noiseStrength; // 0..1 modulation depth
 uniform int   u_noiseOctaves;  // FBM octaves
 uniform vec3  u_noiseWind;      // world m/s domain scroll
+
+// Mist / ground-fog volumes (slice 11.11). std430 SSBO, 4×vec4 per volume.
+struct FogVolumeGpu
+{
+    vec4 centerShape;        // xyz = center, w = shape (0 Box, 1 Sphere)
+    vec4 halfExtentsDensity; // xyz = halfExtents (Sphere: .x = radius), w = density
+    vec4 colourEdge;         // xyz = colour tint, w = edgeSoftness
+    vec4 animMisc;           // x = animSpeed, yzw = pad
+};
+layout(std430, binding = 1) readonly buffer FogVolumeBuffer
+{
+    FogVolumeGpu u_volumes[];
+};
+uniform int u_volumeCount;     // active volumes; 0 → loop never runs
 
 // View-space linear depth at the centre of depth slice `slice` (exponential
 // distribution). Mirrors sliceToViewDepth() in the scatter pass and
@@ -115,6 +131,67 @@ float fogDensityNoise(vec3 worldPos, float freq, float strength, int octaves,
     return clamp(m, 0.0, 2.0);
 }
 
+// --- Mist / ground-fog volume falloff (slice 11.11). Pins CPU fogVolumeDensity().
+// Standalone (no SSBO refs) so the GPU parity test can extract it. ---
+
+// Cubic smoothstep; hard step when edges coincide/invert (edgeSoftness==0,
+// zero-extent axes stay finite + parity-stable).
+float smooth01(float edge0, float edge1, float x)
+{
+    float denom = edge1 - edge0;
+    if (denom <= 0.0)
+    {
+        return x < edge0 ? 0.0 : 1.0;
+    }
+    float t = clamp((x - edge0) / denom, 0.0, 1.0);
+    return t * t * (3.0 - 2.0 * t);
+}
+
+// Falloff: 1 at/under inner, smoothly to 0 at/over outer.
+float coreFade(float x, float inner, float outer)
+{
+    return 1.0 - smooth01(inner, outer, x);
+}
+
+// Density multiplier [0,1] for a world sample in a volume. Mirrors CPU fogVolumeDensity().
+float fogVolumeDensity(int shape, vec3 center, vec3 halfExtents,
+                       float edgeSoftness, float animSpeed,
+                       vec3 worldPos, float time)
+{
+    float soft = clamp(edgeSoftness, 0.0, 1.0);
+    vec3  d    = worldPos - center;
+
+    float falloff;
+    if (shape == 1) // Sphere
+    {
+        float outer = halfExtents.x;
+        float inner = outer * (1.0 - soft);
+        float dist  = sqrt(d.x * d.x + d.y * d.y + d.z * d.z);
+        falloff = coreFade(dist, inner, outer);
+    }
+    else // Box
+    {
+        vec3 inner = halfExtents * (1.0 - soft);
+        falloff = coreFade(abs(d.x), inner.x, halfExtents.x)
+                * coreFade(abs(d.y), inner.y, halfExtents.y)
+                * coreFade(abs(d.z), inner.z, halfExtents.z);
+    }
+
+    // `falloff > 0.0` skips the FBM outside the volume (0*turb==0, so the
+    // result and CPU parity are unchanged) — keeps the per-froxel loop cheap.
+    if (animSpeed != 0.0 && falloff > 0.0)
+    {
+        // Turbulence reuses the slice-11.8 FBM field; 0.15 cyc/m + 3 octaves
+        // are provisional look constants (mirrors the CPU twin). TODO 11.10.
+        vec3 p = vec3(worldPos.x * 0.15,
+                      worldPos.y * 0.15 + time * animSpeed,
+                      worldPos.z * 0.15);
+        falloff *= fbm3(p, 3);
+    }
+
+    return falloff;
+}
+
 void main()
 {
     ivec3 res = ivec3(u_froxelRes);
@@ -127,10 +204,11 @@ void main()
     vec3  scattering = u_scattering;
     float extinction = u_extinction;
 
-    if (u_noiseEnabled != 0)
+    if (u_noiseEnabled != 0 || u_volumeCount > 0)
     {
         // Reconstruct the froxel-centre world position (mirrors the scatter
-        // pass) so the noise field is anchored in world space, not screen space.
+        // pass) so the noise field + volumes are anchored in world space, not
+        // screen space.
         vec2  uv  = (vec2(c.xy) + 0.5) / vec2(res.xy);
         vec2  ndc = uv * 2.0 - 1.0;
         vec4  vp  = u_invProjection * vec4(ndc, 1.0, 1.0);
@@ -140,10 +218,26 @@ void main()
         vec3  viewPos  = ray * (viewDepth / max(-ray.z, 1e-4));
         vec3  worldPos = (u_invView * vec4(viewPos, 1.0)).xyz;
 
-        float m = fogDensityNoise(worldPos, u_noiseFreq, u_noiseStrength,
-                                  u_noiseOctaves, u_noiseWind, u_elapsed);
-        scattering *= m;
-        extinction *= m;
+        // Base-medium density noise (slice 11.8).
+        if (u_noiseEnabled != 0)
+        {
+            float m = fogDensityNoise(worldPos, u_noiseFreq, u_noiseStrength,
+                                      u_noiseOctaves, u_noiseWind, u_elapsed);
+            scattering *= m;
+            extinction *= m;
+        }
+
+        // Placeable mist / ground-fog volumes (slice 11.11) — additive on top.
+        for (int vi = 0; vi < u_volumeCount; ++vi)
+        {
+            FogVolumeGpu fv = u_volumes[vi];
+            float fd = fogVolumeDensity(int(fv.centerShape.w), fv.centerShape.xyz,
+                                        fv.halfExtentsDensity.xyz, fv.colourEdge.w,
+                                        fv.animMisc.x, worldPos, u_elapsed);
+            float contrib = fv.halfExtentsDensity.w * fd;
+            extinction += contrib;
+            scattering += fv.colourEdge.xyz * contrib;
+        }
     }
 
     imageStore(u_volumeImage, c, vec4(scattering, extinction));

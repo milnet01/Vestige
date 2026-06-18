@@ -101,6 +101,14 @@ public:
     /// @brief Sets the directional light.
     void setDirectionalLight(const DirectionalLight& light);
 
+    /// @brief Replaces the active mist / ground-fog volumes (slice 11.11).
+    ///        Beyond MAX_FOG_VOLUMES the extras are dropped (logged once).
+    ///        Empty by default; the Fog editor panel (11.10) populates this.
+    void setFogVolumes(std::vector<FogVolume> volumes) { m_fogVolumes = std::move(volumes); }
+
+    /// @brief The active mist / ground-fog volumes (slice 11.11).
+    const std::vector<FogVolume>& fogVolumes() const { return m_fogVolumes; }
+
     /// @brief Clears all point lights.
     void clearPointLights();
 
@@ -588,6 +596,7 @@ private:
     // window as the unique_ptr GL owners above).
     VolumetricFogPass m_volumetricFogPass;
     float m_volumetricFogElapsed = 0.0f;   // Accumulated seconds for density-noise scroll (11.8)
+    std::vector<FogVolume> m_fogVolumes;   // Active mist / ground-fog volumes (11.11)
     bool m_sdsmEnabled = true;             // Enabled by default
     float m_sdsmNear = 0.1f;              // Smoothed near bound (lerped between frames)
     float m_sdsmFar = 150.0f;             // Smoothed far bound (lerped between frames)

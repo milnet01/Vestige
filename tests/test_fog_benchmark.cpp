@@ -29,6 +29,7 @@
 
 #include <glad/gl.h>
 #include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 
 #include <algorithm>
 #include <cctype>
@@ -108,6 +109,29 @@ TEST_F(FogBenchmarkTest, VolumetricDispatchUnderBudget)
     p.noise.octaves      = 3;
     p.noise.windVelocity = glm::vec3(0.4f, 0.0f, 0.15f);
     p.elapsedSeconds     = 1.0f;
+
+    // Slice 11.11: time a representative heavy mist scene. A real perspective
+    // projection (instead of the uniform-medium tests' identity) gives the
+    // froxels sane world positions, so localized volumes overlap a realistic
+    // fraction of the grid — froxels outside a volume skip its turbulence FBM
+    // via the `falloff > 0` guard, exactly as in a shipped frame. Twelve
+    // volumes scattered through the frustum, half animated, is a rich scene
+    // (the Tabernacle's morning mist + altar dust + incense need far fewer).
+    p.invProjection = glm::inverse(
+        glm::perspective(glm::radians(60.0f), 16.0f / 9.0f, 0.1f, 500.0f));
+    for (int i = 0; i < 12; ++i)
+    {
+        FogVolume v;
+        v.shape        = (i % 3 == 0) ? FogVolumeShape::Sphere : FogVolumeShape::Box;
+        // View-space -z is forward; spread the volumes across depth and screen.
+        const float fi = static_cast<float>(i);
+        v.center       = glm::vec3(fi * 4.0f - 22.0f, fi * 2.0f - 12.0f, -(8.0f + fi * 12.0f));
+        v.halfExtents  = glm::vec3(14.0f, 10.0f, 14.0f);
+        v.edgeSoftness = 0.3f;
+        v.density      = 0.03f;
+        v.animSpeed    = (i % 2 == 0) ? 0.5f : 0.0f; // half animated (FBM path)
+        p.volumes.push_back(v);
+    }
 
     // First dispatch JIT-compiles pipe state the driver never frees — a
     // process-lifetime third-party allocation, not a Vestige leak.

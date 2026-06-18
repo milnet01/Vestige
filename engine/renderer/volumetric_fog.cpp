@@ -102,6 +102,29 @@ float fbm3(float px, float py, float pz, int octaves)
     return total > 0.0f ? sum / total : 0.0f;
 }
 
+// --- Mist / ground-fog volume falloff (slice 11.11). Mirrored verbatim in the
+// GLSL `fogVolumeDensity` in volumetric_inject.comp.glsl (Rule 7). ---
+
+/// Cubic smoothstep on [edge0, edge1]; degenerates to a hard step when the
+/// edges coincide or invert, so `edgeSoftness == 0` and zero-extent axes stay
+/// finite and CPU↔GLSL parity-stable.
+float smooth01(float edge0, float edge1, float x)
+{
+    const float denom = edge1 - edge0;
+    if (denom <= 0.0f)
+    {
+        return x < edge0 ? 0.0f : 1.0f;
+    }
+    const float t = std::clamp((x - edge0) / denom, 0.0f, 1.0f);
+    return t * t * (3.0f - 2.0f * t);
+}
+
+/// Falloff: 1 at/under `inner`, smoothly to 0 at/over `outer`.
+float coreFade(float x, float inner, float outer)
+{
+    return 1.0f - smooth01(inner, outer, x);
+}
+
 } // namespace
 
 int froxelCount(const FroxelGridConfig& cfg)
@@ -185,6 +208,48 @@ float fogDensityNoise(const glm::vec3& worldPos, const FogNoiseParams& params, f
     const float n  = fbm3(dx, dy, dz, octaves);               // [0, 1]
     const float m  = 1.0f + params.strength * (2.0f * n - 1.0f);
     return std::clamp(m, 0.0f, 2.0f);
+}
+
+float fogVolumeDensity(const FogVolume& v, const glm::vec3& worldPos, float time)
+{
+    const float soft = std::clamp(v.edgeSoftness, 0.0f, 1.0f);
+    const glm::vec3 d = worldPos - v.center;
+
+    float falloff;
+    if (v.shape == FogVolumeShape::Sphere)
+    {
+        const float outer = v.halfExtents.x;
+        const float inner = outer * (1.0f - soft);
+        const float dist  = std::sqrt(d.x * d.x + d.y * d.y + d.z * d.z);
+        falloff = coreFade(dist, inner, outer);
+    }
+    else
+    {
+        const glm::vec3 inner = v.halfExtents * (1.0f - soft);
+        falloff = coreFade(std::fabs(d.x), inner.x, v.halfExtents.x)
+                * coreFade(std::fabs(d.y), inner.y, v.halfExtents.y)
+                * coreFade(std::fabs(d.z), inner.z, v.halfExtents.z);
+    }
+
+    // `falloff > 0` skips the FBM for froxels outside the volume (the common
+    // case) — `0 * turb == 0`, so the result is identical with or without the
+    // term and CPU↔GLSL parity holds; it just avoids the cost where it can't
+    // matter.
+    if (v.animSpeed != 0.0f && falloff > 0.0f)
+    {
+        // Turbulence reuses the slice-11.8 value-noise FBM field. F_TURB and
+        // the octave count are provisional look constants, inlined here and in
+        // the GLSL twin so the parity-test extractor sees a self-contained
+        // function. Purely aesthetic — no reference data to fit (Rule 6).
+        // TODO 11.10 / Formula Workbench: expose per-scene via the Fog panel.
+        constexpr float F_TURB = 0.15f;
+        const float n = fbm3(worldPos.x * F_TURB,
+                             worldPos.y * F_TURB + time * v.animSpeed,
+                             worldPos.z * F_TURB, 3); // [0,1]
+        falloff *= n;
+    }
+
+    return falloff;
 }
 
 } // namespace Vestige

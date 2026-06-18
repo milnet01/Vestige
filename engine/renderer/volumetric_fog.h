@@ -129,4 +129,43 @@ struct FogNoiseParams
 /// `params.enabled` (the caller gates application).
 float fogDensityNoise(const glm::vec3& worldPos, const FogNoiseParams& params, float time);
 
+/// @brief Max active mist/ground-fog volumes uploaded to the inject SSBO
+///        (slice 11.11). Over-cap volumes are dropped with a logged warning
+///        (CLAUDE.md "no silent caps"). 32 keeps the SSBO at 2 KB.
+constexpr int MAX_FOG_VOLUMES = 32;
+
+/// @brief Shape of a placeable fog volume (slice 11.11).
+enum class FogVolumeShape
+{
+    Box    = 0, ///< Axis-aligned box; `halfExtents` is the per-axis half-size.
+    Sphere = 1  ///< Sphere; `halfExtents.x` is the radius (.y/.z ignored).
+};
+
+/// @brief A localized, placeable mist / ground-fog volume (slice 11.11) — e.g.
+///        morning mist around the Bronze Laver or dust near the altar. Each
+///        volume adds tinted extinction/scattering to the froxels it overlaps,
+///        with a soft edge and optional animated turbulence.
+struct FogVolume
+{
+    FogVolumeShape shape        = FogVolumeShape::Box;
+    glm::vec3      center       = {0.0f, 0.0f, 0.0f};
+    glm::vec3      halfExtents  = {1.0f, 1.0f, 1.0f}; ///< Box: per-axis half-size; Sphere: .x = radius.
+    glm::vec3      colour       = {0.6f, 0.62f, 0.65f}; ///< Linear-RGB scattering tint.
+    float          density      = 0.5f;  ///< Added extinction (1/m) at the volume core.
+    float          edgeSoftness = 0.2f;  ///< 0..1 fraction of the extent over which density falls to 0.
+    float          animSpeed    = 0.0f;  ///< Turbulence scroll speed (0 = static).
+};
+
+/// @brief Spatial density multiplier in [0,1] for a world-space sample inside
+///        @p v at @p time — the CPU spec that pins the GLSL `fogVolumeDensity`
+///        in `volumetric_inject.comp.glsl` (CLAUDE.md Rule 7).
+///
+/// 1 at the volume core, smoothly falling to 0 at the outer extent over the
+/// `edgeSoftness` band (hard step when `edgeSoftness == 0`). When
+/// `animSpeed != 0` the result is multiplied by a value-noise-FBM turbulence
+/// term (the same integer-hash field as @ref fogDensityNoise), so animated mist
+/// reads as wispy and churning. The inject pass scales this by `v.density`.
+/// Pure function — the caller multiplies in `density`/`colour`.
+float fogVolumeDensity(const FogVolume& v, const glm::vec3& worldPos, float time);
+
 } // namespace Vestige

@@ -338,3 +338,119 @@ TEST(VolumetricFogNoise, OctaveCountClampedNoCrash)
         EXPECT_LE(m, 2.0f);
     }
 }
+
+// ---------------------------------------------------------------------------
+// fogVolumeDensity (slice 11.11) — CPU spec; pinned to the GLSL falloff by the
+// GPU parity test (GlslFogVolumeDensityMatchesCpuReference).
+// ---------------------------------------------------------------------------
+
+namespace
+{
+FogVolume boxVolume(float edgeSoftness = 0.2f, float animSpeed = 0.0f)
+{
+    FogVolume v;
+    v.shape        = FogVolumeShape::Box;
+    v.center       = glm::vec3(0.0f);
+    v.halfExtents  = glm::vec3(2.0f, 3.0f, 4.0f);
+    v.edgeSoftness = edgeSoftness;
+    v.animSpeed    = animSpeed;
+    return v;
+}
+
+FogVolume sphereVolume(float edgeSoftness = 0.2f, float animSpeed = 0.0f)
+{
+    FogVolume v;
+    v.shape        = FogVolumeShape::Sphere;
+    v.center       = glm::vec3(1.0f, -2.0f, 0.5f);
+    v.halfExtents  = glm::vec3(3.0f, 0.0f, 0.0f); // .x = radius
+    v.edgeSoftness = edgeSoftness;
+    v.animSpeed    = animSpeed;
+    return v;
+}
+} // namespace
+
+TEST(VolumetricFogVolume, CoreIsFullDensity)
+{
+    EXPECT_FLOAT_EQ(fogVolumeDensity(boxVolume(), glm::vec3(0.0f), 0.0f), 1.0f);
+    const FogVolume s = sphereVolume();
+    EXPECT_FLOAT_EQ(fogVolumeDensity(s, s.center, 0.0f), 1.0f);
+}
+
+TEST(VolumetricFogVolume, OutsideIsZero)
+{
+    // Far past the outer extent on any axis → no contribution.
+    EXPECT_FLOAT_EQ(fogVolumeDensity(boxVolume(), glm::vec3(100.0f, 0.0f, 0.0f), 0.0f), 0.0f);
+    EXPECT_FLOAT_EQ(fogVolumeDensity(boxVolume(), glm::vec3(0.0f, 0.0f, 50.0f), 0.0f), 0.0f);
+    const FogVolume s = sphereVolume();
+    EXPECT_FLOAT_EQ(fogVolumeDensity(s, s.center + glm::vec3(10.0f, 0.0f, 0.0f), 0.0f), 0.0f);
+}
+
+TEST(VolumetricFogVolume, EdgeFalloffMonotonicNonIncreasing)
+{
+    // Box: marching out along +x from core to past the extent never increases.
+    const FogVolume v = boxVolume();
+    float prev = 2.0f;
+    for (int i = 0; i <= 40; ++i)
+    {
+        const float x = static_cast<float>(i) * 0.1f; // 0 .. 4 m
+        const float d = fogVolumeDensity(v, glm::vec3(x, 0.0f, 0.0f), 0.0f);
+        EXPECT_GE(d, 0.0f);
+        EXPECT_LE(d, 1.0f);
+        EXPECT_LE(d, prev + kEps) << "non-monotonic @ x=" << x;
+        prev = d;
+    }
+}
+
+TEST(VolumetricFogVolume, HardEdgeWhenSoftnessZero)
+{
+    // edgeSoftness == 0 ⇒ a hard step: full inside the extent, zero outside.
+    const FogVolume v = boxVolume(0.0f);
+    EXPECT_FLOAT_EQ(fogVolumeDensity(v, glm::vec3(1.9f, 2.9f, 3.9f), 0.0f), 1.0f);
+    EXPECT_FLOAT_EQ(fogVolumeDensity(v, glm::vec3(2.1f, 0.0f, 0.0f), 0.0f), 0.0f);
+
+    const FogVolume s = sphereVolume(0.0f); // radius 3
+    EXPECT_FLOAT_EQ(fogVolumeDensity(s, s.center + glm::vec3(2.9f, 0.0f, 0.0f), 0.0f), 1.0f);
+    EXPECT_FLOAT_EQ(fogVolumeDensity(s, s.center + glm::vec3(3.1f, 0.0f, 0.0f), 0.0f), 0.0f);
+}
+
+TEST(VolumetricFogVolume, SphereIsRadiallySymmetric)
+{
+    const FogVolume s = sphereVolume(); // radius 3, edgeSoftness 0.2 → soft band (2.4, 3.0)
+    const float r = 2.7f; // within the soft band → density strictly in (0,1)
+    const float ax = fogVolumeDensity(s, s.center + glm::vec3(r, 0.0f, 0.0f), 0.0f);
+    const float ay = fogVolumeDensity(s, s.center + glm::vec3(0.0f, r, 0.0f), 0.0f);
+    const float az = fogVolumeDensity(s, s.center + glm::vec3(0.0f, 0.0f, r), 0.0f);
+    EXPECT_NEAR(ax, ay, kEps);
+    EXPECT_NEAR(ax, az, kEps);
+    EXPECT_GT(ax, 0.0f);
+    EXPECT_LT(ax, 1.0f);
+}
+
+TEST(VolumetricFogVolume, StaticIsTimeInvariantAnimatedIsNot)
+{
+    const glm::vec3 wp(0.5f, 0.5f, 0.5f);
+
+    // animSpeed == 0 → no turbulence term → identical across time.
+    const FogVolume stat = boxVolume(0.2f, 0.0f);
+    EXPECT_FLOAT_EQ(fogVolumeDensity(stat, wp, 0.0f), fogVolumeDensity(stat, wp, 9.0f));
+
+    // animSpeed != 0 → turbulence scroll → the value drifts with time.
+    const FogVolume anim = boxVolume(0.2f, 1.0f);
+    EXPECT_NE(fogVolumeDensity(anim, wp, 0.0f), fogVolumeDensity(anim, wp, 3.0f));
+}
+
+TEST(VolumetricFogVolume, AlwaysInUnitInterval)
+{
+    const FogVolume anim = boxVolume(0.5f, 2.0f);
+    for (int i = 0; i < 64; ++i)
+    {
+        const glm::vec3 wp(static_cast<float>(i) * 0.13f - 4.0f,
+                           static_cast<float>(i) * -0.21f + 3.0f,
+                           static_cast<float>(i) * 0.07f);
+        const float t = static_cast<float>(i) * 0.5f;
+        const float d = fogVolumeDensity(anim, wp, t);
+        EXPECT_TRUE(std::isfinite(d));
+        EXPECT_GE(d, 0.0f);
+        EXPECT_LE(d, 1.0f);
+    }
+}

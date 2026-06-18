@@ -26,6 +26,7 @@
 
 #include <array>
 #include <string>
+#include <vector>
 
 namespace Vestige
 {
@@ -36,10 +37,11 @@ class VolumetricFogPass
 public:
     /// @brief Per-frame inputs for the inject + scatter passes.
     ///
-    /// Mist volumes (11.11) extend this later. `scattering` (sigma_s) and
-    /// `extinction` (sigma_t) are the uniform base medium; `noise` (11.8)
-    /// modulates them per froxel. The CSM block drives per-froxel sun
-    /// shadowing; leave `csmCascadeCount` at 0 for the unshadowed sun lobe.
+    /// `scattering` (sigma_s) and `extinction` (sigma_t) are the uniform base
+    /// medium; `noise` (11.8) modulates them per froxel; `volumes` (11.11) add
+    /// localized tinted fog on top (capped at `MAX_FOG_VOLUMES`). The CSM block
+    /// drives per-froxel sun shadowing; leave `csmCascadeCount` at 0 for the
+    /// unshadowed sun lobe.
     struct FrameParams
     {
         glm::mat4 invProjection{1.0f};        ///< Clip → view, to place froxels.
@@ -54,6 +56,10 @@ public:
         // writes the uniform medium byte-for-byte (pre-11.8 equivalence).
         FogNoiseParams noise{};               ///< Per-froxel density noise.
         float          elapsedSeconds = 0.0f; ///< Wall-clock seconds for noise scroll.
+
+        // Placeable mist / ground-fog volumes (slice 11.11). Beyond
+        // MAX_FOG_VOLUMES the extras are dropped with a logged warning.
+        std::vector<FogVolume> volumes{};     ///< Active fog volumes this frame.
 
         // Cascaded-shadow-map inputs for per-froxel sun shadowing (god rays).
         int       csmCascadeCount = 0;        ///< 0 = unshadowed sun lobe.
@@ -103,6 +109,8 @@ private:
     GLuint m_volumeTex     = 0;  ///< Scratch: inject writes, scatter rewrites in place.
     GLuint m_integratedTex = 0;  ///< Final integrated volume the composite samples.
     GLuint m_fallbackShadowTex = 0;  ///< 1×1 lit depth array — bound when no CSM is supplied.
+    GLuint m_volumeSsbo    = 0;  ///< std430 SSBO of up to MAX_FOG_VOLUMES packed volumes (11.11).
+    int    m_lastOverCap   = -1; ///< Last logged over-cap count (-1 = none) — throttles the warning.
 
     FroxelGridConfig m_cfg{};
     bool m_initialized = false;

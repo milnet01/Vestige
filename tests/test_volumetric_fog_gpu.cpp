@@ -287,6 +287,81 @@ TEST_F(VolumetricFogGpuTest, GlslDensityNoiseMatchesCpuReference)
 }
 
 // =============================================================================
+// Mist-volume falloff (slice 11.11) — GLSL field pinned to the CPU reference
+// =============================================================================
+
+TEST_F(VolumetricFogGpuTest, GlslFogVolumeDensityMatchesCpuReference)
+{
+    // Extract the volume falloff plus the value-noise chain it reuses for the
+    // animated turbulence term, so any drift in the production inject shader
+    // fails parity (same discipline as the density-noise test above).
+    const std::string src = readShaderFile("volumetric_inject.comp.glsl");
+    std::string chain;
+    for (const char* fn : {"noiseHash3", "hashToUnit", "vlerp", "valueNoise3",
+                           "fbm3", "smooth01", "coreFade", "fogVolumeDensity"})
+    {
+        const std::string f = extractGlslFunction(src, fn);
+        ASSERT_FALSE(f.empty()) << "missing GLSL fn: " << fn;
+        chain += f + "\n";
+    }
+
+    ShaderProgram prog(
+        "#version 450 core\n"
+        "layout(location = 0) out vec4 outColor;\n"
+        "uniform int   u_shape;\n"
+        "uniform vec3  u_center;\n"
+        "uniform vec3  u_halfExtents;\n"
+        "uniform float u_edge;\n"
+        "uniform float u_anim;\n"
+        "uniform vec3  u_worldPos;\n"
+        "uniform float u_t;\n"
+        + chain +
+        "void main() {\n"
+        "    outColor = vec4(fogVolumeDensity(u_shape, u_center, u_halfExtents,\n"
+        "                                     u_edge, u_anim, u_worldPos, u_t),\n"
+        "                    0.0, 0.0, 1.0);\n"
+        "}\n");
+    ASSERT_TRUE(prog.valid());
+
+    struct Case { FogVolumeShape shape; glm::vec3 center, halfExtents; float edge, anim; };
+    const Case cases[] = {
+        {FogVolumeShape::Box,    {0.0f, 0.0f, 0.0f}, {2.0f, 3.0f, 4.0f}, 0.2f, 0.0f},
+        {FogVolumeShape::Box,    {1.0f, -2.0f, 0.5f}, {2.5f, 2.5f, 2.5f}, 0.0f, 1.0f},
+        {FogVolumeShape::Sphere, {0.0f, 0.0f, 0.0f}, {3.0f, 0.0f, 0.0f}, 0.3f, 0.0f},
+        {FogVolumeShape::Sphere, {-4.0f, 1.0f, 2.0f}, {5.0f, 0.0f, 0.0f}, 0.5f, 2.0f},
+    };
+    const glm::vec3 positions[] = {
+        {0.0f, 0.0f, 0.0f}, {1.3f, -2.7f, 1.1f}, {2.0f, 0.0f, 0.0f},
+        {-4.0f, 1.0f, 5.0f}, {0.5f, 0.5f, 0.5f}, {-1.9f, 2.9f, -3.9f}};
+    const float times[] = {0.0f, 1.5f, 12.34f};
+
+    for (const Case& cs : cases)
+    {
+        FogVolume v;
+        v.shape       = cs.shape;
+        v.center      = cs.center;
+        v.halfExtents = cs.halfExtents;
+        v.edgeSoftness = cs.edge;
+        v.animSpeed   = cs.anim;
+        for (float t : times)
+        {
+            for (const glm::vec3& wp : positions)
+            {
+                const glm::vec4 gpu = prog.run({
+                    {"u_shape", static_cast<int>(cs.shape)},
+                    {"u_center", cs.center},      {"u_halfExtents", cs.halfExtents},
+                    {"u_edge", cs.edge},          {"u_anim", cs.anim},
+                    {"u_worldPos", wp},           {"u_t", t}});
+                const float cpu = fogVolumeDensity(v, wp, t);
+                EXPECT_NEAR(gpu.r, cpu, 1e-4f + 1e-3f * std::abs(cpu))
+                    << "volume-density mismatch shape=" << static_cast<int>(cs.shape)
+                    << " pos=(" << wp.x << "," << wp.y << "," << wp.z << ") t=" << t;
+            }
+        }
+    }
+}
+
+// =============================================================================
 // CSM sun shadowing — fully-lit vs fully-occluded synthetic shadow map
 // =============================================================================
 
@@ -393,6 +468,72 @@ TEST_F(VolumetricFogGpuTest, SliceCoordMatchesCpuSpec)
             (viewDepthToFroxelSlice(g, vd) + 0.5f) / static_cast<float>(g.resZ),
             0.0f, 1.0f);
         EXPECT_NEAR(gpu.r, cpuCoord, 1e-5f) << "slice coord @ viewDepth " << vd;
+    }
+}
+
+// =============================================================================
+// Mist-volume injection (slice 11.11) — full-dispatch behaviour
+// =============================================================================
+
+TEST_F(VolumetricFogGpuTest, FogVolumeIncreasesExtinction)
+{
+    const FroxelGridConfig g = smallGrid();
+    VolumetricFogPass pass;
+    ASSERT_TRUE(pass.init(VESTIGE_SHADER_DIR, g));
+
+    // Baseline: uniform medium, no volumes (the path the Beer-Lambert test pins).
+    VolumetricFogPass::FrameParams p;
+    p.scattering  = glm::vec3(0.0f);
+    p.extinction  = 0.02f;
+    p.sunRadiance = glm::vec3(0.0f);
+    pass.dispatch(p);
+    const auto noVol = readbackRGBA(pass.integratedTexture(), g);
+
+    // A box large enough that every froxel sits well inside its core → a
+    // uniform +density everywhere, independent of the froxel reconstruction.
+    FogVolume v;
+    v.shape        = FogVolumeShape::Box;
+    v.center       = glm::vec3(0.0f);
+    v.halfExtents  = glm::vec3(1.0e9f);
+    v.edgeSoftness = 0.0f;
+    v.colour       = glm::vec3(0.0f); // extinction only — keep the test clean
+    v.density      = 0.1f;
+    p.volumes = {v};
+    pass.dispatch(p);
+    const auto withVol = readbackRGBA(pass.integratedTexture(), g);
+
+    // Extra extinction ⇒ transmittance (alpha) never higher, strictly lower deep.
+    for (int k = 0; k < g.resZ; ++k)
+    {
+        EXPECT_LE(withVol[idx(g, 1, 2, k) + 3], noVol[idx(g, 1, 2, k) + 3] + 1e-4f)
+            << "volume raised transmittance @ slice " << k;
+    }
+    EXPECT_LT(withVol[idx(g, 1, 2, g.resZ - 1) + 3],
+              noVol[idx(g, 1, 2, g.resZ - 1) + 3] - 1e-3f)
+        << "deep column should be measurably denser with the volume";
+}
+
+TEST_F(VolumetricFogGpuTest, OverCapVolumesAreDroppedNoCrash)
+{
+    const FroxelGridConfig g = smallGrid();
+    VolumetricFogPass pass;
+    ASSERT_TRUE(pass.init(VESTIGE_SHADER_DIR, g));
+
+    VolumetricFogPass::FrameParams p;
+    p.extinction  = 0.02f;
+    p.sunRadiance = glm::vec3(0.0f);
+    p.volumes.resize(MAX_FOG_VOLUMES + 5); // over the SSBO cap → extras dropped
+    for (FogVolume& v : p.volumes)
+    {
+        v.halfExtents  = glm::vec3(1.0e9f);
+        v.edgeSoftness = 0.0f;
+        v.density      = 0.01f;
+    }
+    pass.dispatch(p); // must clamp + log once, not crash or read OOB
+    const auto px = readbackRGBA(pass.integratedTexture(), g);
+    for (float f : px)
+    {
+        EXPECT_TRUE(std::isfinite(f));
     }
 }
 
