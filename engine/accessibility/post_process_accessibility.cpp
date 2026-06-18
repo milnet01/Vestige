@@ -35,6 +35,10 @@ PostProcessAccessibilitySettings safeDefaults()
     // the one fog layer with genuine motion — so the safe preset disables
     // it while leaving the static analytic distance/height fog on.
     s.volumetricFogEnabled = false;
+    // With volumetric off, the screen-space god-rays fallback would otherwise
+    // engage; its shafts sweep as the camera pans past the sun (motion), so the
+    // safe preset turns them off too — no light shafts at all under safe mode.
+    s.godRaysEnabled = false;
     return s;
 }
 

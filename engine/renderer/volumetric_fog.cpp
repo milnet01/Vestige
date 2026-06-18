@@ -6,6 +6,8 @@
 
 #include "renderer/volumetric_fog.h"
 
+#include <glm/mat3x3.hpp>
+
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -250,6 +252,42 @@ float fogVolumeDensity(const FogVolume& v, const glm::vec3& worldPos, float time
     }
 
     return falloff;
+}
+
+GodRaySunScreen godRaysSunScreenInfo(const glm::mat4& view,
+                                     const glm::mat4& projection,
+                                     const glm::vec3& lightDirection,
+                                     float edgeMargin)
+{
+    GodRaySunScreen out;
+
+    // Toward-sun direction in view space (light.direction is travel direction,
+    // so negate — matches the froxel scatter pass).
+    const glm::vec3 sunDirView = glm::mat3(view) * (-lightDirection);
+    const glm::vec4 clip = projection * glm::vec4(sunDirView, 0.0f);
+    if (clip.w <= 0.0f) // sun behind the camera
+    {
+        return out; // visible=false, intensity=0
+    }
+
+    out.uv = glm::vec2(clip.x, clip.y) / clip.w * 0.5f + 0.5f;
+
+    // Edge fade: 0 inside the frame, smoothly to 1 over `edgeMargin` past the
+    // [0,1] boundary (hard cut at the edge when margin is 0).
+    const float edge = std::max(std::fabs(out.uv.x - 0.5f), std::fabs(out.uv.y - 0.5f));
+    float faded;
+    if (edgeMargin > 0.0f)
+    {
+        const float t = std::clamp((edge - 0.5f) / edgeMargin, 0.0f, 1.0f);
+        faded = t * t * (3.0f - 2.0f * t);
+    }
+    else
+    {
+        faded = edge > 0.5f ? 1.0f : 0.0f;
+    }
+    out.intensity = 1.0f - faded;
+    out.visible   = out.intensity > 0.0f;
+    return out;
 }
 
 } // namespace Vestige

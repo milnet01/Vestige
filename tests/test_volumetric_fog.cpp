@@ -10,6 +10,8 @@
 
 #include "renderer/volumetric_fog.h"
 
+#include <glm/gtc/matrix_transform.hpp>
+
 #include <algorithm>
 #include <cmath>
 
@@ -453,4 +455,83 @@ TEST(VolumetricFogVolume, AlwaysInUnitInterval)
         EXPECT_GE(d, 0.0f);
         EXPECT_LE(d, 1.0f);
     }
+}
+
+// ---------------------------------------------------------------------------
+// godRaysSunScreenInfo (slice 11.5) — CPU sun screen-projection + edge fade.
+// ---------------------------------------------------------------------------
+
+namespace
+{
+// Camera at the origin looking down −Z with +Y up; 90° fov, square aspect so
+// proj[0][0] = 1 (screen edge at a 45° off-axis direction). With this view the
+// world axes map to view axes 1:1, so a toward-sun world direction is also its
+// view-space direction — easy to reason about.
+glm::mat4 godRayView() { return glm::lookAt(glm::vec3(0.0f), glm::vec3(0, 0, -1), glm::vec3(0, 1, 0)); }
+glm::mat4 godRayProj() { return glm::perspective(glm::radians(90.0f), 1.0f, 0.1f, 100.0f); }
+} // namespace
+
+TEST(VolumetricFogGodRays, SunDeadAheadCentredFullIntensity)
+{
+    // light.direction is travel direction; sun ahead (camera looks −Z) ⇒
+    // travel direction is +Z (light coming toward the camera from ahead).
+    const GodRaySunScreen s = godRaysSunScreenInfo(
+        godRayView(), godRayProj(), glm::vec3(0, 0, 1), 0.3f);
+    EXPECT_TRUE(s.visible);
+    EXPECT_NEAR(s.uv.x, 0.5f, 1e-4f);
+    EXPECT_NEAR(s.uv.y, 0.5f, 1e-4f);
+    EXPECT_NEAR(s.intensity, 1.0f, 1e-4f);
+}
+
+TEST(VolumetricFogGodRays, SunBehindCameraNotVisible)
+{
+    // Toward-sun = +Z world (behind the −Z-looking camera) ⇒ travel dir = −Z.
+    const GodRaySunScreen s = godRaysSunScreenInfo(
+        godRayView(), godRayProj(), glm::vec3(0, 0, -1), 0.3f);
+    EXPECT_FALSE(s.visible);
+    EXPECT_FLOAT_EQ(s.intensity, 0.0f);
+}
+
+TEST(VolumetricFogGodRays, SunPerpendicularNotVisible)
+{
+    // Toward-sun straight to the right (view z = 0) ⇒ clip.w = 0, not in front.
+    const GodRaySunScreen s = godRaysSunScreenInfo(
+        godRayView(), godRayProj(), glm::vec3(-1, 0, 0), 0.3f);
+    EXPECT_FALSE(s.visible);
+}
+
+TEST(VolumetricFogGodRays, SunPastEdgePartialFade)
+{
+    // Toward-sun (1.3, 0, −1): ndc.x = 1.3 ⇒ uv.x = 1.15 ⇒ edge 0.65; with
+    // margin 0.3, smoothstep(0.5,0.8,0.65)=0.5 ⇒ intensity ≈ 0.5.
+    const GodRaySunScreen s = godRaysSunScreenInfo(
+        godRayView(), godRayProj(), glm::vec3(-1.3f, 0, 1), 0.3f);
+    EXPECT_TRUE(s.visible);
+    EXPECT_GT(s.intensity, 0.0f);
+    EXPECT_LT(s.intensity, 1.0f);
+    EXPECT_NEAR(s.intensity, 0.5f, 0.05f);
+    EXPECT_NEAR(s.uv.x, 1.15f, 1e-3f);
+}
+
+TEST(VolumetricFogGodRays, FarOffScreenFadesToZero)
+{
+    // Toward-sun (5, 0, −1): uv.x = 3.0, far past the 0.3 fade band ⇒ 0.
+    const GodRaySunScreen s = godRaysSunScreenInfo(
+        godRayView(), godRayProj(), glm::vec3(-5.0f, 0, 1), 0.3f);
+    EXPECT_FALSE(s.visible);
+    EXPECT_FLOAT_EQ(s.intensity, 0.0f);
+}
+
+TEST(VolumetricFogGodRays, ZeroMarginIsHardCut)
+{
+    // edgeMargin 0: full intensity inside the frame, instant 0 once past it.
+    const GodRaySunScreen inFrame = godRaysSunScreenInfo(
+        godRayView(), godRayProj(), glm::vec3(0, 0, 1), 0.0f);
+    EXPECT_TRUE(inFrame.visible);
+    EXPECT_FLOAT_EQ(inFrame.intensity, 1.0f);
+
+    const GodRaySunScreen pastEdge = godRaysSunScreenInfo(
+        godRayView(), godRayProj(), glm::vec3(-1.3f, 0, 1), 0.0f);
+    EXPECT_FALSE(pastEdge.visible);
+    EXPECT_FLOAT_EQ(pastEdge.intensity, 0.0f);
 }

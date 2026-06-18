@@ -135,6 +135,7 @@ PostProcessAccessibilitySettings postProcessFromWire(
     pp.fogIntensityScale   = w.fogIntensityScale;
     pp.reduceMotionFog     = w.reduceMotionFog;
     pp.volumetricFogEnabled = w.volumetricFogEnabled;
+    pp.godRaysEnabled      = w.godRaysEnabled;
     return pp;
 }
 

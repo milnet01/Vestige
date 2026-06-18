@@ -26,6 +26,7 @@
 #include "gl_test_fixture.h"
 #include "shader_parity_helpers.h"
 
+#include "renderer/shader.h"
 #include "renderer/volumetric_fog.h"
 #include "renderer/volumetric_fog_pass.h"
 
@@ -535,6 +536,25 @@ TEST_F(VolumetricFogGpuTest, OverCapVolumesAreDroppedNoCrash)
     {
         EXPECT_TRUE(std::isfinite(f));
     }
+}
+
+// =============================================================================
+// God-rays shaders (slice 11.5) — compile + link smoke (no standalone class)
+// =============================================================================
+
+TEST_F(VolumetricFogGpuTest, GodRaysShadersCompileAndLink)
+{
+    const std::string vert = std::string(VESTIGE_SHADER_DIR) + "/screen_quad.vert.glsl";
+
+    Shader gather;
+    EXPECT_TRUE(gather.loadFromFiles(
+        vert, std::string(VESTIGE_SHADER_DIR) + "/god_rays.frag.glsl"))
+        << "god_rays.frag.glsl failed to compile/link";
+
+    Shader combine;
+    EXPECT_TRUE(combine.loadFromFiles(
+        vert, std::string(VESTIGE_SHADER_DIR) + "/god_rays_combine.frag.glsl"))
+        << "god_rays_combine.frag.glsl failed to compile/link";
 }
 
 } // namespace Vestige::Test

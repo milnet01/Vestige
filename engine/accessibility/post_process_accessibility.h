@@ -101,6 +101,17 @@ struct PostProcessAccessibilitySettings
     /// uniform. settings.json round-trips it; `safeDefaults()` sets it false.
     bool volumetricFogEnabled = true;
 
+    /// Screen-space god-rays (crepuscular light shafts) master toggle.
+    /// Defaults on for visual quality. The shipped High-preset god rays come
+    /// free from the volumetric froxel pass; this flag governs the screen-space
+    /// radial-blur fallback (slice 11.5), which only runs when the volumetric
+    /// layer is off (`!volumetricActive`) so the two never double up. Exposed
+    /// so users can disable the light shafts independently. `safeDefaults()`
+    /// turns it **off**: with volumetric also disabled there, the screen-space
+    /// shafts would otherwise engage, and they sweep as the camera pans past
+    /// the sun (motion) — the safe preset wants no light-shaft motion at all.
+    bool godRaysEnabled = true;
+
     /// Value equality — two configs match iff every flag matches.
     bool operator==(const PostProcessAccessibilitySettings& o) const
     {
@@ -109,7 +120,8 @@ struct PostProcessAccessibilitySettings
             && fogEnabled           == o.fogEnabled
             && fogIntensityScale    == o.fogIntensityScale
             && reduceMotionFog      == o.reduceMotionFog
-            && volumetricFogEnabled == o.volumetricFogEnabled;
+            && volumetricFogEnabled == o.volumetricFogEnabled
+            && godRaysEnabled       == o.godRaysEnabled;
     }
     bool operator!=(const PostProcessAccessibilitySettings& o) const { return !(*this == o); }
 };

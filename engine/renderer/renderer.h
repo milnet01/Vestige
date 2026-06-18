@@ -545,6 +545,8 @@ private:
     Shader m_pointShadowDepthShader;
     Shader m_bloomDownsampleShader;
     Shader m_bloomUpsampleShader;
+    Shader m_godRaysShader;          // Screen-space god-rays gather (slice 11.5)
+    Shader m_godRaysCombineShader;   // Additive half→full upsample-combine (slice 11.5)
     Shader m_ssaoShader;
     Shader m_ssaoBlurShader;
     Shader m_taaResolveShader;
@@ -778,6 +780,10 @@ private:
     float m_ssaoBias = 0.025f;
     glm::mat4 m_lastProjection = glm::mat4(1.0f);
     glm::mat4 m_lastView = glm::mat4(1.0f);
+
+    // Screen-space god rays (slice 11.5) — half-res radial-blur fallback,
+    // active only when the volumetric froxel path isn't producing god rays.
+    std::unique_ptr<Framebuffer> m_godRaysFbo;
 
     // Screen-space contact shadows
     Shader m_contactShadowShader;

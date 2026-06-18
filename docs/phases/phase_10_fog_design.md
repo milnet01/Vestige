@@ -114,14 +114,84 @@ All three compute passes are GPU-only; the CPU drives them by uploading params +
 
 ---
 
-## 5. God rays (slice 11.5)
+## 5. God rays (slice 11.5) ✅ SHIPPED 2026-06-18
 
 Two paths, by preset (research §4):
 
-- **High preset:** god rays are a **free byproduct** of slice 11.6 — shadow-mapped inscattering through the froxel volume *is* light shafts (the Tabernacle tent-entrance beam). No separate pass.
-- **Low / Medium preset (and whenever volumetric fog is disabled):** a screen-space radial-blur pass (Kenny Mitchell, GPU Gems 3 ch. 13) — project the sun to screen space, ray-march N taps (64–128) toward it accumulating an occlusion mask. ~0.3–0.6 ms. This is the cheap bolt-on that gives the visual payoff without the froxel grid.
+- **High preset / volumetric on:** god rays are a **free byproduct** of slice 11.6 — shadow-mapped inscattering through the froxel volume *is* light shafts (the Tabernacle tent-entrance beam). No separate pass.
+- **Volumetric off (Low / Medium preset, or fog toggled off):** a screen-space radial-blur pass (Kenny Mitchell, *GPU Gems 3* ch. 13) — project the sun to screen space, gather N taps toward it accumulating a sky-light buffer. The cheap bolt-on that gives the visual payoff without the froxel grid.
 
-`assets/shaders/god_rays_radial.frag.glsl` — new post-process pass, gated by preset + a `godRaysEnabled` toggle. Sits in the composite chain alongside fog (before bloom, so shafts bloom correctly).
+### 5.1 Algorithm (Mitchell radial gather)
+
+For each output pixel `uv`, step toward the sun's screen position `sunUV` in `N` taps, accumulating a *light buffer* `L`:
+
+```
+delta = (uv - sunUV) / N * density      // step toward the sun
+coord = uv ; illum = 1 ; accum = L(uv)
+repeat N-1 times:
+    coord -= delta
+    accum += L(coord) * illum * weight
+    illum *= decay                       // exponential shaft falloff
+result = accum * exposure
+```
+
+`density` (shaft length, ≈0.9), `decay` (≈0.95), `weight` (per-tap, ≈0.5), `exposure` (≈0.3) and `N` (64) are **provisional look constants** inlined in the shader with a `TODO 11.10 / Formula Workbench` marker — purely aesthetic, no reference data to fit (CLAUDE.md Rule 6), exposed per-scene by the editor panel (11.10). The *GPU Gems 3* originals are the starting point.
+
+### 5.2 Light buffer (folded into the gather — no pre-pass)
+
+The occlusion/light buffer `L(c)` is computed *inside* the gather (one pass, not a separate masking pass): sample the resolved depth at `c` and the pre-bloom HDR scene at `c`; contribute the scene colour only where the pixel is **sky** (reverse-Z depth ≤ a small epsilon — sky clears to the far plane = 0.0 in reverse-Z, matching `contact_shadows.frag.glsl`'s `depth < 0.0001` sky test), else 0. Geometry therefore *occludes* the shafts, which is what makes them crepuscular. The bright sun disk in the sky dominates `L`, so the shafts emanate from it. The depth is **point-sampled** (`texelFetch` / nearest) for the sky test — the gather runs at half-res over a full-res reverse-Z depth buffer, and bilinear-filtering a non-linear reverse-Z depth across silhouettes would mis-classify edge pixels (soft sky halo). Each tap costs two texture samples (depth + scene); 64 taps at half-res stays inside the fog-stack budget (§8).
+
+### 5.3 Sun projection + screen fade (CPU)
+
+The sun is a directional light (a point at infinity). Project its *toward-sun* direction to clip space and test it is in front of the camera:
+
+```
+sunDirView = mat3(view) · (−light.direction)      // toward-sun, view space (matches the froxel pass)
+clip       = projection · vec4(sunDirView, 0)     // w=0: direction, not position
+onScreen   = clip.w > 0                            // sun in front of the camera
+sunUV      = clip.xy / clip.w · 0.5 + 0.5
+```
+
+A scalar `intensity` fades the effect out as the sun leaves the view — 1 inside the frame, smoothly to 0 over a screen-margin band, and 0 when `clip.w ≤ 0` (sun behind the camera) — so shafts don't pop when the sun crosses the frustum edge. `sunUV` and `intensity` are uploaded as uniforms; the per-pixel gather is GPU. The projection + fade is the only CPU math and is unit-tested directly (no GL needed).
+
+### 5.4 Integration (two draws, before bloom)
+
+- New `assets/shaders/god_rays.frag.glsl` (gather) + a minimal `god_rays_combine.frag.glsl` (additive upsample), both on the shared `screen_quad.vert.glsl`.
+- **Pass A — gather:** render half-resolution into a new `m_godRaysFbo` (a half-res float `Framebuffer` → `RGBA16F`, `GL_LINEAR`-filtered by the `Framebuffer` default so the half→full upsample in Pass B is smooth), reading the current pre-bloom HDR scene colour and the resolved depth. Note the handles differ: the *colour* is the post-AA `hdrSourceFbo` (the AA-resolved scene) while the *depth* is `m_resolveDepthFbo` (the pre-AA-resolved depth the contact-shadow / SSAO passes already use). Same resolution and registration, so the sky test lines up; the depth is **point-sampled** for the sky classification.
+- **Pass B — combine:** an additive (`GL_ONE, GL_ONE`) full-res draw that adds the half-res `m_godRaysFbo` (linear-upsampled) into the HDR scene FBO.
+- **Insertion point — immediately *before* the bloom downsample block.** The composite order is **bloom → auto-exposure → contact shadows → volumetric dispatch → final composite**; bloom reads the HDR scene FBO as its mip-0 source, and auto-exposure blits it for luminance. So to make the shafts bloom *and* feed auto-exposure, both god-ray draws must complete *before* the bloom block — **not** near the contact-shadow / volumetric passes (those run after bloom). Pass A reads the HDR scene FBO that is current at that point: note SMAA/TAA reassign which FBO holds the resolved scene, so the pass must read whichever `hdrSourceFbo` the bloom block is about to read, not a hard-coded handle.
+- **Texture units:** Pass A binds the scene + depth at its own draw (the composite re-binds its own units afterward); Pass B binds `m_godRaysFbo`. Use **low/free units** — units 9–13 and 17–23 are spoken for (bloom 9, SSAO 10, contact 11, depth 12, LUT 13, SH-probe grid 17–23, froxel volume 17). Binding scene at 0 + depth at a free low unit for the gather, and `m_godRaysFbo` at a free low unit for the combine, avoids all of them.
+- `m_godRaysFbo` is created in `initialize()` and recreated on window resize (immutable storage, same as the bloom mips).
+
+### 5.5 CPU / GPU placement (per CLAUDE.md Rule 7)
+
+| Concern | CPU | GPU | Reason |
+|---------|-----|-----|--------|
+| Sun screen projection + on-screen fade | ✅ | | One matrix-vector mul + a branch per frame — sparse/decision → CPU; unit-tested directly. |
+| Per-pixel radial gather + occlusion test | | ✅ | Per-pixel, N-tap → GPU default. |
+| Additive combine into the HDR buffer | | ✅ | Per-pixel blend → GPU. |
+
+### 5.6 Gating
+
+`godRaysEnabled` (new flag, default true) **and** `!volumetricActive` (`= volumetricFogEnabled && m_volumetricFogPass.isInitialized()`) — the froxel path already produces god rays when volumetric fog is on, so the screen-space fallback runs only when volumetric isn't contributing them, avoiding double shafts. When a future preset→quality mapping forces volumetric off on Low/Medium, the fallback engages automatically. Also skipped when there is no directional light or the sun is behind the camera.
+
+The new flag is plumbed exactly like `volumetricFogEnabled`, which touches **five** sites that must all be updated or the flag silently fails to persist / compare: (1) the `PostProcessAccessibilitySettings` struct field; (2) that struct's hand-written `operator==` (a field-by-field list — omitting it makes two configs differing only in god-rays compare equal, a change-detection bug); (3) `safeDefaults()` in `post_process_accessibility.cpp` (god-rays may stay on — it self-gates off when volumetric is active — but state the choice); (4) the persisted `Settings` mirror in `settings.{h,cpp}` (its `operator==`, `to_json`, `from_json`); (5) the wire→renderer transfer in `settings_apply.cpp`. The renderer then reads the flag at the composite gate.
+
+### 5.7 Test contract
+
+- **CPU `godRaysSunScreenInfo()` unit tests** (the only CPU math, GL-free — a pure function in `volumetric_fog.{h,cpp}`): sun dead-ahead → `sunUV ≈ (0.5,0.5)`, `intensity = 1`, visible; sun behind camera (`clip.w ≤ 0`) → not visible, `intensity = 0`; sun at the frame edge → `intensity` in (0,1); sun well off-screen (past the fade margin) → `intensity = 0`; `edgeMargin = 0` → hard cut at the frame boundary.
+- **GPU shader smoke** (on the headless GL fixture): `god_rays.frag.glsl` and `god_rays_combine.frag.glsl` compile + link against `screen_quad.vert.glsl` — catches GLSL/uniform regressions in CI.
+- **"God rays off" equivalence is structural, not a test:** the whole pass is behind the `godRaysEnabled && !volumetricActive && sun-in-front` gate, so when off it never runs and `hdrSourceFbo` is untouched by construction.
+
+(A spatial behavioural test — "shafts brightest near `sunUV`, occluded frame → 0" — would need a multi-pixel FBO + synthetic depth/scene textures; the current parity harness is 1×1 scalar-uniform only. The sky-gating + intensity-gate logic is simple and the CPU projection is the bug-prone part, which *is* unit-tested; a behavioural GPU harness is a possible follow-up.)
+
+### 5.8 Performance
+
+Half-res gather (one quarter the pixels), 64 taps × 2 samples, plus a full-res additive combine — cheaper than the bloom mip-chain already in the frame. Gated off entirely when volumetric fog is on (the common shipped path), so it adds nothing to the default frame. It has no standalone subsystem class (it lives inline in the renderer composite, reading the live `hdrSourceFbo`), so there is no separate micro-benchmark; its cost rides in the full composite, well inside the frame budget on the RX 6600.
+
+### 5.8 Performance
+
+Half-res gather (one quarter the pixels), 64 taps × 2 samples, plus a full-res additive combine. Gated off entirely when volumetric is on (the common shipped path), so it adds nothing to the default frame. Measured on the RX 6600 in the benchmark.
 
 ---
 
@@ -308,3 +378,11 @@ Per Rule 14 the amendment was re-reviewed cold; loops 2+ ran with no prior-loop 
 §6.2/§6.3 were finalized with the concrete falloff helper (`coreFade`/`smooth01`), the turbulence math + provisional `F_turb`/octave constants, the `std430` 4×`vec4` SSBO layout, the over-cap throttled-log rule, and the `falloff > 0` FBM-skip + reduce-motion clauses — then implemented and reviewed cold.
 
 - **Loop 1** (fresh reviewer, no authoring context): **CLEAN — zero actionable findings.** The reviewer diffed `fogVolumeDensity` branch-by-branch between `volumetric_fog.cpp` and `volumetric_inject.comp.glsl` (`smooth01`, `coreFade`, the box product / sphere radial branches, the turbulence guard + vector form, the inlined `0.15`/3-octave constants, and the shared `fbm3`/`valueNoise3`) and found no divergence; verified every §6 claim against disk (struct fields + defaults, `MAX_FOG_VOLUMES = 32`, SSBO binding 1 / 64-B packing, `u_volumeCount`-gated byte-identical path, noise-then-volumes order, additive `density·fd` / `colour·density·fd`, reduce-motion `animSpeed` zeroing, the over-cap throttle, and all wiring); confirmed the falloff math ("1 at core → 0 at extent", hard step at `edgeSoftness=0`, sphere `radius = halfExtents.x`); and confirmed the parity test exercises the animated branch (2 of 4 cases have `anim≠0`, times swept). 2 INFO (the `FogVolumeShape` 0/1 mapping relies on declaration order — correct as written; no internal contradictions). Per the session standing instruction (converge once only verified polish/INFO remains and no structural fixes are outstanding), **convergence reached** on the clean pass — the doc matches the shipped implementation.
+
+### Amendment 2026-06-18 (slice 11.5 god-rays design) — cold-eyes loops
+
+§5 was expanded from the two-bullet sketch into an implementation-ready design (algorithm §5.1, folded light buffer §5.2, CPU sun projection + fade §5.3, two-pass integration §5.4, CPU/GPU split §5.5, gating §5.6, test contract §5.7, perf §5.8), then reviewed cold *before* implementation (Rule 1).
+
+- **Loop 1** (fresh reviewer, no authoring context): **1 CRITICAL + companions.** The insertion point was wrong against the real composite order — I wrote "after the contact-shadow pass," but the actual order is **bloom → auto-exposure → contact shadows → volumetric → composite**, so bloom runs *before* contact shadows; placing god rays there would have left the shafts *unbloomed* (the opposite of the stated payoff) and contradicted the doc's own "before bloom" sentence. Also flagged: the SH-probe grid occupies units 17–23 (don't grab a high unit); the half-res gather over a full-res reverse-Z depth needs point-sampled depth (silhouette aliasing); set `GL_LINEAR` on the god-rays FBO for the upsample. Verified sound: reverse-Z sky test, sun projection math (matches the froxel pass's `−direction` toward-sun convention), gather direction, gating against the real `volumetricActive`, resize pattern. **Fixed:** insertion moved to *before the bloom block* (reading the live `hdrSourceFbo`, which SMAA/TAA reassign), point-sampled depth, linear FBO filter, unit guidance (0–8 / 14–16 free); the premature "✅ SHIPPED" header removed.
+- **Loop 2** (fresh reviewer, cold, no prior-loop briefing): **no CRITICAL — the insertion order, sky test, sun math, and unit map all verified correct against disk.** 1 HIGH (the "wired like `volumetricFogEnabled`" one-liner hides **five** plumbing sites — struct field, hand-written `operator==`, `safeDefaults()`, the `Settings` JSON mirror's `operator==`/`to_json`/`from_json`, and the `settings_apply` wire transfer — omitting any silently breaks persistence/equality), 1 MEDIUM (name the handles: post-AA colour `hdrSourceFbo` paired with pre-AA-resolved depth `m_resolveDepthFbo`), LOW/INFO (shader double-negate transcription risk — caught by the §5.7 smoke test; resize must delete+recreate the FBO; reverse-Z projection assumed in the CPU test). **Fixed:** §5.6 now enumerates the five plumbing sites, §5.4 names both handles. No structural/architectural defects remain — the design is implementation-ready; the HIGH/MEDIUM are an implementation checklist, carried into the code and re-checked by the post-implementation cold review.
+- **Loop 3 — post-implementation** (fresh reviewer, cold, against the shipped code): **no CRITICAL / HIGH / MEDIUM.** Verified correct: the pass sits after the SMAA/TAA `hdrSourceFbo` reassignment and before the bloom block (shafts bloom + feed auto-exposure); no read-while-write hazard and no `glTextureBarrier` needed (matches the SSAO→blur / SMAA-chain render-then-sample pattern — the barrier in bloom is only for same-texture mip read/write); additive blend enabled then disabled so it doesn't leak into bloom; the half-res viewport doesn't leak (bloom sets its own); `m_resolveDepthFbo` is resolved early (step 2) so the gather reads current-frame depth; reverse-Z sky test, `texelFetch` clamps + out-of-frame guard, loop direction, and `u_intensity` early-out all correct; uniform parity exact (no orphan/missing); `godRaysSunScreenInfo` math hand-traced (the partial-fade test: uv.x=1.15 → intensity 0.5); **all five settings plumbing sites present** (struct field, `operator==`, `safeDefaults`, the `Settings` mirror's `operator==`/`to_json`/`from_json`, the wire transfer); FBO half-res RGBA16F linear + half-res resize. 1 LOW (a header comment claimed `safeDefaults()` leaves god-rays on, but the cpp correctly turns them off — fixed the comment), 2 INFO (sky test `<=`→`<` to exactly match `contact_shadows.frag.glsl` — tightened; §5.4 prose said `R11F_G11F_B10F` but the code uses `RGBA16F` — corrected the prose). **Convergence reached** — implementation matches the design and is committed.

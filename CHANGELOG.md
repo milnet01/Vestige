@@ -22,6 +22,33 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-06-18 Phase 10 fog — slice 11.5 screen-space god rays
+
+**Slice 11.5 — screen-space god rays (crepuscular light shafts).** A cheap
+radial-blur light-shaft pass (Kenny Mitchell, *GPU Gems 3* ch. 13) for when the
+volumetric froxel path isn't producing god rays — the High-preset shafts come
+free from per-froxel sun shadowing, so this is the fallback for when volumetric
+fog is off. Two new shaders on the shared screen-quad vertex shader:
+`god_rays.frag.glsl` does a half-resolution radial gather from each pixel toward
+the sun's screen position, accumulating the HDR scene radiance only where the
+pixel is sky (reverse-Z depth ≈ 0, point-sampled) so geometry occludes the
+shafts; `god_rays_combine.frag.glsl` additively upsamples the result into the
+pre-bloom HDR scene (so the shafts bloom and feed auto-exposure). Inserted in
+the composite path *before* the bloom block, reading the live AA-resolved
+`hdrSourceFbo`. New pure CPU helper `godRaysSunScreenInfo()` projects the
+directional light (a point at infinity) to screen UV and computes an edge fade
+so shafts don't pop as the sun crosses the frustum; the per-pixel gather is GPU.
+Gated by a new `godRaysEnabled` accessibility flag **and** `!volumetricActive`
+(avoids double shafts), skipped when there's no directional light or the sun is
+behind the camera; the accessibility "safe" preset turns it off (shaft sweep is
+motion). The flag is plumbed through all five settings sites (struct +
+`operator==` + `safeDefaults()` + the `Settings` JSON mirror + the wire
+transfer). New tests: `VolumetricFogGodRays` CPU suite (dead-ahead → centred /
+full intensity, behind-camera / perpendicular → not visible, partial edge fade,
+far-off-screen → 0, zero-margin hard cut) and `GodRaysShadersCompileAndLink` GPU
+smoke. "God rays off" is structural (the gate skips the pass entirely). See
+`docs/phases/phase_10_fog_design.md` §5.
+
 ### 2026-06-18 Phase 10 fog — slice 11.11 mist / ground-fog volumes
 
 **Slice 11.11 — placeable mist / ground-fog volumes.** The volumetric inject

@@ -329,6 +329,16 @@ bool Renderer::loadShaders(const std::string& assetPath)
         return false;
     }
 
+    // Screen-space god rays (slice 11.5) — reuse screen_quad.vert.glsl.
+    if (!m_godRaysShader.loadFromFiles(screenVertPath,
+            assetPath + "/shaders/god_rays.frag.glsl")
+        || !m_godRaysCombineShader.loadFromFiles(screenVertPath,
+            assetPath + "/shaders/god_rays_combine.frag.glsl"))
+    {
+        Logger::error("Failed to load god-rays shaders");
+        return false;
+    }
+
     // Load SSAO shaders (reuse screen_quad.vert.glsl)
     std::string ssaoFragPath = assetPath + "/shaders/ssao.frag.glsl";
     if (!m_ssaoShader.loadFromFiles(screenVertPath, ssaoFragPath))
@@ -643,6 +653,13 @@ void Renderer::initFramebuffers(int width, int height, int msaaSamples)
 
     // Contact shadow FBO (same config as SSAO — RGBA16F)
     m_contactShadowFbo = std::make_unique<Framebuffer>(ssaoConfig);
+
+    // God-rays FBO (slice 11.5): half-resolution RGBA16F, linear-filtered
+    // (Framebuffer default) so the additive combine upsamples smoothly.
+    FramebufferConfig godRaysConfig = ssaoConfig;
+    godRaysConfig.width  = std::max(1, width / 2);
+    godRaysConfig.height = std::max(1, height / 2);
+    m_godRaysFbo = std::make_unique<Framebuffer>(godRaysConfig);
 
     // TAA FBOs (created regardless, used when mode is TAA)
     // Non-MSAA scene FBO for TAA (scene rendered here instead of MSAA FBO)
@@ -1025,6 +1042,52 @@ void Renderer::endFrame(float deltaTime)
 
         // Use TAA output as bloom/composite input
         hdrSourceFbo = &m_taa->getCurrentFbo();
+    }
+
+    // 4.9 Screen-space god rays (slice 11.5) — crepuscular light shafts as a
+    // cheap fallback for when the volumetric froxel path isn't producing them.
+    // Runs BEFORE bloom (and before auto-exposure) so the shafts bloom and feed
+    // exposure; gated off when volumetric fog is active (that path gives god
+    // rays for free via per-froxel sun shadowing) to avoid double shafts.
+    {
+        const bool volumetricActive =
+            m_postProcessAccessibility.volumetricFogEnabled
+            && m_volumetricFogPass.isInitialized();
+        if (m_postProcessAccessibility.godRaysEnabled && !volumetricActive
+            && m_hasDirectionalLight && m_godRaysFbo && m_resolveDepthFbo)
+        {
+            // Provisional look constant: the sun fades over this fraction of the
+            // screen past the frame edge. TODO 11.10: expose via the Fog panel.
+            constexpr float GOD_RAYS_EDGE_MARGIN = 0.3f;
+            const GodRaySunScreen sun = godRaysSunScreenInfo(
+                m_lastView, m_lastProjection, m_directionalLight.direction,
+                GOD_RAYS_EDGE_MARGIN);
+            if (sun.visible)
+            {
+                // Pass A — half-res radial gather into m_godRaysFbo.
+                m_godRaysFbo->bind();
+                glViewport(0, 0, m_godRaysFbo->getWidth(), m_godRaysFbo->getHeight());
+                m_godRaysShader.use();
+                hdrSourceFbo->bindColorTexture(0);
+                m_godRaysShader.setInt("u_sceneTexture", 0);
+                m_resolveDepthFbo->bindDepthTexture(1);
+                m_godRaysShader.setInt("u_depthTexture", 1);
+                m_godRaysShader.setVec2("u_sunUV", sun.uv);
+                m_godRaysShader.setFloat("u_intensity", sun.intensity);
+                m_screenQuad->draw();
+
+                // Pass B — additive upsample-combine into the pre-bloom HDR scene.
+                glBindFramebuffer(GL_FRAMEBUFFER, hdrSourceFbo->getId());
+                glViewport(0, 0, m_windowWidth, m_windowHeight);
+                glEnable(GL_BLEND);
+                glBlendFunc(GL_ONE, GL_ONE);
+                m_godRaysCombineShader.use();
+                m_godRaysFbo->bindColorTexture(0);
+                m_godRaysCombineShader.setInt("u_godRaysTexture", 0);
+                m_screenQuad->draw();
+                glDisable(GL_BLEND);
+            }
+        }
     }
 
     // 5. Mip-chain bloom (CoD: Advanced Warfare style)
@@ -4167,6 +4230,7 @@ void Renderer::resizeRenderTarget(int width, int height)
     if (m_resolveDepthFbo) m_resolveDepthFbo->resize(width, height);
     if (m_ssaoFbo) m_ssaoFbo->resize(width, height);
     if (m_ssaoBlurFbo) m_ssaoBlurFbo->resize(width, height);
+    if (m_godRaysFbo) m_godRaysFbo->resize(std::max(1, width / 2), std::max(1, height / 2));
 
     // Resize TAA FBOs
     if (m_taaSceneFbo) m_taaSceneFbo->resize(width, height);

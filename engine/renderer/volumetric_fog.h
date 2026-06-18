@@ -37,6 +37,7 @@
 /// `((i + 0.5) / resX, (j + 0.5) / resY)`.
 #pragma once
 
+#include <glm/mat4x4.hpp>
 #include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
 
@@ -167,5 +168,30 @@ struct FogVolume
 /// reads as wispy and churning. The inject pass scales this by `v.density`.
 /// Pure function — the caller multiplies in `density`/`colour`.
 float fogVolumeDensity(const FogVolume& v, const glm::vec3& worldPos, float time);
+
+/// @brief Where the sun projects on screen + an on-screen fade, for the
+///        screen-space god-rays pass (slice 11.5).
+struct GodRaySunScreen
+{
+    bool      visible   = false;        ///< Sun is in front of the camera and not fully faded out.
+    glm::vec2 uv        = {0.5f, 0.5f}; ///< Sun screen-UV in [0,1] (the radial-blur centre).
+    float     intensity = 0.0f;         ///< Edge fade: 1 on-screen, →0 past the frame, 0 if behind.
+};
+
+/// @brief Project a directional light (a point at infinity) to screen space
+///        and compute an edge fade, for the god-rays radial blur (slice 11.5).
+///
+/// @p lightDirection is the light's *travel* direction (as stored on the
+/// directional light); it is negated internally to point toward the sun, to
+/// match the froxel scatter pass. `clip = projection · view · vec4(toward-sun,
+/// 0)`; `visible` is false (and `intensity` 0) when the sun is behind the
+/// camera (`clip.w ≤ 0`). `intensity` fades from 1 inside the frame to 0 over
+/// an @p edgeMargin band past the screen edge (a hard cut at the edge when
+/// `edgeMargin == 0`), so the shafts don't pop as the sun crosses the frustum.
+/// Pure function — the renderer feeds `uv`/`intensity` to the gather shader.
+GodRaySunScreen godRaysSunScreenInfo(const glm::mat4& view,
+                                     const glm::mat4& projection,
+                                     const glm::vec3& lightDirection,
+                                     float edgeMargin);
 
 } // namespace Vestige

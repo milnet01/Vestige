@@ -93,7 +93,8 @@ bool PostProcessAccessibilityWire::operator==(const PostProcessAccessibilityWire
         && fogEnabled          == o.fogEnabled
         && fogIntensityScale   == o.fogIntensityScale
         && reduceMotionFog     == o.reduceMotionFog
-        && volumetricFogEnabled == o.volumetricFogEnabled;
+        && volumetricFogEnabled == o.volumetricFogEnabled
+        && godRaysEnabled      == o.godRaysEnabled;
 }
 
 bool PhotosensitiveSafetyWire::operator==(const PhotosensitiveSafetyWire& o) const
@@ -312,6 +313,7 @@ json postProcessAccessToJson(const PostProcessAccessibilityWire& p)
         {"fogIntensityScale",   p.fogIntensityScale},
         {"reduceMotionFog",     p.reduceMotionFog},
         {"volumetricFogEnabled", p.volumetricFogEnabled},
+        {"godRaysEnabled",      p.godRaysEnabled},
     };
 }
 
@@ -323,6 +325,7 @@ void postProcessAccessFromJson(const json& j, PostProcessAccessibilityWire& p)
     p.fogIntensityScale   = j.value("fogIntensityScale",   p.fogIntensityScale);
     p.reduceMotionFog     = j.value("reduceMotionFog",     p.reduceMotionFog);
     p.volumetricFogEnabled = j.value("volumetricFogEnabled", p.volumetricFogEnabled);
+    p.godRaysEnabled      = j.value("godRaysEnabled",      p.godRaysEnabled);
 }
 
 json photosensitiveToJson(const PhotosensitiveSafetyWire& p)
