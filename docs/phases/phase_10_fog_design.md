@@ -1,283 +1,232 @@
 # Phase 10 — Fog, Mist & Volumetric Lighting (Design Doc)
 
-**Status:** Draft — awaiting user sign-off before implementation.
+**Status:** ✅ Signed off for implementation (2026-06-18). Cold-eyes looped to clean (3 loops; sign-off delegated per session standing instruction). See the Cold-eyes loop log at the foot of this doc.
 **Research:** See `docs/phases/phase_10_fog_research.md` for citations and derivations.
-**Scope:** Deferred-pipeline fog for the Vestige engine — distance fog, exponential height fog, volumetric fog (froxel-based), and god rays. Delivered as a series of small slices that match the Phase 10 audio cadence.
+**Scope:** Deferred-pipeline fog for the Vestige engine. The non-volumetric layers (distance fog, exponential height fog, sun-inscatter lobe, composite shader integration, accessibility transform) **have shipped**. This doc now specifies the **remaining** volumetric work: froxel-based volumetric fog (single-scatter, no temporal), god rays, and placeable mist / ground-fog volumes.
 
 ---
 
-## 1. Goals
+## 0. What has already shipped (reality check, 2026-06)
 
-- Ship every `Fog, Mist, and Volumetric Lighting` roadmap bullet in Phase 10.
-- Stay inside a **2.0 ms / frame** GPU budget on RX 6600 at 1080p for the full fog stack at the default quality preset (section 7 of the research doc).
-- Integrate with the existing HDR composite pipeline (`screen_quad.frag.glsl`) without breaking bloom, tonemap, colour grading, or the accessibility filter.
-- Expose accessibility toggles symmetrical to `depthOfFieldEnabled` / `motionBlurEnabled` (research §6).
-- Route the one fittable formula in the whole fog scope — the **Schlick approximation to the Henyey-Greenstein phase function** — through the Formula Workbench, per CLAUDE.md Rule 6.
-- Take the opportunity, while standing up that fit, to close three Workbench feature gaps identified during the research (section 9 of this doc).
+These ROADMAP "Fog, Mist, and Volumetric Lighting" bullets are `[x]` and live in `engine/renderer/fog.{h,cpp}` + `assets/shaders/screen_quad.frag.glsl` + `tests/test_fog.cpp`:
+
+| Done | Slice | What |
+|------|-------|------|
+| ✅ | 11.1 | Distance fog primitives — `FogMode` (None/Linear/Exponential/ExponentialSquared), `FogParams`, `computeFogFactor`. |
+| ✅ | 11.2 | Composite shader integration — fog composed in linear HDR after contact shadows, before bloom; world pos reconstructed from reverse-Z depth via `u_fogInvViewProj`; sky pixels skip fog; `composeFog(...)` CPU mirror pins the GLSL. |
+| ✅ | 11.3 | Height fog — `HeightFogParams` + Quílez 2010 analytic integral `computeHeightFogTransmittance` (CPU uses `std::expm1` for horizontal-ray stability; GLSL uses the `1-exp(-tau)` equivalent). |
+| ✅ | 11.4 | Sun-inscatter lobe — `SunInscatterParams` + `computeSunInscatterLobe`. |
+| ✅ | 11.9 | Accessibility transform — `applyFogAccessibilitySettings(authored, settings) → effective`. Master disable + intensity scale + reduce-motion. |
+
+Test coverage for the shipped layers lives in `tests/test_fog.cpp`: the **`Fog`** suite (29 tests: distance/height/sun primitives, knees, monotonicity, degenerate params), **`FogComposite`** (7 tests), and **`FogAccessibility`** (12 tests) — 48 in total. (Slices 11.1/11.3/11.4 all share the `Fog` suite, which is why per-slice counts don't sum cleanly.)
+
+The earlier draft of this doc specified only slice 11.1; that draft is superseded. **No code below changes the shipped layers** — the volumetric work is additive.
 
 ---
 
-## 2. Scope Split — what ships when
+## 1. Goals (remaining work)
 
-Phase 10 fog is too big for a single commit. The slices mirror the Phase 10 audio cadence (10.1 – 10.10):
+- Ship the three remaining ROADMAP bullets: **volumetric fog**, **volumetric god rays**, **mist / ground fog**.
+- Stay inside the **2.0 ms / frame** GPU budget on RX 6600 at 1080p for the *full* fog stack at the High preset (research §7) — measured, not assumed (hard 60 FPS floor).
+- Layer cleanly on the shipped composite: the volumetric pass produces a froxel-integrated `(inscatter, transmittance)` 3D texture that the existing `screen_quad.frag.glsl` composite samples, **replacing** the per-pixel distance/height term when volumetrics are enabled.
+- Route the one fittable formula in the whole scope — the **Schlick approximation to Henyey-Greenstein** — through the Formula Workbench (CLAUDE.md Rule 6). The Workbench already has every capability this fit needs (multi-axis sweeps, max-abs-error acceptance, weighted loss — see §9), so slice 11.7 is reference-case authoring, **not** a tooling change.
+- Extend the shipped accessibility transform with a `volumetricFogEnabled` master toggle (distance/height fog stay authored-on under the safe preset; only the moving volumetric layer is disabled).
+
+### Scope decision — Phase 10 ships *basic* volumetrics; the froxel + temporal *upgrade* is Phase 13
+
+This is the load-bearing scope call and it resolves a genuine self-contradiction in the source docs, so it is stated explicitly:
+
+- The research doc's own Phase-10 recommendation (research §3 line 99, §7 line 206) is a **single 160×90×64 froxel grid, three compute dispatches (inject / scatter / integrate), one directional sun light with CSM shadow sampling per froxel, Schlick phase, and *no temporal reprojection*.**
+- ROADMAP line 1657 confirms the boundary: *"Basic god rays and volumetric fog land in Phase 10 … this Phase 13 item covers the froxel-volume + temporal-reprojection rendering upgrade."*
+- The Phase-10 ROADMAP bullet's sub-bullets list temporal reprojection and multi-light, but those contradict both the research recommendation and the Phase-13 note. **We follow the research + Phase-13 boundary:** temporal reprojection, multi-light scattering, and higher-res grids are **deferred to Phase 13**. Phase 10 = single-scatter sun-only froxel fog, no temporal.
+
+Consequence for accessibility: with no temporal reprojection in Phase 10, the volumetric layer has no inter-frame "background movement" shimmer, so `reduceMotionFog` (already shipped) only needs to clamp the sun-lobe — exactly its current behaviour. The `volumetricFogEnabled` toggle still disables the whole volumetric layer for users who find any haze motion (from animated density noise) uncomfortable.
+
+---
+
+## 2. Open-questions resolution (from the prior draft's §10)
+
+The prior draft left five questions for sign-off. All five now resolve from shipped reality + the research doc; recorded here for the audit trail:
+
+1. **Scope of slice 11.1** — *moot.* 11.1 shipped, bundled with the 11.2 composite, so the first fog commit already produced a visible feature.
+2. **Height fog in the initial run** — *moot.* 11.3 shipped.
+3. **Volumetric fog commitment** — **Yes**, ship basic froxel volumetrics in Phase 10 (no temporal — see §1 scope decision). Research projects ~1.2 ms on RX 6600, comfortably inside 2.0 ms.
+4. **Workbench improvements (§9)** — **all three prerequisites already exist.** `max_abs_error_max` metric (§9.2, `reference_harness.cpp:116`) and weighted-loss curve fitting (§9.3, `curve_fitter.h` `fitWeighted`) shipped in Workbench 1.17.0 (commit `1cb553b`). The "multi-input 2D grid" (§9.1) was **never a gap**: `sweepRecurse` already builds an N-dimensional Cartesian product over every key in `input_sweep`, and shipped cases already use 2–3 keys (`terminal_velocity`, `aerodynamic_drag`). The `(g, cosθ)` phase-function grid is authored by declaring two `input_sweep` keys — no tooling change, no version bump.
+5. **Accessibility default** — **distance + height fog stay authored-on under `safeDefaults()`** (disabling them produces a harsh fog-horizon cutoff — visually worse). The new `volumetricFogEnabled` has struct default `true`; `safeDefaults()` sets it `false`. `reduceMotionFog` has struct default `false` and is set `true` by the shipped `safeDefaults()` (it is not a bare struct default).
+
+---
+
+## 3. Remaining slice plan
+
+Slice numbers follow the shipped `CHANGELOG.md` ledger (line 6673: *"non-volumetric fog slices: 11.5 (screen-space god rays) and 11.10 (editor FogPanel). Volumetric slices 11.6 – 11.8 are the heavy-lift"*). Temporal reprojection was never assigned a Phase-10 slice in that ledger; the prior design draft's tentative "11.8 = temporal" is dropped (temporal → Phase 13), and 11.8 is density noise — consistent with the ledger's 11.6–11.8 volumetric grouping. Mist volumes are the one genuinely new slice (11.11).
 
 | Slice | Title | Complexity | Ships |
 |-------|-------|------------|-------|
-| **11.1** | Distance fog primitives (pure-function) | S | `engine/renderer/fog.{h,cpp}` + 15+ unit tests. No shader wiring yet. |
-| **11.2** | Distance fog shader integration | M | `screen_quad.frag.glsl` fog uniforms + depth-reconstruction helper + renderer plumbing. Opaque-only. |
-| **11.3** | Exponential height fog | M | Adds `FogHeightParams` + analytic Quílez integral to CPU core and GLSL. |
-| **11.4** | Sun-direction inscatter lobe | S | Cosine-lobe directional scattering add (UE "DirectionalInscatteringColor" pattern). |
-| **11.5** | Screen-space god rays (Mitchell) | M | Separate post-process pass. Cheap fallback for Low / Medium preset. |
-| **11.6** | Volumetric fog foundation | L | Froxel grid + density injection compute pass + Beer-Lambert accumulation. No temporal. |
-| **11.7** | Volumetric fog phase function | M | **Workbench-fit Schlick `k(g)`** swapped in for HG. See §5 of this doc. |
-| **11.8** | Volumetric fog temporal reprojection | M | Halton jitter + 5 %/95 % EMA blend. Quality toggle. |
-| **11.9** | Accessibility toggles | S | `PostProcessAccessibilitySettings` extension + UITheme hooks. |
+| **11.6** | Volumetric fog foundation | L | Froxel grid + 3 compute passes (inject / scatter / integrate), single directional sun + CSM sampling, Beer-Lambert accumulation, HG phase (literal, pre-Workbench). Extends the shipped composite to sample the 3D texture. No temporal, no noise yet. |
+| **11.7** | Workbench-fit Schlick phase | M | Author `phase_schlick_hg` reference case (two-key `input_sweep` over `(g, cosθ)`, weighted loss, `max_abs_error_max ≤ 0.02`) → fit Schlick `k(g)` → exported GLSL replaces the literal HG in the scatter pass. Reference-case authoring only — no Workbench code change. |
+| **11.8** | Fog density noise | S/M | 3D Perlin-Worley density modulation in the inject pass for non-uniform haze. Animated via a scroll offset (no temporal-reprojection dependency). |
+| **11.11** | Mist / ground-fog volumes | M | Box + sphere density-injection sources with soft-edge falloff, fed into the 11.6 inject pass. Animated density reuses the 11.8 Perlin-Worley field. |
+| **11.5** | Screen-space god rays (Mitchell) | M | Radial-blur post-process fallback for Low/Medium presets and when volumetric fog is disabled. (High-preset god rays come *free* from 11.6's shadow-mapped inscattering.) Slice number matches the shipped CHANGELOG ledger. |
 | **11.10** | Editor FogPanel | M | Mirror the AudioPanel four-tab pattern (Distance / Height / Volumetric / Debug). |
 
-This doc specifies **11.1** in full and sketches the integration path for the rest.
+Implementation order: **11.6 → 11.7 → 11.8 → 11.11 → 11.5 → 11.10.** Each is a self-contained commit with its own tests, matching the Phase 10 audio cadence.
 
 ---
 
-## 3. API design — slice 11.1 (Distance fog primitives)
+## 4. Volumetric froxel architecture (slice 11.6) — the core
 
-### File surface
+### 4.1 Froxel grid
 
-- `engine/renderer/fog.h` — pure-function primitives (no GL types).
-- `engine/renderer/fog.cpp` — implementation.
-- `tests/test_fog.cpp` — unit coverage.
+A view-frustum-aligned 3D texture ("froxels" = frustum voxels). Default **160 × 90 × 64** = 921,600 froxels, RGBA16F ≈ 14 MB (research §3). Screen-tile × depth-slice; depth distributed **non-linearly** (exponential mapping) so near-camera froxels are small and far froxels coarse:
 
-### Types
+```
+froxel_z(slice) = near * pow(far / near, (slice + 0.5) / numSlices)   // exponential slice distribution
+```
+
+Grid dimensions and the slice-distribution exponent are artist-tuned knobs (research §10), not Workbench-fit — they carry `// TODO: revisit via Formula Workbench once reference data is available` only where measured atmospheric data would apply.
+
+### 4.2 Three compute passes (OpenGL 4.5 compute shaders)
+
+1. **Inject** (`volumetric_inject.comp`) — writes per-froxel `(scattering_rgb, extinction)` into a 3D texture. Base values from the height/distance fog params (reusing the shipped CPU formulas' GLSL form), plus density-noise modulation (11.8) and mist-volume contributions (11.11). One thread per froxel.
+2. **Scatter** (`volumetric_scatter.comp`) — per froxel, evaluate single-scatter inscattering from the directional sun:
+   `L_scatter = scattering * shadow(froxel, sun) * phase(cosθ, g) * sunRadiance + ambientProbe`
+   CSM shadow map sampled per froxel (this is the dominant cost — research §7 line 203). `phase` is literal HG in 11.6, swapped for Workbench Schlick in 11.7.
+3. **Integrate** (`volumetric_integrate.comp`) — front-to-back ray-march along each froxel column accumulating scattering + transmittance (Beer-Lambert), writing `(rgb = inscatter-so-far, a = transmittance-so-far)` per froxel. One thread per screen tile, marching the 64 slices.
+
+Slice 11.6 **extends** the shipped composite (`screen_quad.frag.glsl` — which today contains only the distance/height/sun path, no 3D-texture sampler) to sample this froxel texture at each opaque pixel's coordinate: `C_out = T * C_scene + S`. When `volumetricFogEnabled` is false, the composite keeps its current per-pixel distance/height path byte-for-byte (equivalence test in §8).
+
+### 4.3 Why compute, why this layout
+
+The Forward+ pipeline currently has no G-buffer; the froxel approach is G-buffer-independent (it only needs the depth buffer + shadow maps, both already produced). It also keeps fog cost decoupled from screen resolution (froxel count is fixed) and from overdraw. References: Wronski SIGGRAPH 2014, Hillaire/Frostbite SIGGRAPH 2015 (research §3 refs).
+
+### 4.4 CPU / GPU placement (slice 11.6, per CLAUDE.md Rule 7)
+
+| Concern | CPU | GPU | Reason |
+|---------|-----|-----|--------|
+| Inject / scatter / integrate passes | | ✅ | Per-froxel work → GPU compute default. |
+| Froxel grid sizing, slice-distribution exponent, uniform/SSBO upload | ✅ | | Per-frame setup / I/O → CPU. |
+| Shadow-map + camera matrices feeding the passes | ✅ produce | ✅ consume | Already produced CPU-side for the shadow pass; consumed per-froxel on GPU. |
+
+All three compute passes are GPU-only; the CPU drives them by uploading params + the active mist-volume SSBO each frame. No dual CPU/GPU impl is needed for the passes themselves (they have no reference dataset); the one CPU-spec/GPU-runtime parity pair in this scope is `fogVolumeDensity` (§6.4).
+
+---
+
+## 5. God rays (slice 11.5)
+
+Two paths, by preset (research §4):
+
+- **High preset:** god rays are a **free byproduct** of slice 11.6 — shadow-mapped inscattering through the froxel volume *is* light shafts (the Tabernacle tent-entrance beam). No separate pass.
+- **Low / Medium preset (and whenever volumetric fog is disabled):** a screen-space radial-blur pass (Kenny Mitchell, GPU Gems 3 ch. 13) — project the sun to screen space, ray-march N taps (64–128) toward it accumulating an occlusion mask. ~0.3–0.6 ms. This is the cheap bolt-on that gives the visual payoff without the froxel grid.
+
+`assets/shaders/god_rays_radial.frag.glsl` — new post-process pass, gated by preset + a `godRaysEnabled` toggle. Sits in the composite chain alongside fog (before bloom, so shafts bloom correctly).
+
+---
+
+## 6. Mist / ground-fog volumes (slice 11.11) — *new coverage, absent from the prior draft*
+
+Localized, placeable fog volumes (ROADMAP 465): morning mist around the Bronze Laver, dust near the altar.
+
+### 6.1 Data model
 
 ```cpp
 namespace Vestige
 {
 
-enum class FogMode
+enum class FogVolumeShape { Box, Sphere };
+
+struct FogVolume
 {
-    None,                 // Pass-through. factor = 1.0 always.
-    Linear,               // OpenGL GL_LINEAR: factor = (end - d)/(end - start)
-    Exponential,          // OpenGL GL_EXP:    factor = exp(-density * d)
-    ExponentialSquared,   // OpenGL GL_EXP2:   factor = exp(-(density * d)^2)
+    FogVolumeShape shape       = FogVolumeShape::Box;
+    glm::vec3      center      = {0.0f, 0.0f, 0.0f};
+    glm::vec3      halfExtents = {1.0f, 1.0f, 1.0f}; // Box: per-axis half-size; Sphere: .x = radius
+    glm::vec3      colour      = {0.6f, 0.62f, 0.65f}; // linear-RGB scattering tint
+    float          density     = 0.5f;   // added extinction at the volume core
+    float          edgeSoftness = 0.2f;  // 0..1 fraction of extent over which density falls to 0
+    float          animSpeed   = 0.0f;   // turbulence scroll speed (0 = static)
 };
 
-struct FogParams
-{
-    glm::vec3 colour = {0.55f, 0.60f, 0.65f}; // Linear-RGB inscattering colour
-    float start   = 20.0f;   // Linear mode only
-    float end     = 200.0f;  // Linear mode only; must be > start
-    float density = 0.02f;   // EXP/EXP2 modes; must be >= 0
-};
-
-float computeFogFactor(FogMode mode, const FogParams& params, float distance);
-glm::vec3 applyFog(const glm::vec3& surfaceColour,
-                   const glm::vec3& fogColour,
-                   float factor);
-const char* fogModeLabel(FogMode mode);
+// Pure-function falloff — CPU spec that pins the GLSL inject contribution.
+// Returns density multiplier in [0,1] for a world-space sample point.
+float fogVolumeDensity(const FogVolume& v, const glm::vec3& worldPos, float time);
 
 }
 ```
 
-### Guarantees (= what tests enforce)
+### 6.2 Soft-edge falloff
 
-- **Stable labels** — `fogModeLabel` returns the exact enum identifier; regressions here break the editor.
-- **`None` is a pass-through** — factor == 1.0 at any distance.
-- **Below-camera / sub-start distances** — factor == 1.0 (fog never projects behind the camera; guards linearised-depth reconstruction noise in the shader).
-- **Linear at knees** — factor == 1.0 at `d <= start`, factor == 0.0 at `d >= end`, factor == 0.5 at the midpoint.
-- **EXP at known points** — `density * d = ln 2` gives factor == 0.5 exactly.
-- **EXP2 at knees** — factor == 1.0 at `d = 0`, factor == `exp(-1)` ≈ 0.368 at `density * d = 1`.
-- **Monotonic decay** — factor is non-increasing with distance for Linear / EXP / EXP2.
-- **Degenerate params handled without NaN** — `end == start` (zero span) returns 1.0 rather than dividing by zero; `density < 0` clamps to 0.
-- **`applyFog` matches GLSL `mix(fogColour, surfaceColour, factor)`** — verified byte-for-byte in tests against the shader-side formula, clamped to `[0, 1]`.
+Box: per-axis `smoothstep` from the inner core to the outer extent, multiplied across axes. Sphere: radial `smoothstep(radius, radius*(1-edgeSoftness), |p - center|)`. Animated density adds a slow Perlin-Worley modulation (the same 3D noise field as slice 11.8), scrolled by `time * animSpeed`. These are canonical forms — **no coefficients fitted** (matches the shipped distance-fog primitives' approach).
 
-No coefficients fitted — these are textbook canonical forms (research §1).
+### 6.3 Integration
 
-### Integration stub (slice 11.2, not in 11.1)
+`fogVolumeDensity` is evaluated per froxel in the **inject** pass (4.2 step 1) — each volume adds to that froxel's extinction/scattering. CPU-side `fogVolumeDensity` mirrors the GLSL byte-for-byte (same discipline as the shipped `composeFog`), so a CPU unit test is the spec for the GPU path. Volumes are uploaded as a small SSBO (cap ~32 active volumes; over-cap volumes are dropped with a one-line `log()` per CLAUDE.md "no silent caps").
 
-The eventual shader surface, documented here for context:
+### 6.4 CPU / GPU placement (per CLAUDE.md Rule 7)
 
-```glsl
-// screen_quad.frag.glsl — inserted AFTER contact shadows, BEFORE bloom add.
-uniform int       u_fogMode;       // 0/1/2/3 matching FogMode
-uniform vec3      u_fogColour;
-uniform float     u_fogStart;
-uniform float     u_fogEnd;
-uniform float     u_fogDensity;
-uniform sampler2D u_depthTexture;  // Linear eye-space depth
-
-float fogFactor = computeFogFactor(u_fogMode, ..., eyeDistance);
-color = mix(u_fogColour, color, fogFactor);
-```
-
-The CPU-side `applyFog` is identical to this shader line — tests that exercise the CPU path act as a spec for the GPU path.
+| Concern | CPU | GPU | Reason |
+|---------|-----|-----|--------|
+| Volume list management, culling vs frustum | ✅ | | Branching / sparse / I/O — CPU heuristic default. |
+| Per-froxel density evaluation | | ✅ | Per-froxel (per-voxel) → GPU default. |
+| `fogVolumeDensity` falloff math | ✅ spec | ✅ runtime | Dual impl pinned by a parity test, per Rule 7. |
 
 ---
 
-## 4. HDR composition order (all slices)
+## 7. Phase function (slice 11.7)
 
-Current `screen_quad.frag.glsl` order is SSAO → contact shadows → bloom-add → exposure → tonemap → LUT → colour-vision → gamma. Fog inserts **after contact shadows, before bloom**:
+A reference-case authoring task — every Workbench capability it needs already ships (§9):
 
-```
-HDR scene  -->  SSAO  -->  contact shadows
-           -->  [fog mix with fogColour]      <-- new, slice 11.2
-           -->  bloom add
-           -->  exposure
-           -->  tonemap (ACES/Reinhard/none)
-           -->  LUT
-           -->  colour-vision filter
-           -->  gamma
-```
-
-Rationale (research §1 & §5): fog is a radiance contribution, so it must be in linear HDR. Bloom must sample the *fogged* radiance so bright fog haze blooms correctly; this also matches UE and HDRP.
-
-Volumetric fog (slice 11.6+) writes its own `(inscatter, transmittance)` 3D texture before the composite runs, and the composite samples it at each pixel's linearised-depth froxel coordinate, replacing the height/distance term with the integrated value for that pixel.
+- Fit Schlick `k(g) ≈ a₀ + a₁g + a₂g² + a₃g³` so `p(cosθ,g) ≈ (1-k²) / (4π(1-k·cosθ)²)` matches analytic HG to **max-abs error ≤ 2 %** over `g ∈ [0.1, 0.95]`, `cosθ ∈ [-1, 1]`, forward-scatter weighted 4× (uses the shipped weighted-loss fitter, §9.3).
+- The 2D `(g, cosθ)` reference dataset is authored as a `phase_schlick_hg.json` case with **two `input_sweep` keys** — `sweepRecurse` already produces the Cartesian product (no tooling change; shipped cases like `terminal_velocity` already use 3-key sweeps).
+- Acceptance uses the shipped `max_abs_error_max` metric (§9.2).
+- Export: `engine/renderer/volumetric_phase_schlick.glsl` (generated, checked in), inlined into `volumetric_scatter.comp`, regenerated via the reference case.
 
 ---
 
-## 5. Formula Workbench use — slice 11.7 (Schlick phase function)
+## 8. Performance targets & test strategy
 
-### What gets fit
+Budgets (research §7), enforced by a benchmark harness:
 
-The volumetric light-scattering pass evaluates the Henyey-Greenstein phase function per froxel per light. The exact HG form involves `pow(x, 1.5)`, which is expensive on every GPU. The textbook Schlick approximation replaces it with:
+| Layer | Budget | Technique |
+|-------|--------|-----------|
+| Distance + height (shipped) | < 0.1 ms | single `exp` + divide per pixel |
+| Sun inscatter (shipped) | < 0.1 ms | single `pow` per pixel |
+| God rays, screen-space (Low/Med) | 0.3–0.6 ms | 64–128 taps |
+| Volumetric, 160×90×64, no temporal (High) | **~1.2 ms** | 3 compute dispatches, Schlick phase, CSM per froxel |
+| **Stack total, High preset** | **~1.4 ms** | inside 2.0 ms budget |
 
-```
-p(cos θ, g) ≈ (1 - k²) / (4π (1 - k · cos θ)²)   where  k = k(g)
-```
-
-The textbook `k(g) = 1.55g - 0.55g³` is widely cited but has **no published error bound** against true HG over the anisotropy range we actually use (`g ∈ [0.1, 0.95]`, atmospheric haze through clouds).
-
-### Workbench procedure
-
-1. **Reference data.** Generate a dense `(g, cos θ)` grid (`g ∈ [0.1, 0.95]` step 0.01 = 86 values × `cos θ ∈ [-1, 1]` step 0.02 = 101 values = 8,686 samples) and evaluate analytic HG on the CPU side.
-2. **Fit target.** A rational form for `k(g)` — start with cubic `a₀ + a₁g + a₂g² + a₃g³`, check whether a quadratic is sufficient.
-3. **Bounds.** `a_i ∈ [-5, 5]` (loose — LM should converge inside them).
-4. **Loss.** Weighted L2 on `p(cos θ, g)` — weight forward scatter (`cos θ > 0.5`) 4× because that's where the sun-direction artefact lives.
-5. **Acceptance.** Max-abs error over `p(cos θ, g)` ≤ **2 %** over the full grid; AIC/BIC lower than the textbook `k = 1.55g - 0.55g³` baseline.
-6. **Export.** GLSL snippet — a single `k_of_g(g)` function inlined into the volumetric scatter compute shader.
-
-### Engine integration
-
-`engine/renderer/volumetric_phase_schlick.glsl` — generated artefact, checked in, regenerated via `formula_workbench --reference-case phase_schlick_hg`.
-
-### Reference case JSON
-
-A new `tools/formula_workbench/reference_cases/phase_schlick_hg.json` — format matches the existing `fresnel_schlick.json` / `exponential_fog.json` cases, with the HG-on-a-grid reference inline rather than on an `input_sweep` single variable (see §9 — this requires a small Workbench extension).
+Tests:
+- **11.6** — benchmark harness (`tests/test_fog_benchmark.cpp`, `VESTIGE_BENCHMARK_ONLY=1`); correctness smoke (offscreen render vs reference image); **"volumetric off" equivalence** — output must match the shipped height/distance path byte-for-byte when `volumetricFogEnabled=false`.
+- **11.7** — `phase_schlick_hg` reference-case regression: must converge, `max_abs_error ≤ 0.02`.
+- **11.8 / 11.11** — pure-function `fogVolumeDensity` / noise unit tests (falloff knees, soft-edge monotonicity, static-vs-animated, over-cap drop) + GLSL parity.
+- **11.5** — screen-space god-ray smoke + "god rays off" equivalence.
 
 ---
 
-## 6. Accessibility (slice 11.9)
+## 9. Workbench improvement status (was §9 in the prior draft)
 
-Extend `engine/accessibility/post_process_accessibility.{h,cpp}` — follows the existing DoF / motion-blur pattern:
+| Gap | Status |
+|-----|--------|
+| §9.1 — multi-input 2D reference cases | ✅ **Never a gap** — `sweepRecurse` already builds N-dimensional Cartesian products over multi-key `input_sweep`; shipped cases use 2–3 keys. |
+| §9.2 — `max_abs_error_max` metric | ✅ **Shipped** in Workbench 1.17.0 (`reference_harness.cpp:116`, commit `1cb553b`). |
+| §9.3 — weighted-loss fitting | ✅ **Shipped** in Workbench 1.17.0 (`curve_fitter.h` `fitWeighted` overload, commit `1cb553b`). |
+
+---
+
+## 10. Accessibility extension (slice 11.6 / 11.9-delta)
+
+Add to `PostProcessAccessibilitySettings` (the shipped struct):
 
 ```cpp
-struct PostProcessAccessibilitySettings
-{
-    // ... existing fields ...
-    bool  fogEnabled             = true;   // Default on; safeDefaults() -> false? TBD
-    float fogIntensityScale      = 1.0f;   // Scales density + inscatter contribution
-    bool  volumetricFogEnabled   = true;   // Independent from fogEnabled
-    bool  reduceMotionFog        = false;  // Disables temporal reprojection + caps sun-lobe
-};
+bool volumetricFogEnabled = true;  // independent of fogEnabled; safeDefaults() -> false
 ```
 
-`safeDefaults()` (the one-click accessibility preset) flips `volumetricFogEnabled = false` and `reduceMotionFog = true`. Distance fog itself stays on because disabling it produces a harsh fog-horizon cutoff on mountains and long sightlines (visually worse).
-
-WCAG 2.2 SC 2.3.1 / 2.3.3 and Xbox AG 117/118 cited in research §6.
+`safeDefaults()` sets it `false`. The shipped `applyFogAccessibilitySettings` gains one line gating the volumetric layer; distance + height fog behaviour is unchanged (they stay authored-on). `reduceMotionFog` (set `true` by `safeDefaults()`) continues to clamp the sun-lobe; with no temporal reprojection in Phase 10 it has no froxel-shimmer to suppress. **Note:** the shipped `reduceMotionFog` header comment still advertises "disables temporal reprojection in volumetric fog (when that feature ships)" — since temporal is now deferred to Phase 13, that clause should be updated when 11.6 lands so the flag's Phase-10 role reads as sun-lobe clamp only. WCAG 2.2 SC 2.3.1 / 2.3.3, Xbox AG 117/118 (research §6).
 
 ---
 
-## 7. Performance targets (all slices)
+## 11. Cold-eyes loop log
 
-Per research §7, the combined fog stack must fit inside **2.0 ms** at the High preset on RX 6600 / 1080p. Per-slice budgets:
+Per CLAUDE.md Rule 14 — loop until a cold pass returns zero verified actionable findings; loops 2+ run cold with no prior-loop briefing.
 
-| Slice | Budget | Technique |
-|-------|--------|-----------|
-| 11.1–11.3 (distance + height) | < 0.1 ms | Single `exp` + divide per pixel in `screen_quad.frag.glsl`. |
-| 11.4 (sun inscatter lobe) | < 0.1 ms | Single `pow` per pixel. |
-| 11.5 (god rays, Low/Med preset) | 0.3–0.6 ms | 64–128 taps along sun vector. |
-| 11.6–11.8 (volumetric High preset) | ~1.2–1.5 ms | 160×90×64 froxels, Schlick phase, CSM sampling, temporal on Ultra. |
-| **Stack total, High preset** | **~1.5 ms** | Well inside 2.0 ms budget. |
-
-Enforced via benchmark harness (new `tests/test_fog_benchmark.cpp` in slice 11.6) running under `VESTIGE_BENCHMARK_ONLY=1` to stay out of the unit-test wall-clock.
-
----
-
-## 8. Test strategy
-
-- **Slice 11.1** — pure-function unit tests (formulas, knees, monotonicity, degenerate params, `applyFog` ↔ GLSL-`mix` parity). 15+ cases.
-- **Slices 11.2–11.5** — shader integration smoke tests via headless offscreen render; pixel-comparison against a reference image at a known camera pose. (Pattern: same as bloom / SSAO.)
-- **Slice 11.6+** — benchmark harness + correctness smoke + "volumetric off" equivalence (when `volumetricFogEnabled = false` the output must match the height-fog-only path byte-for-byte).
-- **Slice 11.7** — Workbench reference-case regression: `phase_schlick_hg` must converge and meet `max_abs_error ≤ 0.02`. Added to `tools/formula_workbench/scripts/run_reference_cases.sh` (or wherever the existing reference-case runner lives).
-
----
-
-## 9. Formula Workbench improvements (opportunistic, surfaced by this research)
-
-Three concrete gaps the fog research exposed. All small; each unlocks a class of fit beyond just phase-function work.
-
-### 9.1 — Multi-input reference cases (2D sweeps)
-
-**Problem.** Every existing reference case (`beer_lambert`, `exponential_fog`, `fresnel_schlick`, …) uses `input_sweep: { <single variable>: {min, max, count} }`. HG-vs-Schlick is `p(g, cos θ)` — intrinsically 2D.
-
-**Fix.** Extend the reference-case JSON schema to allow a grid:
-
-```json
-"input_grid": {
-    "g":        { "min": 0.1, "max": 0.95, "step": 0.01 },
-    "cosTheta": { "min": -1.0, "max": 1.0, "step": 0.02 }
-}
-```
-
-The harness iterates the Cartesian product. No breaking change to existing 1D cases (both keys are accepted; one is required).
-
-**Scope.** ~80 lines in `reference_harness.cpp` + schema docs update. Enables all future 2D+ fits (BRDF lobes, tonemap curves under exposure, etc.).
-
-### 9.2 — Max-absolute-error metric alongside RMSE / R²
-
-**Problem.** The current `expected` block in reference cases accepts `r_squared_min` and `rmse_max`. For rendering-formula fits, the user-visible artefact is *the worst-case error*, not the average — a Schlick approximation with RMSE 0.005 but max-abs 0.15 looks broken at the sun direction even though it passes RMSE. Same applies to tonemap curve approximations, BRDF fits, etc.
-
-**Fix.** Add:
-
-```json
-"expected": {
-    "r_squared_min": 0.999,
-    "rmse_max":      0.002,
-    "max_abs_error_max": 0.02,     // NEW
-    "must_converge": true
-}
-```
-
-Compute max-abs error in `reference_harness.cpp` alongside the existing metrics. Backwards-compatible (optional field).
-
-**Scope.** ~20 lines. Touches `fit_history.{h,cpp}` + `reference_harness.cpp`.
-
-### 9.3 — Weighted-loss support (per-sample weight vector)
-
-**Problem.** The phase-function fit needs to weight forward scatter more heavily than back-scatter because that's where the visual artefact sits. Current LM fitter uses uniform weights.
-
-**Fix.** Extend `engine/formula/curve_fitter.{h,cpp}` (+ workbench UI) to accept an optional per-sample weight vector. If absent, behaviour is unchanged. Reference cases declare weights via an optional `"weights"` expression:
-
-```json
-"weights": "pow(max(cosTheta, 0.0), 2.0) * 3.0 + 1.0"
-```
-
-Evaluated per-sample at reference-dataset generation time.
-
-**Scope.** ~40 lines + UI toggle. Enables weighted fits for any rendering formula where some input regions matter more (tonemap highlight region, BRDF grazing angles, shadow-falloff knee).
-
-### Workbench release plan
-
-If the user greenlights these, they ship as workbench **1.X.0** (minor bump, new features, no breaking changes to existing reference cases) in the commit that introduces the `phase_schlick_hg` reference case — keeping the Workbench CHANGELOG + VERSION in the same commit per CLAUDE.md feedback rule.
-
----
-
-## 10. Open questions for user sign-off
-
-1. **Scope of slice 11.1.** Ship just the pure-function primitives (Linear / EXP / EXP2) now, or bundle with 11.2 (shader integration) so the first fog commit produces a visible feature?
-2. **Do we want height fog (11.3) in the initial run**, or land distance fog alone and circle back?
-3. **Volumetric fog commitment.** Are we definitely shipping volumetric fog in Phase 10 (slices 11.6–11.8), or is it a "only if the frame budget holds" aspiration? The research says 1.2–1.5 ms on RX 6600, leaving comfortable headroom, but it's the single biggest Phase 10 rendering item.
-4. **Workbench improvements (§9).** Green-light all three, or subset? They're all small, but each is a workbench commit in its own right.
-5. **Accessibility default.** Should `fogEnabled` default to `true` (normal) with `safeDefaults()` flipping it off, or is fog innocuous enough to stay on even under the safe preset? I currently propose keeping distance fog on and only disabling volumetric fog in safe mode (research §6 rationale).
-
----
-
-**Review requested:** please confirm §10 answers before slice 11.1 implementation begins.
+- **Loop 1** (fresh reviewer): 3 findings. 1 HIGH (wrong commit hash `02c0414` for shipped Workbench features → corrected to `1cb553b`), 2 LOW (per-slice test counts didn't reconcile to the 29-test `Fog` suite → cited suite totals; an `expm1` claim that was a *verified non-issue* — CPU does use `std::expm1`, GLSL uses the `1-exp` equivalent — dropped explicitly). All verified against disk before fixing.
+- **Loop 2** (fresh reviewer, cold): 8 findings, none a repeat of Loop 1 (Loop-1 fixes held). 1 CRITICAL: §9.1 "input_grid" was a fictional gap — `sweepRecurse` already does N-dimensional sweeps, so slice 11.7 needs no tooling/version bump (corrected). 2 HIGH: §4.2 claimed the shipped composite already samples the froxel texture (reworded to future-tense "extends"); god-rays slice renumbered 11.12→11.5 to match the shipped CHANGELOG ledger. 2 MEDIUM: `reduceMotionFog` default wording (struct default is `false`, set `true` by `safeDefaults()`); lingering header-comment temporal note flagged for update at 11.6. 2 LOW: 11.8 reuse clarified; noise basis standardised to Perlin-Worley. 1 INFO: added §4.4 CPU/GPU placement for the froxel core. All verified against disk before fixing.
+- **Loop 3** (fresh reviewer, cold): **CLEAN — zero actionable findings.** All load-bearing claims re-verified against disk (shipped symbols, `sweepRecurse` N-dim sweeps, `reference_harness.cpp:116`, commit `1cb553b`, slice numbering vs CHANGELOG ledger, scope decision vs research §3/§7 + ROADMAP 1657, budget arithmetic). 1 INFO (Phase-13-vs-Phase-15 naming reconciled by ROADMAP 1657 — doc lands on the correct phase) left for follow-up per Rule 14. **Convergence reached → signed off.**
