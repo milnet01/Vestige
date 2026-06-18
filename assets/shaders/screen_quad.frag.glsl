@@ -62,6 +62,15 @@ uniform sampler2D u_fogDepthTexture;       // Unit 12 — reverse-Z depth
 uniform mat4      u_fogInvViewProj;        // Inverse view-projection (world-space reconstruction)
 uniform vec3      u_fogCameraWorldPos;
 
+// Phase 10 volumetric (froxel) fog. When enabled, the integrated froxel
+// volume replaces the analytic distance/height term (design §4.2). The 3D
+// texture holds rgb = accumulated inscatter, a = transmittance, addressed by
+// (screen UV, exponential depth-slice coord).
+uniform bool      u_volumetricEnabled;
+uniform sampler3D u_volumetricTexture;     // Unit 17 — integrated froxel volume
+uniform mat4      u_volView;               // World → view, for the froxel depth lookup
+uniform vec2      u_volNearFar;            // Froxel volume view-depth range (metres)
+
 out vec4 fragColor;
 
 /// Reconstructs the world-space hit position of the fragment at the given UV
@@ -74,6 +83,16 @@ vec3 fogWorldPosFromDepth(vec2 uv, float depth)
     vec4 ndc = vec4(uv * 2.0 - 1.0, depth, 1.0);
     vec4 world = u_fogInvViewProj * ndc;
     return world.xyz / world.w;
+}
+
+/// Normalised depth-slice texcoord (z in [0,1]) for sampling the integrated
+/// froxel volume at view-space linear depth `viewDepth`. Inverse of the
+/// exponential slice distribution, in the `(slice + 0.5) / resZ` form, so it
+/// mirrors `viewDepthToFroxelSlice()` in engine/renderer/volumetric_fog.cpp
+/// (CLAUDE.md Rule 7). Pinned by test_volumetric_fog_gpu.cpp.
+float volumetricSliceCoord(float viewDepth, float nearD, float farD)
+{
+    return clamp(log(viewDepth / nearD) / log(farD / nearD), 0.0, 1.0);
 }
 
 /// CPU-parity port of `Vestige::computeFogFactor` from
@@ -228,7 +247,19 @@ void main()
     bool fogActive =
            (u_fogMode != 0 || u_heightFogEnabled || u_sunInscatterEnabled)
         && fogDepth > 0.0;
-    if (fogActive)
+    if (u_volumetricEnabled && fogDepth > 0.0)
+    {
+        // Volumetric (froxel) fog REPLACES the analytic distance/height term:
+        // C_out = T * C_scene + S (design §4.2). Screen UV addresses the froxel
+        // column (linear tiling); the exponential slice coord places the pixel
+        // along it. Sky (fogDepth == 0) keeps the cleared/tinted background.
+        vec3 worldPos = fogWorldPosFromDepth(v_texCoord, fogDepth);
+        float viewDepth = -(u_volView * vec4(worldPos, 1.0)).z;
+        float zCoord = volumetricSliceCoord(viewDepth, u_volNearFar.x, u_volNearFar.y);
+        vec4 vol = texture(u_volumetricTexture, vec3(v_texCoord, zCoord));
+        color = vol.a * color + vol.rgb;
+    }
+    else if (fogActive)
     {
         vec3 worldPos = fogWorldPosFromDepth(v_texCoord, fogDepth);
         vec3 viewVec = worldPos - u_fogCameraWorldPos;

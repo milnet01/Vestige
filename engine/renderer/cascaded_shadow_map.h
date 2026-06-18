@@ -80,6 +80,12 @@ public:
     /// @brief Gets the number of cascades.
     int getCascadeCount() const;
 
+    /// @brief Raw depth `sampler2DArray` handle, for passes that bind the
+    ///        shadow map to a texture unit themselves (e.g. the volumetric
+    ///        fog scatter pass) rather than via @ref bindShadowTexture. 0
+    ///        until the first @ref update.
+    GLuint depthTextureArray() const { return m_depthTextureArray; }
+
     /// @brief Gets the world-space texel size for a cascade (for normal offset bias).
     float getTexelWorldSize(int cascade) const;
 

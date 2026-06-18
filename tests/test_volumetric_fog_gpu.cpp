@@ -34,6 +34,7 @@
 #include <glad/gl.h>
 #include <glm/glm.hpp>
 
+#include <algorithm>
 #include <cmath>
 #include <vector>
 
@@ -288,6 +289,49 @@ TEST_F(VolumetricFogGpuTest, CsmShadowGatesSunInscatter)
 
     glDeleteTextures(1, &litMap);
     glDeleteTextures(1, &darkMap);
+}
+
+// =============================================================================
+// Composite depth-slice texcoord — GLSL helper pinned to the CPU spec
+// =============================================================================
+
+TEST_F(VolumetricFogGpuTest, SliceCoordMatchesCpuSpec)
+{
+    // The composite samples the integrated volume at this z-texcoord; it is the
+    // inverse of the exponential slice distribution and must agree with
+    // viewDepthToFroxelSlice() (in the `(slice + 0.5)/resZ` form), or every
+    // pixel reads the wrong froxel. Extract the production helper verbatim so a
+    // drift in screen_quad.frag.glsl fails here (CLAUDE.md Rule 7).
+    const std::string fnSrc = extractGlslFunction(
+        readShaderFile("screen_quad.frag.glsl"), "volumetricSliceCoord");
+    ASSERT_FALSE(fnSrc.empty());
+
+    ShaderProgram prog(
+        "#version 450 core\n"
+        "layout(location = 0) out vec4 outColor;\n"
+        "uniform float u_viewDepth;\n"
+        "uniform float u_near;\n"
+        "uniform float u_far;\n"
+        + fnSrc +
+        "void main() {\n"
+        "    outColor = vec4(volumetricSliceCoord(u_viewDepth, u_near, u_far),"
+        " 0.0, 0.0, 1.0);\n"
+        "}\n");
+    ASSERT_TRUE(prog.valid());
+
+    const FroxelGridConfig g = smallGrid();  // near 0.5, far 50, resZ 16
+    // Include a below-near and a beyond-far depth to exercise both clamps.
+    const float depths[] = {0.1f, 0.5f, 1.0f, 5.0f, 12.5f, 25.0f, 50.0f, 100.0f};
+
+    for (float vd : depths)
+    {
+        const glm::vec4 gpu = prog.run(
+            {{"u_viewDepth", vd}, {"u_near", g.near}, {"u_far", g.far}});
+        const float cpuCoord = std::clamp(
+            (viewDepthToFroxelSlice(g, vd) + 0.5f) / static_cast<float>(g.resZ),
+            0.0f, 1.0f);
+        EXPECT_NEAR(gpu.r, cpuCoord, 1e-5f) << "slice coord @ viewDepth " << vd;
+    }
 }
 
 } // namespace Vestige::Test

@@ -407,6 +407,15 @@ bool Renderer::loadShaders(const std::string& assetPath)
         m_depthReducer.reset();
     }
 
+    // Phase 10 volumetric (froxel) fog. Optional — a shader-load failure
+    // leaves the pass uninitialised (isInitialized() == false) and the
+    // composite falls back to the analytic distance/height path; it does not
+    // fail renderer init.
+    if (!m_volumetricFogPass.init(assetPath + "/shaders"))
+    {
+        Logger::warning("Volumetric fog failed to initialize — feature disabled");
+    }
+
     // Load screen-space contact shadow shader
     std::string contactShadowFragPath = assetPath + "/shaders/contact_shadows.frag.glsl";
     if (!m_contactShadowShader.loadFromFiles(screenVertPath, contactShadowFragPath))
@@ -1292,6 +1301,65 @@ void Renderer::endFrame(float deltaTime)
                                glm::inverse(m_lastViewProjection));
         m_screenShader.setVec3("u_fogCameraWorldPos", m_cameraWorldPosition);
     }
+
+    // Phase 10 volumetric (froxel) fog. When enabled, the three compute
+    // passes run here (before the composite samples the result) and the
+    // integrated (inscatter, transmittance) volume REPLACES the analytic
+    // distance/height term above — C_out = T*C_scene + S (design §4.2). When
+    // disabled, u_volumetricEnabled is false and the composite keeps the
+    // analytic path byte-for-byte.
+    const bool volumetricActive = m_postProcessAccessibility.volumetricFogEnabled
+                                  && m_volumetricFogPass.isInitialized();
+    if (volumetricActive)
+    {
+        VolumetricFogPass::FrameParams fp;
+        fp.invProjection   = glm::inverse(m_lastProjection);
+        fp.invView         = glm::inverse(m_lastView);
+        // Toward-sun in view space (matches contact_shadows.frag); the light's
+        // `direction` is the travel direction, so negate before transforming.
+        fp.sunDirViewSpace = glm::normalize(
+            glm::mat3(m_lastView) * (-m_directionalLight.direction));
+        fp.sunRadiance     = m_directionalLight.diffuse;
+        fp.ambient         = m_directionalLight.ambient;
+
+        // Light-atmosphere look defaults — provisional artist constants until
+        // the Fog editor panel (slice 11.10) exposes per-scene density. ~4×
+        // thinner than the FrameParams neutral default so it reads as haze, not
+        // thick fog (≈22 % extinction at 50 m). Slight forward anisotropy gives
+        // the sun-facing god rays a soft bloom.
+        // TODO 11.10: drive these from scene fog settings / Formula Workbench.
+        fp.scattering = glm::vec3(0.005f);
+        fp.extinction = 0.005f;
+        fp.anisotropy = 0.3f;
+
+        // Per-froxel sun shadowing (god rays) when a directional light + its
+        // cascaded shadow map exist this frame. Splits are view-space depths,
+        // matching the scatter shader's cascade-select convention.
+        if (m_hasDirectionalLight && m_cascadedShadowMap)
+        {
+            const int cascades = std::min(m_cascadedShadowMap->getCascadeCount(), 4);
+            fp.csmCascadeCount = cascades;
+            for (int i = 0; i < cascades; ++i)
+            {
+                const auto idx = static_cast<size_t>(i);
+                fp.csmCascadeSplits[idx]      = m_cascadedShadowMap->getCascadeSplit(i);
+                fp.csmLightSpaceMatrices[idx] = m_cascadedShadowMap->getLightSpaceMatrix(i);
+            }
+            fp.csmShadowTexture = m_cascadedShadowMap->depthTextureArray();
+        }
+        m_volumetricFogPass.dispatch(fp);
+    }
+
+    // Composite sampler — ALWAYS bind (Mesa declared-sampler safety). Unit 17
+    // is free in the composite (0/9/10/11/12/13 are taken; 14-16 are the
+    // scene pass's IBL maps, already consumed by now).
+    m_screenShader.setBool("u_volumetricEnabled", volumetricActive);
+    const FroxelGridConfig& vcfg = m_volumetricFogPass.config();
+    glBindTextureUnit(17, volumetricActive ? m_volumetricFogPass.integratedTexture()
+                                           : m_fallbackTex3D);
+    m_screenShader.setInt("u_volumetricTexture", 17);
+    m_screenShader.setVec2("u_volNearFar", glm::vec2(vcfg.near, vcfg.far));
+    m_screenShader.setMat4("u_volView", m_lastView);
 
     // Color grading LUT uniforms — ALWAYS bind texture
     bool lutActive = (m_colorGradingLut && m_colorGradingLut->isEnabled());

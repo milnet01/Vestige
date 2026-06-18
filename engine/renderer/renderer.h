@@ -27,6 +27,7 @@
 #include "renderer/sh_probe_grid.h"
 #include "renderer/environment_map.h"
 #include "renderer/depth_reducer.h"
+#include "renderer/volumetric_fog_pass.h"
 #include "renderer/smaa.h"
 #include "renderer/mesh_pool.h"
 #include "renderer/indirect_buffer.h"
@@ -580,6 +581,12 @@ private:
 
     // SDSM (Sample Distribution Shadow Maps)
     std::unique_ptr<DepthReducer> m_depthReducer;
+
+    // Phase 10 volumetric (froxel) fog. Value member — self-guards via
+    // isInitialized(); init() once a GL context exists, ~VolumetricFogPass
+    // frees its textures while the context is still current (same lifetime
+    // window as the unique_ptr GL owners above).
+    VolumetricFogPass m_volumetricFogPass;
     bool m_sdsmEnabled = true;             // Enabled by default
     float m_sdsmNear = 0.1f;              // Smoothed near bound (lerped between frames)
     float m_sdsmFar = 150.0f;             // Smoothed far bound (lerped between frames)

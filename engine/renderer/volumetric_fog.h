@@ -47,9 +47,9 @@ namespace Vestige
 ///
 /// Defaults match the design doc: 160 × 90 × 64 (= 921,600 froxels,
 /// ~14 MB at RGBA16F). `near`/`far` are the *volumetric* range in
-/// view-space metres — fog beyond `far` falls back to the analytic
-/// distance/height term in the composite, so `far` is typically shorter
-/// than the camera far plane.
+/// view-space metres. The composite clamps the depth-slice coord at `far`,
+/// so pixels beyond it take the farthest froxel's integrated value; `far`
+/// is therefore typically shorter than the camera far plane.
 struct FroxelGridConfig
 {
     int   resX = 160;     ///< Screen-tile columns. Must be > 0.

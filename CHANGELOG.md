@@ -22,7 +22,7 @@ may change any interface without notice.
 
 ## [Unreleased]
 
-### 2026-06-18 Phase 10 fog — slice 11.6 volumetric froxel pipeline (GPU, internal)
+### 2026-06-18 Phase 10 fog — slice 11.6 volumetric froxel pipeline (now user-visible)
 
 The GPU half of slice 11.6: a `VolumetricFogPass` subsystem
 (`engine/renderer/volumetric_fog_pass.{h,cpp}`) that owns two RGBA16F froxel
@@ -59,6 +59,27 @@ and the stale "disables temporal reprojection" note on `reduceMotionFog` is
 corrected (temporal is a Phase 13 upgrade). The toggle is forward-compat
 scaffolding until its consumer — the composite per-pixel froxel sampling — and
 the on-hardware 60 FPS budget land in **part B2**.
+
+**Part B2 — composite wiring + on-by-default light haze (user-visible).** The
+HDR composite (`screen_quad.frag.glsl`) now samples the integrated froxel
+volume: when `volumetricFogEnabled` is set it reconstructs each opaque pixel's
+view-space depth, maps it to the exponential froxel slice (`volumetricSliceCoord`,
+pinned to `viewDepthToFroxelSlice()` by a new GPU parity test), and composites
+`C_out = transmittance·C_scene + inscatter`, **replacing** the analytic
+distance/height term (design §4.2 — no double-fog); when unset, the analytic
+path is byte-identical (the volumetric branch wraps it in an `else`). `Renderer`
+now owns the `VolumetricFogPass`, dispatches the three compute passes each frame
+before the composite, and builds `FrameParams` from the camera + the cascaded
+shadow map — so the per-froxel god-ray shadowing runs whenever a directional
+light is present. `CascadedShadowMap` gained a raw `depthTextureArray()`
+accessor so the scatter pass binds the shadow array itself. Volumetric fog ships
+**on by default at a light-haze density** (~4× thinner than the neutral medium —
+≈22 % extinction at 50 m, reads as atmosphere not thick fog) with a slight
+forward anisotropy for soft sun-facing shafts; per-scene density tuning lands
+with the Fog editor panel (slice 11.10). New tests: a Release-gated GPU
+benchmark (`tests/test_fog_benchmark.cpp`) times the full 160×90×64 dispatch and
+gates it under the 2.0 ms fog-stack budget on the RX 6600 (hard 60 FPS floor —
+measured well within), plus the `volumetricSliceCoord` CPU↔GPU parity test.
 
 ### 2026-06-17 Formula Pipeline — path-tracer formula coverage (3D_E-0006..0012)
 
