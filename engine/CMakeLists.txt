@@ -63,6 +63,7 @@ set(ENGINE_SOURCES
     renderer/color_vision_filter.cpp
     renderer/fog.cpp
     renderer/volumetric_fog.cpp
+    renderer/volumetric_fog_pass.cpp
     accessibility/photosensitive_safety.cpp
     accessibility/post_process_accessibility.cpp
     ui/subtitle.cpp

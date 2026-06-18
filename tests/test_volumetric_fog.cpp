@@ -161,3 +161,86 @@ TEST(VolumetricFog, ScreenUVDegenerateResolutionIsZero)
     g.resX = 0;
     EXPECT_FLOAT_EQ(froxelToScreenUV(g, 3, 3).x, 0.0f);
 }
+
+// ---------------------------------------------------------------------------
+// froxelSliceBoundaryViewDepth — integer slice boundaries (no centre offset)
+// ---------------------------------------------------------------------------
+
+TEST(VolumetricFog, BoundaryZeroIsNearAndResZIsFar)
+{
+    const FroxelGridConfig g = defaultGrid();
+    EXPECT_NEAR(froxelSliceBoundaryViewDepth(g, 0), g.near, kEps);
+    EXPECT_NEAR(froxelSliceBoundaryViewDepth(g, g.resZ), g.far, kEps);
+}
+
+TEST(VolumetricFog, BoundaryBracketsTheSliceCentre)
+{
+    // Slice k's centre depth must lie strictly between boundary(k) and
+    // boundary(k+1) — that is what makes the centre/boundary pair consistent.
+    const FroxelGridConfig g = defaultGrid();
+    for (int k = 0; k < g.resZ; ++k)
+    {
+        const float lo     = froxelSliceBoundaryViewDepth(g, k);
+        const float hi     = froxelSliceBoundaryViewDepth(g, k + 1);
+        const float centre = froxelSliceToViewDepth(g, k);
+        EXPECT_GT(centre, lo) << "slice " << k;
+        EXPECT_LT(centre, hi) << "slice " << k;
+    }
+}
+
+TEST(VolumetricFog, BoundaryIsClampedAndDegenerateSafe)
+{
+    const FroxelGridConfig g = defaultGrid();
+    EXPECT_FLOAT_EQ(froxelSliceBoundaryViewDepth(g, -5), froxelSliceBoundaryViewDepth(g, 0));
+    EXPECT_FLOAT_EQ(froxelSliceBoundaryViewDepth(g, g.resZ + 99),
+                    froxelSliceBoundaryViewDepth(g, g.resZ));
+
+    FroxelGridConfig bad = defaultGrid();
+    bad.near = 0.0f;
+    const float z = froxelSliceBoundaryViewDepth(bad, 3);
+    EXPECT_FALSE(std::isnan(z));
+    EXPECT_FALSE(std::isinf(z));
+}
+
+// ---------------------------------------------------------------------------
+// henyeyGreensteinPhase — normalised phase function
+// ---------------------------------------------------------------------------
+
+TEST(VolumetricFog, IsotropicPhaseIsUniformOneOverFourPi)
+{
+    constexpr float kOneOverFourPi = 0.0795774715f; // 1 / (4π)
+    // g = 0 ⇒ phase is constant 1/(4π) for every angle.
+    for (float c : {-1.0f, -0.3f, 0.0f, 0.5f, 1.0f})
+    {
+        EXPECT_NEAR(henyeyGreensteinPhase(c, 0.0f), kOneOverFourPi, kEps) << "cos=" << c;
+    }
+}
+
+TEST(VolumetricFog, ForwardScatterPeaksTowardLight)
+{
+    // Positive g forward-scatters: phase at cosθ = +1 (aligned) must exceed
+    // phase at cosθ = -1 (back-scatter).
+    const float g = 0.6f;
+    EXPECT_GT(henyeyGreensteinPhase(1.0f, g), henyeyGreensteinPhase(-1.0f, g));
+}
+
+TEST(VolumetricFog, PhaseIntegratesToUnityOverSphere)
+{
+    // ∫ p(cosθ) dΩ = 2π ∫_{-1}^{1} p(μ) dμ = 1. Midpoint-integrate in μ.
+    const float g = 0.4f;
+    constexpr int N = 20000;
+    double integral = 0.0;
+    for (int i = 0; i < N; ++i)
+    {
+        const float mu = -1.0f + (static_cast<float>(i) + 0.5f) * (2.0f / N);
+        integral += static_cast<double>(henyeyGreensteinPhase(mu, g)) * (2.0 / N);
+    }
+    integral *= 2.0 * 3.14159265358979323846;
+    EXPECT_NEAR(integral, 1.0, 2e-3);
+}
+
+TEST(VolumetricFog, PhaseStaysFiniteAtExtremeAnisotropy)
+{
+    EXPECT_TRUE(std::isfinite(henyeyGreensteinPhase(1.0f, 0.99f)));
+    EXPECT_TRUE(std::isfinite(henyeyGreensteinPhase(-1.0f, -0.99f)));
+}

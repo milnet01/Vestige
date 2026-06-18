@@ -22,6 +22,30 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-06-18 Phase 10 fog — slice 11.6 volumetric froxel pipeline (GPU, internal)
+
+The GPU half of slice 11.6: a `VolumetricFogPass` subsystem
+(`engine/renderer/volumetric_fog_pass.{h,cpp}`) that owns two RGBA16F froxel
+3D textures and drives the three compute passes —
+`assets/shaders/volumetric_{inject,scatter,integrate}.comp.glsl` (inject the
+participating medium → single-scatter sun inscattering → front-to-back
+Beer-Lambert accumulation). This is the engine's first use of `image3D` /
+`glBindImageTexture`. Slice 11.6 evaluates the **unshadowed** sun lobe with
+the literal Henyey-Greenstein phase; CSM shadow sampling, the composite
+sampling that makes the fog user-visible, and the accessibility
+`volumetricFogEnabled` toggle land in the wiring step (11.6 part B), where the
+60 FPS budget is measured on real hardware.
+
+Pinned per CLAUDE.md Rule 7 (CPU spec ↔ GPU runtime): added
+`froxelSliceBoundaryViewDepth` and `henyeyGreensteinPhase` references to
+`engine/renderer/volumetric_fog.{h,cpp}`. New headless GPU parity tests
+(`tests/test_volumetric_fog_gpu.cpp`) read froxel texels back and check them
+against the closed forms — Beer-Lambert transmittance, the energy-conserving
+first-slab inscatter integral, and the GLSL phase function vs the CPU
+reference — plus 8 new pure-math unit tests (slice-boundary depths; HG phase
+normalisation, including a numerical sphere-integral-to-unity check). Full
+suite green: 3436/3436.
+
 ### 2026-06-17 Formula Pipeline — path-tracer formula coverage (3D_E-0006..0012)
 
 Eleven new scalar formula templates in `engine/formula/physics_templates.cpp`

@@ -78,6 +78,28 @@ float froxelSliceToViewDepth(const FroxelGridConfig& cfg, int slice);
 /// pixel's froxel. Degenerate configs return 0.
 float viewDepthToFroxelSlice(const FroxelGridConfig& cfg, float viewDepth);
 
+/// @brief View-space linear depth at depth-slice *boundary* index @p boundary.
+///
+/// Unlike @ref froxelSliceToViewDepth (which evaluates at slice *centres*,
+/// `slice + 0.5`), this evaluates at integer boundaries: boundary `b` is the
+/// near edge of slice `b` and the far edge of slice `b - 1`. Used by the
+/// integrate pass to compute each slice's thickness for Beer-Lambert
+/// accumulation, and is the CPU spec that pins
+/// `volumetric_integrate.comp.glsl`. `boundary` is clamped to `[0, resZ]`;
+/// `boundary(0) == near`, `boundary(resZ) == far`. Degenerate configs return
+/// `near`.
+float froxelSliceBoundaryViewDepth(const FroxelGridConfig& cfg, int boundary);
+
+/// @brief Henyey-Greenstein phase function p(cosTheta; g), normalised so its
+///        integral over the unit sphere is 1.
+///
+/// `g` is the anisotropy in (-1, 1): 0 = isotropic (returns `1/(4π)`),
+/// positive = forward-scattering. This is the CPU reference that pins the
+/// `henyeyGreenstein` GLSL helper in `volumetric_scatter.comp.glsl`
+/// (CLAUDE.md Rule 7). The denominator is floored at a small epsilon so
+/// `g → ±1` stays finite.
+float henyeyGreensteinPhase(float cosTheta, float g);
+
 /// @brief Screen-space UV (in [0,1]) at the centre of froxel column
 ///        `(i, j)`. Linear tiling: `((i + 0.5)/resX, (j + 0.5)/resY)`.
 glm::vec2 froxelToScreenUV(const FroxelGridConfig& cfg, int i, int j);

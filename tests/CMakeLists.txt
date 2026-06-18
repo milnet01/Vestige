@@ -11,6 +11,7 @@ add_executable(vestige_tests
     test_ibl_parity.cpp
     test_bloom_parity.cpp
     test_color_grading_parity.cpp
+    test_volumetric_fog_gpu.cpp
     test_event_bus.cpp
     test_timer.cpp
     test_logger.cpp

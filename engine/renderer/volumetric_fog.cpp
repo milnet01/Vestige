@@ -63,6 +63,27 @@ float viewDepthToFroxelSlice(const FroxelGridConfig& cfg, float viewDepth)
     return static_cast<float>(cfg.resZ) * t - 0.5f;
 }
 
+float froxelSliceBoundaryViewDepth(const FroxelGridConfig& cfg, int boundary)
+{
+    if (!isFinite(cfg))
+    {
+        return cfg.near;
+    }
+
+    // Integer boundary (no +0.5 centre offset): boundary(b) = near * (far/near)^(b/N).
+    const int clamped = std::clamp(boundary, 0, cfg.resZ);
+    const float t = static_cast<float>(clamped) / static_cast<float>(cfg.resZ);
+    return cfg.near * std::pow(cfg.far / cfg.near, t);
+}
+
+float henyeyGreensteinPhase(float cosTheta, float g)
+{
+    const float gg = g * g;
+    const float denom = 1.0f + gg - 2.0f * g * cosTheta;
+    constexpr float PI = 3.14159265358979323846f;
+    return (1.0f - gg) / (4.0f * PI * std::pow(std::max(denom, 1e-4f), 1.5f));
+}
+
 glm::vec2 froxelToScreenUV(const FroxelGridConfig& cfg, int i, int j)
 {
     const float u = cfg.resX > 0
