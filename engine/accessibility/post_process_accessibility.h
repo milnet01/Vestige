@@ -95,12 +95,10 @@ struct PostProcessAccessibilitySettings
     /// while the analytic distance/height fog stays authored-on (disabling
     /// that produces a harsh fog-horizon cutoff — visually worse).
     ///
-    /// AUDIT — **awaiting consumer.** Persisted and preset-wired here in
-    /// slice 11.6 part B1; the composite path that reads it (per-pixel
-    /// froxel sampling) lands in part B2. Toggling it has no visible
-    /// effect until then. Do not remove (settings.json round-trip must
-    /// stay stable); route the volumetric dispatch/composite through this
-    /// flag when B2 lands and delete this note.
+    /// Consumed in the renderer composite (slice 11.6 part B2, `renderer.cpp`):
+    /// `volumetricActive = volumetricFogEnabled && m_volumetricFogPass.isInitialized()`
+    /// gates both the froxel dispatch and the `u_volumetricEnabled` composite
+    /// uniform. settings.json round-trips it; `safeDefaults()` sets it false.
     bool volumetricFogEnabled = true;
 
     /// Value equality — two configs match iff every flag matches.

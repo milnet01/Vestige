@@ -104,4 +104,29 @@ float henyeyGreensteinPhase(float cosTheta, float g);
 ///        `(i, j)`. Linear tiling: `((i + 0.5)/resX, (j + 0.5)/resY)`.
 glm::vec2 froxelToScreenUV(const FroxelGridConfig& cfg, int i, int j);
 
+/// @brief Fog density-noise controls (slice 11.8) — modulates the uniform
+///        froxel medium with a drifting value-noise field so fog reads as
+///        non-uniform haze. `enabled` defaults off (the renderer enables it
+///        with provisional look constants until the editor panel, slice 11.10).
+struct FogNoiseParams
+{
+    bool      enabled      = false;                   ///< Off until tuned per scene.
+    float     frequency    = 0.05f;                   ///< Cycles per world metre.
+    float     strength     = 0.6f;                    ///< 0..1 modulation depth.
+    int       octaves      = 3;                       ///< FBM octaves (clamped 1..5).
+    glm::vec3 windVelocity = glm::vec3(0.4f, 0.0f, 0.1f); ///< World m/s domain scroll.
+};
+
+/// @brief Density multiplier (mean ≈ 1) for a froxel at @p worldPos and
+///        @p time, from a 3-octave value-noise FBM.
+///
+/// Returns `clamp(1 + strength·(2·n − 1), 0, 2)` with `n ∈ [0,1]` the FBM
+/// value at `worldPos·frequency + windVelocity·time`. `strength == 0` ⇒ 1.
+/// This is the CPU spec that pins the GLSL `fogDensityNoise` in
+/// `volumetric_inject.comp.glsl` (Rule 7); the integer-hash core is
+/// bit-reproducible CPU↔GLSL, the interpolated value matches within a few
+/// ULPs. `octaves` is clamped to `[1, 5]`. Pure function — does not consult
+/// `params.enabled` (the caller gates application).
+float fogDensityNoise(const glm::vec3& worldPos, const FogNoiseParams& params, float time);
+
 } // namespace Vestige

@@ -22,6 +22,38 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-06-18 Phase 10 fog — slice 11.8 density noise + slice 11.7 dropped
+
+**Slice 11.8 — fog density noise.** The volumetric inject pass
+(`assets/shaders/volumetric_inject.comp.glsl`) now modulates the uniform froxel
+medium with a drifting 3-octave value-noise FBM, so fog reads as non-uniform
+haze instead of a flat grey wash. New CPU spec `fogDensityNoise()` +
+`FogNoiseParams` (`engine/renderer/volumetric_fog.{h,cpp}`), mirrored
+bit-for-bit in the shader by an integer hash (never sin-hashing) so the CPU↔GPU
+parity test is tight. Animated by a world-space domain scroll
+(`windVelocity·time`) with no temporal-reprojection dependency; reduce-motion
+accessibility freezes the drift. Enabled by default with provisional look
+constants (frequency 0.03, strength 0.5, 3 octaves) until the Fog editor panel
+(11.10) exposes per-scene controls; `noise.enabled=false` writes the uniform
+medium byte-for-byte (equivalence preserved, pinned by the existing
+default-params dispatch tests). New tests: `VolumetricFogNoise` CPU suite
+(range / determinism / animation / strength-0 / octave clamp) and
+`GlslDensityNoiseMatchesCpuReference` GPU parity (extracts the whole GLSL noise
+chain and pins it to the CPU spec within `1e-4 + 1e-3·|cpu|`). 60 FPS gate
+re-verified with noise on (full 160×90×64 dispatch, RX 6600, inside the 2.0 ms
+fog-stack budget).
+
+**Slice 11.7 (Workbench-fit Schlick phase) dropped** after pre-implementation
+verification (Rule 13). Fitting Schlick to Henyey-Greenstein cannot meet a
+useful accuracy bound over the needed anisotropy range (HG peaks ≈62 at
+g=0.95, cosθ=1; best fit error ≈67 there, ≈0.03 abs / ≈9% even over the
+realistic g≤0.6 range), there is no perf pressure to replace HG
+(`pow(x,1.5)`=`x·√x` is cheap; the fog stack is far inside budget), and the fit
+needs a cross-formula Workbench capability that does not ship. The scatter pass
+keeps the exact analytic HG phase (its parity test is unchanged). Scope note
+per project rule 5: the cross-formula-fit gap is logged to ROADMAP as **FW W9**.
+See `docs/phases/phase_10_fog_design.md` §7.
+
 ### 2026-06-18 Phase 10 fog — slice 11.6 volumetric froxel pipeline (now user-visible)
 
 The GPU half of slice 11.6: a `VolumetricFogPass` subsystem

@@ -117,11 +117,20 @@ void VolumetricFogPass::dispatch(const FrameParams& params)
     const GLuint groupsY = static_cast<GLuint>((m_cfg.resY + 7) / 8);
     const GLuint groupsZ = static_cast<GLuint>((m_cfg.resZ + 7) / 8);
 
-    // Pass 1 — inject the participating medium.
+    // Pass 1 — inject the participating medium (+ density noise, slice 11.8).
     m_inject.use();
     m_inject.setVec3("u_froxelRes", res);
     m_inject.setVec3("u_scattering", params.scattering);
     m_inject.setFloat("u_extinction", params.extinction);
+    m_inject.setVec2("u_froxelNearFar", nearFar);
+    m_inject.setMat4("u_invProjection", params.invProjection);
+    m_inject.setMat4("u_invView", params.invView);
+    m_inject.setFloat("u_elapsed", params.elapsedSeconds);
+    m_inject.setInt("u_noiseEnabled", params.noise.enabled ? 1 : 0);
+    m_inject.setFloat("u_noiseFreq", params.noise.frequency);
+    m_inject.setFloat("u_noiseStrength", params.noise.strength);
+    m_inject.setInt("u_noiseOctaves", params.noise.octaves);
+    m_inject.setVec3("u_noiseWind", params.noise.windVelocity);
     glBindImageTexture(0, m_volumeTex, 0, GL_TRUE, 0, GL_WRITE_ONLY, GL_RGBA16F);
     glDispatchCompute(groupsX, groupsY, groupsZ);
     glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);

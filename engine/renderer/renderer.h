@@ -587,6 +587,7 @@ private:
     // frees its textures while the context is still current (same lifetime
     // window as the unique_ptr GL owners above).
     VolumetricFogPass m_volumetricFogPass;
+    float m_volumetricFogElapsed = 0.0f;   // Accumulated seconds for density-noise scroll (11.8)
     bool m_sdsmEnabled = true;             // Enabled by default
     float m_sdsmNear = 0.1f;              // Smoothed near bound (lerped between frames)
     float m_sdsmFar = 150.0f;             // Smoothed far bound (lerped between frames)

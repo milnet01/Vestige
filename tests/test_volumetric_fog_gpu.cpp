@@ -225,6 +225,68 @@ TEST_F(VolumetricFogGpuTest, GlslPhaseMatchesCpuReference)
 }
 
 // =============================================================================
+// Density noise (slice 11.8) — GLSL field pinned to the CPU reference
+// =============================================================================
+
+TEST_F(VolumetricFogGpuTest, GlslDensityNoiseMatchesCpuReference)
+{
+    // Extract the whole noise call chain verbatim so any drift in the
+    // production shader fails the parity assertion (same discipline as the
+    // Henyey-Greenstein test above).
+    const std::string src = readShaderFile("volumetric_inject.comp.glsl");
+    std::string chain;
+    for (const char* fn : {"noiseHash3", "hashToUnit", "vlerp",
+                           "valueNoise3", "fbm3", "fogDensityNoise"})
+    {
+        const std::string f = extractGlslFunction(src, fn);
+        ASSERT_FALSE(f.empty()) << "missing GLSL fn: " << fn;
+        chain += f + "\n";
+    }
+
+    ShaderProgram prog(
+        "#version 450 core\n"
+        "layout(location = 0) out vec4 outColor;\n"
+        "uniform vec3  u_worldPos;\n"
+        "uniform float u_freq;\n"
+        "uniform float u_strength;\n"
+        "uniform int   u_octaves;\n"
+        "uniform vec3  u_wind;\n"
+        "uniform float u_t;\n"
+        + chain +
+        "void main() {\n"
+        "    outColor = vec4(fogDensityNoise(u_worldPos, u_freq, u_strength,\n"
+        "                                    u_octaves, u_wind, u_t), 0.0, 0.0, 1.0);\n"
+        "}\n");
+    ASSERT_TRUE(prog.valid());
+
+    FogNoiseParams p;
+    p.frequency    = 0.05f;
+    p.strength     = 0.6f;
+    p.octaves      = 3;
+    p.windVelocity = glm::vec3(0.4f, 0.1f, 0.2f);
+
+    const glm::vec3 positions[] = {
+        {0.0f, 0.0f, 0.0f},   {1.3f, -2.7f, 5.1f},   {-12.0f, 3.5f, 8.8f},
+        {37.4f, 0.0f, -19.2f}, {100.0f, 50.0f, 200.0f}, {-0.4f, -0.4f, -0.4f}};
+    const float times[] = {0.0f, 1.5f, 12.34f};
+
+    for (float t : times)
+    {
+        for (const glm::vec3& wp : positions)
+        {
+            const glm::vec4 gpu = prog.run({
+                {"u_worldPos", wp},          {"u_freq", p.frequency},
+                {"u_strength", p.strength},  {"u_octaves", p.octaves},
+                {"u_wind", p.windVelocity},  {"u_t", t}});
+            const float cpu = fogDensityNoise(wp, p, t);
+            EXPECT_NEAR(gpu.r, cpu, 1e-4f + 1e-3f * std::abs(cpu))
+                << "density-noise mismatch @ pos=(" << wp.x << "," << wp.y << ","
+                << wp.z << ") t=" << t;
+        }
+    }
+}
+
+// =============================================================================
 // CSM sun shadowing — fully-lit vs fully-occluded synthetic shadow map
 // =============================================================================
 

@@ -36,10 +36,10 @@ class VolumetricFogPass
 public:
     /// @brief Per-frame inputs for the inject + scatter passes.
     ///
-    /// Density noise (11.8) and mist volumes (11.11) extend this later.
-    /// `scattering` (sigma_s) and `extinction` (sigma_t) are the uniform base
-    /// medium. The CSM block drives per-froxel sun shadowing; leave
-    /// `csmCascadeCount` at 0 for the unshadowed sun lobe.
+    /// Mist volumes (11.11) extend this later. `scattering` (sigma_s) and
+    /// `extinction` (sigma_t) are the uniform base medium; `noise` (11.8)
+    /// modulates them per froxel. The CSM block drives per-froxel sun
+    /// shadowing; leave `csmCascadeCount` at 0 for the unshadowed sun lobe.
     struct FrameParams
     {
         glm::mat4 invProjection{1.0f};        ///< Clip → view, to place froxels.
@@ -49,6 +49,11 @@ public:
         glm::vec3 scattering{0.02f};          ///< sigma_s per channel, 1/m.
         float     extinction{0.02f};          ///< sigma_t, 1/m.
         float     anisotropy{0.0f};           ///< Henyey-Greenstein g.
+
+        // Density-noise modulation (slice 11.8). `noise.enabled == false`
+        // writes the uniform medium byte-for-byte (pre-11.8 equivalence).
+        FogNoiseParams noise{};               ///< Per-froxel density noise.
+        float          elapsedSeconds = 0.0f; ///< Wall-clock seconds for noise scroll.
 
         // Cascaded-shadow-map inputs for per-froxel sun shadowing (god rays).
         int       csmCascadeCount = 0;        ///< 0 = unshadowed sun lobe.

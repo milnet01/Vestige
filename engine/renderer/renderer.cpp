@@ -779,6 +779,11 @@ void Renderer::endFrame(float deltaTime)
         return;
     }
 
+    // Advance the volumetric density-noise scroll clock (slice 11.8). Done
+    // unconditionally so the field keeps a continuous phase even when the
+    // volumetric layer is toggled off and back on.
+    m_volumetricFogElapsed += deltaTime;
+
     bool isTAA = (m_antiAliasMode == AntiAliasMode::TAA && m_taa && m_taaSceneFbo);
     bool isSMAA = (m_antiAliasMode == AntiAliasMode::SMAA && m_smaa && m_taaSceneFbo);
     bool usesNonMsaaFbo = (isTAA || isSMAA);
@@ -1217,6 +1222,21 @@ void Renderer::endFrame(float deltaTime)
         fp.scattering = glm::vec3(0.005f);
         fp.extinction = 0.005f;
         fp.anisotropy = 0.3f;
+
+        // Density noise (slice 11.8) — drifting value-noise field so the haze
+        // reads as non-uniform rather than a flat wash. Off by struct default;
+        // enabled here with provisional look constants until the Fog editor
+        // panel (11.10) exposes per-scene controls. Reduce-motion freezes the
+        // drift (static noise still varies in space, just doesn't move).
+        // TODO 11.10: drive frequency/strength/wind from scene fog settings.
+        fp.elapsedSeconds      = m_volumetricFogElapsed;
+        fp.noise.enabled       = true;
+        fp.noise.frequency     = 0.03f;
+        fp.noise.strength      = 0.5f;
+        fp.noise.octaves       = 3;
+        fp.noise.windVelocity  = m_postProcessAccessibility.reduceMotionFog
+                                     ? glm::vec3(0.0f)
+                                     : glm::vec3(0.4f, 0.0f, 0.15f);
 
         // Per-froxel sun shadowing (god rays) when a directional light + its
         // cascaded shadow map exist this frame. Splits are view-space depths,

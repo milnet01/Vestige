@@ -13,8 +13,11 @@
 /// Slice 11.6 evaluates the *unshadowed* sun lobe; CSM shadow sampling is
 /// added when the pass is wired into the renderer (slice 11.6 part B, which
 /// can supply the shadow map + light-space matrices). The Henyey-Greenstein
-/// phase is the literal closed form here; slice 11.7 swaps in the
-/// Workbench-fit Schlick approximation.
+/// phase is the literal closed form here and stays that way — the planned
+/// slice-11.7 Schlick approximation was evaluated and dropped (it can't meet a
+/// useful accuracy bound vs HG, there's no perf need, and it needs a
+/// cross-formula Workbench fit that doesn't ship; see
+/// docs/phases/phase_10_fog_design.md §7).
 ///
 /// `henyeyGreenstein` is a standalone function so the parity test
 /// (tests/test_volumetric_fog_gpu.cpp) can extract it and pin it against the

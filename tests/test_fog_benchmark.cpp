@@ -99,6 +99,16 @@ TEST_F(FogBenchmarkTest, VolumetricDispatchUnderBudget)
     p.invView                  = glm::mat4(1.0f);
     p.csmShadowTexture         = litMap;
 
+    // Slice 11.8: the renderer ships density noise on by default, so the gate
+    // must include the inject-pass FBM cost (3 octaves). Matches the renderer's
+    // provisional look constants.
+    p.noise.enabled      = true;
+    p.noise.frequency    = 0.03f;
+    p.noise.strength     = 0.5f;
+    p.noise.octaves      = 3;
+    p.noise.windVelocity = glm::vec3(0.4f, 0.0f, 0.15f);
+    p.elapsedSeconds     = 1.0f;
+
     // First dispatch JIT-compiles pipe state the driver never frees — a
     // process-lifetime third-party allocation, not a Vestige leak.
     Vestige::Test::ScopedLeakCheckDisable noLeakTracking;
