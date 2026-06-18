@@ -1,0 +1,85 @@
+// Copyright (c) 2026 Anthony Schemel
+// SPDX-License-Identifier: MIT
+
+/// @file volumetric_fog.h
+/// @brief Phase 10 slice 11.6 — froxel-grid coordinate system for
+///        volumetric fog (frustum-aligned 3D texture, "froxels" =
+///        frustum voxels).
+///
+/// This header holds the *pure-function* froxel grid math: the mapping
+/// between a froxel's integer `(i, j, k)` coordinate and the view space
+/// it represents. It is the CPU spec that pins the GPU compute shaders
+/// (`volumetric_inject/scatter/integrate.comp`) — the shaders reproduce
+/// these formulas, and the unit tests in `test_volumetric_fog.cpp`
+/// enforce agreement (CLAUDE.md Rule 7, CPU spec ↔ GPU runtime parity).
+///
+/// The GL-resource ownership (3D textures, compute dispatch) lives in the
+/// `VolumetricFog` subsystem class, added in a later step of slice 11.6;
+/// the math below has no GL dependency so it tests headlessly.
+///
+/// ### Depth-slice distribution
+///
+/// Froxel depth slices are distributed *exponentially* along the view
+/// ray so near-camera froxels are small (where detail matters) and far
+/// froxels coarse. For a grid of `N` depth slices spanning view-space
+/// linear depth `[near, far]`:
+///
+///   viewDepth(slice) = near * (far / near) ^ ((slice + 0.5) / N)
+///
+/// evaluated at each slice *centre* (`slice + 0.5`). The inverse maps a
+/// view-space depth back to a (fractional) slice index for sampling:
+///
+///   slice(z) = N * log(z / near) / log(far / near) - 0.5
+///
+/// This is the standard Wronski-2014 / Frostbite froxel distribution
+/// (design doc §4.1; research doc §3). Screen-tile mapping is linear:
+/// froxel `(i, j)` covers the screen-UV cell centred at
+/// `((i + 0.5) / resX, (j + 0.5) / resY)`.
+#pragma once
+
+#include <glm/vec2.hpp>
+#include <glm/vec3.hpp>
+
+namespace Vestige
+{
+
+/// @brief Froxel grid dimensions + the view-depth range it spans.
+///
+/// Defaults match the design doc: 160 × 90 × 64 (= 921,600 froxels,
+/// ~14 MB at RGBA16F). `near`/`far` are the *volumetric* range in
+/// view-space metres — fog beyond `far` falls back to the analytic
+/// distance/height term in the composite, so `far` is typically shorter
+/// than the camera far plane.
+struct FroxelGridConfig
+{
+    int   resX = 160;     ///< Screen-tile columns. Must be > 0.
+    int   resY = 90;      ///< Screen-tile rows. Must be > 0.
+    int   resZ = 64;      ///< Depth slices. Must be > 0.
+    float near = 0.5f;    ///< Near view-depth of the volume. Must be > 0.
+    float far  = 200.0f;  ///< Far view-depth of the volume. Must be > near.
+};
+
+/// @brief Total froxel count for @p cfg (resX * resY * resZ).
+int froxelCount(const FroxelGridConfig& cfg);
+
+/// @brief View-space linear depth at the *centre* of depth slice @p slice.
+///
+/// Exponential distribution (see file header). `slice` is clamped to
+/// `[0, resZ - 1]`; the returned depth is always in `[near, far]`.
+/// Degenerate configs (`near <= 0`, `far <= near`, `resZ <= 0`) return
+/// `near` (or a sane clamp) rather than producing NaN/Inf.
+float froxelSliceToViewDepth(const FroxelGridConfig& cfg, int slice);
+
+/// @brief Inverse of @ref froxelSliceToViewDepth — the (fractional) depth
+///        slice index a view-space depth @p viewDepth maps to.
+///
+/// `viewDepth` is clamped to `[near, far]` before mapping, so the result
+/// is always in `[-0.5, resZ - 0.5]`. Used by the composite to look up a
+/// pixel's froxel. Degenerate configs return 0.
+float viewDepthToFroxelSlice(const FroxelGridConfig& cfg, float viewDepth);
+
+/// @brief Screen-space UV (in [0,1]) at the centre of froxel column
+///        `(i, j)`. Linear tiling: `((i + 0.5)/resX, (j + 0.5)/resY)`.
+glm::vec2 froxelToScreenUV(const FroxelGridConfig& cfg, int i, int j);
+
+} // namespace Vestige
