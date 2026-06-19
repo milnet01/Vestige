@@ -11,6 +11,7 @@ add_executable(vestige_tests
     test_ibl_parity.cpp
     test_bloom_parity.cpp
     test_color_grading_parity.cpp
+    test_subsurface_parity.cpp
     test_volumetric_fog_gpu.cpp
     test_fog_benchmark.cpp
     test_event_bus.cpp
@@ -30,6 +31,7 @@ add_executable(vestige_tests
     test_pom.cpp
     test_gltf_loader.cpp
     test_pbr_material.cpp
+    test_subsurface.cpp
     test_bloom.cpp
     test_ssao.cpp
     test_transparency.cpp

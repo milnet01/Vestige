@@ -1622,6 +1622,11 @@ void Renderer::uploadMaterialUniforms(const Material& material)
         m_sceneShader.setVec3("u_pbrEmissive", material.getEmissive());
         m_sceneShader.setFloat("u_pbrEmissiveStrength", material.getEmissiveStrength());
 
+        // Subsurface scattering (R3) — gated in-shader by strength > 0
+        m_sceneShader.setFloat("u_subsurfaceStrength", material.getSubsurfaceStrength());
+        m_sceneShader.setVec3("u_subsurfaceColor", material.getSubsurfaceColor());
+        m_sceneShader.setFloat("u_subsurfaceThickness", material.getSubsurfaceThickness());
+
         // Metallic-roughness map (unit 6)
         bool hasMR = material.hasMetallicRoughnessTexture();
         m_sceneShader.setBool("u_hasMetallicRoughnessMap", hasMR);
@@ -1671,6 +1676,7 @@ void Renderer::uploadMaterialUniforms(const Material& material)
             (m_iblMultiplierOverride >= 0.0f) ? m_iblMultiplierOverride : 1.0f);
         m_sceneShader.setFloat("u_clearcoat", 0.0f);
         m_sceneShader.setFloat("u_clearcoatRoughness", 0.0f);
+        m_sceneShader.setFloat("u_subsurfaceStrength", 0.0f);  // off for non-PBR materials
         // Mesa requires valid textures for all declared samplers
         glBindTextureUnit(6, m_fallbackTexture);
         glBindTextureUnit(7, m_fallbackTexture);

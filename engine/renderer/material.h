@@ -161,6 +161,29 @@ public:
     /// @brief Gets the emissive strength multiplier.
     float getEmissiveStrength() const;
 
+    // --- Subsurface scattering (R3) ---
+
+    /// @brief Sets the subsurface scattering strength (clamped to [0.0, 1.0]).
+    /// 0.0 disables SSS entirely (the default); the shader skips the term.
+    void setSubsurfaceStrength(float strength);
+
+    /// @brief Gets the subsurface scattering strength.
+    float getSubsurfaceStrength() const;
+
+    /// @brief Sets the subsurface tint (color of scattered + transmitted light).
+    /// Unclamped, matching setAlbedo/setEmissive — an over-bright tint is bounded by tone-mapping.
+    void setSubsurfaceColor(const glm::vec3& color);
+
+    /// @brief Gets the subsurface tint.
+    glm::vec3 getSubsurfaceColor() const;
+
+    /// @brief Sets the uniform thickness proxy (clamped to [0.0, 1.0]).
+    /// Back-scatter transmission scales with (1 - thickness): thin = glowy, thick = opaque.
+    void setSubsurfaceThickness(float thickness);
+
+    /// @brief Gets the subsurface thickness proxy.
+    float getSubsurfaceThickness() const;
+
     // --- PBR textures ---
 
     /// @brief Sets the metallic-roughness map (G=roughness, B=metallic).
@@ -260,6 +283,11 @@ private:
     float m_emissiveStrength;
     float m_uvScale;
     float m_iblMultiplier;
+
+    // Subsurface scattering (R3)
+    float m_subsurfaceStrength;
+    glm::vec3 m_subsurfaceColor;
+    float m_subsurfaceThickness;
     std::shared_ptr<Texture> m_metallicRoughnessTexture;
     std::shared_ptr<Texture> m_emissiveTexture;
     std::shared_ptr<Texture> m_aoTexture;

@@ -22,6 +22,41 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-06-19 Phase 10 Rendering — R3 subsurface scattering (analytic wrap + thickness translucency)
+
+**Slice R3 — cheap, forward-renderer subsurface scattering**, scoped to the Tabernacle's
+backlit dyed-linen curtains. Two view-/light-dependent terms added to the PBR light
+functions, both pure ALU — **no LUT, no extra pass, no new buffers/attachments/texture
+units**: a colored **wrap** front-scatter that softens the terminator and tints the diffuse
+falloff (NVIDIA GPU Gems 3 ch.16), and a **thickness-driven back-scatter** that glows when
+the camera looks toward a backlit thin face (Barré-Brisebois & Bouchard, GDC 2011).
+
+- **Material** gains three PBR fields: `m_subsurfaceStrength` ([0,1], clamped, default 0 ⇒
+  feature off for every existing material), `m_subsurfaceColor` (vec3 tint, unclamped to match
+  `setAlbedo`/`setEmissive`), `m_subsurfaceThickness` ([0,1], clamped, default 0.5; transmission
+  ∝ (1 − thickness)). Serialized in `material_library.cpp` (scalars via `j.value`, color via the
+  existing `readVec3` helper) — additive, no schema bump, old material JSON loads with defaults.
+- **scene.frag.glsl**: two file-scope helpers `sssFrontScatter(rawNdotL, strength, color)` (takes
+  the **raw signed** N·L so the wrap bleeds past the terminator) and `sssBackScatter(...)`, plus
+  four file-scope `const` tuning constants (`SSS_MAX_WRAP/DISTORTION/POWER/SCALE`). Folded into all
+  three `calc*PBR` functions: front-scatter into `baseLighting` before the clearcoat block (so it is
+  clearcoat-attenuated + shadowed); back-scatter added to the return (not occluded by the front-face
+  shadow). Gated by `if (u_subsurfaceStrength > 0.0)` ⇒ **byte-identical to pre-R3 at strength 0**.
+- **CPU mirror** `engine/renderer/subsurface_math.h` (Rule 7) pins the GLSL via parity tests.
+- **Renderer** uploads the three uniforms in `uploadMaterialUniforms` (un-prefixed, following the
+  `u_clearcoat` PBR-add-on convention); the non-PBR else-branch resets strength to 0.
+- **Workaround logged (Rule 5):** the perf benchmark in the design test contract (#8) is **deferred**
+  — SSS has no isolated pass to time (it is a few gated ALU ops in the scene fragment shader), so a
+  full-scene frame-time harness is disproportionate to a delta below GPU timing noise. The 60 FPS
+  floor is gated structurally + by the existing fog/HUD benchmarks + a launch-time curtain spot-check
+  (design §10.6/§10.8 #8).
+- **Tests:** 14 new (11 GL-free in `test_subsurface.cpp` — material defaults/clamps/JSON round-trip +
+  the front/back-scatter CPU mirror incl. the lit-side and shadow-side branches; 3 GL parity in
+  `test_subsurface_parity.cpp` — CPU↔GLSL for both helpers incl. negative N·L, + the strength-0
+  vanish guard). Full suite 3512/3512 (2 Release-only perf benches skipped in Debug).
+- Design-of-record `docs/phases/phase_10_rendering_design.md` §10, cold-eyes converged after 4 loops
+  (§11 R3 log). Curvature-LUT skin shading + per-texel thickness maps deferred to Phase 13 / MetaHuman.
+
 ### 2026-06-19 Tooling — `scripts/local-ci.sh` local CI mirror
 
 Added a one-command local mirror of the GitHub Actions pipeline so a clean local

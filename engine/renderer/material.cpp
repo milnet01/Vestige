@@ -30,6 +30,9 @@ Material::Material()
     , m_emissiveStrength(1.0f)
     , m_uvScale(1.0f)
     , m_iblMultiplier(1.0f)
+    , m_subsurfaceStrength(0.0f)
+    , m_subsurfaceColor(1.0f, 1.0f, 1.0f)
+    , m_subsurfaceThickness(0.5f)
     , m_metallicRoughnessTexture(nullptr)
     , m_emissiveTexture(nullptr)
     , m_aoTexture(nullptr)
@@ -302,6 +305,54 @@ void Material::setEmissiveStrength(float strength)
         strength = 100.0f;
     }
     m_emissiveStrength = strength;
+}
+
+void Material::setSubsurfaceStrength(float strength)
+{
+    if (strength < 0.0f)
+    {
+        strength = 0.0f;
+    }
+    if (strength > 1.0f)
+    {
+        strength = 1.0f;
+    }
+    m_subsurfaceStrength = strength;
+}
+
+float Material::getSubsurfaceStrength() const
+{
+    return m_subsurfaceStrength;
+}
+
+void Material::setSubsurfaceColor(const glm::vec3& color)
+{
+    // Unclamped, matching setAlbedo/setEmissive — an over-bright tint is a legal
+    // authoring choice, bounded later by tone-mapping (design §10.3/§10.7).
+    m_subsurfaceColor = color;
+}
+
+glm::vec3 Material::getSubsurfaceColor() const
+{
+    return m_subsurfaceColor;
+}
+
+void Material::setSubsurfaceThickness(float thickness)
+{
+    if (thickness < 0.0f)
+    {
+        thickness = 0.0f;
+    }
+    if (thickness > 1.0f)
+    {
+        thickness = 1.0f;
+    }
+    m_subsurfaceThickness = thickness;
+}
+
+float Material::getSubsurfaceThickness() const
+{
+    return m_subsurfaceThickness;
 }
 
 float Material::getEmissiveStrength() const

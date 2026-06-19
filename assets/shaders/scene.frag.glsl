@@ -142,6 +142,11 @@ uniform float u_pbrEmissiveStrength;
 uniform float u_clearcoat;           // 0.0 = none, 1.0 = full clearcoat
 uniform float u_clearcoatRoughness;  // Roughness of the clearcoat layer
 
+// Subsurface scattering (R3) — un-prefixed like u_clearcoat (PBR add-on convention)
+uniform float u_subsurfaceStrength;  // 0.0 = off (skips the term), 1.0 = max
+uniform vec3  u_subsurfaceColor;     // tint of scattered + transmitted light
+uniform float u_subsurfaceThickness; // [0,1] thickness proxy; transmission ∝ (1 - thickness)
+
 // PBR textures
 uniform bool u_hasMetallicRoughnessMap;
 uniform sampler2D u_metallicRoughnessMap;  // Unit 6
@@ -754,6 +759,37 @@ vec3 calcSpotLight(int i, vec3 norm, vec3 viewDir, vec3 baseColor)
 // PBR lighting functions (Cook-Torrance)
 // =============================================================================
 
+// Subsurface scattering (R3) tuning constants — file-scope so the parity test can
+// prepend them alongside an extracted helper (design §10.2). CPU mirror:
+// engine/renderer/subsurface_math.h declares the same literals.
+const float SSS_MAX_WRAP   = 0.5;   // max terminator-wrap width (at strength = 1)
+const float SSS_DISTORTION = 0.2;   // normal-perturbation of the back-light direction
+const float SSS_POWER      = 4.0;   // back-scatter lobe tightness
+const float SSS_SCALE      = 1.0;   // back-scatter master scale (future tuning knob; fixed at 1.0)
+
+/// Front scatter: colored wrap diffuse. Takes the RAW signed N·L (not the clamped
+/// NdotL the call sites hold) so the wrap bleeds past the terminator. Returns the
+/// colored bleed folded into the diffuse irradiance; 0 at strength 0.
+vec3 sssFrontScatter(float rawNdotL, float strength, vec3 color)
+{
+    float lambert = max(rawNdotL, 0.0);
+    float wrap    = strength * SSS_MAX_WRAP;
+    float wrapped = max((rawNdotL + wrap) / (1.0 + wrap), 0.0);  // light bleeds past N·L = 0
+    return color * max(wrapped - lambert, 0.0);                  // max() defensive — wrapped >= lambert always
+}
+
+/// Back scatter: thickness-driven translucency (glow through a backlit thin face).
+/// radiance is already attenuation/cone-scaled by the caller. 0 at strength 0, or
+/// thickness 1, or when the viewer is on the lit side.
+vec3 sssBackScatter(vec3 V, vec3 L, vec3 N, float strength, float thickness,
+                    vec3 color, vec3 radiance)
+{
+    vec3  backLightDir = normalize(L + N * SSS_DISTORTION);   // inverted-light scatter dir (NOT a half-vector)
+    float backNdV      = pow(clamp(dot(V, -backLightDir), 0.0, 1.0), SSS_POWER) * SSS_SCALE;
+    float transmit     = backNdV * strength * (1.0 - thickness);
+    return color * radiance * transmit;
+}
+
 /// Calculates Cook-Torrance specular + Lambertian diffuse for a directional light.
 vec3 calcDirectionalLightPBR(vec3 N, vec3 V, vec3 albedo, float metallic,
                               float roughness, vec3 F0)
@@ -785,6 +821,17 @@ vec3 calcDirectionalLightPBR(vec3 N, vec3 V, vec3 albedo, float metallic,
 
     vec3 baseLighting = (kD * albedo / PI + specular) * radiance * NdotL;
 
+    // Subsurface scattering (R3): front-scatter folds into baseLighting (so it is
+    // clearcoat-attenuated + shadowed with the rest); back-scatter is added after the
+    // shadow multiply (transmission is not occluded by the front-face shadow).
+    vec3 sssBack = vec3(0.0);
+    if (u_subsurfaceStrength > 0.0)
+    {
+        float rawNdotL = dot(N, L);  // signed — clamped NdotL would kill shadow-side bleed
+        baseLighting += kD * sssFrontScatter(rawNdotL, u_subsurfaceStrength, u_subsurfaceColor) / PI * radiance;
+        sssBack = sssBackScatter(V, L, N, u_subsurfaceStrength, u_subsurfaceThickness, u_subsurfaceColor, radiance);
+    }
+
     // Clearcoat: second specular lobe (smooth lacquer layer)
     if (u_clearcoat > 0.0)
     {
@@ -796,7 +843,7 @@ vec3 calcDirectionalLightPBR(vec3 N, vec3 V, vec3 albedo, float metallic,
         baseLighting += ccSpec * radiance * NdotL * u_clearcoat;
     }
 
-    return baseLighting * (1.0 - shadow);
+    return baseLighting * (1.0 - shadow) + sssBack;
 }
 
 /// Calculates Cook-Torrance specular + Lambertian diffuse for a point light.
@@ -836,6 +883,15 @@ vec3 calcPointLightPBR(int i, vec3 N, vec3 V, vec3 fragPos, vec3 albedo,
 
     vec3 baseLighting = (kD * albedo / PI + specular) * radiance * NdotL;
 
+    // Subsurface scattering (R3): see calcDirectionalLightPBR for the rationale.
+    vec3 sssBack = vec3(0.0);
+    if (u_subsurfaceStrength > 0.0)
+    {
+        float rawNdotL = dot(N, L);
+        baseLighting += kD * sssFrontScatter(rawNdotL, u_subsurfaceStrength, u_subsurfaceColor) / PI * radiance;
+        sssBack = sssBackScatter(V, L, N, u_subsurfaceStrength, u_subsurfaceThickness, u_subsurfaceColor, radiance);
+    }
+
     // Clearcoat
     if (u_clearcoat > 0.0)
     {
@@ -846,7 +902,7 @@ vec3 calcPointLightPBR(int i, vec3 N, vec3 V, vec3 fragPos, vec3 albedo,
         baseLighting += ccSpec * radiance * NdotL * u_clearcoat;
     }
 
-    return baseLighting * (1.0 - shadow);
+    return baseLighting * (1.0 - shadow) + sssBack;
 }
 
 /// Calculates Cook-Torrance specular + Lambertian diffuse for a spot light.
@@ -884,6 +940,16 @@ vec3 calcSpotLightPBR(int i, vec3 N, vec3 V, vec3 fragPos, vec3 albedo,
 
     vec3 baseLighting = (kD * albedo / PI + specular) * radiance * NdotL;
 
+    // Subsurface scattering (R3): the spot path applies no shadow (bare return), so
+    // spot front-scatter is unshadowed like the rest of the spot contribution (§10.10).
+    vec3 sssBack = vec3(0.0);
+    if (u_subsurfaceStrength > 0.0)
+    {
+        float rawNdotL = dot(N, L);
+        baseLighting += kD * sssFrontScatter(rawNdotL, u_subsurfaceStrength, u_subsurfaceColor) / PI * radiance;
+        sssBack = sssBackScatter(V, L, N, u_subsurfaceStrength, u_subsurfaceThickness, u_subsurfaceColor, radiance);
+    }
+
     // Clearcoat
     if (u_clearcoat > 0.0)
     {
@@ -894,7 +960,7 @@ vec3 calcSpotLightPBR(int i, vec3 N, vec3 V, vec3 fragPos, vec3 albedo,
         baseLighting += ccSpec * radiance * NdotL * u_clearcoat;
     }
 
-    return baseLighting;
+    return baseLighting + sssBack;
 }
 
 // =============================================================================

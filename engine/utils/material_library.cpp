@@ -65,6 +65,9 @@ json serializeMat(const Material& mat, const ResourceManager& resources)
         j["clearcoat"] = mat.getClearcoat();
         j["clearcoatRoughness"] = mat.getClearcoatRoughness();
         j["uvScale"] = mat.getUvScale();
+        j["subsurfaceStrength"] = mat.getSubsurfaceStrength();
+        j["subsurfaceColor"] = vec3ToJson(mat.getSubsurfaceColor());
+        j["subsurfaceThickness"] = mat.getSubsurfaceThickness();
     }
 
     if (mat.hasDiffuseTexture())
@@ -141,6 +144,9 @@ void applyMat(const json& j, Material& mat, ResourceManager& resources)
         mat.setClearcoat(j.value("clearcoat", 0.0f));
         mat.setClearcoatRoughness(j.value("clearcoatRoughness", 0.04f));
         mat.setUvScale(j.value("uvScale", 1.0f));
+        mat.setSubsurfaceStrength(j.value("subsurfaceStrength", 0.0f));
+        mat.setSubsurfaceColor(readVec3(j, "subsurfaceColor", glm::vec3(1.0f)));
+        mat.setSubsurfaceThickness(j.value("subsurfaceThickness", 0.5f));
     }
 
     if (j.contains("diffuseTexture"))
