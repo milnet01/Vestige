@@ -53,7 +53,7 @@ This bundle is core-render-path surgery, so it is sliced to keep each step indep
 | Slice | Title | Complexity | Depends on | Status |
 |-------|-------|------------|------------|--------|
 | **R1** | `Framebuffer` MRT support + motion vectors via geometry-pass MRT (rigid-body parity; drop overlay) | M/L | — | ✅ implemented (2026-06-19) |
-| **R2** | Correct skinned/morph motion (prev-pose history) + prev-normal buffer + `V_mask` disocclusion | L | R1 | ✅ design-of-record signed off (§9); cold-eyes converged (9 loops) — ready to implement |
+| **R2** | Correct skinned/morph motion (prev-pose history) + prev-normal buffer + `V_mask` disocclusion | L | R1 | ✅ implemented (2026-06-19) — 4 commits; 10 new tests, full suite green; α=1.0 placeholder pending Formula Workbench + launch-time grazing-angle spot-check |
 | **R3** | Subsurface scattering (pre-integrated wrap BRDF; per-material thickness/transmission) | M | — | ⬜ design-of-record TBD |
 | **R4** | Screen-space global illumination (single-bounce, temporally accumulated) | L | R1 (R2 ideal) | ⬜ design-of-record TBD |
 
@@ -180,7 +180,7 @@ Plus a `Framebuffer` MRT unit test (`GL_FRAMEBUFFER_COMPLETE` with two attachmen
 
 ## 9. Slice R2 — Animated motion vectors + previous-frame normal buffer + `V_mask` disocclusion (design-of-record)
 
-**Status:** ✅ **design-of-record signed off (2026-06-19)** — cold-eyes converged after 9 loops (Loops 7–9 found zero architectural/structural/mechanical defects; only citation-precision polish, all fixed). Sign-off delegated to Claude per the project owner's standing directive (gate = cold-eyes convergence, not blocking user review). Ready to implement. Builds directly on R1's shipped MRT motion buffer. See the Cold-eyes loop log at the foot of this doc (§10, R2 loops).
+**Status:** ✅ **IMPLEMENTED (2026-06-19)** — shipped in four commits: (1) `Framebuffer` third-attachment MRT infra, (2) `SkeletonAnimator` previous-pose history, (3) end-to-end wiring (scene shaders prev-skinning + normal write, renderer prev-pose plumbing, the skinned-batch routing fix, resolve `V_mask` + normal blit), (4) the §9.10 test contract (10 new tests). Full motion/TAA/skeleton/instance/framebuffer suite green. `u_disocclusionAlpha` ships as the conservative `α = 1.0` placeholder (Formula Workbench TODO); the launch-time grazing-angle / ghosting spot-check (§9.7, §9.10 #10) gates the α=1.0 ship-or-block decision and the prev-normal blit's frame-time budget. Design-of-record signed off after cold-eyes converged in 9 loops (sign-off delegated to Claude per the owner's standing directive). See the Cold-eyes loop log at the foot of this doc (§10, R2 loops).
 
 ### 9.0 What exists today that R2 builds on (reality check, verified against source)
 

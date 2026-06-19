@@ -22,6 +22,48 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-06-19 Phase 10 Rendering — R2 animated motion vectors + previous-frame normal buffer + V_mask disocclusion
+
+**Slice R2 — correct motion vectors for animated (skinned / morph) meshes, plus a
+normal-divergence disocclusion term for TAA.** R1 deliberately gave skinned and morph
+meshes only rigid-body motion (base-position for both terms), so a swinging arm or a
+turning head smeared under TAA. R2 fixes that: the scene vertex shader now skins the
+**previous** pose a second time, so the motion term is a true one-frame pose delta. A
+new world-normal MRT attachment feeds a `V_mask = α(1 − n_cur·n_prev)` term in the
+resolve that rejects history at disocclusion / in-place rotation edges that motion
+vectors alone can't flag. Net: less smear on anything that animates.
+
+- **SkeletonAnimator** retains a one-frame-lagged snapshot of the bone palette and
+  morph weights (`m_prevBoneMatrices` / `m_prevMorphWeights`), captured at the top of
+  `update()` above the early-return guard (capture-before-recompute). Paused/stopped and
+  first-frame both seed prev = current ⇒ zero pose motion.
+- **scene.vert.glsl**: current motion term = the skinned/morphed `gl_Position` (== R1
+  base term for static meshes); previous term re-skins the previous pose (positions only)
+  via a prev-bone SSBO at **binding 7** + `u_prevMorphWeights[]`. No new vertex attributes.
+- **scene.frag.glsl**: writes the geometric world normal to a third MRT attachment
+  (`GL_COLOR_ATTACHMENT2`); a degenerate normal collapses to the zero-length V_mask
+  sentinel (safeNormalize) rather than a NaN.
+- **Framebuffer** generalised to a third colour attachment (`thirdColorAttachment` +
+  `clearThirdAttachment()`); a persistent `m_prevNormalFbo` holds last frame's normal,
+  refreshed by an end-of-frame blit of attachment 2. Attachment-2 colour mask gated
+  exactly like the R1 motion attachment (opaque-only).
+- **taa_resolve.frag.glsl**: `V_mask` multiplies the feedback factor; disabled on the
+  zero-length sentinel so cloth / terrain / sky / transparent keep R1 behaviour.
+- **Routing fix (load-bearing):** skinned/morphed items are now excluded from instance
+  grouping so each forms a single-instance batch routed through the skinning draw with
+  `u_hasBones=true`. This also repairs a **latent R1-era bug** where ≥2 skinned meshes
+  sharing a mesh+material would batch together and render at **bind pose** (the instanced
+  path forces `u_hasBones=false`). Shared-mesh skinned crowds now animate visibly — a
+  visual re-baseline of any such scene is expected.
+- **Formula Workbench (Rule 6):** the disocclusion strength `u_disocclusionAlpha` ships
+  as a conservative `α = 1.0` placeholder with a `TODO: revisit via Formula Workbench`;
+  a launch-time grazing-angle / ghosting spot-check gates the α=1.0 ship-or-block decision.
+- **Tests:** CPU-mirror parity (`motion_vector_math.h`: `morphAndSkinPosition`,
+  `computeAnimatedMotionVectorUV`, `computeDisocclusionVMask`) + animator prev-pose lag,
+  the routing guard, and the three-attachment Framebuffer infra — 10 new tests, full
+  suite green. R1's base-position parity test is replaced (deliberate behaviour change).
+  Design-of-record: `docs/phases/phase_10_rendering_design.md` §9.
+
 ### 2026-06-19 Phase 10 Rendering — R1 motion vectors via geometry-pass MRT (overlay dropped)
 
 **Slice R1 core — emit motion vectors from the main scene pass; delete the
