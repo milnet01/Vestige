@@ -27,6 +27,7 @@ Framebuffer::Framebuffer(Framebuffer&& other) noexcept
     , m_fboId(other.m_fboId)
     , m_colorAttachment(other.m_colorAttachment)
     , m_colorAttachment1(other.m_colorAttachment1)
+    , m_colorAttachment2(other.m_colorAttachment2)
     , m_depthAttachment(other.m_depthAttachment)
     , m_isDepthRenderbuffer(other.m_isDepthRenderbuffer)
     , m_isComplete(other.m_isComplete)
@@ -34,6 +35,7 @@ Framebuffer::Framebuffer(Framebuffer&& other) noexcept
     other.m_fboId = 0;
     other.m_colorAttachment = 0;
     other.m_colorAttachment1 = 0;
+    other.m_colorAttachment2 = 0;
     other.m_depthAttachment = 0;
     other.m_isComplete = false;
 }
@@ -47,12 +49,14 @@ Framebuffer& Framebuffer::operator=(Framebuffer&& other) noexcept
         m_fboId = other.m_fboId;
         m_colorAttachment = other.m_colorAttachment;
         m_colorAttachment1 = other.m_colorAttachment1;
+        m_colorAttachment2 = other.m_colorAttachment2;
         m_depthAttachment = other.m_depthAttachment;
         m_isDepthRenderbuffer = other.m_isDepthRenderbuffer;
         m_isComplete = other.m_isComplete;
         other.m_fboId = 0;
         other.m_colorAttachment = 0;
         other.m_colorAttachment1 = 0;
+        other.m_colorAttachment2 = 0;
         other.m_depthAttachment = 0;
         other.m_isComplete = false;
     }
@@ -115,6 +119,17 @@ void Framebuffer::bindColorTexture(int textureUnit, int attachmentIndex)
         glBindTextureUnit(static_cast<GLuint>(textureUnit), m_colorAttachment1);
         return;
     }
+    if (attachmentIndex == 2)
+    {
+        if (m_colorAttachment2 == 0)
+        {
+            Logger::error("Framebuffer::bindColorTexture — attachment 2 requested but "
+                "thirdColorAttachment is not enabled");
+            return;
+        }
+        glBindTextureUnit(static_cast<GLuint>(textureUnit), m_colorAttachment2);
+        return;
+    }
     glBindTextureUnit(static_cast<GLuint>(textureUnit), m_colorAttachment);
 }
 
@@ -126,6 +141,16 @@ void Framebuffer::clearSecondAttachment()
     }
     const GLfloat zero[4] = {0.0f, 0.0f, 0.0f, 0.0f};
     glClearNamedFramebufferfv(m_fboId, GL_COLOR, 1, zero);
+}
+
+void Framebuffer::clearThirdAttachment()
+{
+    if (m_colorAttachment2 == 0)
+    {
+        return;
+    }
+    const GLfloat zero[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+    glClearNamedFramebufferfv(m_fboId, GL_COLOR, 2, zero);
 }
 
 void Framebuffer::bindDepthTexture(int textureUnit)
@@ -209,29 +234,51 @@ void Framebuffer::create()
             glNamedFramebufferTexture(m_fboId, GL_COLOR_ATTACHMENT0, m_colorAttachment, 0);
         }
 
-        // --- Optional second color attachment (MRT, e.g. motion vectors) ---
-        // Built generically as bundle-wide infrastructure; reuses the same format as
-        // attachment 0 (RGBA16F for the motion buffer: .rg = motion, .b = coverage flag).
-        // Only the non-MSAA path is supported — the motion attachment lives on the
-        // non-MSAA TAA scene FBO and needs no multisample resolve.
-        if (m_config.secondColorAttachment && !isMultisample)
+        // --- Optional MRT attachments (e.g. motion vectors at 1, world normals at 2) ---
+        // Built generically as bundle-wide infrastructure; each reuses attachment 0's
+        // format (RGBA16F on the TAA scene FBO: att1 .rg=motion/.b=coverage; att2 .rgb=normal).
+        // Only the non-MSAA path is supported — these live on the non-MSAA TAA scene FBO and
+        // need no multisample resolve. The draw-buffer list must be contiguous from
+        // attachment 0, so the third attachment requires the second.
+        const bool wantsMrt = m_config.secondColorAttachment || m_config.thirdColorAttachment;
+        if (wantsMrt && !isMultisample)
         {
-            glCreateTextures(GL_TEXTURE_2D, 1, &m_colorAttachment1);
-            glTextureStorage2D(m_colorAttachment1, 1, colorFormat, m_config.width, m_config.height);
+            if (m_config.secondColorAttachment)
+            {
+                glCreateTextures(GL_TEXTURE_2D, 1, &m_colorAttachment1);
+                glTextureStorage2D(m_colorAttachment1, 1, colorFormat, m_config.width, m_config.height);
+                glTextureParameteri(m_colorAttachment1, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+                glTextureParameteri(m_colorAttachment1, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+                glTextureParameteri(m_colorAttachment1, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+                glTextureParameteri(m_colorAttachment1, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+                glNamedFramebufferTexture(m_fboId, GL_COLOR_ATTACHMENT1, m_colorAttachment1, 0);
+            }
+            if (m_config.thirdColorAttachment)
+            {
+                glCreateTextures(GL_TEXTURE_2D, 1, &m_colorAttachment2);
+                glTextureStorage2D(m_colorAttachment2, 1, colorFormat, m_config.width, m_config.height);
+                glTextureParameteri(m_colorAttachment2, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+                glTextureParameteri(m_colorAttachment2, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+                glTextureParameteri(m_colorAttachment2, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+                glTextureParameteri(m_colorAttachment2, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+                glNamedFramebufferTexture(m_fboId, GL_COLOR_ATTACHMENT2, m_colorAttachment2, 0);
+            }
 
-            glTextureParameteri(m_colorAttachment1, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-            glTextureParameteri(m_colorAttachment1, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-            glTextureParameteri(m_colorAttachment1, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-            glTextureParameteri(m_colorAttachment1, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-            glNamedFramebufferTexture(m_fboId, GL_COLOR_ATTACHMENT1, m_colorAttachment1, 0);
-
-            const GLenum drawBuffers[2] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1};
-            glNamedFramebufferDrawBuffers(m_fboId, 2, drawBuffers);
+            if (m_config.thirdColorAttachment)
+            {
+                const GLenum drawBuffers[3] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2};
+                glNamedFramebufferDrawBuffers(m_fboId, 3, drawBuffers);
+            }
+            else
+            {
+                const GLenum drawBuffers[2] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1};
+                glNamedFramebufferDrawBuffers(m_fboId, 2, drawBuffers);
+            }
         }
-        else if (m_config.secondColorAttachment)
+        else if (wantsMrt)
         {
-            Logger::error("Framebuffer: secondColorAttachment requested on a multisampled "
-                "FBO — not supported (motion MRT must be non-MSAA)");
+            Logger::error("Framebuffer: MRT attachment requested on a multisampled FBO — "
+                "not supported (motion/normal MRT must be non-MSAA)");
         }
     }
     else
@@ -324,6 +371,12 @@ void Framebuffer::cleanup()
     {
         glDeleteTextures(1, &m_colorAttachment1);
         m_colorAttachment1 = 0;
+    }
+
+    if (m_colorAttachment2 != 0)
+    {
+        glDeleteTextures(1, &m_colorAttachment2);
+        m_colorAttachment2 = 0;
     }
 
     if (m_depthAttachment != 0)
