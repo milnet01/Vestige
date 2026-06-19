@@ -109,6 +109,23 @@ public:
     /// @brief The active mist / ground-fog volumes (slice 11.11).
     const std::vector<FogVolume>& fogVolumes() const { return m_fogVolumes; }
 
+    /// @brief Authored froxel volumetric medium + density-noise params
+    ///        (slice 11.10 — exposed by the editor FogPanel). Look only; the
+    ///        master volumetric enable + reduce-motion freeze stay in the
+    ///        post-process accessibility settings. Defaults reproduce the
+    ///        renderer's prior inlined haze look.
+    void setVolumetricFogParams(const VolumetricFogParams& params) { m_volumetricFogParams = params; }
+    const VolumetricFogParams& getVolumetricFogParams() const { return m_volumetricFogParams; }
+
+    /// @brief Authored screen-space god-ray params (slice 11.5 / 11.10): an
+    ///        artist gain on the shaft weight + the screen-edge fade margin.
+    void setGodRayParams(const GodRayParams& params) { m_godRayParams = params; }
+    const GodRayParams& getGodRayParams() const { return m_godRayParams; }
+
+    /// @brief Froxel grid config of the volumetric fog pass (read-only — the
+    ///        Fog panel's Debug tab surfaces the grid dimensions).
+    const FroxelGridConfig& getVolumetricFogConfig() const { return m_volumetricFogPass.config(); }
+
     /// @brief Clears all point lights.
     void clearPointLights();
 
@@ -599,6 +616,8 @@ private:
     VolumetricFogPass m_volumetricFogPass;
     float m_volumetricFogElapsed = 0.0f;   // Accumulated seconds for density-noise scroll (11.8)
     std::vector<FogVolume> m_fogVolumes;   // Active mist / ground-fog volumes (11.11)
+    VolumetricFogParams m_volumetricFogParams; // Authored medium + noise look (11.10)
+    GodRayParams m_godRayParams;               // Authored god-ray gain + edge margin (11.10)
     bool m_sdsmEnabled = true;             // Enabled by default
     float m_sdsmNear = 0.1f;              // Smoothed near bound (lerped between frames)
     float m_sdsmFar = 150.0f;             // Smoothed far bound (lerped between frames)

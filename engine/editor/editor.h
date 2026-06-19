@@ -30,6 +30,7 @@
 #include "editor/panels/model_viewer_panel.h"
 #include "editor/panels/navigation_panel.h"
 #include "editor/panels/audio_panel.h"
+#include "editor/panels/fog_panel.h"
 #include "editor/panels/sprite_panel.h"
 #include "editor/panels/tilemap_panel.h"
 #include "editor/panels/ui_layout_panel.h"
@@ -389,6 +390,7 @@ private:
     ModelViewerPanel m_modelViewerPanel;
     NavigationPanel m_navigationPanel;
     AudioPanel m_audioPanel;
+    FogPanel m_fogPanel;
     SpritePanel m_spritePanel;
     TilemapPanel m_tilemapPanel;
     UILayoutPanel m_uiLayoutPanel;

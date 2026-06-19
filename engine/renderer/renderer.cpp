@@ -1056,12 +1056,12 @@ void Renderer::endFrame(float deltaTime)
         if (m_postProcessAccessibility.godRaysEnabled && !volumetricActive
             && m_hasDirectionalLight && m_godRaysFbo && m_resolveDepthFbo)
         {
-            // Provisional look constant: the sun fades over this fraction of the
-            // screen past the frame edge. TODO 11.10: expose via the Fog panel.
-            constexpr float GOD_RAYS_EDGE_MARGIN = 0.3f;
+            // Edge fade + artist gain authored per scene by the Fog panel
+            // (slice 11.10). Defaults (margin 0.3, gain 1.0) reproduce the
+            // prior inlined behaviour.
             const GodRaySunScreen sun = godRaysSunScreenInfo(
                 m_lastView, m_lastProjection, m_directionalLight.direction,
-                GOD_RAYS_EDGE_MARGIN);
+                m_godRayParams.edgeMargin);
             if (sun.visible)
             {
                 // Pass A — half-res radial gather into m_godRaysFbo.
@@ -1073,7 +1073,7 @@ void Renderer::endFrame(float deltaTime)
                 m_resolveDepthFbo->bindDepthTexture(1);
                 m_godRaysShader.setInt("u_depthTexture", 1);
                 m_godRaysShader.setVec2("u_sunUV", sun.uv);
-                m_godRaysShader.setFloat("u_intensity", sun.intensity);
+                m_godRaysShader.setFloat("u_intensity", sun.intensity * m_godRayParams.intensity);
                 m_screenQuad->draw();
 
                 // Pass B — additive upsample-combine into the pre-bloom HDR scene.
@@ -1276,30 +1276,26 @@ void Renderer::endFrame(float deltaTime)
         fp.sunRadiance     = m_directionalLight.diffuse;
         fp.ambient         = m_directionalLight.ambient;
 
-        // Light-atmosphere look defaults — provisional artist constants until
-        // the Fog editor panel (slice 11.10) exposes per-scene density. ~4×
-        // thinner than the FrameParams neutral default so it reads as haze, not
-        // thick fog (≈22 % extinction at 50 m). Slight forward anisotropy gives
-        // the sun-facing god rays a soft bloom.
-        // TODO 11.10: drive these from scene fog settings / Formula Workbench.
-        fp.scattering = glm::vec3(0.005f);
-        fp.extinction = 0.005f;
-        fp.anisotropy = 0.3f;
+        // Authored froxel medium + density-noise look (slice 11.10 — the Fog
+        // editor panel drives m_volumetricFogParams). The struct defaults
+        // reproduce the prior inlined constants byte-for-byte: ~4× thinner than
+        // the FrameParams neutral default so it reads as haze, not thick fog
+        // (≈22 % extinction at 50 m), a slight forward anisotropy for the
+        // sun-facing soft bloom, and the drifting value-noise field (slice
+        // 11.8) so the haze reads non-uniform rather than a flat wash.
+        fp.scattering     = m_volumetricFogParams.scattering;
+        fp.extinction     = m_volumetricFogParams.extinction;
+        fp.anisotropy     = m_volumetricFogParams.anisotropy;
+        fp.elapsedSeconds = m_volumetricFogElapsed;
+        fp.noise          = m_volumetricFogParams.noise;
 
-        // Density noise (slice 11.8) — drifting value-noise field so the haze
-        // reads as non-uniform rather than a flat wash. Off by struct default;
-        // enabled here with provisional look constants until the Fog editor
-        // panel (11.10) exposes per-scene controls. Reduce-motion freezes the
-        // drift (static noise still varies in space, just doesn't move).
-        // TODO 11.10: drive frequency/strength/wind from scene fog settings.
-        fp.elapsedSeconds      = m_volumetricFogElapsed;
-        fp.noise.enabled       = true;
-        fp.noise.frequency     = 0.03f;
-        fp.noise.strength      = 0.5f;
-        fp.noise.octaves       = 3;
-        fp.noise.windVelocity  = m_postProcessAccessibility.reduceMotionFog
-                                     ? glm::vec3(0.0f)
-                                     : glm::vec3(0.4f, 0.0f, 0.15f);
+        // Accessibility wins each frame: reduce-motion freezes the noise drift
+        // on top of whatever the panel authored (static noise still varies in
+        // space, it just stops scrolling).
+        if (m_postProcessAccessibility.reduceMotionFog)
+        {
+            fp.noise.windVelocity = glm::vec3(0.0f);
+        }
 
         // Placeable mist / ground-fog volumes (slice 11.11). Empty until the
         // Fog editor panel (11.10) / scene loading populates them. Reduce-motion

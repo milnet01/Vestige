@@ -22,6 +22,44 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-06-19 Phase 10 fog — slice 11.10 editor FogPanel (Fog bundle complete)
+
+**Slice 11.10 — editor FogPanel.** A dockable ImGui panel (Window → Fog) that
+exposes every per-scene fog knob on the active renderer, mirroring the AudioPanel
+four-tab shape: **Distance** (`FogMode` + distance-fog colour/start/end/density),
+**Height** (exponential height fog + the sun-inscatter lobe), **Volumetric**
+(froxel medium scattering/extinction/anisotropy, density noise, god-ray gain +
+edge margin, and the placeable mist / ground-fog volume list from slice 11.11),
+and **Debug** (froxel grid dims, volume count vs `MAX_FOG_VOLUMES`, over-cap
+indicator). New `FogPanel : public IPanel` in `engine/editor/panels/fog_panel.{h,cpp}`,
+registered through the Ed5 `PanelRegistry` so it gets a Window-menu toggle for
+free. The renderer stays the single source of truth — scalar params round-trip
+through the existing getters/setters each frame; the fog-volume working set is
+seeded from `renderer.fogVolumes()` once per open (so scene-loaded volumes aren't
+clobbered) and pushed back on change.
+
+This slice **resolves the `TODO 11.10` markers** left by slices 11.5/11.8/11.11:
+the volumetric medium + density-noise constants and the god-ray edge margin —
+previously inlined literals in the per-frame `FrameParams` build — are lifted
+into two authored POD structs, `VolumetricFogParams` and `GodRayParams`
+(`engine/renderer/volumetric_fog.h`), with renderer get/set accessors. The
+struct **defaults reproduce the prior inlined literals byte-for-byte** (a parity
+guard test pins them; full regression confirms the lift changed only indirection,
+not GPU inputs). A new god-ray *intensity* gain multiplies the existing edge
+visibility (default 1.0 = unchanged); `edgeMargin` replaces the
+`GOD_RAYS_EDGE_MARGIN` constant.
+
+**Scope decision (per CLAUDE.md Rule 5 — workarounds/deferrals logged).** The
+god-ray radial-blur *sampling* constants (`NUM_SAMPLES`, `DENSITY`, `DECAY`,
+`WEIGHT`, `EXPOSURE`) stay inlined in `god_rays.frag.glsl`, and the `F_turb` /
+octave look-constants stay inlined in the `fogVolumeDensity` CPU/GLSL twin — the
+former because exposing five per-tap uniforms has marginal authoring value at a
+real shader cost, the latter because they **must** remain literals for the
+bit-exact CPU↔GPU parity extractor (design §6.2). Both keep their existing
+`TODO 11.10 / Formula Workbench` markers. With 11.10 done, the **Phase 10
+Fog / Volumetric bundle is complete** (11.6 froxel core, 11.8 density noise,
+11.11 mist volumes, 11.5 god rays, 11.10 panel; 11.7 phase-function dropped).
+
 ### 2026-06-18 Phase 10 fog — slice 11.5 screen-space god rays
 
 **Slice 11.5 — screen-space god rays (crepuscular light shafts).** A cheap

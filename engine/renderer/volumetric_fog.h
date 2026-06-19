@@ -194,4 +194,33 @@ GodRaySunScreen godRaysSunScreenInfo(const glm::mat4& view,
                                      const glm::vec3& lightDirection,
                                      float edgeMargin);
 
+/// @brief Authored per-scene parameters for the froxel volumetric medium
+///        (slice 11.10 — exposed by the editor FogPanel).
+///
+/// The renderer fed these as inlined literals before the panel existed; the
+/// defaults here reproduce those literals *byte-for-byte* so lifting them is
+/// behaviour-preserving. The master enable + reduce-motion freeze live in
+/// `PostProcessAccessibilitySettings` and are applied on top of these each
+/// frame (the panel authors look only). `noise.windVelocity.z` is 0.15 — note
+/// this differs from the `FogNoiseParams` struct default of 0.1, matching the
+/// renderer's original inlined value.
+struct VolumetricFogParams
+{
+    glm::vec3      scattering = glm::vec3(0.005f);  ///< sigma_s, 1/m (≈4× thinner than neutral → haze).
+    float          extinction = 0.005f;             ///< sigma_t, 1/m.
+    float          anisotropy = 0.3f;               ///< Henyey-Greenstein g (soft forward bloom).
+    FogNoiseParams noise = FogNoiseParams{ true, 0.03f, 0.5f, 3, glm::vec3(0.4f, 0.0f, 0.15f) };
+};
+
+/// @brief Authored per-scene parameters for the screen-space god-rays pass
+///        (slice 11.5 / 11.10). `intensity` is an artist gain on the per-pixel
+///        shaft weight; `edgeMargin` is the screen-edge fade band (see
+///        @ref godRaysSunScreenInfo). Defaults reproduce the renderer's
+///        original inlined behaviour (gain 1.0, margin 0.3).
+struct GodRayParams
+{
+    float intensity  = 1.0f;  ///< Multiplied into the shaft visibility (0 = off).
+    float edgeMargin = 0.3f;  ///< Fraction of screen past the frame edge over which the sun fades.
+};
+
 } // namespace Vestige

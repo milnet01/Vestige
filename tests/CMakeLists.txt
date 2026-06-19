@@ -153,6 +153,7 @@ add_executable(vestige_tests
     test_audio_music_player.cpp
     test_scene_load_audio_integration.cpp
     test_audio_panel.cpp
+    test_fog_panel.cpp
     test_camera_mode.cpp
     test_engine_paths.cpp
     test_component_clone.cpp

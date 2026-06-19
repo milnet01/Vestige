@@ -357,7 +357,94 @@ Drifting haze is motion (WCAG 2.2 SC 2.3.3; Xbox AG 117). `applyFogAccessibility
 
 ---
 
-## 12. Cold-eyes loop log
+## 12. Slice 11.10 — Editor FogPanel
+
+**Goal.** A single dockable ImGui panel exposing every per-scene fog knob the renderer already owns, plus the volumetric look-constants that slices 11.5 / 11.8 / 11.11 left inlined with `TODO 11.10` markers. It mirrors the shipped `AudioPanel` four-tab shape (Distance / Height / Volumetric / Debug) and the Ed5 `IPanel` / `PanelRegistry` togglable-panel convention. **No new GPU work** — the panel only *authors* parameters consumed by passes already placed on the GPU.
+
+### 12.1 What the panel drives (single source of truth = the Renderer)
+
+The renderer is the authority for fog state; the panel is a thin view that reads the current value into each widget and writes it back on edit (the `NavigationPanel` / `AudioPanel` precedent). Existing renderer getters/setters already cover the non-volumetric layers:
+
+| Tab | Drives | Renderer API (already present) |
+|---|---|---|
+| Distance | `FogMode` + `FogParams` (colour, start, end, density) | `setFogMode` / `getFogMode`, `setFogParams` / `getFogParams` |
+| Height | height-fog enable + `HeightFogParams`; sun-inscatter enable + `SunInscatterParams` | `setHeightFogEnabled` / `isHeightFogEnabled`, `setHeightFogParams` / `getHeightFogParams`, `setSunInscatterEnabled` / `isSunInscatterEnabled`, `setSunInscatterParams` / `getSunInscatterParams` |
+
+The **Volumetric** tab needs two small pieces of renderer state that today are hardcoded literals in the per-frame `FrameParams` build (`renderer.cpp` ≈ 1285–1300 for the medium/noise, ≈ 1061 for the god-ray edge margin) — this slice lifts them into authored structs (§12.2):
+
+| Tab | Drives | New renderer API (this slice) |
+|---|---|---|
+| Volumetric | froxel medium (`scattering`, `extinction`, `anisotropy`) + density-noise (`FogNoiseParams`) | `setVolumetricFogParams` / `getVolumetricFogParams` over a new `VolumetricFogParams` |
+| Volumetric | god-ray artist gain + screen-edge margin | `setGodRayParams` / `getGodRayParams` over a new `GodRayParams` |
+| Volumetric | mist / ground-fog volume list (slice 11.11) | `setFogVolumes` / `fogVolumes` (already present) |
+
+### 12.2 Lifting the inlined volumetric constants (resolves the `TODO 11.10` markers)
+
+Two new POD structs join `FogNoiseParams` / `FogVolume` in `engine/renderer/volumetric_fog.h` (their natural home — `volumetric_fog.h` is already included by the renderer, so no new include juggling):
+
+```cpp
+struct VolumetricFogParams
+{
+    glm::vec3      scattering = glm::vec3(0.005f);  // sigma_s, 1/m (≈4× thinner than neutral → haze)
+    float          extinction = 0.005f;             // sigma_t, 1/m
+    float          anisotropy = 0.3f;               // Henyey-Greenstein g (soft forward bloom)
+    // enabled, frequency, strength, octaves, windVelocity — declaration order.
+    // windVelocity is 0.15 on Z (NOT the FogNoiseParams struct default of 0.1) to
+    // reproduce the renderer's current inlined literal byte-for-byte.
+    FogNoiseParams noise = FogNoiseParams{ true, 0.03f, 0.5f, 3, glm::vec3(0.4f, 0.0f, 0.15f) };
+};
+
+struct GodRayParams
+{
+    float intensity  = 1.0f;  // artist gain multiplied into the per-pixel shaft weight
+    float edgeMargin = 0.3f;  // sun fades over this fraction of screen past the frame edge
+};
+```
+
+Their **defaults reproduce the current inlined literals byte-for-byte**, so the lift is behaviour-preserving when the panel is untouched (a parity expectation pinned by test, §12.5). The per-frame build reads the struct instead of the literal; the reduce-motion `windVelocity`-zero and `animSpeed`-zero accessibility transforms stay *at the build site* — they override the authored values each frame (§12.4). God-ray gain multiplies the existing edge-visibility (`u_intensity = sun.intensity * params.intensity`); `edgeMargin` replaces the `GOD_RAYS_EDGE_MARGIN` constant.
+
+**Scope decision (logged per CLAUDE.md Rule 5).** The radial-blur *sampling* constants — `NUM_SAMPLES (64)`, `DENSITY (0.9)`, `DECAY (0.95)`, `WEIGHT (0.5)`, `EXPOSURE (0.3)` — stay inlined in `god_rays.frag.glsl` with their existing `TODO 11.10 / Formula Workbench` markers. Exposing them is five per-tap uniforms with marginal authoring value and a real shader cost; `intensity` is the one shaft knob an artist actually reaches for. The `F_turb` / octave look-constants inside `fogVolumeDensity` likewise stay inlined — they **must** remain literals for the bit-exact CPU↔GPU parity extractor (§6.2). Both deferrals are recorded in CHANGELOG.
+
+### 12.3 Panel structure (mirrors AudioPanel + Ed5)
+
+`engine/editor/panels/fog_panel.{h,cpp}`. `class FogPanel : public IPanel` — `displayName()` = `"Fog"`, `isOpen` / `setOpen` over an `m_open` bool, default-closed (matching the other Window-menu panels). `void draw(Renderer* renderer)` opens one ImGui window with a four-item tab bar; a null `renderer` early-returns so headless tests never touch GL.
+
+Editor-owned state (the only state the panel holds, mirroring `AudioPanel`'s reverb-zone list):
+- `std::vector<FogVolume> m_volumes` + `int m_selectedVolume = -1` — the working set the Volumetric tab edits. On the first frame after the panel opens it is **seeded from `renderer->fogVolumes()`** (a one-shot latch reset each frame the panel is closed) so volumes authored by scene loading are adopted, not clobbered by an empty set; thereafter edits **push back on change** via `renderer->setFogVolumes(m_volumes)` (no per-frame vector copy while the tab merely sits open).
+- Pure, GL-free management methods so the panel is unit-testable without an ImGui context (`AudioPanel` / `NavigationPanel` precedent): `int addVolume(const FogVolume&)` (returns the new index, selects it), `bool removeVolume(int)` (range-checked; shifts selection down exactly like `AudioPanel::removeReverbZone`), `void selectVolume(int)`, `const std::vector<FogVolume>& volumes() const`, `int selectedVolume() const`.
+
+Tabs:
+- **Distance** — `FogMode` combo (labels from `fogModeLabel`), colour picker, start / end / density drags.
+- **Height** — enable checkbox + ground density / falloff / height / colour / maxOpacity; sun-inscatter enable + colour / exponent / start.
+- **Volumetric** — a read-only status line (is the froxel path active? — gated by Settings → Accessibility `volumetricFogEnabled`, with a hint that the master toggle lives there, §12.4); scattering / extinction / anisotropy drags; noise enable + frequency / strength / octaves; god-ray gain + edge margin; a volume list (Add Box / Add Sphere / Remove / select) with an editor for the selected volume's shape, center, half-extents, colour, density, edge softness, anim speed.
+- **Debug** — froxel grid dims (`m_volumetricFogPass.config()` via a renderer getter), active volume count vs `MAX_FOG_VOLUMES`, and the over-cap indicator.
+
+### 12.4 Accessibility
+
+The panel authors *look* only. The master fog / volumetric / god-ray enables and the reduce-motion freeze already live in `PostProcessAccessibilitySettings` (slices 11.6 / 11.5 / 11.9) and remain the single authority — the panel shows them read-only with a "set in Settings → Accessibility" hint rather than forking a second toggle surface. Reduce-motion's per-frame `windVelocity` / `animSpeed` zeroing is applied *after* the panel's authored values in the `FrameParams` build, so a motion-sensitive user is never overridden by a scene author.
+
+### 12.5 Test contract
+
+Headless (no GL / ImGui), mirroring `tests/test_audio_panel.cpp`:
+- `FogPanel` defaults closed; `setOpen` / `isOpen` round-trip; `displayName() == "Fog"` (IPanel surface).
+- `addVolume` returns a growing index and selects it; `removeVolume` range-checks, shifts selection down, and clears selection when the selected row is removed; an out-of-range remove is a no-op (mirrors the reverb-zone tests).
+- A **parity guard**: `VolumetricFogParams` / `GodRayParams` default values equal the literals they replace (an `EXPECT` against the documented constants — `0.005` / `0.005` / `0.3`, noise `{true, 0.03, 0.5, 3, (0.4,0,0.15)}`, god-ray `{1.0, 0.3}` — so a future edit to one site can't silently desync the other).
+
+The ImGui `draw()` dispatch isn't headless-testable (same precedent as Ed5 `drawMenuToggle` and Pe1 `beginBatch2D`) — verified visually at editor launch.
+
+### 12.6 CPU / GPU placement (per CLAUDE.md Rule 7)
+
+Entirely **CPU** — UI event handling, parameter authoring, and a small POD vector. Branching / IO / decision work, the CPU side of the heuristic. The authored parameters feed the already-GPU-placed froxel compute passes (11.6 / 11.8 / 11.11) and the god-ray fragment shader (11.5); this slice adds **no** GPU work and **no** new parity surface (the bit-exact `fogVolumeDensity` parity from 11.11 is untouched — its constants stay inlined, §12.2).
+
+### 12.7 Editor wiring
+
+One `FogPanel m_fogPanel` member on `Editor`; `m_panelRegistry.registerPanel(&m_fogPanel)` in `Editor::initialize`; `m_panelRegistry.drawMenuToggle(m_fogPanel)` in the Window menu; `m_fogPanel.draw(renderer)` in the panel-draw block (the `renderer` handle is already in scope there, e.g. `m_hdriViewerPanel.draw(renderer)`). One inherit + one `displayName()` + one register + one toggle — the Ed5 contract.
+
+**Sources.** Internal precedent only — `AudioPanel` (four-tab editor panel), `NavigationPanel` (GL-free testable panel state), and the Ed5 `IPanel` / `PanelRegistry` convention (ROADMAP **Ed5**, shipped 2026-05-16). No external research: this slice wires existing renderer APIs to an existing UI pattern.
+
+---
+
+## 13. Cold-eyes loop log
 
 Per CLAUDE.md Rule 14 — loop until a cold pass returns zero verified actionable findings; loops 2+ run cold with no prior-loop briefing.
 
@@ -371,7 +458,7 @@ Per Rule 14 the amendment was re-reviewed cold; loops 2+ ran with no prior-loop 
 
 - **Loop 1** (fresh reviewer): 3 HIGH (stale "swapped for Schlick in 11.7" in §4.2; "Schlick phase" left in the §8 perf table; ROADMAP not yet updated to match the doc's "dropped"/"logged" claims), 3 MEDIUM (Perlin-Worley vs value-noise contradiction across §3/§6.2/log; "first 3D use" false — `snoise` exists in `particle_simulate.comp.glsl`; wrong CHANGELOG ledger line 6673→6732), 2 LOW (imprecise scatter line refs; closer `u_elapsed` precedent at `particle_simulate.comp.glsl:73`). All verified against disk and fixed; ROADMAP edited (11.7 dropped in the progress note, new **FW W9** cross-formula-gap item, value-noise basis).
 - **Loop 2** (fresh reviewer, cold): caught that the doc still framed **slice 11.6 as future work** though it shipped 2026-06-18 (§4.2 "no 3D-texture sampler" was false; §0/§1/§3/§4/§8 stale framing), plus MEDIUM (CPU noise tests routed to `test_fog.cpp` instead of the froxel home `test_volumetric_fog.cpp`; `terrain.cpp:915` is value-noise, not a pure integer mixer) and LOW (ROADMAP boundary note 1657→1659; ROADMAP feature bullet still "Perlin/Worley"). One reported HIGH (`FrameParams` "does not exist") was a **false finding** — the reviewer read `volumetric_fog.h`; `FrameParams` is in `volumetric_fog_pass.h:43` (verified on disk). All real findings fixed: re-baselined §0/§1/§3/§4/§8/§10 to shipped reality, corrected the test file + citations, updated the ROADMAP bullet, and fixed the stale scatter-shader header comment (11.7 Schlick → dropped).
-- **Loop 3** (fresh reviewer, cold): **no structural / mechanical / architectural defects — only verified polish.** 1 MEDIUM (§10 described the accessibility gate as a future `applyFogAccessibilitySettings` line, but it shipped as a renderer-level gate, and the `reduceMotionFog` comment was already updated), 3 LOW (scatter line refs drifted again 94→97 / 70→73 / 112-120→115-124; §12 historical "ROADMAP 1657" cite; §6 "ROADMAP 465"→465-466), 2 INFO (§11 subsection numbers shadow slice numbers — readability only; a stale `post_process_accessibility.h` "awaiting consumer" comment whose consumer shipped in B2). All polish items fixed, including the stale code comment. Per the session standing instruction (converge once only verified polish remains and no structural fixes are outstanding), **convergence reached** — the doc matches shipped reality and the slice 11.8 design is implementation-ready.
+- **Loop 3** (fresh reviewer, cold): **no structural / mechanical / architectural defects — only verified polish.** 1 MEDIUM (§10 described the accessibility gate as a future `applyFogAccessibilitySettings` line, but it shipped as a renderer-level gate, and the `reduceMotionFog` comment was already updated), 3 LOW (scatter line refs drifted again 94→97 / 70→73 / 112-120→115-124; §13 historical "ROADMAP 1657" cite; §6 "ROADMAP 465"→465-466), 2 INFO (§11 subsection numbers shadow slice numbers — readability only; a stale `post_process_accessibility.h` "awaiting consumer" comment whose consumer shipped in B2). All polish items fixed, including the stale code comment. Per the session standing instruction (converge once only verified polish remains and no structural fixes are outstanding), **convergence reached** — the doc matches shipped reality and the slice 11.8 design is implementation-ready.
 
 ### Amendment 2026-06-18 (slice 11.11 mist-volume design finalized + shipped) — cold-eyes loop
 
@@ -386,3 +473,10 @@ Per Rule 14 the amendment was re-reviewed cold; loops 2+ ran with no prior-loop 
 - **Loop 1** (fresh reviewer, no authoring context): **1 CRITICAL + companions.** The insertion point was wrong against the real composite order — I wrote "after the contact-shadow pass," but the actual order is **bloom → auto-exposure → contact shadows → volumetric → composite**, so bloom runs *before* contact shadows; placing god rays there would have left the shafts *unbloomed* (the opposite of the stated payoff) and contradicted the doc's own "before bloom" sentence. Also flagged: the SH-probe grid occupies units 17–23 (don't grab a high unit); the half-res gather over a full-res reverse-Z depth needs point-sampled depth (silhouette aliasing); set `GL_LINEAR` on the god-rays FBO for the upsample. Verified sound: reverse-Z sky test, sun projection math (matches the froxel pass's `−direction` toward-sun convention), gather direction, gating against the real `volumetricActive`, resize pattern. **Fixed:** insertion moved to *before the bloom block* (reading the live `hdrSourceFbo`, which SMAA/TAA reassign), point-sampled depth, linear FBO filter, unit guidance (0–8 / 14–16 free); the premature "✅ SHIPPED" header removed.
 - **Loop 2** (fresh reviewer, cold, no prior-loop briefing): **no CRITICAL — the insertion order, sky test, sun math, and unit map all verified correct against disk.** 1 HIGH (the "wired like `volumetricFogEnabled`" one-liner hides **five** plumbing sites — struct field, hand-written `operator==`, `safeDefaults()`, the `Settings` JSON mirror's `operator==`/`to_json`/`from_json`, and the `settings_apply` wire transfer — omitting any silently breaks persistence/equality), 1 MEDIUM (name the handles: post-AA colour `hdrSourceFbo` paired with pre-AA-resolved depth `m_resolveDepthFbo`), LOW/INFO (shader double-negate transcription risk — caught by the §5.7 smoke test; resize must delete+recreate the FBO; reverse-Z projection assumed in the CPU test). **Fixed:** §5.6 now enumerates the five plumbing sites, §5.4 names both handles. No structural/architectural defects remain — the design is implementation-ready; the HIGH/MEDIUM are an implementation checklist, carried into the code and re-checked by the post-implementation cold review.
 - **Loop 3 — post-implementation** (fresh reviewer, cold, against the shipped code): **no CRITICAL / HIGH / MEDIUM.** Verified correct: the pass sits after the SMAA/TAA `hdrSourceFbo` reassignment and before the bloom block (shafts bloom + feed auto-exposure); no read-while-write hazard and no `glTextureBarrier` needed (matches the SSAO→blur / SMAA-chain render-then-sample pattern — the barrier in bloom is only for same-texture mip read/write); additive blend enabled then disabled so it doesn't leak into bloom; the half-res viewport doesn't leak (bloom sets its own); `m_resolveDepthFbo` is resolved early (step 2) so the gather reads current-frame depth; reverse-Z sky test, `texelFetch` clamps + out-of-frame guard, loop direction, and `u_intensity` early-out all correct; uniform parity exact (no orphan/missing); `godRaysSunScreenInfo` math hand-traced (the partial-fade test: uv.x=1.15 → intensity 0.5); **all five settings plumbing sites present** (struct field, `operator==`, `safeDefaults`, the `Settings` mirror's `operator==`/`to_json`/`from_json`, the wire transfer); FBO half-res RGBA16F linear + half-res resize. 1 LOW (a header comment claimed `safeDefaults()` leaves god-rays on, but the cpp correctly turns them off — fixed the comment), 2 INFO (sky test `<=`→`<` to exactly match `contact_shadows.frag.glsl` — tightened; §5.4 prose said `R11F_G11F_B10F` but the code uses `RGBA16F` — corrected the prose). **Convergence reached** — implementation matches the design and is committed.
+
+### Amendment 2026-06-19 (slice 11.10 editor FogPanel design) — cold-eyes loop
+
+§12 was added (the new FogPanel design + the lift of the inlined volumetric/god-ray constants into authored `VolumetricFogParams` / `GodRayParams` structs), then reviewed cold *before* implementation (Rule 1).
+
+- **Loop 1** (fresh reviewer, no authoring context): **no CRITICAL / HIGH / MEDIUM.** Verified against disk: all 14 "already present" renderer getters/setters (`renderer.h:107,110,301–328`); the byte-for-byte literals — scattering/extinction `0.005`, anisotropy `0.3` (`renderer.cpp:1285–1287`), noise `{true,0.03,0.5,3}` (`1296–1299`), `windVelocity (0.4,0,0.15)` (`1302`, confirming it differs from the `FogNoiseParams` struct default `0.1` at `volumetric_fog.h:118` — the warning the doc flags), `GOD_RAYS_EDGE_MARGIN 0.3` (`renderer.cpp:1061`); the `FogNoiseParams` field order `{enabled,frequency,strength,octaves,windVelocity}` so the positional aggregate-init is correct; C++17 confirmed (so designated initializers correctly avoided); `u_intensity = sun.intensity` today (`renderer.cpp:1076`) so the artist-gain multiply is a valid minimal change; the `IPanel` four-method surface; the `AudioPanel::removeReverbZone` shift-down semantics the doc says FogPanel mirrors; and the full editor wiring (`m_panelRegistry` member, `registerPanel` in `initialize`, `drawMenuToggle` block, `renderer` in scope at the draw site). 2 LOW (both citation fixes — §12.1 cited `≈1111` for the god-ray margin which is actually `1061`; the F_turb/octave-inlined claim cited §6.3 but that content lives in §6.2). Both verified and fixed. Per the session standing instruction (converge once only verified non-structural polish remains), **convergence reached** — the design is implementation-ready and the byte-for-byte parity contract is sound.
+- **Loop 2 — post-implementation** (fresh reviewer, cold, against the shipped code + diff): **no CRITICAL / HIGH / MEDIUM.** Verified byte-for-byte against the diff that the lift changed only indirection, not values (scattering/extinction `0.005`, anisotropy `0.3`, noise `{true,0.03,0.5,3,(0.4,0,0.15)}`, god-ray gain `1.0`, margin `0.3`); reduce-motion still zeroes `windVelocity` *on top of* the authored value and the per-volume `animSpeed` zeroing is untouched; `GOD_RAYS_EDGE_MARGIN` fully removed (no orphan refs); the `BeginDisabled`/`EndDisabled` pairs balanced on every path; the `FogVolumeShape` Box=0/Sphere=1 combo mapping correct; `removeVolume` a byte-identical mirror of `AudioPanel::removeReverbZone`; editor wiring reachable; the three remaining `TODO 11.10` markers are the *intentionally* deferred sampling/`F_turb` look-constants (§12.2). 1 LOW (the panel never seeded `m_volumes` from `renderer.fogVolumes()`, so opening it would clobber scene-loaded volumes with the empty set) + 1 INFO (the `volEdited` flag was dead — the push ran unconditionally). **Both fixed:** added a one-shot seed-on-open latch (§12.3) and gated the push on actual change. Full debug regression green after the fix. **Convergence reached** — implementation matches the design and is committed.
