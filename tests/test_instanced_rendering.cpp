@@ -185,3 +185,66 @@ TEST(InstanceBatchTest, ManyUniquePairsAllSeparate)
     auto batches = Renderer::buildInstanceBatchesStatic(items);
     EXPECT_EQ(batches.size(), 50u);
 }
+
+// =============================================================================
+// Slice R2 — skinned/morphed items must never coalesce into an instanced batch
+// (the instanced path forces u_hasBones=false ⇒ bind pose). §9.3 routing fix.
+// =============================================================================
+
+TEST(InstanceBatchTest, SkinnedMeshNeverInstanceBatched_R2)
+{
+    // Two items with the SAME mesh+material pointer, both skinned (non-null
+    // boneMatrices). Under R1 they would group into one instanced batch and render at
+    // bind pose; R2 must keep them as two single-instance batches.
+    static const std::vector<glm::mat4> palette(4, glm::mat4(1.0f));
+
+    auto a = makeItem(1, 1);
+    auto b = makeItem(1, 1, glm::translate(glm::mat4(1.0f), glm::vec3(2, 0, 0)));
+    a.boneMatrices = &palette;
+    b.boneMatrices = &palette;
+
+    std::vector<SceneRenderData::RenderItem> items = {a, b};
+    auto batches = Renderer::buildInstanceBatchesStatic(items);
+
+    ASSERT_EQ(batches.size(), 2u) << "shared-mesh skinned items must not merge";
+    for (const auto& batch : batches)
+    {
+        // Each is a single-instance batch → below the instancing threshold → routed
+        // through the per-item skinning draw with u_hasBones=true.
+        EXPECT_EQ(batch.modelMatrices.size(), 1u);
+        EXPECT_LT(static_cast<int>(batch.modelMatrices.size()),
+                  Renderer::MIN_INSTANCE_BATCH_SIZE);
+        ASSERT_EQ(batch.boneMatrixPtrs.size(), 1u);
+        EXPECT_NE(batch.boneMatrixPtrs[0], nullptr);
+    }
+}
+
+TEST(InstanceBatchTest, MorphedMeshNeverInstanceBatched_R2)
+{
+    // Same as above but driven by morph weights instead of bones.
+    static const std::vector<float> weights = {1.0f, 0.0f};
+
+    auto a = makeItem(2, 2);
+    auto b = makeItem(2, 2, glm::translate(glm::mat4(1.0f), glm::vec3(3, 0, 0)));
+    a.morphWeights = &weights;
+    b.morphWeights = &weights;
+
+    std::vector<SceneRenderData::RenderItem> items = {a, b};
+    auto batches = Renderer::buildInstanceBatchesStatic(items);
+
+    ASSERT_EQ(batches.size(), 2u) << "shared-mesh morphed items must not merge";
+    for (const auto& batch : batches)
+    {
+        EXPECT_EQ(batch.modelMatrices.size(), 1u);
+    }
+}
+
+TEST(InstanceBatchTest, StaticMeshesStillGroupAfterRoutingFix_R2)
+{
+    // Regression guard: non-skinned, non-morphed shared-mesh items still coalesce
+    // (the routing fix must not break ordinary instancing).
+    std::vector<SceneRenderData::RenderItem> items = {makeItem(3, 3), makeItem(3, 3)};
+    auto batches = Renderer::buildInstanceBatchesStatic(items);
+    ASSERT_EQ(batches.size(), 1u);
+    EXPECT_EQ(batches[0].modelMatrices.size(), 2u);
+}

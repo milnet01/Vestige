@@ -405,3 +405,60 @@ TEST(SkeletonAnimatorTest, ShuffledStorageEqualsSortedStorageBoneMatrices_A1)
     expectMatNear(sortedBones[1], shuffledBones[2], "Mid");
     expectMatNear(sortedBones[2], shuffledBones[0], "Leaf");
 }
+
+// ---------------------------------------------------------------------------
+// Slice R2 — previous-pose history for animated motion vectors (§9.2, §9.10)
+// ---------------------------------------------------------------------------
+
+// Test 1 — the prev pose lags the current pose by exactly one frame.
+TEST(SkeletonAnimatorTest, PrevPoseSnapshotLagsByOneFrame_R2)
+{
+    SkeletonAnimator animator;
+    animator.setSkeleton(makeSimpleSkeleton());
+    animator.addClip(makeSimpleClip());
+    animator.play("Walk");
+
+    // Frame 1 → root translated to x≈1.5; capture this pose.
+    animator.update(0.3f);
+    const std::vector<glm::mat4> poseFrame1 = animator.getBoneMatrices();
+    EXPECT_NEAR(poseFrame1[0][3][0], 1.5f, 0.05f);
+
+    // Frame 2 → root translated to x≈3.0; prev must equal frame 1's pose.
+    animator.update(0.3f);
+    EXPECT_NEAR(animator.getBoneMatrices()[0][3][0], 3.0f, 0.05f);
+
+    const auto& prev = animator.getPrevBoneMatrices();
+    ASSERT_EQ(prev.size(), poseFrame1.size());
+    for (size_t i = 0; i < prev.size(); ++i)
+    {
+        for (int c = 0; c < 4; ++c)
+            for (int r = 0; r < 4; ++r)
+                EXPECT_NEAR(prev[i][c][r], poseFrame1[i][c][r], 1e-5f)
+                    << "prev[" << i << "][" << c << "][" << r << "]";
+    }
+    // And prev is genuinely lagged — it differs from the now-current pose.
+    EXPECT_GT(std::abs(animator.getBoneMatrices()[0][3][0] - prev[0][3][0]), 1.0f);
+}
+
+// Test 2 — first frame: prev == current ⇒ zero pose motion.
+TEST(SkeletonAnimatorTest, FirstFramePrevPoseEqualsCurrent_R2)
+{
+    SkeletonAnimator animator;
+    animator.setSkeleton(makeSimpleSkeleton());
+    animator.addClip(makeSimpleClip());
+    animator.play("Walk");
+
+    animator.update(0.3f);  // single update — no prior frame to lag
+
+    const auto& cur = animator.getBoneMatrices();
+    const auto& prev = animator.getPrevBoneMatrices();
+    ASSERT_EQ(cur.size(), prev.size());
+    for (size_t i = 0; i < cur.size(); ++i)
+    {
+        for (int c = 0; c < 4; ++c)
+            for (int r = 0; r < 4; ++r)
+                EXPECT_NEAR(prev[i][c][r], cur[i][c][r], 1e-6f)
+                    << "frame1 prev != current at [" << i << "][" << c << "][" << r << "]";
+    }
+    EXPECT_TRUE(animator.getPrevMorphWeights() == animator.getMorphWeights());
+}

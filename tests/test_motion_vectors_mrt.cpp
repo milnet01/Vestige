@@ -184,31 +184,135 @@ TEST(MotionVectorMath, MissingPrevMatrixYieldsNoObjectMotion)
     EXPECT_NEAR(movingMotion.y, cameraMotion.y, kTol);
 }
 
-// Test 7 — skinned/morph meshes use the BASE (un-skinned) object-space position,
-// reproducing the overlay's rigid-body motion exactly and independent of the bone /
-// morph state. The motion math takes the base position only; the animated pose
-// affects gl_Position/shading, not the motion output. (R2 deliberately changes this.)
-TEST(MotionVectorMath, SkinnedMeshMotionUsesBasePositionMatchingOverlay)
+// Test 3 (R2, replaces R1 #7) — skinned meshes now use the ANIMATED pose for motion.
+// A vertex skinned with differing prev/current bone palettes yields motion =
+// proj(currentSkinned) − proj(prevSkinned), which is non-zero; and when the two
+// palettes are equal (static pose) it reduces EXACTLY to the rigid-body value at that
+// posed position (computeMotionVectorUV evaluated there). Pins the §9.6 behaviour change.
+TEST(MotionVectorMath, SkinnedMotionUsesAnimatedPose)
 {
     const glm::mat4 proj = testProjection();
     const glm::mat4 vp = proj * glm::lookAt(glm::vec3(0, 1, 5), glm::vec3(0), glm::vec3(0, 1, 0));
-    const glm::mat4 prevVp = proj * glm::lookAt(glm::vec3(1.5f, 1, 5), glm::vec3(0), glm::vec3(0, 1, 0));
+    const glm::mat4 prevVp = vp;  // static camera — isolate the pose contribution
     const glm::mat4 model = glm::translate(glm::mat4(1.0f), glm::vec3(0, 0, -2));
-    const glm::mat4 prevModel = glm::translate(model, glm::vec3(0.03f, 0, 0));
+    const glm::mat4 prevModel = model;
 
     const glm::vec3 basePos(0.5f, 1.0f, 0.0f);
-    // A hypothetical skinned displacement of the same vertex (what R2 would feed).
-    const glm::vec3 skinnedPos = basePos + glm::vec3(0.4f, -0.3f, 0.1f);
+    const glm::ivec4 boneIds(0, 1, 2, 3);
+    const glm::vec4 boneWeights(1.0f, 0.0f, 0.0f, 0.0f);  // fully bound to joint 0
+    const std::vector<float> noMorphW;
+    const std::vector<glm::vec3> noMorphD;
 
-    const glm::vec2 fromBase = computeMotionVectorUV(model, prevModel, vp, prevVp, basePos);
-    const glm::vec2 fromOverlay = overlayOracle(model, prevModel, vp, prevVp, basePos);
+    // Current palette translates joint 0; previous palette is identity → pose moved.
+    std::array<glm::mat4, 4> curPalette = {glm::translate(glm::mat4(1.0f), glm::vec3(0.4f, -0.3f, 0.1f)),
+                                           glm::mat4(1.0f), glm::mat4(1.0f), glm::mat4(1.0f)};
+    std::array<glm::mat4, 4> prevPalette = {glm::mat4(1.0f), glm::mat4(1.0f), glm::mat4(1.0f), glm::mat4(1.0f)};
 
-    // R1 contract: motion from the base position matches the overlay exactly.
-    EXPECT_NEAR(fromBase.x, fromOverlay.x, kTol);
-    EXPECT_NEAR(fromBase.y, fromOverlay.y, kTol);
+    const glm::vec3 curSkin = morphAndSkinPosition(basePos, noMorphW, noMorphD,
+                                                   curPalette.data(), boneIds, boneWeights, true);
+    const glm::vec3 prevSkin = morphAndSkinPosition(basePos, noMorphW, noMorphD,
+                                                    prevPalette.data(), boneIds, boneWeights, true);
 
-    // And it is genuinely the base-position value, not the skinned-position value
-    // (proving the deliberate rigid-body choice — the two differ).
-    const glm::vec2 fromSkinned = computeMotionVectorUV(model, prevModel, vp, prevVp, skinnedPos);
-    EXPECT_GT(glm::length(fromBase - fromSkinned), 1e-3f);
+    const glm::vec2 animated = computeAnimatedMotionVectorUV(model, prevModel, vp, prevVp, curSkin, prevSkin);
+    // Pose changed under a static camera ⇒ non-zero motion (R1 would have given zero here).
+    EXPECT_GT(glm::length(animated), 1e-3f);
+
+    // Static pose (equal palettes) reduces exactly to the rigid-body value at the posed point.
+    const glm::vec3 sameSkin = curSkin;
+    const glm::vec2 staticPose = computeAnimatedMotionVectorUV(model, prevModel, vp, prevVp, sameSkin, sameSkin);
+    const glm::vec2 rigidAtPosed = computeMotionVectorUV(model, prevModel, vp, prevVp, sameSkin);
+    EXPECT_NEAR(staticPose.x, rigidAtPosed.x, kTol);
+    EXPECT_NEAR(staticPose.y, rigidAtPosed.y, kTol);
+}
+
+// Test 4 (R2) — equal palettes, model == prevModel, vp == prevVp ⇒ zero motion.
+TEST(MotionVectorMath, StaticPoseStaticCameraZeroMotion)
+{
+    const glm::mat4 proj = testProjection();
+    const glm::mat4 vp = proj * glm::lookAt(glm::vec3(0, 1, 5), glm::vec3(0), glm::vec3(0, 1, 0));
+    const glm::mat4 model = glm::translate(glm::mat4(1.0f), glm::vec3(0, 0, -2));
+
+    const glm::vec3 basePos(0.5f, 1.0f, 0.0f);
+    const glm::ivec4 boneIds(0, 1, 2, 3);
+    const glm::vec4 boneWeights(0.6f, 0.4f, 0.0f, 0.0f);
+    std::array<glm::mat4, 4> palette = {glm::translate(glm::mat4(1.0f), glm::vec3(0.2f, 0.1f, 0.0f)),
+                                        glm::rotate(glm::mat4(1.0f), 0.5f, glm::vec3(0, 1, 0)),
+                                        glm::mat4(1.0f), glm::mat4(1.0f)};
+    const std::vector<float> noMorphW;
+    const std::vector<glm::vec3> noMorphD;
+
+    const glm::vec3 skin = morphAndSkinPosition(basePos, noMorphW, noMorphD,
+                                                palette.data(), boneIds, boneWeights, true);
+    const glm::vec2 motion = computeAnimatedMotionVectorUV(model, model, vp, vp, skin, skin);
+    EXPECT_NEAR(motion.x, 0.0f, kTol);
+    EXPECT_NEAR(motion.y, 0.0f, kTol);
+}
+
+// Test 5 (R2) — morph-only vertex: prevWeights ≠ weights ⇒ motion equals the projected
+// delta-driven displacement, independent of bone state (no bones here).
+TEST(MotionVectorMath, MorphMotionUsesPrevWeights)
+{
+    const glm::mat4 proj = testProjection();
+    const glm::mat4 vp = proj * glm::lookAt(glm::vec3(0, 1, 5), glm::vec3(0), glm::vec3(0, 1, 0));
+    const glm::mat4 model = glm::translate(glm::mat4(1.0f), glm::vec3(0, 0, -2));
+
+    const glm::vec3 basePos(0.5f, 1.0f, 0.0f);
+    const std::vector<glm::vec3> morphDeltas = {glm::vec3(0.3f, 0.0f, 0.0f)};  // one target
+    const std::vector<float> curW = {1.0f};   // fully applied this frame
+    const std::vector<float> prevW = {0.0f};  // not applied last frame
+    const glm::ivec4 boneIds(0);
+    const glm::vec4 boneWeights(0.0f);
+
+    const glm::vec3 curPos = morphAndSkinPosition(basePos, curW, morphDeltas,
+                                                  nullptr, boneIds, boneWeights, false);
+    const glm::vec3 prevPos = morphAndSkinPosition(basePos, prevW, morphDeltas,
+                                                   nullptr, boneIds, boneWeights, false);
+
+    const glm::vec2 motion = computeAnimatedMotionVectorUV(model, model, vp, vp, curPos, prevPos);
+    // Independent oracle: the morph displaced the vertex by curW*delta this frame only.
+    const glm::vec2 expected =
+        computeAnimatedMotionVectorUV(model, model, vp, vp,
+                                      basePos + glm::vec3(0.3f, 0, 0), basePos);
+    EXPECT_NEAR(motion.x, expected.x, kTol);
+    EXPECT_NEAR(motion.y, expected.y, kTol);
+    EXPECT_GT(glm::length(motion), 1e-3f);
+}
+
+// Test 7 (R2) — V_mask = α(1 − n·n'): ndot=1 ⇒ 0; ndot=0 ⇒ clamp(α,0,1); monotonic in
+// (1−ndot); and feedback*(1−vMask) is monotonically non-increasing as divergence grows.
+TEST(MotionVectorMath, VMaskZeroWhenNormalsAgreeFullWhenOpposed)
+{
+    const glm::vec3 n(0.0f, 0.0f, 1.0f);
+    // Normals agree exactly ⇒ no rejection.
+    EXPECT_NEAR(computeDisocclusionVMask(1.0f, n, n), 0.0f, kTol);
+    // Orthogonal ⇒ ndot=0 ⇒ vMask = clamp(α,0,1).
+    const glm::vec3 ortho(1.0f, 0.0f, 0.0f);
+    EXPECT_NEAR(computeDisocclusionVMask(1.0f, n, ortho), 1.0f, kTol);
+    EXPECT_NEAR(computeDisocclusionVMask(0.5f, n, ortho), 0.5f, kTol);
+
+    // Monotonic in divergence: rotate the previous normal progressively away from n.
+    float prevMask = -1.0f;
+    float prevFeedback = 1e9f;
+    const float feedback0 = 0.9f;
+    for (int deg = 0; deg <= 90; deg += 15)
+    {
+        const float a = glm::radians(static_cast<float>(deg));
+        const glm::vec3 nPrev(std::sin(a), 0.0f, std::cos(a));
+        const float mask = computeDisocclusionVMask(1.0f, n, nPrev);
+        EXPECT_GE(mask, prevMask - kTol);                 // V_mask non-decreasing
+        const float feedback = feedback0 * (1.0f - mask);
+        EXPECT_LE(feedback, prevFeedback + kTol);          // feedback non-increasing
+        prevMask = mask;
+        prevFeedback = feedback;
+    }
+}
+
+// Test 8 (R2) — zero-length nCur sentinel (cloth/terrain/sky/transparent) ⇒ vMask=0,
+// so those pixels keep R1/today's feedback unchanged regardless of nPrev.
+TEST(MotionVectorMath, VMaskDisabledWhereNoNormal)
+{
+    const glm::vec3 sentinel(0.0f);                 // cleared attachment value
+    const glm::vec3 anyPrev(1.0f, 0.0f, 0.0f);
+    EXPECT_NEAR(computeDisocclusionVMask(1.0f, sentinel, anyPrev), 0.0f, kTol);
+    EXPECT_NEAR(computeDisocclusionVMask(1.0f, sentinel, glm::vec3(0.0f)), 0.0f, kTol);
 }

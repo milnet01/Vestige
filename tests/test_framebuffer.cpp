@@ -191,3 +191,91 @@ TEST_F(FramebufferMrtTest, BindAttachmentOneSucceeds)
     fb.bindColorTexture(3, 1);
     EXPECT_EQ(glGetError(), static_cast<GLenum>(GL_NO_ERROR));
 }
+
+// --- Slice R2: third color attachment (world-normal buffer) ---
+
+namespace
+{
+// TAA-scene-FBO-shaped config with the R2 normal attachment at GL_COLOR_ATTACHMENT2.
+FramebufferConfig makeMrt3Config(int w, int h)
+{
+    FramebufferConfig config = makeMrtConfig(w, h);
+    config.thirdColorAttachment = true;     // normal buffer at GL_COLOR_ATTACHMENT2
+    return config;
+}
+}  // namespace
+
+// FBO with three color attachments must be GL_FRAMEBUFFER_COMPLETE.
+TEST_F(FramebufferMrtTest, ThirdAttachmentFramebufferIsComplete)
+{
+    Framebuffer fb(makeMrt3Config(64, 64));
+    EXPECT_TRUE(fb.isComplete());
+}
+
+// All three draw buffers must be enumerated so the scene shader's three outputs
+// route to GL_COLOR_ATTACHMENT0/1/2.
+TEST_F(FramebufferMrtTest, DrawBuffersEnumerateThreeAttachments)
+{
+    Framebuffer fb(makeMrt3Config(64, 64));
+    ASSERT_TRUE(fb.isComplete());
+
+    fb.bind();
+    GLint db0 = 0, db1 = 0, db2 = 0;
+    glGetIntegerv(GL_DRAW_BUFFER0, &db0);
+    glGetIntegerv(GL_DRAW_BUFFER1, &db1);
+    glGetIntegerv(GL_DRAW_BUFFER2, &db2);
+    EXPECT_EQ(db0, static_cast<GLint>(GL_COLOR_ATTACHMENT0));
+    EXPECT_EQ(db1, static_cast<GLint>(GL_COLOR_ATTACHMENT1));
+    EXPECT_EQ(db2, static_cast<GLint>(GL_COLOR_ATTACHMENT2));
+}
+
+// Test 6 (R2, clear-to-zero portion) — the normal attachment must clear to a
+// zero-length normal regardless of the scene clear colour. That (0,0,0,0) is the
+// V_mask sentinel: pixels no opaque geometry wrote keep R1 feedback. Extends the
+// R1 attachment-1 clear-to-zero guard to attachment 2. (The "holds normalize(world
+// normal) for an opaque pixel" half is a render-pipeline / launch-time spot-check,
+// §9.10 #6/#10 — not expressible at the Framebuffer unit level.)
+TEST_F(FramebufferMrtTest, ThirdAttachmentClearsToZeroUnderNonZeroClearColor)
+{
+    Framebuffer fb(makeMrt3Config(4, 4));
+    ASSERT_TRUE(fb.isComplete());
+
+    fb.bind();
+    glClearColor(0.7f, 0.4f, 0.9f, 1.0f);   // non-zero — would be a bogus normal
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    fb.clearThirdAttachment();
+
+    std::array<float, 4> px2{{-1.0f, -1.0f, -1.0f, -1.0f}};
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, fb.getId());
+    glReadBuffer(GL_COLOR_ATTACHMENT2);
+    glReadPixels(0, 0, 1, 1, GL_RGBA, GL_FLOAT, px2.data());
+    EXPECT_FLOAT_EQ(px2[0], 0.0f);
+    EXPECT_FLOAT_EQ(px2[1], 0.0f);
+    EXPECT_FLOAT_EQ(px2[2], 0.0f) << "uncovered normal must be the zero-length V_mask sentinel";
+    EXPECT_FLOAT_EQ(px2[3], 0.0f);
+
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+}
+
+// bindColorTexture(unit, 2) must bind attachment 2 without a GL error.
+TEST_F(FramebufferMrtTest, BindAttachmentTwoSucceeds)
+{
+    Framebuffer fb(makeMrt3Config(16, 16));
+    ASSERT_TRUE(fb.isComplete());
+
+    while (glGetError() != GL_NO_ERROR) {}  // drain
+    fb.bindColorTexture(4, 2);
+    EXPECT_EQ(glGetError(), static_cast<GLenum>(GL_NO_ERROR));
+}
+
+// Two-attachment FBOs stay byte-for-byte unchanged: no attachment 2, no DRAW_BUFFER2.
+TEST_F(FramebufferMrtTest, TwoAttachmentFboHasNoThirdDrawBuffer)
+{
+    Framebuffer fb(makeMrtConfig(32, 32));   // second only, no third
+    ASSERT_TRUE(fb.isComplete());
+
+    fb.bind();
+    GLint db2 = 0;
+    glGetIntegerv(GL_DRAW_BUFFER2, &db2);
+    EXPECT_EQ(db2, static_cast<GLint>(GL_NONE));
+}
