@@ -141,6 +141,20 @@ python3 tools/audit/audit.py
 Reports go to `docs/AUTOMATED_AUDIT_REPORT.md`. PRs that add or modify
 audit-tool code must also bump the tool's `VERSION` and `CHANGELOG.md`.
 
+### One command for the whole CI gate
+
+To run everything CI runs — both build configs, the full test suite, the
+Tier-1 audit, and the gitleaks secret scan — in a single pass before pushing:
+
+```bash
+scripts/local-ci.sh           # full mirror; exits non-zero if any stage fails
+scripts/local-ci.sh --quick   # Debug build+test + gitleaks only (fast smoke)
+```
+
+A clean run means a green push. It mirrors `.github/workflows/ci.yml` except
+the `cmake-compat` job (which needs a separate CMake 3.21 install); CI still
+runs that one remotely.
+
 If the audit tool flags something in your change that you believe is a
 false positive, you can suppress it via `.audit_suppress` (with
 justification) — see `tools/audit/lib/suppress.py`. If the audit

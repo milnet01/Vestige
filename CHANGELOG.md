@@ -22,6 +22,27 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-06-19 Tooling — `scripts/local-ci.sh` local CI mirror
+
+Added a one-command local mirror of the GitHub Actions pipeline so a clean local
+run means a green push, instead of relying on remembering to build + ctest by hand.
+
+- **`scripts/local-ci.sh`** runs the four locally-reproducible CI jobs from
+  `.github/workflows/ci.yml` in sequence: Debug build + ctest, Release build + ctest
+  (the latter exercising the Release-only perf benchmarks that Debug skips), the
+  Tier-1 static audit (`audit.py -t 1 --ci --no-color --no-tests`), and the gitleaks
+  secret scan. Stages run independently and the run aggregates a PASS/FAIL/timing
+  summary, so one invocation surfaces everything to fix. Exit code 0 ⇒ safe to push.
+- `--quick` runs only the Debug build+test and gitleaks stages (fast pre-push smoke);
+  `-j N` caps build/test parallelism. Reuses the dev `build/` dir for Debug (warm) and
+  a gitignored `build-release/` for Release so it never clobbers the working tree.
+- Configure flags match CI exactly (`-G Ninja -DCMAKE_BUILD_TYPE=… -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+  -DVESTIGE_FETCH_ASSETS=OFF`, ccache launchers, `CCACHE_SLOPPINESS=pch_defines,time_macros`).
+  `xvfb-run` is used only if present (CI is headless; a local desktop session has a real display).
+- **Intentional gap:** the `cmake-compat` job (CMake 3.21 + latest) is not mirrored —
+  reproducing it needs a second CMake install, more than a pre-push gate warrants. CI
+  still runs it remotely; the script's header documents this.
+
 ### 2026-06-19 Phase 10 Rendering — R2 animated motion vectors + previous-frame normal buffer + V_mask disocclusion
 
 **Slice R2 — correct motion vectors for animated (skinned / morph) meshes, plus a
