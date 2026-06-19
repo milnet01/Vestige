@@ -53,7 +53,7 @@ This bundle is core-render-path surgery, so it is sliced to keep each step indep
 | Slice | Title | Complexity | Depends on | Status |
 |-------|-------|------------|------------|--------|
 | **R1** | `Framebuffer` MRT support + motion vectors via geometry-pass MRT (rigid-body parity; drop overlay) | M/L | — | ✅ implemented (2026-06-19) |
-| **R2** | Correct skinned/morph motion (prev-pose history) + prev-normal buffer + `V_mask` disocclusion | L | R1 | ⬜ design-of-record TBD |
+| **R2** | Correct skinned/morph motion (prev-pose history) + prev-normal buffer + `V_mask` disocclusion | L | R1 | ✅ design-of-record signed off (§9); cold-eyes converged (9 loops) — ready to implement |
 | **R3** | Subsurface scattering (pre-integrated wrap BRDF; per-material thickness/transmission) | M | — | ⬜ design-of-record TBD |
 | **R4** | Screen-space global illumination (single-bounce, temporally accumulated) | L | R1 (R2 ideal) | ⬜ design-of-record TBD |
 
@@ -79,7 +79,7 @@ This step is independently testable (FBO completeness check `GL_FRAMEBUFFER_COMP
 
 **Changes:**
 1. `m_taaSceneFbo` is constructed with `secondColorAttachment = true` → a non-MSAA `GL_RGBA16F` motion attachment at `GL_COLOR_ATTACHMENT1`. (`m_taaSceneFbo` is genuinely non-MSAA — `samples = 1`, `renderer.cpp:669` — and is what the scene pass binds in TAA mode, `renderer.cpp:2994`. So the motion attachment needs **no** multisample resolve.)
-2. `scene.vert.glsl` / `scene.frag.glsl` gain a motion output. **Critically, the motion terms use the raw, pre-skin/pre-morph base object-space position** (`position`), *not* the skinned/morphed position that feeds `gl_Position` — because the overlay computed motion from the raw `a_position` for both terms (`motion_vectors_object.vert.glsl:25-27`). So the vertex shader emits a dedicated `v_currentClip_motion = u_projection * u_view * (model * position)` and `v_prevClip_motion = u_prevViewProjection * (prevModel * position)` (both from the base position; note `scene.vert.glsl` binds **separate** `u_view`/`u_projection` at `:48-49`, not a combined `u_viewProjection` — the product equals the overlay's jittered `m_lastViewProjection`, and `u_prevViewProjection` is a new combined uniform set from `m_prevViewProjection`), and the fragment writes `vec4(currUV − prevUV, coverageFlag, 0)` to `out` location 1, reusing the **exact** math of `motion_vectors_object.frag.glsl` (same `safeClipDivide` 1e-6 guard). For non-skinned/non-morph meshes the base position equals the shaded position, so `v_currentClip_motion == gl_Position`; for skinned/morph meshes the base position reproduces the overlay's rigid-body motion exactly. The motion write is gated by a uniform `u_writeMotion` (§4.2). **Implementation note:** the motion output must be written **before any early `return`** in `scene.frag.glsl` (e.g. the wireframe path, `:967-968`) so attachment 1 is never left undefined for an opaque pixel; the late `fragColor.rgb` edits (water caustics `:1265`, cascade-debug `:1279`) touch only attachment 0 and need no change.
+2. `scene.vert.glsl` / `scene.frag.glsl` gain a motion output. **Critically, the motion terms use the raw, pre-skin/pre-morph base object-space position** (`position`), *not* the skinned/morphed position that feeds `gl_Position` — because the overlay computed motion from the raw `a_position` for both terms (`motion_vectors_object.vert.glsl:25-27`). So the vertex shader emits a dedicated `v_currentClip_motion = u_projection * u_view * (model * position)` and `v_prevClip_motion = u_prevViewProjection * (prevModel * position)` (both from the base position; note `scene.vert.glsl` binds **separate** `u_view`/`u_projection` at `:63-64`, not a combined `u_viewProjection` — the product equals the overlay's jittered `m_lastViewProjection`, and `u_prevViewProjection` is a new combined uniform set from `m_prevViewProjection`), and the fragment writes `vec4(currUV − prevUV, coverageFlag, 0)` to `out` location 1, reusing the **exact** math of `motion_vectors_object.frag.glsl` (same `safeClipDivide` 1e-6 guard). For non-skinned/non-morph meshes the base position equals the shaded position, so `v_currentClip_motion == gl_Position`; for skinned/morph meshes the base position reproduces the overlay's rigid-body motion exactly. The motion write is gated by a uniform `u_writeMotion` (§4.2). **Implementation note:** the motion output must be written **before any early `return`** in `scene.frag.glsl` (e.g. the wireframe path, `:967-968`) so attachment 1 is never left undefined for an opaque pixel; the late `fragColor.rgb` edits (water caustics `:1265`, cascade-debug `:1279`) touch only attachment 0 and need no change.
 3. The per-object overlay pass (`renderer.cpp:972-1023`) and shaders `motion_vectors_object.{vert,frag}.glsl` are **deleted**.
 4. The camera-motion full-screen pass is **retained but extended** into a *combine* pass: it samples the scene-pass motion attachment and prefers it where the coverage flag says opaque geometry wrote it (§4.4).
 
@@ -94,13 +94,13 @@ This step is independently testable (FBO completeness check `GL_FRAMEBUFFER_COMP
 **Prev-model stream (opaque pass only).** The overlay set `u_model`/`u_prevModel` per draw; the opaque scene pass has **three** model-matrix sources, each needing a parallel prev-model path. R1 sources prev matrices from the same `m_prevWorldMatrices` cache (keyed by `entityId`) the overlay used. Concrete touch-points (enumerated so the work isn't understated):
 
 - `InstanceBatch` (`renderer.h:529-536`) gains a `std::vector<glm::mat4> prevModelMatrices` field, populated in lock-step with `modelMatrices` in both the **live `buildInstanceBatches` (`renderer.cpp:2771,2786,2797`)** and its **static unit-test mirror `buildInstanceBatchesStatic` (`renderer.cpp:2738,2748`)** — each entry is `m_prevWorldMatrices[entityId]` or, if absent (first frame / new spawn), the current matrix (→ zero motion, matching the overlay fallback `renderer.cpp:1005-1007`).
-- **MDI path** — the current model matrices live in `IndirectBuffer::m_matrixSsbo` (bound to **binding 0**, `indirect_buffer.cpp:102`, assembled via `addCommand(entry, modelMatrices)` + `upload()`, called `renderer.cpp:3185-3188`). The prev-model parallel stream is assembled **in `IndirectBuffer`** (`indirect_buffer.{h,cpp}`) in lock-step with `addCommand`, uploaded to a **new SSBO at binding 4** (binding 0 is taken; 2/3 are bones/morph — verified `scene.vert.glsl:27,33,43`).
+- **MDI path** — the current model matrices live in `IndirectBuffer::m_matrixSsbo` (bound to **binding 0**, `indirect_buffer.cpp:102`, assembled via `addCommand(entry, modelMatrices)` + `upload()`, called `renderer.cpp:3185-3188`). The prev-model parallel stream is assembled **in `IndirectBuffer`** (`indirect_buffer.{h,cpp}`) in lock-step with `addCommand`, uploaded to a **new SSBO at binding 4** (binding 0 is taken; 2/3 are bones/morph — verified `scene.vert.glsl:47,56` for bones/morph, prev-model 4 at `:41`).
 - **Legacy `glDrawElementsInstanced` path** — current model is per-instance vertex attributes 6–9 (`scene.vert.glsl:21-24`) fed by the shared `m_instanceBuffer` (VAO binding point 1, stride `sizeof(mat4)`, `mesh.cpp:259`). Its prev-model is a parallel per-instance attribute stream at **locations 12–15** (10–11 are bones) — which needs a **second instance VBO on a new VAO binding point** with its own divisor (not literally "the same buffer"), set up by a `setupInstanceAttributes`-style call.
 - **Per-entity `drawMesh` path** — prev-model is a uniform `u_prevModel`, set exactly as the overlay did.
 - `scene.vert.glsl` reads the per-instance prev-model indexed identically to the current model (SSBO binding 4 for MDI, attribs 12–15 for legacy, `u_prevModel` uniform otherwise) and computes `v_prevClip_motion = u_prevViewProjection * (prevModel * position)` from the **base** position (§4.1 #2).
 - **Shadow-pass reuse.** `buildInstanceBatches` runs for shadow casters too (`renderer.cpp:2941,3485`), so the new `prevModelMatrices` field gets populated on shadow batches as well — harmless (the shadow shader never reads it), but the prev-model SSBO/attribute upload + bind happens **only on the main opaque MDI/legacy draws**, never wired into the shadow path.
 - **SMAA shares `m_taaSceneFbo`.** The scene pass binds `m_taaSceneFbo` whenever `isTAA || isSMAAScene` (`renderer.cpp:2990-2994`), so with `secondColorAttachment=true` the motion attachment is allocated and written (under the §4.2 mask) on SMAA frames too. This is **benign** — SMAA never samples it, and the mask + per-attachment clear keep it well-defined — but it is marginal extra bandwidth on SMAA frames (noted in §4.5).
-- **Dummy prev-model SSBO (Mesa constraint).** Once `scene.vert.glsl` *declares* `layout(std430, binding = 4)`, that declaration is live for **every** `m_sceneShader` draw — opaque, cloth, transparent, and non-TAA frames — and the engine has a documented hard constraint that *all declared SSBOs must have a valid buffer bound at draw time* on Mesa (`renderer.cpp:760-764`, the reason `m_dummyModelSSBO`/`m_dummyMorphSSBO` exist). So R1 adds a `m_dummyPrevModelSSBO` bound at frame start at binding 4 (mirroring `m_dummyModelSSBO`), and the real prev-model SSBO is bound over it only for the MDI opaque draws. Non-TAA frames keep the dummy bound and pay no upload. (The per-entity `u_prevModel` uniform path is unaffected — it is a uniform, not an SSBO.)
+- **Dummy prev-model SSBO (Mesa constraint).** Once `scene.vert.glsl` *declares* `layout(std430, binding = 4)`, that declaration is live for **every** `m_sceneShader` draw — opaque, cloth, transparent, and non-TAA frames — and the engine has a documented hard constraint that *all declared SSBOs must have a valid buffer bound at draw time* on Mesa (`renderer.cpp:143-156` model/prev-model dummy defs + `:200-201` morph dummy, bound at `:778-782`, the reason `m_dummyModelSSBO`/`m_dummyMorphSSBO` exist). So R1 adds a `m_dummyPrevModelSSBO` bound at frame start at binding 4 (mirroring `m_dummyModelSSBO`), and the real prev-model SSBO is bound over it only for the MDI opaque draws. Non-TAA frames keep the dummy bound and pay no upload. (The per-entity `u_prevModel` uniform path is unaffected — it is a uniform, not an SSBO.)
 - **Vertex-attribute budget:** the legacy prev-model at locations 12–15 fills the VAO's attribute slots 0–15 exactly (`GL_MAX_VERTEX_ATTRIBS` guaranteed minimum is 16). It fits on the RX 6600 dev target, but the budget is now fully consumed — a future per-vertex attribute on this VAO must reclaim or pack a slot. Noted so it isn't a silent ceiling.
 
 ### 4.3 Jitter / parity guarantee (scoped)
@@ -178,7 +178,198 @@ Plus a `Framebuffer` MRT unit test (`GL_FRAMEBUFFER_COMPLETE` with two attachmen
 
 ---
 
-## 9. Cold-eyes loop log
+## 9. Slice R2 — Animated motion vectors + previous-frame normal buffer + `V_mask` disocclusion (design-of-record)
+
+**Status:** ✅ **design-of-record signed off (2026-06-19)** — cold-eyes converged after 9 loops (Loops 7–9 found zero architectural/structural/mechanical defects; only citation-precision polish, all fixed). Sign-off delegated to Claude per the project owner's standing directive (gate = cold-eyes convergence, not blocking user review). Ready to implement. Builds directly on R1's shipped MRT motion buffer. See the Cold-eyes loop log at the foot of this doc (§10, R2 loops).
+
+### 9.0 What exists today that R2 builds on (reality check, verified against source)
+
+| Fact | Source | Consequence for R2 |
+|------|--------|--------------------|
+| **Skinning is a per-entity `drawMesh` path only** — bone matrices upload to SSBO binding 2 and bind inside `drawMesh` (`renderer.cpp:1651-1662`), morph SSBO to binding 3 + per-target weights as `u_morphWeights[i]` uniforms (`:1664-1688`). The MDI/instanced opaque paths carry **no** bone/morph stream. | `renderer.cpp:1630-1688`, `scene.vert.glsl:46-59` | R2's prev-pose plumbing only touches the **per-entity** path — **no** MDI/instanced prev-bone stream, **no** new vertex attributes (prev skinning reuses the same `boneIds`/`boneWeights` at locations 10–11). This is far smaller than R1's three-source model plumbing. |
+| **No previous-frame pose is retained anywhere.** `SkeletonAnimator` holds only the current `m_boneMatrices` (`skeleton_animator.h:191`) and current `m_morphWeights` (`:204`); each `update(deltaTime)` (`:42`) recomputes from scratch. | `skeleton_animator.h:155-214` (no previous *pose* snapshot — the existing `m_prevRootPos`/`m_prevRootRot` at `:211-212` are root-motion state, unrelated) | R2 adds prev-pose snapshots **in `SkeletonAnimator`** (one frame of lag), the single new piece of history machinery. |
+| **R1's motion uses the raw base position for both terms** (`scene.vert.glsl:222-230`), so skinned/morph meshes emit **rigid-body motion only** — a limb that swings while the root stays put produces zero motion → TAA smears it. | `scene.vert.glsl:228-230` | R2 replaces the base-position prev term with an **animated-pose** prev term (skin with previous bones/weights). The R1 current term already equals the skinned `gl_Position` for the common case once we stop forcing base position. |
+| **`scene.frag.glsl` is a 2-attachment MRT** (`fragColor` loc 0 `:27`, `motionOut` loc 1 `:32`); the interpolated **geometric** world normal `v_normal` is available (`:17`, written `scene.vert.glsl:208` as `normalMatrix * skinnedNormal`). No normal G-buffer exists. | `scene.frag.glsl:17,27,32`, `scene.vert.glsl:208` | R2 adds a **third** attachment for the geometric world normal — written from `v_normal` (not the normal-mapped shading normal, which would add high-freq false disocclusion). |
+| **TAA resolve already modulates feedback** by off-screen test, motion length, and clip distance (`taa_resolve.frag.glsl:120-135`) but has **no** depth/normal disocclusion test. History is sampled at `historyUV = v_texCoord − motion` (`:108-109`). | `taa_resolve.frag.glsl:108-135` | `V_mask` plugs into exactly this feedback-modulation block — one more multiplicative confidence term, no restructuring. |
+| **`m_taaSceneFbo` attachments survive to resolve time** — the resolve blits (`renderer.cpp:830-834` colour, `:860-863` depth) read `m_taaSceneFbo` with `GL_COLOR_BUFFER_BIT` (which copies only the read buffer = attachment 0) / `GL_DEPTH_BUFFER_BIT`, so att1 (motion) survives for the combine pass (asserted in the comment at `:986`). | `renderer.cpp:985-988` | R2's att2 (current normal) likewise survives → the resolve can sample it directly as "current normal", no copy. |
+| **TAA already ping-pongs colour** via `m_currentFbo`/`m_historyFbo` + `swapBuffers()` (`taa.h:54-64,76-78`). | `taa.h:54-78` | R2's prev-normal buffer mirrors this idiom (§9.4). |
+| **The Mesa all-declared-SSBOs-must-be-bound constraint** forced R1's `m_dummyPrevModelSSBO` at binding 4. | `renderer.cpp:143-156` (dummy defs + Mesa rationale), `:778-782` (frame-start binds) | R2's new prev-bone SSBO needs the same dummy fallback. **Binding 7** is the slot: binding 5 is declared by the particle sort-keys compute + particle GPU vertex shaders and cloth dihedral (`particle_sort.comp.glsl:44`, `particle_gpu.vert.glsl:32`, `cloth_dihedral.comp.glsl:36`), and binding 6 by cloth normals (`cloth_normals.comp.glsl:23`) — all **outside the scene shader**, and the scene-shader frame-start bind block touches only 0/2/3/4 (`renderer.cpp:778-782`) — so 5/6 are not *reserved* for the scene shader, but to avoid relying on bind-point hygiene across pass boundaries R2 takes binding 7, which **no shader declares**. |
+
+### 9.1 What changes (and what does not)
+
+**Changes:**
+1. **`SkeletonAnimator` retains a one-frame-lagged pose** — `m_prevBoneMatrices` + `m_prevMorphWeights`, snapshotted each `update()` (§9.2).
+2. **The scene vertex shader computes a second, previous-frame skinned position** for the motion prev term, from the previous bones/weights (§9.3). The current motion term becomes the actual skinned `gl_Position` (no longer forced to base position).
+3. **A third MRT attachment** on `m_taaSceneFbo` holds the geometric world normal of opaque `renderItems` (§9.4).
+4. **A previous-frame normal buffer** is retained (§9.4) and **TAA resolve gains the `V_mask` disocclusion term** (§9.5).
+
+**Does not change:** the colour image (attachment 0 untouched); the MSAA / non-TAA paths; R1's three model-matrix prev paths and the combine pass (camera-motion fallback for cloth/terrain/water/particles is unchanged — those still get no normal and no `V_mask`, §9.4/§9.5); rigid (non-skinned, non-morph) meshes' motion (their base position *is* their shaded position, so the animated-pose term is identical to R1's); the SSBO bindings 0/2/3/4 and vertex attributes 0–15 (R2 adds **zero** vertex attributes — prev skinning reuses `boneIds`/`boneWeights`).
+
+### 9.2 Previous-pose history in `SkeletonAnimator` (CPU)
+
+Two new members mirroring the current ones: `std::vector<glm::mat4> m_prevBoneMatrices;` and `std::vector<float> m_prevMorphWeights;`, plus a `bool m_prevPoseValid = false;`. New const accessors `getPrevBoneMatrices()` / `getPrevMorphWeights()` mirror `getBoneMatrices()` (`skeleton_animator.h:136`) / `getMorphWeights()` (`:145`).
+
+**Snapshot timing (capture-before-recompute):** `update()` has an **early-return guard** at `skeleton_animator.cpp:149-155` (`if (!m_playing || m_paused || m_activeClipIndex < 0 || !m_skeleton) return;`) that runs **before** `computeBoneMatrices()` (`:213`). The snapshot must sit **above** that guard so it runs every frame, copying the still-current-from-last-frame pose into the prev buffers before this frame's pose is (re)computed:
+
+```cpp
+void SkeletonAnimator::update(float deltaTime)
+{
+    // Snapshot last frame's pose as "previous" — ABOVE the early-return guard,
+    // so it runs even on the paused/stopped path.
+    if (m_prevPoseValid)
+    {
+        m_prevBoneMatrices = m_boneMatrices;   // last frame's uploaded pose
+        m_prevMorphWeights = m_morphWeights;
+    }
+
+    if (!m_playing || m_paused || m_activeClipIndex < 0 || !m_skeleton)
+    {
+        // ... existing root-motion-delta clear ...
+        if (!m_prevPoseValid) { /* seed prev = current; set m_prevPoseValid = true */ }
+        return;                 // pose frozen ⇒ prev == current ⇒ zero pose motion
+    }
+
+    // ... existing advance + computeBoneMatrices() → fills m_boneMatrices / m_morphWeights ...
+
+    if (!m_prevPoseValid)        // first update with a real pose: seed prev = current → zero motion frame 1
+    {
+        m_prevBoneMatrices = m_boneMatrices;
+        m_prevMorphWeights = m_morphWeights;
+        m_prevPoseValid = true;
+    }
+}
+```
+
+This gives prev = exactly the pose rendered last frame, so the motion term is a true one-frame delta. **Paused / stopped** (early-return path): the snapshot still runs but the pose is frozen, so prev == current ⇒ **zero pose motion** — correct (a paused character the camera orbits still gets camera-reprojection motion via the combine fallback and rigid motion via `prevModel`; only the pose delta is zero). **First frame:** prev == current ⇒ zero motion (matches R1's missing-prev fallback philosophy). The seed is safe because `m_boneMatrices` is bind-pose-filled by `initializeBuffers()` (`skeleton_animator.cpp:264,272`) when the skeleton is set (`:370`); with no skeleton the early-return seeds an empty vector, which is benign (the mesh then renders unskinned, `u_hasBones=false`). **Crossfade** (`crossfadeTo`, `skeleton_animator.h:107`) needs no special handling — `m_boneMatrices` already holds the blended result, so snapshotting it captures the blend. **Root motion** in `APPLY_TO_TRANSFORM` mode moves the entity transform (→ carried by `prevModel`, already handled by R1); the bone palette's zeroed root is captured consistently in prev.
+
+**Verified (Rule 13) — animator updates are not render-culling-gated.** `Scene::update` (`scene.cpp:49-56`) calls `m_root->update(deltaTime)`; `Entity::update(float deltaTime, const glm::mat4& parentWorldMatrix)` (`entity.cpp:31-53`) returns early only on `!m_isActive` (`:33`), otherwise updates each component guarded by `if (component->isEnabled())` (`:42-48`), then recurses to **all** children (`:51-54`). Visibility / frustum culling (`m_isVisible`, a separate render-time flag) is **not** checked here. So every *active* entity's *enabled* `SkeletonAnimator` advances each frame regardless of whether it is on-screen, and prev is exactly one frame old when the entity becomes visible. The two preconditions are self-consistent: if the entity is inactive **or** the animator component is disabled, `update()` does not run — neither the snapshot nor the recompute fires, the pose stays frozen, and prev == current ⇒ zero pose motion (correct — a non-advancing pose has no motion).
+
+### 9.3 Animated motion in the scene vertex shader (GPU)
+
+`scene.vert.glsl` already computes `skinnedPos` (`:187`) and `worldPosition = model * vec4(skinnedPos,1)` (`:201`). R2:
+
+1. **Current motion term = the skinned clip position:** replace the base-position current term (`:229`) with `v_currentClip_motion = u_projection * u_view * worldPosition` (== `gl_Position`). For non-skinned meshes this is byte-identical to R1 (base == skinned).
+2. **Previous motion term = previous-frame skinned position.** Add a parallel previous skinning block reusing the **same** `boneIds`/`boneWeights` (locations 10–11) and the same morph deltas (binding 3), but indexing the **previous** bone palette and previous weights:
+   - New SSBO `layout(std430, binding = 7) buffer PrevBoneMatrices { mat4 u_prevBoneMatrices[]; };` (binding 7 — no shader declares it; bindings 5/6 are compute-pass-only, see §9.0)
+   - New uniform `uniform float u_prevMorphWeights[MAX_MORPH_TARGETS];`
+   - Prev block (positions only — motion needs no normals, so the morph **normal**-delta sum is skipped, making it cheaper than the forward block). It must **mirror the forward block's structure exactly** — same `if (w != 0.0)` weight guard and the same `loopCount = min(u_morphTargetCount, MAX_MORPH_TARGETS)` bound — differing only in reading `u_prevMorphWeights[i]` / `u_prevBoneMatrices[…]`. Since the forward block declares `vid`/`vc`/`loopCount` *inside* its `if (u_morphTargetCount > 0)` scope (`scene.vert.glsl:151-159`), **hoist those three declarations above both blocks** so the prev block indexes `u_morphDeltas` identically (else the snippet below references out-of-scope names):
+     ```glsl
+     // (vid, vc, loopCount hoisted above the forward morph block and reused here)
+     vec3 prevMorphedPos = position;
+     if (u_morphTargetCount > 0) {
+         for (int i = 0; i < loopCount; i++) {
+             float pw = u_prevMorphWeights[i];
+             if (pw != 0.0)
+                 prevMorphedPos += pw * u_morphDeltas[i * vc + vid].xyz;   // position delta only
+         }
+     }
+     vec3 prevSkinnedPos = prevMorphedPos;
+     if (u_hasBones) {
+         mat4 pbt = boneWeights.x * u_prevBoneMatrices[boneIds.x]
+                  + boneWeights.y * u_prevBoneMatrices[boneIds.y]
+                  + boneWeights.z * u_prevBoneMatrices[boneIds.z]
+                  + boneWeights.w * u_prevBoneMatrices[boneIds.w];
+         prevSkinnedPos = vec3(pbt * vec4(prevMorphedPos, 1.0));
+     }
+     v_prevClip_motion = u_prevViewProjection * (prevModel * vec4(prevSkinnedPos, 1.0));
+     ```
+     The CPU parity mirror (§9.10 #5) must follow the same guarded structure so GLSL and mirror agree to FP tolerance.
+   The fragment shader is **unchanged** — it still perspective-divides the two clip positions to `currUV − prevUV` (`scene.frag.glsl:42-44` `safeClipDivide`).
+3. **CPU side — prev-pose plumbing (enumerated, mirroring R1's §4.2 touch-point discipline):**
+   - **`RenderItem`** (`scene.h:47-48`, which today carries the borrowed `boneMatrices`/`morphWeights` pointers) gains parallel `prevBoneMatrices` / `prevMorphWeights` pointer fields, assigned at the producer site `scene.cpp:376,380` (where `item.boneMatrices = &animator->getBoneMatrices()` / `item.morphWeights = &animator->getMorphWeights()`) from the new `animator->getPrevBoneMatrices()` / `getPrevMorphWeights()`.
+   - **`InstanceBatch`** (`renderer.h:530-538`) already carries `boneMatrixPtrs`/`morphWeightPtrs` parallel to `modelMatrices` (`:536-537`) — the actual carrier the draw reads from. It gains parallel `prevBoneMatrixPtrs` / `prevMorphWeightPtrs`, pushed in lock-step at the same batch-build `push_back` sites as the existing pointers (`renderer.cpp:2715-2716,2726-2727,2757-2758,2775&2777` — the latter interleaved with `.clear()` at `:2774,2776` in the batch-reuse path — and `:2786-2787`), exactly as R1 added `prevModelMatrices` (`:535`).
+   - **`drawMesh`** (`renderer.h:92-97`, `renderer.cpp:1630-1635`) gains two trailing defaulted params **after** the existing R1 `prevModelMatrix` (`renderer.h:97`): `const std::vector<glm::mat4>* prevBoneMatrices = nullptr`, `const float* prevMorphWeights = nullptr` — default `nullptr`, resolved in-body to the current bone/morph pointers (mirroring how `prevModelMatrix` falls back to `modelMatrix` at `:1646`), so an absent prev ⇒ zero motion. When skinned it uploads `prevBoneMatrices` to a new `m_prevBoneMatrixSSBO` (binding 7) alongside the existing bone upload (`:1660-1661`) and sets `u_prevMorphWeights[i]` alongside `u_morphWeights[i]` (`:1682-1686`).
+   - **Call-site:** a skinned mesh that stays a **single-instance batch** is drawn through the non-instanced `drawMesh` loop at `renderer.cpp:3299` (the MDI path forces `u_hasBones=false` — `:3170` *"MDI path doesn't support skinning"*), and that loop runs **before** the motion attachment is masked off at `:3306-3311`. So `:3299` is the site that passes the new `batch.prevBoneMatrixPtrs[mi]` / `prevMorphWeightPtrs[mi]` (subject to the routing requirement below). Every other posed draw is outside the motion write and needs nothing: the **transparent** `drawMesh` (`:3442`) runs *after* the `:3306-3311` mask, so its motion output is discarded regardless (prev would default to current anyway — harmless); the **cloth** pass (`:3315-3343`) uses raw `glDrawElements` with `u_hasBones=false` (never `drawMesh`, never skinned); the **shadow / id-buffer / outline** passes (`:3928`, `:4112`, …) use different shaders with no location-1 output.
+   - **Routing requirement (load-bearing — verified batcher gap):** `buildInstanceBatches` keys batches on `(item.mesh, item.material)` only (`renderer.cpp:2751`), with `MIN_INSTANCE_BATCH_SIZE = 2` (`renderer.h:549`) — **skinned-ness is not in the key**. So ≥ 2 skinned entities sharing one mesh+material pointer (a crowd of identical characters) batch together, cross the threshold, and take the **instanced** path (`:3247`), which forces `u_hasBones=false` (`:3253` *"Instancing doesn't support skinning"*) → they render at **bind pose** and never reach the `:3299` skinning draw. Under R1 this was invisible (motion was rigid regardless), but it breaks R2's premise — a batched-away skinned mesh gets neither animated shading nor animated motion — and is a latent R1-era correctness bug in its own right. **R2 must exclude skinned/morphed items from instance grouping:** make `item.boneMatrices != nullptr || item.morphWeights != nullptr` force a unique batch key — e.g. widen the `m_batchIndexMap` key from `(mesh, material)` (`:2751`) to `(mesh, material, isSkinnedOrMorphed)`, or simply skip the `m_batchIndexMap` lookup/insert for skinned/morphed items so each lands in its own batch slot — so every skinned/morphed mesh forms a single-instance batch routed through `:3299` with `u_hasBones=true`. This simultaneously repairs the latent bind-pose bug for shared-mesh skinned crowds — which means it changes **shaded** output there (the crowd now animates visibly, not merely its motion vectors), so the visual-regression baseline for any shared-mesh skinned scene must be re-captured, not only the motion-parity test #9. Pinned by §9.10 test #9 (routing) + a visual re-baseline.
+4. **Mesa dummy (binding 7):** add `m_dummyPrevBoneSSBO` created alongside the other dummies (`renderer.cpp:143-156` model/prev-model, `:200-201` morph) and bound at frame start in the existing dummy-bind block (`:778-782`, which already binds 0/2/3/4), since `scene.vert.glsl`'s `binding = 7` declaration is live for **every** `m_sceneShader` draw (opaque/cloth/transparent/non-TAA). The real prev-bone SSBO is bound over it only for skinned `drawMesh` calls.
+
+**Cost:** skinned vertices do the bone-blend matrix sum twice (current + prev). Vertex-stage ALU, modest skinned vertex counts → negligible vs the fragment stage. The morph prev sum skips normal deltas (half the work of the forward morph block).
+
+### 9.4 Previous-frame normal buffer
+
+**Prerequisite — extend `Framebuffer` to a third attachment (R2's first commit, the analogue of R1's §4.0).** `Framebuffer` today supports exactly two colour attachments: a `secondColorAttachment` flag + `m_colorAttachment1` (`framebuffer.h:23,105`), `bindColorTexture(unit, attachmentIndex)` (already index-parameterised, `:62`), and `clearSecondAttachment()` (`:68`). R2 generalises to a third by **applying §4.0's steps 1–5 at index 2** — the only deltas: a `thirdColorAttachment` flag + `m_colorAttachment2` at `GL_COLOR_ATTACHMENT2`, the `glNamedFramebufferDrawBuffers` list widened to three, `bindColorTexture(unit, 2)`, a per-attachment clear for index 2 (mirroring `clearSecondAttachment`), and `m_colorAttachment2` carried through the move-ctor / move-assignment / `resize()` / `cleanup()` (else leak/double-free). Single- and two-attachment FBOs stay byte-for-byte unchanged.
+
+**Encoding & attachment.** A third attachment (`GL_COLOR_ATTACHMENT2`, RGBA16F) on `m_taaSceneFbo`. `scene.frag.glsl` adds `layout(location = 2) out vec4 normalOut;` and writes `normalOut = vec4(normalize(v_normal), 1.0)` — the **geometric** interpolated world normal, stored signed (no `*0.5+0.5` remap needed → the §9.5 dot product is direct). RGBA16F half-float is **not** an exact round-trip for [-1,1] (~10–11 mantissa bits), but that is far finer than the disocclusion confidence term needs. Full `xyz` in `.rgb` is chosen over octahedral-in-`.rg` for legibility (six-month test); octahedral packing is noted as a future bandwidth micro-opt if profiling ever demands it. `.a` is **unused in R2** — written as `1.0` but not read anywhere; do not build to a value. (A later slice such as R4 SSGI *could* repurpose it for linear depth / roughness — future work, not part of the R2 contract.)
+
+**Per-pass gating — identical rule to R1's attachment 1.** The normal is written **only** for opaque `renderItems` (the geometry the disocclusion signal is meaningful for). The R1 attachment-1 colour mask (`glColorMaski(1, …)` enabled only around the opaque draws) is **extended to also cover attachment 2** — both are masked off for cloth/transparent/skybox/terrain/water. Those passes leave attachment 2 at its cleared value. The §4.0-step-5 per-attachment clear is extended: `glClearNamedFramebufferfv(fbo, GL_COLOR, 2, vec4(0,0,0,0))` each frame, so an uncovered pixel reads a **zero-length** normal — the §9.5 sentinel that disables `V_mask` there (those pixels keep R1/today's motion-only feedback). This means **no normal/`V_mask` for cloth/terrain/water** — consistent with their camera-motion fallback; a deliberate scope boundary, not a regression.
+
+**Previous-frame retention — blit, not ping-pong (simpler path, Rule 9).** The resolve needs last frame's normal sampled at `historyUV`. Decision: a dedicated persistent single-attachment `m_prevNormalFbo` (RGBA16F), and **after** the resolve pass, one `glBlitNamedFramebuffer` copies `m_taaSceneFbo` attachment 2 → `m_prevNormalFbo` (so it holds this frame's normal as "prev" for next frame). At 1080p RGBA16F this blit is ≈ 0.05–0.08 ms (≈ 0.5 % of the 16.6 ms budget) — a bandwidth estimate, to be confirmed by the launch-time frame-time spot-check (§9.7). A texture-swap ping-pong (re-attaching attachment 2 each frame, zero-copy) was considered and **rejected for R2**: it needs a `Framebuffer` attachment-mutation API and muddies attachment ownership, for a sub-0.1 ms saving. Noted as a deferred micro-opt and the explicit contingency: if the §9.7 frame-time spot-check shows the blit exceeds its estimated budget, switch to the zero-copy ping-pong before sign-off.
+
+**Ordering within the frame:** scene pass writes att2 (current normal) → combine → resolve reads att2 (current) + `m_prevNormalFbo` (last frame) → blit att2 → `m_prevNormalFbo`. The blit lands in the same end-of-frame slot as the existing TAA `swapBuffers()`.
+
+### 9.5 `V_mask` disocclusion in TAA resolve (GPU)
+
+`taa_resolve.frag.glsl` gains two samplers — `u_currentNormal` (m_taaSceneFbo att2) and `u_prevNormal` (m_prevNormalFbo) — bound by the resolve pass at the next free texture units (units 3 and 4; current/history/motion occupy 0/1/2, `renderer.cpp:1000-1005`). These unit numbers are scoped to the **resolve** pass (`:994-1014`); the separate combine pass (`:983-988`, shader `m_motionVectorShader`) reuses units 0/1 on its own shader and is unaffected. The combine pass (§4.4) gains **no** new samplers — `u_currentNormal`/`u_prevNormal` bind only in the resolve pass.
+
+```glsl
+vec3 nCur  = texture(u_currentNormal, v_texCoord).xyz;
+vec3 nPrev = texture(u_prevNormal,    historyUV).xyz;     // same reprojection as colour history
+
+float vMask = 0.0;
+// Only where opaque geometry wrote a real normal this frame (cleared = zero-length sentinel).
+if (dot(nCur, nCur) > 0.01)
+{
+    float ndot = clamp(dot(normalize(nCur), normalize(nPrev)), 0.0, 1.0);
+    vMask = clamp(u_disocclusionAlpha * (1.0 - ndot), 0.0, 1.0);   // V_mask = α(1 − n_cur·n_prev)
+}
+feedback *= (1.0 - vMask);   // disocclusion / strong rotation ⇒ reject history ⇒ no smear
+```
+
+This is one more multiplicative confidence term layered onto the existing motion-length and clip-distance reductions (`:129-135`) — when normals agree (`ndot≈1`) `V_mask≈0` and behaviour is unchanged; at a disoccluded edge (a swinging limb revealing background, or a surface rotating in place — the case motion vectors alone can't flag) the normals diverge and history is rejected. Where no normal was written (cloth/terrain/sky/transparent, `nCur` zero-length) `V_mask=0` ⇒ today's behaviour exactly.
+
+**`u_disocclusionAlpha` (α) and the response curve are a Formula Workbench item (Rule 6).** `α` trades ghosting suppression against temporal stability (too high → flicker/loss of AA at grazing normals; too low → residual smear). It is **not** hand-tuned: authored/fit in `tools/formula_workbench/` against captured disocclusion sequences and exported as the uniform default. Until reference captures exist, a conservative placeholder `α = 1.0` ships with a `TODO: revisit u_disocclusionAlpha via Formula Workbench` comment beside the uniform. The capture set (a few short disocclusion sequences — a limb sweeping across background, a head turning in place) is produced by the R2 implementer as the Workbench input. **Ship-or-block gate:** the `α = 1.0` placeholder may ship only if the fog/HUD benchmark and the ghosting/grazing-angle spot-check (§9.7, §9.10 #10) both stay green; if α = 1.0 over-rejects (the "too high → flicker / loss of AA at grazing normals" failure mode), R2 blocks on the Workbench fit before sign-off. A linear `(1 − ndot)` is the v1 curve; the Workbench may replace it with a smoothstep knee if the linear ramp over-rejects at shallow angles.
+
+### 9.6 Behaviour change vs R1 — the base-position parity test is deliberately replaced
+
+R1's test #7 `SkinnedMeshMotionUsesBasePositionMatchingOverlay` (R1 §7) pinned the *interim* base-position rule. **R2 deliberately changes that behaviour** (skinned motion now uses the animated pose), so that test is **rewritten**, not kept — its replacement (§9.10 test #3) asserts the new animated-pose semantics and that the result reduces to R1's base-position value **only** when the pose is static. This is the one place R2 is *not* parity-preserving, and it is the intended fix (correct character motion under TAA). All other R1 guarantees (rigid bodies, camera fallback, coverage flag, sky) are untouched.
+
+### 9.7 GPU cost & 60 FPS floor
+
+Per TAA frame R2 **adds**: (a) a second bone-blend per skinned vertex + a positions-only morph sum (vertex ALU, negligible); (b) one RGBA16F attachment write in the opaque scene pass (bandwidth, no extra geometry); (c) one prev-bone SSBO upload per skinned `drawMesh` (≤ `MAX_BONES`·64 B = 8 KB per skinned mesh, same magnitude as the existing bone upload); (d) the end-of-frame normal blit (≈ 0.05–0.08 ms); (e) two texture samples + a normalized dot in the resolve (cheap). Skinned characters are a small fraction of a Tabernacle-walkthrough scene, so the dominant adds are the attachment write + the blit — together well under the budget. **60 FPS floor:** structurally safe; pinned by the fog/HUD GPU benchmarks staying green and a launch-time frame-time spot-check in a skinned-character scene (measured, not assumed). The resolve must stay correct under all four AA modes — R2's new resolve uniforms only bind in the TAA resolve pass (`renderer.cpp:994-1014`); SMAA/MSAA/none are untouched.
+
+### 9.8 CPU / GPU placement (Rule 7)
+
+| Work | Placement | Reason |
+|------|-----------|--------|
+| Prev-pose snapshot (`m_prevBoneMatrices`/`m_prevMorphWeights`) | **CPU** (`SkeletonAnimator::update`) | Per-entity, branchy bookkeeping; one `std::vector` copy/frame/animator. Already where the current pose lives. |
+| Second (previous) skinning for the motion term | **GPU** (scene vertex shader) | Per-vertex, data-parallel — same class of work as the forward skinning beside it. |
+| Geometric-normal write | **GPU** (scene fragment shader) | Per-pixel; the normal is already in hand from `v_normal`. |
+| `V_mask` compute + feedback modulation | **GPU** (resolve fragment) | Per-pixel, data-parallel. |
+| `α` disocclusion coefficient + response curve | **Formula Workbench (design-time, CPU)** → uniform | Numerical-design constant; Rule 6 forbids hand-coding it. |
+| Prev-skinning motion math parity | **CPU mirror** pinned against the GLSL (extends `motion_vector_math.h`) | Dual CPU-spec/GPU-runtime with a parity test, per Rule 7. |
+
+No new dual *runtime* path — only the parity-test CPU mirror is added (a previous-pose variant of R1's `computeMotionVectorUV`).
+
+### 9.9 Accessibility
+
+R2 makes animated-character motion **correct** rather than zero, which is a net **reduction** in on-screen smear (R1 left swinging limbs ghosting under TAA) — an improvement for motion-sensitive users, not new flashing. `V_mask` further reduces disocclusion smear. The R1-repurposed `--isolate-feature=motion-overlay` flag (`m_objectMotionOverlayEnabled`, gating `u_writeMotion`) still bisects the whole object-motion path including R2's animated term. No new accessibility hook required; the existing `PostProcessAccessibilitySettings` motion controls continue to govern any motion-blur consumer of the buffer.
+
+### 9.10 Test contract (R2)
+
+GL-free where possible (CPU mirror in `tests/test_motion_vectors_mrt.cpp` / a new `test_skeleton_prev_pose.cpp`):
+
+1. **`PrevPoseSnapshotLagsByOneFrame`** — drive `SkeletonAnimator::update` twice with distinct poses; `getPrevBoneMatrices()`/`getPrevMorphWeights()` equal the **first** update's pose (true one-frame lag).
+2. **`FirstFramePrevPoseEqualsCurrent`** — after a single `update`, prev == current ⇒ the motion mirror yields `(0,0)`.
+3. **`SkinnedMotionUsesAnimatedPose`** (replaces R1 #7) — CPU mirror: a vertex skinned with differing prev/current bone palettes yields motion = `proj(currentSkinned) − proj(prevSkinned)`, non-zero; and reduces **exactly** to R1's base-position value when the two palettes are equal (static pose). Pins the §9.6 behaviour change.
+4. **`StaticPoseStaticCameraZeroMotion`** — equal palettes, `model==prevModel`, `vp==prevVp` ⇒ `(0,0)`.
+5. **`MorphMotionUsesPrevWeights`** — morph-only vertex, `prevWeights ≠ weights` ⇒ motion equals the projected delta-driven displacement; independent of bone state.
+6. **`NormalBufferHoldsGeometricWorldNormal`** (GL) — att2 stores `normalize(world geometric normal)` for an opaque pixel and `(0,0,0,0)` for an uncovered pixel under a non-zero scene clear colour (extends the R1 C-A clear-to-zero guard to attachment 2).
+7. **`VMaskZeroWhenNormalsAgreeFullWhenOpposed`** — CPU mirror of `α(1−n·n')`: `ndot=1 ⇒ 0`; `ndot=0 ⇒ clamp(α,0,1)`; monotonic in `(1−ndot)`; `feedback*(1−vMask)` monotonically non-increasing.
+8. **`VMaskDisabledWhereNoNormal`** — zero-length `nCur` sentinel ⇒ `vMask=0` ⇒ cloth/terrain/sky keep R1 feedback unchanged.
+9. **`SkinnedMeshNeverInstanceBatched`** — two render items with the same mesh+material pointer but non-null `boneMatrices` (or `morphWeights`) produce **two** single-instance batches, not one instanced batch ⇒ each routes through the `:3299` skinning draw with `u_hasBones=true`. Pins the §9.3 routing requirement (and guards the latent shared-mesh bind-pose bug).
+10. **`GrazingNormalKeepsAntiAliasing`** (visual/metric spot-check) — at the shipped `α`, a surface seen at a grazing angle (low `n·n_prev` from view-dependent interpolation, **not** true disocclusion) does not lose TAA convergence. Guards the §9.5 α-too-high failure mode and gates the `α = 1.0` ship-or-block decision.
+
+Plus: the `Framebuffer` MRT test extended to **three** attachments (completeness + draw-buffer enumeration + att2 clear-to-zero); the existing TAA/regression suite staying green; the fog/HUD GPU benchmarks not regressing.
+
+### 9.11 Sources (R2)
+
+- **Geometry-pass velocity for skinned meshes (re-skinning the previous pose):** the standard "previous bone matrices" approach — e.g. the velocity-buffer treatment in Karis, "High Quality Temporal Supersampling" (SIGGRAPH 2014) and the *Frostbite*/*Unreal* skinned-velocity convention (skin the vertex twice, with last-frame and this-frame palettes). R2 applies it within the engine's existing single-pass MRT.
+- **`V_mask = α(1 − n_cur·n_prev)` normal-based disocclusion:** nVidia GDC 2024 "rain puddles" technique, per the ROADMAP bullet. Normal-divergence catches in-place rotation and tangential disocclusion that a depth-only test misses (depth-based disocclusion was considered as the cheaper alternative but also needs a prev-buffer and flags fewer cases).
+- **Reverse-Z / Halton jitter / prev-VP chain:** unchanged engine convention (R1 §8), reused verbatim.
+
+---
+
+## 10. Cold-eyes loop log
 
 ### Loop 1 — 2026-06-19 (R1 design, fresh reviewer, no authoring context)
 
@@ -233,3 +424,19 @@ Loop-1/2/3 fixes all **held**. Reviewer's explicit verdict: **no CRITICAL/HIGH/M
 - **INFO — legacy prev-model needs a *separate* instance VBO + binding point**, not the shared `m_instanceBuffer`. **Fixed:** §4.2 clarified.
 
 Per the session standing convergence directive (move on when a loop returns only verified, implemented polish — no structural/mechanical/architectural fixes), the loop is **converged**. R1 is signed off for implementation.
+
+---
+
+### R2 design-of-record — Loops 1–9 — 2026-06-19 (each loop a fresh reviewer, no authoring context, no briefing on prior-loop fixes)
+
+Nine cold loops; every actionable severity (CRITICAL/HIGH/MEDIUM/LOW) verified against source and fixed before the next pass. Convergence: Loops 7–9 returned **zero** architectural/structural/mechanical defects — only citation-precision/wording polish — so per the convergence directive (and the owner's delegated sign-off) the loop is **converged** and R2 is signed off for implementation.
+
+- **Loop 1** — *C (binding 5 free?)* Prev-bone SSBO at binding 5 — **false**: 5 used by particle-sort/cloth-dihedral, 6 by cloth-normals → moved to **binding 7** (no shader declares it). *H (stale Mesa-dummy cite `:760-764`)* → repointed to `:143-156`/`:778-782` (and the inherited R1 §4.2 cite). *M (early-return)* `update()` early-returns at `skeleton_animator.cpp:149-155` before `computeBoneMatrices()` — snapshot placement specified above the guard. *M (culled animators)* — verified **not** culling-gated (`entity.cpp:31-54`, gated by `m_isActive`/`isEnabled()` only).
+- **Loop 2** — *C* §9.3 step 3 still said "binding 5" (steps 2/4 already fixed) → 7. *H* `Entity::update` signature + `isEnabled()` gate (`entity.cpp:44`) added to the Rule-13 verification. *M* "no `m_prev*` members" false (`m_prevRoot*` exist `:211-212`) → narrowed to "no previous *pose* snapshot". *M* `drawMesh` touch-points under-enumerated.
+- **Loop 3** — *C* call-site mapping **inverted** (I'd labelled `:3442` opaque / `:3299` cloth) — corrected: `:3299` is the opaque single-instance skinned draw (before the `:3306` mask), `:3442` is the masked transparent pass, cloth uses `glDrawElements`. *H* binding-5/6 rationale imprecise. *M* `drawMesh` signature cite `:92-96`→`:92-97`. Added the §9.4 **Framebuffer third-attachment prerequisite** (analogue of R1 §4.0).
+- **Loop 4** — 0 C / 0 H. *M* blit-location cite pointed at a comment (`:985-988`) → real blits `:830-834`/`:860-863`. *M* "binding 5/6 compute-only" — 5 also in `particle_gpu.vert.glsl:32`. *L* default-param idiom (`nullptr` + in-body fallback).
+- **Loop 5** — *C (NEW, structural)* `buildInstanceBatches` keys on `(mesh,material)` only (`:2751`), `MIN_INSTANCE_BATCH_SIZE=2`, instanced path forces `u_hasBones=false` (`:3253`) → ≥2 skinned meshes sharing a mesh+material render at **bind pose** and never reach `:3299`. Added the **routing requirement** (exclude skinned/morphed items from instance grouping) + test #9; also a latent R1-era shading bug. *H* α-fit ownerless → added capture-set owner + ship-or-block gate. *M* α grazing-angle acceptance (test #10), resolve/combine unit scoping, blit contingency.
+- **Loop 6** — 0 C. *H* prev-skinning GLSL snippet referenced block-local `vid`/`vc`/`loopCount` → specified hoist + mirror the forward block's `if (w!=0)` guard. *M* prev-morph mirror exactness; demote att2 `.a` "reserved for R4" to future-work; combine pass gains no samplers.
+- **Loop 7** — 0 C / 0 H. *M* stale binding-decl cite `scene.vert.glsl:27,33,43` → `:47,56,41` (R1 §4.2). Softened "losslessly" (RGBA16F half-float); added key-widening mechanism steer.
+- **Loop 8** — 0 C. *H* routing fix also changes **shaded** output → added visual-re-baseline note. *M* prev-pose seed precondition (bind-pose fill `:264,272`/`:370`) cited; *M* §9.4 third-attachment prose collapsed to a §4.0 reference. (One LOW — `InstanceBatch` range — **dismissed as unverified**: brace is at `:538`, cite already correct.)
+- **Loop 9** — 0 C / 0 design defects. Verdict: *"§9 is a strong, implementable design-of-record."* *H/M* citation-precision only: push-site range spanned a `.clear()` (`:2774-2777` clarified to the `push_back` lines `:2775&2777`); `m_dummyMorphSSBO` def is `:200-201` (not in `143-156`); binding-5/6 grouping reworded. All fixed → **converged**.
