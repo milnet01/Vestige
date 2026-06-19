@@ -26,12 +26,14 @@ Framebuffer::Framebuffer(Framebuffer&& other) noexcept
     : m_config(other.m_config)
     , m_fboId(other.m_fboId)
     , m_colorAttachment(other.m_colorAttachment)
+    , m_colorAttachment1(other.m_colorAttachment1)
     , m_depthAttachment(other.m_depthAttachment)
     , m_isDepthRenderbuffer(other.m_isDepthRenderbuffer)
     , m_isComplete(other.m_isComplete)
 {
     other.m_fboId = 0;
     other.m_colorAttachment = 0;
+    other.m_colorAttachment1 = 0;
     other.m_depthAttachment = 0;
     other.m_isComplete = false;
 }
@@ -44,11 +46,13 @@ Framebuffer& Framebuffer::operator=(Framebuffer&& other) noexcept
         m_config = other.m_config;
         m_fboId = other.m_fboId;
         m_colorAttachment = other.m_colorAttachment;
+        m_colorAttachment1 = other.m_colorAttachment1;
         m_depthAttachment = other.m_depthAttachment;
         m_isDepthRenderbuffer = other.m_isDepthRenderbuffer;
         m_isComplete = other.m_isComplete;
         other.m_fboId = 0;
         other.m_colorAttachment = 0;
+        other.m_colorAttachment1 = 0;
         other.m_depthAttachment = 0;
         other.m_isComplete = false;
     }
@@ -92,7 +96,7 @@ void Framebuffer::resize(int width, int height)
     create();
 }
 
-void Framebuffer::bindColorTexture(int textureUnit)
+void Framebuffer::bindColorTexture(int textureUnit, int attachmentIndex)
 {
     if (textureUnit < 0 || textureUnit > 31)
     {
@@ -100,7 +104,28 @@ void Framebuffer::bindColorTexture(int textureUnit)
             + std::to_string(textureUnit));
         return;
     }
+    if (attachmentIndex == 1)
+    {
+        if (m_colorAttachment1 == 0)
+        {
+            Logger::error("Framebuffer::bindColorTexture — attachment 1 requested but "
+                "secondColorAttachment is not enabled");
+            return;
+        }
+        glBindTextureUnit(static_cast<GLuint>(textureUnit), m_colorAttachment1);
+        return;
+    }
     glBindTextureUnit(static_cast<GLuint>(textureUnit), m_colorAttachment);
+}
+
+void Framebuffer::clearSecondAttachment()
+{
+    if (m_colorAttachment1 == 0)
+    {
+        return;
+    }
+    const GLfloat zero[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+    glClearNamedFramebufferfv(m_fboId, GL_COLOR, 1, zero);
 }
 
 void Framebuffer::bindDepthTexture(int textureUnit)
@@ -182,6 +207,31 @@ void Framebuffer::create()
             glTextureParameteri(m_colorAttachment, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
             glTextureParameteri(m_colorAttachment, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
             glNamedFramebufferTexture(m_fboId, GL_COLOR_ATTACHMENT0, m_colorAttachment, 0);
+        }
+
+        // --- Optional second color attachment (MRT, e.g. motion vectors) ---
+        // Built generically as bundle-wide infrastructure; reuses the same format as
+        // attachment 0 (RGBA16F for the motion buffer: .rg = motion, .b = coverage flag).
+        // Only the non-MSAA path is supported — the motion attachment lives on the
+        // non-MSAA TAA scene FBO and needs no multisample resolve.
+        if (m_config.secondColorAttachment && !isMultisample)
+        {
+            glCreateTextures(GL_TEXTURE_2D, 1, &m_colorAttachment1);
+            glTextureStorage2D(m_colorAttachment1, 1, colorFormat, m_config.width, m_config.height);
+
+            glTextureParameteri(m_colorAttachment1, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            glTextureParameteri(m_colorAttachment1, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            glTextureParameteri(m_colorAttachment1, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            glTextureParameteri(m_colorAttachment1, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+            glNamedFramebufferTexture(m_fboId, GL_COLOR_ATTACHMENT1, m_colorAttachment1, 0);
+
+            const GLenum drawBuffers[2] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1};
+            glNamedFramebufferDrawBuffers(m_fboId, 2, drawBuffers);
+        }
+        else if (m_config.secondColorAttachment)
+        {
+            Logger::error("Framebuffer: secondColorAttachment requested on a multisampled "
+                "FBO — not supported (motion MRT must be non-MSAA)");
         }
     }
     else
@@ -268,6 +318,12 @@ void Framebuffer::cleanup()
     {
         glDeleteTextures(1, &m_colorAttachment);
         m_colorAttachment = 0;
+    }
+
+    if (m_colorAttachment1 != 0)
+    {
+        glDeleteTextures(1, &m_colorAttachment1);
+        m_colorAttachment1 = 0;
     }
 
     if (m_depthAttachment != 0)

@@ -22,6 +22,25 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-06-19 Phase 10 Rendering — R1.0 Framebuffer MRT support (motion-vector foundation)
+
+**Slice R1, commit 1 of N — `Framebuffer` second colour attachment.** Extends the
+`Framebuffer` wrapper to optionally allocate a second colour attachment
+(`GL_COLOR_ATTACHMENT1`) for multiple-render-target (MRT) output, the foundation
+for emitting motion vectors directly from the geometry pass (and reused later by
+R2's prev-normal buffer and R4's SSGI buffers). New `FramebufferConfig::secondColorAttachment`
+flag (default off — all existing single-attachment FBOs are byte-for-byte unchanged),
+a second `m_colorAttachment1` texture wired through `create()`/`cleanup()`/`resize()`/
+move-ctor/move-assignment, `glNamedFramebufferDrawBuffers` enabling both draw buffers,
+and `bindColorTexture(unit, attachmentIndex)` to sample attachment 1. Adds
+`clearSecondAttachment()` — a per-attachment `glClearNamedFramebufferfv(…, GL_COLOR, 1, 0)`
+that zeroes the motion attachment independent of the scene clear colour, because a
+single `glClear` writes the global clear-colour into *every* draw buffer (a scene with
+blue ≥ 0.5 would otherwise falsely flag every pixel as motion-covered). Covered by 5 new
+tests in `tests/test_framebuffer.cpp` (FBO completeness, draw-buffer enumeration, the
+clear-to-zero-under-non-zero-clear-colour guard, attachment-1 binding), all green on the
+RX 6600. Design-of-record: `docs/phases/phase_10_rendering_design.md` §4.0.
+
 ### 2026-06-19 Phase 10 fog — slice 11.10 editor FogPanel (Fog bundle complete)
 
 **Slice 11.10 — editor FogPanel.** A dockable ImGui panel (Window → Fog) that

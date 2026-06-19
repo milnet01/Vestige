@@ -20,6 +20,7 @@ struct FramebufferConfig
     bool hasDepthAttachment = true;
     bool isFloatingPoint = false;   // true = GL_RGBA16F (for HDR)
     bool isDepthTexture = false;    // true = depth stored as sampleable texture
+    bool secondColorAttachment = false; // true = add a GL_COLOR_ATTACHMENT1 (MRT, e.g. motion vectors)
 };
 
 /// @brief Wraps an OpenGL framebuffer object for off-screen rendering.
@@ -54,9 +55,17 @@ public:
     /// @param height New height in pixels.
     void resize(int width, int height);
 
-    /// @brief Binds the color texture to a texture unit for sampling.
+    /// @brief Binds a color attachment to a texture unit for sampling.
     /// @param textureUnit The texture unit to bind to (e.g., 0 for GL_TEXTURE0).
-    void bindColorTexture(int textureUnit = 0);
+    /// @param attachmentIndex Which color attachment to bind (0 = GL_COLOR_ATTACHMENT0,
+    ///        1 = GL_COLOR_ATTACHMENT1, requires secondColorAttachment).
+    void bindColorTexture(int textureUnit = 0, int attachmentIndex = 0);
+
+    /// @brief Clears the second color attachment (GL_COLOR_ATTACHMENT1) to (0,0,0,0).
+    /// @note A single glClear writes the global clear-color into every draw buffer, so the
+    ///       second attachment must be cleared independently to keep its coverage flag at 0
+    ///       regardless of the scene clear color. No-op if secondColorAttachment is false.
+    void clearSecondAttachment();
 
     /// @brief Binds the depth texture to a texture unit for sampling.
     /// @param textureUnit The texture unit to bind to.
@@ -93,6 +102,7 @@ private:
     FramebufferConfig m_config;
     GLuint m_fboId = 0;
     GLuint m_colorAttachment = 0;
+    GLuint m_colorAttachment1 = 0;       // Second color attachment (GL_COLOR_ATTACHMENT1, MRT)
     GLuint m_depthAttachment = 0;
     bool m_isDepthRenderbuffer = false;  // Tracks depth attachment type for cleanup
     bool m_isComplete = false;           // True if FBO passed completeness check
