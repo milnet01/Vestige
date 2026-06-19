@@ -54,7 +54,7 @@ This bundle is core-render-path surgery, so it is sliced to keep each step indep
 |-------|-------|------------|------------|--------|
 | **R1** | `Framebuffer` MRT support + motion vectors via geometry-pass MRT (rigid-body parity; drop overlay) | M/L | — | ✅ implemented (2026-06-19) |
 | **R2** | Correct skinned/morph motion (prev-pose history) + prev-normal buffer + `V_mask` disocclusion | L | R1 | ✅ implemented (2026-06-19) — 4 commits; 10 new tests, full suite green; α=1.0 placeholder pending Formula Workbench + launch-time grazing-angle spot-check |
-| **R3** | Subsurface scattering (pre-integrated wrap BRDF; per-material thickness/transmission) | M | — | ⬜ design-of-record TBD |
+| **R3** | Subsurface scattering (analytic wrap front-scatter + thickness translucency) | M | — | ✅ design-of-record signed off (§10) — implementing |
 | **R4** | Screen-space global illumination (single-bounce, temporally accumulated) | L | R1 (R2 ideal) | ⬜ design-of-record TBD |
 
 R2–R4 each get a full architecture section (matching §4's fidelity) + their own cold-eyes loop before implementation. This doc ships R1's design first so the foundation is reviewed and built before the features that lean on it.
@@ -369,7 +369,153 @@ Plus: the `Framebuffer` MRT test extended to **three** attachments (completeness
 
 ---
 
-## 10. Cold-eyes loop log
+## 10. Slice R3 — Subsurface scattering (analytic wrap front-scatter + thickness translucency) (design-of-record)
+
+**Status:** ✅ design-of-record SIGNED OFF (2026-06-19) — cold-eyes converged after 4 loops (Loop 4: zero CRITICAL/HIGH/MEDIUM; see §11 R3 log). Sign-off delegated to Claude per the project's spec-sign-off convention (gate = cold-eyes convergence). Ready to implement.
+
+### 10.0 What exists today that R3 builds on (reality check, verified against source)
+
+- The engine is **forward-rendered** with a hybrid shader: a Cook-Torrance **PBR path** (`scene.frag.glsl` `calcDirectionalLightPBR`/`calcPointLightPBR`/`calcSpotLightPBR`) and a legacy **Blinn-Phong path** (`calcDirectionalLight`/`calcPointLight`/`calcSpotLight`). Per-light diffuse uses a hard terminator clamp `NdotL = max(dot(N, L), 0.0)` (PBR: the three `calc*PBR` functions; BP: the three `calc*` functions). The scene shader's lighting paths have **no** SSS, translucency, thickness, or wrap term (grep: two comments in `engine/core/engine.cpp` noting "true SSS is planned for Phase 9" — both stale, now Phase 10). The one pre-existing translucency term in the codebase is an unrelated ad-hoc grass back-light in `foliage.frag.glsl:132-135` (a separate shader, not the scene PBR path); R3 does not touch it.
+- `Material` (`engine/renderer/material.h`/`.cpp`) is a flat field set with clamped setters; PBR fields include `m_albedo`, `m_metallic`, `m_roughness`, `m_ao`, `m_clearcoat`, `m_emissive`. Materials serialize to `assets/materials/<name>.json` via `material_library.cpp` `serializeMat`/`applyMat` (one line per field, both directions).
+- Material uniforms upload in `Renderer::uploadMaterialUniforms(const Material&)` (called from `drawMesh` before each mesh draw); light uniforms upload once per frame in `uploadLightUniforms`. Lights are plain **array uniforms** (`u_pointLights_*[]`, `u_spotLights_*[]`), not SSBOs — so R3 needs **no SSBO / binding-point work** (contrast R1/R2).
+- Shader parity is tested with the 1×1-FBO readback fixture (`tests/shader_parity_helpers.h`, `gl_test_fixture.h`) + a CPU oracle; `extractGlslFunction` inlines a named GLSL function into a test shader so the **same** source is checked on CPU and GPU.
+
+### 10.1 Scope decision — analytic, no LUT, no extra pass (Rule 9 "simpler path", Rule 2 "shortest correct")
+
+The ROADMAP names R3 as "pre-integrated **wrap-lighting** approximation (no ray marching), per-material **thickness/transmission**, for the Tabernacle's dyed-linen curtains." The full Penner & Borshukov pre-integrated-skin technique drives the wrap width from **mesh curvature** via a 2D LUT indexed by `(N·L, curvature)`. R3 deliberately ships the **analytic** subset, not the curvature-LUT:
+
+- **No LUT texture.** A baked `(N·L, curvature)` LUT would consume a texture unit (the engine is already unit-pressured — see `[[gl-compute-in-composite-unit0-clobber]]` and the fog unit-17 placement) and require a curvature buffer. The analytic wrap is a few ALU ops and needs neither.
+- **No screen-space / texture-space diffusion pass.** Those are the deferred-renderer techniques (Jimenez separable SSSS); they need a separate blur pass over a light buffer. R3 stays a per-fragment lighting-model addition with **zero new passes, buffers, or attachments** — the cheapest path for a forward renderer (confirmed by the research survey: wrap models are "the alternative for forward renderers that can't afford separate post-processing passes").
+- **Curvature-driven wrap is future work.** The full Penner curvature LUT (for skin) is deferred to Phase 13 / MetaHuman skin (`3D_E-0014`), which already cross-references R3. R3's use case — **backlit dyed-linen curtains** — is dominated by the *transmission* (back-scatter) term, not the curvature front-scatter, so the analytic subset covers it.
+
+This matches the R1/R2 "foundation/parity-first" posture: ship the version that serves the named use case at the lowest cost, with the heavier variant flagged as a later slice.
+
+### 10.2 The two terms (GPU, in the PBR path)
+
+R3 adds two view-/light-dependent terms to each PBR light function, gated so non-SSS materials are byte-identical to today. Both terms are factored into **standalone GLSL helpers** so each can be lifted into a parity test via `extractGlslFunction` and mirrored on the CPU (§10.5, §10.8 #5/#7). The light functions call the helpers; they do not inline the math.
+
+**Tuned constants are file-scope `const`s**, declared above the helpers (not function-local, not `#define`):
+
+```glsl
+const float SSS_MAX_WRAP   = 0.5;   // max terminator-wrap width (at strength = 1)
+const float SSS_DISTORTION = 0.2;   // normal-perturbation of the back-light direction
+const float SSS_POWER      = 4.0;   // back-scatter lobe tightness
+const float SSS_SCALE      = 1.0;   // back-scatter master scale (future tuning knob; fixed at 1.0)
+```
+
+Because `extractGlslFunction` lifts only the named function body, the parity harness (§10.8) must **prepend these four `const` declarations** to the extracted helper so it compiles standalone — the test file declares them with the same literals.
+
+**(a) Front scatter — colored wrap diffuse.** Soften the terminator and tint the bleed band (NVIDIA GPU Gems 3 ch.16 "wrap lighting"). The helper takes the **raw, signed** `N·L` (NOT the clamped `NdotL` the call sites already hold — the wrap must see `N·L < 0` to bleed past the terminator):
+
+```glsl
+vec3 sssFrontScatter(float rawNdotL, float strength, vec3 color)
+{
+    float lambert = max(rawNdotL, 0.0);                          // the plain Lambert term
+    float wrap    = strength * SSS_MAX_WRAP;
+    float wrapped = max((rawNdotL + wrap) / (1.0 + wrap), 0.0);  // light bleeds past N·L = 0
+    return color * max(wrapped - lambert, 0.0);                  // colored bleed; max() defensive — wrapped ≥ lambert always (test #3)
+}
+```
+
+For `N·L ∈ [0, 1]` the bleed is `wrapped − lambert = wrap·(1 − N·L)/(1 + wrap)`: **0 only at `N·L = 1`** (the pole, surface facing the light head-on), rising monotonically as `N·L` falls, peaking at the terminator (`N·L → 0`) and **continuing into the shadow side** (for `−wrap < N·L < 0`, decaying to 0 at `N·L = −wrap`). So the front-scatter does **not** leave the lit region untouched — it adds a tinted lift across the *whole* diffuse falloff (strongest near the terminator), which is the softened-falloff look subsurface scattering produces. It is `≥ 0` (never darkens) and gated/tinted per material, so the lift is opt-in, not a global change.
+
+**(b) Back scatter — thickness translucency.** The dominant term for backlit thin surfaces (Barré-Brisebois & Bouchard, GDC 2011 "Approximating Translucency"):
+
+```glsl
+vec3 sssBackScatter(vec3 V, vec3 L, vec3 N, float strength, float thickness, vec3 color, vec3 radiance)
+{
+    vec3  backLightDir = normalize(L + N * SSS_DISTORTION);   // inverted-light scatter dir (NOT a half-vector)
+    float backNdV      = pow(clamp(dot(V, -backLightDir), 0.0, 1.0), SSS_POWER) * SSS_SCALE;
+    float transmit     = backNdV * strength * (1.0 - thickness);
+    return color * radiance * transmit;                       // glows when viewing a backlit thin face
+}
+```
+
+`dot(V, −backLightDir)` peaks when the viewer looks back through the surface toward the (distorted) light; it is 0 when the viewer is on the lit side (`V` aligned with `backLightDir`). `(1 − thickness)` makes thin material (curtain weave) transmit more; `thickness = 1` ⇒ no transmission. Back-scatter is **not** occluded by the surface's own front-facing shadow (the light is *behind* it) — it uses the raw light radiance, which is the intended look. **Note on the cited model (§10.9):** Barré-Brisebois & Bouchard use the *un-normalized* `dot(V, −(L + N·distortion))` inside the `pow`; R3 normalizes `L + N·distortion` so the pre-`pow` value is a true cosine in `[−1, 1]` independent of `|L + N·distortion|`, keeping `SSS_POWER` stable across lights — an intentional deviation, not a verbatim transcription.
+
+**Exact fold (do not paraphrase — each PBR function differs).** Today each `calc*PBR` builds `baseLighting = (kD*albedo/PI + specular) * radiance * NdotL` (`scene.frag.glsl:786/837/885`), where the existing clamped `NdotL` (`= max(dot(N,L),0)`, `:764/816/872`) multiplies **both** the diffuse and the specular contributions. R3 changes the **diffuse contribution only**: the diffuse term becomes `kD*(albedo*NdotL + frontScatter)/PI * radiance`, leaving the specular contribution `specular * radiance * NdotL` untouched. The minimal-diff form, inside the `if (u_subsurfaceStrength > 0.0)` gate: compute the raw dot once (the functions only hold the clamped value), call the helper, and append it to `baseLighting`. **Insertion point matters:** these three lines go **immediately after the `baseLighting = …` assignment (`:786/837/885`) and before the `if (u_clearcoat > 0.0)` block (`:789/840/888`)** — appending them after the clearcoat block would skip the clearcoat attenuation the design intends:
+
+```glsl
+float rawNdotL = dot(N, L);   // signed — the clamped NdotL above would kill shadow-side bleed
+vec3  frontScatter = sssFrontScatter(rawNdotL, u_subsurfaceStrength, u_subsurfaceColor);
+baseLighting += kD * frontScatter / PI * radiance;   // clearcoat-attenuated + shadowed with the rest
+```
+
+This places `frontScatter` **inside** `baseLighting`, so it is correctly (a) attenuated by the clearcoat block `baseLighting *= (1.0 - u_clearcoat*Fc)` (`:795/845/893`) — a clearcoat layer dims the subsurface front-scatter showing through it — and (b) multiplied by `*(1.0 - shadow)` for the directional/point functions where that factor exists. **The spot function applies no shadow** (`:897`), so spot front-scatter is unshadowed — consistent with the rest of the spot contribution, which is also unshadowed today (a pre-existing engine state, not introduced by R3).
+
+`backScatter` is added to the **return value**, after the clearcoat block and outside any shadow multiply, because the three functions return differently:
+- `calcDirectionalLightPBR` / `calcPointLightPBR` return `baseLighting * (1.0 - shadow)` (`:799/849`) ⇒ `return baseLighting * (1.0 - shadow) + backScatter;`
+- `calcSpotLightPBR` **applies no shadow** and returns bare `baseLighting` (`:897`) ⇒ `return baseLighting + backScatter;`. (The spot path having no shadow term is pre-existing engine state, unchanged by R3; the consequence — spot-lit front-scatter is unshadowed, like the rest of the spot contribution today — is recorded in §10.10.)
+
+For point and spot lights, `frontScatter`/`backScatter` are automatically scaled by the existing distance attenuation (and spot cone) because they multiply `radiance`, which already folds in `attenuation` (`:814`) and the spot `intensity` (`:870`) — no extra multiply needed.
+
+**Gate.** The `rawNdotL`/`frontScatter` lines and the `backScatter` call+add are wrapped in `if (u_subsurfaceStrength > 0.0) { … }`. When strength is 0 (the default for every existing material), the PBR path is **byte-identical** to today — pinned by test #6. The four `SSS_*` values are the file-scope `const`s declared above the helpers (see §10.6 for cost).
+
+**Blinn-Phong path is out of scope.** SSS materials (curtains, candles, skin) are authored as PBR; the legacy Blinn-Phong functions keep their plain Lambert clamp. Stated so the implementer doesn't half-wire it.
+
+### 10.3 Material fields + serialization (CPU)
+
+Three new PBR fields on `Material`. The two **scalar** setters clamp (the if-statement clamp idiom of `setMetallic`/`setRoughness`); the **vec3** color setter is left **unclamped**, matching the existing `setAlbedo`/`setEmissive` vec3 setters (which do not clamp) — a tint > 1 is a legal over-bright, bounded later by tone-mapping (§10.7):
+
+| Field | Type | Clamp | Default | Meaning |
+|-------|------|-------|---------|---------|
+| `m_subsurfaceStrength` | `float` | [0, 1] (clamped) | **0.0** | Master SSS amount; 0 ⇒ feature off (every existing material) |
+| `m_subsurfaceColor` | `glm::vec3` | unclamped (matches `setAlbedo`) | (1, 1, 1) | Tint of scattered + transmitted light |
+| `m_subsurfaceThickness` | `float` | [0, 1] (clamped) | 0.5 | Uniform thickness proxy; back-transmission ∝ (1 − thickness) |
+
+Serialized in `material_library.cpp` `serializeMat` (write) + `applyMat` (read): the two **scalars** read via `j.value("subsurfaceStrength", 0.0f)` / `j.value("subsurfaceThickness", 0.5f)`; the **vec3** color reads via the existing `readVec3(j, "subsurfaceColor", glm::vec3(1.0f))` helper (the same helper `setAlbedo`/`setEmissive` use — `nlohmann::json::value` cannot deserialize a `glm::vec3` directly). All three are absent-key-tolerant, so **old material JSON without these keys loads unchanged** (additive, no schema bump — same posture as the fog accessibility fields). A thickness *texture* (per-texel thickness, for hems/folds) is explicit **future work**, not R3 — the scalar is the curtain-scale start.
+
+### 10.4 Uniform plumbing (CPU)
+
+`Renderer::uploadMaterialUniforms` sets three new uniforms beside the existing PBR block: `u_subsurfaceStrength` (float), `u_subsurfaceColor` (vec3), `u_subsurfaceThickness` (float). The un-prefixed `u_subsurface*` naming follows the existing `u_clearcoat` / `u_clearcoatRoughness` PBR-extension uniforms (`renderer.cpp:1620-1621`), which are likewise not `u_pbr*`-prefixed — so this is the established pattern for PBR add-ons, not a new convention. No per-frame light-side change; no SSBO; no new texture unit. The three uniforms are declared in `scene.frag.glsl`; the four `SSS_*` tuned constants are the file-scope `const`s from §10.2 (declared once, there).
+
+### 10.5 CPU / GPU placement (Rule 7)
+
+| Work | Placement | Reason |
+|------|-----------|--------|
+| Front-scatter wrap + back-scatter transmission | **GPU** (scene fragment shader, PBR path) | Per-pixel, per-light, data-parallel — same class as the BRDF beside it. |
+| Material fields + JSON round-trip + uniform upload | **CPU** | Authoring/serialization/I/O; branchy, once per material. |
+| SSS math parity | **CPU mirror** (`engine/renderer/subsurface_math.h`) pinned against the GLSL via `extractGlslFunction` | Dual CPU-spec/GPU-runtime with a parity test, per Rule 7 (mirrors `motion_vector_math.h`). |
+| `SSS_MAX_WRAP` / `SSS_DISTORTION` / `SSS_POWER` / `SSS_SCALE` look constants | **Hand-coded** with `TODO: revisit via Formula Workbench` | Rule 6 carve-out: these are an **artistic** look with **no ground-truth reference dataset** to fit (true SSS reference would need a path-traced curtain capture, which does not exist). Same disposition as the fog HG/Schlick decision (slice 11.7 dropped for the same "no reference data / no perf need" reason). If a reference capture is ever produced, the front-scatter falloff is the fittable candidate. |
+
+### 10.6 60 FPS floor
+
+R3 adds, **only on materials with `subsurfaceStrength > 0`**, ~8 ALU ops + one `normalize` + one `pow` per light per fragment, and **nothing** (one compare) on every other material. No new passes, attachments, buffers, texture binds, or draw calls. Structurally the cheapest possible SSS. **Floor & acceptance threshold:** worst case is a full-screen SSS curtain quad lit by the directional light + all active point/spot lights. The pass/fail criterion: with that worst-case scene, total frame time must regress **no more than 0.5 ms** versus the same scene with `subsurfaceStrength = 0` (the gated-off path), and must stay **≥ 60 FPS (≤ 16.6 ms/frame)** outright on the RX 6600 at 1080p. Verified by the §10.8 #8 frame-time benchmark comparing strength-on vs strength-off (measured, not assumed); the existing fog/HUD GPU benchmarks must also stay green (they do not exercise SSS, so they guard against an unrelated regression slipping in alongside). The branch is coherent across a draw (whole material is SSS or not), so no warp-divergence concern.
+
+### 10.7 Accessibility
+
+SSS adds a soft, static glow (no temporal flashing, no strobe), so it does not interact with the photosensitive caps (`PostProcessAccessibilitySettings`). The transmitted-light term is view-dependent but changes smoothly with camera motion — no new accessibility hook required. Worth a one-line note that an over-bright `subsurfaceColor·radiance` could raise scene luminance; clamped by the existing tone-map/auto-exposure path, not a new concern.
+
+### 10.8 Test contract (R3)
+
+GL-free where possible (CPU mirror in a new `tests/test_subsurface.cpp`; GL parity in `tests/test_subsurface_parity.cpp`):
+
+1. **`MaterialSubsurfaceFieldsRoundTrip`** — set the three fields, serialize, deserialize ⇒ equal; **scalar** clamps enforced (strength/thickness ∈ [0,1]); the **color is unclamped** (a (1.5, 1, 1) tint round-trips unchanged, matching `setAlbedo`); **old JSON without the keys loads with defaults** (strength 0, color white, thickness 0.5).
+2. **`FrontScatterZeroAtStrengthZeroAndAtPole`** — CPU mirror: `subsurfaceStrength = 0` ⇒ `frontScatter = 0` for all `N·L` (so the diffuse term equals the plain `kD*albedo/PI*radiance*max(N·L,0)`). For `strength > 0`, asserting the two branches separately: **(i) lit side `N·L ∈ [0, 1]`** — `frontScatter = subsurfaceColor·wrap·(1 − N·L)/(1 + wrap)`, which is `0` **only at `N·L = 1`** and strictly positive for `N·L ∈ [0, 1)` (pins that the whole lit gradient is lifted, not just a terminator band). **(ii) shadow side `N·L ∈ (−wrap, 0)`** — `lambert = 0`, so `frontScatter = subsurfaceColor·(N·L + wrap)/(1 + wrap)` (a *different* expression — the lit-side closed form does not extend below `N·L = 0`), decaying to `0` at `N·L = −wrap`.
+3. **`FrontScatterNeverDarkens`** — CPU mirror: `wrapped ≥ lambert` for all `N·L ∈ [−1, 1]`, all `wrap ∈ [0, 0.5]`. The guard has real content on `N·L ∈ [−wrap, 1]` (below `−wrap` both terms clamp to 0 and the check is the trivial `0 ≥ 0`); the test asserts the lit surface never loses energy across the meaningful range.
+4. **`BackTransmissionPeaksWhenViewingTowardBacklitThinFace`** — CPU mirror: transmission is maximal when `V` aligns with `−backLightDir` (viewer looking back through the surface toward the light) and `thickness → 0`; **0** when `thickness = 1`, or `strength = 0`, or the viewer is on the lit side (`V` aligned with `backLightDir`, so `dot(V, −backLightDir) ≤ 0`).
+5. **`FrontScatterParityCpuVsGlsl`** (GL) — `extractGlslFunction` pulls the **standalone front-scatter helper** (`vec3 sssFrontScatter(float rawNdotL, float strength, vec3 color)`, factored out of `scene.frag.glsl` for exactly this reason) into the test shader, with the four `SSS_*` `const` declarations prepended so it compiles standalone (§10.2). Matches the CPU mirror within tol over a grid of `(rawNdotL, strength)` that **includes negative `N·L`** (so the shadow-side bleed range is actually exercised).
+6. **`SubsurfaceTermsVanishAtStrengthZero`** — the equivalence guard, in two parts that are both achievable with the existing fixture: (a) **CPU mirror** — at `strength = 0`, both `sssFrontScatter(...)` and `sssBackScatter(...)` return exactly `vec3(0)`, so the `baseLighting += …` / `+ backScatter` additions are provably no-ops; (b) **GL parity** — the two extracted helpers return bit-zero at `strength = 0`. Full-shader byte-identity is **not** asserted by extracting `calcDirectionalLightPBR` (it transitively calls `distributionGGX`/`geometrySmith`/`fresnelSchlick`/`calcClearcoatLobe`/`calcShadow` + shadow-map state the 1×1 fixture can't supply); instead it is guaranteed structurally — the additions live behind `if (u_subsurfaceStrength > 0.0)`, so `strength = 0` takes the pre-R3 code path unchanged — and pinned by the existing scene-shader regression/visual suite staying green.
+7. **`BackTransmissionParityCpuVsGlsl`** (GL) — same parity check for the standalone `sssBackScatter` helper over a `(dot(V, −backLightDir), thickness)` grid.
+8. **`SubsurfaceFrameTimeWithinBudget`** (perf, Release/NDEBUG-gated + software-renderer skip, the `test_fog_benchmark.cpp` pattern) — renders a **fixed** worst-case scene (full-screen SSS curtain quad lit by 1 directional + 8 point + 4 spot lights — the maximum light set the fog benchmark uses, so the count is deterministic run-to-run, not "whatever the live scene has") twice — once at `subsurfaceStrength = 0`, once at the authored strength — with `glFinish` timing. **Portable assertion:** strength-on frame time exceeds strength-off by **≤ 0.5 ms** (a hardware-independent delta — the gated-off vs gated-on cost). **Dev-hardware assertion (RX 6600, 1080p):** absolute frame time stays **≤ 16.6 ms**; this arm is dev-hardware-specific (weaker GPUs may exceed it), so CI relies on the portable delta arm. Makes the 60 FPS floor a test, not a narrative claim; the SSS analogue of the existing fog/HUD GPU benchmarks.
+
+### 10.9 Sources (R3)
+
+- **Pre-integrated skin shading / wrap lighting:** Penner & Borshukov, "Pre-Integrated Skin Shading," *GPU Pro 2* (2011); d'Eon & Luebke, "Real-Time Approximations to Subsurface Scattering," *GPU Gems 3* ch. 16 (NVIDIA) — the wrap-diffuse front term and the curvature-LUT (deferred) both come from this lineage.
+- **Cheap translucency (back-scatter):** Barré-Brisebois & Bouchard, "Approximating Translucency for a Fast, Cheap and Convincing Subsurface Scattering Look," GDC 2011 — the `pow(saturate(dot(V, -(L + N·distortion))), p)` transmission model R3 follows, with one intentional deviation (the `L + N·distortion` vector is normalized first; §10.2(b)).
+- **Forward-renderer suitability:** the technique survey (MJP, "An Introduction to Real-Time Subsurface Scattering"; Chaos "Subsurface scattering explained") confirms wrap + thickness-transmission as the standard forward-path choice when a screen-space diffusion pass is not affordable.
+
+### 10.10 Deferred / knowingly-shipped items
+
+Recorded here so they are decisions, not silent gaps:
+
+- **Spot-light front-scatter is unshadowed.** `calcSpotLightPBR` applies no shadow term today (`scene.frag.glsl:897`), so R3's spot front-scatter (folded into `baseLighting`) is not occluded by cast shadows — the same as the rest of the spot contribution. R3 **ships this knowingly** rather than adding spot shadows (out of scope; a spot-shadow pass is its own work item). Consequence: a spot-lit translucent surface behind an occluder may show a little front-scatter it physically shouldn't. Acceptable for the curtain use case (curtains are directional-sun-lit); filed as a follow-up if spot shadows ever land.
+- **`SSS_SCALE = 1.0` is intentionally inert** — a named back-scatter master scale left in the formula so a future Workbench fit (§10.5) has a knob; no behavioral test asserts it (test #7 cannot distinguish `*1.0` from absence).
+- **Per-texel thickness** (a thickness map for hems/folds) and the **curvature-driven pre-integrated front-scatter LUT** (Penner skin) are both future work (§10.1, §10.3), deferred to Phase 13 / MetaHuman skin (`3D_E-0014`). R3 ships the uniform-scalar thickness + analytic wrap.
+
+---
+
+## 11. Cold-eyes loop log
 
 ### Loop 1 — 2026-06-19 (R1 design, fresh reviewer, no authoring context)
 
@@ -440,3 +586,12 @@ Nine cold loops; every actionable severity (CRITICAL/HIGH/MEDIUM/LOW) verified a
 - **Loop 7** — 0 C / 0 H. *M* stale binding-decl cite `scene.vert.glsl:27,33,43` → `:47,56,41` (R1 §4.2). Softened "losslessly" (RGBA16F half-float); added key-widening mechanism steer.
 - **Loop 8** — 0 C. *H* routing fix also changes **shaded** output → added visual-re-baseline note. *M* prev-pose seed precondition (bind-pose fill `:264,272`/`:370`) cited; *M* §9.4 third-attachment prose collapsed to a §4.0 reference. (One LOW — `InstanceBatch` range — **dismissed as unverified**: brace is at `:538`, cite already correct.)
 - **Loop 9** — 0 C / 0 design defects. Verdict: *"§9 is a strong, implementable design-of-record."* *H/M* citation-precision only: push-site range spanned a `.clear()` (`:2774-2777` clarified to the `push_back` lines `:2775&2777`); `m_dummyMorphSSBO` def is `:200-201` (not in `143-156`); binding-5/6 grouping reworded. All fixed → **converged**.
+
+### R3 design-of-record — Loops 1–4 — 2026-06-19 (each loop fresh reviewers, no authoring context, no briefing on prior-loop fixes)
+
+Four cold loops; every actionable severity (CRITICAL/HIGH/MEDIUM/LOW) verified against source and fixed before the next pass. Convergence: Loop 4 returned **zero CRITICAL/HIGH/MEDIUM** — one LOW (perf-benchmark light count) + INFO only — so per the convergence directive (and the owner's delegated sign-off) §10 is **converged** and R3 is signed off for implementation.
+
+- **Loop 1** (2 reviewers) — *H (math)* "front-scatter leaves the lit region unchanged / rises only across the terminator band" is **false**: `wrapped − lambert = wrap·(1−N·L)/(1+wrap)` is positive for all `N·L < 1`, so the whole lit gradient is lifted → §10.2 prose + test #2 corrected. *H* fold recipe said "add backScatter after the shadow multiply" but `calcSpotLightPBR` **applies no shadow** (`:897`, vs dir/point `:799/849`) → per-function fold written out. *H* clearcoat block `baseLighting *= (1-clearcoat*Fc)` (`:795/845/893`) interaction unspecified → stated (front-scatter inside baseLighting ⇒ attenuated; back-scatter outside). *M* §10.0 "no translucency anywhere" false (`foliage.frag.glsl:135`) → scoped to the scene PBR path. *M* test #6 "extract the full light function" infeasible — `extractGlslFunction` lifts one body, `calc*PBR` calls 5 helpers + `calcShadow` → reframed to helper-level + structural gate. *M* vec3 color clamp claimed to "match idiom" but `setAlbedo`/`setEmissive` are unclamped → color left unclamped. *L* garbled inline formula (`/PI-equivalent specular path`) deleted; `Ht`→`backLightDir`; "verbatim" softened (normalize deviation); engine.cpp "Phase 9" comment count.
+- **Loop 2** (2 reviewers) — Loop-1 fixes held (none resurfaced). *C (NEW)* the front-scatter helper needs the **raw signed `dot(N,L)`**, but every call site's `NdotL` is `max(dot,0)` (`:764/816/872`) → clamped input kills all shadow-side bleed (and tests #2/#3 over the `[−1,1]` range become unreachable); fixed by computing `rawNdotL` in the fold and renaming the helper param. *H* two contradictory "diffuse becomes" formulas (the `:405` comment dropped `kD`/`/PI`) → reconciled. *H* the four `SSS_*` constants are free identifiers `extractGlslFunction` won't pull → declared file-scope `const` + parity harness prepends them. *M* vec3 color must deserialize via the existing `readVec3` helper, not `j.value` (which can't read a `glm::vec3`). *M* test #4 "view faces the light" label backwards → reworded to the precise `dot(V,−backLightDir)≤0` condition. *M* front-scatter shadowing claim inconsistent for the spot path → spot-unshadowed noted. *L* `max(wrapped−lambert,0)` flagged defensive.
+- **Loop 3** (2 reviewers) — 0 C / 0 H. Loop-2 raw-`NdotL` CRITICAL did **not** resurface (held). *M* test #2 closed form `wrap·(1−N·L)/(1+wrap)` only valid on `N·L∈[0,1]`; the shadow-side branch is `(N·L+wrap)/(1+wrap)` → test #2 split into two branches. *M* fold insertion point unpinned (a literal "append at end" would skip clearcoat attenuation) → anchored "after `baseLighting=` (`:786/837/885`), before `if (u_clearcoat>0.0)` (`:789/840/888`)". *M* §10.6 perf gate not in the §10.8 test contract → added perf test #8. *M* `u_subsurface*` vs `u_pbr*` naming divergence → noted the `u_clearcoat` unprefixed precedent (`renderer.cpp:1620`). Dangling "see Open question" reference → added §10.10 deferred-items subsection.
+- **Loop 4** (1 reviewer) — **0 C / 0 H / 0 M.** Reviewer independently re-derived both front-scatter branches (continuous at the terminator, both → `wrap/(1+wrap)`), verified the fold algebra, and confirmed every cited line number, the `readVec3` idiom, the clamp asymmetry, and `extractGlslFunction` single-body extraction. Verdict: *"implementation-ready."* *L* perf scene "all active point/spot lights" non-deterministic → pinned to a fixed 1 dir + 8 point + 4 spot set, split into a portable ≤0.5 ms delta arm and a dev-hardware ≤16.6 ms arm. All fixed → **converged**.
