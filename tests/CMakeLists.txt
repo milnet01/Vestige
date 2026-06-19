@@ -23,6 +23,7 @@ add_executable(vestige_tests
     test_scene_deferred_mutation.cpp
     test_ui_focus_navigation.cpp
     test_framebuffer.cpp
+    test_motion_vectors_mrt.cpp
     test_shadow_map.cpp
     test_tangent_calc.cpp
     test_point_shadow_map.cpp
