@@ -49,6 +49,14 @@ layout(std430, binding = 2) buffer BoneMatrices
     mat4 u_boneMatrices[];
 };
 
+// Previous-frame bone matrices (binding 7) — in lock-step with binding 2, for
+// animated motion vectors (Slice R2). Binding 7 is otherwise unused; a dummy SSBO
+// keeps it bound for every scene draw (Mesa requires all declared SSBOs bound).
+layout(std430, binding = 7) buffer PrevBoneMatrices
+{
+    mat4 u_prevBoneMatrices[];
+};
+
 // Morph target deltas (binding 3)
 // Layout: [pos deltas: target0_vert0..N, target1_vert0..N, ...]
 //         [nor deltas: target0_vert0..N, target1_vert0..N, ...]
@@ -77,6 +85,7 @@ const int MAX_MORPH_TARGETS = 8;
 uniform int u_morphTargetCount;                   // 0 = no morph targets
 uniform int u_morphVertexCount;                   // Vertex count for SSBO indexing
 uniform float u_morphWeights[MAX_MORPH_TARGETS];  // Per-target blend weight
+uniform float u_prevMorphWeights[MAX_MORPH_TARGETS]; // Previous-frame weights — motion (R2)
 
 // Normalize `v`; fall back to `fallback` when length is too small for the
 // division to be numerically meaningful. Prevents NaN/Inf propagation into
@@ -142,22 +151,23 @@ void main()
         normalMatrix = u_normalMatrix;
     }
 
+    // Morph/skin indexing — hoisted above both the forward morph block and the
+    // previous-pose motion block (§9.3) so the latter indexes u_morphDeltas
+    // identically. `tc` addresses the normal-delta region and must match the
+    // engine-side upload count exactly, so it stays unclamped. `loopCount` bounds
+    // the iteration so a corrupt / out-of-range uniform can never drive a loop past
+    // the u_morphWeights[] array size.
+    int vid = gl_VertexID;
+    int vc = u_morphVertexCount;
+    int tc = u_morphTargetCount;
+    int loopCount = min(tc, MAX_MORPH_TARGETS);
+
     // --- Morph target deformation (before bone skinning) ---
     vec3 morphedPos = position;
     vec3 morphedNor = normal;
 
     if (u_morphTargetCount > 0)
     {
-        int vid = gl_VertexID;
-        int vc = u_morphVertexCount;
-        // `tc` addresses the normal-delta region of the buffer and must
-        // match the engine-side upload count exactly, so it stays
-        // unclamped. `loopCount` bounds the iteration so a corrupt /
-        // out-of-range uniform can never drive the loop past the
-        // u_morphWeights[] array size.
-        int tc = u_morphTargetCount;
-        int loopCount = min(tc, MAX_MORPH_TARGETS);
-
         for (int i = 0; i < loopCount; i++)
         {
             float w = u_morphWeights[i];
@@ -219,13 +229,34 @@ void main()
     v_texCoord = texCoord;
     v_viewDepth = -(u_view * worldPosition).z;
 
-    // --- Motion vectors (Slice R1) ---
-    // Use the RAW base position (pre-morph, pre-skin) for BOTH terms, exactly as
-    // the deleted overlay did — so skinned/morph meshes get rigid-body motion and
-    // the animated pose (which drove gl_Position above) never enters the motion
-    // output. For non-skinned meshes base == shaded, so the current term equals
-    // gl_Position. u_projection * u_view equals the overlay's jittered VP.
-    vec4 motionBasePos = vec4(position, 1.0);
-    v_currentClip_motion = u_projection * u_view * (model * motionBasePos);
-    v_prevClip_motion = u_prevViewProjection * (prevModel * motionBasePos);
+    // --- Motion vectors (Slice R1 + R2) ---
+    // Current term = the skinned/morphed shaded position (== gl_Position). For
+    // non-skinned, non-morph meshes this equals R1's base-position term exactly.
+    v_currentClip_motion = u_projection * u_view * worldPosition;
+
+    // Previous term = the PREVIOUS-frame skinned/morphed position, reprojected by
+    // last frame's view-projection and model. Mirrors the forward morph + skin blocks
+    // but indexes the previous bone palette / morph weights (positions only — motion
+    // needs no normals). Absent prev data ⇒ prev buffers equal current ⇒ zero pose
+    // motion (the CPU seeds prev = current; a dummy SSBO keeps binding 7 live).
+    vec3 prevMorphedPos = position;
+    if (u_morphTargetCount > 0)
+    {
+        for (int i = 0; i < loopCount; i++)
+        {
+            float pw = u_prevMorphWeights[i];
+            if (pw != 0.0)
+                prevMorphedPos += pw * u_morphDeltas[i * vc + vid].xyz;
+        }
+    }
+    vec3 prevSkinnedPos = prevMorphedPos;
+    if (u_hasBones)
+    {
+        mat4 pbt = boneWeights.x * u_prevBoneMatrices[boneIds.x]
+                 + boneWeights.y * u_prevBoneMatrices[boneIds.y]
+                 + boneWeights.z * u_prevBoneMatrices[boneIds.z]
+                 + boneWeights.w * u_prevBoneMatrices[boneIds.w];
+        prevSkinnedPos = vec3(pbt * vec4(prevMorphedPos, 1.0));
+    }
+    v_prevClip_motion = u_prevViewProjection * (prevModel * vec4(prevSkinnedPos, 1.0));
 }

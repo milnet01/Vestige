@@ -202,6 +202,20 @@ Renderer::Renderer(EventBus& eventBus)
         static_cast<GLsizeiptr>(sizeof(glm::vec4)),
         nullptr, 0);
 
+    // Previous-frame bone matrix SSBO (binding point 7, Slice R2) — animated motion
+    // vectors. Sized like m_boneMatrixSSBO.
+    glCreateBuffers(1, &m_prevBoneMatrixSSBO);
+    glNamedBufferStorage(m_prevBoneMatrixSSBO,
+        static_cast<GLsizeiptr>(MAX_BONES * sizeof(glm::mat4)),
+        nullptr, GL_DYNAMIC_STORAGE_BIT);
+
+    // Dummy SSBO for previous-frame bone matrices (binding point 7) — scene.vert.glsl
+    // declares binding 7 unconditionally; a dummy covers every non-skinned scene draw.
+    glCreateBuffers(1, &m_dummyPrevBoneSSBO);
+    glNamedBufferStorage(m_dummyPrevBoneSSBO,
+        static_cast<GLsizeiptr>(sizeof(glm::mat4)),
+        nullptr, 0);
+
     Logger::info("Renderer initialized (OpenGL 4.5, reverse-Z)");
 }
 
@@ -268,6 +282,14 @@ Renderer::~Renderer()
     if (m_dummyMorphSSBO != 0)
     {
         glDeleteBuffers(1, &m_dummyMorphSSBO);
+    }
+    if (m_prevBoneMatrixSSBO != 0)
+    {
+        glDeleteBuffers(1, &m_prevBoneMatrixSSBO);
+    }
+    if (m_dummyPrevBoneSSBO != 0)
+    {
+        glDeleteBuffers(1, &m_dummyPrevBoneSSBO);
     }
     Logger::debug("Renderer destroyed");
 }
@@ -676,7 +698,22 @@ void Renderer::initFramebuffers(int width, int height, int msaaSamples)
     // Slice R1: second RGBA16F attachment for motion vectors emitted by the scene
     // pass (.rg motion, .b coverage flag). Non-MSAA → directly sampleable, no resolve.
     taaSceneConfig.secondColorAttachment = true;
+    // Slice R2: third RGBA16F attachment for the geometric world normal (.rgb), used by
+    // the resolve's V_mask disocclusion term.
+    taaSceneConfig.thirdColorAttachment = true;
     m_taaSceneFbo = std::make_unique<Framebuffer>(taaSceneConfig);
+
+    // Slice R2: persistent previous-frame normal buffer. Single RGBA16F colour
+    // attachment, no depth; att2 of m_taaSceneFbo is blitted here end-of-frame so the
+    // next frame's resolve can sample last frame's normal at the reprojected historyUV.
+    FramebufferConfig prevNormalConfig;
+    prevNormalConfig.width = width;
+    prevNormalConfig.height = height;
+    prevNormalConfig.samples = 1;
+    prevNormalConfig.hasColorAttachment = true;
+    prevNormalConfig.hasDepthAttachment = false;
+    prevNormalConfig.isFloatingPoint = true;
+    m_prevNormalFbo = std::make_unique<Framebuffer>(prevNormalConfig);
 
     m_taa = std::make_unique<Taa>(width, height);
 
@@ -769,6 +806,9 @@ void Renderer::beginFrame()
     if (isTAA || isSMAA)
     {
         m_taaSceneFbo->clearSecondAttachment();
+        // Slice R2: zero the normal attachment too — an uncovered pixel then reads a
+        // zero-length normal, the V_mask sentinel that disables disocclusion there.
+        m_taaSceneFbo->clearThirdAttachment();
     }
 
     // Ensure clip distance is clean at frame start (water passes enable/disable it)
@@ -780,6 +820,7 @@ void Renderer::beginFrame()
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, m_boneMatrixSSBO);
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, m_dummyMorphSSBO);
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 4, m_dummyPrevModelSSBO);  // prev-model (R1)
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 7, m_dummyPrevBoneSSBO);   // prev-bone (R2)
 
     // Bind fallback textures to ALL sampler units that the scene shader declares.
     // Mesa requires valid textures even when the shader doesn't sample them.
@@ -1003,11 +1044,32 @@ void Renderer::endFrame(float deltaTime)
         m_taaResolveShader.setInt("u_historyTexture", 1);
         m_taa->getMotionVectorFbo().bindColorTexture(2);
         m_taaResolveShader.setInt("u_motionVectorTexture", 2);
+        // Slice R2: normal buffers for the V_mask disocclusion term. Current normal =
+        // m_taaSceneFbo attachment 2 (survives the colour blit, like the motion attachment);
+        // previous normal = m_prevNormalFbo (blitted from att2 at the end of last frame).
+        m_taaSceneFbo->bindColorTexture(3, 2);
+        m_taaResolveShader.setInt("u_currentNormal", 3);
+        m_prevNormalFbo->bindColorTexture(4, 0);
+        m_taaResolveShader.setInt("u_prevNormal", 4);
+        // TODO: revisit u_disocclusionAlpha via Formula Workbench (§9.5) — α trades
+        // ghosting suppression against temporal stability; α = 1.0 is the conservative
+        // placeholder until disocclusion reference captures are fitted in the Workbench.
+        m_taaResolveShader.setFloat("u_disocclusionAlpha", 1.0f);
         m_taaResolveShader.setFloat("u_feedbackFactor", m_taa->getFeedbackFactor());
         m_taaResolveShader.setVec2("u_texelSize",
             glm::vec2(1.0f / static_cast<float>(m_windowWidth),
                       1.0f / static_cast<float>(m_windowHeight)));
         m_screenQuad->draw();
+
+        // Slice R2: retain this frame's normal as "previous" for next frame's resolve.
+        // Blit m_taaSceneFbo attachment 2 → m_prevNormalFbo attachment 0. Done after the
+        // resolve has read the old m_prevNormalFbo, so the prev buffer is one frame old.
+        glNamedFramebufferReadBuffer(m_taaSceneFbo->getId(), GL_COLOR_ATTACHMENT2);
+        glBlitNamedFramebuffer(m_taaSceneFbo->getId(), m_prevNormalFbo->getId(),
+            0, 0, m_windowWidth, m_windowHeight,
+            0, 0, m_windowWidth, m_windowHeight,
+            GL_COLOR_BUFFER_BIT, GL_NEAREST);
+        glNamedFramebufferReadBuffer(m_taaSceneFbo->getId(), GL_COLOR_ATTACHMENT0);
 
         // Use TAA output as bloom/composite input
         hdrSourceFbo = &m_taa->getCurrentFbo();
@@ -1632,8 +1694,15 @@ void Renderer::drawMesh(const Mesh& mesh, const glm::mat4& modelMatrix,
                          float /*aspectRatio*/,
                          const std::vector<glm::mat4>* boneMatrices,
                          const float* morphWeights, int morphWeightCount,
-                         const glm::mat4* prevModelMatrix)
+                         const glm::mat4* prevModelMatrix,
+                         const std::vector<glm::mat4>* prevBoneMatrices,
+                         const float* prevMorphWeights)
 {
+    // Previous-frame pose for animated motion vectors (Slice R2). Absent prev ⇒ fall back
+    // to the current pose ⇒ prev == current ⇒ zero pose motion (mirrors u_prevModel).
+    if (!prevBoneMatrices) prevBoneMatrices = boneMatrices;
+    if (!prevMorphWeights) prevMorphWeights = morphWeights;
+
     m_sceneShader.use();
 
     // Non-instanced draw — use uniform model matrix
@@ -1659,6 +1728,16 @@ void Renderer::drawMesh(const Mesh& mesh, const glm::mat4& modelMatrix,
             boneCount * sizeof(glm::mat4));
         glNamedBufferSubData(m_boneMatrixSSBO, 0, dataSize, boneMatrices->data());
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, m_boneMatrixSSBO);
+
+        // Slice R2: previous-frame bone palette for animated motion (binding 7). Same
+        // count as the current palette (prev mirrors current). The shader reads this
+        // only under u_hasBones, so non-skinned draws leave the frame-start dummy bound.
+        size_t prevBoneCount = std::min(prevBoneMatrices->size(),
+                                        static_cast<size_t>(MAX_BONES));
+        glNamedBufferSubData(m_prevBoneMatrixSSBO, 0,
+            static_cast<GLsizeiptr>(prevBoneCount * sizeof(glm::mat4)),
+            prevBoneMatrices->data());
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 7, m_prevBoneMatrixSSBO);
     }
 
     // Morph target deformation: bind SSBO and set weights
@@ -1679,10 +1758,21 @@ void Renderer::drawMesh(const Mesh& mesh, const glm::mat4& modelMatrix,
             }
             return a;
         }();
+        // Slice R2: parallel previous-frame morph weights for animated motion.
+        static const std::array<std::string, Mesh::MAX_MORPH_TARGETS> PREV_MORPH_NAMES = []{
+            std::array<std::string, Mesh::MAX_MORPH_TARGETS> a;
+            for (int i = 0; i < Mesh::MAX_MORPH_TARGETS; ++i)
+            {
+                a[static_cast<size_t>(i)] = "u_prevMorphWeights[" + std::to_string(i) + "]";
+            }
+            return a;
+        }();
         for (int i = 0; i < activeMorphCount; ++i)
         {
             m_sceneShader.setFloat(MORPH_NAMES[static_cast<size_t>(i)],
                                     morphWeights[i]);
+            m_sceneShader.setFloat(PREV_MORPH_NAMES[static_cast<size_t>(i)],
+                                    prevMorphWeights[i]);
         }
     }
     m_sceneShader.setInt("u_morphTargetCount", activeMorphCount);
@@ -2705,8 +2795,14 @@ std::vector<Renderer::InstanceBatch> Renderer::buildInstanceBatchesStatic(
 
     for (const auto& item : items)
     {
+        // Slice R2 routing fix (mirror of the live buildInstanceBatches): skinned/morphed
+        // items skip the index map so each forms its own single-instance batch and never
+        // takes the bind-pose instanced path. Pinned by test SkinnedMeshNeverInstanceBatched.
+        const bool isSkinnedOrMorphed =
+            (item.boneMatrices != nullptr || item.morphWeights != nullptr);
+
         auto key = std::make_pair(item.mesh, item.material);
-        auto it = indexMap.find(key);
+        auto it = isSkinnedOrMorphed ? indexMap.end() : indexMap.find(key);
         if (it != indexMap.end())
         {
             batches[it->second].modelMatrices.push_back(item.worldMatrix);
@@ -2714,10 +2810,15 @@ std::vector<Renderer::InstanceBatch> Renderer::buildInstanceBatchesStatic(
             batches[it->second].prevModelMatrices.push_back(item.worldMatrix);
             batches[it->second].boneMatrixPtrs.push_back(item.boneMatrices);
             batches[it->second].morphWeightPtrs.push_back(item.morphWeights);
+            batches[it->second].prevBoneMatrixPtrs.push_back(item.prevBoneMatrices);
+            batches[it->second].prevMorphWeightPtrs.push_back(item.prevMorphWeights);
         }
         else
         {
-            indexMap[key] = batches.size();
+            if (!isSkinnedOrMorphed)
+            {
+                indexMap[key] = batches.size();
+            }
             InstanceBatch batch;
             batch.mesh = item.mesh;
             batch.material = item.material;
@@ -2725,6 +2826,8 @@ std::vector<Renderer::InstanceBatch> Renderer::buildInstanceBatchesStatic(
             batch.prevModelMatrices.push_back(item.worldMatrix);
             batch.boneMatrixPtrs.push_back(item.boneMatrices);
             batch.morphWeightPtrs.push_back(item.morphWeights);
+            batch.prevBoneMatrixPtrs.push_back(item.prevBoneMatrices);
+            batch.prevMorphWeightPtrs.push_back(item.prevMorphWeights);
             batches.push_back(std::move(batch));
         }
     }
@@ -2748,19 +2851,34 @@ void Renderer::buildInstanceBatches(
         const glm::mat4 prevModel =
             (prevIt != m_prevWorldMatrices.end()) ? prevIt->second : item.worldMatrix;
 
+        // Slice R2 routing fix: skinned/morphed items must NEVER coalesce into an
+        // instanced batch — the instanced path forces u_hasBones=false, so a shared
+        // mesh+material crowd would render (and emit motion) at bind pose. Skipping the
+        // index-map lookup/insert for them lands each in its own single-instance batch,
+        // routed through the :3299 skinning draw with u_hasBones=true. (Also repairs a
+        // latent R1-era bind-pose bug for shared-mesh skinned crowds.)
+        const bool isSkinnedOrMorphed =
+            (item.boneMatrices != nullptr || item.morphWeights != nullptr);
+
         auto key = std::make_pair(item.mesh, item.material);
-        auto it = m_batchIndexMap.find(key);
+        auto it = isSkinnedOrMorphed ? m_batchIndexMap.end() : m_batchIndexMap.find(key);
         if (it != m_batchIndexMap.end())
         {
             m_instanceBatches[it->second].modelMatrices.push_back(item.worldMatrix);
             m_instanceBatches[it->second].prevModelMatrices.push_back(prevModel);
             m_instanceBatches[it->second].boneMatrixPtrs.push_back(item.boneMatrices);
             m_instanceBatches[it->second].morphWeightPtrs.push_back(item.morphWeights);
+            m_instanceBatches[it->second].prevBoneMatrixPtrs.push_back(item.prevBoneMatrices);
+            m_instanceBatches[it->second].prevMorphWeightPtrs.push_back(item.prevMorphWeights);
         }
         else
         {
             size_t idx = m_instanceBatchCount;
-            m_batchIndexMap[key] = idx;
+            // Register in the index map only for non-skinned/morphed items (see above).
+            if (!isSkinnedOrMorphed)
+            {
+                m_batchIndexMap[key] = idx;
+            }
 
             if (idx < m_instanceBatches.size())
             {
@@ -2775,6 +2893,10 @@ void Renderer::buildInstanceBatches(
                 m_instanceBatches[idx].boneMatrixPtrs.push_back(item.boneMatrices);
                 m_instanceBatches[idx].morphWeightPtrs.clear();
                 m_instanceBatches[idx].morphWeightPtrs.push_back(item.morphWeights);
+                m_instanceBatches[idx].prevBoneMatrixPtrs.clear();
+                m_instanceBatches[idx].prevBoneMatrixPtrs.push_back(item.prevBoneMatrices);
+                m_instanceBatches[idx].prevMorphWeightPtrs.clear();
+                m_instanceBatches[idx].prevMorphWeightPtrs.push_back(item.prevMorphWeights);
             }
             else
             {
@@ -2785,6 +2907,8 @@ void Renderer::buildInstanceBatches(
                 batch.prevModelMatrices.push_back(prevModel);
                 batch.boneMatrixPtrs.push_back(item.boneMatrices);
                 batch.morphWeightPtrs.push_back(item.morphWeights);
+                batch.prevBoneMatrixPtrs.push_back(item.prevBoneMatrices);
+                batch.prevMorphWeightPtrs.push_back(item.prevMorphWeights);
                 m_instanceBatches.push_back(std::move(batch));
             }
             m_instanceBatchCount++;
@@ -3145,6 +3269,7 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
     m_sceneShader.setMat4("u_prevViewProjection", m_prevViewProjection);
     m_sceneShader.setBool("u_writeMotion", m_objectMotionOverlayEnabled);
     glColorMaski(1, GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    glColorMaski(2, GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);  // Slice R2: normal attachment, gated like motion
 
     // --- Scene pass: draw all opaque render items ---
     // MDI path: group batches by material, issue one glMultiDrawElementsIndirect per group.
@@ -3287,7 +3412,9 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
             }
             else
             {
-                // Non-instanced path for single-instance batches
+                // Non-instanced path for single-instance batches — the only opaque path
+                // that reaches drawMesh with u_hasBones=true, so it is where R2's animated
+                // motion vectors are produced (prev bone palette / morph weights, §9.3).
                 for (size_t mi = 0; mi < batch.modelMatrices.size(); mi++)
                 {
                     auto* bones = (mi < batch.boneMatrixPtrs.size()) ? batch.boneMatrixPtrs[mi] : nullptr;
@@ -3296,8 +3423,11 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
                     int mwc = mw ? static_cast<int>(mwPtr->size()) : 0;
                     const glm::mat4* prev = (mi < batch.prevModelMatrices.size())
                                             ? &batch.prevModelMatrices[mi] : nullptr;
+                    auto* prevBones = (mi < batch.prevBoneMatrixPtrs.size()) ? batch.prevBoneMatrixPtrs[mi] : nullptr;
+                    auto* prevMwPtr = (mi < batch.prevMorphWeightPtrs.size()) ? batch.prevMorphWeightPtrs[mi] : nullptr;
+                    const float* prevMw = (prevMwPtr && !prevMwPtr->empty()) ? prevMwPtr->data() : nullptr;
                     drawMesh(*batch.mesh, batch.modelMatrices[mi], *batch.material,
-                             camera, aspectRatio, bones, mw, mwc, prev);
+                             camera, aspectRatio, bones, mw, mwc, prev, prevBones, prevMw);
                 }
             }
         }
@@ -3309,6 +3439,7 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
     // and clear the coverage flag; the combine pass resolves these pixels to the
     // camera-motion fallback (matching the previous behaviour).
     glColorMaski(1, GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
+    glColorMaski(2, GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);  // Slice R2: stop writing normals
     m_sceneShader.use();
     m_sceneShader.setBool("u_writeMotion", false);
 
@@ -3447,9 +3578,10 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
         glDisable(GL_BLEND);
     }
 
-    // Slice R1: restore the attachment-1 colour mask to its default (all channels
-    // writable) so no later pass / FBO inherits the motion-attachment write guard.
+    // Slice R1/R2: restore the attachment-1 and attachment-2 colour masks to their
+    // default (all channels writable) so no later pass / FBO inherits the write guards.
     glColorMaski(1, GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    glColorMaski(2, GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
 }
 
 void Renderer::renderShadowPass(const std::vector<SceneRenderData::RenderItem>& shadowCasterItems,

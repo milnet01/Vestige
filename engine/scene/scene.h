@@ -46,6 +46,8 @@ struct SceneRenderData
         bool isLocked = false;
         const std::vector<glm::mat4>* boneMatrices = nullptr;  ///< Skeletal animation (nullptr for static)
         const std::vector<float>* morphWeights = nullptr;      ///< Morph target weights (nullptr if no morphs)
+        const std::vector<glm::mat4>* prevBoneMatrices = nullptr; ///< Previous-frame bone palette for animated motion vectors (Slice R2)
+        const std::vector<float>* prevMorphWeights = nullptr;     ///< Previous-frame morph weights (Slice R2)
         GLuint morphSSBO = 0;                                  ///< Morph target delta SSBO (0 if no morphs)
         int morphTargetCount = 0;                              ///< Number of active morph targets
         int morphVertexCount = 0;                              ///< Vertex count for SSBO indexing

@@ -13,6 +13,11 @@ uniform sampler2D u_motionVectorTexture;  // Per-pixel motion in UV space
 uniform float u_feedbackFactor;           // History blend weight (e.g. 0.9)
 uniform vec2 u_texelSize;                 // 1.0 / resolution
 
+// Slice R2: normal-based disocclusion (V_mask = α(1 − n_cur·n_prev)).
+uniform sampler2D u_currentNormal;        // This frame's geometric world normal (scene att2)
+uniform sampler2D u_prevNormal;           // Last frame's normal (blitted), sampled at historyUV
+uniform float u_disocclusionAlpha;        // α — disocclusion strength (Formula Workbench, §9.5)
+
 out vec4 fragColor;
 
 // --- Color space conversions (YCoCg gives tighter variance bounds than RGB) ---
@@ -133,6 +138,21 @@ void main()
     // Reduce feedback when clipping moved the history color significantly
     float clipDist = length(historyYCoCg - clippedHistory);
     feedback *= 1.0 / (1.0 + clipDist * 4.0);
+
+    // Slice R2: normal-divergence disocclusion. V_mask = α(1 − n_cur·n_prev) rejects
+    // history where the surface normal changed (a swinging limb revealing background, or
+    // a surface rotating in place — cases motion vectors alone can't flag). Only active
+    // where opaque geometry wrote a real normal this frame; the cleared zero-length
+    // sentinel (cloth/terrain/sky/transparent) leaves feedback untouched (R1 behaviour).
+    vec3 nCur  = texture(u_currentNormal, v_texCoord).xyz;
+    vec3 nPrev = texture(u_prevNormal,    historyUV).xyz;   // same reprojection as colour history
+    float vMask = 0.0;
+    if (dot(nCur, nCur) > 0.01)
+    {
+        float ndot = clamp(dot(normalize(nCur), normalize(nPrev)), 0.0, 1.0);
+        vMask = clamp(u_disocclusionAlpha * (1.0 - ndot), 0.0, 1.0);
+    }
+    feedback *= (1.0 - vMask);
 
     // Blend
     vec3 result = mix(currentColor, historyColor, feedback);

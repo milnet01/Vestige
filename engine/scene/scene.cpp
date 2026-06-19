@@ -374,10 +374,12 @@ void Scene::collectRenderDataRecursive(
         if (animator && animator->isEnabled() && animator->hasBones())
         {
             item.boneMatrices = &animator->getBoneMatrices();
+            item.prevBoneMatrices = &animator->getPrevBoneMatrices();  // animated motion vectors (R2)
         }
         if (animator && animator->isEnabled() && !animator->getMorphWeights().empty())
         {
             item.morphWeights = &animator->getMorphWeights();
+            item.prevMorphWeights = &animator->getPrevMorphWeights();  // animated motion vectors (R2)
         }
 
         // Morph target SSBO from mesh

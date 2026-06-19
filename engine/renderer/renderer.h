@@ -89,12 +89,19 @@ public:
     /// @param boneMatrices Optional bone matrices for skeletal animation (nullptr for static).
     /// @param morphWeights Optional morph target weights (nullptr if no morphs).
     /// @param morphWeightCount Number of morph weights.
+    /// @param prevModelMatrix Optional previous-frame model matrix (defaults to modelMatrix).
+    /// @param prevBoneMatrices Optional previous-frame bone palette for animated motion
+    ///        vectors (Slice R2); defaults to boneMatrices ⇒ zero pose motion when absent.
+    /// @param prevMorphWeights Optional previous-frame morph weights (Slice R2); defaults
+    ///        to morphWeights ⇒ zero morph motion when absent.
     void drawMesh(const Mesh& mesh, const glm::mat4& modelMatrix,
                   const Material& material, const Camera& camera,
                   float aspectRatio,
                   const std::vector<glm::mat4>* boneMatrices = nullptr,
                   const float* morphWeights = nullptr, int morphWeightCount = 0,
-                  const glm::mat4* prevModelMatrix = nullptr);
+                  const glm::mat4* prevModelMatrix = nullptr,
+                  const std::vector<glm::mat4>* prevBoneMatrices = nullptr,
+                  const float* prevMorphWeights = nullptr);
 
     /// @brief Sets the clear color (background color).
     void setClearColor(const glm::vec3& color);
@@ -535,6 +542,8 @@ public:
         std::vector<glm::mat4> prevModelMatrices;                   ///< Parallel to modelMatrices — previous-frame matrices for motion vectors (Slice R1)
         std::vector<const std::vector<glm::mat4>*> boneMatrixPtrs;  ///< Parallel to modelMatrices (nullptr for static)
         std::vector<const std::vector<float>*> morphWeightPtrs;     ///< Parallel to modelMatrices (nullptr if no morphs)
+        std::vector<const std::vector<glm::mat4>*> prevBoneMatrixPtrs;  ///< Parallel — previous-frame bone palette for animated motion vectors (Slice R2)
+        std::vector<const std::vector<float>*> prevMorphWeightPtrs;     ///< Parallel — previous-frame morph weights (Slice R2)
     };
 
     /// @brief Groups render items by (mesh, material) pair for instanced drawing.
@@ -695,6 +704,7 @@ private:
     // TAA
     std::unique_ptr<Taa> m_taa;
     std::unique_ptr<Framebuffer> m_taaSceneFbo;  // Non-MSAA scene FBO for TAA mode
+    std::unique_ptr<Framebuffer> m_prevNormalFbo; // Persistent prev-frame normal buffer (Slice R2); att2 blitted here end-of-frame
     glm::mat4 m_prevViewProjection = glm::mat4(1.0f);
     glm::mat4 m_lastViewProjection = glm::mat4(1.0f);
 
@@ -837,6 +847,16 @@ private:
 
     // Morph target dummy SSBO (binding point 3) — Mesa safety
     GLuint m_dummyMorphSSBO = 0;
+
+    // Previous-frame bone matrix SSBO (binding point 7, Slice R2) — animated motion
+    // vectors. Sized like m_boneMatrixSSBO (MAX_BONES). Bound over the dummy only for
+    // skinned drawMesh calls.
+    GLuint m_prevBoneMatrixSSBO = 0;
+
+    // Dummy SSBO for previous-frame bone matrices (binding point 7, Slice R2) —
+    // scene.vert.glsl declares binding 7 unconditionally, so Mesa requires a valid
+    // buffer bound on every scene-shader draw (non-skinned/cloth/transparent/non-TAA).
+    GLuint m_dummyPrevBoneSSBO = 0;
 
     // Water caustics
     GLuint m_causticsTexture = 0;

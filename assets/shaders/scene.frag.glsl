@@ -30,6 +30,12 @@ layout(location = 0) out vec4 fragColor;
 // pass is the opaque scene pass AND the attachment-1 colour mask is enabled by the
 // renderer (cloth/transparent/skybox passes are masked out).
 layout(location = 1) out vec4 motionOut;
+// Geometric-normal MRT attachment (Slice R2): .rgb = signed world-space geometric
+// normal (no *0.5+0.5 remap → the resolve dot product is direct), .a unused (1.0).
+// Written for every scene draw, but the renderer's attachment-2 colour mask keeps it
+// only around the opaque pass (cloth/transparent/skybox are masked out → cleared
+// zero-length sentinel → V_mask disabled there). Mirrors attachment 1's gating.
+layout(location = 2) out vec4 normalOut;
 
 // Set true only for the opaque renderItems draws; false elsewhere (combine pass then
 // resolves those pixels to the camera-motion fallback). Also the repurposed
@@ -990,6 +996,13 @@ void main()
     vec2 currUV = safeClipDivide(v_currentClip_motion) * 0.5 + 0.5;
     vec2 prevUV = safeClipDivide(v_prevClip_motion) * 0.5 + 0.5;
     motionOut = vec4(currUV - prevUV, u_writeMotion ? 1.0 : 0.0, 0.0);
+
+    // --- Geometric world normal (Slice R2) ---
+    // Written FIRST (like motionOut), before any early return, so attachment 2 is never
+    // undefined for an opaque pixel. safeNormalize → a degenerate (zero-length) v_normal
+    // collapses to the (0,0,0) sentinel rather than a NaN (which LINEAR filtering on the
+    // attachment would spread); that sentinel disables V_mask in the resolve (§9.5).
+    normalOut = vec4(safeNormalize(v_normal, vec3(0.0)), 1.0);
 
     // Wireframe mode — solid color, no lighting
     if (u_wireframe)
