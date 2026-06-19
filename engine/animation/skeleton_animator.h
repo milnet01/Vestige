@@ -135,6 +135,11 @@ public:
     /// Each matrix is: jointGlobalTransform * inverseBindMatrix.
     const std::vector<glm::mat4>& getBoneMatrices() const;
 
+    /// @brief Gets the previous frame's bone matrices (for animated motion vectors).
+    /// Equals the current matrices on the first frame and whenever the pose is frozen
+    /// (paused/stopped), so the resulting pose-motion delta is zero in those cases.
+    const std::vector<glm::mat4>& getPrevBoneMatrices() const;
+
     /// @brief Whether this animator has valid bone data to render.
     bool hasBones() const;
 
@@ -143,6 +148,10 @@ public:
     /// @brief Gets the current morph target weights (sampled from WEIGHTS animation channels).
     /// Empty if no WEIGHTS channels are present.
     const std::vector<float>& getMorphWeights() const;
+
+    /// @brief Gets the previous frame's morph target weights (for animated motion vectors).
+    /// Equals the current weights on the first frame / frozen pose — zero motion delta then.
+    const std::vector<float>& getPrevMorphWeights() const;
 
     /// @brief Sets a morph weight by index (for procedural control, e.g., blink, look-at).
     /// @param index Morph target index.
@@ -189,6 +198,13 @@ private:
 
     // Final output: jointGlobalTransform * inverseBindMatrix
     std::vector<glm::mat4> m_boneMatrices;
+
+    // --- Previous-frame pose (for animated motion vectors, R2) ---
+    // Snapshot of last frame's m_boneMatrices / m_morphWeights, captured at the top of
+    // update() before this frame's pose is recomputed (capture-before-recompute).
+    std::vector<glm::mat4> m_prevBoneMatrices;
+    std::vector<float> m_prevMorphWeights;
+    bool m_prevPoseValid = false;        ///< false until seeded on the first update
 
     // --- Crossfade state ---
     bool m_crossfading = false;

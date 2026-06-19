@@ -146,11 +146,27 @@ void SkeletonAnimator::advanceAndSample(
 // ---------------------------------------------------------------------------
 void SkeletonAnimator::update(float deltaTime)
 {
+    // Snapshot last frame's pose as "previous" (for animated motion vectors) — ABOVE the
+    // early-return guard, so it runs even on the paused/stopped path. m_boneMatrices still
+    // holds last frame's uploaded pose at this point; copy it before this frame recomputes.
+    if (m_prevPoseValid)
+    {
+        m_prevBoneMatrices = m_boneMatrices;
+        m_prevMorphWeights = m_morphWeights;
+    }
+
     if (!m_playing || m_paused || m_activeClipIndex < 0 || !m_skeleton)
     {
         // Clear root motion delta when not playing
         m_rootMotionDeltaPos = glm::vec3(0.0f);
         m_rootMotionDeltaRot = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
+        // Seed prev = current so the frozen pose yields zero motion (prev == current).
+        if (!m_prevPoseValid)
+        {
+            m_prevBoneMatrices = m_boneMatrices;
+            m_prevMorphWeights = m_morphWeights;
+            m_prevPoseValid = true;
+        }
         return;
     }
 
@@ -211,6 +227,14 @@ void SkeletonAnimator::update(float deltaTime)
     extractRootMotion();
 
     computeBoneMatrices();
+
+    // First update with a real pose: seed prev = current so frame 1 has zero pose motion.
+    if (!m_prevPoseValid)
+    {
+        m_prevBoneMatrices = m_boneMatrices;
+        m_prevMorphWeights = m_morphWeights;
+        m_prevPoseValid = true;
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -270,6 +294,10 @@ void SkeletonAnimator::initializeBuffers()
     m_localScales.resize(count);
     m_globalTransforms.resize(count);
     m_boneMatrices.resize(count, glm::mat4(1.0f));
+
+    // Invalidate previous-pose history so the next update re-seeds prev = current for
+    // this (possibly new) skeleton — avoids a stale-skeleton prev frame on a swap.
+    m_prevPoseValid = false;
 
     // Source buffers for crossfade
     m_sourceTranslations.resize(count);
@@ -599,6 +627,12 @@ const std::vector<glm::mat4>& SkeletonAnimator::getBoneMatrices() const
     return m_boneMatrices;
 }
 
+const std::vector<glm::mat4>& SkeletonAnimator::getPrevBoneMatrices() const
+{
+    // Before the first update seeds it, prev mirrors current ⇒ zero motion.
+    return m_prevPoseValid ? m_prevBoneMatrices : m_boneMatrices;
+}
+
 bool SkeletonAnimator::hasBones() const
 {
     return m_skeleton && !m_boneMatrices.empty() && m_playing;
@@ -610,6 +644,11 @@ bool SkeletonAnimator::hasBones() const
 const std::vector<float>& SkeletonAnimator::getMorphWeights() const
 {
     return m_morphWeights;
+}
+
+const std::vector<float>& SkeletonAnimator::getPrevMorphWeights() const
+{
+    return m_prevPoseValid ? m_prevMorphWeights : m_morphWeights;
 }
 
 void SkeletonAnimator::setMorphWeight(int index, float weight)
