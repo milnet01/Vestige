@@ -147,6 +147,14 @@ Renderer::Renderer(EventBus& eventBus)
         static_cast<GLsizeiptr>(sizeof(glm::mat4)),
         nullptr, 0);
 
+    // Dummy SSBO for previous-frame model matrices (binding point 4, Slice R1).
+    // scene.vert.glsl declares binding 4 unconditionally; Mesa requires it bound
+    // on every scene-shader draw, so a dummy covers cloth/transparent/non-TAA frames.
+    glCreateBuffers(1, &m_dummyPrevModelSSBO);
+    glNamedBufferStorage(m_dummyPrevModelSSBO,
+        static_cast<GLsizeiptr>(sizeof(glm::mat4)),
+        nullptr, 0);
+
     // Fallback textures — Mesa requires ALL declared samplers to have valid textures
     // bound at draw time, even when the shader code path doesn't sample them.
     {
@@ -244,6 +252,10 @@ Renderer::~Renderer()
     if (m_dummyModelSSBO != 0)
     {
         glDeleteBuffers(1, &m_dummyModelSSBO);
+    }
+    if (m_dummyPrevModelSSBO != 0)
+    {
+        glDeleteBuffers(1, &m_dummyPrevModelSSBO);
     }
     if (m_fallbackTexture != 0) glDeleteTextures(1, &m_fallbackTexture);
     if (m_fallbackCubemap != 0) glDeleteTextures(1, &m_fallbackCubemap);
@@ -369,18 +381,9 @@ bool Renderer::loadShaders(const std::string& assetPath)
         return false;
     }
 
-    // AUDIT.md §H15 / FIXPLAN G1: per-object motion vector shader, used
-    // for the overlay pass after the camera-motion pass.
-    std::string motionVecObjVertPath =
-        assetPath + "/shaders/motion_vectors_object.vert.glsl";
-    std::string motionVecObjFragPath =
-        assetPath + "/shaders/motion_vectors_object.frag.glsl";
-    if (!m_motionVectorObjectShader.loadFromFiles(motionVecObjVertPath,
-                                                   motionVecObjFragPath))
-    {
-        Logger::error("Failed to load per-object motion vector shader");
-        return false;
-    }
+    // Slice R1: the per-object motion-vector overlay shaders are gone — the scene
+    // pass now emits object motion via MRT and m_motionVectorShader (loaded above)
+    // is the combine pass that selects object vs camera motion.
 
     // Load SMAA shaders
     std::string smaaEdgeVertPath = assetPath + "/shaders/smaa_edge.vert.glsl";
@@ -670,6 +673,9 @@ void Renderer::initFramebuffers(int width, int height, int msaaSamples)
     taaSceneConfig.hasColorAttachment = true;
     taaSceneConfig.hasDepthAttachment = true;
     taaSceneConfig.isFloatingPoint = true;
+    // Slice R1: second RGBA16F attachment for motion vectors emitted by the scene
+    // pass (.rg motion, .b coverage flag). Non-MSAA → directly sampleable, no resolve.
+    taaSceneConfig.secondColorAttachment = true;
     m_taaSceneFbo = std::make_unique<Framebuffer>(taaSceneConfig);
 
     m_taa = std::make_unique<Taa>(width, height);
@@ -695,6 +701,8 @@ void Renderer::initFramebuffers(int width, int height, int msaaSamples)
 
     // Initialize instance buffer for instanced rendering
     m_instanceBuffer = std::make_unique<InstanceBuffer>();
+    // Parallel previous-frame instance matrices for motion vectors (Slice R1).
+    m_prevInstanceBuffer = std::make_unique<InstanceBuffer>();
 
     // Initialize MDI (Multi-Draw Indirect) infrastructure
     m_meshPool = std::make_unique<MeshPool>();
@@ -754,6 +762,15 @@ void Renderer::beginFrame()
     glViewport(0, 0, m_windowWidth, m_windowHeight);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+    // Slice R1: zero the motion attachment independently of the scene clear colour.
+    // The glClear above wrote the clear-colour into BOTH draw buffers, so a scene
+    // with blue >= 0.5 would falsely flag every pixel as motion-covered. (Done while
+    // the attachment-1 colour mask is still default-TRUE so the clear takes effect.)
+    if (isTAA || isSMAA)
+    {
+        m_taaSceneFbo->clearSecondAttachment();
+    }
+
     // Ensure clip distance is clean at frame start (water passes enable/disable it)
     glDisable(GL_CLIP_DISTANCE0);
 
@@ -762,6 +779,7 @@ void Renderer::beginFrame()
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_dummyModelSSBO);
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, m_boneMatrixSSBO);
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, m_dummyMorphSSBO);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 4, m_dummyPrevModelSSBO);  // prev-model (R1)
 
     // Bind fallback textures to ALL sampler units that the scene shader declares.
     // Mesa requires valid textures even when the shader doesn't sample them.
@@ -950,12 +968,12 @@ void Renderer::endFrame(float deltaTime)
     }
     else if (isTAA)
     {
-        // 4a. Motion vector pass — camera motion fallback for skybox + sky.
-        // AUDIT.md §H15 / FIXPLAN G1: this full-screen pass writes the
-        // camera-motion-only reprojection for every pixel; the per-object
-        // overlay pass below then OVERWRITES motion where geometry sits,
-        // using each entity's current-vs-previous world matrix. Depth
-        // test off here (full-screen quad); on for the overlay.
+        // 4a. Motion vector COMBINE pass (Slice R1). The scene pass already emitted
+        // object motion for opaque renderItems into m_taaSceneFbo's attachment 1
+        // (with a coverage flag); this single full-screen pass selects that object
+        // motion where present, else the camera-reprojection motion (cloth/terrain/
+        // water/particles + behind transparent), else (0,0) on sky. This replaces
+        // the old per-object geometry re-draw. Depth test off (full-screen quad).
         m_taa->getMotionVectorFbo().bind();
         glViewport(0, 0, m_windowWidth, m_windowHeight);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -964,63 +982,14 @@ void Renderer::endFrame(float deltaTime)
         m_motionVectorShader.use();
         m_resolveDepthFbo->bindDepthTexture(0);
         m_motionVectorShader.setInt("u_depthTexture", 0);
+        // Scene-pass motion attachment (attachment 1 of the TAA scene FBO). It
+        // survives the colour blit (which copies attachment 0 + depth only).
+        m_taaSceneFbo->bindColorTexture(1, 1);
+        m_motionVectorShader.setInt("u_sceneMotion", 1);
         m_motionVectorShader.setMat4("u_currentInvViewProjection",
             glm::inverse(m_lastViewProjection));
         m_motionVectorShader.setMat4("u_prevViewProjection", m_prevViewProjection);
         m_screenQuad->draw();
-
-        // 4a'. Per-object motion vector overlay (AUDIT.md §H15 / FIXPLAN G1).
-        // Re-render opaque geometry with per-draw u_model / u_prevModel
-        // uniforms. Depth test + write is on so nearest geometry wins.
-        // Dynamic / animated objects now produce correct motion; static
-        // objects produce the same result as the camera-only pass above.
-        // Skinning + morph paths are out of scope here — the overlay
-        // still writes the rigid-body motion, which is better than the
-        // camera-only fallback but will undershoot on animated meshes.
-        // TODO: emit motion directly from the main geometry pass via MRT
-        // for zero-cost correct motion on skinned/morphed objects.
-        //
-        // Diagnostic: --isolate-feature=motion-overlay flips
-        // m_objectMotionOverlayEnabled false to skip this pass entirely
-        // (TAA reverts to camera-only motion). Used to bisect the
-        // 2026-04-13 visual regression.
-        if (m_objectMotionOverlayEnabled) {
-        glEnable(GL_DEPTH_TEST);
-        // Reverse-Z is globally active (glClipControl ZERO_TO_ONE, clearDepth 0.0);
-        // the motion FBO's depth was cleared to 0 (= far), so GL_LESS would never
-        // pass. GL_GREATER matches the engine-wide reverse-Z convention.
-        // (Fixes the 2026-04-13 visual regression referenced above.)
-        glDepthFunc(GL_GREATER);
-        glDepthMask(GL_TRUE);
-
-        m_motionVectorObjectShader.use();
-        m_motionVectorObjectShader.setMat4("u_viewProjection", m_lastViewProjection);
-        m_motionVectorObjectShader.setMat4("u_prevViewProjection", m_prevViewProjection);
-
-        if (m_currentRenderData)
-        {
-            for (const auto& item : m_currentRenderData->renderItems)
-            {
-                if (!item.mesh) continue;
-                auto it = m_prevWorldMatrices.find(item.entityId);
-                const glm::mat4 prevModel =
-                    (it != m_prevWorldMatrices.end()) ? it->second : item.worldMatrix;
-
-                m_motionVectorObjectShader.setMat4("u_model", item.worldMatrix);
-                m_motionVectorObjectShader.setMat4("u_prevModel", prevModel);
-                item.mesh->bind();
-                glDrawElements(GL_TRIANGLES,
-                               static_cast<GLsizei>(item.mesh->getIndexCount()),
-                               GL_UNSIGNED_INT, nullptr);
-                item.mesh->unbind();
-            }
-        }
-
-        // Restore reverse-Z + depth state for the rest of the post-process
-        // pipeline. All subsequent full-screen passes assume depth-test off.
-        glDepthFunc(GL_GEQUAL);
-        glDisable(GL_DEPTH_TEST);
-        }  // end if (m_objectMotionOverlayEnabled)
 
         // 4b. TAA resolve pass
         m_taa->getCurrentFbo().bind();
@@ -1662,7 +1631,8 @@ void Renderer::drawMesh(const Mesh& mesh, const glm::mat4& modelMatrix,
                          const Material& material, const Camera& camera,
                          float /*aspectRatio*/,
                          const std::vector<glm::mat4>* boneMatrices,
-                         const float* morphWeights, int morphWeightCount)
+                         const float* morphWeights, int morphWeightCount,
+                         const glm::mat4* prevModelMatrix)
 {
     m_sceneShader.use();
 
@@ -1670,6 +1640,10 @@ void Renderer::drawMesh(const Mesh& mesh, const glm::mat4& modelMatrix,
     m_sceneShader.setBool("u_useInstancing", false);
     m_sceneShader.setBool("u_useMDI", false);
     m_sceneShader.setMat4("u_model", modelMatrix);
+    // Previous-frame model for motion vectors (Slice R1). Defaults to the current
+    // matrix (zero object motion) when the caller has no prev — e.g. the transparent
+    // pass, whose motion is masked out anyway.
+    m_sceneShader.setMat4("u_prevModel", prevModelMatrix ? *prevModelMatrix : modelMatrix);
     m_sceneShader.setMat3("u_normalMatrix", computeNormalMatrix(modelMatrix));
     m_sceneShader.setMat4("u_view", camera.getViewMatrix());
     m_sceneShader.setMat4("u_projection", m_lastProjection);
@@ -2736,6 +2710,8 @@ std::vector<Renderer::InstanceBatch> Renderer::buildInstanceBatchesStatic(
         if (it != indexMap.end())
         {
             batches[it->second].modelMatrices.push_back(item.worldMatrix);
+            // Static (test) mirror has no prev-world cache → prev = current (zero motion).
+            batches[it->second].prevModelMatrices.push_back(item.worldMatrix);
             batches[it->second].boneMatrixPtrs.push_back(item.boneMatrices);
             batches[it->second].morphWeightPtrs.push_back(item.morphWeights);
         }
@@ -2746,6 +2722,7 @@ std::vector<Renderer::InstanceBatch> Renderer::buildInstanceBatchesStatic(
             batch.mesh = item.mesh;
             batch.material = item.material;
             batch.modelMatrices.push_back(item.worldMatrix);
+            batch.prevModelMatrices.push_back(item.worldMatrix);
             batch.boneMatrixPtrs.push_back(item.boneMatrices);
             batch.morphWeightPtrs.push_back(item.morphWeights);
             batches.push_back(std::move(batch));
@@ -2764,11 +2741,19 @@ void Renderer::buildInstanceBatches(
 
     for (const auto& item : items)
     {
+        // Previous-frame world matrix for motion vectors (Slice R1): from the cache
+        // keyed by entityId, or the current matrix if absent (first frame / new
+        // spawn) → zero object motion, matching the deleted overlay's fallback.
+        auto prevIt = m_prevWorldMatrices.find(item.entityId);
+        const glm::mat4 prevModel =
+            (prevIt != m_prevWorldMatrices.end()) ? prevIt->second : item.worldMatrix;
+
         auto key = std::make_pair(item.mesh, item.material);
         auto it = m_batchIndexMap.find(key);
         if (it != m_batchIndexMap.end())
         {
             m_instanceBatches[it->second].modelMatrices.push_back(item.worldMatrix);
+            m_instanceBatches[it->second].prevModelMatrices.push_back(prevModel);
             m_instanceBatches[it->second].boneMatrixPtrs.push_back(item.boneMatrices);
             m_instanceBatches[it->second].morphWeightPtrs.push_back(item.morphWeights);
         }
@@ -2784,6 +2769,8 @@ void Renderer::buildInstanceBatches(
                 m_instanceBatches[idx].material = item.material;
                 m_instanceBatches[idx].modelMatrices.clear();
                 m_instanceBatches[idx].modelMatrices.push_back(item.worldMatrix);
+                m_instanceBatches[idx].prevModelMatrices.clear();
+                m_instanceBatches[idx].prevModelMatrices.push_back(prevModel);
                 m_instanceBatches[idx].boneMatrixPtrs.clear();
                 m_instanceBatches[idx].boneMatrixPtrs.push_back(item.boneMatrices);
                 m_instanceBatches[idx].morphWeightPtrs.clear();
@@ -2795,6 +2782,7 @@ void Renderer::buildInstanceBatches(
                 batch.mesh = item.mesh;
                 batch.material = item.material;
                 batch.modelMatrices.push_back(item.worldMatrix);
+                batch.prevModelMatrices.push_back(prevModel);
                 batch.boneMatrixPtrs.push_back(item.boneMatrices);
                 batch.morphWeightPtrs.push_back(item.morphWeights);
                 m_instanceBatches.push_back(std::move(batch));
@@ -3146,6 +3134,18 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
         m_sceneShader.setInt("u_causticsTex", 9);
     }
 
+    // --- Motion vectors (Slice R1): set up the opaque scene pass to emit object
+    // motion into attachment 1. The previous-frame VP feeds the prev-clip term;
+    // u_writeMotion sets the coverage flag (gated by the motion-overlay diagnostic);
+    // and the attachment-1 colour mask is enabled ONLY around the opaque renderItems
+    // draws so cloth/skybox/transparent (which don't write valid motion) leave the
+    // motion attachment at its cleared value. The mask is disabled again right after
+    // the opaque block and fully restored at the end of renderScene().
+    m_sceneShader.use();
+    m_sceneShader.setMat4("u_prevViewProjection", m_prevViewProjection);
+    m_sceneShader.setBool("u_writeMotion", m_objectMotionOverlayEnabled);
+    glColorMaski(1, GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+
     // --- Scene pass: draw all opaque render items ---
     // MDI path: group batches by material, issue one glMultiDrawElementsIndirect per group.
     // Falls back to legacy instanced/single-draw when MDI is unavailable.
@@ -3182,7 +3182,8 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
                 if (m_meshPool->hasMesh(batchPtr->mesh))
                 {
                     MeshPoolEntry entry = m_meshPool->getEntry(batchPtr->mesh);
-                    m_indirectBuffer->addCommand(entry, batchPtr->modelMatrices);
+                    m_indirectBuffer->addCommand(entry, batchPtr->modelMatrices,
+                                                 batchPtr->prevModelMatrices);
                 }
             }
             m_indirectBuffer->upload();
@@ -3209,6 +3210,9 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
 
         // Unbind SSBO
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, 0);
+        // Restore the dummy prev-model SSBO at binding 4 (IndirectBuffer::draw bound
+        // the real one) so later scene-shader draws keep a valid buffer there (Mesa).
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 4, m_dummyPrevModelSSBO);
     }
     else
     {
@@ -3252,6 +3256,11 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
                 m_instanceBuffer->upload(batch.modelMatrices);
                 batch.mesh->setupInstanceAttributes(m_instanceBuffer->getHandle());
 
+                // Parallel previous-frame instance matrices for motion vectors (R1):
+                // upload to a second VBO bound at attribs 12-15.
+                m_prevInstanceBuffer->upload(batch.prevModelMatrices);
+                batch.mesh->setupPrevInstanceAttributes(m_prevInstanceBuffer->getHandle());
+
                 // Set a dummy u_model (unused but prevents warnings)
                 m_sceneShader.setMat4("u_model", batch.modelMatrices[0]);
                 m_sceneShader.setMat4("u_view", m_lastView);
@@ -3285,12 +3294,23 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
                     auto* mwPtr = (mi < batch.morphWeightPtrs.size()) ? batch.morphWeightPtrs[mi] : nullptr;
                     const float* mw = (mwPtr && !mwPtr->empty()) ? mwPtr->data() : nullptr;
                     int mwc = mw ? static_cast<int>(mwPtr->size()) : 0;
+                    const glm::mat4* prev = (mi < batch.prevModelMatrices.size())
+                                            ? &batch.prevModelMatrices[mi] : nullptr;
                     drawMesh(*batch.mesh, batch.modelMatrices[mi], *batch.material,
-                             camera, aspectRatio, bones, mw, mwc);
+                             camera, aspectRatio, bones, mw, mwc, prev);
                 }
             }
         }
     }
+
+    // Slice R1: the opaque renderItems are done — stop writing the motion attachment.
+    // Cloth/skybox/transparent don't have a valid prev-model stream (and the skybox
+    // uses a different shader with no location-1 output), so mask attachment 1 off
+    // and clear the coverage flag; the combine pass resolves these pixels to the
+    // camera-motion fallback (matching the previous behaviour).
+    glColorMaski(1, GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
+    m_sceneShader.use();
+    m_sceneShader.setBool("u_writeMotion", false);
 
     // --- Cloth pass: draw dynamic cloth meshes (same shader as opaques) ---
     for (const auto& clothItem : renderData.clothItems)
@@ -3426,6 +3446,10 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
         glDepthMask(GL_TRUE);
         glDisable(GL_BLEND);
     }
+
+    // Slice R1: restore the attachment-1 colour mask to its default (all channels
+    // writable) so no later pass / FBO inherits the motion-attachment write guard.
+    glColorMaski(1, GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
 }
 
 void Renderer::renderShadowPass(const std::vector<SceneRenderData::RenderItem>& shadowCasterItems,

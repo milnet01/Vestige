@@ -270,6 +270,28 @@ void Mesh::setupInstanceAttributes(GLuint instanceVbo) const
     }
 }
 
+void Mesh::setupPrevInstanceAttributes(GLuint prevInstanceVbo) const
+{
+    if (m_vao == 0)
+    {
+        return;
+    }
+
+    // Previous-frame instance VBO on binding point 2 (0 = mesh verts, 1 = current
+    // instance model). Locations 12-15 = the prev-model mat4 columns (motion vectors).
+    glVertexArrayVertexBuffer(m_vao, 2, prevInstanceVbo, 0, sizeof(glm::mat4));
+    glVertexArrayBindingDivisor(m_vao, 2, 1);
+
+    for (int i = 0; i < 4; i++)
+    {
+        GLuint loc = static_cast<GLuint>(12 + i);
+        glEnableVertexArrayAttrib(m_vao, loc);
+        glVertexArrayAttribFormat(m_vao, loc, 4, GL_FLOAT, GL_FALSE,
+            static_cast<GLuint>(i) * static_cast<GLuint>(sizeof(glm::vec4)));
+        glVertexArrayAttribBinding(m_vao, loc, 2);
+    }
+}
+
 GLuint Mesh::getVao() const
 {
     return m_vao;

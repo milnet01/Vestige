@@ -1,6 +1,6 @@
 # Phase 10 — Rendering Enhancements (Design Doc)
 
-**Status:** ✅ Slice R1 signed off for implementation (2026-06-19). Cold-eyes looped to clean — 4 loops, converged Loop 4 with no CRITICAL/HIGH/MEDIUM (polish-only), sign-off delegated per session standing instruction. Sequencing approved by user ("Foundation first"). R2–R4 remain planning-fidelity (each gets its own design-of-record + cold-eyes before implementation). See the Cold-eyes loop log at the foot of this doc.
+**Status:** ✅ **Slice R1 IMPLEMENTED (2026-06-19)** — shipped in two commits: R1.0 `Framebuffer` MRT support (+ 5 tests), then the R1 core (geometry-pass motion MRT, three prev-model paths, combine pass, overlay deleted, + 7 GL-free motion-math parity tests). Verified on the RX 6600 (Mesa 26.1.2): scene + combine shaders compile/link with the MRT outputs and 24 live TAA-mode visual-test captures render with zero GL errors; full unit suite green (3480). Design signed off after 4 cold-eyes loops (converged Loop 4, polish-only). Sequencing approved by user ("Foundation first"). R2–R4 remain planning-fidelity (each gets its own design-of-record + cold-eyes before implementation). See the Cold-eyes loop log at the foot of this doc.
 **Research:** Inline below (per-slice Sources sections). No separate research doc — the techniques (MRT velocity buffers, pre-integrated SSS, SSGI) are well-established; citations are given per slice.
 **Scope:** The three ROADMAP "Rendering Enhancements" bullets — motion vectors from the geometry pass via MRT, subsurface scattering (SSS), and screen-space global illumination (SSGI). This doc is the **design-of-record for Slice R1 (motion-vector MRT, rigid-body parity)** in full (§4); the later slices (R2–R4) are sketched at planning fidelity (§3) and each get their own design-of-record section before implementation.
 
@@ -52,7 +52,7 @@ This bundle is core-render-path surgery, so it is sliced to keep each step indep
 
 | Slice | Title | Complexity | Depends on | Status |
 |-------|-------|------------|------------|--------|
-| **R1** | `Framebuffer` MRT support + motion vectors via geometry-pass MRT (rigid-body parity; drop overlay) | M/L | — | 📝 designed below (§4) |
+| **R1** | `Framebuffer` MRT support + motion vectors via geometry-pass MRT (rigid-body parity; drop overlay) | M/L | — | ✅ implemented (2026-06-19) |
 | **R2** | Correct skinned/morph motion (prev-pose history) + prev-normal buffer + `V_mask` disocclusion | L | R1 | ⬜ design-of-record TBD |
 | **R3** | Subsurface scattering (pre-integrated wrap BRDF; per-material thickness/transmission) | M | — | ⬜ design-of-record TBD |
 | **R4** | Screen-space global illumination (single-bounce, temporally accumulated) | L | R1 (R2 ideal) | ⬜ design-of-record TBD |

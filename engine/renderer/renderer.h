@@ -93,7 +93,8 @@ public:
                   const Material& material, const Camera& camera,
                   float aspectRatio,
                   const std::vector<glm::mat4>* boneMatrices = nullptr,
-                  const float* morphWeights = nullptr, int morphWeightCount = 0);
+                  const float* morphWeights = nullptr, int morphWeightCount = 0,
+                  const glm::mat4* prevModelMatrix = nullptr);
 
     /// @brief Sets the clear color (background color).
     void setClearColor(const glm::vec3& color);
@@ -531,6 +532,7 @@ public:
         const Mesh* mesh;
         const Material* material;
         std::vector<glm::mat4> modelMatrices;
+        std::vector<glm::mat4> prevModelMatrices;                   ///< Parallel to modelMatrices — previous-frame matrices for motion vectors (Slice R1)
         std::vector<const std::vector<glm::mat4>*> boneMatrixPtrs;  ///< Parallel to modelMatrices (nullptr for static)
         std::vector<const std::vector<float>*> morphWeightPtrs;     ///< Parallel to modelMatrices (nullptr if no morphs)
     };
@@ -567,14 +569,10 @@ private:
     Shader m_ssaoShader;
     Shader m_ssaoBlurShader;
     Shader m_taaResolveShader;
+    // Motion-vector COMBINE pass (Slice R1): selects object motion (emitted by the
+    // scene pass via MRT) where present, else camera-reprojection / sky. Replaces the
+    // deleted per-object overlay re-draw (m_motionVectorObjectShader).
     Shader m_motionVectorShader;
-
-    // AUDIT.md §H15 / FIXPLAN G1: per-object motion vector pass.
-    // Runs after the full-screen camera-motion pass and overwrites the
-    // motion buffer wherever scene geometry lives, so TAA reprojection
-    // of dynamic / animated objects reproduces their real motion
-    // instead of showing only the camera's.
-    Shader m_motionVectorObjectShader;
     std::unordered_map<uint32_t, glm::mat4> m_prevWorldMatrices;
     /// @brief Most recent SceneRenderData pointer set by renderScene(),
     /// consumed by endFrame()'s motion vector overlay pass. Nulled after
@@ -738,6 +736,8 @@ private:
 
     // Instanced rendering
     std::unique_ptr<InstanceBuffer> m_instanceBuffer;
+    // Parallel previous-frame instance matrices for motion vectors (Slice R1).
+    std::unique_ptr<InstanceBuffer> m_prevInstanceBuffer;
 
     // Multi-Draw Indirect (MDI). CPU-side frustum culling happens in scene
     // gather; per-instance GPU culling is future work for a later
@@ -819,6 +819,11 @@ private:
     // Dummy SSBO for model matrices (binding point 0) — Mesa requires all declared
     // SSBOs to have valid buffers bound, even when the MDI code path is not taken.
     GLuint m_dummyModelSSBO = 0;
+
+    // Dummy SSBO for previous-frame model matrices (binding point 4, Slice R1) —
+    // scene.vert.glsl declares binding 4 unconditionally, so Mesa requires a valid
+    // buffer bound on every scene-shader draw (cloth/transparent/non-TAA frames).
+    GLuint m_dummyPrevModelSSBO = 0;
 
     // Fallback textures — Mesa requires ALL declared samplers to have valid textures
     // bound at draw time, even when the shader code path doesn't sample them.

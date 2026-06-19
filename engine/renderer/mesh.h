@@ -68,6 +68,11 @@ public:
     /// @param instanceVbo Handle to a VBO containing per-instance mat4 matrices.
     void setupInstanceAttributes(GLuint instanceVbo) const;
 
+    /// @brief Configures PREVIOUS-frame instance attribute slots (locations 12-15)
+    ///        for motion vectors (Slice R1). Parallel stream to setupInstanceAttributes.
+    /// @param prevInstanceVbo Handle to a VBO containing per-instance previous mat4 matrices.
+    void setupPrevInstanceAttributes(GLuint prevInstanceVbo) const;
+
     /// @brief Gets the VAO handle.
     GLuint getVao() const;
 

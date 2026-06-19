@@ -20,7 +20,29 @@ in vec2 v_texCoord;
 in float v_viewDepth;
 in mat3 v_TBN;
 
-out vec4 fragColor;
+// Motion-vector clip positions (Slice R1) — from the raw base object-space position.
+in vec4 v_currentClip_motion;
+in vec4 v_prevClip_motion;
+
+layout(location = 0) out vec4 fragColor;
+// Motion-vector MRT attachment (Slice R1): .rg = currUV - prevUV, .b = coverage flag
+// (1.0 = opaque renderItem wrote object motion), .a unused. Written only when this
+// pass is the opaque scene pass AND the attachment-1 colour mask is enabled by the
+// renderer (cloth/transparent/skybox passes are masked out).
+layout(location = 1) out vec4 motionOut;
+
+// Set true only for the opaque renderItems draws; false elsewhere (combine pass then
+// resolves those pixels to the camera-motion fallback). Also the repurposed
+// motion-overlay isolation diagnostic (--isolate-feature=motion-overlay).
+uniform bool u_writeMotion;
+
+// Perspective divide with the conventional 1e-6 |w| guard (mirrors the deleted
+// motion_vectors_object.frag.glsl and the CPU spec safeClipDivide).
+// TODO: revisit clip-divide epsilon via Formula Workbench once reference data exists.
+vec2 safeClipDivide(vec4 clip)
+{
+    return (abs(clip.w) > 1e-6) ? (clip.xy / clip.w) : vec2(0.0);
+}
 
 // Normalize `v`; fall back to `fallback` when length is too small to divide
 // safely. Used wherever a degenerate input (camera at fragment position,
@@ -960,6 +982,14 @@ float pomSelfShadow(vec2 texCoords, vec3 lightDirTS, float currentHeight)
 
 void main()
 {
+    // --- Motion vectors (Slice R1) ---
+    // Written FIRST, before any early return (e.g. wireframe), so attachment 1 is
+    // never left undefined for an opaque pixel. .rg = currUV - prevUV; .b = coverage
+    // flag (1.0 when this is the gated opaque pass). The renderer's attachment-1
+    // colour mask discards this for cloth/transparent/skybox passes.
+    vec2 currUV = safeClipDivide(v_currentClip_motion) * 0.5 + 0.5;
+    vec2 prevUV = safeClipDivide(v_prevClip_motion) * 0.5 + 0.5;
+    motionOut = vec4(currUV - prevUV, u_writeMotion ? 1.0 : 0.0, 0.0);
 
     // Wireframe mode — solid color, no lighting
     if (u_wireframe)

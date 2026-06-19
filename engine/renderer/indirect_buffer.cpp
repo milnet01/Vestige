@@ -12,16 +12,19 @@ IndirectBuffer::IndirectBuffer()
 {
     glCreateBuffers(1, &m_commandBuffer);
     glCreateBuffers(1, &m_matrixSsbo);
+    glCreateBuffers(1, &m_prevMatrixSsbo);
 }
 
 IndirectBuffer::~IndirectBuffer()
 {
     if (m_commandBuffer != 0) glDeleteBuffers(1, &m_commandBuffer);
     if (m_matrixSsbo != 0) glDeleteBuffers(1, &m_matrixSsbo);
+    if (m_prevMatrixSsbo != 0) glDeleteBuffers(1, &m_prevMatrixSsbo);
 }
 
 void IndirectBuffer::addCommand(const MeshPoolEntry& poolEntry,
-                                 const std::vector<glm::mat4>& matrices)
+                                 const std::vector<glm::mat4>& matrices,
+                                 const std::vector<glm::mat4>& prevMatrices)
 {
     if (matrices.empty())
     {
@@ -37,12 +40,25 @@ void IndirectBuffer::addCommand(const MeshPoolEntry& poolEntry,
 
     m_commands.push_back(cmd);
     m_allMatrices.insert(m_allMatrices.end(), matrices.begin(), matrices.end());
+
+    // Prev matrices are in lock-step with model matrices (same baseInstance index).
+    // Fall back to the current matrices if a caller passes a mismatched length, so
+    // the SSBO stays the same size as the model SSBO (degrades to zero motion).
+    if (prevMatrices.size() == matrices.size())
+    {
+        m_allPrevMatrices.insert(m_allPrevMatrices.end(), prevMatrices.begin(), prevMatrices.end());
+    }
+    else
+    {
+        m_allPrevMatrices.insert(m_allPrevMatrices.end(), matrices.begin(), matrices.end());
+    }
 }
 
 void IndirectBuffer::clear()
 {
     m_commands.clear();
     m_allMatrices.clear();
+    m_allPrevMatrices.clear();
 }
 
 void IndirectBuffer::upload()
@@ -86,6 +102,23 @@ void IndirectBuffer::upload()
     {
         glNamedBufferSubData(m_matrixSsbo, 0, matSize, m_allMatrices.data());
     }
+
+    // Upload previous-frame matrices to the parallel SSBO (motion vectors, binding 4).
+    auto prevSize = static_cast<GLsizeiptr>(
+        m_allPrevMatrices.size() * sizeof(glm::mat4));
+
+    if (m_allPrevMatrices.size() > m_prevMatrixCapacity)
+    {
+        glDeleteBuffers(1, &m_prevMatrixSsbo);
+        glCreateBuffers(1, &m_prevMatrixSsbo);
+        m_prevMatrixCapacity = m_allPrevMatrices.size();
+        glNamedBufferStorage(m_prevMatrixSsbo, prevSize, m_allPrevMatrices.data(),
+                             GL_DYNAMIC_STORAGE_BIT);
+    }
+    else
+    {
+        glNamedBufferSubData(m_prevMatrixSsbo, 0, prevSize, m_allPrevMatrices.data());
+    }
 }
 
 void IndirectBuffer::draw() const
@@ -100,6 +133,9 @@ void IndirectBuffer::draw() const
 
     // Bind matrix SSBO to binding point 0
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_matrixSsbo);
+
+    // Bind previous-frame matrix SSBO to binding point 4 (motion vectors, Slice R1)
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 4, m_prevMatrixSsbo);
 
     // Issue all draw commands in one call
     glMultiDrawElementsIndirect(
@@ -126,6 +162,11 @@ int IndirectBuffer::getTotalInstances() const
 GLuint IndirectBuffer::getMatrixSsbo() const
 {
     return m_matrixSsbo;
+}
+
+GLuint IndirectBuffer::getPrevMatrixSsbo() const
+{
+    return m_prevMatrixSsbo;
 }
 
 GLuint IndirectBuffer::getCommandBuffer() const

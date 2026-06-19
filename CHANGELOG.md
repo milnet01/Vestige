@@ -22,6 +22,45 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-06-19 Phase 10 Rendering — R1 motion vectors via geometry-pass MRT (overlay dropped)
+
+**Slice R1 core — emit motion vectors from the main scene pass; delete the
+per-object overlay re-draw.** The TAA motion buffer used to be built by two passes:
+a full-screen camera-motion pass, then a *second full re-rasterisation of every
+opaque object* (`motion_vectors_object.{vert,frag}.glsl`) to overwrite motion where
+geometry sat. R1 removes that redundant geometry pass: the main scene shader now
+emits object motion directly into a second MRT attachment (the R1.0 Framebuffer
+work), and the retained full-screen pass becomes a cheap *combine* that selects
+object motion where the opaque pass wrote it (coverage flag), camera-reprojection
+motion elsewhere (cloth / terrain / water / particles, and behind transparent), and
+(0,0) on sky. **Net: one whole opaque-geometry pass removed per TAA frame.**
+
+- **Scene shader** (`scene.vert/frag.glsl`): motion computed from the **raw base
+  object-space position** (pre-skin/pre-morph) for both terms — so skinned/morph
+  meshes keep byte-identical rigid-body motion, exactly as the overlay did (animated
+  motion is R2). Written to MRT `location = 1` before any early return; `.b` carries
+  the coverage flag, gated by `u_writeMotion`.
+- **Three prev-model paths**, each sourcing the previous-frame matrix from the same
+  `m_prevWorldMatrices` cache the overlay used: MDI via a new SSBO at **binding 4**
+  (`IndirectBuffer`), legacy instancing via per-instance attributes **12–15** (a
+  parallel instance VBO + `Mesh::setupPrevInstanceAttributes`), and the per-entity
+  `drawMesh` path via a `u_prevModel` uniform.
+- **Attachment-1 colour mask** enabled only around the opaque `renderItems` draws and
+  disabled for cloth/skybox/transparent, so passes that don't emit valid motion (or
+  use a different shader) leave the motion attachment at its cleared value — the
+  combine resolves those to the camera fallback. Mask restored to default at the end
+  of `renderScene()`.
+- **Mesa constraint:** `scene.vert.glsl` declares binding 4 unconditionally, so a
+  `m_dummyPrevModelSSBO` is bound at frame start (and restored after the MDI draw),
+  mirroring the existing `m_dummyModelSSBO`.
+- The `--isolate-feature=motion-overlay` diagnostic is **repurposed**: it now gates
+  `u_writeMotion` (off → combine falls back to camera-only motion everywhere).
+- Deleted `motion_vectors_object.{vert,frag}.glsl` and `m_motionVectorObjectShader`.
+- Verified end-to-end on the RX 6600 (Mesa 26.1.2): scene + combine shaders compile
+  and link with the MRT outputs, and 24 live TAA-mode visual-test captures render
+  with zero GL errors. Full unit suite green (3480 tests). Design-of-record:
+  `docs/phases/phase_10_rendering_design.md` §4.1–§4.5.
+
 ### 2026-06-19 Phase 10 Rendering — R1.0 Framebuffer MRT support (motion-vector foundation)
 
 **Slice R1, commit 1 of N — `Framebuffer` second colour attachment.** Extends the

@@ -23,10 +23,24 @@ layout(location = 7) in vec4 instanceModelCol1;
 layout(location = 8) in vec4 instanceModelCol2;
 layout(location = 9) in vec4 instanceModelCol3;
 
+// Per-instance PREVIOUS-frame model matrix (locations 12-15) — legacy instancing,
+// for motion vectors (Slice R1). Parallel stream to locations 6-9.
+layout(location = 12) in vec4 instancePrevModelCol0;
+layout(location = 13) in vec4 instancePrevModelCol1;
+layout(location = 14) in vec4 instancePrevModelCol2;
+layout(location = 15) in vec4 instancePrevModelCol3;
+
 // MDI per-instance model matrices (accessed via gl_BaseInstance + gl_InstanceID)
 layout(std430, binding = 0) buffer ModelMatrices
 {
     mat4 u_modelMatrices[];
+};
+
+// MDI per-instance PREVIOUS-frame model matrices (binding 4), in lock-step with
+// binding 0 — for motion vectors (Slice R1). Indexed identically to the model SSBO.
+layout(std430, binding = 4) buffer PrevModelMatrices
+{
+    mat4 u_prevModelMatrices[];
 };
 
 // Bone matrices for skeletal animation (binding 2)
@@ -45,8 +59,10 @@ layout(std430, binding = 3) buffer MorphDeltas
 };
 
 uniform mat4 u_model;
+uniform mat4 u_prevModel;          // Previous-frame model (per-entity path) — motion vectors (R1)
 uniform mat4 u_view;
 uniform mat4 u_projection;
+uniform mat4 u_prevViewProjection; // Previous-frame view-projection — motion vectors (R1)
 uniform bool u_useInstancing;
 uniform bool u_useMDI;
 uniform bool u_hasBones;      // True for skinned meshes — enables bone transform
@@ -81,6 +97,13 @@ out vec2 v_texCoord;
 out float v_viewDepth;
 out mat3 v_TBN;
 
+// Motion-vector clip positions (Slice R1). Computed from the RAW base object-space
+// position (pre-skin / pre-morph), matching the deleted per-object overlay — so
+// skinned/morph meshes get byte-identical rigid-body motion (R2 adds animated-pose
+// motion). The fragment shader perspective-divides these to currUV - prevUV.
+out vec4 v_currentClip_motion;
+out vec4 v_prevClip_motion;
+
 /// Compute cofactor matrix (equivalent to transpose(inverse(m)) * det(m)).
 /// Since we normalize the result, the determinant scaling cancels out.
 /// 3 cross products — much cheaper than inverse() on the GPU.
@@ -94,23 +117,28 @@ mat3 cofactorMatrix(mat3 m)
 void main()
 {
     mat4 model;
+    mat4 prevModel;   // Previous-frame model, selected from the SAME source as `model`
     mat3 normalMatrix;
 
     if (u_useMDI)
     {
         // MDI path: model matrix from SSBO indexed by gl_BaseInstance + gl_InstanceID
         model = u_modelMatrices[gl_BaseInstance + gl_InstanceID];
+        prevModel = u_prevModelMatrices[gl_BaseInstance + gl_InstanceID];
         normalMatrix = cofactorMatrix(mat3(model));
     }
     else if (u_useInstancing)
     {
         model = mat4(instanceModelCol0, instanceModelCol1,
                      instanceModelCol2, instanceModelCol3);
+        prevModel = mat4(instancePrevModelCol0, instancePrevModelCol1,
+                         instancePrevModelCol2, instancePrevModelCol3);
         normalMatrix = cofactorMatrix(mat3(model));
     }
     else
     {
         model = u_model;
+        prevModel = u_prevModel;
         normalMatrix = u_normalMatrix;
     }
 
@@ -190,4 +218,14 @@ void main()
     v_color = color;
     v_texCoord = texCoord;
     v_viewDepth = -(u_view * worldPosition).z;
+
+    // --- Motion vectors (Slice R1) ---
+    // Use the RAW base position (pre-morph, pre-skin) for BOTH terms, exactly as
+    // the deleted overlay did — so skinned/morph meshes get rigid-body motion and
+    // the animated pose (which drove gl_Position above) never enters the motion
+    // output. For non-skinned meshes base == shaded, so the current term equals
+    // gl_Position. u_projection * u_view equals the overlay's jittered VP.
+    vec4 motionBasePos = vec4(position, 1.0);
+    v_currentClip_motion = u_projection * u_view * (model * motionBasePos);
+    v_prevClip_motion = u_prevViewProjection * (prevModel * motionBasePos);
 }

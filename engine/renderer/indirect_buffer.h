@@ -43,8 +43,12 @@ public:
     /// @brief Adds a draw command for a mesh with instance matrices.
     /// @param poolEntry The mesh's location in the shared MeshPool.
     /// @param matrices Per-instance model matrices.
+    /// @param prevMatrices Per-instance PREVIOUS-frame model matrices (motion
+    ///        vectors, Slice R1). Must be the same length as @p matrices and in
+    ///        lock-step; uploaded to a parallel SSBO bound at binding 4.
     void addCommand(const MeshPoolEntry& poolEntry,
-                    const std::vector<glm::mat4>& matrices);
+                    const std::vector<glm::mat4>& matrices,
+                    const std::vector<glm::mat4>& prevMatrices);
 
     /// @brief Clears all commands and resets for a new frame.
     void clear();
@@ -64,6 +68,9 @@ public:
     /// @brief Gets the matrix SSBO handle (for shader binding).
     GLuint getMatrixSsbo() const;
 
+    /// @brief Gets the previous-frame matrix SSBO handle (motion vectors, binding 4).
+    GLuint getPrevMatrixSsbo() const;
+
     /// @brief Gets the command buffer handle (for GPU culling modification).
     GLuint getCommandBuffer() const;
 
@@ -71,12 +78,15 @@ private:
     // CPU-side staging buffers (rebuilt per frame)
     std::vector<DrawElementsIndirectCommand> m_commands;
     std::vector<glm::mat4> m_allMatrices;
+    std::vector<glm::mat4> m_allPrevMatrices;  // Parallel to m_allMatrices (motion vectors)
 
     // GPU buffers
     GLuint m_commandBuffer = 0;     // GL_DRAW_INDIRECT_BUFFER
     GLuint m_matrixSsbo = 0;        // GL_SHADER_STORAGE_BUFFER (per-instance mat4)
+    GLuint m_prevMatrixSsbo = 0;    // GL_SHADER_STORAGE_BUFFER (per-instance prev mat4, binding 4)
     size_t m_commandCapacity = 0;   // Allocated command count
     size_t m_matrixCapacity = 0;    // Allocated matrix count
+    size_t m_prevMatrixCapacity = 0;// Allocated prev-matrix count
 };
 
 } // namespace Vestige
