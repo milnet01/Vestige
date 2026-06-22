@@ -43,7 +43,7 @@ jobs:
       - name: Checkout
         # No submodules in this repo (verified 2026-05-18); `submodules: recursive`
         # was wasted IO — left off intentionally.
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v6
 
       - name: Install build dependencies
         # Cached apt install. The action stores /var/cache/apt/archives
@@ -141,7 +141,7 @@ jobs:
     timeout-minutes: 45
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v6
 
       - name: Install audit tool dependencies
         # Cached apt install — see the comment on linux-build-test's
@@ -246,7 +246,7 @@ jobs:
         cmake: ["3.21.0", "latest"]
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v6
 
       - name: Install build dependencies
         # Cached apt install — see the comment on linux-build-test's
@@ -326,7 +326,7 @@ jobs:
       GITLEAKS_VERSION: "8.30.1"
     steps:
       - name: Checkout (full history)
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v6
         with:
           # gitleaks detect walks the full git history; shallow clone
           # would miss older commits that could contain leaked secrets.
