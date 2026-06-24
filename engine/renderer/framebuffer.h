@@ -22,6 +22,7 @@ struct FramebufferConfig
     bool isDepthTexture = false;    // true = depth stored as sampleable texture
     bool secondColorAttachment = false; // true = add a GL_COLOR_ATTACHMENT1 (MRT, e.g. motion vectors)
     bool thirdColorAttachment = false;  // true = add a GL_COLOR_ATTACHMENT2 (MRT, e.g. world normals); requires secondColorAttachment
+    bool fourthColorAttachment = false; // true = add a GL_COLOR_ATTACHMENT3 (MRT, e.g. GI injection source); requires thirdColorAttachment
 };
 
 /// @brief Wraps an OpenGL framebuffer object for off-screen rendering.
@@ -60,7 +61,8 @@ public:
     /// @param textureUnit The texture unit to bind to (e.g., 0 for GL_TEXTURE0).
     /// @param attachmentIndex Which color attachment to bind (0 = GL_COLOR_ATTACHMENT0,
     ///        1 = GL_COLOR_ATTACHMENT1, requires secondColorAttachment;
-    ///        2 = GL_COLOR_ATTACHMENT2, requires thirdColorAttachment).
+    ///        2 = GL_COLOR_ATTACHMENT2, requires thirdColorAttachment;
+    ///        3 = GL_COLOR_ATTACHMENT3, requires fourthColorAttachment).
     void bindColorTexture(int textureUnit = 0, int attachmentIndex = 0);
 
     /// @brief Clears the second color attachment (GL_COLOR_ATTACHMENT1) to (0,0,0,0).
@@ -74,6 +76,12 @@ public:
     ///       zero-length normal — the disocclusion sentinel that disables V_mask on pixels
     ///       no opaque geometry wrote. No-op if thirdColorAttachment is false.
     void clearThirdAttachment();
+
+    /// @brief Clears the fourth color attachment (GL_COLOR_ATTACHMENT3) to (0,0,0,0).
+    /// @note Same rationale as clearSecondAttachment. For the GI injection source, (0,0,0,0)
+    ///       means uncovered / non-opaque texels inject zero radiance into the froxel cache
+    ///       rather than stale garbage. No-op if fourthColorAttachment is false.
+    void clearFourthAttachment();
 
     /// @brief Binds the depth texture to a texture unit for sampling.
     /// @param textureUnit The texture unit to bind to.
@@ -112,6 +120,7 @@ private:
     GLuint m_colorAttachment = 0;
     GLuint m_colorAttachment1 = 0;       // Second color attachment (GL_COLOR_ATTACHMENT1, MRT)
     GLuint m_colorAttachment2 = 0;       // Third color attachment (GL_COLOR_ATTACHMENT2, MRT)
+    GLuint m_colorAttachment3 = 0;       // Fourth color attachment (GL_COLOR_ATTACHMENT3, MRT)
     GLuint m_depthAttachment = 0;
     bool m_isDepthRenderbuffer = false;  // Tracks depth attachment type for cleanup
     bool m_isComplete = false;           // True if FBO passed completeness check

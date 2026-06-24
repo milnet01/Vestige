@@ -279,3 +279,88 @@ TEST_F(FramebufferMrtTest, TwoAttachmentFboHasNoThirdDrawBuffer)
     glGetIntegerv(GL_DRAW_BUFFER2, &db2);
     EXPECT_EQ(db2, static_cast<GLint>(GL_NONE));
 }
+
+namespace
+{
+// TAA-scene-FBO-shaped config with the R4 GI injection source at GL_COLOR_ATTACHMENT3.
+FramebufferConfig makeMrt4Config(int w, int h)
+{
+    FramebufferConfig config = makeMrt3Config(w, h);
+    config.fourthColorAttachment = true;    // GI injection source at GL_COLOR_ATTACHMENT3
+    return config;
+}
+}  // namespace
+
+// FBO with four color attachments must be GL_FRAMEBUFFER_COMPLETE.
+TEST_F(FramebufferMrtTest, FourthAttachmentFramebufferIsComplete)
+{
+    Framebuffer fb(makeMrt4Config(64, 64));
+    EXPECT_TRUE(fb.isComplete());
+}
+
+// All four draw buffers must be enumerated so the scene shader's four outputs
+// route to GL_COLOR_ATTACHMENT0/1/2/3.
+TEST_F(FramebufferMrtTest, DrawBuffersEnumerateFourAttachments)
+{
+    Framebuffer fb(makeMrt4Config(64, 64));
+    ASSERT_TRUE(fb.isComplete());
+
+    fb.bind();
+    GLint db0 = 0, db1 = 0, db2 = 0, db3 = 0;
+    glGetIntegerv(GL_DRAW_BUFFER0, &db0);
+    glGetIntegerv(GL_DRAW_BUFFER1, &db1);
+    glGetIntegerv(GL_DRAW_BUFFER2, &db2);
+    glGetIntegerv(GL_DRAW_BUFFER3, &db3);
+    EXPECT_EQ(db0, static_cast<GLint>(GL_COLOR_ATTACHMENT0));
+    EXPECT_EQ(db1, static_cast<GLint>(GL_COLOR_ATTACHMENT1));
+    EXPECT_EQ(db2, static_cast<GLint>(GL_COLOR_ATTACHMENT2));
+    EXPECT_EQ(db3, static_cast<GLint>(GL_COLOR_ATTACHMENT3));
+}
+
+// The GI injection source must clear to (0,0,0,0) regardless of the scene clear
+// colour — so uncovered / non-opaque texels inject zero radiance into the froxel
+// cache rather than stale garbage. Extends the att1/att2 clear-to-zero guards to att3.
+TEST_F(FramebufferMrtTest, FourthAttachmentClearsToZeroUnderNonZeroClearColor)
+{
+    Framebuffer fb(makeMrt4Config(4, 4));
+    ASSERT_TRUE(fb.isComplete());
+
+    fb.bind();
+    glClearColor(0.7f, 0.4f, 0.9f, 1.0f);   // non-zero — would be a bogus radiance
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    fb.clearFourthAttachment();
+
+    std::array<float, 4> px3{{-1.0f, -1.0f, -1.0f, -1.0f}};
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, fb.getId());
+    glReadBuffer(GL_COLOR_ATTACHMENT3);
+    glReadPixels(0, 0, 1, 1, GL_RGBA, GL_FLOAT, px3.data());
+    EXPECT_FLOAT_EQ(px3[0], 0.0f);
+    EXPECT_FLOAT_EQ(px3[1], 0.0f);
+    EXPECT_FLOAT_EQ(px3[2], 0.0f) << "uncovered GI source must inject zero radiance";
+    EXPECT_FLOAT_EQ(px3[3], 0.0f);
+
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+}
+
+// bindColorTexture(unit, 3) must bind attachment 3 without a GL error.
+TEST_F(FramebufferMrtTest, BindAttachmentThreeSucceeds)
+{
+    Framebuffer fb(makeMrt4Config(16, 16));
+    ASSERT_TRUE(fb.isComplete());
+
+    while (glGetError() != GL_NO_ERROR) {}  // drain
+    fb.bindColorTexture(5, 3);
+    EXPECT_EQ(glGetError(), static_cast<GLenum>(GL_NO_ERROR));
+}
+
+// Three-attachment FBOs stay byte-for-byte unchanged: no attachment 3, no DRAW_BUFFER3.
+TEST_F(FramebufferMrtTest, ThreeAttachmentFboHasNoFourthDrawBuffer)
+{
+    Framebuffer fb(makeMrt3Config(32, 32));   // third only, no fourth
+    ASSERT_TRUE(fb.isComplete());
+
+    fb.bind();
+    GLint db3 = 0;
+    glGetIntegerv(GL_DRAW_BUFFER3, &db3);
+    EXPECT_EQ(db3, static_cast<GLint>(GL_NONE));
+}

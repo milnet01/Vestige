@@ -28,6 +28,7 @@ Framebuffer::Framebuffer(Framebuffer&& other) noexcept
     , m_colorAttachment(other.m_colorAttachment)
     , m_colorAttachment1(other.m_colorAttachment1)
     , m_colorAttachment2(other.m_colorAttachment2)
+    , m_colorAttachment3(other.m_colorAttachment3)
     , m_depthAttachment(other.m_depthAttachment)
     , m_isDepthRenderbuffer(other.m_isDepthRenderbuffer)
     , m_isComplete(other.m_isComplete)
@@ -36,6 +37,7 @@ Framebuffer::Framebuffer(Framebuffer&& other) noexcept
     other.m_colorAttachment = 0;
     other.m_colorAttachment1 = 0;
     other.m_colorAttachment2 = 0;
+    other.m_colorAttachment3 = 0;
     other.m_depthAttachment = 0;
     other.m_isComplete = false;
 }
@@ -50,6 +52,7 @@ Framebuffer& Framebuffer::operator=(Framebuffer&& other) noexcept
         m_colorAttachment = other.m_colorAttachment;
         m_colorAttachment1 = other.m_colorAttachment1;
         m_colorAttachment2 = other.m_colorAttachment2;
+        m_colorAttachment3 = other.m_colorAttachment3;
         m_depthAttachment = other.m_depthAttachment;
         m_isDepthRenderbuffer = other.m_isDepthRenderbuffer;
         m_isComplete = other.m_isComplete;
@@ -57,6 +60,7 @@ Framebuffer& Framebuffer::operator=(Framebuffer&& other) noexcept
         other.m_colorAttachment = 0;
         other.m_colorAttachment1 = 0;
         other.m_colorAttachment2 = 0;
+        other.m_colorAttachment3 = 0;
         other.m_depthAttachment = 0;
         other.m_isComplete = false;
     }
@@ -130,6 +134,17 @@ void Framebuffer::bindColorTexture(int textureUnit, int attachmentIndex)
         glBindTextureUnit(static_cast<GLuint>(textureUnit), m_colorAttachment2);
         return;
     }
+    if (attachmentIndex == 3)
+    {
+        if (m_colorAttachment3 == 0)
+        {
+            Logger::error("Framebuffer::bindColorTexture — attachment 3 requested but "
+                "fourthColorAttachment is not enabled");
+            return;
+        }
+        glBindTextureUnit(static_cast<GLuint>(textureUnit), m_colorAttachment3);
+        return;
+    }
     glBindTextureUnit(static_cast<GLuint>(textureUnit), m_colorAttachment);
 }
 
@@ -151,6 +166,16 @@ void Framebuffer::clearThirdAttachment()
     }
     const GLfloat zero[4] = {0.0f, 0.0f, 0.0f, 0.0f};
     glClearNamedFramebufferfv(m_fboId, GL_COLOR, 2, zero);
+}
+
+void Framebuffer::clearFourthAttachment()
+{
+    if (m_colorAttachment3 == 0)
+    {
+        return;
+    }
+    const GLfloat zero[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+    glClearNamedFramebufferfv(m_fboId, GL_COLOR, 3, zero);
 }
 
 void Framebuffer::bindDepthTexture(int textureUnit)
@@ -239,41 +264,42 @@ void Framebuffer::create()
         // format (RGBA16F on the TAA scene FBO: att1 .rg=motion/.b=coverage; att2 .rgb=normal).
         // Only the non-MSAA path is supported — these live on the non-MSAA TAA scene FBO and
         // need no multisample resolve. The draw-buffer list must be contiguous from
-        // attachment 0, so the third attachment requires the second.
-        const bool wantsMrt = m_config.secondColorAttachment || m_config.thirdColorAttachment;
+        // attachment 0, so each extra attachment requires the previous one.
+        const bool wantsMrt = m_config.secondColorAttachment || m_config.thirdColorAttachment
+            || m_config.fourthColorAttachment;
         if (wantsMrt && !isMultisample)
         {
+            auto createMrtAttachment = [&](GLuint& tex, GLenum slot)
+            {
+                glCreateTextures(GL_TEXTURE_2D, 1, &tex);
+                glTextureStorage2D(tex, 1, colorFormat, m_config.width, m_config.height);
+                glTextureParameteri(tex, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+                glTextureParameteri(tex, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+                glTextureParameteri(tex, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+                glTextureParameteri(tex, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+                glNamedFramebufferTexture(m_fboId, slot, tex, 0);
+            };
+
             if (m_config.secondColorAttachment)
             {
-                glCreateTextures(GL_TEXTURE_2D, 1, &m_colorAttachment1);
-                glTextureStorage2D(m_colorAttachment1, 1, colorFormat, m_config.width, m_config.height);
-                glTextureParameteri(m_colorAttachment1, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-                glTextureParameteri(m_colorAttachment1, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-                glTextureParameteri(m_colorAttachment1, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-                glTextureParameteri(m_colorAttachment1, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-                glNamedFramebufferTexture(m_fboId, GL_COLOR_ATTACHMENT1, m_colorAttachment1, 0);
+                createMrtAttachment(m_colorAttachment1, GL_COLOR_ATTACHMENT1);
             }
             if (m_config.thirdColorAttachment)
             {
-                glCreateTextures(GL_TEXTURE_2D, 1, &m_colorAttachment2);
-                glTextureStorage2D(m_colorAttachment2, 1, colorFormat, m_config.width, m_config.height);
-                glTextureParameteri(m_colorAttachment2, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-                glTextureParameteri(m_colorAttachment2, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-                glTextureParameteri(m_colorAttachment2, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-                glTextureParameteri(m_colorAttachment2, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-                glNamedFramebufferTexture(m_fboId, GL_COLOR_ATTACHMENT2, m_colorAttachment2, 0);
+                createMrtAttachment(m_colorAttachment2, GL_COLOR_ATTACHMENT2);
+            }
+            if (m_config.fourthColorAttachment)
+            {
+                createMrtAttachment(m_colorAttachment3, GL_COLOR_ATTACHMENT3);
             }
 
-            if (m_config.thirdColorAttachment)
-            {
-                const GLenum drawBuffers[3] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2};
-                glNamedFramebufferDrawBuffers(m_fboId, 3, drawBuffers);
-            }
-            else
-            {
-                const GLenum drawBuffers[2] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1};
-                glNamedFramebufferDrawBuffers(m_fboId, 2, drawBuffers);
-            }
+            // Contiguous draw-buffer list; count follows the highest enabled attachment.
+            GLsizei attachmentCount = 2;
+            if (m_config.thirdColorAttachment)  attachmentCount = 3;
+            if (m_config.fourthColorAttachment) attachmentCount = 4;
+            const GLenum drawBuffers[4] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1,
+                                           GL_COLOR_ATTACHMENT2, GL_COLOR_ATTACHMENT3};
+            glNamedFramebufferDrawBuffers(m_fboId, attachmentCount, drawBuffers);
         }
         else if (wantsMrt)
         {

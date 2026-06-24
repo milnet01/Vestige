@@ -32,6 +32,7 @@ add_executable(vestige_tests
     test_gltf_loader.cpp
     test_pbr_material.cpp
     test_subsurface.cpp
+    test_gi.cpp
     test_bloom.cpp
     test_ssao.cpp
     test_transparency.cpp
