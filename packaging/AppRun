@@ -1,0 +1,11 @@
+#!/bin/sh
+# Vestige AppImage entry point.
+#
+# The engine resolves its assets/ directory relative to the current working
+# directory (app/main.cpp default "assets" + the --assets override), not relative
+# to the binary. An AppImage runs from an arbitrary cwd (a temporary mount), so
+# we point the engine explicitly at the assets bundled inside this AppImage via
+# the supported --assets flag — making it launch correctly from anywhere with no
+# engine change. $HERE resolves to the AppImage's mounted root ($APPDIR).
+HERE="$(dirname "$(readlink -f "${0}")")"
+exec "${HERE}/usr/bin/vestige" --assets "${HERE}/usr/share/vestige/assets" "$@"

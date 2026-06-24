@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Vestige
+GenericName=3D Engine
+Comment=First-person 3D exploration engine
+Exec=vestige
+Icon=vestige
+Terminal=false
+Categories=Graphics;3DGraphics;Game;
+Keywords=3D;OpenGL;engine;walkthrough;
+StartupWMClass=Vestige

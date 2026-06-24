@@ -161,11 +161,59 @@ jobs:
               -czf "${STAGE}.tar.gz" "$STAGE"
           ls -lh "${STAGE}.tar.gz"
 
+      - name: Build AppImage
+        # Single-file, sandbox-free Linux build with embedded zsync update info,
+        # so AppImageUpdate / a self-updater can pull the latest STABLE release.
+        # The AppRun launcher passes --assets pointing inside the AppImage, so it
+        # finds its assets from any working directory (the engine is cwd-relative).
+        run: |
+          set -euo pipefail
+          VER="${{ steps.version.outputs.version }}"
+          export APPIMAGE_EXTRACT_AND_RUN=1   # GitHub runners have no FUSE
+
+          # Pinned packaging tools (bump deliberately, per CLAUDE.md Rule 8).
+          curl -fsSL --retry 3 -o linuxdeploy \
+            https://github.com/linuxdeploy/linuxdeploy/releases/download/1-alpha-20240109-1/linuxdeploy-x86_64.AppImage
+          curl -fsSL --retry 3 -o appimagetool \
+            https://github.com/AppImage/appimagetool/releases/download/1.9.0/appimagetool-x86_64.AppImage
+          chmod +x linuxdeploy appimagetool
+
+          # Assemble the AppDir: binary + bundled assets + desktop + icon + AppRun.
+          APPDIR=AppDir
+          rm -rf "$APPDIR"
+          mkdir -p "$APPDIR/usr/bin" "$APPDIR/usr/share/vestige" \
+                   "$APPDIR/usr/share/applications" \
+                   "$APPDIR/usr/share/icons/hicolor/256x256/apps"
+          cp build/bin/vestige "$APPDIR/usr/bin/"
+          cp -r assets "$APPDIR/usr/share/vestige/assets"
+          cp packaging/vestige.desktop "$APPDIR/usr/share/applications/vestige.desktop"
+          cp packaging/vestige.png "$APPDIR/usr/share/icons/hicolor/256x256/apps/vestige.png"
+          cp packaging/AppRun "$APPDIR/AppRun"; chmod +x "$APPDIR/AppRun"
+          cp LICENSE README.md TESTING.md THIRD_PARTY_NOTICES.md ASSET_LICENSES.md "$APPDIR/usr/share/vestige/"
+
+          # Bundle shared-lib deps (OpenAL Soft, etc.) + patch rpath. --custom-apprun
+          # keeps our launcher (which passes --assets) instead of the default.
+          ./linuxdeploy --appdir "$APPDIR" \
+            -d packaging/vestige.desktop \
+            -i packaging/vestige.png \
+            --custom-apprun packaging/AppRun
+
+          # Package with embedded update info. The zsync glob matches the
+          # versioned asset name; "latest" tracks the newest non-prerelease.
+          OUT="Vestige-${VER}-x86_64.AppImage"
+          ./appimagetool \
+            -u "gh-releases-zsync|milnet01|Vestige|latest|Vestige-*-x86_64.AppImage.zsync" \
+            "$APPDIR" "$OUT"
+          ls -lh "$OUT" "${OUT}.zsync"
+
       - name: Upload as workflow artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
         with:
           name: vestige-linux-x86_64
-          path: vestige-*-linux-x86_64.tar.gz
+          path: |
+            vestige-*-linux-x86_64.tar.gz
+            Vestige-*-x86_64.AppImage
+            Vestige-*-x86_64.AppImage.zsync
           if-no-files-found: error
 
       - name: Attach to GitHub Release
@@ -173,7 +221,10 @@ jobs:
         uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b  # v3.0.1
         with:
           tag_name: ${{ steps.version.outputs.tag }}
-          files: vestige-*-linux-x86_64.tar.gz
+          files: |
+            vestige-*-linux-x86_64.tar.gz
+            Vestige-*-x86_64.AppImage
+            Vestige-*-x86_64.AppImage.zsync
           # RC tags (…-rc.N) publish immediately as pre-releases (testers);
           # final tags (vX.Y.Z) are created as DRAFTS to gate the public
           # release behind one manual "Publish" click. See release-cadence.yml.
