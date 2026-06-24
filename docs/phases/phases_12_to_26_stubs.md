@@ -29,7 +29,7 @@ For each phase below:
 
 | Field | Value |
 |-------|-------|
-| ROADMAP | `## Phase 13: Advanced Rendering` (~line 1094) |
+| ROADMAP | `## Phase 13: Advanced Rendering` (~line 1588) |
 | Status | partial-design (research-update sub-sections shipped 2026-04-28: Gaussian splatting, voxel techniques, dynamic-weather technique pinning) |
 | Scope summary | Screen-space effects (SSR / SSGI / DoF / motion blur), advanced materials (SSS / anisotropy / hair), GI (probe / surfel / radiance-cascade / Brixelizer / ReSTIR), Vulkan + ray tracing, tessellation, shadow techniques (VSM / PCSS / MegaLights), upscaling (FSR), GPU-driven rendering, voxel techniques (VCT / SVO / SVDAG), 3DGS rendering, VR. |
 | Sibling design docs | None — the per-feature ROADMAP rows point at primary references (Kerbl 2023, NVIDIA VXGI, Aokana 2025, etc.). Each feature gets a focused design doc when scheduled. |
