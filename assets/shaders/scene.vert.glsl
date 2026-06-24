@@ -3,7 +3,7 @@
 
 /// @file scene.vert.glsl
 /// @brief Main scene vertex shader — transforms geometry with instancing, MDI, TBN matrix, and TAA jitter support.
-#version 460 core
+#version 450 core
 #extension GL_ARB_shader_draw_parameters : enable
 
 layout(location = 0) in vec3 position;
@@ -30,7 +30,7 @@ layout(location = 13) in vec4 instancePrevModelCol1;
 layout(location = 14) in vec4 instancePrevModelCol2;
 layout(location = 15) in vec4 instancePrevModelCol3;
 
-// MDI per-instance model matrices (accessed via gl_BaseInstance + gl_InstanceID)
+// MDI per-instance model matrices (accessed via gl_BaseInstanceARB + gl_InstanceID)
 layout(std430, binding = 0) buffer ModelMatrices
 {
     mat4 u_modelMatrices[];
@@ -131,9 +131,9 @@ void main()
 
     if (u_useMDI)
     {
-        // MDI path: model matrix from SSBO indexed by gl_BaseInstance + gl_InstanceID
-        model = u_modelMatrices[gl_BaseInstance + gl_InstanceID];
-        prevModel = u_prevModelMatrices[gl_BaseInstance + gl_InstanceID];
+        // MDI path: model matrix from SSBO indexed by gl_BaseInstanceARB + gl_InstanceID
+        model = u_modelMatrices[gl_BaseInstanceARB + gl_InstanceID];
+        prevModel = u_prevModelMatrices[gl_BaseInstanceARB + gl_InstanceID];
         normalMatrix = cofactorMatrix(mat3(model));
     }
     else if (u_useInstancing)
