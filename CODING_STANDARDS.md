@@ -373,6 +373,8 @@ Builds on section 8.
 
 | Topic | Rule |
 |-------|------|
+| Version | Every shader is `#version 450 core` — the engine's single GL 4.5 target (§0). Do **not** reach for a higher `#version` (or a built-in that is only core in a higher version) just because the dev card is GL 4.6: it compiles there but fails on genuine 4.5 hardware and on CI's software renderer (Mesa llvmpipe, GLSL 4.50 max). A shader that truly needs another version must say why with a trailing `// shader-lint-exempt: <reason>` on the `#version` line (Rule 8 — an off-target pin needs a written reason). |
+| Draw parameters | Use the **ARB-suffixed** built-ins — `gl_BaseInstanceARB`, `gl_BaseVertexARB`, `gl_DrawIDARB` — provided by `GL_ARB_shader_draw_parameters`. The suffixless names (`gl_BaseInstance`, …) are core only in GLSL 4.60, so they break at 450; the ARB forms carry the identical value and compile on strict and lenient 4.5 drivers alike. |
 | Precision | `highp` is the default in fragment shaders. Mesa AMD treats `mediump` as `highp` anyway, and explicit `highp` documents intent for portability to mobile/Vulkan-mobile later. |
 | Early-Z | Avoid `discard` before depth write where possible. When alpha-test-style discards are needed, use `layout(early_fragment_tests) in;` to let the GPU keep early-Z. |
 | UBO layout | Respect `std140` rules — `vec3` pads to `vec4`, arrays stride to 16 bytes. Mismatch = silent garbage uniforms. |
@@ -381,6 +383,8 @@ Builds on section 8.
 **Sampler binding (Mesa AMD-specific, locked-in project knowledge):** ALL declared samplers must have a valid texture bound at draw time, even if the shader doesn't read them — otherwise `GL_INVALID_OPERATION`. Different sampler types (`sampler2D` vs `samplerCube`) at the same texture unit also error. Do not undo this; bind a 1×1 white fallback to every declared but unused sampler.
 
 **Enforcement:** when a new uniform sampler is declared in GLSL but no host-side bind is wired, the shader-compile / link step warns at startup. If you hit a `GL_INVALID_OPERATION` on a draw call, the first thing to check is "did I add a sampler to the shader and forget to bind a fallback?" — see `engine/renderer/` for the existing fallback texture handles (white, black, normal-up).
+
+**Version / draw-parameter enforcement:** `tools/shader_lint.py` static-scans every shader for the `#version` and draw-parameter rules above. It runs as the `ShaderLintStrict` ctest gate (with `ShaderLintCatchesViolation` pinning that strict mode actually fails on a seeded off-standard fixture), so a stray `#version 460` or suffixless `gl_BaseInstance` fails the build with no GPU required — at the cheapest stage, not on a 4.5-only machine months later.
 
 ---
 

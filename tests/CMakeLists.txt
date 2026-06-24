@@ -314,7 +314,31 @@ if(Python3_FOUND)
     )
     set_tests_properties(LocalizationAuditCatchesHardcoded
                          PROPERTIES WILL_FAIL TRUE)
+
+    # --- Shader standards lint -------------------------------------------------
+    # Static line-scan keeping every GLSL shader on the engine's GL 4.5 target
+    # (#version 450 core, ARB-suffixed draw-parameter built-ins). Catches the
+    # class of bug that broke run 28092225316 (scene.vert at #version 460) at the
+    # cheapest stage — no GPU or software renderer needed.
+    add_test(
+        NAME ShaderLintStrict
+        COMMAND Python3::Interpreter
+                ${CMAKE_SOURCE_DIR}/tools/shader_lint.py --strict
+    )
+
+    # Pins that strict mode actually fails on an off-standard shader: run it
+    # against a fixture with a seeded #version 460 + suffixless built-in and
+    # expect a non-zero exit (WILL_FAIL inverts the pass condition).
+    add_test(
+        NAME ShaderLintCatchesViolation
+        COMMAND Python3::Interpreter
+                ${CMAKE_SOURCE_DIR}/tools/shader_lint.py --strict
+                --root ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/shader_lint
+    )
+    set_tests_properties(ShaderLintCatchesViolation
+                         PROPERTIES WILL_FAIL TRUE)
 else()
     message(WARNING
-        "Python3 not found — skipping localization_audit ctest gate (L6).")
+        "Python3 not found — skipping localization_audit + shader_lint ctest "
+        "gates.")
 endif()
