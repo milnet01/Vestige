@@ -283,12 +283,24 @@ target_precompile_headers(vestige_tests PRIVATE
     <glm/glm.hpp>
 )
 
-include(GoogleTest)
+# The whole gtest suite runs as ONE ctest entry (a single process), NOT via
+# gtest_discover_tests' per-case registration. Rationale (CI speed, robust): with
+# per-case discovery, each of the ~3.5k gtest cases becomes its own ctest process
+# and every GPU test re-creates an OpenGL context on launch. That process-spawn +
+# per-process GL-context-init dominated CI's "Run tests" step — ~12.5 min in Debug
+# under xvfb (CI run 28116388509), vs ~20 s for the same cases in one process
+# locally. In-process, the suite's single GLTestEnvironment context is created
+# once and every case still runs — identical tests, identical assertions, no
+# coverage change and nothing cached, so a future test can never be silently
+# skipped. `ctest --output-on-failure` still surfaces the failing case via gtest's
+# own output. To run a single case locally:
+#   ./build/bin/vestige_tests --gtest_filter='Suite.Case'
+#
 # No LSan suppression file: the only intentional third-party leaks (GLFW/Mesa
 # init/teardown, llvmpipe JIT shader state) are excluded at their exact call
 # sites via ScopedLeakCheckDisable (tests/lsan_guard.h), so the suite is
 # leak-clean under default options with no environment setup.
-gtest_discover_tests(vestige_tests)
+add_test(NAME vestige_tests COMMAND vestige_tests)
 
 # --- Phase 10 Localization L6 — string-coverage lint (design § 5.7) ----------
 # The audit is a standalone Python regex line-scan, so it runs as its own ctest
