@@ -1606,6 +1606,30 @@ void Renderer::endFrame(float deltaTime)
     glEnable(GL_DEPTH_TEST);
 }
 
+void Renderer::bindShadowFluxAlbedo(Shader& shader, const Material* material)
+{
+    // Mirror the scene pass's unit-0 albedo binding so the shadow flux term uses
+    // the same base colour. Factor = PBR albedo or Blinn-Phong diffuse; texture
+    // (or 1×1 white fallback) modulates it in the fragment shader.
+    bool hasTexture = (material != nullptr) && material->hasDiffuseTexture();
+    glm::vec3 factor = (material != nullptr)
+        ? ((material->getType() == MaterialType::PBR) ? material->getAlbedo()
+                                                      : material->getDiffuseColor())
+        : glm::vec3(1.0f);
+
+    shader.setBool("u_hasTexture", hasTexture);
+    shader.setVec3("u_albedoFactor", factor);
+    if (hasTexture)
+    {
+        material->getDiffuseTexture()->bind(0);
+    }
+    else
+    {
+        glBindTextureUnit(0, m_fallbackTexture);
+    }
+    shader.setInt("u_diffuseTexture", 0);
+}
+
 void Renderer::uploadMaterialUniforms(const Material& material)
 {
     // UV tiling scale
@@ -3689,6 +3713,10 @@ void Renderer::renderShadowPass(const std::vector<SceneRenderData::RenderItem>& 
     m_cascadedShadowMap->update(m_directionalLight, camera, aspectRatio);
 
     m_shadowDepthShader.use();
+    // Phase 13 G1: directional radiance + travel direction for the RSM flux term
+    // (constant across the whole pass; albedo is bound per batch below).
+    m_shadowDepthShader.setVec3("u_lightRadiance", m_directionalLight.diffuse);
+    m_shadowDepthShader.setVec3("u_lightDir", m_directionalLight.direction);
 
     // Render geometry into each cascade layer with per-cascade frustum culling.
     // Far cascades update less frequently to reduce shadow pass cost:
@@ -3730,6 +3758,8 @@ void Renderer::renderShadowPass(const std::vector<SceneRenderData::RenderItem>& 
         {
             const auto& batch = m_instanceBatches[b];
             int count = static_cast<int>(batch.modelMatrices.size());
+            // Phase 13 G1: bind this batch's albedo for the RSM flux term.
+            bindShadowFluxAlbedo(m_shadowDepthShader, batch.material);
             if (count >= MIN_INSTANCE_BATCH_SIZE && m_instanceBuffer)
             {
                 m_shadowDepthShader.setBool("u_useInstancing", true);
@@ -3787,9 +3817,14 @@ void Renderer::renderShadowPass(const std::vector<SceneRenderData::RenderItem>& 
             {
                 m_foliageShadowCaster->renderShadow(
                     m_scratchFoliageChunks, camera, lightSpaceMatrix,
-                    m_foliageShadowTime);
+                    m_foliageShadowTime,
+                    m_directionalLight.diffuse, m_directionalLight.direction);
                 // Restore shadow depth shader — foliage shadow binds its own shader
                 m_shadowDepthShader.use();
+                // Re-set the flux light uniforms the foliage shader's program use()
+                // replaced (albedo is re-bound per batch on the next cascade).
+                m_shadowDepthShader.setVec3("u_lightRadiance", m_directionalLight.diffuse);
+                m_shadowDepthShader.setVec3("u_lightDir", m_directionalLight.direction);
             }
         }
 
@@ -3832,6 +3867,11 @@ void Renderer::renderPointShadowPass(const std::vector<int>& shadowCasters)
         float farPlane = shadowMap->getConfig().farPlane;
         m_pointShadowDepthShader.setVec3("u_lightPos", light.position);
         m_pointShadowDepthShader.setFloat("u_farPlane", farPlane);
+        // Phase 13 G1: radiance + attenuation for the RSM flux term.
+        m_pointShadowDepthShader.setVec3("u_lightRadiance", light.diffuse);
+        m_pointShadowDepthShader.setFloat("u_attConstant", light.constant);
+        m_pointShadowDepthShader.setFloat("u_attLinear", light.linear);
+        m_pointShadowDepthShader.setFloat("u_attQuadratic", light.quadratic);
 
         // Render all 6 cubemap faces
         for (int face = 0; face < 6; face++)
@@ -3844,6 +3884,8 @@ void Renderer::renderPointShadowPass(const std::vector<int>& shadowCasters)
             {
                 const auto& batch = m_instanceBatches[b];
                 int count = static_cast<int>(batch.modelMatrices.size());
+                // Phase 13 G1: bind this batch's albedo for the RSM flux term.
+                bindShadowFluxAlbedo(m_pointShadowDepthShader, batch.material);
                 if (count >= MIN_INSTANCE_BATCH_SIZE && m_instanceBuffer)
                 {
                     m_pointShadowDepthShader.setBool("u_useInstancing", true);

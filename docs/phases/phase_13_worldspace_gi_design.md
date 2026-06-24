@@ -4,7 +4,7 @@
 |---|---|
 | Phase | 13 — Advanced Rendering (GI feature track) |
 | Feature | World-space dynamic GI (DDGI-lite — Dynamic Diffuse Global Illumination) + baked low-end tier |
-| Status | `cold-eyes converged` (6 loops, 2026-06-24) — signed off by Claude per the project's delegated-sign-off convention; ready for phased implementation pending the user's go-ahead |
+| Status | `implementing` — G1 (RSM flux attachment) shipped 2026-06-24 (meshes + foliage; terrain flux split to its own slice, see §4). Design cold-eyes converged (6 loops, 2026-06-24), signed off by Claude per the project's delegated-sign-off convention. G2–G5 pending. |
 | Owners | milnet01 |
 | Start (target) | after the R4 dynamic-GI regression closed (commit `a24a6e4`) |
 | Target completion | TBD — sized at sign-off (5 slices, see §4) |
@@ -194,7 +194,8 @@ Each slice is independently testable, lands behind a flag, and carries a perf ga
 
 | # | Slice | Deliverable | Gate |
 |---|---|---|---|
-| G1 | **RSM flux attachment** | Add RGBA16F flux (albedo·radiance) colour attachment to CSM + point/spot shadow FBOs; shadow shaders **write** flux alongside depth. Flux is written but **nothing consumes it yet** (G2 is the first consumer). | FBO completeness test; existing shadow tests still green; **flux readback matches a CPU reference for one directional light** (readback is testable because G1 writes flux) |
+| G1 | **RSM flux attachment** | Add RGBA16F flux (albedo·radiance) colour attachment to CSM + point/spot shadow FBOs; shadow shaders **write** flux alongside depth. Flux is written but **nothing consumes it yet** (G2 is the first consumer). **Shipped 2026-06-24 for the casters already in the shadow pass — meshes + foliage.** | FBO completeness test; existing shadow tests still green; **flux readback matches a CPU reference for one directional light** (readback is testable because G1 writes flux) |
+| G1t | **Terrain flux (split from G1)** | Wire `TerrainRenderer::renderShadow` into the shadow pass (terrain does not cast shadows today) and have `terrain_shadow` write flux from the splatmap-blended base albedo. Carries the new behaviour change (terrain shadow-casting) + its perf cost, isolated from G1. | terrain shadow-cast perf gate; flux readback vs CPU reference for terrain; existing shadow tests still green |
 | G2 | **Runtime probe injection** | `gi_probe_inject.comp.glsl` — scatter RSM flux VPLs into SH coeffs, write `SHProbeGrid` each frame (single bounce, no temporal yet). | GPU↔CPU parity of the SH projection (readback vs `gi_probe_math.h` mirror); inject-dispatch perf gate — **soft target 0.6 ms, hard fail above 0.8 ms** (the 0.6 ms target is unconfirmed pending the §11 Q1 Workbench fit; the 0.8 ms hard fail is the binding gate; §6) |
 | G3 | **Temporal multi-bounce + leak fix** | EMA-blend this frame's injection with last frame's probe irradiance (feedback = extra bounces); per-probe Chebyshev visibility weight (§3.4). | **convergence test** (§8 criterion); **leak test** (§8); CPU/GPU parity (§5) |
 | G4 | **Tier toggle + R4 reconciliation** | `Settings::rendering.giMode` (Off/Baked/Dynamic) + apply-sink; apply the §2.3 normative R4 rule. | settings round-trip test; **no-double-count test** (§6 bound) decides whether R4 stays active under Dynamic; full-frame perf gate ≤ 1.5 ms (§6) |
@@ -375,6 +376,20 @@ silent omission.
 - 2026-06-24 — initial draft; source map (§3.2) verified against `main` and
   re-confirmed accurate through the cold-eyes loops. Loops 1-6 fixes folded in
   (see §16).
+- 2026-06-24 — **G1 shipped** (RSM flux attachment). RGBA16F flux colour
+  attachment added to the CSM (`cascaded_shadow_map.{h,cpp}`) and point/spot
+  (`point_shadow_map.{h,cpp}`) FBOs; mesh (`shadow_depth`), point
+  (`point_shadow_depth`) and foliage (`foliage_shadow`) shadow shaders write
+  `albedo·radiance·max(0,N·L)` (point adds attenuation). CPU spec
+  `engine/renderer/gi_probe_math.h`; tests `test_gi_probe_{gpu,math}.cpp`
+  (compile/link + GPU↔CPU flux parity + FBO completeness). **Scope note:**
+  during implementation, terrain was found *not* to render into the shadow pass
+  (`TerrainRenderer::renderShadow` is unwired), so ground-bounce flux is split to
+  a dedicated follow-up slice (enabling terrain shadow-casting first) rather than
+  silently turning that behaviour on — user-confirmed 2026-06-24. Foliage flux
+  uses a fixed up-normal (grass billboards have no per-fragment normal) and the
+  atlas albedo without the per-instance tint — both deliberate simplifications
+  for indirect light.
 
 ## 16. Cold-eyes loop log
 

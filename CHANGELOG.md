@@ -9855,6 +9855,18 @@ existing cases (``HelpersMatchEvaluatorPrecisely``,
 
 ### Added
 
+- **World-space GI G1 — RSM flux attachment on the shadow maps** (3D_E-0021)
+  First slice of the world-space dynamic GI (DDGI-lite, design
+  docs/phases/phase_13_worldspace_gi_design.md). The directional CSM
+  and point-light shadow framebuffers gain an RGBA16F flux colour
+  attachment; the mesh + foliage shadow shaders now write
+  albedo·light-radiance·max(0,N·L) (point lights add distance
+  attenuation) alongside depth, so off-screen / all-lights bounce can
+  be scattered into the probe grid in G2. Nothing consumes the flux
+  yet. CPU spec in engine/renderer/gi_probe_math.h, GPU↔CPU parity +
+  FBO-completeness tests in tests/test_gi_probe_{gpu,math}.cpp. Terrain
+  flux deferred to its own slice (terrain does not cast shadows yet).
+
 - **Shader-standards lint gate (tools/shader_lint.py + ShaderLint ctest gates) enforcing the GLSL 4.50 target and ARB-suffixed draw-parameter built-ins**
   Static line-scan that fails the build on any shader off the engine's GL
   4.5 target — a stray #version 460 or suffixless gl_BaseInstance — at the

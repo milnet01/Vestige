@@ -63,10 +63,15 @@ public:
     /// @param camera Current camera (for distance culling).
     /// @param lightSpaceMatrix Light's view-projection matrix.
     /// @param time Elapsed time for wind animation (must match main pass).
+    /// @param lightRadiance Directional light radiance (colour × intensity) for
+    ///        the RSM flux term (Phase 13 G1). Pass black to write zero flux.
+    /// @param lightDir Direction the light travels (`DirectionalLight::direction`).
     void renderShadow(const std::vector<const FoliageChunk*>& chunks,
                       const Camera& camera,
                       const glm::mat4& lightSpaceMatrix,
-                      float time);
+                      float time,
+                      const glm::vec3& lightRadiance,
+                      const glm::vec3& lightDir);
 
     /// @brief Maximum distance for grass shadow casting (cascade 0 range).
     float shadowMaxDistance = 30.0f;

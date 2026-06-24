@@ -35,11 +35,26 @@ CascadedShadowMap::CascadedShadowMap(const CascadedShadowConfig& config)
     float borderColor[] = {1.0f, 1.0f, 1.0f, 1.0f};
     glTextureParameterfv(m_depthTextureArray, GL_TEXTURE_BORDER_COLOR, borderColor);
 
-    // Create FBO (layers are attached one at a time during rendering) — DSA
+    // Create RSM flux colour texture array (one layer per cascade) — DSA.
+    // Phase 13 G1: holds albedo·light-radiance·max(0,N·L) for the surface
+    // closest to the light, so the world-space GI inject pass can scatter it
+    // into the probe grid. RGBA16F because flux is HDR (radiance can exceed 1).
+    glCreateTextures(GL_TEXTURE_2D_ARRAY, 1, &m_fluxTextureArray);
+    glTextureStorage3D(m_fluxTextureArray, 1, GL_RGBA16F, res, res, layers);
+    glTextureParameteri(m_fluxTextureArray, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTextureParameteri(m_fluxTextureArray, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTextureParameteri(m_fluxTextureArray, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTextureParameteri(m_fluxTextureArray, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+    // Create FBO (layers are attached one at a time during rendering) — DSA.
+    // Depth + a single flux colour attachment; both layers are re-pointed per
+    // cascade in beginCascade().
     glCreateFramebuffers(1, &m_fbo);
     glNamedFramebufferTextureLayer(m_fbo, GL_DEPTH_ATTACHMENT,
                                    m_depthTextureArray, 0, 0);
-    glNamedFramebufferDrawBuffer(m_fbo, GL_NONE);
+    glNamedFramebufferTextureLayer(m_fbo, GL_COLOR_ATTACHMENT0,
+                                   m_fluxTextureArray, 0, 0);
+    glNamedFramebufferDrawBuffer(m_fbo, GL_COLOR_ATTACHMENT0);
     glNamedFramebufferReadBuffer(m_fbo, GL_NONE);
 
     GLenum status = glCheckNamedFramebufferStatus(m_fbo, GL_FRAMEBUFFER);
@@ -58,6 +73,10 @@ CascadedShadowMap::~CascadedShadowMap()
     {
         glDeleteTextures(1, &m_depthTextureArray);
     }
+    if (m_fluxTextureArray != 0)
+    {
+        glDeleteTextures(1, &m_fluxTextureArray);
+    }
     if (m_fbo != 0)
     {
         glDeleteFramebuffers(1, &m_fbo);
@@ -68,6 +87,7 @@ CascadedShadowMap::CascadedShadowMap(CascadedShadowMap&& other) noexcept
     : m_config(other.m_config)
     , m_fbo(other.m_fbo)
     , m_depthTextureArray(other.m_depthTextureArray)
+    , m_fluxTextureArray(other.m_fluxTextureArray)
     , m_lightSpaceMatrices(std::move(other.m_lightSpaceMatrices))
     , m_cascadeSplits(std::move(other.m_cascadeSplits))
     , m_texelWorldSizes(std::move(other.m_texelWorldSizes))
@@ -77,6 +97,7 @@ CascadedShadowMap::CascadedShadowMap(CascadedShadowMap&& other) noexcept
 {
     other.m_fbo = 0;
     other.m_depthTextureArray = 0;
+    other.m_fluxTextureArray = 0;
     other.m_hasDepthBounds = false;
     other.m_depthBoundsNear = 0.0f;
     other.m_depthBoundsFar = 0.0f;
@@ -91,6 +112,10 @@ CascadedShadowMap& CascadedShadowMap::operator=(CascadedShadowMap&& other) noexc
         {
             glDeleteTextures(1, &m_depthTextureArray);
         }
+        if (m_fluxTextureArray != 0)
+        {
+            glDeleteTextures(1, &m_fluxTextureArray);
+        }
         if (m_fbo != 0)
         {
             glDeleteFramebuffers(1, &m_fbo);
@@ -100,6 +125,7 @@ CascadedShadowMap& CascadedShadowMap::operator=(CascadedShadowMap&& other) noexc
         m_config = other.m_config;
         m_fbo = other.m_fbo;
         m_depthTextureArray = other.m_depthTextureArray;
+        m_fluxTextureArray = other.m_fluxTextureArray;
         m_lightSpaceMatrices = std::move(other.m_lightSpaceMatrices);
         m_cascadeSplits = std::move(other.m_cascadeSplits);
         m_texelWorldSizes = std::move(other.m_texelWorldSizes);
@@ -110,6 +136,7 @@ CascadedShadowMap& CascadedShadowMap::operator=(CascadedShadowMap&& other) noexc
         // Zero the source
         other.m_fbo = 0;
         other.m_depthTextureArray = 0;
+        other.m_fluxTextureArray = 0;
         other.m_hasDepthBounds = false;
         other.m_depthBoundsNear = 0.0f;
         other.m_depthBoundsFar = 0.0f;
@@ -336,7 +363,13 @@ void CascadedShadowMap::beginCascade(int cascade)
     glBindFramebuffer(GL_FRAMEBUFFER, m_fbo);
     glNamedFramebufferTextureLayer(m_fbo, GL_DEPTH_ATTACHMENT,
                                    m_depthTextureArray, 0, cascade);
+    glNamedFramebufferTextureLayer(m_fbo, GL_COLOR_ATTACHMENT0,
+                                   m_fluxTextureArray, 0, cascade);
     glViewport(0, 0, m_config.resolution, m_config.resolution);
+    // Clear flux to zero (RGB=0 no bounce, A=0 marks "no geometry"); DSA clear
+    // so the global glClearColor state is left untouched (Phase 13 G1).
+    static const float kZeroFlux[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+    glClearNamedFramebufferfv(m_fbo, GL_COLOR, 0, kZeroFlux);
     glClear(GL_DEPTH_BUFFER_BIT);
 }
 

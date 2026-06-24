@@ -81,10 +81,18 @@ public:
     /// @brief Gets the configuration.
     const PointShadowConfig& getConfig() const;
 
+    /// @brief Raw RSM flux cubemap handle (RGBA16F). Each texel holds
+    ///        `albedo · light-radiance · max(0,N·L) · attenuation` for the
+    ///        surface closest to the light — the reflective-shadow-map term the
+    ///        world-space GI inject pass scatters into the probe grid
+    ///        (Phase 13 G1). RGB = flux, A = 1 where geometry wrote flux.
+    GLuint fluxCubemap() const { return m_fluxCubemap; }
+
 private:
     PointShadowConfig m_config;
     GLuint m_fbo = 0;
     GLuint m_depthCubemap = 0;
+    GLuint m_fluxCubemap = 0;   ///< RSM flux colour attachment (RGBA16F, Phase 13 G1)
     glm::mat4 m_lightSpaceMatrices[6];
     glm::mat4 m_shadowProjection;
 };

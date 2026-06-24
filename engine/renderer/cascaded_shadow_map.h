@@ -86,6 +86,14 @@ public:
     ///        until the first @ref update.
     GLuint depthTextureArray() const { return m_depthTextureArray; }
 
+    /// @brief Raw RSM flux `sampler2DArray` handle (RGBA16F, one layer per
+    ///        cascade). Each texel holds `albedo · light-radiance · max(0,N·L)`
+    ///        for the surface closest to the light — the reflective-shadow-map
+    ///        term the world-space GI inject pass scatters into the probe grid
+    ///        (Phase 13 G1). RGB = flux, A = 1 where geometry wrote flux, 0
+    ///        elsewhere. Co-sized with @ref depthTextureArray.
+    GLuint fluxTextureArray() const { return m_fluxTextureArray; }
+
     /// @brief Gets the world-space texel size for a cascade (for normal offset bias).
     float getTexelWorldSize(int cascade) const;
 
@@ -123,6 +131,7 @@ private:
     CascadedShadowConfig m_config;
     GLuint m_fbo = 0;
     GLuint m_depthTextureArray = 0;
+    GLuint m_fluxTextureArray = 0;   ///< RSM flux colour attachment (RGBA16F, Phase 13 G1)
     std::vector<glm::mat4> m_lightSpaceMatrices;
     std::vector<float> m_cascadeSplits;
     std::vector<float> m_texelWorldSizes;

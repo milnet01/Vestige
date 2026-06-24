@@ -27,11 +27,25 @@ PointShadowMap::PointShadowMap(const PointShadowConfig& config)
     glTextureParameteri(m_depthCubemap, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glTextureParameteri(m_depthCubemap, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
 
+    // Create RSM flux colour cubemap — DSA. Phase 13 G1: holds
+    // albedo·light-radiance·max(0,N·L)·attenuation for the surface closest to
+    // the light, scattered into the probe grid by the world-space GI inject
+    // pass. RGBA16F because flux is HDR.
+    glCreateTextures(GL_TEXTURE_CUBE_MAP, 1, &m_fluxCubemap);
+    glTextureStorage2D(m_fluxCubemap, 1, GL_RGBA16F, res, res);
+    glTextureParameteri(m_fluxCubemap, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTextureParameteri(m_fluxCubemap, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTextureParameteri(m_fluxCubemap, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTextureParameteri(m_fluxCubemap, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTextureParameteri(m_fluxCubemap, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+
     // Create FBO — DSA
     glCreateFramebuffers(1, &m_fbo);
-    // Attach entire cubemap (all 6 faces) for completeness check
+    // Attach entire cubemap (all 6 faces) for completeness check; the specific
+    // face is re-pointed per face in beginFace().
     glNamedFramebufferTexture(m_fbo, GL_DEPTH_ATTACHMENT, m_depthCubemap, 0);
-    glNamedFramebufferDrawBuffer(m_fbo, GL_NONE);
+    glNamedFramebufferTexture(m_fbo, GL_COLOR_ATTACHMENT0, m_fluxCubemap, 0);
+    glNamedFramebufferDrawBuffer(m_fbo, GL_COLOR_ATTACHMENT0);
     glNamedFramebufferReadBuffer(m_fbo, GL_NONE);
 
     GLenum status = glCheckNamedFramebufferStatus(m_fbo, GL_FRAMEBUFFER);
@@ -59,12 +73,17 @@ PointShadowMap::~PointShadowMap()
     {
         glDeleteTextures(1, &m_depthCubemap);
     }
+    if (m_fluxCubemap != 0)
+    {
+        glDeleteTextures(1, &m_fluxCubemap);
+    }
 }
 
 PointShadowMap::PointShadowMap(PointShadowMap&& other) noexcept
     : m_config(other.m_config)
     , m_fbo(other.m_fbo)
     , m_depthCubemap(other.m_depthCubemap)
+    , m_fluxCubemap(other.m_fluxCubemap)
     , m_shadowProjection(other.m_shadowProjection)
 {
     for (int i = 0; i < 6; i++)
@@ -73,6 +92,7 @@ PointShadowMap::PointShadowMap(PointShadowMap&& other) noexcept
     }
     other.m_fbo = 0;
     other.m_depthCubemap = 0;
+    other.m_fluxCubemap = 0;
 }
 
 PointShadowMap& PointShadowMap::operator=(PointShadowMap&& other) noexcept
@@ -88,11 +108,16 @@ PointShadowMap& PointShadowMap::operator=(PointShadowMap&& other) noexcept
         {
             glDeleteTextures(1, &m_depthCubemap);
         }
+        if (m_fluxCubemap != 0)
+        {
+            glDeleteTextures(1, &m_fluxCubemap);
+        }
 
         // Transfer all state
         m_config = other.m_config;
         m_fbo = other.m_fbo;
         m_depthCubemap = other.m_depthCubemap;
+        m_fluxCubemap = other.m_fluxCubemap;
         m_shadowProjection = other.m_shadowProjection;
         for (int i = 0; i < 6; i++)
         {
@@ -102,6 +127,7 @@ PointShadowMap& PointShadowMap::operator=(PointShadowMap&& other) noexcept
         // Zero the source
         other.m_fbo = 0;
         other.m_depthCubemap = 0;
+        other.m_fluxCubemap = 0;
     }
     return *this;
 }
@@ -135,7 +161,13 @@ void PointShadowMap::beginFace(int face)
     glBindFramebuffer(GL_FRAMEBUFFER, m_fbo);
     glNamedFramebufferTextureLayer(m_fbo, GL_DEPTH_ATTACHMENT,
         m_depthCubemap, 0, face);
+    glNamedFramebufferTextureLayer(m_fbo, GL_COLOR_ATTACHMENT0,
+        m_fluxCubemap, 0, face);
     glViewport(0, 0, m_config.resolution, m_config.resolution);
+    // Clear flux to zero (RGB=0 no bounce, A=0 marks "no geometry"); DSA clear
+    // leaves the global glClearColor state untouched (Phase 13 G1).
+    static const float kZeroFlux[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+    glClearNamedFramebufferfv(m_fbo, GL_COLOR, 0, kZeroFlux);
     glClear(GL_DEPTH_BUFFER_BIT);
 }
 

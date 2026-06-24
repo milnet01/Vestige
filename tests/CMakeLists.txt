@@ -14,6 +14,8 @@ add_executable(vestige_tests
     test_subsurface_parity.cpp
     test_volumetric_fog_gpu.cpp
     test_gi_gpu.cpp
+    test_gi_probe_gpu.cpp
+    test_gi_probe_math.cpp
     test_fog_benchmark.cpp
     test_event_bus.cpp
     test_timer.cpp

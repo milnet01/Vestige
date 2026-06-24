@@ -258,7 +258,9 @@ void FoliageRenderer::renderShadow(
     const std::vector<const FoliageChunk*>& chunks,
     const Camera& camera,
     const glm::mat4& lightSpaceMatrix,
-    float time)
+    float time,
+    const glm::vec3& lightRadiance,
+    const glm::vec3& lightDir)
 {
     if (!m_initialized || !m_shadowShader.getId() || chunks.empty())
     {
@@ -312,6 +314,9 @@ void FoliageRenderer::renderShadow(
     m_shadowShader.setFloat("u_windAmplitude", windAmplitude);
     m_shadowShader.setFloat("u_windFrequency", windFrequency);
     m_shadowShader.setInt("u_texture", 0);
+    // Phase 13 G1: directional radiance + travel direction for the RSM flux term.
+    m_shadowShader.setVec3("u_lightRadiance", lightRadiance);
+    m_shadowShader.setVec3("u_lightDir", lightDir);
 
     // R4: bracket cull state — shadow pass disables culling so two-
     // sided star-mesh foliage shadows correctly, RAII restores the

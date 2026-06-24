@@ -560,6 +560,10 @@ public:
 private:
     void uploadLightUniforms(const Camera& camera);
     void uploadMaterialUniforms(const Material& material);
+    /// @brief Binds a batch's albedo (texture unit 0 + factor) into a shadow
+    ///        shader for the RSM flux term (Phase 13 G1). Shared by the
+    ///        directional + point shadow passes so they bind albedo identically.
+    void bindShadowFluxAlbedo(Shader& shader, const Material* material);
     void renderShadowPass(const std::vector<SceneRenderData::RenderItem>& shadowCasterItems,
                           const Camera& camera, float aspectRatio);
     void renderPointShadowPass(const std::vector<int>& shadowCasters);
