@@ -1622,6 +1622,20 @@ Application published on Steam. Scenes can be packaged and shared between users.
 - [ ] Radiance cascades (Alexander Sannikov's approach — constant-cost GI independent of scene complexity and light count; 2D proven in production, 3D extension is active research area; ref: Holographic RC arXiv 2505.02041, JTLee98 3D Vulkan PoC)
 - [ ] ReSTIR GI (reservoir-based spatiotemporal importance resampling for indirect illumination — dramatically improves convergence when hardware RT is available)
 
+- 📋 [3D_E-0021] **World-space dynamic GI (DDGI-lite): RSM-injected SH probes + temporal feedback, two-tier Baked/Dynamic/Off.**
+  Design-of-record: docs/phases/phase_13_worldspace_gi_design.md
+  (cold-eyes converged 6 loops, signed off 2026-06-24). Realizes the
+  Light-probes / real-time-irradiance-probe-GI intent via a lighter RSM
+  technique (no surfel/SDF backbone). Reuses SHProbeGrid read path +
+  RadiosityBaker; one net-new engine piece = an RGBA16F flux attachment on
+  the CSM/point shadow FBOs. 5 slices: G1 RSM flux attachment, G2 runtime
+  probe injection, G3 temporal multi-bounce + Chebyshev leak fix, G4 tier
+  toggle + R4 reconciliation, G5 quality presets + accessibility. Budget
+  ≤1.5 ms on the RX 6600. Awaiting user go-ahead to implement.
+  **Layman:** Indirect lighting that bounces off all lights including ones off-screen, with a cheap "baked" mode for low-end machines and a live mode for games.
+  Kind: implement.
+  Source: design-of-record 2026-06-24 (cold-eyes converged, 6 loops).
+
 ### Vulkan and Ray Tracing
 - [ ] Vulkan rendering backend (alternative to OpenGL)
 - [ ] Vulkan descriptor heap (VK_EXT_descriptor_heap — simplified resource binding, replaces legacy descriptor set model)
