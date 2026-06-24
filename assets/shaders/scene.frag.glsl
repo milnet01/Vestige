@@ -36,6 +36,13 @@ layout(location = 1) out vec4 motionOut;
 // only around the opaque pass (cloth/transparent/skybox are masked out → cleared
 // zero-length sentinel → V_mask disabled there). Mirrors attachment 1's gating.
 layout(location = 2) out vec4 normalOut;
+// Dynamic-GI injection-source MRT attachment (Slice R4): .rgb = albedo · Σ(direct
+// diffuse, shadowed) — the direct-diffuse outgoing radiance this surface emits,
+// EXCLUDING ambient/SH, specular, emissive, SSS, and clearcoat attenuation (the
+// design §11.2 energy model — so the dynamic single-bounce never re-adds the SH
+// floor). The GI inject compute splats this into the froxel cache. Written only
+// for opaque renderItems (renderer's attachment-3 colour mask), like motion/normal.
+layout(location = 3) out vec4 giOut;
 
 // Set true only for the opaque renderItems draws; false elsewhere (combine pass then
 // resolves those pixels to the camera-motion fallback). Also the repurposed
@@ -146,6 +153,28 @@ uniform float u_clearcoatRoughness;  // Roughness of the clearcoat layer
 uniform float u_subsurfaceStrength;  // 0.0 = off (skips the term), 1.0 = max
 uniform vec3  u_subsurfaceColor;     // tint of scattered + transmitted light
 uniform float u_subsurfaceThickness; // [0,1] thickness proxy; transmission ∝ (1 - thickness)
+
+// Dynamic GI read (Slice R4, Variant A — design §11.2). The froxel GI cache
+// co-located with the volumetric fog volume: .rgb = accumulated indirect
+// radiance, .a = confidence. Sampled at the fragment's froxel coord (screen UV
+// from gl_FragCoord, slice from v_viewDepth) and added on top of the SH-ambient
+// floor. u_dynamicGiEnabled gates the read so "off" is byte-identical to pre-R4.
+uniform bool      u_dynamicGiEnabled;  // false ⇒ skip the read entirely
+uniform sampler3D u_giTexture;         // m_giReadTexture, unit 24
+uniform float     u_giStrength;        // scale on the dynamic term (default 0.5)
+uniform vec2      u_giNearFar;         // froxel volume [near, far] (view-space m)
+uniform vec2      u_resolution;        // window (w, h) for the froxel screen UV
+
+// Normalised [0,1] depth-slice sample coord for a view depth — mirrors
+// giVolumetricSliceCoord() in gi_math.h and the inject's giSliceCoord (Rule 7).
+float giSliceCoord(float viewDepth, float nearD, float farD)
+{
+    if (!(nearD > 0.0) || !(farD > nearD) || !(viewDepth > 0.0))
+    {
+        return 0.0;
+    }
+    return clamp(log(viewDepth / nearD) / log(farD / nearD), 0.0, 1.0);
+}
 
 // PBR textures
 uniform bool u_hasMetallicRoughnessMap;
@@ -792,7 +821,7 @@ vec3 sssBackScatter(vec3 V, vec3 L, vec3 N, float strength, float thickness,
 
 /// Calculates Cook-Torrance specular + Lambertian diffuse for a directional light.
 vec3 calcDirectionalLightPBR(vec3 N, vec3 V, vec3 albedo, float metallic,
-                              float roughness, vec3 F0)
+                              float roughness, vec3 F0, out vec3 diffuseDirect)
 {
     vec3 L = normalize(-u_dirLight_direction);
     vec3 H = normalize(V + L);
@@ -821,6 +850,12 @@ vec3 calcDirectionalLightPBR(vec3 N, vec3 V, vec3 albedo, float metallic,
 
     vec3 baseLighting = (kD * albedo / PI + specular) * radiance * NdotL;
 
+    // Slice R4 GI injection source: the Lambertian direct-diffuse term only,
+    // shadowed — no specular, SSS, clearcoat, or ambient (design §11.2 energy
+    // model). The shadow multiply mirrors the `baseLighting * (1 - shadow)` at
+    // the return below.
+    diffuseDirect = (kD * albedo / PI) * radiance * NdotL * (1.0 - shadow);
+
     // Subsurface scattering (R3): front-scatter folds into baseLighting (so it is
     // clearcoat-attenuated + shadowed with the rest); back-scatter is added after the
     // shadow multiply (transmission is not occluded by the front-face shadow).
@@ -848,7 +883,7 @@ vec3 calcDirectionalLightPBR(vec3 N, vec3 V, vec3 albedo, float metallic,
 
 /// Calculates Cook-Torrance specular + Lambertian diffuse for a point light.
 vec3 calcPointLightPBR(int i, vec3 N, vec3 V, vec3 fragPos, vec3 albedo,
-                        float metallic, float roughness, vec3 F0)
+                        float metallic, float roughness, vec3 F0, out vec3 diffuseDirect)
 {
     vec3 toLight = u_pointLights_position[i] - fragPos;
     float dist = length(toLight);
@@ -883,6 +918,10 @@ vec3 calcPointLightPBR(int i, vec3 N, vec3 V, vec3 fragPos, vec3 albedo,
 
     vec3 baseLighting = (kD * albedo / PI + specular) * radiance * NdotL;
 
+    // Slice R4 GI injection source (see calcDirectionalLightPBR): Lambertian
+    // direct-diffuse only, shadowed.
+    diffuseDirect = (kD * albedo / PI) * radiance * NdotL * (1.0 - shadow);
+
     // Subsurface scattering (R3): see calcDirectionalLightPBR for the rationale.
     vec3 sssBack = vec3(0.0);
     if (u_subsurfaceStrength > 0.0)
@@ -907,7 +946,7 @@ vec3 calcPointLightPBR(int i, vec3 N, vec3 V, vec3 fragPos, vec3 albedo,
 
 /// Calculates Cook-Torrance specular + Lambertian diffuse for a spot light.
 vec3 calcSpotLightPBR(int i, vec3 N, vec3 V, vec3 fragPos, vec3 albedo,
-                       float metallic, float roughness, vec3 F0)
+                       float metallic, float roughness, vec3 F0, out vec3 diffuseDirect)
 {
     vec3 toLight = u_spotLights_position[i] - fragPos;
     float dist = length(toLight);
@@ -939,6 +978,10 @@ vec3 calcSpotLightPBR(int i, vec3 N, vec3 V, vec3 fragPos, vec3 albedo,
     vec3 kD = (vec3(1.0) - F) * (1.0 - metallic);
 
     vec3 baseLighting = (kD * albedo / PI + specular) * radiance * NdotL;
+
+    // Slice R4 GI injection source (see calcDirectionalLightPBR): Lambertian
+    // direct-diffuse only. The spot path applies no shadow, matching its bare return.
+    diffuseDirect = (kD * albedo / PI) * radiance * NdotL;
 
     // Subsurface scattering (R3): the spot path applies no shadow (bare return), so
     // spot front-scatter is unshadowed like the rest of the spot contribution (§10.10).
@@ -1070,6 +1113,12 @@ void main()
     // attachment would spread); that sentinel disables V_mask in the resolve (§9.5).
     normalOut = vec4(safeNormalize(v_normal, vec3(0.0)), 1.0);
 
+    // --- Dynamic-GI injection source (Slice R4) ---
+    // Written FIRST (like motion/normal), so attachment 3 is never undefined for an
+    // opaque pixel. Default 0 (no injected radiance); the PBR path overwrites it with
+    // the accumulated direct-diffuse below. Non-PBR (Blinn-Phong) surfaces inject 0.
+    giOut = vec4(0.0);
+
     // Wireframe mode — solid color, no lighting
     if (u_wireframe)
     {
@@ -1160,25 +1209,35 @@ void main()
         // F0 — base reflectivity: 0.04 for dielectrics, albedo for metals
         vec3 F0 = mix(vec3(0.04), albedo, metallic);
 
-        // Accumulate direct lighting
+        // Accumulate direct lighting. giDirect accumulates the per-light
+        // direct-diffuse term in parallel (Slice R4 injection source).
         vec3 Lo = vec3(0.0);
+        vec3 giDirect = vec3(0.0);
+        vec3 dd;  // per-light direct-diffuse out-param
 
         if (u_hasDirLight)
         {
-            Lo += calcDirectionalLightPBR(norm, viewDir, albedo, metallic, roughness, F0) * pomShadowFactor;
+            Lo += calcDirectionalLightPBR(norm, viewDir, albedo, metallic, roughness, F0, dd) * pomShadowFactor;
+            giDirect += dd * pomShadowFactor;  // POM self-shadow scales the source too
         }
 
         for (int i = 0; i < u_pointLightCount && i < MAX_POINT_LIGHTS; i++)
         {
             Lo += calcPointLightPBR(i, norm, viewDir, v_fragPosition,
-                                     albedo, metallic, roughness, F0);
+                                     albedo, metallic, roughness, F0, dd);
+            giDirect += dd;
         }
 
         for (int i = 0; i < u_spotLightCount && i < MAX_SPOT_LIGHTS; i++)
         {
             Lo += calcSpotLightPBR(i, norm, viewDir, v_fragPosition,
-                                    albedo, metallic, roughness, F0);
+                                    albedo, metallic, roughness, F0, dd);
+            giDirect += dd;
         }
+
+        // Slice R4: publish the accumulated direct-diffuse as the GI injection
+        // source (att3). Excludes ambient/SH, specular, emissive, SSS, clearcoat.
+        giOut = vec4(giDirect, 1.0);
 
         // Ambient lighting — IBL or fallback constant
         vec3 ambient;
@@ -1224,6 +1283,24 @@ void main()
             vec3 specularIBL = prefilteredColor * (F * brdf.x + brdf.y) * u_iblSpecularScale;
 
             ambient = (diffuseIBL + specularIBL) * ao * u_iblMultiplier;
+
+            // Dynamic GI (Slice R4): add the cached single-bounce indirect term
+            // on TOP of the SH floor. Froxel coord = screen UV from gl_FragCoord
+            // (NOT v_texCoord) + slice from this fragment's view depth. Weighted
+            // by gi.a (confidence) so just-revealed / decaying froxels fade rather
+            // than pop. No u_iblMultiplier (that's the IBL/SH master scale — the
+            // dynamic term's only knob is u_giStrength, which bounds the residual
+            // overlap with the baked floor's first bounce, §11.2); ao applies
+            // because GI is indirect light. Lands BEFORE the clearcoat RMW below,
+            // so on clearcoat materials the GI term is coat-attenuated with the
+            // floor (intended — GI is base-layer indirect under the coat).
+            if (u_dynamicGiEnabled)
+            {
+                vec3 giCoord = vec3(gl_FragCoord.xy / u_resolution,
+                                    giSliceCoord(abs(v_viewDepth), u_giNearFar.x, u_giNearFar.y));
+                vec4 gi = texture(u_giTexture, giCoord);
+                ambient += u_giStrength * gi.a * kD * gi.rgb * albedo * ao;
+            }
 
             // Clearcoat IBL reflection (uses blended prefilter)
             if (u_clearcoat > 0.0)

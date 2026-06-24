@@ -136,6 +136,8 @@ PostProcessAccessibilitySettings postProcessFromWire(
     pp.reduceMotionFog     = w.reduceMotionFog;
     pp.volumetricFogEnabled = w.volumetricFogEnabled;
     pp.godRaysEnabled      = w.godRaysEnabled;
+    pp.dynamicGiEnabled    = w.dynamicGiEnabled;
+    pp.reduceMotionGi      = w.reduceMotionGi;
     return pp;
 }
 

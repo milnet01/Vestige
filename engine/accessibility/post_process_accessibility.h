@@ -112,6 +112,24 @@ struct PostProcessAccessibilitySettings
     /// the sun (motion) — the safe preset wants no light-shaft motion at all.
     bool godRaysEnabled = true;
 
+    /// Dynamic global-illumination master toggle (Slice R4, Variant A).
+    /// Defaults on for visual quality. Gated in the renderer as
+    /// `dynamicGiActive = dynamicGiEnabled && m_volumetricFogPass.isInitialized()
+    /// && (isTAA || isSMAA)` — the GI injection source lives on the non-MSAA
+    /// scene FBO, so dynamic GI is a TAA/SMAA-mode feature (like the R1/R2 motion
+    /// + normal attachments). When inactive the inject dispatch is skipped *and*
+    /// the scene-shader GI read is gated off ⇒ zero GPU cost, byte-identical to
+    /// pre-R4. GI is low-frequency indirect light (no flashing), so unlike god
+    /// rays `safeDefaults()` leaves it **on** — but see `reduceMotionGi`.
+    bool dynamicGiEnabled = true;
+
+    /// Reduced-motion mode for dynamic GI. Sets the inject EMA constants
+    /// `alpha = 0` AND `decay = 0`, freezing the cache so a warm froxel's read
+    /// output (`rgb·a`) is byte-stable frame-to-frame for an unchanging scene —
+    /// no temporal shimmer for motion-sensitive users (design §11.2, normative).
+    /// `safeDefaults()` turns it **on**.
+    bool reduceMotionGi = false;
+
     /// Value equality — two configs match iff every flag matches.
     bool operator==(const PostProcessAccessibilitySettings& o) const
     {
@@ -121,7 +139,9 @@ struct PostProcessAccessibilitySettings
             && fogIntensityScale    == o.fogIntensityScale
             && reduceMotionFog      == o.reduceMotionFog
             && volumetricFogEnabled == o.volumetricFogEnabled
-            && godRaysEnabled       == o.godRaysEnabled;
+            && godRaysEnabled       == o.godRaysEnabled
+            && dynamicGiEnabled     == o.dynamicGiEnabled
+            && reduceMotionGi       == o.reduceMotionGi;
     }
     bool operator!=(const PostProcessAccessibilitySettings& o) const { return !(*this == o); }
 };

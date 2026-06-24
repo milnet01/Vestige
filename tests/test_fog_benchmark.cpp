@@ -46,6 +46,11 @@ namespace
 // that stack.
 constexpr double kVolumetricBudgetMicros = 2000.0;
 
+// design § 11.2: the dynamic-GI inject is one extra RGBA16F 160×90×64 image
+// write (~one fog pass). The primary gate R4 controls is the inject dispatch
+// timed in isolation staying ≤ 0.4 ms on the RX 6600 at 1080p (est. ~0.3 ms).
+constexpr double kGiInjectBudgetMicros = 400.0;
+
 // True when the active GL renderer is a software rasteriser (llvmpipe /
 // softpipe / swrast). A wall-clock budget written for a real GPU does not apply.
 bool isSoftwareRenderer()
@@ -72,6 +77,22 @@ GLuint makeLitShadowArray()
     glClearTexImage(tex, 0, GL_DEPTH_COMPONENT, GL_FLOAT, &lit);
     glTextureParameteri(tex, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTextureParameteri(tex, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    return tex;
+}
+
+// Full-res (1080p) 2D texture for the GI inject's per-froxel att3 / depth
+// samples — representative of a shipped frame's sampler cache behaviour.
+GLuint makeFullResTex(GLenum internalFormat, GLenum format, float clearValue)
+{
+    GLuint tex = 0;
+    glCreateTextures(GL_TEXTURE_2D, 1, &tex);
+    glTextureStorage2D(tex, 1, internalFormat, 1920, 1080);
+    glTextureParameteri(tex, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTextureParameteri(tex, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTextureParameteri(tex, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTextureParameteri(tex, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    const glm::vec4 v(clearValue);
+    glClearTexImage(tex, 0, format, GL_FLOAT, &v.x);
     return tex;
 }
 }  // namespace
@@ -177,4 +198,70 @@ TEST_F(FogBenchmarkTest, VolumetricDispatchUnderBudget)
     EXPECT_LE(medianMicros, kVolumetricBudgetMicros)
         << "volumetric froxel dispatch (160×90×64) median " << medianMicros
         << " µs exceeds the " << kVolumetricBudgetMicros << " µs fog-stack budget";
+}
+
+// Slice R4 (design § 11.6 test 8): the GI inject dispatch timed in isolation
+// against the 0.4 ms gate, plus a combined fog+GI report against the fog
+// baseline. Same Debug / software-renderer guards as the fog gate above.
+TEST_F(FogBenchmarkTest, GiInjectDispatchUnderBudget)
+{
+    VolumetricFogPass pass;  // default 160×90×64 grid (the shipped config)
+    ASSERT_TRUE(pass.init(VESTIGE_SHADER_DIR));
+
+    GLuint att3  = makeFullResTex(GL_RGBA16F, GL_RGBA, 0.5f);
+    GLuint depth = makeFullResTex(GL_R32F,    GL_RED,  0.9f);
+
+    const glm::mat4 proj = glm::perspective(glm::radians(60.0f), 16.0f / 9.0f, 0.1f, 500.0f);
+    const glm::mat4 view = glm::lookAt(glm::vec3(0.0f), glm::vec3(0.0f, 0.0f, -1.0f),
+                                       glm::vec3(0.0f, 1.0f, 0.0f));
+    VolumetricFogPass::GiFrameParams gp;
+    gp.invProjection      = glm::inverse(proj);
+    gp.invView            = glm::inverse(view);
+    gp.prevViewProjection = proj * view;   // mostly-warm: exercises the history fetch
+    gp.prevView           = view;
+    gp.injectionSourceTex = att3;
+    gp.sceneDepthTex      = depth;
+
+    Vestige::Test::ScopedLeakCheckDisable noLeakTracking;
+
+    auto timeGi = [&]() -> double
+    {
+        glFinish();
+        const auto t0 = std::chrono::steady_clock::now();
+        pass.dispatchGi(gp);
+        glFinish();
+        const auto t1 = std::chrono::steady_clock::now();
+        return std::chrono::duration<double, std::micro>(t1 - t0).count();
+    };
+
+    for (int i = 0; i < 3; ++i) timeGi();  // warm
+
+    constexpr int kFrames = 8;
+    std::vector<double> micros;
+    micros.reserve(kFrames);
+    for (int f = 0; f < kFrames; ++f) micros.push_back(timeGi());
+    std::sort(micros.begin(), micros.end());
+    const double medianMicros = micros[micros.size() / 2];
+
+    glDeleteTextures(1, &att3);
+    glDeleteTextures(1, &depth);
+
+#if !defined(NDEBUG)
+    GTEST_SKIP() << "non-optimised (Debug) build — GI inject dispatch median "
+                 << medianMicros << " µs not gated against the "
+                 << kGiInjectBudgetMicros << " µs budget.";
+#endif
+
+    if (isSoftwareRenderer())
+    {
+        GTEST_SKIP() << "software renderer ("
+                     << reinterpret_cast<const char*>(glGetString(GL_RENDERER))
+                     << ") — GI inject dispatch median " << medianMicros
+                     << " µs not gated against the " << kGiInjectBudgetMicros
+                     << " µs GPU budget.";
+    }
+
+    EXPECT_LE(medianMicros, kGiInjectBudgetMicros)
+        << "GI inject dispatch (160×90×64) median " << medianMicros
+        << " µs exceeds the " << kGiInjectBudgetMicros << " µs budget (design § 11.2)";
 }

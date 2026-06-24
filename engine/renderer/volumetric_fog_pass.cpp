@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <array>
+#include <utility>
 
 namespace Vestige
 {
@@ -63,7 +64,8 @@ bool VolumetricFogPass::init(const std::string& shaderDir, const FroxelGridConfi
     const bool ok =
         m_inject.loadComputeShader(shaderDir + "/volumetric_inject.comp.glsl")
         && m_scatter.loadComputeShader(shaderDir + "/volumetric_scatter.comp.glsl")
-        && m_integrate.loadComputeShader(shaderDir + "/volumetric_integrate.comp.glsl");
+        && m_integrate.loadComputeShader(shaderDir + "/volumetric_integrate.comp.glsl")
+        && m_giInject.loadComputeShader(shaderDir + "/gi_inject.comp.glsl");
     if (!ok)
     {
         Logger::error("VolumetricFogPass: failed to load compute shaders from " + shaderDir);
@@ -108,6 +110,76 @@ void VolumetricFogPass::createTextures()
     glNamedBufferData(m_volumeSsbo,
                       static_cast<GLsizeiptr>(MAX_FOG_VOLUMES * sizeof(GpuFogVolume)),
                       nullptr, GL_DYNAMIC_DRAW);
+
+    // Dynamic-GI cache (Slice R4): two RGBA16F 3D textures at the same froxel
+    // dims/filtering as the fog volume, ping-ponged each frame. Cleared to
+    // (0,0,0,0) at allocation so frame 0 reads history with confidence 0
+    // everywhere (all froxels cold — no undefined first-frame state).
+    const glm::vec4 zero(0.0f);
+    glCreateTextures(GL_TEXTURE_3D, 1, &m_giTex);
+    glTextureStorage3D(m_giTex, 1, GL_RGBA16F, m_cfg.resX, m_cfg.resY, m_cfg.resZ);
+    configureFroxelSampling(m_giTex);
+    glClearTexImage(m_giTex, 0, GL_RGBA, GL_FLOAT, &zero);
+
+    glCreateTextures(GL_TEXTURE_3D, 1, &m_giHistoryTex);
+    glTextureStorage3D(m_giHistoryTex, 1, GL_RGBA16F, m_cfg.resX, m_cfg.resY, m_cfg.resZ);
+    configureFroxelSampling(m_giHistoryTex);
+    glClearTexImage(m_giHistoryTex, 0, GL_RGBA, GL_FLOAT, &zero);
+}
+
+void VolumetricFogPass::dispatchGi(const GiFrameParams& params)
+{
+    if (!m_initialized)
+    {
+        return;
+    }
+
+    const glm::vec3 res{static_cast<float>(m_cfg.resX),
+                        static_cast<float>(m_cfg.resY),
+                        static_cast<float>(m_cfg.resZ)};
+    const glm::vec2 nearFar{m_cfg.near, m_cfg.far};
+    const GLuint groupsX = static_cast<GLuint>((m_cfg.resX + 7) / 8);
+    const GLuint groupsY = static_cast<GLuint>((m_cfg.resY + 7) / 8);
+    const GLuint groupsZ = static_cast<GLuint>((m_cfg.resZ + 7) / 8);
+
+    m_giInject.use();
+    m_giInject.setVec3("u_froxelRes", res);
+    m_giInject.setVec2("u_froxelNearFar", nearFar);
+    m_giInject.setMat4("u_invProjection", params.invProjection);
+    m_giInject.setMat4("u_invView", params.invView);
+    m_giInject.setMat4("u_prevViewProjection", params.prevViewProjection);
+    m_giInject.setMat4("u_prevView", params.prevView);
+    m_giInject.setFloat("u_giAlpha", params.alpha);
+    m_giInject.setFloat("u_giDecay", params.decay);
+
+    // History (prev cache) on texture unit 0, injection source on 1, depth on 2;
+    // the write target is image unit 0 (a distinct binding space from texture
+    // units). The reprojected history read samples a different texel than the
+    // thread writes, so the ping-pong read/write are separate textures (safe).
+    glBindTextureUnit(0, m_giHistoryTex);
+    m_giInject.setInt("u_giHistory", 0);
+    glBindTextureUnit(1, params.injectionSourceTex);
+    m_giInject.setInt("u_injectionSource", 1);
+    glBindTextureUnit(2, params.sceneDepthTex);
+    m_giInject.setInt("u_sceneDepth", 2);
+
+    glBindImageTexture(0, m_giTex, 0, GL_TRUE, 0, GL_WRITE_ONLY, GL_RGBA16F);
+    glDispatchCompute(groupsX, groupsY, groupsZ);
+    // The scene pass fetches this cache (after the end-of-frame swap) and tests
+    // read it back via glGetTextureImage; cover image-store, texture-fetch, and
+    // texture-update consumers.
+    glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT
+                    | GL_TEXTURE_FETCH_BARRIER_BIT
+                    | GL_TEXTURE_UPDATE_BARRIER_BIT);
+}
+
+void VolumetricFogPass::swapGiBuffers()
+{
+    if (!m_initialized)
+    {
+        return;
+    }
+    std::swap(m_giTex, m_giHistoryTex);
 }
 
 void VolumetricFogPass::destroy()
@@ -131,6 +203,16 @@ void VolumetricFogPass::destroy()
     {
         glDeleteBuffers(1, &m_volumeSsbo);
         m_volumeSsbo = 0;
+    }
+    if (m_giTex != 0)
+    {
+        glDeleteTextures(1, &m_giTex);
+        m_giTex = 0;
+    }
+    if (m_giHistoryTex != 0)
+    {
+        glDeleteTextures(1, &m_giHistoryTex);
+        m_giHistoryTex = 0;
     }
     m_initialized = false;
 }

@@ -94,7 +94,9 @@ bool PostProcessAccessibilityWire::operator==(const PostProcessAccessibilityWire
         && fogIntensityScale   == o.fogIntensityScale
         && reduceMotionFog     == o.reduceMotionFog
         && volumetricFogEnabled == o.volumetricFogEnabled
-        && godRaysEnabled      == o.godRaysEnabled;
+        && godRaysEnabled      == o.godRaysEnabled
+        && dynamicGiEnabled    == o.dynamicGiEnabled
+        && reduceMotionGi      == o.reduceMotionGi;
 }
 
 bool PhotosensitiveSafetyWire::operator==(const PhotosensitiveSafetyWire& o) const
@@ -314,6 +316,8 @@ json postProcessAccessToJson(const PostProcessAccessibilityWire& p)
         {"reduceMotionFog",     p.reduceMotionFog},
         {"volumetricFogEnabled", p.volumetricFogEnabled},
         {"godRaysEnabled",      p.godRaysEnabled},
+        {"dynamicGiEnabled",    p.dynamicGiEnabled},
+        {"reduceMotionGi",      p.reduceMotionGi},
     };
 }
 
@@ -326,6 +330,8 @@ void postProcessAccessFromJson(const json& j, PostProcessAccessibilityWire& p)
     p.reduceMotionFog     = j.value("reduceMotionFog",     p.reduceMotionFog);
     p.volumetricFogEnabled = j.value("volumetricFogEnabled", p.volumetricFogEnabled);
     p.godRaysEnabled      = j.value("godRaysEnabled",      p.godRaysEnabled);
+    p.dynamicGiEnabled    = j.value("dynamicGiEnabled",    p.dynamicGiEnabled);
+    p.reduceMotionGi      = j.value("reduceMotionGi",      p.reduceMotionGi);
 }
 
 json photosensitiveToJson(const PhotosensitiveSafetyWire& p)

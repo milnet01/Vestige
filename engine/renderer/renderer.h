@@ -707,6 +707,14 @@ private:
     std::unique_ptr<Framebuffer> m_prevNormalFbo; // Persistent prev-frame normal buffer (Slice R2); att2 blitted here end-of-frame
     glm::mat4 m_prevViewProjection = glm::mat4(1.0f);
     glm::mat4 m_lastViewProjection = glm::mat4(1.0f);
+    // Slice R4: previous-frame view matrix, snapshotted alongside
+    // m_prevViewProjection. The dynamic-GI inject reprojects a froxel centre
+    // into the previous frame's cache and needs the previous *view* (for the
+    // prev view-space depth → slice coord) separately from the previous
+    // view-projection (for the screen UV). Both are hoisted unconditional
+    // (updated every frame, not only in the TAA branch) so the GI cache, which
+    // accumulates every frame, reprojects correctly in SMAA mode too.
+    glm::mat4 m_prevView = glm::mat4(1.0f);
 
     // Saved view state (for restoring after water FBO passes)
     glm::mat4 m_savedLastProjection = glm::mat4(1.0f);

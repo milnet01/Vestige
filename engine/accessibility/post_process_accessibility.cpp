@@ -39,6 +39,11 @@ PostProcessAccessibilitySettings safeDefaults()
     // engage; its shafts sweep as the camera pans past the sun (motion), so the
     // safe preset turns them off too — no light shafts at all under safe mode.
     s.godRaysEnabled = false;
+    // Dynamic GI is low-frequency indirect light (no flashing/strobe), so it
+    // stays *on* under the safe preset — but reduce-motion freezes its froxel
+    // cache so an unchanging scene shows no temporal shimmer (design §11.2).
+    s.dynamicGiEnabled = true;
+    s.reduceMotionGi   = true;
     return s;
 }
 

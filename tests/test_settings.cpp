@@ -1163,6 +1163,8 @@ TEST(SettingsApply, RendererAccessibilityForwardsPostProcessWireFieldsVerbatim)
     a.postProcess.fogIntensityScale   = 0.3f;
     a.postProcess.reduceMotionFog     = true;
     a.postProcess.volumetricFogEnabled = false;
+    a.postProcess.dynamicGiEnabled    = false;  // Slice R4
+    a.postProcess.reduceMotionGi      = true;    // Slice R4
 
     RecordingRendererAccessSink sink;
     applyRendererAccessibility(a, sink);
@@ -1173,6 +1175,8 @@ TEST(SettingsApply, RendererAccessibilityForwardsPostProcessWireFieldsVerbatim)
     EXPECT_FLOAT_EQ(sink.pp.fogIntensityScale, 0.3f);
     EXPECT_TRUE(sink.pp.reduceMotionFog);
     EXPECT_FALSE(sink.pp.volumetricFogEnabled);
+    EXPECT_FALSE(sink.pp.dynamicGiEnabled);
+    EXPECT_TRUE(sink.pp.reduceMotionGi);
 }
 
 TEST(SettingsApply, SubtitleMapsEverySizeStringToDistinctEnum)

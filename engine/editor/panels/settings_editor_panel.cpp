@@ -497,6 +497,23 @@ void SettingsEditorPanel::drawAccessibilityTab()
         m_editor->mutate([fogScale](Settings& s) { s.accessibility.postProcess.fogIntensityScale = fogScale; });
     }
 
+    // Dynamic GI (Slice R4). A shipping effect — toggling it has an immediate
+    // visible result (unlike the DoF/motion-blur scaffolding above). Active only
+    // in TAA/SMAA modes. Reduce-motion freezes its froxel cache.
+    bool gi = p.accessibility.postProcess.dynamicGiEnabled;
+    if (ImGui::Checkbox("Dynamic global illumination", &gi))
+    {
+        m_editor->mutate([gi](Settings& s) { s.accessibility.postProcess.dynamicGiEnabled = gi; });
+    }
+    if (gi)
+    {
+        bool rmGi = p.accessibility.postProcess.reduceMotionGi;
+        if (ImGui::Checkbox("    Freeze GI cache (reduced motion)", &rmGi))
+        {
+            m_editor->mutate([rmGi](Settings& s) { s.accessibility.postProcess.reduceMotionGi = rmGi; });
+        }
+    }
+
     ImGui::Spacing();
     ImGui::TextDisabled("Photosensitive safety");
     ImGui::Separator();

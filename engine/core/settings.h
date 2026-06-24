@@ -203,6 +203,8 @@ struct PostProcessAccessibilityWire
     bool  reduceMotionFog     = false;
     bool  volumetricFogEnabled = true;
     bool  godRaysEnabled       = true;
+    bool  dynamicGiEnabled     = true;   // Slice R4: dynamic GI master toggle
+    bool  reduceMotionGi       = false;  // Slice R4: freeze the GI cache (reduce-motion)
 
     bool operator==(const PostProcessAccessibilityWire& o) const;
     bool operator!=(const PostProcessAccessibilityWire& o) const { return !(*this == o); }

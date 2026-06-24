@@ -204,6 +204,17 @@ GLuint Framebuffer::getColorAttachmentId() const
     return m_colorAttachment;
 }
 
+GLuint Framebuffer::getColorAttachmentId(int attachmentIndex) const
+{
+    switch (attachmentIndex)
+    {
+        case 1:  return m_colorAttachment1;
+        case 2:  return m_colorAttachment2;
+        case 3:  return m_colorAttachment3;
+        default: return m_colorAttachment;
+    }
+}
+
 GLuint Framebuffer::getDepthTextureId() const
 {
     return m_isDepthRenderbuffer ? 0 : m_depthAttachment;

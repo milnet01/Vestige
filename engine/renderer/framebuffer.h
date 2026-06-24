@@ -90,8 +90,12 @@ public:
     /// @brief Gets the OpenGL framebuffer ID.
     GLuint getId() const;
 
-    /// @brief Gets the color attachment texture/renderbuffer ID.
+    /// @brief Gets the color attachment texture/renderbuffer ID (attachment 0).
     GLuint getColorAttachmentId() const;
+
+    /// @brief Gets a specific MRT colour-attachment texture ID (1/2/3; any other
+    ///        index returns attachment 0). 0 if that attachment is not enabled.
+    GLuint getColorAttachmentId(int attachmentIndex) const;
 
     /// @brief Gets the depth attachment texture ID (0 if renderbuffer or absent).
     GLuint getDepthTextureId() const;

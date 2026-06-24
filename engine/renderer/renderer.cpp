@@ -4,6 +4,7 @@
 /// @file renderer.cpp
 /// @brief Renderer implementation with Blinn-Phong/PBR lighting, shadows, and FBO pipeline.
 #include "renderer/renderer.h"
+#include "renderer/gi_math.h"  // GI_ALPHA / GI_DECAY / GI_STRENGTH_DEFAULT (Slice R4)
 #include "renderer/dynamic_mesh.h"
 #include "renderer/foliage_renderer.h"
 #include "renderer/motion_overlay_prev_world.h"
@@ -701,6 +702,13 @@ void Renderer::initFramebuffers(int width, int height, int msaaSamples)
     // Slice R2: third RGBA16F attachment for the geometric world normal (.rgb), used by
     // the resolve's V_mask disocclusion term.
     taaSceneConfig.thirdColorAttachment = true;
+    // Slice R4: fourth RGBA16F attachment — the dynamic-GI injection source
+    // (.rgb = albedo · Σ direct-diffuse, shadowed). Direct-diffuse outgoing
+    // radiance only (no ambient/SH, specular, or emissive — design §11.2 energy
+    // model), splatted into the GI froxel cache by the inject compute. Like the
+    // R1/R2 attachments it lives only on this non-MSAA FBO, so dynamic GI is a
+    // TAA/SMAA-mode feature (MSAA/None render to the multisample FBO).
+    taaSceneConfig.fourthColorAttachment = true;
     m_taaSceneFbo = std::make_unique<Framebuffer>(taaSceneConfig);
 
     // Slice R2: persistent previous-frame normal buffer. Single RGBA16F colour
@@ -809,6 +817,9 @@ void Renderer::beginFrame()
         // Slice R2: zero the normal attachment too — an uncovered pixel then reads a
         // zero-length normal, the V_mask sentinel that disables disocclusion there.
         m_taaSceneFbo->clearThirdAttachment();
+        // Slice R4: zero the GI injection source — uncovered / non-opaque texels
+        // then inject zero radiance into the froxel cache rather than stale garbage.
+        m_taaSceneFbo->clearFourthAttachment();
     }
 
     // Ensure clip distance is clean at frame start (water passes enable/disable it)
@@ -1359,6 +1370,33 @@ void Renderer::endFrame(float deltaTime)
         m_volumetricFogPass.dispatch(fp);
     }
 
+    // 5b. Dynamic-GI inject (Slice R4, Variant A). Runs in the SAME pre-composite
+    // window as the fog dispatch (before the composite binds unit 0 — the
+    // unit-0-clobber hazard), AFTER the scene pass so m_taaSceneFbo att3 holds
+    // THIS frame's diffuse-direct radiance. Reads m_giHistoryTex (reprojected) +
+    // writes m_giTex; swapped at end-of-frame below. Active only in TAA/SMAA
+    // (att3 + the GI cache live on the non-MSAA scene FBO); when off the dispatch
+    // is skipped entirely ⇒ zero GPU cost.
+    const bool giActive = m_postProcessAccessibility.dynamicGiEnabled
+        && m_volumetricFogPass.isInitialized()
+        && (isTAA || isSMAA) && m_resolveDepthFbo;
+    if (giActive)
+    {
+        VolumetricFogPass::GiFrameParams gp;
+        gp.invProjection      = glm::inverse(m_lastProjection);
+        gp.invView            = glm::inverse(m_lastView);
+        gp.prevViewProjection = m_prevViewProjection;
+        gp.prevView           = m_prevView;
+        gp.injectionSourceTex = m_taaSceneFbo->getColorAttachmentId(3);
+        gp.sceneDepthTex      = m_resolveDepthFbo->getDepthTextureId();
+        // Reduce-motion freezes the cache: alpha = 0 AND decay = 0 ⇒ both the
+        // blend and the confidence bleed stop (design §11.2, normative).
+        const bool freeze = m_postProcessAccessibility.reduceMotionGi;
+        gp.alpha = freeze ? 0.0f : GI_ALPHA;
+        gp.decay = freeze ? 0.0f : GI_DECAY;
+        m_volumetricFogPass.dispatchGi(gp);
+    }
+
     // 6. Final screen quad composite (tone mapping + bloom + SSAO + contact shadows)
     //    Render to the output FBO (not the screen) so the editor can display it as a texture.
     if (m_outputFbo)
@@ -1518,7 +1556,24 @@ void Renderer::endFrame(float deltaTime)
     {
         m_taa->swapBuffers();
         m_taa->nextFrame();
-        m_prevViewProjection = m_lastViewProjection;
+    }
+
+    // Slice R4: snapshot this frame's view + view-projection as "previous" for
+    // next frame's GI reprojection (and the TAA motion path). Hoisted out of the
+    // isTAA branch above — the dynamic-GI cache accumulates every frame, so in
+    // SMAA mode these must still advance or the reprojection reads a stale prior
+    // frame. (In MSAA/None mode GI is off, but keeping this unconditional is a
+    // one-liner and harmless.)
+    m_prevViewProjection = m_lastViewProjection;
+    m_prevView           = m_lastView;
+
+    // Slice R4: ping-pong the GI cache so this frame's freshly-injected m_giTex
+    // becomes next frame's m_giHistoryTex (the read source the scene pass +
+    // inject reproject against). Mirrors Taa::swapBuffers timing. No-op if the
+    // inject was skipped this frame — the cache simply persists.
+    if (giActive)
+    {
+        m_volumetricFogPass.swapGiBuffers();
     }
 
     // AUDIT.md §H15 / FIXPLAN G1: snapshot this frame's world
@@ -3276,6 +3331,26 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
     m_sceneShader.setBool("u_writeMotion", m_objectMotionOverlayEnabled);
     glColorMaski(1, GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
     glColorMaski(2, GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);  // Slice R2: normal attachment, gated like motion
+    glColorMaski(3, GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);  // Slice R4: GI injection source, gated like motion
+
+    // --- Dynamic GI read (Slice R4): the per-fragment indirect term added on top
+    // of the SH-ambient floor. Active only in TAA/SMAA modes (the att3 injection
+    // source + GI cache live on the non-MSAA scene FBO) and when the fog pass is
+    // initialised. The cache texture is ALWAYS bound (unit 24 — free in the scene
+    // pass) so the declared sampler stays complete for Mesa even when GI is off;
+    // u_dynamicGiEnabled gates the actual read so "off" is byte-identical to pre-R4.
+    const bool giSceneActive = m_postProcessAccessibility.dynamicGiEnabled
+        && m_volumetricFogPass.isInitialized()
+        && (m_antiAliasMode == AntiAliasMode::TAA || m_antiAliasMode == AntiAliasMode::SMAA)
+        && m_taaSceneFbo;
+    const FroxelGridConfig& giCfg = m_volumetricFogPass.config();
+    glBindTextureUnit(24, m_volumetricFogPass.giReadTexture());
+    m_sceneShader.setInt("u_giTexture", 24);
+    m_sceneShader.setBool("u_dynamicGiEnabled", giSceneActive);
+    m_sceneShader.setFloat("u_giStrength", GI_STRENGTH_DEFAULT);
+    m_sceneShader.setVec2("u_giNearFar", glm::vec2(giCfg.near, giCfg.far));
+    m_sceneShader.setVec2("u_resolution",
+        glm::vec2(static_cast<float>(m_windowWidth), static_cast<float>(m_windowHeight)));
 
     // --- Scene pass: draw all opaque render items ---
     // MDI path: group batches by material, issue one glMultiDrawElementsIndirect per group.
@@ -3446,6 +3521,7 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
     // camera-motion fallback (matching the previous behaviour).
     glColorMaski(1, GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
     glColorMaski(2, GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);  // Slice R2: stop writing normals
+    glColorMaski(3, GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);  // Slice R4: stop writing the GI source
     m_sceneShader.use();
     m_sceneShader.setBool("u_writeMotion", false);
 
@@ -3584,10 +3660,11 @@ void Renderer::renderScene(const SceneRenderData& renderData, const Camera& came
         glDisable(GL_BLEND);
     }
 
-    // Slice R1/R2: restore the attachment-1 and attachment-2 colour masks to their
-    // default (all channels writable) so no later pass / FBO inherits the write guards.
+    // Slice R1/R2/R4: restore the attachment-1/2/3 colour masks to their default
+    // (all channels writable) so no later pass / FBO inherits the write guards.
     glColorMaski(1, GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
     glColorMaski(2, GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    glColorMaski(3, GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
 }
 
 void Renderer::renderShadowPass(const std::vector<SceneRenderData::RenderItem>& shadowCasterItems,

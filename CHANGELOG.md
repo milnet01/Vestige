@@ -9855,6 +9855,28 @@ existing cases (``HelpersMatchEvaluatorPrecisely``,
 
 ### Added
 
+- **Dynamic global illumination (Phase 10 Rendering slice R4, Variant A — froxel near-field GI)**
+  One bounce of dynamic direct light, cached in a froxel volume co-located
+  with the volumetric fog grid and accumulated across frames with a
+  reprojected, confidence-weighted EMA. The scene pass writes a 4th MRT
+  attachment (albedo · direct-diffuse, opaque-only) as the injection source;
+  a new compute pass (gi_inject.comp.glsl) splats it into a ping-pong GI cache
+  reading the previous frame at the reprojected coord; the scene shader adds
+  the cached indirect term on top of the baked SH-ambient floor. CPU math
+  mirror in engine/renderer/gi_math.h pins the GLSL (Rule 7). Accessibility:
+  dynamicGiEnabled master toggle + reduceMotionGi (freezes the cache, no
+  temporal shimmer); settings.json round-trips both. GI inject measured well
+  under its 0.4 ms budget on the RX 6600 (design §11.2/§11.6).
+
+  Implementation notes (faithful refinements over the design prose): (1) the
+  scene pass samples the GI *history* texture (the previous frame's completed
+  cache) — the correct ping-pong read, since the inject runs after the scene
+  pass; (2) dynamic GI is active only in TAA/SMAA modes, because the att3
+  injection source + GI cache live on the non-MSAA scene FBO (the same
+  constraint the R1/R2 motion + normal attachments carry). MSAA/None render to
+  the multisample FBO and skip GI entirely (zero GPU cost, byte-identical to
+  pre-R4).
+
 - **Cl9: GPU cloth constraint-convergence accelerator (SOR over-relaxation)**
   The GPU cloth solver gains an opt-in convergence accelerator
   (IClothSolverBackend::setConvergenceMode / setSolverIterations). The
