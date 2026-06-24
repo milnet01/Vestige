@@ -9919,6 +9919,13 @@ existing cases (``HelpersMatchEvaluatorPrecisely``,
 
 ### Fixed
 
+- **Scene vertex shader restored to GLSL 4.50 (was accidentally 4.60), fixing CI shader-compile failure on GL 4.5 / software renderers**
+  scene.vert.glsl declared #version 460 and used the 4.60-core
+  gl_BaseInstance builtin, so it compiled only on GL 4.6 cards and broke
+  under CI's Mesa llvmpipe (GLSL 4.50 max). Now uses 450 + the
+  ARB-suffixed gl_BaseInstanceARB from the already-enabled
+  GL_ARB_shader_draw_parameters extension (identical runtime value).
+
 - **GPU cloth damping now matches the CPU per-substep convention (Cl1)** (Cl1)
   The GPU cloth backend divided ClothConfig::damping by the substep count, treating it as a per-frame coefficient, while the CPU ClothSimulator applies it per substep as documented. The GPU therefore damped roughly `substeps`x less, so an identical cloth diverged by metres between backends in a 2-second free-fall. The GPU now applies damping per substep and clamps it exactly as the CPU does. Found by the new CPU/GPU cloth parity harness.
 
