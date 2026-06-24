@@ -29,7 +29,11 @@ static std::string generateFilenameBase(const std::string& dir)
         now.time_since_epoch()) % 1000;
 
     std::tm tm{};
+#ifdef _WIN32
+    localtime_s(&tm, &time);
+#else
     localtime_r(&time, &tm);
+#endif
 
     std::ostringstream oss;
     oss << dir << "/vestige_diag_"

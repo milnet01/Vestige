@@ -119,6 +119,43 @@ jobs:
             build/Testing/**/*.xml
           if-no-files-found: ignore
 
+  # Windows MSVC build + tests. Vestige ships a Windows binary (release.yml), but
+  # until now nothing built it on push — MSVC-incompatible code (localtime_r,
+  # M_PI, non-noexcept-move types in vectors) accumulated unseen and only broke at
+  # release time. This job builds the same Release config MSVC ships, so
+  # portability regressions surface on every PR/push instead of in a release run.
+  windows-build-test:
+    name: Windows x86_64 (Release)
+    runs-on: windows-2022
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v6
+
+      - name: Cache CMake FetchContent deps
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae  # v5
+        with:
+          path: |
+            build/_deps
+          key: ci-cmake-deps-windows-${{ hashFiles('**/CMakeLists.txt') }}
+          restore-keys: |
+            ci-cmake-deps-windows-
+
+      - name: Configure (Release, MSVC)
+        run: |
+          cmake -S . -B build -A x64 `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DVESTIGE_FETCH_ASSETS=OFF
+
+      - name: Build
+        run: cmake --build build --config Release -j
+
+      - name: Run tests
+        # No xvfb on Windows; GL tests self-skip when no 4.5 context is available
+        # on the runner (GLTestFixture). The job's primary value is catching MSVC
+        # compile breakage; non-GL tests still run and assert.
+        run: ctest --test-dir build -C Release --output-on-failure
+
   audit-tool-tier1:
     name: Audit tool Tier 1 (static)
     runs-on: ubuntu-24.04

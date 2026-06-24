@@ -81,6 +81,18 @@ struct FormulaDefinition
     std::string source;              ///< Provenance (e.g. "fitted from simulation, 2026-04")
     float accuracy = 1.0f;          ///< R^2 accuracy vs reference data [0, 1]
 
+    // Move-only: the per-tier expression trees are `unique_ptr`, so a copy is
+    // deleted by design — use clone() for an explicit deep copy. Declaring the
+    // moves explicitly (and deleting copy) also makes `std::vector<FormulaDefinition>`
+    // reallocation move-construct on MSVC, whose `std::map` move ctor is not
+    // `noexcept` (so the implicit move wouldn't be either, and the vector would
+    // otherwise fall back to the deleted copy — MSVC error C2280).
+    FormulaDefinition() = default;
+    FormulaDefinition(const FormulaDefinition&) = delete;
+    FormulaDefinition& operator=(const FormulaDefinition&) = delete;
+    FormulaDefinition(FormulaDefinition&&) noexcept = default;
+    FormulaDefinition& operator=(FormulaDefinition&&) noexcept = default;
+
     // -- Utilities ----------------------------------------------------------
 
     /// @brief Deep-copies this definition (including all expression trees).
