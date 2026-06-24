@@ -28,6 +28,17 @@ on:
   push:
     tags:
       - "v*"
+  # Callable by release-cadence.yml so the weekly RC / promotion / hotfix flow
+  # reuses this exact build+publish logic. workflow_call runs in the caller's
+  # run with inherited permissions, so it needs NO PAT — the GITHUB_TOKEN
+  # "tags pushed by a token don't trigger workflows" trap is sidestepped
+  # entirely (the cadence pushes the tag, then calls this directly).
+  workflow_call:
+    inputs:
+      tag:
+        description: "Tag to build + publish (e.g. v0.1.61-rc.1 or v0.1.61). Must already exist."
+        required: true
+        type: string
   workflow_dispatch:
     inputs:
       version:
@@ -63,7 +74,7 @@ jobs:
           # For workflow_dispatch runs, the checked-out ref is the
           # branch default (usually main); pin to the requested tag so
           # the built binary actually carries the tagged source.
-          ref: ${{ github.event.inputs.version || github.ref }}
+          ref: ${{ inputs.tag || inputs.version || github.ref }}
 
       - name: Install build dependencies
         # Cached apt install — same pattern as ci.yml. Release runs are
@@ -98,10 +109,16 @@ jobs:
         run: |
           # Strip refs/tags/ prefix; fall back to VERSION file for
           # manual dispatch that forgot the input.
-          TAG="${GITHUB_REF#refs/tags/}"
-          if [ -z "$TAG" ] || [ "$TAG" = "$GITHUB_REF" ]; then
-            TAG="v$(cat VERSION)"
+          # Resolve the tag from whichever trigger fired: workflow_call (cadence)
+          # → inputs.tag; workflow_dispatch → inputs.version; tag push → the ref.
+          # VERSION file is the last-resort fallback.
+          TAG="${{ inputs.tag }}"
+          [ -z "$TAG" ] && TAG="${{ inputs.version }}"
+          if [ -z "$TAG" ]; then
+            T="${GITHUB_REF#refs/tags/}"
+            [ "$T" != "$GITHUB_REF" ] && TAG="$T"
           fi
+          [ -z "$TAG" ] && TAG="v$(cat VERSION)"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
 
@@ -152,11 +169,16 @@ jobs:
           if-no-files-found: error
 
       - name: Attach to GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(steps.version.outputs.tag, 'v')
         uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b  # v3.0.1
         with:
+          tag_name: ${{ steps.version.outputs.tag }}
           files: vestige-*-linux-x86_64.tar.gz
-          draft: true
+          # RC tags (…-rc.N) publish immediately as pre-releases (testers);
+          # final tags (vX.Y.Z) are created as DRAFTS to gate the public
+          # release behind one manual "Publish" click. See release-cadence.yml.
+          draft: ${{ !contains(steps.version.outputs.tag, '-rc') }}
+          prerelease: ${{ contains(steps.version.outputs.tag, '-rc') }}
           fail_on_unmatched_files: true
           generate_release_notes: true
 
@@ -172,7 +194,7 @@ jobs:
         # No submodules in this repo; same drop applied in c768aff.
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v6
         with:
-          ref: ${{ github.event.inputs.version || github.ref }}
+          ref: ${{ inputs.tag || inputs.version || github.ref }}
 
       - name: Cache CMake FetchContent deps
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae  # v5
@@ -199,10 +221,16 @@ jobs:
         id: version
         shell: bash
         run: |
-          TAG="${GITHUB_REF#refs/tags/}"
-          if [ -z "$TAG" ] || [ "$TAG" = "$GITHUB_REF" ]; then
-            TAG="v$(cat VERSION)"
+          # Resolve the tag from whichever trigger fired: workflow_call (cadence)
+          # → inputs.tag; workflow_dispatch → inputs.version; tag push → the ref.
+          # VERSION file is the last-resort fallback.
+          TAG="${{ inputs.tag }}"
+          [ -z "$TAG" ] && TAG="${{ inputs.version }}"
+          if [ -z "$TAG" ]; then
+            T="${GITHUB_REF#refs/tags/}"
+            [ "$T" != "$GITHUB_REF" ] && TAG="$T"
           fi
+          [ -z "$TAG" ] && TAG="v$(cat VERSION)"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
 
@@ -250,10 +278,14 @@ jobs:
           if-no-files-found: error
 
       - name: Attach to GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(steps.version.outputs.tag, 'v')
         uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b  # v3.0.1
         with:
+          tag_name: ${{ steps.version.outputs.tag }}
           files: vestige-*-windows-x86_64.zip
-          draft: true
+          # RC tags publish as pre-releases; final tags are gated drafts.
+          # See the linux-release attach step + release-cadence.yml.
+          draft: ${{ !contains(steps.version.outputs.tag, '-rc') }}
+          prerelease: ${{ contains(steps.version.outputs.tag, '-rc') }}
           fail_on_unmatched_files: true
           generate_release_notes: true

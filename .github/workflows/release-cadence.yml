@@ -1,0 +1,191 @@
+# .github/workflows/release-cadence.yml — weekly RC → release train.
+#
+# Branching model: TRUNK + RELEASE BRANCHES. Day-to-day work lands on `main`.
+# Each release version stabilises on its own short-lived `release/X.Y.Z` branch,
+# so unreleased features piling up on `main` never pollute a baking RC, and a
+# hotfix touches ONLY the release branch (not the new features). See RELEASING.md.
+#
+# Every Wednesday (09:00 UTC) this workflow, in one run:
+#   ① PROMOTE — the active RC's release branch HEAD is tagged as the final
+#      version (vX.Y.Z), which builds + publishes the full release as a DRAFT
+#      (one manual "Publish" click — the outward-facing gate).
+#   ② CUT     — a new release/X.Y.(Z+1) branch is cut from current `main` and
+#      tagged vX.Y.(Z+1)-rc.1, which builds + auto-publishes a pre-release.
+#
+# Hotfix (manual): commit the fix to the active release/X.Y.Z branch, then run
+# this workflow with mode=hotfix. It re-tags that branch as the next RC
+# (…-rc.(N+1)) — fix included, new main features excluded — and back-merges the
+# release branch into `main` so the next week's RC inherits the fix.
+#
+# Versions are derived from git tags (+ the VERSION file as a floor), so the bot
+# never has to bump a version in a commit on main — no commit races. The actual
+# artifact build + GitHub Release is delegated to release.yml via workflow_call,
+# so there is ONE source of build logic and NO personal access token is needed
+# (a token-pushed tag would not trigger release.yml's push trigger; calling it
+# directly sidesteps that entirely).
+
+name: Release cadence
+
+on:
+  schedule:
+    - cron: "0 9 * * 3"   # Wednesdays 09:00 UTC (adjust here to change the day/time)
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "cadence = promote last RC + cut a new RC from main. hotfix = re-cut the active RC (commit your fix to its release/ branch first)."
+        type: choice
+        options: [cadence, hotfix]
+        default: cadence
+
+permissions:
+  contents: write
+
+concurrency:
+  # Never let two cadence runs race on tag/branch creation.
+  group: release-cadence
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    name: Plan tags (promote / cut / hotfix)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      promote_tag: ${{ steps.plan.outputs.promote_tag }}
+      rc_tag: ${{ steps.plan.outputs.rc_tag }}
+    steps:
+      - name: Checkout (full history + all branches/tags)
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v6
+        with:
+          fetch-depth: 0  # need every tag + branch for the version math + merges
+
+      - name: Configure git identity
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Plan + create tags/branches
+        id: plan
+        env:
+          MODE: ${{ inputs.mode || 'cadence' }}
+        run: |
+          set -euo pipefail
+          git fetch --all --tags --force
+
+          FLOOR="$(cat VERSION)"   # dev-baseline version, used only as a floor
+
+          # All released final versions (vX.Y.Z, no suffix) and all RC base
+          # versions (X.Y.Z extracted from vX.Y.Z-rc.N), as bare X.Y.Z lines.
+          finals="$(git tag | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$'            | sed -E 's/^v//'                 | sort -uV || true)"
+          rc_bases="$(git tag | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+$' | sed -E 's/^v//; s/-rc\.[0-9]+$//' | sort -uV || true)"
+
+          # Highest X.Y.Z from stdin; bump the patch component.
+          highest() { grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1; }
+          bump_patch() { local a b c; IFS=. read -r a b c <<<"$1"; echo "$a.$b.$((c+1))"; }
+          final_exists() { git rev-parse -q --verify "refs/tags/v$1" >/dev/null 2>&1; }
+          highest_rc_n() { git tag | grep -E "^v$1-rc\.[0-9]+$" | sed -E 's/.*-rc\.//' | sort -n | tail -1; }
+
+          # Active RC = the highest RC base whose final tag does not yet exist.
+          # rc_bases is sorted ascending, so the last non-finalised value the loop
+          # sees is the highest — that becomes the active RC.
+          active=""
+          while read -r v; do
+            [ -z "$v" ] && continue
+            if ! final_exists "$v"; then active="$v"; fi
+          done <<< "$rc_bases"
+
+          promote_tag=""
+          rc_tag=""
+
+          if [ "$MODE" = "cadence" ]; then
+            # ① PROMOTE the active RC's release branch HEAD → final.
+            if [ -n "$active" ]; then
+              branch="release/$active"
+              if git rev-parse -q --verify "refs/remotes/origin/$branch" >/dev/null 2>&1; then
+                git checkout -B "$branch" "origin/$branch"
+              else
+                # No release branch (legacy RC) — fall back to the RC tag's commit.
+                git checkout --detach "$(git rev-list -n1 "v$active-rc.$(highest_rc_n "$active")")"
+              fi
+              git tag "v$active"                 # final = release HEAD (RC + any hotfixes)
+              git push origin "v$active"
+              promote_tag="v$active"
+              echo "Promoted v$active to final."
+            else
+              echo "No active RC to promote."
+            fi
+
+            # ② CUT a new RC from current main.
+            git fetch --tags --force
+            base="$( { printf '%s\n' "$finals"; printf '%s\n' "$rc_bases"; echo "$active"; echo "$FLOOR"; echo "0.0.0"; } | highest )"
+            next="$(bump_patch "$base")"
+            branch="release/$next"
+            git checkout -B "$branch" "origin/main"
+            git push origin "$branch"
+            git tag "v$next-rc.1"
+            git push origin "v$next-rc.1"
+            rc_tag="v$next-rc.1"
+            echo "Cut $branch and tagged v$next-rc.1 from main."
+
+          elif [ "$MODE" = "hotfix" ]; then
+            if [ -z "$active" ]; then
+              echo "::error::No active RC to hotfix. Cut a release first (mode=cadence), or commit your fix and ensure its release/X.Y.Z branch has an un-promoted RC."
+              exit 1
+            fi
+            branch="release/$active"
+            git rev-parse -q --verify "refs/remotes/origin/$branch" >/dev/null 2>&1 \
+              || { echo "::error::$branch not found — commit the hotfix to that branch and push before running hotfix mode."; exit 1; }
+            git checkout -B "$branch" "origin/$branch"   # already carries the pushed fix
+            n="$(highest_rc_n "$active")"; next_n=$((n + 1))
+            git tag "v$active-rc.$next_n"
+            git push origin "v$active-rc.$next_n"
+            rc_tag="v$active-rc.$next_n"
+            echo "Re-cut RC v$active-rc.$next_n with the hotfix."
+
+            # Back-merge the hotfix into main so next week's RC inherits it.
+            # Clean merge only — a conflict aborts and fails loudly for a human
+            # to resolve (the RC tag is already published, so the fix is shipped).
+            git checkout -B main origin/main
+            if git merge --no-ff --no-edit "origin/$branch"; then
+              git push origin main
+              echo "Back-merged $branch into main."
+            else
+              git merge --abort || true
+              echo "::error::Auto back-merge of $branch into main hit conflicts. Resolve manually: checkout main, 'git merge origin/$branch', push. (The hotfix RC was still published.)"
+              exit 1
+            fi
+          fi
+
+          {
+            echo "promote_tag=$promote_tag"
+            echo "rc_tag=$rc_tag"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### Release cadence (${{ inputs.mode || 'cadence' }})"
+            echo "- Promote (final): \`${{ steps.plan.outputs.promote_tag || '—' }}\`"
+            echo "- RC (pre-release): \`${{ steps.plan.outputs.rc_tag || '—' }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # Build + publish the promoted FINAL release (created as a DRAFT to publish).
+  release-promote:
+    needs: plan
+    if: needs.plan.outputs.promote_tag != ''
+    permissions:
+      contents: write
+    uses: ./.github/workflows/release.yml
+    with:
+      tag: ${{ needs.plan.outputs.promote_tag }}
+
+  # Build + auto-publish the new / re-cut RC as a pre-release.
+  release-rc:
+    needs: plan
+    if: needs.plan.outputs.rc_tag != ''
+    permissions:
+      contents: write
+    uses: ./.github/workflows/release.yml
+    with:
+      tag: ${{ needs.plan.outputs.rc_tag }}
