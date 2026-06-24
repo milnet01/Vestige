@@ -95,6 +95,7 @@ set(ENGINE_SOURCES
     renderer/sprite_renderer.cpp
     renderer/tilemap_renderer.cpp
     resource/model.cpp
+    utils/asset_locator.cpp
     utils/obj_loader.cpp
     utils/gltf_loader.cpp
     utils/procedural_mesh.cpp

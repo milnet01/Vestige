@@ -11,6 +11,7 @@
 /// wrapper / `.desktop` entry launches).
 #include "core/engine.h"
 #include "core/logger.h"
+#include "utils/asset_locator.h"
 
 #include <cstring>
 #include <iostream>
@@ -140,13 +141,26 @@ int main(int argc, char* argv[])
     config.window.width = 1280;
     config.window.height = 720;
     config.window.isVsyncEnabled = true;
-    config.assetPath = "assets";
+    config.assetPath = "";  // empty ⇒ auto-locate after arg parsing (--assets sets it)
 
     int exitCode = 0;
     if (!parseArgs(argc, argv, config, exitCode))
     {
         return exitCode;
     }
+
+    // Resolve the asset root: explicit --assets / $VESTIGE_ASSETS, else the
+    // assets that ship next to the binary, else the working directory. This is
+    // what makes the AppImage / tarball / zip run from any directory.
+    config.assetPath = Vestige::resolveAssetPath(config.assetPath);
+    if (config.assetPath.empty())
+    {
+        Vestige::Logger::fatal(
+            "Could not locate the 'assets' directory next to the executable or in "
+            "the current directory. Pass --assets <path> or set VESTIGE_ASSETS.");
+        return 1;
+    }
+    Vestige::Logger::info("Asset root: " + config.assetPath);
 
     Vestige::Engine engine;
 

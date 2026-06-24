@@ -9936,6 +9936,17 @@ existing cases (``HelpersMatchEvaluatorPrecisely``,
 
 ### Fixed
 
+- **App now locates its assets next to the executable (runs from any directory)**
+  The engine resolved assets relative to the current working directory,
+  so a packaged build only ran if launched from its own folder. It now
+  resolves the asset root in order: --assets, $VESTIGE_ASSETS,
+  &lt;exe-dir&gt;/assets, &lt;exe-dir&gt;/../share/vestige/assets, then
+  &lt;cwd&gt;/assets — so the AppImage / tarball / zip run from anywhere.
+  New engine/utils/asset_locator.{h,cpp} with a GL-free search-order unit
+  test (tests/test_asset_locator.cpp). A clear fatal message replaces the
+  silent shader-load failure when no asset root is found. (Native
+  folder-picker fallback to follow.)
+
 - **Scene vertex shader restored to GLSL 4.50 (was accidentally 4.60), fixing CI shader-compile failure on GL 4.5 / software renderers**
   scene.vert.glsl declared #version 460 and used the 4.60-core
   gl_BaseInstance builtin, so it compiled only on GL 4.6 cards and broke
