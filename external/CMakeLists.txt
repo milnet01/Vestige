@@ -341,6 +341,11 @@ set(TARGET_SAMPLES OFF CACHE BOOL "" FORCE)
 set(TARGET_VIEWER OFF CACHE BOOL "" FORCE)
 set(CPP_RTTI_ENABLED ON CACHE BOOL "" FORCE)
 set(ENABLE_ALL_WARNINGS OFF CACHE BOOL "" FORCE)
+# Jolt defaults to the STATIC MSVC runtime (/MT); the rest of the engine + app
+# use the default dynamic runtime (/MD), so linking Jolt.lib into vestige.exe
+# fails with LNK2038 (RuntimeLibrary mismatch). Force Jolt onto the dynamic
+# runtime to match. No-op on non-MSVC toolchains.
+set(USE_STATIC_MSVC_RUNTIME_LIBRARY OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(JoltPhysics)
 
 # ImPlot — 2D plotting extension for ImGui (MIT)

@@ -26,10 +26,27 @@
 #include <random>
 #include <set>
 #include <sstream>
-#include <unistd.h>
+#ifdef _WIN32
+#include <process.h>   // _getpid
+#else
+#include <unistd.h>    // getpid
+#endif
 
 namespace Vestige
 {
+
+namespace
+{
+/// Process id for unique temp filenames — portable across MSVC and POSIX.
+inline long currentPid()
+{
+#ifdef _WIN32
+    return static_cast<long>(_getpid());
+#else
+    return static_cast<long>(::getpid());
+#endif
+}
+} // namespace
 
 Workbench::Workbench()
 {
@@ -2279,7 +2296,7 @@ void Workbench::runLlmSuggestions()
     namespace fs = std::filesystem;
     const auto csvPath = fs::temp_directory_path()
                        / ("workbench_suggest_"
-                          + std::to_string(::getpid()) + ".csv");
+                          + std::to_string(currentPid()) + ".csv");
     {
         std::ofstream out(csvPath);
         if (!out)
@@ -2548,7 +2565,7 @@ void Workbench::runPySR()
     namespace fs = std::filesystem;
     const auto csvPath = fs::temp_directory_path()
                        / ("workbench_pysr_"
-                          + std::to_string(::getpid()) + ".csv");
+                          + std::to_string(currentPid()) + ".csv");
     {
         std::ofstream out(csvPath);
         if (!out)
