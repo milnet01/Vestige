@@ -9855,6 +9855,11 @@ existing cases (``HelpersMatchEvaluatorPrecisely``,
 
 ### Added
 
+- **Shader-standards lint gate (tools/shader_lint.py + ShaderLint ctest gates) enforcing the GLSL 4.50 target and ARB-suffixed draw-parameter built-ins**
+  Static line-scan that fails the build on any shader off the engine's GL
+  4.5 target — a stray #version 460 or suffixless gl_BaseInstance — at the
+  cheapest stage, no GPU required. Documented in CODING_STANDARDS.md §21.
+
 - **Dynamic global illumination (Phase 10 Rendering slice R4, Variant A — froxel near-field GI)**
   One bounce of dynamic direct light, cached in a froxel volume co-located
   with the volumetric fog grid and accumulated across frames with a
