@@ -207,7 +207,8 @@ protected:
 
         const char* prev = std::getenv("XDG_CONFIG_HOME");
         m_prevXdg = prev ? prev : "";
-        setenv("XDG_CONFIG_HOME", m_xdgRoot.c_str(), 1);
+        // .string() — fs::path::c_str() is const wchar_t* on Windows; setenv needs char*.
+        setenv("XDG_CONFIG_HOME", m_xdgRoot.string().c_str(), 1);
     }
 
     void TearDown() override
