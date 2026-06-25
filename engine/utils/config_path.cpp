@@ -84,6 +84,17 @@ fs::path resolvePlatformConfigDir()
 
 fs::path getConfigDir()
 {
+    // Explicit override, honoured on ALL platforms — returned verbatim as the
+    // full config dir. Lets tests redirect the config dir without depending on
+    // platform-specific vars ($XDG_CONFIG_HOME is POSIX-only; Windows uses
+    // %LOCALAPPDATA%), and gives power users a single portable knob.
+    if (const char* override = std::getenv("VESTIGE_CONFIG_DIR"))
+    {
+        if (override[0] != '\0')
+        {
+            return fs::path(override);
+        }
+    }
     return resolvePlatformConfigDir();
 }
 

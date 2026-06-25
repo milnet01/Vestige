@@ -73,6 +73,14 @@ if(VESTIGE_FAST_BUILD)
     endif()
 endif()
 
+# MSVC reads source files as the system code page by default, which corrupts the
+# UTF-8 string + comment literals used throughout the codebase (e.g. em-dashes,
+# π). /utf-8 makes the source + execution charset UTF-8 to match GCC/Clang.
+# Correctness flag (not a fast-build opt-in), so applied unconditionally on MSVC.
+if(MSVC)
+    add_compile_options(/utf-8)
+endif()
+
 # ---------------------------------------------------------------------------
 # Memory guard: cap concurrent heavy jobs (Ninja job pools)
 #

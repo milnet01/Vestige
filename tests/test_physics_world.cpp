@@ -192,7 +192,15 @@ TEST(PhysicsWorld, ApplyImpulse)
     // Apply a strong horizontal impulse to one body only.
     world.applyImpulse(impulsed, glm::vec3(100, 0, 0));
 
-    world.update(1.0f / 60.0f);
+    // Step several frames so the post-impulse X travel is unambiguous on every
+    // toolchain. A single 1/60 s step lands right at the threshold, and the
+    // first-step integration differs enough between MSVC and GCC (Jolt SIMD /
+    // FP rounding) to straddle it; over many steps the constant-velocity travel
+    // dominates and both platforms clear the gap by a wide margin.
+    for (int i = 0; i < 30; ++i)
+    {
+        world.update(1.0f / 60.0f);
+    }
 
     // Slice 18 Ts1: compare the impulsed body against a control that
     // received no impulse. Gravity alone (no impulse) would not produce

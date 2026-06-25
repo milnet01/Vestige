@@ -209,10 +209,14 @@ protected:
         m_prevXdg = prev ? prev : "";
         // .string() — fs::path::c_str() is const wchar_t* on Windows; setenv needs char*.
         setenv("XDG_CONFIG_HOME", m_xdgRoot.string().c_str(), 1);
+        // Cross-platform config redirect (XDG_CONFIG_HOME is POSIX-only; Windows
+        // uses %LOCALAPPDATA%). Matches the POSIX getConfigDir() = <xdg>/vestige.
+        setenv("VESTIGE_CONFIG_DIR", (m_xdgRoot / "vestige").string().c_str(), 1);
     }
 
     void TearDown() override
     {
+        unsetenv("VESTIGE_CONFIG_DIR");
         if (m_prevXdg.empty())
         {
             unsetenv("XDG_CONFIG_HOME");
