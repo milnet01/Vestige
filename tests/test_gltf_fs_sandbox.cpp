@@ -136,13 +136,14 @@ TEST_F(GltfFsSandboxTest, AbsolutePathBufferUriIsRejected_D2)
     const fs::path absSecret = m_outside / "abs_secret.bin";
     writeBinary(absSecret, std::string(8, 'X'));
 
-    // glTF JSON requires the URI to be a string; embed the absolute
-    // path. Forward slashes work on POSIX; on Windows the test would
-    // need backslash escaping but we skip that here since the engine
-    // is Linux-first per CLAUDE.md.
+    // glTF JSON requires the URI to be a string. Use generic_string() so the
+    // path uses forward slashes — valid JSON on both POSIX and Windows (whose
+    // native backslashes would be an invalid JSON escape, failing the parse
+    // before the sandbox check). A Windows "C:/..." path is still absolute, so
+    // the sandbox rejects it (PathSandbox::isAbsoluteOrRooted).
     writeGltf(R"({
         "asset": {"version": "2.0"},
-        "buffers": [{"uri": ")" + absSecret.string() + R"(", "byteLength": 8}],
+        "buffers": [{"uri": ")" + absSecret.generic_string() + R"(", "byteLength": 8}],
         "scene": 0,
         "scenes": [{"nodes": [0]}],
         "nodes": [{"name": "n"}]
