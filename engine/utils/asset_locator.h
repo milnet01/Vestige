@@ -24,6 +24,7 @@
 
 #include <filesystem>
 #include <functional>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -58,5 +59,47 @@ bool isAssetDir(const std::filesystem::path& dir);
 /// @return The resolved asset path, or "" if none was found (the caller then
 ///         falls back to a folder-picker / fatal error).
 std::string resolveAssetPath(const std::string& cliOverride);
+
+// --- Part B: folder-picker fallback + remembered asset root -----------------
+
+/// @brief Outcome of @ref chooseAssetRoot.
+struct AssetRootChoice
+{
+    std::string path;     ///< Resolved asset root, or "" if none could be found.
+    bool persist = false; ///< true ⇒ a fresh picker choice the caller should save.
+};
+
+/// @brief Decide the asset root from the auto-resolved + remembered values,
+///        falling back to a folder-picker. **Pure** — the validity predicate and
+///        the picker are injected so it is unit-testable without a filesystem or
+///        a real dialog. String-only (no `std::filesystem::path`); the caller
+///        owns any string↔path adaptation (e.g. wrapping @ref isAssetDir).
+///
+/// Order: a non-empty @p autoResolved wins (`persist=false`); else a @p remembered
+/// path that @p isValid accepts (`persist=false`); else loop @p pickFolder until
+/// it returns a path @p isValid accepts (`persist=true`) or "" — cancel/unavailable
+/// (`pickFolder` returns "") yields `{"", false}`. A path is persisted only when it
+/// passed @p isValid, so a wrong pick is never saved.
+AssetRootChoice chooseAssetRoot(
+    const std::string& autoResolved,
+    const std::string& remembered,
+    const std::function<bool(const std::string&)>& isValid,
+    const std::function<std::string()>& pickFolder);
+
+/// @brief Parse a remembered-asset-root config blob. **Pure / testable.**
+///        Returns the value of the first `assets.path=<value>` line (split on the
+///        first `=`, trailing CR/LF stripped, no unescaping), skipping lines with
+///        no `=` or any other key. Empty / no `assets.path` line ⇒ `nullopt`.
+std::optional<std::string> parseAssetPathConfig(const std::string& contents);
+
+/// @brief Read the remembered asset root from the user-config file
+///        (`ConfigPath::getConfigFile("asset_root")`). `nullopt` if absent /
+///        unreadable / has no `assets.path` line.
+std::optional<std::string> readRememberedAssetPath();
+
+/// @brief Persist @p path as the remembered asset root via `AtomicWrite`.
+/// @return true on success (incl. `DirFsyncFailed` — the file is written);
+///         false on a real write failure (the caller logs; nothing persisted).
+bool writeRememberedAssetPath(const std::string& path);
 
 } // namespace Vestige

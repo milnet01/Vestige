@@ -452,3 +452,14 @@ if(VESTIGE_FETCH_ASSETS)
     set(VESTIGE_ASSETS_DIR "${vestige_assets_SOURCE_DIR}" CACHE INTERNAL
         "Path to the populated VestigeAssets clone")
 endif()
+
+# ---------------------------------------------------------------------------
+# tinyfiledialogs — native OS file/folder dialogs (vendored single .c, Zlib).
+# Used by the asset folder-picker fallback (engine/platform/folder_dialog.cpp)
+# when the engine can't auto-locate its assets. Built as its own static lib so
+# the C source never receives the engine's C++ PCH (same reasoning as glad).
+# ---------------------------------------------------------------------------
+add_library(tinyfiledialogs STATIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/tinyfiledialogs/tinyfiledialogs.c)
+target_include_directories(tinyfiledialogs PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/tinyfiledialogs)

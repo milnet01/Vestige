@@ -11,9 +11,11 @@
 /// wrapper / `.desktop` entry launches).
 #include "core/engine.h"
 #include "core/logger.h"
+#include "platform/folder_dialog.h"
 #include "utils/asset_locator.h"
 
 #include <cstring>
+#include <filesystem>
 #include <iostream>
 #include <string>
 
@@ -149,16 +151,34 @@ int main(int argc, char* argv[])
         return exitCode;
     }
 
-    // Resolve the asset root: explicit --assets / $VESTIGE_ASSETS, else the
-    // assets that ship next to the binary, else the working directory. This is
-    // what makes the AppImage / tarball / zip run from any directory.
-    config.assetPath = Vestige::resolveAssetPath(config.assetPath);
-    if (config.assetPath.empty())
+    // Resolve the asset root in layers:
+    //   A. auto-locate — explicit --assets / $VESTIGE_ASSETS, else the assets
+    //      shipped next to the binary, else the working directory (this is what
+    //      makes the AppImage / tarball / zip run from any directory);
+    //   B. a previously-remembered path; then a native folder-picker, whose valid
+    //      choice is persisted so the user is not asked again.
     {
-        Vestige::Logger::fatal(
-            "Could not locate the 'assets' directory next to the executable or in "
-            "the current directory. Pass --assets <path> or set VESTIGE_ASSETS.");
-        return 1;
+        const std::string autoResolved = Vestige::resolveAssetPath(config.assetPath);
+        const std::string remembered =
+            Vestige::readRememberedAssetPath().value_or(std::string{});
+        const auto isValid = [](const std::string& p) {
+            return Vestige::isAssetDir(std::filesystem::path(p));
+        };
+        const Vestige::AssetRootChoice choice = Vestige::chooseAssetRoot(
+            autoResolved, remembered, isValid, Vestige::pickAssetFolder);
+        if (choice.path.empty())
+        {
+            Vestige::Logger::fatal(
+                "Could not locate the 'assets' directory next to the executable or "
+                "in the current directory, and no folder was selected. Pass "
+                "--assets <path> or set VESTIGE_ASSETS.");
+            return 1;
+        }
+        if (choice.persist)
+        {
+            Vestige::writeRememberedAssetPath(choice.path);
+        }
+        config.assetPath = choice.path;
     }
     Vestige::Logger::info("Asset root: " + config.assetPath);
 

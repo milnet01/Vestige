@@ -81,6 +81,7 @@ small-payload libraries that don't warrant a `FetchContent` pull).
 | stb (stb_image, stb_image_write, etc.) | `external/stb/` | MIT or Public Domain (dual) | <https://github.com/nothings/stb> |
 | dr_libs (dr_wav, dr_flac, dr_mp3) | `external/dr_libs/` | MIT-0 or Public Domain (dual) | <https://github.com/mackron/dr_libs> |
 | tl::expected (v1.3.1) | `external/tl_expected/tl/expected.hpp` | CC0 1.0 (public domain) | <https://github.com/TartanLlama/expected> |
+| tinyfiledialogs (v3.21.3) | `external/tinyfiledialogs/` | Zlib | <https://sourceforge.net/projects/tinyfiledialogs/> |
 
 Each vendored source carries its own license header in the file. See
 the individual files for the canonical license text.

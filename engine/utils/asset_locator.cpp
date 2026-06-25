@@ -4,7 +4,14 @@
 /// @file asset_locator.cpp
 #include "utils/asset_locator.h"
 
+#include "core/logger.h"
+#include "utils/atomic_write.h"
+#include "utils/config_path.h"
+
 #include <cstdlib>
+#include <fstream>
+#include <sstream>
+#include <string>
 #include <system_error>
 
 #if defined(_WIN32)
@@ -102,6 +109,111 @@ std::string resolveAssetPath(const std::string& cliOverride)
     auto candidates = assetSearchCandidates(executableDir(), cwd);
     auto found = firstValidAssetDir(candidates, isAssetDir);
     return found.empty() ? std::string() : found.lexically_normal().string();
+}
+
+// --- Part B: folder-picker fallback + remembered asset root -----------------
+
+namespace
+{
+// The single config key + the user-config filename for the remembered root.
+constexpr const char* kAssetPathKey = "assets.path";
+constexpr const char* kConfigFile = "asset_root";
+} // namespace
+
+AssetRootChoice chooseAssetRoot(
+    const std::string& autoResolved,
+    const std::string& remembered,
+    const std::function<bool(const std::string&)>& isValid,
+    const std::function<std::string()>& pickFolder)
+{
+    if (!autoResolved.empty())
+    {
+        return {autoResolved, false};  // Part A already found (and validated) it
+    }
+    if (!remembered.empty() && isValid(remembered))
+    {
+        return {remembered, false};
+    }
+    // Picker loop: re-prompt past an invalid pick; cancel/unavailable ("") exits.
+    for (;;)
+    {
+        std::string picked = pickFolder();
+        if (picked.empty())
+        {
+            return {std::string{}, false};  // cancelled or no dialog available
+        }
+        if (isValid(picked))
+        {
+            return {picked, true};  // fresh, valid choice — persist it
+        }
+        // else: invalid folder, loop and prompt again.
+    }
+}
+
+std::optional<std::string> parseAssetPathConfig(const std::string& contents)
+{
+    std::istringstream in(contents);
+    std::string line;
+    const std::string prefix = std::string(kAssetPathKey) + "=";
+    while (std::getline(in, line))
+    {
+        auto eq = line.find('=');
+        if (eq == std::string::npos)
+        {
+            continue;  // not a key=value line
+        }
+        if (line.compare(0, prefix.size(), prefix) != 0)
+        {
+            continue;  // some other key — skip (forward-compatible)
+        }
+        std::string value = line.substr(eq + 1);
+        // Strip a trailing CR (Windows line ending); getline already dropped \n.
+        if (!value.empty() && value.back() == '\r')
+        {
+            value.pop_back();
+        }
+        if (value.empty())
+        {
+            return std::nullopt;
+        }
+        return value;
+    }
+    return std::nullopt;
+}
+
+std::optional<std::string> readRememberedAssetPath()
+{
+    std::error_code ec;
+    std::filesystem::path file = ConfigPath::getConfigFile(kConfigFile);
+    if (!std::filesystem::exists(file, ec))
+    {
+        return std::nullopt;
+    }
+    std::ifstream in(file, std::ios::binary);
+    if (!in)
+    {
+        return std::nullopt;
+    }
+    std::ostringstream ss;
+    ss << in.rdbuf();
+    return parseAssetPathConfig(ss.str());
+}
+
+bool writeRememberedAssetPath(const std::string& path)
+{
+    // AtomicWrite::writeFile creates parent dirs + does the durable
+    // tmp→fsync→rename. DirFsyncFailed means the file IS written (only crash
+    // durability is unguaranteed) — treat it as success.
+    std::string contents = std::string(kAssetPathKey) + "=" + path + "\n";
+    AtomicWrite::Status st =
+        AtomicWrite::writeFile(ConfigPath::getConfigFile(kConfigFile), contents);
+    if (st == AtomicWrite::Status::Ok || st == AtomicWrite::Status::DirFsyncFailed)
+    {
+        return true;
+    }
+    Logger::warning(std::string("writeRememberedAssetPath: could not persist asset "
+                                "root (") + AtomicWrite::describe(st) + ")");
+    return false;
 }
 
 } // namespace Vestige

@@ -95,6 +95,7 @@ set(ENGINE_SOURCES
     renderer/sprite_renderer.cpp
     renderer/tilemap_renderer.cpp
     resource/model.cpp
+    platform/folder_dialog.cpp
     utils/asset_locator.cpp
     utils/obj_loader.cpp
     utils/gltf_loader.cpp
@@ -429,6 +430,7 @@ target_link_libraries(vestige_engine
         OpenAL::OpenAL
         RecastNavigation::Recast
         RecastNavigation::Detour
+        tinyfiledialogs
 )
 
 # Suppress warnings from third-party source files compiled as part of the engine
