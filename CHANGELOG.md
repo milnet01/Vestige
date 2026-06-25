@@ -9936,6 +9936,13 @@ existing cases (``HelpersMatchEvaluatorPrecisely``,
 
 ### Fixed
 
+- **Windows (MSVC) build + full test suite restored, with a permanent Windows CI job**
+  The Windows target had not been built since v0.1.3-preview and had accumulated
+  MSVC incompatibilities (localtime_r, M_PI, a move-only type copied in a vector,
+  POSIX getpid/unistd, Jolt /MT-vs-/MD link mismatch, missing /utf-8) plus runtime
+  bugs (config-dir redirect, atomic-write, physics FP tolerance). All fixed; a
+  Windows MSVC build+test job now gates every push so it cannot silently rot again.
+
 - **App now locates its assets next to the executable (runs from any directory)**
   The engine resolved assets relative to the current working directory,
   so a packaged build only ran if launched from its own folder. It now
@@ -9958,6 +9965,15 @@ existing cases (``HelpersMatchEvaluatorPrecisely``,
   The GPU cloth backend divided ClothConfig::damping by the substep count, treating it as a per-frame coefficient, while the CPU ClothSimulator applies it per substep as documented. The GPU therefore damped roughly `substeps`x less, so an identical cloth diverged by metres between backends in a 2-second free-fall. The GPU now applies damping per substep and clamps it exactly as the CPU does. Found by the new CPU/GPU cloth parity harness.
 
 ### Security
+
+- **glTF asset sandbox: reject absolute/rooted buffer & image URIs cross-platform**
+  The glTF path-traversal sandbox recognised absolute paths only via POSIX
+  semantics, so on Windows an absolute URI like "/etc/passwd" was treated as a
+  relative sub-path and resolved INSIDE the asset directory, escaping the sandbox
+  and allowing reads of arbitrary files. PathSandbox now rejects native-absolute,
+  POSIX-rooted ("/"), UNC ("\\") and drive-prefixed ("C:") URIs on every platform
+  before joining. Affected Windows builds only; caught while restoring the Windows
+  build (no Windows release shipped with the bug).
 
 - **Bump bundled FreeType VER-2-13-3 → VER-2-14-3**
   Closes the previously accepted-risk CVE-2026-23865 (fixed upstream in 2.14.2); CVE-2025-27363 stays covered. Rule-8 currency sweep surfaced during Phase 10 Localization work. No caller changes — font.cpp's FreeType C-API usage (FT_Init_FreeType / FT_New_Face / FT_Set_Pixel_Sizes / FT_Load_Char) is stable across 2.13→2.14; build + 62 text/font/utf8 tests green. SECURITY.md and tools/audit/audit_config.yaml version pins updated in lockstep.
