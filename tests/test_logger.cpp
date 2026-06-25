@@ -117,7 +117,7 @@ TEST_F(LoggerTest, ConcurrentLoggingPreservesAllEntries_F9)
     static_assert(NUM_THREADS * MSGS_PER_THREAD < Logger::MAX_ENTRIES,
                   "below-cap test must stay below MAX_ENTRIES");
 
-    runConcurrent(NUM_THREADS, [](int t) {
+    runConcurrent(NUM_THREADS, [MSGS_PER_THREAD](int t) {
         for (int i = 0; i < MSGS_PER_THREAD; ++i)
         {
             Logger::info("t" + std::to_string(t) + "_m" + std::to_string(i));
@@ -139,7 +139,7 @@ TEST_F(LoggerTest, ConcurrentLoggingRespectsRingBufferCap_F9)
     static_assert(NUM_THREADS * MSGS_PER_THREAD > Logger::MAX_ENTRIES,
                   "overflow test must exceed MAX_ENTRIES");
 
-    runConcurrent(NUM_THREADS, [](int t) {
+    runConcurrent(NUM_THREADS, [MSGS_PER_THREAD](int t) {
         for (int i = 0; i < MSGS_PER_THREAD; ++i)
         {
             Logger::info("t" + std::to_string(t) + "_m" + std::to_string(i));

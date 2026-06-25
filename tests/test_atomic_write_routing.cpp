@@ -46,6 +46,8 @@
 #include <fstream>
 #include <string>
 
+#include "posix_env_shim.h"  // portable setenv/unsetenv (MSVC)
+
 #include "test_helpers.h"
 
 using namespace Vestige;

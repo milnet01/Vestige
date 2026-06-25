@@ -10,6 +10,12 @@
 #include <cmath>
 #include <vector>
 
+// M_PI is not standard C++ and is absent on MSVC; define it portably for the
+// signal-generation helpers below (no-op where <cmath> already provides it).
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
 using namespace Vestige;
 
 class AudioAnalyzerTest : public ::testing::Test

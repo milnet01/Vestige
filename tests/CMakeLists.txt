@@ -107,7 +107,6 @@ add_executable(vestige_tests
     test_formula_compiler.cpp
     test_curve_fitter.cpp
     test_quality_manager.cpp
-    test_formula_tools.cpp
     test_architectural_tools.cpp
     test_catmull_rom_spline.cpp
     test_pressure_plate.cpp
@@ -219,27 +218,38 @@ add_executable(vestige_tests
     test_character_controller_2d.cpp
     test_game_templates_2d.cpp
     test_sprite_panel.cpp
-    # FormulaWorkbench tool-side unit tests. The .cpp lives under
-    # tools/formula_workbench/ and isn't part of vestige_engine, so
-    # the test target compiles it directly.
-    test_fit_history.cpp
-    test_benchmark.cpp
-    test_reference_harness.cpp
-    test_async_driver.cpp
-    test_pysr_parser.cpp
-    test_markdown_render.cpp
-    test_formula_node_editor_panel.cpp
-    ${CMAKE_SOURCE_DIR}/tools/formula_workbench/fit_history.cpp
-    ${CMAKE_SOURCE_DIR}/tools/formula_workbench/benchmark.cpp
-    ${CMAKE_SOURCE_DIR}/tools/formula_workbench/reference_harness.cpp
-    ${CMAKE_SOURCE_DIR}/tools/formula_workbench/async_driver.cpp
-    ${CMAKE_SOURCE_DIR}/tools/formula_workbench/pysr_parser.cpp
-    ${CMAKE_SOURCE_DIR}/tools/formula_workbench/markdown_render.cpp
-    # Headless core of the FormulaNodeEditorPanel (sampler + state-only
-    # methods). Split from formula_node_editor_panel.cpp so tests don't
-    # need ImGui / ImPlot / imgui-node-editor linkage.
-    ${CMAKE_SOURCE_DIR}/tools/formula_workbench/formula_node_editor_core.cpp
+    # FormulaWorkbench tool-side unit tests + their sources are POSIX-only and
+    # added below under `if(NOT WIN32)` (the workbench forks Python; it is not
+    # built on Windows — see tools/CMakeLists.txt).
 )
+
+# FormulaWorkbench tool-side tests + the tool sources they exercise. The
+# workbench forks a Python process (popen / fork / waitpid, sys/wait.h) and so
+# is POSIX-only; excluded from the Windows test build, matching the tool itself
+# (tools/CMakeLists.txt). The engine-side formula tests (curve fitter, quality
+# manager, etc.) stay in the cross-platform list above.
+if(NOT WIN32)
+    target_sources(vestige_tests PRIVATE
+        test_formula_tools.cpp
+        test_fit_history.cpp
+        test_benchmark.cpp
+        test_reference_harness.cpp
+        test_async_driver.cpp
+        test_pysr_parser.cpp
+        test_markdown_render.cpp
+        test_formula_node_editor_panel.cpp
+        ${CMAKE_SOURCE_DIR}/tools/formula_workbench/fit_history.cpp
+        ${CMAKE_SOURCE_DIR}/tools/formula_workbench/benchmark.cpp
+        ${CMAKE_SOURCE_DIR}/tools/formula_workbench/reference_harness.cpp
+        ${CMAKE_SOURCE_DIR}/tools/formula_workbench/async_driver.cpp
+        ${CMAKE_SOURCE_DIR}/tools/formula_workbench/pysr_parser.cpp
+        ${CMAKE_SOURCE_DIR}/tools/formula_workbench/markdown_render.cpp
+        # Headless core of the FormulaNodeEditorPanel (sampler + state-only
+        # methods). Split from formula_node_editor_panel.cpp so tests don't
+        # need ImGui / ImPlot / imgui-node-editor linkage.
+        ${CMAKE_SOURCE_DIR}/tools/formula_workbench/formula_node_editor_core.cpp
+    )
+endif()
 
 target_include_directories(vestige_tests
     PRIVATE

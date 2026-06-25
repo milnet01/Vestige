@@ -1,7 +1,12 @@
 ## @file CMakeLists.txt
 ## @brief Build configuration for Vestige development tools.
 
-# FormulaWorkbench — interactive formula discovery and fitting tool
+# FormulaWorkbench — interactive formula discovery and fitting tool.
+# POSIX-only: it forks a Python process (popen / fork / waitpid, sys/wait.h) for
+# curve fitting, so it is not built on Windows. The engine + app it depends on
+# are cross-platform; only this authoring tool is gated. (Its tool-side unit
+# tests are likewise excluded from the Windows test build — see tests/CMakeLists.txt.)
+if(NOT WIN32)
 add_executable(formula_workbench
     formula_workbench/main.cpp
     formula_workbench/workbench.cpp
@@ -32,3 +37,4 @@ target_compile_options(formula_workbench PRIVATE
         -Werror=format-security
     >
 )
+endif()  # NOT WIN32

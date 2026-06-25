@@ -9,7 +9,9 @@
 
 #include <glm/glm.hpp>
 
+#include <atomic>
 #include <cstdio>
+#include <filesystem>
 #include <fstream>
 #include <string>
 #include <vector>
@@ -26,21 +28,17 @@ class TempObjFile
 public:
     explicit TempObjFile(const std::string& content)
     {
-        // Use mkstemp for safe temp file creation
-        char nameTemplate[] = "/tmp/vestige_test_XXXXXX.obj";
-        int fd = mkstemps(nameTemplate, 4);  // 4 = length of ".obj"
-        EXPECT_NE(fd, -1) << "Failed to create temp OBJ file";
-
-        if (fd != -1)
-        {
-            m_path = nameTemplate;
-            FILE* f = fdopen(fd, "w");
-            if (f)
-            {
-                fwrite(content.c_str(), 1, content.size(), f);
-                fclose(f);
-            }
-        }
+        // Portable unique temp file (no POSIX mkstemp/fdopen): the system temp
+        // dir + a per-process-unique name. A monotonic counter is unique within
+        // this single-process test binary.
+        namespace fs = std::filesystem;
+        static std::atomic<unsigned> counter{0};
+        m_path = (fs::temp_directory_path() /
+                  ("vestige_test_" + std::to_string(counter.fetch_add(1)) + ".obj"))
+                     .string();
+        std::ofstream f(m_path, std::ios::binary);
+        EXPECT_TRUE(f.good()) << "Failed to create temp OBJ file";
+        f.write(content.data(), static_cast<std::streamsize>(content.size()));
     }
 
     ~TempObjFile()

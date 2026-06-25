@@ -17,6 +17,7 @@
 #include <fstream>
 
 #include "test_helpers.h"
+#include "posix_env_shim.h"  // portable setenv/unsetenv (MSVC)
 
 using namespace Vestige;
 namespace fs = std::filesystem;

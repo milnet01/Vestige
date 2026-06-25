@@ -16,6 +16,12 @@
 #include <unordered_map>
 #include <vector>
 
+// M_PI is not standard C++ and is absent on MSVC; define it portably (no-op
+// where <cmath> already provides it).
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
 using namespace Vestige;
 
 // Wire `animator` + `skelAnimator` for the 13 ARKit shapes used by the
