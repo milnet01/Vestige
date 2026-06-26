@@ -42,7 +42,7 @@ release-branch HEAD produced a complete cross-platform release.
   rc.2 Windows-only) were deleted; rc.3 (complete) retained as the tester pre-release.
 - **Tester caveat:** the Windows zip is unsigned and links the dynamic MSVC runtime,
   so a bare Windows install may show a SmartScreen prompt or need the Microsoft
-  Visual C++ redistributable. (Not yet written up in TESTING.md — follow-up.)
+  Visual C++ redistributable. Documented in TESTING.md § First run on Windows.
 
 ### 2026-06-19 Phase 10 Rendering — R3 subsurface scattering (analytic wrap + thickness translucency)
 

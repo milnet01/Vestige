@@ -42,7 +42,10 @@ Pre-built binaries are published as **GitHub Release assets** on the
 Each release carries:
 
 - `vestige-<version>-linux-x86_64.tar.gz` — Linux tarball, extract and run
+- `Vestige-<version>-x86_64.AppImage` — Linux single-file app; `chmod +x` it
+  and run directly (no install; updates itself via AppImageUpdate)
 - `vestige-<version>-windows-x86_64.zip` — Windows ZIP, extract and run
+  (see *First run on Windows* below)
 
 If no release is published yet (or the current commit is newer than the
 latest release and you want to test unreleased work), you can:
@@ -53,6 +56,24 @@ latest release and you want to test unreleased work), you can:
    ~90 days and require a GitHub login.
 2. **Build from source.** See
    [`CONTRIBUTING.md` § Building from source](CONTRIBUTING.md#building-from-source).
+
+---
+
+## First run on Windows
+
+The Windows build is **not code-signed** yet (signing certificates cost
+money — it's planned for a later release). Two things are normal the first
+time you launch it, and neither means the file is unsafe:
+
+- **A SmartScreen warning** — Windows may show a blue *"Windows protected
+  your PC"* box. Click **More info → Run anyway**. This appears for any
+  unsigned app.
+- **A "missing `vcruntime140.dll`" error (rare)** — Vestige uses the
+  Microsoft Visual C++ runtime, which nearly every Windows 10/11 machine
+  already has (most games and apps install it). If you hit this on launch,
+  install the free [Microsoft Visual C++ Redistributable (x64)](https://aka.ms/vs/17/release/vc_redist.x64.exe)
+  and try again — **and please mention it in your report**, since it tells
+  the maintainer the runtime needs bundling into the ZIP.
 
 ---
 
