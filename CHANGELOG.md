@@ -22,6 +22,28 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-06-26 Release — v0.1.61: first full cross-platform release (Windows + AppImage)
+
+**v0.1.61 is the first Vestige *full* (non-pre-release) build to ship a Windows
+download** — `vestige-0.1.61-windows-x86_64.zip` — alongside the Linux tarball and
+a self-contained **AppImage** (`Vestige-0.1.61-x86_64.AppImage` + a `.zsync` for
+AppImageUpdate auto-updates). Earlier releases were Linux-only because the first
+0.1.61 RC was tagged before the Windows revival landed; promoting the corrected
+release-branch HEAD produced a complete cross-platform release.
+
+- **`release.yml` AppImage fix:** added `desktop-file-utils` to the Linux release
+  job (apt-cache key bumped `release-linux-1` → `-2`). `appimagetool` invokes
+  `desktop-file-validate` to validate the bundled `.desktop` file; without it the
+  AppImage step exited 1 and aborted the Linux job *before* any artifact attached
+  (caught on the first real Windows+AppImage release run). The Windows release job
+  was unaffected.
+- Promoted via the trunk + release-branch cadence: `release/0.1.61` fast-forwarded
+  to the fix commit, tagged `v0.1.61`. The two partial pre-releases (rc.1 Linux-only,
+  rc.2 Windows-only) were deleted; rc.3 (complete) retained as the tester pre-release.
+- **Tester caveat:** the Windows zip is unsigned and links the dynamic MSVC runtime,
+  so a bare Windows install may show a SmartScreen prompt or need the Microsoft
+  Visual C++ redistributable. (Not yet written up in TESTING.md — follow-up.)
+
 ### 2026-06-19 Phase 10 Rendering — R3 subsurface scattering (analytic wrap + thickness translucency)
 
 **Slice R3 — cheap, forward-renderer subsurface scattering**, scoped to the Tabernacle's
