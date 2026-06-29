@@ -25,6 +25,7 @@
 #include "accessibility/post_process_accessibility.h" // PostProcessAccessibilitySettings
 #include "audio/audio_hrtf.h"                         // HrtfMode
 #include "audio/audio_mixer.h"                        // AudioBus enum
+#include "audio/audio_output_mode.h"                  // AudioOutputLayout
 #include "renderer/color_vision_filter.h"             // ColorVisionMode
 #include "ui/subtitle.h"                              // SubtitleSizePreset
 #include "ui/ui_theme.h"                              // UIScalePreset enum
@@ -288,6 +289,37 @@ class AudioEngineHrtfApplySink final : public AudioHrtfApplySink
 public:
     explicit AudioEngineHrtfApplySink(AudioEngine& engine);
     void setHrtfMode(HrtfMode mode) override;
+
+private:
+    AudioEngine& m_engine;
+};
+
+// ================================================================
+// AX8 — speaker-layout apply path (sibling to the HRTF path)
+// ================================================================
+
+/// @brief Sink for the speaker layout. Mirrors `AudioHrtfApplySink`:
+///        the actual `alcResetDeviceSOFT` lives in `AudioEngine`; this
+///        is the abstract seam the headless tests mock.
+class AudioOutputApplySink
+{
+public:
+    virtual ~AudioOutputApplySink() = default;
+    virtual void setOutputLayout(AudioOutputLayout layout) = 0;
+};
+
+/// @brief Pushes the speaker-layout setting onto a sink.
+void applyAudioOutput(const AudioSettings& audio, AudioOutputApplySink& sink);
+
+/// @brief Production sink wrapping a live `AudioEngine`. Forwards to
+///        `AudioEngine::setOutputLayout`. The driver falls back to the
+///        nearest layout if it can't honour the request (or when HRTF
+///        forces stereo) — see `resolveOutputMode`.
+class AudioEngineOutputApplySink final : public AudioOutputApplySink
+{
+public:
+    explicit AudioEngineOutputApplySink(AudioEngine& engine);
+    void setOutputLayout(AudioOutputLayout layout) override;
 
 private:
     AudioEngine& m_engine;

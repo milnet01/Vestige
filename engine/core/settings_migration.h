@@ -78,4 +78,14 @@ void migrate_v1_to_v2(nlohmann::json& j);
 /// Idempotent: running twice on the same tree leaves it unchanged.
 void migrate_v2_to_v3(nlohmann::json& j);
 
+/// @brief v3 → v4: add `audio.outputLayout` (default "auto") for the
+///        Phase 10 Audio quick-wins bundle (AX8 surround output; see
+///        `docs/phases/phase_10_audio_quickwins_design.md` § 3). "auto"
+///        is the current-behaviour default so a v3 file is unchanged in
+///        effect. The bundle takes a single version bump; later bundle
+///        slices add their fields under v4 without a further bump.
+///
+/// Like every arm it MUST set `j["schemaVersion"] = 4`. Idempotent.
+void migrate_v3_to_v4(nlohmann::json& j);
+
 } // namespace Vestige

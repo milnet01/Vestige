@@ -8,6 +8,7 @@
 #include "audio/audio_attenuation.h"
 #include "audio/audio_engine.h"
 #include "audio/audio_hrtf.h"
+#include "audio/audio_output_mode.h"
 #include "audio/audio_source_component.h"
 #include "core/settings.h"
 #include "core/settings_editor.h"
@@ -398,6 +399,17 @@ void AudioPanel::drawDebugTab(AudioSystem* audioSystem)
                 static_cast<double>(engine.getDopplerParams().dopplerFactor));
     ImGui::Text("Speed of sound: %.1f m/s",
                 static_cast<double>(engine.getDopplerParams().speedOfSound));
+
+    // AX8 — current speaker layout + whether the device can do surround.
+    ImGui::Text("Speaker layout: %s", audioOutputLayoutLabel(engine.getOutputLayout()));
+    if (engine.isSurroundOutputSupported())
+    {
+        ImGui::TextDisabled("ALC_SOFT_output_mode present (5.1/7.1 available)");
+    }
+    else
+    {
+        ImGui::TextDisabled("ALC_SOFT_output_mode absent (driver downmix only)");
+    }
 
     ImGui::Separator();
     ImGui::TextUnformatted("HRTF");

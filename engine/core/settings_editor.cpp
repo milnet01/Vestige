@@ -130,6 +130,10 @@ void SettingsEditor::pushPendingToSinks()
     {
         applyAudioHrtf(m_pending.audio, *m_targets.audioHrtf);
     }
+    if (m_targets.audioOutput)
+    {
+        applyAudioOutput(m_pending.audio, *m_targets.audioOutput);
+    }
     if (m_targets.uiAccessibility)
     {
         applyUIAccessibility(m_pending.accessibility,

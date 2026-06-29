@@ -74,7 +74,8 @@ bool DisplaySettings::operator==(const DisplaySettings& o) const
 
 bool AudioSettings::operator==(const AudioSettings& o) const
 {
-    return busGains == o.busGains && hrtfEnabled == o.hrtfEnabled;
+    return busGains == o.busGains && hrtfEnabled == o.hrtfEnabled
+        && outputLayout == o.outputLayout;
 }
 
 bool ControlsSettings::operator==(const ControlsSettings& o) const
@@ -237,8 +238,9 @@ json audioToJson(const AudioSettings& a)
     busGains["ambient"] = a.busGains[4];
     busGains["ui"]      = a.busGains[5];
     return json{
-        {"busGains",    busGains},
-        {"hrtfEnabled", a.hrtfEnabled},
+        {"busGains",     busGains},
+        {"hrtfEnabled",  a.hrtfEnabled},
+        {"outputLayout", audioOutputLayoutToString(a.outputLayout)},
     };
 }
 
@@ -255,6 +257,11 @@ void audioFromJson(const json& j, AudioSettings& a)
         a.busGains[5] = g.value("ui",      a.busGains[5]);
     }
     a.hrtfEnabled = j.value("hrtfEnabled", a.hrtfEnabled);
+    // AX8 — unknown / missing token falls back to the current value
+    // (Auto by default), mirroring qualityPresetFromString's policy.
+    a.outputLayout = audioOutputLayoutFromString(
+        j.value("outputLayout", audioOutputLayoutToString(a.outputLayout)),
+        a.outputLayout);
 }
 
 // --- Controls ---

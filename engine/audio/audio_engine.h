@@ -10,6 +10,7 @@
 #include "audio/audio_doppler.h"
 #include "audio/audio_hrtf.h"
 #include "audio/audio_mixer.h"
+#include "audio/audio_output_mode.h"
 
 #include <glm/glm.hpp>
 
@@ -384,6 +385,27 @@ public:
     /// @brief Returns the current HRTF configuration.
     const HrtfSettings& getHrtfSettings() const { return m_hrtf; }
 
+    /// @brief AX8 — sets the requested speaker layout (mono / stereo /
+    ///        5.1 / 7.1 / auto).
+    ///
+    /// Applied through the **same** `alcResetDeviceSOFT` path as HRTF
+    /// (one reset rebuilds both the HRTF and `ALC_OUTPUT_MODE_SOFT`
+    /// attributes). Safe to call before `initialize()` — the value is
+    /// stored and applied once the context is live. A no-op when the
+    /// layout is unchanged. When the layout cannot be honoured (device
+    /// lacks `ALC_SOFT_output_mode`, or HRTF is enabled), OpenAL Soft
+    /// falls back to the nearest layout — see `resolveOutputMode`.
+    void setOutputLayout(AudioOutputLayout layout);
+
+    /// @brief Returns the currently requested speaker layout.
+    AudioOutputLayout getOutputLayout() const { return m_outputLayout; }
+
+    /// @brief AX8 — true iff the live device advertises
+    ///        `ALC_SOFT_output_mode` (i.e. 5.1/7.1 can be requested).
+    ///        False before `initialize()` or when the extension is
+    ///        absent — the settings UI greys the surround options.
+    bool isSurroundOutputSupported() const;
+
     /// @brief Queries the driver's current HRTF state.
     ///
     /// Reports what the driver actually decided after the last
@@ -432,6 +454,7 @@ private:
     DopplerParams m_doppler{};
     glm::vec3 m_listenerVelocity{0.0f};
     HrtfSettings m_hrtf{};
+    AudioOutputLayout m_outputLayout = AudioOutputLayout::Auto;  ///< AX8 speaker layout.
 
     // ALC_SOFT_HRTF extension function pointers, loaded via
     // alcGetProcAddress after the device is open. Null when the

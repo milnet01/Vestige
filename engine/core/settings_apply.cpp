@@ -227,6 +227,25 @@ void AudioEngineHrtfApplySink::setHrtfMode(HrtfMode mode)
 }
 
 // ================================================================
+// AX8 — speaker-layout apply
+// ================================================================
+
+void applyAudioOutput(const AudioSettings& audio, AudioOutputApplySink& sink)
+{
+    sink.setOutputLayout(audio.outputLayout);
+}
+
+AudioEngineOutputApplySink::AudioEngineOutputApplySink(AudioEngine& engine)
+    : m_engine(engine)
+{
+}
+
+void AudioEngineOutputApplySink::setOutputLayout(AudioOutputLayout layout)
+{
+    m_engine.setOutputLayout(layout);
+}
+
+// ================================================================
 // Slice 13.3b — Photosensitive safety apply
 // ================================================================
 

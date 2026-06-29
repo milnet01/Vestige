@@ -654,6 +654,24 @@ void AudioEngine::setHrtfDataset(const std::string& name)
     applyHrtfSettings();
 }
 
+void AudioEngine::setOutputLayout(AudioOutputLayout layout)
+{
+    if (m_outputLayout == layout)
+    {
+        return;
+    }
+    m_outputLayout = layout;
+    // AX8 — the speaker layout rides the same device-reset path as HRTF;
+    // applyHrtfSettings() rebuilds both attributes in a single reset.
+    applyHrtfSettings();
+}
+
+bool AudioEngine::isSurroundOutputSupported() const
+{
+    return m_available && m_device != nullptr
+        && alcIsExtensionPresent(m_device, "ALC_SOFT_output_mode") == ALC_TRUE;
+}
+
 HrtfStatus AudioEngine::getHrtfStatus() const
 {
     if (!m_available || m_alcResetDeviceSOFT == nullptr)
@@ -711,7 +729,13 @@ void AudioEngine::applyHrtfSettings()
         // treat HRTF on the next context reset. Auto mode omits the
         // attribute entirely — the driver's own heuristics (headphone
         // detection, output-format check) then apply.
-        ALCint attrs[5] = {0, 0, 0, 0, 0};
+        //
+        // AX8 — the same reset also carries the ALC_OUTPUT_MODE_SOFT
+        // (speaker layout) attribute when the extension is present, so a
+        // layout change and an HRTF change share one reset (no double
+        // reset). Capacity: HRTF (2) + HRTF_ID (2) + output mode (2) +
+        // terminator (1) = 7.
+        ALCint attrs[7] = {0, 0, 0, 0, 0, 0, 0};
         int n = 0;
         switch (m_hrtf.mode)
         {
@@ -739,6 +763,18 @@ void AudioEngine::applyHrtfSettings()
                 attrs[n++] = ALC_HRTF_ID_SOFT;
                 attrs[n++] = idx;
             }
+        }
+
+        // AX8 — speaker layout. Only request it when the device
+        // advertises ALC_SOFT_output_mode; otherwise leave it unset and
+        // the driver keeps its default downmix (graceful degrade to
+        // today's behaviour). resolveOutputMode honours the HRTF
+        // precedence rule (HRTF on => ALC_ANY_SOFT, never surround).
+        if (alcIsExtensionPresent(m_device, "ALC_SOFT_output_mode") == ALC_TRUE)
+        {
+            const bool hrtfEnabledSetting = (m_hrtf.mode != HrtfMode::Disabled);
+            attrs[n++] = ALC_OUTPUT_MODE_SOFT;
+            attrs[n++] = resolveOutputMode(m_outputLayout, hrtfEnabledSetting);
         }
 
         attrs[n] = 0;  // ALC attribute list terminator

@@ -401,6 +401,11 @@ bool Engine::initialize(const EngineConfig& config)
             m_hrtfSink = std::make_unique<AudioEngineHrtfApplySink>(
                 audio->getAudioEngine());
             targets.audioHrtf = m_hrtfSink.get();
+
+            // AX8 — speaker layout rides the same AudioEngine reset path.
+            m_outputLayoutSink = std::make_unique<AudioEngineOutputApplySink>(
+                audio->getAudioEngine());
+            targets.audioOutput = m_outputLayoutSink.get();
         }
 
         targets.inputMap = &m_inputActionMap;

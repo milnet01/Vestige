@@ -149,6 +149,7 @@ add_executable(vestige_tests
     test_audio_attenuation.cpp
     test_audio_doppler.cpp
     test_audio_hrtf.cpp
+    test_audio_output_mode.cpp
     test_audio_occlusion.cpp
     test_audio_reverb.cpp
     test_audio_ambient.cpp

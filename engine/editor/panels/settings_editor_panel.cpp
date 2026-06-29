@@ -277,6 +277,32 @@ void SettingsEditorPanel::drawAudioTab()
         m_editor->mutate([hrtf](Settings& s) { s.audio.hrtfEnabled = hrtf; });
     }
 
+    // AX8 — speaker layout. Disabled while HRTF is on: HRTF forces a
+    // stereo headphone mix (the layout is ignored at apply time, see
+    // resolveOutputMode). The item order matches the AudioOutputLayout
+    // enum (Auto, Mono, Stereo, Surround51, Surround71) so the index
+    // round-trips through the cast.
+    ImGui::BeginDisabled(p.audio.hrtfEnabled);
+    const char* layoutItems[] = {
+        "Auto", "Mono", "Stereo", "5.1 Surround", "7.1 Surround",
+    };
+    int layoutIdx = static_cast<int>(p.audio.outputLayout);
+    if (ImGui::Combo("Speaker layout", &layoutIdx, layoutItems, IM_ARRAYSIZE(layoutItems)))
+    {
+        const auto layout = static_cast<AudioOutputLayout>(layoutIdx);
+        m_editor->mutate([layout](Settings& s) { s.audio.outputLayout = layout; });
+    }
+    ImGui::EndDisabled();
+    if (p.audio.hrtfEnabled)
+    {
+        ImGui::SameLine();
+        ImGui::TextDisabled("(?)");
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("HRTF forces stereo headphone output");
+        }
+    }
+
     ImGui::Spacing();
     if (ImGui::Button("Restore audio defaults"))
     {

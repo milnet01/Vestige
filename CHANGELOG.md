@@ -22,6 +22,29 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-06-29 Added — Surround output (5.1 / 7.1) speaker-layout selection (AX8)
+
+First slice of the Phase 10 Audio quick-wins bundle. Players on 5.1/7.1 speaker
+rigs can now pick a true multichannel layout instead of always taking the
+driver's stereo downmix; headphone users keep HRTF unchanged.
+
+- **`Settings → Audio → Speaker layout`** dropdown: Auto / Mono / Stereo / 5.1
+  Surround / 7.1 Surround. The choice persists (settings schema **v3 → v4**, old
+  files default to Auto = today's behaviour) and applies live.
+- HRTF still wins on headphones: the layout dropdown greys out while HRTF is
+  enabled (HRTF forces a stereo headphone mix). **Mono** is offered as a genuine
+  accessibility option for single-sided-hearing users.
+- Mechanism: a new headless `AudioOutputLayout` enum + `resolveOutputMode`
+  mapping to OpenAL Soft's `ALC_SOFT_output_mode` extension, applied through the
+  same single `alcResetDeviceSOFT` device-reset the HRTF setting already uses
+  (one reset, both attributes). Devices without the extension silently keep the
+  driver downmix. Zero per-frame cost — the reset only fires on a settings change.
+- Corrects two stale notes in the original roadmap item: the modern selector is
+  `ALC_SOFT_output_mode` (not `ALC_FORMAT_CHANNELS_SOFT`), and HRTF is its own
+  attribute rather than a "layout".
+- 6 new headless `AudioOutputMode.*` unit tests + settings round-trip / migration
+  / apply-forwarding coverage; 3557 tests pass.
+
 ### 2026-06-26 Release — v0.1.61: first full cross-platform release (Windows + AppImage)
 
 **v0.1.61 is the first Vestige *full* (non-pre-release) build to ship a Windows

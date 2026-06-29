@@ -41,6 +41,7 @@ bool migrate(nlohmann::json& j)
         {
             case 1: migrate_v1_to_v2(j); break;
             case 2: migrate_v2_to_v3(j); break;
+            case 3: migrate_v3_to_v4(j); break;
             default:
                 Logger::warning(
                     "Settings migration: no migration function registered for "
@@ -95,6 +96,23 @@ void migrate_v2_to_v3(nlohmann::json& j)
         };
     }
     j["schemaVersion"] = 3;
+}
+
+void migrate_v3_to_v4(nlohmann::json& j)
+{
+    // AX8 — add `audio.outputLayout` (default "auto") if absent. "auto"
+    // is the current-behaviour default (driver downmix), so a v3 file is
+    // unchanged in effect. fromJson would default a missing field anyway;
+    // we set it explicitly to mirror the other arms and keep the on-disk
+    // document self-describing. The audio section already exists in v3.
+    if (j.contains("audio") && j["audio"].is_object())
+    {
+        if (!j["audio"].contains("outputLayout"))
+        {
+            j["audio"]["outputLayout"] = "auto";
+        }
+    }
+    j["schemaVersion"] = 4;
 }
 
 } // namespace Vestige

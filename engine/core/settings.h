@@ -44,6 +44,8 @@
 #include <utility>
 #include <vector>
 
+#include "audio/audio_output_mode.h"
+
 #include <nlohmann/json_fwd.hpp>
 
 #include "input/input_bindings_wire.h"
@@ -63,7 +65,12 @@ namespace Vestige
 ///    flag-file promotion.
 ///  - v3 (Phase 10 Localization slice L5) — adds `localization`
 ///    section carrying the active UI language code (default "en").
-inline constexpr int kCurrentSchemaVersion = 3;
+///  - v4 (Phase 10 Audio quick-wins bundle) — adds audio fields across
+///    the bundle slices; the bundle takes a single version bump (not
+///    one per slice). AX8 adds `audio.outputLayout` (default "auto").
+///    Missing fields default to current behaviour on load, so a v3
+///    file is unchanged in effect.
+inline constexpr int kCurrentSchemaVersion = 4;
 
 // --------------------------------------------------------------
 // Display section — resolution, vsync, fullscreen, quality.
@@ -120,6 +127,10 @@ struct AudioSettings
     };
 
     bool hrtfEnabled = true;
+
+    /// @brief AX8 — requested speaker layout. `Auto` (default) keeps
+    ///        the driver's own downmix, matching pre-v4 behaviour.
+    AudioOutputLayout outputLayout = AudioOutputLayout::Auto;
 
     bool operator==(const AudioSettings& o) const;
     bool operator!=(const AudioSettings& o) const { return !(*this == o); }

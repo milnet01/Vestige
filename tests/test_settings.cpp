@@ -255,6 +255,7 @@ TEST(Settings, RoundTripsThroughJson)
 
     original.audio.busGains[1] = 0.5f;   // Music
     original.audio.hrtfEnabled = false;
+    original.audio.outputLayout = AudioOutputLayout::Surround51;  // AX8
 
     original.controls.mouseSensitivity = 2.5f;
     original.controls.invertY          = true;
@@ -293,6 +294,7 @@ TEST(Settings, FromJsonWithMissingSectionsKeepsDefaults)
     EXPECT_EQ(s.display.windowWidth, 1920);
     EXPECT_EQ(s.accessibility.uiScalePreset, "1.0x");
     EXPECT_TRUE(s.audio.hrtfEnabled);
+    EXPECT_EQ(s.audio.outputLayout, AudioOutputLayout::Auto);  // AX8 default
 }
 
 TEST(Settings, FromJsonIgnoresUnknownFields)
@@ -761,10 +763,34 @@ TEST(SettingsMigration, V2ToV3PopulatesLanguage)
     j.erase("localization");
     j["schemaVersion"] = 2;
 
+    // migrate() runs the full chain to the current schema; the v2 → v3
+    // step's effect (the localization block) persists through later
+    // steps, so assert the terminal version rather than the literal 3.
     ASSERT_TRUE(migrate(j));
-    EXPECT_EQ(j["schemaVersion"].get<int>(), 3);
+    EXPECT_EQ(j["schemaVersion"].get<int>(), kCurrentSchemaVersion);
     ASSERT_TRUE(j.contains("localization"));
     EXPECT_EQ(j["localization"]["language"].get<std::string>(), "en");
+}
+
+// AX8 verify-step: v3 → v4 adds audio.outputLayout defaulting to "auto"
+// (current-behaviour default, so a v3 file is unchanged in effect).
+TEST(SettingsMigration, V3ToV4AddsOutputLayoutDefaultAuto)
+{
+    // Hand-craft a v3-shaped tree: current toJson, strip the new audio
+    // field + pin schemaVersion back to 3.
+    json j = Settings{}.toJson();
+    j["audio"].erase("outputLayout");
+    j["schemaVersion"] = 3;
+
+    ASSERT_TRUE(migrate(j));
+    EXPECT_EQ(j["schemaVersion"].get<int>(), kCurrentSchemaVersion);
+    ASSERT_TRUE(j["audio"].contains("outputLayout"));
+    EXPECT_EQ(j["audio"]["outputLayout"].get<std::string>(), "auto");
+
+    // And it loads back as the Auto enum (unchanged from pre-v4 behaviour).
+    Settings restored;
+    ASSERT_TRUE(restored.fromJson(j));
+    EXPECT_EQ(restored.audio.outputLayout, AudioOutputLayout::Auto);
 }
 
 TEST(SettingsOnboarding, LegacyFlagPromotesWhenFileExistsAndStructIsDefault)
@@ -1109,6 +1135,14 @@ public:
     void setHrtfMode(HrtfMode m) override { mode = m; ++calls; }
 };
 
+class RecordingOutputSink final : public AudioOutputApplySink
+{
+public:
+    AudioOutputLayout layout = AudioOutputLayout::Auto;
+    int               calls  = 0;
+    void setOutputLayout(AudioOutputLayout l) override { layout = l; ++calls; }
+};
+
 class RecordingPhotoSink final : public PhotosensitiveApplySink
 {
 public:
@@ -1227,6 +1261,26 @@ TEST(SettingsApply, HrtfBoolMapsToAutoOrDisabled)
         RecordingHrtfSink sink;
         applyAudioHrtf(a, sink);
         EXPECT_EQ(sink.mode, HrtfMode::Disabled);
+    }
+}
+
+// AX8 — applyAudioOutput forwards the persisted layout verbatim to the
+// sink (the HRTF-precedence decision lives in resolveOutputMode at the
+// engine boundary, not in the apply forwarder).
+TEST(SettingsApply, OutputLayoutForwardedVerbatim)
+{
+    const AudioOutputLayout all[] = {
+        AudioOutputLayout::Auto, AudioOutputLayout::Mono, AudioOutputLayout::Stereo,
+        AudioOutputLayout::Surround51, AudioOutputLayout::Surround71,
+    };
+    for (AudioOutputLayout layout : all)
+    {
+        AudioSettings a;
+        a.outputLayout = layout;
+        RecordingOutputSink sink;
+        applyAudioOutput(a, sink);
+        EXPECT_EQ(sink.layout, layout);
+        EXPECT_EQ(sink.calls, 1);
     }
 }
 
