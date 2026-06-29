@@ -10,6 +10,10 @@
 #include "audio/audio_source_state.h"
 #include "environment/environment_forces.h"
 #include "scene/component.h"
+
+#include <nlohmann/json.hpp>
+
+#include <fstream>
 #include "scene/entity.h"
 #include "scene/scene.h"
 #include "scene/scene_manager.h"
@@ -26,6 +30,30 @@ bool AudioSystem::initialize(Engine& engine)
         Logger::warning("[AudioSystem] Audio engine initialization failed "
                         "— audio will be unavailable");
         // Non-fatal: engine continues without audio
+    }
+
+    // AX13 — load optional side-chain duck routes. Absent file ⟹ the
+    // router stays empty and only the global manual duck applies (the
+    // pre-AX13 default). Parse failures degrade the same way.
+    std::ifstream mixGraph("assets/audio/mix_graph.json");
+    if (mixGraph)
+    {
+        try
+        {
+            nlohmann::json j;
+            mixGraph >> j;
+            auto routes = parseDuckingRoutes(j);
+            const std::size_t count = routes.size();
+            m_duckingRouter.setRoutes(std::move(routes));
+            Logger::info("[AudioSystem] Loaded " + std::to_string(count)
+                         + " side-chain duck route(s) from mix_graph.json");
+        }
+        catch (const std::exception& e)
+        {
+            Logger::warning(std::string("[AudioSystem] mix_graph.json parse "
+                                        "failed — using manual duck only: ")
+                            + e.what());
+        }
     }
 
     Logger::info("[AudioSystem] Initialized");
@@ -64,6 +92,14 @@ void AudioSystem::update(float deltaTime)
                   deltaTime);
     m_audioEngine.setDuckingSnapshot(
         m_engine->getDuckingState().currentGain);
+
+    // AX13 — advance the side-chain router from LAST frame's bus activity
+    // and publish the per-target-bus duck array. The engine multiplies it
+    // on top of the global manual duck per source bus. Empty router ⟹ all
+    // 1.0 ⟹ no change from the manual-only behaviour.
+    const std::array<float, AudioBusCount> routerDuck =
+        m_duckingRouter.advance(m_busActivePrev, deltaTime);
+    m_audioEngine.setBusDuckSnapshot(routerDuck);
 
     // Phase 10.7 slice A2 — publish the latest mixer snapshot and
     // re-compose AL_GAIN for every live source so mid-play slider
@@ -112,7 +148,15 @@ void AudioSystem::update(float deltaTime)
     AudioLodConfig lod = m_lodConfig;
     lod.enabled        = m_audioEngine.isLodEnabled();
 
-    scene->forEachEntity([this, &mixer, duck, &listenerPos, &air, &lod](Entity& entity)
+    // AX13 — accumulate THIS frame's per-bus activity for next frame's
+    // router pass. A bus is "active" if a live source on it is authored
+    // above a small volume floor (read pre-duck to avoid feedback).
+    std::array<bool, AudioBusCount> busActiveCurr{};
+    constexpr float kBusActiveVolume = 0.01f;
+
+    scene->forEachEntity([this, &mixer, duck, &listenerPos, &air, &lod,
+                          &routerDuck, &busActiveCurr,
+                          kBusActiveVolume](Entity& entity)
     {
         auto* comp = entity.getComponent<AudioSourceComponent>();
         if (comp == nullptr)
@@ -143,6 +187,18 @@ void AudioSystem::update(float deltaTime)
             }
             m_lodTiers[entityId] = tier;
             return tier;
+        };
+
+        // AX13 — effective per-source duck = global manual × router[bus],
+        // and mark this bus active for next frame's router pass.
+        const std::size_t busIdx = static_cast<std::size_t>(comp->bus);
+        const float effDuck = duck * routerDuck[busIdx];
+        auto markBusActive = [&]()
+        {
+            if (comp->volume > kBusActiveVolume)
+            {
+                busActiveCurr[busIdx] = true;
+            }
         };
 
         auto it = m_activeSources.find(entityId);
@@ -184,8 +240,9 @@ void AudioSystem::update(float deltaTime)
                 // Push the full composed state immediately so pitch
                 // / occlusion overrides on the component are heard on
                 // frame 1 rather than frame 2.
+                markBusActive();
                 const AudioSourceAlState state =
-                    composeAudioSourceAlState(*comp, position, mixer, duck,
+                    composeAudioSourceAlState(*comp, position, mixer, effDuck,
                                               listenerPos, air, pickTier());
                 m_audioEngine.applySourceState(source, state);
             }
@@ -202,8 +259,9 @@ void AudioSystem::update(float deltaTime)
             // a future tick can retry.
             return;
         }
+        markBusActive();
         const AudioSourceAlState alState =
-            composeAudioSourceAlState(*comp, position, mixer, duck,
+            composeAudioSourceAlState(*comp, position, mixer, effDuck,
                                       listenerPos, air, pickTier());
         m_audioEngine.applySourceState(source, alState);
     });
@@ -228,6 +286,9 @@ void AudioSystem::update(float deltaTime)
             ++it;
         }
     }
+
+    // AX13 — hand this frame's activity to next frame's router pass.
+    m_busActivePrev = busActiveCurr;
 }
 
 std::vector<uint32_t> AudioSystem::getOwnedComponentTypes() const

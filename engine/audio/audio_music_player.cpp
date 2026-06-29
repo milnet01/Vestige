@@ -317,7 +317,13 @@ void AudioMusicPlayer::update(float deltaSeconds)
 
     const bool deviceLive = m_engine.isAvailable();
     const AudioMixer* mixer = m_engine.getMixerSnapshot();
-    const float duckGain = m_engine.getDuckingSnapshot();
+    // AX13 — streaming music is the prime side-chain target (it dips under
+    // dialogue), so fold in the router's Music-bus duck on top of the
+    // global manual duck. The music player is a separate gain path from
+    // AudioEngine::updateGains, so it resolves the effective duck itself.
+    const float duckGain =
+        m_engine.getDuckingSnapshot()
+        * m_engine.getBusDuckSnapshot()[static_cast<std::size_t>(AudioBus::Music)];
 
     for (StreamingLayer& layer : m_layers)
     {

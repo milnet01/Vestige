@@ -49,6 +49,17 @@ const char* audioBusLabel(AudioBus bus)
     return "Unknown";
 }
 
+bool audioBusFromString(const std::string& name, AudioBus& out)
+{
+    if (name == "master")  { out = AudioBus::Master;  return true; }
+    if (name == "music")   { out = AudioBus::Music;   return true; }
+    if (name == "voice")   { out = AudioBus::Voice;   return true; }
+    if (name == "sfx")     { out = AudioBus::Sfx;     return true; }
+    if (name == "ambient") { out = AudioBus::Ambient; return true; }
+    if (name == "ui")      { out = AudioBus::Ui;      return true; }
+    return false;
+}
+
 void AudioMixer::setBusGain(AudioBus bus, float gain)
 {
     const float clamped = std::max(0.0f, std::min(1.0f, gain));

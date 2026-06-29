@@ -22,6 +22,32 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-06-29 Added — Side-chain ducking from any bus (AX13)
+
+Fourth slice of the Phase 10 Audio quick-wins bundle. Proper mix automation:
+music dips under dialogue, SFX can dip under music stingers — instead of one
+hard-wired global dialogue duck.
+
+- New `engine/audio/audio_ducking.{h,cpp}`: a `DuckingRouter` of N
+  `(sourceBus → targetBus)` routes. While a *source* bus has audible activity
+  this frame, its *target* bus dips (attack/release/floor reused from the existing
+  duck). A bus hit by two routes dips by the product.
+- Declared in `assets/audio/mix_graph.json` (`{"routes":[{"source","target",
+  "attack"?,"release"?,"duckFactor"?}]}`). **`Ui` and `Master` are rejected as
+  targets** (accessibility cues must never duck; ducking Master would attenuate
+  everything), as are unknown bus names — each dropped with a warning.
+- Back-compat: today's single global dialogue duck (the manual `.triggered` flag)
+  is preserved **verbatim** as the no-config default; data-driven routes are
+  purely additive on top (`effective = manualGlobal × routerBus`). Absent
+  `mix_graph.json` ⟹ exactly the old behaviour (pinned by a slew-parity test).
+- Streaming music (the prime "dip under dialogue" target) now respects the router
+  on its own gain path.
+- Per-frame cost: a handful of route advances + one bus-activity bitset folded
+  into the existing source walk (one-frame latency on activity detection,
+  imperceptible against the ~80 ms duck attack).
+- 8 new tests (router identity / slew parity / product accumulation / parse +
+  rejection rules); 3592 pass. No settings field — routes are config-driven.
+
 ### 2026-06-29 Added — Audio LOD ladder: cheaper distant / crowded sound (AX5)
 
 Third slice of the Phase 10 Audio quick-wins bundle. Dense-source scenes

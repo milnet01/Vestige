@@ -7,11 +7,14 @@
 
 #include "core/i_system.h"
 #include "audio/audio_engine.h"
+#include "audio/audio_ducking.h"
 #include "audio/audio_lod.h"
 
+#include <array>
 #include <cstdint>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 namespace Vestige
 {
@@ -54,6 +57,17 @@ public:
     /// @brief Whether audio hardware is available.
     bool isAvailable() const { return m_audioEngine.isAvailable(); }
 
+    /// @brief AX13 — installs the side-chain duck routes (normally loaded
+    ///        from `assets/audio/mix_graph.json` at init; also used by
+    ///        gameplay/tests). Resets the per-route state.
+    void setDuckingRoutes(std::vector<DuckingRoute> routes)
+    {
+        m_duckingRouter.setRoutes(std::move(routes));
+    }
+
+    /// @brief AX13 — read-only access to the router (tests / debug panel).
+    const DuckingRouter& duckingRouter() const { return m_duckingRouter; }
+
     /// @brief Phase 10.9 P2 — read-only access to the per-entity
     ///        active-source map. Tests use this to verify the
     ///        auto-play + source-tracking pipeline without touching AL.
@@ -79,6 +93,16 @@ private:
     ///        frame from the AudioEngine).
     std::unordered_map<std::uint32_t, AudioLodTier> m_lodTiers;
     AudioLodConfig m_lodConfig;
+
+    /// @brief AX13 — side-chain duck routes (additive to the global manual
+    ///        duck). Empty by default → manual-duck-only (pre-AX13).
+    DuckingRouter m_duckingRouter;
+
+    /// @brief AX13 — last frame's per-bus activity, fed to the router this
+    ///        frame (one-frame latency; imperceptible against the ~80 ms
+    ///        duck attack and feedback-free since it reads source volume,
+    ///        not the already-ducked gain).
+    std::array<bool, AudioBusCount> m_busActivePrev{};
 };
 
 } // namespace Vestige

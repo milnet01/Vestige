@@ -321,6 +321,20 @@ public:
     ///        what the engine is actually pushing to AL.
     float getDuckingSnapshot() const { return m_duckingSnapshot; }
 
+    /// @brief AX13 — publishes the per-target-bus duck gains from the
+    ///        side-chain router. Each is multiplied on top of the global
+    ///        `setDuckingSnapshot` value for sources on that bus, so the
+    ///        effective duck is `manualGlobal × routerBus[bus]`. Default
+    ///        (all 1.0) reproduces the pre-AX13 single-duck behaviour.
+    ///        Values clamped to [0, 1] on ingest.
+    void setBusDuckSnapshot(const std::array<float, AudioBusCount>& duck);
+
+    /// @brief The per-bus router-duck snapshot (defaults all 1.0).
+    const std::array<float, AudioBusCount>& getBusDuckSnapshot() const
+    {
+        return m_busDuckSnapshot;
+    }
+
     /// @brief Per-frame sweep that (a) releases sources whose
     ///        OpenAL state has drifted to `AL_STOPPED` and (b)
     ///        re-uploads the composed `master × bus × sourceVolume`
@@ -538,7 +552,19 @@ private:
         static const AudioMixer kDefault{};
         return m_mixerSnapshot ? *m_mixerSnapshot : kDefault;
     }
-    float      m_duckingSnapshot = 1.0f;  ///< Phase 10.9 P3 duck gain (1.0 = no duck).
+    float      m_duckingSnapshot = 1.0f;  ///< Phase 10.9 P3 global manual duck (1.0 = no duck).
+
+    /// @brief AX13 — per-target-bus duck from the side-chain router.
+    ///        Multiplied on top of `m_duckingSnapshot` per source bus.
+    std::array<float, AudioBusCount> m_busDuckSnapshot{
+        {1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f}};
+
+    /// @brief AX13 — effective per-bus duck: global manual × router bus.
+    float effectiveDuck(AudioBus bus) const
+    {
+        return m_duckingSnapshot
+             * m_busDuckSnapshot[static_cast<std::size_t>(bus)];
+    }
 
     CaptionAnnouncer m_captionAnnouncer;  ///< Phase 10.9 P4 caption hook (may be empty).
 

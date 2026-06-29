@@ -35,6 +35,7 @@
 
 #include <array>
 #include <cstddef>
+#include <string>
 #include <vector>
 
 namespace Vestige
@@ -76,6 +77,12 @@ enum class AudioBus
 constexpr std::size_t AudioBusCount = 6;
 
 const char* audioBusLabel(AudioBus bus);
+
+/// @brief Parses a lowercase bus name ("master" / "music" / "voice" /
+///        "sfx" / "ambient" / "ui") into an `AudioBus`. Returns `false`
+///        for an unknown token (leaving @a out untouched) — callers
+///        reject the entry with a warning rather than guessing.
+bool audioBusFromString(const std::string& name, AudioBus& out);
 
 /// @brief Per-bus gain table. All gains default to 1.0 so a fresh
 ///        mixer plays at full authored level.

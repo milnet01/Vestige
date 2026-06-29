@@ -116,7 +116,8 @@ void                   AudioEngine::stopAll();
 void                   AudioEngine::updateGains();           // per-frame sweep
 void                   AudioEngine::applySourceState(id, AudioSourceAlState);
 void                   AudioEngine::setMixerSnapshot(const AudioMixer*);
-void                   AudioEngine::setDuckingSnapshot(float duckGain);
+void                   AudioEngine::setDuckingSnapshot(float duckGain);        // global manual duck
+void                   AudioEngine::setBusDuckSnapshot(busDuckArray);          // AX13 per-bus router duck
 void                   AudioEngine::setHrtfMode(HrtfMode);
 void                   AudioEngine::setHrtfDataset(const std::string&);
 HrtfStatus             AudioEngine::getHrtfStatus() const;
@@ -134,6 +135,11 @@ float  effectiveBusGain(const AudioMixer&, AudioBus);       // master × bus
 float  resolveSourceGain(mixer, bus, sourceVolume);         // 3-arg
 float  resolveSourceGain(mixer, bus, sourceVolume, duckingGain); // 4-arg (Phase 10.9 P3)
 void   updateDucking(DuckingState&, const DuckingParams&, float dt);
+bool   audioBusFromString(const std::string&, AudioBus& out);  // AX13 parser helper
+// audio_ducking.h (AX13) — DuckingRoute {source,target,params} + DuckingRouter
+// (advance(busActive[], dt) -> per-target-bus array) + parseDuckingRoutes(json)
+// for assets/audio/mix_graph.json. The router's per-bus duck multiplies on top of
+// the preserved global manual duck; absent config ⟹ manual-duck-only (pre-AX13).
 std::size_t chooseVoiceToEvict(const std::vector<VoiceCandidate>&);
 std::size_t chooseVoiceToEvictForIncoming(voices, SoundPriority incoming);
 const char* soundPriorityLabel(SoundPriority);
