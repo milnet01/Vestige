@@ -15,6 +15,7 @@
 /// compose math without a real OpenAL device.
 #pragma once
 
+#include "audio/audio_air_absorption.h"
 #include "audio/audio_attenuation.h"
 #include "audio/audio_mixer.h"
 
@@ -47,6 +48,15 @@ struct AudioSourceAlState
 
     /// @brief True if the source is 3D-positioned; false for 2D/UI.
     bool spatial = true;
+
+    /// @brief AX6 — linear high-frequency gain in [0, 1] pushed into the
+    ///        EFX low-pass filter (`AL_LOWPASS_GAINHF`). 1.0 = no HF
+    ///        damping (the pre-AX6 behaviour). Combines occlusion's
+    ///        material low-pass with the distance-driven air-absorption
+    ///        term, multiplicatively. The engine layer only applies the
+    ///        filter for spatial sources and only when EFX is available
+    ///        (silent no-op otherwise — degrades to gain-only).
+    float lowPassGainHf = 1.0f;
 };
 
 /// @brief Pure compose of the per-frame `AudioSourceAlState` from a
@@ -72,10 +82,26 @@ struct AudioSourceAlState
 ///
 /// All other fields are straight copies from the component with no
 /// per-frame transformation — the AL call site pushes them as-is.
+///
+/// AX6 extends the seam with two trailing parameters:
+///   - @a listenerPosition — the camera/listener world position, needed
+///     to compute the listener↔source distance the air-absorption curve
+///     reads. Defaults to the origin so the dozen pre-AX6 call sites that
+///     omit it keep compiling (distance from origin; the air term affects
+///     only `lowPassGainHf`, which those tests do not assert).
+///   - @a air — the per-frame weather snapshot. `air.enabled == false`
+///     (or a 2D/non-spatial source) leaves the air term at 1.0.
+///
+/// `lowPassGainHf = occlusionLowPassHf × airAbsorptionHfGain`, both in
+/// the linear HF-gain domain. The occlusion term is the (newly-wired)
+/// HF complement of `computeObstructionLowPass`; the air term is gated
+/// on `comp.spatial` (distance is meaningless for 2D sources).
 AudioSourceAlState composeAudioSourceAlState(
     const AudioSourceComponent& comp,
     const glm::vec3&            entityPosition,
     const AudioMixer&           mixer,
-    float                       duckingGain);
+    float                       duckingGain,
+    const glm::vec3&            listenerPosition = glm::vec3(0.0f),
+    const AirAbsorptionParams&  air              = AirAbsorptionParams{});
 
 } // namespace Vestige

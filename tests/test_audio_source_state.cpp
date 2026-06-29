@@ -240,3 +240,76 @@ TEST(AudioSourceState, FullChainComposesMixerBusOcclusionDuck_P2)
     EXPECT_GT(state.gain, 0.0f);
     EXPECT_LT(state.gain, upperBoundNoOcclusion);
 }
+
+// ---- AX6 air absorption + occlusion HF damping --------------------
+
+TEST(AudioSourceState, LowPassUnityWhenClearAndNear_AX6)
+{
+    // Air material (no occlusion low-pass) + listener at the source
+    // (distance 0) → no HF damping at all.
+    AudioSourceComponent comp = makeDefaultComponent();
+    comp.occlusionMaterial = AudioOcclusionMaterialPreset::Air;
+    comp.occlusionFraction = 0.0f;
+    AudioMixer m;
+
+    const glm::vec3 pos(10.0f, 0.0f, 0.0f);
+    auto state = composeAudioSourceAlState(comp, pos, m, 1.0f, pos /*listener*/);
+    EXPECT_NEAR(state.lowPassGainHf, 1.0f, kEps);
+}
+
+TEST(AudioSourceState, OcclusionLowPassWiredEvenWithAirDisabled_AX6)
+{
+    // The previously-dead occlusion low-pass now reaches the state.
+    // Concrete has a heavy lowPassAmount; at full block the HF gain
+    // must drop well below unity even with air absorption off.
+    AudioSourceComponent comp = makeDefaultComponent();
+    comp.occlusionMaterial = AudioOcclusionMaterialPreset::Concrete;
+    comp.occlusionFraction = 1.0f;
+    AudioMixer m;
+
+    AirAbsorptionParams air;
+    air.enabled = false;
+    auto state = composeAudioSourceAlState(comp, glm::vec3(0.0f), m, 1.0f,
+                                           glm::vec3(0.0f), air);
+    // Concrete lowPassAmount = 0.90 → HF gain = 1 - 0.90 = 0.10.
+    EXPECT_NEAR(state.lowPassGainHf, 0.10f, 1e-3f);
+}
+
+TEST(AudioSourceState, AirAndOcclusionCombineMultiplicatively_AX6)
+{
+    // Cloth (lowPassAmount 0.30) fully blocked → occlusion HF = 0.70.
+    // A distant source then multiplies in the air term, so the combined
+    // HF gain equals occlusionHf × airHf and is strictly below either.
+    AudioSourceComponent comp = makeDefaultComponent();
+    comp.occlusionMaterial = AudioOcclusionMaterialPreset::Cloth;
+    comp.occlusionFraction = 1.0f;
+    AudioMixer m;
+
+    const glm::vec3 src(150.0f, 0.0f, 0.0f);
+    AirAbsorptionParams air;  // 20 °C, 50% RH, enabled
+    auto state = composeAudioSourceAlState(comp, src, m, 1.0f,
+                                           glm::vec3(0.0f), air);
+
+    const float occlusionHf = 1.0f - 0.30f;                  // 0.70
+    const float airHf       = airAbsorptionHfGain(150.0f, air);
+    EXPECT_NEAR(state.lowPassGainHf, occlusionHf * airHf, 1e-3f);
+    EXPECT_LT(state.lowPassGainHf, occlusionHf);             // air pulled it down
+    EXPECT_LT(state.lowPassGainHf, airHf);
+}
+
+TEST(AudioSourceState, TwoDSourcesSkipAirAbsorption_AX6)
+{
+    // A non-spatial (2D/UI) source ignores air absorption regardless of
+    // how far the "position" is from the listener — distance is
+    // meaningless for it. Only the occlusion term (here Air = none)
+    // applies, leaving HF gain at unity.
+    AudioSourceComponent comp = makeDefaultComponent();
+    comp.spatial           = false;
+    comp.occlusionMaterial = AudioOcclusionMaterialPreset::Air;
+    AudioMixer m;
+
+    AirAbsorptionParams air;  // enabled
+    auto state = composeAudioSourceAlState(comp, glm::vec3(500.0f, 0.0f, 0.0f),
+                                           m, 1.0f, glm::vec3(0.0f), air);
+    EXPECT_NEAR(state.lowPassGainHf, 1.0f, kEps);
+}

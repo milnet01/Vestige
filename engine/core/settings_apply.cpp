@@ -246,6 +246,27 @@ void AudioEngineOutputApplySink::setOutputLayout(AudioOutputLayout layout)
 }
 
 // ================================================================
+// AX6 — air-absorption toggle apply
+// ================================================================
+
+void applyAudioAirAbsorption(const AudioSettings& audio,
+                             AudioAirAbsorptionApplySink& sink)
+{
+    sink.setAirAbsorptionEnabled(audio.airAbsorptionEnabled);
+}
+
+AudioEngineAirAbsorptionApplySink::AudioEngineAirAbsorptionApplySink(
+    AudioEngine& engine)
+    : m_engine(engine)
+{
+}
+
+void AudioEngineAirAbsorptionApplySink::setAirAbsorptionEnabled(bool enabled)
+{
+    m_engine.setAirAbsorptionEnabled(enabled);
+}
+
+// ================================================================
 // Slice 13.3b — Photosensitive safety apply
 // ================================================================
 

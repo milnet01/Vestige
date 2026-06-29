@@ -8,6 +8,7 @@
 #include "core/logger.h"
 #include "audio/audio_source_component.h"
 #include "audio/audio_source_state.h"
+#include "environment/environment_forces.h"
 #include "scene/component.h"
 #include "scene/entity.h"
 #include "scene/scene.h"
@@ -93,7 +94,20 @@ void AudioSystem::update(float deltaTime)
     const AudioMixer& mixer = m_engine->getAudioMixer();
     const float duck        = m_engine->getDuckingState().currentGain;
 
-    scene->forEachEntity([this, &mixer, duck](Entity& entity)
+    // AX6 — listener position + one global weather snapshot per frame.
+    // Weather is global today, so we sample it once rather than
+    // per-source; the master toggle lives on the AudioEngine.
+    const glm::vec3 listenerPos = camera.getPosition();
+    AirAbsorptionParams air;
+    {
+        const WeatherState& weather =
+            m_engine->getEnvironmentForces().getWeather();
+        air.temperatureC = weather.temperature;
+        air.humidity01   = weather.humidity;
+        air.enabled      = m_audioEngine.isAirAbsorptionEnabled();
+    }
+
+    scene->forEachEntity([this, &mixer, duck, &listenerPos, &air](Entity& entity)
     {
         auto* comp = entity.getComponent<AudioSourceComponent>();
         if (comp == nullptr)
@@ -144,7 +158,8 @@ void AudioSystem::update(float deltaTime)
                 // / occlusion overrides on the component are heard on
                 // frame 1 rather than frame 2.
                 const AudioSourceAlState state =
-                    composeAudioSourceAlState(*comp, position, mixer, duck);
+                    composeAudioSourceAlState(*comp, position, mixer, duck,
+                                              listenerPos, air);
                 m_audioEngine.applySourceState(source, state);
             }
             return;
@@ -161,7 +176,8 @@ void AudioSystem::update(float deltaTime)
             return;
         }
         const AudioSourceAlState alState =
-            composeAudioSourceAlState(*comp, position, mixer, duck);
+            composeAudioSourceAlState(*comp, position, mixer, duck,
+                                      listenerPos, air);
         m_audioEngine.applySourceState(source, alState);
     });
 

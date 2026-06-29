@@ -17,7 +17,9 @@ AudioSourceAlState composeAudioSourceAlState(
     const AudioSourceComponent& comp,
     const glm::vec3&            entityPosition,
     const AudioMixer&           mixer,
-    float                       duckingGain)
+    float                       duckingGain,
+    const glm::vec3&            listenerPosition,
+    const AirAbsorptionParams&  air)
 {
     AudioSourceAlState state;
 
@@ -50,6 +52,28 @@ AudioSourceAlState composeAudioSourceAlState(
 
     state.gain = resolveSourceGain(
         mixer, comp.bus, volumeAfterOcclusion, duckingGain);
+
+    // AX6 — per-source high-frequency damping. Two independent terms,
+    // combined multiplicatively in the linear HF-gain domain:
+    //   - occlusionLowPassHf: the HF complement of the (previously
+    //     dead) material low-pass — 1.0 means "no muffling", lower
+    //     means heavier. This wires up `computeObstructionLowPass`,
+    //     which was computed but never sent to OpenAL pre-AX6.
+    //   - airAbsorptionHfGain: ISO 9613-1 distance/temperature/humidity
+    //     rolloff, only meaningful for spatial sources.
+    const float occlusionDamp = computeObstructionLowPass(
+        material.lowPassAmount, comp.occlusionFraction);
+    const float occlusionLowPassHf = 1.0f - occlusionDamp;  // [0,1], 1 = clear
+
+    float airHfGain = 1.0f;
+    if (comp.spatial)
+    {
+        const float distance = glm::length(entityPosition - listenerPosition);
+        airHfGain = airAbsorptionHfGain(distance, air);
+    }
+
+    state.lowPassGainHf = std::max(
+        0.0f, std::min(1.0f, occlusionLowPassHf * airHfGain));
 
     return state;
 }

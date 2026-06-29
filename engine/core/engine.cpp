@@ -406,6 +406,13 @@ bool Engine::initialize(const EngineConfig& config)
             m_outputLayoutSink = std::make_unique<AudioEngineOutputApplySink>(
                 audio->getAudioEngine());
             targets.audioOutput = m_outputLayoutSink.get();
+
+            // AX6 — air-absorption toggle (a stored flag the AudioSystem
+            // reads each frame; no device reset).
+            m_airAbsorptionSink =
+                std::make_unique<AudioEngineAirAbsorptionApplySink>(
+                    audio->getAudioEngine());
+            targets.audioAirAbsorb = m_airAbsorptionSink.get();
         }
 
         targets.inputMap = &m_inputActionMap;

@@ -75,7 +75,8 @@ bool DisplaySettings::operator==(const DisplaySettings& o) const
 bool AudioSettings::operator==(const AudioSettings& o) const
 {
     return busGains == o.busGains && hrtfEnabled == o.hrtfEnabled
-        && outputLayout == o.outputLayout;
+        && outputLayout == o.outputLayout
+        && airAbsorptionEnabled == o.airAbsorptionEnabled;
 }
 
 bool ControlsSettings::operator==(const ControlsSettings& o) const
@@ -239,8 +240,9 @@ json audioToJson(const AudioSettings& a)
     busGains["ui"]      = a.busGains[5];
     return json{
         {"busGains",     busGains},
-        {"hrtfEnabled",  a.hrtfEnabled},
-        {"outputLayout", audioOutputLayoutToString(a.outputLayout)},
+        {"hrtfEnabled",          a.hrtfEnabled},
+        {"outputLayout",         audioOutputLayoutToString(a.outputLayout)},
+        {"airAbsorptionEnabled", a.airAbsorptionEnabled},
     };
 }
 
@@ -262,6 +264,9 @@ void audioFromJson(const json& j, AudioSettings& a)
     a.outputLayout = audioOutputLayoutFromString(
         j.value("outputLayout", audioOutputLayoutToString(a.outputLayout)),
         a.outputLayout);
+    // AX6 — missing key keeps the current value (on by default).
+    a.airAbsorptionEnabled =
+        j.value("airAbsorptionEnabled", a.airAbsorptionEnabled);
 }
 
 // --- Controls ---

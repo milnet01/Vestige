@@ -411,6 +411,10 @@ void AudioPanel::drawDebugTab(AudioSystem* audioSystem)
         ImGui::TextDisabled("ALC_SOFT_output_mode absent (driver downmix only)");
     }
 
+    // AX6 — air-absorption master toggle state.
+    ImGui::Text("Air absorption: %s",
+                engine.isAirAbsorptionEnabled() ? "on" : "off");
+
     ImGui::Separator();
     ImGui::TextUnformatted("HRTF");
     const auto& hrtf = engine.getHrtfSettings();

@@ -11,6 +11,7 @@
 #include <AL/al.h>
 #include <AL/alc.h>
 #include <AL/alext.h>
+#include <AL/efx.h>
 
 #include <algorithm>
 
@@ -99,6 +100,45 @@ bool AudioEngine::initialize()
             alcGetProcAddress(m_device, "alcGetStringiSOFT"));
     }
 
+    // AX6 — load ALC_EXT_EFX and create one reusable low-pass filter
+    // object for per-source air absorption + occlusion HF damping.
+    // The EFX entry points are core-context AL functions, so they load
+    // via alGetProcAddress (not the ALC variant). Absent extension or a
+    // refused filter ⟹ pointers/filter stay null and the per-source
+    // filter path in applySourceState is a silent no-op.
+    if (alcIsExtensionPresent(m_device, "ALC_EXT_EFX") == ALC_TRUE)
+    {
+        m_alGenFilters = reinterpret_cast<void*>(
+            alGetProcAddress("alGenFilters"));
+        m_alDeleteFilters = reinterpret_cast<void*>(
+            alGetProcAddress("alDeleteFilters"));
+        m_alFilteri = reinterpret_cast<void*>(
+            alGetProcAddress("alFilteri"));
+        m_alFilterf = reinterpret_cast<void*>(
+            alGetProcAddress("alFilterf"));
+
+        if (m_alGenFilters && m_alDeleteFilters && m_alFilteri && m_alFilterf)
+        {
+            alGetError();  // clear any stale error before probing
+            auto genFilters = reinterpret_cast<LPALGENFILTERS>(m_alGenFilters);
+            auto filteri    = reinterpret_cast<LPALFILTERI>(m_alFilteri);
+            genFilters(1, &m_lowPassFilter);
+            filteri(m_lowPassFilter, AL_FILTER_TYPE, AL_FILTER_LOWPASS);
+            if (alGetError() != AL_NO_ERROR || m_lowPassFilter == 0)
+            {
+                // Driver refused the LOWPASS filter type — fall back to
+                // gain-only by dropping the (possibly partial) object.
+                if (m_lowPassFilter != 0)
+                {
+                    auto delFilters =
+                        reinterpret_cast<LPALDELETEFILTERS>(m_alDeleteFilters);
+                    delFilters(1, &m_lowPassFilter);
+                }
+                m_lowPassFilter = 0;
+            }
+        }
+    }
+
     // Phase 10.9 Slice 2 P8 — flip to available *before* applying HRTF.
     // `applyHrtfSettings()` guards on `m_available` and on the
     // extension pointer, so setting the flag first lets pre-init
@@ -144,6 +184,15 @@ void AudioEngine::shutdown()
     }
     m_bufferCache.clear();
     m_bufferOrder.clear();
+
+    // AX6 — release the reusable EFX low-pass filter while the context
+    // is still current.
+    if (m_lowPassFilter != 0 && m_alDeleteFilters)
+    {
+        reinterpret_cast<LPALDELETEFILTERS>(m_alDeleteFilters)(
+            1, &m_lowPassFilter);
+        m_lowPassFilter = 0;
+    }
 
     // Destroy context and close device
     alcMakeContextCurrent(nullptr);
@@ -834,6 +883,30 @@ void AudioEngine::applySourceState(unsigned int source,
     alSourcef(source, AL_ROLLOFF_FACTOR,      state.rolloffFactor);
     alSourcei(source, AL_SOURCE_RELATIVE,
               state.spatial ? AL_FALSE : AL_TRUE);
+
+    // AX6 — per-source high-frequency damping via the EFX direct
+    // low-pass filter. Binding AL_DIRECT_FILTER copies the filter's
+    // *current* params into the source, so we rewrite GAINHF and
+    // re-bind every frame. Skipped for 2D/non-spatial sources (distance
+    // is meaningless) and when EFX is unavailable. A gainHf at unity
+    // means "no damping" → clear any previously-bound filter, since
+    // pool sources are reused and a stale filter must not linger.
+    if (m_lowPassFilter != 0)
+    {
+        const float hf = std::clamp(state.lowPassGainHf, 0.0f, 1.0f);
+        if (state.spatial && hf < 0.9999f)
+        {
+            auto filterf = reinterpret_cast<LPALFILTERF>(m_alFilterf);
+            filterf(m_lowPassFilter, AL_LOWPASS_GAIN,   1.0f);  // broadband: AL_GAIN already set
+            filterf(m_lowPassFilter, AL_LOWPASS_GAINHF, hf);
+            alSourcei(source, AL_DIRECT_FILTER,
+                      static_cast<ALint>(m_lowPassFilter));
+        }
+        else
+        {
+            alSourcei(source, AL_DIRECT_FILTER, AL_FILTER_NULL);
+        }
+    }
 }
 
 void AudioEngine::updateGains()

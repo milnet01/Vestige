@@ -105,11 +105,18 @@ void migrate_v3_to_v4(nlohmann::json& j)
     // unchanged in effect. fromJson would default a missing field anyway;
     // we set it explicitly to mirror the other arms and keep the on-disk
     // document self-describing. The audio section already exists in v3.
+    // AX6 rides the same v4 bump — `audio.airAbsorptionEnabled` defaults
+    // to true (on), the current-behaviour value, so a v3 file is again
+    // unchanged in effect.
     if (j.contains("audio") && j["audio"].is_object())
     {
         if (!j["audio"].contains("outputLayout"))
         {
             j["audio"]["outputLayout"] = "auto";
+        }
+        if (!j["audio"].contains("airAbsorptionEnabled"))
+        {
+            j["audio"]["airAbsorptionEnabled"] = true;
         }
     }
     j["schemaVersion"] = 4;

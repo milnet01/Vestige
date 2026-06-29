@@ -256,6 +256,7 @@ TEST(Settings, RoundTripsThroughJson)
     original.audio.busGains[1] = 0.5f;   // Music
     original.audio.hrtfEnabled = false;
     original.audio.outputLayout = AudioOutputLayout::Surround51;  // AX8
+    original.audio.airAbsorptionEnabled = false;                  // AX6
 
     original.controls.mouseSensitivity = 2.5f;
     original.controls.invertY          = true;
@@ -295,6 +296,7 @@ TEST(Settings, FromJsonWithMissingSectionsKeepsDefaults)
     EXPECT_EQ(s.accessibility.uiScalePreset, "1.0x");
     EXPECT_TRUE(s.audio.hrtfEnabled);
     EXPECT_EQ(s.audio.outputLayout, AudioOutputLayout::Auto);  // AX8 default
+    EXPECT_TRUE(s.audio.airAbsorptionEnabled);                 // AX6 default
 }
 
 TEST(Settings, FromJsonIgnoresUnknownFields)
@@ -772,25 +774,32 @@ TEST(SettingsMigration, V2ToV3PopulatesLanguage)
     EXPECT_EQ(j["localization"]["language"].get<std::string>(), "en");
 }
 
-// AX8 verify-step: v3 → v4 adds audio.outputLayout defaulting to "auto"
-// (current-behaviour default, so a v3 file is unchanged in effect).
+// AX8 + AX6 verify-step: v3 → v4 adds audio.outputLayout ("auto") and
+// audio.airAbsorptionEnabled (true) — both current-behaviour defaults,
+// so a v3 file is unchanged in effect. (Both AX8 and AX6 ride the one
+// v4 bump.)
 TEST(SettingsMigration, V3ToV4AddsOutputLayoutDefaultAuto)
 {
     // Hand-craft a v3-shaped tree: current toJson, strip the new audio
-    // field + pin schemaVersion back to 3.
+    // fields + pin schemaVersion back to 3.
     json j = Settings{}.toJson();
     j["audio"].erase("outputLayout");
+    j["audio"].erase("airAbsorptionEnabled");
     j["schemaVersion"] = 3;
 
     ASSERT_TRUE(migrate(j));
     EXPECT_EQ(j["schemaVersion"].get<int>(), kCurrentSchemaVersion);
     ASSERT_TRUE(j["audio"].contains("outputLayout"));
     EXPECT_EQ(j["audio"]["outputLayout"].get<std::string>(), "auto");
+    ASSERT_TRUE(j["audio"].contains("airAbsorptionEnabled"));
+    EXPECT_TRUE(j["audio"]["airAbsorptionEnabled"].get<bool>());
 
-    // And it loads back as the Auto enum (unchanged from pre-v4 behaviour).
+    // And it loads back as the current-behaviour defaults (unchanged
+    // from pre-v4: Auto layout, air absorption on).
     Settings restored;
     ASSERT_TRUE(restored.fromJson(j));
     EXPECT_EQ(restored.audio.outputLayout, AudioOutputLayout::Auto);
+    EXPECT_TRUE(restored.audio.airAbsorptionEnabled);
 }
 
 TEST(SettingsOnboarding, LegacyFlagPromotesWhenFileExistsAndStructIsDefault)
@@ -1143,6 +1152,14 @@ public:
     void setOutputLayout(AudioOutputLayout l) override { layout = l; ++calls; }
 };
 
+class RecordingAirAbsorptionSink final : public AudioAirAbsorptionApplySink
+{
+public:
+    bool enabled = true;
+    int  calls   = 0;
+    void setAirAbsorptionEnabled(bool e) override { enabled = e; ++calls; }
+};
+
 class RecordingPhotoSink final : public PhotosensitiveApplySink
 {
 public:
@@ -1280,6 +1297,20 @@ TEST(SettingsApply, OutputLayoutForwardedVerbatim)
         RecordingOutputSink sink;
         applyAudioOutput(a, sink);
         EXPECT_EQ(sink.layout, layout);
+        EXPECT_EQ(sink.calls, 1);
+    }
+}
+
+// AX6 — applyAudioAirAbsorption forwards the persisted toggle verbatim.
+TEST(SettingsApply, AirAbsorptionForwardedVerbatim)
+{
+    for (bool enabled : {true, false})
+    {
+        AudioSettings a;
+        a.airAbsorptionEnabled = enabled;
+        RecordingAirAbsorptionSink sink;
+        applyAudioAirAbsorption(a, sink);
+        EXPECT_EQ(sink.enabled, enabled);
         EXPECT_EQ(sink.calls, 1);
     }
 }

@@ -132,6 +132,11 @@ struct AudioSettings
     ///        the driver's own downmix, matching pre-v4 behaviour.
     AudioOutputLayout outputLayout = AudioOutputLayout::Auto;
 
+    /// @brief AX6 — distance-driven atmospheric high-frequency rolloff.
+    ///        Default on; off restores the pre-AX6 gain-only attenuation
+    ///        (rides the same v4 schema as `outputLayout`).
+    bool airAbsorptionEnabled = true;
+
     bool operator==(const AudioSettings& o) const;
     bool operator!=(const AudioSettings& o) const { return !(*this == o); }
 };

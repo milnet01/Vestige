@@ -59,6 +59,7 @@ public:
         AudioApplySink*                 audio           = nullptr;
         AudioHrtfApplySink*             audioHrtf       = nullptr;
         AudioOutputApplySink*           audioOutput     = nullptr;
+        AudioAirAbsorptionApplySink*    audioAirAbsorb  = nullptr;
         UIAccessibilityApplySink*       uiAccessibility = nullptr;
         RendererAccessibilityApplySink* rendererAccess  = nullptr;
         SubtitleApplySink*              subtitle        = nullptr;

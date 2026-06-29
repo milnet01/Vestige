@@ -303,6 +303,14 @@ void SettingsEditorPanel::drawAudioTab()
         }
     }
 
+    // AX6 — distance-driven atmospheric high-frequency rolloff.
+    bool airAbsorb = p.audio.airAbsorptionEnabled;
+    if (ImGui::Checkbox("Air absorption (distant sounds lose treble)", &airAbsorb))
+    {
+        m_editor->mutate([airAbsorb](Settings& s)
+                         { s.audio.airAbsorptionEnabled = airAbsorb; });
+    }
+
     ImGui::Spacing();
     if (ImGui::Button("Restore audio defaults"))
     {

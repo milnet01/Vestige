@@ -198,7 +198,12 @@ int              resolveHrtfDatasetIndex(available, preferred);  // -1 = no matc
 
 ```cpp
 // audio_source_state.h — per-frame compose.
-AudioSourceAlState composeAudioSourceAlState(component, entityPos, mixer, duckGain);
+// AX6 added two trailing, defaulted params: the listener position (for the
+// air-absorption distance) and a per-frame weather snapshot. The composed
+// AudioSourceAlState carries a `float lowPassGainHf` (occlusion-HF × air-HF)
+// pushed into the EFX low-pass filter by applySourceState.
+AudioSourceAlState composeAudioSourceAlState(component, entityPos, mixer, duckGain,
+                                             listenerPos = {}, air = {});
 ```
 
 ```cpp
@@ -233,7 +238,7 @@ class AudioSourceComponent : public Component {
 - `setSandboxRoots(empty)` means **no sandbox** — any path the caller supplies is forwarded to the decoder. Production wires install + project + asset-library roots once at startup; tests leave it empty so fixtures resolve.
 - `AudioMixer::setBusGain` is the only sanctioned way to mutate gain — direct `busGain[i]` writes bypass the [0, 1] clamp. The Settings apply path uses the setter so a hand-edited `settings.json` can't sneak out-of-range values past validation.
 - `chooseVoiceToEvictForIncoming` returns `std::size_t{-1}` when no voice has *strictly lower* priority than the incoming sound — equal-priority ties go to the incumbent so a rapid burst of Normal-tier sounds doesn't churn the pool.
-- `composeAudioSourceAlState` folds occlusion into the `volume` input of `resolveSourceGain` (rather than as a separate clamp site) so the mixer / bus / duck / clamp pipeline applies uniformly.
+- `composeAudioSourceAlState` folds occlusion *gain* into the `volume` input of `resolveSourceGain` (rather than as a separate clamp site) so the mixer / bus / duck / clamp pipeline applies uniformly. AX6 additionally composes a separate `lowPassGainHf` (occlusion material HF × ISO 9613-1 air absorption) that `applySourceState` pushes into a per-source EFX `AL_LOWPASS_GAINHF` filter — distinct from gain, and only for spatial sources / when `ALC_EXT_EFX` is present (silent gain-only fallback otherwise).
 - `loadBuffer` is **case-sensitive** and **path-keyed** — the cache stores by exact path string. Two different relative paths to the same file will decode twice and cache twice. Acceptable trade-off; canonicalisation deferred (§15).
 
 **Stability:** facade is **semver-respecting from v1.0** (the engine is pre-1.0 today, so anything-goes per the SemVer spec — but new public-API breaks are still flagged here so consumers can plan migrations). Known evolution points: (a) the 4-arg `resolveSourceGain` is the canonical form — 3-arg overload kept for fire-and-forget gain previews where ducking is irrelevant. (b) See the spec change log (§16) for landed pre-1.0 breaks (e.g. Phase 10.9 W7's lifetime-pointer mixer-publish change).
@@ -244,7 +249,7 @@ class AudioSourceComponent : public Component {
 
 1. Listener sync — `AudioSystem::update` reads the camera transform (camera was already stepped this frame because the system runs in `UpdatePhase::PostCamera`) and calls `AudioEngine::updateListener(pos, fwd, up)` + `setListenerVelocity`.
 2. Per-entity tick — for every `AudioSourceComponent` in the scene:
-   - `composeAudioSourceAlState(comp, entityPos, mixer, duckingGain)` builds the per-frame AL push.
+   - `composeAudioSourceAlState(comp, entityPos, mixer, duckingGain, listenerPos, air)` builds the per-frame AL push (AX6 threads the listener position + a once-per-frame `EnvironmentForces` weather snapshot for air absorption).
    - `AudioEngine::applySourceState(handle, state)` issues the `alSource*f` calls.
    - `isSourcePlaying(handle)` reaps stopped sources from `m_activeSources`.
 3. Ducking decay — `updateDucking(state, params, dt)` slews the global duck gain toward floor-or-1; the result is published via `AudioEngine::setDuckingSnapshot`.

@@ -22,6 +22,37 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-06-29 Added — Air absorption: distant sounds lose their treble (AX6)
+
+Second slice of the Phase 10 Audio quick-wins bundle. Distant outdoor sounds now
+lose their high frequencies before they lose their loudness — a far-off horn is
+*dull*, not just quiet — for a large perceived-realism gain in open scenes.
+
+- New headless `engine/audio/audio_air_absorption.{h,cpp}`: the **exact
+  ISO 9613-1** atmospheric absorption coefficient evaluated at a representative
+  4 kHz high-frequency anchor and converted from dB/m to a linear HF gain over the
+  listener↔source distance. The gain falls with distance and varies with
+  temperature + humidity (drier air absorbs *more* HF at 4 kHz — the physically
+  correct, if counter-intuitive, behaviour).
+- **Introduces the per-source EFX low-pass path the engine never had.** Before
+  AX6, occlusion only attenuated *gain* and `computeObstructionLowPass` was
+  computed but never sent to OpenAL — there was no `AL_LOWPASS_GAINHF` call
+  anywhere. AX6 adds an `ALC_EXT_EFX` probe + one reusable `AL_FILTER_LOWPASS`
+  object on `AudioEngine`, rewritten and re-bound (`AL_DIRECT_FILTER`) per spatial
+  source each frame, and finally **wires up the previously-dead occlusion
+  low-pass**. Occlusion-HF and air-HF combine multiplicatively. Devices without
+  EFX silently degrade to gain-only (today's behaviour).
+- `Settings → Audio → Air absorption` toggle (default **on**; off restores
+  gain-only attenuation for anyone who finds the rolloff muffling). Rides the
+  **same v4 schema bump** as AX8 — no second bump; old files default it on.
+- 2D / UI sources skip air absorption (distance is meaningless for them); the
+  cost is one ISO curve eval + one multiply per spatial source per frame, with a
+  single global weather snapshot taken once per frame.
+- Workaround note (project Rule 5): none. The runtime curve is the exact standard
+  formula, not a placeholder — a Workbench-fit cheap approximation is left as a
+  future optimization (`TODO: revisit via Formula Workbench`).
+- 12 new tests (7 ISO-curve + 4 compose-stage + 1 apply-forwarding); 3572 pass.
+
 ### 2026-06-29 Added — Surround output (5.1 / 7.1) speaker-layout selection (AX8)
 
 First slice of the Phase 10 Audio quick-wins bundle. Players on 5.1/7.1 speaker

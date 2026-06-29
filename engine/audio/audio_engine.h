@@ -406,6 +406,17 @@ public:
     ///        absent — the settings UI greys the surround options.
     bool isSurroundOutputSupported() const;
 
+    /// @brief AX6 — master toggle for distance-driven air absorption.
+    ///
+    /// Stored only; read each frame by `AudioSystem` when it fills the
+    /// per-frame `AirAbsorptionParams`. Off restores the pre-AX6
+    /// gain-only attenuation (no per-source HF rolloff) for users who
+    /// find the muffling unwelcome. Does **not** touch the device.
+    void setAirAbsorptionEnabled(bool enabled) { m_airAbsorptionEnabled = enabled; }
+
+    /// @brief Returns whether air absorption is enabled (default true).
+    bool isAirAbsorptionEnabled() const { return m_airAbsorptionEnabled; }
+
     /// @brief Queries the driver's current HRTF state.
     ///
     /// Reports what the driver actually decided after the last
@@ -461,6 +472,20 @@ private:
     // extension is unavailable — every HRTF call short-circuits.
     void* m_alcResetDeviceSOFT = nullptr;
     void* m_alcGetStringiSOFT  = nullptr;
+
+    // AX6 — ALC_EXT_EFX low-pass filter. Function pointers loaded via
+    // alGetProcAddress in initialize(); `m_lowPassFilter` is a single
+    // reusable AL_FILTER_LOWPASS object whose AL_LOWPASS_GAINHF is
+    // rewritten and re-bound (AL_DIRECT_FILTER) per spatial source each
+    // frame in applySourceState. Null pointers / a 0 filter mean the
+    // extension is absent — the low-pass path is a silent no-op and the
+    // engine degrades to gain-only attenuation (pre-AX6 behaviour).
+    void*        m_alGenFilters    = nullptr;
+    void*        m_alDeleteFilters = nullptr;
+    void*        m_alFilteri       = nullptr;
+    void*        m_alFilterf       = nullptr;
+    unsigned int m_lowPassFilter   = 0;
+    bool         m_airAbsorptionEnabled = true;  ///< AX6 master toggle (read by AudioSystem).
 
     /// @brief Applies `m_hrtf` to the device via `alcResetDeviceSOFT`.
     ///        Called from `initialize()` and whenever the settings

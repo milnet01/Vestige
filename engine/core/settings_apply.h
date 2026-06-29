@@ -326,6 +326,38 @@ private:
 };
 
 // ================================================================
+// AX6 — air-absorption toggle apply path (sibling to the HRTF /
+// output-layout paths; stored on AudioEngine, read by AudioSystem)
+// ================================================================
+
+/// @brief Sink for the air-absorption master toggle. Mirrors the HRTF /
+///        output-layout sinks — the flag lives on `AudioEngine`; this is
+///        the abstract seam the headless tests mock.
+class AudioAirAbsorptionApplySink
+{
+public:
+    virtual ~AudioAirAbsorptionApplySink() = default;
+    virtual void setAirAbsorptionEnabled(bool enabled) = 0;
+};
+
+/// @brief Pushes the air-absorption toggle onto a sink.
+void applyAudioAirAbsorption(const AudioSettings& audio,
+                             AudioAirAbsorptionApplySink& sink);
+
+/// @brief Production sink wrapping a live `AudioEngine`. Forwards to
+///        `AudioEngine::setAirAbsorptionEnabled` — a plain stored flag,
+///        no device reset (the per-frame compose reads it).
+class AudioEngineAirAbsorptionApplySink final : public AudioAirAbsorptionApplySink
+{
+public:
+    explicit AudioEngineAirAbsorptionApplySink(AudioEngine& engine);
+    void setAirAbsorptionEnabled(bool enabled) override;
+
+private:
+    AudioEngine& m_engine;
+};
+
+// ================================================================
 // Slice 13.3b — Photosensitive safety apply path
 // ================================================================
 
