@@ -19,7 +19,8 @@ AudioSourceAlState composeAudioSourceAlState(
     const AudioMixer&           mixer,
     float                       duckingGain,
     const glm::vec3&            listenerPosition,
-    const AirAbsorptionParams&  air)
+    const AirAbsorptionParams&  air,
+    AudioLodTier                lodTier)
 {
     AudioSourceAlState state;
 
@@ -74,6 +75,27 @@ AudioSourceAlState composeAudioSourceAlState(
 
     state.lowPassGainHf = std::max(
         0.0f, std::min(1.0f, occlusionLowPassHf * airHfGain));
+
+    // AX5 — apply the level-of-detail tier the caller picked. Demoted
+    // tiers shed the controllable per-source work: the EFX low-pass and
+    // 3D positioning. (HRTF is device-global and cannot be toggled per
+    // source, so no tier touches it.)
+    state.lodTier = lodTier;
+    switch (lodTier)
+    {
+        case AudioLodTier::Full:
+            break;  // full work — nothing to shed
+        case AudioLodTier::CheapSpatial:
+            state.lowPassGainHf = 1.0f;  // skip the per-source low-pass
+            break;
+        case AudioLodTier::Drop2D:
+            state.spatial       = false;  // collapse to head-relative 2D
+            state.lowPassGainHf = 1.0f;
+            break;
+        case AudioLodTier::Mute:
+            state.gain = 0.0f;
+            break;
+    }
 
     return state;
 }

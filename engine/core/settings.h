@@ -137,6 +137,11 @@ struct AudioSettings
     ///        (rides the same v4 schema as `outputLayout`).
     bool airAbsorptionEnabled = true;
 
+    /// @brief AX5 — per-source audio level-of-detail ladder. Default on;
+    ///        off keeps every source at full spatialisation (pre-AX5).
+    ///        Rides the same v4 schema.
+    bool lodEnabled = true;
+
     bool operator==(const AudioSettings& o) const;
     bool operator!=(const AudioSettings& o) const { return !(*this == o); }
 };

@@ -311,6 +311,13 @@ void SettingsEditorPanel::drawAudioTab()
                          { s.audio.airAbsorptionEnabled = airAbsorb; });
     }
 
+    // AX5 — audio level-of-detail ladder.
+    bool lod = p.audio.lodEnabled;
+    if (ImGui::Checkbox("Audio LOD (cheaper distant/crowded sound)", &lod))
+    {
+        m_editor->mutate([lod](Settings& s) { s.audio.lodEnabled = lod; });
+    }
+
     ImGui::Spacing();
     if (ImGui::Button("Restore audio defaults"))
     {

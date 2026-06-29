@@ -413,6 +413,11 @@ bool Engine::initialize(const EngineConfig& config)
                 std::make_unique<AudioEngineAirAbsorptionApplySink>(
                     audio->getAudioEngine());
             targets.audioAirAbsorb = m_airAbsorptionSink.get();
+
+            // AX5 — audio LOD-ladder toggle (likewise a stored flag).
+            m_lodSink = std::make_unique<AudioEngineLodApplySink>(
+                audio->getAudioEngine());
+            targets.audioLod = m_lodSink.get();
         }
 
         targets.inputMap = &m_inputActionMap;

@@ -118,6 +118,11 @@ void migrate_v3_to_v4(nlohmann::json& j)
         {
             j["audio"]["airAbsorptionEnabled"] = true;
         }
+        // AX5 also rides the v4 bump — `audio.lodEnabled` defaults on.
+        if (!j["audio"].contains("lodEnabled"))
+        {
+            j["audio"]["lodEnabled"] = true;
+        }
     }
     j["schemaVersion"] = 4;
 }

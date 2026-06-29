@@ -7,6 +7,7 @@
 
 #include "core/i_system.h"
 #include "audio/audio_engine.h"
+#include "audio/audio_lod.h"
 
 #include <cstdint>
 #include <string>
@@ -70,6 +71,14 @@ private:
     ///        when the component is removed or the source stops
     ///        (reaped in the per-frame update).
     std::unordered_map<std::uint32_t, unsigned int> m_activeSources;
+
+    /// @brief AX5 — per-entity LOD tier from the previous frame, the
+    ///        `previousTier` input to `audioLodTier` (hysteresis). Reaped
+    ///        alongside `m_activeSources`. The tuning config stays at its
+    ///        defaults; only the master enable is user-facing (read each
+    ///        frame from the AudioEngine).
+    std::unordered_map<std::uint32_t, AudioLodTier> m_lodTiers;
+    AudioLodConfig m_lodConfig;
 };
 
 } // namespace Vestige

@@ -297,6 +297,71 @@ TEST(AudioSourceState, AirAndOcclusionCombineMultiplicatively_AX6)
     EXPECT_LT(state.lowPassGainHf, airHf);
 }
 
+// ---- AX5 LOD tier application in compose --------------------------
+
+TEST(AudioSourceState, LodFullKeepsAllWork_AX5)
+{
+    AudioSourceComponent comp = makeDefaultComponent();
+    comp.occlusionMaterial = AudioOcclusionMaterialPreset::Cloth;
+    comp.occlusionFraction = 1.0f;  // gives a non-unity HF gain
+    AudioMixer m;
+
+    auto state = composeAudioSourceAlState(comp, glm::vec3(0.0f), m, 1.0f,
+                                           glm::vec3(0.0f), AirAbsorptionParams{},
+                                           AudioLodTier::Full);
+    EXPECT_EQ(state.lodTier, AudioLodTier::Full);
+    EXPECT_TRUE(state.spatial);
+    EXPECT_LT(state.lowPassGainHf, 1.0f);  // occlusion low-pass still applied
+    EXPECT_GT(state.gain, 0.0f);
+}
+
+TEST(AudioSourceState, LodCheapSpatialSkipsLowPass_AX5)
+{
+    // CheapSpatial drops the per-source low-pass even when occlusion would
+    // otherwise muffle it — the saving is the skipped filter math. Gain
+    // (occlusion transmission) and 3D positioning are kept.
+    AudioSourceComponent comp = makeDefaultComponent();
+    comp.occlusionMaterial = AudioOcclusionMaterialPreset::Concrete;
+    comp.occlusionFraction = 1.0f;
+    AudioMixer m;
+
+    auto state = composeAudioSourceAlState(comp, glm::vec3(0.0f), m, 1.0f,
+                                           glm::vec3(0.0f), AirAbsorptionParams{},
+                                           AudioLodTier::CheapSpatial);
+    EXPECT_EQ(state.lodTier, AudioLodTier::CheapSpatial);
+    EXPECT_TRUE(state.spatial);
+    EXPECT_NEAR(state.lowPassGainHf, 1.0f, kEps);  // low-pass skipped
+    EXPECT_GT(state.gain, 0.0f);                    // still audible (gain kept)
+}
+
+TEST(AudioSourceState, LodDrop2DCollapsesSpatial_AX5)
+{
+    AudioSourceComponent comp = makeDefaultComponent();
+    comp.spatial = true;
+    AudioMixer m;
+
+    auto state = composeAudioSourceAlState(comp, glm::vec3(30.0f, 0.0f, 0.0f),
+                                           m, 1.0f, glm::vec3(0.0f),
+                                           AirAbsorptionParams{},
+                                           AudioLodTier::Drop2D);
+    EXPECT_EQ(state.lodTier, AudioLodTier::Drop2D);
+    EXPECT_FALSE(state.spatial);                    // collapsed to 2D
+    EXPECT_NEAR(state.lowPassGainHf, 1.0f, kEps);
+}
+
+TEST(AudioSourceState, LodMuteSilencesButComposes_AX5)
+{
+    AudioSourceComponent comp = makeDefaultComponent();
+    comp.volume = 1.0f;
+    AudioMixer m;
+
+    auto state = composeAudioSourceAlState(comp, glm::vec3(0.0f), m, 1.0f,
+                                           glm::vec3(0.0f), AirAbsorptionParams{},
+                                           AudioLodTier::Mute);
+    EXPECT_EQ(state.lodTier, AudioLodTier::Mute);
+    EXPECT_NEAR(state.gain, 0.0f, kEps);  // silent, but state still produced
+}
+
 TEST(AudioSourceState, TwoDSourcesSkipAirAbsorption_AX6)
 {
     // A non-spatial (2D/UI) source ignores air absorption regardless of

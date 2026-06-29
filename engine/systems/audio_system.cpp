@@ -107,7 +107,12 @@ void AudioSystem::update(float deltaTime)
         air.enabled      = m_audioEngine.isAirAbsorptionEnabled();
     }
 
-    scene->forEachEntity([this, &mixer, duck, &listenerPos, &air](Entity& entity)
+    // AX5 — LOD config for this frame (tuning at defaults; only the master
+    // enable is user-facing, read from the engine).
+    AudioLodConfig lod = m_lodConfig;
+    lod.enabled        = m_audioEngine.isLodEnabled();
+
+    scene->forEachEntity([this, &mixer, duck, &listenerPos, &air, &lod](Entity& entity)
     {
         auto* comp = entity.getComponent<AudioSourceComponent>();
         if (comp == nullptr)
@@ -117,6 +122,28 @@ void AudioSystem::update(float deltaTime)
 
         const std::uint32_t entityId = entity.getId();
         const glm::vec3 position = entity.getWorldPosition();
+
+        // AX5 — pick (and remember) this source's LOD tier. 2D sources
+        // never LOD on distance. Reads the previous frame's tier for the
+        // hysteresis dead-band.
+        auto pickTier = [&]() -> AudioLodTier
+        {
+            AudioLodTier prev = AudioLodTier::Full;
+            if (auto t = m_lodTiers.find(entityId); t != m_lodTiers.end())
+            {
+                prev = t->second;
+            }
+            AudioLodTier tier = AudioLodTier::Full;
+            if (comp->spatial)
+            {
+                const float distance = glm::length(position - listenerPos);
+                tier = audioLodTier(distance, comp->maxDistance,
+                                    comp->occlusionFraction, comp->priority,
+                                    prev, lod);
+            }
+            m_lodTiers[entityId] = tier;
+            return tier;
+        };
 
         auto it = m_activeSources.find(entityId);
         if (it == m_activeSources.end())
@@ -159,7 +186,7 @@ void AudioSystem::update(float deltaTime)
                 // frame 1 rather than frame 2.
                 const AudioSourceAlState state =
                     composeAudioSourceAlState(*comp, position, mixer, duck,
-                                              listenerPos, air);
+                                              listenerPos, air, pickTier());
                 m_audioEngine.applySourceState(source, state);
             }
             return;
@@ -177,7 +204,7 @@ void AudioSystem::update(float deltaTime)
         }
         const AudioSourceAlState alState =
             composeAudioSourceAlState(*comp, position, mixer, duck,
-                                      listenerPos, air);
+                                      listenerPos, air, pickTier());
         m_audioEngine.applySourceState(source, alState);
     });
 
@@ -193,6 +220,7 @@ void AudioSystem::update(float deltaTime)
             !m_audioEngine.isSourcePlaying(it->second);
         if (entityGone || sourceDead)
         {
+            m_lodTiers.erase(it->first);  // AX5 — keep the tier map in step
             it = m_activeSources.erase(it);
         }
         else

@@ -358,6 +358,34 @@ private:
 };
 
 // ================================================================
+// AX5 — audio LOD-ladder toggle apply path (sibling to AX6's path)
+// ================================================================
+
+/// @brief Sink for the audio LOD master toggle. The flag lives on
+///        `AudioEngine`; this is the abstract seam the tests mock.
+class AudioLodApplySink
+{
+public:
+    virtual ~AudioLodApplySink() = default;
+    virtual void setLodEnabled(bool enabled) = 0;
+};
+
+/// @brief Pushes the LOD toggle onto a sink.
+void applyAudioLod(const AudioSettings& audio, AudioLodApplySink& sink);
+
+/// @brief Production sink wrapping a live `AudioEngine`. Forwards to
+///        `AudioEngine::setLodEnabled` — a stored flag, no device reset.
+class AudioEngineLodApplySink final : public AudioLodApplySink
+{
+public:
+    explicit AudioEngineLodApplySink(AudioEngine& engine);
+    void setLodEnabled(bool enabled) override;
+
+private:
+    AudioEngine& m_engine;
+};
+
+// ================================================================
 // Slice 13.3b — Photosensitive safety apply path
 // ================================================================
 

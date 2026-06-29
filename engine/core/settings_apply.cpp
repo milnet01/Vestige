@@ -267,6 +267,25 @@ void AudioEngineAirAbsorptionApplySink::setAirAbsorptionEnabled(bool enabled)
 }
 
 // ================================================================
+// AX5 — audio LOD-ladder toggle apply
+// ================================================================
+
+void applyAudioLod(const AudioSettings& audio, AudioLodApplySink& sink)
+{
+    sink.setLodEnabled(audio.lodEnabled);
+}
+
+AudioEngineLodApplySink::AudioEngineLodApplySink(AudioEngine& engine)
+    : m_engine(engine)
+{
+}
+
+void AudioEngineLodApplySink::setLodEnabled(bool enabled)
+{
+    m_engine.setLodEnabled(enabled);
+}
+
+// ================================================================
 // Slice 13.3b — Photosensitive safety apply
 // ================================================================
 

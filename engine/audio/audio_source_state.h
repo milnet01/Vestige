@@ -17,6 +17,7 @@
 
 #include "audio/audio_air_absorption.h"
 #include "audio/audio_attenuation.h"
+#include "audio/audio_lod.h"
 #include "audio/audio_mixer.h"
 
 #include <glm/glm.hpp>
@@ -57,6 +58,12 @@ struct AudioSourceAlState
     ///        filter for spatial sources and only when EFX is available
     ///        (silent no-op otherwise — degrades to gain-only).
     float lowPassGainHf = 1.0f;
+
+    /// @brief AX5 — the level-of-detail tier this source was composed at.
+    ///        `Full` (default) is the pre-AX5 behaviour. Carried on the
+    ///        state for the apply layer (the `Mute` keep-alive/release
+    ///        decision) and debug panels.
+    AudioLodTier lodTier = AudioLodTier::Full;
 };
 
 /// @brief Pure compose of the per-frame `AudioSourceAlState` from a
@@ -96,12 +103,23 @@ struct AudioSourceAlState
 /// the linear HF-gain domain. The occlusion term is the (newly-wired)
 /// HF complement of `computeObstructionLowPass`; the air term is gated
 /// on `comp.spatial` (distance is meaningless for 2D sources).
+///
+/// AX5 adds a trailing, defaulted `lodTier`. The pure tier decision is
+/// made by the caller (`AudioSystem`, which owns the per-entity
+/// previous-tier state); this function just *applies* it:
+///   - `Full` — no change (the default; pre-AX5 behaviour).
+///   - `CheapSpatial` — skip the per-source low-pass (`lowPassGainHf` →
+///     1.0); keep 3D + distance gain.
+///   - `Drop2D` — collapse to 2D (`spatial` → false) at the attenuated
+///     gain; no low-pass.
+///   - `Mute` — gain → 0 (the source is kept alive by the apply layer).
 AudioSourceAlState composeAudioSourceAlState(
     const AudioSourceComponent& comp,
     const glm::vec3&            entityPosition,
     const AudioMixer&           mixer,
     float                       duckingGain,
     const glm::vec3&            listenerPosition = glm::vec3(0.0f),
-    const AirAbsorptionParams&  air              = AirAbsorptionParams{});
+    const AirAbsorptionParams&  air              = AirAbsorptionParams{},
+    AudioLodTier                lodTier          = AudioLodTier::Full);
 
 } // namespace Vestige

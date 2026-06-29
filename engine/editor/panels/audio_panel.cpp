@@ -414,6 +414,8 @@ void AudioPanel::drawDebugTab(AudioSystem* audioSystem)
     // AX6 — air-absorption master toggle state.
     ImGui::Text("Air absorption: %s",
                 engine.isAirAbsorptionEnabled() ? "on" : "off");
+    // AX5 — audio LOD-ladder master toggle state.
+    ImGui::Text("Audio LOD: %s", engine.isLodEnabled() ? "on" : "off");
 
     ImGui::Separator();
     ImGui::TextUnformatted("HRTF");

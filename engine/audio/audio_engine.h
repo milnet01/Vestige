@@ -417,6 +417,16 @@ public:
     /// @brief Returns whether air absorption is enabled (default true).
     bool isAirAbsorptionEnabled() const { return m_airAbsorptionEnabled; }
 
+    /// @brief AX5 — master toggle for the audio level-of-detail ladder.
+    ///
+    /// Stored only; read each frame by `AudioSystem` to gate the per-source
+    /// tier decision. Off keeps every source at `Full` (the pre-AX5
+    /// behaviour). Does **not** touch the device.
+    void setLodEnabled(bool enabled) { m_lodEnabled = enabled; }
+
+    /// @brief Returns whether the audio LOD ladder is enabled (default true).
+    bool isLodEnabled() const { return m_lodEnabled; }
+
     /// @brief Queries the driver's current HRTF state.
     ///
     /// Reports what the driver actually decided after the last
@@ -486,6 +496,7 @@ private:
     void*        m_alFilterf       = nullptr;
     unsigned int m_lowPassFilter   = 0;
     bool         m_airAbsorptionEnabled = true;  ///< AX6 master toggle (read by AudioSystem).
+    bool         m_lodEnabled           = true;  ///< AX5 LOD-ladder toggle (read by AudioSystem).
 
     /// @brief Applies `m_hrtf` to the device via `alcResetDeviceSOFT`.
     ///        Called from `initialize()` and whenever the settings

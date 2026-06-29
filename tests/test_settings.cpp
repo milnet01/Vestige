@@ -257,6 +257,7 @@ TEST(Settings, RoundTripsThroughJson)
     original.audio.hrtfEnabled = false;
     original.audio.outputLayout = AudioOutputLayout::Surround51;  // AX8
     original.audio.airAbsorptionEnabled = false;                  // AX6
+    original.audio.lodEnabled = false;                            // AX5
 
     original.controls.mouseSensitivity = 2.5f;
     original.controls.invertY          = true;
@@ -297,6 +298,7 @@ TEST(Settings, FromJsonWithMissingSectionsKeepsDefaults)
     EXPECT_TRUE(s.audio.hrtfEnabled);
     EXPECT_EQ(s.audio.outputLayout, AudioOutputLayout::Auto);  // AX8 default
     EXPECT_TRUE(s.audio.airAbsorptionEnabled);                 // AX6 default
+    EXPECT_TRUE(s.audio.lodEnabled);                           // AX5 default
 }
 
 TEST(Settings, FromJsonIgnoresUnknownFields)
@@ -785,6 +787,7 @@ TEST(SettingsMigration, V3ToV4AddsOutputLayoutDefaultAuto)
     json j = Settings{}.toJson();
     j["audio"].erase("outputLayout");
     j["audio"].erase("airAbsorptionEnabled");
+    j["audio"].erase("lodEnabled");
     j["schemaVersion"] = 3;
 
     ASSERT_TRUE(migrate(j));
@@ -793,13 +796,16 @@ TEST(SettingsMigration, V3ToV4AddsOutputLayoutDefaultAuto)
     EXPECT_EQ(j["audio"]["outputLayout"].get<std::string>(), "auto");
     ASSERT_TRUE(j["audio"].contains("airAbsorptionEnabled"));
     EXPECT_TRUE(j["audio"]["airAbsorptionEnabled"].get<bool>());
+    ASSERT_TRUE(j["audio"].contains("lodEnabled"));
+    EXPECT_TRUE(j["audio"]["lodEnabled"].get<bool>());
 
     // And it loads back as the current-behaviour defaults (unchanged
-    // from pre-v4: Auto layout, air absorption on).
+    // from pre-v4: Auto layout, air absorption on, LOD on).
     Settings restored;
     ASSERT_TRUE(restored.fromJson(j));
     EXPECT_EQ(restored.audio.outputLayout, AudioOutputLayout::Auto);
     EXPECT_TRUE(restored.audio.airAbsorptionEnabled);
+    EXPECT_TRUE(restored.audio.lodEnabled);
 }
 
 TEST(SettingsOnboarding, LegacyFlagPromotesWhenFileExistsAndStructIsDefault)
@@ -1160,6 +1166,14 @@ public:
     void setAirAbsorptionEnabled(bool e) override { enabled = e; ++calls; }
 };
 
+class RecordingLodSink final : public AudioLodApplySink
+{
+public:
+    bool enabled = true;
+    int  calls   = 0;
+    void setLodEnabled(bool e) override { enabled = e; ++calls; }
+};
+
 class RecordingPhotoSink final : public PhotosensitiveApplySink
 {
 public:
@@ -1310,6 +1324,20 @@ TEST(SettingsApply, AirAbsorptionForwardedVerbatim)
         a.airAbsorptionEnabled = enabled;
         RecordingAirAbsorptionSink sink;
         applyAudioAirAbsorption(a, sink);
+        EXPECT_EQ(sink.enabled, enabled);
+        EXPECT_EQ(sink.calls, 1);
+    }
+}
+
+// AX5 — applyAudioLod forwards the persisted toggle verbatim.
+TEST(SettingsApply, AudioLodForwardedVerbatim)
+{
+    for (bool enabled : {true, false})
+    {
+        AudioSettings a;
+        a.lodEnabled = enabled;
+        RecordingLodSink sink;
+        applyAudioLod(a, sink);
         EXPECT_EQ(sink.enabled, enabled);
         EXPECT_EQ(sink.calls, 1);
     }

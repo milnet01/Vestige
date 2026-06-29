@@ -218,6 +218,7 @@ private:
     std::unique_ptr<AudioEngineHrtfApplySink>            m_hrtfSink;
     std::unique_ptr<AudioEngineOutputApplySink>          m_outputLayoutSink;  // AX8
     std::unique_ptr<AudioEngineAirAbsorptionApplySink>   m_airAbsorptionSink; // AX6
+    std::unique_ptr<AudioEngineLodApplySink>             m_lodSink;           // AX5
     std::unique_ptr<PhotosensitiveStoreApplySink>        m_photosensitiveSink;
     std::unique_ptr<LocalizationServiceApplySink>        m_localizationSink;
 

@@ -138,6 +138,10 @@ void SettingsEditor::pushPendingToSinks()
     {
         applyAudioAirAbsorption(m_pending.audio, *m_targets.audioAirAbsorb);
     }
+    if (m_targets.audioLod)
+    {
+        applyAudioLod(m_pending.audio, *m_targets.audioLod);
+    }
     if (m_targets.uiAccessibility)
     {
         applyUIAccessibility(m_pending.accessibility,

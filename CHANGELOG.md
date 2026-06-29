@@ -22,6 +22,35 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-06-29 Added — Audio LOD ladder: cheaper distant / crowded sound (AX5)
+
+Third slice of the Phase 10 Audio quick-wins bundle. Dense-source scenes
+(markets, crowds, battle) hold 60 FPS by stopping distant / heavily-occluded
+low-priority sources from paying for full spatialisation.
+
+- New headless `engine/audio/audio_lod.{h,cpp}`: a pure per-source tier decision
+  `{Full → CheapSpatial → Drop2D → Mute}` driven by distance (as a fraction of the
+  source's `maxDistance`) with a hysteresis dead-band so a source hovering on a
+  boundary doesn't flap.
+- Occlusion folds into the same ladder: a near but heavily-occluded source is
+  already near-silent (its occlusion *gain* is applied regardless of tier), so it
+  can shed spatial detail too — via an effective `max(distance, occlusion)` ratio,
+  no extra tuning knob.
+- **`SoundPriority::Critical`** (dialogue, boss stingers, objective cues) never
+  drops below CheapSpatial, so accessibility-critical audio keeps its 3D position.
+  2D / UI sources never LOD.
+- Tier effects applied in the compose stage: CheapSpatial skips the per-source
+  EFX low-pass (the AX6 path), Drop2D collapses to head-relative 2D, Mute silences
+  (the source is kept alive for cheap re-promotion).
+- `Settings → Audio → Audio LOD` toggle (default **on**). Rides the **same v4
+  schema** as AX6/AX8 — no further bump; old files default it on.
+- Scope note (project Rule 5): the resolved Q2 *pool-pressure Mute-release*
+  (freeing a pool slot from a muted source under 32-voice pressure) is **deferred**
+  as a focused follow-up — it touches the voice-eviction layer. Mute keeps the
+  source alive at gain 0 (the resolved default); correctness is unaffected (a muted
+  source only holds a slot the way any quiet source did before AX5).
+- 12 new tests (8 tier-decision + 4 compose-stage) + settings coverage; 3584 pass.
+
 ### 2026-06-29 Added — Air absorption: distant sounds lose their treble (AX6)
 
 Second slice of the Phase 10 Audio quick-wins bundle. Distant outdoor sounds now
