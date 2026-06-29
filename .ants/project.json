@@ -1,0 +1,13 @@
+{
+    "changelog": "CHANGELOG.md",
+    "docs_dir": "docs",
+    "roadmap": "ROADMAP.md",
+    "source_roots": [
+        "engine",
+        "tools",
+        "app"
+    ],
+    "test_roots": [
+        "tests"
+    ]
+}
