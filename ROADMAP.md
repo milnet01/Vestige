@@ -176,6 +176,24 @@ once the path tracer's first curves are fitted in anger.
   Kind: enhancement.
   Source: DOOM_Ants_Feedback.md #B (2026-06-16).
 
+### Audio-DSP formula coverage (Vestige audio bundle, 2026-06-29)
+
+Coverage gap surfaced while shipping the Phase 10 audio quick-wins bundle
+(AX5/6/8/9/11/13). Project Rule 6 designates the Formula Workbench as the home
+for numerical design (author / fit / validate / export coefficients instead of
+hand-coding magic constants), but the Workbench's built-in template library has
+**no `audio` category** — its 14 categories are physics, rendering, terrain,
+camera, water, wind, lighting, material, color, denoise, pathtrace, sampling,
+post_processing, animation. So the audio bundle's DSP curves were hand-coded
+against the published standards (correct, and cheap enough at runtime) rather
+than fitted/exported through the Workbench. These concern the Workbench /
+`engine/formula/` subsystem only, not the engine audio runtime.
+
+- 📋 [3D_E-0022] **FW (GAP/MEDIUM): add an `audio` formula-template category for audio-DSP curves.**
+  Give the Workbench first-class audio templates so audio numeric design goes through the fit/validate/export pipeline like every other domain (project Rule 6), and so the runtime can swap heavier closed forms for Workbench-fit cheap approximations (the legitimate optimization path Rule 6 calls out). Seed templates from the curves the audio bundle already ships hand-coded: **ISO 9613-1 atmospheric absorption** `α(f, T, h)` at the ~4 kHz HF anchor → dB/m → linear HF gain (AX6 `engine/audio/audio_air_absorption.cpp` carries a `TODO: revisit via Formula Workbench` for exactly the fitted cheap-polynomial version, target ≤0.5 dB abs error over T∈[-20,50]°C, h∈[10,100]%); and the **ITU-R BS.1770 K-weighting biquad** coefficients used by AX9 loudness (the design flagged the K-weighting filter as a Workbench candidate). Candidate follow-ups: occlusion material low-pass curves and the distance→HF rolloff anchor. Each ships as a `FormulaDefinition` in the `audio` category with reference datasets + reference-harness regression locks, exportable to C++/GLSL like the rest. Pairs with the parity-test discipline (Rule 7) so a fitted approximation is pinned against the exact-standard CPU reference before it replaces it.
+  Kind: feature.
+  Source: in-session-2026-06-29 (Vestige audio quick-wins bundle; user request).
+
 ## Phase 9: Domain-Driven System Architecture
 **Goal:** Evolve the engine toward a domain-driven system model where each natural domain (vegetation, water, cloth, terrain, etc.) is owned by a dedicated system that encapsulates ALL behavior for that domain — rendering, physics, animation, audio, defaults, and editor integration. Scenes compose by pulling in only the systems they need.
 
