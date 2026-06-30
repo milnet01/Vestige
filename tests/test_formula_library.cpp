@@ -968,7 +968,9 @@ TEST(PhysicsTemplates, RegisterBuiltinTemplates)
 {
     FormulaLibrary lib;
     lib.registerBuiltinTemplates();
-    EXPECT_EQ(lib.count(), 38u);
+    // 38 physics/render/path-tracer templates + 3 audio templates (AX4 S1,
+    // 3D_E-0022): impact_loudness_gain, impact_pitch_scale, aggregate_event_rate.
+    EXPECT_EQ(lib.count(), 41u);
 
     // Spot-check original formulas
     EXPECT_NE(lib.findByName("aerodynamic_drag"), nullptr);
@@ -995,7 +997,8 @@ TEST(PhysicsTemplates, CategoriesAreCorrect)
     //              post_processing, rendering, terrain, water, wind.
     // Plus 4 path-tracer categories (3D_E-0006..0010): sampling, denoise,
     //              pathtrace, color.
-    EXPECT_EQ(cats.size(), 14u);
+    // Plus 1 audio category (AX4 S1, 3D_E-0022): audio.
+    EXPECT_EQ(cats.size(), 15u);
 }
 
 TEST(PhysicsTemplates, AerodynamicDragEvaluates)
