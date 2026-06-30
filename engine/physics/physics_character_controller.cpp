@@ -251,6 +251,15 @@ bool PhysicsCharacterController::isOnGround() const
     return m_character->GetGroundState() == JPH::CharacterVirtual::EGroundState::OnGround;
 }
 
+JPH::BodyID PhysicsCharacterController::getGroundBodyId() const
+{
+    if (!m_initialized || m_character == nullptr)
+    {
+        return JPH::BodyID();   // invalid → no ground (caller treats as Default)
+    }
+    return m_character->GetGroundBodyID();
+}
+
 bool PhysicsCharacterController::isOnSteepGround() const
 {
     if (!m_initialized || m_character == nullptr)

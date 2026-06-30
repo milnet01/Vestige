@@ -15,6 +15,7 @@
 #include "systems/cloth_system.h"
 #include "systems/destruction_system.h"
 #include "systems/character_system.h"
+#include "systems/footstep_system.h"
 #include "systems/lighting_system.h"
 #include "systems/audio_system.h"
 #include "systems/music_system.h"
@@ -181,6 +182,13 @@ bool Engine::initialize(const EngineConfig& config)
     // initializeAll() runs the phase sort, so it ticks each frame.
     m_musicPlayer = std::make_unique<AudioMusicPlayer>(audioSys->getAudioEngine());
     m_systemRegistry.registerSystem<MusicSystem>(*m_musicPlayer);
+
+    // AX4 S6: procedural footsteps. Reads CharacterSystem's controller + the
+    // physics world for the surface under the foot, plays via AudioSystem's
+    // engine. Resolves those at initialize() time, so registration order here
+    // is irrelevant (all systems are registered before initializeAll()).
+    m_systemRegistry.registerSystem<FootstepSystem>();
+
     auto* uiSys = m_systemRegistry.registerSystem<UISystem>();
     m_systemRegistry.registerSystem<NavigationSystem>();
     auto* spriteSys = m_systemRegistry.registerSystem<SpriteSystem>();

@@ -79,6 +79,17 @@ public:
     /// @brief Returns true if the character is standing on walkable ground.
     bool isOnGround() const;
 
+    /// @brief BodyID of the surface the character is standing on, or an invalid
+    ///        BodyID when airborne / uninitialized. Wraps the CharacterBase
+    ///        accessor `CharacterVirtual::GetGroundBodyID()` — no raycast.
+    ///
+    /// AX4 S6: the footstep system reads this then
+    /// `PhysicsWorld::getSurfaceMaterial(id)` to pick the sound under the foot.
+    /// Main thread only (same as the world's body accessors). Jolt warns the
+    /// returned body "may have been removed" — `getSurfaceMaterial` already
+    /// returns `Default` for an invalid id, so a stale/removed ground is safe.
+    JPH::BodyID getGroundBodyId() const;
+
     /// @brief Returns true if the character is on a slope too steep to climb.
     bool isOnSteepGround() const;
 

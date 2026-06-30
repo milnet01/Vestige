@@ -84,6 +84,7 @@ add_executable(vestige_tests
     test_procedural_synth.cpp
     test_material_sound_bank.cpp
     test_audio_curves_parity.cpp
+    test_footstep_system.cpp
     test_physics_character_controller.cpp
     test_physics_constraint.cpp
     test_cloth_simulator.cpp

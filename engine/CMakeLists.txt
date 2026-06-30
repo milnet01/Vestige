@@ -18,6 +18,7 @@ set(ENGINE_SOURCES
     systems/cloth_system.cpp
     systems/destruction_system.cpp
     systems/character_system.cpp
+    systems/footstep_system.cpp
     systems/lighting_system.cpp
     core/window.cpp
     core/input_manager.cpp

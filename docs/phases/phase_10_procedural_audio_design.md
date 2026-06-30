@@ -545,6 +545,33 @@ physics-core change**:
 Gated by a settings toggle (§9). NPC footsteps respect the per-source LOD ladder
 (AX5) already shipped — distant NPCs synthesise less often / not at all.
 
+> **S6 as-built (2026-07-01, commit pending):** shipped as a standalone
+> `FootstepSystem` (registered ISystem, `isForceActive()` like `AudioSystem`),
+> *not* an extension of `CharacterSystem` — the registry slot keeps it
+> self-contained and update-ordered after the controller (the main loop steps
+> the controller before `updateAll`). Deviations / pinned choices:
+> 1. **`getGroundBodyId()` confirmed** — wraps `CharacterVirtual::GetGroundBodyID()`
+>    (Jolt 5.3.0 `CharacterBase.h:115`, returns `JPH::BodyID`). Invalid when
+>    airborne → `getSurfaceMaterial` already maps that to `Default`, so a
+>    stale/removed ground (Jolt's documented caveat) is safe with no extra guard.
+> 2. **Cadence** is distance-based with a *speed-scaled* stride
+>    `stride = kStrideBaseMeters + kStridePerSpeed·speed` (running lengthens the
+>    stride, so cadence rises but saturates). The crossing **remainder carries
+>    forward** so cadence doesn't drift. Below `kMinFootstepSpeedMps` the
+>    accumulator is bled to zero (no banked distance while standing). All
+>    non-curve constants carry the Rule-6 `TODO: revisit via Formula Workbench`
+>    marker (§9 L-4).
+> 3. **Landing** uses the *peak* airborne descent speed (tracked each airborne
+>    frame, read on the airborne→ground edge — the controller has already zeroed
+>    vertical velocity by the grounded frame) and a `1.3` envelopeScale (between
+>    a footstep's `1.0` and an impact's `1.5`); it resets the walk cadence.
+> 4. **No per-emitter RNG** on the system — per-strike pitch/gain jitter (§5c)
+>    already happens inside `playSynth` via the engine's `m_synthRng`, so the
+>    footstep system holds no RNG of its own. The pure cadence/landing logic
+>    (`StrideAccumulator`, `strideLengthMeters`, `landingTriggered`) is split out
+>    engine-free and unit-tested (`test_footstep_system.cpp`); the thin
+>    physics→audio glue is verified by read (it reuses S2/S3-tested accessors).
+
 ---
 
 ## 8. Impact / collision emission (S7) + the play entry point
