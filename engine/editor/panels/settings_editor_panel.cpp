@@ -338,6 +338,34 @@ void SettingsEditorPanel::drawAudioTab()
             "default output device while the engine is running.");
     }
 
+    // AX9 — loudness normalisation: even perceived volume across clips.
+    bool loud = p.audio.loudnessEnabled;
+    if (ImGui::Checkbox("Loudness normalisation (consistent volume)", &loud))
+    {
+        m_editor->mutate([loud](Settings& s) { s.audio.loudnessEnabled = loud; });
+    }
+    ImGui::SameLine();
+    ImGui::TextDisabled("(?)");
+    if (ImGui::IsItemHovered())
+    {
+        ImGui::SetTooltip(
+            "Trims each sound to an even loudness so quiet clips aren't\n"
+            "buried and loud ones don't blast you.");
+    }
+    // Target preset. Two loudness norms: −16 LUFS (the modern game level)
+    // and −23 LUFS (the quieter streamer / broadcast level). Index 0 → −16,
+    // 1 → −23; the shown index snaps to whichever norm the stored target is
+    // nearer (midpoint −19.5 LUFS) so a hand-edited value still displays.
+    const char* loudItems[] = {
+        "Game (loud, -16 LUFS)", "Streamer / broadcast (quiet, -23 LUFS)",
+    };
+    int loudIdx = (p.audio.loudnessTargetLufs <= -19.5f) ? 1 : 0;
+    if (ImGui::Combo("Loudness level", &loudIdx, loudItems, IM_ARRAYSIZE(loudItems)))
+    {
+        const float lufs = (loudIdx == 1) ? -23.0f : -16.0f;
+        m_editor->mutate([lufs](Settings& s) { s.audio.loudnessTargetLufs = lufs; });
+    }
+
     ImGui::Spacing();
     if (ImGui::Button("Restore audio defaults"))
     {

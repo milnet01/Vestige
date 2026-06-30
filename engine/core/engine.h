@@ -220,6 +220,7 @@ private:
     std::unique_ptr<AudioEngineAirAbsorptionApplySink>   m_airAbsorptionSink; // AX6
     std::unique_ptr<AudioEngineLodApplySink>             m_lodSink;           // AX5
     std::unique_ptr<AudioEngineDeviceHotSwapApplySink>   m_deviceHotSwapSink; // AX11
+    std::unique_ptr<AudioEngineLoudnessApplySink>        m_loudnessSink;      // AX9
     std::unique_ptr<PhotosensitiveStoreApplySink>        m_photosensitiveSink;
     std::unique_ptr<LocalizationServiceApplySink>        m_localizationSink;
 

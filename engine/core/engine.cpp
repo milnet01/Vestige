@@ -425,6 +425,12 @@ bool Engine::initialize(const EngineConfig& config)
                 std::make_unique<AudioEngineDeviceHotSwapApplySink>(
                     audio->getAudioEngine());
             targets.audioDeviceHotSwap = m_deviceHotSwapSink.get();
+
+            // AX9 — loudness normalisation (stored toggle + target LUFS;
+            // makeup is measured per clip at load, recomputed per lookup).
+            m_loudnessSink = std::make_unique<AudioEngineLoudnessApplySink>(
+                audio->getAudioEngine());
+            targets.audioLoudness = m_loudnessSink.get();
         }
 
         targets.inputMap = &m_inputActionMap;

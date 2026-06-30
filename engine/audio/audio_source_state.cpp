@@ -20,7 +20,8 @@ AudioSourceAlState composeAudioSourceAlState(
     float                       duckingGain,
     const glm::vec3&            listenerPosition,
     const AirAbsorptionParams&  air,
-    AudioLodTier                lodTier)
+    AudioLodTier                lodTier,
+    float                       loudnessMakeup)
 {
     AudioSourceAlState state;
 
@@ -48,8 +49,11 @@ AudioSourceAlState composeAudioSourceAlState(
         occlusionMaterialFor(comp.occlusionMaterial);
     const float occlusion = computeObstructionGain(
         1.0f, material.transmissionCoefficient, comp.occlusionFraction);
+    // Occlusion stays in [0, 1]; AX9 loudness makeup can boost above 1.0, so
+    // it is applied *after* the occlusion clamp and left for resolveSourceGain
+    // to clamp the final composed gain (boosting a quiet clip up to full).
     const float volumeAfterOcclusion =
-        std::max(0.0f, std::min(1.0f, comp.volume * occlusion));
+        std::max(0.0f, std::min(1.0f, comp.volume * occlusion)) * loudnessMakeup;
 
     state.gain = resolveSourceGain(
         mixer, comp.bus, volumeAfterOcclusion, duckingGain);

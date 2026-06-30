@@ -247,6 +247,7 @@ void AudioEngine::shutdown()
     }
     m_bufferCache.clear();
     m_bufferOrder.clear();
+    m_loudnessLufs.clear();  // AX9 — measurements are parallel to the cache
 
     // AX6 — release the reusable EFX low-pass filter while the context
     // is still current.
@@ -400,6 +401,17 @@ unsigned int AudioEngine::loadBuffer(const std::string& filePath)
         return 0;
     }
 
+    // AX9 — measure integrated loudness once per clip (off the frame path),
+    // keyed by the same path as the buffer cache. Stored as the intrinsic
+    // LUFS (not a makeup gain) so a runtime target-LUFS change recomputes
+    // makeup with no re-measure. Runs regardless of m_loudnessEnabled so
+    // toggling the feature on applies to already-cached clips immediately.
+    m_loudnessLufs[filePath] = integratedLoudnessLufs(
+        clip->getSamples().data(),
+        static_cast<std::size_t>(clip->getFrameCount()),
+        static_cast<int>(clip->getChannels()),
+        static_cast<int>(clip->getSampleRate()));
+
     // Phase 10.9 Slice 8 W8: insert at MRU-front, then evict from the
     // LRU tail until cache size is at-or-below the configured cap.
     // Unlike ResourceManager, we don't have a use_count gate because
@@ -422,6 +434,7 @@ void AudioEngine::enforceBufferCacheLimit()
     {
         const std::string victim = m_bufferOrder.back();
         m_bufferOrder.pop_back();
+        m_loudnessLufs.erase(victim);  // AX9 — keep the loudness map bounded
         auto it = m_bufferCache.find(victim);
         if (it != m_bufferCache.end())
         {
@@ -456,6 +469,25 @@ void AudioEngine::flushBufferCache()
     }
     m_bufferCache.clear();
     m_bufferOrder.clear();
+    m_loudnessLufs.clear();  // AX9 — measurements are parallel to the cache
+}
+
+float AudioEngine::loudnessMakeupForPath(const std::string& path) const
+{
+    // AX9 — disabled, or never measured (e.g. a streamed clip that never
+    // went through loadBuffer) → unity, leaving the source volume untouched.
+    if (!m_loudnessEnabled)
+    {
+        return 1.0f;
+    }
+    auto it = m_loudnessLufs.find(path);
+    if (it == m_loudnessLufs.end())
+    {
+        return 1.0f;
+    }
+    // Makeup is derived from the stored intrinsic LUFS against the *current*
+    // target, so a runtime target change is reflected without re-measuring.
+    return loudnessMakeupGain(it->second, m_loudnessTargetLufs);
 }
 
 unsigned int AudioEngine::acquireSource(SoundPriority incomingPriority)
@@ -572,6 +604,11 @@ unsigned int AudioEngine::playSound(const std::string& filePath, const glm::vec3
         return 0;
     }
 
+    // AX9 — fold the per-clip loudness makeup gain into the source volume
+    // before it is stored / resolved, so updateGains and the eviction
+    // candidate scan reuse it. Returns 1.0 (no-op) when loudness is disabled
+    // or the clip has no cached measurement.
+    volume *= loudnessMakeupForPath(filePath);
     m_livePlaybacks[source] = SourceMix{
         bus, volume, priority, std::chrono::steady_clock::now()};
     const float initialGain =
@@ -611,6 +648,11 @@ unsigned int AudioEngine::playSoundSpatial(const std::string& filePath,
     ALuint source = acquireSource(priority);
     if (source == 0) return 0;
 
+    // AX9 — fold the per-clip loudness makeup gain into the source volume
+    // before it is stored / resolved, so updateGains and the eviction
+    // candidate scan reuse it. Returns 1.0 (no-op) when loudness is disabled
+    // or the clip has no cached measurement.
+    volume *= loudnessMakeupForPath(filePath);
     m_livePlaybacks[source] = SourceMix{
         bus, volume, priority, std::chrono::steady_clock::now()};
     const float initialGain =
@@ -652,6 +694,11 @@ unsigned int AudioEngine::playSoundSpatial(const std::string& filePath,
     ALuint source = acquireSource(priority);
     if (source == 0) return 0;
 
+    // AX9 — fold the per-clip loudness makeup gain into the source volume
+    // before it is stored / resolved, so updateGains and the eviction
+    // candidate scan reuse it. Returns 1.0 (no-op) when loudness is disabled
+    // or the clip has no cached measurement.
+    volume *= loudnessMakeupForPath(filePath);
     m_livePlaybacks[source] = SourceMix{
         bus, volume, priority, std::chrono::steady_clock::now()};
     const float initialGain =
@@ -697,6 +744,11 @@ unsigned int AudioEngine::playSound2D(const std::string& filePath, float volume,
         return 0;
     }
 
+    // AX9 — fold the per-clip loudness makeup gain into the source volume
+    // before it is stored / resolved, so updateGains and the eviction
+    // candidate scan reuse it. Returns 1.0 (no-op) when loudness is disabled
+    // or the clip has no cached measurement.
+    volume *= loudnessMakeupForPath(filePath);
     m_livePlaybacks[source] = SourceMix{
         bus, volume, priority, std::chrono::steady_clock::now()};
     const float initialGain =

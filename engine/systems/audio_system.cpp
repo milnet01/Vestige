@@ -248,7 +248,8 @@ void AudioSystem::update(float deltaTime)
                 markBusActive();
                 const AudioSourceAlState state =
                     composeAudioSourceAlState(*comp, position, mixer, effDuck,
-                                              listenerPos, air, pickTier());
+                                              listenerPos, air, pickTier(),
+                                              m_audioEngine.loudnessMakeupForPath(comp->clipPath));
                 m_audioEngine.applySourceState(source, state);
             }
             return;
@@ -267,7 +268,8 @@ void AudioSystem::update(float deltaTime)
         markBusActive();
         const AudioSourceAlState alState =
             composeAudioSourceAlState(*comp, position, mixer, effDuck,
-                                      listenerPos, air, pickTier());
+                                      listenerPos, air, pickTier(),
+                                      m_audioEngine.loudnessMakeupForPath(comp->clipPath));
         m_audioEngine.applySourceState(source, alState);
     });
 

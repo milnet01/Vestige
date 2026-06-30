@@ -146,6 +146,10 @@ void SettingsEditor::pushPendingToSinks()
     {
         applyAudioDeviceHotSwap(m_pending.audio, *m_targets.audioDeviceHotSwap);
     }
+    if (m_targets.audioLoudness)
+    {
+        applyAudioLoudness(m_pending.audio, *m_targets.audioLoudness);
+    }
     if (m_targets.uiAccessibility)
     {
         applyUIAccessibility(m_pending.accessibility,

@@ -382,6 +382,46 @@ set(ALSOFT_INSTALL_AMBDEC_PRESETS OFF CACHE BOOL "" FORCE)
 set(ALSOFT_INSTALL_UTILS OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(openal-soft)
 
+# libebur128 — EBU R128 / ITU-R BS.1770 loudness measurement (MIT, Phase 10 AX9).
+# Used at clip-decode time (engine/audio/audio_loudness.cpp) to measure each
+# clip's integrated loudness (LUFS) so the engine can normalise perceived
+# loudness across clips. Forced static (BUILD_SHARED_LIBS saved + restored)
+# so the build doesn't ship an extra .so; MIT licensing makes static linking
+# safe (unlike OpenAL's LGPL, which we link dynamically). Upstream pins
+# cmake_minimum_required(2.8.12), which CMake 3.27+ rejects — raise the policy
+# floor for this dep only (same fix as Recast below), then restore it.
+FetchContent_Declare(
+    ebur128
+    GIT_REPOSITORY https://github.com/jiixyj/libebur128.git
+    GIT_TAG        v1.2.6
+    GIT_SHALLOW    TRUE
+)
+set(_vestige_shared_save "${BUILD_SHARED_LIBS}")
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+# The engine, app, and test binaries compile -fPIE; libebur128's static target
+# is only built position-independent when WITH_STATIC_PIC is ON (upstream
+# default OFF). Without this, linking the non-PIC libebur128.a into a PIE
+# target fails with `relocation R_X86_64_32 ... can not be used when making a
+# PIE object` on hardened toolchains. WITH_STATIC_PIC is libebur128-specific,
+# so it needs no save/restore.
+set(WITH_STATIC_PIC ON CACHE BOOL "" FORCE)
+set(CMAKE_POLICY_VERSION_MINIMUM 3.5 CACHE STRING "" FORCE)
+_vestige_silence_upstream_dep_warnings()
+FetchContent_MakeAvailable(ebur128)
+_vestige_restore_dep_warnings()
+unset(CMAKE_POLICY_VERSION_MINIMUM CACHE)
+if(_vestige_shared_save STREQUAL "")
+    unset(BUILD_SHARED_LIBS CACHE)
+else()
+    set(BUILD_SHARED_LIBS ${_vestige_shared_save} CACHE BOOL "" FORCE)
+endif()
+unset(_vestige_shared_save)
+# The `ebur128` target sets only an internal EBUR128_INCLUDE_DIR cache var, not
+# a PUBLIC include on the target — add the public header dir so consumers that
+# link `ebur128` (the engine) resolve <ebur128.h>.
+target_include_directories(ebur128 PUBLIC ${ebur128_SOURCE_DIR}/ebur128)
+set(ebur128_SOURCE_DIR ${ebur128_SOURCE_DIR} PARENT_SCOPE)
+
 # Recast Navigation — navmesh generation and pathfinding (ZLib license)
 FetchContent_Declare(
     recastnavigation

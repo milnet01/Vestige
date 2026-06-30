@@ -78,7 +78,9 @@ bool AudioSettings::operator==(const AudioSettings& o) const
         && outputLayout == o.outputLayout
         && airAbsorptionEnabled == o.airAbsorptionEnabled
         && lodEnabled == o.lodEnabled
-        && deviceHotSwap == o.deviceHotSwap;
+        && deviceHotSwap == o.deviceHotSwap
+        && loudnessEnabled == o.loudnessEnabled
+        && loudnessTargetLufs == o.loudnessTargetLufs;
 }
 
 bool ControlsSettings::operator==(const ControlsSettings& o) const
@@ -247,6 +249,8 @@ json audioToJson(const AudioSettings& a)
         {"airAbsorptionEnabled", a.airAbsorptionEnabled},
         {"lodEnabled",           a.lodEnabled},
         {"deviceHotSwap",        deviceHotSwapModeToString(a.deviceHotSwap)},
+        {"loudnessEnabled",      a.loudnessEnabled},
+        {"loudnessTargetLufs",   a.loudnessTargetLufs},
     };
 }
 
@@ -278,6 +282,9 @@ void audioFromJson(const json& j, AudioSettings& a)
     a.deviceHotSwap = deviceHotSwapModeFromString(
         j.value("deviceHotSwap", deviceHotSwapModeToString(a.deviceHotSwap)),
         a.deviceHotSwap);
+    // AX9 — missing keys keep the current values (on, −16 LUFS by default).
+    a.loudnessEnabled    = j.value("loudnessEnabled", a.loudnessEnabled);
+    a.loudnessTargetLufs = j.value("loudnessTargetLufs", a.loudnessTargetLufs);
 }
 
 // --- Controls ---

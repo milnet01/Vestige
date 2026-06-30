@@ -417,6 +417,38 @@ private:
 };
 
 // ================================================================
+// AX9 — audio loudness-normalisation apply path
+// ================================================================
+
+/// @brief Sink for the loudness-normalisation toggle + target. Both live
+///        on `AudioEngine`; this is the abstract seam the tests mock.
+class AudioLoudnessApplySink
+{
+public:
+    virtual ~AudioLoudnessApplySink() = default;
+    virtual void setLoudnessEnabled(bool enabled) = 0;
+    virtual void setLoudnessTargetLufs(float lufs) = 0;
+};
+
+/// @brief Pushes the loudness toggle + target onto a sink.
+void applyAudioLoudness(const AudioSettings& audio, AudioLoudnessApplySink& sink);
+
+/// @brief Production sink wrapping a live `AudioEngine`. Forwards to
+///        `AudioEngine::setLoudnessEnabled` / `setLoudnessTargetLufs` —
+///        stored fields, no device reset (the makeup is recomputed per
+///        clip lookup against the current target).
+class AudioEngineLoudnessApplySink final : public AudioLoudnessApplySink
+{
+public:
+    explicit AudioEngineLoudnessApplySink(AudioEngine& engine);
+    void setLoudnessEnabled(bool enabled) override;
+    void setLoudnessTargetLufs(float lufs) override;
+
+private:
+    AudioEngine& m_engine;
+};
+
+// ================================================================
 // Slice 13.3b — Photosensitive safety apply path
 // ================================================================
 

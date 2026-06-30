@@ -281,6 +281,7 @@ set(ENGINE_SOURCES
     audio/audio_hrtf.cpp
     audio/audio_output_mode.cpp
     audio/audio_device_hotswap.cpp
+    audio/audio_loudness.cpp
     audio/audio_air_absorption.cpp
     audio/audio_lod.cpp
     audio/audio_ducking.cpp
@@ -433,10 +434,19 @@ target_link_libraries(vestige_engine
         nlohmann_json::nlohmann_json
         Jolt
         OpenAL::OpenAL
+        ebur128
         RecastNavigation::Recast
         RecastNavigation::Detour
         tinyfiledialogs
 )
+
+# libebur128 (AX9) is a C library; mark its header dir SYSTEM so the engine's
+# -Werror/-Wconversion flag set doesn't police the third-party <ebur128.h>
+# (same treatment as Jolt / Recast / GLM above).
+get_target_property(EBUR128_INCLUDE_DIRS ebur128 INTERFACE_INCLUDE_DIRECTORIES)
+if(EBUR128_INCLUDE_DIRS)
+    target_include_directories(vestige_engine SYSTEM PUBLIC ${EBUR128_INCLUDE_DIRS})
+endif()
 
 # Suppress warnings from third-party source files compiled as part of the engine
 set_source_files_properties(

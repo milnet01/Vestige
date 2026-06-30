@@ -131,6 +131,16 @@ void migrate_v3_to_v4(nlohmann::json& j)
         {
             j["audio"]["deviceHotSwap"] = "notify";
         }
+        // AX9 rides the same v4 bump — loudness normalisation defaults on at
+        // −16 LUFS (game norm). Self-describing arms mirror the ones above.
+        if (!j["audio"].contains("loudnessEnabled"))
+        {
+            j["audio"]["loudnessEnabled"] = true;
+        }
+        if (!j["audio"].contains("loudnessTargetLufs"))
+        {
+            j["audio"]["loudnessTargetLufs"] = -16.0;
+        }
     }
     j["schemaVersion"] = 4;
 }

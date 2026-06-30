@@ -10,6 +10,7 @@
 #include "audio/audio_device_hotswap.h"
 #include "audio/audio_doppler.h"
 #include "audio/audio_hrtf.h"
+#include "audio/audio_loudness.h"
 #include "audio/audio_mixer.h"
 #include "audio/audio_output_mode.h"
 
@@ -148,6 +149,38 @@ public:
     ///        load thousands of unique clips can raise via
     ///        `setBufferCacheLimit`.
     static constexpr size_t kDefaultBufferCacheLimit = 256;
+
+    // -- Loudness normalisation (Phase 10 AX9) ----------------------------
+    //
+    // EBU R128 / ITU-R BS.1770 per-clip loudness. `loadBuffer` measures
+    // each decoded clip's integrated loudness (LUFS) once and caches it
+    // parallel to the buffer cache; `loudnessMakeupForPath` turns that into
+    // a linear makeup gain toward the current target, which the play paths
+    // fold into the per-source volume. Measurement always runs at decode
+    // (off the frame path); the enabled flag only gates application, so a
+    // runtime toggle takes effect on already-cached clips with no re-decode.
+
+    /// @brief Enables/disables loudness-makeup application. Default on.
+    ///        Does not affect measurement — toggling on applies the cached
+    ///        per-clip loudness immediately.
+    void setLoudnessEnabled(bool enabled) { m_loudnessEnabled = enabled; }
+
+    /// @brief Whether loudness-makeup application is active.
+    bool isLoudnessEnabled() const { return m_loudnessEnabled; }
+
+    /// @brief Sets the reference loudness target (LUFS). −16 (game norm,
+    ///        the default) … −23 (EBU R128 broadcast / streamer preset).
+    void setLoudnessTargetLufs(float lufs) { m_loudnessTargetLufs = lufs; }
+
+    /// @brief Returns the reference loudness target (LUFS).
+    float getLoudnessTargetLufs() const { return m_loudnessTargetLufs; }
+
+    /// @brief Linear makeup gain for the clip at @a path: 1.0 when loudness
+    ///        is disabled or the path has no cached measurement, else the
+    ///        gain that moves the clip's measured loudness toward the
+    ///        target (clamped, silence-gated). The play paths multiply this
+    ///        into the per-source volume before `resolveSourceGain`.
+    float loudnessMakeupForPath(const std::string& path) const;
 
     /// @brief Acquires a source from the pool.
     ///
@@ -659,6 +692,15 @@ private:
     std::unordered_map<std::string, unsigned int> m_bufferCache;
     std::list<std::string> m_bufferOrder;
     size_t m_bufferCacheLimit = kDefaultBufferCacheLimit;
+
+    /// @brief AX9 — per-clip integrated loudness (LUFS), keyed by the same
+    ///        path as `m_bufferCache` and evicted alongside it. Stores the
+    ///        intrinsic measured loudness (not a makeup gain) so a target
+    ///        change recomputes makeup with no re-measure. Default target
+    ///        −16 LUFS (game norm); makeup application enabled by default.
+    std::unordered_map<std::string, float> m_loudnessLufs;
+    bool  m_loudnessEnabled    = true;
+    float m_loudnessTargetLufs = -16.0f;
 
     /// @brief Phase 10.9 Slice 5 D11 — sandbox roots; populated paths
     ///        force `loadBuffer` to reject paths that don't lie inside

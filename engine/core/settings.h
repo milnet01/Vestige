@@ -149,6 +149,18 @@ struct AudioSettings
     ///        Additive key on the v4 schema (tolerant default on load).
     DeviceHotSwapMode deviceHotSwap = DeviceHotSwapMode::Notify;
 
+    /// @brief AX9 — EBU R128 / ITU-R BS.1770 per-clip loudness normalisation.
+    ///        When on (the default), each decoded clip is trimmed toward
+    ///        `loudnessTargetLufs` so perceived loudness is consistent across
+    ///        clips. Additive key on the v4 schema (tolerant default on load).
+    bool loudnessEnabled = true;
+
+    /// @brief AX9 — reference loudness target in LUFS. −16 (the default) is
+    ///        the modern game-loudness norm; −23 is the EBU R128 broadcast /
+    ///        streamer preset. Quieter clips are boosted (capped at +12 dB),
+    ///        louder clips attenuated, to meet this target.
+    float loudnessTargetLufs = -16.0f;
+
     bool operator==(const AudioSettings& o) const;
     bool operator!=(const AudioSettings& o) const { return !(*this == o); }
 };

@@ -9986,6 +9986,18 @@ existing cases (``HelpersMatchEvaluatorPrecisely``,
 
 ### Added
 
+- **Audio loudness normalisation (EBU R128 / ITU-R BS.1770) — consistent perceived volume across sounds (AX9)**
+  Phase 10 audio quick-wins bundle, final slice. Each decoded clip's
+  integrated loudness (LUFS) is measured once at load via libebur128
+  (MIT, new dependency) and trimmed toward a reference target so quiet
+  clips aren't buried and loud ones don't blast you. Default on at −16
+  LUFS (game norm); −23 LUFS (streamer/broadcast) is a selectable preset.
+  Boost capped at +12 dB; digital silence (≤ −70 LUFS) is never amplified.
+  Measured per-clip at the decode boundary (OpenAL exposes no master-bus
+  PCM at runtime); streamed music is out of scope. Settings: Audio →
+  Loudness normalisation toggle + Loudness level preset. New module
+  engine/audio/audio_loudness.{h,cpp}; 11 new tests.
+
 - **AX11 — audio device hot-swap (reopen without restart + HRTF auto-re-detect)**
   Plug in USB/Bluetooth headphones (or change the OS default output)
   mid-session and the engine reopens onto the new device via OpenAL Soft's

@@ -603,6 +603,25 @@ O(samples) once per clip.
 known-loudness synthetic signal (e.g. −23 LUFS 1 kHz sine block) measured through
 `integratedLoudnessLufs` within tolerance; cache stores one measurement per clip.
 
+**Shipped 2026-06-30 — reconciliation with the design above.** Four refinements
+made during implementation, all behaviour-preserving or simplifying:
+- **libebur128's native `short` ingest** (`ebur128_add_frames_short`) is used
+  directly on `AudioClip`'s int16 PCM — no int16→float whole-clip copy as the §8
+  sketch implied (`int16_t` aliases `short` on every target; guarded by a
+  `static_assert`).
+- The per-clip cache stores the **intrinsic measured LUFS, not the makeup gain**,
+  and `loudnessMakeupForPath` derives the gain against the *current* target on
+  lookup — so a runtime `loudnessTargetLufs` change needs no re-measure. Still
+  "one measurement per clip"; the makeup is the trivial part.
+- The makeup folds into the **`volume` input** of the existing `resolveSourceGain`
+  composition (mirroring how occlusion folds in) rather than a new parameter on
+  `resolveSourceGain` — identical result by multiplication associativity, zero
+  churn to that function's many call sites. Applied at the four `playSound*`
+  functions and the ECS `composeAudioSourceAlState` (trailing defaulted param).
+- The `libebur128` static target is forced PIC (`WITH_STATIC_PIC ON`) so it links
+  into the `-fPIE` engine/app/tests — surfaced by the Rule-8 dependency cold-eyes
+  review (one HIGH, fixed before merge).
+
 ---
 
 ## 9. Cross-cutting concerns

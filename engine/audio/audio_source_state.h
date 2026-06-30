@@ -113,6 +113,12 @@ struct AudioSourceAlState
 ///   - `Drop2D` — collapse to 2D (`spatial` → false) at the attenuated
 ///     gain; no low-pass.
 ///   - `Mute` — gain → 0 (the source is kept alive by the apply layer).
+///
+/// AX9 adds a trailing, defaulted `loudnessMakeup` — the per-clip linear
+/// loudness-normalisation gain (`AudioEngine::loudnessMakeupForPath`). It
+/// folds into the `volume` input alongside occlusion, so the same mixer /
+/// bus / duck / clamp pipeline applies; `1.0` (the default) is a no-op,
+/// keeping the pre-AX9 call sites unchanged.
 AudioSourceAlState composeAudioSourceAlState(
     const AudioSourceComponent& comp,
     const glm::vec3&            entityPosition,
@@ -120,6 +126,7 @@ AudioSourceAlState composeAudioSourceAlState(
     float                       duckingGain,
     const glm::vec3&            listenerPosition = glm::vec3(0.0f),
     const AirAbsorptionParams&  air              = AirAbsorptionParams{},
-    AudioLodTier                lodTier          = AudioLodTier::Full);
+    AudioLodTier                lodTier          = AudioLodTier::Full,
+    float                       loudnessMakeup   = 1.0f);
 
 } // namespace Vestige

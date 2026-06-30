@@ -307,6 +307,31 @@ void AudioEngineDeviceHotSwapApplySink::setDeviceHotSwapMode(DeviceHotSwapMode m
 }
 
 // ================================================================
+// AX9 — audio loudness-normalisation apply
+// ================================================================
+
+void applyAudioLoudness(const AudioSettings& audio, AudioLoudnessApplySink& sink)
+{
+    sink.setLoudnessEnabled(audio.loudnessEnabled);
+    sink.setLoudnessTargetLufs(audio.loudnessTargetLufs);
+}
+
+AudioEngineLoudnessApplySink::AudioEngineLoudnessApplySink(AudioEngine& engine)
+    : m_engine(engine)
+{
+}
+
+void AudioEngineLoudnessApplySink::setLoudnessEnabled(bool enabled)
+{
+    m_engine.setLoudnessEnabled(enabled);
+}
+
+void AudioEngineLoudnessApplySink::setLoudnessTargetLufs(float lufs)
+{
+    m_engine.setLoudnessTargetLufs(lufs);
+}
+
+// ================================================================
 // Slice 13.3b — Photosensitive safety apply
 // ================================================================
 
