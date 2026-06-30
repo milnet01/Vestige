@@ -44,6 +44,7 @@
 #include <utility>
 #include <vector>
 
+#include "audio/audio_device_hotswap.h"
 #include "audio/audio_output_mode.h"
 
 #include <nlohmann/json_fwd.hpp>
@@ -141,6 +142,12 @@ struct AudioSettings
     ///        off keeps every source at full spatialisation (pre-AX5).
     ///        Rides the same v4 schema.
     bool lodEnabled = true;
+
+    /// @brief AX11 — what to do when the OS default playback device changes
+    ///        mid-session. `Notify` (default) offers a toast + confirm;
+    ///        `Auto` swaps silently; `Off` keeps the pre-AX11 behaviour.
+    ///        Additive key on the v4 schema (tolerant default on load).
+    DeviceHotSwapMode deviceHotSwap = DeviceHotSwapMode::Notify;
 
     bool operator==(const AudioSettings& o) const;
     bool operator!=(const AudioSettings& o) const { return !(*this == o); }

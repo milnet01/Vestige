@@ -280,6 +280,7 @@ set(ENGINE_SOURCES
     audio/audio_doppler.cpp
     audio/audio_hrtf.cpp
     audio/audio_output_mode.cpp
+    audio/audio_device_hotswap.cpp
     audio/audio_air_absorption.cpp
     audio/audio_lod.cpp
     audio/audio_ducking.cpp

@@ -9986,6 +9986,22 @@ existing cases (``HelpersMatchEvaluatorPrecisely``,
 
 ### Added
 
+- **AX11 — audio device hot-swap (reopen without restart + HRTF auto-re-detect)**
+  Plug in USB/Bluetooth headphones (or change the OS default output)
+  mid-session and the engine reopens onto the new device via OpenAL Soft's
+  ALC_SOFT_reopen_device + ALC_SOFT_system_events, keeping the context,
+  sources and buffers alive — then re-evaluates HRTF so Auto mode
+  re-detects headphones. Policy is a Settings → Audio "Device change"
+  combo: Off (ignore), Notify (toast + confirm, default), Auto (switch
+  silently). The OpenAL event callback runs on its own thread and only
+  sets an atomic flag + stashes the device name under a mutex; the main
+  thread's per-frame AudioSystem poll performs the actual reopen. Silently
+  disables (logged once) on older OpenAL Soft lacking the extensions.
+  Scope note: the ROADMAP bullet's "per-output device routing" (a distinct
+  physical device per bus) is NOT included — OpenAL's single-context model
+  can't route buses to separate devices without a multi-context
+  rearchitecture; tracked as a follow-up.
+
 - **World-space GI G1 — RSM flux attachment on the shadow maps** (3D_E-0021)
   First slice of the world-space dynamic GI (DDGI-lite, design
   docs/phases/phase_13_worldspace_gi_design.md). The directional CSM

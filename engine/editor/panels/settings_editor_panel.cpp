@@ -318,6 +318,26 @@ void SettingsEditorPanel::drawAudioTab()
         m_editor->mutate([lod](Settings& s) { s.audio.lodEnabled = lod; });
     }
 
+    // AX11 — device hot-swap policy. Index order matches the
+    // DeviceHotSwapMode enum (Off, Notify, Auto) so the cast round-trips.
+    const char* hotSwapItems[] = {
+        "Off (ignore)", "Notify (ask before switching)", "Auto (switch silently)",
+    };
+    int hotSwapIdx = static_cast<int>(p.audio.deviceHotSwap);
+    if (ImGui::Combo("Device change", &hotSwapIdx, hotSwapItems, IM_ARRAYSIZE(hotSwapItems)))
+    {
+        const auto mode = static_cast<DeviceHotSwapMode>(hotSwapIdx);
+        m_editor->mutate([mode](Settings& s) { s.audio.deviceHotSwap = mode; });
+    }
+    ImGui::SameLine();
+    ImGui::TextDisabled("(?)");
+    if (ImGui::IsItemHovered())
+    {
+        ImGui::SetTooltip(
+            "What to do when you plug in headphones or change the\n"
+            "default output device while the engine is running.");
+    }
+
     ImGui::Spacing();
     if (ImGui::Button("Restore audio defaults"))
     {

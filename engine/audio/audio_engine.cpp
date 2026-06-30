@@ -18,6 +18,36 @@
 namespace Vestige
 {
 
+namespace
+{
+
+/// @brief AX11 — OpenAL `ALC_SOFT_system_events` callback trampoline.
+///
+/// Runs on OpenAL's internal event thread. Forwards a default-*playback*-
+/// device change to `AudioEngine::onDeviceChanged` via @p userParam (the
+/// engine `this`). Ignores every other event type / device type. The
+/// minimal-work-on-a-foreign-thread contract lives in `onDeviceChanged`.
+void ALC_APIENTRY deviceEventTrampoline(ALCenum eventType, ALCenum deviceType,
+                                        ALCdevice* /*device*/, ALCsizei /*length*/,
+                                        const ALCchar* message, void* userParam) noexcept
+{
+    if (eventType != ALC_EVENT_TYPE_DEFAULT_DEVICE_CHANGED_SOFT
+        || deviceType != ALC_PLAYBACK_DEVICE_SOFT)
+    {
+        return;
+    }
+    auto* self = static_cast<AudioEngine*>(userParam);
+    if (self == nullptr)
+    {
+        return;
+    }
+    // `message` is the new default device's (null-terminated) name.
+    self->onDeviceChanged(message != nullptr ? std::string(message)
+                                             : std::string());
+}
+
+} // namespace
+
 AudioEngine::AudioEngine() = default;
 
 AudioEngine::~AudioEngine()
@@ -139,6 +169,39 @@ bool AudioEngine::initialize()
         }
     }
 
+    // AX11 — audio device hot-swap. `ALC_SOFT_reopen_device` is a
+    // per-device extension (swap onto a new device without losing the
+    // context / sources / buffers); `ALC_SOFT_system_events` is
+    // device-independent (queried on a null device) and delivers the
+    // default-device-changed event on OpenAL's own thread. Both absent on
+    // older OpenAL Soft ⟹ hot-swap silently disables.
+    if (alcIsExtensionPresent(m_device, "ALC_SOFT_reopen_device") == ALC_TRUE)
+    {
+        m_alcReopenDeviceSOFT = reinterpret_cast<void*>(
+            alcGetProcAddress(m_device, "alcReopenDeviceSOFT"));
+    }
+    if (alcIsExtensionPresent(nullptr, "ALC_SOFT_system_events") == ALC_TRUE)
+    {
+        m_alcEventControlSOFT = reinterpret_cast<void*>(
+            alcGetProcAddress(nullptr, "alcEventControlSOFT"));
+        m_alcEventCallbackSOFT = reinterpret_cast<void*>(
+            alcGetProcAddress(nullptr, "alcEventCallbackSOFT"));
+        if (m_alcEventControlSOFT != nullptr && m_alcEventCallbackSOFT != nullptr)
+        {
+            reinterpret_cast<LPALCEVENTCALLBACKSOFT>(m_alcEventCallbackSOFT)(
+                &deviceEventTrampoline, this);
+            const ALCenum events[1] = {ALC_EVENT_TYPE_DEFAULT_DEVICE_CHANGED_SOFT};
+            reinterpret_cast<LPALCEVENTCONTROLSOFT>(m_alcEventControlSOFT)(
+                1, events, ALC_TRUE);
+            m_deviceEventsActive = true;
+        }
+    }
+    if (m_alcReopenDeviceSOFT == nullptr || !m_deviceEventsActive)
+    {
+        Logger::info("[AudioEngine] Device hot-swap unavailable "
+                     "(ALC_SOFT_reopen_device / ALC_SOFT_system_events absent)");
+    }
+
     // Phase 10.9 Slice 2 P8 — flip to available *before* applying HRTF.
     // `applyHrtfSettings()` guards on `m_available` and on the
     // extension pointer, so setting the flag first lets pre-init
@@ -192,6 +255,25 @@ void AudioEngine::shutdown()
         reinterpret_cast<LPALDELETEFILTERS>(m_alDeleteFilters)(
             1, &m_lowPassFilter);
         m_lowPassFilter = 0;
+    }
+
+    // AX11 — deregister the global system-events callback BEFORE tearing
+    // the context / device down, so OpenAL's event thread cannot call back
+    // into a half-destroyed AudioEngine.
+    if (m_deviceEventsActive)
+    {
+        if (m_alcEventControlSOFT != nullptr)
+        {
+            const ALCenum events[1] = {ALC_EVENT_TYPE_DEFAULT_DEVICE_CHANGED_SOFT};
+            reinterpret_cast<LPALCEVENTCONTROLSOFT>(m_alcEventControlSOFT)(
+                1, events, ALC_FALSE);
+        }
+        if (m_alcEventCallbackSOFT != nullptr)
+        {
+            reinterpret_cast<LPALCEVENTCALLBACKSOFT>(m_alcEventCallbackSOFT)(
+                nullptr, nullptr);
+        }
+        m_deviceEventsActive = false;
     }
 
     // Destroy context and close device
@@ -840,6 +922,79 @@ void AudioEngine::applyHrtfSettings()
     {
         m_hrtfStatusListener(composeHrtfStatusEvent(m_hrtf, getHrtfStatus()));
     }
+}
+
+void AudioEngine::onDeviceChanged(const std::string& newDeviceName)
+{
+    // Runs on OpenAL's event thread (or a test thread). Minimal work: stash
+    // the name under the mutex and flag the main thread. No ALC calls, no
+    // engine mutation beyond these two cross-thread fields.
+    {
+        std::lock_guard<std::mutex> lock(m_deviceChangeMutex);
+        m_pendingDeviceName = newDeviceName;
+    }
+    m_deviceChangePending.store(true, std::memory_order_release);
+}
+
+bool AudioEngine::pollAndHandleDeviceChange()
+{
+    // Idle fast path: a single relaxed-acquire exchange per frame. The
+    // exchange also clears the flag so a change is handled exactly once.
+    if (!m_deviceChangePending.exchange(false, std::memory_order_acquire))
+    {
+        return false;
+    }
+
+    std::string name;
+    {
+        std::lock_guard<std::mutex> lock(m_deviceChangeMutex);
+        name = m_pendingDeviceName;
+    }
+
+    switch (decideDeviceSwapAction(m_deviceHotSwapMode))
+    {
+        case DeviceSwapAction::Ignore:
+            return false;
+        case DeviceSwapAction::Notify:
+            if (m_deviceChangeListener)
+            {
+                m_deviceChangeListener(name);
+            }
+            return false;
+        case DeviceSwapAction::Swap:
+            return reopenToDefaultDevice(name);
+    }
+    return false;
+}
+
+bool AudioEngine::reopenToDefaultDevice(const std::string& deviceName)
+{
+    bool swapped = false;
+    if (m_available && m_alcReopenDeviceSOFT != nullptr && m_device != nullptr)
+    {
+        auto reopen = reinterpret_cast<LPALCREOPENDEVICESOFT>(m_alcReopenDeviceSOFT);
+        const ALCchar* name = deviceName.empty() ? nullptr : deviceName.c_str();
+        if (reopen(m_device, name, nullptr) == ALC_TRUE)
+        {
+            swapped = true;
+            Logger::info("[AudioEngine] Reopened audio device" +
+                         (deviceName.empty() ? std::string(" (driver default)")
+                                             : ": " + deviceName));
+        }
+        else
+        {
+            Logger::warning(
+                "[AudioEngine] alcReopenDeviceSOFT failed — device unchanged");
+        }
+    }
+
+    // Re-evaluate HRTF after the change so `Auto` re-detects headphones and
+    // the surround layout is re-applied on the (possibly new) device.
+    // applyHrtfSettings fires the HRTF status listener unconditionally — even
+    // with no live device — so the re-eval is observable headlessly; the
+    // actual device reset inside it is gated on the extension being present.
+    applyHrtfSettings();
+    return swapped;
 }
 
 void AudioEngine::setDuckingSnapshot(float duckingGain)

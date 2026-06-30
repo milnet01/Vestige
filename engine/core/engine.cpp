@@ -418,6 +418,13 @@ bool Engine::initialize(const EngineConfig& config)
             m_lodSink = std::make_unique<AudioEngineLodApplySink>(
                 audio->getAudioEngine());
             targets.audioLod = m_lodSink.get();
+
+            // AX11 — device hot-swap policy (a stored enum the per-frame
+            // device-change poll reads; no device reset on apply).
+            m_deviceHotSwapSink =
+                std::make_unique<AudioEngineDeviceHotSwapApplySink>(
+                    audio->getAudioEngine());
+            targets.audioDeviceHotSwap = m_deviceHotSwapSink.get();
         }
 
         targets.inputMap = &m_inputActionMap;

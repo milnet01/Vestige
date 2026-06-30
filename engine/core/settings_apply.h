@@ -23,6 +23,7 @@
 
 #include "accessibility/photosensitive_safety.h"     // PhotosensitiveLimits
 #include "accessibility/post_process_accessibility.h" // PostProcessAccessibilitySettings
+#include "audio/audio_device_hotswap.h"               // DeviceHotSwapMode
 #include "audio/audio_hrtf.h"                         // HrtfMode
 #include "audio/audio_mixer.h"                        // AudioBus enum
 #include "audio/audio_output_mode.h"                  // AudioOutputLayout
@@ -380,6 +381,36 @@ class AudioEngineLodApplySink final : public AudioLodApplySink
 public:
     explicit AudioEngineLodApplySink(AudioEngine& engine);
     void setLodEnabled(bool enabled) override;
+
+private:
+    AudioEngine& m_engine;
+};
+
+// ================================================================
+// AX11 — audio device hot-swap policy apply path (sibling to AX5)
+// ================================================================
+
+/// @brief Sink for the audio device hot-swap policy. The mode lives on
+///        `AudioEngine`; this is the abstract seam the tests mock.
+class AudioDeviceHotSwapApplySink
+{
+public:
+    virtual ~AudioDeviceHotSwapApplySink() = default;
+    virtual void setDeviceHotSwapMode(DeviceHotSwapMode mode) = 0;
+};
+
+/// @brief Pushes the device hot-swap policy onto a sink.
+void applyAudioDeviceHotSwap(const AudioSettings& audio,
+                             AudioDeviceHotSwapApplySink& sink);
+
+/// @brief Production sink wrapping a live `AudioEngine`. Forwards to
+///        `AudioEngine::setDeviceHotSwapMode` — a stored policy enum, no
+///        device reset (the next frame's poll reads it).
+class AudioEngineDeviceHotSwapApplySink final : public AudioDeviceHotSwapApplySink
+{
+public:
+    explicit AudioEngineDeviceHotSwapApplySink(AudioEngine& engine);
+    void setDeviceHotSwapMode(DeviceHotSwapMode mode) override;
 
 private:
     AudioEngine& m_engine;

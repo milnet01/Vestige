@@ -150,6 +150,7 @@ add_executable(vestige_tests
     test_audio_doppler.cpp
     test_audio_hrtf.cpp
     test_audio_output_mode.cpp
+    test_audio_device_swap.cpp
     test_audio_air_absorption.cpp
     test_audio_lod.cpp
     test_audio_ducking.cpp

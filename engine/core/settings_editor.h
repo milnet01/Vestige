@@ -61,6 +61,7 @@ public:
         AudioOutputApplySink*           audioOutput     = nullptr;
         AudioAirAbsorptionApplySink*    audioAirAbsorb  = nullptr;
         AudioLodApplySink*              audioLod        = nullptr;
+        AudioDeviceHotSwapApplySink*    audioDeviceHotSwap = nullptr;  // AX11
         UIAccessibilityApplySink*       uiAccessibility = nullptr;
         RendererAccessibilityApplySink* rendererAccess  = nullptr;
         SubtitleApplySink*              subtitle        = nullptr;

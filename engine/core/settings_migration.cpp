@@ -123,6 +123,14 @@ void migrate_v3_to_v4(nlohmann::json& j)
         {
             j["audio"]["lodEnabled"] = true;
         }
+        // AX11 rides the same v4 bump — `audio.deviceHotSwap` defaults to
+        // "notify" (toast + confirm), the safe mid-session policy. fromJson
+        // would default a missing key anyway; set it here to keep the
+        // on-disk document self-describing, mirroring the arms above.
+        if (!j["audio"].contains("deviceHotSwap"))
+        {
+            j["audio"]["deviceHotSwap"] = "notify";
+        }
     }
     j["schemaVersion"] = 4;
 }

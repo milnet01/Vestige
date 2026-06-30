@@ -286,6 +286,27 @@ void AudioEngineLodApplySink::setLodEnabled(bool enabled)
 }
 
 // ================================================================
+// AX11 — audio device hot-swap policy apply
+// ================================================================
+
+void applyAudioDeviceHotSwap(const AudioSettings& audio,
+                             AudioDeviceHotSwapApplySink& sink)
+{
+    sink.setDeviceHotSwapMode(audio.deviceHotSwap);
+}
+
+AudioEngineDeviceHotSwapApplySink::AudioEngineDeviceHotSwapApplySink(
+    AudioEngine& engine)
+    : m_engine(engine)
+{
+}
+
+void AudioEngineDeviceHotSwapApplySink::setDeviceHotSwapMode(DeviceHotSwapMode mode)
+{
+    m_engine.setDeviceHotSwapMode(mode);
+}
+
+// ================================================================
 // Slice 13.3b — Photosensitive safety apply
 // ================================================================
 

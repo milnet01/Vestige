@@ -7,6 +7,7 @@
 
 #include "audio/audio_attenuation.h"
 #include "audio/audio_clip.h"
+#include "audio/audio_device_hotswap.h"
 #include "audio/audio_doppler.h"
 #include "audio/audio_hrtf.h"
 #include "audio/audio_mixer.h"
@@ -14,9 +15,11 @@
 
 #include <glm/glm.hpp>
 
+#include <atomic>
 #include <chrono>
 #include <filesystem>
 #include <functional>
+#include <mutex>
 #include <string>
 #include <list>
 #include <unordered_map>
@@ -441,6 +444,65 @@ public:
     /// @brief Returns whether the audio LOD ladder is enabled (default true).
     bool isLodEnabled() const { return m_lodEnabled; }
 
+    /// @brief AX11 — device hot-swap policy: what to do when the OS default
+    ///        playback device changes mid-session.
+    ///
+    /// `Notify` (default) fires the device-change listener so the UI can
+    /// offer a "switch?" toast; `Auto` swaps silently; `Off` ignores the
+    /// change. Stored only — `pollAndHandleDeviceChange` reads it each frame.
+    void setDeviceHotSwapMode(DeviceHotSwapMode mode) { m_deviceHotSwapMode = mode; }
+
+    /// @brief Returns the current device hot-swap policy (default Notify).
+    DeviceHotSwapMode getDeviceHotSwapMode() const { return m_deviceHotSwapMode; }
+
+    /// @brief AX11 — listener fired on the main thread (from
+    ///        `pollAndHandleDeviceChange`) when the default device changed
+    ///        and the policy is `Notify`. The argument is the new default
+    ///        device name. The UI shows a toast and, on confirm, calls
+    ///        `reopenToDefaultDevice(name)`. May be null (no-op).
+    using DeviceChangeListener = std::function<void(const std::string& newDeviceName)>;
+    void setDeviceChangeListener(DeviceChangeListener listener)
+    {
+        m_deviceChangeListener = std::move(listener);
+    }
+
+    /// @brief AX11 — main-thread poll for a pending device change.
+    ///
+    /// Called once per frame at the top of `AudioSystem::update`. If the
+    /// OpenAL event thread flagged a default-device change, this clears the
+    /// flag and dispatches per `getDeviceHotSwapMode()`: `Off` → ignore;
+    /// `Notify` → fire the device-change listener; `Auto` → reopen onto the
+    /// new device + re-evaluate HRTF. One relaxed atomic load when idle.
+    ///
+    /// @return true iff a device swap actually occurred this call.
+    bool pollAndHandleDeviceChange();
+
+    /// @brief AX11 — true while a device change detected by the event
+    ///        thread is still awaiting a poll. Lets the UI badge a pending
+    ///        change; tests assert the callback→main hand-off contract.
+    bool isDeviceChangePending() const
+    {
+        return m_deviceChangePending.load(std::memory_order_acquire);
+    }
+
+    /// @brief AX11 — reopen the live device onto @a deviceName (empty =
+    ///        driver default) via `alcReopenDeviceSOFT`, keeping the
+    ///        context, sources and buffers alive, then re-evaluate HRTF so
+    ///        `Auto` HRTF re-detects headphones. The `Notify` confirm path
+    ///        calls this directly. A no-op returning false when the engine
+    ///        is unavailable or the reopen extension is absent — but HRTF
+    ///        re-eval (and its status listener) still fires so the Settings
+    ///        UI reflects the change.
+    bool reopenToDefaultDevice(const std::string& deviceName);
+
+    /// @brief AX11 — records a default-device change. Normally invoked on
+    ///        OpenAL's internal event thread via the engine's event
+    ///        trampoline; public for headless testing. Does the minimum
+    ///        safe on a foreign thread: stash @a newDeviceName under a mutex
+    ///        and set the atomic pending flag. No ALC calls, no engine
+    ///        mutation, no allocation beyond the string copy.
+    void onDeviceChanged(const std::string& newDeviceName);
+
     /// @brief Queries the driver's current HRTF state.
     ///
     /// Reports what the driver actually decided after the last
@@ -511,6 +573,23 @@ private:
     unsigned int m_lowPassFilter   = 0;
     bool         m_airAbsorptionEnabled = true;  ///< AX6 master toggle (read by AudioSystem).
     bool         m_lodEnabled           = true;  ///< AX5 LOD-ladder toggle (read by AudioSystem).
+
+    // AX11 — audio device hot-swap. `m_alcReopenDeviceSOFT` is the per-device
+    // `ALC_SOFT_reopen_device` entry point; the two event pointers are the
+    // device-independent `ALC_SOFT_system_events` controls. Null pointers ⟹
+    // the OpenAL Soft build lacks the extension and hot-swap silently
+    // disables (logged once at init). `m_deviceEventsActive` records whether
+    // the global event callback was registered, so `shutdown` deregisters it
+    // before the engine dies (the callback runs on OpenAL's own thread).
+    void* m_alcReopenDeviceSOFT  = nullptr;
+    void* m_alcEventControlSOFT  = nullptr;
+    void* m_alcEventCallbackSOFT = nullptr;
+    bool  m_deviceEventsActive   = false;
+    DeviceHotSwapMode    m_deviceHotSwapMode = DeviceHotSwapMode::Notify;
+    DeviceChangeListener m_deviceChangeListener;  ///< Notify-path UI hook (may be empty).
+    std::atomic<bool>    m_deviceChangePending{false};  ///< set by event thread, cleared by poll.
+    std::mutex           m_deviceChangeMutex;     ///< guards m_pendingDeviceName (event ↔ main).
+    std::string          m_pendingDeviceName;     ///< new default name stashed by the event.
 
     /// @brief Applies `m_hrtf` to the device via `alcResetDeviceSOFT`.
     ///        Called from `initialize()` and whenever the settings

@@ -74,6 +74,11 @@ void AudioSystem::update(float deltaTime)
         return;
     }
 
+    // AX11 — poll for a default-device change flagged by OpenAL's event
+    // thread and handle it on this (main) thread per the hot-swap policy
+    // (Off / Notify / Auto). One relaxed atomic load when nothing pending.
+    m_audioEngine.pollAndHandleDeviceChange();
+
     // Sync listener to camera position
     Camera& camera = m_engine->getCamera();
     m_audioEngine.updateListener(

@@ -77,7 +77,8 @@ bool AudioSettings::operator==(const AudioSettings& o) const
     return busGains == o.busGains && hrtfEnabled == o.hrtfEnabled
         && outputLayout == o.outputLayout
         && airAbsorptionEnabled == o.airAbsorptionEnabled
-        && lodEnabled == o.lodEnabled;
+        && lodEnabled == o.lodEnabled
+        && deviceHotSwap == o.deviceHotSwap;
 }
 
 bool ControlsSettings::operator==(const ControlsSettings& o) const
@@ -245,6 +246,7 @@ json audioToJson(const AudioSettings& a)
         {"outputLayout",         audioOutputLayoutToString(a.outputLayout)},
         {"airAbsorptionEnabled", a.airAbsorptionEnabled},
         {"lodEnabled",           a.lodEnabled},
+        {"deviceHotSwap",        deviceHotSwapModeToString(a.deviceHotSwap)},
     };
 }
 
@@ -271,6 +273,11 @@ void audioFromJson(const json& j, AudioSettings& a)
         j.value("airAbsorptionEnabled", a.airAbsorptionEnabled);
     // AX5 — missing key keeps the current value (on by default).
     a.lodEnabled = j.value("lodEnabled", a.lodEnabled);
+    // AX11 — unknown / missing token falls back to the current value
+    // (Notify by default), mirroring the outputLayout token policy.
+    a.deviceHotSwap = deviceHotSwapModeFromString(
+        j.value("deviceHotSwap", deviceHotSwapModeToString(a.deviceHotSwap)),
+        a.deviceHotSwap);
 }
 
 // --- Controls ---
