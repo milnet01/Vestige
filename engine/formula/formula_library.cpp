@@ -5,6 +5,7 @@
 /// @brief FormulaLibrary implementation.
 #include "formula/formula_library.h"
 #include "formula/physics_templates.h"
+#include "formula/audio_templates.h"
 #include "core/logger.h"
 #include "utils/json_size_cap.h"
 
@@ -175,6 +176,14 @@ void FormulaLibrary::registerBuiltinTemplates()
 {
     auto templates = PhysicsTemplates::createAll();
     for (auto& tmpl : templates)
+    {
+        registerFormula(std::move(tmpl));
+    }
+
+    // Audio-DSP category (3D_E-0022): procedural-audio velocity->loudness/pitch
+    // and aggregate event-rate curves go through the Workbench pipeline (Rule 6).
+    auto audioTemplates = AudioTemplates::createAll();
+    for (auto& tmpl : audioTemplates)
     {
         registerFormula(std::move(tmpl));
     }

@@ -9986,6 +9986,16 @@ existing cases (``HelpersMatchEvaluatorPrecisely``,
 
 ### Added
 
+- **Formula Workbench `audio` template category (procedural-audio bundle S1)**
+  New `audio` category in the Formula Workbench template library (the 15th,
+  joining physics/rendering/terrain/…): impact_loudness_gain (approach speed →
+  linear loudness), impact_pitch_scale (→ pitch multiplier), and
+  aggregate_event_rate (→ PhISEM grain rate). Audio numeric design now goes
+  through the fit/validate/export pipeline like every other domain (Rule 6).
+  Closes the category intent of [3D_E-0022]; ISO 9613-1 absorption + BS.1770
+  K-weighting seeds remain Workbench-fitting follow-ups. Enabling slice for the
+  procedural / material-aware audio bundle (AX4).
+
 - **Audio loudness normalisation (EBU R128 / ITU-R BS.1770) — consistent perceived volume across sounds (AX9)**
   Phase 10 audio quick-wins bundle, final slice. Each decoded clip's
   integrated loudness (LUFS) is measured once at load via libebur128

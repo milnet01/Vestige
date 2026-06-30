@@ -104,6 +104,7 @@ add_executable(vestige_tests
     test_advanced_physics.cpp
     test_environment_forces.cpp
     test_formula_library.cpp
+    test_audio_templates.cpp
     test_formula_compiler.cpp
     test_curve_fitter.cpp
     test_quality_manager.cpp

@@ -163,6 +163,7 @@ set(ENGINE_SOURCES
     formula/expression_eval.cpp
     formula/formula_library.cpp
     formula/physics_templates.cpp
+    formula/audio_templates.cpp
     formula/codegen_cpp.cpp
     formula/codegen_glsl.cpp
     formula/lut_generator.cpp
