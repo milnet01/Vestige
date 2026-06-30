@@ -148,6 +148,10 @@ bool Engine::initialize(const EngineConfig& config)
     {
         Logger::warning("PhysicsWorld initialization failed — physics will be unavailable");
     }
+    // Route collision events (AX4 S3) onto the engine event bus so the
+    // procedural-audio impact path (S7) and scripting collision nodes (S8)
+    // receive them.
+    m_physicsWorld.setEventBus(m_eventBus);
 
     // Initialize performance profiler
     m_profiler.init();

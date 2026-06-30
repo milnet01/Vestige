@@ -30,6 +30,9 @@
 namespace Vestige
 {
 
+class EventBus;              // engine/core/event_bus.h — collision-event sink.
+class ContactEventListener;  // engine/physics/contact_event.h — AX4 S3.
+
 /// @brief Configuration for PhysicsWorld initialization.
 struct PhysicsWorldConfig
 {
@@ -58,6 +61,11 @@ public:
 
     /// @brief Shuts down the physics system and releases resources.
     void shutdown();
+
+    /// @brief Sets the EventBus that collision events are published on
+    ///        (AX4 S3). Without one, contacts are still drained each frame
+    ///        (so the queue can't grow unbounded) but nothing is published.
+    void setEventBus(EventBus& bus) { m_eventBus = &bus; }
 
     /// @brief Steps the physics simulation with fixed-timestep accumulation.
     void update(float deltaTime);
@@ -293,6 +301,15 @@ private:
     int m_collisionSteps = 1;
     float m_accumulator = 0.0f;
     bool m_initialized = false;
+
+    // ----- Collision-event bus (AX4 S3) -----
+    std::unique_ptr<ContactEventListener> m_contactListener;
+    EventBus* m_eventBus = nullptr;
+
+    /// @brief Drains the contact listener's queue and publishes one
+    ///        CollisionEvent per pending contact on m_eventBus. Always drains
+    ///        (even with no bus) to bound the queue.
+    void drainContactEvents();
 
     // Constraint storage. std::map gives deterministic (sorted-by-index)
     // iteration so break-order tests and Phase 11A replay are reproducible

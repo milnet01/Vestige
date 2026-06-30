@@ -80,6 +80,7 @@ add_executable(vestige_tests
     test_physics_world.cpp
     test_rigid_body.cpp
     test_surface_material.cpp
+    test_contact_event.cpp
     test_physics_character_controller.cpp
     test_physics_constraint.cpp
     test_cloth_simulator.cpp

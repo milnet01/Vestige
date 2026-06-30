@@ -5,6 +5,8 @@
 /// @brief Jolt PhysicsSystem wrapper implementation.
 #include "physics/physics_world.h"
 #include "physics/jolt_helpers.h"
+#include "physics/contact_event.h"
+#include "core/event_bus.h"
 #include "core/logger.h"
 
 #include <Jolt/RegisterTypes.h>
@@ -119,6 +121,11 @@ bool PhysicsWorld::initialize(const PhysicsWorldConfig& config)
         m_objectVsBpFilter,
         m_objectPairFilter);
 
+    // Register the collision-event listener (AX4 S3). It enqueues contacts on
+    // Jolt job threads; PhysicsWorld::update drains + publishes them.
+    m_contactListener = std::make_unique<ContactEventListener>();
+    m_physicsSystem->SetContactListener(m_contactListener.get());
+
     m_fixedTimestep = config.fixedTimestep;
     m_collisionSteps = config.collisionSteps;
     m_accumulator = 0.0f;
@@ -158,6 +165,13 @@ void PhysicsWorld::shutdown()
         bodyInterface.RemoveBody(id);
         bodyInterface.DestroyBody(id);
     }
+
+    // Detach the contact listener before tearing down the physics system.
+    if (m_physicsSystem)
+    {
+        m_physicsSystem->SetContactListener(nullptr);
+    }
+    m_contactListener.reset();
 
     m_physicsSystem.reset();
     m_jobSystem.reset();
@@ -206,6 +220,27 @@ void PhysicsWorld::update(float deltaTime, const std::function<void(float)>& onF
             onFixedStep(m_fixedTimestep);
         }
         m_accumulator -= m_fixedTimestep;
+    }
+
+    // Publish all contacts accumulated across this frame's substeps.
+    drainContactEvents();
+}
+
+void PhysicsWorld::drainContactEvents()
+{
+    if (!m_contactListener)
+    {
+        return;
+    }
+    // Always drain (even with no bus) so the listener's queue stays bounded.
+    const std::vector<PendingContact>& pending = m_contactListener->takeDrained();
+    if (!m_eventBus)
+    {
+        return;
+    }
+    for (const PendingContact& pc : pending)
+    {
+        m_eventBus->publish(CollisionEvent(pc));
     }
 }
 

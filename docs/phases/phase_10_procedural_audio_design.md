@@ -221,6 +221,19 @@ the two enums stay independent so each can add members the other doesn't need
 
 ## 4. Collision-event bus (S3)
 
+> **As-built note (S3, 2026-06-30).** The shipped listener is simpler than the
+> Enter-path below in two deliberate ways, decided during implementation:
+> (1) the **min-speed threshold is applied by the S7 audio subscriber, not in
+> the listener** — the bus publishes every contact onset (with `approachSpeed`)
+> so a sub-threshold touch still raises a *scripting* enter (S8) while playing
+> no sound; (2) **`OnContactPersisted` is ignored and there is no per-pair
+> throttle** — one Enter per `OnContactAdded`, one Exit per `OnContactRemoved`.
+> Jolt guarantees a matching removal for every add, so Enter/Exit stay balanced
+> for the scripting nodes (a thresholded Enter with an un-thresholded Exit would
+> not be). Emission is naturally bounded by the contact-*onset* rate rather than
+> the per-frame contact count, so the throttle is unnecessary; per-frame synth
+> cost is still bounded by the S7 budget. See `engine/physics/contact_event.h`.
+
 **The single biggest missing piece.** Register one `ContactListener` via
 `PhysicsSystem::SetContactListener`. **Jolt 5.3.0 contract (verified against the
 pinned FetchContent `ContactListener.h:66-116`):**
