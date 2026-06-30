@@ -280,6 +280,33 @@ void PhysicsWorld::destroyBody(JPH::BodyID bodyId)
     bodyInterface.DestroyBody(bodyId);
 }
 
+void PhysicsWorld::setBodyTags(JPH::BodyID bodyId, EntityId entityId, SurfaceMaterial material)
+{
+    if (!m_initialized || bodyId.IsInvalid())
+    {
+        return;
+    }
+    m_physicsSystem->GetBodyInterface().SetUserData(bodyId, packBodyTags(entityId, material));
+}
+
+SurfaceMaterial PhysicsWorld::getSurfaceMaterial(JPH::BodyID bodyId) const
+{
+    if (!m_initialized || bodyId.IsInvalid())
+    {
+        return SurfaceMaterial::Default;
+    }
+    return unpackMaterial(m_physicsSystem->GetBodyInterface().GetUserData(bodyId));
+}
+
+EntityId PhysicsWorld::getBodyEntity(JPH::BodyID bodyId) const
+{
+    if (!m_initialized || bodyId.IsInvalid())
+    {
+        return 0;
+    }
+    return unpackEntity(m_physicsSystem->GetBodyInterface().GetUserData(bodyId));
+}
+
 glm::vec3 PhysicsWorld::getBodyPosition(JPH::BodyID bodyId) const
 {
     const JPH::BodyInterface& bodyInterface = m_physicsSystem->GetBodyInterface();

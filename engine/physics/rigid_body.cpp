@@ -144,6 +144,18 @@ void RigidBody::createBody(PhysicsWorld& world)
         m_bodyId = world.createKinematicBody(shape, pos, rot);
         break;
     }
+
+    // Tag the body with its owning entity id + surface material so the
+    // collision-event bus (S3) and procedural-audio emission (S6/S7) can
+    // recover both from a Jolt contact without a side map. Done post-create
+    // so the three create*Body signatures stay untouched. A body with no
+    // owning entity (e.g. static world geometry created outside a RigidBody)
+    // would get entity id 0 — here `owner` is the component's entity.
+    if (!m_bodyId.IsInvalid())
+    {
+        const EntityId entityId = owner ? owner->getId() : 0;
+        world.setBodyTags(m_bodyId, entityId, surfaceMaterial);
+    }
 }
 
 void RigidBody::destroyBody()
@@ -245,6 +257,7 @@ std::unique_ptr<Component> RigidBody::clone() const
     copy->mass = mass;
     copy->friction = friction;
     copy->restitution = restitution;
+    copy->surfaceMaterial = surfaceMaterial;
     copy->collisionVertices = collisionVertices;
     copy->collisionIndices = collisionIndices;
     copy->setEnabled(isEnabled());

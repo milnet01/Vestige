@@ -7,6 +7,7 @@
 
 #include "scene/component.h"
 #include "physics/physics_world.h"
+#include "physics/surface_material.h"
 
 #include <Jolt/Physics/Body/BodyID.h>
 
@@ -55,6 +56,11 @@ public:
     float mass = 1.0f;
     float friction = 0.5f;
     float restitution = 0.3f;
+
+    /// @brief Surface material used to pick the procedural footstep / impact
+    /// sound bank when this body is struck (AX4 S2). Stored in the Jolt body
+    /// user-data by createBody(); Default = generic dull-thud bank.
+    SurfaceMaterial surfaceMaterial = SurfaceMaterial::Default;
 
     /// @brief Vertex positions for CONVEX_HULL or MESH shapes.
     /// For CONVEX_HULL, only positions are needed (Jolt builds the hull).

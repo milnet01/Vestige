@@ -7,6 +7,7 @@
 
 #include "physics/physics_layers.h"
 #include "physics/physics_constraint.h"
+#include "physics/surface_material.h"
 
 #include <Jolt/Jolt.h>
 #include <Jolt/Core/TempAllocator.h>
@@ -95,6 +96,21 @@ public:
 
     /// @brief Removes a body from the world and destroys it.
     void destroyBody(JPH::BodyID bodyId);
+
+    /// @brief Tags a body with its owning entity id + surface material,
+    ///        stored in the Jolt body user-data word (AX4 S2). Call once
+    ///        after creation. Main thread only (uses BodyInterface).
+    void setBodyTags(JPH::BodyID bodyId, EntityId entityId, SurfaceMaterial material);
+
+    /// @brief Returns a body's surface material (Default if unset/invalid).
+    /// @note MAIN THREAD ONLY — goes through `BodyInterface::GetUserData`,
+    ///       which takes a body lock. Never call from a Jolt contact
+    ///       callback (read `inBody.GetUserData()` lock-free there instead).
+    SurfaceMaterial getSurfaceMaterial(JPH::BodyID bodyId) const;
+
+    /// @brief Returns a body's owning entity id (0 == none).
+    /// @note MAIN THREAD ONLY — same locking caveat as getSurfaceMaterial.
+    EntityId getBodyEntity(JPH::BodyID bodyId) const;
 
     /// @brief Gets the position of a body.
     glm::vec3 getBodyPosition(JPH::BodyID bodyId) const;
