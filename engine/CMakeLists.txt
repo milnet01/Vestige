@@ -294,6 +294,8 @@ set(ENGINE_SOURCES
     audio/audio_music_stream.cpp
     audio/audio_music_player.cpp
     audio/audio_source_state.cpp
+    audio/procedural/modal_synth.cpp
+    audio/procedural/phisem.cpp
     systems/audio_system.cpp
     systems/music_system.cpp
     # UI/HUD system
