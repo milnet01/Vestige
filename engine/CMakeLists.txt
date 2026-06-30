@@ -296,6 +296,7 @@ set(ENGINE_SOURCES
     audio/audio_source_state.cpp
     audio/procedural/modal_synth.cpp
     audio/procedural/phisem.cpp
+    audio/procedural/material_sound_bank.cpp
     systems/audio_system.cpp
     systems/music_system.cpp
     # UI/HUD system

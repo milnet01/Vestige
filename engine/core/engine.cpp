@@ -506,6 +506,10 @@ bool Engine::initialize(const EngineConfig& config)
             {
                 m_captionMap.enqueueFor(clipPath, m_subtitleQueue);
             });
+
+        // AX4 S5 — load the procedural-audio material bank. Absent / malformed
+        // is non-fatal: the engine keeps its built-in dull-thud fallback.
+        audio->getAudioEngine().loadSynthBank(synthBankPath(m_assetPath));
     }
 
     // Startup mode — editor (default) or play (CLI `--play`).

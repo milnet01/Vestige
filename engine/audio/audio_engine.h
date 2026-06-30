@@ -13,6 +13,8 @@
 #include "audio/audio_loudness.h"
 #include "audio/audio_mixer.h"
 #include "audio/audio_output_mode.h"
+#include "audio/procedural/material_sound_bank.h"  // AX4 S5 synth bank
+#include "physics/surface_material.h"              // AX4 S5 SurfaceMaterial
 
 #include <glm/glm.hpp>
 
@@ -21,6 +23,7 @@
 #include <filesystem>
 #include <functional>
 #include <mutex>
+#include <random>
 #include <string>
 #include <list>
 #include <unordered_map>
@@ -293,6 +296,40 @@ public:
     /// Passing a stale or already-released handle is a no-op (`alIsSource`
     /// gate inside the implementation drops it silently).
     void stopSound(unsigned int source) { releaseSource(source); }
+
+    // -- Procedural material-aware audio (AX4 S5) -------------------------
+    //
+    // The one place synthesis meets the source pool (design §8). `playSynth`
+    // turns a (material, approach-speed) request into a fresh 16-bit mono PCM
+    // one-shot via the material bank (`material_sound_bank.*`), uploads it into
+    // a per-source synth buffer, and plays it as an ordinary positional voice —
+    // so LOD / occlusion / air-absorption all apply unchanged. No AX9 LUFS
+    // makeup: synth buffers have no path key, and amplitude is already the
+    // `impactLoudnessGain` curve baked into the samples.
+
+    /// @brief Loads the procedural-audio material bank from @a path (design §6
+    ///        schema). Returns false (built-in fallback retained) on a missing /
+    ///        malformed file. Wired once at startup by `Engine`.
+    bool loadSynthBank(const std::string& path) { return m_synthBank.loadFromFile(path); }
+
+    /// @brief Read access to the loaded material bank (editor preview / tests).
+    const Procedural::MaterialSoundBank& synthBank() const { return m_synthBank; }
+
+    /// @brief Synthesises and plays a material-aware one-shot at @a position.
+    /// @param material      Surface struck (selects the bank entry).
+    /// @param approachSpeed Contact speed (m/s) — drives the FW loudness / pitch
+    ///                      / grain-rate curves. Raw m/s, one energy domain.
+    /// @param position      World position of the strike.
+    /// @param envelopeScale 1.0 = footstep (bank `durSec`); >1 = longer impact
+    ///                      ring (clamped to the synth duration cap).
+    /// @param bus           Mixer bus (defaults to `Sfx`).
+    /// @param priority      Pool-exhaustion eviction tier — see `playSound`.
+    /// @returns The acquired OpenAL source ID, or 0 on failure (no hardware,
+    ///          silent strike, pool exhausted, or buffer-upload error).
+    unsigned int playSynth(SurfaceMaterial material, float approachSpeed,
+                           const glm::vec3& position, float envelopeScale = 1.0f,
+                           AudioBus bus = AudioBus::Sfx,
+                           SoundPriority priority = SoundPriority::Normal);
 
     /// @brief Phase 10.9 P2 — polls the OpenAL state of `source` and
     ///        returns true iff it is currently in `AL_PLAYING`.
@@ -711,6 +748,24 @@ private:
     ///        the canonical path (or @a filePath unchanged when the
     ///        sandbox is disabled), or empty string on rejection.
     std::string validatePath(const std::string& filePath) const;
+
+    // -- Procedural material-aware audio (AX4 S5) -------------------------
+    //
+    // `m_synthBank` holds the per-material synthesis params (loaded from JSON,
+    // built-in thud fallback). `m_synthRng` is the single impact-emission
+    // generator — fixed seed so a session replays identically (§5c); footstep
+    // emitters (S6) own their own generators. `m_synthBuffers` maps an OpenAL
+    // source ID to a dedicated synth buffer, generated once on that slot's first
+    // synth use and refilled per strike — never per-strike `alGenBuffers`, and
+    // never overwritten while attached to a playing source (acquireSource only
+    // hands back a slot whose prior buffer was already detached via AL_BUFFER,0).
+    // This realises the design's "32-buffer ring, one per source slot" as a
+    // source-keyed association. `m_synthScratch` is the reused float→int16 PCM
+    // staging buffer (no per-strike heap churn).
+    Procedural::MaterialSoundBank m_synthBank;
+    std::mt19937 m_synthRng{1337u};
+    std::unordered_map<unsigned int, unsigned int> m_synthBuffers;
+    std::vector<std::int16_t> m_synthScratch;
 
     /// @brief Reclaims finished sources back to the pool.
     void reclaimFinishedSources();

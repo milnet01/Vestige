@@ -28,4 +28,14 @@ namespace Vestige
 /// @return Full path to the caption-map file.
 std::string captionMapPath(const std::string& assetPath);
 
+/// @brief Build the path to the procedural-audio material bank JSON (AX4 S5).
+///
+/// The bank lives at `<assetPath>/audio/synthesis/footstep_modal.json`
+/// (design §6). Absent / malformed is non-fatal — `AudioEngine` keeps its
+/// built-in dull-thud fallback for every material.
+///
+/// @param assetPath The root asset directory. Trailing slashes are tolerated.
+/// @return Full path to the material-bank file.
+std::string synthBankPath(const std::string& assetPath);
+
 } // namespace Vestige

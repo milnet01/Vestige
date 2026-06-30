@@ -45,4 +45,15 @@ std::string captionMapPath(const std::string& assetPath)
     return root + "/captions.json";
 }
 
+std::string synthBankPath(const std::string& assetPath)
+{
+    const std::string root = stripTrailingSlash(assetPath);
+    const std::string rel = "audio/synthesis/footstep_modal.json";
+    if (root.empty())
+    {
+        return rel;
+    }
+    return root + "/" + rel;
+}
+
 } // namespace Vestige

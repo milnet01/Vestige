@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "_comment": "AX4 procedural-audio material bank (design docs/phases/phase_10_procedural_audio_design.md §6). One entry per SurfaceMaterial. Seed values from the cited reference tables (Cook RSS / PhISEM), refined by ear; the play path applies the Formula Workbench velocity curves (audio_curves.h) for loudness/pitch/grain-rate. modal: struck solids; phisem: aggregates. durSec is clamped to the synth cap (0.35 s). pitchGlide on water is declared for future use and not yet consumed by the synth core.",
+  "materials": {
+    "stone":   { "model": "modal",  "modes": [ {"f":380,"d":34,"g":1.0}, {"f":920,"d":48,"g":0.6}, {"f":1840,"d":70,"g":0.3} ], "durSec": 0.18, "pitchJitterCents": 40, "gainJitterDb": 2.0 },
+    "wood":    { "model": "modal",  "modes": [ {"f":210,"d":22,"g":1.0}, {"f":540,"d":30,"g":0.5} ], "durSec": 0.16, "pitchJitterCents": 50, "gainJitterDb": 2.5 },
+    "metal":   { "model": "modal",  "modes": [ {"f":640,"d":8,"g":1.0}, {"f":1700,"d":11,"g":0.8}, {"f":3100,"d":16,"g":0.5}, {"f":5200,"d":22,"g":0.25} ], "durSec": 0.35, "pitchJitterCents": 30, "gainJitterDb": 1.5 },
+    "glass":   { "model": "modal",  "modes": [ {"f":1200,"d":18,"g":1.0}, {"f":2900,"d":26,"g":0.7}, {"f":5400,"d":40,"g":0.35} ], "durSec": 0.22, "pitchJitterCents": 35, "gainJitterDb": 2.0 },
+    "sand":    { "model": "phisem", "centreHz": 1800, "qual": 2.0, "eventRateHz": 1200, "durSec": 0.12, "energyDecay": 18 },
+    "water":   { "model": "phisem", "centreHz": 2600, "qual": 4.0, "eventRateHz": 700,  "durSec": 0.2,  "energyDecay": 10, "pitchGlide": -0.4 },
+    "grass":   { "model": "phisem", "centreHz": 1400, "qual": 1.5, "eventRateHz": 900,  "durSec": 0.14, "energyDecay": 20 },
+    "dirt":    { "model": "phisem", "centreHz": 1100, "qual": 1.2, "eventRateHz": 800,  "durSec": 0.13, "energyDecay": 22 },
+    "cloth":   { "model": "phisem", "centreHz": 900,  "qual": 1.0, "eventRateHz": 500,  "durSec": 0.08, "energyDecay": 30 },
+    "default": { "model": "modal",  "modes": [ {"f":300,"d":40,"g":1.0} ], "durSec": 0.12, "pitchJitterCents": 40, "gainJitterDb": 2.0 }
+  }
+}

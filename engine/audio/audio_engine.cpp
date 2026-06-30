@@ -249,6 +249,14 @@ void AudioEngine::shutdown()
     m_bufferOrder.clear();
     m_loudnessLufs.clear();  // AX9 — measurements are parallel to the cache
 
+    // AX4 S5 — delete the per-source synth buffers. Sources were stopped and
+    // had their buffers detached above, so none of these are still attached.
+    for (auto& [source, buffer] : m_synthBuffers)
+    {
+        alDeleteBuffers(1, &buffer);
+    }
+    m_synthBuffers.clear();
+
     // AX6 — release the reusable EFX low-pass filter while the context
     // is still current.
     if (m_lowPassFilter != 0 && m_alDeleteFilters)
@@ -760,6 +768,86 @@ unsigned int AudioEngine::playSound2D(const std::string& filePath, float volume,
     alSourcef(source, AL_GAIN, initialGain);
     alSourcei(source, AL_LOOPING, AL_FALSE);
     alSourcei(source, AL_SOURCE_RELATIVE, AL_TRUE);  // Relative to listener (2D)
+    alSourcePlay(source);
+    return source;
+}
+
+unsigned int AudioEngine::playSynth(SurfaceMaterial material, float approachSpeed,
+                                    const glm::vec3& position, float envelopeScale,
+                                    AudioBus bus, SoundPriority priority)
+{
+    if (!m_available)
+    {
+        return 0;
+    }
+
+    // Synthesise into the reused staging buffer. The injected uniform draws from
+    // the engine's single impact-emission RNG (fixed seed → replayable, §5c);
+    // PhISEM clamps it away from 0 internally.
+    std::uniform_real_distribution<float> dist(1e-6f, 1.0f);
+    auto sample = [this, &dist]() { return dist(m_synthRng); };
+    const std::size_t produced =
+        m_synthBank.synthesize(material, approachSpeed, envelopeScale, sample, m_synthScratch);
+    if (produced == 0 || m_synthScratch.empty())
+    {
+        return 0;  // silent strike (no modes / zero rate) — nothing to play.
+    }
+
+    ALuint source = acquireSource(priority);
+    if (source == 0)
+    {
+        return 0;
+    }
+
+    // Per-source dedicated synth buffer: generated once on this slot's first
+    // synth use, reused thereafter. Refilling is safe because acquireSource
+    // only returns a slot whose prior buffer was detached (AL_BUFFER, 0) by
+    // releaseSource / reclaimFinishedSources, so it is not attached to any
+    // playing source.
+    ALuint buffer = 0;
+    auto it = m_synthBuffers.find(source);
+    if (it == m_synthBuffers.end())
+    {
+        alGenBuffers(1, &buffer);
+        if (buffer == 0)
+        {
+            releaseSource(source);
+            return 0;
+        }
+        m_synthBuffers[source] = buffer;
+    }
+    else
+    {
+        buffer = it->second;
+    }
+
+    alBufferData(buffer, AL_FORMAT_MONO16, m_synthScratch.data(),
+                 static_cast<ALsizei>(m_synthScratch.size() * sizeof(std::int16_t)),
+                 static_cast<ALsizei>(Procedural::kSynthSampleRate));
+    if (alGetError() != AL_NO_ERROR)
+    {
+        Logger::error("[AudioEngine] Failed to upload synth buffer");
+        releaseSource(source);
+        return 0;
+    }
+
+    // Amplitude is the impactLoudnessGain curve baked into the samples, so the
+    // per-source volume is unity (no AX9 LUFS makeup — synth has no path key).
+    const float volume = 1.0f;
+    m_livePlaybacks[source] = SourceMix{
+        bus, volume, priority, std::chrono::steady_clock::now()};
+    const float initialGain =
+        resolveSourceGain(currentMixer(), bus, volume, effectiveDuck(bus));
+
+    alSourcei(source, AL_BUFFER, static_cast<ALint>(buffer));
+    alSource3f(source, AL_POSITION, position.x, position.y, position.z);
+    alSource3f(source, AL_VELOCITY, 0.0f, 0.0f, 0.0f);
+    alSourcef(source, AL_GAIN, initialGain);
+    alSourcei(source, AL_LOOPING, AL_FALSE);
+    alSourcef(source, AL_REFERENCE_DISTANCE, 1.0f);
+    alSourcef(source, AL_MAX_DISTANCE, 50.0f);
+    alSourcef(source, AL_ROLLOFF_FACTOR, 1.0f);
+    alSourcei(source, AL_SOURCE_RELATIVE, AL_FALSE);  // 3D positioned
     alSourcePlay(source);
     return source;
 }

@@ -347,6 +347,35 @@ explicit clamps, logged in CHANGELOG, not hidden.
 
 ## 5. Synthesis core (S4) — modal (solid) + PhISEM (aggregate)
 
+> **As-built note (S5, 2026-07-01).** Five deliberate implementation choices,
+> none changing the design's contracts:
+> (1) **Buffer ring → source-keyed map.** The "32-buffer ring, one per source
+> slot" is realised as a lazy `source-id → AL buffer` map on `AudioEngine`
+> (`m_synthBuffers`): a buffer is generated on a slot's first synth use and
+> refilled per strike. This satisfies all three of the ring's contracts — ≤32
+> buffers, no per-strike `alGenBuffers`, never overwrite a buffer attached to a
+> playing source (because `acquireSource` only returns a slot whose prior buffer
+> was already detached via `AL_BUFFER,0`) — without a literal ring cursor + the
+> `AL_PLAYING`-skip scan §5 sketched. Simpler, same invariant.
+> (2) **Runtime curves live in `audio/procedural/audio_curves.h`** (not a
+> `_generated.h` — there is no codegen tool). It is the hand-transcribed
+> closed-form of the FW `audio` category, pinned to `audio_templates.cpp` by
+> `tests/test_audio_curves_parity.cpp` so the two cannot silently diverge
+> (Rule 6 source-of-truth + Rule 7 parity).
+> (3) **PhISEM grain-rate composition** (the design left it unpinned): the bank's
+> per-material `eventRateHz` is scaled by
+> `aggregateEventRate(speed) / aggregateEventRate(1.5)`, i.e. it is the rate at
+> the FW curve's *declared default input* (1.5 m/s, asserted by the parity test)
+> and rises with contact speed. One documented anchor, no loose constant.
+> (4) **`roundRobin` variant-selector dropped.** Per-strike RNG pitch/gain jitter
+> already makes consecutive footsteps differ, and there is no pre-baked variant
+> set to round-robin among (synthesis is fresh each strike). `jitterPitch` /
+> `jitterGain` (§5c) are kept and tested. Add round-robin if S6 ever caches
+> variants.
+> (5) **`water.pitchGlide` is parsed-and-ignored** — the §5a/§5b synth core (S4,
+> already shipped) has no per-grain glide parameter. The key stays in the asset
+> for forward-compat; consuming it is a synth-core change, deferred (TODO).
+
 Two algorithmic models, selected per material by the bank (§6). Both are **pure
 functions** that fill an `int16` PCM span; **runtime, per strike**, synthesised
 into a **round-robin buffer ring** on `AudioEngine`. **Ring sizing + reclaim (L2 /
