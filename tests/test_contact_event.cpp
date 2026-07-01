@@ -173,6 +173,7 @@ TEST(ContactEvent, RemovingBodyEmitsExit)
     step(world, 2);
 
     ASSERT_FALSE(events.empty()) << "removing a contacting body must emit Exit";
+    // cppcheck-suppress containerOutOfBounds  ; FP: events.clear() above then repopulated via the bus callback during step(); ASSERT_FALSE already guards emptiness
     const CollisionEvent& exit = events.front();
     EXPECT_FALSE(exit.isEnter);
     const bool pairMatches =

@@ -37,7 +37,7 @@ float integratedLoudnessLufs(const int16_t* interleaved,
     static_assert(sizeof(int16_t) == sizeof(short),
                   "libebur128 short ingest assumes int16_t aliases short");
 
-    double lufs = kLoudnessSilenceGateLufs;
+    double lufs = static_cast<double>(kLoudnessSilenceGateLufs);
     if (ebur128_add_frames_short(
             st, reinterpret_cast<const short*>(interleaved), frames)
             == EBUR128_SUCCESS)
