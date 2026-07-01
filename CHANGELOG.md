@@ -22,6 +22,48 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-07-01 Added — Geometric / ray-traced audio occlusion (AX1)
+
+Sound now muffles behind walls **from the actual scene geometry**, closing the
+"I added a wall but the sound still goes through it cleanly" gap that previously
+required the level designer to hand-set `occlusionFraction`. Untagged geometry
+occludes too (`Default` surface → `Concrete` acoustic wall), so a plain,
+un-tagged level still blocks sound without extra authoring.
+
+A new `AudioOcclusionSystem` (runs in `PostCamera`, registered before
+`AudioSystem` so its output is read the same frame) drives every audible spatial
+source each frame:
+
+- **Volumetric multi-ray fraction.** N rays (default 8, max 16) are cast from
+  the listener toward a Fibonacci-sphere point set around the source; the
+  open-path fraction = blocked/N, so a source near a doorway edge muffles
+  *gradually* instead of snapping. The nearest blocking body's `SurfaceMaterial`
+  picks the transmission/low-pass preset. Reuses the existing
+  `computeObstructionGain`/`computeObstructionLowPass` DSP verbatim.
+- **MT2-parallel, budgeted, culled.** All rays cast across the MT2 job pool in
+  one `parallelFor` (materials resolved on the main thread per Jolt's body-lock
+  contract); a `512`-ray/frame budget with round-robin amortization bounds the
+  worst case (never engages within the shipped settings ranges); sources are
+  culled by spatial flag, pre-compose audibility, and a distance radius. In a
+  synchronous job system the result is deterministic (bit-identical to the
+  serial path). Per-source temporal smoothing releases culled sources instead
+  of freezing them muffled.
+- **Settings + editor.** `Settings → Audio` gains an occlusion toggle + detail
+  (rays) + range sliders; `occlusionEnabled` / `occlusionRayCount` /
+  `occlusionMaxDistance` / `occlusionSourceRadius` ride the existing schema
+  (additive tolerant keys, validated/clamped) through a sibling
+  `AudioOcclusionApplySink` / `AudioEngineOcclusionApplySink`.
+
+Non-goals (honest boundaries): no edge-diffraction filter (`PhysicsWorld::rayCast`
+returns no surface normal — the multi-ray fan approximates partial paths
+perceptually, not a modeled diffraction delay); the in-viewport debug ray
+visualisation is deferred (a self-contained follow-up). CPU-only (branchy Jolt
+BVH traversal — GPU would need the collision geometry mirrored + a readback).
+Design of record: `docs/phases/phase_10_audio_occlusion_design.md` (cold-eyes
+converged in 5 loops). Shipped across slices S1–S5; new
+`engine/audio/occlusion_material_map.h` + `engine/systems/audio_occlusion_system.{h,cpp}`;
+34 new tests (material map + occlusion system + settings round-trip/clamp).
+
 ### 2026-07-01 Fixed — `local-ci.sh` no longer calls a `--quick` smoke run "safe to push"
 
 The pre-push gate could report **"safe to push"** after a `--quick` run even

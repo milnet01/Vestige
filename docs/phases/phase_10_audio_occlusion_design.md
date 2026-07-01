@@ -7,11 +7,19 @@
 > design will reference AX1's shipped material-map + ray plumbing rather than
 > guess at it (global Rule 13).
 >
-> **Status:** ✅ **SIGNED OFF — ready to implement.** Cold-eyes converged in 5 loops
+> **Status:** ✅ **SHIPPED (S1–S5), 2026-07-01.** Cold-eyes converged in 5 loops
 > (§11 log): Loop 5 returned 0 CRITICAL/HIGH/MEDIUM on both lanes with an explicit
 > "recommend sign-off"; no finding resurfaced across any loop. Signed off per the
-> delegated gate (cold-eyes convergence to polish-only). Implement in the §2 slice
-> order, S1 first.
+> delegated gate (cold-eyes convergence to polish-only), then implemented in the §2
+> slice order: S1 material map (42da904), S2 single-ray skeleton (4b7a34c), S3
+> multi-ray fraction (c18b8ee), S4 MT2-parallel + budget/cull (50ea8e4), S5 settings
+> + editor (f107df7). ROADMAP AX1 flipped ✅.
+>
+> **One deferral (design §5 "optional debug line-draw"):** the in-viewport debug
+> ray visualisation (green/red cast rays) is a self-contained follow-up — it needs
+> per-frame ray-endpoint stashing + a debug-line render hookup and does not affect
+> the shipping feature. The settings **toggle** to enable/disable occlusion, and
+> all four tunables, shipped in S5.
 >
 > **Depends on:** MT2 job system (`engine/core/job_system.{h,cpp}`, shipped) — the
 > reason MT2 was built first. AX4's `SurfaceMaterial` tag + Jolt body user-data
