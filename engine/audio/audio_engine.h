@@ -514,6 +514,25 @@ public:
     /// @brief Returns whether the audio LOD ladder is enabled (default true).
     bool isLodEnabled() const { return m_lodEnabled; }
 
+    /// @brief AX4 S9 — master toggle for procedural (synthesised) audio:
+    ///        footsteps + collision impacts. When off, `playSynth` early-returns
+    ///        without synthesising or acquiring a source, muting all procedural
+    ///        emission while leaving sample-based sound (and the Sfx bus gain)
+    ///        untouched. Stored only — read at the top of `playSynth`.
+    void setProceduralAudioEnabled(bool enabled) { m_proceduralAudioEnabled = enabled; }
+
+    /// @brief Returns whether procedural audio is enabled (default true).
+    bool isProceduralAudioEnabled() const { return m_proceduralAudioEnabled; }
+
+    /// @brief AX4 S9 — force-enable impact audio for Default↔Default (untagged)
+    ///        collisions, off by default so an unauthored scene of untagged
+    ///        boxes stays quiet (design §8). Stored only — read by
+    ///        `ImpactAudioSystem` when it decides whether to synthesise.
+    void setEmitUntaggedCollisions(bool enabled) { m_emitUntaggedCollisions = enabled; }
+
+    /// @brief Returns whether untagged-collision impacts are emitted (default false).
+    bool emitUntaggedCollisions() const { return m_emitUntaggedCollisions; }
+
     /// @brief AX11 — device hot-swap policy: what to do when the OS default
     ///        playback device changes mid-session.
     ///
@@ -643,6 +662,8 @@ private:
     unsigned int m_lowPassFilter   = 0;
     bool         m_airAbsorptionEnabled = true;  ///< AX6 master toggle (read by AudioSystem).
     bool         m_lodEnabled           = true;  ///< AX5 LOD-ladder toggle (read by AudioSystem).
+    bool         m_proceduralAudioEnabled = true;  ///< AX4 S9 master procedural-audio toggle (gates playSynth).
+    bool         m_emitUntaggedCollisions = false; ///< AX4 S9 Default↔Default impact gate (read by ImpactAudioSystem).
 
     // AX11 — audio device hot-swap. `m_alcReopenDeviceSOFT` is the per-device
     // `ALC_SOFT_reopen_device` entry point; the two event pointers are the

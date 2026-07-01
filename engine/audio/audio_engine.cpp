@@ -776,7 +776,10 @@ unsigned int AudioEngine::playSynth(SurfaceMaterial material, float approachSpee
                                     const glm::vec3& position, float envelopeScale,
                                     AudioBus bus, SoundPriority priority)
 {
-    if (!m_available)
+    // AX4 S9 — master procedural-audio gate. Off mutes every synthesised
+    // footstep/impact (both route through here) without touching sample
+    // playback or the Sfx bus gain.
+    if (!m_available || !m_proceduralAudioEnabled)
     {
         return 0;
     }

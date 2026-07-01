@@ -150,6 +150,10 @@ void SettingsEditor::pushPendingToSinks()
     {
         applyAudioLoudness(m_pending.audio, *m_targets.audioLoudness);
     }
+    if (m_targets.proceduralAudio)
+    {
+        applyProceduralAudio(m_pending.audio, *m_targets.proceduralAudio);
+    }
     if (m_targets.uiAccessibility)
     {
         applyUIAccessibility(m_pending.accessibility,

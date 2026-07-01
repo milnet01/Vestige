@@ -95,7 +95,8 @@ void ImpactAudioSystem::onCollision(const CollisionEvent& event)
     {
         return;
     }
-    const ImpactDecision decision = decideImpact(event, m_emitUntaggedCollisions);
+    const ImpactDecision decision =
+        decideImpact(event, m_audio->emitUntaggedCollisions());
     if (!decision.play)
     {
         return;

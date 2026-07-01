@@ -366,6 +366,40 @@ void SettingsEditorPanel::drawAudioTab()
         m_editor->mutate([lufs](Settings& s) { s.audio.loudnessTargetLufs = lufs; });
     }
 
+    // AX4 S9 — procedural (synthesised) footstep + impact audio.
+    ImGui::Spacing();
+    bool proc = p.audio.proceduralAudioEnabled;
+    if (ImGui::Checkbox("Procedural footstep / impact sounds", &proc))
+    {
+        m_editor->mutate([proc](Settings& s) { s.audio.proceduralAudioEnabled = proc; });
+    }
+    ImGui::SameLine();
+    ImGui::TextDisabled("(?)");
+    if (ImGui::IsItemHovered())
+    {
+        ImGui::SetTooltip(
+            "Synthesises footstep and collision sounds from each surface's\n"
+            "material. Turn off to silence them without muting other effects.");
+    }
+
+    // Untagged-collision gate — only meaningful while procedural audio is on.
+    ImGui::BeginDisabled(!p.audio.proceduralAudioEnabled);
+    bool untagged = p.audio.emitUntaggedCollisions;
+    if (ImGui::Checkbox("Sound untagged collisions (debug)", &untagged))
+    {
+        m_editor->mutate([untagged](Settings& s) { s.audio.emitUntaggedCollisions = untagged; });
+    }
+    ImGui::EndDisabled();
+    ImGui::SameLine();
+    ImGui::TextDisabled("(?)");
+    if (ImGui::IsItemHovered())
+    {
+        ImGui::SetTooltip(
+            "Off by default: objects with no material assigned stay silent\n"
+            "on impact so an unfinished scene doesn't thud on every touch.\n"
+            "Turn on to hear every collision while testing.");
+    }
+
     ImGui::Spacing();
     if (ImGui::Button("Restore audio defaults"))
     {

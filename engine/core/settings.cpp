@@ -80,7 +80,9 @@ bool AudioSettings::operator==(const AudioSettings& o) const
         && lodEnabled == o.lodEnabled
         && deviceHotSwap == o.deviceHotSwap
         && loudnessEnabled == o.loudnessEnabled
-        && loudnessTargetLufs == o.loudnessTargetLufs;
+        && loudnessTargetLufs == o.loudnessTargetLufs
+        && proceduralAudioEnabled == o.proceduralAudioEnabled
+        && emitUntaggedCollisions == o.emitUntaggedCollisions;
 }
 
 bool ControlsSettings::operator==(const ControlsSettings& o) const
@@ -251,6 +253,8 @@ json audioToJson(const AudioSettings& a)
         {"deviceHotSwap",        deviceHotSwapModeToString(a.deviceHotSwap)},
         {"loudnessEnabled",      a.loudnessEnabled},
         {"loudnessTargetLufs",   a.loudnessTargetLufs},
+        {"proceduralAudioEnabled",  a.proceduralAudioEnabled},
+        {"emitUntaggedCollisions",  a.emitUntaggedCollisions},
     };
 }
 
@@ -285,6 +289,9 @@ void audioFromJson(const json& j, AudioSettings& a)
     // AX9 — missing keys keep the current values (on, −16 LUFS by default).
     a.loudnessEnabled    = j.value("loudnessEnabled", a.loudnessEnabled);
     a.loudnessTargetLufs = j.value("loudnessTargetLufs", a.loudnessTargetLufs);
+    // AX4 S9 — missing keys keep defaults (procedural on, untagged off).
+    a.proceduralAudioEnabled = j.value("proceduralAudioEnabled", a.proceduralAudioEnabled);
+    a.emitUntaggedCollisions = j.value("emitUntaggedCollisions", a.emitUntaggedCollisions);
 }
 
 // --- Controls ---

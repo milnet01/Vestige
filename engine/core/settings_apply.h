@@ -449,6 +449,38 @@ private:
 };
 
 // ================================================================
+// AX4 S9 — procedural-audio apply path (master toggle + untagged gate)
+// ================================================================
+
+/// @brief Sink for the procedural-audio toggles. Both flags live on
+///        `AudioEngine`; this is the abstract seam the headless tests mock.
+class ProceduralAudioApplySink
+{
+public:
+    virtual ~ProceduralAudioApplySink() = default;
+    virtual void setProceduralAudioEnabled(bool enabled) = 0;
+    virtual void setEmitUntaggedCollisions(bool enabled) = 0;
+};
+
+/// @brief Pushes the procedural-audio toggles onto a sink.
+void applyProceduralAudio(const AudioSettings& audio, ProceduralAudioApplySink& sink);
+
+/// @brief Production sink wrapping a live `AudioEngine`. Forwards to
+///        `AudioEngine::setProceduralAudioEnabled` /
+///        `setEmitUntaggedCollisions` — stored flags, no device reset (the
+///        next `playSynth` / `ImpactAudioSystem` decision reads them).
+class AudioEngineProceduralAudioApplySink final : public ProceduralAudioApplySink
+{
+public:
+    explicit AudioEngineProceduralAudioApplySink(AudioEngine& engine);
+    void setProceduralAudioEnabled(bool enabled) override;
+    void setEmitUntaggedCollisions(bool enabled) override;
+
+private:
+    AudioEngine& m_engine;
+};
+
+// ================================================================
 // Slice 13.3b — Photosensitive safety apply path
 // ================================================================
 

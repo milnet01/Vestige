@@ -83,13 +83,12 @@ public:
     ///        scene contents. Mirrors AudioSystem / FootstepSystem.
     bool isForceActive() const override { return true; }
 
-    /// @brief Force-enable Default↔Default (untagged) impact audio, off by
-    ///        default. S9 wires this to the `proceduralAudio.emitUntaggedCollisions`
-    ///        setting; exposed now so that wiring is a one-liner.
-    void setEmitUntaggedCollisions(bool enabled) { m_emitUntaggedCollisions = enabled; }
-
 private:
-    /// @brief Bus callback: decide + synthesise one impact strike.
+    /// @brief Bus callback: decide + synthesise one impact strike. The
+    ///        untagged-collision gate is read live from
+    ///        `AudioEngine::emitUntaggedCollisions()` — S9 wires that flag to
+    ///        the `proceduralAudio.emitUntaggedCollisions` setting, so a single
+    ///        source of truth drives both the decision here and the settings UI.
     void onCollision(const CollisionEvent& event);
 
     static inline const std::string m_name = "ImpactAudio";
@@ -97,7 +96,6 @@ private:
     AudioEngine* m_audio = nullptr;
     EventBus*    m_bus = nullptr;
     std::uint32_t m_subId = 0;              ///< CollisionEvent subscription (0 = none).
-    bool         m_emitUntaggedCollisions = false;
 };
 
 } // namespace Vestige

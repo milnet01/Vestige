@@ -332,6 +332,31 @@ void AudioEngineLoudnessApplySink::setLoudnessTargetLufs(float lufs)
 }
 
 // ================================================================
+// AX4 S9 — procedural-audio apply
+// ================================================================
+
+void applyProceduralAudio(const AudioSettings& audio, ProceduralAudioApplySink& sink)
+{
+    sink.setProceduralAudioEnabled(audio.proceduralAudioEnabled);
+    sink.setEmitUntaggedCollisions(audio.emitUntaggedCollisions);
+}
+
+AudioEngineProceduralAudioApplySink::AudioEngineProceduralAudioApplySink(AudioEngine& engine)
+    : m_engine(engine)
+{
+}
+
+void AudioEngineProceduralAudioApplySink::setProceduralAudioEnabled(bool enabled)
+{
+    m_engine.setProceduralAudioEnabled(enabled);
+}
+
+void AudioEngineProceduralAudioApplySink::setEmitUntaggedCollisions(bool enabled)
+{
+    m_engine.setEmitUntaggedCollisions(enabled);
+}
+
+// ================================================================
 // Slice 13.3b — Photosensitive safety apply
 // ================================================================
 

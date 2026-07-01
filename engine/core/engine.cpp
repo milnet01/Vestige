@@ -450,6 +450,13 @@ bool Engine::initialize(const EngineConfig& config)
             m_loudnessSink = std::make_unique<AudioEngineLoudnessApplySink>(
                 audio->getAudioEngine());
             targets.audioLoudness = m_loudnessSink.get();
+
+            // AX4 S9 — procedural-audio master toggle + untagged-collision
+            // gate (stored flags read by playSynth / ImpactAudioSystem).
+            m_proceduralAudioSink =
+                std::make_unique<AudioEngineProceduralAudioApplySink>(
+                    audio->getAudioEngine());
+            targets.proceduralAudio = m_proceduralAudioSink.get();
         }
 
         targets.inputMap = &m_inputActionMap;

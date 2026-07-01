@@ -258,6 +258,8 @@ TEST(Settings, RoundTripsThroughJson)
     original.audio.outputLayout = AudioOutputLayout::Surround51;  // AX8
     original.audio.airAbsorptionEnabled = false;                  // AX6
     original.audio.lodEnabled = false;                            // AX5
+    original.audio.proceduralAudioEnabled = false;                // AX4 S9
+    original.audio.emitUntaggedCollisions = true;                 // AX4 S9
 
     original.controls.mouseSensitivity = 2.5f;
     original.controls.invertY          = true;
@@ -299,6 +301,8 @@ TEST(Settings, FromJsonWithMissingSectionsKeepsDefaults)
     EXPECT_EQ(s.audio.outputLayout, AudioOutputLayout::Auto);  // AX8 default
     EXPECT_TRUE(s.audio.airAbsorptionEnabled);                 // AX6 default
     EXPECT_TRUE(s.audio.lodEnabled);                           // AX5 default
+    EXPECT_TRUE(s.audio.proceduralAudioEnabled);               // AX4 S9 default
+    EXPECT_FALSE(s.audio.emitUntaggedCollisions);              // AX4 S9 default
 }
 
 TEST(Settings, FromJsonIgnoresUnknownFields)
@@ -1174,6 +1178,17 @@ public:
     void setLodEnabled(bool e) override { enabled = e; ++calls; }
 };
 
+// AX4 S9 — records the procedural-audio toggle pushes.
+class RecordingProceduralAudioSink final : public ProceduralAudioApplySink
+{
+public:
+    bool proceduralEnabled = false;
+    bool emitUntagged      = true;
+    int  calls             = 0;
+    void setProceduralAudioEnabled(bool e) override { proceduralEnabled = e; ++calls; }
+    void setEmitUntaggedCollisions(bool e) override { emitUntagged = e; ++calls; }
+};
+
 class RecordingPhotoSink final : public PhotosensitiveApplySink
 {
 public:
@@ -1340,6 +1355,25 @@ TEST(SettingsApply, AudioLodForwardedVerbatim)
         applyAudioLod(a, sink);
         EXPECT_EQ(sink.enabled, enabled);
         EXPECT_EQ(sink.calls, 1);
+    }
+}
+
+// AX4 S9 — applyProceduralAudio forwards both toggles verbatim.
+TEST(SettingsApply, ProceduralAudioForwardedVerbatim)
+{
+    for (bool proc : {true, false})
+    {
+        for (bool untagged : {true, false})
+        {
+            AudioSettings a;
+            a.proceduralAudioEnabled = proc;
+            a.emitUntaggedCollisions = untagged;
+            RecordingProceduralAudioSink sink;
+            applyProceduralAudio(a, sink);
+            EXPECT_EQ(sink.proceduralEnabled, proc);
+            EXPECT_EQ(sink.emitUntagged, untagged);
+            EXPECT_EQ(sink.calls, 2);
+        }
     }
 }
 

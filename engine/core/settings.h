@@ -161,6 +161,17 @@ struct AudioSettings
     ///        louder clips attenuated, to meet this target.
     float loudnessTargetLufs = -16.0f;
 
+    /// @brief AX4 S9 — master toggle for procedural (synthesised) audio:
+    ///        footsteps + collision impacts. On by default; off mutes all
+    ///        `playSynth` emission without touching sample playback or bus
+    ///        gains. Additive key on the v4 schema (tolerant default on load).
+    bool proceduralAudioEnabled = true;
+
+    /// @brief AX4 S9 — force-enable impact audio for untagged (Default↔Default)
+    ///        collisions, off by default (design §8: keep unauthored scenes
+    ///        quiet). Additive key on the v4 schema (tolerant default on load).
+    bool emitUntaggedCollisions = false;
+
     bool operator==(const AudioSettings& o) const;
     bool operator!=(const AudioSettings& o) const { return !(*this == o); }
 };
