@@ -120,6 +120,7 @@ add_executable(vestige_tests
     test_pressure_plate.cpp
     test_stasis_system.cpp
     test_system_registry.cpp
+    test_job_system.cpp
     test_domain_systems.cpp
     test_editor_viewers.cpp
     test_navigation_panel.cpp

@@ -36,6 +36,7 @@ publishes no suitable release tag — see "Branch-commit pins" below.
 | OpenAL Soft      | 1.25.1                                          | LGPL v2.1 (dynamic linking)                       | <https://github.com/kcat/openal-soft> |
 | libebur128       | v1.2.6                                          | MIT (© Jan Kokemüller; static link)               | <https://github.com/jiixyj/libebur128> |
 | Recast Navigation| v1.6.0                                          | zlib                                              | <https://github.com/recastnavigation/recastnavigation> |
+| enkiTS           | v1.11                                           | zlib (© Doug Binks; static link)                  | <https://github.com/dougbinks/enkiTS> |
 | GoogleTest       | v1.15.2                                         | BSD 3-Clause                                      | <https://github.com/google/googletest> |
 
 ### Branch-commit pins

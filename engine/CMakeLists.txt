@@ -10,6 +10,7 @@ set(ENGINE_SOURCES
     core/timer.cpp
     core/event_bus.cpp
     core/system_registry.cpp
+    core/job_system.cpp
     systems/atmosphere_system.cpp
     systems/particle_system.cpp
     systems/water_system.cpp
@@ -441,10 +442,14 @@ target_link_libraries(vestige_engine
         Jolt
         OpenAL::OpenAL
         ebur128
+        enkiTS
         RecastNavigation::Recast
         RecastNavigation::Detour
         tinyfiledialogs
 )
+# enkiTS (MT2) carries its header dir as a SYSTEM INTERFACE include (set in
+# external/CMakeLists.txt), so linking it above propagates <TaskScheduler.h>
+# -Werror-safe — no extra include wiring needed here.
 
 # libebur128 (AX9) is a C library; mark its header dir SYSTEM so the engine's
 # -Werror/-Wconversion flag set doesn't police the third-party <ebur128.h>
