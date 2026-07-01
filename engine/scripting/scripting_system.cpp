@@ -10,6 +10,7 @@
 #include "core/engine.h"
 #include "core/system_events.h"
 #include "core/logger.h"
+#include "physics/contact_event.h"  // CollisionEvent (S8 wires OnCollisionEnter/Exit)
 
 #include <algorithm>
 #include <cmath>
@@ -449,10 +450,61 @@ void ScriptingSystem::subscribeEventNodes(ScriptInstance& instance)
                     ctx.triggerOutput(*ni, "Destroying");
                 });
         }
-        // Other event types (OnTriggerEnter/Exit, OnCollisionEnter/Exit,
-        // OnAudioFinished, OnVariableChanged) are registered as descriptors
-        // so they appear in the palette but are not wired yet — they require
-        // new engine events that do not exist yet.
+        else if (eventTypeName == "CollisionEnterEvent")
+        {
+            // OnCollisionEnter: fires on a CollisionEvent onset. Filtered to the
+            // owning entity's own collisions (a graph attached to entity 0 is a
+            // global listener). Enter carries the full geometry; `otherEntity`
+            // is the far side of the pair. AX4 S8.
+            const uint32_t ownerEntity = instance.entityId();
+            subId = subscribeFilteredEventNode<CollisionEvent>(
+                this, &instance, nodeDef.id, "Hit",
+                [ownerEntity](const CollisionEvent& e, ScriptNodeInstance& n) -> bool
+                {
+                    if (!e.isEnter) return false;   // Exit → the sibling node
+                    if (ownerEntity != 0 && e.entityA != ownerEntity
+                                         && e.entityB != ownerEntity)
+                    {
+                        return false;   // not this entity's collision
+                    }
+                    const uint32_t other =
+                        (e.entityA == ownerEntity) ? e.entityB : e.entityA;
+                    static const PinId pinOther  = internPin("otherEntity");
+                    static const PinId pinPoint  = internPin("contactPoint");
+                    static const PinId pinNormal = internPin("normal");
+                    n.outputValues[pinOther]  = ScriptValue::entityId(other);
+                    n.outputValues[pinPoint]  = ScriptValue(e.point);
+                    n.outputValues[pinNormal] = ScriptValue(e.normal);
+                    return true;
+                });
+        }
+        else if (eventTypeName == "CollisionExitEvent")
+        {
+            // OnCollisionExit: fires on contact removal. Jolt gives no body
+            // access on removal, so the event carries only the entity pair —
+            // point/normal are absent (the pins keep their zero defaults). S8.
+            const uint32_t ownerEntity = instance.entityId();
+            subId = subscribeFilteredEventNode<CollisionEvent>(
+                this, &instance, nodeDef.id, "Separated",
+                [ownerEntity](const CollisionEvent& e, ScriptNodeInstance& n) -> bool
+                {
+                    if (e.isEnter) return false;    // Enter → the sibling node
+                    if (ownerEntity != 0 && e.entityA != ownerEntity
+                                         && e.entityB != ownerEntity)
+                    {
+                        return false;
+                    }
+                    const uint32_t other =
+                        (e.entityA == ownerEntity) ? e.entityB : e.entityA;
+                    static const PinId pinOther = internPin("otherEntity");
+                    n.outputValues[pinOther] = ScriptValue::entityId(other);
+                    return true;
+                });
+        }
+        // Other event types (OnTriggerEnter/Exit, OnAudioFinished,
+        // OnVariableChanged) are registered as descriptors so they appear in
+        // the palette but are not wired yet — they require new engine events
+        // that do not exist yet.
         else
         {
             // AUDIT.md §M7 / FIXPLAN: warn on unknown eventTypeName so that
@@ -460,7 +512,6 @@ void ScriptingSystem::subscribeEventNodes(ScriptInstance& instance)
             // yet-wired set is explicitly ignored to avoid noise.
             static const std::unordered_set<std::string> kKnownUnwired = {
                 "TriggerEnterEvent", "TriggerExitEvent",
-                "CollisionEnterEvent", "CollisionExitEvent",
                 "AudioFinishedEvent", "VariableChangedEvent"
             };
             if (kKnownUnwired.count(eventTypeName) == 0)

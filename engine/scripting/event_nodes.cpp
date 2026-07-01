@@ -194,13 +194,13 @@ void registerEventNodeTypes(NodeTypeRegistry& registry)
     });
 
     // -----------------------------------------------------------------------
-    // OnCollisionEnter / OnCollisionExit (stubs — awaiting collision events)
+    // OnCollisionEnter / OnCollisionExit (wired to the CollisionEvent bus — S8)
     // -----------------------------------------------------------------------
     registry.registerNode({
         "OnCollisionEnter",
         "On Collision Enter",
         "Events",
-        "(Stub) Fires when a physics collision begins — collision events pending",
+        "Fires when a physics collision begins",
         {},
         {
             {PinKind::EXECUTION, "Hit", ScriptDataType::BOOL, {}},
@@ -208,7 +208,7 @@ void registerEventNodeTypes(NodeTypeRegistry& registry)
             {PinKind::DATA, "contactPoint", ScriptDataType::VEC3, ScriptValue(glm::vec3(0.0f))},
             {PinKind::DATA, "normal", ScriptDataType::VEC3, ScriptValue(glm::vec3(0.0f))},
         },
-        "",
+        "CollisionEnterEvent",
         false, false,
         [](ScriptContext& ctx, const ScriptNodeInstance& node)
         {
@@ -220,13 +220,14 @@ void registerEventNodeTypes(NodeTypeRegistry& registry)
         "OnCollisionExit",
         "On Collision Exit",
         "Events",
-        "(Stub) Fires when a physics collision ends — collision events pending",
+        "Fires when a physics collision ends (contactPoint/normal read zero — "
+        "only Enter carries geometry)",
         {},
         {
             {PinKind::EXECUTION, "Separated", ScriptDataType::BOOL, {}},
             {PinKind::DATA, "otherEntity", ScriptDataType::ENTITY, ScriptValue::entityId(0)},
         },
-        "",
+        "CollisionExitEvent",
         false, false,
         [](ScriptContext& ctx, const ScriptNodeInstance& node)
         {

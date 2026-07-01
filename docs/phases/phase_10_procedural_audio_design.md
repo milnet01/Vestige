@@ -663,6 +663,34 @@ Script authors should treat point/normal as valid on Enter only.
 >    be speculative scaffolding (Rule 2), so it is left as the documented
 >    one-call integration point for when weapons land.
 
+> **S8 as-built (2026-07-01, commit pending):** the two stub nodes are now
+> live. Both `OnCollisionEnter` and `OnCollisionExit` gained a non-empty
+> `eventTypeName` (`"CollisionEnterEvent"` / `"CollisionExitEvent"`) and are
+> wired in `ScriptingSystem::subscribeEventNodes` via the existing
+> `subscribeFilteredEventNode<CollisionEvent>` helper — both subscribe to the
+> *single* C++ `CollisionEvent` type and filter on `isEnter` (phase) so each
+> node fires only on its half. Deviations / pinned choices:
+> 1. **Owner-entity filter mirrors `OnDestroy`:** the node fires only for
+>    collisions involving its graph's entity; `otherEntity` is the far side of
+>    the pair. A graph attached to entity **0** (none) is a global listener
+>    (fires on all). A filter mismatch returns `false` from the populate
+>    lambda, which suppresses the trigger (no downstream execution).
+> 2. **Enter carries geometry, Exit does not:** Enter populates `otherEntity`
+>    + `contactPoint` + `normal`; Exit populates `otherEntity` only, so its
+>    point/normal pins keep their zero defaults — matching Jolt's
+>    no-body-access-on-removal (§4). The two keys were removed from the
+>    `kKnownUnwired` warn-set.
+> 3. **Layering note (candidate S10 cleanup):** `scripting_system.cpp` now
+>    `#include`s `contact_event.h`, which drags in Jolt headers for a struct
+>    the scripting layer only reads. Correct and minimal for S8 (in-lane; not
+>    a silent S3 refactor), but extracting `CollisionEvent` into a Jolt-free
+>    header (leaving the listener in `contact_event.h`) would keep Jolt out of
+>    the scripting TU — flagged for the S10 audit, not bundled here.
+>
+> 4 bridge tests added (`test_scripting_system_bridge.cpp`): Enter populates
+> all pins; Exit resolves `otherEntity` when the owner is the B-side; Enter
+> ignores an Exit event; an uninvolved-entity collision does not fire.
+
 ---
 
 ## 9. Formula Workbench audio category (S1) — closes `[3D_E-0022]`

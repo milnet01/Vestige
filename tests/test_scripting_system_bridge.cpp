@@ -16,10 +16,31 @@
 #include "scripting/latent_nodes.h"
 #include "core/engine.h"
 #include "core/event.h"
+#include "physics/contact_event.h"
 
 #include <gtest/gtest.h>
 
 using namespace Vestige;
+
+namespace
+{
+
+/// Build a CollisionEvent between entity ids a and b for the S8 bridge tests.
+CollisionEvent collisionEvent(uint32_t a, uint32_t b, bool isEnter)
+{
+    CollisionEvent e;
+    e.entityA = a;
+    e.entityB = b;
+    e.isEnter = isEnter;
+    e.point = glm::vec3(4.0f, 5.0f, 6.0f);
+    e.normal = glm::vec3(0.0f, 1.0f, 0.0f);
+    e.approachSpeed = 3.0f;
+    e.matA = SurfaceMaterial::Stone;
+    e.matB = SurfaceMaterial::Metal;
+    return e;
+}
+
+}  // namespace
 
 TEST(ScriptingSystemBridge, KeyPressedEventTriggersOnKeyPressedNode)
 {
@@ -310,6 +331,111 @@ TEST(ScriptingSystemBridge, IsInstanceActiveGenerationGate_Sc6)
     // nullptr fails regardless of expected generation.
     EXPECT_FALSE(sys.isInstanceActive(nullptr, 0));
     EXPECT_FALSE(sys.isInstanceActive(nullptr, gen0));
+
+    sys.unregisterInstance(instance);
+    sys.shutdown();
+}
+
+// --- AX4 S8: OnCollisionEnter / OnCollisionExit wire-up --------------------
+
+TEST(ScriptingSystemBridge, CollisionEnterPopulatesOtherEntityPointAndNormal)
+{
+    Engine engine;
+    ScriptingSystem sys;
+    ASSERT_TRUE(sys.initialize(engine));
+
+    ScriptGraph graph;
+    uint32_t onHit = graph.addNode("OnCollisionEnter");
+    ScriptInstance instance;
+    instance.initialize(graph, /*entityId*/ 1);   // owner = entity 1
+    sys.registerInstance(instance);
+
+    // Entity 1 (owner) strikes entity 2 — the node's `otherEntity` is 2.
+    engine.getEventBus().publish(collisionEvent(1, 2, /*isEnter*/ true));
+
+    auto* nodeInst = instance.getNodeInstance(onHit);
+    ASSERT_NE(nodeInst, nullptr);
+    EXPECT_EQ(nodeInst->outputValues[internPin("otherEntity")].asEntityId(), 2u);
+    EXPECT_EQ(nodeInst->outputValues[internPin("contactPoint")].asVec3(),
+              glm::vec3(4.0f, 5.0f, 6.0f));
+    EXPECT_EQ(nodeInst->outputValues[internPin("normal")].asVec3(),
+              glm::vec3(0.0f, 1.0f, 0.0f));
+
+    sys.unregisterInstance(instance);
+    sys.shutdown();
+}
+
+TEST(ScriptingSystemBridge, CollisionExitPopulatesOtherEntityWhenOwnerIsBodyB)
+{
+    Engine engine;
+    ScriptingSystem sys;
+    ASSERT_TRUE(sys.initialize(engine));
+
+    ScriptGraph graph;
+    uint32_t onSep = graph.addNode("OnCollisionExit");
+    ScriptInstance instance;
+    instance.initialize(graph, /*entityId*/ 1);
+    sys.registerInstance(instance);
+
+    // Owner is the *B* side of the pair here — otherEntity must still resolve
+    // to the far body (2), exercising the ternary's other branch.
+    engine.getEventBus().publish(collisionEvent(2, 1, /*isEnter*/ false));
+
+    auto* nodeInst = instance.getNodeInstance(onSep);
+    ASSERT_NE(nodeInst, nullptr);
+    EXPECT_EQ(nodeInst->outputValues[internPin("otherEntity")].asEntityId(), 2u);
+
+    sys.unregisterInstance(instance);
+    sys.shutdown();
+}
+
+TEST(ScriptingSystemBridge, CollisionEnterNodeIgnoresExitEvent)
+{
+    // An OnCollisionEnter node must not fire on an Exit event (phase filter);
+    // its outputs stay unpopulated.
+    Engine engine;
+    ScriptingSystem sys;
+    ASSERT_TRUE(sys.initialize(engine));
+
+    ScriptGraph graph;
+    uint32_t onHit = graph.addNode("OnCollisionEnter");
+    ScriptInstance instance;
+    instance.initialize(graph, /*entityId*/ 1);
+    sys.registerInstance(instance);
+
+    engine.getEventBus().publish(collisionEvent(1, 2, /*isEnter*/ false));
+
+    auto* nodeInst = instance.getNodeInstance(onHit);
+    ASSERT_NE(nodeInst, nullptr);
+    EXPECT_TRUE(nodeInst->outputValues.find(internPin("otherEntity"))
+                == nodeInst->outputValues.end())
+        << "Enter node must not populate outputs from an Exit event";
+
+    sys.unregisterInstance(instance);
+    sys.shutdown();
+}
+
+TEST(ScriptingSystemBridge, CollisionForUninvolvedEntityDoesNotFire)
+{
+    // A collision between two other entities must not reach an entity-scoped
+    // graph (owner-entity filter, mirroring OnDestroy).
+    Engine engine;
+    ScriptingSystem sys;
+    ASSERT_TRUE(sys.initialize(engine));
+
+    ScriptGraph graph;
+    uint32_t onHit = graph.addNode("OnCollisionEnter");
+    ScriptInstance instance;
+    instance.initialize(graph, /*entityId*/ 1);
+    sys.registerInstance(instance);
+
+    engine.getEventBus().publish(collisionEvent(5, 6, /*isEnter*/ true));
+
+    auto* nodeInst = instance.getNodeInstance(onHit);
+    ASSERT_NE(nodeInst, nullptr);
+    EXPECT_TRUE(nodeInst->outputValues.find(internPin("otherEntity"))
+                == nodeInst->outputValues.end())
+        << "a collision not involving the owner must not fire the node";
 
     sys.unregisterInstance(instance);
     sys.shutdown();
