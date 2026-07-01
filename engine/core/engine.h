@@ -28,6 +28,7 @@
 #include "physics/physics_debug.h"
 #include "testing/visual_test_runner.h"
 #include "core/system_registry.h"
+#include "core/job_system.h"
 #include "ui/caption_map.h"
 #include "ui/subtitle.h"
 
@@ -128,6 +129,12 @@ private:
     void createPhysicsStaticBodies();
 
     EventBus m_eventBus;
+
+    /// MT2 CPU job system. Declared early so it is constructed before the
+    /// systems that cache a pointer to it and destroyed AFTER them (its dtor
+    /// WaitforAllAndShutdown drains outstanding work). Captures this (main)
+    /// thread as its reference thread. See docs/phases/phase_10_6_design.md.
+    JobSystem m_jobSystem;
     std::unique_ptr<Window> m_window;
     std::unique_ptr<Timer> m_timer;
     std::unique_ptr<InputManager> m_inputManager;
@@ -282,6 +289,10 @@ public:
     SceneManager& getSceneManager() { return *m_sceneManager; }
     PhysicsWorld& getPhysicsWorld() { return m_physicsWorld; }
     PerformanceProfiler& getProfiler() { return m_profiler; }
+
+    /// @brief The MT2 CPU job system (submit / parallelFor / runOnMainThread).
+    /// Systems cache this in initialize() like getPhysicsWorld().
+    JobSystem& getJobSystem() { return m_jobSystem; }
 
     /// @brief Access domain system-owned subsystems (via cached pointers).
     EnvironmentForces& getEnvironmentForces() { return *m_environmentForces; }

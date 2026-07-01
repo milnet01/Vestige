@@ -1104,6 +1104,11 @@ void Engine::run()
         // 1. Timer — calculate delta time
         float deltaTime = m_timer->update();
 
+        // 1b. Job system — run work marshalled back to the main thread from
+        // worker threads last frame, then reap completed fire-and-forget tasks
+        // (MT2; docs/phases/phase_10_6_design.md §3.4).
+        m_jobSystem.drainMainThreadQueue();
+
         // 2. Window — poll OS events
         m_window->pollEvents();
 
