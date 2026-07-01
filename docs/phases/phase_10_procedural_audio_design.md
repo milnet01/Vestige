@@ -633,6 +633,36 @@ on **Enter** all are populated, but on **Exit** Jolt gives no body access (§4),
 the Exit event carries only the entity ids and the point/normal pins **read zero**.
 Script authors should treat point/normal as valid on Enter only.
 
+> **S7 as-built (2026-07-01, commit pending):** shipped as a standalone
+> force-active `ImpactAudioSystem` (registered ISystem, mirrors FootstepSystem)
+> that subscribes to the `CollisionEvent` bus in `initialize()` and synthesises
+> inside that synchronous dispatch; `update()` is a no-op (purely event-driven),
+> `shutdown()` unsubscribes. Deviations / pinned choices:
+> 1. **Whole S7 policy is one pure function** `decideImpact(CollisionEvent,
+>    emitUntaggedCollisions) → {play, material}` + `harderMaterial` /
+>    `materialHardnessRank` (Metal=9…Water=1, **Default=0** so a single tagged
+>    body always wins the timbre). Unit-tested engine-free
+>    (`test_impact_audio_system.cpp`, 10 tests); the thin subscribe→playSynth
+>    glue is verified by read (reuses S3/S5-tested paths). The min-speed gate
+>    (`kMinImpactSpeed`, shared with the bus) + Default↔Default suppression both
+>    live in this subscriber, not the bus — so scripting (S8) still sees every
+>    contact. Impact `envelopeScale = 1.5` (Rule-6 TODO marker).
+> 2. **No per-frame synth budget / overflow queue** (design §4/§10). Dropped for
+>    the same reason S3 dropped the per-pair throttle: emission is bounded by the
+>    contact-*onset* rate (one Enter per pair at first contact, then silence) and
+>    the 32-voice pool, not the per-frame contact count — so unbounded per-frame
+>    synthesis is not a realistic path. If a pathological many-simultaneous-onset
+>    burst (a collapsing stack landing on one frame) ever spikes a frame, a
+>    per-frame strike-count cap is the cheap fix; deferred until measured
+>    (Rule 5: named, not hidden).
+> 3. **Weapon-impact path is not built** — there is **no weapon / gameplay
+>    raycast system in the engine** today (grep empty), so there is nothing to
+>    hook. It needs **no new plumbing**: a future weapon system calls the same
+>    public `AudioEngine::playSynth(mat, hitSpeed, hitPoint, 1.5f)` on a ray hit
+>    (`kHitscanReferenceSpeed` for a hitscan). Building a weapon system now would
+>    be speculative scaffolding (Rule 2), so it is left as the documented
+>    one-call integration point for when weapons land.
+
 ---
 
 ## 9. Formula Workbench audio category (S1) — closes `[3D_E-0022]`

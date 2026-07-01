@@ -16,6 +16,7 @@
 #include "systems/destruction_system.h"
 #include "systems/character_system.h"
 #include "systems/footstep_system.h"
+#include "systems/impact_audio_system.h"
 #include "systems/lighting_system.h"
 #include "systems/audio_system.h"
 #include "systems/music_system.h"
@@ -188,6 +189,12 @@ bool Engine::initialize(const EngineConfig& config)
     // engine. Resolves those at initialize() time, so registration order here
     // is irrelevant (all systems are registered before initializeAll()).
     m_systemRegistry.registerSystem<FootstepSystem>();
+
+    // AX4 S7: procedural collision impacts. Subscribes to the S3 CollisionEvent
+    // bus at initialize() time and synthesises material-aware strikes via
+    // AudioSystem's engine — no per-frame work, so registration order is
+    // irrelevant here (all systems registered before initializeAll()).
+    m_systemRegistry.registerSystem<ImpactAudioSystem>();
 
     auto* uiSys = m_systemRegistry.registerSystem<UISystem>();
     m_systemRegistry.registerSystem<NavigationSystem>();

@@ -19,6 +19,7 @@ set(ENGINE_SOURCES
     systems/destruction_system.cpp
     systems/character_system.cpp
     systems/footstep_system.cpp
+    systems/impact_audio_system.cpp
     systems/lighting_system.cpp
     core/window.cpp
     core/input_manager.cpp
