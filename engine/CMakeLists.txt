@@ -519,8 +519,20 @@ target_compile_definitions(vestige_engine PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:_GLIBCXX_ASSERTIONS>
 )
 
-# Debug sanitizers
+# Debug sanitizers. ENGINE_TSAN swaps ASan/UBSan for ThreadSanitizer — they are
+# mutually exclusive — to race-check the MT2 job system (design D6) and future
+# threaded subsystems (MT4). Default OFF (ASan/UBSan, the everyday build).
+# Usage: cmake -B build-tsan -DCMAKE_BUILD_TYPE=Debug -DENGINE_TSAN=ON
+option(ENGINE_TSAN "Build Debug with ThreadSanitizer instead of ASan/UBSan" OFF)
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    if(ENGINE_TSAN)
+        target_compile_options(vestige_engine PUBLIC
+            $<$<CXX_COMPILER_ID:GNU,Clang>:-fsanitize=thread>
+        )
+        target_link_options(vestige_engine PUBLIC
+            $<$<CXX_COMPILER_ID:GNU,Clang>:-fsanitize=thread>
+        )
+    else()
     target_compile_options(vestige_engine PUBLIC
         $<$<CXX_COMPILER_ID:GNU,Clang>:
             -fsanitize=address
@@ -533,6 +545,7 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
             -fsanitize=undefined
         >
     )
+    endif()
     # No LSan suppression file: intentional third-party leaks (GLFW/Mesa driver
     # init/teardown, llvmpipe JIT shader state) are excluded at their exact call
     # sites via ScopedLeakCheckDisable (tests/lsan_guard.h).

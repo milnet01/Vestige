@@ -14,28 +14,30 @@ namespace Vestige
 namespace detail
 {
 
-/// One submitted job. enkiTS runs it via ExecuteRange on a worker thread (or,
-/// for a size-1 job, once). The shared_ptr owning this outlives execution:
-/// held by the JobHandle and by JobSystem::m_inFlight until it completes.
+/// One submitted job. enkiTS partitions [0, m_SetSize) across worker threads and
+/// calls ExecuteRange once per partition with a half-open [start, end) range. A
+/// single submit() sets m_SetSize=1 (one call); parallelFor sets it to `count`.
+/// The shared_ptr owning this outlives execution: held by the JobHandle and by
+/// JobSystem::m_inFlight until it completes.
 class JobTask final : public enki::ITaskSet
 {
 public:
-    explicit JobTask(std::function<void()> fn)
+    JobTask(uint32_t setSize, std::function<void(uint32_t, uint32_t)> fn)
         : m_fn(std::move(fn))
     {
-        m_SetSize = 1;
+        m_SetSize = setSize;
     }
 
-    void ExecuteRange(enki::TaskSetPartition /*range*/, uint32_t /*threadnum*/) override
+    void ExecuteRange(enki::TaskSetPartition range, uint32_t /*threadnum*/) override
     {
         if (m_fn)
         {
-            m_fn();
+            m_fn(range.start, range.end);
         }
     }
 
 private:
-    std::function<void()> m_fn;
+    std::function<void(uint32_t, uint32_t)> m_fn;
 };
 
 }   // namespace detail
@@ -96,9 +98,44 @@ JobHandle JobSystem::submit(std::function<void()> work)
         return JobHandle();
     }
 
+    // A single job is a size-1 parallel range whose callback ignores the range.
+    return enqueue(1u, [w = std::move(work)](uint32_t, uint32_t)
+                   {
+                       if (w)
+                       {
+                           w();
+                       }
+                   });
+}
+
+JobHandle JobSystem::parallelFor(uint32_t count,
+                                 std::function<void(uint32_t, uint32_t)> work)
+{
+    assertMainThread();
+
+    if (count == 0u)
+    {
+        return JobHandle();   // nothing to iterate → already complete.
+    }
+
+    if (isSynchronous())
+    {
+        if (work)
+        {
+            work(0u, count);   // one inline range covering everything.
+        }
+        return JobHandle();
+    }
+
+    return enqueue(count, std::move(work));
+}
+
+JobHandle JobSystem::enqueue(uint32_t setSize,
+                             std::function<void(uint32_t, uint32_t)> work)
+{
     reapCompleted();   // bound m_inFlight until S3's frame-top drain exists.
 
-    auto task = std::make_shared<detail::JobTask>(std::move(work));
+    auto task = std::make_shared<detail::JobTask>(setSize, std::move(work));
     {
         std::lock_guard<std::mutex> lock(m_inFlightMutex);
         m_inFlight.push_back(task);

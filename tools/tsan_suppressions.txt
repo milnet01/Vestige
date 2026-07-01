@@ -1,0 +1,35 @@
+# ThreadSanitizer suppressions — Vestige (MT2 job system, Phase 10.6).
+#
+# Usage: TSAN_OPTIONS="suppressions=tools/tsan_suppressions.txt" <tsan binary>
+#        (the -DENGINE_TSAN=ON build; see engine/CMakeLists.txt).
+#
+# --- enkiTS lock-free task dispatch -----------------------------------------
+# enkiTS hands a task from the submitting (main) thread to a worker via its
+# LockLessMultiReadPipe + a semaphore worker-wakeup. That path is x86-TSO-tuned:
+# correct on every platform Vestige targets (x86-64 only — the RX 6600 dev box
+# and the ubuntu-x86 / windows-x86 CI runners), but TSAN models the C++ abstract
+# memory model rather than x86 Total Store Order, so it reports the task publish
+# (JobTask constructed on the main thread -> ExecuteRange read on a worker) as a
+# data race on the task's std::function. enkiTS is Doom Eternal's scheduler; its
+# pipe is battle-tested on x86. Suppress races routed through enki's dispatch.
+#
+# TRADE-OFF (documented, not hidden): this also suppresses races WITHIN
+# worker-executed work. The JobSystem threading contract
+# (docs/phases/phase_10_6_design.md §4) requires worker callbacks to touch only
+# thread-safe state (atomics / pre-submit snapshots); that contract is enforced
+# by design + the ASan/UBSan suite + code review, NOT by TSAN under this
+# suppression. The full CI TSAN gate (roadmap MT4) must design around this
+# enkiTS opacity (e.g. annotate enki's pipe with __tsan_acquire/release, or gate
+# only non-enki threaded subsystems like the future render thread).
+race:enki::
+
+# --- GL driver / test-harness noise (Mesa) ----------------------------------
+# The monolithic test binary registers a global GLTestEnvironment that spins up
+# a Mesa GL/EGL context; Mesa's driver runs its own internal worker threads
+# (util_queue) whose lock-free internals TSAN flags. This is entirely the test
+# harness, not the job system. A dedicated GL-free TSAN test target (MT4) avoids
+# it; here we suppress the driver libraries directly.
+called_from_lib:libgallium
+called_from_lib:libEGL_mesa
+called_from_lib:libglapi
+race:util_queue

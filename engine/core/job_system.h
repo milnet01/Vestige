@@ -86,6 +86,14 @@ public:
     /// Main-thread-only.
     JobHandle submit(std::function<void()> work);
 
+    /// Data-parallel loop: `work(begin, end)` is called on worker threads over
+    /// disjoint sub-ranges that together cover `[0, count)` (each element
+    /// visited exactly once; `end` is EXCLUSIVE). This is AX1's primitive.
+    /// `count == 0` is a no-op returning a complete handle. Async unless in
+    /// synchronous mode (then `work(0, count)` runs inline). Main-thread-only.
+    JobHandle parallelFor(uint32_t count,
+                          std::function<void(uint32_t begin, uint32_t end)> work);
+
     /// Block the calling thread until `handle` completes. While waiting the
     /// calling thread helps run other queued work (enkiTS WaitforTask). No-op
     /// on an empty/complete handle and in synchronous mode. Main-thread-only.
@@ -106,6 +114,12 @@ private:
     /// Drop already-complete tasks from m_inFlight (main-thread-only). Bounds
     /// the fire-and-forget registry before S3's drainMainThreadQueue exists.
     void reapCompleted();
+
+    /// Async task creation shared by submit + parallelFor: register in
+    /// m_inFlight (keeps a dropped handle alive), pipe to enkiTS, return the
+    /// handle. Caller has already handled synchronous mode. Main-thread-only.
+    JobHandle enqueue(uint32_t setSize,
+                      std::function<void(uint32_t, uint32_t)> work);
 
     std::unique_ptr<enki::TaskScheduler> m_scheduler;   ///< null in sync mode.
     int m_workerCount = 0;
