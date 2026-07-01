@@ -120,8 +120,8 @@ mandates they stay independent — physics must not depend on audio):
 ```cpp
 // engine/audio/occlusion_material_map.h
 #pragma once
-#include "engine/physics/surface_material.h"
-#include "engine/audio/audio_occlusion.h"
+#include "physics/surface_material.h"   // include root is engine/
+#include "audio/audio_occlusion.h"
 
 namespace Vestige
 {

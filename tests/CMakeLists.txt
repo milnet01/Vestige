@@ -165,6 +165,7 @@ add_executable(vestige_tests
     test_audio_lod.cpp
     test_audio_ducking.cpp
     test_audio_occlusion.cpp
+    test_occlusion_material_map.cpp
     test_audio_reverb.cpp
     test_audio_ambient.cpp
     test_audio_music.cpp
