@@ -11,11 +11,27 @@
 #   3. Tier-1 static audit      ← audit-tool-tier1  (cppcheck + clang-tidy + warnings)
 #   4. gitleaks secret scan     ← secret-scan       (full git history)
 #
-# NOT mirrored: the cmake-compat job (CMake 3.21 + latest). It guards downstream
-# users on old CMake; reproducing it needs a second CMake install, which is more
-# than a pre-push gate warrants. If you ever need it, install cmake 3.21 in a
-# venv/container and run the Configure+Build+Test steps from ci.yml's cmake-compat
-# job by hand. CI still runs it on every push, so the gap is covered remotely.
+# NOT mirrored: the cmake-compat job (CMake 3.21 + latest) and the Windows/MSVC
+# build. cmake-compat guards downstream users on old CMake; reproducing it needs
+# a second CMake install, more than a pre-push gate warrants. Windows needs a
+# Windows host. Both still run in CI on every push, so the gap is covered
+# remotely. If you ever need cmake-compat locally, install cmake 3.21 in a
+# venv/container and run ci.yml's cmake-compat Configure+Build+Test by hand.
+#
+# clang-tidy IS part of the Tier-1 audit and its `error`-level findings GATE CI
+# (Severity.HIGH). The audit silently DISABLES clang-tidy when no `clang-tidy` is
+# on PATH — so a missing binary makes the local audit a false-green (it passes
+# while CI's clang-tidy reddens the push). The preflight below self-heals a
+# versioned `clang-tidy-NN` into a repo-local shim and, failing that, WARNS
+# loudly. Install it if missing (openSUSE: `zypper in clang-tools`).
+#
+# VERSION-DRIFT CAVEAT: local static-analysis tools are usually newer than CI's
+# ubuntu-24.04 apt versions (CI: cppcheck ~2.13, clang-tidy ~18; a dev box often
+# runs 2.21 / 22). Findings are version-sensitive, so a clean local audit is a
+# strong signal but not a guarantee for every version-specific finding. CI gates
+# on HIGH/CRITICAL only, which is stable in practice. The preflight prints both
+# so drift is visible. (A Rule-5a follow-up could pin CI to the latest tools to
+# close the drift entirely — tracked separately.)
 #
 # Usage:
 #   scripts/local-ci.sh            # full mirror (all 4 stages) — the push-safety gate
@@ -75,6 +91,55 @@ record() {  # record <name> <ok|fail|skip> <seconds>
 hr()    { printf '%s\n' "------------------------------------------------------------"; }
 banner(){ hr; printf '>>> %s\n' "$1"; hr; }
 
+# --- preflight: tool presence + version parity report -----------------------
+# Guards against the false-green failure mode: a static-analysis tool missing
+# locally → the audit silently skips it → local passes while CI fails.
+CLANG_TIDY_OK=1
+
+# Self-heal a missing plain `clang-tidy` from the highest-versioned
+# `clang-tidy-NN` on the system (openSUSE ships only versioned binaries). The
+# shim lives in a gitignored repo-local dir prepended to PATH for this run only.
+ensure_clang_tidy() {
+    command -v clang-tidy >/dev/null 2>&1 && return 0
+    local best="" cand n newest=-1 resolved
+    for cand in /usr/bin/clang-tidy-* $(compgen -c clang-tidy- 2>/dev/null); do
+        n="${cand##*clang-tidy-}"; [[ "$n" =~ ^[0-9]+$ ]] || continue
+        resolved="$(command -v "$cand" 2>/dev/null || { [[ -x "$cand" ]] && echo "$cand"; })"
+        [[ -n "$resolved" ]] || continue
+        if (( n > newest )); then newest="$n"; best="$resolved"; fi
+    done
+    [[ -n "$best" ]] || return 1
+    mkdir -p "$REPO_ROOT/.ci-tools/bin"
+    ln -sf "$best" "$REPO_ROOT/.ci-tools/bin/clang-tidy"
+    export PATH="$REPO_ROOT/.ci-tools/bin:$PATH"
+    command -v clang-tidy >/dev/null 2>&1
+}
+
+ver_line() {  # ver_line <label> <cmd...> -- prints "  label  <first version-ish line>"
+    local label="$1"; shift
+    if command -v "$1" >/dev/null 2>&1; then
+        printf '  %-11s %s\n' "$label" "$("$@" 2>&1 | grep -iE 'version|[0-9]+\.[0-9]+' | head -1 | sed 's/^ *//')"
+    else
+        printf '  %-11s %s\n' "$label" "!! MISSING"
+    fi
+}
+
+preflight() {
+    banner "preflight — local tool versions (CI = ubuntu-24.04 apt: cppcheck ~2.13, clang-tidy ~18)"
+    ensure_clang_tidy || CLANG_TIDY_OK=0
+    ver_line "cmake"      cmake --version
+    ver_line "ninja"      ninja --version
+    ver_line "cppcheck"   cppcheck --version
+    ver_line "clang-tidy" clang-tidy --version
+    command -v gitleaks >/dev/null 2>&1 && ver_line "gitleaks" gitleaks version || printf '  %-11s %s\n' "gitleaks" "!! MISSING (secret-scan stage will SKIP)"
+    if [[ $CLANG_TIDY_OK -eq 0 ]]; then
+        echo
+        echo "  !! clang-tidy NOT found — the Tier-1 audit will SKIP it. clang-tidy"
+        echo "  !! 'error' findings GATE CI, so this local run is NOT a full mirror."
+        echo "  !! Install it (openSUSE: zypper in clang-tools) before trusting a green."
+    fi
+}
+
 # Configure a build dir with the exact flags from ci.yml's Configure step.
 configure() {  # configure <dir> <build-type>
     cmake -S . -B "$1" -G Ninja \
@@ -103,6 +168,9 @@ build_and_test() {  # build_and_test <stage-label> <dir> <build-type>
     record "$label" ok $((SECONDS - start)); return 0
 }
 
+# --- preflight: report versions + self-heal clang-tidy ----------------------
+preflight
+
 # --- stage 1: Debug build + test (reuses the dev build/ dir) ----------------
 build_and_test "Debug build+test" build Debug || true
 
@@ -121,10 +189,13 @@ fi
 if [[ $QUICK -eq 0 ]]; then
     start=$SECONDS
     banner "Tier-1 audit — cppcheck + clang-tidy + build warnings"
+    # Flag a partial mirror in the stage name so a green summary can't be
+    # mistaken for full parity when clang-tidy was unavailable.
+    audit_label="Tier-1 audit"; [[ $CLANG_TIDY_OK -eq 0 ]] && audit_label="Tier-1 audit(no-tidy)"
     if "${GL_WRAP[@]}" python3 tools/audit/audit.py -t 1 --ci --no-color --no-tests; then
-        record "Tier-1 audit" ok $((SECONDS - start))
+        record "$audit_label" ok $((SECONDS - start))
     else
-        record "Tier-1 audit" fail $((SECONDS - start))
+        record "$audit_label" fail $((SECONDS - start))
     fi
 else
     record "Tier-1 audit" skip 0
