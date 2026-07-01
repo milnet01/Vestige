@@ -112,9 +112,102 @@ TEST(AudioOcclusionSystem, SourceOwnBodyIsIgnored)
     // Without the filter the source occludes itself...
     EXPECT_TRUE(measureOcclusion(world, listener, source).blocked);
     // ...but excluding its own body clears the path.
-    EXPECT_FALSE(measureOcclusion(world, listener, source, ownBody).blocked);
+    EXPECT_FALSE(
+        measureOcclusion(world, listener, source, 1, 0.0f, ownBody).blocked);
 
     world.shutdown();
+}
+
+// ---------------------------------------------------------------------------
+// S3 — multi-ray volumetric fraction + nearest-blocker material
+// ---------------------------------------------------------------------------
+
+// A wall large enough to cover the whole source sphere blocks every ray →
+// fraction 1 (matches the single-ray fully-behind-wall result).
+TEST(AudioOcclusionSystem, MultiRayFullyBehindWallIsFullyOccluded)
+{
+    PhysicsWorld world;
+    ASSERT_TRUE(world.initialize());
+
+    const glm::vec3 listener(0.0f);
+    const glm::vec3 source(0.0f, 0.0f, 10.0f);
+    makeWall(world, glm::vec3(0.0f, 0.0f, 5.0f), glm::vec3(4.0f, 4.0f, 0.5f),
+             SurfaceMaterial::Stone);
+
+    const OcclusionMeasurement m =
+        measureOcclusion(world, listener, source, 8, 0.5f);
+    EXPECT_TRUE(m.blocked);
+    EXPECT_FLOAT_EQ(m.targetFraction, 1.0f);
+
+    world.shutdown();
+}
+
+// A wall covering only part of the source sphere (its top half) blocks some
+// rays but not all → an intermediate fraction, strictly between 0 and 1. This
+// is the graded open-path behaviour near an edge that a single ray can't give.
+TEST(AudioOcclusionSystem, MultiRayPartialCoverGivesIntermediateFraction)
+{
+    PhysicsWorld world;
+    ASSERT_TRUE(world.initialize());
+
+    const glm::vec3 listener(0.0f);
+    const glm::vec3 source(0.0f, 0.0f, 10.0f);
+    // A slab occluding only y > 0 near the source: centred above the line so
+    // its lower face sits at y = 0. Rays toward the upper hemisphere of the
+    // 0.5 m source sphere are blocked; lower-hemisphere rays pass.
+    makeWall(world, glm::vec3(0.0f, 2.0f, 5.0f), glm::vec3(4.0f, 2.0f, 0.5f),
+             SurfaceMaterial::Wood);
+
+    const OcclusionMeasurement m =
+        measureOcclusion(world, listener, source, 16, 0.5f);
+    EXPECT_TRUE(m.blocked);
+    EXPECT_GT(m.targetFraction, 0.0f);
+    EXPECT_LT(m.targetFraction, 1.0f);
+
+    world.shutdown();
+}
+
+// When two walls both block, the material comes from the NEAREST one (smallest
+// hit distance across every blocked ray), not whichever ray happened to be
+// last.
+TEST(AudioOcclusionSystem, MultiRayPicksNearestBlockerMaterial)
+{
+    PhysicsWorld world;
+    ASSERT_TRUE(world.initialize());
+
+    const glm::vec3 listener(0.0f);
+    const glm::vec3 source(0.0f, 0.0f, 10.0f);
+    // Near wall (Metal) at z = 3, far wall (Stone) at z = 7. Both fully cover
+    // the source sphere, so every ray hits the near wall first.
+    makeWall(world, glm::vec3(0.0f, 0.0f, 3.0f), glm::vec3(4.0f, 4.0f, 0.5f),
+             SurfaceMaterial::Metal);
+    makeWall(world, glm::vec3(0.0f, 0.0f, 7.0f), glm::vec3(4.0f, 4.0f, 0.5f),
+             SurfaceMaterial::Stone);
+
+    const OcclusionMeasurement m =
+        measureOcclusion(world, listener, source, 8, 0.5f);
+    EXPECT_TRUE(m.blocked);
+    EXPECT_EQ(m.material, occlusionPresetForSurface(SurfaceMaterial::Metal));
+
+    world.shutdown();
+}
+
+// The offset table is the deterministic point set the fan samples: fixed size,
+// ray 0 at the exact centre, and every other entry a unit vector (so scaling
+// by the radius lands it on the source sphere). Stable across calls — no RNG.
+TEST(AudioOcclusionSystem, RayOffsetTableIsStableAndUnit)
+{
+    const auto& a = occlusionRayOffsets();
+    const auto& b = occlusionRayOffsets();
+    ASSERT_EQ(a.size(), static_cast<std::size_t>(kMaxOcclusionRayCount));
+
+    EXPECT_FLOAT_EQ(glm::length(a[0]), 0.0f) << "ray 0 must be the centre";
+    for (int i = 1; i < kMaxOcclusionRayCount; ++i)
+    {
+        EXPECT_NEAR(glm::length(a[i]), 1.0f, 1e-5f)
+            << "offset " << i << " must be a unit vector";
+        EXPECT_EQ(a[i], b[i]) << "offset " << i << " must be deterministic";
+    }
 }
 
 // The slew is a plain lerp: it eases toward the target, snaps at amount 1, and

@@ -15,7 +15,11 @@
 #include "scene/scene.h"
 #include "scene/scene_manager.h"
 
+#include <glm/gtc/constants.hpp>
+
 #include <algorithm>
+#include <cmath>
+#include <limits>
 
 namespace Vestige
 {
@@ -30,38 +34,103 @@ namespace
 /// TODO: revisit via Formula Workbench once a perceptual target curve exists.
 constexpr float kOcclusionSlewPerSec = 8.0f;
 
+/// @brief Rays cast per spatial source. S3 default; becomes the
+///        `occlusionRayCount` setting in S5. 8 rays give a smooth open-path
+///        fraction near edges at 2× budget headroom (§4.5).
+/// TODO: revisit via Formula Workbench once a perceptual target curve exists.
+constexpr int kDefaultOcclusionRayCount = 8;
+
+/// @brief Radius (metres) of the sphere the extra rays sample toward, so a
+///        source near a doorway edge reads a partial fraction. S3 default;
+///        becomes the `occlusionSourceRadius` setting in S5.
+constexpr float kDefaultOcclusionSourceRadius = 0.5f;
+
 } // namespace
+
+const std::array<glm::vec3, kMaxOcclusionRayCount>& occlusionRayOffsets()
+{
+    static const std::array<glm::vec3, kMaxOcclusionRayCount> table = []
+    {
+        std::array<glm::vec3, kMaxOcclusionRayCount> t{};
+        t[0] = glm::vec3(0.0f);  // ray 0 → exact source centre
+
+        // Fibonacci lattice over the remaining entries: y linearly spaced away
+        // from the poles, azimuth advanced by the golden angle. Each is a unit
+        // vector, so scaling by the sampling radius places it on the source
+        // sphere.
+        constexpr int kSpherePoints = kMaxOcclusionRayCount - 1;
+        const float goldenAngle =
+            glm::pi<float>() * (3.0f - std::sqrt(5.0f));
+        for (int i = 0; i < kSpherePoints; ++i)
+        {
+            const float y =
+                1.0f - (2.0f * static_cast<float>(i) + 1.0f)
+                           / static_cast<float>(kSpherePoints);
+            const float ring   = std::sqrt(std::max(0.0f, 1.0f - y * y));
+            const float theta  = goldenAngle * static_cast<float>(i);
+            t[static_cast<std::size_t>(i + 1)] =
+                glm::vec3(std::cos(theta) * ring, y, std::sin(theta) * ring);
+        }
+        return t;
+    }();
+    return table;
+}
 
 OcclusionMeasurement measureOcclusion(const PhysicsWorld& physics,
                                       const glm::vec3& listenerPos,
                                       const glm::vec3& sourcePos,
+                                      int rayCount,
+                                      float sourceRadius,
                                       JPH::BodyID ignoreBody)
 {
     OcclusionMeasurement result;
 
-    const glm::vec3 toSource = sourcePos - listenerPos;
-    const float distance     = glm::length(toSource);
+    const int n = std::clamp(rayCount, 1, kMaxOcclusionRayCount);
+    const std::array<glm::vec3, kMaxOcclusionRayCount>& offsets =
+        occlusionRayOffsets();
 
-    // Coincident source/listener → zero-length direction. The listener is
-    // effectively at the source, so there is nothing to occlude; skip the cast
-    // rather than normalise a zero vector.
-    if (distance <= 0.0f)
+    int blockedRays = 0;
+    float nearestDistance = std::numeric_limits<float>::max();
+    JPH::BodyID nearestBody;
+
+    for (int i = 0; i < n; ++i)
     {
-        return result;  // unoccluded
+        const glm::vec3 target =
+            sourcePos + offsets[static_cast<std::size_t>(i)] * sourceRadius;
+        const glm::vec3 toTarget = target - listenerPos;
+        const float distance     = glm::length(toTarget);
+
+        // Coincident listener/target → zero-length direction. Skip this ray
+        // (it counts toward the denominator as an un-blocked sample) rather
+        // than normalise a zero vector. At rayCount==1 with a coincident
+        // source this means the whole source reads unoccluded.
+        if (distance <= 0.0f)
+        {
+            continue;
+        }
+
+        JPH::BodyID hitBody;
+        float hitDistance = 0.0f;
+        if (physics.rayCast(listenerPos, toTarget / distance, distance,
+                            hitBody, hitDistance, ignoreBody))
+        {
+            ++blockedRays;
+            if (hitDistance < nearestDistance)
+            {
+                nearestDistance = hitDistance;
+                nearestBody     = hitBody;  // nearest wall along any sampled path
+            }
+        }
     }
 
-    JPH::BodyID hitBody;
-    float hitDistance = 0.0f;
-    const bool blocked = physics.rayCast(listenerPos, toSource / distance,
-                                         distance, hitBody, hitDistance,
-                                         ignoreBody);
-    if (blocked)
+    if (blockedRays > 0)
     {
         result.blocked        = true;
-        result.targetFraction = 1.0f;  // Binary in S2; graded across N rays in S3.
-        // Resolve the blocking body's surface material (main-thread body lock).
+        result.targetFraction =
+            static_cast<float>(blockedRays) / static_cast<float>(n);
+        // Resolve the nearest blocking body's material (main-thread body lock).
         result.material = occlusionPresetForSurface(
-            physics.getSurfaceMaterial(hitBody));
+            physics.getSurfaceMaterial(nearestBody));
     }
     return result;
 }
@@ -136,7 +205,9 @@ void AudioOcclusionSystem::update(float deltaTime)
             }
 
             const OcclusionMeasurement m = measureOcclusion(
-                physics, listenerPos, entity.getWorldPosition(), ignoreBody);
+                physics, listenerPos, entity.getWorldPosition(),
+                kDefaultOcclusionRayCount, kDefaultOcclusionSourceRadius,
+                ignoreBody);
             target = m.targetFraction;
 
             // Snap the material only while blocked. At fraction 0 the DSP

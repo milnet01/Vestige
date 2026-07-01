@@ -13,6 +13,7 @@
 
 #include <glm/glm.hpp>
 
+#include <array>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -23,37 +24,62 @@ namespace Vestige
 class Engine;
 class PhysicsWorld;
 
-/// @brief Result of one source's occlusion measurement (S2: single centre ray).
+/// @brief Upper bound on rays cast per source, and the size of the offset
+///        table. Single source of truth shared by the offset table
+///        (`occlusionRayOffsets`), the §4.5 per-frame ray budget (S4), and the
+///        §5 settings clamp (S5) — bump it here and all three follow.
+inline constexpr int kMaxOcclusionRayCount = 16;
+
+/// @brief Result of one source's occlusion measurement.
 struct OcclusionMeasurement
 {
-    /// @brief Whether the listener→source line hit solid geometry.
+    /// @brief Whether any sampled ray hit solid geometry.
     bool blocked = false;
 
-    /// @brief Target occlusion fraction the source slews toward. Binary in S2
-    ///        (0 = clear line of sight, 1 = blocked); graded across N rays in S3.
+    /// @brief Target occlusion fraction the source slews toward:
+    ///        `blockedRays / rayCount` ∈ [0,1]. Binary when `rayCount == 1`
+    ///        (0 = clear line of sight, 1 = blocked); graded across N rays.
     float targetFraction = 0.0f;
 
-    /// @brief Surface preset of the nearest blocking body. Only meaningful when
+    /// @brief Surface preset of the nearest blocking body (smallest hit
+    ///        distance across all blocked rays). Only meaningful when
     ///        `blocked`; a clear path leaves it `Air` and the caller holds the
     ///        source's previous material (irrelevant at fraction 0).
     AudioOcclusionMaterialPreset material = AudioOcclusionMaterialPreset::Air;
 };
 
-/// @brief Casts the S2 single centre ray from the listener toward the source and
-///        returns the occlusion measurement. A coincident listener/source
-///        (zero-length direction) is treated as unoccluded — no cast.
+/// @brief The fixed per-ray offset table: entry 0 is the zero vector (ray 0
+///        aims at the exact source centre); entries 1..N-1 are a
+///        Fibonacci-sphere distribution of unit vectors over the source
+///        sphere. Scaled by `sourceRadius` at the call site. Deterministic (no
+///        RNG) so occlusion never shimmers and tests are reproducible.
 ///
-/// @param physics    Settled physics world (read-only narrow-phase query).
+/// A Fibonacci lattice needs `sin/cos/sqrt`, so the table is built once at
+/// first use (thread-safe static init) rather than as a `constexpr` literal —
+/// the property that matters (a stable, reproducible point set) is preserved.
+const std::array<glm::vec3, kMaxOcclusionRayCount>& occlusionRayOffsets();
+
+/// @brief Casts `rayCount` rays from the listener toward points sampled inside
+///        a sphere of radius `sourceRadius` around the source, and returns the
+///        volumetric occlusion measurement. `rayCount == 1` samples only the
+///        centre → the binary single-ray case. A per-ray coincident
+///        listener/target (zero-length direction) is skipped, not cast.
+///
+/// @param physics     Settled physics world (read-only narrow-phase query).
 /// @param listenerPos World-space listener (camera) position — the ray origin.
-/// @param sourcePos  World-space source position — the ray target.
-/// @param ignoreBody The source's own physics body, excluded so a source can
-///                   never occlude itself. Pass an invalid id ({}) when the
-///                   source has no body.
-/// @note Main-thread only — resolves the blocking body's material via
+/// @param sourcePos   World-space source position — the sphere centre.
+/// @param rayCount    Rays to sample, clamped to [1, kMaxOcclusionRayCount].
+/// @param sourceRadius Radius of the source sampling sphere (metres).
+/// @param ignoreBody  The source's own physics body, excluded so a source can
+///                    never occlude itself. Pass an invalid id ({}) when the
+///                    source has no body.
+/// @note Main-thread only — resolves the nearest blocking body's material via
 ///       `getSurfaceMaterial`, which takes a body lock (`physics_world.h`).
 OcclusionMeasurement measureOcclusion(const PhysicsWorld& physics,
                                       const glm::vec3& listenerPos,
                                       const glm::vec3& sourcePos,
+                                      int rayCount = 1,
+                                      float sourceRadius = 0.0f,
                                       JPH::BodyID ignoreBody = JPH::BodyID());
 
 /// @brief Eases `current` toward `target` by `slewAmount` ∈ [0,1] and returns
