@@ -16,6 +16,7 @@
 
 #include "audio/audio_occlusion.h"
 #include "audio/occlusion_material_map.h"
+#include "core/job_system.h"
 #include "physics/physics_world.h"
 #include "physics/surface_material.h"
 
@@ -190,6 +191,94 @@ TEST(AudioOcclusionSystem, MultiRayPicksNearestBlockerMaterial)
     EXPECT_EQ(m.material, occlusionPresetForSurface(SurfaceMaterial::Metal));
 
     world.shutdown();
+}
+
+// ---------------------------------------------------------------------------
+// S4 — MT2 parallel batch + budget planner
+// ---------------------------------------------------------------------------
+
+// The batched parallel path in a synchronous JobSystem must produce bit-
+// identical results to calling the serial measureOcclusion per source — the
+// determinism guarantee tests depend on (and replay needs).
+TEST(AudioOcclusionSystem, BatchInSyncModeEqualsSerial)
+{
+    PhysicsWorld world;
+    ASSERT_TRUE(world.initialize());
+
+    // A blocking wall and a clear lane, so the batch mixes blocked + open.
+    makeWall(world, glm::vec3(0.0f, 0.0f, 5.0f), glm::vec3(4.0f, 4.0f, 0.5f),
+             SurfaceMaterial::Metal);
+
+    const glm::vec3 listener(0.0f);
+    std::vector<OcclusionQuery> queries;
+    queries.push_back({listener, glm::vec3(0.0f, 0.0f, 10.0f), 8, 0.5f, {}});
+    queries.push_back({listener, glm::vec3(20.0f, 0.0f, 0.0f), 8, 0.5f, {}}); // clear
+    queries.push_back({listener, glm::vec3(0.0f, 0.0f, 10.0f), 1, 0.0f, {}}); // binary
+
+    JobSystem jobs(JobSystemConfig{0});  // synchronous — deterministic
+    ASSERT_TRUE(jobs.isSynchronous());
+    const std::vector<OcclusionMeasurement> batch =
+        measureOcclusionBatch(world, jobs, queries);
+
+    ASSERT_EQ(batch.size(), queries.size());
+    for (std::size_t i = 0; i < queries.size(); ++i)
+    {
+        const OcclusionMeasurement serial = measureOcclusion(
+            world, queries[i].listenerPos, queries[i].sourcePos,
+            queries[i].rayCount, queries[i].sourceRadius, queries[i].ignoreBody);
+        EXPECT_EQ(batch[i].blocked, serial.blocked) << "query " << i;
+        EXPECT_FLOAT_EQ(batch[i].targetFraction, serial.targetFraction)
+            << "query " << i;
+        EXPECT_EQ(batch[i].material, serial.material) << "query " << i;
+    }
+
+    world.shutdown();
+}
+
+// An empty batch is a valid no-op (empty scene / all culled): parallelFor(0)
+// completes, wait no-ops, and no rays are cast.
+TEST(AudioOcclusionSystem, EmptyBatchIsNoOp)
+{
+    PhysicsWorld world;
+    ASSERT_TRUE(world.initialize());
+    JobSystem jobs(JobSystemConfig{0});
+    EXPECT_TRUE(measureOcclusionBatch(world, jobs, {}).empty());
+    world.shutdown();
+}
+
+// Under budget, every eligible source is serviced and the cursor resets — the
+// default-settings case (256 rays < 512 budget), so round-robin never engages.
+TEST(AudioOcclusionSystem, BudgetPlanServicesAllWhenUnderBudget)
+{
+    const OcclusionServicingPlan plan =
+        planOcclusionServicing(/*eligible*/ 32, /*rayCount*/ 8,
+                               /*budget*/ 512, /*cursor*/ 0);
+    EXPECT_FALSE(plan.engaged);
+    EXPECT_EQ(plan.serviced.size(), 32u);
+    EXPECT_EQ(plan.nextCursor, 0);
+}
+
+// Over budget, only the largest prefix that fits is serviced, starting at the
+// cursor and wrapping, with the cursor advancing so later frames cover the rest.
+TEST(AudioOcclusionSystem, BudgetPlanRoundRobinsWhenOverBudget)
+{
+    // 10 sources × 8 rays = 80 offered, budget 40 → 5 serviceable per frame.
+    const OcclusionServicingPlan f0 =
+        planOcclusionServicing(10, 8, 40, 0);
+    EXPECT_TRUE(f0.engaged);
+    ASSERT_EQ(f0.serviced.size(), 5u);
+    EXPECT_EQ(f0.serviced.front(), 0);
+    EXPECT_EQ(f0.serviced.back(), 4);
+    EXPECT_EQ(f0.nextCursor, 5);
+
+    // Next frame resumes at the cursor and wraps around the end.
+    const OcclusionServicingPlan f1 =
+        planOcclusionServicing(10, 8, 40, f0.nextCursor);
+    EXPECT_TRUE(f1.engaged);
+    ASSERT_EQ(f1.serviced.size(), 5u);
+    EXPECT_EQ(f1.serviced.front(), 5);
+    EXPECT_EQ(f1.serviced.back(), 9);
+    EXPECT_EQ(f1.nextCursor, 0);  // (5 + 5) % 10
 }
 
 // The offset table is the deterministic point set the fan samples: fixed size,
