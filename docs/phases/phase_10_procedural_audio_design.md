@@ -691,6 +691,55 @@ Script authors should treat point/normal as valid on Enter only.
 > all pins; Exit resolves `otherEntity` when the owner is the B-side; Enter
 > ignores an Exit event; an uninvolved-entity collision does not fire.
 
+> **S9 as-built (2026-07-01, commits e-series):** settings + editor, following
+> the L5 field→JSON→ApplySink→ApplyTargets→panel pattern. Deviations / pinned
+> choices:
+> 1. **Two toggles, both on `AudioEngine`:** `proceduralAudioEnabled` (default
+>    on) and `emitUntaggedCollisions` (default off) are additive keys on the v4
+>    schema (tolerant `j.value(key, default)` on load — no version bump, mirrors
+>    AX5/6/9). Both flags live on `AudioEngine` as stored bools (like the
+>    AX5/6/9 toggles), so the `ProceduralAudioApplySink` wraps `AudioEngine` and
+>    no core→systems coupling is introduced. `ImpactAudioSystem` dropped its own
+>    `m_emitUntaggedCollisions` and reads `AudioEngine::emitUntaggedCollisions()`
+>    live — single source of truth for the impact decision *and* the settings
+>    UI. The pure `decideImpact(event, bool)` policy is unchanged.
+> 2. **Master mute gated at `playSynth`, not per-system:** the design's
+>    "toggle mutes emission" is satisfied by one early-return at the single
+>    `AudioEngine::playSynth` entry point both footsteps and impacts route
+>    through — no per-emitter gating. Distinct from the Sfx bus gain (which
+>    mutes *all* effects); this silences only synthesised footsteps/impacts.
+> 3. **Editor material-assign widget:** a *Surface Material* dropdown on the
+>    Rigid Body inspector, populated from `surfaceMaterialLabel` over
+>    `[0, kSurfaceMaterialCount)` (new constant next to the enum, guarded by a
+>    span test) and wired into the existing `RigidBodySnapshot` undo path.
+>    `createBody` already reads `rb.surfaceMaterial` into `setBodyTags`, so an
+>    assigned material drives the S6/S7 audio.
+> 4. **Debug panel:** read-only procedural-audio status lines in the Audio
+>    panel's Debug tab, beside the AX5/AX6 readouts (kept minimal — no emission
+>    counters, which would need per-system plumbing not justified by the need).
+> 5. **Persistence gap surfaced (not fixed):** the 3D `RigidBody` component has
+>    *no* scene-JSON serializer at all — shape/motion/friction/restitution and
+>    now `surfaceMaterial` are edited live with undo but not written to scene
+>    files (only the 2D body persists). Orthogonal to AX4; left for a dedicated
+>    slice rather than smuggled into this bundle (Rule 11).
+>
+> Tests: `SettingsApply.ProceduralAudioForwardedVerbatim`, round-trip +
+> missing-key-default coverage extended, `SurfaceMaterial.CountSpansTheEnum`.
+
+> **S10 as-built (2026-07-01):** close-out.
+> 1. **Jolt-free header split (S8 debt paid):** `CollisionEvent`,
+>    `PendingContact`, and `kMinImpactSpeed` moved to the Jolt-free
+>    `physics/collision_event.h`; `contact_event.h` keeps only the
+>    `ContactEventListener` and includes the new header. Both payloads were
+>    already Jolt-free (a pure move, no behaviour change); scripting + impact
+>    audio TUs no longer pull in Jolt.
+> 2. **Parity green:** `AudioCurvesParity` (4 tests) locks the runtime
+>    `audio_curves.h` against the Workbench reference values.
+> 3. CHANGELOG entry added (bundle-level); AX4 roadmap bullet + the GFM
+>    "Sound material interactions" item flipped ✅; `[3D_E-0022]` annotated
+>    (runtime intent delivered; K-weighting deferred).
+> Full suite green (3680) under ASan+UBSan across the bundle.
+
 ---
 
 ## 9. Formula Workbench audio category (S1) — closes `[3D_E-0022]`

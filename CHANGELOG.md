@@ -22,6 +22,53 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-07-01 Added — Procedural / material-aware audio (AX4)
+
+Footsteps and collision impacts are now **synthesised per surface material**
+instead of shipped as fixed clips — walk on stone and it rings like stone,
+drop a metal crate and it clangs. The full bundle (design doc
+`docs/phases/phase_10_procedural_audio_design.md`, cold-eyes clean), slices
+S2–S10 (S1 — the Formula Workbench `audio` curve category — shipped earlier):
+
+- **Surface-material tag** (`engine/physics/surface_material.h`): a dense,
+  append-only `SurfaceMaterial` enum (Stone/Wood/Metal/Cloth/Sand/Water/Grass/
+  Dirt/Glass, plus Default) packed with the owning entity id into the Jolt body
+  user-data word, so a contact can recover both without a side map.
+- **Collision-event bus** (`physics/collision_event.h` payloads +
+  `physics/contact_event.h` Jolt listener): one `CollisionEvent` per contact
+  onset (Enter) + one per removal (Exit), drained on the main thread and
+  published on the synchronous EventBus. Threshold/suppression live in the
+  audio subscriber so Enter/Exit stay balanced for scripting.
+- **Synthesis core** (`engine/audio/procedural/`): modal synthesis for solid
+  surfaces + PhISEM for aggregates (sand/gravel/grass/water), fed by the
+  Workbench-fit `audio_curves.h` (loudness-gain / pitch-scale / event-rate,
+  pinned by a parity test) and material sound banks
+  (`assets/audio/synthesis/footstep_modal.json`). Exposed through one entry
+  point: `AudioEngine::playSynth(material, approachSpeed, pos, envelopeScale)`.
+- **Footstep emission** (`engine/systems/footstep_system.*`): distance-based,
+  speed-scaled stride cadence + a landing edge (louder strike), material read
+  from the ground body via Jolt `GetGroundBodyID` (no extra ray).
+- **Impact emission** (`engine/systems/impact_audio_system.*`): subscribes to
+  the collision bus; the harder of the two struck materials wins the timbre;
+  sub-threshold and untagged↔untagged contacts stay silent by default.
+- **Scripting unblock**: the `OnCollisionEnter` / `OnCollisionExit` visual-
+  script nodes are wired to the same bus (Enter carries otherEntity + contact
+  point + normal; Exit carries otherEntity only).
+- **Settings + editor** (S9): two Audio-tab toggles — *Procedural footstep /
+  impact sounds* (master mute, gated at `playSynth`) and *Sound untagged
+  collisions* (debug, default off) — persisted (additive v4-schema keys) and
+  live-applied through a new `ProceduralAudioApplySink`. Inspector gains a
+  *Surface Material* dropdown on the Rigid Body component (undoable), and the
+  Audio panel's Debug tab shows the procedural-audio state.
+- **Layering cleanup** (S10): `CollisionEvent` / `PendingContact` /
+  `kMinImpactSpeed` split into the Jolt-free `physics/collision_event.h` so
+  audio + scripting subscribers no longer pull the Jolt backend into their TU.
+
+Deferred by design: K-weighting for the aggregate curve, and full scene-JSON
+persistence of the 3D `RigidBody` component (a pre-existing gap affecting all
+its fields, not just the new material tag). Closes the runtime intent of
+`[3D_E-0022]` (Formula Workbench audio category).
+
 ### 2026-06-29 Added — Side-chain ducking from any bus (AX13)
 
 Fourth slice of the Phase 10 Audio quick-wins bundle. Proper mix automation:
