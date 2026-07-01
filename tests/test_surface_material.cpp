@@ -69,6 +69,23 @@ TEST(SurfaceMaterial, LabelsAreStable)
     EXPECT_STREQ(surfaceMaterialLabel(SurfaceMaterial::Grass), "Grass");
 }
 
+// AX4 S9 — the editor material-assign picker iterates [0, kSurfaceMaterialCount)
+// and labels each entry via surfaceMaterialLabel. Guard that the count exactly
+// spans the enum: it must reach Glass (the last member) and every index in
+// range must carry its own non-"Default" label (a stale count would drop the
+// tail materials from the dropdown or mislabel them).
+TEST(SurfaceMaterial, CountSpansTheEnum)
+{
+    EXPECT_EQ(kSurfaceMaterialCount,
+              static_cast<int>(SurfaceMaterial::Glass) + 1);
+    for (int i = 1; i < kSurfaceMaterialCount; ++i)
+    {
+        EXPECT_STRNE(surfaceMaterialLabel(static_cast<SurfaceMaterial>(i)),
+                     "Default")
+            << "index " << i << " has no distinct label";
+    }
+}
+
 // ---------------------------------------------------------------------------
 // PhysicsWorld set -> get round-trip (main-thread accessors)
 // ---------------------------------------------------------------------------

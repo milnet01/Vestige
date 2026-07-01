@@ -1878,21 +1878,23 @@ struct RigidBodySnapshot
     float mass = 1.0f;
     float friction = 0.5f;
     float restitution = 0.0f;
+    SurfaceMaterial surfaceMaterial = SurfaceMaterial::Default;  // AX4 S9
 
     static RigidBodySnapshot capture(const RigidBody& rb)
     {
         return {rb.shapeType, rb.shapeSize, rb.motionType,
-                rb.mass, rb.friction, rb.restitution};
+                rb.mass, rb.friction, rb.restitution, rb.surfaceMaterial};
     }
 
     static void apply(RigidBody& rb, const RigidBodySnapshot& s)
     {
-        rb.shapeType   = s.shapeType;
-        rb.shapeSize   = s.shapeSize;
-        rb.motionType  = s.motionType;
-        rb.mass        = s.mass;
-        rb.friction    = s.friction;
-        rb.restitution = s.restitution;
+        rb.shapeType       = s.shapeType;
+        rb.shapeSize       = s.shapeSize;
+        rb.motionType      = s.motionType;
+        rb.mass            = s.mass;
+        rb.friction        = s.friction;
+        rb.restitution     = s.restitution;
+        rb.surfaceMaterial = s.surfaceMaterial;
     }
 
     bool operator==(const RigidBodySnapshot& o) const
@@ -1902,7 +1904,8 @@ struct RigidBodySnapshot
             && motionType == o.motionType
             && mass == o.mass
             && friction == o.friction
-            && restitution == o.restitution;
+            && restitution == o.restitution
+            && surfaceMaterial == o.surfaceMaterial;
     }
 };
 
@@ -1993,6 +1996,31 @@ void InspectorPanel::drawRigidBody(Entity& entity)
     }
     tr.track(ImGui::DragFloat("Friction", &rb->friction, 0.01f, 0.0f, 2.0f, "%.2f"));
     tr.track(ImGui::DragFloat("Restitution", &rb->restitution, 0.01f, 0.0f, 1.0f, "%.2f"));
+
+    // --- Surface material (AX4 S9) — what this body is made of when struck;
+    //     selects the procedural footstep / impact sound bank. Labels come
+    //     from surfaceMaterialLabel so the picker can't drift from the enum.
+    const char* materialNames[kSurfaceMaterialCount];
+    for (int i = 0; i < kSurfaceMaterialCount; ++i)
+    {
+        materialNames[i] = surfaceMaterialLabel(static_cast<SurfaceMaterial>(i));
+    }
+    int materialIdx = static_cast<int>(rb->surfaceMaterial);
+    bool materialChanged = ImGui::Combo("Surface Material", &materialIdx,
+                                        materialNames, kSurfaceMaterialCount);
+    tr.track(materialChanged);
+    if (materialChanged)
+    {
+        rb->surfaceMaterial = static_cast<SurfaceMaterial>(materialIdx);
+    }
+    ImGui::SameLine();
+    ImGui::TextDisabled("(?)");
+    if (ImGui::IsItemHovered())
+    {
+        ImGui::SetTooltip(
+            "Material this body is made of. Drives the synthesised footstep\n"
+            "and collision-impact sound when something walks on or hits it.");
+    }
 
     if (tr.shouldCommit())
     {

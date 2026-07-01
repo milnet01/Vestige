@@ -43,6 +43,11 @@ enum class SurfaceMaterial : std::uint8_t
     Glass,
 };
 
+/// @brief Count of `SurfaceMaterial` members — for editor pickers / iteration
+///        over the dense [0, N) range. The enum is append-only, so this only
+///        ever grows; keep it in step when adding a member.
+inline constexpr int kSurfaceMaterialCount = 10;
+
 /// @brief Entity handle as stored in body user-data. 0 == none
 ///        (`Entity::getId()` is never 0). This is the plain numeric id, NOT
 ///        the heavyweight, non-copyable `Entity` scene-graph object.

@@ -416,6 +416,11 @@ void AudioPanel::drawDebugTab(AudioSystem* audioSystem)
                 engine.isAirAbsorptionEnabled() ? "on" : "off");
     // AX5 — audio LOD-ladder master toggle state.
     ImGui::Text("Audio LOD: %s", engine.isLodEnabled() ? "on" : "off");
+    // AX4 S9 — procedural (synthesised) footstep / impact audio state.
+    ImGui::Text("Procedural audio: %s",
+                engine.isProceduralAudioEnabled() ? "on" : "off");
+    ImGui::Text("Untagged-collision sound: %s",
+                engine.emitUntaggedCollisions() ? "on" : "off");
     // AX13 — side-chain duck routes loaded from mix_graph.json (0 = the
     // global manual duck only).
     ImGui::Text("Side-chain duck routes: %zu",
