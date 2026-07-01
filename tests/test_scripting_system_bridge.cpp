@@ -16,7 +16,7 @@
 #include "scripting/latent_nodes.h"
 #include "core/engine.h"
 #include "core/event.h"
-#include "physics/contact_event.h"
+#include "physics/collision_event.h"
 
 #include <gtest/gtest.h>
 

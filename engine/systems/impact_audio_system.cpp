@@ -9,7 +9,7 @@
 #include "core/engine.h"
 #include "core/event_bus.h"
 #include "core/system_registry.h"
-#include "physics/contact_event.h"
+#include "physics/collision_event.h"
 #include "systems/audio_system.h"
 
 namespace Vestige

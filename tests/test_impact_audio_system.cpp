@@ -6,7 +6,7 @@
 ///        engine-free decision pieces (material-hardness dominance, the
 ///        threshold / untagged-suppression gate) and the system's no-op guard.
 #include "systems/impact_audio_system.h"
-#include "physics/contact_event.h"
+#include "physics/collision_event.h"
 
 #include <gtest/gtest.h>
 

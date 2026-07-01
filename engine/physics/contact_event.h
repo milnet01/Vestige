@@ -2,10 +2,15 @@
 // SPDX-License-Identifier: MIT
 
 /// @file contact_event.h
-/// @brief Collision-event bus (AX4 S3): a single Jolt ContactListener that
-///        turns physics contacts into EventBus `CollisionEvent`s for the
+/// @brief Collision-event bus producer (AX4 S3): a single Jolt ContactListener
+///        that turns physics contacts into EventBus `CollisionEvent`s for the
 ///        procedural-audio impact path (S7) and the scripting
 ///        OnCollisionEnter/Exit nodes (S8).
+///
+/// The Jolt-free payloads (`CollisionEvent`, `PendingContact`, `kMinImpactSpeed`)
+/// live in `physics/collision_event.h` so audio/scripting subscribers can
+/// consume them without pulling Jolt into their TU (S10 header split). This
+/// header holds only the `ContactEventListener`, which genuinely needs Jolt.
 ///
 /// Threading contract (Jolt 5.3.0, verified against ContactListener.h:66-116):
 /// the OnContact* callbacks run on multiple Jolt job threads at once and may
@@ -29,15 +34,13 @@
 /// un-thresholded Exit would not be) and keeps the bus generic.
 #pragma once
 
-#include "core/event.h"
-#include "physics/surface_material.h"
+#include "physics/collision_event.h"   // CollisionEvent, PendingContact, kMinImpactSpeed
+#include "physics/surface_material.h"  // unpackEntity / unpackMaterial
 
 #include <Jolt/Jolt.h>
 #include <Jolt/Physics/Body/Body.h>
 #include <Jolt/Physics/Collision/ContactListener.h>
 #include <Jolt/Physics/Collision/Shape/SubShapeIDPair.h>
-
-#include <glm/glm.hpp>
 
 #include <cmath>
 #include <cstdint>
@@ -47,60 +50,6 @@
 
 namespace Vestige
 {
-
-/// @brief Recommended minimum normal approach speed (m/s) below which a
-///        contact is inaudible. NOT applied in this layer — the bus publishes
-///        every contact onset; the *audio* subscriber (S7) uses this to decide
-///        whether to synthesise an impact. Kept here so producer and consumer
-///        share one number.
-/// TODO: revisit via Formula Workbench (perceptual onset threshold).
-inline constexpr float kMinImpactSpeed = 0.5f;
-
-/// @brief POD enqueued from a Jolt job thread; drained on the main thread.
-///        Not an EventBus event (those must inherit Event + are published
-///        only on the main thread).
-struct PendingContact
-{
-    enum class Phase { Enter, Exit };
-
-    EntityId        entityA = 0;
-    EntityId        entityB = 0;
-    glm::vec3       point{0.0f};            ///< Enter only (zero on Exit).
-    glm::vec3       normal{0.0f};           ///< Enter only.
-    float           approachSpeed = 0.0f;   ///< Enter only, m/s.
-    SurfaceMaterial matA = SurfaceMaterial::Default;  ///< Enter only.
-    SurfaceMaterial matB = SurfaceMaterial::Default;  ///< Enter only.
-    Phase           phase = Phase::Enter;
-};
-
-/// @brief EventBus payload. Fields after the entity ids are valid only when
-///        `isEnter` (Exit cannot carry geometry — Jolt's OnContactRemoved has
-///        no body access at all).
-struct CollisionEvent : public Event
-{
-    EntityId        entityA = 0;
-    EntityId        entityB = 0;
-    glm::vec3       point{0.0f};
-    glm::vec3       normal{0.0f};
-    float           approachSpeed = 0.0f;
-    SurfaceMaterial matA = SurfaceMaterial::Default;
-    SurfaceMaterial matB = SurfaceMaterial::Default;
-    bool            isEnter = true;
-
-    CollisionEvent() = default;
-
-    explicit CollisionEvent(const PendingContact& pc)
-        : entityA(pc.entityA)
-        , entityB(pc.entityB)
-        , point(pc.point)
-        , normal(pc.normal)
-        , approachSpeed(pc.approachSpeed)
-        , matA(pc.matA)
-        , matB(pc.matB)
-        , isEnter(pc.phase == PendingContact::Phase::Enter)
-    {
-    }
-};
 
 /// @brief The single registered Jolt ContactListener. Enqueues contacts on
 ///        job threads; the owning PhysicsWorld drains + publishes them.

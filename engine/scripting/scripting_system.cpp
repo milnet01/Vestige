@@ -10,7 +10,7 @@
 #include "core/engine.h"
 #include "core/system_events.h"
 #include "core/logger.h"
-#include "physics/contact_event.h"  // CollisionEvent (S8 wires OnCollisionEnter/Exit)
+#include "physics/collision_event.h"  // CollisionEvent (S8 wires OnCollisionEnter/Exit) — Jolt-free
 
 #include <algorithm>
 #include <cmath>

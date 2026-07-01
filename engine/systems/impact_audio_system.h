@@ -47,7 +47,7 @@ struct ImpactDecision
 /// @brief Decide whether a collision event synthesises an impact, and with
 ///        which material. Pure — the whole S7 policy in one testable function:
 ///        - Exit events are silent (audio cares about the onset only).
-///        - Below `kMinImpactSpeed` (contact_event.h) is inaudible → silent.
+///        - Below `kMinImpactSpeed` (collision_event.h) is inaudible → silent.
 ///        - Both bodies `Default` (untagged) → silent unless
 ///          `emitUntaggedCollisions` (else an unauthored scene full of untagged
 ///          boxes would thud on every contact — design §8, an explicit gate).
