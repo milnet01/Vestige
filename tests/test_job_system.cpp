@@ -175,3 +175,52 @@ TEST(JobSystem, StressConcurrentSubmitAndParallelFor)
     EXPECT_EQ(counter.load(),
               static_cast<uint64_t>(kRounds) * (kSubmitsPerRound + kRangePerRound));
 }
+
+// runOnMainThread (the one worker-callable verb) must defer work to the next
+// drain — nothing runs until drainMainThreadQueue is called on the main thread.
+TEST(JobSystem, RunOnMainThreadDefersUntilDrain)
+{
+    JobSystem js({2});
+    std::atomic<int> ran{0};
+
+    // Post the main-thread work from INSIDE a worker job.
+    JobHandle h = js.submit([&js, &ran]
+    {
+        js.runOnMainThread([&ran] { ran.fetch_add(1, std::memory_order_relaxed); });
+    });
+    js.wait(h);
+
+    EXPECT_EQ(ran.load(), 0) << "runOnMainThread work must not run before drain";
+    js.drainMainThreadQueue();
+    EXPECT_EQ(ran.load(), 1) << "drain runs the queued main-thread work";
+}
+
+TEST(JobSystem, RunOnMainThreadRunsFifo)
+{
+    JobSystem js({0});   // sync mode — no workers needed to exercise the queue.
+    std::vector<int> order;
+    for (int i = 0; i < 5; ++i)
+    {
+        js.runOnMainThread([&order, i] { order.push_back(i); });
+    }
+    js.drainMainThreadQueue();
+    EXPECT_EQ(order, (std::vector<int>{0, 1, 2, 3, 4}));
+}
+
+// A callback that re-posts must land in the NEXT drain, not recurse — proves the
+// queue mutex isn't held while callbacks run (no reentrant deadlock).
+TEST(JobSystem, RunOnMainThreadReentrantPostsToNextDrain)
+{
+    JobSystem js({0});
+    int count = 0;
+    js.runOnMainThread([&js, &count]
+    {
+        ++count;
+        js.runOnMainThread([&count] { ++count; });
+    });
+
+    js.drainMainThreadQueue();
+    EXPECT_EQ(count, 1) << "re-posted work waits for the next drain";
+    js.drainMainThreadQueue();
+    EXPECT_EQ(count, 2);
+}

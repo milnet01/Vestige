@@ -158,6 +158,40 @@ void JobSystem::wait(const JobHandle& handle)
     m_scheduler->WaitforTask(handle.m_task.get());
 }
 
+void JobSystem::runOnMainThread(std::function<void()> work)
+{
+    // Deliberately NOT assertMainThread() — this is the one worker-callable verb.
+    if (!work)
+    {
+        return;
+    }
+    std::lock_guard<std::mutex> lock(m_mainQueueMutex);
+    m_mainQueue.push_back(std::move(work));
+}
+
+void JobSystem::drainMainThreadQueue()
+{
+    assertMainThread();
+
+    // Swap the queue out under the lock, then run the callbacks WITHOUT holding
+    // it — a callback may post more main-thread work (that lands in the next
+    // drain) and must not deadlock on the queue mutex.
+    std::vector<std::function<void()>> local;
+    {
+        std::lock_guard<std::mutex> lock(m_mainQueueMutex);
+        local.swap(m_mainQueue);
+    }
+    for (std::function<void()>& fn : local)   // FIFO — insertion order preserved.
+    {
+        if (fn)
+        {
+            fn();
+        }
+    }
+
+    reapCompleted();   // frame-top reclamation of completed fire-and-forget tasks.
+}
+
 void JobSystem::reapCompleted()
 {
     std::lock_guard<std::mutex> lock(m_inFlightMutex);

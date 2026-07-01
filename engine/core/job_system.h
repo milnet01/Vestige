@@ -99,6 +99,18 @@ public:
     /// on an empty/complete handle and in synchronous mode. Main-thread-only.
     void wait(const JobHandle& handle);
 
+    /// Enqueue `work` to run on the MAIN thread. This is the ONLY verb that is
+    /// safe to call from a worker thread — its point is to marshal a result back
+    /// to the main thread. The work runs when drainMainThreadQueue() is next
+    /// called (frame top). No-op if `work` is empty.
+    void runOnMainThread(std::function<void()> work);
+
+    /// Run all queued runOnMainThread work in FIFO order, then reap completed
+    /// fire-and-forget tasks. MAIN-THREAD-ONLY (asserted). The Engine calls this
+    /// once at the top of each frame. Work re-posted by a drained callback lands
+    /// in the next drain (no reentrant deadlock).
+    void drainMainThreadQueue();
+
     /// Actual worker-thread count (0 in synchronous mode).
     int workerCount() const { return m_workerCount; }
 
@@ -130,6 +142,12 @@ private:
     /// mutex only guards against a future relaxation of that rule.
     std::mutex m_inFlightMutex;
     std::vector<std::shared_ptr<detail::JobTask>> m_inFlight;
+
+    /// runOnMainThread queue: pushed from any thread, drained on the main
+    /// thread. The one piece of genuinely cross-thread mutable state, guarded by
+    /// its own mutex (never held while a queued callback runs).
+    std::mutex m_mainQueueMutex;
+    std::vector<std::function<void()>> m_mainQueue;
 };
 
 }   // namespace Vestige
