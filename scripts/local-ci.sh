@@ -35,11 +35,15 @@
 #
 # Usage:
 #   scripts/local-ci.sh            # full mirror (all 4 stages) — the push-safety gate
-#   scripts/local-ci.sh --quick    # Debug build+test + gitleaks only (fast smoke)
+#   scripts/local-ci.sh --quick    # Debug build+test + gitleaks only (fast smoke,
+#                                  # NOT push-safe: skips the Tier-1 static audit)
 #   scripts/local-ci.sh -j 8        # cap parallel build/test jobs (default: nproc)
 #   scripts/local-ci.sh -h          # this help
 #
-# Exit code: 0 if every run stage passed, 1 otherwise. The summary at the end
+# Exit code: 0 if every run stage passed, 1 if any FAILED. The closing line only
+# reads "safe to push" after a FULL mirror (no SKIPped stage, clang-tidy present)
+# — a --quick or partial run reports "PARTIAL mirror — NOT push-verified" at
+# exit 0 so a smoke green can't be mistaken for the CI push gate. The summary
 # lists each stage's result and timing so a failing push shows everything to fix
 # in one pass (stages run independently; a build failure skips only its own
 # test step, not the other stages).
@@ -219,19 +223,32 @@ fi
 echo
 banner "local-ci summary"
 fails=0
+skipped_stages=()
 for i in "${!STAGE_NAMES[@]}"; do
     case "${STAGE_RESULTS[$i]}" in
         ok)   mark="PASS" ;;
         fail) mark="FAIL"; fails=$((fails + 1)) ;;
-        skip) mark="SKIP" ;;
+        skip) mark="SKIP"; skipped_stages+=("${STAGE_NAMES[$i]}") ;;
     esac
     printf '  %-22s %-4s  %3ds\n' "${STAGE_NAMES[$i]}" "$mark" "${STAGE_TIMES[$i]}"
 done
 hr
-if [[ $fails -eq 0 ]]; then
-    echo "All run stages passed — safe to push."
-    exit 0
-else
+if [[ $fails -gt 0 ]]; then
     echo "$fails stage(s) FAILED — fix before pushing (CI would reject this)."
     exit 1
 fi
+
+# "Safe to push" is earned ONLY by a full mirror of the CI push gates. A --quick
+# run SKIPs the Tier-1 audit (the cppcheck/clang-tidy gate CI enforces) and the
+# Release build; a missing clang-tidy makes the audit partial. Any of those means
+# a green here does NOT imply a green in CI — the exact trap that let three
+# containerOutOfBounds pushes through. Surface it instead of claiming safety.
+if [[ ${#skipped_stages[@]} -gt 0 || $CLANG_TIDY_OK -eq 0 ]]; then
+    echo "Ran stages passed, but this is a PARTIAL mirror — NOT push-verified."
+    [[ ${#skipped_stages[@]} -gt 0 ]] && echo "  skipped: ${skipped_stages[*]}"
+    [[ $CLANG_TIDY_OK -eq 0 ]] && echo "  clang-tidy unavailable — audit ran without it."
+    echo "  Run ./scripts/local-ci.sh (no --quick, full toolchain) before pushing."
+    exit 0
+fi
+echo "Full CI mirror passed — safe to push."
+exit 0

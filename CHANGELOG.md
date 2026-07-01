@@ -22,6 +22,19 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-07-01 Fixed — `local-ci.sh` no longer calls a `--quick` smoke run "safe to push"
+
+The pre-push gate could report **"safe to push"** after a `--quick` run even
+though that mode SKIPs the Tier-1 static audit (the cppcheck / clang-tidy stage
+CI actually gates on) and the Release build. That is how three consecutive
+pushes went out green locally and reddened CI on the *same* cppcheck
+`containerOutOfBounds` finding — the audit simply never ran locally. The summary
+now earns "Full CI mirror passed — safe to push" only after a full run with no
+SKIPped stage and clang-tidy present; a `--quick` or partial run instead prints
+"PARTIAL mirror — NOT push-verified", names the skipped stages, and points at the
+full command. (It was never version drift: local cppcheck 2.21 flags the finding
+identically to CI's 2.13.)
+
 ### 2026-07-01 Added — Procedural / material-aware audio (AX4)
 
 Footsteps and collision impacts are now **synthesised per surface material**
