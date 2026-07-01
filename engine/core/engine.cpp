@@ -18,6 +18,7 @@
 #include "systems/footstep_system.h"
 #include "systems/impact_audio_system.h"
 #include "systems/lighting_system.h"
+#include "systems/audio_occlusion_system.h"
 #include "systems/audio_system.h"
 #include "systems/music_system.h"
 #include "audio/audio_music_player.h"
@@ -174,6 +175,11 @@ bool Engine::initialize(const EngineConfig& config)
     m_systemRegistry.registerSystem<LightingSystem>();
 
     // Phase 9C: new domain systems
+    // AX1: geometric audio occlusion. Registered BEFORE AudioSystem so the
+    // PostCamera stable-sort runs it first — it writes each source's
+    // occlusionFraction/occlusionMaterial from scene geometry, which
+    // AudioSystem's compose loop then reads the same frame.
+    m_systemRegistry.registerSystem<AudioOcclusionSystem>();
     auto* audioSys = m_systemRegistry.registerSystem<AudioSystem>();
 
     // W8 part 2/2: streaming-music player + its ISystem wrapper. The player

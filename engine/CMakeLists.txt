@@ -301,6 +301,7 @@ set(ENGINE_SOURCES
     audio/procedural/phisem.cpp
     audio/procedural/material_sound_bank.cpp
     systems/audio_system.cpp
+    systems/audio_occlusion_system.cpp
     systems/music_system.cpp
     # UI/HUD system
     ui/sprite_batch_renderer.cpp
