@@ -514,6 +514,19 @@ public:
     /// @brief Returns whether the audio LOD ladder is enabled (default true).
     bool isLodEnabled() const { return m_lodEnabled; }
 
+    /// @brief AX1 — geometric audio occlusion settings. Stored only; read each
+    ///        frame by `AudioOcclusionSystem` (which owns no settings of its
+    ///        own). Off casts no rays and releases every source to unoccluded.
+    ///        Do **not** touch the device.
+    void setOcclusionEnabled(bool enabled)   { m_occlusionEnabled = enabled; }
+    bool isOcclusionEnabled() const          { return m_occlusionEnabled; }
+    void setOcclusionRayCount(int count)     { m_occlusionRayCount = count; }
+    int  occlusionRayCount() const           { return m_occlusionRayCount; }
+    void setOcclusionMaxDistance(float m)    { m_occlusionMaxDistance = m; }
+    float occlusionMaxDistance() const       { return m_occlusionMaxDistance; }
+    void setOcclusionSourceRadius(float r)   { m_occlusionSourceRadius = r; }
+    float occlusionSourceRadius() const      { return m_occlusionSourceRadius; }
+
     /// @brief AX4 S9 — master toggle for procedural (synthesised) audio:
     ///        footsteps + collision impacts. When off, `playSynth` early-returns
     ///        without synthesising or acquiring a source, muting all procedural
@@ -664,6 +677,10 @@ private:
     bool         m_lodEnabled           = true;  ///< AX5 LOD-ladder toggle (read by AudioSystem).
     bool         m_proceduralAudioEnabled = true;  ///< AX4 S9 master procedural-audio toggle (gates playSynth).
     bool         m_emitUntaggedCollisions = false; ///< AX4 S9 Default↔Default impact gate (read by ImpactAudioSystem).
+    bool         m_occlusionEnabled       = true;   ///< AX1 occlusion master toggle (read by AudioOcclusionSystem).
+    int          m_occlusionRayCount      = 8;      ///< AX1 rays/source [1,16].
+    float        m_occlusionMaxDistance   = 40.0f;  ///< AX1 cull radius (m).
+    float        m_occlusionSourceRadius  = 0.5f;   ///< AX1 sample-sphere radius (m).
 
     // AX11 — audio device hot-swap. `m_alcReopenDeviceSOFT` is the per-device
     // `ALC_SOFT_reopen_device` entry point; the two event pointers are the

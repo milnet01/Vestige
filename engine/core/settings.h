@@ -172,6 +172,23 @@ struct AudioSettings
     ///        quiet). Additive key on the v4 schema (tolerant default on load).
     bool emitUntaggedCollisions = false;
 
+    /// @brief AX1 — geometric audio occlusion master toggle. On by default; off
+    ///        casts no rays and releases every source to unoccluded within the
+    ///        slew time. Additive key (tolerant default on load).
+    bool occlusionEnabled = true;
+
+    /// @brief AX1 — rays cast per spatial source (volumetric source sampling).
+    ///        Clamped to [1, kMaxOcclusionRayCount(16)]; 1 = binary blocked/clear.
+    int occlusionRayCount = 8;
+
+    /// @brief AX1 — cull radius in metres: beyond it, occlusion is imperceptible
+    ///        under distance attenuation, so no rays are cast.
+    float occlusionMaxDistance = 40.0f;
+
+    /// @brief AX1 — radius (metres) of the sphere the extra rays sample toward,
+    ///        so a source near a doorway edge reads a partial fraction.
+    float occlusionSourceRadius = 0.5f;
+
     bool operator==(const AudioSettings& o) const;
     bool operator!=(const AudioSettings& o) const { return !(*this == o); }
 };

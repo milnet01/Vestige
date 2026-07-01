@@ -82,7 +82,11 @@ bool AudioSettings::operator==(const AudioSettings& o) const
         && loudnessEnabled == o.loudnessEnabled
         && loudnessTargetLufs == o.loudnessTargetLufs
         && proceduralAudioEnabled == o.proceduralAudioEnabled
-        && emitUntaggedCollisions == o.emitUntaggedCollisions;
+        && emitUntaggedCollisions == o.emitUntaggedCollisions
+        && occlusionEnabled == o.occlusionEnabled
+        && occlusionRayCount == o.occlusionRayCount
+        && occlusionMaxDistance == o.occlusionMaxDistance
+        && occlusionSourceRadius == o.occlusionSourceRadius;
 }
 
 bool ControlsSettings::operator==(const ControlsSettings& o) const
@@ -255,6 +259,10 @@ json audioToJson(const AudioSettings& a)
         {"loudnessTargetLufs",   a.loudnessTargetLufs},
         {"proceduralAudioEnabled",  a.proceduralAudioEnabled},
         {"emitUntaggedCollisions",  a.emitUntaggedCollisions},
+        {"occlusionEnabled",        a.occlusionEnabled},
+        {"occlusionRayCount",       a.occlusionRayCount},
+        {"occlusionMaxDistance",    a.occlusionMaxDistance},
+        {"occlusionSourceRadius",   a.occlusionSourceRadius},
     };
 }
 
@@ -292,6 +300,12 @@ void audioFromJson(const json& j, AudioSettings& a)
     // AX4 S9 — missing keys keep defaults (procedural on, untagged off).
     a.proceduralAudioEnabled = j.value("proceduralAudioEnabled", a.proceduralAudioEnabled);
     a.emitUntaggedCollisions = j.value("emitUntaggedCollisions", a.emitUntaggedCollisions);
+    // AX1 — missing keys keep defaults (occlusion on, 8 rays, 40 m, 0.5 m).
+    // Ranges enforced in validate().
+    a.occlusionEnabled      = j.value("occlusionEnabled", a.occlusionEnabled);
+    a.occlusionRayCount     = j.value("occlusionRayCount", a.occlusionRayCount);
+    a.occlusionMaxDistance  = j.value("occlusionMaxDistance", a.occlusionMaxDistance);
+    a.occlusionSourceRadius = j.value("occlusionSourceRadius", a.occlusionSourceRadius);
 }
 
 // --- Controls ---
@@ -522,6 +536,28 @@ bool validate(Settings& s)
         {
             clamped = true;
         }
+    }
+
+    // AX1 — occlusion ranges. Ray count in [1, kMaxOcclusionRayCount(16)]; a
+    // hand-edited settings.json out of range is clamped, not trusted. Distances
+    // are non-negative (0 disables casting / collapses the sample sphere).
+    const int rcOrig = s.audio.occlusionRayCount;
+    s.audio.occlusionRayCount = std::clamp(s.audio.occlusionRayCount, 1, 16);
+    if (s.audio.occlusionRayCount != rcOrig)
+    {
+        clamped = true;
+    }
+    const float mdOrig = s.audio.occlusionMaxDistance;
+    s.audio.occlusionMaxDistance = std::max(0.0f, s.audio.occlusionMaxDistance);
+    if (s.audio.occlusionMaxDistance != mdOrig)
+    {
+        clamped = true;
+    }
+    const float srOrig = s.audio.occlusionSourceRadius;
+    s.audio.occlusionSourceRadius = std::max(0.0f, s.audio.occlusionSourceRadius);
+    if (s.audio.occlusionSourceRadius != srOrig)
+    {
+        clamped = true;
     }
 
     // --- Controls ---

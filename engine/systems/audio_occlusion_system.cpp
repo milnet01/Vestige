@@ -5,12 +5,15 @@
 /// @brief AudioOcclusionSystem implementation (AX1 S2 — single-ray skeleton).
 #include "systems/audio_occlusion_system.h"
 
+#include "audio/audio_engine.h"
 #include "audio/audio_mixer.h"
 #include "audio/audio_source_component.h"
 #include "audio/occlusion_material_map.h"
 #include "core/engine.h"
 #include "core/job_system.h"
 #include "core/logger.h"
+#include "core/system_registry.h"
+#include "systems/audio_system.h"
 #include "physics/physics_world.h"
 #include "physics/rigid_body.h"
 #include "scene/component.h"
@@ -310,6 +313,13 @@ float slewOcclusionFraction(float current, float target, float slewAmount)
 bool AudioOcclusionSystem::initialize(Engine& engine)
 {
     m_engine = &engine;
+    // Cache the AudioEngine the occlusion settings live on. All systems are
+    // registered before initializeAll(), so AudioSystem resolves here; its
+    // AudioEngine member exists from construction (device comes up later).
+    if (auto* audioSys = engine.getSystemRegistry().getSystem<AudioSystem>())
+    {
+        m_audioEngine = &audioSys->getAudioEngine();
+    }
     return true;
 }
 
@@ -341,6 +351,20 @@ void AudioOcclusionSystem::update(float deltaTime)
     // guarantees the camera has been stepped this frame.
     const glm::vec3 listenerPos = m_engine->getCamera().getPosition();
     const AudioMixer& mixer     = m_engine->getAudioMixer();
+
+    // Occlusion settings (S5). Fall back to the built-in defaults, enabled,
+    // when there is no AudioSystem (some test harnesses). When disabled, no
+    // source is eligible → every source targets 0 → the slew releases it.
+    const bool enabled = (m_audioEngine == nullptr)
+                         || m_audioEngine->isOcclusionEnabled();
+    const int rayCount = m_audioEngine ? m_audioEngine->occlusionRayCount()
+                                       : kDefaultOcclusionRayCount;
+    const float maxDistance = m_audioEngine
+                                  ? m_audioEngine->occlusionMaxDistance()
+                                  : kDefaultOcclusionMaxDistance;
+    const float sourceRadius = m_audioEngine
+                                   ? m_audioEngine->occlusionSourceRadius()
+                                   : kDefaultOcclusionSourceRadius;
 
     // Per-frame slew fraction: how far occlusionFraction moves toward its
     // target this frame. clamp guards a long frame from overshooting.
@@ -379,14 +403,13 @@ void AudioOcclusionSystem::update(float deltaTime)
         // plays. Uses the pure 3-arg resolveSourceGain (master × bus × volume,
         // no occlusion/ducking) — the composed gain doesn't exist yet here.
         bool eligibleNow = false;
-        if (comp->spatial)
+        if (enabled && comp->spatial)
         {
             const glm::vec3 sourcePos = entity.getWorldPosition();
             const float distance = glm::length(sourcePos - listenerPos);
             const float preGain =
                 resolveSourceGain(mixer, comp->bus, comp->volume);
-            if (preGain > kAudibleGainEps
-                && distance <= kDefaultOcclusionMaxDistance)
+            if (preGain > kAudibleGainEps && distance <= maxDistance)
             {
                 // A source with its own body must not occlude itself; a source
                 // with no body casts with an invalid ignore id ({}).
@@ -399,8 +422,8 @@ void AudioOcclusionSystem::update(float deltaTime)
                 OcclusionQuery query;
                 query.listenerPos  = listenerPos;
                 query.sourcePos    = sourcePos;
-                query.rayCount     = kDefaultOcclusionRayCount;
-                query.sourceRadius = kDefaultOcclusionSourceRadius;
+                query.rayCount     = rayCount;
+                query.sourceRadius = sourceRadius;
                 query.ignoreBody   = ignoreBody;
                 eligible.push_back({id, query});
                 eligibleNow = true;
@@ -414,7 +437,7 @@ void AudioOcclusionSystem::update(float deltaTime)
 
     // --- Pass 2: budget plan — which eligible sources get rays this frame. ---
     const OcclusionServicingPlan plan = planOcclusionServicing(
-        static_cast<int>(eligible.size()), kDefaultOcclusionRayCount,
+        static_cast<int>(eligible.size()), rayCount,
         kMaxOcclusionRaysPerFrame, m_roundRobinCursor);
     m_roundRobinCursor = plan.nextCursor;
     if (plan.engaged && !m_budgetEngagedLogged)

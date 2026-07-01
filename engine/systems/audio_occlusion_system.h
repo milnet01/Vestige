@@ -25,6 +25,7 @@ namespace Vestige
 class Engine;
 class PhysicsWorld;
 class JobSystem;
+class AudioEngine;
 
 /// @brief Upper bound on rays cast per source, and the size of the offset
 ///        table. Single source of truth shared by the offset table
@@ -196,6 +197,12 @@ private:
 
     static inline const std::string m_name = "AudioOcclusion";
     Engine* m_engine = nullptr;
+
+    /// @brief Cached at init from AudioSystem — the store the occlusion settings
+    ///        (enabled / ray count / max distance / source radius) live on. Null
+    ///        if there is no AudioSystem (some test harnesses); then the system
+    ///        falls back to its built-in defaults, enabled.
+    AudioEngine* m_audioEngine = nullptr;
 
     /// @brief Per-source target, keyed by entity id. Persists across frames so
     ///        a deferred source can hold its last measurement. Reaped for

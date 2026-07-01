@@ -286,6 +286,44 @@ void AudioEngineLodApplySink::setLodEnabled(bool enabled)
 }
 
 // ================================================================
+// AX1 — geometric audio occlusion apply
+// ================================================================
+
+void applyAudioOcclusion(const AudioSettings& audio,
+                         AudioOcclusionApplySink& sink)
+{
+    sink.setOcclusionEnabled(audio.occlusionEnabled);
+    sink.setOcclusionRayCount(audio.occlusionRayCount);
+    sink.setOcclusionMaxDistance(audio.occlusionMaxDistance);
+    sink.setOcclusionSourceRadius(audio.occlusionSourceRadius);
+}
+
+AudioEngineOcclusionApplySink::AudioEngineOcclusionApplySink(AudioEngine& engine)
+    : m_engine(engine)
+{
+}
+
+void AudioEngineOcclusionApplySink::setOcclusionEnabled(bool enabled)
+{
+    m_engine.setOcclusionEnabled(enabled);
+}
+
+void AudioEngineOcclusionApplySink::setOcclusionRayCount(int count)
+{
+    m_engine.setOcclusionRayCount(count);
+}
+
+void AudioEngineOcclusionApplySink::setOcclusionMaxDistance(float metres)
+{
+    m_engine.setOcclusionMaxDistance(metres);
+}
+
+void AudioEngineOcclusionApplySink::setOcclusionSourceRadius(float metres)
+{
+    m_engine.setOcclusionSourceRadius(metres);
+}
+
+// ================================================================
 // AX11 — audio device hot-swap policy apply
 // ================================================================
 

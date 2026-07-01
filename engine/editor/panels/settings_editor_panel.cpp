@@ -400,6 +400,37 @@ void SettingsEditorPanel::drawAudioTab()
             "Turn on to hear every collision while testing.");
     }
 
+    // AX1 — geometric audio occlusion (walls muffle sound behind them).
+    ImGui::Spacing();
+    bool occl = p.audio.occlusionEnabled;
+    if (ImGui::Checkbox("Sound occlusion (walls muffle sound)", &occl))
+    {
+        m_editor->mutate([occl](Settings& s) { s.audio.occlusionEnabled = occl; });
+    }
+    ImGui::SameLine();
+    ImGui::TextDisabled("(?)");
+    if (ImGui::IsItemHovered())
+    {
+        ImGui::SetTooltip(
+            "Sound coming from behind a wall is quieter and muffled, based on\n"
+            "the real scene geometry. Turn off if heavy muffling is disorienting.");
+    }
+
+    // Tunables only matter while occlusion is on.
+    ImGui::BeginDisabled(!p.audio.occlusionEnabled);
+    int rays = p.audio.occlusionRayCount;
+    if (ImGui::SliderInt("Occlusion detail (rays)", &rays, 1, 16))
+    {
+        m_editor->mutate([rays](Settings& s) { s.audio.occlusionRayCount = rays; });
+    }
+    float occlDist = p.audio.occlusionMaxDistance;
+    if (ImGui::SliderFloat("Occlusion range (m)", &occlDist, 1.0f, 100.0f, "%.0f"))
+    {
+        m_editor->mutate([occlDist](Settings& s)
+                         { s.audio.occlusionMaxDistance = occlDist; });
+    }
+    ImGui::EndDisabled();
+
     ImGui::Spacing();
     if (ImGui::Button("Restore audio defaults"))
     {

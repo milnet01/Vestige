@@ -481,6 +481,42 @@ private:
 };
 
 // ================================================================
+// AX1 — geometric audio occlusion apply path (sibling to AX5/AX6)
+// ================================================================
+
+/// @brief Sink for the occlusion settings. All four live on `AudioEngine`;
+///        this is the abstract seam the headless tests mock.
+class AudioOcclusionApplySink
+{
+public:
+    virtual ~AudioOcclusionApplySink() = default;
+    virtual void setOcclusionEnabled(bool enabled) = 0;
+    virtual void setOcclusionRayCount(int count) = 0;
+    virtual void setOcclusionMaxDistance(float metres) = 0;
+    virtual void setOcclusionSourceRadius(float metres) = 0;
+};
+
+/// @brief Pushes the occlusion settings onto a sink.
+void applyAudioOcclusion(const AudioSettings& audio,
+                         AudioOcclusionApplySink& sink);
+
+/// @brief Production sink wrapping a live `AudioEngine`. Forwards to the
+///        `AudioEngine::setOcclusion*` stored fields — no device reset (the
+///        next `AudioOcclusionSystem::update` reads them).
+class AudioEngineOcclusionApplySink final : public AudioOcclusionApplySink
+{
+public:
+    explicit AudioEngineOcclusionApplySink(AudioEngine& engine);
+    void setOcclusionEnabled(bool enabled) override;
+    void setOcclusionRayCount(int count) override;
+    void setOcclusionMaxDistance(float metres) override;
+    void setOcclusionSourceRadius(float metres) override;
+
+private:
+    AudioEngine& m_engine;
+};
+
+// ================================================================
 // Slice 13.3b — Photosensitive safety apply path
 // ================================================================
 

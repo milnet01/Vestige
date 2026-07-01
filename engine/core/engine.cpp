@@ -463,6 +463,13 @@ bool Engine::initialize(const EngineConfig& config)
                 std::make_unique<AudioEngineProceduralAudioApplySink>(
                     audio->getAudioEngine());
             targets.proceduralAudio = m_proceduralAudioSink.get();
+
+            // AX1 — geometric occlusion settings (stored flags read each frame
+            // by AudioOcclusionSystem; no device reset on apply).
+            m_occlusionSink =
+                std::make_unique<AudioEngineOcclusionApplySink>(
+                    audio->getAudioEngine());
+            targets.audioOcclusion = m_occlusionSink.get();
         }
 
         targets.inputMap = &m_inputActionMap;

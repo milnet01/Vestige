@@ -260,6 +260,10 @@ TEST(Settings, RoundTripsThroughJson)
     original.audio.lodEnabled = false;                            // AX5
     original.audio.proceduralAudioEnabled = false;                // AX4 S9
     original.audio.emitUntaggedCollisions = true;                 // AX4 S9
+    original.audio.occlusionEnabled = false;                      // AX1
+    original.audio.occlusionRayCount = 12;                        // AX1
+    original.audio.occlusionMaxDistance = 25.0f;                  // AX1
+    original.audio.occlusionSourceRadius = 0.75f;                 // AX1
 
     original.controls.mouseSensitivity = 2.5f;
     original.controls.invertY          = true;
@@ -303,6 +307,28 @@ TEST(Settings, FromJsonWithMissingSectionsKeepsDefaults)
     EXPECT_TRUE(s.audio.lodEnabled);                           // AX5 default
     EXPECT_TRUE(s.audio.proceduralAudioEnabled);               // AX4 S9 default
     EXPECT_FALSE(s.audio.emitUntaggedCollisions);              // AX4 S9 default
+    EXPECT_TRUE(s.audio.occlusionEnabled);                     // AX1 default
+    EXPECT_EQ(s.audio.occlusionRayCount, 8);                   // AX1 default
+    EXPECT_FLOAT_EQ(s.audio.occlusionMaxDistance, 40.0f);      // AX1 default
+    EXPECT_FLOAT_EQ(s.audio.occlusionSourceRadius, 0.5f);      // AX1 default
+}
+
+// AX1 — validate() clamps out-of-range occlusion fields (a hand-edited
+// settings.json cannot push a bad ray count / negative distance downstream).
+TEST(Settings, OcclusionFieldsAreClampedByValidate)
+{
+    Settings s;
+    s.audio.occlusionRayCount    = 99;      // > kMaxOcclusionRayCount(16)
+    s.audio.occlusionMaxDistance = -5.0f;   // negative
+    s.audio.occlusionSourceRadius = -1.0f;  // negative
+    EXPECT_FALSE(validate(s));              // returns false when it had to clamp
+    EXPECT_EQ(s.audio.occlusionRayCount, 16);
+    EXPECT_FLOAT_EQ(s.audio.occlusionMaxDistance, 0.0f);
+    EXPECT_FLOAT_EQ(s.audio.occlusionSourceRadius, 0.0f);
+
+    s.audio.occlusionRayCount = 0;          // < 1
+    EXPECT_FALSE(validate(s));
+    EXPECT_EQ(s.audio.occlusionRayCount, 1);
 }
 
 TEST(Settings, FromJsonIgnoresUnknownFields)
