@@ -167,6 +167,70 @@ bool AudioEngine::initialize()
                 m_lowPassFilter = 0;
             }
         }
+
+        // AX2 R1 — auxiliary effect slot + one parametric AL_EFFECT_REVERB
+        // object for engine-wide room reverb. Same graceful-fallback posture
+        // as the AX6 filter: a null proc, a 0 slot/effect, or a device with 0
+        // auxiliary sends leaves reverb unavailable and every source dry.
+        m_alGenAuxiliaryEffectSlots = reinterpret_cast<void*>(
+            alGetProcAddress("alGenAuxiliaryEffectSlots"));
+        m_alDeleteAuxiliaryEffectSlots = reinterpret_cast<void*>(
+            alGetProcAddress("alDeleteAuxiliaryEffectSlots"));
+        m_alAuxiliaryEffectSloti = reinterpret_cast<void*>(
+            alGetProcAddress("alAuxiliaryEffectSloti"));
+        m_alAuxiliaryEffectSlotf = reinterpret_cast<void*>(
+            alGetProcAddress("alAuxiliaryEffectSlotf"));
+        m_alGenEffects    = reinterpret_cast<void*>(alGetProcAddress("alGenEffects"));
+        m_alDeleteEffects = reinterpret_cast<void*>(alGetProcAddress("alDeleteEffects"));
+        m_alEffecti       = reinterpret_cast<void*>(alGetProcAddress("alEffecti"));
+        m_alEffectf       = reinterpret_cast<void*>(alGetProcAddress("alEffectf"));
+
+        // Auxiliary sends the device advertises; 0 ⟹ no reverb send path.
+        alcGetIntegerv(m_device, ALC_MAX_AUXILIARY_SENDS, 1, &m_maxAuxSends);
+
+        const bool reverbProcs = m_alGenAuxiliaryEffectSlots &&
+            m_alDeleteAuxiliaryEffectSlots && m_alAuxiliaryEffectSloti &&
+            m_alAuxiliaryEffectSlotf && m_alGenEffects && m_alDeleteEffects &&
+            m_alEffecti && m_alEffectf;
+        if (reverbProcs && m_maxAuxSends > 0)
+        {
+            alGetError();  // clear any stale error before probing
+            auto genSlots = reinterpret_cast<LPALGENAUXILIARYEFFECTSLOTS>(
+                m_alGenAuxiliaryEffectSlots);
+            auto genEffects = reinterpret_cast<LPALGENEFFECTS>(m_alGenEffects);
+            auto effecti    = reinterpret_cast<LPALEFFECTI>(m_alEffecti);
+            genSlots(1, &m_reverbSlot);
+            genEffects(1, &m_reverbEffect);
+            effecti(m_reverbEffect, AL_EFFECT_TYPE, AL_EFFECT_REVERB);
+            if (alGetError() != AL_NO_ERROR ||
+                m_reverbSlot == 0 || m_reverbEffect == 0)
+            {
+                // Driver refused the reverb effect — drop the objects and
+                // degrade to dry (applySourceState skips the aux-send path).
+                if (m_reverbEffect != 0)
+                {
+                    auto delEffects =
+                        reinterpret_cast<LPALDELETEEFFECTS>(m_alDeleteEffects);
+                    delEffects(1, &m_reverbEffect);
+                }
+                if (m_reverbSlot != 0)
+                {
+                    auto delSlots =
+                        reinterpret_cast<LPALDELETEAUXILIARYEFFECTSLOTS>(
+                            m_alDeleteAuxiliaryEffectSlots);
+                    delSlots(1, &m_reverbSlot);
+                }
+                m_reverbSlot   = 0;
+                m_reverbEffect = 0;
+            }
+            else
+            {
+                // A sane default preset + attach; wet gain starts at 0 so the
+                // engine is dry until a zone/setting raises it (R3/R4).
+                setReverbParams(reverbPresetParams(ReverbPreset::Generic));
+                setReverbWetGain(m_reverbWetGain);
+            }
+        }
     }
 
     // AX11 — audio device hot-swap. `ALC_SOFT_reopen_device` is a
@@ -264,6 +328,23 @@ void AudioEngine::shutdown()
         reinterpret_cast<LPALDELETEFILTERS>(m_alDeleteFilters)(
             1, &m_lowPassFilter);
         m_lowPassFilter = 0;
+    }
+
+    // AX2 R1 — release the reverb aux-effect slot + effect (detach the effect
+    // from the slot first) while the context is still current.
+    if (m_reverbSlot != 0 && m_alAuxiliaryEffectSloti && m_alDeleteAuxiliaryEffectSlots)
+    {
+        reinterpret_cast<LPALAUXILIARYEFFECTSLOTI>(m_alAuxiliaryEffectSloti)(
+            m_reverbSlot, AL_EFFECTSLOT_EFFECT, AL_EFFECT_NULL);
+        reinterpret_cast<LPALDELETEAUXILIARYEFFECTSLOTS>(
+            m_alDeleteAuxiliaryEffectSlots)(1, &m_reverbSlot);
+        m_reverbSlot = 0;
+    }
+    if (m_reverbEffect != 0 && m_alDeleteEffects)
+    {
+        reinterpret_cast<LPALDELETEEFFECTS>(m_alDeleteEffects)(
+            1, &m_reverbEffect);
+        m_reverbEffect = 0;
     }
 
     // AX11 — deregister the global system-events callback BEFORE tearing
@@ -1216,6 +1297,60 @@ void AudioEngine::applySourceState(unsigned int source,
             alSourcei(source, AL_DIRECT_FILTER, AL_FILTER_NULL);
         }
     }
+
+    // AX2 R1 — route this source into the reverb aux-effect slot when it has
+    // a send and the slot is live. Pool sources are reused, so a source that
+    // is now dry (or 2D) must be cleared to AL_EFFECTSLOT_NULL or it would
+    // linger on the slot from a previous owner. Send 0 is the only send used
+    // in R1 (one engine-wide reverb).
+    if (m_reverbSlot != 0 && m_maxAuxSends > 0)
+    {
+        if (state.spatial && state.reverbSend > 0.0f)
+        {
+            alSource3i(source, AL_AUXILIARY_SEND_FILTER,
+                       static_cast<ALint>(m_reverbSlot), 0, AL_FILTER_NULL);
+        }
+        else
+        {
+            alSource3i(source, AL_AUXILIARY_SEND_FILTER,
+                       AL_EFFECTSLOT_NULL, 0, AL_FILTER_NULL);
+        }
+    }
+}
+
+void AudioEngine::setReverbParams(const ReverbParams& params)
+{
+    // Push the standard (non-EAX) AL_REVERB_* properties onto the effect,
+    // then re-attach the effect to the slot so the change takes hold. No-op
+    // until the slot + effect exist (EFX absent or driver-refused).
+    if (m_reverbEffect == 0 || m_reverbSlot == 0)
+    {
+        return;
+    }
+    auto effectf = reinterpret_cast<LPALEFFECTF>(m_alEffectf);
+    auto sloti   =
+        reinterpret_cast<LPALAUXILIARYEFFECTSLOTI>(m_alAuxiliaryEffectSloti);
+    effectf(m_reverbEffect, AL_REVERB_DECAY_TIME,        params.decayTime);
+    effectf(m_reverbEffect, AL_REVERB_DENSITY,           params.density);
+    effectf(m_reverbEffect, AL_REVERB_DIFFUSION,         params.diffusion);
+    effectf(m_reverbEffect, AL_REVERB_GAIN,              params.gain);
+    effectf(m_reverbEffect, AL_REVERB_GAINHF,            params.gainHf);
+    effectf(m_reverbEffect, AL_REVERB_REFLECTIONS_DELAY, params.reflectionsDelay);
+    effectf(m_reverbEffect, AL_REVERB_LATE_REVERB_DELAY, params.lateReverbDelay);
+    sloti(m_reverbSlot, AL_EFFECTSLOT_EFFECT,
+          static_cast<ALint>(m_reverbEffect));
+}
+
+void AudioEngine::setReverbWetGain(float gain)
+{
+    m_reverbWetGain = std::clamp(gain, 0.0f, 1.0f);
+    if (m_reverbSlot == 0)
+    {
+        return;
+    }
+    auto slotf =
+        reinterpret_cast<LPALAUXILIARYEFFECTSLOTF>(m_alAuxiliaryEffectSlotf);
+    slotf(m_reverbSlot, AL_EFFECTSLOT_GAIN, m_reverbWetGain);
 }
 
 void AudioEngine::updateGains()

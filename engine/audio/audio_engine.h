@@ -13,6 +13,7 @@
 #include "audio/audio_loudness.h"
 #include "audio/audio_mixer.h"
 #include "audio/audio_output_mode.h"
+#include "audio/audio_reverb.h"                     // AX2 ReverbParams
 #include "audio/procedural/material_sound_bank.h"  // AX4 S5 synth bank
 #include "physics/surface_material.h"              // AX4 S5 SurfaceMaterial
 
@@ -527,6 +528,25 @@ public:
     void setOcclusionSourceRadius(float r)   { m_occlusionSourceRadius = r; }
     float occlusionSourceRadius() const      { return m_occlusionSourceRadius; }
 
+    /// @name AX2 reverb (R1 — engine-wide EFX aux-effect-slot reverb)
+    /// @{
+    /// @brief Push a `ReverbParams` set onto the parametric `AL_EFFECT_REVERB`
+    ///        object and re-attach it to the aux slot. Silent no-op when the
+    ///        reverb slot/effect are unavailable (EFX absent or driver-refused).
+    ///        R1 drives one engine-wide reverb; the zone-selection layer (R3)
+    ///        calls this with the blended per-frame params.
+    void setReverbParams(const ReverbParams& params);
+    /// @brief Set the reverb aux-slot wet gain in [0, 1] (clamped). 0 (the
+    ///        default) is fully dry — the pre-AX2 behaviour. Stored even when
+    ///        the slot is unavailable so a getter reflects the request.
+    void setReverbWetGain(float gain);
+    float reverbWetGain() const   { return m_reverbWetGain; }
+    /// @brief True once an EFX aux-effect slot + reverb effect exist and the
+    ///        device advertises ≥ 1 auxiliary send. False ⟹ reverb degrades to
+    ///        dry and `applySourceState` never sets an aux send.
+    bool  isReverbAvailable() const { return m_reverbSlot != 0 && m_maxAuxSends > 0; }
+    /// @}
+
     /// @brief AX4 S9 — master toggle for procedural (synthesised) audio:
     ///        footsteps + collision impacts. When off, `playSynth` early-returns
     ///        without synthesising or acquiring a source, muting all procedural
@@ -673,6 +693,26 @@ private:
     void*        m_alFilteri       = nullptr;
     void*        m_alFilterf       = nullptr;
     unsigned int m_lowPassFilter   = 0;
+
+    // AX2 R1 — ALC_EXT_EFX auxiliary effect slot + one AL_EFFECT_REVERB
+    // effect object for engine-wide room reverb. Entry points load via
+    // alGetProcAddress inside the same ALC_EXT_EFX gate as the AX6 filter.
+    // A null proc / 0 slot / 0 aux-sends means reverb is unavailable — the
+    // AL_AUXILIARY_SEND_FILTER path in applySourceState is a silent no-op and
+    // every source stays dry (pre-AX2 behaviour). R2 swaps the effect type to
+    // the native convolution effect when the experimental extension is present.
+    void*        m_alGenAuxiliaryEffectSlots    = nullptr;
+    void*        m_alDeleteAuxiliaryEffectSlots = nullptr;
+    void*        m_alAuxiliaryEffectSloti       = nullptr;
+    void*        m_alAuxiliaryEffectSlotf       = nullptr;
+    void*        m_alGenEffects                 = nullptr;
+    void*        m_alDeleteEffects              = nullptr;
+    void*        m_alEffecti                    = nullptr;
+    void*        m_alEffectf                    = nullptr;
+    unsigned int m_reverbSlot   = 0;
+    unsigned int m_reverbEffect = 0;
+    float        m_reverbWetGain = 0.0f;  ///< Slot gain [0,1]; 0 = dry (default).
+    int          m_maxAuxSends   = 0;     ///< ALC_MAX_AUXILIARY_SENDS probe.
     bool         m_airAbsorptionEnabled = true;  ///< AX6 master toggle (read by AudioSystem).
     bool         m_lodEnabled           = true;  ///< AX5 LOD-ladder toggle (read by AudioSystem).
     bool         m_proceduralAudioEnabled = true;  ///< AX4 S9 master procedural-audio toggle (gates playSynth).

@@ -21,7 +21,8 @@ AudioSourceAlState composeAudioSourceAlState(
     const glm::vec3&            listenerPosition,
     const AirAbsorptionParams&  air,
     AudioLodTier                lodTier,
-    float                       loudnessMakeup)
+    float                       loudnessMakeup,
+    float                       reverbSend)
 {
     AudioSourceAlState state;
 
@@ -84,6 +85,11 @@ AudioSourceAlState composeAudioSourceAlState(
     // tiers shed the controllable per-source work: the EFX low-pass and
     // 3D positioning. (HRTF is device-global and cannot be toggled per
     // source, so no tier touches it.)
+    // AX2 R1 — carry the reverb send through. A source that has dropped to
+    // 2D (no world position) or muted (silent) contributes nothing sensible
+    // to the room reverb, so those tiers zero the send.
+    state.reverbSend = std::max(0.0f, std::min(1.0f, reverbSend));
+
     state.lodTier = lodTier;
     switch (lodTier)
     {
@@ -95,9 +101,11 @@ AudioSourceAlState composeAudioSourceAlState(
         case AudioLodTier::Drop2D:
             state.spatial       = false;  // collapse to head-relative 2D
             state.lowPassGainHf = 1.0f;
+            state.reverbSend    = 0.0f;
             break;
         case AudioLodTier::Mute:
-            state.gain = 0.0f;
+            state.gain       = 0.0f;
+            state.reverbSend = 0.0f;
             break;
     }
 

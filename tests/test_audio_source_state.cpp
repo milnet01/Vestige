@@ -378,3 +378,68 @@ TEST(AudioSourceState, TwoDSourcesSkipAirAbsorption_AX6)
                                            m, 1.0f, glm::vec3(0.0f), air);
     EXPECT_NEAR(state.lowPassGainHf, 1.0f, kEps);
 }
+
+// ---- AX2 R1: reverb send passthrough ------------------------------
+
+TEST(AudioSourceState, ReverbSendDefaultsToDry_AX2)
+{
+    // No reverbSend arg → the source is fully dry (pre-AX2 behaviour).
+    AudioSourceComponent comp = makeDefaultComponent();
+    AudioMixer m;
+    auto state = composeAudioSourceAlState(comp, glm::vec3(0.0f), m, 1.0f);
+    EXPECT_NEAR(state.reverbSend, 0.0f, kEps);
+}
+
+TEST(AudioSourceState, ReverbSendPassesThrough_AX2)
+{
+    AudioSourceComponent comp = makeDefaultComponent();
+    AudioMixer m;
+    auto state = composeAudioSourceAlState(
+        comp, glm::vec3(0.0f), m, 1.0f, glm::vec3(0.0f), AirAbsorptionParams{},
+        AudioLodTier::Full, 1.0f, 0.6f);
+    EXPECT_NEAR(state.reverbSend, 0.6f, kEps);
+}
+
+TEST(AudioSourceState, ReverbSendClampedToUnitRange_AX2)
+{
+    AudioSourceComponent comp = makeDefaultComponent();
+    AudioMixer m;
+    auto hi = composeAudioSourceAlState(
+        comp, glm::vec3(0.0f), m, 1.0f, glm::vec3(0.0f), AirAbsorptionParams{},
+        AudioLodTier::Full, 1.0f, 1.5f);
+    EXPECT_NEAR(hi.reverbSend, 1.0f, kEps);
+    auto lo = composeAudioSourceAlState(
+        comp, glm::vec3(0.0f), m, 1.0f, glm::vec3(0.0f), AirAbsorptionParams{},
+        AudioLodTier::Full, 1.0f, -0.2f);
+    EXPECT_NEAR(lo.reverbSend, 0.0f, kEps);
+}
+
+TEST(AudioSourceState, ReverbSendSurvivesFullAndCheapSpatial_AX2)
+{
+    AudioSourceComponent comp = makeDefaultComponent();
+    AudioMixer m;
+    auto full = composeAudioSourceAlState(
+        comp, glm::vec3(0.0f), m, 1.0f, glm::vec3(0.0f), AirAbsorptionParams{},
+        AudioLodTier::Full, 1.0f, 0.5f);
+    EXPECT_NEAR(full.reverbSend, 0.5f, kEps);
+    auto cheap = composeAudioSourceAlState(
+        comp, glm::vec3(0.0f), m, 1.0f, glm::vec3(0.0f), AirAbsorptionParams{},
+        AudioLodTier::CheapSpatial, 1.0f, 0.5f);
+    EXPECT_NEAR(cheap.reverbSend, 0.5f, kEps);
+}
+
+TEST(AudioSourceState, ReverbSendZeroedByDrop2DAndMuteTiers_AX2)
+{
+    // A source that has collapsed to 2D or been muted contributes nothing
+    // sensible to room reverb, so those tiers zero the send.
+    AudioSourceComponent comp = makeDefaultComponent();
+    AudioMixer m;
+    auto drop = composeAudioSourceAlState(
+        comp, glm::vec3(0.0f), m, 1.0f, glm::vec3(0.0f), AirAbsorptionParams{},
+        AudioLodTier::Drop2D, 1.0f, 0.8f);
+    EXPECT_NEAR(drop.reverbSend, 0.0f, kEps);
+    auto mute = composeAudioSourceAlState(
+        comp, glm::vec3(0.0f), m, 1.0f, glm::vec3(0.0f), AirAbsorptionParams{},
+        AudioLodTier::Mute, 1.0f, 0.8f);
+    EXPECT_NEAR(mute.reverbSend, 0.0f, kEps);
+}

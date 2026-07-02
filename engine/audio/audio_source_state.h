@@ -64,6 +64,16 @@ struct AudioSourceAlState
     ///        state for the apply layer (the `Mute` keep-alive/release
     ///        decision) and debug panels.
     AudioLodTier lodTier = AudioLodTier::Full;
+
+    /// @brief AX2 R1 — reverb send level in [0, 1]. When > 0 and the
+    ///        engine has a live reverb aux-effect slot, the apply layer
+    ///        routes this source through `AL_AUXILIARY_SEND_FILTER` so it
+    ///        contributes to (and is coloured by) the room reverb. 0 (the
+    ///        default) leaves the source fully dry — the pre-AX2 behaviour.
+    ///        v1 policy: a source inside a reverb zone sends at unity and
+    ///        the per-room wet level is the slot gain; per-source send
+    ///        scaling is a documented follow-up.
+    float reverbSend = 0.0f;
 };
 
 /// @brief Pure compose of the per-frame `AudioSourceAlState` from a
@@ -119,6 +129,11 @@ struct AudioSourceAlState
 /// folds into the `volume` input alongside occlusion, so the same mixer /
 /// bus / duck / clamp pipeline applies; `1.0` (the default) is a no-op,
 /// keeping the pre-AX9 call sites unchanged.
+///
+/// AX2 R1 adds a trailing, defaulted `reverbSend` — the per-source reverb
+/// aux-send level in [0, 1], copied straight onto the composed state for the
+/// apply layer's `AL_AUXILIARY_SEND_FILTER` routing. `0.0` (the default)
+/// leaves the source dry, keeping the pre-AX2 call sites unchanged.
 AudioSourceAlState composeAudioSourceAlState(
     const AudioSourceComponent& comp,
     const glm::vec3&            entityPosition,
@@ -127,6 +142,7 @@ AudioSourceAlState composeAudioSourceAlState(
     const glm::vec3&            listenerPosition = glm::vec3(0.0f),
     const AirAbsorptionParams&  air              = AirAbsorptionParams{},
     AudioLodTier                lodTier          = AudioLodTier::Full,
-    float                       loudnessMakeup   = 1.0f);
+    float                       loudnessMakeup   = 1.0f,
+    float                       reverbSend       = 0.0f);
 
 } // namespace Vestige

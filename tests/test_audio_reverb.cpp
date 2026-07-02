@@ -7,6 +7,7 @@
 
 #include <gtest/gtest.h>
 
+#include "audio/audio_engine.h"
 #include "audio/audio_reverb.h"
 
 using namespace Vestige;
@@ -184,4 +185,37 @@ TEST(AudioReverb, BlendClampsOutOfRangeT)
     const auto b = reverbPresetParams(ReverbPreset::Cave);
     EXPECT_EQ(blendReverbParams(a, b, -0.5f), a);
     EXPECT_EQ(blendReverbParams(a, b,  1.5f), b);
+}
+
+// -- AX2 R1: AudioEngine reverb accessors (headless, never initialised) ----
+//
+// With no audio device the EFX aux slot is never created, so isReverbAvailable
+// is false and the AL-object setters no-op — but the wet-gain value is still
+// stored + clamped so a getter reflects the request (and R3/R4 can drive it).
+
+TEST(AudioReverb, EngineIsDryAndReverbUnavailableWhenUninitialised)
+{
+    AudioEngine engine;  // never initialised — no audio device / EFX slot
+    EXPECT_FALSE(engine.isReverbAvailable());
+    EXPECT_NEAR(engine.reverbWetGain(), 0.0f, kEps);
+}
+
+TEST(AudioReverb, SetReverbWetGainStoresAndClampsToUnitRange)
+{
+    AudioEngine engine;
+    engine.setReverbWetGain(0.4f);
+    EXPECT_NEAR(engine.reverbWetGain(), 0.4f, kEps);
+    engine.setReverbWetGain(1.5f);
+    EXPECT_NEAR(engine.reverbWetGain(), 1.0f, kEps);
+    engine.setReverbWetGain(-0.3f);
+    EXPECT_NEAR(engine.reverbWetGain(), 0.0f, kEps);
+}
+
+TEST(AudioReverb, SetReverbParamsIsANoOpWithoutASlot)
+{
+    // No slot/effect exist headless, so this must not crash or change
+    // availability — it simply has nowhere to push the params.
+    AudioEngine engine;
+    engine.setReverbParams(reverbPresetParams(ReverbPreset::Cave));
+    EXPECT_FALSE(engine.isReverbAvailable());
 }
