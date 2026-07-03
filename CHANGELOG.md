@@ -60,10 +60,12 @@ never permanent rot), or **(B)** a branch-commit pin because no suitable tag
 exists → `THIRD_PARTY_NOTICES.md`'s Branch-commit-pins section. `CLAUDE.md`
 Rule 8 now routes to it. Reviewed via `/cold-eyes` to convergence (5 loops).
 
-First registry entry: `awalsh128/cache-apt-pkgs-action` held at **1.6.1** —
-1.6.2's new `empty_packages_behavior: error` default reddens CI (Dependabot
-PR #14). The five workflow pin sites now carry a pointer comment to the
-registry. (Separately, `actions/cache` was bumped 5→6 via Dependabot #13.)
+First (and so far only) registry entry: `awalsh128/cache-apt-pkgs-action` was
+held at 1.6.1 because 1.6.2's new `empty_packages_behavior: error` default
+reddened CI. It was **lifted the same day** — 1.6.3 shipped hours later, passed
+the re-test (all apt-using CI jobs green), so the five pins moved to 1.6.3 and
+the registry row was removed. The standard's re-test loop thus ran end-to-end on
+its very first entry. (`actions/cache` was also bumped 5→6 via Dependabot #13.)
 
 ### 2026-07-01 Added — Geometric / ray-traced audio occlusion (AX1)
 

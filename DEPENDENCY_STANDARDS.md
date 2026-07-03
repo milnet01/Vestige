@@ -88,7 +88,13 @@ history + the CHANGELOG).
 
 | Dependency | Latest avail. | Pinned at | Breaking version | What breaks (evidence) | Re-test when | Last checked |
 |------------|---------------|-----------|------------------|------------------------|--------------|--------------|
-| `awalsh128/cache-apt-pkgs-action` (CI) | 1.6.2 | **1.6.1** | **1.6.2** | New `empty_packages_behavior: error` default → the "Install … dependencies" step exits code 3 before the build runs; reddens every apt-using job. Dependabot PR #14, jobs failed in ~10 s. | `> 1.6.2` ships (1.6.3+) | 2026-07-03 |
+
+_No live exceptions right now — every dependency is on its latest release._
+The first entry (`awalsh128/cache-apt-pkgs-action`, held at 1.6.1 while 1.6.2
+reddened CI via a new `empty_packages_behavior: error` default) was **lifted
+2026-07-03** when 1.6.3 shipped and passed the re-test — the standard's re-test
+loop exercised end-to-end within hours of being written. See the CHANGELOG / git
+history for that worked example.
 
 Column meanings:
 - **Pinned at** — the version the project currently holds. May use the version

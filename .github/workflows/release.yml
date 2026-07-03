@@ -81,7 +81,7 @@ jobs:
         # rare (tag pushes) so cache benefit is smaller here than on CI,
         # but consistency + a one-line config keeps both workflows
         # uniform.
-        uses: awalsh128/cache-apt-pkgs-action@681749ae568c81c2037cb9185e38b709b261bd2f  # v1.6.1 — held; 1.6.2 breaks CI (empty_packages_behavior), see DEPENDENCY_STANDARDS.md
+        uses: awalsh128/cache-apt-pkgs-action@553a35bb8ebd9fcabcb1c9451aa4c98e1b4ca8a9  # v1.6.3
         with:
           # desktop-file-utils provides desktop-file-validate, which appimagetool
           # invokes to validate the bundled .desktop file (its absence fails the
