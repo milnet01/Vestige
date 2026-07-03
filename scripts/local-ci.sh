@@ -8,15 +8,28 @@
 #   1. Debug   build + ctest   ← linux-build-test (Debug)
 #   2. Release build + ctest   ← linux-build-test (Release)  [runs the Release-only
 #                                  perf benchmarks that are skipped in Debug]
-#   3. Tier-1 static audit      ← audit-tool-tier1  (cppcheck + clang-tidy + warnings)
-#   4. gitleaks secret scan     ← secret-scan       (full git history)
+#   3. Windows MSVC build+test  ← windows-build-test  [OPT-IN via --windows]
+#   4. Tier-1 static audit      ← audit-tool-tier1  (cppcheck + clang-tidy + warnings)
+#   5. gitleaks secret scan     ← secret-scan       (full git history)
 #
-# NOT mirrored: the cmake-compat job (CMake 3.21 + latest) and the Windows/MSVC
-# build. cmake-compat guards downstream users on old CMake; reproducing it needs
-# a second CMake install, more than a pre-push gate warrants. Windows needs a
-# Windows host. Both still run in CI on every push, so the gap is covered
-# remotely. If you ever need cmake-compat locally, install cmake 3.21 in a
-# venv/container and run ci.yml's cmake-compat Configure+Build+Test by hand.
+# Stage 3 (Windows/MSVC) is OPT-IN via --windows: it cross-compiles the engine with
+# the REAL MSVC toolchain (cl.exe + Windows SDK) under Wine via msvc-wine, then runs
+# the compiled gtest suite under Wine — the same compiler ci.yml's windows-build-test
+# job uses, so MSVC-only breakage (localtime_r, M_PI, non-noexcept-move-in-vector)
+# surfaces before the push instead of 15 min into CI. It's opt-in because it's a
+# separate cold build with a different compiler (no ccache-object sharing with the
+# Linux stages) that runs the tests through Wine — several extra minutes. Toolchain
+# path: $MSVC_WINE_BIN (default ~/tools/msvc-wine/msvc/bin/x64); override to relocate.
+# Only the compiled engine suite (vestige_tests) runs under Wine — the host-Python
+# data-lint tests (localization/shader lint) are excluded there because the Wine
+# cross-compile emulator can't run host Python and mangles their exit codes; those
+# already run natively in stages 1-2 and don't exercise MSVC-compiled code.
+#
+# NOT mirrored: the cmake-compat job (CMake 3.21 + latest). It guards downstream
+# users on old CMake; reproducing it needs a second CMake install, more than a
+# pre-push gate warrants. It still runs in CI on every push, so the gap is covered
+# remotely. If you ever need it locally, install cmake 3.21 in a venv/container and
+# run ci.yml's cmake-compat Configure+Build+Test by hand.
 #
 # clang-tidy IS part of the Tier-1 audit and its `error`-level findings GATE CI
 # (Severity.HIGH). The audit silently DISABLES clang-tidy when no `clang-tidy` is
@@ -34,7 +47,8 @@
 # close the drift entirely — tracked separately.)
 #
 # Usage:
-#   scripts/local-ci.sh            # full mirror (all 4 stages) — the push-safety gate
+#   scripts/local-ci.sh            # Linux mirror (build/test/audit/secrets) — push gate
+#   scripts/local-ci.sh --windows  # ALSO run the Windows MSVC build+test (msvc-wine)
 #   scripts/local-ci.sh --quick    # Debug build+test + gitleaks only (fast smoke,
 #                                  # NOT push-safe: skips the Tier-1 static audit)
 #   scripts/local-ci.sh -j 8        # cap parallel build/test jobs (default: nproc)
@@ -55,10 +69,12 @@ cd "$REPO_ROOT" || exit 1
 
 # --- argument parsing -------------------------------------------------------
 QUICK=0
+WINDOWS=0
 JOBS="$(nproc)"
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --quick)   QUICK=1; shift ;;
+        --windows) WINDOWS=1; shift ;;
         -j)        JOBS="${2:?-j needs a number}"; shift 2 ;;
         -h|--help) awk 'NR>1 && /^#/{sub(/^# ?/,""); print; next} NR>1{exit}' "$0"; exit 0 ;;
         *) echo "unknown argument: $1 (try -h)" >&2; exit 2 ;;
@@ -172,6 +188,62 @@ build_and_test() {  # build_and_test <stage-label> <dir> <build-type>
     record "$label" ok $((SECONDS - start)); return 0
 }
 
+# --- Windows/MSVC stage (opt-in) --------------------------------------------
+# Real MSVC toolchain (cl.exe + Windows SDK) under Wine via msvc-wine. Override
+# MSVC_WINE_BIN to relocate the install.
+MSVC_WINE_BIN="${MSVC_WINE_BIN:-$HOME/tools/msvc-wine/msvc/bin/x64}"
+
+# Cross-compile the engine with MSVC under Wine and run the compiled gtest suite —
+# mirrors ci.yml's windows-build-test. Ninja + cl (no VS generator on Linux);
+# CMAKE_SYSTEM_NAME=Windows cross-compiles; the .exe tests run through Wine via
+# CMAKE_CROSSCOMPILING_EMULATOR. GL tests self-skip (no GL 4.5 context under Wine),
+# same as the GH windows-2022 runner.
+build_and_test_msvc() {
+    local label="Windows MSVC build+test" start=$SECONDS
+    banner "$label — msvc-wine (real MSVC cl.exe under Wine)"
+    if [[ ! -x "$MSVC_WINE_BIN/cl" ]]; then
+        echo "  msvc-wine not found at $MSVC_WINE_BIN — install it or set MSVC_WINE_BIN."
+        record "$label" skip 0; return 0
+    fi
+    if ! command -v wine >/dev/null 2>&1; then
+        echo "  wine not on PATH — needed to run the MSVC test .exe binaries."
+        record "$label" skip 0; return 0
+    fi
+    local msvc_root="${MSVC_WINE_BIN%/bin/x64}"
+    # Subshell scopes the MSVC toolchain + cross-compile env so it can't poison the
+    # Linux stages' PATH / compiler selection.
+    (
+        export PATH="$MSVC_WINE_BIN:$PATH" CC=cl CXX=cl
+        # Cross-compile hygiene: empty pkg-config registry so host Linux libs (e.g.
+        # PipeWire's spa headers → unistd.h) can't leak into the Windows-target build.
+        # A native Windows build has none of these; this reproduces that.
+        mkdir -p "$REPO_ROOT/.ci-tools/empty-pkgconfig"
+        export PKG_CONFIG_LIBDIR="$REPO_ROOT/.ci-tools/empty-pkgconfig" PKG_CONFIG_PATH=""
+        # -DCMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded (+CMP0141 NEW): avoid the
+        # separate-PDB compiler probe msvc-wine can't do (README "Does it work with
+        # CMake?"); keep debug info in the .obj.
+        cmake -S . -B build-msvc -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_SYSTEM_NAME=Windows \
+            -DCMAKE_POLICY_DEFAULT_CMP0141=NEW \
+            -DCMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded \
+            -DCMAKE_CROSSCOMPILING_EMULATOR=/usr/bin/wine \
+            -DVESTIGE_FETCH_ASSETS=OFF || exit 1
+        cmake --build build-msvc -j "$JOBS" || exit 1
+        # Co-locate the MSVC runtime redist (vcruntime140/msvcp140/...) beside the
+        # test .exe so Wine resolves them — WINEPATH alone doesn't chain the
+        # inter-DLL deps. Same DLLs vc_redist installs beside a shipped app.
+        cp "$msvc_root"/VC/Redist/MSVC/*/x64/Microsoft.VC*.CRT/*.dll build-msvc/bin/ 2>/dev/null || true
+        # Only the compiled engine suite runs under Wine; -E excludes the host-Python
+        # data-lint tests (see header) — the Wine emulator can't run host Python.
+        "${GL_WRAP[@]}" ctest --test-dir build-msvc --output-on-failure -j "$JOBS" \
+            -E 'LocalizationAudit|ShaderLint' || exit 1
+    )
+    local rc=$?
+    if [[ $rc -eq 0 ]]; then record "$label" ok $((SECONDS - start)); else record "$label" fail $((SECONDS - start)); fi
+    return $rc
+}
+
 # --- preflight: report versions + self-heal clang-tidy ----------------------
 preflight
 
@@ -185,7 +257,12 @@ else
     record "Release build+test" skip 0
 fi
 
-# --- stage 3: Tier-1 static audit -------------------------------------------
+# --- stage 3 (opt-in): Windows MSVC build + test via msvc-wine ---------------
+if [[ $WINDOWS -eq 1 ]]; then
+    build_and_test_msvc || true
+fi
+
+# --- stage 4: Tier-1 static audit -------------------------------------------
 # Reuses the Debug build/ dir (audit's internal `cmake --build build` is a warm
 # no-op when build/ is already built). Flags match ci.yml: --ci sets the exit
 # code by severity, --no-color keeps logs clean, --no-tests skips the redundant
@@ -205,7 +282,7 @@ else
     record "Tier-1 audit" skip 0
 fi
 
-# --- stage 4: gitleaks secret scan ------------------------------------------
+# --- stage 5: gitleaks secret scan ------------------------------------------
 start=$SECONDS
 banner "gitleaks — secret scan (full git history)"
 if command -v gitleaks >/dev/null 2>&1; then
@@ -250,5 +327,10 @@ if [[ ${#skipped_stages[@]} -gt 0 || $CLANG_TIDY_OK -eq 0 ]]; then
     echo "  Run ./scripts/local-ci.sh (no --quick, full toolchain) before pushing."
     exit 0
 fi
-echo "Full CI mirror passed — safe to push."
+if [[ $WINDOWS -eq 1 ]]; then
+    echo "Full CI mirror incl. Windows/MSVC passed — safe to push. (cmake-compat is still CI-only.)"
+else
+    echo "Linux CI mirror passed — safe to push."
+    echo "  Windows/MSVC not run locally (covered in CI); add --windows to mirror it. cmake-compat is CI-only."
+fi
 exit 0

@@ -54,8 +54,10 @@ rule 8 (`CLAUDE.md`), each non-tag pin carries a written reason:
   `master`.
 - **ImGuizmo — `a15acd87` (2025-12-27):** pinned below the latest master to
   avoid a GCC 14 compile break introduced upstream (see
-  `external/CMakeLists.txt` for the full reason). Re-evaluate when upstream
-  fixes the `vec_t` constructor.
+  `external/CMakeLists.txt` for the full reason). Upstream ships no release
+  tags, so this is a Category-(B) branch-commit pin — tracked here, not the
+  `DEPENDENCY_STANDARDS.md` Breaking-Version Registry — even though the trigger
+  is a build break. Re-evaluate when upstream fixes the `vec_t` constructor.
 - **imgui-filebrowser — `47a18845` (master, 2025-09-24):** upstream publishes
   no tags. Bump deliberately at audit-cycle entry.
 - **ImPlot — `1351ab2c` (master, 2026-05-10):** upstream's last tagged release

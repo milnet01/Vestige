@@ -54,7 +54,7 @@ jobs:
         # don't touch the mirror so the transient 4xx/5xx errors the
         # retry was working around are mostly avoided. Cache miss is
         # still subject to mirror flakes — a failed run can be re-run.
-        uses: awalsh128/cache-apt-pkgs-action@681749ae568c81c2037cb9185e38b709b261bd2f  # v1.6.1
+        uses: awalsh128/cache-apt-pkgs-action@681749ae568c81c2037cb9185e38b709b261bd2f  # v1.6.1 — held; 1.6.2 breaks CI (empty_packages_behavior), see DEPENDENCY_STANDARDS.md
         with:
           packages: build-essential cmake ninja-build pkg-config libgl1-mesa-dev libglu1-mesa-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxxf86vm-dev libwayland-dev libxkbcommon-dev xvfb python3 python3-pip python3-xmltodict python3-yaml python3-flask cppcheck
           version: linux-build-test-1
@@ -183,7 +183,7 @@ jobs:
       - name: Install audit tool dependencies
         # Cached apt install — see the comment on linux-build-test's
         # "Install build dependencies" step for the rationale.
-        uses: awalsh128/cache-apt-pkgs-action@681749ae568c81c2037cb9185e38b709b261bd2f  # v1.6.1
+        uses: awalsh128/cache-apt-pkgs-action@681749ae568c81c2037cb9185e38b709b261bd2f  # v1.6.1 — held; 1.6.2 breaks CI (empty_packages_behavior), see DEPENDENCY_STANDARDS.md
         with:
           packages: cppcheck clang-tidy python3 python3-pip python3-xmltodict python3-yaml python3-flask build-essential cmake ninja-build xvfb libgl1-mesa-dev libglu1-mesa-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxxf86vm-dev libwayland-dev libxkbcommon-dev
           version: audit-tool-tier1-1
@@ -290,7 +290,7 @@ jobs:
         # "Install build dependencies" step for the rationale. cmake
         # itself is installed by the next step (matrix-versioned), so
         # not in this package list.
-        uses: awalsh128/cache-apt-pkgs-action@681749ae568c81c2037cb9185e38b709b261bd2f  # v1.6.1
+        uses: awalsh128/cache-apt-pkgs-action@681749ae568c81c2037cb9185e38b709b261bd2f  # v1.6.1 — held; 1.6.2 breaks CI (empty_packages_behavior), see DEPENDENCY_STANDARDS.md
         with:
           packages: build-essential ninja-build pkg-config libgl1-mesa-dev libglu1-mesa-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxxf86vm-dev libwayland-dev libxkbcommon-dev xvfb
           version: cmake-compat-1

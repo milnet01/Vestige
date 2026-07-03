@@ -43,7 +43,7 @@ jobs:
 
       - name: Install audit tool dependencies
         # Same package set + pin as ci.yml's audit job.
-        uses: awalsh128/cache-apt-pkgs-action@681749ae568c81c2037cb9185e38b709b261bd2f  # v1.6.1
+        uses: awalsh128/cache-apt-pkgs-action@681749ae568c81c2037cb9185e38b709b261bd2f  # v1.6.1 — held; 1.6.2 breaks CI (empty_packages_behavior), see DEPENDENCY_STANDARDS.md
         with:
           packages: cppcheck clang-tidy python3 python3-pip python3-xmltodict python3-yaml python3-flask build-essential cmake ninja-build xvfb libgl1-mesa-dev libglu1-mesa-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxxf86vm-dev libwayland-dev libxkbcommon-dev
           version: audit-full-1

@@ -22,6 +22,49 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-07-03 Added — Local CI mirrors the Windows/MSVC job (opt-in `--windows`)
+
+`scripts/local-ci.sh --windows` now reproduces GitHub's `windows-build-test`
+job **on the Linux dev box**: it cross-compiles the engine with the real MSVC
+toolchain (`cl.exe` + Windows SDK) under Wine via
+[msvc-wine](https://github.com/mstorsjo/msvc-wine), then runs the compiled
+gtest suite under Wine. This catches MSVC-only breakage (`localtime_r`, `M_PI`,
+non-noexcept-move-in-vector) before a push instead of ~15 minutes into CI. It
+is **opt-in** — a separate cold cross-build with a different compiler (no
+ccache sharing with the Linux stages), several minutes — so the everyday
+`local-ci.sh` still runs only the Linux stages.
+
+Two cross-compilation issues were fixed at root, not worked around (logged per
+project rule 5):
+
+- **Host `pkg-config` leaked Linux audio libs into the Windows build.** OpenAL's
+  CMake found the host's PipeWire dev headers and enabled a Linux backend for a
+  Windows target (`spa/utils/cleanup.h` → `unistd.h`, which MSVC can't open).
+  Fixed by pointing `PKG_CONFIG_LIBDIR` at an empty dir for the cross build,
+  reproducing a native Windows build's empty package registry.
+- **The Wine cross-compile emulator mangled host-Python test exit codes.** The
+  `LocalizationAudit*` / `ShaderLint*` ctest entries run host `python3`; under
+  the emulator they exited 1 despite passing. They are excluded from the Wine
+  run (`ctest -E 'LocalizationAudit|ShaderLint'`) — they already run natively
+  in the Linux stages and don't exercise MSVC-compiled code.
+
+### 2026-07-03 Added — Dependency Standards + Breaking-Version Registry
+
+New `DEPENDENCY_STANDARDS.md` formalises the standing rule that every dependency
+stays on its **latest stable release** (a security requirement, not only a
+feature one). The rare deliberate non-latest pin is split on one question —
+does a suitable released tag exist? — into **(A)** held below a breaking release
+→ a **Breaking-Version Registry** row whose *re-test trigger* names the exact
+breaking version (so the pin is re-tested and lifted once a fixed release ships,
+never permanent rot), or **(B)** a branch-commit pin because no suitable tag
+exists → `THIRD_PARTY_NOTICES.md`'s Branch-commit-pins section. `CLAUDE.md`
+Rule 8 now routes to it. Reviewed via `/cold-eyes` to convergence (5 loops).
+
+First registry entry: `awalsh128/cache-apt-pkgs-action` held at **1.6.1** —
+1.6.2's new `empty_packages_behavior: error` default reddens CI (Dependabot
+PR #14). The five workflow pin sites now carry a pointer comment to the
+registry. (Separately, `actions/cache` was bumped 5→6 via Dependabot #13.)
+
 ### 2026-07-01 Added — Geometric / ray-traced audio occlusion (AX1)
 
 Sound now muffles behind walls **from the actual scene geometry**, closing the
