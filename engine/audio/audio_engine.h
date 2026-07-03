@@ -14,6 +14,7 @@
 #include "audio/audio_mixer.h"
 #include "audio/audio_output_mode.h"
 #include "audio/audio_reverb.h"                     // AX2 ReverbParams
+#include "audio/reverb_ir_pool.h"                   // AX2 R2 convolution IR pool
 #include "audio/procedural/material_sound_bank.h"  // AX4 S5 synth bank
 #include "physics/surface_material.h"              // AX4 S5 SurfaceMaterial
 
@@ -528,7 +529,14 @@ public:
     void setOcclusionSourceRadius(float r)   { m_occlusionSourceRadius = r; }
     float occlusionSourceRadius() const      { return m_occlusionSourceRadius; }
 
-    /// @name AX2 reverb (R1 — engine-wide EFX aux-effect-slot reverb)
+    /// @brief AX2 R2 — which OpenAL backend drives the reverb aux slot.
+    ///        `Convolution` when the driver advertises the experimental
+    ///        `AL_SOFTX_convolution_effect` (IRs loaded via `loadReverbIr` +
+    ///        `attachReverbIr`); else `Parametric` (R1's `AL_EFFECT_REVERB`
+    ///        driven by `setReverbParams`). Selected once at `initialize()`.
+    enum class ReverbBackend { Parametric, Convolution };
+
+    /// @name AX2 reverb (R1 aux-slot + parametric; R2 IR convolution)
     /// @{
     /// @brief Push a `ReverbParams` set onto the parametric `AL_EFFECT_REVERB`
     ///        object and re-attach it to the aux slot. Silent no-op when the
@@ -545,6 +553,35 @@ public:
     ///        device advertises ≥ 1 auxiliary send. False ⟹ reverb degrades to
     ///        dry and `applySourceState` never sets an aux send.
     bool  isReverbAvailable() const { return m_reverbSlot != 0 && m_maxAuxSends > 0; }
+    /// @brief AX2 R2 — the backend chosen at init. Convolution ⟹ IRs;
+    ///        Parametric ⟹ `ReverbParams`. Defaults Parametric before init.
+    ReverbBackend reverbBackend() const { return m_reverbBackend; }
+    /// @brief AX2 R2 — decode an impulse-response WAV at @a path into a
+    ///        dedicated AL buffer for the convolution backend, cached by path
+    ///        in a 64 MB LRU pool (`ReverbIrPool`). Reuses the
+    ///        `AudioClip` decoder + the `validatePath` sandbox; deliberately
+    ///        skips the clip LRU cache and AX9 loudness (an IR is not a played
+    ///        clip). A cache hit returns the existing buffer (promoted to MRU).
+    ///        Returns 0 on sandbox rejection, decode failure, upload error, or
+    ///        when the engine is unavailable. The returned buffer is NOT
+    ///        attached — call `attachReverbIr` (R3 drives that per winning zone).
+    unsigned int loadReverbIr(const std::string& path);
+    /// @brief AX2 R2 — attach an IR buffer (from `loadReverbIr`) to the aux
+    ///        slot as the active convolution response. No-op unless the
+    ///        convolution backend is active and the slot is live. The attached
+    ///        IR is pinned — exempt from LRU eviction (the extension forbids
+    ///        deleting an attached buffer). Pass 0 to detach.
+    void attachReverbIr(unsigned int irBuffer);
+    /// @brief AX2 R2 — the IR currently attached to the slot (0 = none).
+    unsigned int attachedReverbIr() const { return m_reverbIrPool.pinned(); }
+    /// @brief AX2 R2 — resident IR-buffer count / their total PCM bytes.
+    size_t reverbIrCount() const     { return m_reverbIrPool.count(); }
+    size_t reverbIrPoolBytes() const { return m_reverbIrPool.bytes(); }
+    /// @brief AX2 R2 — set the IR-pool byte ceiling; tightening evicts LRU-tail
+    ///        IRs immediately (never the attached one). Default 64 MB
+    ///        (`ReverbIrPool::kDefaultLimitBytes`).
+    void   setReverbIrPoolLimitBytes(size_t bytes);
+    size_t reverbIrPoolLimitBytes() const { return m_reverbIrPool.limitBytes(); }
     /// @}
 
     /// @brief AX4 S9 — master toggle for procedural (synthesised) audio:
@@ -713,6 +750,13 @@ private:
     unsigned int m_reverbEffect = 0;
     float        m_reverbWetGain = 0.0f;  ///< Slot gain [0,1]; 0 = dry (default).
     int          m_maxAuxSends   = 0;     ///< ALC_MAX_AUXILIARY_SENDS probe.
+    ReverbBackend m_reverbBackend = ReverbBackend::Parametric;  ///< AX2 R2 backend.
+
+    // AX2 R2 — convolution IR pool: an LRU, byte-bounded store of decoded IR
+    // buffers (device-free bookkeeping in `ReverbIrPool`; this class performs
+    // the alGenBuffers/alDeleteBuffers around it and pins the attached IR so the
+    // extension's "don't delete an attached buffer" rule holds — design §4.1/§7).
+    ReverbIrPool m_reverbIrPool;
     bool         m_airAbsorptionEnabled = true;  ///< AX6 master toggle (read by AudioSystem).
     bool         m_lodEnabled           = true;  ///< AX5 LOD-ladder toggle (read by AudioSystem).
     bool         m_proceduralAudioEnabled = true;  ///< AX4 S9 master procedural-audio toggle (gates playSynth).
@@ -853,6 +897,12 @@ private:
     ///        `m_bufferCacheLimit`. Called automatically after every
     ///        `loadBuffer` insert and from `setBufferCacheLimit`.
     void enforceBufferCacheLimit();
+
+    /// @brief AX2 R2 — deletes the evicted IR buffer IDs a pool operation
+    ///        returned, then logs if the pool still exceeds its cap because the
+    ///        only survivors are the pinned + MRU-front IRs (Rule 5 — no silent
+    ///        caps). Central so both load and limit-change paths behave alike.
+    void reapEvictedReverbIrs(const std::vector<unsigned int>& evicted);
 };
 
 } // namespace Vestige

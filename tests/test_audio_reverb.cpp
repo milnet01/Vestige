@@ -9,6 +9,7 @@
 
 #include "audio/audio_engine.h"
 #include "audio/audio_reverb.h"
+#include "audio/reverb_ir_pool.h"
 
 using namespace Vestige;
 
@@ -218,4 +219,41 @@ TEST(AudioReverb, SetReverbParamsIsANoOpWithoutASlot)
     AudioEngine engine;
     engine.setReverbParams(reverbPresetParams(ReverbPreset::Cave));
     EXPECT_FALSE(engine.isReverbAvailable());
+}
+
+// -- AX2 R2: IR loading + convolution backend (headless contract) ----------
+//
+// Backend selection needs a live device + the experimental extension, neither
+// present headless — so an uninitialised engine reports the parametric backend
+// (the R1 fallback) and the IR-load path degrades gracefully to a no-op. The
+// LRU / pin / byte-limit logic itself is covered device-free in
+// test_reverb_ir_pool.cpp.
+
+TEST(AudioReverb, BackendDefaultsToParametricWhenUninitialised)
+{
+    AudioEngine engine;  // no device → the R1 parametric fallback stands
+    EXPECT_EQ(engine.reverbBackend(), AudioEngine::ReverbBackend::Parametric);
+}
+
+TEST(AudioReverb, LoadReverbIrReturnsZeroAndAddsNothingWhenUnavailable)
+{
+    AudioEngine engine;  // no device — decode/alGenBuffers never run
+    EXPECT_EQ(engine.loadReverbIr("assets/audio/ir/any.wav"), 0u);
+    EXPECT_EQ(engine.reverbIrCount(), 0u);
+    EXPECT_EQ(engine.reverbIrPoolBytes(), 0u);
+    EXPECT_EQ(engine.attachedReverbIr(), 0u);
+}
+
+TEST(AudioReverb, AttachReverbIrIsANoOpOnParametricBackend)
+{
+    // Parametric backend (and no slot) headless: attach must not pin anything.
+    AudioEngine engine;
+    engine.attachReverbIr(42u);
+    EXPECT_EQ(engine.attachedReverbIr(), 0u);
+}
+
+TEST(AudioReverb, ReverbIrPoolLimitDefaultsTo64MiB)
+{
+    AudioEngine engine;
+    EXPECT_EQ(engine.reverbIrPoolLimitBytes(), ReverbIrPool::kDefaultLimitBytes);
 }

@@ -291,6 +291,7 @@ set(ENGINE_SOURCES
     audio/audio_ducking.cpp
     audio/audio_occlusion.cpp
     audio/audio_reverb.cpp
+    audio/reverb_ir_pool.cpp
     audio/audio_ambient.cpp
     audio/audio_music.cpp
     audio/audio_mixer.cpp

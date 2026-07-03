@@ -201,12 +201,40 @@ bool AudioEngine::initialize()
             auto effecti    = reinterpret_cast<LPALEFFECTI>(m_alEffecti);
             genSlots(1, &m_reverbSlot);
             genEffects(1, &m_reverbEffect);
-            effecti(m_reverbEffect, AL_EFFECT_TYPE, AL_EFFECT_REVERB);
+
+            // AX2 R2 — backend selection (once, at init). Prefer the
+            // experimental convolution effect when the driver advertises it;
+            // else fall back to R1's parametric AL_EFFECT_REVERB. Spelling trap
+            // (design §4.2): the runtime probe string carries the X
+            // ("AL_SOFTX_convolution_effect", per alconvolve.c), while the
+            // header feature macro (AL_SOFT_convolution_effect) does not — the
+            // X-form is only ever the alIsExtensionPresent argument.
+            bool convolutionOk = false;
+            if (alIsExtensionPresent("AL_SOFTX_convolution_effect"))
+            {
+                // Value from the fetched alc/inprogext.h experimental extension.
+                constexpr ALenum AL_EFFECT_CONVOLUTION_SOFT = 0xA000;
+                alGetError();
+                effecti(m_reverbEffect, AL_EFFECT_TYPE, AL_EFFECT_CONVOLUTION_SOFT);
+                convolutionOk = (alGetError() == AL_NO_ERROR);
+            }
+            if (convolutionOk)
+            {
+                m_reverbBackend = ReverbBackend::Convolution;
+            }
+            else
+            {
+                // Extension absent, or the driver refused the convolution
+                // effect — use the parametric backend (R1 behaviour).
+                alGetError();
+                effecti(m_reverbEffect, AL_EFFECT_TYPE, AL_EFFECT_REVERB);
+                m_reverbBackend = ReverbBackend::Parametric;
+            }
             if (alGetError() != AL_NO_ERROR ||
                 m_reverbSlot == 0 || m_reverbEffect == 0)
             {
-                // Driver refused the reverb effect — drop the objects and
-                // degrade to dry (applySourceState skips the aux-send path).
+                // Both backends refused — drop the objects and degrade to dry
+                // (applySourceState skips the aux-send path).
                 if (m_reverbEffect != 0)
                 {
                     auto delEffects =
@@ -220,14 +248,21 @@ bool AudioEngine::initialize()
                             m_alDeleteAuxiliaryEffectSlots);
                     delSlots(1, &m_reverbSlot);
                 }
-                m_reverbSlot   = 0;
-                m_reverbEffect = 0;
+                m_reverbSlot    = 0;
+                m_reverbEffect  = 0;
+                m_reverbBackend = ReverbBackend::Parametric;
             }
             else
             {
-                // A sane default preset + attach; wet gain starts at 0 so the
-                // engine is dry until a zone/setting raises it (R3/R4).
-                setReverbParams(reverbPresetParams(ReverbPreset::Generic));
+                // Parametric backend: seed a sane default preset. The
+                // convolution backend waits for an IR (attachReverbIr, driven
+                // by R3) — pushing AL_REVERB_* onto a convolution effect would
+                // error. Wet gain starts at 0 for both backends, so the engine
+                // is dry until a zone/setting raises it (R3/R4).
+                if (m_reverbBackend == ReverbBackend::Parametric)
+                {
+                    setReverbParams(reverbPresetParams(ReverbPreset::Generic));
+                }
                 setReverbWetGain(m_reverbWetGain);
             }
         }
@@ -345,6 +380,14 @@ void AudioEngine::shutdown()
         reinterpret_cast<LPALDELETEEFFECTS>(m_alDeleteEffects)(
             1, &m_reverbEffect);
         m_reverbEffect = 0;
+    }
+
+    // AX2 R2 — delete the convolution IR buffers. The slot is already gone
+    // (deleted just above), so no IR is attached and every buffer is free to
+    // delete. Ordinary AL buffers, released with the core alDeleteBuffers.
+    for (unsigned int id : m_reverbIrPool.clear())
+    {
+        alDeleteBuffers(1, &id);
     }
 
     // AX11 — deregister the global system-events callback BEFORE tearing
@@ -1322,8 +1365,11 @@ void AudioEngine::setReverbParams(const ReverbParams& params)
 {
     // Push the standard (non-EAX) AL_REVERB_* properties onto the effect,
     // then re-attach the effect to the slot so the change takes hold. No-op
-    // until the slot + effect exist (EFX absent or driver-refused).
-    if (m_reverbEffect == 0 || m_reverbSlot == 0)
+    // until the slot + effect exist (EFX absent or driver-refused), and on the
+    // convolution backend (R2) — an AL_REVERB_* push onto a convolution effect
+    // would error; that backend takes IRs via attachReverbIr instead.
+    if (m_reverbEffect == 0 || m_reverbSlot == 0 ||
+        m_reverbBackend != ReverbBackend::Parametric)
     {
         return;
     }
@@ -1351,6 +1397,92 @@ void AudioEngine::setReverbWetGain(float gain)
     auto slotf =
         reinterpret_cast<LPALAUXILIARYEFFECTSLOTF>(m_alAuxiliaryEffectSlotf);
     slotf(m_reverbSlot, AL_EFFECTSLOT_GAIN, m_reverbWetGain);
+}
+
+unsigned int AudioEngine::loadReverbIr(const std::string& path)
+{
+    // Path sandbox (design §4.1) — same gate as loadBuffer, run before the
+    // availability check so paths can't be probed via the audio API.
+    const std::string safePath = validatePath(path);
+    if (safePath.empty())
+    {
+        return 0;
+    }
+    if (!m_available)
+    {
+        return 0;
+    }
+
+    // Cache hit — the pool promotes the path to MRU and returns its buffer.
+    // Keyed by the caller's path (mirrors loadBuffer); decoded from safePath.
+    if (unsigned int cached = m_reverbIrPool.find(path))
+    {
+        return cached;
+    }
+
+    // Decode WAV → s16 PCM via the shared AudioClip decoder. No LRU clip cache,
+    // no AX9 loudness measurement — an IR is convolution data, not a played clip.
+    auto clip = AudioClip::loadFromFile(safePath);
+    if (!clip)
+    {
+        return 0;
+    }
+
+    ALuint buffer = 0;
+    alGenBuffers(1, &buffer);
+    alBufferData(buffer,
+                 static_cast<ALenum>(clip->getALFormat()),
+                 clip->getSamples().data(),
+                 static_cast<ALsizei>(clip->getDataSizeBytes()),
+                 static_cast<ALsizei>(clip->getSampleRate()));
+    if (alGetError() != AL_NO_ERROR)
+    {
+        Logger::error("[AudioEngine] Failed to upload reverb IR: " + path);
+        alDeleteBuffers(1, &buffer);
+        return 0;
+    }
+
+    reapEvictedReverbIrs(
+        m_reverbIrPool.insert(path, buffer, clip->getDataSizeBytes()));
+    return buffer;
+}
+
+void AudioEngine::attachReverbIr(unsigned int irBuffer)
+{
+    // Only the convolution backend consumes IRs; on the parametric backend (or
+    // no slot) this is a silent no-op. Attaching pins the buffer against LRU
+    // eviction (the extension forbids deleting an attached buffer). Passing 0
+    // detaches, unpinning the previously-attached IR.
+    if (m_reverbSlot == 0 || m_reverbBackend != ReverbBackend::Convolution)
+    {
+        return;
+    }
+    reinterpret_cast<LPALAUXILIARYEFFECTSLOTI>(m_alAuxiliaryEffectSloti)(
+        m_reverbSlot, AL_BUFFER, static_cast<ALint>(irBuffer));
+    m_reverbIrPool.setPinned(irBuffer);
+}
+
+void AudioEngine::setReverbIrPoolLimitBytes(size_t bytes)
+{
+    reapEvictedReverbIrs(m_reverbIrPool.setLimit(bytes));
+}
+
+void AudioEngine::reapEvictedReverbIrs(const std::vector<unsigned int>& evicted)
+{
+    for (unsigned int id : evicted)
+    {
+        alDeleteBuffers(1, &id);
+    }
+    if (m_reverbIrPool.bytes() > m_reverbIrPool.limitBytes())
+    {
+        // Rule 5 — surface the overflow rather than silently exceeding the cap.
+        // Only reachable when the pinned + MRU-front IRs alone exceed the limit.
+        Logger::warning("[AudioEngine] Reverb IR pool " +
+                        std::to_string(m_reverbIrPool.bytes()) +
+                        " B exceeds limit " +
+                        std::to_string(m_reverbIrPool.limitBytes()) +
+                        " B (attached + MRU IR pinned).");
+    }
 }
 
 void AudioEngine::updateGains()
