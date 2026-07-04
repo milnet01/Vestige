@@ -11,6 +11,7 @@
 /// their own entries before calling `serializeEntity` /
 /// `deserializeEntity`.
 #include "utils/entity_serializer.h"
+#include "audio/acoustic_probe_component.h"
 #include "audio/audio_source_component.h"
 #include "audio/reverb_zone_component.h"
 #include "scene/entity.h"
@@ -875,6 +876,21 @@ static void deserializeReverbZone(const json& j, Entity& entity, ResourceManager
     comp->wetGain     = j.value("wetGain", 0.30f);
 }
 
+static json serializeAcousticProbe(const AcousticProbeComponent& comp)
+{
+    json j;
+    j["influenceRadius"] = comp.influenceRadius;
+    j["bakedIrPath"]     = comp.bakedIrPath;
+    return j;
+}
+
+static void deserializeAcousticProbe(const json& j, Entity& entity, ResourceManager&)
+{
+    auto* comp = entity.addComponent<AcousticProbeComponent>();
+    comp->influenceRadius = j.value("influenceRadius", 10.0f);
+    comp->bakedIrPath     = j.value("bakedIrPath", std::string(""));
+}
+
 // ---------------------------------------------------------------------------
 // Built-in registry population
 // ---------------------------------------------------------------------------
@@ -969,6 +985,15 @@ static void ensureBuiltinsRegistered()
                 return c ? serializeReverbZone(*c) : json();
             },
             deserializeReverbZone
+        });
+
+        reg.registerEntry({
+            "AcousticProbe",
+            [](const Entity& e, const ResourceManager&) -> json {
+                auto* c = e.getComponent<AcousticProbeComponent>();
+                return c ? serializeAcousticProbe(*c) : json();
+            },
+            deserializeAcousticProbe
         });
     });
 }

@@ -32,6 +32,7 @@
 
 #include <gtest/gtest.h>
 
+#include "audio/acoustic_probe_component.h"
 #include "audio/audio_source_component.h"
 #include "audio/reverb_zone_component.h"
 #include "core/logger.h"
@@ -255,6 +256,76 @@ TEST(EntitySerializerRegistry, ReverbZoneAbsentFieldsTakeDefaults)
     EXPECT_EQ(zone->preset,            ReverbPreset::Generic);
     EXPECT_TRUE(zone->irPath.empty());
     EXPECT_FLOAT_EQ(zone->wetGain,     0.30f);
+}
+
+// ---------------------------------------------------------------------------
+// AX3 B1 — AcousticProbeComponent survives the JSON round-trip, and the pure
+// nearest-probe helper selects the expected probe.
+// ---------------------------------------------------------------------------
+
+TEST(EntitySerializerRegistry, AcousticProbeAllFieldsRoundTrip)
+{
+    Scene sceneOut("Out");
+    Entity* src = sceneOut.createEntity("ProbeHost");
+    auto* probeOut = src->addComponent<AcousticProbeComponent>();
+    probeOut->influenceRadius = 14.0f;                       // not the 10.0 default
+    probeOut->bakedIrPath     = "scene_acoustics/probe_3.wav";
+
+    ResourceManager resources;
+    json j = EntitySerializer::serializeEntity(*src, resources);
+    ASSERT_TRUE(j.contains("components"));
+    ASSERT_TRUE(j["components"].contains("AcousticProbe"))
+        << "AcousticProbe not registered with the serializer";
+
+    Scene sceneIn("In");
+    Entity* dst = EntitySerializer::deserializeEntity(j, sceneIn, resources);
+    ASSERT_NE(dst, nullptr);
+
+    auto* probeIn = dst->getComponent<AcousticProbeComponent>();
+    ASSERT_NE(probeIn, nullptr) << "AcousticProbe dropped on deserialisation";
+    EXPECT_FLOAT_EQ(probeIn->influenceRadius, 14.0f);
+    EXPECT_EQ(probeIn->bakedIrPath,           "scene_acoustics/probe_3.wav");
+}
+
+TEST(EntitySerializerRegistry, AcousticProbeAbsentFieldsTakeDefaults)
+{
+    json entityJson;
+    entityJson["name"] = "Host";
+    entityJson["transform"]["position"] = {0.0f, 0.0f, 0.0f};
+    entityJson["transform"]["rotation"] = {0.0f, 0.0f, 0.0f};
+    entityJson["transform"]["scale"]    = {1.0f, 1.0f, 1.0f};
+    entityJson["components"]["AcousticProbe"] = json::object();
+
+    Scene scene("Defaults");
+    ResourceManager resources;
+    Entity* host = EntitySerializer::deserializeEntity(entityJson, scene, resources);
+    ASSERT_NE(host, nullptr);
+
+    auto* probe = host->getComponent<AcousticProbeComponent>();
+    ASSERT_NE(probe, nullptr);
+    EXPECT_FLOAT_EQ(probe->influenceRadius, 10.0f);
+    EXPECT_TRUE(probe->bakedIrPath.empty());
+}
+
+TEST(AcousticProbe, NearestProbeIndexPicksClosestAndBreaksTiesLow)
+{
+    // Empty list ⇒ no probe.
+    EXPECT_EQ(nearestAcousticProbeIndex({}, glm::vec3(0.0f)), -1);
+
+    const std::vector<glm::vec3> probes = {
+        {0.0f, 0.0f, 0.0f},   // 0
+        {10.0f, 0.0f, 0.0f},  // 1
+        {0.0f, 3.0f, 0.0f},   // 2 — nearest to the listener below
+    };
+    EXPECT_EQ(nearestAcousticProbeIndex(probes, glm::vec3(0.0f, 2.0f, 0.0f)), 2);
+    EXPECT_EQ(nearestAcousticProbeIndex(probes, glm::vec3(9.0f, 0.0f, 0.0f)), 1);
+
+    // Equidistant probes ⇒ the lower index wins (deterministic bake selection).
+    const std::vector<glm::vec3> tie = {
+        {-1.0f, 0.0f, 0.0f},  // 0
+        {1.0f, 0.0f, 0.0f},   // 1 — same distance from the origin
+    };
+    EXPECT_EQ(nearestAcousticProbeIndex(tie, glm::vec3(0.0f)), 0);
 }
 
 // ---------------------------------------------------------------------------
