@@ -517,6 +517,42 @@ private:
 };
 
 // ================================================================
+// AX2 R4 — reverb settings apply path (master toggle + wet cap +
+// convolution-backend gate; all stored on AudioEngine)
+// ================================================================
+
+/// @brief Sink for the three reverb settings. All live on `AudioEngine`; this
+///        is the abstract seam the headless tests mock.
+class AudioReverbApplySink
+{
+public:
+    virtual ~AudioReverbApplySink() = default;
+    virtual void setReverbEnabled(bool enabled) = 0;
+    virtual void setReverbWetCap(float cap) = 0;
+    virtual void setReverbConvolutionEnabled(bool enabled) = 0;
+};
+
+/// @brief Pushes the reverb settings onto a sink.
+void applyAudioReverb(const AudioSettings& audio, AudioReverbApplySink& sink);
+
+/// @brief Production sink wrapping a live `AudioEngine`. The enable + wet-cap
+///        setters take effect the next frame (`ReverbSystem` reads them); the
+///        convolution gate is read once at `AudioEngine::initialize()`, so a
+///        runtime flip lands at the next launch (boot's `forceLiveApply()`
+///        pushes the persisted value before init).
+class AudioEngineReverbApplySink final : public AudioReverbApplySink
+{
+public:
+    explicit AudioEngineReverbApplySink(AudioEngine& engine);
+    void setReverbEnabled(bool enabled) override;
+    void setReverbWetCap(float cap) override;
+    void setReverbConvolutionEnabled(bool enabled) override;
+
+private:
+    AudioEngine& m_engine;
+};
+
+// ================================================================
 // Slice 13.3b — Photosensitive safety apply path
 // ================================================================
 

@@ -84,18 +84,26 @@ void ReverbSystem::update(float deltaTime)
         float              wetGain;
         const std::string* irPath;  // Borrows the component string; valid this
                                      // frame (the scene is not mutated below).
+        const std::string* name;    // Borrows the entity name (Debug read-out).
     };
     std::vector<GatheredZone> zones;
-    scene->forEachEntity([&](Entity& entity)
+    // AX2 R4 — the master toggle simply short-circuits the gather: an empty zone
+    // set makes selectReverbZone report dry, so the slot slews to 0 and no source
+    // gets a send. No separate "disabled" branch needed.
+    if (m_audioEngine->isReverbEnabled())
     {
-        auto* z = entity.getComponent<ReverbZoneComponent>();
-        if (z == nullptr)
+        scene->forEachEntity([&](Entity& entity)
         {
-            return;
-        }
-        zones.push_back({ entity.getWorldPosition(), z->coreRadius, z->falloffBand,
-                          reverbPresetParams(z->preset), z->wetGain, &z->irPath });
-    });
+            auto* z = entity.getComponent<ReverbZoneComponent>();
+            if (z == nullptr)
+            {
+                return;
+            }
+            zones.push_back({ entity.getWorldPosition(), z->coreRadius,
+                              z->falloffBand, reverbPresetParams(z->preset),
+                              z->wetGain, &z->irPath, &entity.getName() });
+        });
+    }
 
     // --- Pick the winning zone (+ neighbour) from the listener position.
     std::vector<ReverbZoneEval> evals;
@@ -107,9 +115,23 @@ void ReverbSystem::update(float deltaTime)
     }
     const ReverbSelection sel = selectReverbZone(evals);
 
+    // Record the winner for the Debug tab (empty when dry / disabled). The
+    // explicit size check both states the invariant (sel.winner indexes the
+    // 1:1 `evals`/`zones` vectors) and satisfies cppcheck's value-flow, which
+    // can't correlate `evals.size()` with `zones.size()` across the call.
+    m_winningZoneName.clear();
+    if (sel.winner >= 0 &&
+        static_cast<std::size_t>(sel.winner) < zones.size())
+    {
+        m_winningZoneName = *zones[static_cast<std::size_t>(sel.winner)].name;
+    }
+
     // --- Drive the slot: character (params or IR swap) + slewed wet gain.
+    // AX2 R4 — cap the target at the accessibility ceiling before slewing.
+    const float target =
+        std::min(sel.targetWetGain, m_audioEngine->reverbWetCap());
     const float slew = std::clamp(deltaTime * kReverbGainSlewPerSec, 0.0f, 1.0f);
-    m_slotWetGain = slewReverbWetGain(m_slotWetGain, sel.targetWetGain, slew);
+    m_slotWetGain = slewReverbWetGain(m_slotWetGain, target, slew);
 
     if (m_audioEngine->reverbBackend() == AudioEngine::ReverbBackend::Convolution)
     {

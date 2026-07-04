@@ -10,44 +10,40 @@
 #include "audio/audio_hrtf.h"
 #include "audio/audio_output_mode.h"
 #include "audio/audio_source_component.h"
+#include "audio/reverb_zone_component.h"
 #include "core/settings.h"
 #include "core/settings_editor.h"
 #include "scene/entity.h"
 #include "scene/scene.h"
 #include "systems/audio_system.h"
+#include "systems/reverb_system.h"
 
 #include <imgui.h>
 
 #include <algorithm>
+#include <cstdio>
 
 namespace Vestige
 {
 
 // ----- State mutators (ImGui-free, unit-testable) ----------------
 
-int AudioPanel::addReverbZone(const ReverbZoneInstance& zone)
+Entity* AudioPanel::createReverbZone(Scene& scene)
 {
-    m_reverbZones.push_back(zone);
-    return static_cast<int>(m_reverbZones.size()) - 1;
+    Entity* entity = scene.createEntity("Reverb Zone");
+    entity->addComponent<ReverbZoneComponent>();
+    m_selectedReverbZoneEntity = entity->getId();
+    return entity;
 }
 
-bool AudioPanel::removeReverbZone(int index)
+bool AudioPanel::removeReverbZone(Scene& scene, std::uint32_t entityId)
 {
-    if (index < 0 || index >= static_cast<int>(m_reverbZones.size()))
+    const bool removed = scene.removeEntity(entityId);
+    if (removed && m_selectedReverbZoneEntity == entityId)
     {
-        return false;
+        m_selectedReverbZoneEntity = 0;
     }
-    m_reverbZones.erase(m_reverbZones.begin() + index);
-    if (m_selectedReverbZone == index)
-    {
-        m_selectedReverbZone = -1;
-    }
-    else if (m_selectedReverbZone > index)
-    {
-        // Shift the selection down to keep it pointing at the same zone.
-        m_selectedReverbZone--;
-    }
-    return true;
+    return removed;
 }
 
 int AudioPanel::addAmbientZone(const AmbientZoneInstance& zone)
@@ -151,7 +147,7 @@ void AudioPanel::draw(AudioSystem* audioSystem, Scene* scene)
         }
         if (ImGui::BeginTabItem("Zones"))
         {
-            drawZonesTab();
+            drawZonesTab(scene);
             ImGui::EndTabItem();
         }
         if (ImGui::BeginTabItem("Debug"))
@@ -273,52 +269,77 @@ void AudioPanel::drawSourcesTab(Scene* scene)
     }
 }
 
-void AudioPanel::drawZonesTab()
+void AudioPanel::drawZonesTab(Scene* scene)
 {
-    // --- Reverb ---
+    // --- Reverb (real scene ReverbZoneComponent entities, AX2 R4) ---
     ImGui::TextUnformatted("Reverb zones");
-    if (ImGui::Button("Add reverb zone"))
+    if (!scene)
     {
-        addReverbZone(ReverbZoneInstance{});
-        m_selectedReverbZone = static_cast<int>(m_reverbZones.size()) - 1;
+        ImGui::TextDisabled("No scene — reverb zones unavailable.");
     }
-    ImGui::Separator();
-
-    for (std::size_t i = 0; i < m_reverbZones.size(); ++i)
+    else
     {
-        ImGui::PushID(static_cast<int>(i));
-        const bool isSelected = (static_cast<int>(i) == m_selectedReverbZone);
-        if (ImGui::Selectable(m_reverbZones[i].name.c_str(), isSelected))
+        if (ImGui::Button("Add reverb zone"))
         {
-            m_selectedReverbZone = static_cast<int>(i);
+            createReverbZone(*scene);
         }
-        ImGui::PopID();
-    }
-
-    if (m_selectedReverbZone >= 0 &&
-        m_selectedReverbZone < static_cast<int>(m_reverbZones.size()))
-    {
         ImGui::Separator();
-        auto& z = m_reverbZones[static_cast<std::size_t>(m_selectedReverbZone)];
-        char nameBuf[128];
-        std::snprintf(nameBuf, sizeof(nameBuf), "%s", z.name.c_str());
-        if (ImGui::InputText("Name", nameBuf, sizeof(nameBuf)))
+
+        // List every entity carrying a ReverbZoneComponent (mirrors the
+        // Sources tab's scene walk). Selection is by entity id.
+        scene->forEachEntity([&](Entity& entity)
         {
-            z.name = nameBuf;
-        }
-        ImGui::DragFloat3("Center", &z.center.x, 0.1f);
-        ImGui::SliderFloat("Core radius",  &z.coreRadius,  0.1f, 100.0f, "%.1f");
-        ImGui::SliderFloat("Falloff band", &z.falloffBand, 0.0f, 100.0f, "%.1f");
-        const char* presets[] = {"Generic", "SmallRoom", "LargeHall",
-                                  "Cave", "Outdoor", "Underwater"};
-        int presetIdx = static_cast<int>(z.preset);
-        if (ImGui::Combo("Preset", &presetIdx, presets, IM_ARRAYSIZE(presets)))
+            if (entity.getComponent<ReverbZoneComponent>() == nullptr)
+            {
+                return;
+            }
+            const std::uint32_t id = entity.getId();
+            ImGui::PushID(static_cast<int>(id));
+            const bool isSelected = (id == m_selectedReverbZoneEntity);
+            if (ImGui::Selectable(entity.getName().c_str(), isSelected))
+            {
+                m_selectedReverbZoneEntity = id;
+            }
+            ImGui::PopID();
+        });
+
+        Entity* selected = scene->findEntityById(m_selectedReverbZoneEntity);
+        ReverbZoneComponent* z =
+            selected ? selected->getComponent<ReverbZoneComponent>() : nullptr;
+        if (z != nullptr)
         {
-            z.preset = static_cast<ReverbPreset>(presetIdx);
-        }
-        if (ImGui::Button("Remove reverb zone"))
-        {
-            removeReverbZone(m_selectedReverbZone);
+            ImGui::Separator();
+            ImGui::PushID(static_cast<int>(m_selectedReverbZoneEntity));
+            char nameBuf[128];
+            std::snprintf(nameBuf, sizeof(nameBuf), "%s",
+                          selected->getName().c_str());
+            if (ImGui::InputText("Name", nameBuf, sizeof(nameBuf)))
+            {
+                selected->setName(nameBuf);
+            }
+            // Position is the entity transform — set it via the scene
+            // hierarchy / gizmo like any entity, not here.
+            ImGui::SliderFloat("Core radius",  &z->coreRadius,  0.1f, 100.0f, "%.1f");
+            ImGui::SliderFloat("Falloff band", &z->falloffBand, 0.0f, 100.0f, "%.1f");
+            const char* presets[] = {"Generic", "SmallRoom", "LargeHall",
+                                      "Cave", "Outdoor", "Underwater"};
+            int presetIdx = static_cast<int>(z->preset);
+            if (ImGui::Combo("Preset", &presetIdx, presets, IM_ARRAYSIZE(presets)))
+            {
+                z->preset = static_cast<ReverbPreset>(presetIdx);
+            }
+            char irBuf[256];
+            std::snprintf(irBuf, sizeof(irBuf), "%s", z->irPath.c_str());
+            if (ImGui::InputText("IR path (convolution)", irBuf, sizeof(irBuf)))
+            {
+                z->irPath = irBuf;
+            }
+            ImGui::SliderFloat("Wet gain", &z->wetGain, 0.0f, 1.0f, "%.2f");
+            if (ImGui::Button("Remove reverb zone"))
+            {
+                removeReverbZone(*scene, m_selectedReverbZoneEntity);
+            }
+            ImGui::PopID();
         }
     }
 
@@ -425,6 +446,25 @@ void AudioPanel::drawDebugTab(AudioSystem* audioSystem)
     // global manual duck only).
     ImGui::Text("Side-chain duck routes: %zu",
                 audioSystem->duckingRouter().routes().size());
+
+    // AX2 R4 — reverb backend + live winning zone. Backend is "Dry" when the
+    // slot is unavailable or the master toggle is off, else the init-chosen
+    // backend. The winning zone + wet gain come from the live ReverbSystem
+    // (null in standalone / test usage).
+    const char* reverbBackend =
+        !engine.isReverbAvailable()  ? "Dry (unavailable)" :
+        !engine.isReverbEnabled()    ? "Dry (disabled)"    :
+        engine.reverbBackend() == AudioEngine::ReverbBackend::Convolution
+            ? "Convolution" : "Parametric";
+    ImGui::Text("Reverb backend: %s", reverbBackend);
+    if (m_reverbSystem != nullptr)
+    {
+        const std::string& zone = m_reverbSystem->winningZoneName();
+        ImGui::Text("Active reverb zone: %s",
+                    zone.empty() ? "<none>" : zone.c_str());
+        ImGui::Text("Reverb wet gain: %.2f",
+                    static_cast<double>(m_reverbSystem->currentWetGain()));
+    }
 
     ImGui::Separator();
     ImGui::TextUnformatted("HRTF");

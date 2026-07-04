@@ -22,6 +22,8 @@ namespace Vestige
 {
 
 class AudioSystem;
+class Entity;
+class ReverbSystem;
 class Scene;
 class SettingsEditor;
 
@@ -31,10 +33,10 @@ class SettingsEditor;
 ///   - **Mixer**  — per-bus gains and the dialogue-duck trigger.
 ///   - **Sources** — active `AudioSourceComponent`s in the scene
 ///                   with per-entity mute / solo toggles.
-///   - **Zones**   — reverb-zone painting + ambient-zone placement.
-///                   Lists are editor-draft staging; the scene
-///                   serialiser will read them when the placement
-///                   surfaces land in the runtime zone systems.
+///   - **Zones**   — reverb-zone placement (real scene
+///                   `ReverbZoneComponent` entities, AX2 R4) +
+///                   ambient-zone placement (still editor-draft, no
+///                   runtime ambient component yet).
 ///   - **Debug**   — voice-pool utilisation, HRTF status + dataset
 ///                   selector, distance-model picker, and an
 ///                   overlay toggle so the viewport can draw each
@@ -48,18 +50,6 @@ class SettingsEditor;
 class AudioPanel
 {
 public:
-    /// @brief Editor-draft reverb zone — position + geometry +
-    ///        preset. Moves to a scene-owned component once the
-    ///        runtime reverb placement surface lands.
-    struct ReverbZoneInstance
-    {
-        std::string  name        = "Reverb Zone";
-        glm::vec3    center      = glm::vec3(0.0f);
-        float        coreRadius  = 5.0f;
-        float        falloffBand = 2.0f;
-        ReverbPreset preset      = ReverbPreset::Generic;
-    };
-
     /// @brief Editor-draft ambient zone — position + the full
     ///        `AmbientZone` params the runtime will consume.
     struct AmbientZoneInstance
@@ -146,20 +136,30 @@ public:
         return m_engineDuckingParams ? *m_engineDuckingParams : m_duckingParams;
     }
 
-    // -- Reverb zones (editor draft) -------------------------------
+    // -- Reverb zones (scene-backed ReverbZoneComponent, AX2 R4) ---
+    //
+    // The reverb tab edits real scene entities carrying a
+    // `ReverbZoneComponent` (created / removed here, serialised by the
+    // scene, consumed by `ReverbSystem`). Selection is by entity id
+    // (0 = none) rather than a list index. The management methods stay
+    // ImGui-free so `test_audio_panel` can exercise them headlessly.
 
-    const std::vector<ReverbZoneInstance>& reverbZones() const { return m_reverbZones; }
+    /// @brief Creates a "Reverb Zone" entity with a default
+    ///        `ReverbZoneComponent`, selects it, and returns it.
+    Entity* createReverbZone(Scene& scene);
 
-    /// @brief Appends a zone and returns its index.
-    int addReverbZone(const ReverbZoneInstance& zone);
+    /// @brief Removes the reverb-zone entity @a entityId from @a scene.
+    ///        Clears the selection if it pointed at that entity. Returns
+    ///        true iff an entity was removed.
+    bool removeReverbZone(Scene& scene, std::uint32_t entityId);
 
-    /// @brief Removes a zone by index. Returns true on success.
-    ///        If the removed zone was the current selection, the
-    ///        selection falls back to -1.
-    bool removeReverbZone(int index);
+    std::uint32_t selectedReverbZone() const     { return m_selectedReverbZoneEntity; }
+    void selectReverbZone(std::uint32_t entityId) { m_selectedReverbZoneEntity = entityId; }
 
-    int  selectedReverbZone() const       { return m_selectedReverbZone; }
-    void selectReverbZone(int index)      { m_selectedReverbZone = index; }
+    /// @brief Wires the live `ReverbSystem` so the Debug tab can show the
+    ///        current winning zone + slot wet gain. Null keeps the tab on
+    ///        the AudioEngine-derived backend line only (tests, standalone).
+    void wireReverbSystem(ReverbSystem* reverbSystem) { m_reverbSystem = reverbSystem; }
 
     // -- Ambient zones (editor draft) ------------------------------
 
@@ -199,7 +199,7 @@ public:
 private:
     void drawMixerTab();
     void drawSourcesTab(Scene* scene);
-    void drawZonesTab();
+    void drawZonesTab(Scene* scene);
     void drawDebugTab(AudioSystem* audioSystem);
 
     bool m_open = false;
@@ -216,10 +216,11 @@ private:
     DuckingState*  m_engineDuckingState  = nullptr; ///< Phase 10.9 P3 authoritative state.
     DuckingParams* m_engineDuckingParams = nullptr; ///< Phase 10.9 P3 authoritative params.
 
-    std::vector<ReverbZoneInstance>  m_reverbZones;
     std::vector<AmbientZoneInstance> m_ambientZones;
-    int m_selectedReverbZone  = -1;
+    std::uint32_t m_selectedReverbZoneEntity = 0;  ///< AX2 R4 (0 = none).
     int m_selectedAmbientZone = -1;
+
+    ReverbSystem* m_reverbSystem = nullptr;  ///< Debug-tab read-outs; may be null.
 
     std::unordered_set<std::uint32_t> m_mutedSources;
     std::unordered_set<std::uint32_t> m_soloedSources;

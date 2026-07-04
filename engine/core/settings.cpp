@@ -86,7 +86,10 @@ bool AudioSettings::operator==(const AudioSettings& o) const
         && occlusionEnabled == o.occlusionEnabled
         && occlusionRayCount == o.occlusionRayCount
         && occlusionMaxDistance == o.occlusionMaxDistance
-        && occlusionSourceRadius == o.occlusionSourceRadius;
+        && occlusionSourceRadius == o.occlusionSourceRadius
+        && reverbEnabled == o.reverbEnabled
+        && reverbWetCap == o.reverbWetCap
+        && reverbConvolutionEnabled == o.reverbConvolutionEnabled;
 }
 
 bool ControlsSettings::operator==(const ControlsSettings& o) const
@@ -263,6 +266,9 @@ json audioToJson(const AudioSettings& a)
         {"occlusionRayCount",       a.occlusionRayCount},
         {"occlusionMaxDistance",    a.occlusionMaxDistance},
         {"occlusionSourceRadius",   a.occlusionSourceRadius},
+        {"reverbEnabled",           a.reverbEnabled},
+        {"reverbWetCap",            a.reverbWetCap},
+        {"reverbConvolutionEnabled", a.reverbConvolutionEnabled},
     };
 }
 
@@ -306,6 +312,11 @@ void audioFromJson(const json& j, AudioSettings& a)
     a.occlusionRayCount     = j.value("occlusionRayCount", a.occlusionRayCount);
     a.occlusionMaxDistance  = j.value("occlusionMaxDistance", a.occlusionMaxDistance);
     a.occlusionSourceRadius = j.value("occlusionSourceRadius", a.occlusionSourceRadius);
+
+    // AX2 R4 — missing keys keep defaults (reverb on, wet cap 0.5, convolution on).
+    a.reverbEnabled             = j.value("reverbEnabled", a.reverbEnabled);
+    a.reverbWetCap              = j.value("reverbWetCap", a.reverbWetCap);
+    a.reverbConvolutionEnabled  = j.value("reverbConvolutionEnabled", a.reverbConvolutionEnabled);
 }
 
 // --- Controls ---
@@ -556,6 +567,15 @@ bool validate(Settings& s)
     const float srOrig = s.audio.occlusionSourceRadius;
     s.audio.occlusionSourceRadius = std::max(0.0f, s.audio.occlusionSourceRadius);
     if (s.audio.occlusionSourceRadius != srOrig)
+    {
+        clamped = true;
+    }
+
+    // AX2 R4 — reverb wet-gain ceiling is a [0, 1] fraction; a hand-edited
+    // settings.json out of range is clamped, not trusted.
+    const float wcOrig = s.audio.reverbWetCap;
+    s.audio.reverbWetCap = clamp01(s.audio.reverbWetCap);
+    if (s.audio.reverbWetCap != wcOrig)
     {
         clamped = true;
     }

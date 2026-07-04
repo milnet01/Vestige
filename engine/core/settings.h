@@ -71,7 +71,7 @@ namespace Vestige
 ///    one per slice). AX8 adds `audio.outputLayout` (default "auto").
 ///    Missing fields default to current behaviour on load, so a v3
 ///    file is unchanged in effect.
-inline constexpr int kCurrentSchemaVersion = 4;
+inline constexpr int kCurrentSchemaVersion = 5;
 
 // --------------------------------------------------------------
 // Display section — resolution, vsync, fullscreen, quality.
@@ -188,6 +188,19 @@ struct AudioSettings
     /// @brief AX1 — radius (metres) of the sphere the extra rays sample toward,
     ///        so a source near a doorway edge reads a partial fraction.
     float occlusionSourceRadius = 0.5f;
+
+    /// @brief AX2 R4 — reverb master toggle. On by default; off keeps every
+    ///        reverb zone dry (the ReverbSystem gathers no zones). v5 key.
+    bool reverbEnabled = true;
+
+    /// @brief AX2 R4 — accessibility ceiling in [0, 1] on any zone's wet gain,
+    ///        clamped at load. Default 0.5 tames loud convolution IRs. v5 key.
+    float reverbWetCap = 0.5f;
+
+    /// @brief AX2 R4 — allow the experimental convolution reverb backend. On by
+    ///        default; off forces the parametric backend at the next launch
+    ///        (the backend is selected once at AudioEngine init). v5 key.
+    bool reverbConvolutionEnabled = true;
 
     bool operator==(const AudioSettings& o) const;
     bool operator!=(const AudioSettings& o) const { return !(*this == o); }

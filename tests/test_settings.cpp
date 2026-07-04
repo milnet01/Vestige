@@ -838,6 +838,33 @@ TEST(SettingsMigration, V3ToV4AddsOutputLayoutDefaultAuto)
     EXPECT_TRUE(restored.audio.lodEnabled);
 }
 
+// AX2 R4 verify-step: v4 → v5 adds the three reverb settings, all at their
+// current-behaviour defaults (reverb on, wet cap 0.5, convolution allowed),
+// so a v4 file is unchanged in effect.
+TEST(SettingsMigration, V4ToV5AddsReverbDefaults)
+{
+    json j = Settings{}.toJson();
+    j["audio"].erase("reverbEnabled");
+    j["audio"].erase("reverbWetCap");
+    j["audio"].erase("reverbConvolutionEnabled");
+    j["schemaVersion"] = 4;
+
+    ASSERT_TRUE(migrate(j));
+    EXPECT_EQ(j["schemaVersion"].get<int>(), kCurrentSchemaVersion);
+    ASSERT_TRUE(j["audio"].contains("reverbEnabled"));
+    EXPECT_TRUE(j["audio"]["reverbEnabled"].get<bool>());
+    ASSERT_TRUE(j["audio"].contains("reverbWetCap"));
+    EXPECT_NEAR(j["audio"]["reverbWetCap"].get<float>(), 0.5f, 1e-6f);
+    ASSERT_TRUE(j["audio"].contains("reverbConvolutionEnabled"));
+    EXPECT_TRUE(j["audio"]["reverbConvolutionEnabled"].get<bool>());
+
+    Settings restored;
+    ASSERT_TRUE(restored.fromJson(j));
+    EXPECT_TRUE(restored.audio.reverbEnabled);
+    EXPECT_NEAR(restored.audio.reverbWetCap, 0.5f, 1e-6f);
+    EXPECT_TRUE(restored.audio.reverbConvolutionEnabled);
+}
+
 TEST(SettingsOnboarding, LegacyFlagPromotesWhenFileExistsAndStructIsDefault)
 {
     // Upgrader scenario: settings.json was never written (WelcomePanel
@@ -1215,6 +1242,19 @@ public:
     void setEmitUntaggedCollisions(bool e) override { emitUntagged = e; ++calls; }
 };
 
+// AX2 R4 — records the reverb setting pushes.
+class RecordingReverbSink final : public AudioReverbApplySink
+{
+public:
+    bool  enabled     = false;
+    float wetCap      = -1.0f;
+    bool  convolution = false;
+    int   calls       = 0;
+    void setReverbEnabled(bool e) override            { enabled = e; ++calls; }
+    void setReverbWetCap(float c) override            { wetCap = c; ++calls; }
+    void setReverbConvolutionEnabled(bool e) override { convolution = e; ++calls; }
+};
+
 class RecordingPhotoSink final : public PhotosensitiveApplySink
 {
 public:
@@ -1401,6 +1441,21 @@ TEST(SettingsApply, ProceduralAudioForwardedVerbatim)
             EXPECT_EQ(sink.calls, 2);
         }
     }
+}
+
+// AX2 R4 — applyAudioReverb forwards all three settings verbatim.
+TEST(SettingsApply, ReverbForwardedVerbatim)
+{
+    AudioSettings a;
+    a.reverbEnabled            = false;
+    a.reverbWetCap             = 0.33f;
+    a.reverbConvolutionEnabled = false;
+    RecordingReverbSink sink;
+    applyAudioReverb(a, sink);
+    EXPECT_FALSE(sink.enabled);
+    EXPECT_NEAR(sink.wetCap, 0.33f, 1e-6f);
+    EXPECT_FALSE(sink.convolution);
+    EXPECT_EQ(sink.calls, 3);
 }
 
 TEST(SettingsApply, PhotosensitiveForwardsEnabledAndLimits)

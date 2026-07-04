@@ -212,6 +212,27 @@ TEST(AudioReverb, SetReverbWetGainStoresAndClampsToUnitRange)
     EXPECT_NEAR(engine.reverbWetGain(), 0.0f, kEps);
 }
 
+// -- AX2 R4: reverb settings storage (read by ReverbSystem / init) ---------
+
+TEST(AudioReverb, ReverbSettingsDefaultsMatchDesign)
+{
+    AudioEngine engine;
+    EXPECT_TRUE(engine.isReverbEnabled());              // master on
+    EXPECT_NEAR(engine.reverbWetCap(), 0.5f, kEps);     // accessibility cap
+    EXPECT_TRUE(engine.isReverbConvolutionAllowed());   // convolution allowed
+}
+
+TEST(AudioReverb, ReverbSettingsSettersStoreVerbatim)
+{
+    AudioEngine engine;
+    engine.setReverbEnabled(false);
+    engine.setReverbWetCap(0.25f);
+    engine.setReverbConvolutionAllowed(false);
+    EXPECT_FALSE(engine.isReverbEnabled());
+    EXPECT_NEAR(engine.reverbWetCap(), 0.25f, kEps);
+    EXPECT_FALSE(engine.isReverbConvolutionAllowed());
+}
+
 TEST(AudioReverb, SetReverbParamsIsANoOpWithoutASlot)
 {
     // No slot/effect exist headless, so this must not crash or change

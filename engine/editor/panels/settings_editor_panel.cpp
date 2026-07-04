@@ -431,6 +431,52 @@ void SettingsEditorPanel::drawAudioTab()
     }
     ImGui::EndDisabled();
 
+    // AX2 R4 — reverb: rooms echo based on placed reverb zones.
+    ImGui::Spacing();
+    bool reverb = p.audio.reverbEnabled;
+    if (ImGui::Checkbox("Reverb (rooms echo)", &reverb))
+    {
+        m_editor->mutate([reverb](Settings& s) { s.audio.reverbEnabled = reverb; });
+    }
+    ImGui::SameLine();
+    ImGui::TextDisabled("(?)");
+    if (ImGui::IsItemHovered())
+    {
+        ImGui::SetTooltip(
+            "Caves, halls, and rooms add a natural echo tail as you walk\n"
+            "through them, from reverb zones placed in the scene. Turn off\n"
+            "to keep every space dry.");
+    }
+
+    ImGui::BeginDisabled(!p.audio.reverbEnabled);
+    float wetCap = p.audio.reverbWetCap;
+    if (ImGui::SliderFloat("Reverb strength cap", &wetCap, 0.0f, 1.0f, "%.2f"))
+    {
+        m_editor->mutate([wetCap](Settings& s) { s.audio.reverbWetCap = wetCap; });
+    }
+    if (ImGui::IsItemHovered())
+    {
+        ImGui::SetTooltip(
+            "Ceiling on how loud the echo can get. Lower it if reverb is\n"
+            "overwhelming; 0 mutes the tail while keeping zones active.");
+    }
+    bool conv = p.audio.reverbConvolutionEnabled;
+    if (ImGui::Checkbox("High-quality convolution reverb", &conv))
+    {
+        m_editor->mutate([conv](Settings& s)
+                         { s.audio.reverbConvolutionEnabled = conv; });
+    }
+    ImGui::SameLine();
+    ImGui::TextDisabled("(?)");
+    if (ImGui::IsItemHovered())
+    {
+        ImGui::SetTooltip(
+            "Uses recorded room impulse responses for realistic echo when\n"
+            "your audio driver supports it. Off falls back to a lighter\n"
+            "synthetic reverb. Takes effect after a restart.");
+    }
+    ImGui::EndDisabled();
+
     ImGui::Spacing();
     if (ImGui::Button("Restore audio defaults"))
     {

@@ -9,9 +9,12 @@
 
 #include <gtest/gtest.h>
 
+#include "audio/reverb_zone_component.h"
 #include "core/settings.h"
 #include "core/settings_editor.h"
 #include "editor/panels/audio_panel.h"
+#include "scene/entity.h"
+#include "scene/scene.h"
 
 using namespace Vestige;
 
@@ -27,9 +30,8 @@ TEST(AudioPanel, DefaultsAreClosed)
     AudioPanel p;
     EXPECT_FALSE(p.isOpen());
     EXPECT_FALSE(p.isZoneOverlayEnabled());
-    EXPECT_EQ(p.selectedReverbZone(),  -1);
+    EXPECT_EQ(p.selectedReverbZone(),  0u);   // 0 = no entity selected.
     EXPECT_EQ(p.selectedAmbientZone(), -1);
-    EXPECT_TRUE(p.reverbZones().empty());
     EXPECT_TRUE(p.ambientZones().empty());
     EXPECT_FALSE(p.hasAnySoloedSource());
 }
@@ -64,54 +66,75 @@ TEST(AudioPanel, DuckingStartsUntriggeredAtUnity)
     EXPECT_NEAR(p.duckingState().currentGain, 1.0f, kEps);
 }
 
-// -- Reverb zone management ---------------------------------------
+// -- Reverb zone management (scene-backed ReverbZoneComponent) -----
 
-TEST(AudioPanel, AddReverbZoneReturnsIndex)
+namespace
 {
-    AudioPanel p;
-    AudioPanel::ReverbZoneInstance z;
-    z.name = "Cave";
-    EXPECT_EQ(p.addReverbZone(z), 0);
-    EXPECT_EQ(p.reverbZones().size(), 1u);
-    EXPECT_EQ(p.reverbZones()[0].name, "Cave");
-
-    AudioPanel::ReverbZoneInstance z2;
-    z2.name = "Hall";
-    EXPECT_EQ(p.addReverbZone(z2), 1);
-    EXPECT_EQ(p.reverbZones().size(), 2u);
+int countReverbZones(Scene& scene)
+{
+    int n = 0;
+    scene.forEachEntity([&](Entity& e)
+    {
+        if (e.getComponent<ReverbZoneComponent>() != nullptr) ++n;
+    });
+    return n;
+}
 }
 
-TEST(AudioPanel, RemoveReverbZoneShiftsSelectionDown)
+TEST(AudioPanel, CreateReverbZoneAddsComponentEntityAndSelectsIt)
 {
     AudioPanel p;
-    p.addReverbZone({});
-    p.addReverbZone({});
-    p.addReverbZone({});
-    p.selectReverbZone(2);
+    Scene scene("test");
 
-    // Remove index 0 — selection now points at what was index 2,
-    // which is now index 1.
-    EXPECT_TRUE(p.removeReverbZone(0));
-    EXPECT_EQ(p.selectedReverbZone(), 1);
-    EXPECT_EQ(p.reverbZones().size(), 2u);
+    Entity* e = p.createReverbZone(scene);
+    ASSERT_NE(e, nullptr);
+    EXPECT_NE(e->getComponent<ReverbZoneComponent>(), nullptr);
+    EXPECT_EQ(p.selectedReverbZone(), e->getId());
+    EXPECT_EQ(countReverbZones(scene), 1);
+
+    // A second create is an independent entity and becomes the selection.
+    Entity* e2 = p.createReverbZone(scene);
+    ASSERT_NE(e2, nullptr);
+    EXPECT_NE(e2->getId(), e->getId());
+    EXPECT_EQ(p.selectedReverbZone(), e2->getId());
+    EXPECT_EQ(countReverbZones(scene), 2);
 }
 
 TEST(AudioPanel, RemoveSelectedReverbZoneClearsSelection)
 {
     AudioPanel p;
-    p.addReverbZone({});
-    p.selectReverbZone(0);
-    EXPECT_TRUE(p.removeReverbZone(0));
-    EXPECT_EQ(p.selectedReverbZone(), -1);
+    Scene scene("test");
+
+    Entity* e = p.createReverbZone(scene);
+    const std::uint32_t id = e->getId();
+    EXPECT_TRUE(p.removeReverbZone(scene, id));
+    EXPECT_EQ(p.selectedReverbZone(), 0u);
+    EXPECT_EQ(countReverbZones(scene), 0);
 }
 
-TEST(AudioPanel, RemoveOutOfRangeReverbZoneIsNoOp)
+TEST(AudioPanel, RemoveNonSelectedReverbZoneKeepsSelection)
 {
     AudioPanel p;
-    p.addReverbZone({});
-    EXPECT_FALSE(p.removeReverbZone(-1));
-    EXPECT_FALSE(p.removeReverbZone(5));
-    EXPECT_EQ(p.reverbZones().size(), 1u);
+    Scene scene("test");
+
+    Entity* first  = p.createReverbZone(scene);
+    Entity* second = p.createReverbZone(scene);  // now selected
+    const std::uint32_t firstId  = first->getId();
+    const std::uint32_t secondId = second->getId();
+
+    EXPECT_TRUE(p.removeReverbZone(scene, firstId));
+    EXPECT_EQ(p.selectedReverbZone(), secondId);  // untouched
+    EXPECT_EQ(countReverbZones(scene), 1);
+}
+
+TEST(AudioPanel, RemoveUnknownReverbZoneIsNoOp)
+{
+    AudioPanel p;
+    Scene scene("test");
+
+    p.createReverbZone(scene);
+    EXPECT_FALSE(p.removeReverbZone(scene, 999999u));
+    EXPECT_EQ(countReverbZones(scene), 1);
 }
 
 // -- Ambient zone management --------------------------------------

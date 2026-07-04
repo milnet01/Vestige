@@ -370,6 +370,37 @@ void AudioEngineLoudnessApplySink::setLoudnessTargetLufs(float lufs)
 }
 
 // ================================================================
+// AX2 R4 — reverb settings apply
+// ================================================================
+
+void applyAudioReverb(const AudioSettings& audio, AudioReverbApplySink& sink)
+{
+    sink.setReverbEnabled(audio.reverbEnabled);
+    sink.setReverbWetCap(audio.reverbWetCap);
+    sink.setReverbConvolutionEnabled(audio.reverbConvolutionEnabled);
+}
+
+AudioEngineReverbApplySink::AudioEngineReverbApplySink(AudioEngine& engine)
+    : m_engine(engine)
+{
+}
+
+void AudioEngineReverbApplySink::setReverbEnabled(bool enabled)
+{
+    m_engine.setReverbEnabled(enabled);
+}
+
+void AudioEngineReverbApplySink::setReverbWetCap(float cap)
+{
+    m_engine.setReverbWetCap(cap);
+}
+
+void AudioEngineReverbApplySink::setReverbConvolutionEnabled(bool enabled)
+{
+    m_engine.setReverbConvolutionAllowed(enabled);
+}
+
+// ================================================================
 // AX4 S9 — procedural-audio apply
 // ================================================================
 

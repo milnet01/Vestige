@@ -42,6 +42,7 @@ bool migrate(nlohmann::json& j)
             case 1: migrate_v1_to_v2(j); break;
             case 2: migrate_v2_to_v3(j); break;
             case 3: migrate_v3_to_v4(j); break;
+            case 4: migrate_v4_to_v5(j); break;
             default:
                 Logger::warning(
                     "Settings migration: no migration function registered for "
@@ -143,6 +144,31 @@ void migrate_v3_to_v4(nlohmann::json& j)
         }
     }
     j["schemaVersion"] = 4;
+}
+
+void migrate_v4_to_v5(nlohmann::json& j)
+{
+    // AX2 R4 — add the three reverb settings. All default to the
+    // current-behaviour value (reverb on, wet cap 0.5, convolution allowed), so
+    // a v4 file is unchanged in effect. fromJson would default a missing key
+    // anyway; the explicit arms keep the on-disk document self-describing,
+    // mirroring the v3→v4 arms above.
+    if (j.contains("audio") && j["audio"].is_object())
+    {
+        if (!j["audio"].contains("reverbEnabled"))
+        {
+            j["audio"]["reverbEnabled"] = true;
+        }
+        if (!j["audio"].contains("reverbWetCap"))
+        {
+            j["audio"]["reverbWetCap"] = 0.5;
+        }
+        if (!j["audio"].contains("reverbConvolutionEnabled"))
+        {
+            j["audio"]["reverbConvolutionEnabled"] = true;
+        }
+    }
+    j["schemaVersion"] = 5;
 }
 
 } // namespace Vestige

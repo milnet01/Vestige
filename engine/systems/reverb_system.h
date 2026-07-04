@@ -48,6 +48,15 @@ public:
     /// @brief PostCamera — same phase as AudioSystem, registered before it.
     UpdatePhase getUpdatePhase() const override { return UpdatePhase::PostCamera; }
 
+    // -- Debug read-outs (AX2 R4 audio-panel Debug tab) --
+
+    /// @brief Name of the zone entity currently driving the slot this frame,
+    ///        or empty when the listener is dry / reverb is disabled.
+    const std::string& winningZoneName() const { return m_winningZoneName; }
+
+    /// @brief The current slewed slot wet gain [0, 1] (0 = dry).
+    float currentWetGain() const { return m_slotWetGain; }
+
 private:
     static inline const std::string m_name = "Reverb";
 
@@ -64,6 +73,9 @@ private:
     /// @brief Path of the IR currently attached to the convolution slot, so a
     ///        winning-zone change triggers exactly one load + swap + wet dip.
     std::string m_attachedIrPath;
+
+    /// @brief Name of the winning zone entity this frame (for the Debug tab).
+    std::string m_winningZoneName;
 };
 
 } // namespace Vestige

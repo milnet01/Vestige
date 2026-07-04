@@ -230,6 +230,7 @@ private:
     std::unique_ptr<AudioEngineLoudnessApplySink>        m_loudnessSink;      // AX9
     std::unique_ptr<AudioEngineProceduralAudioApplySink> m_proceduralAudioSink; // AX4 S9
     std::unique_ptr<AudioEngineOcclusionApplySink>       m_occlusionSink;       // AX1
+    std::unique_ptr<AudioEngineReverbApplySink>          m_reverbSink;          // AX2 R4
     std::unique_ptr<PhotosensitiveStoreApplySink>        m_photosensitiveSink;
     std::unique_ptr<LocalizationServiceApplySink>        m_localizationSink;
 

@@ -209,8 +209,13 @@ bool AudioEngine::initialize()
             // ("AL_SOFTX_convolution_effect", per alconvolve.c), while the
             // header feature macro (AL_SOFT_convolution_effect) does not — the
             // X-form is only ever the alIsExtensionPresent argument.
+            // AX2 R4 — `m_reverbConvolutionAllowed` (from the persisted
+            // `reverbConvolutionEnabled` setting, pushed by forceLiveApply()
+            // before this runs) lets a user force the parametric backend even
+            // when the driver advertises convolution.
             bool convolutionOk = false;
-            if (alIsExtensionPresent("AL_SOFTX_convolution_effect"))
+            if (m_reverbConvolutionAllowed &&
+                alIsExtensionPresent("AL_SOFTX_convolution_effect"))
             {
                 // Value from the fetched alc/inprogext.h experimental extension.
                 constexpr ALenum AL_EFFECT_CONVOLUTION_SOFT = 0xA000;

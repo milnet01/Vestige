@@ -154,6 +154,10 @@ void SettingsEditor::pushPendingToSinks()
     {
         applyAudioOcclusion(m_pending.audio, *m_targets.audioOcclusion);
     }
+    if (m_targets.audioReverb)
+    {
+        applyAudioReverb(m_pending.audio, *m_targets.audioReverb);
+    }
     if (m_targets.proceduralAudio)
     {
         applyProceduralAudio(m_pending.audio, *m_targets.proceduralAudio);

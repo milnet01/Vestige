@@ -556,6 +556,29 @@ public:
     /// @brief AX2 R2 — the backend chosen at init. Convolution ⟹ IRs;
     ///        Parametric ⟹ `ReverbParams`. Defaults Parametric before init.
     ReverbBackend reverbBackend() const { return m_reverbBackend; }
+
+    /// @brief AX2 R4 — reverb master toggle (default on). When off, the
+    ///        `ReverbSystem` gathers no zones, so the slot fades to dry and no
+    ///        source carries a reverb send. A stored flag read each frame.
+    void setReverbEnabled(bool enabled) { m_reverbEnabled = enabled; }
+    bool isReverbEnabled() const        { return m_reverbEnabled; }
+
+    /// @brief AX2 R4 — accessibility ceiling in [0, 1] on any zone's wet gain
+    ///        (default 0.5, taming loud convolution IRs). `ReverbSystem` clamps
+    ///        its target slot gain to this before slewing. Stored raw here;
+    ///        `Settings::validate()` guarantees the [0, 1] range on load.
+    void setReverbWetCap(float cap) { m_reverbWetCap = cap; }
+    float reverbWetCap() const      { return m_reverbWetCap; }
+
+    /// @brief AX2 R4 — allow the experimental convolution backend (default on).
+    ///        Read once at `initialize()` to gate the `AL_SOFTX_convolution_effect`
+    ///        probe: off forces the parametric backend. Because the backend is
+    ///        selected once at init (a live effect-type swap is out of scope), a
+    ///        runtime flip takes effect at the next launch — the boot-time
+    ///        `forceLiveApply()` pushes the persisted value before init, so a
+    ///        saved preference is always honoured.
+    void setReverbConvolutionAllowed(bool allowed) { m_reverbConvolutionAllowed = allowed; }
+    bool isReverbConvolutionAllowed() const         { return m_reverbConvolutionAllowed; }
     /// @brief AX2 R2 — decode an impulse-response WAV at @a path into a
     ///        dedicated AL buffer for the convolution backend, cached by path
     ///        in a 64 MB LRU pool (`ReverbIrPool`). Reuses the
@@ -751,6 +774,9 @@ private:
     float        m_reverbWetGain = 0.0f;  ///< Slot gain [0,1]; 0 = dry (default).
     int          m_maxAuxSends   = 0;     ///< ALC_MAX_AUXILIARY_SENDS probe.
     ReverbBackend m_reverbBackend = ReverbBackend::Parametric;  ///< AX2 R2 backend.
+    bool          m_reverbEnabled  = true;   ///< AX2 R4 master toggle (read by ReverbSystem).
+    float         m_reverbWetCap   = 0.5f;   ///< AX2 R4 wet-gain ceiling [0,1].
+    bool          m_reverbConvolutionAllowed = true;  ///< AX2 R4 init-time backend gate.
 
     // AX2 R2 — convolution IR pool: an LRU, byte-bounded store of decoded IR
     // buffers (device-free bookkeeping in `ReverbIrPool`; this class performs

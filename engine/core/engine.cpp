@@ -478,6 +478,13 @@ bool Engine::initialize(const EngineConfig& config)
                 std::make_unique<AudioEngineOcclusionApplySink>(
                     audio->getAudioEngine());
             targets.audioOcclusion = m_occlusionSink.get();
+
+            // AX2 R4 — reverb master toggle + wet cap (read each frame by
+            // ReverbSystem) + convolution-backend gate (read once at
+            // AudioEngine init; forceLiveApply below runs before initializeAll).
+            m_reverbSink = std::make_unique<AudioEngineReverbApplySink>(
+                audio->getAudioEngine());
+            targets.audioReverb = m_reverbSink.get();
         }
 
         targets.inputMap = &m_inputActionMap;
@@ -526,6 +533,12 @@ bool Engine::initialize(const EngineConfig& config)
             // never reached AL_GAIN.
             m_editor->getAudioPanel().wireEngineDucking(
                 &m_duckingState, &m_duckingParams);
+
+            // AX2 R4 — point the AudioPanel Debug tab at the live
+            // ReverbSystem so it can show the current winning zone + slot
+            // wet gain (the system pointer is stable post-registration).
+            m_editor->getAudioPanel().wireReverbSystem(
+                m_systemRegistry.getSystem<ReverbSystem>());
         }
     }
 

@@ -88,4 +88,12 @@ void migrate_v2_to_v3(nlohmann::json& j);
 /// Like every arm it MUST set `j["schemaVersion"] = 4`. Idempotent.
 void migrate_v3_to_v4(nlohmann::json& j);
 
+/// @brief v4 → v5: add the AX2 R4 reverb settings (`audio.reverbEnabled`,
+///        `audio.reverbWetCap`, `audio.reverbConvolutionEnabled`), each at its
+///        current-behaviour default so a v4 file is unchanged in effect. See
+///        `docs/phases/phase_10_audio_reverb_design.md` § 5.3.
+///
+/// Like every arm it MUST set `j["schemaVersion"] = 5`. Idempotent.
+void migrate_v4_to_v5(nlohmann::json& j);
+
 } // namespace Vestige
