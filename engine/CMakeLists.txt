@@ -293,6 +293,7 @@ set(ENGINE_SOURCES
     audio/audio_reverb.cpp
     audio/reverb_ir_pool.cpp
     audio/acoustic_bake.cpp
+    audio/acoustic_baker.cpp
     audio/audio_ambient.cpp
     audio/audio_music.cpp
     audio/audio_mixer.cpp

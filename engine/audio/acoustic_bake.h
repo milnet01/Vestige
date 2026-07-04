@@ -47,6 +47,7 @@ struct BakeParams
     float maxIrSeconds = 6.0f;            ///< Hard cap on IR length.
     float minIrSeconds = 0.05f;           ///< Floor so an open room still yields a short IR.
     unsigned int tailSeed = 0x9E3779B9u;  ///< Diffuse-tail noise seed base (mixed with probe pos → deterministic).
+    float coplanarMergeToleranceDeg = 1.0f;  ///< Max normal-angle delta under which adjacent triangles fold into one facet (§6.2). Trades facet count against image-source fidelity.
 };
 
 /// @brief Sabine reverberation time RT60 (s): `0.161·V / Σ(Sᵢ·αᵢ)`. Returns 0
