@@ -33,6 +33,7 @@
 #include <gtest/gtest.h>
 
 #include "audio/audio_source_component.h"
+#include "audio/reverb_zone_component.h"
 #include "core/logger.h"
 #include "resource/resource_manager.h"
 #include "scene/component.h"
@@ -194,6 +195,66 @@ TEST(EntitySerializerRegistry, AudioSourceAbsentBusDefaultsToSfx)
         << "pre-A1 scene without a `bus` field must default to Sfx "
            "(the implicit routing used before the mixer-bus design)";
     EXPECT_EQ(asc->clipPath, "audio/sfx/click.wav");
+}
+
+// ---------------------------------------------------------------------------
+// AX2 R3 — ReverbZoneComponent survives the JSON round-trip
+// ---------------------------------------------------------------------------
+
+TEST(EntitySerializerRegistry, ReverbZoneAllFieldsRoundTrip)
+{
+    Scene sceneOut("Out");
+    Entity* src = sceneOut.createEntity("ReverbHost");
+    auto* zoneOut = src->addComponent<ReverbZoneComponent>();
+    zoneOut->coreRadius  = 8.5f;                 // not the 5.0 default
+    zoneOut->falloffBand = 3.25f;                // not the 2.0 default
+    zoneOut->preset      = ReverbPreset::Cave;   // not the Generic default
+    zoneOut->irPath      = "audio/ir/cathedral.wav";
+    zoneOut->wetGain     = 0.72f;                // not the 0.30 default
+
+    ResourceManager resources;
+    json j = EntitySerializer::serializeEntity(*src, resources);
+    ASSERT_TRUE(j.contains("components"));
+    ASSERT_TRUE(j["components"].contains("ReverbZone"))
+        << "ReverbZone not registered with the serializer";
+
+    Scene sceneIn("In");
+    Entity* dst = EntitySerializer::deserializeEntity(j, sceneIn, resources);
+    ASSERT_NE(dst, nullptr);
+
+    auto* zoneIn = dst->getComponent<ReverbZoneComponent>();
+    ASSERT_NE(zoneIn, nullptr) << "ReverbZone dropped on deserialisation";
+    EXPECT_FLOAT_EQ(zoneIn->coreRadius,  8.5f);
+    EXPECT_FLOAT_EQ(zoneIn->falloffBand, 3.25f);
+    EXPECT_EQ(zoneIn->preset,            ReverbPreset::Cave);
+    EXPECT_EQ(zoneIn->irPath,            "audio/ir/cathedral.wav");
+    EXPECT_FLOAT_EQ(zoneIn->wetGain,     0.72f);
+}
+
+TEST(EntitySerializerRegistry, ReverbZoneAbsentFieldsTakeDefaults)
+{
+    // A minimal ReverbZone entry with no fields must hydrate to the component
+    // defaults (5 m core / 2 m band / Generic / no IR / 0.30 wet) — tolerant
+    // deserialisation so a hand-authored or older scene still loads.
+    json entityJson;
+    entityJson["name"] = "Host";
+    entityJson["transform"]["position"] = {0.0f, 0.0f, 0.0f};
+    entityJson["transform"]["rotation"] = {0.0f, 0.0f, 0.0f};
+    entityJson["transform"]["scale"]    = {1.0f, 1.0f, 1.0f};
+    entityJson["components"]["ReverbZone"] = json::object();
+
+    Scene scene("Defaults");
+    ResourceManager resources;
+    Entity* host = EntitySerializer::deserializeEntity(entityJson, scene, resources);
+    ASSERT_NE(host, nullptr);
+
+    auto* zone = host->getComponent<ReverbZoneComponent>();
+    ASSERT_NE(zone, nullptr);
+    EXPECT_FLOAT_EQ(zone->coreRadius,  5.0f);
+    EXPECT_FLOAT_EQ(zone->falloffBand, 2.0f);
+    EXPECT_EQ(zone->preset,            ReverbPreset::Generic);
+    EXPECT_TRUE(zone->irPath.empty());
+    EXPECT_FLOAT_EQ(zone->wetGain,     0.30f);
 }
 
 // ---------------------------------------------------------------------------

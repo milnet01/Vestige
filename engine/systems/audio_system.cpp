@@ -249,7 +249,8 @@ void AudioSystem::update(float deltaTime)
                 const AudioSourceAlState state =
                     composeAudioSourceAlState(*comp, position, mixer, effDuck,
                                               listenerPos, air, pickTier(),
-                                              m_audioEngine.loudnessMakeupForPath(comp->clipPath));
+                                              m_audioEngine.loudnessMakeupForPath(comp->clipPath),
+                                              comp->reverbSend);  // AX2 R3
                 m_audioEngine.applySourceState(source, state);
             }
             return;
@@ -269,7 +270,8 @@ void AudioSystem::update(float deltaTime)
         const AudioSourceAlState alState =
             composeAudioSourceAlState(*comp, position, mixer, effDuck,
                                       listenerPos, air, pickTier(),
-                                      m_audioEngine.loudnessMakeupForPath(comp->clipPath));
+                                      m_audioEngine.loudnessMakeupForPath(comp->clipPath),
+                                      comp->reverbSend);  // AX2 R3
         m_audioEngine.applySourceState(source, alState);
     });
 

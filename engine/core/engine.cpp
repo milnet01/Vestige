@@ -19,6 +19,7 @@
 #include "systems/impact_audio_system.h"
 #include "systems/lighting_system.h"
 #include "systems/audio_occlusion_system.h"
+#include "systems/reverb_system.h"
 #include "systems/audio_system.h"
 #include "systems/music_system.h"
 #include "audio/audio_music_player.h"
@@ -180,6 +181,13 @@ bool Engine::initialize(const EngineConfig& config)
     // occlusionFraction/occlusionMaterial from scene geometry, which
     // AudioSystem's compose loop then reads the same frame.
     m_systemRegistry.registerSystem<AudioOcclusionSystem>();
+
+    // AX2 R3: reverb zone selection. Same PostCamera phase as AudioSystem and
+    // registered BEFORE it, so the stable-sort runs it first — it picks the
+    // winning ReverbZoneComponent from the listener position, drives the aux
+    // slot (parametric params or convolution IR swap), and writes each source's
+    // reverbSend, which AudioSystem's compose loop reads the same frame.
+    m_systemRegistry.registerSystem<ReverbSystem>();
     auto* audioSys = m_systemRegistry.registerSystem<AudioSystem>();
 
     // W8 part 2/2: streaming-music player + its ISystem wrapper. The player

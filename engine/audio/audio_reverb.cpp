@@ -57,6 +57,16 @@ const char* reverbPresetLabel(ReverbPreset preset)
     return "Unknown";
 }
 
+ReverbPreset reverbPresetFromLabel(std::string_view label)
+{
+    if (label == "SmallRoom")  return ReverbPreset::SmallRoom;
+    if (label == "LargeHall")  return ReverbPreset::LargeHall;
+    if (label == "Cave")       return ReverbPreset::Cave;
+    if (label == "Outdoor")    return ReverbPreset::Outdoor;
+    if (label == "Underwater") return ReverbPreset::Underwater;
+    return ReverbPreset::Generic;  // covers "Generic", "", and any stale name.
+}
+
 float computeReverbZoneWeight(float coreRadius,
                                float falloffBand,
                                float distance)
@@ -91,6 +101,71 @@ ReverbParams blendReverbParams(const ReverbParams& a,
     out.reflectionsDelay = a.reflectionsDelay * u + b.reflectionsDelay * c;
     out.lateReverbDelay  = a.lateReverbDelay  * u + b.lateReverbDelay  * c;
     return out;
+}
+
+ReverbSelection selectReverbZone(const std::vector<ReverbZoneEval>& zones)
+{
+    ReverbSelection sel;  // dry default: winner = -1, targetWetGain = 0.
+
+    // Single pass tracking the highest and second-highest weighted zones. A
+    // strict `>` keeps the lower index on ties (deterministic selection).
+    int   winner = -1, neighbour = -1;
+    float wWin = 0.0f, wNbr = 0.0f;
+    for (std::size_t i = 0; i < zones.size(); ++i)
+    {
+        const float w = computeReverbZoneWeight(zones[i].coreRadius,
+                                                zones[i].falloffBand,
+                                                zones[i].distance);
+        if (w <= 0.0f)
+        {
+            continue;
+        }
+        if (w > wWin)
+        {
+            neighbour = winner;               wNbr = wWin;
+            winner    = static_cast<int>(i);  wWin = w;
+        }
+        else if (w > wNbr)
+        {
+            neighbour = static_cast<int>(i); wNbr = w;
+        }
+    }
+
+    if (winner < 0)
+    {
+        return sel;  // Listener outside every zone → dry.
+    }
+
+    const ReverbZoneEval& zWin = zones[static_cast<std::size_t>(winner)];
+    const ReverbParams& pa = zWin.params;
+    ReverbParams pb = pa;
+    float gb = zWin.wetGain;
+    float t  = 0.0f;
+    if (neighbour >= 0)
+    {
+        const ReverbZoneEval& zNbr = zones[static_cast<std::size_t>(neighbour)];
+        t  = wNbr / (wWin + wNbr);   // ∈ (0, 0.5] — winner always weighs more.
+        pb = zNbr.params;
+        gb = zNbr.wetGain;
+    }
+
+    sel.winner        = winner;
+    sel.neighbour     = neighbour;
+    sel.blendT        = t;
+    sel.winnerWeight  = wWin;
+    sel.blendedParams = blendReverbParams(pa, pb, t);
+
+    // Blend the wet gain between the two rooms, then scale by the winner's
+    // weight so leaving every zone fades the slot to silence (step 5 of §5.2).
+    const float blendedWet = zWin.wetGain * (1.0f - t) + gb * t;
+    sel.targetWetGain = blendedWet * wWin;
+    return sel;
+}
+
+float slewReverbWetGain(float current, float target, float slewAmount)
+{
+    const float a = std::max(0.0f, std::min(1.0f, slewAmount));
+    return current + (target - current) * a;
 }
 
 } // namespace Vestige

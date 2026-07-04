@@ -12,6 +12,7 @@
 /// `deserializeEntity`.
 #include "utils/entity_serializer.h"
 #include "audio/audio_source_component.h"
+#include "audio/reverb_zone_component.h"
 #include "scene/entity.h"
 #include "scene/mesh_renderer.h"
 #include "scene/light_component.h"
@@ -853,6 +854,27 @@ static void deserializeAudioSource(const json& j, Entity& entity, ResourceManage
         j.value("priority", std::string("Normal")));
 }
 
+static json serializeReverbZone(const ReverbZoneComponent& comp)
+{
+    json j;
+    j["coreRadius"]  = comp.coreRadius;
+    j["falloffBand"] = comp.falloffBand;
+    j["preset"]      = reverbPresetLabel(comp.preset);
+    j["irPath"]      = comp.irPath;
+    j["wetGain"]     = comp.wetGain;
+    return j;
+}
+
+static void deserializeReverbZone(const json& j, Entity& entity, ResourceManager&)
+{
+    auto* comp = entity.addComponent<ReverbZoneComponent>();
+    comp->coreRadius  = j.value("coreRadius", 5.0f);
+    comp->falloffBand = j.value("falloffBand", 2.0f);
+    comp->preset      = reverbPresetFromLabel(j.value("preset", std::string("Generic")));
+    comp->irPath      = j.value("irPath", std::string(""));
+    comp->wetGain     = j.value("wetGain", 0.30f);
+}
+
 // ---------------------------------------------------------------------------
 // Built-in registry population
 // ---------------------------------------------------------------------------
@@ -938,6 +960,15 @@ static void ensureBuiltinsRegistered()
                 return c ? serializeAudioSource(*c) : json();
             },
             deserializeAudioSource
+        });
+
+        reg.registerEntry({
+            "ReverbZone",
+            [](const Entity& e, const ResourceManager&) -> json {
+                auto* c = e.getComponent<ReverbZoneComponent>();
+                return c ? serializeReverbZone(*c) : json();
+            },
+            deserializeReverbZone
         });
     });
 }

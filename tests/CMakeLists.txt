@@ -169,6 +169,7 @@ add_executable(vestige_tests
     test_audio_occlusion_system.cpp
     test_audio_reverb.cpp
     test_reverb_ir_pool.cpp
+    test_reverb_zone_select.cpp
     test_audio_ambient.cpp
     test_audio_music.cpp
     test_audio_mixer.cpp

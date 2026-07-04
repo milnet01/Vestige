@@ -95,6 +95,14 @@ public:
     ///        0 = clear, 1 = entirely through the material.
     float occlusionFraction = 0.0f;
 
+    /// @brief AX2 R3 — reverb aux-send level in [0, 1], written each frame by
+    ///        `ReverbSystem`: unity when this spatial source is inside any reverb
+    ///        zone, 0 when outside every zone (or non-spatial). It is
+    ///        runtime-derived from zone geometry — NOT serialized, exactly like
+    ///        `occlusionFraction`'s driver — so `AudioSystem`'s compose loop can
+    ///        route the source through the reverb slot the same frame.
+    float reverbSend = 0.0f;
+
     /// @brief Whether the sound loops.
     bool loop = false;
 

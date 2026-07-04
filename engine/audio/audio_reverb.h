@@ -28,6 +28,9 @@
 /// adjustments stay grounded.
 #pragma once
 
+#include <string_view>
+#include <vector>
+
 namespace Vestige
 {
 
@@ -76,6 +79,13 @@ ReverbParams reverbPresetParams(ReverbPreset preset);
 /// @brief Stable, human-readable label for a preset.
 const char* reverbPresetLabel(ReverbPreset preset);
 
+/// @brief Inverse of `reverbPresetLabel`: parse a preset from its label.
+///        Unknown / empty labels fall back to `Generic`, so a scene file with
+///        a stale or missing preset name deserialises to the safe default
+///        rather than failing the load. Used by the scene (de)serializer (R3)
+///        and the editor picker (R4).
+ReverbPreset reverbPresetFromLabel(std::string_view label);
+
 /// @brief Per-zone weight falloff.
 ///
 /// Computes how much this zone contributes to the blended reverb at
@@ -104,5 +114,64 @@ float computeReverbZoneWeight(float coreRadius,
 ReverbParams blendReverbParams(const ReverbParams& a,
                                 const ReverbParams& b,
                                 float t);
+
+/// @brief One reverb zone reduced to the scalar inputs the selection needs.
+///
+/// The engine-side `ReverbSystem` turns each `ReverbZoneComponent` into one of
+/// these: `distance` is the listener→zone-centre distance (computed with glm on
+/// the engine side), and the rest is the zone's authored shape + character. The
+/// selection math itself stays glm-free so it is trivially unit-testable
+/// (AX1's pure-function-then-thin-system split).
+struct ReverbZoneEval
+{
+    float        distance    = 0.0f; ///< Listener → zone centre (m).
+    float        coreRadius  = 5.0f; ///< Full-weight core radius (m).
+    float        falloffBand = 2.0f; ///< Linear-falloff band thickness (m).
+    ReverbParams params;             ///< Parametric character of this zone.
+    float        wetGain     = 0.30f;///< Slot wet gain [0,1] when this zone wins.
+};
+
+/// @brief The winning zone + blended output for one frame's reverb slot.
+struct ReverbSelection
+{
+    /// @brief Index (into the input vector) of the highest-weighted zone, or
+    ///        -1 when the listener is inside no zone (→ dry).
+    int   winner    = -1;
+
+    /// @brief Index of the next-highest zone that also has weight > 0, or -1.
+    int   neighbour = -1;
+
+    /// @brief Blend factor toward the neighbour, `wNeighbour/(wWinner+wNeighbour)`
+    ///        ∈ [0, 0.5]. 0 when there is no neighbour → pure winner character.
+    float blendT    = 0.0f;
+
+    /// @brief The winner's weight ∈ (0,1] — 1 deep in its core, → 0 at its edge.
+    float winnerWeight = 0.0f;
+
+    /// @brief `blendReverbParams(winner, neighbour, blendT)` — the character to
+    ///        push to the parametric effect. Left at the `Generic` default when
+    ///        `winner == -1`.
+    ReverbParams blendedParams;
+
+    /// @brief The slot wet gain to slew toward: the blended zone wet gain scaled
+    ///        by `winnerWeight`, so it both blends between rooms *and* fades to 0
+    ///        as the listener leaves every zone. 0 when `winner == -1`.
+    float targetWetGain = 0.0f;
+};
+
+/// @brief Picks the winning reverb zone (+ neighbour) for the listener and
+///        produces the blended params + target slot gain.
+///
+/// Weighs every zone via `computeReverbZoneWeight`; the highest weight wins and
+/// the second-highest is the blend neighbour (zero-weight zones ignored). Ties
+/// resolve to the lower index (deterministic). With no zone in range the result
+/// is the dry default (`winner == -1`, `targetWetGain == 0`).
+ReverbSelection selectReverbZone(const std::vector<ReverbZoneEval>& zones);
+
+/// @brief Eases `current` toward `target` by `slewAmount` ∈ [0,1] (clamped) and
+///        returns the new value (1 snaps). Mirrors `slewOcclusionFraction` — the
+///        per-frame smoothing that turns entering/leaving a zone into a fade
+///        rather than a step.
+float slewReverbWetGain(float current, float target, float slewAmount);
 
 } // namespace Vestige
