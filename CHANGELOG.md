@@ -22,6 +22,65 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-07-04 Added — Convolution reverb with per-zone impulse responses (AX2)
+
+Reverb was silent math: the 6-preset EFX table lived in `audio_reverb.h` but
+nothing drove an OpenAL effect slot, so rooms never actually echoed. AX2 makes
+reverb audible **and per-room** — a large hall, a cave, and the Tabernacle each
+carry their own acoustic tail, drawn either from a measured/baked impulse-response
+`.wav` (convolution) or from a blended parametric preset (fallback).
+
+A new `ReverbSystem` (runs in `PostCamera`, registered before `AudioSystem`; owns
+`ReverbZoneComponent` so it activates only when a scene actually has zones) picks
+the room from the listener each frame and drives a single shared aux effect slot —
+O(1) in the source count, since reverb is per-room, not per-source.
+
+- **Aux slot + parametric backend (R1).** The engine's first
+  `AL_AUXILIARY_SEND_FILTER` aux effect slot (mirrors the AX6 EFX filter proc-load
+  block). Sources gained a per-source `reverbSend`; off by default until a zone
+  exists.
+- **IR loading + convolution backend (R2).** `AudioEngine::loadReverbIr` /
+  `attachReverbIr` decode a `.wav` IR (reusing the AudioClip decoder + path-sandbox
+  validator, skipping the clip LRU + loudness pass) and bind it to the slot. The
+  backend is chosen **once at init**: native OpenAL convolution
+  (`AL_SOFTX_convolution_effect`) when the driver exposes it, else parametric
+  `AL_EFFECT_REVERB`. IR memory rides a pure, device-free `ReverbIrPool`
+  (LRU + pin + byte-budget) so its eviction invariants are unit-testable headless.
+- **Zones (R3).** New header-only `ReverbZoneComponent` (core radius / falloff band
+  / preset / IR path / wet gain) with hand-written serialize/deserialize. Pure
+  glm-free `selectReverbZone` picks the highest-weight zone plus its nearest
+  neighbour — blends at doorways, fades at zone edges — and the slot's wet gain
+  slews (~8/s) so tails fade in/out without clicks.
+- **Settings + editor (R4).** `Settings → Audio` gains a reverb master toggle, an
+  accessibility **wet-gain cap**, and a high-quality-convolution switch (all on the
+  v4→v5 schema, additive tolerant keys, validated/clamped, via a sibling
+  `AudioReverbApplySink`). The editor's audio-panel Zones tab graduated from a
+  throwaway placeholder list to authoring **real** `ReverbZoneComponent` entities
+  that save with the scene; a Debug read-out shows the live backend
+  (Convolution / Parametric / Dry) and the current winning zone.
+
+Honest deviations from the roadmap wording (recorded per rule 8 / project rule 5):
+
+- **Native OpenAL convolution, not a self-built `pocketfft` FFT convolver.** A
+  partitioned-FFT convolver would need OpenAL's mixed master PCM, which OpenAL Soft
+  doesn't expose (the same "no master-bus PCM" wall AX9 hit) — i.e. a mixer rewrite.
+  The native effect delivers per-zone measured-IR convolution today with a graceful
+  parametric fallback where the driver lacks it, at a fraction of the surface area.
+  No `pocketfft` dependency was added.
+- **IR swap is snap-with-a-wet-dip, not a dual-slot crossfade.** On entering a new
+  convolution zone the slot snaps to the new IR and the wet gain dips to zero for
+  one frame, then slews back — glitch-free without a second slot. A dual-slot
+  crossfade is the documented v2 refinement.
+
+CPU-only (branchy zone selection + geometry; the DSP itself runs inside OpenAL).
+Design of record: `docs/phases/phase_10_audio_reverb_design.md` (joint AX2/AX3 doc,
+cold-eyes converged in 5 loops). Shipped across slices R1–R5; new
+`engine/audio/reverb_ir_pool.{h,cpp}` + `engine/audio/reverb_zone_component.h` +
+`engine/systems/reverb_system.{h,cpp}`; reverb unit tests span `test_reverb_ir_pool`,
+`test_reverb_zone_select`, and reverb cases across the audio_reverb / settings /
+audio_panel / entity_serializer suites. AX3 (acoustic pre-bake — baked IRs from
+scene geometry) is the follow-on bundle.
+
 ### 2026-07-03 Added — Local CI mirrors the Windows/MSVC job (opt-in `--windows`)
 
 `scripts/local-ci.sh --windows` now reproduces GitHub's `windows-build-test`
