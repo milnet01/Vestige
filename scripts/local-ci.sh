@@ -47,10 +47,15 @@
 # close the drift entirely — tracked separately.)
 #
 # Usage:
-#   scripts/local-ci.sh            # Linux mirror (build/test/audit/secrets) — push gate
-#   scripts/local-ci.sh --windows  # ALSO run the Windows MSVC build+test (msvc-wine)
-#   scripts/local-ci.sh --quick    # Debug build+test + gitleaks only (fast smoke,
-#                                  # NOT push-safe: skips the Tier-1 static audit)
+#   scripts/local-ci.sh             # FULL mirror (Linux + Windows/MSVC + audit +
+#                                   # secrets) — the push gate. Windows runs by
+#                                   # default so a Windows-only break is caught
+#                                   # locally; it SKIPs (→ "not push-verified")
+#                                   # only when msvc-wine/wine is absent.
+#   scripts/local-ci.sh --no-windows # skip the Windows MSVC stage (Linux-only;
+#                                   # reports PARTIAL — not push-verified)
+#   scripts/local-ci.sh --quick     # Debug build+test + gitleaks only (fast smoke,
+#                                   # NOT push-safe: skips the Tier-1 audit + Windows)
 #   scripts/local-ci.sh -j 8        # cap parallel build/test jobs (default: nproc)
 #   scripts/local-ci.sh -h          # this help
 #
@@ -69,12 +74,18 @@ cd "$REPO_ROOT" || exit 1
 
 # --- argument parsing -------------------------------------------------------
 QUICK=0
-WINDOWS=0
+# Windows/MSVC is a required CI job, so a full pre-push mirror runs it by default —
+# a Linux-only run once let a Windows-only break (a leaked file handle → a
+# `remove_all` fault MSVC/Windows rejects but Linux tolerates) reach main. It SKIPs
+# cleanly when msvc-wine/wine is absent (→ PARTIAL, not push-verified); --no-windows
+# opts out explicitly; --quick drops it for a fast smoke.
+WINDOWS=1
 JOBS="$(nproc)"
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --quick)   QUICK=1; shift ;;
-        --windows) WINDOWS=1; shift ;;
+        --quick)      QUICK=1; WINDOWS=0; shift ;;
+        --windows)    WINDOWS=1; shift ;;   # explicit-on (default); kept for muscle memory
+        --no-windows) WINDOWS=0; shift ;;
         -j)        JOBS="${2:?-j needs a number}"; shift 2 ;;
         -h|--help) awk 'NR>1 && /^#/{sub(/^# ?/,""); print; next} NR>1{exit}' "$0"; exit 0 ;;
         *) echo "unknown argument: $1 (try -h)" >&2; exit 2 ;;
@@ -257,9 +268,14 @@ else
     record "Release build+test" skip 0
 fi
 
-# --- stage 3 (opt-in): Windows MSVC build + test via msvc-wine ---------------
+# --- stage 3: Windows MSVC build + test via msvc-wine (default; --no-windows off) ---
+# Runs by default so a Windows-only break is caught before push. When disabled it is
+# recorded as SKIP so the summary reports PARTIAL (Windows is a real CI gate — a run
+# without it is not push-verified).
 if [[ $WINDOWS -eq 1 ]]; then
     build_and_test_msvc || true
+else
+    record "Windows MSVC build+test" skip 0
 fi
 
 # --- stage 4: Tier-1 static audit -------------------------------------------
@@ -327,10 +343,7 @@ if [[ ${#skipped_stages[@]} -gt 0 || $CLANG_TIDY_OK -eq 0 ]]; then
     echo "  Run ./scripts/local-ci.sh (no --quick, full toolchain) before pushing."
     exit 0
 fi
-if [[ $WINDOWS -eq 1 ]]; then
-    echo "Full CI mirror incl. Windows/MSVC passed — safe to push. (cmake-compat is still CI-only.)"
-else
-    echo "Linux CI mirror passed — safe to push."
-    echo "  Windows/MSVC not run locally (covered in CI); add --windows to mirror it. cmake-compat is CI-only."
-fi
+# Reaching here means no stage FAILED and none were SKIPped — so Windows/MSVC
+# actually ran and passed (a skip would have taken the PARTIAL branch above).
+echo "Full CI mirror incl. Windows/MSVC passed — safe to push. (cmake-compat is still CI-only.)"
 exit 0

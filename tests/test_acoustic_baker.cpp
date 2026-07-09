@@ -211,15 +211,20 @@ TEST(AcousticBaker, BakeAndWriteRoundTripsAndIsDeterministic)
     EXPECT_TRUE(fs::exists(fs::path(dirA) / "probe_2.wav"));
     EXPECT_TRUE(fs::exists(fs::path(dirA) / "acoustics_index.json"));
 
-    // Index parses and matches.
-    std::ifstream idxIn((fs::path(dirA) / "acoustics_index.json").string());
-    nlohmann::json idx;
-    idxIn >> idx;
-    EXPECT_EQ(idx["version"].get<int>(), 1);
-    EXPECT_EQ(idx["sampleRate"].get<int>(), BakeParams{}.sampleRate);
-    EXPECT_EQ(idx["geometryFingerprint"].get<std::uint64_t>(), ra.geometryFingerprint);
-    ASSERT_EQ(idx["probes"].size(), 2u);
-    EXPECT_EQ(idx["probes"][0]["ir"].get<std::string>(), "probe_1.wav");
+    // Index parses and matches. Scope the reader so its handle is released
+    // before the `fs::remove_all` below — Windows refuses to delete a file that
+    // still has an open handle (a bare function-scope ifstream here would make
+    // that cleanup fail with a sharing violation).
+    {
+        std::ifstream idxIn((fs::path(dirA) / "acoustics_index.json").string());
+        nlohmann::json idx;
+        idxIn >> idx;
+        EXPECT_EQ(idx["version"].get<int>(), 1);
+        EXPECT_EQ(idx["sampleRate"].get<int>(), BakeParams{}.sampleRate);
+        EXPECT_EQ(idx["geometryFingerprint"].get<std::uint64_t>(), ra.geometryFingerprint);
+        ASSERT_EQ(idx["probes"].size(), 2u);
+        EXPECT_EQ(idx["probes"][0]["ir"].get<std::string>(), "probe_1.wav");
+    }
 
     // Each IR round-trips through the runtime loader (float-WAV → s16).
     const auto clip = AudioClip::loadFromFile((fs::path(dirA) / "probe_1.wav").string());
@@ -236,7 +241,6 @@ TEST(AcousticBaker, BakeAndWriteRoundTripsAndIsDeterministic)
               readFileBytes((fs::path(dirB) / "probe_1.wav").string()));
     EXPECT_EQ(readFileBytes((fs::path(dirA) / "probe_2.wav").string()),
               readFileBytes((fs::path(dirB) / "probe_2.wav").string()));
-
     fs::remove_all(root);
     world.shutdown();
 }
