@@ -172,6 +172,7 @@ add_executable(vestige_tests
     test_reverb_zone_select.cpp
     test_acoustic_bake.cpp
     test_acoustic_baker.cpp
+    test_acoustics_index_load.cpp
     test_audio_ambient.cpp
     test_audio_music.cpp
     test_audio_mixer.cpp

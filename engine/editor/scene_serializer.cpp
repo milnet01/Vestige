@@ -508,6 +508,10 @@ SceneSerializerResult SceneSerializer::loadScene(
     // Rebuild entity ID lookup index after bulk deserialization
     scene.rebuildEntityIndex();
 
+    // Record where this scene came from so runtime systems can find its
+    // sidecars (AX3 B4: ReverbSystem loads `<stem>_acoustics/` baked probe IRs).
+    scene.setSourcePath(path.string());
+
     result.success = true;
     Logger::info("Loaded scene '" + sceneName + "' from " + path.string()
                  + " (" + std::to_string(result.entityCount) + " entities, "

@@ -145,6 +145,15 @@ public:
     /// @brief Sets the scene name.
     void setName(const std::string& name);
 
+    /// @brief On-disk path this scene was last loaded from (set by
+    ///        `SceneSerializer::loadScene`). Empty for scenes built in memory.
+    ///        `ReverbSystem` derives the `<stem>_acoustics/` sidecar directory
+    ///        from it to load baked acoustic-probe IRs (AX3 B4).
+    const std::string& getSourcePath() const { return m_sourcePath; }
+
+    /// @brief Records the path a scene was loaded from. @see getSourcePath.
+    void setSourcePath(const std::string& path) { m_sourcePath = path; }
+
     /// @brief Sets the active camera component for rendering.
     /// @param camera Pointer to a CameraComponent in this scene (nullptr to clear).
     void setActiveCamera(CameraComponent* camera);
@@ -265,6 +274,7 @@ private:
     void collectCollidersRecursive(const Entity& entity, std::vector<AABB>& colliders) const;
 
     std::string m_name;
+    std::string m_sourcePath;  ///< Path last loaded from; empty if in-memory (AX3 B4).
     std::unique_ptr<Entity> m_root;
     std::unordered_map<uint32_t, Entity*> m_entityIndex;
     CameraComponent* m_activeCamera = nullptr;
