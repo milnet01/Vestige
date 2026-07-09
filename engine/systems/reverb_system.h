@@ -19,6 +19,14 @@ namespace Vestige
 class Engine;
 class AudioEngine;
 class Scene;
+struct AcousticBakeResult;  // engine/audio/acoustic_baker.h (B5 bake driver).
+
+/// @brief Directory a scene's acoustic sidecar lives in:
+///        `<scene-dir>/<scene-stem>_acoustics/`. The single source of truth for
+///        where a bake **writes** (B5) and where the runtime **reads** (B4) — the
+///        two must never diverge. Empty when `sceneSourcePath` is empty (an
+///        in-memory scene has nowhere to put a sidecar).
+std::string acousticsSidecarDir(const std::string& sceneSourcePath);
 
 /// @brief One probe as loaded from a scene's baked `acoustics_index.json` (B4),
 ///        with its IR path resolved against the sidecar directory.
@@ -84,6 +92,18 @@ public:
     ///        re-bake so the runtime picks up fresh IRs without a scene reload
     ///        (AX3 B5 editor "Bake Acoustics" button).
     void invalidateBakedProbes() { m_bakedScene = nullptr; }
+
+    /// @brief B5 — bakes `scene`'s acoustics into its sidecar dir and forces a
+    ///        runtime reload. Walks the scene's static physics bodies +
+    ///        `AcousticProbeComponent`s, runs the offline image-source baker
+    ///        (`bakeScene`, MT2-parallel across probes) via the engine's
+    ///        `PhysicsWorld` + `JobSystem`, then `invalidateBakedProbes()`.
+    ///
+    /// Returns `AcousticBakeResult{ok=false}` (nothing written) when the system
+    /// is uninitialised or the scene has no on-disk path (save it first — an
+    /// in-memory scene has nowhere to write the sidecar). This is what the editor
+    /// "Bake Acoustics" button and the `--bake-acoustics` CLI both call.
+    AcousticBakeResult bakeAcoustics(Scene& scene);
 
 private:
     /// @brief Drives the slot from the nearest baked probe's IR when the active

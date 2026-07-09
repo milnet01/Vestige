@@ -34,8 +34,10 @@ class SettingsEditor;
 ///   - **Sources** — active `AudioSourceComponent`s in the scene
 ///                   with per-entity mute / solo toggles.
 ///   - **Zones**   — reverb-zone placement (real scene
-///                   `ReverbZoneComponent` entities, AX2 R4) +
-///                   ambient-zone placement (still editor-draft, no
+///                   `ReverbZoneComponent` entities, AX2 R4),
+///                   acoustic-probe placement + "Bake Acoustics"
+///                   (real `AcousticProbeComponent` entities, AX3 B5),
+///                   and ambient-zone placement (still editor-draft, no
 ///                   runtime ambient component yet).
 ///   - **Debug**   — voice-pool utilisation, HRTF status + dataset
 ///                   selector, distance-model picker, and an
@@ -156,9 +158,30 @@ public:
     std::uint32_t selectedReverbZone() const     { return m_selectedReverbZoneEntity; }
     void selectReverbZone(std::uint32_t entityId) { m_selectedReverbZoneEntity = entityId; }
 
+    // -- Acoustic probes (scene-backed AcousticProbeComponent, AX3 B5) ----
+    //
+    // Baked-reverb sample points. Placement mirrors the reverb-zone surface:
+    // add / remove / select entities carrying an `AcousticProbeComponent`, edit
+    // the influence radius, then "Bake Acoustics" runs the offline image-source
+    // baker over the scene's static geometry and writes each probe's IR sidecar.
+    // Management stays ImGui-free so `test_audio_panel` exercises it headlessly.
+
+    /// @brief Creates an "Acoustic Probe" entity with a default
+    ///        `AcousticProbeComponent`, selects it, and returns it.
+    Entity* createAcousticProbe(Scene& scene);
+
+    /// @brief Removes the acoustic-probe entity @a entityId from @a scene,
+    ///        clearing the selection if it pointed at it. True iff removed.
+    bool removeAcousticProbe(Scene& scene, std::uint32_t entityId);
+
+    std::uint32_t selectedAcousticProbe() const     { return m_selectedAcousticProbeEntity; }
+    void selectAcousticProbe(std::uint32_t entityId) { m_selectedAcousticProbeEntity = entityId; }
+
     /// @brief Wires the live `ReverbSystem` so the Debug tab can show the
-    ///        current winning zone + slot wet gain. Null keeps the tab on
-    ///        the AudioEngine-derived backend line only (tests, standalone).
+    ///        current winning zone + slot wet gain, and the Zones tab's "Bake
+    ///        Acoustics" button can drive the offline bake. Null keeps the tab on
+    ///        the AudioEngine-derived backend line only (tests, standalone) and
+    ///        disables the bake button.
     void wireReverbSystem(ReverbSystem* reverbSystem) { m_reverbSystem = reverbSystem; }
 
     // -- Ambient zones (editor draft) ------------------------------
@@ -218,9 +241,17 @@ private:
 
     std::vector<AmbientZoneInstance> m_ambientZones;
     std::uint32_t m_selectedReverbZoneEntity = 0;  ///< AX2 R4 (0 = none).
+    std::uint32_t m_selectedAcousticProbeEntity = 0;  ///< AX3 B5 (0 = none).
     int m_selectedAmbientZone = -1;
 
-    ReverbSystem* m_reverbSystem = nullptr;  ///< Debug-tab read-outs; may be null.
+    ReverbSystem* m_reverbSystem = nullptr;  ///< Debug read-outs + bake; may be null.
+
+    // AX3 B5 — last "Bake Acoustics" outcome, for the Zones-tab status line.
+    bool          m_haveLastBake       = false;
+    bool          m_lastBakeOk         = false;
+    std::size_t   m_lastBakeProbeCount = 0;
+    std::size_t   m_lastBakeFacetCount = 0;
+    float         m_lastBakeVolumeM3   = 0.0f;
 
     std::unordered_set<std::uint32_t> m_mutedSources;
     std::unordered_set<std::uint32_t> m_soloedSources;

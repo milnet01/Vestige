@@ -22,6 +22,74 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-07-09 Added — Acoustic pre-bake: baked per-probe impulse responses (AX3)
+
+AX2 made reverb audible from **hand-authored** zones and measured `.wav` IRs. AX3
+generates those IRs **from the scene's own geometry**: an offline image-source
+baker walks the static walls, simulates the echo at each acoustic probe, and writes
+a `.wav` per probe. At runtime the nearest baked probe drives the convolution slot —
+so a stone hall sounds like *that* hall, with zero ray-tracing during play.
+
+Everything upstream of the slot is new; the slot itself is AX2's. Placement mirrors
+reverb zones (an `AcousticProbeComponent` entity = a point + influence radius), and
+the runtime prefers a baked probe over an authored zone when a bake exists.
+
+- **Probe placement + serialization (B1).** Header-only `AcousticProbeComponent`
+  (position from the entity transform + scalar `influenceRadius` + `bakedIrPath`),
+  an `"AcousticProbe"` serializer entry, and a pure `nearestAcousticProbeIndex`
+  shared by the placement, bake, and runtime paths (ties break low → deterministic).
+- **Image-source bake core (B2).** Pure, device-free
+  `bakeProbeIr(facets, probePos, roomVolumeM3, params)`: BFS image sources to order
+  K for the early reflections (same-plane re-reflection pruned, direct path omitted),
+  then a deterministic decaying-noise late tail whose envelope reaches −60 dB over
+  the room's Sabine RT60. A `surfaceMaterialAbsorption()` α-table + `sabineRt60` /
+  `estimateRt60` (Schroeder T30) round it out. Runs on MT2 workers — no engine state.
+- **Bake driver + sidecar (B3).** `extractStaticTriangles` decodes world-space
+  triangles from static Jolt bodies (main-thread, per Jolt's body-lock contract),
+  `mergeTrianglesToFacets` folds coplanar same-material triangles into Sabine facets,
+  and `bakeAndWrite` runs `bakeProbeIr` across probes via MT2 `parallelFor`, writing
+  `probe_<id>.wav` (32-bit float) + `acoustics_index.json` into the scene's
+  `<stem>_acoustics/` sidecar. A geometry fingerprint (FNV-1a) tags the bake for
+  staleness detection.
+- **Runtime baked-probe reverb (B4).** `ReverbSystem` loads the sidecar for the
+  active scene (reload on scene switch or re-bake), and each frame drives the slot
+  from the nearest probe's IR — snap-with-a-wet-dip swap + gain slew, same click-free
+  path as the zone code — **in preference to** authored zones. Convolution-only; a
+  parametric-only device or an unbaked scene falls back to zones unchanged. The
+  system now also owns `AcousticProbeComponent`, so a baked-only scene (probes, no
+  zones) still activates. `Scene` records its on-disk path so the runtime finds the
+  sidecar.
+- **Bake UI + CLI (B5).** The audio-panel Zones tab authors **real**
+  `AcousticProbeComponent` entities (add / remove / select + influence radius) and a
+  "Bake Acoustics" button runs the bake through `ReverbSystem::bakeAcoustics`,
+  reporting probe / facet / volume counts and refreshing the runtime IRs in place.
+  A `--bake-acoustics PATH` CLI flag does the same headlessly for asset pipelines.
+
+Honest deviations (recorded per rule 8 / project rule 5):
+
+- **`bakeProbeIr` takes an explicit `roomVolumeM3`.** A `ReflectingFacet` is
+  {plane, area, material} with no vertices, so Sabine's volume `V` can't come from
+  the facets — it is the extracted triangles' AABB volume, computed once at
+  extraction (B3) and passed in. IR amplitudes are physical, **not** peak-normalised
+  (the inter-reflection levels are meaningful; the AX2 wet cap governs loudness).
+- **One Jolt decode path for every static shape**, instead of the design's
+  stored-mesh-primary + Jolt-fallback. Box walls carry no stored mesh and Jolt's
+  `GetTrianglesStart/Next` covers box / hull / mesh / sphere / capsule uniformly —
+  simpler, and exactly the decode the design specifies.
+- **`--bake-acoustics` reuses the normal windowed init, then exits** — the engine
+  has no headless mode (init brings up a GL context), and building one is a separate
+  feature. So the CLI needs a display or xvfb, like `--visual-test`. The bake itself
+  touches no GL; it uses only physics + the job system.
+
+CPU-only by design (branchy geometry + disk I/O; embarrassingly parallel across
+probes on MT2 workers — no GPU win). Design of record:
+`docs/phases/phase_10_audio_reverb_design.md` § 6 (joint AX2/AX3 doc, cold-eyes
+converged in 5 loops). Shipped across slices B1–B5; new
+`engine/audio/acoustic_probe_component.h` + `engine/audio/acoustic_bake.{h,cpp}` +
+`engine/audio/acoustic_baker.{h,cpp}`; bake / loader / panel tests span
+`test_acoustic_bake`, `test_acoustic_baker`, `test_acoustics_index_load`, and
+acoustic-probe cases in `test_audio_panel` / `test_entity_serializer_registry`.
+
 ### 2026-07-04 Added — Convolution reverb with per-zone impulse responses (AX2)
 
 Reverb was silent math: the 6-preset EFX table lived in `audio_reverb.h` but

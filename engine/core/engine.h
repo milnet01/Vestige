@@ -75,6 +75,13 @@ struct EngineConfig
     /// editor visible.
     bool startInPlayMode = false;
 
+    /// @brief AX3 B5 — if true, after `initialize()` bake the loaded scene's
+    /// acoustics (offline IR pre-bake) and exit without entering the main loop
+    /// (CLI: --bake-acoustics PATH, which also sets `startupScene` to PATH).
+    /// For asset pipelines / a maintainer re-bake; needs a display (or xvfb)
+    /// like --visual-test, since the engine brings up a GL context on init.
+    bool bakeAcousticsAndExit = false;
+
     /// @brief Phase 10 slice 12.2 — enables the GameScreen state machine.
     ///
     /// When true, Engine opens `GameScreen::MainMenu` at cold-start (for
@@ -116,6 +123,13 @@ public:
 
     /// @brief Runs the main engine loop until the window is closed.
     void run();
+
+    /// @brief AX3 B5 — bakes the active scene's acoustics (offline image-source
+    ///        IR pre-bake) via `ReverbSystem`, then returns without entering the
+    ///        main loop. Drives the `--bake-acoustics PATH` CLI path: call after
+    ///        `initialize()` (which has already loaded the scene + built its
+    ///        static physics bodies). Returns true iff the bake wrote a sidecar.
+    bool bakeActiveSceneAcoustics();
 
     /// @brief Shuts down all subsystems and releases resources.
     void shutdown();

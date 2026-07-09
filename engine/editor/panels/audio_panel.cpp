@@ -5,6 +5,8 @@
 /// @brief AudioPanel — editor UI over the Phase 10 audio pipeline.
 #include "editor/panels/audio_panel.h"
 
+#include "audio/acoustic_baker.h"
+#include "audio/acoustic_probe_component.h"
 #include "audio/audio_attenuation.h"
 #include "audio/audio_engine.h"
 #include "audio/audio_hrtf.h"
@@ -42,6 +44,24 @@ bool AudioPanel::removeReverbZone(Scene& scene, std::uint32_t entityId)
     if (removed && m_selectedReverbZoneEntity == entityId)
     {
         m_selectedReverbZoneEntity = 0;
+    }
+    return removed;
+}
+
+Entity* AudioPanel::createAcousticProbe(Scene& scene)
+{
+    Entity* entity = scene.createEntity("Acoustic Probe");
+    entity->addComponent<AcousticProbeComponent>();
+    m_selectedAcousticProbeEntity = entity->getId();
+    return entity;
+}
+
+bool AudioPanel::removeAcousticProbe(Scene& scene, std::uint32_t entityId)
+{
+    const bool removed = scene.removeEntity(entityId);
+    if (removed && m_selectedAcousticProbeEntity == entityId)
+    {
+        m_selectedAcousticProbeEntity = 0;
     }
     return removed;
 }
@@ -340,6 +360,99 @@ void AudioPanel::drawZonesTab(Scene* scene)
                 removeReverbZone(*scene, m_selectedReverbZoneEntity);
             }
             ImGui::PopID();
+        }
+    }
+
+    // --- Acoustic probes + offline bake (AX3 B5) ---
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::TextUnformatted("Acoustic probes (baked reverb)");
+    if (!scene)
+    {
+        ImGui::TextDisabled("No scene — acoustic probes unavailable.");
+    }
+    else
+    {
+        if (ImGui::Button("Add acoustic probe"))
+        {
+            createAcousticProbe(*scene);
+        }
+        ImGui::Separator();
+
+        scene->forEachEntity([&](Entity& entity)
+        {
+            if (entity.getComponent<AcousticProbeComponent>() == nullptr)
+            {
+                return;
+            }
+            const std::uint32_t id = entity.getId();
+            ImGui::PushID(static_cast<int>(id + 20000));
+            const bool isSelected = (id == m_selectedAcousticProbeEntity);
+            if (ImGui::Selectable(entity.getName().c_str(), isSelected))
+            {
+                m_selectedAcousticProbeEntity = id;
+            }
+            ImGui::PopID();
+        });
+
+        Entity* selected = scene->findEntityById(m_selectedAcousticProbeEntity);
+        AcousticProbeComponent* probe =
+            selected ? selected->getComponent<AcousticProbeComponent>() : nullptr;
+        if (probe != nullptr)
+        {
+            ImGui::Separator();
+            ImGui::PushID(static_cast<int>(m_selectedAcousticProbeEntity + 20000));
+            char nameBuf[128];
+            std::snprintf(nameBuf, sizeof(nameBuf), "%s", selected->getName().c_str());
+            if (ImGui::InputText("Name", nameBuf, sizeof(nameBuf)))
+            {
+                selected->setName(nameBuf);
+            }
+            // Position is the entity transform (gizmo), like a reverb zone.
+            ImGui::SliderFloat("Influence radius", &probe->influenceRadius,
+                               0.1f, 100.0f, "%.1f");
+            // Baked IR path is written by the bake, not hand-edited — show it.
+            ImGui::Text("Baked IR: %s",
+                        probe->bakedIrPath.empty() ? "(not baked)"
+                                                   : probe->bakedIrPath.c_str());
+            if (ImGui::Button("Remove acoustic probe"))
+            {
+                removeAcousticProbe(*scene, m_selectedAcousticProbeEntity);
+            }
+            ImGui::PopID();
+        }
+
+        ImGui::Separator();
+        // The bake needs the live ReverbSystem (physics + job system + scene
+        // path). Disabled in tests / standalone where it is not wired.
+        if (m_reverbSystem == nullptr)
+        {
+            ImGui::TextDisabled("Bake Acoustics — unavailable (no reverb system).");
+        }
+        else if (ImGui::Button("Bake Acoustics"))
+        {
+            const AcousticBakeResult r = m_reverbSystem->bakeAcoustics(*scene);
+            m_haveLastBake       = true;
+            m_lastBakeOk         = r.ok;
+            m_lastBakeProbeCount = r.probes.size();
+            m_lastBakeFacetCount = r.facets.size();
+            m_lastBakeVolumeM3   = r.roomVolumeM3;
+        }
+        if (m_haveLastBake)
+        {
+            if (m_lastBakeOk)
+            {
+                ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.4f, 1.0f),
+                                   "Baked %zu probe(s), %zu facet(s), %.0f m^3",
+                                   m_lastBakeProbeCount, m_lastBakeFacetCount,
+                                   static_cast<double>(m_lastBakeVolumeM3));
+            }
+            else
+            {
+                ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.3f, 1.0f),
+                                   "Bake produced nothing — save the scene and add "
+                                   "probes + static geometry (see log).");
+            }
         }
     }
 

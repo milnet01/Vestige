@@ -5,6 +5,7 @@
 /// @brief ReverbSystem implementation (AX2 R3 — zone selection + slot drive).
 #include "systems/reverb_system.h"
 
+#include "audio/acoustic_baker.h"
 #include "audio/acoustic_probe_component.h"
 #include "audio/audio_engine.h"
 #include "audio/audio_reverb.h"
@@ -42,18 +43,28 @@ namespace
 constexpr float kReverbGainSlewPerSec = 8.0f;
 } // namespace
 
+std::string acousticsSidecarDir(const std::string& sceneSourcePath)
+{
+    if (sceneSourcePath.empty())
+    {
+        return {};  // In-memory scene — no directory to anchor a sidecar.
+    }
+    namespace fs = std::filesystem;
+    const fs::path scenePath(sceneSourcePath);
+    return (scenePath.parent_path() / (scenePath.stem().string() + "_acoustics")).string();
+}
+
 std::vector<LoadedAcousticProbe> loadAcousticsIndex(const std::string& sceneSourcePath)
 {
     std::vector<LoadedAcousticProbe> probes;
-    if (sceneSourcePath.empty())
+    const std::string sidecarDirStr = acousticsSidecarDir(sceneSourcePath);
+    if (sidecarDirStr.empty())
     {
         return probes;  // In-memory scene — no sidecar to read.
     }
 
     namespace fs = std::filesystem;
-    const fs::path scenePath(sceneSourcePath);
-    const fs::path sidecarDir =
-        scenePath.parent_path() / (scenePath.stem().string() + "_acoustics");
+    const fs::path sidecarDir(sidecarDirStr);
     const fs::path indexPath = sidecarDir / "acoustics_index.json";
 
     std::error_code ec;
@@ -367,6 +378,35 @@ bool ReverbSystem::driveFromBakedProbes(const glm::vec3& listenerPos, float delt
     });
 
     return true;
+}
+
+AcousticBakeResult ReverbSystem::bakeAcoustics(Scene& scene)
+{
+    AcousticBakeResult result;  // ok == false by default (nothing written yet).
+
+    if (m_engine == nullptr)
+    {
+        Logger::warning("[ReverbSystem] bakeAcoustics: system not initialised.");
+        return result;
+    }
+
+    // The bake writes into the scene's sidecar dir; an unsaved (in-memory) scene
+    // has no path to anchor it. Fail cleanly so the UI can say "save first".
+    const std::string outputDir = acousticsSidecarDir(scene.getSourcePath());
+    if (outputDir.empty())
+    {
+        Logger::warning("[ReverbSystem] bakeAcoustics: scene has no on-disk path — "
+                        "save the scene before baking acoustics.");
+        return result;
+    }
+
+    result = bakeScene(scene, m_engine->getPhysicsWorld(), m_engine->getJobSystem(),
+                       outputDir, BakeParams{});
+
+    // A re-bake replaces the sidecar; drop the cached probes so `update()` reloads
+    // the fresh IRs next frame without needing a scene reload.
+    invalidateBakedProbes();
+    return result;
 }
 
 std::vector<uint32_t> ReverbSystem::getOwnedComponentTypes() const

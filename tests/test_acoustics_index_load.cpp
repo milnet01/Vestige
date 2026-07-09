@@ -10,7 +10,9 @@
 
 #include "systems/reverb_system.h"
 
+#include "audio/acoustic_baker.h"
 #include "audio/acoustic_probe_component.h"
+#include "scene/scene.h"
 
 #include <nlohmann/json.hpp>
 
@@ -121,6 +123,30 @@ TEST(AcousticsIndexLoad, RejectsIrEntriesWithPathSeparators)
     ASSERT_EQ(probes.size(), 1u);
     EXPECT_EQ(probes[0].id, 3u);
     fs::remove_all(dir);
+}
+
+TEST(AcousticsSidecarDir, DerivesFromSceneStemAndEmptyForInMemory)
+{
+    // The read path (loadAcousticsIndex) and the write path (bakeAcoustics) must
+    // agree on this directory — it is the single source of truth for both.
+    EXPECT_EQ(fs::path(acousticsSidecarDir("/a/b/temple.json")),
+              fs::path("/a/b") / "temple_acoustics");
+    EXPECT_EQ(fs::path(acousticsSidecarDir("hall.scene")),
+              fs::path("hall_acoustics"));
+    EXPECT_TRUE(acousticsSidecarDir("").empty());  // in-memory scene → nowhere.
+}
+
+TEST(ReverbSystemBake, UninitialisedOrUnsavedSceneWritesNothing)
+{
+    ReverbSystem reverb;  // never initialize()'d → no engine handle.
+
+    // An in-memory scene has no source path either; both guards must hold, so the
+    // bake reports failure and touches no disk.
+    Scene scene("unsaved");
+    EXPECT_TRUE(scene.getSourcePath().empty());
+    const AcousticBakeResult result = reverb.bakeAcoustics(scene);
+    EXPECT_FALSE(result.ok);
+    EXPECT_TRUE(result.probes.empty());
 }
 
 TEST(AcousticsIndexLoad, NearestLookupSelectsClosestBakedProbe)

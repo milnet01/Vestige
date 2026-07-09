@@ -9,6 +9,7 @@
 
 #include <gtest/gtest.h>
 
+#include "audio/acoustic_probe_component.h"
 #include "audio/reverb_zone_component.h"
 #include "core/settings.h"
 #include "core/settings_editor.h"
@@ -135,6 +136,82 @@ TEST(AudioPanel, RemoveUnknownReverbZoneIsNoOp)
     p.createReverbZone(scene);
     EXPECT_FALSE(p.removeReverbZone(scene, 999999u));
     EXPECT_EQ(countReverbZones(scene), 1);
+}
+
+// -- Acoustic probe management (scene-backed AcousticProbeComponent, B5) --
+
+namespace
+{
+int countAcousticProbes(Scene& scene)
+{
+    int n = 0;
+    scene.forEachEntity([&](Entity& e)
+    {
+        if (e.getComponent<AcousticProbeComponent>() != nullptr) ++n;
+    });
+    return n;
+}
+}
+
+TEST(AudioPanel, CreateAcousticProbeAddsComponentEntityAndSelectsIt)
+{
+    AudioPanel p;
+    Scene scene("test");
+
+    Entity* e = p.createAcousticProbe(scene);
+    ASSERT_NE(e, nullptr);
+    EXPECT_NE(e->getComponent<AcousticProbeComponent>(), nullptr);
+    EXPECT_EQ(p.selectedAcousticProbe(), e->getId());
+    EXPECT_EQ(countAcousticProbes(scene), 1);
+
+    Entity* e2 = p.createAcousticProbe(scene);
+    ASSERT_NE(e2, nullptr);
+    EXPECT_NE(e2->getId(), e->getId());
+    EXPECT_EQ(p.selectedAcousticProbe(), e2->getId());  // newest is selected
+    EXPECT_EQ(countAcousticProbes(scene), 2);
+}
+
+TEST(AudioPanel, RemoveSelectedAcousticProbeClearsSelection)
+{
+    AudioPanel p;
+    Scene scene("test");
+
+    Entity* e = p.createAcousticProbe(scene);
+    const std::uint32_t id = e->getId();
+    EXPECT_TRUE(p.removeAcousticProbe(scene, id));
+    EXPECT_EQ(p.selectedAcousticProbe(), 0u);
+    EXPECT_EQ(countAcousticProbes(scene), 0);
+}
+
+TEST(AudioPanel, RemoveNonSelectedAcousticProbeKeepsSelection)
+{
+    AudioPanel p;
+    Scene scene("test");
+
+    Entity* first  = p.createAcousticProbe(scene);
+    Entity* second = p.createAcousticProbe(scene);  // now selected
+    const std::uint32_t firstId  = first->getId();
+    const std::uint32_t secondId = second->getId();
+
+    EXPECT_TRUE(p.removeAcousticProbe(scene, firstId));
+    EXPECT_EQ(p.selectedAcousticProbe(), secondId);  // untouched
+    EXPECT_EQ(countAcousticProbes(scene), 1);
+}
+
+TEST(AudioPanel, ReverbZoneAndAcousticProbeSelectionsAreIndependent)
+{
+    AudioPanel p;
+    Scene scene("test");
+
+    Entity* zone  = p.createReverbZone(scene);
+    Entity* probe = p.createAcousticProbe(scene);
+    EXPECT_EQ(p.selectedReverbZone(),   zone->getId());
+    EXPECT_EQ(p.selectedAcousticProbe(), probe->getId());
+
+    // Removing the probe leaves the zone selection intact and vice versa.
+    EXPECT_TRUE(p.removeAcousticProbe(scene, probe->getId()));
+    EXPECT_EQ(p.selectedReverbZone(), zone->getId());
+    EXPECT_EQ(p.selectedAcousticProbe(), 0u);
 }
 
 // -- Ambient zone management --------------------------------------

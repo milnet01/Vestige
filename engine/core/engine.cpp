@@ -20,6 +20,7 @@
 #include "systems/lighting_system.h"
 #include "systems/audio_occlusion_system.h"
 #include "systems/reverb_system.h"
+#include "audio/acoustic_baker.h"
 #include "systems/audio_system.h"
 #include "systems/music_system.h"
 #include "audio/audio_music_player.h"
@@ -1091,6 +1092,36 @@ bool Engine::initialize(const EngineConfig& config)
     Logger::info("Editor camera: Alt+LMB=orbit, MMB=pan, Scroll=zoom, F=focus, Numpad 1/3/7=front/right/top");
     Logger::info("Gamepad: Left stick=move, Right stick=look, LB=sprint, Triggers=up/down");
     return true;
+}
+
+bool Engine::bakeActiveSceneAcoustics()
+{
+    ReverbSystem* reverb = m_systemRegistry.getSystem<ReverbSystem>();
+    if (reverb == nullptr)
+    {
+        Logger::error("Bake acoustics: no ReverbSystem registered.");
+        return false;
+    }
+    Scene* scene = m_sceneManager->getActiveScene();
+    if (scene == nullptr)
+    {
+        Logger::error("Bake acoustics: no active scene.");
+        return false;
+    }
+
+    const AcousticBakeResult result = reverb->bakeAcoustics(*scene);
+    if (result.ok)
+    {
+        Logger::info("Bake acoustics: wrote " + std::to_string(result.probes.size())
+            + " probe IR(s) from " + std::to_string(result.facets.size())
+            + " facet(s), room volume " + std::to_string(result.roomVolumeM3) + " m^3.");
+    }
+    else
+    {
+        Logger::error("Bake acoustics: nothing written (see prior logs — the scene "
+            "needs an on-disk path, static geometry, and acoustic probes).");
+    }
+    return result.ok;
 }
 
 void Engine::run()

@@ -44,6 +44,11 @@ void printUsage(const char* argv0)
         << "                          <assets>/scenes/PATH.\n"
         << "  --assets PATH           Override the asset directory\n"
         << "                          (default: \"assets\").\n"
+        << "  --bake-acoustics PATH   Load the scene at PATH, bake its\n"
+        << "                          acoustic probe IRs into its\n"
+        << "                          <scene>_acoustics/ sidecar, and exit.\n"
+        << "                          Needs a display (or xvfb) like\n"
+        << "                          --visual-test. For asset pipelines.\n"
         << "  --visual-test           Run the automated visual-test\n"
         << "                          harness and exit. Used by CI.\n"
         << "  --isolate-feature=NAME  Disable one feature for visual-test\n"
@@ -106,6 +111,19 @@ bool parseArgs(int argc, char* argv[], Vestige::EngineConfig& config, int& exitC
                 return false;
             }
             config.assetPath = argv[++i];
+        }
+        else if (std::strcmp(arg, "--bake-acoustics") == 0)
+        {
+            if (i + 1 >= argc)
+            {
+                std::cerr << "--bake-acoustics requires a scene path argument\n";
+                exitCode = 2;
+                return false;
+            }
+            config.startupScene         = argv[++i];
+            config.bakeAcousticsAndExit = true;
+            Vestige::Logger::info("Acoustic bake requested for scene: " +
+                                  config.startupScene);
         }
         else if (std::strcmp(arg, "--visual-test") == 0)
         {
@@ -188,6 +206,16 @@ int main(int argc, char* argv[])
     {
         Vestige::Logger::fatal("Engine initialization failed — exiting");
         return 1;
+    }
+
+    // Offline acoustic bake (--bake-acoustics): initialize() has loaded the scene
+    // and built its static physics bodies; bake the sidecar and exit without ever
+    // entering the main loop.
+    if (config.bakeAcousticsAndExit)
+    {
+        const bool ok = engine.bakeActiveSceneAcoustics();
+        engine.shutdown();
+        return ok ? 0 : 1;
     }
 
     engine.run();
