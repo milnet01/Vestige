@@ -1587,6 +1587,7 @@ The engine targets Linux and Windows from the start (CLAUDE.md). The codebase is
 
 ### Asset Pipeline
 - [ ] Texture compression (BC7/KTX2 for desktop, ASTC for mobile — compress on import, load directly to GPU)
+- [ ] Texture channel packing + material atlasing (pack occlusion / roughness / metallic into a single ORM texture on import, and atlas small material textures to cut sampler binds and draw calls — distinct from the shipped 2D sprite atlas, which handles TexturePacker-JSON sprite sheets)
 - [ ] Automatic mipmap generation with quality filtering options
 - [ ] Asset cooking / baking (preprocess models, textures, shaders into optimized binary format)
 - [ ] Asset manifest and dependency tracking (know exactly what each scene needs)
@@ -1628,6 +1629,7 @@ Application published on Steam. Scenes can be packaged and shared between users.
 - [ ] Screen-space global illumination / SSGI (one-bounce diffuse indirect lighting from depth+color buffers — practical "free" GI layer, complements probe-based approaches)
 - [ ] Depth of field (cinematic focus effect for guided tours and screenshots)
 - [ ] Motion blur (per-object and camera-based)
+- [ ] Bent normals (GTAO-derived least-occluded direction — feeds specular occlusion and gives diffuse GI / IBL a directional term instead of a flat AO scalar; runtime path extends the existing SSAO, with optional baked bent-normal maps as the offline complement)
 
 ### Advanced Materials
 - [ ] Subsurface scattering / SSS (light bleeding through thin materials — linen curtains, wax candles, marble, skin; hybrid screen-space diffusion approach or ReSTIR-path-tracing diffusion when RT available; ref: NVIDIA SIGGRAPH 2025). *Basic per-material SSS (thickness + transmission + scattering distance + wrap lighting) lands in Phase 10 "Rendering Enhancements"; this Phase 13 item is the hybrid-screen-space / ReSTIR upgrade.*
@@ -1683,6 +1685,7 @@ Application published on Steam. Scenes can be packaged and shared between users.
 - [ ] Shader execution reordering / SER (group coherent RT shader invocations — up to 2x RT performance; mandatory in SM 6.9 / Vulkan equivalent)
 - [ ] Software ray tracing fallback (screen-space ray marching + voxel/probe traces for GPUs without hardware RT — the most widely deployed approach in shipping games, e.g. UE5 Lumen software path)
 - [ ] Deferred rendering pipeline
+- [ ] Forward+ / clustered forward rendering (tiled/clustered light culling so the current single-pass forward renderer scales to hundreds of dynamic lights without a G-buffer — keeps MSAA and ordered transparency working; complements the deferred pipeline above rather than replacing it)
 - [ ] Visibility buffer rendering (store triangle ID + barycentric coords instead of full G-buffer — compute-based material dispatch and deferred texturing; ref: idTech 8, DOOM: The Dark Ages)
 
 ### Tessellation and Geometry
@@ -1731,6 +1734,7 @@ Application published on Steam. Scenes can be packaged and shared between users.
 ### Anti-Aliasing and Filtering
 - [ ] Global anisotropic filtering quality setting (1x/2x/4x/8x/16x — applied to all scene textures)
 - [ ] Specular anti-aliasing (Toksvig or LEAN mapping — reduces distant surface shimmer from normal maps)
+- [ ] FXAA (fast approximate anti-aliasing — single-pass luminance-edge post-process; the cheapest AA option, added as a fifth `AntiAliasMode` alongside None / MSAA 4x / TAA / SMAA for low-end GPUs and performance mode where MSAA's cost or TAA's motion smear are unwanted)
 
 ### GPU-Driven Rendering
 - [ ] **[Highest-ROI OpenGL 4.5 item]** GPU-driven MDI with Hi-Z occlusion culling (compute-shader Hi-Z build + `glMultiDrawElementsIndirectCount`; expected 10-30% FPS gain on >1k-object scenes; ref: Anno 117 Pax Romana GDC 2026, idTech 8 SIGGRAPH 2025 — https://schedule.gdconf.com/session/all-rays-lead-to-rome-next-gen-graphics-in-anno-117-pax-romana/915067)
