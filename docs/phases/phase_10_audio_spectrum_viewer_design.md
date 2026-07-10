@@ -5,8 +5,21 @@ in editor."*
 **Status:** design — awaiting cold-eyes convergence before implementation.
 **Author:** in-session 2026-07-10.
 **Depends on:** shipped audio bundles (AX1–AX4, reverb, occlusion, procedural),
-`AudioEngine` / `AudioMixer`, `AudioAnalyzer` FFT, editor `AudioPanel` Debug tab,
-vendored ImPlot.
+`AudioEngine` / `AudioMixer`, `AudioMusicPlayer`, `AudioAnalyzer` FFT, editor
+`AudioPanel` Debug tab, vendored ImPlot.
+
+## Section index
+
+- §1 Goal & scope (+ non-goals)
+- §2 Background — why a producer-push CPU tap
+- §3 Architecture (shared FFT, monitor, producer hooks, solo, UI)
+- §4 CPU / GPU placement
+- §5 Performance (60 FPS gate)
+- §6 Accessibility
+- §7 Testing plan
+- §8 Invariants
+- §9 Implementation order
+- §10 Sources
 
 ---
 
@@ -17,223 +30,247 @@ scene author can answer *"why does my mix sound muddy / too bright / too quiet?"
 without a separate DAW. Three user-visible features (full AX12 scope, confirmed
 2026-07-10):
 
-1. **Frequency bars** — a live magnitude spectrum (bass → treble) of the current mix.
-2. **Scrolling waveform** — the master mix's time-domain signal over the last ~1–2 s.
-3. **Per-bus solo** — click a channel (Music / Voice / Sfx / Ambient / Ui) to
-   audition it in isolation (mutes the others on the live output).
+1. **Frequency bars** — a live magnitude spectrum (bass → treble) of the analysis mix.
+2. **Scrolling waveform** — the analysis mix's time-domain signal over the last ~1–2 s.
+3. **Per-bus solo** — click a channel (Music / Voice / Sfx / Ambient / Ui) to audition
+   it in isolation (mutes the others on the live output; the graph follows the solo).
 
-### 1.1 Non-goals (explicit)
+### 1.1 The signal: a producer-push "analysis mix"
 
-- **Not** the true post-spatialization speaker output. OpenAL Soft mixes internally
-  and streams to a hardware device; the finished buffer never reaches engine CPU
-  memory (see §2). The viewer analyses an **approximate content mix** reconstructed
-  on the CPU from the currently-playing per-source PCM, weighted by the mixer's
-  resolved gains. It therefore reflects **frequency balance and per-bus levels**
-  (exactly what "muddy mix" is about) but **excludes** HRTF panning, distance
-  attenuation, and reverb tails that OpenAL applies last. The Debug tab states this
-  limitation inline so the reading is never mistaken for the speaker signal.
-- **No new third-party dependency.** Reuses the in-repo radix-2 FFT and the
-  already-vendored ImPlot. (Per DEPENDENCY_STANDARDS.md: nothing to add, so no
-  dependency-upgrade cold-eyes gate applies — only the standard doc cold-eyes on
-  this design.)
-- **No mixer rewrite**, no new audio thread, no lock-free ring buffer.
+**Chosen approach (user decision 2026-07-10): analyse only CPU-generated audio, tapped
+at the point it is produced.** OpenAL Soft hides both the final speaker mix *and* each
+voice's playing samples (see §2). Rather than reconstruct voices from OpenAL, the audio
+**producers that already hold their samples on the CPU** — the streaming music player
+(which decodes chunks before queueing them) and the procedural synth (AX4, which
+synthesises samples on the CPU) — **push a copy** of what they generate into an
+`AudioMixMonitor`, already scaled by the source's resolved gain. The monitor sums these
+per bus into the **analysis mix** that the viewer transforms and draws.
+
+This is called the **analysis mix** throughout (one term, used consistently) — it is
+*not* the speaker output. It reflects the frequency balance and levels of the
+CPU-generated content, which is where "muddy mix" lives, but excludes HRTF panning,
+distance attenuation, and reverb tails OpenAL applies last.
+
+### 1.2 Non-goals (explicit)
+
+- **File-decoded one-shot SFX are not graphed.** `AudioEngine::loadBuffer` decodes a
+  clip, uploads it to OpenAL via `alBufferData`, and **discards its CPU copy**
+  (`m_bufferCache` maps `path → ALuint` only; a live voice's `SourceMix` stores
+  `{bus, sourceVolume, priority, startTime}` with no path/PCM handle —
+  `engine/audio/audio_engine.h`). Analysing them would require retaining every decoded
+  clip in RAM and threading a PCM handle through the source system — deliberately out of
+  scope. The Debug tab states inline that file one-shots are not shown. **Per-bus solo
+  still mutes them on the live output** (§3.4), it just doesn't graph them.
+- **Not the true post-spatialization speaker output** (would need `ALC_SOFT_loopback`,
+  which replaces the hardware-device path and breaks device hot-swap — §2).
+- **No new third-party dependency.** Reuses the in-repo FFT and already-vendored ImPlot.
+- **No mixer rewrite, no new audio thread, no lock-free ring buffer** (producers and the
+  panel both run on the main/update thread — §3.3).
 
 ---
 
-## 2. Background — why an approximate mix
+## 2. Background — why a producer-push CPU tap
 
 `AudioEngine` opens a **normal hardware playback device**
-(`alcOpenDevice(nullptr)` → `alcCreateContext`) — `engine/audio/audio_engine.cpp`.
-OpenAL Soft performs all sample mixing on its own internal render thread and streams
-straight to the driver; there is **no CPU-visible post-mix buffer** anywhere in the
-codebase (verified: zero references to `ALC_SOFT_loopback`,
-`alcRenderSamplesSOFT`, `alcCaptureSamples`, or any `mixBuffer` / `outputBuffer`).
+(`alcOpenDevice(nullptr)` at `engine/audio/audio_engine.cpp`). OpenAL Soft mixes on its
+own internal render thread and streams straight to the driver; there is **no CPU-visible
+post-mix buffer** (verified: zero references to `ALC_SOFT_loopback`,
+`alcRenderSamplesSOFT`, `alcCaptureSamples`). OpenAL also exposes no read-back of a
+buffer's samples, so a *playing* voice's PCM is not recoverable from the engine side.
 
-Two ways to obtain a signal to analyse:
+Two rejected alternatives:
 
-- **(A) CPU pseudo-mix (chosen).** Sum each active source's currently-playing PCM
-  window, scaled by its resolved gain (`master × bus × sourceVolume × duck`), into a
-  per-bus accumulator and a master accumulator. Approximate but touches nothing
-  fragile.
-- **(B) `ALC_SOFT_loopback` (rejected).** Yields the true post-mix buffer but
-  requires driving the render manually (`alcRenderSamplesSOFT`), which replaces the
-  hardware-device path and is **incompatible with the existing device hot-swap**
-  (`ALC_SOFT_reopen_device` / `ALC_SOFT_system_events`) that auto-switches output
-  when headphones are plugged in. Disproportionate risk for a debug tool.
+- **`ALC_SOFT_loopback`** — true post-mix, but requires driving the render manually,
+  replacing the hardware-device path; incompatible with the existing device hot-swap
+  (`ALC_SOFT_reopen_device` / `ALC_SOFT_system_events`). Disproportionate for a debug
+  tool.
+- **Retain all decoded PCM + reconstruct per voice via `AL_SAMPLE_OFFSET`** — faithful
+  to every source but doubles audio memory (a CPU copy of every clip alongside OpenAL's)
+  and needs a source→PCM handle threaded through `SourceMix`. Rejected as over-built for
+  a debug viewer.
 
-User decision 2026-07-10: **(A)**.
+The producer-push tap avoids both: it reads samples **only where they already exist on
+the CPU**, at zero extra memory when the tab is closed.
 
 ---
 
 ## 3. Architecture
 
-Three small, independently testable units, plus one localized mixer addition and one
-shared-helper extraction. The design deliberately separates **pure maths** (unit-
-testable without any audio device) from **OpenAL plumbing** from **UI**.
+Four small, independently testable units, plus one localized mixer addition and one
+shared-helper extraction. Pure maths (unit-testable without any audio device) is kept
+separate from OpenAL plumbing and from UI.
 
 ```
- AudioEngine (owns) ── AudioMixMonitor ──produces──▶ MixSnapshot ──read──▶ AudioPanel::drawDebugTab
-      │   (plumbing: reads AL_SAMPLE_OFFSET +                                    │ (ImPlot render)
-      │    source PCM, weights via resolveSourceGain)                           │
-      │                                                                          │
-      ├── accumulateMixWindow()  ◀── pure maths (no OpenAL) ── unit tested       ├── computeMagnitudeSpectrum() ◀ shared FFT helper
-      │                                                                          │
-      └── updateGains() ×busSoloMultiplier()  ◀── solo takes effect on live output
+ CPU producers ──submit(bus, samples, gain)──▶ AudioMixMonitor ──snapshot()──▶ AudioPanel::drawDebugTab
+ (AudioMusicPlayer decode,                       │  (sums per bus → master,           │ (ImPlot render)
+  procedural synth)                              │   rolling history; no-op inactive)  │
+                                                 └── accumulate (pure) ── unit tested  ├── computeMagnitudeSpectrum() ◀ shared FFT helper
+ AudioMixer.soloBus ──busSoloMultiplier()──▶ folded into the mixer gain path ──▶ every AL_GAIN site + the submitted gain
 ```
 
 ### 3.1 Shared spectrum helper (reuse, not rewrite)
 
-`AudioAnalyzer::computeFFT` is today a **private static** radix-2 Cooley-Tukey FFT
-inside `engine/experimental/animation/audio_analyzer.{h,cpp}` (Hann-windowed,
-magnitude bins; `FFT_SIZE = 512`). Per project reuse rule 3(b), **extract** the FFT +
-Hann window + magnitude computation into a shared pure module:
+`AudioAnalyzer::computeFFT` is today a **private static** radix-2 Cooley-Tukey FFT inside
+`engine/experimental/animation/audio_analyzer.{h,cpp}` (`FFT_SIZE = 512`, Hann-windowed
+for the lip-sync spectral centroid). Per project reuse rule 3(b), **extract only the raw
+FFT** into a shared pure module:
 
 ```
 engine/audio/audio_spectrum.h / .cpp   (new, pure — no OpenAL, no ImGui)
 
-  // In-place radix-2 Cooley-Tukey FFT (moved verbatim from AudioAnalyzer).
+  // In-place radix-2 Cooley-Tukey FFT (moved verbatim from AudioAnalyzer::computeFFT;
+  // `n` must be a power of two).
   void computeFFT(std::vector<float>& real, std::vector<float>& imag);
 
-  // Hann-window `in` (n samples), FFT, and write n/2 magnitude bins to `outMag`.
-  // Pure: identical output for identical input; the CPU spec for the GPU-free
-  // spectrum path. `binHz(i, sampleRate, n) = i * sampleRate / n`.
+  // Hann-window `in` (n samples, n a power of two), FFT, write n/2 linear magnitude
+  // bins to `outMag`. NEW code (the analyzer never had a standalone magnitude helper —
+  // it fuses magnitude into its centroid loop). Pure/deterministic. Hann divisor is
+  // (n-1) to match the analyzer's existing window exactly. binHz(i) = i * sampleRate / n.
   void computeMagnitudeSpectrum(const float* in, std::size_t n,
                                 std::vector<float>& outMag);
 ```
 
-`AudioAnalyzer` is refactored to call `computeFFT` from the shared module (behaviour
-unchanged — its existing `tests/test_audio_analyzer.cpp` pins that it still produces
-the same spectral centroid). No duplicated FFT.
+`AudioAnalyzer` is refactored to call the shared `computeFFT` (its magnitude/centroid
+code is untouched); behaviour is unchanged and pinned by the existing
+`tests/test_audio_analyzer.cpp`. `computeMagnitudeSpectrum` is new — only `computeFFT` is
+shared between analyzer and viewer.
 
-### 3.2 Pure mix accumulator (the "mix rebuilder")
-
-```
-// Pure — no OpenAL. Input: one contribution per active source.
-struct MixContribution
-{
-    const float* samples;   // mono PCM window for this source, length = frameCount
-    std::size_t  frameCount;
-    AudioBus     bus;        // source's assigned (non-Master) bus
-    float        gain;       // resolveSourceGain(mixer,bus,vol,duck) — already includes master
-};
-
-// Accumulate all contributions into master[frameCount] and
-// perBus[AudioBusCount][frameCount] (Master slot = summed = master).
-// Sums are NOT clamped (a debug meter must show clipping, not hide it);
-// the UI flags |sample| > 1.0 as clip. Deterministic.
-void accumulateMixWindow(const std::vector<MixContribution>& contribs,
-                         std::size_t frameCount,
-                         std::vector<float>& outMaster,
-                         std::array<std::vector<float>, AudioBusCount>& outPerBus);
-```
-
-This is the byte-for-byte-testable core: fake contributions + known gains → exact
-expected sums.
-
-### 3.3 AudioMixMonitor (the plumbing)
+### 3.2 Pure accumulator + `AudioMixMonitor` (the plumbing)
 
 `engine/audio/audio_mix_monitor.{h,cpp}` — owned by `AudioEngine`.
 
-- **Active only when the Debug tab is open.** `setActive(bool)`; when inactive it does
-  **zero work** (protects the 60 FPS budget — see §5). The panel calls
-  `AudioEngine::setMixMonitorActive(m_debugTabVisible)` each frame.
-- `const MixSnapshot& capture()` — called at most once per frame while active
-  (pull-based, driven from the panel draw). For each active source in the engine's
-  existing source pool (the same pool `updateGains` iterates):
-  1. `alGetSourcei(id, AL_SAMPLE_OFFSET, &off)` → current playback frame position.
-  2. Read a fixed **analysis block** of `WINDOW` mono samples from the source's PCM
-     starting at `off` — `WINDOW` is a power of two (design default **1024**, ≈ 23 ms
-     at 44.1 kHz) so it feeds the radix-2 FFT directly. Stereo source PCM is
-     down-mixed to mono (channel average), indexing by `frame × channels`. Reads past
-     the buffer end zero-pad (never OOB).
-  3. Compute `gain = resolveSourceGain(mixer, bus, sourceVolume, duck)` — reuse the
-     existing pure gain math (no re-derivation).
-  4. Emit a `MixContribution`.
-  Then call `accumulateMixWindow(...)` → fill `MixSnapshot`.
-- `MixSnapshot` = `{ std::vector<float> master; std::array<std::vector<float>,6> perBus;
-  int sampleRate; bool anyStreamingMissing; }` — each window is `WINDOW` (1024)
-  samples. Same-thread (main/update) production and consumption ⇒ **no locking**.
-- **Spectrum vs. waveform history:** the FFT consumes one `WINDOW`-sample block per
-  frame (fine-grained, instantaneous). The **scrolling waveform's** ~1–2 s history is
-  *not* one huge window — the panel's `ScrollingBuffer` ring appends a decimated tail
-  of each frame's master block, so history length is a UI concern independent of
-  `WINDOW`.
+- **Active only when the Debug tab is open.** `setActive(bool)`; while inactive,
+  `submit(...)` is an immediate no-op and producers skip the copy entirely (§5). The
+  panel calls `AudioEngine::setMixMonitorActive(m_debugTabVisible)` each frame.
+- **Producer contract (pure summation core):**
+  ```
+  void beginFrame();                       // snapshot the per-bus write base for this frame
+  void submit(AudioBus bus, const float* mono, std::size_t n, float gain);
+  void endFrame();                         // advance the rolling cursor by this frame's span
+  ```
+  `submit` mixes (adds) `gain * mono[i]` into the bus's rolling buffer starting at the
+  frame base, so multiple producers in one frame **sum** (not concatenate). Stereo
+  producer PCM is down-mixed to mono (channel average) before submit. The pure summation
+  — "given a set of `{bus, samples, gain}` for a frame, produce the per-bus and master
+  windows" — is factored as a free function `accumulateFrame(...)` and unit-tested
+  without any audio object.
+- **Cross-producer sample alignment is approximate** (each producer's block is placed at
+  the frame base, not sample-accurately interleaved). This is an accepted debug-meter
+  approximation, consistent with §1.1; it is *not* claimed to be sample-exact.
+- `MixSnapshot snapshot()` returns, for the current frame, `{ std::vector<float> master;
+  std::array<std::vector<float>, AudioBusCount> perBus; int sampleRate; }`. `master` is
+  the summed analysis mix; `perBus` is kept for a future per-bus view and to keep solo
+  self-consistent. Same-thread (main/update) production and consumption ⇒ **no locking.**
+- **FFT window vs. waveform history:** the spectrum FFTs the **master** window of
+  `WINDOW = 2048` samples (one FFT/frame — see §5). The scrolling waveform's ~1–2 s
+  history is a separate UI-side `ScrollingBuffer` ring (§3.5) fed a decimated tail of
+  each frame's master block; history length is independent of `WINDOW`.
 
-**Streaming-music sources** (long tracks decoded in chunks that are queued then
-unqueued from the AL source) have no retained full-buffer PCM to index by
-`AL_SAMPLE_OFFSET`. Handling: the music-stream decoder (`audio_music_stream`) hands
-the monitor a **copy of each decoded chunk as it is queued**, into a small per-source
-retained ring (a few chunks). The monitor reads the currently-playing chunk from that
-ring (selected via `AL_BUFFERS_PROCESSED` / buffer-in-flight bookkeeping the stream
-already tracks). This is the one moderate-complexity hook; it is contained to the
-stream→monitor boundary and gated behind `setActive` so it costs nothing when the tab
-is closed.
+### 3.3 Producer hooks
+
+The two CPU producers submit at their existing production points, guarded by the
+monitor's active flag:
+
+- **Streaming music** — `AudioMusicPlayer` decodes chunks on the CPU before
+  `alSourceQueueBuffers` (it owns the PCM ring and per-layer gain,
+  `engine/audio/audio_music_player.cpp`). Each decoded chunk is submitted on the `Music`
+  bus, scaled by that layer's effective gain (`AudioMusicPlayer::update` already computes
+  it, `audio_music_player.cpp:350`). *(`engine/audio/audio_music_stream.h` is only a
+  decode-frame-counter state machine and holds no PCM — the hook lives in
+  `AudioMusicPlayer`, the PCM/AL-queue owner.)*
+- **Procedural audio** (AX4) — the synth produces samples on the CPU at emission time;
+  it submits its synthesised block on its assigned bus (typically `Sfx`), scaled by the
+  same resolved gain it applies to playback. *(Implementation note: wire the submit at
+  the procedural synth's CPU production point; confirm the exact call site against the
+  AX4 synth path.)*
+
+Both hooks run on the main/update thread. When `setActive(false)`, neither producer
+copies anything.
 
 ### 3.4 Per-bus solo (localized mixer addition)
 
-`AudioMixer` gains solo state as plain data (keeps the "pure data / no OpenAL" invariant):
+Single-solo model (radio-style — one bus at a time; clicking the active solo clears it),
+which avoids a dead `Master` slot:
 
 ```
-std::array<bool, AudioBusCount> busSolo{};   // default all false = no solo
+// In AudioMixer (plain data — keeps the "no OpenAL" invariant):
+int soloBus = -1;  // -1 = no solo; otherwise a non-Master AudioBus index
 
-// Pure: 1.0 if no bus is soloed OR `bus` is itself soloed; else 0.0.
-// Master is never solo-muted.
+// Pure: 1.0 if no bus is soloed OR `bus` is the soloed bus; else 0.0. Master is never muted.
 float busSoloMultiplier(const AudioMixer& mixer, AudioBus bus);
 ```
 
-`resolveSourceGain` is **left untouched** (it is called from many sites; widening it
-is unnecessary blast radius). Instead `AudioEngine::updateGains` multiplies its final
-per-source gain by `busSoloMultiplier(mixer, sourceBus)`. Because `updateGains`
-uploads `AL_GAIN` every frame, toggling solo is audible on the **next frame** with no
-manual dirty-flag bookkeeping. Solo is a transient debug/authoring control — it is
-**not** persisted to settings.json.
+Solo must reach **both** the live output and the graphed analysis mix, and there are
+multiple gain-upload sites — one-shots in `AudioEngine::updateGains` (iterates
+`m_livePlaybacks`), music in `AudioMusicPlayer::update`, and procedural. To cover them
+all without a per-site edit that could miss one, **fold `busSoloMultiplier` into the
+shared mixer gain path** that every site already routes through
+(`effectiveBusGain` / `resolveSourceGain`), so:
+
+- every live `AL_GAIN` upload inherits the solo mute (audible isolation), and
+- the gain each producer passes to `submit` inherits it too — so **the graph follows the
+  solo automatically** (non-soloed buses contribute ~0 to the analysis mix).
+
+*Implementation must verify all three gain sites resolve through the shared path; add the
+multiply to any that don't.* The full resolved gain is therefore
+`master × bus × sourceVolume × effectiveDuck(bus) × busSoloMultiplier(bus)`
+(the `effectiveDuck` router term already exists in `updateGains`,
+`audio_engine.h:860-864`). Solo state is **transient authoring state — not persisted** to
+settings.json.
 
 ### 3.5 UI — AudioPanel Debug tab
 
-`drawDebugTab` (already exists, `engine/editor/panels/audio_panel.cpp`) gains a
+`drawDebugTab` (already exists, `engine/editor/panels/audio_panel.cpp:508`) gains a
 collapsible "Spectrum / Waveform" region above the existing text status.
 
 **ImPlot API note (version currency — global rule 5).** The pinned ImPlot commit
-(`1351ab2c`, chosen for ImGui 1.92.x) is on the **v1.0 `ImPlotSpec` API track, well
-past v0.16**: the old trailing `flags / offset / stride` positional args are removed
-from the `PlotX` signatures and now live on a single `ImPlotSpec` struct passed last.
-v0.16-era plot calls will not compile. The log axis is
-`SetupAxisScale(ImAxis_X1, ImPlotScale_Log10)` — the old `ImPlotAxisFlags_LogScale`
-flag no longer exists at this commit. All plot code below must use the v1.0 idiom.
+(`1351ab2c`, header self-reports `IMPLOT_VERSION "1.1 WIP"`, chosen for ImGui 1.92.x) is
+on the **post-1.0 `ImPlotSpec` API**: the old trailing `flags / offset / stride`
+positional args are removed from the `PlotX` signatures and now live on a single
+`ImPlotSpec` passed last; v0.16-era plot calls will not compile. The log axis is
+`SetupAxisScale(ImAxis_X1, ImPlotScale_Log10)` — the old `ImPlotAxisFlags_LogScale` no
+longer exists. All plot code below uses that idiom.
 
-- **Frequency bars (spectrum):** display path is UI-layer only — the pure
-  `computeMagnitudeSpectrum` returns **linear** magnitudes (stays deterministic /
-  testable, INV-1); the panel converts to dB and applies ballistics:
-  - **Log-frequency X axis** 20 Hz–20 kHz via
-    `SetupAxisScale(ImAxis_X1, ImPlotScale_Log10)` — human pitch is ~logarithmic, so
-    each octave gets equal width.
-  - **dB Y axis:** `dB = 20·log10(max(mag, 1e-9))` (the `1e-9` floor guards
-    `log10(0)`), clamped to a **−80 dB display floor**, `SetupAxisLimits(Y1, -80, 0)`.
-  - Rendered with **`ImPlot::PlotShaded`** (fill from each bin's dB down to the −80 dB
-    floor), not `PlotBars`: on a log axis a fixed `bar_size` is in data units so bars
-    would widen unevenly toward the low end; a shaded envelope reads as a clean
-    spectrum. Optional `PlotLine` overlay for a crisp top edge.
+- **Frequency bars (spectrum):** display path is UI-layer only — `computeMagnitudeSpectrum`
+  returns **linear** magnitudes (deterministic/testable, INV-1); the panel converts to dB
+  and applies ballistics:
+  - **Log-frequency X axis** 20 Hz–20 kHz via `SetupAxisScale(ImAxis_X1, ImPlotScale_Log10)`.
+  - **dB Y axis:** `dB = 20·log10(max(mag, 1e-9))` (`1e-9` floor guards `log10(0)`),
+    clamped to a **−80 dB display floor**, `SetupAxisLimits(ImAxis_Y1, -80, 0)`.
+  - Rendered with **`ImPlot::PlotShaded`** (fill from each bin's dB to the −80 dB floor),
+    not `PlotBars`: on a log axis a fixed `bar_size` is in data units so bars widen
+    unevenly toward the low end; a shaded envelope reads clean. Optional `PlotLine`
+    overlay for a crisp top edge.
   - **Ballistics (anti-strobe):** per-bin fast-attack / slow-release smoothing of the
     displayed dB height — `if (v > s) s = v; else s = release·s + (1-release)·v;`
-    (`release ≈ 0.9` at 60 FPS) — kept as **UI-side state in the panel**, never fed
-    back into the analysed signal, so it does not perturb the pure helper or its tests.
-  - A numeric **peak-frequency + peak-dB readout** sits beside the plot (does not rely
-    on colour alone — accessibility, §6).
-- **Scrolling waveform:** `ImPlot::PlotLine` over the master window, fed through the
-  ImPlot-demo `ScrollingBuffer` ring (an `ImVector<ImVec2>` with a wrapping `Offset`;
-  interleaved stride set on `ImPlotSpec::Stride`), with the X window pinned by
-  `SetupAxisLimits(ImAxis_X1, t - history, t, ImGuiCond_Always)` to get the left-
-  scroll. A clip indicator lights when any `|sample| > 1.0` (the accumulator is
-  unclamped, INV-3). Compact plot via `ImVec2(-1, <px>)` + `ImPlotFlags_NoLegend` /
-  `ImPlotFlags_CanvasOnly`.
-- **No double-windowing:** `computeMagnitudeSpectrum` already Hann-windows once before
-  the FFT; the panel must not apply a second window (a Hann² widens the main lobe and
-  corrupts the dB reading).
-- **Solo row:** six toggle buttons (Master shown as "clear solo"); the active solo is
-  highlighted. Wire to `AudioMixer::busSolo` via an `AudioEngine` setter.
-- Requires **linking `implot_lib` into the engine/editor target** (today it is
-  tools-only): a one-line `target_link_libraries` addition in `engine/CMakeLists.txt`
-  (no new fetch — ImPlot is already vendored at its pinned post-v0.16 commit).
+    (`release ≈ 0.9` at 60 FPS) — held as **UI-side panel state**, never fed back into the
+    analysed signal (so the pure helper and its tests are unaffected, INV-8).
+  - **Bass resolution:** `WINDOW = 2048` gives ≈ 23 Hz bins at 48 kHz (≈ 21.5 Hz at
+    44.1 kHz), so the low-mid region where muddiness lives has usable resolution; this
+    trades ~43 ms of time-window latency, acceptable for a meter. (`WINDOW = 1024` would
+    halve latency but coarsen bass to ≈ 47 Hz bins.)
+  - A numeric **peak-frequency + peak-dB readout** sits beside the plot (does not rely on
+    colour alone — accessibility, §6).
+- **Scrolling waveform:** `ImPlot::PlotLine` over the master window, fed through a
+  hand-copied replica of ImPlot's demo `ScrollingBuffer` (an `ImVector<ImVec2>` ring with
+  a wrapping `Offset`; it lives in `implot_demo.cpp`, which is **not** compiled into
+  `implot_lib`, so it is replicated in the panel, not linked). The X window is pinned with
+  `SetupAxisLimits(ImAxis_X1, t - history, t, ImGuiCond_Always)` for the left-scroll. A
+  clip indicator lights when any `|sample| > 1.0` (the accumulator is unclamped, INV-3).
+  Compact plot via `ImVec2(-1, <px>)` + `ImPlotFlags_NoLegend` / `ImPlotFlags_CanvasOnly`.
+- **No double-windowing:** `computeMagnitudeSpectrum` Hann-windows once before the FFT;
+  the panel must not window again (a Hann² widens the main lobe and corrupts the dB read).
+- **"File one-shots not shown" note:** a one-line static caption states the graph covers
+  CPU-generated audio (music + procedural) only, so a blank Sfx contribution is not read
+  as a bug.
+- **Solo row:** radio-style toggles for Music / Voice / Sfx / Ambient / Ui (clicking the
+  active one clears solo); wired to `AudioMixer::soloBus` via an `AudioEngine` setter.
+- Requires **linking `implot_lib` into `vestige_engine`** (the monolithic engine+editor
+  STATIC lib, `engine/CMakeLists.txt`; there is no separate editor target). One line —
+  `imgui_lib` is already linked so the incremental is `implot_lib` alone. Note this makes
+  `implot_lib` a transitive dep of `app/vestige` and every test binary that links
+  `vestige_engine`; static linkage keeps object pull-in lazy (no runtime cost where
+  unused).
 
 ---
 
@@ -241,63 +278,71 @@ flag no longer exists at this commit. All plot code below must use the v1.0 idio
 
 | Work | Placement | Reason |
 |------|-----------|--------|
-| Pseudo-mix accumulation | **CPU** | Small (≤ ~2 K samples × active voices), branchy (per-source offset/bus decisions), and read-back-bound (`alGetSourcei`). Data is tiny; a GPU round-trip would add latency and complexity for no gain. Matches the "branching / sparse / decision / I/O → CPU" heuristic. |
-| FFT (512–2048 pt, ≤ 7 windows/frame) | **CPU** | Microsecond-scale on this data size; must interoperate with ImGui/ImPlot which are CPU-side. |
-| Solo gain multiply | **CPU** | Part of the existing per-frame `updateGains` CPU path. |
+| Per-bus accumulation (producer submit) | **CPU** | Samples already exist on the CPU at the producer; summing a few short blocks is trivial and branchy. A GPU round-trip would add latency for no gain. Matches the "branching / sparse / I/O → CPU" heuristic. |
+| FFT (one 2048-pt master FFT/frame) | **CPU** | Microsecond-scale at this size; must interoperate with ImGui/ImPlot which are CPU-side. |
+| Solo gain multiply | **CPU** | Part of the existing per-frame gain path. |
 | Bar / waveform rasterization | **GPU (via ImGui backend)** | ImPlot emits vertex data; the ImGui GL backend draws it — standard, no custom GPU code. |
 
-No dual CPU/GPU implementation is needed (nothing here is a per-pixel / per-vertex
-runtime hot path), so no parity test is required.
+No dual CPU/GPU implementation is needed (no per-pixel / per-vertex runtime hot path), so
+no parity test is required.
 
 ---
 
 ## 5. Performance (60 FPS hard gate)
 
-- **Tab closed (default):** monitor inactive → **zero** added cost (no capture, no
-  streaming chunk copies, no FFT). This is the dominant case and keeps the gate safe
-  for normal use.
-- **Tab open:** once-per-frame capture. Cost ≈ (active voices × ~2 K-sample copy +
-  gain calc) + ≤ 7 FFTs of ≤ 2048 pts + ImPlot draw. Order tens of microseconds on
-  the RX 6600 target — negligible against the 16.6 ms frame budget. Capture is
-  pull-based from the panel draw, so it runs **at most once per rendered frame**.
-- Verify with the existing frame-time HUD: open the Debug tab in a busy scene (many
-  concurrent voices + streaming music) and confirm frame time stays < 16.6 ms.
+- **Tab closed (default):** monitor inactive → producers skip the sample copy and
+  `submit` is a no-op → **zero** added cost. The dominant case; keeps the gate safe for
+  normal use. Enforced/observable via INV-6 (a submit-call counter asserts 0 while
+  inactive).
+- **Tab open:** per frame — the producers' sample copies (a few short blocks) + **one**
+  2048-pt master FFT + dB/ballistics over ≤ 1024 bins + ImPlot draw. Order tens of
+  microseconds on the RX 6600 target, negligible against the 16.6 ms budget. Only the
+  master is transformed (1 FFT/frame) — per-bus windows are kept but not FFT'd unless a
+  future per-bus view is added.
+- Verify with the frame-time HUD: open the Debug tab in a busy scene (many music layers +
+  procedural emitters) and confirm frame time stays < 16.6 ms.
 
 ---
 
 ## 6. Accessibility
 
-- **Reduce-motion:** when `PostProcessAccessibilitySettings.reduceMotion` is set, the
-  waveform's left-scroll animation is frozen to a periodic static snapshot (the
-  spectrum bars, being an instantaneous readout, stay live). Consistent with how the
-  fog/particle systems honour reduce-motion.
+- **Reduce-motion:** the waveform's left-scroll is the only animation. Add a new
+  per-feature flag `reduceMotionAudioViewer` to `PostProcessAccessibilitySettings`
+  (mirroring the existing `reduceMotionFog` / `reduceMotionGi` — there is **no** generic
+  `reduceMotion` field); when set, the waveform freezes to a periodic static snapshot
+  while the spectrum bars (an instantaneous readout) stay live. This is a small persisted
+  accessibility pref (one bool + one checkbox in the existing accessibility settings) —
+  distinct from the transient, non-persisted solo state (INV-7).
 - **Not colour-only:** peak frequency and peak level are shown as **text** beside the
-  bars, so the reading does not depend on bar colour. Spectrum uses a
-  perceptually-ordered colormap, not red/green.
-- The panel is opt-in (only drawn when the tab is open) and keyboard-reachable through
-  the existing ImGui tab navigation.
+  bars; the spectrum uses a perceptually-ordered colormap, not red/green.
+- The panel is opt-in (drawn only when the tab is open) and keyboard-reachable through the
+  existing ImGui tab navigation.
 
 ---
 
 ## 7. Testing plan
 
-Pure-function unit tests (no audio device needed — the reason for the maths/plumbing
-split):
+Pure-function unit tests (no audio device — the reason for the maths/plumbing split):
 
-- `test_audio_spectrum` — `computeMagnitudeSpectrum` of a synthesized sine at
-  frequency *f* (sample rate *sr*, size *n*) peaks in bin `round(f·n/sr)`; a DC input
-  peaks in bin 0; silence → all-zero magnitudes.
-- `test_audio_mix_monitor` (pure part) — `accumulateMixWindow` with two fake sources
-  on different buses and known gains yields `master[i] == g0·s0[i] + g1·s1[i]` and the
-  correct per-bus split; empty input → all-zero windows of the requested length;
-  short source windows zero-pad (never read out of range).
-- Solo: `busSoloMultiplier` returns 1.0 for all buses when none soloed; when Sfx is
-  soloed returns 1.0 for Sfx + Master and 0.0 for the rest.
-- Regression: existing `test_audio_analyzer` must still pass unchanged after the FFT
+- `test_audio_spectrum` — `computeMagnitudeSpectrum` of a synthesized sine at frequency
+  *f* (rate *sr*, size *n* power-of-two) peaks in bin `round(f·n/sr)`; DC input peaks in
+  bin 0; silence → all-zero magnitudes; asserts identical output on repeat (purity).
+- `test_audio_mix_monitor` — `accumulateFrame` with two fake producers on different buses
+  and known gains yields `master[i] == g0·s0[i] + g1·s1[i]` and the correct per-bus split;
+  a producer block shorter than `WINDOW` zero-pads (never OOB); empty frame → all-zero
+  windows of length `WINDOW`; over-unity sums are **not** clamped (INV-3).
+- Solo: `busSoloMultiplier` returns 1.0 for every bus when `soloBus == -1`; when `Sfx` is
+  soloed returns 1.0 for `Sfx` (and Master) and 0.0 for the rest.
+- INV-5 regression: existing `test_audio_analyzer` passes unchanged after the FFT
   extraction (proves the refactor is behaviour-preserving).
+- INV-6: with the monitor inactive, a submit-call/copy counter is asserted `== 0` after a
+  simulated producer frame (automated, not just code-review).
+- INV-7: a settings.json round-trip asserts no solo key is written/read.
 
-Manual/visual: open Debug tab, play a known 1 kHz tone → bar peak at 1 kHz; solo Music
-→ only music audible; clip indicator fires on an intentionally over-unity sum.
+Manual/visual: open Debug tab, play a known 1 kHz music layer → bar peak at 1 kHz; solo
+Music → only music audible **and** graphed; solo Sfx → file one-shots muted on output
+(graph shows the "not shown" note); clip indicator fires on an intentionally over-unity
+sum.
 
 ---
 
@@ -305,55 +350,58 @@ Manual/visual: open Debug tab, play a known 1 kHz tone → bar peak at 1 kHz; so
 
 | ID | Invariant | Test surface |
 |----|-----------|--------------|
-| INV-1 | `computeMagnitudeSpectrum` is pure: identical input → identical `outMag`; peak bin of a sine at *f* is `round(f·n/sr)`. | `test_audio_spectrum` |
-| INV-2 | `accumulateMixWindow` output = Σ(gainᵢ · samplesᵢ) per bus and in master; output length always == requested `frameCount` (short inputs zero-pad, never OOB read). | `test_audio_mix_monitor` |
-| INV-3 | Accumulator does **not** clamp — over-unity sums survive so the UI can flag clipping. | `test_audio_mix_monitor` |
-| INV-4 | `busSoloMultiplier` = 0 for a non-soloed bus iff ≥1 non-Master bus is soloed; Master is never solo-muted. | `test_audio_mix_monitor` |
-| INV-5 | FFT extraction is behaviour-preserving: `AudioAnalyzer` spectral centroid unchanged. | `test_audio_analyzer` (existing) |
-| INV-6 | Monitor inactive ⇒ no capture / no FFT / no streaming chunk copy (zero added cost, tab closed). | code review + frame-time check |
-| INV-7 | Solo state is not persisted to settings.json (transient authoring control). | code review |
-| INV-8 | dB conversion + bar ballistics + peak-hold are **UI-layer only**: `computeMagnitudeSpectrum` returns raw linear magnitudes and its output is unaffected by any display smoothing (keeps INV-1 pure). `log10` input is floored at 1e-9 (no `-inf`). | `test_audio_spectrum` (pure output) + code review |
+| INV-1 | `computeMagnitudeSpectrum` is pure: identical input → identical `outMag`; peak bin of a sine at *f* is `round(f·n/sr)`; requires `n` a power of two. | `test_audio_spectrum` |
+| INV-2 | `accumulateFrame` output = Σ(gainᵢ · samplesᵢ) per bus and in master; window length always == `WINDOW` (short producer blocks zero-pad, never OOB read). | `test_audio_mix_monitor` |
+| INV-3 | The accumulator does **not** clamp — over-unity sums survive so the UI can flag clipping. | `test_audio_mix_monitor` |
+| INV-4 | `busSoloMultiplier` = 0 for a bus iff `soloBus != -1` and `bus != soloBus`; Master is never solo-muted; feeds both live gain and the submitted (graphed) gain, so the display follows solo. | `test_audio_mix_monitor` |
+| INV-5 | FFT extraction is behaviour-preserving: only `computeFFT` is shared; `AudioAnalyzer` spectral centroid unchanged (Hann divisor `n-1` preserved). | `test_audio_analyzer` (existing) |
+| INV-6 | Monitor inactive ⇒ `submit` is a no-op and producers copy nothing (submit-call counter == 0). | `test_audio_mix_monitor` (counter) |
+| INV-7 | Solo state is not persisted to settings.json (transient authoring control). Distinct from the persisted `reduceMotionAudioViewer` accessibility flag. | settings round-trip test |
+| INV-8 | dB conversion + bar ballistics + peak-hold are **UI-layer only**: `computeMagnitudeSpectrum` returns raw linear magnitudes, unaffected by display smoothing; `log10` input floored at 1e-9 (no `-inf`). | `test_audio_spectrum` + code review |
 
 ---
 
 ## 9. Implementation order
 
-1. Extract shared FFT → `audio_spectrum.{h,cpp}`; repoint `AudioAnalyzer`; confirm
-   `test_audio_analyzer` green. Add `test_audio_spectrum`.
-2. `accumulateMixWindow` + `MixSnapshot` + `test_audio_mix_monitor` (pure part).
-3. `AudioMixMonitor` plumbing (static/one-shot sources first): `AL_SAMPLE_OFFSET` read
-   + `resolveSourceGain` weighting + capture.
-4. Streaming-music chunk-copy hook (`audio_music_stream` → monitor ring).
-5. Solo: `AudioMixer::busSolo` + `busSoloMultiplier` + `updateGains` multiply + engine
-   setter; tests.
-6. Debug-tab UI (ImPlot bars + waveform + solo row); link `implot_lib` into engine
-   target; reduce-motion + clip indicator.
+1. Extract shared FFT → `audio_spectrum.{h,cpp}`; repoint `AudioAnalyzer` to it; confirm
+   `test_audio_analyzer` green. Add `computeMagnitudeSpectrum` + `test_audio_spectrum`.
+2. `accumulateFrame` + `AudioMixMonitor` (`setActive` / `beginFrame` / `submit` /
+   `endFrame` / `snapshot`) + `test_audio_mix_monitor` (pure summation, zero-pad, no-clamp,
+   inactive-counter).
+3. Solo: `AudioMixer::soloBus` + `busSoloMultiplier` folded into the shared gain path;
+   verify all three AL_GAIN sites route through it; engine setter; tests.
+4. Producer hooks: `AudioMusicPlayer` chunk submit (Music bus); procedural synth submit
+   (assigned bus) — both guarded by the active flag.
+5. `reduceMotionAudioViewer` accessibility flag (+ settings checkbox).
+6. Debug-tab UI (ImPlot spectrum + waveform + solo radio row + "file one-shots not shown"
+   note + clip indicator); link `implot_lib` into `vestige_engine`.
 7. 60 FPS gate verification in a busy scene; CHANGELOG + ROADMAP flip.
 
 ---
 
 ## 10. Sources
 
-- OpenAL Soft — `ALC_SOFT_loopback` extension (`alcLoopbackOpenDeviceSOFT`,
-  `alcRenderSamplesSOFT`): the only route to a true post-mix buffer, and why it
-  conflicts with hardware-device hot-swap. <https://openal-soft.org/> extension docs.
-- OpenAL 1.1 spec — `AL_SAMPLE_OFFSET` source query (current playback position in
-  samples).
-- Hann window / short-time Fourier transform for spectral display — Harris, "On the
-  use of windows for harmonic analysis with the discrete Fourier transform," Proc.
-  IEEE 1978 (standard windowing reference; the in-repo FFT already applies Hann).
-- ImPlot **v1.0 `ImPlotSpec` API** (pinned commit `1351ab2c`, post-v0.16): flags /
-  offset / stride moved onto `ImPlotSpec`; `SetupAxisScale(ImAxis_X1,
-  ImPlotScale_Log10)` replaces the removed `ImPlotAxisFlags_LogScale`; `PlotShaded`
-  for the log-frequency spectrum envelope; the demo `ScrollingBuffer` ring for the
-  waveform. `implot.h` / `implot_demo.cpp` at that commit; ImPlot Discussion #370
-  (v1.0 announcement), Issue #690 (Spec/offset/stride migration).
+- OpenAL Soft — `ALC_SOFT_loopback` (`alcLoopbackOpenDeviceSOFT`, `alcRenderSamplesSOFT`):
+  the only route to a true post-mix buffer, and why it conflicts with hardware-device
+  hot-swap. <https://openal-soft.org/> extension docs.
+- OpenAL 1.1 spec — no buffer-data read-back, motivating the producer-push tap.
+- Hann window / STFT for spectral display — Harris, "On the use of windows for harmonic
+  analysis with the discrete Fourier transform," Proc. IEEE 1978 (the in-repo FFT already
+  applies Hann).
+- ImPlot **post-1.0 `ImPlotSpec` API** (pinned commit `1351ab2c`, header
+  `IMPLOT_VERSION "1.1 WIP"`): flags / offset / stride moved onto `ImPlotSpec`;
+  `SetupAxisScale(ImAxis_X1, ImPlotScale_Log10)` replaces the removed
+  `ImPlotAxisFlags_LogScale`; `PlotShaded` for the log-frequency envelope; the demo
+  `ScrollingBuffer` ring (in `implot_demo.cpp`, replicated not linked) for the waveform.
+  `implot.h` / `implot_demo.cpp` at that commit; ImPlot Discussion #370 (v1.0), Issue #690
+  (Spec migration).
 - Real-time analyzer display conventions — log-frequency axis (~20 Hz–20 kHz), dB
   magnitude (`20·log10(mag)`, −60/−80 dB floor), fast-attack/slow-release ballistics +
-  peak-hold, single Hann window: Audacity "Plot Spectrum" manual; SIR
-  SpectrumAnalyzer; Oxford Wave Research SpectrumView help; techmind audio
-  spectrum-analyser notes; Harris (1978) on windowing.
+  peak-hold, single Hann window: Audacity "Plot Spectrum" manual; SIR SpectrumAnalyzer;
+  Oxford Wave Research SpectrumView help; techmind audio spectrum-analyser notes.
 - In-repo reuse: `engine/experimental/animation/audio_analyzer.{h,cpp}` (FFT),
   `engine/audio/audio_mixer.h` (`resolveSourceGain`, `effectiveBusGain`, buses),
-  `engine/editor/panels/audio_panel.cpp` (`drawDebugTab`).
+  `engine/audio/audio_music_player.cpp` (music decode + gain), `engine/audio/audio_engine.{h,cpp}`
+  (`updateGains`, `effectiveDuck`, `loadBuffer`), `engine/editor/panels/audio_panel.cpp`
+  (`drawDebugTab`).
 ```
