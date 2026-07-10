@@ -57,7 +57,10 @@ Per-bus (not one summed "master mix") because the producers are asynchronous and
 heterogeneous: the music player decodes *ahead* of playback and a file's rate may differ
 from the synth's, so summing them into one time-aligned signal is incoherent. Analysing
 each bus on its own timeline and rate is coherent, makes solo trivial and eviction-safe
-(§3.4), and still answers the muddiness question. A summed-master view is deferred (§1.2).
+(§3.4), and still answers the muddiness question. (One caveat: the Music bus can carry
+several layers; this coherence assumes they share a decode rate — true for synchronized
+stems. Mixed-rate layers fall back to most-recent-rate-wins and the frequency axis is then
+approximate, §3.2.) A summed-master view is deferred (§1.2).
 
 This per-bus signal is the **analysis signal** throughout (one term, used consistently) —
 it is *not* the speaker output. It reflects the frequency balance and levels of a bus's
@@ -161,14 +164,25 @@ new.
 
 - **Active only when the Debug tab is open.** `setActive(bool)` / `isActive()`; producers
   check `isActive()` and skip the int16→float copy when false, and `submit(...)` is itself a
-  no-op when inactive (§5). The panel calls `AudioEngine::setMixMonitorActive(tabVisible)`.
+  no-op when inactive (§5). **Activation is polled every frame** (ImGui immediate mode has no
+  "tab deselected" callback, so activation cannot be set from inside `drawDebugTab` alone —
+  that only runs while the tab is the *selected* one): `AudioPanel::draw` (called each frame
+  from the editor, `editor.cpp:1252`) declares a local `bool debugVisible = false`, sets it
+  `true` only inside the `Debug` tab-item block, and calls
+  `AudioEngine::setMixMonitorActive(debugVisible)` **after** the tab bar / window close — so
+  the monitor is deactivated the frame the tab is deselected or the Audio window is closed.
+  `setActive(false)` also **clears any pending accumulators** (covers a frame where producers
+  submitted but the tab closed before `flushFrame`). One frame of latency on open is
+  harmless. Wiring is code-review-verified; the `setActive(false)`-clears-pending behaviour is
+  unit-tested (INV-6).
 - **Sample domain:** producers submit **normalized-float mono** samples. Both real
   producers hold **int16** PCM (music: `stb_vorbis_get_samples_short_interleaved`,
   `AL_FORMAT_*16`; procedural: `m_synthScratch` is `std::vector<std::int16_t>`,
-  `audio_engine.h:916`), so each producer converts int16→float by `s / 32768.0f` and (music
-  only — the synth path is already `AL_FORMAT_MONO16`, `audio_engine.cpp:956`) down-mixes
-  stereo→mono by channel average **before** `submit`. All spectrum/waveform math and the
-  clip test operate in this normalized-float domain.
+  `audio_engine.h:916`), so each producer converts int16→float by `s / 32768.0f` and down-mixes to mono by
+  averaging the `channels` interleaved samples per frame **before** `submit` (music:
+  `channels ∈ {1,2}` — a mono `.ogg` is passed through, `audio_music_player.cpp:270`; the
+  synth path is already `AL_FORMAT_MONO16`, `audio_engine.cpp:956`). All spectrum/waveform
+  math and the clip test operate in this normalized-float domain.
 - **Submit-anytime + panel-driven flush (no per-system bracket).** Producers call
   `submit(AudioBus, const float* mono, std::size_t n, float gain, int sampleRate)` at any
   point during the frame from their own systems — there is **no** `beginFrame`/`endFrame`
@@ -195,9 +209,12 @@ new.
   wording was wrong (a zero-length append cannot decay a ring).
 - **Rates handled by construction:** each bus stores the rate of its producer's submits;
   `binHz` for the displayed spectrum uses **that bus's** rate. Buses are never summed
-  together, so rates need not match across buses. (If two producers ever share a bus at
-  differing rates, the monitor keeps the first rate seen and logs a warning **once per bus
-  per process** — an accepted debug-tool limitation.)
+  together, so rates need not match across buses. Within a bus, when producers submit at
+  differing rates (e.g. Music carrying two layers decoded from a 44.1 kHz and a 48 kHz file),
+  the monitor uses the **most-recent submit's rate** for that bus's `binHz` and sums the
+  layers index-aligned — an accepted debug-tool approximation (logged once per bus). This is
+  fine for synchronized stems at one rate; mixed-rate layers make the frequency axis
+  approximate.
 - `MixSnapshot snapshot()` exposes, per bus, the content-ring tail, its `rateHz`, and
   `hadRecentSignal` (so the panel shows silence for a bus idle this frame). `[Master]` slots
   are unused (Master is the aggregate concept, never a producer bus); indexing stays by
@@ -219,9 +236,12 @@ Both CPU producers submit at their existing production points, guarded by `isAct
   `m_synthScratch` via `m_synthBank.synthesize(..., m_synthScratch)` (`audio_engine.cpp:922`)
   and resolves gain at `:972`. The synth block is normalized and submitted on its assigned
   bus (typically `Sfx`) at the synth's rate, tapped right after `synthesize`. `playSynth` is
-  invoked from `FootstepSystem::update` and `ImpactAudioSystem::update` (not from
-  `AudioSystem`) — which is exactly why the flush is panel-driven (§3.2), not bracketed
-  around one system.
+  invoked from `FootstepSystem`'s `update`→`emitStep` path (`footstep_system.cpp:99`) and
+  from `ImpactAudioSystem::onCollision` (an EventBus collision callback,
+  `impact_audio_system.cpp:106` — not a per-frame `update` tick) — which is exactly why the
+  flush is panel-driven (§3.2), not bracketed around one system. Both run before the editor
+  draws its panels each frame (`updateAll` then `drawPanels`, `engine.cpp:1425` / `:1833`), so
+  the panel's `flushFrame` captures their submits.
 
 All hooks run on the main/update thread. When inactive, no producer copies anything.
 
@@ -307,11 +327,12 @@ longer exists. Use ImPlot-native condition enums (`ImPlotCond_Always`, not `ImGu
   ImPlotCond_Always)`. Because producers deliver samples in chunks (music decodes ahead), the
   scroll advances in chunk-sized steps, not perfectly smoothly — an accepted debug-tool
   approximation; an idle bus holds its last trace (§3.2). A **clip indicator** lights when any
-  normalized sample `|s| > 1.0` — which on the graphed buses arises from **summing overlapping
-  same-bus contributions** (multiple music layers, or overlapping procedural hits); a single
-  contribution cannot exceed 1.0 because `resolveSourceGain` clamps to [0,1] and neither
-  graphed producer receives AX9 loudness makeup (music: none; synth: `volume = 1.0`, no makeup
-  — `audio_engine.cpp:967`). The ring is unclamped (INV-3). Compact plot via `ImVec2(-1, <px>)`
+  normalized sample `|s| > 1.0`. On the graphed buses that arises only from **summing
+  overlapping same-bus contributions** (multiple music layers, or overlapping procedural
+  hits). A single contribution cannot exceed 1.0: `resolveSourceGain` clamps to [0,1]
+  (`audio_mixer.cpp:93,107`) and neither graphed producer receives AX9 loudness makeup (music:
+  none; synth: `volume = 1.0f`, no makeup — `audio_engine.cpp:968`). The ring is unclamped
+  (INV-3). Compact plot via `ImVec2(-1, <px>)`
   + `ImPlotFlags_NoLegend` / `ImPlotFlags_CanvasOnly`.
 - **No double-windowing:** `computeMagnitudeSpectrum` Hann-windows once before the FFT; the
   panel must not window again (a Hann² widens the main lobe and corrupts the dB read).
@@ -348,15 +369,17 @@ no parity test is required.
 ## 5. Performance & memory (60 FPS hard gate)
 
 - **Tab closed (default):** monitor inactive → producers skip the copy and `submit` is a
-  no-op → **zero** added CPU cost and **zero** added memory (rings allocated lazily on first
-  activation, or freed on close). Dominant case; keeps the gate safe. Observable via INV-6.
+  no-op → **zero** added CPU cost and **zero** added memory (a bus's ring is allocated lazily
+  on its **first submit**, when its rate is known, and freed on close). Dominant case; keeps
+  the gate safe. Observable via INV-6.
 - **Tab open — CPU:** per frame — the active producers' int16→float copies (a few short
   blocks) + per-bus frame-sum + ring appends + **one** 2048-pt FFT of the *selected* bus +
   dB/ballistics over ≤ 1024 bins + ImPlot draw. Only the selected bus is FFT'd. Order tens of
   microseconds on the target CPU (Ryzen 5 5600), negligible against the 16.6 ms budget.
 - **Tab open — memory:** each populated bus's content ring is `WINDOW + HISTORY_SECONDS·rate`
   floats ≈ (2048 + 2.0·48000)·4 B ≈ **~390 KB/bus**. Only `Music` + `Sfx` carry a signal in
-  v1, so ~0.8 MB typical; ≤ ~2.3 MB if all six slots are allocated. Freed when the tab closes.
+  v1, so ~0.8 MB typical; ≤ ~1.95 MB across the five producer-capable buses (the `Master` slot
+  is never allocated, §3.2). Freed when the tab closes.
 - Verify with the frame-time HUD: open the Debug tab in a busy scene (many music layers +
   procedural emitters) and confirm frame time stays < 16.6 ms.
 
@@ -392,9 +415,10 @@ Pure-function unit tests (no audio device — the reason for the maths/plumbing 
   length (short blocks zero-pad, never OOB, INV-2); over-unity sums (two contributions each
   ≤1.0 summing >1.0) are **not** clamped (INV-3); a bus with no submit this frame appends
   nothing, so its ring tail is unchanged (idle-freeze, INV-2); with the monitor inactive, a
-  submit-call counter is `== 0` after a simulated producer frame (INV-6); `submit` before any
-  `flushFrame` still accumulates into pending and is flushed by the next `flushFrame`
-  (submit-anytime contract).
+  submit-call counter is `== 0` after a simulated producer frame, and `setActive(false)` after
+  a submit-without-flush leaves the ring unchanged with pending cleared (INV-6); `submit`
+  before any `flushFrame` still accumulates into pending and is flushed by the next
+  `flushFrame` (submit-anytime contract).
 - `test_audio_mixer` — `busSoloMultiplier` returns 1.0 for every bus when `soloBus == -1`;
   with `Sfx` soloed returns 1.0 for `Sfx` (and Master) and 0.0 for the rest. **Set
   `mixer.soloBus` and assert `resolveSourceGain` / `effectiveBusGain` outputs are unchanged**
@@ -420,7 +444,7 @@ pressure; select Voice/Ambient/Ui → greyed, shows the "not graphed" note.
 | INV-3 | The accumulator/ring does **not** clamp — over-unity sums (from summing overlapping same-bus contributions) survive so the UI can flag clipping in the normalized-float domain. | `test_audio_mix_monitor` |
 | INV-4 | `busSoloMultiplier` = 0 for a bus iff `soloBus != -1` and `bus != soloBus`; Master never muted. Setting `soloBus` leaves `resolveSourceGain` / `effectiveBusGain` outputs unchanged (eviction + occlusion stay solo-agnostic; solo lives only at AL_GAIN upload). | `test_audio_mixer` |
 | INV-5 | FFT extraction is behaviour-preserving: only `computeFFT` is shared; `AudioAnalyzer` spectral centroid unchanged (Hann divisor `n-1` preserved). | `test_audio_analyzer` (existing) |
-| INV-6 | Monitor inactive ⇒ `submit` is a no-op and producers copy nothing (submit-call counter == 0). | `test_audio_mix_monitor` |
+| INV-6 | Monitor inactive ⇒ `submit` is a no-op and producers copy nothing (submit-call counter == 0); `setActive(false)` clears any pending accumulators (a submit-without-flush leaves the ring unchanged). | `test_audio_mix_monitor` |
 | INV-7 | The feature persists no settings: solo and the "Freeze waveform" toggle are transient panel/authoring state; settings.json round-trip shows no new key. | settings round-trip test |
 | INV-8 | dB conversion + bar ballistics + peak-hold are **UI-layer only**: `computeMagnitudeSpectrum` returns raw linear magnitudes, unaffected by display smoothing; input is Hann-windowed exactly once; `log10` input floored at 1e-9 (no `-inf`). | `test_audio_spectrum` + code review |
 
@@ -470,7 +494,7 @@ pressure; select Voice/Ambient/Ui → greyed, shows the "not graphed" note.
   buses), `engine/audio/audio_music_player.cpp` (music decode + gain, `:347/:350`),
   `engine/audio/audio_engine.{h,cpp}` (`playSynth` `m_synthScratch` `:922/:972`, `updateGains`
   AL_GAIN `:1507`, `effectiveDuck` def `audio_engine.h:860`, `loadBuffer`, eviction `:670`),
-  `engine/audio/audio_source_state.cpp` (`composeAudioSourceAlState` `:59`),
+  `engine/audio/audio_source_state.cpp` (`composeAudioSourceAlState`, `state.gain` formed at `:59`),
   `engine/systems/audio_occlusion_system.cpp` (occlusion gate `:411`),
   `engine/systems/footstep_system.cpp` / `engine/systems/impact_audio_system.cpp` (playSynth
   callers), `engine/editor/panels/audio_panel.cpp` (`drawDebugTab` `:508`).
@@ -496,5 +520,11 @@ reviewers per pass, findings verified against source, every actionable severity 
   path under-specified. → panel-driven `flushFrame` (no bracket); solo multiply in
   `composeAudioSourceAlState`; idle = freeze; clip = same-bus summation; reduce-motion as a
   panel-local toggle (dropped the persisted-flag/wire plumbing).
-- **Loop 4** — pending (this revision).
+- **Loop 4** — CRITICAL 0 · HIGH 1 · MEDIUM 2 · LOW ~7. Monitor deactivation path undefined
+  (`drawDebugTab` runs only while the tab is selected → nothing turns the monitor off, breaking
+  the tab-closed zero-cost guarantee); Music multi-layer mixed-rate coherence; mono-file
+  down-mix; `ImpactAudioSystem` submits from `onCollision` (not `update`). → per-frame
+  activation poll in `AudioPanel::draw` (+ clear-pending on deactivate); rate / down-mix /
+  method-name precision; memory-slot and citation fixes.
+- **Loop 5** — pending (this revision).
 ```
