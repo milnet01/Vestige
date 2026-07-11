@@ -121,9 +121,10 @@ path (demonstrated in `terrain_system.cpp:38-76`) fills heights with
 - **`paintFoliage` does not sample terrain height** — it stamps around
   `center` (verified: no terrain reference in the header). On rolling terrain we
   therefore paint **small stamps, each at `center.y = terrain.getHeight(x,z)`**
-  (§5.4), so grass follows the surface. Foliage renders instanced with wind
-  animation (`foliage.vert.glsl`) and casts shadows (already wired at
-  `engine.cpp:305`).
+  (§5.4), so grass follows the surface (`paintFoliage` sets each instance's Y to
+  the stamp `center.y` — it does no terrain sampling). Foliage renders instanced
+  with wind animation (`foliage.vert.glsl`) and casts shadows (already wired at
+  `engine.cpp:306`).
 
 ### 3.3 Water (`engine/scene/water_surface.h`)
 - `WaterSurfaceComponent` is an **entity component**; the water plane sits at the
@@ -133,8 +134,10 @@ path (demonstrated in `terrain_system.cpp:38-76`) fills heights with
   depthDistance, flowSpeed, specularPower, causticsEnabled, reflectionMode
   (default PLANAR), reflectionResolutionScale=0.25, refractionEnabled`.
 - The render loop auto-discovers water entities into `m_renderData.waterSurfaces`
-  and derives caustics onto terrain (`engine.cpp:1500-1528`). Reference usage:
-  the demo "Water Pool" (`engine.cpp:2476-2494`).
+  and derives caustics onto terrain (`engine.cpp:1496-1531`); the water plane's Y
+  is taken from the entity's world matrix (`waterY = waterMatrix[3][1]`, `:1499`),
+  confirming `getLocalWaterY()==0`. Reference usage: the demo "Water Pool"
+  (`engine.cpp:2476-2494`).
 
 ### 3.4 Models / props (`engine/resource/`)
 - `std::shared_ptr<Model> ResourceManager::loadModel(const std::string&)`
@@ -164,8 +167,10 @@ path (demonstrated in `terrain_system.cpp:38-76`) fills heights with
   `EngineConfig::profileLogPath` (not a scene branch).
 
 ### 3.6 Profiling (`engine/profiler/`, `engine/editor/panels/performance_panel.*`)
-- `PerformanceProfiler` (`performance_profiler.h`) owns a `GpuTimer`,
-  `CpuProfiler`, `MemoryTracker`; driven by `beginFrame()` / `endFrame(dt)`.
+- `PerformanceProfiler` (`performance_profiler.h`) owns a `GpuTimer` and
+  `MemoryTracker` and references the global `CpuProfiler`
+  (`getCpuProfiler()` → `Vestige::getCpuProfiler()`); driven by `beginFrame()` /
+  `endFrame(dt)`.
   Getters: `getFps()`, `getFrameTimeMs()`, `getAvgFrameTimeMs()`,
   `getMin/MaxFrameTimeMs()`, `isEnabled()`/`setEnabled(bool)`.
 - `GpuTimer::getResults()` → `const std::vector<GpuPassTiming>&`; each
@@ -292,17 +297,20 @@ so grass hugs the hills; skip stamps inside the pond and near large props:
 for (grid of stamp centres spaced ~2–3 m across the terrain interior) {
     if (inside pond radius) continue;
     float y = t.getHeight(cx, cz);
-    m_foliageManager->paintFoliage(0, {cx,y,cz}, stampRadius, density, falloff, grassCfg);
+    m_foliageManager->paintFoliage(GRASS_TYPE_ID, {cx,y,cz}, stampRadius, GRASS_DENSITY, falloff, grassCfg);
 }
 // then eraseAllFoliage() discs around each placed prop + the pond
 ```
-`GRASS_DENSITY` and stamp spacing are named constants (the primary benchmark
-knob). **Default `GRASS_DENSITY` targets ~40 k instances** (the current demo runs
-10 k comfortably); the constant is documented with a **tested range of ~10 k–120 k**
-so the sub-60 ceiling can be found deliberately without editing scatter logic.
-Because the count is deterministic (INV-7), each density value is a repeatable
-fixture. The upper bound (~120 k) is the guard against an accidental runaway
-paint that would OOM the instance buffer.
+`GRASS_TYPE_ID` is a named constant (foliage type `0` = grass; `paintFoliage`
+computes `instances = area × density`, so the **total** count is
+`GRASS_DENSITY` (per m²) × stamp-area × stamp-count, not `GRASS_DENSITY` alone).
+`GRASS_DENSITY` + stamp spacing together are the **primary benchmark knob**,
+tuned so the default **totals ~40 k instances** (the current demo runs 10 k
+comfortably), with a **documented tested range of ~10 k–120 k total** so the
+sub-60 ceiling can be found deliberately without editing scatter logic. Because
+the count is deterministic (INV-7), each setting is a repeatable fixture; the
+~120 k upper bound guards against a runaway paint that would OOM the instance
+buffer.
 
 ### 5.5 Pond
 ```cpp
@@ -370,14 +378,17 @@ Finish with `scene->update(0.0f)` to compute world matrices.
 **>1 MB** should "consider whether [they] belong in the future public assets
 repo," to keep clones small. The Kenney props are each a few KB (well under that
 line). The **one HDRI (~1.0–1.5 MB) is a deliberate, documented exception**: a
-sky source is required for the meadow's IBL + pond reflections, the `AtmosphereSystem`
-does not generate an IBL sky on its own, and 1K is the smallest size that still
-lights the scene believably (2K `.hdr` is ~4–6 MB and stays out). Higher-res
-sky variants are **not** committed — they can be dropped in via the `nature_local/`
-override (§5.7). The Kenney-model precedent matches the repo's existing CC0/CC-BY
-model posture (Fox, CesiumMan); note the public repo currently ships **no** HDRI
-(the only one, `tabernacle/goegap_2k.hdr`, is in the git-excluded tabernacle set),
-so this HDRI is a new committed-asset class, recorded as such. Add rows to
+sky source is required for the meadow's IBL + pond reflections, and
+`AtmosphereSystem` only manages environment *forces* (wind) — it does not render
+a sky cubemap for IBL, and `EnvironmentMap::captureEnvironment` needs a skybox
+cubemap to derive irradiance — so there is no procedural-sky→IBL route without an
+HDRI. 1K is the smallest size that still lights the scene believably (2K `.hdr`
+is ~4–6 MB and stays out). Higher-res sky variants are **not** committed — they
+can be dropped in via the `nature_local/` override (§5.7). The Kenney-model
+precedent matches the repo's existing CC0/CC-BY model posture (Fox, CesiumMan);
+note the public repo currently ships **no** committed HDRI (the only HDRIs on
+disk, under `tabernacle/`, are in the git-excluded tabernacle set), so this HDRI
+is a new committed-asset class, recorded as such. Add rows to
 `ASSET_LICENSES.md` and full attribution lines to `THIRD_PARTY_NOTICES.md`
 (Kenney credit is optional but included as courtesy; Poly Haven CC0 needs none).
 
@@ -439,11 +450,15 @@ So bottlenecks can be analysed off-panel and shared (user 2026-07-11), a small
 `ProfileLog` class writes the profiler's timings to a CSV file.
 
 - **API:** `bool open(const std::string& path)`, `void close()`, `bool
-  isOpen()`, and `void sample(const PerformanceProfiler&, double elapsedSec)`.
-  The engine calls `sample(...)` once per frame *after* `endFrame(dt)`; the class
-  **throttles internally** to ~1 write/second, emitting **averages over the
-  interval** (so the file is small and readable over a long session, and
-  single-frame noise is smoothed).
+  isOpen()`, and `void sample(PerformanceProfiler&, double elapsedSec)`. The
+  param is a **non-const** reference — reaching the timings goes through
+  `getGpuTimer()`/`getCpuProfiler()`/`getMemoryTracker()`, all non-const
+  accessors (`performance_profiler.h:38,41,44`), exactly as the shipped
+  `PerformancePanel::draw(PerformanceProfiler&, ...)` takes one. The engine calls
+  `sample(...)` once per frame *after* `endFrame(dt)`; the class **throttles
+  internally** to ~1 write/second, emitting **averages over the interval** (so the
+  file is small and readable over a long session, and single-frame noise is
+  smoothed).
 - **Format — long CSV** (robust to a variable pass set; trivial for an agent to
   pivot). Header written once on `open`:
   ```
@@ -458,21 +473,33 @@ So bottlenecks can be analysed off-panel and shared (user 2026-07-11), a small
   12.0,cpu,Culling,1,0.8,
   12.0,mem,gpu_mb,0,512,
   ```
-  `category ∈ {frame,gpu,cpu,mem}`; `name` is the pass/scope; `ms` the interval
-  average; `fps` filled only on the `frame,total` row. The **`depth` column**
-  carries `ProfileEntry.depth` for CPU scopes (GPU passes are flat → `0`) so the
-  reader can see the nesting and sum **only `depth==0` rows** without
-  double-counting a parent's span against its children. Row sources:
-  - `gpu` rows ← `GpuTimer::getResults()` (`{name, timeMs}`, `depth=0`).
-  - `cpu` rows ← `CpuProfiler::getLastFrame()`, with **`ms = endMs − startMs`**
-    (there is no single duration field; §3.6) and `depth` carried through.
-  - `mem` row ← `MemoryTracker::getGpuUsedMB()`.
+  `category ∈ {frame,gpu,cpu,mem}`; `name` is the pass/scope; the `ms` column
+  holds the interval-average milliseconds — **except `mem` rows, where it holds
+  the value in MB** (disambiguated by `category`; kept in one column so the long
+  format stays simple). `fps` is filled only on the `frame,total` row.
+  - Each category emits one synthetic **`total`** row (`name=="total"`) plus the
+    real per-pass/per-scope rows. To get an aggregate without double-counting,
+    **read the `total` row directly** — do *not* sum the per-scope rows. (If
+    summing anyway, sum `depth==0` rows **excluding `name=="total"`**.)
+  - The **`depth` column** carries `ProfileEntry.depth` for CPU scopes (GPU
+    passes and the synthetic totals are flat → `0`) so the nesting is visible.
+  - **Row sources:**
+    - `frame,total` ← `getAvgFrameTimeMs()` (ms) + `getFps()` (fps).
+    - `gpu,total` ← `getTotalGpuTimeMs()`; `gpu,<pass>` ← `GpuTimer::getResults()`
+      (`{name, timeMs}`, `depth=0`).
+    - `cpu,total` ← `getTotalCpuTimeMs()`; `cpu,<scope>` ←
+      `CpuProfiler::getLastFrame()` with **`ms = endMs − startMs`** (no single
+      duration field; §3.6) and `depth` carried through.
+    - `mem,gpu_mb` ← `MemoryTracker::getGpuUsedMB()`.
 - **Row assembly is a pure function** — `formatSampleRows(const ProfileSample&)
-  → std::vector<std::string>` where `ProfileSample` is a plain struct of the
-  averaged values (each entry already reduced to `{category,name,depth,ms}` so
-  the pure function does no timing math). This is unit-tested headlessly (§11);
-  `sample()` aggregates `getResults()`/`getLastFrame()` into a `ProfileSample`
-  (deriving `endMs − startMs`) and calls it.
+  → std::vector<std::string>`, where `ProfileSample` is a plain struct carrying
+  the sample's top-level `timeSec` and `fps` plus a vector of already-reduced
+  `{category, name, depth, value}` entries (so the pure function does no timing
+  math and no getter calls — it just formats). This is unit-tested headlessly
+  (§11); the non-pure `sample()` does the aggregation: it pulls
+  `getResults()`/`getLastFrame()`/`getGpuUsedMB()`/`getAvgFrameTimeMs()`/`getFps()`,
+  derives `endMs − startMs` for CPU scopes, averages over the interval, fills a
+  `ProfileSample`, and calls `formatSampleRows`.
 - **Triggers (two thin entry points over one `ProfileLog`):**
   1. **CLI** `--profile-log[=PATH]` — sets `EngineConfig::profileLogPath`;
      `Engine::initialize()` calls `profiler.setEnabled(true)` + `ProfileLog::open`.
@@ -492,13 +519,18 @@ So bottlenecks can be analysed off-panel and shared (user 2026-07-11), a small
 
 ## 9. Accessibility
 
-- **Reduce-motion:** grass wind and water wave animation are motion. A global
-  reduce-motion setting **exists** — `Settings::reducedMotion` (`settings.h:314`,
-  alongside `reduceMotionFog`/`reduceMotionGi`). The meadow honours it by damping
-  grass wind amplitude + water `flowSpeed` to ~0 when set. During impl, confirm
-  how the grass/water shaders read the wind/flow uniforms and route the
-  reduce-motion flag through the same path the existing `reduceMotion*` toggles
-  use (Rule 13) before wiring.
+- **Reduce-motion:** grass wind and water surface animation are motion. A global
+  reduce-motion setting **exists** — `Settings::Accessibility::reducedMotion`
+  (accessed `settings.accessibility.reducedMotion`, `settings.h:314`, alongside
+  `reduceMotionFog`/`reduceMotionGi`). The meadow honours it by zeroing **both**
+  motion drivers: grass wind amplitude **and** the water's animation — the pond's
+  `WaterSurfaceConfig` has two independent motion fields, per-wave
+  `waves[].speed` (the Gerstner undulation, `water_surface.h:40`) **and**
+  `flowSpeed` (surface flow, `:60`), so damping `flowSpeed` alone leaves the
+  waves moving. Zero the wave `speed`s (or set `numWaves = 0`) as well as
+  `flowSpeed`. During impl, confirm how the grass/water shaders read the
+  wind/flow uniforms and route the flag through the same path the existing
+  `reduceMotion*` toggles use (Rule 13) before wiring.
 - Scene readability does not depend on colour alone (geometry + lighting carry
   it). No text is added.
 
@@ -526,12 +558,14 @@ So bottlenecks can be analysed off-panel and shared (user 2026-07-11), a small
    panel toggle; wire `sample()` after `endFrame`. *Verify:* `--profile-log`
    run produces a well-formed CSV with per-pass rows; row-format unit test
    green; no file / no overhead when the flag/toggle is off.
-7. **Docs/tests/CHANGELOG/ROADMAP** — finalize. **README drift:** update the
-   demo-scene description (`README.md:122` "no extra asset download is required
-   for the demo scene" is now false — the meadow bundles Kenney + an HDRI;
-   `README.md:141` `--play` "demo scene" now means the meadow) and add
-   `--material-demo` + `--profile-log` to the README CLI list. Flip ROADMAP
-   `3D_E-0027` to shipped. Full local-CI incl. Windows.
+7. **Docs/tests/CHANGELOG/ROADMAP + audit** — finalize. **README drift:** update
+   the demo-scene description (`README.md:120-121` "no extra asset download is
+   required for the demo scene" is now false — the meadow bundles Kenney + an
+   HDRI; `README.md:142` `--play` "demo scene (default)" now means the meadow)
+   and add `--material-demo` + `--profile-log` to the README CLI list. Flip
+   ROADMAP `3D_E-0027` to shipped. Run the **project Rule 4 post-phase audit**
+   (AUDIT_STANDARDS.md 5-tier) and get its fix plan approved. Full local-CI incl.
+   Windows.
 
 ---
 
@@ -540,9 +574,11 @@ So bottlenecks can be analysed off-panel and shared (user 2026-07-11), a small
 - **Unit (headless, no GL):** `meadowHeight01` (range 0..1, bowl floor below rim,
   gentle slopes, determinism); `scatterProps` (count, min-distance, exclusion
   disc honoured, determinism from seed); `--material-demo` + `--profile-log` arg
-  parse set their fields; `formatSampleRows` (§8.1) emits a correct header +
-  one row per pass/scope with the right `category,name,depth,ms,fps` columns
-  (GPU rows `depth==0`; nested CPU scopes carry their `depth`).
+  parse set their fields; `formatSampleRows` (§8.1) — given a `ProfileSample`
+  (with `timeSec`, `fps`, and `{category,name,depth,value}` entries) — emits the
+  6-column header and one row per entry with the right `time_s,category,name,
+  depth,ms,fps` cells (GPU rows `depth==0`; nested CPU scopes carry their
+  `depth`; `fps` only on `frame,total`).
 - **Visual-test harness** (`--visual-test`): meadow renders without GL errors /
   crashes (headless-capable path already used by CI).
 - **Manual (the one un-automated step):** launch the editor, confirm the meadow
@@ -595,6 +631,20 @@ So bottlenecks can be analysed off-panel and shared (user 2026-07-11), a small
   `3D_E-0027` created; reduce-motion confirmed shipped (`Settings::reducedMotion`);
   `oak`/`model` snippet bug + `directionDeg`→`direction` + `terrain_system.cpp`
   citation fixed; TOC added.
+- **Loop 2 (2026-07-11)** — same 3 lanes, cold. Tally: CRITICAL 0 · HIGH 1 ·
+  MEDIUM 5 · LOW 8 · INFO 5. All verified & fixed. Findings concentrated in the
+  §8.1 CSV contract (all doc-side, no design change): the `depth==0` summing rule
+  double-counted the synthetic `total` rows → now says read the `total` row
+  directly; `sample()` param made non-const (accessors are non-const);
+  `ProfileSample` given `timeSec` + `fps` + `{category,name,depth,value}` so the
+  pure `formatSampleRows` can emit the 6-column header; synthetic `total` rows
+  attributed to their getters; `mem` row's MB-in-`ms`-column noted. §9
+  reduce-motion corrected to also zero `waves[].speed` (not just `flowSpeed`) and
+  the nested `settings.accessibility.reducedMotion` path. Scene-API lane clean
+  (only line-nudge nits: foliage-shadow `:306`, caustics `:1496-1531`, grass
+  per-m² density wording, `GRASS_TYPE_ID`); `PerformanceProfiler` references (not
+  owns) the global `CpuProfiler`; AtmosphereSystem/HDRI justification tightened;
+  Rule 4 audit pointer added to slice 7.
 
 ---
 
