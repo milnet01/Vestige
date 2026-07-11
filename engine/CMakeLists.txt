@@ -442,6 +442,7 @@ target_link_libraries(vestige_engine
         tinyexr
         freetype
         imgui_lib
+        implot_lib          # AX12 — audio spectrum/waveform viewer (Debug tab)
         imguizmo_lib
         imgui_filebrowser
         imgui_node_editor_lib

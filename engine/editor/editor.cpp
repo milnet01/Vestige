@@ -18,6 +18,8 @@
 #include "scene/mesh_renderer.h"
 #include "scene/scene.h"
 #include "systems/navigation_system.h"
+#include "systems/audio_system.h"     // AX12 — mix-monitor activation poll
+#include "audio/audio_engine.h"       // AX12 — setMixMonitorActive
 
 // Visual-scripting node palette registrations — free functions defined in
 // the scripting/*_nodes.cpp translation units. Forward-declared here rather
@@ -39,6 +41,7 @@ void registerLatentNodeTypes(NodeTypeRegistry& registry);
 #include <imgui_internal.h>
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
+#include <implot.h>  // AX12 — audio spectrum viewer context + plots
 #include <ImGuizmo.h>
 
 #include <GLFW/glfw3.h>
@@ -78,6 +81,7 @@ bool Editor::initialize(GLFWwindow* window, const std::string& assetPath)
     // Create ImGui context
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
+    ImPlot::CreateContext();  // AX12 — audio spectrum viewer plots (Debug tab)
 
     ImGuiIO& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
@@ -201,6 +205,7 @@ void Editor::shutdown()
 
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
+    ImPlot::DestroyContext();  // AX12 — before ImGui context (mirror creation order)
     ImGui::DestroyContext();
 
     m_isInitialized = false;
@@ -1250,6 +1255,14 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
 
         // --- Audio panel ---
         m_audioPanel.draw(m_audioSystem, scene);
+        // AX12 — poll the Debug-tab activation flag AFTER draw() so the mix
+        // monitor deactivates on every draw() exit path (window closed /
+        // collapsed / another tab selected); active only while the tab shows.
+        if (m_audioSystem)
+        {
+            m_audioSystem->getAudioEngine().setMixMonitorActive(
+                m_audioPanel.isDebugTabActive());
+        }
 
         // --- Fog panel (slice 11.10) ---
         m_fogPanel.draw(renderer);

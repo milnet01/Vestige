@@ -9,6 +9,8 @@
 #include "audio/acoustic_probe_component.h"
 #include "audio/audio_attenuation.h"
 #include "audio/audio_engine.h"
+#include "audio/audio_mix_monitor.h"
+#include "audio/audio_spectrum.h"
 #include "audio/audio_hrtf.h"
 #include "audio/audio_output_mode.h"
 #include "audio/audio_source_component.h"
@@ -21,8 +23,10 @@
 #include "systems/reverb_system.h"
 
 #include <imgui.h>
+#include <implot.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 
 namespace Vestige
@@ -145,6 +149,11 @@ float AudioPanel::computeEffectiveSourceGain(std::uint32_t entityId, AudioBus bu
 
 void AudioPanel::draw(AudioSystem* audioSystem, Scene* scene)
 {
+    // AX12: reset the Debug-tab activation flag before any early return, so the
+    // editor's post-draw poll deactivates the mix monitor on every exit path
+    // (window closed / collapsed / another tab selected).
+    m_debugTabActive = false;
+
     if (!m_open) return;
 
     if (!ImGui::Begin("Audio", &m_open))
@@ -172,6 +181,7 @@ void AudioPanel::draw(AudioSystem* audioSystem, Scene* scene)
         }
         if (ImGui::BeginTabItem("Debug"))
         {
+            m_debugTabActive = true;  // AX12 activation poll
             drawDebugTab(audioSystem);
             ImGui::EndTabItem();
         }
@@ -505,6 +515,169 @@ void AudioPanel::drawZonesTab(Scene* scene)
     }
 }
 
+void AudioPanel::drawSpectrumViewer(AudioSystem* audioSystem)
+{
+    AudioEngine& engine  = audioSystem->getAudioEngine();
+    AudioMixMonitor& mon = engine.mixMonitor();
+    mon.flushFrame();  // once per frame, after all producer systems have updated
+
+    AudioMixer& mx = mixer();
+
+    // Bus select / solo row. Only Music & Sfx carry an analysis signal (§1.2);
+    // the rest are file-decoded (greyed). Clicking the active solo clears it.
+    struct BusBtn { const char* label; AudioBus bus; };
+    static const BusBtn kBuses[] = {
+        {"Music", AudioBus::Music}, {"Voice", AudioBus::Voice},
+        {"Sfx",   AudioBus::Sfx},   {"Ambient", AudioBus::Ambient},
+        {"Ui",    AudioBus::Ui}};
+    ImGui::TextUnformatted("Solo / view:");
+    for (const BusBtn& b : kBuses)
+    {
+        ImGui::SameLine();
+        const bool graphed = isMixMonitorGraphedBus(b.bus);
+        const bool soloed  = mx.soloBus == static_cast<int>(b.bus);
+        if (!graphed) ImGui::BeginDisabled();
+        if (soloed)
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.55f, 0.90f, 1.0f));
+        if (ImGui::Button(b.label))
+            mx.soloBus = soloed ? -1 : static_cast<int>(b.bus);
+        if (soloed) ImGui::PopStyleColor();
+        if (!graphed)
+        {
+            ImGui::EndDisabled();
+            if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+                ImGui::SetTooltip("file-decoded — not graphed");
+        }
+    }
+    ImGui::SameLine();
+    ImGui::Checkbox("Freeze waveform", &m_freezeWaveform);
+
+    // Displayed bus = the soloed bus when it's graphed, else Music.
+    AudioBus shown = AudioBus::Music;
+    if (mx.soloBus >= 0 && isMixMonitorGraphedBus(static_cast<AudioBus>(mx.soloBus)))
+        shown = static_cast<AudioBus>(mx.soloBus);
+
+    const std::vector<float>& ring = mon.ring(shown);
+    const int  rate = std::max(1, mon.rateHz(shown));
+    const bool live = mon.hadRecentSignal(shown);
+
+    ImGui::TextDisabled("Analysis mix (CPU content, pre-spatialization) — %s%s",
+                        audioBusLabel(shown),
+                        shown == AudioBus::Music ? "; leads speakers by decode-ahead"
+                                                 : " (procedural only)");
+
+    // ---- Spectrum: last WINDOW samples (front-padded), dB + ballistics ----
+    std::vector<float> blk(kMixMonitorWindow, 0.0f);
+    if (!ring.empty())
+    {
+        const std::size_t n = std::min(ring.size(), kMixMonitorWindow);
+        std::copy(ring.end() - static_cast<std::ptrdiff_t>(n), ring.end(),
+                  blk.end() - static_cast<std::ptrdiff_t>(n));
+    }
+    std::vector<float> mags;
+    computeMagnitudeSpectrum(blk.data(), kMixMonitorWindow, mags);
+    if (m_specDb.size() != mags.size())
+        m_specDb.assign(mags.size(), -80.0f);
+    std::vector<float> freq(mags.size());
+    std::vector<float> db(mags.size());
+    std::size_t peak = 0;
+    for (std::size_t i = 0; i < mags.size(); ++i)
+    {
+        float d = 20.0f * std::log10(std::max(mags[i], 1e-9f));
+        d = std::max(d, -80.0f);
+        // Fast-attack / slow-release ballistics — UI-only, never fed back (INV-8).
+        m_specDb[i] = (d > m_specDb[i]) ? d : (0.9f * m_specDb[i] + 0.1f * d);
+        freq[i] = static_cast<float>(i) * static_cast<float>(rate) /
+                  static_cast<float>(kMixMonitorWindow);
+        db[i] = m_specDb[i];
+        if (i > 0 && db[i] > db[peak]) peak = i;
+    }
+    if (ImPlot::BeginPlot("##ax12_spectrum", ImVec2(-1, 140),
+                          ImPlotFlags_NoLegend | ImPlotFlags_NoMouseText))
+    {
+        ImPlot::SetupAxes("Hz", "dB", ImPlotAxisFlags_NoGridLines, 0);
+        ImPlot::SetupAxisScale(ImAxis_X1, ImPlotScale_Log10);
+        ImPlot::SetupAxisLimits(ImAxis_X1, 20.0, 20000.0);
+        ImPlot::SetupAxisLimits(ImAxis_Y1, -80.0, 0.0);
+        if (!freq.empty())
+        {
+            ImPlotSpec spec;
+            spec.FillAlpha = 0.4f;
+            ImPlot::PlotShaded("spectrum", freq.data(), db.data(),
+                               static_cast<int>(freq.size()), -80.0, spec);
+            ImPlot::PlotLine("spectrum_top", freq.data(), db.data(),
+                             static_cast<int>(freq.size()));
+        }
+        ImPlot::EndPlot();
+    }
+    if (!freq.empty())
+        ImGui::Text("peak: %.0f Hz  %.1f dB%s", static_cast<double>(freq[peak]),
+                    static_cast<double>(db[peak]), live ? "" : "   (idle)");
+
+    // ---- Waveform: min/max envelope over the last HISTORY_SECONDS ----
+    constexpr std::size_t kWavePoints = 512;
+    if (!m_freezeWaveform)
+    {
+        const std::size_t want =
+            static_cast<std::size_t>(kMixMonitorHistorySeconds *
+                                     static_cast<float>(rate));
+        const std::size_t have = std::min(ring.size(), want);
+        m_waveT.assign(kWavePoints, 0.0f);
+        m_waveMin.assign(kWavePoints, 0.0f);
+        m_waveMax.assign(kWavePoints, 0.0f);
+        if (have > 0)
+        {
+            const std::size_t start = ring.size() - have;
+            for (std::size_t p = 0; p < kWavePoints; ++p)
+            {
+                const std::size_t a = start + (have * p) / kWavePoints;
+                const std::size_t e = start + (have * (p + 1)) / kWavePoints;
+                float mn = 0.0f, mxv = 0.0f;
+                bool first = true;
+                for (std::size_t k = a; k < e && k < ring.size(); ++k)
+                {
+                    const float v = ring[k];
+                    if (first) { mn = mxv = v; first = false; }
+                    else { mn = std::min(mn, v); mxv = std::max(mxv, v); }
+                }
+                m_waveT[p]   = static_cast<float>(p) / static_cast<float>(kWavePoints) *
+                               kMixMonitorHistorySeconds;
+                m_waveMin[p] = mn;
+                m_waveMax[p] = mxv;
+            }
+        }
+    }
+    if (ImPlot::BeginPlot("##ax12_wave", ImVec2(-1, 90), ImPlotFlags_CanvasOnly))
+    {
+        ImPlot::SetupAxes(nullptr, nullptr, ImPlotAxisFlags_NoDecorations,
+                          ImPlotAxisFlags_NoDecorations);
+        ImPlot::SetupAxisLimits(ImAxis_X1, 0.0,
+                                static_cast<double>(kMixMonitorHistorySeconds),
+                                ImPlotCond_Always);
+        ImPlot::SetupAxisLimits(ImAxis_Y1, -1.0, 1.0, ImPlotCond_Always);
+        if (!m_waveT.empty())
+        {
+            ImPlotSpec wspec;
+            wspec.FillAlpha = 0.5f;
+            ImPlot::PlotShaded("wave", m_waveT.data(), m_waveMin.data(),
+                               m_waveMax.data(), static_cast<int>(m_waveT.size()),
+                               wspec);
+        }
+        ImPlot::EndPlot();
+    }
+
+    // Clip indicator — scan the full-rate content ring (not the decimation).
+    bool clip = false;
+    for (float v : ring)
+    {
+        if (v > 1.0f || v < -1.0f) { clip = true; break; }
+    }
+    if (clip)
+        ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.3f, 1.0f), "CLIP ( |sample| > 1.0 )");
+
+    ImGui::Separator();
+}
+
 void AudioPanel::drawDebugTab(AudioSystem* audioSystem)
 {
     ImGui::Checkbox("Show zone overlays in viewport", &m_showZoneOverlay);
@@ -526,6 +699,9 @@ void AudioPanel::drawDebugTab(AudioSystem* audioSystem)
 
     ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.5f, 1.0f),
                        "Audio: available");
+
+    // AX12 — live spectrum / waveform / per-bus solo (above the text status).
+    drawSpectrumViewer(audioSystem);
 
     ImGui::Text("Distance model: %s",
                 attenuationModelLabel(engine.getDistanceModel()));

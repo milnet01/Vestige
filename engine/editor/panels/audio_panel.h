@@ -72,6 +72,12 @@ public:
     void setOpen(bool open) { m_open = open; }
     void toggleOpen() { m_open = !m_open; }
 
+    /// @brief AX12 — true iff the Debug tab was actually drawn this frame. The
+    ///        editor polls this after `draw()` and toggles the engine's mix
+    ///        monitor accordingly, so deactivation fires on every draw() exit
+    ///        path (window closed / collapsed / other tab selected).
+    bool isDebugTabActive() const { return m_debugTabActive; }
+
     // -- Mixer + ducking -------------------------------------------
 
     /// @brief Wires the panel to the engine's authoritative mixer +
@@ -224,6 +230,7 @@ private:
     void drawSourcesTab(Scene* scene);
     void drawZonesTab(Scene* scene);
     void drawDebugTab(AudioSystem* audioSystem);
+    void drawSpectrumViewer(AudioSystem* audioSystem);  ///< AX12
 
     bool m_open = false;
 
@@ -257,6 +264,16 @@ private:
     std::unordered_set<std::uint32_t> m_soloedSources;
 
     bool m_showZoneOverlay = false;
+
+    // AX12 — spectrum/waveform viewer state (Debug tab). All transient UI state
+    // (not persisted): activation poll flag, reduce-motion freeze, per-bin
+    // ballistic-smoothed dB, and the min/max waveform envelope (held when frozen).
+    bool m_debugTabActive = false;
+    bool m_freezeWaveform = false;
+    std::vector<float> m_specDb;
+    std::vector<float> m_waveT;
+    std::vector<float> m_waveMin;
+    std::vector<float> m_waveMax;
 };
 
 } // namespace Vestige
