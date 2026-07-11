@@ -40,6 +40,36 @@ Full attribution lines reproduced in
 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) for licence-compliance
 scanners.
 
+### Nature props — `assets/models/nature/`
+
+| Files | Source | License | Attribution required |
+|-------|--------|---------|----------------------|
+| `tree_{oak,default,detailed,fat}.glb`, `tree_pineDefault{A,B}.glb`, `rock_large{A,B}.glb`, `rock_small{A,B,C}.glb`, `stone_tallA.glb`, `flower_{purple,red,yellow}A.glb`, `plant_bush.glb`, `grass.glb`, `plant_flatTall.glb`, `lily_{small,large}.glb`, `log.glb`, `mushroom_red.glb` (22 files) | [Kenney Nature Kit 2.1](https://kenney.nl/assets/nature-kit) | **CC0 1.0** | Optional (credit "Kenney" as courtesy) |
+
+Curated low-poly, vertex-coloured subset (each a few KB, no external
+textures; ~244 KB total) for the meadow benchmark scene
+(`Engine::setupDemoScene()` — see
+`docs/phases/phase_10_meadow_benchmark_scene_design.md`). Photoreal tree
+overrides drop in via the git-ignored `assets/models/nature_local/`
+directory and are never committed.
+
+---
+
+## HDRIs — `assets/hdri/`
+
+| File | Source | License | Attribution required |
+|------|--------|---------|----------------------|
+| `syferfontein_0d_clear_1k.hdr` | [Poly Haven](https://polyhaven.com/a/syferfontein_0d_clear) — 1K equirectangular | **CC0 1.0** | None |
+
+The repo's **first committed HDRI**, added for the meadow benchmark
+scene's image-based lighting + pond reflections. `AtmosphereSystem`
+manages only environment *forces* (wind) and does not render a sky
+cubemap for IBL, so a committed sky source is required. 1K (~1.5 MB) is
+the smallest size that lights the scene believably; higher-res sky
+variants (2K `.hdr` is ~4–6 MB) are **not** committed. Consistent with
+the repo's existing >1 MB CC0 assets (see "How to add a new asset",
+point 5).
+
 ---
 
 ## Fonts — `assets/fonts/`

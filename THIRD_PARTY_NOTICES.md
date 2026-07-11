@@ -125,6 +125,27 @@ Source: <https://github.com/KhronosGroup/glTF-Sample-Assets>
 - **`RiggedFigure.glb`** — © 2017 Cesium. Licensed under
   **CC-BY 4.0 International**.
 
+### Nature props — `assets/models/nature/`
+
+Source: <https://kenney.nl/assets/nature-kit> (Nature Kit 2.1)
+
+- **Kenney Nature Kit 2.1** — a curated 22-file subset of low-poly,
+  vertex-coloured `.glb` models (trees, rocks, flowers, grass, reeds,
+  lily pads, a log, and a mushroom) used by the meadow benchmark scene.
+  Licensed under **CC0 1.0 Universal** (public domain dedication) — free
+  for personal, educational, and commercial use with no attribution
+  required. Created/distributed by Kenney (<https://www.kenney.nl>);
+  the credit above is included as a courtesy, not an obligation.
+
+### HDRIs — `assets/hdri/`
+
+Source: <https://polyhaven.com/a/syferfontein_0d_clear>
+
+- **`syferfontein_0d_clear_1k.hdr`** — 1K equirectangular sky HDRI from
+  Poly Haven. Licensed under **CC0 1.0 Universal** — no attribution
+  required. Provides image-based lighting and pond reflections for the
+  meadow benchmark scene.
+
 ### Fonts — `assets/fonts/`
 
 All five bundled font files are licensed under the

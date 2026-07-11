@@ -216,6 +216,12 @@ assets/textures/everytexture-com-stock-rocks-*/
 assets/textures/*_4k.jpg
 assets/textures/*_4k.blend.zip
 assets/textures/*_4k.blend/
+#
+# Meadow-scene photoreal overrides — heavy scanned/photoreal tree models
+# (60–150 MB each) the maintainer drops in locally to replace the CC0
+# Kenney low-poly props. Loaded via the nature_local path hook when
+# present; never committed. See phase_10_meadow_benchmark_scene_design.md §5.7.
+assets/models/nature_local/
 
 # Stray Ants MCP feedback file authored by another CC session (Formula Workbench)
 DOOM_Ants_Feedback.md
