@@ -132,15 +132,32 @@ vec3 triplanarWeights(vec3 worldNormal, float sharpness)
 }
 
 // ---------------------------------------------------------------------------
-// Simple procedural tiling pattern for a base color (adds visual variation)
-// Returns a color modulation factor (0.85-1.15) to break up flat colors
+// Procedural detail modulation (0.88-1.12) to break up the flat base colors.
 // ---------------------------------------------------------------------------
+// Dave Hoskins' hash — free of the strong diagonal banding that a
+// fract(sin(dot(...))) hash produces on a regular terrain grid.
+float hash21(vec2 p)
+{
+    vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.x + p3.y) * p3.z);
+}
+
 float tilingDetail(vec2 uv)
 {
-    // Two-frequency hash pattern for subtle variation
-    vec2 i = floor(uv * 3.7);
-    float h = fract(sin(dot(i, vec2(127.1, 311.7))) * 43758.5453);
-    return mix(0.88, 1.12, h);
+    // Smooth value noise instead of hard per-cell hashing: the old version
+    // floor()'d into ~2.7 m cells and its sin-hash banded diagonally, which
+    // read as corrugation across gentle terrain. Interpolating removes both.
+    vec2 p = uv * 3.7;
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    float a = hash21(i);
+    float b = hash21(i + vec2(1.0, 0.0));
+    float c = hash21(i + vec2(0.0, 1.0));
+    float d = hash21(i + vec2(1.0, 1.0));
+    float n = mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+    return mix(0.88, 1.12, n);
 }
 
 void main()

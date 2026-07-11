@@ -32,16 +32,49 @@ float hash01(uint32_t a, uint32_t b, uint32_t c)
     return static_cast<float>(h >> 8) * (1.0f / 16777216.0f);  // top 24 bits → [0,1)
 }
 
+/// Smooth 2D value noise in [0, 1). Lattice corner values come from hash01 and
+/// are blended with a quintic (smootherstep) fade for C² continuity — so the
+/// summed octaves give natural rolling relief rather than the regular
+/// corrugation a sin·cos product would produce. Negative lattice coordinates
+/// wrap through the cast, which is fine (the hash only needs determinism).
+float valueNoise(float x, float z, uint32_t seed)
+{
+    const float fx = std::floor(x);
+    const float fz = std::floor(z);
+    const int ix = static_cast<int>(fx);
+    const int iz = static_cast<int>(fz);
+    const float tx = x - fx;
+    const float tz = z - fz;
+    const float ux = tx * tx * tx * (tx * (tx * 6.0f - 15.0f) + 10.0f);
+    const float uz = tz * tz * tz * (tz * (tz * 6.0f - 15.0f) + 10.0f);
+
+    const auto corner = [&](int cx, int cz) {
+        return hash01(seed, static_cast<uint32_t>(cx), static_cast<uint32_t>(cz));
+    };
+    const float v00 = corner(ix, iz);
+    const float v10 = corner(ix + 1, iz);
+    const float v01 = corner(ix, iz + 1);
+    const float v11 = corner(ix + 1, iz + 1);
+
+    const float a = v00 + (v10 - v00) * ux;
+    const float b = v01 + (v11 - v01) * ux;
+    return a + (b - a) * uz;  // [0,1)
+}
+
 }  // namespace
 
 float meadowHeight01(float nx, float nz, const MeadowShape& shape)
 {
-    constexpr float TAU = 6.283185307179586f;
-
     float h = shape.baseHeight01;
+    // fbm: sum octaves of value noise. Each octave gets its own decorrelated
+    // seed; freq scales the lattice (a few cells across the meadow) and amp its
+    // contribution, centred to [-amp, amp].
+    uint32_t octSeed = 0x9e3779b9U;
     for (const auto& oct : shape.octaves)
     {
-        h += oct.amp * std::sin(nx * TAU * oct.freq) * std::cos(nz * TAU * oct.freq);
+        const float n = valueNoise(nx * oct.freq, nz * oct.freq, octSeed);
+        h += oct.amp * (n * 2.0f - 1.0f);
+        octSeed = hashU32(octSeed);
     }
 
     // Carve a smooth radial bowl at the pond centre so the floor sits below the

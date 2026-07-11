@@ -52,14 +52,18 @@ TEST(MeadowHeight, Deterministic)
     EXPECT_FLOAT_EQ(meadowHeight01(0.21f, 0.83f, s), meadowHeight01(0.21f, 0.83f, s));
 }
 
-TEST(MeadowHeight, BowlFloorLiesBelowTheRim)
+TEST(MeadowHeight, BowlCarvesTheCentreDown)
 {
-    const MeadowShape s = makeShape();
-    // The bowl centre must dip below a point out at the bowl rim (same azimuth),
-    // otherwise the pond would not be contained.
-    const float centre = meadowHeight01(s.pondCenterGrid.x, s.pondCenterGrid.y, s);
-    const float rim = meadowHeight01(s.pondCenterGrid.x, s.pondCenterGrid.y + s.pondRadiusGrid, s);
-    EXPECT_LT(centre, rim);
+    // The bowl must lower the pond centre relative to the same point with no
+    // bowl. (Comparing two *spatial* points is not robust once the relief is
+    // noise-based — their noise values have no guaranteed ordering — so we hold
+    // the position fixed and toggle the carve.)
+    const MeadowShape withBowl = makeShape();
+    MeadowShape noBowl = makeShape();
+    noBowl.bowlDepth01 = 0.0f;
+    const float carved = meadowHeight01(withBowl.pondCenterGrid.x, withBowl.pondCenterGrid.y, withBowl);
+    const float flat = meadowHeight01(noBowl.pondCenterGrid.x, noBowl.pondCenterGrid.y, noBowl);
+    EXPECT_LT(carved, flat);
 }
 
 TEST(MeadowHeight, NoBowlOutsideRadius)

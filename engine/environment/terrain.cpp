@@ -387,20 +387,28 @@ void Terrain::createGpuTextures()
     glTextureParameteri(m_heightmapTex, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTextureParameteri(m_heightmapTex, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
-    // Normal map: RGB8 (encoded as n * 0.5 + 0.5)
-    std::vector<uint8_t> normalBytes(static_cast<size_t>(w * d * 3));
+    // Normal map: RGB16 (encoded as n * 0.5 + 0.5). 8-bit gave only ~6 codes
+    // across a gentle slope's near-vertical normal → banded ("contour") shading
+    // on flat terrain; 16-bit removes it. Round (+0.5) rather than truncate.
+    std::vector<uint16_t> normalWords(static_cast<size_t>(w * d * 3));
     for (size_t i = 0; i < m_normalData.size(); ++i)
     {
         const auto& n = m_normalData[i];
-        normalBytes[i * 3 + 0] = static_cast<uint8_t>((n.x * 0.5f + 0.5f) * 255.0f);
-        normalBytes[i * 3 + 1] = static_cast<uint8_t>((n.y * 0.5f + 0.5f) * 255.0f);
-        normalBytes[i * 3 + 2] = static_cast<uint8_t>((n.z * 0.5f + 0.5f) * 255.0f);
+        normalWords[i * 3 + 0] = static_cast<uint16_t>((n.x * 0.5f + 0.5f) * 65535.0f + 0.5f);
+        normalWords[i * 3 + 1] = static_cast<uint16_t>((n.y * 0.5f + 0.5f) * 65535.0f + 0.5f);
+        normalWords[i * 3 + 2] = static_cast<uint16_t>((n.z * 0.5f + 0.5f) * 65535.0f + 0.5f);
     }
 
     glCreateTextures(GL_TEXTURE_2D, 1, &m_normalMapTex);
-    glTextureStorage2D(m_normalMapTex, 1, GL_RGB8, w, d);
+    glTextureStorage2D(m_normalMapTex, 1, GL_RGB16, w, d);
+    // RGB rows are 3 components wide, so at odd widths the row length is not a
+    // multiple of the default 4-byte unpack alignment — GL then misreads each
+    // row start and shears the normals into diagonal bands. Upload tightly
+    // packed (alignment 1), then restore the default.
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
     glTextureSubImage2D(m_normalMapTex, 0, 0, 0, w, d,
-                        GL_RGB, GL_UNSIGNED_BYTE, normalBytes.data());
+                        GL_RGB, GL_UNSIGNED_SHORT, normalWords.data());
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
     glTextureParameteri(m_normalMapTex, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTextureParameteri(m_normalMapTex, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTextureParameteri(m_normalMapTex, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -473,7 +481,7 @@ void Terrain::updateNormalMapRegion(int x, int z, int w, int h)
     // Upload the updated region
     int uploadW = x1 - x0 + 1;
     int uploadH = z1 - z0 + 1;
-    std::vector<uint8_t> normalBytes(static_cast<size_t>(uploadW * uploadH * 3));
+    std::vector<uint16_t> normalWords(static_cast<size_t>(uploadW * uploadH * 3));
     for (int rz = 0; rz < uploadH; ++rz)
     {
         for (int rx = 0; rx < uploadW; ++rx)
@@ -481,14 +489,18 @@ void Terrain::updateNormalMapRegion(int x, int z, int w, int h)
             int srcIdx = (z0 + rz) * m_config.width + (x0 + rx);
             const auto& n = m_normalData[static_cast<size_t>(srcIdx)];
             size_t dstIdx = static_cast<size_t>(rz * uploadW + rx) * 3;
-            normalBytes[dstIdx + 0] = static_cast<uint8_t>((n.x * 0.5f + 0.5f) * 255.0f);
-            normalBytes[dstIdx + 1] = static_cast<uint8_t>((n.y * 0.5f + 0.5f) * 255.0f);
-            normalBytes[dstIdx + 2] = static_cast<uint8_t>((n.z * 0.5f + 0.5f) * 255.0f);
+            normalWords[dstIdx + 0] = static_cast<uint16_t>((n.x * 0.5f + 0.5f) * 65535.0f + 0.5f);
+            normalWords[dstIdx + 1] = static_cast<uint16_t>((n.y * 0.5f + 0.5f) * 65535.0f + 0.5f);
+            normalWords[dstIdx + 2] = static_cast<uint16_t>((n.z * 0.5f + 0.5f) * 65535.0f + 0.5f);
         }
     }
 
+    // Tight packing — RGB rows aren't 4-byte aligned at odd widths (see
+    // initializeGpuResources); default alignment shears the normals diagonally.
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
     glTextureSubImage2D(m_normalMapTex, 0, x0, z0, uploadW, uploadH,
-                        GL_RGB, GL_UNSIGNED_BYTE, normalBytes.data());
+                        GL_RGB, GL_UNSIGNED_SHORT, normalWords.data());
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
 }
 
 void Terrain::updateSplatmapRegion(int x, int z, int w, int h)

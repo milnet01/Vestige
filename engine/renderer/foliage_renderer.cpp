@@ -487,20 +487,38 @@ GLuint FoliageRenderer::generateProceduralTexture(uint32_t typeId)
 
             if (typeId == 0)
             {
-                // Short Grass — narrow green blade
-                float bladeWidth = 0.3f + 0.4f * (1.0f - t);
-                a = (distFromCenter < bladeWidth) ? 1.0f : 0.0f;
-                if (distFromCenter > bladeWidth * 0.7f && distFromCenter < bladeWidth)
+                // Short Grass — a tuft of several THIN blades. A single wide
+                // blade (the old code) filled ~70% of the quad and read as a
+                // solid cone once alpha-tested; thin separated blades read as
+                // grass. Each blade curves (leans with height) and tapers to a
+                // point at its own top.
+                struct Blade { float center; float lean; float topT; };
+                static constexpr Blade blades[] = {
+                    {0.30f, -0.14f, 0.80f},
+                    {0.50f,  0.02f, 1.00f},
+                    {0.70f,  0.13f, 0.86f},
+                };
+                constexpr float baseHalf = 0.055f;  // blade half-width at the base
+                for (const Blade& bl : blades)
                 {
-                    a = 1.0f - (distFromCenter - bladeWidth * 0.7f) / (bladeWidth * 0.3f);
+                    if (t > bl.topT) continue;
+                    const float bx = bl.center + bl.lean * t;     // curved stalk
+                    const float hw = baseHalf * (1.0f - 0.9f * t); // taper to tip
+                    if (hw <= 0.0f) continue;
+                    const float d = std::abs(u - bx);
+                    if (d >= hw) continue;
+                    const float dn = d / hw;
+                    float cov = 1.0f - dn * dn;                    // soft edge
+                    if (t > bl.topT - 0.14f)                       // fade the tip
+                    {
+                        cov *= (bl.topT - t) / 0.14f;
+                    }
+                    a = std::max(a, cov);
                 }
-                if (t > 0.8f)
-                {
-                    a *= 1.0f - (t - 0.8f) / 0.2f;
-                }
-                r = 0.15f + 0.1f * (1.0f - t);
-                g = 0.45f + 0.25f * t;
-                b = 0.08f;
+                // Green gradient — darker at the base, brighter toward the tip.
+                r = 0.13f + 0.07f * (1.0f - t);
+                g = 0.40f + 0.30f * t;
+                b = 0.07f;
             }
             else if (typeId == 1)
             {

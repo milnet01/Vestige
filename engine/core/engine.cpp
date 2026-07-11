@@ -2027,6 +2027,15 @@ void Engine::createPhysicsStaticBodies()
 
 void Engine::setupVisualTestViewpoints()
 {
+    // The meadow's ground is 3–7 m up and the heightmap does not exist yet at
+    // this point (it is built in finalizeMeadowTerrain, after initializeAll).
+    // Its terrain-relative viewpoints are therefore registered there; these
+    // fixed-height Tabernacle viewpoints would sit buried under the meadow.
+    if (m_meadowSceneActive)
+    {
+        return;
+    }
+
     // Tabernacle scene coordinates (must match setupTabernacleScene())
     const float C = 0.445f;
     const float tentL = 30.0f * C;              // 13.35m
@@ -2188,9 +2197,9 @@ void Engine::setupDemoScene()
     m_renderer->setSkyboxEnabled(true);
     m_renderer->setClearColor(glm::vec3(0.53f, 0.68f, 0.86f));
     m_renderer->setAutoExposure(false);
-    m_renderer->setExposure(2.4f);
+    m_renderer->setExposure(1.0f);
     m_renderer->setBloomEnabled(true);
-    m_renderer->setBloomThreshold(2.0f);
+    m_renderer->setBloomThreshold(1.1f);
     m_renderer->setBloomIntensity(0.10f);
     m_renderer->setSsaoEnabled(true);
 
@@ -2207,8 +2216,8 @@ void Engine::setupDemoScene()
     auto* dirLight = sun->addComponent<DirectionalLightComponent>();
     dirLight->light.direction = glm::vec3(-0.35f, -0.88f, -0.32f);
     dirLight->light.ambient = glm::vec3(0.20f, 0.22f, 0.26f);
-    dirLight->light.diffuse = glm::vec3(1.9f, 1.85f, 1.7f);
-    dirLight->light.specular = glm::vec3(1.0f);
+    dirLight->light.diffuse = glm::vec3(1.15f, 1.10f, 1.00f);  // toned down — 1.9 blew out the grass + sand
+    dirLight->light.specular = glm::vec3(0.6f);
 
     // The rolling terrain and carved pond depend on the terrain heightmap, which
     // TerrainSystem only allocates + fills in initializeAll() — long AFTER this
@@ -2235,7 +2244,7 @@ void Engine::finalizeMeadowTerrain()
     // they are hand-authored named values per project Rule 6.
     MeadowShape shape;
     shape.baseHeight01 = 0.14f;          // ~7 m base over the 50 m height scale
-    shape.octaves = {                    // gentle rolling relief (~6–10 m p-p)
+    shape.octaves = {                    // gentle rolling relief (fbm value noise)
         {1.3f, 0.045f},
         {2.7f, 0.025f},
         {5.5f, 0.012f},
@@ -2367,6 +2376,50 @@ void Engine::finalizeMeadowTerrain()
 
         Logger::info("Meadow grass: " + std::to_string(m_foliageManager->getTotalFoliageCount())
             + " instances across " + std::to_string(m_foliageManager->getChunkCount()) + " chunks");
+    }
+
+    // --- Camera vantage ------------------------------------------------------
+    // The meadow raises the ground to ~3–7 m (base + rolling relief), but the
+    // default camera eye is a fixed 1.7 m — which leaves it buried *under* the
+    // terrain (you see the ground as a wall, grass floating above, and the
+    // skybox's lower hemisphere below the terrain edge). The free editor camera
+    // does no terrain collision, so we must place the eye ON the surface here.
+    // Stand back from the pond on its +Z side, look −Z across the water, tilt
+    // down slightly so the grassy ground and pond fill the lower frame.
+    {
+        const glm::vec2 eyeXZ = {pondCenterXZ.x, pondCenterXZ.y + 34.0f};
+        const float eyeY = terrain.getHeight(eyeXZ.x, eyeXZ.y) + 1.7f;
+        m_camera->setPosition(glm::vec3(eyeXZ.x, eyeY, eyeXZ.y));
+        m_camera->setYaw(-90.0f);   // face −Z, toward the pond
+        m_camera->setPitch(-9.0f);  // tilt down onto the ground + water
+        if (m_editor && m_editor->getEditorCamera())
+        {
+            m_editor->getEditorCamera()->syncFromCamera(*m_camera);
+        }
+    }
+
+    // --- Visual-test viewpoints (meadow-relative) ----------------------------
+    // Registered here, not in setupVisualTestViewpoints(), because they sample
+    // the terrain height that only exists now. Each eye sits 1.7 m above the
+    // surface so the camera never clips into a hill. start() runs later.
+    if (m_visualTestMode)
+    {
+        const auto eyeOnSurface = [&](float x, float z) {
+            return glm::vec3(x, terrain.getHeight(x, z) + 1.7f, z);
+        };
+        const float px = pondCenterXZ.x;
+        const float pz = pondCenterXZ.y;
+        // Pond overview from the +Z side (matches the interactive vantage).
+        m_visualTestRunner.addViewpoint({"pond_overview",
+            eyeOnSurface(px, pz + 34.0f), -90.0f, -9.0f, 8, 45.0f});
+        // Close to the shore, looking across the water.
+        m_visualTestRunner.addViewpoint({"pond_shore",
+            eyeOnSurface(px, pz + 12.0f), -90.0f, -4.0f, 8, 45.0f});
+        // Out on the open meadow, away from the pond.
+        m_visualTestRunner.addViewpoint({"open_meadow",
+            eyeOnSurface(px + 45.0f, pz + 40.0f), -135.0f, -3.0f, 8, 45.0f});
+        Logger::info("Meadow visual-test viewpoints registered: "
+            + std::to_string(m_visualTestRunner.viewpointCount()));
     }
 
     scene->update(0.0f);
