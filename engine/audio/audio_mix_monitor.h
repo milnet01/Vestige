@@ -27,6 +27,14 @@ constexpr std::size_t kMixMonitorWindow = 2048;
 /// @brief Rolling waveform history retained per bus.
 constexpr float kMixMonitorHistorySeconds = 2.0f;
 
+/// @brief The buses that carry a CPU-producer analysis signal in v1 (§1.2):
+///        `Music` (streaming) and `Sfx` (procedural synth). Others are
+///        file-decoded and not graphed; producers only submit to these.
+inline bool isMixMonitorGraphedBus(AudioBus bus)
+{
+    return bus == AudioBus::Music || bus == AudioBus::Sfx;
+}
+
 /// @brief One producer's contribution to a bus for a frame: its gain-scaled
 ///        samples. Raw pointer — consumed synchronously by `accumulateBusFrame`.
 struct MixSubmission

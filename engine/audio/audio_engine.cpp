@@ -971,6 +971,21 @@ unsigned int AudioEngine::playSynth(SurfaceMaterial material, float approachSpee
     const float initialGain =
         resolveSourceGain(currentMixer(), bus, volume, effectiveDuck(bus));
 
+    // AX12 — feed the editor spectrum viewer this freshly-synthesised block
+    // (content gain = initialGain, no solo). Only while the Debug tab is active
+    // and the bus is graphed (§1.2). Synth PCM is already mono int16.
+    if (m_mixMonitor.isActive() && isMixMonitorGraphedBus(bus))
+    {
+        m_mixMonitorScratch.resize(m_synthScratch.size());
+        for (std::size_t i = 0; i < m_synthScratch.size(); ++i)
+        {
+            m_mixMonitorScratch[i] = static_cast<float>(m_synthScratch[i]) / 32768.0f;
+        }
+        m_mixMonitor.submit(bus, m_mixMonitorScratch.data(),
+                            m_mixMonitorScratch.size(), initialGain,
+                            static_cast<int>(Procedural::kSynthSampleRate));
+    }
+
     alSourcei(source, AL_BUFFER, static_cast<ALint>(buffer));
     alSource3f(source, AL_POSITION, position.x, position.y, position.z);
     alSource3f(source, AL_VELOCITY, 0.0f, 0.0f, 0.0f);

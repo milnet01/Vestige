@@ -45,6 +45,7 @@
 #include <cstddef>
 #include <deque>
 #include <string>
+#include <vector>
 
 #include "audio/audio_music.h"
 #include "audio/audio_music_stream.h"
@@ -110,6 +111,13 @@ struct StreamingLayer
     /// the sticky flag to `planStreamTick` would re-fire the rewind
     /// every frame.
     bool decoderJustHitEof = false;
+
+    // AX12 — editor spectrum viewer tap (active only while the Debug tab shows).
+    // `analysisGain` is this frame's pre-solo content gain (stashed in update
+    // step 2); `analysisFrame` accumulates this frame's newly-decoded mono-float
+    // PCM, concatenated across decode chunks, for one submit per layer per frame.
+    float              analysisGain = 0.0f;
+    std::vector<float> analysisFrame;
 };
 
 /// @brief Streaming-music player. One voice per active layer.

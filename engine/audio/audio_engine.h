@@ -12,6 +12,7 @@
 #include "audio/audio_hrtf.h"
 #include "audio/audio_loudness.h"
 #include "audio/audio_mixer.h"
+#include "audio/audio_mix_monitor.h"
 #include "audio/audio_output_mode.h"
 #include "audio/audio_reverb.h"                     // AX2 ReverbParams
 #include "audio/reverb_ir_pool.h"                   // AX2 R2 convolution IR pool
@@ -383,6 +384,14 @@ public:
     /// pushed one yet. Reads inside `AudioEngine` use the private
     /// `currentMixer()` helper that falls back to a default all-1 mixer.
     const AudioMixer* getMixerSnapshot() const { return m_mixerSnapshot; }
+
+    /// @brief AX12 — enable/disable the editor spectrum/waveform tap. Polled by
+    ///        `AudioPanel` every frame (active only while the Debug tab shows).
+    void setMixMonitorActive(bool active) { m_mixMonitor.setActive(active); }
+    /// @brief AX12 — the per-bus analysis-signal monitor (read by the panel;
+    ///        producers submit into it).
+    AudioMixMonitor& mixMonitor() { return m_mixMonitor; }
+    const AudioMixMonitor& mixMonitor() const { return m_mixMonitor; }
 
     /// @brief Phase 10.9 P3 — publishes the engine-owned
     ///        `DuckingState::currentGain` snapshot so `updateGains`
@@ -914,6 +923,13 @@ private:
     std::mt19937 m_synthRng{1337u};
     std::unordered_map<unsigned int, unsigned int> m_synthBuffers;
     std::vector<std::int16_t> m_synthScratch;
+
+    // AX12 — editor spectrum/waveform viewer tap. Active only while the Debug
+    // tab is shown; producers (synth here, music player elsewhere) push a
+    // normalized-float copy of what they generate. `m_mixMonitorScratch` is the
+    // reused int16→float staging buffer (no per-strike heap churn).
+    AudioMixMonitor          m_mixMonitor;
+    std::vector<float>       m_mixMonitorScratch;
 
     /// @brief Reclaims finished sources back to the pool.
     void reclaimFinishedSources();

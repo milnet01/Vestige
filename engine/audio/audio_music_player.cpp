@@ -275,6 +275,28 @@ StreamTickPlan AudioMusicPlayer::stepDecodeOnce(StreamingLayer& layer)
         alSourceQueueBuffers(layer.source, 1, &dst);
     }
 
+    // AX12 — accumulate this chunk (down-mixed to mono float) into the layer's
+    // frame buffer for the spectrum viewer. Concatenated across a frame's chunks
+    // (§3.2), submitted once per layer in update(). Only while the tap is active.
+    if (gotFrames > 0 && m_engine.mixMonitor().isActive())
+    {
+        const std::size_t base = layer.analysisFrame.size();
+        layer.analysisFrame.resize(base + static_cast<std::size_t>(gotFrames));
+        for (int f = 0; f < gotFrames; ++f)
+        {
+            float acc = 0.0f;
+            for (int c = 0; c < channels; ++c)
+            {
+                acc += static_cast<float>(
+                    scratch[static_cast<std::size_t>(f) *
+                                static_cast<std::size_t>(channels) +
+                            static_cast<std::size_t>(c)]);
+            }
+            layer.analysisFrame[base + static_cast<std::size_t>(f)] =
+                (acc / static_cast<float>(channels)) / 32768.0f;
+        }
+    }
+
     notifyStreamFramesDecoded(layer.stream,
                               static_cast<std::uint64_t>(std::max(0, gotFrames)),
                               reachedEof);
@@ -342,11 +364,13 @@ void AudioMusicPlayer::update(float deltaSeconds)
         //    it here — same math playSound* uses at upload time).
         if (deviceLive && layer.source != 0)
         {
-            float effective =
+            const float contentGain =
                 mixer != nullptr
                     ? resolveSourceGain(*mixer, AudioBus::Music,
                                         layer.gain.currentGain, duckGain)
                     : layer.gain.currentGain;
+            layer.analysisGain = contentGain;  // AX12: pre-solo content gain (§3.4)
+            float effective = contentGain;
             // AX12: editor solo gate on the live music output (output-only).
             if (mixer != nullptr)
             {
@@ -400,7 +424,21 @@ void AudioMusicPlayer::update(float deltaSeconds)
 
         // 5. Top the buffer ring back up to the keep-ahead target.
         const bool wasFinished = layer.stream.finished;
+        const bool tapActive = m_engine.mixMonitor().isActive();
+        if (tapActive)
+        {
+            layer.analysisFrame.clear();  // fresh per-frame accumulation
+        }
         refillLayer(layer);
+        // AX12: submit this layer's concatenated newly-decoded PCM once (Music
+        // bus, content gain = pre-solo analysisGain) to the spectrum viewer.
+        if (tapActive && !layer.analysisFrame.empty())
+        {
+            m_engine.mixMonitor().submit(AudioBus::Music,
+                                         layer.analysisFrame.data(),
+                                         layer.analysisFrame.size(),
+                                         layer.analysisGain, layer.sampleRate);
+        }
         if (layer.stream.finished && !wasFinished)
         {
             // refillLayer already called stopLayer on a finished track.
