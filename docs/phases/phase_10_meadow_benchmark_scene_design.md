@@ -1,6 +1,7 @@
 # Phase 10 — Meadow Demo & Profiling-Benchmark Scene (design)
 
-**Status:** draft — pending cold-eyes review loop (project Rule 9, global Rule 14).
+**Status:** cold-eyes reviewed (3 loops, 2026-07-11) — converged & signed off;
+proceeding to implementation (project Rule 9, global Rule 14).
 **Roadmap:** `3D_E-0027` (Phase 10 → Rendering Enhancements).
 **Author:** in-session 2026-07-11.
 **Owner subsystem:** `engine/core` (scene setup), `engine/environment` (terrain/foliage),
@@ -129,12 +130,15 @@ path (demonstrated in `terrain_system.cpp:38-76`) fills heights with
 ### 3.3 Water (`engine/scene/water_surface.h`)
 - `WaterSurfaceComponent` is an **entity component**; the water plane sits at the
   entity's transform Y (`getLocalWaterY()` returns 0). `WaterSurfaceConfig`
-  fields (`water_surface.h:27`): `width, depth, gridResolution, numWaves,
+  fields (`water_surface.h:27`, design-relevant subset — others exist,
+  e.g. `refractionStrength`/`normalStrength`/`dudvStrength`/`causticsIntensity`):
+  `width, depth, gridResolution, numWaves,
   waves[4]{amplitude,wavelength,speed,direction (degrees)}, shallowColor, deepColor,
   depthDistance, flowSpeed, specularPower, causticsEnabled, reflectionMode
   (default PLANAR), reflectionResolutionScale=0.25, refractionEnabled`.
 - The render loop auto-discovers water entities into `m_renderData.waterSurfaces`
-  and derives caustics onto terrain (`engine.cpp:1496-1531`); the water plane's Y
+  (earlier render-data collection step) and derives caustics onto terrain
+  (`engine.cpp:1496-1529`); the water plane's Y
   is taken from the entity's world matrix (`waterY = waterMatrix[3][1]`, `:1499`),
   confirming `getLocalWaterY()==0`. Reference usage: the demo "Water Pool"
   (`engine.cpp:2476-2494`).
@@ -251,7 +255,27 @@ the deterministic math (reuse + testability, global Rule 3):
   — jittered-grid ("poisson-ish") 2D points in a region, with a min-distance
   reject and an exclusion disc (the pond). Deterministic from `seed`.
 
-`MeadowShape`/`ScatterParams`/`ScatterPoint` are plain structs. `setupDemoScene()`
+The three plain structs (fields pinned so the unit-tested contracts are complete):
+```cpp
+struct MeadowShape {
+    struct Octave { float freq, amp; };  // low-freq sine terms
+    std::vector<Octave> octaves;         // hill relief
+    glm::vec2 pondCenterGrid;            // bowl centre in 0..1 grid space
+    float pondRadiusGrid, bowlDepth01;   // radius (grid) + max dip (normalized)
+    float baseHeight01;                  // flat offset before octaves
+};
+struct ScatterParams {
+    glm::vec2 regionMin, regionMax;      // world-XZ scatter bounds
+    float cellSize, jitter;              // jittered-grid spacing + jitter [0..1]
+    float minDist;                       // min-distance reject
+    glm::vec2 exclusionCenter;           // pond centre (world XZ)
+    float exclusionRadius;               // reject inside this disc
+    float minScale, maxScale;            // per-point scale range
+};
+struct ScatterPoint { float x, z, yawDeg, scale; };  // one placed prop
+```
+One `scatterProps` call is issued per prop type (its own `seed`/`ScatterParams`),
+so `ScatterPoint` needs no type index. `setupDemoScene()`
 calls these, then applies results through the GL-bound terrain/scene APIs. Tests
 target the pure functions (§11); the full build is covered by the visual-test
 harness + manual check.
@@ -305,10 +329,15 @@ for (grid of stamp centres spaced ~2–3 m across the terrain interior) {
 computes `instances = area × density`, so the **total** count is
 `GRASS_DENSITY` (per m²) × stamp-area × stamp-count, not `GRASS_DENSITY` alone).
 `GRASS_DENSITY` + stamp spacing together are the **primary benchmark knob**,
-tuned so the default **totals ~40 k instances** (the current demo runs 10 k
-comfortably), with a **documented tested range of ~10 k–120 k total** so the
-sub-60 ceiling can be found deliberately without editing scatter logic. Because
-the count is deterministic (INV-7), each setting is a repeatable fixture; the
+tuned so the default totals **~40 k instances** (the current demo runs 10 k
+comfortably), with a **documented tested range of ~10 k–120 k** so the sub-60
+ceiling can be found deliberately without editing scatter logic. These are
+**upper bounds** — `paintFoliage` computes `targetCount = area × density` then
+randomly *rejects* points when `falloff > 0` (and per any `densityMap`), so the
+placed count is ≤ the figure; use `falloff = 0` for an exact count. The result is
+still **deterministic** (repeatable fixture): `paintFoliage` seeds its RNG from a
+hash of each stamp centre, and the stamp grid itself is fixed — so run-to-run
+identical without depending on `SEED_*` (which seed the prop scatter, INV-7). The
 ~120 k upper bound guards against a runaway paint that would OOM the instance
 buffer.
 
@@ -374,21 +403,25 @@ Finish with `scene->update(0.0f)` to compute world matrices.
 - **One CC0 Poly Haven sky HDRI**, **1K** equirectangular `.hdr` (e.g.
   `syferfontein_0d_clear` ~1.0 MB or `meadow_2` ~1.5 MB), `assets/hdri/`.
 
-**Asset-size policy reconciliation.** `ASSET_LICENSES.md` guidance is that assets
-**>1 MB** should "consider whether [they] belong in the future public assets
-repo," to keep clones small. The Kenney props are each a few KB (well under that
-line). The **one HDRI (~1.0–1.5 MB) is a deliberate, documented exception**: a
-sky source is required for the meadow's IBL + pond reflections, and
-`AtmosphereSystem` only manages environment *forces* (wind) — it does not render
-a sky cubemap for IBL, and `EnvironmentMap::captureEnvironment` needs a skybox
-cubemap to derive irradiance — so there is no procedural-sky→IBL route without an
-HDRI. 1K is the smallest size that still lights the scene believably (2K `.hdr`
-is ~4–6 MB and stays out). Higher-res sky variants are **not** committed — they
-can be dropped in via the `nature_local/` override (§5.7). The Kenney-model
-precedent matches the repo's existing CC0/CC-BY model posture (Fox, CesiumMan);
-note the public repo currently ships **no** committed HDRI (the only HDRIs on
-disk, under `tabernacle/`, are in the git-excluded tabernacle set), so this HDRI
-is a new committed-asset class, recorded as such. Add rows to
+**Asset-size policy note.** `ASSET_LICENSES.md` guidance is a **soft
+consideration**, not a cap: assets **>1 MB** should "consider whether [they]
+belong in the future public assets repo," to keep clones small. Documenting that
+consideration *is* compliance. The Kenney props are each a few KB (well under the
+line). The single 1K HDRI (~1.0–1.5 MB) sits above the line, but the repo
+**already tracks several >1 MB CC0 assets** under the same guidance — e.g.
+`red_brick_nor_gl_2k.jpg` (~3.4 MB), `brick_wall_005_nor_gl_2k.jpg` (~3.4 MB),
+`plank_flooring_04_rough_2k.jpg` (~1.4 MB), and `cormorant_garamond.ttf`
+(~1.2 MB) — so the HDRI is consistent precedent, not an exception. It *is* the
+repo's **first committed HDRI** (the only HDRIs on disk today, under
+`tabernacle/`, are git-excluded), so it's recorded as a new asset *type*. A sky
+source is required for the meadow's IBL + pond reflections, and `AtmosphereSystem`
+only manages environment *forces* (wind) — it does not render a sky cubemap for
+IBL, and `EnvironmentMap::captureEnvironment` needs a skybox cubemap to derive
+irradiance — so there is no procedural-sky→IBL route without an HDRI. 1K is the
+smallest size that still lights the scene believably (2K `.hdr` is ~4–6 MB and
+stays out); higher-res sky variants are **not** committed — they drop in via the
+`nature_local/` override (§5.7). The Kenney-model precedent matches the repo's
+existing CC0/CC-BY model posture (Fox, CesiumMan, RiggedFigure). Add rows to
 `ASSET_LICENSES.md` and full attribution lines to `THIRD_PARTY_NOTICES.md`
 (Kenney credit is optional but included as courtesy; Poly Haven CC0 needs none).
 
@@ -480,7 +513,9 @@ So bottlenecks can be analysed off-panel and shared (user 2026-07-11), a small
   - Each category emits one synthetic **`total`** row (`name=="total"`) plus the
     real per-pass/per-scope rows. To get an aggregate without double-counting,
     **read the `total` row directly** — do *not* sum the per-scope rows. (If
-    summing anyway, sum `depth==0` rows **excluding `name=="total"`**.)
+    summing anyway, sum `depth==0` rows **within a single `category`** and
+    **excluding `name=="total"`** — never sum across categories, since `mem`
+    carries MB while `gpu`/`cpu` carry ms.)
   - The **`depth` column** carries `ProfileEntry.depth` for CPU scopes (GPU
     passes and the synthetic totals are flat → `0`) so the nesting is visible.
   - **Row sources:**
@@ -550,7 +585,7 @@ So bottlenecks can be analysed off-panel and shared (user 2026-07-11), a small
    auto-texture + bank blend + water entity + HDRI sky + sun. *Verify:* rolling
    terrain + reflective pond render; height-field unit tests green.
 4. **Grass** — terrain-following stamps + exclusions. *Verify:* dense grass
-   hugs terrain, none in the pond; foliage count > threshold.
+   hugs terrain, none in the pond; foliage count > 30 k at the default density.
 5. **Props** — scatter trees/rocks/flowers/lily/reeds/log via `instantiate`;
    `treePath` local-override hook. *Verify:* props sit on the surface, none in
    the pond; scatter unit tests green.
@@ -561,8 +596,8 @@ So bottlenecks can be analysed off-panel and shared (user 2026-07-11), a small
 7. **Docs/tests/CHANGELOG/ROADMAP + audit** — finalize. **README drift:** update
    the demo-scene description (`README.md:120-121` "no extra asset download is
    required for the demo scene" is now false — the meadow bundles Kenney + an
-   HDRI; `README.md:142` `--play` "demo scene (default)" now means the meadow)
-   and add `--material-demo` + `--profile-log` to the README CLI list. Flip
+   HDRI; the no-flag "demo scene (default)" line at `README.md:141` now means the
+   meadow) and add `--material-demo` + `--profile-log` to the README CLI list. Flip
    ROADMAP `3D_E-0027` to shipped. Run the **project Rule 4 post-phase audit**
    (AUDIT_STANDARDS.md 5-tier) and get its fix plan approved. Full local-CI incl.
    Windows.
@@ -599,10 +634,11 @@ So bottlenecks can be analysed off-panel and shared (user 2026-07-11), a small
 - **INV-5** `meadowHeight01` returns values in [0,1]; the pond-bowl floor is
   strictly below the rim height (so water has depth).
 - **INV-6** Committed assets are CC0/CC-BY with a matching `ASSET_LICENSES.md`
-  row. Kenney props are each well under 1 MB; the **single 1K sky HDRI
-  (~1.0–1.5 MB) is the only committed asset over the repo's 1 MB guideline and is
-  documented as an explicit exception** (§6). Nothing else >1 MB enters the repo;
-  2K+ HDRIs and photoreal trees stay in `nature_local/` (git-ignored).
+  row. Kenney props are each well under 1 MB; the single 1K sky HDRI (~1.0–1.5 MB)
+  sits above the repo's soft 1 MB "consider" guideline but joins several existing
+  >1 MB CC0 assets already tracked (2K texture maps + a variable font), so it is
+  documented, not exceptional (§6). No 2K+ HDRI or photoreal tree enters the repo;
+  those stay in `nature_local/` (git-ignored).
 - **INV-7** Scene is deterministic given fixed `SEED_*` (stable profiling
   fixture).
 - **INV-8** No new render pass or shader; terrain stays enabled
@@ -645,6 +681,19 @@ So bottlenecks can be analysed off-panel and shared (user 2026-07-11), a small
   per-m² density wording, `GRASS_TYPE_ID`); `PerformanceProfiler` references (not
   owns) the global `CpuProfiler`; AtmosphereSystem/HDRI justification tightened;
   Rule 4 audit pointer added to slice 7.
+- **Loop 3 (2026-07-11)** — same 3 lanes, cold. Tally: CRITICAL 0 · HIGH 1 ·
+  MEDIUM 3 · LOW 6 · INFO 6. **Converged (polish/accuracy only — no design,
+  mechanism, or structural finding).** Fixes: the "only committed asset >1 MB"
+  claim was factually wrong (five >1 MB CC0 assets already tracked) → reworded to
+  precedent-not-exception (§6/INV-6); `ProfileSample`/`Scatter*`/`MeadowShape`
+  struct fields declared so the unit-tested contracts are complete; §8.1 summing
+  fallback qualified to one category (mem MB vs ms); grass count clarified as an
+  upper bound (`falloff` rejects some) with its determinism source stated; README
+  citation `:141`, slice-4 threshold (>30 k), caustics `:1496-1529`, water-config
+  subset note, and `setupTabernacleScene` decl/disable-site line split. Scene-API
+  lane clean (no finding above INFO — "implementation-ready").
+  **→ Sign-off:** converged at loop 3; design of record. Proceeding to
+  implementation (project gate = cold-eyes convergence).
 
 ---
 
@@ -654,6 +703,7 @@ So bottlenecks can be analysed off-panel and shared (user 2026-07-11), a small
 - Kenney Nature Kit 2.1 — kenney.nl, CC0 (`License.txt` in kit).
 - Poly Haven — CC0 HDRIs/models (api.polyhaven.com).
 - Existing scene builders: `setupDemoScene` (`engine.cpp:2166`),
-  `setupTabernacleScene` (`engine.cpp:2545`), demo water/foliage
+  `setupTabernacleScene` (decl `engine.cpp:2545`; its terrain-disable site is
+  `:2565`, cited in §2), demo water/foliage
   (`engine.cpp:2476-2537`), `TerrainSystem::initialize` (`terrain_system.cpp:16`;
   its proc-gen height loop at `:38-76`).
