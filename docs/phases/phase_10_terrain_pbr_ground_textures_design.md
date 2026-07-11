@@ -4,14 +4,16 @@
 **Status:** DRAFT — pending cold-eyes convergence (§13) before implementation.
 **Author:** in-session 2026-07-11 (user-requested realism overhaul).
 
+**Contents:** [1 Goal](#1-goal) · [2 Research](#2-research-summary-what-current-practice-recommends) · [3 Current state](#3-current-state-verified-against-source) · [4 Architecture](#4-architecture) · [5 CPU/GPU placement](#5-cpu--gpu-placement-project-rule-7) · [6 Performance](#6-performance-60-fps-is-a-hard-requirement) · [7 Testing](#7-testing) · [8 Assets & licensing](#8-assets--licensing) · [9 Implementation slices](#9-implementation-slices) · [10 Accessibility](#10-accessibility) · [11 Risks](#11-risks--mitigations) · [12 Open questions](#12-open-questions-for-review) · [13 Cold-eyes log](#13-cold-eyes-loop-log)
+
 ---
 
 ## 1. Goal
 
 Replace the terrain fragment shader's **flat-colour placeholder** — four constant
 colours blended by splatmap weight, carrying the literal
-`// will be replaced with texture arrays later` TODO
-(`assets/shaders/terrain.frag.glsl:172`) — with **real tiled PBR ground
+`// Simple base colors for each layer (will be replaced with texture arrays later)`
+comment (`assets/shaders/terrain.frag.glsl:172`) — with **real tiled PBR ground
 materials** (grass / rock / dirt / sand: albedo + normal + roughness, with a
 height channel for blending).
 
@@ -84,13 +86,15 @@ Terrain texturing is a well-trodden area; the current-practice consensus:
    3D textures (no cross-slice filtering), no extension. Bindless textures are a
    3rd option but remain a vendor extension (not core GL) and buy little here.
 
-6. **Channel packing (ORM/ARM).** PBR greyscale maps pack into one RGB texture —
-   one sample instead of three. glTF/Unreal use **ORM** (R=Occlusion,
-   G=Roughness, B=Metallic); Poly Haven ships **ARM** (same channels, their
-   naming). Ground is non-metallic, so we repurpose the metallic slot for the
-   **height** channel the height-blend needs: our packed "material" texture is
-   **R=AO, G=Roughness, B=Height**. Assets are **CC0** from ambientCG / Poly
-   Haven (no attribution required; credited as courtesy).
+6. **Channel packing (ORM/ARM → our AO/Rough/Height).** PBR greyscale maps pack
+   into one RGB texture — one sample instead of three. The industry precedents are
+   **ORM** (glTF/Unreal: R=Occlusion, G=Roughness, B=Metallic) and Poly Haven's
+   **ARM** (same channels). Ground is non-metallic, so we do **not** consume the
+   pre-packed ARM directly — we **self-repack at asset-prep** from the source
+   AO / roughness / displacement maps into our own **R=AO, G=Roughness, B=Height**
+   layout (the height-blend of §2 item 2 needs a height channel, which ARM's
+   metallic slot doesn't carry). Assets are **CC0** from ambientCG / Poly Haven
+   (no attribution required; credited as courtesy).
 
 **Sources:**
 - [Advanced Terrain Texture Splatting — Mishkinis (Game Developer)](https://www.gamedeveloper.com/programming/advanced-terrain-texture-splatting)
@@ -172,27 +176,43 @@ private:
 Bound at units **6/7/8** (4 free; leaves 5=caustics). Trilinear + anisotropic
 filtering, `REPEAT` wrap, full mip chain (`glGenerateTextureMipmap`).
 
+**RGB8 alignment (project banding lesson).** The normal/material arrays are
+3-component (`GL_RGB8`). The recorded engine lesson (`GL_UNPACK_ALIGNMENT`
+banding — a 3-component upload at a non-4-aligned row width shears into diagonal
+bands) applies. Two guarantees make RGB8 safe here and are **mandatory** in the
+loader: (a) committed textures are power-of-two width (1K → 1024×3 = 3072 B/row,
+already 4-aligned), and (b) the loader sets `glPixelStorei(GL_UNPACK_ALIGNMENT,
+1)` around every array upload regardless (belt-and-suspenders for any future
+non-PoT texture). This resolves the §7 "or padded to RGBA" hedge — we commit to
+RGB8 + alignment-1, not RGBA padding.
+
 ### 4.3 Shader changes (`terrain.frag.glsl`)
 
 New uniforms: `sampler2DArray u_albedoArray/u_normalArray/u_materialArray`,
 `float u_layerTiling[4]`, `bool u_useGroundTextures`, `vec2 u_distanceTiling`
-(near/far scale + range). When `u_useGroundTextures` is false → **existing
-flat-colour path unchanged** (fallback / Tabernacle).
+(the `(nearDist, farDist)` smoothstep range in world metres — the far-scale
+*multiplier* is the `FAR_TILING_SCALE` constant, not a uniform). When
+`u_useGroundTextures` is false → **existing flat-colour path unchanged**
+(fallback / Tabernacle).
 
 Per-pixel algorithm when textures are on:
 
 1. **UVs.** `uv_i = worldPos.xz * u_layerTiling[i]`. For the distance-tiling
-   break-up, also `uv_far_i = uv_i * 0.25`; lerp albedo/material samples by
-   `smoothstep` over view distance (`u_distanceTiling`).
+   break-up, also `uv_far_i = uv_i * FAR_TILING_SCALE` (FAR_TILING_SCALE ≈ 0.25,
+   i.e. ~4× larger tiles far away — an art-directed constant carrying a
+   `// TODO: revisit via Formula Workbench` per §4.4 item 2); lerp the **albedo**
+   sample only (not material — cheaper, and the visual repetition is carried by
+   albedo) between near and far by `smoothstep` over view distance
+   (`u_distanceTiling`).
 2. **Sample** albedo, normal, material (AO/Rough/Height) for the 4 layers.
-3. **Height-blend** by splat weight (Mishkinis, §2.2): compute per-layer
+3. **Height-blend** by splat weight (Mishkinis, §2 item 2): compute per-layer
    `hw_i = height_i + splat_i`, `ma = max_i(hw_i) - DEPTH` (DEPTH≈0.2),
    `b_i = max(hw_i - ma, 0)`, `w_i = b_i / Σb_i`. Blend albedo, roughness, AO,
    and the detail normal by `w_i`.
 4. **Slopes (triplanar).** Reuse the existing steepness → `triBlend` logic. Where
    `triBlend>0`, sample the layers triplanar (X/Y/Z world planes) and blend the
    three projections by geometric-normal weights; blend triplanar normals with
-   **Whiteout** (Ben Golus, §2.3). `mix(topDown, triplanar, triBlend)`.
+   **Whiteout** (Ben Golus, §2 item 3). `mix(topDown, triplanar, triBlend)`.
 5. **Detail normal → world.** Combine the blended tangent-space detail normal
    with the macro terrain normal (`u_normalMap`) via Whiteout/RNM, so both the
    large terrain shape and the fine material bumps light correctly.
@@ -220,15 +240,18 @@ not hand-coded constants:
    is exactly Rule 6's endorsed path — a Workbench-fit cheap approximation
    replacing heavier runtime BRDF math — and it makes the terrain specular
    *principled* instead of the current fixed `pow(NdotH,64)*0.15`. Exported as a
-   `FormulaDefinition` in the **rendering** category (C++ + GLSL codegen), pinned
-   by a parity/regression test (§7) against the GGX reference before it ships.
+   `FormulaDefinition` in the **rendering** category (C++ + GLSL codegen). This is
+   a **second dual CPU/GPU implementation** (listed in §5) and is **owned by slice
+   A2** (§9); it is pinned by a GGX-reference parity/regression test (§7) before it
+   ships.
 
-2. **Art-directed constants** — the height-blend band `DEPTH` (~0.2) and the
-   distance-tiling near/far transition. These have **no reference dataset** (pure
-   look tuning), so per Rule 6 they are hand-authored named constants carrying a
-   `// TODO: revisit via Formula Workbench` comment at the definition site — the
-   legitimate hand-code path when no data exists to fit against. If a look-target
-   dataset is later captured, the transition curve becomes a Workbench curve.
+2. **Art-directed constants** — the height-blend band `DEPTH` (~0.2), the
+   distance-tiling `FAR_TILING_SCALE` (~0.25), and the near/far transition range.
+   These have **no reference dataset** (pure look tuning), so per Rule 6 they are
+   hand-authored named constants carrying a `// TODO: revisit via Formula
+   Workbench` comment at the definition site — the legitimate hand-code path when
+   no data exists to fit against. If a look-target dataset is later captured, the
+   transition curve becomes a Workbench curve.
 
 ---
 
@@ -240,25 +263,38 @@ not hand-coded constants:
 | Splatmap weight generation (`generateAutoTexture`) | **CPU**, one-time | Already CPU; sparse/decision logic. |
 | Per-pixel layer sample + height-blend + normal blend + triplanar | **GPU** (fragment) | Per-pixel, data-parallel, no branching decisions the CPU could hoist. |
 | Height-blend math (parity reference) | **CPU** mirror for test only | Dual-impl parity (Rule 7); runtime is GPU. |
+| Roughness → Blinn-Phong specular fit (§4.4 item 1) | **CPU** Workbench fit + GLSL export; **CPU** parity reference | Workbench-authored formula emitted as both C++ and GLSL → dual-impl (Rule 7); runtime is GPU. |
 
-No "CPU now, move later" — the runtime path is GPU from the start; the CPU mirror
-exists solely to lock the formula with a parity test.
+No "CPU now, move later" — the runtime path is GPU from the start. The two CPU
+mirrors (height-blend + the roughness→specular fit) exist solely to lock their
+formulas with parity tests (§7).
 
 ---
 
 ## 6. Performance (60 FPS is a hard requirement)
 
 Worst-case per-pixel cost (top-down, textures on): 4 layers × 3 maps = 12 array
-samples, +4 for distance-tiling dual-scale on albedo/material, + height-blend ALU.
-On steep triplanar pixels, ×3 for the extra projections — but triplanar only
-kicks in above the steepness threshold (`triBlend>0`), which is a small fraction
-of a gentle meadow.
+samples, **+4** for the distance-tiling second albedo sample (albedo only, one
+extra tap per layer — §4.3 point 1), + height-blend ALU. On steep triplanar
+pixels, ×3 for the extra projections — but triplanar only kicks in above the
+steepness threshold (`triBlend>0`), which is a small fraction of a gentle meadow.
 
 **Budget & mitigations:**
 
-- Target: the full meadow (this + grass + props + water + CSM) holds **≥60 FPS at
-  1080p on the RX 6600** dev GPU. Verified against the 3D_E-0027 benchmark with
-  `--profile-log` (compare terrain-pass GPU ms before/after).
+- **Frame target:** the full meadow (this + grass + props + water + CSM) holds
+  **≥60 FPS at 1080p on the RX 6600** dev GPU (16.6 ms frame).
+- **Per-pass target:** the terrain opaque pass costs **≤ 3.0 ms** of that 16.6 ms
+  frame at High (its share of the budget); the before/after comparison is against
+  this ceiling, not just "before/after".
+- **How it's measured (today):** the automated `--profile-log` CSV gate does
+  **not exist yet** — that logger is meadow slice **S6** of 3D_E-0027 (only an
+  unwired `EngineConfig::profileLogPath` field exists so far), and the CSV
+  *parsing/regression* gate is a separate future item (3D_E-0030). So Phase A's
+  perf check is a **manual maintainer read** of the editor **Performance panel**
+  (F12) — which already surfaces per-pass GPU-timer ms (`GpuTimer` →
+  `GpuPassTiming{name,timeMs}`) and FPS from the live `PerformanceProfiler` — on
+  the 3D_E-0027 meadow, comparing the terrain pass ms against the ≤3.0 ms ceiling
+  and total FPS against ≥60. Once S6 lands, the same numbers come from the CSV.
 - **Quality tiers** (wire into the existing `FormulaQualityManager` / settings):
   - **High** — all layers, distance-tiling + macro variation, detail normals,
     height-blend.
@@ -268,9 +304,13 @@ of a gentle meadow.
     triplanar textures (flat-colour on slopes). Roughly the current cost.
 - Mip + anisotropy are mandatory (minification without mips is both ugly *and*
   slow via cache thrash).
-- If the terrain pass regresses the frame budget, the profiler CSV localises it
-  and the quality tier is dropped a notch by default on lower GPUs. Any shipped
-  clamp/tier-forcing is logged per project Rule 5.
+- **Tier selection is a manual setting** (default **High**), plumbed through the
+  existing `FormulaQualityManager` / settings. There is **no automatic
+  GPU-capability detection or frame-time watchdog this phase** — `FormulaQuality
+  Manager` is a manual tier setter, not an auto-detector. Auto-detecting a lower
+  GPU and dropping a tier by default is explicitly **future work** (a settings /
+  quality-manager enhancement), not part of Phase A. If a later phase adds such an
+  automatic clamp, it is logged per project Rule 5.
 
 ---
 
@@ -281,17 +321,33 @@ of a gentle meadow.
   test that it matches the GLSL formula on hand-picked cases (single dominant
   layer → weight 1; equal heights+weights → equal split; a high-height low-weight
   layer still peeks through), and that weights sum to 1 and are non-negative.
+  Also covers the degenerate **`depth → 0`** case (the normalisation divisor is
+  `Σb_i`; because `ma = max_i(h_i+w_i) − depth`, the peak layer has
+  `b_peak = depth`, so `Σb_i ≥ depth`, i.e. `depth > 0` guarantees a positive
+  divisor — assert the function returns the single-peak weighting at `depth=0`
+  without a divide-by-zero, so the implementer adds no needless epsilon).
+- **Roughness → specular parity (unit).** The Workbench-exported
+  `roughness → (shininess, scale)` fit (§4.4 item 1) is checked against its
+  GGX/Cook-Torrance reference dataset: the exported C++ form matches the reference
+  within tolerance (**R² ≥ 0.99** and **max abs error ≤ 0.05** on the normalised
+  specular response over the roughness × NdotH grid), and the C++ and GLSL
+  codegen agree — the Rule-7 parity lock before it ships.
 - **Material-set load (unit).** Mismatched layer dimensions → `isValid()==false`
   (fallback), not a crash; a valid 4-layer set → three non-zero array handles.
 - **Fallback (unit/behavioural).** With no material set, the terrain still renders
   (flat-colour path) — `u_useGroundTextures=false`. Tabernacle/material-demo
   unaffected.
-- **Visual (`--visual-test`).** The existing meadow viewpoints
-  (pond_overview / pond_shore / open_meadow) show textured ground (grass detail,
-  not flat mint); no diagonal banding (watch the GL_UNPACK_ALIGNMENT lesson — all
-  new arrays are RGB8/RGBA8 with correct alignment or padded to RGBA).
-- **Performance (`--profile-log`).** Terrain-pass GPU ms and total FPS recorded
-  against the benchmark; assert ≥60 FPS at High on the dev GPU.
+- **Visual (`--visual-test`) — maintainer inspection, not an automated assert.**
+  There is no golden-image diff in-tree; `--visual-test` captures viewpoint
+  screenshots (pond_overview / pond_shore / open_meadow) that the **maintainer
+  eyeballs**: ground reads as textured grass (not flat mint), no diagonal banding
+  (RGB8 arrays uploaded with `GL_UNPACK_ALIGNMENT=1` and PoT width — §4.2), no
+  stretching on the pond-bowl banks.
+- **Performance — manual read, not an automated gate.** As above (§6), the
+  automated CSV gate does not exist yet. The maintainer reads the **F12
+  Performance panel** on the 3D_E-0027 meadow and checks the terrain pass ms
+  against the **≤ 3.0 ms** ceiling and total FPS against **≥ 60** at High on the
+  RX 6600. (An automated CSV regression gate is future work: 3D_E-0030.)
 
 ---
 
@@ -304,11 +360,14 @@ of a gentle meadow.
   asset-prep from the source `_diff` / `_nor_gl` / `_ao` / `_rough` / `_disp`
   maps.
 - **Resolution: 1K** committed (albedo as JPG, normal + material as PNG). Est.
-  ~4 layers × ~1.2 MB ≈ **~5 MB** total. Above the `ASSET_LICENSES.md` soft
-  >1 MB "consider the future assets repo" line, but the repo already tracks
-  several >1 MB CC0 assets (2K brick/plank/HDRI) under the same guidance —
-  consistent precedent, documented = compliant. 2K variants drop in via a
-  git-ignored override later (mirrors the `nature_local/` pattern).
+  ~4 layers × ~1.2 MB ≈ **~5 MB** total. This sits above the `ASSET_LICENSES.md`
+  soft >1 MB "consider the future assets repo" line, but the repo already tracks
+  >1 MB CC0 assets under the same guidance — the **2K** `red_brick` / `brick_wall`
+  / `plank_flooring` texture sets (`ASSET_LICENSES.md:121-123`) and the committed
+  **1K** `syferfontein_0d_clear_1k.hdr` (~1.5 MB) — so this is consistent
+  precedent (see the meadow design §6 for the full >1 MB-precedent rationale;
+  documented = compliant). 2K variants drop in via a git-ignored override later
+  (mirrors the `nature_local/` pattern).
 - Committed under `assets/textures/terrain/`. `copy_assets` globs `assets/` so no
   CMake change (same as the meadow model/HDRI subdirs).
 
@@ -319,19 +378,25 @@ of a gentle meadow.
 1. **A1 — `TerrainMaterialSet`** + GL array loader + parity-tested
    `heightBlendWeights` pure header. *Verify:* unit tests green (load, fallback,
    blend parity).
-2. **A2 — Shader top-down path.** Add array samplers + uniforms; textured
-   top-down albedo/roughness/AO with height-blend; keep flat-colour fallback
-   branch. *Verify:* `--visual-test` meadow ground is textured grass; Tabernacle
-   unchanged.
+2. **A2 — Shader top-down path + roughness→specular fit.** Add array samplers +
+   uniforms; textured top-down albedo/roughness/AO with height-blend; keep
+   flat-colour fallback branch. **Includes the Formula-Workbench roughness →
+   Blinn-Phong specular fit** (§4.4 item 1): author/fit/validate/export in the
+   Workbench, wire the GLSL into the shader. *Verify:* roughness→specular parity
+   test green (§7); maintainer inspection of `--visual-test` — meadow ground reads
+   as textured grass, Tabernacle unchanged.
 3. **A3 — Detail normals + triplanar (Whiteout).** Detail normal → world via
-   macro-normal combine; triplanar textures on slopes. *Verify:* bumps light
-   correctly; no stretching on the pond-bowl banks.
-4. **A4 — Tiling break-up.** Distance-tiling dual-scale + macro variation.
-   *Verify:* no obvious repetition across the 256 m field in `open_meadow`.
+   macro-normal combine; triplanar textures on slopes. *Verify:* maintainer
+   inspection of `--visual-test` — bumps light correctly; no stretching on the
+   pond-bowl banks.
+4. **A4 — Tiling break-up.** Distance-tiling (albedo, §4.3 point 1) + macro
+   variation. *Verify:* maintainer inspection of `open_meadow` — no obvious
+   repetition across the 256 m field.
 5. **A5 — Assets + wire-up + quality tiers + perf.** Commit the CC0 layer set;
-   the meadow sets it; quality-tier plumbing; `--profile-log` shows ≥60 FPS.
-   *Verify:* benchmark ≥60 FPS at High on RX 6600; CHANGELOG + ASSET_LICENSES +
-   THIRD_PARTY_NOTICES rows.
+   the meadow sets it; manual quality-tier plumbing (default High). *Verify:*
+   maintainer reads the F12 Performance panel on the 3D_E-0027 meadow — terrain
+   pass ≤ 3.0 ms and ≥ 60 FPS at High on RX 6600 (the automated CSV path waits on
+   meadow S6 — §6); CHANGELOG + ASSET_LICENSES + THIRD_PARTY_NOTICES rows added.
 
 Each slice is committed locally; the phase pushes when A5 lands green (§6 push
 cadence — public repo, batch push).
@@ -352,9 +417,11 @@ cadence — public repo, batch push).
 
 - **VRAM / repo size** from the arrays → 1K, packed material map, single set.
 - **Tiling still visible** despite distance+macro → hex-tiling is the escalation
-  (deferred, noted §2.4); design keeps the sample sites isolated so it can slot in.
-- **Perf regression** → quality tiers + profiler-gated default; Rule 5 logging for
-  any clamp.
+  (deferred, noted §2 item 4); design keeps the sample sites isolated so it can
+  slot in.
+- **Perf regression** → manual quality tiers (default High) + the F12-panel perf
+  read (§6); no automatic clamp this phase, so no Rule-5 clamp-logging obligation
+  yet — Rule 5 applies if a future phase adds an auto-tier-drop.
 - **Back-compat break** for flat-colour scenes → explicit `u_useGroundTextures`
   branch + fallback tests.
 
@@ -372,7 +439,38 @@ cadence — public repo, batch push).
 
 ## 13. Cold-eyes loop log
 
-_(Filled as the /cold-eyes loops run — findings + resolutions per loop. Design is
-not implemented until a pass converges with no substantive findings.)_
+_(Findings + resolutions per loop. Design is not implemented until a pass
+converges with no substantive findings.)_
 
-- Loop 1 — pending.
+**Loop 1 (2026-07-11)** — 3 independent cold reviewers (accuracy/conflicts;
+completeness/testability; project-rule compliance). Tally (deduped):
+CRITICAL 0 · HIGH 3 · MEDIUM 6 · LOW 6 · INFO 3 (all actionable verified against
+source; all fixed). All load-bearing code citations verified correct.
+
+- **Workbench roughness→specular fit had no slice owner + no parity test, and §5
+  denied a second dual-impl** (all 3 reviewers) → assigned to slice A2 (§9), added
+  a GGX-parity test (§7, R²≥0.99 / max-err≤0.05), listed as the 2nd dual-impl (§5).
+- **60 FPS "assert" implied an automated gate that doesn't exist** — the
+  `--profile-log` CSV logger is meadow S6 (unbuilt; only `profileLogPath` field),
+  the regression gate is 3D_E-0030 → rewrote §6/§7/§9 to a manual F12
+  Performance-panel read; added a **≤3.0 ms terrain-pass** ceiling.
+- **Auto quality-tier fallback ("dropped on lower GPUs") had no mechanism** →
+  stated tier is a manual setting (default High); auto-detection is future work.
+- **`§2.2/§2.3/§2.4` phantom cross-refs** (§2 is a flat list) → "§2 item N".
+- **RGB8 array banding risk vs project lesson** → §4.2 commits RGB8 + mandatory
+  `GL_UNPACK_ALIGNMENT=1` + PoT-width guarantee; reconciled the §7 hedge.
+- **Sample-count "+4" arithmetic / far-scale magic `0.25`** → distance-tiling is
+  albedo-only (+4); named `FAR_TILING_SCALE` with a Rule-6 TODO.
+- **"2K HDRI" precedent wrong** → cite 2K brick/plank + the 1K HDRI (~1.5 MB);
+  de-duped the asset-precedent prose against meadow design §6.
+- Also: added a TOC; quoted the terrain TODO verbatim; added the height-blend
+  `depth→0` degenerate test + Σb≥depth>0 invariant; marked all `--visual-test`
+  checks as maintainer inspection (no golden-image diff in-tree); trimmed §2 item
+  6 to note self-repacking.
+- **Surfaced to maintainer (code-side, not doc fixes):** `terrain.h:129`
+  doc-comment says the normal map is "RGB8" but `terrain.cpp:403` creates it
+  `GL_RGB16` — the design's §3 "RGB16" is correct; the header comment is the stale
+  one (fix during implementation).
+- INFO (not actioned): height-source `_disp`-vs-luminance choice (owned by A5).
+
+**Loop 2** — pending (cold re-read to confirm convergence).
