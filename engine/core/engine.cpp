@@ -2280,9 +2280,26 @@ void Engine::finalizeMeadowTerrain()
 
     // Auto-texture (grass / rock / sand from slope + altitude) then blend sand
     // into the pond shore. Both edit only the splatmap.
-    Terrain::AutoTextureConfig autoTex{};              // grass-dominant defaults
+    // Keep sand almost entirely UNDER the water. The default altitude-sand rule
+    // paints sand wherever normalized height < 0.08, which covers the whole pond
+    // bowl (floor ~0.05) — and the fbm noise (amp 0.12) spreads that bright sand
+    // band well above the waterline (~0.08). That was the white square halo.
+    // Drop the thresholds below the waterline and tighten the noise so grass
+    // runs almost to the water.
+    Terrain::AutoTextureConfig autoTex{};
+    autoTex.altitudeSandEnd = 0.05f;   // was 0.08 — sand only on the submerged floor
+    autoTex.altitudeSandStart = 0.0f;
+    autoTex.noiseAmplitude = 0.05f;    // was 0.12 — tighter shore, less sand bleeding uphill
     terrain.generateAutoTexture(autoTex);
-    Terrain::BankBlendConfig bankBlend{};              // sand into the shore
+
+    // A narrow brown *mud* waterline (dirt channel), not a wide white sand slab:
+    // grass meets the water with a damp muddy edge. Reeds + lily pads (slice 5)
+    // break up the straight water rectangle. (A perfectly round pond would need
+    // a round water mesh — a water-system feature, out of scope for this pass.)
+    Terrain::BankBlendConfig bankBlend{};
+    bankBlend.bankChannel = 2;      // dirt (brown mud), not sand (near-white here)
+    bankBlend.blendWidth = 4.0f;    // narrow damp edge
+    bankBlend.bankStrength = 0.5f;
     terrain.applyBankBlend(pondCenterXZ, pondHalfExtentXZ, bankBlend);
     terrain.updateSplatmapRegion(0, 0, W, D);
     terrain.buildQuadtree();
@@ -2376,6 +2393,176 @@ void Engine::finalizeMeadowTerrain()
 
         Logger::info("Meadow grass: " + std::to_string(m_foliageManager->getTotalFoliageCount())
             + " instances across " + std::to_string(m_foliageManager->getChunkCount()) + " chunks");
+    }
+
+    // --- Props (slice 5) -----------------------------------------------------
+    // Authored Kenney CC0 low-poly models (assets/models/nature/): trees,
+    // rocks, wildflowers/mushrooms/bushes, reeds, lily pads, a log. Each model
+    // is loaded ONCE and instantiated per scatter point (Model::instantiate
+    // reuses GPU data). scatterProps() gives deterministic jittered-grid
+    // placement; ground props take their Y from the sampled terrain height so
+    // they sit on the hills, lily pads sit on the water plane. propPath() checks
+    // a git-ignored assets/models/nature_local/<file> first, so the maintainer
+    // can drop in photoreal models without touching code (design §5.7).
+    // TODO: revisit via Formula Workbench — scatter densities/scales are
+    // art-directed (no reference dataset), hand-authored per project Rule 6.
+    {
+        namespace fs = std::filesystem;
+        const auto propPath = [](const std::string& file) -> std::string {
+            const std::string local = "assets/models/nature_local/" + file;
+            if (fs::exists(local))
+            {
+                return local;
+            }
+            return "assets/models/nature/" + file;
+        };
+
+        // Load each distinct model once, then round-robin the variants across a
+        // group's scatter points for cheap variety. onWater props sit on the
+        // pond surface; the rest follow the terrain height.
+        const auto scatterGroup = [&](const std::vector<std::string>& files,
+                                      uint32_t seed, const ScatterParams& params,
+                                      float yOffset, bool onWater) -> int {
+            std::vector<std::shared_ptr<Model>> models;
+            for (const std::string& f : files)
+            {
+                if (auto m = m_resourceManager->loadModel(propPath(f)))
+                {
+                    models.push_back(m);
+                }
+                else
+                {
+                    Logger::warning("Meadow prop model missing: " + f);
+                }
+            }
+            if (models.empty())
+            {
+                return 0;
+            }
+            int placed = 0;
+            const std::vector<ScatterPoint> pts = scatterProps(seed, params);
+            for (size_t i = 0; i < pts.size(); ++i)
+            {
+                const ScatterPoint& p = pts[i];
+                const float baseY = onWater ? waterLevelY : terrain.getHeight(p.x, p.z);
+                Entity* e = models[i % models.size()]->instantiate(*scene, nullptr, "Prop");
+                e->transform.position = glm::vec3(p.x, baseY + yOffset, p.z);
+                e->transform.rotation = glm::vec3(0.0f, p.yawDeg, 0.0f);
+                e->transform.scale = glm::vec3(p.scale);
+                ++placed;
+            }
+            return placed;
+        };
+
+        // Meadow world-XZ bounds (a margin in from the terrain border).
+        constexpr float PROP_MARGIN = 6.0f;
+        const glm::vec2 regionMin = {tcfg.origin.x + PROP_MARGIN,
+                                     tcfg.origin.z + PROP_MARGIN};
+        const glm::vec2 regionMax = {
+            tcfg.origin.x + static_cast<float>(W - 1) * tcfg.spacingX - PROP_MARGIN,
+            tcfg.origin.z + static_cast<float>(D - 1) * tcfg.spacingZ - PROP_MARGIN};
+        const float pondClear = POND_SIZE * 0.5f + 10.0f;  // keep big props off the shore
+
+        int propCount = 0;
+
+        // Trees — spread thinly across the meadow (sparse = meadow, not forest),
+        // kept well off the pond. The grid reaches the border, so the outermost
+        // trees form a loose treeline that masks the blurry 1K-HDRI horizon.
+        ScatterParams tree;
+        tree.regionMin = regionMin;
+        tree.regionMax = regionMax;
+        tree.cellSize = 28.0f;
+        tree.jitter = 0.8f;
+        tree.minDist = 12.0f;
+        tree.exclusionCenter = pondCenterXZ;
+        tree.exclusionRadius = pondClear + 6.0f;
+        tree.minScale = 1.3f;
+        tree.maxScale = 2.4f;
+        propCount += scatterGroup(
+            {"tree_oak.glb", "tree_pineDefaultA.glb", "tree_pineDefaultB.glb",
+             "tree_default.glb", "tree_fat.glb", "tree_detailed.glb"},
+            0xA11CE01u, tree, 0.0f, false);
+
+        // Rocks / boulders.
+        ScatterParams rock;
+        rock.regionMin = regionMin;
+        rock.regionMax = regionMax;
+        rock.cellSize = 34.0f;
+        rock.jitter = 0.85f;
+        rock.minDist = 12.0f;
+        rock.exclusionCenter = pondCenterXZ;
+        rock.exclusionRadius = pondClear;
+        rock.minScale = 0.8f;
+        rock.maxScale = 2.0f;
+        propCount += scatterGroup(
+            {"rock_largeA.glb", "rock_largeB.glb", "stone_tallA.glb",
+             "rock_smallA.glb", "rock_smallB.glb", "rock_smallC.glb"},
+            0x0B0DE5u, rock, 0.0f, false);
+
+        // Wildflowers, mushrooms, bushes — the dense small ground cover that
+        // breaks up the flat green. The largest draw-call load of the props
+        // (deliberate: this is a benchmark scene).
+        ScatterParams flower;
+        flower.regionMin = regionMin;
+        flower.regionMax = regionMax;
+        flower.cellSize = 14.0f;
+        flower.jitter = 0.9f;
+        flower.minDist = 0.0f;
+        flower.exclusionCenter = pondCenterXZ;
+        flower.exclusionRadius = pondClear - 4.0f;
+        flower.minScale = 0.7f;
+        flower.maxScale = 1.4f;
+        propCount += scatterGroup(
+            {"flower_purpleA.glb", "flower_redA.glb", "flower_yellowA.glb",
+             "mushroom_red.glb", "plant_bush.glb"},
+            0xF10E12u, flower, 0.0f, false);
+
+        // Reeds / tall plants ringing the pond shore: an annulus — inside the
+        // box around the pond, but outside the water edge (exclusion disc).
+        const float reedBox = POND_SIZE * 0.5f + 7.0f;
+        ScatterParams reed;
+        reed.regionMin = {pondCenterXZ.x - reedBox, pondCenterXZ.y - reedBox};
+        reed.regionMax = {pondCenterXZ.x + reedBox, pondCenterXZ.y + reedBox};
+        reed.cellSize = 3.0f;
+        reed.jitter = 0.9f;
+        reed.minDist = 1.2f;
+        reed.exclusionCenter = pondCenterXZ;
+        reed.exclusionRadius = POND_SIZE * 0.5f - 0.5f;  // just outside the water
+        reed.minScale = 0.8f;
+        reed.maxScale = 1.6f;
+        propCount += scatterGroup(
+            {"plant_flatTall.glb", "grass.glb", "plant_bush.glb"},
+            0x8EED50u, reed, 0.0f, false);
+
+        // Lily pads floating on the water surface (inside the pond, no exclusion
+        // disc). A small +Y offset keeps them just proud of the water.
+        const float lilyBox = POND_SIZE * 0.5f - 2.0f;
+        ScatterParams lily;
+        lily.regionMin = {pondCenterXZ.x - lilyBox, pondCenterXZ.y - lilyBox};
+        lily.regionMax = {pondCenterXZ.x + lilyBox, pondCenterXZ.y + lilyBox};
+        lily.cellSize = 2.5f;
+        lily.jitter = 0.8f;
+        lily.minDist = 1.5f;
+        lily.minScale = 0.8f;
+        lily.maxScale = 1.5f;
+        propCount += scatterGroup(
+            {"lily_large.glb", "lily_small.glb"}, 0x111A0u, lily, 0.05f, true);
+
+        // A fallen log or two near the shore.
+        const float logBox = POND_SIZE * 0.5f + 9.0f;
+        ScatterParams logs;
+        logs.regionMin = {pondCenterXZ.x - logBox, pondCenterXZ.y - logBox};
+        logs.regionMax = {pondCenterXZ.x + logBox, pondCenterXZ.y + logBox};
+        logs.cellSize = 12.0f;
+        logs.jitter = 0.9f;
+        logs.minDist = 8.0f;
+        logs.exclusionCenter = pondCenterXZ;
+        logs.exclusionRadius = POND_SIZE * 0.5f + 1.0f;
+        logs.minScale = 0.9f;
+        logs.maxScale = 1.4f;
+        propCount += scatterGroup({"log.glb"}, 0x106u, logs, 0.0f, false);
+
+        Logger::info("Meadow props: " + std::to_string(propCount) + " instances placed");
     }
 
     // --- Camera vantage ------------------------------------------------------
