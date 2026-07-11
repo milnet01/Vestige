@@ -1,9 +1,21 @@
 # Phase 10 — Meadow Demo & Profiling-Benchmark Scene (design)
 
 **Status:** draft — pending cold-eyes review loop (project Rule 9, global Rule 14).
+**Roadmap:** `3D_E-0027` (Phase 10 → Rendering Enhancements).
 **Author:** in-session 2026-07-11.
 **Owner subsystem:** `engine/core` (scene setup), `engine/environment` (terrain/foliage),
 `engine/scene` (water), plus asset + docs updates.
+
+---
+
+## Contents
+
+§1 Goal · §2 Approach · §3 Verified engine APIs (terrain / foliage / water /
+models / CLI / profiling) · §4 Scene layout · §5 Detailed design (selection,
+helpers, terrain, grass, pond, sky, props) · §6 Assets & licensing · §7 CPU/GPU
+placement · §8 Performance & benchmark methodology (§8.1 profiler CSV log) ·
+§9 Accessibility · §10 Implementation slices · §11 Testing · §12 Invariants ·
+§13 Cold-eyes loop log · §14 Sources.
 
 ---
 
@@ -117,7 +129,7 @@ path (demonstrated in `terrain_system.cpp:38-76`) fills heights with
 - `WaterSurfaceComponent` is an **entity component**; the water plane sits at the
   entity's transform Y (`getLocalWaterY()` returns 0). `WaterSurfaceConfig`
   fields (`water_surface.h:27`): `width, depth, gridResolution, numWaves,
-  waves[4]{amplitude,wavelength,speed,directionDeg}, shallowColor, deepColor,
+  waves[4]{amplitude,wavelength,speed,direction (degrees)}, shallowColor, deepColor,
   depthDistance, flowSpeed, specularPower, causticsEnabled, reflectionMode
   (default PLANAR), reflectionResolutionScale=0.25, refractionEnabled`.
 - The render loop auto-discovers water entities into `m_renderData.waterSurfaces`
@@ -133,9 +145,10 @@ path (demonstrated in `terrain_system.cpp:38-76`) fills heights with
 - Loaders: tinygltf (`.gltf`/`.glb`) + Wavefront `.obj` (verified present).
   Kenney `.glb` are vertex-coloured, embedded-material, no external textures.
 - **Do NOT** route these through `FoliageManager::addTreeDirect` /
-  `TreeRenderer` — that path renders **procedural billboard placeholders**
-  (`tree_renderer.h:65 createPlaceholderTree`), which is why the meadow uses
-  authored `.glb` via `instantiate`.
+  `TreeRenderer` — that path renders **procedural placeholder tree geometry**
+  (trunk + crown, `tree_renderer.h:65 createPlaceholderTree`; billboards are a
+  separate `createBillboardQuad` path), not authored models — which is why the
+  meadow uses authored `.glb` via `instantiate`.
 
 ### 3.5 CLI plumbing (three sites, mirroring `biblicalDemo`)
 - Arg parse: `app/main.cpp:139` (add `--material-demo` before the unknown-arg
@@ -144,17 +157,30 @@ path (demonstrated in `terrain_system.cpp:38-76`) fills heights with
   at `engine.h:105` (add `bool materialDemo=false`).
 - Branch: `engine.cpp:248-255` (`if biblicalDemo → setupTabernacleScene else →
   setupDemoScene`) becomes a three-way (§5.1).
+- The second new flag `--profile-log[=PATH]` (§8.1) takes an **optional** value.
+  Parse it with the `strncmp("--profile-log", ...)` prefix style already used by
+  `--isolate-feature=NAME` (`main.cpp:133`): bare `--profile-log` uses the
+  default path, `--profile-log=PATH` overrides it. It sets
+  `EngineConfig::profileLogPath` (not a scene branch).
 
 ### 3.6 Profiling (`engine/profiler/`, `engine/editor/panels/performance_panel.*`)
 - `PerformanceProfiler` (`performance_profiler.h`) owns a `GpuTimer`,
   `CpuProfiler`, `MemoryTracker`; driven by `beginFrame()` / `endFrame(dt)`.
   Getters: `getFps()`, `getFrameTimeMs()`, `getAvgFrameTimeMs()`,
   `getMin/MaxFrameTimeMs()`, `isEnabled()`/`setEnabled(bool)`.
-- `GpuTimer::getResults()` → `const std::vector<GpuPassTiming>&` (per-pass
-  name + ms; `gpu_timer.h:17,56`), `getTotalGpuTimeMs()`,
-  `hasResults()` (true once the double/triple-buffered queries are ready).
-- `CpuProfiler::getLastFrame()` → `const std::vector<ProfileEntry>&` (per-scope
-  name/depth/ms; `cpu_profiler.h:16,45`), `getTotalCpuTimeMs()`.
+- `GpuTimer::getResults()` → `const std::vector<GpuPassTiming>&`; each
+  `GpuPassTiming` is `{std::string name; float timeMs;}` (`gpu_timer.h:17,56`).
+  GPU passes are flat (no nesting). Also `getTotalGpuTimeMs()`, `hasResults()`
+  (true once the triple-buffered queries are ready).
+- `CpuProfiler::getLastFrame()` → `const std::vector<ProfileEntry>&`; each
+  `ProfileEntry` is `{const char* name; float startMs; float endMs; int
+  parentIndex; int depth;}` (`cpu_profiler.h:16,45`) — **scope duration is
+  `endMs − startMs`** (there is no single `ms` field), and scopes are
+  **hierarchically nested** (`depth`/`parentIndex`; a parent's span contains its
+  children — see §8.1 for how the CSV avoids double-counting). Also
+  `getTotalCpuTimeMs()`.
+- Memory: `MemoryTracker::getGpuUsedMB()` (`memory_tracker.h:44`) backs the
+  `mem` CSV row (§8.1).
 - The editor **Performance panel** (`performance_panel.h`, F12) already renders
   Overview/GPU/CPU/Memory/DrawCalls tabs from the above. The meadow is the
   fixture; the **only** new profiling code is the CSV logger (§8.1), which reads
@@ -222,10 +248,22 @@ the deterministic math (reuse + testability, global Rule 3):
 
 `MeadowShape`/`ScatterParams`/`ScatterPoint` are plain structs. `setupDemoScene()`
 calls these, then applies results through the GL-bound terrain/scene APIs. Tests
-target the pure functions (§8); the full build is covered by the visual-test
+target the pure functions (§11); the full build is covered by the visual-test
 harness + manual check.
 
+**On the numerical tuning (project Rule 6, Formula Workbench):** the height-field
+octave frequencies/amplitudes, scatter densities, and wave parameters are
+**art-directed** — there is no reference dataset to fit against, so they are
+hand-authored as named constants rather than routed through the Formula
+Workbench. Per Rule 6 they carry a `// TODO: revisit via Formula Workbench`
+comment at their definition site, so a future data-driven pass is discoverable.
+
 ### 5.3 Terrain reshape (in `setupDemoScene`)
+**Precondition:** the reshape edits the terrain `TerrainSystem::initialize()`
+already created (it fills a flat, initialized heightmap at engine init, before
+scene setup — §3.1). `setupDemoScene()` must therefore run after systems
+initialize (it does — the scene branch at `engine.cpp:248` is after the
+`m_terrain` assignment at `:239`); the code assumes `m_terrain->isInitialized()`.
 ```cpp
 Terrain& t = getTerrain();
 const int W = t.getWidth(), D = t.getDepth();
@@ -259,8 +297,12 @@ for (grid of stamp centres spaced ~2–3 m across the terrain interior) {
 // then eraseAllFoliage() discs around each placed prop + the pond
 ```
 `GRASS_DENSITY` and stamp spacing are named constants (the primary benchmark
-knob). Target tens of thousands of instances (the current demo already runs 10 k
-comfortably; the benchmark pushes higher to find the ceiling).
+knob). **Default `GRASS_DENSITY` targets ~40 k instances** (the current demo runs
+10 k comfortably); the constant is documented with a **tested range of ~10 k–120 k**
+so the sub-60 ceiling can be found deliberately without editing scatter logic.
+Because the count is deterministic (INV-7), each density value is a repeatable
+fixture. The upper bound (~120 k) is the guard against an accidental runaway
+paint that would OOM the instance buffer.
 
 ### 5.5 Pond
 ```cpp
@@ -269,14 +311,17 @@ pond->transform.position = {pondCenter.x, WATER_LEVEL_Y, pondCenter.z};
 auto* w = pond->addComponent<WaterSurfaceComponent>();
 auto& c = w->getConfig();
 c.width = c.depth = POND_SIZE;  c.gridResolution = 128;
-c.numWaves = 3;  c.waves[0]={0.004f,3.0f,0.2f,20.0f}; /* +2 */
+c.numWaves = 3;                                    // {amplitude,wavelength,speed,directionDeg}
+c.waves[0]={0.004f,3.0f,0.2f, 20.0f};
+c.waves[1]={0.003f,2.0f,0.15f,75.0f};
+c.waves[2]={0.002f,1.5f,0.25f,140.0f};
 c.shallowColor={0.15f,0.45f,0.5f,0.8f}; c.deepColor={0.02f,0.12f,0.28f,1.0f};
 c.reflectionMode = WaterReflectionMode::PLANAR;   // reflects sky + trees
 ```
 `WATER_LEVEL_Y` is chosen so the carved bowl floor is ~1–1.5 m below it.
 
 ### 5.6 Sky, sun, shadows
-Load a committed CC0 HDRI (`assets/hdri/<name>_2k.hdr`, §6) via the existing
+Load a committed CC0 **1K** HDRI (`assets/hdri/<name>_1k.hdr`, §6) via the existing
 equirectangular path (`Renderer::loadSkyboxHDRI` / `Skybox::loadEquirectangular`,
 verified present) and enable the skybox (the current demo disables it and uses a
 flat clear colour — the meadow enables it). Add one `DirectionalLightComponent`
@@ -286,7 +331,7 @@ already active. Bloom/SSAO/ACES stay as the demo sets them.
 ### 5.7 Props scatter + photoreal-later hook
 Load each distinct prop model **once**, then `instantiate()` per scatter point:
 ```cpp
-auto oak = m_resourceManager->loadModel(treePath("tree_oak.glb"));
+auto model = m_resourceManager->loadModel(treePath("tree_oak.glb"));
 for (auto& p : scatterProps(SEED_TREES, treeParams)) {
     Entity* e = model->instantiate(*scene, nullptr, "Tree");
     e->transform.position = {p.x, t.getHeight(p.x,p.z), p.z};
@@ -318,19 +363,30 @@ Finish with `scene->update(0.0f)` to compute world matrices.
   (`flower_{purple,red,yellow}A`), `plant_bush*`, `grass`, `plant_flatTall`
   (reeds), `lily_small/large`, `log`, `mushroom_red`. Total well under ~1 MB.
   Placed in `assets/models/nature/`.
-- **One CC0 Poly Haven HDRI**, 2K equirectangular (e.g. `meadow_2` or
-  `syferfontein_0d_clear`), `assets/hdri/`. ~1–4 MB.
+- **One CC0 Poly Haven sky HDRI**, **1K** equirectangular `.hdr` (e.g.
+  `syferfontein_0d_clear` ~1.0 MB or `meadow_2` ~1.5 MB), `assets/hdri/`.
 
-Both are consistent with the repo's existing posture (it already ships CC0/CC-BY
-models — Fox, CesiumMan — and CC0 Poly Haven textures). Add rows to
+**Asset-size policy reconciliation.** `ASSET_LICENSES.md` guidance is that assets
+**>1 MB** should "consider whether [they] belong in the future public assets
+repo," to keep clones small. The Kenney props are each a few KB (well under that
+line). The **one HDRI (~1.0–1.5 MB) is a deliberate, documented exception**: a
+sky source is required for the meadow's IBL + pond reflections, the `AtmosphereSystem`
+does not generate an IBL sky on its own, and 1K is the smallest size that still
+lights the scene believably (2K `.hdr` is ~4–6 MB and stays out). Higher-res
+sky variants are **not** committed — they can be dropped in via the `nature_local/`
+override (§5.7). The Kenney-model precedent matches the repo's existing CC0/CC-BY
+model posture (Fox, CesiumMan); note the public repo currently ships **no** HDRI
+(the only one, `tabernacle/goegap_2k.hdr`, is in the git-excluded tabernacle set),
+so this HDRI is a new committed-asset class, recorded as such. Add rows to
 `ASSET_LICENSES.md` and full attribution lines to `THIRD_PARTY_NOTICES.md`
 (Kenney credit is optional but included as courtesy; Poly Haven CC0 needs none).
 
-**Not committed:** scanned/photoreal trees (60–150 MB each; §1.1). The
-`nature_local/` override dir (§5.7) is git-ignored.
+**Not committed:** scanned/photoreal trees (60–150 MB each; §1.1) and 2K+ HDRIs.
+The `nature_local/` override dir (§5.7) is git-ignored.
 
 **Verification:** confirm each committed `.glb` loads via the engine's glTF
-loader during the assets slice (§9); confirm the HDRI loads via the skybox path.
+loader during the assets slice (§10, slice 2); confirm the HDRI loads via the
+skybox path.
 
 ---
 
@@ -391,29 +447,39 @@ So bottlenecks can be analysed off-panel and shared (user 2026-07-11), a small
 - **Format — long CSV** (robust to a variable pass set; trivial for an agent to
   pivot). Header written once on `open`:
   ```
-  time_s,category,name,ms,fps
-  12.0,frame,total,15.9,62.9
-  12.0,gpu,total,9.8,
-  12.0,gpu,ShadowPass,2.1,
-  12.0,gpu,WaterReflection,3.4,
-  12.0,gpu,Foliage,1.9,
-  12.0,cpu,total,4.2,
-  12.0,cpu,Culling,0.8,
-  12.0,mem,gpu_mb,512,
+  time_s,category,name,depth,ms,fps
+  12.0,frame,total,0,15.9,62.9
+  12.0,gpu,total,0,9.8,
+  12.0,gpu,ShadowPass,0,2.1,
+  12.0,gpu,WaterReflection,0,3.4,
+  12.0,gpu,Foliage,0,1.9,
+  12.0,cpu,total,0,4.2,
+  12.0,cpu,SceneUpdate,0,2.6,
+  12.0,cpu,Culling,1,0.8,
+  12.0,mem,gpu_mb,0,512,
   ```
   `category ∈ {frame,gpu,cpu,mem}`; `name` is the pass/scope; `ms` the interval
-  average; `fps` filled only on the `frame,total` row. Per-pass rows come
-  straight from `GpuTimer::getResults()` / `CpuProfiler::getLastFrame()`.
+  average; `fps` filled only on the `frame,total` row. The **`depth` column**
+  carries `ProfileEntry.depth` for CPU scopes (GPU passes are flat → `0`) so the
+  reader can see the nesting and sum **only `depth==0` rows** without
+  double-counting a parent's span against its children. Row sources:
+  - `gpu` rows ← `GpuTimer::getResults()` (`{name, timeMs}`, `depth=0`).
+  - `cpu` rows ← `CpuProfiler::getLastFrame()`, with **`ms = endMs − startMs`**
+    (there is no single duration field; §3.6) and `depth` carried through.
+  - `mem` row ← `MemoryTracker::getGpuUsedMB()`.
 - **Row assembly is a pure function** — `formatSampleRows(const ProfileSample&)
   → std::vector<std::string>` where `ProfileSample` is a plain struct of the
-  averaged values. This is unit-tested headlessly (§11); `sample()` just
-  aggregates into a `ProfileSample` and calls it.
+  averaged values (each entry already reduced to `{category,name,depth,ms}` so
+  the pure function does no timing math). This is unit-tested headlessly (§11);
+  `sample()` aggregates `getResults()`/`getLastFrame()` into a `ProfileSample`
+  (deriving `endMs − startMs`) and calls it.
 - **Triggers (two thin entry points over one `ProfileLog`):**
   1. **CLI** `--profile-log[=PATH]` — sets `EngineConfig::profileLogPath`;
      `Engine::initialize()` calls `profiler.setEnabled(true)` + `ProfileLog::open`.
      Default path `vestige_profile_<unix_ts>.csv` in the CWD. This lets a
-     headless / `--play` run capture data without the editor (so it can be
-     driven and the log read back for analysis).
+     `--play` (first-person, no editor UI) or `--visual-test` (the actual
+     headless-capable path used by CI) run capture data without the editor open,
+     so a run can be driven and the log read back for analysis.
   2. **Panel toggle** — a "⏺ Log to CSV" checkbox in the Performance panel
      opens/closes the same `ProfileLog` at the default path for interactive runs.
 - **Off by default:** no file, no throttled sampling, and (unless already on)
@@ -426,11 +492,13 @@ So bottlenecks can be analysed off-panel and shared (user 2026-07-11), a small
 
 ## 9. Accessibility
 
-- **Reduce-motion:** grass wind and water wave animation are motion. If a global
-  reduce-motion setting exists (Settings), the meadow honours it by damping wind
-  amplitude + water `flowSpeed` to ~0; otherwise this is noted as a follow-up
-  (do not invent a setting here). Verify the setting's presence during impl
-  (Rule 13) before wiring.
+- **Reduce-motion:** grass wind and water wave animation are motion. A global
+  reduce-motion setting **exists** — `Settings::reducedMotion` (`settings.h:314`,
+  alongside `reduceMotionFog`/`reduceMotionGi`). The meadow honours it by damping
+  grass wind amplitude + water `flowSpeed` to ~0 when set. During impl, confirm
+  how the grass/water shaders read the wind/flow uniforms and route the
+  reduce-motion flag through the same path the existing `reduceMotion*` toggles
+  use (Rule 13) before wiring.
 - Scene readability does not depend on colour alone (geometry + lighting carry
   it). No text is added.
 
@@ -458,7 +526,12 @@ So bottlenecks can be analysed off-panel and shared (user 2026-07-11), a small
    panel toggle; wire `sample()` after `endFrame`. *Verify:* `--profile-log`
    run produces a well-formed CSV with per-pass rows; row-format unit test
    green; no file / no overhead when the flag/toggle is off.
-7. **Docs/tests/CHANGELOG/ROADMAP** — finalize; full local-CI incl. Windows.
+7. **Docs/tests/CHANGELOG/ROADMAP** — finalize. **README drift:** update the
+   demo-scene description (`README.md:122` "no extra asset download is required
+   for the demo scene" is now false — the meadow bundles Kenney + an HDRI;
+   `README.md:141` `--play` "demo scene" now means the meadow) and add
+   `--material-demo` + `--profile-log` to the README CLI list. Flip ROADMAP
+   `3D_E-0027` to shipped. Full local-CI incl. Windows.
 
 ---
 
@@ -468,7 +541,8 @@ So bottlenecks can be analysed off-panel and shared (user 2026-07-11), a small
   gentle slopes, determinism); `scatterProps` (count, min-distance, exclusion
   disc honoured, determinism from seed); `--material-demo` + `--profile-log` arg
   parse set their fields; `formatSampleRows` (§8.1) emits a correct header +
-  one row per pass/scope with the right category/name/ms/fps columns.
+  one row per pass/scope with the right `category,name,depth,ms,fps` columns
+  (GPU rows `depth==0`; nested CPU scopes carry their `depth`).
 - **Visual-test harness** (`--visual-test`): meadow renders without GL errors /
   crashes (headless-capable path already used by CI).
 - **Manual (the one un-automated step):** launch the editor, confirm the meadow
@@ -489,7 +563,10 @@ So bottlenecks can be analysed off-panel and shared (user 2026-07-11), a small
 - **INV-5** `meadowHeight01` returns values in [0,1]; the pond-bowl floor is
   strictly below the rim height (so water has depth).
 - **INV-6** Committed assets are CC0/CC-BY with a matching `ASSET_LICENSES.md`
-  row; nothing over ~5 MB enters the repo.
+  row. Kenney props are each well under 1 MB; the **single 1K sky HDRI
+  (~1.0–1.5 MB) is the only committed asset over the repo's 1 MB guideline and is
+  documented as an explicit exception** (§6). Nothing else >1 MB enters the repo;
+  2K+ HDRIs and photoreal trees stay in `nature_local/` (git-ignored).
 - **INV-7** Scene is deterministic given fixed `SEED_*` (stable profiling
   fixture).
 - **INV-8** No new render pass or shader; terrain stays enabled
@@ -505,7 +582,19 @@ So bottlenecks can be analysed off-panel and shared (user 2026-07-11), a small
 ---
 
 ## 13. Cold-eyes loop log
-_(to be filled as loops run — project Rule 9 / global Rule 14)_
+
+- **Loop 1 (2026-07-11)** — 3 lanes (scene APIs / CLI+profiler+assets /
+  structure+rules). Tally: CRITICAL 0 · HIGH 2 · MEDIUM 7 · LOW 8 · INFO 2.
+  All verified & fixed. Notables: two broken §-anchors (§5.2→§11, §6→§10);
+  profiler CSV contract corrected (`ProfileEntry` has `startMs`/`endMs` not `ms`;
+  added a `depth` column so nested CPU scopes don't double-count; `GpuPassTiming`
+  field is `timeMs`); HDRI dropped 2K→1K and reconciled with the repo's 1 MB
+  asset-size guideline as a documented exception; Rule 6 (Formula Workbench)
+  art-directed note added; `GRASS_DENSITY` given a default + tested range;
+  README drift + `--material-demo`/`--profile-log` added to slice 7; ROADMAP
+  `3D_E-0027` created; reduce-motion confirmed shipped (`Settings::reducedMotion`);
+  `oak`/`model` snippet bug + `directionDeg`→`direction` + `terrain_system.cpp`
+  citation fixed; TOC added.
 
 ---
 
@@ -516,4 +605,5 @@ _(to be filled as loops run — project Rule 9 / global Rule 14)_
 - Poly Haven — CC0 HDRIs/models (api.polyhaven.com).
 - Existing scene builders: `setupDemoScene` (`engine.cpp:2166`),
   `setupTabernacleScene` (`engine.cpp:2545`), demo water/foliage
-  (`engine.cpp:2476-2537`), `TerrainSystem::initialize` (`terrain_system.cpp:38`).
+  (`engine.cpp:2476-2537`), `TerrainSystem::initialize` (`terrain_system.cpp:16`;
+  its proc-gen height loop at `:38-76`).
