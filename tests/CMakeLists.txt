@@ -7,6 +7,8 @@
 add_executable(vestige_tests
     gl_test_fixture.cpp
     shader_parity_helpers.cpp
+    test_cli_args.cpp
+    ../app/cli_args.cpp
     test_shader_parity_smoke.cpp
     test_ibl_parity.cpp
     test_bloom_parity.cpp

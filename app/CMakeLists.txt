@@ -4,7 +4,7 @@
 ## @file CMakeLists.txt
 ## @brief Build configuration for the Vestige application executable.
 
-add_executable(vestige main.cpp)
+add_executable(vestige main.cpp cli_args.cpp)
 
 target_link_libraries(vestige PRIVATE vestige_engine)
 

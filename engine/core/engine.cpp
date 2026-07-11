@@ -249,6 +249,10 @@ bool Engine::initialize(const EngineConfig& config)
     {
         setupTabernacleScene();
     }
+    else if (config.materialDemo)
+    {
+        setupMaterialDemoScene();
+    }
     else
     {
         setupDemoScene();
@@ -2165,7 +2169,16 @@ void Engine::drawLightGizmos(Scene& scene, const Selection& selection,
 
 void Engine::setupDemoScene()
 {
-    Logger::info("Setting up demo scene...");
+    // TODO(3D_E-0027, slices 3-5): build the natural meadow benchmark scene here
+    // (rolling terrain + carved pond + dense grass + CC0 props + HDRI sky). Until
+    // those slices land, fall back to the legacy material-test bench so the
+    // default launch stays functional and bisectable.
+    setupMaterialDemoScene();
+}
+
+void Engine::setupMaterialDemoScene()
+{
+    Logger::info("Setting up material-test demo scene...");
 
     // Renderer baseline for the public demo. The Tabernacle scene
     // overrides these values; keep them in sync when tuning either

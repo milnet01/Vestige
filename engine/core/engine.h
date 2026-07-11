@@ -103,6 +103,26 @@ struct EngineConfig
     /// it will see the tabernacle scene render with missing-texture
     /// fallbacks.
     bool biblicalDemo = false;
+
+    /// @brief Opt into the legacy material-test-cube demo (CLI: --material-demo).
+    ///
+    /// Default `false` — a fresh clone opens `setupDemoScene()` (the natural
+    /// meadow benchmark scene, ROADMAP 3D_E-0027). Setting this to `true` calls
+    /// `setupMaterialDemoScene()` instead, which builds the older row of numbered
+    /// PBR test cubes (materials / glass / emissive / skeletal-animation bench).
+    /// Kept so the material test bench is not lost when the default became the
+    /// meadow. `--biblical-demo` takes precedence over this flag.
+    bool materialDemo = false;
+
+    /// @brief Optional profiler CSV log path (CLI: --profile-log[=PATH]).
+    ///
+    /// Empty = no logging (default). When non-empty, `initialize()` enables the
+    /// profiler and opens a `ProfileLog` that appends ~1 Hz interval-averaged
+    /// per-pass CPU/GPU timings to this path, for off-panel bottleneck analysis
+    /// (see docs/phases/phase_10_meadow_benchmark_scene_design.md §8.1). The
+    /// sentinel used by the bare `--profile-log` form resolves to a
+    /// `vestige_profile_<unix_ts>.csv` default at open time.
+    std::string profileLogPath;
 };
 
 /// @brief The central engine — owns all subsystems and runs the main loop.
@@ -135,7 +155,8 @@ public:
     void shutdown();
 
 private:
-    void setupDemoScene();
+    void setupDemoScene();          ///< Default: natural meadow benchmark scene (3D_E-0027).
+    void setupMaterialDemoScene();  ///< Legacy PBR material-test cubes (CLI: --material-demo).
     void setupTabernacleScene();
     void setupVisualTestViewpoints();
     void drawLightGizmos(Scene& scene, const Selection& selection,
