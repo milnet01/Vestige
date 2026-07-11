@@ -161,7 +161,14 @@ private:
 
 - All four layers must share dimensions (array requirement). Loader validates and
   fails soft (`m_valid=false`) → fallback, logged once. Reuses the existing
-  `stb_image` texture-load path (async upload not required — one-time init).
+  `stb_image` **decode** path (`texture.cpp`), but builds the
+  `GL_TEXTURE_2D_ARRAY` directly (via `glTextureStorage3D` + per-layer
+  `glTextureSubImage3D`) — so the array does **not** inherit `texture.cpp`'s
+  per-texture filter/anisotropy setup and the loader must set them **explicitly**:
+  `GL_LINEAR_MIPMAP_LINEAR` min / `GL_LINEAR` mag, `GL_TEXTURE_MAX_ANISOTROPY`
+  (already used unguarded elsewhere in the engine — inherits that GL-4.6-core
+  assumption, no new risk), `REPEAT` wrap, then `glGenerateTextureMipmap`.
+  `GL_UNPACK_ALIGNMENT=1` around every layer upload (§4.2).
 - Owned by `TerrainRenderer` (rendering concern), set by the scene:
   `terrainRenderer.setGroundMaterials(std::move(set))`. Null/invalid = fallback.
 
@@ -213,9 +220,18 @@ Per-pixel algorithm when textures are on:
    `triBlend>0`, sample the layers triplanar (X/Y/Z world planes) and blend the
    three projections by geometric-normal weights; blend triplanar normals with
    **Whiteout** (Ben Golus, §2 item 3). `mix(topDown, triplanar, triBlend)`.
-5. **Detail normal → world.** Combine the blended tangent-space detail normal
-   with the macro terrain normal (`u_normalMap`) via Whiteout/RNM, so both the
-   large terrain shape and the fine material bumps light correctly.
+5. **Detail normal → world (construct the TBN — the terrain has none).** The
+   terrain mesh carries no tangent attribute and the fragment shader receives no
+   `v_tangent`/`v_normal` (only `v_terrainUV`, `v_worldPos`, `v_viewDepth`; the
+   surface normal is read from `u_normalMap`) — so the frame must be **built in
+   the shader**. For the **top-down** projection the UVs are world-XZ, which gives
+   a world-aligned tangent frame directly: `T = (1,0,0)`, `B = (0,0,1)`, geometric
+   `N` = the macro normal from `u_normalMap`. Apply the blended tangent-space
+   detail normal onto `N` with **Whiteout** (perturb along `T`/`B`, keep `N`'s
+   sign) to get the world detail normal. For **slope/triplanar** pixels use the
+   per-axis triplanar frames of Ben Golus's Whiteout method (§2 item 3), not this
+   single frame. The resulting world normal (macro + detail) replaces the
+   macro-only normal in lighting.
 6. **Shade.** Feed blended albedo + world normal + roughness + AO into the
    existing lighting (Blinn-Phong direct + ambient + CSM). Roughness modulates
    the existing specular term (lower roughness → tighter/stronger highlight); AO
@@ -287,15 +303,31 @@ steepness threshold (`triBlend>0`), which is a small fraction of a gentle meadow
   frame at High (its share of the budget); the before/after comparison is against
   this ceiling, not just "before/after".
 - **How it's measured (today):** the automated `--profile-log` CSV gate does
-  **not exist yet** — that logger is meadow slice **S6** of 3D_E-0027 (only an
-  unwired `EngineConfig::profileLogPath` field exists so far), and the CSV
-  *parsing/regression* gate is a separate future item (3D_E-0030). So Phase A's
-  perf check is a **manual maintainer read** of the editor **Performance panel**
-  (F12) — which already surfaces per-pass GPU-timer ms (`GpuTimer` →
-  `GpuPassTiming{name,timeMs}`) and FPS from the live `PerformanceProfiler` — on
-  the 3D_E-0027 meadow, comparing the terrain pass ms against the ≤3.0 ms ceiling
-  and total FPS against ≥60. Once S6 lands, the same numbers come from the CSV.
-- **Quality tiers** (wire into the existing `FormulaQualityManager` / settings):
+  **not exist yet** — the flag parses into `EngineConfig::profileLogPath` (with
+  unit tests) but has **no consumer**: there is no `profile_log.{h,cpp}` and
+  `engine.cpp` never reads the field. That logger is meadow slice **S6** of
+  3D_E-0027, and the CSV *parsing/regression* gate is a separate future item
+  (3D_E-0030). So Phase A's perf check is a **manual maintainer read** of the
+  editor **Performance panel** — which already surfaces per-pass GPU-timer ms
+  (`GpuTimer` → `GpuPassTiming{name,timeMs}`) and FPS from the live
+  `PerformanceProfiler` — on the 3D_E-0027 meadow, comparing the terrain pass ms
+  against the ≤3.0 ms ceiling and total FPS against ≥60. (The panel is registered
+  under shortcut F12 in the panel registry; note `README.md` still lists F12 as
+  "toggle fullscreen" — a pre-existing code/doc conflict to reconcile separately,
+  so open it via the `Window → Performance` menu if the shortcut is ambiguous.)
+  Once S6 lands, the same numbers come from the CSV.
+- The **≤ 3.0 ms** terrain-pass figure is an **initial target** (roughly a fifth
+  of the 16.6 ms frame, leaving room for grass + water + shadows + props + post),
+  not a derived bound — it is refined against the first measured baseline on the
+  meadow.
+- **Quality tiers — a graphics setting, NOT `FormulaQualityManager`.** These tiers
+  *toggle shader features* (drop the distance-tiling second sample, drop detail
+  normals, disable triplanar textures), which is a different axis from
+  `FormulaQualityManager`'s `FULL / APPROXIMATE / LUT` (that enum selects a
+  *formula's evaluation accuracy* — the right home only for the §4.4 roughness→
+  specular formula, not for feature gating). The feature tiers are a global
+  **graphics-quality `Setting`** (High/Medium/Low) driving shader `#define`s /
+  a uniform:
   - **High** — all layers, distance-tiling + macro variation, detail normals,
     height-blend.
   - **Medium** — drop the distance-tiling second sample; keep detail normals +
@@ -304,13 +336,12 @@ steepness threshold (`triBlend>0`), which is a small fraction of a gentle meadow
     triplanar textures (flat-colour on slopes). Roughly the current cost.
 - Mip + anisotropy are mandatory (minification without mips is both ugly *and*
   slow via cache thrash).
-- **Tier selection is a manual setting** (default **High**), plumbed through the
-  existing `FormulaQualityManager` / settings. There is **no automatic
-  GPU-capability detection or frame-time watchdog this phase** — `FormulaQuality
-  Manager` is a manual tier setter, not an auto-detector. Auto-detecting a lower
-  GPU and dropping a tier by default is explicitly **future work** (a settings /
-  quality-manager enhancement), not part of Phase A. If a later phase adds such an
-  automatic clamp, it is logged per project Rule 5.
+- **Tier selection is a manual graphics `Setting`** (default **High**). There is
+  **no automatic GPU-capability detection or frame-time watchdog this phase**.
+  Auto-detecting a lower GPU and dropping a tier by default is explicitly
+  **future work** (it also relates to the shipped-game graphics-settings menu,
+  3D_E-0035), not part of Phase A. If a later phase adds such an automatic clamp,
+  it is logged per project Rule 5.
 
 ---
 
@@ -321,11 +352,15 @@ steepness threshold (`triBlend>0`), which is a small fraction of a gentle meadow
   test that it matches the GLSL formula on hand-picked cases (single dominant
   layer → weight 1; equal heights+weights → equal split; a high-height low-weight
   layer still peeks through), and that weights sum to 1 and are non-negative.
-  Also covers the degenerate **`depth → 0`** case (the normalisation divisor is
-  `Σb_i`; because `ma = max_i(h_i+w_i) − depth`, the peak layer has
-  `b_peak = depth`, so `Σb_i ≥ depth`, i.e. `depth > 0` guarantees a positive
-  divisor — assert the function returns the single-peak weighting at `depth=0`
-  without a divide-by-zero, so the implementer adds no needless epsilon).
+  **Divisor safety.** The normalisation divisor is `Σb_i`; because
+  `ma = max_i(h_i+w_i) − depth`, the peak layer has `b_peak = depth`, so
+  `Σb_i ≥ depth`. Therefore **any `depth > 0` guarantees a positive divisor** — no
+  runtime epsilon is needed, because `DEPTH` is a positive constant (~0.2; valid
+  authored range ~[0.05, 0.5]). The parity test asserts safety at the **smallest
+  supported depth (0.05)**, not at `depth = 0`. `depth = 0` is **out of the valid
+  range** (there every `b_i = 0` → `Σb = 0`, a genuine 0/0); the function's
+  contract is `depth > 0`, and a debug assert guards it — the test verifies that
+  assert fires, rather than expecting a defined blend at zero.
 - **Roughness → specular parity (unit).** The Workbench-exported
   `roughness → (shininess, scale)` fit (§4.4 item 1) is checked against its
   GGX/Cook-Torrance reference dataset: the exported C++ form matches the reference
@@ -362,12 +397,14 @@ steepness threshold (`triBlend>0`), which is a small fraction of a gentle meadow
 - **Resolution: 1K** committed (albedo as JPG, normal + material as PNG). Est.
   ~4 layers × ~1.2 MB ≈ **~5 MB** total. This sits above the `ASSET_LICENSES.md`
   soft >1 MB "consider the future assets repo" line, but the repo already tracks
-  >1 MB CC0 assets under the same guidance — the **2K** `red_brick` / `brick_wall`
-  / `plank_flooring` texture sets (`ASSET_LICENSES.md:121-123`) and the committed
-  **1K** `syferfontein_0d_clear_1k.hdr` (~1.5 MB) — so this is consistent
-  precedent (see the meadow design §6 for the full >1 MB-precedent rationale;
-  documented = compliant). 2K variants drop in via a git-ignored override later
-  (mirrors the `nature_local/` pattern).
+  >1 MB CC0 assets under the same guidance — the 2K `red_brick` / `brick_wall` /
+  `plank_flooring` sets (`ASSET_LICENSES.md:121-123`) and the 1K
+  `syferfontein_0d_clear_1k.hdr` (~1.5 MB) — consistent precedent (meadow design
+  §6 has the full rationale). Note the repo's direction is externalization: the
+  **4K** originals were already moved to a `VestigeAssets` side-repo to keep
+  engine clones small (`ASSET_LICENSES.md:126`), so higher-res terrain variants
+  likewise stay out, dropping in via a git-ignored override (mirrors
+  `nature_local/`).
 - Committed under `assets/textures/terrain/`. `copy_assets` globs `assets/` so no
   CMake change (same as the meadow model/HDRI subdirs).
 
@@ -385,13 +422,19 @@ steepness threshold (`triBlend>0`), which is a small fraction of a gentle meadow
    Workbench, wire the GLSL into the shader. *Verify:* roughness→specular parity
    test green (§7); maintainer inspection of `--visual-test` — meadow ground reads
    as textured grass, Tabernacle unchanged.
-3. **A3 — Detail normals + triplanar (Whiteout).** Detail normal → world via
-   macro-normal combine; triplanar textures on slopes. *Verify:* maintainer
-   inspection of `--visual-test` — bumps light correctly; no stretching on the
-   pond-bowl banks.
+3. **A3 — Detail normals + triplanar (Whiteout).** Detail normal → world via the
+   shader-built TBN (§4.3 point 5); triplanar textures on slopes. *Verify:*
+   **objective** — shader compiles + links and a frame renders with **zero GL
+   errors** (`glGetError`), and a unit test on the extracted pure
+   `whiteoutBlend(macroN, detailN)` helper asserts the blended normal differs from
+   the macro normal by > ε for a non-flat detail sample and is unit-length; **plus**
+   maintainer inspection of `--visual-test` (bumps light correctly; no stretching
+   on the pond-bowl banks).
 4. **A4 — Tiling break-up.** Distance-tiling (albedo, §4.3 point 1) + macro
-   variation. *Verify:* maintainer inspection of `open_meadow` — no obvious
-   repetition across the 256 m field.
+   variation. *Verify:* **objective** — a unit test on the pure distance-blend
+   helper asserts the near/far mix follows the `smoothstep` over the
+   `u_distanceTiling` range (near→far endpoints + a midpoint); **plus** maintainer
+   inspection of `open_meadow` (no obvious repetition across the 256 m field).
 5. **A5 — Assets + wire-up + quality tiers + perf.** Commit the CC0 layer set;
    the meadow sets it; manual quality-tier plumbing (default High). *Verify:*
    maintainer reads the F12 Performance panel on the 3D_E-0027 meadow — terrain
@@ -473,4 +516,32 @@ source; all fixed). All load-bearing code citations verified correct.
   one (fix during implementation).
 - INFO (not actioned): height-source `_disp`-vs-luminance choice (owned by A5).
 
-**Loop 2** — pending (cold re-read to confirm convergence).
+**Loop 2 (2026-07-11)** — 3 independent cold reviewers (same lanes, not briefed
+on loop-1 fixes). Tally (deduped): CRITICAL 0 · HIGH 2 · MEDIUM 5 · LOW 6 ·
+INFO 3. Loop-1 fixes all held (no regressions raised); new findings:
+
+- **`FormulaQualityManager` reuse doesn't fit** (all 3 reviewers) — its enum is
+  `FULL/APPROXIMATE/LUT` (per-formula *accuracy*), not a render-feature toggle →
+  the High/Med/Low feature tiers are now a global graphics `Setting` (shader
+  `#define`s), NOT FQM; only the §4.4 roughness formula could live in FQM.
+- **Detail-normal step assumed a TBN the terrain mesh lacks** (R1) — the terrain
+  has no tangent attribute → §4.3 point 5 now specifies the shader-built
+  world-XZ tangent frame (top-down) + per-axis triplanar frames (slopes).
+- **`depth→0` test was self-contradictory** (2 reviewers — my loop-1 error) →
+  reworded: `depth>0` is the contract (safe divisor `Σb≥depth`), test the smallest
+  supported depth (0.05) + assert the debug guard fires at 0, not a defined blend.
+- **A3/A4 had eyeball-only verify** (R2) → added objective checks (GL-error-free
+  compile + `whiteoutBlend` unit test for A3; distance-blend `smoothstep` unit
+  test for A4) alongside the visual inspection.
+- LOW: made anisotropy/filter setup explicit in the loader contract (§4.1);
+  reworded the `profileLogPath` "unwired field" → "parsed, no consumer"; noted the
+  F12/README fullscreen conflict + `Window → Performance` fallback; marked ≤3.0 ms
+  as an initial target; trimmed §8 precedent + noted the 4K-externalization trend.
+- **Surfaced to user (scope):** whether the Workbench GGX roughness→specular fit
+  (§4.4 item 1) is worth a second dual-impl + parity test for a matte-ground phase
+  (Rule 2/9), or a simpler inline curve suffices — pending decision.
+- **Surfaced (code-side):** `terrain.h:129` "RGB8" + `engine.h:118-124` present-
+  tense `ProfileLog` doc-comments are stale (fix at implementation).
+
+**Loop 3** — pending (after the §4.4 scope decision; cold re-read to confirm
+convergence).
