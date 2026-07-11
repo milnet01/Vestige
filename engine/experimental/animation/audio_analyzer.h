@@ -8,7 +8,6 @@
 #include "experimental/animation/viseme_map.h"
 
 #include <cstddef>
-#include <vector>
 
 namespace Vestige
 {
@@ -59,9 +58,6 @@ public:
     void reset();
 
 private:
-    /// @brief Performs radix-2 Cooley-Tukey FFT in-place.
-    static void computeFFT(std::vector<float>& real, std::vector<float>& imag);
-
     float m_rms = 0.0f;
     float m_spectralCentroid = 0.0f;
     bool m_hasSpectralData = false;

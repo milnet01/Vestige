@@ -297,6 +297,8 @@ set(ENGINE_SOURCES
     audio/audio_ambient.cpp
     audio/audio_music.cpp
     audio/audio_mixer.cpp
+    audio/audio_spectrum.cpp
+    audio/audio_mix_monitor.cpp
     audio/audio_music_stream.cpp
     audio/audio_music_player.cpp
     audio/audio_source_state.cpp

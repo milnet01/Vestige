@@ -176,6 +176,8 @@ add_executable(vestige_tests
     test_audio_ambient.cpp
     test_audio_music.cpp
     test_audio_mixer.cpp
+    test_audio_spectrum.cpp
+    test_audio_mix_monitor.cpp
     test_audio_source_component.cpp
     test_audio_source_state.cpp
     test_audio_music_stream.cpp

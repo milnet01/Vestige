@@ -8,6 +8,8 @@
 /// No external dependencies — pure C++17 implementation.
 #include "experimental/animation/audio_analyzer.h"
 
+#include "audio/audio_spectrum.h"  // shared radix-2 computeFFT (extracted, AX12)
+
 #include <algorithm>
 #include <cmath>
 
@@ -186,68 +188,6 @@ void AudioAnalyzer::reset()
     m_rms = 0.0f;
     m_spectralCentroid = 0.0f;
     m_hasSpectralData = false;
-}
-
-// ---------------------------------------------------------------------------
-// Radix-2 Cooley-Tukey FFT (in-place, decimation-in-time)
-// ---------------------------------------------------------------------------
-
-/*static*/ void AudioAnalyzer::computeFFT(std::vector<float>& real, std::vector<float>& imag)
-{
-    size_t n = real.size();
-
-    // Bit-reversal permutation
-    for (size_t i = 1, j = 0; i < n; ++i)
-    {
-        size_t bit = n >> 1;
-        while (j & bit)
-        {
-            j ^= bit;
-            bit >>= 1;
-        }
-        j ^= bit;
-
-        if (i < j)
-        {
-            std::swap(real[i], real[j]);
-            std::swap(imag[i], imag[j]);
-        }
-    }
-
-    // Butterfly stages
-    for (size_t len = 2; len <= n; len <<= 1)
-    {
-        float angle = -2.0f * static_cast<float>(kPi) / static_cast<float>(len);
-        float wReal = std::cos(angle);
-        float wImag = std::sin(angle);
-
-        for (size_t i = 0; i < n; i += len)
-        {
-            float curReal = 1.0f;
-            float curImag = 0.0f;
-
-            for (size_t j = 0; j < len / 2; ++j)
-            {
-                size_t u = i + j;
-                size_t v = i + j + len / 2;
-
-                // Butterfly operation
-                float tReal = curReal * real[v] - curImag * imag[v];
-                float tImag = curReal * imag[v] + curImag * real[v];
-
-                real[v] = real[u] - tReal;
-                imag[v] = imag[u] - tImag;
-                real[u] += tReal;
-                imag[u] += tImag;
-
-                // Advance twiddle factor
-                float nextReal = curReal * wReal - curImag * wImag;
-                float nextImag = curReal * wImag + curImag * wReal;
-                curReal = nextReal;
-                curImag = nextImag;
-            }
-        }
-    }
 }
 
 } // namespace Vestige
