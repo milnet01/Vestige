@@ -513,6 +513,24 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
   Kind: feature.
   Source: in-session-2026-07-11.
 
+- 📋 [3D_E-0028] **Optimise the planar-reflection water pass — cull + LOD + throttle the reflection render.**
+  The planar-reflection water pass re-renders the scene into a reflection FBO every frame — a top suspected hotspot in any scene with visible water. Add: (1) reflection-frustum + above-water-plane culling so only potential reflectors draw; (2) a reduced-detail reflection draw (drop small props/grass beyond N m, coarser shadows/LOD); (3) optional N-frame throttling of the reflection update for distant/near-static water. reflectionResolutionScale is already 0.25. Fixture: the deterministic 3D_E-0027 meadow benchmark (its pond makes this measurable). Investigate first via the profiler CSV, then implement the highest-ROI lever.
+  **Layman:** Water mirrors the world by secretly drawing the whole scene twice; make that second pass much cheaper.
+  Kind: perf.
+  Source: in-session-2026-07-11 (perf sweep; fixture 3D_E-0027).
+
+- 📋 [3D_E-0029] **Cache static-geometry shadow maps + throttle far CSM cascade updates.**
+  Terrain, static props, and most grass don't move, yet the cascaded shadow map re-rasterises them into every cascade every frame. Investigate/implement: a cached static-caster depth per cascade (re-render only moving casters on top), and updating the outer/large cascades every N frames instead of every frame. Expected win grows with caster count — the meadow benchmark (dense grass + many props, all shadow-casting) is the fixture. Watch the ShadowPass GPU timing in the profiler CSV before/after.
+  **Layman:** Stop re-drawing shadows for things that never move every single frame.
+  Kind: perf.
+  Source: in-session-2026-07-11 (perf sweep; fixture 3D_E-0027).
+
+- 📋 [3D_E-0030] **Automated performance-regression gate from the meadow benchmark + profiler CSV.**
+  Turn the deterministic 3D_E-0027 meadow benchmark into a guard-rail: run it headless (--visual-test + --profile-log), parse the profiler CSV, and warn/fail CI when frame-time or a key per-pass GPU cost regresses beyond a threshold vs a committed baseline. Deferred out of 3D_E-0027's scope by design (that phase adds no CI perf-gate). Depends on the profiler CSV logger landing in 3D_E-0027. Start as an investigate: pick the metrics, thresholds, and baseline-refresh policy that avoid flakiness on shared CI runners.
+  **Layman:** Make the computer automatically warn us if a change makes the engine slower.
+  Kind: investigate.
+  Source: in-session-2026-07-11 (perf sweep; extends 3D_E-0027).
+
 ### Fog, Mist, and Volumetric Lighting
 - [x] Distance fog (linear, exponential, exponential-squared) — pure-function primitives shipped in `engine/renderer/fog.{h,cpp}`. `FogMode` enum (`None` / `Linear` / `Exponential` / `ExponentialSquared`) + `FogParams` (linear-RGB colour, start, end, density). `computeFogFactor(mode, params, distance)` implements the three canonical forms: Linear `(end-d)/(end-start)`, GL_EXP `exp(-density·d)`, GL_EXP2 `exp(-(density·d)²)` — returns *surface visibility* in [0,1], matches OpenGL Red Book §9 / D3D9 fog-formulas. Guards every degenerate param (zero span, negative density, sub-camera distance) with pass-through behaviour. 15 unit tests cover knees, monotonicity, and edge cases.
 - [x] Height fog — exponential fog that thickens below a configurable altitude (ground-hugging mist, valley fog). `HeightFogParams` (colour, fogHeight, groundDensity, heightFalloff, maxOpacity) + closed-form `computeHeightFogTransmittance(params, cameraY, rayDirY, rayLength)` — Quílez 2010 analytic integral of `d(y) = a·exp(-b·(y - fogHeight))` along a view ray. Uses `expm1` for numerical stability near horizontal rays; separate `|rd.y| < 1e-5` branch collapses to Beer-Lambert so the horizon line stays smooth. `maxOpacity` clamp mirrors UE `FogMaxOpacity` so the sky doesn't fully vanish on long sightlines. 7 unit tests cover zero-length, zero-density, monotonic decay, horizontal ↔ Beer-Lambert equivalence, altitude thinning, maxOpacity floor, small-angle ↔ horizontal-branch agreement. **Desert heat haze** variant (subtle distortion) is a follow-up.
