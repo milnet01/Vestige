@@ -10260,6 +10260,20 @@ existing cases (``HelpersMatchEvaluatorPrecisely``,
 
 ### Added
 
+- **Editor audio spectrum / waveform viewer (AX12)**
+  The Audio panel's Debug tab now shows a live "mini audio-analyzer": a
+  log-frequency dB spectrum, a min/max-envelope scrolling waveform, and a
+  per-bus solo/select row (Music + procedural Sfx), plus a Freeze-waveform
+  toggle and a clip indicator. Producers (streaming music, procedural synth)
+  push a normalized copy of what they generate into a new per-bus AudioMixMonitor
+  only while the tab is open (zero cost otherwise); the graph reflects the
+  CPU-generated content mix (frequency balance + levels), not the post-
+  spatialization speaker output. Solo mutes the other buses on the live output
+  without affecting voice-eviction or occlusion. Reuses the in-repo radix-2 FFT
+  (extracted to engine/audio/audio_spectrum) and the already-vendored ImPlot —
+  no new dependency. Design: docs/phases/phase_10_audio_spectrum_viewer_design.md
+  (5 cold-eyes loops).
+
 - **Formula Workbench `audio` template category (procedural-audio bundle S1)**
   New `audio` category in the Formula Workbench template library (the 15th,
   joining physics/rendering/terrain/…): impact_loudness_gain (approach speed →
