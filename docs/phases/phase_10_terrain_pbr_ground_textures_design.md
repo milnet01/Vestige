@@ -1,7 +1,8 @@
 # Phase 10 — Meadow Realism A: PBR Ground Textures on Terrain
 
 **Roadmap:** 3D_E-0031 (Meadow realism A). Fixture/benchmark: 3D_E-0027 meadow.
-**Status:** DRAFT — pending cold-eyes convergence (§13) before implementation.
+**Status:** SIGNED OFF (2026-07-11) — cold-eyes converged at loop 3 (§13). Ready
+for implementation (slices A1–A5, §9).
 **Author:** in-session 2026-07-11 (user-requested realism overhaul).
 
 **Contents:** [1 Goal](#1-goal) · [2 Research](#2-research-summary-what-current-practice-recommends) · [3 Current state](#3-current-state-verified-against-source) · [4 Architecture](#4-architecture) · [5 CPU/GPU placement](#5-cpu--gpu-placement-project-rule-7) · [6 Performance](#6-performance-60-fps-is-a-hard-requirement) · [7 Testing](#7-testing) · [8 Assets & licensing](#8-assets--licensing) · [9 Implementation slices](#9-implementation-slices) · [10 Accessibility](#10-accessibility) · [11 Risks](#11-risks--mitigations) · [12 Open questions](#12-open-questions-for-review) · [13 Cold-eyes log](#13-cold-eyes-loop-log)
@@ -69,7 +70,8 @@ Terrain texturing is a well-trodden area; the current-practice consensus:
    on **Whiteout blend** as the desktop sweet spot (RNM is best-quality but
    costlier; UDN flattens past 45°). The engine's terrain shader already has a
    triplanar path (`u_triplanarEnabled/Sharpness/Start/End`) for the flat-colour
-   version — we extend it to textures.
+   version (with `u_textureTiling` as the world-space UV scale) — we extend it to
+   textures.
 
 4. **Break tiling repetition.** Two cheap, composable techniques, both from the
    UE/landscape playbook: **distance-based tiling** (sample the albedo at two
@@ -180,6 +182,16 @@ private:
 | normal   | `GL_RGB8` (linear) | 4 | tangent-space, +Z up |
 | material | `GL_RGB8` (linear) | 4 | R=AO, G=Roughness, B=Height |
 
+**Why RGB8 detail normals are fine here** (the macro normal is deliberately
+`GL_RGB16` — `terrain.cpp:390` notes 8-bit gave "only ~6 codes"). That lesson is
+about a *single* normal spanning the whole 256 m terrain, where 8-bit quantises
+the gentle large-scale slope into visible terraces. The layer normals here are
+**tiled, high-frequency tangent-space** maps (many repeats across the terrain) —
+the standard 8-bit normal-map case, where per-texel precision is ample and the
+terracing failure mode doesn't arise. (The B=Height channel is likewise 8-bit
+~51 levels inside the 0.2 blend band — watch for stair-stepping during A2's
+visual check; bump to a 16-bit material array only if it shows.)
+
 Bound at units **6/7/8** (4 free; leaves 5=caustics). Trilinear + anisotropic
 filtering, `REPEAT` wrap, full mip chain (`glGenerateTextureMipmap`).
 
@@ -225,18 +237,23 @@ Per-pixel algorithm when textures are on:
    `v_tangent`/`v_normal` (only `v_terrainUV`, `v_worldPos`, `v_viewDepth`; the
    surface normal is read from `u_normalMap`) — so the frame must be **built in
    the shader**. For the **top-down** projection the UVs are world-XZ, which gives
-   a world-aligned tangent frame directly: `T = (1,0,0)`, `B = (0,0,1)`, geometric
-   `N` = the macro normal from `u_normalMap`. Apply the blended tangent-space
-   detail normal onto `N` with **Whiteout** (perturb along `T`/`B`, keep `N`'s
-   sign) to get the world detail normal. For **slope/triplanar** pixels use the
+   a world-aligned tangent frame: `T = (1,0,0)`, `B = (0,0,1)`, geometric `N` =
+   the macro normal from `u_normalMap`. (This triad is exactly orthonormal only
+   when `N` is vertical; on gentle non-vertical slopes still below the triplanar
+   threshold `N` tilts slightly and `T·N ≠ 0` — the small residual skew is
+   accepted on meadow-grade terrain.) Apply the blended tangent-space detail
+   normal onto `N` with **Whiteout** (perturb along `T`/`B`, keep `N`'s sign) to
+   get the world detail normal. For **slope/triplanar** pixels use the
    per-axis triplanar frames of Ben Golus's Whiteout method (§2 item 3), not this
    single frame. The resulting world normal (macro + detail) replaces the
    macro-only normal in lighting.
 6. **Shade.** Feed blended albedo + world normal + roughness + AO into the
-   existing lighting (Blinn-Phong direct + ambient + CSM). Roughness modulates
-   the existing specular term (lower roughness → tighter/stronger highlight); AO
-   multiplies ambient. `tilingDetail()` brightness stays as a subtle macro
-   variation multiplier.
+   existing lighting (Blinn-Phong direct + ambient + CSM). The Blinn-Phong
+   *structure* stays, but its currently-fixed constants (`pow(NdotH,64)*0.15`)
+   become **roughness-driven**: roughness maps to the `(shininess, scale)` pair
+   via the Workbench fit of §4.4 item 1 (lower roughness → tighter/stronger
+   highlight). AO multiplies ambient. `tilingDetail()` brightness stays as a
+   subtle macro-variation multiplier.
 
 `heightBlendWeights()` is factored as a **pure function** mirrored on CPU
 (`terrain_material_blend.h`) for a parity test (§7, project Rule 7).
@@ -308,18 +325,19 @@ steepness threshold (`triBlend>0`), which is a small fraction of a gentle meadow
   `engine.cpp` never reads the field. That logger is meadow slice **S6** of
   3D_E-0027, and the CSV *parsing/regression* gate is a separate future item
   (3D_E-0030). So Phase A's perf check is a **manual maintainer read** of the
-  editor **Performance panel** — which already surfaces per-pass GPU-timer ms
-  (`GpuTimer` → `GpuPassTiming{name,timeMs}`) and FPS from the live
-  `PerformanceProfiler` — on the 3D_E-0027 meadow, comparing the terrain pass ms
-  against the ≤3.0 ms ceiling and total FPS against ≥60. (The panel is registered
-  under shortcut F12 in the panel registry; note `README.md` still lists F12 as
-  "toggle fullscreen" — a pre-existing code/doc conflict to reconcile separately,
-  so open it via the `Window → Performance` menu if the shortcut is ambiguous.)
-  Once S6 lands, the same numbers come from the CSV.
+  editor **Performance panel** (registered in the `PanelRegistry`, drawn in the
+  editor dockspace; its GPU tab lists per-pass `GpuTimer` →
+  `GpuPassTiming{name,timeMs}` and FPS from the live `PerformanceProfiler`). The
+  terrain cost is the **named `beginPass("Terrain")` GPU scope** (`engine.cpp`),
+  read on the 3D_E-0027 meadow against the ≤3.0 ms ceiling; FPS against ≥60. Once
+  S6 lands, the same numbers come from the CSV. *(Note: do **not** rely on F12 to
+  open the panel — F12 is bound to toggle-fullscreen (`engine.cpp:392`,
+  `README.md`); the panel's own `shortcut()=="F12"` is unwired display metadata, a
+  code/code collision to reconcile separately.)*
 - The **≤ 3.0 ms** terrain-pass figure is an **initial target** (roughly a fifth
   of the 16.6 ms frame, leaving room for grass + water + shadows + props + post),
-  not a derived bound — it is refined against the first measured baseline on the
-  meadow.
+  not a derived bound. A5 records the **current flat-colour terrain-pass cost as
+  the baseline** at first measurement, then refines the ceiling against it.
 - **Quality tiers — a graphics setting, NOT `FormulaQualityManager`.** These tiers
   *toggle shader features* (drop the distance-tiling second sample, drop detail
   normals, disable triplanar textures), which is a different axis from
@@ -367,8 +385,10 @@ steepness threshold (`triBlend>0`), which is a small fraction of a gentle meadow
   within tolerance (**R² ≥ 0.99** and **max abs error ≤ 0.05** on the normalised
   specular response over the roughness × NdotH grid), and the C++ and GLSL
   codegen agree — the Rule-7 parity lock before it ships.
-- **Material-set load (unit).** Mismatched layer dimensions → `isValid()==false`
-  (fallback), not a crash; a valid 4-layer set → three non-zero array handles.
+- **Material-set load (unit).** Two failure modes, both → `isValid()==false`
+  (fallback), not a crash: (a) mismatched layer dimensions, and (b) a
+  missing/corrupt file (stb_image decode returns null — a distinct code path from
+  the dimension check). A valid 4-layer set → three non-zero array handles.
 - **Fallback (unit/behavioural).** With no material set, the terrain still renders
   (flat-colour path) — `u_useGroundTextures=false`. Tabernacle/material-demo
   unaffected.
@@ -378,11 +398,9 @@ steepness threshold (`triBlend>0`), which is a small fraction of a gentle meadow
   eyeballs**: ground reads as textured grass (not flat mint), no diagonal banding
   (RGB8 arrays uploaded with `GL_UNPACK_ALIGNMENT=1` and PoT width — §4.2), no
   stretching on the pond-bowl banks.
-- **Performance — manual read, not an automated gate.** As above (§6), the
-  automated CSV gate does not exist yet. The maintainer reads the **F12
-  Performance panel** on the 3D_E-0027 meadow and checks the terrain pass ms
-  against the **≤ 3.0 ms** ceiling and total FPS against **≥ 60** at High on the
-  RX 6600. (An automated CSV regression gate is future work: 3D_E-0030.)
+- **Performance — manual read, not an automated gate.** See §6 for the method
+  (Performance-panel `Terrain` GPU scope ≤ 3.0 ms, FPS ≥ 60 at High on the RX 6600;
+  automated CSV gate is future work — 3D_E-0030).
 
 ---
 
@@ -394,17 +412,14 @@ steepness threshold (`triBlend>0`), which is a small fraction of a gentle meadow
   normal + a repacked **R=AO G=Roughness B=Height** material map, generated at
   asset-prep from the source `_diff` / `_nor_gl` / `_ao` / `_rough` / `_disp`
   maps.
-- **Resolution: 1K** committed (albedo as JPG, normal + material as PNG). Est.
-  ~4 layers × ~1.2 MB ≈ **~5 MB** total. This sits above the `ASSET_LICENSES.md`
-  soft >1 MB "consider the future assets repo" line, but the repo already tracks
-  >1 MB CC0 assets under the same guidance — the 2K `red_brick` / `brick_wall` /
-  `plank_flooring` sets (`ASSET_LICENSES.md:121-123`) and the 1K
-  `syferfontein_0d_clear_1k.hdr` (~1.5 MB) — consistent precedent (meadow design
-  §6 has the full rationale). Note the repo's direction is externalization: the
-  **4K** originals were already moved to a `VestigeAssets` side-repo to keep
-  engine clones small (`ASSET_LICENSES.md:126`), so higher-res terrain variants
-  likewise stay out, dropping in via a git-ignored override (mirrors
-  `nature_local/`).
+- **Resolution: 1K** committed (albedo as JPG, normal + material as PNG); ~4
+  layers × ~1.2 MB ≈ **~5 MB** total — above the `ASSET_LICENSES.md` soft >1 MB
+  line but consistent with tracked precedent (the 2K brick/plank sets + the 1K
+  HDRI). **Meadow design §6 carries the full >1 MB-precedent rationale — not
+  repeated here.** Terrain delta: per the repo's externalization direction (4K
+  originals live in the `VestigeAssets` side-repo, `ASSET_LICENSES.md:126`),
+  higher-res terrain variants stay out and drop in via a git-ignored override
+  (mirrors `nature_local/`).
 - Committed under `assets/textures/terrain/`. `copy_assets` globs `assets/` so no
   CMake change (same as the meadow model/HDRI subdirs).
 
@@ -426,8 +441,10 @@ steepness threshold (`triBlend>0`), which is a small fraction of a gentle meadow
    shader-built TBN (§4.3 point 5); triplanar textures on slopes. *Verify:*
    **objective** — shader compiles + links and a frame renders with **zero GL
    errors** (`glGetError`), and a unit test on the extracted pure
-   `whiteoutBlend(macroN, detailN)` helper asserts the blended normal differs from
-   the macro normal by > ε for a non-flat detail sample and is unit-length; **plus**
+   `whiteoutBlend(macroN, detailN)` helper makes a **directional** assertion (a
+   detail normal tilted +X raises the blended world normal's X vs the macro
+   normal; a −X tilt lowers it — so a wrong-axis or flipped-sign blend fails, not
+   merely "differs"), and the result is unit-length; **plus**
    maintainer inspection of `--visual-test` (bumps light correctly; no stretching
    on the pond-bowl banks).
 4. **A4 — Tiling break-up.** Distance-tiling (albedo, §4.3 point 1) + macro
@@ -436,10 +453,13 @@ steepness threshold (`triBlend>0`), which is a small fraction of a gentle meadow
    `u_distanceTiling` range (near→far endpoints + a midpoint); **plus** maintainer
    inspection of `open_meadow` (no obvious repetition across the 256 m field).
 5. **A5 — Assets + wire-up + quality tiers + perf.** Commit the CC0 layer set;
-   the meadow sets it; manual quality-tier plumbing (default High). *Verify:*
-   maintainer reads the F12 Performance panel on the 3D_E-0027 meadow — terrain
-   pass ≤ 3.0 ms and ≥ 60 FPS at High on RX 6600 (the automated CSV path waits on
-   meadow S6 — §6); CHANGELOG + ASSET_LICENSES + THIRD_PARTY_NOTICES rows added.
+   the meadow sets it; graphics-`Setting` tier plumbing (default High). **Fixture
+   precondition:** A5's perf/visual gates run on the 3D_E-0027 meadow, which
+   already renders today (slices S1–S5 shipped) — only its S6 CSV logger is
+   pending, which is why the perf read is manual (§6). *Verify:* maintainer reads
+   the Performance panel's `Terrain` GPU scope on the meadow — terrain pass
+   ≤ 3.0 ms and ≥ 60 FPS at High on RX 6600 (automated CSV path waits on S6 — §6);
+   CHANGELOG + ASSET_LICENSES + THIRD_PARTY_NOTICES rows added.
 
 Each slice is committed locally; the phase pushes when A5 lands green (§6 push
 cadence — public repo, batch push).
@@ -540,8 +560,31 @@ INFO 3. Loop-1 fixes all held (no regressions raised); new findings:
 - **Scope decision (user, 2026-07-11):** keep the Workbench GGX roughness→specular
   fit (§4.4 item 1) as the full second dual-impl + GGX parity test — the principled,
   reusable path — over a simpler inline curve. Design unchanged.
-- **Surfaced (code-side):** `terrain.h:129` "RGB8" + `engine.h:118-124` present-
+- **Surfaced (code-side):** `terrain.h:129` "RGB8" + `engine.h:117-125` present-
   tense `ProfileLog` doc-comments are stale (fix at implementation).
 
-**Loop 3** — pending (after the §4.4 scope decision; cold re-read to confirm
-convergence).
+**Loop 3 (2026-07-11) — CONVERGED.** 3 independent cold reviewers. Tally
+(deduped): **CRITICAL 0 · HIGH 0** · MEDIUM 5 · LOW 8 · INFO — every finding
+**polish/precision**, none structural/mechanical/architectural. Loop-2 fixes all
+held (FQM split, TBN construction, depth→0, A3/A4 objective verify — none
+resurfaced). Polish applied this pass:
+
+- Perf-verify access reworded — the Performance panel is reached via the
+  `PanelRegistry`/dockspace and its named `beginPass("Terrain")` GPU scope, **not**
+  F12 (F12 is toggle-fullscreen; the panel's `shortcut()=="F12"` is unwired
+  metadata — a code/code collision surfaced for separate reconciliation).
+- Added the **decode-failure/missing-file** loader test (distinct from
+  dim-mismatch); made the **A3 whiteout test directional** (wrong-axis/flipped
+  blend now fails); added a **tangent-frame skew caveat** (top-down frame exact
+  only for vertical N); clarified §4.3 pt6 (Blinn-Phong *structure* stays, its
+  constants become roughness-driven); reconciled **RGB8 detail vs RGB16 macro**
+  normal (tiled high-freq vs whole-terrain precision regimes); added `u_texture
+  Tiling` to §2 item 3; noted the **3D_E-0027 fixture precondition** (S1–S5 render
+  today) + the flat-colour **baseline** to record at A5; trimmed §8 precedent to a
+  cross-ref; fixed the `engine.h:117-125` line range.
+- Dismissed as **unverified**: `ASSET_LICENSES.md` "122-124" (direct grep confirms
+  the 2K brick/plank rows are 121-123 — kept). Re-raised GGX-fit scope resolved by
+  the user decision above (kept).
+
+**Convergence:** a pass with zero structural/mechanical/architectural findings —
+only polish, now fixed. **Design signed off for implementation (2026-07-11).**
