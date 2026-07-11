@@ -342,11 +342,16 @@ void AudioMusicPlayer::update(float deltaSeconds)
         //    it here — same math playSound* uses at upload time).
         if (deviceLive && layer.source != 0)
         {
-            const float effective =
+            float effective =
                 mixer != nullptr
                     ? resolveSourceGain(*mixer, AudioBus::Music,
                                         layer.gain.currentGain, duckGain)
                     : layer.gain.currentGain;
+            // AX12: editor solo gate on the live music output (output-only).
+            if (mixer != nullptr)
+            {
+                effective *= busSoloMultiplier(*mixer, AudioBus::Music);
+            }
             alSourcef(layer.source, AL_GAIN, effective);
         }
 

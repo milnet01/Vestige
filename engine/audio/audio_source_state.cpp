@@ -58,6 +58,10 @@ AudioSourceAlState composeAudioSourceAlState(
 
     state.gain = resolveSourceGain(
         mixer, comp.bus, volumeAfterOcclusion, duckingGain);
+    // AX12: fold the editor solo gate into the spatial output gain (uploaded by
+    // applySourceState). Binary {0,1}; resolveSourceGain itself is untouched so
+    // the eviction/occlusion callers stay solo-agnostic.
+    state.gain *= busSoloMultiplier(mixer, comp.bus);
 
     // AX6 — per-source high-frequency damping. Two independent terms,
     // combined multiplicatively in the linear HF-gain domain:

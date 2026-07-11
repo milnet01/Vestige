@@ -90,6 +90,14 @@ struct AudioMixer
 {
     std::array<float, AudioBusCount> busGain;
 
+    /// @brief Phase 10 AX12 — transient editor "solo" selection. `-1` = no solo;
+    ///        otherwise a non-Master `AudioBus` index whose bus plays while every
+    ///        other bus is muted on the live output. Applied only at the AL_GAIN
+    ///        upload path via `busSoloMultiplier` (NOT inside `resolveSourceGain`
+    ///        / `effectiveBusGain`, which also feed voice-eviction and occlusion
+    ///        decisions that must stay solo-agnostic). Not persisted.
+    int soloBus = -1;
+
     AudioMixer()
     {
         busGain.fill(1.0f);
@@ -146,6 +154,15 @@ float resolveSourceGain(const AudioMixer& mixer,
                         AudioBus bus,
                         float sourceVolume,
                         float duckingGain);
+
+/// @brief Phase 10 AX12 — solo gate. Returns 1.0 when no bus is soloed
+///        (`soloBus < 0`) or @a bus is the soloed bus; 0.0 otherwise. `Master`
+///        is never solo-muted (soloing a sub-bus must not silence the global
+///        output). Binary {0,1} so applying it at more than one AL_GAIN upload
+///        site for the same source is idempotent. Pure; independent of every
+///        other mixer field, so multiplying it in at upload leaves
+///        `resolveSourceGain` / `effectiveBusGain` outputs unchanged.
+float busSoloMultiplier(const AudioMixer& mixer, AudioBus bus);
 
 // ----- Ducking --------------------------------------------------
 

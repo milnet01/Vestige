@@ -107,6 +107,17 @@ float resolveSourceGain(const AudioMixer& mixer,
     return std::max(0.0f, std::min(1.0f, base * duck));
 }
 
+float busSoloMultiplier(const AudioMixer& mixer, AudioBus bus)
+{
+    // No solo, or this is the soloed bus → full; Master is never solo-muted.
+    if (mixer.soloBus < 0 || bus == AudioBus::Master ||
+        static_cast<int>(bus) == mixer.soloBus)
+    {
+        return 1.0f;
+    }
+    return 0.0f;  // some other bus is soloed → mute this one on the live output
+}
+
 void updateDucking(DuckingState& state,
                     const DuckingParams& params,
                     float deltaSeconds)

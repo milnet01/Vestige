@@ -1504,7 +1504,11 @@ void AudioEngine::updateGains()
         // upload so the engine-wide duck reaches every live source.
         const float gain = resolveSourceGain(
             currentMixer(), mix.bus, mix.sourceVolume, effectiveDuck(mix.bus));
-        alSourcef(source, AL_GAIN, gain);
+        // AX12: editor solo gate applied at the output upload only (binary
+        // {0,1}); resolveSourceGain stays untouched so the eviction/occlusion
+        // callers of it remain solo-agnostic.
+        alSourcef(source, AL_GAIN,
+                  gain * busSoloMultiplier(currentMixer(), mix.bus));
     }
 }
 

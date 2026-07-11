@@ -533,3 +533,45 @@ TEST(AudioEvictionAdmission, MixedTiersHighIncomingEvictsLowestTier)
     EXPECT_EQ(chooseVoiceToEvictForIncoming(voices, SoundPriority::High),
               static_cast<std::size_t>(1));
 }
+
+// -- Solo gate (AX12) ----------------------------------------------
+
+TEST(AudioSolo, NoSoloMeansEveryBusFull)
+{
+    AudioMixer mixer;  // soloBus defaults to -1
+    EXPECT_FLOAT_EQ(busSoloMultiplier(mixer, AudioBus::Master),  1.0f);
+    EXPECT_FLOAT_EQ(busSoloMultiplier(mixer, AudioBus::Music),   1.0f);
+    EXPECT_FLOAT_EQ(busSoloMultiplier(mixer, AudioBus::Sfx),     1.0f);
+    EXPECT_FLOAT_EQ(busSoloMultiplier(mixer, AudioBus::Ambient), 1.0f);
+}
+
+TEST(AudioSolo, SoloedBusPlaysOthersMutedMasterNever)
+{
+    AudioMixer mixer;
+    mixer.soloBus = static_cast<int>(AudioBus::Sfx);
+
+    EXPECT_FLOAT_EQ(busSoloMultiplier(mixer, AudioBus::Sfx),     1.0f);  // soloed
+    EXPECT_FLOAT_EQ(busSoloMultiplier(mixer, AudioBus::Master),  1.0f);  // never muted
+    EXPECT_FLOAT_EQ(busSoloMultiplier(mixer, AudioBus::Music),   0.0f);
+    EXPECT_FLOAT_EQ(busSoloMultiplier(mixer, AudioBus::Voice),   0.0f);
+    EXPECT_FLOAT_EQ(busSoloMultiplier(mixer, AudioBus::Ambient), 0.0f);
+    EXPECT_FLOAT_EQ(busSoloMultiplier(mixer, AudioBus::Ui),      0.0f);
+}
+
+TEST(AudioSolo, ResolveGainIsInvariantToSolo)
+{
+    // INV-4: solo lives only at the AL_GAIN upload; the shared gain functions
+    // (which also feed eviction + occlusion decisions) must ignore soloBus.
+    AudioMixer a;
+    AudioMixer b;
+    b.soloBus = static_cast<int>(AudioBus::Music);  // only difference
+
+    for (AudioBus bus : {AudioBus::Music, AudioBus::Sfx, AudioBus::Voice})
+    {
+        EXPECT_FLOAT_EQ(effectiveBusGain(a, bus), effectiveBusGain(b, bus));
+        EXPECT_FLOAT_EQ(resolveSourceGain(a, bus, 0.8f),
+                        resolveSourceGain(b, bus, 0.8f));
+        EXPECT_FLOAT_EQ(resolveSourceGain(a, bus, 0.8f, 0.5f),
+                        resolveSourceGain(b, bus, 0.8f, 0.5f));
+    }
+}
