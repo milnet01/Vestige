@@ -537,9 +537,9 @@ INFO 3. Loop-1 fixes all held (no regressions raised); new findings:
   reworded the `profileLogPath` "unwired field" → "parsed, no consumer"; noted the
   F12/README fullscreen conflict + `Window → Performance` fallback; marked ≤3.0 ms
   as an initial target; trimmed §8 precedent + noted the 4K-externalization trend.
-- **Surfaced to user (scope):** whether the Workbench GGX roughness→specular fit
-  (§4.4 item 1) is worth a second dual-impl + parity test for a matte-ground phase
-  (Rule 2/9), or a simpler inline curve suffices — pending decision.
+- **Scope decision (user, 2026-07-11):** keep the Workbench GGX roughness→specular
+  fit (§4.4 item 1) as the full second dual-impl + GGX parity test — the principled,
+  reusable path — over a simpler inline curve. Design unchanged.
 - **Surfaced (code-side):** `terrain.h:129` "RGB8" + `engine.h:118-124` present-
   tense `ProfileLog` doc-comments are stale (fix at implementation).
 
