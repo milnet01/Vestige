@@ -531,6 +531,30 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
   Kind: investigate.
   Source: in-session-2026-07-11 (perf sweep; extends 3D_E-0027).
 
+- 📋 [3D_E-0031] **Meadow realism A — real PBR ground textures on terrain (replace the flat-colour placeholder).**
+  The terrain fragment shader (`assets/shaders/terrain.frag.glsl`) blends four flat colours by splatmap weight and carries an explicit "will be replaced with texture arrays later" TODO — the single biggest reason outdoor scenes read cartoony (the untextured ground fills the frame). Sample real tiled PBR ground materials (grass / dirt / rock / sand: albedo + normal + roughness) by the existing splatmap weights, world-space tiled, reusing the existing triplanar path for steep slopes, with a low-frequency macro-variation to hide tiling. CC0 textures (Poly Haven / ambientCG). Reusable across every outdoor scene (biblical courtyards included), not meadow-only. Phase A of the meadow realism overhaul. Design → cold-eyes → implement.
+  **Layman:** Give the ground a real grass/dirt photo texture instead of flat cartoon green — the biggest single fix for the "too cartoony" look.
+  Kind: feature.
+  Source: user-request-2026-07-11 (realism overhaul; fixture 3D_E-0027).
+
+- 📋 [3D_E-0032] **Meadow realism B — realistic grass (real blade textures, denser/taller/varied).**
+  The foliage renderer always builds a hand-drawn procedural blade texture and ignores `FoliageTypeConfig.texturePath`. Wire a real grass-blade alpha texture (CC0 atlas) through that slot with a procedural fallback, and add height / colour / density variation, leaning on the engine's existing LOD-billboard + distance-fade foliage path so the field stays at 60 FPS. Grass that reads as real blades, not cardboard. Phase B of the realism overhaul; depends on nothing but pairs with 3D_E-0031.
+  **Layman:** Make the grass look like real grass — thicker, taller, varied — instead of hand-drawn cards.
+  Kind: feature.
+  Source: user-request-2026-07-11 (realism overhaul; fixture 3D_E-0027).
+
+- 📋 [3D_E-0033] **Meadow realism C — realistic trees & plants.**
+  Replace the low-poly Kenney props with realistic vegetation: use the engine's existing tree LOD-billboard system and/or biome presets, or photo-textured / billboard-imposter trees (real tree photos on crossed cards for the mid/far treeline). Large committed models stay out of the public repo via the existing git-ignored `nature_local/` override hook. The clustered treeline should reflect in the pond. Phase C — the hardest realism piece; user deferred it behind A/B.
+  **Layman:** Swap the cartoon trees for realistic-looking ones — the treeline you keep pointing at.
+  Kind: feature.
+  Source: user-request-2026-07-11 (realism overhaul; fixture 3D_E-0027).
+
+- 📋 [3D_E-0034] **Meadow realism D — sky, water & colour polish.**
+  A committed CC0 partly-cloudy day HDRI (blue sky + white clouds), a colour-grade pass for vivid natural greens, and water reflection/refraction tuning so the pond convincingly mirrors the treeline. Mood + reflections to match the reference photos. Phase D — final polish once A–C land.
+  **Layman:** Add clouds, richer colour, and better water reflections to finish the look.
+  Kind: enhancement.
+  Source: user-request-2026-07-11 (realism overhaul; fixture 3D_E-0027).
+
 ### Fog, Mist, and Volumetric Lighting
 - [x] Distance fog (linear, exponential, exponential-squared) — pure-function primitives shipped in `engine/renderer/fog.{h,cpp}`. `FogMode` enum (`None` / `Linear` / `Exponential` / `ExponentialSquared`) + `FogParams` (linear-RGB colour, start, end, density). `computeFogFactor(mode, params, distance)` implements the three canonical forms: Linear `(end-d)/(end-start)`, GL_EXP `exp(-density·d)`, GL_EXP2 `exp(-(density·d)²)` — returns *surface visibility* in [0,1], matches OpenGL Red Book §9 / D3D9 fog-formulas. Guards every degenerate param (zero span, negative density, sub-camera distance) with pass-through behaviour. 15 unit tests cover knees, monotonicity, and edge cases.
 - [x] Height fog — exponential fog that thickens below a configurable altitude (ground-hugging mist, valley fog). `HeightFogParams` (colour, fogHeight, groundDensity, heightFalloff, maxOpacity) + closed-form `computeHeightFogTransmittance(params, cameraY, rayDirY, rayLength)` — Quílez 2010 analytic integral of `d(y) = a·exp(-b·(y - fogHeight))` along a view ray. Uses `expm1` for numerical stability near horizontal rays; separate `|rd.y| < 1e-5` branch collapses to Beer-Lambert so the horizon line stays smooth. `maxOpacity` clamp mirrors UE `FogMaxOpacity` so the sky doesn't fully vanish on long sightlines. 7 unit tests cover zero-length, zero-density, monotonic decay, horizontal ↔ Beer-Lambert equivalence, altitude thinning, maxOpacity floor, small-angle ↔ horizontal-branch agreement. **Desert heat haze** variant (subtle distortion) is a follow-up.
