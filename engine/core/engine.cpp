@@ -2311,8 +2311,63 @@ void Engine::finalizeMeadowTerrain()
         c.causticsEnabled = true;
     }
 
-    // Grass (slice 4) and scattered props (slice 5) hook in here; the pure
-    // scatter helper (scatterProps) is already available for them.
+    // --- Grass (slice 4) -----------------------------------------------------
+    // Paint many small stamps over the terrain interior, each anchored to the
+    // sampled surface height so the grass hugs the rolling hills (paintFoliage
+    // does no terrain sampling — it takes each instance's Y from center.y).
+    // GRASS_DENSITY + STAMP_SPACING are the PRIMARY benchmark knob: the defaults
+    // below total ~40 k instances; the documented tested range is ~10 k–120 k
+    // (raise GRASS_DENSITY toward ~2.0 for the upper bound) so the sub-60-FPS
+    // ceiling can be found deliberately without touching the scatter logic.
+    // TODO: revisit via Formula Workbench — stamp geometry is art-directed.
+    {
+        constexpr uint32_t GRASS_TYPE_ID = 0;   // foliage type 0 = grass
+        constexpr float STAMP_SPACING = 5.0f;   // metres between stamp centres
+        constexpr float STAMP_RADIUS = 3.5f;    // stamp disc radius (overlaps)
+        constexpr float GRASS_DENSITY = 0.53f;  // instances per m² per stamp → ~40 k total
+        constexpr float GRASS_FALLOFF = 0.30f;  // soft edge (rejects ~19%)
+        constexpr float EDGE_MARGIN = 5.0f;     // keep grass off the map border
+        // Skip stamps whose centre falls within the pond + a shore band so grass
+        // does not carpet the water; a final erase disc trims any spill.
+        const float pondSkipRadius = POND_SIZE * 0.5f + 3.0f;
+        const float pondSkipR2 = pondSkipRadius * pondSkipRadius;
+
+        FoliageTypeConfig grassCfg;
+        grassCfg.name = "Meadow Grass";
+        grassCfg.minScale = 0.7f;
+        grassCfg.maxScale = 1.5f;
+        grassCfg.tintVariation = glm::vec3(0.10f, 0.16f, 0.06f);
+
+        const float x0 = tcfg.origin.x + EDGE_MARGIN;
+        const float x1 = tcfg.origin.x + static_cast<float>(W - 1) * tcfg.spacingX - EDGE_MARGIN;
+        const float z0 = tcfg.origin.z + EDGE_MARGIN;
+        const float z1 = tcfg.origin.z + static_cast<float>(D - 1) * tcfg.spacingZ - EDGE_MARGIN;
+
+        for (float cz = z0; cz <= z1; cz += STAMP_SPACING)
+        {
+            for (float cx = x0; cx <= x1; cx += STAMP_SPACING)
+            {
+                const float dx = cx - pondCenterXZ.x;
+                const float dz = cz - pondCenterXZ.y;
+                if (dx * dx + dz * dz < pondSkipR2)
+                {
+                    continue;
+                }
+                const float cy = terrain.getHeight(cx, cz);
+                m_foliageManager->paintFoliage(GRASS_TYPE_ID,
+                    glm::vec3(cx, cy, cz), STAMP_RADIUS, GRASS_DENSITY,
+                    GRASS_FALLOFF, grassCfg);
+            }
+        }
+        // Trim any grass that spilled into the pond footprint (props in slice 5
+        // add their own erase discs here).
+        const float pondFloorY = terrain.getHeight(pondCenterXZ.x, pondCenterXZ.y);
+        m_foliageManager->eraseAllFoliage(
+            glm::vec3(pondCenterXZ.x, pondFloorY, pondCenterXZ.y), POND_SIZE * 0.5f + 1.0f);
+
+        Logger::info("Meadow grass: " + std::to_string(m_foliageManager->getTotalFoliageCount())
+            + " instances across " + std::to_string(m_foliageManager->getChunkCount()) + " chunks");
+    }
 
     scene->update(0.0f);
 
