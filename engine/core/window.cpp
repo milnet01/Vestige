@@ -44,6 +44,15 @@ Window::Window(const WindowConfig& config, EventBus& eventBus)
     glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, GLFW_TRUE);
 #endif
 
+    // Stable window class (X11) / app_id (Wayland) so desktop-menu launchers and
+    // the task manager can associate the running window with the .desktop entry
+    // (StartupWMClass=Vestige, see packaging/*.desktop). Without these hints GLFW
+    // derives WM_CLASS from the window title, which carries the version string and
+    // so never matches a fixed StartupWMClass — breaking taskbar pinning.
+    glfwWindowHintString(GLFW_X11_CLASS_NAME, "Vestige");
+    glfwWindowHintString(GLFW_X11_INSTANCE_NAME, "Vestige");
+    glfwWindowHintString(GLFW_WAYLAND_APP_ID, "Vestige");
+
     Logger::info("Creating window: " + config.title + " ("
         + std::to_string(m_width) + "x" + std::to_string(m_height) + ")");
 
