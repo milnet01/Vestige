@@ -212,6 +212,7 @@ add_executable(vestige_tests
     test_localization_service.cpp
     test_result.cpp
     test_terrain_size_caps.cpp
+    test_meadow_terrain.cpp
     test_entity_serializer_depth_cap.cpp
     test_ibl_capture_sequence.cpp
     test_motion_overlay_prev_world.cpp

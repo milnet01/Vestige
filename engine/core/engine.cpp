@@ -39,6 +39,7 @@
 #include "environment/environment_forces.h"
 #include "environment/foliage_manager.h"
 #include "environment/terrain.h"
+#include "environment/meadow_terrain.h"
 #include "physics/physics_character_controller.h"
 
 #include <Jolt/Physics/Collision/Shape/BoxShape.h>
@@ -1038,6 +1039,14 @@ bool Engine::initialize(const EngineConfig& config)
     if (m_terrain && m_terrain->isInitialized())
     {
         m_controller->setTerrain(m_terrain);
+
+        // The default meadow scene reshapes the freshly-initialized terrain and
+        // carves its pond here — the heightmap does not exist at scene-setup time
+        // (see setupDemoScene → finalizeMeadowTerrain).
+        if (m_meadowSceneActive)
+        {
+            finalizeMeadowTerrain();
+        }
     }
 
     // Apply --isolate-feature CLI override (visual-regression bisection).
@@ -2169,11 +2178,145 @@ void Engine::drawLightGizmos(Scene& scene, const Selection& selection,
 
 void Engine::setupDemoScene()
 {
-    // TODO(3D_E-0027, slices 3-5): build the natural meadow benchmark scene here
-    // (rolling terrain + carved pond + dense grass + CC0 props + HDRI sky). Until
-    // those slices land, fall back to the legacy material-test bench so the
-    // default launch stays functional and bisectable.
-    setupMaterialDemoScene();
+    Logger::info("Setting up meadow benchmark scene...");
+
+    // --- Renderer configuration: bright outdoor meadow with HDRI sky ---
+    // Skybox + IBL are on (the material demo disables them). The clear colour is
+    // only the fallback shown if the HDRI fails to load. Exposure is raised to
+    // balance the bright sky HDRI in the ACES tonemapper (matches the Tabernacle
+    // outdoor scene's approach).
+    m_renderer->setSkyboxEnabled(true);
+    m_renderer->setClearColor(glm::vec3(0.53f, 0.68f, 0.86f));
+    m_renderer->setAutoExposure(false);
+    m_renderer->setExposure(2.4f);
+    m_renderer->setBloomEnabled(true);
+    m_renderer->setBloomThreshold(2.0f);
+    m_renderer->setBloomIntensity(0.10f);
+    m_renderer->setSsaoEnabled(true);
+
+    // CC0 1K HDRI (Poly Haven, clear midday — §6). Committed to the public repo;
+    // resolved relative to the working dir like the other demo assets.
+    m_renderer->loadSkyboxHDRI("assets/hdri/syferfontein_0d_clear_1k.hdr");
+
+    Scene* scene = m_sceneManager->createScene("Meadow");
+
+    // --- Sun -----------------------------------------------------------------
+    // One shadow-casting directional light approximating the HDRI's midday sun
+    // (CSM is already active). Warm-white, high angle.
+    Entity* sun = scene->createEntity("Sun");
+    auto* dirLight = sun->addComponent<DirectionalLightComponent>();
+    dirLight->light.direction = glm::vec3(-0.35f, -0.88f, -0.32f);
+    dirLight->light.ambient = glm::vec3(0.20f, 0.22f, 0.26f);
+    dirLight->light.diffuse = glm::vec3(1.9f, 1.85f, 1.7f);
+    dirLight->light.specular = glm::vec3(1.0f);
+
+    // The rolling terrain and carved pond depend on the terrain heightmap, which
+    // TerrainSystem only allocates + fills in initializeAll() — long AFTER this
+    // scene-setup point. They (and later grass/props) are finalized in
+    // finalizeMeadowTerrain(), called from the post-init block once
+    // m_terrain->isInitialized() is true.
+    m_meadowSceneActive = true;
+
+    // Initial scene update to compute world matrices.
+    scene->update(0.0f);
+
+    Logger::info("Meadow base scene ready (HDRI sky + sun; terrain + pond finalize post-init)");
+}
+
+void Engine::finalizeMeadowTerrain()
+{
+    // Precondition (caller-checked): m_terrain->isInitialized() — TerrainSystem
+    // has allocated + filled a default heightfield in initializeAll(), which we
+    // now overwrite with the meadow shape. Runs with a live GL context.
+    Logger::info("Finalizing meadow terrain + pond...");
+
+    // TODO: revisit via Formula Workbench — the octave frequencies/amplitudes and
+    // bowl geometry are art-directed (no reference dataset to fit against), so
+    // they are hand-authored named values per project Rule 6.
+    MeadowShape shape;
+    shape.baseHeight01 = 0.14f;          // ~7 m base over the 50 m height scale
+    shape.octaves = {                    // gentle rolling relief (~6–10 m p-p)
+        {1.3f, 0.045f},
+        {2.7f, 0.025f},
+        {5.5f, 0.012f},
+    };
+    shape.pondCenterGrid = {0.5f, 0.44f}; // world XZ ≈ (0, −15)
+    shape.pondRadiusGrid = 0.11f;         // ~28 m bowl radius
+    shape.bowlDepth01 = 0.09f;            // ~4.5 m dip at the centre
+
+    Terrain& terrain = getTerrain();
+    const int W = terrain.getWidth();
+    const int D = terrain.getDepth();
+    for (int z = 0; z < D; ++z)
+    {
+        for (int x = 0; x < W; ++x)
+        {
+            const float nx = static_cast<float>(x) / static_cast<float>(W - 1);
+            const float nz = static_cast<float>(z) / static_cast<float>(D - 1);
+            terrain.setRawHeight(x, z, meadowHeight01(nx, nz, shape));
+        }
+    }
+    terrain.updateHeightmapRegion(0, 0, W, D);
+    terrain.updateNormalMapRegion(0, 0, W, D);
+
+    // Pond centre + half-extent in world XZ (derived from the terrain config so
+    // the grid-space pond aligns with the carved bowl).
+    const TerrainConfig& tcfg = terrain.getConfig();
+    const glm::vec2 pondCenterXZ = {
+        tcfg.origin.x + shape.pondCenterGrid.x * static_cast<float>(W - 1) * tcfg.spacingX,
+        tcfg.origin.z + shape.pondCenterGrid.y * static_cast<float>(D - 1) * tcfg.spacingZ,
+    };
+    constexpr float POND_SIZE = 14.0f;                 // water plane extent (m)
+    const glm::vec2 pondHalfExtentXZ = {POND_SIZE * 0.5f, POND_SIZE * 0.5f};
+
+    // Auto-texture (grass / rock / sand from slope + altitude) then blend sand
+    // into the pond shore. Both edit only the splatmap.
+    Terrain::AutoTextureConfig autoTex{};              // grass-dominant defaults
+    terrain.generateAutoTexture(autoTex);
+    Terrain::BankBlendConfig bankBlend{};              // sand into the shore
+    terrain.applyBankBlend(pondCenterXZ, pondHalfExtentXZ, bankBlend);
+    terrain.updateSplatmapRegion(0, 0, W, D);
+    terrain.buildQuadtree();
+    // m_terrainEnabled stays true (its default) so the render loop draws it.
+
+    // --- Pond ----------------------------------------------------------------
+    // Water level sits just above the carved bowl floor so the shallow→deep
+    // shading is visible. Sample the reshaped surface at the pond centre for a
+    // robust floor height (independent of the exact octave sum there).
+    Scene* scene = m_sceneManager->getActiveScene();
+    if (!scene)
+    {
+        Logger::warning("finalizeMeadowTerrain: no active scene — pond skipped");
+        return;
+    }
+
+    const float bowlFloorY = terrain.getHeight(pondCenterXZ.x, pondCenterXZ.y);
+    const float waterLevelY = bowlFloorY + 1.5f;
+
+    Entity* pond = scene->createEntity("Pond");
+    pond->transform.position = glm::vec3(pondCenterXZ.x, waterLevelY, pondCenterXZ.y);
+    {
+        auto* water = pond->addComponent<WaterSurfaceComponent>();
+        auto& c = water->getConfig();
+        c.width = POND_SIZE;
+        c.depth = POND_SIZE;
+        c.gridResolution = 128;
+        c.numWaves = 3;
+        c.waves[0] = {0.004f, 3.0f, 0.20f, 20.0f};
+        c.waves[1] = {0.003f, 2.0f, 0.15f, 75.0f};
+        c.waves[2] = {0.002f, 1.5f, 0.25f, 140.0f};
+        c.shallowColor = {0.15f, 0.45f, 0.50f, 0.80f};
+        c.deepColor = {0.02f, 0.12f, 0.28f, 1.00f};
+        c.reflectionMode = WaterReflectionMode::PLANAR;  // mirrors sky + trees
+        c.causticsEnabled = true;
+    }
+
+    // Grass (slice 4) and scattered props (slice 5) hook in here; the pure
+    // scatter helper (scatterProps) is already available for them.
+
+    scene->update(0.0f);
+
+    Logger::info("Meadow terrain + pond ready: rolling hills + reflective pond");
 }
 
 void Engine::setupMaterialDemoScene()

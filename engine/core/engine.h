@@ -156,6 +156,12 @@ public:
 
 private:
     void setupDemoScene();          ///< Default: natural meadow benchmark scene (3D_E-0027).
+    /// @brief Reshapes the terrain into rolling meadow hills + carves the pond.
+    ///        Split out of setupDemoScene() because the terrain heightmap is only
+    ///        allocated + filled by TerrainSystem in initializeAll(), long after
+    ///        scene setup runs — so this is called from the post-init block once
+    ///        m_terrain->isInitialized() is true. Grass/props hook in here too.
+    void finalizeMeadowTerrain();
     void setupMaterialDemoScene();  ///< Legacy PBR material-test cubes (CLI: --material-demo).
     void setupTabernacleScene();
     void setupVisualTestViewpoints();
@@ -295,6 +301,7 @@ private:
     PhysicsCharacterController* m_physicsCharController = nullptr;
     bool m_usePhysicsController = false;  ///< Toggle between AABB and physics controller
     bool m_terrainEnabled = true;         ///< Set false for indoor scenes
+    bool m_meadowSceneActive = false;     ///< Default meadow scene: finalize terrain+pond post-init (3D_E-0027)
     UISystem* m_uiSystem = nullptr;       ///< Cached pointer for render loop
     bool m_enableGameScreens = false;     ///< Slice 12.2 opt-in flag
     class SpriteSystem* m_spriteSystem = nullptr;  ///< Phase 9F 2D sprite pass
