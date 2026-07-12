@@ -61,6 +61,7 @@
 #include <GLFW/glfw3.h>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <filesystem>
 
@@ -2302,6 +2303,43 @@ void Engine::finalizeMeadowTerrain()
     bankBlend.bankStrength = 0.5f;
     terrain.applyBankBlend(pondCenterXZ, pondHalfExtentXZ, bankBlend);
     terrain.updateSplatmapRegion(0, 0, W, D);
+
+    // PBR ground materials (Phase 10 / 3D_E-0031). Replaces the flat-colour terrain
+    // with real tiled grass/rock/dirt/sand (albedo + normal + AO/Rough/Height). A
+    // git-ignored assets/textures/terrain_local/<file> override wins when present
+    // (higher-res drop-in, mirrors the nature_local prop hook). Soft-fails to the
+    // flat-colour path if any map is missing. Per-layer tiling is art-directed
+    // (denser grass, coarser rock) — TODO: revisit via Formula Workbench if a
+    // look-target dataset is captured.
+    if (m_terrainRenderer)
+    {
+        auto groundPath = [](const std::string& file) -> std::string
+        {
+            namespace fs = std::filesystem;
+            const std::string local = "assets/textures/terrain_local/" + file;
+            if (fs::exists(local))
+            {
+                return local;
+            }
+            return "assets/textures/terrain/" + file;
+        };
+        std::array<TerrainLayerDesc, 4> groundLayers{{
+            {groundPath("grass_albedo.jpg"), groundPath("grass_normal.png"),
+             groundPath("grass_material.png"), 0.30f},   // layer 0 — grass (splat R)
+            {groundPath("rock_albedo.jpg"),  groundPath("rock_normal.png"),
+             groundPath("rock_material.png"),  0.12f},   // layer 1 — rock  (splat G)
+            {groundPath("dirt_albedo.jpg"),  groundPath("dirt_normal.png"),
+             groundPath("dirt_material.png"),  0.22f},   // layer 2 — dirt  (splat B)
+            {groundPath("sand_albedo.jpg"),  groundPath("sand_normal.png"),
+             groundPath("sand_material.png"),  0.25f},   // layer 3 — sand  (splat A)
+        }};
+        TerrainMaterialSet groundSet;
+        if (groundSet.load(groundLayers))
+        {
+            m_terrainRenderer->setGroundMaterials(std::move(groundSet));
+            Logger::info("Meadow: PBR ground materials active");
+        }
+    }
     terrain.buildQuadtree();
     // m_terrainEnabled stays true (its default) so the render loop draws it.
 

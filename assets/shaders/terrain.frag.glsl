@@ -33,6 +33,14 @@ uniform float u_triplanarStart;     // Steepness where triplanar begins (0.4)
 uniform float u_triplanarEnd;       // Steepness where fully triplanar (0.7)
 uniform float u_textureTiling;      // World-space tiling for layer textures
 
+// PBR ground material arrays (Phase 10 / 3D_E-0031). When u_useGroundTextures is
+// false the flat-colour path below runs unchanged (fallback / Tabernacle).
+uniform bool u_useGroundTextures;
+uniform sampler2DArray u_albedoArray;    // unit 6, sRGB
+uniform sampler2DArray u_normalArray;    // unit 7, tangent-space (used from slice A3)
+uniform sampler2DArray u_materialArray;  // unit 8, R=AO G=Roughness B=Height
+uniform float u_layerTiling[4];          // world→UV scale per layer (grass/rock/dirt/sand)
+
 // Water caustics (applied to terrain below water surface, within water XZ bounds)
 uniform bool u_causticsEnabled;
 uniform sampler2D u_causticsTex;      // Unit 5
@@ -160,6 +168,20 @@ float tilingDetail(vec2 uv)
     return mix(0.88, 1.12, n);
 }
 
+// ---------------------------------------------------------------------------
+// Depth-aware height blend (Mishkinis). Mirrored on the CPU in
+// engine/environment/terrain_material_blend.h — DEPTH here MUST equal the
+// TERRAIN_HEIGHT_BLEND_DEPTH constant there (the parity contract, design §4.3).
+// ---------------------------------------------------------------------------
+const float TERRAIN_BLEND_DEPTH = 0.2;
+vec4 heightBlendWeights(vec4 heights, vec4 weights)
+{
+    vec4 hw = heights + weights;
+    float ma = max(max(hw.x, hw.y), max(hw.z, hw.w)) - TERRAIN_BLEND_DEPTH;
+    vec4 b = max(hw - ma, 0.0);
+    return b / (b.x + b.y + b.z + b.w);
+}
+
 void main()
 {
     // Read terrain normal from pre-computed normal map (encoded as n * 0.5 + 0.5)
@@ -175,8 +197,38 @@ void main()
     vec3 dirtColor  = vec3(0.55, 0.40, 0.25);
     vec3 sandColor  = vec3(0.76, 0.70, 0.50);
 
+    // Ground PBR properties — defaults for the flat-colour path (AO off, mid roughness).
+    float groundAO = 1.0;
+    float groundRoughness = 0.6;
+
     vec3 albedo;
-    if (u_triplanarEnabled && u_textureTiling > 0.0)
+    if (u_useGroundTextures)
+    {
+        // Top-down (world-XZ) projection per layer; height-blend by splat weight.
+        // Detail normals + triplanar on slopes arrive in slice A3 — A2 lights with
+        // the macro normal and top-down-projects on the (gentle) meadow slopes.
+        vec2 buv = v_worldPos.xz;
+        vec3 a0 = texture(u_albedoArray,   vec3(buv * u_layerTiling[0], 0.0)).rgb;
+        vec3 a1 = texture(u_albedoArray,   vec3(buv * u_layerTiling[1], 1.0)).rgb;
+        vec3 a2 = texture(u_albedoArray,   vec3(buv * u_layerTiling[2], 2.0)).rgb;
+        vec3 a3 = texture(u_albedoArray,   vec3(buv * u_layerTiling[3], 3.0)).rgb;
+        vec3 m0 = texture(u_materialArray, vec3(buv * u_layerTiling[0], 0.0)).rgb;
+        vec3 m1 = texture(u_materialArray, vec3(buv * u_layerTiling[1], 1.0)).rgb;
+        vec3 m2 = texture(u_materialArray, vec3(buv * u_layerTiling[2], 2.0)).rgb;
+        vec3 m3 = texture(u_materialArray, vec3(buv * u_layerTiling[3], 3.0)).rgb;
+
+        // splat = (grass, rock, dirt, sand) = layers 0..3; height = material B channel.
+        vec4 heights = vec4(m0.b, m1.b, m2.b, m3.b);
+        vec4 bw = heightBlendWeights(heights, splat);
+
+        albedo         = a0 * bw.x + a1 * bw.y + a2 * bw.z + a3 * bw.w;
+        groundAO       = m0.r * bw.x + m1.r * bw.y + m2.r * bw.z + m3.r * bw.w;
+        groundRoughness = m0.g * bw.x + m1.g * bw.y + m2.g * bw.z + m3.g * bw.w;
+
+        // Subtle large-scale brightness variation to break exact tiling repeats.
+        albedo *= tilingDetail(buv * 0.15);
+    }
+    else if (u_triplanarEnabled && u_textureTiling > 0.0)
     {
         float steepness = 1.0 - abs(normal.y);
         float triBlend = smoothstep(u_triplanarStart, u_triplanarEnd, steepness);
@@ -232,7 +284,21 @@ void main()
     vec3 viewDir = normalize(u_viewPos - v_worldPos);
     vec3 halfDir = normalize(lightDir + viewDir);
     float NdotH = max(dot(normal, halfDir), 0.0);
-    float specular = pow(NdotH, 64.0) * 0.15;
+
+    float specular;
+    if (u_useGroundTextures)
+    {
+        // Interim roughness→Blinn-Phong specular: smoother ground → tighter, stronger
+        // highlight. Replaced by the Formula-Workbench GGX fit (design §4.4 item 1)
+        // in the next A2 step; this keeps the textured ground energy-plausible now.
+        float shininess = mix(8.0, 128.0, 1.0 - groundRoughness);
+        float specStrength = mix(0.02, 0.20, 1.0 - groundRoughness);
+        specular = pow(NdotH, shininess) * specStrength;
+    }
+    else
+    {
+        specular = pow(NdotH, 64.0) * 0.15;
+    }
 
     // Shadow
     float shadow = 0.0;
@@ -241,7 +307,7 @@ void main()
         shadow = calcTerrainShadow(normal, lightDir);
     }
 
-    vec3 ambient = albedo * u_ambientColor;
+    vec3 ambient = albedo * u_ambientColor * groundAO;
     vec3 diffuse = albedo * NdotL * u_lightColor;
     vec3 spec = u_lightColor * specular * NdotL;
 

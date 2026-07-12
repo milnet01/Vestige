@@ -70,6 +70,8 @@ void TerrainRenderer::shutdown()
         glDeleteTextures(1, &m_defaultNormal);
         m_defaultNormal = 0;
     }
+    // Release the ground-material GL arrays now, while the context is still current.
+    m_groundMaterials = TerrainMaterialSet{};
     m_gridIndexCount = 0;
     m_gridResolution = 0;
     m_terrainShader.destroy();
@@ -145,6 +147,25 @@ void TerrainRenderer::render(const Terrain& terrain,
     // Bind splatmap (texture unit 2)
     glBindTextureUnit(2, terrain.getSplatmapTexture());
     m_terrainShader.setInt("u_splatmap", 2);
+
+    // PBR ground-material arrays (units 6/7/8). Invalid set → flat-colour fallback.
+    bool useGroundTextures = m_groundMaterials.isValid();
+    m_terrainShader.setBool("u_useGroundTextures", useGroundTextures);
+    if (useGroundTextures)
+    {
+        m_groundMaterials.bind(6, 7, 8);
+        m_terrainShader.setInt("u_albedoArray", 6);
+        m_terrainShader.setInt("u_normalArray", 7);
+        m_terrainShader.setInt("u_materialArray", 8);
+        const auto& tilings = m_groundMaterials.tilings();
+        static const char* tilingNames[4] = {
+            "u_layerTiling[0]", "u_layerTiling[1]", "u_layerTiling[2]", "u_layerTiling[3]"
+        };
+        for (int i = 0; i < 4; ++i)
+        {
+            m_terrainShader.setFloat(tilingNames[i], tilings[static_cast<size_t>(i)]);
+        }
+    }
 
     // Triplanar mapping uniforms (conditional on steep slopes)
     m_terrainShader.setBool("u_triplanarEnabled", true);

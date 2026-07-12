@@ -6,6 +6,7 @@
 #pragma once
 
 #include "environment/terrain.h"
+#include "environment/terrain_material_set.h"
 #include "renderer/shader.h"
 #include "renderer/camera.h"
 #include "scene/scene.h"
@@ -14,6 +15,7 @@
 #include <glm/glm.hpp>
 
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace Vestige
@@ -80,6 +82,17 @@ public:
     /// @brief Set caustics quality tier (0=Full, 1=Approximate, 2=Simple).
     void setCausticsQuality(int quality) { m_causticsQuality = quality; }
 
+    /// @brief Assigns the PBR ground-material set (grass/rock/dirt/sand layers).
+    /// An invalid/empty set makes the shader fall back to the flat-colour path.
+    /// Takes ownership (moves the GL arrays in).
+    void setGroundMaterials(TerrainMaterialSet&& materials)
+    {
+        m_groundMaterials = std::move(materials);
+    }
+
+    /// @brief True when a valid ground-material set is bound (textured path active).
+    bool hasGroundMaterials() const { return m_groundMaterials.isValid(); }
+
     /// @brief Gets the number of draw calls from the last frame.
     int getLastDrawCallCount() const { return m_lastDrawCallCount; }
 
@@ -106,6 +119,9 @@ private:
     // Default textures (flat green terrain)
     GLuint m_defaultAlbedo = 0;
     GLuint m_defaultNormal = 0;
+
+    // PBR ground layers (grass/rock/dirt/sand). Invalid → flat-colour fallback path.
+    TerrainMaterialSet m_groundMaterials;
 
     // Per-frame staging
     std::vector<TerrainDrawNode> m_drawNodes;
