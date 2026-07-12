@@ -14,6 +14,7 @@ add_executable(vestige_tests
     test_bloom_parity.cpp
     test_color_grading_parity.cpp
     test_subsurface_parity.cpp
+    test_terrain_material_set.cpp
     test_volumetric_fog_gpu.cpp
     test_gi_gpu.cpp
     test_gi_probe_gpu.cpp

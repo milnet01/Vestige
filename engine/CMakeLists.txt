@@ -160,6 +160,7 @@ set(ENGINE_SOURCES
     environment/spline_path.cpp
     environment/biome_preset.cpp
     environment/terrain.cpp
+    environment/terrain_material_set.cpp
     environment/meadow_terrain.cpp
     renderer/terrain_renderer.cpp
     formula/expression.cpp
