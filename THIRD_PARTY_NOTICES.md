@@ -176,6 +176,10 @@ copyright headers in `assets/fonts/OFL.txt`.
 - All `*_2k.jpg` files derived from Poly Haven CC0 sets
   (`red_brick_4k`, `brick_wall_005_4k`, `plank_flooring_04_4k`).
   **CC0** — no attribution required.
+- `terrain/{grass,rock,dirt,sand}_*` — terrain ground layers repacked from
+  ambientCG CC0 sets (`Grass001`, `Rock035`, `Ground068`, `Ground037`;
+  <https://ambientcg.com>). **CC0 1.0** — no attribution required; ambientCG
+  (Lennart Demes) credited as courtesy.
 - `label_[1-4].png` — engine-authored. **MIT** (matches engine LICENSE).
 
 The larger 4K Poly Haven assets that will eventually ship in the

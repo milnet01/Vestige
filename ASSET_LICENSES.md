@@ -125,6 +125,23 @@ exception, unsafe for a commercially-bound engine). See
 | ~~`everytexture-com-stock-rocks-*`~~ | ~~everytexture.com~~ | **Excluded — see below** | Was used as ground texture; license forbids redistribution |
 | ~~`*_4k.jpg`, `*_4k.blend.zip`, `*_4k.blend/`~~ | Poly Haven CC0 4K variants | **Moved to VestigeAssets repo** | Pulled in at configure time via CMake `FetchContent`; engine clones stay small |
 
+### Terrain ground layers — `assets/textures/terrain/`
+
+PBR ground materials for the terrain renderer (Phase 10 / 3D_E-0031). Each layer
+ships an albedo (JPG, sRGB), a tangent-space normal (PNG, OpenGL `NormalGL`
+convention), and a repacked material map (PNG, **R=AO, G=Roughness, B=Height**)
+generated at asset-prep from the source ambientCG maps. Committed at **512×512**
+(≈4.5 MB total): the ground tiles densely (~6.7 m per repeat), so 512 is visually
+equivalent to 1K here while staying near the design's size target; higher-res 1K/4K
+variants drop in via the git-ignored `assets/textures/terrain_local/` override.
+
+| Pattern | Source | License | Notes |
+|---------|--------|---------|-------|
+| `grass_{albedo,normal,material}.{jpg,png}` | [ambientCG `Grass001`](https://ambientcg.com/view?id=Grass001) | **CC0 1.0** | Lush lawn — layer 0 (grass) |
+| `rock_{albedo,normal,material}.{jpg,png}` | [ambientCG `Rock035`](https://ambientcg.com/view?id=Rock035) | **CC0 1.0** | Grey rock — layer 1 (rock/slopes) |
+| `dirt_{albedo,normal,material}.{jpg,png}` | [ambientCG `Ground068`](https://ambientcg.com/view?id=Ground068) | **CC0 1.0** | Brown soil — layer 2 (dirt) |
+| `sand_{albedo,normal,material}.{jpg,png}` | [ambientCG `Ground037`](https://ambientcg.com/view?id=Ground037) | **CC0 1.0** | Pale tan — layer 3 (sand/shore) |
+
 ### Excluded (not in public repo, kept locally via `.gitignore`)
 
 | Pattern | Source | Reason for exclusion |

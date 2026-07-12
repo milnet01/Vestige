@@ -223,6 +223,12 @@ assets/textures/*_4k.blend/
 # present; never committed. See phase_10_meadow_benchmark_scene_design.md §5.7.
 assets/models/nature_local/
 
+# Terrain ground-texture overrides — higher-res 1K/4K PBR ground layers the
+# maintainer drops in locally to replace the committed 512 CC0 set. Loaded via
+# the terrain_local path hook when present; never committed.
+# See phase_10_terrain_pbr_ground_textures_design.md §8.
+assets/textures/terrain_local/
+
 # Stray Ants MCP feedback file authored by another CC session (Formula Workbench)
 DOOM_Ants_Feedback.md
 
