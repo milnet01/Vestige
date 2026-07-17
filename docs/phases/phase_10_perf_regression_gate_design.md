@@ -174,9 +174,10 @@ the **gate allowlist**:
   - `WARN` if `delta_pct >= warn_pct` (default 10).
   - `IMPROVED` if `delta_pct <= -warn_pct`.
   - else `OK`.
-- A baseline metric **absent from the current run** → `WARN` ("metric missing —
-  baseline may be stale after a pass rename"), not FAIL: renaming/removing a pass is a
-  legitimate code change, and failing on it would punish refactors.
+- A baseline metric **absent from the current run** → `MISSING` (a distinct,
+  non-conclusive verdict — "metric missing, baseline may be stale after a pass rename"),
+  not FAIL: renaming/removing a pass is a legitimate code change, and failing on it would
+  punish refactors. `--strict-warn` promotes `MISSING` to FAIL (§5.5).
 - A current metric **absent from the baseline** → informational note ("new metric —
   refresh the baseline to gate it").
 
@@ -193,18 +194,24 @@ numbers, and are overridable per-metric there:
   "scene": "meadow",
   "reduction": { "drop_warmup_intervals": 1, "min_usable_intervals": 3, "stat": "median" },
   "thresholds": { "warn_pct": 10.0, "fail_pct": 25.0, "min_abs_ms": 0.05, "min_abs_mb": 1.0 },
-  "gate": ["frame,total", "gpu,total", "cpu,total", "mem,gpu_mb"],
+  "gate": ["frame,total", "gpu,total", "cpu,total", "mem,gpu_mb", "gpu,tiny"],
   "metrics": {
     "frame,total": { "ms": 8.000, "fps": 125.0 },
     "gpu,total":   { "ms": 5.000 },
     "gpu,shadow":  { "ms": 1.200 },
+    "gpu,tiny":    { "ms": 0.010 },
     "cpu,total":   { "ms": 2.000 },
     "mem,gpu_mb":  { "mb": 400 }
   }
 }
 ```
 
-`gate` is the allowlist; a metric may exist in `metrics` (for context / future gating)
+`schema` is the baseline-format version; perf_gate reads it and **fatally rejects**
+(exit 2, "baseline schema unsupported") any value other than `1`, so a future
+`"schema": 2` file is never silently mis-parsed. `gpu,tiny` is a **gated sub-floor**
+metric (0.010 ms < the 0.05 ms floor) included so the `floor.csv` fixture can exercise
+the `SKIPPED` path on a *gated* metric (§10); `gpu,shadow` is a **non-gated context**
+metric (in `metrics`, absent from `gate`) exercising INV-4. `gate` is the allowlist; a metric may exist in `metrics` (for context / future gating)
 without being gated. **Per-metric threshold overrides:** a metric entry may carry any
 of the keys `warn_pct`, `fail_pct`, `min_abs_ms`, `min_abs_mb` (e.g.
 `metrics["gpu,total"].fail_pct = 15.0`). Precedence when comparing a metric: the
@@ -223,12 +230,19 @@ benchmark literature (§13).
 
 ### 5.5 Modes (CLI)
 
-**Exit-code contract (all modes):** `0` = pass (no FAIL, ≥1 conclusive gated metric),
-`1` = at least one gated metric FAILed, `2` = **inconclusive** (no gated metric reached
-a conclusive verdict — empty/short/all-warmup run, or none of the baseline's gated
-metrics appeared). Code `2` is deliberately distinct from `0`: an all-INCONCLUSIVE run
-must **not** read as a green pass, or the guard-rail (§1) is silently defeated; a caller
-(release script / CI-on-GPU job) treats `2` as "re-run, the data was unusable."
+**Conclusive vs non-conclusive verdict.** A gated metric's verdict is **conclusive** iff
+it comes from a real baseline-vs-current comparison: `OK`, `WARN`, `FAIL`, or `IMPROVED`.
+The three "no comparison happened" verdicts are **non-conclusive**: `MISSING` (the
+baseline metric is absent from the current run, §5.2), `SKIPPED` (baseline below the
+floor, §5.2), and `INCONCLUSIVE` (too few usable intervals, §5.1).
+
+**Exit-code contract (all modes):** `0` = pass (no FAIL **and** ≥1 *conclusive* gated
+metric), `1` = at least one gated metric FAILed, `2` = **no conclusive gated metric**
+(empty/short/all-warmup run, every gated metric MISSING, or every gated metric below the
+floor). Code `2` is deliberately distinct from `0`: a run that never actually compared
+anything must **not** read as a green pass, or the guard-rail (§1) is silently defeated;
+a caller (release script / CI-on-GPU job) treats `2` as "re-run, the data was unusable."
+`--strict-warn` promotes `WARN` **and** `MISSING` to FAIL → exit 1.
 
 - **Compare (default):**
   `perf_gate.py --baseline tools/perf_gate/baseline_rx6600.json --current run.csv`
@@ -291,8 +305,9 @@ negligible.
 ## 8. Accessibility
 
 N/A — a developer command-line tool with no runtime UI. Output is plain text with an
-explicit status word per row (`OK`/`WARN`/`FAIL`/`IMPROVED`/`SKIPPED`/`INCONCLUSIVE`),
-not colour-only, so it is readable in any terminal and in CI logs.
+explicit status word per row (`OK` / `WARN` / `FAIL` / `IMPROVED` / `MISSING` /
+`SKIPPED` / `INCONCLUSIVE`), not colour-only, so it is readable in any terminal and in
+CI logs.
 
 ## 9. Implementation slices
 
@@ -315,11 +330,14 @@ Two ctest entries (Python3-guarded, mirroring `tests/CMakeLists.txt:350-395`):
   over every fixture and asserts the expected verdict + exit below. This is where each
   invariant path is pinned; a wrong verdict fails the test.
 - **`PerfGateCatchesRegression`** (`WILL_FAIL TRUE`) — the *real* compare path
-  `perf_gate.py --baseline fixtures/perf_gate/baseline.json --current
-  fixtures/perf_gate/regressed.csv` must exit 1. Proves the gate fails on a genuine
-  regression through the same entry point a release job uses — not only inside the
-  self-test harness (same "prove it catches a violation" shape as
-  `ShaderLintCatchesViolation`).
+  `perf_gate.py --baseline ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/perf_gate/baseline.json
+  --current ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/perf_gate/regressed.csv` must exit 1.
+  (Absolute `${CMAKE_CURRENT_SOURCE_DIR}` prefixes, as in the mirrored pattern — ctest
+  runs in the build dir, so a relative fixture path would not resolve.) Proves the gate
+  fails on a genuine regression through the same entry point a release job uses — not
+  only inside the self-test harness (same "prove it catches a violation" shape as
+  `ShaderLintCatchesViolation`). `--selftest` likewise takes `--root
+  ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/perf_gate`.
 
 **Expected verdict table** (`--selftest` asserts each row; drives fixture contents):
 
@@ -328,8 +346,8 @@ Two ctest entries (Python3-guarded, mirroring `tests/CMakeLists.txt:350-395`):
 | `ok.csv` | all gated metrics within ±10 % | all `OK` | 0 |
 | `regressed.csv` | `frame,total` +40 % | `frame,total` `FAIL` | 1 |
 | `improved.csv` | `frame,total` −30 % | `frame,total` `IMPROVED` | 0 (INV-3) |
-| `missing.csv` | a gated pass absent from the run | that metric `WARN` | 0; `1` under `--strict-warn` (INV-6) |
-| `floor.csv` | a sub-floor (<0.05 ms) pass swings +1000 % | that metric `SKIPPED` | 0 (INV — floor) |
+| `missing.csv` | gated `gpu,total` absent from the run (totals otherwise OK) | `gpu,total` `MISSING` | 0; `1` under `--strict-warn` (INV-6) |
+| `floor.csv` | gated sub-floor `gpu,tiny` (0.010→0.110 ms) swings +1000 %; totals held | `gpu,tiny` `SKIPPED`, rest `OK` | 0 (floor) |
 | `short.csv` | ≤2 usable intervals after warmup drop | all `INCONCLUSIVE` | 2 (INV-2) |
 
 `baseline.json` also carries a non-gated context metric (e.g. `gpu,shadow` in `metrics`
@@ -347,8 +365,9 @@ committed text — the whole suite runs on GPU-less CI.
   others are reported but non-gating.
 - **INV-5** `fps` is informational only — reported for context, **never** gated (it is
   a redundant, noisier view of frame performance, not a derivation of `frame,total` ms).
-- **INV-6** A baseline metric missing from the current run is a **WARN**, not a FAIL
-  (a legitimate pass rename must not break the build).
+- **INV-6** A baseline metric missing from the current run is a **MISSING** (distinct,
+  non-conclusive) verdict, not a FAIL (a legitimate pass rename must not break the
+  build); `--strict-warn` promotes it to FAIL.
 - **INV-7** The gate is **not** wired into the generic GPU-less CI matrix; only the
   fixture-based comparator self-test is. Real-baseline execution is a dev/release step
   on GPU hardware.
@@ -375,6 +394,16 @@ committed text — the whole suite runs on GPU-less CI.
     override precedence (§5.3), CSV row-parsing robustness (INV-9), and the tri-state
     exit code (0/1/2) including the INCONCLUSIVE case (§5.5).
   - Naming: `min_abs` → `min_abs_ms` throughout; structure: removed the stray empty §2.
+- **Loop 2 (2026-07-17)** — same 2 cold reviewers, re-read cold (loop-1 fixes confirmed
+  held — the fps/`--strict`/off-by-one findings did not resurface). 4 verified findings
+  (MEDIUM 2 · LOW 2), all fixed:
+  - Correctness: defined **conclusive vs non-conclusive** verdicts and gave the
+    absent-metric case its own `MISSING` status, closing the hole where an all-missing
+    run could exit 0 and defeat the guard-rail (§5.5/§5.2/§8/INV-6).
+  - Testability: added a gated sub-floor metric `gpu,tiny` to the fixture baseline so
+    `floor.csv`'s `SKIPPED` row is actually buildable (§5.3/§10).
+  - Accuracy: §10 ctest commands use absolute `${CMAKE_CURRENT_SOURCE_DIR}` fixture
+    paths (ctest runs in the build dir); defined `schema` version handling (§5.3).
 
 ## 13. Sources
 
