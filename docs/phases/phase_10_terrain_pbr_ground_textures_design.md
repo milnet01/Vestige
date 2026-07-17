@@ -250,9 +250,10 @@ Per-pixel algorithm when textures are on:
    single frame. The resulting world normal (macro + detail) replaces the
    macro-only normal in lighting.
 6. **Shade.** Feed blended albedo + world normal + roughness + AO into the
-   lighting. The **textured** path replaces the fixed Blinn-Phong specular
-   (`pow(NdotH,64)*0.15`) with the **real Cook-Torrance GGX** term (§4.4 item 1),
-   driven by the blended roughness (dielectric `F0 = 0.04`, `metallic = 0`);
+   lighting. The **textured** path replaces its interim roughness-driven
+   Blinn-Phong specular (shipped in A2 part 1) with the **real Cook-Torrance GGX**
+   term (§4.4 item 1), driven by the blended roughness (dielectric `F0 = 0.04`,
+   `metallic = 0`);
    diffuse stays Lambert, ambient + CSM unchanged. AO multiplies ambient.
    `tilingDetail()` brightness stays as a subtle macro-variation multiplier. The
    flat-colour fallback branch keeps its existing Blinn-Phong specular
@@ -261,11 +262,10 @@ Per-pixel algorithm when textures are on:
 `heightBlendWeights()` is factored as a **pure function** mirrored on CPU
 (`terrain_material_blend.h`) for a parity test (§7, project Rule 7).
 
-### 4.4 Formula Workbench usage (project Rule 6)
+### 4.4 Specular model & numerical constants (project Rule 6)
 
-Two numerical pieces here are formulas with reference data, not art whims — they
-go through `tools/formula_workbench/` (author → fit → validate → export to GLSL),
-not hand-coded constants:
+Two numerical pieces here deserve a note on their provenance under project Rule 6
+— one is the canonical BRDF (no fit), the other is hand-authored art constants:
 
 1. **Roughness → specular: use the real Cook-Torrance GGX BRDF (no fit).** The
    terrain shader was Blinn-Phong (`pow(NdotH, s) * k`), and an earlier draft of
@@ -275,7 +275,8 @@ not hand-coded constants:
    reproduce GGX's wide, soft shoulder, so even the *theoretical best-case*
    per-roughness fit (fitting shininess + scale freely at each roughness) misses
    the normalised GGX reference by **max-err ≈ 0.24 at roughness 0.8** — squarely
-   inside the terrain's own roughness range — versus the **≤ 0.05** the parity test
+   inside the terrain's own roughness range (the ground layers are rough:
+   grass/dirt/rock/sand ≈ 0.6–1.0) — versus the **≤ 0.05** the parity test
    required. No `(shininess, scale)` Blinn-Phong mapping can meet that bar; it is a
    model-capability limit, not a fit-quality one (verified numerically before
    implementation).
@@ -283,8 +284,11 @@ not hand-coded constants:
    Instead, the textured ground path shades with the **real Cook-Torrance GGX
    specular** the rest of the engine already uses — the `distributionGGX`,
    `geometrySmith`, and `fresnelSchlick` helpers are lifted verbatim from
-   `scene.frag.glsl` (dielectric `F0 = 0.04`, `metallic = 0`, driven by the blended
-   `groundRoughness`). This makes "match GGX" **exact by construction**: the ground
+   `scene.frag.glsl`, together with their dependencies (`geometrySmith` calls
+   `geometrySchlickGGX`, and `distributionGGX` needs the `PI` constant — neither
+   yet present in `terrain.frag.glsl`), driven by the blended `groundRoughness`
+   (dielectric `F0 = 0.04`, `metallic = 0`). This makes "match GGX" **exact by
+   construction**: the ground
    lights with the same BRDF as every other surface, there is no approximation to
    fit or validate, and no runtime-cost concern (one directional light's
    Cook-Torrance term is trivial on the RX 6600 — §6). The flat-colour fallback
@@ -399,12 +403,17 @@ steepness threshold (`triBlend>0`), which is a small fraction of a gentle meadow
   canonical Cook-Torrance GGX (§4.4 item 1), not a fitted approximation, so the
   test pins **reuse**, not fit accuracy: a unit test evaluates the GGX NDF
   transcribed into `terrain.frag.glsl` (`distributionGGX`) against the engine's
-  reference GGX — the `ggx_distribution` Formula-Library definition, which is the
-  documented source of `scene.frag.glsl`'s helper — over a roughness × NdotH grid,
-  and asserts they agree to floating-point tolerance. That is the Rule-7 lock that
-  stops the terrain copy from silently drifting from the shared BRDF. **Objective
-  compile check:** the shader links and a frame renders **GL-error-free**
-  (`glGetError`).
+  reference GGX — the `ggx_distribution` Formula-Library definition
+  (`physics_templates.cpp`), whose `source` field annotates it as *matching*
+  `scene.frag.glsl`'s helper — over an NdotH × roughness grid. The reference is
+  parameterised by the coefficient **`alpha = roughness²`** (not roughness
+  directly), so the test drives it with `alpha = r*r` at each grid roughness `r`
+  and keeps `r ≥ 0.04` to respect the shader helper's `roughness = max(roughness,
+  0.04)` clamp (the FormulaDefinition has none); with those two substitutions the
+  closed forms are identical and must agree to floating-point tolerance. That is
+  the Rule-7 lock that stops the terrain copy from silently drifting from the
+  shared BRDF. **Objective compile check:** the shader links and a frame renders
+  **GL-error-free** (`glGetError`).
 - **Material-set load (unit).** Two failure modes, both → `isValid()==false`
   (fallback), not a crash: (a) mismatched layer dimensions, and (b) a
   missing/corrupt file (stb_image decode returns null — a distinct code path from
@@ -454,8 +463,9 @@ steepness threshold (`triBlend>0`), which is a small fraction of a gentle meadow
    uniforms; textured top-down albedo/roughness/AO with height-blend; keep
    flat-colour fallback branch (**part 1, shipped**). Replace the interim
    Blinn-Phong specular with the **canonical Cook-Torrance GGX** (§4.4 item 1):
-   lift `distributionGGX` / `geometrySmith` / `fresnelSchlick` from
-   `scene.frag.glsl`, drive by blended roughness (dielectric F0=0.04) (**part 2**).
+   lift `distributionGGX` / `geometrySmith` / `fresnelSchlick` (plus their deps
+   `geometrySchlickGGX` + the `PI` constant) from `scene.frag.glsl`, drive by
+   blended roughness (dielectric F0=0.04) (**part 2**).
    *Verify:* GGX-consistency test green (§7) + GL-error-free frame; maintainer
    inspection of `--visual-test` — meadow ground reads as textured grass with a
    soft roughness-driven sheen, Tabernacle unchanged.
@@ -504,8 +514,8 @@ cadence — public repo, batch push).
 - **Tiling still visible** despite distance+macro → hex-tiling is the escalation
   (deferred, noted §2 item 4); design keeps the sample sites isolated so it can
   slot in.
-- **Perf regression** → manual quality tiers (default High) + the F12-panel perf
-  read (§6); no automatic clamp this phase, so no Rule-5 clamp-logging obligation
+- **Perf regression** → manual quality tiers (default High) + the Performance-panel
+  perf read (§6); no automatic clamp this phase, so no Rule-5 clamp-logging obligation
   yet — Rule 5 applies if a future phase adds an auto-tier-drop.
 - **Back-compat break** for flat-colour scenes → explicit `u_useGroundTextures`
   branch + fallback tests.
@@ -631,7 +641,35 @@ could pass the parity test.
 with the engine's **real Cook-Torrance GGX** (reuse `scene.frag.glsl`'s
 `distributionGGX` / `geometrySmith` / `fresnelSchlick`). "Match GGX" becomes exact
 by construction; the parity test becomes a **consistency** lock (terrain's GGX NDF
-vs the `ggx_distribution` reference), not a fit-accuracy lock. §1.1/§4.3/§4.4/§5/§7/§9
+vs the `ggx_distribution` reference), not a fit-accuracy lock. §4.3/§4.4/§5/§6/§7/§9
 updated accordingly. Re-run through cold-eyes on this revision (log below).
 
-**Cold-eyes re-run (2026-07-17):** _(to be filled as loops run — global Rule 14)_
+**Cold-eyes re-run — Loop 1 (2026-07-17).** 2 independent cold reviewers
+(consistency/stale-refs; doc-vs-code GGX accuracy), not briefed on author intent.
+Tally: CRITICAL 0 · HIGH 0 · MEDIUM 6 · LOW 3 · INFO 1 (all verified against
+source; all fixed). Core question — does any active section still tell the
+implementer to build the dropped Blinn-Phong/Workbench fit — came back **clean**.
+Fixes applied:
+
+- **§4.3 pt6 attributed the wrong constant** — said the textured path replaces
+  `pow(NdotH,64)*0.15`, but that is the *fallback* branch's specular; the textured
+  branch's interim is the A2-part-1 roughness-driven Blinn-Phong → reworded.
+- **"Lifted verbatim" understated the dependencies** — `distributionGGX` needs the
+  `PI` constant (absent from `terrain.frag.glsl`) and `geometrySmith` calls a 4th
+  helper `geometrySchlickGGX` → both now named in §4.4 item 1 + §9 A2.
+- **§7 "documented source" overstated** — `physics_templates.cpp`'s `ggx_distribution`
+  only carries a one-way `source:"matches scene.frag.glsl distributionGGX()"`
+  annotation → reworded to "annotated as matching."
+- **§7 test hid the `alpha = roughness²` reparameterization** — the reference
+  definition's free knob is coefficient `alpha`, not roughness; test must drive it
+  `alpha = r*r` and keep `r ≥ 0.04` for the shader's roughness clamp → both stated.
+- **§4.4 intro framing stale** — "these go through the Workbench (author→fit→
+  validate→export), not hand-coded constants" contradicted both its own sub-items
+  (item 1 = no fit; item 2 = hand-authored) → reframed to "provenance note"; §4.4
+  heading retitled "Specular model & numerical constants."
+- **§11 stale "F12-panel"** perf read contradicted §6's loop-3 correction (panel via
+  PanelRegistry, F12 is toggle-fullscreen) → "Performance-panel."
+- LOW: substantiated "r≈0.8 inside the terrain roughness range" (ground layers
+  ≈ 0.6–1.0); trimmed the spurious §1.1 from the revision-note's updated-sections
+  list. INFO (not actioned): PI literal precision differs (`…59` vs `…f`) but both
+  round to the same float32 — no test impact.
