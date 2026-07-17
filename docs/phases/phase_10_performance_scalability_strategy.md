@@ -126,13 +126,14 @@ rewriting** (Rule 3).
   a *temporal* upscaler (FSR2-class) already exists.
 
 ### Built but INERT (highest leverage — scaffolding with no consumer)
-- **`QualityPreset { Low, Medium, High, Ultra, Custom }`** persisted in `DisplaySettings`
-  (`settings.h:82`), editable in the settings UI (`settings_editor_panel.cpp:225`) — but **no
-  subsystem reads it.** Verified: `qualityPreset` appears only in serialize/validate/equality
+- **`QualityPreset { Low, Medium, High, Ultra, Custom }`** (enum at `settings.h:82`) persisted
+  in `DisplaySettings` as the `qualityPreset` field (`settings.h:101`), editable in the settings
+  UI (`settings_editor_panel.cpp:225`) — but **no subsystem reads it.** Verified: `qualityPreset` appears only in serialize/validate/equality
   and the UI. Zero render consumers.
 - **`renderScale` (float, clamped [0.25, 2.0])** persisted, UI slider present
-  (`settings.h:106`) — **no consumer.** Its own doc-comment says "applied before upscaling to
-  the window size," but no upscaling or render-scale code exists. Verified zero consumers.
+  (`settings.h:106`) — **no consumer.** Its own doc-comment describes it as applied before
+  upscaling to the window size, but no upscaling or render-scale code exists. Verified zero
+  consumers.
 - **`WaterSurface::reflectionResolutionScale` (0.25, "0.1–1.0 fraction of window")**, plus
   `reflectionMode` and `refractionEnabled` (`water_surface.h:73`) — persisted
   (`entity_serializer.cpp:659`) with an inspector slider (`inspector_panel.cpp:1775`), but the
@@ -251,7 +252,7 @@ more for the biblical-structure interiors that are the project's primary use cas
 
 A weak machine that renders at 0.6× resolution (T1a) with fog/GI/SSAO off and 1024 shadows
 (T1b) is doing on the order of **a third of the RX 6600's per-frame GPU work** — the coarse
-arithmetic that turns an ~11–18 FPS Deck frame (§3) into a 60 FPS one. Exact numbers must come
+arithmetic that turns an ~33–40 FPS Deck frame (§3, optimistic end) into a 60 FPS one. Exact numbers must come
 from a real Deck-class measurement, or from the RX 6600 *simulating* a weak GPU by forcing a
 low `renderScale` and reading the profiler CSV (§8).
 
