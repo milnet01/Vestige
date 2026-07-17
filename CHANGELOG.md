@@ -22,6 +22,37 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-07-17 Added — Weak/gamer-hardware performance scalability: Tier 1 (render-scale + presets + FXAA/CAS)
+
+The first wave of the weak/gamer/handheld performance program (strategy +
+Tier-1 design docs cold-eyes-converged and signed off). The goal: let a
+GPU-bound weak part hold 60 FPS by rendering fewer pixels and flipping the
+right settings from one dial — **not** by pushing more onto the GPU.
+
+- **Render-scale (3D_E-0032).** Play mode now renders the scene + post-process
+  chain — and the water reflection FBO — at `renderScale × play-resolution`,
+  then upscales to the window via the existing letterboxed blit. At 0.5× the
+  GPU does **~24%** of the work (matches the 0.5² pixel-count prediction). The
+  editor viewport stays at 1.0 for pixel-exact authoring. The value is read
+  live from the settings each frame, so a preset/slider change takes effect
+  immediately.
+- **Quality presets (3D_E-0032).** The Low/Medium/High/Ultra dial is now wired.
+  `applyQualityPreset` maps each tier onto renderScale + anti-alias mode +
+  SSAO + bloom + a volumetric-fog/dynamic-GI **perf-gate**. The perf-gate is
+  AND-ed with the accessibility gate (INV-A11Y) — a preset can lower cost but
+  can **never** re-enable a pass that accessibility disabled. `Custom` applies
+  nothing, so hand-tuned knobs stand; editing render-scale drops the tier to
+  Custom so a later re-apply can't clobber it.
+- **FXAA + CAS budget stack (3D_E-0032).** New `AntiAliasMode::FXAA` (Timothy
+  Lottes' FXAA 3.11 at quality preset 39, the sharp-FXAA tuning) as the cheap
+  tier's anti-aliasing — a single post-process pass on the composited LDR image,
+  no multisample buffer, no history. The scene FBO's sample count now follows
+  the AA mode: `None`/`FXAA` render **single-sample** (which also removes a
+  latent bug where `None` secretly paid full 4× MSAA cost); only `MSAA 4x`
+  allocates 4 samples. A CAS (AMD FidelityFX Contrast-Adaptive-Sharpening,
+  sharpen-only) pass then follows FXAA to claw back the render-scale upscale
+  softness and counter FXAA's mild blur.
+
 ### 2026-07-09 Added — Acoustic pre-bake: baked per-probe impulse responses (AX3)
 
 AX2 made reverb audible from **hand-authored** zones and measured `.wav` IRs. AX3
@@ -10257,8 +10288,6 @@ existing cases (``HelpersMatchEvaluatorPrecisely``,
   (15 entries — cmake/ctest/make/cppcheck/clang-tidy plus
   MCP filesystem read tools) to reduce per-turn prompts during audit
   sessions.
-
-### Added
 
 - **Profiler CSV logging (`--profile-log[=PATH]`) — meadow benchmark slice S6**
   New `engine/profiler/profile_log.{h,cpp}`: a throttled (~1 Hz,

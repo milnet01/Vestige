@@ -240,7 +240,14 @@ void SettingsEditorPanel::drawDisplayTab()
     float scale = p.display.renderScale;
     if (ImGui::SliderFloat("Render scale", &scale, 0.25f, 2.0f, "%.2f"))
     {
-        m_editor->mutate([scale](Settings& s) { s.display.renderScale = scale; });
+        // Hand-editing render scale drops the tier to Custom so the next
+        // applyQualityPreset (on load / any settings push) doesn't silently
+        // clobber the manual value back to the named preset's (design §4.1).
+        m_editor->mutate([scale](Settings& s)
+        {
+            s.display.renderScale  = scale;
+            s.display.qualityPreset = QualityPreset::Custom;
+        });
     }
 
     ImGui::Spacing();

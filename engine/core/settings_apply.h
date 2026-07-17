@@ -87,10 +87,10 @@ private:
 ///                a test mock.
 ///
 /// @note Intentionally does **not** touch the quality preset or render
-///       scale — those feed the renderer and are wired in later slices
-///       (render scale is a Renderer concern; quality preset governs
-///       shader variants / LOD bias / shadow resolution and is consumed
-///       by individual subsystems).
+///       scale. Those are handled by `applyQualityPreset` (below): the
+///       preset maps onto the renderer AA/SSAO/bloom/heavy-post toggles,
+///       and `renderScale` is an engine-owned value the play-mode resize
+///       reads per-frame (not a renderer setter) — see the Tier-1 design.
 void applyDisplay(const DisplaySettings& display, DisplayApplySink& sink);
 
 // ================================================================
