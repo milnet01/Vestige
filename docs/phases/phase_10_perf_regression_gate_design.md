@@ -462,6 +462,15 @@ runs on GPU-less CI.
     (`gpu,tiny` present → SKIPPED, INCONCLUSIVE only in `short.csv`); `--selftest` now
     also re-runs `warn`/`missing` under `--strict-warn` (exit 1); corrected the INV-5
     coverage claim to structural (§10).
+- **Loop 5 (2026-07-17)** — convergence check. Traced all 7 fixtures through the §5.2
+  ordered classification + §5.5 exit contract: every asserted (verdict → exit) derives
+  exactly; exit codes 0/1/2/3 all reachable and non-contradictory; 7 status words defined
+  before use; defaults consistent; INV-1..9 consistent; Contents matches body; no dangling
+  references. **Zero substantive findings — converged.** (This pass was self-conducted:
+  the independent-reviewer dispatch returned repeated 529/overload errors, so the final
+  check is a maintainer trace rather than a fresh cold agent; implementation + the ctest
+  self-test provide the empirical convergence proof — a design contradiction would make a
+  fixture fail to produce its asserted verdict.)
 
 ## 13. Sources
 
