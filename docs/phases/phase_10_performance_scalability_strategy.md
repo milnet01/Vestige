@@ -44,9 +44,10 @@ mid-high desktop card; it is a mid-range laptop GPU with a meaningful weak tail.
 | **Low-end / Medium** | GTX 1650, GTX 1060 | ~3–4 TFLOPS | 1080p | 16.6 ms |
 | **Handheld / Low** | Steam Deck (RDNA2, 8 CU) | ~1.6 TFLOPS | 1280×800 | 16.6 ms |
 
-*Laptop parts are power-limited, so real throughput is well below the desktop equivalents —
-the survey trend toward mobile silicon means we should treat "High" as more constrained than
-raw TFLOPS suggest.
+*Laptop parts are power-limited, so *effective* throughput is well below the raw-TFLOPS desktop
+equivalents — which is why a higher-TFLOPS laptop card (RTX 4060 Laptop) sits in "High" rather
+than above the desktop RX 6600. The survey trend toward mobile silicon means we treat "High" as
+more constrained than raw TFLOPS suggest.
 
 The **Steam Deck (~1.6 TFLOPS, ~5.5× weaker than the RX 6600, at 1280×800)** is the concrete
 low-end design point. If the meadow holds 60 FPS on the Deck, it holds nearly everywhere.
@@ -56,9 +57,15 @@ low-end design point. If the meadow holds 60 FPS on the Deck, it holds nearly ev
 ## 3. Measured cost structure (profile before optimise)
 
 Captured with the `--profile-log` CSV logger (built 2026-07-17, commit 9507430) on the RX
-6600 via `--visual-test`. **The GPU-timer values are real hardware timings** (GL timestamp
-queries are immune to the ASan debug-build slowdown); the CPU-scope values in that build are
-ASan-inflated ~13× and are used only for *relative* structure, not absolute cost.
+6600 via `--visual-test`, a **Debug + AddressSanitizer** build. **Read the per-pass GPU
+*ranking* as reliable and the absolute ms as only indicative.** GL timestamp queries measure
+the GPU timeline, but a per-pass delta still absorbs GPU-idle bubbles when the ASan-slowed CPU
+(~13× on the CPU side) starves the command queue — so the absolute ~16.5 ms almost certainly
+*overstates* the true RX 6600 GPU cost. Corroborating that: the same RX 6600 hits ~181 FPS
+(~5.5 ms) in the Release editor — a different build *and* camera path — so the real meadow GPU
+cost sits somewhere between ~5.5 and ~16.5 ms. A **Release re-capture** (now trivial with
+`--profile-log`, §8) pins the absolute numbers; the *ranking* below, which drives every
+decision here, does not depend on it.
 
 **Per-pass GPU cost, RX 6600, meadow visual-test (steady-state interval average):**
 
@@ -68,14 +75,16 @@ ASan-inflated ~13× and are used only for *relative* structure, not absolute cos
 | **PostProcess** (SSAO + bloom + composite) | ~3.7 | ~23% | full-screen passes |
 | **Terrain** | ~2.8 | ~17% | GGX ground |
 | Foliage | ~0.09 | <1% | negligible *in this capture* |
-| Water | ~0.02 | <1% | negligible — FBOs already ¼-res |
+| Water | ~0.02 | <1% | *surface pass only*; the two ¼-res geometry-only reflection/refraction re-renders fold into Scene/Terrain (`engine.cpp:1647–1689`) |
 | **GPU total** | ~16.5 | 100% | ≈ 60 FPS-equivalent on RX 6600 |
 
 **The most important finding is a corrected assumption.** Before measuring, the water
 reflection/refraction (two extra scene re-renders) was the presumed villain. Measured, water
 is ~0.02 ms — because its FBOs are already quarter-resolution (`w/4 × h/4` = 1/16 the pixels,
-`water_system.cpp:24`) and geometry-only. **The real GPU budget is the base scene render +
-the post-process stack.** That is what scaling must attack first.
+`water_system.cpp:27`) and geometry-only. **The real GPU budget is the base scene render +
+the post-process stack.** That is what scaling must attack first. (This directly reframes
+ROADMAP **3D_E-0028**, which flags the planar-reflection water pass as a *suspected* hotspot —
+measured, it is not; that item can be de-prioritised.)
 
 **Caveat (INV-CAVEAT-1):** the `--visual-test` camera path is a fixed fly-through and may not
 frame the dense-grass or looking-across-water viewpoints a standing player would. Foliage and
@@ -84,10 +93,13 @@ foliage/water work, capture from a **worst-case meadow vantage** (dense grass fi
 frame, water plane at a grazing angle) to confirm their true cost — do not conclude "foliage
 is free" from the fly-through alone.
 
-**On weak hardware the ranking is what scales, not the absolute ms.** A ~16.5 ms RX 6600 frame
-becomes an estimated **~55–90 ms on a Steam Deck** (5.5× weaker, before the resolution
-difference helps) — i.e. **11–18 FPS** without scaling. Closing that gap needs both fewer
-pixels (resolution scaling) and cheaper pixels (feature gating).
+**On weak hardware the ranking is what scales, not the absolute ms.** Take even the *optimistic*
+end — the ~5.5 ms Release-editor figure: a Steam Deck ~5.5× weaker (§2), at its native 800p
+(fewer pixels than 1080p, which helps it), lands around **~25–30 ms ≈ 33–40 FPS**; on the
+heavier visual-test config it is worse. Either way it is **below the 60 FPS floor** without
+scaling. Closing that gap needs both fewer pixels (resolution scaling) and cheaper pixels
+(feature gating). The exact figure awaits a Deck-class measurement (§8) — what is not in doubt
+is the *sign* of the gap.
 
 ---
 
@@ -101,13 +113,14 @@ rewriting** (Rule 3).
   (`None/MSAA_4X/TAA/SMAA`), SDSM, colour grading, POM, skybox — runtime setters, today driven
   only by dev hotkeys / editor / `--isolate-feature` (`renderer.h:221–298`, `engine.cpp:814`).
 - **Accessibility-gated passes** (persisted + applied): volumetric fog, god rays, dynamic
-  (froxel) GI, DoF, motion blur, fog — via `PostProcessAccessibilitySettings`
-  (`settings.h:278`, `settings_apply.h:212`).
+  (froxel) GI, DoF, motion blur, fog — via the persisted `PostProcessAccessibilityWire`
+  (`settings.h:278`) applied to the renderer-side `PostProcessAccessibilitySettings`
+  (`settings_apply.h:212`).
 - **Water shader-complexity tiers** via `FormulaQualityManager` (`quality_manager.h`), wired
   for water/caustics only (`engine.cpp:1548`).
 - **CPU frustum culling** everywhere (scene, shadows, foliage chunks) with `CullingStats`
   (`frustum.h`, `renderer.cpp:3149`).
-- **Water FBOs already at ¼ resolution** (`water_system.cpp:24`) — an optimisation already in
+- **Water FBOs already at ¼ resolution** (`water_system.cpp:27`) — an optimisation already in
   place, which is why water measured cheap.
 - **TAA + motion-vector G-buffer** (`taa.h`, `test_motion_vectors_mrt`) — the prerequisite for
   a *temporal* upscaler (FSR2-class) already exists.
@@ -120,13 +133,22 @@ rewriting** (Rule 3).
 - **`renderScale` (float, clamped [0.25, 2.0])** persisted, UI slider present
   (`settings.h:106`) — **no consumer.** Its own doc-comment says "applied before upscaling to
   the window size," but no upscaling or render-scale code exists. Verified zero consumers.
+- **`WaterSurface::reflectionResolutionScale` (0.25, "0.1–1.0 fraction of window")**, plus
+  `reflectionMode` and `refractionEnabled` (`water_surface.h:73`) — persisted
+  (`entity_serializer.cpp:659`) with an inspector slider (`inspector_panel.cpp:1775`), but the
+  water FBO caller hardcodes `w/4` regardless (`water_system.cpp:27`) — **no renderer
+  consumer.** Inert, exactly like `renderScale`. (This is why T2b is mostly wiring, not new
+  state.)
 
 ### Missing entirely
 - No dynamic-resolution / upscaling path (renderScale inert; final blit is a straight copy).
-- No runtime-configurable shadow resolution / cascade count (2048×4 hardcoded, `renderer.cpp:577`).
-- No configurable water-reflection resolution (`/4` hardcoded) and no water on/off toggle.
+- No runtime-configurable shadow resolution / cascade count — default-constructed at
+  `renderer.cpp:577`; the 2048×4 defaults live in `CascadedShadowConfig`
+  (`cascaded_shadow_map.h:21–27`).
 - No foliage density scalar, draw-distance setting, or LOD ladder (draw distance hardcoded
-  `100.0f`, shadow-cast `30.0f`; `engine.cpp:1612`, `foliage_renderer.cpp`).
+  `100.0f` at `engine.cpp:1612`, shadow-cast distance `30.0f` at `foliage_renderer.h:77`).
+  *(Water-reflection resolution is not listed here — the fields exist but are inert; see the
+  INERT list above.)*
 - No occlusion culling — a `frustum_cull.comp.glsl` compute shader exists but is unwired
   (`m_mdiEnabled=false`, `renderer.h:774`).
 
@@ -174,10 +196,13 @@ mapping, e.g.:
   preset is a small CPU-side apply function; `Custom` leaves the individual toggles free.
 - *Interplay:* the accessibility wire (reduced-motion etc.) stays authoritative — a preset
   never re-enables something accessibility turned off (§8).
+- *Ships in two waves:* the rows backed by existing setters (`renderScale`, AA, SSAO, bloom,
+  fog, GI) land first; the shadow / foliage / water rows arrive with their Tier-2 knobs (T2a–c).
 
 **T1c. Auto-detect a starting preset** (small, optional). On first run, pick a default preset
 from GL renderer string / VRAM (already read by `MemoryTracker`) so a Deck/iGPU user starts at
-Low instead of a 12 FPS Ultra. Player can override. *Reuse:* `MemoryTracker::getGpuTotalMB`,
+Low instead of a 12 FPS Ultra. Player can override. An unrecognised renderer string falls back
+to Medium (never worse than a wrong guess; see §9). *Reuse:* `MemoryTracker::getGpuTotalMB`,
 the GL renderer string already logged at startup.
 
 ### Tier 2 — Structural knobs the preset needs (moderate new code)
@@ -189,15 +214,19 @@ capture didn't stress it (INV-CAVEAT-1) — verify from a worst-case vantage fir
 *Reuse:* the existing distance-cull + shader distance-fade in `foliage_renderer`.
 
 **T2b. Configurable water reflection resolution + on/off.**
-Turn the hardcoded `/4` into a per-preset factor and allow Low to drop planar reflection
-entirely (fall back to a cheap approximation). Low structural cost; only matters from
-water-facing vantages (verify per INV-CAVEAT-1). *Reuse:* `WaterFbo::init/resize` already take
-explicit dims — only the caller's fixed `/4` needs to become a variable.
+Wire the **already-present-but-inert** `reflectionResolutionScale` / `reflectionMode` /
+`refractionEnabled` fields (§4; `water_surface.h:73`, inspector slider at
+`inspector_panel.cpp:1775`) to the water FBO size + pass, and let a preset drop planar
+reflection entirely on Low. Low structural cost; only matters from water-facing vantages
+(verify per INV-CAVEAT-1). *Reuse:* `WaterFbo::init/resize` already take explicit dims and the
+state fields + UI already exist — the caller's fixed `w/4` (`water_system.cpp:27`) just needs to
+read `reflectionResolutionScale`.
 
 **T2c. Configurable shadow resolution + cascade count.**
 Thread `CascadedShadowConfig` (already parameterised, just constructed with defaults) through a
 setter so the preset can pick 1024×3 (Low) … 4096×4 (Ultra). *Reuse:* the config struct
-already exists; only the hardcoded default construction blocks it.
+already exists; only the hardcoded default construction blocks it. (Relates to ROADMAP
+**3D_E-0029**, static-geometry shadow caching.)
 
 ### Tier 3 — Advanced (larger, later; each its own design doc)
 
@@ -240,8 +269,9 @@ low `renderScale` and reading the profiler CSV (§8).
 | Occlusion cull (T3b) | **GPU** | per-instance depth test (Hi-Z) |
 
 This is where the user's "push onto the GPU" instinct is correct: when a scene is **CPU-bound**
-(draw-call submission, culling, scene traversal — e.g. the water path re-traverses the scene
-3× on the CPU), moving that work to the GPU (GPU culling, instanced/indirect draws) is the fix.
+(draw-call submission, culling, scene traversal — e.g. the water path re-traverses the scene up
+to 3× on the CPU: main + refraction + reflection `renderScene` calls, `engine.cpp:1647–1689`),
+moving that work to the GPU (GPU culling, instanced/indirect draws) is the fix.
 Our *measured* meadow is GPU-bound on the RX 6600, so Tier 1 targets GPU load first; the
 CPU→GPU offload (T3b) matters more for the dense biblical interiors.
 
@@ -252,18 +282,24 @@ CPU→GPU offload (T3b) matters more for the dense biblical interiors.
 Every tier item is measured with the **profiler CSV** (`--profile-log`, now functional) — this
 is the concrete "profile before/after" instrument.
 
-1. **Weak-GPU simulation on the dev machine.** Force `renderScale` low and/or a Low preset,
-   capture the meadow CSV, and confirm the per-pass GPU ms drops as predicted. This lets us
-   validate scaling *without* a physical Deck. *Check:* `gpu,total` at 0.5× renderScale is
-   ≈ 25–30% of the 1.0× value.
-2. **Worst-case vantage capture** (INV-CAVEAT-1) before Tier 2: dense grass + grazing water,
-   to get foliage/water's true cost, not the fly-through's.
-3. **Per-preset acceptance:** each preset holds its target frame budget from the worst-case
-   vantage (Low ≤ 16.6 ms on a simulated weak profile; Ultra unchanged on RX 6600).
-4. **Regression gate (existing 3D_E-0030):** the meadow benchmark + profiler CSV is already the
+1. **Resolution → GPU-ms curve (dev machine).** Force `renderScale` low, capture the meadow
+   CSV, confirm `gpu,total` scales with pixel count (≈ 25–30% at 0.5×). *This validates the
+   scaling **mechanism** only — it is NOT a weak-GPU emulation:* a strong GPU rendering fewer
+   pixels is not CU-/bandwidth-limited at native resolution the way a Deck is, so a low
+   `renderScale` on the RX 6600 says nothing about the Deck's frame time.
+2. **Release re-capture** for trustworthy *absolute* GPU ms (resolves the Debug+ASan caveat in
+   §3): capture on a Release build so per-pass ms aren't inflated by CPU-starvation bubbles.
+3. **Worst-case vantage capture** (INV-CAVEAT-1) before Tier 2, from a **pinned camera pose**
+   (a fixed transform committed alongside the benchmark, so the 3D_E-0030 gate is
+   deterministic): dense grass filling the frame + water at a grazing angle, to get
+   foliage/water's true cost, not the fly-through's.
+4. **Per-preset acceptance — needs a Deck-class measurement**, not the `renderScale` proxy (see
+   1): each preset holds ≤ 16.6 ms from the pinned worst-case vantage on its target hardware
+   (or the closest available proxy); Ultra unchanged on RX 6600.
+5. **Regression gate (existing 3D_E-0030):** the meadow benchmark + profiler CSV is already the
    planned automated perf-regression guard-rail. Tier 1 makes it actionable — the CSV writer it
    depends on now exists.
-5. **Accessibility non-regression:** presets never override an accessibility-off pass; the
+6. **Accessibility non-regression:** presets never override an accessibility-off pass; the
    reduced-motion fog/GI gates stay authoritative (test: apply Ultra with reduce-motion on →
    fog/GI stay off).
 
@@ -275,7 +311,10 @@ is the concrete "profile before/after" instrument.
   sharpen (T1a) and move to temporal (T3a) later. A hard lower clamp (already [0.25, 2.0]) keeps
   it from degenerating.
 - **Risk — preset/accessibility precedence bugs.** One apply-order rule (accessibility wins),
-  pinned by a test (§8.5).
+  pinned by a test (§8.6).
+- **Risk — auto-detect (T1c) brittleness.** GL-renderer-string matching varies across drivers
+  and parts; an unrecognised string defaults to Medium (never a hard fail) and the player can
+  always override.
 - **Risk — concluding from the fly-through** that foliage/water are free (INV-CAVEAT-1).
   Mitigated by the worst-case capture gate.
 - **Out of scope:** frame generation (FSR3 interpolation) — latency/quality tradeoffs not worth
