@@ -85,7 +85,10 @@ void applyQualityPreset(QualityPreset preset, DisplaySettings& display,
         bool          heavyPost;   // volumetric fog + dynamic GI perf-gate
     };
 
-    Row row;
+    // Zero-init so the compiler sees a defined value on every path — a
+    // hypothetical out-of-range enum then falls through to a safe (clamped)
+    // default rather than tripping -Werror=maybe-uninitialized under -O3.
+    Row row{};
     switch (preset)
     {
     case QualityPreset::Low:
