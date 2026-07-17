@@ -1,6 +1,6 @@
 # Meadow Pond — Physical Correctness & Natural Shoreline (Design)
 
-**Status:** Draft — cold-eyes loop 2 applied
+**Status:** Draft — cold-eyes loop 3 applied
 **Program:** 3D_E-0027 (meadow benchmark scene), Phase 10 terrain/water
 **Scope:** Fix the meadow pond so it reads as a real body of water: a level
 surface that fills a contained basin, with a natural contour shoreline instead
@@ -36,7 +36,7 @@ missing feature:
   `engine/systems/terrain_system.cpp:28-31`) → a 256 m × 256 m world. A circle in
   normalized grid space is therefore a circle in world space.
 - The basin is carved by `meadowHeight01()`
-  (logic at `engine/environment/meadow_terrain.cpp:83-93`, using values set at
+  (logic at `engine/environment/meadow_terrain.cpp:83-94`, using values set at
   `engine/core/engine.cpp:2253-2255`): `pondRadiusGrid = 0.11` (≈ 28 m) and
   `bowlDepth01 = 0.09` (≈ 4.5 m dip at centre) over the 50 m height scale. The
   carve `falloff` decreases monotonically to 0 at `pondRadiusGrid`
@@ -50,8 +50,9 @@ missing feature:
 
 At the 7 m plane edge the carved floor is roughly `t = 0.25` up the bowl
 (`falloff ≈ 0.84`), so the surface there is ~0.8 m below the water plane
-(estimate). Because water draws with depth-write off but **depth-test on**
-(`water_renderer.cpp:106`), those submerged edge fragments are **not** occluded,
+(estimate). Because water draws with depth-write off (`water_renderer.cpp:106`)
+but the depth **test** stays on (renderer-global reverse-Z GEQUAL,
+`renderer.cpp:115,121`), those submerged edge fragments are **not** occluded,
 and the shader's shore fade (`edgeFade`, §3.3) only feathers the last 1 m of
 *view-ray* water thickness — which at grazing angles far exceeds the 0.8 m
 vertical depth, so the edge shades opaque. The result is a hard, opaque square
@@ -108,18 +109,24 @@ PondFill computePondFill(HeightSampler sampleHeight, glm::vec2 centreWorld,
 `HeightSampler` is `float(float wx, float wz)`; the scene passes a lambda over
 `Terrain::getHeight`, the test passes an analytic sampler / `meadowHeight01`.
 
-### 3.1 Contained fill level (INV-2) — CPU helper
-One outward ray-cast from the pond centre computes both the spill height and the
-flood radius (§3.2), sharing the march:
+The helper marches `N_RAYS` rays **once, storing each ray's sampled height
+profile**, then derives the fill from the stored samples in two passes — spill
+first (§3.1), flood second (§3.2). A single forward pass is impossible: the flood
+radius keys on `waterLevelY`, which needs `spillHeight = min over all rays` and so
+is unknown while ray #1 is still marching. Retaining the per-ray samples is what
+makes the two passes cheap (no re-march). §8's computation order matches.
 
-- Cast `N_RAYS` rays over `[0, 2π)` out to `R_SCAN = SCAN_FACTOR · R_rim` (a bit
-  past the carve boundary), stepping `MARCH_STEP` metres.
-- Per ray, track the **ridge crest** = max terrain height sampled along the ray.
-- `spillHeight = min` over rays of the per-ray ridge crest — a single-ring
+### 3.1 Contained fill level (INV-2) — CPU helper, pass 1
+- **March (shared):** cast `N_RAYS` rays over `[0, 2π)` out to `R_SCAN =
+  SCAN_FACTOR · R_rim` (a bit past the carve boundary), stepping `MARCH_STEP`
+  metres; store the sampled terrain height at every step of every ray.
+- **Pass 1 (spill):** per ray, `ridgeCrest = max` stored height along the ray;
+  `spillHeight = min` over rays of `ridgeCrest` — a single-ring
   min-over-directions-of-max-along-path. This is a **circular-barrier
   approximation**, exact only for a basin whose escape saddles lie within
   `R_SCAN` and whose carve is monotone to the rim (the authored bowl); it is not
-  a general watershed solve (§9).
+  a general watershed solve (§9), and §7.1 validates it against an independent
+  flood-fill.
 
 Then:
 
@@ -128,23 +135,27 @@ waterLevelY = min(bowlFloorY + DESIRED_DEPTH, spillHeight - RIM_MARGIN)
 waterLevelY = max(waterLevelY, bowlFloorY + MIN_DEPTH)   // degenerate guard
 ```
 
-`RIM_MARGIN` must exceed the fbm height variation **between adjacent ray samples
-near the crest** (sub-metre at `MARCH_STEP`/`N_RAYS` density) — not the full ±4 m
-fbm amplitude, which is the global range, not the local gradient. The `MIN_DEPTH`
-guard covers the degenerate case where a low saddle would push `spillHeight -
-RIM_MARGIN` below the floor (a zero/negative-depth pond).
+`RIM_MARGIN` must exceed the **cross-ray** crest-height variation — the difference
+in ridge crest between *adjacent rays* (angular undersampling is what lets a low
+saddle slip between two rays), which is the containment-dangerous quantity. This
+is distinct from the along-ray sampling error, which `MARCH_STEP` controls. See §8
+for values. The `MIN_DEPTH` guard covers the degenerate case where a low saddle
+would push `spillHeight - RIM_MARGIN` below the floor (a zero/negative-depth
+pond); **note the guard *overrides* the containment clamp** — in that degenerate
+basin the pond trades INV-2 for a non-empty surface, consistent with the
+double-basin case being out of scope (§9).
 
-### 3.2 Water sheet sized to the actual flood (INV-3) — CPU helper
-On the **same** ray-cast, record the **outermost** radius on each ray where
-terrain is still below `waterLevelY` (the last submerged sample before it rises
-and stays above — not merely the first up-crossing, so an fbm bump that pokes
-above `waterY` then dips below again doesn't truncate the flood). Then:
-
+### 3.2 Water sheet sized to the actual flood (INV-3) — CPU helper, pass 2
+- **Pass 2 (flood):** over the **same stored samples**, now that `waterLevelY` is
+  known, record per ray the **outermost** radius where terrain is still below
+  `waterLevelY` (the last submerged sample before it rises and stays above — not
+  merely the first up-crossing, so an fbm bump that pokes above `waterY` then dips
+  below again doesn't truncate the flood).
 - `floodRadius = max` over rays of that outermost submerged radius. By INV-2,
   `waterY < spillHeight ≤` every ray's crest, so each ray does cross above `waterY`
   within `R_SCAN`; a ray that never rises above `waterY` within `R_SCAN` is capped
   at `R_SCAN` and flagged (should not occur for the contained bowl — asserted,
-  §7).
+  §7.2).
 - `POND_SIZE = 2 · (floodRadius + EDGE_PAD)`.
 
 `EDGE_PAD` is chosen ≥ the shoreline-radius variation over one ray spacing (or
@@ -191,7 +202,7 @@ INV-3. Replace it, for the pond, with a **contour band**: paint the dirt channel
 (splat channel 2 — verified R=grass/G=rock/B=dirt/A=sand at `terrain.cpp:1012`,
 matching `bankChannel = 2` at `engine.cpp:2301`) with weight `1 - smoothstep(0,
 BAND_WIDTH, abs(terrainHeight(x,z) - waterLevelY))` over cells near the pond, via
-the existing per-channel splat write (`terrain.h:147`). The damp edge then hugs
+the existing per-channel splat write (`terrain.h:148`). The damp edge then hugs
 the waterline contour on all sides. `applyBankBlend` itself is unchanged (it stays
 for editor-authored rectangular water bodies); only the meadow pond stops calling
 it.
@@ -241,7 +252,7 @@ once), so no parity test is required. Performance is still verified by measureme
 - Terrain sampling: existing `Terrain::getHeight()` (already called at
   `engine.cpp:2357,2420,2428`).
 - Contour shore paint: same per-channel splat write as `applyBankBlend`/
-  `generateAutoTexture` (`terrain.h:147`).
+  `generateAutoTexture` (`terrain.h:148`).
 - Basin carve: existing `meadowHeight01()` bowl — unchanged.
 - New code is CPU-only and small: one ray-cast helper (spill + flood), a contour
   splat loop, and a height-test in the existing grass stamp loop. No shader edit.
@@ -249,17 +260,21 @@ once), so no parity test is required. Performance is still verified by measureme
 ## 6. Preconditions, risks, failure modes
 
 - **Precondition (dry-edge occlusion):** opaque terrain is drawn before the water
-  pass with the depth test enabled (reverse-Z GEQUAL). Verified today
-  (`engine.cpp:1606` enables `GL_DEPTH_TEST`; terrain pass precedes the water draw
-  at `:1679`). *Open question for the code owner:* confirm the depth test stays
-  enabled through `rebindSceneFbo()`/`restoreViewState()` (`engine.cpp:1669-1670`)
-  up to the water draw.
+  pass with the depth test enabled under reverse-Z GEQUAL. The renderer runs the
+  scene pass with `GL_DEPTH_TEST` enabled and `glDepthFunc(GL_GEQUAL)`
+  (`renderer.cpp:115,121`); the water draw (`engine.cpp:1679`) follows the opaque
+  terrain pass, after `rebindSceneFbo()`/`restoreViewState()`
+  (`engine.cpp:1669-1670`). *Open question for the code owner:* confirm the depth
+  test remains enabled through `restoreViewState()` up to the water draw (no
+  `glDisable(GL_DEPTH_TEST)` on that path) — this is the mechanism's load-bearing
+  precondition.
 - **Real opaque-square failure mode:** any part of the enlarged sheet overhanging
   a region with **no opaque occluder at/above `waterY`** (a terrain LOD hole, the
   map edge, terrain disabled) is not depth-culled and shades opaque (refraction-
   clipped). For the meadow the pond centre is world ≈ (0, −15) with
-  `floodRadius + EDGE_PAD` ≪ the 256 m terrain half-extent and terrain always
-  enabled, so no overhang — but this is the condition to preserve, not an
+  `floodRadius + EDGE_PAD` (corners ×√2) ≪ the 128 m terrain half-extent (origin
+  −128, `terrain_system.cpp:33`) and terrain always enabled, so no overhang — but
+  this is the condition to preserve, not an
   assumption to ignore. *Open question:* confirm the sheet stays within terrain
   bounds for the shipped shape.
 - **Containment residual (INV-2):** the min-over-rays-of-ridge-max is exact only
@@ -270,9 +285,14 @@ once), so no parity test is required. Performance is still verified by measureme
   `waterCfg.width`; the larger sheet enlarges the caustic projection area. Terrain
   caustics are gated by `waterY`, so they still only show on submerged ground —
   verify no caustics bleed onto dry banks after the change.
-- **Wave amplitude at the shoreline:** waves displace the surface by ≤ 0.25 m
-  here; the 1 m `softEdgeDistance` feather absorbs that, so the waterline should
-  not shimmer — confirm visually.
+- **Wave amplitude at the shoreline:** the pond's wave amplitudes sum to ~0.009 m
+  (`waves[*].amplitude` = 0.004/0.003/0.002, applied as field `.x` in
+  `water.vert.glsl:38`; the `0.25` in the config is `waves[2].speed`, not
+  amplitude). This sub-centimetre displacement is negligible. Note the occlusion
+  **silhouette** is fixed by the mesh vs. terrain depth, not by the alpha feather
+  (`edgeFade` is alpha-only and over dry ground is opaque, not transparent — §3.3);
+  so the static `EDGE_PAD` margin, not the fade, is what covers any dynamic reach.
+  Confirm visually that the ~9 mm crest does not shimmer at the waterline.
 - **Startup fallback (`!u_hasRefractionTex`):** reachable only until the refraction
   FBO is first populated (`water_renderer.cpp:155-159`). In it the `alpha *=
   edgeFade` line is skipped entirely (`water.frag.glsl:285`) and the dry edges stay
@@ -281,13 +301,21 @@ once), so no parity test is required. Performance is still verified by measureme
 
 ## 7. Verify plan
 
-1. **INV-2 unit test (headless):** call the pure `computePondFill` (§3) with the
-   shipped `MeadowShape` and a `meadowHeight01` sampler in
-   `tests/test_meadow_terrain.cpp` (headless — file comment line 5). Assert
-   `waterLevelY < spillHeight` and, independently, `waterLevelY < min(terrainHeight)`
-   sampled on a dense ring **outside** `R_rim` (in the escape neighbourhood, so the
-   assert is not tautological with the ring the fill is derived from), and
-   `waterLevelY ≥ bowlFloorY + MIN_DEPTH`.
+1. **INV-2 containment test (headless):** call the pure `computePondFill` (§3) with
+   the shipped `MeadowShape` and a `meadowHeight01` sampler in
+   `tests/test_meadow_terrain.cpp` (headless — file comment line 5). The invariant
+   is verified by an **independent flood-fill**, not by restating the construction:
+   fill a fine grid from the pond-centre cell, adding any 4-neighbour whose terrain
+   height `< waterLevelY`; assert the flooded set **never reaches the grid boundary**
+   (`R_SCAN`) — i.e. water at `waterLevelY` cannot escape. This exercises the real
+   containment property against a method (flood-fill) *independent* of the
+   production min-of-ridge-maxima, so it catches an angular-undersampling error the
+   production approximation would miss. Keep `waterLevelY < spillHeight` and
+   `waterLevelY ≥ bowlFloorY + MIN_DEPTH` only as **by-construction sanity checks**
+   (labelled as such — they cannot fail unless the arithmetic is broken), not as the
+   containment proof. (A pre-computed dense-ring min would false-fail here: the outer
+   downslope legitimately dips below `waterLevelY` outside the basin, which the
+   flood-fill correctly ignores because no monotone sub-`waterY` path reaches it.)
 2. **Flood-radius sanity (headless):** assert `computePondFill` returns a finite
    `floodRadius` (no ray hit the `R_SCAN` cap) and `floodRadius < R_rim` for the
    shipped shape.
@@ -301,14 +329,32 @@ once), so no parity test is required. Performance is still verified by measureme
 7. **Performance (Release):** record meadow FPS before/after; acceptance is
    **≥ 60 FPS maintained** with no regression beyond noise on the RX 6600.
 
-## 8. Constants (hand-authored)
+## 8. Constants
 
-`DESIRED_DEPTH`, `RIM_MARGIN`, `MIN_DEPTH`, `EDGE_PAD`, `N_RAYS`, `R_SCAN`
-(`SCAN_FACTOR`), `MARCH_STEP`, `BAND_WIDTH`, `SHORE_MARGIN` are art-/geometry-
-directed with no reference dataset to fit against, matching the neighbouring
-meadow constants that already carry the note (`engine.cpp:2243-2245`). Each gets a
-`// TODO: revisit via Formula Workbench` comment at its definition per project
-Rule 6.
+Two groups. The **geometric** constants are derived (not art-directed); each is
+given with its relationship and a provisional value. The **look** constants are
+art-directed and carry the `// TODO: revisit via Formula Workbench` note per
+project Rule 6, matching the neighbouring meadow constants (`engine.cpp:2243-2245`).
+
+**Geometric (derived; provisional values for the shipped bowl,
+`R_rim ≈ 28 m`, spacing 1 m):**
+
+| Const | Relation | Provisional |
+|-------|----------|-------------|
+| `MARCH_STEP` | ≤ grid spacing, so no crest is stepped over | `0.5 m` |
+| `SCAN_FACTOR` → `R_SCAN` | > 1, far enough to include escape saddles just past the carve boundary | `1.5` → ~42 m |
+| `N_RAYS` | large enough that the shoreline-radius change over one angular gap `2π·floodRadius/N_RAYS` is < `EDGE_PAD` | `128` (arc ≈ 0.7 m at 15 m) |
+| `EDGE_PAD` | ≥ shoreline-radius variation over one ray gap (above) | `2.0 m` |
+| `RIM_MARGIN` | ≥ max **cross-ray** ridge-crest difference between adjacent rays (angular undersampling error) — validated by the §7.1 flood-fill, not assumed | `0.5 m` |
+
+`MIN_DEPTH` is the smallest visually sensible pond depth (`0.5 m`) and only fires
+in the degenerate out-of-scope basin (§3.1).
+
+**Look (art-directed, Formula-Workbench TODO):** `DESIRED_DEPTH` (~1.5 m target
+depth), `BAND_WIDTH` (mud-band width), `SHORE_MARGIN` (damp margin that keeps
+grass off the waterline). These set appearance, have no closed-form derivation,
+and each gets the `// TODO: revisit via Formula Workbench` comment at its
+definition.
 
 ## 9. Out of scope
 
