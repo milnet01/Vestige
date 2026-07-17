@@ -10260,6 +10260,19 @@ existing cases (``HelpersMatchEvaluatorPrecisely``,
 
 ### Added
 
+- **Profiler CSV logging (`--profile-log[=PATH]`) — meadow benchmark slice S6**
+  New `engine/profiler/profile_log.{h,cpp}`: a throttled (~1 Hz,
+  interval-averaged) CSV writer over the existing profiler getters
+  (GPU passes, CPU scopes, frame time, VRAM). The `--profile-log` flag
+  was previously parsed into `EngineConfig::profileLogPath` but had no
+  consumer — the field was dead-wired. `Engine::initialize()` now
+  resolves the bare-form sentinel to `vestige_profile_<unix_ts>.csv`,
+  enables the profiler, and opens the log; the main loop samples after
+  `endFrame`; `shutdown()` flushes the final partial interval. Row
+  assembly is a pure `formatSampleRows()` (headless-unit-tested). Long
+  CSV format `time_s,category,name,depth,ms,fps` per design §8.1.
+  Unblocks profile-before-optimize for the weak/gamer-HW perf work.
+
 - **Editor audio spectrum / waveform viewer (AX12)**
   The Audio panel's Debug tab now shows a live "mini audio-analyzer": a
   log-frequency dB spectrum, a min/max-envelope scrolling waveform, and a

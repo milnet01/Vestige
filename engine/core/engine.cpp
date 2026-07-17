@@ -63,6 +63,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <ctime>
 #include <filesystem>
 
 namespace Vestige
@@ -162,6 +163,28 @@ bool Engine::initialize(const EngineConfig& config)
 
     // Initialize performance profiler
     m_profiler.init();
+
+    // Profiler CSV logging (--profile-log[=PATH]). Enabling the profiler turns on
+    // GPU timestamp queries, hence gated behind the flag — zero cost otherwise.
+    if (!config.profileLogPath.empty())
+    {
+        std::string logPath = config.profileLogPath;
+        if (logPath == EngineConfig::PROFILE_LOG_DEFAULT_SENTINEL)
+        {
+            logPath = "vestige_profile_" +
+                      std::to_string(static_cast<long long>(std::time(nullptr))) +
+                      ".csv";
+        }
+        m_profiler.setEnabled(true);
+        if (m_profileLog.open(logPath))
+        {
+            Logger::info("Profiler CSV log opened: " + logPath);
+        }
+        else
+        {
+            Logger::warning("Failed to open profiler CSV log: " + logPath);
+        }
+    }
 
     // Register domain systems (order = update order)
     // Localization first — a foundational, no-per-frame-work service that UI /
@@ -1910,6 +1933,15 @@ void Engine::run()
 
         // 11. End profiler frame (collect GPU results after swap ensures queries are complete)
         m_profiler.endFrame(deltaTime);
+
+        // 12. Profiler CSV logging (throttles internally to ~1 Hz; no-op unless
+        //     --profile-log opened it). Sampled after endFrame so GPU/CPU/mem
+        //     results are from the just-completed frame.
+        if (m_profileLog.isOpen())
+        {
+            m_profileElapsedSec += static_cast<double>(deltaTime);
+            m_profileLog.sample(m_profiler, m_profileElapsedSec);
+        }
     }
 
     Logger::info("Main loop ended");
@@ -1960,6 +1992,7 @@ void Engine::shutdown()
     m_systemRegistry.clear();
 
     // Shut down remaining engine-owned subsystems
+    m_profileLog.close();  // flushes the final partial interval, if any
     m_profiler.shutdown();
     m_physicsWorld.shutdown();
     m_debugDraw.cleanup();

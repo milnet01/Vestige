@@ -73,10 +73,6 @@ void printUsage(const char* argv0)
 
 bool parseArgs(int argc, char* argv[], EngineConfig& config, int& exitCode)
 {
-    // Bare `--profile-log` (no `=PATH`) uses this sentinel; ProfileLog resolves
-    // it to a timestamped default at open time (see EngineConfig::profileLogPath).
-    static constexpr const char* kProfileLogDefaultSentinel = "\x01" "default";
-
     for (int i = 1; i < argc; i++)
     {
         const char* arg = argv[i];
@@ -142,7 +138,9 @@ bool parseArgs(int argc, char* argv[], EngineConfig& config, int& exitCode)
         }
         else if (std::strcmp(arg, "--profile-log") == 0)
         {
-            config.profileLogPath = kProfileLogDefaultSentinel;
+            // Bare `--profile-log` (no `=PATH`): store the shared sentinel;
+            // Engine::initialize() resolves it to a timestamped default path.
+            config.profileLogPath = EngineConfig::PROFILE_LOG_DEFAULT_SENTINEL;
             Logger::info("Profiler CSV logging enabled (default path)");
         }
         else if (std::strncmp(arg, "--profile-log=", 14) == 0)

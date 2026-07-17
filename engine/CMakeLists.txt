@@ -249,6 +249,7 @@ set(ENGINE_SOURCES
     profiler/cpu_profiler.cpp
     profiler/memory_tracker.cpp
     profiler/performance_profiler.cpp
+    profiler/profile_log.cpp
     editor/panels/performance_panel.cpp
     editor/panels/validation_panel.cpp
     editor/panels/script_editor_panel.cpp

@@ -24,6 +24,7 @@
 #include "renderer/debug_draw.h"
 #include "formula/quality_manager.h"
 #include "profiler/performance_profiler.h"
+#include "profiler/profile_log.h"
 #include "physics/physics_world.h"
 #include "physics/physics_debug.h"
 #include "testing/visual_test_runner.h"
@@ -123,6 +124,12 @@ struct EngineConfig
     /// sentinel used by the bare `--profile-log` form resolves to a
     /// `vestige_profile_<unix_ts>.csv` default at open time.
     std::string profileLogPath;
+
+    /// @brief Sentinel value of `profileLogPath` for the bare `--profile-log`
+    ///        form (no `=PATH`). `Engine::initialize()` resolves it to a
+    ///        timestamped `vestige_profile_<unix_ts>.csv` path at open time.
+    ///        Shared with the CLI parser so there is a single source of truth.
+    static constexpr const char* PROFILE_LOG_DEFAULT_SENTINEL = "\x01" "default";
 };
 
 /// @brief The central engine — owns all subsystems and runs the main loop.
@@ -195,6 +202,8 @@ private:
     DebugDraw m_debugDraw;
     FormulaQualityManager m_formulaQuality;
     PerformanceProfiler m_profiler;
+    ProfileLog m_profileLog;             ///< Off unless --profile-log opened it.
+    double m_profileElapsedSec = 0.0;    ///< Cumulative time_s passed to sample().
     PhysicsWorld m_physicsWorld;
     PhysicsDebugDraw m_physicsDebugDraw;
     VisualTestRunner m_visualTestRunner;
