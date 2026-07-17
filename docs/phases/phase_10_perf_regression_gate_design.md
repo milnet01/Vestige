@@ -34,7 +34,7 @@ catching silent slowdowns before they ship.
 **Layman:** make the computer automatically warn us if a change makes the engine
 slower.
 
-## 1.1 Non-goals
+## 2. Non-goals
 
 - **No new engine/runtime code.** The profiler CSV logger already exists; this item
   is a *consumer* of that CSV. Zero changes to `engine/`.
@@ -45,8 +45,6 @@ slower.
 - **No statistical significance testing (t-test / Mann-Whitney).** A single warm run
   reduced by median is sufficient at this project's scale; distribution testing is a
   later refinement if false positives appear.
-
-## 2. (folded into §1)
 
 ## 3. The core finding: where the gate runs (CI vs GPU hardware)
 
@@ -100,10 +98,15 @@ the machinery is exercised without real hardware).
 - **Metrics available** (from `profile_log.cpp:156-186`): `frame,total` (+ fps),
   `gpu,total` and `gpu,<pass>`, `cpu,total` and `cpu,<scope>`, `mem,gpu_mb`.
 - **Tooling pattern to mirror** — `tools/shader_lint.py` + `tools/localization_audit.py`:
-  `#!/usr/bin/env python3`, MIT header, module docstring, `argparse`, `--strict`
-  self-test mode, `--root` fixture override, exit 0/1. Gated in `tests/CMakeLists.txt`
-  (`find_package(Python3 … QUIET)`; a positive `--strict` test + a `WILL_FAIL`
-  negative test against a seeded fixture).
+  `#!/usr/bin/env python3`, MIT header, module docstring, `argparse`, exit 0/1. In
+  `shader_lint.py`, `--strict` is the **default fail-on-violation scan** (`--lint` is
+  its inverse — warnings only) and `--root` overrides the scanned tree to a fixture;
+  neither tool has a built-in self-test (`shader_lint.py:13,96`). The ctest gate
+  (`tests/CMakeLists.txt:350-395`) is `find_package(Python3 … QUIET)` guarding a
+  positive test that runs the tool and must pass, plus a `WILL_FAIL` negative test
+  that runs it against a seeded-violation fixture. perf_gate reuses this file/flag/
+  ctest shape; its `--selftest` mode (§5.5) is perf_gate's **own** addition, not
+  inherited from these tools.
 
 ## 5. Detailed design
 
@@ -114,18 +117,30 @@ New files (no `engine/` changes):
 - `tools/perf_gate/baseline_placeholder.json` — a committed synthetic baseline so the
   tool + ctest work with no GPU. The real `baseline_rx6600.json` is added later by the
   user via `--update-baseline`.
-- `tests/fixtures/perf_gate/` — synthetic CSVs (`baseline.csv`, `ok.csv`,
-  `regressed.csv`, `short.csv`) + `baseline.json` for the ctest gates.
+- `tests/fixtures/perf_gate/` — a fixture `baseline.json` + synthetic CSVs, one per
+  behaviour the `--selftest` asserts: `ok.csv` (all within tolerance), `regressed.csv`
+  (frame +40 %), `improved.csv` (frame −30 %), `missing.csv` (a gated pass absent),
+  `floor.csv` (a sub-floor pass with a huge %-swing), `short.csv` (≤2 usable
+  intervals). Expected verdicts per fixture: §10 table.
 
 ### 5.1 Parse + reduce
 
-1. Read the CSV. Skip the header. Each row → `(time_s, category, name, depth, value)`.
-   `value` = the `ms` column parsed as float (it holds MB for `mem` rows; the unit is
-   carried by `category`, matching the writer). A blank `ms` is skipped.
+1. Read the CSV. Skip the header. Each row → `(time_s, category, name, depth, value,
+   fps)`. `value` = the `ms` column parsed as float (it holds MB for `mem` rows; the
+   unit is carried by `category`, matching the writer). `fps` = column 6, present only
+   on the `frame,total` row (blank elsewhere → ignored). **Robustness (INV-9):** a row
+   is *skipped* — never fatal — if it has too few columns, or its `ms`/`fps` field is
+   blank or non-numeric. The writer is trusted, so this only guards a truncated final
+   line or a hand-edited file; a skipped row simply doesn't contribute to its metric's
+   series. An empty or header-only CSV yields zero series (→ every gated metric
+   INCONCLUSIVE, step 3).
 2. Group values by metric key `"{category},{name}"` (e.g. `frame,total`, `gpu,shadow`,
    `mem,gpu_mb`). Depth is not part of the key — gated metrics are all depth-0 totals
    and named GPU passes; two same-named scopes at different depths never occur among
-   gated metrics.
+   gated metrics. (A non-gated CPU scope that *does* recur at two depths would be
+   merged in the reported table; harmless, as it never affects the verdict — INV-4.)
+   The `frame,total` group also carries the run's logged `fps` series (reduced the same
+   way, reported for context — never gated, INV-5).
 3. Each metric now has a time-series (one value per ~1 s interval). **Reduce:**
    - **Drop the first `drop_warmup_intervals` (default 1) intervals** — the first
      second covers shader compile, texture upload, and `GpuTimer` warming
@@ -144,12 +159,15 @@ the **gate allowlist**:
 
 - `delta_pct = (current - baseline) / baseline * 100`.
 - Direction: for `ms` / `mb` metrics, **only increases regress** (a decrease is an
-  improvement → `IMPROVED`, never a FAIL). `fps` is *informational only* — it is a
-  pure function of `frame,total` ms, so gating it too would double-count the same
-  quantity; it is printed for context.
-- **Absolute floor** `min_abs` (default 0.05 ms): if the baseline value is below the
+  improvement → `IMPROVED`, never a FAIL). `fps` is **informational only** — never
+  gated. (It is *not* `1000 / frame_ms`: the logger accumulates `fps` as the mean of
+  per-frame `getFps()` while `frame,total` ms is a separate windowed average
+  `getAvgFrameTimeMs()` — `profile_log.cpp:156-158,205` — so the two are correlated
+  but not reciprocal.) It is a redundant, noisier view of frame performance, so it is
+  printed for context but the frame-time regression is judged on `frame,total` ms.
+- **Absolute floor** `min_abs_ms` (default 0.05 ms): if the baseline value is below the
   floor, the metric is `SKIPPED` (a +25 % swing on a 0.01 ms pass is noise, not a
-  regression). Applies to ms metrics only; `mem_gpu_mb` uses its own `min_abs_mb`
+  regression). Applies to ms metrics only; `mem,gpu_mb` uses its own `min_abs_mb`
   (default 1 MB).
 - Verdict per metric:
   - `FAIL` if `delta_pct >= fail_pct` (default 25).
@@ -187,8 +205,12 @@ numbers, and are overridable per-metric there:
 ```
 
 `gate` is the allowlist; a metric may exist in `metrics` (for context / future gating)
-without being gated. Per-metric threshold overrides: `metrics["gpu,total"].fail_pct`
-etc. override the top-level defaults when present.
+without being gated. **Per-metric threshold overrides:** a metric entry may carry any
+of the keys `warn_pct`, `fail_pct`, `min_abs_ms`, `min_abs_mb` (e.g.
+`metrics["gpu,total"].fail_pct = 15.0`). Precedence when comparing a metric: the
+metric's own key if present, else the top-level `thresholds` default. Only these four
+keys are recognised as overrides; `ms` / `mb` / `fps` in a metric entry are baseline
+values, not thresholds.
 
 ### 5.4 Baseline-refresh policy
 
@@ -201,19 +223,34 @@ benchmark literature (§13).
 
 ### 5.5 Modes (CLI)
 
+**Exit-code contract (all modes):** `0` = pass (no FAIL, ≥1 conclusive gated metric),
+`1` = at least one gated metric FAILed, `2` = **inconclusive** (no gated metric reached
+a conclusive verdict — empty/short/all-warmup run, or none of the baseline's gated
+metrics appeared). Code `2` is deliberately distinct from `0`: an all-INCONCLUSIVE run
+must **not** read as a green pass, or the guard-rail (§1) is silently defeated; a caller
+(release script / CI-on-GPU job) treats `2` as "re-run, the data was unusable."
+
 - **Compare (default):**
   `perf_gate.py --baseline tools/perf_gate/baseline_rx6600.json --current run.csv`
-  → prints a per-metric table, exits `1` on any FAIL else `0`. `--strict-warn`
-  promotes WARN→FAIL. `--json OUT.json` writes a machine report.
+  → prints a per-metric table, applies the exit-code contract above. `--strict-warn`
+  promotes every WARN (including the missing-metric WARN, §5.2) to FAIL → exit 1.
+  `--json OUT.json` writes a machine report.
 - **Update baseline:**
   `perf_gate.py --update-baseline --current run.csv --out baseline_rx6600.json
-  --hardware "RX 6600 (RDNA2)"` → reduces the CSV and writes a baseline JSON (carrying
-  today's date, hardware, the default thresholds, and every reduced metric). Threshold
-  editing afterwards is a hand-edit — reviewed like any config.
-- **Self-test (`--strict`, for ctest):** with no `--current`/`--baseline`, runs the
-  built-in fixture comparison (`--root` overrides the fixture dir) and exits non-zero
-  if the *expected* verdicts don't match — i.e. it tests the comparator itself, the
-  same self-gating shape as `shader_lint.py --strict`.
+  --hardware "RX 6600 (RDNA2)"` → reduces the CSV and writes a baseline JSON carrying:
+  today's date, the `--hardware` string, `--scene` (default `meadow`), the default
+  `reduction` + `thresholds` blocks, every reduced metric under `metrics`, and a `gate`
+  allowlist = **the four default keys `frame,total` / `gpu,total` / `cpu,total` /
+  `mem,gpu_mb`, filtered to those actually present** in the reduced metrics. Widen the
+  `gate` (e.g. to add a specific `gpu,<pass>`) or tighten a threshold by hand-editing
+  afterwards — reviewed like any config.
+- **Self-test (`--selftest`, for ctest):** perf_gate's own mode (no analogue in
+  shader_lint). With no `--current`/`--baseline`, it runs the comparator over the
+  committed `tests/fixtures/perf_gate/` set and asserts each fixture's **expected
+  per-metric verdict + exit code** (the table in §10) match; exits `0` iff every
+  assertion holds, non-zero on the first mismatch. `--root DIR` overrides the fixture
+  dir. This tests the comparator itself — the invariant paths (floor, missing→WARN,
+  improvement, short→INCONCLUSIVE, non-gated-metric-ignored) are all exercised here.
 
 The one-liner the user runs on the RX 6600 to (a) create the real baseline and (b)
 guard a change is documented in the tool `--help` and the README CLI section.
@@ -240,9 +277,10 @@ comparison logic. No dual CPU/GPU impl, no parity test needed.
   once real baselines exist.
 - **Absolute floor** — sub-0.05 ms passes are noise-dominated; a relative gate on them
   is meaningless, so they are skipped.
-- **Min-interval guard** — a run shorter than ~4 s (≤3 usable intervals) is
-  INCONCLUSIVE, never a FAIL — prevents a truncated/crashed run from reading as a
-  regression.
+- **Min-interval guard** — a run with fewer than `min_usable_intervals` (default 3)
+  usable intervals after the warmup drop — i.e. under ~4 s of logging — is
+  INCONCLUSIVE, never a FAIL, and yields exit code `2` (§5.5). Prevents a
+  truncated/crashed run from reading as a regression *or* as a green pass.
 - **Determinism** — the meadow scene is seed-deterministic (meadow design INV), so the
   workload is stable run to run; the only variance is timing noise, which the above
   absorbs.
@@ -260,27 +298,44 @@ not colour-only, so it is readable in any terminal and in CI logs.
 
 Single slice (small, self-contained):
 
-1. `tools/perf_gate.py` — parse + reduce + compare + `--update-baseline` + `--strict`
-   self-test. *Verify:* `python3 tools/perf_gate.py --strict` exits 0 on the good
-   fixtures; a seeded-regression fixture makes it exit 1.
-2. `tests/fixtures/perf_gate/` + `tools/perf_gate/baseline_placeholder.json`.
-   *Verify:* files parse as valid CSV/JSON.
-3. `tests/CMakeLists.txt` — `PerfGateStrict` (must pass) + `PerfGateCatchesRegression`
+1. `tools/perf_gate.py` — parse + reduce + compare + `--update-baseline` + `--selftest`.
+   *Verify:* `python3 tools/perf_gate.py --selftest` exits 0 (all fixture verdicts
+   match the §10 table); `perf_gate.py --baseline … --current regressed.csv` exits 1.
+2. `tests/fixtures/perf_gate/` (the fixtures listed in §5) +
+   `tools/perf_gate/baseline_placeholder.json`. *Verify:* files parse as valid CSV/JSON.
+3. `tests/CMakeLists.txt` — `PerfGateSelftest` (must pass) + `PerfGateCatchesRegression`
    (`WILL_FAIL`) mirroring the lint gates. *Verify:* `ctest -R PerfGate` green.
 4. README CLI section + CHANGELOG + ROADMAP flip.
 
 ## 10. Testing & verification
 
-- **ctest `PerfGateStrict`** — the comparator on the good fixtures yields the expected
-  verdicts (all OK/IMPROVED, exit 0).
-- **ctest `PerfGateCatchesRegression`** (`WILL_FAIL TRUE`) — the comparator on a
-  `regressed.csv` (frame time +40 %) exits 1. Pins that the gate actually fails on a
-  real regression (the same "prove it catches a violation" shape as
+Two ctest entries (Python3-guarded, mirroring `tests/CMakeLists.txt:350-395`):
+
+- **`PerfGateSelftest`** — `perf_gate.py --selftest` (must pass). Runs the comparator
+  over every fixture and asserts the expected verdict + exit below. This is where each
+  invariant path is pinned; a wrong verdict fails the test.
+- **`PerfGateCatchesRegression`** (`WILL_FAIL TRUE`) — the *real* compare path
+  `perf_gate.py --baseline fixtures/perf_gate/baseline.json --current
+  fixtures/perf_gate/regressed.csv` must exit 1. Proves the gate fails on a genuine
+  regression through the same entry point a release job uses — not only inside the
+  self-test harness (same "prove it catches a violation" shape as
   `ShaderLintCatchesViolation`).
-- **Self-test coverage inside `--strict`** asserts, over fixtures: median reduction,
-  warmup drop, the absolute floor (a tiny-value pass with a huge % swing stays OK), the
-  missing-metric→WARN path, the improvement path, and the short-run→INCONCLUSIVE path.
-- All fixtures are committed text — the whole suite runs on GPU-less CI.
+
+**Expected verdict table** (`--selftest` asserts each row; drives fixture contents):
+
+| Fixture | Condition it encodes | Gated verdict | Exit |
+|---|---|---|---|
+| `ok.csv` | all gated metrics within ±10 % | all `OK` | 0 |
+| `regressed.csv` | `frame,total` +40 % | `frame,total` `FAIL` | 1 |
+| `improved.csv` | `frame,total` −30 % | `frame,total` `IMPROVED` | 0 (INV-3) |
+| `missing.csv` | a gated pass absent from the run | that metric `WARN` | 0; `1` under `--strict-warn` (INV-6) |
+| `floor.csv` | a sub-floor (<0.05 ms) pass swings +1000 % | that metric `SKIPPED` | 0 (INV — floor) |
+| `short.csv` | ≤2 usable intervals after warmup drop | all `INCONCLUSIVE` | 2 (INV-2) |
+
+`baseline.json` also carries a non-gated context metric (e.g. `gpu,shadow` in `metrics`
+but not in `gate`) that regresses in `ok.csv`, asserting INV-4 (a non-gated regression
+leaves exit 0) and INV-5 (a moved `fps` never changes the verdict). All fixtures are
+committed text — the whole suite runs on GPU-less CI.
 
 ## 11. Invariants
 
@@ -290,8 +345,8 @@ Single slice (small, self-contained):
 - **INV-3** A metric decrease is **never** a FAIL (improvements don't break the build).
 - **INV-4** Only metrics on the baseline `gate` allowlist affect the exit code; all
   others are reported but non-gating.
-- **INV-5** `fps` is informational only (a function of `frame,total` ms) — never
-  independently gated.
+- **INV-5** `fps` is informational only — reported for context, **never** gated (it is
+  a redundant, noisier view of frame performance, not a derivation of `frame,total` ms).
 - **INV-6** A baseline metric missing from the current run is a **WARN**, not a FAIL
   (a legitimate pass rename must not break the build).
 - **INV-7** The gate is **not** wired into the generic GPU-less CI matrix; only the
@@ -299,10 +354,27 @@ Single slice (small, self-contained):
   on GPU hardware.
 - **INV-8** The baseline is refreshed only in its own deliberate, human-reviewed
   commit — never silently alongside the change it would mask.
+- **INV-9** A malformed or short CSV row (too few columns, blank/non-numeric `ms`/`fps`)
+  is **skipped**, never fatal; an empty/header-only CSV reduces to all-INCONCLUSIVE
+  (exit 2), not a crash.
 
 ## 12. Cold-eyes loop log
 
-- _Loop 1: pending — dispatched via `/cold-eyes` after this draft._
+- **Loop 1 (2026-07-17)** — 2 cold reviewers (accuracy-vs-code; consistency/testability).
+  12 verified findings (HIGH 1 · MEDIUM 4 · LOW 5 · INFO 2), all fixed:
+  - Accuracy: dropped the false "fps is a pure function of `frame,total` ms" claim —
+    the logger accumulates fps independently (`profile_log.cpp:156-158,205`); fps is now
+    captured, reported, and gated-never with the correct rationale (§5.1/§5.2/INV-5).
+  - Accuracy: §4 no longer calls `shader_lint --strict` a "self-test" (it's the default
+    scan); perf_gate's `--selftest` is stated as its own mode.
+  - Consistency: fixed the §5.1↔§7 off-by-one on the INCONCLUSIVE boundary (`<3` usable).
+  - Simplification: replaced the vague "`--strict` self-test" with a concrete
+    `--selftest` + a per-fixture expected-verdict table (§10); real compare path is the
+    `WILL_FAIL` test.
+  - Completeness: specified `--update-baseline` `gate` population, per-metric threshold
+    override precedence (§5.3), CSV row-parsing robustness (INV-9), and the tri-state
+    exit code (0/1/2) including the INCONCLUSIVE case (§5.5).
+  - Naming: `min_abs` → `min_abs_ms` throughout; structure: removed the stray empty §2.
 
 ## 13. Sources
 
