@@ -10393,6 +10393,14 @@ existing cases (``HelpersMatchEvaluatorPrecisely``,
 
 ### Fixed
 
+- **Meadow pond is now a physically-correct contained body of water — fills the basin to a level surface with a natural contour shoreline instead of a floating flat square.**
+  The water level is solved to sit below the basin's lowest rim (contained,
+  never on a slope) and the sheet is sized to the true flood radius so its
+  straight edges fall on dry ground and are hidden by depth occlusion. The mud
+  waterline and grass edge now follow the curved shoreline. A MIN_DEPTH clamp can
+  override containment only in a degenerate mis-authored basin (does not occur for
+  the shipped meadow).
+
 - **Windows (MSVC) build + full test suite restored, with a permanent Windows CI job**
   The Windows target had not been built since v0.1.3-preview and had accumulated
   MSVC incompatibilities (localtime_r, M_PI, a move-only type copied in a vector,
