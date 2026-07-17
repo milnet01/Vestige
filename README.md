@@ -221,6 +221,18 @@ docs/              Design notes, research documents, automated audit reports
   (physics curves, lighting attenuation, animation easings) as JSON
   the engine loads at asset time. Per project rules, numerical design
   goes through the Workbench rather than hand-coded magic constants.
+- **Performance-regression gate** (`tools/perf_gate.py`) — compares a
+  profiler CSV (captured with the engine's `--profile-log[=PATH]`) to a
+  committed baseline and flags per-pass slowdowns. Run it on real GPU
+  hardware (timings are meaningless on CI's software renderer):
+  ```bash
+  # capture a fresh run, then check it against the baseline
+  vestige --meadow --visual-test --profile-log=run.csv
+  python3 tools/perf_gate.py --baseline tools/perf_gate/baseline_rx6600.json --current run.csv
+  # first-time: create the baseline on your hardware
+  python3 tools/perf_gate.py --update-baseline --current run.csv \
+      --out tools/perf_gate/baseline_rx6600.json --hardware "RX 6600"
+  ```
 
 ---
 

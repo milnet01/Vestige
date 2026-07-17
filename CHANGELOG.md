@@ -10423,6 +10423,21 @@ existing cases (``HelpersMatchEvaluatorPrecisely``,
 - **Land engine/utils/result.h — Result<T,E> vocabulary type (CE3)**
   `Vestige::Result<T,E>` aliases `std::expected` on C++23 toolchains and\n  the vendored `tl::expected` v1.3.1 (CC0) on the C++17 baseline.\n  `makeUnexpected()` and `Unexpected` aliases exposed. 10 tests added.\n  CODING_STANDARDS §11 updated; phase_11a_design §9 updated. CLAUDE.md Rule 8\n  sharpened: latest dependency version is always required; older pin needs a\n  documented breaking-change reason.
 
+### Added
+
+- **Performance-regression gate (`tools/perf_gate.py`) — meadow benchmark guard-rail (3D_E-0030)**
+  Compares a profiler CSV (`--profile-log`) to a committed baseline JSON and
+  reports OK/WARN/FAIL/IMPROVED/MISSING/SKIPPED/INCONCLUSIVE per metric, exiting
+  non-zero when a gated metric regressed. Reduces each metric's ~1 Hz series by
+  dropping the warm-up interval and taking the median; ordered classification
+  MISSING→INCONCLUSIVE→SKIPPED→compare; exit codes 0 pass / 1 regression /
+  2 inconclusive-data / 3 config-error; `--strict-warn`, `--update-baseline`,
+  `--selftest`. Pure Python stdlib, no engine changes. The live gate runs on real
+  GPU hardware (CI is GPU-less/llvmpipe); on CI only the comparator self-test runs
+  over `tests/fixtures/perf_gate/`. New ctest gates `PerfGateSelftest` +
+  `PerfGateCatchesRegression` (WILL_FAIL). Design:
+  docs/phases/phase_10_perf_regression_gate_design.md (cold-eyes 5 loops).
+
 ### Changed
 
 - **Ts20 follow-ups: pin gust RNG seed, remove two self-testing test stubs (Ts20-DE1/DE2, AC4, BE1)**

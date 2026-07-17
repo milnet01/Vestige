@@ -1,0 +1,17 @@
+{
+  "schema": 1,
+  "hardware": "synthetic-fixture",
+  "captured": "2026-07-17",
+  "scene": "meadow",
+  "reduction": { "drop_warmup_intervals": 1, "min_usable_intervals": 3, "stat": "median" },
+  "thresholds": { "warn_pct": 10.0, "fail_pct": 25.0, "min_abs_ms": 0.05, "min_abs_mb": 1.0 },
+  "gate": ["frame,total", "gpu,total", "cpu,total", "mem,gpu_mb", "gpu,tiny"],
+  "metrics": {
+    "frame,total": { "ms": 8.000, "fps": 125.0 },
+    "gpu,total":   { "ms": 5.000 },
+    "gpu,shadow":  { "ms": 1.200 },
+    "gpu,tiny":    { "ms": 0.010 },
+    "cpu,total":   { "ms": 2.000 },
+    "mem,gpu_mb":  { "mb": 400 }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "schema": 2,
+  "hardware": "synthetic-fixture",
+  "gate": ["frame,total"],
+  "metrics": { "frame,total": { "ms": 8.0 } }
+}

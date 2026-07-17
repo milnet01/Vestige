@@ -393,8 +393,36 @@ if(Python3_FOUND)
     )
     set_tests_properties(ShaderLintCatchesViolation
                          PROPERTIES WILL_FAIL TRUE)
+
+    # --- Performance-regression gate (3D_E-0030) -------------------------------
+    # Comparator that reduces a profiler CSV and compares it to a committed
+    # baseline (design: docs/phases/phase_10_perf_regression_gate_design.md). The
+    # live gate runs on real GPU hardware; here we only exercise the hardware-
+    # agnostic comparator over committed fixtures — valid on GPU-less CI.
+    #
+    # --selftest asserts every fixture's expected verdict + exit (design §10),
+    # including the floor / MISSING / INCONCLUSIVE / --strict-warn / INV-4 paths.
+    add_test(
+        NAME PerfGateSelftest
+        COMMAND Python3::Interpreter
+                ${CMAKE_SOURCE_DIR}/tools/perf_gate.py --selftest
+                --root ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/perf_gate
+    )
+
+    # Pins that the real compare path exits non-zero on a genuine regression:
+    # regressed.csv is frame,total +40% vs the baseline. WILL_FAIL inverts the
+    # pass condition (same shape as ShaderLintCatchesViolation).
+    add_test(
+        NAME PerfGateCatchesRegression
+        COMMAND Python3::Interpreter
+                ${CMAKE_SOURCE_DIR}/tools/perf_gate.py
+                --baseline ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/perf_gate/baseline.json
+                --current ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/perf_gate/regressed.csv
+    )
+    set_tests_properties(PerfGateCatchesRegression
+                         PROPERTIES WILL_FAIL TRUE)
 else()
     message(WARNING
-        "Python3 not found — skipping localization_audit + shader_lint ctest "
-        "gates.")
+        "Python3 not found — skipping localization_audit + shader_lint + "
+        "perf_gate ctest gates.")
 endif()
