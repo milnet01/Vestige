@@ -184,7 +184,7 @@ mapping, e.g.:
 | Feature (existing knob) | Low | Medium | High | Ultra |
 |---|---|---|---|---|
 | `renderScale` (T1a) | 0.5–0.66 | 0.75 | 1.0 | 1.0 |
-| Anti-alias mode | None/SMAA | SMAA | TAA | TAA |
+| Anti-alias mode | FXAA | FXAA | TAA | TAA |
 | SSAO | off | on | on | on |
 | Bloom | off | on | on | on |
 | Volumetric fog | off | off | on | on |
@@ -195,6 +195,9 @@ mapping, e.g.:
 
 - *Reuse:* every row maps to an existing setter (bloom/SSAO/AA/fog/GI) or a Tier-2 knob. The
   preset is a small CPU-side apply function; `Custom` leaves the individual toggles free.
+- *AA choice:* the cheap tiers use **FXAA** — a new, ~sub-ms post-process anti-alias mode added in
+  Tier 1, ideal for weak/handheld GPUs and paired with a CAS sharpen pass; High/Ultra keep TAA.
+  Detail in `phase_10_tier1_render_scale_and_presets_design.md` §3.4.
 - *Interplay:* the accessibility wire (reduced-motion etc.) stays authoritative — a preset
   never re-enables something accessibility turned off (§8).
 - *Ships in two waves:* the rows backed by existing setters (`renderScale`, AA, SSAO, bloom,
