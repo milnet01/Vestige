@@ -364,6 +364,15 @@ public:
     void setPostProcessAccessibility(const PostProcessAccessibilitySettings& settings);
     const PostProcessAccessibilitySettings& getPostProcessAccessibility() const;
 
+    /// @brief Tier-1 (Phase 10) quality perf-gate for the two heaviest
+    ///        optional passes — volumetric fog + dynamic GI. AND-ed with
+    ///        the accessibility gate: a pass runs iff BOTH accessibility
+    ///        and quality allow it, so a low-quality preset can drop these
+    ///        for performance without ever re-enabling a pass that
+    ///        accessibility disabled (INV-A11Y, design §4.3).
+    void setHeavyPostEnabled(bool isEnabled);
+    bool isHeavyPostEnabled() const;
+
     /// @brief Phase 10.7 slice C1 — pushes the engine's photosensitive
     ///        safe-mode state into the renderer so the bloom composite
     ///        can clamp its uploaded intensity at draw time.
@@ -694,6 +703,14 @@ private:
     // stores the settings and calls `applyFogAccessibilitySettings`
     // each frame.
     PostProcessAccessibilitySettings m_postProcessAccessibility;
+
+    // Tier-1 (Phase 10) quality perf-gate: when false the two heaviest
+    // optional passes (volumetric fog + dynamic GI) are skipped for
+    // performance, independently of the accessibility gate above. The
+    // runtime test is the AND of both (INV-A11Y) — a preset lowers cost
+    // but can never re-enable an accessibility-disabled pass. Driven by
+    // applyQualityPreset via setHeavyPostEnabled.
+    bool m_qualityHeavyPostEnabled = true;
 
     // Phase 10.7 slice C1 — photosensitive safe-mode state, pushed
     // from Engine::run() once per frame. The bloom composite reads

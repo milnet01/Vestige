@@ -40,6 +40,77 @@ void applyDisplay(const DisplaySettings& display, DisplayApplySink& sink)
 }
 
 // ================================================================
+// Tier 1 (Phase 10) — quality-preset apply
+// ================================================================
+
+RendererQualityApplySinkImpl::RendererQualityApplySinkImpl(Renderer& renderer)
+    : m_renderer(renderer)
+{
+}
+
+void RendererQualityApplySinkImpl::setAntiAliasMode(AntiAliasMode mode)
+{
+    m_renderer.setAntiAliasMode(mode);
+}
+
+void RendererQualityApplySinkImpl::setSsaoEnabled(bool enabled)
+{
+    m_renderer.setSsaoEnabled(enabled);
+}
+
+void RendererQualityApplySinkImpl::setBloomEnabled(bool enabled)
+{
+    m_renderer.setBloomEnabled(enabled);
+}
+
+void RendererQualityApplySinkImpl::setHeavyPostEnabled(bool enabled)
+{
+    m_renderer.setHeavyPostEnabled(enabled);
+}
+
+void applyQualityPreset(QualityPreset preset, DisplaySettings& display,
+                        RendererQualitySink& sink)
+{
+    // One row of the design-doc §4.1 preset table. renderScale lands on
+    // the DisplaySettings object (the engine reads it per-frame); the four
+    // toggles go to the renderer sink. Cheap tiers use FXAA + reduced
+    // render-scale; High/Ultra render identically in wave 1 (the rows that
+    // differentiate them are Tier-2 setters).
+    struct Row
+    {
+        float         renderScale;
+        AntiAliasMode aa;
+        bool          ssao;
+        bool          bloom;
+        bool          heavyPost;   // volumetric fog + dynamic GI perf-gate
+    };
+
+    Row row;
+    switch (preset)
+    {
+    case QualityPreset::Low:
+        row = {0.66f, AntiAliasMode::FXAA, false, false, false};
+        break;
+    case QualityPreset::Medium:
+        row = {0.75f, AntiAliasMode::FXAA, true, true, false};
+        break;
+    case QualityPreset::High:
+    case QualityPreset::Ultra:
+        row = {1.0f, AntiAliasMode::TAA, true, true, true};
+        break;
+    case QualityPreset::Custom:
+        // Custom applies nothing — the player's hand-tuned knobs stand.
+        return;
+    }
+
+    display.renderScale = row.renderScale;
+    sink.setAntiAliasMode(row.aa);
+    sink.setSsaoEnabled(row.ssao);
+    sink.setBloomEnabled(row.bloom);
+    sink.setHeavyPostEnabled(row.heavyPost);
+}
+
+// ================================================================
 // Slice 13.3 — Audio apply
 // ================================================================
 

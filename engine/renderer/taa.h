@@ -21,7 +21,9 @@ enum class AntiAliasMode
     NONE,
     MSAA_4X,
     TAA,
-    SMAA
+    SMAA,
+    FXAA    ///< Tier-1 budget post-process AA (Lottes FXAA 3.11). Appended
+            ///< last so existing serialized AA-mode ints stay stable.
 };
 
 /// @brief Manages TAA state: jitter, history buffer, motion vectors, resolve.

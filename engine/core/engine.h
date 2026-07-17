@@ -269,6 +269,7 @@ private:
     /// AudioSystem), photosensitive caps (engine-owned store).
     std::unique_ptr<WindowDisplaySink>                   m_displaySink;
     std::unique_ptr<RendererAccessibilityApplySinkImpl>  m_rendererAccessSink;
+    std::unique_ptr<RendererQualityApplySinkImpl>        m_rendererQualitySink;
     std::unique_ptr<UISystemAccessibilityApplySink>      m_uiAccessSink;
     std::unique_ptr<AudioMixerApplySink>                 m_audioSink;
     std::unique_ptr<SubtitleQueueApplySink>              m_subtitleSink;

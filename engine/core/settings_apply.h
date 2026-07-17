@@ -28,6 +28,7 @@
 #include "audio/audio_mixer.h"                        // AudioBus enum
 #include "audio/audio_output_mode.h"                  // AudioOutputLayout
 #include "renderer/color_vision_filter.h"             // ColorVisionMode
+#include "renderer/taa.h"                             // AntiAliasMode
 #include "ui/subtitle.h"                              // SubtitleSizePreset
 #include "ui/ui_theme.h"                              // UIScalePreset enum
 
@@ -37,6 +38,7 @@ namespace Vestige
 {
 
 struct DisplaySettings;          // core/settings.h
+enum class QualityPreset;        // core/settings.h
 struct AudioSettings;            // core/settings.h
 struct AccessibilitySettings;    // core/settings.h
 struct LocalizationSettings;     // core/settings.h
@@ -90,6 +92,58 @@ private:
 ///       shader variants / LOD bias / shadow resolution and is consumed
 ///       by individual subsystems).
 void applyDisplay(const DisplaySettings& display, DisplayApplySink& sink);
+
+// ================================================================
+// Tier 1 (Phase 10) — quality-preset apply path
+//   render scale → DisplaySettings ; AA / SSAO / bloom / heavy-post → Renderer
+// ================================================================
+
+/// @brief Sink for the renderer-side knobs a quality preset drives:
+///        anti-alias mode, SSAO, bloom, and the heavy-post perf gate
+///        (volumetric fog + dynamic GI, §4.2).
+///
+/// @note `renderScale` is intentionally NOT on this sink. It is not
+///       renderer state — it is a persisted `DisplaySettings` field the
+///       engine's play-mode resize reads per frame (design §4.1). So
+///       `applyQualityPreset` writes it into the `DisplaySettings`
+///       object and pushes only the four renderer toggles here.
+class RendererQualitySink
+{
+public:
+    virtual ~RendererQualitySink() = default;
+    virtual void setAntiAliasMode(AntiAliasMode mode) = 0;
+    virtual void setSsaoEnabled(bool enabled) = 0;
+    virtual void setBloomEnabled(bool enabled) = 0;
+    virtual void setHeavyPostEnabled(bool enabled) = 0;
+};
+
+/// @brief Production sink wrapping a live `Renderer`. Thin forwarder to
+///        the four existing setters (`setAntiAliasMode` / `setSsaoEnabled`
+///        / `setBloomEnabled` / `setHeavyPostEnabled`).
+class RendererQualityApplySinkImpl final : public RendererQualitySink
+{
+public:
+    explicit RendererQualityApplySinkImpl(Renderer& renderer);
+    void setAntiAliasMode(AntiAliasMode mode) override;
+    void setSsaoEnabled(bool enabled) override;
+    void setBloomEnabled(bool enabled) override;
+    void setHeavyPostEnabled(bool enabled) override;
+
+private:
+    Renderer& m_renderer;
+};
+
+/// @brief Applies a quality preset (design §4.1). Writes the preset's
+///        render-scale value into `display.renderScale` and pushes the
+///        anti-alias mode + SSAO + bloom + heavy-post toggles onto
+///        `sink`. `Custom` applies **nothing** — the player's individual
+///        hand-tuned knobs stand (design §4.1 "Custom transition").
+///
+/// The preset does NOT set `display.qualityPreset` — the caller (the
+/// settings panel / load path) owns that field, so hand-editing a knob
+/// can flip it to `Custom` without this function clobbering it back.
+void applyQualityPreset(QualityPreset preset, DisplaySettings& display,
+                        RendererQualitySink& sink);
 
 // ================================================================
 // Slice 13.3 — Audio apply path

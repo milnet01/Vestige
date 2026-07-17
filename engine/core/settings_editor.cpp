@@ -172,6 +172,16 @@ void SettingsEditor::pushPendingToSinks()
         applyRendererAccessibility(m_pending.accessibility,
                                    *m_targets.rendererAccess);
     }
+    if (m_targets.rendererQuality)
+    {
+        // Tier-1: maps the quality preset onto the renderer toggles
+        // (AA/SSAO/bloom/heavy-post) and reconciles renderScale into the
+        // pending DisplaySettings. Idempotent for a consistent preset; a
+        // no-op for Custom (the player's hand-tuned knobs stand). The
+        // engine reads pending().display.renderScale per-frame.
+        applyQualityPreset(m_pending.display.qualityPreset,
+                           m_pending.display, *m_targets.rendererQuality);
+    }
     if (m_targets.subtitle)
     {
         applySubtitleSettings(m_pending.accessibility,

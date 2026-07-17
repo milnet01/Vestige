@@ -1188,6 +1188,22 @@ public:
     }
 };
 
+// Tier-1 — records the quality-preset renderer pushes.
+class RecordingRendererQualitySink final : public RendererQualitySink
+{
+public:
+    AntiAliasMode aa        = AntiAliasMode::MSAA_4X;
+    bool          ssao      = false;
+    bool          bloom     = false;
+    bool          heavyPost = false;
+    int           calls     = 0;
+
+    void setAntiAliasMode(AntiAliasMode m) override { aa = m; ++calls; }
+    void setSsaoEnabled(bool e) override            { ssao = e; ++calls; }
+    void setBloomEnabled(bool e) override           { bloom = e; ++calls; }
+    void setHeavyPostEnabled(bool e) override       { heavyPost = e; ++calls; }
+};
+
 class RecordingSubtitleSink final : public SubtitleApplySink
 {
 public:
@@ -1323,6 +1339,98 @@ TEST(SettingsApply, RendererAccessibilityForwardsPostProcessWireFieldsVerbatim)
     EXPECT_FALSE(sink.pp.volumetricFogEnabled);
     EXPECT_FALSE(sink.pp.dynamicGiEnabled);
     EXPECT_TRUE(sink.pp.reduceMotionGi);
+}
+
+// ================================================================
+// Tier 1 — quality-preset apply (design §4.1 / §6 items 3–4)
+// ================================================================
+
+TEST(SettingsApply, QualityPresetLowUsesFxaaHalfScaleAndDropsHeavyPost)
+{
+    DisplaySettings d;
+    d.renderScale = 999.0f;  // sentinel: must be overwritten
+    RecordingRendererQualitySink sink;
+    applyQualityPreset(QualityPreset::Low, d, sink);
+
+    EXPECT_FLOAT_EQ(d.renderScale, 0.66f);
+    EXPECT_EQ(sink.aa, AntiAliasMode::FXAA);
+    EXPECT_FALSE(sink.ssao);
+    EXPECT_FALSE(sink.bloom);
+    EXPECT_FALSE(sink.heavyPost);
+    EXPECT_EQ(sink.calls, 4);
+}
+
+TEST(SettingsApply, QualityPresetMediumKeepsSsaoBloomButStillFxaaAndNoHeavyPost)
+{
+    DisplaySettings d;
+    RecordingRendererQualitySink sink;
+    applyQualityPreset(QualityPreset::Medium, d, sink);
+
+    EXPECT_FLOAT_EQ(d.renderScale, 0.75f);
+    EXPECT_EQ(sink.aa, AntiAliasMode::FXAA);
+    EXPECT_TRUE(sink.ssao);
+    EXPECT_TRUE(sink.bloom);
+    EXPECT_FALSE(sink.heavyPost);
+}
+
+TEST(SettingsApply, QualityPresetHighAndUltraRenderIdenticallyInWave1)
+{
+    for (QualityPreset p : {QualityPreset::High, QualityPreset::Ultra})
+    {
+        DisplaySettings d;
+        RecordingRendererQualitySink sink;
+        applyQualityPreset(p, d, sink);
+
+        EXPECT_FLOAT_EQ(d.renderScale, 1.0f) << "preset " << qualityPresetLabel(p);
+        EXPECT_EQ(sink.aa, AntiAliasMode::TAA) << "preset " << qualityPresetLabel(p);
+        EXPECT_TRUE(sink.ssao);
+        EXPECT_TRUE(sink.bloom);
+        EXPECT_TRUE(sink.heavyPost);
+    }
+}
+
+TEST(SettingsApply, QualityPresetCustomAppliesNothing)
+{
+    DisplaySettings d;
+    d.renderScale = 0.42f;  // a hand-tuned value that must survive
+    RecordingRendererQualitySink sink;
+    applyQualityPreset(QualityPreset::Custom, d, sink);
+
+    EXPECT_FLOAT_EQ(d.renderScale, 0.42f);  // untouched
+    EXPECT_EQ(sink.calls, 0);               // no renderer pushes
+}
+
+// INV-A11Y (design §4.3 / §6 item 4): a preset whose quality side wants
+// the heavy passes ON (Ultra) can never re-enable a pass that accessibility
+// turned OFF. The two apply functions write to disjoint sinks — the preset
+// only reaches `heavyPost`, never the accessibility fog/GI fields — and the
+// renderer's runtime gate is the AND of both. Model that AND here to pin
+// that Ultra's quality=true stays gated off when accessibility=false.
+TEST(SettingsApply, QualityPresetCannotReEnableAccessibilityDisabledHeavyPost)
+{
+    // Quality side: Ultra wants fog + GI on.
+    DisplaySettings d;
+    RecordingRendererQualitySink qualitySink;
+    applyQualityPreset(QualityPreset::Ultra, d, qualitySink);
+    EXPECT_TRUE(qualitySink.heavyPost);
+
+    // Accessibility side: user disabled volumetric fog + dynamic GI.
+    AccessibilitySettings a;
+    a.postProcess.volumetricFogEnabled = false;
+    a.postProcess.dynamicGiEnabled     = false;
+    RecordingRendererAccessSink accessSink;
+    applyRendererAccessibility(a, accessSink);
+    EXPECT_FALSE(accessSink.pp.volumetricFogEnabled);
+    EXPECT_FALSE(accessSink.pp.dynamicGiEnabled);
+
+    // Effective runtime gate = accessibility AND quality (renderer.cpp).
+    // Ultra's quality=true must NOT override accessibility=false.
+    const bool volumetricActive =
+        accessSink.pp.volumetricFogEnabled && qualitySink.heavyPost;
+    const bool giActive =
+        accessSink.pp.dynamicGiEnabled && qualitySink.heavyPost;
+    EXPECT_FALSE(volumetricActive);
+    EXPECT_FALSE(giActive);
 }
 
 TEST(SettingsApply, SubtitleMapsEverySizeStringToDistinctEnum)

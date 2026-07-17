@@ -1305,6 +1305,7 @@ void Renderer::endFrame(float deltaTime)
     // depth array (GL_INVALID_OPERATION). The integrated volume is sampled in
     // the composite uniform block further down.
     const bool volumetricActive = m_postProcessAccessibility.volumetricFogEnabled
+                                  && m_qualityHeavyPostEnabled
                                   && m_volumetricFogPass.isInitialized();
     if (volumetricActive)
     {
@@ -1378,6 +1379,7 @@ void Renderer::endFrame(float deltaTime)
     // (att3 + the GI cache live on the non-MSAA scene FBO); when off the dispatch
     // is skipped entirely ⇒ zero GPU cost.
     const bool giActive = m_postProcessAccessibility.dynamicGiEnabled
+        && m_qualityHeavyPostEnabled
         && m_volumetricFogPass.isInitialized()
         && (isTAA || isSMAA) && m_resolveDepthFbo;
     if (giActive)
@@ -2181,8 +2183,18 @@ bool Renderer::isSsaoEnabled() const
 void Renderer::setAntiAliasMode(AntiAliasMode mode)
 {
     m_antiAliasMode = mode;
-    const char* names[] = {"None", "MSAA 4x", "TAA", "SMAA"};
+    const char* names[] = {"None", "MSAA 4x", "TAA", "SMAA", "FXAA"};
     Logger::info("Anti-aliasing: " + std::string(names[static_cast<int>(mode)]));
+}
+
+void Renderer::setHeavyPostEnabled(bool isEnabled)
+{
+    m_qualityHeavyPostEnabled = isEnabled;
+}
+
+bool Renderer::isHeavyPostEnabled() const
+{
+    return m_qualityHeavyPostEnabled;
 }
 
 AntiAliasMode Renderer::getAntiAliasMode() const

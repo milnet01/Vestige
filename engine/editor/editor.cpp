@@ -729,8 +729,8 @@ void Editor::drawPanels(Renderer* renderer, Scene* scene, Camera* camera,
                     AntiAliasMode aaMode = renderer->getAntiAliasMode();
                     if (ImGui::BeginMenu("Anti-Aliasing (F7)"))
                     {
-                        const char* aaNames[] = {"None", "MSAA 4x", "TAA", "SMAA"};
-                        for (int i = 0; i < 4; ++i)
+                        const char* aaNames[] = {"None", "MSAA 4x", "TAA", "SMAA", "FXAA"};
+                        for (int i = 0; i < 5; ++i)
                         {
                             if (ImGui::MenuItem(aaNames[i], nullptr,
                                                 static_cast<int>(aaMode) == i))

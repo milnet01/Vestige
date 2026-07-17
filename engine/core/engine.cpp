@@ -435,6 +435,13 @@ bool Engine::initialize(const EngineConfig& config)
             m_rendererAccessSink =
                 std::make_unique<RendererAccessibilityApplySinkImpl>(*m_renderer);
             targets.rendererAccess = m_rendererAccessSink.get();
+
+            // Tier-1 quality preset → AA/SSAO/bloom/heavy-post toggles
+            // (renderScale is reconciled into the pending DisplaySettings,
+            // which the play-mode resize reads per frame).
+            m_rendererQualitySink =
+                std::make_unique<RendererQualityApplySinkImpl>(*m_renderer);
+            targets.rendererQuality = m_rendererQualitySink.get();
         }
         if (UISystem* ui = m_systemRegistry.getSystem<UISystem>())
         {
@@ -1249,7 +1256,14 @@ void Engine::run()
             // One factor scales both the scene+post chain and the water reflection FBO
             // coherently (§3.1). renderScale is already clamped to [0.25, 2.0] at settings
             // load; re-clamp defensively. 1.0 rounds back to the exact size (a no-op).
-            const float renderScale = std::clamp(m_settings.display.renderScale, 0.25f, 2.0f);
+            // Source the LIVE value from the settings editor's pending state — the
+            // preset/slider mutate that copy at runtime; m_settings is only the
+            // bootstrap snapshot and never updates after load. Fall back to it before
+            // the editor is constructed (headless / early frames).
+            const float renderScale = std::clamp(
+                m_settingsEditor ? m_settingsEditor->pending().display.renderScale
+                                 : m_settings.display.renderScale,
+                0.25f, 2.0f);
             rw = std::max(1, static_cast<int>(std::lround(static_cast<float>(rw) * renderScale)));
             rh = std::max(1, static_cast<int>(std::lround(static_cast<float>(rh) * renderScale)));
             m_renderer->resizeRenderTarget(rw, rh);

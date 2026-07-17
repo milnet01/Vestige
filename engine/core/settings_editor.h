@@ -68,6 +68,7 @@ public:
         AudioReverbApplySink*           audioReverb     = nullptr;     // AX2 R4
         UIAccessibilityApplySink*       uiAccessibility = nullptr;
         RendererAccessibilityApplySink* rendererAccess  = nullptr;
+        RendererQualitySink*            rendererQuality = nullptr;   // Tier-1 preset
         SubtitleApplySink*              subtitle        = nullptr;
         PhotosensitiveApplySink*        photosensitive  = nullptr;
         InputActionMap*                 inputMap        = nullptr;
