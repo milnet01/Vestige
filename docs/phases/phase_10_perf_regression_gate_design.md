@@ -78,9 +78,10 @@ CI. Two independent reasons:
   matrix.
 
 So tonight's deliverable is complete and verifiable headlessly: the comparator + its
-tests. The committed baseline numbers are captured later on the user's RX 6600 (the
-tool ships with an `--update-baseline` mode and a synthetic placeholder baseline so
-the machinery is exercised without real hardware).
+tests. The committed real-hardware baseline is captured later on the user's RX 6600 via
+the tool's `--update-baseline` mode; until then the committed fixture baseline
+(`tests/fixtures/perf_gate/baseline.json`, a small synthetic baseline) exercises the
+whole machinery without a GPU.
 
 ## 4. Verified context (citations)
 
@@ -114,14 +115,13 @@ New files (no `engine/` changes):
 
 - `tools/perf_gate.py` — the comparator (pure stdlib: `argparse`, `csv`, `json`,
   `statistics`).
-- `tools/perf_gate/baseline_placeholder.json` — a committed synthetic baseline so the
-  tool + ctest work with no GPU. The real `baseline_rx6600.json` is added later by the
-  user via `--update-baseline`.
-- `tests/fixtures/perf_gate/` — a fixture `baseline.json` + synthetic CSVs, one per
-  behaviour the `--selftest` asserts: `ok.csv` (all within tolerance), `regressed.csv`
-  (frame +40 %), `improved.csv` (frame −30 %), `missing.csv` (a gated pass absent),
-  `floor.csv` (a sub-floor pass with a huge %-swing), `short.csv` (≤2 usable
-  intervals). Expected verdicts per fixture: §10 table.
+- `tests/fixtures/perf_gate/` — a fixture `baseline.json` (the committed synthetic
+  baseline, doubling as the machinery's no-GPU exercise) + synthetic CSVs, one per
+  behaviour the `--selftest` asserts: `ok.csv` (totals within tolerance, carries
+  `gpu,tiny`), `regressed.csv` (frame +40 %), `improved.csv` (frame −30 %),
+  `missing.csv` (gated `gpu,total` absent), `floor.csv` (sub-floor `gpu,tiny` swings
+  +1000 %), `short.csv` (≤2 usable intervals). Expected verdicts per fixture: §10 table.
+  The real `baseline_rx6600.json` is added later by the user via `--update-baseline`.
 
 ### 5.1 Parse + reduce
 
@@ -242,13 +242,16 @@ metric), `1` = at least one gated metric FAILed, `2` = **no conclusive gated met
 floor). Code `2` is deliberately distinct from `0`: a run that never actually compared
 anything must **not** read as a green pass, or the guard-rail (§1) is silently defeated;
 a caller (release script / CI-on-GPU job) treats `2` as "re-run, the data was unusable."
-`--strict-warn` promotes `WARN` **and** `MISSING` to FAIL → exit 1.
+Exit `2` is also the **config-error** code — an unreadable baseline or an unsupported
+`schema` (§5.3); that is a fix-the-file error, not a re-runnable-data one, but it shares
+code `2` because in both cases *no verdict was produced*. `--strict-warn` promotes
+`WARN` **and** `MISSING` to FAIL → exit 1.
 
 - **Compare (default):**
   `perf_gate.py --baseline tools/perf_gate/baseline_rx6600.json --current run.csv`
   → prints a per-metric table, applies the exit-code contract above. `--strict-warn`
-  promotes every WARN (including the missing-metric WARN, §5.2) to FAIL → exit 1.
-  `--json OUT.json` writes a machine report.
+  promotes every `WARN` and `MISSING` (§5.2) to FAIL → exit 1. `--json OUT.json` writes
+  a machine report.
 - **Update baseline:**
   `perf_gate.py --update-baseline --current run.csv --out baseline_rx6600.json
   --hardware "RX 6600 (RDNA2)"` → reduces the CSV and writes a baseline JSON carrying:
@@ -316,8 +319,8 @@ Single slice (small, self-contained):
 1. `tools/perf_gate.py` — parse + reduce + compare + `--update-baseline` + `--selftest`.
    *Verify:* `python3 tools/perf_gate.py --selftest` exits 0 (all fixture verdicts
    match the §10 table); `perf_gate.py --baseline … --current regressed.csv` exits 1.
-2. `tests/fixtures/perf_gate/` (the fixtures listed in §5) +
-   `tools/perf_gate/baseline_placeholder.json`. *Verify:* files parse as valid CSV/JSON.
+2. `tests/fixtures/perf_gate/` (the fixtures listed in §5). *Verify:* files parse as
+   valid CSV/JSON.
 3. `tests/CMakeLists.txt` — `PerfGateSelftest` (must pass) + `PerfGateCatchesRegression`
    (`WILL_FAIL`) mirroring the lint gates. *Verify:* `ctest -R PerfGate` green.
 4. README CLI section + CHANGELOG + ROADMAP flip.
@@ -343,17 +346,22 @@ Two ctest entries (Python3-guarded, mirroring `tests/CMakeLists.txt:350-395`):
 
 | Fixture | Condition it encodes | Gated verdict | Exit |
 |---|---|---|---|
-| `ok.csv` | all gated metrics within ±10 % | all `OK` | 0 |
+| `ok.csv` | totals within ±10 %; carries `gpu,tiny` | totals `OK`; `gpu,tiny` `SKIPPED` | 0 |
 | `regressed.csv` | `frame,total` +40 % | `frame,total` `FAIL` | 1 |
 | `improved.csv` | `frame,total` −30 % | `frame,total` `IMPROVED` | 0 (INV-3) |
 | `missing.csv` | gated `gpu,total` absent from the run (totals otherwise OK) | `gpu,total` `MISSING` | 0; `1` under `--strict-warn` (INV-6) |
 | `floor.csv` | gated sub-floor `gpu,tiny` (0.010→0.110 ms) swings +1000 %; totals held | `gpu,tiny` `SKIPPED`, rest `OK` | 0 (floor) |
 | `short.csv` | ≤2 usable intervals after warmup drop | all `INCONCLUSIVE` | 2 (INV-2) |
 
-`baseline.json` also carries a non-gated context metric (e.g. `gpu,shadow` in `metrics`
-but not in `gate`) that regresses in `ok.csv`, asserting INV-4 (a non-gated regression
-leaves exit 0) and INV-5 (a moved `fps` never changes the verdict). All fixtures are
-committed text — the whole suite runs on GPU-less CI.
+Table convention: a row names only the *notable* gated verdict(s); every other gated
+metric present at its baseline value is `OK`. The gated `gpu,tiny` (baseline 0.010 ms)
+is **always `SKIPPED`** — the floor test keys on the *baseline* value, so it is sub-floor
+in every fixture; that is exactly why it is the floor-path witness, and each fixture that
+contains it expects `gpu,tiny SKIPPED`. `baseline.json` also carries a non-gated context
+metric (`gpu,shadow` in `metrics` but not in `gate`) that regresses in `ok.csv`,
+asserting INV-4 (a non-gated regression leaves exit 0) and INV-5 (a moved `fps` never
+changes the verdict). All fixtures are committed text — the whole suite runs on GPU-less
+CI.
 
 ## 11. Invariants
 
@@ -404,6 +412,16 @@ committed text — the whole suite runs on GPU-less CI.
     `floor.csv`'s `SKIPPED` row is actually buildable (§5.3/§10).
   - Accuracy: §10 ctest commands use absolute `${CMAKE_CURRENT_SOURCE_DIR}` fixture
     paths (ctest runs in the build dir); defined `schema` version handling (§5.3).
+- **Loop 3 (2026-07-17)** — same 2 reviewers, cold. Both converged on the same two
+  self-introduced (loop-2) contradictions. 4 verified findings (MEDIUM 2 · LOW 2), fixed:
+  - Consistency: `gpu,tiny` (gated, sub-floor) is `SKIPPED` in *every* fixture (the floor
+    keys on the baseline value), so `ok.csv`'s "all OK" was unbuildable — table row +
+    a convention note now say "totals OK; `gpu,tiny` SKIPPED" (§10).
+  - Consistency: removed stale "missing-metric WARN" wording from the §5.5 Compare
+    bullet — it's `MISSING`, matching §5.2/INV-6.
+  - Completeness: folded the `schema`/unreadable-baseline config error into the exit-2
+    contract (§5.5); simplification: dropped the unused `baseline_placeholder.json` — the
+    fixture `baseline.json` is the committed synthetic baseline (§3/§5/§9).
 
 ## 13. Sources
 
