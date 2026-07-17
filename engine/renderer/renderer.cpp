@@ -319,6 +319,21 @@ bool Renderer::loadShaders(const std::string& assetPath)
         return false;
     }
 
+    // Tier-1 budget AA + sharpen stack — both reuse the full-screen quad vertex
+    // shader, running on the composited LDR image (design §3.2/§3.4).
+    if (!m_fxaaShader.loadFromFiles(screenVertPath,
+                                    assetPath + "/shaders/fxaa.frag.glsl"))
+    {
+        Logger::error("Failed to load FXAA shader");
+        return false;
+    }
+    if (!m_casShader.loadFromFiles(screenVertPath,
+                                   assetPath + "/shaders/cas.frag.glsl"))
+    {
+        Logger::error("Failed to load CAS shader");
+        return false;
+    }
+
     // Load shadow depth shader (for the shadow pass)
     std::string shadowVertPath = assetPath + "/shaders/shadow_depth.vert.glsl";
     std::string shadowFragPath = assetPath + "/shaders/shadow_depth.frag.glsl";
@@ -559,6 +574,13 @@ void Renderer::initFramebuffers(int width, int height, int msaaSamples)
     glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT,
                               GL_RENDERBUFFER, m_outlineStencilRbo);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    // Tier-1 scratch LDR buffer for the FXAA→CAS ping-pong. Mirrors the output
+    // FBO's format (LDR RGBA8, no depth — the passes draw a full-screen quad
+    // with depth test off). FXAA writes here from m_outputFbo, CAS writes back
+    // to m_outputFbo, so getOutputTextureId() keeps pointing at the final image.
+    FramebufferConfig postFxConfig = outputConfig;
+    m_postFxFbo = std::make_unique<Framebuffer>(postFxConfig);
 
     // ID buffer FBO for mouse picking (RGBA8 + depth, rendered on demand)
     FramebufferConfig idBufferConfig;
@@ -1553,6 +1575,41 @@ void Renderer::endFrame(float deltaTime)
 
     m_screenQuad->draw();
 
+    // 6b. Tier-1 budget AA + sharpen stack (FXAA → CAS), design §3.2/§3.4.
+    // Runs on the composited LDR image only when FXAA is the selected AA mode
+    // (the Low/Medium preset tier). The scene already rendered single-sample
+    // (setAntiAliasMode reallocated m_msaaFbo to 1 sample for FXAA), so this is
+    // net-cheaper than the old NONE path that secretly paid 4x MSAA.
+    //   FXAA:  m_outputFbo (composite) → m_postFxFbo   (smooth edges)
+    //   CAS:   m_postFxFbo → m_outputFbo               (claw back sharpness)
+    // Ending in m_outputFbo keeps getOutputTextureId()/blitToScreen unchanged.
+    // Both write colour only, so the outline stencil in m_outputFbo is intact.
+    if (m_antiAliasMode == AntiAliasMode::FXAA && m_outputFbo && m_postFxFbo)
+    {
+        const glm::vec4 rtMetrics(1.0f / static_cast<float>(m_windowWidth),
+                                  1.0f / static_cast<float>(m_windowHeight),
+                                  static_cast<float>(m_windowWidth),
+                                  static_cast<float>(m_windowHeight));
+
+        m_postFxFbo->bind();
+        glViewport(0, 0, m_windowWidth, m_windowHeight);
+        glClear(GL_COLOR_BUFFER_BIT);
+        m_fxaaShader.use();
+        m_outputFbo->bindColorTexture(0);
+        m_fxaaShader.setInt("u_colorTexture", 0);
+        m_fxaaShader.setVec4("u_rtMetrics", rtMetrics);
+        m_screenQuad->draw();
+
+        m_outputFbo->bind();
+        glViewport(0, 0, m_windowWidth, m_windowHeight);
+        glClear(GL_COLOR_BUFFER_BIT);
+        m_casShader.use();
+        m_postFxFbo->bindColorTexture(0);
+        m_casShader.setInt("u_colorTexture", 0);
+        m_casShader.setFloat("u_sharpness", m_casSharpness);
+        m_screenQuad->draw();
+    }
+
     // 7. Swap TAA history buffers
     if (isTAA)
     {
@@ -2185,6 +2242,23 @@ void Renderer::setAntiAliasMode(AntiAliasMode mode)
     m_antiAliasMode = mode;
     const char* names[] = {"None", "MSAA 4x", "TAA", "SMAA", "FXAA"};
     Logger::info("Anti-aliasing: " + std::string(names[static_cast<int>(mode)]));
+
+    // Make the scene FBO's sample count follow the AA mode. Only MSAA_4X wants
+    // a multisampled scene; NONE and FXAA render single-sample (FXAA is a
+    // post-process on the resolved LDR image — a multisampled scene would just
+    // pay 4x cost for nothing, which is the latent NONE=4xMSAA waste this also
+    // fixes). TAA/SMAA use the separate m_taaSceneFbo, unaffected. Reallocate
+    // only on an actual change; Framebuffer has no in-place sample-count setter.
+    if (m_msaaFbo)
+    {
+        const int wantSamples = (mode == AntiAliasMode::MSAA_4X) ? 4 : 1;
+        if (m_msaaFbo->getConfig().samples != wantSamples)
+        {
+            FramebufferConfig cfg = m_msaaFbo->getConfig();
+            cfg.samples = wantSamples;
+            m_msaaFbo = std::make_unique<Framebuffer>(cfg);
+        }
+    }
 }
 
 void Renderer::setHeavyPostEnabled(bool isEnabled)
@@ -4479,6 +4553,10 @@ void Renderer::resizeRenderTarget(int width, int height)
                                       GL_RENDERBUFFER, m_outlineStencilRbo);
             glBindFramebuffer(GL_FRAMEBUFFER, 0);
         }
+    }
+    if (m_postFxFbo)
+    {
+        m_postFxFbo->resize(width, height);
     }
     if (m_idBufferFbo)
     {

@@ -614,6 +614,7 @@ private:
     std::unique_ptr<Framebuffer> m_resolveFbo;
     std::unique_ptr<Framebuffer> m_outputFbo;  // Post-tonemapped LDR output for editor viewport
     GLuint m_outlineStencilRbo = 0;            // Depth-stencil RBO attached to output FBO for outline rendering
+    std::unique_ptr<Framebuffer> m_postFxFbo;  // Tier-1 LDR scratch for the FXAA→CAS ping-pong (mirrors m_outputFbo)
 
     // ID buffer (for mouse picking — rendered on demand)
     std::unique_ptr<Framebuffer> m_idBufferFbo;
@@ -747,6 +748,13 @@ private:
     Shader m_smaaEdgeShader;
     Shader m_smaaBlendShader;
     Shader m_smaaNeighborhoodShader;
+
+    // Tier-1 budget AA + sharpen stack (FXAA → CAS), run on the composited
+    // LDR image when m_antiAliasMode == FXAA. See docs/phases/
+    // phase_10_tier1_render_scale_and_presets_design.md §3.2/§3.4.
+    Shader m_fxaaShader;
+    Shader m_casShader;
+    float  m_casSharpness = 0.5f;  // [0,1] CAS strength — mid default restores upscale softness
 
     // Parallax occlusion mapping
     bool m_pomEnabled = true;
