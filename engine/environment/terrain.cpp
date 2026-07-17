@@ -1125,36 +1125,7 @@ void Terrain::applyBankBlend(const glm::vec2& waterCenter,
                 continue;  // Outside blend range
             }
 
-            // Blend bank channel with existing splatmap
-            size_t idx = static_cast<size_t>(z * w + x);
-            glm::vec4& splat = m_splatData[idx];
-
-            // Increase bank channel, decrease others proportionally
-            float currentBank = splat[ch];
-            float newBank = currentBank + (1.0f - currentBank) * blendFactor;
-
-            // Scale other channels down to maintain sum = 1
-            float otherSum = 0.0f;
-            for (int c = 0; c < 4; ++c)
-            {
-                if (c != ch)
-                {
-                    otherSum += splat[c];
-                }
-            }
-
-            if (otherSum > 0.0f)
-            {
-                float scale = (1.0f - newBank) / otherSum;
-                for (int c = 0; c < 4; ++c)
-                {
-                    if (c != ch)
-                    {
-                        splat[c] *= scale;
-                    }
-                }
-            }
-            splat[ch] = newBank;
+            blendBankChannel(x, z, ch, blendFactor);
         }
     }
 
@@ -1167,6 +1138,98 @@ void Terrain::applyBankBlend(const glm::vec2& waterCenter,
     }
 
     Logger::info("Terrain: bank blending applied (width=" + std::to_string(config.blendWidth)
+                 + "m, channel=" + std::to_string(ch) + ")");
+}
+
+void Terrain::blendBankChannel(int x, int z, int channel, float blendFactor)
+{
+    // Increase the bank channel, then rescale the others so the four weights
+    // still sum to 1 (the splat shader samples normalized weights).
+    glm::vec4& splat = m_splatData[static_cast<size_t>(z * m_config.width + x)];
+    const float newBank = splat[channel] + (1.0f - splat[channel]) * blendFactor;
+
+    float otherSum = 0.0f;
+    for (int c = 0; c < 4; ++c)
+    {
+        if (c != channel)
+        {
+            otherSum += splat[c];
+        }
+    }
+    if (otherSum > 0.0f)
+    {
+        const float scale = (1.0f - newBank) / otherSum;
+        for (int c = 0; c < 4; ++c)
+        {
+            if (c != channel)
+            {
+                splat[c] *= scale;
+            }
+        }
+    }
+    splat[channel] = newBank;
+}
+
+void Terrain::applyContourBankBlend(float waterLevelY,
+                                    const glm::vec2& regionCenter,
+                                    float regionRadius,
+                                    const BankBlendConfig& config)
+{
+    if (!m_initialized)
+    {
+        return;
+    }
+
+    const int w = m_config.width;
+    const int d = m_config.depth;
+    const int ch = std::clamp(config.bankChannel, 0, 3);
+
+    auto smoothstep = [](float edge0, float edge1, float val) -> float {
+        float t = std::clamp((val - edge0) / (edge1 - edge0), 0.0f, 1.0f);
+        return t * t * (3.0f - 2.0f * t);
+    };
+
+    // Texel bounding box of the region disc.
+    float txMin = 0.0f, tzMin = 0.0f, txMax = 0.0f, tzMax = 0.0f;
+    worldToTexel(regionCenter.x - regionRadius, regionCenter.y - regionRadius, txMin, tzMin);
+    worldToTexel(regionCenter.x + regionRadius, regionCenter.y + regionRadius, txMax, tzMax);
+    const int x0 = std::max(0, static_cast<int>(std::floor(txMin)));
+    const int z0 = std::max(0, static_cast<int>(std::floor(tzMin)));
+    const int x1 = std::min(w - 1, static_cast<int>(std::ceil(txMax)));
+    const int z1 = std::min(d - 1, static_cast<int>(std::ceil(tzMax)));
+    const float regionR2 = regionRadius * regionRadius;
+
+    for (int z = z0; z <= z1; ++z)
+    {
+        for (int x = x0; x <= x1; ++x)
+        {
+            const float wx = m_config.origin.x + static_cast<float>(x) * m_config.spacingX;
+            const float wz = m_config.origin.z + static_cast<float>(z) * m_config.spacingZ;
+            const float dx = wx - regionCenter.x;
+            const float dz = wz - regionCenter.y;
+            if (dx * dx + dz * dz > regionR2)
+            {
+                continue;  // outside the region disc
+            }
+            // Blend strength falls off with vertical distance from the waterline,
+            // so the damp band hugs the height contour (curved), not a rectangle.
+            const float heightDelta = std::abs(getHeight(wx, wz) - waterLevelY);
+            const float blendFactor =
+                config.bankStrength * (1.0f - smoothstep(0.0f, config.blendWidth, heightDelta));
+            if (blendFactor > 0.001f)
+            {
+                blendBankChannel(x, z, ch, blendFactor);
+            }
+        }
+    }
+
+    const int regionW = x1 - x0 + 1;
+    const int regionH = z1 - z0 + 1;
+    if (regionW > 0 && regionH > 0)
+    {
+        updateSplatmapRegion(x0, z0, regionW, regionH);
+    }
+    Logger::info("Terrain: contour bank blending applied (band=" + std::to_string(config.blendWidth)
                  + "m, channel=" + std::to_string(ch) + ")");
 }
 

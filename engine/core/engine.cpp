@@ -2269,15 +2269,32 @@ void Engine::finalizeMeadowTerrain()
     terrain.updateHeightmapRegion(0, 0, W, D);
     terrain.updateNormalMapRegion(0, 0, W, D);
 
-    // Pond centre + half-extent in world XZ (derived from the terrain config so
-    // the grid-space pond aligns with the carved bowl).
+    // Pond centre in world XZ (derived from the terrain config so the grid-space
+    // pond aligns with the carved bowl).
     const TerrainConfig& tcfg = terrain.getConfig();
     const glm::vec2 pondCenterXZ = {
         tcfg.origin.x + shape.pondCenterGrid.x * static_cast<float>(W - 1) * tcfg.spacingX,
         tcfg.origin.z + shape.pondCenterGrid.y * static_cast<float>(D - 1) * tcfg.spacingZ,
     };
-    constexpr float POND_SIZE = 14.0f;                 // water plane extent (m)
-    const glm::vec2 pondHalfExtentXZ = {POND_SIZE * 0.5f, POND_SIZE * 0.5f};
+
+    // Physically-correct pond fill + footprint (design
+    // phase_10_meadow_pond_physical_correctness). computePondFill ray-casts the
+    // reshaped bowl for a CONTAINED water level (below the lowest rim) and the true
+    // flood radius, so the water sheet fills the basin to a level contour instead
+    // of floating as a fixed 14 m square. GL-free helper, sampled via getHeight.
+    const float rRimWorld = shape.pondRadiusGrid * static_cast<float>(W - 1) * tcfg.spacingX;
+    const float bowlFloorY = terrain.getHeight(pondCenterXZ.x, pondCenterXZ.y);
+    // desiredDepth is the one art-directed value; the geometric knobs are derived
+    // (design §8). TODO: revisit via Formula Workbench.
+    // NOTE (project Rule 5): PondFillParams::minDepth OVERRIDES containment in a
+    // degenerate basin (would trade INV-2 for a non-empty pond) — does not fire for
+    // the authored bowl, but named here so the clamp is discoverable.
+    PondFillParams pondParams;
+    const PondFill pondFill = computePondFill(
+        [&terrain](float wx, float wz) { return terrain.getHeight(wx, wz); },
+        pondCenterXZ, rRimWorld, bowlFloorY, pondParams);
+    const float waterLevelY = pondFill.waterLevelY;
+    const float POND_SIZE = 2.0f * (pondFill.floodRadius + pondParams.edgePad);  // sheet extent (m)
 
     // Auto-texture (grass / rock / sand from slope + altitude) then blend sand
     // into the pond shore. Both edit only the splatmap.
@@ -2293,15 +2310,17 @@ void Engine::finalizeMeadowTerrain()
     autoTex.noiseAmplitude = 0.05f;    // was 0.12 — tighter shore, less sand bleeding uphill
     terrain.generateAutoTexture(autoTex);
 
-    // A narrow brown *mud* waterline (dirt channel), not a wide white sand slab:
-    // grass meets the water with a damp muddy edge. Reeds + lily pads (slice 5)
-    // break up the straight water rectangle. (A perfectly round pond would need
-    // a round water mesh — a water-system feature, out of scope for this pass.)
+    // A narrow brown *mud* waterline (dirt channel) that hugs the pond's natural
+    // CONTOUR, not a straight-edged square: the damp band follows the height
+    // contour at the waterline (design §3.4). Keyed to the terrain height vs the
+    // water level, so it curves with the shoreline on every side.
+    // TODO: revisit via Formula Workbench — blendWidth/strength are art-directed.
     Terrain::BankBlendConfig bankBlend{};
     bankBlend.bankChannel = 2;      // dirt (brown mud), not sand (near-white here)
-    bankBlend.blendWidth = 4.0f;    // narrow damp edge
+    bankBlend.blendWidth = 4.0f;    // vertical band around the waterline (m)
     bankBlend.bankStrength = 0.5f;
-    terrain.applyBankBlend(pondCenterXZ, pondHalfExtentXZ, bankBlend);
+    terrain.applyContourBankBlend(waterLevelY, pondCenterXZ,
+                                  pondFill.floodRadius + bankBlend.blendWidth + 2.0f, bankBlend);
     terrain.updateSplatmapRegion(0, 0, W, D);
 
     // PBR ground materials (Phase 10 / 3D_E-0031). Replaces the flat-colour terrain
@@ -2344,18 +2363,15 @@ void Engine::finalizeMeadowTerrain()
     // m_terrainEnabled stays true (its default) so the render loop draws it.
 
     // --- Pond ----------------------------------------------------------------
-    // Water level sits just above the carved bowl floor so the shallow→deep
-    // shading is visible. Sample the reshaped surface at the pond centre for a
-    // robust floor height (independent of the exact octave sum there).
+    // Water level + footprint were solved above by computePondFill: a level
+    // surface contained below the lowest rim, filling the basin to its natural
+    // contour (design phase_10_meadow_pond_physical_correctness).
     Scene* scene = m_sceneManager->getActiveScene();
     if (!scene)
     {
         Logger::warning("finalizeMeadowTerrain: no active scene — pond skipped");
         return;
     }
-
-    const float bowlFloorY = terrain.getHeight(pondCenterXZ.x, pondCenterXZ.y);
-    const float waterLevelY = bowlFloorY + 1.5f;
 
     Entity* pond = scene->createEntity("Pond");
     pond->transform.position = glm::vec3(pondCenterXZ.x, waterLevelY, pondCenterXZ.y);
@@ -2391,10 +2407,11 @@ void Engine::finalizeMeadowTerrain()
         constexpr float GRASS_DENSITY = 0.53f;  // instances per m² per stamp → ~40 k total
         constexpr float GRASS_FALLOFF = 0.30f;  // soft edge (rejects ~19%)
         constexpr float EDGE_MARGIN = 5.0f;     // keep grass off the map border
-        // Skip stamps whose centre falls within the pond + a shore band so grass
-        // does not carpet the water; a final erase disc trims any spill.
-        const float pondSkipRadius = POND_SIZE * 0.5f + 3.0f;
-        const float pondSkipR2 = pondSkipRadius * pondSkipRadius;
+        // Keep grass off the water by its CONTOUR, not a square disc: skip a stamp
+        // whose ground sits below the waterline + a damp margin (design §3.5). A
+        // final erase disc at the flood radius trims any spill.
+        // TODO: revisit via Formula Workbench — SHORE_MARGIN is art-directed.
+        constexpr float SHORE_MARGIN = 1.5f;    // damp band above the waterline (m)
 
         FoliageTypeConfig grassCfg;
         grassCfg.name = "Meadow Grass";
@@ -2411,23 +2428,24 @@ void Engine::finalizeMeadowTerrain()
         {
             for (float cx = x0; cx <= x1; cx += STAMP_SPACING)
             {
-                const float dx = cx - pondCenterXZ.x;
-                const float dz = cz - pondCenterXZ.y;
-                if (dx * dx + dz * dz < pondSkipR2)
+                // Sample the ground FIRST (hoisted above the skip) so the contour
+                // gate can use it: skip where the ground is at/below the waterline.
+                const float cy = terrain.getHeight(cx, cz);
+                if (cy < waterLevelY + SHORE_MARGIN)
                 {
                     continue;
                 }
-                const float cy = terrain.getHeight(cx, cz);
                 m_foliageManager->paintFoliage(GRASS_TYPE_ID,
                     glm::vec3(cx, cy, cz), STAMP_RADIUS, GRASS_DENSITY,
                     GRASS_FALLOFF, grassCfg);
             }
         }
         // Trim any grass that spilled into the pond footprint (props in slice 5
-        // add their own erase discs here).
-        const float pondFloorY = terrain.getHeight(pondCenterXZ.x, pondCenterXZ.y);
+        // add their own erase discs here). Disc at the flood radius — the erase
+        // API is disc-only (design §3.5); the star-convex flooded region fits it.
         m_foliageManager->eraseAllFoliage(
-            glm::vec3(pondCenterXZ.x, pondFloorY, pondCenterXZ.y), POND_SIZE * 0.5f + 1.0f);
+            glm::vec3(pondCenterXZ.x, bowlFloorY, pondCenterXZ.y),
+            pondFill.floodRadius + SHORE_MARGIN);
 
         Logger::info("Meadow grass: " + std::to_string(m_foliageManager->getTotalFoliageCount())
             + " instances across " + std::to_string(m_foliageManager->getChunkCount()) + " chunks");

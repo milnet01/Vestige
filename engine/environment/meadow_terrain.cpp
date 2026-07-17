@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 namespace Vestige
 {
@@ -180,6 +181,84 @@ std::vector<ScatterPoint> scatterProps(uint32_t seed, const ScatterParams& param
     }
 
     return out;
+}
+
+PondFill computePondFill(const HeightSampler& sampleHeight, glm::vec2 centreWorld,
+                         float rRimWorld, float bowlFloorY, const PondFillParams& params)
+{
+    PondFill result;
+
+    const float rScan = params.scanFactor * std::max(rRimWorld, 0.0f);
+    const int nRays = std::max(1, params.nRays);
+    const float step = std::max(params.marchStep, 1e-3f);
+    const int steps = std::max(1, static_cast<int>(std::ceil(rScan / step)));
+
+    // One march per ray, storing the full height profile so pass 2 can rescan
+    // once waterLevelY is known (which needs the min over ALL rays first).
+    std::vector<std::vector<float>> profiles(
+        static_cast<size_t>(nRays), std::vector<float>(static_cast<size_t>(steps) + 1, 0.0f));
+
+    // Pass 1 — spill height = min over rays of the per-ray ridge crest.
+    constexpr float TWO_PI = 6.28318530718f;
+    float spillHeight = std::numeric_limits<float>::max();
+    for (int r = 0; r < nRays; ++r)
+    {
+        const float ang = TWO_PI * static_cast<float>(r) / static_cast<float>(nRays);
+        const float dx = std::cos(ang);
+        const float dz = std::sin(ang);
+        float ridgeCrest = -std::numeric_limits<float>::max();
+        for (int s = 0; s <= steps; ++s)
+        {
+            const float rad = static_cast<float>(s) * step;
+            const float h = sampleHeight(centreWorld.x + dx * rad, centreWorld.y + dz * rad);
+            profiles[static_cast<size_t>(r)][static_cast<size_t>(s)] = h;
+            ridgeCrest = std::max(ridgeCrest, h);
+        }
+        spillHeight = std::min(spillHeight, ridgeCrest);
+    }
+    result.spillHeight = spillHeight;
+
+    // Fill: below the spill point, but never a zero/negative-depth pond. The
+    // MIN_DEPTH guard OVERRIDES containment in a degenerate basin (design §3.1).
+    float waterLevelY = std::min(bowlFloorY + params.desiredDepth, spillHeight - params.rimMargin);
+    waterLevelY = std::max(waterLevelY, bowlFloorY + params.minDepth);
+    result.waterLevelY = waterLevelY;
+
+    // Pass 2 — flood radius = max over rays of the FIRST outward crossing of
+    // waterLevelY (the centre-connected shoreline). A ray that never rises above
+    // waterLevelY within R_SCAN is capped at rScan (flagged: floodRadius ≥ rRim
+    // then fails the §7.2 assert).
+    float floodRadius = 0.0f;
+    for (int r = 0; r < nRays; ++r)
+    {
+        const std::vector<float>& profile = profiles[static_cast<size_t>(r)];
+        int firstAbove = steps + 1;  // sentinel: never crosses
+        for (int s = 0; s <= steps; ++s)
+        {
+            if (profile[static_cast<size_t>(s)] >= waterLevelY)
+            {
+                firstAbove = s;
+                break;
+            }
+        }
+        float rayRadius;
+        if (firstAbove > steps)
+        {
+            rayRadius = rScan;  // capped / flagged
+        }
+        else if (firstAbove <= 0)
+        {
+            rayRadius = 0.0f;   // centre already above water (degenerate)
+        }
+        else
+        {
+            rayRadius = static_cast<float>(firstAbove - 1) * step;  // last submerged sample
+        }
+        floodRadius = std::max(floodRadius, rayRadius);
+    }
+    result.floodRadius = floodRadius;
+
+    return result;
 }
 
 }  // namespace Vestige

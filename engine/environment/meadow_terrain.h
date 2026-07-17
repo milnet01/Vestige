@@ -3,6 +3,7 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include <vector>
 
 #include <glm/glm.hpp>
@@ -76,5 +77,43 @@ struct ScatterPoint
 /// scale. Fully determined by `seed` — same seed + params yields the same
 /// points in the same order.
 std::vector<ScatterPoint> scatterProps(uint32_t seed, const ScatterParams& params);
+
+/// @brief World-space terrain height sampler: `float(worldX, worldZ)`.
+using HeightSampler = std::function<float(float, float)>;
+
+/// @brief Geometric knobs for the pond fill/size solve (design §8). Defaults are
+/// the derived provisional values for the authored bowl; all in world metres
+/// except `nRays`. `desiredDepth` is the one art-directed value (Formula-Workbench
+/// TODO at the call site).
+struct PondFillParams
+{
+    float desiredDepth = 1.5f;   ///< Target depth above the floor when the rim allows.
+    float rimMargin = 0.5f;      ///< Keep water this far below the spill height (≥ cross-ray crest variation).
+    float minDepth = 0.5f;       ///< Floor for a degenerate basin; OVERRIDES containment (design §3.1).
+    float edgePad = 2.0f;        ///< Sheet extends this far past the flood radius (onto dry ground).
+    int   nRays = 128;           ///< Angular ray count (shoreline-radius change per gap < edgePad).
+    float scanFactor = 1.5f;     ///< R_SCAN = scanFactor · rRimWorld (reach saddles past the carve boundary).
+    float marchStep = 0.5f;      ///< Radial sample step (≤ grid spacing, so no crest is stepped over).
+};
+
+/// @brief Result of the pond fill solve.
+struct PondFill
+{
+    float waterLevelY = 0.0f;   ///< World Y of the level water surface.
+    float floodRadius = 0.0f;   ///< Max world radius of the centre-connected flooded region.
+    float spillHeight = 0.0f;   ///< Lowest ridge crest water would have to cross to escape.
+};
+
+/// @brief Solve a physically-contained pond level and footprint for the meadow
+/// bowl (design §3.1/§3.2). Marches `nRays` rays out to `scanFactor·rRimWorld`,
+/// storing each ray's height profile; pass 1 sets `spillHeight` = min over rays of
+/// the per-ray ridge crest and clamps `waterLevelY` below it (with a `minDepth`
+/// degenerate guard that overrides containment); pass 2 sets `floodRadius` = max
+/// over rays of the first outward crossing of `waterLevelY` (the centre-connected
+/// shoreline). GL-free and deterministic — the scene passes a `Terrain::getHeight`
+/// lambda, the unit test a `meadowHeight01` wrapper. Assumes a single radial bowl
+/// with a monotone carve (design §9); §7 tests validate containment + coverage.
+PondFill computePondFill(const HeightSampler& sampleHeight, glm::vec2 centreWorld,
+                         float rRimWorld, float bowlFloorY, const PondFillParams& params);
 
 }  // namespace Vestige

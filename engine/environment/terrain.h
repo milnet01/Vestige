@@ -233,6 +233,17 @@ public:
                         const glm::vec2& waterHalfExtent,
                         const BankBlendConfig& config);
 
+    /// @brief Applies bank blending along a height CONTOUR instead of an AABB.
+    /// Blends the bank material into every texel whose terrain height is within
+    /// `config.blendWidth` of `waterLevelY`, so a level pond gets a damp edge that
+    /// follows its natural (curved) shoreline rather than a straight-edged square
+    /// (design phase_10_meadow_pond_physical_correctness §3.4). Scoped to a disc of
+    /// `regionRadius` about `regionCenter` for cost.
+    void applyContourBankBlend(float waterLevelY,
+                               const glm::vec2& regionCenter,
+                               float regionRadius,
+                               const BankBlendConfig& config);
+
     /// @brief Configuration for automatic slope/altitude-based splatmap generation.
     struct AutoTextureConfig
     {
@@ -255,6 +266,11 @@ private:
     void createGpuTextures();
     void computeAllNormals();
     void computeNormalAt(int x, int z);
+
+    /// @brief Blends a bank channel into texel (x,z) by `blendFactor`, rescaling
+    /// the other channels so the splat weights still sum to 1. Shared by the AABB
+    /// and contour bank-blend paths.
+    void blendBankChannel(int x, int z, int channel, float blendFactor);
 
     /// @brief Recursive CDLOD quadtree builder.
     int buildNode(float cx, float cz, float halfSize, int lodLevel);

@@ -7,6 +7,9 @@
 
 #include <gtest/gtest.h>
 
+#include <cmath>
+#include <vector>
+
 #include "environment/meadow_terrain.h"
 
 using namespace Vestige;
@@ -180,4 +183,152 @@ TEST(ScatterProps, DegenerateParamsYieldNoPoints)
     ScatterParams q = makeScatter();
     q.regionMax = q.regionMin;  // zero-area region
     EXPECT_TRUE(scatterProps(1u, q).empty());
+}
+
+// ---- computePondFill (design §7.1/§7.2) ------------------------------------
+//
+// The pond fill is validated in WORLD units against the same meadow bowl the
+// scene ships. The terrain is 257² at 1 m spacing, origin (-128,-128), 50 m
+// height scale (terrain_system.cpp) — so the test wraps meadowHeight01 (grid
+// [0,1] → height01 [0,1]) into a world sampler, exactly as the scene wraps
+// Terrain::getHeight (design §3 helper note).
+
+namespace
+{
+
+constexpr int   TERRAIN_VERTS = 257;
+constexpr float TERRAIN_SPACING = 1.0f;
+constexpr float TERRAIN_ORIGIN = -128.0f;
+constexpr float HEIGHT_SCALE = 50.0f;
+constexpr float WORLD_SPAN = static_cast<float>(TERRAIN_VERTS - 1) * TERRAIN_SPACING;  // 256 m
+
+// World-XZ → world height, wrapping meadowHeight01 (no vertical origin offset —
+// origin.y = 0, matching Terrain::getHeight).
+struct WorldBowl
+{
+    MeadowShape shape;
+    float operator()(float wx, float wz) const
+    {
+        const float nx = (wx - TERRAIN_ORIGIN) / WORLD_SPAN;
+        const float nz = (wz - TERRAIN_ORIGIN) / WORLD_SPAN;
+        return meadowHeight01(nx, nz, shape) * HEIGHT_SCALE;
+    }
+};
+
+glm::vec2 pondCentreWorld(const MeadowShape& s)
+{
+    return {TERRAIN_ORIGIN + s.pondCenterGrid.x * WORLD_SPAN,
+            TERRAIN_ORIGIN + s.pondCenterGrid.y * WORLD_SPAN};
+}
+
+// Independent 4-neighbour flood-fill from the pond centre over a fine grid out
+// to rScan. Returns whether water at `waterY` reaches the R_SCAN boundary
+// (escape) and the max centre-distance of any flooded cell. This is
+// algorithmically independent of computePondFill's ray march (design §7.1).
+struct FloodResult { bool escapes; float maxDist; };
+
+template <typename Sampler>
+FloodResult floodFill(const Sampler& sample, glm::vec2 centre, float waterY,
+                      float rScan, float gridStep)
+{
+    const int N = static_cast<int>(std::ceil(rScan / gridStep));
+    const int side = 2 * N + 1;
+    std::vector<bool> visited(static_cast<size_t>(side) * static_cast<size_t>(side), false);
+    const auto idx = [&](int i, int j) {
+        return static_cast<size_t>((j + N)) * static_cast<size_t>(side) + static_cast<size_t>(i + N);
+    };
+    std::vector<std::pair<int, int>> stack;
+    FloodResult res{false, 0.0f};
+
+    // Seed the centre cell (the floor is below waterY by construction).
+    if (sample(centre.x, centre.y) < waterY)
+    {
+        visited[idx(0, 0)] = true;
+        stack.push_back({0, 0});
+    }
+    const int dI[4] = {1, -1, 0, 0};
+    const int dJ[4] = {0, 0, 1, -1};
+    while (!stack.empty())
+    {
+        const auto [i, j] = stack.back();
+        stack.pop_back();
+        if (std::abs(i) >= N || std::abs(j) >= N)
+        {
+            res.escapes = true;  // a flooded cell sits on the R_SCAN boundary
+        }
+        const float dist = std::sqrt(static_cast<float>(i * i + j * j)) * gridStep;
+        res.maxDist = std::max(res.maxDist, dist);
+        for (int k = 0; k < 4; ++k)
+        {
+            const int ni = i + dI[k];
+            const int nj = j + dJ[k];
+            if (std::abs(ni) > N || std::abs(nj) > N || visited[idx(ni, nj)])
+            {
+                continue;
+            }
+            const float wx = centre.x + static_cast<float>(ni) * gridStep;
+            const float wz = centre.y + static_cast<float>(nj) * gridStep;
+            if (sample(wx, wz) < waterY)
+            {
+                visited[idx(ni, nj)] = true;
+                stack.push_back({ni, nj});
+            }
+        }
+    }
+    return res;
+}
+
+}  // namespace
+
+TEST(PondFill, ContainedAndCoversTheFlood)
+{
+    const WorldBowl bowl{makeShape()};
+    const glm::vec2 centre = pondCentreWorld(bowl.shape);
+    const float rRim = bowl.shape.pondRadiusGrid * WORLD_SPAN;   // ≈ 28 m
+    const float floorY = bowl(centre.x, centre.y);
+
+    PondFillParams params;
+    const PondFill fill = computePondFill(bowl, centre, rRim, floorY, params);
+
+    // By-construction sanity (labelled as such — cannot fail unless arithmetic
+    // is broken): the fill sits below the spill and above the floor.
+    EXPECT_LT(fill.waterLevelY, fill.spillHeight);
+    EXPECT_GE(fill.waterLevelY, floorY + params.minDepth - 1e-3f);
+
+    // §7.2 flood-radius sanity: contained within the bowl, not capped at R_SCAN.
+    const float rScan = params.scanFactor * rRim;
+    EXPECT_GT(fill.floodRadius, 0.0f);
+    EXPECT_LT(fill.floodRadius, rRim);
+    EXPECT_LT(fill.floodRadius, rScan);
+
+    // §7.1 INV-2 containment — INDEPENDENT flood-fill (not the ray march):
+    // water at waterLevelY cannot reach the R_SCAN boundary.
+    const FloodResult flood = floodFill(bowl, centre, fill.waterLevelY, rScan, 1.0f);
+    EXPECT_FALSE(flood.escapes) << "pond spills — water reaches the R_SCAN boundary";
+
+    // §7.1 INV-3 coverage — the headline "no straight edge on water": every
+    // flooded cell lies inside the computed square sheet.
+    const float halfSheet = fill.floodRadius + params.edgePad;  // = POND_SIZE / 2
+    EXPECT_LE(flood.maxDist, halfSheet)
+        << "sheet undersized — flooded ground extends past POND_SIZE/2";
+
+    // Cross-check the two independent shoreline measures agree within a few cells.
+    EXPECT_NEAR(fill.floodRadius, flood.maxDist, 3.0f);
+}
+
+TEST(PondFill, DeterministicAndRimRaisesLevel)
+{
+    const WorldBowl bowl{makeShape()};
+    const glm::vec2 centre = pondCentreWorld(bowl.shape);
+    const float rRim = bowl.shape.pondRadiusGrid * WORLD_SPAN;
+    const float floorY = bowl(centre.x, centre.y);
+    PondFillParams params;
+
+    const PondFill a = computePondFill(bowl, centre, rRim, floorY, params);
+    const PondFill b = computePondFill(bowl, centre, rRim, floorY, params);
+    EXPECT_FLOAT_EQ(a.waterLevelY, b.waterLevelY);
+    EXPECT_FLOAT_EQ(a.floodRadius, b.floodRadius);
+
+    // The pond fills above its floor (a real, non-degenerate body of water).
+    EXPECT_GT(a.waterLevelY, floorY);
 }
