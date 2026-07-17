@@ -513,6 +513,13 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
   Kind: feature.
   Source: in-session-2026-07-11.
 
+- ✅ [3D_E-0037] **Physically-correct meadow pond — contained level surface + natural contour shoreline (was a floating flat square).**
+  Design: docs/phases/phase_10_meadow_pond_physical_correctness_design.md (cold-eyes converged, 5 loops). New GL-free `computePondFill` (ray-cast spill height → contained water level → true flood radius); sheet sized so its straight edges land on dry ground and are hidden by depth occlusion (no shader change); `Terrain::applyContourBankBlend` paints the mud waterline along the height contour; grass skip re-keyed to the waterline; headless flood-fill containment (INV-2) + coverage (INV-3) tests. Verified visually (natural oval pond sunk in the basin) + 44 unit tests + 0 GL errors.
+  **Layman:** The pond looked like a flat blue square hovering over the grass; now it's a real pond that sits down in a hollow with a curved, muddy shoreline.
+  Kind: fix.
+  Source: user-request-2026-07-17.
+  Resolved (2026-07-17): shipped.
+
 - 📋 [3D_E-0028] **Optimise the planar-reflection water pass — cull + LOD + throttle the reflection render.**
   The planar-reflection water pass re-renders the scene into a reflection FBO every frame — a top suspected hotspot in any scene with visible water. Add: (1) reflection-frustum + above-water-plane culling so only potential reflectors draw; (2) a reduced-detail reflection draw (drop small props/grass beyond N m, coarser shadows/LOD); (3) optional N-frame throttling of the reflection update for distant/near-static water. reflectionResolutionScale is already 0.25. Fixture: the deterministic 3D_E-0027 meadow benchmark (its pond makes this measurable). Investigate first via the profiler CSV, then implement the highest-ROI lever.
   **Layman:** Water mirrors the world by secretly drawing the whole scene twice; make that second pass much cheaper.
