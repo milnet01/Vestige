@@ -117,23 +117,27 @@ New files (no `engine/` changes):
   `statistics`).
 - `tests/fixtures/perf_gate/` — a fixture `baseline.json` (the committed synthetic
   baseline, doubling as the machinery's no-GPU exercise) + synthetic CSVs, one per
-  behaviour the `--selftest` asserts: `ok.csv` (totals within tolerance, carries
-  `gpu,tiny`), `regressed.csv` (frame +40 %), `improved.csv` (frame −30 %),
+  behaviour the `--selftest` asserts: `ok.csv` (totals within tolerance), `warn.csv`
+  (frame +15 %), `regressed.csv` (frame +40 %), `improved.csv` (frame −30 %),
   `missing.csv` (gated `gpu,total` absent), `floor.csv` (sub-floor `gpu,tiny` swings
-  +1000 %), `short.csv` (≤2 usable intervals). Expected verdicts per fixture: §10 table.
-  The real `baseline_rx6600.json` is added later by the user via `--update-baseline`.
+  +1000 %), `short.csv` (≤2 usable intervals). **Every CSV contains all five gated
+  metrics** (so `gpu,tiny` is present and `SKIPPED` — INCONCLUSIVE only in `short.csv`)
+  **except** `missing.csv`, which deliberately omits `gpu,total`. Expected verdicts per
+  fixture: §10 table. The real `baseline_rx6600.json` is added later by the user via
+  `--update-baseline`.
 
 ### 5.1 Parse + reduce
 
 1. Read the CSV. Skip the header. Each row → `(time_s, category, name, depth, value,
    fps)`. `value` = the `ms` column parsed as float (it holds MB for `mem` rows; the
    unit is carried by `category`, matching the writer). `fps` = column 6, present only
-   on the `frame,total` row (blank elsewhere → ignored). **Robustness (INV-9):** a row
-   is *skipped* — never fatal — if it has too few columns, or its `ms`/`fps` field is
-   blank or non-numeric. The writer is trusted, so this only guards a truncated final
-   line or a hand-edited file; a skipped row simply doesn't contribute to its metric's
-   series. An empty or header-only CSV yields zero series (→ every gated metric
-   INCONCLUSIVE, step 3).
+   on the `frame,total` row (blank elsewhere — a **blank `fps` is normal** and never a
+   reason to skip a row). **Robustness (INV-9):** a row is *skipped* — never fatal — if
+   it has too few columns or its **`ms`** field is blank or non-numeric. (Only `ms` is
+   required per row; `fps` is optional by the writer's format.) The writer is trusted, so
+   this only guards a truncated final line or a hand-edited file; a skipped row simply
+   doesn't contribute to its metric's series. An empty or header-only CSV yields zero
+   series → every gated baseline metric is `MISSING` (§5.2 classification, rule 1).
 2. Group values by metric key `"{category},{name}"` (e.g. `frame,total`, `gpu,shadow`,
    `mem,gpu_mb`). Depth is not part of the key — gated metrics are all depth-0 totals
    and named GPU passes; two same-named scopes at different depths never occur among
@@ -154,32 +158,37 @@ New files (no `engine/` changes):
 
 ### 5.2 Compare
 
-For each metric present in **both** the baseline and the (reduced) current run and on
-the **gate allowlist**:
+Every metric in the **baseline** gets exactly one verdict, computed by this **ordered
+classification** (first matching rule wins). This runs for *all* baseline metrics — gated
+and non-gated alike — so every reported row (§8) has a status word; the `gate` allowlist
+governs only the **exit code** (§5.5 / INV-4), not whether a verdict is computed.
 
-- `delta_pct = (current - baseline) / baseline * 100`.
-- Direction: for `ms` / `mb` metrics, **only increases regress** (a decrease is an
-  improvement → `IMPROVED`, never a FAIL). `fps` is **informational only** — never
-  gated. (It is *not* `1000 / frame_ms`: the logger accumulates `fps` as the mean of
-  per-frame `getFps()` while `frame,total` ms is a separate windowed average
-  `getAvgFrameTimeMs()` — `profile_log.cpp:156-158,205` — so the two are correlated
-  but not reciprocal.) It is a redundant, noisier view of frame performance, so it is
-  printed for context but the frame-time regression is judged on `frame,total` ms.
-- **Absolute floor** `min_abs_ms` (default 0.05 ms): if the baseline value is below the
-  floor, the metric is `SKIPPED` (a +25 % swing on a 0.01 ms pass is noise, not a
-  regression). Applies to ms metrics only; `mem,gpu_mb` uses its own `min_abs_mb`
-  (default 1 MB).
-- Verdict per metric:
-  - `FAIL` if `delta_pct >= fail_pct` (default 25).
-  - `WARN` if `delta_pct >= warn_pct` (default 10).
-  - `IMPROVED` if `delta_pct <= -warn_pct`.
-  - else `OK`.
-- A baseline metric **absent from the current run** → `MISSING` (a distinct,
-  non-conclusive verdict — "metric missing, baseline may be stale after a pass rename"),
-  not FAIL: renaming/removing a pass is a legitimate code change, and failing on it would
-  punish refactors. `--strict-warn` promotes `MISSING` to FAIL (§5.5).
-- A current metric **absent from the baseline** → informational note ("new metric —
-  refresh the baseline to gate it").
+1. The metric's key appears in **zero** current-run rows → `MISSING`. (Distinct,
+   non-conclusive — "baseline may be stale after a pass rename." A legitimate rename must
+   not FAIL; `--strict-warn` promotes it, §5.5.)
+2. The key appears but yields **fewer than `min_usable_intervals`** usable intervals
+   after the warmup drop (§5.1 step 3) → `INCONCLUSIVE`. (Data-availability is decided
+   before the floor — you cannot floor-test a value you don't have enough of.)
+3. The metric's **baseline** value is below the floor (`min_abs_ms` 0.05 ms, or
+   `min_abs_mb` 1 MB for `mem,gpu_mb`) → `SKIPPED`. (A +25 % swing on a 0.01 ms pass is
+   noise, not a regression. Floor keys on the *baseline* value, so a sub-floor metric is
+   `SKIPPED` in every run where rules 1–2 didn't already fire.)
+4. Otherwise **compare**: `delta_pct = (current - baseline) / baseline * 100`; only
+   *increases* regress (`ms`/`mb`) —
+   - `FAIL` if `delta_pct >= fail_pct` (default 25),
+   - `WARN` if `delta_pct >= warn_pct` (default 10),
+   - `IMPROVED` if `delta_pct <= -warn_pct`,
+   - else `OK`.
+
+`fps` is **never** a metric key in this loop — it is not gated and carries no verdict; it
+rides along on the `frame,total` row as reported context only (INV-5). (It is *not*
+`1000 / frame_ms`: the logger accumulates `fps` as the mean of per-frame `getFps()` while
+`frame,total` ms is a separate windowed average `getAvgFrameTimeMs()` —
+`profile_log.cpp:156-158,205` — so the two are correlated but not reciprocal.) The
+frame-time regression is judged on `frame,total` ms.
+
+A current metric **absent from the baseline** → informational note only ("new metric —
+refresh the baseline to gate it"); it gets no verdict and never affects the exit code.
 
 ### 5.3 Gate allowlist + thresholds
 
@@ -207,8 +216,9 @@ numbers, and are overridable per-metric there:
 ```
 
 `schema` is the baseline-format version; perf_gate reads it and **fatally rejects**
-(exit 2, "baseline schema unsupported") any value other than `1`, so a future
-`"schema": 2` file is never silently mis-parsed. `gpu,tiny` is a **gated sub-floor**
+(exit 3 — config error, §5.5) any value other than `1`, and likewise a **missing**
+`schema` key or an unreadable/unparseable baseline, so a future `"schema": 2` file is
+never silently mis-parsed. `gpu,tiny` is a **gated sub-floor**
 metric (0.010 ms < the 0.05 ms floor) included so the `floor.csv` fixture can exercise
 the `SKIPPED` path on a *gated* metric (§10); `gpu,shadow` is a **non-gated context**
 metric (in `metrics`, absent from `gate`) exercising INV-4. `gate` is the allowlist; a metric may exist in `metrics` (for context / future gating)
@@ -236,16 +246,20 @@ The three "no comparison happened" verdicts are **non-conclusive**: `MISSING` (t
 baseline metric is absent from the current run, §5.2), `SKIPPED` (baseline below the
 floor, §5.2), and `INCONCLUSIVE` (too few usable intervals, §5.1).
 
-**Exit-code contract (all modes):** `0` = pass (no FAIL **and** ≥1 *conclusive* gated
-metric), `1` = at least one gated metric FAILed, `2` = **no conclusive gated metric**
-(empty/short/all-warmup run, every gated metric MISSING, or every gated metric below the
-floor). Code `2` is deliberately distinct from `0`: a run that never actually compared
-anything must **not** read as a green pass, or the guard-rail (§1) is silently defeated;
-a caller (release script / CI-on-GPU job) treats `2` as "re-run, the data was unusable."
-Exit `2` is also the **config-error** code — an unreadable baseline or an unsupported
-`schema` (§5.3); that is a fix-the-file error, not a re-runnable-data one, but it shares
-code `2` because in both cases *no verdict was produced*. `--strict-warn` promotes
-`WARN` **and** `MISSING` to FAIL → exit 1.
+**Exit-code contract (all modes):**
+- `0` = **pass** — no FAIL **and** ≥1 *conclusive* gated metric.
+- `1` = **regression** — at least one gated metric FAILed.
+- `2` = **inconclusive data** — no gated metric reached a conclusive verdict
+  (empty/short/all-warmup run, every gated metric MISSING, or every gated metric below
+  the floor). Distinct from `0`: a run that never actually compared anything must **not**
+  read as a green pass, or the guard-rail (§1) is silently defeated. A caller may re-run
+  (fresh data may help).
+- `3` = **config error** — unreadable/unparseable baseline, a missing or unsupported
+  `schema` (§5.3). A fix-the-file error: a caller must **not** auto-retry on `3` (a
+  re-run won't help); it is a separate code from `2` precisely so an automated caller
+  doesn't loop forever on a broken baseline.
+
+`--strict-warn` promotes `WARN` **and** `MISSING` to FAIL → exit 1.
 
 - **Compare (default):**
   `perf_gate.py --baseline tools/perf_gate/baseline_rx6600.json --current run.csv`
@@ -344,24 +358,33 @@ Two ctest entries (Python3-guarded, mirroring `tests/CMakeLists.txt:350-395`):
 
 **Expected verdict table** (`--selftest` asserts each row; drives fixture contents):
 
-| Fixture | Condition it encodes | Gated verdict | Exit |
+| Fixture | Condition it encodes | Notable gated verdict(s) | Exit |
 |---|---|---|---|
-| `ok.csv` | totals within ±10 %; carries `gpu,tiny` | totals `OK`; `gpu,tiny` `SKIPPED` | 0 |
+| `ok.csv` | four totals within ±10 % | totals `OK` | 0 |
+| `warn.csv` | `frame,total` +15 % | `frame,total` `WARN` | 0; `1` under `--strict-warn` |
 | `regressed.csv` | `frame,total` +40 % | `frame,total` `FAIL` | 1 |
 | `improved.csv` | `frame,total` −30 % | `frame,total` `IMPROVED` | 0 (INV-3) |
-| `missing.csv` | gated `gpu,total` absent from the run (totals otherwise OK) | `gpu,total` `MISSING` | 0; `1` under `--strict-warn` (INV-6) |
-| `floor.csv` | gated sub-floor `gpu,tiny` (0.010→0.110 ms) swings +1000 %; totals held | `gpu,tiny` `SKIPPED`, rest `OK` | 0 (floor) |
-| `short.csv` | ≤2 usable intervals after warmup drop | all `INCONCLUSIVE` | 2 (INV-2) |
+| `missing.csv` | gated `gpu,total` row absent | `gpu,total` `MISSING` | 0; `1` under `--strict-warn` (INV-6) |
+| `floor.csv` | sub-floor `gpu,tiny` swings 0.010→0.110 ms | `gpu,tiny` `SKIPPED` | 0 (floor) |
+| `short.csv` | ≤2 usable intervals after warmup drop | all gated `INCONCLUSIVE` | 2 (INV-2) |
 
-Table convention: a row names only the *notable* gated verdict(s); every other gated
-metric present at its baseline value is `OK`. The gated `gpu,tiny` (baseline 0.010 ms)
-is **always `SKIPPED`** — the floor test keys on the *baseline* value, so it is sub-floor
-in every fixture; that is exactly why it is the floor-path witness, and each fixture that
-contains it expects `gpu,tiny SKIPPED`. `baseline.json` also carries a non-gated context
-metric (`gpu,shadow` in `metrics` but not in `gate`) that regresses in `ok.csv`,
-asserting INV-4 (a non-gated regression leaves exit 0) and INV-5 (a moved `fps` never
-changes the verdict). All fixtures are committed text — the whole suite runs on GPU-less
-CI.
+Table convention: a row names only the *notable* gated verdict(s); every other **present,
+conclusive** gated metric is `OK`. Two standing verdicts hold across the set: the gated
+`gpu,tiny` (baseline 0.010 ms) is present in every CSV and — because the floor keys on the
+*baseline* value — is `SKIPPED` in every fixture **that has enough intervals** (all but
+`short.csv`, where it is `INCONCLUSIVE` like the rest); and `missing.csv` omits only
+`gpu,total`, so its other four gated metrics are `OK`/`SKIPPED` as usual (overall exit 0
+because ≥1 conclusive `OK` remains). `baseline.json` also carries a **non-gated** context
+metric `gpu,shadow` (in `metrics`, absent from `gate`) that regresses in `ok.csv`: the
+self-test asserts it shows a regressed verdict in the report **yet exit stays 0**,
+pinning INV-4 (a non-gated regression never changes the exit code). INV-5 (`fps` never
+gated) is structural — `fps` is never a metric key in the §5.2 loop, so no gate can act
+on it — and is asserted by checking no fixture's verdict set ever contains an `fps` row.
+
+**`--strict-warn` coverage:** `--selftest` additionally re-runs `warn.csv` and
+`missing.csv` with `--strict-warn` and asserts each then exits `1` (WARN→FAIL and
+MISSING→FAIL promotion, §5.5 / INV-6). All fixtures are committed text — the whole suite
+runs on GPU-less CI.
 
 ## 11. Invariants
 
@@ -422,6 +445,23 @@ CI.
   - Completeness: folded the `schema`/unreadable-baseline config error into the exit-2
     contract (§5.5); simplification: dropped the unused `baseline_placeholder.json` — the
     fixture `baseline.json` is the committed synthetic baseline (§3/§5/§9).
+- **Loop 4 (2026-07-17)** — 2 reviewers, cold; dug into the verdict-classification logic.
+  8 verified findings (HIGH 1 · MEDIUM 3 · LOW 3 · INFO 1), all fixed:
+  - Correctness (HIGH): the "skip a row with blank `ms`/`fps`" rule would have skipped
+    every non-`frame` row (fps is blank there by design) → gate nothing. Now skips on a
+    blank/non-numeric **`ms`** only (§5.1/INV-9).
+  - Correctness: gave §5.2 an explicit **ordered classification** (MISSING → INCONCLUSIVE
+    → SKIPPED → compare), resolving the MISSING-vs-INCONCLUSIVE collision for zero-row /
+    empty-CSV / short-run metrics; empty CSV → all-MISSING.
+  - Correctness: §5.2 now computes a verdict for **every** baseline metric (gated or not);
+    the `gate` allowlist governs only the exit code — so the non-gated `gpu,shadow` INV-4
+    witness and §8's per-row status word both hold.
+  - Exit codes: split config errors to a distinct **exit 3** (fix-the-file, no auto-retry)
+    vs data-inconclusive exit 2; defined missing-`schema` handling (§5.3/§5.5).
+  - Testability: added `warn.csv`; every fixture now carries all five gated metrics
+    (`gpu,tiny` present → SKIPPED, INCONCLUSIVE only in `short.csv`); `--selftest` now
+    also re-runs `warn`/`missing` under `--strict-warn` (exit 1); corrected the INV-5
+    coverage claim to structural (§10).
 
 ## 13. Sources
 
