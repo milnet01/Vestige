@@ -81,7 +81,7 @@ already upscales `m_outputFbo` to the window.
 - **Where the scale is applied:** at the **play-mode** resize block only. Multiply `rw,rh` by the
   active `renderScale` once at the top of that block, *before* both the `resizeRenderTarget(rw,rh)`
   call (`engine.cpp:1246`) **and** the water-reflection resize on the next line (`engine.cpp:1247`,
-  `m_waterFbo->resize(rw/4, rh/4)`). One factor therefore scales the whole scene+post chain **and**
+  `m_waterFbo->resize(rw/4, rh/4, rw/4, rh/4)`). One factor therefore scales the whole scene+post chain **and**
   the water reflection FBO coherently — water getting cheaper too is desirable and free (it avoids
   decoupling the water resize from the same input). The **editor** viewport resize
   (`engine.cpp:1237`) is left at ×1.0 in wave 1 so authoring and mouse-picking stay pixel-exact
@@ -125,11 +125,23 @@ FXAA is a cheap post-process AA that operates on the final **LDR** image (post-t
 than the HDR scene — so, unlike MSAA/TAA/SMAA, it needs **no multisample buffer and no history**.
 It is the natural AA for weak/handheld tiers (~0.1–0.5 ms) and pairs with CAS (§3.2).
 
-- **New enum value** `AntiAliasMode::FXAA` alongside `NONE / MSAA_4X / TAA / SMAA` (`taa.h:19`).
-- **Scene path:** FXAA mode renders the scene **single-sample** (the `NONE`/non-MSAA branch of
-  `beginFrame`, `renderer.cpp:793`) — no MSAA cost — then applies one FXAA pass in `endFrame`
-  after the composite (`renderer.cpp:1400`), reading `m_outputFbo`'s LDR color, writing a pong
-  buffer, before CAS/present. It does **not** touch the MSAA/TAA scene-FBO machinery.
+- **New enum value** `AntiAliasMode::FXAA` — **appended after `SMAA`** (`taa.h:19`) so existing
+  serialized AA-mode ints stay stable. `setAntiAliasMode`'s log-name array
+  (`renderer.cpp:2184`: `names[] = {"None","MSAA 4x","TAA","SMAA"}`, indexed by the mode int) must
+  gain a `"FXAA"` entry in lockstep — else `names[4]` is an out-of-bounds read.
+- **Scene path + a required sample-count fix.** FXAA operates on the resolved LDR image, so the
+  scene must render **single-sample** for FXAA to be cheap. Today the scene FBO is created at a
+  fixed 4× MSAA (`engine.cpp:111` → `initFramebuffers(..., 4)`), and `beginFrame`'s
+  `else if (m_msaaFbo)` branch (`renderer.cpp:791–793`) binds it for **both** `NONE` and
+  `MSAA_4X` — so `NONE` already *secretly pays full 4× MSAA cost*, and a naive FXAA-on-top would
+  too (which would flatly contradict its value prop). Wave 1 therefore makes the scene FBO's
+  **sample count follow the AA mode:** `setAntiAliasMode` (`renderer.cpp:2181`) reallocates
+  `m_msaaFbo` to **1 sample** for `NONE`/`FXAA` and 4 for `MSAA_4X` whenever the effective count
+  changes. This is a small, bounded renderer change — and a free bonus: it removes the latent
+  `NONE`-renders-4×-MSAA waste. The resolve (`renderer.cpp:892`) still works at 1 sample (a plain
+  blit). The FXAA pass then runs in `endFrame` after the composite (`renderer.cpp:1400`), reading
+  the LDR color, writing a pong buffer, before CAS/present. TAA/SMAA are unaffected (they use the
+  separate `m_taaSceneFbo`).
 - **Algorithm + tuning (FXAA 3.11, Lottes):** the canonical single-pass luma-edge FXAA at
   `FXAA_QUALITY__PRESET 39` (the max edge-search radius). Ship these as the default constants
   (the well-known "sharp FXAA" tuning — avoids the "vaseline" over-blur), authored as named
@@ -194,7 +206,8 @@ Today those two passes are gated only by the accessibility wire
 them for *performance* without touching *accessibility* semantics, add a `bool
 m_qualityHeavyPostEnabled` (or a two-field perf struct) that is **AND-ed** with the existing gate:
 a pass runs iff `accessibilityEnabled && qualityEnabled`. The preset sets the quality side; the
-accessibility side stays authoritative (see §4.3). This is the only new renderer state in wave 1.
+accessibility side stays authoritative (see §4.3). This bool is the only new *persistent* renderer
+state in wave 1 (the §3.4 sample-count change is behavior in `setAntiAliasMode`, not a new member).
 
 ### 4.3 Accessibility precedence (invariant)
 **INV-A11Y:** a preset must never re-enable a pass that accessibility disabled. Because the gate
@@ -228,38 +241,41 @@ free; the GPU does *less* work (fewer pixels) — the correct direction for a GP
 3. **Preset apply is correct (headless unit test).** Following the existing `settings_apply`
    test pattern (`test_settings.cpp` / `test_atomic_write_routing.cpp`), assert
    `applyQualityPreset(Low, display, sink)` writes `display.renderScale ==` the Low value **and**
-   calls the renderer sink with `AA=NONE, ssao=false, bloom=false, heavyPost=false` (renderScale
+   calls the renderer sink with `AA=FXAA, ssao=false, bloom=false, heavyPost=false` (renderScale
    lands on the `DisplaySettings` object, the four toggles on the sink — §4.1); likewise
-   High/Ultra. No GL context needed (mock sink), mirroring `RendererAccessibilityApplySink`.
+   High/Ultra (`AA=TAA`). No GL context needed (mock sink), mirroring `RendererAccessibilityApplySink`.
 4. **INV-A11Y (headless unit test).** Apply `Ultra` (quality wants fog/GI on) with the
    accessibility wire fog/GI **off**; assert the effective runtime gate is off for both.
 5. **Visual (play mode, pinned camera).** At `renderScale = 0.5`, play mode renders and presents
    an upscaled image, aspect preserved, no letterbox bars, no crash; at 1.0 pixel-identical to
    today. Verified under software rendering (llvmpipe) *and* hardware, per the local-ci renderer
    parity fix (2026-07-17).
-7. **FXAA smoke + visual.** `AntiAliasMode::FXAA` produces a stable, edge-smoothed image with no
-   crash and no interior-texture over-blur (the low subpix keeps text/HUD crisp); a GPU smoke test
-   (like the other shader-parity tests) confirms the `fxaa.frag.glsl` pass runs and a hard vertical
-   edge is measurably softened vs `NONE`. GPU cost is a sub-millisecond add over `NONE` (profiler
-   CSV).
 6. **60 FPS floor unchanged at Ultra/1.0** on the RX 6600 (no regression when scale = 1.0 — the
    resize-input is `round(resize-input × 1.0)` == its current value, i.e. byte-identical to the
    current path).
+7. **FXAA smoke + visual.** `AntiAliasMode::FXAA` produces a stable, edge-smoothed image with no
+   crash and no interior-texture over-blur (the low subpix keeps text/HUD crisp); a GPU smoke test
+   (like the other shader-parity tests) confirms the `fxaa.frag.glsl` pass runs and a hard vertical
+   edge is measurably softened vs `NONE`. Because `NONE`/`FXAA` now render single-sample (§3.4),
+   FXAA's GPU cost is a sub-millisecond add while *removing* the old 4× MSAA cost — net cheaper
+   than today's `NONE` (profiler CSV).
 
 ---
 
 ## 7. Risks & out of scope
 
-- **Risk — image softness at low `renderScale`.** Mitigated by the RCAS sharpen (§3.2) and the
+- **Risk — image softness at low `renderScale`.** Mitigated by the CAS sharpen (§3.2) and the
   existing [0.25, 2.0] clamp. Bilinear-first is acceptable for the initial cut.
 - **Risk — `renderScale = 1.0` must be a no-op.** The internal-res arithmetic at scale 1.0 must
-  reproduce today's exact target size (round(window × 1.0) == window). Pinned by §6.6.
+  reproduce today's exact target size (round(resize-input × 1.0) == resize-input). Pinned by §6
+  item 6.
 - **Risk — editor vs play mode.** Render-scale is primarily a play-mode/gamer concern. Editor
   mode *may* also scale its viewport render, but the default should keep the editor at 1.0 for
   authoring clarity; decision recorded here — apply `renderScale` in play mode; editor stays 1.0
   in wave 1.
-- **Risk — MSAA + tiny internal res.** At `renderScale = 0.25` on a 4K window, internal res is
-  ~1080p — still ample for MSAA. No special casing; the clamp floor protects the degenerate case.
+- **Risk — MSAA + tiny internal res.** At `renderScale = 0.25` on a 4K window (with `MSAA_4X`
+  selected), internal res is ~1080p — still ample for MSAA. No special casing; the clamp floor
+  protects the degenerate case.
 - **Code-side follow-up (not a doc defect).** The `applyDisplay` doc-comment
   (`settings_apply.h:87–91`) frames render-scale as "a Renderer concern" and the quality preset as
   "consumed by individual subsystems (shader variants / LOD bias / shadow resolution)" — a
@@ -283,5 +299,6 @@ free; the GPU does *less* work (fewer pixels) — the correct direction for a GP
 | Apply-layer pattern + mock-sink tests | existing `applyRendererAccessibility` + its sink |
 
 New code is small: the internal-res multiply, `applyQualityPreset`, one AND-gate bool for
-heavy post, the `AntiAliasMode::FXAA` enum value, and two fragment shaders (`fxaa.frag.glsl`,
-`cas.frag.glsl`).
+heavy post, the `AntiAliasMode::FXAA` enum value (+ its `names[]` entry), the dynamic scene-FBO
+sample-count in `setAntiAliasMode` (which also fixes the latent `NONE`=4×-MSAA waste), and two
+fragment shaders (`fxaa.frag.glsl`, `cas.frag.glsl`).
