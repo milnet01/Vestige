@@ -1,7 +1,10 @@
 # Phase 10 — Tier 1: Render-scale + Quality presets (design)
 
-**Status:** Draft — pending `/cold-eyes` convergence, then Claude sign-off (per the
-delegated-sign-off convention) and implementation.
+**Status:** Signed off — cold-eyes converged (loop 1: two reviewers, factual-spine + design-quality,
+caught the renderScale data-path + editor/play + preset gaps, all fixed, and FXAA folded in; loop 2:
+confirmation caught + fixed the FXAA single-sample mechanism bug — `NONE`/`FXAA` now reconfigure the
+scene FBO to 1 sample; final pass returned **0 substantive findings, "implementable as written"**).
+Ready to implement.
 **Parent:** `docs/phases/phase_10_performance_scalability_strategy.md` (Tier 1 = T1a render-scale
 + T1b quality-preset wiring). This doc is the implementable spec for that tier's **first wave**.
 **Goal (plain):** let weak/handheld hardware hold 60 FPS by (a) rendering the 3D scene smaller
