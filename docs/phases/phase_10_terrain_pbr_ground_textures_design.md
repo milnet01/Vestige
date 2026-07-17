@@ -1,8 +1,10 @@
 # Phase 10 — Meadow Realism A: PBR Ground Textures on Terrain
 
 **Roadmap:** 3D_E-0031 (Meadow realism A). Fixture/benchmark: 3D_E-0027 meadow.
-**Status:** SIGNED OFF (2026-07-11) — cold-eyes converged at loop 3 (§13). Ready
-for implementation (slices A1–A5, §9).
+**Status:** SIGNED OFF (2026-07-11); **approach revised 2026-07-17** — the §4.4
+roughness→specular Workbench fit was verified infeasible and replaced with the
+engine's real Cook-Torrance GGX (§13, decision + re-run cold-eyes). A1 + A2
+(part 1, textured path) shipped; A2 (part 2, real GGX specular) in progress.
 **Author:** in-session 2026-07-11 (user-requested realism overhaul).
 
 **Contents:** [1 Goal](#1-goal) · [2 Research](#2-research-summary-what-current-practice-recommends) · [3 Current state](#3-current-state-verified-against-source) · [4 Architecture](#4-architecture) · [5 CPU/GPU placement](#5-cpu--gpu-placement-project-rule-7) · [6 Performance](#6-performance-60-fps-is-a-hard-requirement) · [7 Testing](#7-testing) · [8 Assets & licensing](#8-assets--licensing) · [9 Implementation slices](#9-implementation-slices) · [10 Accessibility](#10-accessibility) · [11 Risks](#11-risks--mitigations) · [12 Open questions](#12-open-questions-for-review) · [13 Cold-eyes log](#13-cold-eyes-loop-log)
@@ -248,12 +250,13 @@ Per-pixel algorithm when textures are on:
    single frame. The resulting world normal (macro + detail) replaces the
    macro-only normal in lighting.
 6. **Shade.** Feed blended albedo + world normal + roughness + AO into the
-   existing lighting (Blinn-Phong direct + ambient + CSM). The Blinn-Phong
-   *structure* stays, but its currently-fixed constants (`pow(NdotH,64)*0.15`)
-   become **roughness-driven**: roughness maps to the `(shininess, scale)` pair
-   via the Workbench fit of §4.4 item 1 (lower roughness → tighter/stronger
-   highlight). AO multiplies ambient. `tilingDetail()` brightness stays as a
-   subtle macro-variation multiplier.
+   lighting. The **textured** path replaces the fixed Blinn-Phong specular
+   (`pow(NdotH,64)*0.15`) with the **real Cook-Torrance GGX** term (§4.4 item 1),
+   driven by the blended roughness (dielectric `F0 = 0.04`, `metallic = 0`);
+   diffuse stays Lambert, ambient + CSM unchanged. AO multiplies ambient.
+   `tilingDetail()` brightness stays as a subtle macro-variation multiplier. The
+   flat-colour fallback branch keeps its existing Blinn-Phong specular
+   byte-identical (Tabernacle/demo unchanged).
 
 `heightBlendWeights()` is factored as a **pure function** mirrored on CPU
 (`terrain_material_blend.h`) for a parity test (§7, project Rule 7).
@@ -264,19 +267,31 @@ Two numerical pieces here are formulas with reference data, not art whims — th
 go through `tools/formula_workbench/` (author → fit → validate → export to GLSL),
 not hand-coded constants:
 
-1. **Roughness → Blinn-Phong specular (the real Workbench candidate).** The
-   terrain shader is Blinn-Phong (`pow(NdotH, s) * k`), but the PBR layers give a
-   **roughness** in [0,1]. Rather than guess a `roughness → (shininess s, scale
-   k)` mapping, fit it in the Workbench against a **GGX/Cook-Torrance reference**
-   (reference dataset = GGX specular lobe sampled over roughness × NdotH; the
-   Workbench already ships Fresnel-Schlick and related rendering templates). This
-   is exactly Rule 6's endorsed path — a Workbench-fit cheap approximation
-   replacing heavier runtime BRDF math — and it makes the terrain specular
-   *principled* instead of the current fixed `pow(NdotH,64)*0.15`. Exported as a
-   `FormulaDefinition` in the **rendering** category (C++ + GLSL codegen). This is
-   a **second dual CPU/GPU implementation** (listed in §5) and is **owned by slice
-   A2** (§9); it is pinned by a GGX-reference parity/regression test (§7) before it
-   ships.
+1. **Roughness → specular: use the real Cook-Torrance GGX BRDF (no fit).** The
+   terrain shader was Blinn-Phong (`pow(NdotH, s) * k`), and an earlier draft of
+   this design fitted a `roughness → (shininess, scale)` Blinn-Phong mapping in the
+   Workbench against a GGX reference. **That approach was verified infeasible and
+   dropped (decision 2026-07-17, §13):** Blinn-Phong's `cos^n` lobe cannot
+   reproduce GGX's wide, soft shoulder, so even the *theoretical best-case*
+   per-roughness fit (fitting shininess + scale freely at each roughness) misses
+   the normalised GGX reference by **max-err ≈ 0.24 at roughness 0.8** — squarely
+   inside the terrain's own roughness range — versus the **≤ 0.05** the parity test
+   required. No `(shininess, scale)` Blinn-Phong mapping can meet that bar; it is a
+   model-capability limit, not a fit-quality one (verified numerically before
+   implementation).
+
+   Instead, the textured ground path shades with the **real Cook-Torrance GGX
+   specular** the rest of the engine already uses — the `distributionGGX`,
+   `geometrySmith`, and `fresnelSchlick` helpers are lifted verbatim from
+   `scene.frag.glsl` (dielectric `F0 = 0.04`, `metallic = 0`, driven by the blended
+   `groundRoughness`). This makes "match GGX" **exact by construction**: the ground
+   lights with the same BRDF as every other surface, there is no approximation to
+   fit or validate, and no runtime-cost concern (one directional light's
+   Cook-Torrance term is trivial on the RX 6600 — §6). The flat-colour fallback
+   branch keeps its `pow(NdotH,64)*0.15` byte-identical. There is therefore **no
+   Workbench fit and no second dual-impl** in this phase; the specular is a direct
+   reuse of the canonical BRDF, pinned by a consistency test (§7) rather than a
+   fit-accuracy test.
 
 2. **Art-directed constants** — the height-blend band `DEPTH` (~0.2), the
    distance-tiling `FAR_TILING_SCALE` (~0.25), and the near/far transition range.
@@ -296,11 +311,12 @@ not hand-coded constants:
 | Splatmap weight generation (`generateAutoTexture`) | **CPU**, one-time | Already CPU; sparse/decision logic. |
 | Per-pixel layer sample + height-blend + normal blend + triplanar | **GPU** (fragment) | Per-pixel, data-parallel, no branching decisions the CPU could hoist. |
 | Height-blend math (parity reference) | **CPU** mirror for test only | Dual-impl parity (Rule 7); runtime is GPU. |
-| Roughness → Blinn-Phong specular fit (§4.4 item 1) | **CPU** Workbench fit + GLSL export; **CPU** parity reference | Workbench-authored formula emitted as both C++ and GLSL → dual-impl (Rule 7); runtime is GPU. |
+| Cook-Torrance GGX specular (§4.4 item 1) | **GPU** (fragment) | Direct reuse of `scene.frag.glsl`'s GGX helpers; per-pixel BRDF eval. No CPU mirror — it is the canonical BRDF, not a fitted approximation. |
 
-No "CPU now, move later" — the runtime path is GPU from the start. The two CPU
-mirrors (height-blend + the roughness→specular fit) exist solely to lock their
-formulas with parity tests (§7).
+No "CPU now, move later" — the runtime path is GPU from the start. The one CPU
+mirror (the height-blend pure function) exists solely to lock its formula with a
+parity test (§7); the GGX specular needs no mirror — it is the engine's canonical
+BRDF, shared verbatim with `scene.frag.glsl`.
 
 ---
 
@@ -342,8 +358,8 @@ steepness threshold (`triBlend>0`), which is a small fraction of a gentle meadow
   *toggle shader features* (drop the distance-tiling second sample, drop detail
   normals, disable triplanar textures), which is a different axis from
   `FormulaQualityManager`'s `FULL / APPROXIMATE / LUT` (that enum selects a
-  *formula's evaluation accuracy* — the right home only for the §4.4 roughness→
-  specular formula, not for feature gating). The feature tiers are a global
+  *formula's evaluation accuracy* — not a fit for feature gating, and this phase
+  has no fitted formula to accuracy-gate anyway). The feature tiers are a global
   **graphics-quality `Setting`** (High/Medium/Low) driving shader `#define`s /
   a uniform:
   - **High** — all layers, distance-tiling + macro variation, detail normals,
@@ -379,12 +395,16 @@ steepness threshold (`triBlend>0`), which is a small fraction of a gentle meadow
   range** (there every `b_i = 0` → `Σb = 0`, a genuine 0/0); the function's
   contract is `depth > 0`, and a debug assert guards it — the test verifies that
   assert fires, rather than expecting a defined blend at zero.
-- **Roughness → specular parity (unit).** The Workbench-exported
-  `roughness → (shininess, scale)` fit (§4.4 item 1) is checked against its
-  GGX/Cook-Torrance reference dataset: the exported C++ form matches the reference
-  within tolerance (**R² ≥ 0.99** and **max abs error ≤ 0.05** on the normalised
-  specular response over the roughness × NdotH grid), and the C++ and GLSL
-  codegen agree — the Rule-7 parity lock before it ships.
+- **GGX specular consistency (unit).** The terrain shader now shades with the
+  canonical Cook-Torrance GGX (§4.4 item 1), not a fitted approximation, so the
+  test pins **reuse**, not fit accuracy: a unit test evaluates the GGX NDF
+  transcribed into `terrain.frag.glsl` (`distributionGGX`) against the engine's
+  reference GGX — the `ggx_distribution` Formula-Library definition, which is the
+  documented source of `scene.frag.glsl`'s helper — over a roughness × NdotH grid,
+  and asserts they agree to floating-point tolerance. That is the Rule-7 lock that
+  stops the terrain copy from silently drifting from the shared BRDF. **Objective
+  compile check:** the shader links and a frame renders **GL-error-free**
+  (`glGetError`).
 - **Material-set load (unit).** Two failure modes, both → `isValid()==false`
   (fallback), not a crash: (a) mismatched layer dimensions, and (b) a
   missing/corrupt file (stb_image decode returns null — a distinct code path from
@@ -430,13 +450,15 @@ steepness threshold (`triBlend>0`), which is a small fraction of a gentle meadow
 1. **A1 — `TerrainMaterialSet`** + GL array loader + parity-tested
    `heightBlendWeights` pure header. *Verify:* unit tests green (load, fallback,
    blend parity).
-2. **A2 — Shader top-down path + roughness→specular fit.** Add array samplers +
+2. **A2 — Shader top-down path + real GGX specular.** Add array samplers +
    uniforms; textured top-down albedo/roughness/AO with height-blend; keep
-   flat-colour fallback branch. **Includes the Formula-Workbench roughness →
-   Blinn-Phong specular fit** (§4.4 item 1): author/fit/validate/export in the
-   Workbench, wire the GLSL into the shader. *Verify:* roughness→specular parity
-   test green (§7); maintainer inspection of `--visual-test` — meadow ground reads
-   as textured grass, Tabernacle unchanged.
+   flat-colour fallback branch (**part 1, shipped**). Replace the interim
+   Blinn-Phong specular with the **canonical Cook-Torrance GGX** (§4.4 item 1):
+   lift `distributionGGX` / `geometrySmith` / `fresnelSchlick` from
+   `scene.frag.glsl`, drive by blended roughness (dielectric F0=0.04) (**part 2**).
+   *Verify:* GGX-consistency test green (§7) + GL-error-free frame; maintainer
+   inspection of `--visual-test` — meadow ground reads as textured grass with a
+   soft roughness-driven sheen, Tabernacle unchanged.
 3. **A3 — Detail normals + triplanar (Whiteout).** Detail normal → world via the
    shader-built TBN (§4.3 point 5); triplanar textures on slopes. *Verify:*
    **objective** — shader compiles + links and a frame renders with **zero GL
@@ -588,3 +610,28 @@ resurfaced). Polish applied this pass:
 
 **Convergence:** a pass with zero structural/mechanical/architectural findings —
 only polish, now fixed. **Design signed off for implementation (2026-07-11).**
+
+---
+
+### Approach revision — Blinn-Phong fit → real GGX (2026-07-17)
+
+**Supersedes the loop-2 "Scope decision (user, 2026-07-11)" above** (which kept the
+Workbench roughness→specular Blinn-Phong fit as the second dual-impl).
+
+During A2 (part 2) implementation the fit was **verified numerically before coding**
+and found infeasible: Blinn-Phong's `k·cos^n` lobe cannot reproduce GGX's wide soft
+shoulder. Even the *theoretical-best* per-roughness fit (shininess + scale fit
+freely at each roughness against the peak-normalised GGX NDF) gives max-abs-error
+**≈ 0.029 @ r=0.4, ≈ 0.069 @ r=0.6, ≈ 0.245 @ r=0.8** — the worst case sits inside
+the terrain's own roughness range — versus the §7 bar of ≤ 0.05. This is a
+model-capability limit, so **no** `(shininess, scale)` mapping (however fitted)
+could pass the parity test.
+
+**Decision (user, 2026-07-17):** drop the Workbench fit; shade the textured ground
+with the engine's **real Cook-Torrance GGX** (reuse `scene.frag.glsl`'s
+`distributionGGX` / `geometrySmith` / `fresnelSchlick`). "Match GGX" becomes exact
+by construction; the parity test becomes a **consistency** lock (terrain's GGX NDF
+vs the `ggx_distribution` reference), not a fit-accuracy lock. §1.1/§4.3/§4.4/§5/§7/§9
+updated accordingly. Re-run through cold-eyes on this revision (log below).
+
+**Cold-eyes re-run (2026-07-17):** _(to be filled as loops run — global Rule 14)_
