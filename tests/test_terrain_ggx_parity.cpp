@@ -26,7 +26,6 @@
 #include "gl_test_fixture.h"
 #include "shader_parity_helpers.h"
 
-#include "formula/expression.h"
 #include "formula/expression_eval.h"
 #include "formula/formula.h"
 #include "formula/physics_templates.h"
@@ -117,9 +116,16 @@ TEST_F(TerrainGgxParityTest, DistributionMatchesReferenceOnGpu)
             const float ref = referenceGgx(ggxDef, h, r);
             // GGX is pure arithmetic (mul/div, no transcendentals); the squared
             // denominator makes values large at low roughness, so compare
-            // relatively. 1e-3 covers float32 accumulation across drivers.
+            // relatively. Tolerance must cover float32 accumulation across
+            // *renderers*, not just GPUs: CI runs headless on Mesa's llvmpipe
+            // (software rasterizer), whose LLVM-compiled divide/square ordering
+            // drifts up to ~0.23% from the CPU reference at the worst (low-
+            // roughness) sample, vs <0.1% on hardware (radeonsi). 5e-3 clears
+            // llvmpipe with margin while still catching a real formula change,
+            // which would diverge by orders of magnitude more. (The old 1e-3
+            // passed on hardware but reddened CI on llvmpipe.)
             const float rel = std::abs(gpu - ref) / std::max(std::abs(ref), 1e-3f);
-            EXPECT_LT(rel, 1e-3f)
+            EXPECT_LT(rel, 5e-3f)
                 << "terrain distributionGGX drifted from ggx_distribution reference"
                 << " at NdotH=" << h << " roughness=" << r
                 << " (gpu=" << gpu << " ref=" << ref << ")";

@@ -110,6 +110,19 @@ else
     GL_WRAP=()
 fi
 
+# RENDERER PARITY WITH CI (critical for catching GPU-test failures before push).
+# GitHub's runners have no GPU, so Mesa falls back to the llvmpipe *software*
+# rasterizer. A dev box with a real GPU (radeonsi/NVIDIA) renders GL tests on
+# hardware instead — and software vs hardware float precision differs enough that
+# a tight GPU-parity tolerance can pass locally yet fail on CI (e.g. the terrain
+# GGX parity test: <0.1% drift on radeonsi, ~0.23% on llvmpipe). Forcing software
+# rendering here makes local ctest use the *same* renderer as CI, so those
+# divergences surface locally. (xvfb alone is NOT enough — on a GPU box Mesa still
+# picks the hardware driver under xvfb; the renderer, not the display, is what
+# must match.)
+export LIBGL_ALWAYS_SOFTWARE=1
+export GALLIUM_DRIVER=llvmpipe
+
 # --- result tracking --------------------------------------------------------
 STAGE_NAMES=()
 STAGE_RESULTS=()
