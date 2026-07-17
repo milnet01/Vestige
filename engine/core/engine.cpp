@@ -1240,9 +1240,18 @@ void Engine::run()
         }
         else
         {
-            // Play mode — render at configured play resolution (independent of window)
+            // Play mode — render at configured play resolution (independent of window),
+            // scaled by the user/preset render-scale (Tier 1 T1a: render the scene smaller
+            // and let blitToScreen upscale to the window — the biggest FPS lever on a
+            // GPU-bound weak part). See docs/phases/phase_10_tier1_render_scale_and_presets_design.md.
             int rw = m_editor ? m_editor->getPlayModeWidth() : m_window->getWidth();
             int rh = m_editor ? m_editor->getPlayModeHeight() : m_window->getHeight();
+            // One factor scales both the scene+post chain and the water reflection FBO
+            // coherently (§3.1). renderScale is already clamped to [0.25, 2.0] at settings
+            // load; re-clamp defensively. 1.0 rounds back to the exact size (a no-op).
+            const float renderScale = std::clamp(m_settings.display.renderScale, 0.25f, 2.0f);
+            rw = std::max(1, static_cast<int>(std::lround(static_cast<float>(rw) * renderScale)));
+            rh = std::max(1, static_cast<int>(std::lround(static_cast<float>(rh) * renderScale)));
             m_renderer->resizeRenderTarget(rw, rh);
             m_waterFbo->resize(rw / 4, rh / 4, rw / 4, rh / 4);
         }
