@@ -182,6 +182,48 @@ vec4 heightBlendWeights(vec4 heights, vec4 weights)
     return b / (b.x + b.y + b.z + b.w);
 }
 
+// Cook-Torrance GGX helpers (3D_E-0031 A2). Lifted verbatim from scene.frag.glsl
+// so the textured ground lights with the engine's canonical BRDF, not a Blinn-Phong
+// approximation — pinned by the GGX-consistency test (test_terrain_ggx_parity).
+const float PI = 3.14159265359;
+
+/// GGX/Trowbridge-Reitz normal distribution function.
+float distributionGGX(float NdotH, float roughness)
+{
+    roughness = max(roughness, 0.04);  // prevent NaN at roughness=0
+    float a = roughness * roughness;
+    float a2 = a * a;
+    float NdotH2 = NdotH * NdotH;
+
+    float denom = NdotH2 * (a2 - 1.0) + 1.0;
+    denom = PI * denom * denom;
+
+    return a2 / denom;
+}
+
+/// Schlick-GGX geometry function for a single direction.
+float geometrySchlickGGX(float NdotV, float roughness)
+{
+    float r = roughness + 1.0;
+    float k = (r * r) / 8.0;
+
+    return NdotV / (NdotV * (1.0 - k) + k);
+}
+
+/// Smith's geometry function — combines view and light direction masking.
+float geometrySmith(float NdotV, float NdotL, float roughness)
+{
+    return geometrySchlickGGX(NdotV, roughness) * geometrySchlickGGX(NdotL, roughness);
+}
+
+/// Fresnel-Schlick approximation.
+vec3 fresnelSchlick(float cosTheta, vec3 F0)
+{
+    float x = clamp(1.0 - cosTheta, 0.0, 1.0);
+    float x2 = x * x;
+    return F0 + (1.0 - F0) * (x2 * x2 * x);
+}
+
 void main()
 {
     // Read terrain normal from pre-computed normal map (encoded as n * 0.5 + 0.5)
@@ -285,19 +327,26 @@ void main()
     vec3 halfDir = normalize(lightDir + viewDir);
     float NdotH = max(dot(normal, halfDir), 0.0);
 
-    float specular;
+    // Specular. The textured ground shades with the engine's canonical
+    // Cook-Torrance GGX (3D_E-0031 A2, design §4.4 item 1) — roughness-driven,
+    // dielectric F0=0.04 — so it matches every other surface exactly. The
+    // flat-colour fallback keeps its fixed Blinn-Phong term byte-identical.
+    vec3 spec;
     if (u_useGroundTextures)
     {
-        // Interim roughness→Blinn-Phong specular: smoother ground → tighter, stronger
-        // highlight. Replaced by the Formula-Workbench GGX fit (design §4.4 item 1)
-        // in the next A2 step; this keeps the textured ground energy-plausible now.
-        float shininess = mix(8.0, 128.0, 1.0 - groundRoughness);
-        float specStrength = mix(0.02, 0.20, 1.0 - groundRoughness);
-        specular = pow(NdotH, shininess) * specStrength;
+        float NdotV = max(dot(normal, viewDir), 0.0);
+        float HdotV = max(dot(halfDir, viewDir), 0.0);
+        vec3  F0 = vec3(0.04);                       // dielectric ground (metallic = 0)
+        float D  = distributionGGX(NdotH, groundRoughness);
+        float G  = geometrySmith(NdotV, NdotL, groundRoughness);
+        vec3  F  = fresnelSchlick(HdotV, F0);
+        vec3 specTerm = (D * G * F) / (4.0 * NdotV * NdotL + 0.0001);
+        spec = u_lightColor * specTerm * NdotL;
     }
     else
     {
-        specular = pow(NdotH, 64.0) * 0.15;
+        float specular = pow(NdotH, 64.0) * 0.15;
+        spec = u_lightColor * specular * NdotL;
     }
 
     // Shadow
@@ -309,7 +358,6 @@ void main()
 
     vec3 ambient = albedo * u_ambientColor * groundAO;
     vec3 diffuse = albedo * NdotL * u_lightColor;
-    vec3 spec = u_lightColor * specular * NdotL;
 
     vec3 color = ambient + (diffuse + spec) * (1.0 - shadow);
 
