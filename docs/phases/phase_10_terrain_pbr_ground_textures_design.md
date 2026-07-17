@@ -204,8 +204,8 @@ bands) applies. Two guarantees make RGB8 safe here and are **mandatory** in the
 loader: (a) committed textures are power-of-two width (1K → 1024×3 = 3072 B/row,
 already 4-aligned), and (b) the loader sets `glPixelStorei(GL_UNPACK_ALIGNMENT,
 1)` around every array upload regardless (belt-and-suspenders for any future
-non-PoT texture). This resolves the §7 "or padded to RGBA" hedge — we commit to
-RGB8 + alignment-1, not RGBA padding.
+non-PoT texture). This settles the RGB8-vs-RGBA-padding choice outright — we
+commit to RGB8 + alignment-1, not RGBA padding.
 
 ### 4.3 Shader changes (`terrain.frag.glsl`)
 
@@ -274,7 +274,7 @@ Two numerical pieces here deserve a note on their provenance under project Rule 
    dropped (decision 2026-07-17, §13):** Blinn-Phong's `cos^n` lobe cannot
    reproduce GGX's wide, soft shoulder, so even the *theoretical best-case*
    per-roughness fit (fitting shininess + scale freely at each roughness) misses
-   the normalised GGX reference by **max-err ≈ 0.24 at roughness 0.8** — squarely
+   the normalised GGX reference by **max-err ≈ 0.245 at roughness 0.8** — squarely
    inside the terrain's own roughness range (the ground layers are rough:
    grass/dirt/rock/sand ≈ 0.6–1.0) — versus the **≤ 0.05** the parity test
    required. No `(shininess, scale)` Blinn-Phong mapping can meet that bar; it is a
@@ -633,7 +633,7 @@ and found infeasible: Blinn-Phong's `k·cos^n` lobe cannot reproduce GGX's wide 
 shoulder. Even the *theoretical-best* per-roughness fit (shininess + scale fit
 freely at each roughness against the peak-normalised GGX NDF) gives max-abs-error
 **≈ 0.029 @ r=0.4, ≈ 0.069 @ r=0.6, ≈ 0.245 @ r=0.8** — the worst case sits inside
-the terrain's own roughness range — versus the §7 bar of ≤ 0.05. This is a
+the terrain's own roughness range — versus the fit-era §7 bar of ≤ 0.05. This is a
 model-capability limit, so **no** `(shininess, scale)` mapping (however fitted)
 could pass the parity test.
 
@@ -673,3 +673,26 @@ Fixes applied:
   ≈ 0.6–1.0); trimmed the spurious §1.1 from the revision-note's updated-sections
   list. INFO (not actioned): PI literal precision differs (`…59` vs `…f`) but both
   round to the same float32 — no test impact.
+
+**Cold-eyes re-run — Loop 2 (2026-07-17) — CONVERGED.** 2 independent cold
+reviewers (same lanes, not briefed on loop-1 fixes). Tally: CRITICAL 0 · HIGH 0 ·
+MEDIUM 0 · LOW 2 · INFO 3 — every verified finding **polish**, none
+structural/mechanical/architectural. Loop-1 fixes all held (the wrong-constant
+attribution, helper deps, `alpha=roughness²` reparameterization, "annotated as
+matching", and stale framings did not resurface). Both lanes confirmed clean on
+the core question — the GGX sections are accurate against source
+(`scene.frag.glsl`/`terrain.frag.glsl`/`physics_templates.cpp`) and no active
+section still specifies the dropped fit. Polish applied this pass:
+
+- Reconciled the worst-case figure to **≈ 0.245** in both §4.4 and §13 (was 0.24 /
+  0.245); tightened §4.2's cross-ref (the §7 "padded to RGBA" hedge it pointed at
+  was already reconciled away) and §13's "the §7 bar of ≤0.05" → "the fit-era §7
+  bar" (§7 is now a consistency test, no accuracy bar).
+- Surfaced (code-side, for the implementer — not doc fixes): `terrain.frag.glsl:292`
+  still comments "Replaced by the Formula-Workbench GGX fit … next A2 step" (stale
+  after this revision; the whole interim block is replaced in A2 part 2), and the
+  textured branch must add `NdotV`/`HdotV` dot-products + the inline `D*G*F/(4·NdotV·
+  NdotL)` assembly (all source vectors already present).
+
+**Convergence:** a pass with zero substantive findings — only polish, now fixed.
+**Revision re-signed-off for implementation (2026-07-17).**
