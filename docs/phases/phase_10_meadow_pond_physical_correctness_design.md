@@ -1,6 +1,6 @@
 # Meadow Pond — Physical Correctness & Natural Shoreline (Design)
 
-**Status:** Draft — cold-eyes loop 3 applied
+**Status:** Draft — cold-eyes loop 4 applied
 **Program:** 3D_E-0027 (meadow benchmark scene), Phase 10 terrain/water
 **Scope:** Fix the meadow pond so it reads as a real body of water: a level
 surface that fills a contained basin, with a natural contour shoreline instead
@@ -106,8 +106,12 @@ PondFill computePondFill(HeightSampler sampleHeight, glm::vec2 centreWorld,
                          float rRimWorld, float bowlFloorY, const PondFillParams&);
 ```
 
-`HeightSampler` is `float(float wx, float wz)`; the scene passes a lambda over
-`Terrain::getHeight`, the test passes an analytic sampler / `meadowHeight01`.
+`HeightSampler` is `float(float wx, float wz)` in **world metres**; the scene
+passes a lambda over `Terrain::getHeight`. The test wraps `meadowHeight01` (which
+takes normalized `[0,1]` grid coords + a `MeadowShape` and returns height01
+`[0,1]`) in a lambda that maps world→grid and scales the result by the 50 m height
+scale plus `origin.y`, so `rRimWorld`/`MARCH_STEP`/`bowlFloorY` stay in consistent
+world units.
 
 The helper marches `N_RAYS` rays **once, storing each ray's sampled height
 profile**, then derives the fill from the stored samples in two passes — spill
@@ -147,11 +151,15 @@ double-basin case being out of scope (§9).
 
 ### 3.2 Water sheet sized to the actual flood (INV-3) — CPU helper, pass 2
 - **Pass 2 (flood):** over the **same stored samples**, now that `waterLevelY` is
-  known, record per ray the **outermost** radius where terrain is still below
-  `waterLevelY` (the last submerged sample before it rises and stays above — not
-  merely the first up-crossing, so an fbm bump that pokes above `waterY` then dips
-  below again doesn't truncate the flood).
-- `floodRadius = max` over rays of that outermost submerged radius. By INV-2,
+  known, record per ray the radius of the **first sustained outward crossing** —
+  the last submerged sample before terrain first rises above `waterLevelY` going
+  outward from the centre. This is the shoreline of the **centre-connected**
+  flooded region, matching §7.1's flood-fill: the outer downslope legitimately dips
+  below `waterLevelY` again past the rim, but it is disconnected from the centre by
+  the intervening crest, so it is *not* part of the pond and must not extend the
+  radius. (An interior bump that pokes above `waterY` and back down would make the
+  centre-connected region non-star-convex — an island — which is out of scope §9.)
+- `floodRadius = max` over rays of that first-crossing radius. By INV-2,
   `waterY < spillHeight ≤` every ray's crest, so each ray does cross above `waterY`
   within `R_SCAN`; a ray that never rises above `waterY` within `R_SCAN` is capped
   at `R_SCAN` and flagged (should not occur for the contained bowl — asserted,
@@ -160,16 +168,22 @@ double-basin case being out of scope (§9).
 
 `EDGE_PAD` is chosen ≥ the shoreline-radius variation over one ray spacing (or
 `N_RAYS` large enough that the variation is sub-`EDGE_PAD`), so every straight
-edge of the square sheet lands on **dry** ground on all sides. This assumes a
-**star-convex** flooded region about the centre (true for the near-circular
-authored bowl); a non-star-convex shoreline is out of scope (§9). The sheet is
-then only marginally larger than the water it shows, so the depth-occluded dry
-rim (§3.3) is thin — minimal overdraw.
+edge of the square sheet lands on **dry** ground on all sides. This assumes the
+**centre-connected flooded region is star-convex** about the centre — the
+first-crossing radius (pass 2) is then its outer boundary in every direction. The
+monotone carve to the rim makes this hold for the authored bowl, and it is not
+assumed blind: §7.1's flood-fill + §7.2's `floodRadius < R_rim` assert on the
+shipped seed are the guard that catches a violation (a non-star-convex connected
+region, or one spilling past `R_rim`, fails the test rather than shipping a broken
+pond). A disconnected outer-downslope dip is *not* part of the region (H-1
+handling above) and does not affect star-convexity. The sheet is then only
+marginally larger than the water it shows, so the depth-occluded dry rim (§3.3) is
+thin — minimal overdraw.
 
 ### 3.3 Why the straight edges vanish — depth occlusion, no shader change
 Over dry ground the flat water plane at `waterY` sits **below** the opaque terrain
-surface. Terrain is drawn (opaque, depth-written) before the water pass
-(`engine.cpp` terrain pass precedes the water draw at `:1679`); water draws with
+surface. Terrain is drawn (opaque, depth-written) in the main scene pass
+(`engine.cpp:1561`) before the water draw (`:1679`); water draws with
 `glDepthMask(GL_FALSE)` but depth-**test** on under reverse-Z `glDepthFunc(GL_GEQUAL)`
 (`water_renderer.cpp:106`, `renderer.cpp:121`). A water fragment below the already-
 drawn terrain is farther from the camera → smaller reverse-Z depth → **fails
@@ -216,8 +230,10 @@ banks. Split the two by capability:
 
 - **Stamp skip → contour:** skip a grass stamp when its centre is below the
   waterline, `terrainHeight(cx,cz) < waterLevelY + SHORE_MARGIN` — a per-centre
-  height test the stamp loop can do directly (it already samples `getHeight(cx,cz)`
-  at `engine.cpp:2420`). Grass then grows up to the damp shore and none on the
+  height test the stamp loop can do directly. It already samples `getHeight(cx,cz)`
+  at `engine.cpp:2420`, but **after** the current distance-based skip
+  (`continue` at `:2416`); the sample must be **hoisted above the skip** so the
+  height gate can use it. Grass then grows up to the damp shore and none on the
   water.
 - **Final erase → disc at the flood radius:** the erase API is disc-only, so pass
   `eraseAllFoliage(center, floodRadius + SHORE_MARGIN)`. A disc slightly larger
@@ -278,9 +294,14 @@ once), so no parity test is required. Performance is still verified by measureme
   assumption to ignore. *Open question:* confirm the sheet stays within terrain
   bounds for the shipped shape.
 - **Containment residual (INV-2):** the min-over-rays-of-ridge-max is exact only
-  for escape saddles within `R_SCAN` on a monotone-carve basin. A hand edit that
-  carves a channel or a second dip breaks it; `MIN_DEPTH` prevents a degenerate
-  empty pond but not a mis-authored double basin — out of scope (§9).
+  for escape saddles within `R_SCAN` on a monotone-carve basin. Truncating the
+  scan at `R_SCAN` is **safe-direction**: capping the per-ray max at `R_SCAN`
+  can only *underestimate* a still-rising ridge, biasing `waterLevelY` *lower* →
+  more contained, never less. Both the production spill and the §7.1 flood-fill
+  share this `R_SCAN` horizon, so both are blind to a saddle beyond it — acceptable
+  under §9's single-authored-bowl scope. A hand edit that carves a channel or a
+  second dip breaks containment; `MIN_DEPTH` prevents a degenerate empty pond but
+  not a mis-authored double basin — out of scope (§9).
 - **Caustics bounds** (`engine.cpp:1519-1537`) derive `halfExtent` from
   `waterCfg.width`; the larger sheet enlarges the caustic projection area. Terrain
   caustics are gated by `waterY`, so they still only show on submerged ground —
@@ -295,7 +316,7 @@ once), so no parity test is required. Performance is still verified by measureme
   Confirm visually that the ~9 mm crest does not shimmer at the waterline.
 - **Startup fallback (`!u_hasRefractionTex`):** reachable only until the refraction
   FBO is first populated (`water_renderer.cpp:155-159`). In it the `alpha *=
-  edgeFade` line is skipped entirely (`water.frag.glsl:285`) and the dry edges stay
+  edgeFade` line is skipped entirely (guarded block `water.frag.glsl:285-288`) and the dry edges stay
   depth-occluded, so there is **no larger square** — only a non-refractive
   submerged disc for ≤ 1 frame. Negligible.
 
@@ -343,7 +364,7 @@ project Rule 6, matching the neighbouring meadow constants (`engine.cpp:2243-224
 |-------|----------|-------------|
 | `MARCH_STEP` | ≤ grid spacing, so no crest is stepped over | `0.5 m` |
 | `SCAN_FACTOR` → `R_SCAN` | > 1, far enough to include escape saddles just past the carve boundary | `1.5` → ~42 m |
-| `N_RAYS` | large enough that the shoreline-radius change over one angular gap `2π·floodRadius/N_RAYS` is < `EDGE_PAD` | `128` (arc ≈ 0.7 m at 15 m) |
+| `N_RAYS` | large enough that the shoreline-radius change between adjacent rays is < `EDGE_PAD`. The arc length `2π·floodRadius/N_RAYS` is a **conservative upper bound** on that radial change (equal only if `\|dr/dθ\|=r`; for the near-circular bowl the true radial change is far smaller) | `128` (arc ≈ 0.7 m at 15 m ⇒ radial change ≪ that) |
 | `EDGE_PAD` | ≥ shoreline-radius variation over one ray gap (above) | `2.0 m` |
 | `RIM_MARGIN` | ≥ max **cross-ray** ridge-crest difference between adjacent rays (angular undersampling error) — validated by the §7.1 flood-fill, not assumed | `0.5 m` |
 
