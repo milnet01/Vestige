@@ -208,8 +208,8 @@ block), not new rendering code:
   current **0.7–1.5** scale (`engine.cpp:2475-2476`) → 0.28–0.6 m. Raise the top
   of the range for occasional taller blades. Optionally seed a light **second
   pass of the existing tall-grass type (typeId 1)** for silhouette variety — both
-  types get a real texture via §4.1. (Second pass is optional polish; core is one
-  type.)
+  types get a real texture via §4.1 (both reuse the committed `grass_blades.png`).
+  (Second pass is optional polish; core is one type.)
 - **Colour:** widen `grassCfg.tintVariation` so blades vary green→yellow-green;
   already multiplied into the fragment colour (`foliage.frag.glsl:118`).
 - **Density** stays the 3D_E-0027 benchmark knob (unchanged — it is the perf
@@ -250,7 +250,7 @@ this phase, so no Formula-Workbench parity mirror (Rule 6/7 n/a here).
   than failing the slice — only dropping below 60 FPS blocks B3.
 - **How it's measured:** the existing editor **Performance panel** GPU tab lists
   the named **`beginPass("Foliage")`** scope (`engine.cpp:1629`) and live FPS.
-  Read on the 3D_E-0027 meadow against ≤ 2.5 ms / ≥ 60 FPS at High — the same
+  Read on the 3D_E-0027 meadow against ≥ 60 FPS (≤ 2.5 ms advisory) at High — the same
   **manual maintainer read** A5 used. The automated path's *tooling already
   exists* — the `--profile-log` CSV logger (`engine/profiler/profile_log.{h,cpp}`,
   consumed at `engine.cpp:169`) and the comparator `tools/perf_gate.py`
@@ -359,8 +359,9 @@ public repo, batch push).
 - Grass legibility must not rely on hue alone (colour-blind): value contrast
   between blades and the textured ground (Phase A) carries the read; the tint
   variation stays within a value band that keeps blades distinct from soil.
-- No flashing; wind motion is gentle and already amplitude-clamped
-  (`engine.cpp:1625`). The Low tier (shorter distance, no grass shadows) doubles
+- No flashing; wind motion is gentle — its amplitude is a small `0.08×` constant
+  (floored, not upper-clamped, at `engine.cpp:1625`; a jarring gust would require
+  an extreme upstream `envWindSpeed`). The Low tier (shorter distance, no grass shadows) doubles
   as the low-end-GPU / reduced-detail path, exposed via the existing quality
   setting.
 
@@ -478,6 +479,24 @@ caught the residue of loop 2's own edits. All fixed:
   genuinely per-instance attributes — claim correct); the A5 *design doc* names the
   tier only generically, but this doc anchors the enum-wiring mirror to **code**
   (`settings_apply.h:42/122`), which is authoritative.
+
+**Loop 4 (2026-07-18) — CONVERGED (polish-only).** 2 cold reviewers, identical
+briefs. Tally: CRITICAL 0 · HIGH 0 · MEDIUM 0 · LOW 3 · INFO 4 (verified 3 /
+unverified 0). Both lanes independently re-verified all ~28 citations exact and
+called the doc implementation-ready; no substantive (structural / mechanical /
+architectural) finding remained. The 3 LOW polish fixes applied:
+- §6 relabelled the `≤ 2.5 ms / ≥ 60 FPS` slash-pair as `≥ 60 FPS (≤ 2.5 ms
+  advisory)` so the gate/advisory distinction reads uniformly.
+- §4.3 / §9 B2 — named the texture the optional typeId-1 second pass reuses
+  (`grass_blades.png`).
+- §10 — "amplitude-clamped" was imprecise (`engine.cpp:1625` is a *floor*, not an
+  upper clamp) → reworded to a `0.08×` scaled/floored amplitude.
+
+**Convergence:** loop 4 is polish-only, so the design is signed off (feedback:
+spec sign-off delegated to cold-eyes convergence). Findings trended 13 → 11 → 8 →
+3(polish); accuracy was clean from loop 2 on. Implementation proceeds from slice
+B1. Out-of-scope code follow-up for the owner: `foliage_renderer.h:89`'s
+"6 triangles, 12 vertices" comment should read "18 vertices" (impl builds 18).
 
 ---
 
