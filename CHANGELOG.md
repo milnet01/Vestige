@@ -22,6 +22,24 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-07-18 Added — Terrain distance-tiling break-up (Meadow realism A4, 3D_E-0031)
+
+Slice A4 of the PBR ground-texture overhaul — hides the tile repeat across the
+far field so the ground doesn't read as an obviously repeating pattern into the
+distance.
+
+- **Distance-tiling.** The top-down ground albedo now fades to a ~4× coarser
+  far-scaled sample (`FAR_TILING_SCALE = 0.25`) over view distance, via a
+  `smoothstep` across `u_distanceTiling` (25→120 m). Only the albedo takes the
+  extra taps (material/normal keep the near sample), and near pixels skip them
+  entirely — so the cost lands only where the repeat would be visible. Sits atop
+  the low-frequency `tilingDetail` macro-variation already applied in A2.
+- **Parity test.** The blend factor is mirrored as a pure `distanceTilingBlend`
+  in `terrain_material_blend.h` and pinned by `TerrainDistanceTilingTest`
+  (0 at/below near, 1 at/above far, 0.5 at the midpoint, monotonic across the
+  range).
+- Verified GL-error-free; the meadow far field reads without obvious tiling.
+
 ### 2026-07-18 Added — Terrain detail normals + triplanar Whiteout (Meadow realism A3, 3D_E-0031)
 
 Slice A3 of the PBR ground-texture overhaul. The textured terrain path now has

@@ -130,4 +130,20 @@ inline std::array<float, 3> whiteoutBlendNormal(const std::array<float, 3>& macr
     return {wx / wlen, wy / wlen, wz / wlen};
 }
 
+/// @brief Distance-tiling blend factor — CPU mirror of the GLSL
+///        `smoothstep(u_distanceTiling.x, u_distanceTiling.y, dist)` (slice A4).
+///
+/// The textured ground fades from its near per-layer tiling to a coarser
+/// far-scaled albedo over view distance to break the tile repeat across the far
+/// field (design §4.3 step 1). This is the pure reference the A4 unit test pins:
+/// 0 at/below `nearDist`, 1 at/above `farDist`, and Hermite-smooth (0.5 at the
+/// midpoint) in between. `farDist` must be > `nearDist` (a valid smoothstep range).
+inline float distanceTilingBlend(float dist, float nearDist, float farDist)
+{
+    assert(farDist > nearDist && "distanceTilingBlend: farDist must exceed nearDist");
+    float t = (dist - nearDist) / (farDist - nearDist);
+    t = t < 0.0f ? 0.0f : (t > 1.0f ? 1.0f : t);
+    return t * t * (3.0f - 2.0f * t);
+}
+
 }  // namespace Vestige

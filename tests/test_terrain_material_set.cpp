@@ -208,6 +208,41 @@ TEST(TerrainNormalBlendTest, FlatDetailPreservesATiltedMacroNormal)
 }
 
 // ---------------------------------------------------------------------------
+// Distance-tiling blend parity (pure, no GL) — slice A4, design §4.3/§7/§9.
+// `distanceTilingBlend` mirrors the GLSL smoothstep over the u_distanceTiling
+// range; the near/far endpoints + midpoint pin the curve the shader lerps by.
+// ---------------------------------------------------------------------------
+TEST(TerrainDistanceTilingTest, EndpointsAndMidpointFollowSmoothstep)
+{
+    const float nearD = 25.0f;
+    const float farD = 120.0f;
+
+    // At/below near → 0 (pure near tiling); at/above far → 1 (pure far tiling).
+    EXPECT_NEAR(distanceTilingBlend(nearD, nearD, farD), 0.0f, 1e-6f);
+    EXPECT_NEAR(distanceTilingBlend(0.0f, nearD, farD), 0.0f, 1e-6f);   // clamps below
+    EXPECT_NEAR(distanceTilingBlend(farD, nearD, farD), 1.0f, 1e-6f);
+    EXPECT_NEAR(distanceTilingBlend(500.0f, nearD, farD), 1.0f, 1e-6f); // clamps above
+
+    // Midpoint of a smoothstep is exactly 0.5.
+    EXPECT_NEAR(distanceTilingBlend(0.5f * (nearD + farD), nearD, farD), 0.5f, 1e-6f);
+}
+
+TEST(TerrainDistanceTilingTest, MonotonicNonDecreasingAcrossTheRange)
+{
+    const float nearD = 25.0f;
+    const float farD = 120.0f;
+    float prev = -1.0f;
+    for (float d = 0.0f; d <= 160.0f; d += 10.0f)
+    {
+        const float v = distanceTilingBlend(d, nearD, farD);
+        EXPECT_GE(v, prev);   // never decreases as distance grows
+        EXPECT_GE(v, 0.0f);
+        EXPECT_LE(v, 1.0f);
+        prev = v;
+    }
+}
+
+// ---------------------------------------------------------------------------
 // TerrainMaterialSet load (needs a GL context) — design §7.
 // ---------------------------------------------------------------------------
 

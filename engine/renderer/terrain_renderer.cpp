@@ -165,6 +165,10 @@ void TerrainRenderer::render(const Terrain& terrain,
         {
             m_terrainShader.setFloat(tilingNames[i], tilings[static_cast<size_t>(i)]);
         }
+        // Distance-tiling break-up range (3D_E-0031 A4): near/far view distance (world
+        // metres) over which the far-scaled albedo fades in. Art-directed — no reference
+        // dataset. TODO: revisit via Formula Workbench if a look-target is captured.
+        m_terrainShader.setVec2("u_distanceTiling", glm::vec2(25.0f, 120.0f));
     }
 
     // Triplanar mapping uniforms (conditional on steep slopes)

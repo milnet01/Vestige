@@ -37,9 +37,10 @@ uniform float u_textureTiling;      // World-space tiling for layer textures
 // false the flat-colour path below runs unchanged (fallback / Tabernacle).
 uniform bool u_useGroundTextures;
 uniform sampler2DArray u_albedoArray;    // unit 6, sRGB
-uniform sampler2DArray u_normalArray;    // unit 7, tangent-space (used from slice A3)
+uniform sampler2DArray u_normalArray;    // unit 7, tangent-space detail (slice A3)
 uniform sampler2DArray u_materialArray;  // unit 8, R=AO G=Roughness B=Height
 uniform float u_layerTiling[4];          // world→UV scale per layer (grass/rock/dirt/sand)
+uniform vec2  u_distanceTiling;          // (nearDist, farDist) world-metre smoothstep range (A4)
 
 // Water caustics (applied to terrain below water surface, within water XZ bounds)
 uniform bool u_causticsEnabled;
@@ -236,7 +237,13 @@ struct GroundSample
     float ao;
     float roughness;
     vec3  tnormal;   // tangent-space, +Z out of surface
+    vec4  weights;   // per-layer height-blend weights (reused for the far albedo, A4)
 };
+
+// Distance-tiling far-scale (A4): the far albedo samples ~1/0.25 = 4× larger tiles
+// so the repeat period across the far field is broken up. Art-directed look constant
+// (no reference dataset). TODO: revisit via Formula Workbench (design §4.4 item 2).
+const float FAR_TILING_SCALE = 0.25;
 
 GroundSample sampleGround(vec2 uv, vec4 splatWeights)
 {
@@ -264,7 +271,20 @@ GroundSample sampleGround(vec2 uv, vec4 splatWeights)
     g.ao        = m0.r * w.x + m1.r * w.y + m2.r * w.z + m3.r * w.w;
     g.roughness = m0.g * w.x + m1.g * w.y + m2.g * w.z + m3.g * w.w;
     g.tnormal   = normalize(n0 * w.x + n1 * w.y + n2 * w.z + n3 * w.w);
+    g.weights   = w;
     return g;
+}
+
+// Far-scaled albedo for the distance-tiling break-up (A4). Samples ONLY albedo
+// (one extra tap per layer — material/normal keep the near sample) at
+// FAR_TILING_SCALE, blended by the same per-layer weights as the near sample.
+vec3 sampleGroundAlbedoFar(vec2 uv, vec4 w)
+{
+    vec3 a0 = texture(u_albedoArray, vec3(uv * u_layerTiling[0] * FAR_TILING_SCALE, 0.0)).rgb;
+    vec3 a1 = texture(u_albedoArray, vec3(uv * u_layerTiling[1] * FAR_TILING_SCALE, 1.0)).rgb;
+    vec3 a2 = texture(u_albedoArray, vec3(uv * u_layerTiling[2] * FAR_TILING_SCALE, 2.0)).rgb;
+    vec3 a3 = texture(u_albedoArray, vec3(uv * u_layerTiling[3] * FAR_TILING_SCALE, 3.0)).rgb;
+    return a0 * w.x + a1 * w.y + a2 * w.z + a3 * w.w;
 }
 
 // ---------------------------------------------------------------------------
@@ -333,6 +353,16 @@ void main()
         vec3  outAlbedo = gY.albedo;
         float outAO     = gY.ao;
         float outRough  = gY.roughness;
+
+        // Distance-tiling break-up (A4): fade to a ~4× coarser far-scaled albedo over
+        // view distance so the tile repeat isn't obvious across the far field. Albedo
+        // only; the extra taps are skipped entirely on near pixels.
+        float distBlend = smoothstep(u_distanceTiling.x, u_distanceTiling.y, abs(v_viewDepth));
+        if (distBlend > 0.001)
+        {
+            vec3 albedoFar = sampleGroundAlbedoFar(v_worldPos.xz, gY.weights);
+            outAlbedo = mix(outAlbedo, albedoFar, distBlend);
+        }
 
         // Slopes: blend in the X/Z world-plane projections (Ben Golus triplanar).
         if (triBlend > 0.001)
