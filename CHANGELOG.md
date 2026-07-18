@@ -22,6 +22,34 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-07-18 Added — Realistic grass: real blade texture + variation + quality tier (Meadow realism B, 3D_E-0038)
+
+Phase B of the meadow-realism overhaul. The grass now uses a real photo-scanned
+blade texture instead of the crude procedural card, reads as varied real grass,
+and respects the graphics-quality setting so weaker GPUs stay at 60 FPS.
+
+- **Real grass texture with procedural fallback (B1).** `FoliageRenderer` now
+  honours `FoliageTypeConfig.texturePath` via `setTypeTexture(typeId, path)`: it
+  loads the image, uploads into a temporary handle, and only frees the old
+  texture once the replacement is known-good — so a missing/corrupt file or a GL
+  upload failure falls back to the procedural blade rather than stranding the
+  grass with no texture. An empty path means "no override" (silent keep). The GL
+  upload is factored into a shared `uploadRGBA8` helper; the fallback decision is
+  unit-tested without a GL context.
+- **Real CC0 grass asset + variation (B2).** Committed
+  `assets/textures/foliage/grass_blades.png` — a portrait grass-blade tuft
+  cropped from the CC0 OpenGameArt "grass blades alpha card" and colour-graded to
+  a fresh green that harmonises with the Phase-A ground. The meadow wires it
+  through `setTypeTexture` with a git-ignored `assets/textures/foliage_local/`
+  override (drop a photoreal texture in without touching code) and widens the
+  per-instance height (scale 0.6–1.8) and colour variation. Look only — instance
+  count is unchanged, so the 3D_E-0027 perf fixture is untouched.
+- **Grass quality tier (B3).** A new `FoliageQuality { Low, Medium, High }` rides
+  the existing `QualityPreset` (same path as A5's terrain tier — no new setting).
+  It drives grass **draw distance** (High 100 m / Medium 70 m / Low 45 m) and
+  **shadow casting** (Low off) — the highest-value meadow perf lever for holding
+  60 FPS on weaker hardware. Default **High**; Ultra maps to High.
+
 ### 2026-07-18 Added — Terrain ground quality tiers (Meadow realism A5, 3D_E-0031)
 
 Slice A5 — the final slice of the PBR ground-texture overhaul. Wires the ground
