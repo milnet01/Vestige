@@ -7,6 +7,11 @@ realism overhaul; pairs with the shipped Phase A (PBR ground textures,
 Layman line (from the roadmap): *make the grass look like real grass — thicker,
 taller, varied — instead of hand-drawn cards.*
 
+**Sections:** 1 Goal · 2 Research · 3 Current state · 4 Architecture (4.1 texture
+wiring · 4.2 quality tier · 4.3 variation) · 5 CPU/GPU placement · 6 Performance ·
+7 Testing · 8 Assets & licensing · 9 Slices (B1–B3) · 10 Accessibility · 11 Risks
+· 12 Open questions · 13 Cold-eyes log · 14 Sources.
+
 ---
 
 ## 1. Goal
@@ -19,8 +24,7 @@ already seeds, and add an A5-style **graphics-quality tier** for grass so the
 ~40 k-instance field holds 60 FPS on weaker GPUs.
 
 The grass should read as real blades, not cardboard, and cost no more per frame
-at High than today's procedural grass (one alpha-tested sample per fragment
-either way — §6).
+at High than today's procedural grass (no extra per-fragment cost — see §6).
 
 ### 1.1 Non-goals (this phase)
 
@@ -113,12 +117,19 @@ Sources (§14 lists URLs).
   /// (fallback) and a warning is logged. Must be called after init().
   void setTypeTexture(uint32_t typeId, const std::string& path);
   ```
-  Implementation: `stbi_load(path, …, 4)` (force RGBA); on success,
+  Implementation: `stbi_load(path, …, 4)` (force RGBA); on a **non-null** decode,
   `glDeleteTextures` the existing `m_typeTextures[typeId]` (the procedural
-  default, to avoid a leak) and replace it with `uploadRGBA8(...)`; on failure,
-  **leave the procedural texture in place** and `Logger::warning`. `stbi_load`
-  returns premultiplied-nothing straight RGBA; alpha is the blade mask the
-  fragment shader already alpha-tests at 0.5 — no shader change.
+  default, to avoid a leak), replace it with `uploadRGBA8(...)`, then
+  `stbi_image_free(pixels)` to release the decoded **CPU** buffer; on a **null**
+  decode, **leave the procedural texture in place** and `Logger::warning`.
+  `stbi_load` returns straight (non-premultiplied) RGBA; alpha is the blade mask
+  the fragment shader already alpha-tests at 0.5 — no shader change.
+  **Edge-case contract:** an **empty `path`** is treated as decode-failure (keep
+  the existing texture, no warning — it just means "no override"); the method
+  **must be called after `init()`** so a procedural default already exists to fall
+  back to (a debug assert guards `m_initialized`); `typeId` may be any value —
+  `m_typeTextures` is a `std::unordered_map`, so a not-yet-present key simply
+  registers a new entry (no out-of-bounds), though only painted typeIds render.
   **Ownership stays uniform:** every `m_typeTextures` entry remains a raw `GLuint`
   the renderer owns and `shutdown()` already deletes — no RAII `Texture` object,
   no mixed ownership.
@@ -127,27 +138,28 @@ Sources (§14 lists URLs).
 
 ### 4.2 Grass quality tier (reuse the A5 graphics-quality `Setting`)
 
-A5 built `RendererQualitySink` (`settings_apply.{h,cpp}`) mapping the graphics
-`QualityPreset` → renderer knobs. Phase B adds **one** foliage lever to that same
-sink — no parallel system, no per-frame settings read.
+A5 **extended** the existing `RendererQualitySink` (`settings_apply.{h,cpp}`) —
+which maps the graphics `QualityPreset` → renderer knobs (the AA/SSAO/bloom/heavy-
+post setters predate A5) — with a terrain-ground lever. Phase B adds **one**
+foliage lever to that same sink — no parallel system, no per-frame settings read.
 
 - **Lever = grass render distance + grass shadow-casting.** These are the only
   *runtime-tunable* grass perf knobs (per-instance density is baked into chunks at
   scene-build by `paintFoliage`, so it is not a runtime dial). Fewer metres of
   grass drawn = fewer instances = the highest-value meadow perf lever, and grass
   is the single biggest instance count in the scene.
-- **New sink method** `virtual void setFoliageQuality(FoliageRenderer&-driven
-  knobs)` — concretely a small struct or two setters. Minimal shape: add
-  `float m_renderDistance = 100.0f;` and `bool m_castShadows = true;` as
-  `FoliageRenderer` members (public, alongside `windAmplitude`), a
-  `setQuality(TerrainGroundQuality-style enum)` setter, and:
+- **New members + setter on `FoliageRenderer`:** `float m_renderDistance = 100.0f;`
+  and `bool m_castShadows = true;` (public, alongside `windAmplitude`), plus
+  `void setQuality(FoliageQuality q);` mapping the enum to those two members. The
+  sink gains `virtual void setFoliageQuality(FoliageQuality) = 0;`, and the
+  concrete `RendererQualityApplySinkImpl` forwards it to
+  `FoliageRenderer::setQuality`. Wiring:
   - `engine.cpp:1636` passes `m_foliageRenderer->m_renderDistance` instead of the
     literal `100.0f`.
-  - the shadow pass (`engine.cpp` foliage `renderShadow` caller, via
-    `Renderer::setFoliageShadowCaster`) is gated on `m_castShadows` — verify the
-    exact gate site during B3 (the shadow caster is invoked inside `Renderer`;
-    the cleanest gate is an early-out in `renderShadow` when `!m_castShadows`,
-    keeping the decision in the renderer, not the caller).
+  - **Shadow gate (committed contract):** `FoliageRenderer::renderShadow`
+    early-returns when `!m_castShadows` — the "Low = no grass shadows" tier is a
+    one-line guard at the top of that method, so the decision stays in the
+    renderer and the `Renderer::setFoliageShadowCaster` caller is untouched.
 - **Tier table (default High):**
 
   | Preset | Grass distance | Grass shadows | Blade texture |
@@ -200,7 +212,7 @@ this phase, so no Formula-Workbench parity mirror (Rule 6/7 n/a here).
 ## 6. Performance (60 FPS is a hard requirement)
 
 - **Per-fragment cost is unchanged.** Whether the blade texture is the 32×64
-  procedural or a real ~256×512 atlas, the fragment shader does **one**
+  procedural or a real ~256×512 texture, the fragment shader does **one**
   alpha-tested `texture()` sample. The dominant grass cost is instance count and
   overdraw, both unchanged at High. So Phase B should **not** materially regress
   the Foliage pass at High — the honest before/after is "≈ equal at High, cheaper
@@ -214,10 +226,16 @@ this phase, so no Formula-Workbench parity mirror (Rule 6/7 n/a here).
 - **How it's measured:** the existing editor **Performance panel** GPU tab lists
   the named **`beginPass("Foliage")`** scope (`engine.cpp:1629`) and live FPS.
   Read on the 3D_E-0027 meadow against ≤ 2.5 ms / ≥ 60 FPS at High — the same
-  **manual maintainer read** A5 used (the automated `--profile-log` CSV gate is
-  3D_E-0027 S6 / 3D_E-0030, still pending). A larger texture costs a few hundred
-  KB more VRAM and marginally more texture-cache pressure — negligible against the
-  instance/overdraw cost.
+  **manual maintainer read** A5 used. The automated path's *tooling already
+  exists* — the `--profile-log` CSV logger (`engine/profiler/profile_log.{h,cpp}`,
+  consumed at `engine.cpp:169`) and the comparator `tools/perf_gate.py`
+  (**3D_E-0030 ✅ shipped 2026-07-17**). What is still pending is a **committed
+  RX 6600 baseline JSON** to compare against — a real-GPU capture step (CI is
+  GPU-less / llvmpipe) the maintainer runs via `--update-baseline`. Until that
+  baseline lands, B3 uses the manual panel read. A larger texture costs on the
+  order of a few hundred KB more VRAM and slightly more texture-cache pressure —
+  bounded by the ≤ 2.5 ms pass gate above, which catches any real regression
+  regardless.
 - **Tiers are a graphics `Setting`, NOT `FormulaQualityManager`.** Same
   distinction A5 documented: these toggle *render distance / shadow casting*
   (a graphics axis), not a formula's evaluation accuracy (`FULL/APPROXIMATE/LUT`).
@@ -227,14 +245,14 @@ this phase, so no Formula-Workbench parity mirror (Rule 6/7 n/a here).
 
 ## 7. Testing
 
-- **File-load + fallback (unit).** `setTypeTexture` with (a) a valid small test
-  PNG → `m_typeTextures[typeId]` becomes a non-zero handle **distinct** from the
-  procedural one (real texture adopted, old one freed); (b) a missing/corrupt path
-  → the procedural handle is **retained** (fallback), no crash, warning logged.
-  A GL context is required — run in the existing GL-test harness that the
-  renderer tests already use (confirm harness during B1; if none covers
-  `FoliageRenderer`, the load/fallback branch is asserted via a headless helper
-  that stubs the decode result rather than a live GL upload).
+- **File-load + fallback.** The **branch decision** — `(path empty OR decode
+  null)` → keep the procedural texture, else adopt the loaded one — is factored as
+  a pure predicate and unit-tested with **no GL** (empty path, a missing file, and
+  a valid decode-result stub each route correctly). Adopting frees the old handle
+  before replacing it (§4.1) — a code invariant, not a runtime assert. The live GL
+  path (the real texture actually bound, no leak-into-error) is covered by the
+  meadow `--visual-test` frame rendering **GL-error-free** (`glGetError`, the
+  objective render check below) — no bespoke GL unit-harness needed.
 - **Tier mapping (unit).** Extend the A5 `RecordingRendererQualitySink` test
   pattern (`tests/test_settings.cpp`): each preset maps to the expected
   `FoliageQuality` (Low→Low with shadows off + 45 m; Medium→Medium; High/Ultra→
@@ -243,7 +261,7 @@ this phase, so no Formula-Workbench parity mirror (Rule 6/7 n/a here).
   renders **GL-error-free** (`glGetError`) with the real texture bound.
 - **Visual (`--visual-test`) — maintainer inspection.** `open_meadow` /
   `pond_shore` viewpoints: grass reads as real blades (not a flat procedural
-  cone), varied in height/colour, no aspect squish (portrait atlas — §4.1 / §8),
+  cone), varied in height/colour, no aspect squish (portrait texture — §4.1 / §8),
   no popping at the tier distance boundary (distance-fade covers the cut).
 
 ---
@@ -265,7 +283,7 @@ this phase, so no Formula-Workbench parity mirror (Rule 6/7 n/a here).
 - **`_local/` override:** the meadow resolves
   `assets/textures/foliage_local/grass_blades.png` first (git-ignored), else the
   committed default — identical to the `terrain_local/` / `nature_local/` pattern
-  (A + props precedent), so the maintainer can drop a photoreal atlas in without
+  (A + props precedent), so the maintainer can drop a photoreal texture in without
   touching code.
 - **Fallback:** if neither path exists, `setTypeTexture` keeps the procedural
   texture (§4.1). The procedural generator stays in the tree as the guaranteed
@@ -281,7 +299,7 @@ this phase, so no Formula-Workbench parity mirror (Rule 6/7 n/a here).
    (Rule 3); add `setTypeTexture(typeId, path)` with procedural fallback.
    *Verify:* load/fallback unit test green; foliage frame GL-error-free.
 2. **B2 — Real asset + meadow wire-up + variation.** Commit the portrait CC0
-   grass atlas + `_local/` override resolve; the meadow calls
+   grass texture + `_local/` override resolve; the meadow calls
    `setTypeTexture(0, path)` (and typeId 1 if the second pass is kept); widen
    scale/tint variation. *Verify:* `--visual-test` — meadow reads as real varied
    grass, no aspect squish; ASSET_LICENSES + THIRD_PARTY_NOTICES rows added.
@@ -290,7 +308,8 @@ this phase, so no Formula-Workbench parity mirror (Rule 6/7 n/a here).
    `m_renderDistance` at `engine.cpp:1636`; gate the shadow pass on
    `m_castShadows`. *Verify:* preset→tier unit test green; maintainer reads the
    Performance panel **Foliage** GPU scope on the meadow — ≤ 2.5 ms and ≥ 60 FPS
-   at High on RX 6600 (automated CSV path waits on S6 — §6); CHANGELOG row added.
+   at High on RX 6600 (automated gate waits on a committed RX 6600 baseline —
+   §6); CHANGELOG row added.
 
 Each slice commits locally; the phase pushes when B3 lands green (§ push cadence —
 public repo, batch push).
@@ -314,7 +333,8 @@ public repo, batch push).
 - **Aspect squish** from mapping a landscape source card onto a portrait quad →
   crop/orient to portrait at asset-prep (§8); visual-test catches it.
 - **Texture leak** when `setTypeTexture` replaces the procedural default →
-  explicit `glDeleteTextures` of the old handle before replacing (§4.1); uniform
+  explicit `glDeleteTextures` of the old GL handle before replacing **and**
+  `stbi_image_free` of the decoded CPU buffer after upload (§4.1); uniform
   raw-`GLuint` ownership keeps `shutdown()` correct.
 - **Perf regression** at High from a bigger texture → §6 shows the per-fragment
   cost is one sample either way; the tier (default High) + Performance-panel read
@@ -339,8 +359,35 @@ public repo, batch push).
 
 ## 13. Cold-eyes loop log
 
-(populated as the loops run — project Rule 9 / global Rule 14: fresh subagent per
-loop, no authoring context, loop until zero verified findings.)
+Project Rule 9 / global Rule 14: fresh subagents per loop, no authoring context,
+loop until no substantive verified finding remains.
+
+**Loop 1 (2026-07-18)** — 2 cold reviewers (accuracy lane + consistency/
+completeness lane). Tally: CRITICAL 0 · HIGH 1 · MEDIUM 5 · LOW 7 · INFO 2
+(verified 13 / unverified 0). All 13 verified findings fixed:
+- HIGH — `setTypeTexture` edge-case contract (empty path, pre-`init()`, `typeId`
+  range) was undefined → added the §4.1 edge-case paragraph.
+- MEDIUM — §6/§9 claimed the `--profile-log` CSV gate + 3D_E-0030 "still pending";
+  both the logger (`profile_log.{h,cpp}`) and comparator (`tools/perf_gate.py`,
+  3D_E-0030 ✅ 2026-07-17) are shipped — only the RX 6600 baseline capture is
+  pending → reworded §6 + §9 B3.
+- MEDIUM — missing `stbi_image_free` of the decoded CPU buffer → added to §4.1 +
+  the §11 leak row.
+- MEDIUM — garbled `setFoliageQuality(FoliageRenderer&-driven knobs)` pseudo-sig +
+  a `TerrainGroundQuality`-vs-`FoliageQuality` naming slip → §4.2 concrete
+  signatures.
+- MEDIUM — shadow-cast gate site left open in prose → committed to the
+  `FoliageRenderer::renderShadow` early-out contract (§4.2).
+- LOW ×7 — "A5 built the sink" → "extended"; added the section index (TOC);
+  firmed the §7 fallback-test contract (pure predicate + GL-error-free frame, no
+  unverified GL harness claim); "atlas" → "texture" where it meant the single card
+  (kept the §1.1 "no texture-atlas UV indexing" non-goal); trimmed a restated
+  per-fragment-cost line; leaned the "negligible VRAM" claim on the ≤2.5 ms gate;
+  amended the ROADMAP 3D_E-0038 bullet to drop the inaccurate "LOD-billboard".
+- INFO (surfaced, not fixed) — the CC0 OpenGameArt asset is B2-scoped (no defect);
+  `foliage_renderer.h:90`'s "12 vertices" doc-comment contradicts the impl's 18
+  (`createStarMesh`) — a **code**-comment fix for the owner, out of scope for a
+  docs review.
 
 ---
 
