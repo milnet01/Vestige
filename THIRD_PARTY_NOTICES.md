@@ -185,6 +185,9 @@ copyright headers in `assets/fonts/OFL.txt`.
   blades alpha card texture (side view)" (`vegetation_grass_card_03.png`;
   <https://opengameart.org/content/grass-blades-alpha-card-texture-side-view>).
   **CC0 1.0** — no attribution required.
+- `foliage/flower_{yellow,white,purple}.png` — engine-authored procedural
+  wildflower billboard cards (Realism C3 / 3D_E-0038). **MIT** (matches engine
+  LICENSE).
 - `label_[1-4].png` — engine-authored. **MIT** (matches engine LICENSE).
 
 The larger 4K Poly Haven assets that will eventually ship in the

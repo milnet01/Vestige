@@ -154,6 +154,7 @@ git-ignored `assets/textures/foliage_local/` override.
 | Pattern | Source | License | Notes |
 |---------|--------|---------|-------|
 | `grass_blades.png` | [OpenGameArt "grass blades alpha card texture (side view)"](https://opengameart.org/content/grass-blades-alpha-card-texture-side-view) (`vegetation_grass_card_03.png`) | **CC0 1.0** | Cropped to a portrait tuft; foliage type 0 (grass) |
+| `flower_{yellow,white,purple}.png` | Engine-authored (procedural flower cards, 3D_E-0038 C3) | **MIT** (matches engine LICENSE) | Clustered billboard wildflowers; foliage types 1/2/3 |
 
 ### Excluded (not in public repo, kept locally via `.gitignore`)
 

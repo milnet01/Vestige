@@ -2539,6 +2539,66 @@ void Engine::finalizeMeadowTerrain()
             + " instances across " + std::to_string(m_foliageManager->getChunkCount()) + " chunks");
     }
 
+    // --- Wildflowers (3D_E-0038 C3) ------------------------------------------
+    // Clustered billboard wildflowers: real meadows grow flowers in species
+    // patches (a lupine drift here, a daisy patch there), not an even sprinkle.
+    // Three CC0 flower cards ride the unused foliage slots (types 1/2/3) via
+    // setTypeTexture (B1 path); each cluster centre is one paintFoliage disc = one
+    // species patch (design §4.3). Sparse accent colour, not a carpet.
+    if (m_foliageRenderer && m_foliageManager)
+    {
+        const auto foliagePath = [](const std::string& file) -> std::string {
+            namespace fs = std::filesystem;
+            const std::string local = "assets/textures/foliage_local/" + file;
+            return fs::exists(local) ? local : "assets/textures/foliage/" + file;
+        };
+        constexpr uint32_t FL_YELLOW = 1, FL_PURPLE = 2, FL_WHITE = 3;
+        m_foliageRenderer->setTypeTexture(FL_YELLOW, foliagePath("flower_yellow.png"));
+        m_foliageRenderer->setTypeTexture(FL_PURPLE, foliagePath("flower_purple.png"));
+        m_foliageRenderer->setTypeTexture(FL_WHITE,  foliagePath("flower_white.png"));
+
+        FoliageTypeConfig flowerCfg;
+        flowerCfg.name = "Wildflower";
+        flowerCfg.minScale = 0.8f;
+        flowerCfg.maxScale = 1.6f;
+        flowerCfg.tintVariation = glm::vec3(0.05f, 0.05f, 0.05f);  // keep the species colour
+
+        // Cluster centres: a coarse seeded jittered-grid over the field, pond
+        // excluded (design §4.3 — the §7 test relies on this exclusion). Each
+        // centre grows one single-species patch.
+        constexpr float FLOWER_MARGIN = 6.0f;
+        constexpr float FLOWER_SHORE_MARGIN = 1.5f;
+        ScatterParams clusters;
+        clusters.regionMin = {tcfg.origin.x + FLOWER_MARGIN, tcfg.origin.z + FLOWER_MARGIN};
+        clusters.regionMax = {
+            tcfg.origin.x + static_cast<float>(W - 1) * tcfg.spacingX - FLOWER_MARGIN,
+            tcfg.origin.z + static_cast<float>(D - 1) * tcfg.spacingZ - FLOWER_MARGIN};
+        clusters.cellSize = 15.0f;   // ~cluster spacing → a few dozen patches
+        clusters.jitter = 0.9f;
+        clusters.minDist = 0.0f;
+        clusters.exclusionCenter = pondCenterXZ;
+        clusters.exclusionRadius = pondFill.floodRadius + 4.0f;
+        clusters.minScale = 1.0f;
+        clusters.maxScale = 1.0f;
+        const std::vector<ScatterPoint> centres = scatterProps(0xF10E12u, clusters);
+
+        const uint32_t species[3] = {FL_YELLOW, FL_PURPLE, FL_WHITE};
+        for (size_t i = 0; i < centres.size(); ++i)
+        {
+            const ScatterPoint& c = centres[i];
+            const float cy = terrain.getHeight(c.x, c.z);
+            if (cy < waterLevelY + FLOWER_SHORE_MARGIN)
+            {
+                continue;   // keep flowers off the damp shore
+            }
+            // One species per cluster (patchy drifts, not a mix), a small dense disc.
+            m_foliageManager->paintFoliage(species[i % 3], glm::vec3(c.x, cy, c.z),
+                /*radius=*/2.2f, /*density=*/1.0f, /*falloff=*/0.4f, flowerCfg);
+        }
+        Logger::info("Meadow wildflowers: " + std::to_string(centres.size())
+            + " clusters painted");
+    }
+
     // --- Props (slice 5) -----------------------------------------------------
     // Authored Kenney CC0 low-poly models (assets/models/nature/): trees,
     // rocks, wildflowers/mushrooms/bushes, reeds, lily pads, a log. Each model
