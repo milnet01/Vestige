@@ -28,7 +28,7 @@ not the meadow scene.
 
 ### 1.1 Non-goals (this phase)
 
-- Grass billboards (→ 3D_E-0032, phase B), trees (→ 3D_E-0033), sky/water polish
+- Grass billboards (→ 3D_E-0038, phase B), trees (→ 3D_E-0033), sky/water polish
   (→ 3D_E-0034). This phase is **ground only**.
 - Runtime terrain-material editing UI. The material set is authored in code /
   scene-setup for now; an editor panel is a later enhancement.
