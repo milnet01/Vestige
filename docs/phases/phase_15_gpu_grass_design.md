@@ -29,7 +29,7 @@ into the terrain — covering the meadow densely and holding **≥ 60 FPS at Hig
 the RX 6600**.
 
 - **Real per-blade geometry**, GPU-generated from a per-blade seed (Bézier ribbon,
-  ~6–10 triangles), not billboards, not shell texturing.
+  ~5–13 triangles by LOD, i.e. `2N−1`), not billboards, not shell texturing.
 - **Procedural placement ("PCG"):** blades scattered by rule — only where the
   terrain **grass** splat layer has weight, thinned on slopes, off water and the
   earthy dirt patches (C1) and the pond.
@@ -40,8 +40,8 @@ the RX 6600**.
 ## 2. Non-goals (this phase)
 
 - **No mesh/task shaders.** They are **never in GL core** — mesh/task shaders exist
-  only as `GL_NV_mesh_shader` / `GL_EXT_mesh_shader` vendor extensions (not even in
-  GL 4.6, the final GL version). The blade geometry is built in the **vertex shader**
+  only as the `GL_NV_mesh_shader` vendor extension on desktop GL (not even in GL 4.6,
+  the final GL version; `EXT_mesh_shader` is Vulkan-side). The blade geometry is built in the **vertex shader**
   from `gl_VertexID` + the per-blade seed — the portable equivalent (§5.1).
 - **No shell texturing.** The stacked-transparent-shell technique reads as "fuzz",
   not distinct blades, and is overdraw-heavy — wrong aesthetic for the references
@@ -65,7 +65,8 @@ the RX 6600**.
   (root position, facing, height, width, lean/bend). Ghost of Tsushima uses a cubic
   Bézier; the AMD GPUOpen sample a quadratic (P0=root, P1=root+up·height,
   P2=P1+dir·height·0.3). Vertices are the curve evaluated at a few `t`, offset
-  perpendicular for width, tapering to the tip. **~6–10 triangles / blade**
+  perpendicular for width, tapering to the tip. **~5–13 triangles / blade** (`2N−1`:
+  near N=7 ≈ 13, far N=3 ≈ 5; GPUOpen's 8-vert far blade = 6)
   (GoT near ≈15 verts, far ≈7; GPUOpen 8 verts→6 tris). The **vertex shader builds
   the mesh** — no authored blade mesh is stored. *(GoT GDC 2021; GPUOpen; GodotGrass.)*
 - **View-facing widening:** edge-on blades are stretched horizontally in view space
@@ -112,8 +113,8 @@ The engine already ships every GPU primitive; the grass system assembles them.
   `indirect_buffer.cpp:141`); `glDrawArraysIndirect` with a **compute-written**
   command buffer + `GL_COMMAND_BARRIER_BIT` (`gpu_particle_system.cpp:369-381,409`)
   — exactly the v2 pattern.
-- **Terrain scatter data.** `Terrain::getHeight(wx,wz)` (`terrain.cpp:121`),
-  `getNormal` (`:148`), `getSplatWeight(texelX,texelZ)→vec4 (R=grass,G=rock,B=dirt,
+- **Terrain scatter data.** `Terrain::getHeight(wx,wz)` (`terrain.cpp:120`),
+  `getNormal` (`:147`), `getSplatWeight(texelX,texelZ)→vec4 (R=grass,G=rock,B=dirt,
   A=sand)` (`terrain.cpp:546`, world→texel via `worldToTexel` `:633`), and GPU
   textures `getHeightmapTexture/getNormalMapTexture/getSplatmapTexture`
   (`terrain.h:126-132`) for a v2 compute path. **Grass weight = `.r`.** *(Grass
@@ -131,7 +132,8 @@ The engine already ships every GPU primitive; the grass system assembles them.
   (0.26×0.4 m), `FoliageInstance` VBO (pos/rot/scale/tint), `glDrawArraysInstanced`,
   **CPU** per-chunk+per-instance distance cull, no GPU cull/indirect. Preserve its
   `FoliageQuality` tier + distance-fade + wind concepts. It stays for **flowers**
-  (types 1/2/3) and as a possible far-field fallback.
+  (types 1/2/3); GPU grass covers the field to the fade distance, so no billboard
+  grass fallback is planned.
 - **GL 4.5 core confirmed** — GLFW 4.5 core forward-compat (`window.cpp:38-41`);
   all shaders `#version 450 core`; compute/SSBO/indirect/DSA all exercised at
   runtime (driver support proven; RX 6600 is GL 4.6).
@@ -149,7 +151,7 @@ and the draw. Coexists with `FoliageRenderer` (flowers).
   the vertex shader computes each vertex from `gl_VertexID` + the per-blade seed
   fetched by `gl_InstanceID` from the SSBO. An **N-segment** blade has rows `0..N`
   with 2 verts per row (left/right) collapsing to a single tip vertex → **`2N+1`
-  strip vertices** (near LOD N=7 → 15 verts; far N=3 → 7 verts). Drawn with
+  strip vertices** (LOD tiers: near N=7 → 15 verts; mid N=5 → 11; far N=3 → 7). Drawn with
   **`GL_TRIANGLE_STRIP`** — each instanced draw replays the strip independently, so
   strips do not connect across blades. *(This is the topology contract for G1 —
   `GL_TRIANGLE_STRIP`, `2N+1` verts, NOT a `GL_TRIANGLES` list.)*
@@ -196,6 +198,11 @@ and the draw. Coexists with `FoliageRenderer` (flowers).
     all seeded deterministically from the chunk id + index (reproducible; testable).
 - **Output:** a per-chunk **SSBO of `GrassBlade` seeds** (§5.5), uploaded once at
   meadow build (rebuilt only if the terrain changes). Chunk AABB stored for cull.
+  **Seed ordering (load-bearing for LOD):** seeds are stored **shuffled /
+  interleaved**, NOT in raster/grid order, so that any prefix `[0, count·fraction)`
+  is a **spatially-uniform** subset of the chunk — the exact property §5.3's
+  prefix-thinning distance-LOD relies on (a raster prefix would draw a spatial slab,
+  not a thinned field). A fixed deterministic shuffle keeps it testable.
 - **PCG rule set is data-driven** via a `GrassConfig` (near-density, slope cutoff,
   height range, grass-weight response, exclusion) so the meadow tunes it without
   new code — the "paint vast expanses" control surface.
@@ -265,8 +272,8 @@ same seeds and writes a compacted visible list + indirect args.
 - **Meadow wire-up:** replace the billboard-**grass** `paintFoliage(GRASS_TYPE_ID…)`
   block with `GrassRenderer::buildField(terrain, meadow bounds, pond exclusion,
   GrassConfig)`. **Keep** the C3 billboard **flower** clusters (types 1/2/3) and C1
-  earthy ground unchanged. The billboard `FoliageRenderer` stays (flowers; possible
-  far-field grass fallback later).
+  earthy ground unchanged. The billboard `FoliageRenderer` stays for **flowers only**
+  (GPU grass covers the field to the fade distance).
 - **Render pass:** insert `m_grassRenderer->render(camera, viewProj, time, csm,
   dirLight)` in the **Foliage** pass (`engine.cpp:1615-1644`), after terrain, before
   water (grass is opaque so it could even precede water opaque; keep it in the
@@ -407,8 +414,8 @@ Each slice commits locally; the phase pushes when G5 lands green.
 - **Blades noisy/dark on slopes** → normal biased toward terrain-normal/vertical +
   boosted ambient (research §5).
 - **Big new subsystem risk** → sliced G1–G5, each independently verifiable; the
-  billboard path stays intact for flowers + as a fallback, so a stall doesn't break
-  the meadow.
+  billboard path stays intact for flowers, and a stall in any slice leaves the prior
+  committed slice working, so it never breaks the meadow build.
 - **Shadow-cast omission looks wrong** (grass not self/tree-shadowing) → grass still
   *receives* shadows; casting is a tracked High/Ultra follow-up, Rule-5 logged.
 
@@ -420,9 +427,10 @@ Each slice commits locally; the phase pushes when G5 lands green.
   candidate.)
 - **Chunk size / near-density / draw-distance** starting values — pin in G2/G5 by
   visual + perf read (art-directed; `TODO: revisit via Formula Workbench`).
-- **Keep billboard grass as a far-field fallback**, or GPU grass all the way to the
-  fade distance? Decide by the G5 perf read (far chunks are the cheapest to LOD, so
-  likely GPU-grass all the way).
+- **Far-field grass — resolved:** GPU grass covers the field all the way to the fade
+  distance (far chunks LOD cheaply); **no billboard-grass fallback**. The billboard
+  `FoliageRenderer` is flowers-only. (Re-open only if the G5 read shows far chunks
+  are unexpectedly expensive.)
 - **Blade colour source** — pure procedural per-blade tint, or a root→tip gradient
   ramp? Procedural first; ramp only if the flat tint reads too uniform.
 
@@ -459,6 +467,25 @@ technique lane caught two real graphics bugs. All fixed:
   the "additive not a rewrite" repetition.
 - INFO — the ~11 ms/~8 ms billboard baseline is an in-session `--visual-test` read
   (to be re-recorded into the 3D_E-0030 CSV for reproducibility).
+
+**Loop 2 (2026-07-18)** — 2 cold reviewers, identical briefs (pointed at the
+renamed Phase-15 file). Tally: CRITICAL 0 · HIGH 0 · MEDIUM 1 · LOW 4 · INFO 3.
+The accuracy lane verified every citation exact ("high-accuracy design doc"); the
+technique lane confirmed the loop-1 topology/perf fixes held. Fixed:
+- MEDIUM — prefix-thinning distance-LOD (§5.3) silently required blade seeds stored
+  so a prefix is a *spatially-uniform* subset; §5.2 didn't state it → added the
+  **shuffled/interleaved seed-ordering** property to §5.2 (a raster prefix would
+  draw a spatial slab, not a thinned field).
+- LOW ×4 — corrected the blade triangle count "~6–10" → `2N−1` (near ≈13, far ≈5,
+  §1/§3); added the **mid LOD tier N=5→11** to the §5.1 vertex-count contract;
+  dropped `GL_EXT_mesh_shader` (Vulkan-side, not desktop GL) leaving `GL_NV_mesh_shader`
+  (§2); resolved the far-field-fallback open question (**GPU grass all the way**, no
+  billboard-grass fallback — billboard path is flowers-only; §5.6/§12/§13); nudged
+  two off-by-one terrain cites (`getHeight` 121→120, `getNormal` 148→147).
+- INFO — `chunkBladeCount·lodFraction` needs a floor/cast at implementation (impl
+  detail, not a design defect).
+
+Loop 3 (final cold confirm) is the next step before sign-off + G1.
 
 ## 15. Sources
 
