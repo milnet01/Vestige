@@ -80,21 +80,21 @@ Sources (§14 lists URLs).
 - **"LOD-billboard" is NOT real.** The `foliage.vert.glsl:5` header comment says
   "LOD crossfading", but there is **no** billboard-LOD mechanism in the shader or
   renderer — it is the star mesh at every distance plus the distance-fade above.
-  This design does **not** depend on an LOD-billboard path (correcting the
-  roadmap's wording).
+  This design does **not** depend on an LOD-billboard path (the roadmap 3D_E-0038
+  bullet has since been corrected to match).
 - **Grass render distance is hardcoded** to `100.0f` at the call site
   (`engine.cpp:1636`), *not* a setting; **`settings_apply.cpp` has zero foliage
   references** — the graphics-quality preset does not currently reach foliage.
-- **A `beginPass("Foliage")` GPU scope already exists** (`engine.cpp:1629`) — the
-  editor Performance panel already lists the Foliage pass timing (no new
-  instrumentation needed for the perf read).
+- **A `beginPass("Foliage")` GPU scope already exists** (`engine.cpp:1629`) — so
+  the named Foliage GPU timing is available to the editor Performance panel's
+  per-pass list; no new instrumentation is needed for the perf read (§6).
 - **Meadow wire-up:** grass is `typeId 0`, painted in `engine.cpp:2460-2509` with
   a `FoliageTypeConfig grassCfg` (name/scale/tint set; `texturePath` left empty),
   ~40 k instances (`GRASS_DENSITY`/`STAMP_SPACING`). `m_foliageRenderer` is an
   Engine member (`engine.h:304`, bound `engine.cpp:262`) — reachable at the
   meadow builder for the wire-up call.
 - **Texture loading to reuse:** `stbi_load` + the GL-upload tail of
-  `generateProceduralTexture` (`foliage_renderer.cpp:604-617`) — the same
+  `generateProceduralTexture` (`foliage_renderer.cpp:605-617`) — the same
   `glCreateTextures / glTextureStorage2D / glTextureSubImage2D / mipmap` sequence
   a real-file loader needs. Extract it into a shared helper (§4.1, Rule 3).
 
@@ -105,7 +105,7 @@ Sources (§14 lists URLs).
 ### 4.1 `FoliageRenderer` — honour `texturePath` with procedural fallback
 
 - **Extract** the GL-upload tail of `generateProceduralTexture`
-  (`foliage_renderer.cpp:604-617`) into a private helper
+  (`foliage_renderer.cpp:605-617`) into a private helper
   `GLuint uploadRGBA8(const uint8_t* pixels, int w, int h)` (immutable storage +
   full mip chain + LINEAR_MIPMAP_LINEAR / CLAMP_TO_EDGE, exactly as today). Both
   the procedural generator and the new file loader call it — no duplicated GL
@@ -117,13 +117,17 @@ Sources (§14 lists URLs).
   /// (fallback) and a warning is logged. Must be called after init().
   void setTypeTexture(uint32_t typeId, const std::string& path);
   ```
-  Implementation: `stbi_load(path, …, 4)` (force RGBA); on a **non-null** decode,
-  `glDeleteTextures` the existing `m_typeTextures[typeId]` (the procedural
-  default, to avoid a leak), replace it with `uploadRGBA8(...)`, then
-  `stbi_image_free(pixels)` to release the decoded **CPU** buffer; on a **null**
-  decode, **leave the procedural texture in place** and `Logger::warning`.
-  `stbi_load` returns straight (non-premultiplied) RGBA; alpha is the blade mask
-  the fragment shader already alpha-tests at 0.5 — no shader change.
+  Implementation: `stbi_load(path, …, 4)` (force RGBA); on a **null** decode,
+  **leave the current texture in place** and `Logger::warning`. On a non-null
+  decode, upload into a **temporary** handle first — `GLuint next =
+  uploadRGBA8(pixels, w, h);` — then `stbi_image_free(pixels)` to release the
+  decoded **CPU** buffer. Only if `next != 0` do we `glDeleteTextures` the old
+  `m_typeTextures[typeId]` and store `next`; if `uploadRGBA8` returns 0 (GL
+  failure), delete `next`, keep the existing texture, and warn. **The old texture
+  is never freed before its replacement is known-good**, so neither a decode nor an
+  upload failure can strand a type with no texture. `stbi_load` returns straight
+  (non-premultiplied) RGBA; alpha is the blade mask the fragment shader already
+  alpha-tests at 0.5 — no shader change.
   **Edge-case contract:** an **empty `path`** is treated as decode-failure (keep
   the existing texture, no warning — it just means "no override"); the method
   **must be called after `init()`** so a procedural default already exists to fall
@@ -148,16 +152,17 @@ foliage lever to that same sink — no parallel system, no per-frame settings re
   scene-build by `paintFoliage`, so it is not a runtime dial). Fewer metres of
   grass drawn = fewer instances = the highest-value meadow perf lever, and grass
   is the single biggest instance count in the scene.
-- **New members + setter on `FoliageRenderer`:** `float m_renderDistance = 100.0f;`
-  and `bool m_castShadows = true;` (public, alongside `windAmplitude`), plus
-  `void setQuality(FoliageQuality q);` mapping the enum to those two members. The
-  sink gains `virtual void setFoliageQuality(FoliageQuality) = 0;`, and the
-  concrete `RendererQualityApplySinkImpl` forwards it to
+- **New members + setter on `FoliageRenderer`:** `float renderDistance = 100.0f;`
+  and `bool castShadows = true;` — **public, no `m_` prefix**, matching the sibling
+  public knob `windAmplitude` (`foliage_renderer.h:83`) the engine already mutates
+  directly — plus `void setQuality(FoliageQuality q);` mapping the enum to those
+  two members. The sink gains `virtual void setFoliageQuality(FoliageQuality) = 0;`,
+  and the concrete `RendererQualityApplySinkImpl` forwards it to
   `FoliageRenderer::setQuality`. Wiring:
-  - `engine.cpp:1636` passes `m_foliageRenderer->m_renderDistance` instead of the
+  - `engine.cpp:1636` passes `m_foliageRenderer->renderDistance` instead of the
     literal `100.0f`.
   - **Shadow gate (committed contract):** `FoliageRenderer::renderShadow`
-    early-returns when `!m_castShadows` — the "Low = no grass shadows" tier is a
+    early-returns when `!castShadows` — the "Low = no grass shadows" tier is a
     one-line guard at the top of that method, so the decision stays in the
     renderer and the `Renderer::setFoliageShadowCaster` caller is untouched.
 - **Tier table (default High):**
@@ -169,20 +174,26 @@ foliage lever to that same sink — no parallel system, no per-frame settings re
   | **Low** | 45 m | no | real (still the real texture — the cost saved is draw distance + shadow pass, not texture fetch) |
 
   `Custom` leaves foliage untouched (early-return, exactly as A5's terrain row).
-- **Scoped enum** `enum class FoliageQuality { Low, Medium, High };` on
-  `FoliageRenderer` (mirrors `TerrainGroundQuality`); the sink maps preset → this.
-  No wire contract with a shader (unlike A5's `u_groundQuality`) — the enum only
-  drives CPU-side distance/shadow members, so its integer values are free to
-  change.
+- **Free-standing scoped enum** `enum class FoliageQuality { Low, Medium, High };`
+  in namespace `Vestige`, **defined in `foliage_renderer.h`** (not nested in the
+  class) and **forward-declared** `enum class FoliageQuality;` in
+  `settings_apply.h` — exactly how A5 wired `TerrainGroundQuality`
+  (`settings_apply.h:42` forward-decl, `:122` bare-name signature), so the sink
+  header needs no `#include "foliage_renderer.h"`. No wire contract with a shader
+  (unlike A5's `u_groundQuality`) — the enum only drives CPU-side distance/shadow
+  members, so its integer values are free to change.
 
 ### 4.3 Variation (meadow tuning — no engine code)
 
-Uses **existing** `FoliageTypeConfig` fields already applied per-instance
-(`i_scale`, `i_rotation`, `i_colorTint`); this is a tuning change in the meadow
-builder (`engine.cpp` grass block), not new rendering code:
+Tunes **existing** `FoliageTypeConfig` fields (`minScale` / `maxScale` /
+`tintVariation`), which `paintFoliage` bakes into the per-instance vertex
+attributes `i_scale` / `i_rotation` / `i_colorTint` (`foliage.vert.glsl:14-16`) at
+paint time; this is a tuning change in the meadow builder (`engine.cpp` grass
+block), not new rendering code:
 
 - **Height:** widen `grassCfg.minScale/maxScale` (taller, more varied silhouette).
-  The star mesh is 0.4 m tall; today's 0.7–1.5 scale → 0.28–0.6 m. Raise the top
+  The star mesh is **0.4 m** tall (`foliage_renderer.cpp:356`); the meadow's
+  current **0.7–1.5** scale (`engine.cpp:2475-2476`) → 0.28–0.6 m. Raise the top
   of the range for occasional taller blades. Optionally seed a light **second
   pass of the existing tall-grass type (typeId 1)** for silhouette variety — both
   types get a real texture via §4.1. (Second pass is optional polish; core is one
@@ -219,10 +230,12 @@ this phase, so no Formula-Workbench parity mirror (Rule 6/7 n/a here).
   at Medium/Low."
 - **Frame target:** the full meadow (terrain + **grass** + props + water + CSM)
   holds **≥ 60 FPS at 1080p on the RX 6600** (16.6 ms frame).
-- **Per-pass target:** the **Foliage** pass costs **≤ 2.5 ms** of that frame at
-  High (its share of the budget). This is an **initial target**, not a derived
-  bound; B3 records the **current procedural-grass Foliage-pass cost as the
-  baseline** at first measurement and refines against it.
+- **Per-pass target:** the **hard gate for B3 is ≥ 60 FPS** on the full meadow at
+  High; the **Foliage** pass **≤ 2.5 ms** is an **advisory watch-line** (its ~1/7
+  share of the 16.6 ms frame), *not* a blocking bound. B3 records the current
+  procedural-grass Foliage-pass cost as the baseline at first measurement; a
+  reading above 2.5 ms that **still holds ≥ 60 FPS** updates the watch-line rather
+  than failing the slice — only dropping below 60 FPS blocks B3.
 - **How it's measured:** the existing editor **Performance panel** GPU tab lists
   the named **`beginPass("Foliage")`** scope (`engine.cpp:1629`) and live FPS.
   Read on the 3D_E-0027 meadow against ≤ 2.5 ms / ≥ 60 FPS at High — the same
@@ -257,8 +270,11 @@ this phase, so no Formula-Workbench parity mirror (Rule 6/7 n/a here).
   pattern (`tests/test_settings.cpp`): each preset maps to the expected
   `FoliageQuality` (Low→Low with shadows off + 45 m; Medium→Medium; High/Ultra→
   High; Custom→untouched). Pure preset→knob mapping, no GL.
-- **Objective render check.** Foliage shader still links and a meadow frame
-  renders **GL-error-free** (`glGetError`) with the real texture bound.
+- **Objective render check (automated).** The foliage shader links and a meadow
+  frame renders **GL-error-free** (`glGetError` returns `GL_NO_ERROR`) with the
+  real texture bound — an objective assertion during the `--visual-test` run,
+  distinct from the maintainer's visual inspection below. This is the automated GL
+  gate the file-load bullet above refers to.
 - **Visual (`--visual-test`) — maintainer inspection.** `open_meadow` /
   `pond_shore` viewpoints: grass reads as real blades (not a flat procedural
   cone), varied in height/colour, no aspect squish (portrait texture — §4.1 / §8),
@@ -301,15 +317,20 @@ this phase, so no Formula-Workbench parity mirror (Rule 6/7 n/a here).
 2. **B2 — Real asset + meadow wire-up + variation.** Commit the portrait CC0
    grass texture + `_local/` override resolve; the meadow calls
    `setTypeTexture(0, path)` (and typeId 1 if the second pass is kept); widen
-   scale/tint variation. *Verify:* `--visual-test` — meadow reads as real varied
-   grass, no aspect squish; ASSET_LICENSES + THIRD_PARTY_NOTICES rows added.
-3. **B3 — Quality tier + perf.** Add `FoliageQuality` enum + render-distance /
-   shadow-cast members; wire into `RendererQualitySink` (High/Med/Low); pass
-   `m_renderDistance` at `engine.cpp:1636`; gate the shadow pass on
-   `m_castShadows`. *Verify:* preset→tier unit test green; maintainer reads the
-   Performance panel **Foliage** GPU scope on the meadow — ≤ 2.5 ms and ≥ 60 FPS
-   at High on RX 6600 (automated gate waits on a committed RX 6600 baseline —
-   §6); CHANGELOG row added.
+   scale/tint variation. *Verify (subjective — an asset swap has no automated
+   gate; the automated coverage is B1's unit test + B3's tier test):*
+   `--visual-test` — meadow reads as real varied grass, no aspect squish;
+   ASSET_LICENSES + THIRD_PARTY_NOTICES rows added.
+3. **B3 — Quality tier + perf.** Add the free-standing `FoliageQuality` enum +
+   `renderDistance` / `castShadows` members; wire into `RendererQualitySink`
+   (High/Med/Low); pass `renderDistance` at `engine.cpp:1636`; gate the shadow
+   pass on `castShadows`. *Verify — automated close criteria:* the preset→tier unit
+   test is green **and** the meadow frame renders GL-error-free (§7). *Plus a
+   manual perf read* (maintainer, Performance panel **Foliage** GPU scope + FPS on
+   the RX 6600 meadow): **≥ 60 FPS at High is the gate**; ≤ 2.5 ms Foliage is the
+   advisory watch-line (§6). The perf read is manual because the automated gate
+   still needs a committed RX 6600 baseline (§6) — automating it is a tracked
+   follow-up, not a B3 blocker. CHANGELOG row added.
 
 Each slice commits locally; the phase pushes when B3 lands green (§ push cadence —
 public repo, batch push).
@@ -385,9 +406,36 @@ completeness lane). Tally: CRITICAL 0 · HIGH 1 · MEDIUM 5 · LOW 7 · INFO 2
   per-fragment-cost line; leaned the "negligible VRAM" claim on the ≤2.5 ms gate;
   amended the ROADMAP 3D_E-0038 bullet to drop the inaccurate "LOD-billboard".
 - INFO (surfaced, not fixed) — the CC0 OpenGameArt asset is B2-scoped (no defect);
-  `foliage_renderer.h:90`'s "12 vertices" doc-comment contradicts the impl's 18
-  (`createStarMesh`) — a **code**-comment fix for the owner, out of scope for a
-  docs review.
+  `foliage_renderer.h:89`'s "12 vertices" doc-comment contradicts the impl's 18
+  (`createStarMesh`, `foliage_renderer.cpp:353`) — a **code**-comment fix for the
+  owner, out of scope for a docs review.
+
+**Loop 2 (2026-07-18)** — 2 cold reviewers (same lanes, briefed identically, not
+told what loop 1 changed). Tally: CRITICAL 0 · HIGH 2 · MEDIUM 3 · LOW 6 · INFO 4
+(verified 11 / unverified 0). Accuracy lane found only LOW/INFO (doc verified
+exact against source); the substantive set came from the consistency lane. All
+fixed:
+- HIGH — `FoliageQuality` was described as nested "on `FoliageRenderer`" while the
+  sink used the bare name (unwritable without an include); made it a free-standing
+  scoped enum forward-declared in `settings_apply.h`, mirroring A5's
+  `TerrainGroundQuality` exactly (§4.2).
+- HIGH — `setTypeTexture` deleted the old texture *before* the new upload was
+  known-good → an upload (GL) failure stranded the type with no texture; reordered
+  to upload-into-temp, free-old-only-on-success, and added the upload-failure
+  branch (§4.1).
+- MEDIUM — ≤2.5 ms was both "target, not a bound" and a B3 pass/fail → named
+  **≥60 FPS the hard gate, ≤2.5 ms an advisory watch-line** (§6 + §9 B3).
+- MEDIUM — B3 had no objective close criterion (only a manual hardware read) →
+  stated the automated close = tier unit test + GL-error-free frame; the perf read
+  is manual (baseline pending), automation a tracked follow-up (§9 B3).
+- MEDIUM — uncited numeric constants (0.4 m mesh, 0.7–1.5 scale, Rule 13) → cited
+  `foliage_renderer.cpp:356` + `engine.cpp:2475-2476` (§4.3).
+- LOW ×6 — `m_`-prefixed public members → unprefixed to match `windAmplitude`;
+  relabelled `i_scale`/`i_rotation`/`i_colorTint` as per-instance attributes (not
+  `FoliageTypeConfig` fields); clarified the GL-error check is an objective
+  `--visual-test` assertion; softened the unverified Performance-panel-UI claim;
+  tightened the "correcting the roadmap" tense (already corrected); B2 verify
+  flagged subjective; trivial line-cite nudges (`:89`, `605-617`).
 
 ---
 
