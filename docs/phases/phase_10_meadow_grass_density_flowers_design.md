@@ -93,12 +93,12 @@ Sources: §14.
   noise/mask dirt-scatter today.
 - **Grass card is 0.15 m × 0.4 m, 3 crossed quads (18 verts).** `createStarMesh`
   `halfWidth = 0.075f`, `height = 0.4f` (`foliage_renderer.cpp:360-361`).
-  Per-instance `i_scale` 0.6–1.8 (`engine.cpp` grassCfg ~2478) → on-screen width
+  Per-instance `i_scale` 0.6–1.8 (`engine.cpp` grassCfg ~2483) → on-screen width
   ~0.09–0.27 m.
 - **~40 k grass instances, sparse.** Grass block (`engine.cpp` ~2455-2520):
   `STAMP_SPACING 5`, `STAMP_RADIUS 3.5`, `GRASS_DENSITY 0.53`, `GRASS_FALLOFF
   0.30`. `paintFoliage` fills `π·r²·density` uniform points per stamp
-  (`foliage_manager.cpp:35-38`). Documented tested range **~10 k–120 k** (raise
+  (`foliage_manager.cpp:~33-34`). Documented tested range **~10 k–120 k** (raise
   `GRASS_DENSITY` toward ~2.0 for the ceiling) — the deliberate 3D_E-0027 perf
   knob.
 - **Foliage is instanced, alpha-tested + alpha-blended, two-sided.**
@@ -166,8 +166,9 @@ new `AutoTextureConfig` fields so existing scenes are byte-unchanged:
 
 Three changes, all tuning-scale (no new render tech):
 
-1. **Wider cards.** Raise `createStarMesh` `halfWidth` from `0.075f` to **~0.13f**
-   (card ~0.26 m wide) so each clump covers more ground — this lets you reach
+1. **Wider cards.** Raise `createStarMesh` `halfWidth` from `0.075f` to the frozen
+   literal **`0.13f`** (card **0.26 m** wide — the exact value the §7 width test
+   pins) so each clump covers more ground — this lets you reach
    continuous coverage at a **lower chosen density** (so fewer instances, less
    overdraw) than skinny cards would need; it does not by itself lower the count
    (that is set by `GRASS_DENSITY`, item 2). Keep `height 0.4f` (per-instance scale
@@ -195,7 +196,10 @@ Three changes, all tuning-scale (no new render tech):
   reuse type **2** for one species and, if a second/third species is wanted, paint
   types **1 and 3** with flower textures too (three unused slots available — types
   1 (tall grass) and 3 (fern) are not painted in the meadow). Each is a portrait
-  flower card (stem + bloom, alpha).
+  flower card (stem + bloom, alpha). **Aspect note:** flower slots inherit the
+  global star-mesh card, so after the §4.2 widening they get the 0.26 m-wide card;
+  that suits flower clumps, but if a portrait bloom squishes, apply the per-type
+  width gate (§12) to the flower slots only.
 - **Cluster placement:** generate **cluster centres** with a seeded scatter (reuse
   `scatterProps` with a coarse `cellSize`, or a small hand-authored/seeded list),
   then `paintFoliage(flowerType, center, clusterRadius≈1.5–2.5 m, clusterDensity,
@@ -279,11 +283,15 @@ No "CPU now, move later." No fitted formula → no Formula-Workbench parity mirr
   `float grassDirtPatchWeight(float noise01, float threshold, float amount)`
   (returns the grass→dirt fraction) and unit-test it: below threshold → 0; at
   noise 1 → `amount`; monotonic between; `amount 0` → 0 (the opt-out). Assert the
-  post-move weights still sum to 1 after normalize on a hand case. No GL.
+  move **conserves grass+dirt mass** on a hand case — `grass' + dirt' == grass +
+  dirt` for the two touched channels, **before** normalize (the real invariant;
+  a post-normalize sum-to-1 check is a tautology — normalize guarantees it for any
+  input). No GL.
 - **Grass card width (unit).** Expose the card half-width as a named constant
   (e.g. `FoliageRenderer::CARD_HALF_WIDTH`) and assert `2·CARD_HALF_WIDTH` equals
-  the intended literal **≈ 0.26 m** (not the old 0.15 m). Pinning to the hardcoded
-  literal — not to the constant itself — makes it a real revert-guard: reverting
+  the intended literal **0.26 m** (`EXPECT_NEAR(2·CARD_HALF_WIDTH, 0.26f, 1e-4f)`;
+  not the old 0.15 m). Pinning to the hardcoded literal — not to the constant
+  itself — makes it a real revert-guard: reverting
   `halfWidth` to `0.075f` fails the test. The corner math (`right =
   halfWidth·(cos,0,sin)`, `bl = −right`, `br = +right`) is computed CPU-side in
   `createStarMesh`, so no GL is needed. (No "visual-only" fallback — this stays an
@@ -334,14 +342,17 @@ No "CPU now, move later." No fitted formula → no Formula-Workbench parity mirr
    `getTotalFoliageCount()` ≤ ~120 k. *Verify:* `--visual-test` — continuous field,
    no lawn-tuft look; instance count logged within budget; GL-error-free.
 3. **C3 — Clustered wildflowers.** Commit CC0 flower card(s); paint billboard
-   flower type(s) in seeded species clusters via `paintFoliage`; retune/trim the
-   `.glb` flower spread. *Verify:* `--visual-test` — flower clusters read through
+   flower type(s) in seeded species clusters via `paintFoliage`; retune **or drop**
+   the `.glb` flower spread — decide by visual read (§4.3/§12). *Verify:*
+   `--visual-test` — flower clusters read through
    the grass like the references; ASSET_LICENSES + THIRD_PARTY rows; GL-error-free.
 4. **C4 — Perf measure + tier.** Add the dense ground-level worst-case vantage;
    Release Performance-panel Foliage read on the RX 6600 at High; confirm ≥ 60 FPS.
    Add a B3-tier **density** step-down **only if** the measurement requires it
    (logged per Rule 5 if so). *Verify:* ≥ 60 FPS at High on RX 6600 at the dense
-   vantage; CHANGELOG row.
+   vantage **and the measured worst-case Foliage-pass ms is recorded** as the
+   baseline (§6 — the record is mandatory so the gate can't close on an eyeballed
+   number); CHANGELOG row (carrying that baseline ms so it's auditable next phase).
 
 Each slice commits locally; the phase pushes when C4 lands green (public repo,
 batch push).
@@ -424,6 +435,26 @@ verified) — only LOW line-number drift. Fixed:
   CI is GPU-less; the mandatory baseline-ms record keeps it honest); `paintFoliage`
   has an optional 7th `DensityMap*` arg the doc's 6-arg form omits (meadow uses the
   6-arg form — harmless).
+
+**Loop 2 (2026-07-18)** — 2 cold reviewers, identical briefs. Tally: CRITICAL 0 ·
+HIGH 0 · MEDIUM 2 · LOW 6 · INFO 3 (verified all / unverified 0). Both lanes
+confirmed loop-1's HIGH (tier order) and the render-scale/foliage-tier separation
+resolved, and re-verified every constant/citation exact. Fixed:
+- MEDIUM — C4's acceptance list let the perf gate close on an eyeballed FPS without
+  recording the baseline ms → added "measured worst-case Foliage-pass ms recorded"
+  to C4's Verify (§9) + carried it into the CHANGELOG row for auditability.
+- MEDIUM — the dirt-patch test asserted "weights sum to 1 after normalize", a
+  tautology (normalize guarantees it) → changed to assert **pre-normalize grass+dirt
+  mass conservation**, the real invariant (§7).
+- LOW ×6 — froze the card half-width to the exact literal `0.13f`/0.26 m with an
+  `EXPECT_NEAR(…,1e-4f)` epsilon (§4.2/§7); aligned §9 C3 ".glb flowers" wording
+  with the §4.3/§12 keep-or-drop-by-visual-read decision; added an aspect note that
+  flower slots inherit the widened card and can take the per-type width gate; and
+  two accuracy-lane line-drift fixes (`grassCfg ~2478`→`~2483`,
+  `foliage_manager.cpp:35-38`→`~33-34`).
+- INFO — the fbm→0..1 remap (upstream of the tested pure helper) is uncovered
+  (trivial); `.glb` "largest draw-call load" is a paraphrase of an engine comment,
+  not independently profiled (doesn't affect the design).
 
 ---
 
