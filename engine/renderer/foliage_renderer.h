@@ -21,6 +21,20 @@ namespace Vestige
 
 class CascadedShadowMap;
 
+/// @brief Pure decision for `setTypeTexture` (3D_E-0038 B1, design §4.1/§7):
+///        given whether the path was empty, whether `stbi_load` returned null,
+///        and the GL handle `uploadRGBA8` produced (0 on GL failure), decide
+///        whether to ADOPT the freshly-loaded texture. Otherwise the caller keeps
+///        the existing (procedural) texture. Factored out so the fallback +
+///        upload-failure ordering contract is unit-testable without a GL context.
+///        `uploadedHandle` is a `GLuint` value, taken as `unsigned` here so the
+///        predicate carries no GL dependency.
+inline bool foliageAdoptLoadedTexture(bool pathEmpty, bool decodeNull,
+                                      unsigned uploadedHandle)
+{
+    return !pathEmpty && !decodeNull && uploadedHandle != 0u;
+}
+
 /// @brief Renders foliage instances using instanced 3-quad star meshes with wind animation.
 class FoliageRenderer
 {
@@ -73,6 +87,14 @@ public:
                       const glm::vec3& lightRadiance,
                       const glm::vec3& lightDir);
 
+    /// @brief Loads a real alpha texture for a foliage type from disk, replacing
+    ///        the procedural default. On an empty path (= "no override") or a
+    ///        decode/GL-upload failure, the current texture is kept (fallback) and
+    ///        — for a non-empty path that fails — a warning is logged. Must be
+    ///        called after `init()` so a procedural default already exists to keep.
+    ///        (3D_E-0038 B1, design §4.1.)
+    void setTypeTexture(uint32_t typeId, const std::string& path);
+
     /// @brief Maximum distance for grass shadow casting (cascade 0 range).
     float shadowMaxDistance = 30.0f;
 
@@ -94,6 +116,12 @@ private:
 
     /// @brief Generates a single procedural texture for a foliage type.
     GLuint generateProceduralTexture(uint32_t typeId);
+
+    /// @brief Uploads a straight-RGBA8 pixel buffer as an immutable-storage 2D
+    ///        texture with a full mip chain (LINEAR_MIPMAP_LINEAR / CLAMP_TO_EDGE).
+    ///        Shared by the procedural generator and `setTypeTexture` so the GL
+    ///        setup lives in one place (Rule 3). Returns 0 on GL failure.
+    GLuint uploadRGBA8(const uint8_t* pixels, int w, int h);
 
     /// @brief Uploads foliage instances to the GPU instance buffer.
     void uploadInstances(const std::vector<FoliageInstance>& instances);

@@ -10,7 +10,10 @@
 #include "renderer/scoped_cull_face.h"
 #include "core/logger.h"
 
+#include <stb_image.h>
+
 #include <cmath>
+#include <string>
 
 namespace Vestige
 {
@@ -601,13 +604,21 @@ GLuint FoliageRenderer::generateProceduralTexture(uint32_t typeId)
         }
     }
 
+    return uploadRGBA8(pixels.data(), width, height);
+}
+
+GLuint FoliageRenderer::uploadRGBA8(const uint8_t* pixels, int w, int h)
+{
+    // Shared GL upload for both the procedural generator and setTypeTexture
+    // (Rule 3): immutable storage + full mip chain, LINEAR_MIPMAP_LINEAR /
+    // CLAMP_TO_EDGE — the star-mesh quads map one texture per face.
     GLuint texture = 0;
     glCreateTextures(GL_TEXTURE_2D, 1, &texture);
     GLsizei mipLevels = 1 + static_cast<GLsizei>(
-        std::floor(std::log2(std::max(width, height))));
-    glTextureStorage2D(texture, mipLevels, GL_RGBA8, width, height);
-    glTextureSubImage2D(texture, 0, 0, 0, width, height,
-                        GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+        std::floor(std::log2(std::max(w, h))));
+    glTextureStorage2D(texture, mipLevels, GL_RGBA8, w, h);
+    glTextureSubImage2D(texture, 0, 0, 0, w, h,
+                        GL_RGBA, GL_UNSIGNED_BYTE, pixels);
     glTextureParameteri(texture, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
     glTextureParameteri(texture, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTextureParameteri(texture, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -615,6 +626,63 @@ GLuint FoliageRenderer::generateProceduralTexture(uint32_t typeId)
     glGenerateTextureMipmap(texture);
 
     return texture;
+}
+
+void FoliageRenderer::setTypeTexture(uint32_t typeId, const std::string& path)
+{
+    // 3D_E-0038 B1 (design §4.1): honour a real blade texture through the
+    // FoliageTypeConfig.texturePath slot, with a procedural fallback. Must run
+    // after init() so a procedural default already exists to keep on failure.
+    if (!m_initialized)
+    {
+        Logger::warning("FoliageRenderer::setTypeTexture called before init(); ignored");
+        return;
+    }
+    if (path.empty())
+    {
+        return;  // empty path = "no override": silently keep the current texture
+    }
+
+    // Engine texture convention (matches terrain_material_set): row 0 is the image
+    // top, so flip on load to map image-top -> quad-top (texCoord v = 1).
+    stbi_set_flip_vertically_on_load_thread(true);
+    int w = 0;
+    int h = 0;
+    int channels = 0;
+    unsigned char* data = stbi_load(path.c_str(), &w, &h, &channels, 4);  // force RGBA
+    const bool decodeNull = (data == nullptr);
+
+    // Upload into a TEMPORARY handle first — the old texture is never freed until
+    // the replacement is known-good, so neither a decode nor a GL-upload failure
+    // can strand this type with no texture (design §4.1).
+    GLuint uploaded = 0;
+    if (!decodeNull)
+    {
+        uploaded = uploadRGBA8(data, w, h);
+        stbi_image_free(data);
+    }
+
+    if (!foliageAdoptLoadedTexture(/*pathEmpty=*/false, decodeNull, uploaded))
+    {
+        if (uploaded != 0)
+        {
+            glDeleteTextures(1, &uploaded);
+        }
+        const char* why = decodeNull
+            ? (stbi_failure_reason() ? stbi_failure_reason() : "decode failed")
+            : "GL upload failed";
+        Logger::warning("FoliageRenderer::setTypeTexture: could not load '" + path
+                        + "' (" + why + "); keeping current texture");
+        return;
+    }
+
+    // Adopt: free the old handle (the procedural default) before replacing it.
+    auto it = m_typeTextures.find(typeId);
+    if (it != m_typeTextures.end() && it->second != 0)
+    {
+        glDeleteTextures(1, &it->second);
+    }
+    m_typeTextures[typeId] = uploaded;
 }
 
 void FoliageRenderer::uploadInstances(const std::vector<FoliageInstance>& instances)
