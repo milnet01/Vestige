@@ -436,11 +436,12 @@ bool Engine::initialize(const EngineConfig& config)
                 std::make_unique<RendererAccessibilityApplySinkImpl>(*m_renderer);
             targets.rendererAccess = m_rendererAccessSink.get();
 
-            // Tier-1 quality preset → AA/SSAO/bloom/heavy-post toggles
-            // (renderScale is reconciled into the pending DisplaySettings,
-            // which the play-mode resize reads per frame).
+            // Tier-1 quality preset → AA/SSAO/bloom/heavy-post toggles + the PBR
+            // terrain ground-texture tier (A5, on the TerrainRenderer). renderScale
+            // is reconciled into the pending DisplaySettings, which the play-mode
+            // resize reads per frame.
             m_rendererQualitySink =
-                std::make_unique<RendererQualityApplySinkImpl>(*m_renderer);
+                std::make_unique<RendererQualityApplySinkImpl>(*m_renderer, *m_terrainRenderer);
             targets.rendererQuality = m_rendererQualitySink.get();
         }
         if (UISystem* ui = m_systemRegistry.getSystem<UISystem>())

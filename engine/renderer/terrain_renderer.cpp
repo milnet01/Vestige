@@ -169,6 +169,11 @@ void TerrainRenderer::render(const Terrain& terrain,
         // metres) over which the far-scaled albedo fades in. Art-directed — no reference
         // dataset. TODO: revisit via Formula Workbench if a look-target is captured.
         m_terrainShader.setVec2("u_distanceTiling", glm::vec2(25.0f, 120.0f));
+
+        // Ground quality tier (3D_E-0031 A5): 0=Low, 1=Medium, 2=High. Gates the
+        // distance-tiling far sample (High), detail normals + height blend + triplanar
+        // textures (Medium/High) in the shader (design §6 quality tiers).
+        m_terrainShader.setInt("u_groundQuality", static_cast<int>(m_groundQuality));
     }
 
     // Triplanar mapping uniforms (conditional on steep slopes)

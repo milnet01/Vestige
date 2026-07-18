@@ -23,6 +23,29 @@ namespace Vestige
 
 class CascadedShadowMap;
 
+/// @brief Ground-texture quality tier for the PBR terrain path (3D_E-0031 A5).
+///
+/// Driven by the global graphics-quality `Setting` (design §6), mapped from
+/// `QualityPreset` in `applyQualityPreset`. Each tier drops shader features:
+///  - **High**   — all layers, distance-tiling break-up, detail normals,
+///                 depth-aware height blend, triplanar textures on slopes.
+///  - **Medium** — drops the distance-tiling far albedo sample; keeps detail
+///                 normals + height blend + triplanar.
+///  - **Low**    — albedo + AO only (no detail-normal taps), linear weight
+///                 blend, flat colour on slopes (no triplanar taps). Roughly
+///                 the pre-texturing flat-colour cost.
+///
+/// The integer values are the wire contract with `terrain.frag.glsl`'s
+/// `u_groundQuality` uniform (0 = Low, 1 = Medium, 2 = High) — the shader
+/// gates on `>= 1` (detail) and `>= 2` (distance-tiling), so the ordering
+/// must not change.
+enum class TerrainGroundQuality
+{
+    Low    = 0,
+    Medium = 1,
+    High   = 2,
+};
+
 /// @brief Configuration for a single terrain texture layer.
 struct TerrainTextureLayer
 {
@@ -93,6 +116,10 @@ public:
     /// @brief True when a valid ground-material set is bound (textured path active).
     bool hasGroundMaterials() const { return m_groundMaterials.isValid(); }
 
+    /// @brief Sets the ground-texture quality tier (3D_E-0031 A5). Fed by the
+    /// graphics-quality `Setting` through `applyQualityPreset`. Default High.
+    void setGroundQuality(TerrainGroundQuality quality) { m_groundQuality = quality; }
+
     /// @brief Gets the number of draw calls from the last frame.
     int getLastDrawCallCount() const { return m_lastDrawCallCount; }
 
@@ -122,6 +149,10 @@ private:
 
     // PBR ground layers (grass/rock/dirt/sand). Invalid → flat-colour fallback path.
     TerrainMaterialSet m_groundMaterials;
+
+    // Ground-texture quality tier (A5). Default High; lowered by the graphics
+    // quality preset. Pushed to the shader as u_groundQuality each frame.
+    TerrainGroundQuality m_groundQuality = TerrainGroundQuality::High;
 
     // Per-frame staging
     std::vector<TerrainDrawNode> m_drawNodes;

@@ -22,6 +22,38 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-07-18 Added — Terrain ground quality tiers (Meadow realism A5, 3D_E-0031)
+
+Slice A5 — the final slice of the PBR ground-texture overhaul. Wires the ground
+shader into the existing graphics-quality setting so weak GPUs can drop the
+heavier ground features, and closes out the phase's assets + bookkeeping.
+
+- **Quality tiers on the graphics `Setting`.** The terrain ground path now reads
+  a `u_groundQuality` uniform (0 = Low, 1 = Medium, 2 = High) driven by the
+  existing `QualityPreset` — no new setting, no `FormulaQualityManager` coupling
+  (design §6). **High** keeps everything (detail normals, depth-aware height
+  blend, distance-tiling break-up, triplanar textures on slopes); **Medium**
+  drops the distance-tiling second albedo sample; **Low** samples albedo + AO
+  only (skips the four detail-normal taps), uses a plain linear weight blend, and
+  fades to flat colour on slopes (no triplanar taps) — roughly the pre-texturing
+  cost. Default **High**; `Low`/`Medium` presets step it down for weaker
+  hardware. Ultra maps to High (identical in wave 1).
+- **Plumbing.** `applyQualityPreset` maps the preset onto a new
+  `RendererQualitySink::setTerrainGroundQuality`, forwarded to
+  `TerrainRenderer::setGroundQuality` — so the tier flows through the same
+  boot + live-apply path as the AA/SSAO/bloom/heavy-post toggles. Pinned by the
+  extended `SettingsApply.QualityPreset*` tests (Low→Low, Medium→Medium,
+  High/Ultra→High, Custom→no-op).
+- **Assets & licensing.** The four CC0 ambientCG ground layers (grass / rock /
+  dirt / sand, 512², ≈4.5 MB) are committed under `assets/textures/terrain/`,
+  with rows in `ASSET_LICENSES.md` and a courtesy credit in
+  `THIRD_PARTY_NOTICES.md`. Higher-res variants drop in via the git-ignored
+  `terrain_local/` override.
+- Verified: full suite green (3850 tests); shader compiles + links GL-error-free;
+  `--visual-test` meadow renders correctly at High and Low. Perf gate (terrain
+  pass ≤ 3.0 ms / ≥ 60 FPS at High on the RX 6600) is a manual Performance-panel
+  read per design §6 — the automated CSV path waits on 3D_E-0027 slice S6.
+
 ### 2026-07-18 Added — Terrain distance-tiling break-up (Meadow realism A4, 3D_E-0031)
 
 Slice A4 of the PBR ground-texture overhaul — hides the tile repeat across the

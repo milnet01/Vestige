@@ -39,6 +39,8 @@ namespace Vestige
 
 struct DisplaySettings;          // core/settings.h
 enum class QualityPreset;        // core/settings.h
+enum class TerrainGroundQuality; // renderer/terrain_renderer.h
+class TerrainRenderer;           // renderer/terrain_renderer.h
 struct AudioSettings;            // core/settings.h
 struct AccessibilitySettings;    // core/settings.h
 struct LocalizationSettings;     // core/settings.h
@@ -115,22 +117,28 @@ public:
     virtual void setSsaoEnabled(bool enabled) = 0;
     virtual void setBloomEnabled(bool enabled) = 0;
     virtual void setHeavyPostEnabled(bool enabled) = 0;
+    /// PBR terrain ground-texture tier (3D_E-0031 A5). Forwarded to the
+    /// `TerrainRenderer`, not the `Renderer` — see `RendererQualityApplySinkImpl`.
+    virtual void setTerrainGroundQuality(TerrainGroundQuality quality) = 0;
 };
 
-/// @brief Production sink wrapping a live `Renderer`. Thin forwarder to
-///        the four existing setters (`setAntiAliasMode` / `setSsaoEnabled`
-///        / `setBloomEnabled` / `setHeavyPostEnabled`).
+/// @brief Production sink wrapping the live `Renderer` + `TerrainRenderer`. Thin
+///        forwarder to the four renderer setters (`setAntiAliasMode` /
+///        `setSsaoEnabled` / `setBloomEnabled` / `setHeavyPostEnabled`) plus the
+///        terrain ground-quality tier (A5), which lives on the `TerrainRenderer`.
 class RendererQualityApplySinkImpl final : public RendererQualitySink
 {
 public:
-    explicit RendererQualityApplySinkImpl(Renderer& renderer);
+    RendererQualityApplySinkImpl(Renderer& renderer, TerrainRenderer& terrain);
     void setAntiAliasMode(AntiAliasMode mode) override;
     void setSsaoEnabled(bool enabled) override;
     void setBloomEnabled(bool enabled) override;
     void setHeavyPostEnabled(bool enabled) override;
+    void setTerrainGroundQuality(TerrainGroundQuality quality) override;
 
 private:
     Renderer& m_renderer;
+    TerrainRenderer& m_terrain;
 };
 
 /// @brief Applies a quality preset (design §4.1). Writes the preset's

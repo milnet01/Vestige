@@ -18,6 +18,7 @@
 #include "accessibility/photosensitive_safety.h"
 #include "editor/panels/settings_editor_panel.h"
 #include "input/input_bindings.h"
+#include "renderer/terrain_renderer.h"   // TerrainGroundQuality (Tier-1 A5)
 #include "utils/atomic_write.h"
 #include "utils/config_path.h"
 
@@ -1196,12 +1197,14 @@ public:
     bool          ssao      = false;
     bool          bloom     = false;
     bool          heavyPost = false;
+    TerrainGroundQuality ground = TerrainGroundQuality::High;  // sentinel
     int           calls     = 0;
 
     void setAntiAliasMode(AntiAliasMode m) override { aa = m; ++calls; }
     void setSsaoEnabled(bool e) override            { ssao = e; ++calls; }
     void setBloomEnabled(bool e) override           { bloom = e; ++calls; }
     void setHeavyPostEnabled(bool e) override       { heavyPost = e; ++calls; }
+    void setTerrainGroundQuality(TerrainGroundQuality q) override { ground = q; ++calls; }
 };
 
 class RecordingSubtitleSink final : public SubtitleApplySink
@@ -1357,7 +1360,8 @@ TEST(SettingsApply, QualityPresetLowUsesFxaaHalfScaleAndDropsHeavyPost)
     EXPECT_FALSE(sink.ssao);
     EXPECT_FALSE(sink.bloom);
     EXPECT_FALSE(sink.heavyPost);
-    EXPECT_EQ(sink.calls, 4);
+    EXPECT_EQ(sink.ground, TerrainGroundQuality::Low);   // A5: cheapest terrain path
+    EXPECT_EQ(sink.calls, 5);                            // 4 toggles + terrain tier
 }
 
 TEST(SettingsApply, QualityPresetMediumKeepsSsaoBloomButStillFxaaAndNoHeavyPost)
@@ -1371,6 +1375,7 @@ TEST(SettingsApply, QualityPresetMediumKeepsSsaoBloomButStillFxaaAndNoHeavyPost)
     EXPECT_TRUE(sink.ssao);
     EXPECT_TRUE(sink.bloom);
     EXPECT_FALSE(sink.heavyPost);
+    EXPECT_EQ(sink.ground, TerrainGroundQuality::Medium);  // A5: drops distance-tiling
 }
 
 TEST(SettingsApply, QualityPresetHighAndUltraRenderIdenticallyInWave1)
@@ -1386,6 +1391,8 @@ TEST(SettingsApply, QualityPresetHighAndUltraRenderIdenticallyInWave1)
         EXPECT_TRUE(sink.ssao);
         EXPECT_TRUE(sink.bloom);
         EXPECT_TRUE(sink.heavyPost);
+        EXPECT_EQ(sink.ground, TerrainGroundQuality::High)  // A5: all terrain features
+            << "preset " << qualityPresetLabel(p);
     }
 }
 

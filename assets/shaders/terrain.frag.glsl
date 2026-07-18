@@ -42,6 +42,12 @@ uniform sampler2DArray u_materialArray;  // unit 8, R=AO G=Roughness B=Height
 uniform float u_layerTiling[4];          // world→UV scale per layer (grass/rock/dirt/sand)
 uniform vec2  u_distanceTiling;          // (nearDist, farDist) world-metre smoothstep range (A4)
 
+// Ground quality tier (3D_E-0031 A5) — driven by the graphics-quality Setting
+// (design §6). 2 = High (all features), 1 = Medium (drop the distance-tiling far
+// sample), 0 = Low (albedo + AO only: no detail normal, linear weight blend, and
+// flat-colour on slopes). Read only inside the u_useGroundTextures path below.
+uniform int u_groundQuality;
+
 // Water caustics (applied to terrain below water surface, within water XZ bounds)
 uniform bool u_causticsEnabled;
 uniform sampler2D u_causticsTex;      // Unit 5
@@ -257,21 +263,41 @@ GroundSample sampleGround(vec2 uv, vec4 splatWeights)
     vec3 m2 = texture(u_materialArray, vec3(uv * u_layerTiling[2], 2.0)).rgb;
     vec3 m3 = texture(u_materialArray, vec3(uv * u_layerTiling[3], 3.0)).rgb;
 
-    vec3 n0 = texture(u_normalArray,   vec3(uv * u_layerTiling[0], 0.0)).rgb * 2.0 - 1.0;
-    vec3 n1 = texture(u_normalArray,   vec3(uv * u_layerTiling[1], 1.0)).rgb * 2.0 - 1.0;
-    vec3 n2 = texture(u_normalArray,   vec3(uv * u_layerTiling[2], 2.0)).rgb * 2.0 - 1.0;
-    vec3 n3 = texture(u_normalArray,   vec3(uv * u_layerTiling[3], 3.0)).rgb * 2.0 - 1.0;
-
-    // Height (material B) drives the same depth-aware blend used for albedo.
+    // Weight blend: Medium/High use the depth-aware height blend; Low (u_groundQuality
+    // == 0) falls back to a plain normalized splat-weight blend (design §6 tiers, A5).
     vec4 heights = vec4(m0.b, m1.b, m2.b, m3.b);
-    vec4 w = heightBlendWeights(heights, splatWeights);
+    vec4 w;
+    if (u_groundQuality >= 1)
+    {
+        w = heightBlendWeights(heights, splatWeights);
+    }
+    else
+    {
+        float s = splatWeights.x + splatWeights.y + splatWeights.z + splatWeights.w;
+        w = splatWeights / max(s, 1e-4);
+    }
 
     GroundSample g;
     g.albedo    = a0 * w.x + a1 * w.y + a2 * w.z + a3 * w.w;
     g.ao        = m0.r * w.x + m1.r * w.y + m2.r * w.z + m3.r * w.w;
     g.roughness = m0.g * w.x + m1.g * w.y + m2.g * w.z + m3.g * w.w;
-    g.tnormal   = normalize(n0 * w.x + n1 * w.y + n2 * w.z + n3 * w.w);
-    g.weights   = w;
+
+    // Detail normals are a Medium/High feature. Low skips the four normal-array
+    // taps (its "albedo + AO only" tier) and returns a flat tangent normal, so the
+    // shading normal stays the terrain macro normal.
+    if (u_groundQuality >= 1)
+    {
+        vec3 n0 = texture(u_normalArray, vec3(uv * u_layerTiling[0], 0.0)).rgb * 2.0 - 1.0;
+        vec3 n1 = texture(u_normalArray, vec3(uv * u_layerTiling[1], 1.0)).rgb * 2.0 - 1.0;
+        vec3 n2 = texture(u_normalArray, vec3(uv * u_layerTiling[2], 2.0)).rgb * 2.0 - 1.0;
+        vec3 n3 = texture(u_normalArray, vec3(uv * u_layerTiling[3], 3.0)).rgb * 2.0 - 1.0;
+        g.tnormal = normalize(n0 * w.x + n1 * w.y + n2 * w.z + n3 * w.w);
+    }
+    else
+    {
+        g.tnormal = vec3(0.0, 0.0, 1.0);
+    }
+    g.weights = w;
     return g;
 }
 
@@ -349,44 +375,63 @@ void main()
 
         // Top-down (world-XZ / Y-axis) projection — the meadow-dominant case.
         GroundSample gY = sampleGround(v_worldPos.xz, splat);
-        vec3  worldN = whiteoutBlend(macroNormal, gY.tnormal);
+        // Detail normal is a Medium/High feature (A5); Low keeps the macro normal.
+        vec3  worldN = (u_groundQuality >= 1)
+                     ? whiteoutBlend(macroNormal, gY.tnormal)
+                     : macroNormal;
         vec3  outAlbedo = gY.albedo;
         float outAO     = gY.ao;
         float outRough  = gY.roughness;
 
-        // Distance-tiling break-up (A4): fade to a ~4× coarser far-scaled albedo over
-        // view distance so the tile repeat isn't obvious across the far field. Albedo
-        // only; the extra taps are skipped entirely on near pixels.
-        float distBlend = smoothstep(u_distanceTiling.x, u_distanceTiling.y, abs(v_viewDepth));
-        if (distBlend > 0.001)
+        // Distance-tiling break-up (A4) is a High-only feature (A5): fade to a ~4×
+        // coarser far-scaled albedo over view distance so the tile repeat isn't
+        // obvious across the far field. Albedo only; skipped entirely on near pixels
+        // and on Medium/Low (the smoothstep + extra taps are gated out).
+        if (u_groundQuality >= 2)
         {
-            vec3 albedoFar = sampleGroundAlbedoFar(v_worldPos.xz, gY.weights);
-            outAlbedo = mix(outAlbedo, albedoFar, distBlend);
+            float distBlend = smoothstep(u_distanceTiling.x, u_distanceTiling.y, abs(v_viewDepth));
+            if (distBlend > 0.001)
+            {
+                vec3 albedoFar = sampleGroundAlbedoFar(v_worldPos.xz, gY.weights);
+                outAlbedo = mix(outAlbedo, albedoFar, distBlend);
+            }
         }
 
-        // Slopes: blend in the X/Z world-plane projections (Ben Golus triplanar).
+        // Slopes. Medium/High blend in the X/Z world-plane projections (Ben Golus
+        // triplanar textures); Low skips those extra samples entirely and fades to
+        // flat colour on slopes instead (design §6 Low tier, A5).
         if (triBlend > 0.001)
         {
-            vec3 tw = triplanarWeights(macroNormal, u_triplanarSharpness);
+            if (u_groundQuality >= 1)
+            {
+                vec3 tw = triplanarWeights(macroNormal, u_triplanarSharpness);
 
-            vec2 uvX = v_worldPos.yz;
-            vec2 uvZ = v_worldPos.xy;
-            if (macroNormal.x < 0.0) uvX.x = -uvX.x;   // fix mirroring on -facing sides
-            if (macroNormal.z < 0.0) uvZ.x = -uvZ.x;
+                vec2 uvX = v_worldPos.yz;
+                vec2 uvZ = v_worldPos.xy;
+                if (macroNormal.x < 0.0) uvX.x = -uvX.x;   // fix mirroring on -facing sides
+                if (macroNormal.z < 0.0) uvZ.x = -uvZ.x;
 
-            GroundSample gX = sampleGround(uvX, splat);
-            GroundSample gZ = sampleGround(uvZ, splat);
+                GroundSample gX = sampleGround(uvX, splat);
+                GroundSample gZ = sampleGround(uvZ, splat);
 
-            vec3  triAlbedo = gX.albedo    * tw.x + gY.albedo    * tw.y + gZ.albedo    * tw.z;
-            float triAO     = gX.ao        * tw.x + gY.ao        * tw.y + gZ.ao        * tw.z;
-            float triRough  = gX.roughness * tw.x + gY.roughness * tw.y + gZ.roughness * tw.z;
-            vec3  triN      = triplanarWorldNormal(gX.tnormal, gY.tnormal, gZ.tnormal,
-                                                   macroNormal, tw);
+                vec3  triAlbedo = gX.albedo    * tw.x + gY.albedo    * tw.y + gZ.albedo    * tw.z;
+                float triAO     = gX.ao        * tw.x + gY.ao        * tw.y + gZ.ao        * tw.z;
+                float triRough  = gX.roughness * tw.x + gY.roughness * tw.y + gZ.roughness * tw.z;
+                vec3  triN      = triplanarWorldNormal(gX.tnormal, gY.tnormal, gZ.tnormal,
+                                                       macroNormal, tw);
 
-            outAlbedo = mix(outAlbedo, triAlbedo, triBlend);
-            outAO     = mix(outAO,     triAO,     triBlend);
-            outRough  = mix(outRough,  triRough,  triBlend);
-            worldN    = normalize(mix(worldN, triN, triBlend));
+                outAlbedo = mix(outAlbedo, triAlbedo, triBlend);
+                outAO     = mix(outAO,     triAO,     triBlend);
+                outRough  = mix(outRough,  triRough,  triBlend);
+                worldN    = normalize(mix(worldN, triN, triBlend));
+            }
+            else
+            {
+                // Low: flat-colour on slopes (no triplanar ground-texture taps).
+                vec3 flatSlope = grassColor * splat.r + rockColor * splat.g
+                               + dirtColor * splat.b + sandColor * splat.a;
+                outAlbedo = mix(outAlbedo, flatSlope, triBlend);
+            }
         }
 
         // Subtle large-scale brightness variation to break exact tiling repeats.
