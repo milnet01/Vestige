@@ -23,8 +23,9 @@ is present. Widen the per-instance **height / colour** variation the meadow
 already seeds, and add an A5-style **graphics-quality tier** for grass so the
 ~40 k-instance field holds 60 FPS on weaker GPUs.
 
-The grass should read as real blades, not cardboard, and cost no more per frame
-at High than today's procedural grass (no extra per-fragment cost — see §6).
+The grass should read as real blades, not cardboard, and cost **no material extra**
+per frame at High vs today's procedural grass — no extra per-fragment cost, only a
+few hundred KB of texture cache (see §6).
 
 ### 1.1 Non-goals (this phase)
 
@@ -123,9 +124,12 @@ Sources (§14 lists URLs).
   uploadRGBA8(pixels, w, h);` — then `stbi_image_free(pixels)` to release the
   decoded **CPU** buffer. Only if `next != 0` do we `glDeleteTextures` the old
   `m_typeTextures[typeId]` and store `next`; if `uploadRGBA8` returns 0 (GL
-  failure), delete `next`, keep the existing texture, and warn. **The old texture
-  is never freed before its replacement is known-good**, so neither a decode nor an
-  upload failure can strand a type with no texture. `stbi_load` returns straight
+  failure), keep the existing texture and warn (nothing to free — `next` is 0).
+  **The old texture is never freed before its replacement is known-good**, so
+  neither a decode nor an upload failure can strand a type with no texture. This
+  ordering is a **review-covered invariant, not a runtime-asserted one** — forcing
+  a GL-upload failure in a unit test would need GL-context fault injection (out of
+  scope); the pure decode/empty-path branch *is* unit-tested (§7). `stbi_load` returns straight
   (non-premultiplied) RGBA; alpha is the blade mask the fragment shader already
   alpha-tests at 0.5 — no shader change.
   **Edge-case contract:** an **empty `path`** is treated as decode-failure (keep
@@ -162,9 +166,17 @@ foliage lever to that same sink — no parallel system, no per-frame settings re
   - `engine.cpp:1636` passes `m_foliageRenderer->renderDistance` instead of the
     literal `100.0f`.
   - **Shadow gate (committed contract):** `FoliageRenderer::renderShadow`
-    early-returns when `!castShadows` — the "Low = no grass shadows" tier is a
-    one-line guard at the top of that method, so the decision stays in the
-    renderer and the `Renderer::setFoliageShadowCaster` caller is untouched.
+    (`foliage_renderer.cpp:257` / `.h:69`) early-returns when `!castShadows` — the
+    "Low = no grass shadows" tier is a one-line guard at the top of that method, so
+    the decision stays in the renderer and the `Renderer::setFoliageShadowCaster`
+    caller is untouched.
+- **Preset → tier mapping site:** the mapping lives in `applyQualityPreset`
+  (`settings_apply.cpp`), which already builds a per-preset `Row`; add a
+  `FoliageQuality foliage;` column filled per preset (Low→Low, Medium→Medium,
+  High/Ultra→High) and end the function with `sink.setFoliageQuality(row.foliage)`
+  — the exact structure A5 used for its `ground` (`TerrainGroundQuality`) column.
+  `Custom` returns before the sink calls, so foliage is left untouched (table note
+  below).
 - **Tier table (default High):**
 
   | Preset | Grass distance | Grass shadows | Blade texture |
@@ -247,8 +259,8 @@ this phase, so no Formula-Workbench parity mirror (Rule 6/7 n/a here).
   GPU-less / llvmpipe) the maintainer runs via `--update-baseline`. Until that
   baseline lands, B3 uses the manual panel read. A larger texture costs on the
   order of a few hundred KB more VRAM and slightly more texture-cache pressure —
-  bounded by the ≤ 2.5 ms pass gate above, which catches any real regression
-  regardless.
+  a small cost the **≥ 60 FPS gate above (≤ 2.5 ms advisory)** would surface if it
+  ever became material.
 - **Tiers are a graphics `Setting`, NOT `FormulaQualityManager`.** Same
   distinction A5 documented: these toggle *render distance / shadow casting*
   (a graphics axis), not a formula's evaluation accuracy (`FULL/APPROXIMATE/LUT`).
@@ -302,7 +314,12 @@ this phase, so no Formula-Workbench parity mirror (Rule 6/7 n/a here).
   (A + props precedent), so the maintainer can drop a photoreal texture in without
   touching code.
 - **Fallback:** if neither path exists, `setTypeTexture` keeps the procedural
-  texture (§4.1). The procedural generator stays in the tree as the guaranteed
+  texture (§4.1). The meadow always passes the **committed default path** (a
+  non-empty string) when the `_local/` override is absent, so a genuinely missing
+  committed asset takes the *missing-file* branch and **warns** (§4.1) — the silent
+  empty-path branch is reserved for a caller that explicitly passes `""` to mean
+  "no override", keeping §11's "missing asset visible in the log" promise intact.
+  The procedural generator stays in the tree as the guaranteed
   floor.
 - **Size:** one ~256×512 RGBA PNG ≈ a few hundred KB — well under the 1 MB soft
   line; no side-repo externalization needed (unlike A's 1K layer set).
@@ -436,6 +453,31 @@ fixed:
   `--visual-test` assertion; softened the unverified Performance-panel-UI claim;
   tightened the "correcting the roadmap" tense (already corrected); B2 verify
   flagged subjective; trivial line-cite nudges (`:89`, `605-617`).
+
+**Loop 3 (2026-07-18)** — 2 cold reviewers, identical briefs. Tally: CRITICAL 0 ·
+HIGH 2 · MEDIUM 2 · LOW 3 · INFO 4 (verified 8 / unverified 0). Accuracy lane
+verified all ~28 citations exact (zero findings above INFO); the consistency lane
+caught the residue of loop 2's own edits. All fixed:
+- HIGH — §6 still called ≤2.5 ms "the pass gate" one sentence after declaring it
+  advisory (self-contradiction introduced in loop 2) → "≥ 60 FPS gate above (≤ 2.5
+  ms advisory)".
+- HIGH — the shadow-gate contract named `FoliageRenderer::renderShadow` without a
+  citation → added `foliage_renderer.cpp:257` / `.h:69`.
+- MEDIUM — the GL-upload-failure branch was untested and not flagged as such →
+  §4.1 now states it is a review-covered invariant (GL fault-injection out of
+  scope; the decode/empty-path branch is unit-tested).
+- MEDIUM — the `QualityPreset → FoliageQuality` mapping site was unspecified →
+  §4.2 names the `applyQualityPreset` per-preset `Row` (mirrors A5's `ground`).
+- LOW ×3 — §1 "cost no more" reconciled with §6's "slightly more cache" ("no
+  material extra"); §8 states the meadow passes the non-empty committed path so a
+  missing asset warns (empty-path-silent reserved for explicit "no override"); the
+  `next`-is-0 delete wording fixed. Plus a ROADMAP edit: 3D_E-0038 "(CC0 atlas)" →
+  "(CC0, single card — not a UV-indexed atlas)".
+- INFO (surfaced, not fixed) — `foliage_renderer.h:89` "12 vertices" (code-comment,
+  owner's call); §4.3 attribute list order differs from source (all three are
+  genuinely per-instance attributes — claim correct); the A5 *design doc* names the
+  tier only generically, but this doc anchors the enum-wiring mirror to **code**
+  (`settings_apply.h:42/122`), which is authoritative.
 
 ---
 
