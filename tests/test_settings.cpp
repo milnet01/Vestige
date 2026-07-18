@@ -19,6 +19,7 @@
 #include "editor/panels/settings_editor_panel.h"
 #include "input/input_bindings.h"
 #include "renderer/terrain_renderer.h"   // TerrainGroundQuality (Tier-1 A5)
+#include "renderer/foliage_renderer.h"   // FoliageQuality (Tier-1 B3)
 #include "utils/atomic_write.h"
 #include "utils/config_path.h"
 
@@ -1198,6 +1199,7 @@ public:
     bool          bloom     = false;
     bool          heavyPost = false;
     TerrainGroundQuality ground = TerrainGroundQuality::High;  // sentinel
+    FoliageQuality foliage = FoliageQuality::High;             // sentinel
     int           calls     = 0;
 
     void setAntiAliasMode(AntiAliasMode m) override { aa = m; ++calls; }
@@ -1205,6 +1207,7 @@ public:
     void setBloomEnabled(bool e) override           { bloom = e; ++calls; }
     void setHeavyPostEnabled(bool e) override       { heavyPost = e; ++calls; }
     void setTerrainGroundQuality(TerrainGroundQuality q) override { ground = q; ++calls; }
+    void setFoliageQuality(FoliageQuality q) override { foliage = q; ++calls; }
 };
 
 class RecordingSubtitleSink final : public SubtitleApplySink
@@ -1361,7 +1364,8 @@ TEST(SettingsApply, QualityPresetLowUsesFxaaHalfScaleAndDropsHeavyPost)
     EXPECT_FALSE(sink.bloom);
     EXPECT_FALSE(sink.heavyPost);
     EXPECT_EQ(sink.ground, TerrainGroundQuality::Low);   // A5: cheapest terrain path
-    EXPECT_EQ(sink.calls, 5);                            // 4 toggles + terrain tier
+    EXPECT_EQ(sink.foliage, FoliageQuality::Low);        // B3: short grass distance, no shadows
+    EXPECT_EQ(sink.calls, 6);                            // 4 toggles + terrain tier + grass tier
 }
 
 TEST(SettingsApply, QualityPresetMediumKeepsSsaoBloomButStillFxaaAndNoHeavyPost)
@@ -1376,6 +1380,7 @@ TEST(SettingsApply, QualityPresetMediumKeepsSsaoBloomButStillFxaaAndNoHeavyPost)
     EXPECT_TRUE(sink.bloom);
     EXPECT_FALSE(sink.heavyPost);
     EXPECT_EQ(sink.ground, TerrainGroundQuality::Medium);  // A5: drops distance-tiling
+    EXPECT_EQ(sink.foliage, FoliageQuality::Medium);       // B3: mid grass distance
 }
 
 TEST(SettingsApply, QualityPresetHighAndUltraRenderIdenticallyInWave1)
@@ -1392,6 +1397,8 @@ TEST(SettingsApply, QualityPresetHighAndUltraRenderIdenticallyInWave1)
         EXPECT_TRUE(sink.bloom);
         EXPECT_TRUE(sink.heavyPost);
         EXPECT_EQ(sink.ground, TerrainGroundQuality::High)  // A5: all terrain features
+            << "preset " << qualityPresetLabel(p);
+        EXPECT_EQ(sink.foliage, FoliageQuality::High)       // B3: full grass distance + shadows
             << "preset " << qualityPresetLabel(p);
     }
 }

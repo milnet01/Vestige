@@ -21,6 +21,19 @@ namespace Vestige
 
 class CascadedShadowMap;
 
+/// @brief Grass graphics-quality tier (3D_E-0038 B3), driven by the graphics
+///        `QualityPreset` via `RendererQualitySink` — the same path A5 uses for
+///        `TerrainGroundQuality`. Free-standing (not nested) so `settings_apply.h`
+///        can forward-declare it without including this header. The tier only
+///        drives CPU-side render distance + shadow-casting, so its integer values
+///        carry no wire contract and are free to change.
+enum class FoliageQuality
+{
+    Low,     ///< Shorter draw distance, no grass shadows.
+    Medium,  ///< Mid draw distance, grass shadows on.
+    High     ///< Full draw distance, grass shadows on.
+};
+
 /// @brief Pure decision for `setTypeTexture` (3D_E-0038 B1, design §4.1/§7):
 ///        given whether the path was empty, whether `stbi_load` returned null,
 ///        and the GL handle `uploadRGBA8` produced (0 on GL failure), decide
@@ -94,6 +107,20 @@ public:
     ///        called after `init()` so a procedural default already exists to keep.
     ///        (3D_E-0038 B1, design §4.1.)
     void setTypeTexture(uint32_t typeId, const std::string& path);
+
+    /// @brief Applies a grass quality tier (3D_E-0038 B3): sets `renderDistance`
+    ///        and `castShadows`. High = 100 m + shadows; Medium = 70 m + shadows;
+    ///        Low = 45 m + no grass shadows.
+    void setQuality(FoliageQuality quality);
+
+    /// @brief Grass render distance (m). The main-pass caller reads this instead
+    ///        of a hardcoded literal so the quality tier can shorten the field on
+    ///        weaker GPUs. Public, mutated directly, like `windAmplitude`.
+    float renderDistance = 100.0f;
+
+    /// @brief Whether grass casts shadows. The Low tier turns this off — the
+    ///        shadow pass early-returns when false (3D_E-0038 B3).
+    bool castShadows = true;
 
     /// @brief Maximum distance for grass shadow casting (cascade 0 range).
     float shadowMaxDistance = 30.0f;

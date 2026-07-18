@@ -437,11 +437,13 @@ bool Engine::initialize(const EngineConfig& config)
             targets.rendererAccess = m_rendererAccessSink.get();
 
             // Tier-1 quality preset → AA/SSAO/bloom/heavy-post toggles + the PBR
-            // terrain ground-texture tier (A5, on the TerrainRenderer). renderScale
-            // is reconciled into the pending DisplaySettings, which the play-mode
+            // terrain ground-texture tier (A5, on the TerrainRenderer) + the grass
+            // distance/shadow tier (B3, on the FoliageRenderer). renderScale is
+            // reconciled into the pending DisplaySettings, which the play-mode
             // resize reads per frame.
             m_rendererQualitySink =
-                std::make_unique<RendererQualityApplySinkImpl>(*m_renderer, *m_terrainRenderer);
+                std::make_unique<RendererQualityApplySinkImpl>(
+                    *m_renderer, *m_terrainRenderer, *m_foliageRenderer);
             targets.rendererQuality = m_rendererQualitySink.get();
         }
         if (UISystem* ui = m_systemRegistry.getSystem<UISystem>())
@@ -1632,8 +1634,10 @@ void Engine::run()
                     CascadedShadowMap* csm = m_renderer->getCascadedShadowMap();
                     const DirectionalLight* dirLight =
                         m_renderData.hasDirectionalLight ? &m_renderData.directionalLight : nullptr;
+                    // Grass draw distance is the quality-tier knob (3D_E-0038 B3):
+                    // Low shortens the field to hold 60 FPS on weaker GPUs.
                     m_foliageRenderer->render(visibleChunks, *m_camera, viewProj, elapsed,
-                                             100.0f, csm, dirLight);
+                                             m_foliageRenderer->renderDistance, csm, dirLight);
                     m_treeRenderer->render(visibleChunks, *m_camera, viewProj, elapsed);
                     m_profiler.getGpuTimer().endPass();
                 }

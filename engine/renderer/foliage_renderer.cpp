@@ -265,7 +265,9 @@ void FoliageRenderer::renderShadow(
     const glm::vec3& lightRadiance,
     const glm::vec3& lightDir)
 {
-    if (!m_initialized || !m_shadowShader.getId() || chunks.empty())
+    // castShadows == false is the Low quality tier's grass-shadow cut (3D_E-0038
+    // B3): early-out here keeps the decision in the renderer, caller untouched.
+    if (!m_initialized || !castShadows || !m_shadowShader.getId() || chunks.empty())
     {
         return;
     }
@@ -626,6 +628,28 @@ GLuint FoliageRenderer::uploadRGBA8(const uint8_t* pixels, int w, int h)
     glGenerateTextureMipmap(texture);
 
     return texture;
+}
+
+void FoliageRenderer::setQuality(FoliageQuality quality)
+{
+    // 3D_E-0038 B3: map the graphics quality tier to the two runtime grass knobs.
+    // Distance is the highest-value meadow perf lever (fewer metres = fewer
+    // instances drawn); Low also drops the grass shadow pass.
+    switch (quality)
+    {
+    case FoliageQuality::Low:
+        renderDistance = 45.0f;
+        castShadows = false;
+        break;
+    case FoliageQuality::Medium:
+        renderDistance = 70.0f;
+        castShadows = true;
+        break;
+    case FoliageQuality::High:
+        renderDistance = 100.0f;
+        castShadows = true;
+        break;
+    }
 }
 
 void FoliageRenderer::setTypeTexture(uint32_t typeId, const std::string& path)
