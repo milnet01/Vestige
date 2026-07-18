@@ -2472,9 +2472,30 @@ void Engine::finalizeMeadowTerrain()
 
         FoliageTypeConfig grassCfg;
         grassCfg.name = "Meadow Grass";
-        grassCfg.minScale = 0.7f;
-        grassCfg.maxScale = 1.5f;
-        grassCfg.tintVariation = glm::vec3(0.10f, 0.16f, 0.06f);
+        // Realism B (3D_E-0038): wider height + colour variation so the field reads
+        // as varied real grass, not a uniform carpet. Scale/tint change the look,
+        // not the instance count, so the 3D_E-0027 perf fixture (GRASS_DENSITY /
+        // STAMP_SPACING) is untouched.
+        grassCfg.minScale = 0.6f;
+        grassCfg.maxScale = 1.8f;
+        grassCfg.tintVariation = glm::vec3(0.12f, 0.20f, 0.07f);
+
+        // Wire the real CC0 grass-blade texture through the foliage type-0 slot,
+        // with the engine's procedural blade as the fallback (design §4.1/§8). A
+        // git-ignored assets/textures/foliage_local/grass_blades.png override wins
+        // when present, mirroring the terrain_local / nature_local drop-in hooks.
+        if (m_foliageRenderer)
+        {
+            const auto foliagePath = [](const std::string& file) -> std::string
+            {
+                namespace fs = std::filesystem;
+                const std::string local = "assets/textures/foliage_local/" + file;
+                return fs::exists(local) ? local : "assets/textures/foliage/" + file;
+            };
+            const std::string grassTex = foliagePath("grass_blades.png");
+            grassCfg.texturePath = grassTex;   // self-documenting; renderer loads via setTypeTexture
+            m_foliageRenderer->setTypeTexture(GRASS_TYPE_ID, grassTex);
+        }
 
         const float x0 = tcfg.origin.x + EDGE_MARGIN;
         const float x1 = tcfg.origin.x + static_cast<float>(W - 1) * tcfg.spacingX - EDGE_MARGIN;

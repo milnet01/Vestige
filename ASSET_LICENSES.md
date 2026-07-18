@@ -142,6 +142,19 @@ variants drop in via the git-ignored `assets/textures/terrain_local/` override.
 | `dirt_{albedo,normal,material}.{jpg,png}` | [ambientCG `Ground068`](https://ambientcg.com/view?id=Ground068) | **CC0 1.0** | Brown soil — layer 2 (dirt) |
 | `sand_{albedo,normal,material}.{jpg,png}` | [ambientCG `Ground037`](https://ambientcg.com/view?id=Ground037) | **CC0 1.0** | Pale tan — layer 3 (sand/shore) |
 
+### Foliage blades — `assets/textures/foliage/`
+
+Real grass-blade alpha texture for the foliage renderer (Realism B / 3D_E-0038),
+wired through `FoliageTypeConfig.texturePath` with the engine's procedural blade
+as the fallback. Committed at **256×256 RGBA PNG** (~99 KB): a portrait tuft
+cropped at asset-prep from the CC0 source card (a 1024×256 side-view strip); alpha
+is the blade mask the foliage shader alpha-tests. A higher-res drop-in wins via the
+git-ignored `assets/textures/foliage_local/` override.
+
+| Pattern | Source | License | Notes |
+|---------|--------|---------|-------|
+| `grass_blades.png` | [OpenGameArt "grass blades alpha card texture (side view)"](https://opengameart.org/content/grass-blades-alpha-card-texture-side-view) (`vegetation_grass_card_03.png`) | **CC0 1.0** | Cropped to a portrait tuft; foliage type 0 (grass) |
+
 ### Excluded (not in public repo, kept locally via `.gitignore`)
 
 | Pattern | Source | Reason for exclusion |
