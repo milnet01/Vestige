@@ -243,6 +243,69 @@ TEST(TerrainDistanceTilingTest, MonotonicNonDecreasingAcrossTheRange)
 }
 
 // ---------------------------------------------------------------------------
+// `grassDirtPatchWeight` — meadow earthy-bare-ground term (3D_E-0038 C1).
+// Design §7: below threshold → 0; at noise 1 → amount; monotonic; amount 0 →
+// 0 (opt-out); and the caller's grass↔dirt move conserves mass pre-normalize.
+// ---------------------------------------------------------------------------
+
+TEST(GrassDirtPatchTest, OptOutWhenAmountZero)
+{
+    // The opt-out that keeps every existing scene byte-unchanged.
+    EXPECT_FLOAT_EQ(grassDirtPatchWeight(1.0f, 0.5f, 0.0f), 0.0f);
+    EXPECT_FLOAT_EQ(grassDirtPatchWeight(0.9f, 0.2f, 0.0f), 0.0f);
+}
+
+TEST(GrassDirtPatchTest, ZeroBelowThreshold_AmountAtNoiseOne)
+{
+    const float thr = 0.6f;
+    const float amt = 0.45f;
+    EXPECT_FLOAT_EQ(grassDirtPatchWeight(0.0f, thr, amt), 0.0f);   // well below
+    EXPECT_FLOAT_EQ(grassDirtPatchWeight(thr, thr, amt), 0.0f);    // exactly at threshold
+    EXPECT_NEAR(grassDirtPatchWeight(1.0f, thr, amt), amt, 1e-6f); // noise 1 → full amount
+}
+
+TEST(GrassDirtPatchTest, MonotonicNonDecreasingInNoise)
+{
+    const float thr = 0.55f;
+    const float amt = 0.5f;
+    float prev = -1.0f;
+    for (float n = 0.0f; n <= 1.0f; n += 0.05f)
+    {
+        const float w = grassDirtPatchWeight(n, thr, amt);
+        EXPECT_GE(w, prev);       // never decreases as the patch noise grows
+        EXPECT_GE(w, 0.0f);
+        EXPECT_LE(w, amt);        // never exceeds the configured max
+        prev = w;
+    }
+}
+
+TEST(GrassDirtPatchTest, MoveConservesGrassPlusDirtMassPreNormalize)
+{
+    // The real invariant (NOT post-normalize sum-to-1, which is a tautology): the
+    // caller's `dirt += grass*w; grass *= (1-w)` transfers mass grass→dirt without
+    // creating or destroying it, so grass+dirt is unchanged before renormalize.
+    const float w = grassDirtPatchWeight(0.85f, 0.6f, 0.45f);
+    ASSERT_GT(w, 0.0f);   // this hand case actually exercises the move
+    float grass = 0.8f;
+    float dirt = 0.1f;
+    const float before = grass + dirt;
+    dirt += grass * w;
+    grass *= (1.0f - w);
+    EXPECT_NEAR(grass + dirt, before, 1e-6f);
+    EXPECT_GT(dirt, 0.1f);          // dirt increased
+    EXPECT_LT(grass, 0.8f);         // grass decreased
+}
+
+TEST(GrassDirtPatchTest, ThresholdNearOneDoesNotDivideByZero)
+{
+    // denom guard: threshold == 1 must not produce NaN/Inf.
+    const float w = grassDirtPatchWeight(1.0f, 1.0f, 0.5f);
+    EXPECT_TRUE(std::isfinite(w));
+    EXPECT_GE(w, 0.0f);
+    EXPECT_LE(w, 0.5f);
+}
+
+// ---------------------------------------------------------------------------
 // TerrainMaterialSet load (needs a GL context) — design §7.
 // ---------------------------------------------------------------------------
 

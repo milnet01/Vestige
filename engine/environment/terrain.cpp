@@ -5,6 +5,7 @@
 /// @brief Heightmap-based terrain with CDLOD quadtree LOD system.
 
 #include "environment/terrain.h"
+#include "environment/terrain_material_blend.h"
 #include "core/logger.h"
 #include "utils/atomic_write.h"
 
@@ -1025,6 +1026,22 @@ void Terrain::generateAutoTexture(const AutoTextureConfig& config)
 
             // Dirt blends in at higher altitudes
             grass *= (1.0f - dirt * 0.7f);
+
+            // Meadow C1 (3D_E-0038): noise-driven grass→dirt patches so flat bare
+            // ground reads as soil, not a mowed lawn. Opt-in (dirtPatchAmount
+            // defaults 0 → this whole block is a no-op for existing scenes). A
+            // SEPARATE low-frequency noise lookup keeps patch layout independent of
+            // the slope/height thresholds above. Mass transfer conserves grass+dirt
+            // before the renormalize below.
+            if (config.dirtPatchAmount > 0.0f)
+            {
+                float patchNoise = fbmNoise(wx * config.dirtPatchScale,
+                                            wz * config.dirtPatchScale);  // 0..1
+                float patch = grassDirtPatchWeight(patchNoise, config.dirtPatchThreshold,
+                                                   config.dirtPatchAmount);
+                dirt += grass * patch;
+                grass *= (1.0f - patch);
+            }
 
             // Normalize weights to sum to 1
             float total = grass + rock + dirt + sand;

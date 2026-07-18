@@ -2369,6 +2369,12 @@ void Engine::finalizeMeadowTerrain()
     autoTex.altitudeSandEnd = 0.05f;   // was 0.08 — sand only on the submerged floor
     autoTex.altitudeSandStart = 0.0f;
     autoTex.noiseAmplitude = 0.05f;    // was 0.12 — tighter shore, less sand bleeding uphill
+    // Realism C1 (3D_E-0038): scatter earthy soil patches across the flat field so
+    // bare ground between grass reads as soil, not a mowed lawn. Opt-in on the
+    // meadow only. TODO: revisit patch scale/amount via Formula Workbench.
+    autoTex.dirtPatchAmount = 0.60f;    // up to 60% grass→dirt inside a patch
+    autoTex.dirtPatchScale = 0.12f;     // ~patch size on the meadow's world scale
+    autoTex.dirtPatchThreshold = 0.52f; // fbm clusters near 0.5 → ~a quarter of the field patches
     terrain.generateAutoTexture(autoTex);
 
     // A narrow brown *mud* waterline (dirt channel) that hugs the pond's natural

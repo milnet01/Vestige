@@ -146,4 +146,31 @@ inline float distanceTilingBlend(float dist, float nearDist, float farDist)
     return t * t * (3.0f - 2.0f * t);
 }
 
+/// @brief Grass→dirt patch weight for the meadow's earthy-bare-ground term
+///        (3D_E-0038 C1). Given a 0..1 patch-noise value, the threshold above
+///        which dirt begins, and the max amount, returns the fraction of grass to
+///        convert to dirt: 0 below `threshold`, Hermite-smooth up to `amount` at
+///        noise 1. `amount <= 0` disables it (returns 0), so the default-0 config
+///        leaves every existing scene byte-unchanged. Pure + GL-free (unit-tested).
+///        The caller applies it as `dirt += grass*w; grass *= (1 - w)` — a mass
+///        transfer that conserves grass+dirt before the splat renormalize.
+inline float grassDirtPatchWeight(float noise01, float threshold, float amount)
+{
+    if (amount <= 0.0f)
+    {
+        return 0.0f;
+    }
+    // Ramp over a fixed BAND above the threshold (not up to 1.0): the terrain's
+    // fbm noise is a 3-octave average that clusters near its midrange and rarely
+    // reaches 1.0, so a smoothstep(threshold, 1.0) would barely trigger. A 0.2-wide
+    // band above the threshold gives clearly-read patches. Still: 0 below
+    // threshold, Hermite-smooth up to `amount` (reached by `threshold + BAND`,
+    // and at noise 1). BAND is fixed so there is no div-by-zero at threshold→1.
+    constexpr float BAND = 0.2f;
+    float t = (noise01 - threshold) / BAND;
+    t = t < 0.0f ? 0.0f : (t > 1.0f ? 1.0f : t);
+    const float s = t * t * (3.0f - 2.0f * t);  // smoothstep
+    return s * amount;
+}
+
 }  // namespace Vestige

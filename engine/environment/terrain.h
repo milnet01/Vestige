@@ -255,6 +255,12 @@ public:
         float altitudeDirtEnd = 0.45f;  ///< Fully dirt above this.
         float noiseScale = 0.05f;       ///< Noise frequency for breaking up transition lines.
         float noiseAmplitude = 0.12f;   ///< How much noise perturbs the thresholds.
+        // Meadow realism C1 (3D_E-0038 follow-on): noise-driven grass→dirt patches
+        // so flat bare ground reads as soil, not a mowed lawn. Opt-in — the
+        // default 0 leaves every existing scene's splatmap byte-unchanged.
+        float dirtPatchAmount = 0.0f;    ///< Max fraction of grass a patch converts to dirt (0 = off).
+        float dirtPatchScale = 0.15f;    ///< Patch noise frequency (world-space); smaller = larger patches.
+        float dirtPatchThreshold = 0.55f;///< Patch noise above this starts dirt (higher = fewer/smaller patches).
     };
 
     /// @brief Generates splatmap weights automatically from slope and altitude.
