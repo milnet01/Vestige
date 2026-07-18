@@ -44,3 +44,11 @@ TEST(FoliageTextureLoad, KeepsCurrentOnUploadFailure_B1)
     EXPECT_FALSE(foliageAdoptLoadedTexture(/*pathEmpty=*/false, /*decodeNull=*/false,
                                            /*uploadedHandle=*/0u));
 }
+
+// 3D_E-0038 C2 — the grass card was widened to 0.26 m full width for dense
+// continuous coverage. Pin it to the literal (design §7) so a revert to the old
+// 0.075 half-width (0.15 m) is caught.
+TEST(FoliageCard, FullWidthIsPointTwoSixMetres_C2)
+{
+    EXPECT_NEAR(2.0f * FoliageRenderer::CARD_HALF_WIDTH, 0.26f, 1e-4f);
+}

@@ -356,8 +356,10 @@ void FoliageRenderer::createStarMesh()
 {
     // A 3-quad star mesh: 3 intersecting vertical quads at 60-degree intervals.
     // Each quad: 2 triangles, 6 vertices. Total: 18 vertices.
-    // Blade dimensions: ~0.15m wide, ~0.4m tall.
-    const float halfWidth = 0.075f;
+    // Card dimensions: 2·CARD_HALF_WIDTH (0.26 m) wide, `height` tall. The wider
+    // card (was 0.15 m) is the C2 dense-grass lever — fewer, wider clumps cover the
+    // ground continuously (design §4.2).
+    const float halfWidth = CARD_HALF_WIDTH;
     const float height = 0.4f;
 
     struct Vertex

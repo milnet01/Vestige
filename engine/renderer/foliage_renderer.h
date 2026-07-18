@@ -100,6 +100,13 @@ public:
                       const glm::vec3& lightRadiance,
                       const glm::vec3& lightDir);
 
+    /// @brief Half-width of each star-mesh quad, metres — the full card is
+    ///        `2·CARD_HALF_WIDTH` wide. Widened from the original 0.075 for dense
+    ///        continuous grass (3D_E-0038 C2): wider clumps reach continuous
+    ///        coverage at a lower instance count (less overdraw). Pinned by a unit
+    ///        test to 0.26 m full width so a revert is caught.
+    static constexpr float CARD_HALF_WIDTH = 0.13f;
+
     /// @brief Loads a real alpha texture for a foliage type from disk, replacing
     ///        the procedural default. On an empty path (= "no override") or a
     ///        decode/GL-upload failure, the current texture is kept (fallback) and

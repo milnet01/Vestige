@@ -2471,7 +2471,7 @@ void Engine::finalizeMeadowTerrain()
         constexpr uint32_t GRASS_TYPE_ID = 0;   // foliage type 0 = grass
         constexpr float STAMP_SPACING = 5.0f;   // metres between stamp centres
         constexpr float STAMP_RADIUS = 3.5f;    // stamp disc radius (overlaps)
-        constexpr float GRASS_DENSITY = 0.53f;  // instances per m² per stamp → ~40 k total
+        constexpr float GRASS_DENSITY = 1.30f;  // C2: dense field (~88 k total, ≤120 k budget)
         constexpr float GRASS_FALLOFF = 0.30f;  // soft edge (rejects ~19%)
         constexpr float EDGE_MARGIN = 5.0f;     // keep grass off the map border
         // Keep grass off the water by its CONTOUR, not a square disc: skip a stamp
@@ -2486,9 +2486,9 @@ void Engine::finalizeMeadowTerrain()
         // as varied real grass, not a uniform carpet. Scale/tint change the look,
         // not the instance count, so the 3D_E-0027 perf fixture (GRASS_DENSITY /
         // STAMP_SPACING) is untouched.
-        grassCfg.minScale = 0.6f;
-        grassCfg.maxScale = 1.8f;
-        grassCfg.tintVariation = glm::vec3(0.12f, 0.20f, 0.07f);
+        grassCfg.minScale = 0.5f;
+        grassCfg.maxScale = 2.0f;
+        grassCfg.tintVariation = glm::vec3(0.14f, 0.22f, 0.08f);
 
         // Wire the real CC0 grass-blade texture through the foliage type-0 slot,
         // with the engine's procedural blade as the fallback (design §4.1/§8). A
