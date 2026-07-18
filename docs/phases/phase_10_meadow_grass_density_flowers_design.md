@@ -38,8 +38,9 @@ Turn the meadow's isolated-tuft grass into a believable meadow:
 
 ### 1.1 Non-goals (this phase)
 
-- **No new grass geometry technique.** Still the instanced 3-quad star mesh +
-  distance-fade (`foliage_renderer.cpp:355-461`). No compute/mesh-shader grass, no
+- **No new grass geometry technique.** Still the instanced 3-quad star mesh
+  (`foliage_renderer.cpp:355-461`) + distance-fade (`foliage.vert.glsl:57-59`). No
+  compute/mesh-shader grass, no
   GPU-driven blade generation, no per-blade Bézier — those stay escalations.
 - **No terrain-tile "painted grass" far-field LOD** and **no GPU culling rewrite**
   this phase. The distance-fade + wider cards + bounded near-field density are the
@@ -80,17 +81,18 @@ Sources: §14.
 - **Terrain auto-texturing paints dirt by *altitude only*.** `Terrain::
   generateAutoTexture` (`terrain.cpp:974-1052`) computes per-texel splat weights
   from slope + altitude + fbm-perturbed thresholds; `grass = 1.0` is the
-  unconditional base (`:1011`), rock is slope-gated, sand/dirt are altitude-gated
-  (`:1013-1015`), dirt only blends in at **high** normalized height
-  (`altitudeDirtStart 0.25`, `terrain.h:250`). On the flat meadow interior none of
+  unconditional base (`:1013`), rock is slope-gated, sand/dirt are altitude-gated
+  (`:1014-1016`), dirt only blends in at **high** normalized height
+  (`altitudeDirtStart 0.25`, `terrain.h:254`). On the flat meadow interior none of
   rock/sand/dirt fire, so **the bare ground is uniform grass green** — the
-  mowed-lawn look. The meadow builder (`engine.cpp` `finalizeMeadowTerrain`
-  ~2380-2420) overrides only the sand thresholds + `noiseAmplitude`. Splat channel
-  map: **R=grass, G=rock, B=dirt, A=sand**. Per-texel dirt primitive
+  mowed-lawn look. The meadow builder (`engine.cpp` `finalizeMeadowTerrain`,
+  autoTex override ~2367-2374) overrides only the sand thresholds + `noiseAmplitude`.
+  Splat channel map: **R=grass, G=rock, B=dirt, A=sand**. Per-texel dirt primitive
   `Terrain::blendBankChannel(x,z,channel,factor)` exists (`terrain.cpp:1144-1171`,
-  used by the pond mud contour); there is **no** noise/mask dirt-scatter today.
+  invoked via `applyContourBankBlend` for the pond mud contour); there is **no**
+  noise/mask dirt-scatter today.
 - **Grass card is 0.15 m × 0.4 m, 3 crossed quads (18 verts).** `createStarMesh`
-  `halfWidth = 0.075f`, `height = 0.4f` (`foliage_renderer.cpp:361-362`).
+  `halfWidth = 0.075f`, `height = 0.4f` (`foliage_renderer.cpp:360-361`).
   Per-instance `i_scale` 0.6–1.8 (`engine.cpp` grassCfg ~2478) → on-screen width
   ~0.09–0.27 m.
 - **~40 k grass instances, sparse.** Grass block (`engine.cpp` ~2455-2520):
@@ -101,8 +103,8 @@ Sources: §14.
   knob.
 - **Foliage is instanced, alpha-tested + alpha-blended, two-sided.**
   `glDrawArraysInstanced(GL_TRIANGLES,0,18,n)` per type
-  (`foliage_renderer.cpp:245-247`); `ScopedBlendState{true,SRC_ALPHA,ONE_MINUS…}` +
-  `ScopedCullFace{false}` (~228-231); the shader also `discard`s `a<0.5`
+  (`foliage_renderer.cpp:~249-250`); `ScopedBlendState{true,SRC_ALPHA,ONE_MINUS…}` +
+  `ScopedCullFace{false}` (~227-228); the shader also `discard`s `a<0.5`
   (`foliage.frag.glsl:112-113`). So it generates overdraw.
 - **Dense-grass cost is currently UNMEASURED.** The fly-through capture put foliage
   at **~0.09 ms (<1 %)** (`phase_10_performance_scalability_strategy.md:77`) — but
@@ -123,9 +125,10 @@ Sources: §14.
   on a `cellSize 14` jittered grid — uniform, not patchy; the comment flags this
   group as "the largest draw-call load of the props" (per-entity, not instanced).
 - **B3 grass quality tier drives distance + shadows only.** `FoliageQuality`
-  {Low,Medium,High} → `renderDistance` (100/70/45 m) + `castShadows`
-  (`foliage_renderer.cpp` `setQuality`; wired via `RendererQualitySink`). No
-  density lever.
+  {Low,Medium,High} → `renderDistance` (**45/70/100 m** — Low is the *shortest*) +
+  `castShadows` (`foliage_renderer.cpp` `setQuality`; wired via
+  `RendererQualitySink`). No density lever, and it does **not** touch render scale
+  (that is the separate `QualityPreset` axis).
 
 ---
 
@@ -143,12 +146,12 @@ new `AutoTextureConfig` fields so existing scenes are byte-unchanged:
     controls patch size.
   - `float dirtPatchThreshold = 0.55f;` — noise value above which dirt starts
     (higher → fewer/smaller patches).
-- In the per-texel loop (`terrain.cpp` ~1011-1024), after the existing weights and
+- In the per-texel loop (`terrain.cpp` ~1013-1024), after the existing weights and
   **only when `dirtPatchAmount > 0`**, sample a second low-frequency fbm
   `p = fbmNoise(wx*dirtPatchScale, wz*dirtPatchScale)` remapped to 0..1, compute
   `patch = smoothstep(dirtPatchThreshold, 1.0, p) * dirtPatchAmount`, then move
   weight from grass to dirt: `dirt += grass * patch; grass *= (1 - patch);` before
-  the existing normalize (`:1027-1041`). This uses a **separate** noise lookup from
+  the existing normalize (~`:1029-1041`). This uses a **separate** noise lookup from
   the threshold-perturbation noise so patch layout is independent of slope/height.
 - The meadow builder sets `autoTex.dirtPatchAmount ≈ 0.45`,
   `dirtPatchScale ≈ 0.08–0.15`, `dirtPatchThreshold ≈ 0.6` so ~15–30 % of the flat
@@ -164,16 +167,20 @@ new `AutoTextureConfig` fields so existing scenes are byte-unchanged:
 Three changes, all tuning-scale (no new render tech):
 
 1. **Wider cards.** Raise `createStarMesh` `halfWidth` from `0.075f` to **~0.13f**
-   (card ~0.26 m wide) so each clump covers more ground → continuous coverage at a
-   *lower* instance count than skinny cards (fewer instances = less overdraw). Keep
-   `height 0.4f` (per-instance scale still varies it). This is a **global foliage**
-   change — verify it doesn't harm other foliage users (the only painter today is
-   the meadow grass; procedural types 1–3 are unused in the shipped scenes), else
-   gate width per-type. *(Open question §12.)*
+   (card ~0.26 m wide) so each clump covers more ground — this lets you reach
+   continuous coverage at a **lower chosen density** (so fewer instances, less
+   overdraw) than skinny cards would need; it does not by itself lower the count
+   (that is set by `GRASS_DENSITY`, item 2). Keep `height 0.4f` (per-instance scale
+   still varies it). This is a **global foliage** change — verify it doesn't harm
+   other foliage users (the only painter today is the meadow grass; procedural
+   types 1–3 are unused in the shipped scenes), else gate width per-type. *(Open
+   question §12.)*
 2. **Higher near-field density, bounded.** Raise `GRASS_DENSITY` (0.53 → ~**1.3**)
-   and/or drop `STAMP_SPACING` so the near field is continuous, targeting an
-   instance budget of **≤ ~120 k** (top of the documented tested range) — *not*
-   uniform max density. The existing **distance-alpha fade**
+   as the primary lever (drop `STAMP_SPACING` only as a fallback if density alone
+   still leaves gaps) so the near field is continuous, targeting an instance
+   **count** budget of **≤ ~120 k** — the top of the *tested* range (§3), meaning
+   it ran, **not** a proven-60-FPS ceiling; C4's Release measurement is what proves
+   the frame. Not uniform max density. The existing **distance-alpha fade**
    (`foliage.vert.glsl:57-59`) thins far grass; combined with the tier's
    `renderDistance`, far grass is culled so the count stays bounded. Record the
    actual `getTotalFoliageCount()` and keep it ≤ budget.
@@ -213,10 +220,12 @@ Three changes, all tuning-scale (no new render tech):
   pass still threatens the frame, the escalation is **B3-tier density scaling** (a
   runtime instance-fraction or a shorter dense-radius) — added **only if measured
   necessary** (avoid speculative complexity).
-- **Weak-HW path = the existing B3 tier** (Low: 45 m distance + 0.66 render scale)
-  plus, if C4 measurement shows it necessary, a density step-down. The Steam-Deck
-  60 FPS target remains the broader perf-scalability program's job (3D_E-0028/29),
-  not a blocker here.
+- **Weak-HW path = two separate Low-preset settings** — the B3 **foliage** tier
+  (Low = 45 m distance, no grass shadows) *and* the `QualityPreset::Low` **render
+  scale** (0.66), both stepped down by the Low preset but distinct axes (the
+  foliage tier does not set render scale) — plus, if C4 measurement shows it
+  necessary, a density step-down. The Steam-Deck 60 FPS target remains the broader
+  perf-scalability program's job (3D_E-0028/29), not a blocker here.
 
 ---
 
@@ -228,7 +237,7 @@ Three changes, all tuning-scale (no new render tech):
 | Splatmap sample + layer blend (incl. dirt patches) | **GPU** (terrain fragment) | Already GPU; the new dirt just shifts existing per-texel weights. |
 | Grass/flower instance generation (paint) | **CPU**, one-time at meadow build | Placement + RNG; sparse/decision logic. |
 | Wider-card mesh, per-instance transform, wind, alpha-test, distance-fade | **GPU** (vertex/fragment) | Per-vertex/per-pixel, data-parallel; unchanged pipeline. |
-| Tier selection (preset → distance/shadow/■density) | **CPU** | One-time branching decision on setting change. |
+| Tier selection (preset → distance / shadow / optional density) | **CPU** | One-time branching decision on setting change. |
 
 No "CPU now, move later." No fitted formula → no Formula-Workbench parity mirror.
 
@@ -243,20 +252,22 @@ No "CPU now, move later." No fitted formula → no Formula-Workbench parity mirr
   ≤ **2.5 ms** at High is the advisory watch-line (not a blocking bound); only
   dropping below 60 FPS blocks the phase.
 - **The three instance-count levers keep overdraw bounded:** (a) wider cards →
-  fewer instances for the same coverage; (b) near-field density capped to a
-  **≤ ~120 k** budget (top of the tested range) with the distance-alpha fade
-  culling far grass; (c) earthy bare ground means less grass is needed to look
-  right. Overdraw — not vertices — is the cost (§2), so bounding on-screen
-  transparent coverage is the whole game.
+  continuous coverage at a lower *chosen* density (fewer instances); (b) near-field
+  density capped to a **≤ ~120 k** count budget (§4.2 — a count, pending C4's
+  measurement) with the distance-alpha fade culling far grass; (c) earthy bare
+  ground means less grass is needed to look right. Overdraw — not vertices — is the
+  cost (§2), so bounding on-screen transparent coverage is the whole game.
 - **Baseline honesty:** the current dense-grass Foliage cost is **unmeasured**
   (§3). C4 records the measured worst-case Foliage-pass ms as the baseline at
   first Release read, then confirms the gate; a runtime **density** step-down for
   the tier is added **only if that measurement requires it**, and if added is
   logged per project Rule 5 (it caps a feature for perf).
 - **Weak HW** (Steam Deck / GTX 1650, already ~33–40 FPS with sparse grass — §3)
-  rides the existing **B3 tier** (Low = 45 m + 0.66 render scale). Bringing weak
-  HW fully to 60 is the perf-scalability program's remit (3D_E-0028/0029), not a
-  gate for this visual phase.
+  rides the existing **B3 foliage tier** (Low = 45 m, no grass shadows) together
+  with the separate `QualityPreset::Low` render scale (0.66) — two distinct
+  settings, both driven by the Low preset. Bringing weak HW fully to 60 is the
+  perf-scalability program's remit (3D_E-0028/0029), not a gate for this visual
+  phase.
 - **Tiers are a graphics `Setting`, NOT `FormulaQualityManager`** — same axis
   distinction as A5/B3. Default High; no auto-detection this phase.
 
@@ -269,12 +280,14 @@ No "CPU now, move later." No fitted formula → no Formula-Workbench parity mirr
   (returns the grass→dirt fraction) and unit-test it: below threshold → 0; at
   noise 1 → `amount`; monotonic between; `amount 0` → 0 (the opt-out). Assert the
   post-move weights still sum to 1 after normalize on a hand case. No GL.
-- **Grass card width (unit/behavioural).** A pure check that the star-mesh
-  half-width constant feeds the emitted vertices (guard against a silent revert):
-  assert the generated quad's width equals `2·halfWidth`. (Mesh build is GL, but
-  the vertex positions are computed CPU-side in `createStarMesh` — extract the
-  corner math if needed, else assert the constant.) *(Confirm testable seam in
-  C2; if not cleanly unit-testable, this is a visual-test-only check.)*
+- **Grass card width (unit).** Expose the card half-width as a named constant
+  (e.g. `FoliageRenderer::CARD_HALF_WIDTH`) and assert `2·CARD_HALF_WIDTH` equals
+  the intended literal **≈ 0.26 m** (not the old 0.15 m). Pinning to the hardcoded
+  literal — not to the constant itself — makes it a real revert-guard: reverting
+  `halfWidth` to `0.075f` fails the test. The corner math (`right =
+  halfWidth·(cos,0,sin)`, `bl = −right`, `br = +right`) is computed CPU-side in
+  `createStarMesh`, so no GL is needed. (No "visual-only" fallback — this stays an
+  objective unit assertion.)
 - **Cluster placement (unit).** The cluster-centre generator (seeded) is
   deterministic → assert a fixed seed yields a stable set of centres within the
   region and outside the pond exclusion. Reuse the `scatterProps` test pattern
@@ -293,7 +306,7 @@ No "CPU now, move later." No fitted formula → no Formula-Workbench parity mirr
 ## 8. Assets & licensing
 
 - **Wildflower textures — CC0**, portrait flower cards (stem + bloom, alpha),
-  ~256×256, committed under `assets/textures/foliage/` (e.g.
+  ~256×384 (portrait), committed under `assets/textures/foliage/` (e.g.
   `flower_lupine.png`, `flower_daisy.png`, `flower_poppy.png`), each with a
   git-ignored `assets/textures/foliage_local/` override (same hook as
   `grass_blades.png`). Sources: CC0 flower cut-outs (OpenGameArt / ambientCG /
@@ -341,7 +354,7 @@ batch push).
   soil patches, and flowers carries the read (colour-blind safe). Flowers add
   colour variety but the grass/soil value structure stands without it.
 - The denser grass + wind stays gentle (amplitude a small constant scaled by wind
-  speed, `engine.cpp:1625`). The Low quality tier (shorter distance, and — if C4
+  speed, `engine.cpp:1627`). The Low foliage tier (shorter distance, and — if C4
   adds it — reduced density) doubles as the low-end-GPU / reduced-detail path.
 
 ---
@@ -380,8 +393,37 @@ batch push).
 
 ## 13. Cold-eyes loop log
 
-(populated as the loops run — project Rule 9 / global Rule 14: fresh subagent per
-loop, no authoring context, loop until no substantive verified finding remains.)
+Project Rule 9 / global Rule 14: fresh subagents per loop, no authoring context,
+loop until no substantive verified finding remains.
+
+**Loop 1 (2026-07-18)** — 2 cold reviewers (accuracy lane + consistency/perf lane).
+Tally: CRITICAL 0 · HIGH 1 · MEDIUM 3 · LOW 8 · INFO 3 (verified all / unverified 0).
+The accuracy lane found the doc substantively exact (every symbol/constant/number
+verified) — only LOW line-number drift. Fixed:
+- HIGH — §3 stated the `FoliageQuality`→distance mapping backwards (positional
+  pairing read Low=100 m/High=45 m; source + the doc's own §4.4/§6 say Low=45) →
+  reordered to 45/70/100 with "Low is the shortest".
+- MEDIUM — the grass-card-width test was a tautology with a "visual-only" escape →
+  rewrote as a real revert-guard pinned to the literal ≈0.26 m via a named
+  `CARD_HALF_WIDTH` constant, dropped the fallback (§7).
+- MEDIUM — §4.4/§6/§10 attributed the 0.66 render scale to the `FoliageQuality`
+  tier; render scale is the separate `QualityPreset` axis → separated the two
+  everywhere (foliage tier = distance + shadows only).
+- MEDIUM — the ≤120 k budget read as perf-safe, but the "tested range" only means
+  it ran, not that it held 60 FPS → labelled it a **count** budget pending C4's
+  Release measurement (§4.2 + §6).
+- LOW ×8 — `■` mojibake in the §5 table → "density"; "and/or" density-vs-spacing →
+  named density the primary lever; "wider cards → fewer instances" conflation
+  clarified (wider cards → coverage at a lower *chosen* density, count still set by
+  `GRASS_DENSITY`); portrait "256×256" → "256×384"; and the accuracy lane's line
+  drift (autoTex override ~2380-2420→~2367-2374, `terrain.h:250`→`:254`,
+  `generateAutoTexture` cites +2, `halfWidth` 361-362→360-361, `glDrawArraysInstanced`
+  245-247→~249-250, `windAmplitude` 1625→1627, `blendBankChannel` "via
+  applyContourBankBlend", §1.1 mesh/fade cite split).
+- INFO (surfaced) — C4's gate is a maintainer Release read on RX 6600 (inherent —
+  CI is GPU-less; the mandatory baseline-ms record keeps it honest); `paintFoliage`
+  has an optional 7th `DensityMap*` arg the doc's 6-arg form omits (meadow uses the
+  6-arg form — harmless).
 
 ---
 
