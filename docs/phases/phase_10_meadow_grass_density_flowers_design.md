@@ -115,7 +115,7 @@ Sources: §14.
   headroom for naive density, RX 6600 does.
 - **Foliage "flower" type 2 is generated but never painted.**
   `generateProceduralTexture(2)` builds a stem+petal card
-  (`foliage_renderer.cpp:540-571`); the meadow paints only `GRASS_TYPE_ID = 0`.
+  (`foliage_renderer.cpp:~545`); the meadow paints only `GRASS_TYPE_ID = 0`.
   `paintFoliage(typeId,center,radius,density,falloff,cfg)`
   (`foliage_manager.cpp:21-110`) fills one disc — **one call per cluster centre =
   one cluster**. `setTypeTexture(typeId,path)` (B1) can swap a real flower texture
@@ -183,8 +183,10 @@ Three changes, all tuning-scale (no new render tech):
    it ran, **not** a proven-60-FPS ceiling; C4's Release measurement is what proves
    the frame. Not uniform max density. The existing **distance-alpha fade**
    (`foliage.vert.glsl:57-59`) thins far grass; combined with the tier's
-   `renderDistance`, far grass is culled so the count stays bounded. Record the
-   actual `getTotalFoliageCount()` and keep it ≤ budget.
+   `renderDistance`, far grass is culled so the count stays bounded. The **≤ ~120 k
+   budget is grass instances** — record `getTotalFoliageCount()` at C2 (grass-only;
+   flowers land in C3, ≤ ~10 k, so the post-C3 total is ~130 k) and keep grass ≤
+   budget.
 3. **More variation.** Widen `grassCfg.minScale/maxScale` (e.g. 0.5–2.0) and
    `tintVariation`; rotation is already random. This breaks the repeated-card read.
    Optionally paint a second, sparser pass of a **shorter** grass (smaller scale)
@@ -202,7 +204,10 @@ Three changes, all tuning-scale (no new render tech):
   width gate (§12) to the flower slots only.
 - **Cluster placement:** generate **cluster centres** with a seeded scatter (reuse
   `scatterProps` with a coarse `cellSize`, or a small hand-authored/seeded list),
-  then `paintFoliage(flowerType, center, clusterRadius≈1.5–2.5 m, clusterDensity,
+  **excluding the pond footprint** (the seeded generator uses the same
+  `exclusionCenter`/`exclusionRadius` the props already pass, so no flower cluster
+  lands in the water — the §7 cluster test asserts this), then
+  `paintFoliage(flowerType, center, clusterRadius≈1.5–2.5 m, clusterDensity,
   falloff, cfg)` per centre — each call fills one disc = one species patch. Vary
   which species per cluster so patches read as lupine drifts / daisy patches. Keep
   total flower instances modest (**≤ ~10 k**, sparse accents) — cheap on the
@@ -455,6 +460,25 @@ resolved, and re-verified every constant/citation exact. Fixed:
 - INFO — the fbm→0..1 remap (upstream of the tested pure helper) is uncovered
   (trivial); `.glb` "largest draw-call load" is a paraphrase of an engine comment,
   not independently profiled (doesn't affect the design).
+
+**Loop 3 (2026-07-18) — CONVERGED (polish-only).** 2 cold reviewers, identical
+briefs. Tally: CRITICAL 0 · HIGH 0 · MEDIUM 0 · LOW 4 · INFO 3 (verified all /
+unverified 1). Both lanes re-verified every citation exact and called the doc
+"implementable as-is"; no substantive (structural/mechanical/architectural)
+finding remained. The polish fixes applied:
+- §4.3 — stated that flower cluster centres exclude the pond footprint (the §7
+  cluster test relies on it; matches `scatterProps`' existing exclusion).
+- §4.2 — labelled the ≤120 k budget **grass** instances; noted `getTotalFoliageCount()`
+  at C2 is grass-only, with flowers (≤10 k, C3) making the post-C3 total ~130 k.
+- §3 — `generateProceduralTexture(2)` cite `:540-571` → `~:545` (line drift).
+- **Dropped (unverified):** the "0.66 render scale might be 0.5" flag — verified
+  correct against `settings_apply.cpp` (Low = `0.66f`) and `test_settings.cpp:1360`;
+  the "HalfScale" *test name* is a pre-existing codebase misnomer, not a doc error.
+
+**Convergence:** loop 3 is polish-only → the design is signed off (feedback:
+spec sign-off delegated to cold-eyes convergence). Findings trended 12 → 8 → 4
+(polish); accuracy was clean of HIGH/MEDIUM from loop 1 on. Implementation
+proceeds from slice C1 (earthy bare ground).
 
 ---
 
