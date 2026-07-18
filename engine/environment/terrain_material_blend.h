@@ -27,6 +27,7 @@
 
 #include <array>
 #include <cassert>
+#include <cmath>
 #include <cstddef>
 
 namespace Vestige
@@ -92,6 +93,41 @@ inline std::array<float, 4> heightBlendWeights(const std::array<float, 4>& heigh
         w[i] = b[i] / sum;
     }
     return w;
+}
+
+/// @brief Apply a tangent-space detail normal onto a world macro normal — CPU
+///        mirror of the GLSL `whiteoutBlend` in `terrain.frag.glsl` (slice A3).
+///
+/// The top-down terrain projection's tangent frame is world-XZ (T = +X, B = +Z),
+/// so the macro normal is reoriented from world (+Y up) into the detail's tangent
+/// basis (+Z up), Ben-Golus Whiteout-blended, and reoriented back. This is the
+/// pure, GL-free reference the A3 directional parity test pins the shader against
+/// (project Rule 7). Both `macroN` and `detailN` are `{x, y, z}`; the result is a
+/// unit-length world-space normal. A detail normal tilted +X raises the blended
+/// normal's X (and −X lowers it) — the direction the test asserts.
+inline std::array<float, 3> whiteoutBlendNormal(const std::array<float, 3>& macroN,
+                                                const std::array<float, 3>& detailN)
+{
+    // world +Y up -> tangent +Z up: n1 = (macroN.x, macroN.z, macroN.y)
+    const float n1x = macroN[0];
+    const float n1y = macroN[2];
+    const float n1z = macroN[1];
+
+    // r = normalize( (n1.xy + detailN.xy, n1.z * detailN.z) )
+    float rx = n1x + detailN[0];
+    float ry = n1y + detailN[1];
+    float rz = n1z * detailN[2];
+    const float rlen = std::sqrt(rx * rx + ry * ry + rz * rz);
+    rx /= rlen;
+    ry /= rlen;
+    rz /= rlen;
+
+    // tangent +Z up -> world +Y up: (r.x, r.z, r.y)
+    float wx = rx;
+    float wy = rz;
+    float wz = ry;
+    const float wlen = std::sqrt(wx * wx + wy * wy + wz * wz);
+    return {wx / wlen, wy / wlen, wz / wlen};
 }
 
 }  // namespace Vestige

@@ -17,6 +17,7 @@
 #include <gtest/gtest.h>
 
 #include <array>
+#include <cmath>
 #include <filesystem>
 #include <numeric>
 #include <string>
@@ -123,6 +124,88 @@ TEST(TerrainHeightBlendDeathTest, DepthZeroTripsTheDebugAssert)
     EXPECT_DEATH({ (void)heightBlendWeights(h, w, 0.0f); }, "depth must be > 0");
 }
 #endif
+
+// ---------------------------------------------------------------------------
+// Whiteout detail-normal blend parity (pure, no GL) — slice A3, design §7/§9.
+// The CPU `whiteoutBlendNormal` mirrors the GLSL `whiteoutBlend`; the assertions
+// are DIRECTIONAL (a +X detail tilt raises the world normal's X, a −X tilt lowers
+// it) so a wrong-axis or flipped-sign blend fails — not merely "differs".
+// ---------------------------------------------------------------------------
+
+namespace
+{
+float vlen3(const std::array<float, 3>& v)
+{
+    return std::sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
+}
+
+std::array<float, 3> normalize3(std::array<float, 3> v)
+{
+    const float l = vlen3(v);
+    return {v[0] / l, v[1] / l, v[2] / l};
+}
+}  // namespace
+
+TEST(TerrainNormalBlendTest, FlatDetailPreservesMacroNormal)
+{
+    // A flat tangent normal (0,0,1 — no tilt) must return the macro normal unchanged.
+    const std::array<float, 3> macro{0.0f, 1.0f, 0.0f};
+    const std::array<float, 3> flat{0.0f, 0.0f, 1.0f};
+    auto res = whiteoutBlendNormal(macro, flat);
+    EXPECT_NEAR(res[0], 0.0f, 1e-5f);
+    EXPECT_NEAR(res[1], 1.0f, 1e-5f);
+    EXPECT_NEAR(res[2], 0.0f, 1e-5f);
+}
+
+TEST(TerrainNormalBlendTest, DetailTiltDrivesWorldNormalAlongTheRightAxis)
+{
+    const std::array<float, 3> macro{0.0f, 1.0f, 0.0f};
+
+    // +X tangent tilt → world normal leans +X; −X tilt → leans −X.
+    auto plusX  = whiteoutBlendNormal(macro, normalize3({0.5f, 0.0f, 1.0f}));
+    auto minusX = whiteoutBlendNormal(macro, normalize3({-0.5f, 0.0f, 1.0f}));
+    EXPECT_GT(plusX[0], 0.0f);
+    EXPECT_LT(minusX[0], 0.0f);
+
+    // Tangent Y maps to world Z under the top-down (world-XZ) frame.
+    auto plusY  = whiteoutBlendNormal(macro, normalize3({0.0f, 0.5f, 1.0f}));
+    auto minusY = whiteoutBlendNormal(macro, normalize3({0.0f, -0.5f, 1.0f}));
+    EXPECT_GT(plusY[2], 0.0f);
+    EXPECT_LT(minusY[2], 0.0f);
+}
+
+TEST(TerrainNormalBlendTest, ResultIsAlwaysUnitLength)
+{
+    const std::array<std::array<float, 3>, 3> macros{{
+        {0.0f, 1.0f, 0.0f},          // flat
+        normalize3({0.2f, 0.97f, 0.0f}),  // gentle +X slope
+        normalize3({-0.1f, 0.95f, 0.3f}), // gentle mixed slope
+    }};
+    const std::array<std::array<float, 3>, 3> details{{
+        {0.0f, 0.0f, 1.0f},
+        normalize3({0.4f, -0.2f, 1.0f}),
+        normalize3({-0.3f, 0.5f, 1.0f}),
+    }};
+    for (const auto& m : macros)
+    {
+        for (const auto& d : details)
+        {
+            EXPECT_NEAR(vlen3(whiteoutBlendNormal(m, d)), 1.0f, 1e-5f);
+        }
+    }
+}
+
+TEST(TerrainNormalBlendTest, FlatDetailPreservesATiltedMacroNormal)
+{
+    // On a gentle slope (macro tilted) a flat detail must leave the macro normal
+    // essentially unchanged — the robustness the whiteout form buys over a raw TBN.
+    const auto macro = normalize3({0.25f, 0.95f, 0.0f});
+    const std::array<float, 3> flat{0.0f, 0.0f, 1.0f};
+    auto res = whiteoutBlendNormal(macro, flat);
+    EXPECT_NEAR(res[0], macro[0], 1e-5f);
+    EXPECT_NEAR(res[1], macro[1], 1e-5f);
+    EXPECT_NEAR(res[2], macro[2], 1e-5f);
+}
 
 // ---------------------------------------------------------------------------
 // TerrainMaterialSet load (needs a GL context) — design §7.

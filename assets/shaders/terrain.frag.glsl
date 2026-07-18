@@ -224,11 +224,84 @@ vec3 fresnelSchlick(float cosTheta, vec3 F0)
     return F0 + (1.0 - F0) * (x2 * x2 * x);
 }
 
+// ---------------------------------------------------------------------------
+// PBR ground layers (3D_E-0031 A3). Sample + height-blend the four layers for
+// one projection; returns blended albedo, AO, roughness and the blended
+// tangent-space detail normal (+Z out of surface). Shared by the top-down and
+// the per-axis triplanar projections (design §4.3 steps 2-3).
+// ---------------------------------------------------------------------------
+struct GroundSample
+{
+    vec3  albedo;
+    float ao;
+    float roughness;
+    vec3  tnormal;   // tangent-space, +Z out of surface
+};
+
+GroundSample sampleGround(vec2 uv, vec4 splatWeights)
+{
+    vec3 a0 = texture(u_albedoArray,   vec3(uv * u_layerTiling[0], 0.0)).rgb;
+    vec3 a1 = texture(u_albedoArray,   vec3(uv * u_layerTiling[1], 1.0)).rgb;
+    vec3 a2 = texture(u_albedoArray,   vec3(uv * u_layerTiling[2], 2.0)).rgb;
+    vec3 a3 = texture(u_albedoArray,   vec3(uv * u_layerTiling[3], 3.0)).rgb;
+
+    vec3 m0 = texture(u_materialArray, vec3(uv * u_layerTiling[0], 0.0)).rgb;
+    vec3 m1 = texture(u_materialArray, vec3(uv * u_layerTiling[1], 1.0)).rgb;
+    vec3 m2 = texture(u_materialArray, vec3(uv * u_layerTiling[2], 2.0)).rgb;
+    vec3 m3 = texture(u_materialArray, vec3(uv * u_layerTiling[3], 3.0)).rgb;
+
+    vec3 n0 = texture(u_normalArray,   vec3(uv * u_layerTiling[0], 0.0)).rgb * 2.0 - 1.0;
+    vec3 n1 = texture(u_normalArray,   vec3(uv * u_layerTiling[1], 1.0)).rgb * 2.0 - 1.0;
+    vec3 n2 = texture(u_normalArray,   vec3(uv * u_layerTiling[2], 2.0)).rgb * 2.0 - 1.0;
+    vec3 n3 = texture(u_normalArray,   vec3(uv * u_layerTiling[3], 3.0)).rgb * 2.0 - 1.0;
+
+    // Height (material B) drives the same depth-aware blend used for albedo.
+    vec4 heights = vec4(m0.b, m1.b, m2.b, m3.b);
+    vec4 w = heightBlendWeights(heights, splatWeights);
+
+    GroundSample g;
+    g.albedo    = a0 * w.x + a1 * w.y + a2 * w.z + a3 * w.w;
+    g.ao        = m0.r * w.x + m1.r * w.y + m2.r * w.z + m3.r * w.w;
+    g.roughness = m0.g * w.x + m1.g * w.y + m2.g * w.z + m3.g * w.w;
+    g.tnormal   = normalize(n0 * w.x + n1 * w.y + n2 * w.z + n3 * w.w);
+    return g;
+}
+
+// ---------------------------------------------------------------------------
+// Apply a tangent-space detail normal onto the world macro normal via Ben Golus's
+// Whiteout blend (design §4.3 step 5). The top-down projection's tangent frame is
+// world-XZ (T = +X, B = +Z), so we reorient the macro normal from world (+Y up)
+// into the detail's tangent basis (+Z up), Whiteout-blend, and reorient back.
+// Using the whiteout form (not a raw TBN transform) keeps the blend robust where
+// the macro normal tilts on gentle, sub-triplanar slopes. Mirrored on the CPU in
+// engine/environment/terrain_material_blend.h (whiteoutBlendNormal) for the
+// A3 directional parity test.
+// ---------------------------------------------------------------------------
+vec3 whiteoutBlend(vec3 macroN, vec3 detailN)
+{
+    vec3 n1 = vec3(macroN.x, macroN.z, macroN.y);   // world +Y up -> tangent +Z up
+    vec3 r  = normalize(vec3(n1.xy + detailN.xy, n1.z * detailN.z));
+    return normalize(vec3(r.x, r.z, r.y));          // tangent +Z up -> world +Y up
+}
+
+// ---------------------------------------------------------------------------
+// Ben Golus Whiteout triplanar normal (design §4.3 steps 4-5, slope path):
+// reorient each axis' tangent-space detail normal onto the geometric world
+// normal, then blend the three by the triplanar weights. tnX/tnY/tnZ are the
+// per-projection tangent normals (X: worldPos.yz, Y: worldPos.xz, Z: worldPos.xy).
+// ---------------------------------------------------------------------------
+vec3 triplanarWorldNormal(vec3 tnX, vec3 tnY, vec3 tnZ, vec3 geomN, vec3 w)
+{
+    vec3 bnX = vec3(tnX.xy + geomN.zy, abs(tnX.z) * geomN.x);
+    vec3 bnY = vec3(tnY.xy + geomN.xz, abs(tnY.z) * geomN.y);
+    vec3 bnZ = vec3(tnZ.xy + geomN.xy, abs(tnZ.z) * geomN.z);
+    return normalize(bnX.zyx * w.x + bnY.xzy * w.y + bnZ.xyz * w.z);
+}
+
 void main()
 {
-    // Read terrain normal from pre-computed normal map (encoded as n * 0.5 + 0.5)
-    vec3 normal = texture(u_normalMap, v_terrainUV).rgb * 2.0 - 1.0;
-    normal = normalize(normal);
+    // Read terrain macro normal from the pre-computed normal map (encoded n*0.5+0.5).
+    vec3 macroNormal = normalize(texture(u_normalMap, v_terrainUV).rgb * 2.0 - 1.0);
 
     // Read splatmap weights for base color
     vec4 splat = texture(u_splatmap, v_terrainUV);
@@ -243,36 +316,58 @@ void main()
     float groundAO = 1.0;
     float groundRoughness = 0.6;
 
+    // Shading normal — the macro normal for the flat-colour paths, detail-perturbed
+    // in the textured path (slice A3).
+    vec3 N = macroNormal;
+
     vec3 albedo;
     if (u_useGroundTextures)
     {
-        // Top-down (world-XZ) projection per layer; height-blend by splat weight.
-        // Detail normals + triplanar on slopes arrive in slice A3 — A2 lights with
-        // the macro normal and top-down-projects on the (gentle) meadow slopes.
-        vec2 buv = v_worldPos.xz;
-        vec3 a0 = texture(u_albedoArray,   vec3(buv * u_layerTiling[0], 0.0)).rgb;
-        vec3 a1 = texture(u_albedoArray,   vec3(buv * u_layerTiling[1], 1.0)).rgb;
-        vec3 a2 = texture(u_albedoArray,   vec3(buv * u_layerTiling[2], 2.0)).rgb;
-        vec3 a3 = texture(u_albedoArray,   vec3(buv * u_layerTiling[3], 3.0)).rgb;
-        vec3 m0 = texture(u_materialArray, vec3(buv * u_layerTiling[0], 0.0)).rgb;
-        vec3 m1 = texture(u_materialArray, vec3(buv * u_layerTiling[1], 1.0)).rgb;
-        vec3 m2 = texture(u_materialArray, vec3(buv * u_layerTiling[2], 2.0)).rgb;
-        vec3 m3 = texture(u_materialArray, vec3(buv * u_layerTiling[3], 3.0)).rgb;
+        // Steepness → triplanar blend (reuse the existing terrain steepness logic).
+        float steepness = 1.0 - abs(macroNormal.y);
+        float triBlend = smoothstep(u_triplanarStart, u_triplanarEnd, steepness);
 
-        // splat = (grass, rock, dirt, sand) = layers 0..3; height = material B channel.
-        vec4 heights = vec4(m0.b, m1.b, m2.b, m3.b);
-        vec4 bw = heightBlendWeights(heights, splat);
+        // Top-down (world-XZ / Y-axis) projection — the meadow-dominant case.
+        GroundSample gY = sampleGround(v_worldPos.xz, splat);
+        vec3  worldN = whiteoutBlend(macroNormal, gY.tnormal);
+        vec3  outAlbedo = gY.albedo;
+        float outAO     = gY.ao;
+        float outRough  = gY.roughness;
 
-        albedo         = a0 * bw.x + a1 * bw.y + a2 * bw.z + a3 * bw.w;
-        groundAO       = m0.r * bw.x + m1.r * bw.y + m2.r * bw.z + m3.r * bw.w;
-        groundRoughness = m0.g * bw.x + m1.g * bw.y + m2.g * bw.z + m3.g * bw.w;
+        // Slopes: blend in the X/Z world-plane projections (Ben Golus triplanar).
+        if (triBlend > 0.001)
+        {
+            vec3 tw = triplanarWeights(macroNormal, u_triplanarSharpness);
+
+            vec2 uvX = v_worldPos.yz;
+            vec2 uvZ = v_worldPos.xy;
+            if (macroNormal.x < 0.0) uvX.x = -uvX.x;   // fix mirroring on -facing sides
+            if (macroNormal.z < 0.0) uvZ.x = -uvZ.x;
+
+            GroundSample gX = sampleGround(uvX, splat);
+            GroundSample gZ = sampleGround(uvZ, splat);
+
+            vec3  triAlbedo = gX.albedo    * tw.x + gY.albedo    * tw.y + gZ.albedo    * tw.z;
+            float triAO     = gX.ao        * tw.x + gY.ao        * tw.y + gZ.ao        * tw.z;
+            float triRough  = gX.roughness * tw.x + gY.roughness * tw.y + gZ.roughness * tw.z;
+            vec3  triN      = triplanarWorldNormal(gX.tnormal, gY.tnormal, gZ.tnormal,
+                                                   macroNormal, tw);
+
+            outAlbedo = mix(outAlbedo, triAlbedo, triBlend);
+            outAO     = mix(outAO,     triAO,     triBlend);
+            outRough  = mix(outRough,  triRough,  triBlend);
+            worldN    = normalize(mix(worldN, triN, triBlend));
+        }
 
         // Subtle large-scale brightness variation to break exact tiling repeats.
-        albedo *= tilingDetail(buv * 0.15);
+        albedo          = outAlbedo * tilingDetail(v_worldPos.xz * 0.15);
+        groundAO        = outAO;
+        groundRoughness = outRough;
+        N               = worldN;
     }
     else if (u_triplanarEnabled && u_textureTiling > 0.0)
     {
-        float steepness = 1.0 - abs(normal.y);
+        float steepness = 1.0 - abs(macroNormal.y);
         float triBlend = smoothstep(u_triplanarStart, u_triplanarEnd, steepness);
 
         // Standard top-down (Y-axis) sampling using worldPos.xz
@@ -285,14 +380,14 @@ void main()
         if (triBlend > 0.001)
         {
             // X-axis and Z-axis projections for steep slopes
-            vec3 tw = triplanarWeights(normal, u_triplanarSharpness);
+            vec3 tw = triplanarWeights(macroNormal, u_triplanarSharpness);
 
             vec2 uvX = v_worldPos.yz * u_textureTiling;
             vec2 uvZ = v_worldPos.xy * u_textureTiling;
 
             // Fix mirroring on negative-facing sides
-            if (normal.x < 0.0) uvX.x = -uvX.x;
-            if (normal.z < 0.0) uvZ.x = -uvZ.x;
+            if (macroNormal.x < 0.0) uvX.x = -uvX.x;
+            if (macroNormal.z < 0.0) uvZ.x = -uvZ.x;
 
             float detailX = tilingDetail(uvX);
             float detailZ = tilingDetail(uvZ);
@@ -321,11 +416,11 @@ void main()
 
     // Directional lighting (Blinn-Phong)
     vec3 lightDir = normalize(-u_lightDirection);
-    float NdotL = max(dot(normal, lightDir), 0.0);
+    float NdotL = max(dot(N, lightDir), 0.0);
 
     vec3 viewDir = normalize(u_viewPos - v_worldPos);
     vec3 halfDir = normalize(lightDir + viewDir);
-    float NdotH = max(dot(normal, halfDir), 0.0);
+    float NdotH = max(dot(N, halfDir), 0.0);
 
     // Specular. The textured ground shades with the engine's canonical
     // Cook-Torrance GGX (3D_E-0031 A2, design §4.4 item 1) — roughness-driven,
@@ -334,7 +429,7 @@ void main()
     vec3 spec;
     if (u_useGroundTextures)
     {
-        float NdotV = max(dot(normal, viewDir), 0.0);
+        float NdotV = max(dot(N, viewDir), 0.0);
         float HdotV = max(dot(halfDir, viewDir), 0.0);
         vec3  F0 = vec3(0.04);                       // dielectric ground (metallic = 0)
         float D  = distributionGGX(NdotH, groundRoughness);
@@ -353,7 +448,7 @@ void main()
     float shadow = 0.0;
     if (u_hasShadows)
     {
-        shadow = calcTerrainShadow(normal, lightDir);
+        shadow = calcTerrainShadow(N, lightDir);
     }
 
     vec3 ambient = albedo * u_ambientColor * groundAO;

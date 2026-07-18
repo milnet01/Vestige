@@ -22,6 +22,32 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-07-18 Added — Terrain detail normals + triplanar Whiteout (Meadow realism A3, 3D_E-0031)
+
+Slice A3 of the PBR ground-texture overhaul. The textured terrain path now has
+real surface relief instead of lighting off the flat macro normal only.
+
+- **Detail normals.** Each ground layer's tangent-space normal map (grass /
+  rock / dirt / sand — already loaded into `u_normalArray`) is sampled and
+  height-blended by the same depth-aware weights as albedo, then applied onto
+  the terrain's macro normal via Ben Golus's **Whiteout** blend using the
+  top-down world-XZ tangent frame. The ground now catches light with fine grain
+  (visible grass/dirt texture) rather than reading as a smooth painted surface.
+- **Triplanar on slopes.** Steep pixels (the pond-bowl banks) now sample albedo,
+  AO, roughness **and** normals across the three world-plane projections and
+  blend them by the geometric-normal weights (Golus per-axis Whiteout normals),
+  mixed against the top-down result by the existing steepness factor — so the
+  dirt banks no longer stretch/smear where the terrain tilts.
+- **Parity test.** The Whiteout blend is mirrored as a pure, GL-free
+  `whiteoutBlendNormal` in `engine/environment/terrain_material_blend.h` and
+  pinned by a **directional** unit test (`TerrainNormalBlendTest`): a +X detail
+  tilt must raise the blended world normal's X, a −X tilt lower it, and the
+  result stay unit-length — so a wrong-axis or flipped-sign blend fails, not
+  merely "differs".
+- Verified: terrain shader compiles + links GL-error-free; `--visual-test`
+  meadow renders textured ground with detail relief and clean pond banks. The
+  flat-colour fallback path (Tabernacle/demo) is unchanged.
+
 ### 2026-07-17 Added — Weak/gamer-hardware performance scalability: Tier 1 (render-scale + presets + FXAA/CAS)
 
 The first wave of the weak/gamer/handheld performance program (strategy +
