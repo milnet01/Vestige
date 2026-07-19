@@ -25,8 +25,9 @@ data model · 5.6 integration) · 6 CPU/GPU placement · 7 Performance · 8 Test
 
 A **continuous field of real 3-D grass blades** that reads like the photoreference
 meadows — blades that catch light, glow when backlit, bend in the wind, and ground
-into the terrain — covering the meadow densely and holding **≥ 60 FPS at High on
-the RX 6600**.
+into the terrain — covering the meadow at the **v1 target density** (VRAM-bounded base
+density, dense read carried by grazing-angle overlap; higher *uniform* density is a v2
+goal — §7) and holding **≥ 60 FPS at High on the RX 6600**.
 
 - **Real per-blade geometry**, GPU-generated from a per-blade seed (Bézier ribbon,
   ~5–13 triangles by LOD, i.e. `2N−1`), not billboards, not shell texturing.
@@ -177,7 +178,15 @@ and the draw. Coexists with `FoliageRenderer` (flowers).
   **fragment shader after** the two-sided face-forward flip (see the opaque bullet) —
   the order is load-bearing.
 - **View-facing widening** (§3): widen the blade in view space as it turns edge-on
-  to the camera, clamped, to kill sub-pixel shimmer.
+  to the camera, clamped, to kill sub-pixel shimmer. **Pin a floor:** the projected
+  blade width must not fall below **~1–1.5 px**; a blade thinner than a sample stride
+  flickers as it crosses pixels. This complements the engine's edge AA rather than
+  replacing it — the scene renders to a **4× MSAA** FBO by default (`engine.cpp:110`,
+  `renderer.cpp:530-544`), which covers geometric blade edges; but under the **TAA/SMAA**
+  AA modes the scene renders to a **non-MSAA** FBO (`renderer.cpp:713-732`), so there
+  the widening floor + the §5.3 fade-to-zero are grass's main sub-pixel defense (TAA's
+  temporal accumulation catches the residual crawl). Verified against the AA path, not
+  assumed.
 - **Opaque, not alpha-blended.** Real blades are solid geometry → render **opaque**
   (depth-tested, blend off; two-sided lighting with back-face cull off — the fragment
   shader **faces the geometric normal toward the camera first** (`faceforward` / flip
@@ -257,6 +266,16 @@ and the draw. Coexists with `FoliageRenderer` (flowers).
     per-chunk draw granularity — the fade tracks each blade, not the chunk. Pure
     `grassLodForDistance(dist)` helper picks the segment tier + the blend-band edges →
     unit-tested (§8's "no obvious LOD pop" criterion rests on this per-blade fade).
+  - **Precondition (else the pop returns).** The *removal* — dropping instanceCount from
+    `curFraction·count` to `nextFraction·count` — is unavoidably **per-chunk** (one
+    `glDrawArraysInstanced`, one instanceCount). For no blade to be un-submitted while
+    still visible, the chunk's fraction step (and the segment-tier step) must key on the
+    chunk's **nearest** point, and the **blend band width must be ≥ the chunk's
+    max distance-spread** (its diagonal, ~22 m for a 16 m chunk) — so the last-to-fade
+    (nearest) drop-set blade has already reached zero before the chunk drops it. Keying
+    on chunk-*centre* with a band narrower than the spread would pop the near-edge blades.
+    The segment-tier "near-sub-pixel" imperceptibility (above) likewise holds only if the
+    chunk's **nearest** blade is past the sub-pixel threshold, not its centre.
 - **Draw (v1):** per visible chunk, `glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0,
   vertsForLod, chunkBladeCount·lodFraction)` (`vertsForLod = 2N+1`, §5.1), seeds
   read from the chunk SSBO bound at a binding point. One draw per visible chunk
@@ -365,7 +384,11 @@ additive rather than a rewrite.
   gate) at a **fixed, reproducible ground-level pose**: G5 adds a named `grass_dense`
   `--visual-test` viewpoint (eye ~1.5 m above the terrain in the densest meadow
   interior; exact XZ + yaw/pitch recorded in the viewpoint list) so the baseline
-  repeats run-to-run. The prior billboard meadow measured GPU-total ~11 ms worst /
+  repeats run-to-run. **Two poses, not one:** the `grass_dense` pose is a near-level
+  *grazing* look (best case for the grazing-angle overlap §7 relies on) **plus** a
+  **downward-pitched `grass_lookdown` pose** — the worst case for the base-density read,
+  where ~130 blades/m² (~9 cm spacing) is sparsest and overlap does not help. The
+  look-down pose is what actually stresses the flagship density risk (§7 memory bullet). The prior billboard meadow measured GPU-total ~11 ms worst /
   ~8 ms avg on the RX 6600 (this-session `--visual-test` read, to be re-recorded into
   the 3D_E-0030 CSV for reproducibility) — headroom, though from an elevated camera.
 - **Opaque blades avoid the billboard cards' alpha-blend sort + transparency
@@ -412,7 +435,10 @@ additive rather than a rewrite.
   against the GLSL" means the two hand-kept formulas agree, **not** a GL readback.
   Test endpoints (row 0 = root, last row = tip on the curve), width tapers
   monotonically to ~0 at the tip, and the
-  curve passes through P0/P2. No GL.
+  curve passes through P0/P2. No GL. **Scope:** the mirror pins the **static** blade
+  (curve + width taper + tip) only; the **wind bend** and **view-facing widening** also
+  move the emitted vertex but are time-/view-dependent, so they are not in the parity
+  seam — a GLSL divergence there is caught by the visual check (§5.4/§5.1), not this test.
 - **LOD selection (unit).** `grassLodForDistance(dist, bands)` → correct tier at band
   edges + midpoints, monotonic non-increasing detail with distance.
 - **Placement gating (unit).** Pure predicates: spawn-probability ∝ grass weight
@@ -424,7 +450,11 @@ additive rather than a rewrite.
   meadow: a continuous field of **distinct 3-D blades** (not cards), backlit glow,
   grounded bases, wind motion, bare earth over the C1 dirt patches, **no obvious LOD
   pop** at band edges (the per-blade distance fade of §5.3 holds the transition
-  smooth despite per-chunk draws).
+  smooth despite per-chunk draws). Two checks a **static screenshot cannot show**, so
+  both use a **moving** pose: (a) **no visible shimmer/crawl** on the blades under a slow
+  camera pan (the widening floor + AA path of §5.1 must hold — a still frame hides
+  temporal aliasing); (b) the **`grass_lookdown`** pose reads acceptably dense from above
+  (the §7 base-density risk), not just the grazing `grass_dense` pose.
 - **Perf (G5).** Release `--profile-log` **Grass** GPU pass ms + FPS at the dense
   vantage on the RX 6600; record the baseline; ≥ 60 FPS at High is the gate.
 
@@ -447,10 +477,12 @@ additive rather than a rewrite.
    exclusion; the **one shared seed SSBO** + per-chunk descriptors (base offset +
    count + AABB). Placement-predicate unit tests. *Verify:* `--visual-test` — blades cover the grass areas, follow the hills,
    thin over dirt patches, avoid water/slopes; GL-error-free.
-3. **G3 — LOD + per-chunk frustum cull.** Distance LOD (segments + blade fraction +
-   survivor widening, blended) and CPU per-chunk frustum cull. `grassLodForDistance`
-   unit test. *Verify:* field holds across distance with no obvious pop; only visible
-   chunks drawn (instrument a drawn-chunk count).
+3. **G3 — LOD + per-chunk frustum cull.** Distance LOD (per-chunk segment tier +
+   per-blade rank/distance fade keyed on the chunk's nearest point, survivor widening)
+   and CPU per-chunk frustum cull. `grassLodForDistance` unit test. *Verify:* under a
+   slow camera **pan** (moving pose) the field holds across distance with **no obvious
+   pop and no blade shimmer/crawl**; only visible chunks drawn (instrument a drawn-chunk
+   count).
 4. **G4 — Shading + wind + shadow receive.** Vertical-biased normals, view·light
    translucency glow, height base AO, boosted ambient; wind vertex bend with
    per-blade phase; **receives** CSM shadows (no cast in v1 — Rule-5 logged).
@@ -459,8 +491,10 @@ additive rather than a rewrite.
 5. **G5 — Tiers + perf + meadow wire-up.** `GrassQuality` tier on the
    `RendererQualitySink`; replace the billboard-grass meadow block with
    `GrassRenderer::buildField`; keep C1 ground + C3 flowers. Release `--profile-log`
-   Grass-pass read on the RX 6600. *Verify:* ≥ 60 FPS at High (baseline ms recorded);
-   preset→tier unit test; CHANGELOG + ROADMAP.
+   Grass-pass read on the RX 6600 at **both** the `grass_dense` (grazing) and
+   `grass_lookdown` poses. *Verify:* ≥ 60 FPS at High (baseline ms recorded); the
+   look-down pose reads acceptably dense (the §7 base-density risk); preset→tier unit
+   test; CHANGELOG + ROADMAP.
 
 **v2 (separate future phase):** GPU compute cull + `glMultiDrawArraysIndirect`
 (non-indexed) + GPU-side placement (the data model is v2-ready). Not in this phase.
@@ -625,6 +659,34 @@ sound; the remaining findings are seam/ordering/attribution gaps. Fixed:
 
 Loop 4 surfaced a HIGH (naming) + 4 MEDIUM → **not converged**. Renamed to the meadow
 bucket; Loop 5 cold on the renamed doc is next before sign-off + G1.
+
+**Loop 5 (2026-07-19)** — 2 cold reviewers on the renamed doc. Tally: CRITICAL 0 · HIGH
+0 · MEDIUM 2 · LOW 2 · INFO 1 (verified 4 / unverified 1). The **accuracy lane came back
+fully clean** — every §4 citation exact, all topology/struct/memory numbers consistent,
+phase-naming resolved. Technique lane (fixed):
+- MEDIUM — §5.3 fade had an **unstated precondition**: removal (the instanceCount step)
+  is per-chunk, so if it keys on chunk-*centre* a near-edge drop-set blade is still
+  mid-fade when the chunk drops it → the pop returns. Added: the fraction step + segment
+  tier must key on the chunk's **nearest** point and the **blend band ≥ the chunk's
+  max distance-spread** (§5.3).
+- MEDIUM — grass anti-aliasing. The reviewer's premise ("engine has no MSAA/TAA, only
+  FXAA+CAS") was **UNVERIFIED and dismissed** — the engine renders to a **4× MSAA** FBO
+  by default (`engine.cpp:110`, `renderer.cpp:530-544`) with TAA/SMAA/FXAA modes. But the
+  *valid* sub-point held: view-facing widening needed a concrete floor + a motion check.
+  Added a **~1–1.5 px projected-width floor**, noted the TAA/SMAA path renders non-MSAA
+  so widening + fade carry there, and added a **moving-pose shimmer/crawl** check to
+  G3/§8 (a static screenshot hides temporal aliasing) (§5.1/§8/§10).
+- LOW — the G5 `grass_dense` pose is grazing (flatters overlap); the flagged density risk
+  is the **look-down** case → added a downward-pitched **`grass_lookdown`** pose to §7/§8/G5.
+- LOW — the Rule-7 parity mirror covers only the **static** curve; wind + view-widening
+  also move the vertex → scoped the seam explicitly, noted they're visual-checked (§8).
+- INFO — softened §1's density claim to "v1 target density … higher uniform density in v2".
+
+**Max-loops cap (5) reached.** Loop 5's one genuinely-substantive finding (the §5.3 fade
+precondition) is fixed; the rest were testability adds + one dismissed reviewer error.
+The accuracy lane is clean and findings have narrowed each loop (L3: 3 MED; L4: 1 HIGH +
+4 MED; L5: 1 real MED + polish) with none resurfacing. Per the cap rule, the
+continue/accept decision goes to the user before sign-off + G1.
 
 ## 15. Sources
 
