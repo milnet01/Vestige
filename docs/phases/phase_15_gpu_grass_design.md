@@ -48,10 +48,10 @@ the RX 6600**.
   (research §3).
 - **v1 defers the fully GPU-driven pipeline.** v1 places blades on the **CPU** per
   terrain chunk and frustum-culls **per chunk** on the CPU; the per-blade GPU
-  compute cull + `glMultiDrawElementsIndirect` + GPU placement is **v2**, dropped
-  in additively because v1 stores blade seeds in an **SSBO from day one** (§5.5). The
-  v2 draw is `glMultiDrawArraysIndirect` (the **non-indexed** multi-draw — the blade
-  strip has no index buffer), not `…ElementsIndirect`.
+  compute cull + `glMultiDrawArraysIndirect` (the **non-indexed** multi-draw — the
+  blade strip has no index buffer, so `…ArraysIndirect`, not `…ElementsIndirect`) +
+  GPU placement is **v2**, dropped in additively because v1 stores blade seeds in a
+  **single shared SSBO from day one** (§5.5).
   CPU per-chunk placement is a standard, well-precedented first step; open-source
   reproductions (e.g. GodotGrass) reach this quality without the full GPU-driven
   pipeline (research §6).
@@ -166,17 +166,23 @@ and the draw. Coexists with `FoliageRenderer` (flowers).
   `P2 = P1 + facingDir·height·lean`. Evaluate at `t = row/N`; offset ±perpendicular
   (facing) by a width that **tapers to 0 at the tip**. The two verts of a row share
   `t`; the last row is a single centred tip vertex.
-- **Per-vertex normal** from the curve tangent × width axis, then **biased toward
-  the terrain normal / vertical** by a configurable amount so the lit field is not
-  noisy (research §3). At the **tip** the width → 0, so the width axis (and the cross
-  product) is degenerate → the tip vertex takes the **row N−1 normal** rather than a
-  NaN/zero normal.
+- **Per-vertex normal** = curve tangent × width axis — the raw **geometric** normal
+  (roughly horizontal, in the plane of the blade face). At the **tip** the width → 0
+  makes the width axis (and the cross product) degenerate → the tip vertex takes the
+  **row N−1 normal** rather than a NaN/zero normal. The **bias toward the terrain
+  normal / vertical** (so the lit field isn't noisy, research §3) is applied in the
+  **fragment shader after** the two-sided face-forward flip (see the opaque bullet) —
+  the order is load-bearing.
 - **View-facing widening** (§3): widen the blade in view space as it turns edge-on
   to the camera, clamped, to kill sub-pixel shimmer.
 - **Opaque, not alpha-blended.** Real blades are solid geometry → render **opaque**
   (depth-tested, blend off; two-sided lighting with back-face cull off — the fragment
-  shader **negates the normal when `!gl_FrontFacing`** so a blade lit from behind is not
-  a black backside, the standard two-sided idiom), which avoids the
+  shader **faces the geometric normal toward the camera first** (`faceforward` / flip
+  on `!gl_FrontFacing`) and **then** applies the vertical bias, so **both** faces keep a
+  positive up-component and a back-lit blade is not a black backside. The order is
+  load-bearing: biasing to near-vertical *then* flipping would point the back face's
+  normal **downward** → no diffuse under an overhead sun, the very artifact the flip is
+  meant to prevent), which avoids the
   **alpha-blend sort + transparency overdraw** the billboard cards paid. **Trade to
   watch:** thin blades still incur **2×2-quad overshading** — sub-pixel / near-edge
   triangles shade whole fragment quads, wasting fragment work — mitigated by
@@ -207,10 +213,11 @@ and the draw. Coexists with `FoliageRenderer` (flowers).
     water exclusion**;
   - randomise facing, height, width, lean, tint, and a per-blade hash (wind phase),
     all seeded deterministically from the chunk id + index (reproducible; testable).
-- **Output:** a per-chunk **SSBO of `GrassBlade` seeds** (§5.5), uploaded once at
-  meadow build (rebuilt only if the terrain changes). Chunk AABB stored for cull.
-  **Seed ordering (load-bearing for LOD):** seeds are stored **shuffled /
-  interleaved**, NOT in raster/grid order, so that any prefix `[0, count·fraction)`
+- **Output:** each chunk's `GrassBlade` seeds are appended into the **one shared
+  SSBO** (§5.5) with the chunk's **base offset + blade count + AABB** recorded in its
+  descriptor, uploaded once at meadow build (rebuilt only if the terrain changes).
+  **Seed ordering (load-bearing for LOD):** within a chunk, seeds are stored **shuffled
+  / interleaved**, NOT in raster/grid order, so that any prefix `[0, count·fraction)`
   is a **spatially-uniform** subset of the chunk — the exact property §5.3's
   prefix-thinning distance-LOD relies on (a raster prefix would draw a spatial slab,
   not a thinned field). A fixed deterministic shuffle keeps it testable.
@@ -234,10 +241,15 @@ and the draw. Coexists with `FoliageRenderer` (flowers).
     subset (§5.2). To avoid the whole chunk dropping a slab of its population the instant
     it crosses a band, the chunk keeps submitting the **finer** tier's blade fraction
     *through* the blend band while the **vertex shader shrinks each soon-to-be-dropped
-    blade's height/width → 0 over that band by its own root-to-camera distance** — a
-    *geometric* fade (blades are opaque; there is no alpha cross-fade). Once a blade has
-    shrunk to zero it falls out of the next-band draw fraction with nothing visible to
-    pop. Survivors **widen** slightly to hold apparent density.
+    blade's height/width → 0** over that band — a *geometric* fade (blades are opaque;
+    there is no alpha cross-fade). **Two inputs pick the fade:** the blade's **rank**
+    (`gl_InstanceID / chunkBladeCount`, the count from the §5.5 descriptor) against the
+    current and next band's fraction thresholds decides *whether* a blade is in the drop
+    set (the ones in `[nextFraction, curFraction)` of the shuffled order); its
+    **root-to-camera distance** across the blend band decides *how far* it has shrunk.
+    Rank picks who fades, distance picks how much. Once a blade reaches zero it falls out
+    of the next-band draw fraction with nothing visible to pop. Survivors **widen**
+    slightly to hold apparent density.
   - The per-blade distance is what makes the blade-count fade smooth *despite* the
     per-chunk draw granularity — the fade tracks each blade, not the chunk. Pure
     `grassLodForDistance(dist)` helper picks the segment tier + the blend-band edges →
@@ -289,10 +301,21 @@ struct GrassBlade {              // std430, 32 bytes
 ```
 `facingAngle` (radians) is cheaper than a `vec2` and keeps the struct at two
 16-byte rows. This layout is fixed now (not "finalised in G1") so G1's Verify has a
-concrete `static_assert` seam. Bound with
-`glBindBufferBase(GL_SHADER_STORAGE_BUFFER, …)`, indexed by `gl_InstanceID`. Per-chunk SSBOs; a chunk-descriptor array (AABB, blade count, base
-offset) drives cull/LOD. This layout is the v1↔v2 seam: v2's compute cull reads the
-same seeds and writes a compacted visible list + indirect args.
+concrete `static_assert` seam.
+
+**One shared blade SSBO** holds every chunk's seeds back-to-back — **not** per-chunk
+buffers. This is load-bearing for the v1↔v2 seam: v2 draws the whole field in one
+`glMultiDrawArraysIndirect` and culls it in one compute dispatch, and a single draw /
+dispatch can bind only **one** SSBO — so per-chunk buffers would force a buffer
+*consolidation* in v2 (a rewrite), exactly what the seam is meant to avoid. A
+**chunk-descriptor array** (AABB, blade count, **base offset** into the shared buffer)
+drives cull/LOD. Bound once with `glBindBufferBase(GL_SHADER_STORAGE_BUFFER, …)`; the
+VS indexes a seed by **`gl_InstanceID + chunkBaseOffset`** — a per-chunk uniform in v1.
+(`gl_InstanceID` alone is `[0, instanceCount)` and does **not** include `baseInstance`;
+`baseInstance` offsets only *vertex attributes*, which this attribute-less draw has
+none of — so the base offset must be added explicitly.) v2's compute cull reads the
+same seeds **in place** and writes a compacted visible list + indirect args — additive,
+no buffer consolidation.
 
 ### 5.6 Integration
 
@@ -358,12 +381,18 @@ additive rather than a rewrite.
   at 32 B/blade, a **~256 MB** grass-SSBO budget on the 8 GB RX 6600 caps storage at
   **~8 M stored blades ≈ ~130 blades/m² base density** across the full field. A reference
   near-density of 1–4 k blades/m² therefore **cannot be stored uniformly over the whole
-  256 m field in v1** — v1 stores at the VRAM-bounded base density and reaches apparent
-  near-camera density via **LOD survivor-widening** (§5.3); true uniform high density is a
-  **v2** concern (GPU/view-dependent placement stores only near the camera). These are
-  *illustrative* budget figures — G2 pins the base density under the SSBO budget; G5
-  records the drawn count + per-pass ms baseline. The **Grass** pass must stay within its
-  share of the 16.6 ms frame.
+  256 m field in v1** — so **v1's near-camera density *is* the base density (~130/m²)**,
+  not a higher figure. (Survivor-widening is a *far-field* mechanism — §5.3 applies it
+  only to far chunks that drop a blade fraction — so it does **not** raise near-camera
+  density; the earlier draft mis-stated this.) What carries the dense continuous *read*
+  at a ground-level camera is **grazing-angle overlap** — the eye looks *across* the
+  field, so even ~130 blades/m² of real 3-D geometry stack into a continuous mat. Whether
+  that reads dense enough close-up is the flagship **G5 visual risk**; true uniform high
+  density is deferred to **v2** (GPU/view-dependent placement stores only near the
+  camera). These are *illustrative* budget figures — G2 pins the base density under the
+  SSBO budget; G5 records the drawn count + per-pass ms baseline **and confirms the
+  close-up density read**. The **Grass** pass must stay within its share of the 16.6 ms
+  frame.
 - **v1 without GPU cull** is the risk (CPU per-chunk cull only draws visible chunks,
   but every blade in a visible chunk is submitted). If the G5 measurement misses 60
   FPS at High, the escalations, in order: (a) more aggressive distance LOD; (b) the
@@ -412,8 +441,8 @@ additive rather than a rewrite.
    test green.
 2. **G2 — CPU placement + PCG gating.** Per-chunk jittered-grid scatter over the
    meadow, seated on terrain height, gated on grass-splat weight + slope + pond
-   exclusion; per-chunk seed SSBOs + chunk descriptors. Placement-predicate unit
-   tests. *Verify:* `--visual-test` — blades cover the grass areas, follow the hills,
+   exclusion; the **one shared seed SSBO** + per-chunk descriptors (base offset +
+   count + AABB). Placement-predicate unit tests. *Verify:* `--visual-test` — blades cover the grass areas, follow the hills,
    thin over dirt patches, avoid water/slopes; GL-error-free.
 3. **G3 — LOD + per-chunk frustum cull.** Distance LOD (segments + blade fraction +
    survivor widening, blended) and CPU per-chunk frustum cull. `grassLodForDistance`
@@ -557,6 +586,41 @@ surfaced three real gaps. All fixed:
 
 Loop 3 surfaced substantive findings (3 MEDIUM) → **not converged**. Loop 4 (cold) is
 the next step before sign-off + G1.
+
+**Loop 4 (2026-07-19)** — 2 cold reviewers, identical cold briefs. Tally: CRITICAL 0
+· HIGH 1 · MEDIUM 4 · LOW 2 · INFO 0 (all 7 verified against source, 0 unverified).
+Both lanes again confirmed every §4 citation exact and the topology/struct/memory math
+sound; the remaining findings are seam/ordering/attribution gaps. Fixed:
+- MEDIUM — §5.5 said "**Per-chunk SSBOs**", which breaks the v1↔v2 "additive" seam it
+  claims: a single `glMultiDrawArraysIndirect` / single compute dispatch can bind only
+  **one** SSBO, so per-chunk buffers would force a consolidation (rewrite) in v2 →
+  changed to **one shared blade SSBO** with per-chunk **base offset** in the descriptor;
+  the VS indexes `gl_InstanceID + chunkBaseOffset` (noted `gl_InstanceID` excludes
+  `baseInstance`) — aligned §5.2/§10 (§5.5/§5.2/§10).
+- MEDIUM — §5.1/§5.4 normal handling flipped **after** the vertical bias (bias→flip),
+  which drives a back-lit blade's normal downward → black backside, the exact artifact
+  the flip prevents → specified **face-forward flip first, vertical bias second**, both
+  faces keep a positive up-component (§5.1).
+- MEDIUM — §7 attributed near-camera density to **survivor-widening**, but that is a
+  far-field mechanism → corrected: v1 near-camera density **is** the base density
+  (~130/m²); the dense continuous *read* comes from **grazing-angle overlap**, and
+  confirming it close-up is the flagship **G5 visual risk** (§7).
+- MEDIUM — §2 still named `glMultiDrawElementsIndirect` for the grass v2 path (missed in
+  loop 3) → `glMultiDrawArraysIndirect` (non-indexed), §2.
+- LOW — §5.3's per-blade fade said "by its own distance", but *membership* in the drop
+  set is set by **rank** (`gl_InstanceID / chunkBladeCount` vs the fraction thresholds),
+  distance only the *amount* → spelled out rank-picks-who / distance-picks-how-much (§5.3).
+- **HIGH (pending) — phase-number collision.** The loop-1 rename 14→15 dodged Phase 14
+  (Adaptive Geometry) but **15 is Atmospheric Rendering** (`ROADMAP.md:29`,
+  `phases_12_to_26_stubs.md:48-56`, live cross-refs at ROADMAP :405/:424/:603); in fact
+  every number 12–26 is a reserved mega-phase. This doc must **not** claim a Phase-NN
+  slot. Rename pending the user's chosen identity (recommend the meadow bucket, matching
+  the sibling `phase_10_meadow_*` grass docs); the §2 Phase-14 label ("virtualised
+  geometry" → "Adaptive Geometry System"; it is a ROADMAP-level plan, not a design doc)
+  is corrected in the same rename.
+
+Loop 4 surfaced a HIGH (naming) + 4 MEDIUM → **not converged**. Rename first, then Loop
+5 cold on the renamed doc before sign-off + G1.
 
 ## 15. Sources
 
