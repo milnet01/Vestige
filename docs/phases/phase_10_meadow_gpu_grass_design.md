@@ -688,6 +688,10 @@ The accuracy lane is clean and findings have narrowed each loop (L3: 3 MED; L4: 
 4 MED; L5: 1 real MED + polish) with none resurfacing. Per the cap rule, the
 continue/accept decision goes to the user before sign-off + G1.
 
+**SIGNED OFF (2026-07-19).** At the loop-5 cap the user chose *accept & sign off*
+(accuracy lane clean, findings narrowing and non-resurfacing, last substantive finding
+fixed). Design is the contract for G1–G5; implementation begins at G1.
+
 ## 15. Sources
 
 - Sucker Punch, GDC 2021 "Procedural Grass in Ghost of Tsushima" —
