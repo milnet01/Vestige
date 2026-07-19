@@ -11,6 +11,7 @@
 #include "systems/particle_system.h"
 #include "systems/water_system.h"
 #include "systems/vegetation_system.h"
+#include "renderer/grass_renderer.h"
 #include "systems/terrain_system.h"
 #include "systems/cloth_system.h"
 #include "systems/destruction_system.h"
@@ -1643,28 +1644,14 @@ void Engine::run()
                     m_profiler.getGpuTimer().endPass();
                 }
 
-                // GPU grass field (meadow_gpu_grass_design). G1: a hard-coded test
-                // patch seated once at the meadow centre — G2 replaces this with real
-                // terrain-gated placement. Drawn independently of the billboard-foliage
-                // chunk list.
-                if (m_grassRenderer)
+                // GPU grass field (meadow_gpu_grass_design). G2: the real terrain-gated
+                // clumped field, built once at meadow finalize (buildField) and drawn
+                // per-chunk here, independent of the billboard-foliage chunk list.
+                if (m_grassRenderer && m_grassRenderer->hasField())
                 {
-                    if (!m_grassRenderer->hasField() && m_terrain)
-                    {
-                        const TerrainConfig& tc = m_terrain->getConfig();
-                        const float cx = tc.origin.x
-                            + static_cast<float>(m_terrain->getWidth() - 1) * tc.spacingX * 0.5f;
-                        const float cz = tc.origin.z
-                            + static_cast<float>(m_terrain->getDepth() - 1) * tc.spacingZ * 0.5f;
-                        m_grassRenderer->seatTestPatchAt(
-                            glm::vec3(cx, m_terrain->getHeight(cx, cz), cz));
-                    }
-                    if (m_grassRenderer->hasField())
-                    {
-                        m_profiler.getGpuTimer().beginPass("Grass");
-                        m_grassRenderer->render(viewProj);
-                        m_profiler.getGpuTimer().endPass();
-                    }
+                    m_profiler.getGpuTimer().beginPass("Grass");
+                    m_grassRenderer->render(viewProj);
+                    m_profiler.getGpuTimer().endPass();
                 }
             }
 
@@ -2562,6 +2549,19 @@ void Engine::finalizeMeadowTerrain()
 
         Logger::info("Meadow grass: " + std::to_string(m_foliageManager->getTotalFoliageCount())
             + " instances across " + std::to_string(m_foliageManager->getChunkCount()) + " chunks");
+    }
+
+    // --- GPU grass field (meadow_gpu_grass_design G2) ------------------------
+    // The real 3-D clumped Bézier-blade field over the meadow, gated on the grass splat
+    // layer + slope + the pond exclusion disc. Built once here (terrain + pond in scope);
+    // the render loop draws it per chunk. Coexists with the billboard grass for now — G5
+    // removes the billboard-grass block once the field is perf-verified at High.
+    if (m_grassRenderer)
+    {
+        GrassConfig grassCfg;                       // tall & wild defaults (§5.2a)
+        grassCfg.exclusionCenter = pondCenterXZ;
+        grassCfg.exclusionRadius = pondFill.floodRadius + 1.5f;   // pond + shore margin
+        m_grassRenderer->buildField(terrain, grassCfg);
     }
 
     // --- Wildflowers (3D_E-0038 C3) ------------------------------------------
