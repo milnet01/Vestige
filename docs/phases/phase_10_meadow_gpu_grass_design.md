@@ -23,14 +23,21 @@ data model · 5.6 integration) · 6 CPU/GPU placement · 7 Performance · 8 Test
 
 ## 1. Goal
 
-A **continuous field of real 3-D grass blades** that reads like the photoreference
-meadows — blades that catch light, glow when backlit, bend in the wind, and ground
-into the terrain — covering the meadow at the **v1 target density** (VRAM-bounded base
-density, dense read carried by grazing-angle overlap; higher *uniform* density is a v2
-goal — §7) and holding **≥ 60 FPS at High on the RX 6600**.
+A **tall, wild, clumped field of real 3-D grass blades** that reads like the
+photoreference meadows — long blades that flop and lean in natural tussocks, catch
+light, glow when backlit, and ground into the terrain — covering the meadow at the
+**v1 target density** (VRAM-bounded base density, dense read carried by grazing-angle
+overlap; higher *uniform* density is a v2 goal — §7) and holding **≥ 60 FPS at High on
+the RX 6600**. Target look: **untended wild meadow**, not a mowed lawn — the default
+tuning is tall (~0.6–1.2 m), strongly leaning, and clumped.
 
 - **Real per-blade geometry**, GPU-generated from a per-blade seed (Bézier ribbon,
   ~5–13 triangles by LOD, i.e. `2N−1`), not billboards, not shell texturing.
+- **Clumping is what makes it a field, not tufts (§5.2a).** Blades snap toward
+  invisible **clump points** that set their height, lean direction, colour, and bend —
+  so the field reads as natural tussocks (tall here, short there, leaning together,
+  varied green) instead of a uniform bristle-brush / lawn. This is the single biggest
+  "reads as a real meadow" lever (Ghost of Tsushima's Voronoi clumping).
 - **Procedural placement ("PCG"):** blades scattered by rule — only where the
   terrain **grass** splat layer has weight, thinned on slopes, off water and the
   earthy dirt patches (C1) and the pond.
@@ -82,6 +89,16 @@ goal — §7) and holding **≥ 60 FPS at High on the RX 6600**.
   where the "grass" layer is painted, thinned on slope/water. This is exactly UE5
   **Landscape Grass Types** (Epic recommends them over PCG for a ground-cover
   carpet). *(UE5 landscape-grass docs; StraySpark PCG guide.)*
+- **Clumping is the "field, not tufts" technique** (the finding from the 2026-07-19
+  research sweep). A grid of identical blades reads as a bristle-brush / mowed lawn; a
+  real meadow grows in **clumps**. Ghost of Tsushima seeds the ground with **Voronoi
+  clump points** — each blade finds its nearest clump and inherits that clump's
+  **height, lean direction, colour, and bend**, producing natural tussocks (tall/short
+  patches, blades leaning together, colour drift) at almost no cost (a noise/Voronoi
+  lookup). This is the biggest single realism lever and the piece a naïve per-blade-
+  random field misses. Full-geometry blades (what we build) are the current
+  recommended approach; **shell texturing is rejected** — it reads as "fuzz", not
+  distinct blades. *(GoT GDC 2021 clumping; hexaquo grass theory; Acerola — rejected.)*
 - **Scaling to hundreds of thousands / millions of blades** = per-instance seeds in
   an **SSBO** + **distance LOD** (fewer blades *and* fewer segments far, survivors
   widened to hold apparent density, blended to avoid pop) + **frustum cull**
@@ -234,8 +251,38 @@ and the draw. Coexists with `FoliageRenderer` (flowers).
   prefix-thinning distance-LOD relies on (a raster prefix would draw a spatial slab,
   not a thinned field). A fixed deterministic shuffle keeps it testable.
 - **PCG rule set is data-driven** via a `GrassConfig` (near-density, slope cutoff,
-  height range, grass-weight response, exclusion) so the meadow tunes it without
-  new code — the "paint vast expanses" control surface.
+  height range, grass-weight response, **clump scale/strength** (§5.2a), exclusion) so
+  the meadow tunes it without new code — the "paint vast expanses" control surface.
+
+### 5.2a Clumping — the "field, not tufts" layer
+
+The realism lever (research §3): blades group into **clumps** instead of standing as
+identical uniform spikes. This is *the* difference between "real meadow" and "mowed
+lawn / bristle-brush".
+
+- **Clump field = a pure function of world XZ**, `grassClump(worldX, worldZ, scale)`,
+  shared by CPU and GLSL (parity, §8). It hash-scatters one **clump centre** per cell
+  of a coarse grid (cell size ≈ `clumpScale`, ~0.5–1.5 m for a wild meadow) and returns,
+  for the nearest centre: a **clump id/hash**, the **distance to centre** (0 at the
+  centre → 1 at the cell edge), and per-clump factors derived from the id —
+  `clumpHeight` (tall vs short tussock), `clumpLeanDir` (a shared facing the whole clump
+  leans toward), `clumpTint` (a small green/colour drift), and `clumpBend` (how far the
+  tussock flops). A Voronoi/nearest-of-neighbouring-cells lookup (like GoT) keeps clump
+  boundaries organic; a single-cell hash is the cheap fallback.
+- **How a blade uses it (VS + placement):** each blade evaluates `grassClump` at its
+  `rootPos.xz` and blends the clump factors into its own seed —
+  `height = baseHeight · mix(1, clumpHeight, clumpStrength)`, facing pulled toward
+  `clumpLeanDir`, `lean`/bend raised by `clumpBend`, tint shifted by `clumpTint`, all
+  scaled by `1 − distToCentre` so a blade at a clump's centre conforms most and edge
+  blades least (soft clump edges, no hard Voronoi seams). `clumpStrength ∈ [0,1]` is the
+  wild↔tidy dial (default **wild ≈ 0.7**).
+- **No data-model change (§5.5).** Clumping is a function of `rootPos`, evaluated in the
+  VS at draw time — it needs **no extra per-blade storage**, so `GrassBlade` stays 32 B.
+  (Placement may *also* consult it on the CPU to bias density toward clump centres, using
+  the same helper.)
+- **Tall & wild defaults** (user direction 2026-07-19): base height ~0.6–1.2 m, strong
+  lean/bend so long blades flop, `clumpStrength` high. All in `GrassConfig` so the look
+  dials from wild meadow to tidy field without code.
 
 ### 5.3 LOD + culling (v1)
 
@@ -295,7 +342,8 @@ and the draw. Coexists with `FoliageRenderer` (flowers).
   the blade facing away from the light); **height-based base AO** (dark at root →
   bright at tip, coupled with wind bend); boosted ambient (power curve) so backsides
   read; receives **CSM shadows** (bind cascade array, reuse the foliage receive
-  path). Colour = blade tint (green with per-blade variation) × light.
+  path). Colour = blade tint (green with per-blade variation **plus the per-clump tint
+  drift of §5.2a**, so tussocks read as subtly different greens) × light.
 - **Wind (vertex):** sample scrolling 2-D value noise by world XZ (reuse the engine
   wind direction/speed from `EnvironmentForces`, as billboard grass does at
   `engine.cpp:1625-1627`) → bend the Bézier `P1/P2` control points, scaled by height
@@ -365,6 +413,7 @@ no buffer consolidation.
 |---|---|---|
 | Blade seed scatter + terrain/slope/splat gating | **CPU**, one-time at meadow build (v1) | I/O + sparse decision logic; moves to GPU compute in v2. |
 | Per-chunk frustum cull + LOD selection | **CPU** per frame (v1) | Tens of chunks; branch/decision. GPU per-blade in v2. |
+| Clump lookup (`grassClump`, §5.2a) → per-clump height/lean/tint/bend | **GPU** (vertex) at draw; **CPU** for placement bias + parity test | Pure function of world XZ; per-vertex on the GPU, mirrored on CPU (Rule-7 parity). |
 | Blade geometry generation (Bézier eval, width, normal) | **GPU** (vertex) | Per-vertex, data-parallel; the whole point of GPU grass. |
 | Wind displacement | **GPU** (vertex) | Per-vertex. |
 | Diffuse + translucency + AO + shadow receive | **GPU** (fragment) | Per-pixel BRDF. |
@@ -439,6 +488,12 @@ additive rather than a rewrite.
   (curve + width taper + tip) only; the **wind bend** and **view-facing widening** also
   move the emitted vertex but are time-/view-dependent, so they are not in the parity
   seam — a GLSL divergence there is caught by the visual check (§5.4/§5.1), not this test.
+- **Clump-function parity (unit, Rule 7).** `grassClump(worldX, worldZ, scale)` (§5.2a)
+  is a second GL-free hand-mirror of its GLSL twin. Test: **determinism** (same XZ →
+  same clump id/factors), **two blades within one clump cell share the clump's
+  height/lean/tint**, `distToCentre` is 0 at the centre and rises to the cell edge, and
+  factors stay in range. This pins the "field, not tufts" math the same way the
+  blade-vertex mirror pins the static blade.
 - **LOD selection (unit).** `grassLodForDistance(dist, bands)` → correct tier at band
   edges + midpoints, monotonic non-increasing detail with distance.
 - **Placement gating (unit).** Pure predicates: spawn-probability ∝ grass weight
@@ -472,11 +527,15 @@ additive rather than a rewrite.
    coded test patch of instanced blades (flat-lit). Pure `grassBladeVertex` mirror +
    parity test. *Verify:* a patch of real 3-D blades renders GL-error-free; parity
    test green.
-2. **G2 — CPU placement + PCG gating.** Per-chunk jittered-grid scatter over the
-   meadow, seated on terrain height, gated on grass-splat weight + slope + pond
-   exclusion; the **one shared seed SSBO** + per-chunk descriptors (base offset +
-   count + AABB). Placement-predicate unit tests. *Verify:* `--visual-test` — blades cover the grass areas, follow the hills,
-   thin over dirt patches, avoid water/slopes; GL-error-free.
+2. **G2 — CPU placement + PCG gating + clumping.** Per-chunk jittered-grid scatter over
+   the meadow, seated on terrain height, gated on grass-splat weight + slope + pond
+   exclusion; the **one shared seed SSBO** + per-chunk descriptors (base offset + count
+   + AABB). Add the **`grassClump` function (§5.2a) — CPU + GLSL, with its parity test**
+   — and apply clump height/lean/bend in the VS so the field reads as **tussocks, not
+   uniform blades**; tall & wild default tuning. Placement + clump-parity unit tests.
+   *Verify:* `--visual-test` — blades cover the grass areas, follow the hills, thin over
+   dirt patches, avoid water/slopes, and **clearly clump** (tall/short patches, blades
+   leaning together) rather than reading as a uniform lawn; GL-error-free.
 3. **G3 — LOD + per-chunk frustum cull.** Distance LOD (per-chunk segment tier +
    per-blade rank/distance fade keyed on the chunk's nearest point, survivor widening)
    and CPU per-chunk frustum cull. `grassLodForDistance` unit test. *Verify:* under a
@@ -484,10 +543,11 @@ additive rather than a rewrite.
    pop and no blade shimmer/crawl**; only visible chunks drawn (instrument a drawn-chunk
    count).
 4. **G4 — Shading + wind + shadow receive.** Vertical-biased normals, view·light
-   translucency glow, height base AO, boosted ambient; wind vertex bend with
-   per-blade phase; **receives** CSM shadows (no cast in v1 — Rule-5 logged).
-   *Verify:* `--visual-test` — backlit glow, grounded bases, wind; blades sit in
-   shadow under trees; GL-error-free.
+   translucency glow, height base AO, boosted ambient, **per-clump tint drift (§5.2a)**;
+   wind vertex bend with per-blade phase (**per-clump wind sway** so tussocks move
+   together); **receives** CSM shadows (no cast in v1 — Rule-5 logged). *Verify:*
+   `--visual-test` — backlit glow, grounded bases, wind, tussocks in subtly different
+   greens; blades sit in shadow under trees; GL-error-free.
 5. **G5 — Tiers + perf + meadow wire-up.** `GrassQuality` tier on the
    `RendererQualitySink`; replace the billboard-grass meadow block with
    `GrassRenderer::buildField`; keep C1 ground + C3 flowers. Release `--profile-log`
@@ -692,6 +752,16 @@ continue/accept decision goes to the user before sign-off + G1.
 (accuracy lane clean, findings narrowing and non-resurfacing, last substantive finding
 fixed). Design is the contract for G1–G5; implementation begins at G1.
 
+**Post-G1 refinement (2026-07-19) — clumping + tall/wild.** After G1 shipped the blade
+pipeline, the user flagged the meadow still reads as tufts/lawn and asked for a research
+sweep on real long-grass fields. The finding: **clumping** (Voronoi/noise clump points
+controlling per-clump height/lean/colour/bend) is the "field, not tufts" lever a naïve
+per-blade-random field misses. Folded in — new **§5.2a** clump layer (a pure
+`grassClump(xz)` function, no `GrassBlade` struct change since it's a function of
+`rootPos`), tall/wild defaults, per-clump tint/wind, updated §1/§3/§5.4/§6/§8/§10/§15.
+Lands in **G2** (placement + clump function + parity) with colour/wind in **G4**. This
+is a material design change → **re-run cold-eyes** on the clumping addition before G2.
+
 ## 15. Sources
 
 - Sucker Punch, GDC 2021 "Procedural Grass in Ghost of Tsushima" —
@@ -705,3 +775,11 @@ fixed). Design is the contract for G1–G5; implementation begins at G1.
 - NVIDIA GPU Gems ch.7 (waving grass) — https://developer.nvidia.com/gpugems/gpugems/part-i-natural-effects/chapter-7-rendering-countless-blades-waving-grass
   · ch.16 (subsurface scattering) — https://developer.nvidia.com/gpugems/gpugems/part-iii-materials/chapter-16-real-time-approximations-subsurface-scattering
 - UE5 scatter: Landscape Grass Types vs PCG — https://www.strayspark.studio/blog/ue5-pcg-production-ready-guide
+- **Clumping sweep (2026-07-19):** GoT GDC talk (Voronoi clumping — clump controls
+  height/direction/colour/bend) https://gdcvault.com/play/1027033/Advanced-Graphics-Summit-Procedural-Grass
+  · breakdown https://tigerabrodi.blog/what-we-can-learn-from-grass-in-ghost-of-tsushima-renders
+  · hexaquo "Grass Rendering — Theory" (four realism properties; full-geometry recommended)
+  https://hexaquo.at/pages/grass-rendering-series-part-1-theory/
+  · Acerola grass renderer (**shell texturing — rejected: reads as fuzz, not blades**)
+  https://archive.org/details/grass-renderer
+  · UE5 Grass Quick Start (density/clump tuning) https://dev.epicgames.com/documentation/unreal-engine/grass-quick-start-in-unreal-engine
