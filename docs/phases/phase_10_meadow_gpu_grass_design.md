@@ -1,4 +1,4 @@
-# Phase 15 — GPU Procedural Grass (real Bézier-blade field)
+# Meadow GPU Grass (real Bézier-blade field)
 
 User redirection after the billboard-grass work (3D_E-0038): *adding more billboard
 tufts will never match the reference meadows — we need a way to paint vast
@@ -55,9 +55,12 @@ the RX 6600**.
   CPU per-chunk placement is a standard, well-precedented first step; open-source
   reproductions (e.g. GodotGrass) reach this quality without the full GPU-driven
   pipeline (research §6).
-- **No Nanite / virtualised micro-geometry** — that is the separate, pre-existing
-  **Phase 14** ("virtualised geometry") design; this GPU-grass work is **Phase 15**
-  to avoid the collision.
+- **No Nanite / virtualised micro-geometry** — that is the roadmap's **Phase 14
+  (Adaptive Geometry System)** plan (meshlets / virtual geometry; a ROADMAP-level scope,
+  no design doc yet). This grass work is unrelated to it and is filed as a
+  **meadow-realism** doc (`phase_10_meadow_gpu_grass_design.md`, sibling to the earlier
+  meadow grass designs), **not** a numbered engine phase — every Phase number 12–26 is
+  already reserved.
 - **No new flower work** — flowers are out of scope beyond keeping the C3 billboard
   sprinkles rendering.
 
@@ -516,7 +519,8 @@ technique lane caught two real graphics bugs. All fixed:
   overshading** (the real dominant cost of thin blades) → reframed as a **G5
   hypothesis** with quad-overshading named the cost to watch (§5.1/§7).
 - MEDIUM — "Phase 14" collided with the pre-existing virtualised-geometry Phase 14 →
-  renamed the doc + title to **Phase 15**.
+  renamed the doc + title to **Phase 15** (which turned out to also be taken —
+  Atmospheric Rendering; corrected in Loop 4 by dropping the Phase-NN framing entirely).
 - MEDIUM — the perf gate's "dense vantage" wasn't a reproducible pose → G5 adds a
   named `grass_dense` viewpoint at a fixed recorded pose (§7).
 - MEDIUM — shadow-cast was both "decided" (§5.4) and "open question" (§13) → stated
@@ -610,17 +614,17 @@ sound; the remaining findings are seam/ordering/attribution gaps. Fixed:
 - LOW — §5.3's per-blade fade said "by its own distance", but *membership* in the drop
   set is set by **rank** (`gl_InstanceID / chunkBladeCount` vs the fraction thresholds),
   distance only the *amount* → spelled out rank-picks-who / distance-picks-how-much (§5.3).
-- **HIGH (pending) — phase-number collision.** The loop-1 rename 14→15 dodged Phase 14
+- **HIGH — phase-number collision (resolved).** The loop-1 rename 14→15 dodged Phase 14
   (Adaptive Geometry) but **15 is Atmospheric Rendering** (`ROADMAP.md:29`,
   `phases_12_to_26_stubs.md:48-56`, live cross-refs at ROADMAP :405/:424/:603); in fact
-  every number 12–26 is a reserved mega-phase. This doc must **not** claim a Phase-NN
-  slot. Rename pending the user's chosen identity (recommend the meadow bucket, matching
-  the sibling `phase_10_meadow_*` grass docs); the §2 Phase-14 label ("virtualised
-  geometry" → "Adaptive Geometry System"; it is a ROADMAP-level plan, not a design doc)
-  is corrected in the same rename.
+  every number 12–26 is a reserved mega-phase. **Resolution (user decision):** dropped
+  the Phase-NN framing — renamed to **`phase_10_meadow_gpu_grass_design.md`** / title
+  "Meadow GPU Grass", a sibling of the earlier `phase_10_meadow_*` grass docs. The §2
+  Phase-14 label was corrected in the same pass ("virtualised geometry" → "Adaptive
+  Geometry System"; it is a ROADMAP-level plan, not a design doc).
 
-Loop 4 surfaced a HIGH (naming) + 4 MEDIUM → **not converged**. Rename first, then Loop
-5 cold on the renamed doc before sign-off + G1.
+Loop 4 surfaced a HIGH (naming) + 4 MEDIUM → **not converged**. Renamed to the meadow
+bucket; Loop 5 cold on the renamed doc is next before sign-off + G1.
 
 ## 15. Sources
 
