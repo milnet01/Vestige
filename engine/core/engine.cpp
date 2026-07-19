@@ -260,6 +260,7 @@ bool Engine::initialize(const EngineConfig& config)
     m_waterFbo             = &waterSys->getWaterFbo();
     m_foliageManager       = &vegSys->getFoliageManager();
     m_foliageRenderer      = &vegSys->getFoliageRenderer();
+    m_grassRenderer        = &vegSys->getGrassRenderer();
     m_treeRenderer         = &vegSys->getTreeRenderer();
     m_terrain              = &terrainSys->getTerrain();
     m_terrainRenderer      = &terrainSys->getTerrainRenderer();
@@ -1640,6 +1641,30 @@ void Engine::run()
                                              m_foliageRenderer->renderDistance, csm, dirLight);
                     m_treeRenderer->render(visibleChunks, *m_camera, viewProj, elapsed);
                     m_profiler.getGpuTimer().endPass();
+                }
+
+                // GPU grass field (meadow_gpu_grass_design). G1: a hard-coded test
+                // patch seated once at the meadow centre — G2 replaces this with real
+                // terrain-gated placement. Drawn independently of the billboard-foliage
+                // chunk list.
+                if (m_grassRenderer)
+                {
+                    if (!m_grassRenderer->hasField() && m_terrain)
+                    {
+                        const TerrainConfig& tc = m_terrain->getConfig();
+                        const float cx = tc.origin.x
+                            + static_cast<float>(m_terrain->getWidth() - 1) * tc.spacingX * 0.5f;
+                        const float cz = tc.origin.z
+                            + static_cast<float>(m_terrain->getDepth() - 1) * tc.spacingZ * 0.5f;
+                        m_grassRenderer->seatTestPatchAt(
+                            glm::vec3(cx, m_terrain->getHeight(cx, cz), cz));
+                    }
+                    if (m_grassRenderer->hasField())
+                    {
+                        m_profiler.getGpuTimer().beginPass("Grass");
+                        m_grassRenderer->render(viewProj);
+                        m_profiler.getGpuTimer().endPass();
+                    }
                 }
             }
 

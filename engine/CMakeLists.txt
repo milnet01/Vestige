@@ -152,6 +152,7 @@ set(ENGINE_SOURCES
     renderer/water_renderer.cpp
     renderer/water_fbo.cpp
     renderer/foliage_renderer.cpp
+    renderer/grass_renderer.cpp
     renderer/tree_renderer.cpp
     environment/environment_forces.cpp
     environment/density_map.cpp

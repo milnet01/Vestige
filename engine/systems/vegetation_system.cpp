@@ -20,6 +20,12 @@ bool VegetationSystem::initialize(Engine& engine)
                         "— foliage will be unavailable");
     }
 
+    if (!m_grassRenderer.init(assetPath))
+    {
+        Logger::warning("[VegetationSystem] Grass renderer initialization failed "
+                        "— GPU grass will be unavailable");
+    }
+
     if (!m_treeRenderer.init(assetPath))
     {
         Logger::warning("[VegetationSystem] Tree renderer initialization failed "
@@ -33,6 +39,7 @@ bool VegetationSystem::initialize(Engine& engine)
 void VegetationSystem::shutdown()
 {
     m_treeRenderer.shutdown();
+    m_grassRenderer.shutdown();
     m_foliageRenderer.shutdown();
     Logger::info("[VegetationSystem] Shut down");
 }

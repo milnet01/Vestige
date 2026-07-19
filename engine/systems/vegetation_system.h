@@ -8,6 +8,7 @@
 #include "core/i_system.h"
 #include "environment/foliage_manager.h"
 #include "renderer/foliage_renderer.h"
+#include "renderer/grass_renderer.h"
 #include "renderer/tree_renderer.h"
 
 #include <string>
@@ -36,6 +37,8 @@ public:
     const FoliageManager& getFoliageManager() const { return m_foliageManager; }
     FoliageRenderer& getFoliageRenderer() { return m_foliageRenderer; }
     const FoliageRenderer& getFoliageRenderer() const { return m_foliageRenderer; }
+    GrassRenderer& getGrassRenderer() { return m_grassRenderer; }
+    const GrassRenderer& getGrassRenderer() const { return m_grassRenderer; }
     TreeRenderer& getTreeRenderer() { return m_treeRenderer; }
     const TreeRenderer& getTreeRenderer() const { return m_treeRenderer; }
 
@@ -43,6 +46,7 @@ private:
     static inline const std::string m_name = "Vegetation";
     FoliageManager m_foliageManager;
     FoliageRenderer m_foliageRenderer;
+    GrassRenderer m_grassRenderer;
     TreeRenderer m_treeRenderer;
 };
 
