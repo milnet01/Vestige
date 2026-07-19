@@ -240,8 +240,10 @@ and the draw. Coexists with `FoliageRenderer` (flowers).
     `EDGE_MARGIN` does);
   - **reject on steep slope** (normal.y below a threshold) and inside the **pond /
     water exclusion**;
-  - randomise facing, height, width, lean, tint, and a per-blade hash (wind phase),
-    all seeded deterministically from the chunk id + index (reproducible; testable).
+  - randomise facing, height, width, lean, and a per-blade `hash` — which **packs**
+    the wind phase + per-blade tint/height variation (§5.5); tint is hash-derived, **not**
+    a stored `GrassBlade` field, so the struct stays 32 B — all seeded deterministically
+    from the chunk id + index (reproducible; testable).
 - **Output:** each chunk's `GrassBlade` seeds are appended into the **one shared
   SSBO** (§5.5) with the chunk's **base offset + blade count + AABB** recorded in its
   descriptor, uploaded once at meadow build (rebuilt only if the terrain changes).
@@ -263,30 +265,39 @@ lawn / bristle-brush".
 - **Clump field = a pure function of world XZ**, `grassClump(worldX, worldZ, scale)`,
   shared by CPU and GLSL (parity, §8). It scatters one **clump centre** per cell of a
   coarse grid (cell size ≈ `clumpScale`, ~0.5–1.5 m for a wild meadow), examines the
-  **3×3 neighbourhood** of cells around the sample, and returns the **two nearest**
-  centres' ids + distances plus, for each, per-clump factors derived from the id:
-  `clumpHeight` (a **multiplier ~0.6–1.6×**, tall vs short tussock), `clumpLeanDir` (a
-  **unit `vec2`**, the shared XZ direction the whole clump leans toward), `clumpTint` (a
-  small clamped green/colour drift), `clumpBend` (0–1, how far the tussock flops), and
-  `clumpPhase` (a shared wind phase, §5.4). The cell-centre offset and all factors come
-  from a **deterministic integer bit-hash** of the cell coordinates (PCG/xxhash-style int
-  ops — **not** `fract(sin(dot(…)))`, which does not bit-match across GPU/CPU), so the
-  CPU mirror and the GLSL agree exactly (finding: parity + the AABB below both depend on
-  identical clump membership).
-- **Seam-free blend needs the nearest *two* centres.** A single centre's
-  `1 − distToCentre` does **not** vanish at a Voronoi boundary (there `d₁≈d₂`, so the
-  weight is ~½ and factors jump). Instead blend the two nearest clumps by their relative
-  distance to the boundary — weight `w = d₂ / (d₁ + d₂)` on the nearer clump — which
-  reaches ½·½ continuity at the seam (C⁰, no ridge). The single-cell-hash variant (weight
-  → 0 at the cell edge) is the cheap fallback and is the only case where one centre is
-  seam-free.
+  **3×3 neighbourhood** of cells around the sample, and returns a **smooth-kernel
+  weighted blend** (below) of the neighbourhood's per-clump factors derived from each
+  cell's id: `clumpHeight` (a **multiplier ~0.6–1.6×**, tall vs short tussock),
+  `clumpLeanDir` (a **unit `vec2`**, the shared XZ direction the whole clump leans
+  toward), `clumpTint` (a small clamped green/colour drift), `clumpBend` (0–1, how far the
+  tussock flops), and `clumpPhase` (a shared wind phase, §5.4). The cell-centre offset
+  (jitter bounded within its cell) and all factors come from a **deterministic integer
+  bit-hash** of the cell coordinates (PCG/xxhash-style int ops — **not**
+  `fract(sin(dot(…)))`, which does not bit-match across GPU/CPU), so the CPU mirror and
+  the GLSL agree exactly (parity + the AABB below both depend on identical clump
+  membership).
+- **Soft boundaries via a smooth falloff kernel (C⁰/C¹ everywhere).** Weight each of the
+  3×3 centres by a smooth kernel of its distance, `wᵢ = smoothstep(kernelR, 0, dᵢ)`
+  (0 beyond `kernelR ≈ clumpScale`, smooth into it), and take the **normalised weighted
+  average** of the factors. Because a centre's weight rises from 0 as it enters the window
+  and falls to 0 as it leaves, the blend is continuous **everywhere** — including the
+  second-nearest-swap loci and Voronoi triple points where a plain two-nearest
+  `d₂/(d₁+d₂)` lerp still jumps (it is only continuous across the nearest-pair edge, not
+  globally — the earlier draft's "two-nearest" claim was wrong). `kernelR` sets
+  distinctness: tight → crisp tussocks with narrow soft seams (one weight dominates near a
+  centre), wide → gentler blending.
 - **How a blade uses it (VS).** Each blade evaluates `grassClump` at its `rootPos.xz` and
-  blends the (seam-free) clump factors into its seed, scaled by `clumpStrength ∈ [0,1]`
-  (the wild↔tidy dial, default **wild ≈ 0.7**): `height = baseHeight ·
-  mix(1, clumpHeight, clumpStrength)`; **facing/lean blended as a direction vector**
-  (`normalize(mix(bladeDir, clumpLeanDir, …))` then back to `facingAngle`) — **never**
-  by lerping the scalar radian, which wraps wrongly at 0/2π; `bend` raised by
-  `clumpBend`; tint shifted by the clamped `clumpTint`.
+  blends the (kernel-smoothed) clump factors into its seed, scaled by
+  `clumpStrength ∈ [0,1]` (the wild↔tidy dial, default **wild ≈ 0.7**): `height =
+  baseHeight · mix(1, clumpHeight, clumpStrength)`; **facing/lean blended as a direction
+  vector** (sum `wᵢ · clumpLeanDirᵢ`, renormalise) then back to `facingAngle` — **never**
+  by lerping the scalar radian (0/2π wrap). **Antipodal guard:** if the summed direction's
+  length is ~0 (opposing lean dirs at ~equal weight), fall back to the dominant-weight
+  direction rather than normalising a zero vector (NaN). `bend` raised by `clumpBend`;
+  tint shifted by the clamped `clumpTint`. **`clumpPhase` is taken nearest-only, not
+  kernel-blended** — it is a *cyclic* phase (blending it reintroduces the 0/2π wrap), and
+  clumps are meant to sway as separate bodies; if a hard sway-seam ever shows, blend the
+  resulting wind *displacement vector*, never the phase angle.
 - **CPU cull path also evaluates `grassClump` (no per-blade *storage* change, but not
   VS-only).** Clumping adds **no field** to `GrassBlade` (it is a function of `rootPos`),
   so the struct stays 32 B (§5.5). **But** because clump height/lean change the *drawn*
@@ -511,10 +522,11 @@ additive rather than a rewrite.
   bit-hash** (so CPU and GLSL bit-match — load-bearing for the AABB, §5.2a). Test:
   **determinism** (same XZ → same clump ids/factors), **blades near one centre share the
   clump's height/lean/tint**, factors stay in range (`clumpHeight` 0.6–1.6×, tint
-  clamped), and — the point of the two-nearest blend — **C⁰ seam continuity**: sampling a
-  dense line of XZ *across* a clump boundary, the blended factors change continuously (no
-  jump at the seam). This pins the "field, not tufts" math the same way the blade-vertex
-  mirror pins the static blade.
+  clamped), and — the point of the smooth-kernel blend — **C⁰ continuity everywhere**:
+  sampling a dense XZ **grid** (not just one line — it must cross Voronoi *triple points*
+  and second-nearest-swap loci, the cases a two-nearest lerp fails), the blended factors
+  change continuously with no jump above a small epsilon. This pins the "field, not tufts"
+  math the same way the blade-vertex mirror pins the static blade.
 - **LOD selection (unit).** `grassLodForDistance(dist, bands)` → correct tier at band
   edges + midpoints, monotonic non-increasing detail with distance.
 - **Placement gating (unit).** Pure predicates: spawn-probability ∝ grass weight
@@ -805,6 +817,24 @@ under-specified its CPU interaction; all fixed:
   wind sway) to §5.2a's factor list and reconciled it with §5.4's per-blade desync.
 
 Loop 1 surfaced a HIGH → **not converged**. Loop 2 (cold) confirms before G2.
+
+**Clumping cold-eyes loop 2 (2026-07-19)** — 2 cold reviewers. Tally: CRITICAL 0 · HIGH 0
+· MEDIUM 2 · LOW 2 (all verified). The loop-1 fixes held; the reviewers caught a real math
+error *in* the loop-1 seam fix:
+- MEDIUM — the loop-1 "two-nearest blend `w=d₂/(d₁+d₂)`" is **not** globally C⁰: it is
+  continuous only across the nearest-pair edge, and **jumps** where the second-nearest
+  clump swaps (interior loci / Voronoi triple points) — a counter-example confirmed it →
+  replaced with a **smooth-falloff kernel** over the 3×3 neighbourhood (`wᵢ =
+  smoothstep(kernelR,0,dᵢ)`, normalised weighted average), C⁰/C¹ everywhere. The §8 test
+  now samples a **grid** (crosses triple points), so it can actually catch a regression.
+- MEDIUM — `normalize(mix(dirA,dirB))` for the lean blend **NaNs** at near-antipodal
+  directions (≈0 vector) → added an **antipodal guard** (fall back to dominant-weight dir).
+- LOW — `clumpPhase` is cyclic; kernel-blending it re-wraps at 0/2π → taken **nearest-only**
+  (clumps sway as separate bodies; blend the displacement vector, not the phase, if needed).
+- LOW — §5.2's "randomise … tint" enumeration implied a stored tint field (would break the
+  32 B `static_assert`) → clarified tint is packed in `hash`, not a struct field.
+
+Loop 2 surfaced substantive math fixes → **not converged**. Loop 3 (cold) confirms before G2.
 
 ## 15. Sources
 
