@@ -49,7 +49,9 @@ the RX 6600**.
 - **v1 defers the fully GPU-driven pipeline.** v1 places blades on the **CPU** per
   terrain chunk and frustum-culls **per chunk** on the CPU; the per-blade GPU
   compute cull + `glMultiDrawElementsIndirect` + GPU placement is **v2**, dropped
-  in additively because v1 stores blade seeds in an **SSBO from day one** (§5.5).
+  in additively because v1 stores blade seeds in an **SSBO from day one** (§5.5). The
+  v2 draw is `glMultiDrawArraysIndirect` (the **non-indexed** multi-draw — the blade
+  strip has no index buffer), not `…ElementsIndirect`.
   CPU per-chunk placement is a standard, well-precedented first step; open-source
   reproductions (e.g. GodotGrass) reach this quality without the full GPU-driven
   pipeline (research §6).
@@ -83,7 +85,8 @@ the RX 6600**.
   **indirect instanced draw** (one draw for the field). *(GoT; GPUOpen; Cyanilux;
   Lingtorp GL indirect.)*
 - **OpenGL 4.5 has all of it in core** — compute (4.3), SSBOs (4.3), indirect draw
-  (`glDrawArraysIndirect` 4.0 / `glMultiDrawElementsIndirect` 4.3), DSA (4.5). No
+  (`glDrawArraysIndirect` 4.0 / `glMultiDrawArraysIndirect` 4.3 — the **non-indexed**
+  variants the blade strip needs, since it carries no index buffer), DSA (4.5). No
   mesh shaders needed; the VS generates the blade.
 - **Shading:** normal biased toward vertical/terrain-normal (so slopes/field aren't
   noisy); **view·light translucency glow** (the signature backlit-grass look);
@@ -113,8 +116,8 @@ The engine already ships every GPU primitive; the grass system assembles them.
   `indirect_buffer.cpp:141`); `glDrawArraysIndirect` with a **compute-written**
   command buffer + `GL_COMMAND_BARRIER_BIT` (`gpu_particle_system.cpp:369-381,409`)
   — exactly the v2 pattern.
-- **Terrain scatter data.** `Terrain::getHeight(wx,wz)` (`terrain.cpp:120`),
-  `getNormal` (`:147`), `getSplatWeight(texelX,texelZ)→vec4 (R=grass,G=rock,B=dirt,
+- **Terrain scatter data.** `Terrain::getHeight(wx,wz)` (`terrain.cpp:121`),
+  `getNormal` (`:148`), `getSplatWeight(texelX,texelZ)→vec4 (R=grass,G=rock,B=dirt,
   A=sand)` (`terrain.cpp:546`, world→texel via `worldToTexel` `:633`), and GPU
   textures `getHeightmapTexture/getNormalMapTexture/getSplatmapTexture`
   (`terrain.h:126-132`) for a v2 compute path. **Grass weight = `.r`.** *(Grass
@@ -154,18 +157,26 @@ and the draw. Coexists with `FoliageRenderer` (flowers).
   strip vertices** (LOD tiers: near N=7 → 15 verts; mid N=5 → 11; far N=3 → 7). Drawn with
   **`GL_TRIANGLE_STRIP`** — each instanced draw replays the strip independently, so
   strips do not connect across blades. *(This is the topology contract for G1 —
-  `GL_TRIANGLE_STRIP`, `2N+1` verts, NOT a `GL_TRIANGLES` list.)*
+  `GL_TRIANGLE_STRIP`, `2N+1` verts, NOT a `GL_TRIANGLES` list.)* The draw pulls **no
+  vertex attributes** (everything from `gl_VertexID`/`gl_InstanceID` + SSBO), but a
+  **non-zero VAO must still be bound** — `glDrawArrays*` with VAO 0 is
+  `GL_INVALID_OPERATION` in a core profile (the engine binds `m_gpuVao` before its
+  SSBO-driven particle draw, `particle_renderer.cpp:370`); grass binds an empty VAO.
 - **Curve.** Quadratic Bézier (GPUOpen form): `P0 = root`, `P1 = root + up·height`,
   `P2 = P1 + facingDir·height·lean`. Evaluate at `t = row/N`; offset ±perpendicular
   (facing) by a width that **tapers to 0 at the tip**. The two verts of a row share
   `t`; the last row is a single centred tip vertex.
 - **Per-vertex normal** from the curve tangent × width axis, then **biased toward
   the terrain normal / vertical** by a configurable amount so the lit field is not
-  noisy (research §3).
+  noisy (research §3). At the **tip** the width → 0, so the width axis (and the cross
+  product) is degenerate → the tip vertex takes the **row N−1 normal** rather than a
+  NaN/zero normal.
 - **View-facing widening** (§3): widen the blade in view space as it turns edge-on
   to the camera, clamped, to kill sub-pixel shimmer.
 - **Opaque, not alpha-blended.** Real blades are solid geometry → render **opaque**
-  (depth-tested, two-sided lighting with back-face cull off), which avoids the
+  (depth-tested, blend off; two-sided lighting with back-face cull off — the fragment
+  shader **negates the normal when `!gl_FrontFacing`** so a blade lit from behind is not
+  a black backside, the standard two-sided idiom), which avoids the
   **alpha-blend sort + transparency overdraw** the billboard cards paid. **Trade to
   watch:** thin blades still incur **2×2-quad overshading** — sub-pixel / near-edge
   triangles shade whole fragment quads, wasting fragment work — mitigated by
@@ -211,23 +222,37 @@ and the draw. Coexists with `FoliageRenderer` (flowers).
 
 - **Per-chunk frustum cull (CPU).** Reuse the `getVisibleChunks` AABB-vs-frustum
   pattern; skip non-visible chunks' draws entirely.
-- **Distance LOD per chunk** (two axes, research §3):
-  - **fewer segments** — pick the blade vertex count (15/11/7) by chunk distance;
-  - **fewer blades** — draw only `instanceCount · lodFraction` of the chunk's
-    blades far away (the seeds are ordered so a prefix is a valid thinned subset),
-    and **widen** survivors slightly to hold apparent density.
-  - LOD tiers are distance bands with a small blend region; the blended tip width /
-    fade avoids pop (research §3). Pure `grassLodForDistance(dist)` helper →
-    unit-tested.
+- **Distance LOD** (two axes, research §3). The draw is per chunk (one
+  `glDrawArraysInstanced`), so the *segment* axis is per-chunk; the *blade-count* axis
+  is faded **per blade** in the shader to keep the pop off the chunk boundary:
+  - **fewer segments (per chunk, coarse).** The blade vertex count (15/11/7) is one
+    value for the whole chunk (it is one draw). This coarse step is placed **far enough
+    out that the affected blades are near-sub-pixel**, so a chunk stepping 15→11→7 is
+    imperceptible without per-blade blending.
+  - **fewer blades (faded per blade, not hard-culled at the boundary).** Far chunks
+    draw a smaller blade fraction — seeds are ordered so a prefix is a spatially-uniform
+    subset (§5.2). To avoid the whole chunk dropping a slab of its population the instant
+    it crosses a band, the chunk keeps submitting the **finer** tier's blade fraction
+    *through* the blend band while the **vertex shader shrinks each soon-to-be-dropped
+    blade's height/width → 0 over that band by its own root-to-camera distance** — a
+    *geometric* fade (blades are opaque; there is no alpha cross-fade). Once a blade has
+    shrunk to zero it falls out of the next-band draw fraction with nothing visible to
+    pop. Survivors **widen** slightly to hold apparent density.
+  - The per-blade distance is what makes the blade-count fade smooth *despite* the
+    per-chunk draw granularity — the fade tracks each blade, not the chunk. Pure
+    `grassLodForDistance(dist)` helper picks the segment tier + the blend-band edges →
+    unit-tested (§8's "no obvious LOD pop" criterion rests on this per-blade fade).
 - **Draw (v1):** per visible chunk, `glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0,
   vertsForLod, chunkBladeCount·lodFraction)` (`vertsForLod = 2N+1`, §5.1), seeds
   read from the chunk SSBO bound at a binding point. One draw per visible chunk
   (tens), not per blade.
 - **v2 (future, additive):** a `grass_cull.comp.glsl` tests blades per-frame,
   compacts survivors + writes an indirect-args buffer, and the field draws in **one**
-  `glMultiDrawElementsIndirect` — the particle indirect precedent
-  (`gpu_particle_system.cpp:369-409`). The v1 SSBO layout is chosen so this is
-  additive, not a rewrite.
+  `glMultiDrawArraysIndirect` — the **non-indexed** multi-draw (the blade strip has no
+  index buffer, so it is `…ArraysIndirect`, not `…ElementsIndirect`; one draw command
+  per LOD segment tier). Follows the engine's `glDrawArraysIndirect` compute-written /
+  barrier particle precedent (`gpu_particle_system.cpp:369-409`), scaled to multi-draw.
+  The v1 SSBO layout is chosen so this is additive, not a rewrite.
 
 ### 5.4 Shading + wind
 
@@ -242,7 +267,9 @@ and the draw. Coexists with `FoliageRenderer` (flowers).
   `engine.cpp:1625-1627`) → bend the Bézier `P1/P2` control points, scaled by height
   along the blade (root fixed, tip moves most), offset by the **per-blade phase**
   (from the seed hash) so neighbours desync; a small high-frequency jitter for gust
-  turbulence.
+  turbulence. (Offsetting the control points slightly lengthens the Bézier arc — a
+  faint stretch — negligible at the clamped gentle amplitude of §11; if it ever shows,
+  apply the bend as a small rotation about the root instead of a control-point offset.)
 - **Shadow casting:** grass casting into the CSM is **expensive** (research §5 notes
   it is often skipped/limited). **Decided for v1: grass does NOT cast shadows** (it
   still *receives* them; a High/Ultra-only cast is a later candidate). This is a
@@ -307,8 +334,9 @@ additive rather than a rewrite.
 ## 7. Performance (60 FPS is a hard requirement)
 
 - **Hard gate: ≥ 60 FPS at High on the RX 6600**, Release, measured via the
-  `--profile-log` CSV **Grass** GPU pass scope (per-pass GPU ms; 3D_E-0030 tooling)
-  at a **fixed, reproducible ground-level pose**: G5 adds a named `grass_dense`
+  `--profile-log` CSV **Grass** GPU pass scope (per-pass GPU ms; the `--profile-log`
+  CSV logger is **3D_E-0027** tooling, consumed by the **3D_E-0030** perf-regression
+  gate) at a **fixed, reproducible ground-level pose**: G5 adds a named `grass_dense`
   `--visual-test` viewpoint (eye ~1.5 m above the terrain in the densest meadow
   interior; exact XZ + yaw/pitch recorded in the viewpoint list) so the baseline
   repeats run-to-run. The prior billboard meadow measured GPU-total ~11 ms worst /
@@ -321,13 +349,21 @@ additive rather than a rewrite.
   per-pixel than the billboards"* is a **G5 hypothesis, not an assumption**;
   quad-overshading is the primary cost to watch, mitigated (not removed) by
   view-facing widening + LOD's fewer-verts / fewer-blades.
-- **Blade budget (initial target, refined by G5 measurement):** dense near the
-  camera, LOD-thinned with distance. Order-of-magnitude working figures: near-field
-  density ~1–4 k blades/m² (UE-grass territory), LOD-thinned to a **~10⁵–10⁶ drawn**
-  total; at 32 B/blade the stored per-chunk seed SSBOs sum to a few tens of MB
-  (bounded, VRAM-cheap). These are *starting* numbers — the drawn count and density
-  are recorded at first Release measurement (G5) as the baseline, not asserted up
-  front — so the **Grass** pass stays within its share of the 16.6 ms frame.
+- **Blade budget — stored ≠ drawn (v1 places once, camera-independent):** the meadow is
+  a **256×256 m** field (`test_meadow_terrain.cpp:199-203`: 257 verts × 1 m spacing;
+  ~246×246 ≈ **60 k m²** of grass after the edge margin, pond, and C1 dirt patches).
+  Because v1 CPU-places blades **once at build** (§5.2/§6), the **stored** blade count is
+  `base-density × grass-footprint` — set at build, *independent* of the camera and so of
+  the LOD-thinned **drawn** count. That is a hard VRAM constraint, not a drawn-cost one:
+  at 32 B/blade, a **~256 MB** grass-SSBO budget on the 8 GB RX 6600 caps storage at
+  **~8 M stored blades ≈ ~130 blades/m² base density** across the full field. A reference
+  near-density of 1–4 k blades/m² therefore **cannot be stored uniformly over the whole
+  256 m field in v1** — v1 stores at the VRAM-bounded base density and reaches apparent
+  near-camera density via **LOD survivor-widening** (§5.3); true uniform high density is a
+  **v2** concern (GPU/view-dependent placement stores only near the camera). These are
+  *illustrative* budget figures — G2 pins the base density under the SSBO budget; G5
+  records the drawn count + per-pass ms baseline. The **Grass** pass must stay within its
+  share of the 16.6 ms frame.
 - **v1 without GPU cull** is the risk (CPU per-chunk cull only draws visible chunks,
   but every blade in a visible chunk is submitted). If the G5 measurement misses 60
   FPS at High, the escalations, in order: (a) more aggressive distance LOD; (b) the
@@ -354,8 +390,9 @@ additive rather than a rewrite.
   **GL-error-free** (`glGetError`) with the field built.
 - **Visual (`--visual-test`) — maintainer inspection vs references.** Ground-level
   meadow: a continuous field of **distinct 3-D blades** (not cards), backlit glow,
-  grounded bases, wind motion, bare earth over the C1 dirt patches, no LOD pop at
-  band edges.
+  grounded bases, wind motion, bare earth over the C1 dirt patches, **no obvious LOD
+  pop** at band edges (the per-blade distance fade of §5.3 holds the transition
+  smooth despite per-chunk draws).
 - **Perf (G5).** Release `--profile-log` **Grass** GPU pass ms + FPS at the dense
   vantage on the RX 6600; record the baseline; ≥ 60 FPS at High is the gate.
 
@@ -393,8 +430,8 @@ additive rather than a rewrite.
    Grass-pass read on the RX 6600. *Verify:* ≥ 60 FPS at High (baseline ms recorded);
    preset→tier unit test; CHANGELOG + ROADMAP.
 
-**v2 (separate future phase):** GPU compute cull + `glMultiDrawElementsIndirect` +
-GPU-side placement (the data model is v2-ready). Not in this phase.
+**v2 (separate future phase):** GPU compute cull + `glMultiDrawArraysIndirect`
+(non-indexed) + GPU-side placement (the data model is v2-ready). Not in this phase.
 
 Each slice commits locally; the phase pushes when G5 lands green.
 
@@ -485,7 +522,41 @@ technique lane confirmed the loop-1 topology/perf fixes held. Fixed:
 - INFO — `chunkBladeCount·lodFraction` needs a floor/cast at implementation (impl
   detail, not a design defect).
 
-Loop 3 (final cold confirm) is the next step before sign-off + G1.
+**Loop 3 (2026-07-19)** — 2 cold reviewers (accuracy/infra lane + graphics
+technique/perf lane), identical cold briefs, no prior-loop context. Tally: CRITICAL 0
+· HIGH 0 · MEDIUM 3 · LOW 5 · INFO 1 (all 8 actionable verified against source, 0
+unverified). The accuracy lane re-verified every §4 citation exact; the technique lane
+surfaced three real gaps. All fixed:
+- MEDIUM — the v2 draw named `glMultiDrawElementsIndirect`, but the blade is a
+  **non-indexed** `GL_TRIANGLE_STRIP` (`glDrawArraysInstanced`, no index buffer) and
+  `…ElementsIndirect` *requires* an index buffer → corrected to
+  **`glMultiDrawArraysIndirect`** (GL 4.3 core, non-indexed) in §2/§3/§5.3/§10; the
+  engine has no `…ArraysIndirect` call yet — the precedent is `gpu_particle_system`'s
+  `glDrawArraysIndirect`, scaled to multi-draw.
+- MEDIUM — §7's "few tens of MB / 1–4 k blades/m² / 10⁵–10⁶ drawn" figures were
+  mutually inconsistent: v1 places **once, camera-independent**, so **stored** count is
+  `base-density × footprint`, not the drawn count. Grounded the footprint (256×256 m,
+  `test_meadow_terrain.cpp:199-203`; ~60 k m² grass) and made storage explicit — a
+  ~256 MB SSBO budget caps base density at ~130 blades/m²; reference near-density is
+  reached via LOD survivor-widening, uniform high density deferred to v2 (§7).
+- MEDIUM — LOD was selected **per chunk** (one draw = one segment count + one blade
+  fraction), so a chunk crossing a band would pop its whole population — contradicting
+  §8's "no LOD pop". Specified the actual mechanism: segment axis stays per-chunk
+  (coarse, placed sub-pixel-far); blade-count axis **fades per blade** in the VS
+  (geometric height/width → 0 over the blend band by each blade's own distance — opaque,
+  no alpha cross-fade), decoupling the fade from the chunk boundary (§5.3/§8).
+- LOW ×5 — nudged `getHeight` 120→**121** / `getNormal` 147→**148** (the loop-2 nudge
+  had overshot the signature line); re-attributed the `--profile-log` CSV logger to
+  **3D_E-0027** (3D_E-0030 is the consuming gate), §7; added the two-sided
+  **`!gl_FrontFacing` normal-flip** so backlit backsides aren't black (§5.1); noted the
+  attribute-less draw needs a **bound non-zero VAO** (VAO 0 = `GL_INVALID_OPERATION` in
+  core; `particle_renderer.cpp:370` precedent, §5.1); tip-vertex normal falls back to the
+  **row N−1 normal** (width→0 degenerates the width axis, §5.1).
+- INFO — noted wind control-point offsets faintly stretch the Bézier arc (negligible at
+  the §11 clamp; rotate-about-root if it ever shows) — §5.4.
+
+Loop 3 surfaced substantive findings (3 MEDIUM) → **not converged**. Loop 4 (cold) is
+the next step before sign-off + G1.
 
 ## 15. Sources
 
