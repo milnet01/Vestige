@@ -289,17 +289,26 @@ lawn / bristle-brush".
   nearest-pair edge — the earlier draft's "two-nearest" claim was wrong). This holds only
   for the **scalar** factors (height/tint/bend); the lean *direction* field has isolated
   singularities handled in the VS bullet.
-- **Kernel envelope + no-NaN fallback (must-honour invariant).** Two constraints must be
-  pinned together at G2 (the §8 test enforces them): **(a) C⁰** needs every *nonzero*-weight
-  centre to lie inside the searched 3×3 → `kernelR ≤ cellSize` (a centre 2 cells out is
-  always > cellSize away; a wider blend needs a 5×5 search, not a bigger `kernelR`);
-  **(b) coverage** needs the sample's *own* cell centre always within `kernelR` so weights
-  never all vanish → **bound the jitter** (centre within ≈ ±¼ cell) so own-centre distance
-  stays < `kernelR`. As a hard safety net regardless of tuning, **if `Σwᵢ < ε` fall back to
-  the single nearest cell's factors** (the loop-1 nearest-cell hash) — this guarantees **no
-  `0/0` NaN** even if a sample lands in an uncovered pocket. `kernelR` (within the envelope)
-  sets distinctness: tighter → crisp tussocks with narrow soft seams, wider (→ 5×5) →
-  gentler blending.
+- **Kernel envelope — a provably-correct window (committed constants).** The blend is
+  C⁰ everywhere **and** never divides by zero iff the tunables sit in a concrete window,
+  which a **3×3 search does admit**. With jitter bounded to a **radius `jr ≤ 0.25·cellSize`**
+  about each cell centre (a radius, not a per-axis box):
+  - **Coverage (no all-zero):** the worst sample is a cell *corner*; the nearest of the
+    four centres meeting there is at most `cellSize·√2/2 + jr ≈ 0.707·cellSize + jr` away.
+    So **≥ 1 of the 3×3 centres is within `kernelR` everywhere** iff
+    `kernelR ≥ 0.707·cellSize + jr` — then `Σwᵢ > 0` always. (The right invariant is
+    "**at least one** of the 3×3 centres within `kernelR`", *not* "the own-cell centre" —
+    at a corner the coverage comes from neighbours.)
+  - **C⁰ (no window-entry jump):** the nearest *excluded* (≥ 2 cells out) centre is at
+    least `1.5·cellSize − jr` away, so it carries zero weight iff
+    `kernelR ≤ 1.5·cellSize − jr`.
+  - Both hold together for `jr = 0.25·cellSize` and **`kernelR = cellSize`** (window
+    `[0.957, 1.25]·cellSize` is non-empty) — the committed default. Then `Σwᵢ > 0`
+    **everywhere**, so the `Σwᵢ < ε` guard (`ε = 1e-6`) is an **unreachable float-safety
+    net** (fall back to the nearest cell's factors), **not** a live path — no `0/0` NaN,
+    and no fallback discontinuity in the field. Crisper tussocks (smaller `kernelR` than
+    the coverage floor) require a **5×5 search** (which raises the excluded-centre floor),
+    not a smaller-than-envelope `kernelR` on a 3×3.
 - **How a blade uses it (VS).** Each blade evaluates `grassClump` at its `rootPos.xz` and
   blends the (kernel-smoothed) clump factors into its seed, scaled by
   `clumpStrength ∈ [0,1]` (the wild↔tidy dial, default **wild ≈ 0.7**): `height =
@@ -538,13 +547,17 @@ additive rather than a rewrite.
   bit-hash** (so CPU and GLSL bit-match — load-bearing for the AABB, §5.2a). Test:
   **determinism** (same XZ → same clump ids/factors), **blades near one centre share the
   clump's height/lean/tint**, factors stay in range (`clumpHeight` 0.6–1.6×, tint
-  clamped), **C⁰ continuity of the scalar factors** — sampling a dense XZ **grid** (not
-  one line: it must cross Voronoi *triple points*, second-nearest-swap loci, and **cell
-  corners**, the cases a two-nearest lerp fails), the blended height/tint/bend change with
-  no jump above a small epsilon — and **no NaN anywhere** (assert every sampled factor is
-  finite, so the all-weights-zero `Σwᵢ<ε` fallback is exercised at cell corners). This
-  pins the "field, not tufts" math the same way the blade-vertex mirror pins the static
-  blade.
+  clamped). Two separate properties (not one — they cover different regimes):
+  **(i) C⁰ over the covered field** — with the committed in-envelope constants (§5.2a:
+  `jr = 0.25·cellSize`, `kernelR = cellSize`) `Σwᵢ > 0` **everywhere**, so a dense XZ
+  **grid** crossing Voronoi *triple points*, second-nearest-swap loci, and **cell corners**
+  (the cases a two-nearest lerp fails) shows the scalar factors change with no jump above a
+  small epsilon; **(ii) finiteness always** — a **synthetic degenerate** call (`kernelR`
+  shrunk below the coverage floor, or a direct all-zero-weights input) forces the
+  `Σwᵢ < ε` safety net and asserts the result is **finite** (no `0/0` NaN) — *not* C⁰
+  there, since the net is an intentional fallback. So the in-envelope field is C⁰ and the
+  net is proven non-NaN, without the test contradicting itself. This pins the "field, not
+  tufts" math the same way the blade-vertex mirror pins the static blade.
 - **LOD selection (unit).** `grassLodForDistance(dist, bands)` → correct tier at band
   edges + midpoints, monotonic non-increasing detail with distance.
 - **Placement gating (unit).** Pure predicates: spawn-probability ∝ grass weight
@@ -876,6 +889,29 @@ on unstated constraints:
   pre-existing "research §5/§6" cites (which don't map to a section) corrected to §3.
 
 Loop 3 surfaced a HIGH (NaN) → **not converged**. Loop 4 (cold) confirms before G2.
+
+**Clumping cold-eyes loop 4 (2026-07-19)** — 2 cold reviewers. **Both lanes converged on
+one coherent issue** (a strong convergence signal): the loop-3 kernel *envelope*
+(`kernelR ≤ cellSize` + "±¼ cell" jitter) did **not** actually guarantee coverage across
+the tunable `kernelR` range, so the `Σwᵢ<ε` fallback was a **live discontinuous path** —
+and §8 then contradicted itself (demanded C⁰ *and* that the fallback "fires at corners").
+Resolved by pinning a **provably-correct window**:
+- Jitter is a **radius `jr ≤ 0.25·cellSize`**; coverage (worst case a cell corner) needs
+  `kernelR ≥ 0.707·cellSize + jr`; C⁰ (excluded centre zero-weight) needs
+  `kernelR ≤ 1.5·cellSize − jr`. Both hold for the committed **`jr = 0.25·cellSize`,
+  `kernelR = cellSize`** (window `[0.957, 1.25]·cellSize` non-empty) → `Σwᵢ > 0`
+  **everywhere**, so the `Σwᵢ<ε` guard (`ε=1e-6`) is an **unreachable float-safety net**,
+  not a live seam. The coverage invariant is "**≥ 1 of the 3×3 centres within `kernelR`**"
+  (not "own-cell centre"). Crisper tussocks → 5×5 search, not sub-envelope `kernelR`.
+- §8 split into two non-contradictory properties: **(i) C⁰** over the (now fully) covered
+  field, **(ii) finiteness** of the fallback via a **synthetic degenerate** input (not "at
+  cell corners"). Q1 correctness (smoothstep, floor/uint hash, antipodal guard) and Q4
+  (CPU-AABB-by-clump-max + §6 table) both verified clean.
+
+Loop 4 converged: both lanes on a **single** now-fixed issue, closed with provably-correct
+committed constants (`jr=0.25·cellSize`, `kernelR=cellSize`, `ε=1e-6`) and a self-consistent
+§8 test. The clumping design is the contract for **G2**; the §8 parity test is the
+build-time enforcement of the C⁰/finiteness properties.
 
 ## 15. Sources
 
