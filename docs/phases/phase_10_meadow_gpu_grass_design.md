@@ -261,25 +261,41 @@ identical uniform spikes. This is *the* difference between "real meadow" and "mo
 lawn / bristle-brush".
 
 - **Clump field = a pure function of world XZ**, `grassClump(worldX, worldZ, scale)`,
-  shared by CPU and GLSL (parity, §8). It hash-scatters one **clump centre** per cell
-  of a coarse grid (cell size ≈ `clumpScale`, ~0.5–1.5 m for a wild meadow) and returns,
-  for the nearest centre: a **clump id/hash**, the **distance to centre** (0 at the
-  centre → 1 at the cell edge), and per-clump factors derived from the id —
-  `clumpHeight` (tall vs short tussock), `clumpLeanDir` (a shared facing the whole clump
-  leans toward), `clumpTint` (a small green/colour drift), and `clumpBend` (how far the
-  tussock flops). A Voronoi/nearest-of-neighbouring-cells lookup (like GoT) keeps clump
-  boundaries organic; a single-cell hash is the cheap fallback.
-- **How a blade uses it (VS + placement):** each blade evaluates `grassClump` at its
-  `rootPos.xz` and blends the clump factors into its own seed —
-  `height = baseHeight · mix(1, clumpHeight, clumpStrength)`, facing pulled toward
-  `clumpLeanDir`, `lean`/bend raised by `clumpBend`, tint shifted by `clumpTint`, all
-  scaled by `1 − distToCentre` so a blade at a clump's centre conforms most and edge
-  blades least (soft clump edges, no hard Voronoi seams). `clumpStrength ∈ [0,1]` is the
-  wild↔tidy dial (default **wild ≈ 0.7**).
-- **No data-model change (§5.5).** Clumping is a function of `rootPos`, evaluated in the
-  VS at draw time — it needs **no extra per-blade storage**, so `GrassBlade` stays 32 B.
-  (Placement may *also* consult it on the CPU to bias density toward clump centres, using
-  the same helper.)
+  shared by CPU and GLSL (parity, §8). It scatters one **clump centre** per cell of a
+  coarse grid (cell size ≈ `clumpScale`, ~0.5–1.5 m for a wild meadow), examines the
+  **3×3 neighbourhood** of cells around the sample, and returns the **two nearest**
+  centres' ids + distances plus, for each, per-clump factors derived from the id:
+  `clumpHeight` (a **multiplier ~0.6–1.6×**, tall vs short tussock), `clumpLeanDir` (a
+  **unit `vec2`**, the shared XZ direction the whole clump leans toward), `clumpTint` (a
+  small clamped green/colour drift), `clumpBend` (0–1, how far the tussock flops), and
+  `clumpPhase` (a shared wind phase, §5.4). The cell-centre offset and all factors come
+  from a **deterministic integer bit-hash** of the cell coordinates (PCG/xxhash-style int
+  ops — **not** `fract(sin(dot(…)))`, which does not bit-match across GPU/CPU), so the
+  CPU mirror and the GLSL agree exactly (finding: parity + the AABB below both depend on
+  identical clump membership).
+- **Seam-free blend needs the nearest *two* centres.** A single centre's
+  `1 − distToCentre` does **not** vanish at a Voronoi boundary (there `d₁≈d₂`, so the
+  weight is ~½ and factors jump). Instead blend the two nearest clumps by their relative
+  distance to the boundary — weight `w = d₂ / (d₁ + d₂)` on the nearer clump — which
+  reaches ½·½ continuity at the seam (C⁰, no ridge). The single-cell-hash variant (weight
+  → 0 at the cell edge) is the cheap fallback and is the only case where one centre is
+  seam-free.
+- **How a blade uses it (VS).** Each blade evaluates `grassClump` at its `rootPos.xz` and
+  blends the (seam-free) clump factors into its seed, scaled by `clumpStrength ∈ [0,1]`
+  (the wild↔tidy dial, default **wild ≈ 0.7**): `height = baseHeight ·
+  mix(1, clumpHeight, clumpStrength)`; **facing/lean blended as a direction vector**
+  (`normalize(mix(bladeDir, clumpLeanDir, …))` then back to `facingAngle`) — **never**
+  by lerping the scalar radian, which wraps wrongly at 0/2π; `bend` raised by
+  `clumpBend`; tint shifted by the clamped `clumpTint`.
+- **CPU cull path also evaluates `grassClump` (no per-blade *storage* change, but not
+  VS-only).** Clumping adds **no field** to `GrassBlade` (it is a function of `rootPos`),
+  so the struct stays 32 B (§5.5). **But** because clump height/lean change the *drawn*
+  geometry, the chunk **AABB** (which drives frustum cull + the LOD nearest-point,
+  §5.3) must be built with the **clump-max height and lean/bend reach** — the CPU
+  placement evaluates the same deterministic `grassClump` and pads the AABB accordingly,
+  else tall/leaning tussocks at the frustum edge get falsely culled and clip. The
+  segment-LOD "sub-pixel" distance (§5.3) likewise keys on the clump-max height. The CPU
+  may also bias placement density toward clump centres with the same helper.
 - **Tall & wild defaults** (user direction 2026-07-19): base height ~0.6–1.2 m, strong
   lean/bend so long blades flop, `clumpStrength` high. All in `GrassConfig` so the look
   dials from wild meadow to tidy field without code.
@@ -347,8 +363,10 @@ lawn / bristle-brush".
 - **Wind (vertex):** sample scrolling 2-D value noise by world XZ (reuse the engine
   wind direction/speed from `EnvironmentForces`, as billboard grass does at
   `engine.cpp:1625-1627`) → bend the Bézier `P1/P2` control points, scaled by height
-  along the blade (root fixed, tip moves most), offset by the **per-blade phase**
-  (from the seed hash) so neighbours desync; a small high-frequency jitter for gust
+  along the blade (root fixed, tip moves most). Two phase terms compose: the **per-clump
+  phase** (`clumpPhase`, §5.2a) makes a whole tussock sway **together as a body**, and a
+  small **per-blade phase** (from the seed hash) adds fine desync on top so blades within
+  the clump don't move in perfect lockstep; a small high-frequency jitter for gust
   turbulence. (Offsetting the control points slightly lengthens the Bézier arc — a
   faint stretch — negligible at the clamped gentle amplitude of §11; if it ever shows,
   apply the bend as a small rotation about the root instead of a control-point offset.)
@@ -489,11 +507,14 @@ additive rather than a rewrite.
   move the emitted vertex but are time-/view-dependent, so they are not in the parity
   seam — a GLSL divergence there is caught by the visual check (§5.4/§5.1), not this test.
 - **Clump-function parity (unit, Rule 7).** `grassClump(worldX, worldZ, scale)` (§5.2a)
-  is a second GL-free hand-mirror of its GLSL twin. Test: **determinism** (same XZ →
-  same clump id/factors), **two blades within one clump cell share the clump's
-  height/lean/tint**, `distToCentre` is 0 at the centre and rises to the cell edge, and
-  factors stay in range. This pins the "field, not tufts" math the same way the
-  blade-vertex mirror pins the static blade.
+  is a second GL-free hand-mirror of its GLSL twin, built on the **deterministic integer
+  bit-hash** (so CPU and GLSL bit-match — load-bearing for the AABB, §5.2a). Test:
+  **determinism** (same XZ → same clump ids/factors), **blades near one centre share the
+  clump's height/lean/tint**, factors stay in range (`clumpHeight` 0.6–1.6×, tint
+  clamped), and — the point of the two-nearest blend — **C⁰ seam continuity**: sampling a
+  dense line of XZ *across* a clump boundary, the blended factors change continuously (no
+  jump at the seam). This pins the "field, not tufts" math the same way the blade-vertex
+  mirror pins the static blade.
 - **LOD selection (unit).** `grassLodForDistance(dist, bands)` → correct tier at band
   edges + midpoints, monotonic non-increasing detail with distance.
 - **Placement gating (unit).** Pure predicates: spawn-probability ∝ grass weight
@@ -761,6 +782,29 @@ per-blade-random field misses. Folded in — new **§5.2a** clump layer (a pure
 `rootPos`), tall/wild defaults, per-clump tint/wind, updated §1/§3/§5.4/§6/§8/§10/§15.
 Lands in **G2** (placement + clump function + parity) with colour/wind in **G4**. This
 is a material design change → **re-run cold-eyes** on the clumping addition before G2.
+
+**Clumping cold-eyes loop 1 (2026-07-19)** — 2 cold reviewers (technique + accuracy).
+Tally: CRITICAL 0 · HIGH 1 · MEDIUM 3 · LOW 4 (all verified). The addition was sound but
+under-specified its CPU interaction; all fixed:
+- HIGH — clump height/lean change the *drawn* geometry, but the design framed clumping as
+  "VS-only, no CPU knowledge" → the CPU chunk **AABB** (frustum cull + LOD nearest-point)
+  would be built from base height and **falsely cull** tall/leaning tussocks at the
+  frustum edge. Corrected §5.2a: no per-blade *storage* change, but the CPU cull path
+  evaluates `grassClump` and pads the AABB by clump-max height + lean reach.
+- MEDIUM — `1 − distToCentre` is **not** seam-free at a Voronoi boundary (there d₁≈d₂ →
+  weight ~½ → factor jump) → blend the **two nearest** clumps by boundary distance
+  (`w = d₂/(d₁+d₂)`); single-cell-hash is the seam-free fallback.
+- MEDIUM — blending `facingAngle` (a scalar radian) toward `clumpLeanDir` wraps wrongly
+  at 0/2π → blend as a **unit-vector direction** (shortest arc) then back to the angle;
+  `clumpLeanDir` specified as a unit `vec2`.
+- MEDIUM — `fract(sin(dot()))` hashing won't bit-match CPU↔GPU (breaks the AABB/parity) →
+  specified a **deterministic integer bit-hash** (PCG/xxhash-style) for both.
+- LOW ×4 — pinned the 3×3 Voronoi neighbourhood + `clumpHeight` 0.6–1.6× range + tint
+  clamp; added a **C⁰ seam-continuity** assertion to the §8 parity test; noted the
+  segment-LOD sub-pixel distance keys on clump-max height; added `clumpPhase` (per-clump
+  wind sway) to §5.2a's factor list and reconciled it with §5.4's per-blade desync.
+
+Loop 1 surfaced a HIGH → **not converged**. Loop 2 (cold) confirms before G2.
 
 ## 15. Sources
 
