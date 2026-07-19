@@ -62,7 +62,7 @@ tuning is tall (~0.6–1.2 m), strongly leaning, and clumped.
   **single shared SSBO from day one** (§5.5).
   CPU per-chunk placement is a standard, well-precedented first step; open-source
   reproductions (e.g. GodotGrass) reach this quality without the full GPU-driven
-  pipeline (research §6).
+  pipeline (research §3).
 - **No Nanite / virtualised micro-geometry** — that is the roadmap's **Phase 14
   (Adaptive Geometry System)** plan (meshlets / virtual geometry; a ROADMAP-level scope,
   no design doc yet). This grass work is unrelated to it and is filed as a
@@ -115,7 +115,7 @@ tuning is tall (~0.6–1.2 m), strongly leaning, and clumped.
   boosted ambient so backsides read. **Wind:** scrolling 2-D noise → bend the upper
   control point, scaled by height along the blade, with a **per-blade phase** so
   neighbours don't move in lockstep. *(GPU Gems ch.7/16; GodotGrass.)*
-- **Pragmatic v1** (research §6): CPU jittered-grid placement per chunk (sample
+- **Pragmatic v1** (research §3): CPU jittered-grid placement per chunk (sample
   terrain height/normal/grass-weight) → SSBO; VS Bézier blade; per-chunk CPU
   frustum cull; distance LOD. Additive v2 = GPU compute cull + indirect + GPU
   placement.
@@ -270,30 +270,46 @@ lawn / bristle-brush".
   cell's id: `clumpHeight` (a **multiplier ~0.6–1.6×**, tall vs short tussock),
   `clumpLeanDir` (a **unit `vec2`**, the shared XZ direction the whole clump leans
   toward), `clumpTint` (a small clamped green/colour drift), `clumpBend` (0–1, how far the
-  tussock flops), and `clumpPhase` (a shared wind phase, §5.4). The cell-centre offset
-  (jitter bounded within its cell) and all factors come from a **deterministic integer
-  bit-hash** of the cell coordinates (PCG/xxhash-style int ops — **not**
-  `fract(sin(dot(…)))`, which does not bit-match across GPU/CPU), so the CPU mirror and
-  the GLSL agree exactly (parity + the AABB below both depend on identical clump
-  membership).
-- **Soft boundaries via a smooth falloff kernel (C⁰/C¹ everywhere).** Weight each of the
-  3×3 centres by a smooth kernel of its distance, `wᵢ = smoothstep(kernelR, 0, dᵢ)`
-  (0 beyond `kernelR ≈ clumpScale`, smooth into it), and take the **normalised weighted
-  average** of the factors. Because a centre's weight rises from 0 as it enters the window
-  and falls to 0 as it leaves, the blend is continuous **everywhere** — including the
-  second-nearest-swap loci and Voronoi triple points where a plain two-nearest
-  `d₂/(d₁+d₂)` lerp still jumps (it is only continuous across the nearest-pair edge, not
-  globally — the earlier draft's "two-nearest" claim was wrong). `kernelR` sets
-  distinctness: tight → crisp tussocks with narrow soft seams (one weight dominates near a
-  centre), wide → gentler blending.
+  tussock flops), and `clumpPhase` (a shared wind phase, §5.4). The cell index is
+  `floor(worldXZ / cellSize)` — **`floor`, never `int()` truncation**, or the meadow's
+  negative half (the field is centred on the origin, so negative cell coords are the
+  *common* case) seams at x=0/z=0. The cell-centre jitter and all factors come from a
+  **deterministic integer bit-hash** of the (two's-complement `uint32`) cell coordinates
+  (PCG/xxhash-style int ops — **not** `fract(sin(dot(…)))`, which does not bit-match
+  across GPU/CPU), so the CPU mirror and the GLSL agree exactly (parity + the AABB below
+  both depend on identical clump membership).
+- **Soft boundaries via a smooth falloff kernel.** Weight each of the 3×3 centres by a
+  smooth kernel of its distance, `wᵢ = 1 − smoothstep(0, kernelR, dᵢ)` (**written
+  `edge0 < edge1`; `smoothstep(kernelR, 0, …)` is GLSL-undefined and silently returns 1
+  on a spec-literal driver → clumping disabled**), and take the **normalised weighted
+  average** of the factors. A centre's weight rises from 0 as it nears and falls to 0 by
+  `kernelR`, so — **within the envelope below** — the blend is C⁰/C¹ **everywhere**,
+  including the second-nearest-swap loci and Voronoi triple points where a plain
+  two-nearest `d₂/(d₁+d₂)` lerp still jumps (that lerp is only continuous across the
+  nearest-pair edge — the earlier draft's "two-nearest" claim was wrong). This holds only
+  for the **scalar** factors (height/tint/bend); the lean *direction* field has isolated
+  singularities handled in the VS bullet.
+- **Kernel envelope + no-NaN fallback (must-honour invariant).** Two constraints must be
+  pinned together at G2 (the §8 test enforces them): **(a) C⁰** needs every *nonzero*-weight
+  centre to lie inside the searched 3×3 → `kernelR ≤ cellSize` (a centre 2 cells out is
+  always > cellSize away; a wider blend needs a 5×5 search, not a bigger `kernelR`);
+  **(b) coverage** needs the sample's *own* cell centre always within `kernelR` so weights
+  never all vanish → **bound the jitter** (centre within ≈ ±¼ cell) so own-centre distance
+  stays < `kernelR`. As a hard safety net regardless of tuning, **if `Σwᵢ < ε` fall back to
+  the single nearest cell's factors** (the loop-1 nearest-cell hash) — this guarantees **no
+  `0/0` NaN** even if a sample lands in an uncovered pocket. `kernelR` (within the envelope)
+  sets distinctness: tighter → crisp tussocks with narrow soft seams, wider (→ 5×5) →
+  gentler blending.
 - **How a blade uses it (VS).** Each blade evaluates `grassClump` at its `rootPos.xz` and
   blends the (kernel-smoothed) clump factors into its seed, scaled by
   `clumpStrength ∈ [0,1]` (the wild↔tidy dial, default **wild ≈ 0.7**): `height =
   baseHeight · mix(1, clumpHeight, clumpStrength)`; **facing/lean blended as a direction
   vector** (sum `wᵢ · clumpLeanDirᵢ`, renormalise) then back to `facingAngle` — **never**
   by lerping the scalar radian (0/2π wrap). **Antipodal guard:** if the summed direction's
-  length is ~0 (opposing lean dirs at ~equal weight), fall back to the dominant-weight
-  direction rather than normalising a zero vector (NaN). `bend` raised by `clumpBend`;
+  length is ~0 (opposing lean dirs at ~equal weight — an isolated index-±1 singularity the
+  guard makes *defined*, not continuous), fall back to the **dominant-weight** direction,
+  with a **deterministic tie-break** (lowest cell id) so CPU and GPU pick the same one on
+  an exact-equal-weight tie. `bend` raised by `clumpBend`;
   tint shifted by the clamped `clumpTint`. **`clumpPhase` is taken nearest-only, not
   kernel-blended** — it is a *cyclic* phase (blending it reintroduces the 0/2π wrap), and
   clumps are meant to sway as separate bodies; if a hard sway-seam ever shows, blend the
@@ -381,7 +397,7 @@ lawn / bristle-brush".
   turbulence. (Offsetting the control points slightly lengthens the Bézier arc — a
   faint stretch — negligible at the clamped gentle amplitude of §11; if it ever shows,
   apply the bend as a small rotation about the root instead of a control-point offset.)
-- **Shadow casting:** grass casting into the CSM is **expensive** (research §5 notes
+- **Shadow casting:** grass casting into the CSM is **expensive** (research §3 notes
   it is often skipped/limited). **Decided for v1: grass does NOT cast shadows** (it
   still *receives* them; a High/Ultra-only cast is a later candidate). This is a
   deliberate scope cap — logged per project Rule 5 in the **G4 commit + CHANGELOG**
@@ -442,7 +458,7 @@ no buffer consolidation.
 |---|---|---|
 | Blade seed scatter + terrain/slope/splat gating | **CPU**, one-time at meadow build (v1) | I/O + sparse decision logic; moves to GPU compute in v2. |
 | Per-chunk frustum cull + LOD selection | **CPU** per frame (v1) | Tens of chunks; branch/decision. GPU per-blade in v2. |
-| Clump lookup (`grassClump`, §5.2a) → per-clump height/lean/tint/bend | **GPU** (vertex) at draw; **CPU** for placement bias + parity test | Pure function of world XZ; per-vertex on the GPU, mirrored on CPU (Rule-7 parity). |
+| Clump lookup (`grassClump`, §5.2a) → per-clump height/lean/tint/bend | **GPU** (vertex) at draw; **CPU** for placement bias, **chunk-AABB clump-max padding** (§5.2a — else tall/leaning tussocks false-cull), + parity test | Pure function of world XZ; per-vertex on the GPU, mirrored on CPU (Rule-7 parity). |
 | Blade geometry generation (Bézier eval, width, normal) | **GPU** (vertex) | Per-vertex, data-parallel; the whole point of GPU grass. |
 | Wind displacement | **GPU** (vertex) | Per-vertex. |
 | Diffuse + translucency + AO + shadow receive | **GPU** (fragment) | Per-pixel BRDF. |
@@ -522,11 +538,13 @@ additive rather than a rewrite.
   bit-hash** (so CPU and GLSL bit-match — load-bearing for the AABB, §5.2a). Test:
   **determinism** (same XZ → same clump ids/factors), **blades near one centre share the
   clump's height/lean/tint**, factors stay in range (`clumpHeight` 0.6–1.6×, tint
-  clamped), and — the point of the smooth-kernel blend — **C⁰ continuity everywhere**:
-  sampling a dense XZ **grid** (not just one line — it must cross Voronoi *triple points*
-  and second-nearest-swap loci, the cases a two-nearest lerp fails), the blended factors
-  change continuously with no jump above a small epsilon. This pins the "field, not tufts"
-  math the same way the blade-vertex mirror pins the static blade.
+  clamped), **C⁰ continuity of the scalar factors** — sampling a dense XZ **grid** (not
+  one line: it must cross Voronoi *triple points*, second-nearest-swap loci, and **cell
+  corners**, the cases a two-nearest lerp fails), the blended height/tint/bend change with
+  no jump above a small epsilon — and **no NaN anywhere** (assert every sampled factor is
+  finite, so the all-weights-zero `Σwᵢ<ε` fallback is exercised at cell corners). This
+  pins the "field, not tufts" math the same way the blade-vertex mirror pins the static
+  blade.
 - **LOD selection (unit).** `grassLodForDistance(dist, bands)` → correct tier at band
   edges + midpoints, monotonic non-increasing detail with distance.
 - **Placement gating (unit).** Pure predicates: spawn-probability ∝ grass weight
@@ -608,7 +626,7 @@ Each slice commits locally; the phase pushes when G5 lands green.
   to the scoped v2 GPU cull only if G5 misses 60 FPS (Rule-5 logged).
 - **LOD pop** → blended tip width + blade-fraction fade at band edges (research §3).
 - **Blades noisy/dark on slopes** → normal biased toward terrain-normal/vertical +
-  boosted ambient (research §5).
+  boosted ambient (research §3).
 - **Big new subsystem risk** → sliced G1–G5, each independently verifiable; the
   billboard path stays intact for flowers, and a stall in any slice leaves the prior
   committed slice working, so it never breaks the meadow build.
@@ -835,6 +853,29 @@ error *in* the loop-1 seam fix:
   32 B `static_assert`) → clarified tint is packed in `hash`, not a struct field.
 
 Loop 2 surfaced substantive math fixes → **not converged**. Loop 3 (cold) confirms before G2.
+
+**Clumping cold-eyes loop 3 (2026-07-19)** — 2 cold reviewers. Tally: CRITICAL 0 · HIGH 1
+· MEDIUM 3 · LOW 3 (all verified). Loop-2's kernel blend was right in spirit but shipped
+on unstated constraints:
+- HIGH — the normalised kernel average **`0/0` NaNs** when all 3×3 weights are zero (a
+  sample in an uncovered corner pocket); loop-2 dropped loop-1's nearest-cell fallback →
+  restored it as a hard `Σwᵢ<ε` safety net (**no NaN regardless of tuning**), + §8 asserts
+  finiteness at cell corners.
+- MEDIUM — `smoothstep(kernelR, 0, d)` is **GLSL-undefined** (`edge0 > edge1`) and a
+  spec-literal driver returns 1 → clumping silently off → rewrote as
+  `1 − smoothstep(0, kernelR, d)`.
+- MEDIUM — C⁰ holds only inside an envelope the doc didn't state → pinned the invariant
+  (`kernelR ≤ cellSize` for a 3×3 search; bound jitter so the own cell always covers; 5×5
+  if wider blending is wanted) and scoped the "C⁰ everywhere" claim to the **scalar**
+  factors.
+- MEDIUM — §6 CPU/GPU table omitted the CPU cull-AABB `grassClump` role (loop-1's HIGH) →
+  added it so §6 matches §5.2a.
+- LOW ×3 — negative cell coords need `floor` (not `int()`) + `uint32` two's-complement
+  hash (meadow is origin-centred, so negatives are the common case); the lean-direction
+  fallback needs a **deterministic tie-break** (lowest cell id) for CPU/GPU parity; and the
+  pre-existing "research §5/§6" cites (which don't map to a section) corrected to §3.
+
+Loop 3 surfaced a HIGH (NaN) → **not converged**. Loop 4 (cold) confirms before G2.
 
 ## 15. Sources
 
