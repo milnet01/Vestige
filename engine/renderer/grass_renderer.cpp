@@ -322,6 +322,33 @@ void GrassRenderer::render(const glm::mat4& viewProjection,
     glBindVertexArray(0);
 }
 
+void GrassRenderer::setQuality(GrassQuality quality)
+{
+    // Start from the §5.3 High defaults, then pull the distances in for the cheaper tiers.
+    // bandWidth (the no-pop fade width) is left at its default 24 m ≥ chunk diagonal on
+    // every tier, so a shortened field still fades rather than pops (§5.3 precondition).
+    m_lodBands = GrassLodBands{};
+    switch (quality)
+    {
+    case GrassQuality::Low:
+        m_lodBands.nearMid = 30.0f;
+        m_lodBands.midFar = 60.0f;
+        m_lodBands.cullDist = 90.0f;
+        m_lodBands.midFraction = 0.35f;
+        m_lodBands.farFraction = 0.15f;
+        break;
+    case GrassQuality::Medium:
+        m_lodBands.nearMid = 40.0f;
+        m_lodBands.midFar = 80.0f;
+        m_lodBands.cullDist = 130.0f;
+        m_lodBands.midFraction = 0.45f;
+        m_lodBands.farFraction = 0.20f;
+        break;
+    case GrassQuality::High:
+        break;   // the GrassLodBands defaults already are the High tuning
+    }
+}
+
 void GrassRenderer::shutdown()
 {
     if (m_vao != 0)

@@ -34,6 +34,19 @@ namespace Vestige
 class Terrain;
 class CascadedShadowMap;
 
+/// @brief GPU-grass quality tier (3D_E-0039 G5), driven by the graphics `QualityPreset`
+///        via `RendererQualitySink` — the same path `FoliageQuality` /
+///        `TerrainGroundQuality` use. Free-standing (not nested) so `settings_apply.h`
+///        can forward-declare it without including this header. The tier only dials
+///        CPU-side LOD distance + blade-fraction aggressiveness (`GrassLodBands`), so its
+///        integer values carry no wire contract and are free to change.
+enum class GrassQuality
+{
+    Low,     ///< Short draw distance, aggressive thinning — reduced-motion / low-end path.
+    Medium,  ///< Mid draw distance.
+    High     ///< Full draw distance + density (the §5.3 `GrassLodBands` defaults).
+};
+
 /// @brief Renders the GPU grass field from one shared blade SSBO. Per-chunk descriptors
 ///        (base offset into the shared buffer + blade count + AABB) drive the per-chunk
 ///        draw now and the frustum cull / LOD in G3.
@@ -102,6 +115,12 @@ public:
     ///        draw distance + LOD aggressiveness without touching the renderer internals.
     GrassLodBands& lodBands() { return m_lodBands; }
     const GrassLodBands& lodBands() const { return m_lodBands; }
+
+    /// @brief Applies a quality tier (§10.5): dials the LOD draw distance + blade-fraction
+    ///        aggressiveness so weaker GPUs shorten the field. High = the §5.3 defaults;
+    ///        Medium/Low pull the cull distance in and thin the mid/far bands harder. The
+    ///        no-pop band width is held ≥ the chunk diagonal on every tier.
+    void setQuality(GrassQuality quality);
 
     /// @brief Near-LOD segment count (N). An N-segment blade is a GL_TRIANGLE_STRIP of
     ///        `2N+1` verts (design §5.1). G2 uses this single tier; G3 adds mid/far.

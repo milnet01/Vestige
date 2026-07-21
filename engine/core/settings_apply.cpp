@@ -12,6 +12,7 @@
 #include "input/input_bindings.h"
 #include "localization/localization_service.h"
 #include "renderer/foliage_renderer.h"
+#include "renderer/grass_renderer.h"
 #include "renderer/renderer.h"
 #include "renderer/terrain_renderer.h"
 #include "systems/ui_system.h"
@@ -47,10 +48,12 @@ void applyDisplay(const DisplaySettings& display, DisplayApplySink& sink)
 
 RendererQualityApplySinkImpl::RendererQualityApplySinkImpl(Renderer& renderer,
                                                            TerrainRenderer& terrain,
-                                                           FoliageRenderer& foliage)
+                                                           FoliageRenderer& foliage,
+                                                           GrassRenderer* grass)
     : m_renderer(renderer)
     , m_terrain(terrain)
     , m_foliage(foliage)
+    , m_grass(grass)
 {
 }
 
@@ -84,6 +87,15 @@ void RendererQualityApplySinkImpl::setFoliageQuality(FoliageQuality quality)
     m_foliage.setQuality(quality);
 }
 
+void RendererQualityApplySinkImpl::setGrassQuality(GrassQuality quality)
+{
+    // Grass is an optional subsystem (a scene may have no GPU grass field).
+    if (m_grass != nullptr)
+    {
+        m_grass->setQuality(quality);
+    }
+}
+
 void applyQualityPreset(QualityPreset preset, DisplaySettings& display,
                         RendererQualitySink& sink)
 {
@@ -101,6 +113,7 @@ void applyQualityPreset(QualityPreset preset, DisplaySettings& display,
         bool                 heavyPost;   // volumetric fog + dynamic GI perf-gate
         TerrainGroundQuality ground;      // PBR terrain ground-texture tier (A5)
         FoliageQuality       foliage;     // grass distance + shadow tier (B3)
+        GrassQuality         grass;       // GPU-grass LOD distance tier (G5)
     };
 
     // Zero-init so the compiler sees a defined value on every path — a
@@ -111,17 +124,17 @@ void applyQualityPreset(QualityPreset preset, DisplaySettings& display,
     {
     case QualityPreset::Low:
         row = {0.66f, AntiAliasMode::FXAA, false, false, false,
-               TerrainGroundQuality::Low, FoliageQuality::Low};
+               TerrainGroundQuality::Low, FoliageQuality::Low, GrassQuality::Low};
         break;
     case QualityPreset::Medium:
         row = {0.75f, AntiAliasMode::FXAA, true, true, false,
-               TerrainGroundQuality::Medium, FoliageQuality::Medium};
+               TerrainGroundQuality::Medium, FoliageQuality::Medium, GrassQuality::Medium};
         break;
     case QualityPreset::High:
     case QualityPreset::Ultra:
         // Ultra renders identically to High in wave 1 (design §6), terrain + grass included.
         row = {1.0f, AntiAliasMode::TAA, true, true, true,
-               TerrainGroundQuality::High, FoliageQuality::High};
+               TerrainGroundQuality::High, FoliageQuality::High, GrassQuality::High};
         break;
     case QualityPreset::Custom:
         // Custom applies nothing — the player's hand-tuned knobs stand.
@@ -135,6 +148,7 @@ void applyQualityPreset(QualityPreset preset, DisplaySettings& display,
     sink.setHeavyPostEnabled(row.heavyPost);
     sink.setTerrainGroundQuality(row.ground);
     sink.setFoliageQuality(row.foliage);
+    sink.setGrassQuality(row.grass);
 }
 
 // ================================================================

@@ -43,6 +43,8 @@ enum class TerrainGroundQuality; // renderer/terrain_renderer.h
 class TerrainRenderer;           // renderer/terrain_renderer.h
 enum class FoliageQuality;       // renderer/foliage_renderer.h
 class FoliageRenderer;           // renderer/foliage_renderer.h
+enum class GrassQuality;         // renderer/grass_renderer.h
+class GrassRenderer;             // renderer/grass_renderer.h
 struct AudioSettings;            // core/settings.h
 struct AccessibilitySettings;    // core/settings.h
 struct LocalizationSettings;     // core/settings.h
@@ -125,6 +127,9 @@ public:
     /// Grass render-distance + shadow tier (3D_E-0038 B3). Forwarded to the
     /// `FoliageRenderer`, not the `Renderer` — see `RendererQualityApplySinkImpl`.
     virtual void setFoliageQuality(FoliageQuality quality) = 0;
+    /// GPU-grass LOD distance tier (3D_E-0039 G5). Forwarded to the `GrassRenderer`
+    /// (may be absent — see `RendererQualityApplySinkImpl`, which no-ops if null).
+    virtual void setGrassQuality(GrassQuality quality) = 0;
 };
 
 /// @brief Production sink wrapping the live `Renderer` + `TerrainRenderer`. Thin
@@ -134,19 +139,23 @@ public:
 class RendererQualityApplySinkImpl final : public RendererQualitySink
 {
 public:
+    /// @param grass The GPU-grass renderer, or nullptr when the scene has none —
+    ///        `setGrassQuality` then no-ops (grass is an optional subsystem).
     RendererQualityApplySinkImpl(Renderer& renderer, TerrainRenderer& terrain,
-                                 FoliageRenderer& foliage);
+                                 FoliageRenderer& foliage, GrassRenderer* grass);
     void setAntiAliasMode(AntiAliasMode mode) override;
     void setSsaoEnabled(bool enabled) override;
     void setBloomEnabled(bool enabled) override;
     void setHeavyPostEnabled(bool enabled) override;
     void setTerrainGroundQuality(TerrainGroundQuality quality) override;
     void setFoliageQuality(FoliageQuality quality) override;
+    void setGrassQuality(GrassQuality quality) override;
 
 private:
     Renderer& m_renderer;
     TerrainRenderer& m_terrain;
     FoliageRenderer& m_foliage;
+    GrassRenderer* m_grass;   ///< Optional — nullptr in scenes with no GPU grass.
 };
 
 /// @brief Applies a quality preset (design §4.1). Writes the preset's

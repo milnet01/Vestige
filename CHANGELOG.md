@@ -22,6 +22,30 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-07-21 Changed — GPU grass is now the meadow grass; billboard grass retired (3D_E-0039, G5)
+
+The GPU blade field graduated from "coexists with the old grass" to being THE
+meadow grass. The billboard grass (~88 000 flat stamped cards) is gone; the
+ground texture and the wildflowers stay. The field also gained a quality tier so
+weaker machines can shorten it, and it was perf-checked on the target GPU.
+
+- **Quality tier (`GrassQuality` Low/Medium/High).** Rides the same graphics
+  `QualityPreset` → `RendererQualitySink` path as the terrain and foliage tiers;
+  `GrassRenderer::setQuality` dials the LOD draw distance + blade-fraction
+  aggressiveness (Low pulls the cull distance in to 90 m and thins harder; High
+  is the full 170 m field). The no-pop fade width is held ≥ the chunk diagonal on
+  every tier. Preset→tier mapping is unit-tested.
+- **Billboard grass retired.** The meadow's foliage-type-0 stamp block was
+  removed; the GPU field (built at meadow finalize) is the only grass now. Freed
+  the Foliage render pass almost entirely (flowers only).
+- **Profile poses.** Two fixed, reproducible visual-test viewpoints —
+  `grass_dense` (near-level grazing) and `grass_lookdown` (downward, the base-
+  density worst case) — for the Grass-pass perf read and the density inspection.
+- **Performance (RX 6600, Release, High).** The full ~1.04 M-blade field costs
+  **~1.2 ms** of GPU time (avg 1.16, max 1.28); total GPU frame ~8 ms, and the
+  meadow holds a vsync-locked **60 FPS** with ~50% GPU headroom. Comfortably
+  clears the 60-FPS-minimum bar.
+
 ### 2026-07-21 Added — GPU grass is now lit, shadowed, and wind-swayed (3D_E-0039, G4)
 
 The GPU grass field went from a flat green gradient to real shading and motion.

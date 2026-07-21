@@ -445,7 +445,7 @@ bool Engine::initialize(const EngineConfig& config)
             // resize reads per frame.
             m_rendererQualitySink =
                 std::make_unique<RendererQualityApplySinkImpl>(
-                    *m_renderer, *m_terrainRenderer, *m_foliageRenderer);
+                    *m_renderer, *m_terrainRenderer, *m_foliageRenderer, m_grassRenderer);
             targets.rendererQuality = m_rendererQualitySink.get();
         }
         if (UISystem* ui = m_systemRegistry.getSystem<UISystem>())
@@ -2500,92 +2500,20 @@ void Engine::finalizeMeadowTerrain()
         c.windDrivenAmplitude = true;
     }
 
-    // --- Grass (slice 4) -----------------------------------------------------
-    // Paint many small stamps over the terrain interior, each anchored to the
-    // sampled surface height so the grass hugs the rolling hills (paintFoliage
-    // does no terrain sampling — it takes each instance's Y from center.y).
-    // GRASS_DENSITY + STAMP_SPACING are the PRIMARY benchmark knob: the defaults
-    // below total ~40 k instances; the documented tested range is ~10 k–120 k
-    // (raise GRASS_DENSITY toward ~2.0 for the upper bound) so the sub-60-FPS
-    // ceiling can be found deliberately without touching the scatter logic.
-    // TODO: revisit via Formula Workbench — stamp geometry is art-directed.
-    {
-        constexpr uint32_t GRASS_TYPE_ID = 0;   // foliage type 0 = grass
-        constexpr float STAMP_SPACING = 5.0f;   // metres between stamp centres
-        constexpr float STAMP_RADIUS = 3.5f;    // stamp disc radius (overlaps)
-        constexpr float GRASS_DENSITY = 1.30f;  // C2: dense field (~88 k total, ≤120 k budget)
-        constexpr float GRASS_FALLOFF = 0.30f;  // soft edge (rejects ~19%)
-        constexpr float EDGE_MARGIN = 5.0f;     // keep grass off the map border
-        // Keep grass off the water by its CONTOUR, not a square disc: skip a stamp
-        // whose ground sits below the waterline + a damp margin (design §3.5). A
-        // final erase disc at the flood radius trims any spill.
-        // TODO: revisit via Formula Workbench — SHORE_MARGIN is art-directed.
-        constexpr float SHORE_MARGIN = 1.5f;    // damp band above the waterline (m)
+    // --- Grass ----------------------------------------------------------------
+    // The meadow grass is the GPU procedural blade field (built just below via
+    // GrassRenderer::buildField) — real 3-D Bézier blades, not billboard cards.
+    // The old billboard-grass block (foliage type 0, ~88 k stamped star meshes)
+    // was RETIRED in 3D_E-0039 G5 once the GPU field was perf-verified at High;
+    // its GRASS_DENSITY/STAMP_SPACING benchmark knob is superseded by the G5
+    // grass_dense / grass_lookdown profile poses. The ground texture (C1) and the
+    // wildflowers (C3) stay on FoliageRenderer.
 
-        FoliageTypeConfig grassCfg;
-        grassCfg.name = "Meadow Grass";
-        // Realism B (3D_E-0038): wider height + colour variation so the field reads
-        // as varied real grass, not a uniform carpet. Scale/tint change the look,
-        // not the instance count, so the 3D_E-0027 perf fixture (GRASS_DENSITY /
-        // STAMP_SPACING) is untouched.
-        grassCfg.minScale = 0.5f;
-        grassCfg.maxScale = 2.0f;
-        grassCfg.tintVariation = glm::vec3(0.14f, 0.22f, 0.08f);
-
-        // Wire the real CC0 grass-blade texture through the foliage type-0 slot,
-        // with the engine's procedural blade as the fallback (design §4.1/§8). A
-        // git-ignored assets/textures/foliage_local/grass_blades.png override wins
-        // when present, mirroring the terrain_local / nature_local drop-in hooks.
-        if (m_foliageRenderer)
-        {
-            const auto foliagePath = [](const std::string& file) -> std::string
-            {
-                namespace fs = std::filesystem;
-                const std::string local = "assets/textures/foliage_local/" + file;
-                return fs::exists(local) ? local : "assets/textures/foliage/" + file;
-            };
-            const std::string grassTex = foliagePath("grass_blades.png");
-            grassCfg.texturePath = grassTex;   // self-documenting; renderer loads via setTypeTexture
-            m_foliageRenderer->setTypeTexture(GRASS_TYPE_ID, grassTex);
-        }
-
-        const float x0 = tcfg.origin.x + EDGE_MARGIN;
-        const float x1 = tcfg.origin.x + static_cast<float>(W - 1) * tcfg.spacingX - EDGE_MARGIN;
-        const float z0 = tcfg.origin.z + EDGE_MARGIN;
-        const float z1 = tcfg.origin.z + static_cast<float>(D - 1) * tcfg.spacingZ - EDGE_MARGIN;
-
-        for (float cz = z0; cz <= z1; cz += STAMP_SPACING)
-        {
-            for (float cx = x0; cx <= x1; cx += STAMP_SPACING)
-            {
-                // Sample the ground FIRST (hoisted above the skip) so the contour
-                // gate can use it: skip where the ground is at/below the waterline.
-                const float cy = terrain.getHeight(cx, cz);
-                if (cy < waterLevelY + SHORE_MARGIN)
-                {
-                    continue;
-                }
-                m_foliageManager->paintFoliage(GRASS_TYPE_ID,
-                    glm::vec3(cx, cy, cz), STAMP_RADIUS, GRASS_DENSITY,
-                    GRASS_FALLOFF, grassCfg);
-            }
-        }
-        // Trim any grass that spilled into the pond footprint (props in slice 5
-        // add their own erase discs here). Disc at the flood radius — the erase
-        // API is disc-only (design §3.5); the star-convex flooded region fits it.
-        m_foliageManager->eraseAllFoliage(
-            glm::vec3(pondCenterXZ.x, bowlFloorY, pondCenterXZ.y),
-            pondFill.floodRadius + SHORE_MARGIN);
-
-        Logger::info("Meadow grass: " + std::to_string(m_foliageManager->getTotalFoliageCount())
-            + " instances across " + std::to_string(m_foliageManager->getChunkCount()) + " chunks");
-    }
-
-    // --- GPU grass field (meadow_gpu_grass_design G2) ------------------------
+    // --- GPU grass field (meadow_gpu_grass_design) ---------------------------
     // The real 3-D clumped Bézier-blade field over the meadow, gated on the grass splat
     // layer + slope + the pond exclusion disc. Built once here (terrain + pond in scope);
-    // the render loop draws it per chunk. Coexists with the billboard grass for now — G5
-    // removes the billboard-grass block once the field is perf-verified at High.
+    // the render loop draws it per chunk, shaded + wind-swayed (G4) at a quality tier (G5).
+    // This IS the meadow grass now — the billboard-grass block was retired above (G5).
     if (m_grassRenderer)
     {
         GrassConfig grassCfg;                       // tall & wild defaults (§5.2a)
@@ -2864,6 +2792,14 @@ void Engine::finalizeMeadowTerrain()
         // Out on the open meadow, away from the pond.
         m_visualTestRunner.addViewpoint({"open_meadow",
             eyeOnSurface(px + 45.0f, pz + 40.0f), -135.0f, -3.0f, 8, 45.0f});
+        // G5 GPU-grass profile poses (single fixed capture each — reproducible for the
+        // Grass-pass perf read + the base-density inspection, design §7). grass_dense is a
+        // near-level grazing view (dense blade overlap flatters the field); grass_lookdown
+        // is the downward-pitched worst case for the base-density read (thinning shows).
+        m_visualTestRunner.addViewpoint({"grass_dense",
+            eyeOnSurface(px + 25.0f, pz + 60.0f), -120.0f, -3.0f, 1, 0.0f});
+        m_visualTestRunner.addViewpoint({"grass_lookdown",
+            eyeOnSurface(px + 25.0f, pz + 60.0f), -120.0f, -45.0f, 1, 0.0f});
         Logger::info("Meadow visual-test viewpoints registered: "
             + std::to_string(m_visualTestRunner.viewpointCount()));
     }
