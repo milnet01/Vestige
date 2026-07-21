@@ -1,9 +1,11 @@
 # Phase 10 — Meadow Realism C: Realistic Trees & Plants (3D_E-0033)
 
-**Status:** **REVISED 2026-07-21 (v2) — re-review pending.** The original v1 (cold-eyes converged loop 6)
+**Status:** **v2 SIGNED OFF (2026-07-21) — cold-eyes converged, implementing T1 → T7.** The original v1
 assumed a single heavy hero mesh needing decimation + a custom-baked octahedral impostor. During T1 the
-asset reality changed the design materially (see the v2 note below), so this doc is **reconciled to v2 and
-must re-run `/cold-eyes` to convergence before further implementation** (project Rule 9 / global Rule 14).
+asset reality changed the design materially (see the v2 note below); the doc was reconciled to v2 and
+re-run through `/cold-eyes` (7 loops, 3 lanes) to convergence — the renderer, asset-pipeline, and
+cross-cutting lanes all verified clean/polish, so spec sign-off is delegated to that convergence per the
+project workflow.
 **ROADMAP:** [3D_E-0033] Meadow realism C — realistic trees & plants. (🚧, `rendering-enhancements`)
 **Depends on / reuses:** GPU grass (3D_E-0039, shipped), meadow benchmark scene (3D_E-0027), pond (3D_E-0037), cascaded shadow maps, `EnvironmentForces` wind.
 **Author:** Claude (spec sign-off delegated to cold-eyes convergence per project workflow).
@@ -354,8 +356,8 @@ medium/small-variant of the same species (D3); **no decimation** (packs are alre
    **Textures shared per species (VRAM-critical).** The **mesh** maps (bark + foliage) are shared by all
    variants of a species; the **billboard** maps are per-variant (each tree's card has its own artist
    pre-rendered texture — §9). To preserve the mesh-map sharing, the finalised tool exports each tree's
-   **geometry only** and points every variant at **one shared per-species `textures/` folder** by relative
-   URI — it does **not** re-emit textures per variant. **Concretely:** a naïve
+   **geometry + material bindings** (with image URIs rewritten to a shared folder — no per-variant image
+   copies) and points every variant at **one shared per-species `textures/` folder** by relative URI. **Concretely:** a naïve
    `export_scene.gltf(export_format="GLTF_SEPARATE")` **copies** textures next to each output (the exact
    duplication to avoid). The required mechanism: **downscale each species' maps once (§below), write them
    to `gameready/<species>/textures/`, and post-process the emitted glTFs to rewrite their image URIs to
@@ -604,8 +606,28 @@ prior-loop briefing. Convergence = zero substantive verified findings._
 **v1 signed off (2026-07-21):** converged at loop 6 with only polish remaining (delegated cold-eyes
 convergence). Loops 1–6 above are the **v1 (octahedral-impostor) audit trail** — retained as history.
 
-**v2 (2026-07-21) — re-review REQUIRED, not yet run.** The T1 asset reality forced a material redesign
-(LOLIPOP artist-LOD packs; custom octahedral baker dropped; sourcing + prep + slices reworked — see the
-v2 change summary at the top). Per project Rule 9 / global Rule 14 this revision **must run `/cold-eyes`
-to convergence before further implementation**. The v1 loop history does **not** carry over — v2 is
-briefed cold. This section will gain the v2 loop log as those loops run.
+**v2 (2026-07-21) — CONVERGED (7 loops, 3 cold lanes: asset-pipeline · renderer/placement ·
+cross-cutting/rules).** The T1 asset reality forced a material redesign (LOLIPOP artist-LOD packs; custom
+octahedral baker dropped; sourcing + prep + slices reworked). Briefed cold each loop (no prior-fix list);
+v1 history did not carry over. Trajectory — every finding verified against source before fixing:
+- **Loop 1** — HIGH 2 · MED 4 · LOW 3: §9 VRAM measured *disk* size not *uncompressed GPU* VRAM (recomputed);
+  billboard not auto camera-facing (specified the yaw-billboard shader path); renderer is 2-bucket not
+  "3-bucket" (reworded to an extension); glTF-separate outputs are `.gltf` not self-contained `.glb`;
+  stale "parity"/"Testing & parity"; sibling benchmark-doc note still said "baked octahedral impostors".
+- **Loop 2** — HIGH 1 · MED 2: billboards are per-variant textures (not shared) → VRAM undercount fixed;
+  mid-LOD (LOD2) path had no source (derive `meshPath` `_lod0`→`_lod2`); §7 asset check can't run in CI
+  (assets git-ignored) → dev-machine local gate.
+- **Loop 3** — MED 1: named the concrete shared-texture export mechanism; per-`(species×LOD)` draw; misc.
+- **Loop 4** — MED 5: §1 still said "CC0" (assets are CC-BY); attribution pinned to a phantom credits
+  screen → retargeted to `ASSET_LICENSES.md`+`THIRD_PARTY_NOTICES.md` (project convention); birch ships
+  **no** billboard; sources are 1K–4K not 1K–2K; asset check must also guard the downscale. Renderer CLEAN.
+- **Loop 5** — HIGH 1 (cross-doc): ROADMAP 3D_E-0033 still described v1 → synced to v2. Plus billboard-≥2-
+  material false-fail (scoped to mesh glTFs) + precision. Renderer CLEAN.
+- **Loop 6** — HIGH 1 · MED 1: a **loop-5 fix-introduced regression** — `export_keep_originals` re-used the
+  un-downscaled 4K source maps (budget blow-out) → removed, copy-downscale-rewrite is the only path; hero
+  index `i % heroSpecies` would draw heroes as field trees → offset `fieldSpecies + i % heroSpecies`.
+- **Loop 7 (confirm, asset lane) — CLEAN.** Export mechanism + VRAM budget verified sound against the real
+  packs; only conservative-estimate/phrasing INFO. Convergence.
+
+**v2 signed off (2026-07-21):** spec sign-off delegated to cold-eyes convergence (project workflow) —
+converged at loop 7 with only polish remaining. Implementation proceeds T1 (finalise split tool) → T7.
