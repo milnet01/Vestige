@@ -1,6 +1,6 @@
 # Phase 10 — Meadow Realism C: Realistic Trees & Plants (3D_E-0033)
 
-**Status:** Design (pre-implementation). Cold-eyes loop pending.
+**Status:** Signed off (2026-07-21, cold-eyes converged at loop 6). Implementing T1 → T8.
 **ROADMAP:** [3D_E-0033] Meadow realism C — realistic trees & plants. (📋, `rendering-enhancements`)
 **Depends on / reuses:** GPU grass (3D_E-0039, shipped), meadow benchmark scene (3D_E-0027), pond (3D_E-0037), cascaded shadow maps, `EnvironmentForces` wind.
 **Author:** Claude (spec sign-off delegated to cold-eyes convergence per project workflow).
@@ -43,9 +43,9 @@ Scope order (locked with user): **trees first**, then flowers + lilies.
     view-dependent. Impostor generation does **not** exist yet.
   - **Species ignored.** `TreeInstance` carries a `speciesIndex` but the renderer draws one hardcoded
     placeholder for every tree.
-  - **Meadow feeds it nothing.** The only callers of the tree-add path are the editor brush
-    (`brush_tool.cpp` → `PlaceTreeCommand` → `FoliageManager::addTreeDirect`). The meadow scene
-    plants zero trees into `FoliageChunk::getTrees()`, so `render()` draws nothing there.
+  - **Meadow feeds it nothing.** The only callers of the tree-add path are the editor
+    (`brush_tool.cpp:260` → `placeTree`; undo/redo via `PlaceTreeCommand` → `addTreeDirect`). The
+    meadow scene plants zero trees into `FoliageChunk::getTrees()`, so `render()` draws nothing there.
 - **Meadow trees today** are plain glb props with **no LOD**: a `scatterGroup` lambda
   (`engine.cpp:2610`) loads Kenney glbs (`tree_oak.glb`, `tree_pineDefaultA/B.glb`, `tree_default.glb`,
   `tree_fat.glb`, `tree_detailed.glb`). The tree scatter *call site* is `engine.cpp:2668`; the
@@ -112,8 +112,9 @@ struct TreeSpecies                        // runtime form; built from a TreeSpec
 std::vector<TreeSpecies>   m_species;     // indexed by TreeInstance::speciesIndex
 ```
 
-`TreeSpecies` is a plain runtime holder (bare-member POD, matching `TreeInstance`'s convention, not the
-`m_` member style — it owns no invariants). `TreeInstance::speciesIndex` (already stored, currently
+`ImpostorAtlas` is the baked-atlas handle bundle — `GLuint albedoAlpha, normalDepth; int gridN; float
+depthScale;` — populated by the §4.2 baker. `TreeSpecies` is a plain runtime holder (bare-member POD,
+matching `TreeInstance`'s convention, not the `m_` member style — it owns no invariants). `TreeInstance::speciesIndex` (already stored, currently
 ignored) becomes the index into this table. Hero and field trees are just entries with different LOD0
 triangle budgets — no type flag needed.
 
@@ -159,7 +160,7 @@ FBO, render a mesh from a chosen camera) — but that helper renders a **full-re
   Ortho (not perspective) keeps the impostor parallax-free per frame so the runtime parallax offset is
   the only depth cue — matches the reference technique.
 - **Bake cost:** `N²` cheap mesh draws per species (× the primitive count), once at load.
-  256 tiles × ~8 species × primitive-count ≈ a few thousand small draws into 128² cells — sub-second;
+  256 tiles × ≤8 species × primitive-count ≈ 6–12k small draws into 128² cells — still sub-second;
   not per-frame.
 
 ### 4.3 Runtime impostor render (rewrite `tree_billboard.*`)
@@ -198,9 +199,10 @@ mildly flattened distant reflected impostor is an acceptable degradation.
 **Flatten node transforms at load, group by material.** A tree glb is a `Model` of several
 `ModelPrimitive`s, each referenced by a `ModelNode` (via `ModelNode::primitiveIndices`) carrying its
 own TRS transform (`model.h`). A single per-instance mat4 (below) can't express those per-node
-transforms, so at load the loader walks **nodes → primitiveIndices** and **pre-multiplies each node's
-world transform into that primitive's vertices** (one flattened copy per node-reference, so a
-multiply-referenced primitive is not dropped). The flattened geometry is then **grouped by material**:
+transforms, so at load the loader **accumulates each node's world matrix** (from `m_rootNodes` down
+`childIndices`, composing parent `computeLocalMatrix()` — not just the node-local TRS) and
+**pre-multiplies that world transform into the node's referenced primitives' vertices** (one flattened
+copy per node-reference, so a multiply-referenced primitive is not dropped). The flattened geometry is then **grouped by material**:
 a real tree has ≥2 materials (opaque bark, alpha-cutout double-sided leaves), so LOD0 emits **one
 instanced draw per material group**, each honouring its own
 `Material::getAlphaMode/getAlphaCutoff/isDoubleSided` — the same per-primitive material handling §4.2
@@ -239,13 +241,16 @@ Replace the raw-prop tree `scatterGroup` call with foliage-tree placement:
   (`cellSize=28`, `jitter=0.8`, `minDist=12`, exclusion = pond disc, `minScale=1.3..2.4`) — the seed
   `0xA11CE01u` is `scatterProps`'s first argument, **not** a `ScatterParams` field. For each
   `ScatterPoint p`: `TreeInstance{ {p.x, terrain.getHeight(p.x,p.z), p.z}, radians(p.yawDeg), p.scale,
-  i % fieldSpecies }` → `m_foliageManager->placeTree(inst, 0.0f)` (it maps world→chunk-grid
+  i % fieldSpecies }` (`fieldSpecies` = the count of field species) →
+  `m_foliageManager->placeTree(inst, 0.0f)` (it maps world→chunk-grid
   internally; `scatterProps` already enforced spacing, so `minSpacing=0`). The lower-level
   `addTreeDirect(gridX, gridZ, inst)` is the alternative but requires the caller to derive
   `gridX/gridZ = floor(worldXZ / FoliageChunk::CHUNK_SIZE)` (16 m). (Yaw: ScatterPoint is degrees,
   TreeInstance is radians.)
-- **Hero trees:** a second sparse scatter group (large `cellSize` ≈ 60, `minDist` ≈ 40, bigger scale,
-  clustered off the main sightline) → hero species indices.
+- **Hero trees:** a second sparse scatter group — `scatterProps(0x4E1D0A11u, heroParams)` with
+  `cellSize` ≈ 60, `minDist` ≈ 40, bigger `minScale/maxScale`, clustered off the main sightline; each
+  `ScatterPoint` → `TreeInstance{ …, i % heroSpecies }` (mirroring the field index scheme), routed
+  through `placeTree` like the field set.
 - Placement alone makes the chunks carry trees, so the existing `engine.cpp:1643` call starts drawing
   them — **but that call passes neither shadow map nor light** (`m_treeRenderer->render(visibleChunks,
   *m_camera, viewProj, elapsed)`), unlike the foliage call just above (`:1641–1642`, which passes
@@ -295,8 +300,11 @@ No per-frame CPU↔GPU parity concern beyond the octahedral mapping, which §7 p
 
 **Species budget (VRAM gate):** at most **8 baked species at the default (High) tier** — this is the
 number §9's **~340 MB** atlas budget (256 MB of maps + ~33% mips) rests on, so it is a hard sourcing
-cap, not a suggestion. More variety than 8 → drop per-atlas resolution or share atlases (both
-`TreeQuality`-tiered, §11).
+cap, not a suggestion. The species listed below are a **candidate pool**; T1 picks the **8
+default-High species** from it (sensible default = D10's roster: oak, birch, maple, willow, beech,
+fir, pine, spruce). Cedar/cypress or CC0-pack additions **substitute within** the 8 — they don't grow
+past it. More variety than 8 → drop per-atlas resolution or share atlases (both `TreeQuality`-tiered,
+§11).
 
 **Species-coherence gate (D10):** every candidate is filtered for temperate-meadow fit *before*
 prep. A CC0 licence is necessary but not sufficient — a desert or tropical species is rejected even
@@ -497,3 +505,14 @@ prior-loop briefing. Convergence = zero substantive verified findings._
   survive the full mip chain, so the shader now **clamps the sampled mip level**. Nits: §5 "hemi-"
   prefix, spruce-not-broadleaf, Rule-3-not-D1 label, `beginPass` line cites (1633/1652), WCAG-2.3.1
   falsification anchor.
+- **Loop 6 (2026-07-21) — CONVERGED.** Same 3 lanes, cold re-read (user-requested confirming loop).
+  **CRITICAL 0 · HIGH 0 · MEDIUM 2 · LOW 3 · INFO 4** — **all polish** (no structural/mechanical/
+  architectural finding). Renderer lane verdict "sound"; cross-cutting "implementation-ready…
+  refinements, not corrections"; impostor 0 crit/high. The Loop-5 fixes (per-material LOD0 draw, mip
+  clamp) held. Polish applied: named the node→world matrix accumulation (`m_rootNodes`/`childIndices`),
+  pinned the 8 default-High species as a candidate-pool subset, gave heroes a concrete seed + index
+  scheme, sketched `ImpostorAtlas`, glossed `fieldSpecies`, corrected the editor tree-add call chain,
+  bake-count arithmetic.
+
+**Signed off (2026-07-21):** spec sign-off delegated to cold-eyes convergence (per project workflow) —
+converged at loop 6 with only polish remaining. Implementation proceeds T1 → T8.
