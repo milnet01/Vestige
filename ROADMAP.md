@@ -559,6 +559,13 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
   Kind: feature.
   Source: user-request-2026-07-11 (realism overhaul; fixture 3D_E-0027).
 
+- 🚧 [3D_E-0039] **GPU procedural grass — one-shared-SSBO Bézier-blade meadow field (G1–G5).**
+  Replace the billboard grass (3D_E-0038) with a real GPU-generated blade field: each blade is a quadratic-Bézier ribbon built in the vertex shader from a per-instance seed in one shared SSBO, drawn per-chunk with `glDrawArraysInstanced` — on the order of a million blades across 256 sixteen-metre chunks over the 256 m meadow. CPU per-chunk placement gated on grass-splat weight + slope + the pond exclusion disc; Voronoi-style clumping (tussocks); distance LOD (per-chunk segment tier + per-blade continuous fade — no pop) and CPU per-chunk frustum cull. Design: docs/phases/phase_10_meadow_gpu_grass_design.md (cold-eyes converged). v2 (GPU compute cull + `glMultiDrawArraysIndirect` + GPU-side placement) is a separate future phase.
+  **Layman:** Grow the grass on the graphics card instead of pasting flat pictures of it — a million real blades that clump into tufts and thin out with distance, so the meadow looks alive up close and stays smooth far away.
+  Progress: G1 blade geometry + shader (VS Bézier ribbon + CPU-parity test), G2 CPU placement + PCG gating + clumping (commit 86008d6), G3 distance LOD + per-chunk frustum cull (commit 355dfb9 — `grass_lod.h` + 6 unit tests) all shipped. Remaining: G4 shading + wind + shadow-receive; G5 quality tiers + perf gate + meadow wire-up (retire the billboard grass, ≥ 60 FPS at High on RX 6600).
+  Kind: feature.
+  Source: user-request-2026-07-19 (meadow GPU grass; fixture 3D_E-0027).
+
 - 📋 [3D_E-0033] **Meadow realism C — realistic trees & plants.**
   Replace the low-poly Kenney props with realistic vegetation: use the engine's existing tree LOD-billboard system and/or biome presets, or photo-textured / billboard-imposter trees (real tree photos on crossed cards for the mid/far treeline). Large committed models stay out of the public repo via the existing git-ignored `nature_local/` override hook. The clustered treeline should reflect in the pond. Phase C — the hardest realism piece; user deferred it behind A/B.
   **Layman:** Swap the cartoon trees for realistic-looking ones — the treeline you keep pointing at.

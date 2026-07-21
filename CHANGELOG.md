@@ -22,6 +22,35 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-07-21 Added — GPU procedural grass: a real GPU-generated blade field replaces the billboard grass (3D_E-0039, G1–G3)
+
+The meadow grass is now grown on the graphics card instead of drawn as flat
+picture-cards. Each blade is a curved ribbon built in the vertex shader from a
+per-blade seed held in one shared buffer — on the order of a million blades
+across the 256 m meadow — placed and clumped into tussocks on the CPU and gated
+to grassy ground (off steep slopes, the dirt patch, and the pond). It looks
+alive up close and stays smooth in the distance. Wind, shading/shadows, and
+quality tiers land in G4–G5; the old billboard grass still coexists until G5
+retires it.
+
+- **Blade geometry + shader (G1).** `GrassRenderer` + a `GrassBlade` seed SSBO;
+  `grass.{vert,frag}.glsl` generate a quadratic-Bézier blade ribbon in the vertex
+  shader (no per-blade mesh is uploaded). A GL-free `grassBladeVertex` mirror is
+  pinned by a CPU/GPU parity test.
+- **CPU placement + PCG gating + clumping (G2, commit 86008d6).** Per-chunk
+  jittered-grid scatter seated on terrain height, gated on grass-splat weight +
+  slope + the pond exclusion disc, into one shared seed SSBO with per-chunk
+  descriptors (base offset + count + clump-padded AABB). A `grassClump` function
+  (CPU + GLSL twin, parity-tested) leans/heightens/bends each blade toward its
+  Voronoi tussock so the field reads as clumps, not a uniform lawn.
+- **Distance LOD + per-chunk frustum cull (G3, commit 355dfb9).** A per-chunk
+  segment tier plus a per-blade continuous fade — evaluated identically on the
+  CPU (submitted blade count) and in the vertex shader (each blade tapers to
+  zero) so the two never disagree and nothing pops; survivors widen to hold
+  apparent density. Off-screen chunks are skipped (reuses `utils/frustum.h`).
+  New pure `environment/grass_lod.h` with 6 unit tests (tier steps, band-edge
+  values, monotonicity, continuity, and the CPU/GPU seam).
+
 ### 2026-07-18 Added — Realistic grass: real blade texture + variation + quality tier (Meadow realism B, 3D_E-0038)
 
 Phase B of the meadow-realism overhaul. The grass now uses a real photo-scanned
@@ -10526,8 +10555,6 @@ existing cases (``HelpersMatchEvaluatorPrecisely``,
 
 - **Land engine/utils/result.h — Result<T,E> vocabulary type (CE3)**
   `Vestige::Result<T,E>` aliases `std::expected` on C++23 toolchains and\n  the vendored `tl::expected` v1.3.1 (CC0) on the C++17 baseline.\n  `makeUnexpected()` and `Unexpected` aliases exposed. 10 tests added.\n  CODING_STANDARDS §11 updated; phase_11a_design §9 updated. CLAUDE.md Rule 8\n  sharpened: latest dependency version is always required; older pin needs a\n  documented breaking-change reason.
-
-### Added
 
 - **Performance-regression gate (`tools/perf_gate.py`) — meadow benchmark guard-rail (3D_E-0030)**
   Compares a profiler CSV (`--profile-log`) to a committed baseline JSON and
