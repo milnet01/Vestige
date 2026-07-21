@@ -34,7 +34,8 @@ shadows, sway in the shared wind, and reflect in the pond. Then clean up the low
 (kill the redundant double-draw) and replace the low-poly lily pads.
 
 The realism bar matches the million-blade GPU grass already shipped: this is not stylized/cartoon —
-it is real-game-looking vegetation, sourced CC0 / free-for-commercial so it is Steam-safe.
+it is real-game-looking vegetation, sourced **CC-BY** / free-for-commercial so it is Steam-safe
+(attribution required — §6.3).
 
 Scope order (locked with user): **trees first**, then flowers + lilies.
 
@@ -51,8 +52,8 @@ Scope order (locked with user): **trees first**, then flowers + lilies.
     `[lodDistance, lodDistance+fadeRange]`, then instanced-draws each bucket
     (`tree_renderer.cpp:85-201`). Public knobs: `lodDistance=50`, `fadeRange=10`, `maxDistance=200`.
   - **But the meshes are placeholders.** LOD0 is a procedural trunk-cylinder + cone-crown
-    (`createPlaceholderTree`, `tree_renderer.cpp:204-321`). "LOD1 impostor" is a hand-coded 64×128
-    RGBA blob (`generateBillboardTexture`, `:378-434`) — **not** rendered from any mesh, **not**
+    (`createPlaceholderTree`, `tree_renderer.cpp:204-320`). "LOD1 impostor" is a hand-coded 64×128
+    RGBA blob (`generateBillboardTexture`, `:378-433`) — **not** rendered from any mesh, **not**
     view-dependent. Impostor generation does **not** exist yet.
   - **Species ignored.** `TreeInstance` carries a `speciesIndex` but the renderer draws one hardcoded
     placeholder for every tree.
@@ -83,9 +84,10 @@ Scope order (locked with user): **trees first**, then flowers + lilies.
   - **Game-ready packs (the actual source)** — LOLIPOP CC-BY packs fetched to the library by
     `tools/asset_prep/fetch_sketchfab_trees.py`: `pine_lolipop_sketchfab_gltf` (15 trees),
     `fir_lolipop_sketchfab_gltf` (3, "Christmas tree"), `maple_lolipop_sketchfab_gltf` (12 Acer),
-    `birch_lolipop_sketchfab_gltf` (5). Each pack bundles LOD0–2 meshes + a billboard (LOD3), split
-    into **bark + foliage** materials, PBR at ~8–22 k LOD0 tris. **CC-BY 4.0** → the credit block in
-    `Trees/SOURCES_sketchfab.md` must appear in the game credits screen (§6.3).
+    `birch_lolipop_sketchfab_gltf` (5). Each pack bundles LOD0–2 meshes + a billboard (LOD3) — **except
+    birch, which ships only LOD0–2** (no billboard; its far tier falls back to LOD2, §4.1) — split into
+    **bark + foliage** materials, PBR at ~8–22 k LOD0 tris. **CC-BY 4.0** → the credit block is recorded
+    in `ASSET_LICENSES.md` + `THIRD_PARTY_NOTICES.md` (§6.3).
   - **Heavy Poly Haven photoscans** (`fir_tree_01`, `pine_tree_01`, …) remain on disk but are **not
     used** as LOD0 (7–17 M tris). Retained only as a *possible* future impostor-bake source; nothing in
     this design depends on them. Desert/tropical library assets (jacaranda, quiver, island) stay
@@ -169,7 +171,9 @@ that machinery and points it at the three real `Model`s. **Bucketing is sub-keye
 the existing renderer draws one shared placeholder mesh per bucket, but v2 has a distinct `Model`/VAO
 (and, for the far tier, a distinct per-species billboard material) per species (§4.1), which cannot share
 one `glDrawElementsInstanced`. So each bucket becomes **one instanced draw per (species × LOD)** — the
-billboard draw binds that species' billboard material (§9). The three distance bands:
+billboard draw binds that species' billboard material (§9). The three distance bands (the distances below
+are **design targets, `TreeQuality`-tunable — D7** — superseding the current `lodDistance=50` default;
+`billboardDistance` is a **new** second-switch knob the 2-bucket renderer does not yet have):
 
 - **LOD0 mesh** for distance `< lodDistance` (≈ 40 m) — full per-material draw (§4.4).
 - **Mid (LOD2) mesh** for `[lodDistance, billboardDistance)` (≈ 40–90 m) — same per-material draw path,
@@ -181,10 +185,12 @@ billboard draw binds that species' billboard material (§9). The three distance 
   basis from a per-pass **camera-right uniform** (rotating about the vertical/trunk axis so the card
   never tilts) — reusing the mechanism the existing placeholder billboard already uses (the camera
   uniforms `u_cameraRight`/`u_cameraUp` set per-pass in `render()` at `tree_renderer.cpp:184-190`, over
-  the quad geometry from `createBillboardQuad` at `:322-376`), fed the artist
-  card geometry instead of a procedural quad. It is a single flat quad, so on fast lateral motion past a
-  dense treeline it can read slightly flat — the accepted v2 tradeoff (D2); the optional octahedral
-  upgrade (§11) is the fix if it ever matters.
+  the quad geometry from `createBillboardQuad` at `:322-376`). Note the existing billboard shader expands
+  a `vec2 a_offset` (billboard-local) via `u_cameraRight`/`u_cameraUp` — so the artist card is fed to it
+  as those 2D offsets + its foliage UVs (its authored size → the offset extents), **not** dropped in as
+  raw 3D vertices. It is a single flat quad, so on fast lateral motion past a dense treeline it can read
+  slightly flat — the accepted v2 tradeoff (D2); the optional octahedral upgrade (§11) is the fix if it
+  ever matters.
 - Two crossfade bands (LOD0↔mid, mid↔billboard), each the renderer's existing complementary-alpha
   dither/blend. The crossfade alpha rides the per-instance `vec2` at attrib **location 12** (§4.4).
 
@@ -311,6 +317,9 @@ realistic style. Four temperate species families, all passing the D10 biome gate
 | Maple (broadleaf) | `maple_lolipop_sketchfab_gltf` | 12 Acer (sapling/small/medium/large × 3) | ~9–22 k | hero (large) + field |
 | Birch (broadleaf) | `birch_lolipop_sketchfab_gltf` | 5 | ~9 k | field |
 
+Each pack ships LOD0/1/2 meshes + a billboard, **except birch** (LOD0–2 only, no billboard — its far
+tier falls back to the LOD2 mesh held to `maxDistance`, §4.1).
+
 **Distinct-mesh budget (VRAM gate, §9):** the meadow uses a **curated subset** of these variants as the
 *distinct* tree files — target **≈ 8–12 distinct meshes** (e.g. 3 pine sizes, 2 fir, 3 maple sizes,
 2 birch). Variety beyond that comes from **instancing + per-tree scale/rotation**, not more files.
@@ -329,9 +338,12 @@ medium/small-variant of the same species (D3); **no decimation** (packs are alre
    `SKETCHFAB_API_TOKEN`, hits the Data API (`/v3/models/{uid}/download`), downloads each pack's glTF
    zip into the categorised library (`Models/Nature/Trees/<species>_lolipop_sketchfab_gltf/`), and
    writes the `SOURCES_sketchfab.md` credit manifest (§6.3).
-2. **Split** — `tools/asset_prep/split_tree_packs.py` (Blender-headless, `blender-5.2 --background
-   --python`; use the **current stable Blender LTS** — confirm against blender.org before running).
-   Per tree it exports **LOD0** (near), **LOD2** (mid) and the **billboard** as separate **glTF-separate**
+2. **Split** — `tools/asset_prep/split_tree_packs.py` (Blender-headless, `<blender> --background
+   --python`, where `<blender>` is the installed Blender LTS binary — `blender-5.2` on this dev machine;
+   use the **current stable LTS** and confirm against blender.org before running, so no version pin goes
+   stale). Per tree it exports **LOD0** (near), **LOD2** (mid) and — **where the pack provides one** (all
+   but **birch**, which ships only LOD0–2; its far tier falls back to LOD2-to-`maxDistance` per §4.1) —
+   the **billboard**, as separate **glTF-separate**
    files (`.gltf` + `.bin` + shared `textures/`), **recentred so the trunk base sits at the origin**
    (y = 0, centred x/z), into `Models/Nature/Trees/gameready/<species>/`, symlinked to the engine's
    git-ignored `assets/models/nature_local/gameready/`.
@@ -348,27 +360,32 @@ medium/small-variant of the same species (D3); **no decimation** (packs are alre
    loads each shared mesh map **once** for the whole species (`resource_manager.cpp:40-72` caches `Texture`
    by path; embedded-in-`.glb` images bypass that cache — the T1 prototype hit exactly this, embedding
    ~20–64 MB per file). **Downscale in place** (the engine uploads textures **uncompressed**, so pixel
-   resolution — not JPG/PNG disk size — sets VRAM; §9): shared **mesh** maps to **1 K** (source is 1 K–2 K:
-   `Bark` 1024×2048, `Clusters` 2048²), per-variant **billboard** maps to **512²** (they are the distant
+   resolution — not JPG/PNG disk size — sets VRAM; §9): shared **mesh** maps to **1 K** (source is **1 K–4 K**:
+   pine `Bark` 1024×2048 / `Clusters` 2048², but **fir/birch mesh maps are 4096²** — a real 4K→1K
+   re-encode), per-variant **billboard** maps to **512²** (they are the distant
    card). Re-encode JPG/PNG (no upscaling). The classifier matches size words case-insensitively
    (`[A-Za-z]+`, so `Acer_Sapling_*` is not dropped).
 
 `nature_local/` and the downloaded packs stay out of the repo (git-ignored / in the external library);
 the **two scripts are committed** so the set is reproducible from the token. The `SOURCES_sketchfab.md`
 manifest is written beside the downloads **in the library** (not the repo) — the repo-tracked home of the
-CC-BY obligation is the credits-screen requirement (§6.3) that T7 verifies. Bundled fallback: if a
+CC-BY obligation is the `ASSET_LICENSES.md` + `THIRD_PARTY_NOTICES.md` rows (§6.3) that T7 verifies.
+Bundled fallback: if a
 `nature_local/` asset is absent, the `propPath` hook already falls back to the lightweight `nature/`
 Kenney glb, so a fresh clone still runs (just with the cartoon trees).
 
 ### 6.3 Attribution (CC-BY 4.0 — required)
 
-The packs are **CC-BY 4.0**, not CC0: attribution is legally required (Steam-safe with a credits
-line). The credit block —
+The packs are **CC-BY 4.0**, not CC0: attribution is legally required (Steam-safe). The credit block —
 
 > 3D tree models by **LOLIPOP** (sketchfab.com/lolipop_1707), licensed under CC BY 4.0.
 
-— is recorded in `Trees/SOURCES_sketchfab.md` and **must appear in the game's credits screen**. T7's
-checklist includes verifying it is present (the credits screen / an `ATTRIBUTIONS`/`CREDITS` doc).
+— goes in the project's **established, repo-tracked attribution files**: a row in `ASSET_LICENSES.md`
+and the full credit line in `THIRD_PARTY_NOTICES.md` (the same mechanism the sibling meadow doc uses,
+and where a future in-game credits screen would source its text — the engine has no credits UI today).
+The `SOURCES_sketchfab.md` manifest beside the downloads (§6.2) is a convenience record, **not** the
+tracked obligation. T7's checklist verifies the `ASSET_LICENSES.md` + `THIRD_PARTY_NOTICES.md` rows
+exist.
 
 ---
 
@@ -383,9 +400,12 @@ checklist includes verifying it is present (the credits screen / an `ATTRIBUTION
 - **Split-tool asset check** (**dev-machine local gate**, not CI — the `gameready/` assets live in
   git-ignored `nature_local/` and are absent from a fresh CI clone, so a CI test could only vacuously
   skip): a small script asserts each `gameready/<species>/` glTF loads as a valid `Model` with **≥2
-  materials** and its **trunk-base bound `y ≈ 0`** (the recentre held), and that a species' variants
-  share their **mesh** texture files — the shared **mesh**-map count per species is bounded (≈6), while
-  billboard maps are legitimately per-variant (§9) — guarding the §6.2 VRAM contract mechanically.
+  materials** and its **trunk-base bound `y ≈ 0`** (the recentre held); that a species' variants
+  share their **mesh** texture files — the shared **mesh**-map count per species is bounded (≲6), while
+  billboard maps are legitimately per-variant (§9); **and that every uploaded map is downscaled — mesh
+  maps ≤ 1 K, billboard maps ≤ 512²** (the §9 budget rests on the downscale as much as the sharing; the
+  4K-source fir/birch maps would otherwise upload ~16× the pixels and pass a count-only check) — guarding
+  the §6.2 VRAM contract mechanically.
 - **Visual-test viewpoints** (run `./vestige --visual-test` **from `build/bin/`**,
   `ASAN_OPTIONS=detect_leaks=0`): add `treeline_far` (billboard band), `tree_near` (LOD0 up close, at
   correct real-world scale), `tree_crossfade` (walk through the two LOD transitions), `hero_tree` (a
@@ -431,8 +451,9 @@ checklist includes verifying it is present (the credits screen / an `ATTRIBUTION
     species carry fewer — e.g. birch has 4, no metallic-roughness), one set for all variants of a
     species. At **1 K** (§6.2): ≲30 MiB/species × **4 species** ≈ **~110–120 MiB**.
   - **Billboard maps are PER-VARIANT** (each tree's card has its own artist pre-rendered baseColor +
-    normal — they do **not** share). At **512²** (§6.2, distant card): 2 maps × 1.3 MiB × the **≈ 8–12
-    curated variants** ≈ **~25 MiB**.
+    normal — they do **not** share). At **512²** (§6.2, distant card): 2 maps × 1.3 MiB × the
+    billboard-bearing curated variants (**≈ 8–10**; birch has no billboard) ≈ **~25 MiB** (a safe
+    over-estimate).
   - **Total ≈ ~145 MiB** texture VRAM + a few MiB of mesh buffers. Fits the 8 GB RX 6600 with wide
     headroom, below v1's 340 MiB atlas. (Three axes: mesh textures scale with **4 species**; billboard
     textures + mesh buffers with the **8–12 distinct variants**.) **Shared mesh textures are
@@ -456,7 +477,7 @@ checklist includes verifying it is present (the credits screen / an `ATTRIBUTION
 | **T4** | LOD0 (+ mid) shadow-caster pass (reuse foliage caster). | Trees cast ground shadows in the `tree_near` capture; shadow bias reuses the foliage caster's value (no new constant); 0 GL errors. |
 | **T5** | Pond reflection: render trees in the water reflection pass (clipPlane). | Treeline mirrors in the pond (`pond_reflection` capture). |
 | **T6** | Flowers cleanup: delete **only** the three `flower_*A.glb` entries from the shared `scatterGroup` call (keep `mushroom_red.glb` + `plant_bush.glb`; keep billboard star-mesh flowers). Replace lily pads with better CC0/CC-BY model. | Flower draw-call count drops; mushrooms/bushes still present; no double-draw; **new lily model visible in `pond_reflection` capture and old `lily_{large,small}.glb` no longer instantiated**; 0 GL errors. |
-| **T7** | `TreeQuality` tier on `RendererQualitySink` (+ preset→tier test); perf gate on RX 6600 (≥60 FPS High); **verify the LOLIPOP CC-BY credit is in the credits screen** (§6.3). ROADMAP 3D_E-0033 ✅ + CHANGELOG. | ctest green; **Tree pass ≤ 2.0 ms + ≥ 60 FPS at High** (RX 6600); credit present; docs updated. |
+| **T7** | `TreeQuality` tier on `RendererQualitySink` (+ preset→tier test); perf gate on RX 6600 (≥60 FPS High); **add the LOLIPOP CC-BY rows to `ASSET_LICENSES.md` + `THIRD_PARTY_NOTICES.md`** (§6.3). ROADMAP 3D_E-0033 ✅ + CHANGELOG. | ctest green; **Tree pass ≤ 2.0 ms + ≥ 60 FPS at High** (RX 6600); CC-BY credit rows present; docs updated. |
 
 Trees = T1–T5, T7. Flowers/lilies = T6. Matches the locked "trees first" order. (v2 dropped the old
 octahedral-baker slice; slices renumbered T1–T7.)
@@ -500,7 +521,7 @@ octahedral-baker slice; slices renumbered T1–T7.)
 - **Tree assets (source of record):** LOLIPOP, game-ready tree packs on Sketchfab, **CC-BY 4.0** —
   Pine `e1e9c07b8e2e445c943fec660beefba2`, Realistic Fir `f58e8b6d733e4b0586e5b7db847b89e7`, Maple
   `b5d2833c258f4054a01ee2b4ef85adf0`, Birch `08fe5117138e4fdaa7ca440ef1201e07` —
-  https://sketchfab.com/lolipop_1707 . Each ships LOD0–2 meshes + a billboard. Licence:
+  https://sketchfab.com/lolipop_1707 . Each ships LOD0–2 meshes + a billboard (birch: LOD0–2 only). Licence:
   https://creativecommons.org/licenses/by/4.0/ (attribution required — §6.3).
 - **Sketchfab Data API (download):** `GET /v3/models/{uid}/download` with `Authorization: Token …` →
   temporary glTF zip URL — https://docs.sketchfab.com/data-api/v3/index.html .
