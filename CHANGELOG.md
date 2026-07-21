@@ -22,6 +22,18 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-07-21 Fixed — Meadow pond is now a still mirror in calm air (ripples only when windy)
+
+The pond rippled constantly regardless of conditions, because its wave and
+surface-distortion strengths were fixed and never looked at the wind. It now
+reads the shared wind (`EnvironmentForces`) at the surface and fades both the
+wave height and the reflection distortion from a flat mirror in calm air up to
+full ripple only once it is genuinely windy. The meadow runs at zero base wind,
+so its pond is a calm mirror by default; turning the wind up brings the ripples
+back. Opt-in per surface (`WaterSurfaceConfig::windDrivenAmplitude`, default
+off), so every other water surface keeps its existing look. New pure
+`waterWindRippleScale` helper with unit tests pinning the calm→windy curve.
+
 ### 2026-07-21 Added — GPU procedural grass: a real GPU-generated blade field replaces the billboard grass (3D_E-0039, G1–G3)
 
 The meadow grass is now grown on the graphics card instead of drawn as flat

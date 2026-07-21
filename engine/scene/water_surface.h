@@ -10,6 +10,7 @@
 #include <glm/glm.hpp>
 #include <glad/gl.h>
 
+#include <algorithm>
 #include <memory>
 
 namespace Vestige
@@ -60,6 +61,13 @@ struct WaterSurfaceConfig
     float flowSpeed = 0.3f;
     float specularPower = 128.0f;
 
+    // Wind-driven ripples (design: "still unless very windy" — the meadow pond).
+    // When true, the wave amplitude AND the procedural normal/dudv distortion are
+    // scaled by the local wind (see waterWindRippleScale) so the surface is a flat
+    // mirror in calm air and only ripples once it is genuinely windy. Default false
+    // keeps the legacy always-on ripples for every other water surface (stay-in-lane).
+    bool windDrivenAmplitude = false;
+
     // Caustics (animated light patterns on surfaces below water)
     bool causticsEnabled = true;        ///< Project caustic patterns onto submerged geometry.
     float causticsIntensity = 0.15f;    ///< Additive brightness of caustic patterns (0.0 to 1.0).
@@ -73,6 +81,24 @@ struct WaterSurfaceConfig
     float reflectionResolutionScale = 0.25f;  ///< 0.1 to 1.0 (fraction of window resolution)
     bool refractionEnabled = true;            ///< Beer's law depth coloring (re-renders scene)
 };
+
+/// @brief Flat-unless-windy ripple gate for wind-driven water (the meadow pond).
+/// Returns the [0,1] fraction of a surface's configured wave amplitude and normal
+/// distortion to show at a given wind speed (m/s): 0 — a still mirror — at or below
+/// WATER_WIND_CALM, ramping smoothly (smoothstep) to 1 — full configured ripple — at
+/// or above WATER_WIND_FULL. Pure + GL-free so it is unit-testable and identical on
+/// every call site. The knots sit high on the engine's 0–30 m/s wind scale so light
+/// breezes leave the pond mirror-flat and it only stirs when it is genuinely windy.
+/// TODO: revisit via Formula Workbench — WATER_WIND_CALM/FULL are art-directed.
+inline float waterWindRippleScale(float windSpeedMetersPerSec)
+{
+    constexpr float WATER_WIND_CALM = 3.0f;   // m/s: at/below → flat mirror
+    constexpr float WATER_WIND_FULL = 16.0f;  // m/s: at/above → full ripple
+    const float t = std::clamp(
+        (windSpeedMetersPerSec - WATER_WIND_CALM) / (WATER_WIND_FULL - WATER_WIND_CALM),
+        0.0f, 1.0f);
+    return t * t * (3.0f - 2.0f * t);   // smoothstep
+}
 
 /// @brief Entity component that manages a water surface mesh and its parameters.
 class WaterSurfaceComponent : public Component

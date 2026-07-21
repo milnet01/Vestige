@@ -1673,7 +1673,13 @@ void Engine::run()
                 waterItems.reserve(m_renderData.waterSurfaces.size());
                 for (const auto& [comp, matrix] : m_renderData.waterSurfaces)
                 {
-                    waterItems.push_back({comp, matrix});
+                    // Sample the shared wind at each surface so wind-driven water
+                    // (the meadow pond) can gate its ripples on it — flat mirror in
+                    // calm air, ripples only when windy. Calm (0) if no atmosphere.
+                    const float windSpeed = m_environmentForces
+                        ? m_environmentForces->getWindSpeed(glm::vec3(matrix[3]))
+                        : 0.0f;
+                    waterItems.push_back({comp, matrix, windSpeed});
                 }
 
                 // Use the first water surface's world Y as the clip plane height
@@ -2477,6 +2483,9 @@ void Engine::finalizeMeadowTerrain()
         c.deepColor = {0.02f, 0.12f, 0.28f, 1.00f};
         c.reflectionMode = WaterReflectionMode::PLANAR;  // mirrors sky + trees
         c.causticsEnabled = true;
+        // Still-unless-windy: the meadow runs at zero base wind, so the pond reads
+        // as a flat mirror; ripples only appear if the wind is turned up (user directive).
+        c.windDrivenAmplitude = true;
     }
 
     // --- Grass (slice 4) -----------------------------------------------------

@@ -63,6 +63,7 @@ add_executable(vestige_tests
     test_particle_data.cpp
     test_animation_curve.cpp
     test_water_surface.cpp
+    test_water_wind.cpp
     test_foliage_chunk.cpp
     test_foliage_texture_load.cpp
     test_grass_blade.cpp

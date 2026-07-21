@@ -197,6 +197,15 @@ void WaterRenderer::render(const std::vector<WaterRenderItem>& waterItems,
         // Model matrix
         m_waterShader.setMat4("u_model", item.worldMatrix);
 
+        // Flat-unless-windy: on wind-driven surfaces (the meadow pond) fade the wave
+        // amplitude AND the surface distortion (below) from a still mirror in calm air
+        // up to the configured ripple as the local wind rises. Every other surface keeps
+        // its always-on ripples (ampScale = 1). windSpeed is sampled per-surface from the
+        // shared EnvironmentForces by the caller, so this renderer stays wind-agnostic.
+        const float ampScale = config.windDrivenAmplitude
+                                   ? waterWindRippleScale(item.windSpeed)
+                                   : 1.0f;
+
         // Wave parameters
         m_waterShader.setInt("u_numWaves", config.numWaves);
         static const char* waveParamNames[WaterSurfaceConfig::MAX_WAVES] = {
@@ -206,7 +215,7 @@ void WaterRenderer::render(const std::vector<WaterRenderItem>& waterItems,
         for (int i = 0; i < config.numWaves && i < WaterSurfaceConfig::MAX_WAVES; ++i)
         {
             m_waterShader.setVec4(waveParamNames[i], glm::vec4(
-                config.waves[i].amplitude,
+                config.waves[i].amplitude * ampScale,
                 config.waves[i].wavelength,
                 config.waves[i].speed,
                 config.waves[i].direction * DEG_TO_RAD
@@ -216,8 +225,12 @@ void WaterRenderer::render(const std::vector<WaterRenderItem>& waterItems,
         // Water color and surface parameters
         m_waterShader.setVec4("u_shallowColor", config.shallowColor);
         m_waterShader.setVec4("u_deepColor", config.deepColor);
-        m_waterShader.setFloat("u_dudvStrength", config.dudvStrength);
-        m_waterShader.setFloat("u_normalStrength", config.normalStrength);
+        // Scale the procedural normal/dudv distortion by the same wind gate — otherwise
+        // the FBM ripple keeps shimmering the reflection even with the waves flattened,
+        // so the "calm" pond would not read as a still mirror. flowSpeed (animation rate)
+        // is left alone: at zero distortion strength its speed has no visible effect.
+        m_waterShader.setFloat("u_dudvStrength", config.dudvStrength * ampScale);
+        m_waterShader.setFloat("u_normalStrength", config.normalStrength * ampScale);
         m_waterShader.setFloat("u_flowSpeed", config.flowSpeed);
         m_waterShader.setFloat("u_specularPower", config.specularPower);
 

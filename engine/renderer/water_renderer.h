@@ -22,6 +22,10 @@ struct WaterRenderItem
 {
     const WaterSurfaceComponent* component;
     glm::mat4 worldMatrix;
+    /// Local wind speed (m/s) sampled at this surface from the shared
+    /// EnvironmentForces. Drives the flat-unless-windy ripple gate for surfaces
+    /// with windDrivenAmplitude; 0 (calm) for every other surface.
+    float windSpeed = 0.0f;
 };
 
 /// @brief Renders water surfaces with planar reflections, refractions, and wave animation.
