@@ -1650,8 +1650,17 @@ void Engine::run()
                 if (m_grassRenderer && m_grassRenderer->hasField())
                 {
                     m_profiler.getGpuTimer().beginPass("Grass");
-                    m_grassRenderer->render(viewProj);
+                    m_grassRenderer->render(viewProj, m_camera->getPosition());
                     m_profiler.getGpuTimer().endPass();
+                    // G3 drawn-chunk instrument (§10): confirm frustum + distance cull are
+                    // actually trimming the 256-chunk field. Low-volume: visual-test only.
+                    if (m_visualTestMode)
+                    {
+                        Logger::info("Grass LOD: drew "
+                            + std::to_string(m_grassRenderer->drawnChunkCount()) + "/"
+                            + std::to_string(m_grassRenderer->chunkCount()) + " chunks ("
+                            + std::to_string(m_grassRenderer->bladeCount()) + " blades total)");
+                    }
                 }
             }
 

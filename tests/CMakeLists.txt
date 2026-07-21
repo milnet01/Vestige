@@ -68,6 +68,7 @@ add_executable(vestige_tests
     test_grass_blade.cpp
     test_grass_clump.cpp
     test_grass_placement.cpp
+    test_grass_lod.cpp
     test_spline_path.cpp
     test_biome_preset.cpp
     test_selection.cpp

@@ -25,10 +25,21 @@ layout(std430, binding = 0) readonly buffer Blades
 };
 
 uniform mat4  u_viewProjection;
-uniform int   u_segments;      // N — LOD segment count (G1: single near tier)
+uniform int   u_segments;      // N — LOD segment count for this chunk (§5.3, per-chunk tier)
 uniform uint  u_baseOffset;    // chunk base offset into the shared seed buffer (§5.5)
 uniform float u_clumpCellSize; // grassClump cell size = clumpScale (§5.2a)
 uniform float u_clumpStrength; // wild↔tidy dial [0,1] (§5.2a)
+
+// --- G3 distance LOD (§5.3): per-blade blade-count fade keyed on grassKeptFraction ---
+uniform vec3  u_cameraPos;     // world camera position (per-blade root→camera distance)
+uniform float u_chunkCount;    // this chunk's FULL blade count (rank = gl_InstanceID/count)
+uniform float u_lodNearMid;    // near→mid tier boundary (m)
+uniform float u_lodMidFar;     // mid→far tier boundary (m)
+uniform float u_lodBandWidth;  // fade-band width leading up to each boundary
+uniform float u_lodNearFrac;   // blades kept close in (also the survivor-widen reference)
+uniform float u_lodMidFrac;    // blades kept in the mid band
+uniform float u_lodFarFrac;    // blades kept far out
+uniform float u_lodRankBand;   // rank-space softness of the per-blade cutoff
 
 out vec3 v_color;
 
@@ -141,10 +152,35 @@ ClumpResult grassClump(vec2 worldXZ, float cellSize)
 }
 
 // ---------------------------------------------------------------------------------------
+// LOD blade-count fade — GLSL twin of Vestige::grassKeptFraction (grass_lod.h §5.3). The
+// CPU evaluates this at the chunk's nearest point (instanceCount); the VS evaluates it per
+// blade at each root's distance. Same curve = no seam between the CPU cut and the GPU fade.
+// ---------------------------------------------------------------------------------------
+float grassKeptFraction(float d)
+{
+    float tMid = smoothstep(u_lodNearMid - u_lodBandWidth, u_lodNearMid, d);
+    float f = mix(u_lodNearFrac, u_lodMidFrac, tMid);
+    float tFar = smoothstep(u_lodMidFar - u_lodBandWidth, u_lodMidFar, d);
+    f = mix(f, u_lodFarFrac, tFar);
+    return f;
+}
+
+// ---------------------------------------------------------------------------------------
 
 void main()
 {
     GrassBlade b = blades[gl_InstanceID + u_baseOffset];
+
+    // --- G3 blade-count LOD (§5.3): fade the drop set, widen the survivors ---
+    // rank ∈ [0,1) over the SHUFFLED chunk order — a prefix is a spatially-uniform subset
+    // (§5.2), so a soft rank cutoff thins the field evenly. `kept` shrinks with distance;
+    // blades whose rank nears `kept` taper their height+width to 0 rather than pop out at a
+    // chunk boundary, and the survivors widen to hold apparent density.
+    float bladeDist = distance(u_cameraPos, b.rootPos);
+    float rank      = float(gl_InstanceID) / max(u_chunkCount, 1.0);
+    float kept      = grassKeptFraction(bladeDist);
+    float lodPresence = 1.0 - smoothstep(kept - u_lodRankBand, kept, rank);   // 1 keep, 0 drop
+    float lodWiden    = sqrt(u_lodNearFrac / max(kept, 1.0e-3));               // survivor widening
 
     int N = u_segments;
     int v = gl_VertexID;
@@ -165,7 +201,7 @@ void main()
     ClumpResult cl = grassClump(b.rootPos.xz, u_clumpCellSize);
     float s = u_clumpStrength;
 
-    float height = b.height * mix(1.0, cl.height, s);   // tall/short tussocks
+    float height = b.height * mix(1.0, cl.height, s) * lodPresence;   // tall/short tussocks (× LOD fade)
     float lean   = b.lean * (1.0 + cl.bend * s);        // clump flop raises the tip lean
 
     // Facing blended as a DIRECTION (never the wrapping scalar angle, §5.2a): mix the
@@ -190,7 +226,7 @@ void main()
 
     // Width axis: horizontal, perpendicular to the facing direction = cross(up, dir).
     vec3 widthAxis = vec3(sin(facing), 0.0, -cos(facing));
-    float halfW = 0.5 * (b.width * (1.0 - t));
+    float halfW = 0.5 * (b.width * (1.0 - t) * lodPresence * lodWiden);   // × LOD fade + survivor widen
 
     vec3 pos = curve + (float(side) * halfW) * widthAxis;
 

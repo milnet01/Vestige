@@ -10,6 +10,7 @@
 #include "core/logger.h"
 #include "environment/grass_placement.h"   // predicates + makeGrassBlade (+ grass_clump hashes)
 #include "environment/terrain.h"
+#include "utils/frustum.h"                  // extractFrustumPlanes + isAabbInFrustum (reuse)
 
 #include <algorithm>
 #include <cmath>
@@ -184,8 +185,9 @@ void GrassRenderer::uploadBlades(const std::vector<GrassBlade>& blades)
                       blades.data(), GL_STATIC_DRAW);
 }
 
-void GrassRenderer::render(const glm::mat4& viewProjection)
+void GrassRenderer::render(const glm::mat4& viewProjection, const glm::vec3& cameraPos)
 {
+    m_drawnChunks = 0;
     if (!m_initialized || m_bladeCount == 0 || m_shader.getId() == 0)
     {
         return;
@@ -200,21 +202,59 @@ void GrassRenderer::render(const glm::mat4& viewProjection)
 
     m_shader.use();
     m_shader.setMat4("u_viewProjection", viewProjection);
-    m_shader.setInt("u_segments", SEGMENTS);
+    m_shader.setVec3("u_cameraPos", cameraPos);
     m_shader.setFloat("u_clumpCellSize", m_config.clumpScale);
     m_shader.setFloat("u_clumpStrength", m_config.clumpStrength);
+    // LOD schedule — constant across chunks; the shader fades each blade per its distance.
+    m_shader.setFloat("u_lodNearMid", m_lodBands.nearMid);
+    m_shader.setFloat("u_lodMidFar", m_lodBands.midFar);
+    m_shader.setFloat("u_lodBandWidth", m_lodBands.bandWidth);
+    m_shader.setFloat("u_lodNearFrac", m_lodBands.nearFraction);
+    m_shader.setFloat("u_lodMidFrac", m_lodBands.midFraction);
+    m_shader.setFloat("u_lodFarFrac", m_lodBands.farFraction);
+    m_shader.setFloat("u_lodRankBand", m_lodBands.rankBand);
 
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_bladeSSBO);
     glBindVertexArray(m_vao);
 
-    // One instanced strip draw per chunk, indexed via u_baseOffset into the shared buffer
-    // (§5.5). G3 adds the per-chunk frustum cull + LOD around this loop.
-    const GLsizei vertsPerBlade = 2 * SEGMENTS + 1;
+    // Per-chunk frustum cull + distance LOD (§5.3). The segment tier (u_segments) and the
+    // submitted blade fraction (instanceCount) key on the chunk's NEAREST point so a chunk's
+    // near-edge blades finish fading before it drops instanceCount; the shader tapers each
+    // blade over the same grassKeptFraction curve, so nothing pops. One draw per visible
+    // chunk (tens), indexed via u_baseOffset into the shared buffer (§5.5).
+    const FrustumPlanes planes = extractFrustumPlanes(viewProjection);
     for (const GrassChunk& c : m_chunks)
     {
+        const AABB box{c.aabbMin, c.aabbMax};
+        if (!isAabbInFrustum(box, planes))
+        {
+            continue;   // outside the view frustum
+        }
+
+        // Nearest point of the AABB to the camera → the LOD distance (§5.3 precondition).
+        const glm::vec3 nearest = glm::clamp(cameraPos, box.min, box.max);
+        const float dNear = glm::distance(cameraPos, nearest);
+
+        const GrassLod lod = grassLodForDistance(dNear, m_lodBands);
+        if (!lod.draw)
+        {
+            continue;   // beyond the cull distance
+        }
+
+        // ceil so a partially-faded boundary blade is still submitted (rank < instanceFraction).
+        const GLsizei instanceCount = std::min<GLsizei>(
+            static_cast<GLsizei>(c.count),
+            static_cast<GLsizei>(std::ceil(lod.instanceFraction * static_cast<float>(c.count))));
+        if (instanceCount <= 0)
+        {
+            continue;
+        }
+
         m_shader.setUInt("u_baseOffset", c.baseOffset);
-        glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, vertsPerBlade,
-                              static_cast<GLsizei>(c.count));
+        m_shader.setInt("u_segments", lod.segments);
+        m_shader.setFloat("u_chunkCount", static_cast<float>(c.count));
+        glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 2 * lod.segments + 1, instanceCount);
+        ++m_drawnChunks;
     }
 
     glBindVertexArray(0);

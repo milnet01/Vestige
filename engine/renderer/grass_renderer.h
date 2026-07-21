@@ -7,16 +7,18 @@
 ///        path in the meadow (flowers stay on FoliageRenderer).
 ///        Design: docs/phases/phase_10_meadow_gpu_grass_design.md.
 ///
-/// Slice status: **G2** — CPU per-chunk placement + PCG gating + clumping. `buildField`
-/// scatters blade seeds across the meadow (terrain-seated, grass-splat/slope/pond gated),
-/// stores them in ONE shared SSBO with per-chunk descriptors (base offset + count +
-/// clump-padded AABB), and the VS conforms each blade toward its clump (§5.2a) so the field
-/// reads as tussocks. LOD + per-chunk frustum cull (G3), shading + wind + shadow-receive
-/// (G4), and quality tiers + meadow wire-up (G5) build on the descriptors laid down here.
+/// Slice status: **G3** — LOD + per-chunk frustum cull. `render` culls each chunk's
+/// clump-padded AABB against the view frustum, then picks a distance LOD from the chunk's
+/// nearest point: a per-chunk segment tier (2N+1 strip verts) plus a per-blade blade-count
+/// fade (`grass_lod.h` `grassKeptFraction`) evaluated identically on the CPU (instanceCount)
+/// and in the VS (each blade tapers to zero over distance), so the field thins with no pop.
+/// Built on G2's shared SSBO + per-chunk descriptors. Shading + wind + shadow-receive (G4)
+/// and quality tiers + meadow wire-up (G5) build on this.
 #pragma once
 
 #include "environment/grass_blade.h"
 #include "environment/grass_config.h"
+#include "environment/grass_lod.h"
 #include "renderer/shader.h"
 
 #include <glm/glm.hpp>
@@ -57,9 +59,12 @@ public:
     ///        changes.
     void buildField(const Terrain& terrain, const GrassConfig& config);
 
-    /// @brief Draws the current blade field, one instanced draw per chunk. No-op until a
-    ///        field is built.
-    void render(const glm::mat4& viewProjection);
+    /// @brief Draws the field: per-chunk frustum cull, then a distance LOD (segment tier +
+    ///        faded blade fraction) from each visible chunk's nearest point (§5.3). No-op
+    ///        until a field is built.
+    /// @param viewProjection Combined VP for the frustum planes + clip transform.
+    /// @param cameraPos World camera position — the per-chunk/-blade LOD distance origin.
+    void render(const glm::mat4& viewProjection, const glm::vec3& cameraPos);
 
     /// @brief Whether a blade field is currently populated.
     bool hasField() const { return m_bladeCount > 0; }
@@ -67,8 +72,17 @@ public:
     /// @brief Total stored blade count across all chunks.
     GLsizei bladeCount() const { return m_bladeCount; }
 
-    /// @brief Chunk count (visible in logs / for a G3 drawn-chunk instrument).
+    /// @brief Chunk count (visible in logs / for the G3 drawn-chunk instrument).
     std::size_t chunkCount() const { return m_chunks.size(); }
+
+    /// @brief Chunks actually drawn last `render` (survived frustum + distance cull) — the
+    ///        §10 G3 drawn-chunk instrument.
+    std::size_t drawnChunkCount() const { return m_drawnChunks; }
+
+    /// @brief Distance-LOD thresholds/levels (§5.3). Public so G5's quality tier can dial
+    ///        draw distance + LOD aggressiveness without touching the renderer internals.
+    GrassLodBands& lodBands() { return m_lodBands; }
+    const GrassLodBands& lodBands() const { return m_lodBands; }
 
     /// @brief Near-LOD segment count (N). An N-segment blade is a GL_TRIANGLE_STRIP of
     ///        `2N+1` verts (design §5.1). G2 uses this single tier; G3 adds mid/far.
@@ -93,6 +107,8 @@ private:
     GLsizei m_bladeCount = 0;
     std::vector<GrassChunk> m_chunks;
     GrassConfig m_config;      ///< Kept for the draw (clump cell size + strength uniforms).
+    GrassLodBands m_lodBands;  ///< Distance-LOD thresholds/levels (§5.3).
+    std::size_t m_drawnChunks = 0;  ///< Chunks drawn last frame (drawn-chunk instrument).
     bool m_initialized = false;
 };
 
