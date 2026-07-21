@@ -20,7 +20,7 @@ must re-run `/cold-eyes` to convergence before further implementation** (project
 
 **Contents:** [1 Goal](#1-goal-plain-terms) · [2 Current state](#2-current-state-verified-against-source-2026-07-21) ·
 [3 Decisions](#3-design-decisions--rationale) · [4 Architecture](#4-architecture) · [5 CPU/GPU placement](#5-cpu--gpu-placement-project-rule-7) ·
-[6 Asset pipeline](#6-asset-pipeline--sourcing) · [7 Testing & parity](#7-testing--parity) · [8 Accessibility](#8-accessibility) ·
+[6 Asset pipeline](#6-asset-pipeline--sourcing) · [7 Testing](#7-testing) · [8 Accessibility](#8-accessibility) ·
 [9 Performance](#9-performance-plan-60-fps-hard-floor) · [10 Slices](#10-implementation-slices) · [11 Risks](#11-risks--scope-caps) ·
 [12 Sources](#12-cited-sources) · [13 Cold-eyes log](#13-cold-eyes-loop-log)
 
@@ -97,7 +97,7 @@ Scope order (locked with user): **trees first**, then flowers + lilies.
 
 | # | Decision | Rationale |
 |---|----------|-----------|
-| D1 | **Revive `TreeRenderer`** (Approach A), keep its LOD/crossfade/instancing machinery, replace its two procedural generators (placeholder mesh + procedural billboard) with the **artist's real glb LOD meshes** (LOD0 near, a lower LOD mid) and the **artist billboard** far. | Reuse before rewrite. The distance-bucketing + crossfade + instanced draw is the hard part and already works; only the *content* is fake. |
+| D1 | **Revive `TreeRenderer`** (Approach A), keep its distance-bucketing / crossfade / instancing machinery (extending it from 2 buckets to 3 — §4.1), and replace its two procedural generators (placeholder mesh + procedural billboard) with the **artist's real LOD meshes** (LOD0 near, LOD2 mid) and the **artist billboard** far. | Reuse before rewrite. The distance-bucketing + crossfade + instanced draw is the hard part and already works; only the *content* is fake (and the mid bucket is a modest extension of it). |
 | D2 | **Use the artist-supplied LODs + billboard** (v2, user-chosen). Each LOLIPOP tree already ships LOD0/1/2 real meshes + a flat billboard (LOD3); the renderer distance-switches between them. **No custom impostor is baked.** The v1 octahedral impostor is **deferred as an optional future upgrade** (§11) — its benefit (never-flat distant treeline on lateral motion) is much smaller now that real LOD1/LOD2 meshes cover most distances, and it was the single hardest/riskiest slice. | Shortest correct path (Rule 2): the artist already solved the distance-representation problem and tuned it. A flat billboard only kicks in far enough out that its flatness is rarely read in a scattered meadow. |
 | D3 | **Two-tier species model**: *hero* trees (few, sparse, big) and *field* trees (many, the treeline) are just the **large vs medium/small size variants** already in each pack (e.g. `Pine_large_*` vs `Pine_medium/small_*`). Both ride the same renderer path; they differ only in which pack variant + placement density. | User wants "huge trees" as landmarks plus a believable treeline. One code path, two content picks — no special-casing, **no decimation** (the packs are already game-budget). |
 | D4 | **Meshes (LOD0 + mid) cast + receive shadows; the far billboard receives only.** | Trees are big — ground shadow-cast matters. Casting *from* a flat far card is ill-defined and the near/mid meshes already cast; a distant billboard's cast contribution is negligible. Scope cap, logged per project Rule 5. |
@@ -105,7 +105,7 @@ Scope order (locked with user): **trees first**, then flowers + lilies.
 | D6 | **Placement reuses `scatterProps`** (the existing deterministic jittered-grid point generator), routed through the foliage tree-placement API (`FoliageManager::placeTree`, which maps world→chunk-grid) instead of raw `Model::instantiate`. | Trees land where the current glb tree-props land; no new placement algorithm; deterministic (seeded). |
 | D7 | **LOD switch distances are a quality tier** on `RendererQualitySink` (new `TreeQuality`, mirroring the shipped `GrassQuality`). Low pulls the LOD0→mid→billboard distances nearer (fewer heavy meshes on screen); High pushes them out. | Weak-HW scalability (ties into perf program). No atlas to size now — the lever is the crossfade distances. |
 | D8 | **Trees render into the water reflection pass** (`TreeRenderer::render` already takes a `clipPlane`). | 3D_E-0033 requires the treeline to reflect in the pond. |
-| D9 | **Asset pipeline is a scripted, repeatable two-step** (`fetch_sketchfab_trees.py` downloads the packs; `split_tree_packs.py` runs Blender-headless to split each pack into per-tree glbs with **shared per-species textures**), not hand-exported one-offs. | Six-month test: the heavy binaries stay out of the repo (git-ignored `nature_local/`); anyone with the API token can re-run the prep. Shared textures avoid duplicating a species' bark/foliage maps across its variant files (§6.2). |
+| D9 | **Asset pipeline is a scripted, repeatable two-step** (`fetch_sketchfab_trees.py` downloads the packs; `split_tree_packs.py` runs Blender-headless to split each pack into per-tree glTF-separate files with **shared per-species textures**), not hand-exported one-offs. | Six-month test: the heavy binaries stay out of the repo (git-ignored `nature_local/`); anyone with the API token can re-run the prep. Shared textures avoid duplicating a species' bark/foliage maps across its variant files (§6.2). |
 | D10 | **Species must be biome-coherent with the meadow.** The demo meadow is a **temperate grassland**, so the species are temperate flora — the sourced set is **fir, pine (conifers) + maple, birch (broadleaves)**, all temperate. Desert / subtropical / tropical assets (quiver tree, jacaranda, island tree) are **excluded** — they read as wrong in a green meadow. | User requirement: the trees must make sense to be there. A believable treeline is biome-consistent, not a random species grab-bag. |
 
 ---
@@ -117,39 +117,45 @@ Scope order (locked with user): **trees first**, then flowers + lilies.
 **Reuse the existing config struct.** `struct TreeSpeciesConfig` already exists
 (`engine/environment/foliage_instance.h:67`: `name`, `meshPath`, `billboardTexturePath`, `minScale`,
 `maxScale`, `minSpacing`) — the *authored* description of a species. We reuse it (decision D1; project
-Rule 3, reuse-before-rewrite): `meshPath` names the LOD0 glb, `billboardTexturePath` is repurposed to
-name the billboard glb. The renderer then holds a *runtime* table of loaded models:
+Rule 3, reuse-before-rewrite): `meshPath` names the LOD0 glTF, `billboardTexturePath` is repurposed to
+name the billboard glTF. The renderer then holds a *runtime* table of loaded models:
 
 ```
 struct TreeSpecies                        // runtime form; built from a TreeSpeciesConfig at load
 {
-    Model*                 lod0Mesh;      // artist LOD0 glb (near) — via ResourceManager (engine/resource/model.h)
-    Model*                 lodMidMesh;    // artist LOD2 glb (mid distance); nullptr → fall straight to billboard
-    Model*                 billboard;     // artist billboard glb (far, flat card); nullptr → mid holds to maxDistance
+    Model*                 lod0Mesh;      // artist LOD0 glTF (near) — via ResourceManager (engine/resource/model.h)
+    Model*                 lodMidMesh;    // artist LOD2 glTF (mid distance); nullptr → fall straight to billboard
+    Model*                 billboard;     // artist billboard glTF (far, flat card); nullptr → mid holds to maxDistance
     AABB                   bounds;        // for LOD sizing + cull
-    float                  trunkPivotY;   // Y of trunk base from glb origin (= bounds.min.y); 0 when origin is at the base (split tool recentres to 0)
+    float                  trunkPivotY;   // Y of trunk base from model origin (= bounds.min.y); 0 when origin is at the base (split tool recentres to 0)
 };
 std::vector<TreeSpecies>   m_species;     // indexed by TreeInstance::speciesIndex
 ```
 
-All three are plain `Model*` loaded from the split per-tree glbs (§6). `TreeSpecies` is a bare-member
+All three are plain `Model*` loaded from the split per-tree glTFs (§6). `TreeSpecies` is a bare-member
 runtime holder (matching `TreeInstance`'s convention, not the `m_` style — it owns no invariants).
 `TreeInstance::speciesIndex` (already stored, currently ignored) becomes the index into this table.
 Hero and field trees are just entries pointing at large vs medium/small pack variants — no type flag
 needed. **Which mid LOD:** the packs ship LOD1 and LOD2; we take **LOD2** as the single mid tier (LOD1
-is barely lighter than LOD0 — the useful saving is LOD2), keeping the renderer's proven **3-bucket**
-scheme (LOD0 / mid / billboard) rather than growing it to 4.
+is barely lighter than LOD0 — the useful saving is LOD2). This **extends the renderer's existing
+*2-bucket* scheme (LOD0 mesh + billboard, §2) to 3 buckets** by adding a mid (LOD2) bucket and a second
+crossfade band — new work on top of the existing LOD0/billboard bucketing + first crossfade, but a
+smaller lift than a 4-bucket scheme.
 
 ### 4.2 Artist LOD assets (what the split tool produces, how they load)
 
-No baking. The §6 split tool emits, per tree, up to three self-contained glbs — `*_lod0.glb` (near),
-`*_lod2.glb` (mid), `*_billboard.glb` (far) — recentred so the trunk base sits at the origin. Each is a
-normal `Model` loaded through `ResourceManager` (which **caches by file path**, so every instance of a
-given glb shares one loaded `Model` + its textures — the reason §6.2 keeps textures **external and
-shared per species**, not embedded per file). A tree glb has **≥2 materials** (bark opaque + foliage
-alpha-cutout, double-sided); the loader preserves them for the per-material draw (§4.4). The billboard
-glb is the artist's flat card (a quad with an alpha-cutout foliage texture) — drawn as an ordinary
-(tiny) mesh, not a special impostor primitive.
+No baking. The **finalised** §6 split tool will emit, per tree, up to three **glTF-separate** files —
+`*_lod0.gltf` (near), `*_lod2.gltf` (mid), `*_billboard.gltf` (far), each `.gltf` + `.bin` referencing
+the **shared per-species `textures/`** — recentred so the trunk base sits at the origin. (glTF-separate,
+not a single-container `.glb`: external shared textures require loose files, §6.2.) Each is a normal
+`Model` loaded through `ResourceManager` (which **caches by file path**, so every instance of a given
+file shares one loaded `Model`, and every variant referencing the same texture path shares one GPU
+upload — the reason §6.2 keeps textures **external and shared per species**, not embedded per file). A
+tree glTF has **≥2 materials** (bark opaque + foliage alpha-cutout, double-sided); the loader preserves
+them for the per-material draw (§4.4). The billboard glTF is the artist's flat card (a quad with an
+alpha-cutout foliage texture); its geometry is an ordinary quad, but it is **drawn with a camera-facing
+(yaw-billboard) shader** (§4.3), not a plain static-mesh draw — far simpler than the v1 octahedral
+impostor, but still oriented per render pass.
 
 ### 4.3 Runtime LOD selection (`TreeRenderer::render`, existing bucketing)
 
@@ -160,19 +166,28 @@ that machinery and points it at the three real `Model`s:
 - **LOD0 mesh** for distance `< lodDistance` (≈ 40 m) — full per-material draw (§4.4).
 - **Mid (LOD2) mesh** for `[lodDistance, billboardDistance)` (≈ 40–90 m) — same per-material draw path,
   lighter mesh.
-- **Billboard** for `[billboardDistance, maxDistance)` (≈ 90–200 m) — the artist's flat card, drawn as
-  a mesh; camera-facing yaw so it doesn't show its edge. It is a single flat quad, so on fast lateral
-  motion past a dense treeline it can read slightly flat — the accepted v2 tradeoff (D2); the optional
-  octahedral upgrade (§11) is the fix if it ever matters.
+- **Billboard** for `[billboardDistance, maxDistance)` (≈ 90–200 m) — the artist's flat card. **A static
+  quad drawn by the per-instance mat4 alone would render at a fixed orientation, not face the camera**
+  (`TreeInstance::rotation` is a fixed per-tree yaw, `foliage_instance.h`). So the billboard bucket is
+  **special-cased**: it is drawn with a **yaw-billboard shader** that rebuilds the card's horizontal
+  basis from a per-pass **camera-right uniform** (rotating about the vertical/trunk axis so the card
+  never tilts) — reusing the mechanism the existing placeholder billboard already uses
+  (`tree_renderer.cpp:322-376` `createBillboardQuad` + `u_cameraRight`/`u_cameraUp`), fed the artist
+  card geometry instead of a procedural quad. It is a single flat quad, so on fast lateral motion past a
+  dense treeline it can read slightly flat — the accepted v2 tradeoff (D2); the optional octahedral
+  upgrade (§11) is the fix if it ever matters.
 - Two crossfade bands (LOD0↔mid, mid↔billboard), each the renderer's existing complementary-alpha
   dither/blend. The crossfade alpha rides the per-instance `vec2` at attrib **location 12** (§4.4).
 
 The switch distances are the `TreeQuality` tier knob (D7). Billboards receive light + CSM shadow the
 same way the meshes do (a flat lit card, §4.6) — they **do not cast** (D4).
 
-**Pond reflection (D8/T5):** the artist billboard is a camera-facing flat card, so it already works from
-the mirrored reflection camera (it yaws to face whatever camera renders it). No special-casing is needed
-— near-shore reflected trees are LOD0/mid mesh, far ones the billboard, same as the main pass.
+**Pond reflection (D8/T5):** because the billboard shader orients the card to **whatever camera renders
+the pass** (from that pass's `u_cameraRight`), feeding the **mirrored reflection camera's** right vector
+makes the far billboards face the reflection camera correctly — no atlas-view-coverage problem like v1's
+hemisphere impostor had. This is a property of the billboard bucket's per-pass orientation (above), not
+automatic static-mesh behaviour. Near-shore reflected trees are LOD0/mid mesh, far ones the billboard,
+same as the main pass.
 
 ### 4.4 LOD0 mesh render (rewrite `tree_mesh.*`)
 
@@ -287,10 +302,10 @@ realistic style. Four temperate species families, all passing the D10 biome gate
 | Maple (broadleaf) | `maple_lolipop_sketchfab_gltf` | 12 Acer (sapling/small/medium/large × 3) | ~9–22 k | hero (large) + field |
 | Birch (broadleaf) | `birch_lolipop_sketchfab_gltf` | 5 | ~9 k | field |
 
-**Distinct-glb budget (VRAM gate, §9):** the meadow uses a **curated subset** of these variants as the
-*distinct* tree files — target **≈ 8–12 distinct glbs** (e.g. 3 pine sizes, 2 fir, 3 maple sizes,
+**Distinct-mesh budget (VRAM gate, §9):** the meadow uses a **curated subset** of these variants as the
+*distinct* tree files — target **≈ 8–12 distinct meshes** (e.g. 3 pine sizes, 2 fir, 3 maple sizes,
 2 birch). Variety beyond that comes from **instancing + per-tree scale/rotation**, not more files.
-`ResourceManager` caches each `Model` by path, so N placements of one glb share one GPU upload — the
+`ResourceManager` caches each `Model` by path, so N placements of one file share one GPU upload — the
 VRAM cost scales with *distinct files*, not tree count. Hero vs field is just large-variant vs
 medium/small-variant of the same species (D3); **no decimation** (packs are already game-budget).
 
@@ -307,10 +322,10 @@ medium/small-variant of the same species (D3); **no decimation** (packs are alre
    writes the `SOURCES_sketchfab.md` credit manifest (§6.3).
 2. **Split** — `tools/asset_prep/split_tree_packs.py` (Blender-headless, `blender-5.2 --background
    --python`; use the **current stable Blender LTS** — confirm against blender.org before running).
-   Per tree it exports **LOD0** (near), **LOD2** (mid) and the **billboard** as separate glbs,
-   **recentred so the trunk base sits at the origin** (y = 0, centred x/z), into
-   `Models/Nature/Trees/gameready/<species>/`, symlinked to the engine's git-ignored
-   `assets/models/nature_local/gameready/`.
+   Per tree it exports **LOD0** (near), **LOD2** (mid) and the **billboard** as separate **glTF-separate**
+   files (`.gltf` + `.bin` + shared `textures/`), **recentred so the trunk base sits at the origin**
+   (y = 0, centred x/z), into `Models/Nature/Trees/gameready/<species>/`, symlinked to the engine's
+   git-ignored `assets/models/nature_local/gameready/`.
 
    **Textures shared per species (VRAM-critical).** All variants of a species share one bark + one
    foliage texture set. The split exports **glTF-separate** (not embedded `.glb`) into a per-species
@@ -318,9 +333,9 @@ medium/small-variant of the same species (D3); **no decimation** (packs are alre
    texture files by relative path and `ResourceManager`'s path cache loads each map **once** for the
    whole species. (Embedding textures per file — the naïve `.glb` path — duplicates a species' maps
    across its variant files and blows the §9 budget; the T1 prototype hit exactly this, embedding
-   ~20–60 MB per file.) Source maps are already 2 K; keep them 2 K (bark) / as-authored (foliage
-   atlas), re-encoded as JPG/PNG (no 4 K upscaling). The classifier matches size words
-   case-insensitively (`[A-Za-z]+`, so `Acer_Sapling_*` is not dropped).
+   ~20–64 MB per file.) **Downscale the shared maps to 1 K** (the engine uploads textures **uncompressed**,
+   so pixel resolution — not JPG/PNG disk size — sets VRAM; §9), re-encoded as JPG/PNG (no upscaling).
+   The classifier matches size words case-insensitively (`[A-Za-z]+`, so `Acer_Sapling_*` is not dropped).
 
 `nature_local/` stays git-ignored (heavy binaries out of the public repo); both scripts + the
 `SOURCES_sketchfab.md` manifest are committed so the set is reproducible from the token. Bundled
@@ -339,7 +354,7 @@ checklist includes verifying it is present (the credits screen / an `ATTRIBUTION
 
 ---
 
-## 7. Testing & parity
+## 7. Testing
 
 - **No octahedral parity test in v2** — dropping the custom impostor removes the only CPU↔GPU contract
   (§5). The artist LODs are plain meshes; there is no bake/runtime map to pin. This is the single
@@ -348,7 +363,7 @@ checklist includes verifying it is present (the credits screen / an `ATTRIBUTION
   (`FoliageChunk` / `FoliageManager` `SerializeDeserialize`, `test_foliage_chunk.cpp`) is untouched;
   species-index semantics unchanged.
 - **Split-tool asset check** (CI-cheap, no GPU): a small test/script asserts each `gameready/<species>/`
-  glb loads as a valid `Model` with **≥2 materials** and its **trunk-base bound `y ≈ 0`** (the recentre
+  glTF loads as a valid `Model` with **≥2 materials** and its **trunk-base bound `y ≈ 0`** (the recentre
   held), and that a species' variants **share** their texture files (distinct-texture count per species
   is bounded) — guarding the §6.2 VRAM contract mechanically.
 - **Visual-test viewpoints** (run `./vestige --visual-test` **from `build/bin/`**,
@@ -359,8 +374,8 @@ checklist includes verifying it is present (the credits screen / an `ATTRIBUTION
 - **Perf gate:** `--profile-log` Tree-pass read on the RX 6600 at the tree viewpoints; **≤ 2.0 ms GPU
   Tree-pass at High** and **≥ 60 FPS at High** (§9). GPU-pass ms is the true metric (frame-total is
   polluted by screenshot readback). This gate + the visual-test captures are **manual / real-GPU-gated**
-  (RX 6600 dev target, not the llvmpipe CI runner); the parity + serialization unit tests are the
-  CI-enforced part.
+  (RX 6600 dev target, not the llvmpipe CI runner); the split-tool asset check + serialization unit
+  tests are the CI-enforced part.
 
 ---
 
@@ -386,16 +401,21 @@ checklist includes verifying it is present (the credits screen / an `ATTRIBUTION
 - **Tree-pass GPU budget:** **≤ 2.0 ms at High on the RX 6600** (context: the shipped Grass pass is
   ~1.2 ms). This is the numeric target the T7 gate checks — not just the whole-frame 60 FPS floor — so
   a Tree-pass-specific regression is caught even when the frame still clears 16.6 ms.
-- **VRAM budget (v2):** no impostor atlas. Cost = **shared per-species textures** (bark + foliage,
-  2 K, ~4–8 MB/species after JPG/PNG re-encode) **+ mesh vertex buffers** (LOD0+mid+billboard for the
-  ≈ 8–12 distinct glbs, a few MB total). Even at 8 species that is well under **~100 MB** — comfortably
-  inside the 8 GB RX 6600, and far below v1's 340 MB atlas budget. **Shared textures are load-bearing**
-  here: embedding per-file (T1's prototype) would multiply the texture cost by the variant count and
-  break this. `TreeQuality` scales LOD switch distances, not texture size.
+- **VRAM budget (v2):** no impostor atlas. The engine uploads textures **uncompressed** with full mips
+  (`GL_RGBA8`/`GL_SRGB8_ALPHA8`, `texture.cpp:162/172`; no BC/KTX2 path), so a map's VRAM cost is
+  ~1.33 × w·h·4 bytes **independent of its JPG/PNG disk size**. At the **1 K** prep resolution (§6.2) a
+  1 K RGBA map ≈ 4 MiB + ~33 % mips ≈ **5.3 MiB**. Each **species** shares ~6 maps (bark + foliage ×
+  diffuse/normal/ARM) ≈ **~30 MiB/species**; the **4 species** ≈ **~120 MiB** of texture VRAM, plus a
+  few MiB of mesh buffers for the ≈ 8–12 distinct meshes. That fits the 8 GB RX 6600 with wide headroom
+  and is below v1's 340 MiB atlas budget. (Note the two axes differ: textures scale with the **4
+  species**; meshes with the **8–12 distinct files**.) **Shared textures are load-bearing** — embedding
+  per file (T1's prototype) multiplies the texture cost by the variant count and breaks this. Levers if
+  it grows: drop the ARM map to constants, or add a BC7 upload path (would cut texture VRAM ~4×).
+  `TreeQuality` scales LOD switch distances, not texture size.
 - **Shadow cast** adds LOD0 trees to the cascade depth pass — bounded (near trees only).
 - Budget check happens at the T7 perf gate before ship; if the Tree pass exceeds 2.0 ms (or the frame
   threatens 16.6 ms), the first lever is `lodDistance` / `billboardDistance` (push cheaper LODs nearer),
-  then the distinct-glb count.
+  then the distinct-mesh count.
 
 ---
 
@@ -403,7 +423,7 @@ checklist includes verifying it is present (the credits screen / an `ATTRIBUTION
 
 | Slice | Work | Verify |
 |-------|------|--------|
-| **T1** | Asset prep — `fetch_sketchfab_trees.py` (done) + `split_tree_packs.py` finalised: per-tree LOD0 + LOD2 + billboard glbs, recentred base-at-origin, **shared per-species external textures** (§6.2), curated ≈ 8–12 distinct variants, sapling-name fix. `SOURCES_sketchfab.md` committed. | Each `gameready/<species>/` glb loads as a `Model` (≥2 materials, base `y ≈ 0`); a species' variants share their texture files; assets resolve via the `propPath`/`nature_local` hook. |
+| **T1** | Asset prep — `fetch_sketchfab_trees.py` (done) + `split_tree_packs.py` finalised: per-tree LOD0 + LOD2 + billboard glTFs (glTF-separate, shared textures), recentred base-at-origin, **shared per-species external textures** (§6.2), curated ≈ 8–12 distinct variants, sapling-name fix. `SOURCES_sketchfab.md` committed. | Each `gameready/<species>/` glTF loads as a `Model` (≥2 materials, base `y ≈ 0`); a species' variants share their texture files; assets resolve via the `propPath`/`nature_local` hook. |
 | **T2** | Revive `TreeRenderer`: species table (from `TreeSpeciesConfig` → LOD0/mid/billboard `Model*`), flatten node transforms into vertices at load, per-material **LOD0 + mid mesh draw** + **billboard draw** (replace both placeholder generators; instance layout: mat4 @6–9 binding 1 + crossfade-alpha/phase `vec2` @12 binding 3), 3-bucket LOD distance-switch + two crossfade bands, wind + CSM receive + directional light. **Widen `TreeRenderer::render` signature (+ `csm`, `dirLight`, wind), update the `engine.cpp:1643` call site, wrap it in its own `beginPass("Tree")` GPU-timer.** | Near mesh + mid mesh + far billboard render; crossfade alpha monotonic across both fade bands; shadows + light visible on trees; a **"Tree" GPU-pass appears in `--profile-log`**; `tree_near`/`tree_crossfade`/`treeline_far` captures + 0 GL errors. |
 | **T3** | Meadow placement: route field-tree (medium/small variants) + hero-tree (large variants) scatter points through `placeTree`; remove the raw glb tree-prop `scatterGroup`; **placement scale tuned to the packs' real-world metres** (≈ 0.8–1.5, not Kenney's 1.3–2.4). | Trees appear at former prop spots at believable size; LOD switches walking toward/away. |
 | **T4** | LOD0 (+ mid) shadow-caster pass (reuse foliage caster). | Trees cast ground shadows in the `tree_near` capture; shadow bias reuses the foliage caster's value (no new constant); 0 GL errors. |

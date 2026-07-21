@@ -156,7 +156,7 @@ path (demonstrated in `terrain_system.cpp:38-76`) fills heights with
   that path drew **procedural placeholder geometry** (trunk + crown,
   `tree_renderer.h:65 createPlaceholderTree`). That prohibition is **lifted** by
   `phase_10_meadow_realism_c_trees_plants_design.md` (3D_E-0033), which replaces
-  the placeholder generators with real meshes + baked octahedral impostors — so
+  the placeholder generators with the artist's real LOD meshes + billboard — so
   the meadow *does* route trees through the foliage tree path (`placeTree` →
   `TreeRenderer`) once that work lands. Authored `.glb` via `instantiate` was the
   benchmark-scene stopgap.
