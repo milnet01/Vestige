@@ -165,7 +165,11 @@ impostor, but still oriented per render pass.
 
 The existing renderer already buckets each tree by camera distance and instanced-draws each bucket with
 a complementary-alpha crossfade in `[switch, switch+fadeRange]` (`tree_renderer.cpp:85-201`). v2 keeps
-that machinery and points it at the three real `Model`s:
+that machinery and points it at the three real `Model`s. **Bucketing is sub-keyed by `speciesIndex`**:
+the existing renderer draws one shared placeholder mesh per bucket, but v2 has a distinct `Model`/VAO
+(and, for the far tier, a distinct per-species billboard material) per species (§4.1), which cannot share
+one `glDrawElementsInstanced`. So each bucket becomes **one instanced draw per (species × LOD)** — the
+billboard draw binds that species' billboard material (§9). The three distance bands:
 
 - **LOD0 mesh** for distance `< lodDistance` (≈ 40 m) — full per-material draw (§4.4).
 - **Mid (LOD2) mesh** for `[lodDistance, billboardDistance)` (≈ 40–90 m) — same per-material draw path,
@@ -175,8 +179,9 @@ that machinery and points it at the three real `Model`s:
   (`TreeInstance::rotation` is a fixed per-tree yaw, `foliage_instance.h`). So the billboard bucket is
   **special-cased**: it is drawn with a **yaw-billboard shader** that rebuilds the card's horizontal
   basis from a per-pass **camera-right uniform** (rotating about the vertical/trunk axis so the card
-  never tilts) — reusing the mechanism the existing placeholder billboard already uses
-  (`tree_renderer.cpp:322-376` `createBillboardQuad` + `u_cameraRight`/`u_cameraUp`), fed the artist
+  never tilts) — reusing the mechanism the existing placeholder billboard already uses (the camera
+  uniforms `u_cameraRight`/`u_cameraUp` set per-pass in `render()` at `tree_renderer.cpp:184-190`, over
+  the quad geometry from `createBillboardQuad` at `:322-376`), fed the artist
   card geometry instead of a procedural quad. It is a single flat quad, so on fast lateral motion past a
   dense treeline it can read slightly flat — the accepted v2 tradeoff (D2); the optional octahedral
   upgrade (§11) is the fix if it ever matters.
@@ -260,7 +265,7 @@ Replace the raw-prop tree `scatterGroup` call with foliage-tree placement:
 - **Give trees their own GPU-timer pass.** The `:1643` tree render currently sits *inside* the shared
   `beginPass("Foliage")` bracket (opened `engine.cpp:1633`), so `--profile-log` has no separate "Tree"
   number to gate §9's ≤2 ms budget against. T2 wraps the tree render in its own
-  `beginPass("Tree")/endPass()` (mirroring the grass `beginPass("Grass")` at `:1651`) so the §7/§9/T7
+  `beginPass("Tree")/endPass()` (mirroring the grass `beginPass("Grass")` at `:1652`) so the §7/§9/T7
   Tree-pass metric is measurable.
 
 ### 4.6 Shadows / wind / lighting uniforms (copy verbatim from grass/foliage)
@@ -332,22 +337,28 @@ medium/small-variant of the same species (D3); **no decimation** (packs are alre
    git-ignored `assets/models/nature_local/gameready/`.
 
    **Textures shared per species (VRAM-critical).** The **mesh** maps (bark + foliage) are shared by all
-   variants of a species; the **billboard** maps are per-variant (each tree's card has its own baked
-   atlas — §9). To preserve the mesh-map sharing, the finalised tool exports each tree's **geometry only**
-   (`.gltf` + `.bin`) and points every variant at the pack's **existing single `textures/` folder** by
-   relative URI — it does **not** re-emit textures per variant (a naïve per-tree `GLTF_SEPARATE` would
-   duplicate them, defeating the goal). `ResourceManager`'s path cache then loads each shared mesh map
-   **once** for the whole species (`resource_manager.cpp:40-72` caches `Texture` by path; embedded-in-`.glb`
-   images bypass that cache — the T1 prototype hit exactly this, embedding ~20–64 MB per file). **Downscale
-   in place** (the engine uploads textures **uncompressed**, so pixel resolution — not JPG/PNG disk size —
-   sets VRAM; §9): shared **mesh** maps to **1 K** (source is 1 K–2 K: `Bark` 1024×2048, `Clusters` 2048²),
-   per-variant **billboard** maps to **512²** (they are the distant card). Re-encode JPG/PNG (no upscaling).
-   The classifier matches size words case-insensitively (`[A-Za-z]+`, so `Acer_Sapling_*` is not dropped).
+   variants of a species; the **billboard** maps are per-variant (each tree's card has its own artist
+   pre-rendered texture — §9). To preserve the mesh-map sharing, the finalised tool exports each tree's
+   **geometry only** and points every variant at the pack's **existing single `textures/` folder** by
+   relative URI — it does **not** re-emit textures per variant. **Concretely:** a naïve
+   `export_scene.gltf(export_format="GLTF_SEPARATE")` **copies** textures next to each output (the exact
+   duplication to avoid); instead pass **`export_keep_originals=True`** (Blender writes `.gltf` + `.bin`
+   referencing the *existing* image files by relative URI, no copy), or post-process the emitted glTFs to
+   rewrite image URIs to one shared folder and delete the duplicates. `ResourceManager`'s path cache then
+   loads each shared mesh map **once** for the whole species (`resource_manager.cpp:40-72` caches `Texture`
+   by path; embedded-in-`.glb` images bypass that cache — the T1 prototype hit exactly this, embedding
+   ~20–64 MB per file). **Downscale in place** (the engine uploads textures **uncompressed**, so pixel
+   resolution — not JPG/PNG disk size — sets VRAM; §9): shared **mesh** maps to **1 K** (source is 1 K–2 K:
+   `Bark` 1024×2048, `Clusters` 2048²), per-variant **billboard** maps to **512²** (they are the distant
+   card). Re-encode JPG/PNG (no upscaling). The classifier matches size words case-insensitively
+   (`[A-Za-z]+`, so `Acer_Sapling_*` is not dropped).
 
-`nature_local/` stays git-ignored (heavy binaries out of the public repo); both scripts + the
-`SOURCES_sketchfab.md` manifest are committed so the set is reproducible from the token. Bundled
-fallback: if a `nature_local/` asset is absent, the `propPath` hook already falls back to the
-lightweight `nature/` Kenney glb, so a fresh clone still runs (just with the cartoon trees).
+`nature_local/` and the downloaded packs stay out of the repo (git-ignored / in the external library);
+the **two scripts are committed** so the set is reproducible from the token. The `SOURCES_sketchfab.md`
+manifest is written beside the downloads **in the library** (not the repo) — the repo-tracked home of the
+CC-BY obligation is the credits-screen requirement (§6.3) that T7 verifies. Bundled fallback: if a
+`nature_local/` asset is absent, the `propPath` hook already falls back to the lightweight `nature/`
+Kenney glb, so a fresh clone still runs (just with the cartoon trees).
 
 ### 6.3 Attribution (CC-BY 4.0 — required)
 
@@ -416,11 +427,12 @@ checklist includes verifying it is present (the credits screen / an `ATTRIBUTION
   no BC/KTX2 path), so a map's VRAM cost is ~1.33 × w·h·4 bytes **independent of its JPG/PNG disk size**.
   A 1 K RGBA map ≈ 4 MiB + ~33 % mips ≈ **5.3 MiB**; a 512² map ≈ **1.3 MiB**. Two texture tiers with
   **different sharing** (verified against the pine pack's glTF `images`):
-  - **Mesh maps are SHARED per species** — ~6 maps (bark + foliage × diffuse/normal/ARM), one set for
-    all variants of a species. At **1 K** (§6.2): ~30 MiB/species × **4 species** ≈ **~120 MiB**.
-  - **Billboard maps are PER-VARIANT** (each tree's card has its own baked baseColor + normal — they do
-    **not** share). At **512²** (§6.2, distant card): 2 maps × 1.3 MiB × the **≈ 8–12 curated variants**
-    ≈ **~25 MiB**.
+  - **Mesh maps are SHARED per species** — up to ~6 maps (bark + foliage × diffuse/normal/ARM; some
+    species carry fewer — e.g. birch has 4, no metallic-roughness), one set for all variants of a
+    species. At **1 K** (§6.2): ≲30 MiB/species × **4 species** ≈ **~110–120 MiB**.
+  - **Billboard maps are PER-VARIANT** (each tree's card has its own artist pre-rendered baseColor +
+    normal — they do **not** share). At **512²** (§6.2, distant card): 2 maps × 1.3 MiB × the **≈ 8–12
+    curated variants** ≈ **~25 MiB**.
   - **Total ≈ ~145 MiB** texture VRAM + a few MiB of mesh buffers. Fits the 8 GB RX 6600 with wide
     headroom, below v1's 340 MiB atlas. (Three axes: mesh textures scale with **4 species**; billboard
     textures + mesh buffers with the **8–12 distinct variants**.) **Shared mesh textures are
@@ -438,7 +450,7 @@ checklist includes verifying it is present (the credits screen / an `ATTRIBUTION
 
 | Slice | Work | Verify |
 |-------|------|--------|
-| **T1** | Asset prep — `fetch_sketchfab_trees.py` (done) + `split_tree_packs.py` finalised: per-tree LOD0 + LOD2 + billboard glTFs (glTF-separate, shared textures), recentred base-at-origin, **shared per-species external textures** (§6.2), curated ≈ 8–12 distinct variants, sapling-name fix. `SOURCES_sketchfab.md` committed. | Each `gameready/<species>/` glTF loads as a `Model` (≥2 materials, base `y ≈ 0`); a species' variants share their texture files; assets resolve via the `propPath`/`nature_local` hook. |
+| **T1** | Asset prep — `fetch_sketchfab_trees.py` (done) + `split_tree_packs.py` finalised: per-tree LOD0 + LOD2 + billboard glTFs (glTF-separate, shared textures), recentred base-at-origin, **shared per-species external textures** (§6.2), curated ≈ 8–12 distinct variants, sapling-name fix. Scripts committed; `SOURCES_sketchfab.md` written in the library (§6.2). | Each `gameready/<species>/` glTF loads as a `Model` (≥2 materials, base `y ≈ 0`); a species' variants share their **mesh** texture files; assets resolve via the `propPath`/`nature_local` hook. |
 | **T2** | Revive `TreeRenderer`: species table (from `TreeSpeciesConfig` → LOD0/mid/billboard `Model*`), flatten node transforms into vertices at load, per-material **LOD0 + mid mesh draw** + **billboard draw** (replace both placeholder generators; instance layout: mat4 @6–9 binding 1 + crossfade-alpha/phase `vec2` @12 binding 3), 3-bucket LOD distance-switch + two crossfade bands, wind + CSM receive + directional light. **Widen `TreeRenderer::render` signature (+ `csm`, `dirLight`, wind), update the `engine.cpp:1643` call site, wrap it in its own `beginPass("Tree")` GPU-timer.** | Near mesh + mid mesh + far billboard render; crossfade alpha monotonic across both fade bands; shadows + light visible on trees; a **"Tree" GPU-pass appears in `--profile-log`**; `tree_near`/`tree_crossfade`/`treeline_far` captures + 0 GL errors. |
 | **T3** | Meadow placement: route field-tree (medium/small variants) + hero-tree (large variants) scatter points through `placeTree`; remove the raw glb tree-prop `scatterGroup`; **placement scale tuned to the packs' real-world metres** (≈ 0.8–1.5, not Kenney's 1.3–2.4). | Trees appear at former prop spots at believable size; LOD switches walking toward/away. |
 | **T4** | LOD0 (+ mid) shadow-caster pass (reuse foliage caster). | Trees cast ground shadows in the `tree_near` capture; shadow bias reuses the foliage caster's value (no new constant); 0 GL errors. |
