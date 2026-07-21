@@ -567,11 +567,12 @@ Full spatial audio pipeline with dynamic mixing, occlusion, and adaptive music. 
   Kind: feature.
   Source: user-request-2026-07-19 (meadow GPU grass; fixture 3D_E-0027).
 
-- 📋 [3D_E-0033] **Meadow realism C — realistic trees & plants.**
+- 🚧 [3D_E-0033] **Meadow realism C — realistic trees & plants.**
   Replace the low-poly Kenney props with realistic vegetation: use the engine's existing tree LOD-billboard system and/or biome presets, or photo-textured / billboard-imposter trees (real tree photos on crossed cards for the mid/far treeline). Large committed models stay out of the public repo via the existing git-ignored `nature_local/` override hook. The clustered treeline should reflect in the pond. Phase C — the hardest realism piece; user deferred it behind A/B.
   **Layman:** Swap the cartoon trees for realistic-looking ones — the treeline you keep pointing at.
   Kind: feature.
   Source: user-request-2026-07-11 (realism overhaul; fixture 3D_E-0027).
+  Design signed off 2026-07-21 (docs/phases/phase_10_meadow_realism_c_trees_plants_design.md, cold-eyes converged at loop 6, commit 9f63446). Approach: revive dormant TreeRenderer with real glb LOD0 + baked hemi-octahedral impostor LOD1; hero (Poly Haven 4K fir/pine, decimated) + field temperate species via nature_local/ hook; placeTree routing; CSM cast/receive; wind; pond reflection. Slices T1–T8. Implementing T1 (asset prep).
 
 - 📋 [3D_E-0034] **Meadow realism D — sky, water & colour polish.**
   A committed CC0 partly-cloudy day HDRI (blue sky + white clouds), a colour-grade pass for vivid natural greens, and water reflection/refraction tuning so the pond convincingly mirrors the treeline. Mood + reflections to match the reference photos. Phase D — final polish once A–C land.
