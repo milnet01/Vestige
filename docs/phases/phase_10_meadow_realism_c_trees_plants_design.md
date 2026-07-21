@@ -152,7 +152,8 @@ FBO, render a mesh from a chosen camera) — but that helper renders a **full-re
   Ortho (not perspective) keeps the impostor parallax-free per frame so the runtime parallax offset is
   the only depth cue — matches the reference technique.
 - **Bake cost:** `N²` cheap mesh draws per species (× the primitive count), once at load.
-  256 × ~8 species ≈ 2k tiles into 128² cells — sub-second; not per-frame.
+  256 tiles × ~8 species × primitive-count ≈ a few thousand small draws into 128² cells — sub-second;
+  not per-frame.
 
 ### 4.3 Runtime impostor render (rewrite `tree_billboard.*`)
 
@@ -164,8 +165,11 @@ Per distant tree (LOD1 bucket), draw a **camera-facing quad** sized to `bounds`:
    the atlas). The enclosing grid triangle gives the **3 nearest frames** and their barycentric blend
    weights.
 3. Sample `albedoAlpha` + `normalDepth` for each of the 3 frames at the frame's cell UVs, applying a
-   **depth-parallax offset** (shift the sample by the view-tangent scaled by sampled depth) so the
-   billboard reads as a solid volume, not a flat card.
+   **depth-parallax offset**: shift the UV along the billboard's view-aligned tangent basis (its
+   screen-right/up axes) by `(sampledDepth − 0.5)` scaled by a `depthScale` — i.e. sample *toward* the
+   viewer for near-surface texels — so the billboard reads as a solid volume, not a flat card.
+   (Parallax correctness is the most artifact-prone step; §7 pins the tangent-basis sign with a
+   reference-pixel check, not eyeballing.)
 4. **Blend** the 3 frames by the barycentric weights; **alpha-clamp** (discard below a threshold) to
    keep silhouettes crisp and hide inter-frame blend fuzz.
 5. **Rotate the blended sampled normal from impostor-local into world space** by the instance's model
@@ -179,15 +183,20 @@ Per distant tree (LOD1 bucket), draw a **camera-facing quad** sized to `bounds`:
 Real glb mesh, **instanced**. **Instance-attrib layout must change** — the placeholder's
 `TreeDrawInstance` uses locations 3–6, but a loaded `Mesh` VAO already occupies **0–5** (vertex
 attribs: pos/normal/color/texCoord/tangent/bitangent) **and 10–11** (bone IDs/weights, enabled
-unconditionally in `Mesh::upload`, `mesh.cpp:209`). The instancing helpers take **6–9** (current
+unconditionally in `Mesh::upload`, `mesh.cpp:210`). The instancing helpers take **6–9** (current
 model mat4, binding 1 — `Mesh::setupInstanceAttributes`, `mesh.cpp:251`) and **12–15** (prev-frame
-model mat4, binding 2 — `setupPrevInstanceAttributes`, `mesh.cpp:273`). So the full reserved map is
-0–5, 6–9, 10–11, 12–15. Reuse `setupInstanceAttributes` for the **model matrix at 6–9 (binding 1)** —
-but its binding-1 stride is hardcoded to `sizeof(glm::mat4)`, so it **cannot** carry extra
-per-instance data. The LOD **alpha** + per-tree **wind phase** therefore ride a **separate
-per-instance VBO on binding point 3**, exposed as a `vec2` at the first free location **16**
-(`setupInstanceAttributes` is the *pattern* for the mat4, not a call that also carries the crossfade
-data). The vertex shader applies **wind sway** (per-tree phase from that attribute,
+model mat4, binding 2 — `setupPrevInstanceAttributes`, `mesh.cpp:273`). So slots **0–15 are fully
+consumed** — and `GL_MAX_VERTEX_ATTRIBS`' guaranteed minimum is 16, which the RX 6600 meets exactly
+(see `phase_10_rendering_design.md:104`), so there is **no 17th slot**. Reuse `setupInstanceAttributes`
+for the **model matrix at 6–9 (binding 1)** — but its binding-1 stride is hardcoded to
+`sizeof(glm::mat4)`, so it **cannot** carry extra per-instance data. The LOD **alpha** + per-tree
+**wind phase** therefore **reclaim the prev-model slots (12–15)**: those are motion-vector attributes
+that **static tree meshes never set up** (`setupPrevInstanceAttributes` is called only on the main
+scene draws in `renderer.cpp`, never for trees). Expose them as a `vec2` at **location 12** on a
+separate per-instance VBO (binding point 3). Trees therefore emit **no motion vectors** (like
+grass/foliage) — logged as a scope cap in §11. (`setupInstanceAttributes` is the *pattern* for the
+mat4, not a call that also carries the crossfade data.) The vertex shader applies **wind sway**
+(per-tree phase from that attribute,
 gentle-capped, calm at wind 0; trunk rigid, canopy sways — sway scaled by height above pivot).
 Fragment: **half-Lambert diffuse + ambient** (albedo from material), **CSM shadow receive**.
 A separate **shadow-caster** pass (reusing the foliage caster pattern, single `u_lightSpaceMatrix`)
@@ -218,9 +227,12 @@ Replace the raw-prop tree `scatterGroup` call with foliage-tree placement:
 
 ### 4.6 Shadows / wind / lighting uniforms (copy verbatim from grass/foliage)
 
-`u_cascadeShadowMap` (sampler2DArray, **unit 3**), `u_cascadeCount`, `u_cascadeSplits[4]`,
-`u_cascadeLightSpaceMatrices[4]`, `u_hasDirectionalLight` + dir/color/intensity, `u_windDirection`
-(vec3) from `EnvironmentForces::getBaseWindDirection()` + `getWindSpeed(pos)`. **Mesa fallback:** both
+The CSM/light uniforms are shared by grass **and** foliage: `u_cascadeShadowMap` (sampler2DArray,
+**unit 3**), `u_cascadeCount`, `u_cascadeSplits[4]`, `u_cascadeLightSpaceMatrices[4]`,
+`u_hasDirectionalLight` + dir/color/intensity. For **wind**, mirror the **foliage** mesh pass —
+`u_windDirection` (vec3), fed from `EnvironmentForces::getBaseWindDirection()` + `getWindSpeed(pos)`
+(the *grass* renderer uses a different pair, `u_windDir` vec2 + `u_windStrength`, because it is a
+separate shader — trees follow foliage, not grass, for wind). **Mesa fallback:** both
 the mesh and impostor shaders must bind a 2DArray to unit 3 every draw — real CSM or
 `sharedSamplerFallback().getSampler2DArray()` — else `GL_INVALID_OPERATION` (the grass no-shadow
 branch is the copy source).
@@ -271,8 +283,8 @@ though it is free.
 
 ### 6.2 Prep (scripted, repeatable — `tools/asset_prep/prepare_trees.py`)
 
-Blender-headless (`blender --background --python`, latest stable LTS — Blender ≥ 4.5 LTS as of 2026)
-per hero asset:
+Blender-headless (`blender --background --python`, whatever the **current stable Blender LTS** is at
+prep time — ≥ 4.5 LTS as of writing; confirm against blender.org before running) per hero asset:
 1. Unzip `.blend.zip` → open `.blend`.
 2. **Decimate** LOD0 to a triangle budget (hero ≈ 20–40k tris; field ≈ 3–10k).
 3. **Downscale** 4K PBR textures to 2K (VRAM; distant trees never resolve 4K).
@@ -289,18 +301,23 @@ lightweight `nature/` Kenney glb, so a fresh clone still runs (just with the car
 
 - **Octahedral parity test** (`tests/test_impostor_octahedral.cpp`, new): a CPU mirror of the GLSL
   **hemi-octahedral** encode/decode (the same hemisphere fold §4.2 and §4.3 use). Asserts (a)
-  `decode(encode(dir)) ≈ dir` roundtrip within tolerance over an upper-hemisphere sweep, and (b) the
+  `decode(encode(dir)) ≈ dir` roundtrip within tolerance over an upper-hemisphere sweep, (b) the
   frame the **baker** places for cell `(i,j)` is the frame the **runtime** selects when viewed from
-  that cell's direction — the CPU/GPU contract pin (Rule 7).
-- **Existing tree/foliage tests stay green** — `TreeInstance` serialization
-  (`treeLayers` fields, `SerializeDeserialize`) is untouched; species index semantics unchanged.
+  that cell's direction, and (c) a **parallax reference-pixel check** — for a known depth + view angle,
+  the CPU mirror computes the expected UV shift and asserts its sign/magnitude match the GLSL, so the
+  tangent-basis sign (§4.3 step 3) is pinned, not eyeballed. The CPU/GPU contract pin (Rule 7).
+- **Existing tree/foliage tests stay green** — the `TreeInstance` round-trip
+  (`FoliageChunk` / `FoliageManager` `SerializeDeserialize`, `test_foliage_chunk.cpp`) is untouched;
+  species-index semantics unchanged.
 - **Visual-test viewpoints** (run `./vestige --visual-test` **from `build/bin/`**,
   `ASAN_OPTIONS=detect_leaks=0`): add `treeline_far` (impostor band), `tree_near` (LOD0 up close),
   `tree_crossfade` (walk through the LOD transition), `hero_tree` (a landmark), `pond_reflection`
   (treeline mirrored). Assert 0 GL errors + visual inspection of captures.
 - **Perf gate:** `--profile-log` Tree-pass read on the RX 6600 at the tree viewpoints; **≤ 2.0 ms GPU
   Tree-pass at High** and **≥ 60 FPS at High** (§9). GPU-pass ms is the true metric (frame-total is
-  polluted by screenshot readback).
+  polluted by screenshot readback). This gate + the visual-test captures are **manual / real-GPU-gated**
+  (RX 6600 dev target, not the llvmpipe CI runner); the parity + serialization unit tests are the
+  CI-enforced part.
 
 ---
 
@@ -325,7 +342,8 @@ lightweight `nature/` Kenney glb, so a fresh clone still runs (just with the car
   a Tree-pass-specific regression is caught even when the frame still clears 16.6 ms.
 - **VRAM budget:** ~32 MB/species at 2048² × 2 RGBA8 maps, **+~33% for mips ≈ 43 MB/species**; the
   **≤ 8-species cap** (§6.1) ⇒ ≈ **340 MB** (fits the 8 GB RX 6600). `TreeQuality` tier scales atlas
-  res/frames down for weaker HW.
+  res/frames down for weaker HW. (The §4.2 RGBA16F-depth escape hatch, if ever taken, roughly doubles
+  the `normalDepth` map and is **out of this 340 MB budget** — a conditional path, not the default.)
 - **Shadow cast** adds LOD0 trees to the cascade depth pass — bounded (near trees only).
 - Budget check happens at the T8 perf gate before ship; if the Tree pass exceeds 2.0 ms (or the frame
   threatens 16.6 ms), the first lever is `lodDistance` (push impostors nearer), then atlas res.
@@ -338,8 +356,8 @@ lightweight `nature/` Kenney glb, so a fresh clone still runs (just with the car
 |-------|------|--------|
 | **T1** | Asset sourcing + prep script (`prepare_trees.py`), populate `nature_local/`, `SOURCES.md`. Download extra CC0 hero trees. | Assets load via `propPath` hook; a smoke scene shows real meshes. |
 | **T2** | `ImpostorBaker` (Framebuffer MRT, hemi-octahedral views, per-cell `glViewport`, tile-padding + mips) + hemi-octahedral map GLSL + **CPU-mirror parity test**. | Parity test green (roundtrip + baker/runtime frame agree); dumped atlas PNG has non-zero alpha coverage per cell; 0 GL errors. |
-| **T3** | Revive `TreeRenderer`: species table (from `TreeSpeciesConfig`), real LOD0 mesh draw (replace placeholder; new instance-attrib layout, mat4 @6–9 + alpha/phase @10), impostor LOD1 draw + runtime hemi-octahedral blend shader (replace procedural billboard), wind + CSM receive + directional light. **Widen `TreeRenderer::render` signature (+ `csm`, `dirLight`) and the `engine.cpp:1643` call site.** | Near mesh + far impostor render; LOD alpha monotonic across the fade band; shadows + light visible on trees; `tree_near`/`treeline_far` captures + 0 GL errors. |
-| **T4** | Meadow placement: route field-tree + hero-tree scatter points through `addTreeDirect`; remove the raw glb tree-prop `scatterGroup`. | Trees appear at former prop spots; LOD switches walking toward/away. |
+| **T3** | Revive `TreeRenderer`: species table (from `TreeSpeciesConfig`), real LOD0 mesh draw (replace placeholder; instance layout: mat4 @6–9 binding 1 + alpha/phase vec2 @12 binding 3), impostor LOD1 draw + runtime hemi-octahedral blend shader (replace procedural billboard), wind + CSM receive + directional light. **Widen `TreeRenderer::render` signature (+ `csm`, `dirLight`) and the `engine.cpp:1643` call site.** | Near mesh + far impostor render; LOD alpha monotonic across the fade band; shadows + light visible on trees; `tree_near`/`treeline_far` captures + 0 GL errors. |
+| **T4** | Meadow placement: route field-tree + hero-tree scatter points through `placeTree`; remove the raw glb tree-prop `scatterGroup`. | Trees appear at former prop spots; LOD switches walking toward/away. |
 | **T5** | LOD0 shadow-caster pass (reuse foliage caster). | Trees cast ground shadows in the `tree_near` capture; shadow bias reuses the foliage caster's value (no new constant); 0 GL errors. |
 | **T6** | Pond reflection: render trees in the water reflection pass (clipPlane). | Treeline mirrors in the pond (`pond_reflection` capture). |
 | **T7** | Flowers cleanup: delete **only** the three `flower_*A.glb` entries from the shared `scatterGroup` call (keep `mushroom_red.glb` + `plant_bush.glb`; keep billboard star-mesh flowers). Replace lily pads with better CC0 model. | Flower draw-call count drops; mushrooms/bushes still present; no double-draw; `pond_reflection` capture + 0 GL errors. |
@@ -352,6 +370,11 @@ Trees = T1–T6, T8 (hero + field). Flowers/lilies = T7. Matches the locked "tre
 ## 11. Risks & scope caps
 
 - **Impostors receive but do not cast shadows** (D4) — logged in the T5 commit + CHANGELOG per Rule 5.
+- **Trees emit no motion vectors** (§4.4) — the VAO's 16-attribute budget is full, so the LOD-crossfade
+  attribute reclaims the prev-model slots 12–15 that TAA/SMAA velocity would use. Trees are treated as
+  static for motion-vector purposes (same as grass/foliage), so fast camera passes near a tree may show
+  minor TAA ghosting. Logged per Rule 5; if tree motion vectors are ever needed, the crossfade data must
+  pack into spare components elsewhere.
 - **Blender dependency for asset prep** — the prep script needs Blender on the prep machine; the
   committed glTF outputs (in `nature_local/`, git-ignored) mean the *engine* never needs Blender.
   If Blender is unavailable, T1 falls back to hand-picked already-glTF CC0 trees (fewer hero options).
@@ -401,4 +424,14 @@ prior-loop briefing. Convergence = zero substantive verified findings._
   impostor-local→world normal rotation for lighting (per-tree yaw); reconciled the 256↔340 MB VRAM
   figure; past-tensed the benchmark-doc supersession note (already amended); `placeTree` (grid-mapping)
   over raw `addTreeDirect`; Blender 4.5 LTS; Tree-pass ≤2 ms echoed into §7/T8; misc citation nits.
-- Loop 3: _pending (cold re-read)_
+- **Loop 3 (2026-07-21)** — same 3 lanes, cold re-read. **CRITICAL 2 · HIGH 1 · MEDIUM 2 · LOW 5 ·
+  INFO 2**, all verified, all fixed. Biggest catch: Loop 2's "location 16" is **out of range** —
+  `GL_MAX_VERTEX_ATTRIBS`' guaranteed minimum is 16 (indices 0–15), and the mesh VAO consumes all of
+  0–15 (verts 0–5, instance mat4 6–9, bones 10–11, prev-model 12–15; cross-checked
+  `phase_10_rendering_design.md:104`). Moved the crossfade attribute to **location 12** by reclaiming
+  the prev-model/motion-vector slots that static trees never set up → trees emit no motion vectors
+  (scope cap §11). Also synced the T3/T4 **slice rows** (still said `@10` / `addTreeDirect`) to the
+  fixed body; corrected the wind uniform (foliage's `u_windDirection`, not grass's `u_windDir`); added
+  a parallax reference-pixel check to the §7 parity test; fixed the `TreeInstance` serialize-test
+  citation; RGBA16F-out-of-budget + Blender-currency + bake-cost nits.
+- Loop 4: _pending (cold re-read)_
