@@ -151,11 +151,14 @@ path (demonstrated in `terrain_system.cpp:38-76`) fills heights with
   data" (`model.h:63`). Reference: `engine.cpp:2418-2423`.
 - Loaders: tinygltf (`.gltf`/`.glb`) + Wavefront `.obj` (verified present).
   Kenney `.glb` are vertex-coloured, embedded-material, no external textures.
-- **Do NOT** route these through `FoliageManager::addTreeDirect` /
-  `TreeRenderer` — that path renders **procedural placeholder tree geometry**
-  (trunk + crown, `tree_renderer.h:65 createPlaceholderTree`; billboards are a
-  separate `createBillboardQuad` path), not authored models — which is why the
-  meadow uses authored `.glb` via `instantiate`.
+- **Historical note (superseded by 3D_E-0033):** this doc originally said "do NOT
+  route trees through `FoliageManager::addTreeDirect` / `TreeRenderer`" because
+  that path drew **procedural placeholder geometry** (trunk + crown,
+  `tree_renderer.h:65 createPlaceholderTree`). That prohibition is **lifted** by
+  `phase_10_meadow_realism_c_trees_plants_design.md` (3D_E-0033), which replaces
+  the placeholder generators with real meshes + baked octahedral impostors — so
+  the meadow *does* route trees through `addTreeDirect` / `TreeRenderer` once that
+  work lands. Authored `.glb` via `instantiate` was the benchmark-scene stopgap.
 
 ### 3.5 CLI plumbing (three sites, mirroring `biblicalDemo`)
 - Arg parse: `app/main.cpp:139` (add `--material-demo` before the unknown-arg

@@ -5,6 +5,12 @@
 **Depends on / reuses:** GPU grass (3D_E-0039, shipped), meadow benchmark scene (3D_E-0027), pond (3D_E-0037), cascaded shadow maps, `EnvironmentForces` wind.
 **Author:** Claude (spec sign-off delegated to cold-eyes convergence per project workflow).
 
+**Contents:** [1 Goal](#1-goal-plain-terms) · [2 Current state](#2-current-state-verified-against-source-2026-07-21) ·
+[3 Decisions](#3-design-decisions--rationale) · [4 Architecture](#4-architecture) · [5 CPU/GPU placement](#5-cpu--gpu-placement-project-rule-7) ·
+[6 Asset pipeline](#6-asset-pipeline--sourcing) · [7 Testing & parity](#7-testing--parity) · [8 Accessibility](#8-accessibility) ·
+[9 Performance](#9-performance-plan-60-fps-hard-floor) · [10 Slices](#10-implementation-slices) · [11 Risks](#11-risks--scope-caps) ·
+[12 Sources](#12-cited-sources) · [13 Cold-eyes log](#13-cold-eyes-loop-log)
+
 ---
 
 ## 1. Goal (plain terms)
@@ -30,7 +36,7 @@ Scope order (locked with user): **trees first**, then flowers + lilies.
   - **LOD/crossfade machinery is real and working** — `render()` buckets each tree by camera
     distance into LOD0-mesh / LOD1-billboard with a complementary-alpha crossfade in
     `[lodDistance, lodDistance+fadeRange]`, then instanced-draws each bucket
-    (`tree_renderer.cpp:100-201`). Public knobs: `lodDistance=50`, `fadeRange=10`, `maxDistance=200`.
+    (`tree_renderer.cpp:85-201`). Public knobs: `lodDistance=50`, `fadeRange=10`, `maxDistance=200`.
   - **But the meshes are placeholders.** LOD0 is a procedural trunk-cylinder + cone-crown
     (`createPlaceholderTree`, `tree_renderer.cpp:204-320`). "LOD1 impostor" is a hand-coded 64×128
     RGBA blob (`generateBillboardTexture`, `:378-433`) — **not** rendered from any mesh, **not**
@@ -42,16 +48,24 @@ Scope order (locked with user): **trees first**, then flowers + lilies.
     plants zero trees into `FoliageChunk::getTrees()`, so `render()` draws nothing there.
 - **Meadow trees today** are plain glb props with **no LOD**: a `scatterGroup` lambda
   (`engine.cpp:2610`) loads Kenney glbs (`tree_oak.glb`, `tree_pineDefaultA/B.glb`, `tree_default.glb`,
-  `tree_fat.glb`, `tree_detailed.glb`) and `Model::instantiate`s one entity per scatter point
-  (`engine.cpp:2668`).
+  `tree_fat.glb`, `tree_detailed.glb`). The tree scatter *call site* is `engine.cpp:2668`; the
+  per-point `Model::instantiate` runs inside the lambda at `engine.cpp:2635`.
 - **Drop-in asset hook exists.** `propPath` lambda (`engine.cpp:2598-2605`) reads
   `assets/models/nature_local/<file>` first, then falls back to `assets/models/nature/<file>`.
   `nature_local/` is git-ignored and does not exist on disk yet — the intended home for large
   realistic assets kept out of the public repo.
 - **Flowers double-drawn:** billboard "star" cross-cards via `FoliageRenderer::createStarMesh`
   (`foliage_renderer.cpp:355`, textures set `engine.cpp:2539-2541`) **and** tiny glb props
-  `flower_purpleA/redA/yellowA.glb` (`engine.cpp:2702-2705`). The glb props are the low-poly offenders.
+  `flower_purpleA/redA/yellowA.glb` (`engine.cpp:2702-2705`). The glb flower props are the low-poly
+  offenders. **Caution:** that same `scatterGroup` call also carries `mushroom_red.glb` +
+  `plant_bush.glb` — T7 must drop only the three `flower_*A.glb` entries, not the whole call.
 - **Lilies** = `lily_large.glb` + `lily_small.glb` on the pond (`engine.cpp:2735-2736`).
+- **Supersession note (cross-doc):** the sibling design doc
+  `phase_10_meadow_benchmark_scene_design.md:154` says *"Do NOT route these through
+  `FoliageManager::addTreeDirect` / `TreeRenderer`"* — because that path drew *procedural placeholder*
+  geometry. **This design lifts that prohibition** by replacing the placeholder generators with real
+  meshes + baked impostors (D1, T3). Once T3 lands, that benchmark-doc line is stale and is amended to
+  point here.
 - **Asset library** (`/mnt/Games/3D Engine Assets/Models/Nature/Trees/`) holds CC0 Poly Haven 4K
   trees as heavy `.blend.zip` originals: `pine_tree_01` (1.3 GB), `fir_tree_01` (913 MB),
   `jacaranda_tree` (558 MB), `island_tree_01–03`, `quiver_tree_01/02`, plus saplings/stumps/roots.
@@ -80,12 +94,16 @@ Scope order (locked with user): **trees first**, then flowers + lilies.
 
 ### 4.1 Species model
 
-A small **species table** owned by `TreeRenderer`, one entry per distinct tree:
+**Reuse the existing config struct.** `struct TreeSpeciesConfig` already exists
+(`engine/environment/foliage_instance.h:67`: `name`, `meshPath`, `billboardTexturePath`, `minScale`,
+`maxScale`, `minSpacing`) — the *authored* description of a species. We reuse it as the bake input
+(dropping `billboardTexturePath`, which the baked impostor replaces) rather than inventing a parallel
+config (project Rule D1). The renderer then holds a *runtime* table of loaded GL handles:
 
 ```
-struct TreeSpecies
+struct TreeSpecies                        // runtime form; built from a TreeSpeciesConfig at load
 {
-    Model*                 lod0Mesh;      // real glb, loaded via ResourceManager (LOD0)
+    Model*                 lod0Mesh;      // real glb (LOD0), loaded via ResourceManager (engine/resource/model.h)
     ImpostorAtlas          impostor;      // baked octahedral atlas (LOD1)
     AABB                   bounds;        // for impostor framing + billboard size
     float                  trunkPivotY;   // base-at-origin correction if needed
@@ -93,37 +111,56 @@ struct TreeSpecies
 std::vector<TreeSpecies>   m_species;     // indexed by TreeInstance::speciesIndex
 ```
 
-`TreeInstance::speciesIndex` (already stored, currently ignored) becomes the index into this table.
-Hero and field trees are just entries with different LOD0 triangle budgets — no type flag needed.
+`TreeSpecies` is a plain runtime holder (bare-member POD, matching `TreeInstance`'s convention, not the
+`m_` member style — it owns no invariants). `TreeInstance::speciesIndex` (already stored, currently
+ignored) becomes the index into this table. Hero and field trees are just entries with different LOD0
+triangle budgets — no type flag needed.
 
 ### 4.2 Octahedral impostor baker (new: `engine/renderer/impostor_baker.{h,cpp}`)
 
-Bakes one atlas per species at load. Reuses `Framebuffer` (MRT) as the render target and the
-`CascadedShadowMap::beginCascade/endCascade` pattern (bind FBO, set per-cell viewport, draw mesh)
-as the render-loop template.
+Bakes one atlas per species at load. Reuses `Framebuffer` (MRT) as the render target. The render
+loop is **structurally similar** to `CascadedShadowMap::beginCascade/endCascade` (bind an offscreen
+FBO, render a mesh from a chosen camera) — but that helper renders a **full-resolution** view into a
+**texture-array layer**, not an atlas sub-rect. The per-tile step is **new code**: for each cell
+`(i,j)` call `glViewport(i·cell, j·cell, cell, cell)` into the single 2D atlas after `bind()`
+(`Framebuffer` has no atlas-tiling helper).
 
 - **Grid:** `N×N` **hemisphere** octahedral views (foliage is rarely seen from below → hemisphere
-  gives more side-view resolution than a full sphere). Default `N=16` (256 frames).
+  gives more side-view resolution than a full sphere). Default `N=16` (256 frames). The bake camera
+  for cell `(i,j)` is placed along the **hemi-octahedral**-decoded direction — the hemisphere fold,
+  **not** the full-sphere octahedral map (§4.3 / §7 use the same fold, or the atlas and runtime
+  disagree).
 - **Atlas:** one texture, `N` cells per side. Default `2048²` → `128²` per frame (ample for
-  ≥`lodDistance` viewing). Two color attachments baked in one pass:
-  - `albedoAlpha` (RGBA8): albedo from `Material::getDiffuseTexture()`; **alpha = coverage** (honors
-    the glb's MASK alpha-cutoff / double-sided, `Material::getAlphaMode/getAlphaCutoff/isDoubleSided`).
-  - `normalDepth` (RGBA8): world-space (impostor-local) normal in RGB, view-depth in A (for parallax
-    + lit-from-sky shading at runtime).
-- **Per-frame camera:** orthographic, framed to `bounds`, oriented along the octahedral-decoded
-  direction for cell `(i,j)`. Ortho (not perspective) keeps the impostor parallax-free per frame so
-  the runtime parallax offset is the only depth cue — matches the reference technique.
-- **Bake cost:** `N²` cheap mesh draws per species, once at load. 256 × ~8 species ≈ 2k draws into
-  128² cells — sub-second; not per-frame.
+  ≥`lodDistance` viewing). Two color attachments baked in one pass (both share the FBO-wide format —
+  `FramebufferConfig::isFloatingPoint` is a single flag for **all** attachments, `framebuffer.h:21`):
+  - `albedoAlpha` (RGBA8): albedo from each primitive's `Material::getDiffuseTexture()`;
+    **alpha = coverage**. A tree glb has several primitives/materials (bark vs leaves) — the baker
+    iterates `Model::m_primitives` and honours **each primitive's own**
+    `Material::getAlphaMode/getAlphaCutoff/isDoubleSided`.
+  - `normalDepth` (RGBA8): impostor-local normal in RGB, view-depth in A. **Depth is 8-bit** (256
+    levels) — a deliberate cap matching the reference impl (wojtekpil bakes an 8-bit `norm_depth`),
+    acceptable for a distant LOD1 impostor. *Escape hatch* if parallax bands on a tall hero tree:
+    move `normalDepth` to a **separate** RGBA16F `Framebuffer` (it cannot share the RGBA8 albedo FBO
+    because the float flag is FBO-wide), baked in a second per-cell pass.
+- **Tile bleed + minification:** each cell gets a **1–2 px padding gutter** (frames don't sample
+  across cell edges at distance), and the atlas is **mip-generated** after bake (octahedral atlases
+  minify hard past `lodDistance`; without mips the interior aliases). Mips cost ~+33% VRAM — folded
+  into §9's budget.
+- **Per-frame camera:** orthographic, framed to `bounds`, oriented along the cell's decoded direction.
+  Ortho (not perspective) keeps the impostor parallax-free per frame so the runtime parallax offset is
+  the only depth cue — matches the reference technique.
+- **Bake cost:** `N²` cheap mesh draws per species (× the primitive count), once at load.
+  256 × ~8 species ≈ 2k tiles into 128² cells — sub-second; not per-frame.
 
 ### 4.3 Runtime impostor render (rewrite `tree_billboard.*`)
 
 Per distant tree (LOD1 bucket), draw a **camera-facing quad** sized to `bounds`:
 
-1. Compute impostor→camera direction in impostor-local space; clamp to hemisphere (`y ≥ 0`).
-2. **Octahedral-encode** that direction to `[0,1]²` grid coords (no trig — the standard
-   octahedral map). The enclosing grid triangle gives the **3 nearest frames** and their
-   barycentric blend weights.
+1. Compute impostor→camera direction in impostor-local space; clamp to the upper hemisphere (`y ≥ 0`).
+2. **Hemi-octahedral-encode** that direction to `[0,1]²` grid coords (no trig — the *hemisphere*
+   octahedral fold, matching the §4.2 bake grid; **not** the full-sphere map, which would waste half
+   the atlas). The enclosing grid triangle gives the **3 nearest frames** and their barycentric blend
+   weights.
 3. Sample `albedoAlpha` + `normalDepth` for each of the 3 frames at the frame's cell UVs, applying a
    **depth-parallax offset** (shift the sample by the view-tangent scaled by sampled depth) so the
    billboard reads as a solid volume, not a flat card.
@@ -134,10 +171,15 @@ Per distant tree (LOD1 bucket), draw a **camera-facing quad** sized to `bounds`:
 
 ### 4.4 LOD0 mesh render (rewrite `tree_mesh.*`)
 
-Real glb mesh, **instanced** (the existing `TreeDrawInstance` VBO: pos/rot/scale/alpha at instance
-attrib locations 3–6). Vertex shader applies **wind sway** (per-tree phase from instance data,
+Real glb mesh, **instanced**. **Instance-attrib layout must change** — the placeholder's
+`TreeDrawInstance` uses locations 3–6, but a real `Mesh` reserves **0–5** for vertex attributes
+(pos/normal/color/texCoord/tangent/bitangent, `mesh.cpp`), so 3–6 would collide. Adopt the engine's
+real-mesh instancing convention `Mesh::setupInstanceAttributes` (`mesh.cpp:251`): a per-instance
+**mat4 model matrix at locations 6–9, binding 1**. That convention has no crossfade slot, so add one
+extra per-instance attribute at **location 10** (same binding) carrying the LOD **alpha** + per-tree
+**wind phase**. The vertex shader applies **wind sway** (per-tree phase from that attribute,
 gentle-capped, calm at wind 0; trunk rigid, canopy sways — sway scaled by height above pivot).
-Fragment: PBR-ish lit (albedo from material, half-Lambert + ambient), **CSM shadow receive**.
+Fragment: **half-Lambert diffuse + ambient** (albedo from material), **CSM shadow receive**.
 A separate **shadow-caster** pass (reusing the foliage caster pattern, single `u_lightSpaceMatrix`)
 renders LOD0 trees into the cascade depth so they cast onto the ground.
 
@@ -151,7 +193,13 @@ Replace the raw-prop tree `scatterGroup` call with foliage-tree placement:
   → `m_foliageManager->addTreeDirect(...)`. (Yaw: ScatterPoint is degrees, TreeInstance is radians.)
 - **Hero trees:** a second sparse scatter group (large `cellSize` ≈ 60, `minDist` ≈ 40, bigger scale,
   clustered off the main sightline) → hero species indices.
-- Trees then render automatically via the existing `engine.cpp:1643` call (chunks already carry them).
+- Placement alone makes the chunks carry trees, so the existing `engine.cpp:1643` call starts drawing
+  them — **but that call passes neither shadow map nor light** (`m_treeRenderer->render(visibleChunks,
+  *m_camera, viewProj, elapsed)`), unlike the foliage call one line above (`:1641`, which passes
+  `csm, dirLight`) and the grass call below. To deliver §4.6's shadow-receive + directional light,
+  **T3 must widen `TreeRenderer::render`'s signature** (add `csm` + `dirLight`, plus wind — mirroring
+  `FoliageRenderer::render` / `GrassRenderer::render`) **and update the `:1643` call site** to pass
+  them. Without that signature change the trees ship unlit and unshadowed.
 
 ### 4.6 Shadows / wind / lighting uniforms (copy verbatim from grass/foliage)
 
@@ -182,6 +230,12 @@ No per-frame CPU↔GPU parity concern beyond the octahedral mapping, which §7 p
 
 ## 6. Asset pipeline & sourcing
 
+### 6.1 Sourcing
+
+**Species budget (VRAM gate):** at most **8 baked species at the default (High) tier** — this is the
+number §9's 256 MB atlas budget rests on, so it is a hard sourcing cap, not a suggestion. More
+variety than 8 → drop per-atlas resolution or share atlases (both `TreeQuality`-tiered, §11).
+
 **Species-coherence gate (D10):** every candidate is filtered for temperate-meadow fit *before*
 prep. A CC0 licence is necessary but not sufficient — a desert or tropical species is rejected even
 though it is free.
@@ -201,7 +255,8 @@ though it is free.
 
 ### 6.2 Prep (scripted, repeatable — `tools/asset_prep/prepare_trees.py`)
 
-Blender-headless (`blender --background --python`) per hero asset:
+Blender-headless (`blender --background --python`, latest stable — Blender ≥ 4.2 LTS at time of
+writing) per hero asset:
 1. Unzip `.blend.zip` → open `.blend`.
 2. **Decimate** LOD0 to a triangle budget (hero ≈ 20–40k tris; field ≈ 3–10k).
 3. **Downscale** 4K PBR textures to 2K (VRAM; distant trees never resolve 4K).
@@ -217,9 +272,10 @@ lightweight `nature/` Kenney glb, so a fresh clone still runs (just with the car
 ## 7. Testing & parity
 
 - **Octahedral parity test** (`tests/test_impostor_octahedral.cpp`, new): a CPU mirror of the GLSL
-  octahedral encode/decode. Asserts (a) `decode(encode(dir)) ≈ dir` roundtrip within tolerance over a
-  hemisphere sweep, and (b) the frame the **baker** places for cell `(i,j)` is the frame the
-  **runtime** selects when viewed from that cell's direction — the CPU/GPU contract pin (Rule 7).
+  **hemi-octahedral** encode/decode (the same hemisphere fold §4.2 and §4.3 use). Asserts (a)
+  `decode(encode(dir)) ≈ dir` roundtrip within tolerance over an upper-hemisphere sweep, and (b) the
+  frame the **baker** places for cell `(i,j)` is the frame the **runtime** selects when viewed from
+  that cell's direction — the CPU/GPU contract pin (Rule 7).
 - **Existing tree/foliage tests stay green** — `TreeInstance` serialization
   (`treeLayers` fields, `SerializeDeserialize`) is untouched; species index semantics unchanged.
 - **Visual-test viewpoints** (run `./vestige --visual-test` **from `build/bin/`**,
@@ -247,11 +303,15 @@ lightweight `nature/` Kenney glb, so a fresh clone still runs (just with the car
   the heaviest single mesh but there are very few and only when close.
 - **Impostor far** (the treeline): one blended camera-facing quad per tree, instanced — cheap.
 - **Bake is one-time at load** (< ~1 s), not per-frame.
-- **VRAM budget:** ~32 MB/species at 2048² × 2 maps; ~8 species ≈ 256 MB (fits the 8 GB RX 6600).
-  `TreeQuality` tier scales atlas res/frames down for weaker HW.
+- **Tree-pass GPU budget:** **≤ 2.0 ms at High on the RX 6600** (context: the shipped Grass pass is
+  ~1.2 ms). This is the numeric target the T8 gate checks — not just the whole-frame 60 FPS floor — so
+  a Tree-pass-specific regression is caught even when the frame still clears 16.6 ms.
+- **VRAM budget:** ~32 MB/species at 2048² × 2 RGBA8 maps, **+~33% for mips ≈ 43 MB/species**; the
+  **≤ 8-species cap** (§6.1) ⇒ ≈ **340 MB** (fits the 8 GB RX 6600). `TreeQuality` tier scales atlas
+  res/frames down for weaker HW.
 - **Shadow cast** adds LOD0 trees to the cascade depth pass — bounded (near trees only).
-- Budget check happens at the T8 perf gate before ship; if the Tree pass threatens the 16.6 ms frame,
-  the first lever is `lodDistance` (push impostors nearer), then atlas res.
+- Budget check happens at the T8 perf gate before ship; if the Tree pass exceeds 2.0 ms (or the frame
+  threatens 16.6 ms), the first lever is `lodDistance` (push impostors nearer), then atlas res.
 
 ---
 
@@ -260,12 +320,12 @@ lightweight `nature/` Kenney glb, so a fresh clone still runs (just with the car
 | Slice | Work | Verify |
 |-------|------|--------|
 | **T1** | Asset sourcing + prep script (`prepare_trees.py`), populate `nature_local/`, `SOURCES.md`. Download extra CC0 hero trees. | Assets load via `propPath` hook; a smoke scene shows real meshes. |
-| **T2** | `ImpostorBaker` (Framebuffer MRT, hemisphere octahedral views) + octahedral map GLSL + **CPU-mirror parity test**. | Parity test green; dumped atlas PNG looks correct (albedo + normal). |
-| **T3** | Revive `TreeRenderer`: species table, real LOD0 mesh draw (replace placeholder), impostor LOD1 draw + runtime octahedral blend shader (replace procedural billboard), wind + CSM receive + directional light. | Near mesh + far impostor render; crossfade smooth; 0 GL errors. |
+| **T2** | `ImpostorBaker` (Framebuffer MRT, hemi-octahedral views, per-cell `glViewport`, tile-padding + mips) + hemi-octahedral map GLSL + **CPU-mirror parity test**. | Parity test green (roundtrip + baker/runtime frame agree); dumped atlas PNG has non-zero alpha coverage per cell; 0 GL errors. |
+| **T3** | Revive `TreeRenderer`: species table (from `TreeSpeciesConfig`), real LOD0 mesh draw (replace placeholder; new instance-attrib layout, mat4 @6–9 + alpha/phase @10), impostor LOD1 draw + runtime hemi-octahedral blend shader (replace procedural billboard), wind + CSM receive + directional light. **Widen `TreeRenderer::render` signature (+ `csm`, `dirLight`) and the `engine.cpp:1643` call site.** | Near mesh + far impostor render; LOD alpha monotonic across the fade band; shadows + light visible on trees; `tree_near`/`treeline_far` captures + 0 GL errors. |
 | **T4** | Meadow placement: route field-tree + hero-tree scatter points through `addTreeDirect`; remove the raw glb tree-prop `scatterGroup`. | Trees appear at former prop spots; LOD switches walking toward/away. |
 | **T5** | LOD0 shadow-caster pass (reuse foliage caster). | Trees cast ground shadows; no shadow acne/peter-panning regressions. |
-| **T6** | Pond reflection: render trees in the water reflection pass (clipPlane). | Treeline mirrors in the pond. |
-| **T7** | Flowers cleanup: remove redundant `flower_*A.glb` props (keep billboard star-mesh flowers). Replace lily pads with better CC0 model. | No double-draw; flowers + lilies look clean. |
+| **T6** | Pond reflection: render trees in the water reflection pass (clipPlane). | Treeline mirrors in the pond (`pond_reflection` capture). |
+| **T7** | Flowers cleanup: delete **only** the three `flower_*A.glb` entries from the shared `scatterGroup` call (keep `mushroom_red.glb` + `plant_bush.glb`; keep billboard star-mesh flowers). Replace lily pads with better CC0 model. | Flower draw-call count drops; mushrooms/bushes still present; no double-draw; `pond_reflection` capture + 0 GL errors. |
 | **T8** | `TreeQuality` tier on `RendererQualitySink` (+ preset→tier test); perf gate on RX 6600 (≥60 FPS High). ROADMAP 3D_E-0033 ✅ + CHANGELOG. | ctest green; 60 FPS High; docs updated. |
 
 Trees = T1–T6, T8 (hero + field). Flowers/lilies = T7. Matches the locked "trees first" order.
@@ -305,7 +365,15 @@ Trees = T1–T6, T8 (hero + field). Flowers/lilies = T7. Matches the locked "tre
 
 ## 13. Cold-eyes loop log
 
-_To be filled as `/cold-eyes` loops run (project Rule 1 + global Rule 14). Loops run cold — no
+_Filled as `/cold-eyes` loops run (project Rule 1 + global Rule 14). Loops run cold — no
 prior-loop briefing. Convergence = zero substantive verified findings._
 
-- Loop 1: _pending_
+- **Loop 1 (2026-07-21)** — 3 lanes (impostor/shaders · renderer/placement · cross-cutting/rules).
+  **CRITICAL 0 · HIGH 3 · MEDIUM 7 · LOW 8 · INFO 3**, all verified against source, all fixed.
+  Substantive fixes: instance-attrib collision (real mesh uses locs 0–5 → mat4 @6–9 + alpha @10);
+  hemi-octahedral fold named (was "standard octahedral map"); `TreeRenderer::render` signature must
+  gain `csm`/`dirLight` (the `:1643` call passed neither); FBO-wide float-format constraint + 8-bit
+  depth cap acknowledged; atlas mips + tile-padding added; reuse existing `TreeSpeciesConfig`;
+  cross-doc conflict with the benchmark-scene doc reconciled (both docs amended); species VRAM cap
+  (≤8) and numeric Tree-pass budget (≤2 ms) pinned; T7 flower-only deletion (keep mushroom/bush).
+- Loop 2: _pending (cold re-read)_
