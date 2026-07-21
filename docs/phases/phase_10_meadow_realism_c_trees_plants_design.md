@@ -351,18 +351,23 @@ medium/small-variant of the same species (D3); **no decimation** (packs are alre
    **Textures shared per species (VRAM-critical).** The **mesh** maps (bark + foliage) are shared by all
    variants of a species; the **billboard** maps are per-variant (each tree's card has its own artist
    pre-rendered texture — §9). To preserve the mesh-map sharing, the finalised tool exports each tree's
-   **geometry only** and points every variant at the pack's **existing single `textures/` folder** by
-   relative URI — it does **not** re-emit textures per variant. **Concretely:** a naïve
+   **geometry only** and points every variant at **one shared per-species `textures/` folder** by relative
+   URI — it does **not** re-emit textures per variant. **Concretely:** a naïve
    `export_scene.gltf(export_format="GLTF_SEPARATE")` **copies** textures next to each output (the exact
-   duplication to avoid); instead pass **`export_keep_originals=True`** (Blender writes `.gltf` + `.bin`
-   referencing the *existing* image files by relative URI, no copy), or post-process the emitted glTFs to
-   rewrite image URIs to one shared folder and delete the duplicates. `ResourceManager`'s path cache then
+   duplication to avoid). Two mechanisms give the shared layout — pick one: **(a)** `export_keep_originals=True`
+   (Blender writes `.gltf` + `.bin` whose image URIs point back at the *source pack's* `textures/` in
+   place — no copy, but the emitted glTFs then depend on the pack folder staying put), or **(b)** the
+   self-contained target: copy the downscaled maps **once** into `gameready/<species>/textures/` and
+   post-process the emitted glTFs to rewrite image URIs to that folder (a one-time copy + rewrite). **(b)
+   is the target layout** (self-contained per-species dir); either way each shared map exists on disk once.
+   `ResourceManager`'s path cache then
    loads each shared mesh map **once** for the whole species (`resource_manager.cpp:40-72` caches `Texture`
    by path; embedded-in-`.glb` images bypass that cache — the T1 prototype hit exactly this, embedding
-   ~20–64 MB per file). **Downscale in place** (the engine uploads textures **uncompressed**, so pixel
-   resolution — not JPG/PNG disk size — sets VRAM; §9): shared **mesh** maps to **1 K** (source is **1 K–4 K**:
-   pine `Bark` 1024×2048 / `Clusters` 2048², but **fir/birch mesh maps are 4096²** — a real 4K→1K
-   re-encode), per-variant **billboard** maps to **512²** (they are the distant
+   ~20–64 MB per file). **Downscale** (the engine uploads textures **uncompressed**, so pixel
+   resolution — not JPG/PNG disk size — sets VRAM; §9): shared **mesh** maps to **≤ 1024 on the longest
+   edge** (source is **1 K–4 K**: pine `Bark` 1024×2048 / `Clusters` 2048²; fir/birch mesh maps **up to
+   4096²** — fir bark base/normal are 2048×4096, birch's four maps 4096² — a real 4K→1K re-encode),
+   per-variant **billboard** maps to **512²** (they are the distant
    card). Re-encode JPG/PNG (no upscaling). The classifier matches size words case-insensitively
    (`[A-Za-z]+`, so `Acer_Sapling_*` is not dropped).
 
@@ -385,7 +390,9 @@ and the full credit line in `THIRD_PARTY_NOTICES.md` (the same mechanism the sib
 and where a future in-game credits screen would source its text — the engine has no credits UI today).
 The `SOURCES_sketchfab.md` manifest beside the downloads (§6.2) is a convenience record, **not** the
 tracked obligation. T7's checklist verifies the `ASSET_LICENSES.md` + `THIRD_PARTY_NOTICES.md` rows
-exist.
+exist. (`ASSET_LICENSES.md`'s charter is assets that *ship* in the public repo; the LOLIPOP packs are
+git-ignored today, so the row is a **forward record** — it takes effect when the trees ship via a
+release / the assets repo — with a one-line note saying so, so the file's scope stays honest.)
 
 ---
 
@@ -400,12 +407,13 @@ exist.
 - **Split-tool asset check** (**dev-machine local gate**, not CI — the `gameready/` assets live in
   git-ignored `nature_local/` and are absent from a fresh CI clone, so a CI test could only vacuously
   skip): a small script asserts each `gameready/<species>/` glTF loads as a valid `Model` with **≥2
-  materials** and its **trunk-base bound `y ≈ 0`** (the recentre held); that a species' variants
-  share their **mesh** texture files — the shared **mesh**-map count per species is bounded (≲6), while
-  billboard maps are legitimately per-variant (§9); **and that every uploaded map is downscaled — mesh
-  maps ≤ 1 K, billboard maps ≤ 512²** (the §9 budget rests on the downscale as much as the sharing; the
-  4K-source fir/birch maps would otherwise upload ~16× the pixels and pass a count-only check) — guarding
-  the §6.2 VRAM contract mechanically.
+  materials** (scoped to the **mesh** `_lod0`/`_lod2` glTFs — a `_billboard.gltf` legitimately has **1**
+  material, so the ≥2 check excludes it) and its **trunk-base bound `y ≈ 0`** (the recentre held); that a
+  species' variants share their **mesh** texture files — the shared **mesh**-map count per species is
+  bounded (≲6), while billboard maps are legitimately per-variant (§9); **and that every uploaded map is
+  downscaled — mesh maps ≤ 1024 on the longest edge, billboard maps ≤ 512²** (the §9 budget rests on the
+  downscale as much as the sharing; the 4K-source fir/birch maps would otherwise upload ~16× the pixels
+  and pass a count-only check) — guarding the §6.2 VRAM contract mechanically.
 - **Visual-test viewpoints** (run `./vestige --visual-test` **from `build/bin/`**,
   `ASAN_OPTIONS=detect_leaks=0`): add `treeline_far` (billboard band), `tree_near` (LOD0 up close, at
   correct real-world scale), `tree_crossfade` (walk through the two LOD transitions), `hero_tree` (a
@@ -447,9 +455,10 @@ exist.
   no BC/KTX2 path), so a map's VRAM cost is ~1.33 × w·h·4 bytes **independent of its JPG/PNG disk size**.
   A 1 K RGBA map ≈ 4 MiB + ~33 % mips ≈ **5.3 MiB**; a 512² map ≈ **1.3 MiB**. Two texture tiers with
   **different sharing** (verified against the pine pack's glTF `images`):
-  - **Mesh maps are SHARED per species** — up to ~6 maps (bark + foliage × diffuse/normal/ARM; some
-    species carry fewer — e.g. birch has 4, no metallic-roughness), one set for all variants of a
-    species. At **1 K** (§6.2): ≲30 MiB/species × **4 species** ≈ **~110–120 MiB**.
+  - **Mesh maps are SHARED per species** — up to ~6 maps (bark + foliage × baseColor/normal/metallic-
+    roughness — glTF metal-rough workflow, not a packed ARM texture; some species carry fewer — e.g.
+    birch has 4, no metallic-roughness), one set for all variants of a species. At **1 K** (§6.2):
+    ≲32 MiB/species × **4 species** ≈ **~110–120 MiB**.
   - **Billboard maps are PER-VARIANT** (each tree's card has its own artist pre-rendered baseColor +
     normal — they do **not** share). At **512²** (§6.2, distant card): 2 maps × 1.3 MiB × the
     billboard-bearing curated variants (**≈ 8–10**; birch has no billboard) ≈ **~25 MiB** (a safe
@@ -458,7 +467,7 @@ exist.
     headroom, below v1's 340 MiB atlas. (Three axes: mesh textures scale with **4 species**; billboard
     textures + mesh buffers with the **8–12 distinct variants**.) **Shared mesh textures are
     load-bearing** — embedding per file (T1's prototype) multiplies the mesh-map cost by the variant
-    count. Levers if it grows: drop the ARM map to constants, shrink billboards further, or add a BC7
+    count. Levers if it grows: drop the metallic-roughness map to constants, shrink billboards further, or add a BC7
     upload path (~4× cut). `TreeQuality` scales LOD switch distances, not texture size.
 - **Shadow cast** adds LOD0 trees to the cascade depth pass — bounded (near trees only).
 - Budget check happens at the T7 perf gate before ship; if the Tree pass exceeds 2.0 ms (or the frame
@@ -471,7 +480,7 @@ exist.
 
 | Slice | Work | Verify |
 |-------|------|--------|
-| **T1** | Asset prep — `fetch_sketchfab_trees.py` (done) + `split_tree_packs.py` finalised: per-tree LOD0 + LOD2 + billboard glTFs (glTF-separate, shared textures), recentred base-at-origin, **shared per-species external textures** (§6.2), curated ≈ 8–12 distinct variants, sapling-name fix. Scripts committed; `SOURCES_sketchfab.md` written in the library (§6.2). | Each `gameready/<species>/` glTF loads as a `Model` (≥2 materials, base `y ≈ 0`); a species' variants share their **mesh** texture files; assets resolve via the `propPath`/`nature_local` hook. |
+| **T1** | Asset prep — `fetch_sketchfab_trees.py` (done) + `split_tree_packs.py` finalised: per-tree LOD0 + LOD2 + billboard glTFs (glTF-separate, shared textures), recentred base-at-origin, **shared per-species external textures** (§6.2), curated ≈ 8–12 distinct variants, sapling-name fix. Scripts committed; `SOURCES_sketchfab.md` written in the library (§6.2). | Each `gameready/<species>/` glTF loads as a `Model` (mesh `_lod0`/`_lod2` ≥2 materials; billboard 1; base `y ≈ 0`); a species' variants share their **mesh** texture files; assets resolve via the `propPath`/`nature_local` hook. |
 | **T2** | Revive `TreeRenderer`: species table (from `TreeSpeciesConfig` → LOD0/mid/billboard `Model*`), flatten node transforms into vertices at load, per-material **LOD0 + mid mesh draw** + **billboard draw** (replace both placeholder generators; instance layout: mat4 @6–9 binding 1 + crossfade-alpha/phase `vec2` @12 binding 3), 3-bucket LOD distance-switch + two crossfade bands, wind + CSM receive + directional light. **Widen `TreeRenderer::render` signature (+ `csm`, `dirLight`, wind), update the `engine.cpp:1643` call site, wrap it in its own `beginPass("Tree")` GPU-timer.** | Near mesh + mid mesh + far billboard render; crossfade alpha monotonic across both fade bands; shadows + light visible on trees; a **"Tree" GPU-pass appears in `--profile-log`**; `tree_near`/`tree_crossfade`/`treeline_far` captures + 0 GL errors. |
 | **T3** | Meadow placement: route field-tree (medium/small variants) + hero-tree (large variants) scatter points through `placeTree`; remove the raw glb tree-prop `scatterGroup`; **placement scale tuned to the packs' real-world metres** (≈ 0.8–1.5, not Kenney's 1.3–2.4). | Trees appear at former prop spots at believable size; LOD switches walking toward/away. |
 | **T4** | LOD0 (+ mid) shadow-caster pass (reuse foliage caster). | Trees cast ground shadows in the `tree_near` capture; shadow bias reuses the foliage caster's value (no new constant); 0 GL errors. |
