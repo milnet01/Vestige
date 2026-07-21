@@ -98,7 +98,8 @@ Scope order (locked with user): **trees first**, then flowers + lilies.
 (`engine/environment/foliage_instance.h:67`: `name`, `meshPath`, `billboardTexturePath`, `minScale`,
 `maxScale`, `minSpacing`) — the *authored* description of a species. We reuse it as the bake input
 (dropping `billboardTexturePath`, which the baked impostor replaces) rather than inventing a parallel
-config (project Rule D1). The renderer then holds a *runtime* table of loaded GL handles:
+config (decision D1; project Rule 3, reuse-before-rewrite). The renderer then holds a *runtime* table
+of loaded GL handles:
 
 ```
 struct TreeSpecies                        // runtime form; built from a TreeSpeciesConfig at load
@@ -146,10 +147,14 @@ FBO, render a mesh from a chosen camera) — but that helper renders a **full-re
     move `normalDepth` to a **separate** RGBA16F `Framebuffer` (it cannot share the RGBA8 albedo FBO
     because the float flag is FBO-wide), baked in a second per-cell pass.
 - **Tile bleed + minification:** each cell gets a **1–2 px padding gutter interior to its 128² cell**
-  (content ≈124–126²; frames don't sample across cell edges at distance), and the atlas is
-  **mip-generated** after bake (octahedral atlases
-  minify hard past `lodDistance`; without mips the interior aliases). Mips cost ~+33% VRAM — folded
-  into §9's budget.
+  (content ≈124–126²; frames don't sample across cell edges), and the atlas is **mip-generated** after
+  bake (octahedral atlases minify hard past `lodDistance`; without mips the interior aliases). A fixed
+  1–2 px gutter is consumed after ~1–2 mip reductions, so the impostor shader **clamps the sampled mip
+  level** (`textureLod` bias / `GL_TEXTURE_MAX_LOD`) to never sample a level where the gutter has
+  vanished and neighbouring frames would bleed — trading a little extra minification aliasing (the
+  alpha-clamp mitigates it) for no cross-frame bleed. The **depth channel is sampled at/near the base
+  mip** for the parallax step (mip-averaging softens the depth cue). Mips cost ~+33% VRAM — folded into
+  §9's budget.
 - **Per-frame camera:** orthographic, framed to `bounds`, oriented along the cell's decoded direction.
   Ortho (not perspective) keeps the impostor parallax-free per frame so the runtime parallax offset is
   the only depth cue — matches the reference technique.
@@ -190,11 +195,18 @@ mildly flattened distant reflected impostor is an acceptable degradation.
 
 ### 4.4 LOD0 mesh render (rewrite `tree_mesh.*`)
 
-**Flatten node transforms at load.** A tree glb is a `Model` of several `ModelPrimitive`s, each on a
-`ModelNode` with its own TRS transform (`model.h`). A single per-instance mat4 (below) can't express
-those per-node transforms, so at load the baker/loader **pre-multiplies each primitive's node-world
-transform into its vertices** — flattening the hierarchy to one instanced vertex stream per species.
-LOD0 is then a single instanced draw and the per-instance mat4 is the only transform applied at draw.
+**Flatten node transforms at load, group by material.** A tree glb is a `Model` of several
+`ModelPrimitive`s, each referenced by a `ModelNode` (via `ModelNode::primitiveIndices`) carrying its
+own TRS transform (`model.h`). A single per-instance mat4 (below) can't express those per-node
+transforms, so at load the loader walks **nodes → primitiveIndices** and **pre-multiplies each node's
+world transform into that primitive's vertices** (one flattened copy per node-reference, so a
+multiply-referenced primitive is not dropped). The flattened geometry is then **grouped by material**:
+a real tree has ≥2 materials (opaque bark, alpha-cutout double-sided leaves), so LOD0 emits **one
+instanced draw per material group**, each honouring its own
+`Material::getAlphaMode/getAlphaCutoff/isDoubleSided` — the same per-primitive material handling §4.2
+uses for the bake. (The near LOD0 view is the highest-fidelity one; it must not collapse leaf-cutout
+into bark-opaque.) The per-instance mat4 is the only *transform* applied at draw; the per-material
+split is a fixed, small draw count per species.
 
 Real glb mesh, **instanced**. **Instance-attrib layout must change** — the placeholder's
 `TreeDrawInstance` uses locations 3–6, but a loaded `Mesh` VAO already occupies **0–5** (vertex
@@ -236,15 +248,15 @@ Replace the raw-prop tree `scatterGroup` call with foliage-tree placement:
   clustered off the main sightline) → hero species indices.
 - Placement alone makes the chunks carry trees, so the existing `engine.cpp:1643` call starts drawing
   them — **but that call passes neither shadow map nor light** (`m_treeRenderer->render(visibleChunks,
-  *m_camera, viewProj, elapsed)`), unlike the foliage call one line above (`:1641`, which passes
+  *m_camera, viewProj, elapsed)`), unlike the foliage call just above (`:1641–1642`, which passes
   `csm, dirLight`) and the grass call below. To deliver §4.6's shadow-receive + directional light,
   **T3 must widen `TreeRenderer::render`'s signature** (add `csm` + `dirLight`, plus wind — mirroring
   `FoliageRenderer::render` / `GrassRenderer::render`) **and update the `:1643` call site** to pass
   them. Without that signature change the trees ship unlit and unshadowed.
 - **Give trees their own GPU-timer pass.** The `:1643` tree render currently sits *inside* the shared
-  `beginPass("Foliage")` bracket (opened `engine.cpp:1636`), so `--profile-log` has no separate "Tree"
+  `beginPass("Foliage")` bracket (opened `engine.cpp:1633`), so `--profile-log` has no separate "Tree"
   number to gate §9's ≤2 ms budget against. T3 wraps the tree render in its own
-  `beginPass("Tree")/endPass()` (mirroring the grass `beginPass("Grass")` at `:1653`) so the §7/§9/T8
+  `beginPass("Tree")/endPass()` (mirroring the grass `beginPass("Grass")` at `:1652`) so the §7/§9/T8
   Tree-pass metric is measurable.
 
 ### 4.6 Shadows / wind / lighting uniforms (copy verbatim from grass/foliage)
@@ -270,8 +282,8 @@ branch is the copy source).
 | Impostor atlas bake (render mesh → atlas) | **GPU**, orchestrated CPU-side, once at load | Per-pixel rasterization into texture. |
 | Per-frame LOD bucketing + crossfade alpha | **CPU**, per frame | Per-tree distance test; sparse (thousands, not millions) — cheaper than a GPU round-trip. Already how `TreeRenderer` works. |
 | Mesh draw, wind sway, lighting, shadow sampling | **GPU** (vertex/fragment) | Per-vertex / per-pixel. |
-| Octahedral frame select + 3-frame blend + parallax | **GPU** (fragment) | Per-pixel. |
-| Octahedral encode/decode **contract** | **Dual** (GLSL runtime + CPU mirror) | Bake-camera placement (CPU) and runtime frame lookup (GLSL) must agree — pinned by a parity test (§7). |
+| Hemi-octahedral frame select + 3-frame blend + parallax | **GPU** (fragment) | Per-pixel. |
+| Hemi-octahedral encode/decode **contract** | **Dual** (GLSL runtime + CPU mirror) | Bake-camera placement (CPU) and runtime frame lookup (GLSL) must agree — pinned by a parity test (§7). |
 
 No per-frame CPU↔GPU parity concern beyond the octahedral mapping, which §7 pins.
 
@@ -304,10 +316,10 @@ though it is free.
   placement density (D3), not by species.
 - **Field trees:** mid-weight realistic CC0 glTF **temperate** species — the already-unpacked
   `low_poly_tree_scene_free` as a baseline, expanded with CC0 game-ready packs (Poly Haven /
-  Quaternius / Kenney where realistic *and* temperate). D10's broadleaf roster (oak, birch, maple,
-  willow, beech, spruce) beyond the named on-disk/oak picks is sourced **ad-hoc from those CC0 packs
-  at T1**, filtered by the coherence gate. Attribution not required for CC0; any non-CC0 pick is
-  flagged before use.
+  Quaternius / Kenney where realistic *and* temperate). D10's temperate roster beyond the named
+  on-disk/oak picks — the broadleaves (birch, maple, willow, beech) plus the spruce conifer — is
+  sourced **ad-hoc from those CC0 packs at T1**, filtered by the coherence gate. Attribution not
+  required for CC0; any non-CC0 pick is flagged before use.
 - **Lily pads:** a better CC0 lily/water-plant model to replace `lily_{large,small}.glb`.
 
 ### 6.2 Prep (scripted, repeatable — `tools/asset_prep/prepare_trees.py`)
@@ -356,7 +368,8 @@ lightweight `nature/` Kenney glb, so a fresh clone still runs (just with the car
 - **Legibility via value + normal, not hue** — trees read by silhouette/shading, colour-blind safe.
 - **Impostor alpha-clamp** kills shimmer/crawl on distant foliage edges (motion-comfort).
 - Tree density is bounded by the meadow scatter params (no seizure-risk flicker from over-dense
-  alpha layers at distance — the impostor is one blended quad, not stacked cards).
+  alpha layers at distance — the impostor is one blended quad, not stacked cards). Checkable via the
+  `treeline_far` motion capture against the WCAG 2.3.1 ≤3-flashes/s threshold.
 
 ---
 
@@ -475,4 +488,12 @@ prior-loop briefing. Convergence = zero substantive verified findings._
   (the ≤2 ms budget was unmeasurable inside the shared Foliage pass); T7 gains a **lily-replaced
   acceptance check**; conifer hero-vs-edge role reconciled; parallax basis pinned in the §7 test;
   materialIndex −1 fallback, 128²-gutter, Blender-currency, and §11 slot-precision nits.
-- Loop 5: _pending (cold re-read)_
+- **Loop 5 (2026-07-21)** — same 3 lanes, cold re-read. **CRITICAL 0 · HIGH 1 · MEDIUM 1 · LOW 7 ·
+  INFO 3**, all verified, all fixed. Renderer + cross-cutting lanes came back **clean** (0 crit/high/med;
+  no body-vs-slice contradiction; all numbers consistent) — only label/line-cite nits. Impostor lane
+  found one fix-introduced HIGH: Loop 4's "flatten to one instanced draw" would render a multi-material
+  tree (bark + leaf-cutout) with a single bound material → LOD0 now emits **one instanced draw per
+  material group** (mirroring §4.2's per-primitive bake); plus a MEDIUM — the fixed atlas gutter doesn't
+  survive the full mip chain, so the shader now **clamps the sampled mip level**. Nits: §5 "hemi-"
+  prefix, spruce-not-broadleaf, Rule-3-not-D1 label, `beginPass` line cites (1633/1652), WCAG-2.3.1
+  falsification anchor.
