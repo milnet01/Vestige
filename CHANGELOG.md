@@ -22,6 +22,36 @@ may change any interface without notice.
 
 ## [Unreleased]
 
+### 2026-07-21 Added — GPU grass is now lit, shadowed, and wind-swayed (3D_E-0039, G4)
+
+The GPU grass field went from a flat green gradient to real shading and motion.
+Each blade now catches the sun with soft directional light and a backlit glow
+when the sun sits behind it, darkens toward its base (inter-blade occlusion) and
+brightens at the tip, and drifts a touch in colour per tussock so no two clumps
+read identically — legibility carried by brightness and shape, not hue, so it
+stays colour-blind safe. The grass receives the scene's real sun shadows (a tree
+or wall now shades the grass beneath it), reusing the same cascaded-shadow path
+as the billboard foliage so the two share one look. And it sways in the shared
+wind (`EnvironmentForces`): the whole tussock leans together, each blade offsets
+a little, and a faster gust ripples through — bending the blade from a fixed root
+to a tip that moves most. A windless meadow (the default) stays perfectly still,
+and the sway is gently capped so it never turns into a storm (accessibility
+reduced-motion floor).
+
+- **Shading (grass.frag.glsl).** Half-Lambert directional light on a
+  vertical-biased blade normal + backlit translucency + height-based ambient
+  occlusion + per-clump/per-blade tint, mirroring `foliage.frag.glsl`.
+- **Shadow receive.** 4-sample rotated-Poisson PCF against the cascaded shadow
+  map, bound in `GrassRenderer::render` exactly as `FoliageRenderer` does
+  (including the Mesa 1×1 `sampler2DArray` fallback when shadows are off).
+- **Wind (grass.vert.glsl).** The vertex shader bends the blade's Bézier control
+  points in the wind direction; `engine.cpp` feeds it the camera-sampled shared
+  wind speed/direction and elapsed time.
+- **Workaround/scope cap (project Rule 5).** Grass **receives** shadows but does
+  **not cast** them in v1 — a deliberate limit to keep the shadow pass cheap.
+  Casting is deferred (candidate for a later slice). No iteration caps or hidden
+  clamps beyond the documented gentle wind cap.
+
 ### 2026-07-21 Fixed — Meadow pond is now a still mirror in calm air (ripples only when windy)
 
 The pond rippled constantly regardless of conditions, because its wave and

@@ -41,7 +41,17 @@ uniform float u_lodMidFrac;    // blades kept in the mid band
 uniform float u_lodFarFrac;    // blades kept far out
 uniform float u_lodRankBand;   // rank-space softness of the per-blade cutoff
 
-out vec3 v_color;
+// --- G4 wind + shading passthrough (§5.4) ---
+uniform mat4  u_view;          // for the view-space depth used to pick a shadow cascade
+uniform float u_time;          // seconds — animates the wind sway
+uniform vec2  u_windDir;       // normalised world-XZ wind direction (env forces)
+uniform float u_windStrength;  // env wind speed (m/s); 0 = dead calm (meadow default)
+
+out vec3  v_worldPos;   // world-space fragment position (shadow lookup + view dir)
+out vec3  v_normal;     // vertical-biased blade normal (§5.4 — legibility by value)
+out vec3  v_tint;       // base green × per-clump tint drift × per-blade value
+out float v_viewDepth;  // view-space depth (cascade select)
+out float v_heightAO;   // 0 at root → 1 at tip (inter-blade AO)
 
 // ---------------------------------------------------------------------------------------
 // Clump field — GLSL twin of Vestige::grassClump (grass_clump.h). Integer bit-hash so the
@@ -212,13 +222,28 @@ void main()
     float facing  = (dot(mixedDir, mixedDir) < 1.0e-8) ? b.facingAngle
                                                        : atan(mixedDir.y, mixedDir.x);
 
-    // --- quadratic Bézier ribbon (mirror of grass_blade.h) ---
+    // --- quadratic Bézier ribbon (mirror of grass_blade.h) + G4 wind bend (§5.4) ---
     vec3 up  = vec3(0.0, 1.0, 0.0);
     vec3 dir = vec3(cos(facing), 0.0, sin(facing));
 
-    vec3 p0 = b.rootPos;
+    vec3 p0 = b.rootPos;                    // root stays anchored to the ground
     vec3 p1 = p0 + up * height;
     vec3 p2 = p1 + dir * (height * lean);
+
+    // Wind sway (§5.4): a gentle, height-scaled, capped push in the wind direction that
+    // bends the blade — P0 fixed, P1 a little, the tip (P2) most. Three octaves compose:
+    // the whole tussock sways together (per-clump cl.phase), each blade offsets a touch
+    // (per-blade hash), and a faster gust ripples through. windStrength 0 ⇒ dead calm, so
+    // the meadow's default no-wind scene leaves the field still (§11 reduced-motion floor).
+    const float WIND_FREQ = 1.6;
+    float swayM    = 0.05 * min(u_windStrength, 8.0) * height;   // metres, gentle-capped
+    float bladeU   = grassU32ToUnit(b.hash);
+    float clumpS   = sin(u_time * WIND_FREQ + cl.phase);
+    float bladeS   = sin(u_time * WIND_FREQ * 1.7 + bladeU * TAU);
+    float gustS    = 0.2 * sin(u_time * WIND_FREQ * 3.1 + cl.phase * 2.0);
+    vec2  windPush = u_windDir * (swayM * (0.7 * clumpS + 0.3 * bladeS + gustS));
+    p1.xz += windPush * 0.35;
+    p2.xz += windPush;
 
     float t = float(row) / float(N);
     float u = 1.0 - t;
@@ -230,9 +255,25 @@ void main()
 
     vec3 pos = curve + (float(side) * halfW) * widthAxis;
 
-    // G1/G2 flat-lit: a root→tip green gradient so the blades read as distinct 3-D shapes
-    // before real shading (with per-clump tint drift) lands in G4.
-    v_color = mix(vec3(0.04, 0.16, 0.02), vec3(0.30, 0.60, 0.16), t);
+    // Blade normal (§5.4): the ribbon's face normal (cross of the along-blade tangent and
+    // the width axis) biased strongly upward, so grass reads as lit-from-sky yet keeps a
+    // gentle per-facing variation — legibility carried by value/normal, not hue (§11). The
+    // tiny up-nudge keeps the tangent non-zero on a fully LOD-faded (height→0) blade so its
+    // degenerate verts never normalize(0)→NaN.
+    vec3 tangent = 2.0 * u * (p1 - p0) + 2.0 * t * (p2 - p1) + up * 1.0e-4;
+    vec3 faceN   = cross(normalize(tangent), widthAxis);
+    v_normal     = normalize(faceN + up * 2.0);
+
+    // Tint: root→tip green, drifted per-tussock (cl.tint ∈ [-1,1], value-only so it stays
+    // colour-blind safe) and jittered a hair per blade so no two read identically.
+    vec3 tint = mix(vec3(0.05, 0.18, 0.03), vec3(0.34, 0.55, 0.18), t);
+    tint *= (1.0 + cl.tint * 0.12 * s);
+    tint *= (0.9 + 0.2 * grassU32ToUnit(b.hash ^ 0x55u));
+    v_tint = tint;
+
+    v_worldPos  = pos;
+    v_viewDepth = -(u_view * vec4(pos, 1.0)).z;
+    v_heightAO  = pow(t, 1.2);
 
     gl_Position = u_viewProjection * vec4(pos, 1.0);
 }

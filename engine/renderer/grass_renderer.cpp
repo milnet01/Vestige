@@ -10,6 +10,8 @@
 #include "core/logger.h"
 #include "environment/grass_placement.h"   // predicates + makeGrassBlade (+ grass_clump hashes)
 #include "environment/terrain.h"
+#include "renderer/cascaded_shadow_map.h"   // CSM shadow-receive binding (G4)
+#include "renderer/sampler_fallback.h"      // Mesa sampler2DArray fallback (G4)
 #include "utils/frustum.h"                  // extractFrustumPlanes + isAabbInFrustum (reuse)
 
 #include <algorithm>
@@ -185,7 +187,14 @@ void GrassRenderer::uploadBlades(const std::vector<GrassBlade>& blades)
                       blades.data(), GL_STATIC_DRAW);
 }
 
-void GrassRenderer::render(const glm::mat4& viewProjection, const glm::vec3& cameraPos)
+void GrassRenderer::render(const glm::mat4& viewProjection,
+                           const glm::mat4& view,
+                           const glm::vec3& cameraPos,
+                           float time,
+                           const glm::vec2& windDir,
+                           float windStrength,
+                           const DirectionalLight* dirLight,
+                           CascadedShadowMap* csm)
 {
     m_drawnChunks = 0;
     if (!m_initialized || m_bladeCount == 0 || m_shader.getId() == 0)
@@ -205,6 +214,59 @@ void GrassRenderer::render(const glm::mat4& viewProjection, const glm::vec3& cam
     m_shader.setVec3("u_cameraPos", cameraPos);
     m_shader.setFloat("u_clumpCellSize", m_config.clumpScale);
     m_shader.setFloat("u_clumpStrength", m_config.clumpStrength);
+
+    // --- G4 wind (§5.4): the VS bends each blade in the wind direction; strength 0 ⇒ calm.
+    m_shader.setMat4("u_view", view);
+    m_shader.setFloat("u_time", time);
+    m_shader.setVec2("u_windDir", windDir);
+    m_shader.setFloat("u_windStrength", windStrength);
+
+    // --- G4 shading (§5.4): directional light + CSM shadow RECEIVE, mirroring FoliageRenderer
+    // so the GPU grass and billboard foliage share one sun/shadow look. Grass does not cast.
+    const bool hasShadows = (csm != nullptr && dirLight != nullptr);
+    m_shader.setBool("u_hasShadows", hasShadows);
+
+    if (dirLight != nullptr)
+    {
+        m_shader.setBool("u_hasDirectionalLight", true);
+        m_shader.setVec3("u_lightDirection", dirLight->direction);
+        m_shader.setVec3("u_lightColor", dirLight->diffuse);
+        m_shader.setVec3("u_ambientColor", dirLight->ambient);
+    }
+    else
+    {
+        m_shader.setBool("u_hasDirectionalLight", false);
+    }
+
+    if (hasShadows)
+    {
+        csm->bindShadowTexture(3);
+        m_shader.setInt("u_cascadeShadowMap", 3);
+        const int cascadeCount = csm->getCascadeCount();
+        m_shader.setInt("u_cascadeCount", cascadeCount);
+        static const char* splitNames[4] = {
+            "u_cascadeSplits[0]", "u_cascadeSplits[1]",
+            "u_cascadeSplits[2]", "u_cascadeSplits[3]"
+        };
+        static const char* matNames[4] = {
+            "u_cascadeLightSpaceMatrices[0]", "u_cascadeLightSpaceMatrices[1]",
+            "u_cascadeLightSpaceMatrices[2]", "u_cascadeLightSpaceMatrices[3]"
+        };
+        for (int i = 0; i < cascadeCount && i < 4; ++i)
+        {
+            m_shader.setFloat(splitNames[i], csm->getCascadeSplit(i));
+            m_shader.setMat4(matNames[i], csm->getLightSpaceMatrix(i));
+        }
+    }
+    else
+    {
+        // Mesa fallback: u_cascadeShadowMap is a sampler2DArray. If nothing of that type is
+        // bound to its unit, the sampler defaults to unit 0 and Mesa fails the draw with
+        // GL_INVALID_OPERATION (see sampler_fallback.h). Bind a 1×1 array to unit 3.
+        glBindTextureUnit(3, sharedSamplerFallback().getSampler2DArray());
+        m_shader.setInt("u_cascadeShadowMap", 3);
+        m_shader.setInt("u_cascadeCount", 0);
+    }
     // LOD schedule — constant across chunks; the shader fades each blade per its distance.
     m_shader.setFloat("u_lodNearMid", m_lodBands.nearMid);
     m_shader.setFloat("u_lodMidFar", m_lodBands.midFar);

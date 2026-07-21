@@ -1650,7 +1650,19 @@ void Engine::run()
                 if (m_grassRenderer && m_grassRenderer->hasField())
                 {
                     m_profiler.getGpuTimer().beginPass("Grass");
-                    m_grassRenderer->render(viewProj, m_camera->getPosition());
+                    // Re-fetch light + shadow map (the foliage block's locals are scoped to
+                    // its !visibleChunks.empty() branch above). Sample the shared wind at the
+                    // camera so the GPU grass sways with the same EnvironmentForces as the
+                    // billboard foliage — meadow default wind 0 ⇒ still field.
+                    CascadedShadowMap* grassCsm = m_renderer->getCascadedShadowMap();
+                    const DirectionalLight* grassLight =
+                        m_renderData.hasDirectionalLight ? &m_renderData.directionalLight : nullptr;
+                    const glm::vec3 windDir3 = m_environmentForces->getBaseWindDirection();
+                    const float grassWind = m_environmentForces->getWindSpeed(m_camera->getPosition());
+                    m_grassRenderer->render(viewProj, m_camera->getViewMatrix(),
+                                            m_camera->getPosition(), elapsed,
+                                            glm::vec2(windDir3.x, windDir3.z), grassWind,
+                                            grassLight, grassCsm);
                     m_profiler.getGpuTimer().endPass();
                     // G3 drawn-chunk instrument (§10): confirm frustum + distance cull are
                     // actually trimming the 256-chunk field. Low-volume: visual-test only.

@@ -19,6 +19,7 @@
 #include "environment/grass_blade.h"
 #include "environment/grass_config.h"
 #include "environment/grass_lod.h"
+#include "renderer/light.h"
 #include "renderer/shader.h"
 
 #include <glm/glm.hpp>
@@ -31,6 +32,7 @@ namespace Vestige
 {
 
 class Terrain;
+class CascadedShadowMap;
 
 /// @brief Renders the GPU grass field from one shared blade SSBO. Per-chunk descriptors
 ///        (base offset into the shared buffer + blade count + AABB) drive the per-chunk
@@ -60,11 +62,28 @@ public:
     void buildField(const Terrain& terrain, const GrassConfig& config);
 
     /// @brief Draws the field: per-chunk frustum cull, then a distance LOD (segment tier +
-    ///        faded blade fraction) from each visible chunk's nearest point (§5.3). No-op
-    ///        until a field is built.
+    ///        faded blade fraction) from each visible chunk's nearest point (§5.3), shaded
+    ///        with directional half-Lambert + backlit translucency + height AO + CSM shadow
+    ///        RECEIVE, and wind-swayed in the vertex shader (§5.4). No-op until a field is
+    ///        built.
     /// @param viewProjection Combined VP for the frustum planes + clip transform.
-    /// @param cameraPos World camera position — the per-chunk/-blade LOD distance origin.
-    void render(const glm::mat4& viewProjection, const glm::vec3& cameraPos);
+    /// @param view View matrix — supplies the view-space depth that picks a shadow cascade.
+    /// @param cameraPos World camera position — the per-chunk/-blade LOD distance origin
+    ///        and the view direction for translucency.
+    /// @param time Elapsed seconds — animates the wind sway.
+    /// @param windDir Normalised world-XZ wind direction (from the shared EnvironmentForces).
+    /// @param windStrength Wind speed (m/s); 0 leaves the field dead calm (meadow default).
+    /// @param dirLight Directional light for diffuse/translucency (nullptr = unlit).
+    /// @param csm Cascaded shadow map for shadow receiving (nullptr = no shadows). Grass
+    ///        RECEIVES shadows but does not CAST them in v1 (§5.4 scope cap).
+    void render(const glm::mat4& viewProjection,
+                const glm::mat4& view,
+                const glm::vec3& cameraPos,
+                float time,
+                const glm::vec2& windDir,
+                float windStrength,
+                const DirectionalLight* dirLight,
+                CascadedShadowMap* csm);
 
     /// @brief Whether a blade field is currently populated.
     bool hasField() const { return m_bladeCount > 0; }
