@@ -61,7 +61,7 @@ Scope order (locked with user): **trees first**, then flowers + lilies.
     meadow scene plants zero trees into `FoliageChunk::getTrees()`, so `render()` draws nothing there.
 - **Meadow trees today** are plain glb props with **no LOD**: a `scatterGroup` lambda
   (`engine.cpp:2610`) loads Kenney glbs (`tree_oak.glb`, `tree_pineDefaultA/B.glb`, `tree_default.glb`,
-  `tree_fat.glb`, `tree_detailed.glb`). The tree scatter *call site* is `engine.cpp:2668`; the
+  `tree_fat.glb`, `tree_detailed.glb`). The tree scatter *call site* is `engine.cpp:2669`; the
   per-point `Model::instantiate` runs inside the lambda at `engine.cpp:2635`.
 - **Drop-in asset hook exists.** `propPath` lambda (`engine.cpp:2598-2605`) reads
   `assets/models/nature_local/<file>` first, then falls back to `assets/models/nature/<file>`.
@@ -118,7 +118,11 @@ Scope order (locked with user): **trees first**, then flowers + lilies.
 (`engine/environment/foliage_instance.h:67`: `name`, `meshPath`, `billboardTexturePath`, `minScale`,
 `maxScale`, `minSpacing`) — the *authored* description of a species. We reuse it (decision D1; project
 Rule 3, reuse-before-rewrite): `meshPath` names the LOD0 glTF, `billboardTexturePath` is repurposed to
-name the billboard glTF. The renderer then holds a *runtime* table of loaded models:
+name the billboard glTF. **The mid (LOD2) path is derived from `meshPath`** by the split tool's naming
+convention — swap the `_lod0` stem for `_lod2` (`…/pine_pine_large_1_lod0.gltf` → `…_lod2.gltf`);
+`lodMidMesh` is `nullptr` if that file is absent, and the mid bucket then collapses (LOD0 fades
+straight to billboard). This keeps the reused two-path config (no third field) while T2 still knows
+where to load all three tiers. The renderer then holds a *runtime* table of loaded models:
 
 ```
 struct TreeSpecies                        // runtime form; built from a TreeSpeciesConfig at load
@@ -256,7 +260,7 @@ Replace the raw-prop tree `scatterGroup` call with foliage-tree placement:
 - **Give trees their own GPU-timer pass.** The `:1643` tree render currently sits *inside* the shared
   `beginPass("Foliage")` bracket (opened `engine.cpp:1633`), so `--profile-log` has no separate "Tree"
   number to gate §9's ≤2 ms budget against. T2 wraps the tree render in its own
-  `beginPass("Tree")/endPass()` (mirroring the grass `beginPass("Grass")` at `:1652`) so the §7/§9/T7
+  `beginPass("Tree")/endPass()` (mirroring the grass `beginPass("Grass")` at `:1651`) so the §7/§9/T7
   Tree-pass metric is measurable.
 
 ### 4.6 Shadows / wind / lighting uniforms (copy verbatim from grass/foliage)
@@ -327,14 +331,17 @@ medium/small-variant of the same species (D3); **no decimation** (packs are alre
    (y = 0, centred x/z), into `Models/Nature/Trees/gameready/<species>/`, symlinked to the engine's
    git-ignored `assets/models/nature_local/gameready/`.
 
-   **Textures shared per species (VRAM-critical).** All variants of a species share one bark + one
-   foliage texture set. The split exports **glTF-separate** (not embedded `.glb`) into a per-species
-   directory with a **single shared `textures/` folder**, so every variant's glTF references the *same*
-   texture files by relative path and `ResourceManager`'s path cache loads each map **once** for the
-   whole species. (Embedding textures per file — the naïve `.glb` path — duplicates a species' maps
-   across its variant files and blows the §9 budget; the T1 prototype hit exactly this, embedding
-   ~20–64 MB per file.) **Downscale the shared maps to 1 K** (the engine uploads textures **uncompressed**,
-   so pixel resolution — not JPG/PNG disk size — sets VRAM; §9), re-encoded as JPG/PNG (no upscaling).
+   **Textures shared per species (VRAM-critical).** The **mesh** maps (bark + foliage) are shared by all
+   variants of a species; the **billboard** maps are per-variant (each tree's card has its own baked
+   atlas — §9). To preserve the mesh-map sharing, the finalised tool exports each tree's **geometry only**
+   (`.gltf` + `.bin`) and points every variant at the pack's **existing single `textures/` folder** by
+   relative URI — it does **not** re-emit textures per variant (a naïve per-tree `GLTF_SEPARATE` would
+   duplicate them, defeating the goal). `ResourceManager`'s path cache then loads each shared mesh map
+   **once** for the whole species (`resource_manager.cpp:40-72` caches `Texture` by path; embedded-in-`.glb`
+   images bypass that cache — the T1 prototype hit exactly this, embedding ~20–64 MB per file). **Downscale
+   in place** (the engine uploads textures **uncompressed**, so pixel resolution — not JPG/PNG disk size —
+   sets VRAM; §9): shared **mesh** maps to **1 K** (source is 1 K–2 K: `Bark` 1024×2048, `Clusters` 2048²),
+   per-variant **billboard** maps to **512²** (they are the distant card). Re-encode JPG/PNG (no upscaling).
    The classifier matches size words case-insensitively (`[A-Za-z]+`, so `Acer_Sapling_*` is not dropped).
 
 `nature_local/` stays git-ignored (heavy binaries out of the public repo); both scripts + the
@@ -362,10 +369,12 @@ checklist includes verifying it is present (the credits screen / an `ATTRIBUTION
 - **Existing tree/foliage tests stay green** — the `TreeInstance` round-trip
   (`FoliageChunk` / `FoliageManager` `SerializeDeserialize`, `test_foliage_chunk.cpp`) is untouched;
   species-index semantics unchanged.
-- **Split-tool asset check** (CI-cheap, no GPU): a small test/script asserts each `gameready/<species>/`
-  glTF loads as a valid `Model` with **≥2 materials** and its **trunk-base bound `y ≈ 0`** (the recentre
-  held), and that a species' variants **share** their texture files (distinct-texture count per species
-  is bounded) — guarding the §6.2 VRAM contract mechanically.
+- **Split-tool asset check** (**dev-machine local gate**, not CI — the `gameready/` assets live in
+  git-ignored `nature_local/` and are absent from a fresh CI clone, so a CI test could only vacuously
+  skip): a small script asserts each `gameready/<species>/` glTF loads as a valid `Model` with **≥2
+  materials** and its **trunk-base bound `y ≈ 0`** (the recentre held), and that a species' variants
+  share their **mesh** texture files — the shared **mesh**-map count per species is bounded (≈6), while
+  billboard maps are legitimately per-variant (§9) — guarding the §6.2 VRAM contract mechanically.
 - **Visual-test viewpoints** (run `./vestige --visual-test` **from `build/bin/`**,
   `ASAN_OPTIONS=detect_leaks=0`): add `treeline_far` (billboard band), `tree_near` (LOD0 up close, at
   correct real-world scale), `tree_crossfade` (walk through the two LOD transitions), `hero_tree` (a
@@ -374,8 +383,9 @@ checklist includes verifying it is present (the credits screen / an `ATTRIBUTION
 - **Perf gate:** `--profile-log` Tree-pass read on the RX 6600 at the tree viewpoints; **≤ 2.0 ms GPU
   Tree-pass at High** and **≥ 60 FPS at High** (§9). GPU-pass ms is the true metric (frame-total is
   polluted by screenshot readback). This gate + the visual-test captures are **manual / real-GPU-gated**
-  (RX 6600 dev target, not the llvmpipe CI runner); the split-tool asset check + serialization unit
-  tests are the CI-enforced part.
+  (RX 6600 dev target, not the llvmpipe CI runner). The **serialization unit test** is the CI-enforced
+  part; the split-tool asset check, perf gate, and visual captures are **dev-machine local gates** (the
+  `gameready/` assets are git-ignored, so CI has nothing to load).
 
 ---
 
@@ -402,16 +412,21 @@ checklist includes verifying it is present (the credits screen / an `ATTRIBUTION
   ~1.2 ms). This is the numeric target the T7 gate checks — not just the whole-frame 60 FPS floor — so
   a Tree-pass-specific regression is caught even when the frame still clears 16.6 ms.
 - **VRAM budget (v2):** no impostor atlas. The engine uploads textures **uncompressed** with full mips
-  (`GL_RGBA8`/`GL_SRGB8_ALPHA8`, `texture.cpp:162/172`; no BC/KTX2 path), so a map's VRAM cost is
-  ~1.33 × w·h·4 bytes **independent of its JPG/PNG disk size**. At the **1 K** prep resolution (§6.2) a
-  1 K RGBA map ≈ 4 MiB + ~33 % mips ≈ **5.3 MiB**. Each **species** shares ~6 maps (bark + foliage ×
-  diffuse/normal/ARM) ≈ **~30 MiB/species**; the **4 species** ≈ **~120 MiB** of texture VRAM, plus a
-  few MiB of mesh buffers for the ≈ 8–12 distinct meshes. That fits the 8 GB RX 6600 with wide headroom
-  and is below v1's 340 MiB atlas budget. (Note the two axes differ: textures scale with the **4
-  species**; meshes with the **8–12 distinct files**.) **Shared textures are load-bearing** — embedding
-  per file (T1's prototype) multiplies the texture cost by the variant count and breaks this. Levers if
-  it grows: drop the ARM map to constants, or add a BC7 upload path (would cut texture VRAM ~4×).
-  `TreeQuality` scales LOD switch distances, not texture size.
+  (`GL_RGBA8`/`GL_SRGB8_ALPHA8` — `selectInternalFormat`, `texture.cpp:89`; storage + mips at `:162/172`;
+  no BC/KTX2 path), so a map's VRAM cost is ~1.33 × w·h·4 bytes **independent of its JPG/PNG disk size**.
+  A 1 K RGBA map ≈ 4 MiB + ~33 % mips ≈ **5.3 MiB**; a 512² map ≈ **1.3 MiB**. Two texture tiers with
+  **different sharing** (verified against the pine pack's glTF `images`):
+  - **Mesh maps are SHARED per species** — ~6 maps (bark + foliage × diffuse/normal/ARM), one set for
+    all variants of a species. At **1 K** (§6.2): ~30 MiB/species × **4 species** ≈ **~120 MiB**.
+  - **Billboard maps are PER-VARIANT** (each tree's card has its own baked baseColor + normal — they do
+    **not** share). At **512²** (§6.2, distant card): 2 maps × 1.3 MiB × the **≈ 8–12 curated variants**
+    ≈ **~25 MiB**.
+  - **Total ≈ ~145 MiB** texture VRAM + a few MiB of mesh buffers. Fits the 8 GB RX 6600 with wide
+    headroom, below v1's 340 MiB atlas. (Three axes: mesh textures scale with **4 species**; billboard
+    textures + mesh buffers with the **8–12 distinct variants**.) **Shared mesh textures are
+    load-bearing** — embedding per file (T1's prototype) multiplies the mesh-map cost by the variant
+    count. Levers if it grows: drop the ARM map to constants, shrink billboards further, or add a BC7
+    upload path (~4× cut). `TreeQuality` scales LOD switch distances, not texture size.
 - **Shadow cast** adds LOD0 trees to the cascade depth pass — bounded (near trees only).
 - Budget check happens at the T7 perf gate before ship; if the Tree pass exceeds 2.0 ms (or the frame
   threatens 16.6 ms), the first lever is `lodDistance` / `billboardDistance` (push cheaper LODs nearer),
