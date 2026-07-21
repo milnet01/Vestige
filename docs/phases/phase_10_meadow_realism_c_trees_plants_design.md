@@ -259,8 +259,11 @@ Replace the raw-prop tree `scatterGroup` call with foliage-tree placement:
   TreeInstance is radians.)
 - **Hero trees:** a second sparse scatter group — `scatterProps(0x4E1D0A11u, heroParams)` with
   `cellSize` ≈ 60, `minDist` ≈ 40, bigger `minScale/maxScale`, clustered off the main sightline; each
-  `ScatterPoint` → `TreeInstance{ …, i % heroSpecies }` (mirroring the field index scheme), routed
-  through `placeTree` like the field set.
+  `ScatterPoint` → `TreeInstance{ …, fieldSpecies + i % heroSpecies }`, routed through `placeTree` like
+  the field set. **The offset matters:** hero entries are appended *after* the `fieldSpecies` field
+  entries in the single `m_species` table (§4.1), so a bare `i % heroSpecies` would index the first
+  field entries and draw heroes as medium/small field trees (contradicting D3). `fieldSpecies + i %
+  heroSpecies` lands on the hero entries (`m_species.size() == fieldSpecies + heroSpecies`).
 - Placement alone makes the chunks carry trees, so the existing `engine.cpp:1643` call starts drawing
   them — **but that call passes neither shadow map nor light** (`m_treeRenderer->render(visibleChunks,
   *m_camera, viewProj, elapsed)`), unlike the foliage call just above (`:1641–1642`, which passes
@@ -315,7 +318,7 @@ realistic style. Four temperate species families, all passing the D10 biome gate
 | Pine (conifer) | `pine_lolipop_sketchfab_gltf` | 15 (big/large/medium/small/sapling × 3) | ~8–12 k | hero (large) + field (medium/small) |
 | Fir (conifer) | `fir_lolipop_sketchfab_gltf` | 3 ("Christmas tree") | ~13 k | hero + field |
 | Maple (broadleaf) | `maple_lolipop_sketchfab_gltf` | 12 Acer (sapling/small/medium/large × 3) | ~9–22 k | hero (large) + field |
-| Birch (broadleaf) | `birch_lolipop_sketchfab_gltf` | 5 | ~9 k | field |
+| Birch (broadleaf) | `birch_lolipop_sketchfab_gltf` | 5 | ~8–20 k | field |
 
 Each pack ships LOD0/1/2 meshes + a billboard, **except birch** (LOD0–2 only, no billboard — its far
 tier falls back to the LOD2 mesh held to `maxDistance`, §4.1).
@@ -354,13 +357,13 @@ medium/small-variant of the same species (D3); **no decimation** (packs are alre
    **geometry only** and points every variant at **one shared per-species `textures/` folder** by relative
    URI — it does **not** re-emit textures per variant. **Concretely:** a naïve
    `export_scene.gltf(export_format="GLTF_SEPARATE")` **copies** textures next to each output (the exact
-   duplication to avoid). Two mechanisms give the shared layout — pick one: **(a)** `export_keep_originals=True`
-   (Blender writes `.gltf` + `.bin` whose image URIs point back at the *source pack's* `textures/` in
-   place — no copy, but the emitted glTFs then depend on the pack folder staying put), or **(b)** the
-   self-contained target: copy the downscaled maps **once** into `gameready/<species>/textures/` and
-   post-process the emitted glTFs to rewrite image URIs to that folder (a one-time copy + rewrite). **(b)
-   is the target layout** (self-contained per-species dir); either way each shared map exists on disk once.
-   `ResourceManager`'s path cache then
+   duplication to avoid). The required mechanism: **downscale each species' maps once (§below), write them
+   to `gameready/<species>/textures/`, and post-process the emitted glTFs to rewrite their image URIs to
+   that shared folder** — a one-time copy + rewrite yielding a self-contained per-species dir where each
+   shared map exists on disk once. (Blender's `export_keep_originals=True` — which references the *source
+   pack's* `textures/` in place with no copy — is **not** usable here: it would re-use the **un-downscaled
+   4K source** maps and blow the §9 budget outright, e.g. birch 4 × 4096² ≈ 340 MiB. The downscale must
+   happen, so the copy is not optional.) `ResourceManager`'s path cache then
    loads each shared mesh map **once** for the whole species (`resource_manager.cpp:40-72` caches `Texture`
    by path; embedded-in-`.glb` images bypass that cache — the T1 prototype hit exactly this, embedding
    ~20–64 MB per file). **Downscale** (the engine uploads textures **uncompressed**, so pixel
@@ -460,9 +463,9 @@ release / the assets repo — with a one-line note saying so, so the file's scop
     birch has 4, no metallic-roughness), one set for all variants of a species. At **1 K** (§6.2):
     ≲32 MiB/species × **4 species** ≈ **~110–120 MiB**.
   - **Billboard maps are PER-VARIANT** (each tree's card has its own artist pre-rendered baseColor +
-    normal — they do **not** share). At **512²** (§6.2, distant card): 2 maps × 1.3 MiB × the
-    billboard-bearing curated variants (**≈ 8–10**; birch has no billboard) ≈ **~25 MiB** (a safe
-    over-estimate).
+    normal, and fir adds a near-flat metallic-roughness — 2–3 maps — they do **not** share). At **512²**
+    (§6.2, distant card): ~2–3 maps × 1.3 MiB × the billboard-bearing curated variants (**≈ 8–10**; birch
+    has no billboard) ≈ **~25 MiB** (a safe over-estimate).
   - **Total ≈ ~145 MiB** texture VRAM + a few MiB of mesh buffers. Fits the 8 GB RX 6600 with wide
     headroom, below v1's 340 MiB atlas. (Three axes: mesh textures scale with **4 species**; billboard
     textures + mesh buffers with the **8–12 distinct variants**.) **Shared mesh textures are
