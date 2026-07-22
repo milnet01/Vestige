@@ -224,6 +224,21 @@ copy per node-reference, so a multiply-referenced primitive is not dropped). The
 > rendered result, no per-instance vertex duplication, full ResourceManager reuse (Rule 3). The
 > per-material grouping (below) is unchanged — it is built from the node walk's `{mesh, nodeMatrix,
 > material}` draw list.
+>
+> **Revision (T2 fix, 2026-07-22):** first-light on-hardware review caught three issues the
+> initial T2 got wrong. (1) **The far "billboard" is NOT a flat card.** The LOLIPOP LOD3 billboard
+> glTF is a small 3-D *cloud of leaf cards* (~18 quads in a ~19×20×20 m box) whose UVs are baked
+> into a 3×3 view-atlas. The initial code drew a synthetic camera-facing quad textured with the
+> whole atlas → all 9 view-cells showed at once, mirrored (the "upside-down triplets" bug). Fixed
+> by rendering the impostor **glTF as a third mesh tier** through the same instanced path
+> (`billboardPrims`), which honours the baked UVs and is view-independent (so it serves the
+> pond-reflection pass too). This **deletes** the separate `tree_billboard.*` shaders + synthetic
+> quad. The impostor's atlas material is `BLEND`; drawn unsorted that haloes, so the far tier forces
+> an order-independent **alpha-cutout at 0.4**. (2) **Birch dropped.** Every LOLIPOP birch variant
+> maps its leaf cards across the *whole* bark+leaf atlas, so its canopy renders as bark; the
+> maples/pines/firs map to their leaf region correctly. The birch field slot became a third maple.
+> (3) **LOD distances retuned** (lod 40→45, billboard 90→180, max 200→350, fade 12→15) so the solid
+> mid mesh holds far out and impostors only appear where fog already hides them — no visible pop-in.
 a real tree has ≥2 materials (opaque bark, alpha-cutout double-sided leaves), so LOD0 emits **one
 instanced draw per material group**, each honouring its own
 `Material::getAlphaMode/getAlphaCutoff/isDoubleSided`. (The near LOD0 view is the highest-fidelity one;

@@ -31,13 +31,15 @@ class Material;
 ///
 /// Each species carries three artist LOD tiers loaded from glTF via
 /// ResourceManager (shared, path-cached): a near mesh (LOD0), a mid mesh (LOD2),
-/// and a flat billboard card (far). Per frame, every tree is bucketed by camera
+/// and a far impostor (LOD3). Per frame, every tree is bucketed by camera
 /// distance into one of the three tiers with a complementary-alpha crossfade in
-/// the two transition bands. Mesh tiers are drawn per-material (bark opaque +
-/// leaf alpha-cutout), instanced, with wind sway + directional light + CSM
-/// shadow receive. The billboard tier is a camera-facing (yaw) quad textured
-/// with the artist's card, oriented from a per-pass camera-right uniform (so the
-/// same code faces the pond-reflection camera too, §4.3 D8).
+/// the two transition bands. ALL THREE tiers are real meshes drawn through the
+/// same instanced mesh path, per-material (bark opaque + leaf alpha-cutout),
+/// with wind sway + directional light + CSM shadow receive. The far tier is the
+/// artist's LOD3 billboard glTF — a small 3-D cloud of leaf cards with the atlas
+/// UVs baked in (NOT a flat card), forced to alpha-cutout since its material is
+/// BLEND. Rendering the impostor mesh directly is view-independent, so the same
+/// code serves the pond-reflection pass too.
 class TreeRenderer
 {
 public:
@@ -86,16 +88,19 @@ public:
                 const glm::vec4& clipPlane = glm::vec4(0.0f));
 
     /// @brief Distance at which LOD0 → mid transition begins (m).
-    float lodDistance = 40.0f;
+    float lodDistance = 45.0f;
 
-    /// @brief Distance at which mid → billboard transition begins (m).
-    float billboardDistance = 90.0f;
+    /// @brief Distance at which mid → far-impostor transition begins (m). Held
+    ///        well out: the solid mid mesh looks better than the sparse impostor,
+    ///        so only swap to the impostor where fog already hides the detail.
+    float billboardDistance = 180.0f;
 
     /// @brief Range over which each LOD transition crossfades (m).
-    float fadeRange = 12.0f;
+    float fadeRange = 15.0f;
 
-    /// @brief Maximum render distance for trees (m).
-    float maxDistance = 200.0f;
+    /// @brief Maximum render distance for trees (m). Held far out so the impostor
+    ///        tier sits on the horizon (under fog) and never visibly pops in.
+    float maxDistance = 350.0f;
 
     /// @brief Wind direction (world XZ), synced from EnvironmentForces per frame.
     glm::vec3 windDirection{1.0f, 0.0f, 0.3f};
@@ -121,13 +126,11 @@ private:
     struct TreeSpecies
     {
         std::shared_ptr<Model> lod0;       ///< Near mesh.
-        std::shared_ptr<Model> lodMid;     ///< Mid mesh (null → collapse to billboard).
-        std::shared_ptr<Model> billboard;  ///< Far card model (null → mid holds to maxDistance).
+        std::shared_ptr<Model> lodMid;     ///< Mid mesh (null → collapse to far tier).
+        std::shared_ptr<Model> billboard;  ///< Far impostor (LOD3) mesh (null → mid holds to maxDistance).
         std::vector<PrimDraw> lod0Prims;   ///< Flattened draw list for LOD0.
         std::vector<PrimDraw> midPrims;    ///< Flattened draw list for the mid tier.
-        GLuint billboardTexture = 0;       ///< Artist billboard card diffuse (GL id, not owned).
-        float billboardHalfWidth = 1.0f;   ///< Card half-width in metres (from model bounds).
-        float billboardHeight = 2.0f;      ///< Card height in metres (from model bounds).
+        std::vector<PrimDraw> billboardPrims;  ///< Flattened draw list for the far impostor.
     };
 
     /// @brief A tree resolved to one tier with its crossfade alpha.
@@ -150,21 +153,21 @@ private:
     void ensureInstanceCapacity(int count);
 
     /// @brief Uploads a bucket's model matrices + alphas and draws every prim in
-    ///        @a prims instanced, honouring per-material alpha mode.
+    ///        @a prims instanced, honouring per-material alpha mode. The far
+    ///        impostor tier passes @a forceAlphaTest to cut out its BLEND atlas
+    ///        as an order-independent cutout (@a forceCutoff threshold).
     void drawMeshTier(const std::vector<PrimDraw>& prims,
-                      const std::vector<Bucketed>& bucket);
-
-    /// @brief Creates the shared unit billboard quad (offset ±1 x, 0..1 y).
-    void createBillboardQuad();
+                      const std::vector<Bucketed>& bucket,
+                      bool forceAlphaTest = false,
+                      float forceCutoff = 0.5f);
 
     /// @brief Sets the shared CSM + directional-light uniforms on @a shader
     ///        (Mesa fallback binds a sampler2DArray to unit 3 when unshadowed).
     void setLightingUniforms(Shader& shader, CascadedShadowMap* csm,
                              const DirectionalLight* dirLight);
 
-    // Shaders
+    // Shaders (all three LOD tiers use the one instanced mesh shader)
     Shader m_meshShader;
-    Shader m_billboardShader;
 
     // Species table (indexed by TreeInstance::speciesIndex)
     std::vector<TreeSpecies> m_species;
@@ -174,28 +177,12 @@ private:
     GLuint m_meshAlphaVbo = 0;      ///< Per-instance crossfade alpha (float).
     int m_meshInstanceCapacity = 0;
 
-    // Shared billboard quad + its per-instance stream (pos/rot/scale/alpha)
-    GLuint m_billboardVao = 0;
-    GLuint m_billboardVbo = 0;
-    GLuint m_billboardInstanceVbo = 0;
-    int m_billboardInstanceCapacity = 0;
-
-    /// @brief Per-instance billboard record (matches the billboard VAO layout).
-    struct BillboardInstance
-    {
-        glm::vec3 position;  ///< Trunk-base world position.
-        float scale;         ///< Per-tree uniform scale.
-        float alpha;         ///< Crossfade weight.
-        float halfWidth;     ///< Species card half-width (metres).
-        float height;        ///< Species card height (metres).
-    };
-
-    // Per-frame staging (reused to avoid per-frame allocation). Mesh + billboard
-    // draws are grouped per species (distinct VAOs / card texture per species),
-    // so each outer vector is indexed by species like m_species.
+    // Per-frame staging (reused to avoid per-frame allocation). All three tiers
+    // are meshes drawn per species (distinct VAOs), so each outer vector is
+    // indexed by species like m_species.
     std::vector<std::vector<Bucketed>> m_lod0BySpecies;
     std::vector<std::vector<Bucketed>> m_midBySpecies;
-    std::vector<std::vector<BillboardInstance>> m_bbBySpecies;
+    std::vector<std::vector<Bucketed>> m_bbBySpecies;
     std::vector<glm::mat4> m_matScratch;    ///< Flat mat4 upload staging.
     std::vector<float> m_alphaScratch;      ///< Flat alpha upload staging.
 

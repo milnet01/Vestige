@@ -23,7 +23,6 @@
 
 #include <glm/gtc/matrix_transform.hpp>
 
-#include <algorithm>
 #include <filesystem>
 
 namespace Vestige
@@ -35,7 +34,6 @@ namespace
 ///        than a few hundred trees of one species in one tier at once, so this
 ///        holds without a mid-frame grow (256 KB mat4 + 8 KB alpha).
 constexpr int INITIAL_MESH_CAPACITY = 4096;
-constexpr int INITIAL_BILLBOARD_CAPACITY = 4096;
 }
 
 TreeRenderer::~TreeRenderer()
@@ -56,13 +54,6 @@ bool TreeRenderer::init(const std::string& assetPath)
         Logger::error("Failed to load tree mesh shaders");
         return false;
     }
-    if (!m_billboardShader.loadFromFiles(assetPath + "/shaders/tree_billboard.vert.glsl",
-                                          assetPath + "/shaders/tree_billboard.frag.glsl"))
-    {
-        Logger::error("Failed to load tree billboard shaders");
-        return false;
-    }
-
     // Shared instanced-mesh streams (model mat4 @ binding 1, crossfade alpha @ binding 3).
     glCreateBuffers(1, &m_meshInstanceVbo);
     glCreateBuffers(1, &m_meshAlphaVbo);
@@ -74,8 +65,6 @@ bool TreeRenderer::init(const std::string& assetPath)
                          m_meshInstanceCapacity * static_cast<GLsizeiptr>(sizeof(float)),
                          nullptr, GL_DYNAMIC_STORAGE_BIT);
 
-    createBillboardQuad();
-
     m_initialized = true;
     Logger::info("Tree renderer initialized");
     return true;
@@ -85,17 +74,12 @@ void TreeRenderer::shutdown()
 {
     if (m_meshInstanceVbo != 0) { glDeleteBuffers(1, &m_meshInstanceVbo); m_meshInstanceVbo = 0; }
     if (m_meshAlphaVbo != 0) { glDeleteBuffers(1, &m_meshAlphaVbo); m_meshAlphaVbo = 0; }
-    if (m_billboardVao != 0) { glDeleteVertexArrays(1, &m_billboardVao); m_billboardVao = 0; }
-    if (m_billboardVbo != 0) { glDeleteBuffers(1, &m_billboardVbo); m_billboardVbo = 0; }
-    if (m_billboardInstanceVbo != 0) { glDeleteBuffers(1, &m_billboardInstanceVbo); m_billboardInstanceVbo = 0; }
     m_meshInstanceCapacity = 0;
-    m_billboardInstanceCapacity = 0;
     m_species.clear();
     m_lod0BySpecies.clear();
     m_midBySpecies.clear();
     m_bbBySpecies.clear();
     m_meshShader.destroy();
-    m_billboardShader.destroy();
     m_initialized = false;
 }
 
@@ -177,24 +161,16 @@ void TreeRenderer::loadSpecies(const std::vector<TreeSpeciesConfig>& configs,
             }
         }
 
-        // Billboard (config's billboardTexturePath repurposed as the card glTF).
+        // Far impostor (LOD3): the artist's billboard glTF is a small 3-D cloud
+        // of leaf cards with the atlas UVs baked in. Draw it as a mesh tier — its
+        // baked UVs crop the atlas correctly (a flat card would show the whole
+        // 3×3 view-grid at once). Config's billboardTexturePath is that glTF path.
         if (!cfg.billboardTexturePath.empty() && fs::exists(cfg.billboardTexturePath))
         {
             sp.billboard = resources.loadModel(cfg.billboardTexturePath);
             if (sp.billboard)
             {
-                for (const auto& mat : sp.billboard->m_materials)
-                {
-                    if (mat && mat->hasDiffuseTexture())
-                    {
-                        sp.billboardTexture = mat->getDiffuseTexture()->getId();
-                        break;
-                    }
-                }
-                AABB b = sp.billboard->getBounds();
-                glm::vec3 size = b.getSize();
-                sp.billboardHalfWidth = std::max(0.1f, std::max(size.x, size.z) * 0.5f);
-                sp.billboardHeight = std::max(0.1f, size.y);
+                buildDrawList(*sp.billboard, sp.billboardPrims);
             }
         }
 
@@ -236,6 +212,7 @@ void TreeRenderer::bindInstanceBuffers()
     {
         setup(sp.lod0Prims);
         setup(sp.midPrims);
+        setup(sp.billboardPrims);
     }
 }
 
@@ -257,62 +234,6 @@ void TreeRenderer::ensureInstanceCapacity(int count)
                          m_meshInstanceCapacity * static_cast<GLsizeiptr>(sizeof(float)),
                          nullptr, GL_DYNAMIC_STORAGE_BIT);
     bindInstanceBuffers();  // re-point every VAO at the new buffers
-}
-
-void TreeRenderer::createBillboardQuad()
-{
-    struct QuadVertex
-    {
-        glm::vec2 offset;    // x in [-1,1], y in [0,1] (base to top)
-        glm::vec2 texCoord;
-    };
-    QuadVertex verts[] = {
-        {{-1.0f, 0.0f}, {0.0f, 0.0f}},
-        {{ 1.0f, 0.0f}, {1.0f, 0.0f}},
-        {{ 1.0f, 1.0f}, {1.0f, 1.0f}},
-        {{-1.0f, 0.0f}, {0.0f, 0.0f}},
-        {{ 1.0f, 1.0f}, {1.0f, 1.0f}},
-        {{-1.0f, 1.0f}, {0.0f, 1.0f}},
-    };
-
-    glCreateVertexArrays(1, &m_billboardVao);
-    glCreateBuffers(1, &m_billboardVbo);
-    glCreateBuffers(1, &m_billboardInstanceVbo);
-
-    glNamedBufferStorage(m_billboardVbo, sizeof(verts), verts, 0);
-    m_billboardInstanceCapacity = INITIAL_BILLBOARD_CAPACITY;
-    glNamedBufferStorage(m_billboardInstanceVbo,
-                         m_billboardInstanceCapacity
-                             * static_cast<GLsizeiptr>(sizeof(BillboardInstance)),
-                         nullptr, GL_DYNAMIC_STORAGE_BIT);
-
-    // Quad attributes (binding 0)
-    glVertexArrayVertexBuffer(m_billboardVao, 0, m_billboardVbo, 0, sizeof(QuadVertex));
-    glEnableVertexArrayAttrib(m_billboardVao, 0);
-    glVertexArrayAttribFormat(m_billboardVao, 0, 2, GL_FLOAT, GL_FALSE, offsetof(QuadVertex, offset));
-    glVertexArrayAttribBinding(m_billboardVao, 0, 0);
-    glEnableVertexArrayAttrib(m_billboardVao, 1);
-    glVertexArrayAttribFormat(m_billboardVao, 1, 2, GL_FLOAT, GL_FALSE, offsetof(QuadVertex, texCoord));
-    glVertexArrayAttribBinding(m_billboardVao, 1, 0);
-
-    // Instance attributes (binding 1, divisor 1)
-    glVertexArrayVertexBuffer(m_billboardVao, 1, m_billboardInstanceVbo, 0, sizeof(BillboardInstance));
-    glVertexArrayBindingDivisor(m_billboardVao, 1, 1);
-    glEnableVertexArrayAttrib(m_billboardVao, 3);
-    glVertexArrayAttribFormat(m_billboardVao, 3, 3, GL_FLOAT, GL_FALSE, offsetof(BillboardInstance, position));
-    glVertexArrayAttribBinding(m_billboardVao, 3, 1);
-    glEnableVertexArrayAttrib(m_billboardVao, 4);
-    glVertexArrayAttribFormat(m_billboardVao, 4, 1, GL_FLOAT, GL_FALSE, offsetof(BillboardInstance, scale));
-    glVertexArrayAttribBinding(m_billboardVao, 4, 1);
-    glEnableVertexArrayAttrib(m_billboardVao, 5);
-    glVertexArrayAttribFormat(m_billboardVao, 5, 1, GL_FLOAT, GL_FALSE, offsetof(BillboardInstance, alpha));
-    glVertexArrayAttribBinding(m_billboardVao, 5, 1);
-    glEnableVertexArrayAttrib(m_billboardVao, 6);
-    glVertexArrayAttribFormat(m_billboardVao, 6, 1, GL_FLOAT, GL_FALSE, offsetof(BillboardInstance, halfWidth));
-    glVertexArrayAttribBinding(m_billboardVao, 6, 1);
-    glEnableVertexArrayAttrib(m_billboardVao, 7);
-    glVertexArrayAttribFormat(m_billboardVao, 7, 1, GL_FLOAT, GL_FALSE, offsetof(BillboardInstance, height));
-    glVertexArrayAttribBinding(m_billboardVao, 7, 1);
 }
 
 void TreeRenderer::setLightingUniforms(Shader& shader, CascadedShadowMap* csm,
@@ -363,7 +284,9 @@ void TreeRenderer::setLightingUniforms(Shader& shader, CascadedShadowMap* csm,
 }
 
 void TreeRenderer::drawMeshTier(const std::vector<PrimDraw>& prims,
-                                const std::vector<Bucketed>& bucket)
+                                const std::vector<Bucketed>& bucket,
+                                bool forceAlphaTest,
+                                float forceCutoff)
 {
     if (prims.empty() || bucket.empty())
     {
@@ -410,6 +333,13 @@ void TreeRenderer::drawMeshTier(const std::vector<PrimDraw>& prims,
             doubleSided = prim.material->isDoubleSided();
             useAlphaTest = (prim.material->getAlphaMode() == AlphaMode::MASK);
             cutoff = prim.material->getAlphaCutoff();
+        }
+        // The far impostor's atlas is BLEND; without depth sorting that haloes,
+        // so cut it out at a fixed threshold instead (order-independent).
+        if (forceAlphaTest && hasTex)
+        {
+            useAlphaTest = true;
+            cutoff = forceCutoff;
         }
         m_meshShader.setBool("u_hasTexture", hasTex);
         m_meshShader.setVec3("u_albedo", albedo);
@@ -473,14 +403,11 @@ void TreeRenderer::render(const std::vector<const FoliageChunk*>& chunks,
             model = glm::scale(model, glm::vec3(tree.scale));
 
             const bool hasMid = !sp.midPrims.empty();
-            const bool hasBB = (sp.billboardTexture != 0);
+            const bool hasBB = !sp.billboardPrims.empty();
 
             auto pushLod0 = [&](float a) { m_lod0BySpecies[si].push_back({model, a}); };
             auto pushMid = [&](float a) { m_midBySpecies[si].push_back({model, a}); };
-            auto pushBB = [&](float a) {
-                m_bbBySpecies[si].push_back({tree.position, tree.scale, a,
-                                             sp.billboardHalfWidth, sp.billboardHeight});
-            };
+            auto pushBB = [&](float a) { m_bbBySpecies[si].push_back({model, a}); };
 
             // Effective near→far switch: mid collapses to LOD0-then-billboard,
             // billboard-less species hold their last mesh tier to maxDistance.
@@ -540,58 +467,15 @@ void TreeRenderer::render(const std::vector<const FoliageChunk*>& chunks,
 
     {
         // Blend on for the crossfade bands; cull toggled per-material inside.
+        // All three tiers are meshes; the far impostor forces an alpha-cutout
+        // (its atlas is BLEND — cutout is order-independent, no halo).
         ScopedBlendState blendGuard{true, GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA};
         ScopedCullFace cullGuard{true};
         for (size_t si = 0; si < m_species.size(); ++si)
         {
             drawMeshTier(m_species[si].lod0Prims, m_lod0BySpecies[si]);
             drawMeshTier(m_species[si].midPrims, m_midBySpecies[si]);
-        }
-    }
-
-    // --- Billboard tier, per species (each has its own card texture) -------
-    m_billboardShader.use();
-    m_billboardShader.setMat4("u_viewProjection", viewProjection);
-    m_billboardShader.setMat4("u_view", camera.getViewMatrix());
-    m_billboardShader.setVec4("u_clipPlane", clipPlane);
-    m_billboardShader.setVec3("u_cameraPos", camPos);
-    // Camera-right from the pass's view matrix (row 0) — orients the card to
-    // whatever camera renders this pass (main or pond reflection, §4.3 D8).
-    const glm::mat4 view = camera.getViewMatrix();
-    m_billboardShader.setVec3("u_cameraRight", glm::vec3(view[0][0], view[1][0], view[2][0]));
-    m_billboardShader.setVec3("u_cameraUp", glm::vec3(0.0f, 1.0f, 0.0f));
-    m_billboardShader.setInt("u_texture", 0);
-    setLightingUniforms(m_billboardShader, csm, dirLight);
-
-    {
-        ScopedBlendState blendGuard{true, GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA};
-        ScopedCullFace cullGuard{false};   // cards are two-sided
-        glBindVertexArray(m_billboardVao);
-        for (size_t si = 0; si < m_species.size(); ++si)
-        {
-            const std::vector<BillboardInstance>& bb = m_bbBySpecies[si];
-            if (bb.empty() || m_species[si].billboardTexture == 0)
-            {
-                continue;
-            }
-            int count = static_cast<int>(bb.size());
-            if (count > m_billboardInstanceCapacity)
-            {
-                m_billboardInstanceCapacity = count + count / 4 + 64;
-                glDeleteBuffers(1, &m_billboardInstanceVbo);
-                glCreateBuffers(1, &m_billboardInstanceVbo);
-                glNamedBufferStorage(m_billboardInstanceVbo,
-                                     m_billboardInstanceCapacity
-                                         * static_cast<GLsizeiptr>(sizeof(BillboardInstance)),
-                                     nullptr, GL_DYNAMIC_STORAGE_BIT);
-                glVertexArrayVertexBuffer(m_billboardVao, 1, m_billboardInstanceVbo, 0,
-                                          sizeof(BillboardInstance));
-            }
-            glNamedBufferSubData(m_billboardInstanceVbo, 0,
-                                 count * static_cast<GLsizeiptr>(sizeof(BillboardInstance)),
-                                 bb.data());
-            glBindTextureUnit(0, m_species[si].billboardTexture);
-            glDrawArraysInstanced(GL_TRIANGLES, 0, 6, count);
+            drawMeshTier(m_species[si].billboardPrims, m_bbBySpecies[si], true, 0.4f);
         }
     }
 }

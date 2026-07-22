@@ -10661,6 +10661,21 @@ existing cases (``HelpersMatchEvaluatorPrecisely``,
 
 ### Fixed
 
+- **Trees (3D_E-0033 T2 fix): distant impostors, birch canopy, and LOD pop-in**
+  First-light on-hardware review of the new tree renderer caught three
+  issues. Distant trees showed as upside-down triplets because the LOLIPOP
+  LOD3 "billboard" is a 3-D cloud of leaf cards with UVs baked into a 3×3
+  view-atlas, not a flat card — the code drew a synthetic quad textured
+  with the whole atlas. Fixed by rendering the impostor glTF as a third
+  instanced mesh tier (honours the baked UVs, view-independent), forcing an
+  order-independent alpha-cutout since its atlas material is BLEND; the
+  separate tree_billboard.* shaders + synthetic quad are removed. Birch was
+  dropped: every LOLIPOP birch variant maps its leaf cards across the whole
+  bark+leaf atlas, so its canopy rendered as bark (a third maple takes its
+  field slot). LOD distances retuned (billboard 90→180 m, max 200→350 m) so
+  the solid mid mesh holds far out and impostors only appear under horizon
+  fog — no visible pop-in. 0 GL errors, all tests green.
+
 - **Meadow pond is now a physically-correct contained body of water — fills the basin to a level surface with a natural contour shoreline instead of a floating flat square.**
   The water level is solved to sit below the basin's lowest rim (contained,
   never on a slope) and the sheet is sized to the true flood radius so its
