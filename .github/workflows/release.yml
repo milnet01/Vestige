@@ -77,17 +77,21 @@ jobs:
           ref: ${{ inputs.tag || inputs.version || github.ref }}
 
       - name: Install build dependencies
-        # Cached apt install — same pattern as ci.yml. Release runs are
-        # rare (tag pushes) so cache benefit is smaller here than on CI,
-        # but consistency + a one-line config keeps both workflows
-        # uniform.
-        uses: awalsh128/cache-apt-pkgs-action@553a35bb8ebd9fcabcb1c9451aa4c98e1b4ca8a9  # v1.6.3
-        with:
-          # desktop-file-utils provides desktop-file-validate, which appimagetool
-          # invokes to validate the bundled .desktop file (its absence fails the
-          # AppImage step). patchelf is for the tarball rpath rewrite.
-          packages: build-essential cmake ninja-build pkg-config libgl1-mesa-dev libglu1-mesa-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxxf86vm-dev libwayland-dev libxkbcommon-dev libasound2-dev patchelf desktop-file-utils
-          version: release-linux-4
+        # Plain apt-get, NOT awalsh128/cache-apt-pkgs-action: that action is
+        # broken on the current ubuntu-24.04 runner — its manifest parser errors
+        # ("substring expression < 0"), installs 0 packages, then caches the
+        # empty result (poisoning every later run). Release runs are rare (tag
+        # pushes), so the lost cache is a few seconds; correctness wins.
+        # desktop-file-utils provides desktop-file-validate for the AppImage
+        # step; patchelf rewrites the tarball rpath.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential cmake ninja-build pkg-config \
+            libgl1-mesa-dev libglu1-mesa-dev \
+            libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxxf86vm-dev \
+            libwayland-dev libxkbcommon-dev libasound2-dev \
+            patchelf desktop-file-utils
 
       - name: Cache CMake FetchContent deps
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v5
