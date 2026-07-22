@@ -56,8 +56,8 @@ jobs:
         # still subject to mirror flakes — a failed run can be re-run.
         uses: awalsh128/cache-apt-pkgs-action@553a35bb8ebd9fcabcb1c9451aa4c98e1b4ca8a9  # v1.6.3
         with:
-          packages: build-essential cmake ninja-build pkg-config libgl1-mesa-dev libglu1-mesa-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxxf86vm-dev libwayland-dev libxkbcommon-dev xvfb python3 python3-pip python3-xmltodict python3-yaml python3-flask cppcheck
-          version: linux-build-test-1
+          packages: build-essential cmake ninja-build pkg-config libgl1-mesa-dev libglu1-mesa-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxxf86vm-dev libwayland-dev libwayland-bin wayland-protocols libxkbcommon-dev xvfb python3 python3-pip python3-xmltodict python3-yaml python3-flask cppcheck
+          version: linux-build-test-2
 
       - name: Set up ccache
         # Shared compiler-output cache. Without this, every job in this
@@ -185,8 +185,8 @@ jobs:
         # "Install build dependencies" step for the rationale.
         uses: awalsh128/cache-apt-pkgs-action@553a35bb8ebd9fcabcb1c9451aa4c98e1b4ca8a9  # v1.6.3
         with:
-          packages: cppcheck clang-tidy python3 python3-pip python3-xmltodict python3-yaml python3-flask build-essential cmake ninja-build xvfb libgl1-mesa-dev libglu1-mesa-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxxf86vm-dev libwayland-dev libxkbcommon-dev
-          version: audit-tool-tier1-1
+          packages: cppcheck clang-tidy python3 python3-pip python3-xmltodict python3-yaml python3-flask build-essential cmake ninja-build xvfb libgl1-mesa-dev libglu1-mesa-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxxf86vm-dev libwayland-dev libwayland-bin wayland-protocols libxkbcommon-dev
+          version: audit-tool-tier1-2
 
       - name: Set up ccache
         # Same rationale as linux-build-test. This job builds the same
@@ -292,8 +292,8 @@ jobs:
         # not in this package list.
         uses: awalsh128/cache-apt-pkgs-action@553a35bb8ebd9fcabcb1c9451aa4c98e1b4ca8a9  # v1.6.3
         with:
-          packages: build-essential ninja-build pkg-config libgl1-mesa-dev libglu1-mesa-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxxf86vm-dev libwayland-dev libxkbcommon-dev xvfb
-          version: cmake-compat-1
+          packages: build-essential ninja-build pkg-config libgl1-mesa-dev libglu1-mesa-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxxf86vm-dev libwayland-dev libwayland-bin wayland-protocols libxkbcommon-dev xvfb
+          version: cmake-compat-2
 
       - name: Install CMake ${{ matrix.cmake }}
         uses: jwlawson/actions-setup-cmake@0d6a7d60b009d01c9e7523be22153ff8f19460d3  # v2

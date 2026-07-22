@@ -86,8 +86,8 @@ jobs:
           # desktop-file-utils provides desktop-file-validate, which appimagetool
           # invokes to validate the bundled .desktop file (its absence fails the
           # AppImage step). patchelf is for the tarball rpath rewrite.
-          packages: build-essential cmake ninja-build pkg-config libgl1-mesa-dev libglu1-mesa-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxxf86vm-dev libwayland-dev libxkbcommon-dev libasound2-dev patchelf desktop-file-utils
-          version: release-linux-2
+          packages: build-essential cmake ninja-build pkg-config libgl1-mesa-dev libglu1-mesa-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxxf86vm-dev libwayland-dev libwayland-bin wayland-protocols libxkbcommon-dev libasound2-dev patchelf desktop-file-utils
+          version: release-linux-3
 
       - name: Cache CMake FetchContent deps
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v5

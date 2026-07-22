@@ -10661,6 +10661,16 @@ existing cases (``HelpersMatchEvaluatorPrecisely``,
 
 ### Fixed
 
+- **Release/CI: install wayland-scanner so the Linux artifact builds**
+  GLFW 3.4 enables Wayland by default and requires wayland-scanner +
+  wayland-protocols at configure time. The workflows installed
+  libwayland-dev but not those, so a clean build (release.yml, and ci.yml
+  on a cold _deps cache) failed with "Failed to find wayland-scanner" —
+  silently breaking the Linux tarball + AppImage tester artifacts while the
+  Windows zip still shipped. Added libwayland-bin + wayland-protocols to
+  every apt list that configures GLFW (ci.yml x3 + release.yml) and bumped
+  each apt-cache version key so the new packages are actually fetched.
+
 - **Trees (3D_E-0033 T2 fix): distant impostors, birch canopy, and LOD pop-in**
   First-light on-hardware review of the new tree renderer caught three
   issues. Distant trees showed as upside-down triplets because the LOLIPOP
