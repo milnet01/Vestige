@@ -91,6 +91,13 @@ set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
 set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(GLFW_INSTALL OFF CACHE BOOL "" FORCE)
+# GLFW 3.4 builds a Wayland backend by default, which requires wayland-scanner
+# at configure time — a build tool the CI/release runners don't reliably have.
+# We ship an X11 backend (universal on Linux via XWayland), matching the
+# pre-3.4 behaviour. Flip this ON (and install wayland-scanner in CI) if native
+# Wayland support is wanted later.
+set(GLFW_BUILD_WAYLAND OFF CACHE BOOL "" FORCE)
+set(GLFW_BUILD_X11 ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(glfw)
 
 # GLM — mathematics

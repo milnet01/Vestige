@@ -10661,15 +10661,16 @@ existing cases (``HelpersMatchEvaluatorPrecisely``,
 
 ### Fixed
 
-- **Release/CI: install wayland-scanner so the Linux artifact builds**
-  GLFW 3.4 enables Wayland by default and requires wayland-scanner +
-  wayland-protocols at configure time. The workflows installed
-  libwayland-dev but not those, so a clean build (release.yml, and ci.yml
-  on a cold _deps cache) failed with "Failed to find wayland-scanner" —
-  silently breaking the Linux tarball + AppImage tester artifacts while the
-  Windows zip still shipped. Added libwayland-bin + wayland-protocols to
-  every apt list that configures GLFW (ci.yml x3 + release.yml) and bumped
-  each apt-cache version key so the new packages are actually fetched.
+- **Build: ship the X11 GLFW backend so the Linux release artifact builds**
+  The external-deps refactor bumped GLFW to 3.4, which enables a Wayland
+  backend by default — requiring wayland-scanner at configure time, a tool
+  the CI/release runners don't reliably provide. A clean build (release.yml,
+  and ci.yml on a cold _deps cache) failed with "Failed to find
+  wayland-scanner", silently breaking the Linux tarball + AppImage tester
+  artifacts while the Windows zip still shipped. Set GLFW_BUILD_WAYLAND OFF /
+  GLFW_BUILD_X11 ON, restoring the pre-3.4 X11-only behaviour (universal on
+  Linux via XWayland). Native Wayland can be re-enabled later by flipping the
+  flag and installing wayland-scanner in CI.
 
 - **Trees (3D_E-0033 T2 fix): distant impostors, birch canopy, and LOD pop-in**
   First-light on-hardware review of the new tree renderer caught three
