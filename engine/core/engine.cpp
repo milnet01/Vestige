@@ -1630,17 +1630,26 @@ void Engine::run()
 
                 if (!visibleChunks.empty())
                 {
-                    m_profiler.getGpuTimer().beginPass("Foliage");
-
-                    // Pass shadow map and directional light to foliage for shadow receiving
+                    // Pass shadow map and directional light to foliage + trees.
                     CascadedShadowMap* csm = m_renderer->getCascadedShadowMap();
                     const DirectionalLight* dirLight =
                         m_renderData.hasDirectionalLight ? &m_renderData.directionalLight : nullptr;
+
+                    m_profiler.getGpuTimer().beginPass("Foliage");
                     // Grass draw distance is the quality-tier knob (3D_E-0038 B3):
                     // Low shortens the field to hold 60 FPS on weaker GPUs.
                     m_foliageRenderer->render(visibleChunks, *m_camera, viewProj, elapsed,
                                              m_foliageRenderer->renderDistance, csm, dirLight);
-                    m_treeRenderer->render(visibleChunks, *m_camera, viewProj, elapsed);
+                    m_profiler.getGpuTimer().endPass();
+
+                    // Trees — own GPU-timer pass so --profile-log has a "Tree"
+                    // number to gate the ≤2 ms budget against (design §4.5).
+                    // Wind synced from the shared environment like foliage.
+                    m_profiler.getGpuTimer().beginPass("Tree");
+                    m_treeRenderer->windDirection = m_environmentForces->getBaseWindDirection();
+                    m_treeRenderer->windAmplitude = 0.15f * std::max(0.2f, envWindSpeed);
+                    m_treeRenderer->render(visibleChunks, *m_camera, viewProj, elapsed,
+                                           csm, dirLight);
                     m_profiler.getGpuTimer().endPass();
                 }
 
@@ -2652,23 +2661,98 @@ void Engine::finalizeMeadowTerrain()
 
         int propCount = 0;
 
-        // Trees — spread thinly across the meadow (sparse = meadow, not forest),
-        // kept well off the pond. The grid reaches the border, so the outermost
-        // trees form a loose treeline that masks the blurry 1K-HDRI horizon.
-        ScatterParams tree;
-        tree.regionMin = regionMin;
-        tree.regionMax = regionMax;
-        tree.cellSize = 28.0f;
-        tree.jitter = 0.8f;
-        tree.minDist = 12.0f;
-        tree.exclusionCenter = pondCenterXZ;
-        tree.exclusionRadius = pondClear + 6.0f;
-        tree.minScale = 1.3f;
-        tree.maxScale = 2.4f;
-        propCount += scatterGroup(
-            {"tree_oak.glb", "tree_pineDefaultA.glb", "tree_pineDefaultB.glb",
-             "tree_default.glb", "tree_fat.glb", "tree_detailed.glb"},
-            0xA11CE01u, tree, 0.0f, false);
+        // Trees (3D_E-0033) — real artist LOD trees (LOLIPOP CC-BY packs) drawn
+        // by TreeRenderer from FoliageManager chunks, replacing the old Kenney
+        // glb props. A curated set of field species (medium/small) + hero species
+        // (large landmark trees); speciesIndex indexes the renderer's table, hero
+        // entries appended after the field entries (so hero placement offsets by
+        // fieldSpecies — a bare i%heroSpecies would draw heroes as field trees).
+        // Sparse = meadow, not forest; kept off the pond; the border row forms a
+        // loose treeline that masks the blurry 1K-HDRI horizon.
+        {
+            const auto treeCfg = [&](const std::string& species,
+                                     const std::string& base) -> TreeSpeciesConfig
+            {
+                TreeSpeciesConfig c;
+                c.name = base;
+                const std::string dir = "gameready/" + species + "/" + base;
+                c.meshPath = propPath(dir + "_lod0.gltf");
+                c.billboardTexturePath = propPath(dir + "_billboard.gltf");
+                return c;
+            };
+
+            const std::vector<TreeSpeciesConfig> fieldCfgs = {
+                treeCfg("pine",  "pine_pine_medium_1"),
+                treeCfg("pine",  "pine_pine_small_2"),
+                treeCfg("maple", "maple_acer_medium_1"),
+                treeCfg("maple", "maple_acer_small_2"),
+                treeCfg("birch", "birch_birch_2"),
+                treeCfg("fir",   "fir_christmas_tree_2"),
+            };
+            const std::vector<TreeSpeciesConfig> heroCfgs = {
+                treeCfg("pine",  "pine_pine_large_1"),
+                treeCfg("maple", "maple_acer_large_1"),
+                treeCfg("pine",  "pine_pine_big_1"),
+            };
+            const uint32_t fieldSpecies = static_cast<uint32_t>(fieldCfgs.size());
+            const uint32_t heroSpecies = static_cast<uint32_t>(heroCfgs.size());
+
+            std::vector<TreeSpeciesConfig> allCfgs = fieldCfgs;
+            allCfgs.insert(allCfgs.end(), heroCfgs.begin(), heroCfgs.end());
+            m_treeRenderer->loadSpecies(allCfgs, *m_resourceManager);
+
+            int treeCount = 0;
+            if (m_treeRenderer->getSpeciesCount() == allCfgs.size())
+            {
+                const auto placeSet = [&](uint32_t seed, const ScatterParams& params,
+                                          uint32_t speciesBase, uint32_t speciesMod)
+                {
+                    const std::vector<ScatterPoint> pts = scatterProps(seed, params);
+                    for (size_t i = 0; i < pts.size(); ++i)
+                    {
+                        const ScatterPoint& p = pts[i];
+                        TreeInstance inst;
+                        inst.position = glm::vec3(p.x, terrain.getHeight(p.x, p.z), p.z);
+                        inst.rotation = glm::radians(p.yawDeg);
+                        inst.scale = p.scale;
+                        inst.speciesIndex = speciesBase + static_cast<uint32_t>(i) % speciesMod;
+                        m_foliageManager->placeTree(inst, 0.0f);
+                        ++treeCount;
+                    }
+                };
+
+                // Field trees (real-world-metre packs → smaller scale than Kenney).
+                ScatterParams field;
+                field.regionMin = regionMin;
+                field.regionMax = regionMax;
+                field.cellSize = 28.0f;
+                field.jitter = 0.8f;
+                field.minDist = 12.0f;
+                field.exclusionCenter = pondCenterXZ;
+                field.exclusionRadius = pondClear + 6.0f;
+                field.minScale = 0.7f;
+                field.maxScale = 1.2f;
+                placeSet(0xA11CE01u, field, 0u, fieldSpecies);
+
+                // Hero trees — a few large landmark trees, well spaced.
+                ScatterParams hero;
+                hero.regionMin = regionMin;
+                hero.regionMax = regionMax;
+                hero.cellSize = 60.0f;
+                hero.jitter = 0.7f;
+                hero.minDist = 40.0f;
+                hero.exclusionCenter = pondCenterXZ;
+                hero.exclusionRadius = pondClear + 10.0f;
+                hero.minScale = 0.9f;
+                hero.maxScale = 1.5f;
+                placeSet(0x4E1D0A11u, hero, fieldSpecies, heroSpecies);
+            }
+            else
+            {
+                Logger::warning("Meadow tree species failed to load; trees skipped");
+            }
+            Logger::info("Meadow trees placed: " + std::to_string(treeCount));
+        }
 
         // Rocks / boulders.
         ScatterParams rock;

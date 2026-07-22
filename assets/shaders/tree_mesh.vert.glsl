@@ -2,47 +2,54 @@
 // SPDX-License-Identifier: MIT
 
 /// @file tree_mesh.vert.glsl
-/// @brief Tree mesh LOD vertex shader — instanced rendering with per-instance rotation, scale, and crossfade alpha.
+/// @brief Tree mesh LOD vertex shader — instanced artist mesh with per-node
+///        matrix, wind sway, and CSM view depth. (design §4.4/§4.6, 3D_E-0033)
 #version 450 core
 
+// Loaded-mesh vertex attributes (Mesh::upload layout: 0=pos,1=normal,3=texCoord)
 layout(location = 0) in vec3 a_position;
-layout(location = 1) in vec3 a_color;
+layout(location = 1) in vec3 a_normal;
+layout(location = 3) in vec2 a_texCoord;
 
-// Per-instance
-layout(location = 3) in vec3 i_position;
-layout(location = 4) in float i_rotation;
-layout(location = 5) in float i_scale;
-layout(location = 6) in float i_alpha;
+// Per-instance: model mat4 @6-9 (binding 1), crossfade alpha @12 (binding 3)
+layout(location = 6) in mat4 i_model;
+layout(location = 12) in float i_alpha;
 
 uniform mat4 u_viewProjection;
+uniform mat4 u_view;
+uniform mat4 u_nodeMatrix;      // baked node world transform for this primitive
 uniform float u_time;
-uniform vec4 u_clipPlane;     // Water clip plane (0,0,0,0 = disabled)
+uniform vec3 u_windDirection;   // world XZ
+uniform float u_windAmplitude;
+uniform float u_windFrequency;
+uniform vec4 u_clipPlane;       // water clip plane (0 = disabled)
 
-out vec3 v_color;
+out vec3 v_normal;
+out vec3 v_worldPos;
+out vec2 v_texCoord;
 out float v_alpha;
+out float v_viewDepth;
 
 void main()
 {
-    // Y-axis rotation
-    float s = sin(i_rotation);
-    float c = cos(i_rotation);
-    vec3 rotated = vec3(
-        a_position.x * c - a_position.z * s,
-        a_position.y,
-        a_position.x * s + a_position.z * c
-    );
+    // Node transform → tree-local, then per-instance transform → world.
+    vec4 world = i_model * (u_nodeMatrix * vec4(a_position, 1.0));
 
-    // Scale and position
-    vec3 worldPos = rotated * i_scale + i_position;
+    // Canopy wind sway: gentle, scaled by height above the trunk base, calm at
+    // wind 0. Phase varies spatially so neighbours don't sway in lockstep.
+    float baseY = i_model[3][1];
+    float h = max(world.y - baseY, 0.0);
+    float windPhase = u_time * u_windFrequency + world.x * 0.1 + world.z * 0.1;
+    float sway = sin(windPhase) * u_windAmplitude * h * 0.05;
+    world.xz += u_windDirection.xz * sway;
 
-    // Gentle wind sway for crown (upper parts only)
-    float swayAmount = max(0.0, a_position.y - 2.0) * 0.02;
-    float windPhase = u_time * 1.5 + i_position.x * 0.3 + i_position.z * 0.2;
-    worldPos.x += sin(windPhase) * swayAmount * i_scale;
-
-    vec4 worldPosition = vec4(worldPos, 1.0);
-    gl_Position = u_viewProjection * worldPosition;
-    gl_ClipDistance[0] = dot(worldPosition, u_clipPlane);
-    v_color = a_color;
+    mat3 nm = mat3(i_model) * mat3(u_nodeMatrix);
+    v_normal = normalize(nm * a_normal);
+    v_worldPos = world.xyz;
+    v_texCoord = a_texCoord;
     v_alpha = i_alpha;
+    v_viewDepth = -(u_view * world).z;
+
+    gl_Position = u_viewProjection * world;
+    gl_ClipDistance[0] = dot(world, u_clipPlane);
 }

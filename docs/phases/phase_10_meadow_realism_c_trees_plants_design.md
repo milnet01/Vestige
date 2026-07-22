@@ -215,6 +215,15 @@ transforms, so at load the loader **accumulates each node's world matrix** (from
 `childIndices`, composing parent `computeLocalMatrix()` — not just the node-local TRS) and
 **pre-multiplies that world transform into the node's referenced primitives' vertices** (one flattened
 copy per node-reference, so a multiply-referenced primitive is not dropped). The flattened geometry is then **grouped by material**:
+
+> **Implementation note (T2, 2026-07-22):** the vertex-rewrite framing above is **not**
+> implementable against a `ResourceManager`-loaded `Model` — `Mesh::upload()` discards its CPU
+> vertex data, so there is nothing to flatten in place. The shipped code keeps the shared cached
+> `Model`/`Mesh` VAOs untouched and instead applies each node's baked world matrix as a per-draw
+> `u_nodeMatrix` uniform in `tree_mesh.vert` (`world = i_model * (u_nodeMatrix * a_position)`). Same
+> rendered result, no per-instance vertex duplication, full ResourceManager reuse (Rule 3). The
+> per-material grouping (below) is unchanged — it is built from the node walk's `{mesh, nodeMatrix,
+> material}` draw list.
 a real tree has ≥2 materials (opaque bark, alpha-cutout double-sided leaves), so LOD0 emits **one
 instanced draw per material group**, each honouring its own
 `Material::getAlphaMode/getAlphaCutoff/isDoubleSided`. (The near LOD0 view is the highest-fidelity one;

@@ -10637,6 +10637,20 @@ existing cases (``HelpersMatchEvaluatorPrecisely``,
 
 ### Changed
 
+- **Meadow now renders realistic artist trees via a revived TreeRenderer (3D_E-0033 T2/T3)**
+  Replaced the low-poly Kenney tree props with real game-ready LOLIPOP CC-BY
+  trees. TreeRenderer builds a runtime species table (6 field + 3 hero
+  species) from the gameready glTFs, drawing per-material LOD0 + mid (LOD2)
+  meshes plus yaw-billboard far cards, with a 3-bucket distance LOD and two
+  crossfade bands, foliage-style wind sway, CSM shadow-receive, and
+  directional light. The meadow builder places field + hero trees through
+  FoliageManager::placeTree, and the tree draw now has its own
+  beginPass("Tree") GPU-timer. Node transforms are applied via a per-draw
+  u_nodeMatrix uniform rather than vertex flattening (the Mesh API discards
+  CPU vertices) — same result, full ResourceManager texture sharing.
+  Remaining trees slices: T4 shadow-caster, T5 pond reflection, T6
+  flowers/lilies cleanup, T7 quality tier + perf gate + CC-BY attribution.
+
 - **Ts20 follow-ups: pin gust RNG seed, remove two self-testing test stubs (Ts20-DE1/DE2, AC4, BE1)**
   Add `EnvironmentForces::setGustRngSeed(uint32_t)` and call it explicitly in
   `WindVelocityAfterGusting` / `GustStateTransitions`; calm periods validly yield
