@@ -343,8 +343,17 @@ void TreeRenderer::drawMeshTier(const std::vector<PrimDraw>& prims,
                          ? prim.material->getAlbedo()
                          : prim.material->getDiffuseColor();
             doubleSided = prim.material->isDoubleSided();
-            useAlphaTest = (prim.material->getAlphaMode() == AlphaMode::MASK);
-            cutoff = prim.material->getAlphaCutoff();
+            // Leaf/foliage atlases are tagged MASK on some species (fir) but BLEND on
+            // others (maple, pine) — both are cutout foliage, not translucent glass.
+            // Treat ANY non-OPAQUE material as a two-sided alpha-cutout leaf so it gets
+            // the clean silhouette + two-sided abs() lighting (the u_useAlphaTest path).
+            // A BLEND cluster left on the signed bark path renders near-black once
+            // normal-mapped (T8). Bark is OPAQUE → stays on the signed one-sided path.
+            AlphaMode am = prim.material->getAlphaMode();
+            useAlphaTest = (am != AlphaMode::OPAQUE);
+            // BLEND carries no authored glTF cutoff; use the tuned value the far
+            // impostor's leaf atlas already uses. MASK provides its own.
+            cutoff = (am == AlphaMode::MASK) ? prim.material->getAlphaCutoff() : 0.4f;
         }
         // The far impostor's atlas is BLEND; without depth sorting that haloes,
         // so cut it out at a fixed threshold instead (order-independent).
